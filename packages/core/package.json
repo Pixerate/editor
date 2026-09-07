@@ -4,6 +4,11 @@
   "description": "UI-agnostic rich text and media editing core library",
   "author": "Pixerate",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Pixerate/editor.git",
+    "directory": "packages/core"
+  },
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",

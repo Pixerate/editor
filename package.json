@@ -5,6 +5,10 @@
   "description": "UI-agnostic media and rich-text editing library with JavaScript, React, and Svelte packages",
   "author": "Pixerate",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Pixerate/editor.git"
+  },
   "type": "module",
   "packageManager": "pnpm@10.28.2",
   "scripts": {

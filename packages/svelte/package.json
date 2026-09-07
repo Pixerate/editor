@@ -4,6 +4,11 @@
   "description": "Svelte bindings and prompt/rich-text components for @pixerate/editor",
   "author": "Pixerate",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Pixerate/editor.git",
+    "directory": "packages/svelte"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
