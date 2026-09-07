@@ -16,7 +16,7 @@
 
 ## 🌟 Overview
 
-`@pixerate/editor` is designed from the ground up for modern creative workflows—powering both **prompt-engineering studios** (like [SlopMachine](https://github.com/Pixerate/slopmachine)) and **document-level rich-text editors** (like [Gleamforge](https://github.com/Pixerate/gleamforge)).
+`@pixerate/editor` is designed from the ground up for modern creative workflows—powering both **prompt-engineering studios** (like **SlopMachine**) and **document-level rich-text editors** (like **Gleamforge**).
 
 ### Core Capabilities
 - 🚀 **UI-Agnostic Core (`@pixerate/editor`)**: Pure TypeScript token parser, AST tokenizer, recursive template resolution with cycle detection, bidirectional character sourcemapping, and headless TipTap/ProseMirror extensions. Usable in Node.js, Web Workers, Firebase Functions, or custom vanilla DOM frontends.
