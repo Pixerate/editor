@@ -1,4 +1,4 @@
-import type { Extensions } from "@tiptap/core";
+import { wrappingInputRule, markInputRule, type Extensions } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import Color from "@tiptap/extension-color";
 import Highlight from "@tiptap/extension-highlight";
@@ -16,6 +16,7 @@ import CharacterCount from "@tiptap/extension-character-count";
 import { SmilieReplacer } from "./SmilieReplacer";
 import { ColorHighlighter } from "./ColorHighlighter";
 import { FontSize } from "./FontSize";
+import { Mention, type MentionOptions } from "./mention";
 
 export interface RichTextPresetOptions {
   placeholder?: string | ((props: { node: any }) => string);
@@ -24,6 +25,7 @@ export interface RichTextPresetOptions {
   enableSmilies?: boolean;
   enableColorHighlighter?: boolean;
   headingLevels?: (1 | 2 | 3 | 4 | 5 | 6)[];
+  mention?: MentionOptions | boolean;
 }
 
 /**
@@ -68,7 +70,19 @@ export function createRichTextPreset(
     TextAlign.configure({
       types: ["heading", "paragraph"],
     }),
-    Link.configure({
+    Link.extend({
+      addInputRules() {
+        return [
+          markInputRule({
+            find: /(?:^|\s)\[([^\]]+)\]\(([^)]+)\)$/,
+            type: this.type,
+            getAttributes: (match) => ({
+              href: match[2],
+            }),
+          }),
+        ];
+      },
+    }).configure({
       openOnClick: openLinksOnClick,
       autolink: true,
       defaultProtocol: "https",
@@ -79,7 +93,19 @@ export function createRichTextPreset(
       },
     }),
     TaskList,
-    TaskItem.configure({
+    TaskItem.extend({
+      addInputRules() {
+        return [
+          wrappingInputRule({
+            find: /^\s*(\[([ |x])?\])\s$/i,
+            type: this.type,
+            getAttributes: (match) => ({
+              checked: match[2]?.toLowerCase() === "x",
+            }),
+          }),
+        ];
+      },
+    }).configure({
       nested: true,
     }),
     FontSize,
@@ -106,6 +132,19 @@ export function createRichTextPreset(
 
   if (enableColorHighlighter) {
     extensions.push(ColorHighlighter);
+  }
+
+  if (options.mention) {
+    const mentionConfig = typeof options.mention === "object" ? options.mention : {};
+    extensions.push(
+      Mention.configure({
+        HTMLAttributes: {
+          class: "pixerate-mention-node",
+          ...(mentionConfig.HTMLAttributes || {}),
+        },
+        ...mentionConfig,
+      }),
+    );
   }
 
   return extensions;
