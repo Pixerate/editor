@@ -1,0 +1,48 @@
+import { Extension, textInputRule } from "@tiptap/core";
+
+export const SmilieReplacer = Extension.create({
+  name: "smilieReplacer",
+
+  addInputRules() {
+    return [
+      textInputRule({ find: /-___- $/, replace: "😑 " }),
+      textInputRule({ find: /:'-\) $/, replace: "😂 " }),
+      textInputRule({ find: /':-\) $/, replace: "😅 " }),
+      textInputRule({ find: /':-D $/, replace: "😅 " }),
+      textInputRule({ find: />:-\) $/, replace: "😆 " }),
+      textInputRule({ find: /-__- $/, replace: "😑 " }),
+      textInputRule({ find: /':-\( $/, replace: "😓 " }),
+      textInputRule({ find: /:'-\( $/, replace: "😢 " }),
+      textInputRule({ find: />:-\( $/, replace: "😠 " }),
+      textInputRule({ find: /O:-\) $/, replace: "😇 " }),
+      textInputRule({ find: /:'\) $/, replace: "😂 " }),
+      textInputRule({ find: /:-D $/, replace: "😃 " }),
+      textInputRule({ find: /':\) $/, replace: "😅 " }),
+      textInputRule({ find: /;-\) $/, replace: "😉 " }),
+      textInputRule({ find: /B-\) $/, replace: "😎 " }),
+      textInputRule({ find: /:-\* $/, replace: "😘 " }),
+      textInputRule({ find: /:-\) $/, replace: "🙂 " }),
+      textInputRule({ find: /-_- $/, replace: "😑 " }),
+      textInputRule({ find: /:-O $/, replace: "😮 " }),
+      textInputRule({ find: /:-P $/, replace: "😛 " }),
+      textInputRule({ find: /:-p $/, replace: "😛 " }),
+      textInputRule({ find: /:-\/ $/, replace: "😕 " }),
+      textInputRule({ find: /:-\( $/, replace: "😞 " }),
+      textInputRule({ find: /:'\( $/, replace: "😢 " }),
+      textInputRule({ find: /:D $/, replace: "😃 " }),
+      textInputRule({ find: /=D $/, replace: "😃 " }),
+      textInputRule({ find: /;\) $/, replace: "😉 " }),
+      textInputRule({ find: /B\) $/, replace: "😎 " }),
+      textInputRule({ find: /:\) $/, replace: "🙂 " }),
+      textInputRule({ find: /=\) $/, replace: "🙂 " }),
+      textInputRule({ find: /:O $/, replace: "😮 " }),
+      textInputRule({ find: /:P $/, replace: "😛 " }),
+      textInputRule({ find: /:p $/, replace: "😛 " }),
+      textInputRule({ find: /:\/ $/, replace: "😕 " }),
+      textInputRule({ find: /:\( $/, replace: "😞 " }),
+      textInputRule({ find: /<3 $/, replace: "❤️ " }),
+      textInputRule({ find: /<\/3 $/, replace: "💔 " }),
+      textInputRule({ find: /\/shrug $/, replace: "¯\\_(ツ)_/¯ " }),
+    ];
+  },
+});

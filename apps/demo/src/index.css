@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply antialiased selection:bg-rose-500/30 selection:text-rose-200;
+  }
+}
+
+.ProseMirror {
+  outline: none;
+  min-height: 140px;
+}
+
+.ProseMirror p.is-empty::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: #64748b;
+  pointer-events: none;
+  height: 0;
+}
+
+/* Custom styling for tokens */
+.animate-gradient {
+  background-size: var(--bg-size, 200% 100%);
+}

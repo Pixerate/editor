@@ -1,0 +1,30 @@
+{
+  "name": "@pixerate/editor-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "UI-agnostic media and rich-text editing library with JavaScript, React, and Svelte packages",
+  "author": "Pixerate",
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "pnpm@10.28.2",
+  "scripts": {
+    "build": "pnpm --recursive run build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "pnpm --recursive run typecheck",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "dev": "pnpm --filter demo dev",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "release": "changeset publish"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.27.12",
+    "@types/node": "^24.0.0",
+    "prettier": "^3.5.0",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
+  }
+}

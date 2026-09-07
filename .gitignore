@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.turbo/
+coverage/
+.changeset/pre.json
+*.log
+.DS_Store
+.svelte-kit/
+build/
