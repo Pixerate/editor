@@ -1,5 +1,5 @@
 import React from "react";
-import { BubbleMenu as TipTapBubbleMenu } from "@tiptap/react";
+import * as TipTapReact from "@tiptap/react";
 import type { Editor } from "@tiptap/core";
 
 export interface BubbleMenuProps {
@@ -14,6 +14,11 @@ export const BubbleMenu: React.FC<BubbleMenuProps> = ({
   children,
 }) => {
   if (!editor) return null;
+
+  const TipTapBubbleMenu = (TipTapReact as any).BubbleMenu;
+  if (!TipTapBubbleMenu) {
+    return <div className={className}>{children}</div>;
+  }
 
   return (
     <TipTapBubbleMenu
