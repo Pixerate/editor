@@ -106,6 +106,13 @@ export function usePromptEditor({
   const containerIdRef = useRef(containerId);
   containerIdRef.current = containerId;
 
+  const templateKey = useMemo(() => {
+    return (templates || [])
+      .map((t) => `${t.id || t.name}:${(t as any).latestVersion || ""}`)
+      .sort()
+      .join(",");
+  }, [templates]);
+
   const resolvedColorMap = useMemo(() => {
     if (userColorMap) return userColorMap;
     const map = new Map<string, ColorGradient>();
@@ -113,7 +120,21 @@ export function usePromptEditor({
       map.set(t.name, { from: "#f43f5e", to: "#8b5cf6" });
     });
     return map.size > 0 ? map : DEFAULT_COLOR_MAP;
-  }, [userColorMap, templates]);
+  }, [userColorMap, templateKey]);
+
+  const StarterKitExt =
+    (StarterKit as any)?.configure
+      ? StarterKit
+      : (StarterKit as any)?.default?.configure
+        ? (StarterKit as any)?.default
+        : StarterKit;
+
+  const PlaceholderExt =
+    (Placeholder as any)?.configure
+      ? Placeholder
+      : (Placeholder as any)?.default?.configure
+        ? (Placeholder as any)?.default
+        : Placeholder;
 
   const editor = useEditor(
     {
@@ -122,11 +143,11 @@ export function usePromptEditor({
       enableInputRules: false,
       editable: isEditing,
       extensions: [
-        StarterKit.configure({
+        StarterKitExt.configure({
           heading: false,
           codeBlock: false,
         }),
-        Placeholder.configure({ placeholder }),
+        PlaceholderExt.configure({ placeholder }),
         GradientText.configure({
           templateColorMap: resolvedColorMap,
           speed,
@@ -200,16 +221,61 @@ export function usePromptEditor({
           class:
             className ||
             "w-full border border-input rounded-md p-3 font-mono text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-primary whitespace-pre-wrap break-words",
+          role: "textbox",
+          "aria-label": "Prompt editor",
         },
-        handleKeyDown: (view, event) => {
+        handleKeyDown(view, event) {
+          if (slashCommandActiveRef.current) {
+            if (
+              event.key === "ArrowUp" ||
+              event.key === "ArrowDown" ||
+              event.key === "Enter"
+            ) {
+              event.preventDefault();
+              return true;
+            }
+            if (event.key === "Escape") {
+              clearSlashCommandRef.current?.();
+              event.preventDefault();
+              event.stopPropagation();
+              return true;
+            }
+          }
+          if (onKeyDownRef.current && onKeyDownRef.current(event as KeyboardEvent)) {
+            return true;
+          }
           if (event.key === "Escape" && onEscapeRef.current) {
             onEscapeRef.current();
             return true;
           }
-          if (onKeyDownRef.current) {
-            return onKeyDownRef.current(event);
-          }
           return false;
+        },
+        handlePaste: (view, event) => {
+          const text = event.clipboardData?.getData("text/plain");
+          if (!text) return false;
+          event.preventDefault();
+          const schema = view.state.schema;
+          if (!schema) return false;
+
+          const blocks = text.replace(/\r\n?/g, "\n").split("\n");
+          const nodes: ProsemirrorNode[] = [];
+          blocks.forEach((line) => {
+            const nodeJson: any = { type: "paragraph" };
+            if (line.length > 0) {
+              nodeJson.content = [{ type: "text", text: line }];
+            }
+            try {
+              const node = ProsemirrorNode.fromJSON(schema, nodeJson);
+              nodes.push(node);
+            } catch {
+              // Ignore
+            }
+          });
+
+          const parsedSlice = Slice.maxOpen(Fragment.fromArray(nodes));
+          const tr = view.state.tr.replaceSelection(parsedSlice);
+          view.dispatch(tr);
+          return true;
         },
         clipboardTextParser: (text, context, _plain, view) => {
           const schema =
@@ -239,8 +305,14 @@ export function usePromptEditor({
         },
       },
     },
-    [templates, resolvedColorMap, isEditing, placeholder, speed],
+    [resolvedColorMap, templateKey, isEditing, placeholder, speed],
   );
+
+  useEffect(() => {
+    if (editor && !editor.isDestroyed) {
+      editor.setEditable(isEditing);
+    }
+  }, [editor, isEditing]);
 
   return editor;
 }

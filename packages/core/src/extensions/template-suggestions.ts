@@ -64,8 +64,13 @@ export const TemplateSuggestions = Extension.create<TemplateSuggestionsOptions>(
       },
     };
 
+    const SuggestionFn =
+      typeof Suggestion === "function"
+        ? Suggestion
+        : (Suggestion as any)?.default || (Suggestion as any)?.Suggestion;
+
     return [
-      Suggestion({
+      SuggestionFn({
         editor: this.editor,
         ...suggestionConfig,
       }),
