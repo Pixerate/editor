@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.2.3
+
+### Patch Changes
+
+- fac79d3: Align TipTap dependencies to ^2.11.5 to prevent npm peer dependency resolution conflicts with @pixerate/editor-svelte
+
 ## 0.2.2
 
 ### Patch Changes
