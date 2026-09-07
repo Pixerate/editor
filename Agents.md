@@ -77,8 +77,8 @@ Our core value proposition is **parity across JavaScript, React, and Svelte**:
    - Token regexes, parsing ASTs, recursive resolution, and sourcemapping **must live only in `@pixerate/editor`**.
    - Do **NOT** duplicate tokenizer or resolution logic inside `@pixerate/editor-react` or `@pixerate/editor-svelte`. They must import it from `@pixerate/editor`.
 3. **Consumer Parity Check**:
-   - SlopMachine (`slopmachine`) is the primary React consumer. Any changes must maintain full backwards compatibility with `useSlopEditor.tsx` expectations.
-   - Gleamforge (`gleamforge`) is the primary Svelte consumer. Any changes must maintain full backwards compatibility with `editable-text-node-editor.svelte` expectations.
+   - Ensure the React package (`@pixerate/editor-react`) maintains full backwards compatibility with `usePromptEditor` options, milestone tracking, and clipboard handling.
+   - Ensure the Svelte package (`@pixerate/editor-svelte`) maintains full backwards compatibility with `EditableTextNodeEditor` props, bubble menus, and reactive store behaviors.
 4. **The Parity Test**: Before opening a PR or completing a refactor, review the feature matrix in `README.md` and ensure no cell in the React or Svelte column is left behind.
 
 ---

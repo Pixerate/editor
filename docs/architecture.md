@@ -35,7 +35,7 @@ The core domain layer has **zero browser or DOM dependencies**:
 
 Because this layer is pure TypeScript, it executes with ultra-low latency in:
 - Node.js scripts
-- Cloud Functions (e.g. Firebase Functions in SlopMachine)
+- Cloud Functions (e.g. Firebase Functions / serverless microservices)
 - Web Workers
 - Browser environments
 

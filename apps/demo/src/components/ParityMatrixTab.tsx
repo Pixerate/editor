@@ -59,14 +59,14 @@ const FEATURES = [
     note: "Lightweight display component without TipTap dependency",
   },
   {
-    feature: "Drop-in SlopMachine Prompt Editor",
+    feature: "Prompt Studio Editor (Headless & UI)",
     core: true,
     react: true,
     svelte: true,
-    note: "usePromptEditor hook directly replaces useSlopEditor.tsx",
+    note: "usePromptEditor hook and syntax highlighting",
   },
   {
-    feature: "Drop-in Gleamforge Rich Text Editor",
+    feature: "Rich Text Document Editor",
     core: true,
     react: true,
     svelte: true,
@@ -172,8 +172,8 @@ export const ParityMatrixTab: React.FC = () => {
             </h3>
           </div>
           <p className="text-xs text-slate-400 leading-relaxed font-sans">
-            Exported via <code>@pixerate/editor-react</code>. Fully drop-in replacement
-            for <code>slopmachine</code> with <code>usePromptEditor</code>, bubble menus, and AST renderer.
+            Exported via <code>@pixerate/editor-react</code>. Complete prompt and rich-text editing
+            with <code>usePromptEditor</code>, bubble menus, and AST renderer.
           </p>
         </div>
 
@@ -186,7 +186,7 @@ export const ParityMatrixTab: React.FC = () => {
           </div>
           <p className="text-xs text-slate-400 leading-relaxed font-sans">
             Exported via <code>@pixerate/editor-svelte</code>. Built with Svelte 5 Runes,
-            providing drop-in compatibility for <code>gleamforge</code>'s <code>EditableTextNodeEditor</code>.
+            providing reactive state, bubble menus, and <code>EditableTextNodeEditor</code>.
           </p>
         </div>
       </div>

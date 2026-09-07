@@ -16,7 +16,7 @@
 
 ## 🌟 Overview
 
-`@pixerate/editor` is designed from the ground up for modern creative workflows—powering both **prompt-engineering studios** (like **SlopMachine**) and **document-level rich-text editors** (like **Gleamforge**).
+`@pixerate/editor` is designed from the ground up for modern creative workflows—powering both **prompt-engineering studios** and **document-level rich-text editors**.
 
 ### Core Capabilities
 - 🚀 **UI-Agnostic Core (`@pixerate/editor`)**: Pure TypeScript token parser, AST tokenizer, recursive template resolution with cycle detection, bidirectional character sourcemapping, and headless TipTap/ProseMirror extensions. Usable in Node.js, Web Workers, Firebase Functions, or custom vanilla DOM frontends.
@@ -33,8 +33,8 @@
 | Package | Version | Description | Target Consumers |
 | :--- | :--- | :--- | :--- |
 | [`@pixerate/editor`](./packages/core) | `0.1.0` | Pure TS core, grammar parser, resolvers, extensions | Node.js, Workers, Vanilla JS |
-| [`@pixerate/editor-react`](./packages/react) | `0.1.0` | React hooks, TipTap wrappers, AST renderer | SlopMachine, Next.js, Vite React |
-| [`@pixerate/editor-svelte`](./packages/svelte) | `0.1.0` | Svelte 5 runes bindings & components | Gleamforge, SvelteKit apps |
+| [`@pixerate/editor-react`](./packages/react) | `0.1.0` | React hooks, TipTap wrappers, AST renderer | React apps, Next.js, Vite React |
+| [`@pixerate/editor-svelte`](./packages/svelte) | `0.1.0` | Svelte 5 runes bindings & components | Svelte apps, SvelteKit apps |
 
 ---
 
@@ -56,8 +56,8 @@ graph TD
     end
 
     subgraph Layer 3: Application Consumers
-        H["SlopMachine (React)"] --> F
-        I["Gleamforge (Svelte)"] --> G
+        H["React Applications"] --> F
+        I["Svelte Applications"] --> G
         J["Backend Pipelines / Functions"] --> A
     end
 ```
@@ -66,7 +66,7 @@ graph TD
 
 ## 🚀 Quickstart
 
-### 1. React (Prompt Studio / SlopMachine)
+### 1. React (Prompt Studio)
 
 ```tsx
 import React, { useState } from "react";
@@ -97,7 +97,7 @@ export function PromptStudio() {
 }
 ```
 
-### 2. Svelte (Rich Document / Gleamforge)
+### 2. Svelte (Rich Document)
 
 ```svelte
 <script lang="ts">
@@ -174,8 +174,8 @@ pnpm --filter demo dev
 ```
 
 Open `http://localhost:3000` to interact with:
-1. **Prompt Studio Tab**: SlopMachine prompt editor with live syntax gradients, slash menu, AST preview, and sourcemap visualizer.
-2. **Document Rich Text Tab**: Gleamforge document editor with headings, lists, bubble menu, smilies, and hex color highlighter.
+1. **Prompt Studio Tab**: Interactive prompt editor with live syntax gradients, slash menu, AST preview, and sourcemap visualizer.
+2. **Document Rich Text Tab**: Rich document editor with headings, lists, bubble menu, smilies, and hex color highlighter.
 3. **Parity Matrix Tab**: Live comparison and feature verification table.
 
 ---
@@ -184,8 +184,6 @@ Open `http://localhost:3000` to interact with:
 
 - [Architecture & Design Principles](docs/architecture.md)
 - [Prompt Grammar & Token Resolution Engine](docs/prompt-engine.md)
-- [SlopMachine Migration Guide](docs/slopmachine-migration.md)
-- [Gleamforge Migration Guide](docs/gleamforge-migration.md)
 - [CI/CD & OIDC Release Workflow](docs/ci-cd-release.md)
 - [Agent Contributing Guide](Agents.md)
 

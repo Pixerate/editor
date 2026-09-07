@@ -59,7 +59,7 @@ export default function App() {
             }`}
           >
             <Sparkles className="w-3.5 h-3.5" />
-            <span>Prompt Studio (SlopMachine)</span>
+            <span>Prompt Studio</span>
           </button>
 
           <button
@@ -71,7 +71,7 @@ export default function App() {
             }`}
           >
             <FileText className="w-3.5 h-3.5" />
-            <span>Document Rich Text (Gleamforge)</span>
+            <span>Document Rich Text</span>
           </button>
 
           <button

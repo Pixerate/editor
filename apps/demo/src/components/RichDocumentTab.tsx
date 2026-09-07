@@ -20,7 +20,7 @@ import {
 export const RichDocumentTab: React.FC = () => {
   const editor = useEditor({
     content: `
-      <h2>Welcome to Gleamforge Rich Text Parity</h2>
+      <h2>Welcome to Rich Text Document Editing</h2>
       <p>This editor demonstrates standard document rich text capabilities shared across React and Svelte packages.</p>
       <p>Try typing smilies like <code>:)</code> or <code>&lt;3</code> or <code>/shrug</code> to see auto-conversion!</p>
       <p>Hex colors like #ef4444 or #3b82f6 are highlighted automatically in real time.</p>

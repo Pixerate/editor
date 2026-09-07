@@ -26,7 +26,7 @@ export interface RichTextPresetOptions {
 }
 
 /**
- * Creates a standard rich-text extensions bundle with Gleamforge and SlopMachine compatibility.
+ * Creates a standard rich-text extensions bundle with full formatting support.
  */
 export function createRichTextPreset(
   options: RichTextPresetOptions = {},

@@ -6,7 +6,7 @@ export interface SvelteInitiateEditorOptions extends Partial<EditorOptions> {
 }
 
 /**
- * Initializes a TipTap editor instance, providing complete feature parity with Gleamforge's initiateEditor.
+ * Initializes a TipTap editor instance preconfigured with rich text extensions.
  */
 export const initiateEditor = (
   element?: HTMLElement,

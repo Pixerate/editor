@@ -107,7 +107,7 @@ export const PromptStudioTab: React.FC = () => {
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-rose-400" />
               <h2 className="text-sm font-semibold tracking-wide uppercase text-slate-300">
-                SlopMachine Prompt Studio (Parity)
+                Prompt Studio (Interactive Demo)
               </h2>
             </div>
             <span className="text-xs text-slate-400 font-mono bg-slate-800 px-2 py-0.5 rounded">

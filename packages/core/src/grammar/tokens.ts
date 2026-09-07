@@ -5,7 +5,7 @@ export const TEMPLATE_REGEX = /{{\s*([^}]+?)\s*}}/g;
 export const VARIABLE_REGEX = /(?<!\{)\{([^{}]+)\}(?!\})/g;
 export const INSTRUCTION_REGEX = /__(.+?)__/g;
 
-// Backward-compatible alias matching SlopMachine naming
+// Backward-compatible camelCase aliases
 export const templateRegex = TEMPLATE_REGEX;
 export const variableRegex = VARIABLE_REGEX;
 export const instructionRegex = INSTRUCTION_REGEX;
