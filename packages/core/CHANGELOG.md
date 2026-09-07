@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.2.2
+
+### Patch Changes
+
+- c1113ed: Fix TextStyle interop import across TipTap v2 and v3
+
 ## 0.2.1
 
 ### Patch Changes
