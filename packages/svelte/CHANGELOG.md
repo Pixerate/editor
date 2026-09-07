@@ -1,5 +1,11 @@
 # @pixerate/editor-svelte
 
+## 0.2.4
+
+### Patch Changes
+
+- 470bd25: Point svelte entry and export condition to pre-bundled dist/index.js instead of raw TypeScript src/index.ts to ensure compatibility with Vite optimize-svelte and Storybook Svelte bundler.
+
 ## 0.2.3
 
 ### Patch Changes
