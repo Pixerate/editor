@@ -1,5 +1,13 @@
 # @pixerate/editor-svelte
 
+## 0.2.5
+
+### Patch Changes
+
+- c0348c6: Add native Mention extension with atomic inline node, extraction, and serializers; add Notion markdown input rules for TaskItem and Link; fix BubbleMenu plugin registration and sizing.
+- Updated dependencies [c0348c6]
+  - @pixerate/editor@0.3.0
+
 ## 0.2.4
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.3.0
+
+### Minor Changes
+
+- c0348c6: Add native Mention extension with atomic inline node, extraction, and serializers; add Notion markdown input rules for TaskItem and Link; fix BubbleMenu plugin registration and sizing.
+
 ## 0.2.3
 
 ### Patch Changes
