@@ -1,6 +1,6 @@
 {
   "name": "@pixerate/editor",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "UI-agnostic rich text and media editing core library",
   "author": "Pixerate",
   "license": "MIT",
