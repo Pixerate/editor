@@ -22,18 +22,20 @@ export interface Token {
 
 export interface TemplateVersion {
   id: string;
-  version: string;
+  version: string | number;
   body: string;
-  createdAt?: string;
+  createdAt?: any;
+  [key: string]: any;
 }
 
 export interface Template {
   id?: string;
   name: string;
   body?: string;
-  latestVersion?: string;
+  latestVersion?: string | number;
   versions?: TemplateVersion[];
   color?: string;
+  [key: string]: any;
 }
 
 export interface ColorGradient {
