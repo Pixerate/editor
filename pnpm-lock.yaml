@@ -70,55 +70,55 @@ importers:
   packages/core:
     dependencies:
       '@tiptap/core':
-        specifier: ^2.11.5 || ^3.0.0
+        specifier: ^2.11.5
         version: 2.27.3(@tiptap/pm@2.27.3)
       '@tiptap/extension-character-count':
-        specifier: ^2.11.5 || ^3.0.0
+        specifier: ^2.11.5
         version: 2.27.3(@tiptap/core@2.27.3(@tiptap/pm@2.27.3))(@tiptap/pm@2.27.3)
       '@tiptap/extension-color':
-        specifier: ^2.11.5 || ^3.0.0
+        specifier: ^2.11.5
         version: 2.27.3(@tiptap/core@2.27.3(@tiptap/pm@2.27.3))(@tiptap/extension-text-style@2.27.3(@tiptap/core@2.27.3(@tiptap/pm@2.27.3)))
       '@tiptap/extension-highlight':
-        specifier: ^2.11.5 || ^3.0.0
+        specifier: ^2.11.5
         version: 2.27.3(@tiptap/core@2.27.3(@tiptap/pm@2.27.3))
       '@tiptap/extension-link':
-        specifier: ^2.11.5 || ^3.0.0
+        specifier: ^2.11.5
         version: 2.27.3(@tiptap/core@2.27.3(@tiptap/pm@2.27.3))(@tiptap/pm@2.27.3)
       '@tiptap/extension-placeholder':
-        specifier: ^2.11.5 || ^3.0.0
+        specifier: ^2.11.5
         version: 2.27.3(@tiptap/core@2.27.3(@tiptap/pm@2.27.3))(@tiptap/pm@2.27.3)
       '@tiptap/extension-subscript':
-        specifier: ^2.11.5 || ^3.0.0
+        specifier: ^2.11.5
         version: 2.27.3(@tiptap/core@2.27.3(@tiptap/pm@2.27.3))
       '@tiptap/extension-superscript':
-        specifier: ^2.11.5 || ^3.0.0
+        specifier: ^2.11.5
         version: 2.27.3(@tiptap/core@2.27.3(@tiptap/pm@2.27.3))
       '@tiptap/extension-task-item':
-        specifier: ^2.11.5 || ^3.0.0
+        specifier: ^2.11.5
         version: 2.27.3(@tiptap/core@2.27.3(@tiptap/pm@2.27.3))(@tiptap/pm@2.27.3)
       '@tiptap/extension-task-list':
-        specifier: ^2.11.5 || ^3.0.0
+        specifier: ^2.11.5
         version: 2.27.3(@tiptap/core@2.27.3(@tiptap/pm@2.27.3))
       '@tiptap/extension-text-align':
-        specifier: ^2.11.5 || ^3.0.0
+        specifier: ^2.11.5
         version: 2.27.3(@tiptap/core@2.27.3(@tiptap/pm@2.27.3))
       '@tiptap/extension-text-style':
-        specifier: ^2.11.5 || ^3.0.0
+        specifier: ^2.11.5
         version: 2.27.3(@tiptap/core@2.27.3(@tiptap/pm@2.27.3))
       '@tiptap/extension-typography':
-        specifier: ^2.11.5 || ^3.0.0
+        specifier: ^2.11.5
         version: 2.27.3(@tiptap/core@2.27.3(@tiptap/pm@2.27.3))
       '@tiptap/extension-underline':
-        specifier: ^2.11.5 || ^3.0.0
+        specifier: ^2.11.5
         version: 2.27.3(@tiptap/core@2.27.3(@tiptap/pm@2.27.3))
       '@tiptap/pm':
-        specifier: ^2.11.5 || ^3.0.0
+        specifier: ^2.11.5
         version: 2.27.3
       '@tiptap/starter-kit':
-        specifier: ^2.11.5 || ^3.0.0
+        specifier: ^2.11.5
         version: 2.27.3
       '@tiptap/suggestion':
-        specifier: ^2.11.5 || ^3.0.0
+        specifier: ^2.11.5
         version: 2.27.3(@tiptap/core@2.27.3(@tiptap/pm@2.27.3))(@tiptap/pm@2.27.3)
     devDependencies:
       '@types/node':
