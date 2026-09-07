@@ -6,3 +6,4 @@ export * from "./SmilieReplacer";
 export * from "./ColorHighlighter";
 export * from "./FontSize";
 export * from "./rich-text-preset";
+export * from "./mention";
