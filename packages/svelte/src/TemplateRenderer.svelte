@@ -39,6 +39,7 @@
   {#each tokens as token}
     {#if token.type === "template"}
       {@const colors = templateColorMap?.get(token.value) || { from: "#f43f5e", to: "#8b5cf6" }}
+      <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
       <span
         style={`--color-from: ${colors.from}; --color-to: ${colors.to};`}
         onclick={() => onTemplateClick?.(token.value)}
@@ -48,6 +49,7 @@
         {`{{${token.value}}}`}
       </span>
     {:else if token.type === "variable"}
+      <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
       <span
         onclick={() => onVariableClick?.(token.value)}
         class="inline-flex items-center px-1.5 py-0.5 mx-0.5 text-xs font-medium rounded-md border border-violet-400/40 bg-violet-400/15 text-violet-600 hover:brightness-110 cursor-pointer transition-all"

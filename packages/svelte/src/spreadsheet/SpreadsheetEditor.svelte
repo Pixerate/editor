@@ -7,6 +7,8 @@
   interface Props {
     sheetState?: ReturnType<typeof createReactiveSpreadsheet>;
     readOnly?: boolean;
+    showFormulaBar?: boolean;
+    class?: string;
     customCellRenderer?: Snippet<[{ row: SpreadsheetRow; col: SpreadsheetColumn; cell: CellData }]>;
     onAddColumnClick?: () => void;
     onColumnHeaderClick?: (col: SpreadsheetColumn) => void;
@@ -15,6 +17,8 @@
   let {
     sheetState = createReactiveSpreadsheet(),
     readOnly = false,
+    showFormulaBar = true,
+    class: className = '',
     customCellRenderer,
     onAddColumnClick,
     onColumnHeaderClick
@@ -25,14 +29,7 @@
   let resizeStartX = $state(0);
   let resizeStartWidth = $state(0);
 
-  // Active cell formula bar binding
-  let activeRawValue = $derived.by(() => {
-    if (!sheetState.activeCell) return '';
-    const row = sheetState.document.rows[sheetState.activeCell.row];
-    const col = sheetState.document.columns[sheetState.activeCell.col];
-    if (!row || !col) return '';
-    return sheetState.getCell(row.id, col.id).raw;
-  });
+
 
   function handleCellClick(rIdx: number, cIdx: number, e: MouseEvent) {
     if (sheetState.editingCell && (sheetState.editingCell.row !== rIdx || sheetState.editingCell.col !== cIdx)) {
@@ -155,34 +152,16 @@
 
 <div
   bind:this={gridContainer}
-  class="flex flex-col h-full w-full overflow-hidden border border-border bg-background select-none outline-none text-foreground font-sans text-xs"
+  class="flex flex-col h-full w-full overflow-hidden border border-border bg-background select-none outline-none text-foreground font-sans text-xs {className}"
   tabindex="0"
   onkeydown={handleKeyDown}
   role="grid"
   aria-label="Spreadsheet"
 >
   <!-- Formula Bar -->
-  <FormulaBar
-    activeCoord={sheetState.activeCell}
-    value={sheetState.editingCell ? sheetState.draftValue : activeRawValue}
-    onChange={(val) => {
-      if (sheetState.activeCell) {
-        sheetState.draftValue = val;
-      }
-    }}
-    onCommit={(val) => {
-      if (sheetState.activeCell) {
-        const row = sheetState.document.rows[sheetState.activeCell.row];
-        const col = sheetState.document.columns[sheetState.activeCell.col];
-        if (row && col) {
-          sheetState.setCellValue(row.id, col.id, val);
-        }
-      }
-    }}
-    onCancel={() => {
-      sheetState.cancelEditing();
-    }}
-  />
+  {#if showFormulaBar}
+    <FormulaBar {sheetState} />
+  {/if}
 
   <!-- Main Scrollable Grid -->
   <div class="relative flex-1 overflow-auto">
@@ -205,11 +184,13 @@
                 <span class="text-[10px] text-muted-foreground/70 font-mono font-normal">({col.key})</span>
               </div>
               <!-- Column Resize Handle -->
+              <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
               <div
                 class="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-primary/50 group-hover:bg-primary/20 z-10"
                 onmousedown={(e) => handleResizeStart(col.id, col.width || 130, e)}
                 role="separator"
                 aria-orientation="vertical"
+                tabindex="-1"
               ></div>
             </th>
           {/each}
