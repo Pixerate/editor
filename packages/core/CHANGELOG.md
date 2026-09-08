@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.4.4
+
+### Patch Changes
+
+- 878ae7a: Ensure spreadsheet columns can be reduced and collapsed with explicit inline styles and style block rules on table cells, and align controller min width constraint to 30px
+
 ## 0.4.3
 
 ### Patch Changes

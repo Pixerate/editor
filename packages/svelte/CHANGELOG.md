@@ -1,5 +1,13 @@
 # @pixerate/editor-svelte
 
+## 0.3.9
+
+### Patch Changes
+
+- 878ae7a: Ensure spreadsheet columns can be reduced and collapsed with explicit inline styles and style block rules on table cells, and align controller min width constraint to 30px
+- Updated dependencies [878ae7a]
+  - @pixerate/editor@0.4.4
+
 ## 0.3.8
 
 ### Patch Changes
