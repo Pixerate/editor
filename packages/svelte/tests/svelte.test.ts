@@ -9,4 +9,10 @@ describe("@pixerate/editor-svelte Distribution Exports", () => {
     expect(SvelteEditor.BubbleMenu).toBeDefined();
     expect(SvelteEditor.TemplateRenderer).toBeDefined();
   });
+
+  it("exports SpreadsheetEditor, FormulaBar, and createReactiveSpreadsheet", () => {
+    expect(SvelteEditor.SpreadsheetEditor).toBeDefined();
+    expect(SvelteEditor.FormulaBar).toBeDefined();
+    expect(SvelteEditor.createReactiveSpreadsheet).toBeDefined();
+  });
 });

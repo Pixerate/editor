@@ -9,4 +9,9 @@ describe("@pixerate/editor-react Exports", () => {
     expect(ReactEditor.BubbleMenu).toBeDefined();
     expect(ReactEditor.TemplateRenderer).toBeDefined();
   });
+
+  it("exports SpreadsheetEditor and useSpreadsheetEditor", () => {
+    expect(ReactEditor.SpreadsheetEditor).toBeDefined();
+    expect(ReactEditor.useSpreadsheetEditor).toBeDefined();
+  });
 });

@@ -33,6 +33,11 @@
       "types": "./dist/serializers/index.d.ts",
       "import": "./dist/serializers/index.js",
       "require": "./dist/serializers/index.cjs"
+    },
+    "./spreadsheet": {
+      "types": "./dist/spreadsheet/index.d.ts",
+      "import": "./dist/spreadsheet/index.js",
+      "require": "./dist/spreadsheet/index.cjs"
     }
   },
   "files": [

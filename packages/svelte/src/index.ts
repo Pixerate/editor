@@ -50,3 +50,5 @@ export type {
   ColorGradient,
   RichTextPresetOptions,
 } from "@pixerate/editor";
+
+export * from "./spreadsheet";
