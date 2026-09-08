@@ -139,7 +139,7 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
 
     const handleMouseMove = (e: MouseEvent) => {
       const delta = e.clientX - resizeStartX;
-      pendingWidth = Math.max(60, resizeStartWidth + delta);
+      pendingWidth = Math.max(30, resizeStartWidth + delta);
 
       if (rafId === null) {
         rafId = requestAnimationFrame(() => {
@@ -249,15 +249,15 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
               {state.document.columns.map((col, cIdx) => (
                 <th
                   key={col.id}
-                  className={`relative border-r border-border px-2 text-left font-medium text-muted-foreground hover:bg-muted/90 transition-colors group ${
+                  className={`relative border-r border-border px-2 text-left font-medium text-muted-foreground hover:bg-muted/90 transition-colors group overflow-hidden max-w-0 ${
                     onColumnHeaderClick ? 'cursor-pointer' : 'cursor-default'
                   }`}
                   style={{ width: col.width || 130, minWidth: col.width || 130, maxWidth: col.width || 130 }}
                   onClick={() => onColumnHeaderClick?.(col)}
                 >
-                  <div className="flex items-center justify-between gap-1 truncate">
-                    <span className="truncate font-semibold text-foreground text-xs">{col.title}</span>
-                    <span className="text-[10px] text-muted-foreground/70 font-mono font-normal">({col.key})</span>
+                  <div className="flex items-center justify-between gap-1 min-w-0 overflow-hidden truncate">
+                    <span className="truncate font-semibold text-foreground text-xs min-w-0">{col.title}</span>
+                    <span className="text-[10px] text-muted-foreground/70 font-mono font-normal shrink-0">({col.key})</span>
                   </div>
                   {/* Column Resize Handle */}
                   <div
@@ -314,7 +314,7 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
                   return (
                     <td
                       key={col.id}
-                      className={`relative border-r border-border px-2 py-1 truncate text-foreground transition-colors ${
+                      className={`relative border-r border-border px-2 py-1 truncate max-w-0 text-foreground transition-colors ${
                         selected ? 'bg-primary/10' : ''
                       } ${active ? 'ring-2 ring-primary ring-inset z-10' : ''}`}
                       onClick={(e) => handleCellClick(rIdx, cIdx, e)}
@@ -332,7 +332,7 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
                       ) : customCellRenderer ? (
                         customCellRenderer({ row, col, cell })
                       ) : (
-                        <span className={`truncate block ${cell.error ? 'text-destructive font-semibold' : ''}`}>
+                        <span className={`truncate block max-w-full ${cell.error ? 'text-destructive font-semibold' : ''}`}>
                           {cell.error || (cell.value ?? '')}
                         </span>
                       )}
