@@ -42,7 +42,7 @@ const createGradientDecorations = (
 
           const style = `--bg-size: ${
             speed * 300
-          }%; --color-from: ${colorFrom}; --color-to: ${colorTo}; caret-color: #111 !important;`;
+          }%; --color-from: ${colorFrom}; --color-to: ${colorTo}; caret-color: #111 !important; background-image: linear-gradient(to right, ${colorFrom}, ${colorTo}, ${colorFrom}); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent;`;
 
           decorations.push(
             Decoration.inline(start, end, {
@@ -73,7 +73,7 @@ const createGradientDecorations = (
 
         const style = `--bg-size: ${
           speed * 300
-        }%; --color-from: ${colorFrom}; --color-to: ${colorTo}; caret-color: #111 !important;`;
+        }%; --color-from: ${colorFrom}; --color-to: ${colorTo}; caret-color: #111 !important; background-image: linear-gradient(to right, #fb7185, #8b5cf6, #fb7185); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent;`;
 
         decorations.push(
           Decoration.inline(start, end, {
