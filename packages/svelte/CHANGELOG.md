@@ -1,5 +1,12 @@
 # @pixerate/editor-svelte
 
+## 0.3.1
+
+### Patch Changes
+
+- 692082a: Fix FormulaBar sheetState binding and add showFormulaBar/class props to SpreadsheetEditor
+- 86a3944: Fix SpreadsheetEditor customCellRenderer snippet argument passing to support both positional and object destructuring, and add readonly prop alias.
+
 ## 0.3.0
 
 ### Minor Changes
