@@ -13,6 +13,7 @@ export interface SpreadsheetEditorProps {
   customCellRenderer?: (props: { row: SpreadsheetRow; col: SpreadsheetColumn; cell: CellData }) => React.ReactNode;
   onAddColumnClick?: () => void;
   onColumnHeaderClick?: (col: SpreadsheetColumn) => void;
+  onColumnResize?: (colId: string, width: number) => void;
 }
 
 export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
@@ -20,7 +21,8 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
   readOnly = false,
   customCellRenderer,
   onAddColumnClick,
-  onColumnHeaderClick
+  onColumnHeaderClick,
+  onColumnResize
 }) => {
   const defaultState = useSpreadsheetEditor();
   const state = externalState || defaultState;
@@ -123,9 +125,13 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
       }
     }
   }, [readOnly, state]);
-
   useEffect(() => {
     if (!resizingColId) return;
+
+    if (typeof document !== 'undefined') {
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    }
 
     const handleMouseMove = (e: MouseEvent) => {
       const delta = e.clientX - resizeStartX;
@@ -133,16 +139,28 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
     };
 
     const handleMouseUp = () => {
+      const col = state.document.columns.find((c) => c.id === resizingColId);
+      if (col && onColumnResize) {
+        onColumnResize(col.id, col.width || resizeStartWidth);
+      }
       setResizingColId(null);
+      if (typeof document !== 'undefined') {
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      }
     };
 
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
     return () => {
+      if (typeof document !== 'undefined') {
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      }
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [resizingColId, resizeStartX, resizeStartWidth, state]);
+  }, [resizingColId, resizeStartX, resizeStartWidth, state, onColumnResize]);
 
   const isCellSelected = (rIdx: number, cIdx: number) => {
     if (!state.selectedRange) return false;
