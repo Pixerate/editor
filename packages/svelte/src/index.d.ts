@@ -94,8 +94,15 @@ import type {
 export interface SpreadsheetEditorProps {
   sheetState: ReturnType<typeof createReactiveSpreadsheet>;
   readonly?: boolean;
+  readOnly?: boolean;
+  showFormulaBar?: boolean;
   class?: string;
-  customCellRenderer?: (cell: CellData, col: SpreadsheetColumn, row: SpreadsheetRow) => any;
+  customCellRenderer?:
+    | ((cell: CellData, col: SpreadsheetColumn, row: SpreadsheetRow) => any)
+    | ((args: { cell: CellData; col: SpreadsheetColumn; row: SpreadsheetRow }) => any)
+    | ((args: { row: SpreadsheetRow; col: SpreadsheetColumn; cell: CellData }) => any);
+  onAddColumnClick?: () => void;
+  onColumnHeaderClick?: (col: SpreadsheetColumn) => void;
 }
 
 export interface FormulaBarProps {

@@ -7,9 +7,12 @@
   interface Props {
     sheetState?: ReturnType<typeof createReactiveSpreadsheet>;
     readOnly?: boolean;
+    readonly?: boolean;
     showFormulaBar?: boolean;
     class?: string;
-    customCellRenderer?: Snippet<[{ row: SpreadsheetRow; col: SpreadsheetColumn; cell: CellData }]>;
+    customCellRenderer?:
+      | Snippet<[CellData, SpreadsheetColumn, SpreadsheetRow]>
+      | Snippet<[{ row: SpreadsheetRow; col: SpreadsheetColumn; cell: CellData }]>;
     onAddColumnClick?: () => void;
     onColumnHeaderClick?: (col: SpreadsheetColumn) => void;
   }
@@ -17,12 +20,15 @@
   let {
     sheetState = createReactiveSpreadsheet(),
     readOnly = false,
+    readonly = false,
     showFormulaBar = true,
     class: className = '',
     customCellRenderer,
     onAddColumnClick,
     onColumnHeaderClick
   }: Props = $props();
+
+  let isReadOnly = $derived(readOnly || readonly);
 
   let gridContainer = $state<HTMLDivElement | null>(null);
   let resizingColId = $state<string | null>(null);
@@ -39,7 +45,7 @@
   }
 
   function handleCellDblClick(rIdx: number, cIdx: number) {
-    if (readOnly) return;
+    if (isReadOnly) return;
     const col = sheetState.document.columns[cIdx];
     if (col?.readOnly) return;
     sheetState.startEditing(rIdx, cIdx);
@@ -47,13 +53,11 @@
 
   function handleKeyDown(e: KeyboardEvent) {
     if (sheetState.editingCell) {
-      if (e.key === 'Enter') {
-        e.preventDefault();
+      if (e.key === 'Escape') {
+        sheetState.cancelEditing();
+      } else if (e.key === 'Enter') {
         sheetState.commitEditing();
         sheetState.moveCursor('down');
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        sheetState.cancelEditing();
       } else if (e.key === 'Tab') {
         e.preventDefault();
         sheetState.commitEditing();
@@ -82,11 +86,11 @@
     } else if (e.key === 'Enter') {
       e.preventDefault();
       const col = sheetState.document.columns[sheetState.activeCell.col];
-      if (!readOnly && !col?.readOnly) {
+      if (!isReadOnly && !col?.readOnly) {
         sheetState.startEditing();
       }
     } else if (e.key === 'Backspace' || e.key === 'Delete') {
-      if (readOnly) return;
+      if (isReadOnly) return;
       const row = sheetState.document.rows[sheetState.activeCell.row];
       const col = sheetState.document.columns[sheetState.activeCell.col];
       if (row && col && !col.readOnly) {
@@ -104,7 +108,7 @@
       e.preventDefault();
       const tsv = sheetState.exportToTsv();
       navigator.clipboard?.writeText(tsv);
-    } else if (!readOnly && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    } else if (!isReadOnly && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
       // Direct typing into cell starts editing
       const col = sheetState.document.columns[sheetState.activeCell.col];
       if (!col?.readOnly) {
@@ -233,7 +237,8 @@
                     
                   />
                 {:else if customCellRenderer}
-                  {@render customCellRenderer({ row, col, cell })}
+                  {@const cellArg = Object.assign({ row, col, cell }, cell)}
+                  {@render (customCellRenderer as any)(cellArg, col, row)}
                 {:else}
                   <span class="truncate block {cell.error ? 'text-destructive font-semibold' : ''}">
                     {cell.error || (cell.value ?? '')}
