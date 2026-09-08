@@ -15,6 +15,7 @@
       | Snippet<[{ row: SpreadsheetRow; col: SpreadsheetColumn; cell: CellData }]>;
     onAddColumnClick?: () => void;
     onColumnHeaderClick?: (col: SpreadsheetColumn) => void;
+    onColumnResize?: (colId: string, width: number) => void;
   }
 
   let {
@@ -25,7 +26,8 @@
     class: className = '',
     customCellRenderer,
     onAddColumnClick,
-    onColumnHeaderClick
+    onColumnHeaderClick,
+    onColumnResize
   }: Props = $props();
 
   let isReadOnly = $derived(readOnly || readonly);
@@ -124,14 +126,30 @@
     resizeStartX = e.clientX;
     resizeStartWidth = width;
 
+    if (typeof document !== 'undefined') {
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    }
+
     const handleMouseMove = (moveEvent: MouseEvent) => {
       if (!resizingColId) return;
       const delta = moveEvent.clientX - resizeStartX;
-      sheetState.setColumnWidth(resizingColId, Math.max(60, resizeStartWidth + delta));
+      const newWidth = Math.max(60, resizeStartWidth + delta);
+      sheetState.setColumnWidth(resizingColId, newWidth);
     };
 
     const handleMouseUp = () => {
+      if (resizingColId) {
+        const col = sheetState.document.columns.find((c) => c.id === resizingColId);
+        if (col && onColumnResize) {
+          onColumnResize(col.id, col.width || resizeStartWidth);
+        }
+      }
       resizingColId = null;
+      if (typeof document !== 'undefined') {
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      }
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
@@ -190,12 +208,16 @@
               <!-- Column Resize Handle -->
               <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
               <div
-                class="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-primary/50 group-hover:bg-primary/20 z-10"
+                class="absolute -right-1.5 top-0 bottom-0 w-3 cursor-col-resize z-10 flex justify-center group/handle"
                 onmousedown={(e) => handleResizeStart(col.id, col.width || 130, e)}
                 role="separator"
                 aria-orientation="vertical"
                 tabindex="-1"
-              ></div>
+              >
+                <div
+                  class="w-0.5 h-full transition-colors {resizingColId === col.id ? 'bg-primary' : 'bg-transparent group-hover/handle:bg-primary/60'}"
+                ></div>
+              </div>
             </th>
           {/each}
           {#if onAddColumnClick}
@@ -203,6 +225,8 @@
               <span class="text-xs font-bold text-muted-foreground">+</span>
             </th>
           {/if}
+          <!-- Spacer column to absorb remaining table width without stretching explicitly sized columns -->
+          <th class="border-b border-border bg-transparent p-0 font-normal"></th>
         </tr>
       </thead>
 
@@ -249,6 +273,8 @@
             {#if onAddColumnClick}
               <td class="w-10 min-w-[2.5rem] bg-muted/10 border-r border-border"></td>
             {/if}
+            <!-- Spacer cell to absorb remaining table width -->
+            <td class="border-b border-border bg-transparent p-0"></td>
           </tr>
         {/each}
       </tbody>
