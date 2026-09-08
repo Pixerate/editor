@@ -89,6 +89,19 @@ export class SpreadsheetController {
     this.recalculateAll();
   }
 
+  public loadDocument(document: SpreadsheetDocument): void {
+    this.document = JSON.parse(JSON.stringify(document));
+    this.activeCell = null;
+    this.selectedRange = null;
+    this.editingCell = null;
+    this.draftValue = '';
+    this.undoStack = [];
+    this.redoStack = [];
+    this.syncWithDataSource();
+    this.recalculateAll();
+    this.notifyChange();
+  }
+
   public registerDataSource(ds: SpreadsheetDataSource): void {
     this.binder.register(ds);
     this.syncWithDataSource();

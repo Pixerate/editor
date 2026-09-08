@@ -157,6 +157,19 @@ export function useSpreadsheetEditor(options: SpreadsheetControllerOptions = {})
     insertRow,
     deleteRow,
     setColumnWidth,
+    loadDocument: (document: SpreadsheetDocument) => {
+      controller.loadDocument(document);
+      setDoc({ ...controller.document });
+      setActiveCell(null);
+      setSelectedRange(null);
+      setEditingCell(null);
+      setDraftValue('');
+    },
+    syncWithDataSource: () => {
+      controller.syncWithDataSource();
+      controller.recalculateAll();
+      setDoc({ ...controller.document });
+    },
     registerDataSource,
     setPrimaryDataSource,
     recalculateAll,

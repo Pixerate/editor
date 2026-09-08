@@ -133,6 +133,8 @@ export declare function createReactiveSpreadsheet(options?: SpreadsheetControlle
   insertRow(index: number, config?: Partial<SpreadsheetRow>): void;
   deleteRow(rowId: string): void;
   setColumnWidth(colId: string, width: number): void;
+  loadDocument(document: SpreadsheetDocument): void;
+  syncWithDataSource(): void;
   registerDataSource(ds: SpreadsheetDataSource): void;
   setPrimaryDataSource(id: string | undefined): void;
   recalculateAll(): void;
