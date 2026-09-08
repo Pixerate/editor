@@ -138,7 +138,7 @@
     const handleMouseMove = (moveEvent: MouseEvent) => {
       if (!resizingColId) return;
       const delta = moveEvent.clientX - resizeStartX;
-      pendingWidth = Math.max(60, resizeStartWidth + delta);
+      pendingWidth = Math.max(30, resizeStartWidth + delta);
 
       if (rafId === null) {
         rafId = requestAnimationFrame(() => {
@@ -214,13 +214,13 @@
           </th>
           {#each sheetState.document.columns as col, cIdx (col.id)}
             <th
-              class="relative border-r border-border px-2 text-left font-medium text-muted-foreground hover:bg-muted/90 transition-colors group {onColumnHeaderClick ? 'cursor-pointer' : 'cursor-default'}"
+              class="relative border-r border-border px-2 text-left font-medium text-muted-foreground hover:bg-muted/90 transition-colors group overflow-hidden max-w-0 {onColumnHeaderClick ? 'cursor-pointer' : 'cursor-default'}"
               style="width: {col.width || 130}px; min-width: {col.width || 130}px; max-width: {col.width || 130}px;"
               onclick={() => onColumnHeaderClick?.(col)}
             >
-              <div class="flex items-center justify-between gap-1 truncate">
-                <span class="truncate font-semibold text-foreground text-xs">{col.title}</span>
-                <span class="text-[10px] text-muted-foreground/70 font-mono font-normal">({col.key})</span>
+              <div class="flex items-center justify-between gap-1 min-w-0 overflow-hidden truncate">
+                <span class="truncate font-semibold text-foreground text-xs min-w-0">{col.title}</span>
+                <span class="text-[10px] text-muted-foreground/70 font-mono font-normal shrink-0">({col.key})</span>
               </div>
               <!-- Column Resize Handle -->
               <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -268,7 +268,7 @@
               {@const isEditing = sheetState.editingCell?.row === rIdx && sheetState.editingCell?.col === cIdx}
 
               <td
-                class="relative border-r border-border px-2 py-1 truncate text-foreground transition-colors {selected ? 'bg-primary/10' : ''} {active ? 'ring-2 ring-primary ring-inset z-10' : ''}"
+                class="relative border-r border-border px-2 py-1 truncate max-w-0 text-foreground transition-colors {selected ? 'bg-primary/10' : ''} {active ? 'ring-2 ring-primary ring-inset z-10' : ''}"
                 onclick={(e) => handleCellClick(rIdx, cIdx, e)}
                 ondblclick={() => handleCellDblClick(rIdx, cIdx)}
               >
@@ -284,7 +284,7 @@
                   {@const cellArg = Object.assign({ row, col, cell }, cell)}
                   {@render (customCellRenderer as any)(cellArg, col, row)}
                 {:else}
-                  <span class="truncate block {cell.error ? 'text-destructive font-semibold' : ''}">
+                  <span class="truncate block max-w-full {cell.error ? 'text-destructive font-semibold' : ''}">
                     {cell.error || (cell.value ?? '')}
                   </span>
                 {/if}
