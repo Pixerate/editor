@@ -6,6 +6,7 @@
 
   interface EditorProps {
     class?: string;
+    editorClass?: string;
     content?: Content;
     showMenu?: boolean;
     editable?: boolean;
@@ -20,6 +21,7 @@
 
   let {
     class: className = "",
+    editorClass = "",
     content = undefined,
     showMenu = true,
     editable = true,
@@ -79,7 +81,7 @@
   {/if}
   <div
     bind:this={element}
-    class="pixerate-editor-content prose w-full max-w-none focus:outline-none"
+    class={`pixerate-editor-content prose dark:prose-invert w-full max-w-none focus:outline-none ${editorClass}`.trim()}
   ></div>
 </div>
 
@@ -90,5 +92,10 @@
     color: #9ca3af;
     pointer-events: none;
     height: 0;
+  }
+
+  :global(.dark .pixerate-editor-content .is-empty::before),
+  :global(html.dark .pixerate-editor-content .is-empty::before) {
+    color: #6b7280;
   }
 </style>

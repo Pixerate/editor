@@ -10,6 +10,7 @@ export * from "./editor.svelte";
 
 export interface EditableTextNodeEditorProps {
   class?: string;
+  editorClass?: string;
   content?: Content;
   showMenu?: boolean;
   editable?: boolean;
