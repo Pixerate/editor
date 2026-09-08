@@ -120,4 +120,38 @@ describe('SpreadsheetController', () => {
     expect(newCtrl.getCell(newCtrl.document.rows[0].id, newCtrl.document.columns[0].id).value).toBe('50');
     expect(newCtrl.getCell(newCtrl.document.rows[0].id, newCtrl.document.columns[1].id).value).toBe('60');
   });
+
+  it('loads new document and recalculates without mutation side-effects', () => {
+    const ctrl = new SpreadsheetController();
+    const sourceDoc = {
+      id: 'custom_sheet',
+      name: 'Custom Sheet',
+      columns: [
+        { id: 'c1', key: 'A', title: 'Num 1', width: 100, type: 'freeform' as const },
+        { id: 'c2', key: 'B', title: 'Num 2', width: 100, type: 'freeform' as const },
+        { id: 'c3', key: 'C', title: 'Sum', width: 100, type: 'freeform' as const }
+      ],
+      rows: [
+        { id: 'r1', index: 0, height: 32, type: 'freeform' as const }
+      ],
+      cells: {
+        r1: {
+          c1: { raw: '25', value: 25 },
+          c2: { raw: '75', value: 75 },
+          c3: { raw: '=A1+B1', value: 0 }
+        }
+      },
+      createdAt: 1000,
+      updatedAt: 1000
+    };
+
+    ctrl.loadDocument(sourceDoc);
+    expect(ctrl.document.id).toBe('custom_sheet');
+    expect(ctrl.document.columns.length).toBe(3);
+    expect(ctrl.getCell('r1', 'c3').value).toBe(100);
+
+    // Verify sourceDoc was deep cloned and not modified directly by reference
+    expect(ctrl.document).not.toBe(sourceDoc);
+    expect(ctrl.document.rows).not.toBe(sourceDoc.rows);
+  });
 });

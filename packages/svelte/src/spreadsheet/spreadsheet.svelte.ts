@@ -128,6 +128,19 @@ export function createReactiveSpreadsheet(options: SpreadsheetControllerOptions 
       controller.setColumnWidth(colId, width);
       doc = { ...controller.document };
     },
+    loadDocument(document: SpreadsheetDocument) {
+      controller.loadDocument(document);
+      doc = { ...controller.document };
+      activeCell = controller.activeCell;
+      selectedRange = controller.selectedRange;
+      editingCell = controller.editingCell;
+      draftValue = controller.draftValue;
+    },
+    syncWithDataSource() {
+      controller.syncWithDataSource();
+      controller.recalculateAll();
+      doc = { ...controller.document };
+    },
     registerDataSource(ds: SpreadsheetDataSource) {
       controller.registerDataSource(ds);
       doc = { ...controller.document };
