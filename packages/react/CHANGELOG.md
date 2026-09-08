@@ -1,5 +1,13 @@
 # @pixerate/editor-react
 
+## 0.3.1
+
+### Patch Changes
+
+- 3fa68c9: Add `loadDocument` and `syncWithDataSource` methods to `SpreadsheetController`, `createReactiveSpreadsheet`, and `useSpreadsheetEditor`. Deep clones loaded documents to prevent reactive proxy mutation cascades.
+- Updated dependencies [3fa68c9]
+  - @pixerate/editor@0.4.1
+
 ## 0.3.0
 
 ### Minor Changes
