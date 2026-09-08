@@ -1,17 +1,32 @@
 import { wrappingInputRule, markInputRule, type Extensions } from "@tiptap/core";
-import StarterKit from "@tiptap/starter-kit";
-import Color from "@tiptap/extension-color";
-import Highlight from "@tiptap/extension-highlight";
-import Link from "@tiptap/extension-link";
-import TaskList from "@tiptap/extension-task-list";
-import TaskItem from "@tiptap/extension-task-item";
-import TextAlign from "@tiptap/extension-text-align";
+import * as _StarterKit from "@tiptap/starter-kit";
+import * as _Color from "@tiptap/extension-color";
+import * as _Highlight from "@tiptap/extension-highlight";
+import * as _Link from "@tiptap/extension-link";
+import * as _TaskList from "@tiptap/extension-task-list";
+import * as _TaskItem from "@tiptap/extension-task-item";
+import * as _TextAlign from "@tiptap/extension-text-align";
 import * as _TextStyle from "@tiptap/extension-text-style";
-const TextStyle = (_TextStyle as any).TextStyle || (_TextStyle as any).default || _TextStyle;
-import Typography from "@tiptap/extension-typography";
-import Underline from "@tiptap/extension-underline";
-import Placeholder from "@tiptap/extension-placeholder";
-import CharacterCount from "@tiptap/extension-character-count";
+import * as _Typography from "@tiptap/extension-typography";
+import * as _Underline from "@tiptap/extension-underline";
+import * as _Placeholder from "@tiptap/extension-placeholder";
+import * as _CharacterCount from "@tiptap/extension-character-count";
+
+const resolveExt = (mod: any, name: string) =>
+  mod?.[name] || mod?.default?.[name] || mod?.default?.default || mod?.default || mod;
+
+const StarterKit = resolveExt(_StarterKit, "StarterKit");
+const Color = resolveExt(_Color, "Color");
+const Highlight = resolveExt(_Highlight, "Highlight");
+const Link = resolveExt(_Link, "Link");
+const TaskList = resolveExt(_TaskList, "TaskList");
+const TaskItem = resolveExt(_TaskItem, "TaskItem");
+const TextAlign = resolveExt(_TextAlign, "TextAlign");
+const TextStyle = resolveExt(_TextStyle, "TextStyle");
+const Typography = resolveExt(_Typography, "Typography");
+const Underline = resolveExt(_Underline, "Underline");
+const Placeholder = resolveExt(_Placeholder, "Placeholder");
+const CharacterCount = resolveExt(_CharacterCount, "CharacterCount");
 
 import { SmilieReplacer } from "./SmilieReplacer";
 import { ColorHighlighter } from "./ColorHighlighter";

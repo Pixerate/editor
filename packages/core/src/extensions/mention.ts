@@ -1,4 +1,5 @@
-import MentionExtension, {
+import {
+  Mention as TipTapMention,
   type MentionOptions as TipTapMentionOptions,
 } from "@tiptap/extension-mention";
 import type { SuggestionOptions } from "@tiptap/suggestion";
@@ -17,11 +18,17 @@ export interface MentionOptions extends Partial<TipTapMentionOptions> {
   suggestion?: Partial<SuggestionOptions<MentionEntity>>;
 }
 
+const BaseMention =
+  TipTapMention ||
+  (TipTapMention as any)?.default?.default ||
+  (TipTapMention as any)?.default ||
+  (TipTapMention as any);
+
 /**
  * First-class native Mention extension for @pixerate/editor.
  * Creates atomic inline <span data-type="mention"> nodes with full suggestion support.
  */
-export const Mention = MentionExtension.extend({
+export const Mention = BaseMention.extend({
   addAttributes() {
     return {
       ...this.parent?.(),
