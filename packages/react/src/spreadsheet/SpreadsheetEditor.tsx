@@ -252,7 +252,7 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
                   className={`relative border-r border-border px-2 text-left font-medium text-muted-foreground hover:bg-muted/90 transition-colors group overflow-hidden max-w-0 ${
                     onColumnHeaderClick ? 'cursor-pointer' : 'cursor-default'
                   }`}
-                  style={{ width: col.width || 130, minWidth: col.width || 130, maxWidth: col.width || 130 }}
+                  style={{ width: col.width || 130, minWidth: col.width || 130, maxWidth: col.width || 130, overflow: 'hidden' }}
                   onClick={() => onColumnHeaderClick?.(col)}
                 >
                   <div className="flex items-center justify-between gap-1 min-w-0 overflow-hidden truncate">
@@ -317,6 +317,7 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
                       className={`relative border-r border-border px-2 py-1 truncate max-w-0 text-foreground transition-colors ${
                         selected ? 'bg-primary/10' : ''
                       } ${active ? 'ring-2 ring-primary ring-inset z-10' : ''}`}
+                      style={{ maxWidth: 0, overflow: 'hidden' }}
                       onClick={(e) => handleCellClick(rIdx, cIdx, e)}
                       onDoubleClick={() => handleCellDblClick(rIdx, cIdx)}
                     >
@@ -353,6 +354,13 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
         .col-resize-handle.active .col-resize-handle-line {
           background-color: var(--primary, #6366f1);
           opacity: 1;
+        }
+        table.table-fixed th {
+          overflow: hidden;
+        }
+        table.table-fixed td {
+          max-width: 0;
+          overflow: hidden;
         }
       `}</style>
     </div>

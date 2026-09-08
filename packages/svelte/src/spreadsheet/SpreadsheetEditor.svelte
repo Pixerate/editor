@@ -215,7 +215,7 @@
           {#each sheetState.document.columns as col, cIdx (col.id)}
             <th
               class="relative border-r border-border px-2 text-left font-medium text-muted-foreground hover:bg-muted/90 transition-colors group overflow-hidden max-w-0 {onColumnHeaderClick ? 'cursor-pointer' : 'cursor-default'}"
-              style="width: {col.width || 130}px; min-width: {col.width || 130}px; max-width: {col.width || 130}px;"
+              style="width: {col.width || 130}px; min-width: {col.width || 130}px; max-width: {col.width || 130}px; overflow: hidden;"
               onclick={() => onColumnHeaderClick?.(col)}
             >
               <div class="flex items-center justify-between gap-1 min-w-0 overflow-hidden truncate">
@@ -269,6 +269,7 @@
 
               <td
                 class="relative border-r border-border px-2 py-1 truncate max-w-0 text-foreground transition-colors {selected ? 'bg-primary/10' : ''} {active ? 'ring-2 ring-primary ring-inset z-10' : ''}"
+                style="max-width: 0; overflow: hidden;"
                 onclick={(e) => handleCellClick(rIdx, cIdx, e)}
                 ondblclick={() => handleCellDblClick(rIdx, cIdx)}
               >
@@ -330,5 +331,12 @@
   .col-resize-handle.active .col-resize-handle-line {
     background-color: var(--primary, #6366f1);
     opacity: 1;
+  }
+  table.table-fixed th {
+    overflow: hidden;
+  }
+  table.table-fixed td {
+    max-width: 0;
+    overflow: hidden;
   }
 </style>

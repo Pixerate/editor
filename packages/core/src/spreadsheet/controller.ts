@@ -503,7 +503,7 @@ export class SpreadsheetController {
   public setColumnWidth(colId: string, width: number): void {
     const col = this.document.columns.find((c) => c.id === colId);
     if (col) {
-      col.width = Math.max(50, width);
+      col.width = Math.max(30, width);
       this.notifyChange();
     }
   }
