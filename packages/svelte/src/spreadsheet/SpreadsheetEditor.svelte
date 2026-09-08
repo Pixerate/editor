@@ -208,7 +208,8 @@
               <!-- Column Resize Handle -->
               <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
               <div
-                class="absolute -right-1.5 top-0 bottom-0 w-3 cursor-col-resize z-10 flex justify-center group/handle"
+                class="absolute top-0 bottom-0 w-3 cursor-col-resize z-10 flex justify-center group/handle"
+                style="right: -6px;"
                 onmousedown={(e) => handleResizeStart(col.id, col.width || 130, e)}
                 role="separator"
                 aria-orientation="vertical"
