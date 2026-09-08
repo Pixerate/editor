@@ -1,5 +1,11 @@
 # @pixerate/editor-svelte
 
+## 0.3.10
+
+### Patch Changes
+
+- aa0d0e4: Add dark:prose-invert, dark placeholder styling, and editorClass prop to EditableTextNodeEditor
+
 ## 0.3.9
 
 ### Patch Changes
