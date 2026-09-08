@@ -1,5 +1,11 @@
 # @pixerate/editor-react
 
+## 0.3.5
+
+### Patch Changes
+
+- 3d69855: Fix column resize handle positioning and hit area centering over column borders across Tailwind environments.
+
 ## 0.3.4
 
 ### Patch Changes
