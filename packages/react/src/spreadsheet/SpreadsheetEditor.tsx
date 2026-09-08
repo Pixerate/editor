@@ -28,6 +28,7 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
   const state = externalState || defaultState;
 
   const [resizingColId, setResizingColId] = useState<string | null>(null);
+  const [hoveredColId, setHoveredColId] = useState<string | null>(null);
   const [resizeStartX, setResizeStartX] = useState(0);
   const [resizeStartWidth, setResizeStartWidth] = useState(0);
 
@@ -133,15 +134,30 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
       document.body.style.userSelect = 'none';
     }
 
+    let rafId: number | null = null;
+    let pendingWidth = resizeStartWidth;
+
     const handleMouseMove = (e: MouseEvent) => {
       const delta = e.clientX - resizeStartX;
-      state.setColumnWidth(resizingColId, Math.max(60, resizeStartWidth + delta));
+      pendingWidth = Math.max(60, resizeStartWidth + delta);
+
+      if (rafId === null) {
+        rafId = requestAnimationFrame(() => {
+          rafId = null;
+          state.setColumnWidth(resizingColId, pendingWidth);
+        });
+      }
     };
 
     const handleMouseUp = () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+      state.setColumnWidth(resizingColId, pendingWidth);
       const col = state.document.columns.find((c) => c.id === resizingColId);
       if (col && onColumnResize) {
-        onColumnResize(col.id, col.width || resizeStartWidth);
+        onColumnResize(col.id, col.width || pendingWidth);
       }
       setResizingColId(null);
       if (typeof document !== 'undefined') {
@@ -153,6 +169,9 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
     return () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
       if (typeof document !== 'undefined') {
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
@@ -230,7 +249,9 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
               {state.document.columns.map((col, cIdx) => (
                 <th
                   key={col.id}
-                  className="relative border-r border-border px-2 text-left font-medium text-muted-foreground hover:bg-muted/90 transition-colors group cursor-pointer"
+                  className={`relative border-r border-border px-2 text-left font-medium text-muted-foreground hover:bg-muted/90 transition-colors group ${
+                    onColumnHeaderClick ? 'cursor-pointer' : 'cursor-default'
+                  }`}
                   style={{ width: col.width || 130, minWidth: col.width || 130, maxWidth: col.width || 130 }}
                   onClick={() => onColumnHeaderClick?.(col)}
                 >
@@ -238,9 +259,12 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
                     <span className="truncate font-semibold text-foreground text-xs">{col.title}</span>
                     <span className="text-[10px] text-muted-foreground/70 font-mono font-normal">({col.key})</span>
                   </div>
+                  {/* Column Resize Handle */}
                   <div
-                    className="absolute top-0 bottom-0 w-3 cursor-col-resize z-10 flex justify-center group/handle"
-                    style={{ right: -6 }}
+                    className="col-resize-handle"
+                    style={{ position: 'absolute', top: 0, bottom: 0, width: 12, right: -6, cursor: 'col-resize', zIndex: 20, display: 'flex', justifyContent: 'center', touchAction: 'none' }}
+                    onMouseEnter={() => setHoveredColId(col.id)}
+                    onMouseLeave={() => setHoveredColId((cur) => cur === col.id ? null : cur)}
                     onMouseDown={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
@@ -252,9 +276,14 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
                     aria-orientation="vertical"
                   >
                     <div
-                      className={`w-0.5 h-full transition-colors ${
-                        resizingColId === col.id ? 'bg-primary' : 'bg-transparent group-hover/handle:bg-primary/60'
-                      }`}
+                      className="col-resize-handle-line"
+                      style={{
+                        width: 2,
+                        height: '100%',
+                        pointerEvents: 'none',
+                        transition: 'background-color 150ms ease',
+                        backgroundColor: resizingColId === col.id ? 'var(--primary, #6366f1)' : hoveredColId === col.id ? 'color-mix(in srgb, var(--primary, #6366f1) 75%, transparent)' : 'transparent'
+                      }}
                     />
                   </div>
                 </th>
@@ -285,10 +314,9 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
                   return (
                     <td
                       key={col.id}
-                      className={`relative border-r border-border px-2 py-1 truncate text-foreground transition-all ${
+                      className={`relative border-r border-border px-2 py-1 truncate text-foreground transition-colors ${
                         selected ? 'bg-primary/10' : ''
                       } ${active ? 'ring-2 ring-primary ring-inset z-10' : ''}`}
-                      style={{ width: col.width || 130, minWidth: col.width || 130, maxWidth: col.width || 130 }}
                       onClick={(e) => handleCellClick(rIdx, cIdx, e)}
                       onDoubleClick={() => handleCellDblClick(rIdx, cIdx)}
                     >
@@ -317,6 +345,16 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
           </tbody>
         </table>
       </div>
+      <style>{`
+        .col-resize-handle:hover .col-resize-handle-line {
+          background-color: var(--primary, #6366f1);
+          opacity: 0.75;
+        }
+        .col-resize-handle.active .col-resize-handle-line {
+          background-color: var(--primary, #6366f1);
+          opacity: 1;
+        }
+      `}</style>
     </div>
   );
 };

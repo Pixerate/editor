@@ -34,6 +34,7 @@
 
   let gridContainer = $state<HTMLDivElement | null>(null);
   let resizingColId = $state<string | null>(null);
+  let hoveredColId = $state<string | null>(null);
   let resizeStartX = $state(0);
   let resizeStartWidth = $state(0);
 
@@ -131,18 +132,34 @@
       document.body.style.userSelect = 'none';
     }
 
+    let rafId: number | null = null;
+    let pendingWidth = width;
+
     const handleMouseMove = (moveEvent: MouseEvent) => {
       if (!resizingColId) return;
       const delta = moveEvent.clientX - resizeStartX;
-      const newWidth = Math.max(60, resizeStartWidth + delta);
-      sheetState.setColumnWidth(resizingColId, newWidth);
+      pendingWidth = Math.max(60, resizeStartWidth + delta);
+
+      if (rafId === null) {
+        rafId = requestAnimationFrame(() => {
+          rafId = null;
+          if (resizingColId) {
+            sheetState.setColumnWidth(resizingColId, pendingWidth);
+          }
+        });
+      }
     };
 
     const handleMouseUp = () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
       if (resizingColId) {
+        sheetState.setColumnWidth(resizingColId, pendingWidth);
         const col = sheetState.document.columns.find((c) => c.id === resizingColId);
         if (col && onColumnResize) {
-          onColumnResize(col.id, col.width || resizeStartWidth);
+          onColumnResize(col.id, col.width || pendingWidth);
         }
       }
       resizingColId = null;
@@ -197,7 +214,7 @@
           </th>
           {#each sheetState.document.columns as col, cIdx (col.id)}
             <th
-              class="relative border-r border-border px-2 text-left font-medium text-muted-foreground hover:bg-muted/90 transition-colors group cursor-pointer"
+              class="relative border-r border-border px-2 text-left font-medium text-muted-foreground hover:bg-muted/90 transition-colors group {onColumnHeaderClick ? 'cursor-pointer' : 'cursor-default'}"
               style="width: {col.width || 130}px; min-width: {col.width || 130}px; max-width: {col.width || 130}px;"
               onclick={() => onColumnHeaderClick?.(col)}
             >
@@ -208,15 +225,18 @@
               <!-- Column Resize Handle -->
               <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
               <div
-                class="absolute top-0 bottom-0 w-3 cursor-col-resize z-10 flex justify-center group/handle"
-                style="right: -6px;"
+                class="col-resize-handle"
+                style="position: absolute; top: 0; bottom: 0; width: 12px; right: -6px; cursor: col-resize !important; z-index: 20; display: flex; justify-content: center; touch-action: none;"
+                onmouseenter={() => hoveredColId = col.id}
+                onmouseleave={() => { if (hoveredColId === col.id) hoveredColId = null; }}
                 onmousedown={(e) => handleResizeStart(col.id, col.width || 130, e)}
                 role="separator"
                 aria-orientation="vertical"
                 tabindex="-1"
               >
                 <div
-                  class="w-0.5 h-full transition-colors {resizingColId === col.id ? 'bg-primary' : 'bg-transparent group-hover/handle:bg-primary/60'}"
+                  class="col-resize-handle-line"
+                  style="width: 2px; height: 100%; pointer-events: none; transition: background-color 150ms ease; background-color: {resizingColId === col.id ? 'var(--primary, #6366f1)' : hoveredColId === col.id ? 'color-mix(in srgb, var(--primary, #6366f1) 75%, transparent)' : 'transparent'};"
                 ></div>
               </div>
             </th>
@@ -248,8 +268,7 @@
               {@const isEditing = sheetState.editingCell?.row === rIdx && sheetState.editingCell?.col === cIdx}
 
               <td
-                class="relative border-r border-border px-2 py-1 truncate text-foreground transition-all {selected ? 'bg-primary/10' : ''} {active ? 'ring-2 ring-primary ring-inset z-10' : ''}"
-                style="width: {col.width || 130}px; min-width: {col.width || 130}px; max-width: {col.width || 130}px;"
+                class="relative border-r border-border px-2 py-1 truncate text-foreground transition-colors {selected ? 'bg-primary/10' : ''} {active ? 'ring-2 ring-primary ring-inset z-10' : ''}"
                 onclick={(e) => handleCellClick(rIdx, cIdx, e)}
                 ondblclick={() => handleCellDblClick(rIdx, cIdx)}
               >
@@ -282,3 +301,34 @@
     </table>
   </div>
 </div>
+
+<style>
+  .col-resize-handle {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 12px;
+    right: -6px;
+    cursor: col-resize !important;
+    z-index: 20;
+    display: flex;
+    justify-content: center;
+    touch-action: none;
+  }
+  .col-resize-handle-line {
+    width: 2px;
+    height: 100%;
+    transition: background-color 150ms ease;
+    background-color: transparent;
+    pointer-events: none;
+  }
+  .col-resize-handle:hover .col-resize-handle-line {
+    background-color: var(--primary, #6366f1);
+    opacity: 0.75;
+  }
+  .col-resize-handle-line.active,
+  .col-resize-handle.active .col-resize-handle-line {
+    background-color: var(--primary, #6366f1);
+    opacity: 1;
+  }
+</style>
