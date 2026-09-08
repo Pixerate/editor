@@ -103,6 +103,7 @@ export interface SpreadsheetEditorProps {
     | ((args: { row: SpreadsheetRow; col: SpreadsheetColumn; cell: CellData }) => any);
   onAddColumnClick?: () => void;
   onColumnHeaderClick?: (col: SpreadsheetColumn) => void;
+  onColumnResize?: (colId: string, width: number) => void;
 }
 
 export interface FormulaBarProps {
