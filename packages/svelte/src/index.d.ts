@@ -78,3 +78,59 @@ export type {
   ColorGradient,
   RichTextPresetOptions,
 };
+
+import type {
+  SpreadsheetController,
+  SpreadsheetControllerOptions,
+  SpreadsheetDocument,
+  SpreadsheetColumn,
+  SpreadsheetRow,
+  CellCoordinate,
+  CellRange,
+  CellData,
+  SpreadsheetDataSource
+} from '@pixerate/editor';
+
+export interface SpreadsheetEditorProps {
+  sheetState: ReturnType<typeof createReactiveSpreadsheet>;
+  readonly?: boolean;
+  class?: string;
+  customCellRenderer?: (cell: CellData, col: SpreadsheetColumn, row: SpreadsheetRow) => any;
+}
+
+export interface FormulaBarProps {
+  sheetState: ReturnType<typeof createReactiveSpreadsheet>;
+  class?: string;
+}
+
+export declare const SpreadsheetEditor: Component<SpreadsheetEditorProps>;
+export declare const FormulaBar: Component<FormulaBarProps>;
+
+export declare function createReactiveSpreadsheet(options?: SpreadsheetControllerOptions): {
+  readonly document: SpreadsheetDocument;
+  readonly activeCell: CellCoordinate | null;
+  readonly selectedRange: CellRange | null;
+  readonly editingCell: CellCoordinate | null;
+  draftValue: string;
+  controller: SpreadsheetController;
+  getCell(rowId: string, colId: string): CellData;
+  setCellValue(rowId: string, colId: string, raw: string): void;
+  selectCell(row: number, col: number, extendSelection?: boolean): void;
+  selectRange(range: CellRange): void;
+  startEditing(row?: number, col?: number, initialVal?: string): void;
+  commitEditing(val?: string): void;
+  cancelEditing(): void;
+  moveCursor(dir: 'up' | 'down' | 'left' | 'right', extend?: boolean): void;
+  insertColumn(index: number, config?: Partial<SpreadsheetColumn>): void;
+  deleteColumn(colId: string): void;
+  insertRow(index: number, config?: Partial<SpreadsheetRow>): void;
+  deleteRow(rowId: string): void;
+  setColumnWidth(colId: string, width: number): void;
+  registerDataSource(ds: SpreadsheetDataSource): void;
+  setPrimaryDataSource(id: string | undefined): void;
+  recalculateAll(): void;
+  exportToTsv(): string;
+  importFromTsv(data: string): void;
+  undo(): void;
+  redo(): void;
+};
