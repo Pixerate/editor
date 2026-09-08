@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.4.2
+
+### Patch Changes
+
+- 73a0740: Add inline standard linear-gradient and background-clip styles to GradientText decoration for framework and CSS version resilience
+
 ## 0.4.1
 
 ### Patch Changes

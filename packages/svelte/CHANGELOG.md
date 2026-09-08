@@ -1,5 +1,13 @@
 # @pixerate/editor-svelte
 
+## 0.3.3
+
+### Patch Changes
+
+- efe499a: Enhance SpreadsheetEditor column resizing with enlarged hit target, visual hover and active indicator guidelines, global drag cursor styles, trailing spacer column to avoid automatic full-width stretching, and onColumnResize callback.
+- Updated dependencies [73a0740]
+  - @pixerate/editor@0.4.2
+
 ## 0.3.2
 
 ### Patch Changes
