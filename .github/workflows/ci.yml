@@ -35,6 +35,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Check for changeset on PRs
+        if: github.event_name == 'pull_request'
+        run: |
+          CHANGESETS=$(find .changeset -name "*.md" ! -name "README.md" | wc -l)
+          if [ "$CHANGESETS" -eq "0" ]; then
+            echo "::error title=Missing Changeset::No changeset found in .changeset/. Please run 'pnpm changeset' and include the generated markdown file in your PR so packages can be published on merge."
+            exit 1
+          else
+            echo "Pending changeset found: $CHANGESETS"
+          fi
+
       - name: Build packages & demo
         run: pnpm build
 
