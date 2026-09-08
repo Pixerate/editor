@@ -1,6 +1,6 @@
 {
   "name": "@pixerate/editor-react",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "description": "React bindings and prompt/rich-text components for @pixerate/editor",
   "author": "Pixerate",
   "license": "MIT",

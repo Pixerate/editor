@@ -1,5 +1,11 @@
 # @pixerate/editor-react
 
+## 0.3.6
+
+### Patch Changes
+
+- 7c71228: Optimize spreadsheet column resize performance with requestAnimationFrame and transition-colors, and improve column header hover cursor and divider visual indicator
+
 ## 0.3.5
 
 ### Patch Changes
