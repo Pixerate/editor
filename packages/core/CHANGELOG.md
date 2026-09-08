@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.4.3
+
+### Patch Changes
+
+- 5faaf5d: Fix CommonJS module interop for TipTap extensions by using resilient named and default unwrapping
+
 ## 0.4.2
 
 ### Patch Changes
