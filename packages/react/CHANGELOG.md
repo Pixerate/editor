@@ -1,5 +1,11 @@
 # @pixerate/editor-react
 
+## 0.3.7
+
+### Patch Changes
+
+- d848090: Allow spreadsheet columns to collapse below text natural width with text truncation and max-w-0 on table cells
+
 ## 0.3.6
 
 ### Patch Changes
