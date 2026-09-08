@@ -1,5 +1,16 @@
 # @pixerate/editor-react
 
+## 0.3.0
+
+### Minor Changes
+
+- 3edfea4: Add generic spreadsheet editor with pure TypeScript formula engine, reactive dependency graph, data source two-way binding, and cross-framework Svelte 5 and React components.
+
+### Patch Changes
+
+- Updated dependencies [3edfea4]
+  - @pixerate/editor@0.4.0
+
 ## 0.2.4
 
 ### Patch Changes
