@@ -239,7 +239,8 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
                     <span className="text-[10px] text-muted-foreground/70 font-mono font-normal">({col.key})</span>
                   </div>
                   <div
-                    className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-primary/50 group-hover:bg-primary/20 z-10"
+                    className="absolute top-0 bottom-0 w-3 cursor-col-resize z-10 flex justify-center group/handle"
+                    style={{ right: -6 }}
                     onMouseDown={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
@@ -249,7 +250,13 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
                     }}
                     role="separator"
                     aria-orientation="vertical"
-                  />
+                  >
+                    <div
+                      className={`w-0.5 h-full transition-colors ${
+                        resizingColId === col.id ? 'bg-primary' : 'bg-transparent group-hover/handle:bg-primary/60'
+                      }`}
+                    />
+                  </div>
                 </th>
               ))}
               {onAddColumnClick && (
