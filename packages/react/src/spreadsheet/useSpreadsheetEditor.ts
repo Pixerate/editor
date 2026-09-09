@@ -111,6 +111,11 @@ export function useSpreadsheetEditor(options: SpreadsheetControllerOptions = {})
     setDoc({ ...controller.document });
   }, [controller]);
 
+  const autoFitColumnWidth = useCallback((colId: string, customWidth?: number) => {
+    controller.autoFitColumnWidth(colId, customWidth);
+    setDoc({ ...controller.document });
+  }, [controller]);
+
   const registerDataSource = useCallback((ds: SpreadsheetDataSource) => {
     controller.registerDataSource(ds);
     setDoc({ ...controller.document });
@@ -157,6 +162,7 @@ export function useSpreadsheetEditor(options: SpreadsheetControllerOptions = {})
     insertRow,
     deleteRow,
     setColumnWidth,
+    autoFitColumnWidth,
     loadDocument: (document: SpreadsheetDocument) => {
       controller.loadDocument(document);
       setDoc({ ...controller.document });

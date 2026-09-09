@@ -128,6 +128,10 @@ export function createReactiveSpreadsheet(options: SpreadsheetControllerOptions 
       controller.setColumnWidth(colId, width);
       doc = { ...controller.document };
     },
+    autoFitColumnWidth(colId: string, customWidth?: number) {
+      controller.autoFitColumnWidth(colId, customWidth);
+      doc = { ...controller.document };
+    },
     loadDocument(document: SpreadsheetDocument) {
       controller.loadDocument(document);
       doc = { ...controller.document };

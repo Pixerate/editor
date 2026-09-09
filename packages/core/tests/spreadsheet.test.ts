@@ -154,4 +154,25 @@ describe('SpreadsheetController', () => {
     expect(ctrl.document).not.toBe(sourceDoc);
     expect(ctrl.document.rows).not.toBe(sourceDoc.rows);
   });
+
+  it('calculates autoFitColumnWidth based on column title and cell contents', () => {
+    const ctrl = new SpreadsheetController();
+    const colA = ctrl.document.columns[0].id;
+    const r0 = ctrl.document.rows[0].id;
+
+    // Default column A title is empty or short
+    ctrl.autoFitColumnWidth(colA);
+    expect(ctrl.document.columns[0].width).toBeGreaterThanOrEqual(50);
+
+    // Insert a very long text value
+    const longText = 'A quick brown fox jumps over the lazy dog and runs across the field';
+    ctrl.setCellValue(r0, colA, longText);
+    ctrl.autoFitColumnWidth(colA);
+    expect(ctrl.document.columns[0].width).toBeGreaterThan(200);
+
+    // Can set explicit custom width via autoFitColumnWidth
+    ctrl.autoFitColumnWidth(colA, 175);
+    expect(ctrl.document.columns[0].width).toBe(175);
+  });
 });
+

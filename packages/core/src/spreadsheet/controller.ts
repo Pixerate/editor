@@ -508,6 +508,26 @@ export class SpreadsheetController {
     }
   }
 
+  public autoFitColumnWidth(colId: string, customWidth?: number): void {
+    if (customWidth !== undefined) {
+      this.setColumnWidth(colId, customWidth);
+      return;
+    }
+    const col = this.document.columns.find((c) => c.id === colId);
+    if (!col) return;
+
+    let maxLen = (col.title || '').length + (col.key ? col.key.length + 3 : 0);
+    for (const row of this.document.rows) {
+      const cell = this.getCell(row.id, col.id);
+      const valStr = cell.value != null ? String(cell.value) : '';
+      if (valStr.length > maxLen) {
+        maxLen = valStr.length;
+      }
+    }
+    const estimatedWidth = Math.min(600, Math.max(50, Math.ceil(maxLen * 8.5 + 32)));
+    this.setColumnWidth(colId, estimatedWidth);
+  }
+
   // --- Clipboard TSV/CSV ---
 
   public exportToTsv(): string {
