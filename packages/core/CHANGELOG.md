@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.4.5
+
+### Patch Changes
+
+- 0557d6b: Support double-clicking column header edge to size to fit in spreadsheet view
+
 ## 0.4.4
 
 ### Patch Changes

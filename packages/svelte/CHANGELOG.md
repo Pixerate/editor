@@ -1,5 +1,13 @@
 # @pixerate/editor-svelte
 
+## 0.3.11
+
+### Patch Changes
+
+- 0557d6b: Support double-clicking column header edge to size to fit in spreadsheet view
+- Updated dependencies [0557d6b]
+  - @pixerate/editor@0.4.5
+
 ## 0.3.10
 
 ### Patch Changes
