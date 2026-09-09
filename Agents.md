@@ -83,7 +83,20 @@ Our core value proposition is **parity across JavaScript, React, and Svelte**:
 
 ---
 
-## 4. Build and Verification Checklist
+## 4. Maintain and Check `GOTCHAS.md`
+
+All agents and contributors must consult and maintain [`GOTCHAS.md`](./GOTCHAS.md):
+
+1. **Check Before Starting Work**: Always review `GOTCHAS.md` before beginning any task to be aware of known issues, framework quirks, and existing workarounds in the codebase.
+2. **Populate with New Findings**: Whenever you encounter, diagnose, or resolve a tricky bug, pitfall, unexpected behavior, or framework-specific edge case (e.g., ProseMirror, React, Svelte, Tailwind, or bundling quirks), document it in `GOTCHAS.md`.
+3. **Include Solutions and Workarounds**: Every entry must clearly describe:
+   - **Issue / Symptom**: What goes wrong.
+   - **Root Cause**: Why it occurs.
+   - **Solution / Workaround**: How to fix it or work around it safely.
+
+---
+
+## 5. Build and Verification Checklist
 
 Before pushing changes:
 ```bash
@@ -95,4 +108,6 @@ pnpm test
 
 # 3. Verify demo app compiles and runs
 pnpm --filter demo build
+
+# 4. Record any newly discovered pitfalls or workarounds in GOTCHAS.md
 ```
