@@ -26,6 +26,7 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
 }) => {
   const defaultState = useSpreadsheetEditor();
   const state = externalState || defaultState;
+  const gridRef = useRef<HTMLDivElement>(null);
 
   const [resizingColId, setResizingColId] = useState<string | null>(null);
   const [hoveredColId, setHoveredColId] = useState<string | null>(null);
@@ -136,9 +137,13 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
 
     let rafId: number | null = null;
     let pendingWidth = resizeStartWidth;
+    let hasDragged = false;
 
     const handleMouseMove = (e: MouseEvent) => {
       const delta = e.clientX - resizeStartX;
+      if (Math.abs(delta) > 2) {
+        hasDragged = true;
+      }
       pendingWidth = Math.max(30, resizeStartWidth + delta);
 
       if (rafId === null) {
@@ -154,10 +159,12 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
         cancelAnimationFrame(rafId);
         rafId = null;
       }
-      state.setColumnWidth(resizingColId, pendingWidth);
-      const col = state.document.columns.find((c) => c.id === resizingColId);
-      if (col && onColumnResize) {
-        onColumnResize(col.id, col.width || pendingWidth);
+      if (hasDragged) {
+        state.setColumnWidth(resizingColId, pendingWidth);
+        const col = state.document.columns.find((c) => c.id === resizingColId);
+        if (col && onColumnResize) {
+          onColumnResize(col.id, col.width || pendingWidth);
+        }
       }
       setResizingColId(null);
       if (typeof document !== 'undefined') {
@@ -181,6 +188,130 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
     };
   }, [resizingColId, resizeStartX, resizeStartWidth, state, onColumnResize]);
 
+  const measureElementContentWidth = useCallback((el: HTMLElement, container: HTMLElement): number => {
+    if (typeof document === 'undefined') return 0;
+
+    let maxW = el.scrollWidth || 0;
+    const firstChild = el.firstElementChild as HTMLElement | null;
+    if (firstChild && firstChild.scrollWidth > maxW) {
+      maxW = firstChild.scrollWidth;
+    }
+
+    const truncated = el.querySelectorAll<HTMLElement>('.truncate, [title], span, div');
+    truncated.forEach((node) => {
+      if (node.scrollWidth > maxW) {
+        maxW = node.scrollWidth;
+      }
+    });
+
+    try {
+      const clone = (firstChild ? firstChild.cloneNode(true) : el.cloneNode(true)) as HTMLElement;
+      clone.style.cssText = `
+        position: absolute !important;
+        visibility: hidden !important;
+        width: max-content !important;
+        min-width: max-content !important;
+        max-width: none !important;
+        overflow: visible !important;
+        white-space: nowrap !important;
+        pointer-events: none !important;
+        top: -9999px !important;
+        left: -9999px !important;
+      `;
+
+      const allNodes = clone.querySelectorAll<HTMLElement>('*');
+      allNodes.forEach((node) => {
+        node.style.maxWidth = 'none';
+        node.style.overflow = 'visible';
+        node.style.textOverflow = 'clip';
+        node.style.whiteSpace = 'nowrap';
+        if (
+          node.classList.contains('truncate') ||
+          node.classList.contains('min-w-0') ||
+          node.classList.contains('w-full') ||
+          node.classList.contains('max-w-0') ||
+          node.classList.contains('flex-1')
+        ) {
+          node.style.width = 'max-content';
+          node.style.minWidth = 'max-content';
+        }
+      });
+
+      container.appendChild(clone);
+      const rect = clone.getBoundingClientRect();
+      container.removeChild(clone);
+
+      if (rect.width > maxW) {
+        maxW = rect.width;
+      }
+    } catch {
+      // Ignore cloning/measuring errors
+    }
+
+    return maxW;
+  }, []);
+
+  const autoFitColumn = useCallback((colId: string, colIndex: number) => {
+    const col = state.document.columns.find((c) => c.id === colId);
+    if (!col) return;
+
+    let calculatedWidth = 0;
+
+    if (gridRef.current && typeof document !== 'undefined') {
+      const table = gridRef.current.querySelector('table');
+      if (table) {
+        const thElements = table.querySelectorAll('thead th');
+        const th = thElements[colIndex + 1] as HTMLElement | undefined;
+        if (th) {
+          const headerInner = (th.firstElementChild as HTMLElement) || th;
+          const headerW = measureElementContentWidth(headerInner, gridRef.current);
+          calculatedWidth = Math.max(calculatedWidth, headerW + 28);
+        }
+
+        const rows = table.querySelectorAll('tbody tr');
+        const sampleLimit = Math.min(rows.length, 150);
+        for (let r = 0; r < sampleLimit; r++) {
+          const tr = rows[r];
+          const td = tr.children[colIndex + 1] as HTMLElement | undefined;
+          if (td) {
+            const cellW = measureElementContentWidth(td, gridRef.current);
+            calculatedWidth = Math.max(calculatedWidth, cellW + 20);
+          }
+        }
+      }
+    }
+
+    if (calculatedWidth > 0) {
+      const finalWidth = Math.min(600, Math.max(50, Math.ceil(calculatedWidth)));
+      state.setColumnWidth(colId, finalWidth);
+    } else {
+      state.autoFitColumnWidth?.(colId);
+    }
+
+    const updatedCol = state.document.columns.find((c) => c.id === colId);
+    if (updatedCol && onColumnResize) {
+      onColumnResize(updatedCol.id, updatedCol.width || 130);
+    }
+  }, [state, measureElementContentWidth, onColumnResize]);
+
+  const handleResizeDblClick = useCallback((colId: string, colIndex: number, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    autoFitColumn(colId, colIndex);
+  }, [autoFitColumn]);
+
+  const handleHeaderDblClick = useCallback((colId: string, colIndex: number, e: React.MouseEvent) => {
+    const target = e.currentTarget as HTMLElement | null;
+    if (target) {
+      const rect = target.getBoundingClientRect();
+      if (rect.right - e.clientX <= 12) {
+        e.preventDefault();
+        e.stopPropagation();
+        autoFitColumn(colId, colIndex);
+      }
+    }
+  }, [autoFitColumn]);
+
   const isCellSelected = (rIdx: number, cIdx: number) => {
     if (!state.selectedRange) return false;
     const minR = Math.min(state.selectedRange.startRow, state.selectedRange.endRow);
@@ -196,6 +327,7 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
 
   return (
     <div
+      ref={gridRef}
       className="flex flex-col h-full w-full overflow-hidden border border-border bg-background select-none outline-none text-foreground font-sans text-xs"
       tabIndex={0}
       onKeyDown={handleKeyDown}
@@ -254,6 +386,7 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
                   }`}
                   style={{ width: col.width || 130, minWidth: col.width || 130, maxWidth: col.width || 130, overflow: 'hidden' }}
                   onClick={() => onColumnHeaderClick?.(col)}
+                  onDoubleClick={(e) => handleHeaderDblClick(col.id, cIdx, e)}
                 >
                   <div className="flex items-center justify-between gap-1 min-w-0 overflow-hidden truncate">
                     <span className="truncate font-semibold text-foreground text-xs min-w-0">{col.title}</span>
@@ -272,6 +405,7 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
                       setResizeStartX(e.clientX);
                       setResizeStartWidth(col.width || 130);
                     }}
+                    onDoubleClick={(e) => handleResizeDblClick(col.id, cIdx, e)}
                     role="separator"
                     aria-orientation="vertical"
                   >
