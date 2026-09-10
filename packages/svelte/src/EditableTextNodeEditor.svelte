@@ -1,7 +1,6 @@
 <script lang="ts">
   import type { Editor, Content, Extensions } from "@tiptap/core";
   import { onDestroy, onMount } from "svelte";
-  import Placeholder from "@tiptap/extension-placeholder";
   import { initiateEditor } from "./editor.svelte";
 
   interface EditorProps {
@@ -46,13 +45,11 @@
     editor = initiateEditor(
       element,
       content,
-      [
-        Placeholder.configure({
-          placeholder,
-        }),
-        ...extensions,
-      ],
+      extensions,
       {
+        richTextOptions: {
+          placeholder,
+        },
         editable,
         onCreate,
         onUpdate,
