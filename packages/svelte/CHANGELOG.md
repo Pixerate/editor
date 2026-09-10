@@ -1,5 +1,11 @@
 # @pixerate/editor-svelte
 
+## 0.3.12
+
+### Patch Changes
+
+- e556a34: Configure placeholder extension via richTextOptions in initiateEditor to prevent duplicate extension warning in TipTap.
+
 ## 0.3.11
 
 ### Patch Changes
