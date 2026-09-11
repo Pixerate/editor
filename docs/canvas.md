@@ -34,6 +34,7 @@ pnpm add @pixerate/editor-svelte @xyflow/svelte
 | [`getLayoutedNodes` / `centerNodes`](#layout-and-viewport-math) | Dagre hierarchical auto-layout, viewport centering, and bounding box math. |
 | [`createCanvasShortcuts`](#createcanvasshortcutsoptions) | Global keyboard shortcut binding with automatic suppression during active text editing. |
 | [`createCanvasInteractions`](#createcanvasinteractionsoptions) | Spacebar panning toggle, trackpad pinch detection, and SvelteFlow interaction presets. |
+| [`createCanvasExplosion`](#createcanvasexplosiongraph-options) | Multi-node explosion, fan-out/bezier trajectory animation, spatial displacement ("make space"), and reversible collapse. |
 | `types` | Generic TypeScript interfaces (`CanvasNode`, `CanvasEdge`, `GraphDifferences`, `CanvasLayoutOptions`, etc.). |
 
 ---
@@ -195,3 +196,48 @@ Manages viewport interaction modes:
 - `trackpadDetected`: Reactive flag set when trackpad pinch-to-zoom is detected.
 - Presets: `defaultSvelteFlowPreset`, `miroCompatiblePreset`.
 - Helper: `restorePanelPointerEvents()` restores panel clickability after drag-selection.
+
+---
+
+### `createCanvasExplosion(graph, options?)`
+
+Headless Svelte 5 rune orchestrating node expansion/explosion into sub-nodes, parametric trajectory paths, spatial layout displacement ("make space"), and reversible collapsing.
+
+#### Features
+- **Spatial Displacement**: Automatically shifts downstream and sibling nodes using directional (`'right'`, `'down'`, `'left'`, `'up'`) or Dagre hierarchical reflow strategies.
+- **Parametric Trajectories**: Built-in `createFanOutTrajectory` (smooth bezier fan arc), `linearTrajectory`, and custom `(origin, target, progress, index, total) => { position, scale, opacity }`.
+- **Reversible Collapse**: Automatically records an `ExplosionSnapshot` caching pre-explosion node positions and edges. Collapsing smoothly retracts child nodes to origin and returns displaced nodes to their baseline positions without graph drift.
+- **High Performance**: Mutates coordinates in-place during `requestAnimationFrame` to avoid per-frame garbage collection.
+
+#### Usage Example
+
+```svelte
+<script lang="ts">
+  import {
+    createCanvasGraph,
+    createCanvasExplosion,
+    createFanOutTrajectory
+  } from '@pixerate/editor-svelte/canvas';
+
+  const graph = createCanvasGraph({ initialNodes: [...], initialEdges: [...] });
+  const explosion = createCanvasExplosion(graph);
+
+  function handleNodeClick(nodeId: string) {
+    if (explosion.isExploded(nodeId)) {
+      explosion.collapseNode(nodeId, { duration: 400 });
+    } else {
+      explosion.explodeNode(nodeId, {
+        childNodes: [
+          { id: 'sub-1', position: { x: 300, y: 50 }, data: { label: 'Task 1' } },
+          { id: 'sub-2', position: { x: 300, y: 150 }, data: { label: 'Task 2' } }
+        ],
+        displacementStrategy: 'directional', // or 'dagre'
+        directionalOptions: { direction: 'right', gap: 50 },
+        trajectory: createFanOutTrajectory({ curvature: 0.4 }),
+        duration: 500
+      });
+    }
+  }
+</script>
+```
+

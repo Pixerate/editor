@@ -94,3 +94,119 @@ export interface CanvasInteractionPresetConfig {
 	minZoom?: number;
 	maxZoom?: number;
 }
+
+/**
+ * Parametric point returned by a trajectory evaluation.
+ */
+export interface TrajectoryPoint {
+	position: XYPosition;
+	scale?: number;
+	opacity?: number;
+}
+
+/**
+ * Trajectory evaluation function determining path, scale, and opacity over time t in [0, 1].
+ */
+export type TrajectoryFunction = (
+	origin: XYPosition,
+	target: XYPosition,
+	progress: number,
+	index: number,
+	total: number
+) => TrajectoryPoint;
+
+/**
+ * Options for fan-out trajectory generator.
+ */
+export interface FanOutTrajectoryOptions {
+	curvature?: number;
+	spreadAngle?: number;
+	startScale?: number;
+	endScale?: number;
+	startOpacity?: number;
+	endOpacity?: number;
+}
+
+/**
+ * Single node animation transition definition.
+ */
+export interface NodeTransition<TNode extends CanvasNode = CanvasNode> {
+	node: TNode;
+	from: XYPosition;
+	to: XYPosition;
+	trajectory?: TrajectoryFunction;
+	delay?: number;
+	duration?: number;
+	easing?: (t: number) => number;
+	index?: number;
+	total?: number;
+}
+
+/**
+ * Displacement axis / direction.
+ */
+export type DisplacementDirection = 'right' | 'left' | 'down' | 'up';
+
+/**
+ * Options for directional displacement calculation.
+ */
+export interface DirectionalDisplacementOptions {
+	direction?: DisplacementDirection;
+	gap?: number;
+	spreadSiblingLanes?: boolean;
+	siblingTolerance?: number;
+}
+
+/**
+ * Options for Dagre reflow displacement calculation.
+ */
+export interface ReflowDisplacementOptions extends CanvasLayoutOptions {
+	anchorNodeId: string;
+}
+
+/**
+ * Snapshot of canvas graph state prior to node explosion, enabling exact reversibility.
+ */
+export interface ExplosionSnapshot<
+	TNode extends CanvasNode = CanvasNode,
+	TEdge extends CanvasEdge = CanvasEdge
+> {
+	parentId: string;
+	childNodeIds: string[];
+	childEdgeIds: string[];
+	displacedNodes: { id: string; originalPosition: XYPosition }[];
+	timestamp: number;
+}
+
+/**
+ * Options for exploding a node.
+ */
+export interface ExplodeNodeOptions<
+	TNode extends CanvasNode = CanvasNode,
+	TEdge extends CanvasEdge = CanvasEdge
+> {
+	childNodes: TNode[];
+	childEdges?: TEdge[];
+	connectParentToChildren?: boolean | 'first' | 'all';
+	connectChildrenToDownstream?: boolean;
+	displacementStrategy?: 'directional' | 'dagre' | 'none';
+	directionalOptions?: DirectionalDisplacementOptions;
+	reflowOptions?: Partial<ReflowDisplacementOptions>;
+	trajectory?: TrajectoryFunction;
+	duration?: number;
+	staggerDelay?: number;
+	easing?: (t: number) => number;
+	onComplete?: () => void;
+}
+
+/**
+ * Options for collapsing an exploded node.
+ */
+export interface CollapseNodeOptions {
+	duration?: number;
+	staggerDelay?: number;
+	easing?: (t: number) => number;
+	trajectory?: TrajectoryFunction;
+	onComplete?: () => void;
+}
+

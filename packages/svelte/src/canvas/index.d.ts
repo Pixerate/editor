@@ -96,6 +96,122 @@ export interface CanvasInteractionPresetConfig {
 }
 
 /**
+ * Parametric point returned by a trajectory evaluation.
+ */
+export interface TrajectoryPoint {
+  position: XYPosition;
+  scale?: number;
+  opacity?: number;
+}
+
+/**
+ * Trajectory evaluation function determining path, scale, and opacity over time t in [0, 1].
+ */
+export type TrajectoryFunction = (
+  origin: XYPosition,
+  target: XYPosition,
+  progress: number,
+  index: number,
+  total: number
+) => TrajectoryPoint;
+
+/**
+ * Options for fan-out trajectory generator.
+ */
+export interface FanOutTrajectoryOptions {
+  curvature?: number;
+  spreadAngle?: number;
+  startScale?: number;
+  endScale?: number;
+  startOpacity?: number;
+  endOpacity?: number;
+}
+
+/**
+ * Single node animation transition definition.
+ */
+export interface NodeTransition<TNode extends CanvasNode = CanvasNode> {
+  node: TNode;
+  from: XYPosition;
+  to: XYPosition;
+  trajectory?: TrajectoryFunction;
+  delay?: number;
+  duration?: number;
+  easing?: (t: number) => number;
+  index?: number;
+  total?: number;
+}
+
+/**
+ * Displacement axis / direction.
+ */
+export type DisplacementDirection = 'right' | 'left' | 'down' | 'up';
+
+/**
+ * Options for directional displacement calculation.
+ */
+export interface DirectionalDisplacementOptions {
+  direction?: DisplacementDirection;
+  gap?: number;
+  spreadSiblingLanes?: boolean;
+  siblingTolerance?: number;
+}
+
+/**
+ * Options for Dagre reflow displacement calculation.
+ */
+export interface ReflowDisplacementOptions extends CanvasLayoutOptions {
+  anchorNodeId: string;
+}
+
+/**
+ * Snapshot of canvas graph state prior to node explosion, enabling exact reversibility.
+ */
+export interface ExplosionSnapshot<
+  TNode extends CanvasNode = CanvasNode,
+  TEdge extends CanvasEdge = CanvasEdge
+> {
+  parentId: string;
+  childNodeIds: string[];
+  childEdgeIds: string[];
+  displacedNodes: { id: string; originalPosition: XYPosition }[];
+  timestamp: number;
+}
+
+/**
+ * Options for exploding a node.
+ */
+export interface ExplodeNodeOptions<
+  TNode extends CanvasNode = CanvasNode,
+  TEdge extends CanvasEdge = CanvasEdge
+> {
+  childNodes: TNode[];
+  childEdges?: TEdge[];
+  connectParentToChildren?: boolean | 'first' | 'all';
+  connectChildrenToDownstream?: boolean;
+  displacementStrategy?: 'directional' | 'dagre' | 'none';
+  directionalOptions?: DirectionalDisplacementOptions;
+  reflowOptions?: Partial<ReflowDisplacementOptions>;
+  trajectory?: TrajectoryFunction;
+  duration?: number;
+  staggerDelay?: number;
+  easing?: (t: number) => number;
+  onComplete?: () => void;
+}
+
+/**
+ * Options for collapsing an exploded node.
+ */
+export interface CollapseNodeOptions {
+  duration?: number;
+  staggerDelay?: number;
+  easing?: (t: number) => number;
+  trajectory?: TrajectoryFunction;
+  onComplete?: () => void;
+}
+
+
+/**
  * Pure calculation of graph differences between a current state and a baseline state.
  */
 export declare function calculateGraphDifferences<
@@ -343,3 +459,114 @@ export declare const miroCompatiblePreset: CanvasInteractionPresetConfig;
  * Helper to ensure panels restore pointer events after selection rectangle releases.
  */
 export declare function restorePanelPointerEvents(panelSelector?: string): void;
+
+/**
+ * Standard linear trajectory: straight line interpolation with linear scale & opacity progression.
+ */
+export declare const linearTrajectory: TrajectoryFunction;
+
+/**
+ * Creates a fan-out trajectory where nodes arc outward from origin to target.
+ */
+export declare function createFanOutTrajectory(options?: FanOutTrajectoryOptions): TrajectoryFunction;
+
+/**
+ * Creates a custom quadratic Bezier trajectory with a specified or dynamically calculated control point.
+ */
+export declare function createBezierTrajectory(
+  getControlPoint: (origin: XYPosition, target: XYPosition) => XYPosition
+): TrajectoryFunction;
+
+/**
+ * Coordinates and animates multiple node transitions simultaneously with zero per-frame array allocations.
+ */
+export declare function runMultiNodeTransition<TNode extends CanvasNode = CanvasNode>(
+  transitions: NodeTransition<TNode>[],
+  options?: {
+    defaultDuration?: number;
+    defaultEasing?: (t: number) => number;
+    onUpdate?: () => void;
+    onComplete?: () => void;
+  }
+): () => void;
+
+/**
+ * Calculates a bounding rectangle for a set of nodes.
+ */
+export declare function computeNodesBoundingBox<TNode extends CanvasNode = CanvasNode>(
+  nodes: TNode[],
+  defaultWidth?: number,
+  defaultHeight?: number
+): Rect;
+
+/**
+ * Pure directional displacement calculation.
+ */
+export declare function calculateDirectionalDisplacement<TNode extends CanvasNode = CanvasNode>(params: {
+  existingNodes: TNode[];
+  originNode: TNode;
+  childNodes: TNode[];
+  getNodesBounds?: (nodes: TNode[]) => Rect;
+  options?: DirectionalDisplacementOptions;
+}): Map<string, XYPosition>;
+
+/**
+ * Pure hierarchical Dagre reflow displacement calculation.
+ */
+export declare function calculateReflowDisplacement<
+  TNode extends CanvasNode = CanvasNode,
+  TEdge extends CanvasEdge = CanvasEdge
+>(params: {
+  existingNodes: TNode[];
+  existingEdges: TEdge[];
+  originNode: TNode;
+  childNodes: TNode[];
+  childEdges?: TEdge[];
+  getNodesBounds?: (nodes: TNode[]) => Rect;
+  options?: CanvasLayoutOptions;
+}): Map<string, XYPosition>;
+
+export interface CanvasGraphTarget<
+  TNode extends CanvasNode = CanvasNode,
+  TEdge extends CanvasEdge = CanvasEdge
+> {
+  nodes: TNode[];
+  edges: TEdge[];
+  setNodes: (nodes: TNode[], triggerCallback?: boolean) => void;
+  setEdges: (edges: TEdge[], triggerCallback?: boolean) => void;
+  addNodeOrNodes: (nodes: TNode | TNode[], animateFrom?: XYPosition, save?: boolean) => void;
+  addEdges: (edges: TEdge[], save?: boolean) => void;
+  removeNodes: (nodes: TNode[], save?: boolean) => void;
+  removeEdges: (edges: TEdge[], save?: boolean) => void;
+  createEdge?: (sourceId: string, targetId: string, options?: any) => TEdge;
+  onSave?: () => void;
+}
+
+export interface CreateCanvasExplosionOptions<TNode extends CanvasNode = CanvasNode> {
+  getNodesBounds?: (nodes: TNode[]) => Rect;
+  onSave?: () => void;
+}
+
+/**
+ * Headless Svelte 5 rune managing canvas node explosion, spatial layout displacement,
+ * coordinated multi-node animation paths, and reversible collapsing.
+ */
+export declare function createCanvasExplosion<
+  TNode extends CanvasNode = CanvasNode,
+  TEdge extends CanvasEdge = CanvasEdge
+>(
+  graph: CanvasGraphTarget<TNode, TEdge>,
+  options?: CreateCanvasExplosionOptions<TNode>
+): {
+  readonly explodedNodeIds: string[];
+  isExploded(nodeId: string): boolean;
+  explodeNode(parentId: string, explodeOptions: ExplodeNodeOptions<TNode, TEdge>): boolean;
+  collapseNode(parentId: string, collapseOptions?: CollapseNodeOptions): boolean;
+  toggleExplode(
+    parentId: string,
+    explodeOptions: ExplodeNodeOptions<TNode, TEdge>,
+    collapseOptions?: CollapseNodeOptions
+  ): boolean;
+  getSnapshot(parentId: string): ExplosionSnapshot<TNode, TEdge> | undefined;
+};
+
