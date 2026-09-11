@@ -21,7 +21,8 @@
 ### Core Capabilities
 - 🚀 **UI-Agnostic Core (`@pixerate/editor`)**: Pure TypeScript token parser, AST tokenizer, recursive template resolution with cycle detection, bidirectional character sourcemapping, and headless TipTap/ProseMirror extensions. Usable in Node.js, Web Workers, Firebase Functions, or custom vanilla DOM frontends.
 - ⚛️ **React Bindings (`@pixerate/editor-react`)**: Drop-in `usePromptEditor` hook, `<EditorContent />`, contextual `<BubbleMenu />`, and lightweight read-only `<TemplateRenderer />`.
-- 🧡 **Svelte 5 Bindings (`@pixerate/editor-svelte`)**: Native runes-based state management, drop-in `<EditableTextNodeEditor />`, `<BubbleMenu />`, and `<TemplateRenderer />`.
+- 🧡 **Svelte 5 Bindings (`@pixerate/editor-svelte`)**: Native runes-based state management, drop-in `<EditableTextNodeEditor />`, `<BubbleMenu />`, `<TemplateRenderer />`, and `<SpreadsheetEditor />`.
+- 🕸️ **Headless Canvas Runes (`@pixerate/editor-svelte/canvas`)**: Svelte 5 runes toolkit for high-performance node graph manipulation, Dagre auto-layout, serialized JSON clipboard, drag-to-dock intersection tracking, and hotkeys on top of `@xyflow/svelte`.
 - 🎨 **Dynamic Syntax Styling**: Inline gradient animations for `{{template}}` tags, badges for `{variable}` fields, and italic styling for `__instructions__`.
 - ⚡ **Plain Text Invariant**: Guarantees raw string multiline format without leaking HTML artifacts, preserving newline paragraph breaks across clipboard paste and export.
 - 🗺️ **Bidirectional Sourcemaps**: Trace character offsets from rendered output directly back to source templates for error reporting and precision highlighting.
@@ -34,7 +35,8 @@
 | :--- | :--- | :--- | :--- |
 | [`@pixerate/editor`](./packages/core) | `0.1.0` | Pure TS core, grammar parser, resolvers, extensions | Node.js, Workers, Vanilla JS |
 | [`@pixerate/editor-react`](./packages/react) | `0.1.0` | React hooks, TipTap wrappers, AST renderer | React apps, Next.js, Vite React |
-| [`@pixerate/editor-svelte`](./packages/svelte) | `0.1.0` | Svelte 5 runes bindings & components | Svelte apps, SvelteKit apps |
+| [`@pixerate/editor-svelte`](./packages/svelte) | `0.3.11` | Svelte 5 runes bindings & components | Svelte apps, SvelteKit apps |
+| [`@pixerate/editor-svelte/canvas`](./packages/svelte/src/canvas) | `0.3.11` | Headless Svelte 5 graph/flow canvas runes & math | SvelteFlow canvas & diagram apps |
 
 ---
 
@@ -183,6 +185,7 @@ Open `http://localhost:3000` to interact with:
 ## 📚 Documentation
 
 - [Architecture & Design Principles](docs/architecture.md)
+- [Svelte 5 Headless Canvas Architecture](docs/canvas.md)
 - [Prompt Grammar & Token Resolution Engine](docs/prompt-engine.md)
 - [CI/CD & OIDC Release Workflow](docs/ci-cd-release.md)
 - [Agent Contributing Guide](Agents.md)
@@ -192,3 +195,4 @@ Open `http://localhost:3000` to interact with:
 ## 📄 License
 
 MIT © Pixerate
+
