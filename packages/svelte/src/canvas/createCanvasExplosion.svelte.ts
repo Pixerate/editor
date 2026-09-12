@@ -14,6 +14,7 @@ import {
 } from './createCanvasDisplacement.js';
 import {
 	createFanOutTrajectory,
+	linearPositionTrajectory,
 	linearTrajectory,
 	runMultiNodeTransition
 } from './createCanvasTrajectory.js';
@@ -172,6 +173,13 @@ export function createCanvasExplosion<
 			if (!child.data) child.data = {} as any;
 			(child.data as any).scale = 0;
 			(child.data as any).opacity = 0;
+			const currentStyle = (child.style || '').replace(/opacity:\s*[^;]+;?/g, '').trim();
+			child.style = `${currentStyle ? currentStyle + '; ' : ''}opacity: 0;`;
+		});
+
+		edgesToAdd.forEach((edge) => {
+			const currentStyle = (edge.style || '').replace(/opacity:\s*[^;]+;?/g, '').trim();
+			edge.style = `${currentStyle ? currentStyle + '; ' : ''}opacity: 0;`;
 		});
 
 		// Add nodes and edges to graph without saving yet
@@ -208,7 +216,7 @@ export function createCanvasExplosion<
 					node,
 					from: { ...node.position },
 					to: targetPos,
-					trajectory: linearTrajectory,
+					trajectory: linearPositionTrajectory,
 					duration,
 					easing
 				});
@@ -224,10 +232,47 @@ export function createCanvasExplosion<
 			defaultDuration: duration,
 			defaultEasing: easing,
 			onUpdate: () => {
-				graph.setNodes([...graph.nodes]);
+				if (edgesToAdd.length > 0) {
+					const childIdSet = new Set(childNodes.map((c) => c.id));
+					const childEdgesInGraph = graph.edges.filter((e) => childIdSet.has(e.target));
+					if (childEdgesInGraph.length > 0) {
+						childEdgesInGraph.forEach((edge) => {
+							const child = childNodes.find((c) => c.id === edge.target);
+							const childOpacity = (child?.data as any)?.opacity ?? 1;
+							const currentStyle = (edge.style || '').replace(/opacity:\s*[^;]+;?/g, '').trim();
+							edge.style = `${currentStyle ? currentStyle + '; ' : ''}opacity: ${childOpacity};`;
+						});
+						graph.setEdges(
+							graph.edges.map((e) => (childIdSet.has(e.target) ? { ...e } : e))
+						);
+					}
+				}
+
+				graph.setNodes(
+					graph.nodes.map((node) => {
+						const isTransitioning = transitions.some((t) => t.node.id === node.id);
+						return isTransitioning ? { ...node, data: { ...node.data } } : node;
+					})
+				);
 			},
 			onComplete: () => {
-				graph.setNodes([...graph.nodes]);
+				childNodes.forEach((child) => {
+					const node = graph.nodes.find((n) => n.id === child.id);
+					if (node) {
+						node.style = (node.style || '').replace(/opacity:\s*[^;]+;?/g, '').trim() || undefined;
+						if (node.data) {
+							(node.data as any).opacity = 1;
+						}
+					}
+				});
+				edgesToAdd.forEach((edge) => {
+					const graphEdge = graph.edges.find((e) => e.id === edge.id);
+					if (graphEdge) {
+						graphEdge.style = (graphEdge.style || '').replace(/opacity:\s*[^;]+;?/g, '').trim() || undefined;
+					}
+				});
+				graph.setNodes(graph.nodes.map((node) => ({ ...node, data: { ...node.data } })));
+				graph.setEdges(graph.edges.map((edge) => ({ ...edge })));
 				explodedNodeIds = [...explodedNodeIds, parentId];
 				activeAnimationCancel = null;
 				options.onSave?.();
@@ -300,7 +345,7 @@ export function createCanvasExplosion<
 					node,
 					from: { ...node.position },
 					to: originalPosition,
-					trajectory: linearTrajectory,
+					trajectory: linearPositionTrajectory,
 					duration,
 					easing
 				});
@@ -315,7 +360,26 @@ export function createCanvasExplosion<
 			defaultDuration: duration,
 			defaultEasing: easing,
 			onUpdate: () => {
-				graph.setNodes([...graph.nodes]);
+				const edgeIdSet = new Set(snapshot.childEdgeIds);
+				const childEdgesInGraph = graph.edges.filter((e) => edgeIdSet.has(e.id));
+				if (childEdgesInGraph.length > 0) {
+					childEdgesInGraph.forEach((edge) => {
+						const child = activeChildNodes.find((c) => c.id === edge.target);
+						const childOpacity = (child?.data as any)?.opacity ?? 0;
+						const currentStyle = (edge.style || '').replace(/opacity:\s*[^;]+;?/g, '').trim();
+						edge.style = `${currentStyle ? currentStyle + '; ' : ''}opacity: ${childOpacity};`;
+					});
+					graph.setEdges(
+						graph.edges.map((e) => (edgeIdSet.has(e.id) ? { ...e } : e))
+					);
+				}
+
+				graph.setNodes(
+					graph.nodes.map((node) => {
+						const isTransitioning = transitions.some((t) => t.node.id === node.id);
+						return isTransitioning ? { ...node, data: { ...node.data } } : node;
+					})
+				);
 			},
 			onComplete: () => {
 				// Animation completed: prune child nodes and edges

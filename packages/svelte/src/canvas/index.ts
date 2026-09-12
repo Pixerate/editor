@@ -48,6 +48,7 @@ export {
 // Trajectory calculation & multi-node transitions
 export {
 	linearTrajectory,
+	linearPositionTrajectory,
 	createFanOutTrajectory,
 	createBezierTrajectory,
 	runMultiNodeTransition

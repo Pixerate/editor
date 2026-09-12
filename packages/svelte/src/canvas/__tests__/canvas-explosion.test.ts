@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
 	linearTrajectory,
+	linearPositionTrajectory,
 	createFanOutTrajectory,
 	createBezierTrajectory,
 	runMultiNodeTransition
@@ -48,8 +49,33 @@ describe('Canvas Trajectory Math & Transition Runner', () => {
 
 		expect(topPoint.scale).toBeCloseTo(0.6);
 		expect(bottomPoint.scale).toBeCloseTo(0.6);
+		expect(topPoint.opacity).toBeCloseTo(0.5);
+		expect(bottomPoint.opacity).toBeCloseTo(0.5);
 		// Trajectory arc deflects top and bottom differently based on normalized index
 		expect(topPoint.position.y).not.toBe(bottomPoint.position.y);
+	});
+
+	it('evaluates linearPositionTrajectory without altering scale or opacity', () => {
+		const origin = { x: 10, y: 20 };
+		const target = { x: 110, y: 120 };
+
+		const pt = linearPositionTrajectory(origin, target, 0.5, 0, 1);
+		expect(pt.position).toEqual({ x: 60, y: 70 });
+		expect(pt.scale).toBeUndefined();
+		expect(pt.opacity).toBeUndefined();
+	});
+
+	it('creates reverse trajectory fading out opacity from 1 to 0', () => {
+		const reverseTrajectory = createFanOutTrajectory({
+			startOpacity: 1,
+			endOpacity: 0,
+			startScale: 1,
+			endScale: 0
+		});
+
+		const pt = reverseTrajectory({ x: 100, y: 100 }, { x: 0, y: 0 }, 0.5, 0, 1);
+		expect(pt.opacity).toBeCloseTo(0.5);
+		expect(pt.scale).toBeCloseTo(0.5);
 	});
 
 	it('creates custom bezier trajectory with control point calculator', () => {
@@ -88,6 +114,36 @@ describe('Canvas Trajectory Math & Transition Runner', () => {
 
 		expect(node.position).toEqual({ x: 100, y: 100 });
 		expect(onComplete).toHaveBeenCalled();
+		cancel();
+	});
+
+	it('animates opacity and sets style in runMultiNodeTransition', () => {
+		const node: CanvasNode = {
+			id: 'n1',
+			position: { x: 0, y: 0 },
+			data: {}
+		};
+
+		const trajectory = createFanOutTrajectory({
+			startOpacity: 0,
+			endOpacity: 1
+		});
+
+		const cancel = runMultiNodeTransition(
+			[
+				{
+					node,
+					from: { x: 0, y: 0 },
+					to: { x: 100, y: 100 },
+					trajectory,
+					duration: 0
+				}
+			]
+		);
+
+		expect(node.position).toEqual({ x: 100, y: 100 });
+		expect((node.data as any).opacity).toBe(1);
+		expect(node.style).toContain('opacity: 1');
 		cancel();
 	});
 });
