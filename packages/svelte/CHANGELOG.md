@@ -1,5 +1,11 @@
 # @pixerate/editor-svelte
 
+## 0.5.3
+
+### Patch Changes
+
+- 05f9932: Animate opacity alongside position during canvas node explosion and collapse transitions, maintaining sibling node visibility with linearPositionTrajectory
+
 ## 0.5.2
 
 ### Patch Changes
