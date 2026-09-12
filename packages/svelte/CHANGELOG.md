@@ -1,5 +1,11 @@
 # @pixerate/editor-svelte
 
+## 0.5.5
+
+### Patch Changes
+
+- 7fbba7f: Add comprehensive multi-frame animation tests verifying continuous position advancement, edge opacity synchronization, and sibling node isolation.
+
 ## 0.5.4
 
 ### Patch Changes
