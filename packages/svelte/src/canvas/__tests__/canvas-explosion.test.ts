@@ -135,7 +135,7 @@ describe('Spatial Displacement Solvers', () => {
 		expect(displaced.has('upstream')).toBe(false);
 	});
 
-	it('calculates vertical directional displacement moving above nodes up and below nodes down without shifting x', () => {
+	it('calculates vertical directional displacement moving above nodes up and below nodes down equally without shifting x', () => {
 		const origin = createNode('origin', 100, 200, 100, 40);
 		const above = createNode('above', 100, 100, 100, 40);
 		const below = createNode('below', 300, 300, 100, 40);
@@ -153,36 +153,35 @@ describe('Spatial Displacement Solvers', () => {
 			options: { direction: 'vertical', gap: 20 }
 		});
 
-		// deltaUp = (200 - 140) + 20 = 80 -> above moves up by 80
-		expect(displaced.get('above')?.y).toBe(100 - 80);
+		// deltaUp = (200 - 140) + 20 = 80
+		// deltaDown = (310 - (200 + 40)) + 20 = 90
+		// equalDelta = max(80, 90) = 90 -> BOTH above and below displace equally by 90!
+		expect(displaced.get('above')?.y).toBe(100 - 90);
 		expect(displaced.get('above')?.x).toBe(100);
 
-		// deltaDown = (310 - (200 + 40)) + 20 = 90 -> below moves down by 90
 		expect(displaced.get('below')?.y).toBe(300 + 90);
-		// Crucially: x position is strictly preserved!
 		expect(displaced.get('below')?.x).toBe(300);
 	});
 
-	it('respects minY bound for vertical displacement by transferring unmet upward shift to downward shift', () => {
+	it('displaces both above and below nodes equally when deltaUp is greater than deltaDown', () => {
 		const origin = createNode('origin', 100, 200, 100, 40);
 		const above = createNode('above', 100, 100, 100, 40);
 		const below = createNode('below', 300, 300, 100, 40);
 
 		const children = [
-			createNode('c1', 250, 140, 100, 30),
-			createNode('c2', 250, 280, 100, 30)
+			createNode('c1', 250, 100, 100, 30), // top at 100 -> deltaUp = 200 - 100 + 20 = 120
+			createNode('c2', 250, 220, 100, 30)  // bottom at 250 -> deltaDown = 250 - 240 + 20 = 30
 		];
 
 		const displaced = calculateDirectionalDisplacement({
 			existingNodes: [origin, above, below],
 			originNode: origin,
 			childNodes: children,
-			options: { direction: 'vertical', gap: 20, minY: 50 }
+			options: { direction: 'vertical', gap: 20 }
 		});
 
-		// max allowed up is 100 - 50 = 50. Unmet = 80 - 50 = 30.
-		expect(displaced.get('above')?.y).toBe(50);
-		// below gets standard 90 + unmet 30 = 120
+		// equalDelta = max(120, 30) = 120 -> BOTH displace equally by 120
+		expect(displaced.get('above')?.y).toBe(100 - 120);
 		expect(displaced.get('below')?.y).toBe(300 + 120);
 		expect(displaced.get('below')?.x).toBe(300);
 	});

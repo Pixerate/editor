@@ -88,24 +88,13 @@ export function calculateDirectionalDisplacement<TNode extends CanvasNode = Canv
 
 	// Vertical displacement parameters: upward and downward row clearance
 	const deltaUp = Math.max(0, originNode.position.y - childBounds.y + gap);
-	let deltaDown = Math.max(
+	const deltaDown = Math.max(
 		0,
 		childBounds.y + childBounds.height - (originNode.position.y + originHeight) + gap
 	);
 
-	let effectiveDeltaUp = deltaUp;
-	if (direction === 'vertical' && minY !== undefined && deltaUp > 0) {
-		const aboveNodes = existingNodes.filter(
-			(n) => n.id !== originNode.id && n.position.y < originNode.position.y
-		);
-		if (aboveNodes.length > 0) {
-			const minAboveY = Math.min(...aboveNodes.map((n) => n.position.y));
-			const maxAllowedUp = Math.max(0, minAboveY - minY);
-			effectiveDeltaUp = Math.min(deltaUp, maxAllowedUp);
-			const unmetUp = deltaUp - effectiveDeltaUp;
-			deltaDown += unmetUp;
-		}
-	}
+	// Both above and below displace equally so the row expands symmetrically
+	const equalDelta = Math.max(deltaUp, deltaDown);
 
 	for (const node of existingNodes) {
 		if (node.id === originNode.id) continue;
@@ -148,17 +137,17 @@ export function calculateDirectionalDisplacement<TNode extends CanvasNode = Canv
 			}
 		} else if (direction === 'vertical') {
 			// Row grows vertically:
-			// Nodes strictly above the origin node move up to accommodate childBounds above origin
-			// Nodes strictly below the origin node move down to accommodate childBounds below origin
-			// Horizontal position (x) is strictly preserved
+			// Nodes strictly above the origin node move up by equalDelta
+			// Nodes strictly below the origin node move down by equalDelta
+			// Both above and below displace equally; horizontal position (x) is strictly preserved
 			if (node.position.y < originNode.position.y) {
-				if (effectiveDeltaUp > 0) {
-					newY -= effectiveDeltaUp;
+				if (equalDelta > 0) {
+					newY -= equalDelta;
 					moved = true;
 				}
 			} else if (node.position.y >= originNode.position.y + originHeight * 0.5) {
-				if (deltaDown > 0) {
-					newY += deltaDown;
+				if (equalDelta > 0) {
+					newY += equalDelta;
 					moved = true;
 				}
 			}
