@@ -135,6 +135,58 @@ describe('Spatial Displacement Solvers', () => {
 		expect(displaced.has('upstream')).toBe(false);
 	});
 
+	it('calculates vertical directional displacement moving above nodes up and below nodes down without shifting x', () => {
+		const origin = createNode('origin', 100, 200, 100, 40);
+		const above = createNode('above', 100, 100, 100, 40);
+		const below = createNode('below', 300, 300, 100, 40);
+
+		// Child cluster extending above and below origin
+		const children = [
+			createNode('c1', 250, 140, 100, 30),
+			createNode('c2', 250, 280, 100, 30) // bottom at 310
+		];
+
+		const displaced = calculateDirectionalDisplacement({
+			existingNodes: [origin, above, below],
+			originNode: origin,
+			childNodes: children,
+			options: { direction: 'vertical', gap: 20 }
+		});
+
+		// deltaUp = (200 - 140) + 20 = 80 -> above moves up by 80
+		expect(displaced.get('above')?.y).toBe(100 - 80);
+		expect(displaced.get('above')?.x).toBe(100);
+
+		// deltaDown = (310 - (200 + 40)) + 20 = 90 -> below moves down by 90
+		expect(displaced.get('below')?.y).toBe(300 + 90);
+		// Crucially: x position is strictly preserved!
+		expect(displaced.get('below')?.x).toBe(300);
+	});
+
+	it('respects minY bound for vertical displacement by transferring unmet upward shift to downward shift', () => {
+		const origin = createNode('origin', 100, 200, 100, 40);
+		const above = createNode('above', 100, 100, 100, 40);
+		const below = createNode('below', 300, 300, 100, 40);
+
+		const children = [
+			createNode('c1', 250, 140, 100, 30),
+			createNode('c2', 250, 280, 100, 30)
+		];
+
+		const displaced = calculateDirectionalDisplacement({
+			existingNodes: [origin, above, below],
+			originNode: origin,
+			childNodes: children,
+			options: { direction: 'vertical', gap: 20, minY: 50 }
+		});
+
+		// max allowed up is 100 - 50 = 50. Unmet = 80 - 50 = 30.
+		expect(displaced.get('above')?.y).toBe(50);
+		// below gets standard 90 + unmet 30 = 120
+		expect(displaced.get('below')?.y).toBe(300 + 120);
+		expect(displaced.get('below')?.x).toBe(300);
+	});
+
 	it('calculates Dagre reflow displacement anchoring origin node position', () => {
 		const origin = createNode('origin', 100, 100, 120, 60);
 		const downstream = createNode('downstream', 300, 100, 120, 60);

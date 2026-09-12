@@ -145,7 +145,7 @@ export interface NodeTransition<TNode extends CanvasNode = CanvasNode> {
 /**
  * Displacement axis / direction.
  */
-export type DisplacementDirection = 'right' | 'left' | 'down' | 'up';
+export type DisplacementDirection = 'right' | 'left' | 'down' | 'up' | 'vertical';
 
 /**
  * Options for directional displacement calculation.
@@ -155,6 +155,7 @@ export interface DirectionalDisplacementOptions {
   gap?: number;
   spreadSiblingLanes?: boolean;
   siblingTolerance?: number;
+  minY?: number;
 }
 
 /**
