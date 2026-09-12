@@ -1,5 +1,11 @@
 # @pixerate/editor-svelte
 
+## 0.5.2
+
+### Patch Changes
+
+- ed4f16c: Ensure vertical canvas displacement expands symmetrically by displacing nodes both above and below equally
+
 ## 0.5.1
 
 ### Patch Changes
