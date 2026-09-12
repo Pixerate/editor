@@ -353,4 +353,98 @@ describe('createCanvasExplosion Rune Lifecycle & Reversibility', () => {
 		explosion.toggleExplode('origin', { childNodes: [child], duration: 0 }, { duration: 0 });
 		expect(explosion.isExploded('origin')).toBe(false);
 	});
+
+	it('updates node positions and opacity continuously across multiple animation frames without freezing', () => {
+		let currentTime = 1000;
+		const originalDateNow = Date.now;
+		Date.now = () => currentTime;
+
+		let rafCallback: (() => void) | null = null;
+		const originalRaf = globalThis.requestAnimationFrame;
+		globalThis.requestAnimationFrame = ((cb: () => void) => {
+			rafCallback = cb;
+			return 1;
+		}) as any;
+
+		try {
+			const origin = createNode('origin', 0, 0);
+			const graph = createCanvasGraph({ initialNodes: [origin] });
+			const explosion = createCanvasExplosion(graph);
+
+			const child = createNode('c1', 100, 100);
+
+			explosion.explodeNode('origin', {
+				childNodes: [child],
+				duration: 200,
+				easing: (t) => t,
+				trajectory: linearPositionTrajectory
+			});
+
+			// Frame 0 ran at t=0 (currentTime = 1000)
+			let graphChild = graph.nodes.find((n) => n.id === 'c1')!;
+			expect(graphChild).toBeDefined();
+
+			// Advance time by 100ms (progress = 0.5)
+			currentTime = 1100;
+			expect(rafCallback).not.toBeNull();
+			if (rafCallback) {
+				const nextCb = rafCallback;
+				rafCallback = null;
+				nextCb();
+			}
+
+			graphChild = graph.nodes.find((n) => n.id === 'c1')!;
+			expect(graphChild.position.x).toBeCloseTo(50, 0);
+			expect(graphChild.position.y).toBeCloseTo(50, 0);
+
+			// Advance time by another 100ms (progress = 1.0)
+			currentTime = 1200;
+			expect(rafCallback).not.toBeNull();
+			if (rafCallback) {
+				const nextCb = rafCallback;
+				rafCallback = null;
+				nextCb();
+			}
+
+			graphChild = graph.nodes.find((n) => n.id === 'c1')!;
+			expect(graphChild.position.x).toBeCloseTo(100, 0);
+			expect(graphChild.position.y).toBeCloseTo(100, 0);
+
+			// Collapse node over 200ms
+			explosion.collapseNode('origin', {
+				duration: 200,
+				easing: (t) => t,
+				trajectory: linearPositionTrajectory
+			});
+
+			// Advance time by 100ms into collapse (progress = 0.5)
+			currentTime = 1300;
+			expect(rafCallback).not.toBeNull();
+			if (rafCallback) {
+				const nextCb = rafCallback;
+				rafCallback = null;
+				nextCb();
+			}
+
+			graphChild = graph.nodes.find((n) => n.id === 'c1')!;
+			expect(graphChild).toBeDefined();
+			expect(graphChild.position.x).toBeCloseTo(50, 0);
+			expect(graphChild.position.y).toBeCloseTo(50, 0);
+
+			// Advance time by another 100ms (collapse completion)
+			currentTime = 1400;
+			expect(rafCallback).not.toBeNull();
+			if (rafCallback) {
+				const nextCb = rafCallback;
+				rafCallback = null;
+				nextCb();
+			}
+
+			expect(graph.nodes.some((n) => n.id === 'c1')).toBe(false);
+			expect(explosion.isExploded('origin')).toBe(false);
+		} finally {
+			Date.now = originalDateNow;
+			globalThis.requestAnimationFrame = originalRaf;
+		}
+	});
 });

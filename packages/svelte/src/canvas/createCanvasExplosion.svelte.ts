@@ -242,27 +242,39 @@ export function createCanvasExplosion<
 							const currentStyle = (edge.style || '').replace(/opacity:\s*[^;]+;?/g, '').trim();
 							edge.style = `${currentStyle ? currentStyle + '; ' : ''}opacity: ${childOpacity};`;
 						});
-						graph.setEdges(
-							graph.edges.map((e) => (childIdSet.has(e.target) ? { ...e } : e))
-						);
+						graph.setEdges([...graph.edges]);
 					}
 				}
 
-				graph.setNodes(
-					graph.nodes.map((node) => {
-						const isTransitioning = transitions.some((t) => t.node.id === node.id);
-						return isTransitioning ? { ...node, data: { ...node.data } } : node;
-					})
-				);
+				// Sync any mismatched node references in graph.nodes from transitions
+				transitions.forEach((t) => {
+					const graphNode = graph.nodes.find((n) => n.id === t.node.id);
+					if (graphNode && graphNode !== t.node) {
+						graphNode.position = { ...t.node.position };
+						graphNode.style = t.node.style;
+						if (t.node.data) {
+							graphNode.data = { ...graphNode.data, ...t.node.data };
+						}
+					}
+				});
+
+				graph.setNodes([...graph.nodes]);
 			},
 			onComplete: () => {
-				childNodes.forEach((child) => {
+				childNodes.forEach((child, i) => {
 					const node = graph.nodes.find((n) => n.id === child.id);
 					if (node) {
+						node.position = { ...targetPositions[i] };
 						node.style = (node.style || '').replace(/opacity:\s*[^;]+;?/g, '').trim() || undefined;
 						if (node.data) {
 							(node.data as any).opacity = 1;
 						}
+					}
+				});
+				displacementMap.forEach((targetPos, nodeId) => {
+					const graphNode = graph.nodes.find((n) => n.id === nodeId);
+					if (graphNode) {
+						graphNode.position = { ...targetPos };
 					}
 				});
 				edgesToAdd.forEach((edge) => {
@@ -271,8 +283,8 @@ export function createCanvasExplosion<
 						graphEdge.style = (graphEdge.style || '').replace(/opacity:\s*[^;]+;?/g, '').trim() || undefined;
 					}
 				});
-				graph.setNodes(graph.nodes.map((node) => ({ ...node, data: { ...node.data } })));
-				graph.setEdges(graph.edges.map((edge) => ({ ...edge })));
+				graph.setNodes([...graph.nodes]);
+				graph.setEdges([...graph.edges]);
 				explodedNodeIds = [...explodedNodeIds, parentId];
 				activeAnimationCancel = null;
 				options.onSave?.();
@@ -369,17 +381,22 @@ export function createCanvasExplosion<
 						const currentStyle = (edge.style || '').replace(/opacity:\s*[^;]+;?/g, '').trim();
 						edge.style = `${currentStyle ? currentStyle + '; ' : ''}opacity: ${childOpacity};`;
 					});
-					graph.setEdges(
-						graph.edges.map((e) => (edgeIdSet.has(e.id) ? { ...e } : e))
-					);
+					graph.setEdges([...graph.edges]);
 				}
 
-				graph.setNodes(
-					graph.nodes.map((node) => {
-						const isTransitioning = transitions.some((t) => t.node.id === node.id);
-						return isTransitioning ? { ...node, data: { ...node.data } } : node;
-					})
-				);
+				// Sync any mismatched node references in graph.nodes from transitions
+				transitions.forEach((t) => {
+					const graphNode = graph.nodes.find((n) => n.id === t.node.id);
+					if (graphNode && graphNode !== t.node) {
+						graphNode.position = { ...t.node.position };
+						graphNode.style = t.node.style;
+						if (t.node.data) {
+							graphNode.data = { ...graphNode.data, ...t.node.data };
+						}
+					}
+				});
+
+				graph.setNodes([...graph.nodes]);
 			},
 			onComplete: () => {
 				// Animation completed: prune child nodes and edges
@@ -390,6 +407,14 @@ export function createCanvasExplosion<
 				if (edgesToRemove.length > 0) {
 					graph.removeEdges(edgesToRemove, false);
 				}
+
+				snapshot.displacedNodes.forEach(({ id, originalPosition }) => {
+					const graphNode = graph.nodes.find((n) => n.id === id);
+					if (graphNode) {
+						graphNode.position = { ...originalPosition };
+					}
+				});
+				graph.setNodes([...graph.nodes]);
 
 				snapshots.delete(parentId);
 				explodedNodeIds = explodedNodeIds.filter((id) => id !== parentId);
