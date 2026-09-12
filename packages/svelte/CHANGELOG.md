@@ -1,5 +1,11 @@
 # @pixerate/editor-svelte
 
+## 0.5.4
+
+### Patch Changes
+
+- b422853: Fix node position and opacity synchronization during explosion and collapse transitions without freezing or breaking object references
+
 ## 0.5.3
 
 ### Patch Changes
