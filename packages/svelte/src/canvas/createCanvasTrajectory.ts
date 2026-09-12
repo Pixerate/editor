@@ -27,6 +27,23 @@ export const linearTrajectory: TrajectoryFunction = (
 };
 
 /**
+ * Linear position trajectory: pure position interpolation without altering scale or opacity.
+ * Used for displaced sibling nodes to ensure their visibility remains unaltered.
+ */
+export const linearPositionTrajectory: TrajectoryFunction = (
+	origin: XYPosition,
+	target: XYPosition,
+	progress: number
+): TrajectoryPoint => {
+	return {
+		position: {
+			x: origin.x + (target.x - origin.x) * progress,
+			y: origin.y + (target.y - origin.y) * progress
+		}
+	};
+};
+
+/**
  * Creates a fan-out trajectory where nodes arc outward from origin to target.
  * Matches the curved distribution shown in multi-node branching diagrams.
  */
@@ -161,6 +178,8 @@ export function runMultiNodeTransition<TNode extends CanvasNode = CanvasNode>(
 				}
 				if (point.opacity !== undefined) {
 					(item.node.data as any).opacity = point.opacity;
+					const currentStyle = (item.node.style || '').replace(/opacity:\s*[^;]+;?/g, '').trim();
+					item.node.style = `${currentStyle ? currentStyle + '; ' : ''}opacity: ${point.opacity};`;
 				}
 			}
 
