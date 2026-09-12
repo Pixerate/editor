@@ -447,4 +447,146 @@ describe('createCanvasExplosion Rune Lifecycle & Reversibility', () => {
 			globalThis.requestAnimationFrame = originalRaf;
 		}
 	});
+
+	it('animates opacity for child nodes and connecting edges while preserving full opacity of displaced sibling nodes', () => {
+		let currentTime = 1000;
+		const originalDateNow = Date.now;
+		Date.now = () => currentTime;
+
+		let rafCallback: (() => void) | null = null;
+		const originalRaf = globalThis.requestAnimationFrame;
+		globalThis.requestAnimationFrame = ((cb: () => void) => {
+			rafCallback = cb;
+			return 1;
+		}) as any;
+
+		try {
+			const origin = createNode('origin', 200, 200);
+			const siblingAbove = createNode('above', 200, 100);
+			const siblingBelow = createNode('below', 200, 300);
+
+			const graph = createCanvasGraph({
+				initialNodes: [origin, siblingAbove, siblingBelow]
+			});
+			const explosion = createCanvasExplosion(graph);
+
+			const child = createNode('c1', 500, 200);
+
+			const forwardTrajectory = createFanOutTrajectory({
+				startOpacity: 0,
+				endOpacity: 1,
+				curvature: 0
+			});
+
+			const reverseTrajectory = createFanOutTrajectory({
+				startOpacity: 1,
+				endOpacity: 0,
+				curvature: 0
+			});
+
+			explosion.explodeNode('origin', {
+				childNodes: [child],
+				duration: 200,
+				easing: (t) => t,
+				trajectory: forwardTrajectory,
+				connectParentToChildren: 'all',
+				directionalOptions: { direction: 'vertical', gap: 20 }
+			});
+
+			// Frame 0: child node and edge start with opacity 0
+			let graphChild = graph.nodes.find((n) => n.id === 'c1')!;
+			let graphEdge = graph.edges.find((e) => e.source === 'origin' && e.target === 'c1')!;
+			let graphAbove = graph.nodes.find((n) => n.id === 'above')!;
+			let graphBelow = graph.nodes.find((n) => n.id === 'below')!;
+
+			expect(graphChild.style).toContain('opacity: 0');
+			expect(graphEdge.style).toContain('opacity: 0');
+			// Displaced siblings should never be faded
+			expect(graphAbove.style || '').not.toContain('opacity: 0');
+			expect(graphBelow.style || '').not.toContain('opacity: 0');
+
+			// Advance 100ms (50% progress)
+			currentTime = 1100;
+			if (rafCallback) {
+				const nextCb = rafCallback;
+				rafCallback = null;
+				nextCb();
+			}
+
+			graphChild = graph.nodes.find((n) => n.id === 'c1')!;
+			graphEdge = graph.edges.find((e) => e.source === 'origin' && e.target === 'c1')!;
+			graphAbove = graph.nodes.find((n) => n.id === 'above')!;
+			graphBelow = graph.nodes.find((n) => n.id === 'below')!;
+
+			expect(graphChild.position.x).toBeCloseTo(335, 0); // quadratic bezier curve at t=0.5
+			expect(graphChild.style).toContain('opacity: 0.5');
+			expect(graphEdge.style).toContain('opacity: 0.5');
+			// Displaced siblings move vertically without horizontal change and without opacity modification
+			expect(graphAbove.position.x).toBe(200);
+			expect(graphBelow.position.x).toBe(200);
+			expect(graphAbove.style || '').not.toContain('opacity: 0.5');
+
+			// Advance 100ms (100% progress)
+			currentTime = 1200;
+			if (rafCallback) {
+				const nextCb = rafCallback;
+				rafCallback = null;
+				nextCb();
+			}
+
+			graphChild = graph.nodes.find((n) => n.id === 'c1')!;
+			graphEdge = graph.edges.find((e) => e.source === 'origin' && e.target === 'c1')!;
+			graphAbove = graph.nodes.find((n) => n.id === 'above')!;
+			graphBelow = graph.nodes.find((n) => n.id === 'below')!;
+
+			expect(graphChild.position.x).toBe(500);
+			expect(graphChild.style || '').not.toContain('opacity: 0');
+			expect((graphChild.data as any).opacity).toBe(1);
+			expect(graphAbove.position.y).toBeLessThan(100);
+			expect(graphBelow.position.y).toBeGreaterThan(300);
+
+			// Now collapse with reverse trajectory
+			explosion.collapseNode('origin', {
+				duration: 200,
+				easing: (t) => t,
+				trajectory: reverseTrajectory
+			});
+
+			// Advance 100ms into collapse (50%)
+			currentTime = 1300;
+			if (rafCallback) {
+				const nextCb = rafCallback;
+				rafCallback = null;
+				nextCb();
+			}
+
+			graphChild = graph.nodes.find((n) => n.id === 'c1')!;
+			graphEdge = graph.edges.find((e) => e.source === 'origin' && e.target === 'c1')!;
+			expect(graphChild.position.x).toBeCloseTo(365, 0); // quadratic bezier curve at t=0.5 on collapse
+			expect(graphChild.style).toContain('opacity: 0.5');
+			expect(graphEdge.style).toContain('opacity: 0.5');
+
+			// Advance 100ms (collapse completion)
+			currentTime = 1400;
+			if (rafCallback) {
+				const nextCb = rafCallback;
+				rafCallback = null;
+				nextCb();
+			}
+
+			expect(graph.nodes.some((n) => n.id === 'c1')).toBe(false);
+			expect(graph.edges.some((e) => e.source === 'origin' && e.target === 'c1')).toBe(false);
+			expect(explosion.isExploded('origin')).toBe(false);
+
+			graphAbove = graph.nodes.find((n) => n.id === 'above')!;
+			graphBelow = graph.nodes.find((n) => n.id === 'below')!;
+			expect(graphAbove.position.y).toBe(100);
+			expect(graphBelow.position.y).toBe(300);
+			expect(graphAbove.position.x).toBe(200);
+			expect(graphBelow.position.x).toBe(200);
+		} finally {
+			Date.now = originalDateNow;
+			globalThis.requestAnimationFrame = originalRaf;
+		}
+	});
 });
