@@ -1,5 +1,12 @@
 # @pixerate/editor-svelte
 
+## 0.6.1
+
+### Patch Changes
+
+- Updated dependencies [f0924c4]
+  - @pixerate/editor@0.5.1
+
 ## 0.6.0
 
 ### Minor Changes

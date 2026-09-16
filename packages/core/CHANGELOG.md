@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.5.1
+
+### Patch Changes
+
+- f0924c4: Publish built-in markdown support and serializers to npm.
+
 ## 0.5.0
 
 ### Minor Changes
