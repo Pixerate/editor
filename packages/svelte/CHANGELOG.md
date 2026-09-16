@@ -1,5 +1,21 @@
 # @pixerate/editor-svelte
 
+## 0.6.0
+
+### Minor Changes
+
+- e32b1ff: Add built-in optional Markdown support, serializers, and controller synchronization:
+  - Export `Markdown` extension and `MarkdownOptions` configuration in `@pixerate/editor`.
+  - Add `markdown?: MarkdownOptions | boolean` to `createRichTextPreset`.
+  - Export `markdownToTipTapHtml` and `getEditorMarkdown` from `@pixerate/editor/serializers`.
+  - Add `markdownMode`, `getMarkdown()`, `setMarkdown()`, and `onMarkdownChange` to `EditorController`.
+  - Expose `markdown` and `richTextOptions` in `EditableTextNodeEditor` in `@pixerate/editor-svelte`.
+
+### Patch Changes
+
+- Updated dependencies [e32b1ff]
+  - @pixerate/editor@0.5.0
+
 ## 0.5.5
 
 ### Patch Changes
