@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Editor, Content, Extensions } from "@tiptap/core";
+  import type { RichTextPresetOptions, MarkdownOptions } from "@pixerate/editor";
   import { onDestroy, onMount } from "svelte";
   import { initiateEditor } from "./editor.svelte";
 
@@ -16,6 +17,8 @@
     onBlur?: () => void;
     onCreate?: () => void;
     placeholder?: string;
+    markdown?: boolean | MarkdownOptions;
+    richTextOptions?: RichTextPresetOptions;
   }
 
   let {
@@ -31,6 +34,8 @@
     onBlur,
     onCreate,
     placeholder = "",
+    markdown = undefined,
+    richTextOptions = {},
   }: EditorProps = $props();
 
   let element = $state<HTMLElement>();
@@ -49,6 +54,8 @@
       {
         richTextOptions: {
           placeholder,
+          ...(markdown !== undefined ? { markdown } : {}),
+          ...richTextOptions,
         },
         editable,
         onCreate,

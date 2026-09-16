@@ -1,4 +1,8 @@
-import { wrappingInputRule, markInputRule, type Extensions } from "@tiptap/core";
+import {
+  wrappingInputRule,
+  markInputRule,
+  type Extensions,
+} from "@tiptap/core";
 import * as _StarterKit from "@tiptap/starter-kit";
 import * as _Color from "@tiptap/extension-color";
 import * as _Highlight from "@tiptap/extension-highlight";
@@ -13,7 +17,11 @@ import * as _Placeholder from "@tiptap/extension-placeholder";
 import * as _CharacterCount from "@tiptap/extension-character-count";
 
 const resolveExt = (mod: any, name: string) =>
-  mod?.[name] || mod?.default?.[name] || mod?.default?.default || mod?.default || mod;
+  mod?.[name] ||
+  mod?.default?.[name] ||
+  mod?.default?.default ||
+  mod?.default ||
+  mod;
 
 const StarterKit = resolveExt(_StarterKit, "StarterKit");
 const Color = resolveExt(_Color, "Color");
@@ -32,6 +40,7 @@ import { SmilieReplacer } from "./SmilieReplacer";
 import { ColorHighlighter } from "./ColorHighlighter";
 import { FontSize } from "./FontSize";
 import { Mention, type MentionOptions } from "./mention";
+import { Markdown, type MarkdownOptions } from "./markdown";
 
 export interface RichTextPresetOptions {
   placeholder?: string | ((props: { node: any }) => string);
@@ -41,6 +50,7 @@ export interface RichTextPresetOptions {
   enableColorHighlighter?: boolean;
   headingLevels?: (1 | 2 | 3 | 4 | 5 | 6)[];
   mention?: MentionOptions | boolean;
+  markdown?: MarkdownOptions | boolean;
 }
 
 /**
@@ -127,9 +137,7 @@ export function createRichTextPreset(
     Placeholder.configure({
       emptyEditorClass: "is-empty",
       placeholder:
-        typeof placeholder === "function"
-          ? placeholder
-          : () => placeholder,
+        typeof placeholder === "function" ? placeholder : () => placeholder,
     }),
   ];
 
@@ -150,7 +158,8 @@ export function createRichTextPreset(
   }
 
   if (options.mention) {
-    const mentionConfig = typeof options.mention === "object" ? options.mention : {};
+    const mentionConfig =
+      typeof options.mention === "object" ? options.mention : {};
     extensions.push(
       Mention.configure({
         HTMLAttributes: {
@@ -158,6 +167,24 @@ export function createRichTextPreset(
           ...(mentionConfig.HTMLAttributes || {}),
         },
         ...mentionConfig,
+      }),
+    );
+  }
+
+  if (options.markdown) {
+    const markdownConfig =
+      typeof options.markdown === "object" ? options.markdown : {};
+    extensions.push(
+      Markdown.configure({
+        html: true,
+        tightLists: true,
+        tightListClass: "tight",
+        bulletListMarker: "-",
+        linkify: true,
+        breaks: true,
+        transformPastedText: true,
+        transformCopiedText: true,
+        ...markdownConfig,
       }),
     );
   }
