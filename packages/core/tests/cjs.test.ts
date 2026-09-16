@@ -16,5 +16,13 @@ describe("CommonJS Module Compatibility", () => {
     const preset = core.createRichTextPreset();
     expect(Array.isArray(preset)).toBe(true);
     expect(preset.length).toBeGreaterThan(0);
+
+    expect(core.Markdown).toBeDefined();
+    expect(typeof core.markdownToTipTapHtml).toBe("function");
+    expect(typeof core.getEditorMarkdown).toBe("function");
+
+    const markdownPreset = core.createRichTextPreset({ markdown: true });
+    expect(Array.isArray(markdownPreset)).toBe(true);
+    expect(markdownPreset.length).toBeGreaterThan(preset.length);
   });
 });
