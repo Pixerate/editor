@@ -1,5 +1,11 @@
 # @pixerate/editor-svelte
 
+## 0.7.0
+
+### Minor Changes
+
+- 132f54b: Add multi-target disambiguation (`dockStrategy`, `resolvePrimaryDockTarget`) and `exclusiveHover` management to `createCanvasDocking`
+
 ## 0.6.1
 
 ### Patch Changes
