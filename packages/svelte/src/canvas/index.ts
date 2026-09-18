@@ -28,7 +28,8 @@ export {
 // Docking & drag interactions rune
 export {
 	createCanvasDocking,
-	type CreateCanvasDockingOptions
+	type CreateCanvasDockingOptions,
+	type DockStrategy
 } from './createCanvasDocking.svelte.js';
 
 // Shortcuts manager
