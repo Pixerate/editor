@@ -139,11 +139,23 @@ Headless clipboard interaction:
 
 ### `createCanvasDocking(options?)`
 
-Drag-and-dock interaction tracking:
+Drag-and-dock interaction tracking and multi-target disambiguation:
 
+#### Parameters (`options`):
+- `isDockTarget?: (target: TNode) => boolean`: Filter determining whether an intersecting node is a valid dock target.
+- `dockStrategy?: 'center-point' | 'max-overlap' | 'pointer' | 'first'`: Disambiguation strategy when a dragged node intersects multiple candidate dock targets (defaults to `'center-point'`).
+- `resolvePrimaryDockTarget?: (targets, draggedNode, event?) => TNode | null`: Custom target resolution callback that takes precedence over `dockStrategy`.
+- `exclusiveHover?: boolean`: When `true` (default), ensures only the single disambiguated primary dock target is hovered at any time, firing `onDockLeave` on the previous target when moving between adjacent targets. Set to `false` for concurrent multi-target hover.
+- `restorePositionOnDock?: boolean`: Restores dragged node initial position upon successful dock drop (defaults to `true`).
+- `onDockHover?: (target, draggedNode) => void`: Callback fired when entering a dock target.
+- `onDockLeave?: (target, draggedNode) => void`: Callback fired when leaving a dock target.
+- `onDockDrop?: (target, draggedNode) => void`: Callback fired on drop into a dock target.
+- `onSave?: () => void`: Optional persistence trigger.
+
+#### Methods:
 - `handleNodeDragStart({ targetNode, event })`: Starts drag tracking.
-- `handleNodeDrag({ targetNode, event }, getIntersectingNodes)`: Computes intersections, firing `onDockHover` and `onDockLeave`.
-- `handleNodeDragStop({ targetNode, event }, getIntersectingNodes, updatePosition?)`: Fires `onDockDrop` and cleans up state.
+- `handleNodeDrag({ targetNode, event }, getIntersectingNodes)`: Computes intersections, disambiguates primary target, and fires `onDockHover` / `onDockLeave`.
+- `handleNodeDragStop({ targetNode, event }, getIntersectingNodes, updatePosition?)`: Disambiguates primary target, fires `onDockDrop`, and cleans up state.
 - `handleConnectStart` / `handleConnectEnd`: Tracks connection handle dragging.
 
 ---

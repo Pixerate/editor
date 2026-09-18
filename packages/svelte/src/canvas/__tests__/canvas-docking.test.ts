@@ -133,4 +133,156 @@ describe('createCanvasDocking', () => {
     expect(docking.draggedNode).toBeNull();
     expect(docking.draggedInitialPosition).toBeNull();
   });
+
+  describe('Dock Target Disambiguation & Exclusive Hover', () => {
+    it('disambiguates adjacent targets using default center-point strategy and exclusive hover', () => {
+      const onDockHover = vi.fn();
+      const onDockLeave = vi.fn();
+      const onDockDrop = vi.fn();
+
+      const docking = createCanvasDocking({
+        isDockTarget: (n) => n.type === 'dockArea',
+        onDockHover,
+        onDockLeave,
+        onDockDrop
+      });
+
+      // Adjacent columns: dockA [0, 200] and dockB [200, 400]
+      const dockA = {
+        ...createSampleNode('dock-a', 'dockArea', 0, 0),
+        measured: { width: 200, height: 400 }
+      };
+      const dockB = {
+        ...createSampleNode('dock-b', 'dockArea', 200, 0),
+        measured: { width: 200, height: 400 }
+      };
+
+      // Dragged card with width 100, positioned at x: 50 -> center is x: 100 (inside dockA)
+      const draggedNode = {
+        ...createSampleNode('dragged', 'item', 50, 50),
+        measured: { width: 100, height: 50 }
+      };
+
+      docking.handleNodeDragStart({ targetNode: draggedNode });
+
+      // Even if xyflow returns both intersecting targets
+      docking.handleNodeDrag(
+        { targetNode: draggedNode },
+        () => [dockA, dockB]
+      );
+
+      // Only dockA receives hover
+      expect(onDockHover).toHaveBeenCalledTimes(1);
+      expect(onDockHover).toHaveBeenCalledWith(dockA, draggedNode);
+      expect(onDockLeave).not.toHaveBeenCalled();
+
+      // Card dragged across boundary: x: 160 -> center is x: 210 (inside dockB)
+      draggedNode.position = { x: 160, y: 50 };
+      docking.handleNodeDrag(
+        { targetNode: draggedNode },
+        () => [dockA, dockB]
+      );
+
+      // dockA is left, dockB is entered
+      expect(onDockLeave).toHaveBeenCalledTimes(1);
+      expect(onDockLeave).toHaveBeenCalledWith(expect.objectContaining({ id: 'dock-a' }), draggedNode);
+      expect(onDockHover).toHaveBeenCalledTimes(2);
+      expect(onDockHover).toHaveBeenLastCalledWith(dockB, draggedNode);
+
+      // Dropping selects dockB, not dockA
+      docking.handleNodeDragStop(
+        { targetNode: draggedNode },
+        () => [dockA, dockB]
+      );
+
+      expect(onDockDrop).toHaveBeenCalledTimes(1);
+      expect(onDockDrop).toHaveBeenCalledWith(dockB, draggedNode);
+    });
+
+    it('disambiguates candidate targets using max-overlap strategy', () => {
+      const onDockHover = vi.fn();
+      const onDockDrop = vi.fn();
+
+      const docking = createCanvasDocking({
+        isDockTarget: (n) => n.type === 'dockArea',
+        dockStrategy: 'max-overlap',
+        onDockHover,
+        onDockDrop
+      });
+
+      // dockA: [0, 100] (area overlap will be 20 * 50 = 1000)
+      const dockA = {
+        ...createSampleNode('dock-a', 'dockArea', 0, 0),
+        measured: { width: 100, height: 200 }
+      };
+      // dockB: [100, 300] (area overlap will be 80 * 50 = 4000)
+      const dockB = {
+        ...createSampleNode('dock-b', 'dockArea', 100, 0),
+        measured: { width: 200, height: 200 }
+      };
+
+      // Dragged card spanning x: 80 to 180 (width 100)
+      const draggedNode = {
+        ...createSampleNode('dragged', 'item', 80, 50),
+        measured: { width: 100, height: 50 }
+      };
+
+      docking.handleNodeDragStart({ targetNode: draggedNode });
+      docking.handleNodeDrag({ targetNode: draggedNode }, () => [dockA, dockB]);
+
+      // dockB has the larger overlap area (80px vs 20px width)
+      expect(onDockHover).toHaveBeenCalledWith(dockB, draggedNode);
+
+      docking.handleNodeDragStop({ targetNode: draggedNode }, () => [dockA, dockB]);
+      expect(onDockDrop).toHaveBeenCalledWith(dockB, draggedNode);
+    });
+
+    it('allows custom resolvePrimaryDockTarget callback to take precedence', () => {
+      const onDockHover = vi.fn();
+      const onDockDrop = vi.fn();
+
+      const dockA = createSampleNode('dock-a', 'dockArea', 0, 0);
+      const dockB = createSampleNode('dock-b', 'dockArea', 100, 0);
+      const draggedNode = createSampleNode('dragged', 'item', 0, 0);
+
+      const docking = createCanvasDocking({
+        isDockTarget: (n) => n.type === 'dockArea',
+        resolvePrimaryDockTarget: (targets) => targets.find((t) => t.id === 'dock-b') ?? null,
+        onDockHover,
+        onDockDrop
+      });
+
+      docking.handleNodeDragStart({ targetNode: draggedNode });
+      docking.handleNodeDrag({ targetNode: draggedNode }, () => [dockA, dockB]);
+
+      expect(onDockHover).toHaveBeenCalledWith(dockB, draggedNode);
+
+      docking.handleNodeDragStop({ targetNode: draggedNode }, () => [dockA, dockB]);
+      expect(onDockDrop).toHaveBeenCalledWith(dockB, draggedNode);
+    });
+
+    it('supports non-exclusive hover mode when exclusiveHover is false', () => {
+      const onDockHover = vi.fn();
+      const onDockLeave = vi.fn();
+
+      const docking = createCanvasDocking({
+        isDockTarget: (n) => n.type === 'dockArea',
+        exclusiveHover: false,
+        onDockHover,
+        onDockLeave
+      });
+
+      const dockA = createSampleNode('dock-a', 'dockArea', 0, 0);
+      const dockB = createSampleNode('dock-b', 'dockArea', 100, 0);
+      const draggedNode = createSampleNode('dragged', 'item', 50, 0);
+
+      docking.handleNodeDragStart({ targetNode: draggedNode });
+      docking.handleNodeDrag({ targetNode: draggedNode }, () => [dockA, dockB]);
+
+      // Both targets should receive hover in non-exclusive mode
+      expect(onDockHover).toHaveBeenCalledTimes(2);
+      expect(onDockHover).toHaveBeenCalledWith(dockA, draggedNode);
+      expect(onDockHover).toHaveBeenCalledWith(dockB, draggedNode);
+    });
+  });
 });

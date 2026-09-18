@@ -73,6 +73,15 @@ export interface CanvasShortcutsOptions<TNode extends CanvasNode = CanvasNode> {
 }
 
 /**
+ * Strategy used to resolve the primary dock target when multiple targets intersect a dragged node.
+ * - 'center-point': Chooses the target enclosing or closest to the center coordinate of the dragged node.
+ * - 'max-overlap': Chooses the target with the largest bounding box intersection area.
+ * - 'pointer': Chooses the target enclosing or closest to the mouse/touch cursor coordinates (falls back to 'center-point').
+ * - 'first': Chooses the first intersecting target (legacy behavior).
+ */
+export type DockStrategy = 'center-point' | 'max-overlap' | 'pointer' | 'first';
+
+/**
  * Docking and intersection callbacks.
  */
 export interface CanvasDockingCallbacks<TNode extends CanvasNode = CanvasNode> {
