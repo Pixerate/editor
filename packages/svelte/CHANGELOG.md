@@ -1,5 +1,16 @@
 # @pixerate/editor-svelte
 
+## 0.8.0
+
+### Minor Changes
+
+- 25f0707: feat: add Image extension and clipboard paste/drop handling to editor and EditableTextNodeEditor
+
+### Patch Changes
+
+- Updated dependencies [25f0707]
+  - @pixerate/editor@0.6.0
+
 ## 0.7.2
 
 ### Patch Changes

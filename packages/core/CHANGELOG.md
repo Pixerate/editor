@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.6.0
+
+### Minor Changes
+
+- 25f0707: feat: add Image extension and clipboard paste/drop handling to editor and EditableTextNodeEditor
+
 ## 0.5.1
 
 ### Patch Changes
