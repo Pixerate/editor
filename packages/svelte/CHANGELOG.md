@@ -1,5 +1,11 @@
 # @pixerate/editor-svelte
 
+## 0.7.2
+
+### Patch Changes
+
+- 8a2e88d: fix(svelte): expose autofocus prop on EditableTextNodeEditor in index.d.ts
+
 ## 0.7.1
 
 ### Patch Changes
