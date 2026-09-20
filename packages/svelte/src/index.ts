@@ -1,6 +1,6 @@
 import type { Component } from "svelte";
 import type { Editor, Content, Extensions, FocusPosition } from "@tiptap/core";
-import type { Template, ColorGradient, RichTextPresetOptions, MarkdownOptions } from "@pixerate/editor";
+import type { Template, ColorGradient, RichTextPresetOptions, MarkdownOptions, ImageOptions } from "@pixerate/editor";
 
 import EditableTextNodeEditorComponent from "./EditableTextNodeEditor.svelte";
 import BubbleMenuComponent from "./BubbleMenu.svelte";
@@ -24,6 +24,8 @@ export interface EditableTextNodeEditorProps {
   markdown?: boolean | MarkdownOptions;
   richTextOptions?: RichTextPresetOptions;
   autofocus?: FocusPosition | boolean;
+  image?: ImageOptions | boolean;
+  uploadImage?: (file: File) => Promise<string> | string;
 }
 
 export interface BubbleMenuProps {
@@ -53,6 +55,7 @@ export type {
   TokenType,
   ColorGradient,
   RichTextPresetOptions,
+  ImageOptions,
 } from "@pixerate/editor";
 
 export * from "./spreadsheet";

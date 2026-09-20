@@ -41,6 +41,7 @@ import { ColorHighlighter } from "./ColorHighlighter";
 import { FontSize } from "./FontSize";
 import { Mention, type MentionOptions } from "./mention";
 import { Markdown, type MarkdownOptions } from "./markdown";
+import { Image, type ImageOptions } from "./image";
 
 export interface RichTextPresetOptions {
   placeholder?: string | ((props: { node: any }) => string);
@@ -51,6 +52,7 @@ export interface RichTextPresetOptions {
   headingLevels?: (1 | 2 | 3 | 4 | 5 | 6)[];
   mention?: MentionOptions | boolean;
   markdown?: MarkdownOptions | boolean;
+  image?: ImageOptions | boolean;
 }
 
 /**
@@ -185,6 +187,20 @@ export function createRichTextPreset(
         transformPastedText: true,
         transformCopiedText: true,
         ...markdownConfig,
+      }),
+    );
+  }
+
+  if (options.image !== false) {
+    const imageConfig =
+      typeof options.image === "object" ? options.image : {};
+    extensions.push(
+      Image.configure({
+        HTMLAttributes: {
+          class: "rounded-md max-w-full h-auto my-2",
+          ...(imageConfig.HTMLAttributes || {}),
+        },
+        ...imageConfig,
       }),
     );
   }
