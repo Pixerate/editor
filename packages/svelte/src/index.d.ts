@@ -1,5 +1,5 @@
 import type { Component } from "svelte";
-import type { Editor, Content, Extensions, EditorOptions } from "@tiptap/core";
+import type { Editor, Content, Extensions, EditorOptions, FocusPosition } from "@tiptap/core";
 import type {
   Template,
   TemplateVersion,
@@ -7,6 +7,7 @@ import type {
   TokenType,
   ColorGradient,
   RichTextPresetOptions,
+  MarkdownOptions,
 } from "@pixerate/editor";
 
 export interface SvelteInitiateEditorOptions extends Partial<EditorOptions> {
@@ -38,6 +39,7 @@ export declare function createReactiveEditor(
 
 export interface EditableTextNodeEditorProps {
   class?: string;
+  editorClass?: string;
   content?: Content;
   showMenu?: boolean;
   editable?: boolean;
@@ -48,6 +50,9 @@ export interface EditableTextNodeEditorProps {
   onBlur?: () => void;
   onCreate?: () => void;
   placeholder?: string;
+  markdown?: boolean | MarkdownOptions;
+  richTextOptions?: RichTextPresetOptions;
+  autofocus?: FocusPosition | boolean;
 }
 
 export interface BubbleMenuProps {
