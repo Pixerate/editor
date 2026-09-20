@@ -1,5 +1,11 @@
 # @pixerate/editor-svelte
 
+## 0.7.1
+
+### Patch Changes
+
+- f1aee60: fix(svelte): disable default autofocus in initiateEditor and expose autofocus prop on EditableTextNodeEditor
+
 ## 0.7.0
 
 ### Minor Changes
