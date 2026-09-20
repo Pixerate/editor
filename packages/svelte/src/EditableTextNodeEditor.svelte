@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Editor, Content, Extensions, FocusPosition } from "@tiptap/core";
-  import type { RichTextPresetOptions, MarkdownOptions } from "@pixerate/editor";
+  import type { RichTextPresetOptions, MarkdownOptions, ImageOptions } from "@pixerate/editor";
   import { onDestroy, onMount } from "svelte";
   import { initiateEditor } from "./editor.svelte";
 
@@ -20,6 +20,8 @@
     markdown?: boolean | MarkdownOptions;
     richTextOptions?: RichTextPresetOptions;
     autofocus?: FocusPosition | boolean;
+    image?: ImageOptions | boolean;
+    uploadImage?: (file: File) => Promise<string> | string;
   }
 
   let {
@@ -38,6 +40,8 @@
     markdown = undefined,
     richTextOptions = {},
     autofocus = false,
+    image = undefined,
+    uploadImage = undefined,
   }: EditorProps = $props();
 
   let element = $state<HTMLElement>();
@@ -57,6 +61,17 @@
         richTextOptions: {
           placeholder,
           ...(markdown !== undefined ? { markdown } : {}),
+          ...(image !== undefined || uploadImage !== undefined
+            ? {
+                image:
+                  image === false
+                    ? false
+                    : {
+                        ...(typeof image === "object" ? image : {}),
+                        ...(uploadImage ? { upload: uploadImage } : {}),
+                      },
+              }
+            : {}),
           ...richTextOptions,
         },
         editable,

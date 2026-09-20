@@ -8,3 +8,4 @@ export * from "./FontSize";
 export * from "./rich-text-preset";
 export * from "./mention";
 export * from "./markdown";
+export * from "./image";
