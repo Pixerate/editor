@@ -24,7 +24,7 @@ export const initiateEditor = (
       ...defaultPreset,
       ...(extensions ?? []),
     ],
-    autofocus: true,
+    autofocus: false,
     ...editorOptions,
   });
 

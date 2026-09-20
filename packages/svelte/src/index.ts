@@ -1,6 +1,6 @@
 import type { Component } from "svelte";
-import type { Editor, Content, Extensions } from "@tiptap/core";
-import type { Template, ColorGradient } from "@pixerate/editor";
+import type { Editor, Content, Extensions, FocusPosition } from "@tiptap/core";
+import type { Template, ColorGradient, RichTextPresetOptions, MarkdownOptions } from "@pixerate/editor";
 
 import EditableTextNodeEditorComponent from "./EditableTextNodeEditor.svelte";
 import BubbleMenuComponent from "./BubbleMenu.svelte";
@@ -21,6 +21,9 @@ export interface EditableTextNodeEditorProps {
   onBlur?: () => void;
   onCreate?: () => void;
   placeholder?: string;
+  markdown?: boolean | MarkdownOptions;
+  richTextOptions?: RichTextPresetOptions;
+  autofocus?: FocusPosition | boolean;
 }
 
 export interface BubbleMenuProps {

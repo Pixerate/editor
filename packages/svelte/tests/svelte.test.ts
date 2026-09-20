@@ -35,5 +35,15 @@ describe("@pixerate/editor-svelte Distribution Exports", () => {
     expect(CanvasModule.miroCompatiblePreset).toBeDefined();
     expect(CanvasModule.restorePanelPointerEvents).toBeDefined();
   });
+
+  it("defaults autofocus to false in initiateEditor, and respects explicit autofocus", () => {
+    const editorDefault = SvelteEditor.initiateEditor();
+    expect(editorDefault.options.autofocus).toBe(false);
+    editorDefault.destroy();
+
+    const editorAutofocus = SvelteEditor.initiateEditor(undefined, undefined, undefined, { autofocus: true });
+    expect(editorAutofocus.options.autofocus).toBe(true);
+    editorAutofocus.destroy();
+  });
 });
 
