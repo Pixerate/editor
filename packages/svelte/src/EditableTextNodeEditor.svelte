@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Editor, Content, Extensions } from "@tiptap/core";
+  import type { Editor, Content, Extensions, FocusPosition } from "@tiptap/core";
   import type { RichTextPresetOptions, MarkdownOptions } from "@pixerate/editor";
   import { onDestroy, onMount } from "svelte";
   import { initiateEditor } from "./editor.svelte";
@@ -19,6 +19,7 @@
     placeholder?: string;
     markdown?: boolean | MarkdownOptions;
     richTextOptions?: RichTextPresetOptions;
+    autofocus?: FocusPosition | boolean;
   }
 
   let {
@@ -36,6 +37,7 @@
     placeholder = "",
     markdown = undefined,
     richTextOptions = {},
+    autofocus = false,
   }: EditorProps = $props();
 
   let element = $state<HTMLElement>();
@@ -58,6 +60,7 @@
           ...richTextOptions,
         },
         editable,
+        autofocus,
         onCreate,
         onUpdate,
         onFocus() {
