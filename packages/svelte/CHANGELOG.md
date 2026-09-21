@@ -1,5 +1,13 @@
 # @pixerate/editor-svelte
 
+## 0.8.1
+
+### Patch Changes
+
+- db73d55: feat(image): add maxBase64Size enforcement, onUploadError callback, and optimistic node cleanup on upload failure
+- Updated dependencies [db73d55]
+  - @pixerate/editor@0.6.1
+
 ## 0.8.0
 
 ### Minor Changes

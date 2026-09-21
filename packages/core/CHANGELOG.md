@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.6.1
+
+### Patch Changes
+
+- db73d55: feat(image): add maxBase64Size enforcement, onUploadError callback, and optimistic node cleanup on upload failure
+
 ## 0.6.0
 
 ### Minor Changes
