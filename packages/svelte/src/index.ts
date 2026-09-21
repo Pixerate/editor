@@ -26,6 +26,7 @@ export interface EditableTextNodeEditorProps {
   autofocus?: FocusPosition | boolean;
   image?: ImageOptions | boolean;
   uploadImage?: (file: File) => Promise<string> | string;
+  onUploadError?: (error: Error, file: File) => void;
 }
 
 export interface BubbleMenuProps {
