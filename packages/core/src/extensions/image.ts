@@ -19,6 +19,19 @@ export interface ImageOptions extends Partial<TipTapImageOptions> {
   upload?: (file: File) => Promise<string> | string;
 
   /**
+   * Callback invoked if the upload handler throws or rejects, or if an image
+   * exceeds maxBase64Size when no upload handler is configured.
+   */
+  onUploadError?: (error: Error, file: File) => void;
+
+  /**
+   * Maximum allowed file size (in bytes) when embedding images as base64 data URLs
+   * without an upload handler. Defaults to 65536 (64 KB).
+   * Files larger than this will be rejected to avoid memory bloat and prompt/stream saturation.
+   */
+  maxBase64Size?: number;
+
+  /**
    * Whether to enable automatic image pasting from clipboard. Defaults to true.
    */
   enablePaste?: boolean;
@@ -69,6 +82,28 @@ export function updateImageSrc(view: any, oldSrc: string, newSrc: string) {
 }
 
 /**
+ * Removes an existing image node matching src attribute across document positions.
+ */
+export function removeImageNode(view: any, src: string) {
+  const { doc } = view.state;
+  let foundPos: number | null = null;
+  let nodeSize = 0;
+
+  doc.descendants((node: any, pos: number) => {
+    if (node.type.name === "image" && node.attrs.src === src) {
+      foundPos = pos;
+      nodeSize = node.nodeSize;
+      return false;
+    }
+  });
+
+  if (foundPos !== null) {
+    const tr = view.state.tr.delete(foundPos, foundPos + nodeSize);
+    view.dispatch(tr);
+  }
+}
+
+/**
  * Handles inserting a pasted or dropped image file, supporting both async upload
  * handlers and direct base64/object-URL fallbacks.
  */
@@ -89,7 +124,9 @@ export function handleImageInsertion(
 
     Promise.resolve(options.upload(file))
       .then((uploadedUrl) => {
-        if (!uploadedUrl) return;
+        if (!uploadedUrl) {
+          throw new Error("Upload handler returned empty URL");
+        }
         if (tempUrl) {
           updateImageSrc(view, tempUrl, uploadedUrl);
           if (typeof URL.revokeObjectURL === "function") {
@@ -100,9 +137,33 @@ export function handleImageInsertion(
         }
       })
       .catch((err) => {
-        console.error("Failed to upload pasted image:", err);
+        const error = err instanceof Error ? err : new Error(String(err));
+        console.error("Failed to upload pasted image:", error);
+        if (tempUrl) {
+          removeImageNode(view, tempUrl);
+          if (typeof URL.revokeObjectURL === "function") {
+            URL.revokeObjectURL(tempUrl);
+          }
+        }
+        if (typeof options.onUploadError === "function") {
+          options.onUploadError(error, file);
+        }
       });
   } else if (options.allowBase64 !== false) {
+    const maxBase64Size = options.maxBase64Size ?? 65536; // 64KB default
+    if (file.size > maxBase64Size) {
+      const err = new Error(
+        `Image size (${Math.round(file.size / 1024)}KB) exceeds maxBase64Size (${Math.round(
+          maxBase64Size / 1024,
+        )}KB). Provide an upload handler to support large images.`,
+      );
+      console.warn(`[Editor] ${err.message}`);
+      if (typeof options.onUploadError === "function") {
+        options.onUploadError(err, file);
+      }
+      return;
+    }
+
     if (typeof FileReader !== "undefined") {
       const reader = new FileReader();
       reader.onload = () => {
@@ -121,9 +182,11 @@ export const Image = BaseImage.extend({
     return {
       ...this.parent?.(),
       allowBase64: true,
+      maxBase64Size: 65536,
       enablePaste: true,
       enableDrop: true,
       upload: undefined,
+      onUploadError: undefined,
       HTMLAttributes: {
         class: "rounded-md max-w-full h-auto my-2",
       },
