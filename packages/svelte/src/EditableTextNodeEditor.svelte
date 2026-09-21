@@ -22,6 +22,7 @@
     autofocus?: FocusPosition | boolean;
     image?: ImageOptions | boolean;
     uploadImage?: (file: File) => Promise<string> | string;
+    onUploadError?: (error: Error, file: File) => void;
   }
 
   let {
@@ -42,6 +43,7 @@
     autofocus = false,
     image = undefined,
     uploadImage = undefined,
+    onUploadError = undefined,
   }: EditorProps = $props();
 
   let element = $state<HTMLElement>();
@@ -61,7 +63,7 @@
         richTextOptions: {
           placeholder,
           ...(markdown !== undefined ? { markdown } : {}),
-          ...(image !== undefined || uploadImage !== undefined
+          ...(image !== undefined || uploadImage !== undefined || onUploadError !== undefined
             ? {
                 image:
                   image === false
@@ -69,6 +71,7 @@
                     : {
                         ...(typeof image === "object" ? image : {}),
                         ...(uploadImage ? { upload: uploadImage } : {}),
+                        ...(onUploadError ? { onUploadError } : {}),
                       },
               }
             : {}),

@@ -89,4 +89,68 @@ describe("Image extension and paste support in @pixerate/editor", () => {
 
     editor.destroy();
   });
+
+  it("removes optimistic image node and calls onUploadError when upload rejects", async () => {
+    const uploadMock = vi.fn().mockRejectedValue(new Error("Network timeout"));
+    const onUploadError = vi.fn();
+
+    const editor = new Editor({
+      extensions: [
+        ...createRichTextPreset({
+          markdown: true,
+          image: {
+            upload: uploadMock,
+            onUploadError,
+          },
+        }),
+      ],
+      content: "<p>Initial text</p>",
+    });
+
+    const fakeFile = new File(["fake image content"], "screenshot.png", { type: "image/png" });
+
+    handleImageInsertion(editor.view, fakeFile, { upload: uploadMock, onUploadError });
+
+    await vi.waitFor(() => {
+      expect(onUploadError).toHaveBeenCalledWith(expect.any(Error), fakeFile);
+    });
+
+    // The temporary blob node should be removed from document
+    const html = editor.getHTML();
+    expect(html).not.toContain("<img");
+
+    editor.destroy();
+  });
+
+  it("rejects images larger than maxBase64Size when upload handler is not provided", () => {
+    const onUploadError = vi.fn();
+    const editor = new Editor({
+      extensions: [
+        ...createRichTextPreset({
+          markdown: true,
+          image: {
+            maxBase64Size: 100, // 100 bytes max
+            onUploadError,
+          },
+        }),
+      ],
+      content: "<p>Initial text</p>",
+    });
+
+    const largeFile = new File([new Array(200).fill("a").join("")], "large.png", { type: "image/png" });
+    handleImageInsertion(editor.view, largeFile, { maxBase64Size: 100, onUploadError });
+
+    expect(onUploadError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining("exceeds maxBase64Size"),
+      }),
+      largeFile,
+    );
+
+    const html = editor.getHTML();
+    expect(html).not.toContain("<img");
+
+    editor.destroy();
+  });
 });
+
