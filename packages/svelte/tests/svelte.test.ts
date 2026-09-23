@@ -16,6 +16,13 @@ describe("@pixerate/editor-svelte Distribution Exports", () => {
     expect(SvelteEditor.createReactiveSpreadsheet).toBeDefined();
   });
 
+  it("exports navigationGuard, createNavigationGuard, and DirtyTracker", () => {
+    expect(SvelteEditor.navigationGuard).toBeDefined();
+    expect(SvelteEditor.createNavigationGuard).toBeDefined();
+    expect(SvelteEditor.DirtyTracker).toBeDefined();
+    expect(SvelteEditor.createDirtyTracker).toBeDefined();
+  });
+
   it("exports canvas runes and utilities from @pixerate/editor-svelte/canvas", async () => {
     const CanvasModule = await import("../dist/canvas");
     expect(CanvasModule.createCanvasGraph).toBeDefined();
@@ -41,9 +48,13 @@ describe("@pixerate/editor-svelte Distribution Exports", () => {
     expect(editorDefault.options.autofocus).toBe(false);
     editorDefault.destroy();
 
-    const editorAutofocus = SvelteEditor.initiateEditor(undefined, undefined, undefined, { autofocus: true });
+    const editorAutofocus = SvelteEditor.initiateEditor(
+      undefined,
+      undefined,
+      undefined,
+      { autofocus: true },
+    );
     expect(editorAutofocus.options.autofocus).toBe(true);
     editorAutofocus.destroy();
   });
 });
-

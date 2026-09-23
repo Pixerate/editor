@@ -1,5 +1,11 @@
 import type { Component } from "svelte";
-import type { Editor, Content, Extensions, EditorOptions, FocusPosition } from "@tiptap/core";
+import type {
+  Editor,
+  Content,
+  Extensions,
+  EditorOptions,
+  FocusPosition,
+} from "@tiptap/core";
 import type {
   Template,
   TemplateVersion,
@@ -96,8 +102,8 @@ import type {
   CellCoordinate,
   CellRange,
   CellData,
-  SpreadsheetDataSource
-} from '@pixerate/editor';
+  SpreadsheetDataSource,
+} from "@pixerate/editor";
 
 export interface SpreadsheetEditorProps {
   sheetState: ReturnType<typeof createReactiveSpreadsheet>;
@@ -107,8 +113,16 @@ export interface SpreadsheetEditorProps {
   class?: string;
   customCellRenderer?:
     | ((cell: CellData, col: SpreadsheetColumn, row: SpreadsheetRow) => any)
-    | ((args: { cell: CellData; col: SpreadsheetColumn; row: SpreadsheetRow }) => any)
-    | ((args: { row: SpreadsheetRow; col: SpreadsheetColumn; cell: CellData }) => any);
+    | ((args: {
+        cell: CellData;
+        col: SpreadsheetColumn;
+        row: SpreadsheetRow;
+      }) => any)
+    | ((args: {
+        row: SpreadsheetRow;
+        col: SpreadsheetColumn;
+        cell: CellData;
+      }) => any);
   onAddColumnClick?: () => void;
   onColumnHeaderClick?: (col: SpreadsheetColumn) => void;
   onColumnResize?: (colId: string, width: number) => void;
@@ -122,7 +136,9 @@ export interface FormulaBarProps {
 export declare const SpreadsheetEditor: Component<SpreadsheetEditorProps>;
 export declare const FormulaBar: Component<FormulaBarProps>;
 
-export declare function createReactiveSpreadsheet(options?: SpreadsheetControllerOptions): {
+export declare function createReactiveSpreadsheet(
+  options?: SpreadsheetControllerOptions,
+): {
   readonly document: SpreadsheetDocument;
   readonly activeCell: CellCoordinate | null;
   readonly selectedRange: CellRange | null;
@@ -136,7 +152,7 @@ export declare function createReactiveSpreadsheet(options?: SpreadsheetControlle
   startEditing(row?: number, col?: number, initialVal?: string): void;
   commitEditing(val?: string): void;
   cancelEditing(): void;
-  moveCursor(dir: 'up' | 'down' | 'left' | 'right', extend?: boolean): void;
+  moveCursor(dir: "up" | "down" | "left" | "right", extend?: boolean): void;
   insertColumn(index: number, config?: Partial<SpreadsheetColumn>): void;
   deleteColumn(colId: string): void;
   insertRow(index: number, config?: Partial<SpreadsheetRow>): void;
@@ -152,3 +168,47 @@ export declare function createReactiveSpreadsheet(options?: SpreadsheetControlle
   undo(): void;
   redo(): void;
 };
+
+export interface NavigationGuardOptions {
+  isDirty: boolean;
+  enabled?: boolean;
+  onBlocked?: (url: string) => void;
+}
+
+export interface NavigationGuardActionReturn {
+  update(newOptions: NavigationGuardOptions): void;
+  destroy(): void;
+}
+
+export declare function navigationGuard(
+  node: HTMLElement,
+  options: NavigationGuardOptions,
+): NavigationGuardActionReturn;
+
+export interface CreateNavigationGuardOptions {
+  isDirty: boolean | (() => boolean);
+  enabled?: boolean | (() => boolean);
+  onNavigate?: (url: string) => void;
+  onBlocked?: (url: string) => void;
+}
+
+export interface NavigationGuardManager {
+  readonly showConfirm: boolean;
+  setShowConfirm(show: boolean): void;
+  readonly pendingUrl: string | null;
+  intercept(url: string): boolean;
+  confirmLeave(): void;
+  cancelLeave(): void;
+  destroy(): void;
+}
+
+export declare function createNavigationGuard(
+  options: CreateNavigationGuardOptions,
+): NavigationGuardManager;
+
+export {
+  DirtyTracker,
+  createDirtyTracker,
+  defaultIsEqual,
+} from "@pixerate/editor";
+export type { DirtyTrackerOptions } from "@pixerate/editor";

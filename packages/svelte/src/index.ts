@@ -1,12 +1,27 @@
 import type { Component } from "svelte";
 import type { Editor, Content, Extensions, FocusPosition } from "@tiptap/core";
-import type { Template, ColorGradient, RichTextPresetOptions, MarkdownOptions, ImageOptions } from "@pixerate/editor";
+import type {
+  Template,
+  ColorGradient,
+  RichTextPresetOptions,
+  MarkdownOptions,
+  ImageOptions,
+} from "@pixerate/editor";
 
 import EditableTextNodeEditorComponent from "./EditableTextNodeEditor.svelte";
 import BubbleMenuComponent from "./BubbleMenu.svelte";
 import TemplateRendererComponent from "./TemplateRenderer.svelte";
 
 export * from "./editor.svelte";
+export * from "./navigationGuard";
+export * from "./createNavigationGuard.svelte";
+
+export {
+  DirtyTracker,
+  createDirtyTracker,
+  defaultIsEqual,
+} from "@pixerate/editor";
+export type { DirtyTrackerOptions } from "@pixerate/editor";
 
 export interface EditableTextNodeEditorProps {
   class?: string;
@@ -45,9 +60,12 @@ export interface TemplateRendererProps {
   onVariableClick?: (variableName: string) => void;
 }
 
-export const EditableTextNodeEditor = EditableTextNodeEditorComponent as unknown as Component<EditableTextNodeEditorProps>;
-export const BubbleMenu = BubbleMenuComponent as unknown as Component<BubbleMenuProps>;
-export const TemplateRenderer = TemplateRendererComponent as unknown as Component<TemplateRendererProps>;
+export const EditableTextNodeEditor =
+  EditableTextNodeEditorComponent as unknown as Component<EditableTextNodeEditorProps>;
+export const BubbleMenu =
+  BubbleMenuComponent as unknown as Component<BubbleMenuProps>;
+export const TemplateRenderer =
+  TemplateRendererComponent as unknown as Component<TemplateRendererProps>;
 
 export type {
   Template,

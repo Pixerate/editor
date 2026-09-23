@@ -36,6 +36,7 @@ export class EditorController {
   private readonly onSelectionChange?: (
     range: { from: number; to: number } | null,
   ) => void;
+  private baselineContent: string;
 
   constructor(options: EditorControllerOptions = {}) {
     const {
@@ -83,6 +84,8 @@ export class EditorController {
     if (plainTextMode) {
       this.enforcePlainTextClipboard();
     }
+
+    this.baselineContent = this.getCurrentContentString();
   }
 
   private enforcePlainTextClipboard() {
@@ -186,6 +189,29 @@ export class EditorController {
       .deleteRange({ from, to })
       .insertContentAt(from, text)
       .run();
+  }
+
+  public getCurrentContentString(): string {
+    if (this.plainTextMode) return this.getPlainText();
+    if (this.markdownMode) return this.getMarkdown();
+    return this.editor.getHTML();
+  }
+
+  public isDirty(): boolean {
+    return this.getCurrentContentString() !== this.baselineContent;
+  }
+
+  public setCheckpoint(content?: string): void {
+    this.baselineContent =
+      content !== undefined ? content : this.getCurrentContentString();
+  }
+
+  public resetDirty(): void {
+    this.setCheckpoint();
+  }
+
+  public getBaselineContent(): string {
+    return this.baselineContent;
   }
 
   public destroy() {
