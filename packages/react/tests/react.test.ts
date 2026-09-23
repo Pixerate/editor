@@ -14,4 +14,11 @@ describe("@pixerate/editor-react Exports", () => {
     expect(ReactEditor.SpreadsheetEditor).toBeDefined();
     expect(ReactEditor.useSpreadsheetEditor).toBeDefined();
   });
+
+  it("exports useNavigationGuard, useDismissGuard, and DirtyTracker", () => {
+    expect(ReactEditor.useNavigationGuard).toBeDefined();
+    expect(ReactEditor.useDismissGuard).toBeDefined();
+    expect(ReactEditor.DirtyTracker).toBeDefined();
+    expect(ReactEditor.createDirtyTracker).toBeDefined();
+  });
 });
