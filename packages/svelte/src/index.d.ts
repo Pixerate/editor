@@ -206,9 +206,42 @@ export declare function createNavigationGuard(
   options: CreateNavigationGuardOptions,
 ): NavigationGuardManager;
 
+export interface SvelteHistory extends HistoryState {
+  readonly manager: HistoryManager;
+  undo(): boolean;
+  redo(): boolean;
+  clear(): void;
+  execute(command: Command): void;
+  executeMerged(command: Command, options?: { windowMs?: number }): void;
+  batch(name: string, fn: () => void): void;
+  subscribe(run: (value: HistoryState) => void): () => void;
+}
+
+export declare function createHistory(
+  managerOrOptions?: HistoryManager | HistoryManagerOptions,
+): SvelteHistory;
+
+export interface HistoryShortcutsOptions {
+  enabled?: boolean;
+  target?: Window | HTMLElement | null;
+  ignoreEditableElements?: boolean;
+}
+
+export declare function createHistoryShortcuts(
+  manager: HistoryManager,
+  options?: HistoryShortcutsOptions,
+): { destroy: () => void };
+
 export {
   DirtyTracker,
   createDirtyTracker,
   defaultIsEqual,
+  HistoryManager,
+  createHistoryManager,
 } from "@pixerate/editor";
-export type { DirtyTrackerOptions } from "@pixerate/editor";
+export type {
+  DirtyTrackerOptions,
+  Command,
+  HistoryState,
+  HistoryManagerOptions,
+} from "@pixerate/editor";

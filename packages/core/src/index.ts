@@ -4,6 +4,7 @@ export * from "./serializers";
 export * from "./controller";
 export * from "./spreadsheet";
 export * from "./dirty";
+export * from "./history";
 
 // Re-export common tiptap types for convenience
 export type { Editor, Content, Extensions, EditorOptions } from "@tiptap/core";

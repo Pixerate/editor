@@ -21,4 +21,11 @@ describe("@pixerate/editor-react Exports", () => {
     expect(ReactEditor.DirtyTracker).toBeDefined();
     expect(ReactEditor.createDirtyTracker).toBeDefined();
   });
+
+  it("exports useHistory, useHistoryShortcuts, and HistoryManager", () => {
+    expect(ReactEditor.useHistory).toBeDefined();
+    expect(ReactEditor.useHistoryShortcuts).toBeDefined();
+    expect(ReactEditor.HistoryManager).toBeDefined();
+    expect(ReactEditor.createHistoryManager).toBeDefined();
+  });
 });

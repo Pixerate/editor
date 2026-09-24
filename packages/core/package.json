@@ -38,6 +38,11 @@
       "types": "./dist/spreadsheet/index.d.ts",
       "import": "./dist/spreadsheet/index.js",
       "require": "./dist/spreadsheet/index.cjs"
+    },
+    "./history": {
+      "types": "./dist/history/index.d.ts",
+      "import": "./dist/history/index.js",
+      "require": "./dist/history/index.cjs"
     }
   },
   "files": [

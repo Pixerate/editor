@@ -15,13 +15,21 @@ import TemplateRendererComponent from "./TemplateRenderer.svelte";
 export * from "./editor.svelte";
 export * from "./navigationGuard";
 export * from "./createNavigationGuard.svelte";
+export * from "./history";
 
 export {
   DirtyTracker,
   createDirtyTracker,
   defaultIsEqual,
+  HistoryManager,
+  createHistoryManager,
 } from "@pixerate/editor";
-export type { DirtyTrackerOptions } from "@pixerate/editor";
+export type {
+  DirtyTrackerOptions,
+  Command,
+  HistoryState,
+  HistoryManagerOptions,
+} from "@pixerate/editor";
 
 export interface EditableTextNodeEditorProps {
   class?: string;

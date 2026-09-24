@@ -7,6 +7,7 @@ export default defineConfig({
     "extensions/index": "src/extensions/index.ts",
     "serializers/index": "src/serializers/index.ts",
     "spreadsheet/index": "src/spreadsheet/index.ts",
+    "history/index": "src/history/index.ts",
   },
   format: ["esm", "cjs"],
   dts: true,

@@ -23,6 +23,13 @@ describe("@pixerate/editor-svelte Distribution Exports", () => {
     expect(SvelteEditor.createDirtyTracker).toBeDefined();
   });
 
+  it("exports createHistory, createHistoryShortcuts, and HistoryManager", () => {
+    expect(SvelteEditor.createHistory).toBeDefined();
+    expect(SvelteEditor.createHistoryShortcuts).toBeDefined();
+    expect(SvelteEditor.HistoryManager).toBeDefined();
+    expect(SvelteEditor.createHistoryManager).toBeDefined();
+  });
+
   it("exports canvas runes and utilities from @pixerate/editor-svelte/canvas", async () => {
     const CanvasModule = await import("../dist/canvas");
     expect(CanvasModule.createCanvasGraph).toBeDefined();

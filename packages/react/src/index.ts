@@ -2,6 +2,8 @@ export * from "./hooks/usePromptEditor";
 export * from "./hooks/useEditor";
 export * from "./hooks/useNavigationGuard";
 export * from "./hooks/useDismissGuard";
+export * from "./hooks/useHistory";
+export * from "./hooks/useHistoryShortcuts";
 export * from "./components/EditorContent";
 export * from "./components/BubbleMenu";
 export * from "./components/TemplateRenderer";
@@ -11,6 +13,8 @@ export {
   DirtyTracker,
   createDirtyTracker,
   defaultIsEqual,
+  HistoryManager,
+  createHistoryManager,
 } from "@pixerate/editor";
 export type {
   Template,
@@ -20,6 +24,9 @@ export type {
   ColorGradient,
   RichTextPresetOptions,
   DirtyTrackerOptions,
+  Command,
+  HistoryState,
+  HistoryManagerOptions,
 } from "@pixerate/editor";
 
 export * from "./spreadsheet";
