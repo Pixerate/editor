@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.8.1
+
+### Patch Changes
+
+- 4bcf5f0: Allow `file://`, `vscode://`, and `cursor://` link protocols in markdown serializer and rich text preset
+
 ## 0.8.0
 
 ### Minor Changes

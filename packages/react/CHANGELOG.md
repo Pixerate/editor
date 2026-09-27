@@ -1,5 +1,12 @@
 # @pixerate/editor-react
 
+## 0.5.1
+
+### Patch Changes
+
+- Updated dependencies [4bcf5f0]
+  - @pixerate/editor@0.8.1
+
 ## 0.5.0
 
 ### Minor Changes
