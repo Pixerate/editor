@@ -113,6 +113,7 @@ export function createRichTextPreset(
       openOnClick: openLinksOnClick,
       autolink: true,
       defaultProtocol: "https",
+      protocols: ["file", "vscode", "cursor"],
       HTMLAttributes: {
         target: "_blank",
         rel: "noopener noreferrer",

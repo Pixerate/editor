@@ -8,6 +8,18 @@ const md = new MarkdownIt({
   breaks: true,
 }).use(taskLists);
 
+const defaultValidateLink = md.validateLink;
+md.validateLink = (url: string) => {
+  if (
+    url.startsWith("file://") ||
+    url.startsWith("vscode://") ||
+    url.startsWith("cursor://")
+  ) {
+    return true;
+  }
+  return defaultValidateLink.call(md, url);
+};
+
 /**
  * Converts a markdown string into HTML suitable for TipTap initial content or setContent.
  */
