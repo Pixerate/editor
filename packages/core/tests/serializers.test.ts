@@ -3,6 +3,7 @@ import {
   escapeHtml,
   plainTextToTipTapHtml,
   htmlToPlainText,
+  markdownToTipTapHtml,
 } from "../src/serializers";
 
 describe("Serializers: Plain Text & TipTap HTML", () => {
@@ -29,5 +30,13 @@ describe("Serializers: Plain Text & TipTap HTML", () => {
     const html = "<p>Line 1</p><p>Line 2</p>";
     const text = htmlToPlainText(html);
     expect(text).toBe("Line 1\nLine 2");
+  });
+
+  it("converts markdown file://, vscode://, and cursor:// links into anchor tags", () => {
+    const markdown = "Check [TaskCard.svelte](file:///path/to/TaskCard.svelte) or [vscode](vscode://file/path) or [cursor](cursor://file/path)";
+    const html = markdownToTipTapHtml(markdown);
+    expect(html).toContain('<a href="file:///path/to/TaskCard.svelte">TaskCard.svelte</a>');
+    expect(html).toContain('<a href="vscode://file/path">vscode</a>');
+    expect(html).toContain('<a href="cursor://file/path">cursor</a>');
   });
 });
