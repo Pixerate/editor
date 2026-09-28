@@ -93,6 +93,7 @@ export interface CanvasInteractionPresetConfig {
   multiSelectionKey?: string[];
   minZoom?: number;
   maxZoom?: number;
+  selectionMode?: 'partial' | 'full';
 }
 
 /**
@@ -570,4 +571,118 @@ export declare function createCanvasExplosion<
   ): boolean;
   getSnapshot(parentId: string): ExplosionSnapshot<TNode, TEdge> | undefined;
 };
+
+export interface HandleConfig {
+  id?: string | null;
+  type: 'source' | 'target';
+  position: any;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+}
+
+export interface NodeMeasurement {
+  width: number;
+  height: number;
+}
+
+export declare function preserveNodeMeasurements<TNode extends CanvasNode = CanvasNode>(
+  newNodes: TNode[],
+  existingNodes: TNode[] | Map<string, TNode>
+): TNode[];
+
+export declare function normalizeNodeHandles<TNode extends CanvasNode = CanvasNode>(
+  node: TNode,
+  handles?: HandleConfig[]
+): TNode;
+
+export interface CreateCanvasNodeSyncOptions<
+  TItem,
+  TNode extends CanvasNode = CanvasNode,
+  TEdge extends CanvasEdge = CanvasEdge
+> {
+  items: () => TItem[];
+  toNode: (
+    item: TItem,
+    index: number,
+    context: { existingNode?: TNode; prevNodesMap: Map<string, TNode> }
+  ) => TNode;
+  toEdges?: (items: TItem[], nodes: TNode[]) => TEdge[];
+  defaultHandles?: (node: TNode) => HandleConfig[] | undefined;
+}
+
+export declare function createCanvasNodeSync<
+  TItem,
+  TNode extends CanvasNode = CanvasNode,
+  TEdge extends CanvasEdge = CanvasEdge
+>(options: CreateCanvasNodeSyncOptions<TItem, TNode, TEdge>): {
+  nodes: TNode[];
+  edges: TEdge[];
+  updateNodeMeasurements(id: string, width: number, height: number): void;
+};
+
+export interface MultiDragFollowerOffset {
+  deltaX: number;
+  deltaY: number;
+  originalPosition: XYPosition;
+  stackOffsetX: number;
+  stackOffsetY: number;
+  rotationDeg: number;
+}
+
+export interface MultiDragState {
+  leadId: string;
+  offsets: Record<string, MultiDragFollowerOffset>;
+  count: number;
+}
+
+export interface CreateCanvasMultiDragOptions {
+  stackOffsetStepX?: number;
+  stackOffsetStepY?: number;
+  rotationAngles?: number[];
+  baseZIndex?: number;
+}
+
+export interface FollowerTransform {
+  isFollower: boolean;
+  stackOffsetX: number;
+  stackOffsetY: number;
+  rotationDeg: number;
+  zIndex: number;
+}
+
+export declare function createCanvasMultiDrag(options?: CreateCanvasMultiDragOptions): {
+  readonly dragState: MultiDragState | null;
+  readonly isMultiDrag: boolean;
+  readonly count: number;
+  readonly leadId: string | null;
+  startMultiDrag(
+    leadNodeId: string,
+    selectedNodeIds: string[] | Set<string>,
+    nodes: CanvasNode[] | Map<string, CanvasNode>
+  ): MultiDragState | null;
+  getFollowerTransform(nodeId: string): FollowerTransform;
+  cancelMultiDrag(
+    applyRestore?: (restores: { id: string; originalPosition: XYPosition }[]) => void
+  ): { id: string; originalPosition: XYPosition }[];
+  commitMultiDrag(): void;
+};
+
+export interface CanvasSelectionOptions {
+  isSpacebarPanning?: boolean;
+  selectionMode?: 'partial' | 'full';
+  multiSelectionKey?: string[];
+}
+
+export declare function getMarqueeSelectionPreset(
+  options?: CanvasSelectionOptions
+): CanvasInteractionPresetConfig;
+
+export declare function handleDeselectOnEscape(
+  event: KeyboardEvent,
+  onDeselect: () => void
+): boolean;
+
+export declare const FloatingHorizontalScrollbar: any;
 

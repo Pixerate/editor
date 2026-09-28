@@ -68,3 +68,33 @@ export {
 	type CanvasGraphTarget,
 	type CreateCanvasExplosionOptions
 } from './createCanvasExplosion.svelte.js';
+
+// Node synchronization & handle normalization
+export {
+	createCanvasNodeSync,
+	preserveNodeMeasurements,
+	normalizeNodeHandles,
+	type HandleConfig,
+	type NodeMeasurement,
+	type CreateCanvasNodeSyncOptions
+} from './createCanvasNodeSync.svelte.js';
+
+// Multi-node drag coordination rune
+export {
+	createCanvasMultiDrag,
+	type MultiDragState,
+	type MultiDragFollowerOffset,
+	type CreateCanvasMultiDragOptions,
+	type FollowerTransform
+} from './createCanvasMultiDrag.svelte.js';
+
+// Drag selection helpers & presets
+export {
+	getMarqueeSelectionPreset,
+	handleDeselectOnEscape,
+	type CanvasSelectionOptions
+} from './createCanvasSelection.svelte.js';
+
+// Viewport floating scrollbar component
+export { default as FloatingHorizontalScrollbar } from './FloatingHorizontalScrollbar.svelte';
+
