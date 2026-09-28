@@ -102,6 +102,7 @@ export interface CanvasInteractionPresetConfig {
 	multiSelectionKey?: string[];
 	minZoom?: number;
 	maxZoom?: number;
+	selectionMode?: 'partial' | 'full';
 }
 
 /**

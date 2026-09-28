@@ -48,7 +48,13 @@ describe("@pixerate/editor-svelte Distribution Exports", () => {
     expect(CanvasModule.defaultSvelteFlowPreset).toBeDefined();
     expect(CanvasModule.miroCompatiblePreset).toBeDefined();
     expect(CanvasModule.restorePanelPointerEvents).toBeDefined();
-  });
+    expect(CanvasModule.createCanvasNodeSync).toBeDefined();
+    expect(CanvasModule.preserveNodeMeasurements).toBeDefined();
+    expect(CanvasModule.normalizeNodeHandles).toBeDefined();
+    expect(CanvasModule.createCanvasMultiDrag).toBeDefined();
+    expect(CanvasModule.getMarqueeSelectionPreset).toBeDefined();
+    expect(CanvasModule.FloatingHorizontalScrollbar).toBeDefined();
+  }, 15000);
 
   it("defaults autofocus to false in initiateEditor, and respects explicit autofocus", () => {
     const editorDefault = SvelteEditor.initiateEditor();
