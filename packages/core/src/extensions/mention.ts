@@ -10,6 +10,10 @@ export interface MentionEntity {
   type?: string;
   avatarUrl?: string;
   color?: string;
+  handle?: string;
+  name?: string;
+  hexColor?: string;
+  aliases?: string[];
   [key: string]: any;
 }
 

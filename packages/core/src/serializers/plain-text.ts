@@ -107,6 +107,8 @@ export interface ExtractedMention {
   [key: string]: any;
 }
 
+import { extractMentions } from "./mentions";
+
 /**
  * Traverses an editor instance, ProseMirror document, JSONContent, or HTML string
  * and extracts all mention attributes without needing regex.
@@ -188,6 +190,18 @@ export function extractMentionsFromDoc(docOrEditor: any): ExtractedMention[] {
           type: getAttr("data-type-name") || getAttr("data-entity-type"),
           avatarUrl: getAttr("data-avatar-url"),
           color: getAttr("data-color"),
+        });
+      }
+    }
+
+    // Fallback: If no HTML mention tags were found, extract raw @mentions from text or markdown
+    if (mentions.length === 0) {
+      const rawHandles = extractMentions(docOrEditor);
+      for (const handle of rawHandles) {
+        mentions.push({
+          id: handle,
+          label: handle,
+          type: "user",
         });
       }
     }
