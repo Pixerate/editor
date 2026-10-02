@@ -30,3 +30,4 @@ export type {
 } from "@pixerate/editor";
 
 export * from "./spreadsheet";
+export * from "./slots";

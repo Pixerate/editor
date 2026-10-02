@@ -13,7 +13,11 @@ export {
 export {
 	getLayoutedNodes,
 	getCenteredNodePosition,
-	centerNodes
+	centerNodes,
+	ensureLayout,
+	placeBeside,
+	estimateNodeSize,
+	flowSide
 } from './createCanvasLayout.js';
 
 // Clipboard rune & helpers
@@ -97,4 +101,13 @@ export {
 
 // Viewport floating scrollbar component
 export { default as FloatingHorizontalScrollbar } from './FloatingHorizontalScrollbar.svelte';
+
+// Agent presence visual layer
+export { default as AgentPresenceLayer } from './AgentPresenceLayer.svelte';
+
+// Streaming canvas rune
+export {
+	createStreamingCanvas,
+	type CreateStreamingCanvasOptions
+} from './createStreamingCanvas.svelte.js';
 

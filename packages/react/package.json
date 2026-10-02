@@ -18,6 +18,18 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./canvas": {
+      "types": "./dist/canvas/index.d.ts",
+      "import": "./dist/canvas/index.js",
+      "require": "./dist/canvas/index.cjs"
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "canvas": [
+        "./dist/canvas/index.d.ts"
+      ]
     }
   },
   "files": [
@@ -38,8 +50,14 @@
     "@tiptap/starter-kit": "^2.11.5 || ^3.0.0"
   },
   "peerDependencies": {
+    "@xyflow/react": "^12.0.0",
     "react": ">=18.0.0",
     "react-dom": ">=18.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@xyflow/react": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@types/react": "^19.0.0",

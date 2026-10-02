@@ -43,6 +43,16 @@
       "types": "./dist/history/index.d.ts",
       "import": "./dist/history/index.js",
       "require": "./dist/history/index.cjs"
+    },
+    "./canvas": {
+      "types": "./dist/canvas/index.d.ts",
+      "import": "./dist/canvas/index.js",
+      "require": "./dist/canvas/index.cjs"
+    },
+    "./agent": {
+      "types": "./dist/agent/index.d.ts",
+      "import": "./dist/agent/index.js",
+      "require": "./dist/agent/index.cjs"
     }
   },
   "files": [
@@ -54,6 +64,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@dagrejs/dagre": "^1.1.8",
     "@tiptap/core": "^2.11.5",
     "@tiptap/extension-character-count": "^2.11.5",
     "@tiptap/extension-color": "^2.11.5",
@@ -79,6 +90,7 @@
     "tiptap-markdown": "^0.8.10"
   },
   "devDependencies": {
+    "@types/dagre": "^0.7.54",
     "@types/markdown-it": "^14.2.0",
     "@types/node": "^24.0.0",
     "tsup": "^8.4.0",

@@ -8,6 +8,8 @@ export default defineConfig({
     "serializers/index": "src/serializers/index.ts",
     "spreadsheet/index": "src/spreadsheet/index.ts",
     "history/index": "src/history/index.ts",
+    "canvas/index": "src/canvas/index.ts",
+    "agent/index": "src/agent/index.ts",
   },
   format: ["esm", "cjs"],
   dts: true,

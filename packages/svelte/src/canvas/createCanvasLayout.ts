@@ -118,3 +118,12 @@ export function getLayoutedNodes<
 		};
 	});
 }
+
+// Re-export incremental layout and collision-aware placement from core
+export {
+	ensureLayout,
+	placeBeside,
+	estimateNodeSize,
+	flowSide
+} from '@pixerate/editor/canvas';
+
