@@ -36,7 +36,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Check for changeset on PRs
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
         run: |
           CHANGESETS=$(find .changeset -name "*.md" ! -name "README.md" | wc -l)
           if [ "$CHANGESETS" -eq "0" ]; then
