@@ -21,7 +21,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           token: ${{ secrets.GH_PAT || secrets.GH_TOKEN_FOR_PACKAGES || secrets.PERSONAL_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
           fetch-depth: 0
