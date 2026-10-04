@@ -94,7 +94,7 @@
     "@types/markdown-it": "^14.2.0",
     "@types/node": "^24.0.0",
     "tsup": "^8.4.0",
-    "typescript": "^5.7.3",
+    "typescript": "^7.0.2",
     "vitest": "^3.0.5"
   }
 }
