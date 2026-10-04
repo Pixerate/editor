@@ -12,6 +12,8 @@ export interface CreateStreamingCanvasOptions<
 > {
 	throttleMs?: number;
 	glideDurationMs?: number;
+	connectedOnly?: boolean;
+	clock?: any;
 	layoutOptions?: IncrementalLayoutOptions;
 	onPositionsChange?: (positions: Map<string, XYPosition>) => void;
 }
@@ -28,6 +30,8 @@ export function createStreamingCanvas<
 	const manager = new StreamingLayoutManager<TNode, TEdge>({
 		throttleMs: options.throttleMs,
 		glideDurationMs: options.glideDurationMs,
+		connectedOnly: options.connectedOnly,
+		clock: options.clock,
 		layoutOptions: options.layoutOptions,
 		onLayoutUpdated: (updated) => {
 			positions = updated;

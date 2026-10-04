@@ -104,18 +104,44 @@ describe('Agent Command Planner', () => {
 			name: 'user',
 			value: 'Alice'
 		});
+
+		const saySteps = planAgentCommand(
+			{ type: 'choreography:say', text: 'Connecting nodes...', atNodeId: 'node-1' },
+			initialSnapshot
+		);
+		expect(saySteps[0]).toEqual({
+			type: 'step:say',
+			text: 'Connecting nodes...',
+			atNodeId: 'node-1',
+			position: undefined
+		});
+
+		const waitSteps = planAgentCommand(
+			{ type: 'choreography:wait', ms: 500 },
+			initialSnapshot
+		);
+		expect(waitSteps[0]).toEqual({
+			type: 'step:wait',
+			ms: 500
+		});
 	});
 });
 
 describe('Agent MCP Tool Definitions', () => {
 	it('exports valid MCP tool definitions with schemas', () => {
-		expect(EDITOR_MCP_TOOLS).toHaveLength(3);
+		expect(EDITOR_MCP_TOOLS).toHaveLength(4);
 		expect(MCP_TOOL_GET_EDITOR_STATE.name).toBe('get_editor_state');
 		expect(MCP_TOOL_EDIT_CANVAS.name).toBe('edit_canvas');
 		expect(MCP_TOOL_EDIT_PROMPT.name).toBe('edit_prompt');
+
+		const viewTool = EDITOR_MCP_TOOLS.find((t) => t.name === 'view_editor');
+		expect(viewTool).toBeDefined();
+		expect(viewTool?.inputSchema.properties.scope.enum).toContain('viewport');
+		expect(viewTool?.inputSchema.properties.scope.enum).toContain('canvas');
 
 		expect(MCP_TOOL_EDIT_CANVAS.inputSchema.properties.operation.enum).toContain('add_node');
 		expect(MCP_TOOL_EDIT_CANVAS.inputSchema.properties.operation.enum).toContain('layout');
 		expect(MCP_TOOL_EDIT_PROMPT.inputSchema.properties.operation.enum).toContain('insert_text');
 	});
 });
+

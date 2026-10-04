@@ -11,6 +11,7 @@ export interface AgentPresence {
 	selectedNodeIds?: string[];
 	activeNodeId?: string;
 	statusMessage?: string;
+	note?: string;
 	lastActive: number;
 }
 
@@ -99,6 +100,17 @@ export type AgentCommand<
 			type: 'prompt:select';
 			from: number;
 			to: number;
+	  }
+	// Choreography / Narration commands
+	| {
+			type: 'choreography:say';
+			text: string;
+			atNodeId?: string;
+			position?: XYPosition;
+	  }
+	| {
+			type: 'choreography:wait';
+			ms: number;
 	  };
 
 /**
@@ -159,4 +171,14 @@ export type AgentStep<
 			type: 'step:prompt_select';
 			from: number;
 			to: number;
+	  }
+	| {
+			type: 'step:say';
+			text: string;
+			atNodeId?: string;
+			position?: XYPosition;
+	  }
+	| {
+			type: 'step:wait';
+			ms: number;
 	  };

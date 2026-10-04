@@ -86,6 +86,55 @@ const FEATURES = [
     svelte: true,
     note: ":) -> 🙂 and #hex badge preview",
   },
+  {
+    feature: "Canvas Layout & Math Engine",
+    core: true,
+    react: true,
+    svelte: true,
+    note: "@pixerate/editor/canvas: Dagre layout, centering, and displacements",
+  },
+  {
+    feature: "Incremental Layout & Collision Avoidance",
+    core: true,
+    react: true,
+    svelte: true,
+    note: "ensureLayout preserves user positions; placeBeside avoids overlap",
+  },
+  {
+    feature: "Deterministic Animation Clock",
+    core: true,
+    react: true,
+    svelte: true,
+    note: "ManualClock and realClock: frame-by-frame stepping for testing & video",
+  },
+  {
+    feature: "Streaming Canvas & Stabilization",
+    core: true,
+    react: true,
+    svelte: true,
+    note: "StreamingLayoutManager, connectedOnly edge filtering, and height estimation",
+  },
+  {
+    feature: "Multi-Agent Presence & Narration",
+    core: true,
+    react: true,
+    svelte: true,
+    note: "<AgentPresenceLayer /> with cursor tags and speech narration bubbles",
+  },
+  {
+    feature: "Design System Component Inversion",
+    core: true,
+    react: true,
+    svelte: true,
+    note: "<EditorSlotsProvider /> and useEditorSlots for host theme injection",
+  },
+  {
+    feature: "Agent Remote Director & MCP Schemas",
+    core: true,
+    react: true,
+    svelte: true,
+    note: "planAgentCommand and EDITOR_MCP_TOOLS (including view_editor)",
+  },
 ];
 
 export const ParityMatrixTab: React.FC = () => {

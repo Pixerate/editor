@@ -126,8 +126,45 @@ export const MCP_TOOL_EDIT_PROMPT = {
 	}
 } as const;
 
+export const MCP_TOOL_VIEW_EDITOR = {
+	name: 'view_editor',
+	description:
+		'Captures a visual image snapshot (JPEG or PNG) of the editor canvas or viewport for multimodal evaluation. Active agent cursor indicators are automatically excluded from the snapshot.',
+	inputSchema: {
+		type: 'object',
+		properties: {
+			scope: {
+				type: 'string',
+				enum: ['viewport', 'canvas'],
+				description: 'Whether to capture only the visible viewport or the full canvas bounding box (default: viewport).'
+			},
+			format: {
+				type: 'string',
+				enum: ['jpeg', 'png'],
+				description: 'Image format of the base64 snapshot (default: jpeg).'
+			},
+			maxEdge: {
+				type: 'integer',
+				description: 'Maximum width or height dimension in pixels (default: 1024).'
+			}
+		}
+	}
+} as const;
+
+/**
+ * CSS selectors for ephemeral UI overlays (such as agent cursors, presence tags, and transient bubbles)
+ * that should be excluded during canvas image export and visual snapshot generation.
+ */
+export const EXPORT_EXCLUDED_SELECTORS = [
+	'.pixerate-presence',
+	'.agent-presence',
+	'.ursula-presence'
+] as const;
+
 export const EDITOR_MCP_TOOLS = [
 	MCP_TOOL_GET_EDITOR_STATE,
 	MCP_TOOL_EDIT_CANVAS,
-	MCP_TOOL_EDIT_PROMPT
+	MCP_TOOL_EDIT_PROMPT,
+	MCP_TOOL_VIEW_EDITOR
 ] as const;
+

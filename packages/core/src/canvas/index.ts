@@ -4,3 +4,5 @@ export * from './trajectory.js';
 export * from './displacement.js';
 export * from './clipboard.js';
 export * from './streaming.js';
+export * from './clock.js';
+export * from './view.js';

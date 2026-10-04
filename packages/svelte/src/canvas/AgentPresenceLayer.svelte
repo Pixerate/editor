@@ -11,7 +11,7 @@
 
 {#if presences.length > 0}
 	<div
-		class="pixerate-agent-presence-layer pointer-events-none absolute inset-0 z-50 overflow-hidden {className}"
+		class="pixerate-presence agent-presence pixerate-agent-presence-layer pointer-events-none absolute inset-0 z-50 overflow-hidden {className}"
 		aria-hidden="true"
 	>
 		{#each presences as agent (agent.agentId)}
@@ -45,6 +45,13 @@
 							<span class="opacity-80 text-[10px]">({agent.statusMessage})</span>
 						{/if}
 					</div>
+
+					<!-- Narration Bubble (say / note) -->
+					{#if agent.note}
+						<div class="mt-1 max-w-xs rounded-lg bg-white/95 backdrop-blur-sm border border-slate-200 px-2.5 py-1.5 text-xs text-slate-800 shadow-lg dark:bg-slate-900/95 dark:border-slate-700 dark:text-slate-100">
+							{agent.note}
+						</div>
+					{/if}
 				</div>
 			{/if}
 		{/each}

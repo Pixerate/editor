@@ -111,3 +111,16 @@ export {
 	type CreateStreamingCanvasOptions
 } from './createStreamingCanvas.svelte.js';
 
+// Clock and view helpers from core
+export {
+	realClock,
+	ManualClock,
+	layoutBounds,
+	canvasHeight,
+	estimateCanvasHeight,
+	blendLayout,
+	connectedOnly,
+	type Clock,
+	type CanvasHeightOptions
+} from '@pixerate/editor/canvas';
+

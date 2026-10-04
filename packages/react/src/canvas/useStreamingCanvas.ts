@@ -13,6 +13,8 @@ export interface UseStreamingCanvasOptions<
 > {
 	throttleMs?: number;
 	glideDurationMs?: number;
+	connectedOnly?: boolean;
+	clock?: any;
 	layoutOptions?: IncrementalLayoutOptions;
 	onPositionsChange: (positions: Map<string, XYPosition>) => void;
 }
@@ -31,6 +33,8 @@ export function useStreamingCanvas<
 		const manager = new StreamingLayoutManager<TNode, TEdge>({
 			throttleMs: options.throttleMs,
 			glideDurationMs: options.glideDurationMs,
+			connectedOnly: options.connectedOnly,
+			clock: options.clock,
 			layoutOptions: options.layoutOptions,
 			onLayoutUpdated: options.onPositionsChange
 		});
@@ -40,7 +44,13 @@ export function useStreamingCanvas<
 			manager.destroy();
 			managerRef.current = null;
 		};
-	}, [options.throttleMs, options.glideDurationMs, options.onPositionsChange]);
+	}, [
+		options.throttleMs,
+		options.glideDurationMs,
+		options.connectedOnly,
+		options.clock,
+		options.onPositionsChange
+	]);
 
 	const pushStreamUpdate = useCallback(
 		(nodes: TNode[], edges: TEdge[], currentPositions: Map<string, XYPosition>) => {

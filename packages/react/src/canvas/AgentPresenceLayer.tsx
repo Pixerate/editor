@@ -15,7 +15,7 @@ export function AgentPresenceLayer({ presences, className = '' }: AgentPresenceL
 
 	return (
 		<div
-			className={`pixerate-agent-presence-layer pointer-events-none absolute inset-0 z-50 overflow-hidden ${className}`}
+			className={`pixerate-presence agent-presence pixerate-agent-presence-layer pointer-events-none absolute inset-0 z-50 overflow-hidden ${className}`}
 			aria-hidden="true"
 		>
 			{presences.map((agent) => {
@@ -56,6 +56,13 @@ export function AgentPresenceLayer({ presences, className = '' }: AgentPresenceL
 								<span className="opacity-80 text-[10px]">({agent.statusMessage})</span>
 							)}
 						</div>
+
+						{/* Narration Bubble (say / note) */}
+						{agent.note && (
+							<div className="mt-1 max-w-xs rounded-lg bg-white/95 backdrop-blur-sm border border-slate-200 px-2.5 py-1.5 text-xs text-slate-800 shadow-lg dark:bg-slate-900/95 dark:border-slate-700 dark:text-slate-100">
+								{agent.note}
+							</div>
+						)}
 					</div>
 				);
 			})}

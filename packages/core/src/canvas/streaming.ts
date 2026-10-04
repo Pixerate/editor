@@ -1,10 +1,14 @@
+import { realClock, type Clock } from './clock.js';
 import { ensureLayout } from './layout.js';
 import { linearPositionTrajectory, runMultiNodeTransition } from './trajectory.js';
 import type { CanvasEdge, CanvasNode, IncrementalLayoutOptions, NodeTransition, XYPosition } from './types.js';
+import { connectedOnly } from './view.js';
 
 export interface StreamingLayoutManagerOptions {
 	throttleMs?: number;
 	glideDurationMs?: number;
+	connectedOnly?: boolean;
+	clock?: Clock;
 	layoutOptions?: IncrementalLayoutOptions;
 	onLayoutUpdated?: (positions: Map<string, XYPosition>) => void;
 }
@@ -19,6 +23,8 @@ export class StreamingLayoutManager<
 > {
 	private throttleMs: number;
 	private glideDurationMs: number;
+	private connectedOnly: boolean;
+	private clock: Clock;
 	private layoutOptions: IncrementalLayoutOptions;
 	private onLayoutUpdated?: (positions: Map<string, XYPosition>) => void;
 
@@ -29,6 +35,8 @@ export class StreamingLayoutManager<
 	constructor(options: StreamingLayoutManagerOptions = {}) {
 		this.throttleMs = options.throttleMs ?? 200;
 		this.glideDurationMs = options.glideDurationMs ?? 300;
+		this.connectedOnly = options.connectedOnly ?? false;
+		this.clock = options.clock ?? realClock;
 		this.layoutOptions = options.layoutOptions ?? { direction: 'LR' };
 		this.onLayoutUpdated = options.onLayoutUpdated;
 	}
@@ -72,7 +80,8 @@ export class StreamingLayoutManager<
 		edges: TEdge[],
 		currentPositions: Map<string, XYPosition>
 	): void {
-		if (nodes.length === 0) return;
+		const targetNodes = this.connectedOnly ? connectedOnly(nodes, edges) : nodes;
+		if (targetNodes.length === 0) return;
 
 		// Cancel any currently running RAF glide
 		if (this.activeTransitionCancel) {
@@ -86,7 +95,7 @@ export class StreamingLayoutManager<
 			stored[id] = pos;
 		}
 
-		const layouted = ensureLayout(nodes, edges, {
+		const layouted = ensureLayout(targetNodes, edges, {
 			...this.layoutOptions,
 			storedPositions: stored
 		});
@@ -116,6 +125,7 @@ export class StreamingLayoutManager<
 
 		if (transitions.length > 0) {
 			this.activeTransitionCancel = runMultiNodeTransition(transitions, {
+				clock: this.clock,
 				onUpdate: () => {
 					// Broadcast updated positions during RAF
 					const liveMap = new Map<string, XYPosition>(currentPositions);

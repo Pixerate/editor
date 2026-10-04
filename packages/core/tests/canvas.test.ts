@@ -14,6 +14,12 @@ import {
 	serializeCanvasNodes,
 	parseCanvasClipboardData,
 	remapPastedNodes,
+	ManualClock,
+	layoutBounds,
+	canvasHeight,
+	estimateCanvasHeight,
+	blendLayout,
+	connectedOnly,
 	type CanvasNode,
 	type CanvasEdge,
 	type Rect
@@ -229,3 +235,153 @@ describe('Canvas Core - Clipboard & Serialization', () => {
 		expect(remappedEdges[0].target).toBe(remappedNodes[1].id);
 	});
 });
+
+describe('Canvas - Clock & Deterministic Animation', () => {
+	it('ManualClock advances time and resolves sleep timers in order', async () => {
+		const clock = new ManualClock(100);
+		expect(clock.now()).toBe(100);
+
+		let resolvedA = false;
+		let resolvedB = false;
+
+		clock.sleep(50).then(() => {
+			resolvedA = true;
+		});
+		clock.sleep(100).then(() => {
+			resolvedB = true;
+		});
+
+		expect(clock.pending).toBe(true);
+
+		// Advance 30ms -> none resolved
+		await clock.advance(30);
+		expect(clock.now()).toBe(130);
+		expect(resolvedA).toBe(false);
+		expect(resolvedB).toBe(false);
+
+		// Advance 30ms (total 60ms) -> A resolved
+		await clock.advance(30);
+		expect(clock.now()).toBe(160);
+		expect(resolvedA).toBe(true);
+		expect(resolvedB).toBe(false);
+
+		// Advance 50ms (total 110ms) -> B resolved
+		await clock.advance(50);
+		expect(clock.now()).toBe(210);
+		expect(resolvedB).toBe(true);
+		expect(clock.pending).toBe(false);
+	});
+
+	it('runMultiNodeTransition animates deterministically via ManualClock', async () => {
+		const clock = new ManualClock(0);
+		const node: CanvasNode = { id: 'n1', position: { x: 0, y: 0 }, data: {} };
+
+		let completed = false;
+		runMultiNodeTransition(
+			[
+				{
+					node,
+					from: { x: 0, y: 0 },
+					to: { x: 100, y: 200 },
+					duration: 100
+				}
+			],
+			{
+				clock,
+				onComplete: () => {
+					completed = true;
+				}
+			}
+		);
+
+		// At start
+		expect(node.position).toEqual({ x: 0, y: 0 });
+		expect(completed).toBe(false);
+
+		// Tick halfway (50ms)
+		await clock.advance(50);
+		expect(node.position.x).toBeGreaterThan(0);
+		expect(node.position.x).toBeLessThan(100);
+		expect(completed).toBe(false);
+
+		// Tick to completion (100ms)
+		await clock.advance(60);
+		expect(node.position).toEqual({ x: 100, y: 200 });
+		expect(completed).toBe(true);
+	});
+});
+
+describe('Canvas - View & Streaming Stabilization', () => {
+	it('layoutBounds calculates bounding box of all nodes', () => {
+		const nodes: CanvasNode[] = [
+			{ id: '1', position: { x: 10, y: 20 }, width: 100, height: 50, data: {} },
+			{ id: '2', position: { x: 200, y: 150 }, width: 80, height: 40, data: {} }
+		];
+
+		const bounds = layoutBounds(nodes);
+		expect(bounds).toEqual({
+			x: 10,
+			y: 20,
+			width: 270, // 200 + 80 - 10 = 270
+			height: 170 // 150 + 40 - 20 = 170
+		});
+	});
+
+	it('canvasHeight clamps height within min and max options', () => {
+		const nodes: CanvasNode[] = [
+			{ id: '1', position: { x: 0, y: 0 }, width: 100, height: 50, data: {} }
+		];
+
+		// content = 50, padding = 48 -> 98, clamped to min 320
+		const h = canvasHeight(nodes, { min: 320, max: 600 });
+		expect(h).toBe(320);
+	});
+
+	it('estimateCanvasHeight reserves container height based on node count', () => {
+		const nodes: CanvasNode[] = Array.from({ length: 4 }, (_, i) => ({
+			id: `n-${i}`,
+			position: { x: 0, y: 0 },
+			data: {}
+		}));
+		const edges: CanvasEdge[] = [];
+
+		const estimated = estimateCanvasHeight(nodes, edges, { min: 300, max: 800 });
+		expect(estimated).toBeGreaterThanOrEqual(300);
+		expect(estimated).toBeLessThanOrEqual(800);
+	});
+
+	it('blendLayout interpolates node positions between two layouts', () => {
+		const from: CanvasNode[] = [
+			{ id: '1', position: { x: 0, y: 0 }, width: 100, height: 50, data: {} }
+		];
+		const to: CanvasNode[] = [
+			{ id: '1', position: { x: 100, y: 200 }, width: 120, height: 60, data: {} },
+			{ id: '2', position: { x: 50, y: 50 }, width: 100, height: 50, data: {} }
+		];
+
+		const blended = blendLayout(from, to, 0.5);
+		const node1 = blended.find((n) => n.id === '1')!;
+		const node2 = blended.find((n) => n.id === '2')!;
+
+		expect(node1.position).toEqual({ x: 50, y: 100 });
+		expect(node1.width).toBe(110);
+		// New node snaps directly to target
+		expect(node2.position).toEqual({ x: 50, y: 50 });
+	});
+
+	it('connectedOnly filters out orphan nodes that have no edges', () => {
+		const nodes: CanvasNode[] = [
+			{ id: 'connected-1', position: { x: 0, y: 0 }, data: {} },
+			{ id: 'connected-2', position: { x: 0, y: 0 }, data: {} },
+			{ id: 'orphan-3', position: { x: 0, y: 0 }, data: {} }
+		];
+		const edges: CanvasEdge[] = [
+			{ id: 'e1', source: 'connected-1', target: 'connected-2' }
+		];
+
+		const filtered = connectedOnly(nodes, edges);
+		expect(filtered).toHaveLength(2);
+		expect(filtered.map((n) => n.id)).toEqual(['connected-1', 'connected-2']);
+	});
+});
+

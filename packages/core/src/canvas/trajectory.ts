@@ -115,6 +115,8 @@ export function createBezierTrajectory(
 	};
 }
 
+import { realClock, type Clock } from './clock.js';
+
 /**
  * Coordinates and animates multiple node transitions simultaneously with zero per-frame array allocations.
  */
@@ -123,6 +125,7 @@ export function runMultiNodeTransition<TNode extends CanvasNode = CanvasNode>(
 	options: {
 		defaultDuration?: number;
 		defaultEasing?: (t: number) => number;
+		clock?: Clock;
 		onUpdate?: () => void;
 		onComplete?: () => void;
 	} = {}
@@ -132,10 +135,16 @@ export function runMultiNodeTransition<TNode extends CanvasNode = CanvasNode>(
 		return () => {};
 	}
 
-	const { defaultDuration = 400, defaultEasing: easingFunc = defaultEasing, onUpdate, onComplete } = options;
+	const {
+		defaultDuration = 400,
+		defaultEasing: easingFunc = defaultEasing,
+		clock = realClock,
+		onUpdate,
+		onComplete
+	} = options;
 
 	let isCancelled = false;
-	const startTime = Date.now();
+	const startTime = clock.now();
 
 	const items = transitions.map((tr, i) => ({
 		...tr,
@@ -150,7 +159,7 @@ export function runMultiNodeTransition<TNode extends CanvasNode = CanvasNode>(
 	function frame() {
 		if (isCancelled) return;
 
-		const now = Date.now();
+		const now = clock.now();
 		let allCompleted = true;
 
 		for (let i = 0; i < items.length; i++) {
@@ -192,9 +201,7 @@ export function runMultiNodeTransition<TNode extends CanvasNode = CanvasNode>(
 		onUpdate?.();
 
 		if (!allCompleted) {
-			if (typeof requestAnimationFrame !== 'undefined') {
-				requestAnimationFrame(frame);
-			}
+			clock.frame().then(frame);
 		} else {
 			onComplete?.();
 		}

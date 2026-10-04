@@ -217,6 +217,26 @@ export function planAgentCommand<
 			];
 		}
 
+		case 'choreography:say': {
+			return [
+				{
+					type: 'step:say',
+					text: command.text,
+					atNodeId: command.atNodeId,
+					position: command.position
+				}
+			];
+		}
+
+		case 'choreography:wait': {
+			return [
+				{
+					type: 'step:wait',
+					ms: command.ms
+				}
+			];
+		}
+
 		default: {
 			return [];
 		}
