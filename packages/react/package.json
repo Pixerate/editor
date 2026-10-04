@@ -50,7 +50,7 @@
   },
   "dependencies": {
     "@pixerate/editor": "workspace:*",
-    "@tiptap/core": "^2.11.5 || ^3.0.0",
+    "@tiptap/core": "^3.30.5",
     "@tiptap/extension-bubble-menu": "^2.11.5 || ^3.0.0",
     "@tiptap/extension-placeholder": "^2.11.5 || ^3.0.0",
     "@tiptap/pm": "^2.11.5 || ^3.0.0",
