@@ -47,7 +47,7 @@
     "@tiptap/extension-placeholder": "^2.11.5 || ^3.0.0",
     "@tiptap/pm": "^2.11.5 || ^3.0.0",
     "@tiptap/react": "^2.11.5 || ^3.0.0",
-    "@tiptap/starter-kit": "^2.11.5 || ^3.0.0"
+    "@tiptap/starter-kit": "^3.31.4"
   },
   "peerDependencies": {
     "@xyflow/react": "^12.0.0",

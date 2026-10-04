@@ -82,7 +82,7 @@
     "@tiptap/extension-typography": "^2.11.5",
     "@tiptap/extension-underline": "^2.11.5",
     "@tiptap/pm": "^2.11.5",
-    "@tiptap/starter-kit": "^2.11.5",
+    "@tiptap/starter-kit": "^3.31.4",
     "@tiptap/suggestion": "^2.11.5",
     "markdown-it": "^15.0.2",
     "markdown-it-task-lists": "^2.1.1",
