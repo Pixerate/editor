@@ -48,7 +48,7 @@
     "@dagrejs/dagre": "^1.1.4",
     "@pixerate/editor": "workspace:*",
     "@tiptap/core": "^2.11.5",
-    "@tiptap/extension-bubble-menu": "^2.11.5",
+    "@tiptap/extension-bubble-menu": "^3.31.4",
     "@tiptap/extension-placeholder": "^2.11.5",
     "@tiptap/pm": "^2.11.5",
     "@tiptap/starter-kit": "^2.11.5"
