@@ -31,3 +31,4 @@ export type {
 
 export * from "./spreadsheet";
 export * from "./slots";
+export * from "./image-editor";

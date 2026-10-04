@@ -53,6 +53,11 @@
       "types": "./dist/agent/index.d.ts",
       "import": "./dist/agent/index.js",
       "require": "./dist/agent/index.cjs"
+    },
+    "./image-editor": {
+      "types": "./dist/image-editor/index.d.ts",
+      "import": "./dist/image-editor/index.js",
+      "require": "./dist/image-editor/index.cjs"
     }
   },
   "files": [

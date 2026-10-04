@@ -16,6 +16,11 @@ describe("@pixerate/editor-svelte Distribution Exports", () => {
     expect(SvelteEditor.createReactiveSpreadsheet).toBeDefined();
   });
 
+  it("exports ImageEditor and createReactiveImageEditor", () => {
+    expect(SvelteEditor.ImageEditor).toBeDefined();
+    expect(SvelteEditor.createReactiveImageEditor).toBeDefined();
+  });
+
   it("exports navigationGuard, createNavigationGuard, and DirtyTracker", () => {
     expect(SvelteEditor.navigationGuard).toBeDefined();
     expect(SvelteEditor.createNavigationGuard).toBeDefined();

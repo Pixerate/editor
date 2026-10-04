@@ -162,6 +162,10 @@ We maintain **strict 1:1 parity** across JavaScript, React, and Svelte:
 | Floating Bubble Formatting Menu | Headless | Component | Component |
 | Rich Text Preset (Lists, Tables, Headings) | ✅ | ✅ | ✅ |
 | Smilies (`:)` -> `🙂`) & Hex Highlighter | ✅ | ✅ | ✅ |
+| Image Editor Canvas 2D Engine & Transformations | ✅ | Component & Hook | Component & Rune |
+| Image Filters & Adjustments | ✅ | ✅ | ✅ |
+| Vector Annotations (Pen, Rect, Circle, Arrow, Line, Text) | ✅ | ✅ | ✅ |
+| Gleamforge Depth & Alpha Masking | ✅ | ✅ | ✅ |
 
 ---
 
@@ -178,7 +182,8 @@ pnpm --filter demo dev
 Open `http://localhost:3000` to interact with:
 1. **Prompt Studio Tab**: Interactive prompt editor with live syntax gradients, slash menu, AST preview, and sourcemap visualizer.
 2. **Document Rich Text Tab**: Rich document editor with headings, lists, bubble menu, smilies, and hex color highlighter.
-3. **Parity Matrix Tab**: Live comparison and feature verification table.
+3. **Image Editor Studio Tab**: Full-featured Canvas 2D image editing with crop presets, adjustments, drawing/annotations, and Gleamforge depth alpha masking.
+4. **Parity Matrix Tab**: Live comparison and feature verification table.
 
 ---
 

@@ -10,6 +10,7 @@ export default defineConfig({
     "history/index": "src/history/index.ts",
     "canvas/index": "src/canvas/index.ts",
     "agent/index": "src/agent/index.ts",
+    "image-editor/index": "src/image-editor/index.ts",
   },
   format: ["esm", "cjs"],
   dts: true,

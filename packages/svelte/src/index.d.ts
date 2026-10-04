@@ -245,3 +245,5 @@ export type {
   HistoryState,
   HistoryManagerOptions,
 } from "@pixerate/editor";
+
+export * from "./image-editor";

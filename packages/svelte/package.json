@@ -26,12 +26,21 @@
       "svelte": "./dist/canvas/index.js",
       "import": "./dist/canvas/index.js",
       "default": "./dist/canvas/index.js"
+    },
+    "./image-editor": {
+      "types": "./dist/image-editor/index.d.ts",
+      "svelte": "./dist/image-editor/index.js",
+      "import": "./dist/image-editor/index.js",
+      "default": "./dist/image-editor/index.js"
     }
   },
   "typesVersions": {
     "*": {
       "canvas": [
         "./dist/canvas/index.d.ts"
+      ],
+      "image-editor": [
+        "./dist/image-editor/index.d.ts"
       ]
     }
   },

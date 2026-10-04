@@ -2,11 +2,12 @@ import React, { useState } from "react";
 import { PromptStudioTab } from "./components/PromptStudioTab";
 import { RichDocumentTab } from "./components/RichDocumentTab";
 import { ParityMatrixTab } from "./components/ParityMatrixTab";
-import { Sparkles, FileText, CheckCircle2 } from "lucide-react";
+import { ImageEditorTab } from "./components/ImageEditorTab";
+import { Sparkles, FileText, CheckCircle2, Image as ImageIcon } from "lucide-react";
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<"prompt" | "rich" | "parity">(
-    "prompt"
+  const [activeTab, setActiveTab] = useState<"prompt" | "rich" | "image" | "parity">(
+    "image"
   );
 
   return (
@@ -75,6 +76,18 @@ export default function App() {
           </button>
 
           <button
+            onClick={() => setActiveTab("image")}
+            className={`flex items-center gap-2 px-4 py-3 text-xs font-medium border-b-2 transition-all ${
+              activeTab === "image"
+                ? "border-rose-500 text-rose-400 bg-rose-500/5"
+                : "border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700"
+            }`}
+          >
+            <ImageIcon className="w-3.5 h-3.5" />
+            <span>Image Editor</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab("parity")}
             className={`flex items-center gap-2 px-4 py-3 text-xs font-medium border-b-2 transition-all ${
               activeTab === "parity"
@@ -92,6 +105,7 @@ export default function App() {
       <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
         {activeTab === "prompt" && <PromptStudioTab />}
         {activeTab === "rich" && <RichDocumentTab />}
+        {activeTab === "image" && <ImageEditorTab />}
         {activeTab === "parity" && <ParityMatrixTab />}
       </main>
 

@@ -8,6 +8,7 @@ export * from "./history";
 export * from "./canvas";
 export * from "./agent";
 export * from "./slots";
+export * from "./image-editor";
 
 // Re-export common tiptap types for convenience
 export type { Editor, Content, Extensions, EditorOptions } from "@tiptap/core";

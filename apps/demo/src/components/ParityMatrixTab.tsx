@@ -135,6 +135,34 @@ const FEATURES = [
     svelte: true,
     note: "planAgentCommand and EDITOR_MCP_TOOLS (including view_editor)",
   },
+  {
+    feature: "Image Editor Canvas Engine & Transformations",
+    core: true,
+    react: true,
+    svelte: true,
+    note: "Crop presets (1:1, 4:3, 16:9, 3:2), 90° rotations, and horizontal/vertical flips",
+  },
+  {
+    feature: "Image Filters & Adjustments",
+    core: true,
+    react: true,
+    svelte: true,
+    note: "Brightness, contrast, saturation, exposure, warmth, blur, and opacity",
+  },
+  {
+    feature: "Image Annotations & Layer Vectors",
+    core: true,
+    react: true,
+    svelte: true,
+    note: "Freehand pen paths, rectangles, circles, arrows, lines, and text watermarks",
+  },
+  {
+    feature: "Gleamforge Depth Alpha Masking",
+    core: true,
+    react: true,
+    svelte: true,
+    note: "Threshold and brightness depth alpha blending with softness, invert, and removeAlpha",
+  },
 ];
 
 export const ParityMatrixTab: React.FC = () => {

@@ -23,12 +23,20 @@
       "types": "./dist/canvas/index.d.ts",
       "import": "./dist/canvas/index.js",
       "require": "./dist/canvas/index.cjs"
+    },
+    "./image-editor": {
+      "types": "./dist/image-editor/index.d.ts",
+      "import": "./dist/image-editor/index.js",
+      "require": "./dist/image-editor/index.cjs"
     }
   },
   "typesVersions": {
     "*": {
       "canvas": [
         "./dist/canvas/index.d.ts"
+      ],
+      "image-editor": [
+        "./dist/image-editor/index.d.ts"
       ]
     }
   },

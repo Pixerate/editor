@@ -2,7 +2,7 @@ import { defineConfig } from "tsup";
 import esbuildSvelte from "esbuild-svelte";
 
 export default defineConfig({
-  entry: ["src/index.ts", "src/canvas/index.ts"],
+  entry: ["src/index.ts", "src/canvas/index.ts", "src/image-editor/index.ts"],
   format: ["esm"],
   dts: false,
   clean: true,
@@ -16,5 +16,5 @@ export default defineConfig({
     "@dagrejs/dagre",
   ],
   esbuildPlugins: [esbuildSvelte() as any],
-  onSuccess: "mkdir -p dist/canvas && cp src/index.d.ts dist/index.d.ts && cp src/canvas/index.d.ts dist/canvas/index.d.ts",
+  onSuccess: "mkdir -p dist/canvas dist/image-editor && cp src/index.d.ts dist/index.d.ts && cp src/canvas/index.d.ts dist/canvas/index.d.ts && cp src/image-editor/index.d.ts dist/image-editor/index.d.ts",
 });
