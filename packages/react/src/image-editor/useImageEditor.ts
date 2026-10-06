@@ -51,6 +51,10 @@ export interface UseImageEditorReturn {
   toBlob: (options?: ExportOptions) => Promise<Blob>;
   toJSON: () => SerializedImageEditorState;
   loadJSON: (data: SerializedImageEditorState) => void;
+  renderMask: (options?: { useAnnotations?: boolean; useCrop?: boolean }) => Promise<HTMLCanvasElement>;
+  toMaskDataURL: (options?: { useAnnotations?: boolean; useCrop?: boolean }) => Promise<string>;
+  applyInpaintedImage: (newDataUrl: string) => Promise<void>;
+  applyBackgroundRemovedImage: (newDataUrl: string) => Promise<void>;
 }
 
 export function useImageEditor(options: ImageEditorOptions = {}): UseImageEditorReturn {
@@ -120,6 +124,22 @@ export function useImageEditor(options: ImageEditorOptions = {}): UseImageEditor
   const toBlob = useCallback((opts?: ExportOptions) => controller.toBlob(opts), [controller]);
   const toJSON = useCallback(() => controller.toJSON(), [controller]);
   const loadJSON = useCallback((data: SerializedImageEditorState) => controller.loadJSON(data), [controller]);
+  const renderMask = useCallback(
+    (opts?: { useAnnotations?: boolean; useCrop?: boolean }) => controller.renderMask(opts),
+    [controller]
+  );
+  const toMaskDataURL = useCallback(
+    (opts?: { useAnnotations?: boolean; useCrop?: boolean }) => controller.toMaskDataURL(opts),
+    [controller]
+  );
+  const applyInpaintedImage = useCallback(
+    (newDataUrl: string) => controller.applyInpaintedImage(newDataUrl),
+    [controller]
+  );
+  const applyBackgroundRemovedImage = useCallback(
+    (newDataUrl: string) => controller.applyBackgroundRemovedImage(newDataUrl),
+    [controller]
+  );
 
   return useMemo(
     () => ({
@@ -158,6 +178,10 @@ export function useImageEditor(options: ImageEditorOptions = {}): UseImageEditor
       toBlob,
       toJSON,
       loadJSON,
+      renderMask,
+      toMaskDataURL,
+      applyInpaintedImage,
+      applyBackgroundRemovedImage,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [controller, state, historyTicks]

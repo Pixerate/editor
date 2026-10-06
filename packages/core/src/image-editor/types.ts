@@ -178,3 +178,23 @@ export interface ImageEditorOptions {
   onStateChange?: (state: ImageEditorState) => void;
   maxHistoryDepth?: number;
 }
+
+export interface InpaintOptions {
+  prompt: string;
+  imageDataUrl: string;
+  maskDataUrl?: string;
+  cropBox?: CropBox | null;
+}
+
+export interface RemoveBackgroundOptions {
+  imageDataUrl: string;
+}
+
+export type InpaintHook = (options: InpaintOptions) => Promise<string | void> | string | void;
+export type RemoveBackgroundHook = (options: RemoveBackgroundOptions) => Promise<string | void> | string | void;
+
+export interface ImageEditorAIHooks {
+  onInpaint?: InpaintHook;
+  onRemoveBackground?: RemoveBackgroundHook;
+}
+

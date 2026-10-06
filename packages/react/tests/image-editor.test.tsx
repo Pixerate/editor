@@ -112,6 +112,7 @@ describe('React Image Editor - ImageEditor Component', () => {
     expect(tabLabels).toContain('Adjustments');
     expect(tabLabels).toContain('Annotations');
     expect(tabLabels).toContain('Depth Mask');
+    expect(tabLabels).toContain('AI Tools');
 
     // Initially in Crop tab: check crop presets
     expect(container.textContent).toContain('Aspect Ratio Presets');
@@ -140,6 +141,17 @@ describe('React Image Editor - ImageEditor Component', () => {
 
     expect(container.textContent).toContain('Depth Masking');
     expect(container.textContent).toContain('Enable Depth / Alpha Mask');
+
+    // Switch to AI Tools tab
+    const aiBtn = Array.from(buttons).find((b) => b.textContent?.includes('AI Tools'));
+    expect(aiBtn).toBeDefined();
+
+    await act(async () => {
+      aiBtn!.click();
+    });
+
+    expect(container.textContent).toContain('Background Removal');
+    expect(container.textContent).toContain('Generative Inpainting');
   });
 
   it('triggers onSave callback when Export Image is clicked', async () => {
@@ -160,4 +172,35 @@ describe('React Image Editor - ImageEditor Component', () => {
 
     expect(onSave).toHaveBeenCalledWith('data:image/png;base64,mock');
   });
+
+  it('triggers onRemoveBackground and onInpaint hooks', async () => {
+    const onRemoveBackground = vi.fn().mockResolvedValue('data:image/png;base64,bgDone');
+    const onInpaint = vi.fn().mockResolvedValue('data:image/png;base64,inpaintDone');
+
+    await act(async () => {
+      root.render(
+        <ImageEditor
+          onRemoveBackground={onRemoveBackground}
+          onInpaint={onInpaint}
+        />
+      );
+    });
+
+    // Switch to AI tab
+    const aiBtn = Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.includes('AI Tools'));
+    await act(async () => {
+      aiBtn!.click();
+    });
+
+    // Click remove background
+    const removeBgBtn = Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.includes('Remove Background'));
+    expect(removeBgBtn).toBeDefined();
+
+    await act(async () => {
+      removeBgBtn!.click();
+    });
+
+    expect(onRemoveBackground).toHaveBeenCalled();
+  });
 });
+

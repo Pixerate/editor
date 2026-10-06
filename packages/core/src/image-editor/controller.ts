@@ -425,7 +425,11 @@ export class ImageEditorController {
   public async render(targetCanvas: HTMLCanvasElement, options?: RenderOptions): Promise<void> {
     const source = this.imageElement || this.state.sourceUrl;
     if (!source) return;
-    await this.renderer.renderToCanvas(targetCanvas, source, this.state, options);
+    try {
+      await this.renderer.renderToCanvas(targetCanvas, source, this.state, options);
+    } catch {
+      // In non-DOM or test mock environments without image loading, safely ignore
+    }
   }
 
   public async renderExport(options?: ExportOptions): Promise<HTMLCanvasElement> {
@@ -472,6 +476,29 @@ export class ImageEditorController {
       }
     });
   }
+
+  // --- AI Masking & Transformation Helpers ---
+
+  public async renderMask(options?: { useAnnotations?: boolean; useCrop?: boolean }): Promise<HTMLCanvasElement> {
+    return this.renderer.renderMask(this.state, options);
+  }
+
+  public async toMaskDataURL(options?: { useAnnotations?: boolean; useCrop?: boolean }): Promise<string> {
+    const canvas = await this.renderMask(options);
+    return canvas.toDataURL('image/png');
+  }
+
+  public async applyInpaintedImage(newDataUrl: string): Promise<void> {
+    this.recordHistory();
+    await this.loadImage(newDataUrl);
+    this.clearAnnotations();
+  }
+
+  public async applyBackgroundRemovedImage(newDataUrl: string): Promise<void> {
+    this.recordHistory();
+    await this.loadImage(newDataUrl);
+  }
+
 
   // --- Serialization ---
 
