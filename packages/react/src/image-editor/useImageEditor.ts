@@ -53,6 +53,7 @@ export interface UseImageEditorReturn {
   loadJSON: (data: SerializedImageEditorState) => void;
   renderMask: (options?: { useAnnotations?: boolean; useCrop?: boolean }) => Promise<HTMLCanvasElement>;
   toMaskDataURL: (options?: { useAnnotations?: boolean; useCrop?: boolean }) => Promise<string>;
+  toSourceDataURL: (options?: Pick<ExportOptions, 'format' | 'quality'>) => Promise<string>;
   applyInpaintedImage: (newDataUrl: string) => Promise<void>;
   applyBackgroundRemovedImage: (newDataUrl: string) => Promise<void>;
 }
@@ -138,6 +139,10 @@ export function useImageEditor(options: ImageEditorOptions = {}): UseImageEditor
     (opts?: { useAnnotations?: boolean; useCrop?: boolean }) => controller.toMaskDataURL(opts),
     [controller]
   );
+  const toSourceDataURL = useCallback(
+    (opts?: Pick<ExportOptions, 'format' | 'quality'>) => controller.toSourceDataURL(opts),
+    [controller]
+  );
   const applyInpaintedImage = useCallback(
     (newDataUrl: string) => controller.applyInpaintedImage(newDataUrl),
     [controller]
@@ -186,6 +191,7 @@ export function useImageEditor(options: ImageEditorOptions = {}): UseImageEditor
       loadJSON,
       renderMask,
       toMaskDataURL,
+      toSourceDataURL,
       applyInpaintedImage,
       applyBackgroundRemovedImage,
     }),

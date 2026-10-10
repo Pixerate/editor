@@ -15,6 +15,23 @@ import {
   SerializedImageEditorState,
 } from './types';
 import { ImageEditorRenderer, RenderOptions } from './renderer';
+import { clampCropToImage, isQuarterTurnSwapped } from './geometry';
+
+/** The image a history entry was recorded against. */
+interface SourceSnapshot {
+  sourceUrl: string | null;
+  element: CanvasImageSource | null;
+  dimensions: ImageDimensions;
+}
+
+/**
+ * Undo/redo entry: the serializable edit state plus the source image it applies to, so
+ * AI edits that replace the image are restorable.
+ */
+interface HistoryEntry {
+  state: SerializedImageEditorState;
+  source: SourceSnapshot;
+}
 
 export const DEFAULT_ADJUSTMENTS: ImageAdjustments = {
   brightness: 0,
@@ -53,11 +70,11 @@ export class ImageEditorController {
   private onStateChange?: (state: ImageEditorState) => void;
 
   // History stacks
-  private undoStack: SerializedImageEditorState[] = [];
-  private redoStack: SerializedImageEditorState[] = [];
+  private undoStack: HistoryEntry[] = [];
+  private redoStack: HistoryEntry[] = [];
   private maxHistoryDepth: number;
   private isApplyingHistory = false;
-  private initialSnapshot: SerializedImageEditorState;
+  private initialSnapshot: HistoryEntry;
 
   constructor(options: ImageEditorOptions = {}) {
     this.maxHistoryDepth = options.maxHistoryDepth ?? 50;
@@ -96,13 +113,14 @@ export class ImageEditorController {
 
     if (options.image instanceof Object && 'width' in options.image) {
       this.imageElement = options.image as CanvasImageSource;
+      this.state.sourceUrl = (options.image as any).src || null;
       this.state.imageDimensions = {
         width: (options.image as any).naturalWidth || (options.image as any).width || 800,
         height: (options.image as any).naturalHeight || (options.image as any).height || 600,
       };
     }
 
-    this.initialSnapshot = this.serializeState();
+    this.initialSnapshot = this.captureHistoryEntry();
 
     if (typeof options.image === 'string') {
       this.loadImage(options.image);
@@ -111,30 +129,48 @@ export class ImageEditorController {
 
   // --- Image Loading ---
 
+  /**
+   * Loads a new source image and makes it the baseline that `reset()` returns to.
+   * Does not record history; use `applyInpaintedImage` / `applyBackgroundRemovedImage`
+   * for undoable source replacement.
+   */
   public async loadImage(src: string | HTMLImageElement): Promise<void> {
+    // Keep the URL visible synchronously (UI bindings compare against it while loading).
+    if (typeof src === 'string') this.state.sourceUrl = src;
+    const source = await this.resolveSource(src);
+    this.imageElement = source.element;
+    this.state.sourceUrl = source.sourceUrl;
+    this.state.imageDimensions = source.dimensions;
+
+    this.initialSnapshot = this.captureHistoryEntry();
+    this.notify();
+  }
+
+  private async resolveSource(src: string | HTMLImageElement): Promise<SourceSnapshot> {
     if (typeof src === 'string') {
-      this.state.sourceUrl = src;
       try {
         const img = await this.renderer.imageCache.get(src);
-        this.imageElement = img;
-        this.state.imageDimensions = {
-          width: img.naturalWidth || img.width || 800,
-          height: img.naturalHeight || img.height || 600,
+        return {
+          sourceUrl: src,
+          element: img,
+          dimensions: {
+            width: img.naturalWidth || img.width || 800,
+            height: img.naturalHeight || img.height || 600,
+          },
         };
-      } catch (err) {
-        // In SSR / non-DOM environments, retain default dimensions
+      } catch {
+        // In SSR / non-DOM environments, retain current dimensions
+        return { sourceUrl: src, element: null, dimensions: { ...this.state.imageDimensions } };
       }
-    } else {
-      this.imageElement = src;
-      this.state.sourceUrl = (src as any).src || null;
-      this.state.imageDimensions = {
+    }
+    return {
+      sourceUrl: (src as any).src || null,
+      element: src,
+      dimensions: {
         width: src.naturalWidth || src.width || 800,
         height: src.naturalHeight || src.height || 600,
-      };
-    }
-
-    this.initialSnapshot = this.serializeState();
-    this.notify();
+      },
+    };
   }
 
   public getImageElement(): CanvasImageSource | null {
@@ -163,9 +199,33 @@ export class ImageEditorController {
 
   // --- History (Undo / Redo / Reset) ---
 
+  private captureHistoryEntry(): HistoryEntry {
+    return {
+      state: this.serializeState(),
+      source: {
+        sourceUrl: this.state.sourceUrl,
+        element: this.imageElement,
+        dimensions: { ...this.state.imageDimensions },
+      },
+    };
+  }
+
+  private restoreHistoryEntry(entry: HistoryEntry): void {
+    this.applySerializedState(entry.state);
+    this.imageElement = entry.source.element;
+    this.state.sourceUrl = entry.source.sourceUrl;
+    this.state.imageDimensions = { ...entry.source.dimensions };
+    if (
+      this.state.selectedAnnotationId &&
+      !this.state.annotations.some((a) => a.id === this.state.selectedAnnotationId)
+    ) {
+      this.state.selectedAnnotationId = null;
+    }
+  }
+
   private recordHistory(): void {
     if (this.isApplyingHistory) return;
-    this.undoStack.push(this.serializeState());
+    this.undoStack.push(this.captureHistoryEntry());
     if (this.undoStack.length > this.maxHistoryDepth) {
       this.undoStack.shift();
     }
@@ -183,11 +243,10 @@ export class ImageEditorController {
   public undo(): boolean {
     if (!this.canUndo) return false;
     this.isApplyingHistory = true;
-    const current = this.serializeState();
-    this.redoStack.push(current);
+    this.redoStack.push(this.captureHistoryEntry());
 
     const prev = this.undoStack.pop()!;
-    this.applySerializedState(prev);
+    this.restoreHistoryEntry(prev);
     this.isApplyingHistory = false;
     this.notify();
     return true;
@@ -196,11 +255,10 @@ export class ImageEditorController {
   public redo(): boolean {
     if (!this.canRedo) return false;
     this.isApplyingHistory = true;
-    const current = this.serializeState();
-    this.undoStack.push(current);
+    this.undoStack.push(this.captureHistoryEntry());
 
     const next = this.redoStack.pop()!;
-    this.applySerializedState(next);
+    this.restoreHistoryEntry(next);
     this.isApplyingHistory = false;
     this.notify();
     return true;
@@ -208,7 +266,7 @@ export class ImageEditorController {
 
   public reset(): void {
     this.recordHistory();
-    this.applySerializedState(this.initialSnapshot);
+    this.restoreHistoryEntry(this.initialSnapshot);
     this.state.zoom = 1;
     this.state.pan = { x: 0, y: 0 };
     this.state.activeTool = 'select';
@@ -249,6 +307,10 @@ export class ImageEditorController {
   public applyCropPreset(ratio: AspectRatio): void {
     this.recordHistory();
     const { width, height } = this.state.imageDimensions;
+    // `ratio` is the on-screen aspect; the crop box lives in natural image space.
+    if (ratio && isQuarterTurnSwapped(this.state.transform)) {
+      ratio = 1 / ratio;
+    }
     if (!ratio) {
       // Freeform: full image
       this.state.crop = { x: 0, y: 0, width, height };
@@ -284,25 +346,25 @@ export class ImageEditorController {
   public rotate(degrees: number): void {
     this.recordHistory();
     const current = this.state.transform.rotate;
-    this.state.transform.rotate = (current + degrees) % 360;
+    this.state.transform = { ...this.state.transform, rotate: (current + degrees) % 360 };
     this.notify();
   }
 
   public setRotation(degrees: number): void {
     this.recordHistory();
-    this.state.transform.rotate = degrees % 360;
+    this.state.transform = { ...this.state.transform, rotate: degrees % 360 };
     this.notify();
   }
 
   public flipHorizontal(): void {
     this.recordHistory();
-    this.state.transform.flipH = !this.state.transform.flipH;
+    this.state.transform = { ...this.state.transform, flipH: !this.state.transform.flipH };
     this.notify();
   }
 
   public flipVertical(): void {
     this.recordHistory();
-    this.state.transform.flipV = !this.state.transform.flipV;
+    this.state.transform = { ...this.state.transform, flipV: !this.state.transform.flipV };
     this.notify();
   }
 
@@ -488,17 +550,77 @@ export class ImageEditorController {
     return canvas.toDataURL('image/png');
   }
 
+  /**
+   * Renders the current source image at natural size with no crop, rotation, flip,
+   * adjustments or annotations. This is the image that `toMaskDataURL()` is aligned with
+   * and the space that `applyInpaintedImage` / `applyBackgroundRemovedImage` expect back.
+   */
+  public async renderSource(): Promise<HTMLCanvasElement> {
+    const { width, height } = this.state.imageDimensions;
+    const canvas = this.renderer.createCanvas(width, height);
+    const source = this.imageElement || this.state.sourceUrl;
+    const ctx = canvas.getContext('2d');
+    if (!ctx || !source) return canvas;
+    const img = typeof source === 'string' ? await this.renderer.imageCache.get(source) : source;
+    ctx.drawImage(img, 0, 0, width, height);
+    return canvas;
+  }
+
+  public async toSourceDataURL(options: Pick<ExportOptions, 'format' | 'quality'> = {}): Promise<string> {
+    const canvas = await this.renderSource();
+    return canvas.toDataURL(options.format || 'image/png', options.quality ?? 0.92);
+  }
+
+  /**
+   * Replaces the source image with an inpainted result (natural image space, see
+   * `toSourceDataURL`) and clears the mask annotations, as ONE undoable step.
+   */
   public async applyInpaintedImage(newDataUrl: string): Promise<void> {
-    this.recordHistory();
-    await this.loadImage(newDataUrl);
-    this.clearAnnotations();
+    await this.replaceSource(newDataUrl, true);
   }
 
+  /**
+   * Replaces the source image with a background-removed result as ONE undoable step.
+   * Crop and annotations are kept (rescaled if the new image has different dimensions).
+   */
   public async applyBackgroundRemovedImage(newDataUrl: string): Promise<void> {
-    this.recordHistory();
-    await this.loadImage(newDataUrl);
+    await this.replaceSource(newDataUrl, false);
   }
 
+  private async replaceSource(src: string, clearAnnotations: boolean): Promise<void> {
+    const next = await this.resolveSource(src);
+    this.recordHistory();
+
+    const prev = this.state.imageDimensions;
+    const sx = next.dimensions.width / (prev.width || next.dimensions.width);
+    const sy = next.dimensions.height / (prev.height || next.dimensions.height);
+
+    this.imageElement = next.element;
+    this.state.sourceUrl = next.sourceUrl;
+    this.state.imageDimensions = next.dimensions;
+
+    if (sx !== 1 || sy !== 1) {
+      if (this.state.crop) {
+        this.state.crop = clampCropToImage(
+          {
+            x: Math.round(this.state.crop.x * sx),
+            y: Math.round(this.state.crop.y * sy),
+            width: Math.round(this.state.crop.width * sx),
+            height: Math.round(this.state.crop.height * sy),
+          },
+          next.dimensions.width,
+          next.dimensions.height
+        );
+      }
+      this.state.annotations = this.state.annotations.map((ann) => scaleAnnotation(ann, sx, sy));
+    }
+
+    if (clearAnnotations) {
+      this.state.annotations = [];
+      this.state.selectedAnnotationId = null;
+    }
+    this.notify();
+  }
 
   // --- Serialization ---
 
@@ -535,5 +657,26 @@ export class ImageEditorController {
       depthRange: [...data.depthMask.depthRange] as [number, number],
     };
     this.state.annotations = JSON.parse(JSON.stringify(data.annotations || []));
+  }
+}
+
+/** Scales an annotation's geometry from one image size to another. */
+function scaleAnnotation(ann: Annotation, sx: number, sy: number): Annotation {
+  const k = Math.sqrt(Math.abs(sx * sy));
+  const base = { ...ann, x: ann.x * sx, y: ann.y * sy } as Annotation;
+  switch (base.type) {
+    case 'pen':
+      return { ...base, points: base.points.map((p) => ({ x: p.x * sx, y: p.y * sy })), strokeWidth: base.strokeWidth * k };
+    case 'rect':
+      return { ...base, width: base.width * sx, height: base.height * sy, strokeWidth: base.strokeWidth * k };
+    case 'image':
+      return { ...base, width: base.width * sx, height: base.height * sy };
+    case 'circle':
+      return { ...base, radiusX: base.radiusX * sx, radiusY: base.radiusY * sy, strokeWidth: base.strokeWidth * k };
+    case 'arrow':
+    case 'line':
+      return { ...base, endX: base.endX * sx, endY: base.endY * sy, strokeWidth: base.strokeWidth * k };
+    case 'text':
+      return { ...base, fontSize: base.fontSize * k };
   }
 }

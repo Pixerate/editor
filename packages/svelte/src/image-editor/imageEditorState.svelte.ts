@@ -139,6 +139,9 @@ export function createReactiveImageEditor(options: ImageEditorOptions = {}) {
     toMaskDataURL(opts?: { useAnnotations?: boolean; useCrop?: boolean }) {
       return controller.toMaskDataURL(opts);
     },
+    toSourceDataURL(opts?: Pick<ExportOptions, 'format' | 'quality'>) {
+      return controller.toSourceDataURL(opts);
+    },
     applyInpaintedImage(newDataUrl: string) {
       return controller.applyInpaintedImage(newDataUrl);
     },

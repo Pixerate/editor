@@ -13,6 +13,17 @@ import type {
   ImageAnnotation,
 } from './types';
 import { applyAdjustments, applyDepthMask } from './filters';
+import {
+  applyImageProjectionToContext,
+  clampCropToImage,
+  getAnnotationBounds,
+  getRotatedSize,
+  getViewportMetrics,
+  getViewportProjection,
+  normalizeAngle,
+  type ImageProjection,
+  type ViewportMetrics,
+} from './geometry';
 
 export interface RenderOptions {
   viewportWidth?: number;
@@ -86,6 +97,8 @@ export class ImageEditorRenderer {
   public imageCache = globalImageCache;
   private cachedBaseCanvas: HTMLCanvasElement | null = null;
   private cachedBaseKey = '';
+  private sourceIds = new WeakMap<object, number>();
+  private nextSourceId = 0;
 
   /**
    * Helper to create a canvas element safely in browser/JSDOM.
@@ -126,8 +139,13 @@ export class ImageEditorRenderer {
       img = imageSource;
     }
 
-    const naturalWidth = (img as any).naturalWidth || (img as any).videoWidth || (img as any).width || 800;
-    const naturalHeight = (img as any).naturalHeight || (img as any).videoHeight || (img as any).height || 600;
+    const { width: naturalWidth, height: naturalHeight } = getSourceSize(img);
+    // Geometry helpers read `imageDimensions`; make sure they see the real source size so the
+    // viewport drawn here and the hit-testing done by the UI share one projection.
+    const geoState: ImageEditorState =
+      state.imageDimensions.width === naturalWidth && state.imageDimensions.height === naturalHeight
+        ? state
+        : { ...state, imageDimensions: { width: naturalWidth, height: naturalHeight } };
 
     const { crop, transform, adjustments, depthMask, annotations, selectedAnnotationId, zoom, pan, isOriginalCompared } = state;
 
@@ -146,125 +164,147 @@ export class ImageEditorRenderer {
       return;
     }
 
-    // Determine working base dimensions based on crop or natural
     // When actively in crop tool or overlay requested, show full image so user can adjust the crop box
     const isActivelyCropping = Boolean(options.showCropOverlay || state.activeTool === 'crop');
-    const cropX = (!isActivelyCropping && crop) ? Math.max(0, crop.x) : 0;
-    const cropY = (!isActivelyCropping && crop) ? Math.max(0, crop.y) : 0;
-    const cropW = (!isActivelyCropping && crop) ? Math.min(naturalWidth - cropX, crop.width) : naturalWidth;
-    const cropH = (!isActivelyCropping && crop) ? Math.min(naturalHeight - cropY, crop.height) : naturalHeight;
+    const projection = getViewportProjection(geoState, vpWidth, vpHeight, isActivelyCropping);
+    const { region } = projection;
+    const rotated = getRotatedSize(region.width, region.height, transform);
 
-    const angle = ((transform.rotate % 360) + 360) % 360;
-    const isSwapped = angle === 90 || angle === 270;
-    const baseW = isSwapped ? cropH : cropW;
-    const baseH = isSwapped ? cropW : cropH;
-
-    // 1. Offscreen canvas for Base Image + Transform (Flip/Rotate) + Crop + Adjustments
-    const baseKey = `${state.sourceUrl}-${naturalWidth}x${naturalHeight}-${cropX},${cropY},${cropW},${cropH}-${angle},${transform.flipH},${transform.flipV}-${adjustments.brightness},${adjustments.contrast},${adjustments.saturation},${adjustments.exposure},${adjustments.temperature},${adjustments.blur},${adjustments.opacity}-${depthMask.enabled},${depthMask.depthRange?.[0]}-${depthMask.depthRange?.[1]},${depthMask.softness},${depthMask.invert},${depthMask.mode}`;
+    // 1. Offscreen canvas for Base Image + Transform (Flip/Rotate) + Crop + Adjustments + Depth mask
+    const baseKey = [
+      this.getSourceId(img),
+      state.sourceUrl,
+      `${naturalWidth}x${naturalHeight}`,
+      `${region.x},${region.y},${region.width},${region.height}`,
+      `${projection.angle},${transform.flipH},${transform.flipV}`,
+      `${adjustments.brightness},${adjustments.contrast},${adjustments.saturation},${adjustments.exposure},${adjustments.temperature},${adjustments.blur},${adjustments.opacity}`,
+      `${depthMask.enabled},${depthMask.maskSource},${depthMask.depthRange?.[0]}-${depthMask.depthRange?.[1]},${depthMask.softness},${depthMask.invert},${depthMask.mode}`,
+    ].join('|');
 
     let baseCanvas = this.cachedBaseCanvas;
     if (!baseCanvas || this.cachedBaseKey !== baseKey) {
-      baseCanvas = this.createCanvas(baseW, baseH);
-      const baseCtx = baseCanvas.getContext('2d');
-
-      if (baseCtx) {
-        baseCtx.save();
-
-        // Handle Flip & Rotate
-        const rad = (angle * Math.PI) / 180;
-        baseCtx.translate(baseW / 2, baseH / 2);
-        baseCtx.rotate(rad);
-        baseCtx.scale(transform.flipH ? -1 : 1, transform.flipV ? -1 : 1);
-
-        // Draw the cropped portion centered
-        baseCtx.drawImage(
-          img,
-          cropX, cropY, cropW, cropH,
-          -cropW / 2, -cropH / 2, cropW, cropH
-        );
-
-        baseCtx.restore();
-
-        // 2. Pixel adjustments & Depth Masking
-        const imageData = baseCtx.getImageData(0, 0, baseW, baseH);
-        if (imageData) {
-          applyAdjustments(imageData, adjustments);
-
-          if (depthMask.enabled && depthMask.maskSource) {
-            try {
-              const maskImg = await this.imageCache.get(depthMask.maskSource);
-              const maskCanvas = this.createCanvas(baseW, baseH);
-              const maskCtx = maskCanvas.getContext('2d');
-              if (maskCtx) {
-                maskCtx.drawImage(maskImg, cropX, cropY, cropW, cropH, 0, 0, baseW, baseH);
-                const maskData = maskCtx.getImageData(0, 0, baseW, baseH);
-                if (maskData) {
-                  applyDepthMask(imageData, maskData, depthMask);
-                }
-              }
-            } catch {
-              // Mask failed to load; continue without crashing
-            }
-          }
-
-          baseCtx.putImageData(imageData, 0, 0);
-        }
-      }
+      baseCanvas = await this.renderBaseImage(img, naturalWidth, naturalHeight, region, transform, state);
       this.cachedBaseCanvas = baseCanvas;
       this.cachedBaseKey = baseKey;
     }
 
-    // 3. Render base canvas onto target canvas with viewport zoom & pan
-    ctx.save();
-    // Center of canvas
-    ctx.translate(vpWidth / 2 + pan.x, vpHeight / 2 + pan.y);
-    ctx.scale(zoom, zoom);
+    // 2. Draw the base canvas into the viewport (centred, fitted, zoomed, panned)
+    const drawW = rotated.width * projection.scale;
+    const drawH = rotated.height * projection.scale;
+    ctx.drawImage(baseCanvas, projection.originX - drawW / 2, projection.originY - drawH / 2, drawW, drawH);
 
-    // Calculate fitted dimensions
-    const fitScale = Math.min((vpWidth * 0.85) / baseW, (vpHeight * 0.85) / baseH, 1);
-    const renderW = baseW * fitScale;
-    const renderH = baseH * fitScale;
+    // 3. Annotations live in natural image space: draw them through the same projection,
+    //    clipped to the visible (cropped) region.
+    if (annotations.length > 0 || options.draftAnnotation) {
+      ctx.save();
+      applyImageProjectionToContext(ctx, projection);
+      ctx.beginPath();
+      ctx.rect(region.x, region.y, region.width, region.height);
+      ctx.clip();
 
-    // Draw base image
-    ctx.drawImage(baseCanvas, -renderW / 2, -renderH / 2, renderW, renderH);
-
-    // 4. Render Annotations scaled to fit image space
-    const scaleFactor = fitScale;
-    ctx.save();
-    ctx.translate(-renderW / 2, -renderH / 2);
-    ctx.scale(scaleFactor, scaleFactor);
-
-    for (const ann of annotations) {
-      await this.drawAnnotation(ctx, ann);
-      if (options.showSelectionOverlay && ann.id === selectedAnnotationId) {
-        this.drawAnnotationSelection(ctx, ann);
+      for (const ann of annotations) {
+        await this.drawAnnotation(ctx, ann);
+        if (options.showSelectionOverlay && ann.id === selectedAnnotationId) {
+          this.drawAnnotationSelection(ctx, ann);
+        }
       }
+
+      // Render active live draft annotation
+      if (options.draftAnnotation) {
+        await this.drawAnnotation(ctx, options.draftAnnotation);
+      }
+
+      ctx.restore();
     }
 
-    // Render active live draft annotation
-    if (options.draftAnnotation) {
-      await this.drawAnnotation(ctx, options.draftAnnotation);
+    // 4. Draw Crop Grid Overlay if crop overlay is requested
+    if (isActivelyCropping) {
+      const activeCrop =
+        options.draftCrop !== undefined && options.draftCrop !== null
+          ? options.draftCrop
+          : (crop ?? { x: 0, y: 0, width: naturalWidth, height: naturalHeight });
+      this.drawCropOverlay(ctx, getViewportMetrics(geoState, vpWidth, vpHeight, true, activeCrop));
+    }
+  }
+
+  /**
+   * Draws `region` of the source image with rotation/flip applied, then pixel adjustments
+   * and the depth mask (which receives the identical transform so it stays aligned).
+   */
+  private async renderBaseImage(
+    img: CanvasImageSource,
+    naturalWidth: number,
+    naturalHeight: number,
+    region: CropBox,
+    transform: ImageTransform,
+    state: Pick<ImageEditorState, 'adjustments' | 'depthMask'>
+  ): Promise<HTMLCanvasElement> {
+    const { adjustments, depthMask } = state;
+    const rotated = getRotatedSize(region.width, region.height, transform);
+    const baseW = Math.max(1, Math.round(rotated.width));
+    const baseH = Math.max(1, Math.round(rotated.height));
+    const baseCanvas = this.createCanvas(baseW, baseH);
+    const baseCtx = baseCanvas.getContext('2d');
+    if (!baseCtx) return baseCanvas;
+
+    const projection = getBaseProjection(region, transform, baseW, baseH);
+
+    baseCtx.save();
+    applyImageProjectionToContext(baseCtx, projection);
+    baseCtx.drawImage(
+      img,
+      region.x, region.y, region.width, region.height,
+      region.x, region.y, region.width, region.height
+    );
+    baseCtx.restore();
+
+    const imageData = baseCtx.getImageData(0, 0, baseW, baseH);
+    if (imageData) {
+      applyAdjustments(imageData, adjustments);
+
+      if (depthMask.enabled && depthMask.maskSource) {
+        try {
+          const maskImg = await this.imageCache.get(depthMask.maskSource);
+          const maskSize = getSourceSize(maskImg, naturalWidth, naturalHeight);
+          const sx = maskSize.width / naturalWidth;
+          const sy = maskSize.height / naturalHeight;
+          const maskCanvas = this.createCanvas(baseW, baseH);
+          const maskCtx = maskCanvas.getContext('2d');
+          if (maskCtx) {
+            // The depth map covers the whole source image; scale it to natural pixels and
+            // apply the exact same rotate/flip/crop projection as the image itself.
+            maskCtx.save();
+            applyImageProjectionToContext(maskCtx, projection);
+            maskCtx.drawImage(
+              maskImg,
+              region.x * sx, region.y * sy, region.width * sx, region.height * sy,
+              region.x, region.y, region.width, region.height
+            );
+            maskCtx.restore();
+            const maskData = maskCtx.getImageData(0, 0, baseW, baseH);
+            if (maskData) {
+              applyDepthMask(imageData, maskData, depthMask);
+            }
+          }
+        } catch {
+          // Mask failed to load; continue without crashing
+        }
+      }
+
+      baseCtx.putImageData(imageData, 0, 0);
     }
 
-    ctx.restore();
+    return baseCanvas;
+  }
 
-    ctx.restore();
-
-    // 5. Draw Crop Grid Overlay if crop overlay is requested
-    const isCroppingActive = Boolean(options.showCropOverlay || state.activeTool === 'crop');
-    const activeCrop =
-      (options.draftCrop !== undefined && options.draftCrop !== null)
-        ? options.draftCrop
-        : (crop ?? (isCroppingActive ? {
-            x: 0,
-            y: 0,
-            width: naturalWidth,
-            height: naturalHeight,
-          } : null));
-
-    if (isCroppingActive && activeCrop) {
-      this.drawCropOverlay(ctx, state, vpWidth, vpHeight, naturalWidth, naturalHeight, activeCrop);
+  private getSourceId(img: CanvasImageSource): number {
+    const key = img as unknown as object;
+    let id = this.sourceIds.get(key);
+    if (id === undefined) {
+      id = ++this.nextSourceId;
+      this.sourceIds.set(key, id);
     }
+    return id;
   }
 
   /**
@@ -404,7 +444,7 @@ export class ImageEditorRenderer {
     ctx.lineWidth = 1.5;
     ctx.setLineDash([4, 4]);
 
-    const bounds = this.getAnnotationBounds(ann);
+    const bounds = getAnnotationBounds(ann);
     const pad = 4;
     ctx.strokeRect(bounds.x - pad, bounds.y - pad, bounds.width + pad * 2, bounds.height + pad * 2);
 
@@ -427,104 +467,40 @@ export class ImageEditorRenderer {
     ctx.restore();
   }
 
+  /** @deprecated Use the standalone `getAnnotationBounds` from the geometry module. */
   public getAnnotationBounds(ann: Annotation): { x: number; y: number; width: number; height: number } {
-    switch (ann.type) {
-      case 'rect':
-        return { x: ann.x, y: ann.y, width: ann.width, height: ann.height };
-      case 'circle':
-        return {
-          x: ann.x - Math.abs(ann.radiusX),
-          y: ann.y - Math.abs(ann.radiusY),
-          width: Math.abs(ann.radiusX) * 2,
-          height: Math.abs(ann.radiusY) * 2,
-        };
-      case 'arrow':
-      case 'line': {
-        const minX = Math.min(ann.x, ann.endX);
-        const minY = Math.min(ann.y, ann.endY);
-        return {
-          x: minX,
-          y: minY,
-          width: Math.max(Math.abs(ann.endX - ann.x), 10),
-          height: Math.max(Math.abs(ann.endY - ann.y), 10),
-        };
-      }
-      case 'pen': {
-        if (!ann.points.length) return { x: ann.x, y: ann.y, width: 0, height: 0 };
-        let minX = ann.points[0].x, maxX = ann.points[0].x;
-        let minY = ann.points[0].y, maxY = ann.points[0].y;
-        for (const pt of ann.points) {
-          if (pt.x < minX) minX = pt.x;
-          if (pt.x > maxX) maxX = pt.x;
-          if (pt.y < minY) minY = pt.y;
-          if (pt.y > maxY) maxY = pt.y;
-        }
-        return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
-      }
-      case 'text':
-        return {
-          x: ann.x,
-          y: ann.y,
-          width: (ann.text.length * ann.fontSize * 0.6),
-          height: ann.fontSize * 1.2,
-        };
-      case 'image':
-        return { x: ann.x, y: ann.y, width: ann.width, height: ann.height };
-    }
+    return getAnnotationBounds(ann);
   }
 
   /**
-   * Draws a rule-of-thirds crop grid overlay.
+   * Draws a rule-of-thirds crop grid overlay. All rectangles come from
+   * `getViewportMetrics`, i.e. the crop box projected through rotation/flip.
    */
-  private drawCropOverlay(
-    ctx: CanvasRenderingContext2D,
-    state: ImageEditorState,
-    vpWidth: number,
-    vpHeight: number,
-    imgWidth: number,
-    imgHeight: number,
-    cropOverride?: CropBox | null
-  ): void {
-    const crop =
-      (cropOverride !== undefined && cropOverride !== null)
-        ? cropOverride
-        : (state.crop ?? {
-            x: 0,
-            y: 0,
-            width: imgWidth,
-            height: imgHeight,
-          });
-    if (!crop) return;
+  private drawCropOverlay(ctx: CanvasRenderingContext2D, metrics: ViewportMetrics): void {
+    const { imageRect, cropRect } = metrics;
+    if (!cropRect) return;
 
-    const { transform, pan, zoom } = state;
-    const angle = ((transform.rotate % 360) + 360) % 360;
-    const isSwapped = angle === 90 || angle === 270;
-    const baseW = isSwapped ? imgHeight : imgWidth;
-    const baseH = isSwapped ? imgWidth : imgHeight;
+    const imgL = imageRect.x;
+    const imgT = imageRect.y;
+    const imgR = imageRect.x + imageRect.width;
+    const imgB = imageRect.y + imageRect.height;
+    const startX = cropRect.x;
+    const startY = cropRect.y;
+    const cropBoxW = cropRect.width;
+    const cropBoxH = cropRect.height;
 
     ctx.save();
-    ctx.translate(vpWidth / 2 + pan.x, vpHeight / 2 + pan.y);
-    ctx.scale(zoom, zoom);
 
-    const fitScale = Math.min((vpWidth * 0.85) / baseW, (vpHeight * 0.85) / baseH, 1);
-    const renderW = baseW * fitScale;
-    const renderH = baseH * fitScale;
-
-    const startX = -renderW / 2 + (crop.x / imgWidth) * renderW;
-    const startY = -renderH / 2 + (crop.y / imgHeight) * renderH;
-    const cropBoxW = (crop.width / imgWidth) * renderW;
-    const cropBoxH = (crop.height / imgHeight) * renderH;
-
-    // Dark semi-transparent scrim outside crop box
+    // Dark semi-transparent scrim outside crop box (within the image)
     ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
     // Top
-    ctx.fillRect(-renderW / 2, -renderH / 2, renderW, startY - (-renderH / 2));
+    ctx.fillRect(imgL, imgT, imageRect.width, Math.max(0, startY - imgT));
     // Bottom
-    ctx.fillRect(-renderW / 2, startY + cropBoxH, renderW, renderH / 2 - (startY + cropBoxH));
+    ctx.fillRect(imgL, startY + cropBoxH, imageRect.width, Math.max(0, imgB - (startY + cropBoxH)));
     // Left
-    ctx.fillRect(-renderW / 2, startY, startX - (-renderW / 2), cropBoxH);
+    ctx.fillRect(imgL, startY, Math.max(0, startX - imgL), cropBoxH);
     // Right
-    ctx.fillRect(startX + cropBoxW, startY, renderW / 2 - (startX + cropBoxW), cropBoxH);
+    ctx.fillRect(startX + cropBoxW, startY, Math.max(0, imgR - (startX + cropBoxW)), cropBoxH);
 
     // Crop border
     ctx.strokeStyle = '#ffffff';
@@ -607,20 +583,15 @@ export class ImageEditorRenderer {
       img = imageSource;
     }
 
-    const naturalWidth = (img as any).naturalWidth || (img as any).videoWidth || (img as any).width || 800;
-    const naturalHeight = (img as any).naturalHeight || (img as any).videoHeight || (img as any).height || 600;
+    const { width: naturalWidth, height: naturalHeight } = getSourceSize(img);
+    const { crop, transform, annotations } = state;
 
-    const { crop, transform, adjustments, depthMask, annotations } = state;
-
-    const cropX = crop ? Math.max(0, crop.x) : 0;
-    const cropY = crop ? Math.max(0, crop.y) : 0;
-    const cropW = crop ? Math.min(naturalWidth - cropX, crop.width) : naturalWidth;
-    const cropH = crop ? Math.min(naturalHeight - cropY, crop.height) : naturalHeight;
-
-    const angle = ((transform.rotate % 360) + 360) % 360;
-    const isSwapped = angle === 90 || angle === 270;
-    const baseW = isSwapped ? cropH : cropW;
-    const baseH = isSwapped ? cropW : cropH;
+    const region = crop
+      ? clampCropToImage(crop, naturalWidth, naturalHeight)
+      : { x: 0, y: 0, width: naturalWidth, height: naturalHeight };
+    const rotated = getRotatedSize(region.width, region.height, transform);
+    const baseW = Math.max(1, Math.round(rotated.width));
+    const baseH = Math.max(1, Math.round(rotated.height));
 
     const exportW = options.width || baseW;
     const exportH = options.height || baseH;
@@ -629,53 +600,16 @@ export class ImageEditorRenderer {
     const ctx = exportCanvas.getContext('2d');
     if (!ctx) return exportCanvas;
 
-    // Draw transformed base image
-    const intermediateCanvas = this.createCanvas(baseW, baseH);
-    const interCtx = intermediateCanvas.getContext('2d');
-    if (interCtx) {
-      interCtx.save();
-      const rad = (angle * Math.PI) / 180;
-      interCtx.translate(baseW / 2, baseH / 2);
-      interCtx.rotate(rad);
-      interCtx.scale(transform.flipH ? -1 : 1, transform.flipV ? -1 : 1);
-      interCtx.drawImage(img, cropX, cropY, cropW, cropH, -cropW / 2, -cropH / 2, cropW, cropH);
-      interCtx.restore();
-
-      // Apply adjustments
-      const imageData = interCtx.getImageData(0, 0, baseW, baseH);
-      if (imageData) {
-        applyAdjustments(imageData, adjustments);
-
-        if (depthMask.enabled && depthMask.maskSource) {
-          try {
-            const maskImg = await this.imageCache.get(depthMask.maskSource);
-            const maskCanvas = this.createCanvas(baseW, baseH);
-            const maskCtx = maskCanvas.getContext('2d');
-            if (maskCtx) {
-              maskCtx.drawImage(maskImg, cropX, cropY, cropW, cropH, 0, 0, baseW, baseH);
-              const maskData = maskCtx.getImageData(0, 0, baseW, baseH);
-              if (maskData) {
-                applyDepthMask(imageData, maskData, depthMask);
-              }
-            }
-          } catch {
-            // Mask skip
-          }
-        }
-
-        interCtx.putImageData(imageData, 0, 0);
-      }
-    }
+    const baseCanvas = await this.renderBaseImage(img, naturalWidth, naturalHeight, region, transform, state);
 
     // Scale to target export dimensions
-    ctx.drawImage(intermediateCanvas, 0, 0, baseW, baseH, 0, 0, exportW, exportH);
+    ctx.drawImage(baseCanvas, 0, 0, baseW, baseH, 0, 0, exportW, exportH);
 
-    // Draw annotations if included
+    // Draw annotations (natural image space) through the same rotate/flip/crop projection
     if (options.includeAnnotations !== false && annotations.length > 0) {
-      const annScaleX = exportW / baseW;
-      const annScaleY = exportH / baseH;
       ctx.save();
-      ctx.scale(annScaleX, annScaleY);
+      ctx.scale(exportW / baseW, exportH / baseH);
+      applyImageProjectionToContext(ctx, getBaseProjection(region, transform, baseW, baseH));
       for (const ann of annotations) {
         await this.drawAnnotation(ctx, ann);
       }
@@ -686,21 +620,22 @@ export class ImageEditorRenderer {
   }
 
   /**
-   * Generates a binary mask canvas (white for mask/selected area, black for unmasked).
-   * Useful for AI inpainting and selective generative fill.
+   * Generates a strictly binary mask canvas (white = area to regenerate, black = keep) in
+   * natural image pixel space of the current source image — the same space the crop box
+   * and annotations are stored in. Pair it with `toSourceDataURL()` for AI inpainting.
    */
   public async renderMask(
     state: ImageEditorState,
     options?: { useAnnotations?: boolean; useCrop?: boolean }
   ): Promise<HTMLCanvasElement> {
-    const naturalWidth = state.imageDimensions.width;
-    const naturalHeight = state.imageDimensions.height;
+    const naturalWidth = Math.max(1, Math.round(state.imageDimensions.width));
+    const naturalHeight = Math.max(1, Math.round(state.imageDimensions.height));
     const maskCanvas = this.createCanvas(naturalWidth, naturalHeight);
     const ctx = maskCanvas.getContext('2d');
     if (!ctx) return maskCanvas;
 
     // Background: unmasked (black)
-    ctx.fillStyle = '#000000';
+    ctx.fillStyle = MASK_BLACK;
     ctx.fillRect(0, 0, naturalWidth, naturalHeight);
 
     const useCrop = options?.useCrop ?? true;
@@ -708,54 +643,106 @@ export class ImageEditorRenderer {
 
     // Crop box mask (if active)
     if (useCrop && state.crop) {
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = MASK_WHITE;
       ctx.fillRect(state.crop.x, state.crop.y, state.crop.width, state.crop.height);
     }
 
-    // Annotation masks (drawn in solid white)
+    // Annotation masks (drawn in solid white, never in annotation colours)
     if (useAnnotations && state.annotations.length > 0) {
       for (const ann of state.annotations) {
-        ctx.save();
-        if (ann.rotation) {
-          ctx.translate(ann.x, ann.y);
-          ctx.rotate((ann.rotation * Math.PI) / 180);
-          ctx.translate(-ann.x, -ann.y);
-        }
-
-        if (ann.type === 'pen') {
-          const pen = ann as PenAnnotation;
-          if (pen.points.length > 0) {
-            ctx.beginPath();
-            ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = Math.max(pen.strokeWidth, 8);
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-            ctx.moveTo(pen.points[0].x, pen.points[0].y);
-            for (let i = 1; i < pen.points.length; i++) {
-              ctx.lineTo(pen.points[i].x, pen.points[i].y);
-            }
-            ctx.stroke();
-          }
-        } else if (ann.type === 'rect') {
-          const rect = ann as RectAnnotation;
-          ctx.fillStyle = '#ffffff';
-          ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
-        } else if (ann.type === 'circle') {
-          const circ = ann as CircleAnnotation;
-          ctx.fillStyle = '#ffffff';
-          ctx.beginPath();
-          ctx.ellipse(circ.x, circ.y, circ.radiusX, circ.radiusY, 0, 0, Math.PI * 2);
-          ctx.fill();
-        } else {
-          ctx.strokeStyle = '#ffffff';
-          ctx.fillStyle = '#ffffff';
-          await this.drawAnnotation(ctx, ann);
-        }
-        ctx.restore();
+        this.drawAnnotationMask(ctx, ann);
       }
+    }
+
+    // Anti-aliased edges produce grey pixels: threshold to pure black/white.
+    const imageData = ctx.getImageData?.(0, 0, naturalWidth, naturalHeight);
+    if (imageData) {
+      const d = imageData.data;
+      for (let i = 0; i < d.length; i += 4) {
+        const v = d[i] >= 128 ? 255 : 0;
+        d[i] = v;
+        d[i + 1] = v;
+        d[i + 2] = v;
+        d[i + 3] = 255;
+      }
+      ctx.putImageData(imageData, 0, 0);
     }
 
     return maskCanvas;
   }
+
+  private drawAnnotationMask(ctx: CanvasRenderingContext2D, ann: Annotation): void {
+    ctx.save();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = MASK_WHITE;
+    ctx.strokeStyle = MASK_WHITE;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    if (ann.rotation) {
+      ctx.translate(ann.x, ann.y);
+      ctx.rotate((ann.rotation * Math.PI) / 180);
+      ctx.translate(-ann.x, -ann.y);
+    }
+
+    switch (ann.type) {
+      case 'pen': {
+        if (ann.points.length > 0) {
+          ctx.beginPath();
+          ctx.lineWidth = Math.max(ann.strokeWidth || 0, 8);
+          ctx.moveTo(ann.points[0].x, ann.points[0].y);
+          for (let i = 1; i < ann.points.length; i++) {
+            ctx.lineTo(ann.points[i].x, ann.points[i].y);
+          }
+          ctx.stroke();
+        }
+        break;
+      }
+      case 'circle': {
+        ctx.beginPath();
+        ctx.ellipse(ann.x, ann.y, Math.abs(ann.radiusX), Math.abs(ann.radiusY), 0, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      }
+      case 'arrow':
+      case 'line': {
+        ctx.beginPath();
+        ctx.lineWidth = Math.max(ann.strokeWidth || 0, 8);
+        ctx.moveTo(ann.x, ann.y);
+        ctx.lineTo(ann.endX, ann.endY);
+        ctx.stroke();
+        break;
+      }
+      case 'rect':
+      case 'image':
+      case 'text': {
+        const b = getAnnotationBounds(ann);
+        ctx.fillRect(b.x, b.y, b.width, b.height);
+        break;
+      }
+    }
+    ctx.restore();
+  }
 }
 
+const MASK_WHITE = '#ffffff';
+const MASK_BLACK = '#000000';
+
+function getSourceSize(img: CanvasImageSource, fallbackW = 800, fallbackH = 600): { width: number; height: number } {
+  const anyImg = img as any;
+  return {
+    width: anyImg.naturalWidth || anyImg.videoWidth || anyImg.width || fallbackW,
+    height: anyImg.naturalHeight || anyImg.videoHeight || anyImg.height || fallbackH,
+  };
+}
+
+function getBaseProjection(region: CropBox, transform: ImageTransform, baseW: number, baseH: number): ImageProjection {
+  return {
+    region,
+    angle: normalizeAngle(transform.rotate),
+    flipH: transform.flipH,
+    flipV: transform.flipV,
+    scale: 1,
+    originX: baseW / 2,
+    originY: baseH / 2,
+  };
+}

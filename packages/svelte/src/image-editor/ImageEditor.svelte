@@ -73,7 +73,9 @@
     aiSuccess = null;
     isRemovingBg = true;
     try {
-      const imageDataUrl = await editor.toDataURL(exportOptions);
+      // AI hooks work on the untransformed source image (natural pixels); crop, rotation,
+      // adjustments and annotations stay non-destructive and are re-applied on top.
+      const imageDataUrl = await editor.toSourceDataURL();
       const result = await effectiveOnRemoveBg({ imageDataUrl });
       if (typeof result === 'string') {
         await editor.applyBackgroundRemovedImage(result);
@@ -101,7 +103,8 @@
     aiSuccess = null;
     isInpainting = true;
     try {
-      const imageDataUrl = await editor.toDataURL(exportOptions);
+      // Source image and mask share natural image space so they line up exactly.
+      const imageDataUrl = await editor.toSourceDataURL();
       const maskDataUrl = await editor.toMaskDataURL({
         useAnnotations: inpaintMaskMode === 'annotations',
         useCrop: inpaintMaskMode === 'crop',
@@ -327,7 +330,8 @@
             currentImgPt,
             editor.state.imageDimensions.width,
             editor.state.imageDimensions.height,
-            activeCropRatio
+            activeCropRatio,
+            editor.state.transform
           );
         }
 
@@ -341,7 +345,7 @@
           height: editor.state.imageDimensions.height,
         };
         const handle = hitTestCrop(canvasPt, editor.state, canvasEl.width, canvasEl.height, 14, activeCrop);
-        canvasEl.style.cursor = getCropCursor(handle);
+        canvasEl.style.cursor = getCropCursor(handle, editor.state.transform);
       }
       return;
     }
