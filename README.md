@@ -31,12 +31,16 @@
 
 ## 📦 Packages
 
-| Package | Version | Description | Target Consumers |
-| :--- | :--- | :--- | :--- |
-| [`@pixerate/editor`](./packages/core) | `0.1.0` | Pure TS core, grammar parser, resolvers, extensions | Node.js, Workers, Vanilla JS |
-| [`@pixerate/editor-react`](./packages/react) | `0.1.0` | React hooks, TipTap wrappers, AST renderer | React apps, Next.js, Vite React |
-| [`@pixerate/editor-svelte`](./packages/svelte) | `0.3.11` | Svelte 5 runes bindings & components | Svelte apps, SvelteKit apps |
-| [`@pixerate/editor-svelte/canvas`](./packages/svelte/src/canvas) | `0.3.11` | Headless Svelte 5 graph/flow canvas runes & math | SvelteFlow canvas & diagram apps |
+| Package | Description | Target Consumers |
+| :--- | :--- | :--- |
+| [`@pixerate/editor`](./packages/core#readme) | Pure TS core, grammar parser, resolvers, serializers, headless extensions and controllers | Node.js, Workers, Vanilla JS |
+| [`@pixerate/editor-react`](./packages/react#readme) | React hooks, TipTap wrappers, AST renderer, spreadsheet / image / canvas components | React apps, Next.js, Vite React |
+| [`@pixerate/editor-svelte`](./packages/svelte#readme) | Svelte 5 runes bindings & components (shipped as sources, SSR-compatible) | Svelte apps, SvelteKit apps |
+| [`@pixerate/editor-svelte/canvas`](./packages/svelte/src/canvas) | Headless Svelte 5 graph/flow canvas runes & math | SvelteFlow canvas & diagram apps |
+
+See the npm badges above for current versions. Each package README covers installation, API and styling.
+
+> **Styling:** the React and Svelte components are styled with Tailwind CSS utility classes and shadcn-style theme tokens. Your Tailwind setup must scan the package and define those tokens. See the *Styling* section of the [React](./packages/react#styling-tailwind-css-required) or [Svelte](./packages/svelte#styling-tailwind-css-required) README.
 
 ---
 
@@ -103,17 +107,21 @@ export function PromptStudio() {
 
 ```svelte
 <script lang="ts">
+  import type { Editor } from "@tiptap/core";
   import { EditableTextNodeEditor } from "@pixerate/editor-svelte";
 
-  let content = $state("<p>Start editing your rich document...</p>");
+  let editor = $state<Editor>();
+  let html = $state("<p>Start editing your rich document...</p>");
   let editable = $state(true);
 </script>
 
 <EditableTextNodeEditor
-  bind:content
+  bind:editor
+  content={html}
   {editable}
   placeholder="Type anything..."
   class="prose max-w-none"
+  onUpdate={() => (html = editor?.getHTML() ?? html)}
 />
 ```
 
@@ -154,18 +162,20 @@ We maintain **strict 1:1 parity** across JavaScript, React, and Svelte:
 | Recursive Template Resolution | ✅ | ✅ | ✅ |
 | Cycle Detection (`[Template loop detected]`) | ✅ | ✅ | ✅ |
 | Bidirectional Sourcemapping | ✅ | ✅ | ✅ |
-| Plain Text Clipboard & Linebreak Parser | ✅ | ✅ | ✅ |
-| Live Animated Gradient Text | ✅ | ✅ | ✅ |
-| Slash Command Trigger (`/command`) | ✅ | ✅ | ✅ |
-| Template Autocomplete (`{{`) | ✅ | ✅ | ✅ |
+| Plain Text Clipboard & Linebreak Parser | ✅ | ✅ | Via core¹ |
+| Live Animated Gradient Text | ✅ | ✅ | Via core¹ |
+| Slash Command Trigger (`/command`) | ✅ | ✅ | Via core¹ |
+| Template Autocomplete (`{{`) | ✅ | ✅ | Via core¹ |
 | Read-Only Token Renderer (`<TemplateRenderer />`) | AST Only | Component | Component |
 | Floating Bubble Formatting Menu | Headless | Component | Component |
-| Rich Text Preset (Lists, Tables, Headings) | ✅ | ✅ | ✅ |
+| Rich Text Preset (Headings, Lists, Task Lists, Links) | ✅ | ✅ | ✅ |
 | Smilies (`:)` -> `🙂`) & Hex Highlighter | ✅ | ✅ | ✅ |
 | Image Editor Canvas 2D Engine & Transformations | ✅ | Component & Hook | Component & Rune |
 | Image Filters & Adjustments | ✅ | ✅ | ✅ |
 | Vector Annotations (Pen, Rect, Circle, Arrow, Line, Text) | ✅ | ✅ | ✅ |
 | Gleamforge Depth & Alpha Masking | ✅ | ✅ | ✅ |
+
+¹ Svelte does not yet have a prompt-editor equivalent of React's `usePromptEditor`. Configure the core extensions (`GradientText`, `TemplateSuggestions`, `SlashCommands`) and pass them to `EditableTextNodeEditor` via `extensions`, or use `createEditor({ plainTextMode: true })` from `@pixerate/editor`.
 
 ---
 

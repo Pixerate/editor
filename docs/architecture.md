@@ -48,7 +48,7 @@ This layer extends `@tiptap/core` with specialized plugins that work across any 
 - **`SlashCommands`**: A keyboard and input plugin that listens for `/` and exposes trigger callbacks to UI popups.
 - **`TemplateSuggestions`**: Triggers autocomplete suggestion popups when the user types `{{`.
 - **`LoadingNode`**: An inline atom node representing asynchronous AI expansion or template loading.
-- **`createRichTextPreset`**: A preconfigured extension bundle containing Headings, Lists, Tables, Strike, CodeBlock, and formatting extensions.
+- **`createRichTextPreset`**: A preconfigured extension bundle built on StarterKit (headings, lists, code blocks, strike) plus task lists, links, text alignment, colors, highlights, typography and images, with opt-in mentions and markdown.
 - **`SmilieReplacer` & `ColorHighlighter`**: Auto-replaces ASCII emoticons with Unicode emoji, and decorates hex colors (e.g. `#ff0055`) with visual color swatches.
 
 ---
