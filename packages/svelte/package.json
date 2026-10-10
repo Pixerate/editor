@@ -53,7 +53,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@dagrejs/dagre": "^1.1.4",
+    "@dagrejs/dagre": "^3.1.1",
     "@pixerate/editor": "workspace:*",
     "@tiptap/extension-bubble-menu": "^2.11.5",
     "@tiptap/extension-placeholder": "^2.11.5",
