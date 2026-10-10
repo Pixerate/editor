@@ -35,6 +35,15 @@ importers:
       '@pixerate/editor-react':
         specifier: workspace:*
         version: link:../../packages/react
+      '@tiptap/core':
+        specifier: ^2.11.5
+        version: 2.27.3(@tiptap/pm@2.27.3)
+      '@tiptap/pm':
+        specifier: ^2.11.5
+        version: 2.27.3
+      '@tiptap/react':
+        specifier: ^2.11.5
+        version: 2.27.3(@tiptap/core@2.27.3(@tiptap/pm@2.27.3))(@tiptap/pm@2.27.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       lucide-react:
         specifier: ^1.16.0
         version: 1.41.0(react@19.2.8)
@@ -75,9 +84,6 @@ importers:
       '@dagrejs/dagre':
         specifier: ^1.1.8
         version: 1.1.8
-      '@tiptap/core':
-        specifier: ^2.11.5
-        version: 2.27.3(@tiptap/pm@2.27.3)
       '@tiptap/extension-character-count':
         specifier: ^2.11.5
         version: 2.27.3(@tiptap/core@2.27.3(@tiptap/pm@2.27.3))(@tiptap/pm@2.27.3)
@@ -123,9 +129,6 @@ importers:
       '@tiptap/extension-underline':
         specifier: ^2.11.5
         version: 2.27.3(@tiptap/core@2.27.3(@tiptap/pm@2.27.3))
-      '@tiptap/pm':
-        specifier: ^2.11.5
-        version: 2.27.3
       '@tiptap/starter-kit':
         specifier: ^2.11.5
         version: 2.27.3
@@ -145,6 +148,12 @@ importers:
         specifier: ^0.8.10
         version: 0.8.10(@tiptap/core@2.27.3(@tiptap/pm@2.27.3))
     devDependencies:
+      '@tiptap/core':
+        specifier: ^2.11.5
+        version: 2.27.3(@tiptap/pm@2.27.3)
+      '@tiptap/pm':
+        specifier: ^2.11.5
+        version: 2.27.3
       '@types/dagre':
         specifier: ^0.7.54
         version: 0.7.54
@@ -169,28 +178,28 @@ importers:
       '@pixerate/editor':
         specifier: workspace:*
         version: link:../core
-      '@tiptap/core':
-        specifier: ^2.11.5 || ^3.0.0
-        version: 2.27.3(@tiptap/pm@2.27.3)
       '@tiptap/extension-bubble-menu':
-        specifier: ^2.11.5 || ^3.0.0
+        specifier: ^2.11.5
         version: 2.27.3(@tiptap/core@2.27.3(@tiptap/pm@2.27.3))(@tiptap/pm@2.27.3)
       '@tiptap/extension-placeholder':
-        specifier: ^2.11.5 || ^3.0.0
+        specifier: ^2.11.5
         version: 2.27.3(@tiptap/core@2.27.3(@tiptap/pm@2.27.3))(@tiptap/pm@2.27.3)
-      '@tiptap/pm':
-        specifier: ^2.11.5 || ^3.0.0
-        version: 2.27.3
-      '@tiptap/react':
-        specifier: ^2.11.5 || ^3.0.0
-        version: 2.27.3(@tiptap/core@2.27.3(@tiptap/pm@2.27.3))(@tiptap/pm@2.27.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@tiptap/starter-kit':
-        specifier: ^2.11.5 || ^3.0.0
+        specifier: ^2.11.5
         version: 2.27.3
       '@xyflow/react':
         specifier: ^12.0.0
         version: 12.12.0(@types/react-dom@19.2.7(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
     devDependencies:
+      '@tiptap/core':
+        specifier: ^2.11.5
+        version: 2.27.3(@tiptap/pm@2.27.3)
+      '@tiptap/pm':
+        specifier: ^2.11.5
+        version: 2.27.3
+      '@tiptap/react':
+        specifier: ^2.11.5
+        version: 2.27.3(@tiptap/core@2.27.3(@tiptap/pm@2.27.3))(@tiptap/pm@2.27.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@types/react':
         specifier: ^19.0.0
         version: 19.2.18
@@ -221,18 +230,12 @@ importers:
       '@pixerate/editor':
         specifier: workspace:*
         version: link:../core
-      '@tiptap/core':
-        specifier: ^2.11.5
-        version: 2.27.3(@tiptap/pm@2.27.3)
       '@tiptap/extension-bubble-menu':
         specifier: ^2.11.5
         version: 2.27.3(@tiptap/core@2.27.3(@tiptap/pm@2.27.3))(@tiptap/pm@2.27.3)
       '@tiptap/extension-placeholder':
         specifier: ^2.11.5
         version: 2.27.3(@tiptap/core@2.27.3(@tiptap/pm@2.27.3))(@tiptap/pm@2.27.3)
-      '@tiptap/pm':
-        specifier: ^2.11.5
-        version: 2.27.3
       '@tiptap/starter-kit':
         specifier: ^2.11.5
         version: 2.27.3
@@ -243,6 +246,12 @@ importers:
       '@sveltejs/vite-plugin-svelte':
         specifier: ^5.0.3
         version: 5.1.1(svelte@5.57.0)(vite@6.4.3(@types/node@24.13.3)(jiti@1.21.7))
+      '@tiptap/core':
+        specifier: ^2.11.5
+        version: 2.27.3(@tiptap/pm@2.27.3)
+      '@tiptap/pm':
+        specifier: ^2.11.5
+        version: 2.27.3
       '@types/dagre':
         specifier: ^0.7.52
         version: 0.7.54

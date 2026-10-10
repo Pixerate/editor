@@ -55,13 +55,13 @@
   "dependencies": {
     "@dagrejs/dagre": "^1.1.4",
     "@pixerate/editor": "workspace:*",
-    "@tiptap/core": "^2.11.5",
     "@tiptap/extension-bubble-menu": "^2.11.5",
     "@tiptap/extension-placeholder": "^2.11.5",
-    "@tiptap/pm": "^2.11.5",
     "@tiptap/starter-kit": "^2.11.5"
   },
   "peerDependencies": {
+    "@tiptap/core": "^2.11.5",
+    "@tiptap/pm": "^2.11.5",
     "@xyflow/svelte": "^1.6.0",
     "svelte": "^5.0.0"
   },
@@ -73,6 +73,8 @@
   "devDependencies": {
     "@sveltejs/package": "^2.5.8",
     "@sveltejs/vite-plugin-svelte": "^5.0.3",
+    "@tiptap/core": "^2.11.5",
+    "@tiptap/pm": "^2.11.5",
     "@types/dagre": "^0.7.52",
     "@xyflow/svelte": "^1.6.6",
     "svelte": "^5.0.0",
