@@ -17,7 +17,7 @@
     calculateCropDrag,
     hitTestAnnotation,
   } from '@pixerate/editor';
-  import { createReactiveImageEditor, type ReactiveImageEditor } from './imageEditorState.svelte';
+  import { createReactiveImageEditor, type ReactiveImageEditor } from './imageEditorState.svelte.js';
 
   interface Props {
     editor?: ReactiveImageEditor;

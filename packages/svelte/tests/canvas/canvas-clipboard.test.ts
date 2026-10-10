@@ -4,8 +4,8 @@ import {
 	isValidCanvasNode,
 	isValidUrl,
 	isEventFromTextInput
-} from '../createCanvasClipboard.svelte.js';
-import type { CanvasNode, CanvasEdge } from '../types.js';
+} from '../../src/canvas/createCanvasClipboard.svelte.js';
+import type { CanvasNode, CanvasEdge } from '../../src/canvas/types.js';
 
 describe('createCanvasClipboard & Clipboard Utilities', () => {
 	it('validates canvas nodes with isValidCanvasNode', () => {

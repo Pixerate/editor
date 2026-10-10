@@ -3,8 +3,8 @@ import {
 	getCenteredNodePosition,
 	centerNodes,
 	getLayoutedNodes
-} from '../createCanvasLayout.js';
-import type { CanvasNode, CanvasEdge } from '../types.js';
+} from '../../src/canvas/createCanvasLayout.js';
+import type { CanvasNode, CanvasEdge } from '../../src/canvas/types.js';
 
 describe('createCanvasLayout & Geometry Helpers', () => {
 	it('calculates centered node position correctly', () => {

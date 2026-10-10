@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { createCanvasMultiDrag } from '../createCanvasMultiDrag.svelte.js';
+import { createCanvasMultiDrag } from '../../src/canvas/createCanvasMultiDrag.svelte.js';
 import {
 	getMarqueeSelectionPreset,
 	handleDeselectOnEscape
-} from '../createCanvasSelection.svelte.js';
-import type { CanvasNode } from '../types.js';
+} from '../../src/canvas/createCanvasSelection.svelte.js';
+import type { CanvasNode } from '../../src/canvas/types.js';
 
 describe('createCanvasMultiDrag & Selection Helpers', () => {
 	const sampleNodes: CanvasNode[] = [

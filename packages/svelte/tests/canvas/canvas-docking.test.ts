@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { createCanvasDocking } from '../createCanvasDocking.svelte.js';
-import type { CanvasNode } from '../types.js';
+import { createCanvasDocking } from '../../src/canvas/createCanvasDocking.svelte.js';
+import type { CanvasNode } from '../../src/canvas/types.js';
 
 describe('createCanvasDocking', () => {
   const createSampleNode = (id: string, type = 'default', x = 0, y = 0): CanvasNode => ({

@@ -3,8 +3,8 @@ import {
 	createCanvasGraph,
 	calculateGraphDifferences,
 	replaceNodeInGraph
-} from '../createCanvasGraph.svelte.js';
-import type { CanvasNode, CanvasEdge } from '../types.js';
+} from '../../src/canvas/createCanvasGraph.svelte.js';
+import type { CanvasNode, CanvasEdge } from '../../src/canvas/types.js';
 
 describe('createCanvasGraph & Graph Operations', () => {
 	const createSampleNode = (id: string, x = 0, y = 0): CanvasNode => ({

@@ -2,7 +2,7 @@
   import type { Editor, Content, Extensions, FocusPosition } from "@tiptap/core";
   import type { RichTextPresetOptions, MarkdownOptions, ImageOptions } from "@pixerate/editor";
   import { onDestroy, onMount } from "svelte";
-  import { initiateEditor } from "./editor.svelte";
+  import { initiateEditor } from "./editor.svelte.js";
 
   interface EditorProps {
     class?: string;

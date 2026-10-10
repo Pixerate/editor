@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import * as SvelteEditor from "../dist";
+import * as SvelteEditor from "../src";
 
 describe("@pixerate/editor-svelte Distribution Exports", () => {
   it("exports initiateEditor, EditableTextNodeEditor, BubbleMenu, TemplateRenderer, and createReactiveEditor", () => {
@@ -36,7 +36,7 @@ describe("@pixerate/editor-svelte Distribution Exports", () => {
   });
 
   it("exports canvas runes and utilities from @pixerate/editor-svelte/canvas", async () => {
-    const CanvasModule = await import("../dist/canvas");
+    const CanvasModule = await import("../src/canvas");
     expect(CanvasModule.createCanvasGraph).toBeDefined();
     expect(CanvasModule.calculateGraphDifferences).toBeDefined();
     expect(CanvasModule.replaceNodeInGraph).toBeDefined();
