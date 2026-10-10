@@ -6,7 +6,20 @@ updates:
       interval: "weekly"
       day: "monday"
     open-pull-requests-limit: 10
+    ignore:
+      # TipTap is a peer dependency pinned to ^2.11.5. A major upgrade must move
+      # every @tiptap/* package (and tiptap-markdown) together in a deliberate,
+      # tested migration; mixing majors installs two ProseMirror copies.
+      # See GOTCHAS.md: "TipTap Must Be a Peer Dependency".
+      - dependency-name: "@tiptap/*"
+        update-types:
+          - "version-update:semver-major"
     groups:
+      # Groups match in order, so TipTap updates always land in one PR.
+      tiptap:
+        patterns:
+          - "@tiptap/*"
+          - "tiptap-markdown"
       minor-and-patch:
         patterns:
           - "*"
