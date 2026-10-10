@@ -265,3 +265,107 @@ describe("HistoryManager", () => {
     expect(history.getState().undoCount).toBe(0);
   });
 });
+
+describe("HistoryManager failure handling", () => {
+  it("rolls back and records nothing when a batch throws", () => {
+    const history = new HistoryManager();
+    const state: string[] = [];
+    const op = (v: string) => ({
+      name: v,
+      execute: () => state.push(v),
+      undo: () => {
+        state.splice(state.lastIndexOf(v), 1);
+      },
+    });
+
+    history.execute(op("before"));
+    const listener = vi.fn();
+    history.subscribe(listener);
+    listener.mockClear();
+
+    const boom = new Error("boom");
+    expect(() =>
+      history.batch("Broken", () => {
+        history.execute(op("a"));
+        history.execute(op("b"));
+        throw boom;
+      }),
+    ).toThrow(boom);
+
+    // Already-executed batch commands are rolled back
+    expect(state).toEqual(["before"]);
+    // Nothing undoable was pushed and the redo/undo stacks are intact
+    expect(history.getState().undoCount).toBe(1);
+    expect(history.getState().undoName).toBe("before");
+    expect(listener).not.toHaveBeenCalled();
+
+    // Manager is still usable (not stuck inside a batch)
+    history.execute(op("after"));
+    expect(history.getState().undoCount).toBe(2);
+    expect(history.undo()).toBe(true);
+    expect(state).toEqual(["before"]);
+  });
+
+  it("rolls back batch commands in reverse order when a nested command throws", () => {
+    const history = new HistoryManager();
+    const log: string[] = [];
+
+    expect(() =>
+      history.batch("Broken", () => {
+        history.execute({ name: "1", execute: () => log.push("1"), undo: () => log.push("undo 1") });
+        history.execute({ name: "2", execute: () => log.push("2"), undo: () => log.push("undo 2") });
+        history.execute({
+          name: "3",
+          execute: () => {
+            throw new Error("fail");
+          },
+          undo: () => log.push("undo 3"),
+        });
+      }),
+    ).toThrow("fail");
+
+    expect(log).toEqual(["1", "2", "undo 2", "undo 1"]);
+    expect(history.getState().canUndo).toBe(false);
+  });
+
+  it("keeps the command on the undo stack when undo throws", () => {
+    const history = new HistoryManager();
+    let fail = true;
+    history.execute({
+      name: "Fragile",
+      execute: () => {},
+      undo: () => {
+        if (fail) throw new Error("undo failed");
+      },
+    });
+
+    expect(() => history.undo()).toThrow("undo failed");
+    expect(history.getState()).toMatchObject({ undoCount: 1, redoCount: 0, undoName: "Fragile" });
+
+    fail = false;
+    expect(history.undo()).toBe(true);
+    expect(history.getState()).toMatchObject({ undoCount: 0, redoCount: 1, redoName: "Fragile" });
+  });
+
+  it("keeps the command on the redo stack when redo throws", () => {
+    const history = new HistoryManager();
+    let fail = false;
+    history.execute({
+      name: "Fragile",
+      execute: () => {},
+      undo: () => {},
+      redo: () => {
+        if (fail) throw new Error("redo failed");
+      },
+    });
+    history.undo();
+
+    fail = true;
+    expect(() => history.redo()).toThrow("redo failed");
+    expect(history.getState()).toMatchObject({ undoCount: 0, redoCount: 1, redoName: "Fragile" });
+
+    fail = false;
+    expect(history.redo()).toBe(true);
+    expect(history.getState()).toMatchObject({ undoCount: 1, redoCount: 0 });
+  });
+});

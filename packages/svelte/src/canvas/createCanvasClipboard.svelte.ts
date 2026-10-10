@@ -22,19 +22,30 @@ export function isEventFromTextInput(event: Event | { target: EventTarget | null
 }
 
 /**
- * Validates that an object conforms to minimal CanvasNode shape.
+ * Validates that an object conforms to minimal CanvasNode shape:
+ * a string `id` and a `position` whose `x` / `y` are finite numbers.
  */
 export function isValidCanvasNode(obj: unknown): obj is CanvasNode {
+	if (typeof obj !== 'object' || obj === null) return false;
+	const candidate = obj as { id?: unknown; position?: unknown };
+	if (typeof candidate.id !== 'string') return false;
+	const position = candidate.position as { x?: unknown; y?: unknown } | null | undefined;
+	return (
+		typeof position === 'object' &&
+		position !== null &&
+		typeof position.x === 'number' &&
+		Number.isFinite(position.x) &&
+		typeof position.y === 'number' &&
+		Number.isFinite(position.y)
+	);
+}
+
+function isValidCanvasEdgeShape(obj: unknown): boolean {
 	return (
 		typeof obj === 'object' &&
 		obj !== null &&
-		'id' in obj &&
-		typeof (obj as any).id === 'string' &&
-		'position' in obj &&
-		typeof (obj as any).position === 'object' &&
-		(obj as any).position !== null &&
-		'x' in (obj as any).position &&
-		'y' in (obj as any).position
+		typeof (obj as any).source === 'string' &&
+		typeof (obj as any).target === 'string'
 	);
 }
 
@@ -153,7 +164,11 @@ export function createCanvasClipboard<
 					(parsed as any).nodes.every(isValidCanvasNode)
 				) {
 					rawNodes = (parsed as any).nodes;
-					rawEdges = (parsed as any).edges;
+					const edgesField = (parsed as any).edges;
+					// Untrusted input: ignore a non-array `edges` and malformed edge entries.
+					rawEdges = Array.isArray(edgesField)
+						? (edgesField.filter(isValidCanvasEdgeShape) as TEdge[])
+						: undefined;
 				}
 
 				if (rawNodes && rawNodes.length > 0) {
@@ -161,18 +176,27 @@ export function createCanvasClipboard<
 
 					// Create ID mapping for cloned nodes
 					const idMap = new Map<string, string>();
+					for (const node of rawNodes) {
+						idMap.set(node.id, crypto.randomUUID());
+					}
 					const newNodes: TNode[] = rawNodes.map((node) => {
-						const newId = crypto.randomUUID();
-						idMap.set(node.id, newId);
-						return {
+						const next: any = {
 							...node,
-							id: newId,
+							id: idMap.get(node.id)!,
 							selected: true,
 							position: {
 								x: node.position.x + 40,
 								y: node.position.y + 40
 							}
 						};
+						// Children of a pasted parent point at the new parent and keep their
+						// parent-relative position; other parent references are left unchanged.
+						const parentId = (node as any).parentId;
+						if (typeof parentId === 'string' && idMap.has(parentId)) {
+							next.parentId = idMap.get(parentId);
+							next.position = { x: node.position.x, y: node.position.y };
+						}
+						return next as TNode;
 					});
 
 					// Clone edges mapping them to the newly generated node IDs

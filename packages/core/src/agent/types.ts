@@ -47,7 +47,8 @@ export type AgentCommand<
 			type: 'canvas:add_node';
 			node: Omit<TNode, 'position'> & { position?: XYPosition };
 			nearNodeId?: string;
-			side?: Side;
+			/** Placement side; accepts both `above`/`below` and the MCP schema's `top`/`bottom`. */
+			side?: Side | 'top' | 'bottom';
 	  }
 	| {
 			type: 'canvas:remove_nodes';

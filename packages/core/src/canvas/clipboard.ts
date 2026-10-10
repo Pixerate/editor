@@ -25,19 +25,34 @@ export function isEventFromTextInput(event: Event | { target: EventTarget | null
 }
 
 /**
- * Validates that an object conforms to minimal CanvasNode shape.
+ * Validates that an object conforms to minimal CanvasNode shape:
+ * a string `id` and a `position` whose `x` / `y` are finite numbers.
  */
 export function isValidCanvasNode(obj: unknown): obj is CanvasNode {
+	if (typeof obj !== 'object' || obj === null) return false;
+	const candidate = obj as { id?: unknown; position?: unknown };
+	if (typeof candidate.id !== 'string') return false;
+	const position = candidate.position as { x?: unknown; y?: unknown } | null | undefined;
 	return (
-		typeof obj === 'object' &&
-		obj !== null &&
-		'id' in obj &&
-		typeof (obj as any).id === 'string' &&
-		'position' in obj &&
-		typeof (obj as any).position === 'object' &&
-		(obj as any).position !== null &&
-		'x' in (obj as any).position &&
-		'y' in (obj as any).position
+		typeof position === 'object' &&
+		position !== null &&
+		typeof position.x === 'number' &&
+		Number.isFinite(position.x) &&
+		typeof position.y === 'number' &&
+		Number.isFinite(position.y)
+	);
+}
+
+/**
+ * Validates that an object conforms to minimal CanvasEdge shape (string `id`, `source`, `target`).
+ */
+export function isValidCanvasEdge(obj: unknown): obj is CanvasEdge {
+	if (typeof obj !== 'object' || obj === null) return false;
+	const candidate = obj as { id?: unknown; source?: unknown; target?: unknown };
+	return (
+		typeof candidate.id === 'string' &&
+		typeof candidate.source === 'string' &&
+		typeof candidate.target === 'string'
 	);
 }
 
@@ -84,7 +99,11 @@ export function parseCanvasClipboardData<
 			parsed.nodes.length > 0 &&
 			parsed.nodes.every(isValidCanvasNode)
 		) {
-			return parsed as CanvasClipboardPayload<TNode, TEdge>;
+			// Untrusted input: drop malformed edges instead of crashing downstream consumers.
+			const edges = Array.isArray(parsed.edges)
+				? (parsed.edges as unknown[]).filter(isValidCanvasEdge)
+				: undefined;
+			return { ...parsed, edges } as CanvasClipboardPayload<TNode, TEdge>;
 		}
 	} catch {
 		// Not JSON or invalid payload
@@ -94,33 +113,61 @@ export function parseCanvasClipboardData<
 
 /**
  * Generates unique new IDs for pasted nodes and updates edge references accordingly.
+ *
+ * - Nodes without a valid id / finite numeric position are skipped.
+ * - `parentId` (and legacy `parentNode`) references to other pasted nodes are remapped to
+ *   the new IDs; such children keep their parent-relative position (no extra offset).
+ *   References to parents outside the pasted set are left unchanged.
+ * - Edges are kept only when both endpoints were pasted; a non-array `edges` is ignored.
  */
 export function remapPastedNodes<
 	TNode extends CanvasNode = CanvasNode,
 	TEdge extends CanvasEdge = CanvasEdge
 >(
 	nodes: TNode[],
-	edges: TEdge[] = [],
+	edges: TEdge[] | null | undefined = [],
 	offset: XYPosition = { x: 30, y: 30 },
 	idGenerator: () => string = () => `node-${Math.random().toString(36).substring(2, 9)}`
 ): { nodes: TNode[]; edges: TEdge[] } {
-	const idMap = new Map<string, string>();
+	const validNodes = (Array.isArray(nodes) ? nodes : []).filter(isValidCanvasNode) as TNode[];
+	const validEdges = (Array.isArray(edges) ? edges : []).filter(isValidCanvasEdge) as TEdge[];
 
-	const newNodes = nodes.map((node) => {
-		const newId = idGenerator();
-		idMap.set(node.id, newId);
-		return {
+	const dx = Number.isFinite(offset?.x) ? offset.x : 0;
+	const dy = Number.isFinite(offset?.y) ? offset.y : 0;
+
+	const idMap = new Map<string, string>();
+	for (const node of validNodes) {
+		idMap.set(node.id, idGenerator());
+	}
+
+	const newNodes = validNodes.map((node) => {
+		const next: CanvasNode = {
 			...node,
-			id: newId,
+			id: idMap.get(node.id)!,
 			position: {
-				x: node.position.x + offset.x,
-				y: node.position.y + offset.y
+				x: node.position.x + dx,
+				y: node.position.y + dy
 			},
 			selected: true
 		};
+
+		let parentRemapped = false;
+		for (const key of ['parentId', 'parentNode'] as const) {
+			const parent = (node as CanvasNode)[key];
+			if (typeof parent === 'string' && idMap.has(parent)) {
+				next[key] = idMap.get(parent)!;
+				parentRemapped = true;
+			}
+		}
+		if (parentRemapped) {
+			// Position is relative to the (also pasted, also offset) parent.
+			next.position = { x: node.position.x, y: node.position.y };
+		}
+
+		return next as TNode;
 	});
 
-	const newEdges = edges
+	const newEdges = validEdges
 		.filter((e) => idMap.has(e.source) && idMap.has(e.target))
 		.map((edge) => ({
 			...edge,

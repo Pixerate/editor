@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
 	getCenteredNodePosition,
 	centerNodes,
@@ -14,6 +14,9 @@ import {
 	serializeCanvasNodes,
 	parseCanvasClipboardData,
 	remapPastedNodes,
+	isValidCanvasNode,
+	withStyleOpacity,
+	StreamingLayoutManager,
 	ManualClock,
 	layoutBounds,
 	canvasHeight,
@@ -22,7 +25,8 @@ import {
 	connectedOnly,
 	type CanvasNode,
 	type CanvasEdge,
-	type Rect
+	type Rect,
+	type XYPosition
 } from '../src/canvas';
 
 describe('Canvas Core - Layout & Centering', () => {
@@ -191,9 +195,9 @@ describe('Canvas Core - Displacement & Trajectory', () => {
 			{ onComplete }
 		);
 
-		// Position should have snapped to destination
-		expect(node.position).toEqual({ x: 150, y: 250 });
+		// Emitted copy should have snapped to destination
 		expect(onComplete).toHaveBeenCalled();
+		expect(onComplete.mock.calls[0][0][0].position).toEqual({ x: 150, y: 250 });
 		cancel();
 	});
 });
@@ -274,13 +278,14 @@ describe('Canvas - Clock & Deterministic Animation', () => {
 
 	it('runMultiNodeTransition animates deterministically via ManualClock', async () => {
 		const clock = new ManualClock(0);
-		const node: CanvasNode = { id: 'n1', position: { x: 0, y: 0 }, data: {} };
+		const input: CanvasNode = { id: 'n1', position: { x: 0, y: 0 }, data: {} };
+		let node = input;
 
 		let completed = false;
 		runMultiNodeTransition(
 			[
 				{
-					node,
+					node: input,
 					from: { x: 0, y: 0 },
 					to: { x: 100, y: 200 },
 					duration: 100
@@ -288,6 +293,9 @@ describe('Canvas - Clock & Deterministic Animation', () => {
 			],
 			{
 				clock,
+				onUpdate: ([updated]) => {
+					node = updated;
+				},
 				onComplete: () => {
 					completed = true;
 				}
@@ -308,6 +316,8 @@ describe('Canvas - Clock & Deterministic Animation', () => {
 		await clock.advance(60);
 		expect(node.position).toEqual({ x: 100, y: 200 });
 		expect(completed).toBe(true);
+		// The caller's node is never mutated
+		expect(input.position).toEqual({ x: 0, y: 0 });
 	});
 });
 
@@ -385,3 +395,222 @@ describe('Canvas - View & Streaming Stabilization', () => {
 	});
 });
 
+
+describe('Canvas - runMultiNodeTransition styles & immutability', () => {
+	it('handles object styles (React Flow) without throwing', () => {
+		const node = {
+			id: 'n1',
+			position: { x: 0, y: 0 },
+			data: { label: 'A' },
+			style: { background: 'red', opacity: 0.1 }
+		} as CanvasNode;
+
+		let result: CanvasNode | undefined;
+		expect(() =>
+			runMultiNodeTransition(
+				[{ node, from: { x: 0, y: 0 }, to: { x: 10, y: 20 }, trajectory: linearTrajectory, duration: 0 }],
+				{ onComplete: ([n]) => (result = n) }
+			)
+		).not.toThrow();
+
+		expect(result!.style).toEqual({ background: 'red', opacity: 1 });
+		expect(result!.data).toEqual({ label: 'A', scale: 1, opacity: 1 });
+		expect(result!.position).toEqual({ x: 10, y: 20 });
+	});
+
+	it('does not mutate input nodes and emits copies in transition order', async () => {
+		const clock = new ManualClock(0);
+		const a: CanvasNode = { id: 'a', position: { x: 0, y: 0 }, data: {}, style: 'color: red;' };
+		const b: CanvasNode = { id: 'b', position: { x: 5, y: 5 }, data: {} };
+		const frames: CanvasNode[][] = [];
+
+		runMultiNodeTransition(
+			[
+				{ node: a, from: { x: 0, y: 0 }, to: { x: 100, y: 0 }, trajectory: linearTrajectory, duration: 100 },
+				{ node: b, from: { x: 5, y: 5 }, to: { x: 5, y: 105 }, duration: 100 }
+			],
+			{ clock, onUpdate: (nodes) => frames.push(nodes) }
+		);
+		await clock.advance(50);
+		await clock.advance(60);
+
+		const last = frames[frames.length - 1];
+		expect(last.map((n) => n.id)).toEqual(['a', 'b']);
+		expect(last[0].position).toEqual({ x: 100, y: 0 });
+		expect(last[0].style).toBe('color: red; opacity: 1;');
+		expect(last[1].position).toEqual({ x: 5, y: 105 });
+		expect(last[0]).not.toBe(a);
+
+		expect(a).toEqual({ id: 'a', position: { x: 0, y: 0 }, data: {}, style: 'color: red;' });
+		expect(b).toEqual({ id: 'b', position: { x: 5, y: 5 }, data: {} });
+	});
+
+	it('withStyleOpacity supports strings, objects and empty styles', () => {
+		expect(withStyleOpacity('opacity: 0; color: red', 0.5)).toBe('color: red; opacity: 0.5;');
+		expect(withStyleOpacity('color: red; opacity: 0.2;', 1)).toBe('color: red; opacity: 1;');
+		expect(withStyleOpacity({ color: 'red' }, 0.3)).toEqual({ color: 'red', opacity: 0.3 });
+		expect(withStyleOpacity(undefined, 0.3)).toBe('opacity: 0.3;');
+		expect(withStyleOpacity(undefined, 0.3, 'object')).toEqual({ opacity: 0.3 });
+	});
+});
+
+describe('Canvas - StreamingLayoutManager', () => {
+	const chain = (count: number) => {
+		const nodes: CanvasNode[] = [];
+		const edges: CanvasEdge[] = [];
+		for (let i = 0; i < count; i++) {
+			nodes.push({ id: `n${i}`, position: { x: 0, y: 0 }, data: {} });
+			if (i > 0) edges.push({ id: `e${i}`, source: `n${i - 1}`, target: `n${i}` });
+		}
+		return { nodes, edges };
+	};
+
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
+	it('throttles (leading + trailing) instead of debouncing continuous updates', () => {
+		vi.useFakeTimers();
+		// A ManualClock that is never advanced keeps glides parked on their first frame,
+		// so every layout produces exactly one synchronous onLayoutUpdated call.
+		const layouts: Map<string, XYPosition>[] = [];
+		const manager = new StreamingLayoutManager({
+			throttleMs: 50,
+			clock: new ManualClock(0),
+			onLayoutUpdated: (positions) => layouts.push(positions)
+		});
+
+		// Updates every 20ms for 500ms
+		let count = 0;
+		for (let t = 0; t < 500; t += 20) {
+			count++;
+			const { nodes, edges } = chain(count);
+			manager.pushStreamUpdate(nodes, edges, new Map());
+			if (t === 0) {
+				// Leading edge runs synchronously
+				expect(layouts).toHaveLength(1);
+			}
+			vi.advanceTimersByTime(20);
+		}
+
+		// ~one layout per 50ms window while the stream is active
+		expect(layouts.length).toBeGreaterThanOrEqual(8);
+		expect(layouts.length).toBeLessThanOrEqual(12);
+
+		// Trailing edge lays out the latest update
+		vi.advanceTimersByTime(100);
+		const last = layouts[layouts.length - 1];
+		expect(last.has(`n${count - 1}`)).toBe(true);
+		manager.destroy();
+	});
+
+	it('destroy cancels a pending trailing layout', () => {
+		vi.useFakeTimers();
+		const onLayoutUpdated = vi.fn();
+		const manager = new StreamingLayoutManager({ throttleMs: 50, onLayoutUpdated });
+		const { nodes, edges } = chain(2);
+		manager.pushStreamUpdate(nodes, edges, new Map());
+		manager.pushStreamUpdate(chain(3).nodes, chain(3).edges, new Map());
+		expect(onLayoutUpdated).toHaveBeenCalledTimes(1);
+		manager.destroy();
+		vi.advanceTimersByTime(200);
+		expect(onLayoutUpdated).toHaveBeenCalledTimes(1);
+	});
+
+	it('glides known nodes from their current position to the newly computed layout', async () => {
+		const clock = new ManualClock(0);
+		const updates: Map<string, XYPosition>[] = [];
+		const manager = new StreamingLayoutManager({
+			glideDurationMs: 100,
+			clock,
+			onLayoutUpdated: (positions) => updates.push(positions)
+		});
+		const { nodes, edges } = chain(2);
+		const current = new Map<string, XYPosition>([
+			['n0', { x: 1000, y: 1000 }],
+			['n1', { x: 2000, y: 1000 }]
+		]);
+
+		manager.flush(nodes, edges, current);
+		const target = manager.getTargetPositions();
+		const targetN0 = target.get('n0')!;
+		expect(targetN0).not.toEqual({ x: 1000, y: 1000 });
+
+		// First frame starts at the current position
+		expect(updates[0].get('n0')).toEqual({ x: 1000, y: 1000 });
+
+		await clock.advance(50);
+		const mid = updates[updates.length - 1].get('n0')!;
+		expect(mid.x).toBeLessThan(1000);
+		expect(mid.x).toBeGreaterThan(targetN0.x);
+
+		await clock.advance(60);
+		const final = updates[updates.length - 1];
+		expect(final.get('n0')).toEqual(targetN0);
+		expect(final.get('n1')).toEqual(target.get('n1'));
+		// Caller's map is untouched
+		expect(current.get('n0')).toEqual({ x: 1000, y: 1000 });
+		manager.destroy();
+	});
+
+	it('places brand-new nodes directly at their target and respects stored positions', () => {
+		const updates: Map<string, XYPosition>[] = [];
+		const manager = new StreamingLayoutManager({
+			clock: new ManualClock(0),
+			layoutOptions: { direction: 'LR', storedPositions: { n0: { x: 500, y: 500 } } },
+			onLayoutUpdated: (positions) => updates.push(positions)
+		});
+		const { nodes, edges } = chain(2);
+		manager.flush(nodes, edges, new Map([['n0', { x: 500, y: 500 }]]));
+		expect(updates).toHaveLength(1);
+		expect(updates[0].get('n0')).toEqual({ x: 500, y: 500 });
+		expect(updates[0].get('n1')!.x).toBeGreaterThan(500);
+		manager.destroy();
+	});
+});
+
+describe('Canvas - Clipboard validation & remapping', () => {
+	it('does not crash on a non-array edges payload', () => {
+		const raw = JSON.stringify({
+			version: 1,
+			nodes: [{ id: 'a', position: { x: 0, y: 0 }, data: {} }],
+			edges: 'not-an-array'
+		});
+		const parsed = parseCanvasClipboardData(raw);
+		expect(parsed).not.toBeNull();
+		expect(() => remapPastedNodes(parsed!.nodes, parsed!.edges)).not.toThrow();
+		expect(() => remapPastedNodes(parsed!.nodes, 'oops' as any)).not.toThrow();
+		expect(() => remapPastedNodes(parsed!.nodes, { length: 1 } as any)).not.toThrow();
+	});
+
+	it('rejects non-finite / non-numeric positions', () => {
+		expect(isValidCanvasNode({ id: 'a', position: { x: '1e3', y: 0 } })).toBe(false);
+		expect(isValidCanvasNode({ id: 'a', position: { x: NaN, y: 0 } })).toBe(false);
+		expect(isValidCanvasNode({ id: 'a', position: { x: 1, y: null } })).toBe(false);
+		expect(isValidCanvasNode({ id: 'a', position: { x: 1, y: 2 } })).toBe(true);
+
+		const raw = JSON.stringify({ version: 1, nodes: [{ id: 'a', position: { x: '1e3', y: 0 }, data: {} }] });
+		expect(parseCanvasClipboardData(raw)).toBeNull();
+
+		const { nodes } = remapPastedNodes([{ id: 'a', position: { x: '1e3', y: 0 }, data: {} } as any]);
+		expect(nodes).toHaveLength(0);
+	});
+
+	it('remaps parentId to the pasted parent and keeps relative child positions', () => {
+		let i = 0;
+		const nodes: CanvasNode[] = [
+			{ id: 'group', position: { x: 100, y: 100 }, data: {} },
+			{ id: 'child', parentId: 'group', position: { x: 10, y: 10 }, data: {} },
+			{ id: 'orphan', parentId: 'elsewhere', position: { x: 5, y: 5 }, data: {} }
+		];
+		const { nodes: pasted } = remapPastedNodes(nodes, [], { x: 30, y: 30 }, () => `new-${i++}`);
+
+		expect(pasted[0].id).toBe('new-0');
+		expect(pasted[0].position).toEqual({ x: 130, y: 130 });
+		expect(pasted[1].parentId).toBe('new-0');
+		expect(pasted[1].position).toEqual({ x: 10, y: 10 });
+		// Parent outside the paste is left untouched
+		expect(pasted[2].parentId).toBe('elsewhere');
+		expect(pasted[2].position).toEqual({ x: 35, y: 35 });
+	});
+});

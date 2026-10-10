@@ -152,3 +152,52 @@ describe('createCanvasClipboard & Clipboard Utilities', () => {
 		expect(onPasteText).toHaveBeenCalledWith('Sample text content');
 	});
 });
+
+describe('createCanvasClipboard paste validation', () => {
+	const pasteEvent = (payload: unknown) =>
+		({
+			target: { tagName: 'DIV' },
+			clipboardData: {
+				getData: (format: string) => (format === 'application/json' ? JSON.stringify(payload) : ''),
+				files: []
+			},
+			preventDefault: vi.fn()
+		}) as unknown as ClipboardEvent;
+
+	it('rejects non-numeric positions', () => {
+		expect(isValidCanvasNode({ id: 'a', position: { x: '1e3', y: 0 } })).toBe(false);
+		expect(isValidCanvasNode({ id: 'a', position: { x: Infinity, y: 0 } })).toBe(false);
+	});
+
+	it('pastes nodes even when edges is not an array', async () => {
+		const onPasteNodes = vi.fn();
+		const onPasteText = vi.fn();
+		const clipboard = createCanvasClipboard({ onPasteNodes, onPasteText });
+		const handled = await clipboard.handlePasteEvent(
+			pasteEvent({ version: 1, nodes: [{ id: 'a', position: { x: 0, y: 0 }, data: {} }], edges: 'nope' })
+		);
+		expect(handled).toBe(true);
+		expect(onPasteNodes).toHaveBeenCalledTimes(1);
+		expect(onPasteText).not.toHaveBeenCalled();
+		expect(onPasteNodes.mock.calls[0][1]).toBeUndefined();
+	});
+
+	it('remaps parentId of pasted children to the pasted parent', async () => {
+		const onPasteNodes = vi.fn();
+		const clipboard = createCanvasClipboard({ onPasteNodes });
+		await clipboard.handlePasteEvent(
+			pasteEvent({
+				version: 1,
+				nodes: [
+					{ id: 'group', position: { x: 100, y: 100 }, data: {} },
+					{ id: 'child', parentId: 'group', position: { x: 10, y: 10 }, data: {} }
+				]
+			})
+		);
+		const [nodes] = onPasteNodes.mock.calls[0];
+		expect(nodes[1].parentId).toBe(nodes[0].id);
+		expect(nodes[1].parentId).not.toBe('group');
+		expect(nodes[1].position).toEqual({ x: 10, y: 10 });
+		expect(nodes[0].position).toEqual({ x: 140, y: 140 });
+	});
+});

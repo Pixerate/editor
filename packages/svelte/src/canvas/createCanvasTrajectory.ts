@@ -1,4 +1,5 @@
 import { cubicOut } from 'svelte/easing';
+import { withStyleOpacity } from '@pixerate/editor/canvas';
 import type { XYPosition } from '@xyflow/svelte';
 import type {
 	CanvasNode,
@@ -114,20 +115,24 @@ export function createBezierTrajectory(
 }
 
 /**
- * Coordinates and animates multiple node transitions simultaneously with zero per-frame array allocations.
- * Directly mutates node positions and data (scale, opacity) in-place during the animation loop.
+ * Coordinates and animates multiple node transitions simultaneously.
+ *
+ * Input nodes are never mutated: every frame produces updated copies (position,
+ * `data.scale` / `data.opacity`, `style` opacity) which are passed to `onUpdate`
+ * (and finally `onComplete`) in the same order as `transitions`. Both CSS-string and
+ * object styles are supported. Merge the copies into your graph state by `id`.
  */
 export function runMultiNodeTransition<TNode extends CanvasNode = CanvasNode>(
 	transitions: NodeTransition<TNode>[],
 	options: {
 		defaultDuration?: number;
 		defaultEasing?: (t: number) => number;
-		onUpdate?: () => void;
-		onComplete?: () => void;
+		onUpdate?: (nodes: TNode[]) => void;
+		onComplete?: (nodes: TNode[]) => void;
 	} = {}
 ): () => void {
 	if (transitions.length === 0) {
-		options.onComplete?.();
+		options.onComplete?.([]);
 		return () => {};
 	}
 
@@ -145,6 +150,9 @@ export function runMultiNodeTransition<TNode extends CanvasNode = CanvasNode>(
 		delay: tr.delay ?? 0,
 		trajectory: tr.trajectory ?? linearTrajectory
 	}));
+
+	// Latest copy of every node; starts out as the untouched inputs.
+	const current: TNode[] = items.map((item) => item.node);
 
 	function frame() {
 		if (isCancelled) return;
@@ -166,36 +174,35 @@ export function runMultiNodeTransition<TNode extends CanvasNode = CanvasNode>(
 
 			const point = item.trajectory(item.from, item.to, progress, item.index, item.total);
 
-			// Direct in-place mutation avoids array reconstruction during RAF
-			item.node.position = { ...point.position };
+			const next = { ...item.node, position: { ...point.position } } as TNode;
 
 			if (point.scale !== undefined || point.opacity !== undefined) {
-				if (!item.node.data) {
-					item.node.data = {} as any;
-				}
+				const data: Record<string, any> = { ...(item.node.data ?? {}) };
 				if (point.scale !== undefined) {
-					(item.node.data as any).scale = point.scale;
+					data.scale = point.scale;
 				}
 				if (point.opacity !== undefined) {
-					(item.node.data as any).opacity = point.opacity;
-					const currentStyle = (item.node.style || '').replace(/opacity:\s*[^;]+;?/g, '').trim();
-					item.node.style = `${currentStyle ? currentStyle + '; ' : ''}opacity: ${point.opacity};`;
+					data.opacity = point.opacity;
+					(next as any).style = withStyleOpacity((item.node as any).style, point.opacity);
 				}
+				(next as any).data = data;
 			}
+
+			current[i] = next;
 
 			if (rawProgress < 1) {
 				allCompleted = false;
 			}
 		}
 
-		onUpdate?.();
+		onUpdate?.(current.slice());
 
 		if (!allCompleted) {
 			if (typeof requestAnimationFrame !== 'undefined') {
 				requestAnimationFrame(frame);
 			}
 		} else {
-			onComplete?.();
+			onComplete?.(current.slice());
 		}
 	}
 

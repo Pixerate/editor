@@ -24,6 +24,15 @@ export interface CanvasGraphTarget<
 }
 
 /**
+ * Replaces nodes in `base` with the same-id node from `updated` (transition frame copies).
+ */
+function mergeById<TNode extends CanvasNode>(base: TNode[], updated: TNode[]): TNode[] {
+	if (updated.length === 0) return [...base];
+	const byId = new Map(updated.map((n) => [n.id, n]));
+	return base.map((n) => byId.get(n.id) ?? n);
+}
+
+/**
  * React hook managing node explosion and collapse transitions with exact reversibility.
  */
 export function useCanvasExplosion<
@@ -112,8 +121,9 @@ export function useCanvasExplosion<
 			});
 
 			runMultiNodeTransition(transitions, {
-				onUpdate: () => setNodes([...mergedNodes]),
-				onComplete: options.onComplete
+				styleFormat: 'object',
+				onUpdate: (updated) => setNodes(mergeById(mergedNodes, updated)),
+				onComplete: () => options.onComplete?.()
 			});
 		},
 		[target]
@@ -163,7 +173,8 @@ export function useCanvasExplosion<
 			});
 
 			runMultiNodeTransition(transitions, {
-				onUpdate: () => setNodes([...nodes]),
+				styleFormat: 'object',
+				onUpdate: (updated) => setNodes(mergeById(nodes, updated)),
 				onComplete: () => {
 					// Clean up child nodes and edges
 					setNodes((prev) => prev.filter((n) => !childIdSet.has(n.id)));

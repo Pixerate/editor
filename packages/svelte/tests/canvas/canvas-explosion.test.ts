@@ -112,8 +112,10 @@ describe("Canvas Trajectory Math & Transition Runner", () => {
       { onComplete },
     );
 
-    expect(node.position).toEqual({ x: 100, y: 100 });
     expect(onComplete).toHaveBeenCalled();
+    expect(onComplete.mock.calls[0][0][0].position).toEqual({ x: 100, y: 100 });
+    // Input nodes are never mutated
+    expect(node.position).toEqual({ x: 0, y: 0 });
     cancel();
   });
 
@@ -129,20 +131,78 @@ describe("Canvas Trajectory Math & Transition Runner", () => {
       endOpacity: 1,
     });
 
-    const cancel = runMultiNodeTransition([
-      {
-        node,
-        from: { x: 0, y: 0 },
-        to: { x: 100, y: 100 },
-        trajectory,
-        duration: 0,
-      },
-    ]);
+    let result: CanvasNode | undefined;
+    const cancel = runMultiNodeTransition(
+      [
+        {
+          node,
+          from: { x: 0, y: 0 },
+          to: { x: 100, y: 100 },
+          trajectory,
+          duration: 0,
+        },
+      ],
+      { onComplete: ([n]) => (result = n) },
+    );
 
-    expect(node.position).toEqual({ x: 100, y: 100 });
-    expect((node.data as any).opacity).toBe(1);
-    expect(node.style).toContain("opacity: 1");
+    expect(result!.position).toEqual({ x: 100, y: 100 });
+    expect((result!.data as any).opacity).toBe(1);
+    expect(result!.style).toContain("opacity: 1");
+    expect(node.style).toBeUndefined();
     cancel();
+  });
+
+  it("supports object styles without throwing or mutating inputs", () => {
+    const node = {
+      id: "n1",
+      position: { x: 0, y: 0 },
+      data: {},
+      style: { color: "red", opacity: 0.2 },
+    } as unknown as CanvasNode;
+
+    let result: any;
+    expect(() =>
+      runMultiNodeTransition(
+        [
+          {
+            node,
+            from: { x: 0, y: 0 },
+            to: { x: 10, y: 10 },
+            trajectory: createFanOutTrajectory(),
+            duration: 0,
+          },
+        ],
+        { onComplete: ([n]) => (result = n) },
+      ),
+    ).not.toThrow();
+
+    expect(result.style).toEqual({ color: "red", opacity: 1 });
+    expect((node as any).style).toEqual({ color: "red", opacity: 0.2 });
+    expect(node.data).toEqual({});
+  });
+
+  it("replaces opacity in string styles without mutating inputs", () => {
+    const node: CanvasNode = {
+      id: "n1",
+      position: { x: 0, y: 0 },
+      data: {},
+      style: "color: red; opacity: 0.2;",
+    };
+    let result: any;
+    runMultiNodeTransition(
+      [
+        {
+          node,
+          from: { x: 0, y: 0 },
+          to: { x: 1, y: 1 },
+          trajectory: createFanOutTrajectory(),
+          duration: 0,
+        },
+      ],
+      { onComplete: ([n]) => (result = n) },
+    );
+    expect(result.style).toBe("color: red; opacity: 1;");
+    expect(node.style).toBe("color: red; opacity: 0.2;");
   });
 });
 

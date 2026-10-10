@@ -1,5 +1,6 @@
 import type {
 	CanvasNode,
+	CanvasNodeStyle,
 	FanOutTrajectoryOptions,
 	NodeTransition,
 	TrajectoryFunction,
@@ -118,20 +119,64 @@ export function createBezierTrajectory(
 import { realClock, type Clock } from './clock.js';
 
 /**
- * Coordinates and animates multiple node transitions simultaneously with zero per-frame array allocations.
+ * Returns a copy of `style` with its opacity set to `opacity`.
+ *
+ * Supports both CSS strings (`"color: red; opacity: 0.5;"`, used by SvelteFlow)
+ * and style objects (`{ color: 'red', opacity: 0.5 }`, used by React Flow / xyflow).
+ * When `style` is empty, `emptyFormat` decides which representation is produced.
+ * Never mutates the input.
+ */
+export function withStyleOpacity(
+	style: CanvasNodeStyle | undefined | null,
+	opacity: number,
+	emptyFormat: 'string' | 'object' = 'string'
+): CanvasNodeStyle {
+	if (style !== null && typeof style === 'object') {
+		return { ...style, opacity };
+	}
+	if (typeof style === 'string' && style.trim() !== '') {
+		const rest = style
+			.replace(/(^|;)\s*opacity\s*:\s*[^;]*;?/gi, '$1')
+			.trim()
+			.replace(/;+\s*$/, '')
+			.trim();
+		return `${rest ? rest + '; ' : ''}opacity: ${opacity};`;
+	}
+	return emptyFormat === 'object' ? { opacity } : `opacity: ${opacity};`;
+}
+
+export interface MultiNodeTransitionOptions<TNode extends CanvasNode = CanvasNode> {
+	defaultDuration?: number;
+	defaultEasing?: (t: number) => number;
+	clock?: Clock;
+	/**
+	 * Style representation to create for nodes that have no `style` yet when an opacity
+	 * is applied. Defaults to `'string'` (SvelteFlow); pass `'object'` for React Flow.
+	 * Existing styles always keep their representation.
+	 */
+	styleFormat?: 'string' | 'object';
+	/**
+	 * Called on every frame with updated copies of the transitioning nodes, in the same
+	 * order as the `transitions` array. Input nodes are never mutated.
+	 */
+	onUpdate?: (nodes: TNode[]) => void;
+	/** Called once all transitions finished, with the final node copies. */
+	onComplete?: (nodes: TNode[]) => void;
+}
+
+/**
+ * Coordinates and animates multiple node transitions simultaneously.
+ *
+ * The input nodes are treated as immutable: every frame produces updated copies
+ * (position, `data.scale` / `data.opacity`, and `style` opacity) which are handed to
+ * `onUpdate` and finally `onComplete`. Merge them into your node state by `id`.
  */
 export function runMultiNodeTransition<TNode extends CanvasNode = CanvasNode>(
 	transitions: NodeTransition<TNode>[],
-	options: {
-		defaultDuration?: number;
-		defaultEasing?: (t: number) => number;
-		clock?: Clock;
-		onUpdate?: () => void;
-		onComplete?: () => void;
-	} = {}
+	options: MultiNodeTransitionOptions<TNode> = {}
 ): () => void {
 	if (transitions.length === 0) {
-		options.onComplete?.();
+		options.onComplete?.([]);
 		return () => {};
 	}
 
@@ -139,6 +184,7 @@ export function runMultiNodeTransition<TNode extends CanvasNode = CanvasNode>(
 		defaultDuration = 400,
 		defaultEasing: easingFunc = defaultEasing,
 		clock = realClock,
+		styleFormat = 'string',
 		onUpdate,
 		onComplete
 	} = options;
@@ -155,6 +201,9 @@ export function runMultiNodeTransition<TNode extends CanvasNode = CanvasNode>(
 		delay: tr.delay ?? 0,
 		trajectory: tr.trajectory ?? linearTrajectory
 	}));
+
+	// Latest copy of every node; starts out as the untouched inputs.
+	const current: TNode[] = items.map((item) => item.node);
 
 	function frame() {
 		if (isCancelled) return;
@@ -177,33 +226,33 @@ export function runMultiNodeTransition<TNode extends CanvasNode = CanvasNode>(
 
 			const point = item.trajectory(item.from, item.to, progress, item.index, item.total);
 
-			item.node.position = { ...point.position };
+			const next: TNode = { ...item.node, position: { ...point.position } };
 
 			if (point.scale !== undefined || point.opacity !== undefined) {
-				if (!item.node.data) {
-					item.node.data = {} as any;
-				}
+				const data: Record<string, any> = { ...(item.node.data ?? {}) };
 				if (point.scale !== undefined) {
-					(item.node.data as any).scale = point.scale;
+					data.scale = point.scale;
 				}
 				if (point.opacity !== undefined) {
-					(item.node.data as any).opacity = point.opacity;
-					const currentStyle = (item.node.style || '').replace(/opacity:\s*[^;]+;?/g, '').trim();
-					item.node.style = `${currentStyle ? currentStyle + '; ' : ''}opacity: ${point.opacity};`;
+					data.opacity = point.opacity;
+					(next as CanvasNode).style = withStyleOpacity(item.node.style, point.opacity, styleFormat);
 				}
+				(next as CanvasNode).data = data;
 			}
+
+			current[i] = next;
 
 			if (rawProgress < 1) {
 				allCompleted = false;
 			}
 		}
 
-		onUpdate?.();
+		onUpdate?.(current.slice());
 
 		if (!allCompleted) {
 			clock.frame().then(frame);
 		} else {
-			onComplete?.();
+			onComplete?.(current.slice());
 		}
 	}
 

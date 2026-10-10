@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
 	planAgentCommand,
+	normalizeSide,
 	EDITOR_MCP_TOOLS,
 	MCP_TOOL_GET_EDITOR_STATE,
 	MCP_TOOL_EDIT_CANVAS,
@@ -145,3 +146,69 @@ describe('Agent MCP Tool Definitions', () => {
 	});
 });
 
+
+describe('Agent planner matches the MCP tool schema', () => {
+	const anchor: CanvasNode = { id: 'a', position: { x: 0, y: 0 }, width: 200, height: 60, data: {} };
+	const snapshot: EditorSnapshot = { canvas: { nodes: [anchor], edges: [] } };
+
+	const placed = (side: any) => {
+		const steps = planAgentCommand(
+			{ type: 'canvas:add_node', node: { id: 'b', data: {} }, nearNodeId: 'a', side },
+			snapshot
+		);
+		if (steps[0].type !== 'step:canvas_add_node') throw new Error('unexpected step');
+		return steps[0].node.position;
+	};
+
+	it('supports every side advertised by the schema', () => {
+		const sides = MCP_TOOL_EDIT_CANVAS.inputSchema.properties.side.enum;
+		expect(sides).toEqual(['top', 'right', 'bottom', 'left']);
+
+		expect(placed('top').y).toBeLessThan(0);
+		expect(placed('bottom').y).toBeGreaterThan(60);
+		expect(placed('left').x).toBeLessThan(0);
+		expect(placed('right').x).toBeGreaterThan(200);
+		// Planner vocabulary still works
+		expect(placed('above')).toEqual(placed('top'));
+		expect(placed('below')).toEqual(placed('bottom'));
+	});
+
+	it('normalizeSide maps schema and planner sides', () => {
+		expect(normalizeSide('top')).toBe('above');
+		expect(normalizeSide('bottom')).toBe('below');
+		expect(normalizeSide('left')).toBe('left');
+		expect(normalizeSide(undefined)).toBe('right');
+	});
+
+	it('defaults canvas:layout incremental to true (preserves manual positions)', () => {
+		const nodes: CanvasNode[] = [
+			{ id: '1', position: { x: 500, y: 200 }, data: {} },
+			{ id: '2', position: { x: 0, y: 0 }, data: {} }
+		];
+		const edges: CanvasEdge[] = [{ id: 'e1', source: '1', target: '2' }];
+
+		const steps = planAgentCommand({ type: 'canvas:layout' }, { canvas: { nodes, edges } });
+		if (steps[0].type !== 'step:canvas_move_nodes') throw new Error('unexpected step');
+		expect(steps[0].positions['1']).toEqual({ x: 500, y: 200 });
+
+		const full = planAgentCommand(
+			{ type: 'canvas:layout', incremental: false },
+			{ canvas: { nodes, edges } }
+		);
+		if (full[0].type !== 'step:canvas_move_nodes') throw new Error('unexpected step');
+		expect(full[0].positions['1']).not.toEqual({ x: 500, y: 200 });
+	});
+
+	it('does not add an edge when nearNodeId does not exist', () => {
+		const steps = planAgentCommand(
+			{ type: 'canvas:add_node', node: { id: 'b', data: {} }, nearNodeId: 'ghost', side: 'right' },
+			snapshot
+		);
+		expect(steps).toHaveLength(1);
+		expect(steps[0].type).toBe('step:canvas_add_node');
+		if (steps[0].type === 'step:canvas_add_node') {
+			// Falls back to default placement beside the last node
+			expect(steps[0].node.position.x).toBeGreaterThan(200);
+		}
+	});
+});
