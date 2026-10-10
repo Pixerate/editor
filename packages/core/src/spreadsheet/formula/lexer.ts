@@ -2,6 +2,7 @@ export type FormulaTokenType =
   | 'NUMBER'
   | 'STRING'
   | 'BOOLEAN'
+  | 'ERROR'
   | 'CELL_REF'
   | 'RANGE'
   | 'PROPERTY_REF'
@@ -68,14 +69,26 @@ export function tokenizeFormula(formula: string): FormulaToken[] {
         str += input[i];
         i++;
       }
-      if (i < input.length && input[i] === quote) {
-        i++; // skip closing quote
+      if (i >= input.length) {
+        throw new Error(`Unterminated string starting at position ${start + offset}`);
       }
+      i++; // skip closing quote
       tokens.push({
         type: 'STRING',
         value: str,
         position: start + offset
       });
+      continue;
+    }
+
+    // Error literal, e.g. #REF! left behind by deleting a referenced row
+    if (char === '#') {
+      const match = /^#(?:REF!|DIV\/0!|VALUE!|NAME\?|N\/A|NUM!|CYCLE!|ERROR!)/.exec(input.slice(i));
+      if (!match) {
+        throw new Error(`Unexpected character '#' at position ${i + offset}`);
+      }
+      tokens.push({ type: 'ERROR', value: match[0], position: i + offset });
+      i += match[0].length;
       continue;
     }
 
@@ -195,8 +208,7 @@ export function tokenizeFormula(formula: string): FormulaToken[] {
       continue;
     }
 
-    // Skip unknown character
-    i++;
+    throw new Error(`Unexpected character '${char}' at position ${i + offset}`);
   }
 
   tokens.push({ type: 'EOF', value: '', position: input.length + offset });
