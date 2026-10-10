@@ -1,4 +1,21 @@
-import type { CropBox, ImageEditorState, ImagePoint } from './types';
+import type { Annotation, CropBox, ImageEditorState, ImagePoint, ImageTransform } from './types';
+
+/*
+ * Coordinate spaces
+ * -----------------
+ * The crop box and every annotation are stored in ONE canonical space: natural image
+ * pixels of the current source image (origin top-left of the un-rotated, un-flipped,
+ * un-cropped image). Rotation, flips, crop and the viewport fit/zoom/pan are pure view
+ * transforms applied on top of that space by a single forward mapping:
+ *
+ *   target = origin + scale * R(angle) * F(flipH, flipV) * (image - regionCenter)
+ *
+ * where `regionCenter` is the centre of the visible region (the crop box, or the whole
+ * image while the crop tool is active). `projectImagePoint` / `unprojectCanvasPoint`
+ * implement the mapping and its exact inverse, and `applyImageProjectionToContext`
+ * applies the very same transform to a 2D context, so rendering, hit-testing, viewport
+ * metrics, export and mask generation cannot drift apart.
+ */
 
 export type CropHandle = 'nw' | 'ne' | 'se' | 'sw' | 'n' | 's' | 'e' | 'w' | 'inside' | null;
 
@@ -18,7 +35,187 @@ export interface ViewportMetrics {
 }
 
 /**
+ * A complete description of the natural-image -> target mapping (see module comment).
+ */
+export interface ImageProjection {
+  /** Visible region in natural image pixels (crop box or full image). */
+  region: CropBox;
+  /** Rotation in degrees, normalised to [0, 360). */
+  angle: number;
+  flipH: boolean;
+  flipV: boolean;
+  /** Uniform scale from image pixels to target pixels. */
+  scale: number;
+  /** Target-space point that the centre of `region` maps to. */
+  originX: number;
+  originY: number;
+}
+
+/** Normalises any rotation in degrees to [0, 360). */
+export function normalizeAngle(degrees: number): number {
+  const a = ((degrees % 360) + 360) % 360;
+  return a === 360 ? 0 : a;
+}
+
+function cosSin(angle: number): [number, number] {
+  // Exact values for quarter turns so 90deg steps never accumulate float noise.
+  switch (angle) {
+    case 0:
+      return [1, 0];
+    case 90:
+      return [0, 1];
+    case 180:
+      return [-1, 0];
+    case 270:
+      return [0, -1];
+    default: {
+      const rad = (angle * Math.PI) / 180;
+      return [Math.cos(rad), Math.sin(rad)];
+    }
+  }
+}
+
+/** Whether the rotation swaps the displayed width and height. */
+export function isQuarterTurnSwapped(transform: Pick<ImageTransform, 'rotate'>): boolean {
+  const angle = normalizeAngle(transform.rotate);
+  return angle === 90 || angle === 270;
+}
+
+/** Size of a region once rotated (bounding box for arbitrary angles). */
+export function getRotatedSize(
+  width: number,
+  height: number,
+  transform: Pick<ImageTransform, 'rotate'>
+): { width: number; height: number } {
+  const [c, s] = cosSin(normalizeAngle(transform.rotate));
+  return {
+    width: Math.abs(width * c) + Math.abs(height * s),
+    height: Math.abs(width * s) + Math.abs(height * c),
+  };
+}
+
+/** Maps a natural-image point to target space. */
+export function projectImagePoint(pt: ImagePoint, p: ImageProjection): ImagePoint {
+  const [c, s] = cosSin(p.angle);
+  let x = pt.x - (p.region.x + p.region.width / 2);
+  let y = pt.y - (p.region.y + p.region.height / 2);
+  if (p.flipH) x = -x;
+  if (p.flipV) y = -y;
+  const rx = x * c - y * s;
+  const ry = x * s + y * c;
+  return { x: p.originX + rx * p.scale, y: p.originY + ry * p.scale };
+}
+
+/** Exact inverse of {@link projectImagePoint}. */
+export function unprojectCanvasPoint(pt: ImagePoint, p: ImageProjection): ImagePoint {
+  const [c, s] = cosSin(p.angle);
+  const rx = (pt.x - p.originX) / p.scale;
+  const ry = (pt.y - p.originY) / p.scale;
+  let x = rx * c + ry * s;
+  let y = -rx * s + ry * c;
+  if (p.flipH) x = -x;
+  if (p.flipV) y = -y;
+  return { x: x + p.region.x + p.region.width / 2, y: y + p.region.y + p.region.height / 2 };
+}
+
+/**
+ * Applies the projection to a 2D context so that subsequent drawing in natural image
+ * pixels lands exactly where {@link projectImagePoint} says it does.
+ */
+export function applyImageProjectionToContext(
+  ctx: Pick<CanvasRenderingContext2D, 'translate' | 'scale' | 'rotate'>,
+  p: ImageProjection
+): void {
+  ctx.translate(p.originX, p.originY);
+  ctx.scale(p.scale, p.scale);
+  if (p.angle !== 0) ctx.rotate((p.angle * Math.PI) / 180);
+  if (p.flipH || p.flipV) ctx.scale(p.flipH ? -1 : 1, p.flipV ? -1 : 1);
+  ctx.translate(-(p.region.x + p.region.width / 2), -(p.region.y + p.region.height / 2));
+}
+
+/** Projects an image-space rectangle and returns its target-space bounding box. */
+export function projectImageRect(
+  rect: CropBox,
+  p: ImageProjection
+): { x: number; y: number; width: number; height: number } {
+  const corners = [
+    projectImagePoint({ x: rect.x, y: rect.y }, p),
+    projectImagePoint({ x: rect.x + rect.width, y: rect.y }, p),
+    projectImagePoint({ x: rect.x, y: rect.y + rect.height }, p),
+    projectImagePoint({ x: rect.x + rect.width, y: rect.y + rect.height }, p),
+  ];
+  const xs = corners.map((c) => c.x);
+  const ys = corners.map((c) => c.y);
+  const minX = Math.min(...xs);
+  const minY = Math.min(...ys);
+  return { x: minX, y: minY, width: Math.max(...xs) - minX, height: Math.max(...ys) - minY };
+}
+
+/** Clamps a crop box to the image bounds. */
+export function clampCropToImage(crop: CropBox, width: number, height: number): CropBox {
+  const x = Math.max(0, Math.min(width - 1, crop.x));
+  const y = Math.max(0, Math.min(height - 1, crop.y));
+  return {
+    x,
+    y,
+    width: Math.max(1, Math.min(width - x, crop.width)),
+    height: Math.max(1, Math.min(height - y, crop.height)),
+  };
+}
+
+function resolveViewport(
+  state: ImageEditorState,
+  vpWidth: number,
+  vpHeight: number,
+  isActivelyCropping: boolean,
+  cropOverride?: CropBox | null
+) {
+  const { imageDimensions, crop: stateCrop, transform, zoom, pan } = state;
+  const naturalWidth = imageDimensions.width || 800;
+  const naturalHeight = imageDimensions.height || 600;
+  const full: CropBox = { x: 0, y: 0, width: naturalWidth, height: naturalHeight };
+  const activeCrop =
+    cropOverride !== undefined && cropOverride !== null
+      ? cropOverride
+      : (stateCrop ?? (isActivelyCropping ? full : null));
+
+  const region =
+    !isActivelyCropping && activeCrop ? clampCropToImage(activeCrop, naturalWidth, naturalHeight) : full;
+  const { width: baseW, height: baseH } = getRotatedSize(region.width, region.height, transform);
+
+  const fitScale = Math.min((vpWidth * 0.85) / baseW, (vpHeight * 0.85) / baseH, 1);
+  const centerX = vpWidth / 2 + pan.x;
+  const centerY = vpHeight / 2 + pan.y;
+
+  const projection: ImageProjection = {
+    region,
+    angle: normalizeAngle(transform.rotate),
+    flipH: transform.flipH,
+    flipV: transform.flipV,
+    scale: zoom * fitScale,
+    originX: centerX,
+    originY: centerY,
+  };
+
+  return { activeCrop, baseW, baseH, fitScale, centerX, centerY, projection };
+}
+
+/**
+ * Returns the natural-image -> canvas projection used by the interactive viewport.
+ */
+export function getViewportProjection(
+  state: ImageEditorState,
+  vpWidth: number,
+  vpHeight: number,
+  isActivelyCropping = false,
+  cropOverride?: CropBox | null
+): ImageProjection {
+  return resolveViewport(state, vpWidth, vpHeight, isActivelyCropping, cropOverride).projection;
+}
+
+/**
  * Calculates current viewport projection metrics for canvas <-> image coordinate mapping.
+ * `cropRect` is the on-screen (rotated/flipped) rectangle of the crop box.
  */
 export function getViewportMetrics(
   state: ImageEditorState,
@@ -27,29 +224,17 @@ export function getViewportMetrics(
   isActivelyCropping = false,
   cropOverride?: CropBox | null
 ): ViewportMetrics {
-  const { imageDimensions, crop: stateCrop, transform, zoom, pan } = state;
-  const naturalWidth = imageDimensions.width || 800;
-  const naturalHeight = imageDimensions.height || 600;
-  const activeCrop =
-    (cropOverride !== undefined && cropOverride !== null)
-      ? cropOverride
-      : (stateCrop ?? (isActivelyCropping ? { x: 0, y: 0, width: naturalWidth, height: naturalHeight } : null));
+  const { zoom } = state;
+  const { activeCrop, baseW, baseH, fitScale, centerX, centerY, projection } = resolveViewport(
+    state,
+    vpWidth,
+    vpHeight,
+    isActivelyCropping,
+    cropOverride
+  );
 
-  const cropW = (!isActivelyCropping && activeCrop) ? activeCrop.width : naturalWidth;
-  const cropH = (!isActivelyCropping && activeCrop) ? activeCrop.height : naturalHeight;
-
-  const angle = ((transform.rotate % 360) + 360) % 360;
-  const isSwapped = angle === 90 || angle === 270;
-  const baseW = isSwapped ? cropH : cropW;
-  const baseH = isSwapped ? cropW : cropH;
-
-  const fitScale = Math.min((vpWidth * 0.85) / baseW, (vpHeight * 0.85) / baseH, 1);
   const renderW = baseW * fitScale;
   const renderH = baseH * fitScale;
-  const totalScale = zoom * fitScale;
-
-  const centerX = vpWidth / 2 + pan.x;
-  const centerY = vpHeight / 2 + pan.y;
 
   const imageRect = {
     x: centerX - (renderW * zoom) / 2,
@@ -58,20 +243,7 @@ export function getViewportMetrics(
     height: renderH * zoom,
   };
 
-  let cropRect: { x: number; y: number; width: number; height: number } | null = null;
-  if (activeCrop) {
-    const startX = -renderW / 2 + (activeCrop.x / naturalWidth) * renderW;
-    const startY = -renderH / 2 + (activeCrop.y / naturalHeight) * renderH;
-    const cropBoxW = (activeCrop.width / naturalWidth) * renderW;
-    const cropBoxH = (activeCrop.height / naturalHeight) * renderH;
-
-    cropRect = {
-      x: centerX + zoom * startX,
-      y: centerY + zoom * startY,
-      width: zoom * cropBoxW,
-      height: zoom * cropBoxH,
-    };
-  }
+  const cropRect = activeCrop ? projectImageRect(activeCrop, projection) : null;
 
   return {
     vpWidth,
@@ -83,14 +255,15 @@ export function getViewportMetrics(
     fitScale,
     renderW,
     renderH,
-    totalScale,
+    totalScale: zoom * fitScale,
     imageRect,
     cropRect,
   };
 }
 
 /**
- * Converts a point on the canvas (in internal canvas pixel space) to image/annotation pixel space.
+ * Converts a point on the canvas (in internal canvas pixel space) to natural image pixel
+ * space, accounting for zoom, pan, fit scale, crop offset, rotation and flips.
  */
 export function canvasToImagePoint(
   canvasPt: ImagePoint,
@@ -99,18 +272,12 @@ export function canvasToImagePoint(
   vpHeight: number,
   isActivelyCropping = false
 ): ImagePoint {
-  const metrics = getViewportMetrics(state, vpWidth, vpHeight, isActivelyCropping);
-  const unzoomedX = (canvasPt.x - metrics.centerX) / state.zoom;
-  const unzoomedY = (canvasPt.y - metrics.centerY) / state.zoom;
-
-  const x = (unzoomedX + metrics.renderW / 2) / metrics.fitScale;
-  const y = (unzoomedY + metrics.renderH / 2) / metrics.fitScale;
-
-  return { x: Math.round(x), y: Math.round(y) };
+  return unprojectCanvasPoint(canvasPt, getViewportProjection(state, vpWidth, vpHeight, isActivelyCropping));
 }
 
 /**
- * Converts a point in image/annotation pixel space to internal canvas pixel space.
+ * Converts a point in natural image pixel space to internal canvas pixel space.
+ * Exact inverse of {@link canvasToImagePoint}.
  */
 export function imageToCanvasPoint(
   imgPt: ImagePoint,
@@ -119,18 +286,54 @@ export function imageToCanvasPoint(
   vpHeight: number,
   isActivelyCropping = false
 ): ImagePoint {
-  const metrics = getViewportMetrics(state, vpWidth, vpHeight, isActivelyCropping);
-  const unzoomedX = (imgPt.x - metrics.baseW / 2) * metrics.fitScale;
-  const unzoomedY = (imgPt.y - metrics.baseH / 2) * metrics.fitScale;
+  return projectImagePoint(imgPt, getViewportProjection(state, vpWidth, vpHeight, isActivelyCropping));
+}
 
-  const canvasX = metrics.centerX + unzoomedX * state.zoom;
-  const canvasY = metrics.centerY + unzoomedY * state.zoom;
+const HANDLE_VECTORS: Record<Exclude<CropHandle, 'inside' | null>, [number, number]> = {
+  nw: [-1, -1],
+  n: [0, -1],
+  ne: [1, -1],
+  e: [1, 0],
+  se: [1, 1],
+  s: [0, 1],
+  sw: [-1, 1],
+  w: [-1, 0],
+};
 
-  return { x: Math.round(canvasX), y: Math.round(canvasY) };
+function vectorToHandle(x: number, y: number): CropHandle {
+  const vx = Math.abs(x) < 0.38 ? 0 : Math.sign(x);
+  const vy = Math.abs(y) < 0.38 ? 0 : Math.sign(y);
+  for (const [name, [hx, hy]] of Object.entries(HANDLE_VECTORS)) {
+    if (hx === vx && hy === vy) return name as CropHandle;
+  }
+  return null;
+}
+
+/**
+ * Converts a crop handle in screen orientation to the equivalent edge/corner of the crop
+ * box in natural image space, or the reverse with `toScreen = true`.
+ */
+export function mapCropHandle(handle: CropHandle, transform: ImageTransform, toScreen = false): CropHandle {
+  if (handle === null || handle === 'inside') return handle;
+  const [hx, hy] = HANDLE_VECTORS[handle];
+  const [c, s] = cosSin(normalizeAngle(transform.rotate));
+  const fx = transform.flipH ? -1 : 1;
+  const fy = transform.flipV ? -1 : 1;
+  if (toScreen) {
+    const x = hx * fx;
+    const y = hy * fy;
+    return vectorToHandle(x * c - y * s, x * s + y * c);
+  }
+  const x = hx * c + hy * s;
+  const y = -hx * s + hy * c;
+  return vectorToHandle(x * fx, y * fy);
 }
 
 /**
  * Hit-tests the crop box and its corner/edge handles given a canvas point.
+ * The returned handle names the edge/corner of the crop box in natural image space
+ * (what {@link calculateCropDrag} expects); use `getCropCursor(handle, state.transform)`
+ * to obtain the matching on-screen cursor.
  */
 export function hitTestCrop(
   canvasPt: ImagePoint,
@@ -143,7 +346,16 @@ export function hitTestCrop(
   const metrics = getViewportMetrics(state, vpWidth, vpHeight, true, cropOverride);
   if (!metrics.cropRect) return null;
 
-  const { x, y, width: w, height: h } = metrics.cropRect;
+  const screenHandle = hitTestCropRect(canvasPt, metrics.cropRect, handleThreshold);
+  return mapCropHandle(screenHandle, state.transform);
+}
+
+function hitTestCropRect(
+  canvasPt: ImagePoint,
+  rect: { x: number; y: number; width: number; height: number },
+  handleThreshold: number
+): CropHandle {
+  const { x, y, width: w, height: h } = rect;
   const px = canvasPt.x;
   const py = canvasPt.y;
 
@@ -174,10 +386,13 @@ export function hitTestCrop(
 }
 
 /**
- * Returns CSS cursor style corresponding to a crop handle.
+ * Returns CSS cursor style corresponding to a crop handle. Pass the current transform when
+ * the handle comes from {@link hitTestCrop} (image space) so the cursor matches the
+ * on-screen orientation under rotation/flip.
  */
-export function getCropCursor(handle: CropHandle): string {
-  switch (handle) {
+export function getCropCursor(handle: CropHandle, transform?: ImageTransform): string {
+  const screenHandle = transform ? mapCropHandle(handle, transform, true) : handle;
+  switch (screenHandle) {
     case 'nw':
     case 'se':
       return 'nwse-resize';
@@ -207,8 +422,13 @@ export function calculateCropDrag(
   currentImgPt: ImagePoint,
   imgWidth: number,
   imgHeight: number,
-  aspectRatio?: number | null
+  aspectRatio?: number | null,
+  transform?: ImageTransform
 ): CropBox {
+  // `aspectRatio` is the on-screen ratio; under a quarter turn it is inverted in image space.
+  if (aspectRatio && transform && isQuarterTurnSwapped(transform)) {
+    aspectRatio = 1 / aspectRatio;
+  }
   const dx = currentImgPt.x - startImgPt.x;
   const dy = currentImgPt.y - startImgPt.y;
 
@@ -281,16 +501,22 @@ export function calculateCropDrag(
 /**
  * Calculates bounding box of an annotation.
  */
-export function getAnnotationBounds(ann: import('./types').Annotation): { x: number; y: number; width: number; height: number } {
+export function getAnnotationBounds(ann: Annotation): { x: number; y: number; width: number; height: number } {
   switch (ann.type) {
     case 'rect':
-      return { x: ann.x, y: ann.y, width: ann.width, height: ann.height };
+    case 'image':
+      return {
+        x: Math.min(ann.x, ann.x + ann.width),
+        y: Math.min(ann.y, ann.y + ann.height),
+        width: Math.abs(ann.width),
+        height: Math.abs(ann.height),
+      };
     case 'circle':
       return {
-        x: ann.x - ann.radiusX,
-        y: ann.y - ann.radiusY,
-        width: ann.radiusX * 2,
-        height: ann.radiusY * 2,
+        x: ann.x - Math.abs(ann.radiusX),
+        y: ann.y - Math.abs(ann.radiusY),
+        width: Math.abs(ann.radiusX) * 2,
+        height: Math.abs(ann.radiusY) * 2,
       };
     case 'arrow':
     case 'line': {
@@ -324,15 +550,13 @@ export function getAnnotationBounds(ann: import('./types').Annotation): { x: num
         width: ann.text.length * ann.fontSize * 0.6,
         height: ann.fontSize * 1.2,
       };
-    case 'image':
-      return { x: ann.x, y: ann.y, width: ann.width, height: ann.height };
   }
 }
 
 /**
  * Hit tests if a point in image space is within an annotation's bounds.
  */
-export function hitTestAnnotation(imgPt: ImagePoint, ann: import('./types').Annotation, padding = 10): boolean {
+export function hitTestAnnotation(imgPt: ImagePoint, ann: Annotation, padding = 10): boolean {
   const b = getAnnotationBounds(ann);
   return (
     imgPt.x >= b.x - padding &&

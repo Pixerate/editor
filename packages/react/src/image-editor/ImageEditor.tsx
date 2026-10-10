@@ -73,7 +73,9 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
     setAiSuccess(null);
     setIsRemovingBg(true);
     try {
-      const imageDataUrl = await editor.toDataURL(exportOptions);
+      // AI hooks work on the untransformed source image (natural pixels); crop, rotation,
+      // adjustments and annotations stay non-destructive and are re-applied on top.
+      const imageDataUrl = await editor.toSourceDataURL();
       const result = await effectiveOnRemoveBg({ imageDataUrl });
       if (typeof result === 'string') {
         await editor.applyBackgroundRemovedImage(result);
@@ -101,7 +103,8 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
     setAiSuccess(null);
     setIsInpainting(true);
     try {
-      const imageDataUrl = await editor.toDataURL(exportOptions);
+      // Source image and mask share natural image space so they line up exactly.
+      const imageDataUrl = await editor.toSourceDataURL();
       const maskDataUrl = await editor.toMaskDataURL({
         useAnnotations: inpaintMaskMode === 'annotations',
         useCrop: inpaintMaskMode === 'crop',
@@ -330,7 +333,8 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
             currentImgPt,
             state.imageDimensions.width,
             state.imageDimensions.height,
-            activeCropRatio
+            activeCropRatio,
+            state.transform
           );
         }
 
@@ -344,7 +348,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
           height: state.imageDimensions.height,
         };
         const handle = hitTestCrop(canvasPt, state, canvas.width, canvas.height, 14, activeCrop);
-        canvas.style.cursor = getCropCursor(handle);
+        canvas.style.cursor = getCropCursor(handle, state.transform);
       }
       return;
     }

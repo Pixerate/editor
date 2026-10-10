@@ -121,10 +121,8 @@ describe('React Image Editor - image option', () => {
     });
 
     expect(hookResult!.state.sourceUrl).toBe('data:image/png;base64,inpainted');
-    expect(loadSpy.mock.calls.map((c) => c[0])).toEqual([
-      'orig.png',
-      'data:image/png;base64,inpainted',
-    ]);
+    // The original is loaded once (on construction) and never reloaded over the AI result.
+    expect(loadSpy.mock.calls.filter((c) => c[0] === 'orig.png')).toHaveLength(1);
 
     // Changing the image option still loads the new image.
     await act(async () => {

@@ -829,3 +829,365 @@ describe('ImageEditor Geometry & Interactive Transformations', () => {
 });
 
 
+
+// ---------------------------------------------------------------------------
+// Canonical coordinate space (natural image pixels) under rotate / flip / crop
+// ---------------------------------------------------------------------------
+
+type Call = { name: string; args: any[]; fillStyle?: unknown; strokeStyle?: unknown };
+
+function makeRecordingCtx(overrides: Record<string, unknown> = {}) {
+  const calls: Call[] = [];
+  const ctx: any = {
+    fillStyle: '#000000',
+    strokeStyle: '#000000',
+    lineWidth: 1,
+    globalAlpha: 1,
+  };
+  const methods = [
+    'clearRect', 'save', 'restore', 'translate', 'scale', 'rotate', 'drawImage', 'beginPath',
+    'stroke', 'fill', 'fillRect', 'strokeRect', 'moveTo', 'lineTo', 'rect', 'clip', 'closePath',
+    'fillText', 'setLineDash', 'putImageData', 'arc',
+  ];
+  for (const m of methods) {
+    ctx[m] = (...args: any[]) => {
+      calls.push({ name: m, args, fillStyle: ctx.fillStyle, strokeStyle: ctx.strokeStyle });
+    };
+  }
+  ctx.ellipse = (...args: any[]) => {
+    // Mirror the real canvas: negative radii throw IndexSizeError.
+    if (args[2] < 0 || args[3] < 0) throw new Error('IndexSizeError: negative radius');
+    calls.push({ name: 'ellipse', args, fillStyle: ctx.fillStyle, strokeStyle: ctx.strokeStyle });
+  };
+  Object.assign(ctx, overrides);
+  return { ctx, calls };
+}
+
+function fakeImage(src: string, width: number, height: number) {
+  return { src, width, height, naturalWidth: width, naturalHeight: height, complete: true } as unknown as HTMLImageElement;
+}
+
+describe('Image editor geometry - canonical natural-image space', () => {
+  const VP = 2000; // large viewport so fitScale === 1 for an 800x600 image
+  const rotations = [0, 90, 180, 270];
+  const flips = [
+    { flipH: false, flipV: false },
+    { flipH: true, flipV: false },
+    { flipH: false, flipV: true },
+    { flipH: true, flipV: true },
+  ];
+  const crops = [null, { x: 100, y: 50, width: 400, height: 300 }];
+
+  function makeState(rotate: number, flipH: boolean, flipV: boolean, crop: any) {
+    const controller = new ImageEditorController({ initialState: { transform: { rotate, flipH, flipV }, crop } });
+    controller.setZoom(1.25);
+    controller.setPan({ x: 13, y: -7 });
+    return controller.getState();
+  }
+
+  for (const rotate of rotations) {
+    for (const { flipH, flipV } of flips) {
+      for (const crop of crops) {
+        for (const active of [false, true]) {
+          it(`round-trips points at ${rotate}deg flipH=${flipH} flipV=${flipV} crop=${!!crop} cropping=${active}`, () => {
+            const state = makeState(rotate, flipH, flipV, crop);
+            const imgPts = [
+              { x: 0, y: 0 },
+              { x: 123.25, y: 456.5 },
+              { x: 800, y: 600 },
+              { x: 37.5, y: 599 },
+            ];
+            for (const pt of imgPts) {
+              const c = imageToCanvasPoint(pt, state, 1024, 768, active);
+              const back = canvasToImagePoint(c, state, 1024, 768, active);
+              expect(back.x).toBeCloseTo(pt.x, 6);
+              expect(back.y).toBeCloseTo(pt.y, 6);
+            }
+            const canvasPt = { x: 311.5, y: 222.25 };
+            const img = canvasToImagePoint(canvasPt, state, 1024, 768, active);
+            const again = imageToCanvasPoint(img, state, 1024, 768, active);
+            expect(again.x).toBeCloseTo(canvasPt.x, 6);
+            expect(again.y).toBeCloseTo(canvasPt.y, 6);
+          });
+        }
+
+        it(`maps the visible region's top-left to the right screen corner at ${rotate}deg flipH=${flipH} flipV=${flipV} crop=${!!crop}`, () => {
+          const controller = new ImageEditorController({ initialState: { transform: { rotate, flipH, flipV }, crop } });
+          const state = controller.getState();
+          const m = getViewportMetrics(state, VP, VP, false);
+          const r = m.imageRect;
+          const corners = [
+            { x: r.x, y: r.y }, // TL
+            { x: r.x + r.width, y: r.y }, // TR
+            { x: r.x + r.width, y: r.y + r.height }, // BR
+            { x: r.x, y: r.y + r.height }, // BL
+          ];
+          // Flip happens in image space first, then clockwise quarter turns.
+          const start = flipH && flipV ? 2 : flipH ? 1 : flipV ? 3 : 0;
+          const expected = corners[(start + rotate / 90) % 4];
+          const origin = crop ? { x: crop.x, y: crop.y } : { x: 0, y: 0 };
+          const actual = imageToCanvasPoint(origin, state, VP, VP, false);
+          expect(actual.x).toBeCloseTo(expected.x, 6);
+          expect(actual.y).toBeCloseTo(expected.y, 6);
+        });
+      }
+    }
+  }
+
+  it('moves the crop the opposite way in image space when dragging on a flipped image', () => {
+    const controller = new ImageEditorController({ initialState: { transform: { rotate: 0, flipH: true, flipV: false } } });
+    const state = controller.getState();
+    const a = canvasToImagePoint({ x: 500, y: 500 }, state, 1000, 1000, true);
+    const b = canvasToImagePoint({ x: 510, y: 500 }, state, 1000, 1000, true);
+    expect(b.x - a.x).toBeLessThan(0);
+    expect(b.y - a.y).toBeCloseTo(0, 6);
+  });
+
+  it('draws a left-half crop at 90deg as a wide strip across the top (crop overlay rect)', () => {
+    const controller = new ImageEditorController({ initialState: { transform: { rotate: 90, flipH: false, flipV: false } } });
+    const crop = { x: 0, y: 0, width: 400, height: 600 };
+    controller.setCrop(crop);
+    const state = controller.getState();
+    const m = getViewportMetrics(state, VP, VP, true, crop);
+    // Rotated base is 600x800 centred at (1000, 1000): x 700..1300, y 600..1400.
+    expect(m.cropRect!.x).toBeCloseTo(700, 6);
+    expect(m.cropRect!.y).toBeCloseTo(600, 6);
+    expect(m.cropRect!.width).toBeCloseTo(600, 6);
+    expect(m.cropRect!.height).toBeCloseTo(400, 6);
+  });
+
+  it('renderer draws the crop border at the projected rect under 90deg rotation', async () => {
+    const renderer = new ImageEditorRenderer();
+    const controller = new ImageEditorController({ initialState: { transform: { rotate: 90, flipH: false, flipV: false } } });
+    controller.setCrop({ x: 0, y: 0, width: 400, height: 600 });
+    const { ctx, calls } = makeRecordingCtx();
+    const target = { width: 0, height: 0, getContext: () => ctx } as unknown as HTMLCanvasElement;
+    const source = fakeImage('', 800, 600);
+    await renderer.renderToCanvas(target, source, controller.getState(), {
+      viewportWidth: VP,
+      viewportHeight: VP,
+      showCropOverlay: true,
+    });
+    const border = calls.find((c) => c.name === 'strokeRect')!;
+    expect(border.args[2]).toBeCloseTo(600, 6);
+    expect(border.args[3]).toBeCloseTo(400, 6);
+    expect(border.args[0]).toBeCloseTo(700, 6);
+    expect(border.args[1]).toBeCloseTo(600, 6);
+  });
+
+  it('hit-tests crop handles in screen orientation and reports image-space handles', () => {
+    const crop = { x: 200, y: 150, width: 400, height: 300 };
+    const flipped = new ImageEditorController({ initialState: { transform: { rotate: 0, flipH: true, flipV: false }, crop } }).getState();
+    const mf = getViewportMetrics(flipped, VP, VP, true);
+    const leftMid = { x: mf.cropRect!.x, y: mf.cropRect!.y + mf.cropRect!.height / 2 };
+    // The left edge on screen is the crop's right ('e') edge in the mirrored image.
+    expect(hitTestCrop(leftMid, flipped, VP, VP)).toBe('e');
+    expect(getCropCursor('e', flipped.transform)).toBe('ew-resize');
+
+    const rotated = new ImageEditorController({ initialState: { transform: { rotate: 90, flipH: false, flipV: false }, crop } }).getState();
+    const mr = getViewportMetrics(rotated, VP, VP, true);
+    const topMid = { x: mr.cropRect!.x + mr.cropRect!.width / 2, y: mr.cropRect!.y };
+    // Rotating 90deg clockwise moves the image's left ('w') edge to the top of the screen.
+    expect(hitTestCrop(topMid, rotated, VP, VP)).toBe('w');
+    expect(getCropCursor('w', rotated.transform)).toBe('ns-resize');
+    const topLeft = { x: mr.cropRect!.x, y: mr.cropRect!.y };
+    expect(hitTestCrop(topLeft, rotated, VP, VP)).toBe('sw');
+    expect(getCropCursor('sw', rotated.transform)).toBe('nwse-resize');
+  });
+
+  it('inverts the on-screen aspect ratio for crop drags under a quarter turn', () => {
+    const start = { x: 0, y: 0, width: 200, height: 100 };
+    const res = calculateCropDrag(start, 'e', { x: 200, y: 50 }, { x: 300, y: 50 }, 1000, 1000, 2, {
+      rotate: 90,
+      flipH: false,
+      flipV: false,
+    });
+    // On screen 2:1 means 1:2 in natural image space.
+    expect(res.height / res.width).toBeCloseTo(2, 6);
+  });
+});
+
+describe('Image editor - immutable transforms & shared bounds', () => {
+  it('rotate/flip produce new transform objects', () => {
+    const controller = new ImageEditorController();
+    const before = controller.getState().transform;
+    controller.rotate(90);
+    const afterRotate = controller.getState().transform;
+    expect(afterRotate).not.toBe(before);
+    expect(before.rotate).toBe(0);
+    controller.flipHorizontal();
+    expect(controller.getState().transform).not.toBe(afterRotate);
+    expect(afterRotate.flipH).toBe(false);
+    const afterH = controller.getState().transform;
+    controller.flipVertical();
+    expect(controller.getState().transform).not.toBe(afterH);
+    const afterV = controller.getState().transform;
+    controller.setRotation(180);
+    expect(controller.getState().transform).not.toBe(afterV);
+  });
+
+  it('uses one getAnnotationBounds implementation that handles negative radii', () => {
+    const circle = { id: 'c', type: 'circle', x: 100, y: 100, radiusX: -20, radiusY: -10, strokeColor: '#f00', strokeWidth: 2 } as const;
+    const expected = { x: 80, y: 90, width: 40, height: 20 };
+    expect(getAnnotationBounds(circle as any)).toEqual(expected);
+    expect(new ImageEditorRenderer().getAnnotationBounds(circle as any)).toEqual(expected);
+  });
+});
+
+describe('Image editor renderer - mask, depth mask and cache', () => {
+  it('renders a strictly black/white inpainting mask and tolerates negative radii', async () => {
+    const renderer = new ImageEditorRenderer();
+    const pixels = new Uint8ClampedArray([0, 0, 0, 255, 200, 200, 200, 128, 100, 50, 20, 255, 255, 255, 255, 255]);
+    let written: Uint8ClampedArray | null = null;
+    const { ctx, calls } = makeRecordingCtx({
+      getImageData: () => ({ data: pixels, width: 2, height: 2 }),
+      putImageData: (img: { data: Uint8ClampedArray }) => {
+        written = img.data;
+      },
+    });
+    renderer.createCanvas = (w: number, h: number) =>
+      ({ width: w, height: h, getContext: () => ctx }) as unknown as HTMLCanvasElement;
+
+    const controller = new ImageEditorController();
+    controller.addAnnotation({ type: 'circle', x: 100, y: 100, radiusX: -20, radiusY: -15, strokeColor: '#ff0000', strokeWidth: 2, fillColor: '#00ff00' });
+    controller.addAnnotation({ type: 'arrow', x: 10, y: 10, endX: 90, endY: 40, strokeColor: '#ff0000', strokeWidth: 3 });
+    controller.addAnnotation({ type: 'line', x: 10, y: 10, endX: 90, endY: 40, strokeColor: '#0000ff', strokeWidth: 3 });
+    controller.addAnnotation({ type: 'text', x: 10, y: 10, text: 'hi', fontSize: 20, color: '#123456' });
+    controller.addAnnotation({ type: 'rect', x: 10, y: 10, width: 20, height: 20, strokeColor: '#abcdef', strokeWidth: 1, fillColor: '#fedcba', opacity: 0.3 });
+
+    await expect(renderer.renderMask(controller.getState(), { useAnnotations: true, useCrop: false })).resolves.toBeDefined();
+
+    const paintCalls = calls.filter((c) => ['fill', 'stroke', 'fillRect', 'strokeRect', 'fillText'].includes(c.name));
+    expect(paintCalls.length).toBeGreaterThan(0);
+    for (const c of paintCalls) {
+      const style = c.name === 'stroke' || c.name === 'strokeRect' ? c.strokeStyle : c.fillStyle;
+      expect(['#000000', '#ffffff']).toContain(style);
+    }
+
+    expect(written).not.toBeNull();
+    const out = written!;
+    for (let i = 0; i < out.length; i += 4) {
+      expect([0, 255]).toContain(out[i]);
+      expect(out[i + 1]).toBe(out[i]);
+      expect(out[i + 2]).toBe(out[i]);
+      expect(out[i + 3]).toBe(255);
+    }
+  });
+
+  it('invalidates the cached base render when depthMask.maskSource changes', async () => {
+    const renderer = new ImageEditorRenderer();
+    const createSpy = vi.spyOn(renderer, 'createCanvas');
+    const { ctx } = makeRecordingCtx();
+    const target = { width: 0, height: 0, getContext: () => ctx } as unknown as HTMLCanvasElement;
+    const source = fakeImage('', 800, 600);
+    const controller = new ImageEditorController();
+    controller.setDepthMask({ enabled: true, maskSource: 'mask-a.png' });
+    const opts = { viewportWidth: 1000, viewportHeight: 800 };
+
+    await renderer.renderToCanvas(target, source, controller.getState(), opts);
+    await renderer.renderToCanvas(target, source, controller.getState(), opts);
+    expect(createSpy).toHaveBeenCalledTimes(1); // cached
+
+    controller.setDepthMask({ maskSource: 'mask-b.png' });
+    await renderer.renderToCanvas(target, source, controller.getState(), opts);
+    expect(createSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('applies the rotate/flip transform to the depth mask', async () => {
+    const renderer = new ImageEditorRenderer();
+    const maskImg = fakeImage('depth-rot.png', 800, 600);
+    renderer.imageCache.set('depth-rot.png', maskImg);
+
+    const contexts: ReturnType<typeof makeRecordingCtx>[] = [];
+    renderer.createCanvas = (w: number, h: number) => {
+      const rec = makeRecordingCtx({
+        getImageData: (_x: number, _y: number, iw: number, ih: number) => ({
+          data: new Uint8ClampedArray(Math.max(1, iw * ih) * 4),
+          width: iw,
+          height: ih,
+        }),
+      });
+      contexts.push(rec);
+      return { width: w, height: h, getContext: () => rec.ctx } as unknown as HTMLCanvasElement;
+    };
+
+    const controller = new ImageEditorController({ initialState: { transform: { rotate: 90, flipH: true, flipV: false } } });
+    controller.setDepthMask({ enabled: true, maskSource: 'depth-rot.png' });
+    await renderer.renderExport(fakeImage('', 800, 600), controller.getState());
+
+    const maskCtx = contexts.find((c) => c.calls.some((call) => call.name === 'drawImage' && call.args[0] === maskImg));
+    expect(maskCtx).toBeDefined();
+    const names = maskCtx!.calls.map((c) => c.name);
+    const rotateIdx = names.indexOf('rotate');
+    const drawIdx = names.indexOf('drawImage');
+    expect(rotateIdx).toBeGreaterThanOrEqual(0);
+    expect(rotateIdx).toBeLessThan(drawIdx);
+    expect(maskCtx!.calls[rotateIdx].args[0]).toBeCloseTo(Math.PI / 2, 6);
+    expect(maskCtx!.calls.some((c) => c.name === 'scale' && c.args[0] === -1)).toBe(true);
+  });
+});
+
+describe('Image editor - undoable AI source replacement', () => {
+  it('applyInpaintedImage is one undo step that restores source and annotations; redo re-applies', async () => {
+    const orig = fakeImage('orig-inpaint.png', 800, 600);
+    const next = fakeImage('next-inpaint.png', 1600, 1200);
+    new ImageEditorRenderer().imageCache.set('next-inpaint.png', next);
+
+    const controller = new ImageEditorController({ image: orig });
+    controller.setCrop({ x: 100, y: 100, width: 200, height: 200 });
+    controller.addAnnotation({ type: 'rect', x: 10, y: 20, width: 30, height: 40, strokeColor: '#f00', strokeWidth: 2 });
+
+    await controller.applyInpaintedImage('next-inpaint.png');
+    let s = controller.getState();
+    expect(s.sourceUrl).toBe('next-inpaint.png');
+    expect(s.imageDimensions).toEqual({ width: 1600, height: 1200 });
+    expect(controller.getImageElement()).toBe(next);
+    expect(s.annotations).toEqual([]);
+    // Crop rescaled to the new (2x) image dimensions
+    expect(s.crop).toEqual({ x: 200, y: 200, width: 400, height: 400 });
+
+    // ONE undo restores both the previous source and the annotations
+    expect(controller.undo()).toBe(true);
+    s = controller.getState();
+    expect(s.sourceUrl).toBe('orig-inpaint.png');
+    expect(s.imageDimensions).toEqual({ width: 800, height: 600 });
+    expect(controller.getImageElement()).toBe(orig);
+    expect(s.annotations).toHaveLength(1);
+    expect(s.crop).toEqual({ x: 100, y: 100, width: 200, height: 200 });
+
+    // The next undo is the annotation add (no duplicate entry from clearing annotations)
+    controller.undo();
+    expect(controller.getState().annotations).toHaveLength(0);
+    expect(controller.getState().crop).toEqual({ x: 100, y: 100, width: 200, height: 200 });
+
+    controller.redo();
+    controller.redo();
+    s = controller.getState();
+    expect(s.sourceUrl).toBe('next-inpaint.png');
+    expect(controller.getImageElement()).toBe(next);
+    expect(s.annotations).toEqual([]);
+    expect(controller.canRedo).toBe(false);
+
+    // reset() still returns to the original image, not the AI result
+    controller.reset();
+    expect(controller.getState().sourceUrl).toBe('orig-inpaint.png');
+    expect(controller.getImageElement()).toBe(orig);
+  });
+
+  it('applyBackgroundRemovedImage keeps (rescaled) annotations and undoes in one step', async () => {
+    const orig = fakeImage('orig-bg.png', 800, 600);
+    const next = fakeImage('next-bg.png', 400, 300);
+    new ImageEditorRenderer().imageCache.set('next-bg.png', next);
+
+    const controller = new ImageEditorController({ image: orig });
+    controller.addAnnotation({ type: 'line', x: 100, y: 100, endX: 200, endY: 300, strokeColor: '#f00', strokeWidth: 4 });
+
+    await controller.applyBackgroundRemovedImage('next-bg.png');
+    const ann = controller.getState().annotations[0] as any;
+    expect(ann).toMatchObject({ x: 50, y: 50, endX: 100, endY: 150, strokeWidth: 2 });
+
+    controller.undo();
+    expect(controller.getState().sourceUrl).toBe('orig-bg.png');
+    expect(controller.getState().annotations[0]).toMatchObject({ x: 100, y: 100, endX: 200, endY: 300 });
+  });
+});

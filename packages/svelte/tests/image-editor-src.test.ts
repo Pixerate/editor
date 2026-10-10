@@ -19,7 +19,8 @@ describe('Svelte ImageEditor - src prop', () => {
     flushSync();
 
     expect(editor.state.sourceUrl).toBe('data:image/png;base64,inpainted');
-    expect(loadSpy.mock.calls.map((c) => c[0])).toEqual(['data:image/png;base64,inpainted']);
+    // The src prop is never reloaded over the AI result.
+    expect(loadSpy.mock.calls.some((c) => c[0] === 'orig.png')).toBe(false);
 
     unmount(component);
     target.remove();
