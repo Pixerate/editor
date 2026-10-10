@@ -1,3 +1,5 @@
+import { Slice, Fragment, Node as ProsemirrorNode, type Schema } from "@tiptap/pm/model";
+
 /**
  * Escapes characters that have syntactic meaning in HTML text.
  */
@@ -33,6 +35,30 @@ export function plainTextToTipTapHtml(text: string): string {
     .split("\n")
     .map((line) => `<p>${escapeHtml(line)}</p>`)
     .join("");
+}
+
+/**
+ * Builds an open ProseMirror slice with one paragraph per line, so inserting it
+ * splits the surrounding paragraph like typing Enter would. Use it for
+ * plain-text paste handling (`clipboardTextParser`) and literal text insertion.
+ */
+export function plainTextToSlice(text: string, schema: Schema): Slice {
+  const nodes: ProsemirrorNode[] = [];
+  text
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .forEach((line) => {
+      const nodeJson: any = { type: "paragraph" };
+      if (line.length > 0) {
+        nodeJson.content = [{ type: "text", text: line }];
+      }
+      try {
+        nodes.push(ProsemirrorNode.fromJSON(schema, nodeJson));
+      } catch {
+        // Ignore invalid node
+      }
+    });
+  return Slice.maxOpen(Fragment.fromArray(nodes));
 }
 
 /**

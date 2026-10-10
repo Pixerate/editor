@@ -1,13 +1,9 @@
 import { Editor, EditorOptions, Content, Extensions } from "@tiptap/core";
-import {
-  Slice,
-  Fragment,
-  Node as ProsemirrorNode,
-  type Schema,
-} from "@tiptap/pm/model";
+import { Slice } from "@tiptap/pm/model";
 import { Token, tokenizePrompt } from "./grammar";
 import {
   plainTextToTipTapHtml,
+  plainTextToSlice,
   getEditorText,
   markdownToTipTapHtml,
   getEditorMarkdown,
@@ -25,29 +21,6 @@ export interface EditorControllerOptions extends Partial<
   onMarkdownChange?: (markdown: string) => void;
   onTokensChange?: (tokens: Token[]) => void;
   onSelectionChange?: (range: { from: number; to: number } | null) => void;
-}
-
-/**
- * Builds an open slice with one paragraph per line, so inserting it splits the
- * surrounding paragraph like typing Enter would.
- */
-function plainTextToSlice(text: string, schema: Schema): Slice {
-  const nodes: ProsemirrorNode[] = [];
-  text
-    .replace(/\r\n?/g, "\n")
-    .split("\n")
-    .forEach((line) => {
-      const nodeJson: any = { type: "paragraph" };
-      if (line.length > 0) {
-        nodeJson.content = [{ type: "text", text: line }];
-      }
-      try {
-        nodes.push(ProsemirrorNode.fromJSON(schema, nodeJson));
-      } catch {
-        // Ignore invalid node
-      }
-    });
-  return Slice.maxOpen(Fragment.fromArray(nodes));
 }
 
 /**
