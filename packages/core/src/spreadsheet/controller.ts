@@ -530,10 +530,26 @@ export class SpreadsheetController {
 
   // --- Clipboard TSV/CSV ---
 
-  public exportToTsv(): string {
-    return this.document.rows
+  /**
+   * Exports cell values as TSV: the whole sheet, or only `range` (e.g. the
+   * current selection) when given.
+   */
+  public exportToTsv(range?: CellRange | null): string {
+    const rows = range
+      ? this.document.rows.slice(
+          Math.min(range.startRow, range.endRow),
+          Math.max(range.startRow, range.endRow) + 1,
+        )
+      : this.document.rows;
+    const columns = range
+      ? this.document.columns.slice(
+          Math.min(range.startCol, range.endCol),
+          Math.max(range.startCol, range.endCol) + 1,
+        )
+      : this.document.columns;
+    return rows
       .map((row) =>
-        this.document.columns
+        columns
           .map((col) => {
             const cell = this.getCell(row.id, col.id);
             return String(cell.value ?? '').replace(/\t/g, ' ');

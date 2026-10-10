@@ -46,6 +46,8 @@
   });
 
   function handleKeyDown(e: KeyboardEvent) {
+    // Keys typed here must not reach the grid's navigation handler.
+    e.stopPropagation();
     if (e.key === 'Enter') {
       e.preventDefault();
       if (sheetState && sheetState.activeCell) {
@@ -91,6 +93,7 @@
     type="text"
     class="flex-1 bg-transparent px-2 py-0.5 outline-none font-sans text-xs text-foreground placeholder:text-muted-foreground/60 focus:bg-background focus:ring-1 focus:ring-primary rounded"
     placeholder="Enter a value or formula (e.g. =SUM(A1:A5))"
+    aria-label="Formula bar"
     value={effectiveValue}
     oninput={handleInput}
     onkeydown={handleKeyDown}

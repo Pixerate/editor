@@ -157,8 +157,8 @@ export function createReactiveSpreadsheet(options: SpreadsheetControllerOptions 
       controller.recalculateAll();
       doc = { ...controller.document };
     },
-    exportToTsv() {
-      return controller.exportToTsv();
+    exportToTsv(range?: CellRange | null) {
+      return controller.exportToTsv(range);
     },
     importFromTsv(data: string) {
       controller.importFromTsv(data);
