@@ -9,14 +9,14 @@ import type {
   InpaintHook,
   RemoveBackgroundHook,
   ImageEditorAIHooks,
-} from '@pixerate/editor';
+} from '@pixerate/editor/image-editor';
 import {
   canvasToImagePoint,
   hitTestCrop,
   getCropCursor,
   calculateCropDrag,
   hitTestAnnotation,
-} from '@pixerate/editor';
+} from '@pixerate/editor/image-editor';
 import { useImageEditor, type UseImageEditorReturn } from './useImageEditor';
 
 export interface ImageEditorProps {

@@ -12,7 +12,7 @@ import {
   type ExportOptions,
   type SerializedImageEditorState,
   type ImagePoint,
-} from '@pixerate/editor';
+} from '@pixerate/editor/image-editor';
 
 export function createReactiveImageEditor(options: ImageEditorOptions = {}) {
   const controller = new ImageEditorController(options);
