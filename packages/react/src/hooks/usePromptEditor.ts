@@ -2,7 +2,7 @@ import { useMemo, useEffect, useRef } from "react";
 import { useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
-import { Slice, Fragment, Node as ProsemirrorNode } from "@tiptap/pm/model";
+import { Slice } from "@tiptap/pm/model";
 import {
   Template,
   ColorGradient,
@@ -10,11 +10,17 @@ import {
   TemplateSuggestions,
   LoadingNode,
   plainTextToTipTapHtml,
+  plainTextToSlice,
   getEditorText,
+  tokenizePrompt,
 } from "@pixerate/editor";
 
 export interface UsePromptEditorProps {
-  /** The initial or controlled content of the editor as plain text */
+  /**
+   * The editor content as plain text. Changes from the parent (e.g. clearing
+   * after submit) are applied to the editor; echoes of the editor's own
+   * updates via `onContentChange` are ignored.
+   */
   content: string;
   /** Callback fired when the editor content changes (returns plain text) */
   onContentChange: (text: string) => void;
@@ -45,7 +51,10 @@ export interface UsePromptEditorProps {
   clearSlashCommand?: () => void;
   /** Whether a slash command menu is currently active */
   slashCommandActive?: boolean;
-  /** Callback fired when certain milestones are reached (e.g., used_variable, used_magic) */
+  /**
+   * Callback fired the first time each milestone is reached while the editor
+   * is mounted: `used_variable` ({variable}) and `used_magic` (__instruction__).
+   */
   onMilestone?: (milestone: string) => void;
   /** DOM element ID of the container, used for positioning popovers */
   containerId?: string;
@@ -59,6 +68,10 @@ const DEFAULT_TEMPLATES: Template[] = [];
 const DEFAULT_COLOR_MAP = new Map<string, ColorGradient>([
   ["default", { from: "#f43f5e", to: "#8b5cf6" }],
 ]);
+const DEFAULT_CLASS_NAME =
+  "w-full border border-input rounded-md p-3 font-mono text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-primary whitespace-pre-wrap break-words";
+
+const normalizeNewlines = (text: string) => text.replace(/\r\n?/g, "\n");
 
 export function usePromptEditor({
   content,
@@ -113,6 +126,11 @@ export function usePromptEditor({
       .join(",");
   }, [templates]);
 
+  // Key the color map by value so an inline `new Map(...)` does not recreate
+  // the editor on every render.
+  const colorMapKey = userColorMap
+    ? JSON.stringify(Array.from(userColorMap.entries()))
+    : "";
   const resolvedColorMap = useMemo(() => {
     if (userColorMap) return userColorMap;
     const map = new Map<string, ColorGradient>();
@@ -120,7 +138,11 @@ export function usePromptEditor({
       map.set(t.name, { from: "#f43f5e", to: "#8b5cf6" });
     });
     return map.size > 0 ? map : DEFAULT_COLOR_MAP;
-  }, [userColorMap, templateKey]);
+  }, [colorMapKey, templateKey]);
+
+  const jsonVariablesKey = (jsonVariables || []).join("\u0000");
+
+  const reachedMilestonesRef = useRef(new Set<string>());
 
   const StarterKitExt =
     (StarterKit as any)?.configure
@@ -164,11 +186,18 @@ export function usePromptEditor({
         onContentChangeRef.current?.(plainText);
 
         if (onMilestoneRef.current) {
-          if (plainText.match(/(?<!\{)\{([^{}]+)\}(?!\})/g)) {
-            onMilestoneRef.current("used_variable");
-          }
-          if (plainText.match(/__([^_]+)__/g)) {
-            onMilestoneRef.current("used_magic");
+          const reached = reachedMilestonesRef.current;
+          for (const token of tokenizePrompt(plainText)) {
+            const milestone =
+              token.type === "variable"
+                ? "used_variable"
+                : token.type === "instruction"
+                  ? "used_magic"
+                  : null;
+            if (milestone && !reached.has(milestone)) {
+              reached.add(milestone);
+              onMilestoneRef.current(milestone);
+            }
           }
         }
 
@@ -218,9 +247,7 @@ export function usePromptEditor({
       },
       editorProps: {
         attributes: {
-          class:
-            className ||
-            "w-full border border-input rounded-md p-3 font-mono text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-primary whitespace-pre-wrap break-words",
+          class: className || DEFAULT_CLASS_NAME,
           role: "textbox",
           "aria-label": "Prompt editor",
         },
@@ -251,30 +278,15 @@ export function usePromptEditor({
           return false;
         },
         handlePaste: (view, event) => {
+          // Paste as plain text even when the clipboard also carries HTML.
           const text = event.clipboardData?.getData("text/plain");
           if (!text) return false;
           event.preventDefault();
           const schema = view.state.schema;
           if (!schema) return false;
-
-          const blocks = text.replace(/\r\n?/g, "\n").split("\n");
-          const nodes: ProsemirrorNode[] = [];
-          blocks.forEach((line) => {
-            const nodeJson: any = { type: "paragraph" };
-            if (line.length > 0) {
-              nodeJson.content = [{ type: "text", text: line }];
-            }
-            try {
-              const node = ProsemirrorNode.fromJSON(schema, nodeJson);
-              nodes.push(node);
-            } catch {
-              // Ignore
-            }
-          });
-
-          const parsedSlice = Slice.maxOpen(Fragment.fromArray(nodes));
-          const tr = view.state.tr.replaceSelection(parsedSlice);
-          view.dispatch(tr);
+          view.dispatch(
+            view.state.tr.replaceSelection(plainTextToSlice(text, schema)),
+          );
           return true;
         },
         clipboardTextParser: (text, context, _plain, view) => {
@@ -284,28 +296,13 @@ export function usePromptEditor({
             view?.state?.schema;
 
           if (!schema) return Slice.empty;
-
-          const blocks = text.replace(/\r\n?/g, "\n").split("\n");
-          const nodes: ProsemirrorNode[] = [];
-
-          blocks.forEach((line) => {
-            const nodeJson: any = { type: "paragraph" };
-            if (line.length > 0) {
-              nodeJson.content = [{ type: "text", text: line }];
-            }
-            try {
-              const node = ProsemirrorNode.fromJSON(schema, nodeJson);
-              nodes.push(node);
-            } catch {
-              // Ignore
-            }
-          });
-
-          return Slice.maxOpen(Fragment.fromArray(nodes));
+          return plainTextToSlice(text, schema);
         },
       },
     },
-    [resolvedColorMap, templateKey, isEditing, placeholder, speed],
+    // Only options baked into extensions recreate the editor; editable state,
+    // placeholder, class names and content are applied to the live instance.
+    [resolvedColorMap, templateKey, speed, jsonVariablesKey],
   );
 
   useEffect(() => {
@@ -313,6 +310,45 @@ export function usePromptEditor({
       editor.setEditable(isEditing);
     }
   }, [editor, isEditing]);
+
+  // Apply content changes made by the parent (e.g. clearing after submit).
+  useEffect(() => {
+    if (!editor || editor.isDestroyed) return;
+    if (normalizeNewlines(content) === getEditorText(editor)) return;
+    const { from, to } = editor.state.selection;
+    editor.commands.setContent(plainTextToTipTapHtml(content), false);
+    const max = editor.state.doc.content.size;
+    editor.commands.setTextSelection({
+      from: Math.min(from, max),
+      to: Math.min(to, max),
+    });
+  }, [editor, content]);
+
+  useEffect(() => {
+    if (!editor || editor.isDestroyed) return;
+    editor.setOptions({
+      editorProps: {
+        ...editor.options.editorProps,
+        attributes: {
+          ...(editor.options.editorProps.attributes as Record<string, string>),
+          class: className || DEFAULT_CLASS_NAME,
+        },
+      },
+    });
+  }, [editor, className]);
+
+  useEffect(() => {
+    if (!editor || editor.isDestroyed) return;
+    const placeholderExt = editor.extensionManager.extensions.find(
+      (ext) => ext.name === "placeholder",
+    );
+    if (!placeholderExt || placeholderExt.options.placeholder === placeholder) {
+      return;
+    }
+    placeholderExt.options.placeholder = placeholder;
+    // Re-run decorations so the new placeholder renders.
+    editor.view.dispatch(editor.state.tr);
+  }, [editor, placeholder]);
 
   return editor;
 }
