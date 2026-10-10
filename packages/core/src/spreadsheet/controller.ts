@@ -11,7 +11,10 @@ import {
   FormulaEvaluator,
   colNameToIndex,
   indexToColName,
-  DependencyGraph
+  DependencyGraph,
+  shiftFormulaReferences,
+  WHOLE_COLUMN_END_ROW,
+  type StructuralChange
 } from './formula';
 import { DataSourceBinder } from './datasource';
 
@@ -44,6 +47,11 @@ export class SpreadsheetController {
   private undoStack: string[] = [];
   private redoStack: string[] = [];
   private isApplyingHistory = false;
+  // Set while importing TSV: history and recalculation are done once at the end.
+  private batching = false;
+  private pendingCommits: Array<[string, string, string]> = [];
+  // Row being evaluated, so [property] references resolve per row.
+  private evaluatingRowIndex: number | null = null;
 
   constructor(options: SpreadsheetControllerOptions = {}) {
     const defaultCols: SpreadsheetColumn[] = [
@@ -146,10 +154,14 @@ export class SpreadsheetController {
     const existing = this.document.cells[rowId]?.[colId];
     if (existing) return existing;
 
-    // Check if column is bound to record
     const col = this.document.columns.find((c) => c.id === colId);
     const row = this.document.rows.find((r) => r.id === rowId);
+    return this.getDerivedCell(row, col);
+  }
 
+  /** Value of a cell with no stored data: bound record value, column formula, or blank. */
+  private getDerivedCell(row: SpreadsheetRow | undefined, col: SpreadsheetColumn | undefined): CellData {
+    // Check if column is bound to record
     if (col && row && col.type === 'bound' && col.binding && row.recordId) {
       const boundVal = this.binder.resolveBoundValue(
         col.binding.dataSource,
@@ -205,6 +217,10 @@ export class SpreadsheetController {
     };
 
     this.document.updatedAt = Date.now();
+    if (this.batching) {
+      this.pendingCommits.push([rowId, colId, raw]);
+      return;
+    }
     this.recalculateCell(rowId, colId);
     this.notifyChange();
 
@@ -219,40 +235,62 @@ export class SpreadsheetController {
     return `${col.key}${row.index + 1}`.toUpperCase();
   }
 
+  /**
+   * Recalculates a cell and everything that depends on it, in dependency
+   * order. Every cell in a reference cycle is marked `#CYCLE!`.
+   */
   public recalculateCell(rowId: string, colId: string): void {
     const cellKey = this.getCellKey(rowId, colId);
-    const { order, hasCycle } = this.depGraph.getEvaluationOrder(cellKey);
-
-    if (hasCycle) {
-      if (this.document.cells[rowId]?.[colId]) {
-        this.document.cells[rowId][colId].error = '#CYCLE!';
-        this.document.cells[rowId][colId].value = '#CYCLE!';
-      }
-      return;
-    }
-
-    for (const key of order) {
-      this.evalSingleCellByKey(key);
-    }
+    this.runEvaluationPlan(this.depGraph.getEvaluationPlan([cellKey], { includeDependents: true }));
   }
 
+  /**
+   * Rebuilds the dependency graph from scratch and recalculates every formula
+   * in dependency order.
+   */
   public recalculateAll(): void {
+    this.depGraph.clear();
+    const formulaKeys: string[] = [];
     for (const row of this.document.rows) {
       for (const col of this.document.columns) {
-        const cell = this.getCell(row.id, col.id);
-        const cellKey = `${col.key}${row.index + 1}`.toUpperCase();
+        // Avoid getCell's id lookups: this loop visits every cell.
+        const cell = this.document.cells[row.id]?.[col.id] ?? this.getDerivedCell(row, col);
         if (cell.raw.startsWith('=')) {
+          const cellKey = `${col.key}${row.index + 1}`.toUpperCase();
           this.depGraph.setCellFormula(cellKey, cell.raw);
+          formulaKeys.push(cellKey);
         }
       }
     }
+    this.runEvaluationPlan(this.depGraph.getEvaluationPlan(formulaKeys));
+  }
 
-    for (const row of this.document.rows) {
-      for (const col of this.document.columns) {
-        const cellKey = `${col.key}${row.index + 1}`.toUpperCase();
-        this.evalSingleCellByKey(cellKey);
+  private runEvaluationPlan(plan: { order: string[]; cyclic: Set<string> }): void {
+    for (const key of plan.order) {
+      if (plan.cyclic.has(key)) {
+        this.markCycle(key);
+      } else {
+        this.evalSingleCellByKey(key);
       }
     }
+  }
+
+  private locateCellKey(cellKey: string): { row: SpreadsheetRow; col: SpreadsheetColumn } | null {
+    const match = cellKey.match(/^([A-Za-z]+)(\d+)$/);
+    if (!match) return null;
+    const col = this.document.columns.find((c) => c.key.toUpperCase() === match[1].toUpperCase());
+    const row = this.document.rows[parseInt(match[2], 10) - 1];
+    return col && row ? { row, col } : null;
+  }
+
+  private markCycle(cellKey: string): void {
+    const located = this.locateCellKey(cellKey);
+    if (!located) return;
+    const { row, col } = located;
+    const cell = this.getCell(row.id, col.id);
+    if (!cell.raw.startsWith('=')) return;
+    if (!this.document.cells[row.id]) this.document.cells[row.id] = {};
+    this.document.cells[row.id][col.id] = { ...cell, value: '#CYCLE!', error: '#CYCLE!' };
   }
 
   private evalSingleCellByKey(cellKey: string): void {
@@ -274,6 +312,7 @@ export class SpreadsheetController {
     }
 
     try {
+      this.evaluatingRowIndex = rowNum - 1;
       const computed = this.evaluator.evaluate(cell.raw);
       if (!this.document.cells[row.id]) {
         this.document.cells[row.id] = {};
@@ -292,6 +331,8 @@ export class SpreadsheetController {
         value: '#ERROR!',
         error: err?.message || 'Formula error'
       };
+    } finally {
+      this.evaluatingRowIndex = null;
     }
   }
 
@@ -300,8 +341,8 @@ export class SpreadsheetController {
     const row = this.document.rows[rowNum - 1];
     if (!col || !row) return 0;
 
-    const cell = this.getCell(row.id, col.id);
-    return cell.value !== undefined && cell.value !== '' ? cell.value : 0;
+    // Blank cells resolve to '' (0 in arithmetic, "" in text), as in spreadsheets.
+    return this.getCell(row.id, col.id).value ?? '';
   }
 
   private resolveRangeByCoords(sCol: string, sRow: number, eCol: string, eRow: number): any[] {
@@ -310,7 +351,8 @@ export class SpreadsheetController {
     const minC = Math.min(startC, endC);
     const maxC = Math.max(startC, endC);
     const minR = Math.min(sRow, eRow);
-    const maxR = Math.max(sRow, eRow);
+    // Whole-column ranges (A:A) stop at the last row.
+    const maxR = Math.min(Math.max(sRow, eRow), WHOLE_COLUMN_END_ROW, this.document.rows.length);
 
     const results: any[] = [];
     for (let c = minC; c <= maxC; c++) {
@@ -321,16 +363,17 @@ export class SpreadsheetController {
       for (let r = minR; r <= maxR; r++) {
         const row = this.document.rows[r - 1];
         if (!row) continue;
-        const cell = this.getCell(row.id, col.id);
-        results.push(cell.value !== undefined && cell.value !== '' ? cell.value : 0);
+        results.push(this.getCell(row.id, col.id).value ?? '');
       }
     }
     return results;
   }
 
   private resolveCurrentRowProperty(prop: string): any {
-    if (!this.activeCell) return 0;
-    const row = this.document.rows[this.activeCell.row];
+    // Resolve against the row being evaluated, not the selected cell's row.
+    const rowIndex = this.evaluatingRowIndex ?? this.activeCell?.row;
+    if (rowIndex === undefined || rowIndex === null) return 0;
+    const row = this.document.rows[rowIndex];
     if (!row || !row.recordId || !this.primaryDataSourceId) return 0;
     return this.binder.resolveBoundValue(this.primaryDataSourceId, row.recordId, prop) ?? 0;
   }
@@ -444,7 +487,7 @@ export class SpreadsheetController {
 
   public insertColumn(index: number, config?: Partial<SpreadsheetColumn>): void {
     this.recordSnapshot();
-    const newId = config?.id || `col_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const newId = config?.id || this.generateId('col');
     const newCol: SpreadsheetColumn = {
       id: newId,
       key: indexToColName(index),
@@ -457,6 +500,7 @@ export class SpreadsheetController {
       readOnly: config?.readOnly
     };
 
+    this.shiftReferences({ axis: 'col', index, type: 'insert' });
     this.document.columns.splice(index, 0, newCol);
     this.recomputeRowIndices();
     this.recalculateAll();
@@ -465,6 +509,9 @@ export class SpreadsheetController {
 
   public deleteColumn(colId: string): void {
     this.recordSnapshot();
+    const colIndex = this.document.columns.findIndex((c) => c.id === colId);
+    if (colIndex === -1) return;
+    this.shiftReferences({ axis: 'col', index: colIndex, type: 'delete' });
     this.document.columns = this.document.columns.filter((c) => c.id !== colId);
     for (const rowId of Object.keys(this.document.cells)) {
       delete this.document.cells[rowId][colId];
@@ -476,7 +523,7 @@ export class SpreadsheetController {
 
   public insertRow(index: number, config?: Partial<SpreadsheetRow>): void {
     this.recordSnapshot();
-    const newId = config?.id || `row_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const newId = config?.id || this.generateId('row');
     const newRow: SpreadsheetRow = {
       id: newId,
       index,
@@ -485,6 +532,7 @@ export class SpreadsheetController {
       type: config?.type || 'freeform'
     };
 
+    this.shiftReferences({ axis: 'row', index, type: 'insert' });
     this.document.rows.splice(index, 0, newRow);
     this.recomputeRowIndices();
     this.recalculateAll();
@@ -493,11 +541,39 @@ export class SpreadsheetController {
 
   public deleteRow(rowId: string): void {
     this.recordSnapshot();
+    const rowIndex = this.document.rows.findIndex((r) => r.id === rowId);
+    if (rowIndex === -1) return;
+    this.shiftReferences({ axis: 'row', index: rowIndex, type: 'delete' });
     this.document.rows = this.document.rows.filter((r) => r.id !== rowId);
     delete this.document.cells[rowId];
     this.recomputeRowIndices();
     this.recalculateAll();
     this.notifyChange();
+  }
+
+  private generateId(prefix: 'row' | 'col'): string {
+    return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  }
+
+  /**
+   * Rewrites references in every cell formula (and, for column changes, every
+   * column formula) so they keep pointing at the same cells.
+   */
+  private shiftReferences(change: StructuralChange): void {
+    for (const rowCells of Object.values(this.document.cells)) {
+      for (const cell of Object.values(rowCells)) {
+        if (cell.raw?.startsWith('=')) {
+          cell.raw = shiftFormulaReferences(cell.raw, change);
+        }
+      }
+    }
+    if (change.axis === 'col') {
+      for (const col of this.document.columns) {
+        if (col.formula?.startsWith('=')) {
+          col.formula = shiftFormulaReferences(col.formula, change);
+        }
+      }
+    }
   }
 
   public setColumnWidth(colId: string, width: number): void {
@@ -559,37 +635,61 @@ export class SpreadsheetController {
       .join('\n');
   }
 
+  /**
+   * Pastes tab-separated values starting at (startRow, startCol), adding rows
+   * and columns as needed. The whole paste is a single undo step.
+   */
   public importFromTsv(tsvData: string, startRow = 0, startCol = 0): void {
+    // Only drop the final line break: leading tabs are empty cells.
+    const normalized = tsvData.replace(/\r\n?/g, '\n').replace(/\n$/, '');
+    if (normalized === '') return;
+
     this.recordSnapshot();
-    const lines = tsvData.trim().split('\n');
-
-    lines.forEach((line, rIdx) => {
-      const cells = line.split('\t');
-      const targetR = startRow + rIdx;
-
-      while (targetR >= this.document.rows.length) {
-        this.insertRow(this.document.rows.length);
-      }
-      const row = this.document.rows[targetR];
-
-      cells.forEach((val, cIdx) => {
-        const targetC = startCol + cIdx;
-        while (targetC >= this.document.columns.length) {
-          this.insertColumn(this.document.columns.length);
+    this.batching = true;
+    this.pendingCommits = [];
+    try {
+      normalized.split('\n').forEach((line, rIdx) => {
+        const targetR = startRow + rIdx;
+        // Growing the grid is not an insertion: no references shift.
+        while (targetR >= this.document.rows.length) {
+          const index = this.document.rows.length;
+          this.document.rows.push({ id: this.generateId('row'), index, height: 32, type: 'freeform' });
         }
-        const col = this.document.columns[targetC];
-        this.setCellValue(row.id, col.id, val);
+        const row = this.document.rows[targetR];
+
+        line.split('\t').forEach((val, cIdx) => {
+          const targetC = startCol + cIdx;
+          while (targetC >= this.document.columns.length) {
+            const key = indexToColName(this.document.columns.length);
+            this.document.columns.push({
+              id: this.generateId('col'),
+              key,
+              title: key,
+              width: 130,
+              type: 'freeform',
+              format: 'text'
+            });
+          }
+          this.setCellValue(row.id, this.document.columns[targetC].id, val);
+        });
       });
-    });
+    } finally {
+      this.batching = false;
+    }
 
     this.recalculateAll();
     this.notifyChange();
+    const commits = this.pendingCommits;
+    this.pendingCommits = [];
+    for (const [rowId, colId, raw] of commits) {
+      this.onCellCommit?.(rowId, colId, raw, this.document.cells[rowId]?.[colId]?.value);
+    }
   }
 
   // --- Undo/Redo Snapshots ---
 
   private recordSnapshot(): void {
-    if (this.isApplyingHistory) return;
+    if (this.isApplyingHistory || this.batching) return;
     this.undoStack.push(JSON.stringify(this.document));
     if (this.undoStack.length > 50) this.undoStack.shift();
     this.redoStack = [];
@@ -598,23 +698,27 @@ export class SpreadsheetController {
   public undo(): void {
     if (this.undoStack.length === 0) return;
     this.isApplyingHistory = true;
-    this.redoStack.push(JSON.stringify(this.document));
-    const previous = JSON.parse(this.undoStack.pop()!);
-    this.document = previous;
-    this.recalculateAll();
-    this.notifyChange();
-    this.isApplyingHistory = false;
+    try {
+      this.redoStack.push(JSON.stringify(this.document));
+      this.document = JSON.parse(this.undoStack.pop()!);
+      this.recalculateAll();
+      this.notifyChange();
+    } finally {
+      this.isApplyingHistory = false;
+    }
   }
 
   public redo(): void {
     if (this.redoStack.length === 0) return;
     this.isApplyingHistory = true;
-    this.undoStack.push(JSON.stringify(this.document));
-    const next = JSON.parse(this.redoStack.pop()!);
-    this.document = next;
-    this.recalculateAll();
-    this.notifyChange();
-    this.isApplyingHistory = false;
+    try {
+      this.undoStack.push(JSON.stringify(this.document));
+      this.document = JSON.parse(this.redoStack.pop()!);
+      this.recalculateAll();
+      this.notifyChange();
+    } finally {
+      this.isApplyingHistory = false;
+    }
   }
 
   private notifyChange(): void {

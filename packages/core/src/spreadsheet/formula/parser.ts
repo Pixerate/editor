@@ -1,5 +1,8 @@
 import { FormulaToken, tokenizeFormula, FormulaTokenType } from './lexer';
 
+/** Row number used for the open end of whole-column ranges such as `A:A`. */
+export const WHOLE_COLUMN_END_ROW = 1048576;
+
 export type ASTNode =
   | LiteralNode
   | CellRefNode
@@ -66,12 +69,26 @@ export function parseCellReference(ref: string): { col: string; row: number } {
 }
 
 export function parseRange(rangeStr: string): RangeNode {
-  const [start, end] = rangeStr.split(':');
+  const [start, end] = rangeStr.replace(/\$/g, '').split(':');
+  const raw = rangeStr.toUpperCase();
+
+  // Whole-column range, e.g. A:A or B:D
+  if (/^[A-Za-z]+$/.test(start) && /^[A-Za-z]+$/.test(end)) {
+    return {
+      type: 'Range',
+      raw,
+      startCol: start.toUpperCase(),
+      startRow: 1,
+      endCol: end.toUpperCase(),
+      endRow: WHOLE_COLUMN_END_ROW
+    };
+  }
+
   const startRef = parseCellReference(start);
   const endRef = parseCellReference(end);
   return {
     type: 'Range',
-    raw: rangeStr.toUpperCase(),
+    raw,
     startCol: startRef.col,
     startRow: startRef.row,
     endCol: endRef.col,
@@ -191,6 +208,11 @@ export class FormulaParser {
       return { type: 'Literal', value: token.value === 'TRUE' };
     }
 
+    if (token.type === 'ERROR') {
+      this.advance();
+      return { type: 'Literal', value: token.value };
+    }
+
     if (token.type === 'CELL_REF') {
       this.advance();
       const parsed = parseCellReference(token.value);
@@ -236,8 +258,8 @@ export class FormulaParser {
         };
       }
 
-      // Standalone identifier treated as string literal or reference
-      return { type: 'Literal', value: name };
+      // Unknown bare names are #NAME? errors, as in spreadsheet apps.
+      return { type: 'Literal', value: '#NAME?' };
     }
 
     if (this.match('LPAREN')) {

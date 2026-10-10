@@ -2,3 +2,4 @@ export * from './lexer';
 export * from './parser';
 export * from './evaluator';
 export * from './dependency-graph';
+export * from './references';

@@ -1,4 +1,4 @@
-import { ASTNode, parseFormula } from './parser';
+import { ASTNode, parseFormula, WHOLE_COLUMN_END_ROW } from './parser';
 import { colNameToIndex, indexToColName } from './evaluator';
 
 export interface CellDep {
@@ -6,12 +6,25 @@ export interface CellDep {
   row: number;
 }
 
+/**
+ * Dependency key for "every cell in column `col`", used by whole-column ranges
+ * (`A:A`) instead of expanding a million cell keys.
+ */
+export const columnDependencyKey = (col: string): string => `${col.toUpperCase()}:`;
+
 export function extractCellDependencies(node: ASTNode): CellDep[] {
   const deps: CellDep[] = [];
 
   const visit = (curr: ASTNode) => {
     if (curr.type === 'CellRef') {
       deps.push({ col: curr.col, row: curr.row });
+    } else if (curr.type === 'Range' && curr.endRow >= WHOLE_COLUMN_END_ROW) {
+      // Whole-column range: depend on the columns, not on every cell.
+      const startC = colNameToIndex(curr.startCol);
+      const endC = colNameToIndex(curr.endCol);
+      for (let c = Math.min(startC, endC); c <= Math.max(startC, endC); c++) {
+        deps.push({ col: indexToColName(c), row: 0 });
+      }
     } else if (curr.type === 'Range') {
       const startC = colNameToIndex(curr.startCol);
       const endC = colNameToIndex(curr.endCol);
@@ -65,7 +78,7 @@ export class DependencyGraph {
       const newDeps = new Set<string>();
 
       for (const d of deps) {
-        const depKey = `${d.col}${d.row}`.toUpperCase();
+        const depKey = d.row === 0 ? columnDependencyKey(d.col) : `${d.col}${d.row}`.toUpperCase();
         newDeps.add(depKey);
 
         if (!this.dependents.has(depKey)) {
@@ -78,6 +91,12 @@ export class DependencyGraph {
     } catch {
       // Syntax errors in formula have no valid dependencies
     }
+  }
+
+  /** Removes every registered formula and dependency. */
+  public clear(): void {
+    this.dependencies.clear();
+    this.dependents.clear();
   }
 
   public getDependencies(cellKey: string): string[] {
@@ -169,5 +188,119 @@ export class DependencyGraph {
     }
 
     return { order, hasCycle: cycleDetected };
+  }
+
+  /**
+   * Plans a recalculation over `cellKeys` (and, with `includeDependents`, every
+   * cell that transitively depends on them). Returns the keys in evaluation
+   * order (dependencies first) and the set of keys that are part of a cycle,
+   * which must be marked `#CYCLE!` instead of evaluated. Every member of a
+   * cycle is reported, not just the cell that closed it.
+   */
+  public getEvaluationPlan(
+    cellKeys: Iterable<string>,
+    options: { includeDependents?: boolean } = {},
+  ): { order: string[]; cyclic: Set<string> } {
+    const nodes = new Set<string>();
+    const queue: string[] = [];
+    for (const key of cellKeys) {
+      const upper = key.toUpperCase();
+      if (!nodes.has(upper)) {
+        nodes.add(upper);
+        queue.push(upper);
+      }
+    }
+    if (options.includeDependents) {
+      while (queue.length > 0) {
+        const node = queue.pop()!;
+        const direct = [
+          ...(this.dependents.get(node) ?? []),
+          ...(this.dependents.get(columnDependencyKey(node.replace(/\d+$/, ''))) ?? []),
+        ];
+        for (const dep of direct) {
+          if (!nodes.has(dep)) {
+            nodes.add(dep);
+            queue.push(dep);
+          }
+        }
+      }
+    }
+
+    // Edges point from a cell to the cells it depends on, restricted to `nodes`.
+    // Whole-column dependencies expand to the planned cells in that column.
+    const neighbors = (node: string): string[] => {
+      const result: string[] = [];
+      for (const dep of this.dependencies.get(node) ?? []) {
+        if (dep.endsWith(':')) {
+          const col = dep.slice(0, -1);
+          for (const candidate of nodes) {
+            if (candidate.replace(/\d+$/, '') === col) result.push(candidate);
+          }
+        } else if (nodes.has(dep)) {
+          result.push(dep);
+        }
+      }
+      return result;
+    };
+
+    // Iterative Tarjan: SCCs are emitted dependencies-first.
+    const order: string[] = [];
+    const cyclic = new Set<string>();
+    const index = new Map<string, number>();
+    const low = new Map<string, number>();
+    const stack: string[] = [];
+    const onStack = new Set<string>();
+    let counter = 0;
+
+    for (const root of nodes) {
+      if (index.has(root)) continue;
+      const work: Array<{ node: string; edges: string[]; next: number }> = [];
+      const enter = (node: string) => {
+        index.set(node, counter);
+        low.set(node, counter);
+        counter++;
+        stack.push(node);
+        onStack.add(node);
+        work.push({ node, edges: neighbors(node), next: 0 });
+      };
+      enter(root);
+
+      while (work.length > 0) {
+        const frame = work[work.length - 1];
+        if (frame.next < frame.edges.length) {
+          const target = frame.edges[frame.next++];
+          if (!index.has(target)) {
+            enter(target);
+          } else if (onStack.has(target)) {
+            low.set(frame.node, Math.min(low.get(frame.node)!, index.get(target)!));
+          }
+          continue;
+        }
+
+        work.pop();
+        if (work.length > 0) {
+          const parent = work[work.length - 1].node;
+          low.set(parent, Math.min(low.get(parent)!, low.get(frame.node)!));
+        }
+
+        if (low.get(frame.node) === index.get(frame.node)) {
+          const component: string[] = [];
+          let member: string;
+          do {
+            member = stack.pop()!;
+            onStack.delete(member);
+            component.push(member);
+          } while (member !== frame.node);
+
+          const isCycle = component.length > 1 || frame.edges.includes(frame.node);
+          for (const key of component) {
+            order.push(key);
+            if (isCycle) cyclic.add(key);
+          }
+        }
+      }
+    }
+
+    return { order, cyclic };
   }
 }
