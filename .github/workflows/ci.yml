@@ -49,5 +49,8 @@ jobs:
       - name: Build packages & demo
         run: pnpm build
 
+      - name: Typecheck
+        run: pnpm typecheck
+
       - name: Run unit tests
         run: pnpm test
