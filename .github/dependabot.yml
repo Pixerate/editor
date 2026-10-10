@@ -14,6 +14,10 @@ updates:
       - dependency-name: "@tiptap/*"
         update-types:
           - "version-update:semver-major"
+      # tiptap-markdown 0.9+ requires @tiptap/core ^3 (a "minor" bump on 0.x).
+      - dependency-name: "tiptap-markdown"
+        versions:
+          - ">=0.9.0"
     groups:
       # Groups match in order, so TipTap updates always land in one PR.
       tiptap:
