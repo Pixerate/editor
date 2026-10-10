@@ -174,5 +174,19 @@ describe('SpreadsheetController', () => {
     ctrl.autoFitColumnWidth(colA, 175);
     expect(ctrl.document.columns[0].width).toBe(175);
   });
-});
 
+  it('exports only the given range as TSV, in either drag direction', () => {
+    const ctrl = new SpreadsheetController();
+    const [c0, c1, c2] = ctrl.document.columns.map((c) => c.id);
+    const [r0, r1] = ctrl.document.rows.map((r) => r.id);
+    ctrl.setCellValue(r0, c0, 'a');
+    ctrl.setCellValue(r0, c1, 'b');
+    ctrl.setCellValue(r0, c2, 'c');
+    ctrl.setCellValue(r1, c0, 'd');
+    ctrl.setCellValue(r1, c1, 'e');
+
+    expect(ctrl.exportToTsv({ startRow: 0, startCol: 0, endRow: 1, endCol: 1 })).toBe('a\tb\nd\te');
+    expect(ctrl.exportToTsv({ startRow: 1, startCol: 1, endRow: 0, endCol: 0 })).toBe('a\tb\nd\te');
+    expect(ctrl.exportToTsv().split('\n').length).toBe(ctrl.document.rows.length);
+  });
+});

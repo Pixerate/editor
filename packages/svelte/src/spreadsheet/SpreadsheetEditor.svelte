@@ -100,16 +100,21 @@
         e.preventDefault();
         sheetState.setCellValue(row.id, col.id, '');
       }
-    } else if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
+    } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
+      // With Shift held, e.key is 'Z'.
       e.preventDefault();
       if (e.shiftKey) {
         sheetState.redo();
       } else {
         sheetState.undo();
       }
-    } else if ((e.metaKey || e.ctrlKey) && e.key === 'c') {
+    } else if (e.ctrlKey && !e.metaKey && e.key.toLowerCase() === 'y') {
       e.preventDefault();
-      const tsv = sheetState.exportToTsv();
+      sheetState.redo();
+    } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'c') {
+      // Copy the selection, not the whole sheet.
+      e.preventDefault();
+      const tsv = sheetState.exportToTsv(sheetState.selectedRange);
       navigator.clipboard?.writeText(tsv);
     } else if (!isReadOnly && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
       // Direct typing into cell starts editing

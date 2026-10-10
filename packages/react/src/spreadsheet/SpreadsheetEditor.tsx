@@ -47,6 +47,29 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
     return `${colName}${state.activeCell.row + 1}`;
   }, [state.activeCell]);
 
+  // Text typed in the formula bar while no cell editor is open.
+  const [formulaDraft, setFormulaDraft] = useState<string | null>(null);
+  const activeColumn = state.activeCell ? state.document.columns[state.activeCell.col] : undefined;
+  const formulaBarReadOnly = readOnly || !state.activeCell || !!activeColumn?.readOnly;
+
+  useEffect(() => {
+    setFormulaDraft(null);
+  }, [state.activeCell?.row, state.activeCell?.col]);
+
+  const commitFormulaBar = () => {
+    if (state.editingCell) {
+      state.commitEditing();
+      return;
+    }
+    if (formulaDraft === null || !state.activeCell) return;
+    const row = state.document.rows[state.activeCell.row];
+    const col = state.document.columns[state.activeCell.col];
+    if (row && col && !formulaBarReadOnly && formulaDraft !== activeRawValue) {
+      state.setCellValue(row.id, col.id, formulaDraft);
+    }
+    setFormulaDraft(null);
+  };
+
   const handleCellClick = useCallback((rIdx: number, cIdx: number, e: React.MouseEvent) => {
     if (state.editingCell && (state.editingCell.row !== rIdx || state.editingCell.col !== cIdx)) {
       state.commitEditing();
@@ -109,16 +132,21 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
         e.preventDefault();
         state.setCellValue(row.id, col.id, '');
       }
-    } else if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
+    } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
+      // With Shift held, e.key is 'Z'.
       e.preventDefault();
       if (e.shiftKey) {
         state.redo();
       } else {
         state.undo();
       }
-    } else if ((e.metaKey || e.ctrlKey) && e.key === 'c') {
+    } else if (e.ctrlKey && !e.metaKey && e.key.toLowerCase() === 'y') {
       e.preventDefault();
-      const tsv = state.exportToTsv();
+      state.redo();
+    } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'c') {
+      // Copy the selection, not the whole sheet.
+      e.preventDefault();
+      const tsv = state.exportToTsv(state.selectedRange);
       navigator.clipboard?.writeText(tsv);
     } else if (!readOnly && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
       const col = state.document.columns[state.activeCell.col];
@@ -127,6 +155,13 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
       }
     }
   }, [readOnly, state]);
+  // The resize effect reads these through refs: re-running it on every width
+  // update would reset the in-progress drag (and skip onColumnResize).
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const onColumnResizeRef = useRef(onColumnResize);
+  onColumnResizeRef.current = onColumnResize;
+
   useEffect(() => {
     if (!resizingColId) return;
 
@@ -149,7 +184,7 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
       if (rafId === null) {
         rafId = requestAnimationFrame(() => {
           rafId = null;
-          state.setColumnWidth(resizingColId, pendingWidth);
+          stateRef.current.setColumnWidth(resizingColId, pendingWidth);
         });
       }
     };
@@ -160,11 +195,8 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
         rafId = null;
       }
       if (hasDragged) {
-        state.setColumnWidth(resizingColId, pendingWidth);
-        const col = state.document.columns.find((c) => c.id === resizingColId);
-        if (col && onColumnResize) {
-          onColumnResize(col.id, col.width || pendingWidth);
-        }
+        stateRef.current.setColumnWidth(resizingColId, pendingWidth);
+        onColumnResizeRef.current?.(resizingColId, pendingWidth);
       }
       setResizingColId(null);
       if (typeof document !== 'undefined') {
@@ -186,7 +218,7 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [resizingColId, resizeStartX, resizeStartWidth, state, onColumnResize]);
+  }, [resizingColId, resizeStartX, resizeStartWidth]);
 
   const measureElementContentWidth = useCallback((el: HTMLElement, container: HTMLElement): number => {
     if (typeof document === 'undefined') return 0;
@@ -346,25 +378,30 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
           type="text"
           className="flex-1 bg-transparent px-2 py-0.5 outline-none font-sans text-xs text-foreground placeholder:text-muted-foreground/60 focus:bg-background focus:ring-1 focus:ring-primary rounded"
           placeholder="Enter a value or formula (e.g. =SUM(A1:A5))"
-          value={state.editingCell ? state.draftValue : activeRawValue}
+          aria-label="Formula bar"
+          readOnly={formulaBarReadOnly}
+          value={state.editingCell ? state.draftValue : formulaDraft ?? activeRawValue}
+          onFocus={() => {
+            if (!state.editingCell) setFormulaDraft(activeRawValue);
+          }}
           onChange={(e) => {
-            if (state.activeCell) {
+            if (state.editingCell) {
               state.setDraftValue(e.target.value);
+            } else if (state.activeCell) {
+              setFormulaDraft(e.target.value);
             }
           }}
+          onBlur={() => commitFormulaBar()}
           onKeyDown={(e) => {
+            // Keys typed here must not reach the grid's navigation handler.
+            e.stopPropagation();
             if (e.key === 'Enter') {
               e.preventDefault();
-              if (state.activeCell) {
-                const row = state.document.rows[state.activeCell.row];
-                const col = state.document.columns[state.activeCell.col];
-                if (row && col) {
-                  state.setCellValue(row.id, col.id, (e.target as HTMLInputElement).value);
-                }
-              }
+              commitFormulaBar();
             } else if (e.key === 'Escape') {
               e.preventDefault();
-              state.cancelEditing();
+              setFormulaDraft(null);
+              if (state.editingCell) state.cancelEditing();
             }
           }}
         />

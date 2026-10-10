@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import {
   SpreadsheetController,
   type SpreadsheetControllerOptions,
@@ -11,38 +11,42 @@ import {
 } from '@pixerate/editor';
 
 export function useSpreadsheetEditor(options: SpreadsheetControllerOptions = {}) {
-  const [doc, setDoc] = useState<SpreadsheetDocument>(() => ({
-    id: options.document?.id || `sheet_${Date.now()}`,
-    name: options.document?.name || 'Sheet 1',
-    columns: options.document?.columns || [],
-    rows: options.document?.rows || [],
-    cells: options.document?.cells || {},
-    createdAt: options.document?.createdAt || Date.now(),
-    updatedAt: options.document?.updatedAt || Date.now()
-  }));
+  // Callbacks are read through a ref so they are never stale.
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
+  const settersRef = useRef<{
+    setDoc?: (doc: SpreadsheetDocument) => void;
+    setActiveCell?: (cell: CellCoordinate | null) => void;
+    setSelectedRange?: (range: CellRange | null) => void;
+  }>({});
 
-  const [activeCell, setActiveCell] = useState<CellCoordinate | null>(null);
-  const [selectedRange, setSelectedRange] = useState<CellRange | null>(null);
+  // Create the controller first so the initial state reflects its document
+  // (including default rows and columns when no document is passed).
+  const [controller] = useState(
+    () =>
+      new SpreadsheetController({
+        ...options,
+        onDocumentChange: (updated) => {
+          settersRef.current.setDoc?.({ ...updated });
+          optionsRef.current.onDocumentChange?.(updated);
+        },
+        onSelectionChange: (active, range) => {
+          settersRef.current.setActiveCell?.(active);
+          settersRef.current.setSelectedRange?.(range);
+          optionsRef.current.onSelectionChange?.(active, range);
+        },
+        onCellCommit: (rowId, colId, raw, value) => {
+          optionsRef.current.onCellCommit?.(rowId, colId, raw, value);
+        },
+      }),
+  );
+
+  const [doc, setDoc] = useState<SpreadsheetDocument>(() => ({ ...controller.document }));
+  const [activeCell, setActiveCell] = useState<CellCoordinate | null>(controller.activeCell);
+  const [selectedRange, setSelectedRange] = useState<CellRange | null>(controller.selectedRange);
   const [editingCell, setEditingCell] = useState<CellCoordinate | null>(null);
   const [draftValue, setDraftValue] = useState<string>('');
-
-  const controller = useMemo(() => {
-    return new SpreadsheetController({
-      ...options,
-      onDocumentChange: (updated) => {
-        setDoc({ ...updated });
-        options.onDocumentChange?.(updated);
-      },
-      onSelectionChange: (active, range) => {
-        setActiveCell(active);
-        setSelectedRange(range);
-        options.onSelectionChange?.(active, range);
-      },
-      onCellCommit: (rowId, colId, raw, value) => {
-        options.onCellCommit?.(rowId, colId, raw, value);
-      }
-    });
-  }, []);
+  settersRef.current = { setDoc, setActiveCell, setSelectedRange };
 
   const setCellValue = useCallback((rowId: string, colId: string, raw: string) => {
     controller.setCellValue(rowId, colId, raw);
@@ -179,7 +183,7 @@ export function useSpreadsheetEditor(options: SpreadsheetControllerOptions = {})
     registerDataSource,
     setPrimaryDataSource,
     recalculateAll,
-    exportToTsv: () => controller.exportToTsv(),
+    exportToTsv: (range?: CellRange | null) => controller.exportToTsv(range),
     importFromTsv: (data: string) => {
       controller.importFromTsv(data);
       setDoc({ ...controller.document });
