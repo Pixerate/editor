@@ -1,5 +1,10 @@
 import { Editor, EditorOptions, Content, Extensions } from "@tiptap/core";
-import { Slice, Fragment, Node as ProsemirrorNode } from "@tiptap/pm/model";
+import {
+  Slice,
+  Fragment,
+  Node as ProsemirrorNode,
+  type Schema,
+} from "@tiptap/pm/model";
 import { Token, tokenizePrompt } from "./grammar";
 import {
   plainTextToTipTapHtml,
@@ -20,6 +25,29 @@ export interface EditorControllerOptions extends Partial<
   onMarkdownChange?: (markdown: string) => void;
   onTokensChange?: (tokens: Token[]) => void;
   onSelectionChange?: (range: { from: number; to: number } | null) => void;
+}
+
+/**
+ * Builds an open slice with one paragraph per line, so inserting it splits the
+ * surrounding paragraph like typing Enter would.
+ */
+function plainTextToSlice(text: string, schema: Schema): Slice {
+  const nodes: ProsemirrorNode[] = [];
+  text
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .forEach((line) => {
+      const nodeJson: any = { type: "paragraph" };
+      if (line.length > 0) {
+        nodeJson.content = [{ type: "text", text: line }];
+      }
+      try {
+        nodes.push(ProsemirrorNode.fromJSON(schema, nodeJson));
+      } catch {
+        // Ignore invalid node
+      }
+    });
+  return Slice.maxOpen(Fragment.fromArray(nodes));
 }
 
 /**
@@ -106,23 +134,7 @@ export class EditorController {
 
           if (!schema) return Slice.empty;
 
-          const blocks = text.replace(/\r\n?/g, "\n").split("\n");
-          const nodes: ProsemirrorNode[] = [];
-
-          blocks.forEach((line) => {
-            const nodeJson: any = { type: "paragraph" };
-            if (line.length > 0) {
-              nodeJson.content = [{ type: "text", text: line }];
-            }
-            try {
-              const node = ProsemirrorNode.fromJSON(schema, nodeJson);
-              nodes.push(node);
-            } catch {
-              // Ignore invalid node
-            }
-          });
-
-          return Slice.maxOpen(Fragment.fromArray(nodes));
+          return plainTextToSlice(text, schema);
         },
       },
     });
@@ -174,21 +186,36 @@ export class EditorController {
     }
   }
 
+  /**
+   * Replaces `from`..`to` with literal text: HTML in `text` is not parsed, and
+   * newlines split paragraphs.
+   */
+  private insertPlainText(from: number, to: number, text: string) {
+    const { state, view } = this.editor;
+    const tr = text.includes("\n") || text.includes("\r")
+      ? state.tr.replace(from, to, plainTextToSlice(text, state.schema))
+      : text
+        ? state.tr.insertText(text, from, to)
+        : state.tr.delete(from, to);
+    view.dispatch(tr.scrollIntoView());
+  }
+
+  /** Inserts text literally at the selection; HTML in `text` is not parsed. */
   public insertText(text: string) {
-    this.editor.commands.insertContent(text);
+    const { from, to } = this.editor.state.selection;
+    this.insertPlainText(from, to, text);
   }
 
+  /** Inserts text literally at `pos`; HTML in `text` is not parsed. */
   public insertTextAt(pos: number, text: string) {
-    this.editor.chain().focus().insertContentAt(pos, text).run();
+    this.insertPlainText(pos, pos, text);
+    this.editor.commands.focus();
   }
 
+  /** Replaces a range with literal text; HTML in `text` is not parsed. */
   public replaceRange(from: number, to: number, text: string) {
-    this.editor
-      .chain()
-      .focus()
-      .deleteRange({ from, to })
-      .insertContentAt(from, text)
-      .run();
+    this.insertPlainText(from, to, text);
+    this.editor.commands.focus();
   }
 
   public getCurrentContentString(): string {
