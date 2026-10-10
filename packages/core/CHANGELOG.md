@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.14.3
+
+### Patch Changes
+
+- ac4f459: Add package READMEs (installation, API overview and Tailwind styling requirements) so the npm package pages are no longer empty.
+
 ## 0.14.2
 
 ### Patch Changes

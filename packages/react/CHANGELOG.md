@@ -1,5 +1,13 @@
 # @pixerate/editor-react
 
+## 0.9.4
+
+### Patch Changes
+
+- ac4f459: Add package READMEs (installation, API overview and Tailwind styling requirements) so the npm package pages are no longer empty.
+- Updated dependencies [ac4f459]
+  - @pixerate/editor@0.14.3
+
 ## 0.9.3
 
 ### Patch Changes

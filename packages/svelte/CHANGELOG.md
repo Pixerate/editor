@@ -1,5 +1,13 @@
 # @pixerate/editor-svelte
 
+## 0.16.1
+
+### Patch Changes
+
+- ac4f459: Add package READMEs (installation, API overview and Tailwind styling requirements) so the npm package pages are no longer empty.
+- Updated dependencies [ac4f459]
+  - @pixerate/editor@0.14.3
+
 ## 0.16.0
 
 ### Minor Changes
