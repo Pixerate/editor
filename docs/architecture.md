@@ -73,4 +73,4 @@ This layer extends `@tiptap/core` with specialized plugins that work across any 
 
 1. **Plain Text is the Single Source of Truth for Prompts**: AI prompt editors must never store HTML tags in database records. The editor operates on pure string content, converting to TipTap nodes on mount and serializing back to pure strings on change.
 2. **Deterministic Token Parsing**: Given the same prompt string, the tokenizer will always return identical token ranges and types.
-3. **Graceful Circular Reference Handling**: In case of circular template references (`A -> B -> A`), the engine guarantees termination within a single pass, returning `"[Template loop detected]"` without throwing an unhandled exception or crashing the browser.
+3. **Graceful Circular Reference Handling**: In case of circular template references (`A -> B -> A`), the engine guarantees termination within a single pass, replacing the recursing tag with `"[Template loop detected]"` (and leaving the rest of the prompt intact) without throwing an unhandled exception or crashing the browser.

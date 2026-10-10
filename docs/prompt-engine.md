@@ -57,7 +57,7 @@ Calling `tokenizePrompt("A photo of {character} in {{scene}}")` produces:
 Templates can reference other templates arbitrarily deep. The resolver traverses the graph and replaces template references with their defined bodies.
 
 ### Cycle Detection
-When circular references are encountered (e.g. `templateA` calls `templateB`, which in turn calls `templateA`), the resolver catches this using a visited set:
+When circular references are encountered (e.g. `templateA` calls `templateB`, which in turn calls `templateA`), the resolver catches this using a visited set and replaces only the offending tag with `TEMPLATE_LOOP_ERROR` (`"[Template loop detected]"`). Tags nested deeper than `maxDepth` (default 10) are replaced with `TEMPLATE_DEPTH_ERROR` (`"[Template max depth exceeded]"`). The rest of the prompt still resolves, so check for errors with `result.includes(TEMPLATE_LOOP_ERROR)`:
 
 ```typescript
 import { resolveTemplates } from "@pixerate/editor";
@@ -69,7 +69,7 @@ const templates = [
 
 const result = resolveTemplates("Start {{loop_a}}", templates);
 console.log(result);
-// => "[Template loop detected]"
+// => "Start calls calls [Template loop detected]"
 ```
 
 ### Version Pinning

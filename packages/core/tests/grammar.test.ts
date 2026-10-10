@@ -9,6 +9,8 @@ import {
   resolveTemplatesWithMapping,
   mapResolvedOffsetToRaw,
   mapRawOffsetToResolved,
+  TEMPLATE_LOOP_ERROR,
+  TEMPLATE_DEPTH_ERROR,
   Template,
 } from "../src/grammar";
 
@@ -136,9 +138,47 @@ describe("Grammar: Resolver & Cycle Detection", () => {
     expect(res).toBe("Look at a cute red panda!");
   });
 
-  it("detects circular recursion and returns [Template loop detected]", () => {
+  it("replaces only the recursing tag with [Template loop detected]", () => {
     const res = resolveTemplates("Start {{loop_a}}", templates);
-    expect(res).toBe("[Template loop detected]");
+    expect(res).toBe("Start calls calls [Template loop detected]");
+    expect(res).toContain(TEMPLATE_LOOP_ERROR);
+  });
+
+  it("keeps surrounding text and other tags when a loop is detected", () => {
+    const res = resolveTemplates(
+      "Hello {{self}} and {{animal}} more text",
+      [...templates, { name: "self", body: "{{self}}" }],
+    );
+    expect(res).toBe("Hello [Template loop detected] and red panda more text");
+  });
+
+  it("replaces tags nested beyond maxDepth with [Template max depth exceeded]", () => {
+    const chain: Template[] = [
+      { name: "a", body: "a>{{b}}" },
+      { name: "b", body: "b>{{c}}" },
+      { name: "c", body: "c" },
+    ];
+    expect(resolveTemplates("x {{a}} y", chain, { maxDepth: 2 })).toBe(
+      `x a>b>${TEMPLATE_DEPTH_ERROR} y`,
+    );
+    expect(resolveTemplates("x {{a}} y", chain, { maxDepth: 3 })).toBe(
+      "x a>b>c y",
+    );
+  });
+
+  it("keeps $ replacement patterns in template bodies literal", () => {
+    const priced: Template[] = [
+      { name: "p", body: "costs $& or $` or $' or $$5" },
+    ];
+    expect(resolveTemplates("A {{p}} B", priced)).toBe(
+      "A costs $& or $` or $' or $$5 B",
+    );
+  });
+
+  it("leaves unknown templates untouched", () => {
+    expect(resolveTemplates("{{missing}} {{animal}}", templates)).toBe(
+      "{{missing}} red panda",
+    );
   });
 
   it("honors template version bindings", () => {
@@ -223,5 +263,38 @@ describe("Grammar: Source Mapping", () => {
     // In resolved text: "A hyper-realistic 8k B" -> ' B' starts at 20
     expect(mapRawOffsetToResolved(11, map)).toBe(20);
     expect(mapResolvedOffsetToRaw(20, map)).toBe(11);
+  });
+
+  it("maps the end of a trailing template to the end of its tag", () => {
+    const text = "ab {{style}}";
+    const { text: resolved, map } = resolveTemplatesWithMapping(text, templates);
+    expect(resolved).toBe("ab hyper-realistic 8k");
+    expect(mapResolvedOffsetToRaw(resolved.length, map)).toBe(text.length);
+    expect(mapRawOffsetToResolved(text.length, map)).toBe(resolved.length);
+    // Inside the resolved template still maps to the start of the tag.
+    expect(mapResolvedOffsetToRaw(5, map)).toBe(3);
+  });
+
+  it("agrees with resolveTemplates on loops, depth limits and $ patterns", () => {
+    const tricky: Template[] = [
+      ...templates,
+      { name: "self", body: "x {{self}}" },
+      { name: "price", body: "$& $`" },
+      { name: "a", body: "{{b}}" },
+      { name: "b", body: "deep" },
+    ];
+    const cases = [
+      "Hello {{self}} more",
+      "A {{price}} B",
+      "{{style}} and {{missing}}",
+    ];
+    for (const input of cases) {
+      expect(resolveTemplatesWithMapping(input, tricky).text).toBe(
+        resolveTemplates(input, tricky),
+      );
+    }
+    expect(
+      resolveTemplatesWithMapping("{{a}}", tricky, undefined, { maxDepth: 1 }).text,
+    ).toBe(resolveTemplates("{{a}}", tricky, { maxDepth: 1 }));
   });
 });
