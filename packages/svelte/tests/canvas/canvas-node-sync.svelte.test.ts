@@ -6,8 +6,8 @@ import {
 	normalizeNodeHandles,
 	createCanvasNodeSync,
 	type HandleConfig
-} from '../createCanvasNodeSync.svelte.js';
-import type { CanvasNode } from '../types.js';
+} from '../../src/canvas/createCanvasNodeSync.svelte.js';
+import type { CanvasNode } from '../../src/canvas/types.js';
 
 describe('createCanvasNodeSync & Node Measurement Caching', () => {
 	it('preserves measured dimensions from existing nodes to newly created nodes', () => {

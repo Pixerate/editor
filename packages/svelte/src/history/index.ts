@@ -1,2 +1,2 @@
-export * from "./history.svelte";
-export * from "./createHistoryShortcuts";
+export * from "./history.svelte.js";
+export * from "./createHistoryShortcuts.js";

@@ -2,7 +2,7 @@
   import type { Snippet } from 'svelte';
   import { indexToColName, type SpreadsheetColumn, type SpreadsheetRow, type CellData } from '@pixerate/editor';
   import FormulaBar from './FormulaBar.svelte';
-  import { createReactiveSpreadsheet } from './spreadsheet.svelte';
+  import { createReactiveSpreadsheet } from './spreadsheet.svelte.js';
 
   interface Props {
     sheetState?: ReturnType<typeof createReactiveSpreadsheet>;

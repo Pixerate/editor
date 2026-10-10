@@ -1,6 +1,6 @@
 <script lang="ts">
   import { indexToColName } from '@pixerate/editor';
-  import type { createReactiveSpreadsheet } from './spreadsheet.svelte';
+  import type { createReactiveSpreadsheet } from './spreadsheet.svelte.js';
 
   interface Props {
     sheetState?: ReturnType<typeof createReactiveSpreadsheet>;

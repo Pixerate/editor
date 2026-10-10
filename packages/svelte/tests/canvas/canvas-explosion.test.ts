@@ -5,15 +5,15 @@ import {
   createFanOutTrajectory,
   createBezierTrajectory,
   runMultiNodeTransition,
-} from "../createCanvasTrajectory.js";
+} from "../../src/canvas/createCanvasTrajectory.js";
 import {
   computeNodesBoundingBox,
   calculateDirectionalDisplacement,
   calculateReflowDisplacement,
-} from "../createCanvasDisplacement.js";
-import { createCanvasExplosion } from "../createCanvasExplosion.svelte.js";
-import { createCanvasGraph } from "../createCanvasGraph.svelte.js";
-import type { CanvasNode, CanvasEdge } from "../types.js";
+} from "../../src/canvas/createCanvasDisplacement.js";
+import { createCanvasExplosion } from "../../src/canvas/createCanvasExplosion.svelte.js";
+import { createCanvasGraph } from "../../src/canvas/createCanvasGraph.svelte.js";
+import type { CanvasNode, CanvasEdge } from "../../src/canvas/types.js";
 
 describe("Canvas Trajectory Math & Transition Runner", () => {
   it("evaluates linear trajectory at progress intervals", () => {

@@ -4,7 +4,7 @@ import {
   defaultSvelteFlowPreset,
   miroCompatiblePreset,
   restorePanelPointerEvents
-} from '../createCanvasInteractions.svelte.js';
+} from '../../src/canvas/createCanvasInteractions.svelte.js';
 
 describe('createCanvasInteractions', () => {
   it('exposes valid default presets', () => {

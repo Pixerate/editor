@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { createCanvasShortcuts } from '../createCanvasShortcuts.js';
-import type { CanvasNode } from '../types.js';
+import { createCanvasShortcuts } from '../../src/canvas/createCanvasShortcuts.js';
+import type { CanvasNode } from '../../src/canvas/types.js';
 
 describe('createCanvasShortcuts', () => {
 	it('attaches listener, handles hotkeys, and cleans up', () => {
