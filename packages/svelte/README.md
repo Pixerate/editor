@@ -3,12 +3,12 @@
 Svelte 5 bindings for [`@pixerate/editor`](https://www.npmjs.com/package/@pixerate/editor): a rich-text editor component, bubble menu, read-only token renderer, plus spreadsheet and image editor components and rune-based node-graph canvas helpers.
 
 ```bash
-npm install @pixerate/editor-svelte @pixerate/editor svelte
+npm install @pixerate/editor-svelte @pixerate/editor @tiptap/core @tiptap/pm svelte
 # only if you use @pixerate/editor-svelte/canvas:
 npm install @xyflow/svelte
 ```
 
-Requires **Svelte 5** (the components use runes). Components ship as `.svelte` sources, so they are compiled by your bundler and work with SvelteKit SSR.
+Requires **Svelte 5** (the components use runes). `@tiptap/core` and `@tiptap/pm` (`^2.11.5`) are peer dependencies. Components ship as `.svelte` sources, so they are compiled by your bundler and work with SvelteKit SSR.
 
 ## Rich text editor
 

@@ -3,12 +3,12 @@
 React bindings for [`@pixerate/editor`](https://www.npmjs.com/package/@pixerate/editor): a prompt editor with live template highlighting and autocomplete, a rich-text editor, a read-only token renderer, plus spreadsheet, image editor and node-graph canvas components.
 
 ```bash
-npm install @pixerate/editor-react @pixerate/editor react react-dom
+npm install @pixerate/editor-react @pixerate/editor @tiptap/core @tiptap/pm @tiptap/react react react-dom
 # only if you use @pixerate/editor-react/canvas:
 npm install @xyflow/react
 ```
 
-Requires React 18 or later.
+Requires React 18 or later. `@tiptap/core`, `@tiptap/pm` and `@tiptap/react` (`^2.11.5`) are peer dependencies, so your app and the editor share one TipTap instance.
 
 ## Prompt editor
 

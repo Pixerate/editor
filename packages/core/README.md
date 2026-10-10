@@ -5,8 +5,10 @@ UI-agnostic core of the Pixerate editor toolkit: a prompt-template grammar with 
 Framework bindings: [`@pixerate/editor-react`](https://www.npmjs.com/package/@pixerate/editor-react) · [`@pixerate/editor-svelte`](https://www.npmjs.com/package/@pixerate/editor-svelte)
 
 ```bash
-npm install @pixerate/editor
+npm install @pixerate/editor @tiptap/core @tiptap/pm
 ```
+
+`@tiptap/core` and `@tiptap/pm` (`^2.11.5`) are peer dependencies, so your app and the editor share one ProseMirror instance.
 
 ## Prompt grammar
 
@@ -101,7 +103,7 @@ Each module is also available as a subpath import:
 | `@pixerate/editor/canvas` | Node-graph layout (dagre), placement, trajectories, displacement, clipboard and streaming layout helpers |
 | `@pixerate/editor/agent` | MCP tool schemas and a planner for agent-driven canvas edits |
 
-The root entry (`@pixerate/editor`) re-exports everything, including TipTap. In backends, import from `@pixerate/editor/grammar` to keep the dependency graph small.
+The root entry (`@pixerate/editor`) re-exports grammar, serializers, extensions, the editor controller, spreadsheet, history and dirty tracking. Canvas, agent and image editor are **subpath-only**, so the root entry never loads dagre or the Canvas 2D renderer. The root entry does import TipTap, so in backends import from `@pixerate/editor/grammar`.
 
 ## License
 
