@@ -6,6 +6,9 @@
     ExportOptions,
     ImageEditorTool,
     ImagePoint,
+    InpaintHook,
+    RemoveBackgroundHook,
+    ImageEditorAIHooks,
   } from '@pixerate/editor';
   import {
     canvasToImagePoint,
@@ -23,6 +26,9 @@
     style?: string;
     onSave?: (dataUrl: string) => void;
     exportOptions?: ExportOptions;
+    onInpaint?: InpaintHook;
+    onRemoveBackground?: RemoveBackgroundHook;
+    aiHooks?: ImageEditorAIHooks;
   }
 
   let {
@@ -31,7 +37,10 @@
     class: className = '',
     style = '',
     onSave,
-    exportOptions
+    exportOptions,
+    onInpaint,
+    onRemoveBackground,
+    aiHooks,
   }: Props = $props();
 
   const internalEditor = createReactiveImageEditor();
@@ -39,8 +48,80 @@
 
   let canvasEl = $state<HTMLCanvasElement | null>(null);
   let containerEl = $state<HTMLDivElement | null>(null);
-  let activeTab = $state<'crop' | 'adjust' | 'annotate' | 'depth'>('crop');
+  let activeTab = $state<'crop' | 'adjust' | 'annotate' | 'depth' | 'ai'>('crop');
   let activeCropRatio = $state<number | null>(null);
+
+  // AI state
+  let inpaintPrompt = $state('');
+  let inpaintMaskMode = $state<'annotations' | 'crop'>('annotations');
+  let isRemovingBg = $state(false);
+  let isInpainting = $state(false);
+  let aiError = $state<string | null>(null);
+  let aiSuccess = $state<string | null>(null);
+
+  const effectiveOnInpaint = $derived(onInpaint || aiHooks?.onInpaint);
+  const effectiveOnRemoveBg = $derived(onRemoveBackground || aiHooks?.onRemoveBackground);
+
+  async function handleRemoveBackground() {
+    if (!effectiveOnRemoveBg) {
+      aiError = 'No background removal hook is configured.';
+      return;
+    }
+    aiError = null;
+    aiSuccess = null;
+    isRemovingBg = true;
+    try {
+      const imageDataUrl = await editor.toDataURL(exportOptions);
+      const result = await effectiveOnRemoveBg({ imageDataUrl });
+      if (typeof result === 'string') {
+        await editor.applyBackgroundRemovedImage(result);
+        aiSuccess = 'Background removed successfully!';
+      } else {
+        aiSuccess = 'Background removal complete.';
+      }
+    } catch (err: any) {
+      aiError = err?.message || 'Failed to remove background.';
+    } finally {
+      isRemovingBg = false;
+    }
+  }
+
+  async function handleInpaint() {
+    if (!effectiveOnInpaint) {
+      aiError = 'No inpainting hook is configured.';
+      return;
+    }
+    if (!inpaintPrompt.trim()) {
+      aiError = 'Please enter an inpainting prompt.';
+      return;
+    }
+    aiError = null;
+    aiSuccess = null;
+    isInpainting = true;
+    try {
+      const imageDataUrl = await editor.toDataURL(exportOptions);
+      const maskDataUrl = await editor.toMaskDataURL({
+        useAnnotations: inpaintMaskMode === 'annotations',
+        useCrop: inpaintMaskMode === 'crop',
+      });
+      const result = await effectiveOnInpaint({
+        prompt: inpaintPrompt.trim(),
+        imageDataUrl,
+        maskDataUrl,
+        cropBox: inpaintMaskMode === 'crop' ? editor.state.crop : null,
+      });
+      if (typeof result === 'string') {
+        await editor.applyInpaintedImage(result);
+        aiSuccess = 'Inpainting applied successfully!';
+      } else {
+        aiSuccess = 'Inpainting complete.';
+      }
+    } catch (err: any) {
+      aiError = err?.message || 'Failed to apply inpainting.';
+    } finally {
+      isInpainting = false;
+    }
+  }
 
   // Annotation drafting state
   let activeColor = $state('#ef4444');
@@ -542,6 +623,21 @@
           : 'text-slate-400 hover:text-slate-200'}"
       >
         Depth Mask
+      </button>
+      <button
+        type="button"
+        onclick={() => {
+          activeTab = 'ai';
+          editor.setTool('select');
+        }}
+        class="px-3 py-1.5 rounded-md font-medium transition-colors flex items-center gap-1.5 {activeTab === 'ai'
+          ? 'bg-indigo-600 text-white shadow'
+          : 'text-slate-400 hover:text-slate-200'}"
+      >
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+        </svg>
+        AI Tools
       </button>
     </div>
 
@@ -1114,6 +1210,136 @@
           {/if}
         </div>
       {/if}
+
+      <!-- TAB 5: AI TOOLS / INPAINTING & BACKGROUND REMOVAL -->
+      {#if activeTab === 'ai'}
+        <div class="flex flex-col gap-4 text-xs">
+          <!-- Background Removal Section -->
+          <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800 flex flex-col gap-2.5">
+            <div class="flex items-center justify-between">
+              <span class="font-semibold text-slate-200 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5 text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M6 3v12M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/>
+                </svg>
+                Background Removal
+              </span>
+              {#if isRemovingBg}
+                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-900/60 text-indigo-300 animate-pulse">
+                  Removing...
+                </span>
+              {/if}
+            </div>
+
+            <p class="text-slate-400 text-[11px] leading-relaxed">
+              Isolate foreground subject with AI alpha transparency segmentation.
+            </p>
+
+            <button
+              type="button"
+              onclick={handleRemoveBackground}
+              disabled={isRemovingBg || isInpainting}
+              class="mt-1 px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-medium shadow transition-colors flex items-center justify-center gap-2"
+            >
+              {#if isRemovingBg}
+                <div class="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                Removing Background...
+              {:else}
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                </svg>
+                Remove Background
+              {/if}
+            </button>
+          </div>
+
+          <!-- AI Inpainting / Generative Fill Section -->
+          <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800 flex flex-col gap-2.5">
+            <div class="flex items-center justify-between">
+              <span class="font-semibold text-slate-200 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5 text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="m21.64 3.64-1.28-1.28a1.2 1.2 0 0 0-1.7 0l-9.72 9.72-1.94 4.86 4.86-1.94 9.72-9.72a1.2 1.2 0 0 0 .06-1.64z"/>
+                  <path d="m14 7 3 3"/>
+                </svg>
+                Generative Inpainting
+              </span>
+              {#if isInpainting}
+                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-900/60 text-purple-300 animate-pulse">
+                  Inpainting...
+                </span>
+              {/if}
+            </div>
+
+            <p class="text-slate-400 text-[11px] leading-relaxed">
+              Replace, modify, or fill selected regions using prompt-guided generative inpainting.
+            </p>
+
+            <div class="flex flex-col gap-1">
+              <label for="ai-inpaint-prompt" class="text-slate-300 text-[11px] font-medium">Prompt</label>
+              <textarea
+                id="ai-inpaint-prompt"
+                bind:value={inpaintPrompt}
+                placeholder="e.g. replace sunglasses with steampunk goggles, remove person in background..."
+                rows="3"
+                class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 resize-none"
+              ></textarea>
+            </div>
+
+            <div class="flex flex-col gap-1">
+              <span class="text-slate-300 text-[11px] font-medium">Target Mask Region</span>
+              <div class="grid grid-cols-2 gap-1.5">
+                <button
+                  type="button"
+                  onclick={() => inpaintMaskMode = 'annotations'}
+                  class="px-2 py-1.5 rounded border text-[11px] font-medium text-left transition-colors {inpaintMaskMode === 'annotations'
+                    ? 'bg-purple-600/30 border-purple-500 text-purple-200'
+                    : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'}"
+                >
+                  Drawn Shapes ({editor.state.annotations.length})
+                </button>
+                <button
+                  type="button"
+                  onclick={() => inpaintMaskMode = 'crop'}
+                  class="px-2 py-1.5 rounded border text-[11px] font-medium text-left transition-colors {inpaintMaskMode === 'crop'
+                    ? 'bg-purple-600/30 border-purple-500 text-purple-200'
+                    : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'}"
+                >
+                  Crop Box ({editor.state.crop ? 'Selected' : 'Full'})
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onclick={handleInpaint}
+              disabled={isInpainting || isRemovingBg || !inpaintPrompt.trim()}
+              class="mt-1 px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-medium shadow transition-colors flex items-center justify-center gap-2"
+            >
+              {#if isInpainting}
+                <div class="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                Generating Inpaint...
+              {:else}
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                </svg>
+                Apply Inpainting
+              {/if}
+            </button>
+          </div>
+
+          {#if aiError}
+            <div class="p-2.5 rounded-lg bg-rose-950/60 border border-rose-800 text-rose-300 text-[11px]">
+              {aiError}
+            </div>
+          {/if}
+
+          {#if aiSuccess}
+            <div class="p-2.5 rounded-lg bg-emerald-950/60 border border-emerald-800 text-emerald-300 text-[11px]">
+              {aiSuccess}
+            </div>
+          {/if}
+        </div>
+      {/if}
+
     </div>
   </div>
 </div>

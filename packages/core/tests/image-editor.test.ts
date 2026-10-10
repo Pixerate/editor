@@ -784,5 +784,48 @@ describe('ImageEditor Geometry & Interactive Transformations', () => {
       expect(bounds.height).toBe(40);
     });
   });
+
+  describe('AI Masking & Inpainting Controller Support', () => {
+    it('generates binary mask canvas and data URL from crop or annotations', async () => {
+      const controller = new ImageEditorController();
+      controller.setCrop({ x: 20, y: 30, width: 100, height: 100 });
+      controller.addAnnotation({
+        type: 'rect',
+        x: 10,
+        y: 10,
+        width: 50,
+        height: 50,
+      });
+
+      const maskCanvas = await controller.renderMask({ useCrop: true, useAnnotations: true });
+      expect(maskCanvas).toBeDefined();
+
+      const maskDataUrl = await controller.toMaskDataURL({ useCrop: true, useAnnotations: true });
+      expect(maskDataUrl).toBeDefined();
+      expect(typeof maskDataUrl).toBe('string');
+    });
+
+    it('applies inpainted image, records history, and clears mask annotations', async () => {
+      const controller = new ImageEditorController();
+      controller.addAnnotation({
+        type: 'pen',
+        points: [{ x: 5, y: 5 }, { x: 10, y: 10 }],
+      });
+      expect(controller.getState().annotations.length).toBe(1);
+
+      await controller.applyInpaintedImage('data:image/png;base64,mockInpaintedResult');
+      expect(controller.getState().sourceUrl).toBe('data:image/png;base64,mockInpaintedResult');
+      expect(controller.getState().annotations.length).toBe(0);
+      expect(controller.canUndo).toBe(true);
+    });
+
+    it('applies background removed image and records history', async () => {
+      const controller = new ImageEditorController();
+      await controller.applyBackgroundRemovedImage('data:image/png;base64,mockTransparentForeground');
+      expect(controller.getState().sourceUrl).toBe('data:image/png;base64,mockTransparentForeground');
+      expect(controller.canUndo).toBe(true);
+    });
+  });
 });
+
 

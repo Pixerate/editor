@@ -6,6 +6,9 @@ import type {
   ExportOptions,
   ImageEditorTool,
   ImagePoint,
+  InpaintHook,
+  RemoveBackgroundHook,
+  ImageEditorAIHooks,
 } from '@pixerate/editor';
 import {
   canvasToImagePoint,
@@ -23,9 +26,12 @@ export interface ImageEditorProps {
   style?: React.CSSProperties;
   onSave?: (dataUrl: string) => void;
   exportOptions?: ExportOptions;
+  onInpaint?: InpaintHook;
+  onRemoveBackground?: RemoveBackgroundHook;
+  aiHooks?: ImageEditorAIHooks;
 }
 
-type TabType = 'crop' | 'adjust' | 'annotate' | 'depth';
+type TabType = 'crop' | 'adjust' | 'annotate' | 'depth' | 'ai';
 
 export const ImageEditor: React.FC<ImageEditorProps> = ({
   editor: externalEditor,
@@ -34,6 +40,9 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
   style,
   onSave,
   exportOptions,
+  onInpaint,
+  onRemoveBackground,
+  aiHooks,
 }) => {
   const internalEditor = useImageEditor({ image: src });
   const editor = externalEditor || internalEditor;
@@ -43,6 +52,78 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState<TabType>('crop');
   const [activeCropRatio, setActiveCropRatio] = useState<number | null>(null);
+
+  // AI Tools state
+  const [inpaintPrompt, setInpaintPrompt] = useState('');
+  const [inpaintMaskMode, setInpaintMaskMode] = useState<'annotations' | 'crop'>('annotations');
+  const [isRemovingBg, setIsRemovingBg] = useState(false);
+  const [isInpainting, setIsInpainting] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiSuccess, setAiSuccess] = useState<string | null>(null);
+
+  const effectiveOnInpaint = onInpaint || aiHooks?.onInpaint;
+  const effectiveOnRemoveBg = onRemoveBackground || aiHooks?.onRemoveBackground;
+
+  const handleRemoveBackground = async () => {
+    if (!effectiveOnRemoveBg) {
+      setAiError('No background removal hook is configured.');
+      return;
+    }
+    setAiError(null);
+    setAiSuccess(null);
+    setIsRemovingBg(true);
+    try {
+      const imageDataUrl = await editor.toDataURL(exportOptions);
+      const result = await effectiveOnRemoveBg({ imageDataUrl });
+      if (typeof result === 'string') {
+        await editor.applyBackgroundRemovedImage(result);
+        setAiSuccess('Background removed successfully!');
+      } else {
+        setAiSuccess('Background removal complete.');
+      }
+    } catch (err: any) {
+      setAiError(err?.message || 'Failed to remove background.');
+    } finally {
+      setIsRemovingBg(false);
+    }
+  };
+
+  const handleInpaint = async () => {
+    if (!effectiveOnInpaint) {
+      setAiError('No inpainting hook is configured.');
+      return;
+    }
+    if (!inpaintPrompt.trim()) {
+      setAiError('Please enter an inpainting prompt.');
+      return;
+    }
+    setAiError(null);
+    setAiSuccess(null);
+    setIsInpainting(true);
+    try {
+      const imageDataUrl = await editor.toDataURL(exportOptions);
+      const maskDataUrl = await editor.toMaskDataURL({
+        useAnnotations: inpaintMaskMode === 'annotations',
+        useCrop: inpaintMaskMode === 'crop',
+      });
+      const result = await effectiveOnInpaint({
+        prompt: inpaintPrompt.trim(),
+        imageDataUrl,
+        maskDataUrl,
+        cropBox: inpaintMaskMode === 'crop' ? editor.state.crop : null,
+      });
+      if (typeof result === 'string') {
+        await editor.applyInpaintedImage(result);
+        setAiSuccess('Inpainting applied successfully!');
+      } else {
+        setAiSuccess('Inpainting complete.');
+      }
+    } catch (err: any) {
+      setAiError(err?.message || 'Failed to apply inpainting.');
+    } finally {
+      setIsInpainting(false);
+    }
+  };
 
   // Annotation drafting state
   const [activeColor, setActiveColor] = useState('#ef4444');
@@ -563,6 +644,21 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
             }`}
           >
             Depth Mask
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('ai');
+              editor.setTool('select');
+            }}
+            className={`px-3 py-1.5 rounded-md font-medium transition-colors flex items-center gap-1.5 ${
+              activeTab === 'ai' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+            </svg>
+            AI Tools
           </button>
         </div>
 
@@ -1161,6 +1257,148 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                     <span>Invert Mask</span>
                   </label>
                 </>
+              )}
+            </div>
+          )}
+
+          {/* TAB 5: AI TOOLS / INPAINTING & BACKGROUND REMOVAL */}
+          {activeTab === 'ai' && (
+            <div className="flex flex-col gap-4 text-xs">
+              {/* Background Removal Section */}
+              <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800 flex flex-col gap-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-slate-200 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                    <svg className="w-3.5 h-3.5 text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M6 3v12M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" />
+                    </svg>
+                    Background Removal
+                  </span>
+                  {isRemovingBg && (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-900/60 text-indigo-300 animate-pulse">
+                      Removing...
+                    </span>
+                  )}
+                </div>
+
+                <p className="text-slate-400 text-[11px] leading-relaxed">
+                  Isolate foreground subject with AI alpha transparency segmentation.
+                </p>
+
+                <button
+                  type="button"
+                  onClick={handleRemoveBackground}
+                  disabled={isRemovingBg || isInpainting}
+                  className="mt-1 px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-medium shadow transition-colors flex items-center justify-center gap-2"
+                >
+                  {isRemovingBg ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Removing Background...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+                      </svg>
+                      Remove Background
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* AI Inpainting / Generative Fill Section */}
+              <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800 flex flex-col gap-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-slate-200 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                    <svg className="w-3.5 h-3.5 text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="m21.64 3.64-1.28-1.28a1.2 1.2 0 0 0-1.7 0l-9.72 9.72-1.94 4.86 4.86-1.94 9.72-9.72a1.2 1.2 0 0 0 .06-1.64z" />
+                      <path d="m14 7 3 3" />
+                    </svg>
+                    Generative Inpainting
+                  </span>
+                  {isInpainting && (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-900/60 text-purple-300 animate-pulse">
+                      Inpainting...
+                    </span>
+                  )}
+                </div>
+
+                <p className="text-slate-400 text-[11px] leading-relaxed">
+                  Replace, modify, or fill selected regions using prompt-guided generative inpainting.
+                </p>
+
+                <div className="flex flex-col gap-1">
+                  <label htmlFor="ai-inpaint-prompt-react" className="text-slate-300 text-[11px] font-medium">Prompt</label>
+                  <textarea
+                    id="ai-inpaint-prompt-react"
+                    value={inpaintPrompt}
+                    onChange={(e) => setInpaintPrompt(e.target.value)}
+                    placeholder="e.g. replace sunglasses with steampunk goggles, remove person in background..."
+                    rows={3}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 resize-none"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <span className="text-slate-300 text-[11px] font-medium">Target Mask Region</span>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setInpaintMaskMode('annotations')}
+                      className={`px-2 py-1.5 rounded border text-[11px] font-medium text-left transition-colors ${
+                        inpaintMaskMode === 'annotations'
+                          ? 'bg-purple-600/30 border-purple-500 text-purple-200'
+                          : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      Drawn Shapes ({state.annotations.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setInpaintMaskMode('crop')}
+                      className={`px-2 py-1.5 rounded border text-[11px] font-medium text-left transition-colors ${
+                        inpaintMaskMode === 'crop'
+                          ? 'bg-purple-600/30 border-purple-500 text-purple-200'
+                          : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      Crop Box ({state.crop ? 'Selected' : 'Full'})
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleInpaint}
+                  disabled={isInpainting || isRemovingBg || !inpaintPrompt.trim()}
+                  className="mt-1 px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-medium shadow transition-colors flex items-center justify-center gap-2"
+                >
+                  {isInpainting ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Generating Inpaint...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+                      </svg>
+                      Apply Inpainting
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {aiError && (
+                <div className="p-2.5 rounded-lg bg-rose-950/60 border border-rose-800 text-rose-300 text-[11px]">
+                  {aiError}
+                </div>
+              )}
+
+              {aiSuccess && (
+                <div className="p-2.5 rounded-lg bg-emerald-950/60 border border-emerald-800 text-emerald-300 text-[11px]">
+                  {aiSuccess}
+                </div>
               )}
             </div>
           )}

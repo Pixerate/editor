@@ -133,6 +133,18 @@ export function createReactiveImageEditor(options: ImageEditorOptions = {}) {
     loadJSON(data: SerializedImageEditorState) {
       controller.loadJSON(data);
     },
+    renderMask(opts?: { useAnnotations?: boolean; useCrop?: boolean }) {
+      return controller.renderMask(opts);
+    },
+    toMaskDataURL(opts?: { useAnnotations?: boolean; useCrop?: boolean }) {
+      return controller.toMaskDataURL(opts);
+    },
+    applyInpaintedImage(newDataUrl: string) {
+      return controller.applyInpaintedImage(newDataUrl);
+    },
+    applyBackgroundRemovedImage(newDataUrl: string) {
+      return controller.applyBackgroundRemovedImage(newDataUrl);
+    },
   };
 }
 

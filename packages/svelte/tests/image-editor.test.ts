@@ -88,6 +88,28 @@ describe('Svelte Image Editor - createReactiveImageEditor rune', () => {
     expect(editor2.state.transform.rotate).toBe(180);
     expect(editor2.state.adjustments.saturation).toBe(40);
   });
+
+  it('supports AI masking, inpainting application, and background removal application', async () => {
+    const editor = createReactiveImageEditor();
+    editor.addAnnotation({
+      type: 'rect',
+      x: 5,
+      y: 5,
+      width: 20,
+      height: 20,
+    });
+    expect(editor.state.annotations.length).toBe(1);
+
+    const maskDataUrl = await editor.toMaskDataURL();
+    expect(maskDataUrl).toBeDefined();
+
+    await editor.applyInpaintedImage('data:image/png;base64,inpaintMock');
+    expect(editor.state.sourceUrl).toBe('data:image/png;base64,inpaintMock');
+    expect(editor.state.annotations.length).toBe(0);
+
+    await editor.applyBackgroundRemovedImage('data:image/png;base64,bgRemovedMock');
+    expect(editor.state.sourceUrl).toBe('data:image/png;base64,bgRemovedMock');
+  });
 });
 
 describe('Svelte Image Editor - Exports', () => {
