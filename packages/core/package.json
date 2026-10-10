@@ -97,7 +97,7 @@
     "@tiptap/pm": "^2.11.5",
     "@types/dagre": "^0.7.54",
     "@types/markdown-it": "^14.2.0",
-    "@types/node": "^24.0.0",
+    "@types/node": "^26.6.4",
     "tsup": "^8.4.0",
     "typescript": "^5.7.3",
     "vitest": "^4.1.11"
