@@ -1,4 +1,4 @@
-import { useSyncExternalStore, useMemo, useCallback } from "react";
+import { useSyncExternalStore, useRef, useCallback } from "react";
 import {
   HistoryManager,
   HistoryState,
@@ -19,17 +19,22 @@ export interface UseHistoryResult extends HistoryState {
 
 /**
  * React hook that subscribes to a HistoryManager instance.
- * Accepts an existing HistoryManager or config options to create an instance.
+ * Accepts an existing HistoryManager or config options to create an instance
+ * (options are read on first render only).
  */
 export function useHistory(
   managerOrOptions?: HistoryManager | HistoryManagerOptions,
 ): UseHistoryResult {
-  const manager = useMemo(() => {
-    if (managerOrOptions instanceof HistoryManager) {
-      return managerOrOptions;
-    }
-    return createHistoryManager(managerOrOptions);
-  }, [managerOrOptions]);
+  // Options are read once, so passing an inline options object does not
+  // create a new manager (and wipe history) on every render.
+  const ownManagerRef = useRef<HistoryManager | null>(null);
+  let manager: HistoryManager;
+  if (managerOrOptions instanceof HistoryManager) {
+    manager = managerOrOptions;
+  } else {
+    ownManagerRef.current ??= createHistoryManager(managerOrOptions);
+    manager = ownManagerRef.current;
+  }
 
   const state = useSyncExternalStore(
     useCallback(

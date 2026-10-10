@@ -19,7 +19,7 @@ export function createReactiveImageEditor(options: ImageEditorOptions = {}) {
   let state = $state<ImageEditorState>(controller.getState());
   let historyTicks = $state<number>(0);
 
-  controller.subscribe((updated) => {
+  const unsubscribe = controller.subscribe((updated) => {
     state = { ...updated };
     historyTicks++;
   });
@@ -144,6 +144,10 @@ export function createReactiveImageEditor(options: ImageEditorOptions = {}) {
     },
     applyBackgroundRemovedImage(newDataUrl: string) {
       return controller.applyBackgroundRemovedImage(newDataUrl);
+    },
+    /** Stops syncing controller state; call when the editor is no longer used. */
+    destroy() {
+      unsubscribe();
     },
   };
 }

@@ -3,6 +3,7 @@ import { JSDOM } from 'jsdom';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { useImageEditor, ImageEditor } from '../src/image-editor';
+import { ImageEditorController } from '@pixerate/editor/image-editor';
 
 let container: HTMLDivElement;
 let root: any;
@@ -96,6 +97,42 @@ describe('React Image Editor - useImageEditor hook', () => {
     });
     expect(hookResult!.state.adjustments.brightness).toBe(30);
     expect(hookResult!.state.adjustments.contrast).toBe(15);
+  });
+});
+
+describe('React Image Editor - image option', () => {
+  it('does not revert AI results back to the original image option', async () => {
+    const loadSpy = vi.spyOn(ImageEditorController.prototype, 'loadImage');
+    let hookResult: ReturnType<typeof useImageEditor> | null = null;
+
+    function TestComponent({ image }: { image: string }) {
+      hookResult = useImageEditor({ image });
+      return null;
+    }
+
+    await act(async () => {
+      root.render(<TestComponent image="orig.png" />);
+    });
+    await act(async () => {
+      await hookResult!.applyInpaintedImage('data:image/png;base64,inpainted');
+    });
+    await act(async () => {
+      root.render(<TestComponent image="orig.png" />);
+    });
+
+    expect(hookResult!.state.sourceUrl).toBe('data:image/png;base64,inpainted');
+    expect(loadSpy.mock.calls.map((c) => c[0])).toEqual([
+      'orig.png',
+      'data:image/png;base64,inpainted',
+    ]);
+
+    // Changing the image option still loads the new image.
+    await act(async () => {
+      root.render(<TestComponent image="next.png" />);
+    });
+    expect(loadSpy.mock.calls.at(-1)?.[0]).toBe('next.png');
+    expect(hookResult!.state.sourceUrl).toBe('next.png');
+    loadSpy.mockRestore();
   });
 });
 
