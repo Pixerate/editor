@@ -13,7 +13,7 @@ import {
   type ExportOptions,
   type SerializedImageEditorState,
   type ImagePoint,
-} from '@pixerate/editor';
+} from '@pixerate/editor/image-editor';
 
 export interface UseImageEditorReturn {
   controller: ImageEditorController;

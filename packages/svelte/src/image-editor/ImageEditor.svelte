@@ -9,14 +9,14 @@
     InpaintHook,
     RemoveBackgroundHook,
     ImageEditorAIHooks,
-  } from '@pixerate/editor';
+  } from '@pixerate/editor/image-editor';
   import {
     canvasToImagePoint,
     hitTestCrop,
     getCropCursor,
     calculateCropDrag,
     hitTestAnnotation,
-  } from '@pixerate/editor';
+  } from '@pixerate/editor/image-editor';
   import { createReactiveImageEditor, type ReactiveImageEditor } from './imageEditorState.svelte.js';
 
   interface Props {
