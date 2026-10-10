@@ -63,7 +63,7 @@
     "@tiptap/core": "^2.11.5",
     "@tiptap/pm": "^2.11.5",
     "@xyflow/svelte": "^1.6.0",
-    "svelte": "^5.0.0"
+    "svelte": "^5.57.2"
   },
   "peerDependenciesMeta": {
     "@xyflow/svelte": {
@@ -76,8 +76,8 @@
     "@tiptap/core": "^2.11.5",
     "@tiptap/pm": "^2.11.5",
     "@types/dagre": "^0.7.52",
-    "@xyflow/svelte": "^1.6.6",
-    "svelte": "^5.0.0",
+    "@xyflow/svelte": "^1.7.0",
+    "svelte": "^5.57.2",
     "svelte-check": "^4.7.6",
     "typescript": "^5.7.3",
     "vitest": "^4.1.11"
