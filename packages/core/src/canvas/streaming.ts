@@ -16,6 +16,15 @@ export interface StreamingLayoutManagerOptions {
 /**
  * Manages throttled incremental layout recalculation and smooth tweened node gliding
  * during active streaming (e.g. LLM streaming or graph generation).
+ *
+ * - `pushStreamUpdate` is a true throttle (leading + trailing edge): the first update
+ *   lays out immediately, further updates within `throttleMs` are coalesced and the
+ *   latest one is laid out when the window closes. Layouts therefore keep running at
+ *   most once per `throttleMs` while a stream is active, instead of being postponed
+ *   until the stream goes quiet.
+ * - Every layout is computed from the graph (respecting `layoutOptions.storedPositions`
+ *   as pinned/manual coordinates) and each known node glides from its *current*
+ *   position (the `currentPositions` argument) to its newly computed position.
  */
 export class StreamingLayoutManager<
 	TNode extends CanvasNode = CanvasNode,
@@ -28,9 +37,11 @@ export class StreamingLayoutManager<
 	private layoutOptions: IncrementalLayoutOptions;
 	private onLayoutUpdated?: (positions: Map<string, XYPosition>) => void;
 
-	private pendingTimer: any = null;
+	private pendingTimer: ReturnType<typeof setTimeout> | null = null;
+	private pendingArgs: [TNode[], TEdge[], Map<string, XYPosition>] | null = null;
 	private activeTransitionCancel: (() => void) | null = null;
 	private targetPositions = new Map<string, XYPosition>();
+	private livePositions = new Map<string, XYPosition>();
 
 	constructor(options: StreamingLayoutManagerOptions = {}) {
 		this.throttleMs = options.throttleMs ?? 200;
@@ -43,21 +54,35 @@ export class StreamingLayoutManager<
 
 	/**
 	 * Feed incoming nodes and edges into the streaming manager.
-	 * Coalesces rapid streaming bursts and triggers smooth layout gliding.
+	 * Throttles rapid streaming bursts (leading + trailing edge) and triggers smooth layout gliding.
 	 */
 	public pushStreamUpdate(
 		nodes: TNode[],
 		edges: TEdge[],
 		currentPositions: Map<string, XYPosition>
 	): void {
-		if (this.pendingTimer) {
-			clearTimeout(this.pendingTimer);
+		if (this.pendingTimer !== null) {
+			// Inside the throttle window: remember the latest update for the trailing edge.
+			this.pendingArgs = [nodes, edges, currentPositions];
+			return;
 		}
 
+		// Leading edge: lay out immediately and open a throttle window.
+		this.recalculateAndGlide(nodes, edges, currentPositions);
+		this.startWindow();
+	}
+
+	private startWindow(): void {
 		this.pendingTimer = setTimeout(() => {
 			this.pendingTimer = null;
-			this.recalculateAndGlide(nodes, edges, currentPositions);
-		}, this.throttleMs);
+			const args = this.pendingArgs;
+			this.pendingArgs = null;
+			if (args) {
+				// Trailing edge: lay out the latest coalesced update and keep throttling.
+				this.recalculateAndGlide(...args);
+				this.startWindow();
+			}
+		}, Math.max(0, this.throttleMs));
 	}
 
 	/**
@@ -68,11 +93,23 @@ export class StreamingLayoutManager<
 		edges: TEdge[],
 		currentPositions: Map<string, XYPosition>
 	): void {
-		if (this.pendingTimer) {
+		this.clearPending();
+		this.recalculateAndGlide(nodes, edges, currentPositions);
+	}
+
+	/**
+	 * Latest computed layout targets (the positions nodes are gliding towards).
+	 */
+	public getTargetPositions(): Map<string, XYPosition> {
+		return new Map(this.targetPositions);
+	}
+
+	private clearPending(): void {
+		if (this.pendingTimer !== null) {
 			clearTimeout(this.pendingTimer);
 			this.pendingTimer = null;
 		}
-		this.recalculateAndGlide(nodes, edges, currentPositions);
+		this.pendingArgs = null;
 	}
 
 	private recalculateAndGlide(
@@ -83,36 +120,35 @@ export class StreamingLayoutManager<
 		const targetNodes = this.connectedOnly ? connectedOnly(nodes, edges) : nodes;
 		if (targetNodes.length === 0) return;
 
-		// Cancel any currently running RAF glide
+		// Where nodes are right now: the caller's view, overridden by any glide still in
+		// flight (the caller may not have applied the latest animated frame yet).
+		const startPositions = new Map<string, XYPosition>(currentPositions);
 		if (this.activeTransitionCancel) {
+			for (const [id, pos] of this.livePositions) {
+				startPositions.set(id, pos);
+			}
 			this.activeTransitionCancel();
 			this.activeTransitionCancel = null;
 		}
 
-		// Incremental layout preserves existing nodes and aligns new nodes
-		const stored: Record<string, XYPosition> = {};
-		for (const [id, pos] of currentPositions.entries()) {
-			stored[id] = pos;
-		}
-
-		const layouted = ensureLayout(targetNodes, edges, {
-			...this.layoutOptions,
-			storedPositions: stored
-		});
+		// Compute fresh layout targets. Only explicitly stored (pinned/manual) positions
+		// are preserved; current positions are the glide *origin*, not the destination.
+		const layouted = ensureLayout(targetNodes, edges, this.layoutOptions);
 
 		const nextPositions = new Map<string, XYPosition>();
 		const transitions: NodeTransition<TNode>[] = [];
 
 		for (const node of layouted) {
-			const target = node.position;
+			const target = { ...node.position };
 			nextPositions.set(node.id, target);
 
-			const current = currentPositions.get(node.id) ?? target;
-			const distance = Math.hypot(target.x - current.x, target.y - current.y);
+			const current = startPositions.get(node.id);
+			if (!current) continue; // brand-new node: appears directly at its target
 
+			const distance = Math.hypot(target.x - current.x, target.y - current.y);
 			if (distance > 2) {
 				transitions.push({
-					node,
+					node: { ...node, position: { ...current } },
 					from: current,
 					to: target,
 					trajectory: linearPositionTrajectory,
@@ -123,32 +159,42 @@ export class StreamingLayoutManager<
 
 		this.targetPositions = nextPositions;
 
-		if (transitions.length > 0) {
-			this.activeTransitionCancel = runMultiNodeTransition(transitions, {
-				clock: this.clock,
-				onUpdate: () => {
-					// Broadcast updated positions during RAF
-					const liveMap = new Map<string, XYPosition>(currentPositions);
-					for (const trans of transitions) {
-						liveMap.set(trans.node.id, { ...trans.node.position });
-					}
-					this.onLayoutUpdated?.(liveMap);
-				},
-				onComplete: () => {
-					this.activeTransitionCancel = null;
-					this.onLayoutUpdated?.(nextPositions);
-				}
-			});
-		} else {
+		if (transitions.length === 0) {
+			this.livePositions = new Map(nextPositions);
 			this.onLayoutUpdated?.(nextPositions);
+			return;
 		}
+
+		const live = new Map<string, XYPosition>(nextPositions);
+		for (const trans of transitions) {
+			live.set(trans.node.id, { ...trans.from });
+		}
+		this.livePositions = live;
+
+		let finished = false;
+		const cancel = runMultiNodeTransition(transitions, {
+			clock: this.clock,
+			onUpdate: (updated) => {
+				const frame = new Map<string, XYPosition>(this.livePositions);
+				for (const node of updated) {
+					frame.set(node.id, { ...node.position });
+				}
+				this.livePositions = frame;
+				this.onLayoutUpdated?.(frame);
+			},
+			onComplete: () => {
+				finished = true;
+				this.activeTransitionCancel = null;
+				this.livePositions = new Map(nextPositions);
+				this.onLayoutUpdated?.(nextPositions);
+			}
+		});
+		// A zero-duration glide completes synchronously; don't keep a stale canceller.
+		this.activeTransitionCancel = finished ? null : cancel;
 	}
 
 	public destroy(): void {
-		if (this.pendingTimer) {
-			clearTimeout(this.pendingTimer);
-			this.pendingTimer = null;
-		}
+		this.clearPending();
 		if (this.activeTransitionCancel) {
 			this.activeTransitionCancel();
 			this.activeTransitionCancel = null;

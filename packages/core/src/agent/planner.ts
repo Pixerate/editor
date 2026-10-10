@@ -1,6 +1,26 @@
 import { ensureLayout, getLayoutedNodes, placeBeside } from '../canvas/layout.js';
-import type { CanvasEdge, CanvasNode, Rect } from '../canvas/types.js';
+import type { CanvasEdge, CanvasNode, Rect, Side } from '../canvas/types.js';
 import type { AgentCommand, AgentStep, EditorSnapshot } from './types.js';
+
+/**
+ * Normalizes a placement side from either the planner vocabulary (`right | below | left | above`)
+ * or the MCP tool schema vocabulary (`top | right | bottom | left`). Unknown values fall back to `right`.
+ */
+export function normalizeSide(side: string | undefined | null): Side {
+	switch (side) {
+		case 'top':
+		case 'above':
+			return 'above';
+		case 'bottom':
+		case 'below':
+			return 'below';
+		case 'left':
+			return 'left';
+		case 'right':
+		default:
+			return 'right';
+	}
+}
 
 /**
  * Plans a sequence of atomic execution steps from a high-level agent command.
@@ -26,37 +46,29 @@ export function planAgentCommand<
 	switch (command.type) {
 		case 'canvas:add_node': {
 			let pos = command.node.position;
+			// Only anchor to (and connect from) a node that actually exists.
+			const anchorId =
+				command.nearNodeId && nodes.some((n) => n.id === command.nearNodeId)
+					? command.nearNodeId
+					: undefined;
 
 			if (!pos) {
-				if (command.nearNodeId) {
+				const rects: Record<string, Rect> = {};
+				for (const n of nodes) {
+					rects[n.id] = {
+						x: n.position.x,
+						y: n.position.y,
+						width: n.measured?.width ?? (n as any).width ?? defaultNodeSize.width,
+						height: n.measured?.height ?? (n as any).height ?? defaultNodeSize.height
+					};
+				}
+
+				if (anchorId) {
 					// Use collision-aware directional placement
-					const rects: Record<string, Rect> = {};
-					for (const n of nodes) {
-						rects[n.id] = {
-							x: n.position.x,
-							y: n.position.y,
-							width: n.measured?.width ?? (n as any).width ?? defaultNodeSize.width,
-							height: n.measured?.height ?? (n as any).height ?? defaultNodeSize.height
-						};
-					}
-					pos = placeBeside(
-						rects,
-						defaultNodeSize,
-						command.side ?? 'right',
-						command.nearNodeId
-					);
+					pos = placeBeside(rects, defaultNodeSize, normalizeSide(command.side), anchorId);
 				} else if (nodes.length > 0) {
 					// Default beside the last node
 					const lastNode = nodes[nodes.length - 1];
-					const rects: Record<string, Rect> = {};
-					for (const n of nodes) {
-						rects[n.id] = {
-							x: n.position.x,
-							y: n.position.y,
-							width: n.measured?.width ?? (n as any).width ?? defaultNodeSize.width,
-							height: n.measured?.height ?? (n as any).height ?? defaultNodeSize.height
-						};
-					}
 					pos = placeBeside(rects, defaultNodeSize, 'right', lastNode.id);
 				} else {
 					pos = { x: 100, y: 100 };
@@ -77,12 +89,12 @@ export function planAgentCommand<
 			];
 
 			// If attached to nearNode, optionally automatically connect
-			if (command.nearNodeId) {
+			if (anchorId) {
 				steps.push({
 					type: 'step:canvas_add_edge',
 					edge: {
 						id: edgeIdGen(),
-						source: command.nearNodeId,
+						source: anchorId,
 						target: fullNode.id
 					} as TEdge
 				});
@@ -128,7 +140,8 @@ export function planAgentCommand<
 			const dir = command.direction ?? 'LR';
 			let layouted: TNode[];
 
-			if (command.incremental) {
+			// Matches the MCP tool schema: `incremental` defaults to true.
+			if (command.incremental ?? true) {
 				const stored: Record<string, { x: number; y: number }> = {};
 				for (const n of nodes) {
 					if (n.position && (n.position.x !== 0 || n.position.y !== 0)) {

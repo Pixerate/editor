@@ -20,6 +20,11 @@ export type Position = 'top' | 'right' | 'bottom' | 'left';
 export type Side = 'right' | 'below' | 'left' | 'above';
 
 /**
+ * Node style: a CSS string (SvelteFlow) or a style object (React Flow / xyflow).
+ */
+export type CanvasNodeStyle = string | Record<string, any>;
+
+/**
  * Generic canvas node structure compatible across SvelteFlow and ReactFlow.
  */
 export interface CanvasNode<
@@ -38,7 +43,7 @@ export interface CanvasNode<
 	width?: number;
 	height?: number;
 	measured?: { width?: number; height?: number };
-	style?: string;
+	style?: CanvasNodeStyle;
 	className?: string;
 	class?: string;
 	[key: string]: any;

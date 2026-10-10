@@ -157,39 +157,68 @@ export class HistoryManager {
 
     try {
       fn();
-    } finally {
+    } catch (error) {
+      const executed = this.currentBatch ?? [];
       this.batchDepth--;
-      const batchCommands = this.currentBatch;
       this.currentBatch = null;
+      this.rollback(executed);
+      throw error;
+    }
 
-      if (batchCommands && batchCommands.length > 0) {
-        const compoundCommand: Command = {
-          name,
-          timestamp: Date.now(),
-          execute: () => {
-            for (let i = 0; i < batchCommands.length; i++) {
-              (batchCommands[i].redo ?? batchCommands[i].execute)();
-            }
-          },
-          undo: () => {
-            for (let i = batchCommands.length - 1; i >= 0; i--) {
-              batchCommands[i].undo();
-            }
-          },
-          redo: () => {
-            for (let i = 0; i < batchCommands.length; i++) {
-              (batchCommands[i].redo ?? batchCommands[i].execute)();
-            }
-          },
-        };
+    this.batchDepth--;
+    const batchCommands: Command[] = this.currentBatch ?? [];
+    this.currentBatch = null;
 
-        this.undoStack.push(compoundCommand);
-        if (this.undoStack.length > this.maxDepth) {
-          this.undoStack.shift();
-        }
-        this.redoStack = [];
-        this.notify();
+    if (batchCommands.length > 0) {
+      const compoundCommand: Command = {
+        name,
+        timestamp: Date.now(),
+        execute: () => {
+          for (let i = 0; i < batchCommands.length; i++) {
+            (batchCommands[i].redo ?? batchCommands[i].execute)();
+          }
+        },
+        undo: () => {
+          for (let i = batchCommands.length - 1; i >= 0; i--) {
+            batchCommands[i].undo();
+          }
+        },
+        redo: () => {
+          for (let i = 0; i < batchCommands.length; i++) {
+            (batchCommands[i].redo ?? batchCommands[i].execute)();
+          }
+        },
+      };
+
+      this.undoStack.push(compoundCommand);
+      if (this.undoStack.length > this.maxDepth) {
+        this.undoStack.shift();
       }
+      this.redoStack = [];
+      this.notify();
+    }
+  }
+
+  /**
+   * Reverts already-executed commands of an aborted batch, newest first.
+   * Commands executed by the undo closures themselves are not recorded.
+   */
+  private rollback(commands: Command[]): void {
+    const wasApplying = this.isApplying;
+    this.isApplying = true;
+    try {
+      for (let i = commands.length - 1; i >= 0; i--) {
+        try {
+          commands[i].undo();
+        } catch (err) {
+          console.error(
+            `[HistoryManager] Error rolling back "${commands[i].name}" of a failed batch:`,
+            err,
+          );
+        }
+      }
+    } finally {
+      this.isApplying = wasApplying;
     }
   }
 
@@ -204,8 +233,10 @@ export class HistoryManager {
 
     this.isApplying = true;
     try {
-      const command = this.undoStack.pop()!;
+      const command = this.undoStack[this.undoStack.length - 1];
+      // If undo throws, the command stays on the undo stack and the error propagates.
       command.undo();
+      this.undoStack.pop();
       this.redoStack.push(command);
       return true;
     } finally {
@@ -225,8 +256,10 @@ export class HistoryManager {
 
     this.isApplying = true;
     try {
-      const command = this.redoStack.pop()!;
+      const command = this.redoStack[this.redoStack.length - 1];
+      // If redo throws, the command stays on the redo stack and the error propagates.
       (command.redo ?? command.execute)();
+      this.redoStack.pop();
       this.undoStack.push(command);
       return true;
     } finally {

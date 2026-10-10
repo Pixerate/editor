@@ -55,6 +55,27 @@ export function createCanvasExplosion<
 	const snapshots = new Map<string, ExplosionSnapshot<TNode, TEdge>>();
 	let activeAnimationCancel: (() => void) | null = null;
 
+	/**
+	 * Applies one animation frame (node copies emitted by runMultiNodeTransition) onto the
+	 * graph's live node objects and publishes the new node array.
+	 */
+	function syncTransitionFrame(byId: Map<string, TNode>) {
+		for (const graphNode of graph.nodes) {
+			const frameNode = byId.get(graphNode.id);
+			if (!frameNode || frameNode === graphNode) continue;
+			graphNode.position = { ...frameNode.position };
+			graphNode.style = frameNode.style;
+			const frameData = frameNode.data as Record<string, any> | undefined;
+			if (frameData && ('scale' in frameData || 'opacity' in frameData)) {
+				const data: Record<string, any> = { ...(graphNode.data ?? {}) };
+				if ('scale' in frameData) data.scale = frameData.scale;
+				if ('opacity' in frameData) data.opacity = frameData.opacity;
+				graphNode.data = data as TNode['data'];
+			}
+		}
+		graph.setNodes([...graph.nodes]);
+	}
+
 	function isExploded(nodeId: string): boolean {
 		return explodedNodeIds.includes(nodeId);
 	}
@@ -231,13 +252,15 @@ export function createCanvasExplosion<
 		activeAnimationCancel = runMultiNodeTransition(transitions, {
 			defaultDuration: duration,
 			defaultEasing: easing,
-			onUpdate: () => {
+			onUpdate: (updated) => {
+				// runMultiNodeTransition never mutates inputs; it hands us per-frame copies.
+				const byId = new Map(updated.map((n) => [n.id, n]));
 				if (edgesToAdd.length > 0) {
 					const childIdSet = new Set(childNodes.map((c) => c.id));
 					const childEdgesInGraph = graph.edges.filter((e) => childIdSet.has(e.target));
 					if (childEdgesInGraph.length > 0) {
 						childEdgesInGraph.forEach((edge) => {
-							const child = childNodes.find((c) => c.id === edge.target);
+							const child = byId.get(edge.target);
 							const childOpacity = (child?.data as any)?.opacity ?? 1;
 							const currentStyle = (edge.style || '').replace(/opacity:\s*[^;]+;?/g, '').trim();
 							edge.style = `${currentStyle ? currentStyle + '; ' : ''}opacity: ${childOpacity};`;
@@ -246,19 +269,7 @@ export function createCanvasExplosion<
 					}
 				}
 
-				// Sync any mismatched node references in graph.nodes from transitions
-				transitions.forEach((t) => {
-					const graphNode = graph.nodes.find((n) => n.id === t.node.id);
-					if (graphNode && graphNode !== t.node) {
-						graphNode.position = { ...t.node.position };
-						graphNode.style = t.node.style;
-						if (t.node.data) {
-							graphNode.data = { ...graphNode.data, ...t.node.data };
-						}
-					}
-				});
-
-				graph.setNodes([...graph.nodes]);
+				syncTransitionFrame(byId);
 			},
 			onComplete: () => {
 				childNodes.forEach((child, i) => {
@@ -371,12 +382,14 @@ export function createCanvasExplosion<
 		activeAnimationCancel = runMultiNodeTransition(transitions, {
 			defaultDuration: duration,
 			defaultEasing: easing,
-			onUpdate: () => {
+			onUpdate: (updated) => {
+				// runMultiNodeTransition never mutates inputs; it hands us per-frame copies.
+				const byId = new Map(updated.map((n) => [n.id, n]));
 				const edgeIdSet = new Set(snapshot.childEdgeIds);
 				const childEdgesInGraph = graph.edges.filter((e) => edgeIdSet.has(e.id));
 				if (childEdgesInGraph.length > 0) {
 					childEdgesInGraph.forEach((edge) => {
-						const child = activeChildNodes.find((c) => c.id === edge.target);
+						const child = byId.get(edge.target);
 						const childOpacity = (child?.data as any)?.opacity ?? 0;
 						const currentStyle = (edge.style || '').replace(/opacity:\s*[^;]+;?/g, '').trim();
 						edge.style = `${currentStyle ? currentStyle + '; ' : ''}opacity: ${childOpacity};`;
@@ -384,19 +397,7 @@ export function createCanvasExplosion<
 					graph.setEdges([...graph.edges]);
 				}
 
-				// Sync any mismatched node references in graph.nodes from transitions
-				transitions.forEach((t) => {
-					const graphNode = graph.nodes.find((n) => n.id === t.node.id);
-					if (graphNode && graphNode !== t.node) {
-						graphNode.position = { ...t.node.position };
-						graphNode.style = t.node.style;
-						if (t.node.data) {
-							graphNode.data = { ...graphNode.data, ...t.node.data };
-						}
-					}
-				});
-
-				graph.setNodes([...graph.nodes]);
+				syncTransitionFrame(byId);
 			},
 			onComplete: () => {
 				// Animation completed: prune child nodes and edges
