@@ -78,6 +78,31 @@ describe("useHistory and useHistoryShortcuts", () => {
     expect(historyHookResult!.redoName).toBe("Change State");
   });
 
+  it("keeps the same manager and history when options are passed inline", async () => {
+    let result: ReturnType<typeof useHistory> | null = null;
+
+    function TestComponent({ tick }: { tick: number }) {
+      result = useHistory({ maxDepth: 10 });
+      return <span>{tick}</span>;
+    }
+
+    await act(async () => {
+      root.render(<TestComponent tick={0} />);
+    });
+    const firstManager = result!.manager;
+
+    await act(async () => {
+      result!.execute({ name: "Step", execute: () => {}, undo: () => {} });
+    });
+    await act(async () => {
+      root.render(<TestComponent tick={1} />);
+    });
+
+    expect(result!.manager).toBe(firstManager);
+    expect(result!.canUndo).toBe(true);
+    expect(result!.undoName).toBe("Step");
+  });
+
   it("handles keyboard shortcuts and respects editable element focus guards", async () => {
     const manager = new HistoryManager();
     let count = 0;

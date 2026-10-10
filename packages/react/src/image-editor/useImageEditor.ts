@@ -76,11 +76,17 @@ export function useImageEditor(options: ImageEditorOptions = {}): UseImageEditor
     return unsub;
   }, [controller]);
 
+  // The constructor loads the initial image. Reload only when the `image`
+  // option itself changes, not whenever the controller's source differs from
+  // it (AI edits replace the source with a data URL and must not be reverted).
+  const loadedImageRef = useRef(options.image);
   useEffect(() => {
-    if (options.image && options.image !== state.sourceUrl) {
+    if (options.image === loadedImageRef.current) return;
+    loadedImageRef.current = options.image;
+    if (options.image) {
       controller.loadImage(options.image);
     }
-  }, [options.image, controller, state.sourceUrl]);
+  }, [options.image, controller]);
 
   const setTool = useCallback((tool: ImageEditorTool) => controller.setTool(tool), [controller]);
   const setCrop = useCallback(

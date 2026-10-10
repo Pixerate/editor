@@ -17,6 +17,7 @@
     calculateCropDrag,
     hitTestAnnotation,
   } from '@pixerate/editor/image-editor';
+  import { onDestroy, untrack } from 'svelte';
   import { createReactiveImageEditor, type ReactiveImageEditor } from './imageEditorState.svelte.js';
 
   interface Props {
@@ -45,6 +46,7 @@
 
   const internalEditor = createReactiveImageEditor();
   const editor = $derived(propEditor || internalEditor);
+  onDestroy(() => internalEditor.destroy());
 
   let canvasEl = $state<HTMLCanvasElement | null>(null);
   let containerEl = $state<HTMLDivElement | null>(null);
@@ -147,11 +149,16 @@
   let currentPath: ImagePoint[] = [];
   let dragStartPoint: ImagePoint | null = null;
 
-  // Update image when src changes
+  // Load the image when `src` changes. Only `src` is tracked: AI edits replace
+  // the editor's source with a data URL and must not be reverted to `src`.
+  let loadedSrc: string | undefined;
   $effect(() => {
-    if (src && src !== editor.state.sourceUrl) {
-      editor.loadImage(src);
-    }
+    const next = src;
+    if (!next || next === loadedSrc) return;
+    loadedSrc = next;
+    untrack(() => {
+      if (next !== editor.state.sourceUrl) editor.loadImage(next);
+    });
   });
 
   async function renderCanvas(overrideAnnotation?: Annotation | null, overrideCrop?: CropBox | null) {
