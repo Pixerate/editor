@@ -71,7 +71,7 @@
   "dependencies": {
     "@dagrejs/dagre": "^1.1.8",
     "@tiptap/extension-character-count": "^2.11.5",
-    "@tiptap/extension-color": "^2.11.5",
+    "@tiptap/extension-color": "^3.31.4",
     "@tiptap/extension-highlight": "^2.11.5",
     "@tiptap/extension-image": "^2.11.5",
     "@tiptap/extension-link": "^2.11.5",
