@@ -82,8 +82,8 @@ importers:
   packages/core:
     dependencies:
       '@dagrejs/dagre':
-        specifier: ^1.1.8
-        version: 1.1.8
+        specifier: ^3.1.1
+        version: 3.1.1
       '@tiptap/extension-character-count':
         specifier: ^2.11.5
         version: 2.27.3(@tiptap/core@2.27.3(@tiptap/pm@2.27.3))(@tiptap/pm@2.27.3)
@@ -225,8 +225,8 @@ importers:
   packages/svelte:
     dependencies:
       '@dagrejs/dagre':
-        specifier: ^1.1.4
-        version: 1.1.8
+        specifier: ^3.1.1
+        version: 3.1.1
       '@pixerate/editor':
         specifier: workspace:*
         version: link:../core
@@ -467,12 +467,11 @@ packages:
     resolution: {integrity: sha512-QxULHAm7cNu72w97JUNCBFODFaXpbDg+dP8b/oWFAZ2MTRppA3U00Y2L1HqaS4J6yBqxwa/Y3nMBaxVKbB/NsA==}
     engines: {node: '>=20.19.0'}
 
-  '@dagrejs/dagre@1.1.8':
-    resolution: {integrity: sha512-5SEDlndt4W/LaVzPYJW+bSmSEZc9EzTf8rJ20WCKvjS5EAZAN0b+x0Yww7VMT4R3Wootkg+X9bUfUxazYw6Blw==}
+  '@dagrejs/dagre@3.1.1':
+    resolution: {integrity: sha512-zroZB1dFOFiGgv4Xcrn1DckB1o4aOikPqD2NDQPV0WM//CXGcS6xiD0rNkqHmw6FEg4tabt4nxPLwgCWT+Vb2A==}
 
-  '@dagrejs/graphlib@2.2.4':
-    resolution: {integrity: sha512-mepCf/e9+SKYy1d02/UkvSy6+6MoyXhVxP8lLDfA7BPE1X1d4dR0sZznmbM8/XVJ1GPM+Svnx7Xj6ZweByWUkw==}
-    engines: {node: '>17.0.0'}
+  '@dagrejs/graphlib@4.0.5':
+    resolution: {integrity: sha512-7xrBTqIts3o+PMUZX97wSc+7TUbW+/rULzGNCTP6yooNVDXbzw4Wutg/H/xOutTB/c/k0YqOAavgPh4/Zk9PFA==}
 
   '@esbuild/aix-ppc64@0.25.12':
     resolution: {integrity: sha512-Hhmwd6CInZ3dwpuGTF8fJG6yoWmsToE+vYgD4nytZVxcu1ulHpUQRAB1UJ8+N1Am3Mz4+xOByoQoSZf4D+CpkA==}
@@ -2903,11 +2902,11 @@ snapshots:
 
   '@csstools/css-tokenizer@4.0.0': {}
 
-  '@dagrejs/dagre@1.1.8':
+  '@dagrejs/dagre@3.1.1':
     dependencies:
-      '@dagrejs/graphlib': 2.2.4
+      '@dagrejs/graphlib': 4.0.5
 
-  '@dagrejs/graphlib@2.2.4': {}
+  '@dagrejs/graphlib@4.0.5': {}
 
   '@esbuild/aix-ppc64@0.25.12':
     optional: true
