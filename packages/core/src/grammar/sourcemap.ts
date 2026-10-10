@@ -1,5 +1,9 @@
-import { Template } from "./tokens";
-import { getLatestVersion, resolveTemplates } from "./resolver";
+import { TEMPLATE_REGEX, Template } from "./tokens";
+import {
+  getTemplateBody,
+  resolveTemplates,
+  type ResolveTemplatesOptions,
+} from "./resolver";
 
 export interface SourceMapSegment {
   resolvedStart: number;
@@ -18,6 +22,7 @@ export function resolveTemplatesWithMapping(
   text: string,
   templates: Template[] = [],
   templateBindings?: Record<string, string>,
+  options?: Pick<ResolveTemplatesOptions, "maxDepth">,
 ): { text: string; map: SourceMapSegment[] } {
   if (!templates || templates.length === 0 || !text.includes("{{")) {
     return {
@@ -35,7 +40,7 @@ export function resolveTemplatesWithMapping(
   }
 
   const templateMap = new Map(templates.map((t) => [t.name, t]));
-  const regex = /{{\s*([^}]+?)\s*}}/g;
+  const regex = new RegExp(TEMPLATE_REGEX.source, TEMPLATE_REGEX.flags);
   let match: RegExpExecArray | null;
   let lastIndex = 0;
   let resolvedText = "";
@@ -62,27 +67,14 @@ export function resolveTemplatesWithMapping(
     let resolvedBody = fullMatch;
     let isTemplate = false;
 
-    if (templateMap.has(templateName)) {
-      const template = templateMap.get(templateName)!;
-      let versionBody: string | undefined;
-      const boundVersionId = templateBindings?.[templateName];
-
-      if (boundVersionId && template.versions) {
-        const boundVersion = template.versions.find(
-          (v) => v.id === boundVersionId || v.version === boundVersionId,
-        );
-        versionBody = boundVersion?.body;
-      } else {
-        const latestVersion = getLatestVersion(template);
-        versionBody = latestVersion?.body ?? template.body;
-      }
-
-      if (versionBody !== undefined) {
-        resolvedBody = resolveTemplates(versionBody, templates, {
-          bindings: templateBindings,
-        });
-        isTemplate = true;
-      }
+    const template = templateMap.get(templateName);
+    if (template && getTemplateBody(template, templateBindings) !== undefined) {
+      // Resolve the tag itself so loop and depth handling match resolveTemplates.
+      resolvedBody = resolveTemplates(fullMatch, templates, {
+        bindings: templateBindings,
+        maxDepth: options?.maxDepth,
+      });
+      isTemplate = true;
     }
 
     if (isTemplate) {
@@ -142,10 +134,13 @@ export function mapResolvedOffsetToRaw(
     if (inRange) {
       if (seg.source === "raw") {
         return seg.rawStart + (resolvedOffset - seg.resolvedStart);
-      } else {
-        // Pointing into a resolved template - return start of template tag
-        return seg.rawStart;
       }
+      // The end of the text maps to the end of the tag; anywhere inside a
+      // resolved template maps to the start of its tag.
+      if (resolvedOffset === seg.resolvedEnd) {
+        return seg.rawEnd;
+      }
+      return seg.rawStart;
     }
   }
   return resolvedOffset;
@@ -168,9 +163,11 @@ export function mapRawOffsetToResolved(
     if (inRange) {
       if (seg.source === "raw") {
         return seg.resolvedStart + (rawOffset - seg.rawStart);
-      } else {
-        return seg.resolvedStart;
       }
+      if (rawOffset === seg.rawEnd) {
+        return seg.resolvedEnd;
+      }
+      return seg.resolvedStart;
     }
   }
   return rawOffset;

@@ -36,9 +36,33 @@ export interface ResolveTemplatesOptions {
   maxDepth?: number;
 }
 
+/** Marker substituted for a template tag that would recurse into itself. */
+export const TEMPLATE_LOOP_ERROR = "[Template loop detected]";
+/** Marker substituted for a template tag nested deeper than `maxDepth`. */
+export const TEMPLATE_DEPTH_ERROR = "[Template max depth exceeded]";
+
+/**
+ * Returns the body a template tag resolves to, honoring version bindings.
+ */
+export function getTemplateBody(
+  template: Template,
+  bindings?: Record<string, string>,
+): string | undefined {
+  const boundVersionId = bindings?.[template.name];
+  if (boundVersionId && template.versions) {
+    const boundVersion = template.versions.find(
+      (v) => v.id === boundVersionId || v.version === boundVersionId,
+    );
+    return boundVersion?.body;
+  }
+  return getLatestVersion(template)?.body ?? template.body;
+}
+
 /**
  * Recursively resolves template tags `{{template_name}}` in a given text.
- * Detects circular dependencies and returns "[Template loop detected]".
+ * A tag that would recurse into itself is replaced with `TEMPLATE_LOOP_ERROR`,
+ * and a tag nested deeper than `maxDepth` with `TEMPLATE_DEPTH_ERROR`; the rest
+ * of the text still resolves normally.
  */
 export function resolveTemplates(
   text: string,
@@ -57,65 +81,35 @@ export function resolveTemplates(
     visited: Set<string>,
     depth: number,
   ): string {
-    if (depth > maxDepth) {
-      return "[Template max depth exceeded]";
-    }
-
-    let result = currentText;
     const regex = new RegExp(TEMPLATE_REGEX.source, TEMPLATE_REGEX.flags);
-    let match: RegExpExecArray | null;
 
-    while ((match = regex.exec(result)) !== null) {
-      const [fullMatch, rawTemplateName] = match;
+    // A function replacer keeps `$&`, `$'` etc. in template bodies literal.
+    return currentText.replace(regex, (fullMatch, rawTemplateName: string) => {
       const templateName = rawTemplateName.trim();
 
       if (visited.has(templateName)) {
-        return "[Template loop detected]";
+        return TEMPLATE_LOOP_ERROR;
       }
 
       const template = templateMap.get(templateName);
       if (!template) {
-        continue;
+        return fullMatch;
       }
 
-      let versionBody: string | undefined;
-      const boundVersionId = options?.bindings?.[templateName];
-
-      if (boundVersionId && template.versions) {
-        const boundVersion = template.versions.find(
-          (v) => v.id === boundVersionId || v.version === boundVersionId,
-        );
-        versionBody = boundVersion?.body;
-      } else {
-        const latest = getLatestVersion(template);
-        versionBody = latest?.body ?? template.body;
-      }
-
+      const versionBody = getTemplateBody(template, options?.bindings);
       if (versionBody === undefined) {
-        continue;
+        return fullMatch;
+      }
+
+      if (depth + 1 > maxDepth) {
+        return TEMPLATE_DEPTH_ERROR;
       }
 
       const nextVisited = new Set(visited);
       nextVisited.add(templateName);
 
-      const resolvedBody = resolveRecursive(
-        versionBody,
-        nextVisited,
-        depth + 1,
-      );
-
-      if (
-        resolvedBody === "[Template loop detected]" ||
-        resolvedBody === "[Template max depth exceeded]"
-      ) {
-        return resolvedBody;
-      }
-
-      result = result.replace(fullMatch, resolvedBody);
-      regex.lastIndex = 0;
-    }
-
-    return result;
+      return resolveRecursive(versionBody, nextVisited, depth + 1);
+    });
   }
 
   return resolveRecursive(text, new Set(), 0);
