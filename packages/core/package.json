@@ -70,7 +70,6 @@
   },
   "dependencies": {
     "@dagrejs/dagre": "^1.1.8",
-    "@tiptap/core": "^2.11.5",
     "@tiptap/extension-character-count": "^2.11.5",
     "@tiptap/extension-color": "^2.11.5",
     "@tiptap/extension-highlight": "^2.11.5",
@@ -86,7 +85,6 @@
     "@tiptap/extension-text-style": "^2.11.5",
     "@tiptap/extension-typography": "^2.11.5",
     "@tiptap/extension-underline": "^2.11.5",
-    "@tiptap/pm": "^2.11.5",
     "@tiptap/starter-kit": "^2.11.5",
     "@tiptap/suggestion": "^2.11.5",
     "markdown-it": "^15.0.2",
@@ -95,11 +93,17 @@
     "tiptap-markdown": "^0.8.10"
   },
   "devDependencies": {
+    "@tiptap/core": "^2.11.5",
+    "@tiptap/pm": "^2.11.5",
     "@types/dagre": "^0.7.54",
     "@types/markdown-it": "^14.2.0",
     "@types/node": "^24.0.0",
     "tsup": "^8.4.0",
     "typescript": "^5.7.3",
     "vitest": "^4.1.11"
+  },
+  "peerDependencies": {
+    "@tiptap/core": "^2.11.5",
+    "@tiptap/pm": "^2.11.5"
   }
 }
