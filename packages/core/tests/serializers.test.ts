@@ -17,6 +17,7 @@ import {
   serializeRichClipboardPayload,
   parseRichClipboardPayload,
   getClipboardData,
+  getEditorText,
 } from "../src/serializers";
 import { createEditor, createRichTextPreset, richClipboardPluginKey } from "../src";
 
@@ -447,5 +448,54 @@ describe("Serializers: rich-text clipboard MIME", () => {
     expect(target.getHTML()).toBe("<p>x<em>hi</em></p>");
     source.destroy();
     target.destroy();
+  });
+});
+
+describe("Serializers: tracked moves in plain text", () => {
+  beforeAll(() => {
+    const dom = new JSDOM();
+    globalThis.document = dom.window.document as any;
+    globalThis.window = dom.window as any;
+    (globalThis as any).Node = dom.window.Node;
+  });
+
+  const movedHtml =
+    '<p><ins data-change-type="insertion" data-change-id="m1" data-move-id="m1" data-author-id="a" data-created-at="1">Moved para.</ins></p>' +
+    "<p>Stays.</p>" +
+    '<p><del data-change-type="deletion" data-change-id="m1" data-move-id="m1" data-author-id="a" data-created-at="1">Moved para.</del></p>';
+
+  it("htmlToPlainText strips move sources and destinations like deletions and insertions", () => {
+    expect(htmlToPlainText(movedHtml)).toBe("Moved para.\nStays.\n");
+    expect(htmlToPlainText(movedHtml, { trackedChanges: "original" })).toBe("\nStays.\nMoved para.");
+    expect(htmlToPlainText(movedHtml, { trackedChanges: "all" })).toBe("Moved para.\nStays.\nMoved para.");
+  });
+
+  it("getEditorText removes a moved paragraph's emptied block", () => {
+    const editor = new Editor({
+      extensions: createRichTextPreset({ trackChanges: true }),
+      content: movedHtml,
+    });
+    expect(getEditorText(editor)).toBe("Moved para.\nStays.");
+    expect(getEditorText(editor, { trackedChanges: "original" })).toBe("Stays.\nMoved para.");
+    editor.destroy();
+  });
+});
+
+describe("asset mention roles in serializers", () => {
+  const mention = (role?: string) =>
+    `<span class="pixerate-mention-node" data-type="mention" data-id="a1" data-label="fox"${role !== undefined ? ` data-role="${role}"` : ""}>@fox</span>`;
+
+  it("writes a mention role as @label:role in plain text, and nothing without one", () => {
+    expect(htmlToPlainText(`<p>${mention()} runs</p>`)).toBe("@fox runs");
+    expect(htmlToPlainText(`<p>${mention("style")} runs</p>`)).toBe("@fox:style runs");
+    expect(htmlToPlainText(`<p>${mention("x y")}</p>`)).toBe("@fox");
+    expect(htmlToPlainText(`<p>${mention("")}</p>`)).toBe("@fox");
+  });
+
+  it("keeps data-role through markdown sanitizing and reports it from HTML", () => {
+    const html = markdownToTipTapHtml(`hello ${mention("start-frame")}`);
+    expect(html).toContain('data-role="start-frame"');
+    expect(extractMentionsFromDoc(html)[0]).toMatchObject({ id: "a1", role: "start-frame" });
+    expect(extractMentionsFromDoc(`<p>${mention()}</p>`)[0]).not.toHaveProperty("role");
   });
 });

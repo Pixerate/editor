@@ -1,3 +1,6 @@
+// Portions ported from gridcraft/crates/engine/src/cmd/sheet.rs and
+// gridcraft/crates/engine/src/cmd/formulas.rs (MIT OR Apache-2.0,
+// © ArtCraft Team and contributors). See THIRD_PARTY_NOTICES.md.
 import {
   SpreadsheetDocument,
   SpreadsheetColumn,
@@ -12,7 +15,10 @@ import {
   SpreadsheetFilterState,
   GroupAggregate,
   GroupSummary,
-  SpreadsheetSpill
+  SpreadsheetSpill,
+  SpreadsheetWorkbook,
+  SpreadsheetDefinedName,
+  SpreadsheetSheetInfo
 } from './types';
 import {
   FormulaEvaluator,
@@ -25,10 +31,29 @@ import {
   WHOLE_COLUMN_END_ROW,
   describeFormulaError,
   isFormulaError,
+  parseFormula,
+  extractCellDependencies,
+  extractNameDependencies,
+  columnDependencyKey,
+  getFormulaFunction,
+  renameSheetInFormula,
+  deleteSheetInFormula,
+  renameNameInFormula,
+  type ASTNode,
   type FormulaRange,
+  type FormulaNameDefinition,
+  type FormulaEvaluationResult,
   type StructuralChange,
-  type CellPosition
+  type CellPosition,
+  type FormulaReferenceFilter
 } from './formula';
+import {
+  copySheetName,
+  isLambdaDefinition,
+  nextSheetName,
+  validateDefinedName,
+  validateSheetName
+} from './workbook';
 import { parseCellInput } from './formula/parse-input';
 import { formatCellDisplay } from './formula/format';
 import { cellFormatForNumberFormat, isGeneralNumberFormat } from './numfmt/presets';
@@ -52,6 +77,27 @@ import {
   type SpreadsheetClipboardSource
 } from './clipboard';
 import {
+  ConditionalFormatEngine,
+  EMPTY_CONDITIONAL_FORMAT_OVERLAY,
+  type ConditionalCellFormat,
+  type ConditionalFormatOverlay,
+  type ConditionalFormatRule,
+  type ConditionalFormatSheet,
+  type ConditionalFormatValue,
+  type NewConditionalFormatRule
+} from './conditional-format';
+import {
+  findDataValidation,
+  findInvalidCells,
+  getValidationListValues,
+  validateCellInput,
+  type DataValidationResult,
+  type DataValidationRule,
+  type DataValidationSheet,
+  type NewDataValidationRule
+} from './validation';
+import { adjustRangesForStructuralChange, shiftRuleFormula, subtractRangeFromRanges } from './rule-ranges';
+import {
   buildSpreadsheetView,
   computeRowGroups,
   getTableSections,
@@ -72,9 +118,42 @@ export interface CsvImportOptions {
   startRow?: number;
   startCol?: number;
   delimiter?: string;
+  /** Sheet (id or name) to import into; default the active sheet. */
+  sheet?: string;
 }
 
 export type NewFilterRule = Omit<FilterRule, 'id'> & { id?: string };
+
+/**
+ * Invalid input waiting for the user: a `stop` alert (retry or cancel) or a
+ * `warning` / `information` prompt (accept, retry or cancel). See
+ * `SpreadsheetController.resolveValidationPrompt`.
+ */
+export interface SpreadsheetValidationPrompt {
+  rowId: string;
+  colId: string;
+  row: number;
+  col: number;
+  /** The input that failed validation. */
+  raw: string;
+  /** The failed check: rule, alert style, title and message. */
+  result: DataValidationResult;
+  /** True when the input came from the cell editor (which stays open meanwhile). */
+  editing: boolean;
+}
+
+/**
+ * Outcome of committing input: `committed`; `rejected` (a `stop` rule) or
+ * `confirm` (a `warning` / `information` rule), with `prompt` now waiting
+ * in `validationPrompt`; `pending` when an earlier prompt is still open;
+ * `none` when nothing was being edited.
+ */
+export type SpreadsheetCommitResult =
+  | { status: 'committed' | 'none' }
+  | { status: 'rejected' | 'confirm' | 'pending'; prompt: SpreadsheetValidationPrompt };
+
+/** How the user answered a validation prompt. */
+export type SpreadsheetValidationAction = 'accept' | 'retry' | 'cancel';
 
 export interface SpreadsheetControllerOptions {
   document?: Partial<SpreadsheetDocument>;
@@ -83,6 +162,20 @@ export interface SpreadsheetControllerOptions {
   onDocumentChange?: (doc: SpreadsheetDocument) => void;
   onSelectionChange?: (activeCell: CellCoordinate | null, range: CellRange | null) => void;
   onCellCommit?: (rowId: string, colId: string, raw: string, value: any) => void;
+  /**
+   * Start from a workbook with several sheets and defined names instead of
+   * `document`. `document` then names nothing; the active sheet is
+   * `workbook.activeSheetId` (default the first sheet).
+   */
+  workbook?: SpreadsheetWorkbook;
+  /**
+   * Called after any change, like `onDocumentChange`, with the whole
+   * workbook. The object holds the live sheet documents: copy it (or use
+   * `getWorkbook()`) before keeping it.
+   */
+  onWorkbookChange?: (workbook: SpreadsheetWorkbook) => void;
+  /** Called when another sheet becomes active. */
+  onActiveSheetChange?: (sheetId: string) => void;
   /**
    * Approximate memory budget for undo/redo snapshots, in bytes (UTF-16 size of
    * the serialized documents). The oldest undo steps beyond it are dropped, but
@@ -107,6 +200,55 @@ interface SpillRecord {
   cells: Array<{ key: string; rowId: string; colId: string }>;
 }
 
+/**
+ * One sheet of the workbook: its document plus derived state (spilled
+ * arrays) and, while it is not active, its saved selection.
+ */
+interface SheetRuntime {
+  doc: SpreadsheetDocument;
+  spills: Map<string, SpillRecord>; // anchor key -> spill
+  spilledBy: Map<string, string>; // spilled cell key -> anchor key
+  spillCells: Map<string, CellData>; // spillCellId -> displayed cell
+  activeCell: CellCoordinate | null;
+  selectedRange: CellRange | null;
+}
+
+const createRuntime = (doc: SpreadsheetDocument): SheetRuntime => ({
+  doc,
+  spills: new Map(),
+  spilledBy: new Map(),
+  spillCells: new Map(),
+  activeCell: null,
+  selectedRange: null
+});
+
+/**
+ * An undo/redo step: a snapshot of one sheet (cell edits, table operations)
+ * or of the whole workbook (sheet and name operations).
+ */
+type HistoryEntry = { kind: 'sheet'; sheetId: string; data: string } | { kind: 'workbook'; data: string };
+
+interface WorkbookSnapshot {
+  sheets: SpreadsheetDocument[];
+  activeSheetId: string;
+  names: SpreadsheetDefinedName[];
+}
+
+const sameName = (a: string, b: string) => a.toUpperCase() === b.toUpperCase();
+
+/** A defined name as listed by `getNames()`. */
+export interface SpreadsheetNameInfo extends SpreadsheetDefinedName {
+  /** Name of the sheet a sheet-scoped name belongs to; unset for workbook scope. */
+  sheetName?: string;
+  /** Whether the name holds a LAMBDA (it is called like a function). */
+  isLambda: boolean;
+}
+
+/** Where a defined name lives: `sheet` (id or name) for a sheet-scoped name. */
+export interface SpreadsheetNameScope {
+  sheet?: string;
+}
+
 // Default undo/redo snapshot budget (see SpreadsheetControllerOptions.maxHistoryBytes).
 const DEFAULT_MAX_HISTORY_BYTES = 64 * 1024 * 1024;
 
@@ -116,7 +258,6 @@ const MAX_SPILL_PASSES = 25;
 const spillCellId = (rowId: string, colId: string) => `${rowId}\u0000${colId}`;
 
 export class SpreadsheetController {
-  public document: SpreadsheetDocument;
   public activeCell: CellCoordinate | null = null;
   public selectedRange: CellRange | null = null;
   public editingCell: CellCoordinate | null = null;
@@ -128,12 +269,24 @@ export class SpreadsheetController {
 
   private primaryDataSourceId?: string;
   private onDocumentChange?: (doc: SpreadsheetDocument) => void;
+  private onWorkbookChange?: (workbook: SpreadsheetWorkbook) => void;
+  private onActiveSheetChange?: (sheetId: string) => void;
+
+  // Workbook: sheets in tab order, the active one, and the one being worked
+  // on (the active sheet, or another sheet while one of its cells is read or
+  // evaluated). Everything that uses `this.document` works on `ctx`.
+  private runtimes: SheetRuntime[] = [];
+  private active!: SheetRuntime;
+  private ctx!: SheetRuntime;
+  // The sheet bound to the primary data source (the first sheet).
+  private boundSheetId: string | null = null;
+  private names: SpreadsheetDefinedName[] = [];
   private onSelectionChange?: (activeCell: CellCoordinate | null, range: CellRange | null) => void;
   private onCellCommit?: (rowId: string, colId: string, raw: string, value: any) => void;
 
   // History stack for undo/redo
-  private undoStack: string[] = [];
-  private redoStack: string[] = [];
+  private undoStack: HistoryEntry[] = [];
+  private redoStack: HistoryEntry[] = [];
   private isApplyingHistory = false;
   private readonly maxHistoryBytes: number;
   // Set while importing TSV: history and recalculation are done once at the end.
@@ -144,13 +297,45 @@ export class SpreadsheetController {
   // Cell being evaluated, for implicit intersection (`=@A:A`).
   private evaluatingCell: { col: string; row: number } | null = null;
 
-  // Dynamic arrays. Spilled values are derived state: they live here, not in
-  // the document, and every recalculation rebuilds them.
-  private spills = new Map<string, SpillRecord>(); // anchor key -> spill
-  private spilledBy = new Map<string, string>(); // spilled cell key -> anchor key
-  private spillCells = new Map<string, CellData>(); // spillCellId -> displayed cell
-  // Cells whose spill ownership changed during the current pass.
+  // Dynamic arrays. Spilled values are derived state: they live in the sheet
+  // runtimes, not in the documents, and every recalculation rebuilds them.
+  // Cells (sheet-qualified keys) whose spill ownership changed during the current pass.
   private spillChanges: Set<string> | null = null;
+
+  /** The active sheet's document (the sheet the editor shows). */
+  public get document(): SpreadsheetDocument {
+    return this.ctx.doc;
+  }
+
+  public set document(doc: SpreadsheetDocument) {
+    this.ctx.doc = doc;
+  }
+
+  private get spills(): Map<string, SpillRecord> {
+    return this.ctx.spills;
+  }
+
+  private get spilledBy(): Map<string, string> {
+    return this.ctx.spilledBy;
+  }
+
+  private get spillCells(): Map<string, CellData> {
+    return this.ctx.spillCells;
+  }
+
+  // Conditional formatting is evaluated lazily (getConditionalFormatOverlay).
+  // Cell keys whose values changed since, or 'all' to evaluate from scratch.
+  private cfEngine: ConditionalFormatEngine | null = null;
+  private cfDirty: Set<string> | 'all' = 'all';
+  // Set while a single cell edit notifies, so the change stays incremental.
+  private cfIncremental = false;
+  // Value being entered, seen by validation formulas instead of the cell's value.
+  private valueOverride: { row: number; col: number; value: unknown } | null = null;
+  // "Circle invalid data": on/off and the cached cells.
+  private circlesShown = false;
+  private invalidCircles: Set<string> | null = null;
+  /** Invalid input waiting for the user's answer (see `resolveValidationPrompt`). */
+  public validationPrompt: SpreadsheetValidationPrompt | null = null;
 
   constructor(options: SpreadsheetControllerOptions = {}) {
     const defaultCols: SpreadsheetColumn[] = [
@@ -167,7 +352,7 @@ export class SpreadsheetController {
       type: 'freeform'
     }));
 
-    this.document = {
+    const first: SpreadsheetDocument = {
       id: options.document?.id || `sheet_${Date.now()}`,
       name: options.document?.name || 'Sheet 1',
       columns: options.document?.columns || defaultCols,
@@ -177,32 +362,144 @@ export class SpreadsheetController {
       updatedAt: options.document?.updatedAt || Date.now(),
       ...(options.document?.table ? { table: options.document.table } : {})
     };
+    if (options.workbook && options.workbook.sheets.length > 0) {
+      this.setWorkbookState(options.workbook, false);
+    } else {
+      this.runtimes = [createRuntime(first)];
+      this.active = this.ctx = this.runtimes[0];
+    }
+    this.boundSheetId = this.runtimes[0].doc.id;
 
     this.primaryDataSourceId = options.primaryDataSourceId;
     this.maxHistoryBytes = Math.max(0, options.maxHistoryBytes ?? DEFAULT_MAX_HISTORY_BYTES);
     this.onDocumentChange = options.onDocumentChange;
     this.onSelectionChange = options.onSelectionChange;
     this.onCellCommit = options.onCellCommit;
+    this.onWorkbookChange = options.onWorkbookChange;
+    this.onActiveSheetChange = options.onActiveSheetChange;
 
     if (options.dataSources) {
       options.dataSources.forEach((ds) => this.binder.register(ds));
     }
 
     this.evaluator = new FormulaEvaluator({
-      resolveCell: (colStr, rowNum) => this.resolveCellByCoord(colStr, rowNum),
-      resolveRange: (sCol, sRow, eCol, eRow) => this.resolveRangeByCoords(sCol, sRow, eCol, eRow),
+      resolveCell: (colStr, rowNum, sheet) => this.onSheet(sheet, () => this.resolveCellByCoord(colStr, rowNum)),
+      resolveRange: (sCol, sRow, eCol, eRow, sheet) =>
+        this.onSheet(sheet, () => this.resolveRangeByCoords(sCol, sRow, eCol, eRow)),
       resolveProperty: (prop) => this.resolveCurrentRowProperty(prop),
-      resolveSpill: (colStr, rowNum) => this.resolveSpillByCoord(colStr, rowNum),
+      resolveSpill: (colStr, rowNum, sheet) => this.onSheet(sheet, () => this.resolveSpillByCoord(colStr, rowNum)),
+      resolveSheetSpan: (first, last) => this.resolveSheetSpan(first, last),
+      resolveName: (name, sheet) => this.resolveDefinedName(name, sheet),
       getFormulaCell: () => this.evaluatingCell
     });
 
     this.syncWithDataSource();
-    this.rederiveTypedValues();
+    for (const rt of this.runtimes) this.withSheet(rt, () => this.rederiveTypedValues());
     this.recalculateAll();
   }
 
+  // --- Workbook: sheet runtimes ---
+
+  private get boundRuntime(): SheetRuntime | null {
+    return this.boundSheetId === null ? null : this.findRuntimeById(this.boundSheetId) ?? null;
+  }
+
+  /** Runs `fn` with `rt` as the sheet `this.document` (and spills) refer to. */
+  private withSheet<T>(rt: SheetRuntime, fn: () => T): T {
+    if (rt === this.ctx) return fn();
+    const saved = this.ctx;
+    this.ctx = rt;
+    try {
+      return fn();
+    } finally {
+      this.ctx = saved;
+    }
+  }
+
+  /**
+   * Runs `fn` on the sheet named `sheet` (a sheet-qualified reference), or
+   * on the current sheet when undefined. `#REF!` when no sheet has that name.
+   */
+  private onSheet<T>(sheet: string | undefined, fn: () => T): T | string {
+    if (sheet === undefined) return fn();
+    const rt = this.findRuntimeByName(sheet);
+    return rt ? this.withSheet(rt, fn) : '#REF!';
+  }
+
+  private findRuntimeByName(name: string): SheetRuntime | undefined {
+    return this.runtimes.find((rt) => sameName(rt.doc.name, name));
+  }
+
+  private findRuntimeById(id: string): SheetRuntime | undefined {
+    return this.runtimes.find((rt) => rt.doc.id === id) ?? this.runtimes.find((rt) => sameName(rt.doc.id, id));
+  }
+
+  /** A sheet by id or name. */
+  private findRuntime(idOrName: string): SheetRuntime | undefined {
+    return this.runtimes.find((rt) => rt.doc.id === idOrName) ?? this.findRuntimeByName(idOrName);
+  }
+
+  /** Dependency-graph key of a cell (`A1`) on a sheet: sheet-qualified, so keys are unique in the workbook. */
+  private qualify(key: string, rt: SheetRuntime = this.ctx): string {
+    return `${rt.doc.id}!${key}`.toUpperCase();
+  }
+
+  /** The sheet and A1 key of a qualified key. */
+  private unqualify(qualified: string): { rt: SheetRuntime; key: string } | null {
+    const bang = qualified.lastIndexOf('!');
+    if (bang < 0) return null;
+    const id = qualified.slice(0, bang);
+    const rt = this.runtimes.find((r) => r.doc.id.toUpperCase() === id);
+    return rt ? { rt, key: qualified.slice(bang + 1) } : null;
+  }
+
+  private resolveSheetSpan(first: string, last: string): string[] | string {
+    const a = this.runtimes.findIndex((rt) => sameName(rt.doc.name, first));
+    const b = this.runtimes.findIndex((rt) => sameName(rt.doc.name, last));
+    if (a < 0 || b < 0) return '#REF!';
+    return this.runtimes.slice(Math.min(a, b), Math.max(a, b) + 1).map((rt) => rt.doc.name);
+  }
+
+  /** The defined name `name` visible from `rt`: its sheet-scoped name first, then the workbook one. */
+  private findName(name: string, rt: SheetRuntime | null): SpreadsheetDefinedName | undefined {
+    return (
+      (rt ? this.names.find((n) => n.sheetId === rt.doc.id && sameName(n.name, name)) : undefined) ??
+      this.names.find((n) => n.sheetId === undefined && sameName(n.name, name))
+    );
+  }
+
+  private resolveDefinedName(name: string, sheet?: string): FormulaNameDefinition | null {
+    const rt = sheet === undefined ? this.ctx : this.findRuntimeByName(sheet);
+    if (!rt) return null;
+    const def = this.findName(name, rt);
+    if (!def) return null;
+    const scope = def.sheetId !== undefined ? this.findRuntimeById(def.sheetId) : undefined;
+    return {
+      formula: def.refersTo,
+      ...(scope ? { sheet: scope.doc.name } : {}),
+      key: `${def.sheetId ?? ''}!${def.name}`
+    };
+  }
+
+  /**
+   * Replaces the active sheet with `document` (its name becomes the sheet's
+   * name, made unique). Clears undo history.
+   */
   public loadDocument(document: SpreadsheetDocument): void {
-    this.document = JSON.parse(JSON.stringify(document));
+    const loaded: SpreadsheetDocument = JSON.parse(JSON.stringify(document));
+    const others = this.runtimes.filter((rt) => rt !== this.active);
+    if (others.some((rt) => rt.doc.id === loaded.id)) loaded.id = this.generateSheetId();
+    const otherNames = others.map((rt) => rt.doc.name);
+    if (!loaded.name || otherNames.some((n) => sameName(n, loaded.name))) {
+      loaded.name = loaded.name ? copySheetName(loaded.name, otherNames) : nextSheetName(otherNames);
+    }
+    const previousId = this.active.doc.id;
+    this.ctx = this.active;
+    this.document = loaded;
+    if (previousId !== loaded.id) {
+      for (const n of this.names) if (n.sheetId === previousId) n.sheetId = loaded.id;
+      if (this.boundSheetId === previousId) this.boundSheetId = loaded.id;
+    }
     this.activeCell = null;
     this.selectedRange = null;
     this.editingCell = null;
@@ -213,6 +510,68 @@ export class SpreadsheetController {
     this.rederiveTypedValues();
     this.recalculateAll();
     this.notifyChange();
+  }
+
+  // --- Workbook: loading and saving ---
+
+  /** A deep copy of the workbook: every sheet, the active sheet and the defined names. */
+  public getWorkbook(): SpreadsheetWorkbook {
+    return JSON.parse(JSON.stringify(this.workbookSnapshot()));
+  }
+
+  /** Replaces the whole workbook (sheets, names, active sheet). Clears undo history. */
+  public loadWorkbook(workbook: SpreadsheetWorkbook): void {
+    if (!workbook.sheets.length) return;
+    this.setWorkbookState(JSON.parse(JSON.stringify(workbook)), true);
+    this.boundSheetId = this.runtimes[0].doc.id;
+    this.editingCell = null;
+    this.draftValue = '';
+    this.undoStack = [];
+    this.redoStack = [];
+    this.syncWithDataSource();
+    for (const rt of this.runtimes) this.withSheet(rt, () => this.rederiveTypedValues());
+    this.recalculateAll();
+    this.notifyChange();
+    this.onSelectionChange?.(this.activeCell, this.selectedRange);
+  }
+
+  private workbookSnapshot(): WorkbookSnapshot {
+    return {
+      sheets: this.runtimes.map((rt) => rt.doc),
+      activeSheetId: this.active.doc.id,
+      names: this.names
+    };
+  }
+
+  /**
+   * Installs a workbook's sheets and names (taking ownership of the objects).
+   * Duplicate sheet ids and names are made unique.
+   */
+  private setWorkbookState(workbook: SpreadsheetWorkbook, resetSelection: boolean): void {
+    const ids = new Set<string>();
+    const names: string[] = [];
+    const runtimes = workbook.sheets.map((doc) => {
+      if (!doc.id || ids.has(doc.id)) doc.id = this.generateSheetId();
+      ids.add(doc.id);
+      if (!doc.name || names.some((n) => sameName(n, doc.name))) {
+        doc.name = doc.name ? copySheetName(doc.name, names) : nextSheetName(names);
+      }
+      names.push(doc.name);
+      doc.columns ??= [];
+      doc.rows ??= [];
+      doc.cells ??= {};
+      return createRuntime(doc);
+    });
+    this.runtimes = runtimes;
+    this.active = this.ctx =
+      runtimes.find((rt) => rt.doc.id === workbook.activeSheetId) ?? runtimes[0];
+    this.names = (workbook.names ?? [])
+      .filter((n) => n.sheetId === undefined || ids.has(n.sheetId))
+      .map((n) => ({ ...n, refersTo: n.refersTo.startsWith('=') ? n.refersTo : `=${n.refersTo}` }));
+    if (resetSelection) {
+      this.activeCell = null;
+      this.selectedRange = null;
+    }
   }
 
   /**
@@ -308,9 +667,13 @@ export class SpreadsheetController {
   }
 
   public syncWithDataSource(): void {
-    if (!this.primaryDataSourceId) return;
-    this.document.rows = this.binder.syncRows(this.document.rows, this.primaryDataSourceId);
-    this.recomputeRowIndices();
+    if (!this.primaryDataSourceId || !this.boundRuntime) return;
+    const id = this.primaryDataSourceId;
+    // Records are bound to the first sheet (the one the controller was created with).
+    this.withSheet(this.boundRuntime, () => {
+      this.document.rows = this.binder.syncRows(this.document.rows, id);
+      this.recomputeRowIndices();
+    });
   }
 
   private recomputeRowIndices(): void {
@@ -409,7 +772,7 @@ export class SpreadsheetController {
     }
 
     const cellKey = this.getCellKey(rowId, colId);
-    this.depGraph.setCellFormula(cellKey, isFormula ? raw : null);
+    this.registerFormula(cellKey, isFormula ? raw : null);
 
     this.document.cells[rowId][colId] = cell;
 
@@ -418,8 +781,14 @@ export class SpreadsheetController {
       this.pendingCommits.push([rowId, colId, raw]);
       return;
     }
+    if (this.cfDirty !== 'all') this.cfDirty.add(cellKey);
     this.recalculateCell(rowId, colId);
-    this.notifyChange();
+    this.cfIncremental = true;
+    try {
+      this.notifyChange();
+    } finally {
+      this.cfIncremental = false;
+    }
 
     const evaluatedVal = this.document.cells[rowId][colId]?.value;
     this.onCellCommit?.(rowId, colId, raw, evaluatedVal);
@@ -440,7 +809,69 @@ export class SpreadsheetController {
     const cellKey = this.getCellKey(rowId, colId);
     // Typing into a spilled cell blocks its array: the anchor recalculates (#SPILL!).
     const anchor = this.spilledBy.get(cellKey);
-    this.recalculateKeys(anchor ? [cellKey, anchor] : [cellKey], true);
+    this.recalculateKeys(anchor ? [this.qualify(cellKey), this.qualify(anchor)] : [this.qualify(cellKey)], true);
+  }
+
+  /**
+   * Registers the dependencies of the formula in `cellKey` (A1 key on the
+   * current sheet), or removes them when `formula` is null: its references
+   * (sheet-qualified ones on their sheet, 3-D ones on every sheet of the
+   * span) and, through defined names, the cells those names refer to.
+   */
+  private registerFormula(cellKey: string, formula: string | null): void {
+    const key = this.qualify(cellKey);
+    if (!formula || !formula.startsWith('=')) {
+      this.depGraph.setCellDependencies(key, []);
+      return;
+    }
+    let ast: ASTNode;
+    try {
+      ast = parseFormula(formula);
+    } catch {
+      this.depGraph.setCellDependencies(key, []);
+      return;
+    }
+    const deps = new Set<string>();
+    this.collectDependencies(ast, this.ctx, deps, new Set());
+    this.depGraph.setCellDependencies(key, deps);
+  }
+
+  /** Adds the qualified keys `ast` depends on, with unqualified references on `home`. */
+  private collectDependencies(ast: ASTNode, home: SheetRuntime, out: Set<string>, seenNames: Set<string>): void {
+    for (const dep of extractCellDependencies(ast)) {
+      let sheets: SheetRuntime[];
+      if (dep.sheet === undefined) {
+        sheets = [home];
+      } else if (dep.sheetEnd === undefined) {
+        const rt = this.findRuntimeByName(dep.sheet);
+        sheets = rt ? [rt] : [];
+      } else {
+        const span = this.resolveSheetSpan(dep.sheet, dep.sheetEnd);
+        sheets = Array.isArray(span) ? span.map((name) => this.findRuntimeByName(name)!) : [];
+      }
+      for (const rt of sheets) {
+        out.add(dep.row === 0 ? columnDependencyKey(`${rt.doc.id}!${dep.col}`) : this.qualify(`${dep.col}${dep.row}`, rt));
+      }
+    }
+    for (const used of extractNameDependencies(ast)) {
+      // A call of a built-in function is not a name.
+      if (used.call && getFormulaFunction(used.name)) continue;
+      const lookupSheet = used.sheet === undefined ? home : this.findRuntimeByName(used.sheet);
+      if (!lookupSheet) continue;
+      const def = this.findName(used.name, lookupSheet);
+      if (!def) continue;
+      const scope = def.sheetId !== undefined ? this.findRuntimeById(def.sheetId) : undefined;
+      // Unqualified references in a workbook-scoped name refer to the using sheet.
+      const nameHome = scope ?? home;
+      const seenKey = `${def.sheetId ?? ''}!${def.name.toUpperCase()}@${nameHome.doc.id}`;
+      if (seenNames.has(seenKey)) continue;
+      seenNames.add(seenKey);
+      try {
+        this.collectDependencies(parseFormula(def.refersTo), nameHome, out, seenNames);
+      } catch {
+        // A name whose formula can't be parsed has no dependencies.
+      }
+    }
   }
 
   /**
@@ -471,32 +902,46 @@ export class SpreadsheetController {
    * in dependency order.
    */
   public recalculateAll(): void {
+    this.cfDirty = 'all';
     this.depGraph.clear();
-    this.spills.clear();
-    this.spilledBy.clear();
-    this.spillCells.clear();
     const formulaKeys: string[] = [];
-    for (const row of this.document.rows) {
-      for (const col of this.document.columns) {
-        // Avoid getCell's id lookups: this loop visits every cell.
-        const cell = this.document.cells[row.id]?.[col.id] ?? this.getDerivedCell(row, col);
-        if (cell.raw.startsWith('=')) {
-          const cellKey = `${col.key}${row.index + 1}`.toUpperCase();
-          this.depGraph.setCellFormula(cellKey, cell.raw);
-          formulaKeys.push(cellKey);
+    for (const rt of this.runtimes) {
+      this.withSheet(rt, () => {
+        this.spills.clear();
+        this.spilledBy.clear();
+        this.spillCells.clear();
+        for (const row of this.document.rows) {
+          for (const col of this.document.columns) {
+            // Avoid getCell's id lookups: this loop visits every cell.
+            const cell = this.document.cells[row.id]?.[col.id] ?? this.getDerivedCell(row, col);
+            if (cell.raw.startsWith('=')) {
+              const cellKey = `${col.key}${row.index + 1}`.toUpperCase();
+              this.registerFormula(cellKey, cell.raw);
+              formulaKeys.push(this.qualify(cellKey));
+            }
+          }
         }
-      }
+      });
     }
     this.recalculateKeys(formulaKeys, false);
   }
 
   private runEvaluationPlan(plan: { order: string[]; cyclic: Set<string> }): void {
-    for (const key of plan.order) {
-      if (plan.cyclic.has(key)) {
-        this.markCycle(key);
-      } else {
-        this.evalSingleCellByKey(key);
-      }
+    for (const qualified of plan.order) {
+      const located = this.unqualify(qualified);
+      if (!located) continue;
+      // Conditional formatting tracks changed cells on the active sheet only; other
+      // sheets are evaluated from scratch when they are activated.
+      const onActive = located.rt === this.active;
+      this.withSheet(located.rt, () => {
+        if (onActive) this.markValueChanged(located.key); // before: cells it spilled into
+        if (plan.cyclic.has(qualified)) {
+          this.markCycle(located.key);
+        } else {
+          this.evalSingleCellByKey(located.key);
+        }
+        if (onActive) this.markValueChanged(located.key); // after: cells it spills into now
+      });
     }
   }
 
@@ -516,14 +961,15 @@ export class SpreadsheetController {
     if (!cell.raw.startsWith('=')) return;
     if (!this.document.cells[row.id]) this.document.cells[row.id] = {};
     // A direct self reference (A1 = A1+1, or SUM(A:A) in column A) gets its own message.
-    const deps = this.depGraph.getDependencies(cellKey);
-    const selfReference = deps.includes(cellKey) || deps.includes(`${col.key.toUpperCase()}:`);
-    const spilledKeys = this.depGraph.getSpilledKeys(cellKey);
+    const qualified = this.qualify(cellKey);
+    const deps = this.depGraph.getDependencies(qualified);
+    const selfReference = deps.includes(qualified) || deps.includes(columnDependencyKey(`${this.document.id}!${col.key}`));
+    const spilledKeys = this.depGraph.getSpilledKeys(qualified);
     const ownSpill = deps.find((dep) => spilledKeys.includes(dep));
     const errorMessage = selfReference
       ? "This formula can't reference its own cell."
       : ownSpill
-        ? `This formula refers to ${ownSpill}, which holds its own spilled results (a circular reference).`
+        ? `This formula refers to ${ownSpill.slice(ownSpill.lastIndexOf('!') + 1)}, which holds its own spilled results (a circular reference).`
         : 'This formula is part of a circular reference: it depends on its own result through other cells.';
     // Keep the spill edges, so the cycle stays detected on the next pass.
     this.clearSpill(cellKey.toUpperCase(), true);
@@ -625,7 +1071,7 @@ export class SpreadsheetController {
     if (reason) {
       this.clearSpill(anchor);
       // Clearing a blocking cell recalculates this anchor.
-      this.depGraph.setSpillEdges(anchor, [], blockers);
+      this.depGraph.setSpillEdges(this.qualify(anchor), [], blockers.map((key) => this.qualify(key)));
       return reason;
     }
 
@@ -652,7 +1098,7 @@ export class SpreadsheetController {
         this.spillCells.set(spillCellId(rowObj.id, column.id), display);
         if (this.spilledBy.get(key) !== anchor) {
           this.spilledBy.set(key, anchor);
-          this.spillChanges?.add(key);
+          this.spillChanges?.add(this.qualify(key));
         }
         cells.push({ key, rowId: rowObj.id, colId: column.id });
       }
@@ -665,7 +1111,7 @@ export class SpreadsheetController {
       }
     }
     this.spills.set(anchor, { anchor, row, col, rows, cols, values: array.values, cells });
-    this.depGraph.setSpillEdges(anchor, cells.map((cell) => cell.key));
+    this.depGraph.setSpillEdges(this.qualify(anchor), cells.map((cell) => this.qualify(cell.key)));
     return null;
   }
 
@@ -676,14 +1122,14 @@ export class SpreadsheetController {
       for (const cell of record.cells) this.forgetSpilledCell(anchor, cell);
       this.spills.delete(anchor);
     }
-    if (!keepEdges) this.depGraph.setSpillEdges(anchor, []);
+    if (!keepEdges) this.depGraph.setSpillEdges(this.qualify(anchor), []);
   }
 
   private forgetSpilledCell(anchor: string, cell: SpillRecord['cells'][number]): void {
     if (this.spilledBy.get(cell.key) !== anchor) return;
     this.spilledBy.delete(cell.key);
     this.spillCells.delete(spillCellId(cell.rowId, cell.colId));
-    this.spillChanges?.add(cell.key);
+    this.spillChanges?.add(this.qualify(cell.key));
   }
 
   private resolveSpillByCoord(colStr: string, rowNum: number): FormulaRange | string {
@@ -743,6 +1189,8 @@ export class SpreadsheetController {
     const col = this.document.columns.find((c) => c.key.toUpperCase() === colStr.toUpperCase());
     const row = this.document.rows[rowNum - 1];
     if (!col || !row) return 0;
+    const override = this.valueOverride;
+    if (override && override.row === rowNum - 1 && this.document.columns[override.col] === col) return override.value;
 
     // Blank cells resolve to '' (0 in arithmetic, "" in text), as in spreadsheets.
     return this.getCell(row.id, col.id).value ?? '';
@@ -763,9 +1211,14 @@ export class SpreadsheetController {
       const col = this.document.columns.find((colDef) => colDef.key.toUpperCase() === colName);
       if (!col) continue;
 
+      const override = this.valueOverride && this.document.columns[this.valueOverride.col] === col ? this.valueOverride : null;
       for (let r = minR; r <= maxR; r++) {
         const row = this.document.rows[r - 1];
         if (!row) continue;
+        if (override && override.row === r - 1) {
+          results.push(override.value);
+          continue;
+        }
         results.push(this.getCell(row.id, col.id).value ?? '');
       }
     }
@@ -848,14 +1301,86 @@ export class SpreadsheetController {
     this.draftValue = initialValue !== undefined ? initialValue : cell.raw;
   }
 
-  public commitEditing(valueToCommit?: string): void {
-    if (!this.editingCell) return;
+  /**
+   * Commits the cell editor's draft (or `valueToCommit`). Input that breaks
+   * the cell's data validation is not committed: the editor stays open and
+   * `validationPrompt` holds the alert until `resolveValidationPrompt`.
+   * Unchanged input is not validated.
+   */
+  public commitEditing(valueToCommit?: string): SpreadsheetCommitResult {
+    if (!this.editingCell) return { status: 'none' };
+    if (this.validationPrompt) return { status: 'pending', prompt: this.validationPrompt };
     const val = valueToCommit !== undefined ? valueToCommit : this.draftValue;
-    if (this.editingCell.rowId && this.editingCell.colId) {
-      this.setCellValue(this.editingCell.rowId, this.editingCell.colId, val);
+    const { rowId, colId, row, col } = this.editingCell;
+    if (rowId && colId) {
+      const failed = this.checkInput(rowId, colId, row, col, val, true);
+      if (failed) return failed;
+      this.setCellValue(rowId, colId, val);
     }
     this.editingCell = null;
     this.draftValue = '';
+    return { status: 'committed' };
+  }
+
+  /**
+   * Commits typed input to a cell (e.g. from the formula bar or a list
+   * dropdown) with data validation, like `commitEditing` without an open
+   * editor. `setCellValue` never validates (paste, import and code bypass
+   * validation, as in Excel).
+   */
+  public commitCellInput(rowId: string, colId: string, raw: string): SpreadsheetCommitResult {
+    if (this.validationPrompt) return { status: 'pending', prompt: this.validationPrompt };
+    const row = this.document.rows.findIndex((r) => r.id === rowId);
+    const col = this.document.columns.findIndex((c) => c.id === colId);
+    if (row === -1 || col === -1) return { status: 'none' };
+    const failed = this.checkInput(rowId, colId, row, col, raw, false);
+    if (failed) return failed;
+    this.setCellValue(rowId, colId, raw);
+    return { status: 'committed' };
+  }
+
+  /** Validates input; when it fails, records and returns the prompt. */
+  private checkInput(
+    rowId: string,
+    colId: string,
+    row: number,
+    col: number,
+    raw: string,
+    editing: boolean
+  ): SpreadsheetCommitResult | null {
+    if (!this.document.table?.dataValidations?.length) return null;
+    if (this.getCell(rowId, colId).raw === raw) return null;
+    const result = this.validateCellInput(row, col, raw);
+    if (result.valid) return null;
+    const prompt: SpreadsheetValidationPrompt = { rowId, colId, row, col, raw, result, editing };
+    this.validationPrompt = prompt;
+    return { status: result.errorStyle === 'stop' ? 'rejected' : 'confirm', prompt };
+  }
+
+  /**
+   * Answers `validationPrompt`: `accept` keeps the input (warning and
+   * information alerts only; for a stop alert it acts as `retry`), `retry`
+   * returns to editing it, `cancel` discards it.
+   */
+  public resolveValidationPrompt(action: SpreadsheetValidationAction): void {
+    const prompt = this.validationPrompt;
+    if (!prompt) return;
+    this.validationPrompt = null;
+    const editingSameCell =
+      prompt.editing && this.editingCell?.rowId === prompt.rowId && this.editingCell?.colId === prompt.colId;
+    if (action === 'accept' && prompt.result.errorStyle !== 'stop') {
+      this.setCellValue(prompt.rowId, prompt.colId, prompt.raw);
+      if (editingSameCell) {
+        this.editingCell = null;
+        this.draftValue = '';
+      }
+    } else if (action === 'cancel') {
+      if (editingSameCell) this.cancelEditing();
+    } else if (editingSameCell) {
+      this.draftValue = prompt.raw;
+    } else {
+      this.startEditing(prompt.row, prompt.col, prompt.raw);
+    }
   }
 
   public cancelEditing(): void {
@@ -982,20 +1507,41 @@ export class SpreadsheetController {
    * column formula) so they keep pointing at the same cells.
    */
   private shiftReferences(change: StructuralChange): void {
-    for (const rowCells of Object.values(this.document.cells)) {
-      for (const cell of Object.values(rowCells)) {
-        if (cell.raw?.startsWith('=')) {
-          cell.raw = shiftFormulaReferences(cell.raw, change);
+    // On every sheet: references to this sheet (unqualified ones on this
+    // sheet, `ThisSheet!A1` anywhere) shift. 3-D references don't.
+    const changed = this.ctx;
+    for (const rt of this.runtimes) {
+      const filter = this.referencesTo(changed, rt);
+      for (const rowCells of Object.values(rt.doc.cells)) {
+        for (const cell of Object.values(rowCells)) {
+          if (cell.raw?.startsWith('=')) {
+            cell.raw = shiftFormulaReferences(cell.raw, change, filter);
+          }
+        }
+      }
+      if (change.axis === 'col') {
+        for (const col of rt.doc.columns) {
+          if (col.formula?.startsWith('=')) {
+            col.formula = shiftFormulaReferences(col.formula, change, filter);
+          }
         }
       }
     }
-    if (change.axis === 'col') {
-      for (const col of this.document.columns) {
-        if (col.formula?.startsWith('=')) {
-          col.formula = shiftFormulaReferences(col.formula, change);
-        }
-      }
+    for (const n of this.names) {
+      const scope = n.sheetId !== undefined ? this.findRuntimeById(n.sheetId) : undefined;
+      n.refersTo = shiftFormulaReferences(n.refersTo, change, {
+        appliesTo: (sheet, sheetEnd) =>
+          sheetEnd === undefined && (sheet === undefined ? scope === changed : sameName(sheet, changed.doc.name))
+      });
     }
+  }
+
+  /** Filter for references, in formulas on sheet `on`, that point at sheet `target`. */
+  private referencesTo(target: SheetRuntime, on: SheetRuntime): FormulaReferenceFilter {
+    return {
+      appliesTo: (sheet, sheetEnd) =>
+        sheetEnd === undefined && (sheet === undefined ? on === target : sameName(sheet, target.doc.name))
+    };
   }
 
   public setColumnWidth(colId: string, width: number): void {
@@ -1152,7 +1698,18 @@ export class SpreadsheetController {
    */
   public importFromCsv(csv: string, options: CsvImportOptions = {}): void {
     const matrix = parseCsv(csv, { delimiter: options.delimiter });
-    this.writeMatrix(matrix, options.startRow ?? 0, options.startCol ?? 0);
+    this.onTargetSheet(options.sheet, () => this.writeMatrix(matrix, options.startRow ?? 0, options.startCol ?? 0));
+  }
+
+  /** Runs `fn` on the sheet `sheet` (id or name), default the active one. Throws for an unknown sheet. */
+  private onTargetSheet(sheet: string | undefined, fn: () => void): void {
+    if (sheet === undefined) {
+      fn();
+      return;
+    }
+    const rt = this.findRuntime(sheet);
+    if (!rt) throw new Error(`There is no sheet "${sheet}".`);
+    this.withSheet(rt, fn);
   }
 
   /**
@@ -1160,7 +1717,7 @@ export class SpreadsheetController {
    * starting at (startRow, startCol), as a single undo step.
    */
   public importRows(rows: string[][], options: Omit<CsvImportOptions, 'delimiter'> = {}): void {
-    this.writeMatrix(rows, options.startRow ?? 0, options.startCol ?? 0);
+    this.onTargetSheet(options.sheet, () => this.writeMatrix(rows, options.startRow ?? 0, options.startCol ?? 0));
   }
 
   /** The cells of `range` (or the whole sheet), row by row. */
@@ -1266,10 +1823,14 @@ export class SpreadsheetController {
 
   /** Rewrites every formula so references follow cells that moved. */
   private remapAllFormulas(moveCell: (position: CellPosition) => CellPosition | null): void {
-    for (const rowCells of Object.values(this.document.cells)) {
-      for (const cell of Object.values(rowCells)) {
-        if (cell.raw?.startsWith('=')) {
-          cell.raw = remapFormulaReferences(cell.raw, moveCell);
+    const moved = this.ctx;
+    for (const rt of this.runtimes) {
+      const filter = this.referencesTo(moved, rt);
+      for (const rowCells of Object.values(rt.doc.cells)) {
+        for (const cell of Object.values(rowCells)) {
+          if (cell.raw?.startsWith('=')) {
+            cell.raw = remapFormulaReferences(cell.raw, moveCell, filter);
+          }
         }
       }
     }
@@ -1281,6 +1842,7 @@ export class SpreadsheetController {
    * merges reduced to a single cell are dropped.
    */
   private adjustTableForStructuralChange(change: StructuralChange): void {
+    this.adjustRulesForStructuralChange(change);
     const merges = this.document.table?.merges;
     if (!merges?.length) return;
     const startKey = change.axis === 'row' ? 'startRow' : 'startCol';
@@ -1882,11 +2444,402 @@ export class SpreadsheetController {
     return buildSpreadsheetView(this.document, this.getCellValueAt);
   }
 
+  // --- Sheets ---
+
+  /** The sheets in tab order. */
+  public getSheets(): SpreadsheetSheetInfo[] {
+    return this.runtimes.map((rt, index) => ({ id: rt.doc.id, name: rt.doc.name, index, active: rt === this.active }));
+  }
+
+  /** Id of the active sheet (the one `document` is). */
+  public get activeSheetId(): string {
+    return this.active.doc.id;
+  }
+
+  /** A sheet's document by id or name (live: don't mutate it directly). */
+  public getSheetDocument(idOrName: string): SpreadsheetDocument | undefined {
+    return this.findRuntime(idOrName)?.doc;
+  }
+
+  /** Why `name` can't name a sheet (or null): see `validateSheetName`. `exceptSheet` is the sheet being renamed. */
+  public validateSheetName(name: string, exceptSheet?: string): string | null {
+    const except = exceptSheet === undefined ? undefined : this.findRuntime(exceptSheet);
+    return validateSheetName(
+      name,
+      this.runtimes.filter((rt) => rt !== except).map((rt) => rt.doc.name)
+    );
+  }
+
+  /**
+   * Shows another sheet (by id or name). The current edit is committed and
+   * each sheet keeps its own selection. Returns false for an unknown sheet.
+   */
+  public setActiveSheet(idOrName: string): boolean {
+    const rt = this.findRuntime(idOrName);
+    if (!rt) return false;
+    if (rt === this.active) return true;
+    if (this.editingCell) this.commitEditing();
+    this.activateRuntime(rt);
+    this.notifyChange();
+    return true;
+  }
+
+  private activateRuntime(rt: SheetRuntime): void {
+    if (rt === this.active) return;
+    if (this.runtimes.includes(this.active)) {
+      this.active.activeCell = this.activeCell;
+      this.active.selectedRange = this.selectedRange;
+    }
+    this.active = this.ctx = rt;
+    this.activeCell = rt.activeCell;
+    this.selectedRange = rt.selectedRange;
+    this.editingCell = null;
+    this.draftValue = '';
+    this.onSelectionChange?.(this.activeCell, this.selectedRange);
+    this.onActiveSheetChange?.(rt.doc.id);
+  }
+
+  /**
+   * Adds a sheet (default: `Sheet N`, empty, after the last sheet) and
+   * activates it unless `activate` is false. Returns its id. Throws when
+   * `name` is invalid or taken. Undoable.
+   */
+  public addSheet(
+    options: { name?: string; index?: number; document?: Partial<SpreadsheetDocument>; activate?: boolean } = {}
+  ): string {
+    const existing = this.runtimes.map((rt) => rt.doc.name);
+    const name = options.name ?? options.document?.name ?? nextSheetName(existing);
+    const invalid = validateSheetName(name, existing);
+    if (invalid) throw new Error(invalid);
+    this.recordWorkbookSnapshot();
+    const id = options.document?.id && !this.findRuntimeById(options.document.id) ? options.document.id : this.generateSheetId();
+    const doc: SpreadsheetDocument = {
+      columns: Array.from({ length: 4 }, (_, i) => ({
+        id: `col_${String.fromCharCode(97 + i)}`,
+        key: indexToColName(i),
+        title: indexToColName(i),
+        width: 120,
+        type: 'freeform' as const
+      })),
+      rows: Array.from({ length: 10 }, (_, i) => ({ id: `row_${i + 1}`, index: i, height: 32, type: 'freeform' as const })),
+      cells: {},
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      ...JSON.parse(JSON.stringify(options.document ?? {})),
+      id,
+      name
+    };
+    const rt = createRuntime(doc);
+    const index = Math.max(0, Math.min(options.index ?? this.runtimes.length, this.runtimes.length));
+    this.runtimes.splice(index, 0, rt);
+    this.withSheet(rt, () => {
+      this.recomputeRowIndices();
+      this.rederiveTypedValues();
+    });
+    if (options.activate !== false) this.activateRuntime(rt);
+    // Formulas that referred to a sheet of this name (#REF!) now find it.
+    this.recalculateAll();
+    this.notifyChange();
+    return id;
+  }
+
+  /**
+   * Renames a sheet. Formulas on every sheet and defined names that refer to
+   * it follow (`=Old!A1` becomes `='New Name'!A1`). Throws when the name is
+   * invalid or taken. Undoable.
+   */
+  public renameSheet(idOrName: string, newName: string): void {
+    const rt = this.findRuntime(idOrName);
+    if (!rt) throw new Error(`There is no sheet "${idOrName}".`);
+    if (rt.doc.name === newName) return;
+    const invalid = this.validateSheetName(newName, rt.doc.id);
+    if (invalid) throw new Error(invalid);
+    this.recordWorkbookSnapshot();
+    const oldName = rt.doc.name;
+    this.rewriteAllFormulas((formula) => renameSheetInFormula(formula, oldName, newName));
+    rt.doc.name = newName;
+    rt.doc.updatedAt = Date.now();
+    this.recalculateAll();
+    this.notifyChange();
+  }
+
+  /** Moves a sheet to position `toIndex` in tab order. Returns false for an unknown sheet. Undoable. */
+  public moveSheet(idOrName: string, toIndex: number): boolean {
+    const rt = this.findRuntime(idOrName);
+    if (!rt) return false;
+    const from = this.runtimes.indexOf(rt);
+    const to = Math.max(0, Math.min(Math.floor(toIndex), this.runtimes.length - 1));
+    if (from === to) return true;
+    this.recordWorkbookSnapshot();
+    this.runtimes.splice(from, 1);
+    this.runtimes.splice(to, 0, rt);
+    // 3-D references (Sheet1:Sheet3!A1) cover the sheets between their ends.
+    this.recalculateAll();
+    this.notifyChange();
+    return true;
+  }
+
+  /**
+   * Deletes a sheet and its sheet-scoped names. References to it become
+   * `#REF!` (a 3-D reference losing an end sheet shrinks). The last sheet
+   * can't be deleted (returns false). Undoable.
+   */
+  public deleteSheet(idOrName: string): boolean {
+    const rt = this.findRuntime(idOrName);
+    if (!rt || this.runtimes.length <= 1) return false;
+    this.recordWorkbookSnapshot();
+    const order = this.runtimes.map((r) => r.doc.name);
+    const index = this.runtimes.indexOf(rt);
+    this.runtimes.splice(index, 1);
+    this.names = this.names.filter((n) => n.sheetId !== rt.doc.id);
+    this.rewriteAllFormulas((formula) => deleteSheetInFormula(formula, rt.doc.name, order));
+    if (this.active === rt) {
+      this.ctx = this.active;
+      this.activateRuntime(this.runtimes[Math.min(index, this.runtimes.length - 1)]);
+    } else if (this.ctx === rt) {
+      this.ctx = this.active;
+    }
+    this.recalculateAll();
+    this.notifyChange();
+    return true;
+  }
+
+  /**
+   * Copies a sheet (default name `Name (2)`, placed after it) with its
+   * sheet-scoped names, which refer to the copy. Activates the copy unless
+   * `activate` is false. Returns the new sheet's id, or null for an unknown
+   * sheet. Undoable.
+   */
+  public duplicateSheet(idOrName: string, options: { name?: string; index?: number; activate?: boolean } = {}): string | null {
+    const source = this.findRuntime(idOrName);
+    if (!source) return null;
+    const existing = this.runtimes.map((rt) => rt.doc.name);
+    const name = options.name ?? copySheetName(source.doc.name, existing);
+    const invalid = validateSheetName(name, existing);
+    if (invalid) throw new Error(invalid);
+    this.recordWorkbookSnapshot();
+    const doc: SpreadsheetDocument = JSON.parse(JSON.stringify(source.doc));
+    doc.id = this.generateSheetId();
+    doc.name = name;
+    doc.createdAt = doc.updatedAt = Date.now();
+    const copies = this.names
+      .filter((n) => n.sheetId === source.doc.id)
+      .map((n) => ({ ...n, sheetId: doc.id, refersTo: renameSheetInFormula(n.refersTo, source.doc.name, name) }));
+    this.names.push(...copies);
+    const rt = createRuntime(doc);
+    const index = Math.max(0, Math.min(options.index ?? this.runtimes.indexOf(source) + 1, this.runtimes.length));
+    this.runtimes.splice(index, 0, rt);
+    if (options.activate !== false) this.activateRuntime(rt);
+    this.recalculateAll();
+    this.notifyChange();
+    return doc.id;
+  }
+
+  /** Applies `rewrite` to every formula: cells and column formulas on every sheet, and defined names. */
+  private rewriteAllFormulas(rewrite: (formula: string) => string): void {
+    for (const rt of this.runtimes) {
+      for (const [rowId, rowCells] of Object.entries(rt.doc.cells)) {
+        for (const [colId, cell] of Object.entries(rowCells)) {
+          if (!cell.raw?.startsWith('=')) continue;
+          const raw = rewrite(cell.raw);
+          // Replace the cell object (bindings compare cells by identity).
+          if (raw !== cell.raw) rt.doc.cells[rowId][colId] = { ...cell, raw };
+        }
+      }
+      for (const col of rt.doc.columns) {
+        if (col.formula?.startsWith('=')) col.formula = rewrite(col.formula);
+      }
+    }
+    for (const n of this.names) n.refersTo = rewrite(n.refersTo);
+  }
+
+  private generateSheetId(): string {
+    return `sheet_${Date.now()}_${(nextIdSequence++).toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+  }
+
+  // --- Defined names (Name Manager) ---
+
+  /** Every defined name, workbook-scoped and sheet-scoped. */
+  public getNames(): SpreadsheetNameInfo[] {
+    return this.names.map((n) => {
+      const scope = n.sheetId !== undefined ? this.findRuntimeById(n.sheetId) : undefined;
+      return {
+        ...n,
+        ...(scope ? { sheetName: scope.doc.name } : {}),
+        isLambda: isLambdaDefinition(n)
+      };
+    });
+  }
+
+  /** The defined name `name` visible from the active sheet (its own sheet-scoped name first), or undefined. */
+  public getName(name: string, scope?: SpreadsheetNameScope): SpreadsheetNameInfo | undefined {
+    const rt = scope?.sheet !== undefined ? this.findRuntime(scope.sheet) : undefined;
+    const def =
+      scope?.sheet !== undefined
+        ? rt
+          ? this.names.find((n) => n.sheetId === rt.doc.id && sameName(n.name, name))
+          : undefined
+        : this.findName(name, this.active);
+    return def ? this.getNames().find((n) => n.name === def.name && n.sheetId === def.sheetId) : undefined;
+  }
+
+  /** Why `name` can't be a defined name (or null): see `validateDefinedName`. */
+  public validateDefinedName(name: string): string | null {
+    return validateDefinedName(name);
+  }
+
+  private scopeRuntime(scope: SpreadsheetNameScope | undefined): SheetRuntime | undefined {
+    if (scope?.sheet === undefined) return undefined;
+    const rt = this.findRuntime(scope.sheet);
+    if (!rt) throw new Error(`There is no sheet "${scope.sheet}".`);
+    return rt;
+  }
+
+  /**
+   * Defines (or redefines) a name in the workbook, or on one sheet with
+   * `sheet`. `refersTo` is a formula: a range (`=Data!$A$2:$A$20`), a
+   * constant (`=0.07`), a formula or a LAMBDA (`=LAMBDA(x, x*2)`, called as
+   * `=Double(4)`). Formulas using the name recalculate. Throws when the name
+   * is invalid or the formula can't be read. Undoable.
+   */
+  public defineName(name: string, refersTo: string, options: SpreadsheetNameScope & { comment?: string } = {}): void {
+    const invalid = validateDefinedName(name);
+    if (invalid) throw new Error(invalid);
+    const formula = refersTo.trim().startsWith('=') ? refersTo.trim() : `=${refersTo.trim()}`;
+    try {
+      parseFormula(formula);
+    } catch (err: any) {
+      throw new Error(`There's a problem with this formula: ${err?.message ?? formula}`);
+    }
+    const rt = this.scopeRuntime(options);
+    this.recordWorkbookSnapshot();
+    const sheetId = rt?.doc.id;
+    const index = this.names.findIndex((n) => n.sheetId === sheetId && sameName(n.name, name));
+    const def: SpreadsheetDefinedName = {
+      name,
+      refersTo: formula,
+      ...(sheetId !== undefined ? { sheetId } : {}),
+      ...(options.comment ? { comment: options.comment } : {})
+    };
+    if (index >= 0) this.names[index] = def;
+    else this.names.push(def);
+    this.recalculateAll();
+    this.notifyChange();
+  }
+
+  /**
+   * Renames a defined name. Formulas that use it (cells, column formulas and
+   * other names) follow, on the sheets where the old name meant this one.
+   * Throws when the name doesn't exist or the new name is invalid or taken.
+   * Undoable.
+   */
+  public renameName(oldName: string, newName: string, options: SpreadsheetNameScope = {}): void {
+    const rt = this.scopeRuntime(options);
+    const sheetId = rt?.doc.id;
+    const def = this.names.find((n) => n.sheetId === sheetId && sameName(n.name, oldName));
+    if (!def) throw new Error(`There is no name "${oldName}"${rt ? ` on sheet ${rt.doc.name}` : ''}.`);
+    if (def.name === newName) return;
+    const invalid = validateDefinedName(newName);
+    if (invalid) throw new Error(invalid);
+    if (!sameName(oldName, newName) && this.names.some((n) => n.sheetId === sheetId && sameName(n.name, newName))) {
+      throw new Error('The name entered already exists. Enter a unique name.');
+    }
+    this.recordWorkbookSnapshot();
+    // Sheets where the old name means this definition.
+    const shadowedOn = new Set(this.names.filter((n) => n.sheetId !== undefined && sameName(n.name, oldName)).map((n) => n.sheetId));
+    const appliesOn = (sheet: SheetRuntime | undefined) =>
+      sheetId !== undefined ? sheet?.doc.id === sheetId : !sheet || !shadowedOn.has(sheet.doc.id);
+    const appliesToSheetName = (sheetName: string) => appliesOn(this.findRuntimeByName(sheetName));
+    for (const sheet of this.runtimes) {
+      const options = { appliesTo: appliesToSheetName, qualifiedOnly: !appliesOn(sheet) };
+      for (const [rowId, rowCells] of Object.entries(sheet.doc.cells)) {
+        for (const [colId, cell] of Object.entries(rowCells)) {
+          if (!cell.raw?.startsWith('=')) continue;
+          const raw = renameNameInFormula(cell.raw, oldName, newName, options);
+          if (raw !== cell.raw) sheet.doc.cells[rowId][colId] = { ...cell, raw };
+        }
+      }
+      for (const col of sheet.doc.columns) {
+        if (col.formula?.startsWith('=')) col.formula = renameNameInFormula(col.formula, oldName, newName, options);
+      }
+    }
+    for (const n of this.names) {
+      const scope = n.sheetId !== undefined ? this.findRuntimeById(n.sheetId) : undefined;
+      n.refersTo = renameNameInFormula(n.refersTo, oldName, newName, {
+        appliesTo: appliesToSheetName,
+        qualifiedOnly: scope ? !appliesOn(scope) : sheetId !== undefined
+      });
+    }
+    def.name = newName;
+    this.recalculateAll();
+    this.notifyChange();
+  }
+
+  /**
+   * Deletes a defined name. Formulas still using it show `#NAME?`. Returns
+   * false when there is no such name. Undoable.
+   */
+  public deleteName(name: string, options: SpreadsheetNameScope = {}): boolean {
+    const rt = this.scopeRuntime(options);
+    const sheetId = rt?.doc.id;
+    const index = this.names.findIndex((n) => n.sheetId === sheetId && sameName(n.name, name));
+    if (index < 0) return false;
+    this.recordWorkbookSnapshot();
+    this.names.splice(index, 1);
+    this.recalculateAll();
+    this.notifyChange();
+    return true;
+  }
+
+  /**
+   * Names formula autocomplete can offer on the active sheet: its
+   * sheet-scoped names and the workbook names they don't hide.
+   */
+  public getNameSuggestions(): Array<{ name: string; description: string; isLambda: boolean }> {
+    const visible = new Map<string, SpreadsheetDefinedName>();
+    for (const n of this.names) {
+      if (n.sheetId === this.active.doc.id) visible.set(n.name.toUpperCase(), n);
+    }
+    for (const n of this.names) {
+      if (n.sheetId === undefined && !visible.has(n.name.toUpperCase())) visible.set(n.name.toUpperCase(), n);
+    }
+    return Array.from(visible.values(), (n) => ({
+      name: n.name,
+      description: n.comment ? `${n.comment} (${n.refersTo})` : n.refersTo,
+      isLambda: isLambdaDefinition(n)
+    })).sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  /**
+   * Evaluates a formula (e.g. `=Rate*2`, `=SUM(Sales)`) as if it were in a
+   * cell of `sheet` (id or name; default the active sheet), without storing
+   * it. Used by the Name Manager to show a name's current value.
+   */
+  public evaluateFormula(formula: string, options: { sheet?: string } = {}): FormulaEvaluationResult {
+    const rt = options.sheet === undefined ? this.active : this.findRuntime(options.sheet);
+    if (!rt) return { value: '#REF!', error: '#REF!', message: `There is no sheet "${options.sheet}".` };
+    const text = formula.startsWith('=') ? formula : `=${formula}`;
+    return this.withSheet(rt, () => this.evaluator.evaluateWithDiagnostics(text));
+  }
+
   // --- Undo/Redo Snapshots ---
+  //
+  // Most steps snapshot one sheet (the one changed); sheet and name
+  // operations snapshot the whole workbook. Undoing a sheet's step shows
+  // that sheet.
 
   private recordSnapshot(): void {
     if (this.isApplyingHistory || this.batching) return;
-    this.undoStack.push(JSON.stringify(this.document));
+    this.pushUndo({ kind: 'sheet', sheetId: this.ctx.doc.id, data: JSON.stringify(this.ctx.doc) });
+  }
+
+  private recordWorkbookSnapshot(): void {
+    if (this.isApplyingHistory || this.batching) return;
+    this.pushUndo({ kind: 'workbook', data: JSON.stringify(this.workbookSnapshot()) });
+  }
+
+  private pushUndo(entry: HistoryEntry): void {
+    this.undoStack.push(entry);
     if (this.undoStack.length > 50) this.undoStack.shift();
     this.redoStack = [];
     this.trimHistory();
@@ -1895,19 +2848,17 @@ export class SpreadsheetController {
   /** Drops the oldest snapshots beyond `maxHistoryBytes`, always keeping the newest. */
   private trimHistory(): void {
     if (this.maxHistoryBytes <= 0 || this.undoStack.length <= 1) return;
-    let total = 0;
-    for (const s of this.undoStack) total += s.length * 2;
-    for (const s of this.redoStack) total += s.length * 2;
+    let total = this.getHistoryByteSize();
     while (total > this.maxHistoryBytes && this.undoStack.length > 1) {
-      total -= this.undoStack.shift()!.length * 2;
+      total -= this.undoStack.shift()!.data.length * 2;
     }
   }
 
   /** Approximate bytes held by the undo/redo snapshots (UTF-16 size). */
   public getHistoryByteSize(): number {
     let total = 0;
-    for (const s of this.undoStack) total += s.length * 2;
-    for (const s of this.redoStack) total += s.length * 2;
+    for (const s of this.undoStack) total += s.data.length * 2;
+    for (const s of this.redoStack) total += s.data.length * 2;
     return total;
   }
 
@@ -1917,24 +2868,52 @@ export class SpreadsheetController {
   }
 
   public undo(): void {
-    if (this.undoStack.length === 0) return;
-    this.isApplyingHistory = true;
-    try {
-      this.redoStack.push(JSON.stringify(this.document));
-      this.document = JSON.parse(this.undoStack.pop()!);
-      this.recalculateAll();
-      this.notifyChange();
-    } finally {
-      this.isApplyingHistory = false;
-    }
+    this.applyHistory(this.undoStack, this.redoStack);
   }
 
   public redo(): void {
-    if (this.redoStack.length === 0) return;
+    this.applyHistory(this.redoStack, this.undoStack);
+  }
+
+  /** Restores the newest entry of `from`, saving the current state of the same scope on `to`. */
+  private applyHistory(from: HistoryEntry[], to: HistoryEntry[]): void {
+    const entry = from.pop();
+    if (!entry) return;
     this.isApplyingHistory = true;
     try {
-      this.undoStack.push(JSON.stringify(this.document));
-      this.document = JSON.parse(this.redoStack.pop()!);
+      if (entry.kind === 'sheet') {
+        const rt = this.findRuntimeById(entry.sheetId);
+        if (!rt) return;
+        to.push({ kind: 'sheet', sheetId: rt.doc.id, data: JSON.stringify(rt.doc) });
+        rt.doc = JSON.parse(entry.data);
+        if (rt !== this.active) {
+          this.ctx = this.active;
+          this.activateRuntime(rt);
+        }
+      } else {
+        to.push({ kind: 'workbook', data: JSON.stringify(this.workbookSnapshot()) });
+        const previousActive = this.active.doc.id;
+        const selection = { activeCell: this.activeCell, selectedRange: this.selectedRange };
+        const saved = new Map(this.runtimes.map((rt) => [rt.doc.id, rt]));
+        this.setWorkbookState(JSON.parse(entry.data), false);
+        // Sheets that survive keep their saved selections.
+        for (const rt of this.runtimes) {
+          const old = saved.get(rt.doc.id);
+          if (old) {
+            rt.activeCell = old.activeCell;
+            rt.selectedRange = old.selectedRange;
+          }
+        }
+        if (this.active.doc.id === previousActive) {
+          this.activeCell = selection.activeCell;
+          this.selectedRange = selection.selectedRange;
+        } else {
+          this.activeCell = this.active.activeCell;
+          this.selectedRange = this.active.selectedRange;
+          this.onSelectionChange?.(this.activeCell, this.selectedRange);
+          this.onActiveSheetChange?.(this.active.doc.id);
+        }
+      }
       this.recalculateAll();
       this.notifyChange();
     } finally {
@@ -1943,7 +2922,335 @@ export class SpreadsheetController {
   }
 
   private notifyChange(): void {
+    if (!this.cfIncremental) this.cfDirty = 'all';
+    this.invalidCircles = null;
+    this.onDocumentChange?.(this.active.doc);
+    if (this.onWorkbookChange) {
+      const snapshot = this.workbookSnapshot();
+      this.onWorkbookChange({ sheets: snapshot.sheets, activeSheetId: snapshot.activeSheetId, names: snapshot.names });
+    }
+  }
+
+  // --- Conditional formatting and data validation ---
+
+  /** The sheet as rule evaluation sees it. */
+  private ruleSheet(): ConditionalFormatSheet & DataValidationSheet {
+    return {
+      rowCount: this.document.rows.length,
+      colCount: this.document.columns.length,
+      getValue: (row, col) => this.getCellValueAt(row, col) ?? '',
+      getInput: (row, col) => {
+        const r = this.document.rows[row];
+        const c = this.document.columns[col];
+        return r && c ? this.getCell(r.id, c.id).raw : '';
+      },
+      evaluateFormula: (formula: string, row: number, col: number, entered?: { row: number; col: number; value: unknown }) =>
+        this.evaluateFormulaAt(formula, row, col, entered)
+    };
+  }
+
+  /**
+   * Evaluates `formula` as if it were in (row, col), without storing it:
+   * relative references and `[property]` resolve from that cell. With
+   * `entered`, that cell reads as the given value (input being validated).
+   * Returns the value, or an array's values (column-major) for a range.
+   */
+  public evaluateFormulaAt(
+    formula: string,
+    row: number,
+    col: number,
+    entered?: { row: number; col: number; value: unknown }
+  ): unknown {
+    const saved = { rowIndex: this.evaluatingRowIndex, cell: this.evaluatingCell, override: this.valueOverride };
+    this.evaluatingRowIndex = row;
+    this.evaluatingCell = { col: this.document.columns[col]?.key ?? indexToColName(col), row: row + 1 };
+    this.valueOverride = entered ?? null;
+    try {
+      const result = this.evaluator.evaluateWithDiagnostics(formula.startsWith('=') ? formula : `=${formula}`);
+      return result.array ? result.array.values : result.value;
+    } finally {
+      this.evaluatingRowIndex = saved.rowIndex;
+      this.evaluatingCell = saved.cell;
+      this.valueOverride = saved.override;
+    }
+  }
+
+  /** Records that the value of `cellKey` (and of the array it spills) may have changed. */
+  private markValueChanged(cellKey: string): void {
+    if (this.cfDirty === 'all') return;
+    this.cfDirty.add(cellKey);
+    const spill = this.spills.get(cellKey);
+    if (spill) for (const cell of spill.cells) this.cfDirty.add(cell.key);
+  }
+
+  private generateRuleId(prefix: 'cf' | 'dv'): string {
+    return `${prefix}_${Date.now()}_${(nextIdSequence++).toString(36)}`;
+  }
+
+  /** Moves rule ranges and rule formulas with inserted / deleted rows and columns. */
+  private adjustRulesForStructuralChange(change: StructuralChange): void {
+    const table = this.document.table;
+    if (!table) return;
+    const shiftIfFormula = (text: string | undefined) =>
+      text !== undefined && text.trimStart().startsWith('=') ? shiftRuleFormula(text, change) : text;
+    const shiftAnchor = (value: ConditionalFormatValue): ConditionalFormatValue =>
+      value.type === 'formula' ? { ...value, formula: shiftRuleFormula(value.formula, change) } : value;
+    if (table.conditionalFormats?.length) {
+      table.conditionalFormats = table.conditionalFormats
+        .map((rule) => {
+          const next = { ...rule, ranges: adjustRangesForStructuralChange(rule.ranges, change) } as ConditionalFormatRule;
+          if (next.type === 'expression') next.formula = shiftRuleFormula(next.formula, change);
+          if (next.type === 'cellIs') {
+            next.value = shiftIfFormula(next.value) ?? '';
+            if (next.value2 !== undefined) next.value2 = shiftIfFormula(next.value2);
+          }
+          if (next.type === 'colorScale') next.stops = next.stops.map((s) => ({ ...s, value: shiftAnchor(s.value) }));
+          if (next.type === 'dataBar') {
+            if (next.min) next.min = shiftAnchor(next.min);
+            if (next.max) next.max = shiftAnchor(next.max);
+          }
+          if (next.type === 'iconSet' && next.thresholds) next.thresholds = next.thresholds.map(shiftAnchor);
+          return next;
+        })
+        .filter((rule) => rule.ranges.length > 0);
+    }
+    if (table.dataValidations?.length) {
+      table.dataValidations = table.dataValidations
+        .map((rule) => {
+          const next: DataValidationRule = { ...rule, ranges: adjustRangesForStructuralChange(rule.ranges, change) };
+          if (rule.formula1 !== undefined) next.formula1 = shiftIfFormula(rule.formula1);
+          if (rule.formula2 !== undefined) next.formula2 = shiftIfFormula(rule.formula2);
+          return next;
+        })
+        .filter((rule) => rule.ranges.length > 0);
+    }
+  }
+
+  /** Conditional formats of the sheet, highest priority first. */
+  public getConditionalFormats(): ConditionalFormatRule[] {
+    return this.document.table?.conditionalFormats ?? [];
+  }
+
+  /**
+   * Adds a conditional format (one undo step). New rules get the highest
+   * priority, as in Excel; pass `priority: 'last'` to add it below the
+   * others. Returns the rule id.
+   */
+  public addConditionalFormat(rule: NewConditionalFormatRule, options: { priority?: 'first' | 'last' } = {}): string {
+    const id = rule.id || this.generateRuleId('cf');
+    const stored = { ...rule, id, ranges: rule.ranges.map((r) => normalizeRange(r)) } as ConditionalFormatRule;
+    this.applyTableChange(() => {
+      const rules = [...(this.table.conditionalFormats ?? [])];
+      if (options.priority === 'last') rules.push(stored);
+      else rules.unshift(stored);
+      this.table.conditionalFormats = rules;
+    });
+    return id;
+  }
+
+  /** Changes a conditional format (its condition, ranges or stop-if-true). Returns false when not found. */
+  public updateConditionalFormat(id: string, changes: Partial<NewConditionalFormatRule>): boolean {
+    const rules = this.document.table?.conditionalFormats ?? [];
+    const index = rules.findIndex((r) => r.id === id);
+    if (index === -1) return false;
+    this.applyTableChange(() => {
+      const next = [...rules];
+      const updated = { ...rules[index], ...changes, id } as ConditionalFormatRule;
+      if (changes.ranges) updated.ranges = changes.ranges.map((r) => normalizeRange(r));
+      next[index] = updated;
+      this.table.conditionalFormats = next;
+    });
+    return true;
+  }
+
+  /** Removes a conditional format. Returns false when not found. */
+  public deleteConditionalFormat(id: string): boolean {
+    const rules = this.document.table?.conditionalFormats ?? [];
+    if (!rules.some((r) => r.id === id)) return false;
+    this.applyTableChange(() => {
+      this.table.conditionalFormats = rules.filter((r) => r.id !== id);
+    });
+    return true;
+  }
+
+  /**
+   * Moves a conditional format to priority `to` (0 = highest), or by
+   * `{ by: -1 }` (up) / `{ by: 1 }` (down). Returns false when nothing moved.
+   */
+  public moveConditionalFormat(id: string, to: number | { by: number }): boolean {
+    const rules = this.document.table?.conditionalFormats ?? [];
+    const from = rules.findIndex((r) => r.id === id);
+    if (from === -1) return false;
+    const target = Math.max(0, Math.min(rules.length - 1, typeof to === 'number' ? to : from + to.by));
+    if (target === from) return false;
+    this.applyTableChange(() => {
+      const next = [...rules];
+      const [moved] = next.splice(from, 1);
+      next.splice(target, 0, moved);
+      this.table.conditionalFormats = next;
+    });
+    return true;
+  }
+
+  /**
+   * Removes conditional formatting from the cells of `range` (rules keep
+   * their other cells; rules left without cells are deleted), or every rule
+   * when `range` is null.
+   */
+  public clearConditionalFormats(range: CellRange | null = null): void {
+    const rules = this.document.table?.conditionalFormats ?? [];
+    if (rules.length === 0) return;
+    this.applyTableChange(() => {
+      this.table.conditionalFormats = range
+        ? rules
+            .map((rule) => ({ ...rule, ranges: subtractRangeFromRanges(rule.ranges, range) }) as ConditionalFormatRule)
+            .filter((rule) => rule.ranges.length > 0)
+        : [];
+    });
+  }
+
+  /**
+   * The conditional look of every formatted cell. Evaluated on demand and
+   * cached: after a cell edit only the affected cells are re-evaluated.
+   */
+  public getConditionalFormatOverlay(): ConditionalFormatOverlay {
+    const rules = this.document.table?.conditionalFormats ?? [];
+    if (rules.length === 0) {
+      this.cfEngine = null;
+      this.cfDirty = 'all';
+      return EMPTY_CONDITIONAL_FORMAT_OVERLAY;
+    }
+    const sheet = this.ruleSheet();
+    if (!this.cfEngine || this.cfDirty === 'all') {
+      this.cfEngine = new ConditionalFormatEngine(sheet);
+      this.cfEngine.evaluate(rules);
+    } else if (this.cfDirty.size > 0) {
+      const changed: Array<{ row: number; col: number }> = [];
+      for (const key of this.cfDirty) {
+        const located = this.locateCellKey(key);
+        if (located) changed.push({ row: located.row.index, col: this.document.columns.indexOf(located.col) });
+      }
+      this.cfEngine.setSheet(sheet);
+      this.cfEngine.update(rules, changed);
+    }
+    this.cfDirty = new Set();
+    return this.cfEngine.overlay;
+  }
+
+  /** The conditional look of (row, col), if any. */
+  public getConditionalFormat(row: number, col: number): ConditionalCellFormat | undefined {
+    return this.getConditionalFormatOverlay().get(row, col);
+  }
+
+  /** Data validation rules of the sheet. */
+  public getDataValidations(): DataValidationRule[] {
+    return this.document.table?.dataValidations ?? [];
+  }
+
+  /** The rule that applies to (row, col), if any. */
+  public getDataValidationAt(row: number, col: number): DataValidationRule | undefined {
+    return findDataValidation(this.document.table?.dataValidations, row, col);
+  }
+
+  /**
+   * Adds a data validation rule (one undo step). Its cells are first
+   * removed from other rules, so each cell has at most one. Returns the id.
+   */
+  public addDataValidation(rule: NewDataValidationRule): string {
+    const id = rule.id || this.generateRuleId('dv');
+    const ranges = rule.ranges.map((r) => normalizeRange(r));
+    this.applyTableChange(() => {
+      let rules = this.table.dataValidations ?? [];
+      for (const cut of ranges) {
+        rules = rules
+          .map((r) => ({ ...r, ranges: subtractRangeFromRanges(r.ranges, cut) }))
+          .filter((r) => r.ranges.length > 0);
+      }
+      this.table.dataValidations = [...rules, { ...rule, id, ranges }];
+    });
+    return id;
+  }
+
+  /** Changes a data validation rule. Returns false when not found. */
+  public updateDataValidation(id: string, changes: Partial<NewDataValidationRule>): boolean {
+    const rules = this.document.table?.dataValidations ?? [];
+    const index = rules.findIndex((r) => r.id === id);
+    if (index === -1) return false;
+    this.applyTableChange(() => {
+      const next = [...rules];
+      const updated: DataValidationRule = { ...rules[index], ...changes, id };
+      if (changes.ranges) updated.ranges = changes.ranges.map((r) => normalizeRange(r));
+      next[index] = updated;
+      this.table.dataValidations = next;
+    });
+    return true;
+  }
+
+  /** Removes a data validation rule. Returns false when not found. */
+  public deleteDataValidation(id: string): boolean {
+    const rules = this.document.table?.dataValidations ?? [];
+    if (!rules.some((r) => r.id === id)) return false;
+    this.applyTableChange(() => {
+      this.table.dataValidations = rules.filter((r) => r.id !== id);
+    });
+    return true;
+  }
+
+  /** Removes validation from the cells of `range`, or every rule when `range` is null. */
+  public clearDataValidation(range: CellRange | null = null): void {
+    const rules = this.document.table?.dataValidations ?? [];
+    if (rules.length === 0) return;
+    this.applyTableChange(() => {
+      this.table.dataValidations = range
+        ? rules.map((r) => ({ ...r, ranges: subtractRangeFromRanges(r.ranges, range) })).filter((r) => r.ranges.length > 0)
+        : [];
+    });
+  }
+
+  /** Checks input for (row, col) against its data validation, without committing it. */
+  public validateCellInput(row: number, col: number, raw: string): DataValidationResult {
+    return validateCellInput(this.ruleSheet(), this.document.table?.dataValidations, row, col, raw);
+  }
+
+  /**
+   * Dropdown items of a list-validated cell, or null when the cell has no
+   * list rule (or its in-cell dropdown is off).
+   */
+  public getValidationListValues(row: number, col: number): string[] | null {
+    const rule = this.getDataValidationAt(row, col);
+    if (!rule || rule.type !== 'list' || rule.inCellDropdown === false) return null;
+    return getValidationListValues(this.ruleSheet(), rule);
+  }
+
+  /** Cells whose current value breaks their validation rule. */
+  public findInvalidCells(): CellPosition[] {
+    return findInvalidCells(this.ruleSheet(), this.document.table?.dataValidations);
+  }
+
+  /**
+   * Turns "circle invalid data" on or off. View state, not part of the
+   * document (not undoable, not saved); listeners are notified so the grid
+   * redraws.
+   */
+  public setInvalidDataCircles(show: boolean): void {
+    if (this.circlesShown === show) return;
+    this.circlesShown = show;
+    this.invalidCircles = null;
     this.onDocumentChange?.(this.document);
+  }
+
+  /** Whether invalid cells are circled. */
+  public getInvalidDataCircles(): boolean {
+    return this.circlesShown;
+  }
+
+  /** Whether (row, col) is circled as invalid (always false while circles are off). */
+  public isInvalidDataCircled(row: number, col: number): boolean {
+    if (!this.circlesShown) return false;
+    if (!this.invalidCircles) {
+      this.invalidCircles = new Set(this.findInvalidCells().map((c) => `${c.row}:${c.col}`));
+    }
+    return this.invalidCircles.has(`${row}:${col}`);
   }
 }
 

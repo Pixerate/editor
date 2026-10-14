@@ -6,6 +6,7 @@ import type TemplateRendererComponent from "./TemplateRenderer.svelte";
 import type VariableFormComponent from "./VariableForm.svelte";
 import type OutlinePanelComponent from "./OutlinePanel.svelte";
 import type MergePreviewComponent from "./MergePreview.svelte";
+import type StylesGalleryComponent from "./StylesGallery.svelte";
 
 export * from "./editor.svelte.js";
 export * from "./navigationGuard.js";
@@ -55,6 +56,9 @@ export type MergePreviewProps = ComponentProps<typeof MergePreviewComponent>;
 export { default as MergePreview } from "./MergePreview.svelte";
 export type OutlinePanelProps = ComponentProps<typeof OutlinePanelComponent>;
 export { default as OutlinePanel } from "./OutlinePanel.svelte";
+export * from "./paragraphStyles.svelte.js";
+export type StylesGalleryProps = ComponentProps<typeof StylesGalleryComponent>;
+export { default as StylesGallery } from "./StylesGallery.svelte";
 
 export type {
   Template,

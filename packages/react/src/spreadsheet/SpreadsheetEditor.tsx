@@ -12,12 +12,19 @@ import {
   type SpreadsheetViewColumn,
   type SpreadsheetViewRow,
   formatCellForDisplay,
-  numberFormatColorToCss
+  numberFormatColorToCss,
+  getConditionalFormatCss,
+  getConditionalFormatIcon,
+  getDataBarCss,
+  type ConditionalCellFormat,
+  type SpreadsheetPanelId
 } from '@pixerate/editor/spreadsheet';
 import { useSpreadsheetEditor } from './useSpreadsheetEditor';
 import { SpreadsheetContextMenu } from './SpreadsheetContextMenu';
 import { SpreadsheetGroupRow } from './SpreadsheetGroupRow';
 import { useFillHandle, useSpreadsheetClipboard } from './useSpreadsheetTableInteractions';
+import { SpreadsheetValidationDialog } from './SpreadsheetValidationDialog';
+import { SpreadsheetConditionalFormatPanel, SpreadsheetDataValidationPanel } from './SpreadsheetRulePanels';
 
 // Sizes of the sticky header row and row-number column, for frozen-pane offsets.
 const COLUMN_HEADER_HEIGHT = 28;
@@ -38,6 +45,7 @@ function frozenCellStyle(
   };
 }
 import { FormulaHints } from './FormulaHints';
+import { SheetTabs } from './SheetTabs';
 
 const coordKey = (cell: { row: number; col: number } | null) => (cell ? `${indexToColName(cell.col)}${cell.row + 1}` : '');
 
@@ -56,22 +64,52 @@ function spillBorderStyle(range: CellRange, row: number, col: number): React.CSS
   };
 }
 
-/** A cell's display text: formatted with its number format, numbers right-aligned, `[Red]`-style colours applied. */
-function CellText({ cell }: { cell: CellData }) {
+/**
+ * A cell's display text: formatted with its number format, numbers
+ * right-aligned, `[Red]`-style colours applied. A conditional format adds a
+ * data bar and / or an icon, and its font colour wins over the format's.
+ */
+function CellText({ cell, conditional }: { cell: CellData; conditional?: ConditionalCellFormat }) {
   const shown = formatCellForDisplay(cell);
-  return (
+  const color = conditional?.color ?? (shown.color ? numberFormatColorToCss(shown.color) : undefined);
+  const decorated = !!conditional?.dataBar || !!conditional?.icon;
+  const text = (
     <span
       className={`truncate block max-w-full ${cell.error ? 'text-destructive font-semibold' : ''}`}
       title={cell.error ? cell.errorMessage ?? cell.error : undefined}
       data-numeric={shown.numeric ? '' : undefined}
       style={
-        shown.numeric || shown.color
-          ? { ...(shown.numeric ? { textAlign: 'right' as const } : {}), ...(shown.color ? { color: numberFormatColorToCss(shown.color) } : {}) }
+        shown.numeric || color || decorated
+          ? {
+              ...(decorated ? { position: 'relative' as const } : {}),
+              ...(conditional?.icon ? { flex: 1, minWidth: 0 } : {}),
+              ...(shown.numeric ? { textAlign: 'right' as const } : {}),
+              ...(color ? { color } : {})
+            }
           : undefined
       }
     >
-      {shown.text}
+      {conditional?.hideValue ? '' : shown.text}
     </span>
+  );
+  if (!conditional || !decorated) return text;
+  const icon = conditional.icon ? getConditionalFormatIcon(conditional.icon.set, conditional.icon.index) : null;
+  return (
+    <>
+      {conditional.dataBar && (
+        <span aria-hidden="true" className="spreadsheet-data-bar" style={getDataBarCss(conditional.dataBar) as React.CSSProperties} />
+      )}
+      {icon ? (
+        <span className="flex items-center gap-1 min-w-0" style={{ position: 'relative' }}>
+          <span className="spreadsheet-cf-icon shrink-0" role="img" aria-label={icon.label} data-icon={conditional.icon!.id} style={{ color: icon.color }}>
+            {icon.glyph}
+          </span>
+          {text}
+        </span>
+      ) : (
+        text
+      )}
+    </>
   );
 }
 
@@ -82,6 +120,8 @@ export interface SpreadsheetEditorProps {
   onAddColumnClick?: () => void;
   onColumnHeaderClick?: (col: SpreadsheetColumn) => void;
   onColumnResize?: (colId: string, width: number) => void;
+  /** Show the sheet tabs bar under the grid (add, switch, rename, reorder, delete sheets). */
+  showSheetTabs?: boolean;
 }
 
 export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
@@ -90,7 +130,8 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
   customCellRenderer,
   onAddColumnClick,
   onColumnHeaderClick,
-  onColumnResize
+  onColumnResize,
+  showSheetTabs = false
 }) => {
   const defaultState = useSpreadsheetEditor();
   const state = externalState || defaultState;
@@ -108,6 +149,11 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
   const { copyShortcutFallback } = useSpreadsheetClipboard(gridRef, state, readOnly);
   const { fillTarget, startFill, extendFill } = useFillHandle(state);
   const [menu, setMenu] = useState<{ x: number; y: number; items: SpreadsheetMenuItem[] } | null>(null);
+  // Conditional formatting / data validation manager, opened from the context menu.
+  const [panel, setPanel] = useState<SpreadsheetPanelId | null>(null);
+  // List dropdown of a list-validated cell.
+  const [listMenu, setListMenu] = useState<{ x: number; y: number; row: number; col: number; values: string[] } | null>(null);
+  const overlay = state.conditionalFormatOverlay;
   const filter = state.document.table?.filter;
   const filteredColIds = useMemo(
     () => new Set(filter?.enabled ? filter.rules.map((r) => r.colId) : []),
@@ -123,6 +169,13 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
     }
     setMenu({ x: e.clientX, y: e.clientY, items: getSpreadsheetMenuItems(state.controller, { row: rIdx, col: cIdx }) });
   }, [readOnly, state]);
+
+  // Defined names for formula autocomplete.
+  const nameSuggestions = useMemo(
+    () => state.controller.getNameSuggestions(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [state.controller, state.document]
+  );
 
   const activeRawValue = useMemo(() => {
     if (!state.activeCell) return '';
@@ -165,7 +218,7 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
     const row = state.document.rows[state.activeCell.row];
     const col = state.document.columns[state.activeCell.col];
     if (row && col && !formulaBarReadOnly && formulaDraft !== activeRawValue) {
-      state.setCellValue(row.id, col.id, formulaDraft);
+      state.commitCellInput(row.id, col.id, formulaDraft);
     }
     setFormulaDraft(null);
   };
@@ -188,14 +241,15 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
     if (state.editingCell) {
       if (e.key === 'Enter') {
         e.preventDefault();
-        state.commitEditing();
+        // Invalid input keeps the editor open behind the validation alert.
+        if (state.commitEditing().status !== 'committed') return;
         state.moveCursor('down');
       } else if (e.key === 'Escape') {
         e.preventDefault();
         state.cancelEditing();
       } else if (e.key === 'Tab') {
         e.preventDefault();
-        state.commitEditing();
+        if (state.commitEditing().status !== 'committed') return;
         state.moveCursor(e.shiftKey ? 'left' : 'right');
       } else {
         return;
@@ -207,7 +261,11 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
 
     if (!state.activeCell) return;
 
-    if (e.key === 'ArrowUp') {
+    if (e.altKey && e.key === 'ArrowDown') {
+      // Alt+Down opens the list of a list-validated cell.
+      e.preventDefault();
+      openListMenu(state.activeCell.row, state.activeCell.col);
+    } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       state.moveCursor('up', e.shiftKey);
     } else if (e.key === 'ArrowDown') {
@@ -260,7 +318,60 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
         state.startEditing(state.activeCell.row, state.activeCell.col, e.key);
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [readOnly, state, copyShortcutFallback]);
+
+  // --- Data validation: list dropdown, input message, alerts ---
+
+  const activeListValues = useMemo(
+    () => (state.activeCell && !readOnly ? state.controller.getValidationListValues(state.activeCell.row, state.activeCell.col) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [state.controller, state.activeCell, state.document, readOnly]
+  );
+  const activeRule = useMemo(
+    () => (state.activeCell ? state.controller.getDataValidationAt(state.activeCell.row, state.activeCell.col) : undefined),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [state.controller, state.activeCell, state.document]
+  );
+  const inputMessage =
+    activeRule && activeRule.showInputMessage !== false && (activeRule.inputTitle || activeRule.inputMessage) ? activeRule : null;
+
+  function openListMenu(row: number, col: number, anchor?: HTMLElement | null) {
+    if (readOnly || state.document.columns[col]?.readOnly) return;
+    const values = state.controller.getValidationListValues(row, col);
+    if (!values) return;
+    const td = anchor ?? gridRef.current?.querySelector<HTMLElement>(`td[data-row="${row}"][data-col="${col}"]`);
+    const rect = td?.getBoundingClientRect();
+    setListMenu({ x: rect ? rect.left : 0, y: rect ? rect.bottom : 0, row, col, values });
+  }
+
+  // Close the list on a press outside it (or on its arrow, which toggles it).
+  useEffect(() => {
+    if (!listMenu) return;
+    const close = (e: MouseEvent) => {
+      if (!(e.target as Element | null)?.closest?.('[aria-label="Allowed values"], .spreadsheet-list-arrow')) setListMenu(null);
+    };
+    window.addEventListener('mousedown', close);
+    return () => window.removeEventListener('mousedown', close);
+  }, [listMenu]);
+
+  const chooseListValue = (value: string) => {
+    if (!listMenu) return;
+    const row = state.document.rows[listMenu.row];
+    const col = state.document.columns[listMenu.col];
+    setListMenu(null);
+    if (row && col) state.commitCellInput(row.id, col.id, value);
+    gridRef.current?.focus();
+  };
+
+  const resolveValidation = (action: 'accept' | 'retry' | 'cancel') => {
+    state.resolveValidationPrompt(action);
+    // Back to the cell editor when it is still open (retry), else the grid.
+    requestAnimationFrame(() => {
+      if (cellInputRef.current) cellInputRef.current.focus();
+      else gridRef.current?.focus();
+    });
+  };
   // The resize effect reads these through refs: re-running it on every width
   // update would reset the in-progress drag (and skip onColumnResize).
   const stateRef = useRef(state);
@@ -463,7 +574,7 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
     return state.activeCell?.row === rIdx && state.activeCell?.col === cIdx;
   };
 
-  return (
+  const grid = (
     <div
       ref={gridRef}
       className="flex flex-col h-full w-full overflow-hidden border border-border bg-background select-none outline-none text-foreground font-sans text-xs"
@@ -519,9 +630,17 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
             inputRef={formulaBarRef}
             value={state.editingCell ? state.draftValue : formulaDraft ?? activeRawValue}
             onAccept={(next) => (state.editingCell ? state.setDraftValue(next) : setFormulaDraft(next))}
+            names={nameSuggestions}
           />
         )}
       </div>
+
+      {inputMessage && (
+        <div role="note" data-validation-input-message="" className="border-b border-border bg-muted/30 px-3 py-1 text-[11px] text-muted-foreground">
+          {inputMessage.inputTitle && <span className="mr-1 font-semibold text-foreground">{inputMessage.inputTitle}</span>}
+          {inputMessage.inputMessage}
+        </div>
+      )}
 
       {/* Main Grid */}
       <div className="relative flex-1 overflow-auto">
@@ -638,6 +757,10 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
                   const active = isActiveCell(rIdx, cIdx);
                   const isEditing = state.editingCell?.row === rIdx && state.editingCell?.col === cIdx;
 
+                  const conditional = overlay.get(rIdx, cIdx);
+                  const conditionalCss = getConditionalFormatCss(conditional);
+                  const circled = state.controller.isInvalidDataCircled(rIdx, cIdx);
+                  const showListArrow = active && !isEditing && !!activeListValues;
                   const inFillPreview = !!fillTarget && !selected && rangeContains(fillTarget, displayRowIndex, viewCol.index);
                   const showFillHandle =
                     !readOnly &&
@@ -661,8 +784,14 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
                         maxWidth: 0,
                         overflow: 'hidden',
                         ...frozenCellStyle(viewRow, viewCol),
+                        ...conditionalCss,
+                        // Keep the selection tint visible over a conditional fill.
+                        ...(conditionalCss.background && selected
+                          ? { boxShadow: 'inset 0 0 0 9999px color-mix(in srgb, var(--primary, #6366f1) 12%, transparent)' }
+                          : {}),
                         ...(inFillPreview ? { outline: '1px dashed var(--primary, #6366f1)', outlineOffset: -1 } : {})
                       }}
+                      data-cf-fill={conditional?.fill}
                       onClick={(e) => handleCellClick(rIdx, cIdx, e)}
                       onDoubleClick={() => handleCellDblClick(rIdx, cIdx)}
                       onContextMenu={(e) => handleCellContextMenu(rIdx, cIdx, e)}
@@ -684,12 +813,37 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
                             }}
                             autoFocus
                           />
-                          <FormulaHints inputRef={cellInputRef} value={state.draftValue} onAccept={state.setDraftValue} />
+                          <FormulaHints inputRef={cellInputRef} value={state.draftValue} onAccept={state.setDraftValue} names={nameSuggestions} />
                         </>
                       ) : customCellRenderer ? (
                         customCellRenderer({ row, col, cell })
                       ) : (
-                        <CellText cell={cell} />
+                        <CellText cell={cell} conditional={conditional} />
+                      )}
+                      {circled && (
+                        <span
+                          className="spreadsheet-invalid-circle"
+                          aria-label="Invalid value"
+                          style={{ position: 'absolute', inset: '1px 2px', border: '2px solid #e11d48', borderRadius: '50%', pointerEvents: 'none', zIndex: 6 }}
+                        />
+                      )}
+                      {showListArrow && (
+                        <button
+                          type="button"
+                          className="spreadsheet-list-arrow"
+                          aria-label="Show allowed values"
+                          aria-haspopup="listbox"
+                          tabIndex={-1}
+                          style={{ position: 'absolute', right: 1, top: 1, bottom: 1, width: 16, zIndex: 24, fontSize: 10, lineHeight: 1, background: 'var(--muted, #f4f4f5)', border: '1px solid var(--border, #e4e4e7)', borderRadius: 2, cursor: 'pointer', padding: 0 }}
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (listMenu) setListMenu(null);
+                            else openListMenu(rIdx, cIdx, e.currentTarget.parentElement);
+                          }}
+                        >
+                          ▾
+                        </button>
                       )}
                       {activeSpill && rangeContains(activeSpill.range, rIdx, cIdx) && (
                         <span aria-hidden="true" className="spreadsheet-spill-border" style={spillBorderStyle(activeSpill.range, rIdx, cIdx)} />
@@ -722,8 +876,41 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
             setMenu(null);
             gridRef.current?.focus();
           }}
+          onOpenPanel={setPanel}
         />
       )}
+      {panel === 'conditionalFormatting' && <SpreadsheetConditionalFormatPanel state={state} onClose={() => setPanel(null)} />}
+      {panel === 'dataValidation' && <SpreadsheetDataValidationPanel state={state} onClose={() => setPanel(null)} />}
+      {listMenu && (
+        <div
+          role="listbox"
+          aria-label="Allowed values"
+          className="fixed z-50 max-h-60 min-w-[8rem] overflow-y-auto rounded-md border border-border bg-popover py-1 text-xs text-popover-foreground shadow-lg"
+          style={{ left: listMenu.x, top: listMenu.y, background: 'var(--popover, var(--background, #fff))' }}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === 'Escape') {
+              setListMenu(null);
+              gridRef.current?.focus();
+            }
+          }}
+        >
+          {listMenu.values.length === 0 && <div className="px-3 py-1 text-muted-foreground">No values</div>}
+          {listMenu.values.map((value, i) => (
+            <button
+              key={`${i}:${value}`}
+              type="button"
+              role="option"
+              aria-selected={false}
+              className="block w-full px-3 py-1 text-left hover:bg-muted"
+              onClick={() => chooseListValue(value)}
+            >
+              {value}
+            </button>
+          ))}
+        </div>
+      )}
+      {state.validationPrompt && <SpreadsheetValidationDialog prompt={state.validationPrompt} onResolve={resolveValidation} />}
       <style>{`
         .col-resize-handle:hover .col-resize-handle-line {
           background-color: var(--primary, #6366f1);
@@ -741,6 +928,14 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
           overflow: hidden;
         }
       `}</style>
+    </div>
+  );
+
+  if (!showSheetTabs) return grid;
+  return (
+    <div className="flex h-full w-full flex-col">
+      <div className="min-h-0 flex-1">{grid}</div>
+      <SheetTabs state={state} readOnly={readOnly} />
     </div>
   );
 };

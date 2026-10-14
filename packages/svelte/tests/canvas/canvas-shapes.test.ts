@@ -3,7 +3,8 @@ import { mount, unmount, flushSync } from 'svelte';
 import { HistoryManager } from '@pixerate/editor/history';
 import { createCanvasArrange } from '../../src/canvas/createCanvasArrange.svelte.js';
 import ShapeNode from '../../src/canvas/ShapeNode.svelte';
-import { isShapeNode, lockNodes } from '../../src/canvas/index.js';
+import { isShapeNode, lockNodes, countPathSegments } from '../../src/canvas/index.js';
+import { CommandRegistry, createShapeCommands } from '@pixerate/editor/commands';
 import type { CanvasNode } from '../../src/canvas/types.js';
 
 const shape = (id: string, x: number, y: number, s: any, extra: Partial<CanvasNode> = {}): CanvasNode =>
@@ -59,6 +60,40 @@ describe('createCanvasArrange shape operations (Svelte rune)', () => {
 		const locked = setup(lockNodes(initial, ['a']) as CanvasNode[]);
 		expect(locked.arrange.combineShapes('unite')).toMatchObject({ ok: false, reason: 'locked' });
 		expect(locked.nodes.map((n) => n.id)).toEqual(['a', 'b']);
+	});
+
+	it('keeps curves when uniting circles', () => {
+		const ctx = setup([shape('a', 0, 0, { kind: 'ellipse' }), shape('b', 60, 0, { kind: 'ellipse' })]);
+		expect(ctx.arrange.unite()).toMatchObject({ ok: true, engine: 'curve' });
+		const counts = countPathSegments(ctx.nodes[0].data.shape.d);
+		expect(counts.lines).toBe(0);
+		expect(counts.cubics).toBeGreaterThan(0);
+	});
+
+	it('offsets paths and outlines strokes as undoable steps, also through the shape commands', () => {
+		const history = new HistoryManager();
+		const ctx = setup(
+			[shape('a', 0, 0, { kind: 'rect', fill: 'red', stroke: 'black', strokeWidth: 4 }), shape('b', 200, 0, { kind: 'ellipse' })],
+			history
+		);
+		expect(ctx.arrange.canOffsetShapes()).toBe(true);
+		expect(ctx.arrange.canOutlineStroke(['b'])).toBe(false);
+		expect(ctx.arrange.offsetShapes(10, ['a'], { createId: () => 'o' }).ok).toBe(true);
+		expect(ctx.nodes.map((n) => n.id)).toEqual(['o', 'b']);
+		expect(ctx.nodes[0]).toMatchObject({ position: { x: -10, y: -10 }, width: 120, height: 120 });
+		history.undo();
+		expect(ctx.nodes.map((n) => n.id)).toEqual(['a', 'b']);
+		ctx.arrange.outlineStroke(['a'], { createId: () => 's' });
+		expect(ctx.nodes.map((n) => n.id)).toEqual(['a', 's', 'b']);
+		expect(ctx.nodes[1].data.shape).toMatchObject({ kind: 'path', fill: 'black' });
+		history.undo();
+		expect(ctx.nodes[0].data.shape.stroke).toBe('black');
+
+		const registry = new CommandRegistry();
+		registry.register(createShapeCommands(ctx.arrange));
+		expect(registry.execute('canvas.offsetPath', { distance: -10, ids: ['b'] })).toMatchObject({ ok: true });
+		expect(ctx.nodes[1].width).toBeCloseTo(80, 1);
+		expect(registry.execute('canvas.outlineStroke', { ids: ['b'] })).toMatchObject({ ok: false, code: 'disabled' });
 	});
 });
 

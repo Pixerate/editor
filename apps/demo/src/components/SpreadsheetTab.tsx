@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useState } from "react";
 import {
+  NameManager,
   SpreadsheetEditor,
   useSpreadsheetEditor,
   useAgentToolProvider,
@@ -12,6 +13,7 @@ import {
   type SpreadsheetColumn,
   type SpreadsheetDocument,
   type SpreadsheetRow,
+  type SpreadsheetWorkbook,
 } from "@pixerate/editor";
 import { createSpreadsheetToolProvider } from "@pixerate/editor/agent";
 import {
@@ -21,6 +23,7 @@ import {
   Undo2,
   Redo2,
   MousePointerClick,
+  Tags,
 } from "lucide-react";
 import { demoToolRegistry } from "../agentTools";
 
@@ -57,7 +60,10 @@ const FOOTER: Array<[string, string]> = [
   ["Error with a reason (hover me)", `=SUMIF(5,"North",${range("F")})`],
 ];
 
-function buildSampleDocument(): Partial<SpreadsheetDocument> {
+/** The data rows (below the header) of one column, as a 0-based range. */
+const dataColumn = (col: number) => ({ startRow: 1, startCol: col, endRow: DATA.length, endCol: col });
+
+function buildSampleDocument(): SpreadsheetDocument {
   const keys = HEADER.map((_, i) => String.fromCharCode(65 + i));
   const columns: SpreadsheetColumn[] = keys.map((key, i) => ({
     id: `col_${key.toLowerCase()}`,
@@ -98,18 +104,110 @@ function buildSampleDocument(): Partial<SpreadsheetDocument> {
     columns,
     rows,
     cells,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
     table: {
       headerRowCount: 1,
       footerRowCount: FOOTER.length,
       frozenRowCount: 1,
       frozenColumnCount: 1,
+      // Conditional formatting (right-click → "Conditional formatting…" to manage).
+      conditionalFormats: [
+        {
+          id: "cf_revenue_scale",
+          type: "colorScale",
+          ranges: [dataColumn(5)],
+          stops: [
+            { value: { type: "min" }, color: "#f8696b" },
+            { value: { type: "percentile", value: 50 }, color: "#ffeb84" },
+            { value: { type: "max" }, color: "#63be7b" },
+          ],
+        },
+        { id: "cf_units_bars", type: "dataBar", ranges: [dataColumn(3)], color: "#638ec6" },
+        {
+          id: "cf_below_target",
+          type: "containsText",
+          text: "Below",
+          ranges: [dataColumn(6)],
+          style: { fill: "#ffc7ce", color: "#9c0006", bold: true },
+        },
+      ],
+      // A list-validated Region column with a dropdown (right-click → "Data validation…").
+      dataValidations: [
+        {
+          id: "dv_region",
+          type: "list",
+          formula1: "North,South,East,West",
+          ranges: [dataColumn(0)],
+          inputTitle: "Region",
+          inputMessage: "Pick North, South, East or West.",
+          errorTitle: "Unknown region",
+          errorMessage: "Choose a region from the list.",
+        },
+      ],
     },
   };
 }
 
+// A second sheet that reads the Sales sheet through cross-sheet references,
+// named ranges and LAMBDA functions.
+const SUMMARY: Array<[string, string]> = [
+  ["Metric", "Value"],
+  ["Total revenue (named range Revenue)", "=SUM(Revenue)"],
+  ["Revenue incl. tax (named LAMBDA WithTax)", "=WithTax(B2)"],
+  ["Units sold (cross-sheet Sales!D2:D11)", `=SUM(Sales!${range("D")})`],
+  ["North revenue (LET + FILTER)", '=LET(north, Regions="North", SUM(FILTER(Revenue, north)))'],
+  ["5! (recursive named LAMBDA Fact)", "=Fact(5)"],
+  ["Largest order (REDUCE)", `=REDUCE(0, Sales!${range("D")}, LAMBDA(a, v, MAX(a, v)))`],
+  ["Squares (MAP spills down)", "=MAP(SEQUENCE(3), LAMBDA(x, x*x))"],
+];
+
+function buildSummaryDocument(): SpreadsheetDocument {
+  const columns: SpreadsheetColumn[] = ["A", "B", "C"].map((key, i) => ({
+    id: `col_${key.toLowerCase()}`,
+    key,
+    title: key,
+    width: i === 0 ? 300 : 140,
+    type: "freeform",
+  }));
+  const rows: SpreadsheetRow[] = Array.from({ length: 12 }, (_, i) => ({ id: `row_${i + 1}`, index: i, height: 30, type: "freeform" }));
+  const cells: Record<string, Record<string, CellData>> = {};
+  SUMMARY.forEach(([label, formula], r) => {
+    cells[rows[r].id] = {
+      col_a: { raw: label, value: label },
+      col_b: { raw: formula, value: formula.startsWith("=") ? null : formula },
+    };
+  });
+  return {
+    id: "demo-summary",
+    name: "Summary",
+    columns,
+    rows,
+    cells,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    table: { headerRowCount: 1, frozenRowCount: 1 },
+  };
+}
+
+function buildSampleWorkbook(): SpreadsheetWorkbook {
+  return {
+    sheets: [buildSampleDocument(), buildSummaryDocument()],
+    activeSheetId: "demo-sales",
+    names: [
+      { name: "Revenue", refersTo: `=Sales!$F$2:$F$${LAST_DATA_ROW}`, comment: "Revenue column" },
+      { name: "Regions", refersTo: `=Sales!$A$2:$A$${LAST_DATA_ROW}` },
+      { name: "TaxRate", refersTo: "=0.2" },
+      { name: "WithTax", refersTo: "=LAMBDA(amount, amount*(1+TaxRate))", comment: "Adds TaxRate" },
+      { name: "Fact", refersTo: "=LAMBDA(n, IF(n<=1, 1, n*Fact(n-1)))", comment: "Recursive factorial" },
+    ],
+  };
+}
+
 export const SpreadsheetTab: React.FC = () => {
-  const initialDocument = useMemo(buildSampleDocument, []);
-  const state = useSpreadsheetEditor({ document: initialDocument });
+  const initialWorkbook = useMemo(buildSampleWorkbook, []);
+  const state = useSpreadsheetEditor({ workbook: initialWorkbook });
+  const [showNames, setShowNames] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [csvPreview, setCsvPreview] = useState<string | null>(null);
@@ -183,6 +281,14 @@ export const SpreadsheetTab: React.FC = () => {
         <button type="button" className={buttonClass} onClick={exportCsv}>
           <Download className="w-3.5 h-3.5" /> Export CSV
         </button>
+        <button
+          type="button"
+          className={buttonClass}
+          aria-pressed={showNames}
+          onClick={() => setShowNames((v) => !v)}
+        >
+          <Tags className="w-3.5 h-3.5" /> Name Manager
+        </button>
         <span className="ml-auto flex items-center gap-1.5 text-xs text-slate-400">
           <MousePointerClick className="w-3.5 h-3.5 text-amber-400" />
           Right-click a cell for sort, filter, freeze, hide, merge and categories
@@ -207,8 +313,14 @@ export const SpreadsheetTab: React.FC = () => {
           void importFile(file);
         }}
       >
-        <SpreadsheetEditor state={state} />
+        <SpreadsheetEditor state={state} showSheetTabs />
       </div>
+
+      {showNames && (
+        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 text-slate-200">
+          <NameManager state={state} onClose={() => setShowNames(false)} />
+        </div>
+      )}
 
       {status && (
         <div className="text-xs text-emerald-300 bg-emerald-950/30 border border-emerald-500/30 rounded-lg px-3 py-2">
@@ -223,6 +335,10 @@ export const SpreadsheetTab: React.FC = () => {
           <p>Select cells and drag the small square at the bottom-right corner (fill handle) to extend a series or shift formulas.</p>
           <p>Copy (Mod+C) and paste (Mod+V) a range inside the sheet or to/from another spreadsheet app (TSV + HTML + lossless JSON).</p>
           <p>Drop a <code className="text-slate-200">.csv</code> / <code className="text-slate-200">.tsv</code> file on the grid to import it.</p>
+          <p>Open the <strong>Summary</strong> tab: it reads Sales through <code className="text-slate-200">Sales!D2:D11</code>, named ranges and LAMBDA names. Double-click a tab to rename it (formulas follow), drag tabs to reorder, right-click for more.</p>
+          <p>Try <code className="text-slate-200">=LAMBDA(x, x*2)(21)</code>, <code className="text-slate-200">=BYROW(Sales!D2:E4, LAMBDA(r, PRODUCT(r)))</code> or define your own names in the Name Manager.</p>
+          <p>Revenue has a colour scale, Units data bars and Status a highlight rule: edit a number to see them update. Right-click → <em>Conditional formatting…</em> manages the rules.</p>
+          <p>Region is list-validated: select a Region cell for its dropdown, or type an unknown region to see the stop alert. Right-click → <em>Data validation…</em> or <em>Circle invalid data</em>.</p>
         </div>
         <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
           <div className="flex items-center justify-between mb-2">

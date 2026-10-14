@@ -13,6 +13,7 @@ import type {
   ImageTransform,
   SerializedImageEditorState,
 } from './types';
+import { deserializeSelection } from './selection/mask';
 
 /** The `version` that `ImageEditorController.toJSON()` writes. */
 export const IMAGE_EDITOR_STATE_VERSION = 1;
@@ -129,7 +130,8 @@ const isAnnotation = (value: unknown): value is Annotation =>
  * - Runs `imageEditorStateMigrations` up to `IMAGE_EDITOR_STATE_VERSION`; a missing
  *   `version` is taken as current.
  * - A newer `version` is still loaded but reported `readOnly`: do not save over it.
- * - Each section (`crop`, `transform`, `adjustments`, `depthMask`, `annotations`)
+ * - Each section (`crop`, `transform`, `adjustments`, `depthMask`, `annotations`, and the
+ *   optional run-length encoded `selection`)
  *   falls back to its default on its own; invalid annotations are dropped one by one.
  * - Unknown top-level keys are returned in `unknown`.
  *
@@ -161,6 +163,15 @@ export function loadImageEditorDocument(input: unknown): ImageEditorDocumentLoad
         },
         defaults: () => [],
       },
+      // Optional: only present when something was selected when saving.
+      selection: {
+        parse: (value) => {
+          const mask = deserializeSelection(value);
+          const v = value as { rle: string };
+          return { width: mask.width, height: mask.height, rle: v.rle };
+        },
+        defaults: undefined,
+      },
     },
     {
       currentVersion: IMAGE_EDITOR_STATE_VERSION,
@@ -174,5 +185,6 @@ export function loadImageEditorDocument(input: unknown): ImageEditorDocumentLoad
     });
   }
   const state = { version: 1, ...result.value } as SerializedImageEditorState;
+  if (state.selection === undefined) delete state.selection;
   return { state, report: result.report, unknown: result.unknown };
 }

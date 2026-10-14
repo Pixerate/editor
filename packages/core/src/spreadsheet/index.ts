@@ -11,3 +11,8 @@ export * from './view';
 export * from './menu';
 export * from './actions';
 export * from './import';
+export * from './workbook';
+export * from './sheet-tabs';
+export * from './conditional-format';
+export * from './validation';
+export * from './rule-ranges';

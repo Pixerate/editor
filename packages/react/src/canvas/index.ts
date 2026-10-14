@@ -216,6 +216,57 @@ export {
 	type PolygonBooleanOptions
 } from '@pixerate/editor/canvas';
 
+// Curve-preserving path operations, Offset Path and Outline Stroke
+export {
+	offsetShapeNodes,
+	outlineShapeNodeStrokes,
+	canOffsetShapeNodes,
+	canOutlineShapeNodeStrokes,
+	applyShapeReplacement,
+	hasVisibleStroke,
+	shapeToBezierPath,
+	shapeNodeToBezierPath,
+	pathBoolean,
+	unitePaths,
+	intersectPaths,
+	subtractPaths,
+	excludePaths,
+	dividePaths,
+	normalizeBezierPath,
+	bezierPathArea,
+	offsetPath,
+	outlineStroke,
+	strokeOutlineRings,
+	dashContours,
+	toBezierPath,
+	bezierPathToSvg,
+	transformBezierPath,
+	bezierPathBounds,
+	bezierPathSignedArea,
+	bezierPathLength,
+	bezierPathPointAtLength,
+	pointInBezierPath,
+	distanceToBezierPath,
+	countPathSegments,
+	type BezierCommand,
+	type BezierPath,
+	type BezierPathInput,
+	type PathOperand,
+	type PathOperandInput,
+	type PathOpsOptions,
+	type PathBooleanResult,
+	type DividePathsResult,
+	type StrokeJoin,
+	type StrokeCap,
+	type OutlineStrokeOptions,
+	type OffsetPathOptions,
+	type OffsetShapeNodesOptions,
+	type OutlineShapeStrokesOptions,
+	type ShapePathEditResult,
+	type ShapePathEditRefusal,
+	type ShapePathEditOperation
+} from '@pixerate/editor/canvas';
+
 // Re-export shared canvas types & pure math from core
 export {
 	getLayoutedNodes,
@@ -334,3 +385,41 @@ export {
 	type CanvasAutoLayout,
 	type UseCanvasAutoLayoutOptions
 } from './useCanvasAutoLayout.js';
+
+// Design tokens: bindings, per-frame modes and inspector controls
+export {
+	useCanvasTokens,
+	type CanvasTokens,
+	type UseCanvasTokensOptions
+} from './useCanvasTokens.js';
+
+export {
+	TokenBindingPicker,
+	TokenModeSwitcher,
+	type TokenBindingPickerProps,
+	type TokenModeSwitcherProps
+} from './TokenBindingPicker.js';
+
+export {
+	bindCanvasToken,
+	setCanvasTokenMode,
+	resolveCanvasTokens,
+	detachTokenBindings,
+	pruneCanvasTokenModes,
+	inspectNodeTokens,
+	getNodeTokenBindings,
+	getNodeTokenModes,
+	getEffectiveTokenModes,
+	getBindableTokenProperties,
+	getCanvasTokenProperty,
+	getTokenPropertyScope,
+	getTokensForProperty,
+	readNodeStyleProperty,
+	writeNodeStyleProperty,
+	CANVAS_TOKEN_PROPERTIES,
+	TOKEN_BINDINGS_DATA_KEY,
+	TOKEN_MODES_DATA_KEY,
+	type CanvasTokenProperty,
+	type CanvasTokenOptions,
+	type CanvasTokenBindingInfo
+} from '@pixerate/editor/canvas';

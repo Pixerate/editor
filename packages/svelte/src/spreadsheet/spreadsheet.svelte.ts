@@ -8,7 +8,11 @@ import {
   type CellData,
   type SpreadsheetColumn,
   type SpreadsheetRow,
-  type SpreadsheetDataSource
+  type SpreadsheetDataSource,
+  type SpreadsheetNameScope,
+  type SpreadsheetCommitResult,
+  type SpreadsheetValidationAction,
+  type SpreadsheetValidationPrompt
 } from '@pixerate/editor/spreadsheet';
 
 export function createReactiveSpreadsheet(options: SpreadsheetControllerOptions = {}) {
@@ -26,6 +30,8 @@ export function createReactiveSpreadsheet(options: SpreadsheetControllerOptions 
   let selectedRange = $state<CellRange | null>(null);
   let editingCell = $state<CellCoordinate | null>(null);
   let draftValue = $state<string>('');
+  // Invalid input waiting for the user (data validation alert).
+  let validationPrompt = $state.raw<SpreadsheetValidationPrompt | null>(null);
 
   const controller = new SpreadsheetController({
     ...options,
@@ -59,6 +65,42 @@ export function createReactiveSpreadsheet(options: SpreadsheetControllerOptions 
   // transpose, CSV, clipboard). The controller reports their changes through
   // onDocumentChange / onSelectionChange, which update the state above.
   const tableActions = bindSpreadsheetTableActions(controller);
+  // Conditional formatting of every formatted cell (re-evaluated incrementally).
+  const conditionalFormatOverlay = $derived.by(() => {
+    void doc;
+    return controller.getConditionalFormatOverlay();
+  });
+
+  // Input breaking a data validation rule is not committed: the editor stays
+  // open and `validationPrompt` holds the alert until it is resolved.
+  function syncEditing() {
+    editingCell = controller.editingCell;
+    draftValue = controller.draftValue;
+    validationPrompt = controller.validationPrompt;
+    activeCell = controller.activeCell;
+    selectedRange = controller.selectedRange;
+    doc = { ...controller.document };
+  }
+
+  // Sheet tabs and defined names. Every workbook change notifies through
+  // onDocumentChange, so they follow `doc`.
+  const sheets = $derived.by(() => {
+    void doc;
+    return controller.getSheets();
+  });
+  const names = $derived.by(() => {
+    void doc;
+    return controller.getNames();
+  });
+
+  // Switching sheets commits the edit in progress.
+  function afterSheetSwitch() {
+    doc = { ...controller.document };
+    activeCell = controller.activeCell;
+    selectedRange = controller.selectedRange;
+    editingCell = controller.editingCell;
+    draftValue = controller.draftValue;
+  }
 
   return {
     get document() {
@@ -78,6 +120,18 @@ export function createReactiveSpreadsheet(options: SpreadsheetControllerOptions 
     },
     get draftValue() {
       return draftValue;
+    },
+    /** The sheets in tab order (see `SpreadsheetController.getSheets`). */
+    get sheets() {
+      return sheets;
+    },
+    get activeSheetId() {
+      void doc;
+      return controller.activeSheetId;
+    },
+    /** Defined names (see `SpreadsheetController.getNames`). */
+    get names() {
+      return names;
     },
     set draftValue(val: string) {
       draftValue = val;
@@ -107,11 +161,27 @@ export function createReactiveSpreadsheet(options: SpreadsheetControllerOptions 
       editingCell = controller.editingCell;
       draftValue = controller.draftValue;
     },
-    commitEditing(val?: string) {
-      controller.commitEditing(val);
-      editingCell = null;
-      draftValue = '';
-      doc = { ...controller.document };
+    get conditionalFormatOverlay() {
+      return conditionalFormatOverlay;
+    },
+    get validationPrompt() {
+      return validationPrompt;
+    },
+    commitEditing(val?: string): SpreadsheetCommitResult {
+      const result = controller.commitEditing(val);
+      syncEditing();
+      return result;
+    },
+    /** Commits input from outside the cell editor (formula bar, list dropdown) with validation. */
+    commitCellInput(rowId: string, colId: string, raw: string): SpreadsheetCommitResult {
+      const result = controller.commitCellInput(rowId, colId, raw);
+      syncEditing();
+      return result;
+    },
+    /** Answers the validation alert: accept (warning / information), retry or cancel. */
+    resolveValidationPrompt(action: SpreadsheetValidationAction) {
+      controller.resolveValidationPrompt(action);
+      syncEditing();
     },
     cancelEditing() {
       controller.cancelEditing();
@@ -179,13 +249,49 @@ export function createReactiveSpreadsheet(options: SpreadsheetControllerOptions 
       controller.importFromTsv(data);
       doc = { ...controller.document };
     },
+    // Undo can switch to the sheet the step belongs to.
     undo() {
       controller.undo();
-      doc = { ...controller.document };
+      afterSheetSwitch();
     },
     redo() {
       controller.redo();
-      doc = { ...controller.document };
+      afterSheetSwitch();
+    },
+    setActiveSheet(idOrName: string) {
+      const changed = controller.setActiveSheet(idOrName);
+      afterSheetSwitch();
+      return changed;
+    },
+    addSheet(options?: Parameters<typeof controller.addSheet>[0]) {
+      const id = controller.addSheet(options);
+      afterSheetSwitch();
+      return id;
+    },
+    renameSheet(idOrName: string, newName: string) {
+      controller.renameSheet(idOrName, newName);
+    },
+    moveSheet(idOrName: string, toIndex: number) {
+      return controller.moveSheet(idOrName, toIndex);
+    },
+    deleteSheet(idOrName: string) {
+      const deleted = controller.deleteSheet(idOrName);
+      afterSheetSwitch();
+      return deleted;
+    },
+    duplicateSheet(idOrName: string, options?: Parameters<typeof controller.duplicateSheet>[1]) {
+      const id = controller.duplicateSheet(idOrName, options);
+      afterSheetSwitch();
+      return id;
+    },
+    defineName(name: string, refersTo: string, options?: SpreadsheetNameScope & { comment?: string }) {
+      controller.defineName(name, refersTo, options);
+    },
+    renameName(oldName: string, newName: string, options?: SpreadsheetNameScope) {
+      controller.renameName(oldName, newName, options);
+    },
+    deleteName(name: string, options?: SpreadsheetNameScope) {
+      return controller.deleteName(name, options);
     },
     ...tableActions
   };

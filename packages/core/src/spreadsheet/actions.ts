@@ -43,7 +43,28 @@ export const SPREADSHEET_TABLE_ACTIONS = [
   'exportToCsv',
   'importFromCsv',
   'copyToClipboardData',
-  'pasteClipboardData'
+  'pasteClipboardData',
+  // Conditional formatting and data validation
+  'getConditionalFormats',
+  'addConditionalFormat',
+  'updateConditionalFormat',
+  'deleteConditionalFormat',
+  'moveConditionalFormat',
+  'clearConditionalFormats',
+  'getConditionalFormatOverlay',
+  'getConditionalFormat',
+  'getDataValidations',
+  'getDataValidationAt',
+  'addDataValidation',
+  'updateDataValidation',
+  'deleteDataValidation',
+  'clearDataValidation',
+  'validateCellInput',
+  'getValidationListValues',
+  'findInvalidCells',
+  'setInvalidDataCircles',
+  'getInvalidDataCircles',
+  'isInvalidDataCircled'
 ] as const;
 
 export type SpreadsheetTableActionName = (typeof SPREADSHEET_TABLE_ACTIONS)[number];

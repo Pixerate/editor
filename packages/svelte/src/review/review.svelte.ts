@@ -90,6 +90,12 @@ export interface SvelteTrackChanges extends TrackChangesSnapshot {
   rejectAll(): void;
   next(): void;
   previous(): void;
+  /** Selects a change in the editor. */
+  select(id: string): void;
+  /** Accepts a tracked move (both ends). */
+  acceptMove(id: string): void;
+  /** Rejects a tracked move (both ends). */
+  rejectMove(id: string): void;
   subscribe(run: (value: TrackChangesSnapshot) => void): () => void;
   destroy(): void;
 }
@@ -136,6 +142,9 @@ export function createTrackChanges(editor: Editor | null | undefined): SvelteTra
     rejectAll: () => run((e) => e.commands.rejectAllChanges()),
     next: () => run((e) => e.chain().focus().selectNextChange().run()),
     previous: () => run((e) => e.chain().focus().selectPreviousChange().run()),
+    select: (id) => run((e) => e.chain().focus().selectChange(id).run()),
+    acceptMove: (id) => run((e) => e.commands.acceptMove(id)),
+    rejectMove: (id) => run((e) => e.commands.rejectMove(id)),
     subscribe(runFn) {
       if (!store) {
         runFn(EMPTY_TRACK_CHANGES_SNAPSHOT);

@@ -1,0 +1,13 @@
+---
+"@pixerate/editor": minor
+"@pixerate/editor-react": minor
+"@pixerate/editor-svelte": minor
+---
+
+Add spreadsheet conditional formatting and data validation (ported from GridCraft).
+
+Conditional formatting (`@pixerate/editor/spreadsheet`): cell value comparisons (with formula operands), formula rules with relative references (`=$A1>10` formats whole rows), text contains / not contains / begins / ends with, blanks, errors, duplicates / unique, top / bottom N and N%, above / below average (with standard deviations), dates occurring, 2- and 3-colour scales and data bars (min / max / number / percent / percentile / formula anchors), and icon sets (12 sets, file or default thresholds, reversed, value hidden). Rules apply in priority order with stop if true. `evaluateConditionalFormats(sheet, rules)` returns a per-cell overlay (fill, font colour, bold / italic / underline / strikethrough, data-bar fraction and colour, icon); `ConditionalFormatEngine.update` re-evaluates only affected cells after edits. The controller stores rules in `document.table.conditionalFormats` and adds undoable `addConditionalFormat`, `updateConditionalFormat`, `deleteConditionalFormat`, `moveConditionalFormat`, `clearConditionalFormats`, plus `getConditionalFormatOverlay` / `getConditionalFormat`. Rule ranges and rule formulas follow inserted and deleted rows and columns.
+
+Data validation: whole number, decimal, list (literal or from a range), date, time, text length and custom formula rules, with ignore blank, input messages and stop / warning / information alerts (`document.table.dataValidations`, undoable `addDataValidation`, `updateDataValidation`, `deleteDataValidation`, `clearDataValidation`). `commitEditing()` now validates and returns a `SpreadsheetCommitResult`: invalid input keeps the editor open and sets `validationPrompt`, answered with `resolveValidationPrompt('accept' | 'retry' | 'cancel')`. New `commitCellInput` validates formula-bar and dropdown input; `setCellValue`, paste and import do not validate. Also `validateCellInput`, `getValidationListValues`, `findInvalidCells` and "circle invalid data" (`setInvalidDataCircles`, `isInvalidDataCircled`).
+
+React and Svelte grids render fills, font styles, data bars, icons and invalid-data circles, show a dropdown arrow on list-validated cells (also Alt+Down), the input message, and validation alert dialogs. The context menu gains conditional formatting and data validation items, including compact "Conditional formatting…" and "Data validation…" managers (`SpreadsheetConditionalFormatPanel`, `SpreadsheetDataValidationPanel`, `SpreadsheetValidationDialog`; menu items with `panel` are opened through the context menu's `onOpenPanel`).

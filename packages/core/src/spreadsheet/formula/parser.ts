@@ -12,21 +12,33 @@ export type ASTNode =
   | PropertyRefNode
   | BinaryOpNode
   | UnaryOpNode
-  | FunctionCallNode;
+  | FunctionCallNode
+  | InvokeNode
+  | MissingNode;
+
+/**
+ * Sheet qualification of a reference: `Sheet2!A1` has `sheet: 'Sheet2'`;
+ * a 3-D reference `Sheet1:Sheet3!A1` also has `sheetEnd: 'Sheet3'`. Unset
+ * for references to the formula's own sheet.
+ */
+export interface SheetQualifier {
+  sheet?: string;
+  sheetEnd?: string;
+}
 
 export interface LiteralNode {
   type: 'Literal';
   value: number | string | boolean;
 }
 
-export interface CellRefNode {
+export interface CellRefNode extends SheetQualifier {
   type: 'CellRef';
   ref: string;
   col: string;
   row: number;
 }
 
-export interface RangeNode {
+export interface RangeNode extends SheetQualifier {
   type: 'Range';
   raw: string;
   startCol: string;
@@ -36,7 +48,7 @@ export interface RangeNode {
 }
 
 /** `A1#`: the whole spill range of the dynamic array anchored at A1. */
-export interface SpillRefNode {
+export interface SpillRefNode extends SheetQualifier {
   type: 'SpillRef';
   /** Anchor cell, e.g. `A1`. */
   ref: string;
@@ -44,10 +56,15 @@ export interface SpillRefNode {
   row: number;
 }
 
-/** A bare name: a LET variable, or `#NAME?` when nothing defines it. */
+/**
+ * A bare name: a LET or LAMBDA variable, a defined name (`Rate`,
+ * `Data!Rate` with `sheet`), or `#NAME?` when nothing defines it.
+ */
 export interface NameNode {
   type: 'Name';
   name: string;
+  /** Sheet of a sheet-qualified name (`Data!Rate`). */
+  sheet?: string;
 }
 
 export interface PropertyRefNode {
@@ -72,6 +89,21 @@ export interface FunctionCallNode {
   type: 'FunctionCall';
   name: string;
   args: ASTNode[];
+}
+
+/**
+ * A call of a computed function: `LAMBDA(x, x+1)(2)` or `(f)(2)`. Calls of a
+ * named function, defined name or variable (`F(2)`) are `FunctionCall`s.
+ */
+export interface InvokeNode {
+  type: 'Invoke';
+  callee: ASTNode;
+  args: ASTNode[];
+}
+
+/** An argument left empty, as in `IF(A1,,1)` or `LAMBDA(x, y, x)(1,)`. */
+export interface MissingNode {
+  type: 'Missing';
 }
 
 export function parseCellReference(ref: string): { col: string; row: number } {
@@ -112,6 +144,13 @@ export function parseRange(rangeStr: string): RangeNode {
     endRow: endRef.row
   };
 }
+
+const qualifier = (token: FormulaToken): SheetQualifier =>
+  token.sheet === undefined
+    ? {}
+    : token.sheetEnd === undefined
+      ? { sheet: token.sheet }
+      : { sheet: token.sheet, sheetEnd: token.sheetEnd };
 
 export class FormulaParser {
   private tokens: FormulaToken[] = [];
@@ -204,7 +243,24 @@ export class FormulaParser {
       const argument = this.unary();
       return { type: 'UnaryOp', op, argument };
     }
-    return this.primary();
+    let expr = this.primary();
+    // A call of a computed function: LAMBDA(x, x+1)(2), (f)(2), F(1)(2).
+    while (this.check('LPAREN') && (expr.type === 'FunctionCall' || expr.type === 'Invoke' || this.previous().type === 'RPAREN')) {
+      this.advance();
+      expr = { type: 'Invoke', callee: expr, args: this.argumentList() };
+    }
+    return expr;
+  }
+
+  /** Arguments after `(` up to and including `)`. Empty positions are `Missing`. */
+  private argumentList(): ASTNode[] {
+    const args: ASTNode[] = [];
+    if (this.match('RPAREN')) return args;
+    do {
+      args.push(this.check('COMMA') || this.check('RPAREN') ? { type: 'Missing' } : this.expression());
+    } while (this.match('COMMA'));
+    this.consume('RPAREN', `Expected ')' after function arguments`);
+    return args;
   }
 
   private primary(): ASTNode {
@@ -232,24 +288,30 @@ export class FormulaParser {
 
     if (token.type === 'CELL_REF') {
       this.advance();
+      // A function whose name looks like a cell reference (LOG10).
+      if (token.sheet === undefined && this.check('LPAREN')) {
+        this.advance();
+        return { type: 'FunctionCall', name: token.value, args: this.argumentList() };
+      }
       const parsed = parseCellReference(token.value);
       return {
         type: 'CellRef',
         ref: token.value,
         col: parsed.col,
-        row: parsed.row
+        row: parsed.row,
+        ...qualifier(token)
       };
     }
 
     if (token.type === 'RANGE') {
       this.advance();
-      return parseRange(token.value);
+      return { ...parseRange(token.value), ...qualifier(token) };
     }
 
     if (token.type === 'SPILL_REF') {
       this.advance();
       const parsed = parseCellReference(token.value);
-      return { type: 'SpillRef', ref: token.value, col: parsed.col, row: parsed.row };
+      return { type: 'SpillRef', ref: token.value, col: parsed.col, row: parsed.row, ...qualifier(token) };
     }
 
     if (token.type === 'PROPERTY_REF') {
@@ -266,23 +328,22 @@ export class FormulaParser {
       this.advance();
 
       if (this.check('LPAREN')) {
-        this.consume('LPAREN', `Expected '(' after function ${name}`);
-        const args: ASTNode[] = [];
-        if (!this.check('RPAREN')) {
-          do {
-            args.push(this.expression());
-          } while (this.match('COMMA'));
+        if (token.sheet !== undefined) {
+          throw new Error(`Unexpected '(' after ${token.sheet}!${name} at position ${this.peek().position}`);
         }
-        this.consume('RPAREN', `Expected ')' after function arguments`);
+        this.consume('LPAREN', `Expected '(' after function ${name}`);
         return {
           type: 'FunctionCall',
           name,
-          args
+          args: this.argumentList()
         };
       }
+      if (token.sheetEnd !== undefined) {
+        throw new Error(`A 3-D reference can't name ${name} at position ${token.position}`);
+      }
 
-      // A bare name: a LET variable, otherwise #NAME? (as in spreadsheet apps).
-      return { type: 'Name', name };
+      // A bare name: a LET variable or defined name, otherwise #NAME? (as in spreadsheet apps).
+      return token.sheet !== undefined ? { type: 'Name', name, sheet: token.sheet } : { type: 'Name', name };
     }
 
     if (this.match('LPAREN')) {

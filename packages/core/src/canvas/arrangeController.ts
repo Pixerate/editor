@@ -23,12 +23,20 @@ import {
 import type { CanvasArrangeAction } from './arrangeShortcuts.js';
 import {
 	applyShapeCombination,
+	applyShapeReplacement,
 	canCombineShapeNodes,
+	canOffsetShapeNodes,
+	canOutlineShapeNodeStrokes,
 	combineShapeNodes,
+	offsetShapeNodes,
+	outlineShapeNodeStrokes,
 	revertShapeCombination,
 	type CombineShapeNodesOptions,
 	type CombineShapeNodesResult,
-	type ShapeOperation
+	type OffsetShapeNodesOptions,
+	type OutlineShapeStrokesOptions,
+	type ShapeOperation,
+	type ShapePathEditResult
 } from './shapeNodes.js';
 import {
 	createNodeGuideIndex,
@@ -233,6 +241,47 @@ export function createCanvasArrangeController<TNode extends CanvasNode = CanvasN
 		divide: (ids?: Iterable<string>, o?: CombineShapeNodesOptions) => controller.combineShapes('divide', ids, o),
 		/** Whether the shape operations can run on `ids` (default: the selection). */
 		canCombineShapes: (ids?: Iterable<string>) => canCombineShapeNodes(options.getNodes(), selectedIds(ids)).ok,
+
+		/**
+		 * Offset Path: grows (`distance > 0`) or shrinks (`distance < 0`) every shape among
+		 * `ids` (default: the selection) by `distance` flow units, keeping curves, as one
+		 * undoable step. Refuses without changing anything when a shape is locked, no shape is
+		 * selected or every result is empty.
+		 */
+		offsetShapes(
+			distance: number,
+			ids?: Iterable<string>,
+			offsetOptions: OffsetShapeNodesOptions = {}
+		): ShapePathEditResult<TNode> {
+			const before = options.getNodes();
+			const result = offsetShapeNodes(before, selectedIds(ids), distance, { ...rect(), ...offsetOptions });
+			if (!result.ok) return result;
+			const run = () => options.setNodes(applyShapeReplacement(options.getNodes(), result));
+			const undo = () => options.setNodes(revertShapeCombination(options.getNodes(), result, before));
+			if (options.history) options.history.execute({ name: 'Offset Path', execute: run, undo });
+			else run();
+			return result;
+		},
+		/** Whether `offsetShapes` can run on `ids` (default: the selection). */
+		canOffsetShapes: (ids?: Iterable<string>) => canOffsetShapeNodes(options.getNodes(), selectedIds(ids)).ok,
+
+		/**
+		 * Outline Stroke: converts the strokes of the shapes among `ids` (default: the
+		 * selection) to filled path shapes, as one undoable step. Refuses when a shape is
+		 * locked or no selected shape has a visible stroke.
+		 */
+		outlineStroke(ids?: Iterable<string>, outlineOptions: OutlineShapeStrokesOptions = {}): ShapePathEditResult<TNode> {
+			const before = options.getNodes();
+			const result = outlineShapeNodeStrokes(before, selectedIds(ids), { ...rect(), ...outlineOptions });
+			if (!result.ok) return result;
+			const run = () => options.setNodes(applyShapeReplacement(options.getNodes(), result));
+			const undo = () => options.setNodes(revertShapeCombination(options.getNodes(), result, before));
+			if (options.history) options.history.execute({ name: 'Outline Stroke', execute: run, undo });
+			else run();
+			return result;
+		},
+		/** Whether `outlineStroke` can run on `ids` (default: the selection). */
+		canOutlineStroke: (ids?: Iterable<string>) => canOutlineShapeNodeStrokes(options.getNodes(), selectedIds(ids)).ok,
 
 		/**
 		 * Runs a shortcut action. Scene actions are not handled here (see the scenes store);

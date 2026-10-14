@@ -1,6 +1,25 @@
-import React, { useState } from 'react';
-import { ImageEditor } from '@pixerate/editor-react';
-import { Image as ImageIcon, Download, Sparkles, Upload } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { ImageEditor, useImageEditor } from '@pixerate/editor-react';
+import { Image as ImageIcon, Download, Sparkles, Upload, Wand2 } from 'lucide-react';
+
+/**
+ * A stand-in for an AI segmentation: a blocky, slightly offset ellipse at 1/16 resolution, the
+ * kind of coarse mask Refine Edge is meant to snap to the real edges of the image.
+ */
+function coarseMask(width: number, height: number) {
+  const w = Math.max(4, Math.round(width / 16));
+  const h = Math.max(4, Math.round(height / 16));
+  const data = new Uint8ClampedArray(w * h * 4);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const dx = (x + 0.5 - w * 0.55) / (w * 0.28);
+      const dy = (y + 0.5 - h * 0.5) / (h * 0.3);
+      const v = dx * dx + dy * dy <= 1 ? 255 : 0;
+      data.set([v, v, v, 255], (y * w + x) * 4);
+    }
+  }
+  return { width: w, height: h, data };
+}
 
 const SAMPLE_IMAGES = [
   {
@@ -20,6 +39,27 @@ const SAMPLE_IMAGES = [
 export function ImageEditorTab() {
   const [selectedImage, setSelectedImage] = useState<string>(SAMPLE_IMAGES[0].url);
   const [exportedUrl, setExportedUrl] = useState<string | null>(null);
+  const editor = useImageEditor();
+  const [maskNote, setMaskNote] = useState<string | null>(null);
+
+  useEffect(() => {
+    void editor.controller.loadImage(selectedImage);
+  }, [editor.controller, selectedImage]);
+
+  const loadCoarseMask = async () => {
+    const { width, height } = editor.controller.getState().imageDimensions;
+    await editor.controller.loadSelectionFromImage(coarseMask(width, height));
+    setMaskNote('Coarse mask loaded. Open "Select & Mask" and press Refine Edge (or use Refine below).');
+  };
+
+  const refineToEdges = async () => {
+    try {
+      await editor.controller.refineSelection({ radius: 16, smartRadius: true, contrast: 20 });
+      setMaskNote('Selection refined to the image edges.');
+    } catch (err) {
+      setMaskNote(err instanceof Error ? err.message : String(err));
+    }
+  };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -43,7 +83,8 @@ export function ImageEditorTab() {
             Media & Image Editor Studio
           </h2>
           <p className="text-xs text-slate-400 mt-1">
-            UI-agnostic Canvas 2D engine with freeform/aspect crop, color adjustments, annotations, and depth alpha masking.
+            UI-agnostic Canvas 2D engine with freeform/aspect crop, color adjustments, annotations, depth alpha masking,
+            and Select &amp; Mask: magic wand, marquees, lasso, Refine Edge and adjustment layer masks.
           </p>
         </div>
 
@@ -72,10 +113,31 @@ export function ImageEditorTab() {
         </div>
       </div>
 
+      {/* Selection demo: simulate an AI segmentation and refine it to the image edges */}
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <button
+          type="button"
+          onClick={loadCoarseMask}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
+        >
+          <Wand2 className="w-3.5 h-3.5" />
+          Load coarse “AI” mask
+        </button>
+        <button
+          type="button"
+          onClick={refineToEdges}
+          disabled={!editor.state.selection}
+          className="px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 disabled:opacity-40"
+        >
+          Refine Edge
+        </button>
+        {maskNote && <span className="text-slate-400">{maskNote}</span>}
+      </div>
+
       {/* Editor Component */}
       <div className="w-full">
         <ImageEditor
-          src={selectedImage}
+          editor={editor}
           onSave={(dataUrl) => {
             setExportedUrl(dataUrl);
           }}

@@ -78,6 +78,11 @@
       "types": "./dist/compare/index.d.ts",
       "import": "./dist/compare/index.js",
       "require": "./dist/compare/index.cjs"
+    },
+    "./tokens": {
+      "types": "./dist/tokens/index.d.ts",
+      "import": "./dist/tokens/index.js",
+      "require": "./dist/tokens/index.cjs"
     }
   },
   "files": [

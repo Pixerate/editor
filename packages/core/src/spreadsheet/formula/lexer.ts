@@ -17,7 +17,58 @@ export type FormulaTokenType =
 export interface FormulaToken {
   type: FormulaTokenType;
   value: string;
+  /** Offset of the token in the formula (for a sheet-qualified reference, of its sheet prefix). */
   position: number;
+  /** Offset just past the token. */
+  end?: number;
+  /**
+   * Sheet of a sheet-qualified reference or name (`Sheet2!A1`, `'My Sheet'!A1:B2`,
+   * `Data!Rate`), unquoted. Unset for references to the formula's own sheet.
+   */
+  sheet?: string;
+  /** Last sheet of a 3-D reference (`Sheet1:Sheet3!A1`). */
+  sheetEnd?: string;
+  /** Offset where the reference itself starts, after the sheet prefix and `!`. */
+  refStart?: number;
+}
+
+// Excel sheet names are at most 31 characters; a quoted name doubles its
+// apostrophes, so a quoted prefix is never longer than this. Bounding the
+// look-ahead keeps tokenizing linear on input full of apostrophes.
+const MAX_QUOTED_SHEET_LENGTH = 2 * 31 + 2;
+
+const isWordStart = (char: string) => /[A-Za-z_$\\]/.test(char) || (char > '\u007f' && /\p{L}/u.test(char));
+const isWordChar = (char: string) =>
+  /[A-Za-z0-9_$.\\?]/.test(char) || (char > '\u007f' && /[\p{L}\p{N}]/u.test(char));
+const CELL_WORD = /^\$?[A-Za-z]+\$?[0-9]+$/;
+
+/**
+ * A quoted sheet prefix starting at `start` (`'My Sheet'!`, `'Bob''s'!`,
+ * `'Q1:Q4'!` for a 3-D span): the sheet name(s) and the offset after `!`, or
+ * null when the quote does not open a sheet prefix (it is a string).
+ */
+function readQuotedSheet(input: string, start: number): { sheet: string; sheetEnd?: string; next: number } | null {
+  let name = '';
+  let j = start + 1;
+  while (j < input.length && j - start <= MAX_QUOTED_SHEET_LENGTH) {
+    if (input[j] === "'") {
+      if (input[j + 1] === "'") {
+        name += "'";
+        j += 2;
+        continue;
+      }
+      // `'text'!=1` is a comparison (`!=` is `<>`), not a sheet prefix.
+      if (input[j + 1] !== '!' || input[j + 2] === '=' || name === '') return null;
+      const colon = name.indexOf(':');
+      if (colon > 0 && colon < name.length - 1) {
+        return { sheet: name.slice(0, colon), sheetEnd: name.slice(colon + 1), next: j + 2 };
+      }
+      return { sheet: name, next: j + 2 };
+    }
+    name += input[j];
+    j++;
+  }
+  return null;
 }
 
 export function tokenizeFormula(formula: string): FormulaToken[] {
@@ -57,6 +108,15 @@ export function tokenizeFormula(formula: string): FormulaToken[] {
       continue;
     }
 
+    // Quoted sheet prefix: 'My Sheet'!A1
+    if (char === "'") {
+      const prefix = readQuotedSheet(input, i);
+      if (prefix) {
+        i = readQualifiedReference(input, prefix.next, i, prefix.sheet, prefix.sheetEnd, offset, tokens);
+        continue;
+      }
+    }
+
     // String literal ("..." or '...')
     if (char === '"' || char === "'") {
       const quote = char;
@@ -77,7 +137,8 @@ export function tokenizeFormula(formula: string): FormulaToken[] {
       tokens.push({
         type: 'STRING',
         value: str,
-        position: start + offset
+        position: start + offset,
+        end: i + offset
       });
       continue;
     }
@@ -108,7 +169,8 @@ export function tokenizeFormula(formula: string): FormulaToken[] {
       tokens.push({
         type: 'PROPERTY_REF',
         value: prop.trim(),
-        position: start + offset
+        position: start + offset,
+        end: i + offset
       });
       continue;
     }
@@ -149,28 +211,41 @@ export function tokenizeFormula(formula: string): FormulaToken[] {
       continue;
     }
 
-    // Identifiers, Cell references, and Ranges (e.g. SUM, A1, B2:B10, A:A)
-    if (/[a-zA-Z_$]/.test(char)) {
+    // Identifiers, Cell references, and Ranges (e.g. SUM, A1, B2:B10, A:A),
+    // optionally sheet-qualified (Sheet2!A1, Sheet1:Sheet3!A1).
+    if (isWordStart(char)) {
       const start = i;
-      while (i < input.length && /[a-zA-Z0-9_$.]/.test(input[i])) {
+      while (i < input.length && isWordChar(input[i])) {
         i++;
       }
       const rawWord = input.slice(start, i);
+
+      // Sheet prefix: Sheet2!A1 (but `A1!=B1` is a comparison).
+      if (input[i] === '!' && input[i + 1] !== '=') {
+        i = readQualifiedReference(input, i + 1, start, rawWord, undefined, offset, tokens);
+        continue;
+      }
 
       // Check if followed by colon indicating a range e.g. A1:B10 or A:A
       if (i < input.length && input[i] === ':') {
         const colonPos = i;
         i++; // skip colon
         const secondStart = i;
-        while (i < input.length && /[a-zA-Z0-9_$.]/.test(input[i])) {
+        while (i < input.length && isWordChar(input[i])) {
           i++;
         }
         const secondWord = input.slice(secondStart, i);
+        if (secondWord.length > 0 && input[i] === '!' && input[i + 1] !== '=') {
+          // 3-D reference: Sheet1:Sheet3!A1
+          i = readQualifiedReference(input, i + 1, start, rawWord, secondWord, offset, tokens);
+          continue;
+        }
         if (secondWord.length > 0) {
           tokens.push({
             type: 'RANGE',
             value: `${rawWord}:${secondWord}`.toUpperCase(),
-            position: start + offset
+            position: start + offset,
+            end: i + offset
           });
           continue;
         } else {
@@ -179,45 +254,89 @@ export function tokenizeFormula(formula: string): FormulaToken[] {
         }
       }
 
-      // Check for boolean literal
-      const upper = rawWord.toUpperCase();
-      if (upper === 'TRUE' || upper === 'FALSE') {
-        tokens.push({
-          type: 'BOOLEAN',
-          value: upper,
-          position: start + offset
-        });
-        continue;
-      }
-
-      // Check for Cell Reference (e.g. A1, $B$12, AA100)
-      if (/^\$?[A-Za-z]+\$?[0-9]+$/.test(rawWord)) {
-        // A1# is the whole spill range of the dynamic array anchored at A1.
-        if (input[i] === '#') {
-          i++;
-          tokens.push({ type: 'SPILL_REF', value: upper.replace(/\$/g, ''), position: start + offset });
-          continue;
-        }
-        tokens.push({
-          type: 'CELL_REF',
-          value: upper.replace(/\$/g, ''),
-          position: start + offset
-        });
-        continue;
-      }
-
-      // Function or generic identifier
-      tokens.push({
-        type: 'IDENTIFIER',
-        value: upper,
-        position: start + offset
-      });
+      pushWord(input, rawWord, start, i, offset, tokens);
+      if (tokens[tokens.length - 1].type === 'SPILL_REF') i++;
       continue;
     }
 
     throw new Error(`Unexpected character '${char}' at position ${i + offset}`);
   }
 
-  tokens.push({ type: 'EOF', value: '', position: input.length + offset });
+  tokens.push({ type: 'EOF', value: '', position: input.length + offset, end: input.length + offset });
+  for (const token of tokens) {
+    if (token.end === undefined) token.end = token.position + Math.max(token.value.length, 1);
+  }
   return tokens;
+}
+
+/**
+ * Pushes the token for a word: a boolean, a cell reference (`A1`, `$B$2`),
+ * a spill reference (`A1#`, when followed by `#`) or an identifier.
+ */
+function pushWord(
+  input: string,
+  rawWord: string,
+  start: number,
+  end: number,
+  offset: number,
+  tokens: FormulaToken[],
+  qualified?: Pick<FormulaToken, 'sheet' | 'sheetEnd' | 'refStart' | 'position'>,
+): void {
+  const upper = rawWord.toUpperCase();
+  const position = qualified?.position ?? start + offset;
+  const extra = qualified ? { sheet: qualified.sheet, ...(qualified.sheetEnd ? { sheetEnd: qualified.sheetEnd } : {}), refStart: qualified.refStart } : {};
+  if (!qualified && (upper === 'TRUE' || upper === 'FALSE')) {
+    tokens.push({ type: 'BOOLEAN', value: upper, position, end: end + offset });
+    return;
+  }
+  if (CELL_WORD.test(rawWord)) {
+    // A1# is the whole spill range of the dynamic array anchored at A1.
+    if (input[end] === '#') {
+      tokens.push({ type: 'SPILL_REF', value: upper.replace(/\$/g, ''), position, end: end + 1 + offset, ...extra });
+      return;
+    }
+    tokens.push({ type: 'CELL_REF', value: upper.replace(/\$/g, ''), position, end: end + offset, ...extra });
+    return;
+  }
+  tokens.push({ type: 'IDENTIFIER', value: upper, position, end: end + offset, ...extra });
+}
+
+/**
+ * Reads the reference after a sheet prefix (`A1`, `A1:B2`, `A:A`, `A1#` or a
+ * defined name) starting at `from`, pushes its token and returns the offset
+ * after it.
+ */
+function readQualifiedReference(
+  input: string,
+  from: number,
+  prefixStart: number,
+  sheet: string,
+  sheetEnd: string | undefined,
+  offset: number,
+  tokens: FormulaToken[],
+): number {
+  let i = from;
+  while (i < input.length && isWordChar(input[i])) i++;
+  const word = input.slice(from, i);
+  if (!word) throw new Error(`Expected a reference after '!' at position ${from + offset}`);
+  const qualified = { sheet, sheetEnd, refStart: from + offset, position: prefixStart + offset };
+  if (input[i] === ':') {
+    let j = i + 1;
+    while (j < input.length && isWordChar(input[j])) j++;
+    const second = input.slice(i + 1, j);
+    if (second) {
+      tokens.push({
+        type: 'RANGE',
+        value: `${word}:${second}`.toUpperCase(),
+        position: qualified.position,
+        end: j + offset,
+        sheet,
+        ...(sheetEnd ? { sheetEnd } : {}),
+        refStart: qualified.refStart,
+      });
+      return j;
+    }
+  }
+  pushWord(input, word, from, i, offset, tokens, qualified);
+  return tokens[tokens.length - 1].type === 'SPILL_REF' ? i + 1 : i;
 }

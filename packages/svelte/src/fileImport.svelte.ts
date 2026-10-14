@@ -1,8 +1,10 @@
 import type { Editor } from "@tiptap/core";
 import {
   FileImportController,
+  summarizeImportStructure,
   type FileImportControllerOptions,
   type FileImportState,
+  type ImportStructureSummary,
 } from "@pixerate/editor";
 
 /**
@@ -23,6 +25,7 @@ export function createFileImport(
     return editor && !editor.isDestroyed ? editor : null;
   }, options);
   let state = $state<FileImportState>(controller.getState());
+  let summary: ImportStructureSummary | null = $derived(summarizeImportStructure(state.lastOutcomes));
   controller.subscribe((next) => {
     state = next;
   });
@@ -36,6 +39,15 @@ export function createFileImport(
     },
     get lastOutcomes() {
       return state.lastOutcomes;
+    },
+    /**
+     * Structures detected in the last import (headings, lists, tables,
+     * columns), or `null` when no adapter reported any (only structure-aware
+     * adapters such as PDF do). Turn PDF detection off with
+     * `setOptions({ adapterOptions: { pdf: { structure: false } } })`.
+     */
+    get structureSummary(): ImportStructureSummary | null {
+      return summary;
     },
     /** Value for `<input type="file" accept={…}>`. */
     get accept() {

@@ -12,6 +12,7 @@ import {
   CommentButton,
   CommentsPanel,
   ReviewToolbar,
+  TrackedChangesList,
   createComments,
   createTrackChanges,
 } from "../src/review";
@@ -280,5 +281,59 @@ describe("Svelte ReviewToolbar", () => {
     const root = render(ReviewToolbar, { editor, showDescription: false });
     expect(root.textContent).toContain("1 of 1");
     expect(root.querySelector("[data-change-type]")).toBeNull();
+  });
+});
+
+const MOVED_HTML =
+  '<p><ins data-change-type="insertion" data-change-id="m1" data-move-id="m1" data-author-id="alice" data-author-name="Alice" data-created-at="1">Moved para.</ins></p>' +
+  "<p>Stays.</p>" +
+  '<p><del data-change-type="deletion" data-change-id="m1" data-move-id="m1" data-author-id="alice" data-author-name="Alice" data-created-at="1">Moved para.</del></p>';
+
+describe("tracked moves in the Svelte review UI", () => {
+  it("exports TrackedChangesList from the package root", () => {
+    expect(RootExports.TrackedChangesList).toBe(TrackedChangesList);
+  });
+
+  it("ReviewToolbar describes a move and accepts both ends", () => {
+    const { editor } = makeEditor(MOVED_HTML);
+    editor.commands.selectNextChange();
+    const root = render(ReviewToolbar, { editor });
+    expect(root.querySelector('[data-change-type="move"]')!.textContent).toBe('Alice: Moved "Moved para."');
+    click(button(root, "Accept"));
+    expect(editor.getHTML()).toBe("<p>Moved para.</p><p>Stays.</p>");
+  });
+
+  it("createTrackChanges exposes move commands and selection", () => {
+    const { editor } = makeEditor(MOVED_HTML);
+    const review = createTrackChanges(editor);
+    expect(review.changes.map((c) => c.type)).toEqual(["move"]);
+    review.select("m1");
+    expect(editor.state.selection.from).toBe(1);
+    review.rejectMove("m1");
+    expect(editor.getHTML()).toBe("<p>Stays.</p><p>Moved para.</p>");
+    review.destroy();
+  });
+
+  it("TrackedChangesList lists a move as one entry and rejects both ends", () => {
+    const { editor } = makeEditor(
+      MOVED_HTML +
+        '<p>Plain <ins data-change-type="insertion" data-change-id="i1" data-author-id="bob" data-author-name="Bob" data-created-at="2">added</ins></p>',
+    );
+    const root = render(TrackedChangesList, { editor });
+    const items = Array.from(root.querySelectorAll("li"));
+    expect(items.map((li) => li.getAttribute("data-change-type"))).toEqual(["move", "insertion"]);
+    expect(items[0].textContent).toContain("Moved · Alice");
+    click(items[0].querySelector("button")!);
+    expect(editor.state.selection.from).toBe(1);
+    click(items[0].querySelectorAll("button")[2]);
+    expect(editor.getHTML()).toContain("<p>Stays.</p><p>Moved para.</p>");
+    expect(getTrackedChanges(editor).map((c) => c.type)).toEqual(["insertion"]);
+    expect(root.querySelectorAll("li")).toHaveLength(1);
+  });
+
+  it("TrackedChangesList shows an empty state", () => {
+    const { editor } = makeEditor();
+    const root = render(TrackedChangesList, { editor, emptyState: "Nothing here" });
+    expect(root.textContent?.trim()).toBe("Nothing here");
   });
 });

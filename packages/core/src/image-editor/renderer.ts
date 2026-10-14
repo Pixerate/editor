@@ -1,6 +1,7 @@
 import type {
   Annotation,
   CropBox,
+  ImagePoint,
   ExportOptions,
   ImageEditorState,
   ImageTransform,
@@ -17,6 +18,9 @@ import { adjustmentLayersKey } from './adjustment-layers';
 import { canvasCompositeOperation, blendImageData, normalizeBlendMode } from './blend';
 import { computeHistogram, type ImageHistogram } from './histogram';
 import { normalizeProcessVersion } from './color';
+import { buildLayerMaskPlanes } from './selection/layer-mask';
+import { selectionOutline, quickMaskPixels } from './selection/overlay';
+import type { SelectionMask } from './selection/mask';
 import {
   applyImageProjectionToContext,
   clampCropToImage,
@@ -37,6 +41,15 @@ export interface RenderOptions {
   interactive?: boolean;
   draftAnnotation?: Annotation | null;
   draftCrop?: CropBox | null;
+  /**
+   * How the active selection is shown: marching ants (default when there is a selection),
+   * a Quick Mask tint over the unselected area (default when `state.quickMask`), or not at all.
+   */
+  selectionDisplay?: 'ants' | 'quickMask' | 'none';
+  /** Dash offset of the marching ants in screen pixels (animate it to make them march). */
+  antsOffset?: number;
+  /** A selection being drawn (e.g. a lasso), shown as a dashed outline in natural pixels. */
+  draftSelectionPath?: ImagePoint[] | null;
 }
 
 /**
@@ -234,7 +247,25 @@ export class ImageEditorRenderer {
       ctx.restore();
     }
 
-    // 4. Draw Crop Grid Overlay if crop overlay is requested
+    // 4. Selection: marching ants or Quick Mask, through the same projection.
+    const display = options.selectionDisplay ?? (state.quickMask ? 'quickMask' : 'ants');
+    if ((state.selection?.bounds && display !== 'none') || options.draftSelectionPath?.length) {
+      ctx.save();
+      try {
+        applyImageProjectionToContext(ctx, projection);
+        ctx.beginPath();
+        ctx.rect(region.x, region.y, region.width, region.height);
+        ctx.clip();
+        if (state.selection?.bounds && display === 'quickMask') this.drawQuickMask(ctx, state.selection);
+        else if (state.selection?.bounds && display === 'ants') this.drawAnts(ctx, state.selection, projection.scale, options.antsOffset ?? 0);
+        if (options.draftSelectionPath?.length) this.drawDraftPath(ctx, options.draftSelectionPath, projection.scale);
+      } catch {
+        // Overlays are best effort (headless / mocked contexts).
+      }
+      ctx.restore();
+    }
+
+    // 5. Draw Crop Grid Overlay if crop overlay is requested
     if (isActivelyCropping) {
       const activeCrop =
         options.draftCrop !== undefined && options.draftCrop !== null
@@ -278,7 +309,9 @@ export class ImageEditorRenderer {
 
     const imageData = baseCtx.getImageData(0, 0, baseW, baseH);
     if (imageData) {
-      applyAdjustments(imageData, adjustments);
+      // Layer masks live in natural pixels: resample them through the same projection.
+      const layerMasks = buildLayerMaskPlanes(adjustments.layers, naturalWidth, naturalHeight, projection, baseW, baseH);
+      applyAdjustments(imageData, adjustments, layerMasks ? { layerMasks } : {});
 
       if (depthMask.enabled && depthMask.maskSource) {
         try {
@@ -314,6 +347,64 @@ export class ImageEditorRenderer {
     }
 
     return baseCanvas;
+  }
+
+  private quickMaskCache = new WeakMap<SelectionMask, HTMLCanvasElement>();
+  private outlineCache = new WeakMap<SelectionMask, Float32Array>();
+
+  /** Rubylith over the unselected area, drawn in natural image space. */
+  private drawQuickMask(ctx: CanvasRenderingContext2D, selection: SelectionMask): void {
+    let canvas = this.quickMaskCache.get(selection);
+    if (!canvas) {
+      canvas = this.createCanvas(selection.width, selection.height);
+      const mctx = canvas.getContext('2d');
+      if (!mctx || typeof mctx.createImageData !== 'function') return;
+      const img = mctx.createImageData(selection.width, selection.height);
+      img.data.set(quickMaskPixels(selection));
+      mctx.putImageData(img, 0, 0);
+      this.quickMaskCache.set(selection, canvas);
+    }
+    ctx.drawImage(canvas, 0, 0, selection.width, selection.height);
+  }
+
+  /** Marching ants: a white line under a black dashed one, one screen pixel wide. */
+  private drawAnts(ctx: CanvasRenderingContext2D, selection: SelectionMask, scale: number, offset: number): void {
+    let segs = this.outlineCache.get(selection);
+    if (!segs) {
+      segs = selectionOutline(selection);
+      this.outlineCache.set(selection, segs);
+    }
+    if (!segs.length) return;
+    const px = 1 / (scale || 1);
+    ctx.beginPath();
+    for (let i = 0; i < segs.length; i += 4) {
+      ctx.moveTo(segs[i], segs[i + 1]);
+      ctx.lineTo(segs[i + 2], segs[i + 3]);
+    }
+    ctx.lineWidth = px;
+    ctx.strokeStyle = '#ffffff';
+    ctx.stroke();
+    if (typeof ctx.setLineDash === 'function') {
+      ctx.setLineDash([4 * px, 4 * px]);
+      ctx.lineDashOffset = -offset * px;
+    }
+    ctx.strokeStyle = '#000000';
+    ctx.stroke();
+    if (typeof ctx.setLineDash === 'function') ctx.setLineDash([]);
+  }
+
+  private drawDraftPath(ctx: CanvasRenderingContext2D, points: ImagePoint[], scale: number): void {
+    const px = 1 / (scale || 1);
+    ctx.beginPath();
+    points.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+    ctx.closePath();
+    ctx.lineWidth = px;
+    ctx.strokeStyle = '#ffffff';
+    ctx.stroke();
+    if (typeof ctx.setLineDash === 'function') ctx.setLineDash([4 * px, 4 * px]);
+    ctx.strokeStyle = '#000000';
+    ctx.stroke();
+    if (typeof ctx.setLineDash === 'function') ctx.setLineDash([]);
   }
 
   private getSourceId(img: CanvasImageSource): number {
@@ -701,7 +792,7 @@ export class ImageEditorRenderer {
    */
   public async renderMask(
     state: ImageEditorState,
-    options?: { useAnnotations?: boolean; useCrop?: boolean }
+    options?: { useAnnotations?: boolean; useCrop?: boolean; useSelection?: boolean }
   ): Promise<HTMLCanvasElement> {
     const naturalWidth = Math.max(1, Math.round(state.imageDimensions.width));
     const naturalHeight = Math.max(1, Math.round(state.imageDimensions.height));
@@ -731,10 +822,18 @@ export class ImageEditorRenderer {
 
     // Anti-aliased edges produce grey pixels: threshold to pure black/white.
     const imageData = ctx.getImageData?.(0, 0, naturalWidth, naturalHeight);
+    // The active selection (same natural space) is added to the mask.
+    const selection =
+      (options?.useSelection ?? true) &&
+      state.selection?.bounds &&
+      state.selection.width === naturalWidth &&
+      state.selection.height === naturalHeight
+        ? state.selection
+        : null;
     if (imageData) {
       const d = imageData.data;
       for (let i = 0; i < d.length; i += 4) {
-        const v = d[i] >= 128 ? 255 : 0;
+        const v = d[i] >= 128 || (selection !== null && selection.data[i >> 2] >= 128) ? 255 : 0;
         d[i] = v;
         d[i + 1] = v;
         d[i + 2] = v;

@@ -1,6 +1,6 @@
 import type { JsonSchema } from '../agent/schema.js';
 import {
-	REFERENCE_ROLE_LABELS,
+	referenceRoleLabel,
 	seedCapability,
 	supportedModes,
 	supportedReferenceRoles,
@@ -132,7 +132,8 @@ export function capabilitiesToJsonSchema(caps: ModelCapabilities): JsonSchema & 
 		const limits = roles.map((role) => {
 			const cap = caps.references?.roles[role] ?? { max: 1 };
 			const min = cap.min ? `${cap.min}–` : 'up to ';
-			return `${role} (${cap.label ?? REFERENCE_ROLE_LABELS[role]}): ${min}${cap.max}`;
+			const accepts = 'accepts' in cap && cap.accepts?.length ? `, ${cap.accepts.join('/')} only` : '';
+			return `${role} (${referenceRoleLabel(role, caps)}): ${min}${cap.max}${accepts}`;
 		});
 		const perRoleTotal = roles.reduce((sum, role) => sum + (caps.references?.roles[role]?.max ?? 1), 0);
 		const maxItems = Math.min(caps.references?.maxTotal ?? Infinity, perRoleTotal);
@@ -147,7 +148,9 @@ export function capabilitiesToJsonSchema(caps: ModelCapabilities): JsonSchema & 
 				properties: {
 					id: { type: 'string', minLength: 1, description: 'Asset id.' },
 					role: { type: 'string', enum: roles },
-					url: { type: 'string' }
+					url: { type: 'string' },
+					mediaType: { type: 'string', description: 'MIME type or media kind of the asset, e.g. "image/png".' },
+					contentHash: { type: 'string' }
 				},
 				required: ['id', 'role'],
 				additionalProperties: false

@@ -48,6 +48,11 @@
       "svelte": "./dist/generation/index.js",
       "default": "./dist/generation/index.js"
     },
+    "./tokens": {
+      "types": "./dist/tokens/index.d.ts",
+      "svelte": "./dist/tokens/index.js",
+      "default": "./dist/tokens/index.js"
+    },
     "./package.json": "./package.json"
   },
   "typesVersions": {
@@ -69,6 +74,9 @@
       ],
       "generation": [
         "./dist/generation/index.d.ts"
+      ],
+      "tokens": [
+        "./dist/tokens/index.d.ts"
       ]
     }
   },

@@ -1,0 +1,180 @@
+<script lang="ts">
+  import type {
+    AdjustmentKind,
+    AdjustmentLayer,
+    ImageEditorController,
+    RefineEdgeParams,
+    SelectionMask,
+  } from '@pixerate/editor/image-editor';
+  import {
+    ADJUSTMENT_KINDS,
+    REFINE_EDGE_CONTROLS,
+    adjustmentKindLabel,
+    layerMaskFromSelection,
+  } from '@pixerate/editor/image-editor';
+  import { untrack } from 'svelte';
+
+  interface Props {
+    controller: ImageEditorController;
+    /** The current selection (`state.selection`). Omit to follow the controller. */
+    selection?: SelectionMask | null;
+    /** The adjustment layers (`state.adjustments.layers`). Omit to follow the controller. */
+    layers?: AdjustmentLayer[];
+    class?: string;
+  }
+
+  let { controller, selection, layers: layersProp, class: className = '' }: Props = $props();
+
+  let tick = $state(0);
+  $effect(() => {
+    const c = controller;
+    return untrack(() => c.subscribe(() => tick++));
+  });
+  const sel = $derived.by(() => {
+    void tick;
+    return selection === undefined ? controller.getSelection() : selection;
+  });
+  const list = $derived.by(() => {
+    void tick;
+    return layersProp ?? controller.getAdjustmentLayers();
+  });
+
+  const DEFAULT_PARAMS: Required<RefineEdgeParams> = { radius: 8, smartRadius: false, smooth: 0, feather: 0, contrast: 0, shiftEdge: 0 };
+  let params = $state<Required<RefineEdgeParams>>({ ...DEFAULT_PARAMS });
+  let busy = $state(false);
+  let error = $state<string | null>(null);
+  let layerId = $state('');
+  let newKind = $state<AdjustmentKind>('hueSaturation');
+  const target = $derived(list.find((l) => l.id === layerId) ?? list[list.length - 1]);
+
+  async function refine() {
+    busy = true;
+    error = null;
+    try {
+      await controller.refineSelection({ ...params });
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+    } finally {
+      busy = false;
+    }
+  }
+
+  function newMaskedLayer() {
+    const s = controller.getSelection();
+    if (s) layerId = controller.addAdjustmentLayer({ kind: newKind, mask: layerMaskFromSelection(s) });
+  }
+
+  const button =
+    'px-2 py-1 rounded-md border border-slate-800 bg-slate-950 text-[11px] text-slate-200 hover:text-white disabled:opacity-40';
+</script>
+
+<div data-testid="refine-edge-panel" class="flex flex-col gap-3 text-xs {className}">
+  <span class="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">Refine Edge</span>
+  {#each REFINE_EDGE_CONTROLS as c (c.id)}
+    <label class="flex flex-col gap-1">
+      <span class="flex justify-between text-slate-400">
+        <span>{c.label}</span>
+        <span class="font-mono">{params[c.id]}{c.unit}</span>
+      </span>
+      <input
+        type="range"
+        min={c.min}
+        max={c.max}
+        step={c.step}
+        aria-label={c.label}
+        value={params[c.id]}
+        oninput={(e) => (params = { ...params, [c.id]: Number((e.currentTarget as HTMLInputElement).value) })}
+        class="w-full accent-indigo-500"
+      />
+    </label>
+  {/each}
+  <label class="flex items-center gap-2 text-slate-300">
+    <input
+      type="checkbox"
+      checked={params.smartRadius}
+      onchange={(e) => (params = { ...params, smartRadius: (e.currentTarget as HTMLInputElement).checked })}
+    />
+    Smart Radius
+  </label>
+  <div class="flex gap-1">
+    <button type="button" class={button} disabled={!sel || busy} onclick={refine}>Refine Edge</button>
+    <button type="button" class={button} onclick={() => (params = { ...DEFAULT_PARAMS })}>Reset</button>
+  </div>
+  {#if error}
+    <p role="alert" class="text-rose-400">{error}</p>
+  {/if}
+
+  <span class="font-semibold text-slate-200 uppercase tracking-wider text-[11px] mt-2">Layer Mask</span>
+  <div class="flex gap-1 items-center">
+    <select
+      aria-label="New masked layer kind"
+      value={newKind}
+      onchange={(e) => (newKind = (e.currentTarget as HTMLSelectElement).value as AdjustmentKind)}
+      class="flex-1 bg-slate-950 border border-slate-800 rounded px-1 py-1 text-slate-200"
+    >
+      {#each ADJUSTMENT_KINDS as k (k.kind)}
+        <option value={k.kind}>{k.label}</option>
+      {/each}
+    </select>
+    <button type="button" class={button} disabled={!sel} onclick={newMaskedLayer}>New Masked Layer</button>
+  </div>
+  {#if list.length > 0 && target}
+    <div class="flex flex-col gap-2">
+      <select
+        aria-label="Mask layer"
+        value={target.id}
+        onchange={(e) => (layerId = (e.currentTarget as HTMLSelectElement).value)}
+        class="bg-slate-950 border border-slate-800 rounded px-1 py-1 text-slate-200"
+      >
+        {#each list as l (l.id)}
+          <option value={l.id}>{l.name || adjustmentKindLabel(l.kind)}{l.mask ? ' (masked)' : ''}</option>
+        {/each}
+      </select>
+      <div class="flex flex-wrap gap-1">
+        <button type="button" class={button} disabled={!sel} onclick={() => controller.applySelectionAsLayerMask(target.id)}>
+          Mask with Selection
+        </button>
+        <button type="button" class={button} disabled={!target.mask} onclick={() => controller.selectionFromLayerMask(target.id)}>
+          Load as Selection
+        </button>
+        <button type="button" class={button} disabled={!target.mask} onclick={() => controller.setAdjustmentLayerMask(target.id, null)}>
+          Remove Mask
+        </button>
+      </div>
+      {#if target.mask}
+        <label class="flex flex-col gap-1">
+          <span class="flex justify-between text-slate-400">
+            <span>Density</span>
+            <span class="font-mono">{Math.round((target.mask.density ?? 1) * 100)}%</span>
+          </span>
+          <input
+            type="range"
+            min="0"
+            max="100"
+            step="1"
+            aria-label="Mask density"
+            value={Math.round((target.mask.density ?? 1) * 100)}
+            oninput={(e) => controller.setAdjustmentLayerMaskProps(target.id, { density: Number((e.currentTarget as HTMLInputElement).value) / 100 })}
+            class="w-full accent-indigo-500"
+          />
+        </label>
+        <label class="flex flex-col gap-1">
+          <span class="flex justify-between text-slate-400">
+            <span>Mask Feather</span>
+            <span class="font-mono">{target.mask.feather ?? 0}px</span>
+          </span>
+          <input
+            type="range"
+            min="0"
+            max="50"
+            step="0.5"
+            aria-label="Mask feather"
+            value={target.mask.feather ?? 0}
+            oninput={(e) => controller.setAdjustmentLayerMaskProps(target.id, { feather: Number((e.currentTarget as HTMLInputElement).value) })}
+            class="w-full accent-indigo-500"
+          />
+        </label>
+      {/if}
+    </div>
+  {/if}
+</div>

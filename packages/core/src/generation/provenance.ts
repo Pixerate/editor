@@ -221,18 +221,6 @@ export function parseProvenance(input: string | unknown): GenerationProvenance {
 }
 
 /**
- * A request that reproduces the recorded generation exactly: the planned
- * settings, model, seed and references that were sent, with the prompt as
- * resolved at the time (not re-resolved against today's templates).
- */
-export function recreateRequest(provenance: GenerationProvenance): GenerationRequest {
-	const request = clone(provenance.request);
-	request.model = provenance.modelId;
-	if (request.prompt === undefined) request.prompt = provenance.resolvedPrompt;
-	return request;
-}
-
-/**
  * Re-resolves the raw prompt against the pinned template bodies and values,
  * e.g. to check a record or to open it in an editor with its source map.
  */

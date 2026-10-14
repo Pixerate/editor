@@ -1,5 +1,5 @@
 import {
-	REFERENCE_ROLE_LABELS,
+	referenceRoleLabel,
 	seedCapability,
 	supportedModes,
 	supportedReferenceRoles,
@@ -42,6 +42,8 @@ export interface ReferenceSlot {
 	description?: string;
 	min: number;
 	max: number;
+	/** Media accepted for this role (see `ReferenceRoleCapability.accepts`). */
+	accepts?: string[];
 	references: GenerationReference[];
 	/** More references of this role fit (per role and in total). */
 	canAdd: boolean;
@@ -189,8 +191,9 @@ export function getReferenceSlots(caps: ModelCapabilities, request: GenerationRe
 		const references = refs.filter((ref) => ref.role === role);
 		return {
 			role,
-			label: cap.label ?? REFERENCE_ROLE_LABELS[role],
+			label: referenceRoleLabel(role, caps),
 			...(cap.description ? { description: cap.description } : {}),
+			...('accepts' in cap && cap.accepts?.length ? { accepts: [...cap.accepts] } : {}),
 			min: cap.min ?? 0,
 			max: cap.max,
 			references,

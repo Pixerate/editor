@@ -39,6 +39,11 @@ export interface ImportContext {
    * exports) can import nested files with the same adapters.
    */
   registry?: ImportAdapterRegistry;
+  /**
+   * Per-import options for this adapter: `ImportFileOptions.adapterOptions[adapter.id]`.
+   * Adapters document what they accept (e.g. the PDF adapter's `{ structure: false }`).
+   */
+  options?: unknown;
 }
 
 export interface ImportAdapter<TResult = unknown> {
@@ -72,6 +77,11 @@ export interface ImportFileOptions {
   fileName?: string;
   /** Overrides the input's own `type`. */
   mimeType?: string;
+  /**
+   * Options for individual adapters, keyed by adapter id; the matching entry
+   * reaches the adapter as `context.options`. Example: `{ pdf: { structure: false } }`.
+   */
+  adapterOptions?: Record<string, unknown>;
 }
 
 export interface ImportOutcome<TResult = unknown> {
@@ -132,7 +142,7 @@ function stripBom(text: string): string {
 /** Creates the {@link ImportContext} helpers for an input. */
 export function createImportContext(
   input: ImportInput,
-  details: { fileName?: string; mimeType?: string; target: ImportTarget; registry?: ImportAdapterRegistry },
+  details: { fileName?: string; mimeType?: string; target: ImportTarget; registry?: ImportAdapterRegistry; options?: unknown },
 ): ImportContext {
   const readArrayBuffer = async (): Promise<ArrayBuffer> => {
     if (typeof input === "string") {
@@ -288,7 +298,13 @@ export class ImportAdapterRegistry {
         { fileName },
       );
     }
-    const context = createImportContext(input, { fileName, mimeType, target: adapter.target, registry: this });
+    const context = createImportContext(input, {
+      fileName,
+      mimeType,
+      target: adapter.target,
+      registry: this,
+      options: options.adapterOptions?.[adapter.id],
+    });
     try {
       const result = (await adapter.import(input, context)) as TResult;
       return { adapterId: adapter.id, target: adapter.target, fileName, mimeType, result };

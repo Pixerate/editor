@@ -63,6 +63,27 @@ import {
   type CrossReferenceOptions,
 } from "./document-structure";
 import { FindReplace, type FindReplaceOptions } from "./find-replace/extension";
+import { ParagraphStyles, type ParagraphStylesOptions } from "./paragraph-styles/extension";
+
+/**
+ * The TipTap packages whose commands the preset installs. Exported only so the
+ * published declarations import them: each package augments `@tiptap/core`'s
+ * `Commands` interface, which is what types `editor.chain().toggleBold()`,
+ * `toggleHeading()`, `setTextAlign()` and so on for apps that use the preset
+ * without depending on those packages themselves. (Triple-slash references are
+ * dropped by the declaration bundler, and runtime imports leave no trace in .d.ts.)
+ */
+export type RichTextPresetCommandPackages = [
+  typeof import("@tiptap/starter-kit"),
+  typeof import("@tiptap/extension-color"),
+  typeof import("@tiptap/extension-highlight"),
+  typeof import("@tiptap/extension-image"),
+  typeof import("@tiptap/extension-link"),
+  typeof import("@tiptap/extension-task-list"),
+  typeof import("@tiptap/extension-text-align"),
+  typeof import("@tiptap/extension-text-style"),
+  typeof import("@tiptap/extension-underline"),
+];
 
 export interface RichTextPresetOptions {
   placeholder?: string | ((props: { node: any }) => string);
@@ -100,6 +121,11 @@ export interface RichTextPresetOptions {
   crossReferences?: Partial<CrossReferenceOptions> | boolean;
   /** Word-style Find and Replace (Mod+F / Mod+H, match highlights). Off by default. */
   findReplace?: Partial<FindReplaceOptions> | boolean;
+  /**
+   * Paragraph styles (Normal, Title, Heading 1–6, Quote, …) with a style
+   * registry, `data-style` attributes and next-style on Enter. Off by default.
+   */
+  paragraphStyles?: Partial<ParagraphStylesOptions> | boolean;
 }
 
 const optionObject = <T>(value: T | boolean | undefined): T | Record<string, never> =>
@@ -319,6 +345,10 @@ export function createRichTextPreset(
 
   if (options.findReplace) {
     extensions.push(FindReplace.configure(optionObject(options.findReplace)));
+  }
+
+  if (options.paragraphStyles) {
+    extensions.push(ParagraphStyles.configure(optionObject(options.paragraphStyles)));
   }
 
   return extensions;

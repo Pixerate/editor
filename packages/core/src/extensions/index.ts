@@ -18,3 +18,4 @@ export * from "./rich-clipboard";
 export * from "./autocorrect";
 export * from "./document-structure";
 export * from "./find-replace";
+export * from "./paragraph-styles";

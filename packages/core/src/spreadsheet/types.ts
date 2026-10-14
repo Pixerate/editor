@@ -1,3 +1,6 @@
+import type { ConditionalFormatRule } from './conditional-format/types';
+import type { DataValidationRule } from './validation/types';
+
 export type CellFormat =
   | 'text'
   | 'number'
@@ -176,6 +179,13 @@ export interface SpreadsheetTableSettings {
   merges?: CellRange[]; // normalized (start <= end), non-overlapping
   filter?: SpreadsheetFilterState;
   grouping?: SpreadsheetGrouping;
+  /**
+   * Conditional formats of this sheet, highest priority first. Kept with the
+   * other per-sheet table state (undoable through document snapshots).
+   */
+  conditionalFormats?: ConditionalFormatRule[];
+  /** Data validation rules of this sheet; a cell uses the first rule containing it. */
+  dataValidations?: DataValidationRule[];
 }
 
 export interface SpreadsheetDataSourceField {
@@ -191,4 +201,46 @@ export interface SpreadsheetDataSource {
   getRecords(): Array<{ id: string; [key: string]: any }>;
   getFields(): SpreadsheetDataSourceField[];
   updateRecord(recordId: string, field: string, value: any): Promise<void> | void;
+}
+
+// --- Workbooks: sheets and defined names ---
+
+/**
+ * A defined name (Formulas › Name Manager): a range, constant, formula or
+ * LAMBDA that formulas can use by name, e.g. `=Price*(1+Rate)`,
+ * `=SUM(Sales)`, `=Double(4)`.
+ */
+export interface SpreadsheetDefinedName {
+  /** The name, e.g. `Rate`. Unique per scope, compared case-insensitively. */
+  name: string;
+  /**
+   * What the name refers to, as a formula: `=Data!$A$2:$A$20`, `=0.07`,
+   * `=Rate*2` or `=LAMBDA(x, x*2)`. Unqualified references refer to the
+   * name's sheet (sheet scope) or to the sheet of the formula using it.
+   */
+  refersTo: string;
+  /** Id of the sheet for a sheet-scoped name; unset for workbook scope. */
+  sheetId?: string;
+  comment?: string;
+}
+
+/**
+ * A workbook: several sheets plus defined names. A `SpreadsheetController`
+ * created from a single document is a workbook with one sheet.
+ */
+export interface SpreadsheetWorkbook {
+  /** The sheets in tab order. A sheet's `name` is its tab name (unique, case-insensitively). */
+  sheets: SpreadsheetDocument[];
+  /** Id of the sheet shown (default: the first). */
+  activeSheetId?: string;
+  names?: SpreadsheetDefinedName[];
+}
+
+/** A sheet tab: what sheet-tab bars render. */
+export interface SpreadsheetSheetInfo {
+  id: string;
+  name: string;
+  /** Position in tab order (0-based). */
+  index: number;
+  active: boolean;
 }

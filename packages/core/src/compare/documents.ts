@@ -13,6 +13,7 @@ import {
   DELETION_MARK_NAME,
   FORMAT_CHANGE_MARK_NAME,
   INSERTION_MARK_NAME,
+  MOVE_ID_ATTRIBUTE,
   getTrackedChanges,
   resolveTrackedChanges,
   type TrackedBlockChangeAttributes,
@@ -53,6 +54,14 @@ export interface CompareDocumentsOptions {
    * at `granularity: "char"`. Default 2000.
    */
   maxCharDiff?: number;
+  /**
+   * Record a top-level paragraph that was deleted in one place and inserted,
+   * identical, elsewhere as a tracked move (`type: "move"`) instead of a
+   * whole-block deletion and insertion. Only paragraphs whose content occurs
+   * once among the deleted and once among the inserted blocks are paired.
+   * Default `false`.
+   */
+  detectMoves?: boolean;
 }
 
 export interface CompareSummary {
@@ -64,6 +73,8 @@ export interface CompareSummary {
   formatChanges: number;
   /** Block type, attribute and wrapping changes. */
   blockChanges: number;
+  /** Moved paragraphs (with `detectMoves`). */
+  moves: number;
   /** Differences the result could not represent as tracked changes. */
   notHonoured: string[];
 }
@@ -673,6 +684,51 @@ function compareChildren(
 }
 
 // ---------------------------------------------------------------------------
+// Moves
+// ---------------------------------------------------------------------------
+
+/**
+ * Pairs top-level paragraphs deleted as a whole with identical paragraphs
+ * inserted as a whole elsewhere, and records each pair as a move: the
+ * source's text gets the deletion mark and the destination's the insertion
+ * mark, both with the same move id (accepting or rejecting removes the
+ * emptied block). Ambiguous content (several identical candidates) is left
+ * as whole-block changes.
+ */
+function detectMovedBlocks(children: ProsemirrorNode[], ctx: Context): ProsemirrorNode[] {
+  const keyOf = (node: ProsemirrorNode) =>
+    `${node.type.name}\u0000${filteredAttributes(node.attrs, ctx)}\u0000${stableStringify(node.content.toJSON())}`;
+  const candidates = new Map<string, { del: number[]; ins: number[] }>();
+  children.forEach((node, index) => {
+    const operation = (node.attrs?.[BLOCK_CHANGE_ATTRIBUTE] as TrackedBlockChangeAttributes | null)
+      ?.operation;
+    if (!operation || !node.isTextblock || !node.textContent.trim()) return;
+    if (!node.type.allowsMarkType(ctx.insertion!) || !node.type.allowsMarkType(ctx.deletion!)) return;
+    const key = keyOf(node);
+    const entry = candidates.get(key) ?? { del: [], ins: [] };
+    (operation === "delete" ? entry.del : entry.ins).push(index);
+    candidates.set(key, entry);
+  });
+  const out = [...children];
+  candidates.forEach(({ del, ins }) => {
+    if (del.length !== 1 || ins.length !== 1) return;
+    const attrs = newAttributes(ctx);
+    const moved = { ...attrs, [MOVE_ID_ATTRIBUTE]: attrs.changeId };
+    const relink = (index: number, markType: MarkType) => {
+      const node = out[index];
+      out[index] = node.type.create(
+        { ...node.attrs, [BLOCK_CHANGE_ATTRIBUTE]: null },
+        markInline(node.content, markType.create(moved)),
+        node.marks,
+      );
+    };
+    relink(del[0], ctx.deletion!);
+    relink(ins[0], ctx.insertion!);
+  });
+  return out;
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -682,10 +738,12 @@ function summarize(doc: ProsemirrorNode, notes: Set<string>): CompareSummary {
     deletions: 0,
     formatChanges: 0,
     blockChanges: 0,
+    moves: 0,
     notHonoured: [...notes],
   };
   getTrackedChanges(doc).forEach((change) => {
-    if (change.type === "insertion" || change.block?.operation === "insert") summary.insertions++;
+    if (change.type === "move") summary.moves++;
+    else if (change.type === "insertion" || change.block?.operation === "insert") summary.insertions++;
     else if (change.type === "deletion" || change.block?.operation === "delete") summary.deletions++;
     else if (change.type === "format") summary.formatChanges++;
     else summary.blockChanges++;
@@ -759,7 +817,8 @@ export function compareDocuments(
   const a = prepare(original);
   const b = prepare(revised);
 
-  const children = compareChildren(a, b, [], [], ctx);
+  let children = compareChildren(a, b, [], [], ctx);
+  if (options.detectMoves) children = detectMovedBlocks(children, ctx);
   let doc: ProsemirrorNode;
   try {
     doc = b.type.createChecked(b.attrs, children, b.marks);

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte';
-  import { applyFormulaSuggestion, getFormulaHints } from '@pixerate/editor/spreadsheet';
+  import { applyFormulaSuggestion, getFormulaHints, type FormulaNameSuggestionSource } from '@pixerate/editor/spreadsheet';
 
   interface Props {
     /** The input being edited (a cell editor or the formula bar). */
@@ -11,9 +11,11 @@
     onAccept?: (value: string) => void;
     /** Maximum number of function suggestions (default 8). */
     limit?: number;
+    /** Defined names to suggest too (e.g. `controller.getNameSuggestions()`). */
+    names?: readonly FormulaNameSuggestionSource[];
   }
 
-  let { input = null, value = '', onAccept, limit = 8 }: Props = $props();
+  let { input = null, value = '', onAccept, limit = 8, names }: Props = $props();
 
   let caret = $state<number | null>(null);
   let focused = $state(false);
@@ -21,7 +23,7 @@
   let dismissed = $state(false);
   let position = $state<{ top: number; left: number; width: number } | null>(null);
 
-  let hints = $derived(getFormulaHints(value, caret ?? value.length, { limit }));
+  let hints = $derived(getFormulaHints(value, caret ?? value.length, { limit, names }));
   let suggestions = $derived(dismissed ? [] : hints.suggestions);
   let selectedIndex = $derived(Math.max(0, Math.min(selected, suggestions.length - 1)));
   let visible = $derived(
@@ -31,7 +33,7 @@
   async function accept(index: number) {
     const suggestion = suggestions[index];
     if (!suggestion || !input) return;
-    const next = applyFormulaSuggestion(value, caret ?? value.length, suggestion.name);
+    const next = applyFormulaSuggestion(value, caret ?? value.length, suggestion);
     caret = next.caret;
     selected = 0;
     onAccept?.(next.value);
@@ -127,7 +129,7 @@
     {/if}
     {#if suggestions.length > 0}
       <ul role="listbox" aria-label="Formula suggestions" class="max-h-64 overflow-auto m-0 list-none p-0 py-1">
-        {#each suggestions as s, i (s.name)}
+        {#each suggestions as s, i (`${s.kind ?? "fn"}:${s.name}`)}
           <li
             role="option"
             aria-selected={i === selectedIndex}

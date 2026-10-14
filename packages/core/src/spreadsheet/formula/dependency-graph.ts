@@ -3,7 +3,57 @@ import { colNameToIndex, indexToColName } from './evaluator';
 
 export interface CellDep {
   col: string;
+  /** Row number; 0 for a whole-column dependency (`A:A`). */
   row: number;
+  /** Sheet of a sheet-qualified reference (`Sheet2!A1`); unset for the formula's own sheet. */
+  sheet?: string;
+  /** Last sheet of a 3-D reference (`Sheet1:Sheet3!A1`). */
+  sheetEnd?: string;
+}
+
+/** A name used by a formula: a defined name, LET/LAMBDA variable or (with `call`) a function. */
+export interface NameDep {
+  /** Upper-case name. */
+  name: string;
+  /** Sheet of a sheet-qualified name (`Data!Rate`). */
+  sheet?: string;
+  /** Used as a function (`Double(4)`). */
+  call: boolean;
+}
+
+/**
+ * Names a formula uses (bare names and calls), for dependencies on defined
+ * names. LET/LAMBDA variables are included; callers ignore names that are
+ * not defined.
+ */
+export function extractNameDependencies(node: ASTNode): NameDep[] {
+  const names: NameDep[] = [];
+  const stack: ASTNode[] = [node];
+  while (stack.length > 0) {
+    const curr = stack.pop()!;
+    switch (curr.type) {
+      case 'Name':
+        names.push(curr.sheet === undefined ? { name: curr.name, call: false } : { name: curr.name, sheet: curr.sheet, call: false });
+        break;
+      case 'FunctionCall':
+        names.push({ name: curr.name, call: true });
+        for (const arg of curr.args) stack.push(arg);
+        break;
+      case 'Invoke':
+        stack.push(curr.callee);
+        for (const arg of curr.args) stack.push(arg);
+        break;
+      case 'BinaryOp':
+        stack.push(curr.left, curr.right);
+        break;
+      case 'UnaryOp':
+        stack.push(curr.argument);
+        break;
+      default:
+        break;
+    }
+  }
+  return names;
 }
 
 /**
@@ -16,17 +66,23 @@ export function extractCellDependencies(node: ASTNode): CellDep[] {
   const deps: CellDep[] = [];
 
   const visit = (curr: ASTNode) => {
+    const sheet: Pick<CellDep, 'sheet' | 'sheetEnd'> =
+      'sheet' in curr && curr.sheet !== undefined
+        ? 'sheetEnd' in curr && curr.sheetEnd !== undefined
+          ? { sheet: curr.sheet, sheetEnd: curr.sheetEnd }
+          : { sheet: curr.sheet }
+        : {};
     if (curr.type === 'CellRef') {
-      deps.push({ col: curr.col, row: curr.row });
+      deps.push({ col: curr.col, row: curr.row, ...sheet });
     } else if (curr.type === 'SpillRef') {
       // A1# is computed by A1: depending on the anchor orders it correctly.
-      deps.push({ col: curr.col, row: curr.row });
+      deps.push({ col: curr.col, row: curr.row, ...sheet });
     } else if (curr.type === 'Range' && curr.endRow >= WHOLE_COLUMN_END_ROW) {
       // Whole-column range: depend on the columns, not on every cell.
       const startC = colNameToIndex(curr.startCol);
       const endC = colNameToIndex(curr.endCol);
       for (let c = Math.min(startC, endC); c <= Math.max(startC, endC); c++) {
-        deps.push({ col: indexToColName(c), row: 0 });
+        deps.push({ col: indexToColName(c), row: 0, ...sheet });
       }
     } else if (curr.type === 'Range') {
       const startC = colNameToIndex(curr.startCol);
@@ -38,7 +94,7 @@ export function extractCellDependencies(node: ASTNode): CellDep[] {
 
       for (let c = minC; c <= maxC; c++) {
         for (let r = minR; r <= maxR; r++) {
-          deps.push({ col: indexToColName(c), row: r });
+          deps.push({ col: indexToColName(c), row: r, ...sheet });
         }
       }
     } else if (curr.type === 'BinaryOp') {
@@ -47,6 +103,9 @@ export function extractCellDependencies(node: ASTNode): CellDep[] {
     } else if (curr.type === 'UnaryOp') {
       visit(curr.argument);
     } else if (curr.type === 'FunctionCall') {
+      curr.args.forEach(visit);
+    } else if (curr.type === 'Invoke') {
+      visit(curr.callee);
       curr.args.forEach(visit);
     }
   };
@@ -68,6 +127,28 @@ export class DependencyGraph {
   private spillDependents = new Map<string, Set<string>>();
   // anchor -> the edges it registered (so they can be replaced).
   private spillEdges = new Map<string, Array<[from: string, to: string]>>();
+
+  /**
+   * Sets the cells `cellKey` depends on directly (keys such as `B2`, or a
+   * column key from `columnDependencyKey`), replacing its previous
+   * dependencies. Used by spreadsheets whose keys carry more than A1 text
+   * (e.g. sheet-qualified keys); `setCellFormula` derives them from a formula.
+   */
+  public setCellDependencies(cellKey: string, dependencyKeys: Iterable<string>): void {
+    const key = cellKey.toUpperCase();
+    for (const dep of this.dependencies.get(key) ?? []) {
+      this.dependents.get(dep)?.delete(key);
+    }
+    this.dependencies.delete(key);
+    const deps = new Set<string>();
+    for (const raw of dependencyKeys) {
+      const dep = raw.toUpperCase();
+      deps.add(dep);
+      if (!this.dependents.has(dep)) this.dependents.set(dep, new Set());
+      this.dependents.get(dep)!.add(key);
+    }
+    if (deps.size > 0) this.dependencies.set(key, deps);
+  }
 
   public setCellFormula(cellKey: string, formulaStr: string | null): void {
     const key = cellKey.toUpperCase();

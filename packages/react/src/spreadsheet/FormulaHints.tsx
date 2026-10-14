@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { applyFormulaSuggestion, getFormulaHints } from '@pixerate/editor/spreadsheet';
+import { applyFormulaSuggestion, getFormulaHints, type FormulaNameSuggestionSource } from '@pixerate/editor/spreadsheet';
 
 export interface FormulaHintsProps {
   /** The input being edited (a cell editor or the formula bar). */
@@ -10,6 +10,8 @@ export interface FormulaHintsProps {
   onAccept: (value: string) => void;
   /** Maximum number of function suggestions (default 8). */
   limit?: number;
+  /** Defined names to suggest too (e.g. `controller.getNameSuggestions()`). */
+  names?: readonly FormulaNameSuggestionSource[];
 }
 
 /**
@@ -21,7 +23,7 @@ export interface FormulaHintsProps {
  * ArrowDown move the selection, Tab accepts it, Escape closes the list.
  * Enter is left alone so it still commits the cell.
  */
-export const FormulaHints: React.FC<FormulaHintsProps> = ({ inputRef, value, onAccept, limit = 8 }) => {
+export const FormulaHints: React.FC<FormulaHintsProps> = ({ inputRef, value, onAccept, limit = 8, names }) => {
   const [caret, setCaret] = useState<number | null>(null);
   const [focused, setFocused] = useState(false);
   const [selected, setSelected] = useState(0);
@@ -30,8 +32,8 @@ export const FormulaHints: React.FC<FormulaHintsProps> = ({ inputRef, value, onA
   const pendingCaret = useRef<number | null>(null);
 
   const hints = useMemo(
-    () => getFormulaHints(value, caret ?? value.length, { limit }),
-    [value, caret, limit],
+    () => getFormulaHints(value, caret ?? value.length, { limit, names }),
+    [value, caret, limit, names],
   );
   const suggestions = dismissed ? [] : hints.suggestions;
   const selectedIndex = Math.max(0, Math.min(selected, suggestions.length - 1));
@@ -45,7 +47,7 @@ export const FormulaHints: React.FC<FormulaHintsProps> = ({ inputRef, value, onA
     const { suggestions: list, value: current, caret: at, onAccept: commit } = latest.current;
     const suggestion = list[index];
     if (!suggestion) return;
-    const next = applyFormulaSuggestion(current, at ?? current.length, suggestion.name);
+    const next = applyFormulaSuggestion(current, at ?? current.length, suggestion);
     pendingCaret.current = next.caret;
     commit(next.value);
   };
@@ -169,7 +171,7 @@ export const FormulaHints: React.FC<FormulaHintsProps> = ({ inputRef, value, onA
         <ul role="listbox" aria-label="Formula suggestions" className="max-h-64 overflow-auto py-1 m-0 list-none p-0">
           {suggestions.map((s, i) => (
             <li
-              key={s.name}
+              key={`${s.kind ?? 'fn'}:${s.name}`}
               role="option"
               aria-selected={i === selectedIndex}
               className={`cursor-pointer px-2 py-1 ${i === selectedIndex ? 'bg-primary/10' : 'hover:bg-muted/50'}`}

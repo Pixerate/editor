@@ -9,6 +9,7 @@ All contributors and AI assistants should check this file before starting work a
 ## Template for New Entries
 
 ```markdown
+
 ### [Scope/Area] Brief description of the issue
 
 - **Issue / Symptom**: What goes wrong or behaves unexpectedly.
@@ -112,6 +113,7 @@ All contributors and AI assistants should check this file before starting work a
 - **Solution / Workaround**:
   1. Position the canvas with `className="absolute inset-0 w-full h-full block cursor-crosshair"` within a `relative flex-1 h-full min-h-0 overflow-hidden` container. Absolute positioning removes the canvas from document flow, making it physically impossible for canvas pixel dimensions to alter or expand the parent container.
   2. Enforce explicit layout height on the editor outer frame (`h-[540px]`).
+
 ### [tailwind/monorepo] Missing Workspace Packages in Tailwind `content` Causes CSS Layout Collapse
 
 - **Issue / Symptom**: In the demo app, the image editor canvas was centered floating over the sidebar controls, the sidebar took up 100% width below the canvas, and aspect ratio preset buttons stacked in single full-width vertical rows rather than a 3-column grid.
@@ -524,6 +526,7 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Navigation guards kept prompting after undoing back to the saved state, selecting text or zooming marked the document modified, and loading a file marked it dirty before the user typed anything.
 - **Root Cause**: A "changed since save" boolean set by every edit never goes back to false on undo; whole-state comparison counts view state (selection, viewport); programmatic loads go through the same change paths as user edits.
 - **Solution / Workaround**: Use `bindDirtyToHistory({ history, getValue, normalize })` (React `useHistoryDirty`, Svelte `createHistoryDirty`): every history change re-compares `normalize(value)` with the saved baseline (cached per `history.getRevision()`), so undo-to-saved is clean. Strip view state in `normalize`. Wrap loads/restores in `suppress(fn)`: it is re-entrant (depth counter), lasts until a returned promise settles, and rebaselines to the loaded value even if the load bypassed the history. Changes made outside the history (e.g. selection) need `refresh()`, which ignores the revision cache.
+
 ### [core/canvas] xyflow Resizers Report Raw Sizes, and SvelteFlow Writes Them After `onResize`
 
 - **Issue / Symptom**: Resize snapping flickered back to the unsnapped size when the pointer was released (React Flow), or did nothing at all (SvelteFlow `onResize`).
@@ -535,6 +538,7 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Curve fitting a freehand stroke produced dozens of tiny segments; fitted boolean results of small ellipses stayed polylines.
 - **Root Cause**: A turning-angle test between adjacent edges reads sample jitter as corners (alternating ±0.3 px noise on 2 px steps turns ~33° per vertex), and a coarsely flattened small circle (radius ≲ 5 at tolerance 0.25) really does turn more than 30° per vertex.
 - **Solution / Workaround**: `fitCubics` measures each vertex's turn to the nearest neighbours at least 4 × `tolerance` away and keeps only the sharpest vertex in that neighbourhood. For very coarse polygons raise `cornerAngleDeg`, or flatten with a smaller `tolerance`. `fitPathData` falls back to the original polyline when fitting would not remove vertices.
+
 ### [core/commands] Shortcut Handlers Must Not `preventDefault` Disabled Commands, and Mod Differs Per Platform
 
 - **Issue / Symptom**: A global shortcut listener that calls `preventDefault()` on every bound chord blocks the browser and focused editors even when the command can't run (e.g. `Mod+Z` with nothing to undo). Separately, `Mod+Y` (redo) and an app binding on `Ctrl+Y` look different in the keymap but collide on Windows and Linux, and the collision is invisible when tests only run on macOS.
@@ -576,6 +580,7 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: An OPFS adapter that works in Chromium rejects every write in some Safari versions, or a crash mid-write leaves a truncated file.
 - **Root Cause**: `FileSystemFileHandle.createWritable()` is missing on Safari's main thread in older versions (only `createSyncAccessHandle` in workers), and `FileSystemHandle.move()` (rename) is not universally available. Writing a file in place is not atomic.
 - **Solution / Workaround**: `createOpfsAdapter` writes `<file>.tmp` and renames it over `<file>` where `move` exists, and otherwise alternates two slots (`.a` / `.b`) and swaps a `.ptr` file only after the slot is complete. Without `createWritable`, `set` rejects with `StorageUnavailableError`; feature-detect with `isOpfsAvailable()` and fall back to `createIndexedDbAdapter` or `createLocalStorageAdapter`. Only localStorage writes are synchronous, so on `pagehide` it is the only backend guaranteed to finish; `flushNow()` still starts the async write for the others.
+
 ### [core/generation] Prompt Limits Count Resolved Text, So the Planner Cannot Truncate Them
 
 - **Issue / Symptom**: A 40-character prompt such as `{{style}} portrait` passed a model's 1000-character limit in the UI, but the provider rejected it: the template expanded to 1,400 characters. Truncating `request.prompt` to fix it cut the raw template text, which did not shorten the resolved prompt and could break a `{{tag}}` in half.
@@ -599,11 +604,13 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: After `resolver.clear()` was called while a batch was still fetching, the `load()` promises waiting on that batch never settled.
 - **Root Cause**: The batch looked up waiters in the shared in-flight map when the fetch returned, but `clear()` had already emptied that map.
 - **Solution / Workaround**: `createBatchResolver` captures each batch's pending entries when the fetch starts and always resolves them. It only writes the result to the cache if the in-flight entry is still the same object, so values from before a `clear()` do not come back. A failed batch resolves its keys to `undefined` and records them as failed (`failed(key)`), so a bad response does not cause a retry storm. `clear(key)` allows a retry.
+
 ### [core/grammar] New Syntax Inside `{?…}` Collides With Names That Were Already Valid
 
 - **Issue / Symptom**: Adding comparison conditions as `{?amount>100}…{/amount>100}` (or any new syntax inside `{?…}`) would have silently changed prompts that already used `=`, `<` or `>` in a section name, and `JSX` attribute strings like `defaultSource="a\nb"` in tests kept a literal backslash-n instead of a newline.
 - **Root Cause**: A section name was "anything but `|` and `\`", so every candidate syntax inside the braces (`{?a>1}`, `{?=a>1}`, even `{?a|>1}`, which is a variable) already meant something. JSX attribute strings are not JavaScript string literals and do not process escapes.
 - **Solution / Workaround**: The comparison is recognised only when the open tag is closed by its bare subject (`{?amount>100}…{/amount}`), a pairing the old grammar always reported as unbalanced; `{?a>1}…{/a>1}` keeps its old meaning. `matchConditionalTags` searches for an exact name or a comparison subject, which picks the same partner as before for every diagnostic-free prompt. `grammar.test.ts` proves this by swapping `= < >` for neutral symbols and comparing old and new results on random prompts. Record-level directives (`{!next}`) were rejected for the same reason: `{!next}` is already an "unless" section. In JSX tests, pass multi-line strings as `{"a\nb"}`.
+
 ### [core/canvas] Auto Layout Must See Flow Changes Before They Are Applied, and Must Not Ping-Pong With Measuring
 
 - **Issue / Symptom**: Deleting a child of an auto layout frame left the frame at its old (hugging) size, and relayout after every measured `dimensions` change could keep re-writing node sizes.
@@ -621,6 +628,7 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: `useCanvasAutoLayout(...).hasPending` (and `guides` before it was re-declared) never changed after the first render.
 - **Root Cause**: `{ ...controller }` copies the *value* a getter returns at spread time, not the getter.
 - **Solution / Workaround**: Re-declare live properties as getters (or state) on the object the hook / rune returns after the spread, as `useCanvasAutoLayout` and `createCanvasAutoLayout` do for `hasPending` and `guides`.
+
 ### [core/spreadsheet] Number Formats Must Round the 15-Digit Decimal String, Not the Binary Value
 
 - **Issue / Symptom**: `(2.675).toFixed(2)` is `"2.67"` and `(1.005).toFixed(2)` is `"1.00"`, but Excel shows `2.68` and `1.01` with `0.00`. Porting Rust's `format!("{:.*e}")` to `toExponential` also differs on exact ties (Rust rounds half to even, JS picks the larger digit), and `toExponential` stops at 100 digits, too few for the exact expansion of a double (up to 767 digits).
@@ -644,6 +652,7 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: `setCellNumberFormat` on a bound record cell or a column-formula cell has nowhere to put the format: those cells are derived, and a stored blank cell normally hides the derived value (it means "cleared").
 - **Root Cause**: `getCell` returns a stored cell with empty `raw` before looking at derived values.
 - **Solution / Workaround**: A stored blank cell with `explicitNumberFormat` is treated as format-only: `getCell` returns the derived value with that format (`{ ...derived, numberFormat }`). Known limitation: a cleared column-formula cell that also has an explicit format therefore shows the column value again.
+
 ### [core/find-replace] JavaScript `RegExp` Backtracks, So Word Wildcards Cannot Be Translated to a `RegExp`
 
 - **Issue / Symptom**: Translating Word's wildcard patterns to a `RegExp` (as WordCraft does for Rust's linear-time `regex` crate) freezes the tab on patterns such as `(a@)@b` (`(a+)+b`) or `*a*a*b` (`.*?a.*?a.*?b`) against a long paragraph without a match: exponential or high-polynomial backtracking inside a single `exec`, which cannot be interrupted.
@@ -662,3 +671,151 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: `extractMentions` took 227 s on 4,000 repetitions of `<span data-type='mention' ` (no `>`), and `htmlToPlainText` grew 4× per doubling of such input. A "linear time" test only passed because its input was small enough to stay under an absolute 1 s budget, and it flaked once the suite grew.
 - **Root Cause**: `/<span\b[^>]*\b(?:a|b)[^>]*>/` backtracks over every split of the two `[^>]*` runs (cubic) when no `>` follows; `/<[^>]+>/g`, `/<pre[\s\S]*?<\/pre>/g`, ```` /```[\s\S]*?```/g ```` and `/\]\([^)]*\)/g` rescan to the end of the input from every opener that has no closer (quadratic).
 - **Solution / Workaround**: Use the scanners in `packages/core/src/serializers/html-scan.ts` (`findTagSpans`, `replaceTagSpans`, `stripTags`, `replaceDelimited`). They find each closer once, reuse it until the scan passes it, and stop when none is left. `tests/html-scan.test.ts` checks they match the old regexes on random input and that time grows linearly. When testing performance, assert growth between two sizes rather than an absolute time, which depends on machine load.
+
+### [core/canvas] Token-Bound Properties Are Materialised Into the Nodes, Not Resolved at Render Time
+
+- **Issue / Symptom**: Resolving token bindings inside node renderers would leave auto layout, measuring, exports and copy / paste seeing stale literals (a bound `gap` would never move children), and a node whose variable was deleted would show nothing.
+- **Root Cause**: Auto layout, arrange, clipboard and xyflow itself read ordinary node fields (`data.layout.gap`, `style`, `data.shape.fill`); only a renderer knew about the binding. Deleted variables no longer resolve, so a render-time lookup has no value to show.
+- **Solution / Workaround**: `resolveCanvasTokens` writes each resolved value into the node field it drives and returns the same array when nothing changed, so it can run after every token or node change without looping (`useCanvasTokens` / `createCanvasTokens` do this). A binding that does not resolve keeps the last written value; on delete, detach with `detachTokenBindings(nodes, event.previous, event.deletedVariableIds)` using the state from *before* the delete. Canvas undo is separate from token undo: undoing a token delete brings the variable back but not the detached bindings.
+
+### [core/tokens] Alias Cycles Must Be Checked Across Every Mode, and W3C Names Cannot Be Both Token and Group
+
+- **Issue / Symptom**: `a → b` in Light and `b → a` in Dark looked acyclic per mode, but resolving `a` with a context of another collection (or after the default mode moved) looped; exporting `color` and `color/bg` produced invalid DTCG JSON (a token with children).
+- **Root Cause**: Aliases are resolved with the target's own collection mode, so a chain can switch modes part-way; DTCG distinguishes tokens (`$value`) from groups, and names map onto paths.
+- **Solution / Workaround**: `checkTokenAlias` searches alias edges of all modes (refusing any cycle), `resolveToken` still guards with a visited set and reports `cycle`. Variable names refuse `.`, `{`, `}` and a leading `$` per group, and a name that is a prefix group of another (`color` vs `color/bg`) is refused with `name-conflict`.
+
+### [core/import] PDF Column Gutters: One Stray Line Hides a Table's Column Gap, and Tolerating It Lets the Gap Leak Into a Column
+
+- **Issue / Symptom**: An unruled table under a paragraph lost its columns (the paragraph's short last line crossed every column gap), and after tolerating a few crossing lines the header cell `Unit` was read as a separate full-width line, splitting `Meter` off the table.
+- **Root Cause**: Gutters were the strips no narrow fragment covers. A strict "no coverage" rule fails on any stray crossing line; a coverage depth tolerance (`≤ 8 %` of narrow fragments) also accepts strips where one fragment merely *ends* or *starts* inside, so the strip starts inside a column and that fragment "crosses" it.
+- **Solution / Workaround**: `readingOrder` in `packages/core/src/import/pdf-layout.ts` sweeps coverage depth with the tolerance, then shrinks each strip to the last fragment end and first fragment start inside it, so only fragments spanning the whole strip count as strays, and keeps it only when the strays are fewer than the fragments on either side (otherwise the "gutter" is the ragged end of one long line next to a short one). Short lines crossing gutters right above or below a grid are pulled into it (spanning header / totals rows) and peeled back to the neighbouring paragraph by `alignedTable` when they don't start on a column edge.
+
+### [core/import] pdf.js: Bold Is Only Known After the Operator List, `constructPath` Changed in v5, and Clip Paths Look Like Rules
+
+- **Issue / Symptom**: Every text item looked regular-weight (item `fontName` is an id like `g_d0_f2`, `styles[...].fontFamily` is usually `sans-serif`); rule extraction found nothing on pdf.js 5; every clipped cell (`re W n`) became a table border.
+- **Root Cause**: `page.commonObjs.get(fontName)` (with `name`, `bold`, `black`, `italic`) only resolves once fonts are loaded, which `getOperatorList()` does; `get` throws for unresolved ids. pdf.js ≤ 4 encodes `constructPath` as `[ops, args, minMax]` followed by a paint operator; pdf.js 5 as `[paintOp, [Float32Array path], minMax]` with its own path codes. Clipping paths end with `endPath`, not a paint operator.
+- **Solution / Workaround**: The adapter calls `getOperatorList()` before `getTextContent()`, checks `commonObjs.has(id)` before `get` (inside `try`), and `pdfOperatorListToRules` handles both `constructPath` forms, keeps path pieces only until a stroke/fill operator paints them (dropping them on `endPath`), and keeps filled rectangles only when they are thin bars. Pass `rulingLines: false` to skip the operator list.
+
+### [core/import] PDF Running-Header Detection Normalises Digits, So Synthetic Fixtures Must Vary Words
+
+- **Issue / Symptom**: A three-page test fixture lost its first body line on every page as a "running header".
+- **Root Cause**: Edge rows are compared with digits replaced by `#` so `Page 3 of 9` matches `Page 4 of 9`; generated prose like `p1w0 p1w1 …` / `p2w0 p2w1 …` then normalises to the same text on every page.
+- **Solution / Workaround**: Build multi-page fixtures from different words per page (not just different numbers). Real body text practically never repeats at the same page edge across half the pages. Separately, use loop-based `minOf` / `maxOf` instead of `Math.min(...values)` on per-page arrays: spreading tens of thousands of fragments overflows the call stack.
+
+### [core/track-changes] A Move Is a Cut and a Later Paste, So It Must Be Linked Across Transactions
+
+- **Issue / Symptom**: Cutting a paragraph and pasting it elsewhere with tracking on produced an unrelated deletion and insertion (two changes to accept or reject separately), and accepting the deletion of a whole paragraph left an empty paragraph behind. Typing right after moved text joined the move.
+- **Root Cause**: ProseMirror's cut is one transaction (`uiEvent: "cut"`) and the paste another (`uiEvent: "paste"`); nothing in the paste says where the text came from, and `transformPasted` strips review marks from the pasted slice. Only a drag (`uiEvent: "drop"`) deletes and inserts in one transaction. Block boundaries are not characters, so removing a paragraph's text leaves the block. `adjacentAttributes` reuses a neighbouring change's attributes, including `moveId`.
+- **Solution / Workaround**: The tracker gives a tracked cut a change of its own and remembers it (id, normalized text, author) in the plugin closure; the next user transaction clears it unless it is a paste by the same author of the same text (white space ignored) whose deletion is still in the document. Then the deletion marks get `moveId` = the cut's change id and the pasted text an insertion with the same `moveId`. A drop links its own deletion and insertion when their texts match. Both are gated by `isMove` (default `isMoveSized`: a paragraph or a sentence of two or more words, as in Word). `adjacentAttributes` skips marks with a `moveId`. When a move is resolved, a removed end that fills a whole top-level textblock deletes the block (`deleteWholeBlock`); nested blocks (list items, quotes) keep their emptied paragraph. `getEditorText` resolves documents with moves through `resolveTrackedChanges` for the same reason; `htmlToPlainText` on HTML alone cannot remove the emptied block. Limitation: moving text that is itself the destination of an earlier move by the same author really deletes it (own insertion), leaving the earlier move with only its source.
+
+### [core/paragraph-styles] Style CSS Loses to Inline Attributes, `onCreate` Is Deferred, and Enter Handlers Race
+
+- **Issue / Symptom**: (1) A style's alignment from the injected stylesheet did not show on paragraphs with direct alignment, and with `TextAlign.configure({ defaultAlignment: "left" })` it never showed. (2) The `<style>` element added in `onCreate` was missing right after `new Editor(...)`. (3) Implementing next-style as an Enter keymap makes it depend on extension order: it either never runs (core keymap's `splitBlock` first) or pre-empts other Enter handlers (lists, suggestion popups). (4) Heading 5 applied in an editor configured with `levels: [1, 2, 3, 4]` rendered as `<h1>`.
+- **Root Cause**: (1) TextAlign renders `style="text-align: …"` inline, which beats any stylesheet rule; with a non-null default every paragraph has it. (2) TipTap emits `create` in a `setTimeout`. (3) TipTap orders keymaps by priority and then reversed extension order. (4) Heading's `renderHTML` falls back to the first configured level.
+- **Solution / Workaround**: (1) Applying a style resets `textAlign` to its default (`null`), so the stylesheet's alignment shows; when the default is not `null`, the style's alignment is written to the attribute instead. (2) CSS is injected in `onBeforeCreate` and removed in `onDestroy`. (3) Next-style runs in `appendTransaction`: when a single transaction turned an empty-selection caret at the end of a styled textblock into a new empty sibling block, the new block gets the style's `next` (merged into the same undo step). Splitting mid-paragraph keeps the style (`keepOnSplit: true`). (4) `isParagraphStyleAvailable` checks the heading extension's `levels`; `setParagraphStyle` refuses and the gallery hides unavailable styles. Style values are sanitized (`safeCSSValue`) and ids restricted to `[A-Za-z][A-Za-z0-9_-]*` because both end up in a stylesheet.
+
+### [core/mentions] A Mention Role Attribute Named `role` Would Capture Existing Entity Fields
+
+- **Issue / Symptom**: Adding a `role` node attribute to the Mention extension made `data-role="admin"` appear on user mentions. Apps pass their whole entity (with a job-title `role` field) as suggestion props, and TipTap keeps every prop that matches a declared attribute.
+- **Root Cause**: TipTap's mention `command` inserts `{ type, attrs: props }`, so any attribute name you declare picks up a same-named field from existing entity objects. Before, undeclared attributes were dropped.
+- **Solution / Workaround**: The node attribute is `assetRole` (rendered as `data-role`). `extractMentionsFromDoc` reports it as `role`. Text syntax (`@fox:style`) is opt-in (`{ roles }`), because `@john:hi` already meant "mention john, then `:hi`". Only `preprocessMarkdownMentions` and `extractMentions` with `roles` set, and `findTextMentions`, read it.
+
+### [core/generation] `generation` Must Not Import the Mention Serializers, and Recreate Must Not Re-Plan Twice
+
+- **Issue / Symptom**: Re-exporting `findTextMentions` from `@pixerate/editor/generation` broke the entry-isolation test, which pulled ProseMirror into the generation bundle. Separately, recreating a record by re-planning the original settings in `exact` mode changed values the user never saw change: a record planned when `4k` snapped to `2k` re-snapped to `4k` once the model gained `4k`.
+- **Root Cause**: `serializers/mentions.ts` imports `escapeHtml` from `plain-text.ts`, which imports ProseMirror. An exact reproduction has to start from what was sent (the planned request), not from what the user asked for.
+- **Solution / Workaround**: The text-only mention helpers live in the dependency-free `serializers/mention-text.ts`, and both entries re-export them. `exact` plans the recorded planned request (any change is `setting-unsupported`). `latest` plans the recorded original settings (differences are `setting-changed`). Mentions are kept in `record.mentions` so `latest` can rebuild them. Capability hashes leave out presentation fields and `timing`, so renaming a model is not drift.
+
+### [svelte/packaging] `import type` in a `.svelte` File Still Counts as an Entry Dependency
+
+- **Issue / Symptom**: The Svelte entry-isolation test failed for `generation/index.js` with `@pixerate/editor/grammar` after `GenerationHistory.svelte` gained `import type { Template } from '@pixerate/editor/grammar'`. The React build of the same import passed.
+- **Root Cause**: `svelte-package` ships `.svelte` sources as they are, so type-only imports stay in the published file (tsup erases them from React's JS).
+- **Solution / Workaround**: In Svelte components, take types only from the entry's own core subpath. Derive the rest when needed (`type Template = NonNullable<RecreateOptions['templates']>[number]`).
+
+### [core/image-editor] Iterated Box Blurs Must Run on Padded Lines, or a Zero-Edge Feather Loses Mass
+
+- **Issue / Symptom**: Feathering a selection with a large radius (the three-box-pass Gaussian used above σ 8) was up to 0.18 off a direct Gaussian next to the image border; the direct kernel below σ 8 matched to 1/255.
+- **Root Cause**: "Zero beyond the image" means one convolution of the zero-padded signal. Running each box pass on the clipped line throws away the coverage the previous pass spread outside the image, so every pass loses more of it at the edges.
+- **Solution / Workaround**: `gaussianBlur` (`selection/modify.ts`) runs the three passes on a line padded by the passes' total radius (zeros, or replicated ends for `clamp`) and only crops at the end. The remaining difference (≤ 0.03) is the box approximation itself; `tests/image-editor-selection.test.ts` checks both regimes against a direct Gaussian and that the cost does not grow with the radius.
+
+### [core/image-editor] Selections Are Immutable Masks Shared by History; Layer Masks Are RLE Strings
+
+- **Issue / Symptom**: Encoding the selection into every undo snapshot made each slider commit cost O(pixels); a `Uint8Array` inside an adjustment layer did not survive the `JSON.parse(JSON.stringify(...))` copies the controller makes of layers; adding a `selection: null` or `mask: undefined` key would have changed how every existing document serializes.
+- **Root Cause**: History entries are built from `serializeState()` on every recorded change, layers are deep-copied as JSON everywhere, and saved documents are compared as JSON.
+- **Solution / Workaround**:
+  1. `SelectionMask` objects are never mutated; every operation returns a new one, and history entries keep a reference next to the serialized state (`HistoryEntry.selection`). Only `toJSON()` run-length encodes it, and only when something is selected.
+  2. `AdjustmentLayer.mask` stores the RLE string (`{ width, height, rle, density?, feather?, enabled? }`); `decodeLayerMask` / `layerMaskCoverage` decode on render behind a small LRU keyed by the string. `normalizeAdjustmentLayer` only sets `mask` when it is usable and leaves default density / feather / enabled out.
+  3. The renderer's base key includes a hash of the mask (`layerMaskKey`), and `buildLayerMaskPlanes` returns `undefined` for mask-free stacks so they take the old code path.
+  4. Layer masks live in natural pixels like annotations: `projectMaskCoverage` unprojects each base pixel through the same `ImageProjection` as the image (crop, rotation, flips), so never draw a mask with hand-rolled transforms.
+
+### [react/image-editor] `useImageEditor({ image })` Reloads Whenever `image` Is a New Object
+
+- **Issue / Symptom**: A test host doing `useImageEditor({ image: fakeImage(20, 10) })` hung the render (the test timed out on the first `act`).
+- **Root Cause**: The hook reloads the source when `options.image` changes identity; `loadImage` notifies, the host re-renders, builds a new image object, and the cycle repeats.
+- **Solution / Workaround**: Pass a stable `image` (a string, or an element created once outside the render). Selection tools also need pixels: a new source clears the sampled pixels, so call `controller.setSamplePixels(...)` after loading when there is no canvas (tests, workers, cross-origin images).
+
+### [core/spreadsheet] Multiple Sheets: `document` Is the Sheet Being Worked On, and Dependency Keys Must Name Their Sheet
+
+- **Issue / Symptom**: With several sheets, `A1` in the dependency graph meant a different cell on every sheet, so editing `Data!A1` recalculated the wrong formulas (or none), and cross-sheet cycles went undetected. Rewriting the whole controller to take a sheet argument would have touched every method.
+- **Root Cause**: The controller was written for one `document` (`getCell`, spills, `evalSingleCellByKey`, table operations all read `this.document`), and graph keys were bare A1 text.
+- **Solution / Workaround**: Each sheet is a runtime (`doc` plus its spill maps and saved selection). `document` and the spill maps are getters on the *current* runtime, which is the active sheet except inside `withSheet(rt, fn)`: cross-sheet reads (`resolveCell(col, row, sheet)`), recalculation and imports into another sheet switch to that sheet's runtime and back (in `finally`). Graph keys are always `SHEETID!A1` (`qualify` / `unqualify`, upper-cased, so whole-column keys become `SHEETID!A:`); spill maps keep bare keys because they are per sheet. One workbook-wide graph keeps recalculation topological across sheets. Notify bindings with the *active* sheet (`this.active.doc`), not the current one. Use sheet ids, not names, for keys, name scopes and undo entries: names change.
+
+### [core/spreadsheet] Sheet Prefixes in Formulas: `Sheet1` Looks Like a Cell, `!=` Is an Operator
+
+- **Issue / Symptom**: Rewriting `Sheet1:Sheet3!A1` after a rename produced `'Sheet1:End'!A1`; `=A1!=B1` and `='text'!=1` stopped parsing once `X!` became a sheet prefix; a quoted-prefix look-ahead could rescan the rest of a formula full of apostrophes from every quote.
+- **Root Cause**: The lexer's cell pattern (`[A-Za-z]+\d+`) has no column limit, so it calls `Sheet1` a cell reference; Excel only quotes names that are cells within its grid (columns up to `XFD`). `!=` is this engine's alias for `<>`. `'` also starts this engine's single-quoted strings.
+- **Solution / Workaround**: `sheetNameNeedsQuotes` uses a bounded cell test (1–3 letters ≤ XFD, row ≤ 1048576) plus R1C1 and boolean look-alikes. The lexer treats `X!` as a prefix only when `!` is not followed by `=`, and looks for `'name'!` at most 64 characters ahead (31-character names with doubled quotes), falling back to a string; the workbook test checks the growth ratio. Tokens carry `sheet`, `sheetEnd`, `refStart` and `end`, so `mapFormulaReferences` rewrites only the reference text after the prefix and keeps the prefix unless the result is `#REF!`.
+
+### [core/spreadsheet] LAMBDA Needs Environment Chains, Not a Scope Stack, and Names Must Not See the Caller's Variables
+
+- **Issue / Symptom**: With LET's scope stack, a lambda created in one LET and called inside another saw the caller's variables (`LET(k,10,f,LAMBDA(x,x+k),LET(k,1000,f(1)))` gave 1001), a defined name `=Rate*2` could pick up a LET variable named `Rate`, and runaway recursion (`Loop = LAMBDA(n, Loop(n+1))`) overflowed the JavaScript stack.
+- **Root Cause**: Closures capture the environment where they are created; a stack only knows where they are called. A defined name is evaluated where it is used, but its formula belongs to the name's scope.
+- **Solution / Workaround**: Variables live in linked `FormulaEnvironment`s; `FormulaLambda` keeps its creation environment (and, for sheet-scoped names, the sheet unqualified references mean), and calls install `{ params, parent: lambda.env }`. Defined names evaluate with `env = null` and a name stack that reports self-reference as `#CYCLE!`. Calls deeper than `MAX_LAMBDA_DEPTH` return `#NUM!`, and a `RangeError` from a smaller stack is caught in `evaluateWithDiagnostics` and reported as `#NUM!` too, so every save/restore of evaluator state must be in `finally`. Omitted arguments bind `''` but are recorded per environment, so `ISOMITTED(x)` is FALSE for an explicitly passed blank cell. Dependencies through names are expanded when a formula is registered (the cells a name refers to become the formula's dependencies), and any name change runs `recalculateAll`, because a new sheet-scoped name can shadow a workbook one.
+
+### [core/spreadsheet] One Edit Can Change the Conditional Look of Cells It Does Not Touch
+
+- **Issue / Symptom**: Re-evaluating conditional formats only at the edited cell left colour scales, data bars, top-N, above-average and duplicate highlights stale in the rest of the range, and missed formula rules (`=$A1>B$1`) and cells whose formulas depend on the edited cell.
+- **Root Cause**: Scales, bars, icons, top/bottom, averages and duplicates are computed from statistics over the whole applies-to range; formula rules can read any cell; and a typed value changes every dependent formula's value.
+- **Solution / Workaround**: The controller records every cell key its evaluation plan visits (the edited cell, its dependents and their spilled cells) and `ConditionalFormatEngine.update(rules, changed)` re-evaluates: the whole range of statistical rules whose range contains a changed cell (dropping their cached statistics), the whole range of rules that use formulas, and only the changed cells for local rules (cell value with constants, text, blanks, errors, dates). Any other document change (structural edits, sort, undo, rule edits) re-evaluates everything. A test compares incremental and full results.
+
+### [core/spreadsheet] Custom Validation Formulas Must See the Value Being Entered
+
+- **Issue / Symptom**: `=COUNTIF($A$1:$A$9,A1)=1` (no duplicates) accepted a duplicate, and `=A1>10` checked the cell's old value.
+- **Root Cause**: Validation runs before the input is committed, so evaluating the rule formula against the sheet reads the cell's current value.
+- **Solution / Workaround**: `DataValidationSheet.evaluateFormula(formula, row, col, entered)` receives the parsed input; the controller sets a temporary `valueOverride` that `resolveCellByCoord` and `resolveRangeByCoords` return for that cell, restored in `finally`. Rule formulas (validation and conditional formatting) are written for the top-left cell of the first range and offset with `offsetFormulaReferences` for other cells, so `$` parts stay put.
+
+### [react|svelte/spreadsheet] The Validation Alert Steals Focus, Which Blurs (and Re-commits) the Cell Editor
+
+- **Issue / Symptom**: After a rejected Enter, the dialog took focus, the cell input's `onBlur` called `commitEditing()` again and the alert re-opened in a loop; Enter also moved the cursor down although nothing was committed.
+- **Root Cause**: The cell editor commits on blur, and the grid's Enter/Tab handler always called `moveCursor` after `commitEditing`.
+- **Solution / Workaround**: While `controller.validationPrompt` is set, `commitEditing` / `commitCellInput` return `{ status: 'pending' }` without doing anything. Enter/Tab only move when the result is `committed`. The dialog backdrop calls `preventDefault()` on `mousedown` so clicks don't move focus, and after `resolveValidationPrompt` the editors refocus the cell input (retry) or the grid. Unchanged input is not validated, so blurring an untouched editor never alerts.
+
+### [svelte/spreadsheet] `{@const}` Calling a Controller Method Does Not Re-run on Controller State
+
+- **Issue / Symptom**: Turning on "Circle invalid data" drew no circles in Svelte (React re-renders everything and showed them).
+- **Root Cause**: `{@const circled = sheetState.controller.isInvalidDataCircled(r, c)}` reads only non-reactive controller state, so Svelte never re-evaluates it when the document state changes.
+- **Solution / Workaround**: Compute such values in a `$derived.by` that reads `sheetState.document` first (`void sheetState.document`), e.g. the set of circled cells, and look cells up in it. The conditional-format overlay is exposed the same way (`sheetState.conditionalFormatOverlay`).
+
+### [core/canvas] Tangent Curves Look Like Ties (or Clusters of Hits) to a Curve Boolean Engine
+
+- **Issue / Symptom**: Uniting two externally tangent circles, or a circle touching another from inside, traced a figure-eight ring or split curves into dozens of tiny pieces; repeated split passes kept finding "new" intersections next to the touch point.
+- **Root Cause**: Near a tangency the two curves stay within `epsilon` of each other over an arc of length about `√(ε·R)`, far longer than `ε`. Subdivision reports a hit for every flat sub-curve pair along it, and the vertex where they meet sits anywhere in that stretch, so the tangent directions there differ by numerical noise (`√(ε/R)` radians) and ordering the edges around the vertex by tangent angle picks an arbitrary one.
+- **Solution / Workaround**: In `packages/core/src/canvas/pathops/boolean.ts`, consecutive hits of one pair between which the curves never separate by more than a few `ε` are one contact (shared end points take part in the clustering, so hits next to an existing vertex are dropped). When tangent angles at a vertex tie within `1e-3` rad, edges are ordered by the chord to a point a short way along each curve, which separates them by curvature.
+
+### [core/canvas] Stroking With a Width Larger Than the Curvature Radius Leaves Spurious Holes
+
+- **Issue / Symptom**: Outline Stroke of a small circle with a thick stroke (or Offset Path growing a small curved shape) left a hole in the middle that the stroke really covers.
+- **Root Cause**: The inner offset of a curve turns inside out where the offset distance exceeds its radius of curvature; its loops wind the other way, so the non-zero fill of the raw outline cancels to 0 there.
+- **Solution / Workaround**: After normalising, drop a face (and its descendants) when a point deep inside it is closer to the source path than the offset distance: holes when growing or stroking, islands when insetting (`dropSpurious` in `packages/core/src/canvas/pathops/stroke.ts`). The deep point must be taken in the face (the ring minus its direct children); a ring's own interior can lie inside a legitimate hole, e.g. the middle of a stroked square.
+
+### [core/canvas] Gauss–Legendre Areas Need Both Halves
+
+- **Issue / Symptom**: Exact Bézier areas (lines and curves) came out twice too large next to the shoelace formula.
+- **Root Cause**: The area is `½ ∫ (x y′ − y x′) dt`, and mapping Gauss–Legendre nodes from `[-1, 1]` onto `[0, 1]` contributes another `½`. A line's term `x0 y1 − x1 y0` is already the integral, so it needs only the first `½`.
+- **Solution / Workaround**: `segmentAreaTerm` divides the 3-point Gauss–Legendre sum (exact for the degree-5 integrand of a cubic) by 4 and the line term by 2; tests compare `bezierPathSignedArea` of rectangles and quadratics with closed forms.
+
+### [core/extensions] TipTap Command Typings Vanish From the Published Declarations
+
+- **Issue / Symptom**: `editor.chain().focus().toggleBold().run()` (and `toggleHeading`, `toggleBulletList`, `toggleTaskList`, `setTextAlign`, …) failed to typecheck with "Property 'toggleBold' does not exist on type 'ChainedCommands'" in the demo, and in any app that uses `createRichTextPreset` without depending on the TipTap extension packages itself. The Vite build doesn't typecheck, so it went unnoticed.
+- **Root Cause**: Each extension package adds its commands by augmenting `@tiptap/core`'s `Commands` interface in its own `.d.ts`. That augmentation only applies when the consumer's TypeScript program loads that file. Core imports the extensions as runtime values, which leave no trace in the emitted declarations, and tsup's declaration bundler drops `/// <reference types="…" />` directives, so nothing pulled the packages in.
+- **Solution / Workaround**: `rich-text-preset.ts` exports `RichTextPresetCommandPackages`, a type naming `typeof import("@tiptap/…")` for every package whose commands the preset installs; the bundled `.d.ts`/`.d.cts` then import those packages (resolved from core's own dependencies). Add a package there when the preset gains an extension with commands. `apps/demo` now has a `typecheck` script, so `pnpm typecheck` (run in CI) catches regressions.

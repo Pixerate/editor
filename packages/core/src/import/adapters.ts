@@ -3,6 +3,7 @@ import { htmlToPlainText } from "../serializers/plain-text";
 import { plainTextToParagraphHtml, sanitizeImportedHtml } from "../serializers/html";
 import { rtfToPlainText } from "../serializers/rtf";
 import { docxImportAdapter } from "./docx";
+import type { ImportStructureReport } from "./pdf-layout";
 import {
   ImportAdapterRegistry,
   type FindImportAdapterQuery,
@@ -20,6 +21,11 @@ export interface DocumentImport {
   html: string;
   /** Plain-text version, used by plain-text (prompt) editors. */
   text: string;
+  /**
+   * What a structure-aware importer recognised (headings, lists, tables,
+   * columns) with confidences; set by the PDF adapter.
+   */
+  structure?: ImportStructureReport;
 }
 
 export type DocumentImportAdapter = ImportAdapter<DocumentImport>;

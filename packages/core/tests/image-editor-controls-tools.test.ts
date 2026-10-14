@@ -107,10 +107,13 @@ describe('image editor agent tools', () => {
     return { controller, registry };
   };
 
-  it('lists five tools with complete MCP annotations', () => {
+  it('lists the adjustment and selection tools with complete MCP annotations', () => {
     const { registry } = setup();
     const { tools } = registry.listTools();
-    expect(tools.map((t) => t.name)).toEqual(['get_adjustments', 'list_controls', 'set_adjustments', 'add_adjustment_layer', 'render_preview']);
+    expect(tools.map((t) => t.name)).toEqual([
+      'get_adjustments', 'list_controls', 'set_adjustments', 'add_adjustment_layer', 'render_preview',
+      'get_selection', 'select_region', 'select_by_color', 'modify_selection', 'refine_selection', 'apply_selection_as_mask',
+    ]);
     for (const t of tools) {
       expect(t.title).toBeTruthy();
       expect(t.annotations).toMatchObject({ title: expect.any(String) });
@@ -119,7 +122,7 @@ describe('image editor agent tools', () => {
       }
     }
     const readOnly = tools.filter((t) => t.annotations!.readOnlyHint).map((t) => t.name);
-    expect(readOnly).toEqual(['get_adjustments', 'list_controls', 'render_preview']);
+    expect(readOnly).toEqual(['get_adjustments', 'list_controls', 'render_preview', 'get_selection']);
   });
 
   it('get_adjustments and list_controls describe the state', async () => {

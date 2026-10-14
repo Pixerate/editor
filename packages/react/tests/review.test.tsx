@@ -14,6 +14,7 @@ import {
   CommentButton,
   CommentsPanel,
   ReviewToolbar,
+  TrackedChangesList,
   useComments,
   useTrackChanges,
 } from "../src";
@@ -303,5 +304,46 @@ describe("ReviewToolbar", () => {
     await render(<ReviewToolbar editor={editor} showDescription={false} />);
     expect(container.textContent).toContain("1 of 1");
     expect(container.querySelector("[data-change-type]")).toBeNull();
+  });
+});
+
+const MOVED_HTML =
+  '<p><ins data-change-type="insertion" data-change-id="m1" data-move-id="m1" data-author-id="alice" data-author-name="Alice" data-created-at="1">Moved para.</ins></p>' +
+  "<p>Stays.</p>" +
+  '<p><del data-change-type="deletion" data-change-id="m1" data-move-id="m1" data-author-id="alice" data-author-name="Alice" data-created-at="1">Moved para.</del></p>';
+
+describe("tracked moves in the review UI", () => {
+  it("ReviewToolbar describes a move and accepts both ends", async () => {
+    const { editor } = makeEditor(MOVED_HTML);
+    editor.commands.selectNextChange();
+    await render(<ReviewToolbar editor={editor} />);
+    const label = container.querySelector('[data-change-type="move"]')!;
+    expect(label.textContent).toBe('Alice: Moved "Moved para."');
+    await click(button("Accept"));
+    expect(editor.getHTML()).toBe("<p>Moved para.</p><p>Stays.</p>");
+  });
+
+  it("TrackedChangesList lists a move as one entry and rejects both ends", async () => {
+    const { editor } = makeEditor(
+      MOVED_HTML +
+        '<p>Plain <ins data-change-type="insertion" data-change-id="i1" data-author-id="bob" data-author-name="Bob" data-created-at="2">added</ins></p>',
+    );
+    await render(<TrackedChangesList editor={editor} />);
+    const items = Array.from(container.querySelectorAll("li"));
+    expect(items.map((li) => li.getAttribute("data-change-type"))).toEqual(["move", "insertion"]);
+    expect(items[0].textContent).toContain("Moved · Alice");
+    // Clicking selects the move's destination.
+    await click(items[0].querySelector("button")!);
+    expect(editor.state.selection.from).toBe(1);
+    await click(items[0].querySelectorAll("button")[2]);
+    expect(editor.getHTML()).toContain("<p>Stays.</p><p>Moved para.</p>");
+    expect(getTrackedChanges(editor).map((c) => c.type)).toEqual(["insertion"]);
+    expect(container.querySelectorAll("li")).toHaveLength(1);
+  });
+
+  it("TrackedChangesList shows an empty state", async () => {
+    const { editor } = makeEditor();
+    await render(<TrackedChangesList editor={editor} emptyState="Nothing here" />);
+    expect(container.textContent).toBe("Nothing here");
   });
 });

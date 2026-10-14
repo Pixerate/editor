@@ -26,6 +26,11 @@ reproduced at the end of this file. Paths are relative to each source repository
 - `crates/engine/src/measure_tests.rs` (test cases re-expressed) → `packages/core/tests/canvas-measure.test.ts`
 - `crates/layout/src/lib.rs` (`layout_frame`, `distribute`, `main_offsets`, `fit_hug_text`, `enforce_limits`, `item_baseline`, `resize_child`, `grid_place`, `resolve_tracks`, `track_content`, `grid_geometry`, `layout_grid`, `apply_constraints`, `layout_page`, `layout_up`, `coherent_sizing`, `clamp_size`) → `packages/core/src/canvas/autoLayout.ts`
 - `crates/layout/src/{tests.rs,behaviour_tests.rs,nested_tests.rs,content_align_tests.rs}` (test cases re-expressed) → `packages/core/tests/canvas-auto-layout.test.ts`
+- `crates/doc/src/styles.rs` (`Collection`, `Mode`, `Variable`, `VariableValue`, `Variables::resolve`, `default_mode`, `current_mode`, `find_mode`, `scopes_for`, `normalize_scopes`, `in_scope`) → `packages/core/src/tokens/types.ts`, `packages/core/src/tokens/model.ts`
+- `crates/engine/src/cmd/variables.rs` (`alias_target` cycle check, `forget_variables` alias detaching, `remove_mode`, `move_mode`, `rename_collection`, `delete_collection`, `field_scope`) → `packages/core/src/tokens/model.ts`, `packages/core/src/canvas/tokenBindings.ts`
+- `crates/doc/src/lib.rs` (`modes_for`: modes inherited down the tree) → `getEffectiveTokenModes` in `packages/core/src/canvas/tokenBindings.ts`
+- `crates/engine/src/variables_io_tests.rs` (behaviour of the variables JSON import / export: merging by name, junk and loop handling, CSS export per mode) → `packages/core/src/tokens/w3c.ts`, `packages/core/src/tokens/css.ts`
+- `crates/engine/src/{variable_tests.rs,variables_behaviour_tests.rs,variables_io_tests.rs}` (test cases re-expressed) → `packages/core/tests/tokens.test.ts`, `packages/core/tests/canvas-tokens.test.ts`
 
 ## filmcraft
 
@@ -50,6 +55,13 @@ reproduced at the end of this file. Paths are relative to each source repository
 - Test cases from the files above, re-expressed → `packages/core/tests/spreadsheet-typed-input.test.ts`
 - `crates/numfmt/src/lib.rs`, `parse.rs`, `render.rs`, `decimal.rs`, `builtin.rs` (Excel number format parsing and rendering, 15-digit decimal rounding, General format, `TEXT()`, built-in formats 0–49, parse cache) and `crates/core/src/date.rs` (serial to date) → `packages/core/src/spreadsheet/numfmt/`
 - `crates/numfmt/src/tests.rs` and `crates/numfmt/tests/poi_number_format_approx.rs` (test cases re-expressed) → `packages/core/tests/number-format.test.ts`, `packages/core/tests/fixtures/poi-number-format-approx.ts`
+- `crates/calc/src/eval.rs` (LET/LAMBDA environments and closures, lambda calls and argument counts, ISOMITTED, MAP/REDUCE/SCAN/BYROW/BYCOL/MAKEARRAY, functions passed by name, defined-name evaluation, recursion depth limit) → `packages/core/src/spreadsheet/formula/evaluator.ts`, `packages/core/src/spreadsheet/formula/lambda.ts`, `packages/core/src/spreadsheet/formula/functions/lambda.ts`
+- `crates/model/src/workbook.rs` (sheet name rules, defined-name lookup by scope) and `crates/engine/src/cmd/formulas.rs` (defined-name validation, R1C1 look-alikes, renaming names in formulas) → `packages/core/src/spreadsheet/workbook.ts`, `packages/core/src/spreadsheet/controller.ts`
+- `crates/formula/src/adjust.rs` and `crates/formula/src/printer.rs` (rename/delete sheet rewriting, 3-D span shrinking, sheet-name quoting) and `crates/engine/src/cmd/sheet.rs` (add, rename, move, copy and delete sheets with their names) → `packages/core/src/spreadsheet/formula/references.ts`, `packages/core/src/spreadsheet/controller.ts`
+- `crates/calc/src/tests.rs`, `crates/formula/src/tests.rs`, `crates/engine/src/tests.rs` and `crates/model/src/workbook.rs` tests (test cases re-expressed) → `packages/core/tests/spreadsheet-lambda.test.ts`, `packages/core/tests/spreadsheet-workbook.test.ts`
+- `crates/model/src/features.rs` (conditional formatting and data validation rule model, icon-set thresholds) and `crates/engine/src/cf.rs` (rule evaluation: priority, stop if true, colour scales, data bars, icon sets, top/bottom, averages, duplicates, text and date rules, relative rule formulas) → `packages/core/src/spreadsheet/conditional-format/`
+- `crates/engine/src/cmd/data.rs` (validation checks, list items, circle invalid data, removing rule cells) and `crates/engine/src/cmd/sheet.rs` (rule ranges following inserted / deleted rows and columns) → `packages/core/src/spreadsheet/validation/`, `packages/core/src/spreadsheet/rule-ranges.ts`
+- Test cases from `crates/engine/src/cf.rs` and `crates/engine/src/tests.rs` (icon-set thresholds, relative validation formulas), re-expressed → `packages/core/tests/spreadsheet-conditional-format.test.ts`, `packages/core/tests/spreadsheet-data-validation.test.ts`
 **Apache POI.** The rows of `packages/core/tests/fixtures/poi-number-format-approx.ts` (format, value and Excel's
 `TEXT()` result) come from Apache POI's `test-data/spreadsheet/NumberFormatApproxTests.xlsx`, as collected in
 GridCraft. Apache POI is © The Apache Software Foundation, licensed under the Apache License, Version 2.0
@@ -72,6 +84,9 @@ GridCraft. Apache POI is © The Apache Software Foundation, licensed under the A
 
 - `crates/compare/src/lib.rs` (`diff` with common prefix/suffix stripping, `myers` keeping only the −d..d frontier, patience `anchors` with longest increasing subsequence, recursion depth limit, grouping into inserted/deleted/replaced) → `packages/core/src/compare/diff.ts`
 - Test cases from the file above (`long_documents_with_scattered_edits`, `very_different_documents_finish`, `insertions_deletions_and_replacements`), re-expressed → `packages/core/tests/compare-diff.test.ts`
+- `crates/export/src/lib.rs` (`body_size`: body text size by character count; `level`: heading levels relative to it, bold body-size headings; `tables`: grid columns from aligned cell edges, rows from overlapping spans, spanning header and totals rows next to a run, the 63-column cap) → `packages/core/src/import/pdf-layout.ts`
+- `crates/edit/src/text_regions.rs` (`group_layout`: runs joined on a baseline across small gaps, rows grouped into blocks by pitch and alignment, line-end hyphens removed when joining rows) → `packages/core/src/import/pdf-layout.ts`
+- Test cases from `crates/export/src/lib.rs` (`grid_text_becomes_a_real_table_in_every_format`, `a_staircase_of_blocks_is_not_a_huge_table`, `two_column_body_text_is_not_mistaken_for_a_table`, `word_does_not_invent_borders_for_aligned_invoice_fields`), re-expressed → `packages/core/tests/pdf-layout.test.ts`
 
 ## photocraft
 
@@ -85,6 +100,11 @@ GridCraft. Apache POI is © The Apache Software Foundation, licensed under the A
 - `crates/color/src/convert.rs` (`D50`, `SRGB_TO_XYZ_D50`, `XYZ_D50_TO_SRGB`) → `packages/core/src/image-editor/adjustment-layers.ts`
 - `crates/algo/src/histogram.rs` (bounded RGB histogram, transparent exclusion, exact-endpoint clipping) → `packages/core/src/image-editor/histogram.ts`
 - Test cases from `crates/compose/src/adjust.rs`, `crates/compose/src/tests.rs`, `crates/doc/src/adjust.rs`, `crates/color/src/blend.rs` and `crates/algo/src/histogram.rs`, re-expressed → `packages/core/tests/image-editor-adjustment-layers.test.ts`, `packages/core/tests/image-editor-blend-histogram.test.ts`
+- `crates/algo/src/selection.rs` (`SelectionMode` / `combine`, `magic_wand` / `wand_region` span fill and anti-aliasing, `color_range_samples`, `tone_range`, `hue_range`, `expand` / `contract` / `border`, anti-aliased `polygon`) → `packages/core/src/image-editor/selection/mask.ts`, `shapes.ts`, `wand.ts`, `modify.ts`
+- `crates/algo/src/selection/distance.rs` (Felzenszwalb–Huttenlocher `edt`) and `crates/algo/src/selection_blur.rs` (Smooth: box + threshold; Feather: Gaussian with σ = radius) → `packages/core/src/image-editor/selection/modify.ts`
+- `crates/algo/src/matting.rs` (`RefineParams`, `box_mean`, `guided_filter_color`, `edge_width`, `refine_buffer` band / smooth / feather / contrast / `shift_mask`) → `packages/core/src/image-editor/selection/refine.ts`, `modify.ts`
+- `crates/engine/src/layer_mask_props_cmds.rs` and `crates/compose/src/masks.rs` (non-destructive mask density and feather) → `packages/core/src/image-editor/selection/layer-mask.ts`
+- Test cases from `crates/algo/src/selection.rs`, `crates/algo/src/selection_blur.rs`, `crates/algo/src/matting.rs` and `crates/algo/src/tests_selection_mix.rs`, re-expressed → `packages/core/tests/image-editor-selection.test.ts`, `packages/core/tests/image-editor-selection-controller.test.ts`
 
 ## soundcraft
 
@@ -102,6 +122,11 @@ GridCraft. Apache POI is © The Apache Software Foundation, licensed under the A
 - `crates/pathops/src/fit.rs` (`fit_cubics`, `fit_single`, `fit_single_from`, `generate`, `newton`, `chord_params`, `is_straight`) → `packages/core/src/canvas/curveFit.ts`
 - `crates/pathops/src/edit.rs` (`simplify_with` corner splitting) → `packages/core/src/canvas/curveFit.ts`
 - Test cases from the files above and `crates/pathops/tests/ops.rs`, re-expressed → `packages/core/tests/canvas-resize-snap.test.ts`, `packages/core/tests/canvas-curve-fit.test.ts`
+- `crates/pathops/src/boolean.rs` (`BoolOp::apply`, fill-rule `inside`, `Tidy::keeping` / `exact_merge`: rebuilding split pieces as exact sub-curves of the input curves, `is_sliver` mean-width sliver test) → `packages/core/src/canvas/pathops/boolean.ts`
+- `crates/pathops/src/offset.rs` (`offset_path`: fill ∪ / − a `2·|d|` stroke ring, open subpaths outlined with butt caps, spurious-contour removal by `deep_point` distance; `stroke_region`) → `packages/core/src/canvas/pathops/stroke.ts`
+- `crates/effects/src/stroke/dash.rs` (exact dash plans: odd patterns doubled, offset into the pattern, restart per subpath, joining across the start of a closed subpath, zero-length dots, invalid / too-fine patterns drawn solid) → `packages/core/src/canvas/pathops/stroke.ts`
+- `crates/pathops/src/boolean.rs` (`try_merge` refit of tangent-continuous runs) → `mergeSmoothRuns` in `packages/core/src/canvas/pathops/stroke.ts`
+- Test cases from `crates/pathops/tests/ops.rs`, `tests/props.rs`, `tests/prop_pathops.rs`, `crates/pathops/src/offset.rs` and `crates/engine/src/tests_outlinestroke.rs`, re-expressed → `packages/core/tests/canvas-pathops.test.ts`
 ---
 
 ## wordcraft
@@ -120,6 +145,10 @@ GridCraft. Apache POI is © The Apache Software Foundation, licensed under the A
 - `crates/engine/src/cmd/find_pattern.rs` (`compile`, `special`, `wildcards`, `count`, `class`, `find_code` / `replace_code` / `numeric_code`, `parse_replace`, `expand`) → `packages/core/src/extensions/find-replace/pattern.ts`
 - `crates/engine/src/cmd/edit.rs` (`search_full`: live-text haystack with a position map and cuts at tracked deletions, joining paragraphs only for `^p`, stepping past empty matches, match cap; `replace_all`: last-to-first, tracked path, paragraph splits) → `packages/core/src/extensions/find-replace/search.ts`, `packages/core/src/extensions/find-replace/extension.ts`
 - `crates/engine/src/tests.rs` (`find_replace`, `find_replace_special_codes`, `find_replace_wildcards`, `hostile_find_patterns_are_bounded`, `replace_under_track_changes_skips_deleted_text`, `find_reads_the_text_around_tracked_deletions`, `replace_all_is_tracked`, `replace_all_splits_paragraphs_at_a_paragraph_mark_in_the_replacement`; re-expressed) → `packages/core/tests/find-replace.test.ts`
+- `crates/engine/src/cmd/moves.rs` (`move_sized`; `cut_tracked` / `take_paste`: a tracked cut gets its own revision and the paste right after it, by the same author and of the same text, links both ends with a move name; `resolve`: accepting a move removes its source and keeps its destination, rejecting restores the source and removes the destination, a moved paragraph's emptied block goes with it) and `crates/engine/src/cmd/review.rs` (moves listed as one change, accepting or rejecting either end resolves both) → `packages/core/src/extensions/track-changes.ts`
+- Test cases from `crates/engine/src/cmd/moves.rs` (`a_tracked_cut_and_paste_of_a_paragraph_is_a_move`, `accepting_one_end_of_a_move_accepts_both`, `rejecting_a_move_puts_the_text_back`), re-expressed → `packages/core/tests/track-changes-moves.test.ts`
+- `crates/doc/src/styles.rs` (`Style` with `based_on` / `next` / `linked`, the built-in style set's shape, `gallery`, `chain` (bounded, cycle-safe), `find`, `upsert`, `remove` (rebasing dependants, dropping `next` / `linked` references), `new_id`) and `crates/doc/src/resolve.rs` (cascade: document defaults → paragraph style chain → character style chain → direct formatting) → `packages/core/src/extensions/paragraph-styles/registry.ts`
+- Test cases from `crates/doc/src/styles.rs` (`builtins_present`, `chain_is_cycle_safe`, `new_ids_unique`) and `crates/doc/src/resolve.rs` (`heading_resolves`, `char_style_then_direct`), re-expressed → `packages/core/tests/paragraph-styles.test.ts`
 
 ## MIT License
 

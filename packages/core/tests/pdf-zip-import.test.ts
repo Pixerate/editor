@@ -16,6 +16,8 @@ import {
   type FileLike,
   type PdfJsLike,
   type PdfJsTextItem,
+  type PdfDocumentImport,
+  summarizeImportStructure,
   type ZipDocumentImport,
 } from "../src";
 import { buildDocx, buildZip, p, r } from "./helpers/zip-writer";
@@ -140,6 +142,139 @@ describe("PDF import with an injected pdf.js", () => {
       message: expect.stringContaining("bad xref"),
     });
     expect(destroy).toHaveBeenCalled();
+  });
+});
+
+describe("PDF import with structure detection", () => {
+  /** A two-page fake PDF: title, list and a ruled table, with running headers and page numbers. */
+  function structuredPdfjs() {
+    const t = (str: string, x: number, y: number, size = 10, fontName = "f1"): PdfJsTextItem => ({
+      str,
+      transform: [size, 0, 0, size, x, y],
+      width: str.length * size * 0.5,
+      height: size,
+      fontName,
+    });
+    const header = t("Quarterly Report", 50, 780, 8);
+    const pages: PdfJsTextItem[][] = [
+      [
+        header,
+        t("Results <2026>", 50, 740, 20),
+        t("The figures below were collected over the whole quarter and checked twice.", 50, 715),
+        t("Highlights", 50, 690, 10, "f2"),
+        t("•", 50, 675),
+        t("Revenue grew", 60, 675),
+        t("•", 50, 661),
+        t("Costs fell", 60, 661),
+        t("1", 300, 40, 8),
+      ],
+      [
+        header,
+        t("Region", 54, 686, 10, "f2"),
+        t("Sales", 204, 686, 10, "f2"),
+        t("North", 54, 666),
+        t("120", 204, 666),
+        t("South", 54, 646),
+        t("95", 204, 646),
+        t("2", 300, 40, 8),
+      ],
+    ];
+    // Page 2's table grid as a classic operator list: a stroked rectangle per cell.
+    const rects: number[] = [];
+    for (const y of [680, 660, 640]) for (const x of [50, 200]) rects.push(x, y, 150, 20);
+    const operatorLists = [
+      { fnArray: [], argsArray: [] },
+      { fnArray: [91, 20], argsArray: [[Array(6).fill(19), rects, null], null] },
+    ];
+    const fonts: Record<string, unknown> = { f1: { name: "Helvetica" }, f2: { name: "Helvetica-Bold", bold: true } };
+    const destroy = vi.fn();
+    const pdfjs: PdfJsLike = {
+      getDocument: () => ({
+        promise: Promise.resolve({
+          numPages: pages.length,
+          destroy,
+          async getPage(n: number) {
+            return {
+              async getTextContent() {
+                return { items: pages[n - 1], styles: {} };
+              },
+              async getOperatorList() {
+                return operatorLists[n - 1];
+              },
+              commonObjs: { has: (id: string) => id in fonts, get: (id: string) => fonts[id] },
+            };
+          },
+        }),
+      }),
+    };
+    return { pdfjs, destroy };
+  }
+
+  it("imports headings, lists and ruled tables and reports them", async () => {
+    const { pdfjs, destroy } = structuredPdfjs();
+    const registry = createImportAdapterRegistry({ builtIns: false });
+    registry.register(createPdfImportAdapter(pdfjs));
+    const outcome = await registry.importFile<PdfDocumentImport>(binaryFile("report.pdf", new Uint8Array(4)));
+    const { html, text, structure } = outcome.result;
+    expect(html).toBe(
+      "<h1>Results &lt;2026&gt;</h1>" +
+        "<p>The figures below were collected over the whole quarter and checked twice.</p>" +
+        "<h2>Highlights</h2>" +
+        "<ul><li><p>Revenue grew</p></li><li><p>Costs fell</p></li></ul>" +
+        "<table><tbody><tr><th><p>Region</p></th><th><p>Sales</p></th></tr>" +
+        "<tr><td><p>North</p></td><td><p>120</p></td></tr>" +
+        "<tr><td><p>South</p></td><td><p>95</p></td></tr></tbody></table>",
+    );
+    expect(text).toContain("Results <2026>");
+    expect(text).not.toContain("Quarterly Report");
+    expect(structure.mode).toBe("structured");
+    expect(structure.counts).toEqual({ headings: 2, lists: 1, tables: 1, paragraphs: 1 });
+    expect(structure.removed).toEqual({ headers: 2, footers: 0, pageNumbers: 2 });
+    expect(structure.items.map((i) => i.type)).toEqual(["heading", "heading", "list", "table"]);
+    expect(destroy).toHaveBeenCalledTimes(1);
+
+    const summary = summarizeImportStructure([outcome]);
+    expect(summary).toMatchObject({ files: 1, mode: "structured", headings: 2, lists: 1, tables: 1 });
+    expect(summarizeImportStructure([])).toBeNull();
+  });
+
+  it("falls back to plain paragraphs per import through adapterOptions", async () => {
+    const { pdfjs } = structuredPdfjs();
+    const registry = createImportAdapterRegistry({ builtIns: false });
+    registry.register(createPdfImportAdapter(pdfjs));
+    const outcome = await registry.importFile<PdfDocumentImport>(binaryFile("report.pdf", new Uint8Array(4)), {
+      adapterOptions: { pdf: { structure: false } },
+    });
+    expect(outcome.result.html).not.toMatch(/<h1|<ul|<table/);
+    expect(outcome.result.html).toContain("<p>Quarterly Report</p>");
+    expect(outcome.result.structure.mode).toBe("plain");
+    expect(outcome.result.structure.counts.headings).toBe(0);
+    // And at creation time.
+    const plain = createImportAdapterRegistry({ builtIns: false });
+    plain.register(createPdfImportAdapter(pdfjs, { structure: false }));
+    const again = await plain.importFile<PdfDocumentImport>(binaryFile("report.pdf", new Uint8Array(4)));
+    expect(again.result.html).toBe(outcome.result.html);
+  });
+
+  it("inserts the structured document into an editor", async () => {
+    const { pdfjs } = structuredPdfjs();
+    const editor = new Editor({ extensions: createRichTextPreset(), content: "<p></p>" });
+    const registry = createImportAdapterRegistry({ builtIns: false });
+    registry.register(createPdfImportAdapter(pdfjs));
+    const outcomes = await importFilesIntoEditor(editor, [binaryFile("report.pdf", new Uint8Array(4))], { registry, at: 0 });
+    expect(outcomes).toHaveLength(1);
+    const html = editor.getHTML();
+    expect(html).toContain("<h1");
+    expect(html).toMatch(/<ul[ >]/);
+    expect(html).toContain("Revenue grew");
+    expect(summarizeImportStructure(outcomes)?.tables).toBe(1);
+    // adapterOptions pass through importFilesIntoEditor too.
+    const plain = await importFilesIntoEditor(editor, [binaryFile("report.pdf", new Uint8Array(4))], {
+      registry,
+      adapterOptions: { pdf: { structure: false } },
+    });
+    expect(summarizeImportStructure([...outcomes, ...plain])?.mode).toBe("mixed");
+    editor.destroy();
   });
 });
 

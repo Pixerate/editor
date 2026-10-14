@@ -5,4 +5,5 @@ export * from "./controller";
 export * from "./zip";
 export * from "./docx";
 export * from "./pdf";
+export * from "./pdf-layout";
 export * from "./zip-export";

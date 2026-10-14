@@ -7,8 +7,8 @@
 
 export type GenerationMediaKind = 'image' | 'video' | 'audio' | 'text';
 
-/** What a reference input is used for. */
-export type ReferenceRole =
+/** The reference roles this library knows by name (labels, aliases, schema order). */
+export type BuiltinReferenceRole =
 	| 'start_frame'
 	| 'end_frame'
 	| 'style_ref'
@@ -19,8 +19,24 @@ export type ReferenceRole =
 	| 'video_ref'
 	| 'audio_ref';
 
-/** Every reference role, in a stable display order. */
-export const REFERENCE_ROLES: readonly ReferenceRole[] = [
+/**
+ * What a reference input (an asset) is used for. The built-in roles are
+ * listed in {@link REFERENCE_ROLES}; models may declare any other role name
+ * (e.g. `subject`, `pose`) in `references.roles`, which makes it valid for
+ * that model. Role names match {@link REFERENCE_ROLE_NAME_REGEX}.
+ */
+export type ReferenceRole = BuiltinReferenceRole | (string & {});
+
+/** Valid role names: a letter, then letters, digits, `_` or `-`, not ending in `_` or `-`. */
+export const REFERENCE_ROLE_NAME_REGEX = /^[A-Za-z](?:[A-Za-z0-9_-]*[A-Za-z0-9])?$/;
+
+/** True for a string usable as a role name. */
+export function isReferenceRoleName(value: unknown): value is ReferenceRole {
+	return typeof value === 'string' && value.length <= 64 && REFERENCE_ROLE_NAME_REGEX.test(value);
+}
+
+/** Every built-in reference role, in a stable display order. */
+export const REFERENCE_ROLES: readonly BuiltinReferenceRole[] = [
 	'start_frame',
 	'end_frame',
 	'style_ref',
@@ -33,7 +49,7 @@ export const REFERENCE_ROLES: readonly ReferenceRole[] = [
 ];
 
 /** Human-readable default labels for reference roles. */
-export const REFERENCE_ROLE_LABELS: Readonly<Record<ReferenceRole, string>> = {
+export const REFERENCE_ROLE_LABELS: Readonly<Record<BuiltinReferenceRole, string>> = {
 	start_frame: 'Start frame',
 	end_frame: 'End frame',
 	style_ref: 'Style reference',
@@ -44,6 +60,80 @@ export const REFERENCE_ROLE_LABELS: Readonly<Record<ReferenceRole, string>> = {
 	video_ref: 'Video reference',
 	audio_ref: 'Audio reference'
 };
+
+/**
+ * Friendly role names accepted wherever a role is written by hand (asset
+ * mentions such as `@fox:style`, agent calls). A model that declares the
+ * alias itself (e.g. its own `style` role) keeps it; otherwise the alias maps
+ * to the built-in role. Keys are lower case.
+ */
+export const REFERENCE_ROLE_ALIASES: Readonly<Record<string, BuiltinReferenceRole>> = {
+	reference: 'image_ref',
+	image: 'image_ref',
+	style: 'style_ref',
+	character: 'character_ref',
+	background: 'background_ref',
+	'start-frame': 'start_frame',
+	'first-frame': 'start_frame',
+	first_frame: 'start_frame',
+	'end-frame': 'end_frame',
+	'last-frame': 'end_frame',
+	last_frame: 'end_frame',
+	'style-ref': 'style_ref',
+	'character-ref': 'character_ref',
+	'background-ref': 'background_ref',
+	'image-ref': 'image_ref',
+	'video-ref': 'video_ref',
+	'audio-ref': 'audio_ref',
+	video: 'video_ref',
+	audio: 'audio_ref'
+};
+
+const isBuiltinRole = (role: string): role is BuiltinReferenceRole =>
+	(REFERENCE_ROLES as readonly string[]).includes(role);
+
+/** Display label of a role: the model's label, the built-in label, or the name made readable. */
+export function referenceRoleLabel(role: ReferenceRole, caps?: ModelCapabilities): string {
+	const declared = caps?.references?.roles[role]?.label;
+	if (declared) return declared;
+	if (isBuiltinRole(role)) return REFERENCE_ROLE_LABELS[role];
+	const words = String(role).replace(/[_-]+/g, ' ').trim();
+	return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/**
+ * Canonical role for a hand-written name: the name itself when the model
+ * declares it (or, without a model, when it is built in), else its alias
+ * ({@link REFERENCE_ROLE_ALIASES}, case-insensitive), else the trimmed name.
+ */
+export function normalizeReferenceRole(role: string, caps?: ModelCapabilities): ReferenceRole {
+	const name = String(role).trim();
+	if (caps ? !!caps.references?.roles[name] : isBuiltinRole(name)) return name;
+	const lower = name.toLowerCase();
+	if (caps?.references?.roles[lower]) return lower;
+	if (!caps && isBuiltinRole(lower)) return lower;
+	return REFERENCE_ROLE_ALIASES[lower] ?? (isBuiltinRole(lower) ? lower : name);
+}
+
+/**
+ * Whether `mediaType` (a MIME type such as `image/png`, or a media kind such
+ * as `image`) matches one of `accepts` (`image`, `image/*`, `image/png`).
+ * An empty or missing `accepts` accepts everything; an unknown media type
+ * only matches a missing `accepts`.
+ */
+export function mediaTypeMatches(mediaType: string | undefined, accepts: readonly string[] | undefined): boolean {
+	if (!accepts || accepts.length === 0) return true;
+	if (!mediaType) return false;
+	const type = mediaType.split(';')[0].trim().toLowerCase();
+	const kind = type.split('/')[0];
+	return accepts.some((entry) => {
+		const pattern = entry.trim().toLowerCase();
+		if (pattern === '*' || pattern === '*/*' || pattern === type) return true;
+		if (!pattern.includes('/')) return pattern === kind;
+		if (pattern.endsWith('/*')) return pattern.slice(0, -2) === kind;
+		return false;
+	});
+}
 
 /** A choice from a fixed list. `options` order matters (low → high where it applies). */
 export interface EnumCapability<T extends string | number = string> {
@@ -98,6 +188,12 @@ export interface ReferenceRoleCapability {
 	min?: number;
 	label?: string;
 	description?: string;
+	/**
+	 * Media accepted for this role: kinds (`image`), wildcards (`image/*`) or
+	 * MIME types (`image/png`). Absent: anything. References whose
+	 * `mediaType` does not match are dropped or rejected by the planner.
+	 */
+	accepts?: readonly string[];
 }
 
 export interface ReferenceCapability {
@@ -188,6 +284,10 @@ export interface GenerationReference {
 	id: string;
 	role: ReferenceRole;
 	url?: string;
+	/** MIME type or media kind, checked against the role's `accepts`. */
+	mediaType?: string;
+	/** Content hash of the asset when it was referenced (used by generation records). */
+	contentHash?: string;
 }
 
 export type GenerationMode = 'generate' | 'edit' | 'inpaint';
@@ -241,10 +341,17 @@ export function seedCapability(value: boolean | SeedCapability | undefined): See
 	return value === true ? {} : value;
 }
 
-/** Supported reference roles of a model in {@link REFERENCE_ROLES} order. */
+/**
+ * Supported reference roles of a model: built-in roles in
+ * {@link REFERENCE_ROLES} order, then custom roles in declaration order.
+ */
 export function supportedReferenceRoles(caps: ModelCapabilities): ReferenceRole[] {
 	const roles = caps.references?.roles ?? {};
-	return REFERENCE_ROLES.filter((role) => (roles[role]?.max ?? 0) > 0);
+	const builtin: ReferenceRole[] = REFERENCE_ROLES.filter((role) => (roles[role]?.max ?? 0) > 0);
+	const custom = Object.keys(roles).filter(
+		(role) => !isBuiltinRole(role) && isReferenceRoleName(role) && (roles[role]?.max ?? 0) > 0
+	);
+	return [...builtin, ...custom];
 }
 
 /** Supported generation modes of a model. */

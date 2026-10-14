@@ -57,6 +57,8 @@ import {
 } from "lucide-react";
 import { demoCommandRegistry, demoToolRegistry } from "../agentTools";
 import { AutoLayoutDemo } from "./AutoLayoutDemo";
+import { TokensDemo } from "./TokensDemo";
+import { ShapeOpsDemo } from "./ShapeOpsDemo";
 
 type BoxData = { label: string; color: string; locked?: boolean };
 type BoxNode = Node<BoxData, "box">;
@@ -358,6 +360,9 @@ const CanvasDemo: React.FC = () => {
       </p>
 
       <AutoLayoutDemo />
+
+      <TokensDemo />
+      <ShapeOpsDemo />
     </div>
   );
 };

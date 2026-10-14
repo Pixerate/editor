@@ -313,3 +313,45 @@ mapRawOffsetToResolved(3, map); // 1  (inside "{?x}")
 ## 4. Editor Styling
 
 The `GradientText` extension decorates tokens in the live editor. Variables with a default get a dashed underline and `data-default` / `data-description` attributes (shown as a tooltip). Balanced conditional tags get an amber highlight and `data-conditional="if" | "unless" | "end"`. Tags are paired across the whole document, so a section may span paragraphs. Unbalanced tags get a red wavy underline and `data-conditional-error`.
+
+---
+
+## 5. Asset Mentions with Roles
+
+An asset mention can say what the asset is for: `@fox_photo:subject`, `@"Old Monet":style`. Roles are not part of the prompt grammar (prompts tokenize exactly as before); they belong to mentions.
+
+- **Text syntax is opt-in.** `extractMentions(text)` and `preprocessMarkdownMentions(text)` behave exactly as before. Pass `{ roles: true }` (any role name) or `{ roles: ["style", "subject"] }` (only these, case-insensitive) to read `:role`. `findTextMentions(text)` (roles on by default) returns every mention with offsets, and `setMentionRoleInText(text, start, role | null)` adds, replaces or removes a role.
+- **Mention nodes** store the role in the `assetRole` attribute, rendered as `data-role`. Mentions without a role render exactly as before, and an entity's own `role` field (e.g. a job title) is ignored. `getMentionNodes(editor)` and `setMentionRoleAt(editor, pos, role)` edit roles in rich text. `htmlToPlainText` writes `@label:role`. `extractMentionsFromDoc` and `extractMentions(html, { details: true })` report `role`.
+- **Models declare roles.** `references.roles` in `ModelCapabilities` lists the roles a model accepts, with `max`, `min`, `label` and `accepts` (media kinds, wildcards or MIME types: `["image"]`, `["image/*"]`, `["image/png"]`). Built-in roles (`style_ref`, `character_ref`, `start_frame`, …) keep their labels. Any other name a model declares (`subject`, `pose`) is valid for that model. Hand-written aliases (`style`, `character`, `reference`, `start-frame`, …) map to built-in roles unless the model declares the alias itself (`normalizeReferenceRole`).
+- **Planning.** Pass mentions as `planGenerationRequest(request, caps, { mentions })`. They become references and are checked per role. An alias is snapped to the model's role. A media type the role does not accept, a role the model does not take, or too many assets for a role are dropped (under `nearest` / `downgrade`) or reported as errors (under `error` / `upgrade`). A mention without a role gets `defaultMentionRole` or the first role that accepts its media (reported as `defaulted`). `validateAssetMentions` and `describeAssetMentions` report the same problems per mention for UI feedback. `capabilitiesToJsonSchema` and the agent tools list role enums, including custom roles.
+
+React and Svelte ship `<AssetMentionChips content assets capabilities onChange />`. It shows each asset mention as a chip with a role badge and opens a role picker popover when clicked.
+
+---
+
+## 6. Generation Records and Recreate
+
+`createGenerationRecord(options)` records everything needed to reproduce an output:
+
+- the provenance (`createProvenance`): raw prompt, the exact body and version of every template the prompt reached, variable values, the resolved prompt and source map, the planned request and its adjustments;
+- a hash per template body, a hash of the model's capabilities (presentation fields and timing are left out), and a hash of the resolved prompt;
+- the user's original settings before planning, the strategy, the seed, and the referenced assets with roles, media types and content hashes;
+- `parentId` and `kind` (`generate`, `recreate`, `variation`), with timestamps.
+
+The hashes (`hashText`) are short and stable, and detect changes. They are not cryptographic.
+
+`recreateRequest(record, { templates, capabilities, assets, mode })` rebuilds the request and reports **drift**:
+
+| Drift | When |
+| :--- | :--- |
+| `template-changed` / `template-missing` | A template's current body differs from the recorded one, or the template is gone (the recorded body is used) |
+| `prompt-changed` | The re-resolved prompt differs |
+| `model-missing` (blocking) / `model-changed` | The model is gone, or its capability hash changed |
+| `setting-unsupported` / `setting-changed` | A recorded setting is no longer accepted (`exact`), or the original settings now plan differently (`latest`). Plan errors are blocking |
+| `asset-missing` (blocking) / `asset-changed` | A referenced asset is gone, or its content hash changed |
+
+`mode: "exact"` (default) uses the recorded template bodies and the planned settings that were sent. `mode: "latest"` resolves the raw prompt with today's templates and re-plans the original settings. Both modes report template edits; only `latest` applies them. `result.ok` is false when an item has `severity: "error"`. `result.recordOptions` can be passed to `createGenerationRecord` once the new job has run. Called with bare provenance, `recreateRequest(provenance)` still returns the request that was sent, as it did before.
+
+`variationRequest(record, { seed, values, settings, rawPrompt })` returns the same request with a new seed (random within the model's range, never the recorded one) and your overrides.
+
+`createGenerationRecordStore({ storage })` persists records on any persistence adapter (memory, localStorage, IndexedDB, OPFS). It provides `put`, `get`, `list` / `summaries` with filters (`model`, `template` name or id, `asset`, `role`, `kind`, `parentId`, `since` / `until`, `text`, `offset` / `limit`, newest first), `remove`, `prune({ maxRecords, olderThan, keep })` and `subscribe`. React's `<GenerationHistory>` + `useGenerationRecords(store)` and Svelte's `<GenerationHistory>` + `createGenerationRecords(store)` list records with role badges and the drift report, and have Recreate (exact / latest) and Variation buttons.

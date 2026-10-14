@@ -11,3 +11,5 @@ export * from './histogram';
 export * from './controls';
 export * from './tools';
 export * from './curve-editing';
+export * from './selection';
+export * from './selection-tools';

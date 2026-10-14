@@ -1,4 +1,5 @@
 import type { BlendMode } from './blend';
+import type { SelectionMask, SerializedSelection } from './selection/mask';
 
 export interface ImageDimensions {
   width: number;
@@ -195,6 +196,28 @@ export interface AdjustmentLayerBase {
   opacity: number;
   /** How the adjusted colour is blended over the layers below. */
   blend: BlendMode;
+  /**
+   * Optional layer mask (natural image pixels): where it is 0 the layer has no effect. Missing:
+   * the layer applies everywhere (layers saved before masks existed are unchanged).
+   */
+  mask?: AdjustmentLayerMask;
+}
+
+/**
+ * A layer mask: 8-bit coverage of the source image, run-length encoded (see
+ * `encodeSelectionRle`), plus non-destructive density and feather.
+ */
+export interface AdjustmentLayerMask {
+  width: number;
+  height: number;
+  /** `r1:` run-length encoding of the mask bytes. */
+  rle: string;
+  /** 0..1 (missing = 1). */
+  density?: number;
+  /** Gaussian σ in pixels (missing = 0). */
+  feather?: number;
+  /** `false` keeps the mask but ignores it. */
+  enabled?: boolean;
 }
 
 /** A non-destructive adjustment layer (Photoshop's Layer › New Adjustment Layer). */
@@ -326,6 +349,13 @@ export interface ImageEditorState {
   zoom: number;
   pan: ImagePoint;
   isOriginalCompared: boolean;
+  /**
+   * The active selection (8-bit coverage over the source image), or null/missing when nothing is
+   * selected. Recorded in undo history and saved as `selection` in `toJSON()`.
+   */
+  selection?: SelectionMask | null;
+  /** Quick Mask view: tint the unselected area instead of drawing marching ants (view state). */
+  quickMask?: boolean;
 }
 
 export interface SerializedImageEditorState {
@@ -339,6 +369,8 @@ export interface SerializedImageEditorState {
   adjustments: ImageAdjustments;
   depthMask: DepthMaskOptions;
   annotations: Annotation[];
+  /** The active selection, run-length encoded. Missing when nothing is selected. */
+  selection?: SerializedSelection;
 }
 
 export interface ExportOptions {
