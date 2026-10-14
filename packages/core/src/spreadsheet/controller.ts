@@ -11,7 +11,8 @@ import {
   FilterRule,
   SpreadsheetFilterState,
   GroupAggregate,
-  GroupSummary
+  GroupSummary,
+  SpreadsheetSpill
 } from './types';
 import {
   FormulaEvaluator,
@@ -22,6 +23,9 @@ import {
   remapFormulaReferences,
   offsetFormulaReferences,
   WHOLE_COLUMN_END_ROW,
+  describeFormulaError,
+  isFormulaError,
+  type FormulaRange,
   type StructuralChange,
   type CellPosition
 } from './formula';
@@ -81,6 +85,24 @@ export interface SpreadsheetControllerOptions {
 /** Module-wide sequence that makes generated row, column and filter ids unique. */
 let nextIdSequence = 0;
 
+/** A placed dynamic array: derived state, rebuilt by every recalculation. */
+interface SpillRecord {
+  anchor: string;
+  row: number;
+  col: number;
+  rows: number;
+  cols: number;
+  /** Column-major values, anchor (top-left) first. */
+  values: any[];
+  /** The spilled cells (anchor excluded). */
+  cells: Array<{ key: string; rowId: string; colId: string }>;
+}
+
+// Recalculation passes after spill ranges change (see recalculateKeys).
+const MAX_SPILL_PASSES = 25;
+
+const spillCellId = (rowId: string, colId: string) => `${rowId}\u0000${colId}`;
+
 export class SpreadsheetController {
   public document: SpreadsheetDocument;
   public activeCell: CellCoordinate | null = null;
@@ -106,6 +128,16 @@ export class SpreadsheetController {
   private pendingCommits: Array<[string, string, string]> = [];
   // Row being evaluated, so [property] references resolve per row.
   private evaluatingRowIndex: number | null = null;
+  // Cell being evaluated, for implicit intersection (`=@A:A`).
+  private evaluatingCell: { col: string; row: number } | null = null;
+
+  // Dynamic arrays. Spilled values are derived state: they live here, not in
+  // the document, and every recalculation rebuilds them.
+  private spills = new Map<string, SpillRecord>(); // anchor key -> spill
+  private spilledBy = new Map<string, string>(); // spilled cell key -> anchor key
+  private spillCells = new Map<string, CellData>(); // spillCellId -> displayed cell
+  // Cells whose spill ownership changed during the current pass.
+  private spillChanges: Set<string> | null = null;
 
   constructor(options: SpreadsheetControllerOptions = {}) {
     const defaultCols: SpreadsheetColumn[] = [
@@ -145,7 +177,9 @@ export class SpreadsheetController {
     this.evaluator = new FormulaEvaluator({
       resolveCell: (colStr, rowNum) => this.resolveCellByCoord(colStr, rowNum),
       resolveRange: (sCol, sRow, eCol, eRow) => this.resolveRangeByCoords(sCol, sRow, eCol, eRow),
-      resolveProperty: (prop) => this.resolveCurrentRowProperty(prop)
+      resolveProperty: (prop) => this.resolveCurrentRowProperty(prop),
+      resolveSpill: (colStr, rowNum) => this.resolveSpillByCoord(colStr, rowNum),
+      getFormulaCell: () => this.evaluatingCell
     });
 
     this.syncWithDataSource();
@@ -207,6 +241,11 @@ export class SpreadsheetController {
 
   public getCell(rowId: string, colId: string): CellData {
     const existing = this.document.cells[rowId]?.[colId];
+    if (existing && existing.raw !== '') return existing;
+    if (this.spillCells.size > 0) {
+      const spilled = this.spillCells.get(spillCellId(rowId, colId));
+      if (spilled) return spilled;
+    }
     if (existing) return existing;
 
     const col = this.document.columns.find((c) => c.id === colId);
@@ -296,7 +335,32 @@ export class SpreadsheetController {
    */
   public recalculateCell(rowId: string, colId: string): void {
     const cellKey = this.getCellKey(rowId, colId);
-    this.runEvaluationPlan(this.depGraph.getEvaluationPlan([cellKey], { includeDependents: true }));
+    // Typing into a spilled cell blocks its array: the anchor recalculates (#SPILL!).
+    const anchor = this.spilledBy.get(cellKey);
+    this.recalculateKeys(anchor ? [cellKey, anchor] : [cellKey], true);
+  }
+
+  /**
+   * Recalculates `keys` (and, with `includeDependents`, their dependents) in
+   * dependency order. Spill ranges are only known after evaluating their
+   * anchors, so when a pass changes which cells hold spilled values (and so
+   * the dependency graph), the dependents of those cells are recalculated in
+   * another pass, until nothing changes.
+   */
+  private recalculateKeys(keys: Iterable<string>, includeDependents: boolean): void {
+    let pending = Array.from(keys);
+    let withDependents = includeDependents;
+    for (let pass = 0; pass < MAX_SPILL_PASSES && pending.length > 0; pass++) {
+      const changed = new Set<string>();
+      this.spillChanges = changed;
+      try {
+        this.runEvaluationPlan(this.depGraph.getEvaluationPlan(pending, { includeDependents: withDependents }));
+      } finally {
+        this.spillChanges = null;
+      }
+      pending = Array.from(changed);
+      withDependents = true;
+    }
   }
 
   /**
@@ -305,6 +369,9 @@ export class SpreadsheetController {
    */
   public recalculateAll(): void {
     this.depGraph.clear();
+    this.spills.clear();
+    this.spilledBy.clear();
+    this.spillCells.clear();
     const formulaKeys: string[] = [];
     for (const row of this.document.rows) {
       for (const col of this.document.columns) {
@@ -317,7 +384,7 @@ export class SpreadsheetController {
         }
       }
     }
-    this.runEvaluationPlan(this.depGraph.getEvaluationPlan(formulaKeys));
+    this.recalculateKeys(formulaKeys, false);
   }
 
   private runEvaluationPlan(plan: { order: string[]; cyclic: Set<string> }): void {
@@ -348,9 +415,15 @@ export class SpreadsheetController {
     // A direct self reference (A1 = A1+1, or SUM(A:A) in column A) gets its own message.
     const deps = this.depGraph.getDependencies(cellKey);
     const selfReference = deps.includes(cellKey) || deps.includes(`${col.key.toUpperCase()}:`);
+    const spilledKeys = this.depGraph.getSpilledKeys(cellKey);
+    const ownSpill = deps.find((dep) => spilledKeys.includes(dep));
     const errorMessage = selfReference
       ? "This formula can't reference its own cell."
-      : 'This formula is part of a circular reference: it depends on its own result through other cells.';
+      : ownSpill
+        ? `This formula refers to ${ownSpill}, which holds its own spilled results (a circular reference).`
+        : 'This formula is part of a circular reference: it depends on its own result through other cells.';
+    // Keep the spill edges, so the cycle stays detected on the next pass.
+    this.clearSpill(cellKey.toUpperCase(), true);
     this.document.cells[row.id][col.id] = { ...cell, value: '#CYCLE!', error: '#CYCLE!', errorMessage };
   }
 
@@ -370,26 +443,191 @@ export class SpreadsheetController {
         cell.error = undefined;
         cell.errorMessage = undefined;
       }
+      // No longer a formula: drop any array it spilled.
+      this.clearSpill(`${colName}${rowNum}`);
       return;
     }
 
     try {
       this.evaluatingRowIndex = rowNum - 1;
+      this.evaluatingCell = { col: colName, row: rowNum };
       const result = this.evaluator.evaluateWithDiagnostics(cell.raw);
       if (!this.document.cells[row.id]) {
         this.document.cells[row.id] = {};
       }
+      let { value, error, message } = result;
+      if (result.array) {
+        const blocked = this.placeSpill(`${colName}${rowNum}`, rowNum - 1, this.document.columns.indexOf(col), result.array);
+        if (blocked) {
+          value = '#SPILL!';
+          error = '#SPILL!';
+          message = blocked;
+        }
+      } else {
+        this.clearSpill(`${colName}${rowNum}`);
+      }
       this.document.cells[row.id][col.id] = {
         ...cell,
-        value: result.value,
+        value,
         // `#ERROR!` (malformed formula, wrong argument count) keeps its
         // message in `error`, as before; other errors store their code.
-        error: result.error === '#ERROR!' ? result.message : result.error,
-        errorMessage: result.message
+        error: error === '#ERROR!' ? message : error,
+        errorMessage: message
       };
     } finally {
       this.evaluatingRowIndex = null;
+      this.evaluatingCell = null;
     }
+  }
+
+  // --- Dynamic arrays (spilling) ---
+
+  /**
+   * Spills `array` from the anchor at (row, col) into the cells below and to
+   * the right. Returns why it can't (the anchor then shows `#SPILL!`), or
+   * null once placed. The grid never grows to fit an array, as in Excel.
+   */
+  private placeSpill(anchor: string, row: number, col: number, array: FormulaRange): string | null {
+    const { rows, cols } = array;
+    const area: CellRange = { startRow: row, startCol: col, endRow: row + rows - 1, endCol: col + cols - 1 };
+    const label = `${indexToColName(area.startCol)}${area.startRow + 1}:${indexToColName(area.endCol)}${area.endRow + 1}`;
+    let reason: string | null = null;
+    const blockers: string[] = [];
+
+    if (area.endRow >= this.document.rows.length || area.endCol >= this.document.columns.length) {
+      reason = `The ${rows}×${cols} result needs ${label}, which extends past the edge of the sheet.`;
+    } else if (this.getMerges().some((m) => rangesIntersect(m, area))) {
+      reason = `The result can't spill into merged cells (it needs ${label}).`;
+    } else {
+      for (let c = area.startCol; c <= area.endCol; c++) {
+        const column = this.document.columns[c];
+        for (let r = area.startRow; r <= area.endRow; r++) {
+          if (r === row && c === col) continue;
+          const rowObj = this.document.rows[r];
+          const key = `${column.key}${r + 1}`.toUpperCase();
+          const stored = this.document.cells[rowObj.id]?.[column.id];
+          const raw = stored ? stored.raw : this.getDerivedCell(rowObj, column).raw;
+          const owner = this.spilledBy.get(key);
+          if (raw !== '') {
+            blockers.push(key);
+            reason ??= `The result needs ${label}, but ${key} isn't empty.`;
+          } else if (owner && owner !== anchor) {
+            blockers.push(key);
+            reason ??= `The result needs ${label}, but ${key} already holds values spilled from ${owner}.`;
+          }
+        }
+      }
+    }
+
+    if (reason) {
+      this.clearSpill(anchor);
+      // Clearing a blocking cell recalculates this anchor.
+      this.depGraph.setSpillEdges(anchor, [], blockers);
+      return reason;
+    }
+
+    const previous = this.spills.get(anchor);
+    const cells: SpillRecord['cells'] = [];
+    for (let c = 0; c < cols; c++) {
+      const column = this.document.columns[col + c];
+      for (let r = 0; r < rows; r++) {
+        if (r === 0 && c === 0) continue;
+        const rowObj = this.document.rows[row + r];
+        const key = `${column.key}${row + r + 1}`.toUpperCase();
+        const value = array.values[c * rows + r] ?? '';
+        const display: CellData = { raw: '', value, format: column.format, spillAnchor: anchor };
+        if (isFormulaError(value)) {
+          display.error = value;
+          display.errorMessage = describeFormulaError(value);
+        }
+        this.spillCells.set(spillCellId(rowObj.id, column.id), display);
+        if (this.spilledBy.get(key) !== anchor) {
+          this.spilledBy.set(key, anchor);
+          this.spillChanges?.add(key);
+        }
+        cells.push({ key, rowId: rowObj.id, colId: column.id });
+      }
+    }
+    if (previous) {
+      const kept = new Set(cells.map((cell) => cell.key));
+      for (const old of previous.cells) {
+        if (kept.has(old.key)) continue;
+        this.forgetSpilledCell(anchor, old);
+      }
+    }
+    this.spills.set(anchor, { anchor, row, col, rows, cols, values: array.values, cells });
+    this.depGraph.setSpillEdges(anchor, cells.map((cell) => cell.key));
+    return null;
+  }
+
+  /** Removes the array spilled from `anchor`. With `keepEdges`, its dependency edges stay. */
+  private clearSpill(anchor: string, keepEdges = false): void {
+    const record = this.spills.get(anchor);
+    if (record) {
+      for (const cell of record.cells) this.forgetSpilledCell(anchor, cell);
+      this.spills.delete(anchor);
+    }
+    if (!keepEdges) this.depGraph.setSpillEdges(anchor, []);
+  }
+
+  private forgetSpilledCell(anchor: string, cell: SpillRecord['cells'][number]): void {
+    if (this.spilledBy.get(cell.key) !== anchor) return;
+    this.spilledBy.delete(cell.key);
+    this.spillCells.delete(spillCellId(cell.rowId, cell.colId));
+    this.spillChanges?.add(cell.key);
+  }
+
+  private resolveSpillByCoord(colStr: string, rowNum: number): FormulaRange | string {
+    const record = this.spills.get(`${colStr}${rowNum}`.toUpperCase());
+    if (record) return { rows: record.rows, cols: record.cols, values: record.values };
+    const value = this.resolveCellByCoord(colStr, rowNum);
+    return isFormulaError(value) ? value : '#REF!';
+  }
+
+  private toSpill(record: SpillRecord): SpreadsheetSpill {
+    const row = this.document.rows[record.row];
+    const col = this.document.columns[record.col];
+    return {
+      key: record.anchor,
+      anchor: { row: record.row, col: record.col },
+      range: {
+        startRow: record.row,
+        startCol: record.col,
+        endRow: record.row + record.rows - 1,
+        endCol: record.col + record.cols - 1
+      },
+      formula: row && col ? this.getCell(row.id, col.id).raw : ''
+    };
+  }
+
+  /**
+   * The dynamic array covering (row, col), whether it is the anchor (the cell
+   * holding the formula) or a spilled cell; null when there is none.
+   */
+  public getSpillAt(row: number, col: number): SpreadsheetSpill | null {
+    if (this.spills.size === 0) return null;
+    const key = `${indexToColName(col)}${row + 1}`;
+    const record = this.spills.get(key) ?? this.spills.get(this.spilledBy.get(key) ?? '');
+    return record ? this.toSpill(record) : null;
+  }
+
+  /** Every dynamic array currently spilled. */
+  public getSpills(): SpreadsheetSpill[] {
+    return Array.from(this.spills.values(), (record) => this.toSpill(record));
+  }
+
+  /** Whether `range` overlaps a spilled array (its anchor or spilled cells). */
+  private intersectsSpill(range: CellRange): boolean {
+    for (const record of this.spills.values()) {
+      const area: CellRange = {
+        startRow: record.row,
+        startCol: record.col,
+        endRow: record.row + record.rows - 1,
+        endCol: record.col + record.cols - 1
+      };
+      if (rangesIntersect(area, range)) return true;
+    }
+    return false;
   }
 
   private resolveCellByCoord(colStr: string, rowNum: number): any {
@@ -835,7 +1073,17 @@ export class SpreadsheetController {
     const r = range
       ? normalizeRange(range)
       : { startRow: 0, startCol: 0, endRow: this.document.rows.length - 1, endCol: this.document.columns.length - 1 };
-    const cells = this.readMatrix(r).map((row) => row.map((cell) => ({ raw: cell.raw, value: cell.error || cell.value })));
+    const cells = this.readMatrix(r).map((row) =>
+      row.map((cell) => {
+        const value = cell.error || cell.value;
+        // A spilled value is pasted as a constant unless its anchor (whose
+        // formula re-spills) is copied too.
+        if (cell.spillAnchor && !this.spillAnchorInRange(cell.spillAnchor, r)) {
+          return { raw: value === null || value === undefined ? '' : String(value), value };
+        }
+        return { raw: cell.raw, value };
+      })
+    );
     return createSpreadsheetClipboardData(cells, { row: r.startRow, col: r.startCol });
   }
 
@@ -858,6 +1106,11 @@ export class SpreadsheetController {
     });
     this.selectRange(r);
     return true;
+  }
+
+  private spillAnchorInRange(anchor: string, range: CellRange): boolean {
+    const record = this.spills.get(anchor);
+    return !!record && rangeContains(range, record.row, record.col);
   }
 
   private getSelectionTopLeft(): CellPosition {
@@ -966,6 +1219,8 @@ export class SpreadsheetController {
 
     const area: CellRange = { startRow, startCol, endRow, endCol };
     if ((this.document.table?.merges ?? []).some((m) => rangesIntersect(m, area))) return false;
+    // Part of a dynamic array can't move (Excel: "You can't change part of an array").
+    if (this.intersectsSpill(area)) return false;
 
     const sourceRows: number[] = [];
     for (let r = startRow; r <= endRow; r++) sourceRows.push(r);
@@ -1220,6 +1475,7 @@ export class SpreadsheetController {
     }
     const merges = this.getMerges();
     if (merges.some((m) => rangesIntersect(m, r) && !rangeContainsRange(r, m))) return false;
+    if (this.intersectsSpill(r)) return false;
 
     this.applyTableChange(() => {
       for (let row = r.startRow; row <= r.endRow; row++) {
@@ -1241,9 +1497,10 @@ export class SpreadsheetController {
     const merges = this.getMerges();
     const remaining = merges.filter((m) => !rangesIntersect(m, range));
     if (remaining.length === merges.length) return false;
+    // Recalculate: the merge may have blocked a dynamic array (#SPILL!).
     this.applyTableChange(() => {
       this.table.merges = remaining;
-    });
+    }, { recalculate: true });
     return true;
   }
 
@@ -1378,6 +1635,7 @@ export class SpreadsheetController {
     const width = s.endCol - s.startCol + 1;
     const t: CellRange = { startRow: s.startRow, startCol: s.startCol, endRow: s.startRow + width - 1, endCol: s.startCol + height - 1 };
     if (this.getMerges().some((m) => rangesIntersect(m, s) || rangesIntersect(m, t))) return false;
+    if (this.intersectsSpill(s) || this.intersectsSpill(t)) return false;
 
     this.applyTableChange(() => {
       this.growGrid(t.endRow, t.endCol);

@@ -37,6 +37,7 @@ pnpm add @pixerate/editor-svelte @xyflow/svelte
 | [`createCanvasExplosion`](#createcanvasexplosiongraph-options) | Multi-node explosion, fan-out/bezier trajectory animation, spatial displacement ("make space"), and reversible collapse. |
 | [`createCanvasArrange`](#createcanvasarrangeoptions) | Align, distribute, make same size, lock / unlock, layer order and smart guides with snap-to-shape. |
 | [`createCanvasScenes`](#createcanvasscenesoptions) | Named saved viewports (Freeform "Scenes") with next / previous, reorder, rename and JSON persistence. |
+| [`ShapeNode` / shape operations](#shape-nodes-and-boolean-operations) | Shape nodes (rect, ellipse, polygon, star, SVG path) and Unite / Intersect / Subtract / Exclude / Divide. |
 | `types` | Generic TypeScript interfaces (`CanvasNode`, `CanvasEdge`, `GraphDifferences`, `CanvasLayoutOptions`, etc.). |
 
 ---
@@ -344,4 +345,66 @@ Named saved viewports backed by the headless `CanvasScenesStore` (shared with Re
 
 `findConnectorSnap(pointer, targets, { zoom, radius, excludeIds, mode })` returns the node and side (`Position` plus the matching `Side`) a connection line should attach to. The pointer is in flow coordinates. A shape under the pointer wins over a shape that is only nearby. `mode: 'handle'` snaps to the side's midpoint, and `'edge'` snaps to the nearest point on the side (floating edges). `nearestHandlePositions(source, target)` picks facing sides for a new connection. `CONNECTION_LINE_TYPES` lists the line types both flow libraries accept for `connectionLineType`.
 
-Shape boolean operations (unite / intersect / subtract) are not provided.
+---
+
+### Shape nodes and boolean operations
+
+Freeform's Unite, Intersect, Subtract, Exclude and Divide for **shape nodes**. Generic nodes with HTML content are not shapes; a node is a shape when `data.shape` holds a shape description. Geometry is relative to the node box, so moving or resizing the node moves or resizes the shape.
+
+```ts
+type ShapeDescription =
+  | { kind: 'rect'; cornerRadius?: number | [tl, tr, br, bl] }
+  | { kind: 'ellipse' }
+  | { kind: 'polygon'; sides?: number }                    // regular polygon, default 6
+  | { kind: 'star'; points?: number; innerRadius?: number } // default 5 points, 0.5
+  | { kind: 'path'; d: string; viewBox?: [minX, minY, width, height]; fillRule?: 'nonzero' | 'evenodd' };
+// every kind also takes: fill, stroke, strokeWidth, opacity, rotation (degrees, clockwise, about the box centre)
+```
+
+Polygons and stars are stretched so their bounding box fills the node. A `path` without a `viewBox` uses node-local pixels.
+
+#### Rendering
+
+`ShapeNode` (React and Svelte) is a headless node component: one SVG path filling the node box, with `fill` (default `currentColor`), `stroke`, `strokeWidth` and `opacity` from `data.shape`. Strokes use `vector-effect: non-scaling-stroke`. Register it as a node type and use `SHAPE_NODE_TYPE` (`'shape'`) as the node `type`:
+
+```svelte
+<script lang="ts">
+  import { SvelteFlow } from '@xyflow/svelte';
+  import { ShapeNode, createCanvasArrange } from '@pixerate/editor-svelte/canvas';
+
+  let nodes = $state.raw([
+    { id: 'a', type: 'shape', position: { x: 0, y: 0 }, width: 120, height: 120, data: { shape: { kind: 'ellipse', fill: '#60a5fa' } } },
+    { id: 'b', type: 'shape', position: { x: 60, y: 0 }, width: 120, height: 120, data: { shape: { kind: 'rect', cornerRadius: 16, fill: '#f472b6' } } }
+  ]);
+  const arrange = createCanvasArrange({ getNodes: () => nodes, setNodes: (next) => (nodes = next) });
+</script>
+
+<button disabled={!arrange.canCombineShapes()} onclick={() => arrange.unite()}>Unite</button>
+<SvelteFlow bind:nodes nodeTypes={{ shape: ShapeNode }} />
+```
+
+React: `nodeTypes={{ shape: ShapeNode }}` with `arrange = useCanvasArrange({ nodes, setNodes, history })`. Pass children (React) or a `children` snippet (Svelte) to a wrapping component to add handles.
+
+#### Operations
+
+`arrange.combineShapes(operation, ids?, options?)` with `'unite' | 'intersect' | 'subtract' | 'exclude' | 'divide'`, plus the shorthands `unite`, `intersect`, `subtract`, `exclude`, `divide` and `canCombineShapes(ids?)`. Each call is one undo step. The pure version is `combineShapeNodes(nodes, ids, operation, options)`, which returns `{ ok: true, removeIds, nodes }` (apply it with `applyShapeCombination`, undo with `revertShapeCombination`) or `{ ok: false, reason }`.
+
+- **Selection**: only shape nodes among the ids take part; other selected nodes are ignored. At least two shapes are needed.
+- **Locked shapes refuse the operation** (`reason: 'locked'`). The operations delete their inputs, and locked nodes are never deleted, so nothing changes. A locked non-shape node in the selection does not block it.
+- **Empty results refuse** (`reason: 'empty'`), e.g. intersecting shapes that do not overlap. The inputs are kept.
+- **Subtract** removes every other shape from the back-most shape (stacking order: `zIndex`, then array order). Unite, Intersect and Exclude are symmetric.
+- **Result**: one `path` shape node (Divide: one per distinct region; a region cut in two becomes two nodes). Its `position` / `width` / `height` are the result's bounding box, and `d` is node-local with `viewBox = [0, 0, width, height]`. Rotation is baked in. The new node is selected and inserted at the array index of the first consumed node.
+- **Style**: node fields, `data` and paint come from the back-most shape (`styleFrom: 'bottom'`, like Freeform), or `'top'`, `'first'` or `{ id }`. Divide pieces take the paint of the top-most shape covering them, so the canvas looks the same after dividing.
+- **Sub-flows**: geometry uses absolute positions. The result keeps the parent when all shapes share one, and is top-level otherwise.
+- **Edges** connected to consumed nodes are not touched (the controller only sees nodes). Remove or reconnect them from `removeIds`.
+- Options: `tolerance` (curve flattening, default 0.25 flow units), `precision` (path decimals, default 3), `simplify` (Ramer–Douglas–Peucker tolerance, default off), `epsilon`, `createId`, `nodeType`, `select`.
+
+No default keyboard shortcuts are bound for these operations.
+
+#### Geometry helpers
+
+- `polygonBoolean(op, operands, { epsilon })`: `'union' | 'intersection' | 'difference' | 'xor'` on any number of operands. An operand is a multi-polygon (`[[outer, ...holes], ...]`, any ring orientation) or `{ rings, fillRule }` (e.g. flattened path data; may self-intersect). Also `unionPolygons`, `intersectPolygons`, `subtractPolygons`, `xorPolygons` and `dividePolygons(operands)` (pieces with the operand indices covering them).
+- Results are simple rings: outer rings have a positive shoelace area and holes a negative one. Rings may touch at a vertex but never cross. Collinear vertices are removed.
+- `parseSvgPath(d)` (absolute `M`/`L`/`C`/`Q`/`A`/`Z`), `flattenSvgPath(d, { tolerance })`, `shapeToPolygon(shape, size)`, `shapeNodeToPolygon(node, lookup)`, `polygonToSvgPath(multi, { precision, simplify, offset })`, `simplifyRing`, `getShapeSvg` / `getShapeRenderData` (exact arcs for rendering), `polygonArea`, `multiPolygonArea`, `pointInRings`.
+
+The engine builds a planar overlay of all edges (splitting at crossings, T-junctions and collinear overlaps, merging points closer than `epsilon`), classifies both sides of every edge by winding number and traces the boundary of the selected region. It handles shared edges, touching vertices, collinear overlaps, holes, nested and disjoint inputs. Limits: the overlay is O(n²) in edges (pruned by a sweep), comfortable for canvas shapes (two 1,024-vertex circles in about 20 ms) but not GIS-scale data; features narrower than `epsilon` (default `1e-9` × the largest coordinate) collapse; curves become polylines, so results are path data with straight segments.

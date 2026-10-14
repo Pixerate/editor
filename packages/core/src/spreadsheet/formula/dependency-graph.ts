@@ -18,6 +18,9 @@ export function extractCellDependencies(node: ASTNode): CellDep[] {
   const visit = (curr: ASTNode) => {
     if (curr.type === 'CellRef') {
       deps.push({ col: curr.col, row: curr.row });
+    } else if (curr.type === 'SpillRef') {
+      // A1# is computed by A1: depending on the anchor orders it correctly.
+      deps.push({ col: curr.col, row: curr.row });
     } else if (curr.type === 'Range' && curr.endRow >= WHOLE_COLUMN_END_ROW) {
       // Whole-column range: depend on the columns, not on every cell.
       const startC = colNameToIndex(curr.startCol);
@@ -57,6 +60,14 @@ export class DependencyGraph {
   private dependencies = new Map<string, Set<string>>();
   // Map of cellKey (e.g. "A1") -> Set of cellKeys that depend ON this cell (dependents)
   private dependents = new Map<string, Set<string>>();
+  // Dynamic-array edges, set by the controller after evaluating an anchor:
+  // spilled cells depend on their anchor, and a blocked (#SPILL!) anchor
+  // depends on the cells blocking it. Kept apart from formula dependencies,
+  // so re-entering a formula doesn't drop them.
+  private spillDependencies = new Map<string, Set<string>>();
+  private spillDependents = new Map<string, Set<string>>();
+  // anchor -> the edges it registered (so they can be replaced).
+  private spillEdges = new Map<string, Array<[from: string, to: string]>>();
 
   public setCellFormula(cellKey: string, formulaStr: string | null): void {
     const key = cellKey.toUpperCase();
@@ -97,14 +108,53 @@ export class DependencyGraph {
   public clear(): void {
     this.dependencies.clear();
     this.dependents.clear();
+    this.spillDependencies.clear();
+    this.spillDependents.clear();
+    this.spillEdges.clear();
   }
 
+  /**
+   * Records the dynamic-array edges of the anchor `anchorKey`, replacing its
+   * previous ones: every key in `spilledKeys` (cells holding its spilled
+   * values) depends on the anchor, and the anchor depends on every key in
+   * `blockingKeys` (cells that stop it spilling). Pass empty lists to remove
+   * the anchor's edges.
+   */
+  public setSpillEdges(anchorKey: string, spilledKeys: Iterable<string>, blockingKeys: Iterable<string> = []): void {
+    const anchor = anchorKey.toUpperCase();
+    for (const [from, to] of this.spillEdges.get(anchor) ?? []) {
+      this.spillDependencies.get(from)?.delete(to);
+      this.spillDependents.get(to)?.delete(from);
+    }
+    const edges: Array<[string, string]> = [];
+    for (const key of spilledKeys) edges.push([key.toUpperCase(), anchor]);
+    for (const key of blockingKeys) edges.push([anchor, key.toUpperCase()]);
+    for (const [from, to] of edges) {
+      if (!this.spillDependencies.has(from)) this.spillDependencies.set(from, new Set());
+      this.spillDependencies.get(from)!.add(to);
+      if (!this.spillDependents.has(to)) this.spillDependents.set(to, new Set());
+      this.spillDependents.get(to)!.add(from);
+    }
+    if (edges.length > 0) this.spillEdges.set(anchor, edges);
+    else this.spillEdges.delete(anchor);
+  }
+
+  /** The spilled cells registered for `anchorKey` by `setSpillEdges`. */
+  public getSpilledKeys(anchorKey: string): string[] {
+    const anchor = anchorKey.toUpperCase();
+    return (this.spillEdges.get(anchor) ?? []).filter(([, to]) => to === anchor).map(([from]) => from);
+  }
+
+  /** Formula dependencies plus dynamic-array (spill) dependencies of a cell. */
   public getDependencies(cellKey: string): string[] {
-    return Array.from(this.dependencies.get(cellKey.toUpperCase()) || []);
+    const key = cellKey.toUpperCase();
+    return unionOf(this.dependencies.get(key), this.spillDependencies.get(key));
   }
 
+  /** Cells depending on `cellKey`, through formulas or spills. */
   public getDependents(cellKey: string): string[] {
-    return Array.from(this.dependents.get(cellKey.toUpperCase()) || []);
+    const key = cellKey.toUpperCase();
+    return unionOf(this.dependents.get(key), this.spillDependents.get(key));
   }
 
   /**
@@ -119,7 +169,7 @@ export class DependencyGraph {
       visited.add(node);
       recStack.add(node);
 
-      const deps = this.dependencies.get(node) || new Set();
+      const deps = this.getDependencies(node);
       for (const neighbor of deps) {
         if (!visited.has(neighbor)) {
           if (dfs(neighbor)) return true;
@@ -215,6 +265,7 @@ export class DependencyGraph {
         const node = queue.pop()!;
         const direct = [
           ...(this.dependents.get(node) ?? []),
+          ...(this.spillDependents.get(node) ?? []),
           ...(this.dependents.get(columnDependencyKey(node.replace(/\d+$/, ''))) ?? []),
         ];
         for (const dep of direct) {
@@ -230,7 +281,7 @@ export class DependencyGraph {
     // Whole-column dependencies expand to the planned cells in that column.
     const neighbors = (node: string): string[] => {
       const result: string[] = [];
-      for (const dep of this.dependencies.get(node) ?? []) {
+      for (const dep of this.getDependencies(node)) {
         if (dep.endsWith(':')) {
           const col = dep.slice(0, -1);
           for (const candidate of nodes) {
@@ -303,4 +354,10 @@ export class DependencyGraph {
 
     return { order, cyclic };
   }
+}
+
+function unionOf(a: Set<string> | undefined, b: Set<string> | undefined): string[] {
+  if (!b || b.size === 0) return Array.from(a ?? []);
+  if (!a || a.size === 0) return Array.from(b);
+  return Array.from(new Set([...a, ...b]));
 }

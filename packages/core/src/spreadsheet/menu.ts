@@ -18,6 +18,32 @@ export interface SpreadsheetMenuItem {
   run: () => void;
 }
 
+/**
+ * Where to place a `position: fixed` menu opened at `point` so it stays inside
+ * the viewport: it flips to the left of / above the pointer when it would
+ * overflow the right / bottom edge, or, when the flipped menu would not fit
+ * either, slides back just enough to fit. It is kept at least `margin` px from
+ * every edge (a menu taller than the viewport is pinned to the top and should
+ * scroll, e.g. with `max-height: calc(100vh - 2 * margin)`).
+ */
+export function clampMenuPosition(
+  point: { x: number; y: number },
+  size: { width: number; height: number },
+  viewport: { width: number; height: number },
+  margin = 4
+): { x: number; y: number } {
+  const place = (start: number, length: number, limit: number) => {
+    if (start + length <= limit - margin) return Math.max(margin, start);
+    const flipped = start - length;
+    // Flip when that fits; otherwise slide it back just enough to fit.
+    return Math.max(margin, flipped >= margin ? flipped : limit - margin - length);
+  };
+  return {
+    x: place(point.x, size.width, viewport.width),
+    y: place(point.y, size.height, viewport.height)
+  };
+}
+
 const quote = (value: unknown) => {
   const text = String(value ?? '');
   return text.length > 24 ? `"${text.slice(0, 23)}…"` : `"${text}"`;

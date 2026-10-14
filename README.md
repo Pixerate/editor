@@ -199,11 +199,20 @@ We maintain **strict 1:1 parity** across JavaScript, React, and Svelte:
 | Canvas Scenes (saved viewports, next / previous) | `CanvasScenesStore` | `useCanvasScenes` | `createCanvasScenes` |
 | Canvas Connector Snapping to Shape Sides | ✅ | Via core | Via core |
 | Canvas Arrange Keyboard Shortcuts | `matchArrangeShortcut` | `useCanvasArrangeShortcuts` | `createCanvasArrangeShortcuts` |
+| Canvas Shape Boolean Ops (Unite / Intersect / Subtract / Exclude / Divide) | `combineShapeNodes` & `polygonBoolean` | `useCanvasArrange` | `createCanvasArrange` |
+| Canvas Shape Nodes (rect, ellipse, polygon, star, SVG path) | `getShapeRenderData` | `<ShapeNode>` | `<ShapeNode>` |
 | Comments (threads, replies, resolve, orphan detection, JSON) | Extension & `CommentStore` | `CommentsPanel`, `CommentButton`, `useComments` | `CommentsPanel`, `CommentButton`, `createComments` |
 | Track Changes (insert/delete marks, accept/reject, navigation) | Extension & `getTrackedChanges` | `ReviewToolbar`, `useTrackChanges` | `ReviewToolbar`, `createTrackChanges` |
 | Tracked-content export (`trackedChanges: "accepted"` default) | ✅ | Via core | Via core |
-| File Import Registry (`.md`, `.html`, `.txt`, `.rtf`; pluggable adapters) | ✅ | `useFileImport` + `fileImport` | `createFileImport` + `fileImport` prop |
+| Tracked formatting changes (`formatChange` mark, accept/reject, descriptions) | ✅ | `ReviewToolbar` description | `ReviewToolbar` description |
+| Tracked block changes (heading/list/quote/alignment, `blockChange` attribute) | ✅ | `ReviewToolbar` description | `ReviewToolbar` description |
+| Tracked edits inside code blocks | ✅ | Via core | Via core |
+| File Import Registry (`.md`, `.html`, `.txt`, `.rtf`, `.docx`; pluggable adapters) | ✅ | `useFileImport` + `fileImport` | `createFileImport` + `fileImport` prop |
 | Drag-and-Drop File Import at Drop Position | `FileImport` | ✅ | ✅ |
+| DOCX Import (headings, lists, tables, links, images, footnotes; dependency-free) | `docxImportAdapter` | Via core | Via core |
+| PDF Text Import (injected pdf.js, opt-in) | `createPdfImportAdapter` | Via core | Via core |
+| Zipped Export Import (Notion / Confluence `.zip`, opt-in) | `zipImportAdapter` | Via core | Via core |
+| Safe ZIP Reader (deflate via `DecompressionStream`, ZIP64, bomb / traversal guards) | `readZip` | Via core | Via core |
 | Rich Clipboard MIME (`application/x.pixerate.document+json`) | `RichClipboard` | `richClipboard` | `richClipboard` prop |
 | Dynamic Agent Tool Registry (MCP `tools/list` / `tools/call`, `listChanged`) | `ToolRegistry` | `useAgentToolProvider` | `useAgentToolProvider` |
 | Spreadsheet Sort (multi-column, range) & Transpose | ✅ | ✅ | ✅ |
@@ -220,6 +229,9 @@ We maintain **strict 1:1 parity** across JavaScript, React, and Svelte:
 | Spreadsheet Formula Function Registry (86 functions, `registerFormulaFunction`) | ✅ | Via core | Via core |
 | Formula Error Diagnostics (`CellData.errorMessage`, error cell tooltips) | ✅ | ✅ | ✅ |
 | Formula Autocomplete & Argument Hints (`<FormulaHints />`) | Headless (`getFormulaHints`) | Component | Component |
+| Spreadsheet Dynamic Arrays (spilling, `#SPILL!`, `A1#` spill references) | `getSpillAt` / `getSpills` | Spill border + greyed formula bar | Spill border + greyed formula bar |
+| Array Functions (FILTER, SORT, SORTBY, UNIQUE, SEQUENCE, TRANSPOSE, RANDARRAY, LET) & array arithmetic | ✅ | Via core | Via core |
+| Formula Date Arithmetic (`date ± days`, `date - date`, chronological date comparisons) | ✅ | Via core | Via core |
 
 ¹ Svelte does not yet have a prompt-editor equivalent of React's `usePromptEditor`. Configure the core extensions (`GradientText`, `TemplateSuggestions`, `SlashCommands`) and pass them to `EditableTextNodeEditor` via `extensions`, or use `createEditor({ plainTextMode: true })` from `@pixerate/editor`.
 

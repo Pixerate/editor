@@ -89,6 +89,78 @@ describe('SpreadsheetEditor formula bar', () => {
   });
 });
 
+describe('SpreadsheetEditor sticky headers', () => {
+  it('gives the sticky header row and row numbers an opaque background', async () => {
+    await mountSheet();
+    // Cells scroll underneath these, so a translucent `bg-muted/60` shows them through.
+    const sticky = Array.from(container.querySelectorAll<HTMLElement>('.sticky'));
+    expect(sticky.length).toBeGreaterThan(2);
+    for (const el of sticky) {
+      expect(el.className).toMatch(/(^|\s)bg-muted(\s|$)/);
+      expect(el.className).not.toMatch(/bg-muted\/\d+/);
+    }
+  });
+});
+
+describe('SpreadsheetEditor cell editor', () => {
+  const cellInput = () => container.querySelector<HTMLInputElement>('td input')!;
+
+  it('commits text typed into the cell on Enter, Tab and blur', async () => {
+    await mountSheet();
+    const cell = container.querySelector('td[data-row="0"][data-col="0"]')!;
+    await act(async () => {
+      cell.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      cell.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    });
+    await typeInto(cellInput(), '=2*21');
+    await key(cellInput(), { key: 'Enter' });
+    expect(cellRaw(0, 0)).toBe('=2*21');
+    expect(sheet.getCell(sheet.document.rows[0].id, sheet.document.columns[0].id).value).toBe(42);
+    expect(sheet.activeCell?.row).toBe(1);
+
+    // Typing a character on a selected cell starts editing with it.
+    await key(grid(), { key: 'h' });
+    await typeInto(cellInput(), 'hello');
+    await key(cellInput(), { key: 'Tab' });
+    expect(cellRaw(1, 0)).toBe('hello');
+
+    await act(async () => sheet.startEditing(2, 2));
+    await typeInto(cellInput(), 'blurred');
+    await act(async () => cellInput().dispatchEvent(new FocusEvent('focusout', { bubbles: true })));
+    expect(cellRaw(2, 2)).toBe('blurred');
+  });
+
+  it('starts editing with the typed key once and keeps typing in the grid after Enter', async () => {
+    await mountSheet();
+    await act(async () => sheet.selectCell(0, 0));
+    await act(async () => (grid() as HTMLElement).focus());
+    const press = new KeyboardEvent('keydown', { key: '1', bubbles: true, cancelable: true });
+    await act(async () => {
+      grid().dispatchEvent(press);
+    });
+    // Prevented, so the browser does not type "1" again into the focused input.
+    expect(press.defaultPrevented).toBe(true);
+    expect(cellInput().value).toBe('1');
+    expect(document.activeElement).toBe(cellInput());
+
+    await key(cellInput(), { key: 'Enter' });
+    expect(cellRaw(0, 0)).toBe('1');
+    // Focus returns to the grid, so the next key edits the next cell.
+    expect(document.activeElement).toBe(grid());
+    await key(grid(), { key: '2' });
+    await key(cellInput(), { key: 'Enter' });
+    expect(cellRaw(1, 0)).toBe('2');
+  });
+
+  it('commits a draft set through state.setDraftValue', async () => {
+    await mountSheet();
+    await act(async () => sheet.startEditing(0, 1));
+    await act(async () => sheet.setDraftValue('direct'));
+    await act(async () => sheet.commitEditing());
+    expect(cellRaw(0, 1)).toBe('direct');
+  });
+});
+
 describe('SpreadsheetEditor shortcuts', () => {
   it('redoes with Mod+Shift+Z (key "Z") and Ctrl+Y', async () => {
     await mountSheet();
@@ -131,6 +203,27 @@ describe('SpreadsheetEditor shortcuts', () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(writeText).toHaveBeenCalledWith('a\tb\nc\td');
+  });
+});
+
+describe('SpreadsheetEditor copy fallback', () => {
+  it('swallows a denied clipboard write instead of leaving an unhandled rejection', async () => {
+    await mountSheet();
+    let handled: ReturnType<typeof vi.fn> | null = null;
+    const writeText = vi.fn(() => {
+      const denied = Promise.reject(new DOMException('Write permission denied.', 'NotAllowedError'));
+      handled = vi.spyOn(denied, 'catch') as any;
+      return denied;
+    });
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    await act(async () => sheet.selectCell(0, 0));
+    await key(grid(), { key: 'c', metaKey: true });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    expect(writeText).toHaveBeenCalled();
+    // The rejection is caught (not left unhandled).
+    expect(handled).toHaveBeenCalled();
   });
 });
 

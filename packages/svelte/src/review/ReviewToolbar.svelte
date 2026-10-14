@@ -5,11 +5,17 @@
   interface Props {
     editor?: Editor | null;
     class?: string;
+    /** Show the current change's author and description. Defaults to `true`. */
+    showDescription?: boolean;
+    /** Class of the description label. */
+    descriptionClass?: string;
   }
 
   let {
     editor = null,
     class: className = "flex flex-wrap items-center gap-1 rounded-md border border-border bg-background p-1 text-sm",
+    showDescription = true,
+    descriptionClass = "max-w-[16rem] truncate px-1 text-xs text-muted-foreground",
   }: Props = $props();
 
   const buttonClass =
@@ -60,6 +66,15 @@
   >
     ›
   </button>
+  {#if showDescription && current}
+    <span
+      class={descriptionClass}
+      data-change-type={current.type}
+      title={`${current.author.name}: ${current.description}`}
+    >
+      {current.author.name ? `${current.author.name}: ` : ""}{current.description}
+    </span>
+  {/if}
   <span class="mx-1 h-4 w-px bg-border" aria-hidden="true"></span>
   <button
     type="button"

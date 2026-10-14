@@ -4,6 +4,7 @@ import { Editor } from "@tiptap/core";
 import { ToolRegistry, createRichTextToolProvider, type AgentToolProvider } from "@pixerate/editor/agent";
 import { createRichTextPreset, fileImportPluginKey, richClipboardPluginKey } from "@pixerate/editor";
 import { EditableTextNodeEditor, createFileImport, useAgentToolProvider } from "../src";
+import { buildDocx, p as docxParagraph, r as docxRun } from "../../core/tests/helpers/zip-writer";
 
 beforeAll(() => {
   // ProseMirror measures layout; jsdom does not implement these.
@@ -72,12 +73,40 @@ describe("createFileImport", () => {
     expect(editor.getHTML()).toMatch(/<h3[^>]*>Hi<\/h3>/);
     expect(editor.getHTML()).not.toContain("script");
 
-    await fileImport.importFiles([textFile("a.docx", "")]);
+    await fileImport.importFiles([textFile("a.pdf", "")]);
     expect(fileImport.error).toMatchObject({ code: "unsupported_type" });
+    // DOCX is a built-in adapter now: an empty file is rejected as invalid, not unsupported.
+    await fileImport.importFiles([textFile("a.docx", "")]);
+    expect(fileImport.error).toMatchObject({ code: "invalid_file" });
 
     current = undefined;
     expect(await fileImport.importFiles([textFile("a.txt", "x")])).toEqual([]);
     editor.destroy();
+  });
+});
+
+describe("DOCX import (Svelte)", () => {
+  it("createFileImport and dropped files use the built-in DOCX adapter", async () => {
+    const bytes = await buildDocx({
+      body: docxParagraph(docxRun("Svelte doc"), '<w:pStyle w:val="Heading2"/>') + docxParagraph(docxRun("struck", "<w:strike/>")),
+    });
+    const editor = new Editor({ extensions: createRichTextPreset(), content: "<p></p>" });
+    const fileImport = createFileImport(() => editor);
+    expect(fileImport.accept).toContain(".docx");
+    await fileImport.importFiles([new File([bytes], "a.docx")]);
+    expect(fileImport.error).toBeNull();
+    expect(editor.getHTML()).toMatch(/<h2[^>]*>Svelte doc<\/h2>/);
+    expect(editor.getHTML()).toContain("<s>struck</s>");
+    editor.destroy();
+
+    const onImport = vi.fn();
+    const mounted = mountEditor({ fileImport: { onImport } });
+    const plugin = mounted.editor.state.plugins.find((p) => (p as any).key === (fileImportPluginKey as any).key)!;
+    const event = { dataTransfer: { files: [new File([bytes], "drop.docx")] }, clientX: 0, clientY: 0, preventDefault: vi.fn() };
+    expect((plugin.props.handleDrop as any).call(plugin, mounted.editor.view, event, null, false)).toBe(true);
+    await vi.waitFor(() => expect(onImport).toHaveBeenCalled());
+    expect(mounted.editor.getHTML()).toMatch(/<h2[^>]*>Svelte doc<\/h2>/);
+    mounted.destroy();
   });
 });
 

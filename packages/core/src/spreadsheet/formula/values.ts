@@ -12,7 +12,9 @@ export const FORMULA_ERRORS = new Set([
   '#N/A',
   '#NUM!',
   '#CYCLE!',
-  '#ERROR!'
+  '#ERROR!',
+  '#SPILL!',
+  '#CALC!'
 ]);
 
 export type FormulaErrorCode =
@@ -23,7 +25,9 @@ export type FormulaErrorCode =
   | '#N/A'
   | '#NUM!'
   | '#CYCLE!'
-  | '#ERROR!';
+  | '#ERROR!'
+  | '#SPILL!'
+  | '#CALC!';
 
 export function isFormulaError(value: unknown): value is string {
   return typeof value === 'string' && FORMULA_ERRORS.has(value);
@@ -76,8 +80,17 @@ export function normalizeValue(value: unknown): unknown {
   return num === null ? value : num;
 }
 
-/** Orders values like spreadsheets: numbers < text < booleans; text is case-insensitive. */
+/**
+ * Orders values like spreadsheets: numbers < text < booleans; text is
+ * case-insensitive. Two ISO dates compare chronologically ("2026-1-5" is
+ * before "2026-01-10").
+ */
 export function compareValues(left: unknown, right: unknown): number {
+  if (typeof left === 'string' && typeof right === 'string') {
+    const a = isoDateTime(left);
+    const b = a === null ? null : isoDateTime(right);
+    if (a !== null && b !== null) return a - b;
+  }
   const rank = (v: unknown) => (typeof v === 'boolean' ? 2 : typeof v === 'string' ? 1 : 0);
   // A blank compares as 0 against numbers/booleans and as "" against text.
   const l = isBlank(left) ? (typeof right === 'string' ? '' : 0) : left;
@@ -198,6 +211,31 @@ export function toDate(value: unknown): Date | null {
     return isNaN(parsed) ? null : new Date(parsed);
   }
   return null;
+}
+
+const ISO_DATE = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/;
+
+/**
+ * Parses ISO date text ("2026-01-31" or "2026-01-31 13:45[:00]") into a
+ * local Date, or null. Only ISO text counts: date arithmetic and date
+ * comparisons never reinterpret other text or numbers as dates.
+ */
+export function parseIsoDate(value: unknown): Date | null {
+  if (typeof value !== 'string' || value.length < 8 || value.length > 19) return null;
+  const iso = ISO_DATE.exec(value.trim());
+  if (!iso) return null;
+  const [, y, m, d, hh = '0', mm = '0', ss = '0'] = iso;
+  const date = new Date(Number(y), Number(m) - 1, Number(d), Number(hh), Number(mm), Number(ss));
+  return date.getMonth() === Number(m) - 1 && date.getDate() === Number(d) ? date : null;
+}
+
+/** Whether ISO date text includes a time of day. */
+export const isoDateHasTime = (value: string): boolean => /[ T]\d/.test(value.trim());
+
+function isoDateTime(value: string): number | null {
+  // Cheap pre-check: ISO dates start with four digits and a dash.
+  if (value.length < 8 || value.charCodeAt(4) !== 45 /* - */) return null;
+  return parseIsoDate(value)?.getTime() ?? null;
 }
 
 /** Spreadsheet serial number (days since 1899-12-30, fraction = time of day). */

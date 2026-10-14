@@ -71,7 +71,8 @@ export function useSpreadsheetClipboard(
     setTimeout(() => {
       if (copiedRef.current) return;
       const s = stateRef.current;
-      navigator.clipboard?.writeText(s.exportToTsv(s.selectedRange));
+      // Rejected when clipboard access is denied; nothing else to fall back to.
+      Promise.resolve(navigator.clipboard?.writeText(s.exportToTsv(s.selectedRange))).catch(() => {});
     }, 0);
   }, []);
 

@@ -2,6 +2,7 @@ import { markdownToTipTapHtml } from "../serializers/markdown";
 import { htmlToPlainText } from "../serializers/plain-text";
 import { plainTextToParagraphHtml, sanitizeImportedHtml } from "../serializers/html";
 import { rtfToPlainText } from "../serializers/rtf";
+import { docxImportAdapter } from "./docx";
 import {
   ImportAdapterRegistry,
   type FindImportAdapterQuery,
@@ -88,6 +89,7 @@ export const BUILT_IN_IMPORT_ADAPTERS: readonly DocumentImportAdapter[] = [
   htmlImportAdapter,
   plainTextImportAdapter,
   rtfImportAdapter,
+  docxImportAdapter,
 ];
 
 export interface CreateImportAdapterRegistryOptions {

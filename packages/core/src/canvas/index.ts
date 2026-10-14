@@ -12,3 +12,6 @@ export * from './connectors.js';
 export * from './scenes.js';
 export * from './arrangeShortcuts.js';
 export * from './arrangeController.js';
+export * from './polygonBoolean.js';
+export * from './shapeGeometry.js';
+export * from './shapeNodes.js';

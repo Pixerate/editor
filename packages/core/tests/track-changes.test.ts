@@ -388,8 +388,32 @@ describe("TrackChanges extension", () => {
     }
   });
 
-  it("does not track inside code blocks (marks are not allowed there)", () => {
+  it("tracks insertions and deletions inside code blocks", () => {
     const editor = createEditor("<pre><code>let x</code></pre>");
+    editor.commands.setTextSelection(6);
+    type(editor, "y");
+    backspace(editor, 2);
+    // "y" was the author's own insertion (really deleted); "x" is kept as a deletion.
+    expect(editor.getText()).toBe("let x");
+    expect(summary(editor)).toEqual(["deletion:x"]);
+    expect(editor.state.doc.firstChild!.type.name).toBe("codeBlock");
+    expect(editor.getHTML()).toContain("<pre><code>let <del");
+    // Formatting is still not allowed in code blocks.
+    expect(editor.state.schema.nodes.codeBlock.allowsMarkType(editor.state.schema.marks.bold)).toBe(false);
+    editor.commands.rejectAllChanges();
+    expect(editor.getText()).toBe("let x");
+    expect(getTrackedChanges(editor)).toEqual([]);
+    editor.destroy();
+  });
+
+  it("does not track inside code blocks with trackCodeBlocks: false", () => {
+    const editor = new Editor({
+      extensions: [
+        ...createRichTextPreset({ markdown: false }),
+        TrackChanges.configure({ enabled: true, author: alice, trackCodeBlocks: false }),
+      ],
+      content: "<pre><code>let x</code></pre>",
+    });
     editor.commands.setTextSelection(6);
     type(editor, "y");
     backspace(editor, 2);

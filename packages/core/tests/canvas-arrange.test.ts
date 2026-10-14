@@ -580,6 +580,62 @@ describe('canvas arrange controller', () => {
 		expect(controller.guides).toEqual([]);
 	});
 
+	it('restores the snapped position in endDrag after the flow writes the raw drop position', () => {
+		let nodes = [node('a', 0, 0, 100, 50), node('c', 103, 300)];
+		const controller = createCanvasArrangeController({ getNodes: () => nodes, setNodes: (n) => (nodes = n) });
+		controller.drag(['c']);
+		expect(byId(nodes).c.position.x).toBe(100);
+		// SvelteFlow (like React Flow) writes the pointer position when the drag ends.
+		nodes = nodes.map((n) => (n.id === 'c' ? { ...n, position: { x: 103, y: 300 } } : n));
+		controller.endDrag();
+		expect(byId(nodes).c.position).toEqual({ x: 100, y: 300 });
+		// Nothing to restore after the drag has ended.
+		nodes = nodes.map((n) => (n.id === 'c' ? { ...n, position: { x: 50, y: 50 } } : n));
+		controller.endDrag();
+		expect(byId(nodes).c.position).toEqual({ x: 50, y: 50 });
+	});
+
+	it('keeps the snapped position when React Flow reports the raw position on drag stop', () => {
+		let nodes = [node('a', 0, 0, 100, 50), node('b', 300, 300, 100, 50)];
+		const controller = createCanvasArrangeController({ getNodes: () => nodes, setNodes: (n) => (nodes = n), getZoom: () => 1 });
+		const [moved] = controller.snapPositionChanges([
+			{ type: 'position', id: 'b', position: { x: 103, y: 200 }, dragging: true }
+		]);
+		expect(moved.position).toEqual({ x: 100, y: 200 });
+		// React Flow's drag-stop change repeats the unsnapped pointer position.
+		const [stopped] = controller.snapPositionChanges([
+			{ type: 'position', id: 'b', position: { x: 103, y: 200 }, dragging: false }
+		]);
+		expect(stopped.position).toEqual({ x: 100, y: 200 });
+		expect(controller.guides).toEqual([]);
+		// The next drag starts fresh: an unsnapped last frame keeps the raw stop position.
+		controller.snapPositionChanges([{ type: 'position', id: 'b', position: { x: 160, y: 400 }, dragging: true }]);
+		const [free] = controller.snapPositionChanges([
+			{ type: 'position', id: 'b', position: { x: 160, y: 400 }, dragging: false }
+		]);
+		expect(free.position).toEqual({ x: 160, y: 400 });
+	});
+
+	it('accepts change batches with id-less changes (React Flow `add`)', () => {
+		// React Flow's `NodeChange` union includes `{ type: 'add', item }` with no `id`;
+		// `snapPositionChanges(changes: NodeChange[])` must accept and pass it through.
+		let nodes = [node('a', 0, 0, 100, 50), node('b', 300, 300, 100, 50)];
+		const controller = createCanvasArrangeController({ getNodes: () => nodes, setNodes: (n) => (nodes = n) });
+		type FlowChange =
+			| { type: 'position'; id: string; position?: { x: number; y: number }; dragging?: boolean }
+			| { type: 'add'; item: { id: string }; index?: number };
+		const added: FlowChange = { type: 'add', item: { id: 'z' } };
+		const changes: FlowChange[] = [
+			added,
+			{ type: 'position', id: 'b', position: { x: 104, y: 200 }, dragging: true }
+		];
+		const result: FlowChange[] = controller.snapPositionChanges(changes);
+		expect(result[0]).toBe(added);
+		expect(result[1]).toMatchObject({ position: { x: 100, y: 200 } });
+		const onlyAdd: FlowChange[] = [added];
+		expect(controller.snapPositionChanges(onlyAdd)).toBe(onlyAdd);
+	});
+
 	it('can disable snapping', () => {
 		let nodes = [node('a', 0, 0), node('b', 103, 0)];
 		const controller = createCanvasArrangeController({ getNodes: () => nodes, setNodes: (n) => (nodes = n), snapping: false });

@@ -7,6 +7,7 @@ import {
   type SpreadsheetColumn,
   type SpreadsheetRow,
   type CellData,
+  type CellRange,
   type SpreadsheetMenuItem,
   type SpreadsheetViewColumn,
   type SpreadsheetViewRow
@@ -35,6 +36,23 @@ function frozenCellStyle(
   };
 }
 import { FormulaHints } from './FormulaHints';
+
+const coordKey = (cell: { row: number; col: number } | null) => (cell ? `${indexToColName(cell.col)}${cell.row + 1}` : '');
+
+/** Thin border drawn on the outer edges of a dynamic array's spill range. */
+function spillBorderStyle(range: CellRange, row: number, col: number): React.CSSProperties {
+  const line = '1px solid color-mix(in srgb, var(--primary, #6366f1) 60%, transparent)';
+  return {
+    position: 'absolute',
+    inset: 0,
+    pointerEvents: 'none',
+    zIndex: 5,
+    borderTop: row === range.startRow ? line : undefined,
+    borderBottom: row === range.endRow ? line : undefined,
+    borderLeft: col === range.startCol ? line : undefined,
+    borderRight: col === range.endCol ? line : undefined
+  };
+}
 
 export interface SpreadsheetEditorProps {
   state?: ReturnType<typeof useSpreadsheetEditor>;
@@ -93,6 +111,15 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
     return state.getCell(row.id, col.id).raw;
   }, [state.activeCell, state.document]);
 
+  // The dynamic array under the active cell (anchor or spilled cell): it gets
+  // a border, and a spilled cell shows the anchor's formula greyed out.
+  const activeSpill = useMemo(
+    () => (state.activeCell ? state.controller.getSpillAt(state.activeCell.row, state.activeCell.col) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [state.controller, state.activeCell, state.document]
+  );
+  const spillFormula = activeSpill && !activeRawValue && activeSpill.key !== coordKey(state.activeCell) ? activeSpill.formula : '';
+
   const coordLabel = useMemo(() => {
     if (!state.activeCell) return '--';
     const colName = indexToColName(state.activeCell.col);
@@ -149,7 +176,11 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
         e.preventDefault();
         state.commitEditing();
         state.moveCursor(e.shiftKey ? 'left' : 'right');
+      } else {
+        return;
       }
+      // The cell input unmounts; keep focus on the grid so typing continues.
+      gridRef.current?.focus();
       return;
     }
 
@@ -202,6 +233,9 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
     } else if (!readOnly && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
       const col = state.document.columns[state.activeCell.col];
       if (!col?.readOnly) {
+        // The key becomes the draft; without preventDefault the browser would
+        // also type it into the newly focused cell input ("1" -> "11").
+        e.preventDefault();
         state.startEditing(state.activeCell.row, state.activeCell.col, e.key);
       }
     }
@@ -432,7 +466,9 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
           placeholder="Enter a value or formula (e.g. =SUM(A1:A5))"
           aria-label="Formula bar"
           readOnly={formulaBarReadOnly}
-          value={state.editingCell ? state.draftValue : formulaDraft ?? activeRawValue}
+          data-spill-formula={!state.editingCell && formulaDraft === null && spillFormula ? 'true' : undefined}
+          style={!state.editingCell && formulaDraft === null && spillFormula ? { color: 'var(--muted-foreground, #94a3b8)' } : undefined}
+          value={state.editingCell ? state.draftValue : formulaDraft ?? (activeRawValue || spillFormula)}
           onFocus={() => {
             if (!state.editingCell) setFormulaDraft(activeRawValue);
           }}
@@ -470,8 +506,8 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
       <div className="relative flex-1 overflow-auto">
         <table className="border-collapse table-fixed w-max min-w-full">
           <thead>
-            <tr className="h-7 bg-muted/60 sticky top-0 z-20 border-b border-border shadow-xs">
-              <th className="w-12 min-w-[3rem] sticky left-0 z-30 bg-muted/90 border-r border-border text-center text-[10px] text-muted-foreground font-medium">
+            <tr className="h-7 bg-muted sticky top-0 z-20 border-b border-border shadow-xs">
+              <th className="w-12 min-w-[3rem] sticky left-0 z-30 bg-muted border-r border-border text-center text-[10px] text-muted-foreground font-medium">
                 #
               </th>
               {view.columns.map(({ column: col, index: cIdx, frozen, stickyLeft }) => (
@@ -563,7 +599,7 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
                 style={{ height: viewRow.row.height || 32 }}
               >
                 <td
-                  className="w-12 min-w-[3rem] sticky left-0 z-10 bg-muted/50 border-r border-border text-center text-[10px] text-muted-foreground font-mono select-none"
+                  className="w-12 min-w-[3rem] sticky left-0 z-10 bg-muted border-r border-border text-center text-[10px] text-muted-foreground font-mono select-none"
                   style={viewRow.frozen ? { top: COLUMN_HEADER_HEIGHT + viewRow.stickyTop, zIndex: 15 } : undefined}
                 >
                   {displayRowIndex + 1}
@@ -620,6 +656,11 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
                             value={state.draftValue}
                             onChange={(e) => state.setDraftValue(e.target.value)}
                             onBlur={() => state.commitEditing()}
+                            onFocus={(e) => {
+                              // Caret after the draft (e.g. the key that started editing).
+                              const end = e.currentTarget.value.length;
+                              e.currentTarget.setSelectionRange(end, end);
+                            }}
                             autoFocus
                           />
                           <FormulaHints inputRef={cellInputRef} value={state.draftValue} onAccept={state.setDraftValue} />
@@ -633,6 +674,9 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
                         >
                           {cell.error || (cell.value ?? '')}
                         </span>
+                      )}
+                      {activeSpill && rangeContains(activeSpill.range, rIdx, cIdx) && (
+                        <span aria-hidden="true" className="spreadsheet-spill-border" style={spillBorderStyle(activeSpill.range, rIdx, cIdx)} />
                       )}
                       {showFillHandle && (
                         <div

@@ -61,7 +61,8 @@ export function attachSpreadsheetClipboard(
     copyShortcutFallback() {
       copied = false;
       setTimeout(() => {
-        if (!copied) navigator.clipboard?.writeText(sheet.exportToTsv(sheet.selectedRange));
+        // Rejected when clipboard access is denied; nothing else to fall back to.
+        if (!copied) Promise.resolve(navigator.clipboard?.writeText(sheet.exportToTsv(sheet.selectedRange))).catch(() => {});
       }, 0);
     },
     destroy() {

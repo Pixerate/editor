@@ -1,5 +1,8 @@
 <script lang="ts">
-  import type { SpreadsheetMenuItem } from '@pixerate/editor/spreadsheet';
+  import { clampMenuPosition, type SpreadsheetMenuItem } from '@pixerate/editor/spreadsheet';
+
+  // Gap kept between the menu and the viewport edges.
+  const VIEWPORT_MARGIN = 4;
 
   interface Props {
     items: SpreadsheetMenuItem[];
@@ -10,6 +13,22 @@
 
   let { items, x, y, onClose }: Props = $props();
   let menuEl = $state<HTMLDivElement | null>(null);
+  let measured = $state<{ x: number; y: number } | null>(null);
+  const position = $derived(measured ?? { x, y });
+
+  // Keep the (fixed) menu inside the viewport: near the right or bottom edge
+  // it opens to the left of / above the pointer instead of being cut off.
+  $effect(() => {
+    void items; // re-measure when the items change
+    if (!menuEl || typeof window === 'undefined') return;
+    const { width, height } = menuEl.getBoundingClientRect();
+    measured = clampMenuPosition(
+      { x, y },
+      { width, height },
+      { width: window.innerWidth, height: window.innerHeight },
+      VIEWPORT_MARGIN
+    );
+  });
 
   // Close on outside press or Escape.
   $effect(() => {
@@ -35,7 +54,7 @@
   aria-label="Table actions"
   tabindex="-1"
   class="fixed z-50 min-w-[14rem] rounded-md border border-border bg-popover py-1 text-xs text-popover-foreground shadow-lg"
-  style="left: {x}px; top: {y}px; background: var(--popover, var(--background, #fff));"
+  style="left: {position.x}px; top: {position.y}px; max-height: calc(100vh - {VIEWPORT_MARGIN * 2}px); overflow-y: auto; background: var(--popover, var(--background, #fff));"
   oncontextmenu={(e) => e.preventDefault()}
   onkeydown={(e) => e.stopPropagation()}
 >

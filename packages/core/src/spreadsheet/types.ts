@@ -61,6 +61,23 @@ export interface CellData {
   errorMessage?: string;
   format?: CellFormat;
   readOnly?: boolean;
+  /**
+   * Set (only) on cells showing a value spilled from a dynamic array: the
+   * anchor cell holding the formula, e.g. `A1`. Spilled cells keep an empty
+   * `raw` and are never stored in the document.
+   */
+  spillAnchor?: string;
+}
+
+/** A dynamic array spilled from its anchor cell (the cell holding the formula). */
+export interface SpreadsheetSpill {
+  /** Anchor cell key, e.g. `A1`. */
+  key: string;
+  anchor: { row: number; col: number };
+  /** Every cell the array covers, anchor included. */
+  range: CellRange;
+  /** The anchor's formula. */
+  formula: string;
 }
 
 export interface SpreadsheetDocument {

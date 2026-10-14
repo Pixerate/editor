@@ -46,6 +46,15 @@
     return value;
   });
 
+  // A spilled cell shows its anchor's formula greyed out (it has no formula of its own).
+  let spillFormula = $derived.by(() => {
+    if (!sheetState || sheetState.editingCell || !sheetState.activeCell || effectiveValue) return '';
+    void sheetState.document;
+    const { row, col } = sheetState.activeCell;
+    const spill = sheetState.controller.getSpillAt(row, col);
+    return spill && (spill.anchor.row !== row || spill.anchor.col !== col) ? spill.formula : '';
+  });
+
   function handleKeyDown(e: KeyboardEvent) {
     // Keys typed here must not reach the grid's navigation handler.
     e.stopPropagation();
@@ -101,7 +110,9 @@
     placeholder="Enter a value or formula (e.g. =SUM(A1:A5))"
     aria-label="Formula bar"
     bind:this={inputEl}
-    value={effectiveValue}
+    data-spill-formula={spillFormula ? 'true' : undefined}
+    style={spillFormula ? 'color: var(--muted-foreground, #94a3b8);' : undefined}
+    value={effectiveValue || spillFormula}
     oninput={handleInput}
     onkeydown={handleKeyDown}
   />

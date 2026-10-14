@@ -44,7 +44,7 @@ describe('formula function registry', () => {
 
   it('lists functions by category, sorted', () => {
     const lookup = listFormulaFunctions('lookup').map((d) => d.name);
-    expect(lookup).toEqual(['HLOOKUP', 'INDEX', 'MATCH', 'VLOOKUP', 'XLOOKUP']);
+    expect(lookup).toEqual(['FILTER', 'HLOOKUP', 'INDEX', 'MATCH', 'SORT', 'SORTBY', 'TRANSPOSE', 'UNIQUE', 'VLOOKUP', 'XLOOKUP']);
     const all = listFormulaFunctions().map((d) => d.name);
     expect(all).toEqual([...all].sort());
     expect(all.length).toBeGreaterThanOrEqual(85);
@@ -159,7 +159,9 @@ describe('formula diagnostics', () => {
     expect(diagnose('=COUNTIF(A1, 1)').message).toBe('Argument 1 of COUNTIF must be a range.');
     expect(diagnose('=YEAR("soon")').message).toBe('Argument 1 of YEAR ("soon") isn\'t a valid date.');
     expect(diagnose('=MOD(1, 0)').message).toBe("Argument 2 of MOD can't be zero.");
-    expect(diagnose('=ABS(A1:A2)', { A1: 1, A2: 2 }).message).toBe('Argument 1 of ABS must be a single value, not a range.');
+    expect(diagnose('=RANDBETWEEN(A1:A2, 5)', { A1: 1, A2: 2 }).message).toBe(
+      'Argument 1 of RANDBETWEEN must be a single value, not a range.',
+    );
   });
 
   it('explains operator errors and propagated errors', () => {
@@ -182,8 +184,12 @@ describe('formula diagnostics', () => {
     expect(result.message).toMatch(/Expected '\)'/);
   });
 
-  it('shows the first value of a range result (no spilling)', () => {
-    expect(diagnose('=A1:A2', { A1: 'first', A2: 'second' })).toEqual({ value: 'first' });
+  it('returns a range result as an array, with its first value as the value', () => {
+    expect(diagnose('=A1:A2', { A1: 'first', A2: 'second' })).toEqual({
+      value: 'first',
+      array: { rows: 2, cols: 1, values: ['first', 'second'] },
+    });
+    expect(diagnose('=A1:A1', { A1: 'only' })).toEqual({ value: 'only' });
   });
 
   it('has a generic description for every error code', () => {

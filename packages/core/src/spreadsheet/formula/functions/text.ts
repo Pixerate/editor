@@ -134,11 +134,12 @@ export const TEXT_FUNCTIONS: FunctionTable = [
   {
     name: 'TRIM',
     category: 'text',
-    description: 'Removes leading and trailing spaces.',
+    description: 'Removes leading and trailing spaces and collapses runs of inner spaces to one, like Excel.',
     args: [TEXT],
     evaluate: (ctx) => {
       const text = ctx.text(0);
-      return failed(text) ? text : text.trim();
+      // Inner runs of spaces collapse (Excel); tabs and line breaks inside are kept.
+      return failed(text) ? text : text.trim().replace(/ {2,}/g, ' ');
     },
   },
   {

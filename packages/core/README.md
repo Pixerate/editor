@@ -108,18 +108,20 @@ editor.commands.resolveComment(id); // also deleteComment, setActiveComment, foc
 store.subscribe((snapshot) => save(store.toJSON()));
 
 editor.commands.toggleTrackChanges();
-getTrackedChanges(editor); // [{ id, type: "insertion" | "deletion", author, from, to, text, … }]
+getTrackedChanges(editor); // [{ id, type: "insertion" | "deletion" | "format" | "block", author, from, to, text, description, … }]
 editor.commands.acceptChange(id); // rejectChange, acceptAllChanges, rejectAllChanges: one undo step each
 ```
 
 - **Comments** are `comment` marks holding a thread id; thread content lives in the headless `CommentStore` (`subscribe` / `getSnapshot`, cached snapshots, `toJSON` / `load`). Threads whose text is deleted are flagged `orphaned` and re-attach on undo.
-- **Track changes** marks typed and pasted text with an `insertion` mark and keeps deleted text with a `deletion` mark (struck through). Deleting your own insertion really deletes it. IME composition is tracked once it ends. Not tracked: formatting-only changes, block-structure changes (splitting/joining paragraphs, lists) and edits inside code blocks. Set the `TRACK_CHANGES_SKIP_META` transaction meta to apply a change untracked (e.g. `setContent`).
-- **Serializers** render tracked content as if all changes were accepted: `getEditorText`, `htmlToPlainText` and `getEditorMarkdown` drop deleted text by default. Pass `{ trackedChanges: "original" }` (as if rejected) or `"all"` (both). `resolveTrackedChanges(doc, view)` returns a resolved document. TipTap's own `editor.getText()` still includes deleted text.
-- Both extensions are also available as `createRichTextPreset({ comments: true, trackChanges: true })`. Mark styles use Tailwind classes; override them via `commentClass` / `activeClass` and `insertionHTMLAttributes` / `deletionHTMLAttributes`.
+- **Track changes** marks typed and pasted text with an `insertion` mark and keeps deleted text with a `deletion` mark (struck through). Deleting your own insertion really deletes it. IME composition is tracked once it ends. Insertions and deletions inside code blocks are tracked too (`trackCodeBlocks: false` turns that off). Set the `TRACK_CHANGES_SKIP_META` transaction meta to apply a change untracked (e.g. `setContent`).
+- **Tracked formatting** (`trackFormatting`, on by default): adding or removing marks (bold, italic, links, highlight, font size, …) on existing text records a `formatChange` mark holding the author, id and the `before` / `after` formatting, shown as a dotted underline. Descriptions read `Formatted: Bold`, `Removed formatting: Italic` or `Changed formatting: Font size`. Accept keeps the new formatting; reject restores the old. Adjacent or repeated formatting by the same author merges into one change, changing it back drops the record, and formatting a tracked insertion stays part of the insertion. Review marks, comments and bookmarks are never formatting (add more with `ignoredMarks`).
+- **Tracked block changes** (`trackBlocks`, on by default): changing a textblock's type or attributes (paragraph ↔ heading, heading level, code block, alignment) or its wrappers (bulleted/numbered/task lists, indenting, outdenting, quotes) stores the previous state in a `blockChange` node attribute on `blockTypes` (paragraph, heading, code block), shown with a margin bar. Descriptions read `Changed Paragraph to Heading 2`, `Wrapped in Bulleted list`, `Changed alignment to Center`. Reject restores the type, attributes and nesting. Paragraph splits and joins are not tracked (a split-off block does not inherit the record). `describeFormatChange` and `describeBlockChange` build the descriptions.
+- **Serializers** render tracked content as if all changes were accepted: `getEditorText`, `htmlToPlainText` and `getEditorMarkdown` drop deleted text and use the new formatting and block types by default. Pass `{ trackedChanges: "original" }` (as if rejected) or `"all"` (both). `resolveTrackedChanges(doc, view)` returns a resolved document. TipTap's own `editor.getText()` still includes deleted text.
+- Both extensions are also available as `createRichTextPreset({ comments: true, trackChanges: true })`. Mark styles use Tailwind classes; override them via `commentClass` / `activeClass` and `insertionHTMLAttributes` / `deletionHTMLAttributes` / `formatChangeHTMLAttributes` / `blockChangeClass`.
 
 ## File import and rich clipboard
 
-An import adapter registry maps file types (MIME types and extensions) to converters. Built-in `document` adapters cover markdown (`.md`, `.markdown`, `.mdown`, `.mkdn`, `.mkd`, `.Rmd`, `.md.txt`), HTML (sanitized with the same allowlist as markdown), plain text (`.txt`) and RTF (best-effort text extraction). The longest matching extension wins, then exact MIME types, then `priority`, then the most recent registration.
+An import adapter registry maps file types (MIME types and extensions) to converters. Built-in `document` adapters cover markdown (`.md`, `.markdown`, `.mdown`, `.mkdn`, `.mkd`, `.Rmd`, `.md.txt`), HTML (sanitized with the same allowlist as markdown), plain text (`.txt`), RTF (best-effort text extraction) and DOCX (`.docx`, `.docm`, `.dotx`). The longest matching extension wins, then exact MIME types, then `priority`, then the most recent registration.
 
 ```ts
 import { importFile, registerImportAdapter, getImportAccept } from "@pixerate/editor";
@@ -127,19 +129,26 @@ import { importFile, registerImportAdapter, getImportAccept } from "@pixerate/ed
 const { adapterId, result } = await importFile(file); // result: { html, text }
 input.accept = getImportAccept("document");
 
-// DOCX, PDF, zipped exports or CSV → spreadsheet are pluggable:
+// Other formats are pluggable:
 registerImportAdapter({
-  id: "docx",
-  label: "Word",
-  mimeTypes: ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
-  extensions: [".docx"],
+  id: "odt",
+  label: "OpenDocument text",
+  mimeTypes: ["application/vnd.oasis.opendocument.text"],
+  extensions: [".odt"],
   target: "document",
   async import(_file, ctx) {
-    const html = await myDocxToHtml(await ctx.readArrayBuffer());
+    const html = await myOdtToHtml(await ctx.readArrayBuffer());
     return { html, text: htmlToPlainText(html) };
   },
 });
 ```
+
+### DOCX, PDF and zipped exports (no extra dependencies)
+
+- **DOCX** (built in): `docxImportAdapter` reads `word/document.xml` (located via `_rels/.rels`), styles, numbering, relationships and footnotes / endnotes with the platform `DOMParser`, and maps headings (`Heading1`–`6`, `Title`, outline levels), bold / italic / underline / strike / super- and subscript, hyperlinks (including `HYPERLINK` fields), nested bulleted / numbered lists, tables (`colspan` / `rowspan`, header rows), line breaks, tabs and embedded PNG / JPEG / GIF / WebP images (as data URLs; dropped by the editor when the image extension is off). Output goes through `sanitizeImportedHtml`. **Tracked changes are imported as if accepted** (`w:ins` kept, `w:del` dropped); `createDocxImportAdapter({ trackedChanges: "original" })` imports them as if rejected. Text boxes, shapes, charts, equations, comments and layout are not imported. Without a global `DOMParser` (plain Node) it throws `ImportError("unsupported_environment")`; pass one with `createDocxImportAdapter({ DOMParser })`. Other options: `images`, `maxImageSize` (10 MiB), `zip` limits.
+- **PDF** (opt-in, bring your own pdf.js): `registerImportAdapter(createPdfImportAdapter(pdfjs))` with any object shaped like `pdfjs-dist` (`getDocument({ data }).promise`, `page.getTextContent()`). Text items are grouped into lines by baseline and into paragraphs by larger-than-usual vertical gaps or blank lines; options `paragraphGap`, `maxPages`, `documentParams`. Text only. `pdfTextItemsToParagraphs` is exported for custom adapters.
+- **Zipped exports** (opt-in): `registerImportAdapter(zipImportAdapter)` imports a `.zip` of markdown / HTML / text / DOCX files (Notion, Confluence, Obsidian exports) with the registry's other adapters — index / README files first, then natural path order — with a heading per file (Notion ids stripped from titles). The result adds `files` and `skipped` (unsupported types, nested archives, failures). Not registered by default because `.zip` is a generic container: claiming every dropped archive would steal drops from other handlers. `createZipImportAdapter({ headings, headingLevel, maxFiles, registry, zip })` customizes it.
+- **ZIP reader**: `readZip(bytes, { maxEntries, maxTotalSize, unsafePaths })` parses the central directory (ZIP64 included) and lazily extracts stored / deflate entries via `DecompressionStream("deflate-raw")` (browsers, Node 18+), verifying CRC-32. It rejects encrypted entries, `..` / absolute names and archives over the entry or uncompressed-size caps (default 10 000 entries / 256 MiB, enforced on inflated bytes) with typed `ZipError`s. DOCX reads use 100 MiB / 5 000 entries.
 
 `FileImport` (or `createRichTextPreset({ fileImport: true })`) inserts dropped or pasted files at the drop position, and `FileImportController` / `pickImportFiles` back file-picker buttons. `RichClipboard` (or `richClipboard: true`) also writes copied content as `application/x.pixerate.document+json` (ProseMirror slice JSON plus a schema signature) and prefers it on paste when the schemas match, falling back to HTML / plain text. Both are opt-in, and `EditorController` keeps them on plain text in `plainTextMode`.
 

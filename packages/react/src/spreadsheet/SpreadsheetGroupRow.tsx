@@ -25,7 +25,7 @@ export const SpreadsheetGroupRow: React.FC<SpreadsheetGroupRowProps> = ({
   const labelColId = columns.some((c) => c.column.id === groupColId) ? groupColId : columns[0]?.column.id;
   return (
   <tr className="border-b border-border bg-muted/40 font-semibold" data-group-key={group.key} style={{ height: 28 }}>
-    <td className="w-12 min-w-[3rem] sticky left-0 z-10 bg-muted/60 border-r border-border text-center">
+    <td className="w-12 min-w-[3rem] sticky left-0 z-10 bg-muted border-r border-border text-center">
       <button
         type="button"
         aria-label={`${group.collapsed ? 'Expand' : 'Collapse'} group ${group.label}`}

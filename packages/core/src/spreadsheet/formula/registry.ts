@@ -94,6 +94,14 @@ export interface FormulaFunctionDefinition {
    * Otherwise a group must be complete.
    */
   allowTrailingArgument?: boolean;
+  /**
+   * A scalar function that is applied element by element when given arrays
+   * (dynamic arrays): `=LEN(A1:A3)` returns three lengths. `true` lifts when
+   * any argument is a multi-value array; a list of argument indices lifts
+   * only when one of those is (IF lifts on its condition). Arguments typed
+   * `range` are always passed whole.
+   */
+  elementwise?: boolean | readonly number[];
   evaluate(ctx: FormulaFunctionContext): any;
 }
 

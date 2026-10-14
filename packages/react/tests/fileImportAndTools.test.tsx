@@ -12,6 +12,7 @@ import {
   useAgentToolProvider,
   type UseFileImportResult,
 } from "../src";
+import { buildDocx, p as docxParagraph, r as docxRun } from "../../core/tests/helpers/zip-writer";
 
 let container: HTMLDivElement;
 let root: Root;
@@ -106,6 +107,28 @@ describe("useFileImport", () => {
     });
     expect(container.textContent).toBe("error");
     expect(fileImport.error).toMatchObject({ code: "unsupported_type" });
+  });
+
+  it("imports .docx files through the default registry", async () => {
+    let editor: Editor | null = null;
+    let fileImport!: UseFileImportResult;
+    function Harness() {
+      editor = useEditor({ immediatelyRender: true, content: "<p></p>" });
+      fileImport = useFileImport(editor);
+      return null;
+    }
+    await act(async () => root.render(<Harness />));
+    expect(fileImport.accept).toContain(".docx");
+    const bytes = await buildDocx({
+      body: docxParagraph(docxRun("Word title"), '<w:pStyle w:val="Heading1"/>') + docxParagraph(docxRun("italic", "<w:i/>")),
+    });
+    await act(async () => {
+      await fileImport.importFiles([new File([bytes], "report.docx")]);
+    });
+    expect(fileImport.error).toBeNull();
+    expect(fileImport.lastOutcomes.map((o) => o.adapterId)).toEqual(["docx"]);
+    expect(editor!.getHTML()).toMatch(/<h1[^>]*>Word title<\/h1>/);
+    expect(editor!.getHTML()).toContain("<em>italic</em>");
   });
 
   it("openFilePicker imports the chosen files", async () => {
