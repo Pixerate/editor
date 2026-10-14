@@ -160,9 +160,13 @@ describe('SpreadsheetEditor table interactions', () => {
       grid().focus();
     });
 
-    await dispatch(grid(), new KeyboardEvent('keydown', { key: 'c', ctrlKey: true, bubbles: true, cancelable: true }));
+    // Browsers fire `copy` synchronously after the Mod+C keydown. Dispatch both
+    // in one act() so the fallback timer can't run in between on a slow runner.
     const copy = clipboardEvent('copy');
-    await dispatch(grid(), copy);
+    await act(async () => {
+      grid().dispatchEvent(new KeyboardEvent('keydown', { key: 'c', ctrlKey: true, bubbles: true, cancelable: true }));
+      grid().dispatchEvent(copy);
+    });
     expect(copy.defaultPrevented).toBe(true);
     expect(copy.clipboardData.data['text/plain']).toBe('2\t20');
     expect(copy.clipboardData.data['text/html']).toContain('<table>');
