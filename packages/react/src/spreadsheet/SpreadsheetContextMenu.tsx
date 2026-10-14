@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import type { SpreadsheetMenuItem } from '@pixerate/editor';
+import type { SpreadsheetMenuItem } from '@pixerate/editor/spreadsheet';
 
 export interface SpreadsheetContextMenuProps {
   items: SpreadsheetMenuItem[];

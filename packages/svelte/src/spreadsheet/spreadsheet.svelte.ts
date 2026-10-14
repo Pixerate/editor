@@ -9,7 +9,7 @@ import {
   type SpreadsheetColumn,
   type SpreadsheetRow,
   type SpreadsheetDataSource
-} from '@pixerate/editor';
+} from '@pixerate/editor/spreadsheet';
 
 export function createReactiveSpreadsheet(options: SpreadsheetControllerOptions = {}) {
   let doc = $state<SpreadsheetDocument>({

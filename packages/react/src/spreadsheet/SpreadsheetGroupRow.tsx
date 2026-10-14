@@ -1,5 +1,5 @@
 import React from 'react';
-import type { SpreadsheetRowGroup, SpreadsheetViewColumn } from '@pixerate/editor';
+import type { SpreadsheetRowGroup, SpreadsheetViewColumn } from '@pixerate/editor/spreadsheet';
 
 export interface SpreadsheetGroupRowProps {
   group: SpreadsheetRowGroup;

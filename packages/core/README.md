@@ -6,6 +6,8 @@ Framework bindings: [`@pixerate/editor-react`](https://www.npmjs.com/package/@pi
 
 ```bash
 npm install @pixerate/editor
+# only if you use @pixerate/editor/canvas (or the agent canvas planner):
+npm install @dagrejs/dagre
 ```
 
 ## Prompt grammar
@@ -187,10 +189,10 @@ Each module is also available as a subpath import:
 | `@pixerate/editor/history` | `HistoryManager`: a command-pattern undo/redo stack |
 | `@pixerate/editor/spreadsheet` | `SpreadsheetController`, formula parser/evaluator and dependency graph, formula function registry (`registerFormulaFunction`, `listFormulaFunctions`, `searchFormulaFunctions`, `getFormulaSignature`) and autocomplete helpers (`getFormulaHints`, `applyFormulaSuggestion`) |
 | `@pixerate/editor/image-editor` | `ImageEditorController` and Canvas 2D renderer: crop, adjustments, annotations, depth masks and AI hooks. Needs a DOM/canvas environment. |
-| `@pixerate/editor/canvas` | Node-graph layout (dagre), placement, trajectories, displacement, clipboard and streaming layout helpers |
+| `@pixerate/editor/canvas` | Node-graph layout (needs the optional `@dagrejs/dagre` peer), placement, trajectories, displacement, clipboard and streaming layout helpers |
 | `@pixerate/editor/agent` | MCP tool schemas, a planner for agent-driven canvas edits, and the dynamic `ToolRegistry` with editor/spreadsheet tool providers |
 
-The root entry (`@pixerate/editor`) re-exports everything, including TipTap. In backends, import from `@pixerate/editor/grammar` to keep the dependency graph small.
+The root entry (`@pixerate/editor`) re-exports everything except canvas, agent and image editor, including TipTap. Import from the narrowest subpath you need: `grammar`, `history`, `spreadsheet` and `image-editor` have no third-party imports, so a spreadsheet-only app bundles no TipTap, markdown or dagre code. The package is marked `sideEffects: false`, so unused root exports are also tree-shaken.
 
 ## License
 

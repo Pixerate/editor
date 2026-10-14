@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { applyFormulaSuggestion, getFormulaHints } from '@pixerate/editor';
+import { applyFormulaSuggestion, getFormulaHints } from '@pixerate/editor/spreadsheet';
 
 export interface FormulaHintsProps {
   /** The input being edited (a cell editor or the formula bar). */

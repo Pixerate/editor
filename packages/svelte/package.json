@@ -18,6 +18,11 @@
       "svelte": "./dist/index.js",
       "default": "./dist/index.js"
     },
+    "./spreadsheet": {
+      "types": "./dist/spreadsheet/index.d.ts",
+      "svelte": "./dist/spreadsheet/index.js",
+      "default": "./dist/spreadsheet/index.js"
+    },
     "./canvas": {
       "types": "./dist/canvas/index.d.ts",
       "svelte": "./dist/canvas/index.js",
@@ -32,6 +37,9 @@
   },
   "typesVersions": {
     "*": {
+      "spreadsheet": [
+        "./dist/spreadsheet/index.d.ts"
+      ],
       "canvas": [
         "./dist/canvas/index.d.ts"
       ],
@@ -53,24 +61,28 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@dagrejs/dagre": "^1.1.4",
     "@pixerate/editor": "workspace:*",
     "@tiptap/extension-bubble-menu": "^2.11.5",
     "@tiptap/extension-placeholder": "^2.11.5",
     "@tiptap/starter-kit": "^2.11.5"
   },
   "peerDependencies": {
+    "@dagrejs/dagre": "^1.1.4",
     "@tiptap/core": "^2.11.5",
     "@tiptap/pm": "^2.11.5",
     "@xyflow/svelte": "^1.6.0",
     "svelte": "^5.0.0"
   },
   "peerDependenciesMeta": {
+    "@dagrejs/dagre": {
+      "optional": true
+    },
     "@xyflow/svelte": {
       "optional": true
     }
   },
   "devDependencies": {
+    "@dagrejs/dagre": "^1.1.4",
     "@sveltejs/package": "^2.5.8",
     "@sveltejs/vite-plugin-svelte": "^5.0.3",
     "@tiptap/core": "^2.11.5",

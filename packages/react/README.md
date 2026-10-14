@@ -5,8 +5,10 @@ React bindings for [`@pixerate/editor`](https://www.npmjs.com/package/@pixerate/
 ```bash
 npm install @pixerate/editor-react @pixerate/editor react react-dom
 # only if you use @pixerate/editor-react/canvas:
-npm install @xyflow/react
+npm install @xyflow/react @dagrejs/dagre
 ```
+
+Each feature has its own entry: `@pixerate/editor-react/spreadsheet`, `/image-editor` and `/canvas`. The spreadsheet and image editor entries import only React and the matching `@pixerate/editor` subpath, so they bundle no TipTap, markdown or canvas code.
 
 Requires React 18 or later.
 
@@ -87,6 +89,7 @@ useAgentToolProvider(registry, provider);
 | Import | Exports |
 | :--- | :--- |
 | `@pixerate/editor-react` | `usePromptEditor`, `useEditor`, `EditorContent`, `BubbleMenu`, `TemplateRenderer`, `useHistory`, `useHistoryShortcuts`, `useNavigationGuard`, `useDismissGuard`, `EditorSlotsProvider` / `useEditorSlots`, `SpreadsheetEditor` / `useSpreadsheetEditor`, `FormulaHints`, `DirtyTracker` |
+| `@pixerate/editor-react/spreadsheet` | `SpreadsheetEditor`, `useSpreadsheetEditor`, `useSpreadsheetTableInteractions`, `FormulaHints`, `SpreadsheetContextMenu`, `SpreadsheetGroupRow` (also re-exported from the root entry) |
 | `@pixerate/editor-react/image-editor` | `ImageEditor`, `useImageEditor`: crop, rotate/flip, adjustments, annotations, depth masks, and `onInpaint` / `onRemoveBackground` AI hooks |
 | `@pixerate/editor-react/canvas` | `useCanvasGraph`, `useCanvasLayout`, `useCanvasClipboard`, `useCanvasDocking`, `useCanvasShortcuts`, `useCanvasExplosion`, `useStreamingCanvas`, `AgentPresenceLayer`, plus the pure layout helpers from `@pixerate/editor/canvas` |
 

@@ -63,13 +63,13 @@
   "files": [
     "dist"
   ],
+  "sideEffects": false,
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
-    "@dagrejs/dagre": "^1.1.8",
     "@tiptap/extension-character-count": "^2.11.5",
     "@tiptap/extension-color": "^2.11.5",
     "@tiptap/extension-highlight": "^2.11.5",
@@ -89,21 +89,28 @@
     "@tiptap/suggestion": "^2.11.5",
     "markdown-it": "^15.0.2",
     "markdown-it-task-lists": "^2.1.1",
-    "prosemirror-markdown": "^1.13.7",
-    "tiptap-markdown": "^0.8.10"
+    "prosemirror-markdown": "^1.13.7"
   },
   "devDependencies": {
+    "@dagrejs/dagre": "^1.1.8",
     "@tiptap/core": "^2.11.5",
     "@tiptap/pm": "^2.11.5",
     "@types/dagre": "^0.7.54",
     "@types/markdown-it": "^14.2.0",
     "@types/node": "^24.0.0",
+    "tiptap-markdown": "^0.8.10",
     "tsup": "^8.4.0",
     "typescript": "^5.7.3",
     "vitest": "^4.1.11"
   },
   "peerDependencies": {
+    "@dagrejs/dagre": "^1.1.8",
     "@tiptap/core": "^2.11.5",
     "@tiptap/pm": "^2.11.5"
+  },
+  "peerDependenciesMeta": {
+    "@dagrejs/dagre": {
+      "optional": true
+    }
   }
 }

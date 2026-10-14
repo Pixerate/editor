@@ -13,7 +13,7 @@
     type SpreadsheetMenuItem,
     type SpreadsheetViewColumn,
     type SpreadsheetViewRow
-  } from '@pixerate/editor';
+  } from '@pixerate/editor/spreadsheet';
   import FormulaBar from './FormulaBar.svelte';
   import SpreadsheetContextMenu from './SpreadsheetContextMenu.svelte';
   import SpreadsheetGroupRow from './SpreadsheetGroupRow.svelte';

@@ -9,7 +9,7 @@ import {
   type SpreadsheetColumn,
   type SpreadsheetRow,
   type SpreadsheetDataSource
-} from '@pixerate/editor';
+} from '@pixerate/editor/spreadsheet';
 
 export function useSpreadsheetEditor(options: SpreadsheetControllerOptions = {}) {
   // Callbacks are read through a ref so they are never stale.

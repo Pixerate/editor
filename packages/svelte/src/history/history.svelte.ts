@@ -4,7 +4,7 @@ import {
   Command,
   createHistoryManager,
   HistoryManagerOptions,
-} from "@pixerate/editor";
+} from "@pixerate/editor/history";
 
 export interface SvelteHistory extends HistoryState {
   readonly manager: HistoryManager;
