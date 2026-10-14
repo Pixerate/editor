@@ -32,6 +32,7 @@
   import SheetTabs from './SheetTabs.svelte';
   import { createReactiveSpreadsheet } from './spreadsheet.svelte.js';
   import { attachSpreadsheetClipboard } from './tableInteractions.js';
+  import { createSpreadsheetViewport } from './viewport.svelte.js';
 
   interface Props {
     sheetState?: ReturnType<typeof createReactiveSpreadsheet>;
@@ -47,6 +48,12 @@
     onColumnResize?: (colId: string, width: number) => void;
     /** Show the sheet tabs bar under the grid (add, switch, rename, reorder, delete sheets). */
     showSheetTabs?: boolean;
+    /**
+     * Render only the rows and columns in (or near) view. `'auto'` (default)
+     * virtualises sheets with more than 200 displayed rows or 60 columns;
+     * `true` / `false` force it.
+     */
+    virtualize?: boolean | 'auto';
   }
 
   let {
@@ -59,8 +66,50 @@
     onAddColumnClick,
     onColumnHeaderClick,
     onColumnResize,
-    showSheetTabs = false
+    showSheetTabs = false,
+    virtualize = 'auto'
   }: Props = $props();
+
+  // Virtualised rendering: frozen rows/columns, a spacer, the rows and
+  // columns in view, another spacer (everything for small sheets).
+  type ColumnSlot = { kind: 'col'; key: string; viewCol: SpreadsheetViewColumn } | { kind: 'space'; key: string; width: number };
+  type RowSlot = { kind: 'row'; key: string; viewRow: SpreadsheetViewRow } | { kind: 'space'; key: string; height: number };
+  let scrollContainer = $state<HTMLDivElement | null>(null);
+  const viewportState = createSpreadsheetViewport({
+    view: () => sheetState.viewModel,
+    virtualize: () => virtualize,
+    merges: () => sheetState.document.table?.merges,
+    activeCell: () => sheetState.activeCell
+  });
+  $effect(() => viewportState.attach(scrollContainer));
+  let viewWindow = $derived(viewportState.window);
+  let columnSlots = $derived.by<ColumnSlot[]>(() => {
+    const view = sheetState.viewModel;
+    const win = viewWindow;
+    const col = (viewCol: SpreadsheetViewColumn): ColumnSlot => ({ kind: 'col', key: viewCol.column.id, viewCol });
+    if (!win.virtual) return view.columns.map(col);
+    const slots = view.columns.slice(0, win.frozenColumns).map(col);
+    if (win.leftSpace > 0) slots.push({ kind: 'space', key: 'space:left', width: win.leftSpace });
+    for (let i = win.colStart; i < win.colEnd; i++) slots.push(col(view.columns[i]));
+    if (win.rightSpace > 0) slots.push({ kind: 'space', key: 'space:right', width: win.rightSpace });
+    return slots;
+  });
+  let renderedColumns = $derived(columnSlots.flatMap((slot) => (slot.kind === 'col' ? [slot.viewCol] : [])));
+  let rowSlots = $derived.by<RowSlot[]>(() => {
+    const view = sheetState.viewModel;
+    const win = viewWindow;
+    const row = (viewRow: SpreadsheetViewRow): RowSlot => ({
+      kind: 'row',
+      key: viewRow.kind === 'group' ? `group:${viewRow.group.key}` : viewRow.row.id,
+      viewRow
+    });
+    if (!win.virtual) return view.rows.map(row);
+    const slots = view.rows.slice(0, win.frozenRows).map(row);
+    if (win.topSpace > 0) slots.push({ kind: 'space', key: 'space:top', height: win.topSpace });
+    for (let i = win.rowStart; i < win.rowEnd; i++) slots.push(row(view.rows[i]));
+    if (win.bottomSpace > 0) slots.push({ kind: 'space', key: 'space:bottom', height: win.bottomSpace });
+    return slots;
+  });
 
   // Defined names for formula autocomplete in the cell editor.
   let nameSuggestions = $derived.by(() => {
@@ -554,8 +603,8 @@
   {/if}
 
   <!-- Main Scrollable Grid -->
-  <div class="relative flex-1 overflow-auto">
-    <table class="border-collapse table-fixed w-max min-w-full">
+  <div bind:this={scrollContainer} class="relative flex-1 overflow-auto" onscroll={viewportState.onScroll}>
+    <table class="border-separate border-spacing-0 table-fixed w-max min-w-full [&>*>tr:not([data-spacer])>*]:border-b [&>*>tr>*]:border-border">
       <!-- Table Header Columns -->
       <thead>
         <tr class="h-7 bg-muted sticky top-0 z-20 border-b border-border shadow-xs">
@@ -563,7 +612,11 @@
           <th class="w-12 min-w-[3rem] sticky left-0 z-30 bg-muted border-r border-border text-center text-[10px] text-muted-foreground font-medium">
             #
           </th>
-          {#each sheetState.viewModel.columns as viewCol (viewCol.column.id)}
+          {#each columnSlots as slot (slot.key)}
+            {#if slot.kind === 'space'}
+              <th aria-hidden="true" data-spacer="" class="p-0" style="width: {slot.width}px; min-width: {slot.width}px; max-width: {slot.width}px; padding: 0;"></th>
+            {:else}
+            {@const viewCol = slot.viewCol}
             {@const col = viewCol.column}
             {@const cIdx = viewCol.index}
             <th
@@ -599,6 +652,7 @@
                 ></div>
               </div>
             </th>
+            {/if}
           {/each}
           {#if onAddColumnClick}
             <th class="w-10 min-w-[2.5rem] px-1 text-center bg-muted/40 hover:bg-muted cursor-pointer transition-colors" onclick={onAddColumnClick} title="Add Column">
@@ -612,11 +666,21 @@
 
       <!-- Table Body Rows -->
       <tbody>
-        {#each sheetState.viewModel.rows as viewRow (viewRow.kind === 'group' ? `group:${viewRow.group.key}` : viewRow.row.id)}
+        {#each rowSlots as rowSlot (rowSlot.key)}
+          {#if rowSlot.kind === 'space'}
+            <tr aria-hidden="true" data-spacer="" style="height: {rowSlot.height}px;">
+              <td colspan={columnSlots.length + 3} style="padding: 0; border: 0;"></td>
+            </tr>
+          {:else}
+          {@const viewRow = rowSlot.viewRow}
           {#if viewRow.kind === 'group'}
             <SpreadsheetGroupRow
               group={viewRow.group}
-              columns={sheetState.viewModel.columns}
+              columns={renderedColumns}
+              labelColumns={sheetState.viewModel.columns}
+              leadingColumns={viewWindow.virtual ? viewWindow.frozenColumns : undefined}
+              leftSpace={viewWindow.leftSpace}
+              rightSpace={viewWindow.rightSpace}
               groupColId={sheetState.document.table?.grouping?.colId ?? ''}
               onToggle={sheetState.toggleGroupCollapsed}
               trailingCell={!!onAddColumnClick}
@@ -637,7 +701,11 @@
             </td>
 
             <!-- Cells (a merged cell renders its top-left cell, spanning the merge) -->
-            {#each sheetState.viewModel.columns as viewCol (viewCol.column.id)}
+            {#each columnSlots as slot (slot.key)}
+              {#if slot.kind === 'space'}
+                <td aria-hidden="true" data-spacer="" style="padding: 0;"></td>
+              {:else}
+              {@const viewCol = slot.viewCol}
               {@const span = sheetState.viewModel.getCellSpan(displayRowIndex, viewCol.index)}
               {#if span}
               {@const rIdx = span.source.row}
@@ -752,6 +820,7 @@
                 {/if}
               </td>
               {/if}
+              {/if}
             {/each}
             {#if onAddColumnClick}
               <td class="w-10 min-w-[2.5rem] bg-muted/10 border-r border-border"></td>
@@ -759,6 +828,7 @@
             <!-- Spacer cell to absorb remaining table width -->
             <td class="border-b border-border bg-transparent p-0"></td>
           </tr>
+          {/if}
           {/if}
         {/each}
       </tbody>

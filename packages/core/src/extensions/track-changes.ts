@@ -787,10 +787,23 @@ export function getTrackedChanges(
   };
 
   const blockCounts = new Map<string, number>();
+  // Table cells holding each whole-block change (null once a block is outside a table).
+  const blockCells = new Map<string, Set<number> | null>();
   doc.descendants((node, pos) => {
     const block = node.attrs?.[BLOCK_CHANGE_ATTRIBUTE] as TrackedBlockChangeAttributes | null;
     if (block?.changeId && node.isTextblock) {
       blockCounts.set(block.changeId, (blockCounts.get(block.changeId) ?? 0) + 1);
+      if (block.operation && blockCells.get(block.changeId) !== null) {
+        const $pos = doc.resolve(pos);
+        let cell = -1;
+        for (let depth = $pos.depth; depth > 0 && cell < 0; depth--) {
+          const role = $pos.node(depth).type.spec.tableRole;
+          if (role === "cell" || role === "header_cell") cell = $pos.before(depth);
+        }
+        const cells = blockCells.get(block.changeId) ?? new Set<number>();
+        if (cell < 0) blockCells.set(block.changeId, null);
+        else blockCells.set(block.changeId, cells.add(cell));
+      }
       const change = add(
         `block:${block.changeId}`,
         "block",
@@ -867,8 +880,12 @@ export function getTrackedChanges(
         if (operation) {
           const count = blockCounts.get(change.id) ?? 1;
           const verb = operation === "insert" ? "Inserted" : "Deleted";
-          change.description =
-            count > 1 ? `${verb} ${count} blocks` : `${verb} ${blockLabel(current.type, current.attrs)}`;
+          const cells = blockCells.get(change.id)?.size;
+          change.description = cells
+            ? `${verb} ${cells === 1 ? "a table cell" : `${cells} table cells`}`
+            : count > 1
+              ? `${verb} ${count} blocks`
+              : `${verb} ${blockLabel(current.type, current.attrs)}`;
         } else {
           change.description = describeBlockChange(previous, current);
         }
@@ -1624,6 +1641,8 @@ interface PendingRestore {
   /** Nothing was inserted in place of the deleted content. */
   pureDelete: boolean;
   backspace: boolean;
+  /** The slice is whole table rows, cells or tables (tracked as whole blocks). */
+  wholeTable: boolean;
 }
 
 interface PendingBlock {
@@ -1826,6 +1845,110 @@ function collectBlockChanges(
   });
 }
 
+// ---------------------------------------------------------------------------
+// Table structure
+// ---------------------------------------------------------------------------
+
+/** `tableRole` of table nodes (set by TipTap's table extensions / prosemirror-tables). */
+const TABLE_ROLES = new Set(["table", "row", "cell", "header_cell"]);
+
+const isTableStructure = (node: ProsemirrorNode) => TABLE_ROLES.has(node.type.spec.tableRole as string);
+
+const supportsBlockChange = (node: ProsemirrorNode) =>
+  !!node.type.spec.attrs && BLOCK_CHANGE_ATTRIBUTE in node.type.spec.attrs;
+
+/** A closed slice of whole tables, rows or cells (e.g. Delete Row / Column / Table). */
+function isWholeTableSlice(slice: Slice): boolean {
+  if (slice.openStart !== 0 || slice.openEnd !== 0 || slice.content.childCount === 0) return false;
+  let whole = true;
+  slice.content.forEach((child) => {
+    if (!isTableStructure(child)) whole = false;
+  });
+  return whole;
+}
+
+/** Every textblock inside can carry a `blockChange` record. */
+function canMarkTableBlocks(slice: Slice): boolean {
+  let ok = true;
+  let any = false;
+  slice.content.descendants((node) => {
+    if (!ok) return false;
+    if (node.isTextblock) {
+      any = true;
+      if (!supportsBlockChange(node)) ok = false;
+      return false;
+    }
+    return true;
+  });
+  return ok && any;
+}
+
+/** All textblocks are whole-block insertions by the current author. */
+function isOwnTableInsertion(slice: Slice, ctx: TrackContext): boolean {
+  let own = true;
+  slice.content.descendants((node) => {
+    if (!own) return false;
+    if (node.isTextblock) {
+      const record = node.attrs[BLOCK_CHANGE_ATTRIBUTE] as TrackedBlockChangeAttributes | null;
+      if (record?.operation !== "insert" || record.authorId !== ctx.author.id) own = false;
+      return false;
+    }
+    return true;
+  });
+  return own;
+}
+
+/**
+ * Records whole tables, rows and cells inserted by a `ReplaceStep` (final
+ * document ranges). Open (partial) table nodes at the slice edges are
+ * skipped: they merge into existing ones.
+ */
+function collectInsertedTableNodes(
+  slice: Slice,
+  from: number,
+  rest: Mapping,
+  out: { from: number; to: number }[],
+): void {
+  slice.content.descendants((node, offset) => {
+    if (!isTableStructure(node)) return !node.isTextblock;
+    const pos = from - slice.openStart + offset;
+    if (pos < from) return true; // An open node at the start: look inside.
+    const start = rest.map(pos, 1);
+    const end = rest.map(pos + node.nodeSize, -1);
+    if (end - start === node.nodeSize) out.push({ from: start, to: end });
+    return false;
+  });
+}
+
+/**
+ * Gives every textblock in `from..to` a whole-block `blockChange` record
+ * (`operation: "insert" | "delete"`, one change id), so accepting a deletion
+ * or rejecting an insertion removes the rows/cells/table around them.
+ */
+function markTableBlocks(
+  tr: Transform,
+  from: number,
+  to: number,
+  operation: TrackedBlockOperation,
+  attrs: TrackedChangeAttributes,
+): boolean {
+  const positions: number[] = [];
+  tr.doc.nodesBetween(from, to, (node, pos) => {
+    if (!node.isTextblock) return true;
+    if (pos >= from && pos + node.nodeSize <= to && supportsBlockChange(node)) positions.push(pos);
+    return false;
+  });
+  positions.forEach((pos) => {
+    const record: TrackedBlockChangeAttributes = {
+      ...baseAttributes(attrs),
+      previous: blockSnapshot(tr.doc, pos),
+      operation,
+    };
+    tr.setNodeAttribute(pos, BLOCK_CHANGE_ATTRIBUTE, record);
+  });
+  return positions.length > 0;
+}
+
 /**
  * Builds a transaction that turns the user's raw edits into tracked changes:
  * inserted content gets the insertion mark, deleted content is put back with
@@ -1844,6 +1967,7 @@ function trackTransactions(
 
   const inserted: { from: number; to: number }[] = [];
   const restores: PendingRestore[] = [];
+  const tableInserts: { from: number; to: number }[] = [];
   const formatRanges: { from: number; to: number }[] = [];
   const blocks = new Map<number, PendingBlock>();
   let mapIndex = 0;
@@ -1890,6 +2014,9 @@ function trackTransactions(
         }
       }
 
+      if (ctx.trackBlocks && slice.size > 0) {
+        collectInsertedTableNodes(slice, from, rest, tableInserts);
+      }
       if (slice.size > 0 && hasInlineContent(slice.content)) {
         const start = rest.map(from, 1);
         const end = rest.map(from + slice.size, -1);
@@ -1897,7 +2024,8 @@ function trackTransactions(
       }
       if (to > from) {
         const deleted = docBefore.slice(from, to);
-        if (!hasInlineContent(deleted.content)) return;
+        const wholeTable = ctx.trackBlocks && isWholeTableSlice(deleted);
+        if (!wholeTable && !hasInlineContent(deleted.content)) return;
         const $from = docBefore.resolve(from);
         const before = i === 0 ? t.before : null;
         const sel = before === oldState.doc ? oldState.selection : null;
@@ -1906,6 +2034,7 @@ function trackTransactions(
           slice: deleted,
           parentType: $from.node(Math.max(0, $from.depth - deleted.openStart)).type,
           pureDelete: slice.size === 0,
+          wholeTable,
           backspace:
             single && slice.size === 0 && !!sel && sel.empty && sel.from === to,
         });
@@ -1916,6 +2045,7 @@ function trackTransactions(
 
   if (
     inserted.length === 0 &&
+    tableInserts.length === 0 &&
     restores.length === 0 &&
     formatRanges.length === 0 &&
     blocks.size === 0
@@ -1988,6 +2118,21 @@ function trackTransactions(
   });
   if (insertAttrs) changed = true;
 
+  // Inserted rows, columns (cells) and tables are whole-block insertions:
+  // rejecting removes them. Their text is part of the block change.
+  if (tableInserts.length) {
+    const attrs = newAttributes(ctx);
+    tableInserts.forEach(({ from, to }) => {
+      const start = tr.mapping.map(from, 1);
+      const end = tr.mapping.map(to, -1);
+      const node = tr.doc.nodeAt(start);
+      if (end <= start || !node || !isTableStructure(node) || node.nodeSize !== end - start) return;
+      tr.removeMark(start, end, ctx.insertion);
+      changed = markTableBlocks(tr, start, end, "insert", attrs) || changed;
+    });
+  }
+  let tableDeleteAttrs: TrackedChangeAttributes | null = null;
+
   let cursor: number | null = null;
   restores
     .sort((a, b) => b.pos - a.pos)
@@ -1995,6 +2140,22 @@ function trackTransactions(
       const pos = tr.mapping.map(restore.pos, -1);
       const attrs =
         deleteAttrs ?? adjacentAttributes(tr.doc, pos, pos, ctx.deletion, ctx) ?? newAttributes(ctx);
+      if (restore.wholeTable && canMarkTableBlocks(restore.slice)) {
+        // Rows/cells/tables the same author inserted are really deleted.
+        if (isOwnTableInsertion(restore.slice, ctx)) return;
+        tableDeleteAttrs = tableDeleteAttrs ?? deleteAttrs ?? newAttributes(ctx);
+        const sizeBefore = tr.doc.content.size;
+        try {
+          tr.replace(pos, pos, restore.slice);
+        } catch {
+          return;
+        }
+        const end = pos + (tr.doc.content.size - sizeBefore);
+        markTableBlocks(tr, pos, end, "delete", tableDeleteAttrs);
+        changed = true;
+        return;
+      }
+      if (!hasInlineContent(restore.slice.content)) return;
       const marked = markDeletedSlice(restore.slice, restore.parentType, attrs, ctx);
       if (!marked || !marked.hasContent) return;
       const sizeBefore = tr.doc.content.size;

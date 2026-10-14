@@ -175,7 +175,7 @@ describe('built-in tool providers have complete MCP annotations', () => {
 		const registry = new ToolRegistry();
 		providers.forEach((p) => registry.register(p));
 		const tools = registry.listTools().tools;
-		expect(tools.length).toBe(3 + 2 + 4 + 3);
+		expect(tools.length).toBe(4 + 2 + 4 + 3);
 		for (const tool of tools) {
 			expect(typeof tool.title, `${tool.name} title`).toBe('string');
 			expect(tool.annotations?.title, `${tool.name} annotations.title`).toBe(tool.title);

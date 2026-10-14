@@ -22,3 +22,6 @@ export * from './autoLayout.js';
 export * from './autoLayoutController.js';
 export * from './tokenBindings.js';
 export * from './pathops/index.js';
+export * from './animation/index.js';
+export * from './components.js';
+export * from './componentsController.js';

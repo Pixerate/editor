@@ -4,3 +4,4 @@ export * from './tools.js';
 export * from './schema.js';
 export * from './registry.js';
 export * from './providers.js';
+export * from './componentTools.js';

@@ -61,6 +61,19 @@ export interface FormulaNameDefinition {
   key?: string;
 }
 
+/** Hints for `EvaluationContext.resolveRange`. */
+export interface RangeResolveOptions {
+  /** The values are only aggregated by a function that ignores blank cells. */
+  skipBlanks?: boolean;
+}
+
+/**
+ * Functions whose result doesn't change when blank cells are left out of
+ * their range arguments (they skip blanks, and their order doesn't matter
+ * beyond floating-point addition, which keeps the document order).
+ */
+const BLANK_IGNORING_FUNCTIONS = new Set(['SUM', 'PRODUCT', 'AVERAGE', 'COUNT', 'COUNTA', 'MIN', 'MAX']);
+
 export interface EvaluationContext {
   /**
    * Value of a cell. `sheet` is set for sheet-qualified references
@@ -72,8 +85,18 @@ export interface EvaluationContext {
    * Values of a rectangular range, column by column (all rows of the first
    * column, then the next column). Lookup functions rely on this order.
    * `sheet` as in `resolveCell`; return an error code for a missing sheet.
+   * `options.skipBlanks` is a hint that the caller ignores blank cells
+   * (SUM, COUNT, AVERAGE, …): a resolver may then leave them out, so sparse
+   * ranges cost no array slots. Returning every value is always correct.
    */
-  resolveRange?: (startCol: string, startRow: number, endCol: string, endRow: number, sheet?: string) => any[] | string;
+  resolveRange?: (
+    startCol: string,
+    startRow: number,
+    endCol: string,
+    endRow: number,
+    sheet?: string,
+    options?: RangeResolveOptions,
+  ) => any[] | string;
   resolveProperty?: (property: string) => any;
   /**
    * The spilled array anchored at a cell, for `A1#` references: its shape and
@@ -535,12 +558,15 @@ export class FormulaEvaluator {
     return values;
   }
 
-  private evaluateRange(node: RangeNode): any {
+  private evaluateRange(node: RangeNode, options?: RangeResolveOptions): any {
     if (!this.context.resolveRange) {
       throw new Error(`Cannot resolve range ${node.raw}: no range resolver provided`);
     }
     if (node.sheetEnd !== undefined) return this.evaluate3d(node);
-    const values = this.context.resolveRange(node.startCol, node.startRow, node.endCol, node.endRow, node.sheet ?? this.defaultSheet);
+    const sheet = node.sheet ?? this.defaultSheet;
+    const values = options
+      ? this.context.resolveRange(node.startCol, node.startRow, node.endCol, node.endRow, sheet, options)
+      : this.context.resolveRange(node.startCol, node.startRow, node.endCol, node.endRow, sheet);
     if (!Array.isArray(values)) {
       if (values === '#REF!' && node.sheet !== undefined) {
         return this.fail('#REF!', `${sheetLabel(node)}${node.raw} refers to a sheet that doesn't exist.`);
@@ -584,7 +610,7 @@ export class FormulaEvaluator {
 
     if (SPECIAL_FORMS.has(def.name)) return this.evaluateSpecialForm(def.name, node);
 
-    const args = this.lazyArguments(node.args);
+    const args = this.lazyArguments(node.args, BLANK_IGNORING_FUNCTIONS.has(def.name));
     if (def.elementwise) {
       const lifted = this.liftOverArrays(def, args);
       if (lifted !== undefined) return lifted;
@@ -599,13 +625,24 @@ export class FormulaEvaluator {
     return result === undefined || result === null ? '' : result;
   }
 
-  private lazyArguments(nodes: ASTNode[]): FormulaArgument[] {
+  /**
+   * Arguments evaluated on first use. With `skipBlanks` (the function ignores
+   * blank cells), range arguments may come back without their blanks.
+   */
+  private lazyArguments(nodes: ASTNode[], skipBlanks = false): FormulaArgument[] {
     const cache = new Map<number, any>();
     return nodes.map((node, index) => ({
       index,
       node,
       value: () => {
-        if (!cache.has(index)) cache.set(index, this.evaluateNode(node));
+        if (!cache.has(index)) {
+          cache.set(
+            index,
+            skipBlanks && node.type === 'Range' && node.sheetEnd === undefined
+              ? this.evaluateRange(node, { skipBlanks: true })
+              : this.evaluateNode(node),
+          );
+        }
         return cache.get(index);
       },
     }));

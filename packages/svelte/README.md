@@ -69,6 +69,8 @@ Requires **Svelte 5** (the components use runes). Components ship as `.svelte` s
 
 `ReviewToolbar` steps through insertions, deletions, formatting and block changes and shows the current one's author and description (e.g. "Ada: Formatted: Bold"); hide it with `showDescription={false}` or restyle it with `descriptionClass`. Put `<CommentButton {editor} />` inside a `BubbleMenu` to comment on the selection. `createComments(editorOrStore)` and `createTrackChanges(editor)` are rune (and Svelte store) adapters for custom UIs.
 
+Tables are on by default in `createRichTextPreset` (`table: false` turns them off). `<TableToolbar {editor} />` shows row, column, merge/split, header and alignment buttons while the selection is in a table (disabled buttons explain why in their tooltip; `items` picks the buttons, `showWhenOutside` keeps it visible). `<TableBubbleMenu {editor} />` shows it in a bubble menu next to the cursor, and `<InsertTableGrid {editor} oninsert={…} />` is a Word-style size picker. `createTableMenu(editor)` is the rune adapter for custom UIs.
+
 `<FindReplaceBar {editor} />` is a Word-style find bar for editors with the `FindReplace` extension (`createRichTextPreset({ findReplace: true })`): it appears on Mod+F / Mod+H (or `editor.commands.openFindReplace()`), with find and replace fields, option toggles, a "3 of 12" counter, previous/next, Replace and Replace all; Enter / Shift+Enter step, Mod+Enter in the replace field replaces all, Escape closes (`onclose`). `createFindReplace(editor)` is the rune (and Svelte store) adapter for custom UIs.
 
 ## More exports
@@ -76,7 +78,7 @@ Requires **Svelte 5** (the components use runes). Components ship as `.svelte` s
 | Import | Exports |
 | :--- | :--- |
 | `@pixerate/editor-svelte` | `EditableTextNodeEditor`, `BubbleMenu`, `TemplateRenderer`, `initiateEditor`, `createReactiveEditor`, `createHistory`, `createHistoryDirty`, `createHistoryShortcuts`, `navigationGuard` (action), `createNavigationGuard`, `SpreadsheetEditor`, `FormulaBar`, `FormulaHints`, `createReactiveSpreadsheet`, `DirtyTracker` |
-| `@pixerate/editor-svelte/spreadsheet` | `SpreadsheetEditor`, `FormulaBar`, `FormulaHints`, `SpreadsheetContextMenu`, `SpreadsheetGroupRow`, `SheetTabs`, `NameManager`, `createReactiveSpreadsheet` (also re-exported from the root entry) |
+| `@pixerate/editor-svelte/spreadsheet` | `SpreadsheetEditor` (virtualised for large sheets, `virtualize` prop), `FormulaBar`, `FormulaHints`, `SpreadsheetContextMenu`, `SpreadsheetGroupRow`, `SheetTabs`, `NameManager`, `createReactiveSpreadsheet`, `createSpreadsheetViewport` (also re-exported from the root entry) |
 | `@pixerate/editor-svelte/image-editor` | `ImageEditor`, `createReactiveImageEditor`: crop, rotate/flip, adjustments, annotations, depth masks, Select & Mask (`SelectionOptionsBar`, `RefineEdgePanel`: magic wand, marquees, lasso, Refine Edge, layer masks), and `onInpaint` / `onRemoveBackground` AI hooks |
 | `@pixerate/editor-svelte/commands` | `CommandPalette`, `createCommandPalette` (`hotkey: "Mod+K"`; call `destroy()` when done), `createCommandShortcuts`, `useRegisterCommands` over a `CommandRegistry` from `@pixerate/editor/commands` (also re-exported from the root entry) |
 | `@pixerate/editor-svelte/persistence` | `createAutosave` (crash-recovery snapshots bound to a history / dirty flag, flushed on `pagehide`; call `destroy()` when done) and `<RecoveryPrompt>` (also re-exported from the root entry) |

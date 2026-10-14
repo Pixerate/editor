@@ -18,7 +18,9 @@ describe('measureGrowth', () => {
     expect(measureGrowth(linear(250_000), linear(1_000_000), { limit: 10 })).toBeLessThan(10);
   });
 
+  // 8× the input: quadratic is ~64×, so even a noisy (slow) small sample can't pull
+  // the lowest ratio of the attempts under the limit.
   it('fails quadratic work on every attempt', { timeout: 60_000 }, () => {
-    expect(measureGrowth(quadratic(500), quadratic(2_000), { limit: 10 })).toBeGreaterThan(10);
+    expect(measureGrowth(quadratic(400), quadratic(3_200), { limit: 10 })).toBeGreaterThan(10);
   });
 });

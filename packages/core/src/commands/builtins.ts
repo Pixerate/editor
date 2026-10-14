@@ -321,6 +321,238 @@ export function createShapeCommands(controller: ShapeCommandTarget, options: Sha
 }
 
 // ---------------------------------------------------------------------------
+// Canvas components and instances
+// ---------------------------------------------------------------------------
+
+type ComponentActionResult = { ok: true; ids: string[] } | { ok: false; reason: string };
+
+/** Components surface of the components controller (`createCanvasComponentsController` satisfies it). */
+export interface ComponentCommandTarget {
+	createComponent(ids?: Iterable<string>): ComponentActionResult;
+	canCreateComponent(ids?: Iterable<string>): true | string;
+	combineAsVariants(ids?: Iterable<string>): ComponentActionResult;
+	canCombineAsVariants(ids?: Iterable<string>): true | string;
+	createInstance(componentId: string, options?: { parentId?: string; position?: { x: number; y: number }; properties?: Record<string, boolean | string> }): ComponentActionResult;
+	canCreateInstance(componentId?: string, parentId?: string): true | string;
+	detachInstance(ids?: Iterable<string>): ComponentActionResult;
+	canDetachInstance(ids?: Iterable<string>): true | string;
+	resetOverrides(id?: string, group?: string): ComponentActionResult;
+	canResetOverrides(id?: string): true | string;
+	pushOverrides(id?: string): ComponentActionResult;
+	canPushOverrides(id?: string): true | string;
+	swapInstance(componentId: string, ids?: Iterable<string>): ComponentActionResult;
+	canSwapInstance(componentId?: string, ids?: Iterable<string>): true | string;
+	setInstanceProperties(properties: Record<string, unknown>, ids?: Iterable<string>): ComponentActionResult;
+	canSetInstanceProperties(ids?: Iterable<string>): true | string;
+	restoreMainComponent(id?: string): ComponentActionResult;
+	canRestoreMainComponent(id?: string): true | string;
+	goToMainComponent(id?: string): string | undefined;
+	canGoToMainComponent(id?: string): true | string;
+	list(): unknown;
+	inspect(id?: string): unknown;
+}
+
+export interface ComponentCommandOptions {
+	/** Id prefix (default `canvas.`). */
+	prefix?: string;
+	group?: string;
+	/** Scope (default `canvas`). Pass `null` for global. */
+	scope?: string | null;
+}
+
+const outcome = (result: ComponentActionResult) => {
+	if (!result.ok) throw new Error(result.reason);
+	return { ids: result.ids };
+};
+
+const ID_PARAM = { type: 'string', description: 'Instance (or layer inside one) to act on (default: the first selected node).' } as const;
+
+/**
+ * Palette / context-menu / agent commands for components and instances:
+ * `canvas.createComponent`, `canvas.combineAsVariants`, `canvas.createInstance`
+ * (`{ componentId, parentId?, x?, y?, properties? }`), `canvas.detachInstance`,
+ * `canvas.resetOverrides` (`{ id?, group? }`), `canvas.pushOverrides`, `canvas.goToMainComponent`,
+ * `canvas.swapInstance` (`{ componentId, ids? }`), `canvas.setInstanceProperties`
+ * (`{ properties, ids? }`: variant and component property values), `canvas.restoreMainComponent`
+ * and the read-only `canvas.listComponents` / `canvas.inspectInstance`. Each action is one
+ * undoable step when the controller has a history; enablement explains why it cannot run.
+ */
+export function createComponentCommands(controller: ComponentCommandTarget, options: ComponentCommandOptions = {}): CommandSpec[] {
+	const prefix = options.prefix ?? 'canvas.';
+	const group = options.group ?? 'Components';
+	const scope = options.scope === null ? undefined : options.scope ?? 'canvas';
+	const base = { group, ...(scope ? { scope } : {}) };
+	const idParams: CommandParamsSchema = { type: 'object', properties: { id: ID_PARAM } };
+	return [
+		{
+			...base,
+			id: `${prefix}createComponent`,
+			label: 'Create Component',
+			keywords: ['component', 'symbol', 'main component', 'reusable'],
+			description: 'Turns the selected frame into a main component, or wraps the selection in one.',
+			params: IDS_PARAMS,
+			shortcut: 'Mod+Alt+K',
+			enabled: (_ctx: unknown, params?: { ids?: string[] }) => controller.canCreateComponent(params?.ids),
+			run: (_ctx: unknown, params: { ids?: string[] }) => outcome(controller.createComponent(params?.ids))
+		},
+		{
+			...base,
+			id: `${prefix}combineAsVariants`,
+			label: 'Combine as Variants',
+			keywords: ['component set', 'variant', 'variants'],
+			description: 'Wraps the selected components in a component set.',
+			params: IDS_PARAMS,
+			enabled: (_ctx: unknown, params?: { ids?: string[] }) => controller.canCombineAsVariants(params?.ids),
+			run: (_ctx: unknown, params: { ids?: string[] }) => outcome(controller.combineAsVariants(params?.ids))
+		},
+		{
+			...base,
+			id: `${prefix}createInstance`,
+			label: 'Create Instance',
+			keywords: ['instance', 'insert component', 'use component'],
+			description: 'Places an instance of a component (or a component set’s default variant).',
+			params: {
+				type: 'object',
+				properties: {
+					componentId: { type: 'string', description: 'Component or component set id.' },
+					parentId: { type: 'string', description: 'Frame to place it in (default: the canvas).' },
+					x: { type: 'number', description: 'X in the parent’s space (default: next to the main).' },
+					y: { type: 'number', description: 'Y in the parent’s space.' },
+					properties: { type: 'object', description: 'Variant and component property values.', additionalProperties: true }
+				},
+				required: ['componentId']
+			},
+			enabled: (_ctx: unknown, params?: { componentId?: string; parentId?: string }) =>
+				params?.componentId === undefined ? true : controller.canCreateInstance(params.componentId, params.parentId),
+			run: (_ctx: unknown, params: { componentId: string; parentId?: string; x?: number; y?: number; properties?: Record<string, boolean | string> }) =>
+				outcome(
+					controller.createInstance(params.componentId, {
+						...(params.parentId !== undefined ? { parentId: params.parentId } : {}),
+						...(params.x !== undefined || params.y !== undefined ? { position: { x: params.x ?? 0, y: params.y ?? 0 } } : {}),
+						...(params.properties ? { properties: params.properties } : {})
+					})
+				)
+		},
+		{
+			...base,
+			id: `${prefix}detachInstance`,
+			label: 'Detach Instance',
+			keywords: ['unlink', 'break instance'],
+			description: 'Turns the selected instances into plain frames that keep their look.',
+			params: IDS_PARAMS,
+			shortcut: 'Mod+Alt+B',
+			enabled: (_ctx: unknown, params?: { ids?: string[] }) => controller.canDetachInstance(params?.ids),
+			run: (_ctx: unknown, params: { ids?: string[] }) => outcome(controller.detachInstance(params?.ids))
+		},
+		{
+			...base,
+			id: `${prefix}resetOverrides`,
+			label: 'Reset All Changes',
+			keywords: ['reset instance', 'reset overrides', 'revert'],
+			description: 'Resets the overrides of an instance (or of a layer, or one override group) to its main.',
+			params: {
+				type: 'object',
+				properties: {
+					id: ID_PARAM,
+					group: { type: 'string', description: 'One override group to reset, e.g. "data.label" or "shape.fill" (default: all).' }
+				}
+			},
+			enabled: (_ctx: unknown, params?: { id?: string }) => controller.canResetOverrides(params?.id),
+			run: (_ctx: unknown, params: { id?: string; group?: string }) => outcome(controller.resetOverrides(params?.id, params?.group))
+		},
+		{
+			...base,
+			id: `${prefix}pushOverrides`,
+			label: 'Push Changes to Main Component',
+			keywords: ['push overrides', 'update main component'],
+			description: 'Copies the instance’s overrides to its main component and every other instance.',
+			params: idParams,
+			enabled: (_ctx: unknown, params?: { id?: string }) => controller.canPushOverrides(params?.id),
+			run: (_ctx: unknown, params: { id?: string }) => outcome(controller.pushOverrides(params?.id))
+		},
+		{
+			...base,
+			id: `${prefix}goToMainComponent`,
+			label: 'Go to Main Component',
+			keywords: ['main component', 'find main', 'reveal'],
+			description: 'Selects the main component of the selected instance.',
+			params: idParams,
+			enabled: (_ctx: unknown, params?: { id?: string }) => controller.canGoToMainComponent(params?.id),
+			run: (_ctx: unknown, params: { id?: string }) => {
+				const main = controller.goToMainComponent(params?.id);
+				if (!main) throw new Error('The main component was not found.');
+				return { id: main };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}swapInstance`,
+			label: 'Swap Instance…',
+			keywords: ['replace instance', 'swap component'],
+			description: 'Makes the selected instances show another component, keeping matching overrides.',
+			params: {
+				type: 'object',
+				properties: {
+					componentId: { type: 'string', description: 'Component or component set to swap to.' },
+					ids: IDS_PARAMS.properties!.ids
+				},
+				required: ['componentId']
+			},
+			enabled: (_ctx: unknown, params?: { componentId?: string; ids?: string[] }) => controller.canSwapInstance(params?.componentId, params?.ids),
+			run: (_ctx: unknown, params: { componentId: string; ids?: string[] }) => outcome(controller.swapInstance(params.componentId, params?.ids))
+		},
+		{
+			...base,
+			id: `${prefix}setInstanceProperties`,
+			label: 'Set Instance Properties…',
+			keywords: ['variant', 'switch variant', 'component property', 'toggle'],
+			description: 'Sets variant properties (switching variants) and component property values of the selected instances.',
+			params: {
+				type: 'object',
+				properties: {
+					properties: { type: 'object', description: 'Property name → value (variant value, boolean, text or component id).', additionalProperties: true },
+					ids: IDS_PARAMS.properties!.ids
+				},
+				required: ['properties']
+			},
+			enabled: (_ctx: unknown, params?: { ids?: string[] }) => controller.canSetInstanceProperties(params?.ids),
+			run: (_ctx: unknown, params: { properties: Record<string, unknown>; ids?: string[] }) =>
+				outcome(controller.setInstanceProperties(params.properties, params?.ids))
+		},
+		{
+			...base,
+			id: `${prefix}restoreMainComponent`,
+			label: 'Restore Main Component',
+			keywords: ['missing main', 'recover component'],
+			description: 'Turns an instance whose main was deleted back into the main component.',
+			params: idParams,
+			enabled: (_ctx: unknown, params?: { id?: string }) => controller.canRestoreMainComponent(params?.id),
+			run: (_ctx: unknown, params: { id?: string }) => outcome(controller.restoreMainComponent(params?.id))
+		},
+		{
+			...base,
+			id: `${prefix}listComponents`,
+			label: 'List Components',
+			keywords: ['components', 'variants', 'assets'],
+			description: 'Lists the components and component sets (with their variant options).',
+			readOnly: true,
+			run: () => controller.list()
+		},
+		{
+			...base,
+			id: `${prefix}inspectInstance`,
+			label: 'Inspect Instance',
+			keywords: ['instance', 'overrides', 'properties'],
+			description: 'Describes an instance: its main, variant, property values and overrides.',
+			params: idParams,
+			readOnly: true,
+			enabled: (_ctx: unknown, params?: { id?: string }) => (controller.inspect(params?.id) ? true : 'Select an instance.'),
+			run: (_ctx: unknown, params: { id?: string }) => controller.inspect(params?.id) ?? null
+		}
+	];
+}
+
+// ---------------------------------------------------------------------------
 // Spreadsheet table actions
 // ---------------------------------------------------------------------------
 

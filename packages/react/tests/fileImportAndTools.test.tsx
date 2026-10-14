@@ -235,8 +235,8 @@ describe("useAgentToolProvider", () => {
 
       await act(async () => root.render(<DocEditor id="one" />));
       vi.runAllTimers();
-      expect(registry.listTools().tools.map((t) => t.name)).toEqual(["get_text", "insert_text", "replace_selection"]);
-      expect(changes.at(-1)).toEqual(["get_text", "insert_text", "replace_selection"]);
+      expect(registry.listTools().tools.map((t) => t.name)).toEqual(["get_text", "insert_text", "replace_selection", "edit_table"]);
+      expect(changes.at(-1)).toEqual(["get_text", "insert_text", "replace_selection", "edit_table"]);
     } finally {
       vi.useRealTimers();
     }

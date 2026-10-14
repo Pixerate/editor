@@ -1,6 +1,15 @@
 import type { Editor } from '@tiptap/core';
 import { plainTextToSlice, getEditorText } from '../serializers/plain-text.js';
 import { getEditorMarkdown } from '../serializers/markdown.js';
+import { TextSelection } from '@tiptap/pm/state';
+import {
+	TABLE_ACTIONS,
+	getTableActionState,
+	getTableState,
+	isTableEnabled,
+	runTableAction,
+	type TableAction
+} from '../extensions/table/actions.js';
 import type { SpreadsheetController } from '../spreadsheet/controller.js';
 import { colNameToIndex, indexToColName, isFormulaError } from '../spreadsheet/formula/evaluator.js';
 import { planToolCall } from './planner.js';
@@ -49,7 +58,8 @@ function selectionInfo(editor: Editor) {
 
 /**
  * Tools for a mounted rich-text editor: `get_text` (always), plus
- * `insert_text` and `replace_selection` while the editor is editable.
+ * `insert_text` and `replace_selection` while the editor is editable, and
+ * `edit_table` when the schema has tables (`createRichTextPreset`'s `table`).
  * Positions are ProseMirror document positions (as in `selection.from`).
  * The provider re-announces its tool list when editability changes and
  * exposes no tools once the editor is destroyed.
@@ -149,13 +159,70 @@ export function createRichTextToolProvider(
 		}
 	};
 
+	const editTable: AgentTool = {
+		name: 'edit_table',
+		title: 'Edit tables',
+		description:
+			'Inserts a table or edits the table at the cursor (or at `at`): add/delete rows and columns, delete the table, ' +
+			'merge/split cells, toggle header row/column/cell, move between cells, set cell alignment or background. ' +
+			'Returns the table size and the cursor cell afterwards.',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				operation: { type: 'string', enum: TABLE_ACTIONS.map((a) => a.action), description: 'Table operation.' },
+				at: { type: 'integer', minimum: 0, description: 'Document position to place the cursor first (e.g. inside a cell).' },
+				rows: { type: 'integer', minimum: 1, maximum: 100, description: 'insertTable: rows (default 3).' },
+				cols: { type: 'integer', minimum: 1, maximum: 50, description: 'insertTable: columns (default 3).' },
+				withHeaderRow: { type: 'boolean', description: 'insertTable: first row is a header row (default true).' },
+				align: {
+					type: ['string', 'null'],
+					enum: ['left', 'center', 'right', 'justify', null],
+					description: 'setCellAlignment: alignment, or null to clear.'
+				},
+				color: { type: ['string', 'null'], description: 'setCellBackground: CSS color, or null to clear.' }
+			},
+			required: ['operation'],
+			additionalProperties: false
+		},
+		annotations: {
+			title: 'Edit tables',
+			readOnlyHint: false,
+			destructiveHint: true,
+			idempotentHint: false,
+			openWorldHint: false
+		},
+		handler: ({ operation, at, ...params }) => {
+			const ed = editor();
+			if (at !== undefined) {
+				const size = ed.state.doc.content.size;
+				if (at > size) throw new Error(`Position ${at} is outside the document (size ${size}).`);
+				ed.view.dispatch(ed.state.tr.setSelection(TextSelection.near(ed.state.doc.resolve(at))));
+			}
+			const action = operation as TableAction;
+			const state = getTableActionState(ed, action, params);
+			if (state !== true) throw new Error(state);
+			runTableAction(ed, action, params);
+			const table = getTableState(ed);
+			return {
+				operation,
+				table: table.inTable
+					? { rows: table.rows, columns: table.columns, row: table.row, column: table.column }
+					: null,
+				selection: selectionInfo(ed)
+			};
+		}
+	};
+
 	return {
 		id: options.id,
 		namespace: options.namespace,
 		tools: () => {
 			const ed = editor();
 			if (!ed || ed.isDestroyed) return [];
-			return ed.isEditable ? [getText, insertText, replaceSelection] : [getText];
+			if (!ed.isEditable) return [getText];
+			return isTableEnabled(ed)
+				? [getText, insertText, replaceSelection, editTable]
+				: [getText, insertText, replaceSelection];
 		},
 		subscribe: (notify) => {
 			const ed = editor();

@@ -7,12 +7,14 @@ import type VariableFormComponent from "./VariableForm.svelte";
 import type OutlinePanelComponent from "./OutlinePanel.svelte";
 import type MergePreviewComponent from "./MergePreview.svelte";
 import type StylesGalleryComponent from "./StylesGallery.svelte";
+import type ExportDocxButtonComponent from "./ExportDocxButton.svelte";
 
 export * from "./editor.svelte.js";
 export * from "./navigationGuard.js";
 export * from "./createNavigationGuard.svelte.js";
 export * from "./history/index.js";
 export * from "./fileImport.svelte.js";
+export * from "./docxExport.svelte.js";
 export * from "./agentTools.svelte.js";
 export * from "./outline.svelte.js";
 export * from "./merge.svelte.js";
@@ -59,6 +61,8 @@ export { default as OutlinePanel } from "./OutlinePanel.svelte";
 export * from "./paragraphStyles.svelte.js";
 export type StylesGalleryProps = ComponentProps<typeof StylesGalleryComponent>;
 export { default as StylesGallery } from "./StylesGallery.svelte";
+export type ExportDocxButtonProps = ComponentProps<typeof ExportDocxButtonComponent>;
+export { default as ExportDocxButton } from "./ExportDocxButton.svelte";
 
 export type {
   Template,
@@ -86,3 +90,4 @@ export * from "./commands/index.js";
 export * from "./persistence/index.js";
 export * from "./generation/index.js";
 export * from "./find-replace/index.js";
+export * from "./tables/index.js";

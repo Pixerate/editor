@@ -86,6 +86,11 @@ function parseDeclarations(style: string): [string, string][] {
 	return out;
 }
 
+/** The top-level `name: value` declarations of a style string (names as written, in order). */
+export function parseNodeStyleDeclarations(style: string): [string, string][] {
+	return parseDeclarations(style);
+}
+
 /** A style property (camelCase name) from a style string or object. */
 export function readNodeStyleProperty(style: CanvasNodeStyle | undefined | null, prop: string): string | number | undefined {
 	if (!style) return undefined;

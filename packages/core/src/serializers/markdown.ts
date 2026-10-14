@@ -28,14 +28,14 @@ md.validateLink = (url: string) => {
  * markdown-it-task-lists emits as raw HTML.
  */
 const ALLOWED_HTML_TAGS = new Set([
-  "a", "abbr", "b", "blockquote", "br", "code", "del", "details", "div", "em",
-  "h1", "h2", "h3", "h4", "h5", "h6", "hr", "i", "img", "input", "kbd", "li", "mark",
+  "a", "abbr", "b", "blockquote", "br", "code", "col", "colgroup", "del", "details", "div", "em",
+  "h1", "h2", "h3", "h4", "h5", "h6", "hr", "i", "img", "input", "ins", "kbd", "li", "mark",
   "ol", "p", "pre", "s", "span", "strong", "sub", "summary", "sup", "table",
   "tbody", "td", "tfoot", "th", "thead", "tr", "u", "ul",
 ]);
 
 const ALLOWED_HTML_ATTRS = new Set([
-  "alt", "align", "checked", "class", "colspan", "disabled", "height", "href",
+  "alt", "align", "checked", "class", "colspan", "colwidth", "disabled", "height", "href",
   "rel", "rowspan", "src", "start", "target", "title", "type", "width",
 ]);
 

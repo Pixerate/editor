@@ -32,9 +32,9 @@ import {
   describeFormulaError,
   isFormulaError,
   parseFormula,
-  extractCellDependencies,
+  extractReferenceDependencies,
   extractNameDependencies,
-  columnDependencyKey,
+  rangeDependencyKey,
   getFormulaFunction,
   renameSheetInFormula,
   deleteSheetInFormula,
@@ -184,6 +184,16 @@ export interface SpreadsheetControllerOptions {
   maxHistoryBytes?: number;
 }
 
+/** Work done by a recalculation (see `SpreadsheetController.getRecalculationStats`). */
+export interface SpreadsheetRecalculationStats {
+  /** Formulas evaluated. */
+  evaluated: number;
+  /** Cells in the evaluation plans: formulas, their dependents and spilled cells. */
+  planned: number;
+  /** Evaluation passes (another pass runs when spill ranges change). */
+  passes: number;
+}
+
 /** Module-wide sequence that makes generated row, column and filter ids unique. */
 let nextIdSequence = 0;
 
@@ -226,7 +236,19 @@ const createRuntime = (doc: SpreadsheetDocument): SheetRuntime => ({
  * An undo/redo step: a snapshot of one sheet (cell edits, table operations)
  * or of the whole workbook (sheet and name operations).
  */
-type HistoryEntry = { kind: 'sheet'; sheetId: string; data: string } | { kind: 'workbook'; data: string };
+type HistoryEntry =
+  | { kind: 'sheet'; sheetId: string; data: string }
+  | { kind: 'workbook'; data: string }
+  // One cell's previous state (a `CellHistoryData`): a single-cell edit
+  // doesn't serialise the whole sheet, which took most of an edit's time on
+  // large sheets.
+  | { kind: 'cells'; sheetId: string; data: string };
+
+interface CellHistoryData {
+  /** [rowId, colId, stored cell (null: none), whether the row had a cells entry]. */
+  cells: Array<[rowId: string, colId: string, cell: CellData | null, rowExisted: boolean]>;
+  updatedAt?: number;
+}
 
 interface WorkbookSnapshot {
   sheets: SpreadsheetDocument[];
@@ -252,10 +274,53 @@ export interface SpreadsheetNameScope {
 // Default undo/redo snapshot budget (see SpreadsheetControllerOptions.maxHistoryBytes).
 const DEFAULT_MAX_HISTORY_BYTES = 64 * 1024 * 1024;
 
+// Parsed formulas kept by the controller (cleared when full).
+const AST_CACHE_SIZE = 100_000;
+
+// Smallest range (in cells) worth caching while running an evaluation plan.
+const RANGE_CACHE_MIN_CELLS = 256;
+
 // Recalculation passes after spill ranges change (see recalculateKeys).
 const MAX_SPILL_PASSES = 25;
 
 const spillCellId = (rowId: string, colId: string) => `${rowId}\u0000${colId}`;
+
+/**
+ * Positions of rows (or columns) by id, so lookups by id don't scan the
+ * whole list (which made large imports quadratic). Rows and columns are
+ * changed in place in many places, so every hit is checked against the list
+ * and a stale map is rebuilt; ids appended at the end are picked up by
+ * scanning only the new tail.
+ */
+class PositionCache {
+  private map = new Map<string, number>();
+  private scanned = 0;
+
+  find(list: ReadonlyArray<{ id: string }>, id: string): number {
+    const pos = this.map.get(id);
+    if (pos !== undefined && list[pos]?.id === id) return pos;
+    if (pos === undefined && this.scanned <= list.length) {
+      for (let i = this.scanned; i < list.length; i++) this.map.set(list[i].id, i);
+      this.scanned = list.length;
+      const found = this.map.get(id);
+      if (found !== undefined && list[found]?.id === id) return found;
+    }
+    this.map.clear();
+    list.forEach((item, i) => this.map.set(item.id, i));
+    this.scanned = list.length;
+    const found = this.map.get(id);
+    return found !== undefined ? found : -1;
+  }
+}
+
+const positionCaches = new WeakMap<object, PositionCache>();
+
+/** Index of the item with `id` in `list` (rows or columns), or -1. */
+function positionOf(list: ReadonlyArray<{ id: string }>, id: string): number {
+  let cache = positionCaches.get(list);
+  if (!cache) positionCaches.set(list, (cache = new PositionCache()));
+  return cache.find(list, id);
+}
 
 export class SpreadsheetController {
   public activeCell: CellCoordinate | null = null;
@@ -301,6 +366,10 @@ export class SpreadsheetController {
   // runtimes, not in the documents, and every recalculation rebuilds them.
   // Cells (sheet-qualified keys) whose spill ownership changed during the current pass.
   private spillChanges: Set<string> | null = null;
+  private recalcStats: SpreadsheetRecalculationStats = { evaluated: 0, planned: 0, passes: 0 };
+  // Values of large ranges read while running an evaluation plan (see runEvaluationPlan).
+  private astCache = new Map<string, ASTNode>();
+  private rangeCache: Map<string, { sheet: string; c0: number; c1: number; values: any[] }> | null = null;
 
   /** The active sheet's document (the sheet the editor shows). */
   public get document(): SpreadsheetDocument {
@@ -384,8 +453,8 @@ export class SpreadsheetController {
 
     this.evaluator = new FormulaEvaluator({
       resolveCell: (colStr, rowNum, sheet) => this.onSheet(sheet, () => this.resolveCellByCoord(colStr, rowNum)),
-      resolveRange: (sCol, sRow, eCol, eRow, sheet) =>
-        this.onSheet(sheet, () => this.resolveRangeByCoords(sCol, sRow, eCol, eRow)),
+      resolveRange: (sCol, sRow, eCol, eRow, sheet, options) =>
+        this.onSheet(sheet, () => this.resolveRangeByCoords(sCol, sRow, eCol, eRow, options)),
       resolveProperty: (prop) => this.resolveCurrentRowProperty(prop),
       resolveSpill: (colStr, rowNum, sheet) => this.onSheet(sheet, () => this.resolveSpillByCoord(colStr, rowNum)),
       resolveSheetSpan: (first, last) => this.resolveSheetSpan(first, last),
@@ -686,6 +755,8 @@ export class SpreadsheetController {
   }
 
   public getColumn(colIdOrKey: string): SpreadsheetColumn | undefined {
+    const byId = this.findColumn(colIdOrKey);
+    if (byId) return byId;
     return this.document.columns.find(
       (c) => c.id === colIdOrKey || c.key.toUpperCase() === colIdOrKey.toUpperCase()
     );
@@ -695,7 +766,27 @@ export class SpreadsheetController {
     if (typeof rowIdOrIndex === 'number') {
       return this.document.rows[rowIdOrIndex];
     }
-    return this.document.rows.find((r) => r.id === rowIdOrIndex);
+    return this.findRow(rowIdOrIndex);
+  }
+
+  /** The row with this id on the current sheet (constant time, see `PositionCache`). */
+  private findRow(rowId: string): SpreadsheetRow | undefined {
+    const pos = positionOf(this.document.rows, rowId);
+    return pos < 0 ? undefined : this.document.rows[pos];
+  }
+
+  /** The column with this id on the current sheet. */
+  private findColumn(colId: string): SpreadsheetColumn | undefined {
+    const pos = positionOf(this.document.columns, colId);
+    return pos < 0 ? undefined : this.document.columns[pos];
+  }
+
+  /** The column whose key is `key` (`A`, `B`, …): keys follow column positions. */
+  private columnByKey(key: string): SpreadsheetColumn | undefined {
+    const upper = key.toUpperCase();
+    const col = this.document.columns[colNameToIndex(upper)];
+    if (col && col.key.toUpperCase() === upper) return col;
+    return this.document.columns.find((c) => c.key.toUpperCase() === upper);
   }
 
   public getCell(rowId: string, colId: string): CellData {
@@ -707,8 +798,23 @@ export class SpreadsheetController {
     }
     if (existing && !existing.explicitNumberFormat) return existing;
 
-    const col = this.document.columns.find((c) => c.id === colId);
-    const row = this.document.rows.find((r) => r.id === rowId);
+    return this.finishCell(existing, this.findRow(rowId), this.findColumn(colId));
+  }
+
+  /** `getCell` for a row and column already looked up. */
+  private cellOf(row: SpreadsheetRow, col: SpreadsheetColumn): CellData {
+    const existing = this.document.cells[row.id]?.[col.id];
+    if (existing && existing.raw !== '') return existing;
+    if (this.spillCells.size > 0) {
+      const spilled = this.spillCells.get(spillCellId(row.id, col.id));
+      if (spilled) return spilled;
+    }
+    if (existing && !existing.explicitNumberFormat) return existing;
+    return this.finishCell(existing, row, col);
+  }
+
+  /** A cell with no value of its own: derived (bound, column formula, blank), keeping an explicit number format. */
+  private finishCell(existing: CellData | undefined, row: SpreadsheetRow | undefined, col: SpreadsheetColumn | undefined): CellData {
     const derived = this.getDerivedCell(row, col);
     if (!existing) return derived;
     // A blank cell holding only an explicit number format, over a bound
@@ -748,14 +854,14 @@ export class SpreadsheetController {
   }
 
   public setCellValue(rowId: string, colId: string, raw: string): void {
-    this.recordSnapshot();
+    this.recordCellSnapshot(rowId, colId);
 
     if (!this.document.cells[rowId]) {
       this.document.cells[rowId] = {};
     }
 
-    const col = this.document.columns.find((c) => c.id === colId);
-    const row = this.document.rows.find((r) => r.id === rowId);
+    const col = this.findColumn(colId);
+    const row = this.findRow(rowId);
 
     const isFormula = raw.startsWith('=');
     const existing = this.document.cells[rowId][colId];
@@ -773,6 +879,7 @@ export class SpreadsheetController {
 
     const cellKey = this.getCellKey(rowId, colId);
     this.registerFormula(cellKey, isFormula ? raw : null);
+    this.dropStaleSpillEdges(cellKey, raw);
 
     this.document.cells[rowId][colId] = cell;
 
@@ -795,8 +902,8 @@ export class SpreadsheetController {
   }
 
   private getCellKey(rowId: string, colId: string): string {
-    const row = this.document.rows.find((r) => r.id === rowId);
-    const col = this.document.columns.find((c) => c.id === colId);
+    const row = this.findRow(rowId);
+    const col = this.findColumn(colId);
     if (!row || !col) return `${colId}_${rowId}`;
     return `${col.key}${row.index + 1}`.toUpperCase();
   }
@@ -822,23 +929,66 @@ export class SpreadsheetController {
     const key = this.qualify(cellKey);
     if (!formula || !formula.startsWith('=')) {
       this.depGraph.setCellDependencies(key, []);
+      this.depGraph.setVolatile(key, false);
       return;
     }
     let ast: ASTNode;
     try {
-      ast = parseFormula(formula);
+      ast = this.parseCached(formula);
     } catch {
       this.depGraph.setCellDependencies(key, []);
+      this.depGraph.setVolatile(key, false);
       return;
     }
     const deps = new Set<string>();
-    this.collectDependencies(ast, this.ctx, deps, new Set());
+    const volatile = { found: false };
+    this.collectDependencies(ast, this.ctx, deps, new Set(), volatile);
     this.depGraph.setCellDependencies(key, deps);
+    this.depGraph.setVolatile(key, volatile.found);
   }
 
-  /** Adds the qualified keys `ast` depends on, with unqualified references on `home`. */
-  private collectDependencies(ast: ASTNode, home: SheetRuntime, out: Set<string>, seenNames: Set<string>): void {
-    for (const dep of extractCellDependencies(ast)) {
+  /**
+   * Spill edges made stale by new input in `cellKey`: the edges of the array
+   * it anchored (its new formula re-spills when evaluated; spill changes
+   * are recalculated in a further pass) and, when it now holds input, its
+   * edge to the anchor whose values it held. Left in place they can close
+   * false cycles with the new formulas before the anchors are evaluated.
+   */
+  private dropStaleSpillEdges(cellKey: string, raw: string): void {
+    const key = this.qualify(cellKey);
+    this.depGraph.setSpillEdges(key, []);
+    if (raw !== '') this.depGraph.detachSpilledCell(key);
+  }
+
+  /**
+   * The parsed formula, shared by dependency registration and evaluation (so
+   * a load parses each formula once). ASTs are never mutated.
+   */
+  private parseCached(formula: string): ASTNode {
+    let ast = this.astCache.get(formula);
+    if (!ast) {
+      ast = parseFormula(formula);
+      if (this.astCache.size >= AST_CACHE_SIZE) this.astCache.clear();
+      this.astCache.set(formula, ast);
+    }
+    return ast;
+  }
+
+  /**
+   * Adds the qualified keys `ast` depends on, with unqualified references on
+   * `home`: cells, and ranges kept whole (`SHEETID!A1:A50000`), which the
+   * graph indexes as intervals instead of one key per cell. Sets
+   * `volatile.found` when a volatile function (NOW, RAND, …) is used,
+   * directly or through a defined name.
+   */
+  private collectDependencies(
+    ast: ASTNode,
+    home: SheetRuntime,
+    out: Set<string>,
+    seenNames: Set<string>,
+    volatile: { found: boolean } = { found: false }
+  ): void {
+    for (const dep of extractReferenceDependencies(ast)) {
       let sheets: SheetRuntime[];
       if (dep.sheet === undefined) {
         sheets = [home];
@@ -850,12 +1000,22 @@ export class SpreadsheetController {
         sheets = Array.isArray(span) ? span.map((name) => this.findRuntimeByName(name)!) : [];
       }
       for (const rt of sheets) {
-        out.add(dep.row === 0 ? columnDependencyKey(`${rt.doc.id}!${dep.col}`) : this.qualify(`${dep.col}${dep.row}`, rt));
+        out.add(
+          dep.kind === 'cell'
+            ? this.qualify(`${dep.col}${dep.row}`, rt)
+            : rangeDependencyKey(dep.startCol, dep.startRow, dep.endCol, dep.endRow, rt.doc.id)
+        );
       }
     }
     for (const used of extractNameDependencies(ast)) {
-      // A call of a built-in function is not a name.
-      if (used.call && getFormulaFunction(used.name)) continue;
+      if (used.call) {
+        const fn = getFormulaFunction(used.name);
+        // A call of a built-in function is not a name.
+        if (fn) {
+          if (fn.volatile) volatile.found = true;
+          continue;
+        }
+      }
       const lookupSheet = used.sheet === undefined ? home : this.findRuntimeByName(used.sheet);
       if (!lookupSheet) continue;
       const def = this.findName(used.name, lookupSheet);
@@ -867,7 +1027,7 @@ export class SpreadsheetController {
       if (seenNames.has(seenKey)) continue;
       seenNames.add(seenKey);
       try {
-        this.collectDependencies(parseFormula(def.refersTo), nameHome, out, seenNames);
+        this.collectDependencies(parseFormula(def.refersTo), nameHome, out, seenNames, volatile);
       } catch {
         // A name whose formula can't be parsed has no dependencies.
       }
@@ -884,17 +1044,52 @@ export class SpreadsheetController {
   private recalculateKeys(keys: Iterable<string>, includeDependents: boolean): void {
     let pending = Array.from(keys);
     let withDependents = includeDependents;
-    for (let pass = 0; pass < MAX_SPILL_PASSES && pending.length > 0; pass++) {
+    // An edit recalculates volatile formulas (NOW, RAND, …) too, as in Excel.
+    let withVolatile = includeDependents;
+    const stats: SpreadsheetRecalculationStats = { evaluated: 0, planned: 0, passes: 0 };
+    this.recalcStats = stats;
+    for (let pass = 0; pass < MAX_SPILL_PASSES && (pending.length > 0 || withVolatile); pass++) {
       const changed = new Set<string>();
       this.spillChanges = changed;
       try {
-        this.runEvaluationPlan(this.depGraph.getEvaluationPlan(pending, { includeDependents: withDependents }));
+        const plan = this.depGraph.getEvaluationPlan(pending, { includeDependents: withDependents, includeVolatile: withVolatile });
+        stats.planned += plan.order.length;
+        stats.passes++;
+        this.runEvaluationPlan(plan);
       } finally {
         this.spillChanges = null;
       }
       pending = Array.from(changed);
       withDependents = true;
+      withVolatile = false;
     }
+  }
+
+  /**
+   * Recalculates cells of the current sheet whose stored input changed (their
+   * formulas already registered), with their dependents, in one plan.
+   */
+  private recalculateWrittenCells(cells: Array<[rowId: string, colId: string]>): void {
+    const keys = new Set<string>();
+    for (const [rowId, colId] of cells) {
+      const cellKey = this.getCellKey(rowId, colId);
+      keys.add(this.qualify(cellKey));
+      // Writing into a spilled cell blocks its array: the anchor recalculates.
+      const anchor = this.spilledBy.get(cellKey);
+      if (anchor) keys.add(this.qualify(anchor));
+    }
+    this.recalculateKeys(keys, true);
+  }
+
+  /**
+   * Work done by the last recalculation (an edit, paste, import, load or
+   * full recalculation): formulas evaluated, cells planned (formulas, their
+   * dependents and spilled cells) and passes (more than one when spill
+   * ranges changed). Deterministic, unlike timings: use it to check that an
+   * edit only recalculates what depends on it.
+   */
+  public getRecalculationStats(): SpreadsheetRecalculationStats {
+    return { ...this.recalcStats };
   }
 
   /**
@@ -910,11 +1105,16 @@ export class SpreadsheetController {
         this.spills.clear();
         this.spilledBy.clear();
         this.spillCells.clear();
+        const columns = this.document.columns;
+        // Only bound and formula columns derive cells; others are blank unless stored.
+        const deriving = columns.map((col) => col.type === 'bound' || col.type === 'formula');
         for (const row of this.document.rows) {
-          for (const col of this.document.columns) {
+          const stored = this.document.cells[row.id];
+          for (let c = 0; c < columns.length; c++) {
+            const col = columns[c];
             // Avoid getCell's id lookups: this loop visits every cell.
-            const cell = this.document.cells[row.id]?.[col.id] ?? this.getDerivedCell(row, col);
-            if (cell.raw.startsWith('=')) {
+            const cell = stored?.[col.id] ?? (deriving[c] ? this.getDerivedCell(row, col) : null);
+            if (cell && typeof cell.raw === 'string' && cell.raw.startsWith('=')) {
               const cellKey = `${col.key}${row.index + 1}`.toUpperCase();
               this.registerFormula(cellKey, cell.raw);
               formulaKeys.push(this.qualify(cellKey));
@@ -927,28 +1127,50 @@ export class SpreadsheetController {
   }
 
   private runEvaluationPlan(plan: { order: string[]; cyclic: Set<string> }): void {
-    for (const qualified of plan.order) {
-      const located = this.unqualify(qualified);
-      if (!located) continue;
-      // Conditional formatting tracks changed cells on the active sheet only; other
-      // sheets are evaluated from scratch when they are activated.
-      const onActive = located.rt === this.active;
-      this.withSheet(located.rt, () => {
-        if (onActive) this.markValueChanged(located.key); // before: cells it spilled into
-        if (plan.cyclic.has(qualified)) {
-          this.markCycle(located.key);
-        } else {
-          this.evalSingleCellByKey(located.key);
-        }
-        if (onActive) this.markValueChanged(located.key); // after: cells it spills into now
-      });
+    // Large ranges read by several formulas are resolved once per plan.
+    this.rangeCache = new Map();
+    try {
+      for (const qualified of plan.order) {
+        const located = this.unqualify(qualified);
+        if (!located) continue;
+        // Conditional formatting tracks changed cells on the active sheet only; other
+        // sheets are evaluated from scratch when they are activated.
+        const onActive = located.rt === this.active;
+        this.withSheet(located.rt, () => {
+          const hadSpill = this.spills.has(located.key);
+          const spillChanges = this.spillChanges?.size ?? 0;
+          if (onActive) this.markValueChanged(located.key); // before: cells it spilled into
+          if (plan.cyclic.has(qualified)) {
+            this.markCycle(located.key);
+          } else {
+            this.evalSingleCellByKey(located.key);
+          }
+          if (onActive) this.markValueChanged(located.key); // after: cells it spills into now
+          const spilled = hadSpill || this.spills.has(located.key) || (this.spillChanges?.size ?? 0) !== spillChanges;
+          this.invalidateRangeCache(located.rt.doc.id, spilled ? null : colNameToIndex(located.key.replace(/\d+$/, '')));
+        });
+      }
+    } finally {
+      this.rangeCache = null;
+    }
+  }
+
+  /**
+   * Drops cached ranges of `sheetId` that cover column `col` (whose cell was
+   * just evaluated), or all of the sheet's when `col` is null (spilled
+   * values moved or changed).
+   */
+  private invalidateRangeCache(sheetId: string, col: number | null): void {
+    if (!this.rangeCache || this.rangeCache.size === 0) return;
+    for (const [key, entry] of this.rangeCache) {
+      if (entry.sheet === sheetId && (col === null || (col >= entry.c0 && col <= entry.c1))) this.rangeCache.delete(key);
     }
   }
 
   private locateCellKey(cellKey: string): { row: SpreadsheetRow; col: SpreadsheetColumn } | null {
     const match = cellKey.match(/^([A-Za-z]+)(\d+)$/);
     if (!match) return null;
-    const col = this.document.columns.find((c) => c.key.toUpperCase() === match[1].toUpperCase());
+    const col = this.columnByKey(match[1]);
     const row = this.document.rows[parseInt(match[2], 10) - 1];
     return col && row ? { row, col } : null;
   }
@@ -962,10 +1184,10 @@ export class SpreadsheetController {
     if (!this.document.cells[row.id]) this.document.cells[row.id] = {};
     // A direct self reference (A1 = A1+1, or SUM(A:A) in column A) gets its own message.
     const qualified = this.qualify(cellKey);
-    const deps = this.depGraph.getDependencies(qualified);
-    const selfReference = deps.includes(qualified) || deps.includes(columnDependencyKey(`${this.document.id}!${col.key}`));
-    const spilledKeys = this.depGraph.getSpilledKeys(qualified);
-    const ownSpill = deps.find((dep) => spilledKeys.includes(dep));
+    const selfReference = this.depGraph.dependsOn(qualified, qualified);
+    const ownSpill = selfReference
+      ? undefined
+      : this.depGraph.getSpilledKeys(qualified).find((key) => this.depGraph.dependsOn(qualified, key));
     const errorMessage = selfReference
       ? "This formula can't reference its own cell."
       : ownSpill
@@ -982,7 +1204,7 @@ export class SpreadsheetController {
     const colName = match[1].toUpperCase();
     const rowNum = parseInt(match[2], 10);
 
-    const col = this.document.columns.find((c) => c.key.toUpperCase() === colName);
+    const col = this.columnByKey(colName);
     const row = this.document.rows[rowNum - 1];
     if (!col || !row) return;
 
@@ -1000,13 +1222,20 @@ export class SpreadsheetController {
     try {
       this.evaluatingRowIndex = rowNum - 1;
       this.evaluatingCell = { col: colName, row: rowNum };
-      const result = this.evaluator.evaluateWithDiagnostics(cell.raw);
+      this.recalcStats.evaluated++;
+      let parsed: ASTNode | string = cell.raw;
+      try {
+        parsed = this.parseCached(cell.raw);
+      } catch {
+        // Malformed: evaluateWithDiagnostics reports the parser's message.
+      }
+      const result = this.evaluator.evaluateWithDiagnostics(parsed);
       if (!this.document.cells[row.id]) {
         this.document.cells[row.id] = {};
       }
       let { value, error, message } = result;
       if (result.array) {
-        const blocked = this.placeSpill(`${colName}${rowNum}`, rowNum - 1, this.document.columns.indexOf(col), result.array);
+        const blocked = this.placeSpill(`${colName}${rowNum}`, rowNum - 1, positionOf(this.document.columns, col.id), result.array);
         if (blocked) {
           value = '#SPILL!';
           error = '#SPILL!';
@@ -1076,6 +1305,10 @@ export class SpreadsheetController {
     }
 
     const previous = this.spills.get(anchor);
+    // Cells the graph didn't link to this anchor (a first spill, or edges
+    // dropped when the anchor got a new formula): their dependents may have
+    // been planned before the anchor, so they recalculate in another pass.
+    const linked = new Set(this.depGraph.getSpilledKeys(this.qualify(anchor)));
     const cells: SpillRecord['cells'] = [];
     for (let c = 0; c < cols; c++) {
       const column = this.document.columns[col + c];
@@ -1098,6 +1331,8 @@ export class SpreadsheetController {
         this.spillCells.set(spillCellId(rowObj.id, column.id), display);
         if (this.spilledBy.get(key) !== anchor) {
           this.spilledBy.set(key, anchor);
+          this.spillChanges?.add(this.qualify(key));
+        } else if (!linked.has(this.qualify(key))) {
           this.spillChanges?.add(this.qualify(key));
         }
         cells.push({ key, rowId: rowObj.id, colId: column.id });
@@ -1186,17 +1421,28 @@ export class SpreadsheetController {
   }
 
   private resolveCellByCoord(colStr: string, rowNum: number): any {
-    const col = this.document.columns.find((c) => c.key.toUpperCase() === colStr.toUpperCase());
+    const col = this.columnByKey(colStr);
     const row = this.document.rows[rowNum - 1];
     if (!col || !row) return 0;
     const override = this.valueOverride;
     if (override && override.row === rowNum - 1 && this.document.columns[override.col] === col) return override.value;
 
     // Blank cells resolve to '' (0 in arithmetic, "" in text), as in spreadsheets.
-    return this.getCell(row.id, col.id).value ?? '';
+    return this.cellOf(row, col).value ?? '';
   }
 
-  private resolveRangeByCoords(sCol: string, sRow: number, eCol: string, eRow: number): any[] {
+  /**
+   * Values of a range, column by column. With `skipBlanks` (functions that
+   * ignore blank cells: SUM, COUNT, AVERAGE, …) blank cells are left out, so
+   * a sparse column costs one lookup per row and no array slot.
+   */
+  private resolveRangeByCoords(
+    sCol: string,
+    sRow: number,
+    eCol: string,
+    eRow: number,
+    options?: { skipBlanks?: boolean }
+  ): any[] {
     const startC = colNameToIndex(sCol);
     const endC = colNameToIndex(eCol);
     const minC = Math.min(startC, endC);
@@ -1204,24 +1450,49 @@ export class SpreadsheetController {
     const minR = Math.min(sRow, eRow);
     // Whole-column ranges (A:A) stop at the last row.
     const maxR = Math.min(Math.max(sRow, eRow), WHOLE_COLUMN_END_ROW, this.document.rows.length);
+    const skipBlanks = options?.skipBlanks === true;
+    const cacheable = this.rangeCache !== null && !this.valueOverride && (maxC - minC + 1) * (maxR - minR + 1) >= RANGE_CACHE_MIN_CELLS;
+    const cacheKey = cacheable ? `${this.document.id}|${minC}|${maxC}|${minR}|${maxR}|${skipBlanks ? 1 : 0}` : '';
+    if (cacheable) {
+      const hit = this.rangeCache!.get(cacheKey);
+      if (hit) return hit.values.slice();
+    }
+    const rows = this.document.rows;
+    const cells = this.document.cells;
+    const spills = this.spillCells.size > 0 ? this.spillCells : null;
 
     const results: any[] = [];
     for (let c = minC; c <= maxC; c++) {
-      const colName = indexToColName(c);
-      const col = this.document.columns.find((colDef) => colDef.key.toUpperCase() === colName);
+      const col = this.columnByKey(indexToColName(c));
       if (!col) continue;
+      // Bound and formula columns derive values for cells without their own.
+      const plain = col.type !== 'bound' && col.type !== 'formula';
+      const colId = col.id;
 
       const override = this.valueOverride && this.document.columns[this.valueOverride.col] === col ? this.valueOverride : null;
       for (let r = minR; r <= maxR; r++) {
-        const row = this.document.rows[r - 1];
+        const row = rows[r - 1];
         if (!row) continue;
+        let value: any;
         if (override && override.row === r - 1) {
-          results.push(override.value);
-          continue;
+          value = override.value;
+        } else {
+          const stored = cells[row.id]?.[colId];
+          if (stored && stored.raw !== '') value = stored.value;
+          else {
+            const spilled = spills?.get(spillCellId(row.id, colId));
+            if (spilled) value = spilled.value;
+            else if (stored && (plain || !stored.explicitNumberFormat)) value = stored.value;
+            else if (plain) value = '';
+            else value = this.cellOf(row, col).value;
+          }
         }
-        results.push(this.getCell(row.id, col.id).value ?? '');
+        if (value === undefined || value === null) value = '';
+        if (skipBlanks && value === '') continue;
+        results.push(value);
       }
     }
+    if (cacheable) this.rangeCache!.set(cacheKey, { sheet: this.document.id, c0: minC, c1: maxC, values: results.slice() });
     return results;
   }
 
@@ -1330,8 +1601,8 @@ export class SpreadsheetController {
    */
   public commitCellInput(rowId: string, colId: string, raw: string): SpreadsheetCommitResult {
     if (this.validationPrompt) return { status: 'pending', prompt: this.validationPrompt };
-    const row = this.document.rows.findIndex((r) => r.id === rowId);
-    const col = this.document.columns.findIndex((c) => c.id === colId);
+    const row = positionOf(this.document.rows, rowId);
+    const col = positionOf(this.document.columns, colId);
     if (row === -1 || col === -1) return { status: 'none' };
     const failed = this.checkInput(rowId, colId, row, col, raw, false);
     if (failed) return failed;
@@ -1656,6 +1927,8 @@ export class SpreadsheetController {
    */
   private runBatch(fn: () => void): void {
     this.recordSnapshot();
+    const rowCount = this.document.rows.length;
+    const colCount = this.document.columns.length;
     this.batching = true;
     this.pendingCommits = [];
     try {
@@ -1664,8 +1937,18 @@ export class SpreadsheetController {
       this.batching = false;
     }
 
+    const grew = this.document.rows.length !== rowCount || this.document.columns.length !== colCount;
     this.recomputeRowIndices();
-    this.recalculateAll();
+    if (grew) {
+      // New rows and columns change what references past the old edge (and
+      // column formulas) see: rebuild the graph and evaluate everything once.
+      this.recalculateAll();
+    } else {
+      // Every write already registered its formula: recalculate the written
+      // cells and their dependents in one plan, as a single edit would.
+      this.cfDirty = 'all';
+      this.recalculateWrittenCells(this.pendingCommits.map(([rowId, colId]) => [rowId, colId]));
+    }
     this.document.updatedAt = Date.now();
     this.notifyChange();
     const commits = this.pendingCommits;
@@ -2833,6 +3116,19 @@ export class SpreadsheetController {
     this.pushUndo({ kind: 'sheet', sheetId: this.ctx.doc.id, data: JSON.stringify(this.ctx.doc) });
   }
 
+  /** Records the stored state of one cell, for undoing a single-cell edit. */
+  private recordCellSnapshot(rowId: string, colId: string): void {
+    if (this.isApplyingHistory || this.batching) return;
+    this.pushUndo({ kind: 'cells', sheetId: this.ctx.doc.id, data: JSON.stringify(this.cellHistory(this.ctx.doc, [[rowId, colId]])) });
+  }
+
+  private cellHistory(doc: SpreadsheetDocument, cells: Array<[string, string]>): CellHistoryData {
+    return {
+      cells: cells.map(([rowId, colId]) => [rowId, colId, doc.cells[rowId]?.[colId] ?? null, doc.cells[rowId] !== undefined]),
+      updatedAt: doc.updatedAt
+    };
+  }
+
   private recordWorkbookSnapshot(): void {
     if (this.isApplyingHistory || this.batching) return;
     this.pushUndo({ kind: 'workbook', data: JSON.stringify(this.workbookSnapshot()) });
@@ -2881,6 +3177,37 @@ export class SpreadsheetController {
     if (!entry) return;
     this.isApplyingHistory = true;
     try {
+      if (entry.kind === 'cells') {
+        const rt = this.findRuntimeById(entry.sheetId);
+        if (!rt) return;
+        const saved: CellHistoryData = JSON.parse(entry.data);
+        const positions = saved.cells.map(([rowId, colId]) => [rowId, colId] as [string, string]);
+        to.push({ kind: 'cells', sheetId: rt.doc.id, data: JSON.stringify(this.cellHistory(rt.doc, positions)) });
+        for (const [rowId, colId, cell, rowExisted] of saved.cells) {
+          if (cell) {
+            (rt.doc.cells[rowId] ??= {})[colId] = cell;
+          } else if (rt.doc.cells[rowId]) {
+            delete rt.doc.cells[rowId][colId];
+            if (!rowExisted && Object.keys(rt.doc.cells[rowId]).length === 0) delete rt.doc.cells[rowId];
+          }
+        }
+        if (saved.updatedAt !== undefined) rt.doc.updatedAt = saved.updatedAt;
+        if (rt !== this.active) {
+          this.ctx = this.active;
+          this.activateRuntime(rt);
+        }
+        this.withSheet(rt, () => {
+          for (const [rowId, colId] of positions) {
+            const raw = rt.doc.cells[rowId]?.[colId]?.raw;
+            const cellKey = this.getCellKey(rowId, colId);
+            this.registerFormula(cellKey, raw?.startsWith('=') ? raw : null);
+            this.dropStaleSpillEdges(cellKey, raw ?? '');
+          }
+          this.recalculateWrittenCells(positions);
+        });
+        this.notifyChange();
+        return;
+      }
       if (entry.kind === 'sheet') {
         const rt = this.findRuntimeById(entry.sheetId);
         if (!rt) return;
@@ -3128,7 +3455,7 @@ export class SpreadsheetController {
       const changed: Array<{ row: number; col: number }> = [];
       for (const key of this.cfDirty) {
         const located = this.locateCellKey(key);
-        if (located) changed.push({ row: located.row.index, col: this.document.columns.indexOf(located.col) });
+        if (located) changed.push({ row: located.row.index, col: positionOf(this.document.columns, located.col.id) });
       }
       this.cfEngine.setSheet(sheet);
       this.cfEngine.update(rules, changed);
