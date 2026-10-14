@@ -6,7 +6,7 @@ export * from './references';
 export * from './registry';
 export * from './caret';
 export { parseCriteria, wildcardToRegExp, type FormulaCriteriaPredicate } from './criteria';
-export { formatValueWithCode, formatCellDisplay } from './format';
+export { formatValueWithCode, formatCellDisplay, formatCellForDisplay } from './format';
 export {
   parseCellInput,
   parseNumberText,

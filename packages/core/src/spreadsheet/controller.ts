@@ -31,6 +31,7 @@ import {
 } from './formula';
 import { parseCellInput } from './formula/parse-input';
 import { formatCellDisplay } from './formula/format';
+import { cellFormatForNumberFormat, isGeneralNumberFormat } from './numfmt/presets';
 import { DataSourceBinder } from './datasource';
 import {
   compareCellValues,
@@ -229,7 +230,7 @@ export class SpreadsheetController {
         const cell = cells[col.id];
         if (!cell || typeof cell.raw !== 'string' || cell.raw.startsWith('=')) continue;
         if (col.type === 'bound' && col.binding && row.recordId) continue;
-        const typed = this.typedCell(cell.raw, cell.format);
+        const typed = this.typedCell(cell.raw, cell.format, col, cell);
         cell.value = typed.value;
         if (typed.numberFormat) cell.numberFormat = typed.numberFormat;
         else delete cell.numberFormat;
@@ -244,13 +245,37 @@ export class SpreadsheetController {
    * `CellFormat` to use: the automatic one (currency, percentage, date,
    * number) when `format` is unset or `text` (the default of new columns).
    */
-  private typedCell(raw: string, format: CellData['format']): Pick<CellData, 'value' | 'numberFormat' | 'format'> {
+  private typedCell(
+    raw: string,
+    format: CellData['format'],
+    col?: SpreadsheetColumn,
+    existing?: CellData
+  ): Pick<CellData, 'value' | 'numberFormat' | 'explicitNumberFormat' | 'format'> {
     const parsed = parseCellInput(raw);
+    const fixed = this.fixedNumberFormat(col, existing);
+    const numberFormat = fixed ?? parsed.numberFormat;
     return {
       value: parsed.value,
-      ...(parsed.numberFormat ? { numberFormat: parsed.numberFormat } : {}),
-      format: parsed.cellFormat && (!format || format === 'text') ? parsed.cellFormat : format
+      ...(numberFormat ? { numberFormat } : {}),
+      ...(existing?.explicitNumberFormat ? { explicitNumberFormat: true } : {}),
+      format: fixed === undefined && parsed.cellFormat && (!format || format === 'text') ? parsed.cellFormat : format
     };
+  }
+
+  /**
+   * The number format a cell keeps whatever is typed into it: its explicit
+   * one, else its column's. Undefined lets typed input choose one.
+   */
+  private fixedNumberFormat(col: SpreadsheetColumn | undefined, existing: CellData | undefined): string | undefined {
+    if (existing?.explicitNumberFormat && existing.numberFormat !== undefined) return existing.numberFormat;
+    return col?.numberFormat && !isGeneralNumberFormat(col.numberFormat) ? col.numberFormat : undefined;
+  }
+
+  /** `numberFormat` / `explicitNumberFormat` fields for a formula, bound or spilled cell. */
+  private fixedNumberFormatFields(col: SpreadsheetColumn | undefined, existing: CellData | undefined): Partial<CellData> {
+    const numberFormat = this.fixedNumberFormat(col, existing);
+    if (numberFormat === undefined) return {};
+    return existing?.explicitNumberFormat ? { numberFormat, explicitNumberFormat: true } : { numberFormat };
   }
 
   /**
@@ -317,11 +342,16 @@ export class SpreadsheetController {
       const spilled = this.spillCells.get(spillCellId(rowId, colId));
       if (spilled) return spilled;
     }
-    if (existing) return existing;
+    if (existing && !existing.explicitNumberFormat) return existing;
 
     const col = this.document.columns.find((c) => c.id === colId);
     const row = this.document.rows.find((r) => r.id === rowId);
-    return this.getDerivedCell(row, col);
+    const derived = this.getDerivedCell(row, col);
+    if (!existing) return derived;
+    // A blank cell holding only an explicit number format, over a bound
+    // record value or a column formula: show that value with the format.
+    if (derived.raw === '') return existing;
+    return { ...derived, numberFormat: existing.numberFormat, explicitNumberFormat: true };
   }
 
   /** Value of a cell with no stored data: bound record value, column formula, or blank. */
@@ -336,7 +366,8 @@ export class SpreadsheetController {
       return {
         raw: boundVal !== undefined ? String(boundVal) : '',
         value: boundVal ?? '',
-        format: col.format
+        format: col.format,
+        ...this.fixedNumberFormatFields(col, undefined)
       };
     }
 
@@ -345,11 +376,12 @@ export class SpreadsheetController {
       return {
         raw: col.formula,
         value: '',
-        format: col.format
+        format: col.format,
+        ...this.fixedNumberFormatFields(col, undefined)
       };
     }
 
-    return { raw: '', value: '', format: col?.format };
+    return { raw: '', value: '', format: col?.format, ...this.fixedNumberFormatFields(col, undefined) };
   }
 
   public setCellValue(rowId: string, colId: string, raw: string): void {
@@ -363,16 +395,17 @@ export class SpreadsheetController {
     const row = this.document.rows.find((r) => r.id === rowId);
 
     const isFormula = raw.startsWith('=');
+    const existing = this.document.cells[rowId][colId];
     let cell: CellData;
     // If this is a bound column and row is bound to record, dispatch back to data source
     if (col?.type === 'bound' && col.binding && row?.recordId) {
       const value = this.boundInputValue(col.binding.dataSource, col.binding.field, raw);
       this.binder.commitBoundValue(col.binding.dataSource, row.recordId, col.binding.field, value);
-      cell = { raw, value, format: col.format };
+      cell = { raw, value, format: col.format, ...this.fixedNumberFormatFields(col, existing) };
     } else if (isFormula) {
-      cell = { raw, value: raw, format: col?.format };
+      cell = { raw, value: raw, format: col?.format, ...this.fixedNumberFormatFields(col, existing) };
     } else {
-      cell = { raw, ...this.typedCell(raw, col?.format) };
+      cell = { raw, ...this.typedCell(raw, col?.format, col, existing) };
     }
 
     const cellKey = this.getCellKey(rowId, colId);
@@ -605,7 +638,13 @@ export class SpreadsheetController {
         const rowObj = this.document.rows[row + r];
         const key = `${column.key}${row + r + 1}`.toUpperCase();
         const value = array.values[c * rows + r] ?? '';
-        const display: CellData = { raw: '', value, format: column.format, spillAnchor: anchor };
+        const display: CellData = {
+          raw: '',
+          value,
+          format: column.format,
+          spillAnchor: anchor,
+          ...this.fixedNumberFormatFields(column, this.document.cells[rowObj.id]?.[column.id])
+        };
         if (isFormulaError(value)) {
           display.error = value;
           display.errorMessage = describeFormulaError(value);
@@ -872,6 +911,7 @@ export class SpreadsheetController {
       binding: config?.binding,
       formula: config?.formula,
       format: config?.format || 'text',
+      ...(config?.numberFormat ? { numberFormat: config.numberFormat } : {}),
       readOnly: config?.readOnly
     };
 
@@ -1443,6 +1483,100 @@ export class SpreadsheetController {
     this.applyTableChange(() => {
       this.table[key] = value;
     });
+  }
+
+  // --- Number formats ---
+  //
+  // Cells are replaced, never mutated in place: framework bindings compare
+  // cell objects by identity to decide what to re-render.
+
+  /**
+   * Sets an explicit number format code (e.g. `0.00`, `"$"#,##0.00`,
+   * `m/d/yyyy`, `[Red]0;[Blue]-0`) on every cell in `range`, including blank
+   * cells, so values typed later keep it. `null` removes explicit formats: the
+   * cells go back to their column's format or the one chosen for typed input.
+   * Undoable as one step. Returns false when there is no range.
+   */
+  public setCellNumberFormat(range: CellRange | null, code: string | null): boolean {
+    if (!range) return false;
+    const r = normalizeRange(range);
+    this.recordSnapshot();
+    const kind = code === null ? undefined : cellFormatForNumberFormat(code);
+    for (let ri = r.startRow; ri <= r.endRow; ri++) {
+      const row = this.document.rows[ri];
+      if (!row) continue;
+      for (let ci = r.startCol; ci <= r.endCol; ci++) {
+        const col = this.document.columns[ci];
+        if (!col) continue;
+        const cells = (this.document.cells[row.id] ??= {});
+        const existing = cells[col.id];
+        if (code === null) {
+          if (!existing?.explicitNumberFormat) continue;
+          if (existing.raw === '' && existing.value === '' && !existing.error) {
+            delete cells[col.id];
+          } else {
+            const { explicitNumberFormat: _explicit, ...rest } = existing;
+            cells[col.id] = this.withNumberFormat(rest, this.implicitNumberFormat(rest, col, row));
+          }
+        } else {
+          cells[col.id] = {
+            ...(existing ?? { raw: '', value: '' }),
+            format: kind ?? existing?.format ?? col.format,
+            numberFormat: code,
+            explicitNumberFormat: true
+          };
+        }
+        this.refreshSpilledNumberFormat(row, col);
+      }
+    }
+    this.document.updatedAt = Date.now();
+    this.notifyChange();
+    return true;
+  }
+
+  /**
+   * Sets the number format code of a column (`null` or `General` clears it).
+   * Its cells without an explicit format of their own use it, including
+   * values typed later; when cleared they go back to the format chosen for
+   * typed input. Undoable.
+   */
+  public setColumnNumberFormat(colId: string, code: string | null): void {
+    const col = this.getColumn(colId);
+    if (!col) return;
+    this.recordSnapshot();
+    if (code === null || isGeneralNumberFormat(code)) delete col.numberFormat;
+    else col.numberFormat = code;
+    for (const row of this.document.rows) {
+      const cells = this.document.cells[row.id];
+      const cell = cells?.[col.id];
+      if (cells && cell && !cell.explicitNumberFormat) {
+        cells[col.id] = this.withNumberFormat(cell, this.implicitNumberFormat(cell, col, row));
+      }
+      this.refreshSpilledNumberFormat(row, col);
+    }
+    this.document.updatedAt = Date.now();
+    this.notifyChange();
+  }
+
+  /** The column's format, or the one typed input chose (typed cells only). */
+  private implicitNumberFormat(cell: CellData, col: SpreadsheetColumn, row: SpreadsheetRow): string | undefined {
+    const typed = cell.raw !== '' && !cell.raw.startsWith('=') && !(col.type === 'bound' && col.binding && row.recordId);
+    return this.fixedNumberFormat(col, undefined) ?? (typed ? parseCellInput(cell.raw).numberFormat : undefined);
+  }
+
+  /** A copy of `cell` with `numberFormat` set, or removed when undefined. */
+  private withNumberFormat(cell: CellData, numberFormat: string | undefined): CellData {
+    const { numberFormat: _old, ...rest } = cell;
+    return numberFormat === undefined ? rest : { ...rest, numberFormat };
+  }
+
+  /** Re-applies the stored cell's (or the column's) format to a spilled value shown there. */
+  private refreshSpilledNumberFormat(row: SpreadsheetRow, col: SpreadsheetColumn): void {
+    const id = spillCellId(row.id, col.id);
+    const spilled = this.spillCells.get(id);
+    if (!spilled) return;
+    const { numberFormat: _old, explicitNumberFormat: _explicit, ...rest } = spilled;
+    this.spillCells.set(id, { ...rest, ...this.fixedNumberFormatFields(col, this.document.cells[row.id]?.[col.id]) });
   }
 
   // --- Hide / unhide ---

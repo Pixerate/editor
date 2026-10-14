@@ -75,6 +75,8 @@ const editor = useEditor({ extensions: [Comments.configure({ author: me }), Trac
 
 `ReviewToolbar` steps through insertions, deletions, formatting and block changes and shows the current one's author and description (e.g. "Ada: Changed Paragraph to Heading 2"); hide it with `showDescription={false}` or restyle it with `descriptionClassName`. `useComments(editorOrStore)` and `useTrackChanges(editor)` expose the same state for custom UIs (each change has `type` and `description`).
 
+`FindReplaceBar` is a Word-style find bar for editors with the `FindReplace` extension (`useEditor({ richTextOptions: { findReplace: true } })`): it appears on Mod+F / Mod+H (or `editor.commands.openFindReplace()`), with find and replace fields, option toggles (match case, whole words, wildcards, regex, plus prefix/suffix/ignore punctuation/white space under "More options"), a "3 of 12" counter, previous/next, Replace and Replace all. Enter / Shift+Enter step, Enter in the replace field replaces, Mod+Enter replaces all, Escape closes. Pass `alwaysOpen` to keep it visible. `useFindReplace(editor)` exposes the state and commands for custom UIs.
+
 `useEditor({ fileImport: true, richClipboard: true })` imports dropped/pasted `.md`, `.html`, `.txt`, `.rtf` and `.docx` files (plus any adapter you register, e.g. PDF or zipped exports) at the drop position and copies lossless slices between editors. `useFileImport(editor)` returns `{ openFilePicker, importFiles, accept, isImporting, error }` for an import button. `usePromptEditor({ fileImport: true })` imports dropped files as plain text.
 
 `useAgentToolProvider(registry, provider)` registers an agent tool provider (see `ToolRegistry` in `@pixerate/editor/agent`) while the component is mounted. Memoize the provider:
@@ -92,6 +94,8 @@ useAgentToolProvider(registry, provider);
 | `@pixerate/editor-react/spreadsheet` | `SpreadsheetEditor`, `useSpreadsheetEditor`, `useSpreadsheetTableInteractions`, `FormulaHints`, `SpreadsheetContextMenu`, `SpreadsheetGroupRow` (also re-exported from the root entry) |
 | `@pixerate/editor-react/image-editor` | `ImageEditor`, `useImageEditor`: crop, rotate/flip, adjustments, annotations, depth masks, and `onInpaint` / `onRemoveBackground` AI hooks |
 | `@pixerate/editor-react/commands` | `CommandPalette`, `useCommandPalette` (`hotkey: "Mod+K"`), `useCommandShortcuts`, `useRegisterCommands` over a `CommandRegistry` from `@pixerate/editor/commands` (also re-exported from the root entry) |
+| `@pixerate/editor-react/persistence` | `useAutosave` (crash-recovery snapshots bound to a history / dirty flag, flushed on `pagehide`, with a recovery check on mount) and `<RecoveryPrompt>` (also re-exported from the root entry) |
+| `@pixerate/editor-react/generation` | `GenerationSettings` (controls generated from a model's capabilities, reference slots by role, plan adjustments), `useGenerationPlan`, `JobProgress`, `useJobProgress` over `@pixerate/editor/generation` (also re-exported from the root entry) |
 | `@pixerate/editor-react/canvas` | `useCanvasGraph`, `useCanvasLayout`, `useCanvasClipboard`, `useCanvasDocking`, `useCanvasShortcuts`, `useCanvasExplosion`, `useStreamingCanvas`, `AgentPresenceLayer`, plus the pure layout helpers from `@pixerate/editor/canvas` |
 
 ## Styling (Tailwind CSS required)

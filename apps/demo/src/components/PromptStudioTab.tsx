@@ -4,6 +4,7 @@ import {
   EditorContent,
   TemplateRenderer,
   VariableForm,
+  MergePreview,
   useAgentToolProvider,
   Template,
   PromptValues,
@@ -17,6 +18,7 @@ import {
   Terminal,
   SlidersHorizontal,
   AlertTriangle,
+  Table2,
 } from "lucide-react";
 import { demoToolRegistry } from "../agentTools";
 
@@ -27,6 +29,16 @@ const SAMPLE_PROMPT =
 // as literal text and reports it in `diagnostics`.
 const BROKEN_PROMPT =
   "A quiet harbour at dawn{?mood} with a {mood|melancholy} atmosphere, {{golden_hour}}{/fog}.";
+
+// Mail merge sample: one prompt per row, with a comparison section.
+const MERGE_TEMPLATE =
+  "Portrait of {character|a stranger} in {setting}{?budget>=1000}, {{octane_masterpiece}}{/budget}{!budget>=1000}, quick sketch{/budget}.";
+
+const SAMPLE_CSV = `Character,Setting,Budget,Status
+a weathered sea captain,a storm-lashed harbour,1500,active
+a street violinist,a rainy Paris alley,200,active
+an astronaut,the surface of Mars,5000,cancelled
+,a quiet library,80,active`;
 
 const DEMO_TEMPLATES: Template[] = [
   {
@@ -59,6 +71,7 @@ export const PromptStudioTab: React.FC = () => {
   const [content, setContent] = useState(SAMPLE_PROMPT);
   const [values, setValues] = useState<PromptValues>({});
   const [entered, setEntered] = useState<Record<string, string>>({});
+  const [mergeTemplate, setMergeTemplate] = useState(MERGE_TEMPLATE);
   const [slashMenu, setSlashMenu] = useState<{
     visible: boolean;
     query: string;
@@ -286,6 +299,39 @@ export const PromptStudioTab: React.FC = () => {
           >
             {resolvedText}
           </div>
+        </div>
+
+        {/* Mail merge preview */}
+        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5" data-testid="merge-preview">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <div className="flex items-center gap-2">
+              <Table2 className="w-4 h-4 text-emerald-400" />
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+                Mail Merge (&lt;MergePreview /&gt;)
+              </h3>
+            </div>
+            <button
+              type="button"
+              onClick={() => setMergeTemplate(mergeTemplate === content ? MERGE_TEMPLATE : content)}
+              className="px-2 py-0.5 text-[10px] rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300"
+            >
+              {mergeTemplate === content ? "Use sample prompt" : "Use editor prompt"}
+            </button>
+          </div>
+          <p className="text-xs text-slate-400 mb-3">
+            One prompt per CSV / JSON record. Fields are matched to variables automatically;{" "}
+            <code className="text-violet-300">{"{?budget>=1000}…{/budget}"}</code> compares a field
+            (<code>{"= <> < > <= >="}</code>). Records with <code>status=cancelled</code> are skipped.
+          </p>
+          <MergePreview
+            content={mergeTemplate}
+            templates={DEMO_TEMPLATES}
+            templateColorMap={COLOR_MAP}
+            defaultSource={SAMPLE_CSV}
+            skipIf="status=cancelled"
+            downloadName="prompts"
+            className="flex flex-col gap-3 text-xs text-slate-300"
+          />
         </div>
 
         {/* Grammar diagnostics */}

@@ -252,7 +252,14 @@ export function resolvePrompt(
         };
         if (token.conditional !== "end") {
           const close = pairs!.get(i)!;
-          if (!evaluateCondition(token.conditional, token.value, values)) {
+          if (
+            !evaluateCondition(
+              token.conditional,
+              token.value,
+              values,
+              token.comparison,
+            )
+          ) {
             // Drop the whole section, tags included.
             out.replaced(token.start, tokens[close].end, "", tagInfo);
             i = close;
@@ -314,7 +321,12 @@ export function evaluatePromptTokens(
     if (token.type === "conditional") {
       if (
         token.conditional !== "end" &&
-        !evaluateCondition(token.conditional!, token.value, values)
+        !evaluateCondition(
+          token.conditional!,
+          token.value,
+          values,
+          token.comparison,
+        )
       ) {
         i = pairs.get(i)!;
       }

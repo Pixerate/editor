@@ -38,6 +38,16 @@
       "types": "./dist/commands/index.d.ts",
       "import": "./dist/commands/index.js",
       "require": "./dist/commands/index.cjs"
+    },
+    "./persistence": {
+      "types": "./dist/persistence/index.d.ts",
+      "import": "./dist/persistence/index.js",
+      "require": "./dist/persistence/index.cjs"
+    },
+    "./generation": {
+      "types": "./dist/generation/index.d.ts",
+      "import": "./dist/generation/index.js",
+      "require": "./dist/generation/index.cjs"
     }
   },
   "typesVersions": {
@@ -53,6 +63,12 @@
       ],
       "commands": [
         "./dist/commands/index.d.ts"
+      ],
+      "persistence": [
+        "./dist/persistence/index.d.ts"
+      ],
+      "generation": [
+        "./dist/generation/index.d.ts"
       ]
     }
   },

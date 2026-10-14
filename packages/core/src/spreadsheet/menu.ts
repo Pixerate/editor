@@ -8,6 +8,7 @@ import type { CellRange } from './types';
 import type { CellPosition } from './formula';
 import { formatCellDisplay, indexToColName } from './formula';
 import { isSingleCellRange, normalizeRange, rangeContains, rangesIntersect } from './table';
+import { NUMBER_FORMAT_PRESETS, isGeneralNumberFormat } from './numfmt/presets';
 
 export interface SpreadsheetMenuItem {
   id: string;
@@ -15,7 +16,36 @@ export interface SpreadsheetMenuItem {
   disabled?: boolean;
   /** Draw a divider before this item. */
   separatorBefore?: boolean;
-  run: () => void;
+  /** The item is the current choice of its group (e.g. the cell's number format). */
+  checked?: boolean;
+  /**
+   * Ask for text before running (e.g. a custom number format code): the
+   * editor prompts with `label` and `defaultValue`, then calls `run(text)`;
+   * cancelling skips `run`.
+   */
+  input?: { label: string; defaultValue?: string };
+  run: (input?: string) => void;
+}
+
+/**
+ * Runs a menu item the way the editors do: an item with `input` first asks
+ * for text with `ask` (default `window.prompt`) and is skipped when that is
+ * cancelled. Returns whether `run` was called.
+ */
+export function runSpreadsheetMenuItem(
+  item: SpreadsheetMenuItem,
+  ask?: (label: string, defaultValue: string) => string | null | undefined
+): boolean {
+  if (!item.input) {
+    item.run();
+    return true;
+  }
+  const prompt =
+    ask ?? ((label: string, value: string) => (typeof window !== 'undefined' && window.prompt ? window.prompt(label, value) : null));
+  const text = prompt(item.input.label, item.input.defaultValue ?? '');
+  if (text === null || text === undefined) return false;
+  item.run(text);
+  return true;
 }
 
 /**
@@ -178,6 +208,33 @@ export function getSpreadsheetMenuItems(controller: SpreadsheetController, cell:
       },
     },
   ];
+
+  // Format cells: number format presets and a custom code, for the selection.
+  const currentFormat = cellData.numberFormat;
+  const presetMatch = NUMBER_FORMAT_PRESETS.find((p) =>
+    p.id === 'general' ? isGeneralNumberFormat(currentFormat) : p.code === currentFormat
+  );
+  NUMBER_FORMAT_PRESETS.forEach((preset, i) => {
+    items.push({
+      id: `number-format-${preset.id}`,
+      label: `Format cells: ${preset.label}`,
+      separatorBefore: i === 0,
+      checked: presetMatch === preset,
+      run: () => {
+        controller.setCellNumberFormat(selection, preset.code);
+      },
+    });
+  });
+  items.push({
+    id: 'number-format-custom',
+    label: 'Format cells: Custom…',
+    checked: !presetMatch,
+    input: { label: 'Number format code, e.g. #,##0.00;[Red](#,##0.00)', defaultValue: currentFormat ?? 'General' },
+    run: (code) => {
+      if (code === undefined) return;
+      controller.setCellNumberFormat(selection, code.trim() === '' ? null : code);
+    },
+  });
 
   if (grouping) {
     items.push(

@@ -6,7 +6,9 @@ export default defineConfig({
     "spreadsheet/index": "src/spreadsheet/index.ts",
     "canvas/index": "src/canvas/index.ts",
     "image-editor/index": "src/image-editor/index.ts",
-    "commands/index": "src/commands/index.ts"
+    "commands/index": "src/commands/index.ts",
+    "persistence/index": "src/persistence/index.ts",
+    "generation/index": "src/generation/index.ts"
   },
   format: ["esm", "cjs"],
   dts: true,

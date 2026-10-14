@@ -46,6 +46,7 @@ import {
 	type SnapNodeResizeResult
 } from './resizeSnap.js';
 import { createNodeLookup } from './arrange.js';
+import { layoutUpMany, type AutoLayoutOptions } from './autoLayout.js';
 import type { CanvasNode, Rect, XYPosition } from './types.js';
 
 /** Minimal history surface (`HistoryManager` satisfies it). */
@@ -74,6 +75,11 @@ export interface CanvasArrangeControllerOptions<TNode extends CanvasNode = Canva
 	rectOptions?: NodeRectOptions;
 	/** Called whenever the guide segments change (set while dragging, cleared on drop). */
 	onGuidesChange?: (guides: GuideLine[]) => void;
+	/**
+	 * Re-run auto layout (`data.layout` frames) around the nodes an arrange action moves or
+	 * resizes, in the same undoable step. `true` uses the default measuring.
+	 */
+	autoLayout?: boolean | AutoLayoutOptions;
 }
 
 /**
@@ -121,6 +127,16 @@ export function createCanvasArrangeController<TNode extends CanvasNode = CanvasN
 	/** Applies updates as one (optionally undoable) step. Returns the updates. */
 	function apply(name: string, updates: CanvasNodeUpdate[]): CanvasNodeUpdate[] {
 		if (updates.length === 0) return updates;
+		if (options.autoLayout) {
+			const layoutOptions = options.autoLayout === true ? { rectOptions: options.rectOptions } : options.autoLayout;
+			const moved = applyNodeUpdates(options.getNodes(), updates);
+			const layout = layoutUpMany(moved, updates.map((u) => u.id), layoutOptions);
+			if (layout.length > 0) {
+				const byId = new Map<string, CanvasNodeUpdate>();
+				for (const u of [...updates, ...layout]) byId.set(u.id, { ...byId.get(u.id), ...u });
+				updates = [...byId.values()];
+			}
+		}
 		const inverse = invertNodeUpdates(options.getNodes(), updates);
 		const run = (u: CanvasNodeUpdate[]) => options.setNodes(applyNodeUpdates(options.getNodes(), u));
 		if (options.history) {

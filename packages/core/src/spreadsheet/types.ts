@@ -24,6 +24,13 @@ export interface SpreadsheetColumn {
   binding?: ColumnBinding;
   formula?: string; // column-level template/formula applied across rows
   format?: CellFormat;
+  /**
+   * Number format code for the column's cells (e.g. `#,##0.00`,
+   * `"$"#,##0.00;[Red]("$"#,##0.00)`, `m/d/yyyy`). Cells without an explicit
+   * code of their own use it instead of the automatic one chosen for typed
+   * input. See `SpreadsheetController.setColumnNumberFormat`.
+   */
+  numberFormat?: string;
   readOnly?: boolean;
   hidden?: boolean; // hidden by the user (hide/unhide columns)
 }
@@ -67,12 +74,18 @@ export interface CellData {
   errorMessage?: string;
   format?: CellFormat;
   /**
-   * Number format code chosen automatically for typed input, e.g.
-   * `"$"#,##0.00` for `$1,200.50`, `0%` for `10%`, `#,##0` for `1,234`,
-   * `m/d/yyyy` for `3/4/2026`, `h:mm` for `10:30`. Used by
-   * `formatCellDisplay`; absent for formulas and General numbers.
+   * Excel number format code used to display the value (see
+   * `formatCellDisplay`). Set explicitly (`explicitNumberFormat`), inherited
+   * from the column's `numberFormat`, or chosen automatically for typed input,
+   * e.g. `"$"#,##0.00` for `$1,200.50`, `0%` for `10%`, `#,##0` for `1,234`,
+   * `m/d/yyyy` for `3/4/2026`, `h:mm` for `10:30`. Absent for General.
    */
   numberFormat?: string;
+  /**
+   * True when `numberFormat` was set explicitly (`setCellNumberFormat`):
+   * typing into the cell keeps it instead of choosing an automatic format.
+   */
+  explicitNumberFormat?: boolean;
   readOnly?: boolean;
   /**
    * Set (only) on cells showing a value spilled from a dynamic array: the

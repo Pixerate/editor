@@ -1,5 +1,10 @@
-import { Slice, Fragment, Node as ProsemirrorNode, type Schema } from "@tiptap/pm/model";
-import type { TrackedChangesView } from "../extensions/track-changes";
+import { DOMSerializer, Slice, Fragment, Node as ProsemirrorNode, type Schema } from "@tiptap/pm/model";
+import {
+  BLOCK_CHANGE_ATTRIBUTE,
+  resolveTrackedChanges,
+  type TrackedChangesView,
+} from "../extensions/track-changes";
+import { findTagSpans, replaceTagSpans, stripTags } from "./html-scan";
 
 export interface PlainTextOptions {
   /**
@@ -15,17 +20,14 @@ export interface PlainTextOptions {
  * Match tracked deletion / insertion elements. They never nest within
  * themselves, so a lazy match is enough.
  */
-const TRACKED_DELETION_REGEX =
-  /<del\b(?=[^>]*\bdata-change-type=["']deletion["'])[^>]*>[\s\S]*?<\/del>/gi;
-const TRACKED_INSERTION_REGEX =
-  /<ins\b(?=[^>]*\bdata-change-type=["']insertion["'])[^>]*>[\s\S]*?<\/ins>/gi;
+const TRACKED_DELETION_ATTRIBUTE = /\bdata-change-type=["']deletion["']/i;
+const TRACKED_INSERTION_ATTRIBUTE = /\bdata-change-type=["']insertion["']/i;
 
 function stripTrackedChanges(html: string, view: TrackedChangesView): string {
   if (view === "all" || !html.includes("data-change-type")) return html;
-  return html.replace(
-    view === "accepted" ? TRACKED_DELETION_REGEX : TRACKED_INSERTION_REGEX,
-    "",
-  );
+  return view === "accepted"
+    ? replaceTagSpans(html, "del", TRACKED_DELETION_ATTRIBUTE, () => "")
+    : replaceTagSpans(html, "ins", TRACKED_INSERTION_ATTRIBUTE, () => "");
 }
 
 /**
@@ -97,13 +99,7 @@ const BLOCK_TAGS = new Set([
   "H1", "H2", "H3", "H4", "H5", "H6", "HR",
 ]);
 
-/**
- * Matches a TipTap mention span (including its content). The lookahead keeps
- * a single `[^>]*` scan per tag, avoiding catastrophic backtracking on
- * malformed input.
- */
-const MENTION_SPAN_REGEX =
-  /<span\b(?=[^>]*\bdata-type=["']mention["'])([^>]*)>[\s\S]*?<\/span>/gi;
+const MENTION_TYPE_ATTRIBUTE = /\bdata-type=["']mention["']/i;
 
 function getHtmlAttribute(attrs: string, name: string): string | undefined {
   const match = new RegExp(`\\b${name}=(?:"([^"]*)"|'([^']*)')`, "i").exec(
@@ -139,10 +135,11 @@ export function htmlToPlainText(html: string, options: PlainTextOptions = {}): s
   if (!html) return "";
 
   // Normalize mentions so data-label is preserved as @label even if textContent is empty
-  const mentionNormalized = stripTrackedChanges(
+  const trackedResolved = stripTrackedChanges(
     html,
     options.trackedChanges ?? "accepted",
-  ).replace(MENTION_SPAN_REGEX, (match, attrs) => {
+  );
+  const mentionNormalized = replaceTagSpans(trackedResolved, "span", MENTION_TYPE_ATTRIBUTE, (match, attrs) => {
     const label =
       getHtmlAttribute(attrs, "data-label") || getHtmlAttribute(attrs, "data-id");
     return label ? `@${label}` : match;
@@ -203,9 +200,32 @@ export function htmlToPlainText(html: string, options: PlainTextOptions = {}): s
     .replace(
       /<\/(?:p|div|li|pre|blockquote|h[1-6])>(?:\s*<\/(?:li|ul|ol|blockquote|div)>)*/gi,
       "\n",
-    )
-    .replace(/<[^>]+>/g, "");
-  return decodeHtmlEntities(text).replace(/\n$/, "");
+    );
+  return decodeHtmlEntities(stripTags(text)).replace(/\n$/, "");
+}
+
+/**
+ * Whole-block insertions/deletions (`blockChange.operation`, from document
+ * comparison) have no `<ins>`/`<del>` elements to strip, so documents with
+ * them are resolved first and serialized from the resolved document.
+ */
+function resolvedBlockOperationsHtml(editor: any, view: TrackedChangesView): string | null {
+  const doc: ProsemirrorNode | undefined = editor?.state?.doc;
+  if (!doc || view === "all" || typeof document === "undefined") return null;
+  let found = false;
+  doc.descendants((node) => {
+    if (found) return false;
+    if (node.isTextblock) {
+      if (node.attrs?.[BLOCK_CHANGE_ATTRIBUTE]?.operation) found = true;
+      return false;
+    }
+    return true;
+  });
+  if (!found) return null;
+  const resolved = resolveTrackedChanges(doc, view);
+  const container = document.createElement("div");
+  container.appendChild(DOMSerializer.fromSchema(doc.type.schema).serializeFragment(resolved.content));
+  return container.innerHTML;
 }
 
 /**
@@ -215,7 +235,9 @@ export function htmlToPlainText(html: string, options: PlainTextOptions = {}): s
  */
 export function getEditorText(editor: any, options: PlainTextOptions = {}): string {
   if (!editor) return "";
-  const html = typeof editor.getHTML === "function" ? editor.getHTML() : "";
+  const html =
+    resolvedBlockOperationsHtml(editor, options.trackedChanges ?? "accepted") ??
+    (typeof editor.getHTML === "function" ? editor.getHTML() : "");
   if (html) {
     return htmlToPlainText(html, options);
   }
@@ -305,10 +327,8 @@ export function extractMentionsFromDoc(docOrEditor: any): ExtractedMention[] {
         });
       });
     } else {
-      const spanRegex = /<span([^>]*data-type=["']mention["'][^>]*)>/gi;
-      let match;
-      while ((match = spanRegex.exec(docOrEditor)) !== null) {
-        const attrStr = match[1];
+      for (const span of findTagSpans(docOrEditor, "span", MENTION_TYPE_ATTRIBUTE, false)) {
+        const attrStr = span.attrs;
         const getAttr = (name: string) => {
           const m = new RegExp(`${name}=["']([^"']*)["']`, "i").exec(attrStr);
           return m ? m[1] : undefined;

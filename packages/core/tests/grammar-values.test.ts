@@ -367,7 +367,9 @@ describe("Resolution with values: source maps", () => {
         }
       }
     }
-  });
+    // ~1,200 resolutions with full offset checks: well over vitest's 5 s default when
+    // the whole suite runs in parallel on a loaded machine (e.g. the release job).
+  }, 30_000);
 });
 
 describe("evaluatePromptTokens", () => {

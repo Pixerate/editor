@@ -38,6 +38,8 @@ export const SPREADSHEET_TABLE_ACTIONS = [
   'toggleGroupCollapsed',
   'getGroups',
   'transposeRange',
+  'setCellNumberFormat',
+  'setColumnNumberFormat',
   'exportToCsv',
   'importFromCsv',
   'copyToClipboardData',

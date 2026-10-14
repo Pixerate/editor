@@ -6,6 +6,7 @@ import {
   OutlinePanel,
   useFileImport,
   useAgentToolProvider,
+  FindReplaceBar,
 } from "@pixerate/editor-react";
 import { getCrossReferenceTargets } from "@pixerate/editor";
 import { createRichTextToolProvider } from "@pixerate/editor/agent";
@@ -26,8 +27,10 @@ import {
   Link2,
   Upload,
   Wand2,
+  Search,
 } from "lucide-react";
 import { demoToolRegistry } from "../agentTools";
+import { RichDocumentAutosave } from "./RichDocumentAutosave";
 
 const INITIAL_CONTENT = `
   <h1 id="h-welcome">Welcome to Rich Text Document Editing</h1>
@@ -66,6 +69,7 @@ export const RichDocumentTab: React.FC = () => {
       footnotes: true,
       bookmarks: true,
       crossReferences: true,
+      findReplace: true,
       autocorrect: {
         onCorrection: (c) =>
           setCorrections((prev) => [`${c.original} → ${c.replacement}`, ...prev].slice(0, 5)),
@@ -109,6 +113,7 @@ export const RichDocumentTab: React.FC = () => {
 
   return (
     <div className="space-y-4">
+      <RichDocumentAutosave editor={editor} />
       {/* Editor Toolbar */}
       <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-3 flex flex-wrap items-center gap-1 shadow-md">
         <button onClick={() => editor.chain().focus().toggleBold().run()} className={btn(editor.isActive("bold"))} title="Bold">
@@ -149,6 +154,16 @@ export const RichDocumentTab: React.FC = () => {
         </button>
         <button onClick={() => editor.chain().focus().insertFootnote().run()} className={btn()} title="Insert footnote">
           <Superscript className="w-4 h-4" />
+        </button>
+
+        <div className="w-px h-5 bg-slate-800 mx-1" />
+
+        <button
+          onClick={() => editor.chain().focus().openFindReplace({ mode: "replace" }).run()}
+          className={btn()}
+          title="Find and replace (Mod+F / Mod+H)"
+        >
+          <Search className="w-4 h-4" />
         </button>
 
         <div className="ml-auto flex items-center gap-3 text-xs text-slate-400">
@@ -293,6 +308,7 @@ export const RichDocumentTab: React.FC = () => {
             </button>
           </BubbleMenu>
 
+          <FindReplaceBar editor={editor} className="mb-3 flex flex-col gap-1 rounded-md border border-border bg-background p-1 text-sm shadow-sm" />
           <EditorContent editor={editor} />
         </div>
       </div>

@@ -1,4 +1,5 @@
 import { escapeHtml } from "./plain-text";
+import { findTagSpans, replaceDelimited, stripTags } from "./html-scan";
 import type { MentionEntity } from "../extensions/mention";
 
 /**
@@ -49,12 +50,23 @@ export interface PreprocessMarkdownMentionsOptions {
  */
 export function stripMarkdownCode(content: string): string {
   if (!content || typeof content !== "string") return "";
-  return content
-    .replace(/```[\s\S]*?```/g, "")
-    .replace(/~~~[\s\S]*?~~~/g, "")
-    .replace(/<pre[\s\S]*?<\/pre>/gi, "")
-    .replace(/<code[\s\S]*?<\/code>/gi, "")
-    .replace(/`[^`\n]*`/g, "");
+  // Linear scans instead of lazy `[\s\S]*?` regexes, which rescan to the end of the
+  // input from every unclosed opener (see html-scan.ts).
+  let text = replaceDelimited(content, /```/g, "```");
+  text = replaceDelimited(text, /~~~/g, "~~~");
+  text = replaceDelimited(text, /<pre/gi, "</pre>", undefined, true);
+  text = replaceDelimited(text, /<code/gi, "</code>", undefined, true);
+  return text.replace(/`[^`\n]*`/g, "");
+}
+
+/** True for the attributes of a mention node: `data-type="mention"` or the `pixerate-mention-node` class. */
+function isMentionNodeAttributes(attrs: string): boolean {
+  if (/\bdata-type=["']mention["']/i.test(attrs)) return true;
+  const classAttr = /\bclass=(["'])/i.exec(attrs);
+  if (!classAttr) return false;
+  const valueStart = classAttr.index + classAttr[0].length;
+  const valueEnd = attrs.indexOf(classAttr[1], valueStart);
+  return valueEnd !== -1 && attrs.slice(valueStart, valueEnd).includes("pixerate-mention-node");
 }
 
 /**
@@ -67,24 +79,29 @@ export function extractMentions(content: string): string[] {
   // Normalize existing HTML mention nodes (e.g. from TipTap or rich text serializers)
   // so data-mention-suggestion-char="@" does not trigger spurious quoted matches against attributes,
   // and ensure the actual mentioned label or ID is preserved cleanly.
-  const normalizedMentionNodes = content.replace(
-    /<span\b[^>]*\b(?:data-type=["']mention["']|class=["'][^"']*pixerate-mention-node[^"']*["'])[^>]*>([\s\S]*?)<\/span>/gi,
-    (match, inner) => {
-      const labelMatch = match.match(/\bdata-label=["']([^"']+)["']/i);
-      if (labelMatch) return ` @${labelMatch[1]} `;
-      const idMatch = match.match(/\bdata-id=["']([^"']+)["']/i);
-      if (idMatch) return ` @${idMatch[1]} `;
-      return ` ${inner} `;
-    }
-  );
+  // A linear scan: the equivalent regex (`<span\b[^>]*\b(?:…)[^>]*>`) backtracks
+  // cubically on malformed input without a `>` (see html-scan.ts).
+  let normalizedMentionNodes = "";
+  let last = 0;
+  for (const span of findTagSpans(content, "span", isMentionNodeAttributes, true)) {
+    const labelMatch = /\bdata-label=["']([^"']+)["']/i.exec(span.attrs);
+    const idMatch = labelMatch ? null : /\bdata-id=["']([^"']+)["']/i.exec(span.attrs);
+    const inner = content.slice(span.openEnd, span.end - "</span>".length);
+    const replacement = labelMatch ? ` @${labelMatch[1]} ` : idMatch ? ` @${idMatch[1]} ` : ` ${inner} `;
+    normalizedMentionNodes += content.slice(last, span.start) + replacement;
+    last = span.end;
+  }
+  normalizedMentionNodes += content.slice(last);
 
   const cleanContent = stripMarkdownCode(normalizedMentionNodes);
   // Strip URLs and markdown link destinations so @package or @handles in URLs are not extracted as mentions
   const withoutUrls = cleanContent
-    .replace(/(?:https?|ftp|file|vscode|cursor|mailto):\/\/[^\s<>()]+/gi, "")
-    .replace(/\]\([^)]*\)/g, "]");
+    .replace(/(?:https?|ftp|file|vscode|cursor|mailto):\/\/[^\s<>()]+/gi, "");
+  // Markdown link destinations: `](…)` → `]` (linear; `/\]\([^)]*\)/g` is quadratic
+  // when many `](` have no `)`).
+  const withoutLinks = replaceDelimited(withoutUrls, /\]\(/g, ")", () => "]");
   // Strip remaining HTML tags so attributes containing '@' or '>' aren't treated as mention triggers
-  const textOnly = withoutUrls.replace(/<[^>]+>/g, " ");
+  const textOnly = stripTags(withoutLinks, " ");
 
   const mentions: string[] = [];
   const seen = new Set<string>();

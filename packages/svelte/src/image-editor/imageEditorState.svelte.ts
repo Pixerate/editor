@@ -12,6 +12,10 @@ import {
   type ExportOptions,
   type SerializedImageEditorState,
   type ImagePoint,
+  type AdjustmentKind,
+  type AdjustmentLayerInit,
+  type AdjustmentLayerUpdate,
+  type ImageHistogram,
 } from '@pixerate/editor/image-editor';
 
 export function createReactiveImageEditor(options: ImageEditorOptions = {}) {
@@ -19,9 +23,14 @@ export function createReactiveImageEditor(options: ImageEditorOptions = {}) {
   let state = $state<ImageEditorState>(controller.getState());
   let historyTicks = $state<number>(0);
 
+  let histogram = $state.raw<ImageHistogram | null>(controller.getHistogram());
+
   const unsubscribe = controller.subscribe((updated) => {
     state = { ...updated };
     historyTicks++;
+  });
+  const unsubscribeHistogram = controller.subscribeHistogram((h) => {
+    histogram = h;
   });
 
   return {
@@ -35,6 +44,10 @@ export function createReactiveImageEditor(options: ImageEditorOptions = {}) {
       // depend on historyTicks for reactivity
       void historyTicks;
       return controller.canUndo;
+    },
+    /** Histogram of the last rendered preview (after adjustments and layers); null before a render. */
+    get histogram() {
+      return histogram;
     },
     get canRedo() {
       void historyTicks;
@@ -73,6 +86,22 @@ export function createReactiveImageEditor(options: ImageEditorOptions = {}) {
     /** Update to Current Process: re-render the adjustments with the latest process (one undo step). */
     upgradeProcess() {
       return controller.upgradeProcess();
+    },
+    /** Adds an adjustment layer (one undo step) and returns its id. */
+    addAdjustmentLayer(init: AdjustmentKind | AdjustmentLayerInit, index?: number) {
+      return controller.addAdjustmentLayer(init, index);
+    },
+    updateAdjustmentLayer(id: string, update: AdjustmentLayerUpdate, commitToHistory = true) {
+      return controller.updateAdjustmentLayer(id, update, commitToHistory);
+    },
+    removeAdjustmentLayer(id: string) {
+      return controller.removeAdjustmentLayer(id);
+    },
+    moveAdjustmentLayer(id: string, toIndex: number) {
+      return controller.moveAdjustmentLayer(id, toIndex);
+    },
+    toggleAdjustmentLayer(id: string, enabled?: boolean) {
+      return controller.toggleAdjustmentLayer(id, enabled);
     },
     setDepthMask(partial: Partial<DepthMaskOptions>) {
       controller.setDepthMask(partial);
@@ -155,8 +184,25 @@ export function createReactiveImageEditor(options: ImageEditorOptions = {}) {
     /** Stops syncing controller state; call when the editor is no longer used. */
     destroy() {
       unsubscribe();
+      unsubscribeHistogram();
     },
   };
 }
 
 export type ReactiveImageEditor = ReturnType<typeof createReactiveImageEditor>;
+
+/** The preview histogram of an image editor controller as a rune (`current`), updated after every render. */
+export function createImageHistogram(controller: ImageEditorController) {
+  let current = $state.raw<ImageHistogram | null>(controller.getHistogram());
+  const unsubscribe = controller.subscribeHistogram((h) => {
+    current = h;
+  });
+  return {
+    get current() {
+      return current;
+    },
+    destroy() {
+      unsubscribe();
+    },
+  };
+}

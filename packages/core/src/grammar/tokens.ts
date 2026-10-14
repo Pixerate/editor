@@ -44,13 +44,31 @@ export interface Token {
   description?: string;
   /** Conditional tags only. */
   conditional?: ConditionalKind;
+  /**
+   * Opening conditional tags written as a comparison (`{?amount>100}`,
+   * closed by `{/amount}`) only. `value` is then the variable name.
+   */
+  comparison?: ConditionComparison;
+}
+
+/** Operators accepted in a comparison condition such as `{?amount>=100}`. */
+export type ComparisonOperator = "=" | "<>" | "<" | ">" | "<=" | ">=";
+
+/** The comparison part of a conditional tag: `{?status=paid}` → `{ operator: "=", operand: "paid" }`. */
+export interface ConditionComparison {
+  operator: ComparisonOperator;
+  /** Right-hand side, unquoted. */
+  operand: string;
 }
 
 /** Values supplied for `{variable}` slots and `{?variable}` conditions. */
 export type PromptValue = string | number | boolean | null | undefined;
 export type PromptValues = Record<string, PromptValue>;
 
-export type PromptDiagnosticCode = "unclosed-section" | "unexpected-close";
+export type PromptDiagnosticCode =
+  | "unclosed-section"
+  | "unexpected-close"
+  | "invalid-condition";
 
 /**
  * A recoverable grammar problem. The offending tag is treated as literal text.

@@ -99,9 +99,17 @@ export interface TrackedBlockSnapshot {
   wrappers: { type: string; attrs: Record<string, any> }[];
 }
 
+/**
+ * Whole-block operation of a `blockChange` record: the block was inserted
+ * (rejecting removes it) or deleted (accepting removes it). Produced by
+ * `compareDocuments`; absent for type/attribute/wrapping changes.
+ */
+export type TrackedBlockOperation = "insert" | "delete";
+
 /** Value of the `blockChange` node attribute. */
 export interface TrackedBlockChangeAttributes extends TrackedChangeAttributes {
   previous: TrackedBlockSnapshot;
+  operation?: TrackedBlockOperation;
 }
 
 export interface TrackedFormatSummary {
@@ -132,8 +140,15 @@ export interface TrackedChange {
   description: string;
   /** Formatting changes (`type: "format"`). */
   format?: TrackedFormatSummary;
-  /** Block changes (`type: "block"`): the first block's previous and current state. */
-  block?: { previous: TrackedBlockSnapshot; current: TrackedBlockSnapshot };
+  /**
+   * Block changes (`type: "block"`): the first block's previous and current
+   * state, and the whole-block operation for inserted/deleted blocks.
+   */
+  block?: {
+    previous: TrackedBlockSnapshot;
+    current: TrackedBlockSnapshot;
+    operation?: TrackedBlockOperation;
+  };
 }
 
 export interface TrackChangesSnapshot {
@@ -157,6 +172,10 @@ export interface TrackChangesOptions {
   formatChangeHTMLAttributes: Record<string, any>;
   /** Class added to blocks with a tracked block change (margin bar by default). */
   blockChangeClass: string;
+  /** Extra class of wholly inserted blocks (`blockChange.operation: "insert"`, from comparisons). */
+  blockInsertedClass: string;
+  /** Extra class of wholly deleted blocks (`blockChange.operation: "delete"`, from comparisons). */
+  blockDeletedClass: string;
   /** Track mark changes (bold, links, font size, …) on existing text. Default `true`. */
   trackFormatting: boolean;
   /** Track textblock type/attribute and wrapping (list, quote) changes. Default `true`. */
@@ -674,9 +693,11 @@ export function getTrackedChanges(
     return change;
   };
 
+  const blockCounts = new Map<string, number>();
   doc.descendants((node, pos) => {
     const block = node.attrs?.[BLOCK_CHANGE_ATTRIBUTE] as TrackedBlockChangeAttributes | null;
     if (block?.changeId && node.isTextblock) {
+      blockCounts.set(block.changeId, (blockCounts.get(block.changeId) ?? 0) + 1);
       const change = add(
         `block:${block.changeId}`,
         "block",
@@ -686,7 +707,11 @@ export function getTrackedChanges(
         node.textContent,
       );
       if (!change.block) {
-        change.block = { previous: block.previous, current: blockSnapshot(doc, pos) };
+        change.block = {
+          previous: block.previous,
+          current: blockSnapshot(doc, pos),
+          ...(block.operation ? { operation: block.operation } : {}),
+        };
       }
     }
     if (!node.isInline) return;
@@ -724,9 +749,18 @@ export function getTrackedChanges(
       case "format":
         change.description = describeFormatChange(change.format!);
         break;
-      case "block":
-        change.description = describeBlockChange(change.block!.previous, change.block!.current);
+      case "block": {
+        const { previous, current, operation } = change.block!;
+        if (operation) {
+          const count = blockCounts.get(change.id) ?? 1;
+          const verb = operation === "insert" ? "Inserted" : "Deleted";
+          change.description =
+            count > 1 ? `${verb} ${count} blocks` : `${verb} ${blockLabel(current.type, current.attrs)}`;
+        } else {
+          change.description = describeBlockChange(previous, current);
+        }
         break;
+      }
     }
   });
   return changes.sort((a, b) => a.from - b.from || a.to - b.to);
@@ -989,12 +1023,68 @@ function restoreWrappers(
   }
 }
 
+/**
+ * Removes the blocks of whole-block operations that the decision drops
+ * (accepted deletions, rejected insertions). Containers whose textblocks are
+ * all removed (list items, lists, quotes, table rows) are removed with them.
+ */
+function removeBlocks(tr: Transform, ids: ReadonlySet<string>, decision: "accept" | "reject"): void {
+  const removed: TrackedBlockOperation = decision === "accept" ? "delete" : "insert";
+  const memo = new Map<ProsemirrorNode, boolean>();
+  const removable = (node: ProsemirrorNode): boolean => {
+    const cached = memo.get(node);
+    if (cached !== undefined) return cached;
+    let result: boolean;
+    if (node.isTextblock) {
+      const record = node.attrs?.[BLOCK_CHANGE_ATTRIBUTE] as TrackedBlockChangeAttributes | null;
+      result = !!record?.changeId && record.operation === removed && ids.has(record.changeId);
+    } else if (node.isLeaf || node.childCount === 0) {
+      result = false;
+    } else {
+      result = true;
+      for (let i = 0; i < node.childCount && result; i++) result = removable(node.child(i));
+    }
+    memo.set(node, result);
+    return result;
+  };
+
+  const doc = tr.doc;
+  if (removable(doc)) {
+    const filler = doc.type.contentMatch.defaultType?.createAndFill();
+    if (filler) tr.replaceWith(0, doc.content.size, filler);
+    return;
+  }
+  const ranges: { from: number; to: number }[] = [];
+  const visit = (node: ProsemirrorNode, contentStart: number) => {
+    node.forEach((child, offset) => {
+      const from = contentStart + offset;
+      if (removable(child)) {
+        ranges.push({ from, to: from + child.nodeSize });
+      } else if (!child.isTextblock && !child.isLeaf) {
+        visit(child, from + 1);
+      }
+    });
+  };
+  visit(doc, 0);
+  if (ranges.length === 0) return;
+  const startIndex = tr.steps.length;
+  ranges.reverse().forEach(({ from, to }) => {
+    const mapping = tr.mapping.slice(startIndex);
+    try {
+      tr.delete(mapping.map(from, 1), mapping.map(to, -1));
+    } catch {
+      // The parent cannot lose this block (e.g. a list item's first paragraph): keep it.
+    }
+  });
+}
+
 function decideBlocks(
   tr: Transform,
   changes: readonly TrackedChange[],
   decision: "accept" | "reject",
 ): void {
   const ids = new Set(changes.map((c) => c.id));
+  removeBlocks(tr, ids, decision);
   const items: { contentPos: number; record: TrackedBlockChangeAttributes }[] = [];
   tr.doc.descendants((node, pos) => {
     const record = node.attrs?.[BLOCK_CHANGE_ATTRIBUTE] as TrackedBlockChangeAttributes | null;
@@ -1011,7 +1101,7 @@ function decideBlocks(
     const $pos = tr.doc.resolve(contentPos);
     if (!$pos.parent.isTextblock || $pos.parentOffset !== 0) return;
     const pos = $pos.before();
-    if (decision === "accept") {
+    if (decision === "accept" || record.operation) {
       tr.setNodeAttribute(pos, BLOCK_CHANGE_ATTRIBUTE, null);
       return;
     }
@@ -1397,6 +1487,8 @@ function trackBlocks(
     if (!node.isTextblock || $pos.parentOffset !== 0 || $pos.depth === 0) return;
     if (!node.type.spec.attrs || !(BLOCK_CHANGE_ATTRIBUTE in node.type.spec.attrs)) return;
     const pos = $pos.before();
+    // Inserted/deleted blocks (from a comparison) keep their record.
+    if (existing?.operation || node.attrs[BLOCK_CHANGE_ATTRIBUTE]?.operation) return;
     const original = existing?.previous ?? previous;
     const current = blockSnapshot(tr.doc, pos);
     if (sameBlock(original, current, ctx.ignoredAttributes)) {
@@ -1678,6 +1770,10 @@ export const TrackChanges = Extension.create<TrackChangesOptions, TrackChangesSt
       deletionHTMLAttributes: {},
       formatChangeHTMLAttributes: {},
       blockChangeClass: "pixerate-block-change border-l-2 border-amber-400 pl-2 dark:border-amber-500",
+      blockInsertedClass:
+        "pixerate-block-inserted underline decoration-emerald-500 text-emerald-700 dark:text-emerald-400",
+      blockDeletedClass:
+        "pixerate-block-deleted line-through decoration-red-500 text-red-600 dark:text-red-400",
       trackFormatting: true,
       trackBlocks: true,
       trackCodeBlocks: true,
@@ -1701,6 +1797,8 @@ export const TrackChanges = Extension.create<TrackChangesOptions, TrackChangesSt
   addGlobalAttributes() {
     if (this.options?.trackBlocks === false) return [];
     const blockClass = this.options?.blockChangeClass ?? "";
+    const insertedClass = this.options?.blockInsertedClass ?? "";
+    const deletedClass = this.options?.blockDeletedClass ?? "";
     return [
       {
         types: this.options?.blockTypes ?? ["paragraph", "heading", "codeBlock"],
@@ -1712,9 +1810,13 @@ export const TrackChanges = Extension.create<TrackChangesOptions, TrackChangesSt
             renderHTML: (attrs: Record<string, any>) => {
               const value = attrs[BLOCK_CHANGE_ATTRIBUTE];
               if (!value) return {};
+              const operation = (value as TrackedBlockChangeAttributes).operation;
+              const extra = operation === "insert" ? insertedClass : operation === "delete" ? deletedClass : "";
+              const className = [blockClass, extra].filter(Boolean).join(" ");
               return {
                 "data-block-change": JSON.stringify(value),
-                ...(blockClass ? { class: blockClass } : {}),
+                ...(operation ? { "data-block-operation": operation } : {}),
+                ...(className ? { class: className } : {}),
               };
             },
           },

@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { clampMenuPosition, type SpreadsheetMenuItem } from '@pixerate/editor/spreadsheet';
+import { clampMenuPosition, runSpreadsheetMenuItem, type SpreadsheetMenuItem } from '@pixerate/editor/spreadsheet';
 
 // Gap kept between the menu and the viewport edges.
 const VIEWPORT_MARGIN = 4;
@@ -71,11 +71,14 @@ export const SpreadsheetContextMenu: React.FC<SpreadsheetContextMenuProps> = ({ 
             type="button"
             role="menuitem"
             data-action={item.id}
+            data-checked={item.checked ? '' : undefined}
             disabled={item.disabled}
-            className="block w-full px-3 py-1 text-left hover:bg-muted disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent"
+            className={`block w-full px-3 py-1 text-left hover:bg-muted disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent ${
+              item.checked ? 'font-semibold' : ''
+            }`}
             onClick={() => {
               onClose();
-              item.run();
+              runSpreadsheetMenuItem(item);
             }}
           >
             {item.label}

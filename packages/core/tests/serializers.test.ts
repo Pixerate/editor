@@ -98,11 +98,9 @@ describe("Serializers: htmlToPlainText (Node fallback, no DOM)", () => {
     });
   }
 
-  it("handles malformed mention spans in linear time", () => {
-    const malformed = "<span data-type='mention' ".repeat(2000);
-    const start = performance.now();
-    htmlToPlainText(malformed);
-    expect(performance.now() - start).toBeLessThan(1000);
+  it("handles malformed mention spans quickly", () => {
+    // Growth with input size is checked in html-scan.test.ts; this is a smoke test.
+    expect(htmlToPlainText("<span data-type='mention' ".repeat(20000))).toContain("<span");
   });
 });
 

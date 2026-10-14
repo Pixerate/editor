@@ -69,6 +69,8 @@ Requires **Svelte 5** (the components use runes). Components ship as `.svelte` s
 
 `ReviewToolbar` steps through insertions, deletions, formatting and block changes and shows the current one's author and description (e.g. "Ada: Formatted: Bold"); hide it with `showDescription={false}` or restyle it with `descriptionClass`. Put `<CommentButton {editor} />` inside a `BubbleMenu` to comment on the selection. `createComments(editorOrStore)` and `createTrackChanges(editor)` are rune (and Svelte store) adapters for custom UIs.
 
+`<FindReplaceBar {editor} />` is a Word-style find bar for editors with the `FindReplace` extension (`createRichTextPreset({ findReplace: true })`): it appears on Mod+F / Mod+H (or `editor.commands.openFindReplace()`), with find and replace fields, option toggles, a "3 of 12" counter, previous/next, Replace and Replace all; Enter / Shift+Enter step, Mod+Enter in the replace field replaces all, Escape closes (`onclose`). `createFindReplace(editor)` is the rune (and Svelte store) adapter for custom UIs.
+
 ## More exports
 
 | Import | Exports |
@@ -77,6 +79,8 @@ Requires **Svelte 5** (the components use runes). Components ship as `.svelte` s
 | `@pixerate/editor-svelte/spreadsheet` | `SpreadsheetEditor`, `FormulaBar`, `FormulaHints`, `SpreadsheetContextMenu`, `SpreadsheetGroupRow`, `createReactiveSpreadsheet` (also re-exported from the root entry) |
 | `@pixerate/editor-svelte/image-editor` | `ImageEditor`, `createReactiveImageEditor`: crop, rotate/flip, adjustments, annotations, depth masks, and `onInpaint` / `onRemoveBackground` AI hooks |
 | `@pixerate/editor-svelte/commands` | `CommandPalette`, `createCommandPalette` (`hotkey: "Mod+K"`; call `destroy()` when done), `createCommandShortcuts`, `useRegisterCommands` over a `CommandRegistry` from `@pixerate/editor/commands` (also re-exported from the root entry) |
+| `@pixerate/editor-svelte/persistence` | `createAutosave` (crash-recovery snapshots bound to a history / dirty flag, flushed on `pagehide`; call `destroy()` when done) and `<RecoveryPrompt>` (also re-exported from the root entry) |
+| `@pixerate/editor-svelte/generation` | `GenerationSettings` (controls generated from a model's capabilities, reference slots by role, plan adjustments; `onchange` / `onaddreference`), `createGenerationPlan(() => request, () => caps)`, `JobProgress`, `createJobProgress` (call `destroy()` when done) over `@pixerate/editor/generation` (also re-exported from the root entry) |
 | `@pixerate/editor-svelte/canvas` | Runes for `@xyflow/svelte`: `createCanvasGraph`, `createCanvasClipboard`, `createCanvasDocking`, `createCanvasShortcuts`, `createCanvasInteractions`, `createCanvasExplosion`, `createCanvasNodeSync`, `createCanvasMultiDrag`, `createStreamingCanvas`, `AgentPresenceLayer`, `FloatingHorizontalScrollbar`, plus layout helpers |
 
 Prop types are exported alongside each component, for example `EditableTextNodeEditorProps`, `BubbleMenuProps`, `ImageEditorProps` and `SpreadsheetEditorProps`.

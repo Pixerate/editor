@@ -193,3 +193,47 @@ describe('Svelte SpreadsheetEditor table interactions', () => {
     expect(paste.defaultPrevented).toBe(false);
   });
 });
+
+describe('Svelte SpreadsheetEditor number formats', () => {
+  const span = (cell: HTMLElement | null) => cell!.querySelector<HTMLElement>('span')!;
+
+  it('renders formatted numbers right-aligned with format colours', () => {
+    const { sheetState, td } = setup([['-5', 'text', '1234.5']]);
+    sheetState.setCellNumberFormat({ startRow: 0, startCol: 0, endRow: 0, endCol: 2 }, '#,##0.00;[Red](#,##0.00)');
+    flushSync();
+    expect(span(td(0, 0)).textContent?.trim()).toBe('(5.00)');
+    expect(span(td(0, 0)).style.color).toBe('rgb(255, 0, 0)');
+    expect(span(td(0, 0)).style.textAlign).toBe('right');
+    expect(span(td(0, 1)).textContent?.trim()).toBe('text');
+    expect(span(td(0, 1)).style.textAlign).toBe('');
+    expect(span(td(0, 1)).hasAttribute('data-numeric')).toBe(false);
+    expect(span(td(0, 2)).textContent?.trim()).toBe('1,234.50');
+    expect(span(td(0, 2)).style.color).toBe('');
+  });
+
+  it('applies presets and custom codes from the context menu', () => {
+    const { target, td, dispatch } = setup([['1.5']]);
+    const openMenu = () => {
+      dispatch(td(0, 0)!, new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 }));
+      return target.querySelector('[role="menu"]')!;
+    };
+    let menu = openMenu();
+    expect(menu.querySelector('[data-action="number-format-general"]')!.hasAttribute('data-checked')).toBe(true);
+    dispatch(menu.querySelector('[data-action="number-format-currency"]')!, new MouseEvent('click', { bubbles: true }));
+    expect(span(td(0, 0)).textContent?.trim()).toBe('$1.50');
+
+    const prompt = vi.spyOn(window, 'prompt').mockReturnValue('0.000 "kg"');
+    try {
+      menu = openMenu();
+      expect(menu.querySelector('[data-action="number-format-currency"]')!.hasAttribute('data-checked')).toBe(true);
+      dispatch(menu.querySelector('[data-action="number-format-custom"]')!, new MouseEvent('click', { bubbles: true }));
+      expect(prompt).toHaveBeenCalledWith(expect.stringContaining('Number format code'), '"$"#,##0.00');
+      expect(span(td(0, 0)).textContent?.trim()).toBe('1.500 kg');
+      prompt.mockReturnValue(null);
+      dispatch(openMenu().querySelector('[data-action="number-format-custom"]')!, new MouseEvent('click', { bubbles: true }));
+      expect(span(td(0, 0)).textContent?.trim()).toBe('1.500 kg');
+    } finally {
+      prompt.mockRestore();
+    }
+  });
+});

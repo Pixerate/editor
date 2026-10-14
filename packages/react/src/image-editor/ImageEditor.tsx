@@ -18,8 +18,13 @@ import {
   hitTestAnnotation,
   normalizeProcessVersion,
   LATEST_PROCESS_VERSION,
+  IMAGE_ADJUSTMENT_CONTROLS,
+  readAdjustmentControls,
 } from '@pixerate/editor/image-editor';
 import { useImageEditor, type UseImageEditorReturn } from './useImageEditor';
+import { ControlSlider } from './ControlSlider';
+import { Histogram } from './Histogram';
+import { AdjustmentLayersPanel } from './AdjustmentLayersPanel';
 
 export interface ImageEditorProps {
   editor?: UseImageEditorReturn;
@@ -912,150 +917,39 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                 </button>
               </div>
 
-              {/* Brightness */}
-              <div>
-                <div className="flex justify-between text-slate-400 mb-1">
-                  <span>Brightness</span>
-                  <span className="font-mono">{state.adjustments.brightness}</span>
-                </div>
-                <input
-                  type="range"
-                  min="-100"
-                  max="100"
-                  value={state.adjustments.brightness}
-                  onChange={(e) => editor.setAdjustments({ brightness: Number(e.target.value) })}
-                  className="w-full accent-indigo-500"
-                />
-              </div>
+              <Histogram histogram={editor.histogram} />
 
-              {/* Contrast */}
-              <div>
-                <div className="flex justify-between text-slate-400 mb-1">
-                  <span>Contrast</span>
-                  <span className="font-mono">{state.adjustments.contrast}</span>
-                </div>
-                <input
-                  type="range"
-                  min="-100"
-                  max="100"
-                  value={state.adjustments.contrast}
-                  onChange={(e) => editor.setAdjustments({ contrast: Number(e.target.value) })}
-                  className="w-full accent-indigo-500"
-                />
-              </div>
+              {IMAGE_ADJUSTMENT_CONTROLS.map((spec) => (
+                <React.Fragment key={spec.id}>
+                  <ControlSlider
+                    spec={spec}
+                    value={readAdjustmentControls(state.adjustments)[spec.id]}
+                    disabled={spec.requiresProcess !== undefined && legacyProcess}
+                    onChange={(v) => editor.setAdjustments({ [spec.id]: v })}
+                  />
+                  {spec.id === 'tint' && legacyProcess && (
+                    <div
+                      className="flex items-center justify-between gap-2 rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-[10px] text-amber-200"
+                      data-testid="image-editor-process-notice"
+                    >
+                      <span>Legacy rendering (process 1). Tint needs the current process.</span>
+                      <button
+                        type="button"
+                        onClick={() => editor.upgradeProcess()}
+                        className="shrink-0 rounded bg-amber-500/20 px-2 py-0.5 hover:bg-amber-500/30"
+                      >
+                        Update
+                      </button>
+                    </div>
+                  )}
+                </React.Fragment>
+              ))}
 
-              {/* Saturation */}
-              <div>
-                <div className="flex justify-between text-slate-400 mb-1">
-                  <span>Saturation</span>
-                  <span className="font-mono">{state.adjustments.saturation}</span>
-                </div>
-                <input
-                  type="range"
-                  min="-100"
-                  max="100"
-                  value={state.adjustments.saturation}
-                  onChange={(e) => editor.setAdjustments({ saturation: Number(e.target.value) })}
-                  className="w-full accent-indigo-500"
-                />
-              </div>
-
-              {/* Exposure */}
-              <div>
-                <div className="flex justify-between text-slate-400 mb-1">
-                  <span>Exposure</span>
-                  <span className="font-mono">{state.adjustments.exposure}</span>
-                </div>
-                <input
-                  type="range"
-                  min="-100"
-                  max="100"
-                  value={state.adjustments.exposure}
-                  onChange={(e) => editor.setAdjustments({ exposure: Number(e.target.value) })}
-                  className="w-full accent-indigo-500"
-                />
-              </div>
-
-              {/* Temperature / Warmth */}
-              <div>
-                <div className="flex justify-between text-slate-400 mb-1">
-                  <span>Warmth / Temperature</span>
-                  <span className="font-mono">{state.adjustments.temperature}</span>
-                </div>
-                <input
-                  type="range"
-                  min="-100"
-                  max="100"
-                  value={state.adjustments.temperature}
-                  onChange={(e) => editor.setAdjustments({ temperature: Number(e.target.value) })}
-                  className="w-full accent-indigo-500"
-                />
-              </div>
-
-              {/* Tint (process 2 white balance) */}
-              <div>
-                <div className="flex justify-between text-slate-400 mb-1">
-                  <span>Tint</span>
-                  <span className="font-mono">{state.adjustments.tint ?? 0}</span>
-                </div>
-                <input
-                  type="range"
-                  min="-100"
-                  max="100"
-                  aria-label="Tint"
-                  disabled={legacyProcess}
-                  value={state.adjustments.tint ?? 0}
-                  onChange={(e) => editor.setAdjustments({ tint: Number(e.target.value) })}
-                  className="w-full accent-indigo-500 disabled:opacity-40"
-                />
-              </div>
-
-              {legacyProcess && (
-                <div
-                  className="flex items-center justify-between gap-2 rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-[10px] text-amber-200"
-                  data-testid="image-editor-process-notice"
-                >
-                  <span>Legacy rendering (process 1). Tint needs the current process.</span>
-                  <button
-                    type="button"
-                    onClick={() => editor.upgradeProcess()}
-                    className="shrink-0 rounded bg-amber-500/20 px-2 py-0.5 hover:bg-amber-500/30"
-                  >
-                    Update
-                  </button>
-                </div>
-              )}
-
-              {/* Blur */}
-              <div>
-                <div className="flex justify-between text-slate-400 mb-1">
-                  <span>Blur</span>
-                  <span className="font-mono">{state.adjustments.blur}px</span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="30"
-                  value={state.adjustments.blur}
-                  onChange={(e) => editor.setAdjustments({ blur: Number(e.target.value) })}
-                  className="w-full accent-indigo-500"
-                />
-              </div>
-
-              {/* Opacity */}
-              <div>
-                <div className="flex justify-between text-slate-400 mb-1">
-                  <span>Opacity</span>
-                  <span className="font-mono">{Math.round(state.adjustments.opacity * 100)}%</span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.05"
-                  value={state.adjustments.opacity}
-                  onChange={(e) => editor.setAdjustments({ opacity: Number(e.target.value) })}
-                  className="w-full accent-indigo-500"
+              <div className="border-t border-slate-700/60 pt-3">
+                <AdjustmentLayersPanel
+                  controller={controller}
+                  layers={state.adjustments.layers}
+                  histogram={editor.histogram}
                 />
               </div>
             </div>

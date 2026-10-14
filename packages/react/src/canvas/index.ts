@@ -278,3 +278,59 @@ export {
 	type Point,
 	type Position
 } from '@pixerate/editor/canvas';
+
+// Auto layout (Figma-style stacks, wrap, grid, hug / fill / fixed) and constraints
+export {
+	layoutFrame,
+	layoutAll,
+	layoutUp,
+	layoutUpMany,
+	applyConstraints,
+	getAutoLayout,
+	getChildLayout,
+	getLayoutSizing,
+	getAutoLayoutGrid,
+	getAutoLayoutInsertTarget,
+	getFlowChildren,
+	getLayoutParent,
+	isAutoLayoutFrame,
+	makeSizingCoherent,
+	moveLayoutChild,
+	mergeNodeUpdates,
+	relayoutUpdates,
+	resolvePadding,
+	clampLayoutSize,
+	createCanvasAutoLayoutController,
+	AUTO_LAYOUT_DATA_KEY,
+	CHILD_LAYOUT_DATA_KEY,
+	type AutoLayout,
+	type AutoLayoutChild,
+	type AutoLayoutMode,
+	type AutoLayoutSizing,
+	type AutoLayoutSizingPair,
+	type AutoLayoutSize,
+	type AutoLayoutAlignMain,
+	type AutoLayoutAlignCross,
+	type AutoLayoutAlignContent,
+	type AutoLayoutPadding,
+	type AutoLayoutGrid,
+	type AutoLayoutGridTrack,
+	type AutoLayoutGridArea,
+	type AutoLayoutGridCell,
+	type AutoLayoutGridGeometry,
+	type AutoLayoutCellAlign,
+	type AutoLayoutConstraints,
+	type AutoLayoutHorizontalConstraint,
+	type AutoLayoutVerticalConstraint,
+	type AutoLayoutMeasure,
+	type AutoLayoutOptions,
+	type AutoLayoutInsertTarget,
+	type CanvasAutoLayoutController,
+	type CanvasAutoLayoutControllerOptions
+} from '@pixerate/editor/canvas';
+
+export {
+	useCanvasAutoLayout,
+	type CanvasAutoLayout,
+	type UseCanvasAutoLayoutOptions
+} from './useCanvasAutoLayout.js';

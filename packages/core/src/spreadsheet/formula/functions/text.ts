@@ -1,6 +1,6 @@
 import type { FormulaFunctionContext } from '../registry';
 import { wildcardToRegExp } from '../criteria';
-import { formatValueWithCode } from '../format';
+import { formatTextFunction } from '../../numfmt';
 import { dateToSerial, isBlank, isFormulaError, toDate, toText } from '../values';
 import { parseNumberText } from '../parse-input';
 import { arg, failed, optional, repeating, type FunctionTable } from './helpers';
@@ -314,15 +314,21 @@ export const TEXT_FUNCTIONS: FunctionTable = [
   {
     name: 'TEXT',
     category: 'text',
-    description: 'Formats a number or date as text using a format code such as "0.00", "#,##0", "0%" or "yyyy-mm-dd".',
+    description: 'Formats a number or date as text using an Excel format code such as "0.00", "#,##0", "0%", "# ?/?" or "yyyy-mm-dd".',
     args: [arg('value', 'The number or date to format.'), arg('format_text', 'The format code.', 'text')],
     evaluate: (ctx) => {
       const value = ctx.scalar(0);
       if (isFormulaError(value)) return value;
       const format = ctx.text(1);
       if (failed(format)) return format;
-      const result = formatValueWithCode(value, format);
-      return result ?? ctx.argError(0, '#VALUE!', `isn't a date, so it can't use the format "${format}".`);
+      const result = formatTextFunction(value, format);
+      if ('text' in result) return result.text;
+      if (result.error === '#VALUE!') {
+        return Array.from(format).length > 255
+          ? ctx.argError(1, '#VALUE!', 'is longer than 255 characters.')
+          : ctx.argError(0, '#VALUE!', `is outside the date range, so it can't use the format "${format}".`);
+      }
+      return result.error;
     },
   },
 ];

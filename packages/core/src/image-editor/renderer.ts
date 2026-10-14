@@ -13,6 +13,9 @@ import type {
   ImageAnnotation,
 } from './types';
 import { applyAdjustments, applyDepthMask } from './filters';
+import { adjustmentLayersKey } from './adjustment-layers';
+import { canvasCompositeOperation, blendImageData, normalizeBlendMode } from './blend';
+import { computeHistogram, type ImageHistogram } from './histogram';
 import { normalizeProcessVersion } from './color';
 import {
   applyImageProjectionToContext,
@@ -98,6 +101,13 @@ export class ImageEditorRenderer {
   public imageCache = globalImageCache;
   private cachedBaseCanvas: HTMLCanvasElement | null = null;
   private cachedBaseKey = '';
+  /**
+   * Histogram of the last viewport base render (after adjustments and layers, before
+   * annotations); `null` until a render with pixel access has happened.
+   */
+  public previewHistogram: ImageHistogram | null = null;
+  /** Called whenever the viewport base image is re-rendered with the new histogram. */
+  public onPreviewHistogram?: (histogram: ImageHistogram | null) => void;
   private sourceIds = new WeakMap<object, number>();
   private nextSourceId = 0;
 
@@ -179,14 +189,20 @@ export class ImageEditorRenderer {
       `${region.x},${region.y},${region.width},${region.height}`,
       `${projection.angle},${transform.flipH},${transform.flipV}`,
       `${adjustments.brightness},${adjustments.contrast},${adjustments.saturation},${adjustments.exposure},${adjustments.temperature},${adjustments.tint ?? 0},${adjustments.blur},${adjustments.opacity},p${normalizeProcessVersion(adjustments.process)}`,
+      adjustmentLayersKey(adjustments.layers),
       `${depthMask.enabled},${depthMask.maskSource},${depthMask.depthRange?.[0]}-${depthMask.depthRange?.[1]},${depthMask.softness},${depthMask.invert},${depthMask.mode}`,
     ].join('|');
 
     let baseCanvas = this.cachedBaseCanvas;
     if (!baseCanvas || this.cachedBaseKey !== baseKey) {
-      baseCanvas = await this.renderBaseImage(img, naturalWidth, naturalHeight, region, transform, state);
+      let histogram: ImageHistogram | null = null;
+      baseCanvas = await this.renderBaseImage(img, naturalWidth, naturalHeight, region, transform, state, (pixels) => {
+        histogram = computeHistogram(pixels);
+      });
       this.cachedBaseCanvas = baseCanvas;
       this.cachedBaseKey = baseKey;
+      this.previewHistogram = histogram;
+      this.onPreviewHistogram?.(histogram);
     }
 
     // 2. Draw the base canvas into the viewport (centred, fitted, zoomed, panned)
@@ -238,7 +254,8 @@ export class ImageEditorRenderer {
     naturalHeight: number,
     region: CropBox,
     transform: ImageTransform,
-    state: Pick<ImageEditorState, 'adjustments' | 'depthMask'>
+    state: Pick<ImageEditorState, 'adjustments' | 'depthMask'>,
+    onPixels?: (pixels: ImageData) => void
   ): Promise<HTMLCanvasElement> {
     const { adjustments, depthMask } = state;
     const rotated = getRotatedSize(region.width, region.height, transform);
@@ -292,6 +309,7 @@ export class ImageEditorRenderer {
         }
       }
 
+      onPixels?.(imageData);
       baseCtx.putImageData(imageData, 0, 0);
     }
 
@@ -312,6 +330,62 @@ export class ImageEditorRenderer {
    * Draws an individual annotation onto the canvas.
    */
   public async drawAnnotation(ctx: CanvasRenderingContext2D, ann: Annotation): Promise<void> {
+    const blend = normalizeBlendMode(ann.blend);
+    if (blend === 'normal') {
+      await this.drawAnnotationContent(ctx, ann);
+      return;
+    }
+    const op = canvasCompositeOperation(blend);
+    if (op) {
+      ctx.save();
+      ctx.globalCompositeOperation = op;
+      await this.drawAnnotationContent(ctx, ann);
+      ctx.restore();
+      return;
+    }
+    if (!(await this.drawAnnotationBlended(ctx, ann))) {
+      // No pixel access (e.g. a tainted or headless canvas): draw it normally.
+      await this.drawAnnotationContent(ctx, ann);
+    }
+  }
+
+  /**
+   * Scalar fallback for blend modes the canvas cannot composite (Photoshop soft light, linear /
+   * vivid / pin light, hard mix, subtract, divide, darker / lighter colour, linear burn / dodge):
+   * draws the annotation on a same-size layer with the same transform, blends it into a copy of
+   * the target's pixels with `blendImageData`, and copies the result back inside the current clip.
+   */
+  private async drawAnnotationBlended(ctx: CanvasRenderingContext2D, ann: Annotation): Promise<boolean> {
+    const canvas = ctx.canvas as HTMLCanvasElement | undefined;
+    if (!canvas || typeof ctx.getTransform !== 'function' || typeof ctx.getImageData !== 'function') return false;
+    const w = canvas.width;
+    const h = canvas.height;
+    const layer = this.createCanvas(w, h);
+    const lctx = layer.getContext('2d');
+    if (!lctx) return false;
+    try {
+      lctx.setTransform(ctx.getTransform());
+      lctx.globalAlpha = ctx.globalAlpha;
+      await this.drawAnnotationContent(lctx, ann);
+      const backdrop = ctx.getImageData(0, 0, w, h);
+      const source = lctx.getImageData(0, 0, w, h);
+      if (!backdrop || !source) return false;
+      blendImageData(backdrop, source, normalizeBlendMode(ann.blend));
+      lctx.setTransform(1, 0, 0, 1, 0, 0);
+      lctx.putImageData(backdrop, 0, 0);
+    } catch {
+      return false;
+    }
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'copy';
+    ctx.drawImage(layer, 0, 0);
+    ctx.restore();
+    return true;
+  }
+
+  private async drawAnnotationContent(ctx: CanvasRenderingContext2D, ann: Annotation): Promise<void> {
     ctx.save();
     if (ann.opacity !== undefined) {
       ctx.globalAlpha = ann.opacity;

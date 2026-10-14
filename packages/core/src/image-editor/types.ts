@@ -1,3 +1,5 @@
+import type { BlendMode } from './blend';
+
 export interface ImageDimensions {
   width: number;
   height: number;
@@ -43,7 +45,164 @@ export interface ImageAdjustments {
    * versions existed look exactly as they did. See `normalizeProcessVersion`.
    */
   process?: 1 | 2;
+  /**
+   * Non-destructive adjustment layers, evaluated bottom (first) to top (last) after the base
+   * adjustments above, on the encoded sRGB result. Missing or empty: no layers (edits saved
+   * before layers existed render exactly as before).
+   */
+  layers?: AdjustmentLayer[];
 }
+
+// ---------------------------------------------------------------------------
+// Adjustment layers
+// ---------------------------------------------------------------------------
+
+export type AdjustmentKind =
+  | 'curves'
+  | 'levels'
+  | 'hueSaturation'
+  | 'vibrance'
+  | 'colorBalance'
+  | 'blackWhite'
+  | 'invert'
+  | 'posterize'
+  | 'threshold'
+  | 'photoFilter';
+
+/** A Curves point; `input` and `output` are levels, 0..255. */
+export interface CurvePoint {
+  input: number;
+  output: number;
+}
+
+/** Curves: each channel's curve first, then the master (composite) curve, as in Photoshop. */
+export interface CurvesParams {
+  master: CurvePoint[];
+  red: CurvePoint[];
+  green: CurvePoint[];
+  blue: CurvePoint[];
+}
+
+/** One Levels record. Black / white points are levels (0..255); `gamma` is the midtone slider (0.1..9.99). */
+export interface LevelsChannel {
+  inBlack: number;
+  inWhite: number;
+  gamma: number;
+  outBlack: number;
+  outWhite: number;
+}
+
+/** Levels: each channel's record first, then the master record, as in Photoshop. */
+export interface LevelsParams {
+  master: LevelsChannel;
+  red: LevelsChannel;
+  green: LevelsChannel;
+  blue: LevelsChannel;
+}
+
+/** One of Hue/Saturation's six colour ranges (reds, yellows, greens, cyans, blues, magentas). */
+export interface HueRange {
+  /** Hue shift in degrees (-180..180). */
+  hue: number;
+  /** Saturation change in percent (-100..100). */
+  saturation: number;
+  /** Lightness change in percent (-100..100). */
+  lightness: number;
+  /** Hue degrees where the range starts fading in, is fully on, starts fading out and ends (may wrap). */
+  bounds: [number, number, number, number];
+}
+
+export interface HueSaturationParams {
+  /** Master hue shift in degrees (-180..180), or the hue when colorizing (0..360). */
+  hue: number;
+  /** Percent, -100..100 (0..100 when colorizing). */
+  saturation: number;
+  /** Percent, -100..100. */
+  lightness: number;
+  colorize: boolean;
+  /** Six ranges: reds, yellows, greens, cyans, blues, magentas. */
+  ranges: HueRange[];
+}
+
+export interface VibranceParams {
+  /** -100..100 */
+  vibrance: number;
+  /** -100..100 */
+  saturation: number;
+}
+
+/** Cyan–red, magenta–green, yellow–blue sliders, -100..100 each. */
+export type ColorBalanceTone = [number, number, number];
+
+export interface ColorBalanceParams {
+  shadows: ColorBalanceTone;
+  midtones: ColorBalanceTone;
+  highlights: ColorBalanceTone;
+  preserveLuminosity: boolean;
+}
+
+/** Black & White: percent weights of the six colours (Photoshop defaults 40 60 40 60 20 80). */
+export interface BlackWhiteParams {
+  reds: number;
+  yellows: number;
+  greens: number;
+  cyans: number;
+  blues: number;
+  magentas: number;
+  /** Tint colour (`#rrggbb`), applied like the Color blend mode, or `null` for none. */
+  tint: string | null;
+}
+
+export interface PhotoFilterParams {
+  /** Filter colour, `#rrggbb`. */
+  color: string;
+  /** Percent, 0..100. */
+  density: number;
+  preserveLuminosity: boolean;
+}
+
+export interface PosterizeParams {
+  /** 2..255 */
+  levels: number;
+}
+
+export interface ThresholdParams {
+  /** 1..255: luma at or above it becomes white. */
+  level: number;
+}
+
+export type InvertParams = Record<string, never>;
+
+export interface AdjustmentParamsMap {
+  curves: CurvesParams;
+  levels: LevelsParams;
+  hueSaturation: HueSaturationParams;
+  vibrance: VibranceParams;
+  colorBalance: ColorBalanceParams;
+  blackWhite: BlackWhiteParams;
+  invert: InvertParams;
+  posterize: PosterizeParams;
+  threshold: ThresholdParams;
+  photoFilter: PhotoFilterParams;
+}
+
+export interface AdjustmentLayerBase {
+  id: string;
+  /** Optional display name. */
+  name?: string;
+  enabled: boolean;
+  /** 0..1 */
+  opacity: number;
+  /** How the adjusted colour is blended over the layers below. */
+  blend: BlendMode;
+}
+
+/** A non-destructive adjustment layer (Photoshop's Layer › New Adjustment Layer). */
+export type AdjustmentLayer = {
+  [K in AdjustmentKind]: AdjustmentLayerBase & { kind: K; params: AdjustmentParamsMap[K] };
+}[AdjustmentKind];
+
+export type AdjustmentLayerOf<K extends AdjustmentKind> = Extract<AdjustmentLayer, { kind: K }>;
 
 export interface DepthMaskOptions {
   enabled: boolean;
@@ -63,6 +222,8 @@ export interface BaseAnnotation {
   y: number;
   rotation?: number;
   opacity?: number;
+  /** Blend mode the annotation is drawn with (default `normal`). */
+  blend?: BlendMode;
 }
 
 export interface PenAnnotation extends BaseAnnotation {
@@ -168,7 +329,11 @@ export interface ImageEditorState {
 }
 
 export interface SerializedImageEditorState {
-  version: 1;
+  /**
+   * Schema version. `2` adds `adjustments.layers`; states without layers are still written as
+   * `1` so they round-trip unchanged. See `migrateSerializedImageEditorState`.
+   */
+  version: 1 | 2;
   crop: CropBox | null;
   transform: ImageTransform;
   adjustments: ImageAdjustments;

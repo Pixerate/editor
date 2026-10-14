@@ -7,6 +7,7 @@ export { default as CommentsPanel } from "./CommentsPanel.svelte";
 export { default as ReviewToolbar } from "./ReviewToolbar.svelte";
 export { default as CommentButton } from "./CommentButton.svelte";
 export * from "./review.svelte.js";
+export * from "./documentCompare.svelte.js";
 
 export type CommentsPanelProps = ComponentProps<typeof CommentsPanelComponent>;
 export type ReviewToolbarProps = ComponentProps<typeof ReviewToolbarComponent>;

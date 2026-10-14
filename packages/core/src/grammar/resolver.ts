@@ -6,7 +6,8 @@ import {
   PromptValues,
 } from "./tokens";
 import { resolvePrompt } from "./engine";
-import { parseVariableBody } from "./variables";
+import { conditionSubject, parseVariableBody } from "./variables";
+import { tokenizePrompt } from "./tokenizer";
 
 export interface ResolveTemplatesOptions {
   bindings?: Record<string, string>;
@@ -67,15 +68,31 @@ export function extractTemplateNames(text: string): string[] {
 
 /**
  * Extracts unique variable names referenced in text, including names used by
- * conditional section tags. Defaults and descriptions are stripped.
+ * conditional section tags (`amount` for `{?amount>100}…{/amount}`).
+ * Defaults and descriptions are stripped.
  */
 export function extractVariableNames(text: string): string[] {
   if (!text) return [];
   const set = new Set<string>();
   const regex = new RegExp(VARIABLE_REGEX.source, VARIABLE_REGEX.flags);
+  let comparisonStarts: Set<number> | undefined;
   let match: RegExpExecArray | null;
   while ((match = regex.exec(text)) !== null) {
-    set.add(parseVariableBody(match[1]).name);
+    const parsed = parseVariableBody(match[1]);
+    let name = parsed.name;
+    if (parsed.kind === "conditional" && parsed.conditional !== "end") {
+      const subject = conditionSubject(name);
+      if (subject) {
+        // Only a tag closed by `{/subject}` is a comparison on `subject`.
+        comparisonStarts ??= new Set(
+          tokenizePrompt(text)
+            .filter((token) => token.comparison)
+            .map((token) => token.start),
+        );
+        if (comparisonStarts.has(match.index)) name = subject;
+      }
+    }
+    set.add(name);
   }
   return Array.from(set);
 }

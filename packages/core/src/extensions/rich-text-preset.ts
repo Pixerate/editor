@@ -44,6 +44,7 @@ import { Markdown, type MarkdownOptions } from "./markdown";
 import { Image, type ImageOptions } from "./image";
 import { Comments, type CommentsOptions } from "./comments";
 import { TrackChanges, type TrackChangesOptions } from "./track-changes";
+import { DocumentCompare } from "./document-compare";
 import { FileImport, type FileImportOptions } from "./file-import";
 import { RichClipboard, type RichClipboardOptions } from "./rich-clipboard";
 import { Autocorrect, type AutocorrectOptions } from "./autocorrect";
@@ -61,6 +62,7 @@ import {
   type BookmarkOptions,
   type CrossReferenceOptions,
 } from "./document-structure";
+import { FindReplace, type FindReplaceOptions } from "./find-replace/extension";
 
 export interface RichTextPresetOptions {
   placeholder?: string | ((props: { node: any }) => string);
@@ -74,7 +76,7 @@ export interface RichTextPresetOptions {
   image?: ImageOptions | boolean;
   /** Adds the `Comments` extension (off by default). */
   comments?: Partial<CommentsOptions> | boolean;
-  /** Adds the `TrackChanges` extension (off by default). */
+  /** Adds the `TrackChanges` and `DocumentCompare` extensions (off by default). */
   trackChanges?: Partial<TrackChangesOptions> | boolean;
   /** Import dropped/pasted .md, .html, .txt and .rtf files (opt-in). */
   fileImport?: FileImportOptions | boolean;
@@ -96,6 +98,8 @@ export interface RichTextPresetOptions {
   bookmarks?: Partial<BookmarkOptions> | boolean;
   /** Cross-references to headings and bookmarks (also enables `outline`). Off by default. */
   crossReferences?: Partial<CrossReferenceOptions> | boolean;
+  /** Word-style Find and Replace (Mod+F / Mod+H, match highlights). Off by default. */
+  findReplace?: Partial<FindReplaceOptions> | boolean;
 }
 
 const optionObject = <T>(value: T | boolean | undefined): T | Record<string, never> =>
@@ -265,6 +269,7 @@ export function createRichTextPreset(
       typeof options.trackChanges === "object"
         ? TrackChanges.configure(options.trackChanges)
         : TrackChanges,
+      DocumentCompare,
     );
   }
 
@@ -310,6 +315,10 @@ export function createRichTextPreset(
 
   if (options.crossReferences) {
     extensions.push(CrossReference.configure(optionObject(options.crossReferences)));
+  }
+
+  if (options.findReplace) {
+    extensions.push(FindReplace.configure(optionObject(options.findReplace)));
   }
 
   return extensions;

@@ -1,6 +1,8 @@
 import React, { useMemo } from "react";
 import {
+  describeConditionalTag,
   evaluatePromptTokens,
+  formatConditionalTag,
   resolveTemplates,
   Template,
   ColorGradient,
@@ -31,7 +33,6 @@ export interface TemplateRendererProps {
   onVariableClick?: (variableName: string) => void;
 }
 
-const CONDITIONAL_PREFIX = { if: "?", unless: "!", end: "/" } as const;
 
 export const TemplateRenderer: React.FC<TemplateRendererProps> = ({
   content,
@@ -132,15 +133,9 @@ export const TemplateRenderer: React.FC<TemplateRendererProps> = ({
               key={index}
               data-conditional={token.conditional}
               className="inline-flex items-center px-1 py-0.5 mx-0.5 text-xs font-medium rounded-md border border-amber-400/40 bg-amber-400/15 text-amber-700 dark:text-amber-300"
-              title={
-                token.conditional === "end"
-                  ? `End of section: ${token.value}`
-                  : token.conditional === "if"
-                    ? `Shown when "${token.value}" has a value`
-                    : `Shown when "${token.value}" is empty`
-              }
+              title={describeConditionalTag(token)}
             >
-              {`{${CONDITIONAL_PREFIX[token.conditional]}${token.value}}`}
+              {formatConditionalTag(token)}
             </span>
           );
         }

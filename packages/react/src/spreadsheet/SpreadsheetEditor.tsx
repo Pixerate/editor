@@ -11,7 +11,8 @@ import {
   type SpreadsheetMenuItem,
   type SpreadsheetViewColumn,
   type SpreadsheetViewRow,
-  formatCellDisplay
+  formatCellForDisplay,
+  numberFormatColorToCss
 } from '@pixerate/editor/spreadsheet';
 import { useSpreadsheetEditor } from './useSpreadsheetEditor';
 import { SpreadsheetContextMenu } from './SpreadsheetContextMenu';
@@ -53,6 +54,25 @@ function spillBorderStyle(range: CellRange, row: number, col: number): React.CSS
     borderLeft: col === range.startCol ? line : undefined,
     borderRight: col === range.endCol ? line : undefined
   };
+}
+
+/** A cell's display text: formatted with its number format, numbers right-aligned, `[Red]`-style colours applied. */
+function CellText({ cell }: { cell: CellData }) {
+  const shown = formatCellForDisplay(cell);
+  return (
+    <span
+      className={`truncate block max-w-full ${cell.error ? 'text-destructive font-semibold' : ''}`}
+      title={cell.error ? cell.errorMessage ?? cell.error : undefined}
+      data-numeric={shown.numeric ? '' : undefined}
+      style={
+        shown.numeric || shown.color
+          ? { ...(shown.numeric ? { textAlign: 'right' as const } : {}), ...(shown.color ? { color: numberFormatColorToCss(shown.color) } : {}) }
+          : undefined
+      }
+    >
+      {shown.text}
+    </span>
+  );
 }
 
 export interface SpreadsheetEditorProps {
@@ -669,12 +689,7 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
                       ) : customCellRenderer ? (
                         customCellRenderer({ row, col, cell })
                       ) : (
-                        <span
-                          className={`truncate block max-w-full ${cell.error ? 'text-destructive font-semibold' : ''}`}
-                          title={cell.error ? cell.errorMessage ?? cell.error : undefined}
-                        >
-                          {formatCellDisplay(cell)}
-                        </span>
+                        <CellText cell={cell} />
                       )}
                       {activeSpill && rangeContains(activeSpill.range, rIdx, cIdx) && (
                         <span aria-hidden="true" className="spreadsheet-spill-border" style={spillBorderStyle(activeSpill.range, rIdx, cIdx)} />

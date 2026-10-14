@@ -9,6 +9,7 @@ import {
   srgbToLinear,
   whiteBalanceMatrix,
 } from './color';
+import { applyAdjustmentLayers } from './adjustment-layers';
 
 function clamp(value: number, min = 0, max = 255): number {
   return Math.max(min, Math.min(max, value));
@@ -16,7 +17,7 @@ function clamp(value: number, min = 0, max = 255): number {
 
 /**
  * Applies color and tone adjustments (brightness, contrast, saturation, exposure, temperature, tint,
- * opacity, blur) directly to the pixel data of an ImageData buffer.
+ * opacity, then any adjustment `layers`, then blur) directly to the pixel data of an ImageData buffer.
  *
  * `adjustments.process` selects the rendering: `2` is the linear-light pipeline
  * ({@link applyProcess2Adjustments}); anything else (including a missing value, as in edits saved
@@ -28,6 +29,9 @@ export function applyAdjustments(imageData: ImageData, adjustments: ImageAdjustm
   } else {
     applyLegacyAdjustments(imageData, adjustments);
   }
+
+  // Adjustment layers, bottom to top, on the encoded result (no-op without layers).
+  applyAdjustmentLayers(imageData, adjustments.layers);
 
   // Apply blur if requested
   if (adjustments.blur > 0) {

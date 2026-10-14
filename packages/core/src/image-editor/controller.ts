@@ -1,4 +1,7 @@
 import {
+  AdjustmentKind,
+  AdjustmentLayer,
+  AdjustmentParamsMap,
   Annotation,
   CreateAnnotationPayload,
   AspectRatio,
@@ -17,6 +20,27 @@ import {
 import { ImageEditorRenderer, RenderOptions } from './renderer';
 import { clampCropToImage, isQuarterTurnSwapped } from './geometry';
 import { LATEST_PROCESS_VERSION, LEGACY_PROCESS_VERSION, normalizeProcessVersion } from './color';
+import { createAdjustmentLayer, normalizeAdjustmentLayer, normalizeAdjustmentLayers } from './adjustment-layers';
+import type { BlendMode } from './blend';
+import type { ImageHistogram } from './histogram';
+
+/** Latest serialized schema version (`2`: adjustment layers). */
+export const IMAGE_EDITOR_SCHEMA_VERSION = 2 as const;
+
+/** Changes to an adjustment layer; `params` is merged into the current parameters. */
+export interface AdjustmentLayerUpdate<K extends AdjustmentKind = AdjustmentKind> {
+  params?: Partial<AdjustmentParamsMap[K]>;
+  enabled?: boolean;
+  opacity?: number;
+  blend?: BlendMode;
+  name?: string;
+}
+
+/** A new adjustment layer: its kind plus optional initial values. */
+export interface AdjustmentLayerInit<K extends AdjustmentKind = AdjustmentKind> extends AdjustmentLayerUpdate<K> {
+  kind: K;
+  id?: string;
+}
 
 /** The image a history entry was recorded against. */
 interface SourceSnapshot {
@@ -52,10 +76,38 @@ export const DEFAULT_ADJUSTMENTS: ImageAdjustments = {
  */
 export function normalizeStoredAdjustments(stored: Partial<ImageAdjustments> | undefined | null): ImageAdjustments {
   if (!stored) return { ...DEFAULT_ADJUSTMENTS };
-  return {
+  const out: ImageAdjustments = {
     ...DEFAULT_ADJUSTMENTS,
     ...stored,
     process: normalizeProcessVersion(stored.process),
+  };
+  // Layers are deep-copied and cleaned; an empty or missing list is left out entirely.
+  const layers = normalizeAdjustmentLayers(stored.layers);
+  if (layers.length) out.layers = layers;
+  else delete out.layers;
+  return out;
+}
+
+/**
+ * Brings a stored editor state of any schema version to the current shape. Version 1 (and a
+ * missing version) has no adjustment layers; everything else is unchanged, so old states load
+ * and render exactly as before.
+ */
+export function migrateSerializedImageEditorState(
+  data: Partial<SerializedImageEditorState> & { version?: number }
+): SerializedImageEditorState {
+  const adjustments = normalizeStoredAdjustments(data.adjustments);
+  return {
+    version: adjustments.layers?.length ? IMAGE_EDITOR_SCHEMA_VERSION : 1,
+    crop: data.crop ? { ...data.crop } : null,
+    transform: { ...DEFAULT_TRANSFORM, ...data.transform },
+    adjustments: serializeAdjustments(adjustments),
+    depthMask: {
+      ...DEFAULT_DEPTH_MASK,
+      ...data.depthMask,
+      depthRange: [...(data.depthMask?.depthRange ?? DEFAULT_DEPTH_MASK.depthRange)] as [number, number],
+    },
+    annotations: JSON.parse(JSON.stringify(data.annotations ?? [])),
   };
 }
 
@@ -83,6 +135,7 @@ export class ImageEditorController {
   private renderer: ImageEditorRenderer;
   private imageElement: CanvasImageSource | null = null;
   private listeners = new Set<(state: ImageEditorState) => void>();
+  private histogramListeners = new Set<(histogram: ImageHistogram | null) => void>();
   private onStateChange?: (state: ImageEditorState) => void;
 
   // History stacks
@@ -96,6 +149,9 @@ export class ImageEditorController {
     this.maxHistoryDepth = options.maxHistoryDepth ?? 50;
     this.onStateChange = options.onStateChange;
     this.renderer = new ImageEditorRenderer();
+    this.renderer.onPreviewHistogram = (histogram) => {
+      this.histogramListeners.forEach((l) => l(histogram));
+    };
 
     const initialAdjustments = normalizeStoredAdjustments(options.initialState?.adjustments);
 
@@ -387,10 +443,16 @@ export class ImageEditorController {
     if (commitToHistory) {
       this.recordHistory();
     }
-    this.state.adjustments = {
+    const next: ImageAdjustments = {
       ...this.state.adjustments,
       ...partial,
     };
+    if ('layers' in partial) {
+      const layers = normalizeAdjustmentLayers(partial.layers);
+      if (layers.length) next.layers = layers;
+      else delete next.layers;
+    }
+    this.state.adjustments = next;
     this.notify();
   }
 
@@ -409,10 +471,142 @@ export class ImageEditorController {
     return true;
   }
 
+  /** Resets the base sliders (latest process). Adjustment layers are kept; see `clearAdjustmentLayers`. */
   public resetAdjustments(): void {
     this.recordHistory();
+    const layers = this.state.adjustments.layers;
     this.state.adjustments = { ...DEFAULT_ADJUSTMENTS };
+    if (layers?.length) this.state.adjustments.layers = layers;
     this.notify();
+  }
+
+  // --- Adjustment layers ---
+
+  /** The adjustment layers, bottom (first) to top (last). */
+  public getAdjustmentLayers(): AdjustmentLayer[] {
+    return this.state.adjustments.layers ?? [];
+  }
+
+  public getAdjustmentLayer(id: string): AdjustmentLayer | undefined {
+    return this.getAdjustmentLayers().find((l) => l.id === id);
+  }
+
+  private setLayers(layers: AdjustmentLayer[]): void {
+    const next: ImageAdjustments = { ...this.state.adjustments };
+    if (layers.length) next.layers = layers;
+    else delete next.layers;
+    this.state.adjustments = next;
+  }
+
+  /**
+   * Adds an adjustment layer on top (or at `index`, 0 = bottom) as one undo step and returns
+   * its id. `kind` alone gives neutral parameters.
+   */
+  public addAdjustmentLayer<K extends AdjustmentKind>(init: K | AdjustmentLayerInit<K>, index?: number): string {
+    const spec: AdjustmentLayerInit<K> = typeof init === 'string' ? { kind: init } : init;
+    const layers = [...this.getAdjustmentLayers()];
+    const layer = createAdjustmentLayer(spec.kind, {
+      id: spec.id && !layers.some((l) => l.id === spec.id) ? spec.id : undefined,
+      name: spec.name,
+      params: spec.params,
+      enabled: spec.enabled,
+      opacity: spec.opacity,
+      blend: spec.blend,
+    });
+    this.recordHistory();
+    const at = index === undefined ? layers.length : Math.max(0, Math.min(layers.length, Math.round(index)));
+    layers.splice(at, 0, layer);
+    this.setLayers(layers);
+    this.notify();
+    return layer.id;
+  }
+
+  /**
+   * Updates a layer (`params` merged into the current ones, then normalised). Pass
+   * `commitToHistory = false` for the moves of a drag after recording its start once.
+   * Returns false for an unknown id.
+   */
+  public updateAdjustmentLayer(id: string, update: AdjustmentLayerUpdate, commitToHistory = true): boolean {
+    const layers = this.getAdjustmentLayers();
+    const index = layers.findIndex((l) => l.id === id);
+    if (index === -1) return false;
+    const current = layers[index];
+    const merged = normalizeAdjustmentLayer({
+      ...current,
+      ...(update.enabled !== undefined ? { enabled: update.enabled } : {}),
+      ...(update.opacity !== undefined ? { opacity: update.opacity } : {}),
+      ...(update.blend !== undefined ? { blend: update.blend } : {}),
+      ...(update.name !== undefined ? { name: update.name } : {}),
+      params: { ...current.params, ...(update.params ?? {}) },
+    });
+    if (!merged) return false;
+    if (commitToHistory) this.recordHistory();
+    const next = [...layers];
+    next[index] = merged;
+    this.setLayers(next);
+    this.notify();
+    return true;
+  }
+
+  /** Removes a layer as one undo step. Returns false for an unknown id. */
+  public removeAdjustmentLayer(id: string): boolean {
+    const layers = this.getAdjustmentLayers();
+    if (!layers.some((l) => l.id === id)) return false;
+    this.recordHistory();
+    this.setLayers(layers.filter((l) => l.id !== id));
+    this.notify();
+    return true;
+  }
+
+  /** Moves a layer to `toIndex` (0 = bottom) as one undo step. Returns false if nothing moved. */
+  public moveAdjustmentLayer(id: string, toIndex: number): boolean {
+    const layers = [...this.getAdjustmentLayers()];
+    const from = layers.findIndex((l) => l.id === id);
+    if (from === -1) return false;
+    const to = Math.max(0, Math.min(layers.length - 1, Math.round(toIndex)));
+    if (to === from) return false;
+    this.recordHistory();
+    const [layer] = layers.splice(from, 1);
+    layers.splice(to, 0, layer);
+    this.setLayers(layers);
+    this.notify();
+    return true;
+  }
+
+  /** Shows or hides a layer (flips it without `enabled`) as one undo step. */
+  public toggleAdjustmentLayer(id: string, enabled?: boolean): boolean {
+    const layer = this.getAdjustmentLayer(id);
+    if (!layer) return false;
+    const next = enabled ?? !layer.enabled;
+    if (next === layer.enabled) return false;
+    return this.updateAdjustmentLayer(id, { enabled: next });
+  }
+
+  /** Removes every adjustment layer as one undo step. */
+  public clearAdjustmentLayers(): void {
+    if (!this.getAdjustmentLayers().length) return;
+    this.recordHistory();
+    this.setLayers([]);
+    this.notify();
+  }
+
+  // --- Histogram ---
+
+  /**
+   * Histogram of the last rendered preview (after adjustments and layers, before annotations),
+   * or `null` before the first render or without canvas pixel access.
+   */
+  public getHistogram(): ImageHistogram | null {
+    return this.renderer.previewHistogram;
+  }
+
+  /** Calls `listener` now and whenever a render produces a new preview histogram. */
+  public subscribeHistogram(listener: (histogram: ImageHistogram | null) => void): () => void {
+    this.histogramListeners.add(listener);
+    listener(this.renderer.previewHistogram);
+    return () => {
+      this.histogramListeners.delete(listener);
+    };
   }
 
   // --- Depth Masking (Gleamforge) ---
@@ -658,13 +852,14 @@ export class ImageEditorController {
 
   public loadJSON(data: SerializedImageEditorState): void {
     this.recordHistory();
-    this.applySerializedState(data);
+    this.applySerializedState(migrateSerializedImageEditorState(data));
     this.notify();
   }
 
   private serializeState(): SerializedImageEditorState {
     return {
-      version: 1,
+      // States without adjustment layers keep schema 1, so they round-trip unchanged.
+      version: this.state.adjustments.layers?.length ? IMAGE_EDITOR_SCHEMA_VERSION : 1,
       crop: this.state.crop ? { ...this.state.crop } : null,
       transform: { ...this.state.transform },
       adjustments: serializeAdjustments(this.state.adjustments),
@@ -694,6 +889,8 @@ export class ImageEditorController {
  */
 function serializeAdjustments(adjustments: ImageAdjustments): ImageAdjustments {
   const out: ImageAdjustments = { ...adjustments };
+  if (out.layers?.length) out.layers = JSON.parse(JSON.stringify(out.layers));
+  else delete out.layers;
   if (normalizeProcessVersion(out.process) === LEGACY_PROCESS_VERSION) {
     delete out.process;
     if (!out.tint) delete out.tint;

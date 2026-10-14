@@ -56,6 +56,7 @@ import {
   MoveVertical,
 } from "lucide-react";
 import { demoCommandRegistry, demoToolRegistry } from "../agentTools";
+import { AutoLayoutDemo } from "./AutoLayoutDemo";
 
 type BoxData = { label: string; color: string; locked?: boolean };
 type BoxNode = Node<BoxData, "box">;
@@ -355,6 +356,8 @@ const CanvasDemo: React.FC = () => {
         selection box to select several nodes. Shortcuts: Alt+A/H/D/W/V/S align, Alt+Shift+H/V distribute, Mod+L lock,
         Mod+]/[ layer order, PageDown/PageUp scenes, Mod+Z undo.
       </p>
+
+      <AutoLayoutDemo />
     </div>
   );
 };

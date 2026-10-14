@@ -10,6 +10,7 @@ export * from "./dirty";
 export * from "./history";
 export * from "./slots";
 export * from "./import";
+export * from "./compare";
 
 // Re-export common tiptap types for convenience
 export type { Editor, Content, Extensions, EditorOptions } from "@tiptap/core";
