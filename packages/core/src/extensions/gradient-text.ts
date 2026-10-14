@@ -156,15 +156,18 @@ const createGradientDecorations = (
                 "underline decoration-wavy decoration-red-500 text-red-600 dark:text-red-400",
               "data-conditional-error": result.error,
               title:
-                result.error === "unclosed-section"
-                  ? `Section "${tag.name}" is never closed with {/${tag.name}}`
-                  : `{/${tag.name}} does not close any open section`,
+                result.error === "invalid-condition"
+                  ? `Invalid condition: ${result.comparison?.error ?? tag.name}`
+                  : result.error === "unclosed-section"
+                    ? `Section "${tag.name}" is never closed with {/${tag.name}}`
+                    : `{/${tag.name}} does not close any open section`,
             }
           : {
               class:
                 "bg-amber-400/30 text-amber-700 dark:text-amber-300 font-medium px-0.5 rounded-xs",
               "data-conditional": tag.conditional,
-              "data-variable-condition": tag.name,
+              // A comparison (`{?amount>100}`) names its subject variable.
+              "data-variable-condition": result.comparison?.subject ?? tag.name,
             },
       ),
     );

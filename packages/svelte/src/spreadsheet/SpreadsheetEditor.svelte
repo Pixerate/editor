@@ -13,7 +13,8 @@
     type SpreadsheetMenuItem,
     type SpreadsheetViewColumn,
     type SpreadsheetViewRow,
-    formatCellDisplay
+    formatCellForDisplay,
+    numberFormatColorToCss
   } from '@pixerate/editor/spreadsheet';
   import FormulaBar from './FormulaBar.svelte';
   import SpreadsheetContextMenu from './SpreadsheetContextMenu.svelte';
@@ -586,11 +587,14 @@
                   {@const cellArg = Object.assign({ row, col, cell }, cell)}
                   {@render (customCellRenderer as any)(cellArg, col, row)}
                 {:else}
+                  {@const shown = formatCellForDisplay(cell)}
                   <span
                     class="truncate block max-w-full {cell.error ? 'text-destructive font-semibold' : ''}"
                     title={cell.error ? (cell.errorMessage ?? cell.error) : undefined}
+                    data-numeric={shown.numeric ? '' : undefined}
+                    style="{shown.numeric ? 'text-align: right;' : ''}{shown.color ? ` color: ${numberFormatColorToCss(shown.color)};` : ''}"
                   >
-                    {formatCellDisplay(cell)}
+                    {shown.text}
                   </span>
                 {/if}
                 {#if activeSpill && rangeContains(activeSpill.range, rIdx, cIdx)}

@@ -5,6 +5,7 @@ import type BubbleMenuComponent from "./BubbleMenu.svelte";
 import type TemplateRendererComponent from "./TemplateRenderer.svelte";
 import type VariableFormComponent from "./VariableForm.svelte";
 import type OutlinePanelComponent from "./OutlinePanel.svelte";
+import type MergePreviewComponent from "./MergePreview.svelte";
 
 export * from "./editor.svelte.js";
 export * from "./navigationGuard.js";
@@ -13,6 +14,7 @@ export * from "./history/index.js";
 export * from "./fileImport.svelte.js";
 export * from "./agentTools.svelte.js";
 export * from "./outline.svelte.js";
+export * from "./merge.svelte.js";
 
 export {
   DirtyTracker,
@@ -49,6 +51,8 @@ export { default as EditableTextNodeEditor } from "./EditableTextNodeEditor.svel
 export { default as BubbleMenu } from "./BubbleMenu.svelte";
 export { default as TemplateRenderer } from "./TemplateRenderer.svelte";
 export { default as VariableForm } from "./VariableForm.svelte";
+export type MergePreviewProps = ComponentProps<typeof MergePreviewComponent>;
+export { default as MergePreview } from "./MergePreview.svelte";
 export type OutlinePanelProps = ComponentProps<typeof OutlinePanelComponent>;
 export { default as OutlinePanel } from "./OutlinePanel.svelte";
 
@@ -65,9 +69,16 @@ export type {
   PromptValues,
   PromptDiagnostic,
   VariableFormField,
+  MergeDataSource,
+  MergeRecord,
+  MergeRecordsResult,
+  MergeOutput,
 } from "@pixerate/editor";
 
 export * from "./spreadsheet/index.js";
 export * from "./image-editor/index.js";
 export * from "./review/index.js";
 export * from "./commands/index.js";
+export * from "./persistence/index.js";
+export * from "./generation/index.js";
+export * from "./find-replace/index.js";

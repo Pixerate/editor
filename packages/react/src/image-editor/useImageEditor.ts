@@ -13,6 +13,10 @@ import {
   type ExportOptions,
   type SerializedImageEditorState,
   type ImagePoint,
+  type AdjustmentKind,
+  type AdjustmentLayerInit,
+  type AdjustmentLayerUpdate,
+  type ImageHistogram,
 } from '@pixerate/editor/image-editor';
 
 export interface UseImageEditorReturn {
@@ -32,6 +36,14 @@ export interface UseImageEditorReturn {
   resetAdjustments: () => void;
   /** Update to Current Process: re-render the adjustments with the latest process (one undo step). */
   upgradeProcess: () => boolean;
+  /** Adds an adjustment layer (one undo step) and returns its id. */
+  addAdjustmentLayer: (init: AdjustmentKind | AdjustmentLayerInit, index?: number) => string;
+  updateAdjustmentLayer: (id: string, update: AdjustmentLayerUpdate, commitToHistory?: boolean) => boolean;
+  removeAdjustmentLayer: (id: string) => boolean;
+  moveAdjustmentLayer: (id: string, toIndex: number) => boolean;
+  toggleAdjustmentLayer: (id: string, enabled?: boolean) => boolean;
+  /** Histogram of the last rendered preview (after adjustments and layers); null before a render. */
+  histogram: ImageHistogram | null;
   setDepthMask: (partial: Partial<DepthMaskOptions>) => void;
   resetDepthMask: () => void;
   addAnnotation: (annotation: CreateAnnotationPayload) => string;
@@ -70,6 +82,9 @@ export function useImageEditor(options: ImageEditorOptions = {}): UseImageEditor
   const controller = controllerRef.current;
   const [state, setState] = useState<ImageEditorState>(() => controller.getState());
   const [historyTicks, setHistoryTicks] = useState(0);
+  const [histogram, setHistogram] = useState<ImageHistogram | null>(() => controller.getHistogram());
+
+  useEffect(() => controller.subscribeHistogram(setHistogram), [controller]);
 
   useEffect(() => {
     const unsub = controller.subscribe((next) => {
@@ -109,6 +124,21 @@ export function useImageEditor(options: ImageEditorOptions = {}): UseImageEditor
   );
   const resetAdjustments = useCallback(() => controller.resetAdjustments(), [controller]);
   const upgradeProcess = useCallback(() => controller.upgradeProcess(), [controller]);
+  const addAdjustmentLayer = useCallback(
+    (init: AdjustmentKind | AdjustmentLayerInit, index?: number) => controller.addAdjustmentLayer(init, index),
+    [controller]
+  );
+  const updateAdjustmentLayer = useCallback(
+    (id: string, update: AdjustmentLayerUpdate, commitToHistory = true) =>
+      controller.updateAdjustmentLayer(id, update, commitToHistory),
+    [controller]
+  );
+  const removeAdjustmentLayer = useCallback((id: string) => controller.removeAdjustmentLayer(id), [controller]);
+  const moveAdjustmentLayer = useCallback((id: string, to: number) => controller.moveAdjustmentLayer(id, to), [controller]);
+  const toggleAdjustmentLayer = useCallback(
+    (id: string, enabled?: boolean) => controller.toggleAdjustmentLayer(id, enabled),
+    [controller]
+  );
   const setDepthMask = useCallback((partial: Partial<DepthMaskOptions>) => controller.setDepthMask(partial), [controller]);
   const resetDepthMask = useCallback(() => controller.resetDepthMask(), [controller]);
   const addAnnotation = useCallback((ann: CreateAnnotationPayload) => controller.addAnnotation(ann), [controller]);
@@ -172,6 +202,12 @@ export function useImageEditor(options: ImageEditorOptions = {}): UseImageEditor
       setAdjustments,
       resetAdjustments,
       upgradeProcess,
+      addAdjustmentLayer,
+      updateAdjustmentLayer,
+      removeAdjustmentLayer,
+      moveAdjustmentLayer,
+      toggleAdjustmentLayer,
+      histogram,
       setDepthMask,
       resetDepthMask,
       addAnnotation,
@@ -200,6 +236,6 @@ export function useImageEditor(options: ImageEditorOptions = {}): UseImageEditor
       applyBackgroundRemovedImage,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [controller, state, historyTicks]
+    [controller, state, historyTicks, histogram]
   );
 }

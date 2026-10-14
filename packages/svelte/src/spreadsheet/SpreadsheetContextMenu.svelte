@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { clampMenuPosition, type SpreadsheetMenuItem } from '@pixerate/editor/spreadsheet';
+  import { clampMenuPosition, runSpreadsheetMenuItem, type SpreadsheetMenuItem } from '@pixerate/editor/spreadsheet';
 
   // Gap kept between the menu and the viewport edges.
   const VIEWPORT_MARGIN = 4;
@@ -66,11 +66,14 @@
       type="button"
       role="menuitem"
       data-action={item.id}
+      data-checked={item.checked ? '' : undefined}
       disabled={item.disabled}
-      class="block w-full px-3 py-1 text-left hover:bg-muted disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent"
+      class="block w-full px-3 py-1 text-left hover:bg-muted disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent {item.checked
+        ? 'font-semibold'
+        : ''}"
       onclick={() => {
         onClose();
-        item.run();
+        runSpreadsheetMenuItem(item);
       }}
     >
       {item.label}

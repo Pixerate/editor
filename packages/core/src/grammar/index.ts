@@ -5,3 +5,5 @@ export * from "./sourcemap";
 export * from "./engine";
 export * from "./variables";
 export * from "./fields";
+export * from "./data-source";
+export * from "./merge";

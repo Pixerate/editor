@@ -18,6 +18,16 @@ import {
   matchConditionalTags,
   escapeVariableText,
   unescapeVariableText,
+  resolvePrompt,
+  evaluatePromptTokens,
+  extractVariables,
+  getVariableFormFields,
+  compareConditionValues,
+  conditionSubject,
+  parseComparison,
+  formatConditionalTag,
+  parseConditionExpression,
+  evaluateConditionExpression,
 } from "../src/grammar";
 
 describe("Grammar: Tokenizer", () => {
@@ -638,5 +648,292 @@ describe("Grammar: Backwards compatibility with the original grammar", () => {
       const input = randomPrompt(r, pieces);
       expect(tokenizePrompt(input)).toEqual(legacyTokenize(input));
     }
+  });
+});
+
+describe("Grammar: Comparison conditions", () => {
+  const run = (text: string, values: Record<string, any>) =>
+    resolvePrompt(text, [], { values }).text;
+
+  it("tokenizes a comparison closed by its subject", () => {
+    const tokens = tokenizePrompt("{?amount>100}big{/amount}");
+    expect(tokens[0]).toEqual({
+      type: "conditional",
+      raw: "{?amount>100}",
+      value: "amount",
+      conditional: "if",
+      comparison: { operator: ">", operand: "100" },
+      start: 0,
+      end: 13,
+    });
+    expect(tokens[2]).toMatchObject({ type: "conditional", conditional: "end", value: "amount" });
+    expect(tokens[2].comparison).toBeUndefined();
+    expect(getPromptDiagnostics("{?amount>100}big{/amount}")).toEqual([]);
+  });
+
+  it("trims spaces, accepts != and quoted operands", () => {
+    const [open] = tokenizePrompt('{?status != "on hold"}x{/status}');
+    expect(open).toMatchObject({
+      value: "status",
+      comparison: { operator: "<>", operand: "on hold" },
+    });
+    const [empty] = tokenizePrompt('{!note=""}x{/note}');
+    expect(empty).toMatchObject({
+      conditional: "unless",
+      value: "note",
+      comparison: { operator: "=", operand: "" },
+    });
+  });
+
+  it.each([
+    ["=", "5", "5.0", true],
+    ["=", "7", "7", true],
+    ["<>", "5", "6", true],
+    ["<", "9", "10", true],
+    [">", "10", "9", true],
+    ["<=", "10", "10", true],
+    [">=", "9", "10", false],
+    ["<", "-2.5", "1e1", true],
+  ] as const)("compares numbers numerically: %s %s %s", (op, left, right, expected) => {
+    expect(compareConditionValues(left, op, right)).toBe(expected);
+  });
+
+  it("compares text case-insensitively when either side is not a number", () => {
+    expect(compareConditionValues("PAID", "=", "paid")).toBe(true);
+    expect(compareConditionValues("apple", "<", "Banana")).toBe(true);
+    // As text, "10" sorts before "9x".
+    expect(compareConditionValues("10", ">", "9x")).toBe(false);
+    expect(compareConditionValues("", "=", "")).toBe(true);
+    expect(compareConditionValues("0x10", "=", "16")).toBe(false);
+  });
+
+  it("keeps or drops sections by comparing the supplied value", () => {
+    const prompt = "Total{?amount>100} (large){/amount}{!amount>100} (small){/amount}";
+    expect(run(prompt, { amount: "250" })).toBe("Total (large)");
+    expect(run(prompt, { amount: 99.5 })).toBe("Total (small)");
+    expect(run(prompt, { amount: "100" })).toBe("Total (small)");
+    expect(run(prompt, {})).toBe("Total (small)");
+    expect(run("{?status=paid}Thanks{/status}", { status: "Paid" })).toBe("Thanks");
+    expect(run("{?status=paid}Thanks{/status}", { status: "due" })).toBe("");
+    expect(run('{?note=""}none{/note}', {})).toBe("none");
+    expect(run("{?n<>0}nonzero{/n}", { n: "0.0" })).toBe("");
+  });
+
+  it("nests comparisons with presence sections and variables", () => {
+    const prompt =
+      "{?vip}VIP {?spend>=1000}gold {name}{/spend}{/vip}{?spend<1000}std{/spend}";
+    expect(run(prompt, { vip: "y", spend: "1500", name: "Ada" })).toBe("VIP gold Ada");
+    expect(run(prompt, { vip: "y", spend: "10" })).toBe("VIP std");
+    expect(run(prompt, { spend: "2000" })).toBe("");
+  });
+
+  it("leaves comparisons as written without values and maps them", () => {
+    const prompt = "A{?x>1}B{/x}C";
+    expect(resolveTemplates(prompt, [])).toBe(prompt);
+    const { text, map } = resolvePrompt(prompt, [], { values: { x: 2 } });
+    expect(text).toBe("ABC");
+    expect(mapResolvedOffsetToRaw(1, map)).toBe(7);
+    expect(map.find((s) => s.source === "conditional")).toMatchObject({
+      variableName: "x",
+    });
+  });
+
+  it("evaluates comparisons in evaluatePromptTokens", () => {
+    const tokens = evaluatePromptTokens("{?n>=3}many{/n}{?n<3}few{/n}", { n: "4" });
+    expect(tokens.map((t) => t.value).join("")).toBe("many");
+  });
+
+  it("still treats {?a>1}…{/a>1} as a presence check on a variable named a>1", () => {
+    const tokens = tokenizePrompt("{?a>1}x{/a>1}");
+    expect(tokens[0]).toMatchObject({ value: "a>1", conditional: "if" });
+    expect(tokens[0].comparison).toBeUndefined();
+    expect(run("{?a>1}x{/a>1}", { "a>1": "yes", a: "0" })).toBe("x");
+    expect(run("{?a>1}x{/a>1}", { a: "5" })).toBe("");
+  });
+
+  it.each([
+    ["{?amount>}x{/amount}", "Missing value"],
+    ["{?amount=>5}x{/amount}", "Unexpected"],
+    ["{?amount==5}x{/amount}", "Unexpected"],
+    ['{?amount="5}x{/amount}', "Unterminated"],
+  ])("reports %s as an invalid condition and keeps it literal", (input, message) => {
+    const { tokens, diagnostics } = tokenizePromptWithDiagnostics(input);
+    expect(tokens).toEqual([
+      { type: "text", raw: input, value: input, start: 0, end: input.length },
+    ]);
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]).toMatchObject({ code: "invalid-condition", name: "amount", start: 0 });
+    expect(diagnostics[0].message).toContain(message);
+    expect(resolvePrompt(input, [], { values: { amount: 9 } }).text).toBe(input);
+  });
+
+  it("parses comparisons and subjects", () => {
+    expect(conditionSubject("amount >= 3")).toBe("amount");
+    expect(conditionSubject("amount")).toBeUndefined();
+    expect(conditionSubject(">3")).toBeUndefined();
+    expect(conditionSubject("a!b=3")).toBeUndefined();
+    expect(parseComparison("x <= -1")).toEqual({
+      subject: "x",
+      comparison: { operator: "<=", operand: "-1" },
+    });
+    expect(parseComparison("x=")?.error).toMatch(/Missing value/);
+    expect(parseComparison("plain")).toBeUndefined();
+  });
+
+  it("formats conditional tags for display", () => {
+    expect(formatConditionalTag({ conditional: "if", value: "x" })).toBe("{?x}");
+    expect(formatConditionalTag({ conditional: "end", value: "x" })).toBe("{/x}");
+    expect(
+      formatConditionalTag({
+        conditional: "unless",
+        value: "s",
+        comparison: { operator: "<>", operand: " on hold" },
+      }),
+    ).toBe('{!s<>" on hold"}');
+    expect(
+      formatConditionalTag({ conditional: "if", value: "n", comparison: { operator: ">", operand: "3" } }),
+    ).toBe("{?n>3}");
+  });
+
+  it("parses and evaluates standalone condition expressions", () => {
+    const vip = parseConditionExpression("vip");
+    const notVip = parseConditionExpression("!vip");
+    const big = parseConditionExpression("? amount > 10");
+    const notPaid = parseConditionExpression("!status=paid");
+    for (const e of [vip, notVip, big, notPaid]) expect("error" in e).toBe(false);
+    const values = { vip: "y", amount: "12", status: "PAID" };
+    expect(evaluateConditionExpression(vip as any, values)).toBe(true);
+    expect(evaluateConditionExpression(notVip as any, values)).toBe(false);
+    expect(evaluateConditionExpression(big as any, values)).toBe(true);
+    expect(evaluateConditionExpression(notPaid as any, values)).toBe(false);
+    expect(parseConditionExpression("")).toEqual({ error: "Empty condition" });
+    expect("error" in parseConditionExpression("amount>")).toBe(true);
+    expect("error" in parseConditionExpression("=5")).toBe(true);
+  });
+
+  it("pairs a comparison with the nearest matching open tag", () => {
+    expect(
+      matchConditionalTags([
+        { conditional: "if", name: "a" },
+        { conditional: "if", name: "a>1" },
+        { conditional: "end", name: "a" },
+        { conditional: "end", name: "a" },
+      ]).map((m) => [m.partner, m.error, m.comparison?.subject]),
+    ).toEqual([
+      [3, undefined, undefined],
+      [2, undefined, "a"],
+      [1, undefined, "a"],
+      [0, undefined, undefined],
+    ]);
+  });
+
+  it("reports comparison subjects from the variable helpers", () => {
+    const prompt = "{?amount>100}Dear {name}{/amount}{?a>1}x{/a>1}";
+    expect(extractVariableNames(prompt)).toEqual(["amount", "name", "a>1"]);
+    expect(extractVariables(prompt)[0]).toMatchObject({
+      name: "amount",
+      usedInCondition: true,
+      usedInComparison: true,
+      usedAsValue: false,
+    });
+    const fields = getVariableFormFields(prompt);
+    expect(fields.find((f) => f.name === "amount")?.conditionOnly).toBe(false);
+    expect(fields.find((f) => f.name === "a>1")?.conditionOnly).toBe(true);
+  });
+});
+
+describe("Grammar: Comparison conditions are backwards compatible", () => {
+  function rng(seed: number) {
+    return () => {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+      return seed / 0x7fffffff;
+    };
+  }
+  // Before comparisons, `=`, `<` and `>` were ordinary name characters.
+  // Swapping them for symbols that cannot form a comparison reproduces the
+  // old behaviour, which the new grammar must match on accepted prompts.
+  const swap: Record<string, string> = { "=": "①", "<": "②", ">": "③" };
+  const neutralize = (s: string) => s.replace(/[=<>]/g, (c) => swap[c]);
+  const restore = (s: string) =>
+    s.replace(/[①-③]/g, (c) => Object.keys(swap).find((k) => swap[k] === c)!);
+  const neutralTokens = (tokens: any[]) =>
+    tokens.map((t) => ({ ...t, raw: neutralize(t.raw), value: neutralize(t.value) }));
+
+  const pieces = [
+    "{?x}",
+    "{/x}",
+    "{!x}",
+    "{?a>1}",
+    "{/a>1}",
+    "{!a>1}",
+    "{?b=c}",
+    "{/b=c}",
+    "{?a <= 2}",
+    "{/a <= 2}",
+    "{/a}",
+    "{/b}",
+    "{a}",
+    "{b|d}",
+    "{{t}}",
+    "a<b",
+    "=",
+    " ",
+    "text",
+  ];
+  const templates: Template[] = [{ name: "t", body: "T{?x}{a}{/x}" }];
+  const randomInput = (r: () => number) =>
+    Array.from(
+      { length: 1 + Math.floor(r() * 8) },
+      () => pieces[Math.floor(r() * pieces.length)],
+    ).join("");
+
+  it("tokenizes and resolves every prompt the old grammar accepted exactly as before", () => {
+    const r = rng(2026);
+    let checked = 0;
+    for (let n = 0; n < 4000; n++) {
+      const input = randomInput(r);
+      const legacy = neutralize(input);
+      if (getPromptDiagnostics(legacy).length > 0) continue;
+      checked++;
+      expect(neutralTokens(tokenizePrompt(input))).toEqual(tokenizePrompt(legacy));
+      expect(getPromptDiagnostics(input)).toEqual([]);
+      const values: Record<string, string> = {
+        x: r() > 0.5 ? "1" : "",
+        a: r() > 0.5 ? "5" : "0",
+        "a>1": r() > 0.5 ? "yes" : "",
+        "b=c": r() > 0.5 ? "yes" : "",
+        "a <= 2": "y",
+      };
+      const legacyValues = Object.fromEntries(
+        Object.entries(values).map(([k, v]) => [neutralize(k), v]),
+      );
+      expect(resolvePrompt(input, templates, { values }).text).toBe(
+        restore(resolvePrompt(legacy, templates, { values: legacyValues }).text),
+      );
+      expect(resolveTemplates(input, templates)).toBe(
+        restore(resolveTemplates(legacy, templates)),
+      );
+      expect(extractVariableNames(input)).toEqual(
+        extractVariableNames(legacy).map(restore),
+      );
+    }
+    expect(checked).toBeGreaterThan(250);
+  });
+
+  it("only gives new meaning to prompts the old grammar reported as unbalanced", () => {
+    const r = rng(99);
+    let changed = 0;
+    for (let n = 0; n < 1500; n++) {
+      const input = randomInput(r);
+      const hasComparison = tokenizePrompt(input).some((t) => t.comparison);
+      const invalid = getPromptDiagnostics(input).some(
+        (d) => d.code === "invalid-condition",
+      );
+      if (hasComparison || invalid) {
+        changed++;
+        expect(getPromptDiagnostics(neutralize(input)).length).toBeGreaterThan(0);
+      }
+    }
+    expect(changed).toBeGreaterThan(20);
   });
 });

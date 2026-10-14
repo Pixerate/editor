@@ -3,6 +3,7 @@ import {
 	createCanvasArrangeController,
 	matchArrangeShortcut,
 	type ArrangeHistoryTarget,
+	type AutoLayoutOptions,
 	type ArrangeShortcutBinding,
 	type CanvasArrangeAction,
 	type CanvasNode,
@@ -24,6 +25,8 @@ export interface UseCanvasArrangeOptions<TNode extends CanvasNode = CanvasNode> 
 	/** Turns drag snapping off (default `true`). */
 	snapping?: boolean;
 	rectOptions?: NodeRectOptions;
+	/** Re-run auto layout around arranged nodes in the same undo step (see `useCanvasAutoLayout`). */
+	autoLayout?: boolean | AutoLayoutOptions;
 }
 
 /**
@@ -65,6 +68,9 @@ export function useCanvasArrange<TNode extends CanvasNode = CanvasNode>(options:
 				},
 				get rectOptions() {
 					return optionsRef.current.rectOptions;
+				},
+				get autoLayout() {
+					return optionsRef.current.autoLayout;
 				},
 				onGuidesChange: setGuides
 			}),

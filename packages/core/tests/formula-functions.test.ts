@@ -328,7 +328,12 @@ describe('text functions', () => {
     expect(run('=TEXT("2026-03-05 14:07:09", "hh:mm:ss")')).toBe('14:07:09');
     expect(run('=TEXT("2026-03-05 14:07:09", "h:mm AM/PM")')).toBe('2:07 PM');
     expect(run('=TEXT(46023, "yyyy-mm-dd")')).toBe('2026-01-01');
-    expect(run('=TEXT("nope", "yyyy")')).toBe('#VALUE!');
+    // Like Excel, text that isn't a number or date passes through unchanged.
+    expect(run('=TEXT("nope", "yyyy")')).toBe('nope');
+    expect(run('=TEXT(-1, "yyyy")')).toBe('#VALUE!');
+    expect(run('=TEXT(1.5, "# ?/?")')).toBe('1 1/2');
+    expect(run('=TEXT(-5, "#,##0.00;[Red](#,##0.00)")')).toBe('(5.00)');
+    expect(run('=TEXT(2.675, "0.00")')).toBe('2.68');
   });
 
   it('formatValueWithCode is exported for reuse', () => {

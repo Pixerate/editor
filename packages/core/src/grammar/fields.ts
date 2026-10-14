@@ -11,8 +11,13 @@ export interface VariableDescriptor {
   description?: string;
   /** Appears as a `{name}` slot. */
   usedAsValue: boolean;
-  /** Appears in a `{?name}` / `{!name}` condition. */
+  /** Appears in a `{?name}` / `{!name}` condition (including comparisons). */
   usedInCondition: boolean;
+  /**
+   * Present (and `true`) when the variable is compared in a condition such as
+   * `{?amount>100}`, so a form should ask for its text, not a checkbox.
+   */
+  usedInComparison?: true;
   /** Number of `{name…}` slots and condition tags (closing tags excluded). */
   occurrences: number;
   /** Templates whose bodies mention the variable, in discovery order. */
@@ -79,7 +84,9 @@ export function extractVariables(
           descriptor.description = token.description;
         }
       } else if (token.type === "conditional" && token.conditional !== "end") {
-        describe(token.value, templateName).usedInCondition = true;
+        const descriptor = describe(token.value, templateName);
+        descriptor.usedInCondition = true;
+        if (token.comparison) descriptor.usedInComparison = true;
       } else if (token.type === "template") {
         const template = templateMap.get(token.value);
         if (!template || visited.has(token.value) || depth + 1 > maxDepth) {
@@ -110,7 +117,10 @@ export interface VariableFormField {
    * leaves the `{name}` placeholder in the resolved prompt.
    */
   required: boolean;
-  /** Only used by `{?name}` / `{!name}` conditions, never substituted. */
+  /**
+   * Only used by `{?name}` / `{!name}` presence conditions, never substituted
+   * or compared (a form can show a checkbox).
+   */
   conditionOnly: boolean;
 }
 
@@ -135,7 +145,7 @@ export function getVariableFormFields(
       ? { description: variable.description }
       : {}),
     required: variable.usedAsValue && variable.defaultValue === undefined,
-    conditionOnly: !variable.usedAsValue,
+    conditionOnly: !variable.usedAsValue && !variable.usedInComparison,
   }));
 }
 

@@ -453,3 +453,54 @@ No default keyboard shortcuts are bound for these operations.
 - `parseSvgPath(d)` (absolute `M`/`L`/`C`/`Q`/`A`/`Z`), `flattenSvgPath(d, { tolerance })`, `shapeToPolygon(shape, size)`, `shapeNodeToPolygon(node, lookup)`, `polygonToSvgPath(multi, { precision, simplify, offset, curves })`, `simplifyRing`, `getShapeSvg` / `getShapeRenderData` (exact arcs for rendering), `polygonArea`, `multiPolygonArea`, `pointInRings`.
 
 The engine builds a planar overlay of all edges (splitting at crossings, T-junctions and collinear overlaps, merging points closer than `epsilon`), classifies both sides of every edge by winding number and traces the boundary of the selected region. It handles shared edges, touching vertices, collinear overlaps, holes, nested and disjoint inputs. Limits: the overlay is O(n²) in edges (pruned by a sweep), comfortable for canvas shapes (two 1,024-vertex circles in about 20 ms) but not GIS-scale data; features narrower than `epsilon` (default `1e-9` × the largest coordinate) collapse; curves are flattened to polylines for the overlay; `combineShapeNodes` fits curves back onto the result (see `curves`).
+
+---
+
+### Auto layout and constraints (sub-flows)
+
+Figma-style auto layout for xyflow sub-flows. A **frame** is any node with `data.layout`; its children are the nodes whose `parentId` is the frame, in node-array order. The functions are pure and return `CanvasNodeUpdate`s (positions relative to the parent, sizes) for `applyNodeUpdates`.
+
+```ts
+// Frame: node.data.layout
+type AutoLayout = {
+  mode: 'horizontal' | 'vertical' | 'grid';
+  gap?: number;                 // main-axis gap (grid: column gap); negative overlaps. Default 0
+  rowGap?: number;              // between wrapped lines (grid: row gap). Default: gap
+  padding?: number | [v, h] | [top, right, bottom, left] | { top, right, bottom, left }; // default 0
+  wrap?: boolean;               // ignored while the frame hugs its main axis
+  alignMain?: 'start' | 'center' | 'end' | 'space-between' | 'space-around' | 'space-evenly';
+  alignCross?: 'start' | 'center' | 'end' | 'stretch' | 'baseline';   // baseline: horizontal only
+  alignContent?: 'auto' | 'space-between';                          // wrapped lines
+  sizing?: { width?: 'fixed' | 'hug' | 'fill'; height?: ... };       // the frame's own sizing
+  min?: { width?, height? }; max?: { width?, height? };
+  grid?: { columns?: number | Track[]; rows?: number | Track[] };    // Track: px | 'hug' | '2fr' | { fr: 2 }
+};
+// Child: node.data.childLayout
+type AutoLayoutChild = {
+  sizing?: { width?: 'fixed' | 'hug' | 'fill'; height?: ... };       // wins over layout.sizing on nested frames
+  min?: { width?, height? }; max?: { width?, height? };
+  absolute?: boolean;           // ignore auto layout, follow constraints instead
+  constraints?: { horizontal?: 'left' | 'right' | 'leftRight' | 'center' | 'scale';
+                  vertical?: 'top' | 'bottom' | 'topBottom' | 'center' | 'scale' };
+  gridArea?: { column?, row?, columnSpan?, rowSpan?, alignX?, alignY? };   // 0-based anchors
+};
+```
+
+- `layoutFrame(nodes, frameId, { measure })` lays out one frame (nested frames resized by fill are laid out again), `layoutAll(nodes)` lays out every frame children-before-parents so nested hugging settles in one pass, and `layoutUp(nodes, changedId)` / `layoutUpMany(nodes, ids)` lay out a changed frame and its auto layout ancestors only.
+- **Sizing**: `fixed` keeps the size, `hug` fits the content plus padding (frames and text-like nodes), `fill` shares the free main-axis space like flexbox (min / max freeze and the rest is shared again) or stretches across. Fill on an axis the frame hugs reads as fixed. Min / max always apply; a frame is never smaller than its padding.
+- **Alignment**: auto gaps (`space-*`) never go below 0; a single `space-between` child sits at the start. `stretch` makes fixed-size children fill across. `baseline` lines up the first text baseline (`measure.textBaseline`); nested horizontal frames use their first child's baseline, other nodes sit at the top.
+- **Wrap**: lines break when the main axis runs out; each line distributes on its own. `alignContent: 'space-between'` spreads lines; lines of nothing but fill-across children stretch.
+- **Grid**: `columns` / `rows` are counts (`1fr` each) or tracks. Fixed tracks keep their size, `hug` tracks fit their content, `fr` tracks share the rest like CSS (never below their content). Rows are added to fit the children. Anchored children (`gridArea.column` + `row`) are placed first, the rest flow in reading order; spans grow content-sized tracks. `alignMain` / `alignCross` align children in their cells, `gridArea.alignX/Y` override per child. `getAutoLayoutGrid(nodes, frameId)` returns the resolved tracks and cells.
+- **Absolute children and constraints**: absolute children keep their place and follow `constraints` when the frame resizes (hug included). `applyConstraints(nodes, parentId, previousSize)` applies constraints to the children of any parent after it was resized (all children of a plain parent, absolute ones of a frame).
+- **Measuring**: `measure.size(node)` defaults to `getNodeSize` (xyflow `measured`, then `width` / `height`, then style). Nodes for which `measure.textSize(node)` returns a natural size are text-like: hug width uses it (wrapping at `max.width` via `measure.textHeight(node, width)`), and a fill-width text with hug height re-wraps at the width it gets.
+- `makeSizingCoherent(nodes, id, { measure })` downgrades `fill` without an auto layout parent (or with a parent hugging that axis) and `hug` on nodes that cannot hug to `fixed`, for the node and its children.
+- Not modelled: rotation, strokes taking up space, and `reverse_z` canvas stacking (use `zIndex`).
+
+#### Controller, React hook and Svelte rune
+
+`createCanvasAutoLayoutController({ getNodes, setNodes, history?, measure?, enabled?, dragReorder?, onGuidesChange? })` (React: `useCanvasAutoLayout({ nodes, setNodes, history })`, Svelte: `createCanvasAutoLayout({ getNodes, setNodes, history })`):
+
+- Actions, each one undoable step together with the relayout it causes: `addNode(node, { index? })`, `removeNodes(ids)` (descendants too), `resizeNode(id, { width?, height? })` (children follow constraints), `moveChild(id, index)`, `applyAutoLayout(frameId?)` (default: every frame).
+- Flow-originated changes are derived and not recorded: React passes each `onNodesChange` batch through `autoLayout.noteChanges(changes)` before applying it, and the hook flushes once React commits. Measured sizes, resize ends (children follow constraints from the size the resize started at), added and removed nodes relayout their frames. Svelte: `handleChanges(changes)`, `nodesDeleted(nodes)` (`ondelete`), `measured(id)` and `<NodeResizer {...autoLayout.resizerHandlers(id)} />`.
+- **Reorder by dragging**: a flow child dragged inside its frame shows a drop marker (`guides`, for `<CanvasGuidesLayer>`) and on drop moves to the slot under its centre (reading order for grid and wrapped frames) in one undoable step whose undo restores the position the drag began at. Svelte: `onnodedrag={({ targetNode }) => autoLayout.dragReorder(targetNode.id)}` and `onnodedragstop={({ targetNode }) => autoLayout.endReorderDrag(targetNode.id)}`. Order is the node-array order (`moveLayoutChild` keeps parents before children).
+- The arrange controller takes `autoLayout: true | { measure }` to relayout frames around aligned, distributed or resized nodes in the same undo step.

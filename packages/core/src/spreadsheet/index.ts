@@ -1,5 +1,7 @@
 export * from './types';
 export * from './formula';
+export * from './numfmt';
+export * from './numfmt/presets';
 export * from './datasource';
 export * from './controller';
 export * from './csv';

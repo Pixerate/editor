@@ -18,3 +18,5 @@ export * from './shapeNodes.js';
 export * from './measure.js';
 export * from './resizeSnap.js';
 export * from './curveFit.js';
+export * from './autoLayout.js';
+export * from './autoLayoutController.js';

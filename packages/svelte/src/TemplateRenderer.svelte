@@ -1,6 +1,8 @@
 <script lang="ts">
   import {
     evaluatePromptTokens,
+    describeConditionalTag,
+    formatConditionalTag,
     resolveTemplates,
     type Template,
     type ColorGradient,
@@ -36,8 +38,6 @@
     onVariableClick,
   }: Props = $props();
 
-  const CONDITIONAL_PREFIX = { if: "?", unless: "!", end: "/" } as const;
-
   let displayText = $derived(
     resolve && templates.length > 0
       ? resolveTemplates(content, templates, { bindings })
@@ -58,12 +58,6 @@
       .join("\n");
   }
 
-  function conditionalTitle(token: (typeof tokens)[number]): string {
-    if (token.conditional === "end") return `End of section: ${token.value}`;
-    return token.conditional === "if"
-      ? `Shown when "${token.value}" has a value`
-      : `Shown when "${token.value}" is empty`;
-  }
 </script>
 
 <div class={className}>
@@ -102,8 +96,8 @@
       <span
         data-conditional={token.conditional}
         class="inline-flex items-center px-1 py-0.5 mx-0.5 text-xs font-medium rounded-md border border-amber-400/40 bg-amber-400/15 text-amber-700"
-        title={conditionalTitle(token)}
-      >{`{${CONDITIONAL_PREFIX[token.conditional]}${token.value}}`}</span>
+        title={describeConditionalTag(token)}
+      >{formatConditionalTag(token)}</span>
     {:else if token.type === "instruction"}
       <span
         class="inline-flex items-center px-1.5 py-0.5 mx-0.5 text-xs italic font-medium rounded-md border border-rose-400/40 bg-rose-400/15 text-rose-600"

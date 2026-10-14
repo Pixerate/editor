@@ -11,6 +11,8 @@ export * from "./components/EditorContent";
 export * from "./components/BubbleMenu";
 export * from "./components/TemplateRenderer";
 export * from "./components/VariableForm";
+export * from "./components/MergePreview";
+export * from "./hooks/useMergePreview";
 export * from "./hooks/useOutline";
 export * from "./components/OutlinePanel";
 
@@ -45,6 +47,10 @@ export type {
   PromptValues,
   PromptDiagnostic,
   VariableFormField,
+  MergeDataSource,
+  MergeRecord,
+  MergeRecordsResult,
+  MergeOutput,
 } from "@pixerate/editor";
 
 export * from "./spreadsheet";
@@ -52,3 +58,6 @@ export * from "./slots";
 export * from "./image-editor";
 export * from "./review";
 export * from "./commands";
+export * from "./persistence";
+export * from "./generation";
+export * from "./find-replace";

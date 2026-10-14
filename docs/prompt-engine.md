@@ -97,9 +97,32 @@ getPromptDiagnostics("a {?x} b");
 
 Tags are only emitted as `conditional` tokens (with `conditional: "if" | "unless" | "end"`) when balanced.
 
+### Comparison Conditions
+
+Like the condition of Word's `IF` / `SKIPIF` fields, a section can compare a variable with a value. Write the comparison in the opening tag and close the section with the **bare variable name**:
+
+```text
+Total: {amount}{?amount>100} (free shipping){/amount}
+{?status=paid}Thanks for paying.{/status}{!status=paid}Payment is due.{/status}
+{?tier <> "gold plus"}…{/tier}    {?note=""}No note.{/note}
+```
+
+- Operators: `=`, `<>` (or `!=`), `<`, `>`, `<=`, `>=`. Spaces around the operator are ignored.
+- When both sides parse as plain decimal numbers (`12`, `-3.5`, `1e3`) they compare numerically, so `7` equals `7.0`. Otherwise both compare as case-insensitive text (`Paid` = `paid`).
+- The value is everything after the operator, trimmed. Quote it (`"…"`) to keep surrounding spaces, to compare with an empty value (`""`), or when it starts with `=`, `<`, `>` or `"`. It may not contain `{`, `}`, `|` or `\`.
+- `{!x>3}…{/x}` keeps its body when the comparison fails.
+- Only supplied values are compared (not defaults); a missing value compares as `""`.
+- The token for the opening tag has `value` set to the variable (`amount`) and `comparison: { operator, operand }`. `formatConditionalTag()` and `describeConditionalTag()` render it for display; `compareConditionValues()` exposes the comparison rules.
+
+A comparison whose value is malformed (`{?amount>}…{/amount}`, `{?amount=>5}…{/amount}`, an unterminated quote) is kept as literal text and reported once with the code `invalid-condition`.
+
+**Why the bare close tag?** Before comparisons existed, `=`, `<` and `>` were ordinary name characters, so `{?a>1}…{/a>1}` was a valid presence check on a variable called `a>1`. It still is: a close tag that repeats the whole opening text keeps the old meaning. Only `{/a}` turns `{?a>1}` into a comparison, and that combination was previously always an unbalanced (reported) pair, so no prompt that used to resolve cleanly changes meaning.
+
+Use `parseConditionExpression("amount>100")` / `evaluateConditionExpression()` to evaluate the same condition syntax outside a prompt (it also accepts `name` and `!name`).
+
 ### Backwards Compatibility
 
-Without the new syntax, prompts tokenize exactly as before. The only change to `VARIABLE_REGEX` is backslash escaping, which can change the match for text that has a backslash directly before a brace. `resolveTemplates` and `resolveTemplatesWithMapping` behave exactly as before unless `values` is passed. `extractVariableNames` now returns `subject` for `{subject|default}` and includes names used by conditions.
+Without the new syntax, prompts tokenize exactly as before. The only change to `VARIABLE_REGEX` is backslash escaping, which can change the match for text that has a backslash directly before a brace. `resolveTemplates` and `resolveTemplatesWithMapping` behave exactly as before unless `values` is passed. `extractVariableNames` now returns `subject` for `{subject|default}` and includes names used by conditions (`amount` for a comparison `{?amount>100}…{/amount}`). Comparison conditions only give meaning to tag pairs that were previously reported as unbalanced; randomized tests in `grammar.test.ts` check that every prompt the old grammar accepted without diagnostics tokenizes and resolves identically.
 
 ---
 
@@ -194,7 +217,48 @@ getVariableFormFields("{subject|a red fox|Describe the subject} {?hd}4k{/hd}");
 const values = compactVariableValues({ subject: "", hd: "true" }); // { hd: "true" }
 ```
 
+A variable used only in comparisons (`{?amount>100}`) is flagged `usedInComparison` and is not `conditionOnly`, so forms ask for its text.
+
 React and Svelte ship a `VariableForm` component built on these helpers. It renders a text input per variable, or a checkbox for condition-only variables, and calls `onChange(values, entered)`. `TemplateRenderer` accepts the same `values` to preview the filled prompt: values and defaults are highlighted, and failing sections are hidden. For custom renderers, use `evaluatePromptTokens(text, values)`.
+
+### Mail Merge: Data Sources and Multi-Record Merge
+
+Like Word's mail merge, a prompt can be merged with every record of a data source.
+
+**`parseDataSource(input, options)`** reads CSV / TSV text, JSON (an array of objects or of arrays), rows (`unknown[][]`) or objects, and returns `{ fields, records, warnings, format, delimiter? }`:
+
+- Delimited text uses the RFC 4180 parser from the spreadsheet module (quotes, doubled quotes, CRLF/LF/CR, BOM). `delimiter: "auto"` (the default) picks whichever of `,` `;` and tab is most frequent in the first line outside quotes, preferring `,`.
+- `hasHeader` (default `true`): the first row names the fields. Names are trimmed, blank names become `Column N`, and repeats (case-insensitive) are numbered `Name 2`. Without a header, fields are `Column 1…N`.
+- Rows that are entirely blank are skipped; records are padded or cut to the header width (`ragged-rows` warning); records and fields are capped (`maxRecords` 100 000, `maxFields` 1 000).
+- For objects the fields are the union of keys in first-seen order. Cells become strings (`null` → `""`, nested values → JSON). Field names such as `__proto__` are stored as plain data.
+- It never throws: problems (`invalid-json`, `blank-header`, `duplicate-header`, `records-truncated`, …) are listed in `warnings`.
+
+**`matchFields(variables, fields)`** maps variables to fields: an exact match, then a case-, space- and punctuation-insensitive one (`first_name` ↔ `First Name`), then aliases (`FIELD_ALIASES`: `FirstName`/`First`/`GivenName`, `LastName`/`Surname`, `PostalCode`/`ZIP`/`Postcode`, `Email`/`E-mail`, …; add groups with `{ aliases }`). `recordToValues(record, mapping)` builds the prompt values for one record; blank cells are left out so `{name|default}` falls back to its default (`blankAsMissing: false` renders them empty).
+
+**`mergeRecords(template, source, options)`** resolves the template once per record with `resolvePrompt` and returns `{ outputs: { index, record, values, text, map }[], skipped, diagnostics, text, mapping, truncated }`:
+
+```typescript
+import { mergeRecords } from "@pixerate/editor";
+
+const csv = "First Name,City,Budget,Status\nAda,London,1500,active\nAlan,Wilmslow,200,cancelled";
+const { outputs, skipped, text } = mergeRecords(
+  "Portrait of {firstName} in {city}{?budget>=1000}, 8k render{/budget}",
+  csv,
+  { skipIf: "status=cancelled", separator: "\n" },
+);
+// outputs[0].text === "Portrait of Ada in London, 8k render"; skipped[0].index === 1
+```
+
+- `mapping` overrides the automatic field matching (`null` leaves a variable unset).
+- `skipIf` drops a record's output, like `SKIPIF`: a condition string in the section syntax without braces (`status=cancelled`, `!email`, `amount<10`) evaluated against the record's values, or a function `(record, values, index) => boolean`. A malformed string is reported as `invalid-skip-condition` and skips nothing.
+- `separator` joins `text` (default `"\n\n"`; `"none"` joins with nothing). `from` / `to` (1-based, inclusive) choose a record range.
+- `maxOutputs` (default 10 000) and `maxLength` (default 20 000 000 characters) stop the merge early with a `max-outputs` / `max-length` diagnostic and `truncated: true`. Skipped records do not count.
+- Diagnostics also include the template's grammar diagnostics (once), `unmapped-variable` for value slots with no field and no default, and data source warnings (`data-source`) when `source` was not already parsed.
+- `serializeMergeOutputs(outputs, "text" | "json")` formats the result for copying or download.
+
+Record-level directives such as Word's `NEXT` are not part of the grammar: `{!next}` already means "section kept when `next` is empty", so a directive would change existing prompts. Filter records with `skipIf`, or pre-process the records instead.
+
+React and Svelte ship `<MergePreview content defaultSource skipIf separator onMerge />`: paste or pick a CSV / TSV / JSON file, adjust the automatic field mapping, step through records ("Record 3 of 20") with the resolved prompt shown by `TemplateRenderer`, and "Merge all" to copy or download the outputs as text or JSON. The headless state is `useMergePreview(options)` in React and `createMergePreview(() => options, initialSource)` in Svelte.
 
 ---
 

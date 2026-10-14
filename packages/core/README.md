@@ -119,6 +119,26 @@ editor.commands.acceptChange(id); // rejectChange, acceptAllChanges, rejectAllCh
 - **Serializers** render tracked content as if all changes were accepted: `getEditorText`, `htmlToPlainText` and `getEditorMarkdown` drop deleted text and use the new formatting and block types by default. Pass `{ trackedChanges: "original" }` (as if rejected) or `"all"` (both). `resolveTrackedChanges(doc, view)` returns a resolved document. TipTap's own `editor.getText()` still includes deleted text.
 - Both extensions are also available as `createRichTextPreset({ comments: true, trackChanges: true })`. Mark styles use Tailwind classes; override them via `commentClass` / `activeClass` and `insertionHTMLAttributes` / `deletionHTMLAttributes` / `formatChangeHTMLAttributes` / `blockChangeClass`.
 
+## Find and replace
+
+```ts
+import { createRichTextPreset, getFindReplaceState } from "@pixerate/editor";
+
+const editor = new Editor({ extensions: [...createRichTextPreset({ findReplace: true })] }); // or FindReplace.configure({...})
+
+editor.commands.setSearch({ query: "([A-Z][a-z]@), ([A-Z][a-z]@)", replacement: "\\2 \\1", options: { wildcards: true } });
+editor.commands.findNext(); // findPrevious, replaceCurrent, replaceAll (one undo step), clearSearch
+editor.commands.openFindReplace({ mode: "replace" }); // what Mod+F / Mod+H do; closeFindReplace hides it
+getFindReplaceState(editor); // { open, mode, query, replacement, options, matches, currentIndex, error, truncated, lastReplaceCount }
+```
+
+- **Options** (`FindOptions`): `matchCase`, `wholeWord`, `matchPrefix`, `matchSuffix`, `ignorePunctuation`, `ignoreWhitespace`, `wildcards`, `regex`, `literal` (no `^` codes).
+- **Special characters** (Word): `^p` paragraph mark (a pattern with `^p` reads sibling paragraphs together; `^p` in the replacement splits the paragraph), `^t` tab, `^l` line break, `^?` any character, `^#` digit, `^$` letter, `^w` white space, `^^` caret, `^+` / `^=` em / en dash, `^s` non-breaking space, `^13` / `^u8212` character codes. In Replace with: `^&` found text, `^c` clipboard (`getClipboardText` option).
+- **Wildcards** (Word): `?`, `*` (shortest run within a paragraph), `[a-z]`, `[!x]`, `{n}`, `{n,}`, `{n,m}`, `@` (one or more), `<` / `>` word start / end, `( )` groups used as `\1`–`\9` in Replace with. Wildcard search always matches case.
+- **Bounded**: special and wildcard patterns run on a linear-time matcher (no catastrophic backtracking); every search also has a time budget (`timeLimitMs`, 250 ms) and match cap (`maxMatches`, 10 000), reported as `truncated`. Raw `regex` mode uses JavaScript's `RegExp`, rejects nested repetition such as `(a+)+` and is only bounded between matches. Invalid patterns are reported as `error: { code, message }`, never thrown.
+- **Track changes**: tracked-deleted text is skipped (a match never spans a deletion, but word boundaries see the live text), and replacements made while tracking become tracked deletions and insertions.
+- Matches are decorated with `pixerate-find-match` and the current one also with `pixerate-find-match-current` (`matchClass` / `currentMatchClass`); style them in your CSS. `createFindReplaceCommands(editor)` returns command-registry specs (`findReplace.open`, `.next`, `.find`, `.replaceAll`, …).
+
 ## File import and rich clipboard
 
 An import adapter registry maps file types (MIME types and extensions) to converters. Built-in `document` adapters cover markdown (`.md`, `.markdown`, `.mdown`, `.mkdn`, `.mkd`, `.Rmd`, `.md.txt`), HTML (sanitized with the same allowlist as markdown), plain text (`.txt`), RTF (best-effort text extraction) and DOCX (`.docx`, `.docm`, `.dotx`). The longest matching extension wins, then exact MIME types, then `priority`, then the most recent registration.
@@ -207,6 +227,46 @@ formatShortcut("Mod+Shift+Z", "mac"); // "⇧⌘Z" ("Ctrl+Shift+Z" on Windows / 
 - **Palette**: `rankCommands(query, entries, { recents })` does subsequence fuzzy ranking over label, group, keywords and id. Exact matches come first, and an empty query lists recent commands first. `createCommandPaletteController(registry)` holds the palette state that the React and Svelte `<CommandPalette>` components render.
 - **Agents**: `createCommandToolProvider(registry)` adds `list_commands`, `run_command` and `run_commands` to a `ToolRegistry`, with complete MCP annotations. `run_commands` runs steps in order but is **not atomic**: steps that succeeded before a failure stay applied. To get all-or-nothing behaviour, register one `undoable` command that runs the steps.
 
+## Generation models, planning and provenance
+
+`@pixerate/editor/generation` describes generative models as data, checks a request against a model before it is sent, and records what produced each output. It reaches only the grammar and the agent tool-registry modules, so it has no third-party imports.
+
+```ts
+import {
+  planGenerationRequest,
+  capabilitiesToJsonSchema,
+  createGenerationToolProvider,
+  createProvenance,
+  recreateRequest,
+  estimateJobProgress,
+  expectedDurationFor,
+  type ModelCapabilities,
+} from "@pixerate/editor/generation";
+
+const model: ModelCapabilities = {
+  id: "img-xl",
+  media: "image",
+  prompt: { maxLength: 1000 }, // counted after templates/variables resolve (countResolved defaults to true)
+  negativePrompt: true,
+  aspectRatios: { options: ["9:16", "1:1", "16:9"], default: "1:1" },
+  quality: { options: ["draft", "standard", "high"] },
+  count: { max: 4, options: [1, 2, 4] },
+  references: { roles: { style_ref: { max: 2 }, character_ref: { max: 1 } }, maxTotal: 2 },
+  params: { guidance: { type: "number", min: 1, max: 10, step: 0.5 } },
+  timing: { baseMs: 12_000, perItemMs: 4_000 },
+};
+
+const plan = planGenerationRequest({ aspectRatio: "21:9", count: 3 }, model, { strategy: "downgrade", resolvedPrompt });
+// plan.request: { model: "img-xl", aspectRatio: "16:9", count: 2 }
+// plan.adjustments: [{ field: "aspectRatio", from: "21:9", to: "16:9", kind: "snapped", reason }, { field: "count", … }]
+```
+
+- **Strategies**: `nearest` (default) snaps enum values to the closest option, clamps and rounds ranges, truncates text and reference lists, and drops unsupported fields and references, reporting each change. Ties go to the higher value, or to the lower one with `downgrade`. `upgrade` also breaks ties upwards but does not drop references the model cannot use: that is an error, as is a text-only model given image references. `error` changes nothing and reports every mismatch. Missing required references, unsupported modes (`edit` / `inpaint`) and a model mismatch are always errors. Planning is pure and deterministic.
+- **Schema and agents**: `capabilitiesToJsonSchema(model)` builds a strict request schema (enums, `minimum` / `maximum`, `maxItems`, and descriptions for per-role limits) that `validateJsonSchema` checks. `createGenerationToolProvider({ models, generate, estimate? })` adds `list_models`, `plan_generation` and `estimate_generation` (read-only) and `generate` (destructive) to a `ToolRegistry`. `generate` requires an `idempotencyKey`: a retry with the same key and arguments returns the first result (or joins it while it is still running) instead of generating again. `mergeCapabilities(remote, overlay)` keeps server capability values and takes only presentation fields (`name`, `description`, `badges`, `icon`, `group`) and overlay-only models from the overlay.
+- **Provenance**: `createProvenance({ rawPrompt, templates, bindings, values, model, plan })` pins the exact bodies and versions of every template the prompt reached, and records the variable values, the resolved prompt with its source map, the planned settings, adjustments and references. `serializeProvenance` / `parseProvenance` are versioned. `recreateRequest(provenance)` returns the request that was sent, and `replayProvenancePrompt` re-resolves the prompt from the pinned bodies.
+- **Lookups and progress**: `createBatchResolver({ fetch, maxBatch, delayMs })` batches and dedupes lookups; a failed batch resolves its keys as empty instead of retrying. `estimateJobProgress({ startedAt, now, expectedMs })` returns a time-based percent that stays at or below 95 until `done`, and a label such as `~2m left` or `Almost done…`. `expectedDurationFor(model, request)` uses the model's `timing`.
+- **Forms**: `getGenerationControls(model)` and `getReferenceSlots(model, request)` describe the controls that the React and Svelte `<GenerationSettings>` render.
+
 ### Document structure and autocorrect
 
 Opt-in preset options add Word/Pages-style document structure:
@@ -239,8 +299,43 @@ Each module is also available as a subpath import:
 | `@pixerate/editor/canvas` | Node-graph layout (needs the optional `@dagrejs/dagre` peer), placement, trajectories, displacement, clipboard and streaming layout helpers |
 | `@pixerate/editor/agent` | MCP tool schemas, a planner for agent-driven canvas edits, and the dynamic `ToolRegistry` with editor/spreadsheet tool providers |
 | `@pixerate/editor/commands` | `CommandRegistry`, `ShortcutMap`, palette ranking, `createCommandToolProvider` and built-in history / arrange / spreadsheet commands (no third-party imports) |
+| `@pixerate/editor/persistence` | Autosave and crash recovery (`createAutosaveController`, `createRecoveryPolicy`, `createRevisionTracker`), storage adapters (memory, localStorage, IndexedDB, OPFS) and document migration (`migrateDocument`, `loadSections`, `LoadReport`) (no third-party imports) |
+| `@pixerate/editor/generation` | Model capability descriptors, `planGenerationRequest`, `capabilitiesToJsonSchema`, `createGenerationToolProvider`, provenance, `createBatchResolver` and job-progress estimates (no third-party imports) |
 
-The root entry (`@pixerate/editor`) re-exports everything except canvas, agent, commands and image editor, including TipTap. Import from the narrowest subpath you need: `grammar`, `history`, `spreadsheet`, `commands` and `image-editor` have no third-party imports, so a spreadsheet-only app bundles no TipTap, markdown or dagre code. The package is marked `sideEffects: false`, so unused root exports are also tree-shaken.
+The root entry (`@pixerate/editor`) re-exports everything except canvas, agent, commands, persistence, generation and image editor, including TipTap. Import from the narrowest subpath you need: `grammar`, `history`, `spreadsheet`, `commands`, `persistence` and `image-editor` have no third-party imports, so a spreadsheet-only app bundles no TipTap, markdown or dagre code. The package is marked `sideEffects: false`, so unused root exports are also tree-shaken.
+
+## Autosave, crash recovery and document migration
+
+```ts
+import {
+  createAutosaveController,
+  createIndexedDbAdapter,
+  createRevisionTracker,
+  formatRecoveryMessage,
+} from "@pixerate/editor/persistence";
+
+const revisions = createRevisionTracker({ history, dirty: bindDirtyToHistory({ history, getValue }) });
+const autosave = createAutosaveController({
+  storage: createIndexedDbAdapter("my-app"), // or createLocalStorageAdapter / createOpfsAdapter / createMemoryStorage
+  key: "doc-42",
+  getSnapshot: () => doc,
+  revision: revisions.revision,
+  savedRevision: revisions.savedRevision,
+  name: "Quarterly plan",
+});
+revisions.subscribe(() => autosave.notify());
+
+const recovered = await autosave.checkRecovery(); // { snapshot, meta: { time, name, revision } } | null
+if (recovered && confirm(formatRecoveryMessage(recovered.meta))) load(recovered.snapshot);
+else if (recovered) await autosave.discardRecovery();
+autosave.ready(); // hydration gate: nothing is written before this
+addEventListener("pagehide", () => autosave.flushNow());
+// after an explicit save: autosave.markClean() retires the snapshot, but only one this session wrote
+```
+
+Snapshots are written `debounceMs` after the last edit and at least every `interval` while edits keep coming; failed writes retry with exponential backoff (`retryBaseMs` doubling to `retryMaxMs`). `createRecoveryPolicy` is the pure, clock-injected state machine behind it.
+
+`migrateDocument(json, { currentVersion, steps: { 1: (doc) => … } })` upgrades stored JSON one version at a time and returns a `LoadReport`: `migratedFrom`, `readOnly` (a newer version, or a failed step: show it but never save over it) and `unknownKeys`. `loadSections(doc, { key: { parse, defaults } })` falls back to defaults one section at a time and keeps unknown keys; `loadDocument` does both. `loadImageEditorDocument(json)` (`@pixerate/editor/image-editor`) applies them to `SerializedImageEditorState`.
 
 ## History gestures, marks and dirty tracking
 

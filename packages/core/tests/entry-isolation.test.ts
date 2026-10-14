@@ -26,7 +26,7 @@ function reachablePackages(entry: string): Set<string> {
 }
 
 describe("subpath entry isolation", () => {
-  it.each(["spreadsheet/index.js", "image-editor/index.js", "history/index.js", "grammar/index.js", "commands/index.js"])(
+  it.each(["spreadsheet/index.js", "image-editor/index.js", "history/index.js", "grammar/index.js", "commands/index.js", "persistence/index.js", "generation/index.js"])(
     "%s pulls in no third-party packages",
     (entry) => {
       expect([...reachablePackages(entry)]).toEqual([]);
@@ -35,6 +35,11 @@ describe("subpath entry isolation", () => {
 
   it("canvas/index.js only pulls in dagre", () => {
     expect([...reachablePackages("canvas/index.js")]).toEqual(["@dagrejs/dagre"]);
+  });
+
+  it("compare/index.js only pulls in TipTap / ProseMirror", () => {
+    const packages = [...reachablePackages("compare/index.js")];
+    expect(packages.every((name) => name === "@tiptap/core" || name.startsWith("@tiptap/pm/"))).toBe(true);
   });
 
   it("root entry does not pull in dagre", () => {

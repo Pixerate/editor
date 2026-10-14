@@ -18,7 +18,12 @@
     hitTestAnnotation,
     normalizeProcessVersion,
     LATEST_PROCESS_VERSION,
+    IMAGE_ADJUSTMENT_CONTROLS,
+    readAdjustmentControls,
   } from '@pixerate/editor/image-editor';
+  import ControlSlider from './ControlSlider.svelte';
+  import Histogram from './Histogram.svelte';
+  import AdjustmentLayersPanel from './AdjustmentLayersPanel.svelte';
   import { onDestroy, untrack } from 'svelte';
   import { createReactiveImageEditor, type ReactiveImageEditor } from './imageEditorState.svelte.js';
 
@@ -886,150 +891,37 @@
             </button>
           </div>
 
-          <!-- Brightness -->
-          <div>
-            <div class="flex justify-between text-slate-400 mb-1">
-              <span>Brightness</span>
-              <span class="font-mono">{editor.state.adjustments.brightness}</span>
-            </div>
-            <input
-              type="range"
-              min="-100"
-              max="100"
-              value={editor.state.adjustments.brightness}
-              oninput={(e) => editor.setAdjustments({ brightness: Number((e.target as HTMLInputElement).value) })}
-              class="w-full accent-indigo-500"
-            />
-          </div>
+          <Histogram histogram={editor.histogram} />
 
-          <!-- Contrast -->
-          <div>
-            <div class="flex justify-between text-slate-400 mb-1">
-              <span>Contrast</span>
-              <span class="font-mono">{editor.state.adjustments.contrast}</span>
-            </div>
-            <input
-              type="range"
-              min="-100"
-              max="100"
-              value={editor.state.adjustments.contrast}
-              oninput={(e) => editor.setAdjustments({ contrast: Number((e.target as HTMLInputElement).value) })}
-              class="w-full accent-indigo-500"
+          {#each IMAGE_ADJUSTMENT_CONTROLS as spec (spec.id)}
+            <ControlSlider
+              {spec}
+              value={readAdjustmentControls(editor.state.adjustments)[spec.id]}
+              disabled={spec.requiresProcess !== undefined && legacyProcess}
+              onchange={(v) => editor.setAdjustments({ [spec.id]: v })}
             />
-          </div>
-
-          <!-- Saturation -->
-          <div>
-            <div class="flex justify-between text-slate-400 mb-1">
-              <span>Saturation</span>
-              <span class="font-mono">{editor.state.adjustments.saturation}</span>
-            </div>
-            <input
-              type="range"
-              min="-100"
-              max="100"
-              value={editor.state.adjustments.saturation}
-              oninput={(e) => editor.setAdjustments({ saturation: Number((e.target as HTMLInputElement).value) })}
-              class="w-full accent-indigo-500"
-            />
-          </div>
-
-          <!-- Exposure -->
-          <div>
-            <div class="flex justify-between text-slate-400 mb-1">
-              <span>Exposure</span>
-              <span class="font-mono">{editor.state.adjustments.exposure}</span>
-            </div>
-            <input
-              type="range"
-              min="-100"
-              max="100"
-              value={editor.state.adjustments.exposure}
-              oninput={(e) => editor.setAdjustments({ exposure: Number((e.target as HTMLInputElement).value) })}
-              class="w-full accent-indigo-500"
-            />
-          </div>
-
-          <!-- Temperature / Warmth -->
-          <div>
-            <div class="flex justify-between text-slate-400 mb-1">
-              <span>Warmth / Temperature</span>
-              <span class="font-mono">{editor.state.adjustments.temperature}</span>
-            </div>
-            <input
-              type="range"
-              min="-100"
-              max="100"
-              value={editor.state.adjustments.temperature}
-              oninput={(e) => editor.setAdjustments({ temperature: Number((e.target as HTMLInputElement).value) })}
-              class="w-full accent-indigo-500"
-            />
-          </div>
-
-          <!-- Tint (process 2 white balance) -->
-          <div>
-            <div class="flex justify-between text-slate-400 mb-1">
-              <span>Tint</span>
-              <span class="font-mono">{editor.state.adjustments.tint ?? 0}</span>
-            </div>
-            <input
-              type="range"
-              min="-100"
-              max="100"
-              aria-label="Tint"
-              disabled={legacyProcess}
-              value={editor.state.adjustments.tint ?? 0}
-              oninput={(e) => editor.setAdjustments({ tint: Number((e.target as HTMLInputElement).value) })}
-              class="w-full accent-indigo-500 disabled:opacity-40"
-            />
-          </div>
-
-          {#if legacyProcess}
-            <div
-              class="flex items-center justify-between gap-2 rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-[10px] text-amber-200"
-              data-testid="image-editor-process-notice"
-            >
-              <span>Legacy rendering (process 1). Tint needs the current process.</span>
-              <button
-                type="button"
-                onclick={() => editor.upgradeProcess()}
-                class="shrink-0 rounded bg-amber-500/20 px-2 py-0.5 hover:bg-amber-500/30"
+            {#if spec.id === 'tint' && legacyProcess}
+              <div
+                class="flex items-center justify-between gap-2 rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-[10px] text-amber-200"
+                data-testid="image-editor-process-notice"
               >
-                Update
-              </button>
-            </div>
-          {/if}
+                <span>Legacy rendering (process 1). Tint needs the current process.</span>
+                <button
+                  type="button"
+                  onclick={() => editor.upgradeProcess()}
+                  class="shrink-0 rounded bg-amber-500/20 px-2 py-0.5 hover:bg-amber-500/30"
+                >
+                  Update
+                </button>
+              </div>
+            {/if}
+          {/each}
 
-          <!-- Blur -->
-          <div>
-            <div class="flex justify-between text-slate-400 mb-1">
-              <span>Blur</span>
-              <span class="font-mono">{editor.state.adjustments.blur}px</span>
-            </div>
-            <input
-              type="range"
-              min="0"
-              max="30"
-              value={editor.state.adjustments.blur}
-              oninput={(e) => editor.setAdjustments({ blur: Number((e.target as HTMLInputElement).value) })}
-              class="w-full accent-indigo-500"
-            />
-          </div>
-
-          <!-- Opacity -->
-          <div>
-            <div class="flex justify-between text-slate-400 mb-1">
-              <span>Opacity</span>
-              <span class="font-mono">{Math.round(editor.state.adjustments.opacity * 100)}%</span>
-            </div>
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.05"
-              value={editor.state.adjustments.opacity}
-              oninput={(e) => editor.setAdjustments({ opacity: Number((e.target as HTMLInputElement).value) })}
-              class="w-full accent-indigo-500"
+          <div class="border-t border-slate-700/60 pt-3">
+            <AdjustmentLayersPanel
+              controller={editor.controller}
+              layers={editor.state.adjustments.layers}
+              histogram={editor.histogram}
             />
           </div>
         </div>

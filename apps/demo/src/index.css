@@ -89,3 +89,7 @@
 .animate-gradient {
   background-size: var(--bg-size, 200% 100%);
 }
+
+/* Find & Replace match highlights (FindReplace extension decorations) */
+.pixerate-find-match { background: rgb(250 204 21 / 0.3); border-radius: 2px; }
+.pixerate-find-match-current { background: rgb(249 115 22 / 0.6); outline: 1px solid rgb(249 115 22); }

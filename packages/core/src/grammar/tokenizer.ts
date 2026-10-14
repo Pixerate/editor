@@ -131,9 +131,29 @@ export function tokenizePromptWithDiagnostics(text: string): TokenizeResult {
   matchConditionalTags(
     conditionals.map((m) => ({ conditional: m.conditional, name: m.value })),
   ).forEach((result, i) => {
-    if (!result.error) return;
     const tag = conditionals[i];
+    const parsed = result.comparison;
+    if (!result.error) {
+      if (parsed?.comparison && tag.conditional !== "end") {
+        // `{?amount>100}` closed by `{/amount}`: a comparison on `amount`.
+        tag.value = parsed.subject;
+        tag.comparison = parsed.comparison;
+      }
+      return;
+    }
     literal.add(tag);
+    if (result.error === "invalid-condition") {
+      // Reported once, on the opening tag.
+      if (tag.conditional === "end") return;
+      diagnostics.push({
+        code: result.error,
+        message: `Invalid condition "${tag.raw}": ${parsed?.error ?? "malformed comparison"}`,
+        name: parsed?.subject ?? tag.value,
+        start: tag.start,
+        end: tag.end,
+      });
+      return;
+    }
     diagnostics.push({
       code: result.error,
       message:
@@ -145,6 +165,8 @@ export function tokenizePromptWithDiagnostics(text: string): TokenizeResult {
       end: tag.end,
     });
   });
+  // Keep diagnostics in document order (an invalid pair is found at its close).
+  diagnostics.sort((a, b) => a.start - b.start);
 
   const tokens: Token[] = [];
   let currentIdx = 0;

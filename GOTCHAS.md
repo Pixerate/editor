@@ -431,6 +431,18 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: `AddMarkStep` / `RemoveMarkStep` (and `ReplaceStep`s whose content only differs in marks) say *where* formatting changed; `ReplaceAroundStep` (setBlockType, setNodeMarkup, wrap, lift) and `AttrStep` say *which* textblocks changed. Only the old document (`oldState.doc`, or the record already stored on the old node) knows the original state.
 - **Solution / Workaround**: Steps only collect ranges/textblocks (mapped to the final document). Afterwards each text segment is mapped back with the inverted mapping to the old document and its original formatting (the old `formatChange.before`, or its marks) is compared with the current marks; textblocks compare the original snapshot (type, attrs minus ignored ones like outline `id`, wrapper types) with the final one. Equal → the record is removed (the change was reverted). Textblocks with no counterpart in the old document (splits) are skipped, and `blockChange` uses `keepOnSplit: false`. Restoring wrappers on reject ports prosemirror-schema-list's `sinkListItem` / `liftToOuterList` for list items and uses `lift` / `wrap` + `join` otherwise. Limitation: outdenting a nested item that has following siblings re-parents those siblings without changing their depth, so they get no record and rejecting the outdent nests them one level deeper. Paragraph splits/joins are not tracked at all. Converting to a code block drops incompatible marks, which reject cannot restore.
 
+### [core/compare] Whole Paragraphs Have No Inline Representation, So Compare Records Them as `blockChange` Operations
+
+- **Issue / Symptom**: Marking an inserted paragraph's text with `insertion` (and a deleted one's with `deletion`) is not enough: rejecting the insertion (or accepting the deletion) removes the text but leaves an empty paragraph, so "reject all" never reproduced the original document after `compareDocuments`.
+- **Root Cause**: ProseMirror block boundaries are not characters (unlike Word's paragraph marks), and `TrackChanges` deliberately does not track paragraph splits/joins.
+- **Solution / Workaround**: `compareDocuments` records wholly inserted/deleted blocks as `blockChange` records with `operation: "insert" | "delete"` on every textblock inside (one change id per run; the text itself is not marked). `applyDecision` removes accepted deletions / rejected insertions first (`removeBlocks`), taking along containers whose textblocks are all removed (list items, lists, quotes, rows), and replaces an emptied document with an empty paragraph. The tracker never rewrites or clears records that have an `operation`. `getEditorText` strips tracked text with `<ins>`/`<del>` regexes, which cannot see whole-block operations, so documents containing them are resolved with `resolveTrackedChanges` and re-serialized before the text is extracted. Limits: atom blocks (images, rules) and textblocks without the `blockChange` attribute cannot carry a record (reported in `summary.notHonoured`); `blockChange` is `keepOnSplit: false`, so pressing Enter inside an inserted block leaves the new half untracked. Container attribute changes (task `checked`, ordered-list `start`) are not tracked either.
+
+### [core/compare] Word Tokens With Trailing White Space Misalign Before Punctuation
+
+- **Issue / Symptom**: With "word + trailing space" tokens (as in wordcraft), `Old line.` → `New line here.` reported `Old line` deleted and `New line here` inserted, because `line` (before `.`) and `line ` are different tokens.
+- **Root Cause**: The trailing white space is part of the token key, so the same word differs by position.
+- **Solution / Workaround**: Words, white-space runs and symbols are separate tokens; equal runs that are only white space between two changes are absorbed into one replacement (`stretches()`), so `a b c` → `x y z` stays a single deletion + insertion instead of alternating. Note that `ignoreCase`/`ignoreWhitespace` keep the revised text without a change, so reject-all cannot restore those differences (by design), and code blocks in a headless `getSchema()` schema (no tracked marks, see the code-block entry above) are compared as whole-block replacements.
+
 ### [react/spreadsheet] Cell Editor Drafts Must Reach the Controller
 
 - **Issue / Symptom**: In the React `SpreadsheetEditor`, text typed into a cell was thrown away on Enter, Tab or blur (the cell kept its old value). Only the formula bar worked. Found in the demo; no jsdom test typed into the cell input.
@@ -471,6 +483,28 @@ All contributors and AI assistants should check this file before starting work a
   3. A future look change adds process 3 and a new branch in `applyAdjustments`; never edit process 1 or 2 output in place (bug fixes for broken output excepted). The legacy pixel snapshot in `tests/image-editor-color.test.ts` guards this.
   4. Process 2 is identity at neutral within ±1 only because the tone LUT's highlight shoulder degenerates to the identity when headroom is 1 and the encode LUT has 65 536 entries. Keep `headroom = max(1, reach)` per channel; a fixed shoulder would shift unedited highlights.
   5. The renderer's base-canvas cache key must include every field that affects pixels (`tint`, normalised `process`), or switching process shows a stale image.
+
+### [core/image-editor] Adjustment Layers Must Not Change How Layer-Free Edits Load, Save or Render
+
+- **Issue / Symptom**: Adding `layers` to the editor state risked re-serializing every old document (a new schema version, an empty `layers: []`), a stale preview after editing a layer, and a different look for edits that never used layers.
+- **Root Cause**: Saved documents are compared and diffed as JSON; the renderer caches the adjusted base canvas by a key of the fields that affect pixels; and layer maths that ran on every pixel (even as an identity) would round values differently.
+- **Solution / Workaround**:
+  1. Layers live in `adjustments.layers` and are **absent** (not `[]`) when there are none: `normalizeStoredAdjustments`, `setAdjustments` and the layer methods delete the key for an empty list. Only states with layers serialize as `version: 2`; layer-free states stay `version: 1`, byte for byte. Load through `migrateSerializedImageEditorState` / `normalizeAdjustmentLayers`, which clean and clamp stored layers.
+  2. `applyAdjustmentLayers` runs after the base process (1 or 2) and before blur, on the encoded 8-bit result, and skips neutral, disabled and zero-opacity layers entirely (`compileAdjustmentLayer` returns `null` for the identity), so no layers means no extra pass.
+  3. The renderer's base key includes `adjustmentLayersKey(layers)`. Per-layer LUTs are cached by `kind + JSON(params)`, so slider drags only recompile the layer that changed.
+  4. Levels work on whole levels (quantum 255) like Photoshop's 8-bit documents; Curves and Levels apply each channel's record before the master.
+
+### [core/image-editor] Canvas `soft-light` Is Not Photoshop's Soft Light; Scalar Blend Fallback Must Stay Inside the Clip
+
+- **Issue / Symptom**: Annotations drawn with `globalCompositeOperation = 'soft-light'` looked different from adjustment layers in Soft Light, and modes such as Linear Burn, Pin Light, Hard Mix, Subtract and Divide have no canvas operation at all.
+- **Root Cause**: Canvas implements the W3C Compositing soft light; Photoshop's uses a different formula for a light source (`cs > 0.5`: `2·cb·(1 − cs) + √cb·(2·cs − 1)`). The other modes simply do not exist in Canvas 2D.
+- **Solution / Workaround**: `BLEND_MODES[].canvas` lists an operation only where the maths match (`soft-light` is `null`). For the rest, `drawAnnotation` draws the annotation on a same-size layer with the same transform, blends it into a copy of the target pixels with `blendImageData`, and draws the result back with `globalCompositeOperation = 'copy'` under an identity transform: `copy` only replaces pixels inside the current clip, so the image-region clip still holds. Without pixel access (tainted or headless canvas) it falls back to a normal draw.
+
+### [svelte/image-editor] Subscribing to a Controller Inside `$effect` Loops Forever
+
+- **Issue / Symptom**: Mounting the Svelte `AdjustmentLayersPanel` threw `effect_update_depth_exceeded`, and the existing image editor test took 9 s before failing.
+- **Root Cause**: `controller.subscribe(listener)` calls the listener synchronously; a listener doing `tick++` reads and writes `tick` inside the effect, so the effect depends on the state it writes.
+- **Solution / Workaround**: Subscribe inside `untrack(() => controller.subscribe(...))` and return the unsubscribe function. Keep large per-render objects such as the histogram in `$state.raw`, so they are not deep-proxied on every render.
 
 
 ### [core/history] Keyed Gestures Merge Commands, so Commands Must Be Absolute or Untagged
@@ -524,3 +558,107 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Files ported from the MIT/Apache ArtCraft apps carry a header comment and a root `THIRD_PARTY_NOTICES.md`, but neither reached npm: tsup strips comments from `dist`, and `@pixerate/editor` publishes only `dist`.
 - **Root Cause**: MIT requires the copyright and permission notice in every copy, including the published package. A root-level file is outside the package's `files`.
 - **Solution / Workaround**: `packages/core/THIRD_PARTY_NOTICES.md` is a copy listed in `files`. `tests/third-party-notices.test.ts` fails if it drifts from the root file. When porting more code, add a section to the root file and copy it into the package (and into `packages/react` / `packages/svelte` too if ported code lands there).
+
+### [core/persistence] Autosave Must Not Overwrite the Previous Session's Snapshot Before the User Decides
+
+- **Issue / Symptom**: After a crash, reopening the app showed the "Restore unsaved changes?" prompt, but the snapshot it offered was already replaced by the freshly loaded (unchanged) document, or by a clean meta written when the new session "saved".
+- **Root Cause**: Autosave started as soon as the editor mounted: loading the document counted as a change, and a save in the new session retired whatever snapshot was in storage, including one this session never wrote.
+- **Solution / Workaround**: `createAutosaveController` writes nothing until `ready()` (the hydration gate); `useAutosave` / `createAutosave` call it only after the recovery check found nothing or the user chose Restore / Discard. `markClean()` only writes a clean meta for a snapshot this session wrote (`createRecoveryPolicy().ownsSnapshot`), so a clean start never consumes an earlier session's snapshot. The snapshot is written before its dirty meta, so the meta never points at a missing snapshot.
+
+### [core/persistence] Revision Listeners Can Run Before the Dirty Binding Updates
+
+- **Issue / Symptom**: With `bindDirtyToHistory` and an autosave both subscribed to the same `HistoryManager`, undoing back to the saved state still wrote a snapshot (or a save was not noticed) depending on subscription order.
+- **Root Cause**: `HistoryManager` notifies listeners in subscription order. If the autosave's listener runs first, the binding's `dirty` flag is still stale when it is read.
+- **Solution / Workaround**: `createRevisionTracker` reads the dirty flag lazily in `savedRevision()`, and `AutosaveController.notify()` never ticks synchronously (it schedules a timer), so every history listener has run before the policy looks at the revisions. A stale clean read heals itself: when the binding then flips to dirty, the tracker bumps the revision.
+
+### [core/persistence] OPFS Writes: `createWritable` and `move` Are Not Everywhere
+
+- **Issue / Symptom**: An OPFS adapter that works in Chromium rejects every write in some Safari versions, or a crash mid-write leaves a truncated file.
+- **Root Cause**: `FileSystemFileHandle.createWritable()` is missing on Safari's main thread in older versions (only `createSyncAccessHandle` in workers), and `FileSystemHandle.move()` (rename) is not universally available. Writing a file in place is not atomic.
+- **Solution / Workaround**: `createOpfsAdapter` writes `<file>.tmp` and renames it over `<file>` where `move` exists, and otherwise alternates two slots (`.a` / `.b`) and swaps a `.ptr` file only after the slot is complete. Without `createWritable`, `set` rejects with `StorageUnavailableError`; feature-detect with `isOpfsAvailable()` and fall back to `createIndexedDbAdapter` or `createLocalStorageAdapter`. Only localStorage writes are synchronous, so on `pagehide` it is the only backend guaranteed to finish; `flushNow()` still starts the async write for the others.
+### [core/generation] Prompt Limits Count Resolved Text, So the Planner Cannot Truncate Them
+
+- **Issue / Symptom**: A 40-character prompt such as `{{style}} portrait` passed a model's 1000-character limit in the UI, but the provider rejected it: the template expanded to 1,400 characters. Truncating `request.prompt` to fix it cut the raw template text, which did not shorten the resolved prompt and could break a `{{tag}}` in half.
+- **Root Cause**: Models limit what they receive (the resolved prompt), but the request carries the raw template. The length that counts and the text you can edit are different strings.
+- **Solution / Workaround**: `prompt.countResolved` defaults to `true`. Pass the resolved text as `planGenerationRequest(…, { resolvedPrompt })`. When the resolved text is over the limit, the planner reports an error under every strategy and leaves the prompt alone. It only truncates when it measured the same string it would edit. `capabilitiesToJsonSchema` puts `maxLength` on `prompt` only when `countResolved: false`; otherwise the limit appears only in the description, so schema validation of a raw template does not give false passes or failures.
+
+### [core/generation] Retried `generate` Calls Need Idempotency Keys That Compare Arguments and Forget Failures
+
+- **Issue / Symptom**: An agent that timed out waiting for `generate` retried and was billed for two generations. A naive "seen this key" cache then made things worse: a call that failed upstream could never be retried, and reusing a key with a different prompt silently returned the old result.
+- **Root Cause**: MCP clients retry on transport errors without knowing whether the first call ran. A key on its own does not say whether the retry is the same request.
+- **Solution / Workaround**: `createGenerationToolProvider` stores `key → { signature, promise }`. The signature is a stable (sorted-key) JSON of the other arguments. A retry with the same key and arguments while the call is still running joins the same promise; once it has finished, the retry returns the cached result marked `deduplicated: true`. The same key with different arguments is an error. A rejected call removes its key so it can be retried. Keys are evicted oldest-first past `maxIdempotencyKeys`. The tool keeps `destructiveHint: true` together with `idempotentHint: true`, because repeating it with the same arguments has no further effect.
+
+### [core/generation] Nearest-Option Snapping Hits Exact Ties on Log Scales
+
+- **Issue / Symptom**: Snapping `720p` to `["480p", "1080p"]` or `1:1` to `["9:16", "16:9"]` returned whichever option came first, which changed when the server reordered its options.
+- **Root Cause**: Resolutions and aspect ratios are compared on a log scale (pixel count, width/height). Common presets form geometric series, so 720p lies exactly between 480p and 1080p (both ratios are 1.5), and 1:1 lies exactly between 9:16 and 16:9.
+- **Solution / Workaround**: `snapToOption` compares distances with an epsilon and breaks ties by rank, never by option order: `downgrade` picks the lower option, while `upgrade` and `nearest` pick the higher one. Integer and step rounding use the same rule (`count: 3` against `[2, 4]`). Tests for snapping should include an exact tie.
+
+### [core/generation] Batch Resolvers Must Resolve Each Batch's Own Promises When the Cache Is Cleared Mid-Flight
+
+- **Issue / Symptom**: After `resolver.clear()` was called while a batch was still fetching, the `load()` promises waiting on that batch never settled.
+- **Root Cause**: The batch looked up waiters in the shared in-flight map when the fetch returned, but `clear()` had already emptied that map.
+- **Solution / Workaround**: `createBatchResolver` captures each batch's pending entries when the fetch starts and always resolves them. It only writes the result to the cache if the in-flight entry is still the same object, so values from before a `clear()` do not come back. A failed batch resolves its keys to `undefined` and records them as failed (`failed(key)`), so a bad response does not cause a retry storm. `clear(key)` allows a retry.
+### [core/grammar] New Syntax Inside `{?…}` Collides With Names That Were Already Valid
+
+- **Issue / Symptom**: Adding comparison conditions as `{?amount>100}…{/amount>100}` (or any new syntax inside `{?…}`) would have silently changed prompts that already used `=`, `<` or `>` in a section name, and `JSX` attribute strings like `defaultSource="a\nb"` in tests kept a literal backslash-n instead of a newline.
+- **Root Cause**: A section name was "anything but `|` and `\`", so every candidate syntax inside the braces (`{?a>1}`, `{?=a>1}`, even `{?a|>1}`, which is a variable) already meant something. JSX attribute strings are not JavaScript string literals and do not process escapes.
+- **Solution / Workaround**: The comparison is recognised only when the open tag is closed by its bare subject (`{?amount>100}…{/amount}`), a pairing the old grammar always reported as unbalanced; `{?a>1}…{/a>1}` keeps its old meaning. `matchConditionalTags` searches for an exact name or a comparison subject, which picks the same partner as before for every diagnostic-free prompt. `grammar.test.ts` proves this by swapping `= < >` for neutral symbols and comparing old and new results on random prompts. Record-level directives (`{!next}`) were rejected for the same reason: `{!next}` is already an "unless" section. In JSX tests, pass multi-line strings as `{"a\nb"}`.
+### [core/canvas] Auto Layout Must See Flow Changes Before They Are Applied, and Must Not Ping-Pong With Measuring
+
+- **Issue / Symptom**: Deleting a child of an auto layout frame left the frame at its old (hugging) size, and relayout after every measured `dimensions` change could keep re-writing node sizes.
+- **Root Cause**: A React Flow `remove` change only carries the id; once `applyNodeChanges` has run, the node and its `parentId` are gone, so the frame to relayout is unknown. SvelteFlow calls `ondelete` after removing the nodes. Writing `width` / `height` makes xyflow re-measure the node, which emits another `dimensions` change.
+- **Solution / Workaround**: Pass each `onNodesChange` batch through `autoLayout.noteChanges(changes)` *before* applying it (it records the parents of removed nodes) and flush after the nodes update (`useCanvasAutoLayout` flushes in a layout effect, the Svelte rune on a microtask; Svelte's `nodesDeleted(nodes)` reads `parentId` from the deleted node objects). Layout passes only return updates that differ by more than 1e-6 and `flush` writes nothing when there are none, so a re-measure with the same size ends the loop.
+
+### [core/canvas] Child Order in Auto Layout Frames Is the Node Array, Which Must Keep Parents First
+
+- **Issue / Symptom**: Moving a flow child to a new slot by splicing the node array made xyflow warn about (or misplace) the moved node's own children.
+- **Root Cause**: xyflow requires every parent to come before its children in the array. Moving a node later than its descendants breaks that, and moving it earlier than its parent too.
+- **Solution / Workaround**: `moveLayoutChild` puts the siblings back into the array slots they already occupied (in the new order) and then runs a stable parents-first pass. Use it (or `autoLayout.moveChild`) instead of splicing; `zIndex` stays independent of layout order.
+
+### [react/svelte] Spreading a Controller Object Snapshots Its Getters
+
+- **Issue / Symptom**: `useCanvasAutoLayout(...).hasPending` (and `guides` before it was re-declared) never changed after the first render.
+- **Root Cause**: `{ ...controller }` copies the *value* a getter returns at spread time, not the getter.
+- **Solution / Workaround**: Re-declare live properties as getters (or state) on the object the hook / rune returns after the spread, as `useCanvasAutoLayout` and `createCanvasAutoLayout` do for `hasPending` and `guides`.
+### [core/spreadsheet] Number Formats Must Round the 15-Digit Decimal String, Not the Binary Value
+
+- **Issue / Symptom**: `(2.675).toFixed(2)` is `"2.67"` and `(1.005).toFixed(2)` is `"1.00"`, but Excel shows `2.68` and `1.01` with `0.00`. Porting Rust's `format!("{:.*e}")` to `toExponential` also differs on exact ties (Rust rounds half to even, JS picks the larger digit), and `toExponential` stops at 100 digits, too few for the exact expansion of a double (up to 767 digits).
+- **Root Cause**: Excel first writes a number with 15 significant digits, then rounds that decimal string half away from zero. An exact tie at the 16th digit (`1234567890123455`) goes toward zero.
+- **Solution / Workaround**: Always format through `numfmt/decimal.ts` (`decimalDigits` → `fixedFromDigits`), never `toFixed`. It takes 16 digits from `toExponential(15)`; only when the 16th digit is a 5 does it check for an exact tie, using the exact decimal expansion computed with `BigInt` from the double's bits. The tie rules are covered by `tests/number-format.test.ts`.
+
+### [core/spreadsheet] Number Formats See Dates as ISO Text, and the 1900 Leap Day
+
+- **Issue / Symptom**: A date cell (`"2026-03-04"`) formatted with `0.00` or `dddd` must behave like Excel's serial 46085; `dateToSerial` gives serials one too low before 1900-03-01, and serial 60 (the fictitious 1900-02-29) has no ISO text.
+- **Root Cause**: Our engine stores dates as ISO text and times as day fractions, while format codes work on 1900-system serial numbers.
+- **Solution / Workaround**: `dateValueToSerial` (used by `NumberFormat.format`, `formatCellForDisplay` and `TEXT()`) converts ISO text with `serialFromYmd`, which counts the fictitious leap day; `renderDate` maps serial 60 to 2/29/1900 and serial 0 to 1/0/1900, as Excel does. Only ISO text is converted in cell display: other numeric-looking text stays text (Excel shows text through the `@` section). Only the 1900 date system is supported.
+
+### [svelte/spreadsheet] Mutating a Cell Object in Place Does Not Re-Render It
+
+- **Issue / Symptom**: Setting `cell.numberFormat` on the stored cell object and calling `notifyChange()` updated the controller, but the Svelte grid kept showing the old text (React happened to re-render).
+- **Root Cause**: The Svelte grid reads cells through `{@const cell = sheetState.getCell(...)}`; Svelte deriveds compare with `===`, so the same object means nothing downstream re-runs.
+- **Solution / Workaround**: Controller operations replace cell objects (`cells[colId] = { ...cell, numberFormat }`) instead of mutating them. Do the same for spilled display cells (`spillCells.set(id, {...})`).
+
+### [core/spreadsheet] A Format-Only Blank Cell Over a Bound or Column-Formula Value
+
+- **Issue / Symptom**: `setCellNumberFormat` on a bound record cell or a column-formula cell has nowhere to put the format: those cells are derived, and a stored blank cell normally hides the derived value (it means "cleared").
+- **Root Cause**: `getCell` returns a stored cell with empty `raw` before looking at derived values.
+- **Solution / Workaround**: A stored blank cell with `explicitNumberFormat` is treated as format-only: `getCell` returns the derived value with that format (`{ ...derived, numberFormat }`). Known limitation: a cleared column-formula cell that also has an explicit format therefore shows the column value again.
+### [core/find-replace] JavaScript `RegExp` Backtracks, So Word Wildcards Cannot Be Translated to a `RegExp`
+
+- **Issue / Symptom**: Translating Word's wildcard patterns to a `RegExp` (as WordCraft does for Rust's linear-time `regex` crate) freezes the tab on patterns such as `(a@)@b` (`(a+)+b`) or `*a*a*b` (`.*?a.*?a.*?b`) against a long paragraph without a match: exponential or high-polynomial backtracking inside a single `exec`, which cannot be interrupted.
+- **Root Cause**: V8's irregexp is a backtracking engine. Rejecting nested quantifiers is not enough: several adjacent lazy `*` runs are polynomial (O(n^k)), and a time check between `exec` calls never runs while one call is stuck.
+- **Solution / Workaround**: Special-character and wildcard patterns compile to a small program run by a Pike VM (`packages/core/src/extensions/find-replace/pattern.ts`), which is O(text × program) for any pattern; counted repeats are expanded and the program is capped at 20 000 instructions (`too_complex`), the Find text at 1 024 characters (`too_long`), and every search has a shared budget (VM steps, wall-clock `timeLimitMs`, `maxMatches`) reported as `truncated`. Only the raw `regex` option uses `RegExp`: it rejects a repeated group containing a repeat (`(a+)+`, `(\w*)*`) and checks the deadline before each `exec`, but cannot stop a single runaway call; leave regex mode out of your UI if users can search very large documents. Also: in a VM thread loop, when no thread is alive at a position (an assertion like `<` failed), advance and bump the list generation instead of stopping, or later matches are missed.
+
+### [core/find-replace] Search Text Must Skip Tracked Deletions but Keep Their Neighbours as Context
+
+- **Issue / Symptom**: With Track Changes on, Replace found its own struck-through text again and never advanced; `catfish` was found across a deleted space; or `fish` (whole word) was found right after a deleted space although the live text reads `catfish`.
+- **Root Cause**: Tracked deletions stay in the document with a `deletion` mark, and replacing while tracking re-inserts the found text as a deletion. Simply concatenating all text nodes searches deleted text; searching each live run separately loses the neighbouring live characters that word-boundary assertions need.
+- **Solution / Workaround**: Build one search string per textblock from the non-deleted runs (with a per-character map back to document positions), record a "cut" wherever deleted text was skipped, and search each cut segment with the whole string as context (the Pike VM checks assertions against the full string; the regex path searches a prefix with `lastIndex`). Paragraphs are only joined (with `\r`) when the pattern can match `^p`. Replacements go through ordinary `replaceWith`, so the `TrackChanges` `appendTransaction` turns them into tracked deletions and insertions in the same undo step.
+
+
+### [core/serializers] Lazy and `[^>]*` Regexes Are Quadratic (or Cubic) on Malformed HTML
+
+- **Issue / Symptom**: `extractMentions` took 227 s on 4,000 repetitions of `<span data-type='mention' ` (no `>`), and `htmlToPlainText` grew 4× per doubling of such input. A "linear time" test only passed because its input was small enough to stay under an absolute 1 s budget, and it flaked once the suite grew.
+- **Root Cause**: `/<span\b[^>]*\b(?:a|b)[^>]*>/` backtracks over every split of the two `[^>]*` runs (cubic) when no `>` follows; `/<[^>]+>/g`, `/<pre[\s\S]*?<\/pre>/g`, ```` /```[\s\S]*?```/g ```` and `/\]\([^)]*\)/g` rescan to the end of the input from every opener that has no closer (quadratic).
+- **Solution / Workaround**: Use the scanners in `packages/core/src/serializers/html-scan.ts` (`findTagSpans`, `replaceTagSpans`, `stripTags`, `replaceDelimited`). They find each closer once, reuse it until the scan passes it, and stop when none is left. `tests/html-scan.test.ts` checks they match the old regexes on random input and that time grows linearly. When testing performance, assert growth between two sizes rather than an absolute time, which depends on machine load.

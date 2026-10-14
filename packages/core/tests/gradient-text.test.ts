@@ -61,4 +61,21 @@ describe("GradientText variable and conditional decorations", () => {
       ["{/x}", "unexpected-close"],
     ]);
   });
+
+  it("decorates comparison conditions and flags malformed ones", () => {
+    const dom = render("<p>{?amount>100}big{/amount} {?n=}x{/n}</p>");
+    const tags = Array.from(dom.querySelectorAll("[data-conditional]"));
+    expect(
+      tags.map((t) => [t.textContent, t.getAttribute("data-variable-condition")]),
+    ).toEqual([
+      ["{?amount>100}", "amount"],
+      ["{/amount}", "amount"],
+    ]);
+    const errors = Array.from(dom.querySelectorAll("[data-conditional-error]"));
+    expect(errors.map((e) => [e.textContent, e.getAttribute("data-conditional-error")])).toEqual([
+      ["{?n=}", "invalid-condition"],
+      ["{/n}", "invalid-condition"],
+    ]);
+    expect(errors[0].getAttribute("title")).toContain("Missing value");
+  });
 });

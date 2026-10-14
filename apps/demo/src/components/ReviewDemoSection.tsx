@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { Comments, CommentStore, TrackChanges, getEditorText } from "@pixerate/editor";
 import {
   useEditor,
@@ -7,10 +7,20 @@ import {
   CommentButton,
   CommentsPanel,
   ReviewToolbar,
+  useDocumentCompare,
   useTrackChanges,
 } from "@pixerate/editor-react";
 
 const reviewer = { id: "demo-user", name: "You" };
+
+const ORIGINAL_VERSION = `<h3>Quarterly plan</h3>
+<p>The team will ship the editor in March and review feedback in April.</p>
+<ul><li><p>Write the docs</p></li><li><p>Fix the bugs</p></li></ul>
+<p>This paragraph was removed.</p>`;
+
+const REVISED_VERSION = `<h2>Quarterly plan</h2>
+<p>The team will ship the <strong>new</strong> editor in February and review feedback in April.</p>
+<ol><li><p>Write the docs</p></li><li><p>Fix the critical bugs</p></li><li><p>Plan the launch</p></li></ol>`;
 
 /**
  * Comments and tracked changes (suggestion mode) on a rich-text document.
@@ -34,6 +44,10 @@ export const ReviewDemoSection: React.FC = () => {
     },
   });
   const review = useTrackChanges(editor);
+  const comparison = useDocumentCompare(editor, { author: { id: "compare", name: "Compare" } });
+  const [comparing, setComparing] = useState(false);
+  const [original, setOriginal] = useState(ORIGINAL_VERSION);
+  const [revised, setRevised] = useState(REVISED_VERSION);
 
   if (!editor) return null;
 
@@ -43,6 +57,56 @@ export const ReviewDemoSection: React.FC = () => {
         editor={editor}
         className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-800 bg-slate-900/80 p-2 text-slate-200"
       />
+      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
+        <button
+          type="button"
+          onClick={() => setComparing((open) => !open)}
+          className="rounded border border-slate-700 px-2 py-1 text-slate-200 hover:bg-slate-800"
+        >
+          Compare…
+        </button>
+        {comparison.summary && (
+          <span>
+            Compared: {comparison.summary.insertions} insertions, {comparison.summary.deletions} deletions,{" "}
+            {comparison.summary.formatChanges} formatting, {comparison.summary.blockChanges} block changes
+            {comparison.summary.notHonoured.length > 0 && ` (not tracked: ${comparison.summary.notHonoured.join(" ")})`}
+          </span>
+        )}
+      </div>
+      {comparing && (
+        <div className="grid gap-2 rounded-xl border border-slate-800 bg-slate-900/60 p-3 md:grid-cols-2">
+          <label className="flex flex-col gap-1 text-xs text-slate-400">
+            Original (HTML)
+            <textarea
+              value={original}
+              onChange={(e) => setOriginal(e.target.value)}
+              rows={6}
+              className="rounded border border-slate-700 bg-slate-950 p-2 font-mono text-slate-200"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-slate-400">
+            Revised (HTML)
+            <textarea
+              value={revised}
+              onChange={(e) => setRevised(e.target.value)}
+              rows={6}
+              className="rounded border border-slate-700 bg-slate-950 p-2 font-mono text-slate-200"
+            />
+          </label>
+          <div className="md:col-span-2">
+            <button
+              type="button"
+              onClick={() => {
+                comparison.compare(original, revised);
+                setComparing(false);
+              }}
+              className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-500"
+            >
+              Compare into editor
+            </button>
+          </div>
+        </div>
+      )}
       <div className="grid gap-4 md:grid-cols-[1fr_18rem]">
         <div>
           <BubbleMenu
