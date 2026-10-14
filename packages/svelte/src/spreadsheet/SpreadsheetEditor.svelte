@@ -51,6 +51,18 @@
 
   let gridContainer = $state<HTMLDivElement | null>(null);
   let cellInput = $state<HTMLInputElement | null>(null);
+
+  // Focus the cell editor when it opens, with the caret after the draft
+  // (e.g. the key that started editing), so typing goes into the cell.
+  $effect(() => {
+    if (!cellInput) return;
+    // Editing started from the formula bar keeps focus there.
+    const active = typeof document !== 'undefined' ? document.activeElement : null;
+    if (active instanceof HTMLInputElement && active !== cellInput) return;
+    cellInput.focus();
+    const end = cellInput.value.length;
+    cellInput.setSelectionRange(end, end);
+  });
   let resizingColId = $state<string | null>(null);
   let hoveredColId = $state<string | null>(null);
   let resizeStartX = $state(0);
@@ -76,6 +88,24 @@
     return new Set(filter?.enabled ? filter.rules.map((r) => r.colId) : []);
   });
   let selection = $derived(sheetState.selectedRange ? normalizeRange(sheetState.selectedRange) : null);
+  // The dynamic array under the active cell (anchor or spilled cell) gets a border.
+  let activeSpill = $derived.by(() => {
+    void sheetState.document;
+    const cell = sheetState.activeCell;
+    return cell ? sheetState.controller.getSpillAt(cell.row, cell.col) : null;
+  });
+
+  /** Thin border drawn on the outer edges of a dynamic array's spill range. */
+  function spillBorderStyle(range: CellRange, row: number, col: number): string {
+    const line = '1px solid color-mix(in srgb, var(--primary, #6366f1) 60%, transparent)';
+    return (
+      'position: absolute; inset: 0; pointer-events: none; z-index: 5;' +
+      (row === range.startRow ? ` border-top: ${line};` : '') +
+      (row === range.endRow ? ` border-bottom: ${line};` : '') +
+      (col === range.startCol ? ` border-left: ${line};` : '') +
+      (col === range.endCol ? ` border-right: ${line};` : '')
+    );
+  }
 
   /** Fill handle: press, move over cells, release to autofill (one undo step). */
   function startFill(e: MouseEvent) {
@@ -138,15 +168,21 @@
   function handleKeyDown(e: KeyboardEvent) {
     if (sheetState.editingCell) {
       if (e.key === 'Escape') {
+        e.preventDefault();
         sheetState.cancelEditing();
       } else if (e.key === 'Enter') {
+        e.preventDefault();
         sheetState.commitEditing();
         sheetState.moveCursor('down');
       } else if (e.key === 'Tab') {
         e.preventDefault();
         sheetState.commitEditing();
         sheetState.moveCursor(e.shiftKey ? 'left' : 'right');
+      } else {
+        return;
       }
+      // The cell input unmounts; keep focus on the grid so typing continues.
+      gridContainer?.focus();
       return;
     }
 
@@ -200,6 +236,9 @@
       // Direct typing into cell starts editing
       const col = sheetState.document.columns[sheetState.activeCell.col];
       if (!col?.readOnly) {
+        // The key becomes the draft; without preventDefault the browser would
+        // also type it into the newly focused cell input ("1" -> "11").
+        e.preventDefault();
         sheetState.startEditing(sheetState.activeCell.row, sheetState.activeCell.col, e.key);
       }
     }
@@ -420,9 +459,9 @@
     <table class="border-collapse table-fixed w-max min-w-full">
       <!-- Table Header Columns -->
       <thead>
-        <tr class="h-7 bg-muted/60 sticky top-0 z-20 border-b border-border shadow-xs">
+        <tr class="h-7 bg-muted sticky top-0 z-20 border-b border-border shadow-xs">
           <!-- Top Left Corner Cell -->
-          <th class="w-12 min-w-[3rem] sticky left-0 z-30 bg-muted/90 border-r border-border text-center text-[10px] text-muted-foreground font-medium">
+          <th class="w-12 min-w-[3rem] sticky left-0 z-30 bg-muted border-r border-border text-center text-[10px] text-muted-foreground font-medium">
             #
           </th>
           {#each sheetState.viewModel.columns as viewCol (viewCol.column.id)}
@@ -492,7 +531,7 @@
           >
             <!-- Row Header Index -->
             <td
-              class="w-12 min-w-[3rem] sticky left-0 z-10 bg-muted/50 border-r border-border text-center text-[10px] text-muted-foreground font-mono select-none"
+              class="w-12 min-w-[3rem] sticky left-0 z-10 bg-muted border-r border-border text-center text-[10px] text-muted-foreground font-mono select-none"
               style={viewRow.frozen ? `top: ${COLUMN_HEADER_HEIGHT + viewRow.stickyTop}px; z-index: 15;` : undefined}
             >
               {displayRowIndex + 1}
@@ -540,7 +579,6 @@
                     bind:this={cellInput}
                     bind:value={sheetState.draftValue}
                     onblur={() => sheetState.commitEditing()}
-                    
                   />
                   <FormulaHints input={cellInput} value={sheetState.draftValue} onAccept={(next) => (sheetState.draftValue = next)} />
                 {:else if customCellRenderer}
@@ -553,6 +591,9 @@
                   >
                     {cell.error || (cell.value ?? '')}
                   </span>
+                {/if}
+                {#if activeSpill && rangeContains(activeSpill.range, rIdx, cIdx)}
+                  <span aria-hidden="true" class="spreadsheet-spill-border" style={spillBorderStyle(activeSpill.range, rIdx, cIdx)}></span>
                 {/if}
                 {#if showFillHandle}
                   <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->

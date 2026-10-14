@@ -113,6 +113,30 @@ describe('Svelte SpreadsheetEditor table interactions', () => {
     expect(target.querySelector('[role="menu"]')).toBeNull();
   });
 
+  it('keeps the context menu inside the viewport', () => {
+    const { target, td, dispatch } = setup([['a']]);
+    const rect = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function (this: HTMLElement) {
+        const height = this.getAttribute('role') === 'menu' ? 400 : 0;
+        return { x: 0, y: 0, top: 0, left: 0, right: 220, bottom: height, width: 220, height, toJSON() {} } as DOMRect;
+      });
+    try {
+      dispatch(
+        td(0, 0)!,
+        new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: window.innerWidth - 20, clientY: window.innerHeight - 30 })
+      );
+      flushSync();
+      const menu = target.querySelector<HTMLElement>('[role="menu"]')!;
+      // Opened near the bottom-right corner, it flips to the left of and above the pointer.
+      expect(menu.style.left).toBe(`${window.innerWidth - 20 - 220}px`);
+      expect(menu.style.top).toBe(`${window.innerHeight - 30 - 400}px`);
+      expect(menu.style.overflowY).toBe('auto');
+    } finally {
+      rect.mockRestore();
+    }
+  });
+
   it('autofills by dragging the fill handle', () => {
     const { sheetState, target, raw, td, dispatch } = setup([['1'], ['2']]);
     sheetState.selectCell(0, 0);

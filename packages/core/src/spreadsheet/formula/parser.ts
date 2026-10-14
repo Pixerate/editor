@@ -7,6 +7,8 @@ export type ASTNode =
   | LiteralNode
   | CellRefNode
   | RangeNode
+  | SpillRefNode
+  | NameNode
   | PropertyRefNode
   | BinaryOpNode
   | UnaryOpNode
@@ -31,6 +33,21 @@ export interface RangeNode {
   startRow: number;
   endCol: string;
   endRow: number;
+}
+
+/** `A1#`: the whole spill range of the dynamic array anchored at A1. */
+export interface SpillRefNode {
+  type: 'SpillRef';
+  /** Anchor cell, e.g. `A1`. */
+  ref: string;
+  col: string;
+  row: number;
+}
+
+/** A bare name: a LET variable, or `#NAME?` when nothing defines it. */
+export interface NameNode {
+  type: 'Name';
+  name: string;
 }
 
 export interface PropertyRefNode {
@@ -182,7 +199,7 @@ export class FormulaParser {
   }
 
   private unary(): ASTNode {
-    if (this.matchOperator('-', '+')) {
+    if (this.matchOperator('-', '+', '@')) {
       const op = this.previous().value;
       const argument = this.unary();
       return { type: 'UnaryOp', op, argument };
@@ -229,6 +246,12 @@ export class FormulaParser {
       return parseRange(token.value);
     }
 
+    if (token.type === 'SPILL_REF') {
+      this.advance();
+      const parsed = parseCellReference(token.value);
+      return { type: 'SpillRef', ref: token.value, col: parsed.col, row: parsed.row };
+    }
+
     if (token.type === 'PROPERTY_REF') {
       this.advance();
       return {
@@ -258,8 +281,8 @@ export class FormulaParser {
         };
       }
 
-      // Unknown bare names are #NAME? errors, as in spreadsheet apps.
-      return { type: 'Literal', value: '#NAME?' };
+      // A bare name: a LET variable, otherwise #NAME? (as in spreadsheet apps).
+      return { type: 'Name', name };
     }
 
     if (this.match('LPAREN')) {

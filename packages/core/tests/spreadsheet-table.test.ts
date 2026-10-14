@@ -5,6 +5,7 @@ import {
   computeFillTarget,
   fillSeries,
   getSpreadsheetMenuItems,
+  clampMenuPosition,
   matchesFilterRule,
   offsetFormulaReferences,
   remapFormulaReferences,
@@ -494,5 +495,25 @@ describe('context menu items', () => {
     getSpreadsheetMenuItems(ctrl, { row: 1, col: 0 }).find((i) => i.id === 'group-by')!.run();
     expect(ctrl.document.table?.grouping?.colId).toBe('c0');
     expect(getSpreadsheetMenuItems(ctrl, { row: 1, col: 0 }).some((i) => i.id === 'summary-sum')).toBe(true);
+  });
+});
+
+describe('clampMenuPosition', () => {
+  const viewport = { width: 1000, height: 800 };
+  const size = { width: 200, height: 400 };
+
+  it('keeps the pointer position when the menu fits', () => {
+    expect(clampMenuPosition({ x: 100, y: 100 }, size, viewport)).toEqual({ x: 100, y: 100 });
+  });
+
+  it('flips left / up when the menu would overflow the right / bottom edge', () => {
+    expect(clampMenuPosition({ x: 900, y: 600 }, size, viewport)).toEqual({ x: 700, y: 200 });
+  });
+
+  it('slides a menu that fits neither way back inside the viewport', () => {
+    // Flipping up from y=300 would put the top at -400: slide up just enough instead.
+    expect(clampMenuPosition({ x: 10, y: 300 }, { width: 200, height: 700 }, viewport, 8)).toEqual({ x: 10, y: 92 });
+    // Taller than the viewport: pinned to the top margin (the menu scrolls).
+    expect(clampMenuPosition({ x: 10, y: 500 }, { width: 200, height: 900 }, viewport, 4).y).toBe(4);
   });
 });

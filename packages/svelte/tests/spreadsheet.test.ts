@@ -33,6 +33,55 @@ function setup() {
   };
 }
 
+describe('Svelte SpreadsheetEditor sticky headers', () => {
+  it('gives the sticky header row and row numbers an opaque background', () => {
+    const { grid } = setup();
+    // Cells scroll underneath these, so a translucent `bg-muted/60` shows them through.
+    const sticky = Array.from(grid.querySelectorAll<HTMLElement>('.sticky'));
+    expect(sticky.length).toBeGreaterThan(2);
+    for (const el of sticky) {
+      expect(el.className).toMatch(/(^|\s)bg-muted(\s|$)/);
+      expect(el.className).not.toMatch(/bg-muted\/\d+/);
+    }
+  });
+});
+
+describe('Svelte SpreadsheetEditor cell editor', () => {
+  it('focuses the cell editor, starts it with the typed key once and refocuses the grid', () => {
+    const { sheetState, raw, key, grid } = setup();
+    sheetState.selectCell(0, 0);
+    flushSync();
+    (grid as HTMLElement).focus();
+    const press = new KeyboardEvent('keydown', { key: '1', bubbles: true, cancelable: true });
+    grid.dispatchEvent(press);
+    flushSync();
+    expect(press.defaultPrevented).toBe(true);
+    const input = grid.querySelector<HTMLInputElement>('td input')!;
+    expect(input.value).toBe('1');
+    expect(document.activeElement).toBe(input);
+
+    key(input, { key: 'Enter' });
+    expect(raw(0, 0)).toBe('1');
+    expect(document.activeElement).toBe(grid);
+    key(grid, { key: '2' });
+    key(grid.querySelector('td input')!, { key: 'Enter' });
+    expect(raw(1, 0)).toBe('2');
+  });
+
+  it('commits text typed into the cell on Enter', () => {
+    const { sheetState, raw, key, grid } = setup();
+    sheetState.startEditing(0, 0);
+    flushSync();
+    const input = grid.querySelector<HTMLInputElement>('td input')!;
+    input.value = '=2*21';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    flushSync();
+    key(input, { key: 'Enter' });
+    expect(raw(0, 0)).toBe('=2*21');
+    expect(sheetState.getCell(sheetState.document.rows[0].id, sheetState.document.columns[0].id).value).toBe(42);
+  });
+});
+
 describe('Svelte SpreadsheetEditor', () => {
   it('does not let formula bar keys reach the grid', () => {
     const { sheetState, raw, key, formulaBar } = setup();
@@ -78,5 +127,25 @@ describe('Svelte SpreadsheetEditor', () => {
     // Without a browser copy event (jsdom), the TSV fallback runs on the next task.
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(writeText).toHaveBeenCalledWith('x\tb\nc\td');
+  });
+});
+
+describe('Svelte SpreadsheetEditor copy fallback', () => {
+  it('swallows a denied clipboard write instead of leaving an unhandled rejection', async () => {
+    const { sheetState, key, grid } = setup();
+    let handled: ReturnType<typeof vi.fn> | null = null;
+    const writeText = vi.fn(() => {
+      const denied = Promise.reject(new DOMException('Write permission denied.', 'NotAllowedError'));
+      handled = vi.spyOn(denied, 'catch') as any;
+      return denied;
+    });
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    sheetState.selectCell(0, 0);
+    flushSync();
+    key(grid, { key: 'c', metaKey: true });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(writeText).toHaveBeenCalled();
+    // The rejection is caught (not left unhandled).
+    expect(handled).toHaveBeenCalled();
   });
 });

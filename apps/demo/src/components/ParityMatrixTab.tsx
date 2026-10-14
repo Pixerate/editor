@@ -1,7 +1,69 @@
 import React from "react";
+// Keep in sync with the "Feature Parity Guarantee" table in the root README.
 import { Check, ShieldCheck, Box } from "lucide-react";
 
-const FEATURES = [
+/** `true` = supported; a string names how (e.g. "Headless", a hook or component). */
+type ParityValue = boolean | string;
+
+interface ParityRow {
+  feature: string;
+  core: ParityValue;
+  react: ParityValue;
+  svelte: ParityValue;
+  note: string;
+}
+
+const row = (
+  feature: string,
+  core: ParityValue,
+  react: ParityValue,
+  svelte: ParityValue,
+  note: string
+): ParityRow => ({ feature, core, react, svelte, note });
+
+// Rows added with the productivity-app features (see the root README matrix).
+const PRODUCTIVITY_FEATURES: ParityRow[] = [
+  row("Variable Defaults & Descriptions ({name|default|description})", true, true, true, "Defaults fill blank values; descriptions label form fields"),
+  row("Conditional Sections ({?name}…{/name}, {!name}…{/name}) with Diagnostics", true, true, true, "Unbalanced tags stay literal and are reported"),
+  row("Resolution with Values (values option, resolvePrompt)", true, true, true, "Templates, variables and sections resolved in one pass"),
+  row("Variable Fill-In Form", "Headless", "<VariableForm />", "<VariableForm />", "getVariableFormFields: one field per variable, checkboxes for conditions"),
+  row("Value Preview in <TemplateRenderer values />", "evaluatePromptTokens", true, true, "Variables show their value or default"),
+  row("Heading Outline & Navigation Panel (outline)", "createOutlineStore", "<OutlinePanel /> & useOutline", "<OutlinePanel /> & createOutline", "Stable heading ids; active section highlighted"),
+  row("Table of Contents Block (tableOfContents, [[toc]])", true, true, true, "Live entries linked to headings"),
+  row("Footnotes (footnotes, markdown [^n])", true, true, true, "Automatic numbering and footnotes list"),
+  row("Bookmarks & Cross-References (bookmarks, crossReferences)", true, true, true, "References follow renames and flag broken targets"),
+  row("Autocorrect Rules & Exceptions (autocorrect)", true, true, true, "Smart quotes, symbols, fractions, sentence capitals"),
+  row("Document-Structure Slash/Toolbar Items", true, "Via core", "Via core", "getDocumentStructureCommandItems"),
+  row("Canvas Align / Distribute / Make Same Size", true, "useCanvasArrange", "createCanvasArrange", "Locked nodes act as anchors"),
+  row("Canvas Lock / Unlock & Layer Order (Front / Back)", true, "useCanvasArrange", "createCanvasArrange", "zIndex assigned per sibling group"),
+  row("Canvas Smart Guides & Snap-to-Shape (edges, centres, spacing)", true, "Hook & <CanvasGuidesLayer>", "Rune & <CanvasGuidesLayer>", "Snap targets indexed once per drag"),
+  row("Canvas Scenes (saved viewports, next / previous)", "CanvasScenesStore", "useCanvasScenes", "createCanvasScenes", "JSON persistence, reorder and rename"),
+  row("Canvas Connector Snapping to Shape Sides", true, "Via core", "Via core", "findConnectorSnap, nearestHandlePositions"),
+  row("Canvas Arrange Keyboard Shortcuts", "matchArrangeShortcut", "useCanvasArrangeShortcuts", "createCanvasArrangeShortcuts", "Matched by KeyboardEvent.code"),
+  row("Comments (threads, replies, resolve, orphan detection, JSON)", "Extension & CommentStore", "CommentsPanel, CommentButton, useComments", "CommentsPanel, CommentButton, createComments", "Anchored comment marks"),
+  row("Track Changes (insert/delete marks, accept/reject, navigation)", "Extension & getTrackedChanges", "ReviewToolbar, useTrackChanges", "ReviewToolbar, createTrackChanges", "Suggestion mode"),
+  row("Tracked-content export (trackedChanges: \"accepted\" default)", true, "Via core", "Via core", "Exports as if all changes were accepted"),
+  row("File Import Registry (.md, .html, .txt, .rtf; pluggable adapters)", true, "useFileImport + fileImport", "createFileImport + fileImport prop", "registerImportAdapter for new formats"),
+  row("Drag-and-Drop File Import at Drop Position", "FileImport", true, true, "Dropped files land where they are dropped"),
+  row("Rich Clipboard MIME (application/x.pixerate.document+json)", "RichClipboard", "richClipboard", "richClipboard prop", "Lossless copy/paste between editors"),
+  row("Dynamic Agent Tool Registry (MCP tools/list / tools/call, listChanged)", "ToolRegistry", "useAgentToolProvider", "useAgentToolProvider", "Providers register as editors mount"),
+  row("Spreadsheet Sort (multi-column, range) & Transpose", true, true, true, "Header and footer rows stay put"),
+  row("Spreadsheet Filters (per-column rules, toggle)", true, true, true, "Filters live in the view model"),
+  row("Spreadsheet Freeze Panes, Header & Footer Rows", true, true, true, "Sticky frozen rows and columns"),
+  row("Spreadsheet Hide/Unhide Rows & Columns", true, true, true, "Hidden state separate from filters"),
+  row("Spreadsheet Merged Cells", true, true, true, "Normalized, non-overlapping ranges"),
+  row("Spreadsheet Autofill (fill handle, series, formula shifting)", true, true, true, "Drag the fill handle to extend"),
+  row("Spreadsheet Categories (grouped rows, summaries, collapse)", true, true, true, "SUM / COUNT / AVERAGE / MIN / MAX per group"),
+  row("Spreadsheet CSV Import/Export (RFC 4180)", true, true, true, "Quoted fields, embedded newlines"),
+  row("Spreadsheet CSV / TSV File Import Adapters (import registry)", "importFileIntoSpreadsheet", "Via core", "Via core", "registerSpreadsheetImportAdapters"),
+  row("Spreadsheet Clipboard (TSV + HTML + lossless JSON)", true, true, true, "Paste from and to other spreadsheet apps"),
+  row("Spreadsheet Table Context Menu", "Headless", "Component", "Component", "getSpreadsheetMenuItems"),
+  row("Spreadsheet Formula Function Registry (86 functions, registerFormulaFunction)", true, "Via core", "Via core", "Argument metadata and indexed error messages"),
+  row("Formula Error Diagnostics (CellData.errorMessage, error cell tooltips)", true, true, true, "Explains why a formula failed"),
+  row("Formula Autocomplete & Argument Hints (<FormulaHints />)", "Headless (getFormulaHints)", "Component", "Component", "Function list and active-argument hint"),
+];
+
+const FEATURES: ParityRow[] = [
   {
     feature: "Token Grammar & AST Parser",
     core: true,
@@ -163,7 +225,19 @@ const FEATURES = [
     svelte: true,
     note: "Threshold and brightness depth alpha blending with softness, invert, and removeAlpha",
   },
+  ...PRODUCTIVITY_FEATURES,
 ];
+
+function ParityCell({ value }: { value: ParityValue }) {
+  if (value === true) return <Check className="w-4 h-4 text-emerald-400 mx-auto" />;
+  if (value === false) return <span className="text-slate-600">—</span>;
+  return (
+    <span className="inline-flex items-center gap-1 text-[10px] text-emerald-300 font-mono">
+      <Check className="w-3 h-3 text-emerald-400 shrink-0" />
+      {value}
+    </span>
+  );
+}
 
 export const ParityMatrixTab: React.FC = () => {
   return (
@@ -199,25 +273,13 @@ export const ParityMatrixTab: React.FC = () => {
                     {item.feature}
                   </td>
                   <td className="py-3 px-4 text-center">
-                    {item.core ? (
-                      <Check className="w-4 h-4 text-emerald-400 mx-auto" />
-                    ) : (
-                      <span className="text-slate-600">—</span>
-                    )}
+                    <ParityCell value={item.core} />
                   </td>
                   <td className="py-3 px-4 text-center">
-                    {item.react ? (
-                      <Check className="w-4 h-4 text-emerald-400 mx-auto" />
-                    ) : (
-                      <span className="text-slate-600">—</span>
-                    )}
+                    <ParityCell value={item.react} />
                   </td>
                   <td className="py-3 px-4 text-center">
-                    {item.svelte ? (
-                      <Check className="w-4 h-4 text-emerald-400 mx-auto" />
-                    ) : (
-                      <span className="text-slate-600">—</span>
-                    )}
+                    <ParityCell value={item.svelte} />
                   </td>
                   <td className="py-3 px-4 text-slate-400 font-sans">{item.note}</td>
                 </tr>

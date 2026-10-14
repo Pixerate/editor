@@ -1,16 +1,32 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   usePromptEditor,
   EditorContent,
   TemplateRenderer,
+  VariableForm,
+  useAgentToolProvider,
   Template,
+  PromptValues,
 } from "@pixerate/editor-react";
+import { resolvePrompt } from "@pixerate/editor";
+import { createRichTextToolProvider } from "@pixerate/editor/agent";
 import {
-  resolveTemplatesWithMapping,
-  resolveTemplates,
-  tokenizePrompt,
-} from "@pixerate/editor";
-import { Sparkles, Code2, Layers, Terminal } from "lucide-react";
+  Sparkles,
+  Code2,
+  Layers,
+  Terminal,
+  SlidersHorizontal,
+  AlertTriangle,
+} from "lucide-react";
+import { demoToolRegistry } from "../agentTools";
+
+const SAMPLE_PROMPT =
+  "A photorealistic portrait of {character|a weathered sea captain|Who is in the shot?} in {{cyberpunk_city}}, __award_winning__ composition{?lens}, shot with a {lens|35mm|Lens focal length} lens{/lens}{!lens}, wide angle{/lens}.";
+
+// `{?mood}` opens a section that is never closed: the grammar keeps the tag
+// as literal text and reports it in `diagnostics`.
+const BROKEN_PROMPT =
+  "A quiet harbour at dawn{?mood} with a {mood|melancholy} atmosphere, {{golden_hour}}{/fog}.";
 
 const DEMO_TEMPLATES: Template[] = [
   {
@@ -21,7 +37,7 @@ const DEMO_TEMPLATES: Template[] = [
   },
   {
     name: "cyberpunk_city",
-    body: "sprawling neon-lit mega city in rain with {{golden_hour}} reflections",
+    body: "sprawling neon-lit mega city in {weather|light rain|Weather in the city} with {{golden_hour}} reflections",
     latestVersion: "1.0",
     color: "purple",
   },
@@ -40,9 +56,9 @@ const COLOR_MAP = new Map([
 ]);
 
 export const PromptStudioTab: React.FC = () => {
-  const [content, setContent] = useState(
-    "A photorealistic portrait of {character} in {{cyberpunk_city}}, __award_winning__ composition, shot with {lens}."
-  );
+  const [content, setContent] = useState(SAMPLE_PROMPT);
+  const [values, setValues] = useState<PromptValues>({});
+  const [entered, setEntered] = useState<Record<string, string>>({});
   const [slashMenu, setSlashMenu] = useState<{
     visible: boolean;
     query: string;
@@ -76,11 +92,21 @@ export const PromptStudioTab: React.FC = () => {
     },
   });
 
-  const { text: resolvedText, map: sourceMap } = resolveTemplatesWithMapping(
-    content,
-    DEMO_TEMPLATES
+  const provider = useMemo(
+    () => (editor ? createRichTextToolProvider(editor, { id: "prompt", namespace: "prompt" }) : null),
+    [editor]
   );
-  const tokens = tokenizePrompt(content);
+  useAgentToolProvider(demoToolRegistry, provider);
+
+  // Templates expanded and variables filled in (defaults apply to blank fields).
+  const {
+    text: resolvedText,
+    map: sourceMap,
+    diagnostics,
+  } = resolvePrompt(content, DEMO_TEMPLATES, { values });
+
+  // `usePromptEditor` applies parent content changes to the editor.
+  const loadPrompt = (text: string) => setContent(text);
 
   const insertToken = (tokenText: string) => {
     if (editor) {
@@ -186,13 +212,15 @@ export const PromptStudioTab: React.FC = () => {
             </h3>
           </div>
           <p className="text-xs text-slate-400 mb-3">
-            Pure AST token render without ProseMirror/TipTap overhead:
+            Pure AST token render without ProseMirror/TipTap overhead, previewing
+            the values entered in the form (<code>values</code> prop):
           </p>
-          <div className="p-3 bg-slate-950 rounded-lg border border-slate-800/80">
+          <div className="p-3 bg-slate-950 rounded-lg border border-slate-800/80" data-testid="template-renderer">
             <TemplateRenderer
               content={content}
               templates={DEMO_TEMPLATES}
               templateColorMap={COLOR_MAP}
+              values={values}
             />
           </div>
         </div>
@@ -200,17 +228,90 @@ export const PromptStudioTab: React.FC = () => {
 
       {/* Right Column: Grammar & Source Mapping Insights */}
       <div className="lg:col-span-5 space-y-4">
+        {/* Variable fill-in form */}
+        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <div className="flex items-center gap-2">
+              <SlidersHorizontal className="w-4 h-4 text-violet-400" />
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+                Variables (&lt;VariableForm /&gt;)
+              </h3>
+            </div>
+            <div className="flex gap-1">
+              <button
+                type="button"
+                onClick={() => loadPrompt(SAMPLE_PROMPT)}
+                className="px-2 py-0.5 text-[10px] rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300"
+              >
+                Sample
+              </button>
+              <button
+                type="button"
+                onClick={() => loadPrompt(BROKEN_PROMPT)}
+                className="px-2 py-0.5 text-[10px] rounded border border-amber-500/40 bg-slate-800 hover:bg-slate-700 text-amber-300"
+              >
+                Broken sections
+              </button>
+            </div>
+          </div>
+          <p className="text-xs text-slate-400 mb-3">
+            <code className="text-violet-300">{"{name|default|description}"}</code> becomes a labelled
+            field with the default as placeholder; <code className="text-violet-300">{"{?x}…{/x}"}</code>{" "}
+            sections are kept only when <code>x</code> is set (<code className="text-violet-300">{"{!x}"}</code>{" "}
+            when it is not).
+          </p>
+          <VariableForm
+            content={content}
+            templates={DEMO_TEMPLATES}
+            values={entered}
+            onChange={(next, raw) => {
+              setValues(next);
+              setEntered(raw);
+            }}
+            className="flex flex-col gap-3 text-xs text-slate-300"
+          />
+        </div>
+
         {/* Recursive Template Resolution */}
         <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5">
           <div className="flex items-center gap-2 mb-2">
             <Terminal className="w-4 h-4 text-cyan-400" />
             <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-300">
-              Recursive Resolution (Up to 10 Levels)
+              Resolved Prompt (resolvePrompt with values)
             </h3>
           </div>
-          <div className="p-3 bg-slate-950 rounded-lg border border-slate-800/80 text-xs font-mono text-cyan-200 break-words leading-relaxed">
+          <div
+            className="p-3 bg-slate-950 rounded-lg border border-slate-800/80 text-xs font-mono text-cyan-200 break-words leading-relaxed"
+            data-testid="resolved-prompt"
+          >
             {resolvedText}
           </div>
+        </div>
+
+        {/* Grammar diagnostics */}
+        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5">
+          <div className="flex items-center gap-2 mb-2">
+            <AlertTriangle className={`w-4 h-4 ${diagnostics.length ? "text-amber-400" : "text-slate-500"}`} />
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+              Diagnostics ({diagnostics.length})
+            </h3>
+          </div>
+          {diagnostics.length === 0 ? (
+            <p className="text-xs text-slate-500 italic">
+              No grammar problems. Try “Broken sections”.
+            </p>
+          ) : (
+            <ul className="space-y-1.5 text-xs" data-testid="prompt-diagnostics">
+              {diagnostics.map((d, i) => (
+                <li key={i} className="p-2 rounded border border-amber-500/40 bg-amber-950/30 text-amber-200">
+                  <div className="font-mono text-[10px] text-amber-400">
+                    {d.code} · {d.templateName ? `template ${d.templateName}` : "prompt"} @ {d.start}..{d.end}
+                  </div>
+                  {d.message}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
         {/* Bidirectional Source Map */}

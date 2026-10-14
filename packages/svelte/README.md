@@ -37,7 +37,7 @@ Requires **Svelte 5** (the components use runes). Components ship as `.svelte` s
 
 `content` sets the initial document. Read later changes from the bound `editor` (for example in `onUpdate`), as above. The editor is preloaded with `createRichTextPreset()`. Pass `markdown`, `image`, `uploadImage`, `extensions` or `richTextOptions` to configure it.
 
-`fileImport` imports dropped/pasted `.md`, `.html`, `.txt` and `.rtf` files at the drop position, and `richClipboard` copies lossless slices between editors (both opt-in). `createFileImport(() => editor)` returns reactive `isImporting` / `error` plus `openFilePicker()` and `importFiles()` for an import button.
+`fileImport` imports dropped/pasted `.md`, `.html`, `.txt`, `.rtf` and `.docx` files (plus any adapter you register, e.g. PDF or zipped exports) at the drop position, and `richClipboard` copies lossless slices between editors (both opt-in). `createFileImport(() => editor)` returns reactive `isImporting` / `error` plus `openFilePicker()` and `importFiles()` for an import button.
 
 `useAgentToolProvider(registry, () => editor && createRichTextToolProvider(editor, { id: "doc" }))` registers an agent tool provider (see `ToolRegistry` in `@pixerate/editor/agent`) for the component's lifetime. Call it during component initialisation.
 
@@ -67,7 +67,7 @@ Requires **Svelte 5** (the components use runes). Components ship as `.svelte` s
 <CommentsPanel {editor} />
 ```
 
-Put `<CommentButton {editor} />` inside a `BubbleMenu` to comment on the selection. `createComments(editorOrStore)` and `createTrackChanges(editor)` are rune (and Svelte store) adapters for custom UIs.
+`ReviewToolbar` steps through insertions, deletions, formatting and block changes and shows the current one's author and description (e.g. "Ada: Formatted: Bold"); hide it with `showDescription={false}` or restyle it with `descriptionClass`. Put `<CommentButton {editor} />` inside a `BubbleMenu` to comment on the selection. `createComments(editorOrStore)` and `createTrackChanges(editor)` are rune (and Svelte store) adapters for custom UIs.
 
 ## More exports
 

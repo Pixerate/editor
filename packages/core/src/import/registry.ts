@@ -4,9 +4,10 @@
  * import pipelines of document apps, where each source format declares the
  * MIME types and extensions it accepts.
  *
- * Built-in adapters cover markdown, HTML, plain text and RTF for the
- * `document` target. Binary formats (DOCX, PDF, zipped exports) and other
- * targets (e.g. CSV → `spreadsheet`) plug in with `registerImportAdapter`.
+ * Built-in adapters cover markdown, HTML, plain text, RTF and DOCX for the
+ * `document` target. PDF (`createPdfImportAdapter`), zipped exports
+ * (`zipImportAdapter`) and other targets (e.g. CSV → `spreadsheet`) plug in
+ * with `registerImportAdapter`.
  */
 
 /** What an import produces content for. Custom targets are plain strings. */
@@ -33,6 +34,11 @@ export interface ImportContext {
   readText(): Promise<string>;
   /** Reads the input as binary data (strings are UTF-8 encoded). */
   readArrayBuffer(): Promise<ArrayBuffer>;
+  /**
+   * The registry running the import, so container adapters (e.g. zipped
+   * exports) can import nested files with the same adapters.
+   */
+  registry?: ImportAdapterRegistry;
 }
 
 export interface ImportAdapter<TResult = unknown> {
@@ -76,7 +82,14 @@ export interface ImportOutcome<TResult = unknown> {
   result: TResult;
 }
 
-export type ImportErrorCode = "unsupported_type" | "unknown_adapter" | "adapter_failed";
+export type ImportErrorCode =
+  | "unsupported_type"
+  | "unknown_adapter"
+  | "adapter_failed"
+  /** The file is damaged or not the format its name/type claims (e.g. a `.docx` without `word/document.xml`). */
+  | "invalid_file"
+  /** A platform API the adapter needs (e.g. `DOMParser`) is missing. */
+  | "unsupported_environment";
 
 export class ImportError extends Error {
   readonly code: ImportErrorCode;
@@ -119,7 +132,7 @@ function stripBom(text: string): string {
 /** Creates the {@link ImportContext} helpers for an input. */
 export function createImportContext(
   input: ImportInput,
-  details: { fileName?: string; mimeType?: string; target: ImportTarget },
+  details: { fileName?: string; mimeType?: string; target: ImportTarget; registry?: ImportAdapterRegistry },
 ): ImportContext {
   const readArrayBuffer = async (): Promise<ArrayBuffer> => {
     if (typeof input === "string") {
@@ -275,11 +288,16 @@ export class ImportAdapterRegistry {
         { fileName },
       );
     }
-    const context = createImportContext(input, { fileName, mimeType, target: adapter.target });
+    const context = createImportContext(input, { fileName, mimeType, target: adapter.target, registry: this });
     try {
       const result = (await adapter.import(input, context)) as TResult;
       return { adapterId: adapter.id, target: adapter.target, fileName, mimeType, result };
     } catch (error) {
+      // Adapters may throw structured ImportErrors (e.g. `invalid_file`); keep their code.
+      if (error instanceof ImportError) {
+        if (error.fileName !== undefined || fileName === undefined) throw error;
+        throw new ImportError(error.code, error.message, { fileName, cause: error.cause });
+      }
       throw new ImportError(
         "adapter_failed",
         `Import adapter "${adapter.id}" failed: ${error instanceof Error ? error.message : String(error)}`,

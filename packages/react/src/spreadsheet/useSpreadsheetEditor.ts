@@ -46,8 +46,15 @@ export function useSpreadsheetEditor(options: SpreadsheetControllerOptions = {})
   const [activeCell, setActiveCell] = useState<CellCoordinate | null>(controller.activeCell);
   const [selectedRange, setSelectedRange] = useState<CellRange | null>(controller.selectedRange);
   const [editingCell, setEditingCell] = useState<CellCoordinate | null>(null);
-  const [draftValue, setDraftValue] = useState<string>('');
+  const [draftValue, setDraftState] = useState<string>('');
   settersRef.current = { setDoc, setActiveCell, setSelectedRange };
+
+  // The controller commits its own `draftValue` (`commitEditing()` without an
+  // argument), so typed text must reach it, not just React state.
+  const setDraftValue = useCallback((value: string) => {
+    controller.draftValue = value;
+    setDraftState(value);
+  }, [controller]);
 
   const setCellValue = useCallback((rowId: string, colId: string, raw: string) => {
     controller.setCellValue(rowId, colId, raw);

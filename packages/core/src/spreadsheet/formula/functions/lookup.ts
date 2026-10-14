@@ -15,7 +15,7 @@ import { arg, failed, optional, type FunctionTable } from './helpers';
  * Lookup functions return single values. A function that would return a whole
  * row or column (INDEX with row 0, XLOOKUP with a 2D return array) returns an
  * array: other functions can aggregate it (`SUM(INDEX(A1:C3, 0, 2))`), and a
- * cell showing it displays its first value (no dynamic-array spilling).
+ * cell showing it spills it into the cells below/right (dynamic arrays).
  */
 
 type MatchMode = 'exact' | 'wildcard' | 'next-smaller' | 'next-larger' | 'sorted-asc' | 'sorted-desc';

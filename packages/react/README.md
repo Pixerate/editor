@@ -68,14 +68,14 @@ import { CommentsPanel, ReviewToolbar, CommentButton, BubbleMenu } from "@pixera
 
 const editor = useEditor({ extensions: [Comments.configure({ author: me }), TrackChanges.configure({ author: me })] });
 
-<ReviewToolbar editor={editor} />        {/* toggle tracking, prev/next, accept/reject (all) */}
+<ReviewToolbar editor={editor} />        {/* toggle tracking, prev/next, accept/reject (all), current change description */}
 <BubbleMenu editor={editor}><CommentButton editor={editor} /></BubbleMenu>
 <CommentsPanel editor={editor} />        {/* threads: reply, resolve, delete, click to select */}
 ```
 
-`useComments(editorOrStore)` and `useTrackChanges(editor)` expose the same state for custom UIs.
+`ReviewToolbar` steps through insertions, deletions, formatting and block changes and shows the current one's author and description (e.g. "Ada: Changed Paragraph to Heading 2"); hide it with `showDescription={false}` or restyle it with `descriptionClassName`. `useComments(editorOrStore)` and `useTrackChanges(editor)` expose the same state for custom UIs (each change has `type` and `description`).
 
-`useEditor({ fileImport: true, richClipboard: true })` imports dropped/pasted `.md`, `.html`, `.txt` and `.rtf` files at the drop position and copies lossless slices between editors. `useFileImport(editor)` returns `{ openFilePicker, importFiles, accept, isImporting, error }` for an import button. `usePromptEditor({ fileImport: true })` imports dropped files as plain text.
+`useEditor({ fileImport: true, richClipboard: true })` imports dropped/pasted `.md`, `.html`, `.txt`, `.rtf` and `.docx` files (plus any adapter you register, e.g. PDF or zipped exports) at the drop position and copies lossless slices between editors. `useFileImport(editor)` returns `{ openFilePicker, importFiles, accept, isImporting, error }` for an import button. `usePromptEditor({ fileImport: true })` imports dropped files as plain text.
 
 `useAgentToolProvider(registry, provider)` registers an agent tool provider (see `ToolRegistry` in `@pixerate/editor/agent`) while the component is mounted. Memoize the provider:
 

@@ -105,7 +105,8 @@ export function shiftFormulaReferences(formula: string, change: StructuralChange
 /**
  * Calls `rewrite` with the source text of every cell or range reference in
  * `formula` (e.g. `"$A1"`, `"B2:C10"`, `"A:A"`) and splices in its result.
- * String literals, property references and function names (e.g. `LOG10(`)
+ * For a spill reference (`A1#`) it receives the anchor (`"A1"`) and the `#`
+ * is kept, unless the rewrite returns `#REF!`. String literals, property references and function names (e.g. `LOG10(`)
  * are skipped. Formulas that fail to tokenize are returned unchanged.
  */
 export function mapFormulaReferences(formula: string, rewrite: (reference: string) => string): string {
@@ -122,13 +123,21 @@ export function mapFormulaReferences(formula: string, rewrite: (reference: strin
   let cursor = 0;
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i];
-    if (token.type !== 'CELL_REF' && token.type !== 'RANGE') continue;
+    if (token.type !== 'CELL_REF' && token.type !== 'RANGE' && token.type !== 'SPILL_REF') continue;
     // Function names that look like cell references (e.g. LOG10) are calls.
     if (tokens[i + 1]?.type === 'LPAREN') continue;
 
     let end = token.position;
     while (end < formula.length && REF_CHAR.test(formula[end])) end++;
     const original = formula.slice(token.position, end);
+
+    if (token.type === 'SPILL_REF') {
+      // A1#: the anchor is rewritten like a cell reference; `#` stays.
+      const rewritten = rewrite(original);
+      result += formula.slice(cursor, token.position) + (rewritten === '#REF!' ? rewritten : `${rewritten}#`);
+      cursor = end + 1;
+      continue;
+    }
 
     result += formula.slice(cursor, token.position) + rewrite(original);
     cursor = end;

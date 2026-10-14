@@ -248,4 +248,37 @@ describe("Svelte ReviewToolbar", () => {
     click(button(root, "Accept all"));
     expect(editor.getText()).toBe(">one! two three");
   });
+
+  it("shows formatting and block changes with their descriptions", () => {
+    const { editor } = makeEditor("<p>Title</p><p>Body text</p>");
+    editor.commands.setTrackChanges(true);
+    editor.chain().setTextSelection(2).toggleHeading({ level: 2 }).run();
+    editor.chain().setTextSelection({ from: 8, to: 12 }).toggleBold().run();
+    const root = render(ReviewToolbar, { editor, descriptionClass: "my-desc" });
+    expect(root.textContent).toContain("2 of 2");
+    const label = () => root.querySelector("[data-change-type]") as HTMLElement | null;
+    expect(label()!.getAttribute("data-change-type")).toBe("format");
+    expect(label()!.textContent!.trim()).toBe("Alice: Formatted: Bold");
+    expect(label()!.className).toBe("my-desc");
+
+    click(button(root, "Previous change"));
+    expect(label()!.getAttribute("data-change-type")).toBe("block");
+    expect(label()!.textContent!.trim()).toBe("Alice: Changed Paragraph to Heading 2");
+    click(button(root, "Reject"));
+    expect(editor.state.doc.firstChild!.type.name).toBe("paragraph");
+    expect(root.textContent).toContain("1 changes");
+
+    click(button(root, "Accept all"));
+    expect(editor.getHTML()).toBe("<p>Title</p><p><strong>Body</strong> text</p>");
+    expect(label()).toBeNull();
+  });
+
+  it("can hide the description", () => {
+    const { editor } = makeEditor("<p>Body</p>");
+    editor.commands.setTrackChanges(true);
+    editor.chain().setTextSelection({ from: 1, to: 5 }).toggleItalic().run();
+    const root = render(ReviewToolbar, { editor, showDescription: false });
+    expect(root.textContent).toContain("1 of 1");
+    expect(root.querySelector("[data-change-type]")).toBeNull();
+  });
 });

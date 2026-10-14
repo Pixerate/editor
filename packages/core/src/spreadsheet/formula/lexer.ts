@@ -5,6 +5,7 @@ export type FormulaTokenType =
   | 'ERROR'
   | 'CELL_REF'
   | 'RANGE'
+  | 'SPILL_REF'
   | 'PROPERTY_REF'
   | 'IDENTIFIER'
   | 'OPERATOR'
@@ -83,7 +84,7 @@ export function tokenizeFormula(formula: string): FormulaToken[] {
 
     // Error literal, e.g. #REF! left behind by deleting a referenced row
     if (char === '#') {
-      const match = /^#(?:REF!|DIV\/0!|VALUE!|NAME\?|N\/A|NUM!|CYCLE!|ERROR!)/.exec(input.slice(i));
+      const match = /^#(?:REF!|DIV\/0!|VALUE!|NAME\?|N\/A|NUM!|CYCLE!|ERROR!|SPILL!|CALC!)/.exec(input.slice(i));
       if (!match) {
         throw new Error(`Unexpected character '#' at position ${i + offset}`);
       }
@@ -141,8 +142,8 @@ export function tokenizeFormula(formula: string): FormulaToken[] {
       continue;
     }
 
-    // Single character operators: +, -, *, /, ^, &, =, <, >
-    if (['+', '-', '*', '/', '^', '&', '=', '<', '>'].includes(char)) {
+    // Single character operators: +, -, *, /, ^, &, =, <, >, and @ (implicit intersection)
+    if (['+', '-', '*', '/', '^', '&', '=', '<', '>', '@'].includes(char)) {
       tokens.push({ type: 'OPERATOR', value: char, position: i + offset });
       i++;
       continue;
@@ -191,6 +192,12 @@ export function tokenizeFormula(formula: string): FormulaToken[] {
 
       // Check for Cell Reference (e.g. A1, $B$12, AA100)
       if (/^\$?[A-Za-z]+\$?[0-9]+$/.test(rawWord)) {
+        // A1# is the whole spill range of the dynamic array anchored at A1.
+        if (input[i] === '#') {
+          i++;
+          tokens.push({ type: 'SPILL_REF', value: upper.replace(/\$/g, ''), position: start + offset });
+          continue;
+        }
         tokens.push({
           type: 'CELL_REF',
           value: upper.replace(/\$/g, ''),

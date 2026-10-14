@@ -5,18 +5,31 @@ import { useTrackChanges } from "./useReview";
 export interface ReviewToolbarProps {
   editor: Editor | null;
   className?: string;
+  /**
+   * Show the current change's author and description (e.g. "Alice: Formatted:
+   * Bold"). Defaults to `true`.
+   */
+  showDescription?: boolean;
+  /** Class of the description label. */
+  descriptionClassName?: string;
 }
+
+const defaultDescriptionClass = "max-w-[16rem] truncate px-1 text-xs text-muted-foreground";
 
 const buttonClass =
   "rounded px-2 py-1 text-xs text-foreground hover:bg-muted disabled:opacity-40 disabled:hover:bg-transparent";
 
 /**
- * Toolbar for tracked changes: toggle tracking, step through changes, and
- * accept or reject the current change or all changes.
+ * Toolbar for tracked changes: toggle tracking, step through changes
+ * (insertions, deletions, formatting and block changes, with a description
+ * of the current one), and accept or reject the current change or all
+ * changes.
  */
 export const ReviewToolbar: React.FC<ReviewToolbarProps> = ({
   editor,
   className = "flex flex-wrap items-center gap-1 rounded-md border border-border bg-background p-1 text-sm",
+  showDescription = true,
+  descriptionClassName = defaultDescriptionClass,
 }) => {
   const review = useTrackChanges(editor);
   const count = review.changes.length;
@@ -56,6 +69,16 @@ export const ReviewToolbar: React.FC<ReviewToolbarProps> = ({
       >
         ›
       </button>
+      {showDescription && current && (
+        <span
+          className={descriptionClassName}
+          data-change-type={current.type}
+          title={`${current.author.name}: ${current.description}`}
+        >
+          {current.author.name ? `${current.author.name}: ` : ""}
+          {current.description}
+        </span>
+      )}
       <span className="mx-1 h-4 w-px bg-border" aria-hidden="true" />
       <button
         type="button"

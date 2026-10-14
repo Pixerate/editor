@@ -1,0 +1,250 @@
+import React, { useMemo, useRef, useState } from "react";
+import {
+  SpreadsheetEditor,
+  useSpreadsheetEditor,
+  useAgentToolProvider,
+} from "@pixerate/editor-react";
+import {
+  defaultImportRegistry,
+  importFileIntoSpreadsheet,
+  registerSpreadsheetImportAdapters,
+  type CellData,
+  type SpreadsheetColumn,
+  type SpreadsheetDocument,
+  type SpreadsheetRow,
+} from "@pixerate/editor";
+import { createSpreadsheetToolProvider } from "@pixerate/editor/agent";
+import {
+  Table2,
+  Upload,
+  Download,
+  Undo2,
+  Redo2,
+  MousePointerClick,
+} from "lucide-react";
+import { demoToolRegistry } from "../agentTools";
+
+// CSV and TSV adapters for `importFileIntoSpreadsheet` (registered once).
+registerSpreadsheetImportAdapters(defaultImportRegistry);
+
+const HEADER = ["Region", "Rep", "Product", "Units", "Price", "Revenue", "Status"];
+
+const DATA: Array<[string, string, string, number, number]> = [
+  ["North", "Ava", "Widget", 120, 9.5],
+  ["West", "Ben", "Gadget", 45, 24],
+  ["East", "Chloe", "Widget", 80, 9.5],
+  ["North", "Dev", "Gizmo", 30, 42],
+  ["South", "Eli", "Gadget", 64, 24],
+  ["West", "Fay", "Gizmo", 18, 42],
+  ["East", "Gus", "Gadget", 95, 24],
+  ["South", "Hana", "Widget", 150, 9.5],
+  ["North", "Ivo", "Gadget", 52, 24],
+  ["West", "Jun", "Widget", 70, 9.5],
+];
+
+const LAST_DATA_ROW = DATA.length + 1; // row 1 is the header
+const range = (col: string) => `${col}2:${col}${LAST_DATA_ROW}`;
+
+// Footer rows (never sorted, filtered or grouped) exercising the formula library.
+const FOOTER: Array<[string, string]> = [
+  ["Total revenue", `=SUM(${range("F")})`],
+  ["North revenue (SUMIF)", `=SUMIF(${range("A")},"North",${range("F")})`],
+  ["East orders > 50 units (COUNTIFS)", `=COUNTIFS(${range("A")},"East",${range("D")},">50")`],
+  ["Avg West units (AVERAGEIFS)", `=ROUND(AVERAGEIFS(${range("D")},${range("A")},"West"),1)`],
+  ["Top rep (XLOOKUP)", `=XLOOKUP(MAX(${range("F")}),${range("F")},${range("B")})`],
+  ["First three reps (TEXTJOIN)", `=TEXTJOIN(", ",TRUE,B2:B4)`],
+  ["Days since 1 Jan 2026 (DATEDIF)", `=DATEDIF(DATE(2026,1,1),TODAY(),"d")`],
+  ["Error with a reason (hover me)", `=SUMIF(5,"North",${range("F")})`],
+];
+
+function buildSampleDocument(): Partial<SpreadsheetDocument> {
+  const keys = HEADER.map((_, i) => String.fromCharCode(65 + i));
+  const columns: SpreadsheetColumn[] = keys.map((key, i) => ({
+    id: `col_${key.toLowerCase()}`,
+    key,
+    title: key,
+    width: i === 0 ? 220 : i === 1 ? 150 : 110,
+    type: "freeform",
+  }));
+  const matrix: string[][] = [
+    HEADER,
+    ...DATA.map((row, i) => {
+      const r = i + 2;
+      return [
+        ...row.map(String),
+        `=D${r}*E${r}`,
+        `=IF(F${r}>=1000,"On target","Below")`,
+      ];
+    }),
+    ...FOOTER.map(([label, formula]) => [label, formula]),
+  ];
+  const rows: SpreadsheetRow[] = matrix.map((_, i) => ({
+    id: `row_${i + 1}`,
+    index: i,
+    height: 30,
+    type: "freeform",
+  }));
+  const cells: Record<string, Record<string, CellData>> = {};
+  matrix.forEach((line, r) => {
+    cells[rows[r].id] = {};
+    line.forEach((raw, c) => {
+      // Formulas are evaluated by the controller; typed values are text.
+      cells[rows[r].id][columns[c].id] = { raw, value: raw.startsWith("=") ? null : raw };
+    });
+  });
+  return {
+    id: "demo-sales",
+    name: "Sales",
+    columns,
+    rows,
+    cells,
+    table: {
+      headerRowCount: 1,
+      footerRowCount: FOOTER.length,
+      frozenRowCount: 1,
+      frozenColumnCount: 1,
+    },
+  };
+}
+
+export const SpreadsheetTab: React.FC = () => {
+  const initialDocument = useMemo(buildSampleDocument, []);
+  const state = useSpreadsheetEditor({ document: initialDocument });
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [csvPreview, setCsvPreview] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+
+  const provider = useMemo(
+    () => createSpreadsheetToolProvider(state.controller, { id: "sheet", namespace: "sheet" }),
+    [state.controller]
+  );
+  useAgentToolProvider(demoToolRegistry, provider);
+
+  const importFile = async (file: File) => {
+    try {
+      const outcome = await importFileIntoSpreadsheet(state.controller, file, {
+        registry: defaultImportRegistry,
+        startRow: 0,
+        startCol: 0,
+      });
+      setStatus(
+        `Imported ${outcome.result.rows.length} rows from ${file.name} (adapter: ${outcome.adapterId}). Undo restores the previous sheet.`
+      );
+    } catch (error) {
+      setStatus(`Import failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
+  const exportCsv = () => setCsvPreview(state.exportToCsv());
+
+  const csvHref = useMemo(
+    () =>
+      csvPreview === null
+        ? undefined
+        : `data:text/csv;charset=utf-8,${encodeURIComponent(csvPreview)}`,
+    [csvPreview]
+  );
+
+  const buttonClass =
+    "flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors";
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-3 flex flex-wrap items-center gap-2 shadow-md">
+        <div className="flex items-center gap-2 mr-2">
+          <Table2 className="w-4 h-4 text-emerald-400" />
+          <h2 className="text-sm font-semibold tracking-wide uppercase text-slate-300">
+            Spreadsheet
+          </h2>
+        </div>
+        <button type="button" className={buttonClass} onClick={() => state.undo()} title="Undo (Mod+Z)">
+          <Undo2 className="w-3.5 h-3.5" /> Undo
+        </button>
+        <button type="button" className={buttonClass} onClick={() => state.redo()} title="Redo (Mod+Shift+Z)">
+          <Redo2 className="w-3.5 h-3.5" /> Redo
+        </button>
+        <div className="w-px h-5 bg-slate-800 mx-1" />
+        <button type="button" className={buttonClass} onClick={() => fileInputRef.current?.click()}>
+          <Upload className="w-3.5 h-3.5" /> Import CSV / TSV
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept={defaultImportRegistry.accept("spreadsheet")}
+          className="hidden"
+          data-testid="spreadsheet-file-input"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) void importFile(file);
+            e.target.value = "";
+          }}
+        />
+        <button type="button" className={buttonClass} onClick={exportCsv}>
+          <Download className="w-3.5 h-3.5" /> Export CSV
+        </button>
+        <span className="ml-auto flex items-center gap-1.5 text-xs text-slate-400">
+          <MousePointerClick className="w-3.5 h-3.5 text-amber-400" />
+          Right-click a cell for sort, filter, freeze, hide, merge and categories
+        </span>
+      </div>
+
+      <div
+        className={`h-[560px] rounded-xl overflow-hidden border ${
+          dragOver ? "border-emerald-500 ring-2 ring-emerald-500/40" : "border-slate-800"
+        }`}
+        onDragOver={(e) => {
+          if (!Array.from(e.dataTransfer.types).includes("Files")) return;
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          const file = e.dataTransfer.files?.[0];
+          setDragOver(false);
+          if (!file) return;
+          e.preventDefault();
+          void importFile(file);
+        }}
+      >
+        <SpreadsheetEditor state={state} />
+      </div>
+
+      {status && (
+        <div className="text-xs text-emerald-300 bg-emerald-950/30 border border-emerald-500/30 rounded-lg px-3 py-2">
+          {status}
+        </div>
+      )}
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 text-xs text-slate-400 space-y-1.5">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">Try it</h3>
+          <p>Type <code className="text-slate-200">=SU</code> in a cell or the formula bar for autocomplete; inside the parentheses the argument hint follows the caret.</p>
+          <p>Select cells and drag the small square at the bottom-right corner (fill handle) to extend a series or shift formulas.</p>
+          <p>Copy (Mod+C) and paste (Mod+V) a range inside the sheet or to/from another spreadsheet app (TSV + HTML + lossless JSON).</p>
+          <p>Drop a <code className="text-slate-200">.csv</code> / <code className="text-slate-200">.tsv</code> file on the grid to import it.</p>
+        </div>
+        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-300">CSV Export (RFC 4180)</h3>
+            {csvHref && (
+              <a
+                href={csvHref}
+                download="sales.csv"
+                className="text-xs text-emerald-300 hover:text-emerald-200 underline underline-offset-2"
+              >
+                Download sales.csv
+              </a>
+            )}
+          </div>
+          <pre
+            data-testid="csv-preview"
+            className="max-h-48 overflow-auto text-[11px] font-mono text-slate-300 bg-slate-950 border border-slate-800 rounded-lg p-2 whitespace-pre"
+          >
+            {csvPreview ?? "Click “Export CSV” to serialize the computed values."}
+          </pre>
+        </div>
+      </div>
+    </div>
+  );
+};

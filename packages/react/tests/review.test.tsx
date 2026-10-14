@@ -273,4 +273,35 @@ describe("ReviewToolbar", () => {
     expect(editor.getText()).toBe(">one! two three");
     expect(getTrackedChanges(editor)).toEqual([]);
   });
+
+  it("shows formatting and block changes with their descriptions", async () => {
+    const { editor } = makeEditor("<p>Title</p><p>Body text</p>", true);
+    editor.chain().setTextSelection(2).toggleHeading({ level: 2 }).run();
+    editor.chain().setTextSelection({ from: 8, to: 12 }).toggleBold().run();
+    await render(<ReviewToolbar editor={editor} descriptionClassName="my-desc" />);
+    expect(container.textContent).toContain("2 of 2");
+    const label = () => container.querySelector("[data-change-type]") as HTMLElement | null;
+    expect(label()!.getAttribute("data-change-type")).toBe("format");
+    expect(label()!.textContent).toBe("Alice: Formatted: Bold");
+    expect(label()!.className).toBe("my-desc");
+
+    await click(button("Previous change"));
+    expect(label()!.getAttribute("data-change-type")).toBe("block");
+    expect(label()!.textContent).toBe("Alice: Changed Paragraph to Heading 2");
+    await click(button("Reject"));
+    expect(editor.state.doc.firstChild!.type.name).toBe("paragraph");
+    expect(container.textContent).toContain("1 changes");
+
+    await click(button("Accept all"));
+    expect(editor.getHTML()).toBe("<p>Title</p><p><strong>Body</strong> text</p>");
+    expect(label()).toBeNull();
+  });
+
+  it("can hide the description", async () => {
+    const { editor } = makeEditor("<p>Body</p>", true);
+    editor.chain().setTextSelection({ from: 1, to: 5 }).toggleItalic().run();
+    await render(<ReviewToolbar editor={editor} showDescription={false} />);
+    expect(container.textContent).toContain("1 of 1");
+    expect(container.querySelector("[data-change-type]")).toBeNull();
+  });
 });

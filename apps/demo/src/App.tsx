@@ -4,12 +4,41 @@ import { RichDocumentTab } from "./components/RichDocumentTab";
 import { ParityMatrixTab } from "./components/ParityMatrixTab";
 import { ImageEditorTab } from "./components/ImageEditorTab";
 import { ReviewDemoSection } from "./components/ReviewDemoSection";
-import { Sparkles, FileText, CheckCircle2, Image as ImageIcon } from "lucide-react";
+import { SpreadsheetTab } from "./components/SpreadsheetTab";
+import { CanvasTab } from "./components/CanvasTab";
+import { AgentToolsPanel } from "./components/AgentToolsPanel";
+import {
+  Sparkles,
+  FileText,
+  CheckCircle2,
+  Image as ImageIcon,
+  Table2,
+  Shapes,
+} from "lucide-react";
+
+type TabId = "prompt" | "rich" | "sheet" | "canvas" | "image" | "parity";
+
+const TABS: Array<{ id: TabId; label: string; icon: React.ElementType }> = [
+  { id: "prompt", label: "Prompt Studio", icon: Sparkles },
+  { id: "rich", label: "Document Rich Text", icon: FileText },
+  { id: "sheet", label: "Spreadsheet", icon: Table2 },
+  { id: "canvas", label: "Canvas", icon: Shapes },
+  { id: "image", label: "Image Editor", icon: ImageIcon },
+  { id: "parity", label: "Feature Parity Matrix", icon: CheckCircle2 },
+];
+
+const initialTab = (): TabId => {
+  // `#sheet`, `#canvas`, ... open a tab directly.
+  const hash = typeof window !== "undefined" ? window.location.hash.slice(1) : "";
+  return TABS.some((t) => t.id === hash) ? (hash as TabId) : "image";
+};
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<"prompt" | "rich" | "image" | "parity">(
-    "image"
-  );
+  const [activeTab, setActiveTabState] = useState<TabId>(initialTab);
+  const setActiveTab = (tab: TabId) => {
+    setActiveTabState(tab);
+    window.history.replaceState(null, "", `#${tab}`);
+  };
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
@@ -51,54 +80,21 @@ export default function App() {
         </div>
 
         {/* Tab Navigation */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex gap-2 border-t border-slate-800/60">
-          <button
-            onClick={() => setActiveTab("prompt")}
-            className={`flex items-center gap-2 px-4 py-3 text-xs font-medium border-b-2 transition-all ${
-              activeTab === "prompt"
-                ? "border-rose-500 text-rose-400 bg-rose-500/5"
-                : "border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700"
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Prompt Studio</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("rich")}
-            className={`flex items-center gap-2 px-4 py-3 text-xs font-medium border-b-2 transition-all ${
-              activeTab === "rich"
-                ? "border-rose-500 text-rose-400 bg-rose-500/5"
-                : "border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700"
-            }`}
-          >
-            <FileText className="w-3.5 h-3.5" />
-            <span>Document Rich Text</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("image")}
-            className={`flex items-center gap-2 px-4 py-3 text-xs font-medium border-b-2 transition-all ${
-              activeTab === "image"
-                ? "border-rose-500 text-rose-400 bg-rose-500/5"
-                : "border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700"
-            }`}
-          >
-            <ImageIcon className="w-3.5 h-3.5" />
-            <span>Image Editor</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("parity")}
-            className={`flex items-center gap-2 px-4 py-3 text-xs font-medium border-b-2 transition-all ${
-              activeTab === "parity"
-                ? "border-rose-500 text-rose-400 bg-rose-500/5"
-                : "border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700"
-            }`}
-          >
-            <CheckCircle2 className="w-3.5 h-3.5" />
-            <span>Feature Parity Matrix</span>
-          </button>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex gap-2 border-t border-slate-800/60 overflow-x-auto">
+          {TABS.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              onClick={() => setActiveTab(id)}
+              className={`flex items-center gap-2 px-4 py-3 text-xs font-medium border-b-2 transition-all whitespace-nowrap ${
+                activeTab === id
+                  ? "border-rose-500 text-rose-400 bg-rose-500/5"
+                  : "border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700"
+              }`}
+            >
+              <Icon className="w-3.5 h-3.5" />
+              <span>{label}</span>
+            </button>
+          ))}
         </div>
       </header>
 
@@ -107,8 +103,11 @@ export default function App() {
         {activeTab === "prompt" && <PromptStudioTab />}
         {activeTab === "rich" && <RichDocumentTab />}
         {activeTab === "rich" && <ReviewDemoSection />}
+        {activeTab === "sheet" && <SpreadsheetTab />}
+        {activeTab === "canvas" && <CanvasTab />}
         {activeTab === "image" && <ImageEditorTab />}
         {activeTab === "parity" && <ParityMatrixTab />}
+        {activeTab !== "parity" && <AgentToolsPanel />}
       </main>
 
       {/* Footer */}

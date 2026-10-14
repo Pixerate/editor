@@ -1,5 +1,8 @@
-import React, { useEffect, useRef } from 'react';
-import type { SpreadsheetMenuItem } from '@pixerate/editor/spreadsheet';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { clampMenuPosition, type SpreadsheetMenuItem } from '@pixerate/editor/spreadsheet';
+
+// Gap kept between the menu and the viewport edges.
+const VIEWPORT_MARGIN = 4;
 
 export interface SpreadsheetContextMenuProps {
   items: SpreadsheetMenuItem[];
@@ -13,6 +16,22 @@ export const SpreadsheetContextMenu: React.FC<SpreadsheetContextMenuProps> = ({ 
   const menuRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const [position, setPosition] = useState({ x, y });
+
+  // Keep the (fixed) menu inside the viewport: near the right or bottom edge
+  // it opens to the left of / above the pointer instead of being cut off.
+  useLayoutEffect(() => {
+    const menu = menuRef.current;
+    if (!menu || typeof window === 'undefined') return;
+    const { width, height } = menu.getBoundingClientRect();
+    const next = clampMenuPosition(
+      { x, y },
+      { width, height },
+      { width: window.innerWidth, height: window.innerHeight },
+      VIEWPORT_MARGIN
+    );
+    setPosition((prev) => (prev.x === next.x && prev.y === next.y ? prev : next));
+  }, [x, y, items]);
 
   useEffect(() => {
     const handlePointer = (e: MouseEvent) => {
@@ -35,7 +54,13 @@ export const SpreadsheetContextMenu: React.FC<SpreadsheetContextMenuProps> = ({ 
       role="menu"
       aria-label="Table actions"
       className="fixed z-50 min-w-[14rem] rounded-md border border-border bg-popover py-1 text-xs text-popover-foreground shadow-lg"
-      style={{ left: x, top: y, background: 'var(--popover, var(--background, #fff))' }}
+      style={{
+        left: position.x,
+        top: position.y,
+        maxHeight: `calc(100vh - ${VIEWPORT_MARGIN * 2}px)`,
+        overflowY: 'auto',
+        background: 'var(--popover, var(--background, #fff))'
+      }}
       onContextMenu={(e) => e.preventDefault()}
       onKeyDown={(e) => e.stopPropagation()}
     >

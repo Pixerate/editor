@@ -22,6 +22,15 @@ import {
 } from './arrange.js';
 import type { CanvasArrangeAction } from './arrangeShortcuts.js';
 import {
+	applyShapeCombination,
+	canCombineShapeNodes,
+	combineShapeNodes,
+	revertShapeCombination,
+	type CombineShapeNodesOptions,
+	type CombineShapeNodesResult,
+	type ShapeOperation
+} from './shapeNodes.js';
+import {
 	createNodeGuideIndex,
 	snapNodeDrag,
 	type GuideIndex,
@@ -55,10 +64,14 @@ export interface CanvasArrangeControllerOptions<TNode extends CanvasNode = Canva
 	onGuidesChange?: (guides: GuideLine[]) => void;
 }
 
-/** A React Flow / SvelteFlow style node change; only `position` changes are inspected. */
+/**
+ * A React Flow / SvelteFlow style node change; only `position` changes are inspected.
+ * `id` is optional because a batch can contain changes without one (React Flow's
+ * `add` change carries an `item` instead), so `NodeChange[]` must be accepted as is.
+ */
 export interface PositionChangeLike {
 	type: string;
-	id: string;
+	id?: string;
 	position?: XYPosition;
 	dragging?: boolean;
 	[key: string]: any;
@@ -75,6 +88,8 @@ export function createCanvasArrangeController<TNode extends CanvasNode = CanvasN
 	let guides: GuideLine[] = [];
 	let dragIndex: GuideIndex | null = null;
 	let dragKey = '';
+	// Snapped positions from the last dragging batch, re-applied to the drag-stop change.
+	let lastSnapped = new Map<string, XYPosition>();
 
 	const selectedIds = (ids?: Iterable<string>) =>
 		ids ? [...ids] : options.getSelectedIds?.() ?? options.getNodes().filter((n) => n.selected).map((n) => n.id);
@@ -157,6 +172,35 @@ export function createCanvasArrangeController<TNode extends CanvasNode = CanvasN
 		isLocked: (id: string) => isLocked(options.getNodes().find((n) => n.id === id)),
 
 		/**
+		 * Freeform shape operation (Unite / Intersect / Subtract / Exclude / Divide) on the
+		 * shape nodes among `ids` (default: the selection). Replaces them with the result as
+		 * one undoable step. Refuses without changing anything when a selected shape is
+		 * locked, fewer than two shapes are selected, or the result is empty.
+		 */
+		combineShapes(
+			operation: ShapeOperation,
+			ids?: Iterable<string>,
+			combineOptions: CombineShapeNodesOptions = {}
+		): CombineShapeNodesResult<TNode> {
+			const before = options.getNodes();
+			const result = combineShapeNodes(before, selectedIds(ids), operation, { ...rect(), ...combineOptions });
+			if (!result.ok) return result;
+			const name = `${operation[0].toUpperCase()}${operation.slice(1)} Shapes`;
+			const run = () => options.setNodes(applyShapeCombination(options.getNodes(), result));
+			const undo = () => options.setNodes(revertShapeCombination(options.getNodes(), result, before));
+			if (options.history) options.history.execute({ name, execute: run, undo });
+			else run();
+			return result;
+		},
+		unite: (ids?: Iterable<string>, o?: CombineShapeNodesOptions) => controller.combineShapes('unite', ids, o),
+		intersect: (ids?: Iterable<string>, o?: CombineShapeNodesOptions) => controller.combineShapes('intersect', ids, o),
+		subtract: (ids?: Iterable<string>, o?: CombineShapeNodesOptions) => controller.combineShapes('subtract', ids, o),
+		exclude: (ids?: Iterable<string>, o?: CombineShapeNodesOptions) => controller.combineShapes('exclude', ids, o),
+		divide: (ids?: Iterable<string>, o?: CombineShapeNodesOptions) => controller.combineShapes('divide', ids, o),
+		/** Whether the shape operations can run on `ids` (default: the selection). */
+		canCombineShapes: (ids?: Iterable<string>) => canCombineShapeNodes(options.getNodes(), selectedIds(ids)).ok,
+
+		/**
 		 * Runs a shortcut action. Scene actions are not handled here (see the scenes store);
 		 * returns `false` for them and for unknown actions.
 		 */
@@ -203,8 +247,10 @@ export function createCanvasArrangeController<TNode extends CanvasNode = CanvasN
 				zoom: options.getZoom?.() ?? 1,
 				index: dragIndex!
 			});
+			lastSnapped = new Map();
 			if (result.updates.length > 0) {
 				options.setNodes(applyNodeUpdates(options.getNodes(), result.updates));
+				for (const u of result.updates) if (u.position) lastSnapped.set(u.id, u.position);
 			}
 			setGuides(result.guides);
 			return result;
@@ -216,16 +262,27 @@ export function createCanvasArrangeController<TNode extends CanvasNode = CanvasN
 		 * A batch without a dragging position change ends the drag and clears the guides.
 		 */
 		snapPositionChanges<TChange extends PositionChangeLike>(changes: TChange[]): TChange[] {
-			const dragging = changes.filter((c) => c.type === 'position' && c.position && c.dragging);
+			const dragging = changes.filter(
+				(c): c is TChange & { id: string; position: XYPosition } =>
+					c.type === 'position' && typeof c.id === 'string' && !!c.position && !!c.dragging
+			);
 			if (dragging.length === 0) {
-				if (changes.some((c) => c.type === 'position' && c.dragging === false)) controller.endDrag();
-				return changes;
+				if (!changes.some((c) => c.type === 'position' && c.dragging === false)) return changes;
+				// React Flow's drag-stop change carries the raw pointer position, which would
+				// undo the snap of the last frame; keep the snapped position instead.
+				const snapped = lastSnapped;
+				lastSnapped = new Map(); // applied to the changes below, not by endDrag
+				controller.endDrag();
+				const keep = (c: TChange) =>
+					c.type === 'position' && c.dragging === false && !!c.position && c.id !== undefined && snapped.has(c.id);
+				if (!changes.some(keep)) return changes;
+				return changes.map((c) => (keep(c) ? { ...c, position: snapped.get(c.id!)! } : c));
 			}
 			if (options.snapping === false) return changes;
 			const ids = dragging.map((c) => c.id);
 			const key = ids.slice().sort().join('\u0000');
 			if (!dragIndex || key !== dragKey) controller.beginDrag(ids);
-			const proposed = new Map(dragging.map((c) => [c.id, c.position!]));
+			const proposed = new Map(dragging.map((c) => [c.id, c.position]));
 			const nodes = options.getNodes().map((n) => (proposed.has(n.id) ? { ...n, position: proposed.get(n.id)! } : n));
 			const result = snapNodeDrag(nodes, ids, {
 				...rect(),
@@ -235,22 +292,39 @@ export function createCanvasArrangeController<TNode extends CanvasNode = CanvasN
 			});
 			setGuides(result.guides);
 			const { x: dx, y: dy } = result.offset;
+			lastSnapped = new Map();
 			if (dx === 0 && dy === 0) return changes;
 			// Children of a dragged parent move with it; only shift top-level dragged nodes.
 			const parents = new Map(nodes.map((n) => [n.id, n.parentId]));
 			const shift = new Set(ids.filter((id) => !proposed.has(parents.get(id) ?? '')));
-			return changes.map((c) =>
-				c.type === 'position' && c.position && c.dragging && shift.has(c.id)
-					? { ...c, position: { x: c.position.x + dx, y: c.position.y + dy } }
-					: c
-			);
+			return changes.map((c) => {
+				if (!(c.type === 'position' && c.position && c.dragging && c.id !== undefined && shift.has(c.id))) return c;
+				const position = { x: c.position.x + dx, y: c.position.y + dy };
+				lastSnapped.set(c.id, position);
+				return { ...c, position };
+			});
 		},
 
-		/** Clears guides and the cached snap targets. */
+		/**
+		 * Clears guides and the cached snap targets. Call it from the flow's drag-stop
+		 * handler: flow libraries write the raw pointer position when a drag ends, so the
+		 * last snapped positions from `drag` are written back here.
+		 */
 		endDrag() {
+			const snapped = lastSnapped;
 			dragIndex = null;
 			dragKey = '';
+			lastSnapped = new Map();
 			setGuides([]);
+			if (snapped.size === 0) return;
+			const nodes = options.getNodes();
+			const drift = nodes.some((n) => {
+				const p = snapped.get(n.id);
+				return !!p && (n.position.x !== p.x || n.position.y !== p.y);
+			});
+			if (drift) {
+				options.setNodes(applyNodeUpdates(nodes, [...snapped].map(([id, position]) => ({ id, position }))));
+			}
 		}
 	};
 	return controller;
