@@ -9,6 +9,7 @@ import {
   type PdfRuleLine,
   type PdfTextRun,
 } from "../src";
+import { measureGrowth } from "./helpers/growth";
 
 /** A run at baseline `y`; ~0.5 em per character. */
 const run = (text: string, x: number, y: number, extra: Partial<PdfTextRun> = {}): PdfTextRun => {
@@ -439,21 +440,11 @@ describe("analyzePdfLayout: performance", () => {
   }
 
   it("grows near-linearly with the number of runs", { timeout: 60_000 }, () => {
-    const time = (scale: number) => {
-      const page = bigPage(scale);
-      const samples: number[] = [];
-      for (let i = 0; i < 3; i++) {
-        const start = performance.now();
-        analyzePdfLayout([page]);
-        samples.push(performance.now() - start);
-      }
-      return Math.min(...samples);
-    };
-    time(20); // warm up
-    const small = Math.max(time(50), 1);
-    const large = time(200);
+    const small = bigPage(100);
+    const large = bigPage(400);
     // 4× the input: linear ≈ 4×, quadratic ≈ 16×.
-    expect(large / small).toBeLessThan(10);
+    const ratio = measureGrowth(() => analyzePdfLayout([small]), () => analyzePdfLayout([large]), { limit: 10 });
+    expect(ratio).toBeLessThan(10);
   });
 
   it("keeps a staircase of cells from exploding into a huge table", { timeout: 30_000 }, () => {

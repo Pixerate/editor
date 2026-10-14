@@ -26,6 +26,7 @@ import {
   W3C_TOKENS_EXTENSION,
   type TokenState,
 } from "../src/tokens";
+import { measureGrowth } from "./helpers/growth";
 
 function counterIds() {
   let n = 0;
@@ -509,19 +510,16 @@ describe("W3C design tokens", () => {
   });
 
   it("import runs in linear time on long malformed references and measures", () => {
-    const time = (n: number) => {
+    const workload = (n: number) => {
       const doc: Record<string, unknown> = {};
       for (let i = 0; i < 50; i++) {
         doc[`r${i}`] = { $type: "number", $value: "{" + "a".repeat(n) };
         doc[`d${i}`] = { $type: "dimension", $value: "1".repeat(Math.min(n, 99)) + "e" };
       }
-      const start = performance.now();
-      importW3CTokens({ collections: [], variables: [] }, doc);
-      return performance.now() - start;
+      return () => importW3CTokens({ collections: [], variables: [] }, doc);
     };
-    time(500);
-    const small = time(500);
-    const large = time(4000);
-    expect(large).toBeLessThan(Math.max(small * 30, 200));
+    // 8× the reference length: linear ≈ 8×, quadratic ≈ 64×.
+    const ratio = measureGrowth(workload(2000), workload(16000), { limit: 24 });
+    expect(ratio).toBeLessThan(24);
   });
 });

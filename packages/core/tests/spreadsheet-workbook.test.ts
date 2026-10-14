@@ -23,6 +23,7 @@ import {
   sheetDropIndex,
   type SpreadsheetWorkbook,
 } from '../src/spreadsheet';
+import { measureGrowth } from './helpers/growth';
 
 /** Value of `ref` (e.g. `B2`) on the active sheet, or on `sheet`. */
 function valueOf(c: SpreadsheetController, ref: string, sheet?: string): any {
@@ -81,23 +82,16 @@ describe('formula syntax for sheets', () => {
   });
 
   it('tokenizes input full of apostrophes in linear time', { timeout: 30_000 }, () => {
-    const time = (n: number) => {
-      const formula = `=${"'a''".repeat(n)}`;
-      const start = performance.now();
-      for (let i = 0; i < 3; i++) {
-        try {
-          tokenizeFormula(formula);
-        } catch {
-          // Unterminated strings are expected; only the scan time matters.
-        }
+    const scan = (formula: string) => () => {
+      try {
+        tokenizeFormula(formula);
+      } catch {
+        // Unterminated strings are expected; only the scan time matters.
       }
-      return performance.now() - start;
     };
-    time(2_000); // warm up
-    const small = Math.max(time(20_000), 1);
-    const large = time(80_000);
     // Linear: 4× the input takes about 4× the time (quadratic would be 16×).
-    expect(large / small).toBeLessThan(10);
+    const ratio = measureGrowth(scan(`=${"'a''".repeat(20_000)}`), scan(`=${"'a''".repeat(80_000)}`), { limit: 10 });
+    expect(ratio).toBeLessThan(10);
   });
 
   it('quotes sheet names that need it', () => {
