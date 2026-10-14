@@ -21,6 +21,7 @@ import {
   safeCSSValue,
   StyleRegistry,
 } from "../src";
+import { measureGrowth } from "./helpers/growth";
 
 beforeAll(() => {
   const dom = new JSDOM();
@@ -171,18 +172,12 @@ describe("style registry", () => {
   });
 
   it("drops unsafe values in linear time", { timeout: 20000 }, () => {
-    const time = (n: number) => {
-      const value = "a".repeat(n) + "/";
-      const start = performance.now();
-      for (let i = 0; i < 50; i++) safeCSSValue(value);
-      return performance.now() - start;
-    };
-    // Long values are rejected before the pattern runs; doubling the input
-    // must not quadruple the time.
-    time(1000);
-    const small = Math.max(time(200_000), 0.5);
-    const large = time(400_000);
-    expect(large / small).toBeLessThan(3.5);
+    const small = "a".repeat(200_000) + "/";
+    const large = "a".repeat(800_000) + "/";
+    // Long values are rejected before the pattern runs: 4× the input is ~4× the
+    // time (or less), never the ~16× of a quadratic scan.
+    const ratio = measureGrowth(() => safeCSSValue(small), () => safeCSSValue(large), { limit: 10 });
+    expect(ratio).toBeLessThan(10);
     expect(safeCSSValue("a".repeat(300))).toBeUndefined();
   });
 });

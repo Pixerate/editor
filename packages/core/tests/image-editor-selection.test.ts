@@ -42,6 +42,7 @@ import {
   type PixelBuffer,
   type SelectionMask,
 } from '../src/image-editor/selection';
+import { measureGrowth } from './helpers/growth';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -630,32 +631,8 @@ describe('refine edge', () => {
  * Ratio of the cost of `large` to `small`. Each is repeated until one sample takes ≥ 15 ms, and
  * the two are measured alternately (so load spikes hit both), keeping the best of 7 samples.
  */
-function growthRatio(small: () => void, large: () => void): number {
-  const reps = (fn: () => void) => {
-    fn();
-    let n = 1;
-    for (;;) {
-      const t0 = performance.now();
-      for (let i = 0; i < n; i++) fn();
-      if (performance.now() - t0 >= 15 || n >= 64) return n;
-      n *= 2;
-    }
-  };
-  const ns = reps(small);
-  const nl = reps(large);
-  const sample = (fn: () => void, n: number) => {
-    const t0 = performance.now();
-    for (let i = 0; i < n; i++) fn();
-    return (performance.now() - t0) / n;
-  };
-  let bs = Infinity;
-  let bl = Infinity;
-  for (let k = 0; k < 7; k++) {
-    bs = Math.min(bs, sample(small, ns));
-    bl = Math.min(bl, sample(large, nl));
-  }
-  return bl / Math.max(bs, 0.01);
-}
+/** Growth from `small` to `large` (see helpers/growth), retried while at or above `limit`. */
+const growthRatio = (small: () => void, large: () => void, limit = 30) => measureGrowth(small, large, { limit, runs: 7 });
 
 describe('selection performance scales linearly', () => {
   // 9× the pixels: linear is ~9, quadratic would be ~81.
@@ -690,6 +667,6 @@ describe('selection performance scales linearly', () => {
   it('a wide feather costs about the same as a narrow one', { timeout: 60_000 }, () => {
     const sel = disc(400);
     // Three box passes per line: the cost is O(pixels + radius × lines), not O(pixels × radius).
-    expect(growthRatio(() => modifySelection(sel, 'feather', 10), () => modifySelection(sel, 'feather', 80))).toBeLessThan(6);
+    expect(growthRatio(() => modifySelection(sel, 'feather', 10), () => modifySelection(sel, 'feather', 80), 6)).toBeLessThan(6);
   });
 });

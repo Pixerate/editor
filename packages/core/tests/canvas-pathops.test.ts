@@ -45,6 +45,7 @@ import {
 import { polygonBoolean } from '../src/canvas/polygonBoolean';
 import { flattenSvgPath } from '../src/canvas/shapeGeometry';
 import type { Point } from '../src/canvas/types';
+import { measureGrowth } from './helpers/growth';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -899,18 +900,6 @@ describe('outlineStroke', () => {
 // Performance
 // ---------------------------------------------------------------------------
 
-/** Best of several runs: the least disturbed by other processes. */
-function timeIt(fn: () => void, runs = 5) {
-	fn();
-	const times: number[] = [];
-	for (let i = 0; i < runs; i++) {
-		const start = performance.now();
-		fn();
-		times.push(performance.now() - start);
-	}
-	return Math.min(...times);
-}
-
 describe('performance', () => {
 	it(
 		'grows at most about quadratically with the number of shapes',
@@ -921,10 +910,9 @@ describe('performance', () => {
 			};
 			const small = shapesOf(40);
 			const large = shapesOf(80);
-			const t1 = timeIt(() => pathBoolean('union', small));
-			const t2 = timeIt(() => pathBoolean('union', large));
-			// Doubling the input: quadratic work would be 4×; allow generous slack for noise.
-			expect(t2 / Math.max(t1, 1)).toBeLessThan(10);
+			// Doubling the input: quadratic work would be 4×, cubic 8×.
+			const ratio = measureGrowth(() => pathBoolean('union', small), () => pathBoolean('union', large), { limit: 7 });
+			expect(ratio).toBeLessThan(7);
 		},
 		60_000
 	);
@@ -938,9 +926,8 @@ describe('performance', () => {
 			const b1 = star(300);
 			const a2 = star(600);
 			const b2 = star(600);
-			const t1 = timeIt(() => unitePaths(a1, b1));
-			const t2 = timeIt(() => unitePaths(a2, b2));
-			expect(t2 / Math.max(t1, 1)).toBeLessThan(10);
+			const ratio = measureGrowth(() => unitePaths(a1, b1), () => unitePaths(a2, b2), { limit: 7 });
+			expect(ratio).toBeLessThan(7);
 		},
 		60_000
 	);

@@ -22,6 +22,7 @@ import {
   type ConditionalFormatSheet,
   type NewConditionalFormatRule
 } from '../src/spreadsheet';
+import { measureGrowth } from './helpers/growth';
 
 /** A controller whose cells are filled from `grid` (row-major raw inputs). */
 function sheet(grid: string[][], rows = Math.max(grid.length, 1), cols = 4) {
@@ -456,7 +457,7 @@ describe('conditional formatting: performance', () => {
   it(
     'evaluates large ranges in time that grows linearly',
     () => {
-      const time = (n: number) => {
+      const workload = (n: number) => {
         const values = Array.from({ length: n }, (_, i) => [(i * 7919) % 1000, `v${i % 97}`]);
         const s: ConditionalFormatSheet = { rowCount: n, colCount: 2, getValue: (r, c) => values[r][c] };
         const rules: ConditionalFormatRule[] = [
@@ -464,19 +465,13 @@ describe('conditional formatting: performance', () => {
           rule({ type: 'duplicate', style: RED, ranges: [col(0, n - 1, 1)] }, 'b'),
           rule({ type: 'containsText', text: 'v1', style: RED, ranges: [col(0, n - 1, 1)] }, 'c')
         ];
-        const start = performance.now();
-        evaluateConditionalFormats(s, rules);
-        return performance.now() - start;
+        return () => evaluateConditionalFormats(s, rules);
       };
-      // Best of three runs each, so GC pauses and machine load don't decide.
-      const best = (n: number) => Math.min(time(n), time(n), time(n));
-      time(2000); // warm up
-      const small = Math.max(best(5000), 1);
-      const large = best(40000);
-      // 8x the cells: linear is ~8x, quadratic would be ~64x; allow slack for machine load.
-      expect(large / small).toBeLessThan(24);
+      // 4× the cells: linear is ~4×, quadratic would be ~16×.
+      const ratio = measureGrowth(workload(10_000), workload(40_000), { limit: 10 });
+      expect(ratio).toBeLessThan(10);
     },
-    30000
+    60000
   );
 });
 

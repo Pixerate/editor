@@ -3,7 +3,7 @@ import { describe, it, expect } from "vitest";
 import { Editor } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import { createMentionExtension, getMentionNodes, setMentionRoleAt } from "../src/extensions";
-import { growthRatio } from "./helpers/growth";
+import { growthRatio, measureGrowth } from "./helpers/growth";
 import {
   extractMentions,
   extractMentionsFromDoc,
@@ -221,18 +221,12 @@ describe("role parsing stays linear", () => {
   // with the unchanged one instead of asserting absolute growth.
   it("preprocessing with roles costs about the same as without", () => {
     const input = " @a:b @c:".repeat(8000);
-    const best = (run: () => unknown) => {
-      let min = Infinity;
-      for (let i = 0; i < 3; i++) {
-        const start = performance.now();
-        run();
-        min = Math.min(min, performance.now() - start);
-      }
-      return min;
-    };
-    best(() => preprocessMarkdownMentions(input, { roles: true }));
-    const on = best(() => preprocessMarkdownMentions(input, { roles: true }));
-    const off = best(() => preprocessMarkdownMentions(input));
-    expect(on / Math.max(off, 1)).toBeLessThan(5);
+    // Same input both ways: the "growth" is the cost of the role path relative to the old one.
+    const ratio = measureGrowth(
+      () => preprocessMarkdownMentions(input),
+      () => preprocessMarkdownMentions(input, { roles: true }),
+      { limit: 5 },
+    );
+    expect(ratio).toBeLessThan(5);
   }, 30_000);
 });
