@@ -190,7 +190,7 @@ All contributors and AI assistants should check this file before starting work a
 
 - **Issue / Symptom**: Formulas computed from cells evaluated later showed 0 (`A1` = `=A2*2` loaded before `A2`); cycle markers vanished or turned into `NaN` after an insert or undo; inserting a row made formulas point at the wrong cells; column formulas using `[property]` showed the same value in every row.
 - **Root Cause**: `recalculateAll` evaluated row by row and never cleared the dependency graph; cycle detection only flagged the edited cell; references are stored as A1 text, so moving cells without rewriting formulas changes what they point at; `[property]` resolved against the *selected* row.
-- **Solution / Workaround**: `DependencyGraph.getEvaluationPlan()` runs an iterative Tarjan SCC pass (no recursion, so long chains don't overflow) that returns cells dependencies-first plus every member of a cycle. `recalculateAll` rebuilds the graph and follows the plan. Row/column insert/delete calls `shiftFormulaReferences()` on every formula *before* mutating the grid; growing the grid during a paste is not an insertion and must not shift references. Whole-column ranges (`A:A`) register a column dependency key (`"A:"`) instead of a million cell keys. The controller sets the evaluating row while evaluating so `[property]` is per-row. In formula code, never use `Math.max(...values)` or `push(...values)` on range values: large ranges overflow the stack.
+- **Solution / Workaround**: `DependencyGraph.getEvaluationPlan()` runs an iterative Tarjan SCC pass (no recursion, so long chains don't overflow) that returns cells dependencies-first plus every member of a cycle. `recalculateAll` rebuilds the graph and follows the plan. Row/column insert/delete calls `shiftFormulaReferences()` on every formula *before* mutating the grid; growing the grid during a paste is not an insertion and must not shift references. Ranges (including whole columns `A:A`) are stored whole in an interval index, never as one key per cell (see the large-sheet entry below). The controller sets the evaluating row while evaluating so `[property]` is per-row. In formula code, never use `Math.max(...values)` or `push(...values)` on range values: large ranges overflow the stack.
 
 
 ### [core/canvas] Streaming Layout: Debounce Starves Layouts, and Current Positions Are Not Layout Targets
@@ -825,3 +825,127 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Release runs failed (so nothing was published) on "grows linearly" tests whose code was fine, e.g. `pdf-layout` at 10.4× against a limit of 10, `html-scan` at 31×, `mention-roles` at 20×.
 - **Root Cause**: Each test timed its own sizes once or best-of-three, often for well under a millisecond. On a loaded CI runner (or with many test files in parallel) a single GC pause or descheduling dominates such a sample, so a linear function can look quadratic.
 - **Solution / Workaround**: Use `measureGrowth(small, large, { limit })` (or `growthRatio(unit, run)` for repeated strings) from `packages/core/tests/helpers/growth.ts`: it repeats each sample until it takes at least 10 ms, alternates small and large, keeps the best of several runs, and retries while the ratio is at or above the limit. `tests/growth-helper.test.ts` checks it still fails real quadratic work. Prefer 4× size steps (linear ≈ 4×, quadratic ≈ 16×) and keep absolute-time limits at least 20× above the measured local time.
+
+### [core/canvas] Animated Nodes: Render the Evaluated Frame, but Send Edits Back Through `applyDisplayChanges`
+
+- **Issue / Symptom**: Dragging an animated node in React Flow snapped it back on the next frame. Writing the evaluated values into the stored nodes baked one frame's values into the base, so scrubbing showed wrong values afterwards. Rotating a node through `style.transform` moved it to the flow origin.
+- **Root Cause**: The canvas shows `applyAnimation(nodes, time)`, but xyflow reports changes against the nodes it renders. Applying those changes to the stored nodes either loses them (the animated value wins on the next frame) or stores evaluated values. xyflow positions nodes with `transform: translate(…)` on the same element as `node.style`, so a `transform` in the style replaces it.
+- **Solution / Workaround**:
+  - Render `display()` / `displayNodes` and pass edits through `applyDisplayChanges(applyNodeChanges(changes, displayNodes))`. It calls `recordAnimationChanges`, which keys animated properties at the playhead (all changed properties in record mode) and restores their stored values; other changes pass through.
+  - The keying is one undo step that only restores `data.animation`, merged by tag while a drag continues.
+  - Rotation and scale are written to the CSS individual transform properties `style.rotate` / `style.scale`, which compose with xyflow's `transform`.
+  - Run `applyAnimation` after `resolveCanvasTokens`, never before.
+
+### [core/canvas] Keyframe Caches Keyed by Array Identity Go Stale When the Array Is Edited in Place
+
+- **Issue / Symptom**: After `keys[0] = { ...keys[0], easing: 'hold' }`, `evaluateTrack(keys, t)` kept interpolating linearly.
+- **Root Cause**: `normalizeKeyframes` (sort, drop invalid, merge duplicate times) is cached in a `WeakMap` keyed by the keyframe array so every frame does not re-sort. An in-place edit keeps the same array.
+- **Solution / Workaround**: The cache stores a shallow copy of the elements and is reused only while every element is still the same object (an O(n) identity check, no sort). Editing functions always write new arrays and keyframe objects. Treat keyframe objects as immutable: mutating `k.time` in place is still not detected.
+
+### [core/canvas] Frame Times Are Not Exact, and Keying at the Playhead Must Not Snap
+
+- **Issue / Symptom**: A keyframe recorded at 500 ms was stored as `500.00000000000006`, so it no longer matched refs at 500. Pressing "Add keyframe" with the playhead at 250 ms keyed 233.333 ms.
+- **Root Cause**: `Math.round(t / (1000 / fps)) * (1000 / fps)` is not exact in binary floating point. Snapping every keyed time to a frame moves keys the user placed deliberately.
+- **Solution / Workaround**: `snapTimeToFrame` rounds its result to a microsecond, and refs compare times with `ANIMATION_TIME_EPSILON`. Only keyframe drags snap to frames, when no other target is in range. Keys at the playhead use the playhead time unchanged.
+
+### [core/canvas] CSS Cannot Reproduce OKLab Colour Tweens or Split `x` / `y` Timing
+
+- **Issue / Symptom**: Exported CSS animations faded colours through a different (muddier) midpoint than the canvas. When `x` and `y` had different easings, one of them followed the wrong curve.
+- **Root Cause**: CSS keyframes interpolate colours in sRGB and cannot choose a space. `translate` takes both axes, and a keyframe block has one `animation-timing-function` for every property in it.
+- **Solution / Workaround**: Export one `@keyframes` per CSS property, so each track keeps its own per-segment easing. Use `rotate` / `scale` / `translate` instead of a combined `transform`. Colour segments between different colours, `x` / `y` pairs whose key times or easings differ, and motion paths are sampled at `sampleFps` with linear timing and reported as `exact: false`.
+
+### [svelte/canvas] Timeline Rows Do Not Refresh After Undo When the Nodes Are Not `$state`
+
+- **Issue / Symptom**: In tests (and apps that keep nodes in a plain variable or store), undoing a keyframe move left the Svelte timeline showing the moved diamonds.
+- **Root Cause**: The rows are a `$derived` of `animation.timelineRows()`, which reads the nodes through `getNodes()`. Undo changes the nodes without changing the controller's state snapshot (time, selection and duration are equal), so nothing reactive was read.
+- **Solution / Workaround**: `createCanvasAnimation` bumps a `revision` `$state` whenever it writes the nodes (edits, undo and redo all go through its `setNodes`). `<AnimationTimeline>` and `displayNodes` read `revision`. Changes made outside the rune need a `revision` prop bump or `refresh()`.
+
+### [react/svelte] `ReturnType` of a Generic Hook Fixes the Default Type Parameter
+
+- **Issue / Symptom**: The demo's `useCanvasAnimation<DemoNode>(…)` result could not be passed to `<AnimationTimeline animation>`: "Two different types with this name exist, but they are unrelated."
+- **Root Cause**: `type CanvasAnimation = ReturnType<typeof useCanvasAnimation>` instantiates the hook with `TNode = CanvasNode`. Methods taking or returning `TNode[]` make the result invariant in `TNode`.
+- **Solution / Workaround**: Make the alias generic (`CanvasAnimation<TNode> = ReturnType<typeof useCanvasAnimation<TNode>>`, likewise `SvelteCanvasAnimation<TNode>`), and have components accept `CanvasAnimation<any>`.
+
+### [core/tables] prosemirror-tables `deleteRow` / `deleteColumn` Say They Can Run on the Whole Table
+
+- **Issue / Symptom**: `editor.can().deleteRow()` returned `true` in a one-row table, so the toolbar enabled "Delete row", but running it did nothing (`runTableAction` returned `false`, the command registry reported a failure).
+- **Root Cause**: prosemirror-tables only checks "the selection covers every row/column" inside its `if (dispatch)` branch, so a dry run (`can()`, no `dispatch`) never sees it. `mergeCells` / `splitCell` / `goToNextCell` do check without dispatching.
+- **Solution / Workaround**: `getTableActionState` checks `selectedRect(state)` itself for `deleteRow` / `deleteColumn` and returns "These are all the rows: delete the table instead." Don't trust `can()` alone for prosemirror-tables commands; test enablement by running the action, not only by asking.
+
+### [core/track-changes] Deleted Table Rows and Columns Have No Inline Text to Mark, So They Are Whole-Block Changes
+
+- **Issue / Symptom**: With tracking on, Delete Row put the row back with its text struck through, but accepting left an empty row; Delete Column really deleted the empty cells of the column and restored only the cells with text, leaving a ragged table that `fixTables` then padded in the wrong place. Inserted rows (empty paragraphs) were not tracked at all.
+- **Root Cause**: The tracker only restores deleted slices that contain inline content and only marks inserted inline content; rows, cells and tables are structure, like paragraph boundaries (see "Whole Paragraphs Have No Inline Representation").
+- **Solution / Workaround**: Closed slices made only of `tableRole` nodes (table, row, cell, header cell) are tracked as whole-block operations: a deletion is re-inserted unchanged and every textblock inside gets `blockChange: { operation: "delete" }`; inserted tables/rows/cells (found by walking the step's slice, skipping open edge nodes) get `operation: "insert"`, with any insertion marks inside removed. `removeBlocks` already removes containers whose textblocks are all removed, so accepting/rejecting removes whole rows, cells or the table. Rows the same author inserted are really deleted. Merging/splitting cells (span changes plus cell deletions in one step) cannot be represented and is refused while tracking; cell attribute changes (`setCellAttribute`, column widths) are `ReplaceAroundStep`s that leave the textblocks' wrapper types unchanged, so they stay untracked. Header toggles change the wrapper type and are tracked as ordinary block changes (rejecting restores the cell type via `restoreWrappers`).
+
+### [core/markdown] tiptap-markdown's Table Serializer Does Not Escape `|`, and Its HTML Fallback Was Escaped by Our Sanitizer
+
+- **Issue / Symptom**: A cell containing `A|B` exported as `| A|B | 3 |`, which reads back as three cells. Tables with spans were exported as HTML containing `<colgroup><col>`, which `markdownToTipTapHtml` turned into literal `&lt;colgroup&gt;` text. Header alignment was lost.
+- **Root Cause**: tiptap-markdown 0.8 writes cells with `renderInline` and its text serializer escapes markdown characters but not the pipe; it always writes `---` delimiters. TipTap's `table` `renderHTML` emits a `<colgroup>`, and `colgroup` / `col` were missing from the embedded-HTML allowlist.
+- **Solution / Workaround**: The `Table` extension provides `storage.markdown.serialize` (tiptap-markdown merges it over its default and keeps the default parser): cells are rendered in place mid-line and their output is rewritten with `|` → `\|` and newlines → spaces; delimiters come from the header cells' `align`. Non-GFM tables are written as HTML (a block that parses back). `colgroup`, `col` and `colwidth` are in the sanitizer allowlist; `style` is still dropped.
+
+### [react|svelte/tables] Toolbar Tests: `focus()` Needs `requestAnimationFrame`, and the Bubble Menu Element Is Detached
+
+- **Issue / Symptom**: Table commands run through the command registry failed in jsdom with "requestAnimationFrame is not defined"; `document.querySelector` could not find a `TableBubbleMenu`'s toolbar; a table store test started "inside a table" before any selection was made.
+- **Root Cause**: `chain().focus()` schedules with `requestAnimationFrame`, which plain JSDOM setups don't define. TipTap's `BubbleMenuView` removes its element from the DOM until tippy shows it, so a React portal or Svelte child rendered into it is not in the document. A document that starts with a table puts the initial selection in its first cell.
+- **Solution / Workaround**: Polyfill `requestAnimationFrame` in tests that focus. Find bubble menu content through `editor.view.pluginViews` (`view.element`). Move the selection out of the table before asserting the "outside" state.
+
+### [core/export] DOCX Round Trips: `<ins>` Was Not in the Sanitizer Allowlist, the Hyperlink Style Underlines, and Word Has No Change or Thread Ids
+
+- **Issue / Symptom**: Tracked insertions imported from Word vanished as marks (only their text stayed); exported links came back underlined; one tracked change became several after export and re-import; comment threads and moves lost their link to each other.
+- **Root Cause**: `sanitizeImportedHtml` stripped `<ins>` (not in `ALLOWED_HTML_TAGS`), so `ins[data-change-type]` never reached the `insertion` mark. Word marks links with the `Hyperlink` character style, whose underline the importer applied as formatting. WordprocessingML gives every `w:ins` / `w:del` element its own `w:id` and has no thread or change id: replies point at the `w14:paraId` of their parent comment's last paragraph (`commentsExtended.xml`), moves are paired only by the `w:name` of their `w:moveFromRangeStart` / `w:moveToRangeStart`, and author ids exist only in `people.xml`.
+- **Solution / Workaround**: `ins` is now allowed (attributes still go through the allowlist; this also means `<ins>` in markdown renders instead of being escaped). The importer ignores the `Hyperlink` style's formatting inside hyperlinks, merges adjacent changes with the same kind, author, date and move into one change id, maps move range names to fresh move ids, attaches replies to the root of their chain, and reads author ids from `people.xml` (the export writes it unless `privacy: "strip-authors"`). Ids are regenerated on import (`createReviewId`), so comparing round trips must use bodies, authors and texts, not ids. Other limits: `Title` paragraphs come back as `<h1>` (existing import rule), headings with custom styles lose `data-style`, block-change wrappers (lists, quotes) are not exported, and dates keep whole seconds only.
+
+### [core/export] Word Needs a Paragraph Between and After Tables, and `w:delText` Is Only for Real Deletions
+
+- **Issue / Symptom**: Two adjacent tables merged into one in Word; a document or cell ending in a table was reported as damaged; moved-away text showed as missing.
+- **Root Cause**: Word joins consecutive `w:tbl` elements, requires every `w:tc` to end with a `w:p`, and expects a paragraph before the final `w:sectPr`. Moved-away text (`w:moveFrom`) must stay in `w:t` (ECMA-376 §17.13.5.22); only `w:del` content uses `w:delText`.
+- **Solution / Workaround**: The exporter writes an empty `w:p` between adjacent tables, at the end of cells that are empty or end with a table, and after a final table (which the importer reads back as an empty paragraph), and writes `w:delText` only for deletions without a `moveId`.
+
+### [core/canvas] Component Sync Needs the Nodes From Before the Edit, and No-Op Rebuilds Must Keep Node Identity
+
+- **Issue / Symptom**: Deciding overrides by comparing an instance layer with its main layer recorded the main's *old* value as an override whenever the main was edited before its instances were rebuilt (the instance simply had not caught up). Separately, rebuilding instances on every React Flow change re-rendered forever.
+- **Root Cause**: "Differs from the main" is ambiguous on its own: it means either "the user changed the instance" or "the user changed the main". Rebuilding an instance creates new node objects even when nothing changed, so a hook that sets nodes after a sync triggers another change, and another sync.
+- **Solution / Workaround**: `syncCanvasComponents(before, after)` diffs each node against its version *before the edit*: only groups that changed on an instance layer become overrides (and only while they differ from the main), while changes inside a main rebuild its instances. Rebuilt nodes that deep-equal their previous version keep their identity, so a no-op sync returns `after` itself. The controller keeps the last synced array and syncs against it; its own actions and undo / redo set that snapshot, so changes made by a rebuild are never re-read as edits.
+
+### [core/canvas] Token-Bound Values and Component Property Values Look Like Overrides
+
+- **Issue / Symptom**: An instance in Dark mode (its own `data.tokenModes`) would show every bound fill as overridden; binding another variable inside an instance recorded both `token.fill` and `shape.fill`. Conversely, filtering out every group a component property drives meant that typing over a property-driven label, or swapping a nested instance whose main an instance-swap property drives, recorded no override at all.
+- **Root Cause**: Bound values are materialised into the nodes (see the token entry above), so a layer resolved in another mode really does differ from its main. Property values are written by the rebuild, not by the user, so they never need filtering out of user edits.
+- **Solution / Workaround**: Value groups written by a node's token bindings are never overrides (found by probing `property.write` with a different value and diffing); a different binding is the override (`token.<key>`). Property values are applied during the rebuild, which the sync never re-reads as an edit, so a user edit to a property-driven layer is an override that wins over the property, as in Figma. Only `rebaseInstance` (detach, paste, restore), which compares values rather than edits, skips property-driven groups.
+
+### [core/canvas] Variant Switches Match Layers by Name, and Text Layers Are Often Named by Their Content
+
+- **Issue / Symptom**: Switching an instance from `State=Default` to `State=Hover` lost the text override on its label and gave the label a new id.
+- **Root Cause**: Layers of two variants are different nodes, so the rebuild matches old copies to the new variant's layers by their name path (`Frame/Label`). `getLayerName` falls back to `data.label`, which for text nodes is the text itself, and that differs between variants ("Default" / "Hover").
+- **Solution / Workaround**: Give layers that must match across variants (or swaps) a stable `data.name`; it wins over `data.label` for matching. Matching inside one main uses the source id first, so plain main edits never depend on names.
+
+### [core/spreadsheet] Large Sheets: Ranges Expanded per Cell, Whole-Sheet Undo Snapshots and Quadratic Id Lookups
+
+- **Issue / Symptom**: On a 50k-row sheet a CSV import took 23 s, loading 100 formulas over `$A$1:$A$50000` took 3.2 s and editing one of their inputs 0.8 s, and even an edit nothing depended on took ~25 ms.
+- **Root Cause**: The dependency graph expanded every range into one key per cell (100 × 50k set entries), and planning scanned those lists; `rows.find((r) => r.id === …)` in `getCell` / `setCellValue` / `getCellKey` made imports O(n²) (and range reads over blank cells too); every single-cell edit serialised the whole sheet (`JSON.stringify`) for undo.
+- **Solution / Workaround**: `DependencyGraph` keeps ranges whole (`SHEETID!A1:A50000`) in a per-column interval index (ported from gridcraft's `Intervals`: sorted starts plus a max-end segment tree, insertions/removals merged lazily on the next query) and a per-sheet index for ranges wider than 64 columns; `getDependents` is O(log n + k). Planning turns each distinct range into one virtual node whose edges are the planned cells inside it (binary search), so ranges shared by many formulas cost once. `getDependencies` now returns range keys (`A1:A3`, `A:`) instead of expanded cells; use `dependsOn(formula, cell)` to ask about one cell. Rows and columns are found through a validated `PositionCache` (never `find` in a per-cell path). Single-cell edits push a `cells` undo entry (the cell's previous state); `getRecalculationStats()` gives deterministic work counts for tests. Paste/import inside the grid recalculates the written cells with their dependents in one plan; when the grid grows (or for `loadWorkbook`), `recalculateAll` evaluates everything once.
+
+### [core/spreadsheet] Spill Edges Can Close False Cycles: Blockers Don't Order, and New Input Makes Old Edges Stale
+
+- **Issue / Symptom**: Random edit sequences left `#CYCLE!` (or skipped spills) that a full recalculation of the same workbook didn't show, e.g. an anchor blocked by a cell whose formula (indirectly) read the anchor, `A1` = `=SEQUENCE(4)` then pasting `=MAX(A2:A9)*2` into A1 and `=SEQUENCE(3)` into A2, or replacing an anchor's formula with one reading the cells it used to spill into. The old graph had the same bugs.
+- **Root Cause**: A blocked anchor's edges to its blockers were ordering edges, but whether a cell blocks depends on its input, not its value. Spilled-cell → anchor edges outlive the input that made them true (a cell that now has its own formula, an anchor with a new formula) until the anchor is evaluated again, so the plan made before that sees cycles that no longer exist, and a cyclic anchor keeps its edges.
+- **Solution / Workaround**: Blocker edges are only followed for propagation (`getDependents`), never for ordering or cycle detection. Writing a cell drops the spill edges it anchored and its edge to the anchor whose values it held (`dropStaleSpillEdges`). Because dropped edges lose ordering, `placeSpill` reports every spilled cell not previously linked to the anchor as a spill change, so its dependents are recalculated in the next pass. `tests/spreadsheet-recalc.test.ts` compares incremental and full recalculation on random sheets with ranges, spills, cross-sheet, 3-D and name references, pastes, undo and redo: run more seeds after changing recalculation.
+
+### [core/spreadsheet] Per-Plan Range Cache and Blank-Skipping Ranges Are Only Safe in Narrow Cases
+
+- **Issue / Symptom**: Caching a range's values for a whole recalculation, or leaving blank cells out of ranges, can return stale or wrong results.
+- **Root Cause**: Formulas evaluated later in the same plan (or spills re-placed) change cells inside a cached range; `COUNTBLANK`, `COUNTIF(…,"")`, `INDEX`, `MATCH` and array results depend on blank positions.
+- **Solution / Workaround**: The controller caches only ranges of 256+ cells, only while `runEvaluationPlan` runs and no `valueOverride` (validation) is set; evaluating a cell drops cached ranges covering its column, and any spill change drops the sheet's entries; hits return a copy. Blanks are skipped only for direct `Range` arguments of `SUM`, `PRODUCT`, `AVERAGE`, `COUNT`, `COUNTA`, `MIN` and `MAX` (`RangeResolveOptions.skipBlanks`, a hint resolvers may ignore). Keep document order: floating-point sums depend on it.
+
+### [react|svelte/spreadsheet] Virtualised Grid: jsdom Has No Layout, Merges Cross the Window, and Scroll-Into-View Must Not Track Scrolling
+
+- **Issue / Symptom**: In jsdom the window computed from `clientHeight` (0) rendered no rows and `scroll` events never fired after programmatic scrolling; a merged cell whose top-left row was above the window vanished (or its `rowspan` covered the spacer); an effect that scrolled the active cell into view snapped back whenever the user scrolled away.
+- **Root Cause**: jsdom does no layout (sizes are 0, no `ResizeObserver`), but it stores `scrollTop`. A merge is rendered from its top-left cell. An effect reading the viewport state re-runs on every scroll.
+- **Solution / Workaround**: The core helpers (`getSpreadsheetViewWindow`, `getSpreadsheetScrollToCell`) assume a 1200×600 viewport when the size is 0, and widen the window until no merge crosses its edges. The bindings update their viewport state directly after scrolling to the active cell, and only re-render when the window changes. The scroll-into-view effect depends only on the active cell and the mode (`untrack` in Svelte, refs in React). Frozen rows/columns are rendered before the spacers so sticky offsets still work; group rows get the same spacer cells as body rows (`leadingColumns`, `leftSpace`, `rightSpace`). Small sheets (≤ 200 rows, ≤ 60 columns) render every cell, so existing DOM tests are unchanged. Browser automation must press keys (not `insertText`) to type into the grid.
+
+### [react/svelte spreadsheet] Scrolled Rows Show Through Frozen Rows in a Collapsed-Border Table
+
+- **Issue / Symptom**: With frozen rows and a sheet scrolled far down (e.g. the demo's 10,000-row "Large" sheet), thin slivers of the scrolling rows' text appeared along the top of every frozen row. Hit-testing showed no gap; hiding the scrolled rows made the slivers disappear.
+- **Root Cause**: The grid `<table>` used `border-collapse: collapse` with the row separator on the `<tr>` (`border-b`). In the collapsing border model the shared borders belong to the table grid, not the cells, so when frozen cells are `position: sticky` their backgrounds don't cover the border band and the browser paints the rows scrolled underneath through it.
+- **Solution / Workaround**: The table uses `border-separate border-spacing-0`, and the row separator is drawn on the cells (`[&>*>tr:not([data-spacer])>*]:border-b`; spacer rows get none so the virtual-scroll heights stay exact). Don't switch the grid back to `border-collapse` while frozen panes are sticky cells. Consumers' Tailwind must scan the package sources (as for every other class the components use) for the arbitrary variant to compile.

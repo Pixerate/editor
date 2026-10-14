@@ -16,6 +16,7 @@ export default defineConfig({
     "generation/index": "src/generation/index.ts",
     "compare/index": "src/compare/index.ts",
     "tokens/index": "src/tokens/index.ts",
+    "export/index": "src/export/index.ts",
   },
   format: ["esm", "cjs"],
   dts: true,

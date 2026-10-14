@@ -8,8 +8,14 @@ import {
   useAgentToolProvider,
   FindReplaceBar,
   StylesGallery,
+  InsertTableGrid,
+  TableToolbar,
+  TableBubbleMenu,
+  useRegisterCommands,
+  ExportDocxButton,
 } from "@pixerate/editor-react";
-import { getCrossReferenceTargets } from "@pixerate/editor";
+import { CommentStore, DEFAULT_TABLE_TOOLBAR, createTableCommands, getCrossReferenceTargets } from "@pixerate/editor";
+import type { DocxExportReport } from "@pixerate/editor/export";
 import { createRichTextToolProvider } from "@pixerate/editor/agent";
 import {
   Bold,
@@ -29,8 +35,9 @@ import {
   Upload,
   Wand2,
   Search,
+  Table as TableIcon,
 } from "lucide-react";
-import { demoToolRegistry } from "../agentTools";
+import { demoCommandRegistry, demoToolRegistry } from "../agentTools";
 import { RichDocumentAutosave } from "./RichDocumentAutosave";
 import { samplePdfFile, samplePdfRegistry } from "../samplePdf";
 
@@ -49,16 +56,50 @@ const INITIAL_CONTENT = `
     <li>Interactive bubble menu on text selection</li>
     <li>Task lists and rich formatting</li>
   </ul>
+  <h2 id="h-tables">Tables</h2>
+  <p>Insert a table from the grid picker in the toolbar. With the cursor in a table, the table toolbar adds and deletes rows and columns, merges and splits cells, toggles header rows, columns and cells, and aligns cells; Tab moves to the next cell. Drag a column border to resize it.</p>
+  <table><tbody>
+    <tr><th><p>Feature</p></th><th><p>React</p></th><th><p>Svelte</p></th></tr>
+    <tr><td><p>Table toolbar and bubble menu</p></td><td><p>TableToolbar</p></td><td><p>TableToolbar</p></td></tr>
+    <tr><td><p>Insert-table grid</p></td><td colspan="2"><p>InsertTableGrid (both)</p></td></tr>
+  </tbody></table>
+  <h2 id="h-review">Review and Word export</h2>
+  <p>This paragraph carries <span data-comment-id="demo-comment">a comment thread with a reply</span> and tracked changes: <del data-change-type="deletion" data-change-id="demo-del" data-author-id="ana" data-author-name="Ana Editor" data-created-at="1767225600000">old wording</del><ins data-change-type="insertion" data-change-id="demo-ins" data-author-id="ana" data-author-name="Ana Editor" data-created-at="1767225600000">new wording</ins>. “Export to Word” writes them to a <code>.docx</code> with authors, dates, replies and resolved state.</p>
   <h2 id="h-import">Import and clipboard</h2>
   <p>Drop a <code>.md</code>, <code>.html</code>, <code>.txt</code> or <code>.rtf</code> file onto the editor (it lands at the drop position) or use “Import file”. “Import sample PDF” runs PDF layout analysis (columns, headings, lists, tables, running headers) on a generated fixture; untick “Detect structure” for the plain fallback. Copy and paste keeps footnotes, bookmarks and cross-references intact between editors (rich clipboard).</p>
   <section data-type="footnotes"><ol><li data-type="footnote" data-id="fn-demo"><p>Footnotes are numbered automatically and listed at the end of the document.</p></li></ol></section>
 `;
+
+/** A compact subset of the table toolbar for the bubble menu. */
+const QUICK_TABLE_ITEMS = DEFAULT_TABLE_TOOLBAR.filter((item) =>
+  ["addRowAfter", "addColumnAfter", "deleteRow", "deleteColumn", "toggleHeaderRow"].includes(item.id),
+);
 
 export const RichDocumentTab: React.FC = () => {
   const [corrections, setCorrections] = useState<string[]>([]);
   const [importMessage, setImportMessage] = useState<string | null>(null);
   const [bookmarkName, setBookmarkName] = useState("");
   const [crossRefTarget, setCrossRefTarget] = useState("");
+  const [tablePickerOpen, setTablePickerOpen] = useState(false);
+  const [exportMessage, setExportMessage] = useState<string | null>(null);
+  const commentStore = useMemo(
+    () =>
+      new CommentStore({
+        threads: [
+          {
+            id: "demo-comment",
+            anchor: null,
+            author: { id: "ana", name: "Ana Editor" },
+            createdAt: 1767225600000,
+            body: "Should this mention the export?",
+            replies: [{ id: "demo-reply", author: { id: "you", name: "You" }, body: "Yes, it now does.", createdAt: 1767229200000 }],
+            resolved: false,
+            orphaned: false,
+          },
+        ],
+      }),
+    [],
+  );
 
   const editor = useEditor({
     content: INITIAL_CONTENT,
@@ -73,6 +114,8 @@ export const RichDocumentTab: React.FC = () => {
       crossReferences: true,
       findReplace: true,
       paragraphStyles: true,
+      comments: { store: commentStore, author: { id: "you", name: "You" } },
+      trackChanges: { enabled: false, author: { id: "you", name: "You" } },
       autocorrect: {
         onCorrection: (c) =>
           setCorrections((prev) => [`${c.original} → ${c.replacement}`, ...prev].slice(0, 5)),
@@ -111,6 +154,10 @@ export const RichDocumentTab: React.FC = () => {
     [editor]
   );
   useAgentToolProvider(demoToolRegistry, provider);
+
+  // Table commands in the command palette (⌘K) and for agents (commands__run_command).
+  const tableCommands = useMemo(() => (editor ? createTableCommands(editor) : null), [editor]);
+  useRegisterCommands(demoCommandRegistry, tableCommands);
 
   if (!editor) return null;
 
@@ -168,6 +215,27 @@ export const RichDocumentTab: React.FC = () => {
 
         <div className="w-px h-5 bg-slate-800 mx-1" />
 
+        <div className="relative">
+          <button
+            onClick={() => setTablePickerOpen((open) => !open)}
+            className={btn(tablePickerOpen || editor.isActive("table"))}
+            title="Insert table"
+            aria-expanded={tablePickerOpen}
+          >
+            <TableIcon className="w-4 h-4" />
+          </button>
+          {tablePickerOpen && (
+            <div className="absolute left-0 top-full z-30 mt-1">
+              <InsertTableGrid
+                editor={editor}
+                className="inline-flex flex-col gap-1 rounded-md border border-slate-700 bg-slate-900 p-2 text-xs text-slate-300 shadow-xl"
+                cellClassName="h-4 w-4 rounded-sm border border-slate-700 bg-slate-950 disabled:opacity-40 data-[active=true]:border-rose-400 data-[active=true]:bg-rose-500/30"
+                activeCellClassName=""
+                onInsert={() => setTablePickerOpen(false)}
+              />
+            </div>
+          )}
+        </div>
         <button onClick={() => editor.chain().focus().insertTableOfContents().run()} className={btn()} title="Insert table of contents">
           <ListTree className="w-4 h-4" />
         </button>
@@ -197,6 +265,15 @@ export const RichDocumentTab: React.FC = () => {
           </span>
         </div>
       </div>
+
+      {/* Table toolbar: shown while the cursor is in a table */}
+      <TableToolbar
+        editor={editor}
+        className="bg-slate-900/80 border border-slate-800 rounded-xl px-3 py-2 flex flex-wrap items-center gap-1 text-xs"
+        buttonClassName="whitespace-nowrap px-2 py-1 rounded text-slate-300 hover:bg-slate-800 disabled:opacity-40 disabled:hover:bg-transparent"
+        activeButtonClassName="bg-rose-500/20 text-rose-300"
+        separatorClassName="w-px h-4 bg-slate-700 mx-1"
+      />
 
       {/* Bookmarks, cross-references and import */}
       <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-3 flex flex-wrap items-center gap-2 text-xs">
@@ -268,6 +345,24 @@ export const RichDocumentTab: React.FC = () => {
         >
           <Upload className="w-3.5 h-3.5" /> {fileImport.isImporting ? "Importing…" : "Import file"}
         </button>
+        <ExportDocxButton
+          editor={editor}
+          title="Rich document demo"
+          author={{ id: "you", name: "You" }}
+          className="flex items-center gap-1.5 px-2 py-1 rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 disabled:opacity-50"
+          onExported={(report: DocxExportReport) =>
+            setExportMessage(
+              `Exported ${report.written.paragraphs} paragraphs, ${report.written.comments} comment(s), ` +
+                `${report.written.trackedChanges} tracked change(s)` +
+                (report.dropped.length ? `; left out: ${report.dropped.map((d) => `${d.name} (${d.reason})`).join(", ")}` : ""),
+            )
+          }
+        />
+        {exportMessage && (
+          <span className="text-emerald-300" data-testid="export-status">
+            {exportMessage}
+          </span>
+        )}
         {(importMessage || fileImport.error) && (
           <span className={fileImport.error ? "text-red-400" : "text-emerald-300"} data-testid="import-status">
             {fileImport.error ? fileImport.error.message : importMessage}
@@ -351,6 +446,20 @@ export const RichDocumentTab: React.FC = () => {
               Underline
             </button>
           </BubbleMenu>
+
+          <TableBubbleMenu
+            editor={editor}
+            className="bg-slate-800 text-slate-100 border border-slate-700 shadow-xl rounded-md p-1"
+            tippyOptions={{ duration: 100, placement: "bottom" }}
+          >
+            <TableToolbar
+              editor={editor}
+              items={QUICK_TABLE_ITEMS}
+              className="flex items-center gap-1 text-xs"
+              buttonClassName="whitespace-nowrap px-2 py-1 rounded hover:bg-slate-700 disabled:opacity-40"
+              activeButtonClassName="text-rose-400"
+            />
+          </TableBubbleMenu>
 
           <FindReplaceBar editor={editor} className="mb-3 flex flex-col gap-1 rounded-md border border-border bg-background p-1 text-sm shadow-sm" />
           <EditorContent editor={editor} />

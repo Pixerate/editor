@@ -11,6 +11,7 @@ export * from "./history";
 export * from "./slots";
 export * from "./import";
 export * from "./compare";
+export * from "./export";
 
 // Re-export common tiptap types for convenience
 export type { Editor, Content, Extensions, EditorOptions } from "@tiptap/core";

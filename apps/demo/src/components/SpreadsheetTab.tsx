@@ -24,6 +24,7 @@ import {
   Redo2,
   MousePointerClick,
   Tags,
+  Rows3,
 } from "lucide-react";
 import { demoToolRegistry } from "../agentTools";
 
@@ -204,6 +205,45 @@ function buildSampleWorkbook(): SpreadsheetWorkbook {
   };
 }
 
+const LARGE_SHEET_NAME = "Large";
+const LARGE_SHEET_ROWS = 10_000;
+
+/**
+ * A 10,000 × 5 sheet (50k cells): values, per-row formulas and whole-column
+ * aggregates. Editing one value recalculates only the formulas that read it,
+ * and the grid renders only the rows in view.
+ */
+function buildLargeSheet(): Partial<SpreadsheetDocument> {
+  const columns: SpreadsheetColumn[] = ["Value", "Double", "Sum", "Band", "Totals"].map((title, i) => ({
+    id: `large_c${i}`,
+    key: String.fromCharCode(65 + i),
+    title,
+    width: 120,
+    type: "freeform" as const,
+  }));
+  const rows: SpreadsheetRow[] = Array.from({ length: LARGE_SHEET_ROWS }, (_, r) => ({
+    id: `large_r${r}`,
+    index: r,
+    height: 32,
+    type: "freeform" as const,
+  }));
+  const totals = ["=SUM(A:A)", "=AVERAGE(B:B)", '=COUNTIF(A:A,">50")', `=SUMIF(D1:D${LARGE_SHEET_ROWS},"high",A1:A${LARGE_SHEET_ROWS})`];
+  const cells: Record<string, Record<string, CellData>> = {};
+  for (let r = 0; r < LARGE_SHEET_ROWS; r++) {
+    const n = r + 1;
+    const value = (r * 37) % 100;
+    cells[`large_r${r}`] = {
+      large_c0: { raw: String(value), value },
+      large_c1: { raw: `=A${n}*2`, value: "" },
+      large_c2: { raw: `=A${n}+B${n}`, value: "" },
+      large_c3: { raw: value > 50 ? "high" : "low", value: value > 50 ? "high" : "low" },
+      large_c4: r < totals.length ? { raw: totals[r], value: "" } : { raw: String(n), value: n },
+    };
+  }
+  // The totals (E1:E4) stay in view while scrolling.
+  return { name: LARGE_SHEET_NAME, columns, rows, cells, table: { frozenRowCount: 4 } };
+}
+
 export const SpreadsheetTab: React.FC = () => {
   const initialWorkbook = useMemo(buildSampleWorkbook, []);
   const state = useSpreadsheetEditor({ workbook: initialWorkbook });
@@ -235,6 +275,20 @@ export const SpreadsheetTab: React.FC = () => {
   };
 
   const exportCsv = () => setCsvPreview(state.exportToCsv());
+
+  const openLargeSheet = () => {
+    const existing = state.controller.getSheets().find((sheet) => sheet.name === LARGE_SHEET_NAME);
+    if (existing) {
+      state.setActiveSheet(existing.id);
+      return;
+    }
+    const start = performance.now();
+    state.addSheet({ name: LARGE_SHEET_NAME, document: buildLargeSheet(), activate: true });
+    const { evaluated } = state.controller.getRecalculationStats();
+    setStatus(
+      `Built "${LARGE_SHEET_NAME}" (${LARGE_SHEET_ROWS.toLocaleString()} rows × 5 columns) and evaluated ${evaluated.toLocaleString()} formulas in ${Math.round(performance.now() - start)} ms. Edit a value in column A: only the formulas reading it recalculate (see the totals in E1:E4), and only the rows in view are rendered.`
+    );
+  };
 
   const csvHref = useMemo(
     () =>
@@ -280,6 +334,9 @@ export const SpreadsheetTab: React.FC = () => {
         />
         <button type="button" className={buttonClass} onClick={exportCsv}>
           <Download className="w-3.5 h-3.5" /> Export CSV
+        </button>
+        <button type="button" className={buttonClass} onClick={openLargeSheet} title="Adds a 10,000-row sheet to try fast recalculation and virtualised rendering">
+          <Rows3 className="w-3.5 h-3.5" /> Large sheet (50k cells)
         </button>
         <button
           type="button"

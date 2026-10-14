@@ -212,6 +212,8 @@ We maintain **strict 1:1 parity** across JavaScript, React, and Svelte:
 | Design Tokens: Collections, Modes, Aliases & Undoable Store | `TokenStore` & `resolveToken` (`/tokens`) | `useTokens` & `<TokensPanel>` (`/tokens`) | `createTokens` & `<TokensPanel>` (`/tokens`) |
 | Design Tokens: W3C JSON Import / Export & CSS Variables per Mode | `importW3CTokens`, `exportW3CTokens` & `exportTokensCss` | `useTokens` (`css`, `cssVariables`) | `createTokens` (`css`, `style`) |
 | Canvas Token Bindings & Per-Frame Modes | `bindCanvasToken`, `setCanvasTokenMode` & `resolveCanvasTokens` | `useCanvasTokens`, `<TokenBindingPicker>` & `<TokenModeSwitcher>` | `createCanvasTokens`, `<TokenBindingPicker>` & `<TokenModeSwitcher>` |
+| Canvas Components & Instances (overrides, variants, properties, nested, detach / reset / push) | `syncCanvasComponents` & `createCanvasComponentsController` | `useCanvasComponents`, `<CanvasComponentsPanel>` & `<CanvasInstanceInspector>` | `createCanvasComponents`, `<CanvasComponentsPanel>` & `<CanvasInstanceInspector>` |
+| Canvas Component Commands & Agent Tools | `createComponentCommands` & `createCanvasComponentToolProvider` | Via core & `useRegisterCommands` | Via core & `useRegisterCommands` |
 | Canvas Bézier Curve Fitting (boolean results, freehand) | `fitCubics` & `fitPathData` | Via core | Via core |
 | Canvas Scenes (saved viewports, next / previous) | `CanvasScenesStore` | `useCanvasScenes` | `createCanvasScenes` |
 | Canvas Connector Snapping to Shape Sides | ✅ | Via core | Via core |
@@ -220,6 +222,10 @@ We maintain **strict 1:1 parity** across JavaScript, React, and Svelte:
 | Canvas Offset Path & Outline Stroke (joins, caps, miter limit, dashes) | `offsetPath`, `outlineStroke`, `offsetShapeNodes` & `outlineShapeNodeStrokes` | `useCanvasArrange` (`offsetShapes`, `outlineStroke`) | `createCanvasArrange` (`offsetShapes`, `outlineStroke`) |
 | Canvas Shape Commands (palette / context menu) | `createShapeCommands` | Via core & `useRegisterCommands` | Via core & `useRegisterCommands` |
 | Canvas Shape Nodes (rect, ellipse, polygon, star, SVG path) | `getShapeRenderData` | `<ShapeNode>` | `<ShapeNode>` |
+| Canvas Keyframe Animation (tracks, easing incl. spring, OKLab colours, record mode, undoable edits) | `evaluateAnimation`, `moveKeyframes`, `recordAnimationChanges` & `createCanvasAnimationController` | `useCanvasAnimation` | `createCanvasAnimation` |
+| Canvas Animation Timeline (scrub, draggable keyframes with snapping, easing picker) | `getTimelineRows` & `snapKeyframeDelta` | `<AnimationTimeline>` | `<AnimationTimeline>` |
+| Canvas Animation Playback & Export (injected clock, loop / ping-pong, CSS / Web Animations, frames) | `AnimationPlayer`, `exportCssAnimation`, `toWebAnimations` & `sampleAnimationFrames` | `useCanvasAnimation` | `createCanvasAnimation` |
+| Canvas Animation Commands & Agent Tools | `createCanvasAnimationCommands` | Via core & `useRegisterCommands` | Via core & `useRegisterCommands` |
 | Comments (threads, replies, resolve, orphan detection, JSON) | Extension & `CommentStore` | `CommentsPanel`, `CommentButton`, `useComments` | `CommentsPanel`, `CommentButton`, `createComments` |
 | Track Changes (insert/delete marks, accept/reject, navigation) | Extension & `getTrackedChanges` | `ReviewToolbar`, `useTrackChanges` | `ReviewToolbar`, `createTrackChanges` |
 | Tracked-content export (`trackedChanges: "accepted"` default) | ✅ | Via core | Via core |
@@ -231,9 +237,13 @@ We maintain **strict 1:1 parity** across JavaScript, React, and Svelte:
 | Paragraph styles (Normal, Title, Subtitle, Heading 1–6, Quote, Code, List Paragraph; `basedOn`, next style on Enter, linked character styles, user styles, `data-style` HTML) | `ParagraphStyles` (`paragraphStyles` preset option), `createStyleRegistry`, `createParagraphStylesStore` | `StylesGallery`, `useParagraphStyles` | `StylesGallery`, `createParagraphStyles` |
 | Compare Documents into tracked changes (word/char, ignore case/white space, formatting, whole-block insert/delete, optional moved paragraphs via `detectMoves`) | `compareDocuments`, `compareHtml`, `diffSequences` (`@pixerate/editor/compare`) & `setContentFromComparison` | `useDocumentCompare` | `createDocumentCompare` |
 | Find & Replace (Word `^` codes, wildcards with `\1` groups, regex, match options; skips tracked deletions, tracked replacements) | `FindReplace` (`findReplace` preset option) | `FindReplaceBar`, `useFindReplace` | `FindReplaceBar`, `createFindReplace` |
+| Tables (header rows/columns/cells, `colspan`/`rowspan`, resizable columns, cell alignment and background; on by default, `table: false` to flatten) | `createTableExtensions` (`table` preset option), `createTableCommands`, `getTableState`, `createTableStore`, `edit_table` agent tool | `TableToolbar`, `TableBubbleMenu`, `InsertTableGrid`, `useTableMenu` | `TableToolbar`, `TableBubbleMenu`, `InsertTableGrid`, `createTableMenu` |
+| Tables in exports and review (tab-separated plain text, GFM markdown or HTML fallback, GFM import, tracked row/column/table insertions and deletions, compare) | ✅ | Via core | Via core |
 | File Import Registry (`.md`, `.html`, `.txt`, `.rtf`, `.docx`; pluggable adapters) | ✅ | `useFileImport` + `fileImport` | `createFileImport` + `fileImport` prop |
 | Drag-and-Drop File Import at Drop Position | `FileImport` | ✅ | ✅ |
 | DOCX Import (headings, lists, tables, links, images, footnotes; dependency-free) | `docxImportAdapter` | Via core | Via core |
+| DOCX Import of comments (replies, resolved), tracked changes (`trackedChanges: "marks"`: insertions, deletions, moves, `w:rPrChange`, `w:pPrChange`) and paragraph styles | `docxToDocumentImport`, `applyImportedReviewData` | Via core (`useFileImport` applies them) | Via core (`createFileImport` applies them) |
+| Word (.docx) Export (styles, lists, tables, images, comments with replies, tracked changes with authors and dates, `privacy: "strip-authors"`) | `exportDocx`, `exportDocxBlob`, `DocxExportController` (`@pixerate/editor/export`) | `useDocxExport`, `ExportDocxButton` | `createDocxExport`, `ExportDocxButton` |
 | PDF Import (injected pdf.js, opt-in) with layout analysis: reading order across columns, headings, lists, ruled and unruled tables, running headers/footers removed | `createPdfImportAdapter`, `analyzePdfLayout` | Via core | Via core |
 | Import Structure Report and Plain Fallback Toggle (`adapterOptions: { pdf: { structure: false } }`) | `summarizeImportStructure` | `useFileImport().structureSummary` | `createFileImport().structureSummary` |
 | Zipped Export Import (Notion / Confluence `.zip`, opt-in) | `zipImportAdapter` | Via core | Via core |
@@ -265,6 +275,8 @@ We maintain **strict 1:1 parity** across JavaScript, React, and Svelte:
 | Spreadsheet Dynamic Arrays (spilling, `#SPILL!`, `A1#` spill references) | `getSpillAt` / `getSpills` | Spill border + greyed formula bar | Spill border + greyed formula bar |
 | Spreadsheet Conditional Formatting (highlight, formula, top/bottom, average, duplicates, dates, colour scales, data bars, icon sets; priority & stop if true) | `evaluateConditionalFormats` / `addConditionalFormat` | Fills, bars, icons + manager panel | Fills, bars, icons + manager panel |
 | Spreadsheet Data Validation (whole, decimal, list, date, time, text length, custom; stop/warning/information alerts, circle invalid data) | `validateCellInput` / `addDataValidation` | List dropdown, alerts + manager panel | List dropdown, alerts + manager panel |
+| Spreadsheet Incremental Recalculation (ranges indexed as intervals, dirty subgraph in topological order, volatile functions, one-pass bulk loads, blank-skipping aggregates) | `DependencyGraph` / `getRecalculationStats` | Via core | Via core |
+| Spreadsheet Virtualised Rendering (visible rows/columns + overscan; frozen panes, merges, groups, keyboard scroll-into-view) | `getSpreadsheetViewWindow` / `getSpreadsheetScrollToCell` | `virtualize` prop / `useSpreadsheetViewport` | `virtualize` prop / `createSpreadsheetViewport` |
 | Array Functions (FILTER, SORT, SORTBY, UNIQUE, SEQUENCE, TRANSPOSE, RANDARRAY, LET) & array arithmetic | ✅ | Via core | Via core |
 | LAMBDA (closures, inline calls, recursion cap) & MAP, REDUCE, SCAN, BYROW, BYCOL, MAKEARRAY, ISOMITTED | ✅ | Via core | Via core |
 | Defined Names (workbook/sheet scope, ranges, constants, LAMBDA names; rename rewrites formulas) | `defineName` / `renameName` / `deleteName` | `<NameManager>` + name autocomplete | `<NameManager>` + name autocomplete |

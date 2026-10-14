@@ -1,5 +1,16 @@
+// Portions ported from wordcraft/crates/docx/src/read/mod.rs and wordcraft/crates/docx/src/read/story.rs (MIT OR Apache-2.0, © ArtCraft Team and contributors). See THIRD_PARTY_NOTICES.md.
 import { sanitizeImportedHtml } from "../serializers/html";
 import { escapeHtml, htmlToPlainText } from "../serializers/plain-text";
+import { createReviewId, type CommentReply, type CommentThread, type SerializedComments } from "../extensions/comment-store";
+import {
+  createStyleRegistry,
+  DEFAULT_STYLES,
+  isValidStyleId,
+  NORMAL_STYLE_ID,
+  type CharacterFormat,
+  type ParagraphFormat,
+  type StyleDefinition,
+} from "../extensions/paragraph-styles/registry";
 import type { DocumentImport, DocumentImportAdapter } from "./adapters";
 import { ImportError } from "./registry";
 import { readZip, type ZipArchive, type ZipReadOptions } from "./zip";
@@ -18,8 +29,19 @@ import { readZip, type ZipArchive, type ZipReadOptions } from "./zip";
  * data URLs. The result goes through `sanitizeImportedHtml`.
  *
  * Tracked changes are imported as if accepted (`w:ins` kept, `w:del` dropped)
- * unless `trackedChanges: "original"` is passed. Text boxes, charts, shapes,
- * equations, comments and page layout are not imported.
+ * unless `trackedChanges: "original"` is passed; `trackedChanges: "marks"`
+ * keeps them as track-changes marks (`<ins>` / `<del>` with authors, dates and
+ * move ids, formatting changes from `w:rPrChange`, block changes from
+ * `w:pPrChange`).
+ *
+ * Comments (`comments.xml`, with replies and resolved state from
+ * `commentsExtended.xml` and author ids from `people.xml`) are returned as
+ * `comments`, and their ranges are marked with `data-comment-id`. The
+ * paragraph and character styles of `styles.xml` are returned as a style
+ * registry (`styles`), and body paragraphs with a custom style get
+ * `data-style`. Paragraphs in the `Block Text` style become block quotes, and
+ * paragraphs in the `Code` style code blocks. Text boxes, charts, shapes,
+ * equations and page layout are not imported.
  */
 
 export const DOCX_MIME_TYPES = [
@@ -38,9 +60,14 @@ export interface DocxImportOptions {
   DOMParser?: { new (): DOMParser };
   /**
    * Tracked changes: `"accepted"` (default) imports insertions and drops
-   * deletions; `"original"` does the opposite (as if all were rejected).
+   * deletions; `"original"` does the opposite (as if all were rejected);
+   * `"marks"` keeps both as track-changes marks (for editors with `TrackChanges`).
    */
-  trackedChanges?: "accepted" | "original";
+  trackedChanges?: "accepted" | "original" | "marks";
+  /** Import comments and mark their ranges (default `true`). */
+  comments?: boolean;
+  /** Return the file's styles as `styles` and add `data-style` to styled paragraphs (default `true`). */
+  paragraphStyles?: boolean;
   /** Embed images from `word/media` as data URLs (default `true`). */
   images?: boolean;
   /** Images larger than this many bytes are skipped (default 10 MiB). */
@@ -50,6 +77,10 @@ export interface DocxImportOptions {
 }
 
 export const DEFAULT_DOCX_MAX_IMAGE_SIZE = 10 * 1024 * 1024;
+/** Most comments (threads plus replies) read from one file. */
+const MAX_COMMENTS = 5_000;
+/** Longest reply chain followed to find a thread's root. */
+const MAX_PARENT_CHAIN = 64;
 
 const W_NAMESPACES = new Set([
   "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
@@ -65,6 +96,9 @@ const IMAGE_MIME_TYPES: Record<string, string> = {
   webp: "image/webp",
 };
 
+/** Glyphs the DOCX export writes before task list items (Word has no checklist numbering). */
+const TASK_GLYPHS: Record<string, boolean> = { "☐": false, "☒": true, "☑": true };
+
 interface Relationship {
   type: string;
   target: string;
@@ -79,14 +113,45 @@ interface Format {
   sup?: boolean;
   sub?: boolean;
   href?: string;
+  /** Tracked insertion or deletion (`trackedChanges: "marks"`). */
+  rev?: RevisionInfo;
+  /** Tracked formatting change (`w:rPrChange`). */
+  fmt?: FormatChangeInfo;
+  /** Ids of the comment threads covering the text. */
+  comments?: string[];
+}
+
+interface ChangeInfo {
+  changeId: string;
+  authorId: string;
+  authorName: string;
+  createdAt: number;
+}
+
+interface RevisionInfo extends ChangeInfo {
+  kind: "insertion" | "deletion";
+  moveId?: string;
+}
+
+interface FormatChangeInfo extends ChangeInfo {
+  before: { type: string }[];
+  after: { type: string }[];
 }
 
 interface StyleInfo {
   name: string;
+  type: string;
   basedOn?: string;
+  next?: string;
+  link?: string;
+  priority?: number;
+  quick?: boolean;
+  hidden?: boolean;
   outlineLevel?: number;
   numPr?: { numId: string; ilvl: number };
   format: Format;
+  paragraph: ParagraphFormat;
+  character: CharacterFormat;
 }
 
 interface ListLevel {
@@ -116,7 +181,22 @@ interface RenderContext {
   notes: Map<string, Note>;
   /** Note keys (`footnote:1`) in order of first reference. */
   noteOrder: string[];
-  tracked: "accepted" | "original";
+  tracked: "accepted" | "original" | "marks";
+  /** File style id → registry style id (empty with `paragraphStyles: false`). */
+  styleIds: Map<string, string>;
+  /** Author name → user id (`people.xml`). */
+  people: Map<string, string>;
+  /** Comment file id → thread id (replies map to their thread). */
+  commentThreads: Map<string, string>;
+  /** Open comment ranges: thread id → number of open ranges. */
+  openComments: Map<string, number>;
+  /** Open move ranges by range id, latest last. */
+  moveRanges: Map<string, { moveId: string; to: boolean }>;
+  /** Move names (`w:name`) → move ids unique to this import. */
+  moveIds: Map<string, string>;
+  /** Segments emitted so far; adjacent changes by the same author and time share an id. */
+  segmentCount: number;
+  lastChange: { key: string; changeId: string; end: number } | null;
 }
 
 type Segment =
@@ -301,6 +381,71 @@ function readNumPr(pPr: Element | undefined): { numId: string; ilvl: number } | 
   return { numId, ilvl: Number(attr(wChild(numPr, "ilvl"), "val") ?? 0) || 0 };
 }
 
+/** Twips → CSS points. */
+function twipsToCss(value: string | undefined): string | undefined {
+  const n = Number(value);
+  return value !== undefined && value !== "" && Number.isFinite(n) ? `${Math.round((n / 20) * 100) / 100}pt` : undefined;
+}
+
+const ALIGNMENTS: Record<string, ParagraphFormat["textAlign"]> = {
+  left: "left",
+  start: "left",
+  center: "center",
+  right: "right",
+  end: "right",
+  both: "justify",
+  distribute: "justify",
+};
+
+function readParagraphFormat(pPr: Element | undefined): ParagraphFormat {
+  const format: ParagraphFormat = {};
+  if (!pPr) return format;
+  const jc = attr(wChild(pPr, "jc"), "val");
+  if (jc && ALIGNMENTS[jc]) format.textAlign = ALIGNMENTS[jc];
+  const spacing = wChild(pPr, "spacing");
+  const before = twipsToCss(attr(spacing, "before"));
+  const after = twipsToCss(attr(spacing, "after"));
+  if (before) format.spaceBefore = before;
+  if (after) format.spaceAfter = after;
+  const line = Number(attr(spacing, "line"));
+  if (Number.isFinite(line) && line > 0) {
+    const rule = attr(spacing, "lineRule") ?? "auto";
+    format.lineHeight = rule === "auto" ? String(Math.round((line / 240) * 100) / 100) : twipsToCss(String(line));
+  }
+  const ind = wChild(pPr, "ind");
+  const left = twipsToCss(attr(ind, "left") ?? attr(ind, "start"));
+  const right = twipsToCss(attr(ind, "right") ?? attr(ind, "end"));
+  const first = attr(ind, "firstLine");
+  const hanging = attr(ind, "hanging");
+  if (left) format.indentLeft = left;
+  if (right) format.indentRight = right;
+  if (first !== undefined) format.indentFirstLine = twipsToCss(first);
+  else if (hanging !== undefined && Number.isFinite(Number(hanging))) format.indentFirstLine = twipsToCss(String(-Number(hanging)));
+  return format;
+}
+
+function readCharacterFormat(rPr: Element | undefined): CharacterFormat {
+  const format: CharacterFormat = {};
+  if (!rPr) return format;
+  const f = readFormat(rPr);
+  if (f.b !== undefined) format.bold = f.b;
+  if (f.i !== undefined) format.italic = f.i;
+  if (f.u !== undefined) format.underline = f.u;
+  if (f.s !== undefined) format.strike = f.s;
+  const fonts = wChild(rPr, "rFonts");
+  const font = attr(fonts, "ascii") ?? attr(fonts, "hAnsi");
+  // Style values end up in a stylesheet; only plain font names are kept.
+  if (font && /^[\w .-]{1,64}$/.test(font)) format.fontFamily = font;
+  const size = Number(attr(wChild(rPr, "sz"), "val"));
+  if (Number.isFinite(size) && size > 0 && size < 3300) format.fontSize = `${size / 2}pt`;
+  const color = attr(wChild(rPr, "color"), "val");
+  if (color && /^[0-9a-f]{6}$/i.test(color)) format.color = `#${color.toLowerCase()}`;
+  if (toggle(wChild(rPr, "caps"))) format.textTransform = "uppercase";
+  const smallCaps = toggle(wChild(rPr, "smallCaps"));
+  if (smallCaps !== undefined) format.smallCaps = smallCaps;
+  return format;
+}
+
 function readStyles(doc: Document | null): Map<string, StyleInfo> {
   const styles = new Map<string, StyleInfo>();
   if (!doc) return styles;
@@ -308,16 +453,93 @@ function readStyles(doc: Document | null): Map<string, StyleInfo> {
     const id = attr(style, "styleId");
     if (!id) return;
     const pPr = wChild(style, "pPr");
+    const rPr = wChild(style, "rPr");
     const outline = attr(wChild(pPr, "outlineLvl"), "val");
+    const priority = Number(attr(wChild(style, "uiPriority"), "val"));
     styles.set(id, {
       name: attr(wChild(style, "name"), "val") ?? id,
+      type: attr(style, "type") ?? "paragraph",
       basedOn: attr(wChild(style, "basedOn"), "val"),
+      next: attr(wChild(style, "next"), "val"),
+      link: attr(wChild(style, "link"), "val"),
+      priority: Number.isFinite(priority) && attr(wChild(style, "uiPriority"), "val") !== undefined ? priority : undefined,
+      quick: toggle(wChild(style, "qFormat")),
+      hidden: toggle(wChild(style, "semiHidden")) || toggle(wChild(style, "hidden")),
       outlineLevel: outline !== undefined ? Number(outline) : undefined,
       numPr: readNumPr(pPr),
-      format: readFormat(wChild(style, "rPr")),
+      format: readFormat(rPr),
+      paragraph: readParagraphFormat(pPr),
+      character: readCharacterFormat(rPr),
     });
   });
   return styles;
+}
+
+/** Word stores some built-in style names in lower case (`heading 1`). */
+function displayStyleName(name: string): string {
+  const heading = /^heading ([1-9])$/.exec(name);
+  return heading ? `Heading ${heading[1]}` : name;
+}
+
+/** Maps file style ids to valid, unique registry ids (`Überschrift1` → `berschrift1`). */
+function mapStyleIds(styles: Map<string, StyleInfo>): Map<string, string> {
+  const ids = new Map<string, string>();
+  const used = new Set<string>();
+  styles.forEach((style, fileId) => {
+    if (style.type !== "paragraph" && style.type !== "character") return;
+    let id = fileId.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 60);
+    if (!/^[A-Za-z]/.test(id)) id = `S${id}`;
+    let unique = id;
+    for (let n = 2; used.has(unique); n++) unique = `${id}${n}`;
+    if (!isValidStyleId(unique)) return;
+    used.add(unique);
+    ids.set(fileId, unique);
+  });
+  return ids;
+}
+
+const styleKind = (style: StyleInfo | undefined) => (style?.type === "character" ? "character" : "paragraph");
+
+/** The file's paragraph and character styles as registry definitions. */
+function styleDefinitions(styles: Map<string, StyleInfo>, ids: Map<string, string>): StyleDefinition[] {
+  const out: StyleDefinition[] = [];
+  styles.forEach((style, fileId) => {
+    const id = ids.get(fileId);
+    if (!id) return;
+    const kind = styleKind(style);
+    const sameKind = (other: string | undefined) =>
+      other && ids.has(other) && styleKind(styles.get(other)) === kind ? ids.get(other) : undefined;
+    const definition: StyleDefinition = { id, name: displayStyleName(style.name || fileId), kind };
+    const basedOn = sameKind(style.basedOn);
+    if (basedOn) definition.basedOn = basedOn;
+    if (kind === "paragraph") {
+      const next = sameKind(style.next);
+      if (next) definition.next = next;
+    }
+    const linked = style.link ? ids.get(style.link) : undefined;
+    if (linked) definition.linked = linked;
+    if (kind === "paragraph" && Object.keys(style.paragraph).length) definition.paragraph = style.paragraph;
+    if (Object.keys(style.character).length) definition.character = style.character;
+    if (kind === "paragraph") {
+      const heading = /^heading([1-6])$/i.exec(fileId) ?? /^heading ([1-6])$/i.exec(style.name);
+      if (heading) definition.block = { type: "heading", attrs: { level: Number(heading[1]) } };
+      else if (style.outlineLevel !== undefined && style.outlineLevel >= 0 && style.outlineLevel <= 5) {
+        definition.block = { type: "heading", attrs: { level: style.outlineLevel + 1 } };
+      } else if (id === "Code") definition.block = { type: "codeBlock" };
+      else if (id === NORMAL_STYLE_ID) definition.block = { type: "paragraph" };
+    }
+    if (style.priority !== undefined) definition.priority = style.priority;
+    if (style.quick) definition.quick = true;
+    if (style.hidden) definition.hidden = true;
+    // Built-in styles keep their identity (and block) when the file redefines them.
+    const builtin = DEFAULT_STYLES.find((s) => s.id === id && s.kind === kind);
+    if (builtin) {
+      definition.builtin = true;
+      definition.block ??= builtin.block;
+    }
+    out.push(definition);
+  });
+  return out;
 }
 
 function styleChain(styles: Map<string, StyleInfo>, id: string | undefined): StyleInfo[] {
@@ -345,6 +567,18 @@ function styleHeadingLevel(styles: Map<string, StyleInfo>, id: string | undefine
     }
   }
   if (id && /^title$/i.test(id)) return 1;
+  return undefined;
+}
+
+/** `quote` for Block Text paragraphs, `code` for Code paragraphs (the DOCX export's mapping). */
+function specialStyle(styles: Map<string, StyleInfo>, id: string | undefined): "quote" | "code" | undefined {
+  if (!id) return undefined;
+  for (const style of styleChain(styles, id)) {
+    if (/^block ?text$/i.test(style.name)) return "quote";
+    if (/^code$/i.test(style.name)) return "code";
+  }
+  if (/^blocktext$/i.test(id)) return "quote";
+  if (id === "Code") return "code";
   return undefined;
 }
 
@@ -382,10 +616,217 @@ function readNumbering(doc: Document | null): Numbering {
   return numbering;
 }
 
+// --- Review data (comments, people, changes) ---------------------------------
+
+function readPeople(doc: Document | null): Map<string, string> {
+  const people = new Map<string, string>();
+  if (!doc) return people;
+  descendants(doc, "person").forEach((person) => {
+    const author = attr(person, "author");
+    const userId = attr(descendants(person, "presenceInfo")[0], "userId");
+    if (author && userId && !people.has(author)) people.set(author, userId);
+  });
+  return people;
+}
+
+function dateOf(value: string | undefined): number {
+  const ms = value ? Date.parse(value) : NaN;
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+function authorOf(ctx: { people: Map<string, string> }, name: string | undefined) {
+  const authorName = (name ?? "").trim() || "Unknown";
+  return { id: ctx.people.get(authorName) ?? authorName, name: authorName };
+}
+
+/** Plain text of a comment body: paragraphs joined with newlines. */
+function commentBody(comment: Element): string {
+  const lines: string[] = [];
+  const walk = (el: Element, line: string[]) => {
+    for (const child of childElements(el)) {
+      if (!isW(child)) continue;
+      switch (child.localName) {
+        case "t":
+          line.push(child.textContent ?? "");
+          break;
+        case "tab":
+          line.push("\t");
+          break;
+        case "br":
+        case "cr":
+          line.push("\n");
+          break;
+        case "delText":
+        case "del":
+        case "moveFrom":
+          break;
+        default:
+          walk(child, line);
+      }
+    }
+  };
+  for (const block of childElements(comment)) {
+    if (!isW(block)) continue;
+    const paragraphs = block.localName === "p" ? [block] : descendants(block, "p").filter((p) => isW(p));
+    for (const p of paragraphs) {
+      const line: string[] = [];
+      walk(p, line);
+      lines.push(line.join(""));
+    }
+  }
+  return lines.join("\n").trim();
+}
+
+/**
+ * Reads `comments.xml` and `commentsExtended.xml` into threads: comments
+ * without a parent are threads; replies (`w15:paraIdParent`) are attached to
+ * the root of their chain, oldest first. Returns the threads and the map from
+ * comment file ids to thread ids.
+ */
+function readComments(
+  commentsXml: Document | null,
+  extendedXml: Document | null,
+  people: Map<string, string>,
+): { threads: CommentThread[]; byFileId: Map<string, string> } {
+  const byFileId = new Map<string, string>();
+  if (!commentsXml) return { threads: [], byFileId };
+  type Entry = { fileId: string; author: ReturnType<typeof authorOf>; createdAt: number; body: string; parent?: string; done: boolean };
+  const entries = new Map<string, Entry>();
+  const byParaId = new Map<string, string>();
+  for (const comment of descendants(commentsXml, "comment").filter((el) => isW(el))) {
+    if (entries.size >= MAX_COMMENTS) break;
+    const fileId = attr(comment, "id");
+    if (fileId === undefined || entries.has(fileId)) continue;
+    entries.set(fileId, {
+      fileId,
+      author: authorOf({ people }, attr(comment, "author")),
+      createdAt: dateOf(attr(comment, "date")),
+      body: commentBody(comment),
+      done: false,
+    });
+    const paragraphs = descendants(comment, "p");
+    const paraId = attr(paragraphs[paragraphs.length - 1], "paraId");
+    if (paraId) byParaId.set(paraId, fileId);
+  }
+  if (extendedXml) {
+    for (const ex of descendants(extendedXml, "commentEx")) {
+      const fileId = byParaId.get(attr(ex, "paraId") ?? "");
+      const entry = fileId !== undefined ? entries.get(fileId) : undefined;
+      if (!entry) continue;
+      const parent = byParaId.get(attr(ex, "paraIdParent") ?? "");
+      if (parent !== undefined && parent !== fileId) entry.parent = parent;
+      const done = attr(ex, "done");
+      entry.done = done === "1" || done === "true";
+    }
+  }
+  const rootOf = (entry: Entry): Entry => {
+    let current = entry;
+    for (let i = 0; i < MAX_PARENT_CHAIN && current.parent !== undefined; i++) {
+      const parent = entries.get(current.parent);
+      if (!parent || parent === entry) break;
+      current = parent;
+    }
+    return current;
+  };
+  const threads = new Map<string, CommentThread>();
+  for (const entry of entries.values()) {
+    if (rootOf(entry) !== entry) continue;
+    const id = createReviewId("comment");
+    byFileId.set(entry.fileId, id);
+    threads.set(entry.fileId, {
+      id,
+      anchor: null,
+      author: entry.author,
+      createdAt: entry.createdAt,
+      body: entry.body,
+      replies: [],
+      resolved: entry.done,
+      orphaned: false,
+    });
+  }
+  for (const entry of entries.values()) {
+    const root = rootOf(entry);
+    if (root === entry) continue;
+    const thread = threads.get(root.fileId);
+    if (!thread) continue;
+    byFileId.set(entry.fileId, thread.id);
+    const reply: CommentReply = {
+      id: createReviewId("reply"),
+      author: entry.author,
+      body: entry.body,
+      createdAt: entry.createdAt,
+    };
+    thread.replies.push(reply);
+  }
+  return { threads: Array.from(threads.values()), byFileId };
+}
+
+/** Applies a range marker (comment or move range) found between runs or blocks. */
+function applyMarker(el: Element, ctx: RenderContext): boolean {
+  switch (el.localName) {
+    case "commentRangeStart": {
+      const thread = ctx.commentThreads.get(attr(el, "id") ?? "");
+      if (thread) ctx.openComments.set(thread, (ctx.openComments.get(thread) ?? 0) + 1);
+      return true;
+    }
+    case "commentRangeEnd": {
+      const thread = ctx.commentThreads.get(attr(el, "id") ?? "");
+      const open = thread ? ctx.openComments.get(thread) : undefined;
+      if (thread && open !== undefined) {
+        if (open <= 1) ctx.openComments.delete(thread);
+        else ctx.openComments.set(thread, open - 1);
+      }
+      return true;
+    }
+    case "moveFromRangeStart":
+    case "moveToRangeStart": {
+      const id = attr(el, "id");
+      const name = attr(el, "name") ?? `range-${id}`;
+      let moveId = ctx.moveIds.get(name);
+      if (!moveId) {
+        moveId = createReviewId("move");
+        ctx.moveIds.set(name, moveId);
+      }
+      if (id !== undefined) {
+        ctx.moveRanges.delete(id);
+        ctx.moveRanges.set(id, { moveId, to: el.localName === "moveToRangeStart" });
+      }
+      return true;
+    }
+    case "moveFromRangeEnd":
+    case "moveToRangeEnd":
+      ctx.moveRanges.delete(attr(el, "id") ?? "");
+      return true;
+    default:
+      return false;
+  }
+}
+
+const FORMAT_MARK_TYPES: [keyof Format, string][] = [
+  ["b", "bold"],
+  ["i", "italic"],
+  ["u", "underline"],
+  ["s", "strike"],
+  ["sub", "subscript"],
+  ["sup", "superscript"],
+];
+
+const formatMarks = (f: Format) => FORMAT_MARK_TYPES.filter(([key]) => f[key]).map(([, type]) => ({ type }));
+
 // --- Rendering --------------------------------------------------------------
 
 const formatKey = (f: Format) =>
-  `${f.b ? 1 : 0}${f.i ? 1 : 0}${f.u ? 1 : 0}${f.s ? 1 : 0}${f.sup ? 1 : 0}${f.sub ? 1 : 0}|${f.href ?? ""}`;
+  `${f.b ? 1 : 0}${f.i ? 1 : 0}${f.u ? 1 : 0}${f.s ? 1 : 0}${f.sup ? 1 : 0}${f.sub ? 1 : 0}|${f.href ?? ""}` +
+  (f.rev ? `|${f.rev.kind}:${f.rev.changeId}:${f.rev.moveId ?? ""}` : "") +
+  (f.fmt ? `|f:${f.fmt.changeId}` : "") +
+  (f.comments ? `|c:${f.comments.join(",")}` : "");
+
+function changeAttrs(change: ChangeInfo): string {
+  return (
+    ` data-change-id="${escapeHtml(change.changeId)}" data-author-id="${escapeHtml(change.authorId)}"` +
+    ` data-author-name="${escapeHtml(change.authorName)}" data-created-at="${change.createdAt}"`
+  );
+}
 
 function wrapFormat(inner: string, f: Format): string {
   let html = inner;
@@ -395,11 +836,22 @@ function wrapFormat(inner: string, f: Format): string {
   if (f.u) html = `<u>${html}</u>`;
   if (f.i) html = `<em>${html}</em>`;
   if (f.b) html = `<strong>${html}</strong>`;
+  if (f.fmt) {
+    html =
+      `<span data-change-type="format"${changeAttrs(f.fmt)}` +
+      ` data-format-before="${escapeHtml(JSON.stringify(f.fmt.before))}" data-format-after="${escapeHtml(JSON.stringify(f.fmt.after))}">${html}</span>`;
+  }
+  if (f.rev) {
+    const tag = f.rev.kind === "insertion" ? "ins" : "del";
+    const move = f.rev.moveId ? ` data-move-id="${escapeHtml(f.rev.moveId)}"` : "";
+    html = `<${tag} data-change-type="${f.rev.kind}"${changeAttrs(f.rev)}${move}>${html}</${tag}>`;
+  }
+  for (const id of [...(f.comments ?? [])].reverse()) html = `<span data-comment-id="${escapeHtml(id)}">${html}</span>`;
   if (f.href) html = `<a href="${escapeHtml(f.href)}">${html}</a>`;
   return html;
 }
 
-function renderSegments(segments: Segment[]): string {
+function renderSegments(segments: Segment[], code = false): string {
   let html = "";
   let i = 0;
   while (i < segments.length) {
@@ -409,11 +861,13 @@ function renderSegments(segments: Segment[]): string {
     for (; j < segments.length && formatKey(segments[j].format) === key; j++) {
       const seg = segments[j];
       if (seg.kind === "text") inner += escapeHtml(seg.text);
-      else if (seg.kind === "br") inner += "<br>";
-      else if (seg.kind === "img") inner += `<img src="${escapeHtml(seg.src)}" alt="${escapeHtml(seg.alt)}">`;
+      else if (seg.kind === "br") inner += code ? "\n" : "<br>";
+      else if (seg.kind === "img") inner += code ? "" : `<img src="${escapeHtml(seg.src)}" alt="${escapeHtml(seg.alt)}">`;
       else inner += `<sup>${seg.n}</sup>`;
     }
-    html += wrapFormat(inner, segments[i].format);
+    const format = segments[i].format;
+    // Code blocks hold plain text: only review marks are kept.
+    html += wrapFormat(inner, code ? { rev: format.rev, comments: format.comments } : format);
     i = j;
   }
   return html;
@@ -431,7 +885,7 @@ function parseHyperlinkInstruction(instr: string): string | undefined {
 }
 
 class ParagraphRenderer {
-  private segments: Segment[] = [];
+  segments: Segment[] = [];
   /** Open complex fields (`w:fldChar`), innermost last. */
   private fields: { instr: string; href?: string; separated: boolean }[] = [];
 
@@ -440,9 +894,36 @@ class ParagraphRenderer {
     private readonly part: Part,
   ) {}
 
-  render(p: Element): string {
+  collect(p: Element): this {
     this.walk(p, {});
-    return renderSegments(this.segments);
+    return this;
+  }
+
+  render(p: Element): string {
+    return this.collect(p).html();
+  }
+
+  html(code = false): string {
+    return renderSegments(this.segments, code);
+  }
+
+  /** Removes a leading task-list glyph (`☐ ` / `☒ `) and returns its checked state. */
+  takeTaskGlyph(): boolean | undefined {
+    const first = this.segments[0];
+    if (!first || first.kind !== "text") return undefined;
+    const glyph = first.text.charAt(0);
+    if (!(glyph in TASK_GLYPHS)) return undefined;
+    const rest = first.text.slice(1).replace(/^ /, "");
+    if (rest) first.text = rest;
+    else {
+      this.segments.shift();
+      const next = this.segments[0];
+      if (next?.kind === "text") {
+        next.text = next.text.replace(/^ /, "");
+        if (!next.text) this.segments.shift();
+      }
+    }
+    return TASK_GLYPHS[glyph];
   }
 
   private fieldHref(): string | undefined {
@@ -456,8 +937,42 @@ class ParagraphRenderer {
     return this.fields.some((field) => !field.separated);
   }
 
+  /** A tracked change id shared with the previous change when adjacent and by the same author at the same time. */
+  private changeId(key: string): string {
+    const last = this.ctx.lastChange;
+    if (last && last.key === key && last.end === this.ctx.segmentCount) return last.changeId;
+    return createReviewId("change");
+  }
+
+  private change(el: Element, kind: string, extra = ""): { info: ChangeInfo; key: string } {
+    const author = authorOf(this.ctx, attr(el, "author"));
+    const createdAt = dateOf(attr(el, "date"));
+    const key = `${kind}|${author.name}|${createdAt}|${extra}`;
+    return {
+      key,
+      info: { changeId: this.changeId(key), authorId: author.id, authorName: author.name, createdAt },
+    };
+  }
+
+  private revision(el: Element, kind: RevisionInfo["kind"]): { rev: RevisionInfo; key: string } {
+    let moveId: string | undefined;
+    if (el.localName === "moveFrom" || el.localName === "moveTo") {
+      const to = el.localName === "moveTo";
+      for (const range of this.ctx.moveRanges.values()) if (range.to === to) moveId = range.moveId;
+      moveId ??= createReviewId("move");
+    }
+    const { info, key } = this.change(el, kind, moveId ?? "");
+    return { rev: { ...info, kind, ...(moveId ? { moveId } : {}) }, key };
+  }
+
+  private walkChange(el: Element, base: Format, kind: RevisionInfo["kind"]) {
+    const { rev, key } = this.revision(el, kind);
+    this.walk(el, { ...base, rev });
+    this.ctx.lastChange = { key, changeId: rev.changeId, end: this.ctx.segmentCount };
+  }
+
   private walk(el: Element, base: Format) {
-    const accepted = this.ctx.tracked === "accepted";
+    const tracked = this.ctx.tracked;
     for (const child of childElements(el)) {
       if (!isW(child)) {
         // Markup-compatibility wrappers (e.g. around drawings) are handled per run.
@@ -482,11 +997,13 @@ class ParagraphRenderer {
         }
         case "ins":
         case "moveTo":
-          if (accepted) this.walk(child, base);
+          if (tracked === "accepted") this.walk(child, base);
+          else if (tracked === "marks") this.walkChange(child, base, "insertion");
           break;
         case "del":
         case "moveFrom":
-          if (!accepted) this.walk(child, base);
+          if (tracked === "original") this.walk(child, base);
+          else if (tracked === "marks") this.walkChange(child, base, "deletion");
           break;
         case "sdt":
           this.walk(wChild(child, "sdtContent") ?? child, base);
@@ -499,6 +1016,7 @@ class ParagraphRenderer {
           this.walk(child, base);
           break;
         default:
+          applyMarker(child, this.ctx);
           break;
       }
     }
@@ -506,11 +1024,24 @@ class ParagraphRenderer {
 
   private run(r: Element, base: Format) {
     const rPr = wChild(r, "rPr");
-    const styleFormat = this.ctx.styles.get(attr(wChild(rPr, "rStyle"), "val") ?? "")?.format ?? {};
+    const runStyle = this.ctx.styles.get(attr(wChild(rPr, "rStyle"), "val") ?? "");
+    // The Hyperlink character style only says "this is a link": its underline is not formatting.
+    const styleFormat = base.href && runStyle && /^hyperlink$/i.test(runStyle.name) ? {} : (runStyle?.format ?? {});
     const own = readFormat(rPr);
     const format: Format = { ...base, ...styleFormat, ...own };
+    const rPrChange = wChild(rPr, "rPrChange");
+    let changeKey: string | undefined;
+    if (rPrChange && this.ctx.tracked === "marks") {
+      const { info, key } = this.change(rPrChange, "format");
+      const before = { ...styleFormat, ...readFormat(wChild(rPrChange, "rPr")) };
+      format.fmt = { ...info, before: formatMarks(before), after: formatMarks(format) };
+      changeKey = key;
+    }
     for (const child of childElements(r)) {
       this.runChild(child, format);
+    }
+    if (format.fmt && changeKey) {
+      this.ctx.lastChange = { key: changeKey, changeId: format.fmt.changeId, end: this.ctx.segmentCount };
     }
   }
 
@@ -518,7 +1049,12 @@ class ParagraphRenderer {
     const push = (segment: Segment) => {
       if (this.inFieldInstruction()) return;
       const href = format.href ?? this.fieldHref();
-      this.segments.push(href && !format.href ? { ...segment, format: { ...format, href } } : segment);
+      let out = href && !format.href ? { ...segment, format: { ...format, href } } : segment;
+      if (this.ctx.openComments.size) {
+        out = { ...out, format: { ...out.format, comments: Array.from(this.ctx.openComments.keys()) } };
+      }
+      this.segments.push(out);
+      this.ctx.segmentCount++;
     };
     if (child.localName === "AlternateContent") {
       // Prefer the first branch that yields an image (mc:Choice, then mc:Fallback).
@@ -534,7 +1070,7 @@ class ParagraphRenderer {
         push({ kind: "text", text: child.textContent ?? "", format });
         break;
       case "delText":
-        if (this.ctx.tracked === "original") push({ kind: "text", text: child.textContent ?? "", format });
+        if (this.ctx.tracked !== "accepted") push({ kind: "text", text: child.textContent ?? "", format });
         break;
       case "tab":
       case "ptab":
@@ -600,9 +1136,21 @@ class ParagraphRenderer {
   }
 }
 
-/** Flattens block-level wrappers (content controls, tracked moves, …) into `w:p` / `w:tbl`. */
+const MARKERS = new Set([
+  "commentRangeStart",
+  "commentRangeEnd",
+  "moveFromRangeStart",
+  "moveFromRangeEnd",
+  "moveToRangeStart",
+  "moveToRangeEnd",
+]);
+
+/**
+ * Flattens block-level wrappers (content controls, tracked moves, …) into
+ * `w:p` / `w:tbl`, keeping block-level range markers in document order.
+ */
 function flattenBlocks(container: Element, ctx: RenderContext, out: Element[] = []): Element[] {
-  const accepted = ctx.tracked === "accepted";
+  const tracked = ctx.tracked;
   for (const child of childElements(container)) {
     if (!isW(child)) continue;
     switch (child.localName) {
@@ -619,13 +1167,14 @@ function flattenBlocks(container: Element, ctx: RenderContext, out: Element[] = 
         break;
       case "ins":
       case "moveTo":
-        if (accepted) flattenBlocks(child, ctx, out);
+        if (tracked !== "original") flattenBlocks(child, ctx, out);
         break;
       case "del":
       case "moveFrom":
-        if (!accepted) flattenBlocks(child, ctx, out);
+        if (tracked !== "accepted") flattenBlocks(child, ctx, out);
         break;
       default:
+        if (MARKERS.has(child.localName)) out.push(child);
         break;
     }
   }
@@ -655,13 +1204,46 @@ function paragraphInfo(p: Element, ctx: RenderContext) {
       start: num?.starts.get(numPr.ilvl) ?? def?.start ?? 1,
     };
   }
-  return { heading, list };
+  const special = heading === undefined && !list ? specialStyle(ctx.styles, styleId) : undefined;
+  return { heading, list, styleId, special, pPr };
 }
 
-function renderBlocks(container: Element, ctx: RenderContext, part: Part): string {
+/** `data-block-change` for a paragraph with `w:pPrChange` (top-level paragraphs, `trackedChanges: "marks"`). */
+function blockChangeAttr(pPr: Element | undefined, ctx: RenderContext): string {
+  const change = wChild(pPr, "pPrChange");
+  if (!change) return "";
+  const oldPPr = wChild(change, "pPr");
+  const oldStyle = attr(wChild(oldPPr, "pStyle"), "val");
+  const oldOutline = attr(wChild(oldPPr, "outlineLvl"), "val");
+  const level =
+    oldOutline !== undefined
+      ? Number(oldOutline) >= 0 && Number(oldOutline) <= 5
+        ? Number(oldOutline) + 1
+        : undefined
+      : styleHeadingLevel(ctx.styles, oldStyle);
+  const mappedStyle = oldStyle ? ctx.styleIds.get(oldStyle) : undefined;
+  const previous =
+    level !== undefined
+      ? { type: "heading", attrs: { level }, wrappers: [] }
+      : specialStyle(ctx.styles, oldStyle) === "code"
+        ? { type: "codeBlock", attrs: {}, wrappers: [] }
+        : { type: "paragraph", attrs: mappedStyle && mappedStyle !== NORMAL_STYLE_ID ? { styleId: mappedStyle } : {}, wrappers: [] };
+  const author = authorOf(ctx, attr(change, "author"));
+  const record = {
+    changeId: createReviewId("change"),
+    authorId: author.id,
+    authorName: author.name,
+    authorColor: null,
+    createdAt: dateOf(attr(change, "date")),
+    previous,
+  };
+  return ` data-block-change="${escapeHtml(JSON.stringify(record))}"`;
+}
+
+function renderBlocks(container: Element, ctx: RenderContext, part: Part, topLevel = false): string {
   let html = "";
   // Open lists, outermost first; each has an open `<li>`.
-  const stack: { level: number; tag: "ul" | "ol" }[] = [];
+  const stack: { level: number; tag: "ul" | "ol"; task: boolean }[] = [];
   const closeList = () => {
     const top = stack.pop()!;
     html += `</li></${top.tag}>`;
@@ -669,35 +1251,67 @@ function renderBlocks(container: Element, ctx: RenderContext, part: Part): strin
   const closeAll = () => {
     while (stack.length) closeList();
   };
+  // Consecutive Block Text paragraphs form one quote, consecutive Code paragraphs one code block.
+  let group: { kind: "quote" | "code"; parts: string[] } | null = null;
+  const flush = () => {
+    if (!group) return;
+    html += group.kind === "quote" ? `<blockquote>${group.parts.join("")}</blockquote>` : `<pre><code>${group.parts.join("\n")}</code></pre>`;
+    group = null;
+  };
 
   for (const block of flattenBlocks(container, ctx)) {
+    if (MARKERS.has(block.localName)) {
+      applyMarker(block, ctx);
+      continue;
+    }
     if (block.localName === "tbl") {
       closeAll();
+      flush();
       html += renderTable(block, ctx, part);
       continue;
     }
-    const { heading, list } = paragraphInfo(block, ctx);
-    const inner = new ParagraphRenderer(ctx, part).render(block);
-    const blockHtml = heading ? `<h${heading}>${inner}</h${heading}>` : `<p>${inner}</p>`;
+    const { heading, list, styleId, special, pPr } = paragraphInfo(block, ctx);
+    const renderer = new ParagraphRenderer(ctx, part).collect(block);
+    if (special) {
+      closeAll();
+      if (group && (group as { kind: string }).kind !== special) flush();
+      group ??= { kind: special, parts: [] };
+      group.parts.push(special === "code" ? renderer.html(true) : `<p>${renderer.html()}</p>`);
+      continue;
+    }
+    flush();
+    const task = list && !list.ordered ? renderer.takeTaskGlyph() : undefined;
+    const inner = renderer.html();
+    const mappedStyle = styleId ? ctx.styleIds.get(styleId) : undefined;
+    const styleAttr =
+      !heading && !list && mappedStyle && mappedStyle !== NORMAL_STYLE_ID ? ` data-style="${escapeHtml(mappedStyle)}"` : "";
+    const changeAttr = topLevel && !list && ctx.tracked === "marks" ? blockChangeAttr(pPr, ctx) : "";
+    const blockHtml = heading
+      ? `<h${heading}${changeAttr}>${inner}</h${heading}>`
+      : `<p${styleAttr}${changeAttr}>${inner}</p>`;
     if (!list) {
       closeAll();
       html += blockHtml;
       continue;
     }
     const tag = list.ordered ? "ol" : "ul";
+    const isTask = task !== undefined;
+    const item = isTask ? `<li data-type="taskItem" data-checked="${task ? "true" : "false"}">` : "<li>";
     while (stack.length && stack[stack.length - 1].level > list.level) closeList();
     const top = stack[stack.length - 1];
-    if (top && top.level === list.level && top.tag === tag) {
-      html += "</li><li>";
+    if (top && top.level === list.level && top.tag === tag && top.task === isTask) {
+      html += `</li>${item}`;
     } else {
       if (top && top.level === list.level) closeList();
       const start = tag === "ol" && list.start !== 1 ? ` start="${list.start}"` : "";
-      html += `<${tag}${start}><li>`;
-      stack.push({ level: list.level, tag });
+      const type = isTask ? ' data-type="taskList"' : "";
+      html += `<${tag}${type}${start}>${item}`;
+      stack.push({ level: list.level, tag, task: isTask });
     }
     html += blockHtml;
   }
   closeAll();
+  flush();
   return html;
 }
 
@@ -767,9 +1381,9 @@ function getDomParser(options: DocxImportOptions): { new (): DOMParser } {
 }
 
 /**
- * Converts a DOCX file to sanitized TipTap HTML and plain text. Throws
- * {@link ImportError} (`invalid_file` / `unsupported_environment`) or
- * `ZipError` for damaged or oversized containers.
+ * Converts a DOCX file to sanitized TipTap HTML and plain text, plus its
+ * comments and styles. Throws {@link ImportError} (`invalid_file` /
+ * `unsupported_environment`) or `ZipError` for damaged or oversized containers.
  */
 export async function docxToDocumentImport(
   data: ArrayBuffer | ArrayBufferView,
@@ -808,12 +1422,40 @@ export async function docxToDocumentImport(
   const stylesPath = partByType("styles") ?? `${baseDir}styles.xml`;
   const numberingPath = partByType("numbering") ?? `${baseDir}numbering.xml`;
 
+  const styles = readStyles(await readXmlPart(zip, Parser, stylesPath));
+  const useStyles = options.paragraphStyles !== false;
+  const styleIds = useStyles ? mapStyleIds(styles) : new Map<string, string>();
+  const peoplePath = partByType("people");
+  const people = readPeople(peoplePath ? await readXmlPart(zip, Parser, peoplePath) : null);
+
+  let threads: CommentThread[] = [];
+  let commentThreads = new Map<string, string>();
+  if (options.comments !== false) {
+    const commentsPath = partByType("comments");
+    const extendedPath = partByType("commentsExtended");
+    const read = readComments(
+      commentsPath ? await readXmlPart(zip, Parser, commentsPath) : null,
+      extendedPath ? await readXmlPart(zip, Parser, extendedPath) : null,
+      people,
+    );
+    threads = read.threads;
+    commentThreads = read.byFileId;
+  }
+
   const ctx: RenderContext = {
-    styles: readStyles(await readXmlPart(zip, Parser, stylesPath)),
+    styles,
     numbering: readNumbering(await readXmlPart(zip, Parser, numberingPath)),
     notes: new Map(),
     noteOrder: [],
     tracked: options.trackedChanges ?? "accepted",
+    styleIds,
+    people,
+    commentThreads,
+    openComments: new Map(),
+    moveRanges: new Map(),
+    moveIds: new Map(),
+    segmentCount: 0,
+    lastChange: null,
   };
 
   for (const kind of ["footnote", "endnote"] as const) {
@@ -832,7 +1474,7 @@ export async function docxToDocumentImport(
   }
 
   const part: Part = { rels, images: await loadImages(zip, documentXml, rels, options) };
-  let html = renderBlocks(body, ctx, part);
+  let html = renderBlocks(body, ctx, part, true);
   if (ctx.noteOrder.length) {
     // Notes may reference further notes; render until the list stops growing.
     let notesHtml = "";
@@ -843,7 +1485,13 @@ export async function docxToDocumentImport(
     html += `<hr><ol>${notesHtml}</ol>`;
   }
   const sanitized = sanitizeImportedHtml(html);
-  return { html: sanitized, text: htmlToPlainText(sanitized) };
+  const result: DocumentImport = { html: sanitized, text: htmlToPlainText(sanitized) };
+  if (threads.length) result.comments = { version: 1, threads };
+  if (useStyles) {
+    const definitions = styleDefinitions(styles, styleIds);
+    if (definitions.length) result.styles = createStyleRegistry({ styles: definitions });
+  }
+  return result;
 }
 
 /** Creates a DOCX `document` adapter with custom options. */

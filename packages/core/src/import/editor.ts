@@ -63,6 +63,42 @@ export function insertImportedDocument(
   return end;
 }
 
+/**
+ * Loads the review data of an import (DOCX comments and styles) into an
+ * editor: threads are added to the `Comments` extension's store (existing
+ * threads are kept) and styles the `ParagraphStyles` registry does not have
+ * yet are added. Call it after inserting `content.html`;
+ * `importFilesIntoEditor` does so for editors. Returns how many threads and
+ * styles were added.
+ */
+export function applyImportedReviewData(
+  editor: { storage?: unknown } | null | undefined,
+  content: DocumentImport,
+): { comments: number; styles: number } {
+  const storage = (editor?.storage ?? {}) as any;
+  let comments = 0;
+  let styles = 0;
+  const store = storage.comment?.store;
+  const threads = content.comments?.threads ?? [];
+  if (store && threads.length) {
+    const existing = store.toJSON().threads as { id: string }[];
+    const fresh = threads.filter((thread) => !existing.some((t) => t.id === thread.id));
+    if (fresh.length) {
+      store.load({ version: 1, threads: [...existing, ...fresh] });
+      comments = fresh.length;
+    }
+  }
+  const registry = storage.paragraphStyles?.registry;
+  if (registry && content.styles) {
+    for (const style of content.styles.list()) {
+      if (registry.get(style.id)) continue;
+      registry.upsert(style);
+      styles++;
+    }
+  }
+  return { comments, styles };
+}
+
 export interface ImportFilesIntoEditorOptions extends InsertImportedDocumentOptions {
   /** Registry to match files against (default: the shared default registry). */
   registry?: ImportAdapterRegistry;
@@ -96,6 +132,9 @@ export async function importFilesIntoEditor(
       const view = toView(target);
       if ((view as any).isDestroyed) break;
       at = insertImportedDocument(view, outcome.result, { at, asPlainText: options.asPlainText });
+      if (!options.asPlainText && "storage" in (target as object)) {
+        applyImportedReviewData(target as { storage?: unknown }, outcome.result);
+      }
       outcomes.push(outcome);
       options.onImport?.(outcome, file);
     } catch (error) {

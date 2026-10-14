@@ -139,6 +139,24 @@ getFindReplaceState(editor); // { open, mode, query, replacement, options, match
 - **Track changes**: tracked-deleted text is skipped (a match never spans a deletion, but word boundaries see the live text), and replacements made while tracking become tracked deletions and insertions.
 - Matches are decorated with `pixerate-find-match` and the current one also with `pixerate-find-match-current` (`matchClass` / `currentMatchClass`); style them in your CSS. `createFindReplaceCommands(editor)` returns command-registry specs (`findReplace.open`, `.next`, `.find`, `.replaceAll`, …).
 
+## Tables
+
+`createRichTextPreset()` includes tables by default (TipTap's `table`, `tableRow`, `tableHeader`, `tableCell`): resizable columns (`colwidth`), header rows, columns and cells, `colspan` / `rowspan` (kept from pasted HTML and from DOCX / PDF import), cell `align` and `backgroundColor`, and table node selection. Configure them with `table: { resizable, cellMinWidth, allowTableNodeSelection, HTMLAttributes, ... }`, or pass `table: false` to leave tables out of the schema (pasted and imported tables are then flattened into paragraphs, as before).
+
+```ts
+import { createTableCommands, getTableState, runTableAction, getTableActionState } from "@pixerate/editor";
+
+runTableAction(editor, "insertTable", { rows: 3, cols: 4, withHeaderRow: true });
+getTableActionState(editor, "mergeCells"); // true, or why not: "Select two or more adjacent cells to merge."
+getTableState(editor); // { inTable, rows, columns, row, column, headerRow, headerColumn, headerCell, cellAlignment, actions: { … } }
+registry.register(createTableCommands(editor)); // table.insertTable, table.addRowAfter, table.mergeCells, … (palette & agents)
+```
+
+- **Actions** (`TABLE_ACTIONS`): `insertTable` (no nesting), `addRowBefore` / `addRowAfter` / `deleteRow`, `addColumnBefore` / `addColumnAfter` / `deleteColumn`, `deleteTable`, `mergeCells` / `splitCell`, `toggleHeaderRow` / `toggleHeaderColumn` / `toggleHeaderCell`, `goToNextCell` / `goToPreviousCell` (Tab / Shift+Tab), `setCellAlignment` (`{ align }`) and `setCellBackground` (`{ color }`, sanitized). `createTableStore(editor)` is the external store the React and Svelte toolbars use; `DEFAULT_TABLE_TOOLBAR` lists their buttons. `createRichTextToolProvider` adds an `edit_table` agent tool when the schema has tables.
+- **Export**: `getEditorText` writes each row as a line of tab-separated cells. Markdown (`markdown: true`) writes a GFM pipe table (column alignment from the header cells, `|` escaped) when the first row is all header cells, nothing spans and every cell holds one paragraph; otherwise the table is written as HTML, which parses back. GFM tables in markdown input become tables.
+- **Track changes**: edits inside cells are tracked like any text. Inserting or deleting rows, columns (their cells) or a whole table is tracked as a whole-block change (`blockChange` with `operation`): rejecting an insertion or accepting a deletion removes the rows/cells/table; deleting rows you inserted yourself removes them. Header toggles are tracked as block changes (reject restores the cell type). Cell attributes (alignment, background, widths) are not tracked, and merging or splitting cells is refused while tracking. `compareDocuments` compares tables row by row and cell by cell.
+- Style the tables in your CSS (`.tableWrapper`, `table`, `th`, `td`, `.selectedCell`, `.column-resize-handle`; the table has the `pixerate-table` class).
+
 ## File import and rich clipboard
 
 An import adapter registry maps file types (MIME types and extensions) to converters. Built-in `document` adapters cover markdown (`.md`, `.markdown`, `.mdown`, `.mkdn`, `.mkd`, `.Rmd`, `.md.txt`), HTML (sanitized with the same allowlist as markdown), plain text (`.txt`), RTF (best-effort text extraction) and DOCX (`.docx`, `.docm`, `.dotx`). The longest matching extension wins, then exact MIME types, then `priority`, then the most recent registration.
@@ -353,6 +371,18 @@ sheet.findInvalidCells(); // "circle invalid data"
 ```
 
 `evaluateConditionalFormats(sheet, rules)` and `validateCellInput(sheet, rules, row, col, input)` also work on any grid through the small `ConditionalFormatSheet` / `DataValidationSheet` interfaces. Rule formulas are written for the top-left cell of the first range and shift for other cells; custom validation formulas see the value being entered. `setCellValue`, paste and import never validate (as in Excel); `commitEditing` and `commitCellInput` do.
+
+## Large spreadsheets: incremental recalculation and virtualised rendering
+
+The dependency graph stores each range a formula reads once, in an interval index per column (wide ranges in a per-sheet index), instead of one key per cell, so `=SUM(A1:A50000)` and `=SUM(A:A)` are one entry each. An edit finds the formulas reading the cell in O(log n + k), recalculates only that dirty subgraph in topological order (a range read by many formulas is resolved once per recalculation), and still detects cycles, re-spills dynamic arrays, follows sheet-qualified, 3-D and defined-name references and recalculates volatile functions (`NOW`, `TODAY`, `RAND`, `RANDBETWEEN`, `RANDARRAY`) on every edit. CSV import, `loadWorkbook` and large pastes register the cells and evaluate each formula once; a single-cell edit is undone without a whole-sheet snapshot. `SUM`, `PRODUCT`, `AVERAGE`, `COUNT`, `COUNTA`, `MIN` and `MAX` read their ranges without materialising blank cells.
+
+```ts
+sheet.setCellValue(rowId, colId, "42");
+sheet.getRecalculationStats(); // { evaluated: 1, planned: 2, passes: 1 }: deterministic work counts
+sheet.depGraph.getIndexStats(); // { formulas, cellEdges, rangeEntries, volatile }
+```
+
+`measureSpreadsheetView`, `getSpreadsheetViewWindow` and `getSpreadsheetScrollToCell` work out which displayed rows and columns to render for a scroll position (frozen rows and columns always, merges crossing the edge whole) and how far to scroll to show the active cell. The React and Svelte `SpreadsheetEditor` use them for sheets with more than 200 displayed rows or 60 columns (`virtualize` prop: `'auto'`, `true` or `false`). `packages/core/tests/spreadsheet-recalc.bench.test.ts` measures 50k-cell sheets (`SPREADSHEET_BENCH=1`).
 
 ## Other modules
 

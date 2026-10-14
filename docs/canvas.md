@@ -562,3 +562,80 @@ Bindings live in node data and survive copy / paste, duplication and serialisati
 `resolveCanvasTokens(nodes, state, { modes })` writes every bound value into the ordinary node fields and returns the same array when nothing changed, so renderers and auto layout need no token awareness. `bindCanvasToken(nodes, ids, key, variableId | null, state)` binds (or unbinds, keeping the value) and `setCanvasTokenMode(nodes, ids, collectionId, modeId | null, state)` switches a frame's mode.
 
 React: `useCanvasTokens({ store, nodes, setNodes, modes })` re-resolves on token and node changes and detaches on delete; `<TokenBindingPicker state nodes selectedIds onChange>` and `<TokenModeSwitcher state nodes nodeIds onChange>` are inspector controls, and `@pixerate/editor-react/tokens` has `useTokens(store, { modes })` (state, `cssVariables`, `css`) and `<TokensPanel store>`. Svelte: `createCanvasTokens({ store, getNodes, setNodes, modes })` (call `resolve()` after changing nodes yourself), the same components (`onchange`), and `createTokens` / `<TokensPanel>` in `@pixerate/editor-svelte/tokens`.
+
+### Keyframe animation and timeline
+
+A node's animation lives in `node.data.animation` (`ANIMATION_DATA_KEY`), so it copies, pastes, duplicates and serialises with the node. Each animatable property has a track of keyframes `{ time (ms), value, easing? }`. The easing applies to the segment *leaving* the keyframe.
+
+```ts
+import { animateNode, applyAnimation, exportCssAnimation, AnimationPlayer, ManualClock } from '@pixerate/editor/canvas';
+
+let { nodes } = animateNode(nodes, 'card', { from: { opacity: 0 }, to: { x: 0, opacity: 1 }, duration: 600, easing: 'ease-out' });
+const frame = applyAnimation(nodes, 300); // copies with the values at 300 ms; `nodes` is untouched
+exportCssAnimation(nodes, 'card', { loop: 'ping-pong' }).css; // @keyframes … + an `animation` rule
+```
+
+- **Properties** (`ANIMATABLE_PROPERTIES`): `x`, `y`, `width`, `height`, `rotation` (degrees) and `scale`, `opacity` (0–1), `fill`, `stroke`, `strokeWidth`, `cornerRadius`, and `motionPath` (0–1 along `animation.motionPath.d`, with optional `autoRotate`; set it with `setMotionPath`). Rotation and scale are written to the CSS individual transform properties `style.rotate` / `style.scale`, so they compose with xyflow's `transform`. Fill, stroke, stroke width and corner radius use the same fields as token bindings (`data.shape.*` or `style`). Pass `properties` to add your own `AnimatableProperty`.
+- **Easing**: `hold`, `linear`, the CSS presets `ease`, `ease-in`, `ease-out` and `ease-in-out` (CSS Easing Level 1 values), `ease-in-back` and `ease-out-back`, `{ type: 'cubic-bezier', x1, y1, x2, y2 }` (or a CSS `cubic-bezier()` string), and `spring` / `{ type: 'spring', stiffness, damping, mass, velocity }` (a closed-form damped spring that may overshoot). `easingFromInfluence(out, in)` builds the After Effects-style "influence" ease.
+- **Evaluation**: `evaluateTrack` holds the first value before the first key and the last value after the last key. Unsorted keys are sorted. When several keys share a time, the later one in the array wins (`normalizeKeyframes`, cached per array, so treat keyframes as immutable). Numbers extrapolate, so overshooting easings also overshoot the value. Colours interpolate in OKLab with premultiplied alpha (`mixColorsOklab`), so a fade from `transparent` keeps the hue. `evaluateAnimation(doc, time)` returns `{ nodeId: { property: value } }`. `applyAnimationOverrides` writes those values into copies; nodes without values keep their identity. `wrapAnimationTime(t, duration, 'none' | 'loop' | 'ping-pong')` maps a running time onto the timeline.
+- **Design tokens**: run `applyAnimation` *after* `resolveCanvasTokens`. Token values are then the stored base, and an animated property shows its keyframes while it is animated.
+- **Editing** (pure, throws `AnimationEditError` without partial edits):
+  - `setKeyframe`, `updateKeyframe`, `deleteKeyframes`. Deleting a track's last key keeps its value on the node.
+  - `setKeyframeEasing`, `setTrackEnabled` (disabled tracks keep their keys), `removeTrack`.
+  - `addKeyframesAtTime`: keys the values shown at a time.
+  - `moveKeyframes`: one common delta across nodes and properties, clamped so the group keeps its spacing. Originals are removed before destinations are inserted, so keys can move into each other's old slots.
+  - `scaleKeyframes`: around a pivot.
+  - `snapKeyframeDelta`: group snapping to the nearest target within a threshold.
+  - `copyKeyframes` / `pasteKeyframes`: relative times, onto other nodes.
+  - `animateNode`.
+- **Record mode**: `recordAnimationChanges(base, shown, edited, time, { recording })` turns edits made on the *displayed* nodes into stored edits:
+  - A changed property that is already animated is keyed at `time`.
+  - In record mode, any changed property is keyed. Its first key also adds a key at 0 with the previous value.
+  - Everything else passes through as a static edit.
+- **Player**: `new AnimationPlayer({ clock, duration, loop, playbackRate, onTime, onEnd })` has `play`, `pause`, `toggle`, `stop`, `seek`, and `scrub` / `endScrub` (scrubbing pauses, then resumes). It asks the clock for frames only while playing. Pass a `ManualClock` in tests or when rendering video. `getState()` is a cached snapshot.
+- **Export**:
+  - `sampleAnimationFrames(doc, { fps })`: the values at each frame.
+  - `exportCssAnimation(nodes, id, { loop, playbackRate, selector })`: one `@keyframes` per CSS property, with per-segment `animation-timing-function` (`steps(1, end)` for hold, sampled `linear()` for springs). `x` / `y` become `translate` relative to the node's position.
+  - `toWebAnimations` + `playWebAnimations(element, specs)`.
+  - Tracks CSS cannot reproduce exactly are sampled and reported as `exact: false`: OKLab colours, `x` / `y` with different timing, and motion paths.
+- **Controller**: `createCanvasAnimationController({ getNodes, setNodes, history, clock })` combines these.
+  - Render `display()` (the nodes at the playhead) and send edits made on them back through `applyDisplayChanges(next)`. A drag that keys a property becomes one undo step, merged by tag.
+  - Keyframe edits are undoable steps, and a selection follows moves.
+  - `beginKeyframeDrag` / `updateKeyframeDrag(deltaMs, { snap, thresholdMs })` / `endKeyframeDrag` / `cancelKeyframeDrag` drag keyframes. They snap to other keys, the playhead, 0 and the end, and otherwise to whole frames. The preview is not an edit, and the drop is one undo step.
+  - The timeline has a fixed `duration`, or follows the last key (at least `minDuration`).
+- **Commands and agent tools**: `createCanvasAnimationCommands(controller)` (in `@pixerate/editor/commands`) registers:
+  - `canvas.animation.togglePlay`, `play`, `pause`, `stop`, and `seek { time }`.
+  - `addKeyframe { ids?, properties?, time? }`, `deleteKeyframes`, `setEasing { easing }`, `toggleRecord`, and `next` / `previousKeyframe`.
+  - `animateNode { nodeId, to, from?, duration?, delay?, easing? }` and `exportCss { nodeId }`.
+
+  Expose them to agents with `createCommandToolProvider`.
+
+React: `useCanvasAnimation({ nodes, setNodes, history, clock })` returns the controller plus reactive `state`, `time`, `playing`, `recording`, `selection`, `drag` and `displayNodes`. Wire React Flow with `nodes={animation.displayNodes}` and `onNodesChange={(c) => animation.applyDisplayChanges(applyNodeChanges(c, animation.displayNodes))}`. `<AnimationTimeline animation width>` has:
+
+- play / pause, a record toggle and add keyframe;
+- a ruler you drag to scrub;
+- one lane per animated property of the selected nodes. Keyframe diamonds drag with snapping. Alt turns snapping off, Escape cancels, Shift-click adds to the selection, and Delete removes.
+- an easing picker for the selected keyframes, and the loop mode.
+
+Svelte: `createCanvasAnimation({ getNodes, setNodes, history, clock })` with the same API (`displayNodes` is a reactive getter) and `<AnimationTimeline animation width>`.
+
+### Components, instances and variants
+
+Figma-style reusable components on any React Flow / SvelteFlow canvas whose frames are parent nodes (`parentId`). Everything lives in node `data`, so components and instances survive JSON, copy / paste and duplication.
+
+- **Main component**: a node with `data.component` (`{ properties?, variant?, description? }`); its descendants are its layers. `createCanvasComponent(nodes, ids)` converts a single frame-like node (one with children, a `group` / `frame` type or auto layout) or wraps the selection in a new component frame (siblings only; never inside an instance).
+- **Component set**: a node with `data.componentSet` whose child components are **variants** (`data.component.variant`, e.g. `{ Style: 'Primary', Size: 'Small' }`, named `Style=Primary, Size=Small`). `combineCanvasComponentsAsVariants(nodes, ids)` wraps sibling components in a set (names already in `Prop=Value` form are parsed, others become `Property 1=Default`, `Variant2`, …). The default variant is the one nearest the set's top-left corner; `getVariantConflicts` lists duplicate combinations.
+- **Instance**: a node with `data.instance = { componentId, properties }`. `createCanvasInstance(nodes, componentOrSetId, { parentId?, position?, properties? })` copies the main's layers as real nodes; each copy records the main layer it mirrors in `data.componentSource` (ids default to `<instanceId>:<sourceId>`, see `idGenerator`).
+- **Overrides**: edits to instance layers are recorded per layer in `data.componentOverrides` as property groups: `data.<key>` (e.g. `data.label`), `style.<prop>`, `shape.<key>`, `layout.<key>` (auto layout gap, padding, …), `token.<key>` (a different token binding), `tokenMode.<collection>`, `hidden`, `component` / `props` (a nested instance swapped or given other property values), `node.<key>` and, on the instance itself, `size`. Setting a value back to the main's clears its override; values written by a token binding or a component property are never overrides. The geometry of layers inside an instance follows the main, its constraints and auto layout (only the instance resizes, its layers following their constraints).
+- **Propagation**: `syncCanvasComponents(before, after)` runs after any edit (the hooks call it on every node change): it records overrides on edited instance layers and rebuilds the instances of components whose layers changed (nested components first), keeping layer ids, overrides, property values, and each instance's own position, visibility, lock, `childLayout` and token modes. It returns `after` unchanged when there is nothing to do. Instances never gain or lose layers: deleting a layer inside an instance hides it (a `hidden` override); nodes added inside an instance move out next to it; a pasted copy of an instance layer stops mirroring the main, and a pasted nested instance becomes an instance of its own main. `syncAllCanvasInstances(nodes)` rebuilds everything (e.g. instances saved without their layers).
+- **Variants and swaps**: `setCanvasInstanceProperties(nodes, ids, { Style: 'Secondary', Label: 'Buy' })` switches variants (matched by values; overrides stay where the layer's name path matches and both variants agreed on that property, text layers keep all of theirs) and sets component property values. `swapCanvasInstance(nodes, ids, componentId, { keepTextOverridesOnly? })` shows another main, keeping same-named property values and overrides matched by layer name. Name text layers with `data.name` when `data.label` is their content, so matching survives text that differs between variants.
+- **Component properties**: `setCanvasComponentProperty(nodes, componentOrSetId, name, def | null, { newName? })` adds / edits / deletes `boolean`, `text` and `instanceSwap` properties (variants share their set's); `bindCanvasComponentProperty(nodes, layerId, field, name | null)` binds a main layer's `visible`, a `data.<key>` text field or a nested instance's `component`. Property values reach nested instances through their own properties (one level per source hop, like Figma).
+- **Reset / push / detach**: `resetCanvasInstanceOverrides(nodes, id, group?)` resets one group, one layer, or a whole instance (its own size stays; property values go back to their defaults). `pushCanvasInstanceOverrides(nodes, id)` copies the instance's overrides to its main and so to every other instance. `detachCanvasInstance(nodes, ids)` turns an instance into a plain frame with the same look; nested instances become instances of their own mains (a nested instance alone can't be detached).
+- **Deleted mains**: instances keep their layers in a `missing-main` state (`getInstanceStatus`); `restoreCanvasMainComponent(nodes, instanceId)` turns one back into the main with its old id (its layers take the ids their copies mirror, so every other instance re-links). Pasting an instance into a document without its main keeps the reference the same way.
+- **Cycles**: an instance can't be placed in (or swapped / property-set into) a component it contains, directly or through nested instances (`wouldCreateComponentCycle`).
+- **Tokens**: bindings (`data.tokenBindings`) are copied from the main and follow it unless the instance binds another variable; an instance's own `data.tokenModes` (e.g. Dark) resolves its layers in that mode. Pass `tokens: { state }` to resolve after a sync, or let `useCanvasTokens` / `createCanvasTokens` do it.
+- **Queries**: `listCanvasComponents(nodes)` (components, sets, variant options, instance counts) and `inspectCanvasInstance(nodes, id)` (main, status, variant, properties, overrides per layer) feed panels and inspectors.
+
+`createCanvasComponentsController({ getNodes, setNodes, history })` wraps all of this: `sync()`, `createComponent`, `combineAsVariants`, `createInstance`, `detachInstance`, `resetOverrides`, `pushOverrides`, `swapInstance`, `setInstanceProperties`, `restoreMainComponent`, `setComponentProperty`, `bindComponentProperty` and `goToMainComponent` (selects the main and calls `onReveal`), each one undoable step, each with a `can…` check returning `true` or the reason it can't run. `createComponentCommands(controller)` (`@pixerate/editor/commands`) registers them as `canvas.createComponent` (Mod+Alt+K), `canvas.detachInstance` (Mod+Alt+B), `canvas.resetOverrides`, … plus read-only `canvas.listComponents` / `canvas.inspectInstance`; `createCanvasComponentToolProvider(controller)` (`@pixerate/editor/agent`) exposes them as agent tools.
+
+React: `useCanvasComponents({ nodes, setNodes, history })` returns the controller and syncs after every node change; `<CanvasComponentsPanel nodes onInsert>` lists sets, variants and components (click to insert, or drag: read the id with `getCanvasComponentDragId(event.dataTransfer)`); `<CanvasInstanceInspector nodes nodeId components onError>` shows variant pickers, property controls, overrides (each resettable) and Reset all / Go to main / Push changes / Detach (Restore for a missing main). Svelte: `createCanvasComponents({ getNodes, setNodes, history })` syncs when the nodes it reads change (`autoSync: false` to call `sync()` yourself; `destroy()` stops it) and the same components (`oninsert`, `onerror`).

@@ -341,7 +341,7 @@ describe('Built-in tool providers', () => {
 		const editor = new Editor({ extensions: createRichTextPreset(), content: '<p>Hello world</p>' });
 		const registry = new ToolRegistry();
 		registry.register(createRichTextToolProvider(editor, { id: 'doc' }));
-		expect(registry.listTools().tools.map((t) => t.name)).toEqual(['get_text', 'insert_text', 'replace_selection']);
+		expect(registry.listTools().tools.map((t) => t.name)).toEqual(['get_text', 'insert_text', 'replace_selection', 'edit_table']);
 
 		const text = await registry.callTool('get_text', {});
 		expect(text.structuredContent).toMatchObject({ format: 'text', content: 'Hello world' });

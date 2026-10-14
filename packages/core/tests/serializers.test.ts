@@ -20,6 +20,7 @@ import {
   getEditorText,
 } from "../src/serializers";
 import { createEditor, createRichTextPreset, richClipboardPluginKey } from "../src";
+import { growthRatio } from "./helpers/growth";
 
 describe("Serializers: Plain Text & TipTap HTML", () => {
   it("escapes special HTML characters", () => {
@@ -90,6 +91,13 @@ const sharedHtmlCases: Array<[string, string, string]> = [
     "hi @Ada!",
   ],
   ["line breaks", "<p>a<br>b</p>", "a\nb"],
+  [
+    "tables as tab-separated rows",
+    '<p>intro</p><table style="min-width: 50px"><colgroup><col></colgroup><tbody>' +
+      '<tr><th colspan="1" rowspan="1"><p>A</p></th><th><p>B</p></th></tr>' +
+      "<tr><td><p>1</p></td><td><p>2</p></td></tr></tbody></table><p>end</p>",
+    "intro\nA\tB\n1\t2\nend",
+  ],
 ];
 
 describe("Serializers: htmlToPlainText (Node fallback, no DOM)", () => {
@@ -103,6 +111,14 @@ describe("Serializers: htmlToPlainText (Node fallback, no DOM)", () => {
     // Growth with input size is checked in html-scan.test.ts; this is a smoke test.
     expect(htmlToPlainText("<span data-type='mention' ".repeat(20000))).toContain("<span");
   });
+
+  it.each([["</td>   "], ["</p>   "], ["</th>\n<td"]])(
+    "table cell rules stay linear on %j",
+    (unit) => {
+      expect(growthRatio(unit, (input) => htmlToPlainText(input))).toBeLessThan(10);
+    },
+    30_000,
+  );
 });
 
 describe("Serializers: DOM-backed parsing", () => {
@@ -168,6 +184,42 @@ describe("Serializers: DOM-backed parsing", () => {
     controller.replaceRange(1, 6, "");
     expect(controller.getPlainText()).toBe("\nline2 <i>x</i> <p> literally & more");
     controller.destroy();
+  });
+});
+
+describe("Serializers: tables", () => {
+  beforeAll(() => {
+    const dom = new JSDOM();
+    globalThis.document = dom.window.document as any;
+    globalThis.window = dom.window as any;
+    (globalThis as any).Node = dom.window.Node;
+  });
+
+  it("plain text pads spanned columns and joins a cell's paragraphs", () => {
+    expect(
+      htmlToPlainText(
+        '<table><tr><td colspan="3"><p>wide</p><p>cell</p></td><td><p>x<br>y</p></td></tr><tr><td></td><td>b</td></tr></table>',
+      ),
+    ).toBe("wide cell\t\t\tx y\n\tb");
+  });
+
+  it("an editor's text has one line per row", () => {
+    const editor = new Editor({
+      extensions: createRichTextPreset(),
+      content: "<table><tr><th>Name</th><th>Qty</th></tr><tr><td>Apples</td><td>3</td></tr></table>",
+    });
+    expect(getEditorText(editor)).toBe("Name\tQty\nApples\t3");
+    editor.destroy();
+  });
+
+  it("the HTML sanitizer keeps table structure, colgroup and spans but not styles or handlers", () => {
+    const html = sanitizeHtml(
+      '<table style="width:1px" onclick="x()"><colgroup><col colwidth="80" onmouseover="y()"></colgroup>' +
+        '<tbody><tr><th colspan="2" data-background-color="red">a</th></tr></tbody></table>',
+    );
+    expect(html).toBe(
+      '<table><colgroup><col colwidth="80"></colgroup><tbody><tr><th colspan="2" data-background-color="red">a</th></tr></tbody></table>',
+    );
   });
 });
 
@@ -497,5 +549,15 @@ describe("asset mention roles in serializers", () => {
     expect(html).toContain('data-role="start-frame"');
     expect(extractMentionsFromDoc(html)[0]).toMatchObject({ id: "a1", role: "start-frame" });
     expect(extractMentionsFromDoc(`<p>${mention()}</p>`)[0]).not.toHaveProperty("role");
+  });
+});
+
+describe("tracked-change HTML from imports", () => {
+  it("keeps <ins> with its data attributes and drops handlers (DOCX tracked insertions)", () => {
+    expect(
+      sanitizeImportedHtml('<p><ins data-change-type="insertion" data-move-id="m" onclick="x()" style="color:red">a</ins></p>'),
+    ).toBe('<p><ins data-change-type="insertion" data-move-id="m">a</ins></p>');
+    expect(sanitizeHtml("<ins>x</ins>")).toBe("<ins>x</ins>");
+    expect(markdownToTipTapHtml("a <ins>b</ins>")).toContain("<ins>b</ins>");
   });
 });

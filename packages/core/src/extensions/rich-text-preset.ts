@@ -64,6 +64,7 @@ import {
 } from "./document-structure";
 import { FindReplace, type FindReplaceOptions } from "./find-replace/extension";
 import { ParagraphStyles, type ParagraphStylesOptions } from "./paragraph-styles/extension";
+import { createTableExtensions, type RichTextTableOptions } from "./table/extension";
 
 /**
  * The TipTap packages whose commands the preset installs. Exported only so the
@@ -83,6 +84,10 @@ export type RichTextPresetCommandPackages = [
   typeof import("@tiptap/extension-text-align"),
   typeof import("@tiptap/extension-text-style"),
   typeof import("@tiptap/extension-underline"),
+  typeof import("@tiptap/extension-table"),
+  typeof import("@tiptap/extension-table-row"),
+  typeof import("@tiptap/extension-table-header"),
+  typeof import("@tiptap/extension-table-cell"),
 ];
 
 export interface RichTextPresetOptions {
@@ -126,6 +131,14 @@ export interface RichTextPresetOptions {
    * registry, `data-style` attributes and next-style on Enter. Off by default.
    */
   paragraphStyles?: Partial<ParagraphStylesOptions> | boolean;
+  /**
+   * Tables (`table`, `tableRow`, `tableHeader`, `tableCell`): resizable
+   * columns, header rows/columns/cells, `colspan`/`rowspan` (e.g. from PDF
+   * and DOCX import), cell alignment and background, GFM markdown. **On by
+   * default**; `table: false` leaves tables out of the schema, so pasted or
+   * imported tables are flattened into paragraphs as before.
+   */
+  table?: Partial<RichTextTableOptions> | boolean;
 }
 
 const optionObject = <T>(value: T | boolean | undefined): T | Record<string, never> =>
@@ -219,6 +232,10 @@ export function createRichTextPreset(
         typeof placeholder === "function" ? placeholder : () => placeholder,
     }),
   ];
+
+  if (options.table !== false) {
+    extensions.push(...createTableExtensions(optionObject(options.table)));
+  }
 
   if (characterLimit) {
     extensions.push(

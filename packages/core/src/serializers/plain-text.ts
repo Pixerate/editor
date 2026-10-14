@@ -129,8 +129,77 @@ function decodeHtmlEntities(text: string): string {
     .replace(/&amp;/g, "&");
 }
 
+const CELL_TAGS = new Set(["TD", "TH"]);
+
 /**
- * Extracts plain text from an HTML string or TipTap HTML, preserving newlines between block tags.
+ * Walks DOM nodes and emits one line per *innermost* block, so nested blocks
+ * (e.g. TipTap's `<li><p>…</p></li>`) are not repeated. A table row is one
+ * line of tab-separated cells: a cell's paragraphs are joined with spaces and
+ * a cell spanning several columns is followed by empty cells.
+ */
+function blockLines(nodes: readonly ChildNode[]): string[] {
+  const lines: string[] = [];
+  let current: string | null = null;
+  const flush = () => {
+    if (current !== null) {
+      lines.push(current);
+      current = null;
+    }
+  };
+  const visit = (node: Node) => {
+    if (node.nodeType === 3) {
+      const value = node.nodeValue ?? "";
+      // Skip formatting whitespace between blocks.
+      if (current === null && value.trim() === "") return;
+      current = (current ?? "") + value;
+      return;
+    }
+    if (node.nodeType !== 1) return;
+    const element = node as Element;
+    const tag = element.tagName.toUpperCase();
+    if (tag === "BR") {
+      current = (current ?? "") + "\n";
+      return;
+    }
+    if (tag === "TR") {
+      flush();
+      const cells: string[] = [];
+      element.childNodes.forEach((child) => {
+        if (child.nodeType !== 1 || !CELL_TAGS.has((child as Element).tagName.toUpperCase())) return;
+        const cell = child as Element;
+        cells.push(
+          blockLines(Array.from(cell.childNodes))
+            .filter((line) => line !== "")
+            .join(" ")
+            .replace(/[\t\n]+/g, " "),
+        );
+        const span = parseInt(cell.getAttribute("colspan") ?? "1", 10);
+        for (let i = 1; i < Math.min(Number.isFinite(span) ? span : 1, 1000); i++) cells.push("");
+      });
+      lines.push(cells.join("\t"));
+      return;
+    }
+    if (!BLOCK_TAGS.has(tag)) {
+      node.childNodes.forEach(visit);
+      return;
+    }
+    flush();
+    const linesBefore = lines.length;
+    node.childNodes.forEach(visit);
+    flush();
+    // An empty block (e.g. <p></p>) is an empty line.
+    if (lines.length === linesBefore && tag !== "HR" && tag !== "TABLE") {
+      lines.push("");
+    }
+  };
+  nodes.forEach(visit);
+  flush();
+  return lines;
+}
+
+/**
+ * Extracts plain text from an HTML string or TipTap HTML, preserving newlines
+ * between block tags. Table rows become lines of tab-separated cells.
  */
 export function htmlToPlainText(html: string, options: PlainTextOptions = {}): string {
   if (!html) return "";
@@ -155,50 +224,15 @@ export function htmlToPlainText(html: string, options: PlainTextOptions = {}): s
       .querySelectorAll("br.ProseMirror-trailingBreak")
       .forEach((br) => br.remove());
 
-    // Walk the tree, emitting one line per innermost block so nested blocks
-    // (e.g. TipTap's <li><p>…</p></li>) are not repeated.
-    const lines: string[] = [];
-    let current: string | null = null;
-    const flush = () => {
-      if (current !== null) {
-        lines.push(current);
-        current = null;
-      }
-    };
-    const visit = (node: Node) => {
-      if (node.nodeType === 3) {
-        const value = node.nodeValue ?? "";
-        // Skip formatting whitespace between blocks.
-        if (current === null && value.trim() === "") return;
-        current = (current ?? "") + value;
-        return;
-      }
-      if (node.nodeType !== 1) return;
-      const tag = (node as Element).tagName.toUpperCase();
-      if (tag === "BR") {
-        current = (current ?? "") + "\n";
-        return;
-      }
-      if (!BLOCK_TAGS.has(tag)) {
-        node.childNodes.forEach(visit);
-        return;
-      }
-      flush();
-      const linesBefore = lines.length;
-      node.childNodes.forEach(visit);
-      flush();
-      // An empty block (e.g. <p></p>) is an empty line.
-      if (lines.length === linesBefore && tag !== "HR") {
-        lines.push("");
-      }
-    };
-    fragment.childNodes.forEach(visit);
-    flush();
-    return lines.join("\n");
+    return blockLines(Array.from(fragment.childNodes)).join("\n");
   }
 
-  // Node.js fallback regex
+  // Node.js fallback regex. Table cells are tab-separated and rows end lines
+  // (a cell's own closing paragraph is dropped first so it does not end the line).
   const text = mentionNormalized
+    .replace(/<\/p>\s*<\/t([dh])>/gi, "</t$1>")
+    .replace(/<\/t[dh]>\s*(?=<t[dh][\s>])/gi, "\t")
+    .replace(/<\/tr>/gi, "\n")
     .replace(/<br\s*\/?>/gi, "\n")
     // A closing block, plus any closing wrappers right after it, ends one line.
     .replace(

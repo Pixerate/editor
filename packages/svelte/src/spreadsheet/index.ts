@@ -23,3 +23,4 @@ export type FormulaBarProps = ComponentProps<typeof FormulaBarComponent>;
 export type FormulaHintsProps = ComponentProps<typeof FormulaHintsComponent>;
 export type SheetTabsProps = ComponentProps<typeof SheetTabsComponent>;
 export type NameManagerProps = ComponentProps<typeof NameManagerComponent>;
+export * from './viewport.svelte.js';

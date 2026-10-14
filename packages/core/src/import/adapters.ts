@@ -4,6 +4,8 @@ import { plainTextToParagraphHtml, sanitizeImportedHtml } from "../serializers/h
 import { rtfToPlainText } from "../serializers/rtf";
 import { docxImportAdapter } from "./docx";
 import type { ImportStructureReport } from "./pdf-layout";
+import type { SerializedComments } from "../extensions/comment-store";
+import type { StyleRegistry } from "../extensions/paragraph-styles/registry";
 import {
   ImportAdapterRegistry,
   type FindImportAdapterQuery,
@@ -26,6 +28,14 @@ export interface DocumentImport {
    * columns) with confidences; set by the PDF adapter.
    */
   structure?: ImportStructureReport;
+  /**
+   * Comment threads (with replies and resolved state) whose ranges the HTML
+   * marks with `data-comment-id`; set by the DOCX adapter. Load them into the
+   * editor's comment store, e.g. with `applyImportedReviewData`.
+   */
+  comments?: SerializedComments;
+  /** Paragraph and character styles the file defines; set by the DOCX adapter. */
+  styles?: StyleRegistry;
 }
 
 export type DocumentImportAdapter = ImportAdapter<DocumentImport>;

@@ -25,6 +25,7 @@ import { SpreadsheetGroupRow } from './SpreadsheetGroupRow';
 import { useFillHandle, useSpreadsheetClipboard } from './useSpreadsheetTableInteractions';
 import { SpreadsheetValidationDialog } from './SpreadsheetValidationDialog';
 import { SpreadsheetConditionalFormatPanel, SpreadsheetDataValidationPanel } from './SpreadsheetRulePanels';
+import { useSpreadsheetViewport } from './useSpreadsheetViewport';
 
 // Sizes of the sticky header row and row-number column, for frozen-pane offsets.
 const COLUMN_HEADER_HEIGHT = 28;
@@ -122,7 +123,18 @@ export interface SpreadsheetEditorProps {
   onColumnResize?: (colId: string, width: number) => void;
   /** Show the sheet tabs bar under the grid (add, switch, rename, reorder, delete sheets). */
   showSheetTabs?: boolean;
+  /**
+   * Render only the rows and columns in (or near) view. `'auto'` (default)
+   * virtualises sheets with more than 200 displayed rows or 60 columns;
+   * `true` / `false` force it.
+   */
+  virtualize?: boolean | 'auto';
 }
+
+/** A rendered column, or the space standing for the columns left out. */
+type ColumnSlot = { kind: 'col'; viewCol: SpreadsheetViewColumn } | { kind: 'space'; key: string; width: number };
+/** A rendered row, or the space standing for the rows left out. */
+type RowSlot = { kind: 'row'; viewRow: SpreadsheetViewRow } | { kind: 'space'; key: string; height: number };
 
 export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
   state: externalState,
@@ -131,11 +143,13 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
   onAddColumnClick,
   onColumnHeaderClick,
   onColumnResize,
-  showSheetTabs = false
+  showSheetTabs = false,
+  virtualize = 'auto'
 }) => {
   const defaultState = useSpreadsheetEditor();
   const state = externalState || defaultState;
   const gridRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const formulaBarRef = useRef<HTMLInputElement>(null);
   const cellInputRef = useRef<HTMLInputElement>(null);
 
@@ -146,6 +160,35 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
 
   // Table operations: render model, clipboard, fill handle and context menu.
   const view = state.viewModel;
+  // Virtualised rendering: frozen rows/columns, a spacer, the rows and
+  // columns in view, another spacer (everything for small sheets).
+  const { window: viewWindow, onScroll: handleGridScroll } = useSpreadsheetViewport(scrollRef, view, {
+    virtualize,
+    merges: state.document.table?.merges,
+    activeCell: state.activeCell
+  });
+  const columnSlots = useMemo<ColumnSlot[]>(() => {
+    const col = (viewCol: SpreadsheetViewColumn): ColumnSlot => ({ kind: 'col', viewCol });
+    if (!viewWindow.virtual) return view.columns.map(col);
+    const slots = view.columns.slice(0, viewWindow.frozenColumns).map(col);
+    if (viewWindow.leftSpace > 0) slots.push({ kind: 'space', key: 'space:left', width: viewWindow.leftSpace });
+    for (let i = viewWindow.colStart; i < viewWindow.colEnd; i++) slots.push(col(view.columns[i]));
+    if (viewWindow.rightSpace > 0) slots.push({ kind: 'space', key: 'space:right', width: viewWindow.rightSpace });
+    return slots;
+  }, [view, viewWindow]);
+  const renderedColumns = useMemo(
+    () => columnSlots.flatMap((slot) => (slot.kind === 'col' ? [slot.viewCol] : [])),
+    [columnSlots]
+  );
+  const rowSlots = useMemo<RowSlot[]>(() => {
+    const row = (viewRow: SpreadsheetViewRow): RowSlot => ({ kind: 'row', viewRow });
+    if (!viewWindow.virtual) return view.rows.map(row);
+    const slots = view.rows.slice(0, viewWindow.frozenRows).map(row);
+    if (viewWindow.topSpace > 0) slots.push({ kind: 'space', key: 'space:top', height: viewWindow.topSpace });
+    for (let i = viewWindow.rowStart; i < viewWindow.rowEnd; i++) slots.push(row(view.rows[i]));
+    if (viewWindow.bottomSpace > 0) slots.push({ kind: 'space', key: 'space:bottom', height: viewWindow.bottomSpace });
+    return slots;
+  }, [view, viewWindow]);
   const { copyShortcutFallback } = useSpreadsheetClipboard(gridRef, state, readOnly);
   const { fillTarget, startFill, extendFill } = useFillHandle(state);
   const [menu, setMenu] = useState<{ x: number; y: number; items: SpreadsheetMenuItem[] } | null>(null);
@@ -643,14 +686,22 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
       )}
 
       {/* Main Grid */}
-      <div className="relative flex-1 overflow-auto">
-        <table className="border-collapse table-fixed w-max min-w-full">
+      <div ref={scrollRef} className="relative flex-1 overflow-auto" onScroll={handleGridScroll}>
+        <table className="border-separate border-spacing-0 table-fixed w-max min-w-full [&>*>tr:not([data-spacer])>*]:border-b [&>*>tr>*]:border-border">
           <thead>
             <tr className="h-7 bg-muted sticky top-0 z-20 border-b border-border shadow-xs">
               <th className="w-12 min-w-[3rem] sticky left-0 z-30 bg-muted border-r border-border text-center text-[10px] text-muted-foreground font-medium">
                 #
               </th>
-              {view.columns.map(({ column: col, index: cIdx, frozen, stickyLeft }) => (
+              {columnSlots.map((slot) => slot.kind === 'space' ? (
+                <th
+                  key={slot.key}
+                  aria-hidden="true"
+                  data-spacer=""
+                  className="p-0"
+                  style={{ width: slot.width, minWidth: slot.width, maxWidth: slot.width, padding: 0 }}
+                />
+              ) : ((({ column: col, index: cIdx, frozen, stickyLeft }) => (
                 <th
                   key={col.id}
                   data-col={cIdx}
@@ -703,7 +754,7 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
                     />
                   </div>
                 </th>
-              ))}
+              ))(slot.viewCol)))}
               {onAddColumnClick && (
                 <th
                   className="w-10 min-w-[2.5rem] px-1 text-center bg-muted/40 hover:bg-muted cursor-pointer transition-colors"
@@ -716,13 +767,25 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
             </tr>
           </thead>
           <tbody>
-            {view.rows.map((viewRow) => {
+            {rowSlots.map((rowSlot) => {
+              if (rowSlot.kind === 'space') {
+                return (
+                  <tr key={rowSlot.key} aria-hidden="true" data-spacer="" style={{ height: rowSlot.height }}>
+                    <td colSpan={columnSlots.length + 2} style={{ padding: 0, border: 0 }} />
+                  </tr>
+                );
+              }
+              const viewRow = rowSlot.viewRow;
               if (viewRow.kind === 'group') {
                 return (
                   <SpreadsheetGroupRow
                     key={`group:${viewRow.group.key}`}
                     group={viewRow.group}
-                    columns={view.columns}
+                    columns={renderedColumns}
+                    labelColumns={view.columns}
+                    leadingColumns={viewWindow.virtual ? viewWindow.frozenColumns : undefined}
+                    leftSpace={viewWindow.leftSpace}
+                    rightSpace={viewWindow.rightSpace}
                     groupColId={state.document.table?.grouping?.colId ?? ''}
                     onToggle={state.toggleGroupCollapsed}
                     trailingCell={!!onAddColumnClick}
@@ -744,7 +807,9 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
                 >
                   {displayRowIndex + 1}
                 </td>
-                {view.columns.map((viewCol) => {
+                {columnSlots.map((slot) => {
+                  if (slot.kind === 'space') return <td key={slot.key} aria-hidden="true" data-spacer="" style={{ padding: 0 }} />;
+                  const viewCol = slot.viewCol;
                   // A merged cell renders its top-left cell, spanning the merge.
                   const span = view.getCellSpan(displayRowIndex, viewCol.index);
                   if (!span) return null;

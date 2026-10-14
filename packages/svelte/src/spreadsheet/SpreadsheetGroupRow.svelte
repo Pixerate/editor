@@ -9,12 +9,31 @@
     onToggle: (key: string) => void;
     /** Render a trailing cell for the "add column" column. */
     trailingCell?: boolean;
+    /** Every displayed column, when `columns` is a virtualised window of them (picks the label column). */
+    labelColumns?: SpreadsheetViewColumn[];
+    /** Virtualised: columns before the left spacer (the frozen ones), and the spacers' widths. */
+    leadingColumns?: number;
+    leftSpace?: number;
+    rightSpace?: number;
   }
 
-  let { group, columns, groupColId, onToggle, trailingCell = false }: Props = $props();
+  let {
+    group,
+    columns,
+    groupColId,
+    onToggle,
+    trailingCell = false,
+    labelColumns,
+    leadingColumns,
+    leftSpace = 0,
+    rightSpace = 0
+  }: Props = $props();
 
   // The label goes in the grouping column, or the first column when that one is hidden.
-  let labelColId = $derived(columns.some((c) => c.column.id === groupColId) ? groupColId : columns[0]?.column.id);
+  let labelColId = $derived.by(() => {
+    const candidates = labelColumns ?? columns;
+    return candidates.some((c) => c.column.id === groupColId) ? groupColId : candidates[0]?.column.id;
+  });
 
   const formatSummary = (value: number | null) => (value === null ? '–' : String(value));
 </script>
@@ -35,8 +54,11 @@
       {group.collapsed ? '▸' : '▾'}
     </button>
   </td>
-  {#each columns as { column } (column.id)}
+  {#each columns as { column }, i (column.id)}
     {@const summary = group.summaries[column.id]}
+    {#if leadingColumns !== undefined && i === leadingColumns && leftSpace > 0}
+      <td aria-hidden="true" data-spacer="" style="padding: 0;"></td>
+    {/if}
     <td class="border-r border-border px-2 py-1 truncate max-w-0 text-foreground" style="max-width: 0; overflow: hidden;">
       {#if column.id === labelColId}
         <span class="truncate">
@@ -47,6 +69,12 @@
       {/if}
     </td>
   {/each}
+  {#if leadingColumns !== undefined && leadingColumns >= columns.length && leftSpace > 0}
+    <td aria-hidden="true" data-spacer="" style="padding: 0;"></td>
+  {/if}
+  {#if rightSpace > 0}
+    <td aria-hidden="true" data-spacer="" style="padding: 0;"></td>
+  {/if}
   {#if trailingCell}
     <td class="w-10 min-w-[2.5rem] bg-muted/10 border-r border-border"></td>
   {/if}

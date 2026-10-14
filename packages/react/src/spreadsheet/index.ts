@@ -8,3 +8,4 @@ export * from './SheetTabs';
 export * from './NameManager';
 export * from './SpreadsheetValidationDialog';
 export * from './SpreadsheetRulePanels';
+export * from './useSpreadsheetViewport';

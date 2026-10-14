@@ -59,6 +59,8 @@ import { demoCommandRegistry, demoToolRegistry } from "../agentTools";
 import { AutoLayoutDemo } from "./AutoLayoutDemo";
 import { TokensDemo } from "./TokensDemo";
 import { ShapeOpsDemo } from "./ShapeOpsDemo";
+import { AnimationDemo } from "./AnimationDemo";
+import { ComponentsDemo } from "./ComponentsDemo";
 
 type BoxData = { label: string; color: string; locked?: boolean };
 type BoxNode = Node<BoxData, "box">;
@@ -363,6 +365,8 @@ const CanvasDemo: React.FC = () => {
 
       <TokensDemo />
       <ShapeOpsDemo />
+      <AnimationDemo />
+      <ComponentsDemo />
     </div>
   );
 };
