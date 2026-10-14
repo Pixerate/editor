@@ -10,7 +10,8 @@ import {
   type CellRange,
   type SpreadsheetMenuItem,
   type SpreadsheetViewColumn,
-  type SpreadsheetViewRow
+  type SpreadsheetViewRow,
+  formatCellDisplay
 } from '@pixerate/editor/spreadsheet';
 import { useSpreadsheetEditor } from './useSpreadsheetEditor';
 import { SpreadsheetContextMenu } from './SpreadsheetContextMenu';
@@ -672,7 +673,7 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
                           className={`truncate block max-w-full ${cell.error ? 'text-destructive font-semibold' : ''}`}
                           title={cell.error ? cell.errorMessage ?? cell.error : undefined}
                         >
-                          {cell.error || (cell.value ?? '')}
+                          {formatCellDisplay(cell)}
                         </span>
                       )}
                       {activeSpill && rangeContains(activeSpill.range, rIdx, cIdx) && (

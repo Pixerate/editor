@@ -3,6 +3,7 @@ export * from "./hooks/useEditor";
 export * from "./hooks/useNavigationGuard";
 export * from "./hooks/useDismissGuard";
 export * from "./hooks/useHistory";
+export * from "./hooks/useHistoryDirty";
 export * from "./hooks/useHistoryShortcuts";
 export * from "./hooks/useFileImport";
 export * from "./hooks/useAgentToolProvider";
@@ -20,6 +21,8 @@ export {
   defaultIsEqual,
   HistoryManager,
   createHistoryManager,
+  bindDirtyToHistory,
+  withoutDirty,
 } from "@pixerate/editor";
 export type {
   Template,
@@ -32,6 +35,11 @@ export type {
   Command,
   HistoryState,
   HistoryManagerOptions,
+  HistoryEntry,
+  HistoryMark,
+  MergedExecutionOptions,
+  HistoryDirtyBinding,
+  BindDirtyToHistoryOptions,
 } from "@pixerate/editor";
 export type {
   PromptValues,
@@ -43,3 +51,4 @@ export * from "./spreadsheet";
 export * from "./slots";
 export * from "./image-editor";
 export * from "./review";
+export * from "./commands";

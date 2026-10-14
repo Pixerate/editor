@@ -2,6 +2,7 @@ import type { FormulaFunctionContext } from '../registry';
 import { wildcardToRegExp } from '../criteria';
 import { formatValueWithCode } from '../format';
 import { dateToSerial, isBlank, isFormulaError, toDate, toText } from '../values';
+import { parseNumberText } from '../parse-input';
 import { arg, failed, optional, repeating, type FunctionTable } from './helpers';
 
 const TEXT = arg('text', 'The text to use.', 'text');
@@ -304,7 +305,8 @@ export const TEXT_FUNCTIONS: FunctionTable = [
       if (isFormulaError(value)) return value;
       if (typeof value === 'number') return value;
       if (isBlank(value)) return 0;
-      const num = parseNumericText(toText(value));
+      // Typed-input rules ("3/4/2026", "10:30 PM", "1 1/2") after the lenient ones ("€12").
+      const num = parseNumericText(toText(value)) ?? parseNumberText(toText(value));
       if (num === null) return ctx.argError(0, '#VALUE!', `("${toText(value)}") can't be converted to a number.`);
       return num;
     },

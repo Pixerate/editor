@@ -6,7 +6,7 @@
 import type { SpreadsheetController } from './controller';
 import type { CellRange } from './types';
 import type { CellPosition } from './formula';
-import { indexToColName } from './formula';
+import { formatCellDisplay, indexToColName } from './formula';
 import { isSingleCellRange, normalizeRange, rangeContains, rangesIntersect } from './table';
 
 export interface SpreadsheetMenuItem {
@@ -65,7 +65,8 @@ export function getSpreadsheetMenuItems(controller: SpreadsheetController, cell:
       ? normalizeRange(controller.selectedRange)
       : { startRow: cell.row, startCol: cell.col, endRow: cell.row, endCol: cell.col };
   const colName = indexToColName(cell.col);
-  const value = controller.getCell(row.id, column.id).value;
+  const cellData = controller.getCell(row.id, column.id);
+  const value = cellData.value;
   const table = doc.table ?? {};
   const filter = controller.getFilterState();
   const grouping = table.grouping;
@@ -88,7 +89,7 @@ export function getSpreadsheetMenuItems(controller: SpreadsheetController, cell:
     },
     {
       id: 'filter-equals',
-      label: `Show only rows where ${colName} = ${quote(value)}`,
+      label: `Show only rows where ${colName} = ${quote(formatCellDisplay(cellData))}`,
       separatorBefore: true,
       run: () => controller.addFilterRule({ colId: column.id, operator: 'equals', value: String(value ?? '') }),
     },

@@ -125,6 +125,45 @@ export {
 	type CreateCanvasScenesOptions
 } from './createCanvasScenes.svelte.js';
 export { default as CanvasGuidesLayer } from './CanvasGuidesLayer.svelte';
+
+// Distance measuring (Alt-hover), resize / grid snapping and curve fitting
+export {
+	createCanvasMeasure,
+	type CanvasMeasure,
+	type CreateCanvasMeasureOptions
+} from './createCanvasMeasure.svelte.js';
+export {
+	measureBetween,
+	measureToLine,
+	measureSelection,
+	measureLabel,
+	isMeasureModifierHeld,
+	snapToGrid,
+	snapResize,
+	snapNodeResize,
+	inferResizeHandle,
+	resizeHandleAxes,
+	getResizingNodeRect,
+	RESIZE_HANDLES,
+	fitCubics,
+	fitCubicRun,
+	fitPathData,
+	fitFreehandPath,
+	cubicsToPathData,
+	cubicPointAt,
+	isStraightCubic,
+	type MeasureGuide,
+	type MeasureSelectionResult,
+	type MeasureSelectionOptions,
+	type ResizeHandle,
+	type SnapResizeOptions,
+	type SnapResizeResult,
+	type SnapNodeResizeOptions,
+	type SnapNodeResizeResult,
+	type CubicSegment,
+	type FitCubicsOptions,
+	type FitPathDataOptions
+} from '@pixerate/editor/canvas';
 export {
 	alignNodes,
 	distributeNodes,

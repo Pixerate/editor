@@ -5,6 +5,8 @@
  */
 import type { CellRange, FilterRule, GroupAggregate, SortDirection } from './types';
 import type { CellPosition } from './formula';
+import { compareValues, isFormulaError, numericValue, parseIsoDate, sortCompareValues } from './formula/values';
+import { parseCellInput } from './formula/parse-input';
 
 // --- Ranges ---
 
@@ -68,41 +70,68 @@ function compareText(a: string, b: string): number {
 }
 
 /**
- * Sort order for cell values: numbers (ascending) before text (natural,
- * case-insensitive). `desc` reverses that order. Blanks always sort last,
- * whatever the direction.
+ * Sort order for cell values, as in Excel: numbers (ascending), then text,
+ * booleans and errors; `desc` reverses that order. Numbers compare at 15
+ * significant digits and ISO dates chronologically. Text uses a natural,
+ * case-insensitive order ("Item 2" before "Item 10"). Blanks always sort
+ * last, whatever the direction.
  */
 export function compareCellValues(a: unknown, b: unknown, direction: SortDirection = 'asc'): number {
   const aBlank = isBlankValue(a);
   const bBlank = isBlankValue(b);
   if (aBlank || bBlank) return aBlank === bBlank ? 0 : aBlank ? 1 : -1;
 
-  const aNum = toNumber(a);
-  const bNum = toNumber(b);
   let result: number;
-  if (aNum !== null && bNum !== null) result = aNum - bNum;
-  else if (aNum !== null) result = -1;
-  else if (bNum !== null) result = 1;
-  else result = compareText(String(a), String(b));
+  if (isPlainText(a) && isPlainText(b) && !(parseIsoDate(a) && parseIsoDate(b))) {
+    result = compareText(a, b);
+  } else {
+    result = sortCompareValues(a, b);
+  }
   if (result === 0) return 0;
   return direction === 'desc' ? -Math.sign(result) : Math.sign(result);
 }
 
+const isPlainText = (value: unknown): value is string => typeof value === 'string' && !isFormulaError(value);
+
 // --- Filters ---
 
+type FilterKind = 'number' | 'text' | 'boolean';
+
+/**
+ * A cell value for filtering: numeric text (e.g. from a data source) counts
+ * as a number, like criteria in COUNTIF. ISO dates order with numbers
+ * (as serial dates).
+ */
+function filterValue(value: unknown): { value: unknown; kind: FilterKind } | null {
+  if (isBlankValue(value) || isFormulaError(value)) return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? { value, kind: 'number' } : null;
+  if (typeof value === 'boolean') return { value, kind: 'boolean' };
+  const num = numericValue(value);
+  if (num !== null) return { value: num, kind: 'number' };
+  const text = String(value);
+  return { value: text, kind: parseIsoDate(text) ? 'number' : 'text' };
+}
+
+/** A filter operand, read with the typed-input rules ("1,000", "10%", "3/4/2026", "TRUE"). */
+function filterOperand(operand: unknown): { value: unknown; kind: FilterKind } | null {
+  if (typeof operand !== 'string') return filterValue(operand);
+  if (operand.trim() === '') return null;
+  const parsed = parseCellInput(operand.trim());
+  if (parsed.type === 'number' || parsed.type === 'date' || parsed.type === 'boolean') return filterValue(parsed.value);
+  return { value: operand, kind: 'text' };
+}
+
 function compareForFilter(value: unknown, operand: unknown): number | null {
-  if (isBlankValue(value) || isBlankValue(operand)) return null;
-  const a = toNumber(value);
-  const b = toNumber(operand);
-  if (a !== null && b !== null) return a - b;
-  if (a !== null || b !== null) return null; // number vs text never compares
-  return compareText(String(value), String(operand));
+  const a = filterValue(value);
+  const b = filterOperand(operand);
+  // Numbers (and dates), text and booleans never compare with each other.
+  if (!a || !b || a.kind !== b.kind) return null;
+  return compareValues(a.value, b.value);
 }
 
 function looselyEquals(value: unknown, operand: unknown): boolean {
-  const a = toNumber(value);
-  const b = toNumber(operand);
-  if (a !== null && b !== null) return a === b;
+  const c = compareForFilter(value, operand);
+  if (c !== null) return c === 0;
   return String(value ?? '').trim().toLowerCase() === String(operand ?? '').trim().toLowerCase();
 }
 
@@ -200,7 +229,9 @@ function classifyFillValue(raw: string): FillValue {
   if (raw.trim() === '') return { kind: 'blank' };
   const num = toNumber(raw);
   if (num !== null) return { kind: 'number', value: num };
-  const date = ISO_DATE_PATTERN.exec(raw.trim());
+  // Typed dates ("3/4/2026", "Mar 4, 2026") continue as ISO dates.
+  const typed = parseCellInput(raw);
+  const date = ISO_DATE_PATTERN.exec(typed.type === 'date' ? String(typed.value) : raw.trim());
   if (date) {
     const [year, month, day] = [Number(date[1]), Number(date[2]), Number(date[3])];
     const time = Date.UTC(year, month - 1, day);
@@ -258,8 +289,8 @@ function linearTrend(values: number[], x: number): number {
  * nearest-first) by `count` values, the way a fill handle does:
  *
  * - numbers: one value repeats; two or more continue their linear trend
- * - ISO dates (`YYYY-MM-DD`): one date counts up by a day; two or more
- *   continue their day or month step
+ * - dates (ISO `YYYY-MM-DD`, or typed like `3/4/2026`): one date counts up
+ *   by a day; two or more continue their day or month step (as ISO dates)
  * - text ending in a number ("Item 1"): the number counts up (or continues
  *   the step of several values with the same prefix/suffix)
  * - anything else (or a mix) repeats the source cyclically

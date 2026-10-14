@@ -375,6 +375,7 @@ describe('Pixel Filters & Masking Functions', () => {
     const imgData = createTestImageData(2, 2, 100, 100, 100, 255);
     const adjustments: ImageAdjustments = {
       ...DEFAULT_ADJUSTMENTS,
+      process: 1, // legacy rendering
       brightness: 20, // + 51
     };
     applyAdjustments(imgData, adjustments);
@@ -390,6 +391,7 @@ describe('Pixel Filters & Masking Functions', () => {
     const imgData = createTestImageData(2, 2, 100, 100, 100, 255);
     const adjustments: ImageAdjustments = {
       ...DEFAULT_ADJUSTMENTS,
+      process: 1, // legacy rendering
       temperature: 30, // warm: red increases by 24, blue decreases by 24
     };
     applyAdjustments(imgData, adjustments);

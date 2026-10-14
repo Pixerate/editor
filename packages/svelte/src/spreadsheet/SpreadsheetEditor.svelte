@@ -12,7 +12,8 @@
     type CellRange,
     type SpreadsheetMenuItem,
     type SpreadsheetViewColumn,
-    type SpreadsheetViewRow
+    type SpreadsheetViewRow,
+    formatCellDisplay
   } from '@pixerate/editor/spreadsheet';
   import FormulaBar from './FormulaBar.svelte';
   import SpreadsheetContextMenu from './SpreadsheetContextMenu.svelte';
@@ -589,7 +590,7 @@
                     class="truncate block max-w-full {cell.error ? 'text-destructive font-semibold' : ''}"
                     title={cell.error ? (cell.errorMessage ?? cell.error) : undefined}
                   >
-                    {cell.error || (cell.value ?? '')}
+                    {formatCellDisplay(cell)}
                   </span>
                 {/if}
                 {#if activeSpill && rangeContains(activeSpill.range, rIdx, cIdx)}

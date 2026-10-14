@@ -83,3 +83,19 @@ describe('Svelte SpreadsheetEditor dynamic arrays', () => {
     expect(border(0, 0)).toBeNull();
   });
 });
+
+describe('Svelte SpreadsheetEditor typed values', () => {
+  it('shows typed values with their automatic format and compares them as numbers', () => {
+    const { sheetState, td } = setup();
+    const [, , , r3, r4] = sheetState.document.rows;
+    const [a, b, c] = sheetState.document.columns;
+    sheetState.setCellValue(r3.id, a.id, '10%');
+    sheetState.setCellValue(r3.id, b.id, '$1,200.50');
+    sheetState.setCellValue(r3.id, c.id, '3/4/2026');
+    sheetState.setCellValue(r4.id, a.id, '7');
+    sheetState.setCellValue(r4.id, b.id, '=A5>8');
+    flushSync();
+    expect([3, 3, 3].map((r, i) => td(r, i).textContent?.trim())).toEqual(['10%', '$1,200.50', '3/4/2026']);
+    expect(td(4, 1).textContent?.trim()).toBe('FALSE');
+  });
+});

@@ -55,11 +55,24 @@ export interface CellRange {
 
 export interface CellData {
   raw: string; // Raw input (e.g., "120", "=SUM(A1:A5)", "In Progress")
-  value: any;  // Evaluated computed value
+  /**
+   * Evaluated value. Typed (non-formula) input is parsed: `"120"` → 120,
+   * `"TRUE"` → true, `"3/4/2026"` → `"2026-03-04"` (dates are ISO text),
+   * `"10:30"` → 0.4375 (a time alone is a fraction of a day); `'120` forces
+   * the text `"120"`. Formulas store their result.
+   */
+  value: any;
   error?: string; // Error string (e.g., "#VALUE!", "#CYCLE!", "#REF!")
   /** Why the formula failed, e.g. `Argument 2 of SUMIF must be a range.` Set alongside `error`. */
   errorMessage?: string;
   format?: CellFormat;
+  /**
+   * Number format code chosen automatically for typed input, e.g.
+   * `"$"#,##0.00` for `$1,200.50`, `0%` for `10%`, `#,##0` for `1,234`,
+   * `m/d/yyyy` for `3/4/2026`, `h:mm` for `10:30`. Used by
+   * `formatCellDisplay`; absent for formulas and General numbers.
+   */
+  numberFormat?: string;
   readOnly?: boolean;
   /**
    * Set (only) on cells showing a value spilled from a dynamic array: the

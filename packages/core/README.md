@@ -169,6 +169,44 @@ await registry.callTool("insert_text", { text: "Hello" }); // { content: [...], 
 
 `createEditorMcpToolProvider` exposes the static tools (`get_editor_state`, `edit_canvas`, `edit_prompt`, `view_editor`) through the registry, and `planToolCall` turns any tool call into planner steps (`step:tool_call` for registry tools).
 
+## Commands, shortcuts and the command palette
+
+`@pixerate/editor/commands` gives every action one id that menus, keyboard shortcuts, the command palette and agents all run, so they share enablement and parameter validation. It has no third-party imports.
+
+```ts
+import {
+  CommandRegistry,
+  createHistoryCommands,
+  createArrangeCommands,
+  createCommandToolProvider,
+  formatShortcut,
+} from "@pixerate/editor/commands";
+
+const commands = new CommandRegistry({ history }); // `history` makes `undoable` commands one undo step
+commands.register(createHistoryCommands(history)); // history.undo (Mod+Z), history.redo (Mod+Shift+Z, Mod+Y off macOS)
+commands.register(createArrangeCommands(arrange, { getSelectedIds })); // canvas.alignLeft (Alt+A), … scoped to "canvas"
+commands.register({
+  id: "doc.insertDate",
+  label: "Insert Date",
+  group: "Insert",
+  shortcut: "Mod+Shift+D",
+  params: { type: "object", properties: { format: { type: "string" } } },
+  enabled: (ctx) => (ctx.editable ? true : "The document is read-only."),
+  run: (ctx, { format }) => ctx.insertDate(format),
+});
+
+commands.execute("doc.insertDate", { fmt: "iso" });
+// { ok: false, code: "invalid_params", message: 'Unknown parameter "fmt" for command "doc.insertDate"; expected "format".' }
+commands.list({ scope: "canvas" }); // entries with shortcuts, enabled and disabledReason
+window.addEventListener("keydown", (e) => commands.handleKeyDown(e, { scopes: ["canvas"] }));
+formatShortcut("Mod+Shift+Z", "mac"); // "⇧⌘Z" ("Ctrl+Shift+Z" on Windows / Linux)
+```
+
+- **Results**: `execute` never throws. It returns `{ ok: true, result }` or `{ ok: false, code: "unknown_command" | "disabled" | "invalid_params" | "failed", message }`. `enabled(ctx, params)` returns `true` or a reason string, and receives the params the caller passed, so a command that acts on the selection can still run on ids passed in params. `executeAsync` awaits async commands.
+- **Shortcuts** (`registry.shortcuts`, a `ShortcutMap`): chords are platform-neutral (`Mod` is ⌘ on macOS and Ctrl elsewhere) and match `event.code`, so Option/Alt chords work on macOS. Letter keys follow Latin layouts such as AZERTY. Bindings can be scoped (`scope: "canvas"`), and scoped bindings win over global ones. Events from inputs and editors are ignored unless `allowInEditable` is set. `setOverride` / `getOverrides` store user remaps, and `findConflicts(platform)` reports chords that collide on a platform (e.g. `Mod+Y` and `Ctrl+Y` collide off macOS).
+- **Palette**: `rankCommands(query, entries, { recents })` does subsequence fuzzy ranking over label, group, keywords and id. Exact matches come first, and an empty query lists recent commands first. `createCommandPaletteController(registry)` holds the palette state that the React and Svelte `<CommandPalette>` components render.
+- **Agents**: `createCommandToolProvider(registry)` adds `list_commands`, `run_command` and `run_commands` to a `ToolRegistry`, with complete MCP annotations. `run_commands` runs steps in order but is **not atomic**: steps that succeeded before a failure stay applied. To get all-or-nothing behaviour, register one `undoable` command that runs the steps.
+
 ### Document structure and autocorrect
 
 Opt-in preset options add Word/Pages-style document structure:
@@ -195,13 +233,53 @@ Each module is also available as a subpath import:
 | `@pixerate/editor/grammar` | Tokenizer, resolver, sourcemaps. No TipTap or DOM dependencies, so it is safe for Node.js, workers and serverless functions. |
 | `@pixerate/editor/serializers` | Plain text, markdown and mention serializers |
 | `@pixerate/editor/extensions` | Headless TipTap extensions |
-| `@pixerate/editor/history` | `HistoryManager`: a command-pattern undo/redo stack |
+| `@pixerate/editor/history` | `HistoryManager`: a command-pattern undo/redo stack with gesture merge keys, undo marks, a byte budget and a History-panel listing; `DirtyTracker` / `bindDirtyToHistory` |
 | `@pixerate/editor/spreadsheet` | `SpreadsheetController`, formula parser/evaluator and dependency graph, formula function registry (`registerFormulaFunction`, `listFormulaFunctions`, `searchFormulaFunctions`, `getFormulaSignature`) and autocomplete helpers (`getFormulaHints`, `applyFormulaSuggestion`) |
 | `@pixerate/editor/image-editor` | `ImageEditorController` and Canvas 2D renderer: crop, adjustments, annotations, depth masks and AI hooks. Needs a DOM/canvas environment. |
 | `@pixerate/editor/canvas` | Node-graph layout (needs the optional `@dagrejs/dagre` peer), placement, trajectories, displacement, clipboard and streaming layout helpers |
 | `@pixerate/editor/agent` | MCP tool schemas, a planner for agent-driven canvas edits, and the dynamic `ToolRegistry` with editor/spreadsheet tool providers |
+| `@pixerate/editor/commands` | `CommandRegistry`, `ShortcutMap`, palette ranking, `createCommandToolProvider` and built-in history / arrange / spreadsheet commands (no third-party imports) |
 
-The root entry (`@pixerate/editor`) re-exports everything except canvas, agent and image editor, including TipTap. Import from the narrowest subpath you need: `grammar`, `history`, `spreadsheet` and `image-editor` have no third-party imports, so a spreadsheet-only app bundles no TipTap, markdown or dagre code. The package is marked `sideEffects: false`, so unused root exports are also tree-shaken.
+The root entry (`@pixerate/editor`) re-exports everything except canvas, agent, commands and image editor, including TipTap. Import from the narrowest subpath you need: `grammar`, `history`, `spreadsheet`, `commands` and `image-editor` have no third-party imports, so a spreadsheet-only app bundles no TipTap, markdown or dagre code. The package is marked `sideEffects: false`, so unused root exports are also tree-shaken.
+
+## History gestures, marks and dirty tracking
+
+```ts
+import { HistoryManager, bindDirtyToHistory } from "@pixerate/editor/history";
+
+const history = new HistoryManager({ maxDepth: 200, maxBytes: 32 << 20, sizeOf: (c) => c.byteSize ?? 0 });
+
+// A drag is one undo step, however long it lasts. Any other recorded command,
+// undo, redo or endGesture() ends it.
+history.executeMerged(setOpacity(0.4), { key: "opacity-slider" });
+history.executeMerged(setOpacity(0.5), { key: "opacity-slider" });
+
+// Hold a gesture: every merged execute until endGesture() joins one step.
+history.beginGesture("automation-pass");
+/* ... */
+history.endGesture();
+
+// Escape-cancel: take back everything since the drag started, with no redo left behind.
+const mark = history.mark();
+/* ... drag ... */
+history.revertTo(mark); // returns the number of steps reverted (0 if the mark is gone)
+
+// History panel
+history.getEntries(); // [{ id, label, index, current, undone }]
+history.goTo(2); // undo / redo until entry 2 is current; goTo(-1) undoes everything
+
+// Dirty vs saved: undoing back to the saved state is clean again.
+const dirty = bindDirtyToHistory({
+  history,
+  getValue: () => doc,
+  normalize: ({ selection, viewport, ...rest }) => rest, // selection/zoom never dirty
+});
+dirty.suppress(() => loadFromDisk()); // programmatic loads don't mark dirty (re-entrant)
+dirty.markClean(); // after saving
+dirty.dirty; // feed to useNavigationGuard / createNavigationGuard
+```
+
+Tag-only `executeMerged(cmd)` keeps its 300 ms time-window coalescing. React exposes the same API through `useHistory()` (`entries`, `goTo`, `mark`, `revertTo`, `beginGesture`, `endGesture`) and `useHistoryDirty()`; Svelte through `createHistory()` and `createHistoryDirty()`.
 
 ## License
 

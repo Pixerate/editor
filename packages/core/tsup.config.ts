@@ -11,6 +11,7 @@ export default defineConfig({
     "canvas/index": "src/canvas/index.ts",
     "agent/index": "src/agent/index.ts",
     "image-editor/index": "src/image-editor/index.ts",
+    "commands/index": "src/commands/index.ts",
   },
   format: ["esm", "cjs"],
   dts: true,

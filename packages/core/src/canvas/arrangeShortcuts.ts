@@ -1,4 +1,4 @@
-import { isEventFromTextInput } from './clipboard.js';
+import { ShortcutMap } from '../commands/shortcuts.js';
 
 /**
  * Canvas arrangement actions that have keyboard shortcuts.
@@ -56,42 +56,32 @@ export const DEFAULT_ARRANGE_SHORTCUTS: readonly ArrangeShortcutBinding[] = [
 	{ action: 'previousScene', code: 'PageUp', label: 'PageUp' }
 ];
 
-const KEY_TO_CODE: Record<string, string> = {
-	']': 'BracketRight',
-	'[': 'BracketLeft',
-	PageDown: 'PageDown',
-	PageUp: 'PageUp'
-};
+// One ShortcutMap per bindings array. `either` keeps the historical behaviour: `Mod` matches ⌘ or Ctrl.
+const maps = new WeakMap<readonly ArrangeShortcutBinding[], ShortcutMap>();
 
-function eventCode(event: KeyboardEvent): string {
-	if (event.code) return event.code;
-	// Synthetic events (and some test environments) omit `code`; derive it from `key`.
-	if (KEY_TO_CODE[event.key]) return KEY_TO_CODE[event.key];
-	if (/^[a-z]$/i.test(event.key)) return `Key${event.key.toUpperCase()}`;
-	return event.key;
+function arrangeShortcutMap(bindings: readonly ArrangeShortcutBinding[]): ShortcutMap {
+	let map = maps.get(bindings);
+	if (!map) {
+		map = new ShortcutMap(
+			bindings.map((b) => ({
+				command: b.action,
+				chord: { key: b.code, mod: b.mod, alt: b.alt, shift: b.shift }
+			})),
+			{ modifierMode: 'either' }
+		);
+		maps.set(bindings, map);
+	}
+	return map;
 }
 
 /**
  * Resolves a keydown event to an arrange action, or `null`. Events from text inputs,
  * textareas, selects, contenteditable and ProseMirror are ignored (see `isEventFromTextInput`).
- * `Mod` is ⌘ or Ctrl.
+ * `Mod` is ⌘ or Ctrl. Built on the command system's `ShortcutMap` (matching `event.code`).
  */
 export function matchArrangeShortcut(
 	event: KeyboardEvent,
 	bindings: readonly ArrangeShortcutBinding[] = DEFAULT_ARRANGE_SHORTCUTS
 ): CanvasArrangeAction | null {
-	if (isEventFromTextInput(event)) return null;
-	const code = eventCode(event);
-	const mod = event.metaKey || event.ctrlKey;
-	for (const binding of bindings) {
-		if (
-			binding.code === code &&
-			!!binding.mod === mod &&
-			!!binding.alt === event.altKey &&
-			!!binding.shift === event.shiftKey
-		) {
-			return binding.action;
-		}
-	}
-	return null;
+	return (arrangeShortcutMap(bindings).resolve(event)?.command as CanvasArrangeAction | undefined) ?? null;
 }

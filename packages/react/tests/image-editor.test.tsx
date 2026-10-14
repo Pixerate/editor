@@ -239,3 +239,53 @@ describe('React Image Editor - ImageEditor Component', () => {
   });
 });
 
+
+describe('React Image Editor - white balance tint and process versions', () => {
+  const legacyAdjustments = { brightness: 0, contrast: 0, saturation: 0, exposure: 0, temperature: 20, blur: 0, opacity: 1 };
+
+  it('exposes tint and upgradeProcess through the hook', async () => {
+    let hookResult: ReturnType<typeof useImageEditor> | null = null;
+    function TestComponent() {
+      hookResult = useImageEditor({ initialState: { adjustments: legacyAdjustments } });
+      return null;
+    }
+    await act(async () => {
+      root.render(<TestComponent />);
+    });
+    expect(hookResult!.state.adjustments.process).toBe(1);
+    await act(async () => {
+      expect(hookResult!.upgradeProcess()).toBe(true);
+    });
+    expect(hookResult!.state.adjustments.process).toBe(2);
+    await act(async () => {
+      hookResult!.setAdjustments({ tint: -15 });
+    });
+    expect(hookResult!.toJSON().adjustments).toMatchObject({ tint: -15, process: 2, temperature: 20 });
+  });
+
+  it('shows a tint slider and an update notice for legacy edits', async () => {
+    let hookResult: ReturnType<typeof useImageEditor> | null = null;
+    function TestComponent() {
+      hookResult = useImageEditor({ initialState: { adjustments: legacyAdjustments } });
+      return <ImageEditor editor={hookResult} />;
+    }
+    await act(async () => {
+      root.render(<TestComponent />);
+    });
+    const adjustBtn = Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Adjustments');
+    await act(async () => {
+      adjustBtn!.click();
+    });
+    const tint = container.querySelector('input[aria-label="Tint"]') as HTMLInputElement;
+    expect(tint).not.toBeNull();
+    expect(tint.disabled).toBe(true);
+    const notice = container.querySelector('[data-testid="image-editor-process-notice"]');
+    expect(notice).not.toBeNull();
+    await act(async () => {
+      (notice!.querySelector('button') as HTMLButtonElement).click();
+    });
+    expect(hookResult!.state.adjustments.process).toBe(2);
+    expect(container.querySelector('[data-testid="image-editor-process-notice"]')).toBeNull();
+    expect((container.querySelector('input[aria-label="Tint"]') as HTMLInputElement).disabled).toBe(false);
+  });
+});

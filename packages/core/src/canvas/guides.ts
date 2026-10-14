@@ -5,14 +5,30 @@ import type { CanvasNode, Rect, XYPosition } from './types.js';
 /**
  * A guide line to render while dragging, in flow coordinates.
  * `edge` and `centre` guides are alignment lines; `spacing` guides mark equal gaps.
+ * `measure` lines (with a distance `label`) and dashed `extension` lines come from the
+ * distance measuring helpers (`measureBetween`, `measureSelection`).
  */
 export interface GuideLine {
 	orientation: 'vertical' | 'horizontal';
-	kind: 'edge' | 'centre' | 'spacing';
+	kind: 'edge' | 'centre' | 'spacing' | 'measure' | 'extension';
 	x1: number;
 	y1: number;
 	x2: number;
 	y2: number;
+	/** Text drawn at the middle of the line (measuring distances). */
+	label?: string;
+}
+
+/**
+ * Snaps `value` to a grid with the given `spacing` and `origin`. A spacing of 0 or less
+ * (or a non-finite one) leaves the value unchanged.
+ *
+ * Ported from vectorcraft-main/crates/geom/src/snap.rs (MIT OR Apache-2.0, © ArtCraft Team
+ * and contributors). See THIRD_PARTY_NOTICES.md.
+ */
+export function snapToGrid(value: number, spacing: number, origin = 0): number {
+	if (!(spacing > 0) || !Number.isFinite(spacing)) return value;
+	return Math.round((value - origin) / spacing) * spacing + origin;
 }
 
 export interface SnapGuidesOptions {
@@ -26,6 +42,13 @@ export interface SnapGuidesOptions {
 	centres?: boolean;
 	/** Snap to equal spacing between neighbouring shapes in the same row / column (default `true`). */
 	spacing?: boolean;
+	/**
+	 * Grid spacing in flow units (default 0, off). An axis that does not snap to a shape snaps
+	 * its top-left (drag) or moving edge (resize) to the grid; grid snaps draw no guides.
+	 */
+	gridSize?: number;
+	/** Grid origin in flow units (default `{ x: 0, y: 0 }`). */
+	gridOrigin?: XYPosition;
 }
 
 export interface SnapResult {
@@ -35,6 +58,7 @@ export interface SnapResult {
 	offset: XYPosition;
 	/** Guide segments to draw for the snap that was applied. */
 	guides: GuideLine[];
+	/** Whether x snapped to a shape (grid snaps do not count). */
 	snappedX: boolean;
 	snappedY: boolean;
 }
@@ -260,8 +284,10 @@ export function computeSnapGuides(
 
 	const sx = snapAxis(true);
 	const sy = snapAxis(false);
-	const dx = sx.delta ?? 0;
-	const dy = sy.delta ?? 0;
+	const grid = options.gridSize ?? 0;
+	const gridDelta = (v: number, origin: number) => snapToGrid(v, grid, origin) - v;
+	const dx = sx.delta ?? (grid > 0 ? gridDelta(moving.x, options.gridOrigin?.x ?? 0) : 0);
+	const dy = sy.delta ?? (grid > 0 ? gridDelta(moving.y, options.gridOrigin?.y ?? 0) : 0);
 	const snapped: Rect = { x: moving.x + dx, y: moving.y + dy, width: moving.width, height: moving.height };
 	const guides: GuideLine[] = [];
 

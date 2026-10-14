@@ -70,6 +70,10 @@ export function createReactiveImageEditor(options: ImageEditorOptions = {}) {
     resetAdjustments() {
       controller.resetAdjustments();
     },
+    /** Update to Current Process: re-render the adjustments with the latest process (one undo step). */
+    upgradeProcess() {
+      return controller.upgradeProcess();
+    },
     setDepthMask(partial: Partial<DepthMaskOptions>) {
       controller.setDepthMask(partial);
     },

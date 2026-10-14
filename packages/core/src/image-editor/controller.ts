@@ -16,6 +16,7 @@ import {
 } from './types';
 import { ImageEditorRenderer, RenderOptions } from './renderer';
 import { clampCropToImage, isQuarterTurnSwapped } from './geometry';
+import { LATEST_PROCESS_VERSION, LEGACY_PROCESS_VERSION, normalizeProcessVersion } from './color';
 
 /** The image a history entry was recorded against. */
 interface SourceSnapshot {
@@ -39,9 +40,24 @@ export const DEFAULT_ADJUSTMENTS: ImageAdjustments = {
   saturation: 0,
   exposure: 0,
   temperature: 0,
+  tint: 0,
   blur: 0,
   opacity: 1,
+  process: LATEST_PROCESS_VERSION,
 };
+
+/**
+ * Fills in defaults for stored adjustments. A stored object without `process` was saved before
+ * process versions existed and keeps the legacy rendering.
+ */
+export function normalizeStoredAdjustments(stored: Partial<ImageAdjustments> | undefined | null): ImageAdjustments {
+  if (!stored) return { ...DEFAULT_ADJUSTMENTS };
+  return {
+    ...DEFAULT_ADJUSTMENTS,
+    ...stored,
+    process: normalizeProcessVersion(stored.process),
+  };
+}
 
 export const DEFAULT_TRANSFORM: ImageTransform = {
   rotate: 0,
@@ -81,10 +97,7 @@ export class ImageEditorController {
     this.onStateChange = options.onStateChange;
     this.renderer = new ImageEditorRenderer();
 
-    const initialAdjustments: ImageAdjustments = {
-      ...DEFAULT_ADJUSTMENTS,
-      ...options.initialState?.adjustments,
-    };
+    const initialAdjustments = normalizeStoredAdjustments(options.initialState?.adjustments);
 
     const initialTransform: ImageTransform = {
       ...DEFAULT_TRANSFORM,
@@ -381,6 +394,21 @@ export class ImageEditorController {
     this.notify();
   }
 
+  /** True when the adjustments use an older rendering process than {@link LATEST_PROCESS_VERSION}. */
+  public get isProcessOutdated(): boolean {
+    return normalizeProcessVersion(this.state.adjustments.process) < LATEST_PROCESS_VERSION;
+  }
+
+  /**
+   * Update to Current Process: re-interprets the current adjustment values with the latest
+   * rendering process (one undo step). Returns false when already current.
+   */
+  public upgradeProcess(): boolean {
+    if (!this.isProcessOutdated) return false;
+    this.setAdjustments({ process: LATEST_PROCESS_VERSION });
+    return true;
+  }
+
   public resetAdjustments(): void {
     this.recordHistory();
     this.state.adjustments = { ...DEFAULT_ADJUSTMENTS };
@@ -639,7 +667,7 @@ export class ImageEditorController {
       version: 1,
       crop: this.state.crop ? { ...this.state.crop } : null,
       transform: { ...this.state.transform },
-      adjustments: { ...this.state.adjustments },
+      adjustments: serializeAdjustments(this.state.adjustments),
       depthMask: {
         ...this.state.depthMask,
         depthRange: [...this.state.depthMask.depthRange] as [number, number],
@@ -651,13 +679,26 @@ export class ImageEditorController {
   private applySerializedState(data: SerializedImageEditorState): void {
     this.state.crop = data.crop ? { ...data.crop } : null;
     this.state.transform = { ...data.transform };
-    this.state.adjustments = { ...data.adjustments };
+    this.state.adjustments = normalizeStoredAdjustments(data.adjustments);
     this.state.depthMask = {
       ...data.depthMask,
       depthRange: [...data.depthMask.depthRange] as [number, number],
     };
     this.state.annotations = JSON.parse(JSON.stringify(data.annotations || []));
   }
+}
+
+/**
+ * Legacy-process adjustments are saved without `process` (and without an unused zero `tint`), so
+ * they serialize exactly as they did before process versions existed.
+ */
+function serializeAdjustments(adjustments: ImageAdjustments): ImageAdjustments {
+  const out: ImageAdjustments = { ...adjustments };
+  if (normalizeProcessVersion(out.process) === LEGACY_PROCESS_VERSION) {
+    delete out.process;
+    if (!out.tint) delete out.tint;
+  }
+  return out;
 }
 
 /** Scales an annotation's geometry from one image size to another. */

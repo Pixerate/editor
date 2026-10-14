@@ -249,7 +249,7 @@ describe('controller diagnostics', () => {
     s.set('C2', '=C1*2');
     expect(s.cell('C2')).toMatchObject({ value: '#CYCLE!', errorMessage: 'Cell C1 is part of a circular reference.' });
     s.set('D1', '5');
-    expect(s.cell('C1').value).toBe('5');
+    expect(s.cell('C1').value).toBe(5);
     expect(s.cell('C1').errorMessage).toBeUndefined();
   });
 
@@ -262,7 +262,7 @@ describe('controller diagnostics', () => {
     s.set('C1', '=VLOOKUP("pear", A1:B2, 2, FALSE)');
     s.set('C2', '=XLOOKUP(5, B1:B2, A1:A2)');
     s.set('C3', '=SUMIF(A1:A2, "p*", B1:B2)');
-    expect(s.cell('C1').value).toBe('5');
+    expect(s.cell('C1').value).toBe(5);
     expect(s.cell('C2').value).toBe('pear');
     expect(s.cell('C3').value).toBe(5);
   });

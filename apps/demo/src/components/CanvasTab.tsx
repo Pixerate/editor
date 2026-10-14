@@ -1,10 +1,11 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ReactFlow,
   ReactFlowProvider,
   Background,
   Controls,
   Handle,
+  NodeResizer,
   Position,
   applyNodeChanges,
   applyEdgeChanges,
@@ -21,11 +22,13 @@ import {
   useCanvasArrange,
   useCanvasArrangeShortcuts,
   useCanvasScenes,
+  useCanvasMeasure,
   CanvasGuidesLayer,
   DEFAULT_ARRANGE_SHORTCUTS,
   type AlignEdge,
 } from "@pixerate/editor-react/canvas";
-import { useAgentToolProvider, useHistory, useHistoryShortcuts } from "@pixerate/editor-react";
+import { useAgentToolProvider, useHistory, useHistoryShortcuts, useRegisterCommands } from "@pixerate/editor-react";
+import { createArrangeCommands, createHistoryCommands } from "@pixerate/editor/commands";
 import type { AgentTool, AgentToolProvider } from "@pixerate/editor/agent";
 import {
   AlignStartVertical,
@@ -52,13 +55,15 @@ import {
   MoveHorizontal,
   MoveVertical,
 } from "lucide-react";
-import { demoToolRegistry } from "../agentTools";
+import { demoCommandRegistry, demoToolRegistry } from "../agentTools";
 
 type BoxData = { label: string; color: string; locked?: boolean };
 type BoxNode = Node<BoxData, "box">;
 
 /** A plain card that shows a lock badge for locked nodes. */
 const BoxNodeView: React.FC<NodeProps<BoxNode>> = ({ data, selected }) => (
+  <>
+  <NodeResizer isVisible={!!selected && !data.locked} minWidth={40} minHeight={30} color="#94a3b8" />
   <div
     className={`h-full w-full rounded-lg border-2 px-3 py-2 text-xs font-medium text-slate-100 shadow-lg flex items-center justify-center text-center ${
       selected ? "ring-2 ring-white/70" : ""
@@ -72,6 +77,7 @@ const BoxNodeView: React.FC<NodeProps<BoxNode>> = ({ data, selected }) => (
     )}
     <Handle type="source" position={Position.Right} />
   </div>
+  </>
 );
 
 const NODE_TYPES = { box: BoxNodeView };
@@ -134,7 +140,10 @@ const CanvasDemo: React.FC = () => {
     setNodes,
     history: history.manager,
     zoom: viewport.zoom,
+    guides: { gridSize: 10 },
   });
+  // Hold Alt / Option and hover a node to measure distances from the selection.
+  const measure = useCanvasMeasure<BoxNode>({ nodes });
 
   const scenes = useCanvasScenes({
     getViewport: flow.getViewport,
@@ -144,9 +153,28 @@ const CanvasDemo: React.FC = () => {
 
   useCanvasArrangeShortcuts({ arrange, scenes });
 
+  // Palette / agent commands. The hooks above keep handling the keys; the palette shows them.
+  const nodesRef = useRef(nodes);
+  nodesRef.current = nodes;
+  const scenesRef = useRef(scenes);
+  scenesRef.current = scenes;
+  const commands = useMemo(
+    () => [
+      ...createHistoryCommands(history.manager, { prefix: "canvas.history." }),
+      ...createArrangeCommands(arrange, {
+        scope: null,
+        getSelectedIds: () => nodesRef.current.filter((n) => n.selected).map((n) => n.id),
+        scenes: { next: () => scenesRef.current.next(), previous: () => scenesRef.current.previous() },
+      }),
+    ],
+    [history.manager, arrange],
+  );
+  useRegisterCommands(demoCommandRegistry, commands);
+  useEffect(() => demoCommandRegistry.invalidate(), [nodes, history.canUndo, history.canRedo]);
+
   const onNodesChange = useCallback(
     (changes: NodeChange<BoxNode>[]) =>
-      setNodes((current) => applyNodeChanges(arrange.snapPositionChanges(changes), current)),
+      setNodes((current) => applyNodeChanges(arrange.snapResizeChanges(arrange.snapPositionChanges(changes)), current)),
     [arrange]
   );
   const onEdgesChange = useCallback(
@@ -270,13 +298,15 @@ const CanvasDemo: React.FC = () => {
           nodeTypes={NODE_TYPES}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
+          onNodeMouseEnter={measure.onNodeMouseEnter}
+          onNodeMouseLeave={measure.onNodeMouseLeave}
           colorMode="dark"
           fitView
           proOptions={{ hideAttribution: true }}
         >
           <Background />
           <Controls />
-          <CanvasGuidesLayer guides={arrange.guides} viewport={viewport} />
+          <CanvasGuidesLayer guides={[...arrange.guides, ...measure.guides]} viewport={viewport} />
         </ReactFlow>
       </div>
 
@@ -319,7 +349,9 @@ const CanvasDemo: React.FC = () => {
       </div>
 
       <p className="text-xs text-slate-500">
-        Drag a node near another to see smart guides (edges, centres, equal spacing) and snapping. Shift-click or drag a
+        Drag a node near another to see smart guides (edges, centres, equal spacing) and snapping; resize a selected node
+        from its handles to snap its edges (10px grid otherwise). Hold Alt / Option and hover a node to measure distances
+        from the selection. Shift-click or drag a
         selection box to select several nodes. Shortcuts: Alt+A/H/D/W/V/S align, Alt+Shift+H/V distribute, Mod+L lock,
         Mod+]/[ layer order, PageDown/PageUp scenes, Mod+Z undo.
       </p>

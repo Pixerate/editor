@@ -1,4 +1,5 @@
-import { FORMULA_ERRORS, isBlank, isFormulaError, numericValue } from './values';
+import { FORMULA_ERRORS, compareValues, isBlank, isFormulaError, numericValue, parseIsoDate } from './values';
+import { parseCellInput } from './parse-input';
 
 /** Tests one value against a criterion. */
 export type FormulaCriteriaPredicate = (value: unknown) => boolean;
@@ -33,7 +34,9 @@ export const hasWildcards = (pattern: string): boolean => /(^|[^~])[*?]/.test(pa
  * Parses a criterion as used by SUMIF, COUNTIFS etc.:
  * - a number or boolean matches equal values (`5` matches 5 and the text "5");
  * - text may start with `=`, `<>`, `<`, `<=`, `>` or `>=`. Numeric operands
- *   compare numbers; text operands compare text case-insensitively;
+ *   (typed-input rules: `">1,000"`, `"<50%"`, `">$5"`) compare numbers; date
+ *   operands (`">=3/1/2026"`, `"<2026-03-01"`) compare ISO dates (and serial
+ *   numbers) chronologically; text operands compare text case-insensitively;
  * - `=`/`<>` text operands and plain text support `*` and `?` wildcards;
  * - `""` and `"="` match blank cells, `"<>"` matches non-blank cells.
  * Error values in the data never match.
@@ -59,13 +62,19 @@ export function parseCriteria(criterion: unknown): FormulaCriteriaPredicate {
     return () => false;
   }
 
-  const operandNumber = numericValue(operand);
+  const parsed = parseCellInput(operand.trim());
+  const operandNumber = numericValue(operand) ?? (parsed.type === 'number' ? (parsed.value as number) : null);
+  const operandDate = parsed.type === 'date' ? (parsed.value as string) : null;
+  // Dates are ISO text; a number in the data compares as a serial date.
+  const isDateValue = (value: unknown) => typeof value === 'number' || parseIsoDate(value) !== null;
   const operandUpper = operand.trim().toUpperCase();
   const operandBoolean = operandUpper === 'TRUE' ? true : operandUpper === 'FALSE' ? false : null;
 
   if (op === '=' || op === '<>') {
     let equals: FormulaCriteriaPredicate;
-    if (operandNumber !== null) {
+    if (operandDate !== null) {
+      equals = (value) => isDateValue(value) && compareValues(value, operandDate) === 0;
+    } else if (operandNumber !== null) {
       equals = (value) => numericValue(value) === operandNumber;
     } else if (operandBoolean !== null) {
       equals = (value) => value === operandBoolean || (typeof value === 'string' && value.trim().toUpperCase() === operandUpper);
@@ -81,6 +90,10 @@ export function parseCriteria(criterion: unknown): FormulaCriteriaPredicate {
 
   const test = (cmp: number) =>
     op === '<' ? cmp < 0 : op === '<=' ? cmp <= 0 : op === '>' ? cmp > 0 : cmp >= 0;
+
+  if (operandDate !== null) {
+    return (value) => isDateValue(value) && test(compareValues(value, operandDate));
+  }
 
   if (operandNumber !== null) {
     // Numeric comparisons only consider numbers (and numeric text).

@@ -38,7 +38,15 @@ import {
 	type SnapGuidesOptions,
 	type SnapNodeDragResult
 } from './guides.js';
-import type { CanvasNode, XYPosition } from './types.js';
+import {
+	getResizingNodeRect,
+	inferResizeHandle,
+	snapNodeResize,
+	type ResizeHandle,
+	type SnapNodeResizeResult
+} from './resizeSnap.js';
+import { createNodeLookup } from './arrange.js';
+import type { CanvasNode, Rect, XYPosition } from './types.js';
 
 /** Minimal history surface (`HistoryManager` satisfies it). */
 export interface ArrangeHistoryTarget {
@@ -58,6 +66,10 @@ export interface CanvasArrangeControllerOptions<TNode extends CanvasNode = Canva
 	guides?: Omit<SnapGuidesOptions, 'zoom'>;
 	/** Turns drag snapping off while keeping the arrange actions (default `true`). */
 	snapping?: boolean;
+	/** Turns resize snapping off (default: follows `snapping`). */
+	resizeSnapping?: boolean;
+	/** Resize options passed to `snapResize` (`keepAspectRatio`, `minWidth`, `minHeight`). */
+	resize?: { keepAspectRatio?: boolean; minWidth?: number; minHeight?: number };
 	/** Size resolution for unmeasured nodes. */
 	rectOptions?: NodeRectOptions;
 	/** Called whenever the guide segments change (set while dragging, cleared on drop). */
@@ -90,6 +102,12 @@ export function createCanvasArrangeController<TNode extends CanvasNode = CanvasN
 	let dragKey = '';
 	// Snapped positions from the last dragging batch, re-applied to the drag-stop change.
 	let lastSnapped = new Map<string, XYPosition>();
+	// Resize snapping: the node, its box when the resize started, cached targets and the
+	// last snapped box (absolute) re-applied when the flow writes the raw end size.
+	let resizeId: string | null = null;
+	let resizeStart: Rect | null = null;
+	let resizeIndex: GuideIndex | null = null;
+	let lastResized: SnapNodeResizeResult | null = null;
 
 	const selectedIds = (ids?: Iterable<string>) =>
 		ids ? [...ids] : options.getSelectedIds?.() ?? options.getNodes().filter((n) => n.selected).map((n) => n.id);
@@ -303,6 +321,158 @@ export function createCanvasArrangeController<TNode extends CanvasNode = CanvasN
 				lastSnapped.set(c.id, position);
 				return { ...c, position };
 			});
+		},
+
+		/**
+		 * Starts resize snapping for node `id`: records its box (to tell which handle is
+		 * dragged) and caches the snap targets. Optional: `resize` starts lazily.
+		 */
+		beginResize(id: string) {
+			const nodes = options.getNodes();
+			const lookup = createNodeLookup(nodes);
+			const node = lookup.get(id);
+			resizeId = id;
+			resizeStart = node ? getResizingNodeRect(node, lookup, rect()) : null;
+			resizeIndex = createNodeGuideIndex(nodes, [id], rect());
+			lastResized = null;
+		},
+
+		/**
+		 * Snaps node `id` as currently sized in `getNodes()` (call it after the flow wrote the
+		 * new size, e.g. SvelteFlow's `NodeResizer` `onResize`, deferred by a microtask) and
+		 * writes the snapped box back through `setNodes` (not recorded in history). `handle`
+		 * defaults to the one inferred from the edges that moved since `beginResize`. A locked
+		 * node is restored to its starting box.
+		 */
+		resize(id: string, handle?: ResizeHandle): SnapNodeResizeResult | null {
+			if (resizeId !== id) controller.beginResize(id);
+			const nodes = options.getNodes();
+			const lookup = createNodeLookup(nodes);
+			const node = lookup.get(id);
+			if (!node || !resizeStart) return null;
+			const proposed = getResizingNodeRect(node, lookup, rect());
+			if (isLocked(node)) {
+				const start = resizeStart;
+				const parent = node.parentId ? lookup.get(node.parentId) : undefined;
+				const origin = parent ? getResizingNodeRect(parent, lookup, rect()) : { x: 0, y: 0 };
+				if (proposed.x !== start.x || proposed.y !== start.y || proposed.width !== start.width || proposed.height !== start.height) {
+					options.setNodes(
+						applyNodeUpdates(nodes, [
+							{ id, position: { x: start.x - origin.x, y: start.y - origin.y }, width: start.width, height: start.height }
+						])
+					);
+				}
+				return null;
+			}
+			if ((options.resizeSnapping ?? options.snapping) === false) return null;
+			const h = handle ?? inferResizeHandle(resizeStart, proposed);
+			if (!h) {
+				setGuides([]);
+				return null;
+			}
+			const result = snapNodeResize(nodes, id, proposed, h, {
+				...rect(),
+				...options.guides,
+				...options.resize,
+				zoom: options.getZoom?.() ?? 1,
+				index: resizeIndex!
+			});
+			lastResized = result.updates.length > 0 ? result : null;
+			if (result.updates.length > 0) options.setNodes(applyNodeUpdates(nodes, result.updates));
+			setGuides(result.guides);
+			return result;
+		},
+
+		/**
+		 * Ends resize snapping: clears guides and re-applies the last snapped box if the flow
+		 * wrote the raw pointer size afterwards.
+		 */
+		endResize() {
+			const last = lastResized;
+			resizeId = null;
+			resizeStart = null;
+			resizeIndex = null;
+			lastResized = null;
+			setGuides([]);
+			const update = last?.updates[0];
+			if (!update) return;
+			const node = options.getNodes().find((n) => n.id === update.id);
+			if (!node) return;
+			const drift =
+				node.position.x !== update.position!.x ||
+				node.position.y !== update.position!.y ||
+				node.width !== update.width ||
+				node.height !== update.height;
+			if (drift) options.setNodes(applyNodeUpdates(options.getNodes(), [update]));
+		},
+
+		/**
+		 * React Flow style: snaps the `dimensions` (and matching `position`) changes a
+		 * `NodeResizer` emits in an `onNodesChange` batch and updates `guides`. The resize-end
+		 * change (`resizing: false`) carries the raw pointer size, so the last snapped size is
+		 * kept. Resize changes of locked nodes are dropped. Returns the (possibly new) changes.
+		 */
+		snapResizeChanges<TChange extends PositionChangeLike>(changes: TChange[]): TChange[] {
+			const dims = changes.find(
+				(c) => c.type === 'dimensions' && typeof c.id === 'string' && !!c.dimensions && typeof c.resizing === 'boolean'
+			);
+			if (!dims) return changes;
+			const id = dims.id as string;
+			const nodes = options.getNodes();
+			const lookup = createNodeLookup(nodes);
+			const node = lookup.get(id);
+			const isResizeChange = (c: TChange) => c.id === id && (c.type === 'dimensions' || c.type === 'position');
+			if (node && isLocked(node)) {
+				if (dims.resizing === false) controller.endResize();
+				return changes.filter((c) => !isResizeChange(c));
+			}
+			if (dims.resizing === false) {
+				const last = lastResized?.updates[0];
+				lastResized = null; // applied to the change below, not by endResize
+				controller.endResize();
+				if (!last || last.id !== id) return changes;
+				return changes.map((c) =>
+					c === dims ? { ...c, dimensions: { width: last.width!, height: last.height! } } : c
+				);
+			}
+			if (!node || (options.resizeSnapping ?? options.snapping) === false) return changes;
+			if (resizeId !== id) controller.beginResize(id);
+			if (!resizeStart) return changes;
+			const posChange = changes.find((c) => c.id === id && c.type === 'position' && !!c.position);
+			const parent = node.parentId ? lookup.get(node.parentId) : undefined;
+			const origin = parent ? getResizingNodeRect(parent, lookup, rect()) : { x: 0, y: 0 };
+			const position = posChange?.position ?? node.position;
+			const proposed: Rect = {
+				x: position.x + origin.x,
+				y: position.y + origin.y,
+				width: dims.dimensions.width,
+				height: dims.dimensions.height
+			};
+			const handle = inferResizeHandle(resizeStart, proposed);
+			if (!handle) {
+				setGuides([]);
+				return changes;
+			}
+			const result = snapNodeResize(nodes, id, proposed, handle, {
+				...rect(),
+				...options.guides,
+				...options.resize,
+				zoom: options.getZoom?.() ?? 1,
+				index: resizeIndex!
+			});
+			setGuides(result.guides);
+			const update = result.updates[0];
+			lastResized = update ? result : null;
+			if (!update) return changes;
+			const next = changes.map((c) => {
+				if (c === dims) return { ...c, dimensions: { width: update.width!, height: update.height! } };
+				if (c === posChange) return { ...c, position: update.position! };
+				return c;
+			});
+			if (!posChange && (update.position!.x !== node.position.x || update.position!.y !== node.position.y)) {
+				next.push({ id, type: 'position', position: update.position! } as unknown as TChange);
+			}
+			return next;
 		},
 
 		/**

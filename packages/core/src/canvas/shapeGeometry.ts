@@ -4,6 +4,7 @@
  */
 import type { Point } from './types.js';
 import type { MultiPolygon, PolygonFillRule, PolygonRing } from './polygonBoolean.js';
+import { fitPathData } from './curveFit.js';
 
 // ---------------------------------------------------------------------------
 // Shape descriptions
@@ -768,6 +769,16 @@ export interface PolygonToPathOptions {
 	simplify?: number;
 	/** Added to every point before formatting (e.g. to make coordinates node-local). */
 	offset?: { x: number; y: number };
+	/**
+	 * `'lines'` (default) writes every ring as `M`/`L`/`Z`. `'fit'` fits cubic Béziers to each
+	 * ring (`fitPathData`), so flattened curves come back as smooth `C` curves while sharp
+	 * corners (turning more than `cornerAngleDeg`) and straight edges stay as they are.
+	 */
+	curves?: 'lines' | 'fit';
+	/** Curve-fitting tolerance in path units for `curves: 'fit'` (default 0.25). */
+	curveTolerance?: number;
+	/** Corner threshold in degrees for `curves: 'fit'` (default 30). */
+	cornerAngleDeg?: number;
 }
 
 /**
@@ -780,6 +791,8 @@ export function polygonToSvgPath(input: MultiPolygon | PolygonRing[], options: P
 	const dx = options.offset?.x ?? 0;
 	const dy = options.offset?.y ?? 0;
 	const rings: Point[][] = [];
+	const fit = options.curves === 'fit';
+	let fitted = '';
 	for (const item of input as any[]) {
 		const list: Point[][] =
 			item.length > 0 && Array.isArray(item[0]) && Array.isArray(item[0][0]) ? item : [item];
@@ -787,8 +800,17 @@ export function polygonToSvgPath(input: MultiPolygon | PolygonRing[], options: P
 			let r = ring;
 			if (options.simplify && options.simplify > 0) r = simplifyRing(r, options.simplify);
 			if (r.length < 3) continue;
+			if (fit) {
+				fitted += fitPathData(r, {
+					tolerance: options.curveTolerance ?? 0.25,
+					cornerAngleDeg: options.cornerAngleDeg,
+					precision,
+					offset: { x: dx, y: dy }
+				});
+				continue;
+			}
 			rings.push(dx || dy ? r.map(([x, y]) => [x + dx, y + dy] as Point) : r);
 		}
 	}
-	return ringsToPath(rings, f);
+	return fit ? fitted : ringsToPath(rings, f);
 }

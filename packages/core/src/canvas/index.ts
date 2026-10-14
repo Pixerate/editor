@@ -15,3 +15,6 @@ export * from './arrangeController.js';
 export * from './polygonBoolean.js';
 export * from './shapeGeometry.js';
 export * from './shapeNodes.js';
+export * from './measure.js';
+export * from './resizeSnap.js';
+export * from './curveFit.js';

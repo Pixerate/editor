@@ -1,4 +1,5 @@
-import { HistoryManager } from "@pixerate/editor/history";
+import type { HistoryManager } from "@pixerate/editor/history";
+import { matchHistoryShortcut } from "@pixerate/editor/commands";
 
 export interface HistoryShortcutsOptions {
   /**
@@ -41,47 +42,15 @@ export function createHistoryShortcuts(
 
   const handleKeyDown = (event: Event) => {
     const e = event as KeyboardEvent;
-    const isMac =
-      typeof navigator !== "undefined" &&
-      /Mac|iPod|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
-    const modifier = isMac ? e.metaKey : e.ctrlKey;
-
-    if (!modifier) return;
-
-    if (ignoreEditableElements && typeof document !== "undefined") {
-      const targetEl = (e.target || document.activeElement) as HTMLElement | null;
-      if (targetEl && targetEl.tagName) {
-        const tagName = targetEl.tagName.toLowerCase();
-        const isInput = tagName === "input" || tagName === "textarea";
-        const isContentEditable =
-          targetEl.isContentEditable ||
-          targetEl.getAttribute?.("contenteditable") === "true";
-        if (isInput || isContentEditable) {
-          return;
-        }
-      }
-    }
-
-    const key = e.key?.toLowerCase();
-
-    // Undo: Mod+Z (without Shift)
-    if (key === "z" && !e.shiftKey) {
-      if (manager.getState().canUndo) {
-        e.preventDefault();
-        manager.undo();
-      }
-      return;
-    }
-
-    // Redo: Mod+Shift+Z or (on non-Mac) Mod+Y
-    const isRedoKey =
-      (key === "z" && e.shiftKey) || (!isMac && key === "y" && !e.shiftKey);
-
-    if (isRedoKey) {
-      if (manager.getState().canRedo) {
-        e.preventDefault();
-        manager.redo();
-      }
+    // Default bindings from the command system: Mod+Z, Mod+Shift+Z and (off macOS) Mod+Y,
+    // matched by `event.code` with `Mod` = ⌘ on macOS and Ctrl elsewhere.
+    const action = matchHistoryShortcut(e, { allowInEditable: !ignoreEditableElements });
+    if (action === "undo" && manager.getState().canUndo) {
+      e.preventDefault();
+      manager.undo();
+    } else if (action === "redo" && manager.getState().canRedo) {
+      e.preventDefault();
+      manager.redo();
     }
   };
 

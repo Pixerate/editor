@@ -16,6 +16,8 @@
     getCropCursor,
     calculateCropDrag,
     hitTestAnnotation,
+    normalizeProcessVersion,
+    LATEST_PROCESS_VERSION,
   } from '@pixerate/editor/image-editor';
   import { onDestroy, untrack } from 'svelte';
   import { createReactiveImageEditor, type ReactiveImageEditor } from './imageEditorState.svelte.js';
@@ -47,6 +49,9 @@
   const internalEditor = createReactiveImageEditor();
   const editor = $derived(propEditor || internalEditor);
   onDestroy(() => internalEditor.destroy());
+  const legacyProcess = $derived(
+    normalizeProcessVersion(editor.state.adjustments.process) < LATEST_PROCESS_VERSION
+  );
 
   let canvasEl = $state<HTMLCanvasElement | null>(null);
   let containerEl = $state<HTMLDivElement | null>(null);
@@ -960,6 +965,40 @@
               class="w-full accent-indigo-500"
             />
           </div>
+
+          <!-- Tint (process 2 white balance) -->
+          <div>
+            <div class="flex justify-between text-slate-400 mb-1">
+              <span>Tint</span>
+              <span class="font-mono">{editor.state.adjustments.tint ?? 0}</span>
+            </div>
+            <input
+              type="range"
+              min="-100"
+              max="100"
+              aria-label="Tint"
+              disabled={legacyProcess}
+              value={editor.state.adjustments.tint ?? 0}
+              oninput={(e) => editor.setAdjustments({ tint: Number((e.target as HTMLInputElement).value) })}
+              class="w-full accent-indigo-500 disabled:opacity-40"
+            />
+          </div>
+
+          {#if legacyProcess}
+            <div
+              class="flex items-center justify-between gap-2 rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-[10px] text-amber-200"
+              data-testid="image-editor-process-notice"
+            >
+              <span>Legacy rendering (process 1). Tint needs the current process.</span>
+              <button
+                type="button"
+                onclick={() => editor.upgradeProcess()}
+                class="shrink-0 rounded bg-amber-500/20 px-2 py-0.5 hover:bg-amber-500/30"
+              >
+                Update
+              </button>
+            </div>
+          {/if}
 
           <!-- Blur -->
           <div>

@@ -5,6 +5,14 @@
 
 export const MCP_TOOL_GET_EDITOR_STATE = {
 	name: 'get_editor_state',
+	title: 'Get editor state',
+	annotations: {
+		title: 'Get editor state',
+		readOnlyHint: true,
+		destructiveHint: false,
+		idempotentHint: true,
+		openWorldHint: false
+	},
 	description:
 		'Retrieves the current state of the document, variables, selection, and canvas graph (nodes and edges).',
 	inputSchema: {
@@ -24,6 +32,14 @@ export const MCP_TOOL_GET_EDITOR_STATE = {
 
 export const MCP_TOOL_EDIT_CANVAS = {
 	name: 'edit_canvas',
+	title: 'Edit the canvas',
+	annotations: {
+		title: 'Edit the canvas',
+		readOnlyHint: false,
+		destructiveHint: true,
+		idempotentHint: false,
+		openWorldHint: false
+	},
 	description:
 		'Applies high-level structural operations to the visual canvas (adding nodes, connecting edges, organizing layout, or moving elements).',
 	inputSchema: {
@@ -88,6 +104,14 @@ export const MCP_TOOL_EDIT_CANVAS = {
 
 export const MCP_TOOL_EDIT_PROMPT = {
 	name: 'edit_prompt',
+	title: 'Edit the prompt',
+	annotations: {
+		title: 'Edit the prompt',
+		readOnlyHint: false,
+		destructiveHint: true,
+		idempotentHint: false,
+		openWorldHint: false
+	},
 	description:
 		'Applies edits to the prompt template document, including inserting text, replacing ranges, and setting variables.',
 	inputSchema: {
@@ -128,6 +152,14 @@ export const MCP_TOOL_EDIT_PROMPT = {
 
 export const MCP_TOOL_VIEW_EDITOR = {
 	name: 'view_editor',
+	title: 'View the editor',
+	annotations: {
+		title: 'View the editor',
+		readOnlyHint: true,
+		destructiveHint: false,
+		idempotentHint: true,
+		openWorldHint: false
+	},
 	description:
 		'Captures a visual image snapshot (JPEG or PNG) of the editor canvas or viewport for multimodal evaluation. Active agent cursor indicators are automatically excluded from the snapshot.',
 	inputSchema: {

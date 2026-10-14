@@ -29,6 +29,8 @@ import {
   type StructuralChange,
   type CellPosition
 } from './formula';
+import { parseCellInput } from './formula/parse-input';
+import { formatCellDisplay } from './formula/format';
 import { DataSourceBinder } from './datasource';
 import {
   compareCellValues,
@@ -80,6 +82,12 @@ export interface SpreadsheetControllerOptions {
   onDocumentChange?: (doc: SpreadsheetDocument) => void;
   onSelectionChange?: (activeCell: CellCoordinate | null, range: CellRange | null) => void;
   onCellCommit?: (rowId: string, colId: string, raw: string, value: any) => void;
+  /**
+   * Approximate memory budget for undo/redo snapshots, in bytes (UTF-16 size of
+   * the serialized documents). The oldest undo steps beyond it are dropped, but
+   * the most recent one is always kept. Defaults to 64 MiB; 0 = unlimited.
+   */
+  maxHistoryBytes?: number;
 }
 
 /** Module-wide sequence that makes generated row, column and filter ids unique. */
@@ -97,6 +105,9 @@ interface SpillRecord {
   /** The spilled cells (anchor excluded). */
   cells: Array<{ key: string; rowId: string; colId: string }>;
 }
+
+// Default undo/redo snapshot budget (see SpreadsheetControllerOptions.maxHistoryBytes).
+const DEFAULT_MAX_HISTORY_BYTES = 64 * 1024 * 1024;
 
 // Recalculation passes after spill ranges change (see recalculateKeys).
 const MAX_SPILL_PASSES = 25;
@@ -123,6 +134,7 @@ export class SpreadsheetController {
   private undoStack: string[] = [];
   private redoStack: string[] = [];
   private isApplyingHistory = false;
+  private readonly maxHistoryBytes: number;
   // Set while importing TSV: history and recalculation are done once at the end.
   private batching = false;
   private pendingCommits: Array<[string, string, string]> = [];
@@ -166,6 +178,7 @@ export class SpreadsheetController {
     };
 
     this.primaryDataSourceId = options.primaryDataSourceId;
+    this.maxHistoryBytes = Math.max(0, options.maxHistoryBytes ?? DEFAULT_MAX_HISTORY_BYTES);
     this.onDocumentChange = options.onDocumentChange;
     this.onSelectionChange = options.onSelectionChange;
     this.onCellCommit = options.onCellCommit;
@@ -183,6 +196,7 @@ export class SpreadsheetController {
     });
 
     this.syncWithDataSource();
+    this.rederiveTypedValues();
     this.recalculateAll();
   }
 
@@ -195,8 +209,65 @@ export class SpreadsheetController {
     this.undoStack = [];
     this.redoStack = [];
     this.syncWithDataSource();
+    this.rederiveTypedValues();
     this.recalculateAll();
     this.notifyChange();
+  }
+
+  /**
+   * Re-parses the value of every stored typed (non-formula) cell from its
+   * `raw` input, so documents saved before typed input was parsed (whose
+   * values are text such as `"120"`) compare and sort as numbers. Cells of
+   * bound columns in record rows keep their value: it belongs to the data
+   * source.
+   */
+  private rederiveTypedValues(): void {
+    for (const row of this.document.rows) {
+      const cells = this.document.cells[row.id];
+      if (!cells) continue;
+      for (const col of this.document.columns) {
+        const cell = cells[col.id];
+        if (!cell || typeof cell.raw !== 'string' || cell.raw.startsWith('=')) continue;
+        if (col.type === 'bound' && col.binding && row.recordId) continue;
+        const typed = this.typedCell(cell.raw, cell.format);
+        cell.value = typed.value;
+        if (typed.numberFormat) cell.numberFormat = typed.numberFormat;
+        else delete cell.numberFormat;
+        if (typed.format) cell.format = typed.format;
+      }
+    }
+  }
+
+  /**
+   * Value of typed (non-formula) input: a number, boolean, ISO date, error
+   * or text (see `parseCellInput`), its automatic number format, and the
+   * `CellFormat` to use: the automatic one (currency, percentage, date,
+   * number) when `format` is unset or `text` (the default of new columns).
+   */
+  private typedCell(raw: string, format: CellData['format']): Pick<CellData, 'value' | 'numberFormat' | 'format'> {
+    const parsed = parseCellInput(raw);
+    return {
+      value: parsed.value,
+      ...(parsed.numberFormat ? { numberFormat: parsed.numberFormat } : {}),
+      format: parsed.cellFormat && (!format || format === 'text') ? parsed.cellFormat : format
+    };
+  }
+
+  /**
+   * Typed input for a bound field, coerced by the field's declared type:
+   * number, boolean and date fields get a number, boolean or ISO date when
+   * the input parses as one; string and enum fields (and unknown fields)
+   * keep the text exactly as typed.
+   */
+  private boundInputValue(dataSourceId: string, field: string, raw: string): unknown {
+    if (raw.startsWith('=')) return raw;
+    const type = this.binder.getDataSource(dataSourceId)?.getFields().find((f) => f.key === field)?.type;
+    if (type !== 'number' && type !== 'boolean' && type !== 'date') return raw;
+    const parsed = parseCellInput(raw);
+    if (type === 'number' && parsed.type === 'number') return parsed.value;
+    if (type === 'boolean' && parsed.type === 'boolean') return parsed.value;
+    if (type === 'date' && parsed.type === 'date') return parsed.value;
+    return raw;
   }
 
   public registerDataSource(ds: SpreadsheetDataSource): void {
@@ -291,24 +362,23 @@ export class SpreadsheetController {
     const col = this.document.columns.find((c) => c.id === colId);
     const row = this.document.rows.find((r) => r.id === rowId);
 
+    const isFormula = raw.startsWith('=');
+    let cell: CellData;
     // If this is a bound column and row is bound to record, dispatch back to data source
     if (col?.type === 'bound' && col.binding && row?.recordId) {
-      this.binder.commitBoundValue(
-        col.binding.dataSource,
-        row.recordId,
-        col.binding.field,
-        raw
-      );
+      const value = this.boundInputValue(col.binding.dataSource, col.binding.field, raw);
+      this.binder.commitBoundValue(col.binding.dataSource, row.recordId, col.binding.field, value);
+      cell = { raw, value, format: col.format };
+    } else if (isFormula) {
+      cell = { raw, value: raw, format: col?.format };
+    } else {
+      cell = { raw, ...this.typedCell(raw, col?.format) };
     }
 
     const cellKey = this.getCellKey(rowId, colId);
-    this.depGraph.setCellFormula(cellKey, raw.startsWith('=') ? raw : null);
+    this.depGraph.setCellFormula(cellKey, isFormula ? raw : null);
 
-    this.document.cells[rowId][colId] = {
-      raw,
-      value: raw,
-      format: col?.format
-    };
+    this.document.cells[rowId][colId] = cell;
 
     this.document.updatedAt = Date.now();
     if (this.batching) {
@@ -907,7 +977,7 @@ export class SpreadsheetController {
     let maxLen = (col.title || '').length + (col.key ? col.key.length + 3 : 0);
     for (const row of this.document.rows) {
       const cell = this.getCell(row.id, col.id);
-      const valStr = cell.value != null ? String(cell.value) : '';
+      const valStr = formatCellDisplay(cell);
       if (valStr.length > maxLen) {
         maxLen = valStr.length;
       }
@@ -939,8 +1009,7 @@ export class SpreadsheetController {
       .map((row) =>
         columns
           .map((col) => {
-            const cell = this.getCell(row.id, col.id);
-            return String(cell.value ?? '').replace(/\t/g, ' ');
+            return formatCellDisplay(this.getCell(row.id, col.id)).replace(/\t/g, ' ');
           })
           .join('\t')
       )
@@ -1028,7 +1097,7 @@ export class SpreadsheetController {
    */
   public exportToCsv(options: CsvExportOptions = {}): string {
     const matrix = this.readMatrix(options.range ?? null).map((row) =>
-      row.map((cell) => (options.formulas ? cell.raw : String(cell.value ?? '')))
+      row.map((cell) => (options.formulas ? cell.raw : formatCellDisplay(cell)))
     );
     return serializeCsv(matrix, {
       delimiter: options.delimiter,
@@ -1076,12 +1145,13 @@ export class SpreadsheetController {
     const cells = this.readMatrix(r).map((row) =>
       row.map((cell) => {
         const value = cell.error || cell.value;
+        const text = formatCellDisplay(cell);
         // A spilled value is pasted as a constant unless its anchor (whose
         // formula re-spills) is copied too.
         if (cell.spillAnchor && !this.spillAnchorInRange(cell.spillAnchor, r)) {
-          return { raw: value === null || value === undefined ? '' : String(value), value };
+          return { raw: text, value, text };
         }
-        return { raw: cell.raw, value };
+        return { raw: cell.raw, value, text };
       })
     );
     return createSpreadsheetClipboardData(cells, { row: r.startRow, col: r.startCol });
@@ -1685,6 +1755,31 @@ export class SpreadsheetController {
     this.undoStack.push(JSON.stringify(this.document));
     if (this.undoStack.length > 50) this.undoStack.shift();
     this.redoStack = [];
+    this.trimHistory();
+  }
+
+  /** Drops the oldest snapshots beyond `maxHistoryBytes`, always keeping the newest. */
+  private trimHistory(): void {
+    if (this.maxHistoryBytes <= 0 || this.undoStack.length <= 1) return;
+    let total = 0;
+    for (const s of this.undoStack) total += s.length * 2;
+    for (const s of this.redoStack) total += s.length * 2;
+    while (total > this.maxHistoryBytes && this.undoStack.length > 1) {
+      total -= this.undoStack.shift()!.length * 2;
+    }
+  }
+
+  /** Approximate bytes held by the undo/redo snapshots (UTF-16 size). */
+  public getHistoryByteSize(): number {
+    let total = 0;
+    for (const s of this.undoStack) total += s.length * 2;
+    for (const s of this.redoStack) total += s.length * 2;
+    return total;
+  }
+
+  /** Number of undo / redo snapshots currently held. */
+  public getHistoryDepth(): { undo: number; redo: number } {
+    return { undo: this.undoStack.length, redo: this.redoStack.length };
   }
 
   public undo(): void {

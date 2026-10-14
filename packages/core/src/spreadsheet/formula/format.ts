@@ -1,4 +1,52 @@
+import type { CellData } from '../types';
 import { numericValue, roundHalfAwayFromZero, toDate, toText } from './values';
+
+/**
+ * The text a cell shows: its error, or its value formatted with the number
+ * format chosen for typed input (`numberFormat`, e.g. `"$"#,##0.00` for
+ * `$1,200.50`, `0%` for `10%`, `m/d/yyyy` for `3/4/2026`). Other numbers use
+ * up to 15 significant digits and booleans show as TRUE/FALSE.
+ */
+export function formatCellDisplay(cell: Pick<CellData, 'value' | 'error' | 'numberFormat'> | null | undefined): string {
+  if (!cell) return '';
+  if (cell.error) return cell.error;
+  const { value, numberFormat } = cell;
+  if (numberFormat && value !== '' && value !== null && value !== undefined && typeof value !== 'boolean') {
+    if (/^\[h\]/i.test(numberFormat) && typeof value === 'number') return formatElapsedHours(value);
+    if (numberFormat === '# ?/?' && typeof value === 'number') return formatFraction(value);
+    const formatted = formatValueWithCode(value, numberFormat);
+    if (formatted !== null) return formatted;
+  }
+  return toText(value);
+}
+
+/** `# ?/?`: a whole part and the closest fraction with a one-digit denominator (1 1/2). */
+function formatFraction(value: number): string {
+  const sign = value < 0 ? '-' : '';
+  const abs = Math.abs(value);
+  let whole = Math.floor(abs);
+  const frac = abs - whole;
+  let best = { num: 0, den: 1, err: frac };
+  for (let den = 2; den <= 9; den++) {
+    const num = Math.round(frac * den);
+    const err = Math.abs(frac - num / den);
+    if (err < best.err - 1e-12) best = { num, den, err };
+  }
+  if (best.num === best.den) {
+    whole += 1;
+    best = { num: 0, den: 1, err: 0 };
+  }
+  if (best.num === 0) return `${sign}${whole}`;
+  return `${sign}${whole === 0 ? '' : `${whole} `}${best.num}/${best.den}`;
+}
+
+/** `[h]:mm:ss`: hours past 24 keep counting (25:00:00). */
+function formatElapsedHours(days: number): string {
+  const total = Math.round(Math.abs(days) * 86400);
+  const p = (n: number) => String(n).padStart(2, '0');
+  const text = `${Math.floor(total / 3600)}:${p(Math.floor(total / 60) % 60)}:${p(total % 60)}`;
+  return days < 0 ? `-${text}` : text;
+}
 
 /**
  * A subset of spreadsheet number format codes, as used by TEXT():

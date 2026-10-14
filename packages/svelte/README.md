@@ -73,9 +73,10 @@ Requires **Svelte 5** (the components use runes). Components ship as `.svelte` s
 
 | Import | Exports |
 | :--- | :--- |
-| `@pixerate/editor-svelte` | `EditableTextNodeEditor`, `BubbleMenu`, `TemplateRenderer`, `initiateEditor`, `createReactiveEditor`, `createHistory`, `createHistoryShortcuts`, `navigationGuard` (action), `createNavigationGuard`, `SpreadsheetEditor`, `FormulaBar`, `FormulaHints`, `createReactiveSpreadsheet`, `DirtyTracker` |
+| `@pixerate/editor-svelte` | `EditableTextNodeEditor`, `BubbleMenu`, `TemplateRenderer`, `initiateEditor`, `createReactiveEditor`, `createHistory`, `createHistoryDirty`, `createHistoryShortcuts`, `navigationGuard` (action), `createNavigationGuard`, `SpreadsheetEditor`, `FormulaBar`, `FormulaHints`, `createReactiveSpreadsheet`, `DirtyTracker` |
 | `@pixerate/editor-svelte/spreadsheet` | `SpreadsheetEditor`, `FormulaBar`, `FormulaHints`, `SpreadsheetContextMenu`, `SpreadsheetGroupRow`, `createReactiveSpreadsheet` (also re-exported from the root entry) |
 | `@pixerate/editor-svelte/image-editor` | `ImageEditor`, `createReactiveImageEditor`: crop, rotate/flip, adjustments, annotations, depth masks, and `onInpaint` / `onRemoveBackground` AI hooks |
+| `@pixerate/editor-svelte/commands` | `CommandPalette`, `createCommandPalette` (`hotkey: "Mod+K"`; call `destroy()` when done), `createCommandShortcuts`, `useRegisterCommands` over a `CommandRegistry` from `@pixerate/editor/commands` (also re-exported from the root entry) |
 | `@pixerate/editor-svelte/canvas` | Runes for `@xyflow/svelte`: `createCanvasGraph`, `createCanvasClipboard`, `createCanvasDocking`, `createCanvasShortcuts`, `createCanvasInteractions`, `createCanvasExplosion`, `createCanvasNodeSync`, `createCanvasMultiDrag`, `createStreamingCanvas`, `AgentPresenceLayer`, `FloatingHorizontalScrollbar`, plus layout helpers |
 
 Prop types are exported alongside each component, for example `EditableTextNodeEditorProps`, `BubbleMenuProps`, `ImageEditorProps` and `SpreadsheetEditorProps`.
