@@ -4,9 +4,14 @@ export * from "./hooks/useNavigationGuard";
 export * from "./hooks/useDismissGuard";
 export * from "./hooks/useHistory";
 export * from "./hooks/useHistoryShortcuts";
+export * from "./hooks/useFileImport";
+export * from "./hooks/useAgentToolProvider";
 export * from "./components/EditorContent";
 export * from "./components/BubbleMenu";
 export * from "./components/TemplateRenderer";
+export * from "./components/VariableForm";
+export * from "./hooks/useOutline";
+export * from "./components/OutlinePanel";
 
 // Re-export core types for easy consumer access
 export {
@@ -28,7 +33,13 @@ export type {
   HistoryState,
   HistoryManagerOptions,
 } from "@pixerate/editor";
+export type {
+  PromptValues,
+  PromptDiagnostic,
+  VariableFormField,
+} from "@pixerate/editor";
 
 export * from "./spreadsheet";
 export * from "./slots";
 export * from "./image-editor";
+export * from "./review";

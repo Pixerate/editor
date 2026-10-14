@@ -13,6 +13,8 @@ import {
   plainTextToSlice,
   getEditorText,
   tokenizePrompt,
+  FileImport,
+  type FileImportOptions,
 } from "@pixerate/editor";
 
 export interface UsePromptEditorProps {
@@ -62,6 +64,12 @@ export interface UsePromptEditorProps {
   jsonVariables?: string[];
   /** Animation speed for gradient decorations */
   speed?: number;
+  /**
+   * Import text from .md, .html, .txt and .rtf files dropped onto the editor
+   * (opt-in). Content is always inserted as plain text. Pasting keeps the
+   * plain-text paste handler, so pasted files are not imported.
+   */
+  fileImport?: Omit<FileImportOptions, "asPlainText"> | boolean;
 }
 
 const DEFAULT_TEMPLATES: Template[] = [];
@@ -91,7 +99,12 @@ export function usePromptEditor({
   containerId = "editor-container",
   jsonVariables,
   speed = 2,
+  fileImport,
 }: UsePromptEditorProps) {
+  const fileImportRef = useRef(fileImport);
+  fileImportRef.current = fileImport;
+  const fileImportEnabled = !!fileImport;
+
   const slashCommandActiveRef = useRef(slashCommandActive);
   slashCommandActiveRef.current = slashCommandActive;
 
@@ -179,6 +192,15 @@ export function usePromptEditor({
           templates,
         }),
         LoadingNode,
+        ...(fileImportEnabled
+          ? [
+              FileImport.configure({
+                ...(typeof fileImportRef.current === "object" ? fileImportRef.current : {}),
+                // Prompt editors only ever receive plain text.
+                asPlainText: true,
+              }),
+            ]
+          : []),
       ],
       content: plainTextToTipTapHtml(content),
       onUpdate: ({ editor: ed }) => {
@@ -302,7 +324,7 @@ export function usePromptEditor({
     },
     // Only options baked into extensions recreate the editor; editable state,
     // placeholder, class names and content are applied to the live instance.
-    [resolvedColorMap, templateKey, speed, jsonVariablesKey],
+    [resolvedColorMap, templateKey, speed, jsonVariablesKey, fileImportEnabled],
   );
 
   useEffect(() => {

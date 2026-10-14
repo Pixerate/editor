@@ -1,11 +1,40 @@
 import React, { useRef, useState, useMemo, useEffect, useCallback } from 'react';
 import {
   indexToColName,
+  getSpreadsheetMenuItems,
+  normalizeRange,
+  rangeContains,
   type SpreadsheetColumn,
   type SpreadsheetRow,
-  type CellData
+  type CellData,
+  type SpreadsheetMenuItem,
+  type SpreadsheetViewColumn,
+  type SpreadsheetViewRow
 } from '@pixerate/editor';
 import { useSpreadsheetEditor } from './useSpreadsheetEditor';
+import { SpreadsheetContextMenu } from './SpreadsheetContextMenu';
+import { SpreadsheetGroupRow } from './SpreadsheetGroupRow';
+import { useFillHandle, useSpreadsheetClipboard } from './useSpreadsheetTableInteractions';
+
+// Sizes of the sticky header row and row-number column, for frozen-pane offsets.
+const COLUMN_HEADER_HEIGHT = 28;
+const ROW_HEADER_WIDTH = 48;
+
+/** Sticky positioning for cells in frozen rows and/or columns. */
+function frozenCellStyle(
+  viewRow: Extract<SpreadsheetViewRow, { kind: 'row' }>,
+  viewCol: SpreadsheetViewColumn
+): React.CSSProperties | undefined {
+  if (!viewRow.frozen && !viewCol.frozen) return undefined;
+  return {
+    position: 'sticky',
+    ...(viewRow.frozen ? { top: COLUMN_HEADER_HEIGHT + viewRow.stickyTop } : {}),
+    ...(viewCol.frozen ? { left: ROW_HEADER_WIDTH + viewCol.stickyLeft } : {}),
+    zIndex: viewRow.frozen && viewCol.frozen ? 14 : viewRow.frozen ? 12 : 11,
+    background: 'var(--background, #fff)'
+  };
+}
+import { FormulaHints } from './FormulaHints';
 
 export interface SpreadsheetEditorProps {
   state?: ReturnType<typeof useSpreadsheetEditor>;
@@ -27,11 +56,34 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
   const defaultState = useSpreadsheetEditor();
   const state = externalState || defaultState;
   const gridRef = useRef<HTMLDivElement>(null);
+  const formulaBarRef = useRef<HTMLInputElement>(null);
+  const cellInputRef = useRef<HTMLInputElement>(null);
 
   const [resizingColId, setResizingColId] = useState<string | null>(null);
   const [hoveredColId, setHoveredColId] = useState<string | null>(null);
   const [resizeStartX, setResizeStartX] = useState(0);
   const [resizeStartWidth, setResizeStartWidth] = useState(0);
+
+  // Table operations: render model, clipboard, fill handle and context menu.
+  const view = state.viewModel;
+  const { copyShortcutFallback } = useSpreadsheetClipboard(gridRef, state, readOnly);
+  const { fillTarget, startFill, extendFill } = useFillHandle(state);
+  const [menu, setMenu] = useState<{ x: number; y: number; items: SpreadsheetMenuItem[] } | null>(null);
+  const filter = state.document.table?.filter;
+  const filteredColIds = useMemo(
+    () => new Set(filter?.enabled ? filter.rules.map((r) => r.colId) : []),
+    [filter]
+  );
+
+  const handleCellContextMenu = useCallback((rIdx: number, cIdx: number, e: React.MouseEvent) => {
+    if (readOnly) return;
+    e.preventDefault();
+    if (state.editingCell) state.commitEditing();
+    if (!state.selectedRange || !rangeContains(state.selectedRange, rIdx, cIdx)) {
+      state.selectCell(rIdx, cIdx);
+    }
+    setMenu({ x: e.clientX, y: e.clientY, items: getSpreadsheetMenuItems(state.controller, { row: rIdx, col: cIdx }) });
+  }, [readOnly, state]);
 
   const activeRawValue = useMemo(() => {
     if (!state.activeCell) return '';
@@ -144,17 +196,16 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
       e.preventDefault();
       state.redo();
     } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'c') {
-      // Copy the selection, not the whole sheet.
-      e.preventDefault();
-      const tsv = state.exportToTsv(state.selectedRange);
-      navigator.clipboard?.writeText(tsv);
+      // Copy the selection, not the whole sheet. The browser's copy event
+      // writes TSV, HTML and the internal format; the fallback writes TSV.
+      copyShortcutFallback();
     } else if (!readOnly && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
       const col = state.document.columns[state.activeCell.col];
       if (!col?.readOnly) {
         state.startEditing(state.activeCell.row, state.activeCell.col, e.key);
       }
     }
-  }, [readOnly, state]);
+  }, [readOnly, state, copyShortcutFallback]);
   // The resize effect reads these through refs: re-running it on every width
   // update would reset the in-progress drag (and skip onColumnResize).
   const stateRef = useRef(state);
@@ -292,8 +343,8 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
     if (gridRef.current && typeof document !== 'undefined') {
       const table = gridRef.current.querySelector('table');
       if (table) {
-        const thElements = table.querySelectorAll('thead th');
-        const th = thElements[colIndex + 1] as HTMLElement | undefined;
+        // Look cells up by column index: hidden columns and merges shift DOM positions.
+        const th = table.querySelector(`thead th[data-col="${colIndex}"]`) as HTMLElement | null;
         if (th) {
           const headerInner = (th.firstElementChild as HTMLElement) || th;
           const headerW = measureElementContentWidth(headerInner, gridRef.current);
@@ -304,7 +355,7 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
         const sampleLimit = Math.min(rows.length, 150);
         for (let r = 0; r < sampleLimit; r++) {
           const tr = rows[r];
-          const td = tr.children[colIndex + 1] as HTMLElement | undefined;
+          const td = tr.querySelector(`td[data-col="${colIndex}"][colspan="1"]`) as HTMLElement | null;
           if (td) {
             const cellW = measureElementContentWidth(td, gridRef.current);
             calculatedWidth = Math.max(calculatedWidth, cellW + 20);
@@ -375,6 +426,7 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
           <span className="italic font-serif font-bold text-sm text-primary">fx</span>
         </div>
         <input
+          ref={formulaBarRef}
           type="text"
           className="flex-1 bg-transparent px-2 py-0.5 outline-none font-sans text-xs text-foreground placeholder:text-muted-foreground/60 focus:bg-background focus:ring-1 focus:ring-primary rounded"
           placeholder="Enter a value or formula (e.g. =SUM(A1:A5))"
@@ -405,6 +457,13 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
             }
           }}
         />
+        {!formulaBarReadOnly && (
+          <FormulaHints
+            inputRef={formulaBarRef}
+            value={state.editingCell ? state.draftValue : formulaDraft ?? activeRawValue}
+            onAccept={(next) => (state.editingCell ? state.setDraftValue(next) : setFormulaDraft(next))}
+          />
+        )}
       </div>
 
       {/* Main Grid */}
@@ -415,18 +474,28 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
               <th className="w-12 min-w-[3rem] sticky left-0 z-30 bg-muted/90 border-r border-border text-center text-[10px] text-muted-foreground font-medium">
                 #
               </th>
-              {state.document.columns.map((col, cIdx) => (
+              {view.columns.map(({ column: col, index: cIdx, frozen, stickyLeft }) => (
                 <th
                   key={col.id}
+                  data-col={cIdx}
                   className={`relative border-r border-border px-2 text-left font-medium text-muted-foreground hover:bg-muted/90 transition-colors group overflow-hidden max-w-0 ${
                     onColumnHeaderClick ? 'cursor-pointer' : 'cursor-default'
                   }`}
-                  style={{ width: col.width || 130, minWidth: col.width || 130, maxWidth: col.width || 130, overflow: 'hidden' }}
+                  style={{
+                    width: col.width || 130,
+                    minWidth: col.width || 130,
+                    maxWidth: col.width || 130,
+                    overflow: 'hidden',
+                    ...(frozen ? { position: 'sticky', left: ROW_HEADER_WIDTH + stickyLeft, zIndex: 25, background: 'var(--muted, #f4f4f5)' } : {})
+                  }}
                   onClick={() => onColumnHeaderClick?.(col)}
                   onDoubleClick={(e) => handleHeaderDblClick(col.id, cIdx, e)}
                 >
                   <div className="flex items-center justify-between gap-1 min-w-0 overflow-hidden truncate">
                     <span className="truncate font-semibold text-foreground text-xs min-w-0">{col.title}</span>
+                    {filteredColIds.has(col.id) && (
+                      <span className="text-[10px] text-primary shrink-0" title="Filtered" data-filtered="true">⏷</span>
+                    )}
                     <span className="text-[10px] text-muted-foreground/70 font-mono font-normal shrink-0">({col.key})</span>
                   </div>
                   {/* Column Resize Handle */}
@@ -471,52 +540,130 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
             </tr>
           </thead>
           <tbody>
-            {state.document.rows.map((row, rIdx) => (
-              <tr key={row.id} className="border-b border-border hover:bg-muted/10 transition-colors" style={{ height: row.height || 32 }}>
-                <td className="w-12 min-w-[3rem] sticky left-0 z-10 bg-muted/50 border-r border-border text-center text-[10px] text-muted-foreground font-mono select-none">
-                  {rIdx + 1}
+            {view.rows.map((viewRow) => {
+              if (viewRow.kind === 'group') {
+                return (
+                  <SpreadsheetGroupRow
+                    key={`group:${viewRow.group.key}`}
+                    group={viewRow.group}
+                    columns={view.columns}
+                    groupColId={state.document.table?.grouping?.colId ?? ''}
+                    onToggle={state.toggleGroupCollapsed}
+                    trailingCell={!!onAddColumnClick}
+                  />
+                );
+              }
+              const displayRowIndex = viewRow.index;
+              const selection = state.selectedRange ? normalizeRange(state.selectedRange) : null;
+              return (
+              <tr
+                key={viewRow.row.id}
+                data-row={displayRowIndex}
+                className={`border-b border-border hover:bg-muted/10 transition-colors ${viewRow.section !== 'body' ? 'bg-muted/30 font-semibold' : ''}`}
+                style={{ height: viewRow.row.height || 32 }}
+              >
+                <td
+                  className="w-12 min-w-[3rem] sticky left-0 z-10 bg-muted/50 border-r border-border text-center text-[10px] text-muted-foreground font-mono select-none"
+                  style={viewRow.frozen ? { top: COLUMN_HEADER_HEIGHT + viewRow.stickyTop, zIndex: 15 } : undefined}
+                >
+                  {displayRowIndex + 1}
                 </td>
-                {state.document.columns.map((col, cIdx) => {
+                {view.columns.map((viewCol) => {
+                  // A merged cell renders its top-left cell, spanning the merge.
+                  const span = view.getCellSpan(displayRowIndex, viewCol.index);
+                  if (!span) return null;
+                  const rIdx = span.source.row;
+                  const cIdx = span.source.col;
+                  const row = state.document.rows[rIdx];
+                  const col = state.document.columns[cIdx];
                   const cell = state.getCell(row.id, col.id);
                   const selected = isCellSelected(rIdx, cIdx);
                   const active = isActiveCell(rIdx, cIdx);
                   const isEditing = state.editingCell?.row === rIdx && state.editingCell?.col === cIdx;
 
+                  const inFillPreview = !!fillTarget && !selected && rangeContains(fillTarget, displayRowIndex, viewCol.index);
+                  const showFillHandle =
+                    !readOnly &&
+                    !isEditing &&
+                    !!selection &&
+                    (span.merge
+                      ? rangeContains(span.merge, selection.endRow, selection.endCol)
+                      : selection.endRow === rIdx && selection.endCol === cIdx);
+
                   return (
                     <td
-                      key={col.id}
+                      key={viewCol.column.id}
+                      data-row={rIdx}
+                      data-col={cIdx}
+                      rowSpan={span.rowSpan}
+                      colSpan={span.colSpan}
                       className={`relative border-r border-border px-2 py-1 truncate max-w-0 text-foreground transition-colors ${
                         selected ? 'bg-primary/10' : ''
-                      } ${active ? 'ring-2 ring-primary ring-inset z-10' : ''}`}
-                      style={{ maxWidth: 0, overflow: 'hidden' }}
+                      } ${active ? 'ring-2 ring-primary ring-inset z-10' : ''} ${viewCol.header ? 'font-semibold' : ''}`}
+                      style={{
+                        maxWidth: 0,
+                        overflow: 'hidden',
+                        ...frozenCellStyle(viewRow, viewCol),
+                        ...(inFillPreview ? { outline: '1px dashed var(--primary, #6366f1)', outlineOffset: -1 } : {})
+                      }}
                       onClick={(e) => handleCellClick(rIdx, cIdx, e)}
                       onDoubleClick={() => handleCellDblClick(rIdx, cIdx)}
+                      onContextMenu={(e) => handleCellContextMenu(rIdx, cIdx, e)}
+                      onMouseOver={() => extendFill(displayRowIndex, viewCol.index)}
                     >
                       {isEditing ? (
-                        <input
-                          type="text"
-                          className="absolute inset-0 w-full h-full px-2 py-1 bg-background text-foreground outline-none font-sans text-xs border-2 border-primary z-20"
-                          value={state.draftValue}
-                          onChange={(e) => state.setDraftValue(e.target.value)}
-                          onBlur={() => state.commitEditing()}
-                          autoFocus
-                        />
+                        <>
+                          <input
+                            ref={cellInputRef}
+                            type="text"
+                            className="absolute inset-0 w-full h-full px-2 py-1 bg-background text-foreground outline-none font-sans text-xs border-2 border-primary z-20"
+                            value={state.draftValue}
+                            onChange={(e) => state.setDraftValue(e.target.value)}
+                            onBlur={() => state.commitEditing()}
+                            autoFocus
+                          />
+                          <FormulaHints inputRef={cellInputRef} value={state.draftValue} onAccept={state.setDraftValue} />
+                        </>
                       ) : customCellRenderer ? (
                         customCellRenderer({ row, col, cell })
                       ) : (
-                        <span className={`truncate block max-w-full ${cell.error ? 'text-destructive font-semibold' : ''}`}>
+                        <span
+                          className={`truncate block max-w-full ${cell.error ? 'text-destructive font-semibold' : ''}`}
+                          title={cell.error ? cell.errorMessage ?? cell.error : undefined}
+                        >
                           {cell.error || (cell.value ?? '')}
                         </span>
+                      )}
+                      {showFillHandle && (
+                        <div
+                          className="spreadsheet-fill-handle"
+                          aria-label="Fill handle"
+                          onMouseDown={startFill}
+                          onClick={(e) => e.stopPropagation()}
+                          style={{ position: 'absolute', right: 0, bottom: 0, width: 7, height: 7, background: 'var(--primary, #6366f1)', cursor: 'crosshair', zIndex: 25 }}
+                        />
                       )}
                     </td>
                   );
                 })}
                 {onAddColumnClick && <td className="w-10 min-w-[2.5rem] bg-muted/10 border-r border-border" />}
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
+      {menu && (
+        <SpreadsheetContextMenu
+          items={menu.items}
+          x={menu.x}
+          y={menu.y}
+          onClose={() => {
+            setMenu(null);
+            gridRef.current?.focus();
+          }}
+        />
+      )}
       <style>{`
         .col-resize-handle:hover .col-resize-handle-line {
           background-color: var(--primary, #6366f1);

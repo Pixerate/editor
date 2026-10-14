@@ -4,6 +4,11 @@ import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import type { Node as ProsemirrorNode } from "@tiptap/pm/model";
 import type { EditorState } from "@tiptap/pm/state";
 import { TEMPLATE_REGEX, VARIABLE_REGEX, INSTRUCTION_REGEX, ColorGradient } from "../grammar/tokens";
+import {
+  matchConditionalTags,
+  parseVariableBody,
+  type ConditionalTagLike,
+} from "../grammar/variables";
 
 export interface GradientTextOptions {
   templateColorMap: Map<string, ColorGradient>;
@@ -23,6 +28,8 @@ const createGradientDecorations = (
       ? options.jsonVariables
       : new Set(options.jsonVariables)
     : null;
+  const conditionalTags: (ConditionalTagLike & { start: number; end: number })[] =
+    [];
 
   doc.descendants((node, pos) => {
     if (node.isText) {
@@ -84,27 +91,83 @@ const createGradientDecorations = (
         );
       }
 
-      // 3. Variable: {variableName}
+      // 3. Variable: {variableName}, {name|default|description}, and the
+      // conditional tags {?name} / {!name} / {/name} (paired below).
       const varRegex = new RegExp(
         VARIABLE_REGEX.source,
         VARIABLE_REGEX.flags,
       );
       while ((match = varRegex.exec(text)) !== null) {
-        const variableName = match[1].trim();
+        const parsed = parseVariableBody(match[1]);
         const start = pos + match.index;
         const end = start + match[0].length;
-        const isJsonVar = jsonVarSet?.has(variableName);
 
-        decorations.push(
-          Decoration.inline(start, end, {
-            class: isJsonVar
-              ? "bg-violet-400/40 border-b-4 border-rose-300 dark:border-rose-800 inline-flex items-baseline px-1 py-0 text-foreground/80 gap-0.5 rounded-xs"
-              : "bg-rose-400/40 border-b-4 border-violet-300 dark:border-violet-800 inline-flex items-baseline px-1 py-0 text-foreground/80 gap-0.5 rounded-xs",
-            "data-variable": variableName,
-          }),
-        );
+        if (parsed.kind === "conditional") {
+          conditionalTags.push({
+            conditional: parsed.conditional,
+            name: parsed.name,
+            start,
+            end,
+          });
+          continue;
+        }
+
+        const variableName = parsed.name;
+        const isJsonVar = jsonVarSet?.has(variableName);
+        const attrs: Record<string, string> = {
+          class: isJsonVar
+            ? "bg-violet-400/40 border-b-4 border-rose-300 dark:border-rose-800 inline-flex items-baseline px-1 py-0 text-foreground/80 gap-0.5 rounded-xs"
+            : "bg-rose-400/40 border-b-4 border-violet-300 dark:border-violet-800 inline-flex items-baseline px-1 py-0 text-foreground/80 gap-0.5 rounded-xs",
+          "data-variable": variableName,
+        };
+        if (parsed.defaultValue !== undefined) {
+          // A dashed underline marks slots that fall back to a default.
+          attrs.class += " border-dashed";
+          attrs["data-default"] = parsed.defaultValue;
+        }
+        if (parsed.description !== undefined) {
+          attrs["data-description"] = parsed.description;
+        }
+        const title = [
+          parsed.description,
+          parsed.defaultValue !== undefined
+            ? `Default: ${parsed.defaultValue || "(empty)"}`
+            : undefined,
+        ]
+          .filter(Boolean)
+          .join(" · ");
+        if (title) attrs.title = title;
+
+        decorations.push(Decoration.inline(start, end, attrs));
       }
     }
+  });
+
+  // Sections may span paragraphs, so tags are paired across the whole doc.
+  matchConditionalTags(conditionalTags).forEach((result, i) => {
+    const tag = conditionalTags[i];
+    decorations.push(
+      Decoration.inline(
+        tag.start,
+        tag.end,
+        result.error
+          ? {
+              class:
+                "underline decoration-wavy decoration-red-500 text-red-600 dark:text-red-400",
+              "data-conditional-error": result.error,
+              title:
+                result.error === "unclosed-section"
+                  ? `Section "${tag.name}" is never closed with {/${tag.name}}`
+                  : `{/${tag.name}} does not close any open section`,
+            }
+          : {
+              class:
+                "bg-amber-400/30 text-amber-700 dark:text-amber-300 font-medium px-0.5 rounded-xs",
+              "data-conditional": tag.conditional,
+              "data-variable-condition": tag.name,
+            },
+      ),
+    );
   });
 
   return decorations;

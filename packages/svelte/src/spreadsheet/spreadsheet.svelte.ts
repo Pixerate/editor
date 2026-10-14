@@ -1,5 +1,6 @@
 import {
   SpreadsheetController,
+  bindSpreadsheetTableActions,
   type SpreadsheetControllerOptions,
   type SpreadsheetDocument,
   type CellCoordinate,
@@ -48,6 +49,17 @@ export function createReactiveSpreadsheet(options: SpreadsheetControllerOptions 
   activeCell = controller.activeCell;
   selectedRange = controller.selectedRange;
 
+  // What to render: visible rows (with group headers) and columns, frozen
+  // offsets and merged-cell spans. Recomputed whenever the document changes.
+  const viewModel = $derived.by(() => {
+    void doc;
+    return controller.getViewModel();
+  });
+  // Table operations (sort, filters, freeze, hide, merge, autofill, categories,
+  // transpose, CSV, clipboard). The controller reports their changes through
+  // onDocumentChange / onSelectionChange, which update the state above.
+  const tableActions = bindSpreadsheetTableActions(controller);
+
   return {
     get document() {
       return doc;
@@ -60,6 +72,9 @@ export function createReactiveSpreadsheet(options: SpreadsheetControllerOptions 
     },
     get editingCell() {
       return editingCell;
+    },
+    get viewModel() {
+      return viewModel;
     },
     get draftValue() {
       return draftValue;
@@ -171,6 +186,7 @@ export function createReactiveSpreadsheet(options: SpreadsheetControllerOptions 
     redo() {
       controller.redo();
       doc = { ...controller.document };
-    }
+    },
+    ...tableActions
   };
 }

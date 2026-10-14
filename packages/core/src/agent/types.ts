@@ -112,6 +112,13 @@ export type AgentCommand<
 	| {
 			type: 'choreography:wait';
 			ms: number;
+	  }
+	// Dynamic tools (ToolRegistry)
+	| {
+			type: 'tool:call';
+			/** Exposed tool name in a `ToolRegistry`. */
+			name: string;
+			arguments?: Record<string, unknown>;
 	  };
 
 /**
@@ -182,4 +189,10 @@ export type AgentStep<
 	| {
 			type: 'step:wait';
 			ms: number;
+	  }
+	| {
+			/** Execute with `ToolRegistry.callTool(name, arguments)`. */
+			type: 'step:tool_call';
+			name: string;
+			arguments: Record<string, unknown>;
 	  };

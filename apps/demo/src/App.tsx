@@ -3,6 +3,7 @@ import { PromptStudioTab } from "./components/PromptStudioTab";
 import { RichDocumentTab } from "./components/RichDocumentTab";
 import { ParityMatrixTab } from "./components/ParityMatrixTab";
 import { ImageEditorTab } from "./components/ImageEditorTab";
+import { ReviewDemoSection } from "./components/ReviewDemoSection";
 import { Sparkles, FileText, CheckCircle2, Image as ImageIcon } from "lucide-react";
 
 export default function App() {
@@ -105,6 +106,7 @@ export default function App() {
       <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
         {activeTab === "prompt" && <PromptStudioTab />}
         {activeTab === "rich" && <RichDocumentTab />}
+        {activeTab === "rich" && <ReviewDemoSection />}
         {activeTab === "image" && <ImageEditorTab />}
         {activeTab === "parity" && <ParityMatrixTab />}
       </main>

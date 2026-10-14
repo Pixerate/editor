@@ -25,6 +25,7 @@ export interface SpreadsheetColumn {
   formula?: string; // column-level template/formula applied across rows
   format?: CellFormat;
   readOnly?: boolean;
+  hidden?: boolean; // hidden by the user (hide/unhide columns)
 }
 
 export type RowType = 'record' | 'freeform';
@@ -35,6 +36,7 @@ export interface SpreadsheetRow {
   height?: number; // default 32
   recordId?: string; // ID of bound record (e.g. taskId)
   type: RowType;
+  hidden?: boolean; // hidden by the user (hide/unhide rows); filters do not set this
 }
 
 export interface CellCoordinate {
@@ -55,6 +57,8 @@ export interface CellData {
   raw: string; // Raw input (e.g., "120", "=SUM(A1:A5)", "In Progress")
   value: any;  // Evaluated computed value
   error?: string; // Error string (e.g., "#VALUE!", "#CYCLE!", "#REF!")
+  /** Why the formula failed, e.g. `Argument 2 of SUMIF must be a range.` Set alongside `error`. */
+  errorMessage?: string;
   format?: CellFormat;
   readOnly?: boolean;
 }
@@ -67,6 +71,68 @@ export interface SpreadsheetDocument {
   cells: Record<string, Record<string, CellData>>; // cells[rowId][colId]
   createdAt?: number;
   updatedAt?: number;
+  table?: SpreadsheetTableSettings; // sort/filter/freeze/merge/grouping state
+}
+
+// --- Table operations (sort, filters, freeze, merges, categories) ---
+
+export type SortDirection = 'asc' | 'desc';
+
+export interface SortKey {
+  colId: string;
+  direction?: SortDirection; // default 'asc'
+}
+
+export type FilterOperator =
+  | 'equals'
+  | 'notEquals'
+  | 'contains'
+  | 'notContains'
+  | 'greaterThan'
+  | 'greaterThanOrEqual'
+  | 'lessThan'
+  | 'lessThanOrEqual'
+  | 'between'
+  | 'isBlank'
+  | 'isNotBlank'
+  | 'oneOf';
+
+export interface FilterRule {
+  id: string;
+  colId: string;
+  operator: FilterOperator;
+  value?: string | number; // equals/contains/comparisons; lower bound of `between`
+  value2?: string | number; // upper bound of `between`
+  values?: string[]; // `oneOf`
+}
+
+export interface SpreadsheetFilterState {
+  enabled: boolean;
+  rules: FilterRule[]; // combined with AND
+}
+
+export type GroupAggregate = 'sum' | 'count' | 'average' | 'min' | 'max';
+
+export interface GroupSummary {
+  colId: string;
+  aggregate: GroupAggregate;
+}
+
+export interface SpreadsheetGrouping {
+  colId: string; // rows are grouped by this column's value
+  summaries: GroupSummary[];
+  collapsed: string[]; // keys of collapsed groups
+}
+
+export interface SpreadsheetTableSettings {
+  headerRowCount?: number; // header rows: never sorted, filtered or grouped
+  footerRowCount?: number; // footer rows at the bottom: never sorted, filtered or grouped
+  headerColumnCount?: number;
+  frozenRowCount?: number; // rows kept visible while scrolling (sticky)
+  frozenColumnCount?: number; // columns kept visible while scrolling (sticky)
+  merges?: CellRange[]; // normalized (start <= end), non-overlapping
+  filter?: SpreadsheetFilterState;
+  grouping?: SpreadsheetGrouping;
 }
 
 export interface SpreadsheetDataSourceField {

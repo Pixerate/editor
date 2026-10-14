@@ -67,6 +67,13 @@ describe('Spreadsheet engine: recalculation order and cycles', () => {
     s.set('A1', '10');
     expect(s.value('A3000')).toBe(3009);
   });
+
+  it('gives every row created in one burst a unique id', () => {
+    const ctrl = new SpreadsheetController();
+    ctrl.importFromTsv(Array.from({ length: 5000 }, (_, i) => String(i)).join('\n'));
+    const ids = ctrl.document.rows.map((r) => r.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
 });
 
 describe('Spreadsheet engine: structural edits rewrite references', () => {

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { indexToColName } from '@pixerate/editor';
   import type { createReactiveSpreadsheet } from './spreadsheet.svelte.js';
+  import FormulaHints from './FormulaHints.svelte';
 
   interface Props {
     sheetState?: ReturnType<typeof createReactiveSpreadsheet>;
@@ -69,17 +70,22 @@
   }
 
   function handleInput(e: Event) {
-    const target = e.target as HTMLInputElement;
+    setValue((e.target as HTMLInputElement).value);
+  }
+
+  function setValue(next: string) {
     if (sheetState) {
-      sheetState.draftValue = target.value;
+      sheetState.draftValue = next;
       if (sheetState.activeCell && !sheetState.editingCell) {
-        sheetState.startEditing(sheetState.activeCell.row, sheetState.activeCell.col, target.value);
+        sheetState.startEditing(sheetState.activeCell.row, sheetState.activeCell.col, next);
       }
     } else {
-      value = target.value;
+      value = next;
     }
-    onChange?.(target.value);
+    onChange?.(next);
   }
+
+  let inputEl = $state<HTMLInputElement | null>(null);
 </script>
 
 <div class="flex items-center gap-2 border-b border-border bg-muted/20 px-3 py-1.5 text-xs font-mono {className}">
@@ -94,8 +100,10 @@
     class="flex-1 bg-transparent px-2 py-0.5 outline-none font-sans text-xs text-foreground placeholder:text-muted-foreground/60 focus:bg-background focus:ring-1 focus:ring-primary rounded"
     placeholder="Enter a value or formula (e.g. =SUM(A1:A5))"
     aria-label="Formula bar"
+    bind:this={inputEl}
     value={effectiveValue}
     oninput={handleInput}
     onkeydown={handleKeyDown}
   />
+  <FormulaHints input={inputEl} value={effectiveValue} onAccept={setValue} />
 </div>

@@ -1,6 +1,7 @@
 import MarkdownIt from "markdown-it";
 import taskLists from "markdown-it-task-lists";
-import { escapeHtml, getEditorText } from "./plain-text";
+import { escapeHtml, getEditorText, type PlainTextOptions } from "./plain-text";
+import { resolveTrackedChanges } from "../extensions/track-changes";
 
 const md = new MarkdownIt({
   html: true,
@@ -48,12 +49,14 @@ function sanitizeTag(
   isClosing: string,
   rawTagName: string,
   rawAttrs: string,
+  stripDisallowed: boolean,
 ): string {
   const tagName = rawTagName.toLowerCase();
-  if (!ALLOWED_HTML_TAGS.has(tagName)) return escapeHtml(tagText);
+  const reject = () => (stripDisallowed ? "" : escapeHtml(tagText));
+  if (!ALLOWED_HTML_TAGS.has(tagName)) return reject();
   if (isClosing) return `</${tagName}>`;
   if (tagName === "input" && !/\stype\s*=\s*["']?checkbox["']?[\s>/]/i.test(tagText)) {
-    return escapeHtml(tagText);
+    return reject();
   }
 
   let attrs = "";
@@ -82,18 +85,32 @@ function sanitizeTag(
   return `<${tagName}${attrs}>`;
 }
 
+export interface SanitizeHtmlOptions {
+  /**
+   * What to do with tags outside the allowlist: `escape` (default) renders
+   * them as literal text, `strip` removes the tag but keeps its text content.
+   */
+  disallowedTags?: "escape" | "strip";
+}
+
 /**
- * Sanitizes raw HTML with an allowlist of tags and attributes: event handlers,
- * `style`, and unsafe URL schemes are dropped; disallowed tags are escaped.
+ * Sanitizes raw HTML with the same allowlist the markdown renderer applies to
+ * embedded HTML: event handlers, `style` and unsafe URL schemes are dropped,
+ * and disallowed tags are escaped (or removed with `disallowedTags: "strip"`).
+ * It is string-based, so it works without a DOM and never runs handlers.
  */
-function sanitizeEmbeddedHtml(html: string): string {
+export function sanitizeHtml(html: string, options: SanitizeHtmlOptions = {}): string {
+  return sanitizeEmbeddedHtml(html, options.disallowedTags === "strip");
+}
+
+function sanitizeEmbeddedHtml(html: string, stripDisallowed = false): string {
   let result = "";
   let lastIndex = 0;
   let match: RegExpExecArray | null;
   HTML_TAG_REGEX.lastIndex = 0;
   while ((match = HTML_TAG_REGEX.exec(html)) !== null) {
     result += html.slice(lastIndex, match.index).replace(/</g, "&lt;");
-    result += sanitizeTag(match[0], match[1], match[2], match[3]);
+    result += sanitizeTag(match[0], match[1], match[2], match[3], stripDisallowed);
     lastIndex = match.index + match[0].length;
   }
   return result + html.slice(lastIndex).replace(/</g, "&lt;");
@@ -192,11 +209,19 @@ export function markdownToTipTapHtml(
  * Extracts clean markdown from a TipTap editor instance.
  * If the editor has the Markdown extension configured, it uses editor.storage.markdown.getMarkdown().
  * Otherwise, it falls back to getEditorText(editor).
+ * Tracked changes are exported as accepted unless `options.trackedChanges`
+ * says otherwise (`"all"` renders deletions as `~~strikethrough~~`).
  */
-export function getEditorMarkdown(editor: any): string {
+export function getEditorMarkdown(editor: any, options: PlainTextOptions = {}): string {
   if (!editor) return "";
-  if (typeof editor.storage?.markdown?.getMarkdown === "function") {
-    return editor.storage.markdown.getMarkdown();
+  const markdown = editor.storage?.markdown;
+  if (typeof markdown?.getMarkdown === "function") {
+    const doc = editor.state?.doc;
+    if (doc && typeof markdown.serializer?.serialize === "function") {
+      const resolved = resolveTrackedChanges(doc, options.trackedChanges ?? "accepted");
+      if (resolved !== doc) return markdown.serializer.serialize(resolved);
+    }
+    return markdown.getMarkdown();
   }
-  return getEditorText(editor);
+  return getEditorText(editor, options);
 }

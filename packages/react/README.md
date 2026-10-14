@@ -58,11 +58,35 @@ export function Document() {
 
 `useEditor` is TipTap's `useEditor` preloaded with `createRichTextPreset()`: headings, lists, task lists, links, text alignment, colors and highlights, and images. Mentions and markdown are opt-in via `richTextOptions: { mention: true, markdown: true }`.
 
+## Comments and tracked changes
+
+```tsx
+import { Comments, TrackChanges } from "@pixerate/editor";
+import { CommentsPanel, ReviewToolbar, CommentButton, BubbleMenu } from "@pixerate/editor-react";
+
+const editor = useEditor({ extensions: [Comments.configure({ author: me }), TrackChanges.configure({ author: me })] });
+
+<ReviewToolbar editor={editor} />        {/* toggle tracking, prev/next, accept/reject (all) */}
+<BubbleMenu editor={editor}><CommentButton editor={editor} /></BubbleMenu>
+<CommentsPanel editor={editor} />        {/* threads: reply, resolve, delete, click to select */}
+```
+
+`useComments(editorOrStore)` and `useTrackChanges(editor)` expose the same state for custom UIs.
+
+`useEditor({ fileImport: true, richClipboard: true })` imports dropped/pasted `.md`, `.html`, `.txt` and `.rtf` files at the drop position and copies lossless slices between editors. `useFileImport(editor)` returns `{ openFilePicker, importFiles, accept, isImporting, error }` for an import button. `usePromptEditor({ fileImport: true })` imports dropped files as plain text.
+
+`useAgentToolProvider(registry, provider)` registers an agent tool provider (see `ToolRegistry` in `@pixerate/editor/agent`) while the component is mounted. Memoize the provider:
+
+```tsx
+const provider = useMemo(() => editor && createRichTextToolProvider(editor, { id: "doc" }), [editor]);
+useAgentToolProvider(registry, provider);
+```
+
 ## More exports
 
 | Import | Exports |
 | :--- | :--- |
-| `@pixerate/editor-react` | `usePromptEditor`, `useEditor`, `EditorContent`, `BubbleMenu`, `TemplateRenderer`, `useHistory`, `useHistoryShortcuts`, `useNavigationGuard`, `useDismissGuard`, `EditorSlotsProvider` / `useEditorSlots`, `SpreadsheetEditor` / `useSpreadsheetEditor`, `DirtyTracker` |
+| `@pixerate/editor-react` | `usePromptEditor`, `useEditor`, `EditorContent`, `BubbleMenu`, `TemplateRenderer`, `useHistory`, `useHistoryShortcuts`, `useNavigationGuard`, `useDismissGuard`, `EditorSlotsProvider` / `useEditorSlots`, `SpreadsheetEditor` / `useSpreadsheetEditor`, `FormulaHints`, `DirtyTracker` |
 | `@pixerate/editor-react/image-editor` | `ImageEditor`, `useImageEditor`: crop, rotate/flip, adjustments, annotations, depth masks, and `onInpaint` / `onRemoveBackground` AI hooks |
 | `@pixerate/editor-react/canvas` | `useCanvasGraph`, `useCanvasLayout`, `useCanvasClipboard`, `useCanvasDocking`, `useCanvasShortcuts`, `useCanvasExplosion`, `useStreamingCanvas`, `AgentPresenceLayer`, plus the pure layout helpers from `@pixerate/editor/canvas` |
 

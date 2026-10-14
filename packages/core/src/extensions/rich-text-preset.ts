@@ -42,6 +42,25 @@ import { FontSize } from "./FontSize";
 import { Mention, type MentionOptions } from "./mention";
 import { Markdown, type MarkdownOptions } from "./markdown";
 import { Image, type ImageOptions } from "./image";
+import { Comments, type CommentsOptions } from "./comments";
+import { TrackChanges, type TrackChangesOptions } from "./track-changes";
+import { FileImport, type FileImportOptions } from "./file-import";
+import { RichClipboard, type RichClipboardOptions } from "./rich-clipboard";
+import { Autocorrect, type AutocorrectOptions } from "./autocorrect";
+import {
+  Outline,
+  TableOfContents,
+  FootnoteReference,
+  Footnotes,
+  Footnote,
+  Bookmark,
+  CrossReference,
+  type OutlineOptions,
+  type TableOfContentsOptions,
+  type FootnotesOptions,
+  type BookmarkOptions,
+  type CrossReferenceOptions,
+} from "./document-structure";
 
 export interface RichTextPresetOptions {
   placeholder?: string | ((props: { node: any }) => string);
@@ -53,7 +72,34 @@ export interface RichTextPresetOptions {
   mention?: MentionOptions | boolean;
   markdown?: MarkdownOptions | boolean;
   image?: ImageOptions | boolean;
+  /** Adds the `Comments` extension (off by default). */
+  comments?: Partial<CommentsOptions> | boolean;
+  /** Adds the `TrackChanges` extension (off by default). */
+  trackChanges?: Partial<TrackChangesOptions> | boolean;
+  /** Import dropped/pasted .md, .html, .txt and .rtf files (opt-in). */
+  fileImport?: FileImportOptions | boolean;
+  /** Copy/paste lossless ProseMirror slices between editors (opt-in). */
+  richClipboard?: RichClipboardOptions | boolean;
+  /**
+   * Word-style AutoCorrect (smart quotes, symbols, fractions, sentence
+   * capitalization, ...). Off by default. Replaces the Typography extension
+   * when enabled, since both handle quotes and dashes.
+   */
+  autocorrect?: Partial<AutocorrectOptions> | boolean;
+  /** Heading outline with stable heading ids. Off by default. */
+  outline?: Partial<OutlineOptions> | boolean;
+  /** Table of contents block (also enables `outline`). Off by default. */
+  tableOfContents?: Partial<TableOfContentsOptions> | boolean;
+  /** Footnote references and the footnotes list. Off by default. */
+  footnotes?: Partial<FootnotesOptions> | boolean;
+  /** Named bookmarks. Off by default. */
+  bookmarks?: Partial<BookmarkOptions> | boolean;
+  /** Cross-references to headings and bookmarks (also enables `outline`). Off by default. */
+  crossReferences?: Partial<CrossReferenceOptions> | boolean;
 }
+
+const optionObject = <T>(value: T | boolean | undefined): T | Record<string, never> =>
+  typeof value === "object" && value !== null ? value : {};
 
 /**
  * Creates a standard rich-text extensions bundle with full formatting support.
@@ -93,7 +139,7 @@ export function createRichTextPreset(
     Color,
     Highlight.configure({ multicolor: true }),
     Underline,
-    Typography,
+    ...(options.autocorrect ? [] : [Typography]),
     TextAlign.configure({
       types: ["heading", "paragraph"],
     }),
@@ -204,6 +250,66 @@ export function createRichTextPreset(
         ...imageConfig,
       }),
     );
+  }
+
+  if (options.comments) {
+    extensions.push(
+      typeof options.comments === "object"
+        ? Comments.configure(options.comments)
+        : Comments,
+    );
+  }
+
+  if (options.trackChanges) {
+    extensions.push(
+      typeof options.trackChanges === "object"
+        ? TrackChanges.configure(options.trackChanges)
+        : TrackChanges,
+    );
+  }
+
+  if (options.fileImport) {
+    extensions.push(
+      FileImport.configure(
+        typeof options.fileImport === "object" ? options.fileImport : {},
+      ),
+    );
+  }
+
+  if (options.richClipboard) {
+    extensions.push(
+      RichClipboard.configure(
+        typeof options.richClipboard === "object" ? options.richClipboard : {},
+      ),
+    );
+  }
+
+  if (options.autocorrect) {
+    extensions.push(Autocorrect.configure(optionObject(options.autocorrect)));
+  }
+
+  if (options.outline || options.tableOfContents || options.crossReferences) {
+    extensions.push(Outline.configure(optionObject(options.outline)));
+  }
+
+  if (options.tableOfContents) {
+    extensions.push(TableOfContents.configure(optionObject(options.tableOfContents)));
+  }
+
+  if (options.footnotes) {
+    extensions.push(
+      FootnoteReference.configure(optionObject(options.footnotes)),
+      Footnotes,
+      Footnote,
+    );
+  }
+
+  if (options.bookmarks) {
+    extensions.push(Bookmark.configure(optionObject(options.bookmarks)));
+  }
+
+  if (options.crossReferences) {
+    extensions.push(CrossReference.configure(optionObject(options.crossReferences)));
   }
 
   return extensions;

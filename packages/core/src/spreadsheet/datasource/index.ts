@@ -43,6 +43,7 @@ export class DataSourceBinder {
     for (const record of records) {
       const existing = existingRecordRowMap.get(record.id);
       nextRows.push({
+        ...(existing?.hidden ? { hidden: true } : {}),
         id: existing?.id || `row_${record.id}`,
         index: rowIndex++,
         height: existing?.height || 32,

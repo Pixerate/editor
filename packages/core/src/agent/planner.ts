@@ -250,8 +250,104 @@ export function planAgentCommand<
 			];
 		}
 
+		case 'tool:call': {
+			return [
+				{
+					type: 'step:tool_call',
+					name: command.name,
+					arguments: command.arguments ?? {}
+				}
+			];
+		}
+
 		default: {
 			return [];
 		}
 	}
+}
+
+/**
+ * Converts an MCP tool call into a planner command. `edit_canvas` and
+ * `edit_prompt` (see `tools.ts`) map to canvas/prompt commands using the MCP
+ * schema's vocabulary; every other tool, including dynamic `ToolRegistry`
+ * tools, becomes a `tool:call` command. Returns `null` when a static tool's
+ * arguments are missing what the operation needs.
+ */
+export function toolCallToAgentCommand<
+	TNode extends CanvasNode = CanvasNode,
+	TEdge extends CanvasEdge = CanvasEdge
+>(name: string, args: Record<string, any> = {}): AgentCommand<TNode, TEdge> | null {
+	const ids = (value: unknown): string[] | null =>
+		Array.isArray(value) && value.every((v) => typeof v === 'string') ? value : null;
+	const num = (value: unknown) => typeof value === 'number' && Number.isFinite(value);
+
+	if (name === 'edit_canvas') {
+		switch (args.operation) {
+			case 'add_node':
+				return args.node && typeof args.node === 'object'
+					? { type: 'canvas:add_node', node: args.node, nearNodeId: args.nearNodeId, side: args.side }
+					: null;
+			case 'remove_nodes':
+				return ids(args.nodeIds) ? { type: 'canvas:remove_nodes', nodeIds: args.nodeIds } : null;
+			case 'connect':
+				return typeof args.source === 'string' && typeof args.target === 'string'
+					? { type: 'canvas:connect', source: args.source, target: args.target, label: args.label }
+					: null;
+			case 'update_node': {
+				const id = args.node?.id ?? args.id;
+				return typeof id === 'string'
+					? { type: 'canvas:update_node', id, data: args.node?.data ?? args.data ?? {} }
+					: null;
+			}
+			case 'layout':
+				return { type: 'canvas:layout', direction: args.direction, incremental: args.incremental };
+			case 'select':
+				return ids(args.nodeIds) ? { type: 'canvas:select', nodeIds: args.nodeIds } : null;
+			case 'highlight':
+				return ids(args.nodeIds) ? { type: 'canvas:highlight', nodeIds: args.nodeIds } : null;
+			default:
+				return null;
+		}
+	}
+
+	if (name === 'edit_prompt') {
+		switch (args.operation) {
+			case 'insert_text':
+				return typeof args.text === 'string'
+					? { type: 'prompt:insert_text', text: args.text, at: num(args.at) ? args.at : undefined }
+					: null;
+			case 'replace_range':
+				return typeof args.text === 'string' && num(args.from) && num(args.to)
+					? { type: 'prompt:replace_range', from: args.from, to: args.to, text: args.text }
+					: null;
+			case 'set_variable':
+				return typeof args.name === 'string'
+					? { type: 'prompt:set_variable', name: args.name, value: args.value }
+					: null;
+			case 'select':
+				return num(args.from) && num(args.to) ? { type: 'prompt:select', from: args.from, to: args.to } : null;
+			default:
+				return null;
+		}
+	}
+
+	return { type: 'tool:call', name, arguments: args };
+}
+
+/**
+ * Plans the steps for an MCP tool call: static editor tools are planned like
+ * the equivalent commands, any other tool becomes a `step:tool_call` to be
+ * executed with `ToolRegistry.callTool`. Returns `[]` for invalid arguments.
+ */
+export function planToolCall<
+	TNode extends CanvasNode = CanvasNode,
+	TEdge extends CanvasEdge = CanvasEdge
+>(
+	name: string,
+	args: Record<string, any>,
+	snapshot: EditorSnapshot<TNode, TEdge>,
+	options?: Parameters<typeof planAgentCommand>[2]
+): AgentStep<TNode, TEdge>[] {
+	const command = toolCallToAgentCommand<TNode, TEdge>(name, args);
+	return command ? planAgentCommand(command, snapshot, options) : [];
 }

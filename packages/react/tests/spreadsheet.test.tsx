@@ -126,6 +126,10 @@ describe('SpreadsheetEditor shortcuts', () => {
     });
 
     await key(grid(), { key: 'c', ctrlKey: true });
+    // Without a browser copy event (jsdom), the TSV fallback runs on the next task.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
     expect(writeText).toHaveBeenCalledWith('a\tb\nc\td');
   });
 });

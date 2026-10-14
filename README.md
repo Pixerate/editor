@@ -148,7 +148,15 @@ const resolved = resolveTemplates("Shot of {{scene}}", templates);
 
 // 3. Offset Mapping
 const { text, map } = resolveTemplatesWithMapping("Shot of {{scene}}", templates);
+
+// 4. Variable defaults, descriptions and conditional sections
+resolveTemplates("A {subject|red fox|Describe it}{?style} by {style}{/style}", [], {
+  values: { style: "Monet" },
+});
+// -> "A red fox by Monet"
 ```
+
+See [docs/prompt-engine.md](./docs/prompt-engine.md) for the full grammar, fill-in form helpers and source map details.
 
 ---
 
@@ -162,6 +170,11 @@ We maintain **strict 1:1 parity** across JavaScript, React, and Svelte:
 | Recursive Template Resolution | ✅ | ✅ | ✅ |
 | Cycle Detection (`[Template loop detected]`) | ✅ | ✅ | ✅ |
 | Bidirectional Sourcemapping | ✅ | ✅ | ✅ |
+| Variable Defaults & Descriptions (`{name\|default\|description}`) | ✅ | ✅ | ✅ |
+| Conditional Sections (`{?name}…{/name}`, `{!name}…{/name}`) with Diagnostics | ✅ | ✅ | ✅ |
+| Resolution with Values (`values` option, `resolvePrompt`) | ✅ | ✅ | ✅ |
+| Variable Fill-In Form (`getVariableFormFields` / `<VariableForm />`) | Headless | Component | Component |
+| Value Preview in `<TemplateRenderer values />` | `evaluatePromptTokens` | ✅ | ✅ |
 | Plain Text Clipboard & Linebreak Parser | ✅ | ✅ | Via core¹ |
 | Live Animated Gradient Text | ✅ | ✅ | Via core¹ |
 | Slash Command Trigger (`/command`) | ✅ | ✅ | Via core¹ |
@@ -170,10 +183,43 @@ We maintain **strict 1:1 parity** across JavaScript, React, and Svelte:
 | Floating Bubble Formatting Menu | Headless | Component | Component |
 | Rich Text Preset (Headings, Lists, Task Lists, Links) | ✅ | ✅ | ✅ |
 | Smilies (`:)` -> `🙂`) & Hex Highlighter | ✅ | ✅ | ✅ |
+| Heading Outline & Navigation Panel (`outline`) | Headless (`createOutlineStore`) | `<OutlinePanel />` & `useOutline` | `<OutlinePanel />` & `createOutline` |
+| Table of Contents Block (`tableOfContents`, `[[toc]]`) | ✅ | ✅ | ✅ |
+| Footnotes (`footnotes`, markdown `[^n]`) | ✅ | ✅ | ✅ |
+| Bookmarks & Cross-References (`bookmarks`, `crossReferences`) | ✅ | ✅ | ✅ |
+| Autocorrect Rules & Exceptions (`autocorrect`) | ✅ | ✅ | ✅ |
+| Document-Structure Slash/Toolbar Items (`getDocumentStructureCommandItems`) | ✅ | Via core | Via core |
 | Image Editor Canvas 2D Engine & Transformations | ✅ | Component & Hook | Component & Rune |
 | Image Filters & Adjustments | ✅ | ✅ | ✅ |
 | Vector Annotations (Pen, Rect, Circle, Arrow, Line, Text) | ✅ | ✅ | ✅ |
 | Gleamforge Depth & Alpha Masking | ✅ | ✅ | ✅ |
+| Canvas Align / Distribute / Make Same Size | ✅ | `useCanvasArrange` | `createCanvasArrange` |
+| Canvas Lock / Unlock & Layer Order (Front / Back) | ✅ | `useCanvasArrange` | `createCanvasArrange` |
+| Canvas Smart Guides & Snap-to-Shape (edges, centres, spacing) | ✅ | Hook & `<CanvasGuidesLayer>` | Rune & `<CanvasGuidesLayer>` |
+| Canvas Scenes (saved viewports, next / previous) | `CanvasScenesStore` | `useCanvasScenes` | `createCanvasScenes` |
+| Canvas Connector Snapping to Shape Sides | ✅ | Via core | Via core |
+| Canvas Arrange Keyboard Shortcuts | `matchArrangeShortcut` | `useCanvasArrangeShortcuts` | `createCanvasArrangeShortcuts` |
+| Comments (threads, replies, resolve, orphan detection, JSON) | Extension & `CommentStore` | `CommentsPanel`, `CommentButton`, `useComments` | `CommentsPanel`, `CommentButton`, `createComments` |
+| Track Changes (insert/delete marks, accept/reject, navigation) | Extension & `getTrackedChanges` | `ReviewToolbar`, `useTrackChanges` | `ReviewToolbar`, `createTrackChanges` |
+| Tracked-content export (`trackedChanges: "accepted"` default) | ✅ | Via core | Via core |
+| File Import Registry (`.md`, `.html`, `.txt`, `.rtf`; pluggable adapters) | ✅ | `useFileImport` + `fileImport` | `createFileImport` + `fileImport` prop |
+| Drag-and-Drop File Import at Drop Position | `FileImport` | ✅ | ✅ |
+| Rich Clipboard MIME (`application/x.pixerate.document+json`) | `RichClipboard` | `richClipboard` | `richClipboard` prop |
+| Dynamic Agent Tool Registry (MCP `tools/list` / `tools/call`, `listChanged`) | `ToolRegistry` | `useAgentToolProvider` | `useAgentToolProvider` |
+| Spreadsheet Sort (multi-column, range) & Transpose | ✅ | ✅ | ✅ |
+| Spreadsheet Filters (per-column rules, toggle) | ✅ | ✅ | ✅ |
+| Spreadsheet Freeze Panes, Header & Footer Rows | ✅ | ✅ | ✅ |
+| Spreadsheet Hide/Unhide Rows & Columns | ✅ | ✅ | ✅ |
+| Spreadsheet Merged Cells | ✅ | ✅ | ✅ |
+| Spreadsheet Autofill (fill handle, series, formula shifting) | ✅ | ✅ | ✅ |
+| Spreadsheet Categories (grouped rows, summaries, collapse) | ✅ | ✅ | ✅ |
+| Spreadsheet CSV Import/Export (RFC 4180) | ✅ | ✅ | ✅ |
+| Spreadsheet CSV / TSV File Import Adapters (import registry) | `importFileIntoSpreadsheet` | Via core | Via core |
+| Spreadsheet Clipboard (TSV + HTML + lossless JSON) | ✅ | ✅ | ✅ |
+| Spreadsheet Table Context Menu | Headless | Component | Component |
+| Spreadsheet Formula Function Registry (86 functions, `registerFormulaFunction`) | ✅ | Via core | Via core |
+| Formula Error Diagnostics (`CellData.errorMessage`, error cell tooltips) | ✅ | ✅ | ✅ |
+| Formula Autocomplete & Argument Hints (`<FormulaHints />`) | Headless (`getFormulaHints`) | Component | Component |
 
 ¹ Svelte does not yet have a prompt-editor equivalent of React's `usePromptEditor`. Configure the core extensions (`GradientText`, `TemplateSuggestions`, `SlashCommands`) and pass them to `EditableTextNodeEditor` via `extensions`, or use `createEditor({ plainTextMode: true })` from `@pixerate/editor`.
 
