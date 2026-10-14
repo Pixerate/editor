@@ -3,7 +3,7 @@ import {
   computeFillTarget,
   normalizeRange,
   type CellRange
-} from '@pixerate/editor';
+} from '@pixerate/editor/spreadsheet';
 import type { useSpreadsheetEditor } from './useSpreadsheetEditor';
 
 type SpreadsheetState = ReturnType<typeof useSpreadsheetEditor>;

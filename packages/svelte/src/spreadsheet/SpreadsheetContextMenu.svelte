@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { SpreadsheetMenuItem } from '@pixerate/editor';
+  import type { SpreadsheetMenuItem } from '@pixerate/editor/spreadsheet';
 
   interface Props {
     items: SpreadsheetMenuItem[];

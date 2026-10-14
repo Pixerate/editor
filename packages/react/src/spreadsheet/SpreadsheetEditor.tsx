@@ -10,7 +10,7 @@ import {
   type SpreadsheetMenuItem,
   type SpreadsheetViewColumn,
   type SpreadsheetViewRow
-} from '@pixerate/editor';
+} from '@pixerate/editor/spreadsheet';
 import { useSpreadsheetEditor } from './useSpreadsheetEditor';
 import { SpreadsheetContextMenu } from './SpreadsheetContextMenu';
 import { SpreadsheetGroupRow } from './SpreadsheetGroupRow';

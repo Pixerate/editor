@@ -81,9 +81,6 @@ importers:
 
   packages/core:
     dependencies:
-      '@dagrejs/dagre':
-        specifier: ^1.1.8
-        version: 1.1.8
       '@tiptap/extension-character-count':
         specifier: ^2.11.5
         version: 2.27.3(@tiptap/core@2.27.3(@tiptap/pm@2.27.3))(@tiptap/pm@2.27.3)
@@ -144,10 +141,10 @@ importers:
       prosemirror-markdown:
         specifier: ^1.13.7
         version: 1.13.7
-      tiptap-markdown:
-        specifier: ^0.8.10
-        version: 0.8.10(@tiptap/core@2.27.3(@tiptap/pm@2.27.3))
     devDependencies:
+      '@dagrejs/dagre':
+        specifier: ^1.1.8
+        version: 1.1.8
       '@tiptap/core':
         specifier: ^2.11.5
         version: 2.27.3(@tiptap/pm@2.27.3)
@@ -163,6 +160,9 @@ importers:
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3
+      tiptap-markdown:
+        specifier: ^0.8.10
+        version: 0.8.10(@tiptap/core@2.27.3(@tiptap/pm@2.27.3))
       tsup:
         specifier: ^8.4.0
         version: 8.5.1(jiti@1.21.7)(postcss@8.5.28)(typescript@5.9.3)
@@ -175,6 +175,9 @@ importers:
 
   packages/react:
     dependencies:
+      '@dagrejs/dagre':
+        specifier: ^1.1.8
+        version: 1.1.8
       '@pixerate/editor':
         specifier: workspace:*
         version: link:../core
@@ -224,9 +227,6 @@ importers:
 
   packages/svelte:
     dependencies:
-      '@dagrejs/dagre':
-        specifier: ^1.1.4
-        version: 1.1.8
       '@pixerate/editor':
         specifier: workspace:*
         version: link:../core
@@ -240,6 +240,9 @@ importers:
         specifier: ^2.11.5
         version: 2.27.3
     devDependencies:
+      '@dagrejs/dagre':
+        specifier: ^1.1.4
+        version: 1.1.8
       '@sveltejs/package':
         specifier: ^2.5.8
         version: 2.5.8(svelte@5.57.0)(typescript@5.9.3)

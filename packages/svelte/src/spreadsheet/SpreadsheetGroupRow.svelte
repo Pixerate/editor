@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { SpreadsheetRowGroup, SpreadsheetViewColumn } from '@pixerate/editor';
+  import type { SpreadsheetRowGroup, SpreadsheetViewColumn } from '@pixerate/editor/spreadsheet';
 
   interface Props {
     group: SpreadsheetRowGroup;

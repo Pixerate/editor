@@ -1,4 +1,4 @@
-import type { SpreadsheetClipboardData, SpreadsheetClipboardSource, CellRange } from '@pixerate/editor';
+import type { SpreadsheetClipboardData, SpreadsheetClipboardSource, CellRange } from '@pixerate/editor/spreadsheet';
 
 /** The parts of the reactive spreadsheet the clipboard handlers need. */
 export interface SpreadsheetClipboardTarget {

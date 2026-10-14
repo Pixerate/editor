@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { indexToColName } from '@pixerate/editor';
+  import { indexToColName } from '@pixerate/editor/spreadsheet';
   import type { createReactiveSpreadsheet } from './spreadsheet.svelte.js';
   import FormulaHints from './FormulaHints.svelte';
 

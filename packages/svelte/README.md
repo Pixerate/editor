@@ -5,8 +5,10 @@ Svelte 5 bindings for [`@pixerate/editor`](https://www.npmjs.com/package/@pixera
 ```bash
 npm install @pixerate/editor-svelte @pixerate/editor svelte
 # only if you use @pixerate/editor-svelte/canvas:
-npm install @xyflow/svelte
+npm install @xyflow/svelte @dagrejs/dagre
 ```
+
+Each feature has its own entry: `@pixerate/editor-svelte/spreadsheet`, `/image-editor` and `/canvas`. The spreadsheet and image editor entries import only Svelte and the matching `@pixerate/editor` subpath, so they bundle no TipTap, markdown or canvas code.
 
 Requires **Svelte 5** (the components use runes). Components ship as `.svelte` sources, so they are compiled by your bundler and work with SvelteKit SSR.
 
@@ -72,6 +74,7 @@ Put `<CommentButton {editor} />` inside a `BubbleMenu` to comment on the selecti
 | Import | Exports |
 | :--- | :--- |
 | `@pixerate/editor-svelte` | `EditableTextNodeEditor`, `BubbleMenu`, `TemplateRenderer`, `initiateEditor`, `createReactiveEditor`, `createHistory`, `createHistoryShortcuts`, `navigationGuard` (action), `createNavigationGuard`, `SpreadsheetEditor`, `FormulaBar`, `FormulaHints`, `createReactiveSpreadsheet`, `DirtyTracker` |
+| `@pixerate/editor-svelte/spreadsheet` | `SpreadsheetEditor`, `FormulaBar`, `FormulaHints`, `SpreadsheetContextMenu`, `SpreadsheetGroupRow`, `createReactiveSpreadsheet` (also re-exported from the root entry) |
 | `@pixerate/editor-svelte/image-editor` | `ImageEditor`, `createReactiveImageEditor`: crop, rotate/flip, adjustments, annotations, depth masks, and `onInpaint` / `onRemoveBackground` AI hooks |
 | `@pixerate/editor-svelte/canvas` | Runes for `@xyflow/svelte`: `createCanvasGraph`, `createCanvasClipboard`, `createCanvasDocking`, `createCanvasShortcuts`, `createCanvasInteractions`, `createCanvasExplosion`, `createCanvasNodeSync`, `createCanvasMultiDrag`, `createStreamingCanvas`, `AgentPresenceLayer`, `FloatingHorizontalScrollbar`, plus layout helpers |
 

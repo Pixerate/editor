@@ -1,4 +1,4 @@
-import { HistoryManager } from "@pixerate/editor";
+import { HistoryManager } from "@pixerate/editor/history";
 
 export interface HistoryShortcutsOptions {
   /**
