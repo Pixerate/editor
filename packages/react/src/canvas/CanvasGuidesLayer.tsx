@@ -10,6 +10,8 @@ export interface CanvasGuidesLayerProps {
 	color?: string;
 	/** Colour of equal-spacing guides. */
 	spacingColor?: string;
+	/** Colour of measuring lines, their labels and extension lines. */
+	measureColor?: string;
 	className?: string;
 }
 
@@ -24,6 +26,7 @@ export function CanvasGuidesLayer({
 	viewport = DEFAULT_VIEWPORT,
 	color = '#f59e0b',
 	spacingColor = '#ec4899',
+	measureColor = '#ef4444',
 	className = ''
 }: CanvasGuidesLayerProps) {
 	if (!guides || guides.length === 0) return null;
@@ -44,20 +47,51 @@ export function CanvasGuidesLayer({
 			}}
 			aria-hidden="true"
 		>
-			{guides.map((guide, i) => (
-				<line
-					key={i}
-					data-kind={guide.kind}
-					x1={sx(guide.x1)}
-					y1={sy(guide.y1)}
-					x2={sx(guide.x2)}
-					y2={sy(guide.y2)}
-					stroke={guide.kind === 'spacing' ? spacingColor : color}
-					strokeWidth={1}
-					strokeDasharray={guide.kind === 'centre' ? '4 3' : undefined}
-					shapeRendering="crispEdges"
-				/>
-			))}
+			{guides.map((guide, i) => {
+				const measuring = guide.kind === 'measure' || guide.kind === 'extension';
+				return (
+					<line
+						key={i}
+						data-kind={guide.kind}
+						x1={sx(guide.x1)}
+						y1={sy(guide.y1)}
+						x2={sx(guide.x2)}
+						y2={sy(guide.y2)}
+						stroke={measuring ? measureColor : guide.kind === 'spacing' ? spacingColor : color}
+						strokeWidth={1}
+						strokeDasharray={guide.kind === 'centre' ? '4 3' : guide.kind === 'extension' ? '3 3' : undefined}
+						shapeRendering="crispEdges"
+					/>
+				);
+			})}
+			{guides.map((guide, i) => {
+				if (!guide.label) return null;
+				const x = sx((guide.x1 + guide.x2) / 2);
+				const y = sy((guide.y1 + guide.y2) / 2);
+				// Labels sit beside vertical lines and below horizontal ones.
+				const vertical = guide.orientation === 'vertical';
+				const width = guide.label.length * 6.5 + 8;
+				return (
+					<g
+						key={`label-${i}`}
+						className="pixerate-canvas-guides__label"
+						data-label={guide.label}
+						transform={`translate(${vertical ? x + 4 : x - width / 2} ${vertical ? y - 8 : y + 4})`}
+					>
+						<rect width={width} height={16} rx={3} fill={measureColor} />
+						<text
+							x={width / 2}
+							y={11.5}
+							textAnchor="middle"
+							fontSize={11}
+							fontFamily="system-ui, sans-serif"
+							fill="#fff"
+						>
+							{guide.label}
+						</text>
+					</g>
+				);
+			})}
 		</svg>
 	);
 }

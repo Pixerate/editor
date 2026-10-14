@@ -20,12 +20,19 @@ export {
   defaultIsEqual,
   HistoryManager,
   createHistoryManager,
+  bindDirtyToHistory,
+  withoutDirty,
 } from "@pixerate/editor";
 export type {
   DirtyTrackerOptions,
   Command,
   HistoryState,
   HistoryManagerOptions,
+  HistoryEntry,
+  HistoryMark,
+  MergedExecutionOptions,
+  HistoryDirtyBinding,
+  BindDirtyToHistoryOptions,
 } from "@pixerate/editor";
 
 // Prop types are derived from the components so they cannot drift.
@@ -63,3 +70,4 @@ export type {
 export * from "./spreadsheet/index.js";
 export * from "./image-editor/index.js";
 export * from "./review/index.js";
+export * from "./commands/index.js";

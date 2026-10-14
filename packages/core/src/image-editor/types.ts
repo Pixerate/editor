@@ -29,8 +29,20 @@ export interface ImageAdjustments {
   saturation: number; // -100 to 100, 0 is default
   exposure: number; // -100 to 100, 0 is default
   temperature: number; // -100 to 100, 0 is default (warmth/coolness)
+  /**
+   * -100 (green) to 100 (magenta), 0 is default. White-balance tint correction in Duv × 3000
+   * (process 2 only; the legacy process ignores it).
+   */
+  tint?: number;
   blur: number; // 0 to 50, 0 is default
   opacity: number; // 0 to 1, 1 is default
+  /**
+   * Rendering process the values are interpreted by. `2` (the latest; new edits and Reset get
+   * it): linear-light exposure, Bradford white balance, LUT tone curve without intermediate
+   * clipping. `1` or missing: the legacy 8-bit rendering, so edits saved before process
+   * versions existed look exactly as they did. See `normalizeProcessVersion`.
+   */
+  process?: 1 | 2;
 }
 
 export interface DepthMaskOptions {

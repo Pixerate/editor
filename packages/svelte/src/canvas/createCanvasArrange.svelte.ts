@@ -29,7 +29,7 @@ export interface CreateCanvasArrangeOptions<TNode extends CanvasNode = CanvasNod
  * Wire snapping to SvelteFlow with `onnodedragstart={() => arrange.beginDrag()}`,
  * `onnodedrag={({ nodes }) => arrange.drag(nodes.map((n) => n.id))}` and
  * `onnodedragstop={() => arrange.endDrag()}`, and render `arrange.guides` with
- * `<CanvasGuidesLayer>`.
+ * `<CanvasGuidesLayer>`. Snap resizes with `<NodeResizer {...arrange.resizerHandlers(id)} />`.
  */
 export function createCanvasArrange<TNode extends CanvasNode = CanvasNode>(
 	options: CreateCanvasArrangeOptions<TNode>
@@ -46,9 +46,26 @@ export function createCanvasArrange<TNode extends CanvasNode = CanvasNode>(
 
 	return {
 		...controller,
-		/** Guide segments (flow coordinates) for the active drag; empty otherwise. */
+		/** Guide segments (flow coordinates) for the active drag or resize; empty otherwise. */
 		get guides() {
 			return guides;
+		},
+		/**
+		 * Resize snapping for SvelteFlow's `<NodeResizer>` / `<NodeResizeControl>`:
+		 * `<NodeResizer {...arrange.resizerHandlers(id)} />`. The resizer writes the raw size
+		 * to the nodes after `onResize`, so snapping runs a microtask later and writes the
+		 * snapped box back. Locked nodes snap back to their starting box.
+		 */
+		resizerHandlers(id: string) {
+			return {
+				onResizeStart: () => controller.beginResize(id),
+				onResize: () => {
+					queueMicrotask(() => controller.resize(id));
+				},
+				onResizeEnd: () => {
+					queueMicrotask(() => controller.endResize());
+				}
+			};
 		}
 	};
 }

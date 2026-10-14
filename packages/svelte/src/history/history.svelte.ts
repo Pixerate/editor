@@ -1,6 +1,9 @@
 import {
   HistoryManager,
   HistoryState,
+  HistoryEntry,
+  HistoryMark,
+  MergedExecutionOptions,
   Command,
   createHistoryManager,
   HistoryManagerOptions,
@@ -8,12 +11,23 @@ import {
 
 export interface SvelteHistory extends HistoryState {
   readonly manager: HistoryManager;
+  /** History panel rows (undo steps, then redo steps). */
+  readonly entries: HistoryEntry[];
   undo(): boolean;
   redo(): boolean;
   clear(): void;
   execute(command: Command): void;
-  executeMerged(command: Command, options?: { windowMs?: number }): void;
+  executeMerged(command: Command, options?: MergedExecutionOptions): void;
   batch(name: string, fn: () => void): void;
+  /** Undoes / redoes until the entry at `index` is current (`-1` = before all). */
+  goTo(index: number): number;
+  /** Captures the current point, e.g. when a drag starts. */
+  mark(): HistoryMark;
+  /** Takes back every step since `mark` without leaving redo (Escape-cancel). */
+  revertTo(mark: HistoryMark): number;
+  /** Joins every merged execute into one step until `endGesture`. */
+  beginGesture(key: string): void;
+  endGesture(): void;
   subscribe(run: (value: HistoryState) => void): () => void;
 }
 
@@ -56,13 +70,23 @@ export function createHistory(
     get manager() {
       return manager;
     },
+    get entries() {
+      // Reading `state` makes the getter reactive; getEntries() is cached per change.
+      void state;
+      return manager.getEntries();
+    },
     undo: () => manager.undo(),
     redo: () => manager.redo(),
     clear: () => manager.clear(),
     execute: (cmd: Command) => manager.execute(cmd),
-    executeMerged: (cmd: Command, opts?: { windowMs?: number }) =>
+    executeMerged: (cmd: Command, opts?: MergedExecutionOptions) =>
       manager.executeMerged(cmd, opts),
     batch: (name: string, fn: () => void) => manager.batch(name, fn),
+    goTo: (index: number) => manager.goTo(index),
+    mark: () => manager.mark(),
+    revertTo: (m: HistoryMark) => manager.revertTo(m),
+    beginGesture: (key: string) => manager.beginGesture(key),
+    endGesture: () => manager.endGesture(),
     subscribe: (run: (value: HistoryState) => void) => manager.subscribe(run),
   };
 }

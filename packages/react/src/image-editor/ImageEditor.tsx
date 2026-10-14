@@ -16,6 +16,8 @@ import {
   getCropCursor,
   calculateCropDrag,
   hitTestAnnotation,
+  normalizeProcessVersion,
+  LATEST_PROCESS_VERSION,
 } from '@pixerate/editor/image-editor';
 import { useImageEditor, type UseImageEditorReturn } from './useImageEditor';
 
@@ -47,6 +49,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
   const internalEditor = useImageEditor({ image: src });
   const editor = externalEditor || internalEditor;
   const { state, controller } = editor;
+  const legacyProcess = normalizeProcessVersion(state.adjustments.process) < LATEST_PROCESS_VERSION;
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -988,6 +991,40 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                   className="w-full accent-indigo-500"
                 />
               </div>
+
+              {/* Tint (process 2 white balance) */}
+              <div>
+                <div className="flex justify-between text-slate-400 mb-1">
+                  <span>Tint</span>
+                  <span className="font-mono">{state.adjustments.tint ?? 0}</span>
+                </div>
+                <input
+                  type="range"
+                  min="-100"
+                  max="100"
+                  aria-label="Tint"
+                  disabled={legacyProcess}
+                  value={state.adjustments.tint ?? 0}
+                  onChange={(e) => editor.setAdjustments({ tint: Number(e.target.value) })}
+                  className="w-full accent-indigo-500 disabled:opacity-40"
+                />
+              </div>
+
+              {legacyProcess && (
+                <div
+                  className="flex items-center justify-between gap-2 rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-[10px] text-amber-200"
+                  data-testid="image-editor-process-notice"
+                >
+                  <span>Legacy rendering (process 1). Tint needs the current process.</span>
+                  <button
+                    type="button"
+                    onClick={() => editor.upgradeProcess()}
+                    className="shrink-0 rounded bg-amber-500/20 px-2 py-0.5 hover:bg-amber-500/30"
+                  >
+                    Update
+                  </button>
+                </div>
+              )}
 
               {/* Blur */}
               <div>

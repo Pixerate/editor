@@ -58,10 +58,16 @@
       "types": "./dist/image-editor/index.d.ts",
       "import": "./dist/image-editor/index.js",
       "require": "./dist/image-editor/index.cjs"
+    },
+    "./commands": {
+      "types": "./dist/commands/index.d.ts",
+      "import": "./dist/commands/index.js",
+      "require": "./dist/commands/index.cjs"
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "THIRD_PARTY_NOTICES.md"
   ],
   "sideEffects": false,
   "scripts": {

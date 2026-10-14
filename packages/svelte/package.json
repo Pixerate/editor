@@ -33,6 +33,11 @@
       "svelte": "./dist/image-editor/index.js",
       "default": "./dist/image-editor/index.js"
     },
+    "./commands": {
+      "types": "./dist/commands/index.d.ts",
+      "svelte": "./dist/commands/index.js",
+      "default": "./dist/commands/index.js"
+    },
     "./package.json": "./package.json"
   },
   "typesVersions": {
@@ -45,6 +50,9 @@
       ],
       "image-editor": [
         "./dist/image-editor/index.d.ts"
+      ],
+      "commands": [
+        "./dist/commands/index.d.ts"
       ]
     }
   },

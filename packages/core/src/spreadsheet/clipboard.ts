@@ -18,6 +18,8 @@ export const SPREADSHEET_CLIPBOARD_MIME = 'application/x.pixerate.spreadsheet+js
 export interface SpreadsheetClipboardCell {
   raw: string; // input as typed (formula text for formulas)
   value: unknown; // displayed value
+  /** Display text for `text/plain` and `text/html` (e.g. `10%` for 0.1); defaults to the value as text. Not stored in the JSON payload. */
+  text?: string;
 }
 
 export interface SpreadsheetClipboardPayload {
@@ -153,11 +155,16 @@ export function createSpreadsheetClipboardData(
   cells: SpreadsheetClipboardCell[][],
   origin: CellPosition,
 ): SpreadsheetClipboardData {
-  const values = cells.map((row) => row.map((cell) => cell.value));
-  const payload: SpreadsheetClipboardPayload = { type: 'pixerate-spreadsheet', version: 1, origin, cells };
+  const texts = cells.map((row) => row.map((cell) => cell.text ?? displayText(cell.value)));
+  const payload: SpreadsheetClipboardPayload = {
+    type: 'pixerate-spreadsheet',
+    version: 1,
+    origin,
+    cells: cells.map((row) => row.map(({ raw, value }) => ({ raw, value }))),
+  };
   return {
-    'text/plain': serializeTsv(values.map((row) => row.map(displayText))),
-    'text/html': serializeHtmlTable(values),
+    'text/plain': serializeTsv(texts),
+    'text/html': serializeHtmlTable(texts),
     [SPREADSHEET_CLIPBOARD_MIME]: JSON.stringify(payload),
   };
 }

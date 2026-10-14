@@ -23,7 +23,7 @@ describe('SpreadsheetController', () => {
     ctrl.setCellValue(row2, colA, '250');
     ctrl.setCellValue(row1, colB, '=A1 + A2');
 
-    expect(ctrl.getCell(row1, colA).value).toBe('100');
+    expect(ctrl.getCell(row1, colA).value).toBe(100);
     expect(ctrl.getCell(row1, colB).value).toBe(350);
 
     // Update A1 and confirm B1 updates
@@ -117,8 +117,8 @@ describe('SpreadsheetController', () => {
 
     const newCtrl = new SpreadsheetController();
     newCtrl.importFromTsv('50\t60\n70\t80');
-    expect(newCtrl.getCell(newCtrl.document.rows[0].id, newCtrl.document.columns[0].id).value).toBe('50');
-    expect(newCtrl.getCell(newCtrl.document.rows[0].id, newCtrl.document.columns[1].id).value).toBe('60');
+    expect(newCtrl.getCell(newCtrl.document.rows[0].id, newCtrl.document.columns[0].id).value).toBe(50);
+    expect(newCtrl.getCell(newCtrl.document.rows[0].id, newCtrl.document.columns[1].id).value).toBe(60);
   });
 
   it('loads new document and recalculates without mutation side-effects', () => {

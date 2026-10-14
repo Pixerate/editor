@@ -1,7 +1,10 @@
+// Portions ported from gridcraft/crates/core/src/value.rs (MIT OR Apache-2.0,
+// © ArtCraft Team and contributors). See THIRD_PARTY_NOTICES.md.
 /**
  * Value helpers shared by the formula evaluator and the built-in functions:
  * error values, spreadsheet coercion rules, comparisons, ranges and dates.
  */
+import { parseNumberText } from './parse-input';
 
 /** Spreadsheet error values. They propagate through operators and functions. */
 export const FORMULA_ERRORS = new Set([
@@ -35,15 +38,17 @@ export function isFormulaError(value: unknown): value is string {
 
 export const isBlank = (value: unknown): boolean => value === '' || value === null || value === undefined;
 
-/** Coerces to a number like a spreadsheet: blanks are 0, booleans 1/0, other text is #VALUE!. */
+/**
+ * Coerces to a number like arithmetic does: blanks are 0, booleans 1/0,
+ * numeric text parses (`"1,000"`, `"50%"`, `"$3"`, `"(5)"`, dates and times
+ * as serial numbers), other text is #VALUE!.
+ */
 export function toNumber(value: unknown): number | string {
   if (isFormulaError(value)) return value;
   if (isBlank(value)) return 0;
   if (typeof value === 'boolean') return value ? 1 : 0;
   if (typeof value === 'number') return value;
-  const trimmed = String(value).trim();
-  const num = trimmed === '' ? NaN : Number(trimmed);
-  return isNaN(num) ? '#VALUE!' : num;
+  return parseNumberText(String(value)) ?? '#VALUE!';
 }
 
 /** Coerces to a boolean: numbers are non-zero, "TRUE"/"FALSE" text is parsed, other text is #VALUE!. */
@@ -58,8 +63,43 @@ export function toBoolean(value: unknown): boolean | string {
   return '#VALUE!';
 }
 
+/** Coerces to text like `&` does: numbers use up to 15 significant digits (`0.1+0.2` is "0.3"). */
 export const toText = (value: unknown): string =>
-  isBlank(value) ? '' : typeof value === 'boolean' ? (value ? 'TRUE' : 'FALSE') : String(value);
+  isBlank(value)
+    ? ''
+    : typeof value === 'boolean'
+      ? (value ? 'TRUE' : 'FALSE')
+      : typeof value === 'number'
+        ? numberToText(value)
+        : String(value);
+
+/**
+ * Number to text as Excel converts it in `&` and General display: up to 15
+ * significant digits, scientific for very large or very small magnitudes.
+ */
+export function numberToText(n: number): string {
+  if (n === 0 || !Number.isFinite(n)) return '0';
+  const a = Math.abs(n);
+  if (((a < 1e-9 || a >= 1e15) && Math.round(a) !== a) || a >= 1e15) return sciText(n, 15);
+  let mag = Math.floor(Math.log10(a));
+  if (a >= Math.pow(10, mag + 1)) mag++; // log10 can land just below an exact power of ten
+  const decimals = Math.min(Math.max(14 - mag, 0), 30);
+  return trimDecimal(n.toFixed(decimals));
+}
+
+/** Removes trailing zeros (and a trailing point) from a decimal string. */
+function trimDecimal(s: string): string {
+  if (!s.includes('.')) return s;
+  const t = s.replace(/0+$/, '').replace(/\.$/, '');
+  return t === '-0' ? '0' : t;
+}
+
+/** Scientific text like `1.23456789012346E+15` with up to `sig` significant digits. */
+function sciText(n: number, sig: number): string {
+  const [mantissa, exp] = n.toExponential(Math.max(sig - 1, 0)).split('e');
+  const e = Number(exp);
+  return `${trimDecimal(mantissa)}E${e < 0 ? '-' : '+'}${String(Math.abs(e)).padStart(2, '0')}`;
+}
 
 /**
  * Number held by a value, or null. Typed cell values are stored as text, so
@@ -80,28 +120,95 @@ export function normalizeValue(value: unknown): unknown {
   return num === null ? value : num;
 }
 
+/** `ERROR.TYPE`-style order of error values, used when two errors are compared. */
+const ERROR_ORDER = ['#NULL!', '#DIV/0!', '#VALUE!', '#REF!', '#NAME?', '#NUM!', '#N/A', '#SPILL!', '#CALC!', '#CYCLE!', '#ERROR!'];
+
+/** Type rank for comparison and sorting: numbers < text < booleans < errors; blanks rank last. */
+function valueRank(value: unknown): number {
+  if (isBlank(value)) return 4;
+  if (typeof value === 'number') return 0;
+  if (typeof value === 'boolean') return 2;
+  if (typeof value === 'string' && FORMULA_ERRORS.has(value)) return 3;
+  return 1;
+}
+
 /**
- * Orders values like spreadsheets: numbers < text < booleans; text is
- * case-insensitive. Two ISO dates compare chronologically ("2026-1-5" is
- * before "2026-01-10").
+ * Compares numbers the way Excel does: both are rounded to 15 significant
+ * digits first, so binary noise such as `0.1+0.2` versus `0.3` counts as equal.
+ */
+export function compareNumbers(a: number, b: number): number {
+  if (a === b) return 0;
+  // Numbers further apart than the 15th digit can't round together, and
+  // rounding keeps their order: skip the rounding on the sort hot path.
+  if (Math.abs(a - b) > Math.max(Math.abs(a), Math.abs(b)) * 1e-13) return a < b ? -1 : 1;
+  const round15 = (x: number) => (!Number.isFinite(x) || x === 0 ? x : Number(x.toExponential(14)));
+  const x = round15(a);
+  const y = round15(b);
+  return x < y ? -1 : x > y ? 1 : 0;
+}
+
+/** Case-insensitive text order. */
+export function compareText(a: string, b: string): number {
+  const x = a.toLowerCase();
+  const y = b.toLowerCase();
+  return x < y ? -1 : x > y ? 1 : 0;
+}
+
+/**
+ * Excel's comparison for the `=`, `<>`, `<`… operators: numbers < text <
+ * booleans < errors, numbers compared at 15 significant digits, text
+ * case-insensitively. A blank acts as 0, "" or FALSE depending on the other
+ * side. Dates are ISO text: two ISO dates compare chronologically
+ * ("2026-1-5" is before "2026-01-10"), and an ISO date against a number
+ * compares as its serial number.
  */
 export function compareValues(left: unknown, right: unknown): number {
-  if (typeof left === 'string' && typeof right === 'string') {
-    const a = isoDateTime(left);
-    const b = a === null ? null : isoDateTime(right);
-    if (a !== null && b !== null) return a - b;
+  const lRank = valueRank(left);
+  const rRank = valueRank(right);
+  if (lRank === 4 || rRank === 4) {
+    if (lRank === rRank) return 0;
+    // A blank against a number, text or boolean takes that type's empty value.
+    const blankFirst = lRank === 4;
+    const other = blankFirst ? right : left;
+    const otherRank = blankFirst ? rRank : lRank;
+    let cmp: number;
+    if (otherRank === 0) cmp = compareNumbers(0, other as number);
+    else if (otherRank === 1) cmp = String(other) === '' ? 0 : -1;
+    else if (otherRank === 2) cmp = other ? -1 : 0;
+    else return lRank - rRank;
+    return blankFirst ? cmp : -cmp;
   }
-  const rank = (v: unknown) => (typeof v === 'boolean' ? 2 : typeof v === 'string' ? 1 : 0);
-  // A blank compares as 0 against numbers/booleans and as "" against text.
-  const l = isBlank(left) ? (typeof right === 'string' ? '' : 0) : left;
-  const r = isBlank(right) ? (typeof l === 'string' ? '' : 0) : right;
-  if (rank(l) !== rank(r)) return rank(l) - rank(r);
-  if (typeof l === 'string') {
-    const a = l.toLowerCase();
-    const b = (r as string).toLowerCase();
-    return a < b ? -1 : a > b ? 1 : 0;
+  if (lRank === 1 && rRank === 1) {
+    const a = String(left);
+    const b = String(right);
+    const ta = isoDateTime(a);
+    const tb = ta === null ? null : isoDateTime(b);
+    if (ta !== null && tb !== null) return Math.sign(ta - tb);
+    return compareText(a, b);
   }
-  return Number(l) - Number(r);
+  if ((lRank === 0 && rRank === 1) || (lRank === 1 && rRank === 0)) {
+    const date = parseIsoDate(lRank === 1 ? left : right);
+    if (date) {
+      const serial = dateToSerial(date);
+      return lRank === 0 ? compareNumbers(left as number, serial) : compareNumbers(serial, right as number);
+    }
+  }
+  if (lRank !== rRank) return lRank - rRank;
+  if (lRank === 0) return compareNumbers(left as number, right as number);
+  if (lRank === 2) return Number(left) - Number(right);
+  return Math.sign(ERROR_ORDER.indexOf(left as string) - ERROR_ORDER.indexOf(right as string));
+}
+
+/**
+ * Sort order (ascending): numbers, text, booleans, errors, then blanks last.
+ * Errors are equal to each other, so sorting keeps their order.
+ */
+export function sortCompareValues(left: unknown, right: unknown): number {
+  const lBlank = isBlank(left);
+  const rBlank = isBlank(right);
+  if (lBlank || rBlank) return lBlank === rBlank ? 0 : lBlank ? 1 : -1;
+  if (isFormulaError(left) && isFormulaError(right)) return 0;
+  return compareValues(left, right);
 }
 
 /** Rounds half away from zero, compensating for binary floating point (ROUND(1.005, 2) = 1.01). */

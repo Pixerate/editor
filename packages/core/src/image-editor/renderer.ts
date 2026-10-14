@@ -13,6 +13,7 @@ import type {
   ImageAnnotation,
 } from './types';
 import { applyAdjustments, applyDepthMask } from './filters';
+import { normalizeProcessVersion } from './color';
 import {
   applyImageProjectionToContext,
   clampCropToImage,
@@ -177,7 +178,7 @@ export class ImageEditorRenderer {
       `${naturalWidth}x${naturalHeight}`,
       `${region.x},${region.y},${region.width},${region.height}`,
       `${projection.angle},${transform.flipH},${transform.flipV}`,
-      `${adjustments.brightness},${adjustments.contrast},${adjustments.saturation},${adjustments.exposure},${adjustments.temperature},${adjustments.blur},${adjustments.opacity}`,
+      `${adjustments.brightness},${adjustments.contrast},${adjustments.saturation},${adjustments.exposure},${adjustments.temperature},${adjustments.tint ?? 0},${adjustments.blur},${adjustments.opacity},p${normalizeProcessVersion(adjustments.process)}`,
       `${depthMask.enabled},${depthMask.maskSource},${depthMask.depthRange?.[0]}-${depthMask.depthRange?.[1]},${depthMask.softness},${depthMask.invert},${depthMask.mode}`,
     ].join('|');
 

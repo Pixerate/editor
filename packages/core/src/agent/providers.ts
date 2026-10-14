@@ -62,6 +62,7 @@ export function createRichTextToolProvider(
 
 	const getText: AgentTool = {
 		name: 'get_text',
+		title: 'Get document text',
 		description:
 			'Returns the document content (plain text by default, or HTML / markdown) and the current selection.',
 		inputSchema: {
@@ -75,7 +76,13 @@ export function createRichTextToolProvider(
 			},
 			additionalProperties: false
 		},
-		annotations: { readOnlyHint: true },
+		annotations: {
+			title: 'Get document text',
+			readOnlyHint: true,
+			destructiveHint: false,
+			idempotentHint: true,
+			openWorldHint: false
+		},
 		handler: ({ format = 'text' }) => {
 			const ed = editor();
 			const content =
@@ -86,6 +93,7 @@ export function createRichTextToolProvider(
 
 	const insertText: AgentTool = {
 		name: 'insert_text',
+		title: 'Insert text',
 		description:
 			'Inserts literal text (newlines start new paragraphs) at a document position, or at the cursor when `at` is omitted.',
 		inputSchema: {
@@ -96,6 +104,13 @@ export function createRichTextToolProvider(
 			},
 			required: ['text'],
 			additionalProperties: false
+		},
+		annotations: {
+			title: 'Insert text',
+			readOnlyHint: false,
+			destructiveHint: false,
+			idempotentHint: false,
+			openWorldHint: false
 		},
 		handler: ({ text, at }) => {
 			const ed = editor();
@@ -111,6 +126,7 @@ export function createRichTextToolProvider(
 
 	const replaceSelection: AgentTool = {
 		name: 'replace_selection',
+		title: 'Replace selection',
 		description: 'Replaces the selected content with literal text (an empty string deletes the selection).',
 		inputSchema: {
 			type: 'object',
@@ -118,7 +134,13 @@ export function createRichTextToolProvider(
 			required: ['text'],
 			additionalProperties: false
 		},
-		annotations: { destructiveHint: true },
+		annotations: {
+			title: 'Replace selection',
+			readOnlyHint: false,
+			destructiveHint: true,
+			idempotentHint: false,
+			openWorldHint: false
+		},
 		handler: ({ text }) => {
 			const ed = editor();
 			const { from, to } = ed.state.selection;
@@ -176,6 +198,7 @@ export function createSpreadsheetToolProvider(
 
 	const getRange: AgentTool = {
 		name: 'get_range',
+		title: 'Read cells',
 		description:
 			'Reads a cell range in A1 notation (e.g. "A1:C5" or "B2") and returns computed values, raw input and errors.',
 		inputSchema: {
@@ -186,7 +209,13 @@ export function createSpreadsheetToolProvider(
 			required: ['range'],
 			additionalProperties: false
 		},
-		annotations: { readOnlyHint: true },
+		annotations: {
+			title: 'Read cells',
+			readOnlyHint: true,
+			destructiveHint: false,
+			idempotentHint: true,
+			openWorldHint: false
+		},
 		handler: ({ range }) => {
 			const [startRef, endRef = startRef] = String(range).split(':');
 			const start = parseCell(startRef);
@@ -226,6 +255,7 @@ export function createSpreadsheetToolProvider(
 
 	const setCell: AgentTool = {
 		name: 'set_cell',
+		title: 'Set a cell',
 		description: 'Sets the raw input of one cell (A1 notation). Values starting with "=" are formulas.',
 		inputSchema: {
 			type: 'object',
@@ -235,6 +265,13 @@ export function createSpreadsheetToolProvider(
 			},
 			required: ['cell', 'value'],
 			additionalProperties: false
+		},
+		annotations: {
+			title: 'Set a cell',
+			readOnlyHint: false,
+			destructiveHint: true,
+			idempotentHint: true,
+			openWorldHint: false
 		},
 		handler: ({ cell, value }) => {
 			const { row, col } = parseCell(cell);

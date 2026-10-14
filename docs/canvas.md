@@ -257,6 +257,8 @@ Freeform-style arrangement. The maths lives in `@pixerate/editor/canvas` and is 
 - `getZoom?: () => number`: Converts the guide threshold from screen pixels to flow units.
 - `guides?: { threshold?: number; edges?: boolean; centres?: boolean; spacing?: boolean }`: Smart-guide options (threshold defaults to 6 screen px).
 - `snapping?: boolean`: Turns drag snapping off while keeping the actions.
+- `guides.gridSize?: number` / `guides.gridOrigin?`: Snap to a grid when no shape is in reach (drag and resize).
+- `resizeSnapping?: boolean`, `resize?: { keepAspectRatio?, minWidth?, minHeight? }`: Resize snapping options.
 
 #### Methods
 - `align(edge, ids?)`: `'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom'`. Aligns to the selection bounds.
@@ -265,6 +267,7 @@ Freeform-style arrangement. The maths lives in `@pixerate/editor/canvas` and is 
 - `lock(ids?)`, `unlock(ids?)`, `toggleLock(ids?)`, `isLocked(id)`.
 - `bringForward(ids?)`, `sendBackward(ids?)`, `bringToFront(ids?)`, `sendToBack(ids?)`.
 - `beginDrag(ids?)`, `drag(ids?)`, `endDrag()`, and the reactive `guides` array.
+- `resizerHandlers(id)`, `beginResize(id)`, `resize(id, handle?)`, `endResize()`, `snapResizeChanges(changes)`: resize snapping (see below).
 - `runAction(action)`: Runs a shortcut action by name.
 
 #### Rules
@@ -303,6 +306,46 @@ Freeform-style arrangement. The maths lives in `@pixerate/editor/canvas` and is 
 Edges snap to edges and centres to centres. Equal-spacing guides appear when the dragged node would sit centred between its row/column neighbours, or would repeat a neighbour's gap. Snap targets are indexed once per drag (`createNodeGuideIndex`), and each frame is a binary search.
 
 Pure helpers for custom integrations: `alignNodes`, `distributeNodes`, `matchSize`, `reorderNodes`, `applyNodeUpdates`, `invertNodeUpdates`, `computeSnapGuides`, `createGuideIndex`, `snapNodeDrag`.
+
+#### Resize and grid snapping
+
+`snapResize(rect, handle, targets, { zoom, threshold, edges, centres, gridSize, gridOrigin, keepAspectRatio, minWidth, minHeight })` snaps a box being resized with `handle` (`'top-left' | 'top' | 'top-right' | 'right' | 'bottom-right' | 'bottom' | 'bottom-left' | 'left'`, xyflow's names):
+
+- The opposite edge (side handles) or corner (corner handles) stays fixed. A side snaps its one moving edge; a corner snaps x and y independently. With `keepAspectRatio` a corner snaps whichever axis is closer and the other follows; a side scales the other axis about its centre.
+- Moving edges land on other shapes' edges and centres within `threshold` screen px. A snap that would collapse or flip the box (or go below `minWidth` / `minHeight`) is rejected and the next target is tried.
+- `gridSize` (also honoured by drag snapping): an axis without a shape snap snaps its moving edge (drag: the top-left) to the grid. Grid snaps draw no guides. `snapToGrid(value, spacing, origin)` is the scalar helper.
+- Returns `{ rect, guides, snappedX, snappedY, changed }`. `snapNodeResize(nodes, id, rect, handle)` wraps it for nodes (the node and its descendants are not targets; locked nodes are not snapped).
+
+The arrange controller wires it to the flow libraries. Options: `resizeSnapping` (default follows `snapping`) and `resize: { keepAspectRatio, minWidth, minHeight }`; the guide options (`threshold`, `gridSize`, ...) are shared with dragging.
+
+```svelte
+<!-- Svelte: inside a custom node -->
+<NodeResizer {...arrange.resizerHandlers(id)} />
+```
+
+SvelteFlow's resizer calls `onResize` before it writes the raw size to `nodes`, so `resizerHandlers` snaps a microtask later (`arrange.resize(id)`) and writes the snapped box back. `beginResize(id)`, `resize(id, handle?)` and `endResize()` are available for custom wiring; the handle is inferred from the edges that moved since `beginResize`. Resizing a locked node puts it back to its starting box.
+
+React: pass changes through `arrange.snapResizeChanges` as well as `snapPositionChanges` (`applyNodeChanges(arrange.snapResizeChanges(arrange.snapPositionChanges(changes)), nodes)`). It snaps `dimensions` changes with `resizing: true` (and the matching `position` change for top / left handles), keeps the snapped size on the `resizing: false` end change (React Flow reports the raw pointer size there), and drops resize changes of locked nodes.
+
+#### Distance measuring (Alt-hover)
+
+Hold Alt / Option and hover a node to see red distance lines with labels from the selection (the union of the selected nodes) to it. Hovering the selection itself or empty space measures to the selection's parent.
+
+```svelte
+<script lang="ts">
+  import { createCanvasMeasure, CanvasGuidesLayer } from '@pixerate/editor-svelte/canvas';
+  const measure = createCanvasMeasure({ getNodes: () => nodes });
+  $effect(() => measure.listen());
+</script>
+
+<SvelteFlow bind:nodes onnodepointerenter={measure.onnodepointerenter} onnodepointerleave={measure.onnodepointerleave}>
+  <CanvasGuidesLayer guides={[...arrange.guides, ...measure.guides]} viewport={flow.getViewport()} />
+</SvelteFlow>
+```
+
+React: `const measure = useCanvasMeasure({ nodes })`, `onNodeMouseEnter={measure.onNodeMouseEnter}`, `onNodeMouseLeave={measure.onNodeMouseLeave}`. Both expose `guides`, `target` (the measured box, to outline), `active`, `hoveredId`, `setHovered` (Svelte) / `setHoveredId` (React) and `setModifier`. Options: `getSelectedIds`, `enabled`, `requireModifier` (`false` measures without Alt), `rectOptions`.
+
+Pure helpers: `measureBetween(a, b)` covers three cases. One box inside the other measures to each edge of the outer one along the inner box's centre lines. Overlapping boxes measure between matching edges. Boxes apart measure the gaps across the shared rows / columns, or from the middle of `a` with a dashed `extension` line to `b`. `measureToLine(rect, 'vertical' | 'horizontal', at)`, `measureSelection(nodes, selectedIds, hoveredId)` and `measureLabel(d)` (two decimals, no trailing zeros) are also exported. Measure guides are `GuideLine`s with `kind: 'measure'` (with `label`) or `'extension'`; `<CanvasGuidesLayer>` draws them in `measureColor` (default red) with label pills.
 
 #### Keyboard shortcuts (`DEFAULT_ARRANGE_SHORTCUTS`)
 
@@ -397,7 +440,8 @@ React: `nodeTypes={{ shape: ShapeNode }}` with `arrange = useCanvasArrange({ nod
 - **Style**: node fields, `data` and paint come from the back-most shape (`styleFrom: 'bottom'`, like Freeform), or `'top'`, `'first'` or `{ id }`. Divide pieces take the paint of the top-most shape covering them, so the canvas looks the same after dividing.
 - **Sub-flows**: geometry uses absolute positions. The result keeps the parent when all shapes share one, and is top-level otherwise.
 - **Edges** connected to consumed nodes are not touched (the controller only sees nodes). Remove or reconnect them from `removeIds`.
-- Options: `tolerance` (curve flattening, default 0.25 flow units), `precision` (path decimals, default 3), `simplify` (Ramer–Douglas–Peucker tolerance, default off), `epsilon`, `createId`, `nodeType`, `select`.
+- **Curves**: the result is fitted with cubic Béziers by default (`curves: 'fit'`), so the union of two ellipses comes back as a handful of smooth curves instead of a long polyline. Corners turning more than `cornerAngleDeg` (default 30°) and straight edges stay sharp; rings that would not get lighter (plain polygons) keep their straight segments. `curves: 'lines'` writes the polygon as before.
+- Options: `tolerance` (curve flattening, default 0.25 flow units), `curves`, `curveTolerance` (default `tolerance`), `cornerAngleDeg`, `precision` (path decimals, default 3), `simplify` (Ramer–Douglas–Peucker tolerance, default off), `epsilon`, `createId`, `nodeType`, `select`.
 
 No default keyboard shortcuts are bound for these operations.
 
@@ -405,6 +449,7 @@ No default keyboard shortcuts are bound for these operations.
 
 - `polygonBoolean(op, operands, { epsilon })`: `'union' | 'intersection' | 'difference' | 'xor'` on any number of operands. An operand is a multi-polygon (`[[outer, ...holes], ...]`, any ring orientation) or `{ rings, fillRule }` (e.g. flattened path data; may self-intersect). Also `unionPolygons`, `intersectPolygons`, `subtractPolygons`, `xorPolygons` and `dividePolygons(operands)` (pieces with the operand indices covering them).
 - Results are simple rings: outer rings have a positive shoelace area and holes a negative one. Rings may touch at a vertex but never cross. Collinear vertices are removed.
-- `parseSvgPath(d)` (absolute `M`/`L`/`C`/`Q`/`A`/`Z`), `flattenSvgPath(d, { tolerance })`, `shapeToPolygon(shape, size)`, `shapeNodeToPolygon(node, lookup)`, `polygonToSvgPath(multi, { precision, simplify, offset })`, `simplifyRing`, `getShapeSvg` / `getShapeRenderData` (exact arcs for rendering), `polygonArea`, `multiPolygonArea`, `pointInRings`.
+- `fitCubics(points, tolerance, { cornerAngleDeg, closed })` fits cubic segments (Schneider-style least squares with Newton reparameterisation, split at the worst point) so every point is within `tolerance`, keeping corners sharper than `cornerAngleDeg` (default 30°; the turn is measured over 4 × `tolerance`, so sample noise does not read as corners). `fitPathData(ring, { tolerance, closed, precision, offset })` returns SVG path data (`C` curves, `L` for straight stretches); `fitFreehandPath(points, { tolerance })` smooths a freehand stroke into an open path.
+- `parseSvgPath(d)` (absolute `M`/`L`/`C`/`Q`/`A`/`Z`), `flattenSvgPath(d, { tolerance })`, `shapeToPolygon(shape, size)`, `shapeNodeToPolygon(node, lookup)`, `polygonToSvgPath(multi, { precision, simplify, offset, curves })`, `simplifyRing`, `getShapeSvg` / `getShapeRenderData` (exact arcs for rendering), `polygonArea`, `multiPolygonArea`, `pointInRings`.
 
-The engine builds a planar overlay of all edges (splitting at crossings, T-junctions and collinear overlaps, merging points closer than `epsilon`), classifies both sides of every edge by winding number and traces the boundary of the selected region. It handles shared edges, touching vertices, collinear overlaps, holes, nested and disjoint inputs. Limits: the overlay is O(n²) in edges (pruned by a sweep), comfortable for canvas shapes (two 1,024-vertex circles in about 20 ms) but not GIS-scale data; features narrower than `epsilon` (default `1e-9` × the largest coordinate) collapse; curves become polylines, so results are path data with straight segments.
+The engine builds a planar overlay of all edges (splitting at crossings, T-junctions and collinear overlaps, merging points closer than `epsilon`), classifies both sides of every edge by winding number and traces the boundary of the selected region. It handles shared edges, touching vertices, collinear overlaps, holes, nested and disjoint inputs. Limits: the overlay is O(n²) in edges (pruned by a sweep), comfortable for canvas shapes (two 1,024-vertex circles in about 20 ms) but not GIS-scale data; features narrower than `epsilon` (default `1e-9` × the largest coordinate) collapse; curves are flattened to polylines for the overlay; `combineShapeNodes` fits curves back onto the result (see `curves`).

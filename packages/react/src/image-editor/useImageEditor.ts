@@ -30,6 +30,8 @@ export interface UseImageEditorReturn {
   flipVertical: () => void;
   setAdjustments: (partial: Partial<ImageAdjustments>, commitToHistory?: boolean) => void;
   resetAdjustments: () => void;
+  /** Update to Current Process: re-render the adjustments with the latest process (one undo step). */
+  upgradeProcess: () => boolean;
   setDepthMask: (partial: Partial<DepthMaskOptions>) => void;
   resetDepthMask: () => void;
   addAnnotation: (annotation: CreateAnnotationPayload) => string;
@@ -106,6 +108,7 @@ export function useImageEditor(options: ImageEditorOptions = {}): UseImageEditor
     [controller]
   );
   const resetAdjustments = useCallback(() => controller.resetAdjustments(), [controller]);
+  const upgradeProcess = useCallback(() => controller.upgradeProcess(), [controller]);
   const setDepthMask = useCallback((partial: Partial<DepthMaskOptions>) => controller.setDepthMask(partial), [controller]);
   const resetDepthMask = useCallback(() => controller.resetDepthMask(), [controller]);
   const addAnnotation = useCallback((ann: CreateAnnotationPayload) => controller.addAnnotation(ann), [controller]);
@@ -168,6 +171,7 @@ export function useImageEditor(options: ImageEditorOptions = {}): UseImageEditor
       flipVertical,
       setAdjustments,
       resetAdjustments,
+      upgradeProcess,
       setDepthMask,
       resetDepthMask,
       addAnnotation,

@@ -111,9 +111,9 @@ describe('dynamic arrays: spilling', () => {
     s.set('B1', '=A1:A3');
     s.set('C1', '=A1:A3*2');
     expect(s.block('B1:C3')).toEqual([
-      ['1', 2],
-      ['2', 4],
-      ['3', 6],
+      [1, 2],
+      [2, 4],
+      [3, 6],
     ]);
   });
 
@@ -277,9 +277,9 @@ describe('dynamic arrays: spilling', () => {
       ['Bob', '3', '4'],
     ]);
     s.set('A5', '=INDEX(A1:C2, 0, 2)');
-    expect(s.block('A5:A6').flat()).toEqual(['1', '3']);
+    expect(s.block('A5:A6').flat()).toEqual([1, 3]);
     s.set('B5', '=XLOOKUP("Bob", A1:A2, B1:C2)');
-    expect(s.block('B5:C5').flat()).toEqual(['3', '4']);
+    expect(s.block('B5:C5').flat()).toEqual([3, 4]);
   });
 
   it('survives undo/redo', () => {
@@ -609,7 +609,9 @@ describe('date arithmetic', () => {
 
   it('leaves non-date text and other operators alone', () => {
     expect(diagnose('="2026-13-01" + 1').error).toBe('#VALUE!');
-    expect(diagnose('="2026-01-01" * 2').error).toBe('#VALUE!');
+    // Date text in other arithmetic coerces to its serial number, as in Excel.
+    expect(diagnose('="2026-01-01" * 2').value).toBe(46023 * 2);
+    expect(diagnose('="2026-01-01x" * 2').error).toBe('#VALUE!');
     expect(diagnose('=DATE(2026, 1, 31)').value).toBe('2026-01-31');
   });
 

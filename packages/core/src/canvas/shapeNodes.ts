@@ -111,6 +111,16 @@ export interface CombineShapeNodesOptions extends ShapeNodePolygonOptions {
 	precision?: number;
 	/** Ramer–Douglas–Peucker simplification tolerance for the result (default 0, off). */
 	simplify?: number;
+	/**
+	 * How the result's outline is written: `'fit'` (default) fits smooth cubic curves to the
+	 * flattened result, so booleans of curved shapes stay curved (sharp corners and straight
+	 * edges are kept); `'lines'` writes the polygon as straight segments.
+	 */
+	curves?: 'lines' | 'fit';
+	/** Curve-fitting tolerance in flow units for `curves: 'fit'` (default: `tolerance`, 0.25). */
+	curveTolerance?: number;
+	/** Corner threshold in degrees for `curves: 'fit'` (default 30). */
+	cornerAngleDeg?: number;
 	/** Point-merge tolerance passed to the boolean engine. */
 	epsilon?: number;
 	/** Select the new nodes (default `true`). */
@@ -219,7 +229,10 @@ export function combineShapeNodes<TNode extends CanvasNode>(
 		const d = polygonToSvgPath(polygon, {
 			precision: options.precision,
 			simplify: options.simplify,
-			offset: { x: -bounds.minX, y: -bounds.minY }
+			offset: { x: -bounds.minX, y: -bounds.minY },
+			curves: options.curves ?? 'fit',
+			curveTolerance: options.curveTolerance ?? options.tolerance ?? 0.25,
+			cornerAngleDeg: options.cornerAngleDeg
 		});
 		if (!d) return null;
 		const sourceShape = getNodeShape(source)!;

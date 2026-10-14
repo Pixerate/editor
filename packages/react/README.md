@@ -88,9 +88,10 @@ useAgentToolProvider(registry, provider);
 
 | Import | Exports |
 | :--- | :--- |
-| `@pixerate/editor-react` | `usePromptEditor`, `useEditor`, `EditorContent`, `BubbleMenu`, `TemplateRenderer`, `useHistory`, `useHistoryShortcuts`, `useNavigationGuard`, `useDismissGuard`, `EditorSlotsProvider` / `useEditorSlots`, `SpreadsheetEditor` / `useSpreadsheetEditor`, `FormulaHints`, `DirtyTracker` |
+| `@pixerate/editor-react` | `usePromptEditor`, `useEditor`, `EditorContent`, `BubbleMenu`, `TemplateRenderer`, `useHistory`, `useHistoryDirty`, `useHistoryShortcuts`, `useNavigationGuard`, `useDismissGuard`, `EditorSlotsProvider` / `useEditorSlots`, `SpreadsheetEditor` / `useSpreadsheetEditor`, `FormulaHints`, `DirtyTracker` |
 | `@pixerate/editor-react/spreadsheet` | `SpreadsheetEditor`, `useSpreadsheetEditor`, `useSpreadsheetTableInteractions`, `FormulaHints`, `SpreadsheetContextMenu`, `SpreadsheetGroupRow` (also re-exported from the root entry) |
 | `@pixerate/editor-react/image-editor` | `ImageEditor`, `useImageEditor`: crop, rotate/flip, adjustments, annotations, depth masks, and `onInpaint` / `onRemoveBackground` AI hooks |
+| `@pixerate/editor-react/commands` | `CommandPalette`, `useCommandPalette` (`hotkey: "Mod+K"`), `useCommandShortcuts`, `useRegisterCommands` over a `CommandRegistry` from `@pixerate/editor/commands` (also re-exported from the root entry) |
 | `@pixerate/editor-react/canvas` | `useCanvasGraph`, `useCanvasLayout`, `useCanvasClipboard`, `useCanvasDocking`, `useCanvasShortcuts`, `useCanvasExplosion`, `useStreamingCanvas`, `AgentPresenceLayer`, plus the pure layout helpers from `@pixerate/editor/canvas` |
 
 ## Styling (Tailwind CSS required)

@@ -1,4 +1,7 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
+import { CommandPalette, useCommandPalette, useRegisterCommands } from "@pixerate/editor-react";
+import type { CommandSpec } from "@pixerate/editor/commands";
+import { demoCommandRegistry } from "./agentTools";
 import { PromptStudioTab } from "./components/PromptStudioTab";
 import { RichDocumentTab } from "./components/RichDocumentTab";
 import { ParityMatrixTab } from "./components/ParityMatrixTab";
@@ -40,6 +43,22 @@ export default function App() {
     window.history.replaceState(null, "", `#${tab}`);
   };
 
+  // Command palette (Mod+K): tab navigation plus whatever the mounted tabs register.
+  const navigationCommands = useMemo<CommandSpec[]>(
+    () =>
+      TABS.map(({ id, label }) => ({
+        id: `app.goto.${id}`,
+        label: `Go to ${label}`,
+        group: "Navigate",
+        keywords: ["tab", "open", id],
+        run: () => setActiveTab(id),
+      })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+  useRegisterCommands(demoCommandRegistry, navigationCommands);
+  const palette = useCommandPalette(demoCommandRegistry, { hotkey: "Mod+K" });
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
       {/* Top Header */}
@@ -65,6 +84,17 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-4">
+            <button
+              type="button"
+              onClick={() => palette.setOpen(true)}
+              className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors px-3 py-1.5 rounded-lg border border-slate-800 hover:border-slate-700 bg-slate-900/60"
+              title="Command palette"
+            >
+              <span>Commands</span>
+              <kbd className="font-mono text-[10px] text-slate-500">
+                {demoCommandRegistry.shortcuts.platform === "mac" ? "⌘K" : "Ctrl+K"}
+              </kbd>
+            </button>
             <a
               href="https://github.com/Pixerate/editor"
               target="_blank"
@@ -109,6 +139,8 @@ export default function App() {
         {activeTab === "parity" && <ParityMatrixTab />}
         {activeTab !== "parity" && <AgentToolsPanel />}
       </main>
+
+      <CommandPalette palette={palette} />
 
       {/* Footer */}
       <footer className="border-t border-slate-800/80 py-4 text-center text-xs text-slate-500">

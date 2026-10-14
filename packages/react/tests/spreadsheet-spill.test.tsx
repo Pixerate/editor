@@ -95,3 +95,20 @@ describe('SpreadsheetEditor dynamic arrays', () => {
     expect(border(0, 0)).toBeNull();
   });
 });
+
+describe('SpreadsheetEditor typed values', () => {
+  it('shows typed values with their automatic format and compares them as numbers', async () => {
+    await act(async () => root.render(<Harness />));
+    const [r0, r1] = sheet.document.rows;
+    const [a, b, c] = sheet.document.columns;
+    await act(async () => {
+      sheet.setCellValue(r0.id, a.id, '10%');
+      sheet.setCellValue(r0.id, b.id, '$1,200.50');
+      sheet.setCellValue(r0.id, c.id, '3/4/2026');
+      sheet.setCellValue(r1.id, a.id, '7');
+      sheet.setCellValue(r1.id, b.id, '=A2>8');
+    });
+    expect([td(0, 0).textContent, td(0, 1).textContent, td(0, 2).textContent]).toEqual(['10%', '$1,200.50', '3/4/2026']);
+    expect(td(1, 1).textContent).toBe('FALSE');
+  });
+});

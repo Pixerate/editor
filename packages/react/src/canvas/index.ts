@@ -58,6 +58,46 @@ export {
 	type CanvasGuidesLayerProps
 } from './CanvasGuidesLayer.js';
 
+// Distance measuring (Alt-hover), resize / grid snapping and curve fitting
+export {
+	useCanvasMeasure,
+	type CanvasMeasure,
+	type UseCanvasMeasureOptions
+} from './useCanvasMeasure.js';
+
+export {
+	measureBetween,
+	measureToLine,
+	measureSelection,
+	measureLabel,
+	isMeasureModifierHeld,
+	snapToGrid,
+	snapResize,
+	snapNodeResize,
+	inferResizeHandle,
+	resizeHandleAxes,
+	getResizingNodeRect,
+	RESIZE_HANDLES,
+	fitCubics,
+	fitCubicRun,
+	fitPathData,
+	fitFreehandPath,
+	cubicsToPathData,
+	cubicPointAt,
+	isStraightCubic,
+	type MeasureGuide,
+	type MeasureSelectionResult,
+	type MeasureSelectionOptions,
+	type ResizeHandle,
+	type SnapResizeOptions,
+	type SnapResizeResult,
+	type SnapNodeResizeOptions,
+	type SnapNodeResizeResult,
+	type CubicSegment,
+	type FitCubicsOptions,
+	type FitPathDataOptions
+} from '@pixerate/editor/canvas';
+
 export {
 	alignNodes,
 	distributeNodes,

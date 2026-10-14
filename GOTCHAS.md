@@ -325,11 +325,18 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: The async Clipboard API cannot write arbitrary MIME types; only a `copy` event's `clipboardData` can. With no text selection, browsers dispatch `copy`/`paste` at `<body>`, not at a focused non-editable `div`. Calling `preventDefault()` on the Mod+C keydown cancels the copy event entirely. In jsdom no copy event follows a synthetic keydown.
 - **Solution / Workaround**: Listen for `copy`/`paste` on `document` and act only when focus is inside the grid but not in a text input (cell editor, formula bar). On Mod+C, don't prevent default; schedule a `setTimeout(0)` fallback that writes TSV with `writeText` only if no copy event handled it (the copy event fires synchronously during the keydown's default action, before any task). Tests must dispatch a `copy`/`paste` `Event` with a stubbed `clipboardData`, or wait a tick for the fallback.
 
-### [core/spreadsheet] Formula Ranges Arrive Flat and Column-Major, and Typed Cell Values Are Text
+### [core/spreadsheet] Formula Ranges Arrive Flat and Column-Major
 
-- **Issue / Symptom**: Lookup functions (INDEX, VLOOKUP, XLOOKUP) picked the wrong cells, and `MATCH(5, A1:A3, 0)` returned `#N/A` even though a cell showed `5`.
-- **Root Cause**: `EvaluationContext.resolveRange` returns one flat array, column by column (the controller's loop order), with no row/column shape. Separately, cells typed by the user store their raw text as the value, so a typed `5` is the string `"5"`, and `compareValues` ranks numbers and text differently (`"1"=1` is FALSE by design).
-- **Solution / Workaround**: The evaluator records each range's shape (`withRangeShape`, a `WeakMap` keyed by the array, columns taken from the range reference) and functions read ranges through `ctx.range(i)` / `rangeGet(range, row, col)`. Never assume row-major order. Custom `resolveRange` implementations must return values column-major. Lookups, criteria (`SUMIF` etc.) and `ISNUMBER` normalize numeric text with `numericValue` / `normalizeValue`, while the `=` operator keeps its strict typed comparison. Functions that would return a whole row/column return a shaped array: other functions can aggregate it, `evaluateWithDiagnostics` returns it as `array` (with the top-left value as `value`), and the controller spills it (see the dynamic-arrays entry).
+- **Issue / Symptom**: Lookup functions (INDEX, VLOOKUP, XLOOKUP) picked the wrong cells.
+- **Root Cause**: `EvaluationContext.resolveRange` returns one flat array, column by column (the controller's loop order), with no row/column shape.
+- **Solution / Workaround**: The evaluator records each range's shape (`withRangeShape`, a `WeakMap` keyed by the array, columns taken from the range reference) and functions read ranges through `ctx.range(i)` / `rangeGet(range, row, col)`. Never assume row-major order. Custom `resolveRange` implementations must return values column-major. Functions that would return a whole row/column return a shaped array: other functions can aggregate it, `evaluateWithDiagnostics` returns it as `array` (with the top-left value as `value`), and the controller spills it (see the dynamic-arrays entry).
+
+### [core/spreadsheet] Typed Input Must Be Parsed, or `=B1>8` Treats a Typed `7` as Text
+
+- **Issue / Symptom**: With typed cells stored as their raw text, a typed `7` was the string `"7"`, so `=B1>8` was TRUE (text ranks above numbers), `FILTER(A:A, A:A>8)` kept small numbers, `MATCH(5, …)` missed a typed `5`, and sort put `10` before `9`.
+- **Root Cause**: `CellData.value` was set to `raw` for non-formula input, and the strict Excel comparison (`"1"=1` is FALSE) is correct only if typed numbers are numbers. Patching individual functions (`numericValue` / `normalizeValue` in lookups and criteria) hid the problem without fixing operators.
+- **Solution / Workaround**: `setCellValue` (and so CSV/TSV import, `importRows`, paste and autofill) stores `parseCellInput(raw).value`: numbers (`1,234`, `$5`, `10%`, `(100)`, `1e3`, `1 1/2`), booleans, error literals, ISO dates and text; `raw` stays as typed and a leading `'` forces text. `loadDocument` and the constructor re-parse stored typed cells from `raw`, so old documents with `value: "7"` work. Bound columns are different: values read from the data source are never re-parsed, and writes are coerced only for `number`/`boolean`/`date` fields. Display through `formatCellDisplay(cell)`, which applies the automatic `numberFormat` (`10%` stays `10%`, not `0.1`). Comparisons go through `compareValues` (Excel order numbers < text < booleans < errors; numbers at 15 significant digits so `0.1+0.2=0.3`); sorting through `sortCompareValues` / `compareCellValues` (blanks last). `numericValue` still accepts numeric text for lookups, criteria and SUM-style functions, because data sources can supply numbers as strings.
+- **Date representation**: dates stay ISO text (`3/4/2026` → `"2026-03-04"`, with a time `"2026-03-04 18:00:00"`), because date arithmetic, DATE/TODAY and existing documents all use ISO text. A time typed alone (`10:30`) becomes a day fraction (0.4375) like Excel, shown with its `h:mm` format. ISO text can't hold Excel's fictitious 1900-02-29, so typing it keeps text (as numeric text in a formula it is serial 60). `parseNumberText` turns date text into 1900-system serials (`serialFromYmd`); `dateToSerial` counts from 1899-12-30 and so differs by one for dates before 1900-03-01.
 
 ### [core/spreadsheet] `isFormulaError` Narrows `string` to `never`
 
@@ -453,3 +460,67 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Without theme tokens, the spreadsheet, review panel and menus rendered unstyled in the demo (transparent popovers, invisible borders and selection).
 - **Root Cause**: Components use shadcn classes (`bg-background`, `bg-primary/10`, `border-border`) and also inline styles such as `var(--primary, #6366f1)` and `var(--popover, …)`. shadcn's usual HSL-triple variables (`--primary: 240 5% 26%`) are invalid when used directly as a color, and Tailwind colors defined as plain `var(--x)` lose opacity modifiers.
 - **Solution / Workaround**: The demo defines `--x-rgb` channels for Tailwind (`rgb(var(--x-rgb) / <alpha-value>)` in `apps/demo/tailwind.config.js`) and full colors `--x: rgb(var(--x-rgb))` for inline styles (`apps/demo/src/index.css`). Hosts using shadcn HSL triples should also define full-color `--primary`, `--background`, `--muted` and `--popover`.
+
+### [core/image-editor] Changing How Saved Adjustments Render Needs a New Process Version
+
+- **Issue / Symptom**: Improving the adjustment maths (linear-light exposure, Bradford white balance, tone LUTs) changed how every saved edit looked; `{ ...DEFAULT_ADJUSTMENTS, ...saved }` silently moved old edits to the new rendering. The old 8-bit path also clamped after each step, so exposure up then contrast down turned distinct highlights into one flat grey.
+- **Root Cause**: Adjustment values have no meaning without the algorithm that interprets them, and a default spread fills a missing field with the *new* default.
+- **Solution / Workaround**:
+  1. `ImageAdjustments.process` selects the rendering. A missing or damaged value is process 1 (`normalizeProcessVersion`), which `applyLegacyAdjustments` renders unchanged (frozen; `tint` is ignored there). New edits and Reset get `LATEST_PROCESS_VERSION` (2). Load stored adjustments through `normalizeStoredAdjustments`, never `{ ...DEFAULT_ADJUSTMENTS, ...stored }`.
+  2. Process 1 is serialized without `process` (and without a zero `tint`), so old documents round-trip byte for byte. `upgradeProcess()` is the one explicit, undoable way to move an edit forward.
+  3. A future look change adds process 3 and a new branch in `applyAdjustments`; never edit process 1 or 2 output in place (bug fixes for broken output excepted). The legacy pixel snapshot in `tests/image-editor-color.test.ts` guards this.
+  4. Process 2 is identity at neutral within ±1 only because the tone LUT's highlight shoulder degenerates to the identity when headroom is 1 and the encode LUT has 65 536 entries. Keep `headroom = max(1, reach)` per channel; a fixed shoulder would shift unedited highlights.
+  5. The renderer's base-canvas cache key must include every field that affects pixels (`tint`, normalised `process`), or switching process shows a stale image.
+
+
+### [core/history] Keyed Gestures Merge Commands, so Commands Must Be Absolute or Untagged
+
+- **Issue / Symptom**: A held gesture (`beginGesture`) that drags two parameters (volume and pan) into one undo step would redo only the last one, and undo would restore only one of them, if the merge kept "first undo + last redo" as the time-window `executeMerged` does.
+- **Root Cause**: "Keep the first undo, take the last redo" is only correct when every merged command sets the *same* thing to an absolute value. Different parameters (or relative commands like "increment") need every command's undo and redo.
+- **Solution / Workaround**: A keyed step keeps a list of parts. A merged command whose `tag` equals the last part's `tag` replaces that part's redo (absolute-command assumption, as before); anything else is appended, and undo runs the parts in reverse. Give absolute "set" commands a `tag` so long drags stay one small part; leave relative commands untagged. Gestures end on any other recorded command, undo, redo, `revertTo`, `goTo`, `clear` or `endGesture()`; reads, marks and empty batches do not end them.
+
+### [core/history] Undo Marks Must Detect a Lost Start, Not Just a Lost Top
+
+- **Issue / Symptom**: `revertTo(mark)` for a mark taken on an empty history (Escape on the first drag) would undo steps that existed before the drag once `maxDepth` / `maxBytes` had dropped the bottom of the stack, and a naive mark would survive `clear()`.
+- **Root Cause**: A mark that points at "no top step" cannot be found in the stack, so "undo until the top is the marked step" runs to the bottom of whatever is left.
+- **Solution / Workaround**: Marks carry the marked step's id plus a `dropped` counter and an `epoch` (bumped by `clear`). An empty-history mark is valid only while nothing has been dropped; any mark from an older epoch is a no-op returning 0. Reverted steps are removed outright (and undone steps made after the mark are filtered out of redo), so redo never brings a cancelled drag back.
+
+### [core/dirty] Dirty Tracking Must Compare Values, Not Count History Steps
+
+- **Issue / Symptom**: Navigation guards kept prompting after undoing back to the saved state, selecting text or zooming marked the document modified, and loading a file marked it dirty before the user typed anything.
+- **Root Cause**: A "changed since save" boolean set by every edit never goes back to false on undo; whole-state comparison counts view state (selection, viewport); programmatic loads go through the same change paths as user edits.
+- **Solution / Workaround**: Use `bindDirtyToHistory({ history, getValue, normalize })` (React `useHistoryDirty`, Svelte `createHistoryDirty`): every history change re-compares `normalize(value)` with the saved baseline (cached per `history.getRevision()`), so undo-to-saved is clean. Strip view state in `normalize`. Wrap loads/restores in `suppress(fn)`: it is re-entrant (depth counter), lasts until a returned promise settles, and rebaselines to the loaded value even if the load bypassed the history. Changes made outside the history (e.g. selection) need `refresh()`, which ignores the revision cache.
+### [core/canvas] xyflow Resizers Report Raw Sizes, and SvelteFlow Writes Them After `onResize`
+
+- **Issue / Symptom**: Resize snapping flickered back to the unsnapped size when the pointer was released (React Flow), or did nothing at all (SvelteFlow `onResize`).
+- **Root Cause**: `XYResizer` keeps its own raw `prevValues`; React Flow's end change (`type: 'dimensions'`, `resizing: false`) carries those raw values, undoing the last snap. SvelteFlow's `ResizeControl` calls `onResize` *before* writing the raw `x` / `y` / `width` / `height` to `store.nodes`, so anything written from `onResize` is overwritten. The changes also do not say which handle is dragged.
+- **Solution / Workaround**: React: `snapResizeChanges` remembers the last snapped size and rewrites the `resizing: false` change. Svelte: `resizerHandlers(id)` defers `resize(id)` / `endResize()` with `queueMicrotask`, after the resizer has written the raw size. The handle is inferred from the edges that moved since `beginResize` (`inferResizeHandle`). While resizing, read `width` / `height` before `measured` (`getResizingNodeRect`): `measured` is stale until xyflow re-measures.
+
+### [core/canvas] Corner Detection on Polylines Breaks on Noisy or Coarsely Flattened Input
+
+- **Issue / Symptom**: Curve fitting a freehand stroke produced dozens of tiny segments; fitted boolean results of small ellipses stayed polylines.
+- **Root Cause**: A turning-angle test between adjacent edges reads sample jitter as corners (alternating ±0.3 px noise on 2 px steps turns ~33° per vertex), and a coarsely flattened small circle (radius ≲ 5 at tolerance 0.25) really does turn more than 30° per vertex.
+- **Solution / Workaround**: `fitCubics` measures each vertex's turn to the nearest neighbours at least 4 × `tolerance` away and keeps only the sharpest vertex in that neighbourhood. For very coarse polygons raise `cornerAngleDeg`, or flatten with a smaller `tolerance`. `fitPathData` falls back to the original polyline when fitting would not remove vertices.
+### [core/commands] Shortcut Handlers Must Not `preventDefault` Disabled Commands, and Mod Differs Per Platform
+
+- **Issue / Symptom**: A global shortcut listener that calls `preventDefault()` on every bound chord blocks the browser and focused editors even when the command can't run (e.g. `Mod+Z` with nothing to undo). Separately, `Mod+Y` (redo) and an app binding on `Ctrl+Y` look different in the keymap but collide on Windows and Linux, and the collision is invisible when tests only run on macOS.
+- **Root Cause**: Whether a chord should be consumed depends on the command's enablement at that moment, not only on the binding. `Mod` is ⌘ on macOS and Ctrl elsewhere, so whether two chords collide depends on the platform.
+- **Solution / Workaround**: `CommandRegistry.handleKeyDown` resolves the command, checks `isEnabled`, and only then calls `preventDefault()` and runs it. `ShortcutMap.findConflicts(platform)` compares effective chords (with `Mod` resolved for that platform), and `commands.test.ts` asserts that the default keymaps have no conflicts on mac, windows and linux. Bindings that only make sense on some platforms use `platforms` (e.g. `Mod+Y` redo off macOS). Keys match by `event.code` (see "Option/Alt Shortcuts Must Match `KeyboardEvent.code`"). The one exception is `shortcutCode`: a letter key that produces a different Latin letter without Alt uses that letter, so `Mod+Z` follows the Z label on AZERTY, QWERTZ and Dvorak, as browsers do. Matching both the code and the key would fire `Mod+Z` from two different physical keys.
+
+### [core/commands] Agent `listChanged` Only Fires When Tool Definitions Change
+
+- **Issue / Symptom**: Registering or removing commands did not send `tools/list_changed` to agents using the command tool provider.
+- **Root Cause**: `ToolRegistry` compares a JSON signature of `listTools()` (see "Tool-List Notifications Must Be Coalesced and Compared"). The three command tools (`list_commands`, `run_command`, `run_commands`) never changed, so their signature never changed either.
+- **Solution / Workaround**: `run_command`'s `id` schema carries an `enum` of the visible command ids. The tool definition now changes when commands are added or removed, but not when they run or their enablement changes. `run_commands` keeps a free `id` string so that each step can report `unknown_command` on its own instead of the whole batch being rejected.
+
+### [svelte/packaging] `Foo.svelte` and `foo.svelte.ts` Collide in `dist` on Case-Insensitive File Systems
+
+- **Issue / Symptom**: `svelte-check` warned `Cannot write file '.../dist/commands/CommandPalette.svelte.js' because it would be overwritten by multiple input files` after adding `CommandPalette.svelte` next to a rune file `commandPalette.svelte.ts`.
+- **Root Cause**: Both compile to `…alette.svelte.js` / `.d.ts`. On macOS and Windows file systems, which are case-insensitive, these are the same path, so one output silently replaces the other.
+- **Solution / Workaround**: Give rune modules names that differ from component names by more than case (`palette.svelte.ts` next to `CommandPalette.svelte`).
+
+### [monorepo/licensing] Ported Code Needs Its Notice in the Published Package, Not Just in Source
+
+- **Issue / Symptom**: Files ported from the MIT/Apache ArtCraft apps carry a header comment and a root `THIRD_PARTY_NOTICES.md`, but neither reached npm: tsup strips comments from `dist`, and `@pixerate/editor` publishes only `dist`.
+- **Root Cause**: MIT requires the copyright and permission notice in every copy, including the published package. A root-level file is outside the package's `files`.
+- **Solution / Workaround**: `packages/core/THIRD_PARTY_NOTICES.md` is a copy listed in `files`. `tests/third-party-notices.test.ts` fails if it drifts from the root file. When porting more code, add a section to the root file and copy it into the package (and into `packages/react` / `packages/svelte` too if ported code lands there).

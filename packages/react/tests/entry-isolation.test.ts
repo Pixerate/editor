@@ -36,6 +36,7 @@ describe("subpath entry isolation", () => {
   it.each([
     ["spreadsheet/index.js", "spreadsheet"],
     ["image-editor/index.js", "image-editor"],
+    ["commands/index.js", "commands"],
   ])("%s pulls in nothing beyond React and @pixerate/editor/%s", (entry, coreSubpath) => {
     const packages = [...reachablePackages(entry)];
     expect(packages).toContain(`@pixerate/editor/${coreSubpath}`);
