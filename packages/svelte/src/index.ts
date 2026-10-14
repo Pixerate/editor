@@ -3,11 +3,16 @@ import type { ComponentProps } from "svelte";
 import type EditableTextNodeEditorComponent from "./EditableTextNodeEditor.svelte";
 import type BubbleMenuComponent from "./BubbleMenu.svelte";
 import type TemplateRendererComponent from "./TemplateRenderer.svelte";
+import type VariableFormComponent from "./VariableForm.svelte";
+import type OutlinePanelComponent from "./OutlinePanel.svelte";
 
 export * from "./editor.svelte.js";
 export * from "./navigationGuard.js";
 export * from "./createNavigationGuard.svelte.js";
 export * from "./history/index.js";
+export * from "./fileImport.svelte.js";
+export * from "./agentTools.svelte.js";
+export * from "./outline.svelte.js";
 
 export {
   DirtyTracker,
@@ -31,10 +36,14 @@ export type BubbleMenuProps = ComponentProps<typeof BubbleMenuComponent>;
 export type TemplateRendererProps = ComponentProps<
   typeof TemplateRendererComponent
 >;
+export type VariableFormProps = ComponentProps<typeof VariableFormComponent>;
 
 export { default as EditableTextNodeEditor } from "./EditableTextNodeEditor.svelte";
 export { default as BubbleMenu } from "./BubbleMenu.svelte";
 export { default as TemplateRenderer } from "./TemplateRenderer.svelte";
+export { default as VariableForm } from "./VariableForm.svelte";
+export type OutlinePanelProps = ComponentProps<typeof OutlinePanelComponent>;
+export { default as OutlinePanel } from "./OutlinePanel.svelte";
 
 export type {
   Template,
@@ -45,6 +54,12 @@ export type {
   RichTextPresetOptions,
   ImageOptions,
 } from "@pixerate/editor";
+export type {
+  PromptValues,
+  PromptDiagnostic,
+  VariableFormField,
+} from "@pixerate/editor";
 
 export * from "./spreadsheet/index.js";
 export * from "./image-editor/index.js";
+export * from "./review/index.js";

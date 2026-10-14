@@ -50,7 +50,7 @@ describe('Svelte SpreadsheetEditor', () => {
     expect(sheetState.editingCell).toBeNull();
   });
 
-  it('redoes with Mod+Shift+Z (key "Z") and Ctrl+Y, and copies only the selection', () => {
+  it('redoes with Mod+Shift+Z (key "Z") and Ctrl+Y, and copies only the selection', async () => {
     const { sheetState, raw, key, grid } = setup();
     const [r0, r1] = sheetState.document.rows.map((r) => r.id);
     const [c0, c1] = sheetState.document.columns.map((c) => c.id);
@@ -75,6 +75,8 @@ describe('Svelte SpreadsheetEditor', () => {
     sheetState.selectCell(1, 1, true);
     flushSync();
     key(grid, { key: 'c', ctrlKey: true });
+    // Without a browser copy event (jsdom), the TSV fallback runs on the next task.
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(writeText).toHaveBeenCalledWith('x\tb\nc\td');
   });
 });

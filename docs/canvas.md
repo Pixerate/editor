@@ -35,6 +35,8 @@ pnpm add @pixerate/editor-svelte @xyflow/svelte
 | [`createCanvasShortcuts`](#createcanvasshortcutsoptions) | Global keyboard shortcut binding with automatic suppression during active text editing. |
 | [`createCanvasInteractions`](#createcanvasinteractionsoptions) | Spacebar panning toggle, trackpad pinch detection, and SvelteFlow interaction presets. |
 | [`createCanvasExplosion`](#createcanvasexplosiongraph-options) | Multi-node explosion, fan-out/bezier trajectory animation, spatial displacement ("make space"), and reversible collapse. |
+| [`createCanvasArrange`](#createcanvasarrangeoptions) | Align, distribute, make same size, lock / unlock, layer order and smart guides with snap-to-shape. |
+| [`createCanvasScenes`](#createcanvasscenesoptions) | Named saved viewports (Freeform "Scenes") with next / previous, reorder, rename and JSON persistence. |
 | `types` | Generic TypeScript interfaces (`CanvasNode`, `CanvasEdge`, `GraphDifferences`, `CanvasLayoutOptions`, etc.). |
 
 ---
@@ -241,3 +243,105 @@ Headless Svelte 5 rune orchestrating node expansion/explosion into sub-nodes, pa
 </script>
 ```
 
+---
+
+### `createCanvasArrange(options)`
+
+Freeform-style arrangement. The maths lives in `@pixerate/editor/canvas` and is shared with React's `useCanvasArrange`.
+
+#### Options
+- `getNodes: () => TNode[]` / `setNodes: (nodes: TNode[]) => void`: Read and write the node array.
+- `getSelectedIds?: () => string[]`: Ids used when a method is called without ids (default: nodes with `selected: true`).
+- `history?: HistoryManager`: Records every action as one undoable step. Drag snapping is not recorded.
+- `getZoom?: () => number`: Converts the guide threshold from screen pixels to flow units.
+- `guides?: { threshold?: number; edges?: boolean; centres?: boolean; spacing?: boolean }`: Smart-guide options (threshold defaults to 6 screen px).
+- `snapping?: boolean`: Turns drag snapping off while keeping the actions.
+
+#### Methods
+- `align(edge, ids?)`: `'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom'`. Aligns to the selection bounds.
+- `distribute(axis, mode?, ids?)`: `'horizontal' | 'vertical' | 'both'`, with `'gaps'` (equal spacing, default) or `'centres'`. The outermost nodes stay put. Needs three or more nodes.
+- `matchSize(dimension, ids?, { reference?, keepCentre? })`: Make Same Size from the `largest` (default), `smallest`, `first` or `{ id }` node.
+- `lock(ids?)`, `unlock(ids?)`, `toggleLock(ids?)`, `isLocked(id)`.
+- `bringForward(ids?)`, `sendBackward(ids?)`, `bringToFront(ids?)`, `sendToBack(ids?)`.
+- `beginDrag(ids?)`, `drag(ids?)`, `endDrag()`, and the reactive `guides` array.
+- `runAction(action)`: Runs a shortcut action by name.
+
+#### Rules
+- **Locked nodes** (`data.locked === true`, set by `lockNodes`) are never moved, resized or restacked. They still count towards the selection bounds, so they act as alignment anchors. Locking sets `draggable: false` and `deletable: false` and keeps the node selectable. Unlocking restores the previous flags.
+- **Sub-flows**: Geometry uses absolute positions along the `parentId` chain. Updates are written back relative to the parent.
+- **Sizes**: `measured`, then `width` / `height`, then a pixel `width` / `height` in `style` (string or object), then `estimateNodeSize`.
+- **Layer order**: `zIndex` values are assigned per sibling group. The array order is not changed (see GOTCHAS).
+
+#### Smart guides and snapping
+
+```svelte
+<script lang="ts">
+  import { SvelteFlow, useSvelteFlow } from '@xyflow/svelte';
+  import { createCanvasArrange, createCanvasArrangeShortcuts, CanvasGuidesLayer } from '@pixerate/editor-svelte/canvas';
+
+  let nodes = $state.raw([...]);
+  const flow = useSvelteFlow();
+  const arrange = createCanvasArrange({
+    getNodes: () => nodes,
+    setNodes: (next) => (nodes = next),
+    getZoom: () => flow.getViewport().zoom
+  });
+  $effect(() => createCanvasArrangeShortcuts({ arrange }));
+</script>
+
+<SvelteFlow
+  bind:nodes
+  onnodedragstart={() => arrange.beginDrag()}
+  onnodedrag={({ nodes: dragged }) => arrange.drag(dragged.map((n) => n.id))}
+  onnodedragstop={() => arrange.endDrag()}
+>
+  <CanvasGuidesLayer guides={arrange.guides} viewport={flow.getViewport()} />
+</SvelteFlow>
+```
+
+Edges snap to edges and centres to centres. Equal-spacing guides appear when the dragged node would sit centred between its row/column neighbours, or would repeat a neighbour's gap. Snap targets are indexed once per drag (`createNodeGuideIndex`), and each frame is a binary search.
+
+Pure helpers for custom integrations: `alignNodes`, `distributeNodes`, `matchSize`, `reorderNodes`, `applyNodeUpdates`, `invertNodeUpdates`, `computeSnapGuides`, `createGuideIndex`, `snapNodeDrag`.
+
+#### Keyboard shortcuts (`DEFAULT_ARRANGE_SHORTCUTS`)
+
+| Action | Shortcut |
+| :--- | :--- |
+| Align left / center / right | `Alt+A` / `Alt+H` / `Alt+D` |
+| Align top / middle / bottom | `Alt+W` / `Alt+V` / `Alt+S` |
+| Distribute horizontally / vertically | `Alt+Shift+H` / `Alt+Shift+V` |
+| Lock / Unlock | `Mod+L` / `Mod+Alt+L` |
+| Bring forward / Send backward | `Mod+]` / `Mod+[` |
+| Bring to front / Send to back | `Mod+Alt+]` / `Mod+Alt+[` |
+| Next / previous scene | `PageDown` / `PageUp` |
+
+Keys are matched by `KeyboardEvent.code`. Shortcuts are ignored while typing in inputs, textareas, contenteditable and ProseMirror. Pass `bindings` to override them.
+
+---
+
+### `createCanvasScenes(options?)`
+
+Named saved viewports backed by the headless `CanvasScenesStore` (shared with React's `useCanvasScenes`).
+
+#### Options
+- `getViewport?` / `setViewport?`: Usually `useSvelteFlow().getViewport` / `setViewport`.
+- `duration?`: Transition duration when showing a scene (default 300ms).
+- `wrap?`: Whether `next` / `previous` wrap around (default `false`).
+- `initialScenes?`, `createId?`, `onChange?`.
+
+#### Returns
+- `scenes`, `current`, `currentId`, `currentIndex` (reactive).
+- `capture(name?, { viewport?, nodeIds?, index? })`, `captureNodes(nodes, ids, size, name?, fit?)`, `recapture(id)`.
+- `update`, `rename`, `move(id, toIndex)`, `reorder(ids)`, `remove`, `clear`.
+- `goTo(id)`, `next()`, `previous()`: Move the viewport through `setViewport`.
+- `toJSON()`, `serialize()`, `load(json)`: Versioned JSON (`{ version: 1, scenes }`). Invalid entries are dropped on load.
+
+`fitViewportToRect(rect, size, { padding, minZoom, maxZoom })` and `fitViewportToNodes(nodes, size, ids?)` compute an xyflow viewport that frames content.
+
+---
+
+### Connector snapping
+
+`findConnectorSnap(pointer, targets, { zoom, radius, excludeIds, mode })` returns the node and side (`Position` plus the matching `Side`) a connection line should attach to. The pointer is in flow coordinates. A shape under the pointer wins over a shape that is only nearby. `mode: 'handle'` snaps to the side's midpoint, and `'edge'` snaps to the nearest point on the side (floating edges). `nearestHandlePositions(source, target)` picks facing sides for a new connection. `CONNECTION_LINE_TYPES` lists the line types both flow libraries accept for `connectionLineType`.
+
+Shape boolean operations (unite / intersect / subtract) are not provided.

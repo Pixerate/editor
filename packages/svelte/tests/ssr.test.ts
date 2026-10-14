@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
 import { render } from "svelte/server";
-import { TemplateRenderer, EditableTextNodeEditor } from "../src";
+import { TemplateRenderer, EditableTextNodeEditor, VariableForm, CommentsPanel, ReviewToolbar, OutlinePanel } from "../src";
 import { SpreadsheetEditor } from "../src/spreadsheet";
 
 describe("SSR", () => {
@@ -16,9 +16,16 @@ describe("SSR", () => {
     });
     expect(body).toContain("subject");
 
+    expect(
+      render(VariableForm, { props: { content: "{subject|a fox|Who?}" } }).body,
+    ).toContain('placeholder="a fox"');
+
     expect(() =>
       render(EditableTextNodeEditor, { props: { content: "<p>Hi</p>" } }),
     ).not.toThrow();
     expect(() => render(SpreadsheetEditor, { props: {} })).not.toThrow();
+    expect(render(CommentsPanel, { props: {} }).body).toContain("No comments yet");
+    expect(render(ReviewToolbar, { props: {} }).body).toContain("No changes");
+    expect(render(OutlinePanel, { props: {} }).body).toContain("Document outline");
   });
 });

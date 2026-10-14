@@ -1,8 +1,25 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
-  import { indexToColName, type SpreadsheetColumn, type SpreadsheetRow, type CellData } from '@pixerate/editor';
+  import {
+    indexToColName,
+    computeFillTarget,
+    getSpreadsheetMenuItems,
+    normalizeRange,
+    rangeContains,
+    type SpreadsheetColumn,
+    type SpreadsheetRow,
+    type CellData,
+    type CellRange,
+    type SpreadsheetMenuItem,
+    type SpreadsheetViewColumn,
+    type SpreadsheetViewRow
+  } from '@pixerate/editor';
   import FormulaBar from './FormulaBar.svelte';
+  import SpreadsheetContextMenu from './SpreadsheetContextMenu.svelte';
+  import SpreadsheetGroupRow from './SpreadsheetGroupRow.svelte';
+  import FormulaHints from './FormulaHints.svelte';
   import { createReactiveSpreadsheet } from './spreadsheet.svelte.js';
+  import { attachSpreadsheetClipboard } from './tableInteractions.js';
 
   interface Props {
     sheetState?: ReturnType<typeof createReactiveSpreadsheet>;
@@ -33,10 +50,74 @@
   let isReadOnly = $derived(readOnly || readonly);
 
   let gridContainer = $state<HTMLDivElement | null>(null);
+  let cellInput = $state<HTMLInputElement | null>(null);
   let resizingColId = $state<string | null>(null);
   let hoveredColId = $state<string | null>(null);
   let resizeStartX = $state(0);
   let resizeStartWidth = $state(0);
+
+  // --- Table operations: clipboard, fill handle, context menu, frozen panes ---
+
+  // Sizes of the sticky header row and row-number column, for frozen-pane offsets.
+  const COLUMN_HEADER_HEIGHT = 28;
+  const ROW_HEADER_WIDTH = 48;
+
+  let copyShortcutFallback: () => void = () => {};
+  $effect(() => {
+    const clipboard = attachSpreadsheetClipboard(() => gridContainer, sheetState, () => isReadOnly);
+    copyShortcutFallback = clipboard.copyShortcutFallback;
+    return () => clipboard.destroy();
+  });
+
+  let fillDrag = $state.raw<{ source: CellRange; target: CellRange | null } | null>(null);
+  let menu = $state.raw<{ x: number; y: number; items: SpreadsheetMenuItem[] } | null>(null);
+  let filteredColIds = $derived.by(() => {
+    const filter = sheetState.document.table?.filter;
+    return new Set(filter?.enabled ? filter.rules.map((r) => r.colId) : []);
+  });
+  let selection = $derived(sheetState.selectedRange ? normalizeRange(sheetState.selectedRange) : null);
+
+  /** Fill handle: press, move over cells, release to autofill (one undo step). */
+  function startFill(e: MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    const range = sheetState.selectedRange;
+    if (!range) return;
+    fillDrag = { source: normalizeRange(range), target: null };
+    const finish = () => {
+      const current = fillDrag;
+      fillDrag = null;
+      if (current?.target) sheetState.autofill(current.source, current.target);
+    };
+    window.addEventListener('mouseup', finish, { once: true });
+  }
+
+  function extendFill(row: number, col: number) {
+    if (!fillDrag) return;
+    fillDrag = { source: fillDrag.source, target: computeFillTarget(fillDrag.source, { row, col }) };
+  }
+
+  function handleCellContextMenu(rIdx: number, cIdx: number, e: MouseEvent) {
+    if (isReadOnly) return;
+    e.preventDefault();
+    if (sheetState.editingCell) sheetState.commitEditing();
+    if (!sheetState.selectedRange || !rangeContains(sheetState.selectedRange, rIdx, cIdx)) {
+      sheetState.selectCell(rIdx, cIdx);
+    }
+    menu = { x: e.clientX, y: e.clientY, items: getSpreadsheetMenuItems(sheetState.controller, { row: rIdx, col: cIdx }) };
+  }
+
+  /** Sticky positioning for cells in frozen rows and/or columns. */
+  function frozenCellStyle(viewRow: Extract<SpreadsheetViewRow, { kind: 'row' }>, viewCol: SpreadsheetViewColumn): string {
+    if (!viewRow.frozen && !viewCol.frozen) return '';
+    const zIndex = viewRow.frozen && viewCol.frozen ? 14 : viewRow.frozen ? 12 : 11;
+    return (
+      'position: sticky;' +
+      (viewRow.frozen ? ` top: ${COLUMN_HEADER_HEIGHT + viewRow.stickyTop}px;` : '') +
+      (viewCol.frozen ? ` left: ${ROW_HEADER_WIDTH + viewCol.stickyLeft}px;` : '') +
+      ` z-index: ${zIndex}; background: var(--background, #fff);`
+    );
+  }
 
 
 
@@ -112,10 +193,9 @@
       e.preventDefault();
       sheetState.redo();
     } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'c') {
-      // Copy the selection, not the whole sheet.
-      e.preventDefault();
-      const tsv = sheetState.exportToTsv(sheetState.selectedRange);
-      navigator.clipboard?.writeText(tsv);
+      // Copy the selection, not the whole sheet. The browser's copy event
+      // writes TSV, HTML and the internal format; the fallback writes TSV.
+      copyShortcutFallback();
     } else if (!isReadOnly && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
       // Direct typing into cell starts editing
       const col = sheetState.document.columns[sheetState.activeCell.col];
@@ -256,8 +336,8 @@
     if (gridContainer && typeof document !== 'undefined') {
       const table = gridContainer.querySelector('table');
       if (table) {
-        const thElements = table.querySelectorAll('thead th');
-        const th = thElements[colIndex + 1] as HTMLElement | undefined;
+        // Look cells up by column index: hidden columns and merges shift DOM positions.
+        const th = table.querySelector(`thead th[data-col="${colIndex}"]`) as HTMLElement | null;
         if (th) {
           const headerInner = (th.firstElementChild as HTMLElement) || th;
           const headerW = measureElementContentWidth(headerInner, gridContainer);
@@ -268,7 +348,7 @@
         const sampleLimit = Math.min(rows.length, 150);
         for (let r = 0; r < sampleLimit; r++) {
           const tr = rows[r];
-          const td = tr.children[colIndex + 1] as HTMLElement | undefined;
+          const td = tr.querySelector(`td[data-col="${colIndex}"][colspan="1"]`) as HTMLElement | null;
           if (td) {
             const cellW = measureElementContentWidth(td, gridContainer);
             calculatedWidth = Math.max(calculatedWidth, cellW + 20);
@@ -345,15 +425,21 @@
           <th class="w-12 min-w-[3rem] sticky left-0 z-30 bg-muted/90 border-r border-border text-center text-[10px] text-muted-foreground font-medium">
             #
           </th>
-          {#each sheetState.document.columns as col, cIdx (col.id)}
+          {#each sheetState.viewModel.columns as viewCol (viewCol.column.id)}
+            {@const col = viewCol.column}
+            {@const cIdx = viewCol.index}
             <th
+              data-col={cIdx}
               class="relative border-r border-border px-2 text-left font-medium text-muted-foreground hover:bg-muted/90 transition-colors group overflow-hidden max-w-0 {onColumnHeaderClick ? 'cursor-pointer' : 'cursor-default'}"
-              style="width: {col.width || 130}px; min-width: {col.width || 130}px; max-width: {col.width || 130}px; overflow: hidden;"
+              style="width: {col.width || 130}px; min-width: {col.width || 130}px; max-width: {col.width || 130}px; overflow: hidden;{viewCol.frozen ? ` position: sticky; left: ${ROW_HEADER_WIDTH + viewCol.stickyLeft}px; z-index: 25; background: var(--muted, #f4f4f5);` : ''}"
               onclick={() => onColumnHeaderClick?.(col)}
               ondblclick={(e) => handleHeaderDblClick(col.id, cIdx, e)}
             >
               <div class="flex items-center justify-between gap-1 min-w-0 overflow-hidden truncate">
                 <span class="truncate font-semibold text-foreground text-xs min-w-0">{col.title}</span>
+                {#if filteredColIds.has(col.id)}
+                  <span class="text-[10px] text-primary shrink-0" title="Filtered" data-filtered="true">⏷</span>
+                {/if}
                 <span class="text-[10px] text-muted-foreground/70 font-mono font-normal shrink-0">({col.key})</span>
               </div>
               <!-- Column Resize Handle -->
@@ -388,43 +474,98 @@
 
       <!-- Table Body Rows -->
       <tbody>
-        {#each sheetState.document.rows as row, rIdx (row.id)}
-          <tr class="border-b border-border hover:bg-muted/10 transition-colors" style="height: {row.height || 32}px;">
+        {#each sheetState.viewModel.rows as viewRow (viewRow.kind === 'group' ? `group:${viewRow.group.key}` : viewRow.row.id)}
+          {#if viewRow.kind === 'group'}
+            <SpreadsheetGroupRow
+              group={viewRow.group}
+              columns={sheetState.viewModel.columns}
+              groupColId={sheetState.document.table?.grouping?.colId ?? ''}
+              onToggle={sheetState.toggleGroupCollapsed}
+              trailingCell={!!onAddColumnClick}
+            />
+          {:else}
+          {@const displayRowIndex = viewRow.index}
+          <tr
+            data-row={displayRowIndex}
+            class="border-b border-border hover:bg-muted/10 transition-colors {viewRow.section !== 'body' ? 'bg-muted/30 font-semibold' : ''}"
+            style="height: {viewRow.row.height || 32}px;"
+          >
             <!-- Row Header Index -->
-            <td class="w-12 min-w-[3rem] sticky left-0 z-10 bg-muted/50 border-r border-border text-center text-[10px] text-muted-foreground font-mono select-none">
-              {rIdx + 1}
+            <td
+              class="w-12 min-w-[3rem] sticky left-0 z-10 bg-muted/50 border-r border-border text-center text-[10px] text-muted-foreground font-mono select-none"
+              style={viewRow.frozen ? `top: ${COLUMN_HEADER_HEIGHT + viewRow.stickyTop}px; z-index: 15;` : undefined}
+            >
+              {displayRowIndex + 1}
             </td>
 
-            <!-- Cells -->
-            {#each sheetState.document.columns as col, cIdx (col.id)}
+            <!-- Cells (a merged cell renders its top-left cell, spanning the merge) -->
+            {#each sheetState.viewModel.columns as viewCol (viewCol.column.id)}
+              {@const span = sheetState.viewModel.getCellSpan(displayRowIndex, viewCol.index)}
+              {#if span}
+              {@const rIdx = span.source.row}
+              {@const cIdx = span.source.col}
+              {@const row = sheetState.document.rows[rIdx]}
+              {@const col = sheetState.document.columns[cIdx]}
               {@const cell = sheetState.getCell(row.id, col.id)}
               {@const selected = isCellSelected(rIdx, cIdx)}
               {@const active = isActiveCell(rIdx, cIdx)}
               {@const isEditing = sheetState.editingCell?.row === rIdx && sheetState.editingCell?.col === cIdx}
 
+              {@const inFillPreview = !!fillDrag?.target && !selected && rangeContains(fillDrag.target, displayRowIndex, viewCol.index)}
+              {@const showFillHandle =
+                !isReadOnly &&
+                !isEditing &&
+                !!selection &&
+                (span.merge
+                  ? rangeContains(span.merge, selection.endRow, selection.endCol)
+                  : selection.endRow === rIdx && selection.endCol === cIdx)}
+
+              <!-- svelte-ignore a11y_mouse_events_have_key_events -->
               <td
-                class="relative border-r border-border px-2 py-1 truncate max-w-0 text-foreground transition-colors {selected ? 'bg-primary/10' : ''} {active ? 'ring-2 ring-primary ring-inset z-10' : ''}"
-                style="max-width: 0; overflow: hidden;"
+                data-row={rIdx}
+                data-col={cIdx}
+                rowspan={span.rowSpan}
+                colspan={span.colSpan}
+                class="relative border-r border-border px-2 py-1 truncate max-w-0 text-foreground transition-colors {selected ? 'bg-primary/10' : ''} {active ? 'ring-2 ring-primary ring-inset z-10' : ''} {viewCol.header ? 'font-semibold' : ''}"
+                style="max-width: 0; overflow: hidden; {frozenCellStyle(viewRow, viewCol)}{inFillPreview ? ' outline: 1px dashed var(--primary, #6366f1); outline-offset: -1px;' : ''}"
                 onclick={(e) => handleCellClick(rIdx, cIdx, e)}
                 ondblclick={() => handleCellDblClick(rIdx, cIdx)}
+                oncontextmenu={(e) => handleCellContextMenu(rIdx, cIdx, e)}
+                onmouseover={() => extendFill(displayRowIndex, viewCol.index)}
               >
                 {#if isEditing}
                   <input
                     type="text"
                     class="absolute inset-0 w-full h-full px-2 py-1 bg-background text-foreground outline-none font-sans text-xs border-2 border-primary z-20"
+                    bind:this={cellInput}
                     bind:value={sheetState.draftValue}
                     onblur={() => sheetState.commitEditing()}
                     
                   />
+                  <FormulaHints input={cellInput} value={sheetState.draftValue} onAccept={(next) => (sheetState.draftValue = next)} />
                 {:else if customCellRenderer}
                   {@const cellArg = Object.assign({ row, col, cell }, cell)}
                   {@render (customCellRenderer as any)(cellArg, col, row)}
                 {:else}
-                  <span class="truncate block max-w-full {cell.error ? 'text-destructive font-semibold' : ''}">
+                  <span
+                    class="truncate block max-w-full {cell.error ? 'text-destructive font-semibold' : ''}"
+                    title={cell.error ? (cell.errorMessage ?? cell.error) : undefined}
+                  >
                     {cell.error || (cell.value ?? '')}
                   </span>
                 {/if}
+                {#if showFillHandle}
+                  <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
+                  <div
+                    class="spreadsheet-fill-handle"
+                    aria-label="Fill handle"
+                    onmousedown={startFill}
+                    onclick={(e) => e.stopPropagation()}
+                    style="position: absolute; right: 0; bottom: 0; width: 7px; height: 7px; background: var(--primary, #6366f1); cursor: crosshair; z-index: 25;"
+                  ></div>
+                {/if}
               </td>
+              {/if}
             {/each}
             {#if onAddColumnClick}
               <td class="w-10 min-w-[2.5rem] bg-muted/10 border-r border-border"></td>
@@ -432,10 +573,22 @@
             <!-- Spacer cell to absorb remaining table width -->
             <td class="border-b border-border bg-transparent p-0"></td>
           </tr>
+          {/if}
         {/each}
       </tbody>
     </table>
   </div>
+  {#if menu}
+    <SpreadsheetContextMenu
+      items={menu.items}
+      x={menu.x}
+      y={menu.y}
+      onClose={() => {
+        menu = null;
+        gridContainer?.focus();
+      }}
+    />
+  {/if}
 </div>
 
 <style>

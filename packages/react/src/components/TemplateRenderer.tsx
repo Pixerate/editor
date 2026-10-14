@@ -1,9 +1,10 @@
 import React, { useMemo } from "react";
 import {
-  tokenizePrompt,
+  evaluatePromptTokens,
   resolveTemplates,
   Template,
   ColorGradient,
+  PromptValues,
 } from "@pixerate/editor";
 
 export interface TemplateRendererProps {
@@ -15,6 +16,13 @@ export interface TemplateRendererProps {
   templateColorMap?: Map<string, ColorGradient>;
   /** Whether to resolve nested templates recursively before displaying */
   resolve?: boolean;
+  /** Template version bindings used when `resolve` is set */
+  bindings?: Record<string, string>;
+  /**
+   * Variable values. When set, variables show their value (or default),
+   * sections whose condition fails are hidden, and section tags are dropped.
+   */
+  values?: PromptValues;
   /** Custom class name for the wrapper */
   className?: string;
   /** Click callback for template badges */
@@ -23,23 +31,27 @@ export interface TemplateRendererProps {
   onVariableClick?: (variableName: string) => void;
 }
 
+const CONDITIONAL_PREFIX = { if: "?", unless: "!", end: "/" } as const;
+
 export const TemplateRenderer: React.FC<TemplateRendererProps> = ({
   content,
   templates = [],
   templateColorMap,
   resolve = false,
+  bindings,
+  values,
   className = "font-mono text-sm leading-relaxed whitespace-pre-wrap break-words",
   onTemplateClick,
   onVariableClick,
 }) => {
   const displayText = useMemo(() => {
     if (!resolve || templates.length === 0) return content;
-    return resolveTemplates(content, templates);
-  }, [content, templates, resolve]);
+    return resolveTemplates(content, templates, { bindings });
+  }, [content, templates, resolve, bindings]);
 
   const tokens = useMemo(() => {
-    return tokenizePrompt(displayText);
-  }, [displayText]);
+    return evaluatePromptTokens(displayText, values);
+  }, [displayText, values]);
 
   return (
     <div className={className}>
@@ -68,14 +80,67 @@ export const TemplateRenderer: React.FC<TemplateRendererProps> = ({
         }
 
         if (token.type === "variable") {
+          const details = [
+            `Variable: ${token.value}`,
+            token.description,
+            token.defaultValue !== undefined
+              ? `Default: ${token.defaultValue || "(empty)"}`
+              : undefined,
+          ]
+            .filter(Boolean)
+            .join("\n");
+
+          if (token.resolvedValue !== undefined) {
+            return (
+              <span
+                key={index}
+                onClick={() => onVariableClick?.(token.value)}
+                data-variable={token.value}
+                data-value-source={token.valueSource}
+                className={
+                  token.valueSource === "value"
+                    ? "inline px-1 mx-0.5 rounded-md bg-emerald-400/15 text-emerald-700 dark:text-emerald-300 border-b border-emerald-400/60 cursor-pointer"
+                    : "inline px-1 mx-0.5 rounded-md bg-violet-400/10 text-violet-600 dark:text-violet-300 italic border-b border-dashed border-violet-400/60 cursor-pointer"
+                }
+                title={details}
+              >
+                {token.resolvedValue}
+              </span>
+            );
+          }
+
           return (
             <span
               key={index}
               onClick={() => onVariableClick?.(token.value)}
+              data-variable={token.value}
               className="inline-flex items-center px-1.5 py-0.5 mx-0.5 text-xs font-medium rounded-md border border-violet-400/40 bg-violet-400/15 text-violet-600 dark:text-violet-300 hover:brightness-110 cursor-pointer transition-all"
-              title={`Variable: ${token.value}`}
+              title={details}
             >
-              {`{${token.value}}`}
+              {`{${token.value}`}
+              {token.defaultValue !== undefined && (
+                <span className="opacity-60">{`|${token.defaultValue}`}</span>
+              )}
+              {"}"}
+            </span>
+          );
+        }
+
+        if (token.type === "conditional" && token.conditional) {
+          return (
+            <span
+              key={index}
+              data-conditional={token.conditional}
+              className="inline-flex items-center px-1 py-0.5 mx-0.5 text-xs font-medium rounded-md border border-amber-400/40 bg-amber-400/15 text-amber-700 dark:text-amber-300"
+              title={
+                token.conditional === "end"
+                  ? `End of section: ${token.value}`
+                  : token.conditional === "if"
+                    ? `Shown when "${token.value}" has a value`
+                    : `Shown when "${token.value}" is empty`
+              }
+            >
+              {`{${CONDITIONAL_PREFIX[token.conditional]}${token.value}}`}
             </span>
           );
         }

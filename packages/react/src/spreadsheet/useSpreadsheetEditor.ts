@@ -1,6 +1,7 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useMemo } from 'react';
 import {
   SpreadsheetController,
+  bindSpreadsheetTableActions,
   type SpreadsheetControllerOptions,
   type SpreadsheetDocument,
   type CellCoordinate,
@@ -145,6 +146,15 @@ export function useSpreadsheetEditor(options: SpreadsheetControllerOptions = {})
     setDoc({ ...controller.document });
   }, [controller]);
 
+  // Table operations (sort, filters, freeze, hide, merge, autofill, categories,
+  // transpose, CSV, clipboard). The controller reports their changes through
+  // onDocumentChange / onSelectionChange, which update the state above.
+  const tableActions = useMemo(() => bindSpreadsheetTableActions(controller), [controller]);
+  // What to render: visible rows (with group headers) and columns, frozen
+  // offsets and merged-cell spans. Recomputed whenever the document changes.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const viewModel = useMemo(() => controller.getViewModel(), [controller, doc]);
+
   return {
     document: doc,
     activeCell,
@@ -188,6 +198,8 @@ export function useSpreadsheetEditor(options: SpreadsheetControllerOptions = {})
       controller.importFromTsv(data);
       setDoc({ ...controller.document });
     },
+    ...tableActions,
+    viewModel,
     undo,
     redo
   };

@@ -111,6 +111,74 @@ export {
 	type CreateStreamingCanvasOptions
 } from './createStreamingCanvas.svelte.js';
 
+// Arrangement (align / distribute / size / lock / z-order), smart guides and scenes
+export {
+	createCanvasArrange,
+	createCanvasArrangeShortcuts,
+	type CanvasArrange,
+	type CreateCanvasArrangeOptions,
+	type CanvasArrangeShortcutsOptions
+} from './createCanvasArrange.svelte.js';
+export {
+	createCanvasScenes,
+	type CanvasScenes,
+	type CreateCanvasScenesOptions
+} from './createCanvasScenes.svelte.js';
+export { default as CanvasGuidesLayer } from './CanvasGuidesLayer.svelte';
+export {
+	alignNodes,
+	distributeNodes,
+	matchSize,
+	reorderNodes,
+	applyNodeUpdates,
+	invertNodeUpdates,
+	lockNodes,
+	unlockNodes,
+	toggleLockNodes,
+	isLocked,
+	getNodeSize,
+	getNodeRect,
+	getAbsolutePosition,
+	readStyleSize,
+	withStyleSize,
+	computeSnapGuides,
+	createGuideIndex,
+	createNodeGuideIndex,
+	snapNodeDrag,
+	findConnectorSnap,
+	nearestHandlePositions,
+	handlePoint,
+	positionToSide,
+	sideToPosition,
+	oppositePosition,
+	CONNECTION_LINE_TYPES,
+	CanvasScenesStore,
+	createCanvasScenesStore,
+	parseCanvasScenes,
+	fitViewportToRect,
+	fitViewportToNodes,
+	matchArrangeShortcut,
+	DEFAULT_ARRANGE_SHORTCUTS,
+	type AlignEdge,
+	type DistributeAxis,
+	type DistributeMode,
+	type SizeDimension,
+	type ZOrderOperation,
+	type CanvasNodeUpdate,
+	type GuideLine,
+	type GuideIndex,
+	type SnapGuidesOptions,
+	type SnapResult,
+	type ConnectorSnap,
+	type ConnectorSnapTarget,
+	type CanvasConnectionLineType,
+	type CanvasScene,
+	type CanvasScenesState,
+	type CanvasViewport,
+	type CanvasArrangeAction,
+	type ArrangeShortcutBinding
+} from '@pixerate/editor/canvas';
+
 // Clock and view helpers from core
 export {
 	realClock,

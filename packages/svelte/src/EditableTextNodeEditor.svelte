@@ -1,6 +1,12 @@
 <script lang="ts">
   import type { Editor, Content, Extensions, FocusPosition } from "@tiptap/core";
-  import type { RichTextPresetOptions, MarkdownOptions, ImageOptions } from "@pixerate/editor";
+  import type {
+    RichTextPresetOptions,
+    MarkdownOptions,
+    ImageOptions,
+    FileImportOptions,
+    RichClipboardOptions,
+  } from "@pixerate/editor";
   import { onDestroy, onMount } from "svelte";
   import { initiateEditor } from "./editor.svelte.js";
 
@@ -23,6 +29,10 @@
     image?: ImageOptions | boolean;
     uploadImage?: (file: File) => Promise<string> | string;
     onUploadError?: (error: Error, file: File) => void;
+    /** Import .md, .html, .txt and .rtf files dropped or pasted into the editor (opt-in). */
+    fileImport?: FileImportOptions | boolean;
+    /** Copy/paste lossless ProseMirror slices between editors (opt-in). */
+    richClipboard?: RichClipboardOptions | boolean;
   }
 
   let {
@@ -44,6 +54,8 @@
     image = undefined,
     uploadImage = undefined,
     onUploadError = undefined,
+    fileImport = undefined,
+    richClipboard = undefined,
   }: EditorProps = $props();
 
   let element = $state<HTMLElement>();
@@ -75,12 +87,16 @@
                       },
               }
             : {}),
+          ...(fileImport !== undefined ? { fileImport } : {}),
+          ...(richClipboard !== undefined ? { richClipboard } : {}),
           ...richTextOptions,
         },
         editable,
         autofocus,
-        onCreate,
-        onUpdate,
+        // TipTap registers these as event listeners; passing `undefined`
+        // overrides its no-op defaults and makes `emit` throw.
+        ...(onCreate ? { onCreate } : {}),
+        ...(onUpdate ? { onUpdate } : {}),
         onFocus() {
           if (onFocus) onFocus();
         },

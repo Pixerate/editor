@@ -1,4 +1,32 @@
 import { Slice, Fragment, Node as ProsemirrorNode, type Schema } from "@tiptap/pm/model";
+import type { TrackedChangesView } from "../extensions/track-changes";
+
+export interface PlainTextOptions {
+  /**
+   * How tracked changes (`TrackChanges` extension) appear in the text.
+   * Defaults to `"accepted"`: deleted text is dropped and inserted text kept,
+   * so suggested deletions never leak into exported text. `"original"` drops
+   * insertions and keeps deletions; `"all"` keeps both.
+   */
+  trackedChanges?: TrackedChangesView;
+}
+
+/**
+ * Match tracked deletion / insertion elements. They never nest within
+ * themselves, so a lazy match is enough.
+ */
+const TRACKED_DELETION_REGEX =
+  /<del\b(?=[^>]*\bdata-change-type=["']deletion["'])[^>]*>[\s\S]*?<\/del>/gi;
+const TRACKED_INSERTION_REGEX =
+  /<ins\b(?=[^>]*\bdata-change-type=["']insertion["'])[^>]*>[\s\S]*?<\/ins>/gi;
+
+function stripTrackedChanges(html: string, view: TrackedChangesView): string {
+  if (view === "all" || !html.includes("data-change-type")) return html;
+  return html.replace(
+    view === "accepted" ? TRACKED_DELETION_REGEX : TRACKED_INSERTION_REGEX,
+    "",
+  );
+}
 
 /**
  * Escapes characters that have syntactic meaning in HTML text.
@@ -107,11 +135,14 @@ function decodeHtmlEntities(text: string): string {
 /**
  * Extracts plain text from an HTML string or TipTap HTML, preserving newlines between block tags.
  */
-export function htmlToPlainText(html: string): string {
+export function htmlToPlainText(html: string, options: PlainTextOptions = {}): string {
   if (!html) return "";
 
   // Normalize mentions so data-label is preserved as @label even if textContent is empty
-  const mentionNormalized = html.replace(MENTION_SPAN_REGEX, (match, attrs) => {
+  const mentionNormalized = stripTrackedChanges(
+    html,
+    options.trackedChanges ?? "accepted",
+  ).replace(MENTION_SPAN_REGEX, (match, attrs) => {
     const label =
       getHtmlAttribute(attrs, "data-label") || getHtmlAttribute(attrs, "data-id");
     return label ? `@${label}` : match;
@@ -179,13 +210,14 @@ export function htmlToPlainText(html: string): string {
 
 /**
  * Extracts plain text from a TipTap editor instance, preserving newline separators
- * between block nodes and converting mention nodes to @label.
+ * between block nodes and converting mention nodes to @label. Tracked changes
+ * are rendered as accepted unless `options.trackedChanges` says otherwise.
  */
-export function getEditorText(editor: any): string {
+export function getEditorText(editor: any, options: PlainTextOptions = {}): string {
   if (!editor) return "";
   const html = typeof editor.getHTML === "function" ? editor.getHTML() : "";
   if (html) {
-    return htmlToPlainText(html);
+    return htmlToPlainText(html, options);
   }
   if (typeof editor.getText === "function") {
     try {

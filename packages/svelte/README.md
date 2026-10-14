@@ -35,6 +35,10 @@ Requires **Svelte 5** (the components use runes). Components ship as `.svelte` s
 
 `content` sets the initial document. Read later changes from the bound `editor` (for example in `onUpdate`), as above. The editor is preloaded with `createRichTextPreset()`. Pass `markdown`, `image`, `uploadImage`, `extensions` or `richTextOptions` to configure it.
 
+`fileImport` imports dropped/pasted `.md`, `.html`, `.txt` and `.rtf` files at the drop position, and `richClipboard` copies lossless slices between editors (both opt-in). `createFileImport(() => editor)` returns reactive `isImporting` / `error` plus `openFilePicker()` and `importFiles()` for an import button.
+
+`useAgentToolProvider(registry, () => editor && createRichTextToolProvider(editor, { id: "doc" }))` registers an agent tool provider (see `ToolRegistry` in `@pixerate/editor/agent`) for the component's lifetime. Call it during component initialisation.
+
 ## Read-only token renderer
 
 ```svelte
@@ -46,11 +50,28 @@ Requires **Svelte 5** (the components use runes). Components ship as `.svelte` s
 <TemplateRenderer content={"A photo of {subject} in {{golden_hour}}"} {templates} resolve />
 ```
 
+## Comments and tracked changes
+
+```svelte
+<script lang="ts">
+  import { Comments, TrackChanges } from "@pixerate/editor";
+  import { EditableTextNodeEditor, CommentsPanel, ReviewToolbar } from "@pixerate/editor-svelte";
+  let editor = $state();
+  const extensions = [Comments.configure({ author: me }), TrackChanges.configure({ author: me })];
+</script>
+
+<ReviewToolbar {editor} />
+<EditableTextNodeEditor bind:editor {extensions} />
+<CommentsPanel {editor} />
+```
+
+Put `<CommentButton {editor} />` inside a `BubbleMenu` to comment on the selection. `createComments(editorOrStore)` and `createTrackChanges(editor)` are rune (and Svelte store) adapters for custom UIs.
+
 ## More exports
 
 | Import | Exports |
 | :--- | :--- |
-| `@pixerate/editor-svelte` | `EditableTextNodeEditor`, `BubbleMenu`, `TemplateRenderer`, `initiateEditor`, `createReactiveEditor`, `createHistory`, `createHistoryShortcuts`, `navigationGuard` (action), `createNavigationGuard`, `SpreadsheetEditor`, `FormulaBar`, `createReactiveSpreadsheet`, `DirtyTracker` |
+| `@pixerate/editor-svelte` | `EditableTextNodeEditor`, `BubbleMenu`, `TemplateRenderer`, `initiateEditor`, `createReactiveEditor`, `createHistory`, `createHistoryShortcuts`, `navigationGuard` (action), `createNavigationGuard`, `SpreadsheetEditor`, `FormulaBar`, `FormulaHints`, `createReactiveSpreadsheet`, `DirtyTracker` |
 | `@pixerate/editor-svelte/image-editor` | `ImageEditor`, `createReactiveImageEditor`: crop, rotate/flip, adjustments, annotations, depth masks, and `onInpaint` / `onRemoveBackground` AI hooks |
 | `@pixerate/editor-svelte/canvas` | Runes for `@xyflow/svelte`: `createCanvasGraph`, `createCanvasClipboard`, `createCanvasDocking`, `createCanvasShortcuts`, `createCanvasInteractions`, `createCanvasExplosion`, `createCanvasNodeSync`, `createCanvasMultiDrag`, `createStreamingCanvas`, `AgentPresenceLayer`, `FloatingHorizontalScrollbar`, plus layout helpers |
 

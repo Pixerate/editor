@@ -38,6 +38,80 @@ export {
 	type CanvasGraphTarget
 } from './useCanvasExplosion.js';
 
+// Arrangement (align / distribute / size / lock / z-order), smart guides and scenes
+export {
+	useCanvasArrange,
+	useCanvasArrangeShortcuts,
+	type CanvasArrange,
+	type UseCanvasArrangeOptions,
+	type UseCanvasArrangeShortcutsOptions
+} from './useCanvasArrange.js';
+
+export {
+	useCanvasScenes,
+	type CanvasScenes,
+	type UseCanvasScenesOptions
+} from './useCanvasScenes.js';
+
+export {
+	CanvasGuidesLayer,
+	type CanvasGuidesLayerProps
+} from './CanvasGuidesLayer.js';
+
+export {
+	alignNodes,
+	distributeNodes,
+	matchSize,
+	reorderNodes,
+	applyNodeUpdates,
+	invertNodeUpdates,
+	lockNodes,
+	unlockNodes,
+	toggleLockNodes,
+	isLocked,
+	getNodeSize,
+	getNodeRect,
+	getAbsolutePosition,
+	readStyleSize,
+	withStyleSize,
+	computeSnapGuides,
+	createGuideIndex,
+	createNodeGuideIndex,
+	snapNodeDrag,
+	findConnectorSnap,
+	nearestHandlePositions,
+	handlePoint,
+	positionToSide,
+	sideToPosition,
+	oppositePosition,
+	CONNECTION_LINE_TYPES,
+	CanvasScenesStore,
+	createCanvasScenesStore,
+	parseCanvasScenes,
+	fitViewportToRect,
+	fitViewportToNodes,
+	matchArrangeShortcut,
+	DEFAULT_ARRANGE_SHORTCUTS,
+	type AlignEdge,
+	type DistributeAxis,
+	type DistributeMode,
+	type SizeDimension,
+	type ZOrderOperation,
+	type CanvasNodeUpdate,
+	type GuideLine,
+	type GuideIndex,
+	type SnapGuidesOptions,
+	type SnapResult,
+	type ConnectorSnap,
+	type ConnectorSnapTarget,
+	type CanvasConnectionLineType,
+	type CanvasScene,
+	type CanvasScenesState,
+	type CanvasViewport,
+	type CanvasArrangeAction,
+	type ArrangeShortcutBinding
+} from '@pixerate/editor/canvas';
+
 // Re-export shared canvas types & pure math from core
 export {
 	getLayoutedNodes,

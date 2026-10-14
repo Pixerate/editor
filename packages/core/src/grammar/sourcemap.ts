@@ -1,31 +1,52 @@
-import { TEMPLATE_REGEX, Template } from "./tokens";
-import {
-  getTemplateBody,
-  resolveTemplates,
-  type ResolveTemplatesOptions,
-} from "./resolver";
+import type { PromptDiagnostic, Template } from "./tokens";
+import type { ResolveTemplatesOptions } from "./resolver";
+import { resolvePrompt } from "./engine";
+import { getPromptDiagnostics } from "./tokenizer";
 
+/**
+ * One contiguous piece of resolved output and the raw range it came from.
+ *
+ * - `raw`: copied verbatim; offsets map character by character.
+ * - `template`: the expansion of a `{{template}}` tag.
+ * - `variable`: a substituted value or `|default` for a `{variable}` tag.
+ * - `conditional`: a section tag, or a whole removed section. These segments
+ *   are empty in the resolved text (`resolvedStart === resolvedEnd`).
+ *
+ * Offsets inside non-raw segments map to the start of their raw range.
+ */
 export interface SourceMapSegment {
   resolvedStart: number;
   resolvedEnd: number;
-  source: "raw" | "template";
+  source: "raw" | "template" | "variable" | "conditional";
   rawStart: number;
   rawEnd: number;
   templateName?: string;
+  /** Variable substituted (`variable`) or tested (`conditional`). */
+  variableName?: string;
+  /** For `variable` segments: whether a supplied value or the default was used. */
+  valueSource?: "value" | "default";
 }
 
 /**
  * Resolves templates in text while tracking character offset mapping
  * between the raw input and the fully resolved output.
+ *
+ * Pass `options.values` to also substitute variables and evaluate conditional
+ * sections (see `resolvePrompt`); without it the output is unchanged from the
+ * template-only behavior.
  */
 export function resolveTemplatesWithMapping(
   text: string,
   templates: Template[] = [],
   templateBindings?: Record<string, string>,
-  options?: Pick<ResolveTemplatesOptions, "maxDepth">,
-): { text: string; map: SourceMapSegment[] } {
-  if (!templates || templates.length === 0 || !text.includes("{{")) {
+  options?: Pick<ResolveTemplatesOptions, "maxDepth" | "values">,
+): { text: string; map: SourceMapSegment[]; diagnostics: PromptDiagnostic[] } {
+  if (
+    options?.values === undefined &&
+    (!templates || templates.length === 0 || !text.includes("{{"))
+  ) {
     return {
+      diagnostics: getPromptDiagnostics(text),
       text,
       map: [
         {
@@ -39,82 +60,11 @@ export function resolveTemplatesWithMapping(
     };
   }
 
-  const templateMap = new Map(templates.map((t) => [t.name, t]));
-  const regex = new RegExp(TEMPLATE_REGEX.source, TEMPLATE_REGEX.flags);
-  let match: RegExpExecArray | null;
-  let lastIndex = 0;
-  let resolvedText = "";
-  const map: SourceMapSegment[] = [];
-
-  while ((match = regex.exec(text)) !== null) {
-    const [fullMatch, rawTemplateName] = match;
-    const templateName = rawTemplateName.trim();
-    const matchIndex = match.index;
-
-    // Add raw text preceding this template match
-    if (matchIndex > lastIndex) {
-      const rawSegment = text.substring(lastIndex, matchIndex);
-      map.push({
-        resolvedStart: resolvedText.length,
-        resolvedEnd: resolvedText.length + rawSegment.length,
-        source: "raw",
-        rawStart: lastIndex,
-        rawEnd: matchIndex,
-      });
-      resolvedText += rawSegment;
-    }
-
-    let resolvedBody = fullMatch;
-    let isTemplate = false;
-
-    const template = templateMap.get(templateName);
-    if (template && getTemplateBody(template, templateBindings) !== undefined) {
-      // Resolve the tag itself so loop and depth handling match resolveTemplates.
-      resolvedBody = resolveTemplates(fullMatch, templates, {
-        bindings: templateBindings,
-        maxDepth: options?.maxDepth,
-      });
-      isTemplate = true;
-    }
-
-    if (isTemplate) {
-      map.push({
-        resolvedStart: resolvedText.length,
-        resolvedEnd: resolvedText.length + resolvedBody.length,
-        source: "template",
-        rawStart: matchIndex,
-        rawEnd: matchIndex + fullMatch.length,
-        templateName,
-      });
-      resolvedText += resolvedBody;
-    } else {
-      map.push({
-        resolvedStart: resolvedText.length,
-        resolvedEnd: resolvedText.length + fullMatch.length,
-        source: "raw",
-        rawStart: matchIndex,
-        rawEnd: matchIndex + fullMatch.length,
-      });
-      resolvedText += fullMatch;
-    }
-
-    lastIndex = matchIndex + fullMatch.length;
-  }
-
-  // Add any remaining raw text after the final match
-  if (lastIndex < text.length) {
-    const rawSegment = text.substring(lastIndex);
-    map.push({
-      resolvedStart: resolvedText.length,
-      resolvedEnd: resolvedText.length + rawSegment.length,
-      source: "raw",
-      rawStart: lastIndex,
-      rawEnd: text.length,
-    });
-    resolvedText += rawSegment;
-  }
-
-  return { text: resolvedText, map };
+  return resolvePrompt(text, templates, {
+    bindings: templateBindings,
+    maxDepth: options?.maxDepth,
+    values: options?.values,
+  });
 }
 
 /**

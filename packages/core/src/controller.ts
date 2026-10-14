@@ -90,6 +90,14 @@ export class EditorController {
   }
 
   private enforcePlainTextClipboard() {
+    // Opt-in rich clipboard / file import must not bypass the plain-text invariant.
+    const richClipboard = this.editor.storage?.richClipboard;
+    if (richClipboard) richClipboard.plainTextMode = true;
+    const fileImport = this.editor.extensionManager?.extensions.find(
+      (ext) => ext.name === "fileImport",
+    );
+    if (fileImport) fileImport.options.asPlainText = true;
+
     this.editor.setOptions({
       editorProps: {
         ...this.editor.options.editorProps,

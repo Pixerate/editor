@@ -3,59 +3,19 @@ import {
   VARIABLE_REGEX,
   INSTRUCTION_REGEX,
   Template,
-  TemplateVersion,
+  PromptValues,
 } from "./tokens";
-
-/**
- * Finds the latest version of a template based on `latestVersion` or last version entry.
- */
-export function getLatestVersion(
-  template: Template,
-): TemplateVersion | undefined {
-  if (!template.versions || template.versions.length === 0) {
-    if (template.body !== undefined) {
-      return {
-        id: template.id || "default",
-        version: "1.0",
-        body: template.body,
-      };
-    }
-    return undefined;
-  }
-  if (template.latestVersion) {
-    const found = template.versions.find(
-      (v) => v.version === template.latestVersion,
-    );
-    if (found) return found;
-  }
-  return template.versions[template.versions.length - 1];
-}
+import { resolvePrompt } from "./engine";
+import { parseVariableBody } from "./variables";
 
 export interface ResolveTemplatesOptions {
   bindings?: Record<string, string>;
   maxDepth?: number;
-}
-
-/** Marker substituted for a template tag that would recurse into itself. */
-export const TEMPLATE_LOOP_ERROR = "[Template loop detected]";
-/** Marker substituted for a template tag nested deeper than `maxDepth`. */
-export const TEMPLATE_DEPTH_ERROR = "[Template max depth exceeded]";
-
-/**
- * Returns the body a template tag resolves to, honoring version bindings.
- */
-export function getTemplateBody(
-  template: Template,
-  bindings?: Record<string, string>,
-): string | undefined {
-  const boundVersionId = bindings?.[template.name];
-  if (boundVersionId && template.versions) {
-    const boundVersion = template.versions.find(
-      (v) => v.id === boundVersionId || v.version === boundVersionId,
-    );
-    return boundVersion?.body;
-  }
-  return getLatestVersion(template)?.body ?? template.body;
+  /**
+   * Values for `{variable}` slots and `{?variable}` sections. When omitted,
+   * variables, defaults and section tags are left exactly as written.
+   */
+  values?: PromptValues;
 }
 
 /**
@@ -63,76 +23,32 @@ export function getTemplateBody(
  * A tag that would recurse into itself is replaced with `TEMPLATE_LOOP_ERROR`,
  * and a tag nested deeper than `maxDepth` with `TEMPLATE_DEPTH_ERROR`; the rest
  * of the text still resolves normally.
+ *
+ * Pass `options.values` to also fill variables (falling back to their
+ * `{name|default}`) and evaluate `{?name}…{/name}` / `{!name}…{/name}`
+ * sections, including those inside template bodies. See `resolvePrompt` for
+ * the source map and diagnostics.
  */
 export function resolveTemplates(
   text: string,
   templates: Template[] = [],
   options?: ResolveTemplatesOptions,
 ): string {
-  const templateMap = new Map<string, Template>();
-  for (const t of templates) {
-    templateMap.set(t.name, t);
-  }
-
-  const maxDepth = options?.maxDepth ?? 10;
-
-  function resolveRecursive(
-    currentText: string,
-    visited: Set<string>,
-    depth: number,
-  ): string {
-    const regex = new RegExp(TEMPLATE_REGEX.source, TEMPLATE_REGEX.flags);
-
-    // A function replacer keeps `$&`, `$'` etc. in template bodies literal.
-    return currentText.replace(regex, (fullMatch, rawTemplateName: string) => {
-      const templateName = rawTemplateName.trim();
-
-      if (visited.has(templateName)) {
-        return TEMPLATE_LOOP_ERROR;
-      }
-
-      const template = templateMap.get(templateName);
-      if (!template) {
-        return fullMatch;
-      }
-
-      const versionBody = getTemplateBody(template, options?.bindings);
-      if (versionBody === undefined) {
-        return fullMatch;
-      }
-
-      if (depth + 1 > maxDepth) {
-        return TEMPLATE_DEPTH_ERROR;
-      }
-
-      const nextVisited = new Set(visited);
-      nextVisited.add(templateName);
-
-      return resolveRecursive(versionBody, nextVisited, depth + 1);
-    });
-  }
-
-  return resolveRecursive(text, new Set(), 0);
+  return resolvePrompt(text, templates, options).text;
 }
 
 /**
- * Replaces `{variableName}` with values from a dictionary.
+ * Replaces `{variableName}` with values from a dictionary, falling back to a
+ * `{variableName|default}` when no value is supplied, and evaluates
+ * `{?name}…{/name}` / `{!name}…{/name}` sections. Variables with neither a
+ * value nor a default are left as written. Templates are not expanded.
  */
 export function resolveVariables(
   text: string,
-  values: Record<string, string | number>,
+  values: PromptValues,
 ): string {
   if (!text) return "";
-  return text.replace(
-    new RegExp(VARIABLE_REGEX.source, VARIABLE_REGEX.flags),
-    (fullMatch, varName) => {
-      const key = varName.trim();
-      if (Object.prototype.hasOwnProperty.call(values, key)) {
-        return String(values[key]);
-      }
-      return fullMatch;
-    },
-  );
+  return resolvePrompt(text, [], { values }).text;
 }
 
 /**
@@ -150,7 +66,8 @@ export function extractTemplateNames(text: string): string[] {
 }
 
 /**
- * Extracts unique variable names referenced in text.
+ * Extracts unique variable names referenced in text, including names used by
+ * conditional section tags. Defaults and descriptions are stripped.
  */
 export function extractVariableNames(text: string): string[] {
   if (!text) return [];
@@ -158,7 +75,7 @@ export function extractVariableNames(text: string): string[] {
   const regex = new RegExp(VARIABLE_REGEX.source, VARIABLE_REGEX.flags);
   let match: RegExpExecArray | null;
   while ((match = regex.exec(text)) !== null) {
-    set.add(match[1].trim());
+    set.add(parseVariableBody(match[1]).name);
   }
   return Array.from(set);
 }
