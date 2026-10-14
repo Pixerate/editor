@@ -2,9 +2,16 @@ import { describe, it, expect, vi, beforeAll } from "vitest";
 import { flushSync, mount, unmount } from "svelte";
 import { Editor } from "@tiptap/core";
 import { ToolRegistry, createRichTextToolProvider, type AgentToolProvider } from "@pixerate/editor/agent";
-import { createRichTextPreset, fileImportPluginKey, richClipboardPluginKey } from "@pixerate/editor";
+import {
+  createImportAdapterRegistry,
+  createPdfImportAdapter,
+  createRichTextPreset,
+  fileImportPluginKey,
+  richClipboardPluginKey,
+} from "@pixerate/editor";
 import { EditableTextNodeEditor, createFileImport, useAgentToolProvider } from "../src";
 import { buildDocx, p as docxParagraph, r as docxRun } from "../../core/tests/helpers/zip-writer";
+import { fakeStructuredPdfjs } from "../../core/tests/helpers/fake-pdfjs";
 
 beforeAll(() => {
   // ProseMirror measures layout; jsdom does not implement these.
@@ -81,6 +88,25 @@ describe("createFileImport", () => {
 
     current = undefined;
     expect(await fileImport.importFiles([textFile("a.txt", "x")])).toEqual([]);
+    editor.destroy();
+  });
+});
+
+describe("PDF structure summary (Svelte)", () => {
+  it("summarises detected structure and honours the structure toggle", async () => {
+    const registry = createImportAdapterRegistry({ builtIns: false });
+    registry.register(createPdfImportAdapter(fakeStructuredPdfjs()));
+    const editor = new Editor({ extensions: createRichTextPreset(), content: "<p></p>" });
+    const fileImport = createFileImport(() => editor, { registry });
+    expect(fileImport.structureSummary).toBeNull();
+    const pdf = () => new File([new Uint8Array([37, 80, 68, 70])], "doc.pdf", { type: "application/pdf" });
+    await fileImport.importFiles([pdf()]);
+    expect(fileImport.structureSummary).toMatchObject({ files: 1, mode: "structured", headings: 1, tables: 1, paragraphs: 1 });
+    expect(editor.getHTML()).toMatch(/<h1[^>]*>Imported title<\/h1>/);
+
+    fileImport.setOptions({ registry, adapterOptions: { pdf: { structure: false } } });
+    await fileImport.importFiles([pdf()]);
+    expect(fileImport.structureSummary).toMatchObject({ mode: "plain", headings: 0, tables: 0 });
     editor.destroy();
   });
 });

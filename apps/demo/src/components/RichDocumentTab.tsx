@@ -7,6 +7,7 @@ import {
   useFileImport,
   useAgentToolProvider,
   FindReplaceBar,
+  StylesGallery,
 } from "@pixerate/editor-react";
 import { getCrossReferenceTargets } from "@pixerate/editor";
 import { createRichTextToolProvider } from "@pixerate/editor/agent";
@@ -31,6 +32,7 @@ import {
 } from "lucide-react";
 import { demoToolRegistry } from "../agentTools";
 import { RichDocumentAutosave } from "./RichDocumentAutosave";
+import { samplePdfFile, samplePdfRegistry } from "../samplePdf";
 
 const INITIAL_CONTENT = `
   <h1 id="h-welcome">Welcome to Rich Text Document Editing</h1>
@@ -48,7 +50,7 @@ const INITIAL_CONTENT = `
     <li>Task lists and rich formatting</li>
   </ul>
   <h2 id="h-import">Import and clipboard</h2>
-  <p>Drop a <code>.md</code>, <code>.html</code>, <code>.txt</code> or <code>.rtf</code> file onto the editor (it lands at the drop position) or use “Import file”. Copy and paste keeps footnotes, bookmarks and cross-references intact between editors (rich clipboard).</p>
+  <p>Drop a <code>.md</code>, <code>.html</code>, <code>.txt</code> or <code>.rtf</code> file onto the editor (it lands at the drop position) or use “Import file”. “Import sample PDF” runs PDF layout analysis (columns, headings, lists, tables, running headers) on a generated fixture; untick “Detect structure” for the plain fallback. Copy and paste keeps footnotes, bookmarks and cross-references intact between editors (rich clipboard).</p>
   <section data-type="footnotes"><ol><li data-type="footnote" data-id="fn-demo"><p>Footnotes are numbered automatically and listed at the end of the document.</p></li></ol></section>
 `;
 
@@ -70,6 +72,7 @@ export const RichDocumentTab: React.FC = () => {
       bookmarks: true,
       crossReferences: true,
       findReplace: true,
+      paragraphStyles: true,
       autocorrect: {
         onCorrection: (c) =>
           setCorrections((prev) => [`${c.original} → ${c.replacement}`, ...prev].slice(0, 5)),
@@ -95,6 +98,14 @@ export const RichDocumentTab: React.FC = () => {
       setImportMessage(`Imported ${file.name ?? "file"} with the ${outcome.adapterId} adapter.`),
   });
 
+  // PDF structure detection on a generated two-page fixture (no pdf.js needed).
+  const [detectPdfStructure, setDetectPdfStructure] = useState(true);
+  const sampleImport = useFileImport(editor, {
+    registry: samplePdfRegistry,
+    adapterOptions: { pdf: { structure: detectPdfStructure } },
+  });
+  const pdfSummary = sampleImport.structureSummary;
+
   const provider = useMemo(
     () => (editor ? createRichTextToolProvider(editor, { id: "document", namespace: "doc" }) : null),
     [editor]
@@ -116,6 +127,14 @@ export const RichDocumentTab: React.FC = () => {
       <RichDocumentAutosave editor={editor} />
       {/* Editor Toolbar */}
       <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-3 flex flex-wrap items-center gap-1 shadow-md">
+        <StylesGallery
+          editor={editor}
+          itemClassName="rounded px-2 py-1 text-left text-xs text-slate-200 hover:bg-slate-800 disabled:opacity-40"
+          activeItemClassName="bg-rose-500/20 text-rose-300"
+        />
+
+        <div className="w-px h-5 bg-slate-800 mx-1" />
+
         <button onClick={() => editor.chain().focus().toggleBold().run()} className={btn(editor.isActive("bold"))} title="Bold">
           <Bold className="w-4 h-4" />
         </button>
@@ -252,6 +271,31 @@ export const RichDocumentTab: React.FC = () => {
         {(importMessage || fileImport.error) && (
           <span className={fileImport.error ? "text-red-400" : "text-emerald-300"} data-testid="import-status">
             {fileImport.error ? fileImport.error.message : importMessage}
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={() => void sampleImport.importFiles([samplePdfFile()])}
+          disabled={sampleImport.isImporting}
+          className="flex items-center gap-1.5 px-2 py-1 rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 disabled:opacity-50"
+          title="Imports a generated two-column PDF fixture through the PDF adapter"
+        >
+          <Upload className="w-3.5 h-3.5" /> Import sample PDF
+        </button>
+        <label className="flex items-center gap-1 text-slate-300">
+          <input
+            type="checkbox"
+            checked={detectPdfStructure}
+            onChange={(e) => setDetectPdfStructure(e.target.checked)}
+          />
+          Detect structure
+        </label>
+        {pdfSummary && (
+          <span className="text-emerald-300" data-testid="pdf-structure-summary">
+            {pdfSummary.mode === "plain"
+              ? `Plain import: ${pdfSummary.paragraphs} paragraphs`
+              : `${pdfSummary.headings} headings, ${pdfSummary.lists} lists, ${pdfSummary.tables} tables, ` +
+                `${pdfSummary.multiColumnPages} multi-column page(s) · confidence ${Math.round(pdfSummary.confidence * 100)}%`}
           </span>
         )}
       </div>

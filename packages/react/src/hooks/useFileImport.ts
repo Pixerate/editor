@@ -2,11 +2,20 @@ import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import type { Editor } from "@tiptap/core";
 import {
   FileImportController,
+  summarizeImportStructure,
   type FileImportControllerOptions,
   type FileImportState,
+  type ImportStructureSummary,
 } from "@pixerate/editor";
 
 export interface UseFileImportResult extends FileImportState {
+  /**
+   * Structures detected in the last import (headings, lists, tables, columns),
+   * or `null` when no adapter reported any (only structure-aware adapters such
+   * as PDF do). Turn PDF detection off with
+   * `useFileImport(editor, { adapterOptions: { pdf: { structure: false } } })`.
+   */
+  structureSummary: ImportStructureSummary | null;
   /** Value for `<input type="file" accept={…}>`. */
   accept: string;
   /** Opens the browser file picker and imports the chosen files at the selection. */
@@ -41,9 +50,11 @@ export function useFileImport(
   });
 
   const state = useSyncExternalStore(controller.subscribe, controller.getState, controller.getState);
+  const structureSummary = useMemo(() => summarizeImportStructure(state.lastOutcomes), [state.lastOutcomes]);
 
   return {
     ...state,
+    structureSummary,
     accept: controller.accept,
     openFilePicker: controller.openFilePicker,
     importFiles: controller.importFiles,

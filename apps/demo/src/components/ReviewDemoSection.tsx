@@ -1,5 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Comments, CommentStore, TrackChanges, getEditorText } from "@pixerate/editor";
+import type { Editor } from "@tiptap/core";
+import { TextSelection } from "@tiptap/pm/state";
 import {
   useEditor,
   EditorContent,
@@ -7,11 +9,43 @@ import {
   CommentButton,
   CommentsPanel,
   ReviewToolbar,
+  TrackedChangesList,
   useDocumentCompare,
   useTrackChanges,
 } from "@pixerate/editor-react";
 
 const reviewer = { id: "demo-user", name: "You" };
+
+const MOVE_EXAMPLE = `<h3>Tracked moves</h3>
+<p>First, gather the requirements.</p>
+<p>Then ship it to customers.</p>
+<p>Next, write the design.</p>
+<p>Finally, celebrate.</p>`;
+
+/**
+ * Loads a short list and, with tracking on, cuts the "Next" paragraph and
+ * pastes it before the third block (the same transactions as Cut and
+ * Paste), so it is recorded as one move: green double strike at the
+ * source, green double underline at the destination.
+ */
+function runMoveExample(editor: Editor) {
+  editor.commands.setTrackChanges(false);
+  editor.commands.setContent(MOVE_EXAMPLE);
+  editor.commands.setTrackChanges(true);
+  const doc = editor.state.doc;
+  const starts: number[] = [];
+  doc.forEach((_node, offset) => starts.push(offset + 1));
+  editor.view.dispatch(
+    editor.state.tr.setSelection(TextSelection.create(doc, starts[3], starts[4])),
+  );
+  const slice = editor.state.selection.content();
+  const html = (editor.view as any).serializeForClipboard(slice).dom.innerHTML as string;
+  editor.view.dispatch(editor.state.tr.deleteSelection().setMeta("uiEvent", "cut"));
+  editor.view.dispatch(
+    editor.state.tr.setSelection(TextSelection.create(editor.state.doc, starts[2])),
+  );
+  editor.view.pasteHTML(html);
+}
 
 const ORIGINAL_VERSION = `<h3>Quarterly plan</h3>
 <p>The team will ship the editor in March and review feedback in April.</p>
@@ -44,7 +78,10 @@ export const ReviewDemoSection: React.FC = () => {
     },
   });
   const review = useTrackChanges(editor);
-  const comparison = useDocumentCompare(editor, { author: { id: "compare", name: "Compare" } });
+  const comparison = useDocumentCompare(editor, {
+    author: { id: "compare", name: "Compare" },
+    detectMoves: true,
+  });
   const [comparing, setComparing] = useState(false);
   const [original, setOriginal] = useState(ORIGINAL_VERSION);
   const [revised, setRevised] = useState(REVISED_VERSION);
@@ -65,10 +102,19 @@ export const ReviewDemoSection: React.FC = () => {
         >
           Compare…
         </button>
+        <button
+          type="button"
+          onClick={() => runMoveExample(editor)}
+          className="rounded border border-slate-700 px-2 py-1 text-slate-200 hover:bg-slate-800"
+          title="Cut a sentence and paste it elsewhere with tracking on"
+        >
+          Tracked move example
+        </button>
+        <span>Cut and paste (or drag) a sentence or paragraph with tracking on to record a move.</span>
         {comparison.summary && (
           <span>
             Compared: {comparison.summary.insertions} insertions, {comparison.summary.deletions} deletions,{" "}
-            {comparison.summary.formatChanges} formatting, {comparison.summary.blockChanges} block changes
+            {comparison.summary.formatChanges} formatting, {comparison.summary.blockChanges} block changes, {comparison.summary.moves} moves
             {comparison.summary.notHonoured.length > 0 && ` (not tracked: ${comparison.summary.notHonoured.join(" ")})`}
           </span>
         )}
@@ -122,10 +168,16 @@ export const ReviewDemoSection: React.FC = () => {
             <span className="text-slate-300">{getEditorText(editor)}</span>
           </p>
         </div>
-        <CommentsPanel
-          editor={editor}
-          className="flex flex-col gap-2 rounded-xl border border-slate-800 bg-slate-900/60 p-3 text-sm text-slate-200"
-        />
+        <div className="flex flex-col gap-3">
+          <TrackedChangesList
+            editor={editor}
+            className="flex flex-col gap-1 rounded-xl border border-slate-800 bg-slate-900/60 p-3 text-sm text-slate-200"
+          />
+          <CommentsPanel
+            editor={editor}
+            className="flex flex-col gap-2 rounded-xl border border-slate-800 bg-slate-900/60 p-3 text-sm text-slate-200"
+          />
+        </div>
       </div>
     </section>
   );

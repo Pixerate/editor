@@ -8,6 +8,8 @@ import type { FileLike, ImportAdapterRegistry, ImportOutcome } from "../import/r
 export interface FileImportOptions {
   /** Registry used to match files (default: the shared default registry). */
   registry?: ImportAdapterRegistry;
+  /** Per-adapter options keyed by adapter id, e.g. `{ pdf: { structure: false } }`. */
+  adapterOptions?: Record<string, unknown>;
   /** Insert extracted plain text instead of HTML (plain-text / prompt editors). */
   asPlainText?: boolean;
   /** Import files dropped onto the editor (default `true`). */
@@ -57,6 +59,7 @@ export const FileImport = Extension.create<FileImportOptions>({
   addOptions() {
     return {
       registry: undefined,
+      adapterOptions: undefined,
       asPlainText: false,
       enableDrop: true,
       enablePaste: true,
@@ -73,6 +76,7 @@ export const FileImport = Extension.create<FileImportOptions>({
         registry: registry(),
         at,
         asPlainText: options.asPlainText,
+        adapterOptions: options.adapterOptions,
         onImport: options.onImport,
         onError: options.onImportError,
       });

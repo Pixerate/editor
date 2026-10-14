@@ -71,7 +71,7 @@ describe("compareDocuments", () => {
     const a = doc(p("Same words."), h(2, "Title"));
     const { doc: result, summary } = compare(a, a);
     expect(result.toJSON()).toEqual(a.toJSON());
-    expect(summary).toEqual({ insertions: 0, deletions: 0, formatChanges: 0, blockChanges: 0, notHonoured: [] });
+    expect(summary).toEqual({ insertions: 0, deletions: 0, formatChanges: 0, blockChanges: 0, moves: 0, notHonoured: [] });
   });
 
   it("marks word-level changes inside a modified paragraph", () => {
@@ -332,6 +332,59 @@ describe("compareDocuments", () => {
     }
     // Every kind of change was exercised.
     expect(Object.values(seen).every((count) => count > 10)).toBe(true);
+  });
+});
+
+describe("compareDocuments move detection", () => {
+  const moved = () => ({
+    a: doc(p("Alpha paragraph."), p("Beta paragraph."), p("Gamma paragraph."), p("Delta paragraph.")),
+    b: doc(p("Beta paragraph."), p("Gamma paragraph."), p("Delta paragraph."), p("Alpha paragraph.")),
+  });
+
+  it("is off by default: a moved paragraph is a deletion and an insertion", () => {
+    const { a, b } = moved();
+    const result = compare(a, b);
+    expect(result.summary.moves).toBe(0);
+    expect(getTrackedChanges(result.doc).every((c) => c.type === "block")).toBe(true);
+  });
+
+  it("records an identical paragraph deleted in one place and inserted elsewhere as a move", () => {
+    const { a, b } = moved();
+    const result = compare(a, b, { detectMoves: true });
+    expect(result.summary).toMatchObject({ moves: 1, insertions: 0, deletions: 0 });
+    const [move] = getTrackedChanges(result.doc);
+    expect(move.type).toBe("move");
+    expect(move.description).toBe('Moved "Alpha paragraph."');
+    expect(move.move!.from[0].from).toBeLessThan(move.move!.to[0].from);
+    expectRoundTrip(a, b, result);
+  });
+
+  it("leaves ambiguous and changed paragraphs as whole-block changes", () => {
+    const a = doc(p("Same."), p("Middle text."), p("Same."), p("Edited paragraph."));
+    const b = doc(p("Middle text."), p("Same."), p("Same."), p("Edited paragraph!"));
+    const result = compare(a, b, { detectMoves: true });
+    expectRoundTrip(a, b, result);
+    // "Same." appears twice, so it is not paired.
+    expect(getTrackedChanges(result.doc).filter((c) => c.type === "move")).toHaveLength(0);
+  });
+
+  it("round-trips random documents with move detection", () => {
+    const random = rng(7);
+    const pool = ["One two.", "Three four.", "Five six.", "Seven eight.", "Nine ten.", "Eleven."];
+    for (let round = 0; round < 200; round++) {
+      const original = pool.filter(() => random() < 0.8).map((t) => p(t));
+      if (original.length === 0) original.push(p("Only."));
+      const revised = [...original];
+      for (let e = 0; e < 3; e++) {
+        const from = Math.floor(random() * revised.length);
+        const [item] = revised.splice(from, 1);
+        revised.splice(Math.floor(random() * (revised.length + 1)), 0, item);
+      }
+      if (random() < 0.3) revised.splice(Math.floor(random() * revised.length), 0, p("New words."));
+      const a = doc(...original);
+      const b = doc(...revised);
+      expectRoundTrip(a, b, compare(a, b, { detectMoves: true }));
+    }
   });
 });
 

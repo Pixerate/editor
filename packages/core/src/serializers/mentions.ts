@@ -1,16 +1,23 @@
 import { escapeHtml } from "./plain-text";
+import {
+  MENTION_REGEX,
+  NODE_ROLE_MARK,
+  formatMentionHandle,
+  readRoleSuffix,
+  type MentionRoleSyntax,
+} from "./mention-text";
+
+export {
+  MENTION_REGEX,
+  findTextMentions,
+  formatMentionText,
+  setMentionRoleInText,
+  type MentionRoleSyntax,
+  type TextMention,
+} from "./mention-text";
 import { findTagSpans, replaceDelimited, stripTags } from "./html-scan";
 import type { MentionEntity } from "../extensions/mention";
 
-/**
- * Canonical regex pattern for matching @mentions in plain text or markdown.
- * Supports:
- * - Standard unquoted handles: @username, @user.name, @team_alpha, @sa-1
- * - Quoted handles: @"John Doe", &quot;Jane Doe&quot;
- * Unquoted handles exclude trailing punctuation (e.g. @violet. matches "violet" without the dot).
- */
-export const MENTION_REGEX =
-  /(?:^|[\s>(*_"';\\/[\]{}~`:]|&quot;|&gt;|&lt;|&amp;)@(?:"([^"]+)"|&quot;([^&]+)&quot;|([a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+)*))/g;
 
 /**
  * Split regex identifying markdown code blocks, inline code, URLs, and existing HTML tags.
@@ -23,6 +30,22 @@ export interface MentionSegment {
   type: "text" | "mention";
   value: string;
   handle?: string;
+  /** Role written after the handle (`@fox:style`), when role syntax is enabled. */
+  role?: string;
+}
+
+
+/** A mention with its role (asset mentions: `@fox:style`, or `data-role` on a mention node). */
+export interface MentionDetail {
+  handle: string;
+  role?: string;
+}
+
+export interface ExtractMentionsOptions {
+  /** Return `{ handle, role }` objects instead of handles. */
+  details?: boolean;
+  /** Read `@handle:role` suffixes in text (see {@link MentionRoleSyntax}). Mention nodes' `data-role` is always read in `details` mode. */
+  roles?: MentionRoleSyntax;
 }
 
 export interface PreprocessMarkdownMentionsOptions {
@@ -39,6 +62,11 @@ export interface PreprocessMarkdownMentionsOptions {
    * Custom resolver callback to derive entity metadata for unmatched handles.
    */
   resolveMention?: (handle: string) => Partial<MentionEntity> | null | undefined;
+  /**
+   * Read `@handle:role` and emit the role as `data-role` (the `:role` text is
+   * consumed). Off by default. See {@link MentionRoleSyntax}.
+   */
+  roles?: MentionRoleSyntax;
 }
 
 /**
@@ -72,9 +100,18 @@ function isMentionNodeAttributes(attrs: string): boolean {
 /**
  * Extracts unique mention handles from a text, markdown, or HTML string,
  * ignoring trailing punctuation, code blocks, URLs, and pre-existing HTML mention attributes.
+ *
+ * With `{ details: true }` it returns `{ handle, role }` objects, unique per
+ * handle and role: roles come from mention nodes' `data-role` and, when
+ * `roles` is set, from `@handle:role` text. Without options the result is
+ * unchanged.
  */
-export function extractMentions(content: string): string[] {
+export function extractMentions(content: string, options?: ExtractMentionsOptions & { details?: false }): string[];
+export function extractMentions(content: string, options: ExtractMentionsOptions & { details: true }): MentionDetail[];
+export function extractMentions(content: string, options?: ExtractMentionsOptions): string[] | MentionDetail[];
+export function extractMentions(content: string, options: ExtractMentionsOptions = {}): string[] | MentionDetail[] {
   if (!content || typeof content !== "string") return [];
+  const details = options.details === true;
 
   // Normalize existing HTML mention nodes (e.g. from TipTap or rich text serializers)
   // so data-mention-suggestion-char="@" does not trigger spurious quoted matches against attributes,
@@ -87,7 +124,13 @@ export function extractMentions(content: string): string[] {
     const labelMatch = /\bdata-label=["']([^"']+)["']/i.exec(span.attrs);
     const idMatch = labelMatch ? null : /\bdata-id=["']([^"']+)["']/i.exec(span.attrs);
     const inner = content.slice(span.openEnd, span.end - "</span>".length);
-    const replacement = labelMatch ? ` @${labelMatch[1]} ` : idMatch ? ` @${idMatch[1]} ` : ` ${inner} `;
+    let replacement = labelMatch ? ` @${labelMatch[1]} ` : idMatch ? ` @${idMatch[1]} ` : ` ${inner} `;
+    if (details && (labelMatch || idMatch)) {
+      const roleMatch = /\bdata-role=["']([^"']+)["']/i.exec(span.attrs);
+      const role = roleMatch && /^[A-Za-z](?:[A-Za-z0-9_-]*[A-Za-z0-9])?$/.test(roleMatch[1]) ? roleMatch[1] : null;
+      const label = (labelMatch ?? idMatch)![1];
+      replacement = ` ${formatMentionHandle(label)}${role ? NODE_ROLE_MARK + role : ""} `;
+    }
     normalizedMentionNodes += content.slice(last, span.start) + replacement;
     last = span.end;
   }
@@ -104,6 +147,7 @@ export function extractMentions(content: string): string[] {
   const textOnly = stripTags(withoutLinks, " ");
 
   const mentions: string[] = [];
+  const detailed: MentionDetail[] = [];
   const seen = new Set<string>();
 
   const regex = new RegExp(MENTION_REGEX.source, "g");
@@ -111,20 +155,33 @@ export function extractMentions(content: string): string[] {
 
   while ((match = regex.exec(textOnly)) !== null) {
     const handle = (match[1] ?? match[2] ?? match[3] ?? "").trim();
+    if (details) {
+      const suffix = readRoleSuffix(textOnly, regex.lastIndex, options.roles);
+      if (suffix) regex.lastIndex = suffix.end;
+      const key = `${handle}\u0000${suffix?.role ?? ""}`;
+      if (handle && !seen.has(key)) {
+        seen.add(key);
+        detailed.push(suffix ? { handle, role: suffix.role } : { handle });
+      }
+      continue;
+    }
     if (handle && !seen.has(handle)) {
       seen.add(handle);
       mentions.push(handle);
     }
   }
 
-  return mentions;
+  return details ? detailed : mentions;
 }
 
 /**
  * Segments a text string into plain text parts and mention tokens.
  * Correctly leaves trailing punctuation (like ".") as part of the following text segment.
  */
-export function parseMentionSegments(content: string): MentionSegment[] {
+export function parseMentionSegments(
+  content: string,
+  options: { roles?: MentionRoleSyntax } = {},
+): MentionSegment[] {
   if (!content) return [];
 
   const segments: MentionSegment[] = [];
@@ -136,9 +193,17 @@ export function parseMentionSegments(content: string): MentionSegment[] {
     const fullMatch = match[0];
     const atIndex = fullMatch.indexOf("@");
     const prefix = atIndex > 0 ? fullMatch.slice(0, atIndex) : "";
-    const mentionToken = fullMatch.slice(atIndex);
+    let mentionToken = fullMatch.slice(atIndex);
     const handle = match[1] ?? match[2] ?? match[3];
     const matchStart = match.index + prefix.length;
+    const suffix =
+      options.roles && content.charAt(regex.lastIndex) === ":"
+        ? readRoleSuffix(content, regex.lastIndex, options.roles)
+        : null;
+    if (suffix) {
+      mentionToken = content.slice(matchStart, suffix.end);
+      regex.lastIndex = suffix.end;
+    }
 
     if (matchStart > lastIndex) {
       segments.push({
@@ -151,6 +216,7 @@ export function parseMentionSegments(content: string): MentionSegment[] {
       type: "mention",
       value: mentionToken,
       handle,
+      ...(suffix ? { role: suffix.role } : {}),
     });
 
     lastIndex = matchStart + mentionToken.length;
@@ -210,7 +276,13 @@ export function preprocessMarkdownMentions(
       }
 
       const regex = new RegExp(MENTION_REGEX.source, "g");
-      return part.replace(regex, (match, quotedHandle, escapedQuotedHandle, standardHandle) => {
+      const render = (
+        match: string,
+        quotedHandle: string | undefined,
+        escapedQuotedHandle: string | undefined,
+        standardHandle: string | undefined,
+        role?: string,
+      ): string => {
         const atIndex = match.indexOf("@");
         const prefix = atIndex > 0 ? match.slice(0, atIndex) : "";
         const rawHandle = (quotedHandle || escapedQuotedHandle || standardHandle || "").trim();
@@ -276,8 +348,25 @@ export function preprocessMarkdownMentions(
           id || label
         )}" data-label="${escapeHtml(label)}" data-mention-suggestion-char="@" data-type-name="${escapeHtml(
           type || defaultType
-        )}"${avatarAttr}${colorAttr}>@${escapeHtml(label)}</span>`;
-      });
+        )}"${avatarAttr}${colorAttr}${role ? ` data-role="${escapeHtml(role)}"` : ""}>@${escapeHtml(label)}</span>`;
+      };
+      if (!options.roles) {
+        return part.replace(regex, (match, quotedHandle, escapedQuotedHandle, standardHandle) =>
+          render(match, quotedHandle, escapedQuotedHandle, standardHandle),
+        );
+      }
+      // Role syntax: consume a `:role` suffix after each mention.
+      let out = "";
+      let last = 0;
+      let match: RegExpExecArray | null;
+      while ((match = regex.exec(part)) !== null) {
+        const suffix = readRoleSuffix(part, regex.lastIndex, options.roles);
+        const rendered = render(match[0], match[1], match[2], match[3], suffix?.role);
+        if (suffix && rendered !== match[0]) regex.lastIndex = suffix.end;
+        out += part.slice(last, match.index) + rendered;
+        last = regex.lastIndex;
+      }
+      return out + part.slice(last);
     })
     .join("");
 }

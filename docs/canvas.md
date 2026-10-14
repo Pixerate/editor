@@ -37,7 +37,7 @@ pnpm add @pixerate/editor-svelte @xyflow/svelte
 | [`createCanvasExplosion`](#createcanvasexplosiongraph-options) | Multi-node explosion, fan-out/bezier trajectory animation, spatial displacement ("make space"), and reversible collapse. |
 | [`createCanvasArrange`](#createcanvasarrangeoptions) | Align, distribute, make same size, lock / unlock, layer order and smart guides with snap-to-shape. |
 | [`createCanvasScenes`](#createcanvasscenesoptions) | Named saved viewports (Freeform "Scenes") with next / previous, reorder, rename and JSON persistence. |
-| [`ShapeNode` / shape operations](#shape-nodes-and-boolean-operations) | Shape nodes (rect, ellipse, polygon, star, SVG path) and Unite / Intersect / Subtract / Exclude / Divide. |
+| [`ShapeNode` / shape operations](#shape-nodes-and-boolean-operations) | Shape nodes (rect, ellipse, polygon, star, SVG path), curve-preserving Unite / Intersect / Subtract / Exclude / Divide, Offset Path and Outline Stroke. |
 | `types` | Generic TypeScript interfaces (`CanvasNode`, `CanvasEdge`, `GraphDifferences`, `CanvasLayoutOptions`, etc.). |
 
 ---
@@ -440,10 +440,34 @@ React: `nodeTypes={{ shape: ShapeNode }}` with `arrange = useCanvasArrange({ nod
 - **Style**: node fields, `data` and paint come from the back-most shape (`styleFrom: 'bottom'`, like Freeform), or `'top'`, `'first'` or `{ id }`. Divide pieces take the paint of the top-most shape covering them, so the canvas looks the same after dividing.
 - **Sub-flows**: geometry uses absolute positions. The result keeps the parent when all shapes share one, and is top-level otherwise.
 - **Edges** connected to consumed nodes are not touched (the controller only sees nodes). Remove or reconnect them from `removeIds`.
-- **Curves**: the result is fitted with cubic Béziers by default (`curves: 'fit'`), so the union of two ellipses comes back as a handful of smooth curves instead of a long polyline. Corners turning more than `cornerAngleDeg` (default 30°) and straight edges stay sharp; rings that would not get lighter (plain polygons) keep their straight segments. `curves: 'lines'` writes the polygon as before.
-- Options: `tolerance` (curve flattening, default 0.25 flow units), `curves`, `curveTolerance` (default `tolerance`), `cornerAngleDeg`, `precision` (path decimals, default 3), `simplify` (Ramer–Douglas–Peucker tolerance, default off), `epsilon`, `createId`, `nodeType`, `select`.
+- **Curves are kept** (`engine: 'curve'`, the default): the operation runs on the exact Bézier outlines (arcs become cubics), and every piece of the result is an exact sub-curve of an input segment, so the union of two circles is eight cubic arcs meeting at the true intersection points and a rectangle side stays one line. The result reports `engine` (`'curve'`, or `'polygon'` after a fallback) and `fallbackReason`; `onFallback(reason)` is called too. When the curve engine cannot resolve the input (nearly coincident curves that never converge) it falls back to the polygon engine below.
+- **Polygon engine** (`engine: 'polygon'`, implied by `curves: 'lines'`): shapes are flattened (`tolerance`, default 0.25 flow units) and combined with `polygonBoolean`; the result is fitted with cubic Béziers (`curves: 'fit'`, corners sharper than `cornerAngleDeg` kept) or written as lines (`curves: 'lines'`).
+- Options: `engine`, `onFallback`, `precision` (path decimals, default 3), `epsilon`, `createId`, `nodeType`, `select`, `styleFrom`; polygon engine only: `tolerance`, `curves`, `curveTolerance`, `cornerAngleDeg`, `simplify`.
 
-No default keyboard shortcuts are bound for these operations.
+#### Offset Path and Outline Stroke
+
+`arrange.offsetShapes(distance, ids?, { join, miterLimit, keepOriginal })` grows (`distance > 0`) or shrinks (`distance < 0`) every selected shape by `distance` flow units, keeping curves (a circle grows into a circle of four cubics). Joins are `'miter'` (default, with `miterLimit` 4), `'round'` or `'bevel'`. The offset shape replaces the original in place (same stacking position and paint), or sits below it with `keepOriginal`. Shapes whose inset vanishes are left alone; the call refuses (`'empty'`) when every result is empty, and with `'locked'` / `'no-shapes'` / `'invalid'`.
+
+`arrange.outlineStroke(ids?, { width, join, cap, miterLimit, dash, dashOffset, keepFill })` converts each selected shape's stroke into a filled `path` shape (fill = the stroke colour, no stroke). The stroke is outlined in flow units at `strokeWidth` (strokes do not scale with the node), with SVG's defaults: miter joins, miter limit 4, butt caps. The shape's fill stays as the original node with its stroke removed, below the outline (`keepFill: false` drops it). Refuses with `'no-stroke'` when no selected shape has a visible stroke.
+
+Both are one undo step (`'Offset Path'`, `'Outline Stroke'`), with `canOffsetShapes(ids?)` / `canOutlineStroke(ids?)` for menus. Pure versions: `offsetShapeNodes(nodes, ids, distance, options)` and `outlineShapeNodeStrokes(nodes, ids, options)` return `{ ok: true, removeIds, nodes, replacements }`; apply with `applyShapeReplacement` (each node is swapped in place) and undo with `revertShapeCombination(nodes, result, previous)`.
+
+#### Commands (palette, context menu, agents)
+
+`createShapeCommands(arrange, { prefix, scope, defaultOffset })` (from `@pixerate/editor/commands`) returns `canvas.unite`, `canvas.intersect`, `canvas.subtract`, `canvas.exclude`, `canvas.divide`, `canvas.offsetPath` (`{ distance, join?, miterLimit?, ids? }`) and `canvas.outlineStroke` (`{ join?, cap?, miterLimit?, ids? }`). Register them with `useRegisterCommands` (React or Svelte) to list them in the command palette or a context menu; disabled commands explain why ("Select at least two unlocked shapes."). No default keyboard shortcuts are bound for these operations.
+
+#### Path operations (curve engine)
+
+Paths are `BezierPath`s: absolute `M` / `L` / `Q` / `C` / `Z` commands. Every function also accepts SVG path data or `parseSvgPath` output (arcs become cubics of at most 90°); `toBezierPath` and `bezierPathToSvg(path, { precision, offset })` convert explicitly.
+
+- `pathBoolean(op, operands, options)`: `'union' | 'intersection' | 'difference' | 'xor'` on any number of operands (a path, or `{ path, fillRule }`; open subpaths are closed for filling). Returns `{ path, engine, fallbackReason?, error? }`. Shorthands `unitePaths`, `intersectPaths`, `subtractPaths`, `excludePaths`; `dividePaths(operands)` returns `{ pieces: [{ path, operands }] }`, one per connected region; `normalizeBezierPath(path, fillRule)` resolves self-intersections. Results are simple closed subpaths that never cross, outer subpaths counter-clockwise in a y-up frame and holes the other way, so they fill the same with `nonzero` and `evenodd`. Non-finite input gives an empty path with `error`.
+- Options: `epsilon` (points closer than this merge; default `1e-9` × the largest coordinate), `fallback` (default `true`; `false` throws a `PathOpsError`), `fallbackTolerance` (flattening for the fallback, default 0.05), `onFallback`, `subdivisionBudget`.
+- `offsetPath(path, distance, { join, miterLimit, fillRule, tolerance })`: closed subpaths are a filled region; open subpaths are outlined with width `2·|distance|` when growing. Round joins give the exact Minkowski offset (within `tolerance`, default 0.01).
+- `outlineStroke(path, { width, join, cap, miterLimit, dash, dashOffset, tolerance })`: the area painted by an SVG stroke, as one clean path. Dashes follow arc length (odd patterns repeat twice, invalid or all-zero patterns draw solid, more than 200,000 dashes draw solid), restart on every subpath and join across the start of a closed subpath; zero-length dashes paint round / square dots. `strokeOutlineRings` returns the raw overlapping outline and `dashContours` the dashes.
+- Measures: `bezierPathArea(path, fillRule)` (exact filled area), `bezierPathSignedArea`, `bezierPathBounds` (exact, using curve extrema), `bezierPathLength`, `bezierPathPointAtLength` (point, tangent, angle), `trimSegments`, `segmentLength` / `segmentParamAtLength` (Gauss–Legendre arc length and its inverse), `pointInBezierPath(path, point, fillRule)`, `distanceToBezierPath`, `countPathSegments`, `transformBezierPath(path, [a, b, c, d, e, f])`.
+- Shapes: `shapeToBezierPath(shape, size)` and `shapeNodeToBezierPath(node, lookup)` give the exact outline (rotation and view boxes applied).
+
+How it works: every input segment is cut into pieces monotone in x and y; pieces are intersected pairwise (lines analytically, curves by recursive subdivision to flat sub-curves, chord intersection and Newton polishing), with end points lying on other pieces (T-junctions, tangencies), coincident overlaps and clusters of hits along a tangency resolved first. Coincident pieces merge, both sides of every piece are classified by a horizontal or vertical ray (a monotone piece is crossed at most once), and the kept pieces are traced into rings (sharpest left turn; tangent curves are ordered by a short chord along each). Consecutive pieces of one input segment are merged back into its exact sub-curve. Cost is roughly quadratic in the number of segments (two 600-vertex polygons or 80 circles in tens of milliseconds). The stroker offsets lines exactly and curves by cubic approximations refined until they are within `tolerance`, joins the outer side of each corner and pivots the inner side through the vertex, fills the outline with `nonzero` and normalises it; faces left by inner offsets that turn inside out (a deep point closer to the path than the offset distance) are dropped.
 
 #### Geometry helpers
 
@@ -452,7 +476,7 @@ No default keyboard shortcuts are bound for these operations.
 - `fitCubics(points, tolerance, { cornerAngleDeg, closed })` fits cubic segments (Schneider-style least squares with Newton reparameterisation, split at the worst point) so every point is within `tolerance`, keeping corners sharper than `cornerAngleDeg` (default 30°; the turn is measured over 4 × `tolerance`, so sample noise does not read as corners). `fitPathData(ring, { tolerance, closed, precision, offset })` returns SVG path data (`C` curves, `L` for straight stretches); `fitFreehandPath(points, { tolerance })` smooths a freehand stroke into an open path.
 - `parseSvgPath(d)` (absolute `M`/`L`/`C`/`Q`/`A`/`Z`), `flattenSvgPath(d, { tolerance })`, `shapeToPolygon(shape, size)`, `shapeNodeToPolygon(node, lookup)`, `polygonToSvgPath(multi, { precision, simplify, offset, curves })`, `simplifyRing`, `getShapeSvg` / `getShapeRenderData` (exact arcs for rendering), `polygonArea`, `multiPolygonArea`, `pointInRings`.
 
-The engine builds a planar overlay of all edges (splitting at crossings, T-junctions and collinear overlaps, merging points closer than `epsilon`), classifies both sides of every edge by winding number and traces the boundary of the selected region. It handles shared edges, touching vertices, collinear overlaps, holes, nested and disjoint inputs. Limits: the overlay is O(n²) in edges (pruned by a sweep), comfortable for canvas shapes (two 1,024-vertex circles in about 20 ms) but not GIS-scale data; features narrower than `epsilon` (default `1e-9` × the largest coordinate) collapse; curves are flattened to polylines for the overlay; `combineShapeNodes` fits curves back onto the result (see `curves`).
+The engine builds a planar overlay of all edges (splitting at crossings, T-junctions and collinear overlaps, merging points closer than `epsilon`), classifies both sides of every edge by winding number and traces the boundary of the selected region. It handles shared edges, touching vertices, collinear overlaps, holes, nested and disjoint inputs. Limits: the overlay is O(n²) in edges (pruned by a sweep), comfortable for canvas shapes (two 1,024-vertex circles in about 20 ms) but not GIS-scale data; features narrower than `epsilon` (default `1e-9` × the largest coordinate) collapse; curves are flattened to polylines for the overlay. It is the fallback of the curve engine and `combineShapeNodes`' `engine: 'polygon'`.
 
 ---
 
@@ -504,3 +528,37 @@ type AutoLayoutChild = {
 - Flow-originated changes are derived and not recorded: React passes each `onNodesChange` batch through `autoLayout.noteChanges(changes)` before applying it, and the hook flushes once React commits. Measured sizes, resize ends (children follow constraints from the size the resize started at), added and removed nodes relayout their frames. Svelte: `handleChanges(changes)`, `nodesDeleted(nodes)` (`ondelete`), `measured(id)` and `<NodeResizer {...autoLayout.resizerHandlers(id)} />`.
 - **Reorder by dragging**: a flow child dragged inside its frame shows a drop marker (`guides`, for `<CanvasGuidesLayer>`) and on drop moves to the slot under its centre (reading order for grid and wrapped frames) in one undoable step whose undo restores the position the drag began at. Svelte: `onnodedrag={({ targetNode }) => autoLayout.dragReorder(targetNode.id)}` and `onnodedragstop={({ targetNode }) => autoLayout.endReorderDrag(targetNode.id)}`. Order is the node-array order (`moveLayoutChild` keeps parents before children).
 - The arrange controller takes `autoLayout: true | { measure }` to relayout frames around aligned, distributed or resized nodes in the same undo step.
+
+### Design tokens (variables) and modes
+
+`@pixerate/editor/tokens` (dependency-free) holds Figma-style variables: **collections** with **modes** (the first is the default, e.g. Light / Dark) and typed **variables** (`color`, `number`, `string`, `boolean`) with one value per mode. A value is a literal (colours are stored as lowercase `#rrggbb` / `#rrggbbaa`) or `{ alias: variableId }` to a variable of the same type, in any collection.
+
+```ts
+import { TokenStore, exportTokensCss, exportW3CTokensJson, importW3CTokens } from '@pixerate/editor/tokens';
+
+const store = new TokenStore();
+const theme = store.createCollection('Theme', ['Light', 'Dark']);
+const bg = store.createVariable({ collectionId: theme.id, name: 'color/bg', type: 'color', values: { Light: '#fff', Dark: '#0f172a' } });
+store.createVariable({ collectionId: theme.id, name: 'color/surface', type: 'color', value: { alias: bg.id } });
+store.resolveValue(bg.id, { [theme.id]: theme.modes[1].id }); // '#0f172a'
+exportTokensCss(store.getState()); // :root { --color-bg: #ffffff; … } :root[data-mode="dark"] { … }
+```
+
+- **Resolution**: `resolveToken(state, id, modes)` follows aliases, reading each variable in its own collection's mode from `modes` (collection id → mode id; the default mode otherwise). It returns `{ ok: true, value, chain }` or `{ ok: false, code: 'missing' | 'cycle' | 'no-value' | 'type-mismatch', message, chain }`; it never throws.
+- **Aliases** must keep the type and must not lead back to the variable through any alias in any mode (`alias-cycle`, with the path in the message).
+- **Store**: every edit is one undo step (`transact(label, fn)` groups several and rolls back if `fn` throws) and one change event `{ source, reason, state, previous, deletedVariableIds }`. Refused edits throw a `TokenError` with a `code` and change nothing. `getState()` is an immutable snapshot whose reference only changes on edits. `load(json)` reads untrusted data through `parseTokenState` (junk dropped, cycles broken, issues returned).
+- **Rename / delete**: renaming keeps ids, so bindings keep working. Deleting a variable (or collection) makes variables aliasing it take its values per mode; bound canvas nodes are detached with `detachTokenBindings(nodes, event.previous, event.deletedVariableIds)` and keep their values.
+- **Scopes** (`CORNER_RADIUS`, `GAP`, `SHAPE_FILL`, …) only filter pickers (`getTokensForProperty`); binding out of scope still works.
+- **W3C Design Tokens**: `exportW3CTokens(state)` writes one top-level group per collection, `/` groups as nested groups, `$type` / `$value` (the default mode) and `{Collection.path}` references; modes, ids, scopes and units ride in `$extensions["com.pixerate.tokens"]`. `importW3CTokens(state, json, { collection?, mode? })` merges by name (ids kept), takes plain DTCG files (`color`, `number`, `dimension`, `duration`, `fontWeight`, `fontFamily`, `string`, `boolean`; group `$type` inherited; one mode per file via `mode`) and reports skipped entries as warnings.
+- **CSS**: `exportTokensCss(state, { prefix, attribute, nested })` emits the default modes on `:root` and other modes on `:root[data-mode="dark"]` (aliases as `var(--target)`); `getTokenCssVariables(state, modes)` returns resolved properties for inline styles.
+
+#### Binding node properties
+
+Bindings live in node data and survive copy / paste, duplication and serialisation:
+
+- `node.data.tokenBindings`: property key → variable id. Built-in keys (`CANVAS_TOKEN_PROPERTIES`): `fill` (`data.shape.fill`, else `style.backgroundColor` / `background`), `stroke`, `strokeWidth`, `opacity` (percent, like Figma: 40 → `style.opacity: 0.4`), `cornerRadius`, `gap`, `rowGap`, `padding`, `paddingHorizontal` / `Vertical` / `Top` / `Right` / `Bottom` / `Left` (auto layout frames), `textColor` (`style.color`), `fontSize`, `visible` (`hidden`). Pass `properties` to add your own `CanvasTokenProperty`.
+- `node.data.tokenModes`: collection id → mode id, an explicit mode inherited by descendants (via `parentId`); the nearest ancestor wins, then the root `modes` option, then the default mode. Unknown modes count as Auto.
+
+`resolveCanvasTokens(nodes, state, { modes })` writes every bound value into the ordinary node fields and returns the same array when nothing changed, so renderers and auto layout need no token awareness. `bindCanvasToken(nodes, ids, key, variableId | null, state)` binds (or unbinds, keeping the value) and `setCanvasTokenMode(nodes, ids, collectionId, modeId | null, state)` switches a frame's mode.
+
+React: `useCanvasTokens({ store, nodes, setNodes, modes })` re-resolves on token and node changes and detaches on delete; `<TokenBindingPicker state nodes selectedIds onChange>` and `<TokenModeSwitcher state nodes nodeIds onChange>` are inspector controls, and `@pixerate/editor-react/tokens` has `useTokens(store, { modes })` (state, `cssVariables`, `css`) and `<TokensPanel store>`. Svelte: `createCanvasTokens({ store, getNodes, setNodes, modes })` (call `resolve()` after changing nodes yourself), the same components (`onchange`), and `createTokens` / `<TokensPanel>` in `@pixerate/editor-svelte/tokens`.

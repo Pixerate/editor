@@ -199,6 +199,7 @@ We maintain **strict 1:1 parity** across JavaScript, React, and Svelte:
 | Photoshop Blend Modes (layers & annotations) | `blendPixel` & `BLEND_MODES` | ✅ | ✅ |
 | Image Histogram | `computeHistogram` | `<Histogram>` & `useImageHistogram` | `<Histogram>` & `createImageHistogram` |
 | Image Adjustment Control Table & Agent Tools | `IMAGE_ADJUSTMENT_CONTROLS` & `createImageEditorToolProvider` | `<ControlSlider>` | `<ControlSlider>` |
+| Image Selections & Masks (magic wand, colour range, marquees, lasso, modes, grow/shrink/feather/border/smooth, guided-filter Refine Edge, Quick Mask, adjustment layer masks, RLE in the document, agent tools) | `SelectionGesture`, `magicWand`, `refineSelection`, `layerMaskFromSelection` | `<SelectionOptionsBar>` & `<RefineEdgePanel>` | `<SelectionOptionsBar>` & `<RefineEdgePanel>` |
 | Vector Annotations (Pen, Rect, Circle, Arrow, Line, Text) | ✅ | ✅ | ✅ |
 | Gleamforge Depth & Alpha Masking | ✅ | ✅ | ✅ |
 | Canvas Align / Distribute / Make Same Size | ✅ | `useCanvasArrange` | `createCanvasArrange` |
@@ -208,11 +209,16 @@ We maintain **strict 1:1 parity** across JavaScript, React, and Svelte:
 | Canvas Distance Measuring (Alt-hover) | `measureBetween` & `measureSelection` | `useCanvasMeasure` & `<CanvasGuidesLayer>` | `createCanvasMeasure` & `<CanvasGuidesLayer>` |
 | Canvas Auto Layout & Constraints (stack, wrap, grid, hug / fill) | `layoutFrame`, `layoutAll`, `layoutUp` & `createCanvasAutoLayoutController` | `useCanvasAutoLayout` | `createCanvasAutoLayout` |
 | Canvas Auto Layout Drag Reorder | `getAutoLayoutInsertTarget` & `moveLayoutChild` | `useCanvasAutoLayout` (`noteChanges`) | `createCanvasAutoLayout` (`dragReorder`) |
+| Design Tokens: Collections, Modes, Aliases & Undoable Store | `TokenStore` & `resolveToken` (`/tokens`) | `useTokens` & `<TokensPanel>` (`/tokens`) | `createTokens` & `<TokensPanel>` (`/tokens`) |
+| Design Tokens: W3C JSON Import / Export & CSS Variables per Mode | `importW3CTokens`, `exportW3CTokens` & `exportTokensCss` | `useTokens` (`css`, `cssVariables`) | `createTokens` (`css`, `style`) |
+| Canvas Token Bindings & Per-Frame Modes | `bindCanvasToken`, `setCanvasTokenMode` & `resolveCanvasTokens` | `useCanvasTokens`, `<TokenBindingPicker>` & `<TokenModeSwitcher>` | `createCanvasTokens`, `<TokenBindingPicker>` & `<TokenModeSwitcher>` |
 | Canvas Bézier Curve Fitting (boolean results, freehand) | `fitCubics` & `fitPathData` | Via core | Via core |
 | Canvas Scenes (saved viewports, next / previous) | `CanvasScenesStore` | `useCanvasScenes` | `createCanvasScenes` |
 | Canvas Connector Snapping to Shape Sides | ✅ | Via core | Via core |
 | Canvas Arrange Keyboard Shortcuts | `matchArrangeShortcut` | `useCanvasArrangeShortcuts` | `createCanvasArrangeShortcuts` |
-| Canvas Shape Boolean Ops (Unite / Intersect / Subtract / Exclude / Divide) | `combineShapeNodes` & `polygonBoolean` | `useCanvasArrange` | `createCanvasArrange` |
+| Canvas Shape Boolean Ops (Unite / Intersect / Subtract / Exclude / Divide, curve-preserving) | `combineShapeNodes`, `pathBoolean` & `polygonBoolean` | `useCanvasArrange` | `createCanvasArrange` |
+| Canvas Offset Path & Outline Stroke (joins, caps, miter limit, dashes) | `offsetPath`, `outlineStroke`, `offsetShapeNodes` & `outlineShapeNodeStrokes` | `useCanvasArrange` (`offsetShapes`, `outlineStroke`) | `createCanvasArrange` (`offsetShapes`, `outlineStroke`) |
+| Canvas Shape Commands (palette / context menu) | `createShapeCommands` | Via core & `useRegisterCommands` | Via core & `useRegisterCommands` |
 | Canvas Shape Nodes (rect, ellipse, polygon, star, SVG path) | `getShapeRenderData` | `<ShapeNode>` | `<ShapeNode>` |
 | Comments (threads, replies, resolve, orphan detection, JSON) | Extension & `CommentStore` | `CommentsPanel`, `CommentButton`, `useComments` | `CommentsPanel`, `CommentButton`, `createComments` |
 | Track Changes (insert/delete marks, accept/reject, navigation) | Extension & `getTrackedChanges` | `ReviewToolbar`, `useTrackChanges` | `ReviewToolbar`, `createTrackChanges` |
@@ -220,12 +226,16 @@ We maintain **strict 1:1 parity** across JavaScript, React, and Svelte:
 | Tracked formatting changes (`formatChange` mark, accept/reject, descriptions) | ✅ | `ReviewToolbar` description | `ReviewToolbar` description |
 | Tracked block changes (heading/list/quote/alignment, `blockChange` attribute) | ✅ | `ReviewToolbar` description | `ReviewToolbar` description |
 | Tracked edits inside code blocks | ✅ | Via core | Via core |
-| Compare Documents into tracked changes (word/char, ignore case/white space, formatting, whole-block insert/delete) | `compareDocuments`, `compareHtml`, `diffSequences` (`@pixerate/editor/compare`) & `setContentFromComparison` | `useDocumentCompare` | `createDocumentCompare` |
+| Tracked moves (cut + paste / drag of a sentence or paragraph, linked move-from/move-to, accept/reject as one, `acceptMove`/`rejectMove`) | ✅ (`isMoveSized`, `trackMoves`, `isMove`) | `ReviewToolbar`, `TrackedChangesList` | `ReviewToolbar`, `TrackedChangesList` |
+| Tracked changes list (accept/reject each change, select on click) | `getTrackedChanges`, `selectChange`, `trackedChangeLabel` | `TrackedChangesList` | `TrackedChangesList` |
+| Paragraph styles (Normal, Title, Subtitle, Heading 1–6, Quote, Code, List Paragraph; `basedOn`, next style on Enter, linked character styles, user styles, `data-style` HTML) | `ParagraphStyles` (`paragraphStyles` preset option), `createStyleRegistry`, `createParagraphStylesStore` | `StylesGallery`, `useParagraphStyles` | `StylesGallery`, `createParagraphStyles` |
+| Compare Documents into tracked changes (word/char, ignore case/white space, formatting, whole-block insert/delete, optional moved paragraphs via `detectMoves`) | `compareDocuments`, `compareHtml`, `diffSequences` (`@pixerate/editor/compare`) & `setContentFromComparison` | `useDocumentCompare` | `createDocumentCompare` |
 | Find & Replace (Word `^` codes, wildcards with `\1` groups, regex, match options; skips tracked deletions, tracked replacements) | `FindReplace` (`findReplace` preset option) | `FindReplaceBar`, `useFindReplace` | `FindReplaceBar`, `createFindReplace` |
 | File Import Registry (`.md`, `.html`, `.txt`, `.rtf`, `.docx`; pluggable adapters) | ✅ | `useFileImport` + `fileImport` | `createFileImport` + `fileImport` prop |
 | Drag-and-Drop File Import at Drop Position | `FileImport` | ✅ | ✅ |
 | DOCX Import (headings, lists, tables, links, images, footnotes; dependency-free) | `docxImportAdapter` | Via core | Via core |
-| PDF Text Import (injected pdf.js, opt-in) | `createPdfImportAdapter` | Via core | Via core |
+| PDF Import (injected pdf.js, opt-in) with layout analysis: reading order across columns, headings, lists, ruled and unruled tables, running headers/footers removed | `createPdfImportAdapter`, `analyzePdfLayout` | Via core | Via core |
+| Import Structure Report and Plain Fallback Toggle (`adapterOptions: { pdf: { structure: false } }`) | `summarizeImportStructure` | `useFileImport().structureSummary` | `createFileImport().structureSummary` |
 | Zipped Export Import (Notion / Confluence `.zip`, opt-in) | `zipImportAdapter` | Via core | Via core |
 | Safe ZIP Reader (deflate via `DecompressionStream`, ZIP64, bomb / traversal guards) | `readZip` | Via core | Via core |
 | Rich Clipboard MIME (`application/x.pixerate.document+json`) | `RichClipboard` | `richClipboard` | `richClipboard` prop |
@@ -253,7 +263,12 @@ We maintain **strict 1:1 parity** across JavaScript, React, and Svelte:
 | Formula Error Diagnostics (`CellData.errorMessage`, error cell tooltips) | ✅ | ✅ | ✅ |
 | Formula Autocomplete & Argument Hints (`<FormulaHints />`) | Headless (`getFormulaHints`) | Component | Component |
 | Spreadsheet Dynamic Arrays (spilling, `#SPILL!`, `A1#` spill references) | `getSpillAt` / `getSpills` | Spill border + greyed formula bar | Spill border + greyed formula bar |
+| Spreadsheet Conditional Formatting (highlight, formula, top/bottom, average, duplicates, dates, colour scales, data bars, icon sets; priority & stop if true) | `evaluateConditionalFormats` / `addConditionalFormat` | Fills, bars, icons + manager panel | Fills, bars, icons + manager panel |
+| Spreadsheet Data Validation (whole, decimal, list, date, time, text length, custom; stop/warning/information alerts, circle invalid data) | `validateCellInput` / `addDataValidation` | List dropdown, alerts + manager panel | List dropdown, alerts + manager panel |
 | Array Functions (FILTER, SORT, SORTBY, UNIQUE, SEQUENCE, TRANSPOSE, RANDARRAY, LET) & array arithmetic | ✅ | Via core | Via core |
+| LAMBDA (closures, inline calls, recursion cap) & MAP, REDUCE, SCAN, BYROW, BYCOL, MAKEARRAY, ISOMITTED | ✅ | Via core | Via core |
+| Defined Names (workbook/sheet scope, ranges, constants, LAMBDA names; rename rewrites formulas) | `defineName` / `renameName` / `deleteName` | `<NameManager>` + name autocomplete | `<NameManager>` + name autocomplete |
+| Multiple Sheets (`Sheet2!A1`, `'My Sheet'!A1:B2`, 3-D `Sheet1:Sheet3!A1`; rename/delete rewrite to `#REF!`, per-sheet undo) | `addSheet` / `renameSheet` / `moveSheet` / `deleteSheet` / `duplicateSheet` | `<SheetTabs>` (`showSheetTabs`) | `<SheetTabs>` (`showSheetTabs`) |
 | Formula Date Arithmetic (`date ± days`, `date - date`, chronological date comparisons) | ✅ | Via core | Via core |
 | History Gesture Merge Keys & Held Gestures (`executeMerged(cmd, { key })`, `beginGesture` / `endGesture`) | `HistoryManager` | `useHistory` | `createHistory` |
 | History Undo Marks / Escape-Cancel (`mark`, `revertTo`) | `HistoryManager` | `useHistory` | `createHistory` |
@@ -267,6 +282,8 @@ We maintain **strict 1:1 parity** across JavaScript, React, and Svelte:
 | Generation Agent Tools (`list_models`, `plan_generation`, `estimate_generation`, idempotent `generate`) & JSON Schema | `createGenerationToolProvider` & `capabilitiesToJsonSchema` | Via core | Via core |
 | Generation Provenance (pinned template versions, sourcemap, `recreateRequest`) & Batch Resolver | `createProvenance` & `createBatchResolver` | Via core | Via core |
 | Generation Job Progress (time-based, ≤95% until done, "~2m left") | `estimateJobProgress` | `<JobProgress>` & `useJobProgress` | `<JobProgress>` & `createJobProgress` |
+| Generation Records & Recreate (template/model/asset hashes, `exact` / `latest`, drift report, variations, record store with filter / prune) | `createGenerationRecord`, `recreateRequest`, `variationRequest`, `createGenerationRecordStore` | `<GenerationHistory>` & `useGenerationRecords` | `<GenerationHistory>` & `createGenerationRecords` |
+| Asset Mentions with Roles (`@fox:style`, `data-role`, per-role limits & media types from capabilities) | `findTextMentions`, `extractMentions({ details })`, `validateAssetMentions`, `PlanOptions.mentions` | `<AssetMentionChips>` (role picker popover) | `<AssetMentionChips>` (role picker popover) |
 
 ¹ Svelte does not yet have a prompt-editor equivalent of React's `usePromptEditor`. Configure the core extensions (`GradientText`, `TemplateSuggestions`, `SlashCommands`) and pass them to `EditableTextNodeEditor` via `extensions`, or use `createEditor({ plainTextMode: true })` from `@pixerate/editor`.
 
@@ -285,7 +302,7 @@ pnpm --filter demo dev
 Open `http://localhost:3000` to interact with:
 1. **Prompt Studio Tab**: Interactive prompt editor with live syntax gradients, slash menu, AST preview, and sourcemap visualizer.
 2. **Document Rich Text Tab**: Rich document editor with headings, lists, bubble menu, smilies, and hex color highlighter.
-3. **Image Editor Studio Tab**: Full-featured Canvas 2D image editing with crop presets, adjustments, drawing/annotations, and Gleamforge depth alpha masking.
+3. **Image Editor Studio Tab**: Full-featured Canvas 2D image editing with crop presets, adjustments, drawing/annotations, Gleamforge depth alpha masking, and Select & Mask (magic wand, a simulated coarse AI mask refined to the image edges, adjustment layer masks).
 4. **Parity Matrix Tab**: Live comparison and feature verification table.
 
 ---

@@ -62,6 +62,12 @@ export interface UseTrackChangesResult extends TrackChangesSnapshot {
   rejectAll: () => void;
   next: () => void;
   previous: () => void;
+  /** Selects a change in the editor. */
+  select: (id: string) => void;
+  /** Accepts a tracked move (both ends). */
+  acceptMove: (id: string) => void;
+  /** Rejects a tracked move (both ends). */
+  rejectMove: (id: string) => void;
 }
 
 /**
@@ -93,6 +99,9 @@ export function useTrackChanges(editor: Editor | null | undefined): UseTrackChan
       rejectAll: run((e) => e.commands.rejectAllChanges()),
       next: run((e) => e.chain().focus().selectNextChange().run()),
       previous: run((e) => e.chain().focus().selectPreviousChange().run()),
+      select: (id: string) => run((e) => e.chain().focus().selectChange(id).run())(),
+      acceptMove: (id: string) => run((e) => e.commands.acceptMove(id))(),
+      rejectMove: (id: string) => run((e) => e.commands.rejectMove(id))(),
     };
   }, [snapshot, editor]);
 }

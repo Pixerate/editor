@@ -4,7 +4,12 @@ import React, { act, useMemo } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import type { Editor } from "@tiptap/react";
 import { ToolRegistry, createRichTextToolProvider, type AgentToolProvider } from "@pixerate/editor/agent";
-import { fileImportPluginKey, richClipboardPluginKey } from "@pixerate/editor";
+import {
+  createImportAdapterRegistry,
+  createPdfImportAdapter,
+  fileImportPluginKey,
+  richClipboardPluginKey,
+} from "@pixerate/editor";
 import {
   useEditor,
   usePromptEditor,
@@ -13,6 +18,7 @@ import {
   type UseFileImportResult,
 } from "../src";
 import { buildDocx, p as docxParagraph, r as docxRun } from "../../core/tests/helpers/zip-writer";
+import { fakeStructuredPdfjs } from "../../core/tests/helpers/fake-pdfjs";
 
 let container: HTMLDivElement;
 let root: Root;
@@ -150,6 +156,34 @@ describe("useFileImport", () => {
     });
     expect(editor!.getText()).toBe("picked");
     click.mockRestore();
+  });
+
+  it("summarises detected PDF structure and honours the structure toggle", async () => {
+    const registry = createImportAdapterRegistry({ builtIns: false });
+    registry.register(createPdfImportAdapter(fakeStructuredPdfjs()));
+    let editor: Editor | null = null;
+    let fileImport!: UseFileImportResult;
+    function Harness({ structure }: { structure: boolean }) {
+      editor = useEditor({ immediatelyRender: true, content: "<p></p>" });
+      fileImport = useFileImport(editor, { registry, adapterOptions: { pdf: { structure } } });
+      const s = fileImport.structureSummary;
+      return <span>{s ? `${s.mode}:${s.headings}h/${s.tables}t` : "none"}</span>;
+    }
+    await act(async () => root.render(<Harness structure />));
+    expect(container.textContent).toBe("none");
+    const pdf = () => new File([new Uint8Array([37, 80, 68, 70])], "doc.pdf", { type: "application/pdf" });
+    await act(async () => {
+      await fileImport.importFiles([pdf()]);
+    });
+    expect(container.textContent).toBe("structured:1h/1t");
+    expect(fileImport.structureSummary).toMatchObject({ files: 1, headings: 1, tables: 1, paragraphs: 1 });
+    expect(editor!.getHTML()).toMatch(/<h1[^>]*>Imported title<\/h1>/);
+
+    await act(async () => root.render(<Harness structure={false} />));
+    await act(async () => {
+      await fileImport.importFiles([pdf()]);
+    });
+    expect(container.textContent).toBe("plain:0h/0t");
   });
 });
 

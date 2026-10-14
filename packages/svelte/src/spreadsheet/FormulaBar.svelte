@@ -46,6 +46,13 @@
     return value;
   });
 
+  // Defined names for formula autocomplete.
+  let nameSuggestions = $derived.by(() => {
+    if (!sheetState) return [];
+    void sheetState.document;
+    return sheetState.controller.getNameSuggestions();
+  });
+
   // A spilled cell shows its anchor's formula greyed out (it has no formula of its own).
   let spillFormula = $derived.by(() => {
     if (!sheetState || sheetState.editingCell || !sheetState.activeCell || effectiveValue) return '';
@@ -63,10 +70,12 @@
       if (sheetState && sheetState.activeCell) {
         const row = sheetState.document.rows[sheetState.activeCell.row];
         const col = sheetState.document.columns[sheetState.activeCell.col];
-        if (row && col) {
-          sheetState.setCellValue(row.id, col.id, effectiveValue);
+        // Committed with data validation: invalid input waits for the alert.
+        if (sheetState.editingCell) {
+          sheetState.commitEditing(effectiveValue);
+        } else if (row && col) {
+          sheetState.commitCellInput(row.id, col.id, effectiveValue);
         }
-        sheetState.commitEditing();
       }
       onCommit?.(effectiveValue);
     } else if (e.key === 'Escape') {
@@ -116,5 +125,5 @@
     oninput={handleInput}
     onkeydown={handleKeyDown}
   />
-  <FormulaHints input={inputEl} value={effectiveValue} onAccept={setValue} />
+  <FormulaHints input={inputEl} value={effectiveValue} onAccept={setValue} names={nameSuggestions} />
 </div>

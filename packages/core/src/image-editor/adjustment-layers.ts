@@ -3,6 +3,7 @@
 import type {
   AdjustmentKind,
   AdjustmentLayer,
+  AdjustmentLayerMask,
   AdjustmentLayerOf,
   AdjustmentParamsMap,
   BlackWhiteParams,
@@ -17,6 +18,7 @@ import type {
 } from './types';
 import { type BlendMode, blendRgb, normalizeBlendMode, setLum } from './blend';
 import { linearToSrgb, srgbToLinear } from './color';
+import { layerMaskKey, normalizeLayerMask } from './selection/layer-mask';
 
 /**
  * Adjustment layers: Photoshop-matching evaluation on encoded sRGB colours in 0..1.
@@ -127,6 +129,7 @@ export function createAdjustmentLayer<K extends AdjustmentKind>(
     enabled?: boolean;
     opacity?: number;
     blend?: BlendMode;
+    mask?: AdjustmentLayerMask;
   } = {}
 ): AdjustmentLayerOf<K> {
   const raw = {
@@ -137,6 +140,7 @@ export function createAdjustmentLayer<K extends AdjustmentKind>(
     enabled: options.enabled ?? true,
     opacity: options.opacity ?? 1,
     blend: options.blend ?? 'normal',
+    mask: options.mask,
   };
   return normalizeAdjustmentLayer(raw) as AdjustmentLayerOf<K>;
 }
@@ -248,6 +252,9 @@ export function normalizeAdjustmentLayer(raw: unknown): AdjustmentLayer | null {
     params: normParams(r.kind, r.params),
   };
   if (typeof r.name === 'string' && r.name) layer.name = r.name;
+  // Only present when the layer has a usable mask, so mask-free layers serialize as before.
+  const mask = normalizeLayerMask(r.mask);
+  if (mask) layer.mask = mask;
   return layer as unknown as AdjustmentLayer;
 }
 
@@ -863,9 +870,9 @@ export function evaluateAdjustmentLayers(color: readonly number[], layers: reado
   return c;
 }
 
-function applyLayer(c: Rgb, layer: AdjustmentLayer, op: PixelOp | null): void {
+function applyLayer(c: Rgb, layer: AdjustmentLayer, op: PixelOp | null, coverage = 1): void {
   if (!op || layer.enabled === false) return;
-  const alpha = Math.min(1, Math.max(0, layer.opacity ?? 1));
+  const alpha = Math.min(1, Math.max(0, layer.opacity ?? 1)) * coverage;
   if (alpha <= 0) return;
   const blend = layer.blend ?? 'normal';
   if (blend === 'normal' && alpha >= 1) {
@@ -884,11 +891,20 @@ function applyLayer(c: Rgb, layer: AdjustmentLayer, op: PixelOp | null): void {
  * Applies an adjustment-layer stack to 8-bit straight RGBA pixels in place. Each pixel is
  * decoded once, run through every layer in float, and encoded once. Transparent pixels are
  * left alone; alpha is never changed.
+ *
+ * `masks` (layer id → 0..1 coverage per pixel of `imageData`, see `buildLayerMaskPlanes`)
+ * scales each masked layer's opacity per pixel: coverage 0 leaves the pixel as the layers below
+ * made it, 1 applies the layer fully.
  */
-export function applyAdjustmentLayers(imageData: ImageData, layers: readonly AdjustmentLayer[] | undefined): void {
+export function applyAdjustmentLayers(
+  imageData: Pick<ImageData, 'data'>,
+  layers: readonly AdjustmentLayer[] | undefined,
+  masks?: ReadonlyMap<string, ArrayLike<number>>
+): void {
   const active = activeAdjustmentLayers(layers);
   if (!active.length) return;
   const ops = active.map((l) => compiledFor(l));
+  const planes = active.map((l) => masks?.get(l.id));
   const data = imageData.data;
   const len = data.length;
   const c: Rgb = [0, 0, 0];
@@ -897,7 +913,15 @@ export function applyAdjustmentLayers(imageData: ImageData, layers: readonly Adj
     c[0] = data[i] / 255;
     c[1] = data[i + 1] / 255;
     c[2] = data[i + 2] / 255;
-    for (let k = 0; k < active.length; k++) applyLayer(c, active[k], ops[k]);
+    for (let k = 0; k < active.length; k++) {
+      const plane = planes[k];
+      if (plane) {
+        const cov = plane[i >> 2];
+        if (cov > 0) applyLayer(c, active[k], ops[k], cov >= 1 ? 1 : cov);
+      } else {
+        applyLayer(c, active[k], ops[k]);
+      }
+    }
     data[i] = Math.round(clamp01(c[0]) * 255);
     data[i + 1] = Math.round(clamp01(c[1]) * 255);
     data[i + 2] = Math.round(clamp01(c[2]) * 255);
@@ -908,6 +932,10 @@ export function applyAdjustmentLayers(imageData: ImageData, layers: readonly Adj
 export function adjustmentLayersKey(layers: readonly AdjustmentLayer[] | undefined): string {
   if (!layers?.length) return '';
   return JSON.stringify(
-    layers.map((l) => [l.kind, l.enabled !== false, l.opacity ?? 1, l.blend ?? 'normal', l.params])
+    layers.map((l) => {
+      const key: unknown[] = [l.kind, l.enabled !== false, l.opacity ?? 1, l.blend ?? 'normal', l.params];
+      if (l.mask) key.push(layerMaskKey(l.mask));
+      return key;
+    })
   );
 }

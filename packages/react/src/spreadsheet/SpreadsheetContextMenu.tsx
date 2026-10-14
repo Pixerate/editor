@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { clampMenuPosition, runSpreadsheetMenuItem, type SpreadsheetMenuItem } from '@pixerate/editor/spreadsheet';
+import { clampMenuPosition, runSpreadsheetMenuItem, type SpreadsheetMenuItem, type SpreadsheetPanelId } from '@pixerate/editor/spreadsheet';
 
 // Gap kept between the menu and the viewport edges.
 const VIEWPORT_MARGIN = 4;
@@ -9,10 +9,14 @@ export interface SpreadsheetContextMenuProps {
   x: number;
   y: number;
   onClose: () => void;
+  /** Accessible name of the menu (default "Table actions"). */
+  ariaLabel?: string;
+  /** Opens a panel for items with `panel` (conditional formatting, data validation). */
+  onOpenPanel?: (panel: SpreadsheetPanelId) => void;
 }
 
 /** The table context menu (sort, filter, freeze, hide, merge, categories, transpose). */
-export const SpreadsheetContextMenu: React.FC<SpreadsheetContextMenuProps> = ({ items, x, y, onClose }) => {
+export const SpreadsheetContextMenu: React.FC<SpreadsheetContextMenuProps> = ({ items, x, y, onClose, onOpenPanel, ariaLabel = 'Table actions' }) => {
   const menuRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
@@ -52,7 +56,7 @@ export const SpreadsheetContextMenu: React.FC<SpreadsheetContextMenuProps> = ({ 
     <div
       ref={menuRef}
       role="menu"
-      aria-label="Table actions"
+      aria-label={ariaLabel}
       className="fixed z-50 min-w-[14rem] rounded-md border border-border bg-popover py-1 text-xs text-popover-foreground shadow-lg"
       style={{
         left: position.x,
@@ -78,7 +82,8 @@ export const SpreadsheetContextMenu: React.FC<SpreadsheetContextMenuProps> = ({ 
             }`}
             onClick={() => {
               onClose();
-              runSpreadsheetMenuItem(item);
+              if (item.panel) onOpenPanel?.(item.panel);
+              else runSpreadsheetMenuItem(item);
             }}
           >
             {item.label}

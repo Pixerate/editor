@@ -20,3 +20,5 @@ export * from './resizeSnap.js';
 export * from './curveFit.js';
 export * from './autoLayout.js';
 export * from './autoLayoutController.js';
+export * from './tokenBindings.js';
+export * from './pathops/index.js';

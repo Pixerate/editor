@@ -20,11 +20,16 @@ import {
   LATEST_PROCESS_VERSION,
   IMAGE_ADJUSTMENT_CONTROLS,
   readAdjustmentControls,
+  DEFAULT_SELECTION_TOOL_OPTIONS,
+  SelectionGesture,
+  type SelectionToolOptions,
 } from '@pixerate/editor/image-editor';
 import { useImageEditor, type UseImageEditorReturn } from './useImageEditor';
 import { ControlSlider } from './ControlSlider';
 import { Histogram } from './Histogram';
 import { AdjustmentLayersPanel } from './AdjustmentLayersPanel';
+import { SelectionOptionsBar } from './SelectionOptionsBar';
+import { RefineEdgePanel } from './RefineEdgePanel';
 
 export interface ImageEditorProps {
   editor?: UseImageEditorReturn;
@@ -38,7 +43,7 @@ export interface ImageEditorProps {
   aiHooks?: ImageEditorAIHooks;
 }
 
-type TabType = 'crop' | 'adjust' | 'annotate' | 'depth' | 'ai';
+type TabType = 'crop' | 'adjust' | 'select' | 'annotate' | 'depth' | 'ai';
 
 export const ImageEditor: React.FC<ImageEditorProps> = ({
   editor: externalEditor,
@@ -60,6 +65,17 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState<TabType>('crop');
   const [activeCropRatio, setActiveCropRatio] = useState<number | null>(null);
+
+  // Selection tools (magic wand, marquees, lasso): options bar state and the pointer gesture.
+  const [selectionOptions, setSelectionOptions] = useState<SelectionToolOptions>(DEFAULT_SELECTION_TOOL_OPTIONS);
+  const selectionOptionsRef = useRef(selectionOptions);
+  selectionOptionsRef.current = selectionOptions;
+  const selectionGestureRef = useRef<SelectionGesture | null>(null);
+  if (!selectionGestureRef.current || selectionGestureRef.current.controller !== controller) {
+    selectionGestureRef.current = new SelectionGesture(controller, () => selectionOptionsRef.current);
+  }
+  const selectionDraftRef = useRef<ImagePoint[] | null>(null);
+  const [selectionError, setSelectionError] = useState<string | null>(null);
 
   // AI Tools state
   const [inpaintPrompt, setInpaintPrompt] = useState('');
@@ -178,6 +194,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
         interactive: true,
         draftAnnotation: draftAnnotation !== undefined ? draftAnnotation : draftAnnotationRef.current,
         draftCrop: draftCrop !== undefined ? draftCrop : draftCropRef.current,
+        draftSelectionPath: selectionDraftRef.current,
       });
     },
     [controller, activeTab]
@@ -242,6 +259,13 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
     const canvas = canvasRef.current;
     if (!canvas) return;
     const canvasPt = getCanvasEventPoint(e);
+
+    if (activeTab === 'select') {
+      const gesture = selectionGestureRef.current!;
+      const imgPt = canvasToImagePoint(canvasPt, state, canvas.width, canvas.height, false);
+      void gesture.begin(imgPt, e).then(() => setSelectionError(gesture.error));
+      return;
+    }
 
     if (activeTab === 'crop') {
       const activeCrop = draftCropRef.current || state.crop || {
@@ -315,6 +339,15 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
     const canvas = canvasRef.current;
     if (!canvas) return;
     const canvasPt = getCanvasEventPoint(e);
+
+    if (activeTab === 'select') {
+      const gesture = selectionGestureRef.current!;
+      if (gesture.active && gesture.move(canvasToImagePoint(canvasPt, state, canvas.width, canvas.height, false))) {
+        selectionDraftRef.current = gesture.draftPath;
+        renderCanvas();
+      }
+      return;
+    }
 
     if (activeTab === 'crop') {
       const drag = cropDragInfoRef.current;
@@ -474,6 +507,16 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
     if (!canvas) return;
     const canvasPt = getCanvasEventPoint(e);
 
+    if (activeTab === 'select') {
+      const gesture = selectionGestureRef.current!;
+      if (gesture.active) {
+        gesture.end(canvasToImagePoint(canvasPt, state, canvas.width, canvas.height, false), e);
+        selectionDraftRef.current = null;
+        renderCanvas();
+      }
+      return;
+    }
+
     if (activeTab === 'crop') {
       if (cropDragInfoRef.current) {
         if (
@@ -632,6 +675,18 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
             }`}
           >
             Adjustments
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('select');
+              editor.setTool('select');
+            }}
+            className={`px-3 py-1.5 rounded-md font-medium transition-colors ${
+              activeTab === 'select' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Select & Mask
           </button>
           <button
             type="button"
@@ -1193,6 +1248,25 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                   </label>
                 </>
               )}
+            </div>
+          )}
+
+          {/* SELECT & MASK: selection tools, refine edge, layer masks */}
+          {activeTab === 'select' && (
+            <div className="flex flex-col gap-4 text-xs">
+              <SelectionOptionsBar
+                controller={controller}
+                options={selectionOptions}
+                onOptionsChange={setSelectionOptions}
+                selection={state.selection ?? null}
+                quickMask={Boolean(state.quickMask)}
+              />
+              {selectionError && (
+                <p role="alert" className="text-rose-400">
+                  {selectionError}
+                </p>
+              )}
+              <RefineEdgePanel controller={controller} selection={state.selection ?? null} layers={state.adjustments.layers} />
             </div>
           )}
 

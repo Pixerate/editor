@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { replaceDelimited, replaceTagSpans, stripTags } from '../src/serializers/html-scan';
 import { extractMentions, htmlToPlainText, stripMarkdownCode } from '../src/serializers';
+import { growthRatio } from './helpers/growth';
 
 // Reference implementations: the regexes the scanners replaced. They are correct but
 // quadratic (or worse) on malformed input, so they are only run on short strings here.
@@ -58,24 +59,6 @@ describe('html-scan: same results as the regexes it replaces', () => {
 });
 
 describe('html-scan: linear time on malformed input', () => {
-  // Compare growth rather than absolute time (which depends on machine load):
-  // linear is ~4x for 4x the input, the quadratic behaviour fixed here is ~16x and
-  // the cubic one far more. Best of three runs at each size.
-  const growth = (unit: string, run: (s: string) => unknown) => {
-    const time = (n: number) => {
-      const input = unit.repeat(n);
-      let best = Infinity;
-      for (let i = 0; i < 3; i++) {
-        const start = performance.now();
-        run(input);
-        best = Math.min(best, performance.now() - start);
-      }
-      return best;
-    };
-    time(500);
-    return time(16000) / Math.max(time(4000), 0.5);
-  };
-
   const all = (s: string) => {
     htmlToPlainText(s);
     extractMentions(s);
@@ -92,6 +75,6 @@ describe('html-scan: linear time on malformed input', () => {
     ['```x'],
     ['](']],
   )('%j', (unit) => {
-    expect(growth(unit, all)).toBeLessThan(10);
+    expect(growthRatio(unit, all)).toBeLessThan(10);
   }, 30_000);
 });

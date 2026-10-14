@@ -21,6 +21,7 @@ import {
   Table2,
 } from "lucide-react";
 import { demoToolRegistry } from "../agentTools";
+import { GenerationHistoryDemo } from "./GenerationHistoryDemo";
 
 const SAMPLE_PROMPT =
   "A photorealistic portrait of {character|a weathered sea captain|Who is in the shot?} in {{cyberpunk_city}}, __award_winning__ composition{?lens}, shot with a {lens|35mm|Lens focal length} lens{/lens}{!lens}, wide angle{/lens}.";
@@ -69,6 +70,8 @@ const COLOR_MAP = new Map([
 
 export const PromptStudioTab: React.FC = () => {
   const [content, setContent] = useState(SAMPLE_PROMPT);
+  // Editable copy for resolution and generation history (Edit template → drift).
+  const [templates, setTemplates] = useState<Template[]>(DEMO_TEMPLATES);
   const [values, setValues] = useState<PromptValues>({});
   const [entered, setEntered] = useState<Record<string, string>>({});
   const [mergeTemplate, setMergeTemplate] = useState(MERGE_TEMPLATE);
@@ -116,7 +119,7 @@ export const PromptStudioTab: React.FC = () => {
     text: resolvedText,
     map: sourceMap,
     diagnostics,
-  } = resolvePrompt(content, DEMO_TEMPLATES, { values });
+  } = resolvePrompt(content, templates, { values });
 
   // `usePromptEditor` applies parent content changes to the editor.
   const loadPrompt = (text: string) => setContent(text);
@@ -231,7 +234,7 @@ export const PromptStudioTab: React.FC = () => {
           <div className="p-3 bg-slate-950 rounded-lg border border-slate-800/80" data-testid="template-renderer">
             <TemplateRenderer
               content={content}
-              templates={DEMO_TEMPLATES}
+              templates={templates}
               templateColorMap={COLOR_MAP}
               values={values}
             />
@@ -275,7 +278,7 @@ export const PromptStudioTab: React.FC = () => {
           </p>
           <VariableForm
             content={content}
-            templates={DEMO_TEMPLATES}
+            templates={templates}
             values={entered}
             onChange={(next, raw) => {
               setValues(next);
@@ -299,6 +302,23 @@ export const PromptStudioTab: React.FC = () => {
           >
             {resolvedText}
           </div>
+        </div>
+
+        {/* Asset mentions with roles + generation history (Recreate / Variation, drift) */}
+        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5">
+          <div className="flex items-center gap-2 mb-2">
+            <Sparkles className="w-4 h-4 text-sky-400" />
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+              Asset Roles &amp; Generation History
+            </h3>
+          </div>
+          <GenerationHistoryDemo
+            content={content}
+            onContentChange={loadPrompt}
+            values={values}
+            templates={templates}
+            onTemplatesChange={setTemplates}
+          />
         </div>
 
         {/* Mail merge preview */}
@@ -325,7 +345,7 @@ export const PromptStudioTab: React.FC = () => {
           </p>
           <MergePreview
             content={mergeTemplate}
-            templates={DEMO_TEMPLATES}
+            templates={templates}
             templateColorMap={COLOR_MAP}
             defaultSource={SAMPLE_CSV}
             skipIf="status=cancelled"

@@ -1,4 +1,7 @@
-import { tokenizeFormula } from './lexer';
+// Portions ported from gridcraft/crates/formula/src/adjust.rs and
+// gridcraft/crates/engine/src/cmd/formulas.rs (MIT OR Apache-2.0,
+// © ArtCraft Team and contributors). See THIRD_PARTY_NOTICES.md.
+import { tokenizeFormula, type FormulaToken } from './lexer';
 import { colNameToIndex, indexToColName } from './evaluator';
 
 /**
@@ -98,18 +101,47 @@ function rewriteReference(text: string, change: StructuralChange): string {
  * become `#REF!`. Absolute (`$`) markers are kept. String literals, property
  * references and function names are left untouched.
  */
-export function shiftFormulaReferences(formula: string, change: StructuralChange): string {
-  return mapFormulaReferences(formula, (text) => rewriteReference(text, change));
+export function shiftFormulaReferences(
+  formula: string,
+  change: StructuralChange,
+  options: FormulaReferenceFilter = {},
+): string {
+  return mapFormulaReferences(formula, (text, info) =>
+    !options.appliesTo || options.appliesTo(info.sheet, info.sheetEnd) ? rewriteReference(text, change) : text,
+  );
+}
+
+/**
+ * Limits a rewrite to some references, e.g. only those pointing at the sheet
+ * that changed: `appliesTo(sheet)` gets the reference's sheet (undefined for
+ * the formula's own sheet) and, for 3-D references, the last sheet.
+ */
+export interface FormulaReferenceFilter {
+  appliesTo?: (sheet: string | undefined, sheetEnd: string | undefined) => boolean;
+}
+
+/** Where a reference passed to a `mapFormulaReferences` callback points. */
+export interface FormulaReferenceInfo {
+  /** Sheet of a qualified reference (`Sheet2!A1`), unquoted; undefined for the formula's own sheet. */
+  sheet?: string;
+  /** Last sheet of a 3-D reference. */
+  sheetEnd?: string;
 }
 
 /**
  * Calls `rewrite` with the source text of every cell or range reference in
  * `formula` (e.g. `"$A1"`, `"B2:C10"`, `"A:A"`) and splices in its result.
  * For a spill reference (`A1#`) it receives the anchor (`"A1"`) and the `#`
- * is kept, unless the rewrite returns `#REF!`. String literals, property references and function names (e.g. `LOG10(`)
- * are skipped. Formulas that fail to tokenize are returned unchanged.
+ * is kept, unless the rewrite returns `#REF!`. A sheet prefix (`Sheet2!`,
+ * `'My Sheet'!`) is not part of the text: `info` says which sheet the
+ * reference points at, and the prefix is kept unless the rewrite returns
+ * `#REF!`. String literals, property references and function names (e.g.
+ * `LOG10(`) are skipped. Formulas that fail to tokenize are returned unchanged.
  */
-export function mapFormulaReferences(formula: string, rewrite: (reference: string) => string): string {
+export function mapFormulaReferences(
+  formula: string,
+  rewrite: (reference: string, info: FormulaReferenceInfo) => string,
+): string {
   if (!formula.startsWith('=')) return formula;
 
   let tokens;
@@ -127,19 +159,24 @@ export function mapFormulaReferences(formula: string, rewrite: (reference: strin
     // Function names that look like cell references (e.g. LOG10) are calls.
     if (tokens[i + 1]?.type === 'LPAREN') continue;
 
-    let end = token.position;
+    const refStart = token.refStart ?? token.position;
+    let end = refStart;
     while (end < formula.length && REF_CHAR.test(formula[end])) end++;
-    const original = formula.slice(token.position, end);
+    const original = formula.slice(refStart, end);
+    const info: FormulaReferenceInfo =
+      token.sheet === undefined ? {} : token.sheetEnd === undefined ? { sheet: token.sheet } : { sheet: token.sheet, sheetEnd: token.sheetEnd };
+    const prefix = formula.slice(token.position, refStart);
 
     if (token.type === 'SPILL_REF') {
       // A1#: the anchor is rewritten like a cell reference; `#` stays.
-      const rewritten = rewrite(original);
-      result += formula.slice(cursor, token.position) + (rewritten === '#REF!' ? rewritten : `${rewritten}#`);
+      const rewritten = rewrite(original, info);
+      result += formula.slice(cursor, token.position) + (rewritten === '#REF!' ? rewritten : `${prefix}${rewritten}#`);
       cursor = end + 1;
       continue;
     }
 
-    result += formula.slice(cursor, token.position) + rewrite(original);
+    const rewritten = rewrite(original, info);
+    result += formula.slice(cursor, token.position) + (rewritten === '#REF!' ? rewritten : prefix + rewritten);
     cursor = end;
   }
   return result + formula.slice(cursor);
@@ -186,8 +223,10 @@ const MAX_REMAP_RANGE_CELLS = 100_000;
 export function remapFormulaReferences(
   formula: string,
   moveCell: (position: CellPosition) => CellPosition | null,
+  options: FormulaReferenceFilter = {},
 ): string {
-  return mapFormulaReferences(formula, (text) => {
+  return mapFormulaReferences(formula, (text, info) => {
+    if (options.appliesTo && !options.appliesTo(info.sheet, info.sheetEnd)) return text;
     const parts = text.split(':').map(parsePart);
     if (parts.some((p) => p === null)) return text;
     const [start, end] = parts as RefPart[];
@@ -227,4 +266,146 @@ export function remapFormulaReferences(
     }
     return `${formatPart({ ...start, row: minR, col: minC })}:${formatPart({ ...end, row: maxR, col: maxC })}`;
   });
+}
+
+// --- Sheets and defined names ---
+
+// A1-style reference within Excel's grid (columns up to XFD).
+const CELL_LIKE = /^[A-Za-z]{1,3}\d{1,7}$/;
+const isCellLike = (name: string) => {
+  if (!CELL_LIKE.test(name)) return false;
+  const letters = name.match(/^[A-Za-z]+/)![0].toUpperCase();
+  const col = Array.from(letters).reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0);
+  const row = Number(name.slice(letters.length));
+  return col <= 16384 && row >= 1 && row <= 1048576;
+};
+const R1C1_LIKE = /^[Rr]\d*(?:[Cc]\d*)?$|^[Cc]\d*$/;
+
+/**
+ * Whether a sheet name must be quoted in a formula (`'My Sheet'!A1`): names
+ * with spaces or punctuation, starting with a digit, or that look like a
+ * cell reference (`A1`, `R1C1`) or a boolean.
+ */
+export function sheetNameNeedsQuotes(name: string): boolean {
+  if (!/^[A-Za-z_\p{L}][\p{L}\p{N}_.]*$/u.test(name)) return true;
+  const upper = name.toUpperCase();
+  return isCellLike(name) || R1C1_LIKE.test(name) || upper === 'TRUE' || upper === 'FALSE';
+}
+
+/** A sheet name as written in formulas: `Data`, `'My Sheet'`, `'Bob''s'`. */
+export function quoteSheetName(name: string): string {
+  return sheetNameNeedsQuotes(name) ? `'${name.replace(/'/g, "''")}'` : name;
+}
+
+/** The prefix of a reference to `sheet` (or the 3-D span `sheet:sheetEnd`), with `!`. */
+export function formatSheetPrefix(sheet: string, sheetEnd?: string): string {
+  if (sheetEnd === undefined) return `${quoteSheetName(sheet)}!`;
+  const quoted = sheetNameNeedsQuotes(sheet) || sheetNameNeedsQuotes(sheetEnd);
+  return quoted ? `'${`${sheet}:${sheetEnd}`.replace(/'/g, "''")}'!` : `${sheet}:${sheetEnd}!`;
+}
+
+function tokensOf(formula: string): FormulaToken[] | null {
+  if (!formula.startsWith('=')) return null;
+  try {
+    return tokenizeFormula(formula);
+  } catch {
+    return null;
+  }
+}
+
+/** Replaces token spans: `edit` returns the new text for a token, or null to keep it. */
+function rewriteTokens(formula: string, edit: (token: FormulaToken) => { from: number; to: number; text: string } | null): string {
+  const tokens = tokensOf(formula);
+  if (!tokens) return formula;
+  let result = '';
+  let cursor = 0;
+  for (const token of tokens) {
+    const change = edit(token);
+    if (!change) continue;
+    result += formula.slice(cursor, change.from) + change.text;
+    cursor = change.to;
+  }
+  return cursor === 0 ? formula : result + formula.slice(cursor);
+}
+
+const sameName = (a: string, b: string) => a.toUpperCase() === b.toUpperCase();
+
+/**
+ * Rewrites references to the sheet `oldName` (cell, range, spill and 3-D
+ * references, and sheet-qualified names such as `Old!Rate`) after it is
+ * renamed to `newName`, quoting the new name when needed.
+ */
+export function renameSheetInFormula(formula: string, oldName: string, newName: string): string {
+  return rewriteTokens(formula, (token) => {
+    if (token.sheet === undefined || token.refStart === undefined) return null;
+    const first = sameName(token.sheet, oldName);
+    const last = token.sheetEnd !== undefined && sameName(token.sheetEnd, oldName);
+    if (!first && !last) return null;
+    const sheet = first ? newName : token.sheet;
+    const sheetEnd = token.sheetEnd === undefined ? undefined : last ? newName : token.sheetEnd;
+    return { from: token.position, to: token.refStart, text: formatSheetPrefix(sheet, sheetEnd) };
+  });
+}
+
+/**
+ * Rewrites a formula after the sheet `name` is deleted: references to it
+ * become `#REF!`. `order` lists the sheet names before the deletion, in tab
+ * order: a 3-D reference losing an end sheet shrinks to the neighbouring
+ * sheet, as in Excel (`Sheet1:Sheet3!A1` without Sheet1 is `Sheet2:Sheet3!A1`).
+ */
+export function deleteSheetInFormula(formula: string, name: string, order: readonly string[] = []): string {
+  const position = (sheet: string) => order.findIndex((s) => sameName(s, sheet));
+  return rewriteTokens(formula, (token) => {
+    if (token.sheet === undefined || token.refStart === undefined) return null;
+    const end = token.end ?? token.refStart;
+    if (token.sheetEnd === undefined) {
+      return sameName(token.sheet, name) ? { from: token.position, to: end, text: '#REF!' } : null;
+    }
+    const first = sameName(token.sheet, name);
+    const last = sameName(token.sheetEnd, name);
+    if (!first && !last) return null;
+    const a = position(token.sheet);
+    const b = position(token.sheetEnd);
+    if (a < 0 || b < 0 || a === b) return { from: token.position, to: end, text: '#REF!' };
+    // The deleted end moves one sheet towards the other end.
+    const inward = (from: number, to: number) => order[from < to ? from + 1 : from - 1];
+    const newFirst = first ? inward(a, b) : token.sheet;
+    const newLast = last ? inward(b, a) : token.sheetEnd;
+    const prefix = sameName(newFirst, newLast) ? formatSheetPrefix(newFirst) : formatSheetPrefix(newFirst, newLast);
+    return { from: token.position, to: token.refStart, text: prefix };
+  });
+}
+
+/**
+ * Renames uses of the defined name `oldName` (`Rate`, `Rate*2`, `Double(4)`,
+ * `Data!Rate`) to `newName`. `appliesTo(sheet)` decides, for a
+ * sheet-qualified use, whether that sheet's name is the renamed one; unset,
+ * every use is renamed. With `qualifiedOnly`, unqualified uses are kept (the
+ * formula is on a sheet where the name means something else).
+ */
+export function renameNameInFormula(
+  formula: string,
+  oldName: string,
+  newName: string,
+  options: { appliesTo?: (sheet: string) => boolean; qualifiedOnly?: boolean } = {},
+): string {
+  return rewriteTokens(formula, (token) => {
+    if (token.type !== 'IDENTIFIER' || !sameName(token.value, oldName)) return null;
+    if (token.sheet !== undefined ? options.appliesTo && !options.appliesTo(token.sheet) : options.qualifiedOnly) return null;
+    const from = token.refStart ?? token.position;
+    return { from, to: token.end ?? from + oldName.length, text: newName };
+  });
+}
+
+/** Upper-case names used in a formula (bare names, calls and sheet-qualified names). */
+export function formulaIdentifiers(formula: string): Array<{ name: string; sheet?: string; call: boolean }> {
+  const tokens = tokensOf(formula);
+  if (!tokens) return [];
+  const out: Array<{ name: string; sheet?: string; call: boolean }> = [];
+  tokens.forEach((token, i) => {
+    if (token.type !== 'IDENTIFIER') return;
+    const call = tokens[i + 1]?.type === 'LPAREN';
+    out.push(token.sheet === undefined ? { name: token.value, call } : { name: token.value, sheet: token.sheet, call });
+  });
+  return out;
 }

@@ -86,6 +86,8 @@ export interface ImportFileIntoSpreadsheetOptions {
   /** Top-left cell to write to (0-based). Default A1. */
   startRow?: number;
   startCol?: number;
+  /** Sheet (id or name) to import into; default the active sheet. */
+  sheet?: string;
 }
 
 /**
@@ -97,8 +99,8 @@ export async function importFileIntoSpreadsheet(
   input: ImportInput,
   options: ImportFileIntoSpreadsheetOptions,
 ): Promise<ImportOutcome<SpreadsheetImport>> {
-  const { registry, startRow, startCol, ...rest } = options;
+  const { registry, startRow, startCol, sheet, ...rest } = options;
   const outcome = await registry.importFile<SpreadsheetImport>(input, { ...rest, target: 'spreadsheet' });
-  controller.importRows(outcome.result.rows, { startRow, startCol });
+  controller.importRows(outcome.result.rows, { startRow, startCol, sheet });
   return outcome;
 }

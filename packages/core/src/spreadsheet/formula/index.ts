@@ -1,6 +1,7 @@
 export * from './lexer';
 export * from './parser';
 export * from './evaluator';
+export { FormulaLambda, isFormulaLambda, MAX_LAMBDA_DEPTH, type FormulaEnvironment } from './lambda';
 export * from './dependency-graph';
 export * from './references';
 export * from './registry';

@@ -20,10 +20,15 @@
     LATEST_PROCESS_VERSION,
     IMAGE_ADJUSTMENT_CONTROLS,
     readAdjustmentControls,
+    DEFAULT_SELECTION_TOOL_OPTIONS,
+    SelectionGesture,
+    type SelectionToolOptions,
   } from '@pixerate/editor/image-editor';
   import ControlSlider from './ControlSlider.svelte';
   import Histogram from './Histogram.svelte';
   import AdjustmentLayersPanel from './AdjustmentLayersPanel.svelte';
+  import SelectionOptionsBar from './SelectionOptionsBar.svelte';
+  import RefineEdgePanel from './RefineEdgePanel.svelte';
   import { onDestroy, untrack } from 'svelte';
   import { createReactiveImageEditor, type ReactiveImageEditor } from './imageEditorState.svelte.js';
 
@@ -60,7 +65,13 @@
 
   let canvasEl = $state<HTMLCanvasElement | null>(null);
   let containerEl = $state<HTMLDivElement | null>(null);
-  let activeTab = $state<'crop' | 'adjust' | 'annotate' | 'depth' | 'ai'>('crop');
+  let activeTab = $state<'crop' | 'adjust' | 'select' | 'annotate' | 'depth' | 'ai'>('crop');
+
+  // Selection tools (magic wand, marquees, lasso): options bar state and the pointer gesture.
+  let selectionOptions = $state<SelectionToolOptions>({ ...DEFAULT_SELECTION_TOOL_OPTIONS });
+  const selectionGesture = $derived(new SelectionGesture(editor.controller, () => selectionOptions));
+  let selectionDraft = $state.raw<ImagePoint[] | null>(null);
+  let selectionError = $state<string | null>(null);
   let activeCropRatio = $state<number | null>(null);
 
   // AI state
@@ -187,6 +198,7 @@
       interactive: true,
       draftAnnotation: overrideAnnotation !== undefined ? overrideAnnotation : draftAnnotation,
       draftCrop: overrideCrop !== undefined ? overrideCrop : draftCrop,
+      draftSelectionPath: selectionDraft,
     });
   }
 
@@ -243,6 +255,13 @@
   function handleMouseDown(e: MouseEvent) {
     if (!canvasEl) return;
     const canvasPt = getCanvasEventPoint(e);
+
+    if (activeTab === 'select') {
+      const gesture = selectionGesture;
+      const imgPt = canvasToImagePoint(canvasPt, editor.state, canvasEl.width, canvasEl.height, false);
+      void gesture.begin(imgPt, e).then(() => (selectionError = gesture.error));
+      return;
+    }
 
     if (activeTab === 'crop') {
       const activeCrop = draftCrop || editor.state.crop || {
@@ -315,6 +334,15 @@
   function handleMouseMove(e: MouseEvent) {
     if (!canvasEl) return;
     const canvasPt = getCanvasEventPoint(e);
+
+    if (activeTab === 'select') {
+      const gesture = selectionGesture;
+      if (gesture.active && gesture.move(canvasToImagePoint(canvasPt, editor.state, canvasEl.width, canvasEl.height, false))) {
+        selectionDraft = gesture.draftPath;
+        renderCanvas();
+      }
+      return;
+    }
 
     if (activeTab === 'crop') {
       if (cropDragInfo) {
@@ -468,6 +496,16 @@
     if (!canvasEl) return;
     const canvasPt = getCanvasEventPoint(e);
 
+    if (activeTab === 'select') {
+      const gesture = selectionGesture;
+      if (gesture.active) {
+        gesture.end(canvasToImagePoint(canvasPt, editor.state, canvasEl.width, canvasEl.height, false), e);
+        selectionDraft = null;
+        renderCanvas();
+      }
+      return;
+    }
+
     if (activeTab === 'crop') {
       if (cropDragInfo) {
         if (draftCrop && draftCrop.width >= 20 && draftCrop.height >= 20) {
@@ -620,6 +658,18 @@
           : 'text-slate-400 hover:text-slate-200'}"
       >
         Adjustments
+      </button>
+      <button
+        type="button"
+        onclick={() => {
+          activeTab = 'select';
+          editor.setTool('select');
+        }}
+        class="px-3 py-1.5 rounded-md font-medium transition-colors {activeTab === 'select'
+          ? 'bg-indigo-600 text-white shadow'
+          : 'text-slate-400 hover:text-slate-200'}"
+      >
+        Select & Mask
       </button>
       <button
         type="button"
@@ -1150,6 +1200,27 @@
               <span>Invert Mask</span>
             </label>
           {/if}
+        </div>
+      {/if}
+
+      <!-- SELECT & MASK: selection tools, refine edge, layer masks -->
+      {#if activeTab === 'select'}
+        <div class="flex flex-col gap-4 text-xs">
+          <SelectionOptionsBar
+            controller={editor.controller}
+            options={selectionOptions}
+            onOptionsChange={(next) => (selectionOptions = next)}
+            selection={editor.state.selection ?? null}
+            quickMask={Boolean(editor.state.quickMask)}
+          />
+          {#if selectionError}
+            <p role="alert" class="text-rose-400">{selectionError}</p>
+          {/if}
+          <RefineEdgePanel
+            controller={editor.controller}
+            selection={editor.state.selection ?? null}
+            layers={editor.state.adjustments.layers}
+          />
         </div>
       {/if}
 

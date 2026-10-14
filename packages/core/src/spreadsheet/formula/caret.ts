@@ -100,6 +100,21 @@ export interface FormulaFunctionSuggestion {
   signature: string;
   description: string;
   category: FormulaFunctionDefinition['category'];
+  /**
+   * `name` for a defined name (accepting it inserts the name as defined,
+   * followed by `(` only for a LAMBDA name); unset for functions.
+   */
+  kind?: 'name';
+  /** For a defined name: it holds a LAMBDA, so it is called like a function. */
+  isLambda?: boolean;
+}
+
+/** A defined name offered by autocomplete (see `SpreadsheetController.getNameSuggestions`). */
+export interface FormulaNameSuggestionSource {
+  name: string;
+  description?: string;
+  /** A LAMBDA name is called like a function. */
+  isLambda?: boolean;
 }
 
 export interface FormulaActiveCall {
@@ -133,19 +148,32 @@ const toSuggestion = (def: FormulaFunctionDefinition): FormulaFunctionSuggestion
 export function getFormulaHints(
   input: string,
   caret: number = input.length,
-  options: { limit?: number } = {},
+  options: { limit?: number; names?: readonly FormulaNameSuggestionSource[] } = {},
 ): FormulaHints {
   const context = getFormulaCaretContext(input, caret);
   let suggestions: FormulaFunctionSuggestion[] = [];
   if (context.prefix) {
     const query = context.prefix.text.toUpperCase();
-    // Suggest names that start with what was typed; hide an exact, complete match.
-    suggestions = searchFormulaFunctions(query, { limit: undefined })
-      .filter((def) => def.name.startsWith(query))
-      .slice(0, options.limit ?? 8)
-      .map(toSuggestion);
+    // Suggest names that start with what was typed; hide an exact, complete
+    // match. Defined names come first: they are specific to this workbook.
+    const names: FormulaFunctionSuggestion[] = (options.names ?? [])
+      .filter((n) => n.name.toUpperCase().startsWith(query))
+      .map((n) => ({
+        name: n.name,
+        signature: n.isLambda ? `${n.name}(…)` : n.name,
+        description: n.description ?? '',
+        category: 'lookup' as const,
+        kind: 'name' as const,
+        ...(n.isLambda ? { isLambda: true } : {}),
+      }));
+    suggestions = [
+      ...names,
+      ...searchFormulaFunctions(query, { limit: undefined })
+        .filter((def) => def.name.startsWith(query) && !names.some((n) => n.name.toUpperCase() === def.name))
+        .map(toSuggestion),
+    ].slice(0, options.limit ?? 8);
     const followedByParen = input.slice(context.prefix.end).trimStart().startsWith('(');
-    if (followedByParen || (suggestions.length === 1 && suggestions[0].name === query)) suggestions = [];
+    if (followedByParen || (suggestions.length === 1 && suggestions[0].name.toUpperCase() === query)) suggestions = [];
   }
 
   let activeCall: FormulaActiveCall | null = null;
@@ -169,19 +197,31 @@ export function getFormulaHints(
 
 /**
  * Replaces the name prefix at the caret with `NAME(`, returning the new input
- * and caret position (just inside the parenthesis).
+ * and caret position (just inside the parenthesis). Given a defined-name
+ * suggestion (`kind: 'name'`), the name keeps its case and gets a `(` only
+ * when it holds a LAMBDA; `call: false` inserts any name without `(`.
  */
 export function applyFormulaSuggestion(
   input: string,
   caret: number,
-  name: string,
+  suggestion: string | Pick<FormulaFunctionSuggestion, 'name' | 'kind' | 'isLambda'>,
+  options: { call?: boolean } = {},
 ): { value: string; caret: number } {
   const context = getFormulaCaretContext(input, caret);
   const start = context.prefix?.start ?? caret;
   const end = context.prefix?.end ?? caret;
+  const definedName = typeof suggestion !== 'string' && suggestion.kind === 'name';
+  const name = typeof suggestion === 'string' ? suggestion : suggestion.name;
+  const call = options.call ?? (definedName ? !!(suggestion as FormulaFunctionSuggestion).isLambda : true);
+  if (!call) {
+    // A defined name: inserted as defined, without a parenthesis.
+    const value = input.slice(0, start) + name + input.slice(end);
+    return { value, caret: start + name.length };
+  }
   // Skip an existing "(" so accepting inside "SU|(" doesn't double it.
   const hasParen = input[end] === '(';
-  const insert = hasParen ? name.toUpperCase() : `${name.toUpperCase()}(`;
+  const spelled = definedName ? name : name.toUpperCase();
+  const insert = hasParen ? spelled : `${spelled}(`;
   const value = input.slice(0, start) + insert + input.slice(end);
   return { value, caret: start + insert.length + (hasParen ? 1 : 0) };
 }

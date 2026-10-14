@@ -4,3 +4,5 @@ export * from './Histogram';
 export * from './ControlSlider';
 export * from './CurvesEditor';
 export * from './AdjustmentLayersPanel';
+export * from './SelectionOptionsBar';
+export * from './RefineEdgePanel';

@@ -8,6 +8,7 @@ import { LOOKUP_FUNCTIONS } from './lookup';
 import { DATE_FUNCTIONS } from './date';
 import { INFORMATION_FUNCTIONS } from './information';
 import { ARRAY_FUNCTIONS, ELEMENTWISE_BUILTINS } from './array';
+import { LAMBDA_FUNCTIONS } from './lambda';
 
 /** Every built-in formula function. The registry is seeded from this list. */
 export const BUILTIN_FORMULA_FUNCTIONS: readonly FormulaFunctionDefinition[] = [
@@ -20,6 +21,7 @@ export const BUILTIN_FORMULA_FUNCTIONS: readonly FormulaFunctionDefinition[] = [
   ...DATE_FUNCTIONS,
   ...INFORMATION_FUNCTIONS,
   ...ARRAY_FUNCTIONS,
+  ...LAMBDA_FUNCTIONS,
 ].map((def) => {
   // Scalar built-ins that apply element by element to arrays.
   const elementwise = ELEMENTWISE_BUILTINS[def.name];

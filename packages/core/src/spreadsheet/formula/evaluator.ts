@@ -1,4 +1,21 @@
-import { ASTNode, parseFormula, type FunctionCallNode, type RangeNode, type SpillRefNode } from './parser';
+// Portions ported from gridcraft/crates/calc/src/eval.rs (MIT OR Apache-2.0,
+// © ArtCraft Team and contributors). See THIRD_PARTY_NOTICES.md.
+import {
+  ASTNode,
+  parseFormula,
+  type CellRefNode,
+  type FunctionCallNode,
+  type NameNode,
+  type RangeNode,
+  type SpillRefNode,
+} from './parser';
+import {
+  FormulaLambda,
+  isFormulaLambda,
+  lookupEnvironment,
+  MAX_LAMBDA_DEPTH,
+  type FormulaEnvironment,
+} from './lambda';
 import {
   checkFormulaArgumentCount,
   getFormulaArgumentSpecIndex,
@@ -26,6 +43,7 @@ import {
   formatIsoDate,
   formatIsoDateTime,
   cleanFloat,
+  rangeGet,
   type FormulaErrorCode,
   type FormulaRange,
 } from './values';
@@ -33,20 +51,48 @@ import {
 export { FORMULA_ERRORS, isFormulaError, colNameToIndex, indexToColName } from './values';
 export type { FormulaErrorCode, FormulaRange } from './values';
 
+/** What a defined name refers to, as returned by `EvaluationContext.resolveName`. */
+export interface FormulaNameDefinition {
+  /** Formula text (`=Sheet1!$A$1:$A$9`, `=0.07`, `=LAMBDA(x, x*2)`) or a parsed formula. */
+  formula: string | ASTNode;
+  /** Sheet that unqualified references in the formula refer to (a sheet-scoped name's sheet). */
+  sheet?: string;
+  /** A key identifying the name (for cycle detection), e.g. `Data!RATE`. Defaults to the name. */
+  key?: string;
+}
+
 export interface EvaluationContext {
-  resolveCell?: (col: string, row: number) => any;
+  /**
+   * Value of a cell. `sheet` is set for sheet-qualified references
+   * (`Sheet2!A1`); undefined means the formula's own sheet. Return `#REF!`
+   * for a sheet that doesn't exist.
+   */
+  resolveCell?: (col: string, row: number, sheet?: string) => any;
   /**
    * Values of a rectangular range, column by column (all rows of the first
    * column, then the next column). Lookup functions rely on this order.
+   * `sheet` as in `resolveCell`; return an error code for a missing sheet.
    */
-  resolveRange?: (startCol: string, startRow: number, endCol: string, endRow: number) => any[];
+  resolveRange?: (startCol: string, startRow: number, endCol: string, endRow: number, sheet?: string) => any[] | string;
   resolveProperty?: (property: string) => any;
   /**
    * The spilled array anchored at a cell, for `A1#` references: its shape and
    * values (column-major, like `resolveRange`), or an error code (e.g.
    * `#REF!` when the cell holds no array).
    */
-  resolveSpill?: (col: string, row: number) => FormulaRange | string;
+  resolveSpill?: (col: string, row: number, sheet?: string) => FormulaRange | string;
+  /**
+   * The sheets of a 3-D reference (`Sheet1:Sheet3!A1`), from `first` to
+   * `last` in tab order, or an error code when either sheet is missing.
+   */
+  resolveSheetSpan?: (first: string, last: string) => string[] | string;
+  /**
+   * A defined name (`Rate`, `Data!Rate`), or null when none is visible.
+   * `sheet` is the qualifying sheet, or the sheet whose names apply (when a
+   * sheet-scoped name refers to another name); undefined means the formula's
+   * own sheet. Sheet-scoped names come before workbook-scoped ones.
+   */
+  resolveName?: (name: string, sheet?: string) => FormulaNameDefinition | null;
   /**
    * The cell holding the formula being evaluated, used by the implicit
    * intersection operator (`=@A:A` reads the cell in the formula's row).
@@ -132,11 +178,43 @@ const isMultiArray = (value: unknown): value is any[] => Array.isArray(value) &&
 
 const firstValue = (value: any): any => (Array.isArray(value) ? (value.length ? value[0] : '') : value);
 
+/** `Sheet2!` / `Sheet1:Sheet3!` prefix for messages, or ''. */
+const sheetLabel = (node: { sheet?: string; sheetEnd?: string }): string =>
+  node.sheet === undefined ? '' : `${node.sheetEnd === undefined ? node.sheet : `${node.sheet}:${node.sheetEnd}`}!`;
+
+/**
+ * Special forms: evaluated by the evaluator itself (they define variables or
+ * take functions), listed in the registry for autocomplete and signatures.
+ */
+const SPECIAL_FORMS = new Set(['LET', 'LAMBDA', 'ISOMITTED', 'MAP', 'REDUCE', 'SCAN', 'BYROW', 'BYCOL', 'MAKEARRAY']);
+
+/** One element of a LAMBDA helper's result: nested arrays and lambdas are #CALC!. */
+function elementValue(value: any): any {
+  if (isFormulaLambda(value)) return '#CALC!';
+  if (Array.isArray(value)) return value.length === 1 ? elementValue(value[0]) : '#CALC!';
+  return value;
+}
+
+/** A value as a 2-D range: arrays keep their shape, a single value is 1x1. */
+function asRange(value: any): FormulaRange {
+  if (Array.isArray(value)) return toFormulaRange(value);
+  return { rows: 1, cols: 1, values: [value] };
+}
+
+const LITERAL_BLANK: ASTNode = { type: 'Literal', value: '' };
+
 export class FormulaEvaluator {
   private context: EvaluationContext;
   private diagnostics: FormulaDiagnostic[] = [];
-  // LET variables, innermost scope last.
-  private scopes: Array<Map<string, any>> = [];
+  // LET and LAMBDA variables (innermost first, chained to outer scopes).
+  private env: FormulaEnvironment | null = null;
+  // Sheet that unqualified references refer to while evaluating a
+  // sheet-scoped defined name (undefined: the formula's own sheet).
+  private defaultSheet: string | undefined = undefined;
+  private lambdaDepth = 0;
+  // Defined names being evaluated, to stop names that refer to themselves.
+  private nameStack: string[] = [];
+  private parsedNames = new Map<string, ASTNode>();
 
   constructor(context: EvaluationContext = {}) {
     this.context = context;
@@ -148,7 +226,14 @@ export class FormulaEvaluator {
    */
   public evaluate(astOrFormula: ASTNode | string): any {
     const ast = typeof astOrFormula === 'string' ? parseFormula(astOrFormula) : astOrFormula;
-    return this.evaluateNode(ast);
+    const value = this.evaluateNode(ast);
+    if (isFormulaLambda(value)) {
+      return this.fail(
+        '#CALC!',
+        'The formula returns a LAMBDA function without calling it. Add its arguments in parentheses, e.g. LAMBDA(x, x+1)(2).',
+      );
+    }
+    return value;
   }
 
   /**
@@ -159,9 +244,15 @@ export class FormulaEvaluator {
    */
   public evaluateWithDiagnostics(astOrFormula: ASTNode | string): FormulaEvaluationResult {
     const saved = this.diagnostics;
-    const savedScopes = this.scopes;
+    const savedEnv = this.env;
+    const savedSheet = this.defaultSheet;
+    const savedDepth = this.lambdaDepth;
+    const savedNames = this.nameStack;
     this.diagnostics = [];
-    this.scopes = [];
+    this.env = null;
+    this.defaultSheet = undefined;
+    this.lambdaDepth = 0;
+    this.nameStack = [];
     try {
       let value = this.evaluate(astOrFormula);
       let array: FormulaRange | undefined;
@@ -182,10 +273,17 @@ export class FormulaEvaluator {
       }
       return array ? { value, array } : { value };
     } catch (err: any) {
+      if (err instanceof RangeError) {
+        // The JavaScript stack ran out (very deep LAMBDA recursion).
+        return { value: '#NUM!', error: '#NUM!', message: 'The calculation is nested too deeply (recursion limit).' };
+      }
       return { value: '#ERROR!', error: '#ERROR!', message: err?.message || 'Formula error' };
     } finally {
       this.diagnostics = saved;
-      this.scopes = savedScopes;
+      this.env = savedEnv;
+      this.defaultSheet = savedSheet;
+      this.lambdaDepth = savedDepth;
+      this.nameStack = savedNames;
     }
   }
 
@@ -206,13 +304,18 @@ export class FormulaEvaluator {
         if (!this.context.resolveCell) {
           throw new Error(`Cannot resolve cell reference ${node.ref}: no cell resolver provided`);
         }
-        const value = this.context.resolveCell(node.col, node.row);
+        if (node.sheetEnd !== undefined) return this.evaluate3d(node);
+        const value = this.context.resolveCell(node.col, node.row, node.sheet ?? this.defaultSheet);
         if (isFormulaError(value)) {
+          const label = `${sheetLabel(node)}${node.ref}`;
+          if (value === '#REF!' && node.sheet !== undefined) {
+            return this.fail('#REF!', `${label} refers to a sheet that doesn't exist.`);
+          }
           this.fail(
             value as FormulaErrorCode,
             value === '#CYCLE!'
-              ? `Cell ${node.ref} is part of a circular reference.`
-              : `Cell ${node.ref} contains an error (${value}).`,
+              ? `Cell ${label} is part of a circular reference.`
+              : `Cell ${label} contains an error (${value}).`,
           );
         }
         return value;
@@ -224,11 +327,17 @@ export class FormulaEvaluator {
       case 'SpillRef':
         return this.evaluateSpillRef(node);
 
-      case 'Name': {
-        for (let i = this.scopes.length - 1; i >= 0; i--) {
-          if (this.scopes[i].has(node.name)) return this.scopes[i].get(node.name);
-        }
-        return this.fail('#NAME?', 'This formula contains an unknown name.');
+      case 'Name':
+        return this.evaluateName(node);
+
+      case 'Missing':
+        return '';
+
+      case 'Invoke': {
+        const callee = this.evaluateNode(node.callee);
+        if (isFormulaLambda(callee)) return this.invokeLambda(callee, node.args);
+        if (isFormulaError(callee)) return callee;
+        return this.fail('#VALUE!', 'Only a LAMBDA function can be called with arguments in parentheses.');
       }
 
       case 'PropertyRef': {
@@ -253,6 +362,9 @@ export class FormulaEvaluator {
         if (isFormulaError(left)) return left;
         const right = this.evaluateNode(node.right);
         if (isFormulaError(right)) return right;
+        if (isFormulaLambda(left) || isFormulaLambda(right)) {
+          return this.fail('#VALUE!', `The ${node.op} operator can't use a LAMBDA function; call it with arguments first.`);
+        }
         if (isMultiArray(left) || isMultiArray(right)) {
           // Array arithmetic: operate element by element (=A1:A3*2).
           const a = shapeOf(left);
@@ -284,6 +396,7 @@ export class FormulaEvaluator {
   }
 
   private unary(op: string, raw: any): any {
+    if (isFormulaLambda(raw)) return this.fail('#VALUE!', `The ${op} operator can't use a LAMBDA function.`);
     const val = toNumber(raw);
     if (isFormulaError(val)) {
       return isFormulaError(raw) ? raw : this.fail('#VALUE!', `The ${op} operator can't use text (${quote(raw)}).`);
@@ -403,7 +516,10 @@ export class FormulaEvaluator {
     if (!this.context.resolveSpill) {
       throw new Error(`Cannot resolve spill range ${node.ref}#: no spill resolver provided`);
     }
-    const spill = this.context.resolveSpill(node.col, node.row);
+    if (node.sheetEnd !== undefined) {
+      return this.fail('#REF!', `A 3-D reference can't use the spill operator (${sheetLabel(node)}${node.ref}#).`);
+    }
+    const spill = this.context.resolveSpill(node.col, node.row, node.sheet ?? this.defaultSheet);
     if (typeof spill === 'string' || !spill) {
       const code = (isFormulaError(spill) ? spill : '#REF!') as FormulaErrorCode;
       return this.fail(
@@ -419,12 +535,18 @@ export class FormulaEvaluator {
     return values;
   }
 
-  private evaluateRange(node: RangeNode): any[] {
+  private evaluateRange(node: RangeNode): any {
     if (!this.context.resolveRange) {
       throw new Error(`Cannot resolve range ${node.raw}: no range resolver provided`);
     }
-    const values = this.context.resolveRange(node.startCol, node.startRow, node.endCol, node.endRow);
-    if (!Array.isArray(values)) return values;
+    if (node.sheetEnd !== undefined) return this.evaluate3d(node);
+    const values = this.context.resolveRange(node.startCol, node.startRow, node.endCol, node.endRow, node.sheet ?? this.defaultSheet);
+    if (!Array.isArray(values)) {
+      if (values === '#REF!' && node.sheet !== undefined) {
+        return this.fail('#REF!', `${sheetLabel(node)}${node.raw} refers to a sheet that doesn't exist.`);
+      }
+      return values;
+    }
     // Record the 2D shape so lookups can address rows and columns.
     const cols = Math.abs(colNameToIndex(node.endCol) - colNameToIndex(node.startCol)) + 1;
     if (values.length % cols === 0) withRangeShape(values, values.length / cols, cols);
@@ -434,13 +556,33 @@ export class FormulaEvaluator {
   }
 
   private callFunction(node: FunctionCallNode): any {
+    // A LET or LAMBDA variable holding a lambda: LET(f, LAMBDA(x, x*2), f(3)).
+    const variables = lookupEnvironment(this.env, node.name);
+    if (variables) {
+      const bound = variables.vars.get(node.name);
+      if (isFormulaLambda(bound)) return this.invokeLambda(bound, node.args);
+    }
+
     const def = getFormulaFunction(node.name);
-    if (!def) return this.fail('#NAME?', `Unknown function "${node.name.toUpperCase()}".`);
+    if (!def) {
+      // A defined name holding a lambda: =Double(4).
+      const named = this.lookupDefinedName(node.name);
+      if (named) {
+        const value = this.evaluateDefinedName(named, node.name);
+        if (isFormulaLambda(value)) return this.invokeLambda(value, node.args);
+        if (isFormulaError(value)) return value;
+        return this.fail('#VALUE!', `The name ${node.name} doesn't refer to a LAMBDA function, so it can't be called.`);
+      }
+      if (variables) {
+        return this.fail('#VALUE!', `The variable ${node.name} doesn't hold a LAMBDA function, so it can't be called.`);
+      }
+      return this.fail('#NAME?', `Unknown function "${node.name.toUpperCase()}".`);
+    }
 
     const countError = checkFormulaArgumentCount(def, node.args.length);
     if (countError) return this.fail('#ERROR!', countError);
 
-    if (def.name === 'LET') return this.evaluateLet(node);
+    if (SPECIAL_FORMS.has(def.name)) return this.evaluateSpecialForm(def.name, node);
 
     const args = this.lazyArguments(node.args);
     if (def.elementwise) {
@@ -499,25 +641,339 @@ export class FormulaEvaluator {
     });
   }
 
+  // --- Names, LET and LAMBDA ---
+
+  /** A bare name: a variable, a defined name, or #NAME?. */
+  private evaluateName(node: NameNode): any {
+    if (node.sheet === undefined) {
+      const variables = lookupEnvironment(this.env, node.name);
+      if (variables) return variables.vars.get(node.name);
+    }
+    const named = this.lookupDefinedName(node.name, node.sheet);
+    if (named) return this.evaluateDefinedName(named, `${sheetLabel(node)}${node.name}`);
+    if (node.sheet !== undefined) {
+      return this.fail('#NAME?', `There is no name ${node.name} on sheet ${node.sheet}.`);
+    }
+    return this.fail('#NAME?', `This formula contains an unknown name.`);
+  }
+
+  private lookupDefinedName(name: string, sheet?: string): FormulaNameDefinition | null {
+    return this.context.resolveName?.(name, sheet ?? this.defaultSheet) ?? null;
+  }
+
+  /**
+   * Evaluates a defined name's formula, outside any LET/LAMBDA variables, with
+   * unqualified references pointing at the name's sheet (for sheet-scoped
+   * names).
+   */
+  private evaluateDefinedName(def: FormulaNameDefinition, label: string): any {
+    const key = (def.key ?? label).toUpperCase();
+    if (this.nameStack.includes(key)) {
+      return this.fail('#CYCLE!', `The name ${label} refers to itself.`);
+    }
+    let ast: ASTNode;
+    if (typeof def.formula === 'string') {
+      const text = def.formula.startsWith('=') ? def.formula : `=${def.formula}`;
+      let cached = this.parsedNames.get(text);
+      if (!cached) {
+        try {
+          cached = parseFormula(text);
+        } catch {
+          return this.fail('#NAME?', `The name ${label} has a formula that can't be read.`);
+        }
+        if (this.parsedNames.size > 500) this.parsedNames.clear();
+        this.parsedNames.set(text, cached);
+      }
+      ast = cached;
+    } else {
+      ast = def.formula;
+    }
+    const savedEnv = this.env;
+    const savedSheet = this.defaultSheet;
+    this.nameStack.push(key);
+    this.env = null;
+    if (def.sheet !== undefined) this.defaultSheet = def.sheet;
+    try {
+      return this.evaluateNode(ast);
+    } finally {
+      this.env = savedEnv;
+      this.defaultSheet = savedSheet;
+      this.nameStack.pop();
+    }
+  }
+
+  /** A 3-D reference (`Sheet1:Sheet3!A1`, `Sheet1:Sheet3!A1:B2`): every sheet's values, in tab order. */
+  private evaluate3d(node: CellRefNode | RangeNode): any {
+    const label = node.type === 'CellRef' ? `${sheetLabel(node)}${node.ref}` : `${sheetLabel(node)}${node.raw}`;
+    const sheets = this.context.resolveSheetSpan?.(node.sheet!, node.sheetEnd!);
+    if (!Array.isArray(sheets)) {
+      return this.fail('#REF!', `${label} refers to a sheet that doesn't exist.`);
+    }
+    const values: any[] = [];
+    for (const sheet of sheets) {
+      const part =
+        node.type === 'CellRef'
+          ? [this.context.resolveCell!(node.col, node.row, sheet)]
+          : this.context.resolveRange!(node.startCol, node.startRow, node.endCol, node.endRow, sheet);
+      if (!Array.isArray(part)) return this.fail('#REF!', `${label} refers to a sheet that doesn't exist.`);
+      for (const value of part) values.push(value ?? '');
+    }
+    const error = values.find(isFormulaError);
+    if (error) this.fail(error as FormulaErrorCode, `The 3-D reference ${label} contains an error (${error}).`);
+    return withRangeShape(values, values.length, 1);
+  }
+
+  /** Calls a lambda with argument expressions, evaluated in the caller's scope. */
+  private invokeLambda(lambda: FormulaLambda, argNodes: ASTNode[]): any {
+    const params = lambda.params;
+    // `f()` with one parameter passes it as omitted.
+    const positionsOk = argNodes.length === params.length || (argNodes.length === 0 && params.length === 1);
+    if (!positionsOk) {
+      return this.fail(
+        '#VALUE!',
+        `${lambda.label} expects ${params.length} argument${params.length === 1 ? '' : 's'}, but ${argNodes.length} ${argNodes.length === 1 ? 'was' : 'were'} given.`,
+      );
+    }
+    const values: any[] = [];
+    const omitted = new Set<number>();
+    for (let i = 0; i < params.length; i++) {
+      const node = argNodes[i];
+      if (!node || node.type === 'Missing') {
+        omitted.add(i);
+        values.push('');
+      } else {
+        values.push(this.evaluateNode(node));
+      }
+    }
+    return this.invokeWithValues(lambda, values, omitted);
+  }
+
+  /** Calls a lambda with argument values (`omitted`: positions left out, for ISOMITTED). */
+  private invokeWithValues(lambda: FormulaLambda, values: any[], omitted?: Set<number>): any {
+    if (this.lambdaDepth >= MAX_LAMBDA_DEPTH) {
+      return this.fail('#NUM!', `LAMBDA calls are nested more than ${MAX_LAMBDA_DEPTH} deep (runaway recursion?).`);
+    }
+    if (lambda.native) return lambda.native(values);
+    const vars = new Map<string, any>();
+    let omittedNames: Set<string> | undefined;
+    lambda.params.forEach((param, i) => {
+      vars.set(param, values[i] ?? '');
+      if (omitted?.has(i)) (omittedNames ??= new Set()).add(param);
+    });
+    const savedEnv = this.env;
+    const savedSheet = this.defaultSheet;
+    this.env = { vars, omitted: omittedNames, parent: lambda.env };
+    this.defaultSheet = lambda.sheet;
+    this.lambdaDepth++;
+    try {
+      return this.evaluateNode(lambda.body!);
+    } finally {
+      this.lambdaDepth--;
+      this.env = savedEnv;
+      this.defaultSheet = savedSheet;
+    }
+  }
+
+  private evaluateSpecialForm(name: string, node: FunctionCallNode): any {
+    switch (name) {
+      case 'LET':
+        return this.evaluateLet(node);
+      case 'LAMBDA':
+        return this.evaluateLambda(node);
+      case 'ISOMITTED': {
+        const arg = node.args[0];
+        if (arg?.type !== 'Name' || arg.sheet !== undefined) return false;
+        const variables = lookupEnvironment(this.env, arg.name);
+        return !!variables?.omitted?.has(arg.name);
+      }
+      case 'MAP':
+        return this.evaluateMap(node);
+      case 'REDUCE':
+      case 'SCAN':
+        return this.evaluateReduce(node, name === 'SCAN');
+      case 'BYROW':
+      case 'BYCOL':
+        return this.evaluateByLine(node, name === 'BYROW');
+      default:
+        return this.evaluateMakeArray(node);
+    }
+  }
+
   /** LET(name1, value1, [name2, value2, ...], calculation). */
   private evaluateLet(node: FunctionCallNode): any {
     if (node.args.length % 2 === 0) {
       return this.fail('#ERROR!', 'LET needs name/value pairs followed by a calculation.');
     }
-    const scope = new Map<string, any>();
-    this.scopes.push(scope);
+    const vars = new Map<string, any>();
+    const savedEnv = this.env;
+    // Each value sees the names defined before it.
+    this.env = { vars, parent: savedEnv };
     try {
       for (let i = 0; i < node.args.length - 1; i += 2) {
         const nameNode = node.args[i];
-        if (nameNode.type !== 'Name') {
+        if (nameNode.type !== 'Name' || nameNode.sheet !== undefined) {
           return this.fail('#ERROR!', `Argument ${i + 1} of LET must be a name (names can't look like cell references).`);
         }
-        scope.set(nameNode.name, this.evaluateNode(node.args[i + 1]));
+        vars.set(nameNode.name, this.evaluateNode(node.args[i + 1]));
       }
       return this.evaluateNode(node.args[node.args.length - 1]);
     } finally {
-      this.scopes.pop();
+      this.env = savedEnv;
     }
+  }
+
+  /** LAMBDA([parameter1, ...], calculation): a function value closing over the current variables. */
+  private evaluateLambda(node: FunctionCallNode): any {
+    const params: string[] = [];
+    for (let i = 0; i < node.args.length - 1; i++) {
+      const param = node.args[i];
+      if (param.type !== 'Name' || param.sheet !== undefined) {
+        return this.fail('#VALUE!', `Parameter ${i + 1} of LAMBDA must be a name (names can't look like cell references).`);
+      }
+      if (params.includes(param.name)) {
+        return this.fail('#VALUE!', `LAMBDA parameter ${param.name} is listed twice.`);
+      }
+      params.push(param.name);
+    }
+    const body = node.args[node.args.length - 1];
+    if (body.type === 'Missing') return this.fail('#VALUE!', 'LAMBDA needs a calculation as its last argument.');
+    return new FormulaLambda(params, body, this.env, this.defaultSheet);
+  }
+
+  /**
+   * The function argument of a LAMBDA helper: a lambda, or a built-in
+   * function given by name (`BYROW(A1:C3, SUM)`) unless a variable or defined
+   * name has that name. Returns an error string when it is neither.
+   */
+  private lambdaArgument(fn: string, node: ASTNode | undefined, index: number): FormulaLambda | string {
+    if (!node) return this.fail('#VALUE!', `${fn} needs a LAMBDA function.`);
+    if (node.type === 'Name' && node.sheet === undefined && !lookupEnvironment(this.env, node.name) && !this.lookupDefinedName(node.name)) {
+      const def = getFormulaFunction(node.name);
+      if (def && !SPECIAL_FORMS.has(def.name)) {
+        return new FormulaLambda([], null, null, undefined, (values) => this.callBuiltinWithValues(def, values), def.name);
+      }
+    }
+    const value = this.evaluateNode(node);
+    if (isFormulaLambda(value)) return value;
+    if (isFormulaError(value)) return value;
+    return this.fail('#VALUE!', `Argument ${index + 1} of ${fn} must be a LAMBDA function.`);
+  }
+
+  /** Calls a built-in function with already evaluated arguments. */
+  private callBuiltinWithValues(def: FormulaFunctionDefinition, values: any[]): any {
+    const countError = checkFormulaArgumentCount(def, values.length);
+    if (countError) return this.fail('#VALUE!', countError);
+    const args: FormulaArgument[] = values.map((value, index) => ({ index, node: LITERAL_BLANK, value: () => value }));
+    if (def.elementwise) {
+      const lifted = this.liftOverArrays(def, args);
+      if (lifted !== undefined) return lifted;
+    }
+    return this.finishCall(def, def.evaluate(this.createContext(def, args)));
+  }
+
+  /** Checks a lambda takes `count` parameters (native functions take any count). */
+  private checkArity(fn: string, lambda: FormulaLambda, count: number): string | null {
+    if (lambda.native || lambda.params.length === count) return null;
+    return this.fail(
+      '#VALUE!',
+      `The LAMBDA passed to ${fn} must take ${count} parameter${count === 1 ? '' : 's'}, but it takes ${lambda.params.length}.`,
+    );
+  }
+
+  /** MAP(array1, [array2, ...], lambda): calls the lambda with each element. */
+  private evaluateMap(node: FunctionCallNode): any {
+    const lambda = this.lambdaArgument('MAP', node.args[node.args.length - 1], node.args.length - 1);
+    if (typeof lambda === 'string') return lambda;
+    const arrays: any[] = [];
+    for (let i = 0; i < node.args.length - 1; i++) {
+      const value = this.evaluateNode(node.args[i]);
+      if (isFormulaError(value)) return value;
+      arrays.push(value);
+    }
+    const arity = this.checkArity('MAP', lambda, arrays.length);
+    if (arity) return arity;
+    let rows = 1;
+    let cols = 1;
+    for (const array of arrays) {
+      const shape = shapeOf(array);
+      rows = Math.max(rows, shape.rows);
+      cols = Math.max(cols, shape.cols);
+    }
+    if (rows * cols > MAX_FORMULA_ARRAY_SIZE) return this.fail('#NUM!', 'The array result is too large.');
+    return buildArray(rows, cols, (r, c) =>
+      elementValue(this.invokeWithValues(lambda, arrays.map((array) => broadcastGet(array, r, c)))),
+    );
+  }
+
+  /**
+   * REDUCE([initial_value], array, lambda) / SCAN(...): folds the array row
+   * by row with lambda(accumulator, value). SCAN returns every intermediate
+   * value, in the array's shape.
+   */
+  private evaluateReduce(node: FunctionCallNode, scan: boolean): any {
+    const fn = scan ? 'SCAN' : 'REDUCE';
+    let acc: any = this.evaluateNode(node.args[0]);
+    const arrayValue = this.evaluateNode(node.args[1]);
+    if (isFormulaError(arrayValue)) return arrayValue;
+    const lambda = this.lambdaArgument(fn, node.args[2], 2);
+    if (typeof lambda === 'string') return lambda;
+    const arity = this.checkArity(fn, lambda, 2);
+    if (arity) return arity;
+    const range = asRange(arrayValue);
+    const results: any[] = scan ? new Array(range.rows * range.cols) : [];
+    // Excel goes row by row; ranges are stored column by column.
+    for (let r = 0; r < range.rows; r++) {
+      for (let c = 0; c < range.cols; c++) {
+        acc = this.invokeWithValues(lambda, [acc, rangeGet(range, r, c)]);
+        if (scan) results[c * range.rows + r] = elementValue(acc);
+      }
+    }
+    if (scan) return withRangeShape(results, range.rows, range.cols);
+    return acc;
+  }
+
+  /** BYROW(array, lambda) / BYCOL(array, lambda): one result per row (a column) or per column (a row). */
+  private evaluateByLine(node: FunctionCallNode, byRow: boolean): any {
+    const fn = byRow ? 'BYROW' : 'BYCOL';
+    const arrayValue = this.evaluateNode(node.args[0]);
+    if (isFormulaError(arrayValue)) return arrayValue;
+    const lambda = this.lambdaArgument(fn, node.args[1], 1);
+    if (typeof lambda === 'string') return lambda;
+    const arity = this.checkArity(fn, lambda, 1);
+    if (arity) return arity;
+    const range = asRange(arrayValue);
+    const count = byRow ? range.rows : range.cols;
+    const out: any[] = [];
+    for (let i = 0; i < count; i++) {
+      const line: any[] = [];
+      const length = byRow ? range.cols : range.rows;
+      for (let j = 0; j < length; j++) line.push(byRow ? rangeGet(range, i, j) : rangeGet(range, j, i));
+      const slice = byRow ? withRangeShape(line, 1, length) : withRangeShape(line, length, 1);
+      out.push(elementValue(this.invokeWithValues(lambda, [slice])));
+    }
+    return byRow ? withRangeShape(out, count, 1) : withRangeShape(out, 1, count);
+  }
+
+  /** MAKEARRAY(rows, columns, lambda): lambda(row, column) for every 1-based position. */
+  private evaluateMakeArray(node: FunctionCallNode): any {
+    const size = (index: number): number | string => {
+      const value = firstValue(this.evaluateNode(node.args[index]));
+      if (isFormulaError(value)) return value;
+      const num = toNumber(value);
+      if (isFormulaError(num)) return this.fail('#VALUE!', `Argument ${index + 1} of MAKEARRAY must be a number.`);
+      return Math.trunc(num as number);
+    };
+    const rows = size(0);
+    if (typeof rows === 'string') return rows;
+    const cols = size(1);
+    if (typeof cols === 'string') return cols;
+    if (rows < 1 || cols < 1) return this.fail('#VALUE!', 'MAKEARRAY needs at least one row and one column.');
+    if (rows * cols > MAX_FORMULA_ARRAY_SIZE) return this.fail('#NUM!', 'The array result is too large.');
+    const lambda = this.lambdaArgument('MAKEARRAY', node.args[2], 2);
+    if (typeof lambda === 'string') return lambda;
+    const arity = this.checkArity('MAKEARRAY', lambda, 2);
+    if (arity) return arity;
+    return buildArray(rows, cols, (r, c) => elementValue(this.invokeWithValues(lambda, [r + 1, c + 1])));
   }
 
   private createContext(def: FormulaFunctionDefinition, args: FormulaArgument[]): FormulaFunctionContext {

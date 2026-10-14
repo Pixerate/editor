@@ -63,6 +63,7 @@ import {
   type CrossReferenceOptions,
 } from "./document-structure";
 import { FindReplace, type FindReplaceOptions } from "./find-replace/extension";
+import { ParagraphStyles, type ParagraphStylesOptions } from "./paragraph-styles/extension";
 
 export interface RichTextPresetOptions {
   placeholder?: string | ((props: { node: any }) => string);
@@ -100,6 +101,11 @@ export interface RichTextPresetOptions {
   crossReferences?: Partial<CrossReferenceOptions> | boolean;
   /** Word-style Find and Replace (Mod+F / Mod+H, match highlights). Off by default. */
   findReplace?: Partial<FindReplaceOptions> | boolean;
+  /**
+   * Paragraph styles (Normal, Title, Heading 1–6, Quote, …) with a style
+   * registry, `data-style` attributes and next-style on Enter. Off by default.
+   */
+  paragraphStyles?: Partial<ParagraphStylesOptions> | boolean;
 }
 
 const optionObject = <T>(value: T | boolean | undefined): T | Record<string, never> =>
@@ -319,6 +325,10 @@ export function createRichTextPreset(
 
   if (options.findReplace) {
     extensions.push(FindReplace.configure(optionObject(options.findReplace)));
+  }
+
+  if (options.paragraphStyles) {
+    extensions.push(ParagraphStyles.configure(optionObject(options.paragraphStyles)));
   }
 
   return extensions;

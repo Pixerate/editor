@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { clampMenuPosition, runSpreadsheetMenuItem, type SpreadsheetMenuItem } from '@pixerate/editor/spreadsheet';
+  import { clampMenuPosition, runSpreadsheetMenuItem, type SpreadsheetMenuItem, type SpreadsheetPanelId } from '@pixerate/editor/spreadsheet';
 
   // Gap kept between the menu and the viewport edges.
   const VIEWPORT_MARGIN = 4;
@@ -9,9 +9,13 @@
     x: number;
     y: number;
     onClose: () => void;
+    /** Accessible name of the menu (default "Table actions"). */
+    ariaLabel?: string;
+    /** Opens a panel for items with `panel` (conditional formatting, data validation). */
+    onOpenPanel?: (panel: SpreadsheetPanelId) => void;
   }
 
-  let { items, x, y, onClose }: Props = $props();
+  let { items, x, y, onClose, onOpenPanel, ariaLabel = 'Table actions' }: Props = $props();
   let menuEl = $state<HTMLDivElement | null>(null);
   let measured = $state<{ x: number; y: number } | null>(null);
   const position = $derived(measured ?? { x, y });
@@ -51,7 +55,7 @@
 <div
   bind:this={menuEl}
   role="menu"
-  aria-label="Table actions"
+  aria-label={ariaLabel}
   tabindex="-1"
   class="fixed z-50 min-w-[14rem] rounded-md border border-border bg-popover py-1 text-xs text-popover-foreground shadow-lg"
   style="left: {position.x}px; top: {position.y}px; max-height: calc(100vh - {VIEWPORT_MARGIN * 2}px); overflow-y: auto; background: var(--popover, var(--background, #fff));"
@@ -73,7 +77,8 @@
         : ''}"
       onclick={() => {
         onClose();
-        runSpreadsheetMenuItem(item);
+        if (item.panel) onOpenPanel?.(item.panel);
+        else runSpreadsheetMenuItem(item);
       }}
     >
       {item.label}

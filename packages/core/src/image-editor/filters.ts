@@ -23,7 +23,11 @@ function clamp(value: number, min = 0, max = 255): number {
  * ({@link applyProcess2Adjustments}); anything else (including a missing value, as in edits saved
  * before process versions existed) is the frozen legacy rendering ({@link applyLegacyAdjustments}).
  */
-export function applyAdjustments(imageData: ImageData, adjustments: ImageAdjustments): void {
+export function applyAdjustments(
+  imageData: ImageData,
+  adjustments: ImageAdjustments,
+  options: { layerMasks?: ReadonlyMap<string, ArrayLike<number>> } = {}
+): void {
   if (normalizeProcessVersion(adjustments.process) === LATEST_PROCESS_VERSION) {
     applyProcess2Adjustments(imageData, adjustments);
   } else {
@@ -31,7 +35,8 @@ export function applyAdjustments(imageData: ImageData, adjustments: ImageAdjustm
   }
 
   // Adjustment layers, bottom to top, on the encoded result (no-op without layers).
-  applyAdjustmentLayers(imageData, adjustments.layers);
+  // Layer masks (see `buildLayerMaskPlanes`) are aligned with `imageData`.
+  applyAdjustmentLayers(imageData, adjustments.layers, options.layerMasks);
 
   // Apply blur if requested
   if (adjustments.blur > 0) {

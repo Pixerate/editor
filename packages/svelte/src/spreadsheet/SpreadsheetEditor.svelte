@@ -14,12 +14,22 @@
     type SpreadsheetViewColumn,
     type SpreadsheetViewRow,
     formatCellForDisplay,
-    numberFormatColorToCss
+    numberFormatColorToCss,
+    getConditionalFormatCss,
+    getConditionalFormatIcon,
+    getDataBarCss,
+    conditionalFormatStyleString,
+    type SpreadsheetPanelId,
+    type SpreadsheetValidationAction
   } from '@pixerate/editor/spreadsheet';
   import FormulaBar from './FormulaBar.svelte';
+  import SpreadsheetValidationDialog from './SpreadsheetValidationDialog.svelte';
+  import SpreadsheetConditionalFormatPanel from './SpreadsheetConditionalFormatPanel.svelte';
+  import SpreadsheetDataValidationPanel from './SpreadsheetDataValidationPanel.svelte';
   import SpreadsheetContextMenu from './SpreadsheetContextMenu.svelte';
   import SpreadsheetGroupRow from './SpreadsheetGroupRow.svelte';
   import FormulaHints from './FormulaHints.svelte';
+  import SheetTabs from './SheetTabs.svelte';
   import { createReactiveSpreadsheet } from './spreadsheet.svelte.js';
   import { attachSpreadsheetClipboard } from './tableInteractions.js';
 
@@ -35,6 +45,8 @@
     onAddColumnClick?: () => void;
     onColumnHeaderClick?: (col: SpreadsheetColumn) => void;
     onColumnResize?: (colId: string, width: number) => void;
+    /** Show the sheet tabs bar under the grid (add, switch, rename, reorder, delete sheets). */
+    showSheetTabs?: boolean;
   }
 
   let {
@@ -46,8 +58,15 @@
     customCellRenderer,
     onAddColumnClick,
     onColumnHeaderClick,
-    onColumnResize
+    onColumnResize,
+    showSheetTabs = false
   }: Props = $props();
+
+  // Defined names for formula autocomplete in the cell editor.
+  let nameSuggestions = $derived.by(() => {
+    void sheetState.document;
+    return sheetState.controller.getNameSuggestions();
+  });
 
   let isReadOnly = $derived(readOnly || readonly);
 
@@ -85,6 +104,73 @@
 
   let fillDrag = $state.raw<{ source: CellRange; target: CellRange | null } | null>(null);
   let menu = $state.raw<{ x: number; y: number; items: SpreadsheetMenuItem[] } | null>(null);
+  // Conditional formatting / data validation manager, opened from the context menu.
+  let panel = $state<SpreadsheetPanelId | null>(null);
+  // List dropdown of a list-validated cell.
+  let listMenu = $state.raw<{ x: number; y: number; row: number; col: number; values: string[] } | null>(null);
+
+  // --- Data validation: list dropdown, input message, alerts ---
+  let activeListValues = $derived.by(() => {
+    void sheetState.document;
+    const cell = sheetState.activeCell;
+    return cell && !isReadOnly ? sheetState.controller.getValidationListValues(cell.row, cell.col) : null;
+  });
+  let inputMessage = $derived.by(() => {
+    void sheetState.document;
+    const cell = sheetState.activeCell;
+    const rule = cell ? sheetState.controller.getDataValidationAt(cell.row, cell.col) : undefined;
+    return rule && rule.showInputMessage !== false && (rule.inputTitle || rule.inputMessage) ? rule : null;
+  });
+
+  // "Circle invalid data": recomputed when the document (or the toggle) changes.
+  let invalidCircles = $derived.by(() => {
+    void sheetState.document;
+    if (!sheetState.controller.getInvalidDataCircles()) return null;
+    return new Set(sheetState.controller.findInvalidCells().map((c) => `${c.row}:${c.col}`));
+  });
+
+  function openListMenu(row: number, col: number, anchor?: HTMLElement | null) {
+    if (isReadOnly || sheetState.document.columns[col]?.readOnly) return;
+    const values = sheetState.controller.getValidationListValues(row, col);
+    if (!values) return;
+    const td = anchor ?? gridContainer?.querySelector<HTMLElement>(`td[data-row="${row}"][data-col="${col}"]`);
+    const rect = td?.getBoundingClientRect();
+    listMenu = { x: rect ? rect.left : 0, y: rect ? rect.bottom : 0, row, col, values };
+  }
+
+  // Close the list on a press outside it (or on its arrow, which toggles it).
+  $effect(() => {
+    if (!listMenu) return;
+    const close = (e: MouseEvent) => {
+      if (!(e.target as Element | null)?.closest?.('[aria-label="Allowed values"], .spreadsheet-list-arrow')) listMenu = null;
+    };
+    window.addEventListener('mousedown', close);
+    return () => window.removeEventListener('mousedown', close);
+  });
+
+  function chooseListValue(value: string) {
+    if (!listMenu) return;
+    const row = sheetState.document.rows[listMenu.row];
+    const col = sheetState.document.columns[listMenu.col];
+    listMenu = null;
+    if (row && col) sheetState.commitCellInput(row.id, col.id, value);
+    gridContainer?.focus();
+  }
+
+  function resolveValidation(action: SpreadsheetValidationAction) {
+    sheetState.resolveValidationPrompt(action);
+    // Back to the cell editor when it is still open (retry), else the grid.
+    requestAnimationFrame(() => {
+      if (cellInput) cellInput.focus();
+      else gridContainer?.focus();
+    });
+  }
+
+  /** Inline style of a cell's conditional look (fill, font), keeping the selection tint visible. */
+  function conditionalStyle(fill: string | undefined, css: string, selected: boolean): string {
+    if (!css) return '';
+    return ` ${css}${fill && selected ? ' box-shadow: inset 0 0 0 9999px color-mix(in srgb, var(--primary, #6366f1) 12%, transparent);' : ''}`;
+  }
   let filteredColIds = $derived.by(() => {
     const filter = sheetState.document.table?.filter;
     return new Set(filter?.enabled ? filter.rules.map((r) => r.colId) : []);
@@ -174,11 +260,12 @@
         sheetState.cancelEditing();
       } else if (e.key === 'Enter') {
         e.preventDefault();
-        sheetState.commitEditing();
+        // Invalid input keeps the editor open behind the validation alert.
+        if (sheetState.commitEditing().status !== 'committed') return;
         sheetState.moveCursor('down');
       } else if (e.key === 'Tab') {
         e.preventDefault();
-        sheetState.commitEditing();
+        if (sheetState.commitEditing().status !== 'committed') return;
         sheetState.moveCursor(e.shiftKey ? 'left' : 'right');
       } else {
         return;
@@ -190,7 +277,11 @@
 
     if (!sheetState.activeCell) return;
 
-    if (e.key === 'ArrowUp') {
+    if (e.altKey && e.key === 'ArrowDown') {
+      // Alt+Down opens the list of a list-validated cell.
+      e.preventDefault();
+      openListMenu(sheetState.activeCell.row, sheetState.activeCell.col);
+    } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       sheetState.moveCursor('up', e.shiftKey);
     } else if (e.key === 'ArrowDown') {
@@ -443,6 +534,7 @@
   }
 </script>
 
+{#snippet grid()}
 <div
   bind:this={gridContainer}
   class="flex flex-col h-full w-full overflow-hidden border border-border bg-background select-none outline-none text-foreground font-sans text-xs {className}"
@@ -454,6 +546,11 @@
   <!-- Formula Bar -->
   {#if showFormulaBar}
     <FormulaBar {sheetState} />
+  {/if}
+  {#if inputMessage}
+    <div role="note" data-validation-input-message="" class="border-b border-border bg-muted/30 px-3 py-1 text-[11px] text-muted-foreground">
+      {#if inputMessage.inputTitle}<span class="mr-1 font-semibold text-foreground">{inputMessage.inputTitle}</span>{/if}{inputMessage.inputMessage ?? ''}
+    </div>
   {/if}
 
   <!-- Main Scrollable Grid -->
@@ -552,6 +649,10 @@
               {@const active = isActiveCell(rIdx, cIdx)}
               {@const isEditing = sheetState.editingCell?.row === rIdx && sheetState.editingCell?.col === cIdx}
 
+              {@const conditional = sheetState.conditionalFormatOverlay.get(rIdx, cIdx)}
+              {@const conditionalCss = conditionalFormatStyleString(getConditionalFormatCss(conditional))}
+              {@const circled = !!invalidCircles?.has(`${rIdx}:${cIdx}`)}
+              {@const showListArrow = active && !isEditing && !!activeListValues}
               {@const inFillPreview = !!fillDrag?.target && !selected && rangeContains(fillDrag.target, displayRowIndex, viewCol.index)}
               {@const showFillHandle =
                 !isReadOnly &&
@@ -568,7 +669,8 @@
                 rowspan={span.rowSpan}
                 colspan={span.colSpan}
                 class="relative border-r border-border px-2 py-1 truncate max-w-0 text-foreground transition-colors {selected ? 'bg-primary/10' : ''} {active ? 'ring-2 ring-primary ring-inset z-10' : ''} {viewCol.header ? 'font-semibold' : ''}"
-                style="max-width: 0; overflow: hidden; {frozenCellStyle(viewRow, viewCol)}{inFillPreview ? ' outline: 1px dashed var(--primary, #6366f1); outline-offset: -1px;' : ''}"
+                style="max-width: 0; overflow: hidden; {frozenCellStyle(viewRow, viewCol)}{conditionalStyle(conditional?.fill, conditionalCss, selected)}{inFillPreview ? ' outline: 1px dashed var(--primary, #6366f1); outline-offset: -1px;' : ''}"
+                data-cf-fill={conditional?.fill}
                 onclick={(e) => handleCellClick(rIdx, cIdx, e)}
                 ondblclick={() => handleCellDblClick(rIdx, cIdx)}
                 oncontextmenu={(e) => handleCellContextMenu(rIdx, cIdx, e)}
@@ -582,20 +684,58 @@
                     bind:value={sheetState.draftValue}
                     onblur={() => sheetState.commitEditing()}
                   />
-                  <FormulaHints input={cellInput} value={sheetState.draftValue} onAccept={(next) => (sheetState.draftValue = next)} />
+                  <FormulaHints input={cellInput} value={sheetState.draftValue} onAccept={(next) => (sheetState.draftValue = next)} names={nameSuggestions} />
                 {:else if customCellRenderer}
                   {@const cellArg = Object.assign({ row, col, cell }, cell)}
                   {@render (customCellRenderer as any)(cellArg, col, row)}
                 {:else}
                   {@const shown = formatCellForDisplay(cell)}
+                  {@const textColor = conditional?.color ?? (shown.color ? numberFormatColorToCss(shown.color) : undefined)}
+                  {@const icon = conditional?.icon ? getConditionalFormatIcon(conditional.icon.set, conditional.icon.index) : null}
+                  {#if conditional?.dataBar}
+                    <span aria-hidden="true" class="spreadsheet-data-bar" style={conditionalFormatStyleString(getDataBarCss(conditional.dataBar))}></span>
+                  {/if}
+                  {#snippet cellText()}
+                    <span
+                      class="truncate block max-w-full {cell.error ? 'text-destructive font-semibold' : ''}"
+                      title={cell.error ? (cell.errorMessage ?? cell.error) : undefined}
+                      data-numeric={shown.numeric ? '' : undefined}
+                      style="{conditional?.dataBar || icon ? 'position: relative;' : ''}{icon ? ' flex: 1; min-width: 0;' : ''}{shown.numeric ? ' text-align: right;' : ''}{textColor ? ` color: ${textColor};` : ''}"
+                    >
+                      {conditional?.hideValue ? '' : shown.text}
+                    </span>
+                  {/snippet}
+                  {#if icon && conditional?.icon}
+                    <span class="flex items-center gap-1 min-w-0" style="position: relative;">
+                      <span class="spreadsheet-cf-icon shrink-0" role="img" aria-label={icon.label} data-icon={conditional.icon.id} style="color: {icon.color};">{icon.glyph}</span>
+                      {@render cellText()}
+                    </span>
+                  {:else}
+                    {@render cellText()}
+                  {/if}
+                {/if}
+                {#if circled}
                   <span
-                    class="truncate block max-w-full {cell.error ? 'text-destructive font-semibold' : ''}"
-                    title={cell.error ? (cell.errorMessage ?? cell.error) : undefined}
-                    data-numeric={shown.numeric ? '' : undefined}
-                    style="{shown.numeric ? 'text-align: right;' : ''}{shown.color ? ` color: ${numberFormatColorToCss(shown.color)};` : ''}"
+                    class="spreadsheet-invalid-circle"
+                    aria-label="Invalid value"
+                    style="position: absolute; inset: 1px 2px; border: 2px solid #e11d48; border-radius: 50%; pointer-events: none; z-index: 6;"
+                  ></span>
+                {/if}
+                {#if showListArrow}
+                  <button
+                    type="button"
+                    class="spreadsheet-list-arrow"
+                    aria-label="Show allowed values"
+                    aria-haspopup="listbox"
+                    tabindex="-1"
+                    style="position: absolute; right: 1px; top: 1px; bottom: 1px; width: 16px; z-index: 24; font-size: 10px; line-height: 1; background: var(--muted, #f4f4f5); border: 1px solid var(--border, #e4e4e7); border-radius: 2px; cursor: pointer; padding: 0;"
+                    onmousedown={(e) => e.stopPropagation()}
+                    onclick={(e) => {
+                      e.stopPropagation();
+                      if (listMenu) listMenu = null;
+                      else openListMenu(rIdx, cIdx, (e.currentTarget as HTMLElement).parentElement);
+                    }}>▾</button
                   >
-                    {shown.text}
-                  </span>
                 {/if}
                 {#if activeSpill && rangeContains(activeSpill.range, rIdx, cIdx)}
                   <span aria-hidden="true" class="spreadsheet-spill-border" style={spillBorderStyle(activeSpill.range, rIdx, cIdx)}></span>
@@ -633,9 +773,53 @@
         menu = null;
         gridContainer?.focus();
       }}
+      onOpenPanel={(next) => (panel = next)}
     />
   {/if}
+  {#if panel === 'conditionalFormatting'}
+    <SpreadsheetConditionalFormatPanel {sheetState} onClose={() => (panel = null)} />
+  {:else if panel === 'dataValidation'}
+    <SpreadsheetDataValidationPanel {sheetState} onClose={() => (panel = null)} />
+  {/if}
+  {#if listMenu}
+    <div
+      role="listbox"
+      aria-label="Allowed values"
+      tabindex="-1"
+      class="fixed z-50 max-h-60 min-w-[8rem] overflow-y-auto rounded-md border border-border bg-popover py-1 text-xs text-popover-foreground shadow-lg"
+      style="left: {listMenu.x}px; top: {listMenu.y}px; background: var(--popover, var(--background, #fff));"
+      onkeydown={(e) => {
+        e.stopPropagation();
+        if (e.key === 'Escape') {
+          listMenu = null;
+          gridContainer?.focus();
+        }
+      }}
+    >
+      {#if listMenu.values.length === 0}
+        <div class="px-3 py-1 text-muted-foreground">No values</div>
+      {/if}
+      {#each listMenu.values as value, i (`${i}:${value}`)}
+        <button type="button" role="option" aria-selected="false" class="block w-full px-3 py-1 text-left hover:bg-muted" onclick={() => chooseListValue(value)}
+          >{value}</button
+        >
+      {/each}
+    </div>
+  {/if}
+  {#if sheetState.validationPrompt}
+    <SpreadsheetValidationDialog prompt={sheetState.validationPrompt} onResolve={resolveValidation} />
+  {/if}
 </div>
+{/snippet}
+
+{#if showSheetTabs}
+  <div class="flex h-full w-full flex-col">
+    <div class="min-h-0 flex-1">{@render grid()}</div>
+    <SheetTabs {sheetState} readOnly={isReadOnly} />
+  </div>
+{:else}
+  {@render grid()}
+{/if}
 
 <style>
   .col-resize-handle {

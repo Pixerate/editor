@@ -204,6 +204,123 @@ export function createArrangeCommands(controller: ArrangeCommandTarget, options:
 }
 
 // ---------------------------------------------------------------------------
+// Canvas shape operations
+// ---------------------------------------------------------------------------
+
+/** Shape operations surface of the arrange controller (`createCanvasArrangeController` satisfies it). */
+export interface ShapeCommandTarget {
+	combineShapes(operation: 'unite' | 'intersect' | 'subtract' | 'exclude' | 'divide', ids?: Iterable<string>): unknown;
+	canCombineShapes(ids?: Iterable<string>): boolean;
+	offsetShapes(distance: number, ids?: Iterable<string>, options?: { join?: 'miter' | 'round' | 'bevel'; miterLimit?: number }): unknown;
+	canOffsetShapes(ids?: Iterable<string>): boolean;
+	outlineStroke(
+		ids?: Iterable<string>,
+		options?: { join?: 'miter' | 'round' | 'bevel'; cap?: 'butt' | 'round' | 'square'; miterLimit?: number }
+	): unknown;
+	canOutlineStroke(ids?: Iterable<string>): boolean;
+}
+
+export interface ShapeCommandOptions {
+	/** Id prefix (default `canvas.`). */
+	prefix?: string;
+	group?: string;
+	/** Scope (default `canvas`). Pass `null` for global. */
+	scope?: string | null;
+	/** Offset distance used when `canvas.offsetPath` is run without one (default 10). */
+	defaultOffset?: number;
+}
+
+const SHAPE_COMMANDS = [
+	{ op: 'unite', label: 'Unite Shapes', keywords: ['union', 'merge', 'boolean', 'combine'] },
+	{ op: 'intersect', label: 'Intersect Shapes', keywords: ['intersection', 'boolean', 'combine'] },
+	{ op: 'subtract', label: 'Subtract Shapes', keywords: ['difference', 'minus front', 'boolean', 'combine'] },
+	{ op: 'exclude', label: 'Exclude Shapes', keywords: ['xor', 'boolean', 'combine'] },
+	{ op: 'divide', label: 'Divide Shapes', keywords: ['split', 'pathfinder', 'boolean'] }
+] as const;
+
+const JOIN_PARAM = { type: 'string', enum: ['miter', 'round', 'bevel'], description: 'Corner style (default miter).' } as const;
+
+/**
+ * Palette / context-menu / agent commands for the shape operations: `canvas.unite`,
+ * `canvas.intersect`, `canvas.subtract`, `canvas.exclude`, `canvas.divide`,
+ * `canvas.offsetPath` (`{ distance, join?, miterLimit?, ids? }`) and `canvas.outlineStroke`
+ * (`{ join?, cap?, miterLimit?, ids? }`). Each is one undoable step when the controller has a
+ * history; enablement explains why a command cannot run.
+ */
+export function createShapeCommands(controller: ShapeCommandTarget, options: ShapeCommandOptions = {}): CommandSpec[] {
+	const prefix = options.prefix ?? 'canvas.';
+	const group = options.group ?? 'Shape';
+	const scope = options.scope === null ? undefined : options.scope ?? 'canvas';
+	const base = { group, ...(scope ? { scope } : {}) };
+	const combine = SHAPE_COMMANDS.map(
+		({ op, label, keywords }): CommandSpec => ({
+			...base,
+			id: `${prefix}${op}`,
+			label,
+			keywords: [...keywords],
+			description: `${label.split(' ')[0]}s the selected shapes into a new path (curves are kept).`,
+			params: IDS_PARAMS,
+			enabled: (_ctx: unknown, params?: { ids?: string[] }) =>
+				controller.canCombineShapes(params?.ids) ? true : 'Select at least two unlocked shapes.',
+			run: (_ctx: unknown, params: { ids?: string[] }) => controller.combineShapes(op, params?.ids)
+		})
+	);
+	return [
+		...combine,
+		{
+			...base,
+			id: `${prefix}offsetPath`,
+			label: 'Offset Path…',
+			keywords: ['inset', 'outset', 'grow', 'shrink', 'expand', 'contract'],
+			description: 'Grows (positive distance) or shrinks (negative) the selected shapes.',
+			params: {
+				type: 'object',
+				properties: {
+					distance: { type: 'number', description: `Offset in canvas units (default ${options.defaultOffset ?? 10}).` },
+					join: JOIN_PARAM,
+					miterLimit: { type: 'number', description: 'Miter limit (default 4).' },
+					ids: IDS_PARAMS.properties!.ids
+				}
+			},
+			enabled: (_ctx: unknown, params?: { ids?: string[] }) =>
+				controller.canOffsetShapes(params?.ids) ? true : 'Select an unlocked shape.',
+			run: (_ctx: unknown, params: { distance?: number; join?: 'miter' | 'round' | 'bevel'; miterLimit?: number; ids?: string[] }) =>
+				controller.offsetShapes(params?.distance ?? options.defaultOffset ?? 10, params?.ids, {
+					...(params?.join ? { join: params.join } : {}),
+					...(params?.miterLimit !== undefined ? { miterLimit: params.miterLimit } : {})
+				})
+		},
+		{
+			...base,
+			id: `${prefix}outlineStroke`,
+			label: 'Outline Stroke',
+			keywords: ['expand stroke', 'stroke to path', 'convert stroke'],
+			description: 'Converts the strokes of the selected shapes to filled shapes.',
+			params: {
+				type: 'object',
+				properties: {
+					join: JOIN_PARAM,
+					cap: { type: 'string', enum: ['butt', 'round', 'square'], description: 'Line cap (default butt).' },
+					miterLimit: { type: 'number', description: 'Miter limit (default 4).' },
+					ids: IDS_PARAMS.properties!.ids
+				}
+			},
+			enabled: (_ctx: unknown, params?: { ids?: string[] }) =>
+				controller.canOutlineStroke(params?.ids) ? true : 'Select an unlocked shape with a stroke.',
+			run: (
+				_ctx: unknown,
+				params: { join?: 'miter' | 'round' | 'bevel'; cap?: 'butt' | 'round' | 'square'; miterLimit?: number; ids?: string[] }
+			) =>
+				controller.outlineStroke(params?.ids, {
+					...(params?.join ? { join: params.join } : {}),
+					...(params?.cap ? { cap: params.cap } : {}),
+					...(params?.miterLimit !== undefined ? { miterLimit: params.miterLimit } : {})
+				})
+		}
+	];
+}
+
+// ---------------------------------------------------------------------------
 // Spreadsheet table actions
 // ---------------------------------------------------------------------------
 

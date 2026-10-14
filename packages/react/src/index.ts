@@ -15,6 +15,8 @@ export * from "./components/MergePreview";
 export * from "./hooks/useMergePreview";
 export * from "./hooks/useOutline";
 export * from "./components/OutlinePanel";
+export * from "./hooks/useParagraphStyles";
+export * from "./components/StylesGallery";
 
 // Re-export core types for easy consumer access
 export {

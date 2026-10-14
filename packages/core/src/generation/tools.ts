@@ -1,8 +1,15 @@
 import type { AgentTool, AgentToolProvider, ToolCallContext } from '../agent/registry.js';
 import type { JsonSchema } from '../agent/schema.js';
-import { REFERENCE_ROLES, type GenerationRequest, type ModelCapabilities } from './capabilities.js';
+import {
+	REFERENCE_ROLES,
+	supportedReferenceRoles,
+	type GenerationRequest,
+	type ModelCapabilities,
+	type ReferenceRole
+} from './capabilities.js';
 import { planGenerationRequest, type GenerationPlan, type PlanStrategy } from './plan.js';
 import { capabilitiesToJsonSchema } from './schema.js';
+import { stableStringify } from './hash.js';
 
 export interface GenerateContext {
 	model: ModelCapabilities;
@@ -42,7 +49,16 @@ export interface GenerationToolProvider extends AgentToolProvider {
 
 const STRATEGIES: PlanStrategy[] = ['nearest', 'upgrade', 'downgrade', 'error'];
 
-const requestSchema: JsonSchema = {
+/** Built-in roles plus every role a model declares, for the shared request schema. */
+function knownRoles(models: readonly ModelCapabilities[]): ReferenceRole[] {
+	const roles: ReferenceRole[] = [...REFERENCE_ROLES];
+	for (const model of models) {
+		for (const role of supportedReferenceRoles(model)) if (!roles.includes(role)) roles.push(role);
+	}
+	return roles;
+}
+
+const requestSchemaFor = (roles: readonly ReferenceRole[]): JsonSchema => ({
 	type: 'object',
 	description:
 		'Generation request. Call list_models for the fields each model supports; unsupported values are adjusted per `strategy`.',
@@ -63,8 +79,14 @@ const requestSchema: JsonSchema = {
 				type: 'object',
 				properties: {
 					id: { type: 'string', minLength: 1 },
-					role: { type: 'string', enum: [...REFERENCE_ROLES] },
-					url: { type: 'string' }
+					role: {
+						type: 'string',
+						enum: [...roles],
+						description: 'What the asset is used for. Each model lists the roles it accepts (list_models).'
+					},
+					url: { type: 'string' },
+					mediaType: { type: 'string', description: 'MIME type or media kind, e.g. "image/png".' },
+					contentHash: { type: 'string' }
 				},
 				required: ['id', 'role'],
 				additionalProperties: false
@@ -73,7 +95,7 @@ const requestSchema: JsonSchema = {
 		params: { type: 'object', additionalProperties: { type: ['string', 'number', 'boolean'] } }
 	},
 	additionalProperties: false
-};
+});
 
 const strategySchema: JsonSchema = {
 	type: 'string',
@@ -81,19 +103,6 @@ const strategySchema: JsonSchema = {
 	description:
 		'How to handle unsupported values: nearest (snap/clamp, ties up), downgrade (ties down), upgrade (ties up, never drops references), error (change nothing).'
 };
-
-/** Stable JSON (sorted object keys) used to compare retried arguments. */
-function stableStringify(value: unknown): string {
-	if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
-	if (value && typeof value === 'object') {
-		const entries = Object.keys(value as object)
-			.filter((key) => (value as any)[key] !== undefined)
-			.sort()
-			.map((key) => `${JSON.stringify(key)}:${stableStringify((value as any)[key])}`);
-		return `{${entries.join(',')}}`;
-	}
-	return JSON.stringify(value) ?? 'null';
-}
 
 function planFailure(plan: GenerationPlan) {
 	return {
@@ -145,12 +154,13 @@ export function createGenerationToolProvider(options: GenerationToolProviderOpti
 	};
 
 	const planInput = (): JsonSchema & { type: 'object' } => {
-		const ids = readModels().map((m) => m.id);
+		const models = readModels();
+		const ids = models.map((m) => m.id);
 		return {
 			type: 'object',
 			properties: {
 				model: { type: 'string', ...(ids.length ? { enum: ids } : {}), description: 'Model id from list_models.' },
-				request: requestSchema,
+				request: requestSchemaFor(knownRoles(models)),
 				strategy: strategySchema,
 				resolvedPrompt: {
 					type: 'string',

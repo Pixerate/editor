@@ -1,6 +1,7 @@
 import { DOMSerializer, Slice, Fragment, Node as ProsemirrorNode, type Schema } from "@tiptap/pm/model";
 import {
   BLOCK_CHANGE_ATTRIBUTE,
+  MOVE_ID_ATTRIBUTE,
   resolveTrackedChanges,
   type TrackedChangesView,
 } from "../extensions/track-changes";
@@ -142,7 +143,10 @@ export function htmlToPlainText(html: string, options: PlainTextOptions = {}): s
   const mentionNormalized = replaceTagSpans(trackedResolved, "span", MENTION_TYPE_ATTRIBUTE, (match, attrs) => {
     const label =
       getHtmlAttribute(attrs, "data-label") || getHtmlAttribute(attrs, "data-id");
-    return label ? `@${label}` : match;
+    const role = getHtmlAttribute(attrs, "data-role");
+    // A role is written as `@label:role`, the text syntax `extractMentions` reads.
+    const validRole = role && /^[A-Za-z](?:[A-Za-z0-9_-]*[A-Za-z0-9])?$/.test(role) ? role : "";
+    return label ? `@${label}${validRole ? `:${validRole}` : ""}` : match;
   });
 
   if (typeof document !== "undefined") {
@@ -206,8 +210,9 @@ export function htmlToPlainText(html: string, options: PlainTextOptions = {}): s
 
 /**
  * Whole-block insertions/deletions (`blockChange.operation`, from document
- * comparison) have no `<ins>`/`<del>` elements to strip, so documents with
- * them are resolved first and serialized from the resolved document.
+ * comparison) have no `<ins>`/`<del>` elements to strip, and resolving a
+ * moved paragraph removes its whole block, so documents with either are
+ * resolved first and serialized from the resolved document.
  */
 function resolvedBlockOperationsHtml(editor: any, view: TrackedChangesView): string | null {
   const doc: ProsemirrorNode | undefined = editor?.state?.doc;
@@ -217,6 +222,9 @@ function resolvedBlockOperationsHtml(editor: any, view: TrackedChangesView): str
     if (found) return false;
     if (node.isTextblock) {
       if (node.attrs?.[BLOCK_CHANGE_ATTRIBUTE]?.operation) found = true;
+      else node.forEach((child) => {
+        if (child.marks.some((mark) => mark.attrs?.[MOVE_ID_ATTRIBUTE])) found = true;
+      });
       return false;
     }
     return true;
@@ -255,6 +263,8 @@ export interface ExtractedMention {
   id: string;
   label: string;
   type?: string;
+  /** Asset role (`data-role`), when set. */
+  role?: string;
   avatarUrl?: string;
   color?: string;
   [key: string]: any;
@@ -285,6 +295,7 @@ export function extractMentionsFromDoc(docOrEditor: any): ExtractedMention[] {
           avatarUrl: node.attrs.avatarUrl,
           color: node.attrs.color,
           ...node.attrs,
+          ...(node.attrs.assetRole ? { role: node.attrs.assetRole } : {}),
         });
       }
     });
@@ -303,6 +314,7 @@ export function extractMentionsFromDoc(docOrEditor: any): ExtractedMention[] {
             avatarUrl: node.attrs.avatarUrl,
             color: node.attrs.color,
             ...node.attrs,
+            ...(node.attrs.assetRole ? { role: node.attrs.assetRole } : {}),
           });
         }
         if (Array.isArray(node.content)) {
@@ -324,6 +336,7 @@ export function extractMentionsFromDoc(docOrEditor: any): ExtractedMention[] {
           type: el.getAttribute("data-type-name") || undefined,
           avatarUrl: el.getAttribute("data-avatar-url") || undefined,
           color: el.getAttribute("data-color") || undefined,
+          ...(el.getAttribute("data-role") ? { role: el.getAttribute("data-role")! } : {}),
         });
       });
     } else {
@@ -339,6 +352,7 @@ export function extractMentionsFromDoc(docOrEditor: any): ExtractedMention[] {
           type: getAttr("data-type-name") || getAttr("data-entity-type"),
           avatarUrl: getAttr("data-avatar-url"),
           color: getAttr("data-color"),
+          ...(getAttr("data-role") ? { role: getAttr("data-role") } : {}),
         });
       }
     }

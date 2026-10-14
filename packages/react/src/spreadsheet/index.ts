@@ -4,3 +4,7 @@ export * from './SpreadsheetContextMenu';
 export * from './SpreadsheetGroupRow';
 export * from './useSpreadsheetTableInteractions';
 export * from './FormulaHints';
+export * from './SheetTabs';
+export * from './NameManager';
+export * from './SpreadsheetValidationDialog';
+export * from './SpreadsheetRulePanels';

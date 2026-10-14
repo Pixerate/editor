@@ -1,3 +1,4 @@
+// Portions ported from wordcraft/crates/engine/src/cmd/moves.rs and wordcraft/crates/engine/src/cmd/review.rs (MIT OR Apache-2.0, © ArtCraft Team and contributors). See THIRD_PARTY_NOTICES.md.
 import { Extension, Mark, mergeAttributes, type Editor } from "@tiptap/core";
 import {
   Plugin,
@@ -38,6 +39,12 @@ export const DELETION_MARK_NAME = "deletion";
 export const FORMAT_CHANGE_MARK_NAME = "formatChange";
 /** Node attribute recording a tracked block change (type, attributes or wrapping). */
 export const BLOCK_CHANGE_ATTRIBUTE = "blockChange";
+/**
+ * Attribute of the insertion and deletion marks linking the two ends of a
+ * tracked move: the deletion is where the text moved from, the insertion
+ * where it moved to. Serialized as `data-move-id`.
+ */
+export const MOVE_ID_ATTRIBUTE = "moveId";
 
 /**
  * Marks that are never treated as formatting: the review marks themselves,
@@ -58,7 +65,7 @@ const REVIEW_MARK_NAMES = new Set([
  */
 export const TRACK_CHANGES_SKIP_META = "trackChangesSkip";
 
-export type TrackedChangeType = "insertion" | "deletion" | "format" | "block";
+export type TrackedChangeType = "insertion" | "deletion" | "format" | "block" | "move";
 
 /**
  * How tracked content is rendered by serializers:
@@ -75,6 +82,11 @@ export interface TrackedChangeAttributes {
   authorName: string;
   authorColor: string | null;
   createdAt: number;
+  /**
+   * Insertion/deletion marks only: links a deletion (moved from) and an
+   * insertion (moved to) into one tracked move.
+   */
+  moveId?: string | null;
 }
 
 /** A serializable mark (`mark.toJSON()`). */
@@ -149,6 +161,18 @@ export interface TrackedChange {
     current: TrackedBlockSnapshot;
     operation?: TrackedBlockOperation;
   };
+  /**
+   * Moves (`type: "move"`): where the text was moved from (struck through
+   * until accepted) and where it was moved to. `ranges` holds both.
+   */
+  move?: {
+    from: { from: number; to: number }[];
+    to: { from: number; to: number }[];
+    /** The moved text at its source. */
+    fromText: string;
+    /** The moved text at its destination. */
+    toText: string;
+  };
 }
 
 export interface TrackChangesSnapshot {
@@ -191,6 +215,19 @@ export interface TrackChangesOptions {
   ignoredMarks: string[];
   /** Node attributes ignored when comparing blocks (e.g. generated ids). */
   ignoredBlockAttributes: string[];
+  /**
+   * Record a cut and paste (or a drag) of the same text as one tracked move
+   * instead of a deletion and an insertion. Default `true`.
+   */
+  trackMoves: boolean;
+  /**
+   * Decides whether moved text is big enough to be a move. Default
+   * `isMoveSized` (a paragraph, or at least a sentence of two words, as in
+   * Word); pass `() => true` to record every cut/paste or drag as a move.
+   */
+  isMove: (text: string) => boolean;
+  /** HTML attributes (e.g. `class`) of moved text, at both ends. Replaces the default green double line. */
+  moveHTMLAttributes: Record<string, any>;
 }
 
 /**
@@ -256,11 +293,17 @@ declare module "@tiptap/core" {
       /** Rejects one change (single undo step). */
       rejectChange: (id: string) => ReturnType;
       acceptAllChanges: () => ReturnType;
+      /** Accepts a tracked move: removes the source, keeps the destination. */
+      acceptMove: (id: string) => ReturnType;
+      /** Rejects a tracked move: restores the source, removes the destination. */
+      rejectMove: (id: string) => ReturnType;
       rejectAllChanges: () => ReturnType;
       /** Selects the next change after the selection, wrapping around. */
       selectNextChange: () => ReturnType;
       /** Selects the previous change before the selection, wrapping around. */
       selectPreviousChange: () => ReturnType;
+      /** Selects a change (a move's destination, a block change's content). */
+      selectChange: (id: string) => ReturnType;
     };
   }
 }
@@ -307,10 +350,32 @@ const sharedAttributes = () => ({
   },
 });
 
+const moveAttribute = () => ({
+  [MOVE_ID_ATTRIBUTE]: {
+    default: null,
+    parseHTML: (el: HTMLElement) => el.getAttribute("data-move-id"),
+    renderHTML: (attrs: any) =>
+      attrs[MOVE_ID_ATTRIBUTE] ? { "data-move-id": attrs[MOVE_ID_ATTRIBUTE] } : {},
+  },
+});
+
+interface TrackedMarkOptions {
+  HTMLAttributes: Record<string, any>;
+  /** Attributes used instead of `HTMLAttributes` when the mark is one end of a move. */
+  moveHTMLAttributes: Record<string, any>;
+}
+
+/** Default classes of moved text: green double underline (destination) / strike (source), as in Word. */
+export const MOVE_TO_CLASS =
+  "pixerate-move-to underline decoration-double decoration-emerald-600 text-emerald-700 dark:text-emerald-400";
+export const MOVE_FROM_CLASS =
+  "pixerate-move-from line-through decoration-double decoration-emerald-600 text-emerald-700 dark:text-emerald-400";
+
 /**
- * Text inserted while tracking was on. Rendered as `<ins>`.
+ * Text inserted while tracking was on. Rendered as `<ins>`. With a `moveId`
+ * it is the destination of a tracked move.
  */
-export const TrackedInsertion = Mark.create<{ HTMLAttributes: Record<string, any> }>({
+export const TrackedInsertion = Mark.create<TrackedMarkOptions>({
   name: INSERTION_MARK_NAME,
   inclusive: false,
   addOptions() {
@@ -319,20 +384,24 @@ export const TrackedInsertion = Mark.create<{ HTMLAttributes: Record<string, any
         class:
           "pixerate-insertion underline decoration-emerald-500 text-emerald-700 dark:text-emerald-400",
       },
+      moveHTMLAttributes: { class: MOVE_TO_CLASS },
     };
   },
   addStorage() {
     // tiptap-markdown: inserted text is exported as plain text.
     return { markdown: { serialize: { open: "", close: "" }, parse: {} } };
   },
-  addAttributes: sharedAttributes,
+  addAttributes: () => ({ ...sharedAttributes(), ...moveAttribute() }),
   parseHTML() {
     return [{ tag: 'ins[data-change-type="insertion"]', priority: 100 }];
   },
-  renderHTML({ HTMLAttributes }) {
+  renderHTML({ mark, HTMLAttributes }) {
+    const base = mark.attrs[MOVE_ID_ATTRIBUTE]
+      ? this.options.moveHTMLAttributes
+      : this.options.HTMLAttributes;
     return [
       "ins",
-      mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, {
+      mergeAttributes(base, HTMLAttributes, {
         "data-change-type": "insertion",
       }),
       0,
@@ -342,9 +411,10 @@ export const TrackedInsertion = Mark.create<{ HTMLAttributes: Record<string, any
 
 /**
  * Text deleted while tracking was on. The text stays in the document until
- * the change is accepted. Rendered as `<del>` (struck through).
+ * the change is accepted. Rendered as `<del>` (struck through). With a
+ * `moveId` it is the source of a tracked move.
  */
-export const TrackedDeletion = Mark.create<{ HTMLAttributes: Record<string, any> }>({
+export const TrackedDeletion = Mark.create<TrackedMarkOptions>({
   name: DELETION_MARK_NAME,
   inclusive: false,
   addOptions() {
@@ -353,6 +423,7 @@ export const TrackedDeletion = Mark.create<{ HTMLAttributes: Record<string, any>
         class:
           "pixerate-deletion line-through decoration-red-500 text-red-600 dark:text-red-400",
       },
+      moveHTMLAttributes: { class: MOVE_FROM_CLASS },
     };
   },
   addStorage() {
@@ -365,15 +436,18 @@ export const TrackedDeletion = Mark.create<{ HTMLAttributes: Record<string, any>
       },
     };
   },
-  addAttributes: sharedAttributes,
+  addAttributes: () => ({ ...sharedAttributes(), ...moveAttribute() }),
   parseHTML() {
     // Higher priority than Strike, which also parses `<del>`.
     return [{ tag: 'del[data-change-type="deletion"]', priority: 100 }];
   },
-  renderHTML({ HTMLAttributes }) {
+  renderHTML({ mark, HTMLAttributes }) {
+    const base = mark.attrs[MOVE_ID_ATTRIBUTE]
+      ? this.options.moveHTMLAttributes
+      : this.options.HTMLAttributes;
     return [
       "del",
-      mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, {
+      mergeAttributes(base, HTMLAttributes, {
         "data-change-type": "deletion",
       }),
       0,
@@ -569,6 +643,9 @@ export function describeBlockChange(
     keys.forEach((key) => {
       if (key === "textAlign") {
         parts.push(`Changed alignment to ${humanize(String(current.attrs?.textAlign ?? "default"))}`);
+      } else if (key === "styleId") {
+        // Paragraph styles (`ParagraphStyles`): no id means the block's default style.
+        parts.push(`Changed style to ${current.attrs?.styleId ?? "default"}`);
       } else {
         parts.push(`Changed ${humanize(key).toLowerCase()} of ${after}`);
       }
@@ -588,6 +665,22 @@ export function describeBlockChange(
     else parts.push("Changed nesting");
   }
   return parts.join("; ") || `Changed ${after}`;
+}
+
+/** Short label of a change's type for review UIs (`Moved` for a move). */
+export function trackedChangeLabel(change: Pick<TrackedChange, "type">): string {
+  switch (change.type) {
+    case "insertion":
+      return "Inserted";
+    case "deletion":
+      return "Deleted";
+    case "format":
+      return "Formatted";
+    case "move":
+      return "Moved";
+    default:
+      return "Changed";
+  }
 }
 
 function truncate(text: string, max = 40): string {
@@ -720,6 +813,20 @@ export function getTrackedChanges(
       if (!isMarkChange(markType)) return;
       const attrs = changeAttributes(mark);
       if (!attrs.changeId) return;
+      const text = node.isText ? node.text ?? "" : "";
+      const moveId = markType !== FORMAT_CHANGE_MARK_NAME ? attrs[MOVE_ID_ATTRIBUTE] : null;
+      if (moveId) {
+        const change = add(`move:${moveId}`, "move", { ...attrs, changeId: moveId }, pos, pos + node.nodeSize, text);
+        if (!change.move) change.move = { from: [], to: [], fromText: "", toText: "" };
+        const source = markType === DELETION_MARK_NAME;
+        const list = source ? change.move.from : change.move.to;
+        const last = list[list.length - 1];
+        if (last && last.to === pos) last.to = pos + node.nodeSize;
+        else list.push({ from: pos, to: pos + node.nodeSize });
+        if (source) change.move.fromText += text;
+        else change.move.toText += text;
+        return;
+      }
       const type: TrackedChangeType = markType === FORMAT_CHANGE_MARK_NAME ? "format" : (markType as TrackedChangeType);
       const change = add(
         `${type}:${attrs.changeId}`,
@@ -727,7 +834,7 @@ export function getTrackedChanges(
         attrs,
         pos,
         pos + node.nodeSize,
-        node.isText ? node.text ?? "" : "",
+        text,
       );
       if (type === "format") {
         const summary = diffFormatting(mark.attrs.before ?? [], mark.attrs.after ?? []);
@@ -749,6 +856,12 @@ export function getTrackedChanges(
       case "format":
         change.description = describeFormatChange(change.format!);
         break;
+      case "move": {
+        const move = change.move!;
+        change.text = move.toText || move.fromText;
+        change.description = change.text ? `Moved "${truncate(change.text)}"` : "Moved content";
+        break;
+      }
       case "block": {
         const { previous, current, operation } = change.block!;
         if (operation) {
@@ -789,9 +902,17 @@ export function getTrackedChangeAt(
   );
 }
 
-/** Text positions selected for a change (block changes select their content). */
+/**
+ * Text positions selected for a change (block changes select their content,
+ * moves their destination).
+ */
 function selectionRange(change: TrackedChange): [number, number] {
-  return change.type === "block" ? [change.from + 1, change.to - 1] : [change.from, change.to];
+  if (change.type === "block") return [change.from + 1, change.to - 1];
+  if (change.type === "move" && change.move) {
+    const ranges = change.move.to.length ? change.move.to : change.move.from;
+    if (ranges.length) return [ranges[0].from, ranges[ranges.length - 1].to];
+  }
+  return [change.from, change.to];
 }
 
 export function isTrackChangesEnabled(source: Editor | EditorState | null | undefined): boolean {
@@ -1132,6 +1253,32 @@ function decideBlocks(
 }
 
 /**
+ * Moved text that fills a whole top-level textblock takes the block with it
+ * when it is removed, so moving a paragraph and accepting (or rejecting) the
+ * move leaves no empty paragraph behind. Returns `false` when the range is
+ * not such a block or the block cannot be removed.
+ */
+function deleteWholeBlock(tr: Transform, from: number, to: number): boolean {
+  const $from = tr.doc.resolve(from);
+  const block = $from.parent;
+  if (
+    $from.depth !== 1 ||
+    !block.isTextblock ||
+    from !== $from.start() ||
+    to !== $from.end() ||
+    tr.doc.childCount < 2
+  ) {
+    return false;
+  }
+  try {
+    tr.delete($from.before(), $from.after());
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Accepts or rejects changes on a transform. Formatting is resolved first,
  * then inline marks are removed and text is deleted from the end of the
  * document backwards so positions stay valid; block changes come last.
@@ -1145,8 +1292,21 @@ function applyDecision(
   const format = changes.filter((c) => c.type === "format");
   if (format.length) decideFormat(tr, format, decision);
 
-  const deletions: { from: number; to: number }[] = [];
+  const deletions: { from: number; to: number; wholeBlocks?: boolean }[] = [];
   changes.forEach((change) => {
+    if (change.type === "move" && change.move) {
+      // Accepting keeps the destination and removes the source; rejecting
+      // restores the source and removes the destination.
+      const accept = decision === "accept";
+      const keepType = schema.marks[accept ? INSERTION_MARK_NAME : DELETION_MARK_NAME];
+      (accept ? change.move.to : change.move.from).forEach(({ from, to }) => {
+        if (keepType) tr.removeMark(from, to, keepType);
+      });
+      (accept ? change.move.from : change.move.to).forEach(({ from, to }) =>
+        deletions.push({ from, to, wholeBlocks: true }),
+      );
+      return;
+    }
     if (change.type !== "insertion" && change.type !== "deletion") return;
     const markType = schema.marks[change.type];
     if (!markType) return;
@@ -1161,8 +1321,11 @@ function applyDecision(
   });
   deletions
     .sort((a, b) => b.from - a.from)
-    .forEach(({ from, to }) => {
-      tr.delete(tr.mapping.map(from), tr.mapping.map(to));
+    .forEach(({ from, to, wholeBlocks }) => {
+      const start = tr.mapping.map(from);
+      const end = tr.mapping.map(to);
+      if (wholeBlocks && deleteWholeBlock(tr, start, end)) return;
+      tr.delete(start, end);
     });
 
   const blocks = changes.filter((c) => c.type === "block");
@@ -1254,6 +1417,99 @@ interface TrackContext {
   trackBlocks: boolean;
   ignoredMarks: ReadonlySet<string>;
   ignoredAttributes: ReadonlySet<string>;
+  /** Move detection for this batch of transactions, when moves are tracked. */
+  moves?: MoveContext;
+}
+
+/** A tracked cut that the next paste can turn into the source of a move. */
+interface PendingMove {
+  /** Change id of the cut's deletion (becomes the move id). */
+  id: string;
+  /** The cut text (normalized). */
+  text: string;
+  authorId: string;
+}
+
+interface MoveContext {
+  /** The user action of the batch (`uiEvent` meta). */
+  event: "cut" | "paste" | "drop" | null;
+  /** The last tracked cut, for a paste. */
+  pending: PendingMove | null;
+  isMove: (text: string) => boolean;
+  /** Set by `trackTransactions` when the batch is a cut that can become a move. */
+  cut?: PendingMove;
+}
+
+const SENTENCE_END = /[.!?…]$/;
+const TRAILING_CLOSERS = /["'”’)]+$/;
+const TRAILING_SPACES = /[  ]+$/;
+
+/**
+ * Whether moved text is big enough to be recorded as a move rather than a
+ * deletion and an insertion, as in Word: a paragraph (the text holds a
+ * paragraph break) or at least a sentence of two or more words.
+ */
+export function isMoveSized(text: string): boolean {
+  const trimmed = text.replace(TRAILING_SPACES, "");
+  if (trimmed.includes("\n")) return true;
+  const sentence = trimmed.replace(TRAILING_CLOSERS, "");
+  return SENTENCE_END.test(sentence) && sentence.trim().split(/\s+/).length >= 2;
+}
+
+/**
+ * Drops white space so moved text can be compared across block boundaries
+ * and mark splits.
+ */
+const normalizeMoveText = (text: string) => text.replace(/\s+/g, "");
+
+/**
+ * The text of a deleted slice that the deletion mark will record: neither
+ * the author's own insertions (really deleted) nor text deleted before.
+ * Blocks are separated by `\n`.
+ */
+function deletedText(slice: Slice, ctx: TrackContext): string {
+  let text = "";
+  let blocks = 0;
+  slice.content.descendants((node) => {
+    if (node.isTextblock) {
+      if (blocks++ > 0) text += "\n";
+      return true;
+    }
+    if (!node.isText) return true;
+    const insertion = ctx.insertion.isInSet(node.marks);
+    if (insertion && insertion.attrs.authorId === ctx.author.id) return false;
+    if (ctx.deletion.isInSet(node.marks)) return false;
+    text += node.text ?? "";
+    return false;
+  });
+  return text;
+}
+
+/** Text of a document range with blocks separated by `\n`. */
+const rangeText = (doc: ProsemirrorNode, from: number, to: number) =>
+  doc.textBetween(from, to, "\n", "");
+
+/**
+ * Adds the move id to the source deletion of a pending cut. Returns `false`
+ * when that deletion is no longer in the document.
+ */
+function linkMoveSource(tr: Transform, pending: PendingMove, ctx: TrackContext): boolean {
+  const segments: { from: number; to: number; mark: ProsemirrorMark }[] = [];
+  tr.doc.descendants((node, pos) => {
+    if (!node.isInline) return true;
+    const mark = ctx.deletion.isInSet(node.marks);
+    if (mark && mark.attrs.changeId === pending.id && !mark.attrs[MOVE_ID_ATTRIBUTE]) {
+      segments.push({ from: pos, to: pos + node.nodeSize, mark });
+    }
+    return false;
+  });
+  if (segments.length === 0) return false;
+  const text = segments.map((s) => rangeText(tr.doc, s.from, s.to)).join("");
+  if (normalizeMoveText(text) !== pending.text) return false;
+  segments.forEach(({ from, to, mark }) =>
+    tr.addMark(from, to, ctx.deletion.create({ ...mark.attrs, [MOVE_ID_ATTRIBUTE]: pending.id })),
+  );
+  return true;
 }
 
 function newAttributes(ctx: TrackContext): TrackedChangeAttributes {
@@ -1291,7 +1547,13 @@ function adjacentAttributes(
   const candidates = [doc.resolve(from).nodeBefore, doc.resolve(to).nodeAfter];
   for (const node of candidates) {
     const mark = node && type.isInSet(node.marks);
-    if (mark && mark.attrs.authorId === ctx.author.id && mark.attrs.changeId) {
+    // Typing next to moved text is not part of the move.
+    if (
+      mark &&
+      mark.attrs.authorId === ctx.author.id &&
+      mark.attrs.changeId &&
+      !mark.attrs[MOVE_ID_ATTRIBUTE]
+    ) {
       return changeAttributes(mark);
     }
   }
@@ -1673,21 +1935,66 @@ function trackTransactions(
     changed = trackBlocks(tr, blocks, ctx) || changed;
   }
 
+  // Moves: a paste of the text the last tracked cut deleted, or a drag of a
+  // range within the document, links the deletion and the insertion.
+  const moves = ctx.moves;
+  let insertAttrs: TrackedChangeAttributes | null = null;
+  let deleteAttrs: TrackedChangeAttributes | null = null;
+  const moveAttrs = (id: string): TrackedChangeAttributes => ({
+    changeId: id,
+    authorId: ctx.author.id,
+    authorName: ctx.author.name,
+    authorColor: ctx.author.color ?? null,
+    createdAt: ctx.now(),
+    [MOVE_ID_ATTRIBUTE]: id,
+  });
+  if (moves && inserted.length) {
+    const insertedText = normalizeMoveText(
+      inserted.map((r) => rangeText(tr.doc, r.from, r.to)).join(""),
+    );
+    const pending = moves.pending;
+    if (
+      moves.event === "paste" &&
+      pending &&
+      pending.authorId === ctx.author.id &&
+      insertedText === pending.text &&
+      linkMoveSource(tr, pending, ctx)
+    ) {
+      insertAttrs = moveAttrs(pending.id);
+    } else if (moves.event === "drop" && restores.length) {
+      const raw = restores.map((r) => deletedText(r.slice, ctx)).join("\n");
+      if (insertedText && normalizeMoveText(raw) === insertedText && moves.isMove(raw)) {
+        insertAttrs = deleteAttrs = moveAttrs(ctx.generateId());
+      }
+    }
+  }
+  if (moves?.event === "cut" && restores.length) {
+    // A cut gets a change of its own, so the paste after it moves exactly it.
+    deleteAttrs = newAttributes(ctx);
+    const raw = restores.map((r) => deletedText(r.slice, ctx)).join("\n");
+    if (normalizeMoveText(raw) && moves.isMove(raw)) {
+      moves.cut = { id: deleteAttrs.changeId, text: normalizeMoveText(raw), authorId: ctx.author.id };
+    }
+  }
+
   inserted.forEach(({ from, to }) => {
     tr.removeMark(from, to, ctx.deletion);
     tr.removeMark(from, to, ctx.insertion);
     if (ctx.format) tr.removeMark(from, to, ctx.format);
-    const attrs = adjacentAttributes(tr.doc, from, to, ctx.insertion, ctx) ?? newAttributes(ctx);
+    const attrs =
+      insertAttrs ?? adjacentAttributes(tr.doc, from, to, ctx.insertion, ctx) ?? newAttributes(ctx);
     tr.addMark(from, to, ctx.insertion.create(attrs));
     changed = true;
   });
+  if (insertAttrs) changed = true;
 
   let cursor: number | null = null;
   restores
     .sort((a, b) => b.pos - a.pos)
     .forEach((restore) => {
       const pos = tr.mapping.map(restore.pos, -1);
-      const attrs = adjacentAttributes(tr.doc, pos, pos, ctx.deletion, ctx) ?? newAttributes(ctx);
+      const attrs =
+        deleteAttrs ?? adjacentAttributes(tr.doc, pos, pos, ctx.deletion, ctx) ?? newAttributes(ctx);
       const marked = markDeletedSlice(restore.slice, restore.parentType, attrs, ctx);
       if (!marked || !marked.hasContent) return;
       const sizeBefore = tr.doc.content.size;
@@ -1752,7 +2059,9 @@ function allowTrackingInCodeBlocks(schema: Schema): void {
  * deletion (struck through) until the change is accepted or rejected.
  * Formatting changes on existing text are recorded with the `formatChange`
  * mark, and textblock type/attribute/wrapping changes with the `blockChange`
- * node attribute.
+ * node attribute. A cut and paste (or a drag) of a sentence or paragraph is
+ * recorded as a move: a deletion and an insertion linked by `moveId`, listed
+ * as one change and accepted or rejected together.
  *
  * Deleting your own insertion really deletes it. Paragraph splits and joins
  * are not tracked. IME composition is tracked once the composition ends.
@@ -1780,6 +2089,9 @@ export const TrackChanges = Extension.create<TrackChangesOptions, TrackChangesSt
       blockTypes: ["paragraph", "heading", "codeBlock"],
       ignoredMarks: [],
       ignoredBlockAttributes: ["id"],
+      trackMoves: true,
+      isMove: isMoveSized,
+      moveHTMLAttributes: {},
     };
   },
 
@@ -1829,13 +2141,18 @@ export const TrackChanges = Extension.create<TrackChangesOptions, TrackChangesSt
     const insertionAttrs = this.options?.insertionHTMLAttributes ?? {};
     const deletionAttrs = this.options?.deletionHTMLAttributes ?? {};
     const formatAttrs = this.options?.formatChangeHTMLAttributes ?? {};
+    const moveAttrs = this.options?.moveHTMLAttributes ?? {};
+    const markOptions = (attrs: Record<string, any>) => ({
+      ...(Object.keys(attrs).length ? { HTMLAttributes: attrs } : {}),
+      ...(Object.keys(moveAttrs).length ? { moveHTMLAttributes: moveAttrs } : {}),
+    });
+    const configured = <T extends typeof TrackedInsertion>(mark: T, attrs: Record<string, any>) => {
+      const options = markOptions(attrs);
+      return Object.keys(options).length ? mark.configure(options) : mark;
+    };
     return [
-      Object.keys(insertionAttrs).length
-        ? TrackedInsertion.configure({ HTMLAttributes: insertionAttrs })
-        : TrackedInsertion,
-      Object.keys(deletionAttrs).length
-        ? TrackedDeletion.configure({ HTMLAttributes: deletionAttrs })
-        : TrackedDeletion,
+      configured(TrackedInsertion, insertionAttrs),
+      configured(TrackedDeletion, deletionAttrs),
       Object.keys(formatAttrs).length
         ? TrackedFormatChange.configure({ HTMLAttributes: formatAttrs })
         : TrackedFormatChange,
@@ -1848,10 +2165,11 @@ export const TrackChanges = Extension.create<TrackChangesOptions, TrackChangesSt
 
   addCommands() {
     const decide =
-      (decision: "accept" | "reject", id: string | null) =>
+      (decision: "accept" | "reject", id: string | null, onlyMoves = false) =>
       ({ state, tr, dispatch }: { state: EditorState; tr: Transaction; dispatch?: any }) => {
         const all = getTrackedChanges(state.doc);
-        const changes = id === null ? all : all.filter((c) => c.id === id);
+        const changes =
+          id === null ? all : all.filter((c) => c.id === id && (!onlyMoves || c.type === "move"));
         if (changes.length === 0) return false;
         if (dispatch) {
           applyDecision(tr, changes, decision);
@@ -1902,11 +2220,24 @@ export const TrackChanges = Extension.create<TrackChangesOptions, TrackChangesSt
           return true;
         },
       acceptChange: (id) => decide("accept", id),
+      acceptMove: (id) => decide("accept", id, true),
+      rejectMove: (id) => decide("reject", id, true),
       rejectChange: (id) => decide("reject", id),
       acceptAllChanges: () => decide("accept", null),
       rejectAllChanges: () => decide("reject", null),
       selectNextChange: () => select(1),
       selectPreviousChange: () => select(-1),
+      selectChange:
+        (id) =>
+        ({ state, tr, dispatch }) => {
+          const change = getTrackedChanges(state.doc).find((c) => c.id === id);
+          if (!change) return false;
+          if (dispatch) {
+            const [anchor, head] = selectionRange(change);
+            tr.setSelection(TextSelection.create(tr.doc, anchor, head)).scrollIntoView();
+          }
+          return true;
+        },
     };
   },
 
@@ -1921,6 +2252,9 @@ export const TrackChanges = Extension.create<TrackChangesOptions, TrackChangesSt
     // together once it ends.
     let pending: { oldState: EditorState; transactions: Transaction[] } | null = null;
     let flushTimer: ReturnType<typeof setTimeout> | null = null;
+    // The last tracked cut, which the paste right after it turns into a move.
+    let pendingMove: PendingMove | null = null;
+    const isMove = options.isMove ?? isMoveSized;
 
     const scheduleFlush = () => {
       if (flushTimer) clearTimeout(flushTimer);
@@ -1953,7 +2287,10 @@ export const TrackChanges = Extension.create<TrackChangesOptions, TrackChangesSt
         appendTransaction: (transactions, oldState, newState) => {
           const plugin = trackChangesPluginKey.getState(oldState);
           const tracking = !!plugin?.enabled;
-          if (!tracking && !pending) return null;
+          if (!tracking && !pending) {
+            if (transactions.some((t) => t.docChanged)) pendingMove = null;
+            return null;
+          }
 
           if (editorView?.composing && transactions.some((t) => t.docChanged)) {
             if (tracking) {
@@ -1972,7 +2309,19 @@ export const TrackChanges = Extension.create<TrackChangesOptions, TrackChangesSt
           }
           if (!tracking && trs === transactions) return null;
           const author = plugin?.author ?? options.author;
-          return trackTransactions(trs, fromState, newState, {
+          const userTransactions = trs.filter((t) => !shouldSkip(t));
+          let moves: MoveContext | undefined;
+          if (userTransactions.length) {
+            const uiEvent =
+              userTransactions.length === 1 ? userTransactions[0].getMeta("uiEvent") : null;
+            const event = uiEvent === "cut" || uiEvent === "paste" || uiEvent === "drop" ? uiEvent : null;
+            if (options.trackMoves !== false) {
+              moves = { event, pending: event === "paste" ? pendingMove : null, isMove };
+            }
+            // Any other edit ends the cut-and-paste sequence.
+            pendingMove = null;
+          }
+          const result = trackTransactions(trs, fromState, newState, {
             author,
             now: options.now,
             generateId: options.generateId,
@@ -1985,7 +2334,10 @@ export const TrackChanges = Extension.create<TrackChangesOptions, TrackChangesSt
             trackBlocks: options.trackBlocks !== false,
             ignoredMarks,
             ignoredAttributes,
+            moves,
           });
+          if (moves?.cut) pendingMove = moves.cut;
+          return result;
         },
         props: {
           transformPasted: (slice, view) => acceptSlice(slice, view.state.schema),

@@ -1,7 +1,11 @@
 import {
 	GENERATION_REQUEST_FIELDS,
 	REFERENCE_ROLES,
+	isReferenceRoleName,
+	mediaTypeMatches,
+	normalizeReferenceRole,
 	seedCapability,
+	supportedReferenceRoles,
 	supportedModes,
 	textFieldCapability,
 	type EnumCapability,
@@ -71,6 +75,28 @@ export interface PlanOptions {
 	fillDefaults?: boolean;
 	/** Override whether references with unsupported roles may be dropped (default: `nearest` and `downgrade` only). */
 	dropUnsupportedReferences?: boolean;
+	/**
+	 * Assets mentioned in the prompt (e.g. from `extractMentions(text, { details: true, roles: true })`
+	 * joined with your asset library). They are appended to `request.references`
+	 * and validated per role like any other reference. A mention without a role
+	 * gets `defaultMentionRole`, or the first role of the model that accepts its
+	 * media type (reported as `defaulted`).
+	 */
+	mentions?: readonly PlanAssetMention[];
+	/** Role for mentions that have none (see `mentions`). */
+	defaultMentionRole?: ReferenceRole;
+}
+
+/** An asset mention handed to the planner (see {@link PlanOptions.mentions}). */
+export interface PlanAssetMention {
+	/** Asset id. */
+	id: string;
+	role?: ReferenceRole | null;
+	mediaType?: string;
+	contentHash?: string;
+	url?: string;
+	/** The mention text, used in messages (default: the id). */
+	label?: string;
 }
 
 const EPSILON = 1e-9;
@@ -399,6 +425,45 @@ class Planner {
 		return undefined;
 	}
 
+	/** Turns `options.mentions` into references (appended after the request's own). */
+	addMentions() {
+		const mentions = this.options.mentions;
+		if (!mentions?.length) return;
+		const refs = [...(this.request.references ?? [])];
+		for (const mention of mentions) {
+			if (!mention || typeof mention.id !== 'string' || mention.id === '') continue;
+			let role = mention.role ?? undefined;
+			if (!role) {
+				role = this.options.defaultMentionRole ?? this.inferRole(mention.mediaType);
+				this.adjust(
+					`references.${role}`,
+					undefined,
+					role,
+					'defaulted',
+					`@${mention.label ?? mention.id} has no role; using ${role}.`
+				);
+			}
+			refs.push({
+				id: mention.id,
+				role,
+				...(mention.url !== undefined ? { url: mention.url } : {}),
+				...(mention.mediaType !== undefined ? { mediaType: mention.mediaType } : {}),
+				...(mention.contentHash !== undefined ? { contentHash: mention.contentHash } : {})
+			});
+		}
+		this.request.references = refs;
+	}
+
+	/** First role of the model (other than `mask`) whose `accepts` matches `mediaType`. */
+	inferRole(mediaType: string | undefined): ReferenceRole {
+		for (const role of supportedReferenceRoles(this.caps)) {
+			if (role === 'mask') continue;
+			const cap = this.roleCapability(role);
+			if (cap && (mediaType === undefined || mediaTypeMatches(mediaType, cap.accepts))) return role;
+		}
+		return 'image_ref';
+	}
+
 	planReferences() {
 		const refs = this.request.references;
 		const allowDrop =
@@ -407,13 +472,37 @@ class Planner {
 		const byRole = new Map<ReferenceRole, GenerationReference[]>();
 		const kept: GenerationReference[] = [];
 		const unsupported = new Map<string, number>();
-		for (const [index, ref] of (refs ?? []).entries()) {
-			if (!ref || typeof ref.id !== 'string' || ref.id === '' || !REFERENCE_ROLES.includes(ref.role)) {
-				this.error(`references.${index}`, ref, 'Each reference needs an `id` and a known `role`.');
+		for (const [index, original] of (refs ?? []).entries()) {
+			let ref = original;
+			if (!ref || typeof ref.id !== 'string' || ref.id === '' || !isReferenceRoleName(ref.role)) {
+				this.error(`references.${index}`, ref, 'Each reference needs an `id` and a valid `role`.');
 				continue;
 			}
 			if (!this.roleCapability(ref.role)) {
-				unsupported.set(ref.role, (unsupported.get(ref.role) ?? 0) + 1);
+				const alias = normalizeReferenceRole(ref.role, this.caps);
+				if (alias !== ref.role && this.roleCapability(alias)) {
+					if (this.strict) {
+						this.error(`references.${ref.role}`, ref.role, `The model calls this role ${describe(alias)}.`);
+						continue;
+					}
+					this.adjust(
+						`references.${ref.role}`,
+						ref.role,
+						alias,
+						'snapped',
+						`Using the model's ${alias} role for ${describe(ref.role)}.`
+					);
+					ref = { ...ref, role: alias };
+				} else {
+					unsupported.set(ref.role, (unsupported.get(ref.role) ?? 0) + 1);
+					continue;
+				}
+			}
+			const cap = this.roleCapability(ref.role)!;
+			if (ref.mediaType !== undefined && !mediaTypeMatches(ref.mediaType, cap.accepts)) {
+				const message = `${describe(ref.id)} is ${describe(ref.mediaType)}; ${ref.role} accepts ${list(cap.accepts ?? [])}.`;
+				if (allowDrop) this.adjust(`references.${ref.role}`, ref.id, undefined, 'dropped', message);
+				else this.error(`references.${ref.role}`, ref.id, message);
 				continue;
 			}
 			const group = byRole.get(ref.role) ?? [];
@@ -435,9 +524,12 @@ class Planner {
 			else this.error(`references.${role}`, count, message);
 		}
 
-		// Per-role limits.
+		// Per-role limits (built-in roles first, then the model's own roles).
 		const removed = new Set<GenerationReference>();
-		for (const role of REFERENCE_ROLES) {
+		const custom = supportedReferenceRoles(this.caps).filter(
+			(role) => !(REFERENCE_ROLES as readonly string[]).includes(role)
+		);
+		for (const role of [...REFERENCE_ROLES, ...custom]) {
 			const cap = this.roleCapability(role);
 			const group = byRole.get(role) ?? [];
 			if (!cap) continue;
@@ -590,6 +682,7 @@ class Planner {
 		this.planDuration();
 		this.planSeed();
 		this.planMode();
+		this.addMentions();
 		this.planReferences();
 		this.planParams();
 	}

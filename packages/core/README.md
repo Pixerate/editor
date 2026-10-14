@@ -284,6 +284,76 @@ const extensions = createRichTextPreset({
 
 `Autocorrect` takes a `rules` list (`defaultAutocorrectRules`, or compose `smartQuoteRules`, `symbolRules`, `fractionRules`, `capitalizeSentenceRules`, `twoInitialCapitalsRules`, `smilieAutocorrectRules` and your own `{ id, find, replace }` rules). Undo right after a correction restores what was typed; nothing is corrected in code or inside prompt tokens. It replaces the Typography extension in the preset. `getDocumentStructureCommandItems(editor, query)` returns ready-made slash-menu/toolbar items for the installed extensions.
 
+## Image selections and masks
+
+`@pixerate/editor/image-editor` has Photoshop-style selections. A selection is a `SelectionMask`: one 8-bit coverage value per source pixel (natural image pixels, the same space as the crop box), with `bounds`, treated as immutable.
+
+```ts
+const editor = new ImageEditorController({ image });
+await editor.magicWand({ x: 120, y: 80 }, { tolerance: 32, contiguous: true, mode: "add" });
+editor.selectEllipse({ x: 40, y: 40, width: 200, height: 120 }, { mode: "subtract", feather: 2 });
+editor.modifySelection("grow", 4); // grow | shrink | feather | border | smooth
+
+// A coarse AI segmentation (any size, white = selected), snapped to the image's edges.
+await editor.loadSelectionFromImage(maskDataUrl);
+await editor.refineSelection({ radius: 12, smartRadius: true, contrast: 20 });
+
+// Use it as an adjustment layer mask; density and feather stay editable.
+const id = editor.addAdjustmentLayer("hueSaturation");
+editor.applySelectionAsLayerMask(id, { feather: 3 });
+editor.setAdjustmentLayerMaskProps(id, { density: 0.6 });
+```
+
+- **Tools**: `magicWand` (scanline span fill with an explicit stack; RGB or perceptual ΔE tolerance; contiguous or global; optional `sampleMerged`), `colorRange` (samples, fuzziness, localized clusters), `toneRange`, `hueRange`, `rectSelection`, `ellipseSelection`, `polygonSelection` (anti-aliased).
+- **Modes**: `replace`, `add` (max), `subtract`, `intersect` (min), on 8-bit values; Shift / Alt map to add / subtract (`selectionModeFromModifiers`).
+- **Modify**: grow / shrink through an exact Euclidean distance transform, border, smooth (box + threshold), feather (Gaussian, σ = radius, three box passes above σ 8). All linear in the pixel count.
+- **Refine Edge**: `refineSelection(pixels, mask, { radius, smartRadius, smooth, feather, contrast, shiftEdge })`, a colour guided filter in a band around the edge, confined to the mask's bounds plus a halo.
+- **Layer masks**: `AdjustmentLayer.mask` (`{ width, height, rle, density?, feather?, enabled? }`) scales the layer's opacity per pixel; it is resampled through the crop / rotation / flips like the image. `selectionFromLayerMask` loads it back.
+- **Document**: `toJSON()` adds `selection` (run-length encoded, `r1:` + base64) only when something is selected, and layers only carry `mask` when they have one, so selection- and mask-free documents serialize exactly as before. Selections are part of undo history. `renderMask()` / `toMaskDataURL()` include the selection for inpainting.
+- **Viewport**: marching ants by default, `quickMask` tints the unselected area; `RenderOptions.selectionDisplay` overrides, `draftSelectionPath` shows a shape being drawn. `SelectionGesture` turns pointer events into selections for UIs.
+- **Agent tools**: `createImageEditorToolProvider` adds `get_selection`, `select_region`, `select_by_color`, `modify_selection`, `refine_selection` and `apply_selection_as_mask`.
+- **Pixels**: the tools read the source image through a canvas; pass `setSamplePixels(imageData)` (or `{ pixels }` per call) where there is no canvas or the image is cross-origin.
+
+## Spreadsheet sheets, defined names and LAMBDA
+
+A `SpreadsheetController` is a workbook. Created from one `document` it has a single sheet and behaves as before (`controller.document` is the active sheet); pass `workbook` for several sheets.
+
+```ts
+import { SpreadsheetController } from "@pixerate/editor/spreadsheet";
+
+const sheet = new SpreadsheetController({ document: { name: "Sales" } });
+sheet.addSheet({ name: "Summary" });            // activates it; returns its id
+sheet.defineName("Revenue", "=Sales!$F$2:$F$11");
+sheet.defineName("WithTax", "=LAMBDA(x, x*1.2)");
+sheet.setCellValue(sheet.document.rows[0].id, sheet.document.columns[0].id, "=WithTax(SUM(Revenue))");
+sheet.renameSheet("Sales", "Sales 2026");        // formulas become ='Sales 2026'!…
+sheet.getWorkbook();                             // { sheets, activeSheetId, names } to save
+```
+
+Formulas reference other sheets (`Sheet2!A1`, `'My Sheet'!A1:B2`, `Data!A1#`) and 3-D ranges (`SUM(Sheet1:Sheet3!A1)`). Deleting a sheet turns references to it into `#REF!`; inserting or deleting rows and columns rewrites references from every sheet. Names can be workbook- or sheet-scoped (`{ sheet }`), are validated like Excel (`validateDefinedName`), and `renameName` rewrites the formulas using them. `LAMBDA` values can be called inline (`=LAMBDA(x, x+1)(2)`), stored with `LET` or a name (recursion is capped at 1000 calls with `#NUM!`), or passed to `MAP`, `REDUCE`, `SCAN`, `BYROW`, `BYCOL` and `MAKEARRAY`. Undo restores the sheet a step changed (switching to it) or, for sheet and name operations, the whole workbook.
+
+## Spreadsheet conditional formatting and data validation
+
+Rules live in the sheet's `document.table` (`conditionalFormats`, highest priority first, and `dataValidations`), so they are saved, undone and redone with the sheet, and their ranges and formulas follow inserted and deleted rows and columns.
+
+```ts
+import { SpreadsheetController, createConditionalFormatRule } from "@pixerate/editor/spreadsheet";
+
+const sheet = new SpreadsheetController({ document });
+const all = { startRow: 1, startCol: 0, endRow: 20, endCol: 3 };
+sheet.addConditionalFormat({ type: "expression", formula: "=$D2>100", style: { fill: "#c6efce" }, ranges: [all] });
+sheet.addConditionalFormat(createConditionalFormatRule({ kind: "dataBar", ranges: [{ ...all, startCol: 3, endCol: 3 }] }));
+sheet.getConditionalFormat(4, 3); // { fill, dataBar: { fraction, color, gradient }, ... } or undefined
+
+sheet.addDataValidation({ ranges: [{ ...all, endCol: 0 }], type: "list", formula1: "North,South,East,West", errorStyle: "warning" });
+sheet.startEditing(1, 0, "Mars");
+const result = sheet.commitEditing(); // { status: "confirm", prompt } — the editor stays open
+sheet.resolveValidationPrompt("cancel"); // or "accept" (warning / information) / "retry"
+sheet.findInvalidCells(); // "circle invalid data"
+```
+
+`evaluateConditionalFormats(sheet, rules)` and `validateCellInput(sheet, rules, row, col, input)` also work on any grid through the small `ConditionalFormatSheet` / `DataValidationSheet` interfaces. Rule formulas are written for the top-left cell of the first range and shift for other cells; custom validation formulas see the value being entered. `setCellValue`, paste and import never validate (as in Excel); `commitEditing` and `commitCellInput` do.
+
 ## Other modules
 
 Each module is also available as a subpath import:
@@ -295,7 +365,7 @@ Each module is also available as a subpath import:
 | `@pixerate/editor/extensions` | Headless TipTap extensions |
 | `@pixerate/editor/history` | `HistoryManager`: a command-pattern undo/redo stack with gesture merge keys, undo marks, a byte budget and a History-panel listing; `DirtyTracker` / `bindDirtyToHistory` |
 | `@pixerate/editor/spreadsheet` | `SpreadsheetController`, formula parser/evaluator and dependency graph, formula function registry (`registerFormulaFunction`, `listFormulaFunctions`, `searchFormulaFunctions`, `getFormulaSignature`) and autocomplete helpers (`getFormulaHints`, `applyFormulaSuggestion`) |
-| `@pixerate/editor/image-editor` | `ImageEditorController` and Canvas 2D renderer: crop, adjustments, annotations, depth masks and AI hooks. Needs a DOM/canvas environment. |
+| `@pixerate/editor/image-editor` | `ImageEditorController` and Canvas 2D renderer: crop, adjustments, annotations, depth masks, selections and layer masks, and AI hooks. Needs a DOM/canvas environment (the selection algorithms themselves are pure). |
 | `@pixerate/editor/canvas` | Node-graph layout (needs the optional `@dagrejs/dagre` peer), placement, trajectories, displacement, clipboard and streaming layout helpers |
 | `@pixerate/editor/agent` | MCP tool schemas, a planner for agent-driven canvas edits, and the dynamic `ToolRegistry` with editor/spreadsheet tool providers |
 | `@pixerate/editor/commands` | `CommandRegistry`, `ShortcutMap`, palette ranking, `createCommandToolProvider` and built-in history / arrange / spreadsheet commands (no third-party imports) |

@@ -23,6 +23,32 @@ import { LATEST_PROCESS_VERSION, LEGACY_PROCESS_VERSION, normalizeProcessVersion
 import { createAdjustmentLayer, normalizeAdjustmentLayer, normalizeAdjustmentLayers } from './adjustment-layers';
 import type { BlendMode } from './blend';
 import type { ImageHistogram } from './histogram';
+import { applyAdjustments } from './filters';
+import {
+  combineSelections,
+  createSelectionMask,
+  deserializeSelection,
+  fullSelection,
+  invertSelection as invertSelectionMask,
+  resizeSelection,
+  selectionFromPixels,
+  serializeSelection,
+  type PixelBuffer,
+  type SelectionChannel,
+  type SelectionMask,
+  type SelectionMode,
+} from './selection/mask';
+import { ellipseSelection, polygonSelection, rectSelection, type ShapeSelectionOptions } from './selection/shapes';
+import { colorRange, magicWand, type ColorRangeOptions, type ColorRangeSample, type MagicWandOptions } from './selection/wand';
+import { modifySelection as modifySelectionMask, type SelectionModifyOp } from './selection/modify';
+import { refineSelection as refineSelectionMask, type RefineEdgeParams } from './selection/refine';
+import {
+  decodeLayerMask,
+  layerMaskFromSelection,
+  updateLayerMaskProps,
+  type LayerMaskProps,
+} from './selection/layer-mask';
+import type { AdjustmentLayerMask } from './types';
 
 /** Latest serialized schema version (`2`: adjustment layers). */
 export const IMAGE_EDITOR_SCHEMA_VERSION = 2 as const;
@@ -34,6 +60,24 @@ export interface AdjustmentLayerUpdate<K extends AdjustmentKind = AdjustmentKind
   opacity?: number;
   blend?: BlendMode;
   name?: string;
+  /** A layer mask, or `null` to remove it. */
+  mask?: AdjustmentLayerMask | null;
+}
+
+/** Options shared by the selection commands. */
+export interface SelectionCommandOptions {
+  /** How the result combines with the current selection (default `replace`). */
+  mode?: SelectionMode;
+  /** Feather the new shape by this many pixels before combining (default 0). */
+  feather?: number;
+}
+
+/** Where the selection tools read colours from. */
+export interface SampleOptions {
+  /** Sample the adjusted image (base adjustments and layers) instead of the source pixels. */
+  sampleMerged?: boolean;
+  /** Pixels to use instead of reading the source image (natural size, RGBA). */
+  pixels?: PixelBuffer;
 }
 
 /** A new adjustment layer: its kind plus optional initial values. */
@@ -56,6 +100,8 @@ interface SourceSnapshot {
 interface HistoryEntry {
   state: SerializedImageEditorState;
   source: SourceSnapshot;
+  /** Selections are immutable, so entries share them instead of encoding them. */
+  selection: SelectionMask | null;
 }
 
 export const DEFAULT_ADJUSTMENTS: ImageAdjustments = {
@@ -108,6 +154,7 @@ export function migrateSerializedImageEditorState(
       depthRange: [...(data.depthMask?.depthRange ?? DEFAULT_DEPTH_MASK.depthRange)] as [number, number],
     },
     annotations: JSON.parse(JSON.stringify(data.annotations ?? [])),
+    ...(data.selection ? { selection: { ...data.selection } } : {}),
   };
 }
 
@@ -144,6 +191,9 @@ export class ImageEditorController {
   private maxHistoryDepth: number;
   private isApplyingHistory = false;
   private initialSnapshot: HistoryEntry;
+  /** Pixels the selection tools sample (host-provided or read back from the source). */
+  private samplePixels: PixelBuffer | null = null;
+  private samplePixelsOverride = false;
 
   constructor(options: ImageEditorOptions = {}) {
     this.maxHistoryDepth = options.maxHistoryDepth ?? 50;
@@ -178,7 +228,16 @@ export class ImageEditorController {
       zoom: 1,
       pan: { x: 0, y: 0 },
       isOriginalCompared: false,
+      selection: null,
+      quickMask: false,
     };
+    if (options.initialState?.selection) {
+      try {
+        this.state.selection = normalizeSelection(deserializeSelection(options.initialState.selection));
+      } catch {
+        // A damaged selection is dropped; the rest of the state still loads.
+      }
+    }
 
     if (options.image instanceof Object && 'width' in options.image) {
       this.imageElement = options.image as CanvasImageSource;
@@ -210,6 +269,8 @@ export class ImageEditorController {
     this.imageElement = source.element;
     this.state.sourceUrl = source.sourceUrl;
     this.state.imageDimensions = source.dimensions;
+    this.samplePixels = null;
+    this.dropMismatchedSelection();
 
     this.initialSnapshot = this.captureHistoryEntry();
     this.notify();
@@ -276,11 +337,14 @@ export class ImageEditorController {
         element: this.imageElement,
         dimensions: { ...this.state.imageDimensions },
       },
+      selection: this.state.selection ?? null,
     };
   }
 
   private restoreHistoryEntry(entry: HistoryEntry): void {
     this.applySerializedState(entry.state);
+    this.state.selection = entry.selection;
+    if (this.imageElement !== entry.source.element) this.samplePixels = null;
     this.imageElement = entry.source.element;
     this.state.sourceUrl = entry.source.sourceUrl;
     this.state.imageDimensions = { ...entry.source.dimensions };
@@ -512,6 +576,7 @@ export class ImageEditorController {
       enabled: spec.enabled,
       opacity: spec.opacity,
       blend: spec.blend,
+      mask: spec.mask ?? undefined,
     });
     this.recordHistory();
     const at = index === undefined ? layers.length : Math.max(0, Math.min(layers.length, Math.round(index)));
@@ -537,6 +602,7 @@ export class ImageEditorController {
       ...(update.opacity !== undefined ? { opacity: update.opacity } : {}),
       ...(update.blend !== undefined ? { blend: update.blend } : {}),
       ...(update.name !== undefined ? { name: update.name } : {}),
+      ...(update.mask !== undefined ? { mask: update.mask ?? undefined } : {}),
       params: { ...current.params, ...(update.params ?? {}) },
     });
     if (!merged) return false;
@@ -588,6 +654,248 @@ export class ImageEditorController {
     this.recordHistory();
     this.setLayers([]);
     this.notify();
+  }
+
+  // --- Selection ---
+
+  /** The active selection, or `null`. */
+  public getSelection(): SelectionMask | null {
+    return this.state.selection ?? null;
+  }
+
+  public get hasSelection(): boolean {
+    return Boolean(this.state.selection?.bounds);
+  }
+
+  private get naturalSize(): { width: number; height: number } {
+    return {
+      width: Math.max(1, Math.round(this.state.imageDimensions.width)),
+      height: Math.max(1, Math.round(this.state.imageDimensions.height)),
+    };
+  }
+
+  private dropMismatchedSelection(): void {
+    const sel = this.state.selection;
+    if (!sel) return;
+    const { width, height } = this.naturalSize;
+    if (sel.width !== width || sel.height !== height) this.state.selection = null;
+  }
+
+  /**
+   * Replaces the selection, or combines `mask` with it by `mode`, as one undo step. A mask of a
+   * different size (e.g. an AI segmentation at another resolution) is resampled to the image.
+   * Returns false when nothing changed.
+   */
+  public setSelection(mask: SelectionMask | null, mode: SelectionMode = 'replace'): boolean {
+    const { width, height } = this.naturalSize;
+    let next: SelectionMask | null = null;
+    if (mask) {
+      const sized = mask.width === width && mask.height === height ? mask : resizeSelection(mask, width, height);
+      next = combineSelections(this.state.selection, sized, mode);
+    } else if (mode !== 'replace') {
+      return false;
+    }
+    const prev = normalizeSelection(this.state.selection ?? null);
+    if (prev === next || (prev && next && sameSelection(prev, next))) return false;
+    this.recordHistory();
+    this.state.selection = next;
+    this.notify();
+    return true;
+  }
+
+  /** Select › All. */
+  public selectAll(): boolean {
+    const { width, height } = this.naturalSize;
+    return this.setSelection(fullSelection(width, height));
+  }
+
+  /** Select › Deselect. */
+  public deselect(): boolean {
+    return this.setSelection(null);
+  }
+
+  /** Select › Inverse (with nothing selected, selects everything). */
+  public invertSelection(): boolean {
+    const { width, height } = this.naturalSize;
+    const current = this.state.selection ?? createSelectionMask(width, height);
+    return this.setSelection(invertSelectionMask(current));
+  }
+
+  private shapeCommand(mask: SelectionMask, options: SelectionCommandOptions): boolean {
+    const shaped = options.feather && options.feather > 0 ? modifySelectionMask(mask, 'feather', options.feather) : mask;
+    return this.setSelection(shaped, options.mode ?? 'replace');
+  }
+
+  /** Rectangular marquee in natural image pixels. */
+  public selectRect(rect: CropBox, options: SelectionCommandOptions & ShapeSelectionOptions = {}): boolean {
+    const { width, height } = this.naturalSize;
+    return this.shapeCommand(rectSelection(width, height, rect, options), options);
+  }
+
+  /** Elliptical marquee inscribed in `rect`. */
+  public selectEllipse(rect: CropBox, options: SelectionCommandOptions & ShapeSelectionOptions = {}): boolean {
+    const { width, height } = this.naturalSize;
+    return this.shapeCommand(ellipseSelection(width, height, rect, options), options);
+  }
+
+  /** Lasso / polygonal lasso. */
+  public selectPolygon(points: ImagePoint[], options: SelectionCommandOptions & ShapeSelectionOptions = {}): boolean {
+    const { width, height } = this.naturalSize;
+    return this.shapeCommand(polygonSelection(width, height, points, options), options);
+  }
+
+  /**
+   * Supplies the pixels the selection tools sample (natural size RGBA), e.g. decoded in a worker
+   * or in a test; `null` goes back to reading the source image. A new source image clears it.
+   */
+  public setSamplePixels(pixels: PixelBuffer | null): void {
+    this.samplePixels = pixels;
+    this.samplePixelsOverride = pixels !== null;
+  }
+
+  /**
+   * The pixels the selection tools sample: the source image at natural size, or with
+   * `sampleMerged` the source after the base adjustments and adjustment layers (no crop,
+   * rotation or annotations). `null` without pixel access (no DOM, tainted canvas).
+   */
+  public async getSamplePixels(options: SampleOptions = {}): Promise<PixelBuffer | null> {
+    const { width, height } = this.naturalSize;
+    let base = options.pixels ?? this.samplePixels;
+    if (!base) {
+      try {
+        const canvas = await this.renderSource();
+        const ctx = canvas.getContext('2d');
+        const data = ctx?.getImageData?.(0, 0, width, height);
+        if (data && data.data && data.data.length >= width * height * 4) {
+          base = { width, height, data: data.data };
+          this.samplePixels = base;
+          this.samplePixelsOverride = false;
+        }
+      } catch {
+        base = null;
+      }
+    }
+    if (!base) return null;
+    if (base.width !== width || base.height !== height) {
+      if (!this.samplePixelsOverride && !options.pixels) this.samplePixels = null;
+      return null;
+    }
+    if (!options.sampleMerged) return base;
+    const copy = { width: base.width, height: base.height, data: new Uint8ClampedArray(base.data as ArrayLike<number>) };
+    applyAdjustments(copy as unknown as ImageData, this.state.adjustments);
+    return copy;
+  }
+
+  private async requirePixels(options: SampleOptions): Promise<PixelBuffer> {
+    const pixels = await this.getSamplePixels(options);
+    if (!pixels) throw new Error('The image pixels are not available (no canvas access); pass `pixels`.');
+    return pixels;
+  }
+
+  /**
+   * Magic wand at `point` (natural image pixels). Resolves to the resulting selection (null when
+   * nothing is selected).
+   */
+  public async magicWand(
+    point: ImagePoint,
+    options: MagicWandOptions & SelectionCommandOptions & SampleOptions = {}
+  ): Promise<SelectionMask | null> {
+    const pixels = await this.requirePixels(options);
+    this.shapeCommand(magicWand(pixels, point, options), options);
+    return this.getSelection();
+  }
+
+  /** Select › Color Range with colour samples (`#rrggbb` or `[r, g, b]`, optionally where they were picked). */
+  public async selectColorRange(
+    samples: ColorRangeSample[],
+    options: ColorRangeOptions & SelectionCommandOptions & SampleOptions = {}
+  ): Promise<SelectionMask | null> {
+    const pixels = await this.requirePixels(options);
+    this.shapeCommand(colorRange(pixels, samples, options), options);
+    return this.getSelection();
+  }
+
+  /** Select › Modify: grow, shrink, feather, border or smooth by `radius` pixels (one undo step). */
+  public modifySelection(op: SelectionModifyOp, radius: number): boolean {
+    const sel = this.state.selection;
+    if (!sel?.bounds) return false;
+    return this.setSelection(modifySelectionMask(sel, op, radius));
+  }
+
+  /**
+   * Refine Edge: snaps the selection (e.g. a coarse AI mask loaded with `loadSelectionFromImage`)
+   * to the image's edges with a guided filter, then smooth / feather / contrast / shift edge.
+   */
+  public async refineSelection(params: RefineEdgeParams, options: SampleOptions = {}): Promise<boolean> {
+    const sel = this.state.selection;
+    if (!sel?.bounds) return false;
+    const pixels = (params.radius ?? 0) > 0 ? await this.requirePixels(options) : null;
+    return this.setSelection(refineSelectionMask(pixels, sel, params));
+  }
+
+  /**
+   * Loads a selection from a mask image (an AI segmentation, a saved mask): a data URL / URL or
+   * RGBA pixels, by luminance (white = selected) or a channel. Any size; it is resampled.
+   */
+  public async loadSelectionFromImage(
+    source: string | PixelBuffer,
+    options: { channel?: SelectionChannel; invert?: boolean; threshold?: number; mode?: SelectionMode } = {}
+  ): Promise<SelectionMask | null> {
+    let pixels: PixelBuffer;
+    if (typeof source === 'string') {
+      const img = await this.renderer.imageCache.get(source);
+      const w = img.naturalWidth || img.width;
+      const h = img.naturalHeight || img.height;
+      const canvas = this.renderer.createCanvas(w, h);
+      const ctx = canvas.getContext('2d');
+      if (ctx) ctx.drawImage(img, 0, 0, w, h);
+      const data = ctx?.getImageData?.(0, 0, w, h);
+      if (!data) throw new Error('The mask image pixels are not available (no canvas access); pass pixels.');
+      pixels = { width: w, height: h, data: data.data };
+    } else {
+      pixels = source;
+    }
+    this.setSelection(selectionFromPixels(pixels, options), options.mode ?? 'replace');
+    return this.getSelection();
+  }
+
+  /** Quick Mask view (tints the unselected area). View state: no undo step. */
+  public setQuickMask(on: boolean): void {
+    if (Boolean(this.state.quickMask) === on) return;
+    this.state.quickMask = on;
+    this.notify();
+  }
+
+  // --- Layer masks ---
+
+  /**
+   * Adds the selection as the layer's mask (Reveal Selection), replacing any mask, as one undo
+   * step. Without a selection, returns false.
+   */
+  public applySelectionAsLayerMask(layerId: string, props: LayerMaskProps = {}): boolean {
+    const sel = this.state.selection;
+    if (!sel?.bounds || !this.getAdjustmentLayer(layerId)) return false;
+    return this.updateAdjustmentLayer(layerId, { mask: layerMaskFromSelection(sel, props) });
+  }
+
+  /** Sets (from a selection-shaped mask) or removes (`null`) a layer's mask as one undo step. */
+  public setAdjustmentLayerMask(layerId: string, mask: SelectionMask | null, props: LayerMaskProps = {}): boolean {
+    return this.updateAdjustmentLayer(layerId, { mask: mask ? layerMaskFromSelection(mask, props) : null });
+  }
+
+  /** Changes a layer mask's density (0..1), feather (px) or enabled flag; the mask pixels are kept. */
+  public setAdjustmentLayerMaskProps(layerId: string, props: LayerMaskProps, commitToHistory = true): boolean {
+    const layer = this.getAdjustmentLayer(layerId);
+    if (!layer?.mask) return false;
+    return this.updateAdjustmentLayer(layerId, { mask: updateLayerMaskProps(layer.mask, props) }, commitToHistory);
+  }
+
+  /** Load Selection from a layer mask (its pixels; density and feather are not applied). */
+  public selectionFromLayerMask(layerId: string, mode: SelectionMode = 'replace'): boolean {
+    const layer = this.getAdjustmentLayer(layerId);
+    const sel = layer?.mask ? decodeLayerMask(layer.mask) : null;
+    if (!sel) return false;
+    return this.setSelection(sel, mode);
   }
 
   // --- Histogram ---
@@ -763,11 +1071,11 @@ export class ImageEditorController {
 
   // --- AI Masking & Transformation Helpers ---
 
-  public async renderMask(options?: { useAnnotations?: boolean; useCrop?: boolean }): Promise<HTMLCanvasElement> {
+  public async renderMask(options?: { useAnnotations?: boolean; useCrop?: boolean; useSelection?: boolean }): Promise<HTMLCanvasElement> {
     return this.renderer.renderMask(this.state, options);
   }
 
-  public async toMaskDataURL(options?: { useAnnotations?: boolean; useCrop?: boolean }): Promise<string> {
+  public async toMaskDataURL(options?: { useAnnotations?: boolean; useCrop?: boolean; useSelection?: boolean }): Promise<string> {
     const canvas = await this.renderMask(options);
     return canvas.toDataURL('image/png');
   }
@@ -820,6 +1128,12 @@ export class ImageEditorController {
     this.imageElement = next.element;
     this.state.sourceUrl = next.sourceUrl;
     this.state.imageDimensions = next.dimensions;
+    this.samplePixels = null;
+    if (this.state.selection && (sx !== 1 || sy !== 1)) {
+      this.state.selection = normalizeSelection(
+        resizeSelection(this.state.selection, Math.round(next.dimensions.width), Math.round(next.dimensions.height))
+      );
+    }
 
     if (sx !== 1 || sy !== 1) {
       if (this.state.crop) {
@@ -846,13 +1160,26 @@ export class ImageEditorController {
 
   // --- Serialization ---
 
+  /** The serializable state; `selection` is included (run-length encoded) only when something is selected. */
   public toJSON(): SerializedImageEditorState {
-    return this.serializeState();
+    const out = this.serializeState();
+    if (this.state.selection?.bounds) out.selection = serializeSelection(this.state.selection);
+    return out;
   }
 
   public loadJSON(data: SerializedImageEditorState): void {
     this.recordHistory();
     this.applySerializedState(migrateSerializedImageEditorState(data));
+    let selection: SelectionMask | null = null;
+    if (data.selection) {
+      try {
+        selection = normalizeSelection(deserializeSelection(data.selection));
+      } catch {
+        selection = null;
+      }
+    }
+    this.state.selection = selection;
+    this.dropMismatchedSelection();
     this.notify();
   }
 
@@ -896,6 +1223,19 @@ function serializeAdjustments(adjustments: ImageAdjustments): ImageAdjustments {
     if (!out.tint) delete out.tint;
   }
   return out;
+}
+
+/** `null` for an empty selection, so "nothing selected" has one representation. */
+function normalizeSelection(mask: SelectionMask | null): SelectionMask | null {
+  return mask?.bounds ? mask : null;
+}
+
+function sameSelection(a: SelectionMask, b: SelectionMask): boolean {
+  if (a.width !== b.width || a.height !== b.height) return false;
+  const x = a.data;
+  const y = b.data;
+  for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return false;
+  return true;
 }
 
 /** Scales an annotation's geometry from one image size to another. */

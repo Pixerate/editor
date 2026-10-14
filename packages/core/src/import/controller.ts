@@ -5,6 +5,7 @@ import {
   type ImportFilesIntoEditorOptions,
 } from "./editor";
 import type { FileLike, ImportOutcome } from "./registry";
+import type { ImportStructureReport } from "./pdf-layout";
 
 /**
  * Opens the browser file picker and resolves with the chosen files (an empty
@@ -124,4 +125,46 @@ export function createFileImportController(
   options?: FileImportControllerOptions,
 ): FileImportController {
   return new FileImportController(getTarget, options);
+}
+
+/** Totals of the structure reports (`DocumentImport.structure`) of several imports. */
+export interface ImportStructureSummary {
+  /** Imports that carried a report. */
+  files: number;
+  /** `"mixed"` when some files were imported with structure detection and some without. */
+  mode: "structured" | "plain" | "mixed";
+  headings: number;
+  lists: number;
+  tables: number;
+  paragraphs: number;
+  multiColumnPages: number;
+  /** Mean of the reports' confidences (0–1). */
+  confidence: number;
+}
+
+/**
+ * Sums the structure reports of import outcomes, e.g. `lastOutcomes` from a
+ * file-import controller. Returns `null` when no outcome has a report (only
+ * structure-aware adapters such as PDF produce one).
+ */
+export function summarizeImportStructure(
+  outcomes: readonly ImportOutcome<DocumentImport>[],
+): ImportStructureSummary | null {
+  const reports = outcomes
+    .map((outcome) => outcome.result?.structure)
+    .filter((report): report is ImportStructureReport => !!report);
+  if (!reports.length) return null;
+  const modes = new Set(reports.map((report) => report.mode));
+  const sum = (pick: (report: ImportStructureReport) => number) =>
+    reports.reduce((total, report) => total + pick(report), 0);
+  return {
+    files: reports.length,
+    mode: modes.size > 1 ? "mixed" : reports[0].mode,
+    headings: sum((r) => r.counts.headings),
+    lists: sum((r) => r.counts.lists),
+    tables: sum((r) => r.counts.tables),
+    paragraphs: sum((r) => r.counts.paragraphs),
+    multiColumnPages: sum((r) => r.multiColumnPages),
+    confidence: Math.round((sum((r) => r.confidence) / reports.length) * 100) / 100,
+  };
 }

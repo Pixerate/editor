@@ -66,6 +66,8 @@ export function insertImportedDocument(
 export interface ImportFilesIntoEditorOptions extends InsertImportedDocumentOptions {
   /** Registry to match files against (default: the shared default registry). */
   registry?: ImportAdapterRegistry;
+  /** Per-adapter options keyed by adapter id, e.g. `{ pdf: { structure: false } }` (see `ImportFileOptions`). */
+  adapterOptions?: Record<string, unknown>;
   /** Called after each file is inserted. */
   onImport?: (outcome: ImportOutcome<DocumentImport>, file: FileLike) => void;
   /** Called for each file that cannot be imported; other files continue. */
@@ -87,7 +89,10 @@ export async function importFilesIntoEditor(
   let at = options.at;
   for (const file of Array.from(files as ArrayLike<FileLike>)) {
     try {
-      const outcome = await registry.importFile<DocumentImport>(file, { target: "document" });
+      const outcome = await registry.importFile<DocumentImport>(file, {
+        target: "document",
+        adapterOptions: options.adapterOptions,
+      });
       const view = toView(target);
       if ((view as any).isDestroyed) break;
       at = insertImportedDocument(view, outcome.result, { at, asPlainText: options.asPlainText });

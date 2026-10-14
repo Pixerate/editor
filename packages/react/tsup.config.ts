@@ -8,7 +8,8 @@ export default defineConfig({
     "image-editor/index": "src/image-editor/index.ts",
     "commands/index": "src/commands/index.ts",
     "persistence/index": "src/persistence/index.ts",
-    "generation/index": "src/generation/index.ts"
+    "generation/index": "src/generation/index.ts",
+    "tokens/index": "src/tokens/index.ts"
   },
   format: ["esm", "cjs"],
   dts: true,

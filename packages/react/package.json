@@ -48,6 +48,11 @@
       "types": "./dist/generation/index.d.ts",
       "import": "./dist/generation/index.js",
       "require": "./dist/generation/index.cjs"
+    },
+    "./tokens": {
+      "types": "./dist/tokens/index.d.ts",
+      "import": "./dist/tokens/index.js",
+      "require": "./dist/tokens/index.cjs"
     }
   },
   "typesVersions": {
@@ -69,6 +74,9 @@
       ],
       "generation": [
         "./dist/generation/index.d.ts"
+      ],
+      "tokens": [
+        "./dist/tokens/index.d.ts"
       ]
     }
   },

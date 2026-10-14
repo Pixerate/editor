@@ -91,8 +91,8 @@ useAgentToolProvider(registry, provider);
 | Import | Exports |
 | :--- | :--- |
 | `@pixerate/editor-react` | `usePromptEditor`, `useEditor`, `EditorContent`, `BubbleMenu`, `TemplateRenderer`, `useHistory`, `useHistoryDirty`, `useHistoryShortcuts`, `useNavigationGuard`, `useDismissGuard`, `EditorSlotsProvider` / `useEditorSlots`, `SpreadsheetEditor` / `useSpreadsheetEditor`, `FormulaHints`, `DirtyTracker` |
-| `@pixerate/editor-react/spreadsheet` | `SpreadsheetEditor`, `useSpreadsheetEditor`, `useSpreadsheetTableInteractions`, `FormulaHints`, `SpreadsheetContextMenu`, `SpreadsheetGroupRow` (also re-exported from the root entry) |
-| `@pixerate/editor-react/image-editor` | `ImageEditor`, `useImageEditor`: crop, rotate/flip, adjustments, annotations, depth masks, and `onInpaint` / `onRemoveBackground` AI hooks |
+| `@pixerate/editor-react/spreadsheet` | `SpreadsheetEditor`, `useSpreadsheetEditor`, `useSpreadsheetTableInteractions`, `FormulaHints`, `SpreadsheetContextMenu`, `SpreadsheetGroupRow`, `SheetTabs`, `NameManager` (also re-exported from the root entry) |
+| `@pixerate/editor-react/image-editor` | `ImageEditor`, `useImageEditor`: crop, rotate/flip, adjustments, annotations, depth masks, Select & Mask (`SelectionOptionsBar`, `RefineEdgePanel`: magic wand, marquees, lasso, Refine Edge, layer masks), and `onInpaint` / `onRemoveBackground` AI hooks |
 | `@pixerate/editor-react/commands` | `CommandPalette`, `useCommandPalette` (`hotkey: "Mod+K"`), `useCommandShortcuts`, `useRegisterCommands` over a `CommandRegistry` from `@pixerate/editor/commands` (also re-exported from the root entry) |
 | `@pixerate/editor-react/persistence` | `useAutosave` (crash-recovery snapshots bound to a history / dirty flag, flushed on `pagehide`, with a recovery check on mount) and `<RecoveryPrompt>` (also re-exported from the root entry) |
 | `@pixerate/editor-react/generation` | `GenerationSettings` (controls generated from a model's capabilities, reference slots by role, plan adjustments), `useGenerationPlan`, `JobProgress`, `useJobProgress` over `@pixerate/editor/generation` (also re-exported from the root entry) |

@@ -8,7 +8,12 @@ import {
   type CellRange,
   type SpreadsheetColumn,
   type SpreadsheetRow,
-  type SpreadsheetDataSource
+  type SpreadsheetDataSource,
+  type SpreadsheetDocument as SheetDocument,
+  type SpreadsheetNameScope,
+  type SpreadsheetCommitResult,
+  type SpreadsheetValidationAction,
+  type SpreadsheetValidationPrompt
 } from '@pixerate/editor/spreadsheet';
 
 export function useSpreadsheetEditor(options: SpreadsheetControllerOptions = {}) {
@@ -47,6 +52,8 @@ export function useSpreadsheetEditor(options: SpreadsheetControllerOptions = {})
   const [selectedRange, setSelectedRange] = useState<CellRange | null>(controller.selectedRange);
   const [editingCell, setEditingCell] = useState<CellCoordinate | null>(null);
   const [draftValue, setDraftState] = useState<string>('');
+  // Invalid input waiting for the user (data validation alert).
+  const [validationPrompt, setValidationPrompt] = useState<SpreadsheetValidationPrompt | null>(null);
   settersRef.current = { setDoc, setActiveCell, setSelectedRange };
 
   // The controller commits its own `draftValue` (`commitEditing()` without an
@@ -79,12 +86,35 @@ export function useSpreadsheetEditor(options: SpreadsheetControllerOptions = {})
     setDraftValue(controller.draftValue);
   }, [controller]);
 
-  const commitEditing = useCallback((val?: string) => {
-    controller.commitEditing(val);
-    setEditingCell(null);
-    setDraftValue('');
+  // Input breaking a data validation rule is not committed: the editor stays
+  // open and `validationPrompt` holds the alert until it is resolved.
+  const syncEditing = useCallback(() => {
+    setEditingCell(controller.editingCell);
+    setDraftValue(controller.draftValue);
+    setValidationPrompt(controller.validationPrompt);
+    setActiveCell(controller.activeCell);
+    setSelectedRange(controller.selectedRange);
     setDoc({ ...controller.document });
   }, [controller]);
+
+  const commitEditing = useCallback((val?: string): SpreadsheetCommitResult => {
+    const result = controller.commitEditing(val);
+    syncEditing();
+    return result;
+  }, [controller, syncEditing]);
+
+  /** Commits input from outside the cell editor (formula bar, list dropdown) with validation. */
+  const commitCellInput = useCallback((rowId: string, colId: string, raw: string): SpreadsheetCommitResult => {
+    const result = controller.commitCellInput(rowId, colId, raw);
+    syncEditing();
+    return result;
+  }, [controller, syncEditing]);
+
+  /** Answers the validation alert: accept (warning / information), retry or cancel. */
+  const resolveValidationPrompt = useCallback((action: SpreadsheetValidationAction) => {
+    controller.resolveValidationPrompt(action);
+    syncEditing();
+  }, [controller, syncEditing]);
 
   const cancelEditing = useCallback(() => {
     controller.cancelEditing();
@@ -143,14 +173,19 @@ export function useSpreadsheetEditor(options: SpreadsheetControllerOptions = {})
     setDoc({ ...controller.document });
   }, [controller]);
 
+  // Undo can switch to the sheet the step belongs to.
   const undo = useCallback(() => {
     controller.undo();
     setDoc({ ...controller.document });
+    setActiveCell(controller.activeCell);
+    setSelectedRange(controller.selectedRange);
   }, [controller]);
 
   const redo = useCallback(() => {
     controller.redo();
     setDoc({ ...controller.document });
+    setActiveCell(controller.activeCell);
+    setSelectedRange(controller.selectedRange);
   }, [controller]);
 
   // Table operations (sort, filters, freeze, hide, merge, autofill, categories,
@@ -161,6 +196,58 @@ export function useSpreadsheetEditor(options: SpreadsheetControllerOptions = {})
   // offsets and merged-cell spans. Recomputed whenever the document changes.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const viewModel = useMemo(() => controller.getViewModel(), [controller, doc]);
+  // Sheet tabs and defined names. Every workbook change notifies through
+  // onDocumentChange, so they follow `doc`.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const sheets = useMemo(() => controller.getSheets(), [controller, doc]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const names = useMemo(() => controller.getNames(), [controller, doc]);
+
+  // Switching sheets commits the edit in progress.
+  const afterSheetSwitch = useCallback(() => {
+    setEditingCell(controller.editingCell);
+    setDraftValue(controller.draftValue);
+    setActiveCell(controller.activeCell);
+    setSelectedRange(controller.selectedRange);
+    setDoc({ ...controller.document });
+  }, [controller, setDraftValue]);
+
+  const workbookActions = useMemo(
+    () => ({
+      setActiveSheet: (idOrName: string) => {
+        const changed = controller.setActiveSheet(idOrName);
+        afterSheetSwitch();
+        return changed;
+      },
+      addSheet: (options?: { name?: string; index?: number; document?: Partial<SheetDocument>; activate?: boolean }) => {
+        const id = controller.addSheet(options);
+        afterSheetSwitch();
+        return id;
+      },
+      renameSheet: (idOrName: string, newName: string) => controller.renameSheet(idOrName, newName),
+      moveSheet: (idOrName: string, toIndex: number) => controller.moveSheet(idOrName, toIndex),
+      deleteSheet: (idOrName: string) => {
+        const deleted = controller.deleteSheet(idOrName);
+        afterSheetSwitch();
+        return deleted;
+      },
+      duplicateSheet: (idOrName: string, options?: { name?: string; index?: number; activate?: boolean }) => {
+        const id = controller.duplicateSheet(idOrName, options);
+        afterSheetSwitch();
+        return id;
+      },
+      defineName: (name: string, refersTo: string, options?: SpreadsheetNameScope & { comment?: string }) =>
+        controller.defineName(name, refersTo, options),
+      renameName: (oldName: string, newName: string, options?: SpreadsheetNameScope) =>
+        controller.renameName(oldName, newName, options),
+      deleteName: (name: string, options?: SpreadsheetNameScope) => controller.deleteName(name, options),
+    }),
+    [controller, afterSheetSwitch],
+  );
+
+  // Conditional formatting of every formatted cell (re-evaluated incrementally).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const conditionalFormatOverlay = useMemo(() => controller.getConditionalFormatOverlay(), [controller, doc]);
 
   return {
     document: doc,
@@ -169,6 +256,9 @@ export function useSpreadsheetEditor(options: SpreadsheetControllerOptions = {})
     editingCell,
     draftValue,
     setDraftValue,
+    validationPrompt,
+    resolveValidationPrompt,
+    commitCellInput,
     controller,
     getCell: (rowId: string, colId: string) => controller.getCell(rowId, colId),
     setCellValue,
@@ -207,6 +297,13 @@ export function useSpreadsheetEditor(options: SpreadsheetControllerOptions = {})
     },
     ...tableActions,
     viewModel,
+    /** The sheets in tab order (see `SpreadsheetController.getSheets`). */
+    sheets,
+    activeSheetId: controller.activeSheetId,
+    /** Defined names (see `SpreadsheetController.getNames`). */
+    names,
+    ...workbookActions,
+    conditionalFormatOverlay,
     undo,
     redo
   };

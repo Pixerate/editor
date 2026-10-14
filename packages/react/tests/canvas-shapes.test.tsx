@@ -3,7 +3,8 @@ import { JSDOM } from 'jsdom';
 import React, { act, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { HistoryManager } from '@pixerate/editor/history';
-import { useCanvasArrange, ShapeNode, isShapeNode, lockNodes, type CanvasNode } from '../src/canvas';
+import { useCanvasArrange, ShapeNode, isShapeNode, lockNodes, countPathSegments, type CanvasNode } from '../src/canvas';
+import { CommandRegistry, createShapeCommands } from '@pixerate/editor/commands';
 
 let container: HTMLDivElement;
 let root: any;
@@ -91,6 +92,55 @@ describe('useCanvasArrange shape operations', () => {
 		});
 		expect(refusal).toMatchObject({ ok: false, reason: 'locked' });
 		expect(locked.ref.nodes.map((n) => n.id)).toEqual(['a', 'b']);
+	});
+
+	it('keeps curves when uniting circles', async () => {
+		const { ref, Test } = renderArrange([shape('a', 0, 0, { kind: 'ellipse' }), shape('b', 60, 0, { kind: 'ellipse' })]);
+		await act(async () => root.render(<Test />));
+		let result: any;
+		await act(async () => {
+			result = ref.arrange!.unite();
+		});
+		expect(result).toMatchObject({ ok: true, engine: 'curve' });
+		const counts = countPathSegments(ref.nodes[0].data.shape.d);
+		expect(counts.lines).toBe(0);
+		expect(counts.cubics).toBeGreaterThan(0);
+	});
+
+	it('offsets paths and outlines strokes as undoable steps, also through the shape commands', async () => {
+		const history = new HistoryManager();
+		const { ref, Test } = renderArrange(
+			[shape('a', 0, 0, { kind: 'rect', fill: 'red', stroke: 'black', strokeWidth: 4 }), shape('b', 200, 0, { kind: 'ellipse' })],
+			history
+		);
+		await act(async () => root.render(<Test />));
+		expect(ref.arrange!.canOffsetShapes()).toBe(true);
+		expect(ref.arrange!.canOutlineStroke(['b'])).toBe(false);
+		let result: any;
+		await act(async () => {
+			result = ref.arrange!.offsetShapes(10, ['a'], { createId: () => 'o' });
+		});
+		expect(result.ok).toBe(true);
+		expect(ref.nodes.map((n) => n.id)).toEqual(['o', 'b']);
+		expect(ref.nodes[0]).toMatchObject({ position: { x: -10, y: -10 }, width: 120, height: 120 });
+		await act(async () => history.undo());
+		expect(ref.nodes.map((n) => n.id)).toEqual(['a', 'b']);
+		await act(async () => {
+			result = ref.arrange!.outlineStroke(['a'], { createId: () => 's' });
+		});
+		expect(ref.nodes.map((n) => n.id)).toEqual(['a', 's', 'b']);
+		expect(ref.nodes[1].data.shape).toMatchObject({ kind: 'path', fill: 'black' });
+		await act(async () => history.undo());
+		expect(ref.nodes[0].data.shape.stroke).toBe('black');
+
+		const registry = new CommandRegistry();
+		registry.register(createShapeCommands(ref.arrange!));
+		await act(async () => {
+			result = registry.execute('canvas.offsetPath', { distance: -10, ids: ['b'] });
+		});
+		expect(result).toMatchObject({ ok: true });
+		expect(ref.nodes[1].width).toBeCloseTo(80, 1);
+		expect(registry.execute('canvas.outlineStroke', { ids: ['b'] })).toMatchObject({ ok: false, code: 'disabled' });
 	});
 });
 

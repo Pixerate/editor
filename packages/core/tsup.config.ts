@@ -15,6 +15,7 @@ export default defineConfig({
     "persistence/index": "src/persistence/index.ts",
     "generation/index": "src/generation/index.ts",
     "compare/index": "src/compare/index.ts",
+    "tokens/index": "src/tokens/index.ts",
   },
   format: ["esm", "cjs"],
   dts: true,
