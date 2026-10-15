@@ -53,6 +53,11 @@
       "svelte": "./dist/tokens/index.js",
       "default": "./dist/tokens/index.js"
     },
+    "./parameters": {
+      "types": "./dist/parameters/index.d.ts",
+      "svelte": "./dist/parameters/index.js",
+      "default": "./dist/parameters/index.js"
+    },
     "./package.json": "./package.json"
   },
   "typesVersions": {
@@ -77,6 +82,9 @@
       ],
       "tokens": [
         "./dist/tokens/index.d.ts"
+      ],
+      "parameters": [
+        "./dist/parameters/index.d.ts"
       ]
     }
   },

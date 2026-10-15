@@ -426,8 +426,9 @@ Each module is also available as a subpath import:
 | `@pixerate/editor/compare` | `diffSequences` (Myers + patience), `compareDocuments` and `compareHtml`: two versions of a document as tracked changes (also re-exported from the root entry) |
 | `@pixerate/editor/export` | Word export: `exportDocx`, `exportDocxBlob`, `createDocxParts`, `DocxExportController`, plus the zip writer and XML escapers it uses (no third-party imports; also re-exported from the root entry) |
 | `@pixerate/editor/tokens` | Design tokens: collections, modes, aliases, `TokenStore`, `resolveToken`, W3C Design Tokens JSON and CSS custom-property export (no third-party imports) |
+| `@pixerate/editor/parameters` | Schema-driven parameters editor for effects, shaders, generators and component props: `ParameterSchema` (number, int, boolean, choice, color, vector, image and text fields; groups; `showIf`), `ParametersController` (validation, undo with merged slider gestures, reset, randomize, presets, keyframe hooks), `createParameterCommands` for agents and `parameterSchemaFromShaderControls` (no third-party imports) |
 
-The root entry (`@pixerate/editor`) re-exports everything except animation, canvas, agent, commands, persistence, generation, tokens and image editor, including TipTap. Import from the narrowest subpath you need: `grammar`, `history`, `animation`, `spreadsheet`, `commands`, `persistence` and `image-editor` have no third-party imports, so a spreadsheet-only app bundles no TipTap, markdown or dagre code. The package is marked `sideEffects: false`, so unused root exports are also tree-shaken.
+The root entry (`@pixerate/editor`) re-exports everything except animation, canvas, agent, commands, persistence, generation, tokens, parameters and image editor, including TipTap. Import from the narrowest subpath you need: `grammar`, `history`, `animation`, `spreadsheet`, `commands`, `persistence` and `image-editor` have no third-party imports, so a spreadsheet-only app bundles no TipTap, markdown or dagre code. The package is marked `sideEffects: false`, so unused root exports are also tree-shaken.
 
 ## Keyframe animation without the canvas
 

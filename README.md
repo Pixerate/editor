@@ -23,6 +23,7 @@ Editors for creative and AI apps: prompts, rich-text documents, spreadsheets, a 
 | **Spreadsheet** | Formula engine (dynamic arrays, `LAMBDA`, defined names, multiple sheets), Excel number formats, conditional formatting, data validation, sort/filter/freeze/merge, CSV, fast recalculation, virtualised grid | `@pixerate/editor/spreadsheet` |
 | **Canvas** | Node graph tools on xyflow: align and distribute, smart guides, auto layout, curve-preserving shape booleans, design tokens with light/dark modes, components and instances, keyframe animation | `@pixerate/editor/canvas`, `/tokens`, `/animation` |
 | **Image editor** | Canvas 2D crop/rotate, adjustments and adjustment layers, blend modes, histogram, selections and masks (magic wand, Refine Edge), annotations | `@pixerate/editor/image-editor` |
+| **Parameters** | Schema-driven control panel for effects, shaders, generators and component props: sliders, toggles, choices, colours, vectors, image pickers and text, with groups, conditional fields, presets, undo, randomize and keyframe diamonds | `@pixerate/editor/parameters` |
 | **Commands and agents** | One command registry for shortcuts, the command palette and AI agent tools (MCP-style `tools/list` / `tools/call`) | `@pixerate/editor/commands`, `/agent` |
 | **History and saving** | Undo/redo with gesture merging, dirty-vs-saved tracking, autosave with crash recovery, storage adapters (localStorage, IndexedDB, OPFS) | `@pixerate/editor/history`, `/persistence` |
 | **AI generation** | Model capabilities and request planning, settings forms, job progress, generation records with Recreate, asset mentions with roles | `@pixerate/editor/generation` |
@@ -153,7 +154,7 @@ pnpm build
 pnpm --filter demo dev
 ```
 
-Open http://localhost:3000. The demo has a tab per area: **Prompt Studio**, **Document Rich Text**, **Spreadsheet**, **Canvas**, **Image Editor**, and a **Feature Parity Matrix**. A command palette (⌘K / Ctrl+K) works everywhere, and every tab except the parity matrix has an agent-tools panel listing the tools that tab registers.
+Open http://localhost:3000. The demo has a tab per area: **Prompt Studio**, **Document Rich Text**, **Spreadsheet**, **Canvas**, **Image Editor**, **Parameters**, and a **Feature Parity Matrix**. A command palette (⌘K / Ctrl+K) works everywhere, and every tab except the parity matrix has an agent-tools panel listing the tools that tab registers.
 
 ## Feature parity
 
@@ -328,6 +329,22 @@ Every feature is available from core and from both framework packages. "Via core
 </details>
 
 <details>
+<summary><strong>Parameters</strong> (8)</summary>
+
+| Feature | Core | React | Svelte |
+| :--- | :---: | :---: | :---: |
+| Parameter Schema (number / int, boolean, choice, color with optional alpha, vector 2–4, image, text; labels, descriptions, defaults) | `ParameterSchema` & `checkParameterSchema` (`/parameters`) | `<ParametersPanel>` | `<ParametersPanel>` |
+| Collapsible Groups & Conditional Fields (`showIf`) | `getParameterVisibility` | `<ParametersPanel>` | `<ParametersPanel>` |
+| Parameters Controller (validation with sentence errors, stable `getState`, `subscribe`, reset, seeded randomize, `toJSON` / `load`) | `ParametersController` | `useParameters`, `useParametersController` & `useParametersState` | `createParameters` |
+| Parameter Undo with Merged Slider Drags (shared or own `HistoryManager`) | `beginGesture` / `endGesture` | `<ParameterSlider>` & `<ParameterColor>` | `<ParameterSlider>` & `<ParameterColor>` |
+| Parameter Presets (apply, save, delete; built-in presets read-only) | `applyPreset`, `savePreset`, `deletePreset` | `<ParametersPanel>` | `<ParametersPanel>` |
+| Field Controls (slider + number, toggle, select / segmented, colour, vector, image picker, text) | Headless helpers (`parseParameterNumberInput`, `formatParameterValue`) | `<ParameterFieldControl>` & per-type components | `<ParameterFieldControl>` & per-type components |
+| Parameter Keyframe Hooks (`AnimationTrack`-shaped tracks, key at playhead, undoable toggle, keys follow edits) | `ParameterKeyframes` & `createParameterKeyframeStore` | `<KeyframeDiamond>` | `<KeyframeDiamond>` |
+| Parameter Commands & Agent Tools; Shader `@control` Adapter | `createParameterCommands` & `parameterSchemaFromShaderControls` | `useParameterCommands` | `useParameterCommands` |
+
+</details>
+
+<details>
 <summary><strong>Commands and agent tools</strong> (6)</summary>
 
 | Feature | Core | React | Svelte |
@@ -378,6 +395,7 @@ Every feature is available from core and from both framework packages. "Via core
 - [Architecture](docs/architecture.md)
 - [Prompt grammar and resolution](docs/prompt-engine.md)
 - [Canvas](docs/canvas.md)
+- [Parameters editor](docs/parameters.md)
 - [CI/CD and releases](docs/ci-cd-release.md)
 - [Known pitfalls and workarounds (GOTCHAS)](GOTCHAS.md)
 

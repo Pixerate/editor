@@ -3,6 +3,8 @@ import { describe, it, expect } from "vitest";
 import { render } from "svelte/server";
 import { TemplateRenderer, EditableTextNodeEditor, VariableForm, CommentsPanel, ReviewToolbar, OutlinePanel } from "../src";
 import { SpreadsheetEditor } from "../src/spreadsheet";
+import { ParametersPanel } from "../src/parameters";
+import { ParametersController } from "@pixerate/editor/parameters";
 
 describe("SSR", () => {
   it("renders components on the server without touching the DOM", () => {
@@ -27,5 +29,9 @@ describe("SSR", () => {
     expect(render(CommentsPanel, { props: {} }).body).toContain("No comments yet");
     expect(render(ReviewToolbar, { props: {} }).body).toContain("No changes");
     expect(render(OutlinePanel, { props: {} }).body).toContain("Document outline");
+    const controller = new ParametersController({
+      schema: { title: "Glow", fields: [{ id: "speed", type: "number", min: 0, max: 4, default: 1 }] },
+    });
+    expect(render(ParametersPanel, { props: { controller, idPrefix: "p" } }).body).toContain('for="p-speed"');
   });
 });
