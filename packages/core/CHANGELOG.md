@@ -1,5 +1,12 @@
 # @pixerate/editor
 
+## 0.28.0
+
+### Minor Changes
+
+- e06ae39: Add `@pixerate/editor/animation`, the keyframe animation model as its own dependency-free subpath: `AnimationTrack` / `AnimationKeyframe` / `AnimationValue` and the easing types, `resolveEasing`, `evaluateEasing`, `cubicBezierAt`, `springAt`, the easing presets and labels, `parseCssEasing`, `easingToCss`, `evaluateTrack`, `interpolateAnimationValue`, `normalizeKeyframes`, the OKLab colour helpers, `AnimationPlayer` / `createAnimationPlayer` and the `Clock` / `ManualClock` / `realClock` time sources. It imports no dagre, TipTap or canvas-node code, so apps that only need keyframes no longer have to install `@dagrejs/dagre`. `@pixerate/editor/canvas` still re-exports all of it.
+- ca79b03: Add the `@pixerate/editor/tools` subpath: `ToolRegistry`, `createToolRegistry`, `ToolRegistryError`, the agent tool types, `validateJsonSchema` and the static `EDITOR_MCP_TOOLS` definitions, with no TipTap, ProseMirror or dagre imports. Hosts that only combine tool providers (for example `createCommandToolProvider`) no longer need TipTap installed. `@pixerate/editor/agent` still re-exports all of it, and the TipTap-bound providers (`createRichTextToolProvider`, `createEditorMcpToolProvider`, ...) stay there. The React and Svelte tool-provider helpers now import their types from `/tools`.
+
 ## 0.27.0
 
 ### Minor Changes
