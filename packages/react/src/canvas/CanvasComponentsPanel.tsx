@@ -7,42 +7,96 @@ import {
 	type CanvasNode
 } from '@pixerate/editor/canvas';
 
+/** The variant-editing actions the components panel runs (a components controller or hook satisfies it). */
+export type CanvasComponentsPanelActions = Pick<
+	CanvasComponentsController<any>,
+	'addVariant' | 'removeVariant' | 'setVariantProperties' | 'renameVariantProperty' | 'renameVariantValue'
+>;
+
 export interface CanvasComponentsPanelProps<TNode extends CanvasNode = CanvasNode> {
 	nodes: TNode[];
 	/** Inserts an instance of a component (or a set's default variant); called on click. */
 	onInsert: (componentId: string) => void;
+	/**
+	 * Variant editing: with it, sets get "+ Variant" and a properties editor (rename properties
+	 * and values inline), and variants a menu (also on right click) to edit, duplicate or remove them.
+	 */
+	components?: CanvasComponentsPanelActions;
+	/** Receives refusals (e.g. a duplicate variant combination). */
+	onError?: (reason: string) => void;
 	/** Show the search field (default `true`). */
 	search?: boolean;
 	className?: string;
 }
 
+type Outcome = { ok: boolean; reason?: string } | undefined;
+
+/** A text field that commits on blur / Enter when its value changed (Escape reverts). */
+function InlineField({ value, label, onCommit }: { value: string; label: string; onCommit: (next: string) => void }) {
+	return (
+		<input
+			key={value}
+			type="text"
+			aria-label={label}
+			defaultValue={value}
+			className="min-w-0 flex-1 rounded border border-border bg-background px-1 py-0.5 text-xs"
+			onBlur={(e) => {
+				const next = e.currentTarget.value.trim();
+				if (next && next !== value) onCommit(next);
+				else e.currentTarget.value = value;
+			}}
+			onKeyDown={(e) => {
+				if (e.key === 'Enter') e.currentTarget.blur();
+				if (e.key === 'Escape') {
+					e.currentTarget.value = value;
+					e.currentTarget.blur();
+				}
+			}}
+		/>
+	);
+}
+
 /**
  * Components panel: component sets (with their variants) and lone components. Click one to
  * insert an instance, or drag it onto the canvas (the drag carries the id as
- * `CANVAS_COMPONENT_DRAG_TYPE`; read it with `getCanvasComponentDragId`).
+ * `CANVAS_COMPONENT_DRAG_TYPE`; read it with `getCanvasComponentDragId`). With `components`,
+ * sets and variants can be edited: "+ Variant", rename properties / values, edit, duplicate or
+ * remove a variant.
  */
 export function CanvasComponentsPanel<TNode extends CanvasNode = CanvasNode>({
 	nodes,
 	onInsert,
+	components,
+	onError,
 	search = true,
 	className = ''
 }: CanvasComponentsPanelProps<TNode>) {
 	const [query, setQuery] = useState('');
-	const { components, sets } = listCanvasComponents(nodes);
+	const [propsOpen, setPropsOpen] = useState<string | null>(null);
+	const [menuFor, setMenuFor] = useState<string | null>(null);
+	const [editing, setEditing] = useState<string | null>(null);
+	const { components: all, sets } = listCanvasComponents(nodes);
 	const q = query.trim().toLowerCase();
 	const match = (name: string) => !q || name.toLowerCase().includes(q);
-	const lone = components.filter((c) => !c.setId && match(c.name));
+	const lone = all.filter((c) => !c.setId && match(c.name));
 	const shownSets = sets.filter((s) => match(s.name) || s.variants.some((v) => match(v.name)));
-	const item = (id: string, name: string, count: number, extra: Record<string, string> = {}) => (
+	const report = (result: Outcome) => {
+		if (result && !result.ok && result.reason) onError?.(result.reason);
+		return !!result?.ok;
+	};
+	const small = 'shrink-0 rounded px-1 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40';
+	const menuItem = 'rounded px-2 py-0.5 text-left hover:bg-muted disabled:opacity-40';
+	const item = (id: string, name: string, count: number, extra: Record<string, string> = {}, onContextMenu?: (e: React.MouseEvent) => void) => (
 		<button
 			key={id}
 			type="button"
 			draggable
 			data-component-id={id}
 			{...extra}
-			className="flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left text-xs hover:bg-muted"
+			className="flex w-full min-w-0 items-center justify-between gap-2 rounded px-2 py-1 text-left text-xs hover:bg-muted"
 			title={`Insert an instance of ${name}`}
 			onClick={() => onInsert(id)}
+			onContextMenu={onContextMenu}
 			onDragStart={(e) => {
 				e.dataTransfer.setData(CANVAS_COMPONENT_DRAG_TYPE, id);
 				e.dataTransfer.setData('text/plain', name);
@@ -73,14 +127,171 @@ export function CanvasComponentsPanel<TNode extends CanvasNode = CanvasNode>({
 			) : null}
 			{shownSets.map((set) => (
 				<div key={set.id} data-component-set={set.id} className="flex flex-col">
-					{item(set.id, set.name, set.variants.reduce((sum, v) => sum + v.instanceCount, 0), { 'data-kind': 'set' })}
+					<div className="flex items-center gap-1">
+						{item(set.id, set.name, set.variants.reduce((sum, v) => sum + v.instanceCount, 0), { 'data-kind': 'set' })}
+						{components ? (
+							<>
+								<button
+									type="button"
+									className={small}
+									data-action="add-variant"
+									aria-label={`Add a variant to ${set.name}`}
+									title="Add a variant (duplicates the default variant)"
+									onClick={() => report(components.addVariant(set.id))}
+								>
+									+&nbsp;Variant
+								</button>
+								<button
+									type="button"
+									className={small}
+									data-action="variant-properties"
+									aria-expanded={propsOpen === set.id}
+									aria-label={`Edit the variant properties of ${set.name}`}
+									title="Rename variant properties and values"
+									onClick={() => setPropsOpen(propsOpen === set.id ? null : set.id)}
+								>
+									⚙
+								</button>
+							</>
+						) : null}
+					</div>
+					{components && propsOpen === set.id ? (
+						<div data-variant-properties={set.id} className="ml-3 flex flex-col gap-1 border-l border-border py-1 pl-2">
+							{set.options.map((option) => (
+								<div key={option.name} data-variant-option={option.name} className="flex flex-col gap-0.5">
+									<InlineField
+										value={option.name}
+										label={`Rename property ${option.name}`}
+										onCommit={(next) => report(components.renameVariantProperty(option.name, next, set.id))}
+									/>
+									<div className="ml-2 flex flex-wrap gap-1">
+										{option.values.map((value) => (
+											<InlineField
+												key={value}
+												value={value}
+												label={`Rename ${option.name} value ${value}`}
+												onCommit={(next) => report(components.renameVariantValue(option.name, value, next, set.id))}
+											/>
+										))}
+									</div>
+								</div>
+							))}
+						</div>
+					) : null}
 					<div className="ml-3 flex flex-col border-l border-border pl-1">
-						{set.variants.map((v) => item(v.id, v.name, v.instanceCount, { 'data-kind': 'variant' }))}
+						{set.variants.map((v) => (
+							<div key={v.id} data-variant-row={v.id} className="flex flex-col">
+								<div className="flex items-center gap-1">
+									{item(
+										v.id,
+										v.name,
+										v.instanceCount,
+										{ 'data-kind': 'variant' },
+										components
+											? (e) => {
+													e.preventDefault();
+													setMenuFor(v.id);
+												}
+											: undefined
+									)}
+									{components ? (
+										<button
+											type="button"
+											className={small}
+											data-action="variant-menu"
+											aria-haspopup="menu"
+											aria-expanded={menuFor === v.id}
+											aria-label={`Variant actions for ${v.name}`}
+											onClick={() => setMenuFor(menuFor === v.id ? null : v.id)}
+										>
+											⋯
+										</button>
+									) : null}
+								</div>
+								{components && menuFor === v.id ? (
+									<div role="menu" data-variant-menu={v.id} className="ml-2 flex flex-col rounded border border-border bg-background p-1 shadow">
+										<button
+											type="button"
+											role="menuitem"
+											className={menuItem}
+											data-action="edit-variant"
+											onClick={() => {
+												setEditing(v.id);
+												setMenuFor(null);
+											}}
+										>
+											Edit values…
+										</button>
+										<button
+											type="button"
+											role="menuitem"
+											className={menuItem}
+											data-action="duplicate-variant"
+											onClick={() => {
+												setMenuFor(null);
+												report(components.addVariant(set.id, { from: v.id }));
+											}}
+										>
+											Duplicate
+										</button>
+										<button
+											type="button"
+											role="menuitem"
+											className={menuItem}
+											data-action="remove-variant"
+											disabled={set.variants.length < 2}
+											title={set.variants.length < 2 ? 'A component set needs at least one variant.' : 'Its instances switch to the closest variant'}
+											onClick={() => {
+												setMenuFor(null);
+												report(components.removeVariant(v.id));
+											}}
+										>
+											Remove variant
+										</button>
+									</div>
+								) : null}
+								{components && editing === v.id ? (
+									<form
+										data-variant-editor={v.id}
+										className="ml-2 flex flex-col gap-1 py-1"
+										onSubmit={(e) => {
+											e.preventDefault();
+											const values: Record<string, string> = {};
+											for (const input of e.currentTarget.querySelectorAll<HTMLInputElement>('input[data-variant-value]')) {
+												values[input.dataset.variantValue!] = input.value;
+											}
+											if (report(components.setVariantProperties(values, v.id))) setEditing(null);
+										}}
+									>
+										{set.options.map((option) => (
+											<label key={option.name} className="flex items-center gap-2">
+												<span className="w-16 shrink-0 truncate text-muted-foreground">{option.name}</span>
+												<input
+													type="text"
+													data-variant-value={option.name}
+													aria-label={`${option.name} value`}
+													defaultValue={v.variant?.[option.name] ?? ''}
+													className="min-w-0 flex-1 rounded border border-border bg-background px-1 py-0.5 text-xs"
+												/>
+											</label>
+										))}
+										<div className="flex gap-1">
+											<button type="submit" className="rounded border border-border px-2 py-0.5 hover:bg-muted" data-action="save-variant">
+												Save
+											</button>
+											<button type="button" className="rounded px-2 py-0.5 hover:bg-muted" data-action="cancel-variant" onClick={() => setEditing(null)}>
+												Cancel
+											</button>
+										</div>
+									</form>
+								) : null}
+							</div>
+						))}
 					</div>
 				</div>
 			))}
 			{lone.map((c) => item(c.id, c.name, c.instanceCount, { 'data-kind': 'component' }))}
-			{components.length === 0 ? <p className="text-muted-foreground">No components yet. Select a frame and choose Create Component.</p> : null}
+			{all.length === 0 ? <p className="text-muted-foreground">No components yet. Select a frame and choose Create Component.</p> : null}
 		</div>
 	);
 }

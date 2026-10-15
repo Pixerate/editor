@@ -213,6 +213,7 @@ We maintain **strict 1:1 parity** across JavaScript, React, and Svelte:
 | Design Tokens: W3C JSON Import / Export & CSS Variables per Mode | `importW3CTokens`, `exportW3CTokens` & `exportTokensCss` | `useTokens` (`css`, `cssVariables`) | `createTokens` (`css`, `style`) |
 | Canvas Token Bindings & Per-Frame Modes | `bindCanvasToken`, `setCanvasTokenMode` & `resolveCanvasTokens` | `useCanvasTokens`, `<TokenBindingPicker>` & `<TokenModeSwitcher>` | `createCanvasTokens`, `<TokenBindingPicker>` & `<TokenModeSwitcher>` |
 | Canvas Components & Instances (overrides, variants, properties, nested, detach / reset / push) | `syncCanvasComponents` & `createCanvasComponentsController` | `useCanvasComponents`, `<CanvasComponentsPanel>` & `<CanvasInstanceInspector>` | `createCanvasComponents`, `<CanvasComponentsPanel>` & `<CanvasInstanceInspector>` |
+| Canvas Variant Editing (add / remove / edit / rename variants and their properties) | `addCanvasVariant`, `removeCanvasVariant`, `renameCanvasVariantProperty`, … | `<CanvasComponentsPanel components>` | `<CanvasComponentsPanel components>` |
 | Canvas Component Commands & Agent Tools | `createComponentCommands` & `createCanvasComponentToolProvider` | Via core & `useRegisterCommands` | Via core & `useRegisterCommands` |
 | Canvas Bézier Curve Fitting (boolean results, freehand) | `fitCubics` & `fitPathData` | Via core | Via core |
 | Canvas Scenes (saved viewports, next / previous) | `CanvasScenesStore` | `useCanvasScenes` | `createCanvasScenes` |

@@ -179,6 +179,11 @@ describe("components controller", () => {
       "detach_instance",
       "go_to_main_component",
       "restore_main_component",
+      "add_variant",
+      "remove_variant",
+      "set_variant_properties",
+      "rename_variant_property",
+      "rename_variant_value",
     ]);
     const made = await tools.callTool("create_instance", { componentId: "card", x: 10, y: 400 });
     expect(made.isError).toBeFalsy();

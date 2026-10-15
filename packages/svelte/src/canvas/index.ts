@@ -577,6 +577,12 @@ export {
 	setCanvasComponentProperty,
 	bindCanvasComponentProperty,
 	restoreCanvasMainComponent,
+	addCanvasVariant,
+	removeCanvasVariant,
+	setCanvasVariantProperties,
+	renameCanvasVariantProperty,
+	renameCanvasVariantValue,
+	getNextVariantValues,
 	syncCanvasComponents,
 	syncCanvasInstance,
 	syncAllCanvasInstances,
@@ -600,5 +606,7 @@ export {
 	type CanvasComponentSyncOptions,
 	type CanvasInstanceInfo,
 	type CanvasComponentInfo,
-	type CanvasComponentSetInfo
+	type CanvasComponentSetInfo,
+	type AddCanvasVariantOptions,
+	type SetCanvasVariantPropertiesOptions
 } from '@pixerate/editor/canvas';

@@ -2164,3 +2164,411 @@ export function restoreCanvasMainComponent<TNode extends CanvasNode>(
 	for (const nn of nested) after = rebaseInstance(after, nn, options.tokens);
 	return done(nodes, after, [compId], options);
 }
+
+// ---------------------------------------------------------------------------------------------
+// Editing the variants of a component set
+
+export interface AddCanvasVariantOptions extends CanvasComponentSyncOptions {
+	/** Variant to duplicate (default: the set's default variant). */
+	from?: string;
+	/**
+	 * Property values of the new variant; properties not named keep the source's values. New
+	 * property names are added to every other variant with `defaultValue`. Default: the next
+	 * unused value of the first property (`Variant5`, …), see `getNextVariantValues`.
+	 */
+	variant?: Readonly<Record<string, string>>;
+	/** Position in the set's space (default: right of the source, or by the set's auto layout). */
+	position?: XYPosition;
+	/** Id of the new variant (its layers get `<id>-<sourceLayerId>`). */
+	id?: string;
+	/** Value the other variants take for a new property (default `Default`). */
+	defaultValue?: string;
+}
+
+export interface SetCanvasVariantPropertiesOptions extends CanvasComponentSyncOptions {
+	/** Value the other variants take for a new property (default `Default`). */
+	defaultValue?: string;
+}
+
+/** Gap between a new variant and its neighbours, and the set's padding around it. */
+const VARIANT_GAP = 20;
+
+const variantKey = (values: Readonly<Record<string, string>>) => formatVariantName(values);
+
+function variantNameProblem(kind: 'property' | 'value', s: string): string | undefined {
+	const label = kind === 'property' ? 'Variant property names' : 'Variant values';
+	if (!s) return `${label} must not be empty.`;
+	if (/[,=]/.test(s)) return `${label} can't contain "," or "=".`;
+	return undefined;
+}
+
+/** Trimmed, validated variant pairs, or the reason they are invalid. */
+function cleanVariantPairs(pairs: Readonly<Record<string, unknown>>): Record<string, string> | string {
+	const out: Record<string, string> = {};
+	for (const [rawKey, rawValue] of Object.entries(pairs)) {
+		if (typeof rawValue !== 'string') return `"${rawKey}" takes a text value.`;
+		const k = rawKey.trim();
+		const v = rawValue.trim();
+		const problem = variantNameProblem('property', k) ?? variantNameProblem('value', v);
+		if (problem) return problem;
+		out[k] = v;
+	}
+	return out;
+}
+
+/** Property order of a set (first seen, in layer order) for the given values. */
+function variantOrder(ids: readonly string[], values: ReadonlyMap<string, Readonly<Record<string, string>>>): string[] {
+	const order: string[] = [];
+	for (const id of ids) for (const k of Object.keys(values.get(id) ?? {})) if (!order.includes(k)) order.push(k);
+	return order;
+}
+
+/** `node` carrying variant `values` (explicit `data.component.variant`, and its name). */
+function withVariantValues<T extends CanvasNode>(node: T, values: Record<string, string>, order: readonly string[]): T {
+	const name = formatVariantName(values, order);
+	const data: Data = { ...dataOf(node), [COMPONENT_DATA_KEY]: { ...(getComponentData(node) ?? {}), variant: values }, label: name };
+	if (typeof data.name === 'string' && data.name.includes('=')) data.name = name;
+	return same(dataOf(node), data) ? node : withData(node, data);
+}
+
+/**
+ * The variant among `list` matching most of `wanted`; ties go to the one matching the earlier
+ * properties, then to the first in layer order.
+ */
+function closestVariant(list: readonly CanvasNode[], wanted: Readonly<Record<string, string>>): string | undefined {
+	const entries = Object.entries(wanted);
+	let best: { score: number[]; id: string } | undefined;
+	const better = (a: number[], b: number[]) => {
+		for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] > b[i];
+		return false;
+	};
+	for (const v of list) {
+		const values = getVariantValues(v);
+		const matches = entries.map(([k, val]) => (values[k] === val ? 1 : 0));
+		const score = [matches.reduce((a: number, b) => a + b, 0), ...matches];
+		if (!best || better(score, best.score)) best = { score, id: v.id };
+	}
+	return best?.id;
+}
+
+interface VariantEdit {
+	set: CanvasNode;
+	variants: CanvasNode[];
+	values: Map<string, Record<string, string>>;
+}
+
+function variantEditIn(g: Graph, setId: string): VariantEdit | { code: CanvasComponentErrorCode; reason: string } {
+	const set = g.get(setId);
+	if (!isCanvasComponentSet(set)) return { code: 'not-found', reason: 'Choose a component set.' };
+	if (owningInstanceIn(g, setId)) return { code: 'inside-instance', reason: "A component set inside an instance can't be edited: edit its main." };
+	const variants = variantsIn(g, setId);
+	return { set: set!, variants, values: new Map(variants.map((v) => [v.id, getVariantValues(v)])) };
+}
+
+/** Adds the properties of `pairs` no variant has yet to every variant, with `defaultValue`. */
+function addMissingProperties(edit: VariantEdit, pairs: Readonly<Record<string, string>>, defaultValue: string): string | undefined {
+	const known = new Set<string>();
+	for (const v of edit.values.values()) for (const k of Object.keys(v)) known.add(k);
+	const added = Object.keys(pairs).filter((k) => !known.has(k));
+	if (added.length === 0) return undefined;
+	const problem = variantNameProblem('value', defaultValue);
+	if (problem) return problem;
+	const defs = dataOf(edit.set)[COMPONENT_SET_DATA_KEY]?.properties;
+	const clash = isRecord(defs) ? added.find((k) => k in defs) : undefined;
+	if (clash) return `"${clash}" is a component property.`;
+	for (const [id, v] of edit.values) {
+		const next = { ...v };
+		for (const k of added) next[k] = defaultValue;
+		edit.values.set(id, next);
+	}
+	return undefined;
+}
+
+/** The name of the first of `ids` whose combination another variant shares. */
+function duplicateAmong(values: ReadonlyMap<string, Readonly<Record<string, string>>>, ids: Iterable<string>): string | undefined {
+	for (const id of ids) {
+		const key = variantKey(values.get(id)!);
+		for (const [other, v] of values) {
+			if (other !== id && variantKey(v) === key) return formatVariantName(values.get(id)!, variantOrder([...values.keys()], values));
+		}
+	}
+	return undefined;
+}
+
+/** Variant nodes whose values changed in `edit`, by id. */
+function writeVariantEdit(edit: VariantEdit, extra: readonly string[] = []): Map<string, CanvasNode> {
+	const order = variantOrder([...edit.variants.map((v) => v.id), ...extra], edit.values);
+	const updates = new Map<string, CanvasNode>();
+	for (const v of edit.variants) {
+		const next = withVariantValues(v, edit.values.get(v.id)!, order);
+		if (next !== v) updates.set(v.id, next);
+	}
+	return updates;
+}
+
+function nextVariantValuesIn(g: Graph, setId: string, fromId: string | undefined): Record<string, string> {
+	const variants = variantsIn(g, setId);
+	const base = getVariantValues(g.get(fromId));
+	const first = variantOptionsIn(g, setId)[0];
+	const prop = first?.name ?? 'Property 1';
+	const used = new Set(variants.map((v) => variantKey(getVariantValues(v))));
+	for (let k = variants.length + 1; ; k++) {
+		const values = { ...base, [prop]: `Variant${k}` };
+		if (!first?.values.includes(`Variant${k}`) && !used.has(variantKey(values))) return values;
+	}
+}
+
+/**
+ * The values `addCanvasVariant` gives a new variant by default: the source's (default: the
+ * set's default variant) with the first property set to the next unused `Variant<n>`.
+ */
+export function getNextVariantValues(nodes: readonly CanvasNode[], setId: string, from?: string): Record<string, string> {
+	const g = new Graph(nodes);
+	return nextVariantValuesIn(g, setId, from ?? defaultVariantIn(g, setId));
+}
+
+function relayoutSet(nodes: CanvasNode[], setId: string, options: CanvasComponentSyncOptions): CanvasNode[] {
+	if (options.layout === false || !getAutoLayout(nodes.find((n) => n.id === setId))) return nodes;
+	return applyNodeUpdates(nodes, layoutUpMany(nodes, [setId], typeof options.layout === 'object' ? options.layout : {}));
+}
+
+/**
+ * Adds a variant to a component set by duplicating one (default: the default variant) with new
+ * ids and the given property values. New property names are added to every other variant (with
+ * `defaultValue`), so the set stays consistent; a combination another variant has is refused.
+ * The copy goes right of its source (the set grows to fit) or where the set's auto layout puts it.
+ */
+export function addCanvasVariant<TNode extends CanvasNode>(
+	nodes: readonly TNode[],
+	setId: string,
+	options: AddCanvasVariantOptions = {}
+): CanvasComponentResult<TNode> {
+	const g = new Graph(nodes);
+	const edit = variantEditIn(g, setId);
+	if (!('set' in edit)) return fail(nodes, edit.code, edit.reason);
+	if (edit.variants.length === 0) return fail(nodes, 'invalid', 'The set has no variant to duplicate.');
+	const fromId = options.from ?? defaultVariantIn(g, setId)!;
+	const source = edit.variants.find((v) => v.id === fromId);
+	if (!source) return fail(nodes, 'not-found', `"${fromId}" is not a variant of this set.`);
+	const wanted = cleanVariantPairs(options.variant ?? nextVariantValuesIn(g, setId, fromId));
+	if (typeof wanted === 'string') return fail(nodes, 'invalid', wanted);
+	const problem = addMissingProperties(edit, wanted, (options.defaultValue ?? 'Default').trim());
+	if (problem) return fail(nodes, 'invalid', problem);
+	const id = options.id ?? uniqueId(`${setId}-variant`, g.byId);
+	if (g.get(id)) return fail(nodes, 'invalid', `Id "${id}" is taken.`);
+	edit.values.set(id, { ...edit.values.get(fromId)!, ...wanted });
+	const dup = duplicateAmong(edit.values, [id]);
+	if (dup) return fail(nodes, 'invalid', `A variant with ${dup} exists already.`);
+
+	// Placement: the given position, the set's auto layout, or the first free spot right of the source.
+	const autoLayout = !!getAutoLayout(edit.set);
+	const { width, height } = getNodeSize(source);
+	let position: XYPosition = options.position ? { ...options.position } : { ...source.position };
+	if (!options.position && !autoLayout) {
+		const rects = edit.variants.map((v) => ({ ...v.position, ...getNodeSize(v) }));
+		position = { x: source.position.x + width + VARIANT_GAP, y: source.position.y };
+		for (let k = 0; k <= rects.length; k++) {
+			const hit = rects.find((r) => position.x < r.x + r.width && r.x < position.x + width && position.y < r.y + r.height && r.y < position.y + height);
+			if (!hit) break;
+			position = { x: hit.x + hit.width + VARIANT_GAP, y: position.y };
+		}
+	}
+
+	// Copy the source's subtree with fresh ids, after the set's last layer.
+	const taken = new Set(g.byId.keys());
+	taken.add(id);
+	const map = new Map<string, string>([[fromId, id]]);
+	const sub = g.subtree(fromId);
+	for (const d of sub) {
+		if (d === fromId) continue;
+		const nid = uniqueId(`${id}-${d}`, taken);
+		taken.add(nid);
+		map.set(d, nid);
+	}
+	const order = variantOrder([...edit.variants.map((v) => v.id), id], edit.values);
+	const subSet = new Set(sub);
+	const copies: CanvasNode[] = nodes
+		.filter((n) => subSet.has(n.id))
+		.map((n) => {
+			const next = { ...n, id: map.get(n.id)! } as Data;
+			if (n.parentId !== undefined && n.id !== fromId) next.parentId = map.get(n.parentId) ?? n.parentId;
+			for (const k of RUNTIME_KEYS) delete next[k];
+			if (n.id !== fromId) return next as CanvasNode;
+			next.position = position;
+			return withVariantValues(next as CanvasNode, edit.values.get(id)!, order);
+		});
+	const updates = writeVariantEdit(edit, [id]);
+	const inSet = new Set(g.subtree(setId));
+	let last = -1;
+	nodes.forEach((n, i) => {
+		if (inSet.has(n.id)) last = i;
+	});
+	let after: CanvasNode[] = [];
+	nodes.forEach((n, i) => {
+		after.push(updates.get(n.id) ?? n);
+		if (i === last) after.push(...copies);
+	});
+
+	if (autoLayout && !options.position) after = relayoutSet(after, setId, options);
+	else {
+		const size = getNodeSize(edit.set);
+		const w = Math.max(size.width, position.x + width + VARIANT_GAP);
+		const h = Math.max(size.height, position.y + height + VARIANT_GAP);
+		if (w !== size.width || h !== size.height) after = applyNodeUpdates(after, [{ id: setId, width: w, height: h }]);
+	}
+	return done(nodes, after, [id], options);
+}
+
+/**
+ * Removes a variant from its set (refusing the last one). Its instances switch to the closest
+ * remaining variant (most matching values), keeping their overrides like a variant switch, and
+ * instance swap values and defaults pointing at it point at that variant too.
+ */
+export function removeCanvasVariant<TNode extends CanvasNode>(
+	nodes: readonly TNode[],
+	variantId: string,
+	options: CanvasComponentSyncOptions = {}
+): CanvasComponentResult<TNode> {
+	const g = new Graph(nodes);
+	const set = variantSetIn(g, variantId);
+	if (!set) return fail(nodes, 'not-found', 'Choose a variant of a component set.');
+	if (owningInstanceIn(g, set.id)) return fail(nodes, 'inside-instance', "A component set inside an instance can't be edited: edit its main.");
+	const others = variantsIn(g, set.id).filter((v) => v.id !== variantId);
+	if (others.length === 0) return fail(nodes, 'invalid', 'A component set needs at least one variant: delete the set instead.');
+	const replacement = closestVariant(others, getVariantValues(g.get(variantId)))!;
+	const swap = <T>(v: T): T => (v === variantId ? (replacement as T) : v);
+
+	// 1. Re-point instances (and instance swap values / defaults), synced while the variant exists.
+	const repointed = nodes.map((n) => {
+		const data = dataOf(n);
+		let next: Data | undefined;
+		const inst = getInstanceData(n);
+		if (inst) {
+			const moved: CanvasInstanceData = { ...inst, componentId: swap(inst.componentId) };
+			if (inst.properties) moved.properties = Object.fromEntries(Object.entries(inst.properties).map(([k, v]) => [k, swap(v)]));
+			if (!same(moved, inst)) next = { ...data, [INSTANCE_DATA_KEY]: moved };
+		}
+		for (const key of [COMPONENT_DATA_KEY, COMPONENT_SET_DATA_KEY]) {
+			const owner = data[key];
+			if (!isRecord(owner) || !isRecord(owner.properties)) continue;
+			const defs: Record<string, CanvasComponentPropertyDef> = {};
+			for (const [k, def] of Object.entries(owner.properties as Record<string, CanvasComponentPropertyDef>)) {
+				defs[k] =
+					def.type === 'instanceSwap'
+						? { ...def, default: swap(def.default), ...(def.preferred ? { preferred: [...new Set(def.preferred.map(swap))] } : {}) }
+						: def;
+			}
+			if (!same(defs, owner.properties)) next = { ...(next ?? data), [key]: { ...owner, properties: defs } };
+		}
+		return next ? withData(n, next) : n;
+	});
+	const mid = syncCanvasComponents(nodes, repointed, options);
+
+	// 2. Delete the variant (the set's auto layout closes the gap).
+	const gone = new Set(new Graph(mid).subtree(variantId));
+	const after = relayoutSet(
+		mid.filter((n) => !gone.has(n.id)),
+		set.id,
+		options
+	);
+	return { ok: true, nodes: syncCanvasComponents(mid, after as TNode[], options), ids: [replacement] };
+}
+
+/**
+ * Edits a variant's property values (merged into its current ones). New property names are
+ * added to every other variant (with `defaultValue`); a combination another variant has is
+ * refused. Instances of the variant stay on it and pick up the new values.
+ */
+export function setCanvasVariantProperties<TNode extends CanvasNode>(
+	nodes: readonly TNode[],
+	variantId: string,
+	values: Readonly<Record<string, string>>,
+	options: SetCanvasVariantPropertiesOptions = {}
+): CanvasComponentResult<TNode> {
+	const g = new Graph(nodes);
+	const set = variantSetIn(g, variantId);
+	if (!set) return fail(nodes, 'not-found', 'Choose a variant of a component set.');
+	const edit = variantEditIn(g, set.id);
+	if (!('set' in edit)) return fail(nodes, edit.code, edit.reason);
+	const wanted = cleanVariantPairs(values);
+	if (typeof wanted === 'string') return fail(nodes, 'invalid', wanted);
+	const problem = addMissingProperties(edit, wanted, (options.defaultValue ?? 'Default').trim());
+	if (problem) return fail(nodes, 'invalid', problem);
+	edit.values.set(variantId, { ...edit.values.get(variantId)!, ...wanted });
+	const dup = duplicateAmong(edit.values, [variantId]);
+	if (dup) return fail(nodes, 'invalid', `A variant with ${dup} exists already.`);
+	const updates = writeVariantEdit(edit);
+	if (updates.size === 0) return { ok: true, nodes: nodes as TNode[], ids: [variantId] };
+	return done(nodes, nodes.map((n) => updates.get(n.id) ?? n), [variantId], options);
+}
+
+/** Rewrites property values (via `fn`) stored on instances of the set's variants. */
+function updateInstanceValues(g: Graph, setId: string, updates: Map<string, CanvasNode>, fn: (props: Record<string, Value>) => Record<string, Value>) {
+	const ids = new Set(variantsIn(g, setId).map((v) => v.id));
+	for (const n of g.nodes) {
+		const inst = getInstanceData(n);
+		if (!inst?.properties || !ids.has(inst.componentId)) continue;
+		const props = fn({ ...inst.properties });
+		if (same(props, inst.properties)) continue;
+		const cur = updates.get(n.id) ?? n;
+		updates.set(n.id, withData(cur, { ...dataOf(cur), [INSTANCE_DATA_KEY]: { ...inst, properties: props } }));
+	}
+}
+
+/** Renames a variant property across a set: every variant, and the values instances store. */
+export function renameCanvasVariantProperty<TNode extends CanvasNode>(
+	nodes: readonly TNode[],
+	setId: string,
+	name: string,
+	newName: string,
+	options: CanvasComponentSyncOptions = {}
+): CanvasComponentResult<TNode> {
+	const g = new Graph(nodes);
+	const edit = variantEditIn(g, setId);
+	if (!('set' in edit)) return fail(nodes, edit.code, edit.reason);
+	const known = variantOptionsIn(g, setId);
+	if (!known.some((o) => o.name === name)) return fail(nodes, 'unknown-property', `Unknown variant property "${name}".`);
+	const to = newName.trim();
+	const problem = variantNameProblem('property', to);
+	if (problem) return fail(nodes, 'invalid', problem);
+	if (to === name) return { ok: true, nodes: nodes as TNode[], ids: [setId] };
+	if (known.some((o) => o.name === to)) return fail(nodes, 'invalid', `"${to}" exists already.`);
+	if (to in propertyDefsIn(g, edit.variants[0].id)) return fail(nodes, 'invalid', `"${to}" is a component property.`);
+	const rename = <T>(v: Record<string, T>) => Object.fromEntries(Object.entries(v).map(([k, val]) => [k === name ? to : k, val]));
+	for (const [id, v] of edit.values) edit.values.set(id, rename(v));
+	const updates = writeVariantEdit(edit);
+	updateInstanceValues(g, setId, updates, (props) => (name in props ? rename(props) : props));
+	return done(nodes, nodes.map((n) => updates.get(n.id) ?? n), [setId], options);
+}
+
+/** Renames a value of a variant property across a set: every variant using it, and instances. */
+export function renameCanvasVariantValue<TNode extends CanvasNode>(
+	nodes: readonly TNode[],
+	setId: string,
+	property: string,
+	value: string,
+	newValue: string,
+	options: CanvasComponentSyncOptions = {}
+): CanvasComponentResult<TNode> {
+	const g = new Graph(nodes);
+	const edit = variantEditIn(g, setId);
+	if (!('set' in edit)) return fail(nodes, edit.code, edit.reason);
+	const option = variantOptionsIn(g, setId).find((o) => o.name === property);
+	if (!option) return fail(nodes, 'unknown-property', `Unknown variant property "${property}".`);
+	if (!option.values.includes(value)) return fail(nodes, 'invalid', `"${property}" has no value "${value}".`);
+	const to = newValue.trim();
+	const problem = variantNameProblem('value', to);
+	if (problem) return fail(nodes, 'invalid', problem);
+	if (to === value) return { ok: true, nodes: nodes as TNode[], ids: [setId] };
+	const touched: string[] = [];
+	for (const [id, v] of edit.values) {
+		if (v[property] !== value) continue;
+		edit.values.set(id, { ...v, [property]: to });
+		touched.push(id);
+	}
+	const dup = duplicateAmong(edit.values, touched);
+	if (dup) return fail(nodes, 'invalid', `A variant with ${dup} exists already.`);
+	const updates = writeVariantEdit(edit);
+	updateInstanceValues(g, setId, updates, (props) => (props[property] === value ? { ...props, [property]: to } : props));
+	return done(nodes, nodes.map((n) => updates.get(n.id) ?? n), [setId], options);
+}

@@ -938,6 +938,12 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: Layers of two variants are different nodes, so the rebuild matches old copies to the new variant's layers by their name path (`Frame/Label`). `getLayerName` falls back to `data.label`, which for text nodes is the text itself, and that differs between variants ("Default" / "Hover").
 - **Solution / Workaround**: Give layers that must match across variants (or swaps) a stable `data.name`; it wins over `data.label` for matching. Matching inside one main uses the source id first, so plain main edits never depend on names.
 
+### [core/canvas] Removing a Variant Must Re-Point Its Instances Before Deleting It
+
+- **Issue / Symptom**: Deleting a variant and re-pointing its instances to another variant in the same edit kept every override of the instances, including ones the two variants disagreed on (a fill that only made sense on the removed variant stuck).
+- **Root Cause**: A variant switch filters overrides by diffing the old source layer (`data.componentSource`, in the old variant) against the new one. When the old variant is already gone, the source can't be found, so nothing is filtered.
+- **Solution / Workaround**: `removeCanvasVariant` syncs twice: first it re-points the instances (and instance swap values) while the variant still exists, then deletes the variant's subtree. Likewise, when editing variant values (`setCanvasVariantProperties`, renames), write the explicit `data.component.variant` and the formatted name together, since a variant without `variant` falls back to parsing its name.
+
 ### [core/spreadsheet] Large Sheets: Ranges Expanded per Cell, Whole-Sheet Undo Snapshots and Quadratic Id Lookups
 
 - **Issue / Symptom**: On a 50k-row sheet a CSV import took 23 s, loading 100 formulas over `$A$1:$A$50000` took 3.2 s and editing one of their inputs 0.8 s, and even an edit nothing depended on took ~25 ms.

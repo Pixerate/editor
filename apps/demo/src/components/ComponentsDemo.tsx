@@ -20,7 +20,7 @@ import { useAgentToolProvider, useHistory, useRegisterCommands } from "@pixerate
 import { createComponentCommands } from "@pixerate/editor/commands";
 import { createCanvasComponentToolProvider } from "@pixerate/editor/agent";
 import { demoCommandRegistry, demoToolRegistry } from "../agentTools";
-import { Component, Redo2, Undo2, Unlink, RotateCcw, Crosshair, Paintbrush } from "lucide-react";
+import { Component, Redo2, Undo2, Unlink, RotateCcw, Crosshair, Paintbrush, Plus } from "lucide-react";
 
 type DemoNode = Node<Record<string, any>, "frame" | "label">;
 
@@ -115,6 +115,8 @@ const ComponentsCanvas: React.FC = () => {
     onReveal: (node) => flow.fitView({ nodes: [{ id: node.id }], padding: 1, duration: 300 }),
   });
   const selected = nodes.filter((n) => n.selected).map((n) => n.id);
+  // "+ Variant" duplicates the selected Button variant, else the set's default one.
+  const selectedVariant = nodes.find((n) => n.selected && n.parentId === "button" && isCanvasComponent(n))?.id;
   // Palette and agent access: the same actions as commands (with disabled reasons) and tools.
   const commands = useMemo(() => createComponentCommands(components, { scope: null }), [components]);
   useRegisterCommands(demoCommandRegistry, commands);
@@ -153,6 +155,7 @@ const ComponentsCanvas: React.FC = () => {
       detach: components.canDetachInstance(),
       reset: components.canResetOverrides(),
       main: components.canGoToMainComponent(),
+      variant: components.canAddVariant("button"),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [nodes],
@@ -175,6 +178,16 @@ const ComponentsCanvas: React.FC = () => {
         </button>
         <button type="button" className={btn} disabled={can.main !== true} title={tip(can.main, "Go to main component")} onClick={() => components.goToMainComponent()}>
           <Crosshair className="w-3.5 h-3.5" /> Go to main
+        </button>
+        <button
+          type="button"
+          className={btn}
+          disabled={can.variant !== true}
+          title={tip(can.variant, "Add a variant to the Button set (duplicates the selected or default variant)")}
+          onClick={() => report(components.addVariant("button", selectedVariant ? { from: selectedVariant } : {}))}
+          data-testid="add-button-variant"
+        >
+          <Plus className="w-3.5 h-3.5" /> Variant
         </button>
         <button type="button" className={btn} onClick={recolour} title="Edit the Primary mains: every instance follows">
           <Paintbrush className="w-3.5 h-3.5" /> Recolour Primary main
@@ -201,7 +214,7 @@ const ComponentsCanvas: React.FC = () => {
         <div className="space-y-3 rounded-xl border border-slate-800 bg-slate-900 p-3 text-slate-200">
           <div>
             <h4 className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Assets</h4>
-            <CanvasComponentsPanel nodes={nodes} onInsert={(id) => report(components.createInstance(id))} />
+            <CanvasComponentsPanel nodes={nodes} onInsert={(id) => report(components.createInstance(id))} components={components} onError={setError} />
           </div>
           <div>
             <h4 className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Instance</h4>
@@ -213,7 +226,8 @@ const ComponentsCanvas: React.FC = () => {
       <p className="text-xs text-slate-500">
         A Button component set (Style × Size) with a Label text property. Pick variants and labels in the inspector, see the
         overrides there (each resets on its own), recolour the Primary mains to see instances follow, or drag a component from Assets
-        onto the canvas.
+        onto the canvas. "+ Variant" duplicates a variant into the set (instances' pickers show the new value); rename
+        properties and values with ⚙, and edit or remove a variant from its ⋯ menu (instances switch to the closest variant).
       </p>
     </div>
   );
