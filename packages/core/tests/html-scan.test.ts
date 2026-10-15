@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { replaceDelimited, replaceTagSpans, stripTags } from '../src/serializers/html-scan';
-import { extractMentions, htmlToPlainText, stripMarkdownCode } from '../src/serializers';
+import { extractMentions, htmlToPlainText, preprocessMarkdownMentions, splitMarkdownMentionParts, stripMarkdownCode } from '../src/serializers';
 import { growthRatio } from './helpers/growth';
 
 // Reference implementations: the regexes the scanners replaced. They are correct but
@@ -16,10 +16,17 @@ const refStripMarkdownCode = (content: string) =>
     .replace(/<code[\s\S]*?<\/code>/gi, '')
     .replace(/`[^`\n]*`/g, '');
 
+// MARKDOWN_MENTION_SPLIT_REGEX with quoted mention attributes stopped at `>` (the scanner
+// ends a tag at its first `>`; the original let a quoted class value run past it).
+const REF_MENTION_SPLIT =
+  /(```[\s\S]*?```|~~~[\s\S]*?~~~|<pre[\s\S]*?<\/pre>|<code[\s\S]*?<\/code>|`[^`\n]+`|<span\b[^>]*\b(?:data-type=["']mention["']|class=["'][^"'>]*pixerate-mention-node[^"'>]*["']|data-mention=["'][^"'>]*["'])[^>]*>[\s\S]*?<\/span>|<[^>]+>|\]\([^)]+\)|(?:https?|file|vscode|cursor|mailto):\/\/[^\s<)]+)/gi;
+
 const PIECES = [
   '<', '>', '<>', '<span', '<SPAN', ' data-type="mention"', " data-type='mention'", ' data-label="Ann"',
   '</span>', '</SPAN>', 'x', ' ', '@bob', '<pre>', '</pre>', '<code>', '</code>', '```', '~~~', '`a`',
   '](', ')', '\n', '<del data-change-type="deletion">', '</del>', '<span-x', '<spanner>',
+  ' class="pixerate-mention-node"', " class='a pixerate-mention-node b'", ' data-mention="x"', '"', "'",
+  'https://a.b/c', 'HTTP://x', 'mailto://m', '~', '`', '<PRE>', '</Code>', ']', '(',
 ];
 
 function randomStrings(count: number, seed = 7): string[] {
@@ -51,6 +58,10 @@ describe('html-scan: same results as the regexes it replaces', () => {
     for (const input of inputs) expect(stripMarkdownCode(input)).toBe(refStripMarkdownCode(input));
   });
 
+  it('splitMarkdownMentionParts matches splitting by the mention split regex', () => {
+    for (const input of inputs) expect(splitMarkdownMentionParts(input)).toEqual(input.split(REF_MENTION_SPLIT));
+  });
+
   it('replaceDelimited matches /\\]\\([^)]*\\)/g', () => {
     for (const input of inputs) {
       expect(replaceDelimited(input, /\]\(/g, ')', () => ']')).toBe(input.replace(/\]\([^)]*\)/g, ']'));
@@ -63,6 +74,7 @@ describe('html-scan: linear time on malformed input', () => {
     htmlToPlainText(s);
     extractMentions(s);
     stripMarkdownCode(s);
+    preprocessMarkdownMentions(s);
   };
 
   it.each([
@@ -73,8 +85,14 @@ describe('html-scan: linear time on malformed input', () => {
     ['<'],
     ['<pre>'],
     ['```x'],
-    ['](']],
-  )('%j', (unit) => {
+    [']('],
+    ['<span a '],
+    ['<span class="pixerate-mention-node">x'],
+    ['<span data-type="mention">@a</span'],
+    ['<code>'],
+    ['`a'],
+    ['http://'],
+  ])('%j', (unit) => {
     expect(growthRatio(unit, all)).toBeLessThan(10);
   }, 30_000);
 });
