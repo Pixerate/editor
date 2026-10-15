@@ -404,8 +404,11 @@ Each module is also available as a subpath import:
 | `@pixerate/editor/commands` | `CommandRegistry`, `ShortcutMap`, palette ranking, `createCommandToolProvider` and built-in history / arrange / spreadsheet commands (no third-party imports) |
 | `@pixerate/editor/persistence` | Autosave and crash recovery (`createAutosaveController`, `createRecoveryPolicy`, `createRevisionTracker`), storage adapters (memory, localStorage, IndexedDB, OPFS) and document migration (`migrateDocument`, `loadSections`, `LoadReport`) (no third-party imports) |
 | `@pixerate/editor/generation` | Model capability descriptors, `planGenerationRequest`, `capabilitiesToJsonSchema`, `createGenerationToolProvider`, provenance, `createBatchResolver` and job-progress estimates (no third-party imports) |
+| `@pixerate/editor/compare` | `diffSequences` (Myers + patience), `compareDocuments` and `compareHtml`: two versions of a document as tracked changes (also re-exported from the root entry) |
+| `@pixerate/editor/export` | Word export: `exportDocx`, `exportDocxBlob`, `createDocxParts`, `DocxExportController`, plus the zip writer and XML escapers it uses (no third-party imports; also re-exported from the root entry) |
+| `@pixerate/editor/tokens` | Design tokens: collections, modes, aliases, `TokenStore`, `resolveToken`, W3C Design Tokens JSON and CSS custom-property export (no third-party imports) |
 
-The root entry (`@pixerate/editor`) re-exports everything except canvas, agent, commands, persistence, generation and image editor, including TipTap. Import from the narrowest subpath you need: `grammar`, `history`, `spreadsheet`, `commands`, `persistence` and `image-editor` have no third-party imports, so a spreadsheet-only app bundles no TipTap, markdown or dagre code. The package is marked `sideEffects: false`, so unused root exports are also tree-shaken.
+The root entry (`@pixerate/editor`) re-exports everything except canvas, agent, commands, persistence, generation, tokens and image editor, including TipTap. Import from the narrowest subpath you need: `grammar`, `history`, `spreadsheet`, `commands`, `persistence` and `image-editor` have no third-party imports, so a spreadsheet-only app bundles no TipTap, markdown or dagre code. The package is marked `sideEffects: false`, so unused root exports are also tree-shaken.
 
 ## Autosave, crash recovery and document migration
 

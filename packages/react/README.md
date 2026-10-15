@@ -51,7 +51,9 @@ export function Document() {
   const editor = useEditor({ content: "<p>Hello</p>", richTextOptions: { markdown: true } });
   return (
     <>
-      <BubbleMenu editor={editor}>{/* your formatting buttons */}</BubbleMenu>
+      <BubbleMenu editor={editor}>
+        <button onClick={() => editor?.chain().focus().toggleBold().run()}>Bold</button>
+      </BubbleMenu>
       <EditorContent editor={editor} />
     </>
   );
