@@ -350,6 +350,137 @@ export interface ComponentCommandTarget {
 	canGoToMainComponent(id?: string): true | string;
 	list(): unknown;
 	inspect(id?: string): unknown;
+	// Variant editing (optional so older targets keep type-checking; the controller has them all).
+	addVariant?(
+		setId?: string,
+		options?: { from?: string; variant?: Record<string, string>; position?: { x: number; y: number }; defaultValue?: string }
+	): ComponentActionResult;
+	canAddVariant?(setId?: string, options?: { from?: string; variant?: Record<string, string> }): true | string;
+	removeVariant?(variantId?: string): ComponentActionResult;
+	canRemoveVariant?(variantId?: string): true | string;
+	setVariantProperties?(values: Record<string, string>, variantId?: string, options?: { defaultValue?: string }): ComponentActionResult;
+	canSetVariantProperties?(values?: Record<string, string>, variantId?: string): true | string;
+	renameVariantProperty?(name: string, newName: string, setId?: string): ComponentActionResult;
+	canRenameVariantProperty?(name?: string, newName?: string, setId?: string): true | string;
+	renameVariantValue?(property: string, value: string, newValue: string, setId?: string): ComponentActionResult;
+	canRenameVariantValue?(property?: string, value?: string, newValue?: string, setId?: string): true | string;
+}
+
+/** The variant-editing part of a `ComponentCommandTarget` (present on the components controller). */
+type VariantCommandTarget = Required<
+	Pick<
+		ComponentCommandTarget,
+		| 'addVariant'
+		| 'canAddVariant'
+		| 'removeVariant'
+		| 'canRemoveVariant'
+		| 'setVariantProperties'
+		| 'canSetVariantProperties'
+		| 'renameVariantProperty'
+		| 'canRenameVariantProperty'
+		| 'renameVariantValue'
+		| 'canRenameVariantValue'
+	>
+>;
+
+/** Whether a command target can edit variants. */
+export function hasVariantCommands(controller: ComponentCommandTarget): controller is ComponentCommandTarget & VariantCommandTarget {
+	return typeof controller.addVariant === 'function' && typeof controller.removeVariant === 'function';
+}
+
+const SET_ID_PARAM = { type: 'string', description: 'Component set (or one of its variants) to act on (default: the selection’s set).' } as const;
+const VARIANT_ID_PARAM = { type: 'string', description: 'Variant to act on (default: the first selected variant).' } as const;
+const VARIANT_VALUES_PARAM = {
+	type: 'object',
+	description: 'Variant property → value, e.g. { "Size": "Medium" }. New property names are added to every variant.',
+	additionalProperties: { type: 'string' }
+} as const;
+
+function variantCommands(controller: ComponentCommandTarget & VariantCommandTarget, prefix: string, base: Partial<CommandSpec>): CommandSpec[] {
+	return [
+		{
+			...base,
+			id: `${prefix}addVariant`,
+			label: 'Add Variant',
+			keywords: ['variant', 'new variant', 'duplicate variant', 'component set'],
+			description: 'Adds a variant to a component set by duplicating one (default: the selected or default variant) with new property values.',
+			params: {
+				type: 'object',
+				properties: {
+					setId: SET_ID_PARAM,
+					from: { type: 'string', description: 'Variant to duplicate (default: the selected variant, else the default one).' },
+					variant: VARIANT_VALUES_PARAM,
+					x: { type: 'number', description: 'X in the set’s space (default: next to the source).' },
+					y: { type: 'number', description: 'Y in the set’s space.' }
+				}
+			},
+			enabled: (_ctx: unknown, params?: { setId?: string; from?: string; variant?: Record<string, string> }) =>
+				controller.canAddVariant(params?.setId, {
+					...(params?.from !== undefined ? { from: params.from } : {}),
+					...(params?.variant ? { variant: params.variant } : {})
+				}),
+			run: (_ctx: unknown, params?: { setId?: string; from?: string; variant?: Record<string, string>; x?: number; y?: number }) =>
+				outcome(
+					controller.addVariant(params?.setId, {
+						...(params?.from !== undefined ? { from: params.from } : {}),
+						...(params?.variant ? { variant: params.variant } : {}),
+						...(params?.x !== undefined || params?.y !== undefined ? { position: { x: params?.x ?? 0, y: params?.y ?? 0 } } : {})
+					})
+				)
+		} as CommandSpec,
+		{
+			...base,
+			id: `${prefix}removeVariant`,
+			label: 'Remove Variant',
+			keywords: ['delete variant', 'variant'],
+			description: 'Removes a variant; its instances switch to the closest remaining variant, keeping overrides.',
+			params: { type: 'object', properties: { id: VARIANT_ID_PARAM } },
+			enabled: (_ctx: unknown, params?: { id?: string }) => controller.canRemoveVariant(params?.id),
+			run: (_ctx: unknown, params?: { id?: string }) => outcome(controller.removeVariant(params?.id))
+		} as CommandSpec,
+		{
+			...base,
+			id: `${prefix}setVariantProperties`,
+			label: 'Edit Variant Properties…',
+			keywords: ['rename variant', 'variant values', 'variant'],
+			description: 'Sets a variant’s property values (refusing a combination another variant has).',
+			params: { type: 'object', properties: { values: VARIANT_VALUES_PARAM, id: VARIANT_ID_PARAM }, required: ['values'] },
+			enabled: (_ctx: unknown, params?: { values?: Record<string, string>; id?: string }) => controller.canSetVariantProperties(params?.values, params?.id),
+			run: (_ctx: unknown, params: { values: Record<string, string>; id?: string }) => outcome(controller.setVariantProperties(params.values, params?.id))
+		} as CommandSpec,
+		{
+			...base,
+			id: `${prefix}renameVariantProperty`,
+			label: 'Rename Variant Property…',
+			keywords: ['rename property', 'variant property'],
+			description: 'Renames a variant property across a component set.',
+			params: {
+				type: 'object',
+				properties: { name: { type: 'string' }, newName: { type: 'string' }, setId: SET_ID_PARAM },
+				required: ['name', 'newName']
+			},
+			enabled: (_ctx: unknown, params?: { name?: string; newName?: string; setId?: string }) =>
+				controller.canRenameVariantProperty(params?.name, params?.newName, params?.setId),
+			run: (_ctx: unknown, params: { name: string; newName: string; setId?: string }) =>
+				outcome(controller.renameVariantProperty(params.name, params.newName, params?.setId))
+		} as CommandSpec,
+		{
+			...base,
+			id: `${prefix}renameVariantValue`,
+			label: 'Rename Variant Value…',
+			keywords: ['rename value', 'variant value'],
+			description: 'Renames a value of a variant property across a component set.',
+			params: {
+				type: 'object',
+				properties: { property: { type: 'string' }, value: { type: 'string' }, newValue: { type: 'string' }, setId: SET_ID_PARAM },
+				required: ['property', 'value', 'newValue']
+			},
+			enabled: (_ctx: unknown, params?: { property?: string; value?: string; newValue?: string; setId?: string }) =>
+				controller.canRenameVariantValue(params?.property, params?.value, params?.newValue, params?.setId),
+			run: (_ctx: unknown, params: { property: string; value: string; newValue: string; setId?: string }) =>
+				outcome(controller.renameVariantValue(params.property, params.value, params.newValue, params?.setId))
+		} as CommandSpec
+	];
 }
 
 export interface ComponentCommandOptions {
@@ -373,8 +504,11 @@ const ID_PARAM = { type: 'string', description: 'Instance (or layer inside one) 
  * (`{ componentId, parentId?, x?, y?, properties? }`), `canvas.detachInstance`,
  * `canvas.resetOverrides` (`{ id?, group? }`), `canvas.pushOverrides`, `canvas.goToMainComponent`,
  * `canvas.swapInstance` (`{ componentId, ids? }`), `canvas.setInstanceProperties`
- * (`{ properties, ids? }`: variant and component property values), `canvas.restoreMainComponent`
- * and the read-only `canvas.listComponents` / `canvas.inspectInstance`. Each action is one
+ * (`{ properties, ids? }`: variant and component property values), `canvas.restoreMainComponent`,
+ * the variant editors `canvas.addVariant` (`{ setId?, from?, variant?, x?, y? }`),
+ * `canvas.removeVariant` (`{ id? }`), `canvas.setVariantProperties` (`{ values, id? }`),
+ * `canvas.renameVariantProperty` (`{ name, newName, setId? }`) and `canvas.renameVariantValue`
+ * (`{ property, value, newValue, setId? }`) when the target has them, and the read-only `canvas.listComponents` / `canvas.inspectInstance`. Each action is one
  * undoable step when the controller has a history; enablement explains why it cannot run.
  */
 export function createComponentCommands(controller: ComponentCommandTarget, options: ComponentCommandOptions = {}): CommandSpec[] {
@@ -548,7 +682,8 @@ export function createComponentCommands(controller: ComponentCommandTarget, opti
 			readOnly: true,
 			enabled: (_ctx: unknown, params?: { id?: string }) => (controller.inspect(params?.id) ? true : 'Select an instance.'),
 			run: (_ctx: unknown, params: { id?: string }) => controller.inspect(params?.id) ?? null
-		}
+		},
+		...(hasVariantCommands(controller) ? variantCommands(controller, prefix, base) : [])
 	];
 }
 

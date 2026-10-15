@@ -271,7 +271,8 @@ describe('incremental recalculation work counts', () => {
     expect(ctrl.depGraph.getIndexStats().volatile).toBe(1);
   });
 
-  it('a CSV import builds the graph and evaluates every formula once', () => {
+  // ~0.5 s alone; the generous timeout covers parallel test runs (it counts work, not time).
+  it('a CSV import builds the graph and evaluates every formula once', { timeout: 30_000 }, () => {
     const ctrl = new SpreadsheetController();
     const lines: string[] = [];
     for (let r = 1; r <= 3_000; r++) lines.push(`${r},=A${r}*2,=SUM(B$1:B${r})`);

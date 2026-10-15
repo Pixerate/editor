@@ -268,6 +268,43 @@ export function remapFormulaReferences(
   });
 }
 
+/**
+ * Transposes a formula that is written relative to `anchor` (a rule formula:
+ * conditional formatting or data validation) for a block transposed in
+ * place around its top-left cell (`block.startRow`, `block.startCol`). The
+ * result is written for the transposed anchor. Relative offsets swap axes
+ * (a reference one column to the right becomes one row below) and `$`
+ * parts inside the block follow the cell they point at, so the `$` flags
+ * swap axes too (`$B2` → `C$2`). References with a `$` part outside the
+ * block (or on another sheet), whole columns and other sheets' absolute
+ * references keep their text.
+ */
+export function transposeFormulaReferences(
+  formula: string,
+  anchor: CellPosition,
+  block: { startRow: number; startCol: number; endRow: number; endCol: number },
+): string {
+  const t = { row: block.startRow + (anchor.col - block.startCol), col: block.startCol + (anchor.row - block.startRow) };
+  return mapFormulaReferences(formula, (text, info) => {
+    const parts = text.split(':').map(parsePart);
+    if (parts.some((p) => p === null || p.row === null)) return text;
+    const moved: RefPart[] = [];
+    for (const part of parts as RefPart[]) {
+      const row = part.row as number;
+      const colAbs = !!part.colAbs;
+      const rowAbs = !!part.rowAbs;
+      if ((colAbs || rowAbs) && info.sheet !== undefined) return text;
+      if (colAbs && (part.col < block.startCol || part.col > block.endCol)) return text;
+      if (rowAbs && (row < block.startRow || row > block.endRow)) return text;
+      const newRow = colAbs ? block.startRow + (part.col - block.startCol) : t.row + (part.col - anchor.col);
+      const newCol = rowAbs ? block.startCol + (row - block.startRow) : t.col + (row - anchor.row);
+      if (newRow < 0 || newCol < 0) return '#REF!';
+      moved.push({ colAbs: part.rowAbs, col: newCol, rowAbs: part.colAbs, row: newRow });
+    }
+    return moved.map(formatPart).join(':');
+  });
+}
+
 // --- Sheets and defined names ---
 
 // A1-style reference within Excel's grid (columns up to XFD).

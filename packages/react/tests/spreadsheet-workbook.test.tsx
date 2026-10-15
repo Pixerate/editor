@@ -201,3 +201,37 @@ describe('NameManager', () => {
     expect(option?.textContent).toContain('Revenue');
   });
 });
+
+describe('useSpreadsheetEditor: defined names in the saved document', () => {
+  function Persisting({ document, onSave }: { document?: any; onSave: (doc: any) => void }) {
+    sheet = useSpreadsheetEditor({ document, onDocumentChange: (doc) => onSave(JSON.parse(JSON.stringify(doc))) });
+    return null;
+  }
+
+  it('saves names through onDocumentChange and restores them from `document`', async () => {
+    let saved: any = null;
+    await act(async () => root.render(<Persisting onSave={(doc) => (saved = doc)} />));
+    await act(async () => {
+      sheet.defineName('Rate', '=0.5');
+      sheet.defineName('Twice', '=LAMBDA(x, x*2)');
+      sheet.defineName('Local', '=4', { sheet: sheet.activeSheetId });
+      sheet.setCellValue(sheet.document.rows[0].id, sheet.document.columns[0].id, '=Twice(Local)*Rate');
+    });
+    expect(saved.names.map((n: any) => n.name)).toEqual(['Rate', 'Twice', 'Local']);
+    expect(sheet.document.names?.map((n) => n.name)).toEqual(['Rate', 'Twice', 'Local']);
+    await act(async () => {
+      sheet.deleteName('Rate');
+    });
+    expect(saved.names.map((n: any) => n.name)).toEqual(['Twice', 'Local']);
+    expect(sheet.document.names?.map((n) => n.name)).toEqual(['Twice', 'Local']);
+    await act(async () => sheet.undo());
+    expect(saved.names.map((n: any) => n.name)).toEqual(['Rate', 'Twice', 'Local']);
+
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await act(async () => root.render(<Persisting document={saved} onSave={() => {}} />));
+    expect(sheet.names.map((n) => n.name)).toEqual(['Rate', 'Twice', 'Local']);
+    expect(sheet.names.find((n) => n.name === 'Local')?.sheetId).toBe(sheet.activeSheetId);
+    expect(valueAt(0, 0)).toBe(4);
+  });
+});

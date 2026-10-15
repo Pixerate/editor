@@ -96,7 +96,15 @@ import {
   type DataValidationSheet,
   type NewDataValidationRule
 } from './validation';
-import { adjustRangesForStructuralChange, shiftRuleFormula, subtractRangeFromRanges } from './rule-ranges';
+import {
+  adjustRangesForStructuralChange,
+  mapConditionalFormatFormulas,
+  mapDataValidationFormulas,
+  shiftRuleFormula,
+  sortRules,
+  subtractRangeFromRanges,
+  transposeRules
+} from './rule-ranges';
 import {
   buildSpreadsheetView,
   computeRowGroups,
@@ -159,6 +167,11 @@ export interface SpreadsheetControllerOptions {
   document?: Partial<SpreadsheetDocument>;
   dataSources?: SpreadsheetDataSource[];
   primaryDataSourceId?: string;
+  /**
+   * Called after any change with the active sheet's document. Its `names`
+   * holds the defined names that sheet uses (workbook names and its own), so
+   * saving this document and passing it back as `document` restores them.
+   */
   onDocumentChange?: (doc: SpreadsheetDocument) => void;
   onSelectionChange?: (activeCell: CellCoordinate | null, range: CellRange | null) => void;
   onCellCommit?: (rowId: string, colId: string, raw: string, value: any) => void;
@@ -257,6 +270,45 @@ interface WorkbookSnapshot {
 }
 
 const sameName = (a: string, b: string) => a.toUpperCase() === b.toUpperCase();
+
+/** Identity of a defined name: its scope and upper-cased name. */
+const nameKey = (n: Pick<SpreadsheetDefinedName, 'name' | 'sheetId'>) => `${n.sheetId ?? ''}!${n.name.toUpperCase()}`;
+
+/** A saved defined name, cleaned up (`refersTo` starts with `=`), or null when unusable. */
+function normalizeSavedName(n: SpreadsheetDefinedName, sheetId: string | undefined): SpreadsheetDefinedName | null {
+  if (!n || typeof n.name !== 'string' || typeof n.refersTo !== 'string' || n.name === '') return null;
+  const { sheetId: _ignored, ...rest } = n;
+  return {
+    ...rest,
+    refersTo: n.refersTo.startsWith('=') ? n.refersTo : `=${n.refersTo}`,
+    ...(sheetId !== undefined ? { sheetId } : {})
+  };
+}
+
+/**
+ * The names saved in a sheet document: any `sheetId` means that sheet
+ * (`sheetId`); names without one are workbook-scoped. Duplicates keep the
+ * first.
+ */
+function namesFromDocument(doc: Partial<SpreadsheetDocument> | undefined, sheetId: string): SpreadsheetDefinedName[] {
+  if (!Array.isArray(doc?.names)) return [];
+  const out: SpreadsheetDefinedName[] = [];
+  const seen = new Set<string>();
+  for (const saved of doc.names) {
+    const n = normalizeSavedName(saved, saved?.sheetId !== undefined ? sheetId : undefined);
+    if (!n || seen.has(nameKey(n))) continue;
+    seen.add(nameKey(n));
+    out.push(n);
+  }
+  return out;
+}
+
+/** A sheet document without its saved `names` (shallow). */
+function withoutNames(doc: SpreadsheetDocument): SpreadsheetDocument {
+  if (!('names' in doc)) return doc;
+  const { names: _names, ...rest } = doc;
+  return rest;
+}
 
 /** A defined name as listed by `getNames()`. */
 export interface SpreadsheetNameInfo extends SpreadsheetDefinedName {
@@ -432,11 +484,14 @@ export class SpreadsheetController {
       ...(options.document?.table ? { table: options.document.table } : {})
     };
     if (options.workbook && options.workbook.sheets.length > 0) {
-      this.setWorkbookState(options.workbook, false);
+      // Shallow copies: writing ids, names and `names` must not change the caller's objects.
+      this.setWorkbookState({ ...options.workbook, sheets: options.workbook.sheets.map((doc) => ({ ...doc })) }, false);
     } else {
       this.runtimes = [createRuntime(first)];
       this.active = this.ctx = this.runtimes[0];
+      this.names = namesFromDocument(options.document, first.id);
     }
+    this.syncDocumentNames();
     this.boundSheetId = this.runtimes[0].doc.id;
 
     this.primaryDataSourceId = options.primaryDataSourceId;
@@ -569,6 +624,7 @@ export class SpreadsheetController {
       for (const n of this.names) if (n.sheetId === previousId) n.sheetId = loaded.id;
       if (this.boundSheetId === previousId) this.boundSheetId = loaded.id;
     }
+    if (Array.isArray(document.names)) this.loadDocumentNames(document, loaded.id);
     this.activeCell = null;
     this.selectedRange = null;
     this.editingCell = null;
@@ -583,9 +639,42 @@ export class SpreadsheetController {
 
   // --- Workbook: loading and saving ---
 
-  /** A deep copy of the workbook: every sheet, the active sheet and the defined names. */
+  /**
+   * Installs the names saved in a document loaded into sheet `sheetId`: they
+   * replace that sheet's own names and, when it is the only sheet, the
+   * workbook names; with other sheets, its workbook names are added (or
+   * replace the same name) and the others are kept.
+   */
+  private loadDocumentNames(document: Partial<SpreadsheetDocument>, sheetId: string): void {
+    const saved = namesFromDocument(document, sheetId);
+    const onlySheet = this.runtimes.length === 1;
+    const keys = new Set(saved.map(nameKey));
+    this.names = this.names.filter(
+      (n) => n.sheetId !== sheetId && !(n.sheetId === undefined && (onlySheet || keys.has(nameKey(n))))
+    );
+    this.names.push(...saved);
+  }
+
+  /**
+   * Writes every sheet's current names into its document (`doc.names`), so
+   * documents passed to `onDocumentChange` or read from `document` carry them.
+   */
+  private syncDocumentNames(): void {
+    for (const rt of this.runtimes) {
+      const names = this.names.filter((n) => n.sheetId === undefined || n.sheetId === rt.doc.id).map((n) => ({ ...n }));
+      if (names.length > 0) rt.doc.names = names;
+      else delete rt.doc.names;
+    }
+  }
+
+  /**
+   * A deep copy of the workbook: every sheet, the active sheet and the
+   * defined names. The names are in `names` only (not repeated in each
+   * sheet's `names`).
+   */
   public getWorkbook(): SpreadsheetWorkbook {
-    return JSON.parse(JSON.stringify(this.workbookSnapshot()));
+    const snapshot = this.workbookSnapshot();
+    return JSON.parse(JSON.stringify({ ...snapshot, sheets: snapshot.sheets.map(withoutNames) }));
   }
 
   /** Replaces the whole workbook (sheets, names, active sheet). Clears undo history. */
@@ -602,6 +691,12 @@ export class SpreadsheetController {
     this.recalculateAll();
     this.notifyChange();
     this.onSelectionChange?.(this.activeCell, this.selectedRange);
+  }
+
+  /** The workbook as undo data; sheets leave out their copies of the names. */
+  private serializeWorkbookSnapshot(): string {
+    const snapshot = this.workbookSnapshot();
+    return JSON.stringify({ ...snapshot, sheets: snapshot.sheets.map(withoutNames) });
   }
 
   private workbookSnapshot(): WorkbookSnapshot {
@@ -634,9 +729,21 @@ export class SpreadsheetController {
     this.runtimes = runtimes;
     this.active = this.ctx =
       runtimes.find((rt) => rt.doc.id === workbook.activeSheetId) ?? runtimes[0];
-    this.names = (workbook.names ?? [])
-      .filter((n) => n.sheetId === undefined || ids.has(n.sheetId))
-      .map((n) => ({ ...n, refersTo: n.refersTo.startsWith('=') ? n.refersTo : `=${n.refersTo}` }));
+    // `workbook.names` first; then names saved only in sheet documents (a
+    // workbook assembled from documents kept from `onDocumentChange`).
+    const seen = new Set<string>();
+    this.names = [];
+    const add = (n: SpreadsheetDefinedName | null) => {
+      if (!n || seen.has(nameKey(n))) return;
+      seen.add(nameKey(n));
+      this.names.push(n);
+    };
+    for (const n of workbook.names ?? []) {
+      if (n?.sheetId === undefined || ids.has(n.sheetId)) add(normalizeSavedName(n, n?.sheetId));
+    }
+    for (const rt of runtimes) {
+      for (const n of namesFromDocument(rt.doc, rt.doc.id)) add(n);
+    }
     if (resetSelection) {
       this.activeCell = null;
       this.selectedRange = null;
@@ -2202,6 +2309,11 @@ export class SpreadsheetController {
         if (target === undefined || col < startCol || col > endCol) return null;
         return { row: target, col };
       });
+      // Whole rows carry every column, including rule ranges past the last one.
+      this.moveRulesForSort(
+        { startRow, startCol, endRow, endCol: wholeRows ? Number.MAX_SAFE_INTEGER : endCol },
+        (row) => newIndexOf.get(row) ?? row
+      );
 
       if (wholeRows) {
         const moved = sorted.map((r) => this.document.rows[r]);
@@ -2692,6 +2804,7 @@ export class SpreadsheetController {
         if (!rangeContains(s, row, col)) return null;
         return { row: s.startRow + (col - s.startCol), col: s.startCol + (row - s.startRow) };
       });
+      this.moveRulesForTranspose(s, t);
 
       const rowId = (r: number) => this.document.rows[r].id;
       const colId = (c: number) => this.document.columns[c].id;
@@ -2812,6 +2925,12 @@ export class SpreadsheetController {
       id,
       name
     };
+    // Names saved in the document: its sheet-scoped names belong to the new
+    // sheet; its workbook names are added unless the workbook has them.
+    const existingNames = new Set(this.names.map(nameKey));
+    for (const n of namesFromDocument(options.document, id)) {
+      if (!existingNames.has(nameKey(n))) this.names.push(n);
+    }
     const rt = createRuntime(doc);
     const index = Math.max(0, Math.min(options.index ?? this.runtimes.length, this.runtimes.length));
     this.runtimes.splice(index, 0, rt);
@@ -2905,6 +3024,7 @@ export class SpreadsheetController {
     doc.id = this.generateSheetId();
     doc.name = name;
     doc.createdAt = doc.updatedAt = Date.now();
+    delete doc.names; // rewritten from `this.names` on notify
     const copies = this.names
       .filter((n) => n.sheetId === source.doc.id)
       .map((n) => ({ ...n, sheetId: doc.id, refersTo: renameSheetInFormula(n.refersTo, source.doc.name, name) }));
@@ -3131,7 +3251,7 @@ export class SpreadsheetController {
 
   private recordWorkbookSnapshot(): void {
     if (this.isApplyingHistory || this.batching) return;
-    this.pushUndo({ kind: 'workbook', data: JSON.stringify(this.workbookSnapshot()) });
+    this.pushUndo({ kind: 'workbook', data: this.serializeWorkbookSnapshot() });
   }
 
   private pushUndo(entry: HistoryEntry): void {
@@ -3218,7 +3338,7 @@ export class SpreadsheetController {
           this.activateRuntime(rt);
         }
       } else {
-        to.push({ kind: 'workbook', data: JSON.stringify(this.workbookSnapshot()) });
+        to.push({ kind: 'workbook', data: this.serializeWorkbookSnapshot() });
         const previousActive = this.active.doc.id;
         const selection = { activeCell: this.activeCell, selectedRange: this.selectedRange };
         const saved = new Map(this.runtimes.map((rt) => [rt.doc.id, rt]));
@@ -3251,6 +3371,7 @@ export class SpreadsheetController {
   private notifyChange(): void {
     if (!this.cfIncremental) this.cfDirty = 'all';
     this.invalidCircles = null;
+    this.syncDocumentNames();
     this.onDocumentChange?.(this.active.doc);
     if (this.onWorkbookChange) {
       const snapshot = this.workbookSnapshot();
@@ -3350,6 +3471,37 @@ export class SpreadsheetController {
           return next;
         })
         .filter((rule) => rule.ranges.length > 0);
+    }
+  }
+
+  /**
+   * Moves conditional formats and validations with sorted rows: per-row
+   * parts follow their rows, parts spanning every sorted row stay (Excel).
+   */
+  private moveRulesForSort(block: CellRange, newRowOf: (row: number) => number): void {
+    const table = this.document.table;
+    if (!table) return;
+    if (table.conditionalFormats?.length) {
+      table.conditionalFormats = sortRules(table.conditionalFormats, block, newRowOf, mapConditionalFormatFormulas);
+    }
+    if (table.dataValidations?.length) {
+      table.dataValidations = sortRules(table.dataValidations, block, newRowOf, mapDataValidationFormulas);
+    }
+  }
+
+  /** Moves conditional formats and validations of a transposed block with its cells. */
+  private moveRulesForTranspose(block: CellRange, target: CellRange): void {
+    const table = this.document.table;
+    if (!table) return;
+    if (table.conditionalFormats?.length) {
+      table.conditionalFormats = transposeRules(table.conditionalFormats, block, target, mapConditionalFormatFormulas, () =>
+        this.generateRuleId('cf')
+      );
+    }
+    if (table.dataValidations?.length) {
+      table.dataValidations = transposeRules(table.dataValidations, block, target, mapDataValidationFormulas, () =>
+        this.generateRuleId('dv')
+      );
     }
   }
 

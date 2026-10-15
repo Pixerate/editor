@@ -198,3 +198,77 @@ describe("createCanvasComponents + panel + inspector (Svelte)", () => {
     expect(inserted).toEqual(["secondary"]);
   });
 });
+
+describe("components panel: variant editing (Svelte)", () => {
+  it("adds, renames, edits and removes variants (undoable)", () => {
+    const history = new HistoryManager();
+    const state = $state({ nodes: buttonSet() });
+    const errors: string[] = [];
+    const components = createCanvasComponents({ getNodes: () => state.nodes, setNodes: (n) => (state.nodes = n), history });
+    cleanups.push(components.destroy);
+    components.createInstance("primary", { id: "inst", position: { x: 300, y: 0 } });
+    const panel = render(CanvasComponentsPanel, {
+      get nodes() {
+        return state.nodes;
+      },
+      oninsert: () => {},
+      components,
+      onerror: (e: string) => errors.push(e),
+    });
+    const inspector = render(CanvasInstanceInspector, {
+      get nodes() {
+        return state.nodes;
+      },
+      nodeId: "inst",
+      components,
+    });
+    const variants = () => qa(panel, "[data-component-set] [data-kind='variant']").map((b) => b.firstElementChild?.textContent?.replace("◇", "").trim());
+    const node = (id: string) => state.nodes.find((n) => n.id === id) as any;
+    expect(variants()).toEqual(["Style=Primary", "Style=Secondary"]);
+
+    click(q(panel, "[data-action='add-variant']"));
+    expect(variants()).toEqual(["Style=Primary", "Style=Secondary", "Style=Variant3"]);
+    expect([...q<HTMLSelectElement>(inspector, "[data-variant-property='Style'] select").options].map((o) => o.value)).toEqual(["Primary", "Secondary", "Variant3"]);
+
+    click(q(panel, "[data-action='variant-properties']"));
+    commit(q<HTMLInputElement>(panel, "input[aria-label='Rename property Style']"), "Tone");
+    expect(variants()).toEqual(["Tone=Primary", "Tone=Secondary", "Tone=Variant3"]);
+    commit(q<HTMLInputElement>(panel, "input[aria-label='Rename Tone value Primary']"), "Brand");
+    expect(variants()[0]).toBe("Tone=Brand");
+    expect(q(inspector, "[data-variant-property='Tone']")).not.toBeNull();
+
+    click(q(panel, "[data-variant-row='secondary'] [data-action='variant-menu']"));
+    click(q(panel, "[data-variant-menu='secondary'] [data-action='edit-variant']"));
+    const submit = (value: string) => {
+      q<HTMLInputElement>(panel, "[data-variant-editor='secondary'] input[data-variant-value='Tone']").value = value;
+      q(panel, "[data-variant-editor='secondary']").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      flushSync();
+    };
+    submit("Brand");
+    expect(errors).toEqual(["A variant with Tone=Brand exists already."]);
+    expect(q(panel, "[data-variant-editor='secondary']")).not.toBeNull();
+    submit("Muted");
+    expect(node("secondary").data.label).toBe("Tone=Muted");
+    expect(q(panel, "[data-variant-editor='secondary']")).toBeNull();
+
+    q(panel, "[data-component-id='primary']").dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+    flushSync();
+    expect(q<HTMLButtonElement>(panel, "[data-variant-menu='primary'] [data-action='remove-variant']").disabled).toBe(false);
+    click(q(panel, "[data-variant-menu='primary'] [data-action='remove-variant']"));
+    expect(node("primary")).toBeUndefined();
+    expect(getInstanceData(node("inst"))?.componentId).toBe("secondary");
+    expect(variants()).toEqual(["Tone=Muted", "Tone=Variant3"]);
+
+    history.undo();
+    flushSync();
+    expect(getInstanceData(node("inst"))?.componentId).toBe("primary");
+    expect(variants()).toEqual(["Tone=Brand", "Tone=Muted", "Tone=Variant3"]);
+    expect(errors).toHaveLength(1);
+  });
+
+  it("hides the editing controls without components", () => {
+    const root = render(CanvasComponentsPanel, { nodes: buttonSet(), oninsert: () => {} });
+    expect(q(root, "[data-action='add-variant']")).toBeNull();
+    expect(q(root, "[data-action='variant-menu']")).toBeNull();
+  });
+});

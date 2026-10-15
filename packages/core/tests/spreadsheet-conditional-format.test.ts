@@ -467,9 +467,9 @@ describe('conditional formatting: performance', () => {
         ];
         return () => evaluateConditionalFormats(s, rules);
       };
-      // 4× the cells: linear is ~4×, quadratic would be ~16×.
-      const ratio = measureGrowth(workload(10_000), workload(40_000), { limit: 10 });
-      expect(ratio).toBeLessThan(10);
+      // 4× the cells: linear is ~4× (colour scales sort, so a little more), quadratic ~16×.
+      const ratio = measureGrowth(workload(10_000), workload(40_000), { limit: 12 });
+      expect(ratio).toBeLessThan(12);
     },
     60000
   );

@@ -1,4 +1,4 @@
-import type { ComponentCommandTarget } from '../commands/builtins.js';
+import { hasVariantCommands, type ComponentCommandTarget } from '../commands/builtins.js';
 import type { AgentTool, AgentToolProvider } from './registry.js';
 import type { ToolProviderOptions } from './providers.js';
 
@@ -19,8 +19,10 @@ const check = (result: Outcome) => {
  * (`createCanvasComponentsController`): `list_components`, `inspect_instance`,
  * `create_component`, `combine_as_variants`, `create_instance`, `set_instance_properties`
  * (variants and component properties), `swap_instance`, `reset_overrides`, `push_overrides`,
- * `detach_instance`, `go_to_main_component` and `restore_main_component`. Refused actions come
- * back as tool errors carrying the reason.
+ * `detach_instance`, `go_to_main_component`, `restore_main_component` and (when the controller
+ * has them) the variant editors `add_variant`, `remove_variant`, `set_variant_properties`,
+ * `rename_variant_property` and `rename_variant_value`. Refused actions come back as tool errors
+ * carrying the reason.
  */
 export function createCanvasComponentToolProvider(
 	controller: ComponentCommandTarget,
@@ -113,5 +115,52 @@ export function createCanvasComponentToolProvider(
 			check(controller.restoreMainComponent(id))
 		)
 	];
+	if (hasVariantCommands(controller)) {
+		const SET = { type: 'string', description: 'Component set, or one of its variants (default: the selection’s set).' };
+		const VARIANT = { type: 'string', description: 'Variant id (default: the first selected variant).' };
+		const VALUES = { type: 'object', additionalProperties: { type: 'string' }, description: 'Variant property → value, e.g. { "Size": "Medium" }.' };
+		tools.push(
+			tool(
+				'add_variant',
+				'Adds a variant to a component set by duplicating one (default: the set’s default variant) with new property values. Unnamed properties keep the source’s values; new property names are added to every variant ("Default"). A combination another variant has is refused. Without values the next "VariantN" is used.',
+				{ setId: SET, from: { type: 'string', description: 'Variant to duplicate.' }, variant: VALUES, x: { type: 'number' }, y: { type: 'number' } },
+				({ setId, from, variant, x, y }) =>
+					check(
+						controller.addVariant(setId, {
+							...(from !== undefined ? { from } : {}),
+							...(variant ? { variant } : {}),
+							...(x !== undefined || y !== undefined ? { position: { x: x ?? 0, y: y ?? 0 } } : {})
+						})
+					)
+			),
+			tool(
+				'remove_variant',
+				'Removes a variant from its component set (not the last one). Its instances switch to the closest remaining variant, keeping overrides.',
+				{ id: VARIANT },
+				({ id }) => check(controller.removeVariant(id))
+			),
+			tool(
+				'set_variant_properties',
+				'Sets a variant’s property values (merged with its current ones); new property names are added to every variant. A combination another variant has is refused.',
+				{ values: VALUES, id: VARIANT },
+				({ values, id }) => check(controller.setVariantProperties(values, id)),
+				{ required: ['values'] }
+			),
+			tool(
+				'rename_variant_property',
+				'Renames a variant property across a component set (instances keep their variant).',
+				{ name: { type: 'string' }, newName: { type: 'string' }, setId: SET },
+				({ name, newName, setId }) => check(controller.renameVariantProperty(name, newName, setId)),
+				{ required: ['name', 'newName'] }
+			),
+			tool(
+				'rename_variant_value',
+				'Renames a value of a variant property across a component set (instances keep their variant).',
+				{ property: { type: 'string' }, value: { type: 'string' }, newValue: { type: 'string' }, setId: SET },
+				({ property, value, newValue, setId }) => check(controller.renameVariantValue(property, value, newValue, setId)),
+				{ required: ['property', 'value', 'newValue'] }
+			)
+		);
+	}
 	return { id: options.id, namespace: options.namespace, tools };
 }

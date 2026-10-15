@@ -1,6 +1,7 @@
 // Portions ported from figcraft/crates/engine/src/cmd/component.rs (MIT OR Apache-2.0, © ArtCraft Team and contributors). See THIRD_PARTY_NOTICES.md.
 import type { ArrangeHistoryTarget } from './arrangeController.js';
 import {
+	addCanvasVariant,
 	bindCanvasComponentProperty,
 	combineCanvasComponentsAsVariants,
 	createCanvasComponent,
@@ -10,20 +11,26 @@ import {
 	getNodeOverrides,
 	getOwningInstance,
 	getRootInstance,
+	getVariantSet,
 	inspectCanvasInstance,
 	isCanvasComponent,
 	isCanvasComponentSet,
 	isInsideInstance,
 	listCanvasComponents,
 	pushCanvasInstanceOverrides,
+	removeCanvasVariant,
+	renameCanvasVariantProperty,
+	renameCanvasVariantValue,
 	resetCanvasInstanceOverrides,
 	restoreCanvasMainComponent,
 	setCanvasComponentProperty,
 	setCanvasInstanceProperties,
+	setCanvasVariantProperties,
 	swapCanvasInstance,
 	syncAllCanvasInstances,
 	syncCanvasComponents,
 	wouldCreateComponentCycle,
+	type AddCanvasVariantOptions,
 	type CanvasComponentPropertyDef,
 	type CanvasComponentPropertyField,
 	type CanvasComponentResult,
@@ -81,8 +88,8 @@ function applyPatch<TNode extends CanvasNode>(current: readonly TNode[], patch: 
 
 /**
  * Framework-agnostic components controller shared by the React hook and the Svelte rune. Its
- * actions (create component / instance, combine as variants, detach, reset, push, swap, set
- * properties, restore main) are one undoable step each with a `history`; `sync()` keeps
+ * actions (create component / instance, combine as variants, add / remove / edit / rename
+ * variants, detach, reset, push, swap, set properties, restore main) are one undoable step each with a `history`; `sync()` keeps
  * instances following their mains after any other edit (call it after the nodes change).
  * Each `can…` check returns `true` or the reason the action can't run.
  */
@@ -131,6 +138,28 @@ export function createCanvasComponentsController<TNode extends CanvasNode = Canv
 
 	const reason = (result: CanvasComponentResult<TNode>): true | string => (result.ok ? true : result.reason);
 	const nodes = () => options.getNodes();
+	const refused = (why: string) => ({ ok: false, nodes: nodes(), code: 'not-found', reason: why }) as CanvasComponentResult<TNode>;
+	/** The set `id` names (a set, or a variant's set; default: the selection's). */
+	const setOf = (id?: string): string | undefined => {
+		const at = target(id);
+		const node = at ? nodes().find((n) => n.id === at) : undefined;
+		if (!node) return undefined;
+		return isCanvasComponentSet(node) ? node.id : getVariantSet(nodes(), node.id);
+	};
+	/** The variant `id` names (default: the first selected variant). */
+	const variantOf = (id?: string): string | undefined => {
+		const at = target(id);
+		return at && getVariantSet(nodes(), at) ? at : undefined;
+	};
+	const NO_SET = 'Select a component set or one of its variants.';
+	const NO_VARIANT = 'Select a variant of a component set.';
+	type VariantOptions = Omit<AddCanvasVariantOptions, keyof CanvasComponentSyncOptions>;
+	/** `addVariant` options with `from` defaulting to the selected variant. */
+	const addOptions = (setId: string | undefined, addOptions_: VariantOptions): VariantOptions => {
+		if (addOptions_.from !== undefined || setId !== undefined) return addOptions_;
+		const v = variantOf();
+		return v ? { ...addOptions_, from: v } : addOptions_;
+	};
 
 	const controller = {
 		sync,
@@ -254,6 +283,70 @@ export function createCanvasComponentsController<TNode extends CanvasNode = Canv
 			return run(def ? 'Edit Component Property' : 'Delete Component Property', (n) =>
 				setCanvasComponentProperty(n, componentId, name, def, { ...syncOptions(), ...propertyOptions })
 			);
+		},
+
+		/**
+		 * Adds a variant to a set (default: the selection's set) by duplicating `from` (default:
+		 * the selected variant, else the default variant) with the given `variant` values.
+		 */
+		addVariant(setId?: string, variantOptions: VariantOptions = {}) {
+			const set = setOf(setId);
+			if (!set) return refused(NO_SET);
+			const opts = addOptions(setId, variantOptions);
+			return run('Add Variant', (n) => addCanvasVariant(n, set, { ...syncOptions(), ...opts }));
+		},
+		canAddVariant(setId?: string, variantOptions: VariantOptions = {}): true | string {
+			const set = setOf(setId);
+			return set ? reason(addCanvasVariant(nodes(), set, { ...addOptions(setId, variantOptions), layout: false })) : NO_SET;
+		},
+
+		/** Removes a variant (default: the selected one); its instances switch to the closest variant. */
+		removeVariant(variantId?: string) {
+			const v = variantOf(variantId);
+			if (!v) return refused(NO_VARIANT);
+			return run('Remove Variant', (n) => removeCanvasVariant(n, v, syncOptions()));
+		},
+		canRemoveVariant(variantId?: string): true | string {
+			const v = variantOf(variantId);
+			return v ? reason(removeCanvasVariant(nodes(), v, { layout: false })) : NO_VARIANT;
+		},
+
+		/** Edits a variant's property values (default: the selected variant). */
+		setVariantProperties(values: Record<string, string>, variantId?: string, variantOptions: { defaultValue?: string } = {}) {
+			const v = variantOf(variantId);
+			if (!v) return refused(NO_VARIANT);
+			return run('Edit Variant', (n) => setCanvasVariantProperties(n, v, values, { ...syncOptions(), ...variantOptions }));
+		},
+		canSetVariantProperties(values?: Record<string, string>, variantId?: string): true | string {
+			const v = variantOf(variantId);
+			if (!v) return NO_VARIANT;
+			return values ? reason(setCanvasVariantProperties(nodes(), v, values, { layout: false })) : true;
+		},
+
+		/** Renames a variant property across a set (default: the selection's set). */
+		renameVariantProperty(name: string, newName: string, setId?: string) {
+			const set = setOf(setId);
+			if (!set) return refused(NO_SET);
+			return run('Rename Variant Property', (n) => renameCanvasVariantProperty(n, set, name, newName, syncOptions()));
+		},
+		canRenameVariantProperty(name?: string, newName?: string, setId?: string): true | string {
+			const set = setOf(setId);
+			if (!set) return NO_SET;
+			return name !== undefined && newName !== undefined ? reason(renameCanvasVariantProperty(nodes(), set, name, newName, { layout: false })) : true;
+		},
+
+		/** Renames a value of a variant property across a set (default: the selection's set). */
+		renameVariantValue(property: string, value: string, newValue: string, setId?: string) {
+			const set = setOf(setId);
+			if (!set) return refused(NO_SET);
+			return run('Rename Variant Value', (n) => renameCanvasVariantValue(n, set, property, value, newValue, syncOptions()));
+		},
+		canRenameVariantValue(property?: string, value?: string, newValue?: string, setId?: string): true | string {
+			const set = setOf(setId);
+			if (!set) return NO_SET;
+			return property !== undefined && value !== undefined && newValue !== undefined
+				? reason(renameCanvasVariantValue(nodes(), set, property, value, newValue, { layout: false }))
+				: true;
 		},
 
 		/** Binds (or with `null` unbinds) a main layer's field to a component property. */

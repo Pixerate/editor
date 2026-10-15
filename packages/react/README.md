@@ -51,7 +51,9 @@ export function Document() {
   const editor = useEditor({ content: "<p>Hello</p>", richTextOptions: { markdown: true } });
   return (
     <>
-      <BubbleMenu editor={editor}>{/* your formatting buttons */}</BubbleMenu>
+      <BubbleMenu editor={editor}>
+        <button onClick={() => editor?.chain().focus().toggleBold().run()}>Bold</button>
+      </BubbleMenu>
       <EditorContent editor={editor} />
     </>
   );
@@ -99,6 +101,8 @@ useAgentToolProvider(registry, provider);
 | `@pixerate/editor-react/persistence` | `useAutosave` (crash-recovery snapshots bound to a history / dirty flag, flushed on `pagehide`, with a recovery check on mount) and `<RecoveryPrompt>` (also re-exported from the root entry) |
 | `@pixerate/editor-react/generation` | `GenerationSettings` (controls generated from a model's capabilities, reference slots by role, plan adjustments), `useGenerationPlan`, `JobProgress`, `useJobProgress` over `@pixerate/editor/generation` (also re-exported from the root entry) |
 | `@pixerate/editor-react/canvas` | `useCanvasGraph`, `useCanvasLayout`, `useCanvasClipboard`, `useCanvasDocking`, `useCanvasShortcuts`, `useCanvasExplosion`, `useStreamingCanvas`, `AgentPresenceLayer`, plus the pure layout helpers from `@pixerate/editor/canvas` |
+
+Spreadsheet persistence: `useSpreadsheetEditor` exposes `document` (and passes it to `onDocumentChange`) with the defined names its formulas use in `document.names`, so saving that document and passing it back as `document` restores workbook, sheet-scoped and LAMBDA names. For several sheets, save `controller.getWorkbook()` instead.
 
 ## Styling (Tailwind CSS required)
 
