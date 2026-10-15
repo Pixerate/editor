@@ -1,5 +1,16 @@
 # @pixerate/editor-svelte
 
+## 0.27.0
+
+### Minor Changes
+
+- 41af28c: Add `@pixerate/editor-svelte/parameters`: `createParameters` and `useParameterCommands`, the field controls `ParameterSlider` (slider + number box), `ParameterToggle`, `ParameterSelect`, `ParameterColor`, `ParameterVector`, `ParameterImage`, `ParameterText`, `KeyframeDiamond` and `ParameterFieldControl`, and `ParametersPanel`, which renders a whole parameter schema with groups, presets, undo / reset / randomize and keyframe diamonds.
+
+### Patch Changes
+
+- Updated dependencies [41af28c]
+  - @pixerate/editor@0.29.0
+
 ## 0.26.1
 
 ### Patch Changes
