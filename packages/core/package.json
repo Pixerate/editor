@@ -98,6 +98,11 @@
       "types": "./dist/export/index.d.ts",
       "import": "./dist/export/index.js",
       "require": "./dist/export/index.cjs"
+    },
+    "./parameters": {
+      "types": "./dist/parameters/index.d.ts",
+      "import": "./dist/parameters/index.js",
+      "require": "./dist/parameters/index.cjs"
     }
   },
   "files": [
