@@ -1,14 +1,15 @@
-import React, { useMemo, useState } from "react";
-import { CommandPalette, useCommandPalette, useRegisterCommands } from "@pixerate/editor-react";
+import React, { Suspense, lazy, useMemo, useState } from "react";
+import { CommandPalette, useCommandPalette, useRegisterCommands } from "@pixerate/editor-react/commands";
 import type { CommandSpec } from "@pixerate/editor/commands";
 import { demoCommandRegistry } from "./agentTools";
-import { PromptStudioTab } from "./components/PromptStudioTab";
-import { RichDocumentTab } from "./components/RichDocumentTab";
-import { ParityMatrixTab } from "./components/ParityMatrixTab";
-import { ImageEditorTab } from "./components/ImageEditorTab";
-import { ReviewDemoSection } from "./components/ReviewDemoSection";
-import { SpreadsheetTab } from "./components/SpreadsheetTab";
-import { CanvasTab } from "./components/CanvasTab";
+// Each tab loads on first visit, so the first page doesn't download every editor.
+const PromptStudioTab = lazy(() => import("./components/PromptStudioTab").then((m) => ({ default: m.PromptStudioTab })));
+const RichDocumentTab = lazy(() => import("./components/RichDocumentTab").then((m) => ({ default: m.RichDocumentTab })));
+const ReviewDemoSection = lazy(() => import("./components/ReviewDemoSection").then((m) => ({ default: m.ReviewDemoSection })));
+const SpreadsheetTab = lazy(() => import("./components/SpreadsheetTab").then((m) => ({ default: m.SpreadsheetTab })));
+const CanvasTab = lazy(() => import("./components/CanvasTab").then((m) => ({ default: m.CanvasTab })));
+const ImageEditorTab = lazy(() => import("./components/ImageEditorTab").then((m) => ({ default: m.ImageEditorTab })));
+const ParityMatrixTab = lazy(() => import("./components/ParityMatrixTab").then((m) => ({ default: m.ParityMatrixTab })));
 import { AgentToolsPanel } from "./components/AgentToolsPanel";
 import {
   Sparkles,
@@ -74,11 +75,11 @@ export default function App() {
                   @pixerate/editor
                 </h1>
                 <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20">
-                  v0.1.0-preview
+                  v{__PIXERATE_VERSION__}
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                UI-agnostic media & rich-text editing engine
+                Prompt, document, spreadsheet, canvas and image editors
               </p>
             </div>
           </div>
@@ -130,13 +131,15 @@ export default function App() {
 
       {/* Main Content Body */}
       <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
-        {activeTab === "prompt" && <PromptStudioTab />}
-        {activeTab === "rich" && <RichDocumentTab />}
-        {activeTab === "rich" && <ReviewDemoSection />}
-        {activeTab === "sheet" && <SpreadsheetTab />}
-        {activeTab === "canvas" && <CanvasTab />}
-        {activeTab === "image" && <ImageEditorTab />}
-        {activeTab === "parity" && <ParityMatrixTab />}
+        <Suspense fallback={<p className="py-16 text-center text-sm text-slate-500" role="status">Loading…</p>}>
+          {activeTab === "prompt" && <PromptStudioTab />}
+          {activeTab === "rich" && <RichDocumentTab />}
+          {activeTab === "rich" && <ReviewDemoSection />}
+          {activeTab === "sheet" && <SpreadsheetTab />}
+          {activeTab === "canvas" && <CanvasTab />}
+          {activeTab === "image" && <ImageEditorTab />}
+          {activeTab === "parity" && <ParityMatrixTab />}
+        </Suspense>
         {activeTab !== "parity" && <AgentToolsPanel />}
       </main>
 
@@ -144,7 +147,9 @@ export default function App() {
 
       {/* Footer */}
       <footer className="border-t border-slate-800/80 py-4 text-center text-xs text-slate-500">
-        @pixerate/editor monorepo • JavaScript / React / Svelte UI-agnostic architecture
+        <a href="https://github.com/Pixerate/editor" className="hover:text-slate-300">github.com/Pixerate/editor</a> • MIT
+        {" • "}
+        <a href="https://www.npmjs.com/package/@pixerate/editor" className="hover:text-slate-300">npm</a>
       </footer>
     </div>
   );
