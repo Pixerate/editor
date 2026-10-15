@@ -20,6 +20,10 @@ export type AnimationEasingPreset =
 	| 'ease-in-out'
 	| 'ease-in-back'
 	| 'ease-out-back'
+	| 'ease-out-elastic'
+	| 'ease-in-elastic'
+	| 'ease-in-out-elastic'
+	| 'elastic'
 	| 'spring';
 
 export interface CubicBezierEasing {
@@ -42,7 +46,17 @@ export interface SpringEasing {
 	velocity?: number;
 }
 
-export type AnimationEasing = AnimationEasingPreset | CubicBezierEasing | SpringEasing;
+export interface ElasticEasing {
+	type: 'elastic';
+	/** Amplitude / overshoot factor (default 1). */
+	amplitude?: number;
+	/** Period of oscillation as a fraction of duration (default 0.3). */
+	period?: number;
+	/** Mode of elastic oscillation ('out' | 'in' | 'in-out', default 'out'). */
+	mode?: 'out' | 'in' | 'in-out';
+}
+
+export type AnimationEasing = AnimationEasingPreset | CubicBezierEasing | SpringEasing | ElasticEasing;
 
 /** Preset names, in picker order. */
 export const ANIMATION_EASING_PRESETS: readonly AnimationEasingPreset[] = [
@@ -53,6 +67,10 @@ export const ANIMATION_EASING_PRESETS: readonly AnimationEasingPreset[] = [
 	'ease-in-out',
 	'ease-in-back',
 	'ease-out-back',
+	'ease-out-elastic',
+	'ease-in-elastic',
+	'ease-in-out-elastic',
+	'elastic',
 	'spring',
 	'hold'
 ];
@@ -67,6 +85,10 @@ export const ANIMATION_EASING_LABELS: Readonly<Record<AnimationEasingPreset, str
 	'ease-in-out': 'Ease in-out',
 	'ease-in-back': 'Back in',
 	'ease-out-back': 'Back out',
+	'ease-out-elastic': 'Elastic out',
+	'ease-in-elastic': 'Elastic in',
+	'ease-in-out-elastic': 'Elastic in-out',
+	elastic: 'Elastic',
 	spring: 'Spring'
 };
 
@@ -82,9 +104,47 @@ export const CUBIC_BEZIER_PRESETS: Readonly<Record<string, readonly [number, num
 };
 
 const DEFAULT_SPRING = { stiffness: 170, damping: 26, mass: 1, velocity: 0 };
+const DEFAULT_ELASTIC = { amplitude: 1, period: 0.3, mode: 'out' as const };
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 const finite = (v: unknown, fallback: number) => (typeof v === 'number' && Number.isFinite(v) ? v : fallback);
+
+/**
+ * Normalised position for a parametric elastic oscillation curve (as used in Rive and Penner curves).
+ * Amplitude controls the overshoot intensity; period controls the wave frequency across normalized progress `t` (0–1).
+ */
+export function elasticAt(elastic: Omit<ElasticEasing, 'type'>, t: number): number {
+	if (t <= 0) return 0;
+	if (t >= 1) return 1;
+
+	const a = Math.max(1e-6, finite(elastic.amplitude, DEFAULT_ELASTIC.amplitude));
+	const p = Math.max(1e-6, finite(elastic.period, DEFAULT_ELASTIC.period));
+	const mode = elastic.mode ?? 'out';
+
+	const TAU = 2 * Math.PI;
+
+	const solveOut = (u: number, amp: number, per: number) => {
+		const s = amp < 1 ? per / 4 : (per / TAU) * Math.asin(1 / amp);
+		return amp * Math.pow(2, -10 * u) * Math.sin(((u - s) * TAU) / per) + 1;
+	};
+
+	const solveIn = (u: number, amp: number, per: number) => {
+		const s = amp < 1 ? per / 4 : (per / TAU) * Math.asin(1 / amp);
+		const adjusted = u - 1;
+		return -(amp * Math.pow(2, 10 * adjusted) * Math.sin(((adjusted - s) * TAU) / per));
+	};
+
+	if (mode === 'in') {
+		return solveIn(t, a, p);
+	}
+	if (mode === 'in-out') {
+		if (t < 0.5) {
+			return 0.5 * solveIn(t * 2, a, p);
+		}
+		return 0.5 + 0.5 * solveOut((t - 0.5) * 2, a, p);
+	}
+	return solveOut(t, a, p);
+}
 
 /**
  * Solves a CSS `cubic-bezier(x1, y1, x2, y2)` for y at progress x (Newton steps with a
@@ -148,10 +208,21 @@ export function springAt(spring: Omit<SpringEasing, 'type'>, seconds: number): n
 	return 1 - x;
 }
 
-/** Resolves an easing to a cubic-bezier, spring or hold descriptor (unknown input → linear). */
-export function resolveEasing(easing: AnimationEasing | string | undefined | null): CubicBezierEasing | Required<SpringEasing> | 'hold' {
+/** Resolves an easing to a cubic-bezier, spring, elastic or hold descriptor (unknown input → linear). */
+export function resolveEasing(
+	easing: AnimationEasing | string | undefined | null
+): CubicBezierEasing | Required<SpringEasing> | Required<ElasticEasing> | 'hold' {
 	if (easing === 'hold') return 'hold';
 	if (easing === 'spring') return { type: 'spring', ...DEFAULT_SPRING };
+	if (easing === 'elastic' || easing === 'ease-out-elastic') {
+		return { type: 'elastic', ...DEFAULT_ELASTIC, mode: 'out' };
+	}
+	if (easing === 'ease-in-elastic') {
+		return { type: 'elastic', ...DEFAULT_ELASTIC, mode: 'in' };
+	}
+	if (easing === 'ease-in-out-elastic') {
+		return { type: 'elastic', ...DEFAULT_ELASTIC, mode: 'in-out' };
+	}
 	if (typeof easing === 'string') {
 		const preset = CUBIC_BEZIER_PRESETS[easing];
 		if (preset) return { type: 'cubic-bezier', x1: preset[0], y1: preset[1], x2: preset[2], y2: preset[3] };
@@ -166,6 +237,14 @@ export function resolveEasing(easing: AnimationEasing | string | undefined | nul
 				damping: finite(easing.damping, DEFAULT_SPRING.damping),
 				mass: finite(easing.mass, DEFAULT_SPRING.mass),
 				velocity: finite(easing.velocity, DEFAULT_SPRING.velocity)
+			};
+		}
+		if (easing.type === 'elastic') {
+			return {
+				type: 'elastic',
+				amplitude: finite(easing.amplitude, DEFAULT_ELASTIC.amplitude),
+				period: finite(easing.period, DEFAULT_ELASTIC.period),
+				mode: easing.mode === 'in' || easing.mode === 'in-out' ? easing.mode : 'out'
 			};
 		}
 		if (easing.type === 'cubic-bezier') {
@@ -191,6 +270,7 @@ export function evaluateEasing(easing: AnimationEasing | string | undefined | nu
 	const resolved = resolveEasing(easing);
 	if (resolved === 'hold') return 0;
 	if (resolved.type === 'spring') return springAt(resolved, (u * Math.max(0, durationMs)) / 1000);
+	if (resolved.type === 'elastic') return elasticAt(resolved, u);
 	const { x1, y1, x2, y2 } = resolved;
 	if (x1 === y1 && x2 === y2) return u; // linear
 	return cubicBezierAt(x1, y1, x2, y2, u);
@@ -235,6 +315,7 @@ export function isAnimationEasing(value: unknown): value is AnimationEasing {
 	if (typeof value !== 'object' || value === null) return false;
 	const e = value as Record<string, unknown>;
 	if (e.type === 'spring') return true;
+	if (e.type === 'elastic') return true;
 	return e.type === 'cubic-bezier' && [e.x1, e.y1, e.x2, e.y2].every((v) => typeof v === 'number' && Number.isFinite(v));
 }
 
@@ -256,6 +337,12 @@ export function easingToCss(easing: AnimationEasing | string | undefined | null,
 		for (let i = 0; i <= n; i++) points.push(String(round(i === n ? 1 : springAt(resolved, ((i / n) * durationMs) / 1000))));
 		return `linear(${points.join(', ')})`;
 	}
+	if (resolved.type === 'elastic') {
+		const n = Math.max(2, Math.floor(samples));
+		const points: string[] = [];
+		for (let i = 0; i <= n; i++) points.push(String(round(i === n ? 1 : elasticAt(resolved, i / n))));
+		return `linear(${points.join(', ')})`;
+	}
 	const { x1, y1, x2, y2 } = resolved;
 	for (const [name, p] of Object.entries(CUBIC_BEZIER_PRESETS)) {
 		if (['linear', 'ease', 'ease-in', 'ease-out', 'ease-in-out'].includes(name) && p[0] === x1 && p[1] === y1 && p[2] === x2 && p[3] === y2) {
@@ -265,9 +352,11 @@ export function easingToCss(easing: AnimationEasing | string | undefined | null,
 	return `cubic-bezier(${round(x1)}, ${round(y1)}, ${round(x2)}, ${round(y2)})`;
 }
 
-/** Short label for an easing (a preset's label, or `Custom` / `Spring`). */
+/** Short label for an easing (a preset's label, or `Custom` / `Spring` / `Elastic`). */
 export function easingLabel(easing: AnimationEasing | undefined | null): string {
 	if (easing === undefined || easing === null) return ANIMATION_EASING_LABELS.linear;
 	if (typeof easing === 'string') return ANIMATION_EASING_LABELS[easing as AnimationEasingPreset] ?? easing;
-	return easing.type === 'spring' ? 'Spring' : 'Custom';
+	if (easing.type === 'spring') return 'Spring';
+	if (easing.type === 'elastic') return 'Elastic';
+	return 'Custom';
 }

@@ -7,6 +7,7 @@ const PUBLIC_API = [
 	'evaluateEasing',
 	'cubicBezierAt',
 	'springAt',
+	'elasticAt',
 	'ANIMATION_EASING_PRESETS',
 	'ANIMATION_EASING_LABELS',
 	'CUBIC_BEZIER_PRESETS',

@@ -1003,3 +1003,16 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: A store that rebuilds its snapshot inside a history command's `execute` / `undo` reports stale `canUndo` / `canRedo` / `undoLabel` (the undo button stays disabled after the first edit).
 - **Root Cause**: `HistoryManager.execute` calls `command.execute()` first and only then pushes the step and notifies; `undo` / `redo` likewise notify after the closure ran.
 - **Solution / Workaround**: Notify from the command (so values update immediately) and also subscribe to the history, re-notifying only when the undo / redo fields actually changed. `ParametersController` does both, which keeps one snapshot per edit in the common case and never leaves the history fields stale.
+
+### [core/animation] Parametric Elastic Easing Boundary Guarantees and Sampling
+
+- **Issue / Symptom**: Parametric damped harmonic oscillators ($e^{-\lambda t} \cos(\omega t)$) used for elastic animations can drift from boundary conditions due to floating point inaccuracies, resulting in jumps at $t = 0$ or $t = 1$. Furthermore, CSS transitions cannot natively parse parameterised spring/elastic curves like `cubic-bezier`.
+- **Root Cause**: When computing $t = 0$ or $t = 1$, damped sine/cosine equations evaluate to fractional residuals ($1 \pm \epsilon$) unless strictly bounded. Additionally, CSS transitions require standard cubic beziers or modern CSS `linear(...)` piecewise approximations.
+- **Solution / Workaround**: In `elasticAt`, clamp boundary evaluations explicitly ($t \le 0 \to 0$, $t \ge 1 \to 1$). In `easingToCss`, sample elastic curves over discrete intervals (e.g. 20 samples) to generate a standards-compliant CSS `linear(...)` function for performant GPU rendering.
+
+### [core/parameters] Range Mapper Degenerate Interval Safeguards
+
+- **Issue / Symptom**: Passing identical bounds for the input range (`from: [v, v]`) to `createRangeMapper` or `mapRange` produces `NaN` or `Infinity` upon interpolation.
+- **Root Cause**: The domain normalization formula $(value - inMin) / (inMax - inMin)$ results in division by zero ($0 / 0 = NaN$) when $inMin == inMax$.
+- **Solution / Workaround**: Check for degenerate intervals (`inSpan === 0`). When degenerate, bypass division and return the lower target bound (`toMin`), preserving safety and avoiding cascading `NaN`s in downstream transform math.
+
