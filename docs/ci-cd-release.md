@@ -25,9 +25,9 @@ Runs on:
 - **Node**: `24`
 - **Package Manager**: `pnpm` (latest)
 - **Steps**:
-  1. Checkout repository with `actions/checkout@v4`
-  2. Setup pnpm with `pnpm/action-setup@v4`
-  3. Setup Node.js 24 with caching via `actions/setup-node@v4`
+  1. Checkout repository with `actions/checkout@v7`
+  2. Setup pnpm with `pnpm/action-setup@v6`
+  3. Setup Node.js 24 with caching via `actions/setup-node@v7`
   4. `pnpm install --frozen-lockfile`
   5. `pnpm test` (Runs all Vitest suites across core, react, and svelte packages)
   6. `pnpm build` (Compiles all library packages and demo app)
