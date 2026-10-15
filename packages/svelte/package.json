@@ -115,7 +115,7 @@
   },
   "devDependencies": {
     "@dagrejs/dagre": "^1.1.4",
-    "@sveltejs/package": "^2.5.8",
+    "@sveltejs/package": "^3.0.0",
     "@sveltejs/vite-plugin-svelte": "^5.0.3",
     "@tiptap/core": "^2.11.5",
     "@tiptap/pm": "^2.11.5",
