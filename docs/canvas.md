@@ -565,6 +565,8 @@ React: `useCanvasTokens({ store, nodes, setNodes, modes })` re-resolves on token
 
 ### Keyframe animation and timeline
 
+The node-independent parts (tracks and keyframes, easing, `evaluateTrack`, OKLab colour mixing, `AnimationPlayer` and the clocks) are also published on their own as `@pixerate/editor/animation`, which has no third-party imports, so a keyframe editor that does not use canvas nodes does not need `@dagrejs/dagre`. `@pixerate/editor/canvas` re-exports all of it.
+
 A node's animation lives in `node.data.animation` (`ANIMATION_DATA_KEY`), so it copies, pastes, duplicates and serialises with the node. Each animatable property has a track of keyframes `{ time (ms), value, easing? }`. The easing applies to the segment *leaving* the keyframe.
 
 ```ts

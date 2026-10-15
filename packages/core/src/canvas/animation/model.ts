@@ -4,7 +4,9 @@ import { bezierPathLength, bezierPathPointAtLength } from '../pathops/bezier.js'
 import { getCanvasTokenProperty, readNodeStyleProperty, writeNodeStyleProperty } from '../tokenBindings.js';
 import { withStyleOpacity } from '../trajectory.js';
 import type { CanvasNode } from '../types.js';
-import { isAnimationEasing, type AnimationEasing } from './easing.js';
+import { ANIMATION_TIME_EPSILON, isAnimationKeyframe, normalizeKeyframes, type AnimationKeyframe, type AnimationTrack, type AnimationValue, type AnimationValueType } from '../../animation/keyframes.js';
+
+export { ANIMATION_TIME_EPSILON, isAnimationKeyframe, normalizeKeyframes, type AnimationKeyframe, type AnimationTrack, type AnimationValue, type AnimationValueType };
 
 /**
  * Keyframe animation for canvas nodes.
@@ -17,26 +19,6 @@ import { isAnimationEasing, type AnimationEasing } from './easing.js';
 
 /** Data key holding a node's animation. */
 export const ANIMATION_DATA_KEY = 'animation';
-
-/** Keyframe times closer than this (ms) are the same time. */
-export const ANIMATION_TIME_EPSILON = 1e-6;
-
-/** A keyframe value: a number, or a CSS colour for colour properties. */
-export type AnimationValue = number | string;
-
-export interface AnimationKeyframe {
-	/** Time in milliseconds from the start of the timeline. */
-	time: number;
-	value: AnimationValue;
-	/** Easing of the segment from this keyframe to the next (default `linear`). */
-	easing?: AnimationEasing;
-}
-
-export interface AnimationTrack {
-	keyframes: AnimationKeyframe[];
-	/** Disabled tracks keep their keyframes but do not animate (default `true`). */
-	enabled?: boolean;
-}
 
 /** A path a node's centre follows, driven by the `motionPath` track (progress 0–1). */
 export interface AnimationMotionPath {
@@ -51,8 +33,6 @@ export interface NodeAnimation {
 	tracks: Record<string, AnimationTrack>;
 	motionPath?: AnimationMotionPath;
 }
-
-export type AnimationValueType = 'number' | 'color';
 
 /** A node property keyframes can drive. */
 export interface AnimatableProperty {
@@ -229,57 +209,6 @@ export function clampAnimationValue(property: AnimatableProperty | undefined, va
 	if (property.min !== undefined) v = Math.max(property.min, v);
 	if (property.max !== undefined) v = Math.min(property.max, v);
 	return v;
-}
-
-function isValue(value: unknown): value is AnimationValue {
-	return (typeof value === 'number' && Number.isFinite(value)) || typeof value === 'string';
-}
-
-/** Whether `value` is a well-formed keyframe. */
-export function isAnimationKeyframe(value: unknown): value is AnimationKeyframe {
-	if (typeof value !== 'object' || value === null) return false;
-	const k = value as Record<string, unknown>;
-	return (
-		typeof k.time === 'number' &&
-		Number.isFinite(k.time) &&
-		isValue(k.value) &&
-		(k.easing === undefined || isAnimationEasing(k.easing))
-	);
-}
-
-const sortedCache = new WeakMap<readonly AnimationKeyframe[], { items: AnimationKeyframe[]; out: AnimationKeyframe[] }>();
-
-/**
- * Keyframes sorted by time, invalid entries dropped and duplicate times merged (the *later*
- * entry in the array wins, so appending a keyframe replaces one at the same time). Cached per
- * array (revalidated by element identity), so evaluating every frame does not re-sort; treat
- * keyframe objects as immutable.
- */
-export function normalizeKeyframes(keyframes: readonly AnimationKeyframe[] | undefined | null): AnimationKeyframe[] {
-	if (!Array.isArray(keyframes)) return [];
-	const cached = sortedCache.get(keyframes);
-	// The array may have been edited in place since: reuse only while it holds the same keyframes.
-	if (cached && cached.items.length === keyframes.length && cached.items.every((k, i) => k === keyframes[i])) return cached.out;
-	const indexed = keyframes
-		.map((k, i) => ({ k, i }))
-		.filter(({ k }) => isAnimationKeyframe(k))
-		.sort((a, b) => a.k.time - b.k.time || a.i - b.i);
-	const out: AnimationKeyframe[] = [];
-	let lastIndex = -1;
-	for (const { k, i } of indexed) {
-		const prev = out[out.length - 1];
-		if (prev && Math.abs(k.time - prev.time) <= ANIMATION_TIME_EPSILON) {
-			if (i > lastIndex) {
-				out[out.length - 1] = k;
-				lastIndex = i;
-			}
-			continue;
-		}
-		out.push(k);
-		lastIndex = i;
-	}
-	sortedCache.set(keyframes, { items: [...keyframes], out });
-	return out;
 }
 
 /** The node's animation (tracks with at least one valid keyframe), or `null`. */

@@ -399,7 +399,8 @@ Each module is also available as a subpath import:
 | `@pixerate/editor/history` | `HistoryManager`: a command-pattern undo/redo stack with gesture merge keys, undo marks, a byte budget and a History-panel listing; `DirtyTracker` / `bindDirtyToHistory` |
 | `@pixerate/editor/spreadsheet` | `SpreadsheetController`, formula parser/evaluator and dependency graph, formula function registry (`registerFormulaFunction`, `listFormulaFunctions`, `searchFormulaFunctions`, `getFormulaSignature`) and autocomplete helpers (`getFormulaHints`, `applyFormulaSuggestion`) |
 | `@pixerate/editor/image-editor` | `ImageEditorController` and Canvas 2D renderer: crop, adjustments, annotations, depth masks, selections and layer masks, and AI hooks. Needs a DOM/canvas environment (the selection algorithms themselves are pure). |
-| `@pixerate/editor/canvas` | Node-graph layout (needs the optional `@dagrejs/dagre` peer), placement, trajectories, displacement, clipboard and streaming layout helpers |
+| `@pixerate/editor/animation` | The keyframe model without canvas nodes: `AnimationTrack` / `AnimationKeyframe`, easing (`resolveEasing`, `evaluateEasing`, `cubicBezierAt`, `springAt`, presets, `parseCssEasing`, `easingToCss`), `evaluateTrack`, `interpolateAnimationValue`, `normalizeKeyframes`, OKLab colour mixing, `AnimationPlayer` and the `Clock` / `ManualClock` / `realClock` time sources (no third-party imports) |
+| `@pixerate/editor/canvas` | Node-graph layout (needs the optional `@dagrejs/dagre` peer), placement, trajectories, displacement, clipboard and streaming layout helpers, and node keyframe animation (re-exports everything in `/animation`) |
 | `@pixerate/editor/agent` | MCP tool schemas, a planner for agent-driven canvas edits, and the dynamic `ToolRegistry` with editor/spreadsheet tool providers |
 | `@pixerate/editor/commands` | `CommandRegistry`, `ShortcutMap`, palette ranking, `createCommandToolProvider` and built-in history / arrange / spreadsheet commands (no third-party imports) |
 | `@pixerate/editor/persistence` | Autosave and crash recovery (`createAutosaveController`, `createRecoveryPolicy`, `createRevisionTracker`), storage adapters (memory, localStorage, IndexedDB, OPFS) and document migration (`migrateDocument`, `loadSections`, `LoadReport`) (no third-party imports) |
@@ -408,7 +409,29 @@ Each module is also available as a subpath import:
 | `@pixerate/editor/export` | Word export: `exportDocx`, `exportDocxBlob`, `createDocxParts`, `DocxExportController`, plus the zip writer and XML escapers it uses (no third-party imports; also re-exported from the root entry) |
 | `@pixerate/editor/tokens` | Design tokens: collections, modes, aliases, `TokenStore`, `resolveToken`, W3C Design Tokens JSON and CSS custom-property export (no third-party imports) |
 
-The root entry (`@pixerate/editor`) re-exports everything except canvas, agent, commands, persistence, generation, tokens and image editor, including TipTap. Import from the narrowest subpath you need: `grammar`, `history`, `spreadsheet`, `commands`, `persistence` and `image-editor` have no third-party imports, so a spreadsheet-only app bundles no TipTap, markdown or dagre code. The package is marked `sideEffects: false`, so unused root exports are also tree-shaken.
+The root entry (`@pixerate/editor`) re-exports everything except animation, canvas, agent, commands, persistence, generation, tokens and image editor, including TipTap. Import from the narrowest subpath you need: `grammar`, `history`, `animation`, `spreadsheet`, `commands`, `persistence` and `image-editor` have no third-party imports, so a spreadsheet-only app bundles no TipTap, markdown or dagre code. The package is marked `sideEffects: false`, so unused root exports are also tree-shaken.
+
+## Keyframe animation without the canvas
+
+`@pixerate/editor/animation` is the keyframe model on its own: no dagre, TipTap or canvas nodes. Use it to animate anything you can describe as a track of numbers or CSS colours.
+
+```ts
+import { evaluateTrack, createAnimationPlayer, ManualClock, type AnimationTrack } from "@pixerate/editor/animation";
+
+const opacity: AnimationTrack = {
+  keyframes: [
+    { time: 0, value: 0, easing: "ease-out" },
+    { time: 600, value: 1, easing: { type: "spring", stiffness: 170, damping: 26 } },
+    { time: 1200, value: 0.5 },
+  ],
+};
+evaluateTrack(opacity, 300); // eased value at 300 ms
+evaluateTrack({ keyframes: [{ time: 0, value: "#ff0000" }, { time: 1000, value: "transparent" }] }, 500, "color"); // OKLab mix
+
+const player = createAnimationPlayer({ clock: new ManualClock(), duration: 1200, loop: "ping-pong", onTime: (t) => console.log(evaluateTrack(opacity, t)) });
+```
+
+`@pixerate/editor/canvas` re-exports all of it, and adds node tracks (`evaluateAnimation`, `applyAnimation`), editing, timeline and export helpers on top.
 
 ## Autosave, crash recovery and document migration
 
