@@ -137,7 +137,7 @@
     "prosemirror-markdown": "^1.13.7"
   },
   "devDependencies": {
-    "@dagrejs/dagre": "^1.1.8",
+    "@dagrejs/dagre": "^3.1.1",
     "@tiptap/core": "^2.11.5",
     "@tiptap/pm": "^2.11.5",
     "@types/dagre": "^0.7.54",
@@ -149,7 +149,7 @@
     "vitest": "^4.1.11"
   },
   "peerDependencies": {
-    "@dagrejs/dagre": "^1.1.8",
+    "@dagrejs/dagre": "^3.1.1",
     "@tiptap/core": "^2.11.5",
     "@tiptap/pm": "^2.11.5"
   },
