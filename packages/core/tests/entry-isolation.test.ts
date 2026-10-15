@@ -4,7 +4,7 @@ import path from "path";
 
 const dist = path.resolve(__dirname, "../dist");
 
-/** Bare (package) specifiers reachable from an ESM entry, following relative chunk imports. */
+/** Bare (package) specifiers reachable from an ESM or CJS entry, following relative chunk imports. */
 function reachablePackages(entry: string): Set<string> {
   const seen = new Set<string>();
   const packages = new Set<string>();
@@ -13,7 +13,7 @@ function reachablePackages(entry: string): Set<string> {
     seen.add(file);
     const source = readFileSync(file, "utf8");
     const specifiers = source.matchAll(
-      /(?:import|export)\s*(?:[^'"]*?\sfrom\s*)?['"]([^'"]+)['"]|import\(\s*['"]([^'"]+)['"]\s*\)/g,
+      /(?:import|export)\s*(?:[^'"]*?\sfrom\s*)?['"]([^'"]+)['"]|(?:import|require)\(\s*['"]([^'"]+)['"]\s*\)/g,
     );
     for (const match of specifiers) {
       const specifier = match[1] ?? match[2];
@@ -40,6 +40,22 @@ describe("subpath entry isolation", () => {
   it("compare/index.js only pulls in TipTap / ProseMirror", () => {
     const packages = [...reachablePackages("compare/index.js")];
     expect(packages.every((name) => name === "@tiptap/core" || name.startsWith("@tiptap/pm/"))).toBe(true);
+  });
+
+  it.each(["tools/index.js", "tools/index.cjs"])("%s pulls in no TipTap, ProseMirror or dagre", (entry) => {
+    const packages = [...reachablePackages(entry)];
+    expect(packages.filter((name) => /tiptap|prosemirror|dagre/.test(name))).toEqual([]);
+    expect(packages).toEqual([]);
+  });
+
+  it("agent/index.js still re-exports the registry from tools", async () => {
+    const agent = await import(path.join(dist, "agent/index.js"));
+    const tools = await import(path.join(dist, "tools/index.js"));
+    expect(agent.ToolRegistry).toBe(tools.ToolRegistry);
+    expect(agent.createToolRegistry).toBe(tools.createToolRegistry);
+    expect(agent.EDITOR_MCP_TOOLS).toBe(tools.EDITOR_MCP_TOOLS);
+    expect(typeof agent.createRichTextToolProvider).toBe("function");
+    expect(tools.createRichTextToolProvider).toBeUndefined();
   });
 
   it("root entry does not pull in dagre", () => {

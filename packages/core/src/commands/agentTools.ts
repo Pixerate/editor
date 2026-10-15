@@ -1,5 +1,5 @@
 // Portions ported from filmcraft-main/crates/automation/src/server.rs (MIT OR Apache-2.0, © ArtCraft Team and contributors). See THIRD_PARTY_NOTICES.md.
-import type { AgentTool, AgentToolProvider, McpToolResult } from '../agent/registry.js';
+import type { AgentTool, AgentToolProvider, McpToolResult } from '../tools/registry.js';
 import { rankCommands } from './palette.js';
 import type { CommandRegistry, CommandResult } from './registry.js';
 

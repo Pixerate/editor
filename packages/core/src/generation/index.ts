@@ -16,6 +16,6 @@ export * from './store.js';
 // Plain-text asset mentions (`@fox:style`), dependency-free.
 export { findTextMentions, formatMentionText, setMentionRoleInText } from '../serializers/mention-text.js';
 export type { MentionRoleSyntax, TextMention } from '../serializers/mention-text.js';
-export type { JsonSchema, SchemaValidationError } from '../agent/schema.js';
-export { validateJsonSchema } from '../agent/schema.js';
-export type { AgentTool, AgentToolProvider, McpToolDefinition, McpToolResult } from '../agent/registry.js';
+export type { JsonSchema, SchemaValidationError } from '../tools/schema.js';
+export { validateJsonSchema } from '../tools/schema.js';
+export type { AgentTool, AgentToolProvider, McpToolDefinition, McpToolResult } from '../tools/registry.js';

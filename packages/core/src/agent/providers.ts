@@ -13,13 +13,13 @@ import {
 import type { SpreadsheetController } from '../spreadsheet/controller.js';
 import { colNameToIndex, indexToColName, isFormulaError } from '../spreadsheet/formula/evaluator.js';
 import { planToolCall } from './planner.js';
-import type { AgentTool, AgentToolProvider } from './registry.js';
+import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import {
 	MCP_TOOL_EDIT_CANVAS,
 	MCP_TOOL_EDIT_PROMPT,
 	MCP_TOOL_GET_EDITOR_STATE,
 	MCP_TOOL_VIEW_EDITOR
-} from './tools.js';
+} from '../tools/definitions.js';
 import type { AgentStep, EditorSnapshot } from './types.js';
 import type { CanvasEdge, CanvasNode } from '../canvas/types.js';
 

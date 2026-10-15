@@ -208,6 +208,23 @@ await registry.callTool("insert_text", { text: "Hello" }); // { content: [...], 
 
 `createEditorMcpToolProvider` exposes the static tools (`get_editor_state`, `edit_canvas`, `edit_prompt`, `view_editor`) through the registry, and `planToolCall` turns any tool call into planner steps (`step:tool_call` for registry tools).
 
+### Without TipTap: `@pixerate/editor/tools`
+
+`@pixerate/editor/agent` loads TipTap, ProseMirror and (through the canvas planner) dagre, because the rich-text, spreadsheet and canvas providers live there. Hosts that only need the registry, such as a canvas-only app or an effect editor exposing commands, can import it from `@pixerate/editor/tools`, which has no third-party imports:
+
+```ts
+import { createToolRegistry } from "@pixerate/editor/tools";
+import { createCommandToolProvider } from "@pixerate/editor/commands";
+
+const registry = createToolRegistry();
+registry.register(createCommandToolProvider(commands, { id: "effects" }));
+
+const list = registry.listTools(); // MCP tools/list result
+const result = await registry.callTool(name, args); // MCP tools/call result
+```
+
+It exports `ToolRegistry`, `createToolRegistry`, `ToolRegistryError`, the tool types (`AgentTool`, `AgentToolProvider`, `AgentToolHandler`, `ToolCallContext`, `McpToolDefinition`, `McpToolResult`, `McpListToolsResult`, `ToolCallError`), `validateJsonSchema` / `SchemaValidationError`, and the static `EDITOR_MCP_TOOLS` definitions. `/agent` re-exports all of it, so existing imports keep working. `createEditorMcpToolProvider` stays in `/agent` because its `layout` operation runs dagre.
+
 ## Commands, shortcuts and the command palette
 
 `@pixerate/editor/commands` gives every action one id that menus, keyboard shortcuts, the command palette and agents all run, so they share enablement and parameter validation. It has no third-party imports.
@@ -401,6 +418,7 @@ Each module is also available as a subpath import:
 | `@pixerate/editor/image-editor` | `ImageEditorController` and Canvas 2D renderer: crop, adjustments, annotations, depth masks, selections and layer masks, and AI hooks. Needs a DOM/canvas environment (the selection algorithms themselves are pure). |
 | `@pixerate/editor/canvas` | Node-graph layout (needs the optional `@dagrejs/dagre` peer), placement, trajectories, displacement, clipboard and streaming layout helpers |
 | `@pixerate/editor/agent` | MCP tool schemas, a planner for agent-driven canvas edits, and the dynamic `ToolRegistry` with editor/spreadsheet tool providers |
+| `@pixerate/editor/tools` | `ToolRegistry`, tool types, `validateJsonSchema` and the static MCP tool definitions, without TipTap or dagre (no third-party imports) |
 | `@pixerate/editor/commands` | `CommandRegistry`, `ShortcutMap`, palette ranking, `createCommandToolProvider` and built-in history / arrange / spreadsheet commands (no third-party imports) |
 | `@pixerate/editor/persistence` | Autosave and crash recovery (`createAutosaveController`, `createRecoveryPolicy`, `createRevisionTracker`), storage adapters (memory, localStorage, IndexedDB, OPFS) and document migration (`migrateDocument`, `loadSections`, `LoadReport`) (no third-party imports) |
 | `@pixerate/editor/generation` | Model capability descriptors, `planGenerationRequest`, `capabilitiesToJsonSchema`, `createGenerationToolProvider`, provenance, `createBatchResolver` and job-progress estimates (no third-party imports) |

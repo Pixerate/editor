@@ -1,4 +1,4 @@
-import type { AgentToolProvider, ToolRegistry } from "@pixerate/editor/agent";
+import type { AgentToolProvider, ToolRegistry } from "@pixerate/editor/tools";
 
 type MaybeGetter<T> = T | (() => T);
 

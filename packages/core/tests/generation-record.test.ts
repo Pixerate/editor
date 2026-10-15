@@ -37,7 +37,7 @@ import {
   type ModelCapabilities,
 } from "../src/generation";
 import { createMemoryStorage, withStorageFailures } from "../src/persistence";
-import { ToolRegistry } from "../src/agent/registry";
+import { ToolRegistry } from "../src/tools/registry";
 import type { Template } from "../src/grammar";
 
 const model: ModelCapabilities = {

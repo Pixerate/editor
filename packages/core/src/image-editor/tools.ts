@@ -1,4 +1,4 @@
-import type { AgentTool, AgentToolProvider } from '../agent/registry';
+import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import type { ImageEditorController } from './controller';
 import type { AdjustmentKind, ImageAdjustments } from './types';
 import { normalizeProcessVersion } from './color';
