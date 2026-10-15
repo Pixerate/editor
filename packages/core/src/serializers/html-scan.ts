@@ -154,6 +154,6 @@ export function replaceDelimited(
 }
 
 /** Lower-cases ASCII letters only, so indices match the original string. */
-function asciiLower(text: string): string {
+export function asciiLower(text: string): string {
   return text.replace(/[A-Z]+/g, (m) => m.toLowerCase());
 }

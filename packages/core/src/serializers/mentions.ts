@@ -15,16 +15,115 @@ export {
   type MentionRoleSyntax,
   type TextMention,
 } from "./mention-text";
-import { findTagSpans, replaceDelimited, stripTags } from "./html-scan";
+import { asciiLower, findTagSpans, replaceDelimited, stripTags } from "./html-scan";
 import type { MentionEntity } from "../extensions/mention";
 
 
 /**
- * Split regex identifying markdown code blocks, inline code, URLs, and existing HTML tags.
- * Used by preprocessMarkdownMentions to ensure non-mention regions remain completely untouched.
+ * Split regex identifying markdown code blocks, inline code, URLs, and existing HTML tags:
+ * the regions preprocessMarkdownMentions leaves untouched. Kept as the reference definition;
+ * preprocessMarkdownMentions uses {@link splitMarkdownMentionParts}, because this regex is
+ * quadratic (lazy closers) and cubic (mention spans) on malformed input.
  */
 export const MARKDOWN_MENTION_SPLIT_REGEX =
   /(```[\s\S]*?```|~~~[\s\S]*?~~~|<pre[\s\S]*?<\/pre>|<code[\s\S]*?<\/code>|`[^`\n]+`|<span\b[^>]*\b(?:data-type=["']mention["']|class=["'][^"']*pixerate-mention-node[^"']*["']|data-mention=["'][^"']*["'])[^>]*>[\s\S]*?<\/span>|<[^>]+>|\]\([^)]+\)|(?:https?|file|vscode|cursor|mailto):\/\/[^\s<)]+)/gi;
+
+// The mention-span attribute test. Unlike the regex above, quoted values can't run past
+// the tag's `>`: a tag ends at its first `>` here, which keeps the scan linear.
+const MENTION_SPAN_ATTRIBUTE =
+  /\b(?:data-type=["']mention["']|class=["'][^"'>]*pixerate-mention-node[^"'>]*["']|data-mention=["'][^"'>]*["'])/gi;
+const URL_SCHEMES = ["https://", "http://", "file://", "vscode://", "cursor://", "mailto://"];
+const URL_STOP = /[\s<)]/;
+
+/**
+ * `text.split(MARKDOWN_MENTION_SPLIT_REGEX)` in linear time: alternating plain text and
+ * protected parts (code fences, `<pre>` / `<code>`, inline code, mention spans, HTML tags,
+ * markdown link targets, URLs), starting and ending with text (possibly empty). Each
+ * closer is found through a cached "next occurrence" that only moves forward, so
+ * unclosed fences or tags cost O(1) per position instead of a scan to the end.
+ */
+export function splitMarkdownMentionParts(text: string): string[] {
+  const lower = asciiLower(text);
+  const n = text.length;
+  const cache = new Map<string, { from: number; at: number }>();
+  /** First index ≥ from of needle in the lower-cased text, or -1. */
+  const next = (needle: string, from: number) => {
+    const cached = cache.get(needle);
+    if (cached && cached.from <= from && (cached.at === -1 || cached.at >= from)) return cached.at;
+    const at = lower.indexOf(needle, from);
+    cache.set(needle, { from, at });
+    return at;
+  };
+  let attrFrom = -1;
+  let attrAt = -1;
+  /** Start of the first mention attribute at or after from, or -1. */
+  const nextAttribute = (from: number) => {
+    if (attrFrom !== -1 && (attrAt === -1 || attrAt >= from) && attrFrom <= from) return attrAt;
+    MENTION_SPAN_ATTRIBUTE.lastIndex = from;
+    attrAt = MENTION_SPAN_ATTRIBUTE.exec(text)?.index ?? -1;
+    attrFrom = from;
+    return attrAt;
+  };
+  /** End (exclusive) of a protected part starting at i, or -1. */
+  const matchAt = (i: number): number => {
+    const c = text[i];
+    if (c === "`" || c === "~") {
+      const fence = c.repeat(3);
+      if (text.startsWith(fence, i)) {
+        const close = next(fence, i + 3);
+        if (close !== -1) return close + 3;
+      }
+      if (c === "`") {
+        const tick = next("`", i + 1);
+        const newline = next("\n", i + 1);
+        if (tick > i + 1 && (newline === -1 || tick < newline)) return tick + 1;
+      }
+      return -1;
+    }
+    if (c === "<") {
+      for (const tag of ["pre", "code"]) {
+        if (lower.startsWith(`<${tag}`, i)) {
+          const close = next(`</${tag}>`, i + tag.length + 1);
+          if (close !== -1) return close + tag.length + 3;
+        }
+      }
+      const gt = next(">", i + 1);
+      if (lower.startsWith("<span", i) && !/\w/.test(text[i + 5] ?? "") && gt !== -1) {
+        const attr = nextAttribute(i + 5);
+        if (attr !== -1 && attr < gt) {
+          const close = next("</span>", gt + 1);
+          if (close !== -1) return close + 7;
+        }
+      }
+      return gt > i + 1 ? gt + 1 : -1;
+    }
+    if (c === "]") {
+      if (text[i + 1] !== "(") return -1;
+      const close = next(")", i + 2);
+      return close > i + 2 ? close + 1 : -1;
+    }
+    for (const scheme of URL_SCHEMES) {
+      if (!lower.startsWith(scheme, i)) continue;
+      let end = i + scheme.length;
+      while (end < n && !URL_STOP.test(text[end])) end++;
+      return end > i + scheme.length ? end : -1;
+    }
+    return -1;
+  };
+  const parts: string[] = [];
+  let last = 0;
+  for (let i = 0; i < n; ) {
+    const end = matchAt(i);
+    if (end === -1) {
+      i++;
+      continue;
+    }
+    parts.push(text.slice(last, i), text.slice(i, end));
+    last = i = end;
+  }
+  parts.push(text.slice(last));
+  return parts;
+}
 
 export interface MentionSegment {
   type: "text" | "mention";
@@ -251,7 +350,7 @@ export function preprocessMarkdownMentions(
   const defaultType = options.defaultType || "user";
   const resolveMention = options.resolveMention;
 
-  const parts = content.split(MARKDOWN_MENTION_SPLIT_REGEX);
+  const parts = splitMarkdownMentionParts(content);
 
   return parts
     .map((part) => {

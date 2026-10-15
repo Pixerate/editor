@@ -18,6 +18,7 @@ import {
   parseRichClipboardPayload,
   getClipboardData,
   getEditorText,
+  preprocessMarkdownMentions,
 } from "../src/serializers";
 import { createEditor, createRichTextPreset, richClipboardPluginKey } from "../src";
 import { growthRatio } from "./helpers/growth";
@@ -110,6 +111,15 @@ describe("Serializers: htmlToPlainText (Node fallback, no DOM)", () => {
   it("handles malformed mention spans quickly", () => {
     // Growth with input size is checked in html-scan.test.ts; this is a smoke test.
     expect(htmlToPlainText("<span data-type='mention' ".repeat(20000))).toContain("<span");
+  });
+
+  it("preprocesses markdown with unclosed mention spans, fences and tags quickly", () => {
+    // This took minutes with the split regex (cubic on unclosed mention spans).
+    const input = "<span data-type='mention' ".repeat(20000) + "```" + "<pre>".repeat(5000) + " @bob";
+    const html = preprocessMarkdownMentions(input, [{ id: "bob", label: "bob" } as any]);
+    expect(html).toContain('data-id="bob"');
+    // Protected regions are still left alone.
+    expect(preprocessMarkdownMentions("`@bob` <code>@bob</code> @bob", [{ id: "bob", label: "bob" } as any]).match(/data-id="bob"/g)).toHaveLength(1);
   });
 
   it.each([["</td>   "], ["</p>   "], ["</th>\n<td"]])(
