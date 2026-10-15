@@ -21,7 +21,7 @@ Editors for creative and AI apps: prompts, rich-text documents, spreadsheets, a 
 | **Review** | Comments with replies, tracked changes (insertions, deletions, moves, formatting), compare two documents into tracked changes | `@pixerate/editor/extensions`, `/compare` |
 | **Import / export** | Import `.docx`, `.md`, `.html`, `.txt`, `.rtf`, PDF (layout-aware) and Notion/Confluence zips; export Word `.docx` with comments and tracked changes | `@pixerate/editor`, `/export` |
 | **Spreadsheet** | Formula engine (dynamic arrays, `LAMBDA`, defined names, multiple sheets), Excel number formats, conditional formatting, data validation, sort/filter/freeze/merge, CSV, fast recalculation, virtualised grid | `@pixerate/editor/spreadsheet` |
-| **Canvas** | Node graph tools on xyflow: align and distribute, smart guides, auto layout, curve-preserving shape booleans, design tokens with light/dark modes, components and instances, keyframe animation | `@pixerate/editor/canvas`, `/tokens` |
+| **Canvas** | Node graph tools on xyflow: align and distribute, smart guides, auto layout, curve-preserving shape booleans, design tokens with light/dark modes, components and instances, keyframe animation | `@pixerate/editor/canvas`, `/tokens`, `/animation` |
 | **Image editor** | Canvas 2D crop/rotate, adjustments and adjustment layers, blend modes, histogram, selections and masks (magic wand, Refine Edge), annotations | `@pixerate/editor/image-editor` |
 | **Commands and agents** | One command registry for shortcuts, the command palette and AI agent tools (MCP-style `tools/list` / `tools/call`) | `@pixerate/editor/commands`, `/agent` |
 | **History and saving** | Undo/redo with gesture merging, dirty-vs-saved tracking, autosave with crash recovery, storage adapters (localStorage, IndexedDB, OPFS) | `@pixerate/editor/history`, `/persistence` |
@@ -276,7 +276,7 @@ Every feature is available from core and from both framework packages. "Via core
 </details>
 
 <details>
-<summary><strong>Canvas</strong> (25)</summary>
+<summary><strong>Canvas</strong> (26)</summary>
 
 | Feature | Core | React | Svelte |
 | :--- | :---: | :---: | :---: |
@@ -305,6 +305,7 @@ Every feature is available from core and from both framework packages. "Via core
 | Canvas Animation Timeline (scrub, draggable keyframes with snapping, easing picker) | `getTimelineRows` & `snapKeyframeDelta` | `<AnimationTimeline>` | `<AnimationTimeline>` |
 | Canvas Animation Playback & Export (injected clock, loop / ping-pong, CSS / Web Animations, frames) | `AnimationPlayer`, `exportCssAnimation`, `toWebAnimations` & `sampleAnimationFrames` | `useCanvasAnimation` | `createCanvasAnimation` |
 | Canvas Animation Commands & Agent Tools | `createCanvasAnimationCommands` | Via core & `useRegisterCommands` | Via core & `useRegisterCommands` |
+| Standalone Keyframe Model (tracks, easing, OKLab colours, evaluation, player and clock with no canvas nodes or dagre) | `evaluateTrack`, `evaluateEasing` & `AnimationPlayer` (`/animation`) | Via core | Via core |
 
 </details>
 
