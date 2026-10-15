@@ -96,7 +96,15 @@ import {
   type DataValidationSheet,
   type NewDataValidationRule
 } from './validation';
-import { adjustRangesForStructuralChange, shiftRuleFormula, subtractRangeFromRanges } from './rule-ranges';
+import {
+  adjustRangesForStructuralChange,
+  mapConditionalFormatFormulas,
+  mapDataValidationFormulas,
+  shiftRuleFormula,
+  sortRules,
+  subtractRangeFromRanges,
+  transposeRules
+} from './rule-ranges';
 import {
   buildSpreadsheetView,
   computeRowGroups,
@@ -2202,6 +2210,11 @@ export class SpreadsheetController {
         if (target === undefined || col < startCol || col > endCol) return null;
         return { row: target, col };
       });
+      // Whole rows carry every column, including rule ranges past the last one.
+      this.moveRulesForSort(
+        { startRow, startCol, endRow, endCol: wholeRows ? Number.MAX_SAFE_INTEGER : endCol },
+        (row) => newIndexOf.get(row) ?? row
+      );
 
       if (wholeRows) {
         const moved = sorted.map((r) => this.document.rows[r]);
@@ -2692,6 +2705,7 @@ export class SpreadsheetController {
         if (!rangeContains(s, row, col)) return null;
         return { row: s.startRow + (col - s.startCol), col: s.startCol + (row - s.startRow) };
       });
+      this.moveRulesForTranspose(s, t);
 
       const rowId = (r: number) => this.document.rows[r].id;
       const colId = (c: number) => this.document.columns[c].id;
@@ -3350,6 +3364,37 @@ export class SpreadsheetController {
           return next;
         })
         .filter((rule) => rule.ranges.length > 0);
+    }
+  }
+
+  /**
+   * Moves conditional formats and validations with sorted rows: per-row
+   * parts follow their rows, parts spanning every sorted row stay (Excel).
+   */
+  private moveRulesForSort(block: CellRange, newRowOf: (row: number) => number): void {
+    const table = this.document.table;
+    if (!table) return;
+    if (table.conditionalFormats?.length) {
+      table.conditionalFormats = sortRules(table.conditionalFormats, block, newRowOf, mapConditionalFormatFormulas);
+    }
+    if (table.dataValidations?.length) {
+      table.dataValidations = sortRules(table.dataValidations, block, newRowOf, mapDataValidationFormulas);
+    }
+  }
+
+  /** Moves conditional formats and validations of a transposed block with its cells. */
+  private moveRulesForTranspose(block: CellRange, target: CellRange): void {
+    const table = this.document.table;
+    if (!table) return;
+    if (table.conditionalFormats?.length) {
+      table.conditionalFormats = transposeRules(table.conditionalFormats, block, target, mapConditionalFormatFormulas, () =>
+        this.generateRuleId('cf')
+      );
+    }
+    if (table.dataValidations?.length) {
+      table.dataValidations = transposeRules(table.dataValidations, block, target, mapDataValidationFormulas, () =>
+        this.generateRuleId('dv')
+      );
     }
   }
 

@@ -255,7 +255,7 @@ We maintain **strict 1:1 parity** across JavaScript, React, and Svelte:
 | Command Palette (fuzzy ranking, recents, shortcuts, disabled reasons) | `rankCommands` & `createCommandPaletteController` | `<CommandPalette>` & `useCommandPalette` | `<CommandPalette>` & `createCommandPalette` |
 | Commands as Agent Tools (`list_commands`, `run_command`, `run_commands`) | `createCommandToolProvider` | Via core | Via core |
 | Built-in Commands (history undo/redo, canvas arrange, spreadsheet table) | `createHistoryCommands`, `createArrangeCommands`, `createSpreadsheetCommands` | Via core | Via core |
-| Spreadsheet Sort (multi-column, range) & Transpose | ✅ | ✅ | ✅ |
+| Spreadsheet Sort (multi-column, range) & Transpose (per-cell conditional formats / validations move with the cells) | ✅ | ✅ | ✅ |
 | Spreadsheet Filters (per-column rules, toggle) | ✅ | ✅ | ✅ |
 | Spreadsheet Freeze Panes, Header & Footer Rows | ✅ | ✅ | ✅ |
 | Spreadsheet Hide/Unhide Rows & Columns | ✅ | ✅ | ✅ |

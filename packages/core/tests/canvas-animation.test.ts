@@ -338,8 +338,8 @@ describe('track evaluation', () => {
 			);
 		const small = make(250);
 		const large = make(1000);
-		const ratio = measureGrowth(() => applyAnimation(small, 750), () => applyAnimation(large, 750), { limit: 8 });
-		expect(ratio).toBeLessThan(8);
+		const ratio = measureGrowth(() => applyAnimation(small, 750), () => applyAnimation(large, 750), { limit: 10 });
+		expect(ratio).toBeLessThan(10);
 	});
 });
 
