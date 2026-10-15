@@ -26,7 +26,7 @@ function reachablePackages(entry: string): Set<string> {
 }
 
 describe("subpath entry isolation", () => {
-  it.each(["spreadsheet/index.js", "image-editor/index.js", "history/index.js", "grammar/index.js", "commands/index.js", "persistence/index.js", "generation/index.js", "tokens/index.js", "export/index.js"])(
+  it.each(["spreadsheet/index.js", "image-editor/index.js", "history/index.js", "animation/index.js", "grammar/index.js", "commands/index.js", "persistence/index.js", "generation/index.js", "tokens/index.js", "export/index.js"])(
     "%s pulls in no third-party packages",
     (entry) => {
       expect([...reachablePackages(entry)]).toEqual([]);
