@@ -979,8 +979,27 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: A host that only wanted `ToolRegistry` (an effect editor exposing `createCommandToolProvider`, a canvas-only or spreadsheet-only app) had to install `@tiptap/core`, `@tiptap/pm` and `@dagrejs/dagre`, because importing `@pixerate/editor/agent` loads them. Consumers worked around it by copying `callTool` / `toolDefinitions` helpers or importing the tool types from `/generation`.
 - **Root Cause**: `/agent` re-exports `providers.ts`, which imports `@tiptap/core` and `@tiptap/pm/state` at load time for `createRichTextToolProvider`, and `planner.ts`, which imports `canvas/layout.ts` (dagre). The registry itself depends on none of them.
 - **Solution / Workaround**: The registry, the JSON Schema validator and the static MCP tool definitions live in `src/tools/` and ship as `@pixerate/editor/tools`; `/agent` re-exports `../tools/index.js` so existing imports keep working. Dependency-free modules (`commands`, `generation`, `image-editor`) import from `../tools/*.js`, never from `../agent/*`. Anything that needs TipTap or the planner (including `createEditorMcpToolProvider`, whose `layout` operation runs dagre) stays in `/agent`. `tests/entry-isolation.test.ts` fails if `tools/index.js` or `tools/index.cjs` reaches any third-party package.
+
 ### [core/animation] The `/animation` Entry Must Not Reach Canvas Code, and tsup Chunks Can Pull It In Silently
 
 - **Issue / Symptom**: Keyframe evaluation used to live under `src/canvas/animation/`, so the only way to get `evaluateTrack` or `AnimationPlayer` was `@pixerate/editor/canvas`, which statically imports the optional `@dagrejs/dagre` peer.
 - **Root Cause**: The node-independent parts (easing, OKLab colour, keyframes, `evaluateTrack`, player, clock) shared files with node code (`model.ts` / `evaluate.ts` import `CanvasNode`, `arrange`, `tokenBindings`). With `splitting: true`, one stray import from `src/animation/` into `src/canvas/` would put canvas code (and dagre) into a chunk the `/animation` entry loads, with no type error.
 - **Solution / Workaround**: The node-independent code lives in `src/animation/` and imports nothing from `src/canvas/` (only `src/tokens/color.ts`). `src/canvas/clock.ts` and `src/canvas/animation/{easing,color,player}.ts` are one-line re-exports, and the canvas `model.ts` / `evaluate.ts` re-export the keyframe types and `evaluateTrack`, so `/canvas` still exports the same bindings. `tests/entry-isolation.test.ts` checks the built `dist/animation/index.js` reaches no packages; `tests/animation-entry.test.ts` checks `/canvas` re-exports the same functions and that nothing node-specific leaked into `/animation`. Add new node-independent helpers to `src/animation/`, never the other way round.
+
+### [svelte] A Variable Named `state` Turns `$state(...)` Into a Store Subscription
+
+- **Issue / Symptom**: `svelte-check` reports `Block-scoped variable '$state' used before its declaration` and `Cannot use 'state' as a store` in a component that declares `let state = $state.raw(...)` (for example a `ParametersState` snapshot).
+- **Root Cause**: In a `.svelte` file, `$name` means "subscribe to the store `name`" whenever a variable called `name` is in scope. Declaring `state` makes the compiler read `$state` as a store reference instead of the rune.
+- **Solution / Workaround**: Never name a component-level variable `state` (or `derived`, `effect`, `props`). The parameters panel keeps its snapshot in `view`. Props named `state` are fine only in components that use no `$state` rune.
+
+### [core/commands] A Command's `params` Can Be a Getter, but Only While the Spec Is Not Spread
+
+- **Issue / Symptom**: The JSON Schema agents see for `parameters.set` must follow the parameter schema, which changes with `ParametersController.setSchema`, but `CommandSpec.params` is a plain property read by `list()` and validated on every `execute()`.
+- **Root Cause**: `CommandRegistry` stores the spec object as given and reads `spec.params` each time, so a getter works. Spreading the spec (`{ ...spec, scope }`) evaluates the getter once and freezes the schema.
+- **Solution / Workaround**: Define `params` with `get params() { … }` on the object literal that is registered, and add shared fields (`group`, `scope`) by spreading them *into* that literal, not by spreading the spec into a new object. Note the registry validates params against this schema before `run`, so range and enum errors come back as `invalid_params` with `validateJsonSchema` wording (`/values/speed Must be <= 4.`); only checks the JSON Schema cannot express (vector component bounds, text patterns) reach the controller's sentence errors.
+
+### [core/parameters] Command `execute` Runs Before `HistoryManager` Records the Step
+
+- **Issue / Symptom**: A store that rebuilds its snapshot inside a history command's `execute` / `undo` reports stale `canUndo` / `canRedo` / `undoLabel` (the undo button stays disabled after the first edit).
+- **Root Cause**: `HistoryManager.execute` calls `command.execute()` first and only then pushes the step and notifies; `undo` / `redo` likewise notify after the closure ran.
+- **Solution / Workaround**: Notify from the command (so values update immediately) and also subscribe to the history, re-notifying only when the undo / redo fields actually changed. `ParametersController` does both, which keeps one snapshot per edit in the common case and never leaves the history fields stale.

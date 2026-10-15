@@ -37,9 +37,9 @@ export interface ParameterControlProps<F extends ParameterField, V extends Param
 }
 
 export const parameterInputClass =
-  'h-7 w-full min-w-0 rounded-md border border-input bg-background px-2 text-xs text-foreground tabular-nums focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
+  'h-7 w-full min-w-0 rounded-md border border-input bg-background px-2 text-xs text-foreground tabular-nums focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50';
 export const parameterButtonClass =
-  'inline-flex h-7 items-center justify-center gap-1 rounded-md border border-input bg-background px-2 text-xs text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50';
+  'inline-flex h-7 items-center justify-center gap-1 rounded-md border border-input bg-background px-2 text-xs text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:pointer-events-none disabled:opacity-50';
 const rangeClass = 'h-4 w-full min-w-0 flex-1 cursor-pointer accent-primary disabled:cursor-not-allowed disabled:opacity-50';
 
 type CommitInputProps = { value: string; onCommit: (value: string) => void; multiline?: boolean } & Omit<
@@ -161,7 +161,7 @@ export function ParameterToggle({ field, value, onChange, disabled, id }: Parame
       aria-label={parameterLabel(field)}
       disabled={disabled || field.readOnly}
       onClick={() => onChange(!value)}
-      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-transparent transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50 ${
+      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-transparent transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:opacity-50 ${
         value ? 'bg-primary' : 'bg-muted'
       }`}
     >
@@ -300,7 +300,7 @@ export function ParameterColor({ field, value, onChange, onGestureStart, onGestu
                 aria-pressed={swatch === (alpha ? hex : rgb)}
                 disabled={off}
                 onClick={() => onChange(swatch)}
-                className="h-5 w-5 rounded border border-input aria-pressed:ring-1 aria-pressed:ring-ring"
+                className="h-5 w-5 rounded border border-input aria-pressed:ring-1 aria-pressed:ring-primary"
                 style={{ background: swatch }}
               />
             );
@@ -401,7 +401,7 @@ export function ParameterImage({ field, value, onChange, disabled, id, resolveFi
               aria-pressed={o.url === value}
               disabled={off}
               onClick={() => onChange(o.url)}
-              className="h-9 w-12 overflow-hidden rounded border border-input aria-pressed:ring-2 aria-pressed:ring-ring"
+              className="h-9 w-12 overflow-hidden rounded border border-input aria-pressed:ring-2 aria-pressed:ring-primary"
             >
               <img src={o.url} alt="" className="h-full w-full object-cover" />
             </button>
@@ -449,7 +449,7 @@ export function KeyframeDiamond({ state, onToggle, label, disabled, className = 
       title={keyed ? 'Remove keyframe here' : 'Add keyframe at the playhead'}
       disabled={disabled}
       onClick={onToggle}
-      className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-40 ${
+      className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:opacity-40 ${
         state === 'none' ? 'text-muted-foreground hover:text-foreground' : 'text-amber-500'
       } ${className}`}
     >

@@ -67,7 +67,7 @@
           aria-pressed={o.url === value}
           disabled={off}
           onclick={() => onchange(o.url)}
-          class="h-9 w-12 overflow-hidden rounded border border-input aria-pressed:ring-2 aria-pressed:ring-ring"
+          class="h-9 w-12 overflow-hidden rounded border border-input aria-pressed:ring-2 aria-pressed:ring-primary"
         >
           <img src={o.url} alt="" class="h-full w-full object-cover" />
         </button>

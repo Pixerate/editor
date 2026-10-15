@@ -24,7 +24,7 @@
   title={keyed ? 'Remove keyframe here' : 'Add keyframe at the playhead'}
   {disabled}
   onclick={ontoggle}
-  class="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-40 {state ===
+  class="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:opacity-40 {state ===
   'none'
     ? 'text-muted-foreground hover:text-foreground'
     : 'text-amber-500'} {className}"

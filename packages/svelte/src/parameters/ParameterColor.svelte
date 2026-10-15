@@ -99,7 +99,7 @@
             aria-pressed={swatch === shown}
             disabled={off}
             onclick={() => onchange(swatch)}
-            class="h-5 w-5 rounded border border-input aria-pressed:ring-1 aria-pressed:ring-ring"
+            class="h-5 w-5 rounded border border-input aria-pressed:ring-1 aria-pressed:ring-primary"
             style:background={swatch}
           ></button>
         {/if}

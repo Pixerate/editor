@@ -21,7 +21,7 @@
   aria-label={parameterLabel(field)}
   disabled={disabled || field.readOnly}
   onclick={() => onchange(!value)}
-  class="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-transparent transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50 {value
+  class="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-transparent transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:opacity-50 {value
     ? 'bg-primary'
     : 'bg-muted'}"
 >
