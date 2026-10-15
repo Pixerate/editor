@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import type { AgentToolProvider, ToolRegistry } from "@pixerate/editor/agent";
+import type { AgentToolProvider, ToolRegistry } from "@pixerate/editor/tools";
 
 /**
  * Registers a tool provider with a `ToolRegistry` while the component is

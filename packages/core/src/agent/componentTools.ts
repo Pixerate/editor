@@ -1,5 +1,5 @@
 import { hasVariantCommands, type ComponentCommandTarget } from '../commands/builtins.js';
-import type { AgentTool, AgentToolProvider } from './registry.js';
+import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import type { ToolProviderOptions } from './providers.js';
 
 const IDS = { type: 'array', items: { type: 'string' }, description: 'Node ids (default: the selection).' } as const;

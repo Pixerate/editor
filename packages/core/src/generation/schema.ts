@@ -1,4 +1,4 @@
-import type { JsonSchema } from '../agent/schema.js';
+import type { JsonSchema } from '../tools/schema.js';
 import {
 	referenceRoleLabel,
 	seedCapability,

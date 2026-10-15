@@ -11,6 +11,7 @@ export default defineConfig({
     "animation/index": "src/animation/index.ts",
     "canvas/index": "src/canvas/index.ts",
     "agent/index": "src/agent/index.ts",
+    "tools/index": "src/tools/index.ts",
     "image-editor/index": "src/image-editor/index.ts",
     "commands/index": "src/commands/index.ts",
     "persistence/index": "src/persistence/index.ts",

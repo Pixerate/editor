@@ -1,5 +1,5 @@
-import type { AgentTool, AgentToolProvider, ToolCallContext } from '../agent/registry.js';
-import type { JsonSchema } from '../agent/schema.js';
+import type { AgentTool, AgentToolProvider, ToolCallContext } from '../tools/registry.js';
+import type { JsonSchema } from '../tools/schema.js';
 import {
 	REFERENCE_ROLES,
 	supportedReferenceRoles,

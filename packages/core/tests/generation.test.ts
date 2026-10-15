@@ -28,7 +28,7 @@ import {
   type GenerationRequest,
   type ModelCapabilities,
 } from "../src/generation";
-import { ToolRegistry } from "../src/agent/registry";
+import { ToolRegistry } from "../src/tools/registry";
 import type { Template } from "../src/grammar";
 
 const imageModel: ModelCapabilities = {

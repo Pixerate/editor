@@ -1,5 +1,5 @@
-import type { AgentTool } from '../agent/registry';
-import type { JsonSchema } from '../agent/schema';
+import type { AgentTool } from '../tools/registry.js';
+import type { JsonSchema } from '../tools/schema.js';
 import type { ImageEditorController } from './controller';
 import type { AdjustmentKind } from './types';
 import { ADJUSTMENT_KINDS, isAdjustmentKind } from './adjustment-layers';

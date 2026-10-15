@@ -1,5 +1,5 @@
 // Portions ported from filmcraft-main/crates/engine/src/commands.rs and crates/engine/src/lib.rs (MIT OR Apache-2.0, © ArtCraft Team and contributors). See THIRD_PARTY_NOTICES.md.
-import { validateJsonSchema, type JsonSchema, type SchemaValidationError } from '../agent/schema.js';
+import { validateJsonSchema, type JsonSchema, type SchemaValidationError } from '../tools/schema.js';
 import type { KeyboardEventLike, Platform } from './chords.js';
 import {
 	ShortcutMap,

@@ -30,7 +30,7 @@ import {
   type RichTextPresetOptions,
 } from "../src";
 import { CommandRegistry } from "../src/commands";
-import { ToolRegistry } from "../src/agent/registry";
+import { ToolRegistry } from "../src/tools/registry";
 import { createRichTextToolProvider } from "../src/agent/providers";
 
 beforeAll(() => {

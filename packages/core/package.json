@@ -59,6 +59,11 @@
       "import": "./dist/agent/index.js",
       "require": "./dist/agent/index.cjs"
     },
+    "./tools": {
+      "types": "./dist/tools/index.d.ts",
+      "import": "./dist/tools/index.js",
+      "require": "./dist/tools/index.cjs"
+    },
     "./image-editor": {
       "types": "./dist/image-editor/index.d.ts",
       "import": "./dist/image-editor/index.js",
