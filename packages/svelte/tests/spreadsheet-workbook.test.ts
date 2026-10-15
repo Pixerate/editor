@@ -174,3 +174,26 @@ describe('Svelte NameManager', () => {
     expect(target.querySelector('[role="option"]')?.textContent).toContain('Revenue');
   });
 });
+
+describe('createReactiveSpreadsheet: defined names in the saved document', () => {
+  it('saves names through onDocumentChange and restores them from `document`', () => {
+    let saved: any = null;
+    const sheetState = createReactiveSpreadsheet({ onDocumentChange: (doc) => (saved = JSON.parse(JSON.stringify(doc))) });
+    sheetState.defineName('Rate', '=0.5');
+    sheetState.defineName('Twice', '=LAMBDA(x, x*2)');
+    sheetState.defineName('Local', '=4', { sheet: sheetState.activeSheetId });
+    sheetState.setCellValue(sheetState.document.rows[0].id, sheetState.document.columns[0].id, '=Twice(Local)*Rate');
+    expect(saved.names.map((n: any) => n.name)).toEqual(['Rate', 'Twice', 'Local']);
+    expect(sheetState.document.names?.map((n) => n.name)).toEqual(['Rate', 'Twice', 'Local']);
+    sheetState.deleteName('Rate');
+    expect(saved.names.map((n: any) => n.name)).toEqual(['Twice', 'Local']);
+    expect(sheetState.document.names?.map((n) => n.name)).toEqual(['Twice', 'Local']);
+    sheetState.undo();
+    expect(saved.names.map((n: any) => n.name)).toEqual(['Rate', 'Twice', 'Local']);
+
+    const reloaded = createReactiveSpreadsheet({ document: saved });
+    expect(reloaded.names.map((n) => n.name)).toEqual(['Rate', 'Twice', 'Local']);
+    expect(reloaded.names.find((n) => n.name === 'Local')?.sheetId).toBe(reloaded.activeSheetId);
+    expect(reloaded.getCell(reloaded.document.rows[0].id, reloaded.document.columns[0].id).value).toBe(4);
+  });
+});

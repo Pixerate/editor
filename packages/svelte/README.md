@@ -85,6 +85,8 @@ Tables are on by default in `createRichTextPreset` (`table: false` turns them of
 | `@pixerate/editor-svelte/generation` | `GenerationSettings` (controls generated from a model's capabilities, reference slots by role, plan adjustments; `onchange` / `onaddreference`), `createGenerationPlan(() => request, () => caps)`, `JobProgress`, `createJobProgress` (call `destroy()` when done) over `@pixerate/editor/generation` (also re-exported from the root entry) |
 | `@pixerate/editor-svelte/canvas` | Runes for `@xyflow/svelte`: `createCanvasGraph`, `createCanvasClipboard`, `createCanvasDocking`, `createCanvasShortcuts`, `createCanvasInteractions`, `createCanvasExplosion`, `createCanvasNodeSync`, `createCanvasMultiDrag`, `createStreamingCanvas`, `AgentPresenceLayer`, `FloatingHorizontalScrollbar`, plus layout helpers |
 
+Spreadsheet persistence: `createReactiveSpreadsheet` exposes `document` (and passes it to `onDocumentChange`) with the defined names its formulas use in `document.names`, so saving that document and passing it back as `document` restores workbook, sheet-scoped and LAMBDA names. For several sheets, save `controller.getWorkbook()` instead.
+
 Prop types are exported alongside each component, for example `EditableTextNodeEditorProps`, `BubbleMenuProps`, `ImageEditorProps` and `SpreadsheetEditorProps`.
 
 ## Styling (Tailwind CSS required)

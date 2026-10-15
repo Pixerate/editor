@@ -345,8 +345,10 @@ sheet.defineName("Revenue", "=Sales!$F$2:$F$11");
 sheet.defineName("WithTax", "=LAMBDA(x, x*1.2)");
 sheet.setCellValue(sheet.document.rows[0].id, sheet.document.columns[0].id, "=WithTax(SUM(Revenue))");
 sheet.renameSheet("Sales", "Sales 2026");        // formulas become ='Sales 2026'!…
-sheet.getWorkbook();                             // { sheets, activeSheetId, names } to save
+sheet.getWorkbook();                             // { sheets, activeSheetId, names }: save every sheet
 ```
+
+**Saving.** Either save `getWorkbook()` (every sheet, with all names in `names`) and load it with `{ workbook }` / `loadWorkbook`, or keep saving the document passed to `onDocumentChange` and load it with `{ document }` / `loadDocument`: each sheet document's `names` holds the workbook-scoped names plus that sheet's own sheet-scoped names (any `sheetId` there means "this sheet"), so a single-sheet app round-trips names (LAMBDA names included) without changes. When a workbook is loaded, `workbook.names` wins over names repeated in `sheets[*].names`, and names found only in sheet documents are added (first sheet wins). `getWorkbook()` keeps names in `names` only. Documents and workbooks saved before names existed load as before.
 
 Formulas reference other sheets (`Sheet2!A1`, `'My Sheet'!A1:B2`, `Data!A1#`) and 3-D ranges (`SUM(Sheet1:Sheet3!A1)`). Deleting a sheet turns references to it into `#REF!`; inserting or deleting rows and columns rewrites references from every sheet. Names can be workbook- or sheet-scoped (`{ sheet }`), are validated like Excel (`validateDefinedName`), and `renameName` rewrites the formulas using them. `LAMBDA` values can be called inline (`=LAMBDA(x, x+1)(2)`), stored with `LET` or a name (recursion is capped at 1000 calls with `#NUM!`), or passed to `MAP`, `REDUCE`, `SCAN`, `BYROW`, `BYCOL` and `MAKEARRAY`. Undo restores the sheet a step changed (switching to it) or, for sheet and name operations, the whole workbook.
 

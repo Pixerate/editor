@@ -279,7 +279,7 @@ We maintain **strict 1:1 parity** across JavaScript, React, and Svelte:
 | Spreadsheet Virtualised Rendering (visible rows/columns + overscan; frozen panes, merges, groups, keyboard scroll-into-view) | `getSpreadsheetViewWindow` / `getSpreadsheetScrollToCell` | `virtualize` prop / `useSpreadsheetViewport` | `virtualize` prop / `createSpreadsheetViewport` |
 | Array Functions (FILTER, SORT, SORTBY, UNIQUE, SEQUENCE, TRANSPOSE, RANDARRAY, LET) & array arithmetic | ✅ | Via core | Via core |
 | LAMBDA (closures, inline calls, recursion cap) & MAP, REDUCE, SCAN, BYROW, BYCOL, MAKEARRAY, ISOMITTED | ✅ | Via core | Via core |
-| Defined Names (workbook/sheet scope, ranges, constants, LAMBDA names; rename rewrites formulas) | `defineName` / `renameName` / `deleteName` | `<NameManager>` + name autocomplete | `<NameManager>` + name autocomplete |
+| Defined Names (workbook/sheet scope, ranges, constants, LAMBDA names; rename rewrites formulas; saved in each sheet document's `names`) | `defineName` / `renameName` / `deleteName` | `<NameManager>` + name autocomplete | `<NameManager>` + name autocomplete |
 | Multiple Sheets (`Sheet2!A1`, `'My Sheet'!A1:B2`, 3-D `Sheet1:Sheet3!A1`; rename/delete rewrite to `#REF!`, per-sheet undo) | `addSheet` / `renameSheet` / `moveSheet` / `deleteSheet` / `duplicateSheet` | `<SheetTabs>` (`showSheetTabs`) | `<SheetTabs>` (`showSheetTabs`) |
 | Formula Date Arithmetic (`date ± days`, `date - date`, chronological date comparisons) | ✅ | Via core | Via core |
 | History Gesture Merge Keys & Held Gestures (`executeMerged(cmd, { key })`, `beginGesture` / `endGesture`) | `HistoryManager` | `useHistory` | `createHistory` |

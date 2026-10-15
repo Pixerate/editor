@@ -118,6 +118,19 @@ export interface SpreadsheetDocument {
   createdAt?: number;
   updatedAt?: number;
   table?: SpreadsheetTableSettings; // sort/filter/freeze/merge/grouping state
+  /**
+   * The defined names formulas on this sheet can use, so a document saved on
+   * its own (from `onDocumentChange`) reloads with them: every
+   * workbook-scoped name (no `sheetId`) plus this sheet's own sheet-scoped
+   * names (`sheetId` set). Written by `SpreadsheetController` on every
+   * change; read by `new SpreadsheetController({ document })`,
+   * `loadDocument`, `addSheet({ document })` and, for `workbook.sheets`,
+   * `loadWorkbook` (where `workbook.names` wins). Any `sheetId` in a
+   * document's names means "this sheet", whatever its value. Absent when
+   * there are no names. `getWorkbook()` leaves it out of its sheets, because
+   * `workbook.names` holds them all.
+   */
+  names?: SpreadsheetDefinedName[];
 }
 
 // --- Table operations (sort, filters, freeze, merges, categories) ---
@@ -233,6 +246,11 @@ export interface SpreadsheetWorkbook {
   sheets: SpreadsheetDocument[];
   /** Id of the sheet shown (default: the first). */
   activeSheetId?: string;
+  /**
+   * Every defined name. When loading, these win over the same names found in
+   * `sheets[*].names`; names found only in a sheet's `names` are added too
+   * (first sheet in tab order wins for workbook-scoped duplicates).
+   */
   names?: SpreadsheetDefinedName[];
 }
 
