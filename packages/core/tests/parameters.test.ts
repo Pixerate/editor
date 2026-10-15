@@ -12,6 +12,8 @@ import {
 	createParameterKeyframeStore,
 	evaluateParameterCondition,
 	formatParameterNumber,
+	formatParameterValue,
+	parseParameterNumberInput,
 	getParameterDefaults,
 	getParameterFields,
 	getParameterVisibility,
@@ -133,6 +135,14 @@ describe('parameter schema helpers', () => {
 		expect(parameterStep({ id: 'o', type: 'number', min: 0, max: 1, default: 0 })).toBe(0.01);
 		expect(clampParameterNumber(speed, 9)).toBe(4);
 		expect(clampParameterNumber({ id: 'i', type: 'int', default: 0 }, 2.4)).toBe(2);
+		expect(parseParameterNumberInput(speed, ' 2.5x ')).toBe(2.5);
+		expect(parseParameterNumberInput(speed, '1,5')).toBe(1.5);
+		expect(parseParameterNumberInput(speed, '99')).toBe(4);
+		expect(parseParameterNumberInput(speed, 'abc')).toBeNull();
+		const fields = getParameterFields(schema);
+		expect(formatParameterValue(fields[2], false)).toBe('Off');
+		expect(formatParameterValue(fields[3], 'advanced')).toBe('Advanced…');
+		expect(formatParameterValue(fields[6], [0.5, -1])).toBe('0.5, -1');
 	});
 
 	it('converts colours between hex and 0–1 components', () => {

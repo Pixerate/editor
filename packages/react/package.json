@@ -53,6 +53,11 @@
       "types": "./dist/tokens/index.d.ts",
       "import": "./dist/tokens/index.js",
       "require": "./dist/tokens/index.cjs"
+    },
+    "./parameters": {
+      "types": "./dist/parameters/index.d.ts",
+      "import": "./dist/parameters/index.js",
+      "require": "./dist/parameters/index.cjs"
     }
   },
   "typesVersions": {
@@ -77,6 +82,9 @@
       ],
       "tokens": [
         "./dist/tokens/index.d.ts"
+      ],
+      "parameters": [
+        "./dist/parameters/index.d.ts"
       ]
     }
   },

@@ -306,6 +306,38 @@ export function clampParameterNumber(field: NumberParameterField, value: number)
 	return Math.round(v * 1e6) / 1e6;
 }
 
+/**
+ * Parses what someone typed into a number box ("2.5", "2.5x", "-1e2") and clamps it into
+ * the field's bounds. Returns `null` when it is not a number.
+ */
+export function parseParameterNumberInput(field: NumberParameterField, text: string): number | null {
+	let t = text.trim();
+	if (field.unit && t.endsWith(field.unit)) t = t.slice(0, -field.unit.length).trim();
+	if (t === '') return null;
+	const n = Number(t.replace(',', '.'));
+	return Number.isFinite(n) ? clampParameterNumber(field, n) : null;
+}
+
+/** A value as short display text (numbers formatted, vectors comma-separated, booleans On/Off). */
+export function formatParameterValue(field: ParameterField, value: ParameterValue | undefined): string {
+	if (value === undefined) return '';
+	switch (field.type) {
+		case 'number':
+		case 'int':
+			return formatParameterNumber(field, value as number);
+		case 'boolean':
+			return value ? 'On' : 'Off';
+		case 'choice': {
+			const option = getChoiceOptions(field).find((o) => o.value === value);
+			return option ? choiceOptionLabel(option) : String(value);
+		}
+		case 'vector':
+			return (value as number[]).map((v, i) => formatParameterNumber(vectorComponentField(field, i), v)).join(', ');
+		default:
+			return String(value);
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Validation
 // ---------------------------------------------------------------------------
