@@ -82,3 +82,26 @@ permissions:
    - **Branch**: `main`
    - **Workflow filename**: `release.yml`
 5. Save. The workflow can now publish securely using `--provenance` without any static token stored in GitHub repository secrets!
+
+---
+
+## Demo deployment (`demo.yml`)
+
+`.github/workflows/demo.yml` builds `apps/demo` against the workspace packages and publishes it to GitHub Pages at **https://pixerate.github.io/editor/**.
+
+- **When:** on pushes to `main` that touch `apps/demo/**`, `packages/**`, `pnpm-lock.yaml` or the workflow itself, and on demand from the Actions tab (`workflow_dispatch`).
+- **Base path:** project pages are served from `/<repo>/`, so the workflow builds with `DEMO_BASE=/<repo>/`, which `apps/demo/vite.config.ts` uses as Vite's `base`. Locally `base` stays `/`. The demo uses hash links (`#sheet`, `#canvas`, …), so no 404 fallback is needed.
+- **Permissions:** `pages: write` and `id-token: write` for `actions/deploy-pages`; deployments share one `pages` concurrency group and never cancel one in progress.
+
+### One-time GitHub configuration
+
+In the repository's **Settings → Pages**, set **Source** to **GitHub Actions**. Until then the deploy job fails with "Pages site not found". After the first run, the `github-pages` environment shows the live URL.
+
+To preview the Pages build locally:
+
+```bash
+pnpm --filter "./packages/*" build
+cd apps/demo && DEMO_BASE=/editor/ npx vite build && DEMO_BASE=/editor/ npx vite preview
+```
+
+Then open http://localhost:4173/editor/.

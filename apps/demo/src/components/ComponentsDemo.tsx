@@ -212,6 +212,32 @@ const ComponentsCanvas: React.FC = () => {
           </ReactFlow>
         </div>
         <div className="space-y-3 rounded-xl border border-slate-800 bg-slate-900 p-3 text-slate-200">
+          <div data-testid="components-history">
+            <h4 className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">History</h4>
+            {history.entries.length === 0 ? (
+              <p className="text-[11px] text-slate-500">Edits appear here; click one to go back to it.</p>
+            ) : (
+              <ol className="max-h-32 overflow-auto text-xs">
+                <li>
+                  <button type="button" className="w-full text-left px-1.5 py-0.5 rounded text-slate-500 hover:bg-slate-800" onClick={() => history.goTo(-1)}>
+                    Start
+                  </button>
+                </li>
+                {history.entries.map((entry) => (
+                  <li key={entry.id}>
+                    <button
+                      type="button"
+                      onClick={() => history.goTo(entry.index)}
+                      aria-current={entry.current ? "step" : undefined}
+                      className={`w-full text-left px-1.5 py-0.5 rounded hover:bg-slate-800 ${entry.current ? "bg-slate-800 text-sky-300" : entry.undone ? "text-slate-500 line-through" : "text-slate-300"}`}
+                    >
+                      {entry.label}
+                    </button>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </div>
           <div>
             <h4 className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Assets</h4>
             <CanvasComponentsPanel nodes={nodes} onInsert={(id) => report(components.createInstance(id))} components={components} onError={setError} />

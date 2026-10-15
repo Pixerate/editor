@@ -2,6 +2,8 @@
 
 Editors for creative and AI apps: prompts, rich-text documents, spreadsheets, a design canvas and an image editor. The logic is plain TypeScript in one core package, with matching React and Svelte 5 packages on top.
 
+**[Try the live demo →](https://pixerate.github.io/editor/)**
+
 <p align="center">
   <a href="https://www.npmjs.com/package/@pixerate/editor"><img src="https://img.shields.io/npm/v/@pixerate/editor.svg?style=flat-square&color=rose" alt="npm core version" /></a>
   <a href="https://www.npmjs.com/package/@pixerate/editor-react"><img src="https://img.shields.io/npm/v/@pixerate/editor-react.svg?style=flat-square&color=blue" alt="npm react version" /></a>
@@ -142,6 +144,8 @@ const { data, report } = await exportDocx(doc); // data: Uint8Array of the .docx
 More examples: [prompt engine](docs/prompt-engine.md), [canvas](docs/canvas.md) and each package README.
 
 ## Demo
+
+The demo is deployed to **https://pixerate.github.io/editor/** on every push to `main` that changes the demo or the packages. To run it locally:
 
 ```bash
 pnpm install

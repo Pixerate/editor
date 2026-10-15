@@ -2,6 +2,8 @@ import React, { useMemo, useState } from "react";
 import {
   AssetMentionChips,
   GenerationHistory,
+  GenerationSettings,
+  JobProgress,
   useGenerationRecords,
 } from "@pixerate/editor-react";
 import {
@@ -11,6 +13,7 @@ import {
   findTextMentions,
   type AssetInfo,
   type CreateGenerationRecordOptions,
+  type GenerationRequest,
   type ModelCapabilities,
   type PlanAssetMention,
 } from "@pixerate/editor/generation";
@@ -69,6 +72,9 @@ export const GenerationHistoryDemo: React.FC<Props> = ({
   const { records } = useGenerationRecords(store);
   const [assets, setAssets] = useState(DEMO_ASSETS);
   const [message, setMessage] = useState<string | null>(null);
+  // "4k" isn't offered by the demo model: the settings form shows how the plan snaps it.
+  const [request, setRequest] = useState<GenerationRequest>({ aspectRatio: "16:9", resolution: "4k" });
+  const [job, setJob] = useState<{ startedAt: number; done: boolean } | null>(null);
 
   const mentions: PlanAssetMention[] = useMemo(
     () =>
@@ -90,18 +96,23 @@ export const GenerationHistoryDemo: React.FC<Props> = ({
     setMessage(`${label}: ${record.provenance.resolvedPrompt.slice(0, 60)}… (seed ${record.seed ?? "–"}${dropped ? `, ${dropped} dropped` : ""})`);
   };
 
-  const generate = () =>
-    run(
+  const generate = async () => {
+    // Pretend the provider takes a few seconds, so the progress bar has something to show.
+    setJob({ startedAt: Date.now(), done: false });
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+    setJob((current) => (current ? { ...current, done: true } : current));
+    await run(
       {
         rawPrompt: content,
         templates,
         values,
         model: DEMO_MODEL,
-        request: { aspectRatio: "16:9", resolution: "4k", seed: Math.floor(Math.random() * 1_000_000) },
+        request: { ...request, seed: request.seed ?? Math.floor(Math.random() * 1_000_000) },
         mentions,
       },
       "Generated",
     );
+  };
 
   const editTemplate = () => {
     onTemplatesChange(
@@ -144,11 +155,27 @@ export const GenerationHistoryDemo: React.FC<Props> = ({
         capabilities={DEMO_MODEL}
         className="text-slate-200"
       />
+      <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
+        <p className="mb-2 text-[11px] text-slate-400">
+          Settings generated from the model&apos;s capabilities. Unsupported values are snapped and listed below.
+        </p>
+        <GenerationSettings capabilities={DEMO_MODEL} value={request} onChange={setRequest} className="text-slate-200" />
+      </div>
+      {job && (
+        <JobProgress
+          title={DEMO_MODEL.name}
+          startedAt={job.startedAt}
+          expectedMs={3500}
+          done={job.done}
+          className="text-slate-200"
+        />
+      )}
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
+          disabled={job !== null && !job.done}
           onClick={() => void generate()}
-          className="px-2.5 py-1 text-xs rounded bg-rose-600 hover:bg-rose-500 text-white"
+          className="px-2.5 py-1 text-xs rounded bg-rose-600 hover:bg-rose-500 text-white disabled:opacity-50"
           data-testid="fake-generate"
         >
           <Wand2 className="inline w-3.5 h-3.5 mr-1" />
