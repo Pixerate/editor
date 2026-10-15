@@ -4,6 +4,7 @@ import * as _Table from "@tiptap/extension-table";
 import * as _TableRow from "@tiptap/extension-table-row";
 import * as _TableHeader from "@tiptap/extension-table-header";
 import * as _TableCell from "@tiptap/extension-table-cell";
+import { createTableNestingPlugin } from "./nesting";
 
 const resolveExt = (mod: any, name: string) =>
   mod?.[name] || mod?.default?.[name] || mod?.default?.default || mod?.default || mod;
@@ -179,10 +180,17 @@ export const DEFAULT_TABLE_OPTIONS: RichTextTableOptions = {
   rowHTMLAttributes: {},
 };
 
-/** TipTap's `Table` with the GFM-aware markdown serializer. */
+/**
+ * TipTap's `Table` with the GFM-aware markdown serializer and the nesting
+ * guard (`createTableNestingPlugin`): tables are never pasted, imported or
+ * inserted into table cells.
+ */
 export const Table = BaseTable.extend({
   addStorage() {
     return { markdown: { serialize: serializeTableMarkdown } };
+  },
+  addProseMirrorPlugins() {
+    return [...(this.parent?.() ?? []), createTableNestingPlugin()];
   },
 });
 

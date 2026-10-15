@@ -7,6 +7,7 @@ import {
   readRichClipboard,
   serializeRichClipboardPayload,
 } from "../serializers/clipboard";
+import { handleTablePasteWithoutNesting } from "./table/nesting";
 
 export interface RichClipboardOptions {
   /** MIME type for the slice JSON (default `application/x.pixerate.document+json`). */
@@ -92,6 +93,9 @@ export const RichClipboard = Extension.create<RichClipboardOptions, RichClipboar
             const slice = readRichClipboard(event, view.state.schema, mimeType);
             if (!slice) return false;
             event.preventDefault();
+            // In a table: fill cells with a copied table, or put content
+            // that contains a table after the table instead of nesting it.
+            if (handleTablePasteWithoutNesting(view, event, slice)) return true;
             view.dispatch(
               view.state.tr
                 .replaceSelection(slice)

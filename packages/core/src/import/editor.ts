@@ -2,6 +2,7 @@ import { DOMParser as PMDOMParser, Slice, type Schema } from "@tiptap/pm/model";
 import { Selection } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
 import { plainTextToSlice } from "../serializers/plain-text";
+import { insertSliceAfterTable, outermostTableDepth, sliceContainsTable } from "../extensions/table/nesting";
 import { defaultImportRegistry, type DocumentImport } from "./adapters";
 import type { FileLike, ImportAdapterRegistry, ImportOutcome } from "./registry";
 
@@ -35,7 +36,9 @@ export interface InsertImportedDocumentOptions {
 
 /**
  * Inserts an imported document into an editor as one transaction and returns
- * the position right after the inserted content.
+ * the position right after the inserted content. Content with a table that
+ * would land in a table cell is inserted after the outermost table instead
+ * (tables are never nested).
  */
 export function insertImportedDocument(
   target: ImportEditorTarget,
@@ -52,6 +55,17 @@ export function insertImportedDocument(
   if (!htmlSlice && from === to && !state.doc.resolve(from).parent.inlineContent) {
     // Drop positions can fall between blocks; text belongs in the nearest textblock.
     from = to = Selection.near(state.doc.resolve(from)).from;
+  }
+  if (htmlSlice && sliceContainsTable(htmlSlice) && outermostTableDepth(state.doc.resolve(from)) >= 0) {
+    // Tables are not nested: an import into a table cell goes after the
+    // (outermost) table, and the cell keeps its content.
+    const tr = state.tr;
+    const end = insertSliceAfterTable(tr, from, to, htmlSlice);
+    if (end !== null) {
+      if (options.at === undefined) tr.setSelection(Selection.near(tr.doc.resolve(end), -1));
+      view.dispatch(tr.scrollIntoView().setMeta("uiEvent", "drop"));
+      return end;
+    }
   }
   // Closed HTML blocks may replace an empty parent (`replaceRange`); plain text
   // is an open slice that merges into the current paragraph like a paste.
