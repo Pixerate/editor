@@ -155,6 +155,11 @@ describe("field controls", () => {
     // The number box parses, clamps and commits on blur.
     await commit(q<HTMLInputElement>('input[aria-label="Speed value"]'), "9");
     expect(onChange).toHaveBeenLastCalledWith(4);
+    // Text that is not a number shows the stored value again.
+    onChange.mockClear();
+    await commit(q<HTMLInputElement>('input[aria-label="Speed value"]'), "abc");
+    expect(onChange).not.toHaveBeenCalled();
+    expect(q<HTMLInputElement>('input[aria-label="Speed value"]').value).toBe("1");
   });
 
   it("renders segmented choices and colour hex input", async () => {

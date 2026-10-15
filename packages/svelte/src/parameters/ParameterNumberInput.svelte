@@ -41,9 +41,11 @@
     disabled={disabled || field.readOnly}
     class="{parameterInputClass} {field.unit ? 'pr-6' : ''}"
     onkeydown={keydown}
-    oncommit={(t) => {
+    oncommit={(t, input) => {
       const n = parseParameterNumberInput(field, t);
-      if (n !== null) onchange(n);
+      // Show the stored value again when the text was not a number or clamps to it.
+      if (n === null || n === value) input.value = text;
+      else onchange(n);
     }}
   />
   {#if field.unit}

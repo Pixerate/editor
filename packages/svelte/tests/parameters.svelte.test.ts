@@ -119,6 +119,11 @@ describe("field controls", () => {
     expect(ongestureend).toHaveBeenCalledTimes(1);
     commit(root.querySelector('input[aria-label="Speed value"]') as HTMLInputElement, "9");
     expect(onchange).toHaveBeenLastCalledWith(4);
+    // Text that is not a number shows the stored value again.
+    onchange.mockClear();
+    commit(root.querySelector('input[aria-label="Speed value"]') as HTMLInputElement, "abc");
+    expect(onchange).not.toHaveBeenCalled();
+    expect((root.querySelector('input[aria-label="Speed value"]') as HTMLInputElement).value).toBe("1");
   });
 
   it("renders segmented choices and colour hex input", () => {

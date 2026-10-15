@@ -1,3 +1,5 @@
+import type { AnimationEasing } from '../animation/easing.js';
+
 /**
  * Types for the schema-driven parameters editor: the control panel of an effect, shader,
  * generator or component. A `ParameterSchema` lists fields (optionally in groups); a
@@ -182,10 +184,10 @@ export interface ParameterError {
 	message: string;
 }
 
-/** Easing of a keyframe segment: a preset name or an object (`AnimationEasing` from the canvas fits). */
-export type ParameterEasing = string | { readonly type: string; readonly [key: string]: unknown };
+/** Easing of a keyframe segment (the `AnimationEasing` of `@pixerate/editor/animation`). */
+export type ParameterEasing = AnimationEasing;
 
-/** One keyframe, shaped like the canvas `AnimationKeyframe`. */
+/** One keyframe, shaped like `AnimationKeyframe` from `@pixerate/editor/animation`. */
 export interface ParameterKeyframe<TValue = ParameterValue> {
 	/** Time in milliseconds. */
 	time: number;
@@ -194,7 +196,7 @@ export interface ParameterKeyframe<TValue = ParameterValue> {
 	easing?: ParameterEasing;
 }
 
-/** A parameter's keyframes, shaped like the canvas `AnimationTrack`. */
+/** A parameter's keyframes, shaped like `AnimationTrack` from `@pixerate/editor/animation` (which it accepts). */
 export interface ParameterTrack<TValue = ParameterValue> {
 	keyframes: ParameterKeyframe<TValue>[];
 	enabled?: boolean;

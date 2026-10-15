@@ -13,7 +13,7 @@ import type {
 	ParameterValues,
 	VectorParameterField
 } from './types.js';
-import type { JsonSchema } from '../agent/schema.js';
+import type { JsonSchema } from '../tools/schema.js';
 
 // ---------------------------------------------------------------------------
 // Labels and colours

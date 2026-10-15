@@ -67,7 +67,7 @@ params.getState();                     // the same object until something change
 
 ## Keyframes
 
-Pass a `keyframes` adapter to get keyframe diamonds. Tracks have the canvas `AnimationTrack` shape: `{ keyframes: [{ time /* ms */, value, easing? }] }`. `createParameterKeyframeStore()` keeps them in memory; an effect document can implement `getTrack` / `setTrack` / `subscribe` over its own storage.
+Pass a `keyframes` adapter to get keyframe diamonds. Tracks have the `AnimationTrack` shape from `@pixerate/editor/animation`: `{ keyframes: [{ time /* ms */, value, easing? }] }`, and those tracks are accepted as they are. `createParameterKeyframeStore()` keeps them in memory; an effect document can implement `getTrack` / `setTrack` / `subscribe` over its own storage.
 
 ```ts
 const keyframes = createParameterKeyframeStore();
@@ -78,7 +78,7 @@ params.toggleKeyframe("speed");         // add or remove a key at the playhead (
 params.setValue("speed", 3);            // on a key, the key follows the value
 ```
 
-Interpolation stays with the timeline that owns playback (Flair's effect editor, the canvas animation player).
+Interpolation stays with the timeline that owns playback (Flair's effect editor, the canvas animation player). For number and colour tracks, `evaluateTrack(track, time)` from `@pixerate/editor/animation` gives the eased value to pass to `setTime`; the demo's Parameters tab does exactly that.
 
 ## Agents
 

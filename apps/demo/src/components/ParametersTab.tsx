@@ -1,9 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { evaluateTrack, type AnimationTrack } from "@pixerate/editor/animation";
 import {
   createParameterKeyframeStore,
-  hexToRgba01,
   parameterSchemaFromShaderControls,
-  rgba01ToHex,
   shaderControlValue,
   type ParameterSchema,
   type ParameterTrack,
@@ -71,28 +70,17 @@ const SCHEMA: ParameterSchema = {
 
 const DURATION = 3000;
 
-// The demo owns interpolation (like any timeline would): numbers, vectors and colours are
-// linear between keys, everything else holds.
-function interpolate(a: ParameterValue, b: ParameterValue, t: number): ParameterValue {
-  if (typeof a === "number" && typeof b === "number") return a + (b - a) * t;
-  if (Array.isArray(a) && Array.isArray(b)) return a.map((v, i) => v + ((b[i] ?? v) - v) * t);
-  if (typeof a === "string" && typeof b === "string" && a.startsWith("#") && b.startsWith("#")) {
-    const ca = hexToRgba01(a, true);
-    const cb = hexToRgba01(b, true);
-    if (ca && cb) return rgba01ToHex(interpolate(ca, cb, t) as number[], a.length > 7);
-  }
-  return t < 1 ? a : b;
-}
-
+// Playback belongs to the timeline, not the panel: number and colour tracks evaluate with the
+// easing-aware `evaluateTrack` from `@pixerate/editor/animation`; other values hold.
 function evaluate(track: ParameterTrack, time: number): ParameterValue | undefined {
-  const keys = track.keyframes;
-  if (keys.length === 0) return undefined;
-  if (time <= keys[0].time) return keys[0].value;
-  for (let i = 0; i < keys.length - 1; i++) {
-    const [k0, k1] = [keys[i], keys[i + 1]];
-    if (time <= k1.time) return interpolate(k0.value, k1.value, (time - k0.time) / (k1.time - k0.time || 1));
+  const first = track.keyframes[0]?.value;
+  if (typeof first === "number") return evaluateTrack(track as AnimationTrack, time, "number");
+  if (typeof first === "string" && first.startsWith("#")) {
+    const v = evaluateTrack(track as AnimationTrack, time, "color");
+    return typeof v === "string" ? v : undefined;
   }
-  return keys[keys.length - 1].value;
+  const passed = track.keyframes.filter((k) => k.time <= time);
+  return (passed[passed.length - 1] ?? track.keyframes[0])?.value;
 }
 
 function GlowPreview({ values, time }: { values: Readonly<ParameterValues>; time: number }) {
@@ -171,7 +159,7 @@ export function ParametersTab() {
   const keyframes = useMemo(
     () =>
       createParameterKeyframeStore({
-        radius: { keyframes: [{ time: 0, value: 35 }, { time: 1500, value: 85 }, { time: 3000, value: 35 }] },
+        radius: { keyframes: [{ time: 0, value: 35, easing: "ease-in-out" }, { time: 1500, value: 85, easing: "ease-in-out" }, { time: 3000, value: 35 }] },
         tint: { keyframes: [{ time: 0, value: "#f43f5e" }, { time: 3000, value: "#a855f7" }] },
       }),
     [],

@@ -4,7 +4,8 @@
 
   interface Props extends Omit<HTMLInputAttributes, 'value' | 'class'> {
     value: string;
-    oncommit: (value: string) => void;
+    /** Called with the text and the element (e.g. to show the stored value again after a refused edit). */
+    oncommit: (value: string, input: HTMLInputElement | HTMLTextAreaElement) => void;
     /** A textarea that commits on blur or Mod+Enter. */
     multiline?: boolean;
     class?: string;
@@ -13,7 +14,7 @@
   let { value, oncommit, multiline = false, class: className = parameterInputClass, onkeydown, ...rest }: Props = $props();
 
   function commit(el: HTMLInputElement | HTMLTextAreaElement) {
-    if (el.value !== value) oncommit(el.value);
+    if (el.value !== value) oncommit(el.value, el);
   }
 
   function keydown(e: KeyboardEvent & { currentTarget: HTMLInputElement | HTMLTextAreaElement }) {

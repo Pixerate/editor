@@ -42,15 +42,17 @@ export const parameterButtonClass =
   'inline-flex h-7 items-center justify-center gap-1 rounded-md border border-input bg-background px-2 text-xs text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:pointer-events-none disabled:opacity-50';
 const rangeClass = 'h-4 w-full min-w-0 flex-1 cursor-pointer accent-primary disabled:cursor-not-allowed disabled:opacity-50';
 
-type CommitInputProps = { value: string; onCommit: (value: string) => void; multiline?: boolean } & Omit<
-  React.InputHTMLAttributes<HTMLInputElement> & React.TextareaHTMLAttributes<HTMLTextAreaElement>,
-  'value' | 'onChange' | 'defaultValue'
->;
+type CommitInputProps = {
+  value: string;
+  /** Called with the text and the element (e.g. to show the stored value again after a refused edit). */
+  onCommit: (value: string, input: HTMLInputElement | HTMLTextAreaElement) => void;
+  multiline?: boolean;
+} & Omit<React.InputHTMLAttributes<HTMLInputElement> & React.TextareaHTMLAttributes<HTMLTextAreaElement>, 'value' | 'onChange' | 'defaultValue'>;
 
 /** A text box that commits on blur or Enter (Mod+Enter when multiline) and resets on Escape. */
 export function ParameterCommitInput({ value, onCommit, multiline, className, onKeyDown, ...rest }: CommitInputProps) {
   const commit = (el: HTMLInputElement | HTMLTextAreaElement) => {
-    if (el.value !== value) onCommit(el.value);
+    if (el.value !== value) onCommit(el.value, el);
   };
   const keyDown = (e: React.KeyboardEvent<HTMLInputElement & HTMLTextAreaElement>) => {
     onKeyDown?.(e);
@@ -62,14 +64,18 @@ export function ParameterCommitInput({ value, onCommit, multiline, className, on
     if (e.key === 'Escape') e.currentTarget.value = value;
   };
   const props = {
-    key: value,
     defaultValue: value,
     className: className ?? parameterInputClass,
     onBlur: (e: React.FocusEvent<HTMLInputElement & HTMLTextAreaElement>) => commit(e.currentTarget),
     onKeyDown: keyDown,
     ...rest,
   };
-  return multiline ? <textarea {...props} className={`${props.className} h-auto min-h-[3.5rem] py-1`} /> : <input type="text" {...props} />;
+  // `key` remounts the box when the value changes from outside.
+  return multiline ? (
+    <textarea key={value} {...props} className={`${props.className} h-auto min-h-[3.5rem] py-1`} />
+  ) : (
+    <input key={value} type="text" {...props} />
+  );
 }
 
 const plainNumber = (field: NumberParameterField, value: number) => formatParameterNumber({ ...field, unit: undefined }, value);
@@ -92,9 +98,11 @@ export function ParameterNumberInput({
         value={plainNumber(field, value)}
         disabled={disabled || field.readOnly}
         className={`${parameterInputClass} ${field.unit ? 'pr-6' : ''}`}
-        onCommit={(text) => {
+        onCommit={(text, input) => {
           const n = parseParameterNumberInput(field, text);
-          if (n !== null) onChange(n);
+          // Show the stored value again when the text was not a number or clamps to it.
+          if (n === null || n === value) input.value = plainNumber(field, value);
+          else onChange(n);
         }}
         onKeyDown={(e) => {
           if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;

@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { HistoryManager } from '../src/history';
 import { CommandRegistry, createCommandToolProvider } from '../src/commands';
-import { ToolRegistry } from '../src/agent';
+import { ToolRegistry } from '../src/tools';
+import type { AnimationTrack } from '../src/animation';
 import {
 	ParametersController,
 	ParameterSchemaError,
@@ -371,6 +372,13 @@ describe('parameter keyframes', () => {
 		expect(c.getState().keys.speed).toBe('none');
 		c.undo();
 		expect(c.keyState('speed', 0)).toBe('keyed');
+	});
+
+	it('accepts @pixerate/editor/animation tracks', () => {
+		const track: AnimationTrack = { keyframes: [{ time: 0, value: 1, easing: 'ease-out' }, { time: 500, value: 2, easing: { type: 'spring', stiffness: 170, damping: 26 } }] };
+		const keyframes = createParameterKeyframeStore({ speed: track });
+		const c = new ParametersController({ schema, keyframes });
+		expect(c.keyState('speed', 500)).toBe('keyed');
 	});
 
 	it('shows evaluated values on time changes without undo steps', () => {
