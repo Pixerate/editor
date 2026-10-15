@@ -1016,3 +1016,10 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: The domain normalization formula $(value - inMin) / (inMax - inMin)$ results in division by zero ($0 / 0 = NaN$) when $inMin == inMax$.
 - **Solution / Workaround**: Check for degenerate intervals (`inSpan === 0`). When degenerate, bypass division and return the lower target bound (`toMin`), preserving safety and avoiding cascading `NaN`s in downstream transform math.
 
+### [react/dependencies] Peer Dependency Range Alignment with Sibling Pixerate Packages
+
+- **Issue / Symptom**: Installing `@pixerate/editor-react` alongside `@pixerate/flair@0.13.0` or sibling ecosystem packages triggers `npm ERR! code ERESOLVE` peer dependency collision errors on clean `npm install`.
+- **Root Cause**: `@pixerate/flair@0.13.0` declares `peerDependencies: { "@pixerate/editor": ">=0.29.0 <1" }`, while `@pixerate/editor-react` previously kept `@pixerate/editor` under direct `dependencies` pinned to an exact version (`workspace:*` resolving to `0.27.0` or `0.29.0`), causing npm's strict peer dependency resolver to detect conflicting version constraints.
+- **Solution / Workaround**: Move `@pixerate/editor` to `peerDependencies` with the ecosystem-aligned range `">=0.29.0 <1"` in `@pixerate/editor-react` (paired with `devDependencies: { "@pixerate/editor": "workspace:*" }` for local monorepo builds and tests) and omit it from direct `dependencies`.
+
+

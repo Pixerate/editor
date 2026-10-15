@@ -98,13 +98,13 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@pixerate/editor": "workspace:*",
     "@tiptap/extension-bubble-menu": "^2.11.5",
     "@tiptap/extension-placeholder": "^2.11.5",
     "@tiptap/starter-kit": "^2.11.5"
   },
   "peerDependencies": {
     "@dagrejs/dagre": "^1.1.8",
+    "@pixerate/editor": ">=0.29.0 <1",
     "@tiptap/core": "^2.11.5",
     "@tiptap/pm": "^2.11.5",
     "@tiptap/react": "^2.11.5",
@@ -121,6 +121,7 @@
     }
   },
   "devDependencies": {
+    "@pixerate/editor": "workspace:*",
     "@tiptap/core": "^2.11.5",
     "@tiptap/pm": "^2.11.5",
     "@tiptap/react": "^2.11.5",

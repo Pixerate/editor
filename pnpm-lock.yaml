@@ -193,9 +193,6 @@ importers:
       '@dagrejs/dagre':
         specifier: ^1.1.8
         version: 1.1.8
-      '@pixerate/editor':
-        specifier: workspace:*
-        version: link:../core
       '@tiptap/extension-bubble-menu':
         specifier: ^2.11.5
         version: 2.27.3(@tiptap/core@2.27.3(@tiptap/pm@2.27.3))(@tiptap/pm@2.27.3)
@@ -209,6 +206,9 @@ importers:
         specifier: ^12.0.0
         version: 12.12.0(@types/react-dom@19.2.7(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
     devDependencies:
+      '@pixerate/editor':
+        specifier: workspace:*
+        version: link:../core
       '@tiptap/core':
         specifier: ^2.11.5
         version: 2.27.3(@tiptap/pm@2.27.3)

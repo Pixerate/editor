@@ -28,4 +28,15 @@ describe("@pixerate/editor-react Exports", () => {
     expect(ReactEditor.HistoryManager).toBeDefined();
     expect(ReactEditor.createHistoryManager).toBeDefined();
   });
+
+  it("aligns @pixerate/editor peerDependency range (>=0.29.0 <1) and omits it from direct dependencies", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const pkg = JSON.parse(
+      readFileSync(fileURLToPath(new URL("../package.json", import.meta.url)), "utf8")
+    );
+
+    expect(pkg.peerDependencies["@pixerate/editor"]).toBe(">=0.29.0 <1");
+    expect(pkg.dependencies?.["@pixerate/editor"]).toBeUndefined();
+  });
 });
