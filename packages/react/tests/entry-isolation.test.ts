@@ -41,6 +41,7 @@ describe("subpath entry isolation", () => {
     ["generation/index.js", "generation"],
     ["tokens/index.js", "tokens"],
     ["parameters/index.js", "parameters"],
+    ["vector/index.js", "vector"],
   ])("%s pulls in nothing beyond React and @pixerate/editor/%s", (entry, coreSubpath) => {
     const packages = [...reachablePackages(entry)];
     expect(packages).toContain(`@pixerate/editor/${coreSubpath}`);

@@ -10,6 +10,7 @@ const SpreadsheetTab = lazy(() => import("./components/SpreadsheetTab").then((m)
 const CanvasTab = lazy(() => import("./components/CanvasTab").then((m) => ({ default: m.CanvasTab })));
 const ImageEditorTab = lazy(() => import("./components/ImageEditorTab").then((m) => ({ default: m.ImageEditorTab })));
 const ParametersTab = lazy(() => import("./components/ParametersTab").then((m) => ({ default: m.ParametersTab })));
+const VectorTab = lazy(() => import("./components/VectorTab").then((m) => ({ default: m.VectorTab })));
 const ParityMatrixTab = lazy(() => import("./components/ParityMatrixTab").then((m) => ({ default: m.ParityMatrixTab })));
 import { AgentToolsPanel } from "./components/AgentToolsPanel";
 import {
@@ -20,15 +21,17 @@ import {
   Table2,
   Shapes,
   SlidersHorizontal,
+  PenTool,
 } from "lucide-react";
 
-type TabId = "prompt" | "rich" | "sheet" | "canvas" | "image" | "params" | "parity";
+type TabId = "prompt" | "rich" | "sheet" | "canvas" | "vector" | "image" | "params" | "parity";
 
 const TABS: Array<{ id: TabId; label: string; icon: React.ElementType }> = [
   { id: "prompt", label: "Prompt Studio", icon: Sparkles },
   { id: "rich", label: "Document Rich Text", icon: FileText },
   { id: "sheet", label: "Spreadsheet", icon: Table2 },
   { id: "canvas", label: "Canvas", icon: Shapes },
+  { id: "vector", label: "Vector", icon: PenTool },
   { id: "image", label: "Image Editor", icon: ImageIcon },
   { id: "params", label: "Parameters", icon: SlidersHorizontal },
   { id: "parity", label: "Feature Parity Matrix", icon: CheckCircle2 },
@@ -142,6 +145,7 @@ export default function App() {
           {activeTab === "canvas" && <CanvasTab />}
           {activeTab === "image" && <ImageEditorTab />}
           {activeTab === "params" && <ParametersTab />}
+          {activeTab === "vector" && <VectorTab />}
           {activeTab === "parity" && <ParityMatrixTab />}
         </Suspense>
         {activeTab !== "parity" && <AgentToolsPanel />}

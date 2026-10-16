@@ -20,6 +20,7 @@ export default defineConfig({
     "tokens/index": "src/tokens/index.ts",
     "export/index": "src/export/index.ts",
     "parameters/index": "src/parameters/index.ts",
+    "vector/index": "src/vector/index.ts",
   },
   format: ["esm", "cjs"],
   dts: true,
