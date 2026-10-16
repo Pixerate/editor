@@ -559,15 +559,21 @@ export interface OutlineShapeStrokesOptions extends ShapePathEditBaseOptions {
 
 const INVISIBLE_PAINT = new Set(['none', 'transparent']);
 
-/** Whether a shape draws a stroke (a stroke colour other than `none` and a positive width). */
+/** Whether a shape draws a stroke (a stroke colour or gradient other than `none` and a positive width). */
 export function hasVisibleStroke(shape: ShapeDescription | null): boolean {
-	if (!shape || typeof shape.stroke !== 'string' || INVISIBLE_PAINT.has(shape.stroke.trim().toLowerCase())) return false;
+	if (!shape) return false;
+	const stroke = (shape as any).strokeGradient ?? shape.stroke;
+	if (stroke === undefined || stroke === null) return false;
+	if (typeof stroke === 'string' && INVISIBLE_PAINT.has(stroke.trim().toLowerCase())) return false;
 	const width = shape.strokeWidth ?? 1;
 	return Number.isFinite(width) && width > 0;
 }
 
 function hasVisibleFill(shape: ShapeDescription): boolean {
-	return shape.fill === undefined || !INVISIBLE_PAINT.has(String(shape.fill).trim().toLowerCase());
+	if ((shape as any).fillGradient) return true;
+	if (shape.fill === undefined) return true;
+	if (typeof shape.fill === 'object' && shape.fill !== null) return true;
+	return !INVISIBLE_PAINT.has(String(shape.fill).trim().toLowerCase());
 }
 
 function shapeTargets(nodes: CanvasNode[], ids: Iterable<string>) {

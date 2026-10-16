@@ -10,9 +10,11 @@ import { getNodeRect } from './arrange.js';
 
 export type FreehandTool = 'select' | 'pen' | 'highlighter' | 'eraser';
 
+import type { CanvasGradientDef } from './gradient.js';
+
 export interface FreehandStrokeStyle {
-	/** Stroke color (any CSS color string). */
-	color: string;
+	/** Stroke color (any CSS color string) or gradient definition. */
+	color: string | CanvasGradientDef;
 	/** Stroke width in flow canvas units. */
 	width: number;
 	/** Stroke opacity (0 to 1). */
@@ -21,6 +23,8 @@ export interface FreehandStrokeStyle {
 	cap?: 'round' | 'butt' | 'square';
 	/** SVG stroke-linejoin: 'round', 'bevel', or 'miter'. */
 	join?: 'round' | 'bevel' | 'miter';
+	/** Optional gradient definition for the stroke. */
+	gradient?: CanvasGradientDef;
 }
 
 export interface FreehandDrawOptions {
@@ -168,6 +172,10 @@ export function strokeToShapeNode(
 	const width = Math.max(bounds.width, 1);
 	const height = Math.max(bounds.height, 1);
 
+	const strokePaint = stroke.style.gradient ?? stroke.style.color;
+	const strokeGradient =
+		stroke.style.gradient ?? (typeof stroke.style.color === 'object' && stroke.style.color ? stroke.style.color : undefined);
+
 	return {
 		id: options.id ?? stroke.id,
 		type: 'shape',
@@ -183,9 +191,12 @@ export function strokeToShapeNode(
 				kind: 'path',
 				d,
 				viewBox: [0, 0, width, height],
-				stroke: stroke.style.color,
+				stroke: strokePaint,
 				strokeWidth,
 				opacity: stroke.style.opacity,
+				strokeLinecap: stroke.style.cap ?? 'round',
+				strokeLinejoin: stroke.style.join ?? 'round',
+				...(strokeGradient ? { strokeGradient } : {}),
 				fill: 'none'
 			},
 			tool: stroke.tool

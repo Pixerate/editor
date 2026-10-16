@@ -69,7 +69,11 @@ import {
   Brush,
   Plus,
 } from "lucide-react";
-import type { ShapeDescription } from "@pixerate/editor-react/canvas";
+import {
+  type ShapeDescription,
+  CANVAS_GRADIENT_PRESETS,
+  type CanvasGradientDef,
+} from "@pixerate/editor-react/canvas";
 import { demoCommandRegistry, demoToolRegistry } from "../agentTools";
 import { AutoLayoutDemo } from "./AutoLayoutDemo";
 import { TokensDemo } from "./TokensDemo";
@@ -183,12 +187,28 @@ const CanvasDemo: React.FC = () => {
     zoom: viewport.zoom,
     guides: { gridSize: 10 },
   });
+  const [activeGradientKey, setActiveGradientKey] = useState<string | null>(null);
+
   const draw = useCanvasDraw<BoxNode>({
     nodes,
     setNodes,
     history: history.manager,
     initialTool: "select",
   });
+
+  const selectColor = useCallback((color: string) => {
+    setActiveGradientKey(null);
+    draw.setStyle({ color, gradient: undefined });
+  }, [draw]);
+
+  const selectGradient = useCallback((key: string) => {
+    setActiveGradientKey(key);
+    const grad = CANVAS_GRADIENT_PRESETS[key];
+    if (grad) {
+      draw.setStyle({ color: grad.stops[0]?.color ?? '#38bdf8', gradient: grad });
+    }
+  }, [draw]);
+
   // Hold Alt / Option and hover a node to measure distances from the selection.
   const measure = useCanvasMeasure<BoxNode>({ nodes });
 
@@ -231,11 +251,16 @@ const CanvasDemo: React.FC = () => {
     });
   }, [history.manager]);
 
+  const activeGradDef = activeGradientKey ? CANVAS_GRADIENT_PRESETS[activeGradientKey] : null;
+
   const addShape = useCallback((kind: "rect" | "ellipse" | "star") => {
     const vp = flow.getViewport();
     // Canvas coordinates centered roughly in view
     const cx = (-vp.x + 400) / (vp.zoom || 1);
     const cy = (-vp.y + 240) / (vp.zoom || 1);
+
+    const fillVal = activeGradDef ? activeGradDef : `${draw.style.color}33`;
+    const strokeVal = activeGradDef ? activeGradDef : (draw.style.color as string);
 
     if (kind === "rect") {
       const node = shapeNode(
@@ -245,7 +270,15 @@ const CanvasDemo: React.FC = () => {
         cy - 40,
         120,
         80,
-        { kind: "rect", cornerRadius: 8, fill: "#0ea5e933", stroke: "#0ea5e9", strokeWidth: 2 }
+        {
+          kind: "rect",
+          cornerRadius: 8,
+          fill: fillVal,
+          stroke: strokeVal,
+          strokeWidth: 2,
+          strokeLinecap: "round",
+          strokeLinejoin: "round",
+        }
       );
       addNodeWithUndo(node);
     } else if (kind === "ellipse") {
@@ -256,7 +289,14 @@ const CanvasDemo: React.FC = () => {
         cy - 50,
         100,
         100,
-        { kind: "ellipse", fill: "#8b5cf633", stroke: "#8b5cf6", strokeWidth: 2 }
+        {
+          kind: "ellipse",
+          fill: fillVal,
+          stroke: strokeVal,
+          strokeWidth: 2,
+          strokeLinecap: "round",
+          strokeLinejoin: "round",
+        }
       );
       addNodeWithUndo(node);
     } else if (kind === "star") {
@@ -267,11 +307,20 @@ const CanvasDemo: React.FC = () => {
         cy - 50,
         100,
         100,
-        { kind: "star", points: 5, innerRadius: 0.5, fill: "#f59e0b33", stroke: "#f59e0b", strokeWidth: 2 }
+        {
+          kind: "star",
+          points: 5,
+          innerRadius: 0.5,
+          fill: fillVal,
+          stroke: strokeVal,
+          strokeWidth: 2,
+          strokeLinecap: "round",
+          strokeLinejoin: "round",
+        }
       );
       addNodeWithUndo(node);
     }
-  }, [flow, addNodeWithUndo]);
+  }, [flow, addNodeWithUndo, activeGradDef, draw.style.color]);
 
   const addSampleDrawing = useCallback(() => {
     const vp = flow.getViewport();
@@ -280,6 +329,7 @@ const CanvasDemo: React.FC = () => {
 
     // Decorative smooth spiral / wave stroke
     const d = "M 10 70 C 30 10, 70 10, 90 70 C 110 130, 150 130, 170 70 C 190 10, 230 10, 250 70";
+    const strokeVal = activeGradDef ? activeGradDef : (draw.style.color as string);
     const node = shapeNode(
       getUniqueNodeId("drawing"),
       "Wave Drawing",
@@ -291,14 +341,16 @@ const CanvasDemo: React.FC = () => {
         kind: "path",
         d,
         viewBox: [0, 0, 260, 80],
-        stroke: "#ec4899",
+        stroke: strokeVal,
         strokeWidth: 4,
+        strokeLinecap: "round",
+        strokeLinejoin: "round",
         fill: "none",
         opacity: 0.95,
       }
     );
     addNodeWithUndo(node);
-  }, [flow, addNodeWithUndo]);
+  }, [flow, addNodeWithUndo, activeGradDef, draw.style.color]);
 
   const onNodesChange = useCallback(
     (changes: NodeChange<BoxNode>[]) =>
@@ -447,15 +499,34 @@ const CanvasDemo: React.FC = () => {
         >
           <Eraser className="w-4 h-4" />
         </button>
-        {draw.tool !== "select" && draw.tool !== "eraser" && (
-          <div className="flex items-center gap-1.5 ml-1 pl-2 border-l border-slate-800">
-            <input
-              type="color"
-              value={draw.style.color}
-              onChange={(e) => draw.setStyle({ color: e.target.value })}
-              className="w-5 h-5 rounded cursor-pointer bg-transparent border-0 p-0"
-              title="Stroke color"
-            />
+        <div className="flex items-center gap-1.5 ml-1 pl-2 border-l border-slate-800">
+          <input
+            type="color"
+            value={typeof draw.style.color === 'string' ? draw.style.color : '#3b82f6'}
+            onChange={(e) => selectColor(e.target.value)}
+            className="w-5 h-5 rounded cursor-pointer bg-transparent border-0 p-0"
+            title="Solid color"
+          />
+          <div className="flex items-center gap-1 bg-slate-950/60 p-0.5 rounded border border-slate-800" title="Choose color or gradient">
+            {Object.entries(CANVAS_GRADIENT_PRESETS).map(([key, grad]) => {
+              const bg = `linear-gradient(${grad.angle ?? 90}deg, ${grad.stops.map((s) => `${s.color} ${s.offset * 100}%`).join(', ')})`;
+              const isSelected = activeGradientKey === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => selectGradient(key)}
+                  className={`w-4 h-4 rounded-full transition-transform hover:scale-110 ${
+                    isSelected ? 'ring-2 ring-white scale-110' : 'opacity-80 hover:opacity-100'
+                  }`}
+                  style={{ background: bg }}
+                  title={`Gradient: ${key.charAt(0).toUpperCase() + key.slice(1)}`}
+                  aria-label={`Gradient: ${key}`}
+                />
+              );
+            })}
+          </div>
+          {draw.tool !== "select" && draw.tool !== "eraser" && (
             <input
               type="range"
               min={draw.tool === "highlighter" ? 12 : 1}
@@ -465,8 +536,8 @@ const CanvasDemo: React.FC = () => {
               className="w-16 accent-sky-500 cursor-pointer"
               title={`Stroke width: ${draw.style.width}px`}
             />
-          </div>
-        )}
+          )}
+        </div>
         <div className="w-px h-5 bg-slate-800 mx-1" />
         <div className="flex items-center gap-0.5 bg-slate-800/60 rounded p-0.5" title="Insert shapes into canvas">
           <button

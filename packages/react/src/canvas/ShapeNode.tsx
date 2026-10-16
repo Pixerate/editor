@@ -20,10 +20,10 @@ export interface ShapeNodeProps {
  * to add handles. Strokes keep their width when the node is resized
  * (`vector-effect: non-scaling-stroke`). Renders nothing when `data.shape` is missing.
  */
-export function ShapeNode({ data, width, height, selected, className = '', children }: ShapeNodeProps) {
+export function ShapeNode({ id, data, width, height, selected, className = '', children }: ShapeNodeProps) {
 	const shape = data?.shape;
 	if (!isShapeDescription(shape)) return null;
-	const render = getShapeRenderData(shape, { width, height });
+	const render = getShapeRenderData(shape, { width, height }, { id: id || data?.id });
 	return (
 		<div
 			className={`pixerate-shape-node ${className}`.trim()}
@@ -39,6 +39,38 @@ export function ShapeNode({ data, width, height, selected, className = '', child
 				style={{ display: 'block', overflow: 'visible' }}
 				aria-hidden="true"
 			>
+				{(render.fillGradient || render.strokeGradient) && (
+					<defs>
+						{render.fillGradient && render.fillGradient.type === 'linear' && (
+							<linearGradient id={render.fillGradient.id} {...render.fillGradient.attrs}>
+								{render.fillGradient.stops.map((stop, i) => (
+									<stop key={i} offset={stop.offset} stopColor={stop.stopColor} stopOpacity={stop.stopOpacity} />
+								))}
+							</linearGradient>
+						)}
+						{render.fillGradient && render.fillGradient.type === 'radial' && (
+							<radialGradient id={render.fillGradient.id} {...render.fillGradient.attrs}>
+								{render.fillGradient.stops.map((stop, i) => (
+									<stop key={i} offset={stop.offset} stopColor={stop.stopColor} stopOpacity={stop.stopOpacity} />
+								))}
+							</radialGradient>
+						)}
+						{render.strokeGradient && render.strokeGradient.type === 'linear' && (
+							<linearGradient id={render.strokeGradient.id} {...render.strokeGradient.attrs}>
+								{render.strokeGradient.stops.map((stop, i) => (
+									<stop key={i} offset={stop.offset} stopColor={stop.stopColor} stopOpacity={stop.stopOpacity} />
+								))}
+							</linearGradient>
+						)}
+						{render.strokeGradient && render.strokeGradient.type === 'radial' && (
+							<radialGradient id={render.strokeGradient.id} {...render.strokeGradient.attrs}>
+								{render.strokeGradient.stops.map((stop, i) => (
+									<stop key={i} offset={stop.offset} stopColor={stop.stopColor} stopOpacity={stop.stopOpacity} />
+								))}
+							</radialGradient>
+						)}
+					</defs>
+				)}
 				<path
 					d={render.d}
 					transform={render.transform}
@@ -46,6 +78,8 @@ export function ShapeNode({ data, width, height, selected, className = '', child
 					fillRule={render.fillRule}
 					stroke={render.stroke}
 					strokeWidth={render.strokeWidth}
+					strokeLinecap={render.strokeLinecap}
+					strokeLinejoin={render.strokeLinejoin}
 					opacity={render.opacity}
 					vectorEffect="non-scaling-stroke"
 				/>

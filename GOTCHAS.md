@@ -21,6 +21,25 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [canvas/freehand] Freehand Stroke Endcaps Stripped on Node Creation & Single-Point Dot Disappearance
+
+- **Issue / Symptom**: When drawing freehand strokes with pen or highlighter tools on the canvas, endcaps appear rounded/square during live drag preview, but become square/flat or completely disappear (for single-point clicks/dots) after releasing the mouse pointer.
+- **Root Cause**: `CanvasDrawLayer` was rendering the live `<path>` with `strokeLinecap={draw.activeStroke.style.cap ?? 'round'}`. However, `strokeToShapeNode` in `@pixerate/editor` was not copying `strokeLinecap` or `strokeLinejoin` into `node.data.shape`. Additionally, `ShapeNode.tsx` (React) and `ShapeNode.svelte` (Svelte) were not passing `strokeLinecap` or `strokeLinejoin` down to the rendered `<path>`. In SVG, zero-length or micro-length paths (`M x y L x+0.01 y`) used for dots require round or square linecaps to have visible area.
+- **Solution / Workaround**:
+  1. In `strokeToShapeNode`, forward `strokeLinecap: stroke.style.cap ?? 'round'` and `strokeLinejoin: stroke.style.join ?? 'round'`.
+  2. In `ShapeNode` (React and Svelte), bind `strokeLinecap={render.strokeLinecap}` and `strokeLinejoin={render.strokeLinejoin}` (or `stroke-linecap` / `stroke-linejoin`).
+
+### [canvas/gradients] SVG Linear and Radial Gradient Rendering in Shape Nodes and Live Drawing Layers
+
+- **Issue / Symptom**: Setting `fill` or `stroke` to a gradient definition (linear or radial) renders black or transparent if directly assigned to `fill` or `stroke` attributes in SVG.
+- **Root Cause**: Unlike HTML/CSS background values, SVG `<path>` and `<rect>` elements do not accept raw CSS gradient functions in `fill` or `stroke`. They require `<defs>` containing `<linearGradient id="...">` or `<radialGradient id="...">` and reference them via `url(#id)`.
+- **Solution / Workaround**:
+  1. Add gradient models (`CanvasLinearGradient`, `CanvasRadialGradient`, `CanvasGradientDef`), parser (`parseCssGradient`), and SVG descriptor generator (`gradientToSvgDef`) in `@pixerate/editor`.
+  2. In `getShapeRenderData`, resolve gradient fills and strokes to deterministic def IDs (`shape-fill-${id}`, `shape-stroke-${id}`) and output `fillGradient` / `strokeGradient` defs.
+  3. In `ShapeNode` (React and Svelte), render `<defs>` with `<linearGradient>` / `<radialGradient>` before rendering shape paths.
+  4. In `CanvasDrawLayer` (React and Svelte), resolve the active live stroke gradient to an inline `<defs>` definition (`draw-active-stroke-gradient`) so user strokes render with gradients live during dragging.
+
+
 ### [svelte/canvas] Svelte 5 Runes and .svelte Imports in Vitest
 
 - **Issue / Symptom**: Running Vitest fails with `ReferenceError: $state is not defined` when executing tests against `.svelte.ts` files, or throws `TypeError: Unknown file extension ".svelte"` when importing `@xyflow/svelte`.

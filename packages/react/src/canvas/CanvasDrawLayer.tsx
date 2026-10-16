@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { CanvasDraw } from './useCanvasDraw.js';
 import {
 	strokePointsToPathData,
+	resolveCanvasGradient,
+	gradientToSvgDef,
 	type CanvasNode,
 	type CanvasViewport
 } from '@pixerate/editor/canvas';
@@ -142,6 +144,18 @@ export function CanvasDrawLayer<TNode extends CanvasNode = CanvasNode>({
 		? strokePointsToPathData(draw.activeStroke.points)
 		: null;
 
+	const activeGradient = draw.activeStroke
+		? resolveCanvasGradient(draw.activeStroke.style.gradient ?? draw.activeStroke.style.color)
+		: null;
+	const resolvedGradientDef = activeGradient
+		? gradientToSvgDef(activeGradient, 'active-draw-stroke-gradient')
+		: null;
+	const strokePaint = resolvedGradientDef
+		? `url(#${resolvedGradientDef.id})`
+		: draw.activeStroke
+			? (draw.activeStroke.style.color as string)
+			: 'currentColor';
+
 	return (
 		<svg
 			ref={svgRef}
@@ -163,13 +177,34 @@ export function CanvasDrawLayer<TNode extends CanvasNode = CanvasNode>({
 			onPointerUp={handlePointerUp}
 			onPointerLeave={handlePointerLeave}
 		>
+			{/* Gradient defs for active freehand stroke */}
+			{resolvedGradientDef && (
+				<defs>
+					{resolvedGradientDef.type === 'linear' && (
+						<linearGradient id={resolvedGradientDef.id} {...resolvedGradientDef.attrs}>
+							{resolvedGradientDef.stops.map((stop, i) => (
+								<stop key={i} offset={stop.offset} stopColor={stop.stopColor} stopOpacity={stop.stopOpacity} />
+							))}
+						</linearGradient>
+					)}
+					{resolvedGradientDef.type === 'radial' && (
+						<radialGradient id={resolvedGradientDef.id} {...resolvedGradientDef.attrs}>
+							{resolvedGradientDef.stops.map((stop, i) => (
+								<stop key={i} offset={stop.offset} stopColor={stop.stopColor} stopOpacity={stop.stopOpacity} />
+							))}
+						</radialGradient>
+					)}
+				</defs>
+			)}
+
 			{/* Canvas-space items transformed by current React Flow viewport */}
 			<g transform={`translate(${viewport.x}, ${viewport.y}) scale(${viewport.zoom})`}>
 				{draw.activeStroke && strokePath && (
 					<path
+						className="pixerate-canvas-draw-active"
 						d={strokePath}
 						fill="none"
-						stroke={draw.activeStroke.style.color}
+						stroke={strokePaint}
 						strokeWidth={draw.activeStroke.style.width}
 						opacity={draw.activeStroke.style.opacity}
 						strokeLinecap={draw.activeStroke.style.cap ?? 'round'}

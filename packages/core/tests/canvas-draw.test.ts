@@ -118,8 +118,39 @@ describe('canvas freehand drawing (core)', () => {
 		expect(shape.viewBox).toEqual([0, 0, 100, 50]);
 		expect(shape.stroke).toBe('#ec4899');
 		expect(shape.strokeWidth).toBe(4);
+		expect(shape.strokeLinecap).toBe('round');
+		expect(shape.strokeLinejoin).toBe('round');
 		expect(shape.opacity).toBe(0.9);
 		expect(shape.fill).toBe('none');
+	});
+
+	it('converts a gradient FreehandStroke preserving gradient definitions and endcaps', () => {
+		const gradientStroke: FreehandStroke = {
+			id: 'stroke-grad',
+			tool: 'pen',
+			points: [
+				[10, 10],
+				[50, 50]
+			],
+			style: {
+				color: {
+					type: 'linear',
+					angle: 45,
+					stops: [
+						{ offset: 0, color: '#f97316' },
+						{ offset: 1, color: '#ec4899' }
+					]
+				},
+				width: 6,
+				cap: 'round',
+				join: 'round'
+			}
+		};
+
+		const node = strokeToShapeNode(gradientStroke);
+		expect(node.data.shape.strokeLinecap).toBe('round');
+		expect(node.data.shape.strokeLinejoin).toBe('round');
+		expect(node.data.shape.strokeGradient).toEqual(gradientStroke.style.color);
 	});
 
 	it('finds stroke nodes intersecting an eraser point', () => {

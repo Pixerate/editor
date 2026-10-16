@@ -90,4 +90,37 @@ describe('createCanvasDraw (Svelte rune)', () => {
 		ctx.draw.endStroke();
 		expect(ctx.nodes.length).toBe(0);
 	});
+
+	it('draws with gradients and preserves stroke linecaps and joins', () => {
+		const ctx = setup([]);
+		ctx.draw.setStyle({
+			gradient: {
+				type: 'linear',
+				angle: 90,
+				stops: [
+					{ offset: 0, color: '#f97316' },
+					{ offset: 1, color: '#ec4899' }
+				]
+			},
+			cap: 'round',
+			join: 'round'
+		});
+
+		ctx.draw.startStroke([10, 20]);
+		ctx.draw.continueStroke([100, 200]);
+		const node = ctx.draw.endStroke();
+
+		expect(node).not.toBeNull();
+		const shape = (node!.data as any).shape;
+		expect(shape.strokeLinecap).toBe('round');
+		expect(shape.strokeLinejoin).toBe('round');
+		expect(shape.strokeGradient).toEqual({
+			type: 'linear',
+			angle: 90,
+			stops: [
+				{ offset: 0, color: '#f97316' },
+				{ offset: 1, color: '#ec4899' }
+			]
+		});
+	});
 });

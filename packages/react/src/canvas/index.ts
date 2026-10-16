@@ -627,9 +627,21 @@ export {
 	strokePointsToPathData,
 	strokeToShapeNode,
 	type CanvasDrawControllerOptions,
-	type FreehandDrawOptions,
 	type FreehandStroke,
 	type FreehandStrokeStyle,
 	type FreehandTool,
-	type StrokeToShapeNodeOptions
+	type StrokeToShapeNodeOptions,
+	// Gradients
+	CANVAS_GRADIENT_PRESETS,
+	isCanvasGradient,
+	parseCssGradient,
+	resolveCanvasGradient,
+	angleToSvgLinearCoords,
+	gradientToSvgDef,
+	type GradientStop,
+	type CanvasLinearGradient,
+	type CanvasRadialGradient,
+	type CanvasGradientDef,
+	type SvgGradientStop,
+	type SvgGradientDef
 } from '@pixerate/editor/canvas';

@@ -27,3 +27,4 @@ export * from './components.js';
 export * from './componentsController.js';
 export * from './freehand.js';
 export * from './drawController.js';
+export * from './gradient.js';

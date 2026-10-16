@@ -3,6 +3,8 @@
 	import type { CanvasDraw } from './createCanvasDraw.svelte.js';
 	import {
 		strokePointsToPathData,
+		resolveCanvasGradient,
+		gradientToSvgDef,
 		type CanvasViewport
 	} from '@pixerate/editor/canvas';
 
@@ -86,6 +88,22 @@
 		draw.activeStroke ? strokePointsToPathData(draw.activeStroke.points) : null
 	);
 
+	let activeGradient = $derived(
+		draw.activeStroke
+			? resolveCanvasGradient(draw.activeStroke.style.gradient ?? draw.activeStroke.style.color)
+			: null
+	);
+	let resolvedGradientDef = $derived(
+		activeGradient ? gradientToSvgDef(activeGradient, 'active-draw-stroke-gradient-svelte') : null
+	);
+	let strokePaint = $derived(
+		resolvedGradientDef
+			? `url(#${resolvedGradientDef.id})`
+			: draw.activeStroke
+				? (draw.activeStroke.style.color as string)
+				: 'currentColor'
+	);
+
 	function handlePointerDown(e: PointerEvent) {
 		if (!interactive || e.button !== 0) return;
 		e.preventDefault();
@@ -141,12 +159,31 @@
 	onpointerup={handlePointerUp}
 	onpointerleave={handlePointerLeave}
 >
+	{#if resolvedGradientDef}
+		<defs>
+			{#if resolvedGradientDef.type === 'linear'}
+				<linearGradient id={resolvedGradientDef.id} {...resolvedGradientDef.attrs}>
+					{#each resolvedGradientDef.stops as stop}
+						<stop offset={stop.offset} stop-color={stop.stopColor} stop-opacity={stop.stopOpacity} />
+					{/each}
+				</linearGradient>
+			{/if}
+			{#if resolvedGradientDef.type === 'radial'}
+				<radialGradient id={resolvedGradientDef.id} {...resolvedGradientDef.attrs}>
+					{#each resolvedGradientDef.stops as stop}
+						<stop offset={stop.offset} stop-color={stop.stopColor} stop-opacity={stop.stopOpacity} />
+					{/each}
+				</radialGradient>
+			{/if}
+		</defs>
+	{/if}
+
 	<g transform="translate({viewport.x}, {viewport.y}) scale({viewport.zoom})">
 		{#if draw.activeStroke && strokePath}
 			<path
 				d={strokePath}
 				fill="none"
-				stroke={draw.activeStroke.style.color}
+				stroke={strokePaint}
 				stroke-width={draw.activeStroke.style.width}
 				opacity={draw.activeStroke.style.opacity}
 				stroke-linecap={draw.activeStroke.style.cap ?? 'round'}

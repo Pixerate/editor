@@ -169,4 +169,61 @@ describe('useCanvasDraw and CanvasDrawLayer (react)', () => {
 		});
 		expect(svg.style.pointerEvents).toBe('none');
 	});
+
+	it('renders gradient live stroke and preserves gradient and linecaps in created shape node', async () => {
+		const ref: { draw: CanvasDraw | null; nodes: CanvasNode[] } = {
+			draw: null,
+			nodes: []
+		};
+
+		function TestComponent() {
+			const [nodes, setNodes] = useState<CanvasNode[]>([]);
+			ref.nodes = nodes;
+			const draw = useCanvasDraw({
+				nodes,
+				setNodes,
+				initialTool: 'pen'
+			});
+			ref.draw = draw;
+			return <CanvasDrawLayer draw={draw} />;
+		}
+
+		await act(async () => {
+			root.render(<TestComponent />);
+		});
+
+		act(() => {
+			ref.draw?.setStyle({
+				gradient: {
+					type: 'linear',
+					angle: 90,
+					stops: [
+						{ offset: 0, color: '#f97316' },
+						{ offset: 1, color: '#ec4899' }
+					]
+				},
+				cap: 'round',
+				join: 'round'
+			});
+			ref.draw?.startStroke([10, 20]);
+			ref.draw?.continueStroke([100, 200]);
+		});
+
+		// While stroke is active, an SVG linearGradient definition exists in <defs>
+		const linearGrad = container.querySelector('defs linearGradient');
+		expect(linearGrad).not.toBeNull();
+		const activePath = container.querySelector('path.pixerate-canvas-draw-active');
+		expect(activePath?.getAttribute('stroke-linecap') ?? (activePath as any)?.strokeLinecap).toBe('round');
+		expect(activePath?.getAttribute('stroke-linejoin') ?? (activePath as any)?.strokeLinejoin).toBe('round');
+
+		act(() => {
+			ref.draw?.endStroke();
+		});
+
+		expect(ref.nodes.length).toBe(1);
+		const created = ref.nodes[0];
+		expect(created.data.shape.strokeLinecap).toBe('round');
+		expect(created.data.shape.strokeLinejoin).toBe('round');
+		expect(created.data.shape.strokeGradient).toBeDefined();
+	});
 });

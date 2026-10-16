@@ -10,12 +10,19 @@ import { fitPathData } from './curveFit.js';
 // Shape descriptions
 // ---------------------------------------------------------------------------
 
-/** Paint shared by every shape kind. Colours are any CSS colour. */
+import type { CanvasGradientDef, SvgGradientDef } from './gradient.js';
+import { gradientToSvgDef, resolveCanvasGradient } from './gradient.js';
+
+/** Paint shared by every shape kind. Colours are any CSS colour, preset name, or gradient definition. */
 export interface ShapePaint {
-	fill?: string;
-	stroke?: string;
+	fill?: string | CanvasGradientDef;
+	stroke?: string | CanvasGradientDef;
 	strokeWidth?: number;
 	opacity?: number;
+	strokeLinecap?: 'round' | 'butt' | 'square';
+	strokeLinejoin?: 'round' | 'bevel' | 'miter';
+	fillGradient?: CanvasGradientDef;
+	strokeGradient?: CanvasGradientDef;
 }
 
 interface ShapeBase extends ShapePaint {
@@ -610,30 +617,82 @@ export interface ShapeRenderData {
 	stroke: string;
 	strokeWidth: number;
 	opacity?: number;
+	strokeLinecap?: 'round' | 'butt' | 'square';
+	strokeLinejoin?: 'round' | 'bevel' | 'miter';
+	/** Gradient def for the fill, when fill uses a gradient. */
+	fillGradient?: SvgGradientDef;
+	/** Gradient def for the stroke, when stroke uses a gradient. */
+	strokeGradient?: SvgGradientDef;
+}
+
+export interface GetShapeRenderDataOptions {
+	/** Unique ID suffix or base ID used when generating SVG gradient IDs (default: auto random). */
+	id?: string;
 }
 
 /**
  * Resolves the SVG drawing of a shape for a node size. Without a size, a path's view box
  * size (or 100x100) is used. Paint defaults: `fill: currentColor`, `stroke: none`,
- * `strokeWidth: 1`.
+ * `strokeWidth: 1`. Supports solid colors, CSS gradients, presets, and CanvasGradientDef.
  */
-export function getShapeRenderData(shape: ShapeDescription, size: Partial<ShapeSize> = {}): ShapeRenderData {
+export function getShapeRenderData(
+	shape: ShapeDescription,
+	size: Partial<ShapeSize> = {},
+	options: GetShapeRenderDataOptions = {}
+): ShapeRenderData {
 	const vb = shape.kind === 'path' ? validViewBox(shape.viewBox) : null;
 	const width = size.width && size.width > 0 ? size.width : vb ? vb[2] : 100;
 	const height = size.height && size.height > 0 ? size.height : vb ? vb[3] : 100;
 	const svg = getShapeSvg(shape, { width, height });
+
+	const baseId = options.id || Math.random().toString(36).slice(2, 9);
+
+	// Resolve fill (gradient or solid)
+	let fillStr = 'currentColor';
+	let fillGradientDef: SvgGradientDef | undefined;
+	const rawFill = shape.fillGradient ?? shape.fill;
+	const resolvedFillGradient = resolveCanvasGradient(rawFill);
+	if (resolvedFillGradient) {
+		const gradId = `shape-fill-${baseId}`;
+		fillGradientDef = gradientToSvgDef(resolvedFillGradient, gradId);
+		fillStr = `url(#${gradId})`;
+	} else if (typeof shape.fill === 'string') {
+		fillStr = shape.fill;
+	} else if (shape.fill === undefined) {
+		fillStr = 'currentColor';
+	}
+
+	// Resolve stroke (gradient or solid)
+	let strokeStr = 'none';
+	let strokeGradientDef: SvgGradientDef | undefined;
+	const rawStroke = shape.strokeGradient ?? shape.stroke;
+	const resolvedStrokeGradient = resolveCanvasGradient(rawStroke);
+	if (resolvedStrokeGradient) {
+		const gradId = `shape-stroke-${baseId}`;
+		strokeGradientDef = gradientToSvgDef(resolvedStrokeGradient, gradId);
+		strokeStr = `url(#${gradId})`;
+	} else if (typeof shape.stroke === 'string') {
+		strokeStr = shape.stroke;
+	} else if (shape.stroke === undefined) {
+		strokeStr = 'none';
+	}
+
 	const data: ShapeRenderData = {
 		viewBox: `0 0 ${formatNumber(width, 3)} ${formatNumber(height, 3)}`,
 		width,
 		height,
 		d: svg.d,
 		fillRule: svg.fillRule,
-		fill: shape.fill ?? 'currentColor',
-		stroke: shape.stroke ?? 'none',
+		fill: fillStr,
+		stroke: strokeStr,
 		strokeWidth: shape.strokeWidth ?? 1
 	};
 	if (svg.transform) data.transform = svg.transform;
 	if (shape.opacity !== undefined) data.opacity = shape.opacity;
+	if (shape.strokeLinecap) data.strokeLinecap = shape.strokeLinecap;
+	if (shape.strokeLinejoin) data.strokeLinejoin = shape.strokeLinejoin;
+	if (fillGradientDef) data.fillGradient = fillGradientDef;
+	if (strokeGradientDef) data.strokeGradient = strokeGradientDef;
 	return data;
 }
 
