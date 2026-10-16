@@ -11,12 +11,13 @@
 
 {#each nodes as node (node.id)}
   {#if node.kind === 'group'}
-    <g data-vector-id={node.id} opacity={node.opacity < 1 ? node.opacity : undefined}>
+    <g data-vector-id={node.id} transform={node.transform} opacity={node.opacity < 1 ? node.opacity : undefined}>
       <Self nodes={node.children} />
     </g>
   {:else}
     <path
       data-vector-id={node.id}
+      transform={node.transform}
       d={node.d}
       fill={node.fill}
       fill-rule={node.fillRule}

@@ -317,9 +317,9 @@ Every feature is available from core and from both framework packages. "Via core
 
 | Feature | Core | React | Svelte |
 | :--- | :---: | :---: | :---: |
-| Vector Document Model (Bézier paths with corner / smooth / symmetric anchors, compound paths, groups, gradients, hidden / locked nodes) | `VectorDocument` & geometry helpers (`/vector`) | `<VectorCanvas>` | `<VectorCanvas>` |
+| Vector Document Model (Bézier paths with corner / smooth / symmetric anchors, compound paths, groups, gradients, hidden / locked nodes, rigid per-node transforms) | `VectorDocument` & geometry helpers (`/vector`) | `<VectorCanvas>` | `<VectorCanvas>` |
 | Vector Tools (select, direct select, pen, pencil, rectangle, ellipse, polygon, star, line; keyboard shortcuts; pan / zoom; grid snapping) | `VectorEditorController` | `useVectorEditor`, `useVectorEditorController` & `useVectorEditorState` | `createVectorEditor` |
-| Vector Transforms (move, resize and rotate handles, flip, align, distribute, arrange, group / ungroup, duplicate, copy / paste) | `transform`, `align`, `distribute`, `arrange`, `group` | `<VectorToolbar>` | `<VectorToolbar>` |
+| Vector Transforms (move, resize and rotate handles with a selection box that stays rotated, set rotation, flip, align, distribute, arrange, group / ungroup, duplicate, copy / paste) | `transform`, `setRotation`, `align`, `distribute`, `arrange`, `group` | `<VectorToolbar>` | `<VectorToolbar>` |
 | Vector Path Editing (move points and handles, add / delete points, convert corner ↔ smooth, close / open, reverse) and Boolean Operations | `insertAnchorAt`, `convertAnchors`, `booleanOp` | `<VectorCanvas>` & `<VectorToolbar>` | `<VectorCanvas>` & `<VectorToolbar>` |
 | Vector Style Panel (fill, stroke, width, opacity; defaults for new shapes) | `getVectorSelectionStyle` & `setStyle` | `<VectorStylePanel>` | `<VectorStylePanel>` |
 | Vector SVG Import / Export & Agent Commands | `parseVectorSvg`, `vectorDocumentToSvg` & `createVectorCommands` | `useVectorCommands` | `useVectorCommands` |

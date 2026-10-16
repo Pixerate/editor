@@ -6,6 +6,7 @@ import type { Point } from '../canvas/types.js';
 import {
 	bezierPathBounds,
 	bezierPathToSvg,
+	transformBezierPath,
 	distanceToBezierPath,
 	pointInBezierPath,
 	segmentNearest,
@@ -249,10 +250,29 @@ export function collectPathNodes(node: VectorNode): VectorPathNode[] {
 // Bounds
 // ---------------------------------------------------------------------------
 
-/** Geometric bounds of a node (stroke width not included), or null when it has no points. */
-export function vectorNodeBounds(node: VectorNode): VectorBounds | null {
-	if (node.type === 'group') return unionBounds(node.children.map(vectorNodeBounds));
-	const b = bezierPathBounds(subpathsToBezier(node.subpaths));
+/** The node's local → parent matrix (identity when it has no `transform`). */
+export function nodeMatrix(node: VectorNode): AffineMatrix {
+	return node.transform ?? IDENTITY_MATRIX;
+}
+
+/** A path node's outline in the space `parent` maps to (default: its parent's space). */
+export function vectorPathWorldBezier(node: VectorPathNode, parent: AffineMatrix = IDENTITY_MATRIX): BezierPath {
+	const m = multiplyMatrices(nodeMatrix(node), parent);
+	const path = subpathsToBezier(node.subpaths);
+	return isIdentityMatrix(m) ? path : transformBezierPath(path, m);
+}
+
+/**
+ * Geometric bounds of a node (stroke width not included) in the space `parent` maps to —
+ * by default the node's parent space, which for top-level nodes is the document. Null when
+ * the node has no points.
+ */
+export function vectorNodeBounds(node: VectorNode, parent: AffineMatrix = IDENTITY_MATRIX): VectorBounds | null {
+	if (node.type === 'group') {
+		const m = multiplyMatrices(nodeMatrix(node), parent);
+		return unionBounds(node.children.map((c) => vectorNodeBounds(c, m)));
+	}
+	const b = bezierPathBounds(vectorPathWorldBezier(node, parent));
 	if (!b) return null;
 	return { x: b.minX, y: b.minY, width: b.maxX - b.minX, height: b.maxY - b.minY };
 }
@@ -292,10 +312,13 @@ export function boundsFromPoints(a: Vec2, b: Vec2): VectorBounds {
  * Whether `p` hits a node: inside its fill (when it has one) or within half its stroke
  * width plus `tolerance` of its outline. A group is hit when any visible child is.
  */
-export function hitTestVectorNode(node: VectorNode, p: Vec2, tolerance = 0): boolean {
+export function hitTestVectorNode(node: VectorNode, p: Vec2, tolerance = 0, parent: AffineMatrix = IDENTITY_MATRIX): boolean {
 	if (node.visible === false) return false;
-	if (node.type === 'group') return node.children.some((c) => hitTestVectorNode(c, p, tolerance));
-	const path = subpathsToBezier(node.subpaths);
+	if (node.type === 'group') {
+		const m = multiplyMatrices(nodeMatrix(node), parent);
+		return node.children.some((c) => hitTestVectorNode(c, p, tolerance, m));
+	}
+	const path = vectorPathWorldBezier(node, parent);
 	if (path.length === 0) return false;
 	const point: Point = [p.x, p.y];
 	if (hasPaint(node.fill) && pointInBezierPath(path, point, node.fillRule ?? 'nonzero')) return true;
@@ -322,7 +345,7 @@ export interface NearestSegment {
 	distance: number;
 }
 
-/** The closest point on any segment of a path node. */
+/** The closest point on any segment of a path node (`p` and the result are in the node's own space). */
 export function nearestSegment(node: VectorPathNode, p: Vec2): NearestSegment | null {
 	let best: NearestSegment | null = null;
 	node.subpaths.forEach((sp, s) => {
@@ -370,8 +393,56 @@ export function applyMatrix(m: AffineMatrix, p: Vec2): Vec2 {
 	return { x: m[0] * p.x + m[2] * p.y + m[4], y: m[1] * p.x + m[3] * p.y + m[5] };
 }
 
-/** A copy of the node with every anchor and handle transformed. Stroke widths are kept. */
-export function transformVectorNode<T extends VectorNode>(node: T, m: AffineMatrix): T {
+export function isIdentityMatrix(m: AffineMatrix, eps = 1e-12): boolean {
+	return Math.abs(m[0] - 1) < eps && Math.abs(m[1]) < eps && Math.abs(m[2]) < eps && Math.abs(m[3] - 1) < eps && Math.abs(m[4]) < eps && Math.abs(m[5]) < eps;
+}
+
+/** The inverse matrix (the identity for a singular one). */
+export function invertMatrix(m: AffineMatrix): AffineMatrix {
+	const [a, b, c, d, e, f] = m;
+	const det = a * d - b * c;
+	if (!det || !Number.isFinite(det)) return IDENTITY_MATRIX;
+	return [d / det, -b / det, -c / det, a / det, (c * f - d * e) / det, (b * e - a * f) / det];
+}
+
+/** Applies only the linear part (for directions and offsets). */
+export function applyMatrixLinear(m: AffineMatrix, v: Vec2): Vec2 {
+	return { x: m[0] * v.x + m[2] * v.y, y: m[1] * v.x + m[3] * v.y };
+}
+
+/**
+ * The rotation of a matrix in degrees, clockwise (y down), in (−180, 180]. For a mirrored
+ * matrix it is the rotation left after undoing a horizontal flip, so a flipped rotated shape
+ * keeps its angle.
+ */
+export function matrixRotation(m: AffineMatrix): number {
+	const [a, b, c, d] = m;
+	const mirrored = a * d - b * c < 0;
+	const deg = ((mirrored ? Math.atan2(-b - c, d - a) : Math.atan2(b - c, a + d)) * 180) / Math.PI;
+	return Math.abs(deg) < 1e-9 ? 0 : deg;
+}
+
+/**
+ * Splits `m` into `residual` then `rigid` (`m = residual × rigid` in apply order): `rigid` is
+ * the nearest rotation plus the translation, `residual` the linear rest (scale, skew,
+ * reflection). An unrotated `m` gives an identity `rigid` and everything in `residual`.
+ */
+export function decomposeRigid(m: AffineMatrix): { rigid: AffineMatrix; residual: AffineMatrix } {
+	const [a, b, c, d, e, f] = m;
+	const deg = matrixRotation(m);
+	if (deg === 0) return { rigid: IDENTITY_MATRIX, residual: m };
+	const r = (deg * Math.PI) / 180;
+	const cos = Math.cos(r);
+	const sin = Math.sin(r);
+	return {
+		rigid: [cos, sin, -sin, cos, e, f],
+		residual: [cos * a + sin * b, -sin * a + cos * b, cos * c + sin * d, -sin * c + cos * d, 0, 0]
+	};
+}
+
+/** Every anchor and handle mapped through `m` (the node's own `transform` is untouched). */
+function bakeIntoGeometry<T extends VectorNode>(node: T, m: AffineMatrix): T {
+	if (isIdentityMatrix(m)) return node;
 	if (node.type === 'group') return { ...node, children: node.children.map((c) => transformVectorNode(c, m)) };
 	const path = node as VectorPathNode;
 	return {
@@ -388,6 +459,48 @@ export function transformVectorNode<T extends VectorNode>(node: T, m: AffineMatr
 			})
 		}))
 	} as T;
+}
+
+/**
+ * A copy of the node moved by `m`, given in its parent's space. The node's rotation and
+ * translation go to its rigid `transform`; scale and skew are baked into its anchors (or its
+ * children), so the result draws exactly as `m` says. Stroke widths are kept.
+ */
+export function transformVectorNode<T extends VectorNode>(node: T, m: AffineMatrix): T {
+	const total = multiplyMatrices(nodeMatrix(node), m);
+	const { rigid, residual } = decomposeRigid(total);
+	const { transform: _old, ...rest } = node as VectorNode;
+	const baked = bakeIntoGeometry(rest as T, residual);
+	return isIdentityMatrix(rigid) ? baked : ({ ...baked, transform: rigid } as T);
+}
+
+/** The node's rotation in degrees (from its `transform` and its ancestors' when `parent` is given). */
+export function vectorNodeRotation(node: VectorNode, parent: AffineMatrix = IDENTITY_MATRIX): number {
+	return matrixRotation(multiplyMatrices(nodeMatrix(node), parent));
+}
+
+/** The local → document matrix of node `id` (ancestors' transforms included), or null. */
+export function vectorWorldMatrix(nodes: readonly VectorNode[], id: string): AffineMatrix | null {
+	const search = (list: readonly VectorNode[], parent: AffineMatrix): AffineMatrix | null => {
+		for (const n of list) {
+			const m = multiplyMatrices(nodeMatrix(n), parent);
+			if (n.id === id) return m;
+			if (n.type === 'group') {
+				const found = search(n.children, m);
+				if (found) return found;
+			}
+		}
+		return null;
+	};
+	return search(nodes, IDENTITY_MATRIX);
+}
+
+/** The parent space → document matrix of node `id` (identity for top-level nodes), or null. */
+export function vectorParentMatrix(nodes: readonly VectorNode[], id: string): AffineMatrix | null {
+	const node = findVectorNode(nodes, id);
+	const world = vectorWorldMatrix(nodes, id);
+	if (!node || !world) return null;
+	return multiplyMatrices(invertMatrix(nodeMatrix(node)), world);
 }
 
 // ---------------------------------------------------------------------------

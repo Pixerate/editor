@@ -1,5 +1,8 @@
 import type { CanvasGradientDef } from '../canvas/gradient.js';
 
+/** An affine matrix `[a, b, c, d, e, f]`: `x' = a·x + c·y + e`, `y' = b·x + d·y + f` (SVG order). */
+export type VectorMatrix = readonly [number, number, number, number, number, number];
+
 /** A point in document coordinates. */
 export interface Vec2 {
 	x: number;
@@ -65,6 +68,13 @@ interface VectorNodeBase {
 	locked?: boolean;
 	/** 0–1, default 1. */
 	opacity?: number;
+	/**
+	 * Placement in the parent's space: a rigid matrix (rotation + translation). Anchors and
+	 * children are in the node's own space. Omitted for unrotated nodes, whose positions are
+	 * stored directly. Scale and skew are never stored here — `transformVectorNode` bakes
+	 * them into the geometry, so stroke widths and the rotated selection box stay exact.
+	 */
+	transform?: VectorMatrix;
 }
 
 /** A shape made of one or more subpaths (holes and compound shapes included). */

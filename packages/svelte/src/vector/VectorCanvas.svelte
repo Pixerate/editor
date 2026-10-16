@@ -181,7 +181,7 @@
       <path d={overlay.penPreview} stroke={accentColor} stroke-dasharray="4 3" />
     {/if}
     {#if box}
-      <g data-vector-selection="">
+      <g data-vector-selection="" transform={box.transform || undefined}>
         <rect x={box.x} y={box.y} width={box.width} height={box.height} stroke={accentColor} />
         <line x1={box.x + box.width / 2} y1={box.y} x2={box.x + box.width / 2} y2={box.y - 24} stroke={accentColor} />
         {#each box.handles as h (h.handle)}

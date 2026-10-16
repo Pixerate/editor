@@ -1,6 +1,6 @@
 import type { CommandSpec } from '../commands/registry.js';
 import type { VectorEditorController, VectorShapeInput } from './controller.js';
-import { vectorNodeBounds, vectorPathData } from './geometry.js';
+import { vectorNodeBounds, vectorNodeRotation, vectorParentMatrix, vectorPathData, IDENTITY_MATRIX } from './geometry.js';
 import type { VectorAlign, VectorArrange, VectorBooleanOperation, VectorNode, VectorStyle, VectorTool } from './types.js';
 import { VECTOR_TOOLS } from './types.js';
 
@@ -19,7 +19,10 @@ export interface VectorNodeListing {
 	type: 'path' | 'group';
 	name?: string;
 	depth: number;
+	/** Axis-aligned bounds in document units. */
 	bounds: { x: number; y: number; width: number; height: number } | null;
+	/** Rotation in degrees, clockwise (ancestors' rotations included). */
+	rotation: number;
 	visible: boolean;
 	locked: boolean;
 	selected: boolean;
@@ -85,12 +88,14 @@ export function createVectorCommands(controller: VectorEditorController, options
 		const out: VectorNodeListing[] = [];
 		const visit = (nodes: readonly VectorNode[], depth: number) => {
 			for (const n of nodes) {
-				const b = vectorNodeBounds(n);
+				const parent = vectorParentMatrix(state.document.nodes, n.id) ?? IDENTITY_MATRIX;
+				const b = vectorNodeBounds(n, parent);
 				out.push({
 					id: n.id,
 					type: n.type,
 					...(n.name ? { name: n.name } : {}),
 					depth,
+					rotation: Math.round(vectorNodeRotation(n, parent) * 100) / 100,
 					bounds: b && { x: Math.round(b.x * 100) / 100, y: Math.round(b.y * 100) / 100, width: Math.round(b.width * 100) / 100, height: Math.round(b.height * 100) / 100 },
 					visible: n.visible !== false,
 					locked: !!n.locked,
@@ -195,18 +200,28 @@ export function createVectorCommands(controller: VectorEditorController, options
 			id: `${prefix}transform`,
 			label: 'Transform…',
 			keywords: ['move', 'translate', 'scale', 'resize', 'rotate', 'flip'],
-			description: 'Moves (dx, dy), scales (sx, sy) and/or rotates (degrees clockwise) nodes around their combined centre, in that order.',
+			description:
+				'Moves (dx, dy), scales (sx, sy, along the selection box axes) and/or rotates (`rotate`: by degrees clockwise around the combined centre; `angle`: to an absolute rotation, each node around its own centre), in that order.',
 			params: {
 				type: 'object',
-				properties: { ids: IDS, dx: { type: 'number' }, dy: { type: 'number' }, sx: { type: 'number' }, sy: { type: 'number' }, rotate: { type: 'number' } }
+				properties: {
+					ids: IDS,
+					dx: { type: 'number' },
+					dy: { type: 'number' },
+					sx: { type: 'number' },
+					sy: { type: 'number' },
+					rotate: { type: 'number' },
+					angle: { type: 'number' }
+				}
 			},
 			enabled: enabledFor,
 			undoable: true,
-			run: (_ctx: unknown, params: { ids?: string[]; dx?: number; dy?: number; sx?: number; sy?: number; rotate?: number }) => {
+			run: (_ctx: unknown, params: { ids?: string[]; dx?: number; dy?: number; sx?: number; sy?: number; rotate?: number; angle?: number }) => {
 				const target = ids(params);
 				if (params.dx || params.dy) check(controller.translate(params.dx ?? 0, params.dy ?? 0, { ids: target }));
 				if (params.sx !== undefined || params.sy !== undefined) check(controller.scale(params.sx ?? 1, params.sy ?? params.sx ?? 1, { ids: target }));
 				if (params.rotate) check(controller.rotate(params.rotate, { ids: target }));
+				if (params.angle !== undefined) check(controller.setRotation(params.angle, { ids: target }));
 				return { ok: true };
 			}
 		},

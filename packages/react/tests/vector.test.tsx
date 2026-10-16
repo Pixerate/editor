@@ -126,6 +126,15 @@ describe("VectorCanvas", () => {
     expect(c.getState().tool).toBe("select");
   });
 
+  it("renders rotated nodes with a rotated selection box", async () => {
+    const c = make();
+    c.select(["a"]);
+    c.rotate(30);
+    await act(async () => root.render(<VectorCanvas controller={c} fitOnMount={false} />));
+    expect(q('[data-vector-scene] path[data-vector-id="a"]').getAttribute("transform")).toMatch(/^matrix\(0\.866025 0\.5 -0\.5 0\.866025 /);
+    expect(q("[data-vector-selection]").getAttribute("transform")).toBe("rotate(30 0 0)");
+  });
+
   it("shows a marquee while dragging on empty canvas", async () => {
     const c = make();
     await act(async () => root.render(<VectorCanvas controller={c} fitOnMount={false} />));
