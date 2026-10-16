@@ -40,6 +40,7 @@ import {
 	VECTOR_ARROWHEADS,
 	VECTOR_CORNER_KINDS,
 	type VectorArrowhead,
+	type VectorBlend,
 	type VectorCornerKind,
 	type VectorDocument,
 	type VectorFillRule,
@@ -198,6 +199,38 @@ function gradientMarkup(def: SvgGradientDef): string {
 	return `<${tag} id="${escapeAttr(def.id)}"${attrs}>${stops}</${tag}>`;
 }
 
+/**
+ * `data-vector-blend` (a blend group's options as JSON, its spine in the group's space) back to
+ * a blend, the spine carried by `m` (import bakes group transforms into the children).
+ */
+function blendFromAttribute(value: string | undefined, m: AffineMatrix): VectorBlend | null {
+	if (!value) return null;
+	let raw: unknown;
+	try {
+		raw = JSON.parse(value);
+	} catch {
+		return null;
+	}
+	if (!raw || typeof raw !== 'object') return null;
+	const r = raw as Record<string, unknown>;
+	const out: VectorBlend = {};
+	if (r.spacing === 'steps' || r.spacing === 'distance' || r.spacing === 'smoothColor') out.spacing = r.spacing;
+	if (typeof r.steps === 'number' && Number.isFinite(r.steps)) out.steps = Math.min(1000, Math.max(1, Math.round(r.steps)));
+	if (typeof r.distance === 'number' && r.distance > 0) out.distance = r.distance;
+	if (typeof r.orientToSpine === 'boolean') out.orientToSpine = r.orientToSpine;
+	if (typeof r.linear === 'boolean') out.linear = r.linear;
+	if (r.starts && typeof r.starts === 'object') {
+		const starts = Object.fromEntries(Object.entries(r.starts as Record<string, unknown>).filter((e): e is [string, number] => Number.isInteger(e[1]) && (e[1] as number) >= 0));
+		if (Object.keys(starts).length) out.starts = starts;
+	}
+	const spine = r.spine as VectorSubpath | null | undefined;
+	if (spine && Array.isArray(spine.anchors) && spine.anchors.every((a) => a && Number.isFinite(a.x) && Number.isFinite(a.y))) {
+		const sp: VectorSubpath = { closed: !!spine.closed, anchors: spine.anchors.map((a) => ({ x: a.x, y: a.y, ...(a.in ? { in: { x: a.in.x, y: a.in.y } } : {}), ...(a.out ? { out: { x: a.out.x, y: a.out.y } } : {}) })) };
+		out.spine = m === IDENTITY_MATRIX ? sp : transformVectorNode<VectorPathNode>({ id: '', type: 'path', subpaths: [sp] }, m).subpaths[0];
+	}
+	return out;
+}
+
 /** Serializes a vector document as a standalone SVG string. */
 export function vectorDocumentToSvg(doc: VectorDocument, options: VectorSvgExportOptions = {}): string {
 	const precision = options.precision ?? 3;
@@ -213,6 +246,8 @@ export function vectorDocumentToSvg(doc: VectorDocument, options: VectorSvgExpor
 		if (node.transform) out += ` transform="matrix(${node.transform.map((n) => formatNumber(n, 6)).join(' ')})"`;
 		if (node.opacity !== undefined && node.opacity < 1) out += ` opacity="${num(node.opacity)}"`;
 		if (node.visible === false) out += ` display="none"`;
+		if (node.blendStep) out += ` data-vector-blend-step=""`;
+		if (node.type === 'group' && node.blend) out += ` data-vector-blend="${escapeAttr(JSON.stringify(node.blend))}"`;
 		return out;
 	};
 
@@ -665,6 +700,8 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 				...(opacity !== undefined && Number.isFinite(opacity) && opacity < 1 ? { opacity } : {}),
 				...(hidden ? { visible: false } : {})
 			};
+			// A blend's in-betweens are regenerated from its keys.
+			if (child.attrs['data-vector-blend-step'] !== undefined) continue;
 			if (child.name === 'g' && child.attrs['data-vector-path'] !== undefined) {
 				const node = mergedPath(child, s, m, meta);
 				if (node) out.push(node);
@@ -674,6 +711,8 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 				const children = visit(child, s, m);
 				if (!children.length) continue;
 				const group: VectorGroupNode = { id: idFor(child), type: 'group', ...meta, children };
+				const blend = child.name === 'g' ? blendFromAttribute(child.attrs['data-vector-blend'], m) : null;
+				if (blend) group.blend = blend;
 				out.push(group);
 				continue;
 			}

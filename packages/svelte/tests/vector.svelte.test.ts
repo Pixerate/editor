@@ -587,3 +587,72 @@ describe("VectorEditor and runes (svelte)", () => {
     expect(registry.has("vector.addShape")).toBe(false);
   });
 });
+
+describe("Blend (svelte)", () => {
+  const pair = () =>
+    new VectorEditorController({
+      document: {
+        width: 400,
+        height: 300,
+        nodes: [
+          { id: "a", type: "path", fill: "#ff0000", stroke: null, subpaths: [rectSubpath({ x: 0, y: 0, width: 20, height: 20 })] },
+          { id: "b", type: "path", fill: "#0000ff", stroke: null, subpaths: [rectSubpath({ x: 200, y: 0, width: 20, height: 20 })] },
+          { id: "s", type: "path", fill: null, stroke: "#000000", subpaths: [{ closed: false, anchors: [{ x: 10, y: 200 }, { x: 110, y: 100 }, { x: 210, y: 200 }] }] },
+        ],
+      },
+      createId: () => `bl${++n}`,
+    });
+
+  it("toolbar makes a blend, edits its spacing, replaces its spine and expands it", () => {
+    const c = pair();
+    const t = render(VectorToolbar, { controller: c });
+    const make = t.querySelector('[data-vector-blend-action="make"]') as HTMLButtonElement;
+    expect(make.disabled).toBe(true);
+    expect((t.querySelector('[data-vector-blend-action="expand"]') as HTMLButtonElement).disabled).toBe(true);
+    c.select(["a", "b"]);
+    flushSync();
+    click(make);
+    const id = c.getState().selection[0];
+    const blend = () => c.getNode(id) as any;
+    expect(blend().blend).toBeTruthy();
+    expect(blend().children.filter((k: any) => k.blendStep)).toHaveLength(5);
+    setValue(t.querySelector('input[aria-label="Blend steps"]') as HTMLInputElement, "2");
+    expect(blend().children.filter((k: any) => k.blendStep)).toHaveLength(2);
+    setValue(t.querySelector('select[aria-label="Blend spacing"]') as HTMLSelectElement, "distance");
+    expect(blend().blend.spacing).toBe("distance");
+    expect(t.querySelector('input[aria-label="Blend distance"]')).toBeTruthy();
+    click(t.querySelector('[data-vector-blend-action="orient"]'));
+    expect(blend().blend.orientToSpine).toBe(true);
+    expect(t.querySelector('[data-vector-blend-action="orient"]')!.getAttribute("aria-pressed")).toBe("true");
+    c.select([id, "s"]);
+    flushSync();
+    click(t.querySelector('[data-vector-blend-action="spine"]'));
+    expect(blend().blend.spine.anchors).toHaveLength(3);
+    expect(c.getNode("s")).toBeUndefined();
+    click(t.querySelector('[data-vector-blend-action="expand"]'));
+    expect(blend().blend).toBeUndefined();
+    expect(c.getState().undoLabel).toBe("Expand Blend");
+  });
+
+  it("draws the spine and the Blend tool's first pick", () => {
+    const c = pair();
+    const id = c.blend({ ids: ["a", "b"], steps: 3 })!;
+    const t = render(VectorCanvas, { controller: c, fitOnMount: false });
+    expect(t.querySelectorAll("[data-vector-scene] path")).toHaveLength(6);
+    expect(t.querySelector(`[data-vector-blend-spine="${id}"]`)).toBeTruthy();
+    expect(t.querySelectorAll(`[data-vector-blend-spine="${id}"] circle`)).toHaveLength(2);
+    const svg = t.querySelector("svg")!;
+    key(svg, "j");
+    expect(c.getState().tool).toBe("blend");
+    c.select([]);
+    flushSync();
+    pointer(svg, "pointermove", 10, 200);
+    expect(t.querySelectorAll("[data-vector-blend-anchor]")).toHaveLength(3);
+    pointer(svg, "pointerdown", 10, 200);
+    pointer(svg, "pointerup", 10, 200);
+    expect(t.querySelector("[data-vector-blend-start] circle")).toBeTruthy();
+    pointer(svg, "pointerdown", 100, 10);
+    expect(c.getState().blendStart).toBeNull();
+    expect(c.getState().undoLabel).toBe("Blend");
+  });
+});

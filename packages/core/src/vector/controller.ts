@@ -80,6 +80,13 @@ import {
 	VECTOR_WIDTH_SAME_T
 } from './width.js';
 import { parseVectorSvg, vectorDocumentToSvg, type VectorSvgExportOptions } from './svg.js';
+import {
+	expandVectorBlend,
+	isVectorBlendGroup,
+	refreshVectorBlends,
+	releaseVectorBlend,
+	vectorBlendKeyTargets
+} from './blendGroup.js';
 import { constrainToLeave, VECTOR_CONSTRUCTION_ANGLES, VectorSnapTargets, type VectorSnapGuides, type VectorSnapLeave } from './snap.js';
 import {
 	bendSegment as bendSubpathSegment,
@@ -115,6 +122,8 @@ import type {
 	VectorAnchorType,
 	VectorArrange,
 	VectorAverageAxis,
+	VectorBlend,
+	VectorBlendOptions,
 	VectorBooleanOperation,
 	VectorBounds,
 	VectorCornerKind,
@@ -344,6 +353,10 @@ export interface VectorEditorState {
 	pointer: Vec2 | null;
 	/** Shape Builder and paint bucket highlight: faces, line pieces and the gesture's trail. */
 	builder: VectorBuilderPreview | null;
+	/** The Blend tool's first click: the shape (and anchor of its first subpath) the next click blends from. */
+	blendStart: VectorBlendStart | null;
+	/** Options new blends get. */
+	blendDefaults: VectorBlendOptions;
 	canUndo: boolean;
 	canRedo: boolean;
 	undoLabel: string;
@@ -353,6 +366,37 @@ export interface VectorEditorState {
 }
 
 export type VectorActionResult = { ok: true } | { ok: false; message: string };
+
+/** The shape the Blend tool blends from (its first click). */
+export interface VectorBlendStart {
+	nodeId: string;
+	/** The clicked anchor of its first subpath, or null for the shape as a whole. */
+	anchor: number | null;
+}
+
+/** Blend settings and options of `VectorEditorController.blend`. */
+export interface VectorBlendInput extends VectorBlendOptions {
+	/** Nodes to blend (default: the selection), in stacking order unless `keepOrder`. */
+	ids?: readonly string[];
+	/** Blend in the order given instead of stacking order. */
+	keepOrder?: boolean;
+	/** Start anchor of each key's first subpath, by key id. */
+	starts?: Record<string, number>;
+	name?: string;
+}
+
+const BLEND_OPTION_KEYS = ['spacing', 'steps', 'distance', 'orientToSpine', 'linear'] as const;
+
+/** The blend options in `input`, valid ones only. */
+function blendOptionsOf(input: Partial<VectorBlendOptions>): VectorBlendOptions {
+	const out: VectorBlendOptions = {};
+	if (input.spacing === 'steps' || input.spacing === 'distance' || input.spacing === 'smoothColor') out.spacing = input.spacing;
+	if (typeof input.steps === 'number' && Number.isFinite(input.steps)) out.steps = Math.min(1000, Math.max(1, Math.round(input.steps)));
+	if (typeof input.distance === 'number' && Number.isFinite(input.distance) && input.distance > 0) out.distance = input.distance;
+	if (typeof input.orientToSpine === 'boolean') out.orientToSpine = input.orientToSpine;
+	if (typeof input.linear === 'boolean') out.linear = input.linear;
+	return out;
+}
 
 /**
  * What the Shape Builder or paint bucket highlights, in document units: the faces (filled paths
@@ -785,7 +829,8 @@ const TOOL_LABELS: Record<VectorTool, string> = {
 	eraser: 'Eraser',
 	width: 'Width',
 	shapeBuilder: 'Shape Builder',
-	paintBucket: 'Paint Bucket'
+	paintBucket: 'Paint Bucket',
+	blend: 'Blend'
 };
 
 const TOOL_KEYS: Record<string, VectorTool> = {
@@ -803,7 +848,8 @@ const TOOL_KEYS: Record<string, VectorTool> = {
 	e: 'eraser',
 	w: 'width',
 	m: 'shapeBuilder',
-	b: 'paintBucket'
+	b: 'paintBucket',
+	j: 'blend'
 };
 
 export function vectorToolLabel(tool: VectorTool): string {
@@ -826,7 +872,8 @@ export const VECTOR_TOOL_SHORTCUTS: Readonly<Record<VectorTool, string>> = {
 	eraser: 'E',
 	width: 'W',
 	shapeBuilder: 'M',
-	paintBucket: 'B'
+	paintBucket: 'B',
+	blend: 'J'
 };
 
 /** Short glyphs for tool buttons (pair them with `vectorToolLabel` for the accessible name). */
@@ -845,7 +892,8 @@ export const VECTOR_TOOL_GLYPHS: Readonly<Record<VectorTool, string>> = {
 	eraser: '⌫',
 	width: '⇹',
 	shapeBuilder: '⊕',
-	paintBucket: '◍'
+	paintBucket: '◍',
+	blend: '⧓'
 };
 
 /** Tools that drag out a shape (they snap while hovering). */
@@ -1011,6 +1059,9 @@ export class VectorEditorController {
 	/** Paint bucket map of the visible outlines. */
 	private fillCache: { doc: VectorDocument; gap: number; map: PlanarMap | null } | null = null;
 	private builderPreview: VectorBuilderPreview | null = null;
+	private blendStart: VectorBlendStart | null = null;
+	/** Options new blends get (the toolbars edit them along with the selected blend's). */
+	private blendDefaults: VectorBlendOptions = {};
 	/** What the highlight shows, to skip notifying when the pointer stays over the same face. */
 	private builderHoverKey: string | null = null;
 	private readonly createId: () => string;
@@ -1026,6 +1077,7 @@ export class VectorEditorController {
 	constructor(options: VectorEditorOptions = {}) {
 		this.history = options.history ?? new HistoryManager();
 		this.doc = options.document ? cloneVectorDocument(options.document) : { width: 800, height: 600, nodes: [] };
+		this.doc = this.refreshed(this.doc);
 		this.tool = options.tool ?? 'select';
 		this.defaults = { ...DEFAULT_DEFAULTS, ...(options.defaults ?? {}) } as VectorEditorState['defaults'];
 		this.viewport = { x: 0, y: 0, zoom: 1, ...(options.viewport ?? {}) };
@@ -1097,6 +1149,8 @@ export class VectorEditorController {
 			pen: this.pen,
 			pointer: this.pointer,
 			builder: this.builderPreview,
+			blendStart: this.blendStart,
+			blendDefaults: this.blendDefaults,
 			canUndo: h.canUndo,
 			canRedo: h.canRedo,
 			undoLabel: h.undoName,
@@ -1105,7 +1159,17 @@ export class VectorEditorController {
 		};
 	}
 
+	/** `doc` with its blends' steps brought up to date (the same object when they already are). */
+	private refreshed(doc: VectorDocument): VectorDocument {
+		const nodes = refreshVectorBlends(doc.nodes);
+		return nodes === doc.nodes ? doc : { ...doc, nodes };
+	}
+
 	private notify(docChanged = false) {
+		// Blends regenerate their steps after every edit of a key (drags included).
+		const fresh = this.refreshed(this.doc);
+		if (fresh !== this.doc) this.doc = fresh;
+		if (this.blendStart && !this.getNode(this.blendStart.nodeId)) this.blendStart = null;
 		this.revision++;
 		this.state = this.computeState();
 		if (docChanged) this.onChange?.(this.doc);
@@ -1166,6 +1230,8 @@ export class VectorEditorController {
 				return this.builderPreview.mode === 'erase' ? 'not-allowed' : 'cell';
 			case 'paintBucket':
 				return this.builderPreview ? 'cell' : 'crosshair';
+			case 'blend':
+				return h?.nodeId ? (this.blendStart && this.blendStart.nodeId !== h.nodeId ? 'copy' : 'pointer') : 'crosshair';
 			default:
 				return 'crosshair';
 		}
@@ -1206,6 +1272,7 @@ export class VectorEditorController {
 
 	/** Records the change from `before` to the current state as one undo step. */
 	private commit(name: string, before: Snapshot) {
+		this.doc = this.refreshed(this.doc);
 		const after = this.snapshot();
 		if (before.doc === after.doc) {
 			this.notify();
@@ -1323,6 +1390,7 @@ export class VectorEditorController {
 		this.widthEdit = null;
 		this.builderPreview = null;
 		this.builderHoverKey = null;
+		this.blendStart = null;
 		if (tool !== 'direct') {
 			this.anchors = [];
 			this.editingId = null;
@@ -2186,6 +2254,7 @@ export class VectorEditorController {
 						const m = nodeMatrix(n);
 						out.push(
 							...n.children
+								.map((c) => (c.blendStep ? (({ blendStep: _s, locked: _l, ...rest }) => rest as VectorNode)(c) : c))
 								.map((c) => (n.transform ? transformVectorNode(c, m) : c))
 								.map((c) => (opacity !== undefined && opacity < 1 ? { ...c, opacity: (c.opacity ?? 1) * opacity } : c))
 						);
@@ -2357,6 +2426,185 @@ export class VectorEditorController {
 	}
 
 	/** The Shape Builder map of the selected (or given) paths, cached per document and selection. */
+	// -------------------------------------------------------------------------
+	// Blends
+	// -------------------------------------------------------------------------
+
+	/** Selected (or given) blend groups; a selected key or step counts as its blend. */
+	private blendTargets(ids?: readonly string[]): (VectorGroupNode & { blend: VectorBlend })[] {
+		const out = new Map<string, VectorGroupNode & { blend: VectorBlend }>();
+		for (const id of ids ?? this.selection) {
+			const node = this.getNode(id);
+			const group = isVectorBlendGroup(node) ? node : locateVectorNode(this.doc.nodes, id)?.parent;
+			if (isVectorBlendGroup(group)) out.set(group.id, group);
+		}
+		return [...out.values()];
+	}
+
+	/**
+	 * Blends two or more selected (or given) paths or groups: they become the keys of a live
+	 * blend group (bottom to top, or in the order given with `keepOrder`) whose in-betweens are
+	 * regenerated whenever a key or the options change. The keys must share a parent. Returns
+	 * the blend group's id, or null.
+	 */
+	blend(input: VectorBlendInput = {}): string | null {
+		const ids = [...new Set(input.ids ?? this.selectedRoots())].filter((id) => {
+			const n = this.getNode(id);
+			return !!n && !n.blendStep && !n.locked;
+		});
+		if (ids.length < 2) return null;
+		const locs = ids.map((id) => locateVectorNode(this.doc.nodes, id)!);
+		const parent = locs[0].parent?.id ?? null;
+		if (locs.some((l) => (l.parent?.id ?? null) !== parent)) return null;
+		const order = input.keepOrder ? ids : ids.slice().sort((a, b) => locs[ids.indexOf(a)].index - locs[ids.indexOf(b)].index);
+		const blend: VectorBlend = blendOptionsOf({ ...this.blendDefaults, ...input });
+		if (input.starts) {
+			const starts = Object.fromEntries(Object.entries(input.starts).filter(([k, v]) => order.includes(k) && Number.isInteger(v) && v >= 0));
+			if (Object.keys(starts).length) blend.starts = starts;
+		}
+		const id = this.newId();
+		this.change('Blend', () => {
+			const set = new Set(order);
+			const regroup = (list: readonly VectorNode[]): VectorNode[] => {
+				const members = order.map((m) => list.find((n) => n.id === m)!);
+				const top = Math.max(...members.map((m) => list.indexOf(m)));
+				const out: VectorNode[] = [];
+				list.forEach((n, i) => {
+					if (i === top) out.push({ id, type: 'group', name: input.name ?? 'Blend', blend, children: members });
+					if (!set.has(n.id)) out.push(n);
+				});
+				return out;
+			};
+			if (parent === null) this.setDoc(regroup(this.doc.nodes));
+			else this.setDoc(mapTree(this.doc.nodes, (n) => (n.id === parent && n.type === 'group' ? { ...n, children: regroup(n.children) } : n)));
+			this.selection = [id];
+			this.anchors = [];
+			this.editingId = null;
+		});
+		return id;
+	}
+
+	/** Sets the options new blends get (spacing, steps, distance, orientation, morph). */
+	setBlendDefaults(patch: Partial<VectorBlendOptions>): void {
+		this.blendDefaults = { ...this.blendDefaults, ...blendOptionsOf(patch) };
+		this.notify();
+	}
+
+	/**
+	 * Adds a node as the last key of a blend (it must share the blend's parent); `start` is the
+	 * anchor of its first subpath the blend starts from. One undo step.
+	 */
+	addBlendKey(blendId: string, nodeId: string, options: { start?: number | null } = {}): VectorActionResult {
+		const group = this.getNode(blendId);
+		const node = this.getNode(nodeId);
+		if (!isVectorBlendGroup(group)) return { ok: false, message: `"${blendId}" is not a blend.` };
+		if (!node || node.blendStep || node.locked || node.id === blendId) return { ok: false, message: `"${nodeId}" cannot be a key.` };
+		const parentOf = (id: string) => locateVectorNode(this.doc.nodes, id)?.parent?.id ?? null;
+		if (parentOf(blendId) !== parentOf(nodeId)) return { ok: false, message: 'The new key must sit beside the blend (same parent).' };
+		const start = options.start;
+		this.change('Blend', () => {
+			const blend = start !== null && start !== undefined ? { ...group.blend, starts: { ...group.blend.starts, [nodeId]: start } } : group.blend;
+			// The key leaves its place and joins the blend.
+			const m = invertMatrix(nodeMatrix(group));
+			const key = group.transform ? transformVectorNode(node, m) : node;
+			// Two passes: the key must not be removed again from inside the blend.
+			const without = mapTree(this.doc.nodes, (n) => (n.id === nodeId ? null : n));
+			this.setDoc(spliceTree(without, blendId, [{ ...group, blend, children: [...group.children, key] }]));
+			this.selection = [blendId];
+			this.anchors = [];
+		});
+		return { ok: true };
+	}
+
+	/** Changes the spacing, steps, distance, orientation or morph of the selected (or given) blends. */
+	setBlendOptions(patch: Partial<VectorBlendOptions>, options: { ids?: readonly string[] } = {}): VectorActionResult {
+		const groups = this.blendTargets(options.ids);
+		if (!groups.length) return { ok: false, message: 'Select a blend.' };
+		const clean = blendOptionsOf(patch);
+		if (!Object.keys(clean).length) return { ok: false, message: 'No valid blend options were given.' };
+		const set = new Set(groups.map((g) => g.id));
+		this.change('Blend Options', () => {
+			this.setDoc(mapTree(this.doc.nodes, (n) => (set.has(n.id) && n.type === 'group' && n.blend ? { ...n, blend: { ...n.blend, ...clean } } : n)));
+		});
+		return { ok: true };
+	}
+
+	/** Expand: turns the selected (or given) blends into plain groups of their keys and steps. Returns their ids. */
+	expandBlend(options: { ids?: readonly string[] } = {}): string[] {
+		const groups = this.blendTargets(options.ids);
+		if (!groups.length) return [];
+		const set = new Set(groups.map((g) => g.id));
+		const used = new Set<string>();
+		walkVectorNodes(this.doc.nodes, (n) => used.add(n.id));
+		const fresh = () => {
+			let id = this.createId();
+			while (used.has(id)) id = this.createId();
+			used.add(id);
+			return id;
+		};
+		this.change('Expand Blend', () => {
+			this.setDoc(mapTree(this.doc.nodes, (n) => (set.has(n.id) && n.type === 'group' ? expandVectorBlend(n, fresh) : n)));
+			this.selection = [...set];
+			this.anchors = [];
+		});
+		return [...set];
+	}
+
+	/** Release: replaces the selected (or given) blends with their keys (and a replaced spine as a path). */
+	releaseBlend(options: { ids?: readonly string[] } = {}): string[] {
+		const groups = this.blendTargets(options.ids);
+		if (!groups.length) return [];
+		const released: string[] = [];
+		this.change('Release Blend', () => {
+			for (const g of groups) {
+				const nodes = releaseVectorBlend(g, () => this.newId());
+				released.push(...nodes.map((n) => n.id));
+				this.setDoc(spliceTree(this.doc.nodes, g.id, nodes));
+			}
+			this.selection = released;
+			this.anchors = [];
+		});
+		return released;
+	}
+
+	/**
+	 * Replace Spine: the selected blend's steps follow the selected path instead of the straight
+	 * lines between its keys. The path's first subpath becomes the spine (the path is removed)
+	 * and the keys move onto it, spread evenly by arc length.
+	 */
+	replaceBlendSpine(options: { ids?: readonly string[] } = {}): VectorActionResult {
+		const roots = options.ids ?? this.selectedRoots();
+		const groups = this.blendTargets(roots);
+		const paths = roots.map((id) => this.getNode(id)).filter((n): n is VectorPathNode => n?.type === 'path' && !n.blendStep && !isVectorBlendGroup(locateVectorNode(this.doc.nodes, n.id)?.parent));
+		if (groups.length !== 1 || paths.length !== 1) return { ok: false, message: 'Select one blend and one path to be its spine.' };
+		const group = groups[0];
+		const path = paths[0];
+		const first = path.subpaths.find((sp) => sp.anchors.length >= 2);
+		if (!first) return { ok: false, message: 'The spine needs a path with at least two points.' };
+		// The path's first subpath in the blend group's own space.
+		const m = multiplyMatrices(this.worldOf(path.id), invertMatrix(this.worldOf(group.id)));
+		const spine = transformVectorNode<VectorPathNode>({ id: '', type: 'path', subpaths: [first] }, m).subpaths[0];
+		this.change('Replace Spine', () => {
+			const withSpine: VectorGroupNode = { ...group, blend: { ...group.blend, spine } };
+			const targets = vectorBlendKeyTargets(withSpine);
+			let k = 0;
+			const children = withSpine.children.map((c) => {
+				if (c.blendStep) return c;
+				const target = targets[k++];
+				const b = vectorNodeBounds(c);
+				if (!target || !b) return c;
+				const dx = target[0] - (b.x + b.width / 2);
+				const dy = target[1] - (b.y + b.height / 2);
+				return Math.hypot(dx, dy) > 1e-9 ? transformVectorNode(c, translateMatrix(dx, dy)) : c;
+			});
+			this.setDoc(mapTree(this.doc.nodes, (n) => (n.id === path.id ? null : n.id === group.id ? { ...withSpine, children } : n)));
+			this.selection = [group.id];
+			this.anchors = [];
+			if (this.editingId === path.id) this.editingId = null;
+		});
+		return { ok: true };
+	}
+
 	private shapeBuilderMap(ids?: readonly string[]): VectorShapeBuilderMap | null {
 		const roots = ids ?? this.selectedRoots();
 		const key = roots.join('\u0000');
@@ -3281,6 +3529,11 @@ export class VectorEditorController {
 				const seg = this.nearestOutline(p);
 				return seg ? { nodeId: seg.nodeId, segment: seg } : null;
 			}
+			case 'blend': {
+				const hit = this.blendHit(screen, p);
+				if (!hit) return null;
+				return hit.anchor === null ? { nodeId: hit.nodeId } : { nodeId: hit.nodeId, anchor: { nodeId: hit.nodeId, subpath: 0, index: hit.anchor } };
+			}
 			case 'width': {
 				const hit = this.hitWidthHandle(screen);
 				if (hit) return { nodeId: hit.ref.nodeId, widthPoint: hit.ref };
@@ -3521,6 +3774,8 @@ export class VectorEditorController {
 			case 'shapeBuilder':
 			case 'paintBucket':
 				return this.downBuilder(p, input);
+			case 'blend':
+				return this.downBlend(screen, p);
 			case 'scissors': {
 				const seg = this.nearestOutline(p);
 				if (seg) this.cutPathAt(seg.nodeId, seg.point);
@@ -3535,6 +3790,49 @@ export class VectorEditorController {
 			default:
 				return this.downShape(p, input);
 		}
+	}
+
+	/** The shape under the pointer for the Blend tool, and the anchor of its first subpath under it. */
+	private blendHit(screen: Vec2, p: Vec2): VectorBlendStart | null {
+		const node = hitTestVectorNodes(this.doc.nodes, p, this.tolerance());
+		if (!node) return null;
+		let anchor: number | null = null;
+		if (node.type === 'path' && node.subpaths[0]) {
+			const refs = node.subpaths[0].anchors.map((_, index) => ({ nodeId: node.id, subpath: 0, index }));
+			anchor = this.hitAnchor(screen, refs)?.index ?? null;
+		}
+		return { nodeId: node.id, anchor };
+	}
+
+	/** Blend tool: the first click picks the shape to blend from, the next one blends it into the shape clicked. */
+	private downBlend(screen: Vec2, p: Vec2) {
+		const hit = this.blendHit(screen, p);
+		const start = this.blendStart;
+		if (!hit) {
+			if (start) {
+				this.blendStart = null;
+				this.notify();
+			}
+			return;
+		}
+		if (!start || start.nodeId === hit.nodeId) {
+			this.blendStart = hit;
+			this.selection = [hit.nodeId];
+			this.anchors = [];
+			this.notify();
+			return;
+		}
+		this.blendStart = null;
+		const first = this.getNode(start.nodeId);
+		if (isVectorBlendGroup(first)) {
+			// Clicking on from a blend adds the shape as its next key.
+			if (!this.addBlendKey(first.id, hit.nodeId, { start: hit.anchor }).ok) this.notify();
+			return;
+		}
+		const starts: Record<string, number> = {};
+		if (start.anchor !== null) starts[start.nodeId] = start.anchor;
+		if (hit.anchor !== null) starts[hit.nodeId] = hit.anchor;
+		if (!this.blend({ ids: [start.nodeId, hit.nodeId], keepOrder: true, starts })) this.notify();
 	}
 
 	private downSelect(screen: Vec2, p: Vec2, input: VectorPointerInput) {
@@ -4377,7 +4675,10 @@ export class VectorEditorController {
 					this.notify();
 				}
 				else if (this.pen) this.finishPath();
-				else if (this.tool === 'direct' && this.anchors.length) {
+				else if (this.blendStart) {
+					this.blendStart = null;
+					this.notify();
+				} else if (this.tool === 'direct' && this.anchors.length) {
 					this.anchors = [];
 					this.notify();
 				} else if (this.tool !== 'select') this.setTool('select');

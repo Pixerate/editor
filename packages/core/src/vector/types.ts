@@ -139,6 +139,11 @@ interface VectorNodeBase {
 	 * them into the geometry, so stroke widths and the rotated selection box stay exact.
 	 */
 	transform?: VectorMatrix;
+	/**
+	 * An in-between a blend group generated from its keys. Steps are rebuilt whenever a key or
+	 * the blend options change, and are locked (clicks select the blend group).
+	 */
+	blendStep?: boolean;
 }
 
 /** A shape made of one or more subpaths (holes and compound shapes included). */
@@ -147,10 +152,48 @@ export interface VectorPathNode extends VectorNodeBase, VectorStyle {
 	subpaths: VectorSubpath[];
 }
 
+/**
+ * How a blend spaces its in-betweens: a number of `steps` between each pair of keys, a fixed
+ * `distance` between steps along the spine, or `smoothColor` (as many steps as the colours
+ * need for a smooth ramp; by distance when the colours match).
+ */
+export type VectorBlendSpacing = 'steps' | 'distance' | 'smoothColor';
+export const VECTOR_BLEND_SPACINGS: readonly VectorBlendSpacing[] = ['steps', 'distance', 'smoothColor'];
+
+/** Settings of a blend. */
+export interface VectorBlendOptions {
+	/** Default `steps`. */
+	spacing?: VectorBlendSpacing;
+	/** Steps between each pair of keys with `steps` spacing (default 5). */
+	steps?: number;
+	/** Distance between steps along the spine with `distance` spacing (default 20). */
+	distance?: number;
+	/** Turn the steps with the spine's direction (default `false`: they keep the keys' orientation). */
+	orientToSpine?: boolean;
+	/** Move anchors in straight lines instead of the rotation-aware morph (default `false`). */
+	linear?: boolean;
+}
+
+/** A live blend: the group's keys plus how the in-betweens are made and laid out. */
+export interface VectorBlend extends VectorBlendOptions {
+	/**
+	 * A replaced spine in the group's space: the steps follow it instead of the straight lines
+	 * between the keys' centres (the keys sit along it, spread evenly by arc length).
+	 */
+	spine?: VectorSubpath | null;
+	/** The anchor of each key's first subpath its blend starts from, by key id (the Blend tool's clicks). */
+	starts?: Record<string, number>;
+}
+
 /** A group of nodes that select and transform together. */
 export interface VectorGroupNode extends VectorNodeBase {
 	type: 'group';
 	children: VectorNode[];
+	/**
+	 * Makes the group a live blend: its children that are not `blendStep`s are the keys, in
+	 * stacking order, and the steps between them are regenerated whenever a key changes.
+	 */
+	blend?: VectorBlend | null;
 }
 
 export type VectorNode = VectorPathNode | VectorGroupNode;
@@ -189,7 +232,9 @@ export interface VectorHandleRef extends VectorAnchorRef {
  * shape; `scissors` cuts a path at a point, `knife` cuts filled shapes along a freehand stroke,
  * `eraser` rubs out the area under one and `width` drags a stroke's width at a point.
  * `shapeBuilder` merges (Alt: deletes) the faces the selected shapes make, and `paintBucket`
- * fills the region the visible outlines enclose around a click with a new shape.
+ * fills the region the visible outlines enclose around a click with a new shape. `blend`
+ * blends the shape clicked first into the one clicked next (clicking an anchor of a closed path
+ * starts the blend there).
  */
 export type VectorTool =
 	| 'select'
@@ -206,7 +251,8 @@ export type VectorTool =
 	| 'eraser'
 	| 'width'
 	| 'shapeBuilder'
-	| 'paintBucket';
+	| 'paintBucket'
+	| 'blend';
 
 export const VECTOR_TOOLS: readonly VectorTool[] = [
 	'select',
@@ -223,7 +269,8 @@ export const VECTOR_TOOLS: readonly VectorTool[] = [
 	'eraser',
 	'width',
 	'shapeBuilder',
-	'paintBucket'
+	'paintBucket',
+	'blend'
 ];
 
 /** Keyboard modifiers held during a pointer event. */

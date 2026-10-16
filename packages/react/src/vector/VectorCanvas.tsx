@@ -305,6 +305,32 @@ export function VectorCanvas({
             <circle cx={w.x} cy={w.y} r={1.5} fill={accentColor} />
           </g>
         ))}
+        {overlay.blend.spines.map((sp) => (
+          <g key={`blend:${sp.id}`} data-vector-blend-spine={sp.id} data-replaced={sp.replaced || undefined}>
+            <path d={sp.d} fill="none" stroke={accentColor} strokeDasharray="4 3" />
+            {sp.keys.map((k, i) => (
+              <circle key={i} cx={k.x} cy={k.y} r={THEME.handleRadius} fill={THEME.handleFill} stroke={accentColor} />
+            ))}
+          </g>
+        ))}
+        {overlay.blend.start && (
+          <g data-vector-blend-start="">
+            <path d={overlay.blend.start.d} fill="none" stroke={accentColor} strokeWidth={2} />
+            {overlay.blend.start.anchor && <circle cx={overlay.blend.start.anchor.x} cy={overlay.blend.start.anchor.y} r={THEME.handleRadius + 1} fill={accentColor} />}
+          </g>
+        )}
+        {overlay.blend.anchors.map((a, i) => (
+          <rect
+            key={`blend-anchor:${i}`}
+            data-vector-blend-anchor={i}
+            x={a.x - as / 2}
+            y={a.y - as / 2}
+            width={as}
+            height={as}
+            fill={a.hovered ? accentColor : THEME.handleFill}
+            stroke={accentColor}
+          />
+        ))}
         {overlay.widthSpot && (
           <g data-vector-width-spot="">
             <line x1={overlay.widthSpot.left.x} y1={overlay.widthSpot.left.y} x2={overlay.widthSpot.right.x} y2={overlay.widthSpot.right.y} stroke={accentColor} strokeDasharray="3 2" />

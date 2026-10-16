@@ -13,3 +13,5 @@ export * from './stroke.js';
 export * from './width.js';
 export * from './varstroke.js';
 export * from './builder.js';
+export * from './blend.js';
+export * from './blendGroup.js';
