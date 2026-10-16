@@ -1,5 +1,16 @@
 # @pixerate/editor-svelte
 
+## 0.33.0
+
+### Minor Changes
+
+- 6e84d7b: Vector editor: live corners and stroke options. Any corner anchor can carry a radius (`anchor.corner = { radius, kind }`, kinds `round`, `inverted`, `chamfer`); the anchors stay sharp and `expandVectorCorners` (called by `subpathsToBezier`) draws the cut at render, hit-test, bounds, boolean, outline and export time, as a true arc at any angle that also follows curved sides and shrinks to fit short ones. The rectangle, polygon and star tools (and `<rect rx>` on import) now set corner radii instead of baking curves (`rectSubpath(bounds, radius)` returns four anchors with corners), `setCornerRadius` / `setCornerKind` edit them, and the direct tool shows draggable corner widgets (Alt-click cycles the kind). Strokes gain `strokeAlign` (`center`, `inside`, `outside`; closed shapes only) and arrowheads (`startArrow` / `endArrow`: triangle, arrow, open, circle, square, bar; `arrowAlign` `extend` / `tip`; `startArrowScale` / `endArrowScale`), drawn by both `VectorCanvas`es with clip paths / masks, respected by hit-testing, and exported to SVG as a double-width stroke with a clip or mask plus filled heads (or `{ strokes: 'outline' }`), which import merges back. New `outlineStroke()` action (toolbar ⊡) and helpers `vectorStrokeParts`, `vectorStrokeOutline`, `vectorCorners`, `getVectorCornerWidgets`. `getVectorSelectionStyle` reports the new fields, both `VectorStylePanel`s edit alignment, heads and corner radius / kind, and the agent commands add the fields to `vector.setStyle` plus `vector.setCorners` and `vector.outlineStroke`.
+
+### Patch Changes
+
+- Updated dependencies [6e84d7b]
+  - @pixerate/editor@0.36.0
+
 ## 0.32.0
 
 ### Minor Changes
