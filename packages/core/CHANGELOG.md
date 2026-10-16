@@ -1,5 +1,15 @@
 # @pixerate/editor
 
+## 0.30.0
+
+### Minor Changes
+
+- a41385b: Add freehand drawing tools (pen, highlighter, eraser) for xyflow canvas:
+  - `@pixerate/editor/canvas`: Streamline point smoothing, Bézier curve fitting to ShapeNode, eraser hit-testing, and headless CanvasDrawController with undo/redo history and batch deletion
+  - `@pixerate/editor-react/canvas`: `useCanvasDraw` hook and `<CanvasDrawLayer>` interactive SVG overlay with live stroke preview, spacebar pan override, and viewport transforms
+  - `@pixerate/editor-svelte/canvas`: `createCanvasDraw` rune and `<CanvasDrawLayer>` Svelte 5 component with reactive SVG overlay and cross-framework parity
+- 9c8ab5d: Add parametric elastic easing curves (`elasticAt`, `ElasticEasing`, elastic presets, CSS `linear(...)` generator) to `@pixerate/editor/animation`, and add continuous parameter range mappers (`createRangeMapper`, `mapRange`) with customizable interpolation, easing curves, and domain clamping safeguards to `@pixerate/editor/parameters`.
+
 ## 0.29.0
 
 ### Minor Changes

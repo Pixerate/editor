@@ -1,5 +1,21 @@
 # @pixerate/editor-react
 
+## 0.21.0
+
+### Minor Changes
+
+- a41385b: Add freehand drawing tools (pen, highlighter, eraser) for xyflow canvas:
+  - `@pixerate/editor/canvas`: Streamline point smoothing, Bézier curve fitting to ShapeNode, eraser hit-testing, and headless CanvasDrawController with undo/redo history and batch deletion
+  - `@pixerate/editor-react/canvas`: `useCanvasDraw` hook and `<CanvasDrawLayer>` interactive SVG overlay with live stroke preview, spacebar pan override, and viewport transforms
+  - `@pixerate/editor-svelte/canvas`: `createCanvasDraw` rune and `<CanvasDrawLayer>` Svelte 5 component with reactive SVG overlay and cross-framework parity
+
+### Patch Changes
+
+- 9075249: Align `@pixerate/editor` peer dependency range to `>=0.29.0 <1` to match sibling Pixerate ecosystem packages and prevent `ERESOLVE` collisions on clean npm installs.
+- Updated dependencies [a41385b]
+- Updated dependencies [9c8ab5d]
+  - @pixerate/editor@0.30.0
+
 ## 0.20.0
 
 ### Minor Changes

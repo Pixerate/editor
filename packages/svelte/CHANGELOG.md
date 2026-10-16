@@ -1,5 +1,20 @@
 # @pixerate/editor-svelte
 
+## 0.28.0
+
+### Minor Changes
+
+- a41385b: Add freehand drawing tools (pen, highlighter, eraser) for xyflow canvas:
+  - `@pixerate/editor/canvas`: Streamline point smoothing, Bézier curve fitting to ShapeNode, eraser hit-testing, and headless CanvasDrawController with undo/redo history and batch deletion
+  - `@pixerate/editor-react/canvas`: `useCanvasDraw` hook and `<CanvasDrawLayer>` interactive SVG overlay with live stroke preview, spacebar pan override, and viewport transforms
+  - `@pixerate/editor-svelte/canvas`: `createCanvasDraw` rune and `<CanvasDrawLayer>` Svelte 5 component with reactive SVG overlay and cross-framework parity
+
+### Patch Changes
+
+- Updated dependencies [a41385b]
+- Updated dependencies [9c8ab5d]
+  - @pixerate/editor@0.30.0
+
 ## 0.27.0
 
 ### Minor Changes
