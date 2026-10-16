@@ -1022,4 +1022,18 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: `@pixerate/flair@0.13.0` declares `peerDependencies: { "@pixerate/editor": ">=0.29.0 <1" }`, while `@pixerate/editor-react` previously kept `@pixerate/editor` under direct `dependencies` pinned to an exact version (`workspace:*` resolving to `0.27.0` or `0.29.0`), causing npm's strict peer dependency resolver to detect conflicting version constraints.
 - **Solution / Workaround**: Move `@pixerate/editor` to `peerDependencies` with the ecosystem-aligned range `">=0.29.0 <1"` in `@pixerate/editor-react` (paired with `devDependencies: { "@pixerate/editor": "workspace:*" }` for local monorepo builds and tests) and omit it from direct `dependencies`.
 
+### [core/canvas] Freehand Eraser Gesture Undo Snapshot Preservation
+
+- **Issue / Symptom**: Dragging an eraser across multiple nodes and subsequently executing undo either restored erased strokes out of order (distorting z-index ordering) or failed to restore earlier nodes in the same drag stroke when batching deletions.
+- **Root Cause**: If each node erasure removes the node dynamically or splices indices step-by-step without a baseline snapshot, undoing the compound command by re-inserting elements or reversing individual removals drifts relative to remaining nodes or fails to preserve original sibling ordering.
+- **Solution / Workaround**: In `createCanvasDrawController`, capture `dragStartNodes = [...options.getNodes()]` upon `startStroke` when `tool === 'eraser'`. During `endStroke`, if any nodes were deleted, register a single history command whose `undo` action restores the exact pre-drag snapshot (`options.setNodes(dragStartNodes)`), ensuring absolute fidelity of node list order, layer hierarchy, and z-indexes across continuous eraser sweeps.
+
+### [react|svelte/canvas] Pointer-Events and Spacebar Panning in Freehand Drawing Overlays
+
+- **Issue / Symptom**: When an interactive SVG drawing overlay (`CanvasDrawLayer`) covers the canvas, standard xyflow panning, node dragging, and canvas selection are blocked. Conversely, if pointer events are disabled, drawing gestures cannot be captured. Furthermore, users cannot pan the canvas without first switching away from the drawing tool.
+- **Root Cause**: An overlay with `pointer-events: auto` intercepts all pointer gestures before they reach React Flow or Svelte Flow's pane and node layers.
+- **Solution / Workaround**:
+  1. Set `pointer-events: auto` on `CanvasDrawLayer` only when `tool !== 'select'`. When `tool === 'select'`, set `pointer-events: none` to let xyflow handle selection, dragging, and box selection natively.
+  2. Implement spacebar hold detection (`isSpacePressed` via `keydown` / `keyup`). While spacebar is held down, toggle the overlay's pointer events to `none` and switch the cursor to `grab`, allowing users to hold Space and drag to pan the xyflow canvas seamlessly without changing their active drawing tool.
+
 

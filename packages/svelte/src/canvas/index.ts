@@ -126,6 +126,14 @@ export {
 } from './createCanvasScenes.svelte.js';
 export { default as CanvasGuidesLayer } from './CanvasGuidesLayer.svelte';
 
+// Freehand drawing tools (pen, highlighter, eraser)
+export {
+	createCanvasDraw,
+	type CanvasDraw,
+	type CreateCanvasDrawOptions
+} from './createCanvasDraw.svelte.js';
+export { default as CanvasDrawLayer } from './CanvasDrawLayer.svelte';
+
 // Distance measuring (Alt-hover), resize / grid snapping and curve fitting
 export {
 	createCanvasMeasure,

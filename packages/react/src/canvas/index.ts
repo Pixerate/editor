@@ -58,6 +58,20 @@ export {
 	type CanvasGuidesLayerProps
 } from './CanvasGuidesLayer.js';
 
+// Freehand drawing tools (pen, highlighter, eraser)
+export {
+	useCanvasDraw,
+	type CanvasDraw,
+	type CanvasDrawState,
+	type CanvasDrawActions,
+	type UseCanvasDrawOptions
+} from './useCanvasDraw.js';
+
+export {
+	CanvasDrawLayer,
+	type CanvasDrawLayerProps
+} from './CanvasDrawLayer.js';
+
 // Distance measuring (Alt-hover), resize / grid snapping and curve fitting
 export {
 	useCanvasMeasure,

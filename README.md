@@ -277,7 +277,7 @@ Every feature is available from core and from both framework packages. "Via core
 </details>
 
 <details>
-<summary><strong>Canvas</strong> (26)</summary>
+<summary><strong>Canvas</strong> (27)</summary>
 
 | Feature | Core | React | Svelte |
 | :--- | :---: | :---: | :---: |
@@ -302,6 +302,7 @@ Every feature is available from core and from both framework packages. "Via core
 | Canvas Offset Path & Outline Stroke (joins, caps, miter limit, dashes) | `offsetPath`, `outlineStroke`, `offsetShapeNodes` & `outlineShapeNodeStrokes` | `useCanvasArrange` (`offsetShapes`, `outlineStroke`) | `createCanvasArrange` (`offsetShapes`, `outlineStroke`) |
 | Canvas Shape Commands (palette / context menu) | `createShapeCommands` | Via core & `useRegisterCommands` | Via core & `useRegisterCommands` |
 | Canvas Shape Nodes (rect, ellipse, polygon, star, SVG path) | `getShapeRenderData` | `<ShapeNode>` | `<ShapeNode>` |
+| Canvas Freehand Drawing Tools (pen, highlighter, eraser, smoothing, SVG path nodes, undo/redo) | `createCanvasDrawController`, `streamlinePoints`, `strokeToShapeNode`, `findStrokesAtPoint` | `useCanvasDraw` & `<CanvasDrawLayer>` | `createCanvasDraw` & `<CanvasDrawLayer>` |
 | Canvas Keyframe Animation (tracks, easing incl. spring, OKLab colours, record mode, undoable edits) | `evaluateAnimation`, `moveKeyframes`, `recordAnimationChanges` & `createCanvasAnimationController` | `useCanvasAnimation` | `createCanvasAnimation` |
 | Canvas Animation Timeline (scrub, draggable keyframes with snapping, easing picker) | `getTimelineRows` & `snapKeyframeDelta` | `<AnimationTimeline>` | `<AnimationTimeline>` |
 | Canvas Animation Playback & Export (injected clock, loop / ping-pong, CSS / Web Animations, frames) | `AnimationPlayer`, `exportCssAnimation`, `toWebAnimations` & `sampleAnimationFrames` | `useCanvasAnimation` | `createCanvasAnimation` |

@@ -23,9 +23,14 @@ import {
   useCanvasArrangeShortcuts,
   useCanvasScenes,
   useCanvasMeasure,
+  useCanvasDraw,
+  CanvasDrawLayer,
   CanvasGuidesLayer,
+  ShapeNode,
   DEFAULT_ARRANGE_SHORTCUTS,
   type AlignEdge,
+  type CanvasNode,
+  type FreehandTool,
 } from "@pixerate/editor-react/canvas";
 import { useAgentToolProvider, useHistory, useHistoryShortcuts, useRegisterCommands } from "@pixerate/editor-react";
 import { createArrangeCommands, createHistoryCommands } from "@pixerate/editor/commands";
@@ -54,6 +59,10 @@ import {
   Shapes,
   MoveHorizontal,
   MoveVertical,
+  Pen,
+  Highlighter,
+  Eraser,
+  MousePointer,
 } from "lucide-react";
 import { demoCommandRegistry, demoToolRegistry } from "../agentTools";
 import { AutoLayoutDemo } from "./AutoLayoutDemo";
@@ -62,8 +71,8 @@ import { ShapeOpsDemo } from "./ShapeOpsDemo";
 import { AnimationDemo } from "./AnimationDemo";
 import { ComponentsDemo } from "./ComponentsDemo";
 
-type BoxData = { label: string; color: string; locked?: boolean };
-type BoxNode = Node<BoxData, "box">;
+type BoxData = { label: string; color: string; locked?: boolean; shape?: any };
+type BoxNode = Node<BoxData, string>;
 
 /** A plain card that shows a lock badge for locked nodes. */
 const BoxNodeView: React.FC<NodeProps<BoxNode>> = ({ data, selected }) => (
@@ -85,7 +94,7 @@ const BoxNodeView: React.FC<NodeProps<BoxNode>> = ({ data, selected }) => (
   </>
 );
 
-const NODE_TYPES = { box: BoxNodeView };
+const NODE_TYPES = { box: BoxNodeView, shape: ShapeNode };
 
 const box = (
   id: string,
@@ -146,6 +155,12 @@ const CanvasDemo: React.FC = () => {
     history: history.manager,
     zoom: viewport.zoom,
     guides: { gridSize: 10 },
+  });
+  const draw = useCanvasDraw<BoxNode>({
+    nodes,
+    setNodes,
+    history: history.manager,
+    initialTool: "select",
   });
   // Hold Alt / Option and hover a node to measure distances from the selection.
   const measure = useCanvasMeasure<BoxNode>({ nodes });
@@ -288,6 +303,63 @@ const CanvasDemo: React.FC = () => {
           <SendToBack className="w-4 h-4" />
         </button>
         <div className="w-px h-5 bg-slate-800 mx-1" />
+        <button
+          type="button"
+          className={`${btn} ${draw.tool === "select" ? "bg-slate-800 text-sky-400 font-medium" : ""}`}
+          onClick={() => draw.setTool("select")}
+          title="Select / Move mode (V)"
+          aria-label="Select mode"
+        >
+          <MousePointer className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
+          className={`${btn} ${draw.tool === "pen" ? "bg-slate-800 text-sky-400 font-medium" : ""}`}
+          onClick={() => draw.setTool("pen")}
+          title="Pen tool (P)"
+          aria-label="Pen tool"
+        >
+          <Pen className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
+          className={`${btn} ${draw.tool === "highlighter" ? "bg-slate-800 text-amber-400 font-medium" : ""}`}
+          onClick={() => draw.setTool("highlighter")}
+          title="Highlighter tool (H)"
+          aria-label="Highlighter tool"
+        >
+          <Highlighter className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
+          className={`${btn} ${draw.tool === "eraser" ? "bg-slate-800 text-rose-400 font-medium" : ""}`}
+          onClick={() => draw.setTool("eraser")}
+          title="Eraser tool (E)"
+          aria-label="Eraser tool"
+        >
+          <Eraser className="w-4 h-4" />
+        </button>
+        {draw.tool !== "select" && draw.tool !== "eraser" && (
+          <div className="flex items-center gap-1.5 ml-1 pl-2 border-l border-slate-800">
+            <input
+              type="color"
+              value={draw.style.color}
+              onChange={(e) => draw.setStyle({ color: e.target.value })}
+              className="w-5 h-5 rounded cursor-pointer bg-transparent border-0 p-0"
+              title="Stroke color"
+            />
+            <input
+              type="range"
+              min={draw.tool === "highlighter" ? 12 : 1}
+              max={draw.tool === "highlighter" ? 48 : 16}
+              value={draw.style.width}
+              onChange={(e) => draw.setStyle({ width: Number(e.target.value) })}
+              className="w-16 accent-sky-500 cursor-pointer"
+              title={`Stroke width: ${draw.style.width}px`}
+            />
+          </div>
+        )}
+        <div className="w-px h-5 bg-slate-800 mx-1" />
         <button type="button" className={btn} disabled={!history.canUndo} onClick={() => history.undo()} title="Undo (Mod+Z)" aria-label="Undo">
           <Undo2 className="w-4 h-4" />
         </button>
@@ -312,6 +384,7 @@ const CanvasDemo: React.FC = () => {
           <Background />
           <Controls />
           <CanvasGuidesLayer guides={[...arrange.guides, ...measure.guides]} viewport={viewport} />
+          <CanvasDrawLayer draw={draw} viewport={viewport} />
         </ReactFlow>
       </div>
 
