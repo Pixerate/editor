@@ -58,6 +58,11 @@
       "svelte": "./dist/parameters/index.js",
       "default": "./dist/parameters/index.js"
     },
+    "./vector": {
+      "types": "./dist/vector/index.d.ts",
+      "svelte": "./dist/vector/index.js",
+      "default": "./dist/vector/index.js"
+    },
     "./package.json": "./package.json"
   },
   "typesVersions": {
@@ -85,6 +90,9 @@
       ],
       "parameters": [
         "./dist/parameters/index.d.ts"
+      ],
+      "vector": [
+        "./dist/vector/index.d.ts"
       ]
     }
   },

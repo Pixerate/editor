@@ -5,6 +5,8 @@ import { TemplateRenderer, EditableTextNodeEditor, VariableForm, CommentsPanel, 
 import { SpreadsheetEditor } from "../src/spreadsheet";
 import { ParametersPanel } from "../src/parameters";
 import { ParametersController } from "@pixerate/editor/parameters";
+import { VectorEditor } from "../src/vector";
+import { VectorEditorController, rectSubpath } from "@pixerate/editor/vector";
 
 describe("SSR", () => {
   it("renders components on the server without touching the DOM", () => {
@@ -33,5 +35,9 @@ describe("SSR", () => {
       schema: { title: "Glow", fields: [{ id: "speed", type: "number", min: 0, max: 4, default: 1 }] },
     });
     expect(render(ParametersPanel, { props: { controller, idPrefix: "p" } }).body).toContain('for="p-speed"');
+    const vector = new VectorEditorController({
+      document: { width: 100, height: 100, nodes: [{ id: "a", type: "path", fill: "#f00", subpaths: [rectSubpath({ x: 0, y: 0, width: 10, height: 10 })] }] },
+    });
+    expect(render(VectorEditor, { props: { controller: vector } }).body).toContain('data-vector-id="a"');
   });
 });

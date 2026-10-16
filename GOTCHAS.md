@@ -21,6 +21,24 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [svelte] A Local Variable Named `state` Breaks `$state()` in the Same Component
+
+- **Issue / Symptom**: `svelte-check` reports `Cannot use 'state' as a store. 'state' needs to be an object with a subscribe method on it` on a line like `let svg = $state();`, in a component that also has `const state = $derived(...)`.
+- **Root Cause**: In Svelte, `$name` is store auto-subscription syntax. When a binding called `state` exists in the component's scope, the compiler reads `$state(...)` as "subscribe to the store `state`" instead of the `$state` rune.
+- **Solution / Workaround**: Never name a component-level binding `state` (or `derived`, `effect`, `props`). The vector components call the controller snapshot `view` (`const view = $derived(store.current)`).
+
+### [core/vector] Gestures Applied Live Must Still Report the Change When Committed
+
+- **Issue / Symptom**: `VectorEditorController`'s `onChange` did not fire for programmatic edits (`addShape`, `align`, …) even though the document changed and undo worked.
+- **Root Cause**: Edits (and drags) update `this.doc` first and are then recorded with `history.execute(command)`, whose `execute()` restores the "after" snapshot. Because that snapshot is already the current document, the restore saw no difference and skipped `onChange`.
+- **Solution / Workaround**: `commit()` sets a `committing` flag around `history.execute` so `restore()` reports the document change once. Any controller that applies a change before recording it needs the same care.
+
+### [react/svelte vector] Wheel Zoom Needs a Non-Passive Native Listener
+
+- **Issue / Symptom**: Ctrl/Cmd+wheel over the vector canvas zoomed the whole browser page (or scrolled it) instead of the drawing, and `preventDefault()` logged "Unable to preventDefault inside passive event listener".
+- **Root Cause**: React registers `onWheel` as a passive listener, and browsers treat wheel listeners on the document as passive by default, so they cannot cancel scrolling or pinch-zoom.
+- **Solution / Workaround**: Attach the wheel handler in an effect with `element.addEventListener('wheel', handler, { passive: false })` (React `useEffect`, Svelte `$effect`) and call `preventDefault()` there.
+
 ### [canvas/freehand] Freehand Stroke Endcaps Stripped on Node Creation & Single-Point Dot Disappearance
 
 - **Issue / Symptom**: When drawing freehand strokes with pen or highlighter tools on the canvas, endcaps appear rounded/square during live drag preview, but become square/flat or completely disappear (for single-point clicks/dots) after releasing the mouse pointer.

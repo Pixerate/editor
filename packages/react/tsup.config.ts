@@ -10,7 +10,8 @@ export default defineConfig({
     "persistence/index": "src/persistence/index.ts",
     "generation/index": "src/generation/index.ts",
     "tokens/index": "src/tokens/index.ts",
-    "parameters/index": "src/parameters/index.ts"
+    "parameters/index": "src/parameters/index.ts",
+    "vector/index": "src/vector/index.ts"
   },
   format: ["esm", "cjs"],
   dts: true,

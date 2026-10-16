@@ -58,6 +58,11 @@
       "types": "./dist/parameters/index.d.ts",
       "import": "./dist/parameters/index.js",
       "require": "./dist/parameters/index.cjs"
+    },
+    "./vector": {
+      "types": "./dist/vector/index.d.ts",
+      "import": "./dist/vector/index.js",
+      "require": "./dist/vector/index.cjs"
     }
   },
   "typesVersions": {
@@ -85,6 +90,9 @@
       ],
       "parameters": [
         "./dist/parameters/index.d.ts"
+      ],
+      "vector": [
+        "./dist/vector/index.d.ts"
       ]
     }
   },
