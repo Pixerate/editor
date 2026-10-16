@@ -13,12 +13,17 @@ import {
   VECTOR_CORNER_KIND_LABELS,
   VECTOR_STROKE_ALIGN_LABELS,
   VECTOR_WIDTH_PRESETS,
+  VECTOR_BLEND_SPACINGS,
+  VECTOR_BLEND_SPACING_LABELS,
+  applyVectorBlendOptions,
+  getVectorBlendControls,
   getVectorSelectionStyle,
   widthProfilePreset,
   widthProfilePresetId,
   vectorPaintToHex,
   vectorToolLabel,
   type VectorArrowhead,
+  type VectorBlendSpacing,
   type VectorCornerKind,
   type VectorEditorController,
   type VectorStrokeAlign,
@@ -49,11 +54,25 @@ export interface VectorToolbarProps {
    * those tools are active (default `true`).
    */
   showPathEdit?: boolean;
+  /**
+   * Blend: Make Blend, spacing (steps, distance or smooth colour), steps / distance, orient to
+   * spine, Replace Spine, Expand and Release (default `true`).
+   */
+  showBlend?: boolean;
   className?: string;
 }
 
 /** Tool picker plus undo, snapping, boolean operations, grouping, stacking and alignment. */
-export function VectorToolbar({ controller, tools = VECTOR_TOOLS, showHistory = true, showArrange = true, showSnap = true, showPathEdit = true, className }: VectorToolbarProps) {
+export function VectorToolbar({
+  controller,
+  tools = VECTOR_TOOLS,
+  showHistory = true,
+  showArrange = true,
+  showSnap = true,
+  showPathEdit = true,
+  showBlend = true,
+  className,
+}: VectorToolbarProps) {
   const state = useVectorEditorState(controller);
   const count = state.selection.length;
   const points = state.tool === 'direct' ? state.selectedAnchors.length : 0;
@@ -180,6 +199,7 @@ export function VectorToolbar({ controller, tools = VECTOR_TOOLS, showHistory = 
           )}
         </div>
       )}
+      {showBlend && <VectorBlendControls controller={controller} />}
       {showArrange && (
         <>
           <div className="ml-1 flex items-center gap-1" role="group" aria-label="Combine">
@@ -218,6 +238,76 @@ export function VectorToolbar({ controller, tools = VECTOR_TOOLS, showHistory = 
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+/** Blend buttons and options: they edit the selected blends and the options new blends get. */
+function VectorBlendControls({ controller }: { controller: VectorEditorController }) {
+  const state = useVectorEditorState(controller);
+  const blend = getVectorBlendControls(state);
+  const o = blend.options;
+  const selected = blend.ids.length > 0;
+  return (
+    <div className="ml-1 flex items-center gap-1" role="group" aria-label="Blend" data-vector-blend-controls="">
+      <button type="button" data-vector-blend-action="make" className={buttonClass} title="Make Blend" aria-label="Make Blend" disabled={!blend.canBlend} onClick={() => controller.blend()}>
+        ⧓
+      </button>
+      <select
+        aria-label="Blend spacing"
+        className="h-7 rounded border border-border bg-background px-1 text-xs"
+        value={o.spacing}
+        onChange={(e) => applyVectorBlendOptions(controller, { spacing: e.target.value as VectorBlendSpacing })}
+      >
+        {VECTOR_BLEND_SPACINGS.map((sp) => (
+          <option key={sp} value={sp}>
+            {VECTOR_BLEND_SPACING_LABELS[sp]}
+          </option>
+        ))}
+      </select>
+      {o.spacing !== 'smoothColor' && (
+        <input
+          type="number"
+          min={o.spacing === 'steps' ? 1 : 0.5}
+          step={1}
+          aria-label={o.spacing === 'steps' ? 'Blend steps' : 'Blend distance'}
+          className="h-7 w-16 rounded border border-border bg-background px-1.5 text-xs"
+          value={o.spacing === 'steps' ? o.steps : o.distance}
+          onChange={(e) => {
+            const n = parseFloat(e.target.value);
+            if (!Number.isFinite(n) || n <= 0) return;
+            applyVectorBlendOptions(controller, o.spacing === 'steps' ? { steps: n } : { distance: n });
+          }}
+        />
+      )}
+      <button
+        type="button"
+        data-vector-blend-action="orient"
+        className={buttonClass}
+        aria-pressed={o.orientToSpine}
+        title="Orient steps to the spine"
+        aria-label="Orient to spine"
+        onClick={() => applyVectorBlendOptions(controller, { orientToSpine: !o.orientToSpine })}
+      >
+        ⤿
+      </button>
+      <button
+        type="button"
+        data-vector-blend-action="spine"
+        className={buttonClass}
+        title="Replace Spine (select a blend and a path)"
+        aria-label="Replace Spine"
+        disabled={!blend.canReplaceSpine}
+        onClick={() => controller.replaceBlendSpine()}
+      >
+        ⌇
+      </button>
+      <button type="button" data-vector-blend-action="expand" className={buttonClass} title="Expand Blend" aria-label="Expand Blend" disabled={!selected} onClick={() => controller.expandBlend()}>
+        ⧉
+      </button>
+      <button type="button" data-vector-blend-action="release" className={buttonClass} title="Release Blend" aria-label="Release Blend" disabled={!selected} onClick={() => controller.releaseBlend()}>
+        ⧄
+      </button>
     </div>
   );
 }

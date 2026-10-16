@@ -62,6 +62,21 @@ const STARTER: VectorDocument = {
       subpaths: [{ closed: false, anchors: [{ x: 340, y: 250, out: { x: 420, y: 180 } }, { x: 540, y: 170, in: { x: 470, y: 120 } }] }],
     },
     {
+      // A live blend: edit either key (A) and the steps follow; the dashed spine shows when selected.
+      id: "blend",
+      type: "group",
+      name: "Blend",
+      blend: {
+        steps: 6,
+        orientToSpine: true,
+        spine: { closed: false, anchors: [{ x: 345, y: 60, out: { x: 390, y: 0 } }, { x: 525, y: 60, in: { x: 480, y: 0 } }] },
+      },
+      children: [
+        { id: "blend-a", type: "path", name: "Blend start", fill: "#0ea5e9", stroke: null, subpaths: [rectSubpath({ x: 331, y: 46, width: 28, height: 28 }, 4)] },
+        { id: "blend-b", type: "path", name: "Blend end", fill: "#f43f5e", stroke: null, subpaths: [starSubpath({ x: 505, y: 40, width: 40, height: 40 }, 5, 0.45)] },
+      ],
+    },
+    {
       id: "brush",
       type: "path",
       name: "Tapered stroke",

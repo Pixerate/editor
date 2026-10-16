@@ -13,6 +13,7 @@
   } from '@pixerate/editor/vector';
   import { vectorStateOf } from './subscribe.svelte.js';
   import { vectorButtonClass } from './styles.js';
+  import VectorBlendControls from './VectorBlendControls.svelte';
 
   interface Props {
     controller: VectorEditorController;
@@ -30,10 +31,15 @@
      * those tools are active (default `true`).
      */
     showPathEdit?: boolean;
+    /**
+     * Blend: Make Blend, spacing (steps, distance or smooth colour), steps / distance, orient to
+     * spine, Replace Spine, Expand and Release (default `true`).
+     */
+    showBlend?: boolean;
     class?: string;
   }
 
-  let { controller, tools = VECTOR_TOOLS, showHistory = true, showArrange = true, showSnap = true, showPathEdit = true, class: className = '' }: Props = $props();
+  let { controller, tools = VECTOR_TOOLS, showHistory = true, showArrange = true, showSnap = true, showPathEdit = true, showBlend = true, class: className = '' }: Props = $props();
 
   const snapTitle = 'Snap to objects';
   const modKey = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform ?? '') ? '⌘' : 'Ctrl';
@@ -181,6 +187,9 @@
         </button>
       {/if}
     </div>
+  {/if}
+  {#if showBlend}
+    <VectorBlendControls {controller} />
   {/if}
   {#if showArrange}
     <div class="ml-1 flex items-center gap-1" role="group" aria-label="Combine">

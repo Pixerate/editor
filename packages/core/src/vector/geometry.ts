@@ -458,10 +458,28 @@ export function decomposeRigid(m: AffineMatrix): { rigid: AffineMatrix; residual
 	};
 }
 
+function mapAnchor(a: VectorAnchor, m: AffineMatrix): VectorAnchor {
+	const p = applyMatrix(m, a);
+	const next: VectorAnchor = { x: p.x, y: p.y };
+	if (a.in) next.in = applyMatrix(m, a.in);
+	if (a.out) next.out = applyMatrix(m, a.out);
+	if (a.type) next.type = a.type;
+	if (a.corner) next.corner = { ...a.corner };
+	return next;
+}
+
 /** Every anchor and handle mapped through `m` (the node's own `transform` is untouched). */
 function bakeIntoGeometry<T extends VectorNode>(node: T, m: AffineMatrix): T {
 	if (isIdentityMatrix(m)) return node;
-	if (node.type === 'group') return { ...node, children: node.children.map((c) => transformVectorNode(c, m)) };
+	if (node.type === 'group') {
+		const group = node as VectorGroupNode;
+		const children = group.children.map((c) => transformVectorNode(c, m));
+		// A blend's replaced spine lives in the group's space too.
+		const spine = group.blend?.spine;
+		if (!spine) return { ...group, children } as T;
+		const moved = { closed: spine.closed, anchors: spine.anchors.map((a) => mapAnchor(a, m)) };
+		return { ...group, children, blend: { ...group.blend, spine: moved } } as T;
+	}
 	const path = node as VectorPathNode;
 	// A mirror swaps the sides of a variable-width stroke (the path still runs the same way).
 	const mirrored = m[0] * m[3] - m[1] * m[2] < 0 && path.strokeWidthProfile?.length;
@@ -470,15 +488,7 @@ function bakeIntoGeometry<T extends VectorNode>(node: T, m: AffineMatrix): T {
 		...(mirrored ? { strokeWidthProfile: mirrorWidthProfile(path.strokeWidthProfile!) } : {}),
 		subpaths: path.subpaths.map((sp) => ({
 			closed: sp.closed,
-			anchors: sp.anchors.map((a) => {
-				const p = applyMatrix(m, a);
-				const next: VectorAnchor = { x: p.x, y: p.y };
-				if (a.in) next.in = applyMatrix(m, a.in);
-				if (a.out) next.out = applyMatrix(m, a.out);
-				if (a.type) next.type = a.type;
-				if (a.corner) next.corner = { ...a.corner };
-				return next;
-			})
+			anchors: sp.anchors.map((a) => mapAnchor(a, m))
 		}))
 	} as T;
 }

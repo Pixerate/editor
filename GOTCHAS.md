@@ -1208,3 +1208,27 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: The React and Svelte parameters binding tests occasionally failed in CI at `expect(state.modified).toBe(true)` right after `randomize(["speed"])`.
 - **Root Cause**: The controller used `Math.random`, and the field snaps to its step: any draw in about [0.2375, 0.2625) gives back the default `speed` of 1, so nothing is modified (about a 1 in 40 chance).
 - **Solution / Workaround**: Give the controller a fixed source in tests (`new ParametersController({ schema, random: () => 0.75 })`) or call `randomize({ seed })`, and assert the value it picks. Never assert a change after an unseeded randomize.
+
+### [core/vector] Picking a Morph's Start Anchor by Position Squashes Turned Shapes
+
+- **Issue / Symptom**: Blending a horizontal bar into the same bar turned 90° gave a middle step that was a fat square (area up a third) instead of the bar half turned, even with the Procrustes in-between.
+- **Root Cause**: effectcraft's `correspond` scores each cyclic start by how far corresponding anchors are apart once both shapes are centred and scaled. That cost is not rotation-invariant: the start that pairs each corner with the nearest one (a squash) beats the one that pairs it with the turned corner, and Procrustes then finds no rotation to follow. Its absolute-angle shape-context histograms push the same way.
+- **Solution / Workaround**: `bestStart` in `vector/blend.ts` scores what is left after the best-fit rotation and scale (`1 − (dot² + cross²) / n²` on unit-RMS point sets, O(n) per start), plus `0.1 · (1 − cos θ)` so the least turning wins among equal fits (circles, squares), plus shape contexts whose angles are measured from the contour's direction (rotation-invariant).
+
+### [core/vector] Largest-Remainder Anchor Allocation Must Treat Rounding Noise as a Tie
+
+- **Issue / Symptom**: A star and the same star turned did not keep their area through a blend: the in-betweens came out slightly distorted.
+- **Root Cause**: When a contour's segments all have the same length, the fractional parts of their anchor shares differ only by floating-point noise, and that noise — different for the turned copy — decided which segments got the extra anchors. The two shapes were refined differently, so no start lined them up exactly.
+- **Solution / Workaround**: `refineMorphContour` sorts remainders with a 1e-9 tolerance and breaks ties by segment index, so congruent shapes are split alike.
+
+### [core/vector] `mapTree` Visits the Node It Just Returned
+
+- **Issue / Symptom**: Adding a shape to a blend with `mapTree(nodes, (n) => n.id === key ? null : n.id === blend ? { ...blend, children: [...children, key] } : n)` reported success, but the key vanished from the document.
+- **Root Cause**: The controller's `mapTree` recurses into the children of whatever the callback returns, so the moved key was found inside the new group and removed again.
+- **Solution / Workaround**: Remove first, then insert with `spliceTree` (or any pass that does not re-run the callback on its own output).
+
+### [core/vector] Blend Steps Are Rebuilt in `notify()` and `commit()`, Keyed by Key Identity
+
+- **Issue / Symptom**: A live blend has to follow every edit of its keys (drags included) without each tool knowing about blends, and undo must restore steps that match the keys.
+- **Root Cause**: Steps are derived data stored in the document (so the scene, bounds, hit-tests and SVG export see them), and the controller mutates `this.doc` in many places.
+- **Solution / Workaround**: `refreshVectorBlends` runs on the document in `notify()` (live during drags) and at the start of `commit()` (so history snapshots hold the refreshed document). It returns the same objects when nothing changed: generated children are cached per first key and reused while the keys are the same objects and the blend options serialise the same, and morph correspondences are cached per key pair. Steps are locked (`locked: true`) so the select tool picks the blend group and the direct tool only reaches keys; transforms of the group bake its replaced spine with the children (`bakeIntoGeometry`).

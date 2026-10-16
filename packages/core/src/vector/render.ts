@@ -23,6 +23,9 @@ import {
 import { sanitizeWidthProfile, widthProfilePresetId, type VectorWidthPreset } from './width.js';
 import {
 	findVectorNode,
+	locateVectorNode,
+	subpathsToBezier,
+	vectorWorldMatrix,
 	IDENTITY_MATRIX,
 	inferAnchorType,
 	multiplyMatrices,
@@ -35,14 +38,18 @@ import {
 } from './geometry.js';
 import { vectorPaintToSvg, vectorStrokeSvgParts, type VectorRenderStrokeParts } from './svg.js';
 import { vectorCorners } from './corners.js';
+import { isVectorBlendGroup, resolveVectorBlendOptions, vectorBlendRailAt, vectorBlendSpine } from './blendGroup.js';
 import type { VectorGuideKind, VectorSnapKind } from './snap.js';
 import type {
 	VectorAnchorRef,
 	VectorAnchorType,
 	VectorArrowAlign,
 	VectorArrowhead,
+	VectorBlendOptions,
+	VectorBlendSpacing,
 	VectorBounds,
 	VectorCornerKind,
+	VectorGroupNode,
 	VectorHandleRef,
 	VectorNode,
 	VectorPaint,
@@ -220,6 +227,17 @@ export interface VectorOverlayRenderData {
 	 * or `fill` (paint bucket).
 	 */
 	builder: { mode: 'merge' | 'erase' | 'fill'; faces: string[]; hatches: string[]; lines: string[]; trail: string | null } | null;
+	/**
+	 * Blends (screen space): the spine of each selected blend (`d`, draw it dashed; `keys` are
+	 * where its keys sit on it; `replaced` when it is a replaced spine) and, with the Blend tool,
+	 * the outline of the shape it blends from (`start`, with the clicked anchor) and the anchors
+	 * of the first subpath under the pointer (click one to start the blend there).
+	 */
+	blend: {
+		spines: { id: string; d: string; keys: Vec2[]; replaced: boolean }[];
+		start: { d: string; anchor: Vec2 | null } | null;
+		anchors: { x: number; y: number; hovered: boolean }[];
+	};
 	/** A short status, e.g. "W 120 × H 80" or "45°". */
 	status: string | null;
 }
@@ -449,8 +467,106 @@ export function getVectorOverlayRenderData(state: VectorEditorState): VectorOver
 		}
 	}
 
-	return { outlines, selectionBox, anchors, handles, marquee, penPreview, artboard, guides, status, toolStroke, pencilString, cutPoint, cornerWidgets, widthPoints, widthSpot, builder };
+	const blend = blendOverlay(state);
+	if (state.tool === 'blend' && !it) status = state.blendStart ? 'Click another shape to blend into' : 'Click a shape to blend from';
+
+	return { outlines, selectionBox, anchors, handles, marquee, penPreview, artboard, guides, status, toolStroke, pencilString, cutPoint, cornerWidgets, widthPoints, widthSpot, builder, blend };
 }
+
+/** Blend groups the selection covers (a selected key counts as its blend). */
+function selectedBlends(state: Pick<VectorEditorState, 'document' | 'selection'>): VectorGroupNode[] {
+	const out = new Map<string, VectorGroupNode>();
+	for (const id of state.selection) {
+		const node = findVectorNode(state.document.nodes, id);
+		const group = isVectorBlendGroup(node) ? node : locateVectorNode(state.document.nodes, id)?.parent;
+		if (isVectorBlendGroup(group)) out.set(group.id, group);
+	}
+	return [...out.values()];
+}
+
+function blendOverlay(state: VectorEditorState): VectorOverlayRenderData['blend'] {
+	const v = state.viewport;
+	const view: AffineMatrix = [v.zoom, 0, 0, v.zoom, v.x, v.y];
+	const doc = state.document;
+	const sc = (p: Vec2, m: AffineMatrix) => {
+		const q = { x: m[0] * p.x + m[2] * p.y + m[4], y: m[1] * p.x + m[3] * p.y + m[5] };
+		return { x: fmt(q.x), y: fmt(q.y) };
+	};
+	const spines = selectedBlends(state).flatMap((g) => {
+		const s = vectorBlendSpine(g);
+		if (!s) return [];
+		const m = multiplyMatrices(vectorWorldMatrix(doc.nodes, g.id) ?? IDENTITY_MATRIX, view);
+		const d = bezierPathToSvg(transformBezierPath(subpathsToBezier([s.spine], { corners: false }), m), { precision: 2 });
+		const keys = s.stops.map((stop) => {
+			const p = vectorBlendRailAt(s.rail, stop).point;
+			return sc({ x: p[0], y: p[1] }, m);
+		});
+		return [{ id: g.id, d, keys, replaced: s.replaced }];
+	});
+	let start: VectorOverlayRenderData['blend']['start'] = null;
+	const anchors: VectorOverlayRenderData['blend']['anchors'] = [];
+	if (state.tool === 'blend') {
+		const from = state.blendStart ? findVectorNode(doc.nodes, state.blendStart.nodeId) : undefined;
+		if (from && state.blendStart) {
+			const a = state.blendStart.anchor === null ? undefined : getAnchorWorld(doc, { nodeId: from.id, subpath: 0, index: state.blendStart.anchor });
+			start = { d: screenOutline(state, from), anchor: a ? sc(a, view) : null };
+		}
+		const hovered = state.hover?.nodeId ? findVectorNode(doc.nodes, state.hover.nodeId) : undefined;
+		if (hovered?.type === 'path' && hovered.subpaths[0]) {
+			hovered.subpaths[0].anchors.forEach((_, index) => {
+				const a = getAnchorWorld(doc, { nodeId: hovered.id, subpath: 0, index });
+				if (a) anchors.push({ ...sc(a, view), hovered: state.hover?.anchor?.index === index });
+			});
+		}
+	}
+	return { spines, start, anchors };
+}
+
+/** What the Blend controls of a toolbar or style panel show. */
+export interface VectorBlendControls {
+	/** Ids of the selected blends (a selected key counts as its blend). */
+	ids: string[];
+	/** The first selected blend's options, or the options new blends get. */
+	options: Required<VectorBlendOptions>;
+	/** Two or more shapes that share a parent are selected: Blend can run. */
+	canBlend: boolean;
+	/** One blend and one path are selected: Replace Spine can run. */
+	canReplaceSpine: boolean;
+	/** The first selected blend follows a replaced spine. */
+	hasSpine: boolean;
+}
+
+/** State of the Blend controls for the current selection. */
+export function getVectorBlendControls(state: Pick<VectorEditorState, 'document' | 'selection' | 'blendDefaults'>): VectorBlendControls {
+	const blends = selectedBlends(state);
+	const doc = state.document;
+	const roots = state.selection.filter((id) => {
+		const node = findVectorNode(doc.nodes, id);
+		return !!node && !node.blendStep && !node.locked && !state.selection.includes(locateVectorNode(doc.nodes, id)?.parent?.id ?? '');
+	});
+	const parents = new Set(roots.map((id) => locateVectorNode(doc.nodes, id)?.parent?.id ?? null));
+	const paths = roots.filter((id) => findVectorNode(doc.nodes, id)?.type === 'path' && !isVectorBlendGroup(locateVectorNode(doc.nodes, id)?.parent));
+	const first = blends[0];
+	return {
+		ids: blends.map((g) => g.id),
+		options: resolveVectorBlendOptions(first ? first.blend : state.blendDefaults),
+		canBlend: roots.length >= 2 && parents.size === 1,
+		canReplaceSpine: blends.length === 1 && paths.length === 1,
+		hasSpine: !!first?.blend?.spine
+	};
+}
+
+/**
+ * Applies blend options from a toolbar: to the selected blends (one undo step) and to the
+ * options new blends get, so the controls keep showing what was picked.
+ */
+export function applyVectorBlendOptions(controller: VectorEditorController, patch: Partial<VectorBlendOptions>): void {
+	controller.setBlendDefaults(patch);
+	if (getVectorBlendControls(controller.getState()).ids.length) controller.setBlendOptions(patch);
+}
+
+/** Labels of the blend spacing modes, for toolbars. */
+export const VECTOR_BLEND_SPACING_LABELS: Readonly<Record<VectorBlendSpacing, string>> = { steps: 'Specified Steps', distance: 'Specified Distance', smoothColor: 'Smooth Color' };
 
 // ---------------------------------------------------------------------------
 // Event adapters (duck-typed, so they work with DOM, React and Svelte events)

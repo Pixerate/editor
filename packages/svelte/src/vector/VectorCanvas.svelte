@@ -228,6 +228,25 @@
         <circle cx={w.x} cy={w.y} r={1.5} fill={accentColor} />
       </g>
     {/each}
+    {#each overlay.blend.spines as sp (sp.id)}
+      <g data-vector-blend-spine={sp.id} data-replaced={sp.replaced || undefined}>
+        <path d={sp.d} fill="none" stroke={accentColor} stroke-dasharray="4 3" />
+        {#each sp.keys as k, i (i)}
+          <circle cx={k.x} cy={k.y} r={THEME.handleRadius} fill={THEME.handleFill} stroke={accentColor} />
+        {/each}
+      </g>
+    {/each}
+    {#if overlay.blend.start}
+      <g data-vector-blend-start="">
+        <path d={overlay.blend.start.d} fill="none" stroke={accentColor} stroke-width="2" />
+        {#if overlay.blend.start.anchor}
+          <circle cx={overlay.blend.start.anchor.x} cy={overlay.blend.start.anchor.y} r={THEME.handleRadius + 1} fill={accentColor} />
+        {/if}
+      </g>
+    {/if}
+    {#each overlay.blend.anchors as a, i (i)}
+      <rect data-vector-blend-anchor={i} x={a.x - as / 2} y={a.y - as / 2} width={as} height={as} fill={a.hovered ? accentColor : THEME.handleFill} stroke={accentColor} />
+    {/each}
     {#if overlay.widthSpot}
       <g data-vector-width-spot="">
         <line x1={overlay.widthSpot.left.x} y1={overlay.widthSpot.left.y} x2={overlay.widthSpot.right.x} y2={overlay.widthSpot.right.y} stroke={accentColor} stroke-dasharray="3 2" />
