@@ -221,6 +221,7 @@ const CanvasDemo: React.FC = () => {
 
   const addNodeWithUndo = useCallback((node: BoxNode) => {
     history.manager.execute({
+      name: "add-node",
       execute: () => {
         setNodes((prev) => [...prev, node]);
       },

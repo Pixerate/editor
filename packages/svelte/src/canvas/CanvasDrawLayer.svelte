@@ -133,6 +133,7 @@
 
 <svg
 	bind:this={svgEl}
+	role="presentation"
 	class="pixerate-canvas-draw-layer {className}"
 	style="position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: {interactive ? 'all' : 'none'}; cursor: {interactive ? resolvedCursor : 'default'}; overflow: visible; z-index: 20; touch-action: none;"
 	onpointerdown={handlePointerDown}

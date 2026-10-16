@@ -618,5 +618,18 @@ export {
 	type CanvasComponentInfo,
 	type CanvasComponentSetInfo,
 	type AddCanvasVariantOptions,
-	type SetCanvasVariantPropertiesOptions
+	type SetCanvasVariantPropertiesOptions,
+	// Freehand drawing exports
+	createCanvasDrawController,
+	createDefaultStrokeStyle,
+	findStrokesAtPoint,
+	streamlinePoints,
+	strokePointsToPathData,
+	strokeToShapeNode,
+	type CanvasDrawControllerOptions,
+	type FreehandDrawOptions,
+	type FreehandStroke,
+	type FreehandStrokeStyle,
+	type FreehandTool,
+	type StrokeToShapeNodeOptions
 } from '@pixerate/editor/canvas';

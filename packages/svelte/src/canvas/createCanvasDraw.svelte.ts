@@ -7,11 +7,15 @@ import {
 } from '@pixerate/editor/canvas';
 import type { CanvasNode } from './types.js';
 
+type CoreOptions = CanvasDrawControllerOptions<any>;
+
 export interface CreateCanvasDrawOptions<TNode extends CanvasNode = CanvasNode>
 	extends Omit<
-		CanvasDrawControllerOptions<TNode>,
-		'onToolChange' | 'onStyleChange' | 'onActiveStrokeChange'
+		CoreOptions,
+		'getNodes' | 'setNodes' | 'onToolChange' | 'onStyleChange' | 'onActiveStrokeChange'
 	> {
+	getNodes: () => TNode[];
+	setNodes: (nodes: TNode[]) => void;
 	onToolChange?: (tool: FreehandTool) => void;
 	onStyleChange?: (style: FreehandStrokeStyle) => void;
 	onActiveStrokeChange?: (stroke: FreehandStroke | null) => void;
@@ -26,7 +30,7 @@ export function createCanvasDraw<TNode extends CanvasNode = CanvasNode>(
 	let tool = $state.raw<FreehandTool>(options.tool ?? 'select');
 	let activeStroke = $state.raw<FreehandStroke | null>(null);
 
-	const controller = createCanvasDrawController<TNode>({
+	const controller = createCanvasDrawController<any>({
 		...options,
 		onToolChange: (nextTool) => {
 			tool = nextTool;
