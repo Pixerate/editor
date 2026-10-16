@@ -678,4 +678,33 @@ describe("VectorEditor and hooks", () => {
     await act(async () => root.render(<div />));
     expect(registry.has("vector.addShape")).toBe(false);
   });
+
+  it("keeps the History buttons in step under StrictMode", async () => {
+    let controller!: VectorEditorController;
+    function Host() {
+      controller = useVectorEditorController({ document: doc() });
+      return <VectorToolbar controller={controller} />;
+    }
+    await act(async () =>
+      root.render(
+        <React.StrictMode>
+          <Host />
+        </React.StrictMode>,
+      ),
+    );
+    const undo = () => q<HTMLButtonElement>('[role="group"][aria-label="History"] button[aria-label^="Undo"]');
+    const redo = () => q<HTMLButtonElement>('[role="group"][aria-label="History"] button[aria-label^="Redo"]');
+    expect(undo().disabled).toBe(true);
+    expect(redo().disabled).toBe(true);
+    await act(async () => void controller.addShape({ kind: "rect", x: 0, y: 0, width: 5, height: 5 }));
+    expect(undo().disabled).toBe(false);
+    expect(undo().getAttribute("aria-label")).toBe(`Undo ${controller.getState().undoLabel}`);
+    expect(redo().disabled).toBe(true);
+    click(undo());
+    expect(controller.getState().canRedo).toBe(true);
+    expect(undo().disabled).toBe(true);
+    expect(undo().getAttribute("aria-label")).toBe("Undo");
+    expect(redo().disabled).toBe(false);
+    expect(redo().getAttribute("aria-label")).toBe(`Redo ${controller.getState().redoLabel}`);
+  });
 });
