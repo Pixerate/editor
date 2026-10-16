@@ -8,6 +8,7 @@ import {
   toVectorPointerInput,
   type VectorEditorController,
   type VectorRenderNode,
+  type VectorRenderPath,
   type SvgGradientDef,
 } from '@pixerate/editor/vector';
 import { useVectorEditorState } from './useVectorEditor';
@@ -58,6 +59,8 @@ export function VectorSceneNodes({ nodes }: { nodes: readonly VectorRenderNode[]
           <g key={node.id} data-vector-id={node.id} transform={node.transform} opacity={node.opacity < 1 ? node.opacity : undefined}>
             <VectorSceneNodes nodes={node.children} />
           </g>
+        ) : node.strokeParts ? (
+          <VectorPartedPath key={node.id} node={node} />
         ) : (
           <path
             key={node.id}
@@ -76,6 +79,47 @@ export function VectorSceneNodes({ nodes }: { nodes: readonly VectorRenderNode[]
         ),
       )}
     </>
+  );
+}
+
+/** A path whose stroke is aligned inside / outside (double width, clipped or masked by the shape) or has arrowheads. */
+function VectorPartedPath({ node }: { node: VectorRenderPath }) {
+  const sp = node.strokeParts!;
+  const clip = sp.clip;
+  const b = clip?.bounds;
+  return (
+    <g data-vector-id={node.id} data-vector-stroke-align={sp.align} transform={node.transform} opacity={node.opacity < 1 ? node.opacity : undefined}>
+      {clip && b && (
+        <defs>
+          {clip.kind === 'clip' ? (
+            <clipPath id={clip.id}>
+              <path d={node.d} clipRule={node.fillRule} />
+            </clipPath>
+          ) : (
+            <mask id={clip.id} maskUnits="userSpaceOnUse" x={b.x} y={b.y} width={b.width} height={b.height}>
+              <rect x={b.x} y={b.y} width={b.width} height={b.height} fill="#fff" />
+              <path d={node.d} fill="#000" fillRule={node.fillRule} />
+            </mask>
+          )}
+        </defs>
+      )}
+      <path data-vector-part="fill" d={node.d} fill={node.fill} fillRule={node.fillRule} stroke="none" />
+      <path
+        data-vector-part="stroke"
+        d={sp.d}
+        fill="none"
+        stroke={node.stroke}
+        strokeWidth={sp.width}
+        strokeLinecap={node.strokeLinecap as any}
+        strokeLinejoin={node.strokeLinejoin as any}
+        strokeDasharray={node.strokeDasharray}
+        clipPath={clip?.kind === 'clip' ? `url(#${clip.id})` : undefined}
+        mask={clip?.kind === 'mask' ? `url(#${clip.id})` : undefined}
+      />
+      {sp.heads.map((head, i) => (
+        <path key={i} data-vector-part="head" d={head} fill={node.stroke} />
+      ))}
+    </g>
   );
 }
 
@@ -240,6 +284,12 @@ export function VectorCanvas({
             <circle key={key} data-vector-anchor={a.ref.index} cx={a.x} cy={a.y} r={size / 2} fill={fill} stroke={accentColor} />
           );
         })}
+        {overlay.cornerWidgets.map((w) => (
+          <g key={`corner:${w.ref.nodeId}:${w.ref.subpath}:${w.ref.index}`} data-vector-corner-widget={w.ref.index} data-corner-kind={w.kind}>
+            <circle cx={w.x} cy={w.y} r={THEME.cornerWidgetRadius + (w.hovered ? 1 : 0)} fill={THEME.handleFill} stroke={accentColor} />
+            <circle cx={w.x} cy={w.y} r={1.5} fill={accentColor} />
+          </g>
+        ))}
         {state.tool === 'pen' && overlay.anchors.some((a) => a.closes && a.hovered) && (
           <circle cx={overlay.anchors.find((a) => a.closes)!.x} cy={overlay.anchors.find((a) => a.closes)!.y} r={as} stroke={accentColor} />
         )}

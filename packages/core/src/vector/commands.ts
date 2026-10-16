@@ -1,8 +1,8 @@
 import type { CommandSpec } from '../commands/registry.js';
 import type { VectorEditorController, VectorShapeInput } from './controller.js';
 import { vectorNodeBounds, vectorNodeRotation, vectorParentMatrix, vectorPathData, IDENTITY_MATRIX } from './geometry.js';
-import type { VectorAlign, VectorAnchorRef, VectorArrange, VectorAverageAxis, VectorBooleanOperation, VectorNode, VectorStyle, VectorTool } from './types.js';
-import { VECTOR_TOOLS } from './types.js';
+import type { VectorAlign, VectorAnchorRef, VectorArrange, VectorAverageAxis, VectorBooleanOperation, VectorCornerKind, VectorNode, VectorStyle, VectorTool } from './types.js';
+import { VECTOR_ARROWHEADS, VECTOR_CORNER_KINDS, VECTOR_TOOLS } from './types.js';
 
 export interface VectorCommandOptions {
 	/** Id prefix (default `vector.`); use one per editor when several are registered. */
@@ -68,7 +68,13 @@ const STYLE_PROPS = {
 	strokeLinecap: { type: 'string', enum: ['butt', 'round', 'square'] },
 	strokeLinejoin: { type: 'string', enum: ['miter', 'round', 'bevel'] },
 	strokeDasharray: { type: 'array', items: { type: 'number' } },
-	fillRule: { type: 'string', enum: ['nonzero', 'evenodd'] }
+	fillRule: { type: 'string', enum: ['nonzero', 'evenodd'] },
+	strokeAlign: { type: 'string', enum: ['center', 'inside', 'outside'], description: 'Where the stroke sits on the outline (closed shapes only; open paths stroke centred).' },
+	startArrow: { type: ['string', 'null'], enum: [...VECTOR_ARROWHEADS, null], description: 'Head at the start of an open path, or null for none.' },
+	endArrow: { type: ['string', 'null'], enum: [...VECTOR_ARROWHEADS, null], description: 'Head at the end of an open path, or null for none.' },
+	arrowAlign: { type: 'string', enum: ['extend', 'tip'], description: '`extend`: the tip sits past the end point; `tip`: on it, the stroke shortened under the head.' },
+	startArrowScale: { type: 'number', exclusiveMinimum: 0, description: 'Start head size as a multiple of the stroke width (default 1).' },
+	endArrowScale: { type: 'number', exclusiveMinimum: 0, description: 'End head size as a multiple of the stroke width (default 1).' }
 } as const;
 
 const pickStyle = (params: Record<string, unknown>): VectorStyle => {
@@ -174,7 +180,8 @@ export function createVectorCommands(controller: VectorEditorController, options
 					y: { type: 'number' },
 					width: { type: 'number', description: 'For a line: the x offset of its end.' },
 					height: { type: 'number', description: 'For a line: the y offset of its end.' },
-					cornerRadius: { type: 'number', minimum: 0 },
+					cornerRadius: { type: 'number', minimum: 0, description: 'Live corner radius of a rect, polygon or star.' },
+					cornerKind: { type: 'string', enum: VECTOR_CORNER_KINDS },
 					sides: { type: 'integer', minimum: 3 },
 					points: { type: 'integer', minimum: 3 },
 					innerRatio: { type: 'number', minimum: 0, maximum: 1 },
@@ -218,6 +225,39 @@ export function createVectorCommands(controller: VectorEditorController, options
 				if (!Object.keys(style).length) fail('Pass at least one style property.');
 				check(controller.setStyle(style, ids(params)));
 				return { ok: true };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}setCorners`,
+			label: 'Corner Radius…',
+			keywords: ['round', 'rounded', 'corners', 'radius', 'fillet', 'chamfer', 'live corners'],
+			description:
+				'Sets the live corner radius (and optionally `kind`: round, inverted or chamfer) of `anchors`, else the selected points (direct tool), else every corner of `ids` / the selection. Radius 0 makes corners sharp; radii shrink to fit short sides. The anchors stay editable.',
+			params: { type: 'object', properties: { radius: { type: 'number', minimum: 0 }, kind: { type: 'string', enum: VECTOR_CORNER_KINDS }, ids: IDS, anchors: ANCHORS } },
+			undoable: true,
+			run: (_ctx: unknown, params: { radius?: number; kind?: VectorCornerKind; ids?: string[]; anchors?: VectorAnchorRef[] } | undefined) => {
+				const refs = params?.anchors ? anchorsOf(params.anchors) : undefined;
+				const target = { refs, ids: params?.ids ? ids(params) : undefined };
+				if (params?.radius !== undefined) check(controller.setCornerRadius(params.radius, { ...target, kind: params.kind }));
+				else if (params?.kind) check(controller.setCornerKind(params.kind, target));
+				else fail('Pass `radius` and / or `kind`.');
+				return { ok: true };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}outlineStroke`,
+			label: 'Outline Stroke',
+			keywords: ['expand', 'stroke to path', 'outline', 'convert stroke'],
+			description: 'Turns the stroke of paths into filled shapes of the area it paints (alignment, caps, joins, dashes and arrowheads included). Returns the new ids.',
+			params: { type: 'object', properties: { ids: IDS } },
+			enabled: enabledFor,
+			undoable: true,
+			run: (_ctx: unknown, params: { ids?: string[] } | undefined) => {
+				const created = controller.outlineStroke({ ids: params?.ids ? ids(params) : undefined });
+				if (!created.length) fail('No selected path has a stroke.');
+				return { ids: created };
 			}
 		},
 		{

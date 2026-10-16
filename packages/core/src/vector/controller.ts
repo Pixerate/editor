@@ -48,6 +48,17 @@ import {
 	walkVectorNodes,
 	type AffineMatrix
 } from './geometry.js';
+import {
+	cornerBisectorPoint,
+	cornerRadiusChange,
+	fitCornerRadius,
+	nextVectorCornerKind,
+	setAnchorCorner,
+	setSubpathCorners,
+	vectorCorners,
+	type VectorCornerInfo
+} from './corners.js';
+import { vectorStrokeOutlinePath } from './stroke.js';
 import { parseVectorSvg, vectorDocumentToSvg, type VectorSvgExportOptions } from './svg.js';
 import { constrainToLeave, VECTOR_CONSTRUCTION_ANGLES, VectorSnapTargets, type VectorSnapGuides, type VectorSnapLeave } from './snap.js';
 import {
@@ -72,6 +83,7 @@ import type {
 	VectorAverageAxis,
 	VectorBooleanOperation,
 	VectorBounds,
+	VectorCornerKind,
 	VectorDefaults,
 	VectorDistribute,
 	VectorDocument,
@@ -176,6 +188,8 @@ export interface VectorHover {
 	/** A segment under the pointer (direct tool and scissors); `point` is in document space. */
 	segment?: { nodeId: string; subpath: number; segment: number; t: number; point: Vec2 };
 	transformHandle?: VectorTransformHandle;
+	/** A live corner widget (direct tool): the corner's anchor. */
+	corner?: VectorAnchorRef;
 }
 
 /** The drag in progress, for overlays and status text. */
@@ -187,6 +201,7 @@ export type VectorInteraction =
 	| { type: 'anchors'; dx: number; dy: number }
 	| { type: 'handle'; ref: VectorHandleRef }
 	| { type: 'bend'; ref: VectorSegmentRef }
+	| { type: 'corner'; ref: VectorAnchorRef; radius: number }
 	| { type: 'draw'; tool: VectorTool; nodeId: string; bounds: VectorBounds; string?: [Vec2, Vec2] }
 	| { type: 'stroke'; tool: 'knife' | 'eraser'; points: Vec2[]; width: number }
 	| { type: 'pen'; nodeId: string }
@@ -207,7 +222,7 @@ export interface VectorEditorState {
 	/** The selection box, rotated with the selection when its nodes share a rotation. */
 	selectionFrame: VectorSelectionFrame | null;
 	viewport: VectorViewport;
-	defaults: Readonly<Required<Pick<VectorDefaults, 'polygonSides' | 'starPoints' | 'starInnerRatio' | 'cornerRadius'>> & VectorStyle>;
+	defaults: Readonly<Required<Pick<VectorDefaults, 'polygonSides' | 'starPoints' | 'starInnerRatio' | 'cornerRadius'>> & Pick<VectorDefaults, 'cornerKind'> & VectorStyle>;
 	snap: VectorSnapOptions;
 	editing: VectorPathEditOptions;
 	/** Smart guides of the snap in progress, in document units (null when there are none). */
@@ -249,12 +264,31 @@ export interface VectorShapeInput extends VectorStyle {
 	y: number;
 	width: number;
 	height: number;
+	/** Live corner radius of a rectangle, polygon or star (default: the editor default). */
 	cornerRadius?: number;
+	cornerKind?: VectorCornerKind;
 	sides?: number;
 	points?: number;
 	innerRatio?: number;
 	name?: string;
 }
+
+/** Every field of `VectorStyle`, in the order style panels and commands list them. */
+export const VECTOR_STYLE_KEYS = [
+	'fill',
+	'stroke',
+	'strokeWidth',
+	'strokeLinecap',
+	'strokeLinejoin',
+	'strokeDasharray',
+	'fillRule',
+	'strokeAlign',
+	'startArrow',
+	'endArrow',
+	'arrowAlign',
+	'startArrowScale',
+	'endArrowScale'
+] as const satisfies readonly (keyof VectorStyle)[];
 
 /** Clipboard payload type written by `copy()`. */
 export const VECTOR_CLIPBOARD_TYPE = 'pixerate/vector';
@@ -347,6 +381,56 @@ export function getVisibleHandles(
 		const next = ref.index < n - 1 ? ref.index + 1 : sp.closed ? 0 : -1;
 		if (prev >= 0) push(node, ref.subpath, prev, 'out');
 		if (next >= 0) push(node, ref.subpath, next, 'in');
+	}
+	return out;
+}
+
+/** Live corner widgets sit at least this far inside their corner (screen px along each side of a right angle). */
+export const VECTOR_CORNER_WIDGET_INSET = 10;
+
+/** A live corner widget of the direct tool: drag it to round the corners, Alt-click to change their kind. */
+export interface VectorCornerWidget {
+	ref: VectorAnchorRef;
+	/** Document position of the widget. */
+	x: number;
+	y: number;
+	/** The radius stored on the anchor and the radius drawn (no larger than fits). */
+	radius: number;
+	drawnRadius: number;
+	kind: VectorCornerKind;
+	/** The corner in its node's own space. */
+	corner: VectorCornerInfo;
+}
+
+/**
+ * The live corner widgets the direct tool shows: on each editable path, at its selected corner
+ * anchors (or at every corner when none of its anchors is selected). Corners whose sides are
+ * shorter than three insets on screen hide theirs. Dragging one sets the radius of all of them.
+ * Ported from ArtCraft vectorcraft `crates/tools/src/corners.rs` (MIT OR Apache-2.0, see
+ * THIRD_PARTY_NOTICES.md), as is the `corner` drag below.
+ */
+export function getVectorCornerWidgets(
+	state: Pick<VectorEditorState, 'document' | 'selection' | 'editingId' | 'tool' | 'pen' | 'selectedAnchors' | 'viewport'>
+): VectorCornerWidget[] {
+	if (state.tool !== 'direct' || state.pen) return [];
+	const zoom = state.viewport.zoom;
+	const out: VectorCornerWidget[] = [];
+	for (const id of getEditablePathIds(state)) {
+		const node = findVectorNode(state.document.nodes, id) as VectorPathNode;
+		const picked = state.selectedAnchors.filter((r) => r.nodeId === id);
+		const m = vectorWorldMatrix(state.document.nodes, id) ?? IDENTITY_MATRIX;
+		for (const c of vectorCorners(node.subpaths)) {
+			if (picked.length && !picked.some((r) => r.subpath === c.subpath && r.index === c.index)) continue;
+			const side = Math.min(c.lu, c.lv);
+			if (side * zoom < 3 * VECTOR_CORNER_WIDGET_INSET) continue;
+			const a = node.subpaths[c.subpath].anchors[c.index];
+			const radius = a.corner?.radius ?? 0;
+			const drawn = fitCornerRadius(c, radius);
+			// On the bisector at the centre of the arc as drawn, at least the inset in and at most half the shorter side.
+			const k = Math.min(Math.max(drawn / c.sin, VECTOR_CORNER_WIDGET_INSET / (zoom * Math.sqrt(1 + c.cos))), side / 2);
+			const p = applyMatrix(m, cornerBisectorPoint(c, k));
+			out.push({ ref: { nodeId: id, subpath: c.subpath, index: c.index }, x: p.x, y: p.y, radius, drawnRadius: drawn, kind: a.corner?.kind ?? 'round', corner: c });
+		}
 	}
 	return out;
 }
@@ -584,6 +668,7 @@ type Drag =
 	| ({ kind: 'anchors'; start: Vec2; before: Snapshot; base: VectorDocument; moved: boolean; clickRef: VectorAnchorRef | null; lead: VectorAnchorRef | null } & DragTargets)
 	| ({ kind: 'handle'; ref: VectorHandleRef; before: Snapshot; base: VectorDocument } & DragTargets)
 	| { kind: 'bend'; ref: VectorSegmentRef; t: number; start: Vec2; before: Snapshot; base: VectorDocument; moved: boolean }
+	| { kind: 'corner'; widget: VectorCornerWidget; refs: VectorAnchorRef[]; start: Vec2; before: Snapshot; base: VectorDocument; moved: boolean; alt: boolean; shift: boolean }
 	| { kind: 'stroke'; tool: 'knife' | 'eraser'; points: Vec2[]; before: Snapshot }
 	| { kind: 'pull'; ref: VectorAnchorRef; before: Snapshot; base: VectorDocument; label: string; outOnly: boolean; closing: boolean; altBreaks: boolean }
 	| ({ kind: 'shape'; tool: VectorTool; start: Vec2; nodeId: string; before: Snapshot } & DragTargets)
@@ -757,7 +842,7 @@ export class VectorEditorController {
 				if (h?.transformHandle) return vectorResizeCursor(h.transformHandle, this.frameOf(this.selectedRoots())?.angle ?? 0);
 				return h?.nodeId ? 'move' : 'default';
 			case 'direct':
-				if (h?.anchor || h?.handle) return 'pointer';
+				if (h?.anchor || h?.handle || h?.corner) return 'pointer';
 				if (h?.segment) return 'copy';
 				return h?.nodeId ? 'move' : 'default';
 			case 'pen':
@@ -1112,7 +1197,7 @@ export class VectorEditorController {
 		let subpath: VectorSubpath;
 		switch (input.kind) {
 			case 'rect':
-				subpath = rectSubpath(b, input.cornerRadius ?? d.cornerRadius);
+				subpath = rectSubpath(b);
 				break;
 			case 'ellipse':
 				subpath = ellipseSubpath(b);
@@ -1127,10 +1212,14 @@ export class VectorEditorController {
 				subpath = lineSubpath({ x: b.x, y: b.y }, { x: b.x + b.width, y: b.y + b.height });
 				break;
 		}
+		const radius = input.cornerRadius ?? d.cornerRadius;
+		const kind = input.cornerKind ?? d.cornerKind;
+		// Live corners: the shape keeps its sharp anchors, so the radius stays editable.
+		if ((input.kind === 'rect' || input.kind === 'polygon' || input.kind === 'star') && radius > 0) subpath = setSubpathCorners(subpath, radius, kind);
 		const names = { rect: 'Rectangle', ellipse: 'Ellipse', polygon: 'Polygon', star: 'Star', line: 'Line' };
 		const style = this.styleFor(input.kind === 'line');
 		const own: VectorStyle = {};
-		for (const key of ['fill', 'stroke', 'strokeWidth', 'strokeLinecap', 'strokeLinejoin', 'strokeDasharray', 'fillRule'] as const) {
+		for (const key of VECTOR_STYLE_KEYS) {
 			if (input[key] !== undefined) (own as any)[key] = input[key];
 		}
 		return { id: this.newId(), type: 'path', name: input.name ?? names[input.kind], ...style, ...own, subpaths: [subpath] };
@@ -1156,6 +1245,8 @@ export class VectorEditorController {
 		if (d.strokeLinejoin) out.strokeLinejoin = d.strokeLinejoin;
 		if (d.strokeDasharray) out.strokeDasharray = d.strokeDasharray;
 		if (d.fillRule) out.fillRule = d.fillRule;
+		if (d.strokeAlign && d.strokeAlign !== 'center') out.strokeAlign = d.strokeAlign;
+		for (const key of ['startArrow', 'endArrow', 'arrowAlign', 'startArrowScale', 'endArrowScale'] as const) if (d[key]) (out as any)[key] = d[key];
 		return out;
 	}
 
@@ -1181,6 +1272,98 @@ export class VectorEditorController {
 			this.setDoc(mapTree(this.doc.nodes, (n) => (targets.has(n.id) ? ({ ...n, ...style } as VectorNode) : n)));
 		});
 		return { ok: true };
+	}
+
+	/**
+	 * Sets the live corner radius (and optionally the kind) of anchors: `refs`, else the selected
+	 * anchors (direct tool), else every anchor of the `ids` / selected paths. Radius 0 makes the
+	 * corners sharp again. Corners shrink to fit when drawn, so any radius is accepted.
+	 */
+	setCornerRadius(radius: number, options: { kind?: VectorCornerKind; refs?: readonly VectorAnchorRef[]; ids?: readonly string[] } = {}): VectorActionResult {
+		if (!Number.isFinite(radius) || radius < 0) return { ok: false, message: 'The radius must be a number of at least 0.' };
+		const refs = this.cornerTargets(options);
+		if (!refs.length) return { ok: false, message: 'Nothing is selected.' };
+		this.change(radius > 0 ? 'Corner Radius' : 'Sharpen Corners', () => {
+			this.doc = this.updateAnchors(this.doc, refs, (a) => setAnchorCorner(a, radius, options.kind));
+		});
+		return { ok: true };
+	}
+
+	/** Sets the live corner kind of the same anchors as `setCornerRadius`, keeping their radii. */
+	setCornerKind(kind: VectorCornerKind, options: { refs?: readonly VectorAnchorRef[]; ids?: readonly string[] } = {}): VectorActionResult {
+		const refs = this.cornerTargets(options);
+		if (!refs.length) return { ok: false, message: 'Nothing is selected.' };
+		this.change('Corner Kind', () => {
+			this.doc = this.updateAnchors(this.doc, refs, (a) => setAnchorCorner(a, a.corner?.radius ?? 0, kind));
+		});
+		return { ok: true };
+	}
+
+	/** Anchors a corner change applies to (see `setCornerRadius`). */
+	private cornerTargets(options: { refs?: readonly VectorAnchorRef[]; ids?: readonly string[] }): VectorAnchorRef[] {
+		if (options.refs) return options.refs.filter((r) => getAnchor(this.doc, r));
+		if (!options.ids && this.tool === 'direct' && this.anchors.length) return this.anchors.slice();
+		const out: VectorAnchorRef[] = [];
+		for (const id of options.ids ?? this.selection) {
+			const node = this.getNode(id);
+			if (!node) continue;
+			for (const p of collectPathNodes(node)) {
+				if (p.locked) continue;
+				p.subpaths.forEach((sp, s) => sp.anchors.forEach((_, i) => out.push({ nodeId: p.id, subpath: s, index: i })));
+			}
+		}
+		return out;
+	}
+
+	/**
+	 * Outline Stroke: replaces each selected (or given) path's stroke with a filled path of the
+	 * area it paints (alignment, joins, caps, dashes and arrowheads included), placed above a copy
+	 * of the path that keeps the fill (left out when there is none). Returns the new paths' ids.
+	 */
+	outlineStroke(options: { ids?: readonly string[] } = {}): string[] {
+		const roots = options.ids ?? this.selectedRoots();
+		const paths: VectorPathNode[] = [];
+		for (const id of roots) {
+			const node = this.getNode(id);
+			if (node) for (const p of collectPathNodes(node)) if (!p.locked && hasPaint(p.stroke) && (p.strokeWidth ?? 1) > 0) paths.push(p);
+		}
+		if (!paths.length) return [];
+		const created: string[] = [];
+		const replace = new Map<string, VectorNode[]>();
+		for (const p of paths) {
+			// In the node's own space: the new paths keep its transform.
+			const outline = bezierToSubpaths(vectorStrokeOutlinePath(subpathsToBezier(p.subpaths), p));
+			if (!outline.length) continue;
+			const {
+				stroke,
+				strokeWidth: _w,
+				strokeLinecap: _c,
+				strokeLinejoin: _j,
+				strokeDasharray: _d,
+				strokeAlign: _a,
+				startArrow: _s,
+				endArrow: _e,
+				arrowAlign: _al,
+				startArrowScale: _ss,
+				endArrowScale: _es,
+				...rest
+			} = cloneVectorNode(p);
+			const id = this.newId();
+			const strokeNode: VectorPathNode = { ...rest, id, name: `${p.name ?? 'Path'} Stroke`, subpaths: outline, fill: stroke ?? null, stroke: null, fillRule: 'nonzero' };
+			const list: VectorNode[] = hasPaint(p.fill) ? [{ ...rest, stroke: null }, strokeNode] : [strokeNode];
+			created.push(id);
+			replace.set(p.id, list);
+		}
+		if (!created.length) return [];
+		this.change('Outline Stroke', () => {
+			let nodes = this.doc.nodes;
+			for (const [id, list] of replace) nodes = spliceTree(nodes, id, list);
+			this.setDoc(nodes);
+			this.selection = created;
+			this.anchors = [];
+			this.editingId = null;
+		});
+		return created;
 	}
 
 	rename(id: string, name: string): VectorActionResult {
@@ -1840,7 +2023,7 @@ export class VectorEditorController {
 		const map = (p: Vec2) => applyMatrix(m, p);
 		return from.subpaths.map((sp) => ({
 			closed: sp.closed,
-			anchors: sp.anchors.map((a) => ({ ...map(a), ...(a.in ? { in: map(a.in) } : {}), ...(a.out ? { out: map(a.out) } : {}), ...(a.type ? { type: a.type } : {}) }))
+			anchors: sp.anchors.map((a) => ({ ...map(a), ...(a.in ? { in: map(a.in) } : {}), ...(a.out ? { out: map(a.out) } : {}), ...(a.type ? { type: a.type } : {}), ...(a.corner ? { corner: { ...a.corner } } : {}) }))
 		}));
 	}
 
@@ -2228,6 +2411,24 @@ export class VectorEditorController {
 		return null;
 	}
 
+	private cornerView() {
+		return { ...this.view(), viewport: this.viewport };
+	}
+
+	private hitCornerWidget(screen: Vec2): VectorCornerWidget | null {
+		let best: VectorCornerWidget | null = null;
+		let bestD = Infinity;
+		for (const w of getVectorCornerWidgets(this.cornerView())) {
+			const s = this.documentToScreen(w);
+			const d = Math.hypot(s.x - screen.x, s.y - screen.y);
+			if (d <= this.hitRadius && d < bestD) {
+				best = w;
+				bestD = d;
+			}
+		}
+		return best;
+	}
+
 	private hitAnchor(screen: Vec2, refs: readonly VectorAnchorRef[]): VectorAnchorRef | null {
 		let best: VectorAnchorRef | null = null;
 		let bestD = Infinity;
@@ -2289,6 +2490,8 @@ export class VectorEditorController {
 				if (handle) return { nodeId: handle.nodeId, handle };
 				const anchor = this.hitAnchor(screen, getVisibleAnchors(this.view()));
 				if (anchor) return { nodeId: anchor.nodeId, anchor };
+				const widget = this.hitCornerWidget(screen);
+				if (widget) return { nodeId: widget.ref.nodeId, corner: widget.ref };
 				for (const id of getEditablePathIds(this.view())) {
 					const node = this.getNode(id) as VectorPathNode;
 					const seg = nearestSegment(node, this.toLocal(id, p));
@@ -2453,6 +2656,13 @@ export class VectorEditorController {
 				}
 			} else if (!selected) this.anchors = [anchor];
 			this.drag = { kind: 'anchors', start: p, before: this.snapshot(), base: this.doc, moved: false, clickRef: selected && !input.shift ? anchor : null, lead: anchor };
+			this.notify();
+			return;
+		}
+		const widget = this.hitCornerWidget(screen);
+		if (widget) {
+			const refs = getVectorCornerWidgets(this.cornerView()).map((w) => w.ref);
+			this.drag = { kind: 'corner', widget, refs, start: p, before: this.snapshot(), base: this.doc, moved: false, alt: !!input.alt, shift: !!input.shift };
 			this.notify();
 			return;
 		}
@@ -2713,6 +2923,18 @@ export class VectorEditorController {
 				this.notify(true);
 				return;
 			}
+			case 'corner': {
+				if (!drag.moved && Math.hypot(p.x - drag.start.x, p.y - drag.start.y) * this.viewport.zoom < 3) return;
+				drag.moved = true;
+				const c = drag.widget.corner;
+				const inv = invertMatrix(this.worldOf(drag.widget.ref.nodeId, drag.base));
+				const d = applyMatrixLinear(inv, { x: p.x - drag.start.x, y: p.y - drag.start.y });
+				const radius = Math.max(0, Math.min(c.maxRadius, drag.widget.drawnRadius + cornerRadiusChange(c, d)));
+				this.doc = this.updateAnchors(drag.base, drag.refs, (a) => setAnchorCorner(a, radius));
+				this.interaction = { type: 'corner', ref: drag.widget.ref, radius };
+				this.notify(true);
+				return;
+			}
 			case 'bend': {
 				if (!drag.moved && Math.hypot(p.x - drag.start.x, p.y - drag.start.y) * this.viewport.zoom < 2) return;
 				drag.moved = true;
@@ -2911,6 +3133,21 @@ export class VectorEditorController {
 					return;
 				}
 				return this.commit('Bend Segment', drag.before);
+			case 'corner': {
+				if (drag.moved) return this.commit('Corner Radius', drag.before);
+				if (drag.alt) {
+					const kind = nextVectorCornerKind(drag.widget.kind);
+					this.doc = this.updateAnchors(drag.base, drag.refs, (a) => setAnchorCorner(a, a.corner?.radius ?? 0, kind));
+					return this.commit('Corner Kind', drag.before);
+				}
+				// A click selects the widget's corner, so the next drag rounds that corner alone.
+				const ref = drag.widget.ref;
+				const has = this.anchors.some((a) => sameRef(a, ref));
+				this.editingId = ref.nodeId;
+				this.anchors = drag.shift ? (has ? this.anchors.filter((a) => !sameRef(a, ref)) : [...this.anchors, ref]) : [ref];
+				this.notify();
+				return;
+			}
 			case 'stroke': {
 				this.notify();
 				if (drag.tool === 'knife') this.knife(drag.points);

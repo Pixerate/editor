@@ -9,6 +9,7 @@ import type { SvgGradientDef } from '../canvas/gradient.js';
 export type { SvgGradientDef };
 import {
 	getAnchorWorld,
+	getVectorCornerWidgets,
 	getVectorSelectionBoxGeometry,
 	getVisibleAnchors,
 	getVisibleHandles,
@@ -28,9 +29,24 @@ import {
 	vectorPathWorldBezier,
 	type AffineMatrix
 } from './geometry.js';
-import { vectorPaintToSvg } from './svg.js';
+import { vectorPaintToSvg, vectorStrokeSvgParts, type VectorRenderStrokeParts } from './svg.js';
+import { vectorCorners } from './corners.js';
 import type { VectorGuideKind, VectorSnapKind } from './snap.js';
-import type { VectorAnchorRef, VectorAnchorType, VectorBounds, VectorHandleRef, VectorNode, VectorPaint, VectorPathNode, VectorTransformHandle, Vec2 } from './types.js';
+import type {
+	VectorAnchorRef,
+	VectorAnchorType,
+	VectorArrowAlign,
+	VectorArrowhead,
+	VectorBounds,
+	VectorCornerKind,
+	VectorHandleRef,
+	VectorNode,
+	VectorPaint,
+	VectorPathNode,
+	VectorStrokeAlign,
+	VectorTransformHandle,
+	Vec2
+} from './types.js';
 
 export interface VectorRenderPath {
 	kind: 'path';
@@ -47,6 +63,13 @@ export interface VectorRenderPath {
 	strokeDasharray?: string;
 	fillRule: 'nonzero' | 'evenodd';
 	opacity: number;
+	/**
+	 * Set when the stroke takes more than one element: an inside / outside alignment or
+	 * arrowheads. Draw `d` with the fill only, then `stroke.d` with the stroke (at
+	 * `stroke.width`, clipped or masked as `stroke.clip` says), then each head filled with
+	 * `stroke`; group them under `id`, `transform` and `opacity`.
+	 */
+	strokeParts?: VectorRenderStrokeParts;
 }
 
 export interface VectorRenderGroup {
@@ -92,6 +115,18 @@ export interface VectorRenderHandle {
 	anchorX: number;
 	anchorY: number;
 	hovered: boolean;
+}
+
+/** A live corner widget in screen pixels. */
+export interface VectorRenderCornerWidget {
+	ref: VectorAnchorRef;
+	x: number;
+	y: number;
+	radius: number;
+	kind: VectorCornerKind;
+	hovered: boolean;
+	/** Its corners are being dragged. */
+	active: boolean;
 }
 
 /** A smart guide line in screen pixels. */
@@ -141,6 +176,11 @@ export interface VectorOverlayRenderData {
 	pencilString: { x1: number; y1: number; x2: number; y2: number } | null;
 	/** Where the scissors would cut (screen space). */
 	cutPoint: Vec2 | null;
+	/**
+	 * Live corner widgets of the direct tool (screen space): drag one to round its corners,
+	 * Alt-click to cycle round / inverted / chamfer, click to pick its corner alone.
+	 */
+	cornerWidgets: VectorRenderCornerWidget[];
 	/** A short status, e.g. "W 120 × H 80" or "45°". */
 	status: string | null;
 }
@@ -158,10 +198,12 @@ function renderNode(node: VectorNode, defs: SvgGradientDef[], idPrefix: string):
 	const stroke = vectorPaintToSvg(node.stroke, `${idPrefix}stroke-${node.id}`);
 	if (fill.gradient) defs.push(fill.gradient);
 	if (stroke.gradient) defs.push(stroke.gradient);
+	const strokeParts = stroke.value !== 'none' ? vectorStrokeSvgParts(node, `${idPrefix}clip-${node.id}`) : undefined;
 	return {
 		kind: 'path',
 		id: node.id,
 		...(node.transform ? { transform: fmtMatrix(node.transform) } : {}),
+		...(strokeParts ? { strokeParts } : {}),
 		d: vectorPathData(node),
 		fill: fill.value,
 		stroke: stroke.value,
@@ -322,9 +364,15 @@ export function getVectorOverlayRenderData(state: VectorEditorState): VectorOver
 		const b = toScreen(state, it.string[1]);
 		pencilString = { x1: fmt(a.x), y1: fmt(a.y), x2: fmt(b.x), y2: fmt(b.y) };
 	}
+	const dragged = it?.type === 'corner' ? it.ref : null;
+	const cornerWidgets: VectorRenderCornerWidget[] = getVectorCornerWidgets(state).map((w) => {
+		const s = toScreen(state, w);
+		return { ref: w.ref, x: fmt(s.x), y: fmt(s.y), radius: w.radius, kind: w.kind, hovered: sameAnchor(state.hover?.corner, w.ref), active: !!dragged };
+	});
+	if (it?.type === 'corner') status = `R ${fmt(it.radius)}`;
 	const cutPoint = state.tool === 'scissors' && state.hover?.segment && !it ? (({ x, y }) => ({ x: fmt(x), y: fmt(y) }))(toScreen(state, state.hover.segment.point)) : null;
 
-	return { outlines, selectionBox, anchors, handles, marquee, penPreview, artboard, guides, status, toolStroke, pencilString, cutPoint };
+	return { outlines, selectionBox, anchors, handles, marquee, penPreview, artboard, guides, status, toolStroke, pencilString, cutPoint, cornerWidgets };
 }
 
 // ---------------------------------------------------------------------------
@@ -342,7 +390,9 @@ export const VECTOR_OVERLAY_THEME = {
 	eraserFill: 'rgba(239, 68, 68, 0.25)',
 	transformHandleSize: 8,
 	anchorSize: 7,
-	handleRadius: 3.5
+	handleRadius: 3.5,
+	/** Radius of a live corner widget (a ring with a dot). */
+	cornerWidgetRadius: 4
 } as const;
 
 interface ModifierEventLike {
@@ -386,29 +436,112 @@ export interface VectorSelectionStyle {
 	stroke: VectorPaint;
 	strokeWidth: number;
 	opacity: number;
-	mixed: { fill: boolean; stroke: boolean; strokeWidth: boolean; opacity: boolean };
+	strokeAlign: VectorStrokeAlign;
+	startArrow: VectorArrowhead | null;
+	endArrow: VectorArrowhead | null;
+	arrowAlign: VectorArrowAlign;
+	startArrowScale: number;
+	endArrowScale: number;
+	/**
+	 * Live corners of the selected anchors (direct tool) or of every corner of the selected
+	 * paths: the first one's radius and kind, and how many corners there are (0: none to round).
+	 */
+	cornerRadius: number;
+	cornerKind: VectorCornerKind;
+	corners: number;
+	/** Some selected path is open, so arrowheads apply. */
+	hasOpenPath: boolean;
+	mixed: {
+		fill: boolean;
+		stroke: boolean;
+		strokeWidth: boolean;
+		opacity: boolean;
+		strokeAlign: boolean;
+		startArrow: boolean;
+		endArrow: boolean;
+		arrowAlign: boolean;
+		startArrowScale: boolean;
+		endArrowScale: boolean;
+		cornerRadius: boolean;
+		cornerKind: boolean;
+	};
 	/** Ids of the paths the style applies to. */
 	pathIds: string[];
 }
 
-export function getVectorSelectionStyle(state: Pick<VectorEditorState, 'document' | 'selection'>): VectorSelectionStyle | null {
+export function getVectorSelectionStyle(
+	state: Pick<VectorEditorState, 'document' | 'selection'> & Partial<Pick<VectorEditorState, 'selectedAnchors' | 'tool'>>
+): VectorSelectionStyle | null {
 	const paths: VectorPathNode[] = [];
 	for (const id of state.selection) {
 		const node = findVectorNode(state.document.nodes, id);
 		if (node) paths.push(...collect(node));
 	}
+	const anchorMode = state.tool === 'direct' && !!state.selectedAnchors?.length;
+	if (anchorMode) {
+		for (const r of state.selectedAnchors!) {
+			if (paths.some((p) => p.id === r.nodeId)) continue;
+			const node = findVectorNode(state.document.nodes, r.nodeId);
+			if (node?.type === 'path') paths.push(node);
+		}
+	}
 	if (!paths.length) return null;
 	const first = paths[0];
 	const same = (get: (p: VectorPathNode) => unknown) => paths.every((p) => JSON.stringify(get(p) ?? null) === JSON.stringify(get(first) ?? null));
+	// Corners: those of the selected anchors in the direct tool, else every corner of the paths.
+	const corners: { radius: number; kind: VectorCornerKind }[] = [];
+	for (const p of paths) {
+		for (const c of vectorCorners(p.subpaths)) {
+			if (anchorMode && !state.selectedAnchors!.some((r) => r.nodeId === p.id && r.subpath === c.subpath && r.index === c.index)) continue;
+			const corner = p.subpaths[c.subpath].anchors[c.index].corner;
+			corners.push({ radius: corner?.radius ?? 0, kind: corner?.kind ?? 'round' });
+		}
+	}
+	const c0 = corners[0] ?? { radius: 0, kind: 'round' as const };
 	return {
 		fill: first.fill ?? null,
 		stroke: first.stroke ?? null,
 		strokeWidth: first.strokeWidth ?? 1,
 		opacity: first.opacity ?? 1,
-		mixed: { fill: !same((p) => p.fill), stroke: !same((p) => p.stroke), strokeWidth: !same((p) => p.strokeWidth ?? 1), opacity: !same((p) => p.opacity ?? 1) },
+		strokeAlign: first.strokeAlign ?? 'center',
+		startArrow: first.startArrow ?? null,
+		endArrow: first.endArrow ?? null,
+		arrowAlign: first.arrowAlign ?? 'extend',
+		startArrowScale: first.startArrowScale ?? 1,
+		endArrowScale: first.endArrowScale ?? 1,
+		cornerRadius: c0.radius,
+		cornerKind: c0.kind,
+		corners: corners.length,
+		hasOpenPath: paths.some((p) => p.subpaths.some((sp) => !sp.closed && sp.anchors.length > 1)),
+		mixed: {
+			fill: !same((p) => p.fill),
+			stroke: !same((p) => p.stroke),
+			strokeWidth: !same((p) => p.strokeWidth ?? 1),
+			opacity: !same((p) => p.opacity ?? 1),
+			strokeAlign: !same((p) => p.strokeAlign ?? 'center'),
+			startArrow: !same((p) => p.startArrow ?? null),
+			endArrow: !same((p) => p.endArrow ?? null),
+			arrowAlign: !same((p) => p.arrowAlign ?? 'extend'),
+			startArrowScale: !same((p) => p.startArrowScale ?? 1),
+			endArrowScale: !same((p) => p.endArrowScale ?? 1),
+			cornerRadius: corners.some((c) => c.radius !== c0.radius),
+			cornerKind: corners.some((c) => c.kind !== c0.kind)
+		},
 		pathIds: paths.map((p) => p.id)
 	};
 }
+
+/** Labels of the stroke alignments, corner kinds and arrowheads, for style panels. */
+export const VECTOR_STROKE_ALIGN_LABELS: Readonly<Record<VectorStrokeAlign, string>> = { center: 'Center', inside: 'Inside', outside: 'Outside' };
+export const VECTOR_CORNER_KIND_LABELS: Readonly<Record<VectorCornerKind, string>> = { round: 'Round', inverted: 'Inverted', chamfer: 'Chamfer' };
+export const VECTOR_ARROWHEAD_LABELS: Readonly<Record<VectorArrowhead, string>> = {
+	triangle: 'Triangle',
+	arrow: 'Arrow',
+	open: 'Open arrow',
+	circle: 'Circle',
+	square: 'Square',
+	bar: 'Bar'
+};
 
 /** A paint as `#rrggbb` for `<input type="color">`, or null for none, gradients and other CSS colours. */
 export function vectorPaintToHex(paint: VectorPaint | undefined): string | null {
@@ -425,7 +558,7 @@ export function vectorPaintToHex(paint: VectorPaint | undefined): string | null 
 
 /** A path-editing button of the bundled toolbars. */
 export interface VectorPathAction {
-	id: 'join' | 'average' | 'cut' | 'clean' | 'smooth';
+	id: 'join' | 'average' | 'cut' | 'clean' | 'smooth' | 'outline';
 	label: string;
 	title: string;
 	/** Shortcut after Cmd / Ctrl, if any. */
@@ -435,13 +568,14 @@ export interface VectorPathAction {
 	run: (controller: VectorEditorController) => unknown;
 }
 
-/** Join, Average, Cut at Points, Remove Redundant Points and Smooth, as the toolbars show them. */
+/** Join, Average, Cut at Points, Remove Redundant Points, Smooth and Outline Stroke, as the toolbars show them. */
 export const VECTOR_PATH_ACTIONS: readonly VectorPathAction[] = [
 	{ id: 'join', label: '⋈', title: 'Join', shortcut: 'J', enabled: (s, p) => s + p > 0, run: (c) => c.joinPaths() },
 	{ id: 'average', label: '⊹', title: 'Average Points', shortcut: 'Alt+J', enabled: (_s, p) => p > 1, run: (c) => c.averageAnchors('both') },
 	{ id: 'cut', label: '✂·', title: 'Cut at Points', enabled: (_s, p) => p > 0, run: (c) => c.cutAtAnchors() },
 	{ id: 'clean', label: '⌁', title: 'Remove Redundant Points', enabled: (s, p) => s + p > 0, run: (c) => c.removeRedundantPoints() },
-	{ id: 'smooth', label: '∿', title: 'Smooth', enabled: (s, p) => s + p > 0, run: (c) => c.smoothPaths() }
+	{ id: 'smooth', label: '∿', title: 'Smooth', enabled: (s, p) => s + p > 0, run: (c) => c.smoothPaths() },
+	{ id: 'outline', label: '⊡', title: 'Outline Stroke', enabled: (s) => s > 0, run: (c) => c.outlineStroke() }
 ];
 
 /** The on / off path-editing settings the toolbars toggle. */

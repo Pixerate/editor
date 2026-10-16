@@ -34,8 +34,8 @@ const doc: VectorDocument = {
 };
 ```
 
-- A **path** has one or more subpaths (holes and compound shapes), a fill and stroke (any CSS colour, a gradient, or `null`), stroke width / caps / joins / dashes, a fill rule and opacity.
-- An **anchor** has optional `in` / `out` handles (absolute document positions). A segment with no handles at either end is a straight line; otherwise it is a cubic Bézier. `type` is `corner`, `smooth` (handles in line) or `symmetric` (in line, equal length) and decides how the opposite handle follows when one is dragged.
+- A **path** has one or more subpaths (holes and compound shapes), a fill and stroke (any CSS colour, a gradient, or `null`), stroke width / caps / joins / dashes / alignment, arrowheads, a fill rule and opacity.
+- An **anchor** has optional `in` / `out` handles (absolute document positions). A segment with no handles at either end is a straight line; otherwise it is a cubic Bézier. `type` is `corner`, `smooth` (handles in line) or `symmetric` (in line, equal length) and decides how the opposite handle follows when one is dragged. An optional `corner: { radius, kind }` is a live corner (see below).
 - A **group** selects and transforms its children together. Nodes can be hidden (`visible: false`) or locked (drawn, not pickable).
 - A node's optional **`transform`** places it in its parent's space. It is always *rigid* (rotation + translation): anchors and children live in the node's own space. `transformVectorNode(node, m)` composes `m`, keeps the rotation in `transform` and bakes any scale, skew or mirroring into the anchors (or children), so stroke widths, hit-testing tolerances and the rotated selection box stay exact. Unrotated nodes have no `transform` and store document positions directly.
 
@@ -88,6 +88,29 @@ Every gesture is one undo step (`Move`, `Scale`, `Draw Rectangle`, `Add Point`, 
 The selection box follows the selection's rotation when every selected node shares one (`state.selectionFrame.angle`); its resize handles, `scale` and `flip` act along those rotated axes, and `setRotation(degrees)` turns each node to an absolute angle. `state.selectionBounds` stays the axis-aligned box used by align and distribute.
 
 Programmatic API, all undoable: `setRotation`, `addShape`, `addPath`, `addNode`, `updateNode`, `setStyle`, `removeNodes`, `translate`, `scale`, `rotate`, `flip`, `transform(matrix)`, `align`, `distribute`, `arrange`, `group`, `ungroup`, `duplicate`, `booleanOp('union' | 'subtract' | 'intersect' | 'exclude')`, `combine`, `breakApart`, `moveAnchor`, `moveHandle`, `convertAnchors`, `insertAnchorAt`, `deleteAnchors`, `setClosed`, `reversePaths`, `copy` / `cut` / `paste` (JSON text, or SVG markup on paste), `loadSvg`, `importSvg`, `setDocument`, `setArtboard`. Viewport: `zoomAt`, `zoomToFit`, `panBy`, `setViewport`, `screenToDocument`, `documentToScreen`.
+
+## Live corners
+
+Any corner anchor (not smooth, not the end of an open subpath, where two straight or curved sides meet at an angle) can carry a radius: `anchor.corner = { radius, kind }`, with `kind` `round` (default), `inverted` (an arc centred on the corner, cut into the shape) or `chamfer` (a straight bevel). The stored anchor stays sharp. `expandVectorCorners(subpaths)` is the one helper that draws the cut geometry, and `subpathsToBezier` calls it, so rendering, hit-testing, bounds, booleans, Outline Stroke, knife / eraser and SVG export all see the same rounded shape (`subpathsToBezier(subpaths, { corners: false })` gives the sharp outline).
+
+- Each side is trimmed by arc length, `r / tan(angle / 2)` from the corner, and a radius that does not fit shrinks so the cut takes at most half of each side (neighbouring corners at their largest meet without overlapping). `vectorCorners(subpaths)` lists the corners with their angle and `maxRadius`.
+- A round cut is one cubic with handles `4/3 · tan(φ/4) · ρ` along the sides' directions at the cut (φ the turn, ρ the radius of the circle through both ends): a true arc at any angle (within 0.03 % of the radius at 90°), tangent to curved sides too.
+- The rectangle, polygon and star tools (and `addShape` / `vector.addShape` with `cornerRadius`, and `<rect rx>` on import) set radii on sharp anchors instead of baking curves, so corners stay editable. `rectSubpath(bounds, radius, kind)` and `setSubpathCorners(subpath, radius, kind)` do the same in code; `defaults.cornerRadius` / `defaults.cornerKind` apply to new shapes.
+- `setCornerRadius(radius, { kind, refs, ids })` and `setCornerKind(kind, …)` change the selected points' corners with the direct tool, else every corner of the selected paths. Scaling a node keeps its radii.
+- **Corner widgets**: with the direct tool, each editable path shows a widget inside its selected corners (every corner when none of its points is selected), on the bisector at the arc's centre and at least 10 px in; corners with a side shorter than 30 px on screen hide theirs. Drag one to set the radius of all shown corners (it follows the pointer along the bisector, up to fully round; status `R …`), Alt-click to cycle round → inverted → chamfer, click to pick that corner alone. `getVectorCornerWidgets(state)` and `getVectorOverlayRenderData(state).cornerWidgets` give their positions.
+
+## Stroke alignment and arrowheads
+
+```ts
+editor.setStyle({ strokeAlign: "inside" });                              // center (default) | inside | outside
+editor.setStyle({ startArrow: "circle", endArrow: "triangle", arrowAlign: "tip", endArrowScale: 1.5 });
+editor.outlineStroke();                                                   // the stroke as a filled path
+```
+
+- **Alignment** applies to shapes whose subpaths are all closed (open paths stroke centred). An inside stroke is a stroke of twice the width intersected with the fill, an outside one twice the width minus the fill. The canvases draw it as the fill, then the double-width stroke clipped to the shape (`<clipPath>`) or masked by it (`<mask>`); hit-testing checks the side of the outline; `vectorStrokeOutline(node)` / `vectorStrokeOutlinePath(path, style)` give the exact painted area with `outlineStroke` and `pathBoolean`.
+- **Arrowheads** (`triangle`, `arrow`, `open`, `circle`, `square`, `bar`) go on the start of the first subpath and the end of the last one, when open. A head is 4 × its weight long and wide, the weight being the stroke width × `startArrowScale` / `endArrowScale` (default 1). With `arrowAlign: "extend"` (default) the tip sits past the end point and the path keeps its length; with `tip` the tip sits on the end point and the stroke is shortened under the head. Either way the stroke stops under the head (`arrowheadInset`): halfway into solid heads, at the chevron's inner corner, far enough that a round or square cap stays behind the tip. Heads are filled with the stroke's paint. `vectorStrokeParts(path, style)` returns the alignment, the (shortened) line, the draw width and each head's outline, tip and direction.
+- **Outline Stroke** (`outlineStroke({ ids })`, the toolbar's ⊡ button, `vector.outlineStroke`) replaces each stroke with a filled path of the area it paints — alignment, joins, caps, dashes, corners and heads included — above a copy of the path that keeps the fill.
+- `getVectorSelectionStyle(state)` reports `strokeAlign`, the arrow fields, `cornerRadius` / `cornerKind` / `corners` and `hasOpenPath`, with `mixed` flags; the style panels show Align, Start / End heads with their scale, Heads (tip past end / at end) for open paths, and Corners (radius and kind).
 
 ## Path editing
 
@@ -142,7 +165,7 @@ Hold **Cmd / Ctrl** during a drag to bypass snapping. The pull distance is `thre
 
 ## Rendering
 
-`getVectorSceneRenderData(state)` returns the document as SVG-ready paths (with gradient defs) and a `transform` for the document layer; `getVectorOverlayRenderData(state)` returns the overlay in screen pixels: outlines, the selection box with its handles, anchors, handles, the marquee, the pen's rubber band, smart guide lines and labels (`guides`), the knife or eraser stroke being drawn (`toolStroke`), the pencil's lazy-mouse string (`pencilString`), the scissors cut point (`cutPoint`) and a status string. Draw the overlay outside the transformed layer so handles keep their size at any zoom. Scene nodes carry an SVG `transform` when rotated, and the selection box comes unrotated with a `transform` (`rotate(angle cx cy)`) to draw it in — handle `screen` positions are the true on-screen points. The bundled React and Svelte canvases are thin renderers over these two functions.
+`getVectorSceneRenderData(state)` returns the document as SVG-ready paths (with gradient defs) and a `transform` for the document layer; `getVectorOverlayRenderData(state)` returns the overlay in screen pixels: outlines, the selection box with its handles, anchors, handles, the marquee, the pen's rubber band, smart guide lines and labels (`guides`), the knife or eraser stroke being drawn (`toolStroke`), the pencil's lazy-mouse string (`pencilString`), the scissors cut point (`cutPoint`) the live corner widgets (`cornerWidgets`) and a status string. Draw the overlay outside the transformed layer so handles keep their size at any zoom. Scene nodes carry an SVG `transform` when rotated, and the selection box comes unrotated with a `transform` (`rotate(angle cx cy)`) to draw it in — handle `screen` positions are the true on-screen points. A path whose stroke is aligned or has arrowheads carries `strokeParts`: draw `d` with the fill only, then `strokeParts.d` at `strokeParts.width` with its `clip` (a `<clipPath>` of the shape for inside, a user-space `<mask>` over `clip.bounds` that hides the shape for outside), then each head filled with the stroke; the canvases group them under the node's id as `<g data-vector-id data-vector-stroke-align>` with `data-vector-part="fill" | "stroke" | "head"` children. The bundled React and Svelte canvases are thin renderers over these two functions.
 
 ## SVG
 
@@ -153,6 +176,8 @@ const doc = parseVectorSvg(markup);        // DOM-free: path, rect, circle, elli
                                            // linear / radial gradients, style attributes and transforms
 const svg = vectorDocumentToSvg(doc);      // standalone SVG with <defs> for gradients
 ```
+
+Live corners export as their rounded outline plus `data-vector-d` (the sharp path) and `data-vector-corners` (`subpath.index:radius[:kind]`), so the editor's own SVG imports with editable corners. Inside / outside strokes and arrowheads, which SVG cannot express, export as a `<g data-vector-path>` holding the fill, the double-width stroke with a `<clipPath>` or `<mask>`, and the heads as filled paths (`vectorDocumentToSvg(doc, { strokes: "outline" })` writes one filled outline of the stroke instead); import merges such a group back into one path with its alignment, heads and real stroke width.
 
 On import each shape's transform is split: its rotation becomes the node's `transform` and any scale or skew is baked into the anchors (stroke widths are scaled by the transform's average scale). Export writes rotated nodes with `transform="matrix(…)"`. Text, images, clip paths, masks, filters and `<use>` are skipped.
 
@@ -168,7 +193,7 @@ function Drawing() {
 }
 ```
 
-`<VectorCanvas>` (smart guides drawn in `guideColor`), `<VectorToolbar>` (with a snapping toggle, `showSnap`, and a path-editing group, `showPathEdit`: Join, Average, Cut at Points, Remove Redundant Points, Smooth, the Keep shape / Curvature / Shapes toggles, and the pencil smoothing and eraser size inputs while those tools are active) and `<VectorStylePanel>` can be used on their own; `useVectorEditor` / `useVectorEditorState` give the state.
+`<VectorCanvas>` (smart guides drawn in `guideColor`), `<VectorToolbar>` (with a snapping toggle, `showSnap`, and a path-editing group, `showPathEdit`: Join, Average, Cut at Points, Remove Redundant Points, Smooth, Outline Stroke, the Keep shape / Curvature / Shapes toggles, and the pencil smoothing and eraser size inputs while those tools are active) and `<VectorStylePanel>` (fill, stroke, width, alignment, arrowheads, corner radius and kind, opacity) can be used on their own; the canvas draws corner widgets with the direct tool; `useVectorEditor` / `useVectorEditorState` give the state.
 
 ## Svelte
 
@@ -187,4 +212,4 @@ function Drawing() {
 
 ## Agent commands
 
-`createVectorCommands(controller)` returns `vector.list`, `vector.select`, `vector.addShape`, `vector.addPath`, `vector.setStyle`, `vector.transform`, `vector.delete`, `vector.boolean`, `vector.align`, `vector.distribute`, `vector.arrange`, `vector.group`, `vector.ungroup`, `vector.deleteAnchors`, `vector.moveAnchor`, `vector.bendSegment`, `vector.join`, `vector.average`, `vector.removeRedundantPoints`, `vector.smooth`, `vector.cut`, `vector.knife`, `vector.erase`, `vector.setEditing`, `vector.setTool`, `vector.exportSvg` and `vector.importSvg`. Register them in a `CommandRegistry` and `createCommandToolProvider` exposes them as agent tools.
+`createVectorCommands(controller)` returns `vector.list`, `vector.select`, `vector.addShape`, `vector.addPath`, `vector.setStyle` (fill, stroke, width, caps, joins, dashes, fill rule, `strokeAlign`, `startArrow` / `endArrow`, `arrowAlign`, `startArrowScale` / `endArrowScale`), `vector.setCorners` (radius and / or kind of anchors or paths), `vector.outlineStroke`, `vector.transform`, `vector.delete`, `vector.boolean`, `vector.align`, `vector.distribute`, `vector.arrange`, `vector.group`, `vector.ungroup`, `vector.deleteAnchors`, `vector.moveAnchor`, `vector.bendSegment`, `vector.join`, `vector.average`, `vector.removeRedundantPoints`, `vector.smooth`, `vector.cut`, `vector.knife`, `vector.erase`, `vector.setEditing`, `vector.setTool`, `vector.exportSvg` and `vector.importSvg`. Register them in a `CommandRegistry` and `createCommandToolProvider` exposes them as agent tools.

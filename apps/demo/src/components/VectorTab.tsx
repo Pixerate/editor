@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { ellipseSubpath, rectSubpath, starSubpath, type VectorDocument } from "@pixerate/editor/vector";
+import { ellipseSubpath, rectSubpath, setSubpathCorners, starSubpath, type VectorDocument } from "@pixerate/editor/vector";
 import { VectorEditor, useVectorCommands, useVectorEditorController, useVectorEditorState } from "@pixerate/editor-react/vector";
 import { PenTool } from "lucide-react";
 import { demoCommandRegistry } from "../agentTools";
@@ -38,7 +38,29 @@ const STARTER: VectorDocument = {
       ],
     },
     { id: "card", type: "path", name: "Card", fill: "#e0f2fe", stroke: "#0369a1", strokeWidth: 2, subpaths: [rectSubpath({ x: 80, y: 60, width: 220, height: 140 }, 18)] },
-    { id: "star", type: "path", name: "Star", fill: "#facc15", stroke: "#a16207", strokeWidth: 2, subpaths: [starSubpath({ x: 150, y: 90, width: 80, height: 80 }, 5, 0.45)] },
+    {
+      id: "star",
+      type: "path",
+      name: "Star",
+      fill: "#facc15",
+      stroke: "#a16207",
+      strokeWidth: 4,
+      strokeAlign: "inside",
+      subpaths: [setSubpathCorners(starSubpath({ x: 150, y: 90, width: 80, height: 80 }, 5, 0.45), 3)],
+    },
+    {
+      id: "arrow",
+      type: "path",
+      name: "Arrow",
+      fill: null,
+      stroke: "#334155",
+      strokeWidth: 3,
+      strokeLinecap: "round",
+      startArrow: "circle",
+      endArrow: "triangle",
+      arrowAlign: "tip",
+      subpaths: [{ closed: false, anchors: [{ x: 340, y: 250, out: { x: 420, y: 180 } }, { x: 540, y: 170, in: { x: 470, y: 120 } }] }],
+    },
   ],
 };
 

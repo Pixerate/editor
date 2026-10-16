@@ -1112,3 +1112,33 @@ All contributors and AI assistants should check this file before starting work a
   2. Implement spacebar hold detection (`isSpacePressed` via `keydown` / `keyup`). While spacebar is held down, toggle the overlay's pointer events to `none` and switch the cursor to `grab`, allowing users to hold Space and drag to pan the xyflow canvas seamlessly without changing their active drawing tool.
 
 
+
+### [core/vector] Live Corners Vanish When an Anchor Is Copied Field by Field
+
+- **Issue / Symptom**: A rounded corner turns sharp after moving, scaling, reversing or pasting a path, with no error.
+- **Root Cause**: The radius lives on the anchor (`anchor.corner`), and several helpers build anchor copies by hand (`{ x, y, in, out, type }`), so any copy that lists the fields drops it.
+- **Solution / Workaround**: Copy anchors with `cloneAnchor`, or add `...(a.corner ? { corner: { ...a.corner } } : {})` to hand-built copies (`bakeIntoGeometry`, `reverseSubpath`, `curvatureMoveAnchor`, `subpathsIn` do). Tests in `vector-corners-strokes.test.ts` move, scale, rotate and paste a rounded path.
+
+### [core/vector] `subpathsToBezier` Draws Live Corners, So Its Segments No Longer Match the Anchors
+
+- **Issue / Symptom**: Code that walks the Bézier commands of a path and maps segment `i` back to anchor `i` gets the wrong segment (or one too many) on a path with corner radii.
+- **Root Cause**: `subpathsToBezier` runs `expandVectorCorners`, the one place live corners are cut; a cut corner adds an anchor and trims both neighbouring segments.
+- **Solution / Workaround**: Use `subpathSegment(sp, i)` / `nearestSegment` for anchor-indexed segments, or `subpathsToBezier(subpaths, { corners: false })` for the sharp outline. `expandVectorCornersOf` also returns `sources`, the stored anchor each drawn anchor came from.
+
+### [core/vector] One Cubic per Corner Cut Loses Accuracy at Sharp Angles
+
+- **Issue / Symptom**: The round cut of a very acute corner (a star's tip) is visibly not quite circular when zoomed far in.
+- **Root Cause**: A cubic arc's radial error grows with roughly the sixth power of the angle it turns through: about 0.03 % of the radius for a 90° turn, about 0.6 % for the 150° turn of a 30° corner.
+- **Solution / Workaround**: Acceptable for drawing (figcraft does the same); the tests assert < 1 % at 30°. If an exact arc ever matters, split cuts turning more than 90° into two cubics in `cutCorner`.
+
+### [core|react|svelte/vector] Clip Paths and Masks for Aligned Strokes Need Node-Local Coordinates and Explicit Mask Bounds
+
+- **Issue / Symptom**: An inside / outside stroke is clipped in the wrong place on rotated nodes, or an outside stroke (and its arrowheads) is cropped at the shape's bounding box.
+- **Root Cause**: `clipPathUnits` / `maskContentUnits` default to `userSpaceOnUse`, which is the user space of the *referencing* element, transform included, so the clip shape must use the node's own coordinates (the same `d` as the fill), not document ones. A `<mask>` without `maskUnits="userSpaceOnUse"` and a box covers only the object's bounding box plus 10 %, which cuts a wide outside stroke.
+- **Solution / Workaround**: `vectorStrokeSvgParts` returns `clip.bounds` (the outline's bounds padded by `vectorStrokeReach`) and both canvases and the SVG export write `<mask maskUnits="userSpaceOnUse" x y width height>` with a white rect and the shape in black, inside the node's own `<g transform>`. Ids come from the canvas `idPrefix`, so two canvases on a page don't share clips.
+
+### [core/vector] `render.ts` and `svg.ts` Import Each Other's Module Graph
+
+- **Issue / Symptom**: Moving a render helper that the SVG exporter needs into `render.ts` creates an import cycle (`svg.ts → render.ts → controller.ts → svg.ts`).
+- **Root Cause**: `render.ts` already imports `vectorPaintToSvg` from `svg.ts`, and the controller imports `svg.ts` for `toSvg` / `loadSvg`.
+- **Solution / Workaround**: Keep helpers both need in `svg.ts` (or lower: `stroke.ts`, `corners.ts`, `geometry.ts`), e.g. `vectorStrokeSvgParts` and the `VectorRenderStrokeParts` type, and import them into `render.ts`. `stroke.ts` and `corners.ts` import only path ops and types, so `geometry.ts` can use them.

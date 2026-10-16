@@ -143,8 +143,12 @@ describe('vector geometry', () => {
 	it('builds stars and rounded rects', () => {
 		expect(starSubpath({ x: 0, y: 0, width: 100, height: 100 }, 5).anchors).toHaveLength(10);
 		const rr = rectSubpath({ x: 0, y: 0, width: 100, height: 40 }, 50);
-		expect(rr.anchors).toHaveLength(8);
-		expect(rr.anchors[0].x).toBe(20); // radius clamped to half the height
+		// Live corners: four sharp anchors carrying the radius; drawn, it is clamped to half the height.
+		expect(rr.anchors).toHaveLength(4);
+		expect(rr.anchors.every((a) => a.corner?.radius === 50)).toBe(true);
+		const drawn = bezierToSubpaths(vectorPathData([rr]))[0];
+		expect(drawn.anchors).toHaveLength(8);
+		expect(drawn.anchors[0].x).toBeCloseTo(20, 9);
 	});
 
 	it('transforms nodes with matrices', () => {
