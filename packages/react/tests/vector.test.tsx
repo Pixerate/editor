@@ -299,6 +299,77 @@ describe("live corners, stroke alignment and arrowheads (React)", () => {
   });
 });
 
+describe("variable-width strokes (React)", () => {
+  const penPointer = (el: Element, type: string, x: number, y: number, pressure: number) =>
+    act(() => {
+      const e = new Pointer(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0 });
+      Object.defineProperty(e, "pressure", { value: pressure });
+      Object.defineProperty(e, "pointerType", { value: "pen" });
+      el.dispatchEvent(e);
+    });
+
+  it("draws a profiled stroke as a filled outline", async () => {
+    const c = make();
+    const line = c.addPath("M0 200 L200 200", { stroke: "#00f", strokeWidth: 10, strokeWidthProfile: [{ t: 0, left: 1, right: 1 }, { t: 1, left: 0, right: 0 }] });
+    await act(async () => root.render(<VectorCanvas controller={c} fitOnMount={false} />));
+    const outline = q(`[data-vector-id="${line}"] [data-vector-part="stroke-outline"]`);
+    expect(outline.getAttribute("fill")).toBe("#00f");
+    expect(outline.getAttribute("d")).toMatch(/^M/);
+    expect(qa(`[data-vector-id="${line}"] [data-vector-part="stroke"]`)).toHaveLength(0);
+  });
+
+  it("drags a width point with the width tool and shows its handles", async () => {
+    const c = make();
+    const line = c.addPath("M0 200 L200 200", { stroke: "#000", strokeWidth: 10 });
+    await act(async () => root.render(<VectorCanvas controller={c} fitOnMount={false} />));
+    const svg = q("svg");
+    key(svg, "w");
+    expect(c.getState().tool).toBe("width");
+    pointer(svg, "pointermove", 100, 202);
+    expect(qa("[data-vector-width-spot]")).toHaveLength(1);
+    pointer(svg, "pointerdown", 100, 202);
+    pointer(svg, "pointermove", 100, 220);
+    expect(q("[data-vector-status]").textContent).toBe("W 40");
+    pointer(svg, "pointerup", 100, 220);
+    expect((c.getNode(line) as any).strokeWidthProfile[1]).toEqual({ t: 0.5, left: 4, right: 4 });
+    expect(qa("[data-vector-width-point]")).toHaveLength(3);
+    expect(q('[data-vector-width-point][data-selected] [data-vector-width-side="right"]').getAttribute("cy")).toBe("220");
+    key(svg, "Delete");
+    expect((c.getNode(line) as any).strokeWidthProfile).toHaveLength(2);
+  });
+
+  it("records pen pressure on pencil strokes", async () => {
+    const c = make();
+    await act(async () => root.render(<VectorCanvas controller={c} fitOnMount={false} />));
+    const svg = q("svg");
+    key(svg, "n");
+    penPointer(svg, "pointerdown", 200, 200, 0.2);
+    for (let i = 1; i <= 20; i++) penPointer(svg, "pointermove", 200 + i * 5, 200, 0.2 + i * 0.04);
+    penPointer(svg, "pointerup", 300, 200, 0);
+    const node = c.getNode(c.getState().selection[0]) as any;
+    expect(node.strokeWidthProfile.length).toBeGreaterThan(1);
+    expect(node.strokeWidthProfile[0].left).toBeLessThan(node.strokeWidthProfile[node.strokeWidthProfile.length - 1].left);
+  });
+
+  it("style panel picks a width profile and resets it", async () => {
+    const c = make();
+    const line = c.addPath("M0 200 L100 200", { stroke: "#000" });
+    c.select([line]);
+    await act(async () => root.render(<VectorStylePanel controller={c} />));
+    const reset = q<HTMLButtonElement>('button[aria-label="Reset to uniform width"]');
+    expect(reset.disabled).toBe(true);
+    await setValue(q<HTMLSelectElement>('select[aria-label="Width profile"]'), "taperEnd");
+    expect((c.getNode(line) as any).strokeWidthProfile).toEqual([{ t: 0, left: 1, right: 1 }, { t: 1, left: 0, right: 0 }]);
+    expect(q<HTMLSelectElement>('select[aria-label="Width profile"]').value).toBe("taperEnd");
+    click(q('button[aria-label="Reset to uniform width"]'));
+    expect("strokeWidthProfile" in (c.getNode(line) as any)).toBe(false);
+    // Nothing selected: the default for new paths.
+    await act(async () => c.select([]));
+    await setValue(q<HTMLSelectElement>('select[aria-label="Width profile"]'), "bulge");
+    expect(c.getState().defaults.strokeWidthProfile).toHaveLength(3);
+  });
+});
+
 describe("path editing (React)", () => {
   it("bends a segment, previews knife strokes and shows the scissors cut point", async () => {
     const c = make();

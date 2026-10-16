@@ -12,6 +12,7 @@
     isVectorTextTarget,
     toVectorKeyInput,
     toVectorPointerInput,
+    vectorDiamondPath,
     type VectorEditorController
   } from '@pixerate/editor/vector';
   import VectorGradientDefs from './VectorGradientDefs.svelte';
@@ -222,6 +223,21 @@
       <g data-vector-corner-widget={w.ref.index} data-corner-kind={w.kind}>
         <circle cx={w.x} cy={w.y} r={THEME.cornerWidgetRadius + (w.hovered ? 1 : 0)} fill={THEME.handleFill} stroke={accentColor} />
         <circle cx={w.x} cy={w.y} r={1.5} fill={accentColor} />
+      </g>
+    {/each}
+    {#if overlay.widthSpot}
+      <g data-vector-width-spot="">
+        <line x1={overlay.widthSpot.left.x} y1={overlay.widthSpot.left.y} x2={overlay.widthSpot.right.x} y2={overlay.widthSpot.right.y} stroke={accentColor} stroke-dasharray="3 2" />
+        <path d={vectorDiamondPath(overlay.widthSpot.x, overlay.widthSpot.y)} fill="none" stroke={accentColor} />
+      </g>
+    {/if}
+    {#each overlay.widthPoints as w (`width:${w.ref.nodeId}:${w.ref.subpath}:${w.ref.index}`)}
+      <g data-vector-width-point={w.ref.index} data-selected={w.selected || undefined}>
+        <line x1={w.left.x} y1={w.left.y} x2={w.right.x} y2={w.right.y} stroke={accentColor} />
+        <path d={vectorDiamondPath(w.x, w.y)} fill={w.selected || w.active ? accentColor : THEME.handleFill} stroke={accentColor} stroke-width={w.hovered === 'center' ? 2 : 1} />
+        {#each ['left', 'right'] as const as side (side)}
+          <circle data-vector-width-side={side} cx={w[side].x} cy={w[side].y} r={THEME.handleRadius + (w.hovered === side ? 1 : 0)} fill={THEME.handleFill} stroke={accentColor} />
+        {/each}
       </g>
     {/each}
     {#if closing}

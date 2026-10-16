@@ -5,13 +5,18 @@
     VECTOR_CORNER_KINDS,
     VECTOR_CORNER_KIND_LABELS,
     VECTOR_STROKE_ALIGN_LABELS,
+    VECTOR_WIDTH_PRESETS,
     getVectorSelectionStyle,
     vectorPaintToHex,
+    widthProfilePreset,
+    widthProfilePresetId,
     type VectorCornerKind,
     type VectorEditorController,
-    type VectorStrokeAlign
+    type VectorStrokeAlign,
+    type VectorWidthPreset
   } from '@pixerate/editor/vector';
   import { vectorStateOf } from './subscribe.svelte.js';
+  import { vectorButtonClass } from './styles.js';
 
   interface Props {
     controller: VectorEditorController;
@@ -37,6 +42,7 @@
       arrowAlign: d.arrowAlign ?? 'extend',
       startArrowScale: d.startArrowScale ?? 1,
       endArrowScale: d.endArrowScale ?? 1,
+      widthProfile: widthProfilePresetId(d.strokeWidthProfile),
       cornerRadius: d.cornerRadius,
       cornerKind: d.cornerKind ?? 'round',
       corners: 1,
@@ -55,6 +61,11 @@
     if (!style) controller.setDefaults({ ...(patch.radius !== undefined ? { cornerRadius: patch.radius } : {}), ...(patch.kind ? { cornerKind: patch.kind } : {}) });
     else if (patch.radius !== undefined) controller.setCornerRadius(patch.radius);
     else if (patch.kind) controller.setCornerKind(patch.kind);
+  }
+
+  function setProfile(id: VectorWidthPreset) {
+    if (style) controller.setWidthProfile(id);
+    else controller.setDefaults({ strokeWidthProfile: widthProfilePreset(id)?.length ? widthProfilePreset(id) : null });
   }
 
   function apply(patch: Record<string, unknown>) {
@@ -113,6 +124,31 @@
     </select>
     {#if style?.mixed.strokeAlign}<span class="text-[11px] text-muted-foreground">Mixed</span>{/if}
   </label>
+  <div class="flex items-center gap-2 text-xs text-foreground" data-vector-style="widthProfile">
+    <span class="w-16">Profile</span>
+    <select
+      aria-label="Width profile"
+      class={selectClass}
+      value={source.widthProfile}
+      onchange={(e) => {
+        if (e.currentTarget.value !== 'custom') setProfile(e.currentTarget.value as VectorWidthPreset);
+      }}
+    >
+      {#each VECTOR_WIDTH_PRESETS as p (p.id)}<option value={p.id}>{p.label}</option>{/each}
+      {#if source.widthProfile === 'custom'}<option value="custom" disabled>Custom</option>{/if}
+    </select>
+    <button
+      type="button"
+      class={vectorButtonClass}
+      title="Reset to uniform width"
+      aria-label="Reset to uniform width"
+      disabled={source.widthProfile === 'uniform' && !style?.mixed.widthProfile}
+      onclick={() => setProfile('uniform')}
+    >
+      ═
+    </button>
+    {#if style?.mixed.widthProfile}<span class="text-[11px] text-muted-foreground">Mixed</span>{/if}
+  </div>
   {#if source.hasOpenPath}
     {#each ends as { key, scaleKey, label } (key)}
       <div class="flex items-center gap-2" data-vector-style={key}>

@@ -58,7 +58,23 @@ import {
 	vectorCorners,
 	type VectorCornerInfo
 } from './corners.js';
-import { vectorStrokeOutlinePath } from './stroke.js';
+import { strokeWidthProfileOf, vectorStrokeOutlinePath, vectorStrokeParts } from './stroke.js';
+import { nearestStrokePosition, strokePositionPoint } from './varstroke.js';
+import {
+	generateWidthProfile,
+	insertWidthPoint,
+	pressureWidthProfile,
+	removeWidthPoints,
+	reverseWidthProfile,
+	sanitizeWidthProfile,
+	setWidthPoint,
+	widthProfileAt,
+	widthProfileMaxScale,
+	widthProfilePreset,
+	type VectorTaperOptions,
+	type VectorWaveOptions,
+	type VectorWidthPreset
+} from './width.js';
 import { parseVectorSvg, vectorDocumentToSvg, type VectorSvgExportOptions } from './svg.js';
 import { constrainToLeave, VECTOR_CONSTRUCTION_ANGLES, VectorSnapTargets, type VectorSnapGuides, type VectorSnapLeave } from './snap.js';
 import {
@@ -97,7 +113,8 @@ import type {
 	VectorSubpath,
 	VectorTool,
 	VectorTransformHandle,
-	VectorViewport
+	VectorViewport,
+	VectorWidthPoint
 } from './types.js';
 
 // ---------------------------------------------------------------------------
@@ -141,10 +158,22 @@ export interface VectorPathEditOptions {
 	recognizeShapes: boolean;
 	/** Eraser diameter in document units (default 10). */
 	eraserSize: number;
+	/**
+	 * Record pointer pressure on pencil strokes as a width profile: `pen` (default) for pen input
+	 * only, `all` for any pointer that reports pressure, `off` never.
+	 */
+	pencilPressure: 'pen' | 'all' | 'off';
 }
 
 /** Path-editing options new editors start with. */
-export const DEFAULT_VECTOR_PATH_EDIT: Readonly<VectorPathEditOptions> = { keepShapeOnDelete: true, curvatureMoves: false, pencilSmoothing: 0, recognizeShapes: false, eraserSize: 10 };
+export const DEFAULT_VECTOR_PATH_EDIT: Readonly<VectorPathEditOptions> = {
+	keepShapeOnDelete: true,
+	curvatureMoves: false,
+	pencilSmoothing: 0,
+	recognizeShapes: false,
+	eraserSize: 10,
+	pencilPressure: 'pen'
+};
 
 /** Longest pencil lazy-mouse string (at smoothing 1), in screen pixels. */
 export const VECTOR_PENCIL_STRING_PX = 100;
@@ -172,6 +201,29 @@ export interface VectorEditorOptions {
 export interface VectorPointerInput extends VectorModifiers {
 	/** 0 = primary, 1 = middle (pans), 2 = secondary. Default 0. */
 	button?: number;
+	/** `PointerEvent.pressure` (0–1), recorded on pencil strokes. */
+	pressure?: number;
+	/** `PointerEvent.pointerType` (`mouse`, `pen`, `touch`). */
+	pointerType?: string;
+}
+
+/** One width point of a path's stroke profile; `subpath` is the subpath it is shown on. */
+export interface VectorWidthPointRef {
+	nodeId: string;
+	index: number;
+	subpath: number;
+}
+
+/** A spot on a stroke (width tool): where a drag would add a width point. Positions in document units. */
+export interface VectorStrokeSpot {
+	nodeId: string;
+	subpath: number;
+	/** Position along the subpath by length, 0–1. */
+	t: number;
+	point: Vec2;
+	/** Ends of the stroke's width across the path there. */
+	left: Vec2;
+	right: Vec2;
 }
 
 /** A key press as the controller needs it. */
@@ -190,6 +242,10 @@ export interface VectorHover {
 	transformHandle?: VectorTransformHandle;
 	/** A live corner widget (direct tool): the corner's anchor. */
 	corner?: VectorAnchorRef;
+	/** A width point (width tool): its centre or the end of its left / right side. */
+	widthPoint?: VectorWidthPointRef & { part: 'center' | 'left' | 'right' };
+	/** A spot on a stroke away from its width points (width tool). */
+	strokeSpot?: VectorStrokeSpot;
 }
 
 /** The drag in progress, for overlays and status text. */
@@ -204,6 +260,7 @@ export type VectorInteraction =
 	| { type: 'corner'; ref: VectorAnchorRef; radius: number }
 	| { type: 'draw'; tool: VectorTool; nodeId: string; bounds: VectorBounds; string?: [Vec2, Vec2] }
 	| { type: 'stroke'; tool: 'knife' | 'eraser'; points: Vec2[]; width: number }
+	| { type: 'width'; ref: VectorWidthPointRef; mode: 'width' | 'move'; width: number }
 	| { type: 'pen'; nodeId: string }
 	| { type: 'pan' };
 
@@ -215,6 +272,8 @@ export interface VectorEditorState {
 	selection: readonly string[];
 	/** Selected anchors (direct tool). */
 	selectedAnchors: readonly VectorAnchorRef[];
+	/** The selected width point (width tool); Delete removes it. */
+	selectedWidthPoint: VectorWidthPointRef | null;
 	/** The path whose anchors are being edited, if any. */
 	editingId: string | null;
 	/** Axis-aligned bounds of the selected nodes in document units. */
@@ -287,7 +346,8 @@ export const VECTOR_STYLE_KEYS = [
 	'endArrow',
 	'arrowAlign',
 	'startArrowScale',
-	'endArrowScale'
+	'endArrowScale',
+	'strokeWidthProfile'
 ] as const satisfies readonly (keyof VectorStyle)[];
 
 /** Clipboard payload type written by `copy()`. */
@@ -435,6 +495,87 @@ export function getVectorCornerWidgets(
 	return out;
 }
 
+/**
+ * The line a path's stroke follows (node space; shortened under `tip` arrowheads) and the
+ * distance a side scale of 1 reaches from it (half the drawn width: twice the stroke width for
+ * inside / outside strokes). Null for paths without a visible stroke.
+ */
+export function vectorStrokeWidthGeometry(node: VectorPathNode): { line: BezierPath; unit: number } | null {
+	if (!hasPaint(node.stroke) || !((node.strokeWidth ?? 1) > 0)) return null;
+	const parts = vectorStrokeParts(subpathsToBezier(node.subpaths), node);
+	return parts.line.length ? { line: parts.line, unit: parts.drawWidth / 2 } : null;
+}
+
+/** A width point of the width tool, in document units. */
+export interface VectorWidthHandle {
+	ref: VectorWidthPointRef;
+	/** The point on the path. */
+	x: number;
+	y: number;
+	/** Ends of its left and right sides. */
+	left: Vec2;
+	right: Vec2;
+	t: number;
+	/** Side scales (multiples of half the stroke width). */
+	leftScale: number;
+	rightScale: number;
+	selected: boolean;
+}
+
+/**
+ * The width points the width tool shows: every profile point on every subpath of the stroke
+ * under the pointer, the selected paths and the stroke being edited. Ported from ArtCraft
+ * vectorcraft `crates/tools/src/distort/width.rs` (MIT OR Apache-2.0, see
+ * THIRD_PARTY_NOTICES.md), as are the `width` drag and hover below.
+ */
+export function getVectorWidthHandles(
+	state: Pick<VectorEditorState, 'document' | 'selection' | 'tool' | 'hover' | 'interaction' | 'selectedWidthPoint'>
+): VectorWidthHandle[] {
+	if (state.tool !== 'width') return [];
+	const ids = new Set<string>();
+	for (const id of state.selection) {
+		const n = findVectorNode(state.document.nodes, id);
+		if (n) for (const p of collectPathNodes(n)) ids.add(p.id);
+	}
+	if (state.hover?.nodeId) ids.add(state.hover.nodeId);
+	if (state.interaction?.type === 'width') ids.add(state.interaction.ref.nodeId);
+	if (state.selectedWidthPoint) ids.add(state.selectedWidthPoint.nodeId);
+	const out: VectorWidthHandle[] = [];
+	for (const id of ids) {
+		const node = findVectorNode(state.document.nodes, id);
+		if (node?.type !== 'path' || node.visible === false || !node.strokeWidthProfile?.length) continue;
+		const g = vectorStrokeWidthGeometry(node);
+		if (!g) continue;
+		const profile = sanitizeWidthProfile(node.strokeWidthProfile);
+		const m = vectorWorldMatrix(state.document.nodes, id) ?? IDENTITY_MATRIX;
+		const contours = node.subpaths.length;
+		for (let sp = 0; sp < contours; sp++) {
+			profile.forEach((w, index) => {
+				const at = strokePositionPoint(g.line, sp, w.t);
+				if (!at) return;
+				const n = { x: at.tangent[1], y: -at.tangent[0] };
+				const c = { x: at.point[0], y: at.point[1] };
+				const p = applyMatrix(m, c);
+				const l = applyMatrix(m, { x: c.x + n.x * w.left * g.unit, y: c.y + n.y * w.left * g.unit });
+				const r = applyMatrix(m, { x: c.x - n.x * w.right * g.unit, y: c.y - n.y * w.right * g.unit });
+				const sel = state.selectedWidthPoint;
+				out.push({
+					ref: { nodeId: id, index, subpath: sp },
+					x: p.x,
+					y: p.y,
+					left: l,
+					right: r,
+					t: w.t,
+					leftScale: w.left,
+					rightScale: w.right,
+					selected: !!sel && sel.nodeId === id && sel.index === index
+				});
+			});
+		}
+	}
+	return out;
+}
+
 /** Looks up an anchor (positions in its node's own space). */
 export function getAnchor(doc: VectorDocument, ref: VectorAnchorRef): VectorAnchor | undefined {
 	const node = findVectorNode(doc.nodes, ref.nodeId);
@@ -546,10 +687,11 @@ const TOOL_LABELS: Record<VectorTool, string> = {
 	line: 'Line',
 	scissors: 'Scissors',
 	knife: 'Knife',
-	eraser: 'Eraser'
+	eraser: 'Eraser',
+	width: 'Width'
 };
 
-const TOOL_KEYS: Record<string, VectorTool> = { v: 'select', a: 'direct', p: 'pen', n: 'pencil', r: 'rect', o: 'ellipse', y: 'polygon', s: 'star', l: 'line', c: 'scissors', k: 'knife', e: 'eraser' };
+const TOOL_KEYS: Record<string, VectorTool> = { v: 'select', a: 'direct', p: 'pen', n: 'pencil', r: 'rect', o: 'ellipse', y: 'polygon', s: 'star', l: 'line', c: 'scissors', k: 'knife', e: 'eraser', w: 'width' };
 
 export function vectorToolLabel(tool: VectorTool): string {
 	return TOOL_LABELS[tool];
@@ -568,7 +710,8 @@ export const VECTOR_TOOL_SHORTCUTS: Readonly<Record<VectorTool, string>> = {
 	line: 'L',
 	scissors: 'C',
 	knife: 'K',
-	eraser: 'E'
+	eraser: 'E',
+	width: 'W'
 };
 
 /** Short glyphs for tool buttons (pair them with `vectorToolLabel` for the accessible name). */
@@ -584,7 +727,8 @@ export const VECTOR_TOOL_GLYPHS: Readonly<Record<VectorTool, string>> = {
 	line: '╱',
 	scissors: '✂',
 	knife: '⟋',
-	eraser: '⌫'
+	eraser: '⌫',
+	width: '⇹'
 };
 
 /** Tools that drag out a shape (they snap while hovering). */
@@ -672,7 +816,24 @@ type Drag =
 	| { kind: 'stroke'; tool: 'knife' | 'eraser'; points: Vec2[]; before: Snapshot }
 	| { kind: 'pull'; ref: VectorAnchorRef; before: Snapshot; base: VectorDocument; label: string; outOnly: boolean; closing: boolean; altBreaks: boolean }
 	| ({ kind: 'shape'; tool: VectorTool; start: Vec2; nodeId: string; before: Snapshot } & DragTargets)
-	| { kind: 'pencil'; nodeId: string; points: Point[]; before: Snapshot; lazy: LazyMouse }
+	| { kind: 'pencil'; nodeId: string; points: Point[]; before: Snapshot; lazy: LazyMouse; pressures: number[] | null; pressure: number }
+	| {
+			kind: 'width';
+			ref: VectorWidthPointRef;
+			mode: 'width' | 'move';
+			side: 'both' | 'left' | 'right';
+			/** The stroke line's point and left normal where the drag started (node space). */
+			origin: Vec2;
+			normal: Vec2;
+			/** Half the drawn stroke width: side scale 1 reaches this far. */
+			unit: number;
+			profile: VectorWidthPoint[];
+			before: Snapshot;
+			base: VectorDocument;
+			start: Vec2;
+			moved: boolean;
+			created: boolean;
+	  }
 	| { kind: 'pan'; start: Vec2; viewport: VectorViewport };
 
 /**
@@ -687,6 +848,7 @@ export class VectorEditorController {
 	private doc: VectorDocument;
 	private selection: string[] = [];
 	private anchors: VectorAnchorRef[] = [];
+	private widthPoint: VectorWidthPointRef | null = null;
 	private editingId: string | null = null;
 	private pen: { nodeId: string; subpath: number } | null = null;
 	private tool: VectorTool;
@@ -773,6 +935,7 @@ export class VectorEditorController {
 			tool: this.tool,
 			selection: this.selection,
 			selectedAnchors: this.anchors,
+			selectedWidthPoint: this.widthPoint,
 			editingId: this.editingId,
 			selectionBounds: this.boundsOf(this.selection),
 			selectionFrame: this.frameOf(this.selectedRoots()),
@@ -847,6 +1010,10 @@ export class VectorEditorController {
 				return h?.nodeId ? 'move' : 'default';
 			case 'pen':
 				return h?.anchor ? 'pointer' : 'crosshair';
+			case 'width':
+				if (this.drag?.kind === 'width') return this.drag.mode === 'move' ? 'grabbing' : 'ew-resize';
+				if (h?.widthPoint) return h.widthPoint.part === 'center' ? 'grab' : 'ew-resize';
+				return h?.strokeSpot ? 'copy' : 'default';
 			default:
 				return 'crosshair';
 		}
@@ -991,6 +1158,7 @@ export class VectorEditorController {
 		this.tool = tool;
 		this.hover = null;
 		this.guides = null;
+		this.widthPoint = null;
 		if (tool !== 'direct') {
 			this.anchors = [];
 			this.editingId = null;
@@ -1247,6 +1415,7 @@ export class VectorEditorController {
 		if (d.fillRule) out.fillRule = d.fillRule;
 		if (d.strokeAlign && d.strokeAlign !== 'center') out.strokeAlign = d.strokeAlign;
 		for (const key of ['startArrow', 'endArrow', 'arrowAlign', 'startArrowScale', 'endArrowScale'] as const) if (d[key]) (out as any)[key] = d[key];
+		if (d.strokeWidthProfile?.length) out.strokeWidthProfile = d.strokeWidthProfile.map((p) => ({ ...p }));
 		return out;
 	}
 
@@ -1269,8 +1438,42 @@ export class VectorEditorController {
 		}
 		if (!targets.size) return { ok: false, message: 'Nothing is selected.' };
 		this.change(options.label ?? 'Change Style', () => {
-			this.setDoc(mapTree(this.doc.nodes, (n) => (targets.has(n.id) ? ({ ...n, ...style } as VectorNode) : n)));
+			this.setDoc(mapTree(this.doc.nodes, (n) => (targets.has(n.id) ? withStyle(n as VectorPathNode, style) : n)));
 		});
+		return { ok: true };
+	}
+
+	/**
+	 * Sets the variable-width profile of the selected (or given) paths: a preset id
+	 * (`uniform` removes the profile), points, or a parametric taper / wave. Returns an error for
+	 * an unknown preset.
+	 */
+	setWidthProfile(
+		profile: VectorWidthPreset | readonly VectorWidthPoint[] | { taper?: VectorTaperOptions; wave?: VectorWaveOptions } | null,
+		options: { ids?: readonly string[] } = {}
+	): VectorActionResult {
+		let points: VectorWidthPoint[];
+		if (profile === null) points = [];
+		else if (typeof profile === 'string') {
+			const preset = widthProfilePreset(profile);
+			if (!preset) return { ok: false, message: `There is no width profile "${profile}".` };
+			points = preset;
+		} else if (Array.isArray(profile)) points = sanitizeWidthProfile(profile);
+		else {
+			const p = profile as { taper?: VectorTaperOptions; wave?: VectorWaveOptions };
+			points = p.taper || p.wave ? generateWidthProfile(p) : [];
+		}
+		this.widthPoint = null;
+		return this.setStyle({ strokeWidthProfile: points.length ? points : null }, options.ids ?? this.selection, { label: points.length ? 'Width Profile' : 'Uniform Width' });
+	}
+
+	/** Removes one width point of a path's profile (the width tool's Delete). */
+	removeWidthPoint(ref: Pick<VectorWidthPointRef, 'nodeId' | 'index'>): VectorActionResult {
+		const node = this.getNode(ref.nodeId);
+		if (node?.type !== 'path' || !node.strokeWidthProfile?.[ref.index]) return { ok: false, message: 'There is no such width point.' };
+		const rest = removeWidthPoints(sanitizeWidthProfile(node.strokeWidthProfile), [ref.index]);
+		this.widthPoint = null;
+		this.change('Delete Width Point', () => this.replaceNode(node.id, withStyle(node, { strokeWidthProfile: rest.length ? rest : null })));
 		return { ok: true };
 	}
 
@@ -1346,6 +1549,7 @@ export class VectorEditorController {
 				arrowAlign: _al,
 				startArrowScale: _ss,
 				endArrowScale: _es,
+				strokeWidthProfile: _wp,
 				...rest
 			} = cloneVectorNode(p);
 			const id = this.newId();
@@ -1990,7 +2194,13 @@ export class VectorEditorController {
 		const set = new Set(ids.flatMap((id) => (this.getNode(id) ? collectPathNodes(this.getNode(id)!) : [])).map((p) => p.id));
 		if (!set.size) return { ok: false, message: 'Select a path.' };
 		this.change('Reverse Path', () => {
-			this.setDoc(mapTree(this.doc.nodes, (n) => (n.type === 'path' && set.has(n.id) ? { ...n, subpaths: n.subpaths.map(reverseSubpath) } : n)));
+			this.setDoc(
+				mapTree(this.doc.nodes, (n) =>
+					n.type === 'path' && set.has(n.id)
+						? { ...n, subpaths: n.subpaths.map(reverseSubpath), ...(n.strokeWidthProfile?.length ? { strokeWidthProfile: reverseWidthProfile(n.strokeWidthProfile) } : {}) }
+						: n
+				)
+			);
 			this.anchors = [];
 		});
 		return { ok: true };
@@ -2512,9 +2722,135 @@ export class VectorEditorController {
 				const seg = this.nearestOutline(p);
 				return seg ? { nodeId: seg.nodeId, segment: seg } : null;
 			}
+			case 'width': {
+				const hit = this.hitWidthHandle(screen);
+				if (hit) return { nodeId: hit.ref.nodeId, widthPoint: hit.ref };
+				const spot = this.strokeSpotAt(p);
+				return spot ? { nodeId: spot.nodeId, strokeSpot: spot } : null;
+			}
 			default:
 				return null;
 		}
+	}
+
+	private widthView() {
+		return { document: this.doc, selection: this.selection, tool: this.tool, hover: this.hover, interaction: this.interaction, selectedWidthPoint: this.widthPoint };
+	}
+
+	/** The width point centre or side end under `screen` (width tool). */
+	private hitWidthHandle(screen: Vec2): { ref: VectorWidthPointRef & { part: 'center' | 'left' | 'right' } } | null {
+		let best: { ref: VectorWidthPointRef & { part: 'center' | 'left' | 'right' } } | null = null;
+		let bestD = Infinity;
+		for (const h of getVectorWidthHandles(this.widthView())) {
+			for (const [part, q] of [['center', h], ['left', h.left], ['right', h.right]] as const) {
+				const s = this.documentToScreen(q);
+				const d = Math.hypot(s.x - screen.x, s.y - screen.y);
+				// Ties go to the centre (listed first), so a zero-width point can still be moved.
+				if (d <= this.hitRadius && d < bestD - 1e-9) {
+					best = { ref: { ...h.ref, part } };
+					bestD = d;
+				}
+			}
+		}
+		return best;
+	}
+
+	/** The nearest stroked, unlocked visible path whose stroke is under document point `p` (width tool). */
+	private strokeSpotAt(p: Vec2): VectorStrokeSpot | null {
+		let best: (VectorStrokeSpot & { distance: number }) | null = null;
+		const tol = this.tolerance();
+		walkVectorNodes(this.doc.nodes, (n) => {
+			if (n.type !== 'path' || n.visible === false || n.locked) return;
+			if (hiddenOrLocked(this.doc.nodes, n.id)) return;
+			const g = vectorStrokeWidthGeometry(n);
+			if (!g) return;
+			const m = this.worldOf(n.id);
+			const local = applyMatrix(invertMatrix(m), p);
+			const near = nearestStrokePosition(g.line, [local.x, local.y]);
+			if (!near) return;
+			const profile = strokeWidthProfileOf(n);
+			const w = widthProfileAt(profile, near.t);
+			const reach = Math.max(near.side === 'left' ? w.left : w.right, 0) * g.unit + tol;
+			if (near.distance > reach || near.distance > widthProfileMaxScale(profile) * g.unit + tol) return;
+			if (best && near.distance >= best.distance) return;
+			const nx = near.tangent[1];
+			const ny = -near.tangent[0];
+			const [cx, cy] = near.point;
+			best = {
+				nodeId: n.id,
+				subpath: near.contour,
+				t: near.t,
+				point: applyMatrix(m, { x: cx, y: cy }),
+				left: applyMatrix(m, { x: cx + nx * w.left * g.unit, y: cy + ny * w.left * g.unit }),
+				right: applyMatrix(m, { x: cx - nx * w.right * g.unit, y: cy - ny * w.right * g.unit }),
+				distance: near.distance
+			};
+		});
+		if (!best) return null;
+		const { distance: _d, ...spot } = best as VectorStrokeSpot & { distance: number };
+		return spot;
+	}
+
+	private downWidth(screen: Vec2, p: Vec2, input: VectorPointerInput) {
+		const hit = this.hitWidthHandle(screen);
+		const spot = hit ? null : this.strokeSpotAt(p);
+		const nodeId = hit?.ref.nodeId ?? spot?.nodeId;
+		const node = nodeId ? this.getNode(nodeId) : undefined;
+		const g = node?.type === 'path' ? vectorStrokeWidthGeometry(node) : null;
+		if (!node || node.type !== 'path' || !g) {
+			if (this.widthPoint) {
+				this.widthPoint = null;
+				this.notify();
+			}
+			return;
+		}
+		const before = this.snapshot();
+		const local = this.toLocal(node.id, p);
+		let profile: VectorWidthPoint[];
+		let ref: VectorWidthPointRef;
+		let mode: 'width' | 'move' = 'width';
+		let side: 'both' | 'left' | 'right' = 'both';
+		let t: number;
+		let subpath: number;
+		if (hit) {
+			profile = sanitizeWidthProfile(node.strokeWidthProfile);
+			ref = { nodeId: node.id, index: hit.ref.index, subpath: hit.ref.subpath };
+			t = profile[ref.index]?.t ?? 0;
+			subpath = hit.ref.subpath;
+			if (hit.ref.part === 'center') mode = 'move';
+			else if (input.alt) side = hit.ref.part;
+		} else {
+			const near = nearestStrokePosition(g.line, [local.x, local.y])!;
+			const inserted = insertWidthPoint(strokeWidthProfileOf(node), near.t);
+			profile = inserted.points;
+			subpath = near.contour;
+			t = near.t;
+			ref = { nodeId: node.id, index: inserted.index, subpath };
+			if (input.alt) side = near.side;
+		}
+		const at = strokePositionPoint(g.line, subpath, t);
+		if (!at) return;
+		const base = { ...this.doc, nodes: mapTree(this.doc.nodes, (n) => (n.id === node.id ? { ...(n as VectorPathNode), strokeWidthProfile: profile } : n)) };
+		this.doc = base;
+		this.widthPoint = { nodeId: node.id, index: ref.index, subpath };
+		this.drag = {
+			kind: 'width',
+			ref,
+			mode,
+			side,
+			origin: { x: at.point[0], y: at.point[1] },
+			normal: { x: at.tangent[1], y: -at.tangent[0] },
+			unit: g.unit,
+			profile,
+			before,
+			base,
+			start: p,
+			moved: false,
+			created: !hit
+		};
+		const w = profile[ref.index];
+		this.interaction = { type: 'width', ref, mode, width: (w.left + w.right) * g.unit };
+		this.notify(!hit);
 	}
 
 	/** The nearest outline point of any visible, unlocked path within the pick distance of document point `p`. */
@@ -2567,7 +2903,9 @@ export class VectorEditorController {
 			case 'pen':
 				return this.downPen(screen, p, input);
 			case 'pencil':
-				return this.downPencil(p);
+				return this.downPencil(p, input);
+			case 'width':
+				return this.downWidth(screen, p, input);
 			case 'scissors': {
 				const seg = this.nearestOutline(p);
 				if (seg) this.cutPathAt(seg.nodeId, seg.point);
@@ -2769,7 +3107,7 @@ export class VectorEditorController {
 		this.notify(true);
 	}
 
-	private downPencil(p: Vec2) {
+	private downPencil(p: Vec2, input: VectorPointerInput = {}) {
 		const before = this.snapshot();
 		const node: VectorPathNode = {
 			id: this.newId(),
@@ -2783,7 +3121,11 @@ export class VectorEditorController {
 		this.setDoc([...this.doc.nodes, node]);
 		const lazy = new LazyMouse((this.editing.pencilSmoothing * VECTOR_PENCIL_STRING_PX) / this.viewport.zoom);
 		lazy.push([p.x, p.y]);
-		this.drag = { kind: 'pencil', nodeId: node.id, points: [[p.x, p.y]], before, lazy };
+		const mode = this.editing.pencilPressure;
+		const hasPressure = typeof input.pressure === 'number' && Number.isFinite(input.pressure);
+		const record = hasPressure && (mode === 'all' || (mode === 'pen' && input.pointerType === 'pen'));
+		const pressure = hasPressure ? input.pressure! : 0.5;
+		this.drag = { kind: 'pencil', nodeId: node.id, points: [[p.x, p.y]], before, lazy, pressures: record ? [pressure] : null, pressure };
 		this.interaction = { type: 'draw', tool: 'pencil', nodeId: node.id, bounds: { x: p.x, y: p.y, width: 0, height: 0 } };
 		this.notify(true);
 	}
@@ -3003,12 +3345,37 @@ export class VectorEditorController {
 				this.notify(true);
 				return;
 			}
+			case 'width': {
+				if (!drag.moved && Math.hypot(p.x - drag.start.x, p.y - drag.start.y) * this.viewport.zoom < 2) return;
+				drag.moved = true;
+				const node = findVectorNode(drag.base.nodes, drag.ref.nodeId) as VectorPathNode;
+				const local = this.toLocal(node.id, p, drag.base);
+				let profile: VectorWidthPoint[];
+				if (drag.mode === 'move') {
+					const g = vectorStrokeWidthGeometry(node);
+					const near = g ? nearestStrokePosition(g.line, [local.x, local.y], drag.ref.subpath) : null;
+					if (!near) return;
+					profile = setWidthPoint(drag.profile, drag.ref.index, { t: near.t });
+				} else {
+					const off = ((local.x - drag.origin.x) * drag.normal.x + (local.y - drag.origin.y) * drag.normal.y) / drag.unit;
+					const patch =
+						drag.side === 'both' ? { left: Math.abs(off), right: Math.abs(off) } : drag.side === 'left' ? { left: Math.max(0, off) } : { right: Math.max(0, -off) };
+					profile = setWidthPoint(drag.profile, drag.ref.index, patch);
+				}
+				this.doc = { ...drag.base, nodes: mapTree(drag.base.nodes, (n) => (n.id === node.id ? { ...(n as VectorPathNode), strokeWidthProfile: profile } : n)) };
+				const w = profile[drag.ref.index];
+				this.interaction = { type: 'width', ref: drag.ref, mode: drag.mode, width: (w.left + w.right) * drag.unit };
+				this.notify(true);
+				return;
+			}
 			case 'pencil': {
 				const last = drag.points[drag.points.length - 1];
 				let moved = false;
+				if (typeof input.pressure === 'number' && Number.isFinite(input.pressure)) drag.pressure = input.pressure;
 				for (const q of drag.lazy.push([p.x, p.y])) {
 					if (Math.hypot(q[0] - last[0], q[1] - last[1]) * this.viewport.zoom < 1.5) continue;
 					drag.points.push(q);
+					drag.pressures?.push(drag.pressure);
 					moved = true;
 				}
 				const string = drag.lazy.string();
@@ -3095,7 +3462,8 @@ export class VectorEditorController {
 
 	/** Primary button released. */
 	pointerUp(screen?: Vec2, input: VectorPointerInput = {}): void {
-		if (screen && this.drag && this.drag.kind !== 'pan') this.pointerMove(screen, input);
+		// A pen reports no pressure as it lifts: keep the last pressure for the final move.
+		if (screen && this.drag && this.drag.kind !== 'pan') this.pointerMove(screen, { ...input, pressure: undefined });
 		const drag = this.drag;
 		this.drag = null;
 		this.interaction = null;
@@ -3148,6 +3516,16 @@ export class VectorEditorController {
 				this.notify();
 				return;
 			}
+			case 'width': {
+				if (drag.moved) return this.commit(drag.mode === 'move' ? 'Move Width Point' : 'Width Point', drag.before);
+				// A click adds nothing; on a width point it selects it.
+				if (drag.created) {
+					this.doc = drag.before.doc;
+					this.widthPoint = null;
+					this.notify(true);
+				} else this.notify();
+				return;
+			}
 			case 'stroke': {
 				this.notify();
 				if (drag.tool === 'knife') this.knife(drag.points);
@@ -3178,7 +3556,10 @@ export class VectorEditorController {
 					this.notify(true);
 					return;
 				}
-				for (const q of drag.lazy.finish()) drag.points.push(q);
+				for (const q of drag.lazy.finish()) {
+					drag.points.push(q);
+					drag.pressures?.push(drag.pressure);
+				}
 				const shape = this.editing.recognizeShapes ? recognizeInkShape(drag.points, { minSize: 6 / this.viewport.zoom }) : null;
 				if (shape) {
 					this.replaceNode(drag.nodeId, { ...node, name: inkShapeLabel(shape), subpaths: [inkShapeSubpath(shape)] });
@@ -3193,7 +3574,8 @@ export class VectorEditorController {
 					anchors.push({ x: c.p3[0], y: c.p3[1], in: { x: c.p2[0], y: c.p2[1] } });
 				}
 				const subpaths = anchors.length > 1 ? bezierToSubpaths(subpathsToBezier([{ anchors, closed: false }])) : node.subpaths;
-				this.replaceNode(drag.nodeId, { ...node, subpaths });
+				const profile = drag.pressures ? pencilPressureProfile(drag.points, drag.pressures) : [];
+				this.replaceNode(drag.nodeId, { ...node, subpaths, ...(profile.length ? { strokeWidthProfile: profile } : {}) });
 				this.selection = [drag.nodeId];
 				return this.commit('Draw', drag.before);
 			}
@@ -3320,6 +3702,10 @@ export class VectorEditorController {
 		switch (key) {
 			case 'Escape':
 				if (this.drag) this.cancelDrag();
+				else if (this.tool === 'width' && this.widthPoint) {
+					this.widthPoint = null;
+					this.notify();
+				}
 				else if (this.pen) this.finishPath();
 				else if (this.tool === 'direct' && this.anchors.length) {
 					this.anchors = [];
@@ -3341,6 +3727,7 @@ export class VectorEditorController {
 				return false;
 			case 'Delete':
 			case 'Backspace':
+				if (this.tool === 'width' && this.widthPoint) return this.removeWidthPoint(this.widthPoint).ok;
 				if (this.pen) {
 					const node = this.getNode(this.pen.nodeId) as VectorPathNode;
 					const sp = node.subpaths[this.pen.subpath];
@@ -3430,4 +3817,35 @@ export function scaleFor(handle: VectorTransformHandle, b: VectorBounds, p: Vec2
 		else sx = Math.abs(sy);
 	}
 	return { sx, sy, origin };
+}
+
+/** A style applied to a path; a `null` (or empty) width profile removes it. */
+function withStyle(node: VectorPathNode, style: VectorStyle & { opacity?: number }): VectorNode {
+	const next = { ...node, ...style } as VectorPathNode;
+	if ('strokeWidthProfile' in style) {
+		const p = style.strokeWidthProfile ? sanitizeWidthProfile(style.strokeWidthProfile) : [];
+		if (p.length) next.strokeWidthProfile = p;
+		else delete next.strokeWidthProfile;
+	}
+	return next;
+}
+
+/** True when node `id` or one of its ancestors is locked or hidden. */
+function hiddenOrLocked(nodes: readonly VectorNode[], id: string): boolean {
+	const loc = locateVectorNode(nodes as VectorNode[], id);
+	if (!loc) return false;
+	const n = loc.list[loc.index];
+	if (n.locked || n.visible === false) return true;
+	return loc.parent ? hiddenOrLocked(nodes, loc.parent.id) : false;
+}
+
+/** The width profile of pencil samples and their pressures (positions by length along the samples). */
+function pencilPressureProfile(points: readonly Point[], pressures: readonly number[]): VectorWidthPoint[] {
+	const n = Math.min(points.length, pressures.length);
+	if (n < 2) return [];
+	const s = [0];
+	for (let i = 1; i < n; i++) s.push(s[i - 1] + Math.hypot(points[i][0] - points[i - 1][0], points[i][1] - points[i - 1][1]));
+	const total = s[n - 1];
+	if (!(total > 0)) return [];
+	return pressureWidthProfile(s.map((d, i) => ({ t: d / total, pressure: pressures[i] })));
 }

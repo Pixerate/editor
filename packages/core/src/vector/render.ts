@@ -11,12 +11,15 @@ import {
 	getAnchorWorld,
 	getVectorCornerWidgets,
 	getVectorSelectionBoxGeometry,
+	getVectorWidthHandles,
 	getVisibleAnchors,
 	getVisibleHandles,
 	type VectorEditorController,
 	type VectorEditorState,
-	type VectorSelectionBoxGeometry
+	type VectorSelectionBoxGeometry,
+	type VectorWidthPointRef
 } from './controller.js';
+import { sanitizeWidthProfile, widthProfilePresetId, type VectorWidthPreset } from './width.js';
 import {
 	findVectorNode,
 	IDENTITY_MATRIX,
@@ -45,6 +48,7 @@ import type {
 	VectorPathNode,
 	VectorStrokeAlign,
 	VectorTransformHandle,
+	VectorWidthPoint,
 	Vec2
 } from './types.js';
 
@@ -129,6 +133,23 @@ export interface VectorRenderCornerWidget {
 	active: boolean;
 }
 
+/**
+ * A width point of the width tool in screen pixels: a diamond at (`x`, `y`) on the path and a
+ * line across the stroke from `left` to `right`, with a handle at each end.
+ */
+export interface VectorRenderWidthPoint {
+	ref: VectorWidthPointRef;
+	x: number;
+	y: number;
+	left: Vec2;
+	right: Vec2;
+	selected: boolean;
+	/** The part under the pointer, if any. */
+	hovered: 'center' | 'left' | 'right' | null;
+	/** Being dragged. */
+	active: boolean;
+}
+
 /** A smart guide line in screen pixels. */
 export interface VectorRenderGuideLine {
 	kind: VectorGuideKind;
@@ -181,6 +202,13 @@ export interface VectorOverlayRenderData {
 	 * Alt-click to cycle round / inverted / chamfer, click to pick its corner alone.
 	 */
 	cornerWidgets: VectorRenderCornerWidget[];
+	/** Width points of the width tool (screen space). */
+	widthPoints: VectorRenderWidthPoint[];
+	/**
+	 * Where a width-tool drag would add a width point (screen space): draw a dashed line from
+	 * `left` to `right` and a hollow diamond at (`x`, `y`).
+	 */
+	widthSpot: { x: number; y: number; left: Vec2; right: Vec2 } | null;
 	/** A short status, e.g. "W 120 × H 80" or "45°". */
 	status: string | null;
 }
@@ -372,7 +400,22 @@ export function getVectorOverlayRenderData(state: VectorEditorState): VectorOver
 	if (it?.type === 'corner') status = `R ${fmt(it.radius)}`;
 	const cutPoint = state.tool === 'scissors' && state.hover?.segment && !it ? (({ x, y }) => ({ x: fmt(x), y: fmt(y) }))(toScreen(state, state.hover.segment.point)) : null;
 
-	return { outlines, selectionBox, anchors, handles, marquee, penPreview, artboard, guides, status, toolStroke, pencilString, cutPoint, cornerWidgets };
+	const sc = (p: Vec2) => {
+		const q = toScreen(state, p);
+		return { x: fmt(q.x), y: fmt(q.y) };
+	};
+	const sameWidth = (a: VectorWidthPointRef | null | undefined, b: VectorWidthPointRef) => !!a && a.nodeId === b.nodeId && a.index === b.index;
+	const widthPoints: VectorRenderWidthPoint[] = getVectorWidthHandles(state).map((h) => {
+		const c = sc(h);
+		const hw = state.hover?.widthPoint;
+		const hovered = hw && sameWidth(hw, h.ref) && hw.subpath === h.ref.subpath ? hw.part : null;
+		return { ref: h.ref, x: c.x, y: c.y, left: sc(h.left), right: sc(h.right), selected: h.selected, hovered, active: it?.type === 'width' && sameWidth(it.ref, h.ref) };
+	});
+	const spot = state.tool === 'width' && !it ? state.hover?.strokeSpot : null;
+	const widthSpot = spot ? { ...sc(spot.point), left: sc(spot.left), right: sc(spot.right) } : null;
+	if (it?.type === 'width') status = it.mode === 'move' ? 'Move width point' : `W ${fmt(it.width)}`;
+
+	return { outlines, selectionBox, anchors, handles, marquee, penPreview, artboard, guides, status, toolStroke, pencilString, cutPoint, cornerWidgets, widthPoints, widthSpot };
 }
 
 // ---------------------------------------------------------------------------
@@ -392,8 +435,15 @@ export const VECTOR_OVERLAY_THEME = {
 	anchorSize: 7,
 	handleRadius: 3.5,
 	/** Radius of a live corner widget (a ring with a dot). */
-	cornerWidgetRadius: 4
+	cornerWidgetRadius: 4,
+	/** Half the diagonal of a width point's diamond. */
+	widthPointSize: 5
 } as const;
+
+/** SVG path data of the diamond a width point is drawn with (screen pixels). */
+export function vectorDiamondPath(x: number, y: number, r: number = VECTOR_OVERLAY_THEME.widthPointSize): string {
+	return `M${fmt(x)} ${fmt(y - r)}L${fmt(x + r)} ${fmt(y)}L${fmt(x)} ${fmt(y + r)}L${fmt(x - r)} ${fmt(y)}Z`;
+}
 
 interface ModifierEventLike {
 	shiftKey?: boolean;
@@ -407,9 +457,17 @@ export function toVectorModifiers(event: ModifierEventLike): { shift: boolean; a
 	return { shift: !!event.shiftKey, alt: !!event.altKey, mod: !!(event.metaKey || event.ctrlKey) };
 }
 
-/** A pointer event as `VectorEditorController.pointerDown/Move/Up` input. */
-export function toVectorPointerInput(event: ModifierEventLike & { button?: number }) {
-	return { ...toVectorModifiers(event), button: event.button };
+/**
+ * A pointer event as `VectorEditorController.pointerDown/Move/Up` input: modifiers, button,
+ * and the pressure and pointer type the pencil records as a width profile.
+ */
+export function toVectorPointerInput(event: ModifierEventLike & { button?: number; pressure?: number; pointerType?: string }) {
+	return {
+		...toVectorModifiers(event),
+		button: event.button,
+		...(typeof event.pressure === 'number' ? { pressure: event.pressure } : {}),
+		...(event.pointerType ? { pointerType: event.pointerType } : {})
+	};
 }
 
 /** A key event as `VectorEditorController.keyDown/keyUp` input. */
@@ -442,6 +500,9 @@ export interface VectorSelectionStyle {
 	arrowAlign: VectorArrowAlign;
 	startArrowScale: number;
 	endArrowScale: number;
+	/** The first path's width profile (null when uniform) and the preset it matches. */
+	strokeWidthProfile: VectorWidthPoint[] | null;
+	widthProfile: VectorWidthPreset | 'custom';
 	/**
 	 * Live corners of the selected anchors (direct tool) or of every corner of the selected
 	 * paths: the first one's radius and kind, and how many corners there are (0: none to round).
@@ -462,6 +523,7 @@ export interface VectorSelectionStyle {
 		arrowAlign: boolean;
 		startArrowScale: boolean;
 		endArrowScale: boolean;
+		widthProfile: boolean;
 		cornerRadius: boolean;
 		cornerKind: boolean;
 	};
@@ -509,6 +571,8 @@ export function getVectorSelectionStyle(
 		arrowAlign: first.arrowAlign ?? 'extend',
 		startArrowScale: first.startArrowScale ?? 1,
 		endArrowScale: first.endArrowScale ?? 1,
+		strokeWidthProfile: profileOf(first),
+		widthProfile: widthProfilePresetId(profileOf(first)),
 		cornerRadius: c0.radius,
 		cornerKind: c0.kind,
 		corners: corners.length,
@@ -524,11 +588,17 @@ export function getVectorSelectionStyle(
 			arrowAlign: !same((p) => p.arrowAlign ?? 'extend'),
 			startArrowScale: !same((p) => p.startArrowScale ?? 1),
 			endArrowScale: !same((p) => p.endArrowScale ?? 1),
+			widthProfile: !same(profileOf),
 			cornerRadius: corners.some((c) => c.radius !== c0.radius),
 			cornerKind: corners.some((c) => c.kind !== c0.kind)
 		},
 		pathIds: paths.map((p) => p.id)
 	};
+}
+
+function profileOf(p: VectorPathNode): VectorWidthPoint[] | null {
+	const points = sanitizeWidthProfile(p.strokeWidthProfile);
+	return points.length && widthProfilePresetId(points) !== 'uniform' ? points : null;
 }
 
 /** Labels of the stroke alignments, corner kinds and arrowheads, for style panels. */

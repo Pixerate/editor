@@ -19,6 +19,7 @@ import {
 } from '../canvas/pathops/bezier.js';
 import { expandVectorCorners, setSubpathCorners } from './corners.js';
 import { hitTestVectorStroke, vectorStrokeOutlinePath } from './stroke.js';
+import { mirrorWidthProfile } from './width.js';
 import type {
 	VectorAnchor,
 	VectorAnchorType,
@@ -462,8 +463,11 @@ function bakeIntoGeometry<T extends VectorNode>(node: T, m: AffineMatrix): T {
 	if (isIdentityMatrix(m)) return node;
 	if (node.type === 'group') return { ...node, children: node.children.map((c) => transformVectorNode(c, m)) };
 	const path = node as VectorPathNode;
+	// A mirror swaps the sides of a variable-width stroke (the path still runs the same way).
+	const mirrored = m[0] * m[3] - m[1] * m[2] < 0 && path.strokeWidthProfile?.length;
 	return {
 		...path,
+		...(mirrored ? { strokeWidthProfile: mirrorWidthProfile(path.strokeWidthProfile!) } : {}),
 		subpaths: path.subpaths.map((sp) => ({
 			closed: sp.closed,
 			anchors: sp.anchors.map((a) => {

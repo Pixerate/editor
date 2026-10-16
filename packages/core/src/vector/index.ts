@@ -10,3 +10,5 @@ export * from './pathCut.js';
 export * from './ink.js';
 export * from './corners.js';
 export * from './stroke.js';
+export * from './width.js';
+export * from './varstroke.js';
