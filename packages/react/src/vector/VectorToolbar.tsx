@@ -31,6 +31,7 @@ import {
   type VectorWidthPreset,
 } from '@pixerate/editor/vector';
 import { useVectorEditorState } from './useVectorEditor';
+import { VectorEffectsPanel } from './VectorEffectsPanel';
 
 const VECTOR_SNAP_TITLE = 'Snap to objects';
 const modKeyLabel = () => (typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform ?? '') ? '⌘' : 'Ctrl');
@@ -78,6 +79,9 @@ export function VectorToolbar({
   const points = state.tool === 'direct' ? state.selectedAnchors.length : 0;
   const editing = state.editing;
   const groupSelected = state.selection.some((id) => controller.getNode(id)?.type === 'group');
+  // Live booleans keep the operands editable; a lone live group or its operands take the operation too.
+  const [live, setLive] = React.useState(false);
+  const booleanDisabled = live ? count < 1 : count < 2;
   const act = (label: string, title: string, run: () => unknown, disabled = false) => (
     <button key={label} type="button" className={buttonClass} title={title} aria-label={title} disabled={disabled} onClick={() => void run()}>
       {label}
@@ -203,10 +207,21 @@ export function VectorToolbar({
       {showArrange && (
         <>
           <div className="ml-1 flex items-center gap-1" role="group" aria-label="Combine">
-            {act('∪', 'Union', () => controller.booleanOp('union'), count < 2)}
-            {act('−', 'Subtract', () => controller.booleanOp('subtract'), count < 2)}
-            {act('∩', 'Intersect', () => controller.booleanOp('intersect'), count < 2)}
-            {act('⊻', 'Exclude', () => controller.booleanOp('exclude'), count < 2)}
+            <button
+              type="button"
+              data-vector-live-boolean=""
+              className={buttonClass}
+              aria-pressed={live}
+              title="Live booleans: keep the shapes editable"
+              aria-label="Live booleans"
+              onClick={() => setLive(!live)}
+            >
+              Live
+            </button>
+            {act('∪', 'Union', () => controller.booleanOp('union', { live }), booleanDisabled)}
+            {act('−', 'Subtract', () => controller.booleanOp('subtract', { live }), booleanDisabled)}
+            {act('∩', 'Intersect', () => controller.booleanOp('intersect', { live }), booleanDisabled)}
+            {act('⊻', 'Exclude', () => controller.booleanOp('exclude', { live }), booleanDisabled)}
             {act('G', 'Group', () => controller.group(), count < 1)}
             {act('U', 'Ungroup', () => controller.ungroup(), !groupSelected)}
           </div>
@@ -321,7 +336,7 @@ const selectClass = 'h-7 min-w-0 flex-1 rounded border border-border bg-backgrou
 const numberClass = 'h-7 w-16 rounded border border-border bg-background px-1.5 text-xs';
 
 /**
- * Fill, stroke, stroke width, alignment and width profile, arrowheads, live corner radius and opacity of the
+ * Fill, stroke, stroke width, alignment and width profile, arrowheads, live corner radius, opacity and path effects (`VectorEffectsPanel`) of the
  * selection (corners of the selected points with the direct tool); with nothing selected it
  * edits the defaults for new shapes.
  */
@@ -532,6 +547,7 @@ export function VectorStylePanel({ controller, className }: VectorStylePanelProp
           />
         </label>
       )}
+      {style && <VectorEffectsPanel controller={controller} />}
     </div>
   );
 }
