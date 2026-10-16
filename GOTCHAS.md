@@ -21,6 +21,24 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/vector] Merging Faces by a Boolean Union of Their Outlines Leaves Seams
+
+- **Issue / Symptom**: Shape Builder merges built by uniting the faces' own outlines can leave a hairline gap or a spur along the edge two faces shared, and a merged shape whose faces only touched at a corner could come out with a sliver.
+- **Root Cause**: Each face's outline is rebuilt separately (pieces joined back into exact sub-curves), so two faces' copies of a shared edge or corner are not guaranteed to be bit-identical; the union then sees two nearly coincident edges instead of one.
+- **Solution / Workaround**: `PlanarMap.merge` traces the union along the map's own half-edges: an edge whose two sides are both merged faces is skipped, so shared edges drop out exactly (vectorcraft's `Map::merge`). Covering shapes that lose faces are rebuilt the same way from the faces they keep, never by subtracting the merged shape. Pathfinder operations use one arrangement for all results (`pathBooleanSelect`) for the same reason.
+
+### [core/vector] Islands Must Be Nested per Face, Not by an Even-Odd Rule Over the Network
+
+- **Issue / Symptom**: With three nested squares, a fill of the outer ring that takes every island inside its loop as a hole (as cadcraft's `islands` does) also cuts out the innermost square, a hole inside a hole; figcraft's `faces` notes the same weakness for crossing networks.
+- **Root Cause**: Taking every group of curves inside the traced loop as a hole (cadcraft's `islands`) or classifying faces with an even-odd test over the whole network ignores which face an island actually sits in.
+- **Solution / Workaround**: The face walk gives each connected piece's outer boundary (a clockwise cycle); `PlanarMap` makes it a hole only of the smallest face of *another* piece around it. `regionAt` traces the loop from the ray as cadcraft does, then takes that face's holes. Adjacency lives in per-vertex angle-sorted lists with half-edge slots, so a walk step is O(1) instead of figcraft's scans over all segments.
+
+### [react|svelte] Binding Tests Use the Built Core: Rebuild It After Changing Core State
+
+- **Issue / Symptom**: After adding a field to `VectorOverlayRenderData`, every React and Svelte vector test failed with `Cannot read properties of undefined (reading 'map')`, including tests that never touched the new feature.
+- **Root Cause**: The bindings import `@pixerate/editor/vector`, which resolves to `packages/core/dist`; the canvases read the new field from a stale build that does not produce it.
+- **Solution / Workaround**: Run `pnpm --filter @pixerate/editor build` (or `pnpm build`) before running binding tests after core changes.
+
 ### [core/vector] Unioning a Variable-Width Stroke Piece by Piece Is Quadratic
 
 - **Issue / Symptom**: Building a tapered stroke as effectcraft does — a trapezoid per flattened segment plus a wedge per bend, unioned non-zero — took 86 s for a 120-wiggle pencil line, and the polygon boolean's winding pass alone was O(edges²).

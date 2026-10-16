@@ -159,10 +159,10 @@ function normalizeOperand(input: PathOperandInput): NormalizedOperand {
 	return { chains, fillRule };
 }
 
-function scaleOf(operands: NormalizedOperand[]): number {
+function scaleOf(operandChains: readonly (readonly (readonly BezierSegment[])[])[]): number {
 	let max = 0;
-	for (const op of operands) {
-		for (const chain of op.chains) {
+	for (const chains of operandChains) {
+		for (const chain of chains) {
 			for (const seg of chain) {
 				for (const [x, y] of seg) max = Math.max(max, Math.abs(x), Math.abs(y));
 			}
@@ -720,15 +720,18 @@ interface Arrangement {
 	scale: number;
 }
 
-function buildArrangement(inputs: PathOperandInput[], options: PathOpsOptions): Arrangement {
-	const operands = inputs.map(normalizeOperand);
-	const scale = scaleOf(operands);
+/** Cuts every chain of every operand into monotone pieces and splits them where they meet. */
+function splitChains(
+	operandChains: readonly (readonly (readonly BezierSegment[])[])[],
+	options: PathOpsOptions
+): { pieces: Piece[]; pool: VertexPool; sources: Source[]; eps: number; scale: number } {
+	const scale = scaleOf(operandChains);
 	const eps = options.epsilon && options.epsilon > 0 ? options.epsilon : 1e-9 * scale;
 	const pool = new VertexPool(eps);
 	const sources: Source[] = [];
 	let pieces: Piece[] = [];
-	operands.forEach((op, operand) => {
-		for (const chain of op.chains) {
+	operandChains.forEach((chains, operand) => {
+		for (const chain of chains) {
 			for (const raw of chain) {
 				const straight = raw.length > 2 && isStraightSegment(raw, eps * 0.01);
 				const seg: BezierSegment = straight ? [raw[0], raw[raw.length - 1]] : raw;
@@ -757,6 +760,21 @@ function buildArrangement(inputs: PathOperandInput[], options: PathOpsOptions): 
 		}
 	}
 	if (!settled) throw new PathOpsError('intersections did not settle');
+	return { pieces, pool, sources, eps, scale };
+}
+
+/** Whether two pieces between the same two vertices (`pts` in the same direction) coincide. */
+function samePiece(e: readonly Point[], pts: readonly Point[], eps: number): boolean {
+	if (e.length === 2 && pts.length === 2) return true;
+	return segmentNearest(e, segmentPoint(pts, 0.5)).distance <= eps * 4 && segmentNearest(pts, segmentPoint(e, 0.5)).distance <= eps * 4;
+}
+
+function buildArrangement(inputs: PathOperandInput[], options: PathOpsOptions): Arrangement {
+	const operands = inputs.map(normalizeOperand);
+	const { pieces, sources, eps, scale } = splitChains(
+		operands.map((o) => o.chains),
+		options
+	);
 
 	// Merge coincident pieces.
 	const count = operands.length;
@@ -770,14 +788,7 @@ function buildArrangement(inputs: PathOperandInput[], options: PathOpsOptions): 
 		const key = `${a.id},${b.id}`;
 		const group = groups.get(key) ?? [];
 		if (!groups.has(key)) groups.set(key, group);
-		const mid = segmentPoint(pts, 0.5);
-		let edge = group.find((e) => {
-			if (e.pts.length === 2 && pts.length === 2) return true;
-			return (
-				segmentNearest(e.pts, mid).distance <= eps * 4 &&
-				segmentNearest(pts, segmentPoint(e.pts, 0.5)).distance <= eps * 4
-			);
-		});
+		let edge = group.find((e) => samePiece(e.pts, pts, eps));
 		if (!edge) {
 			edge = {
 				a,
@@ -1291,4 +1302,116 @@ export function nestedRingsToPath(rings: NestedRing[], keep: (index: number) => 
 		if (keep(i)) contours.push({ segments: r.segments, closed: true });
 	});
 	return contoursToPath(contours);
+}
+
+// ---------------------------------------------------------------------------
+// Planar split (for planar maps: Shape Builder, fill regions, Pathfinder Outline)
+// ---------------------------------------------------------------------------
+
+/** One edge of `planarSplit`: a piece of an input segment between two vertices. */
+export interface PlanarSplitEdge {
+	/** Vertex indices at the start and end of `pts`. */
+	a: number;
+	b: number;
+	/** Control points from vertex `a` to vertex `b`. */
+	pts: Point[];
+	/** Inputs whose chains run along this edge, ascending (several where outlines coincide). */
+	operands: number[];
+	/** The source segment it is a piece of (index into `sources`) and its parameters there at `a` and `b`. */
+	src: number;
+	sa: number;
+	sb: number;
+}
+
+export interface PlanarSplitResult {
+	vertices: Point[];
+	edges: PlanarSplitEdge[];
+	/** The input segments, as `src` refers to them. */
+	sources: BezierSegment[];
+	eps: number;
+	scale: number;
+}
+
+/**
+ * The chains of every input (open or closed, as given: nothing is closed for filling) split
+ * wherever they cross or touch each other or themselves, with the same intersection search as
+ * the boolean operations. Coincident pieces become one edge that lists every input along it.
+ * Throws a `PathOpsError` when the search does not settle or the input is not finite.
+ */
+export function planarSplit(inputs: readonly (readonly (readonly BezierSegment[])[])[], options: PathOpsOptions = {}): PlanarSplitResult {
+	for (const chains of inputs) {
+		for (const chain of chains) {
+			for (const seg of chain) for (const p of seg) if (!Number.isFinite(p[0]) || !Number.isFinite(p[1])) throw new PathOpsError(NON_FINITE);
+		}
+	}
+	const { pieces, pool, sources, eps, scale } = splitChains(inputs, options);
+	const groups = new Map<string, PlanarSplitEdge[]>();
+	const edges: PlanarSplitEdge[] = [];
+	for (const piece of pieces) {
+		const forward = piece.a.id < piece.b.id;
+		const a = forward ? piece.a : piece.b;
+		const b = forward ? piece.b : piece.a;
+		const pts = forward ? piece.pts : [...piece.pts].reverse();
+		const key = `${a.id},${b.id}`;
+		let group = groups.get(key);
+		if (!group) groups.set(key, (group = []));
+		const edge = group.find((e) => samePiece(e.pts, pts, eps));
+		if (edge) {
+			if (!edge.operands.includes(piece.operand)) edge.operands = [...edge.operands, piece.operand].sort((x, y) => x - y);
+			continue;
+		}
+		const created: PlanarSplitEdge = { a: a.id, b: b.id, pts, operands: [piece.operand], src: piece.src, sa: forward ? piece.s0 : piece.s1, sb: forward ? piece.s1 : piece.s0 };
+		group.push(created);
+		edges.push(created);
+	}
+	return { vertices: pool.vertices.map((v) => v.p), edges, sources: sources.map((s) => s.seg), eps, scale };
+}
+
+/** Result of `pathBooleanSelect`: per selector, its connected parts (each an outer subpath with its holes). */
+export interface PathSelectResult extends PathOpsReport {
+	parts: BezierPath[][];
+}
+
+/**
+ * Several boolean selections over one arrangement of the operands (the Pathfinder panel's
+ * Trim, Merge, Crop and Minus Back are each a selection per output). A selector gets the
+ * ascending indices of the operands covering an area and keeps the area when it returns true.
+ * Each selection comes back as its connected parts, largest first, built as `pathBoolean`
+ * builds its result; areas that only touch at an edge are one part. Falls back to the
+ * polygon engine like `pathBoolean`.
+ */
+export function pathBooleanSelect(
+	operands: PathOperandInput[],
+	selectors: readonly ((covering: readonly number[]) => boolean)[],
+	options: PathOpsOptions = {}
+): PathSelectResult {
+	if (operands.length === 0) return { parts: selectors.map(() => []), engine: 'curve' };
+	const covering = (flags: boolean[]) => flags.flatMap((f, k) => (f ? [k] : []));
+	try {
+		const arr = buildArrangement(operands, options);
+		const parts = selectors.map((select) => {
+			const rings = extractRings(arr, (flags) => select(covering(flags)));
+			return groupRings(rings)
+				.sort((a, b) => b[0].area - a[0].area)
+				.map(ringsToPath);
+		});
+		return { parts, engine: 'curve' };
+	} catch (error) {
+		const reason = reasonOf(error);
+		if (reason === NON_FINITE) return { parts: selectors.map(() => []), engine: 'curve', error: reason };
+		if (options.fallback === false) throw error;
+		options.onFallback?.(reason);
+		const tolerance = options.fallbackTolerance ?? 0.05;
+		const pieces = dividePolygons(
+			operands.map((o) => flattenOperand(o, tolerance)),
+			{ epsilon: options.epsilon }
+		);
+		const parts = selectors.map((select) => {
+			const picked = pieces.filter((p) => select(p.operands));
+			if (!picked.length) return [];
+			const multi = polygonBoolean('union', [picked.map((p) => p.polygon)], { epsilon: options.epsilon });
+			return multi.map((polygon) => multiToPath([polygon], tolerance));
+		});
+		return { parts, engine: 'polygon', fallbackReason: reason };
+	}
 }

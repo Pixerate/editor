@@ -320,6 +320,25 @@ export function VectorCanvas({
         {state.tool === 'pen' && overlay.anchors.some((a) => a.closes && a.hovered) && (
           <circle cx={overlay.anchors.find((a) => a.closes)!.x} cy={overlay.anchors.find((a) => a.closes)!.y} r={as} stroke={accentColor} />
         )}
+        {overlay.builder && (
+          <g data-vector-builder={overlay.builder.mode}>
+            {overlay.builder.faces.map((d, i) => (
+              <path
+                key={`f${i}`}
+                data-vector-builder-face=""
+                d={d}
+                fill={overlay.builder!.mode === 'erase' ? THEME.builderEraseFill : THEME.builderFill}
+                fillRule="nonzero"
+                stroke={overlay.builder!.mode === 'erase' ? THEME.builderErase : accentColor}
+                strokeWidth={1}
+              />
+            ))}
+            {overlay.builder.lines.map((d, i) => (
+              <path key={`l${i}`} data-vector-builder-line="" d={d} fill="none" stroke={THEME.builderErase} strokeWidth={3} strokeLinecap="round" />
+            ))}
+            {overlay.builder.trail && <path data-vector-builder-trail="" d={overlay.builder.trail} fill="none" stroke={overlay.builder.mode === 'erase' ? THEME.builderErase : accentColor} strokeWidth={1} />}
+          </g>
+        )}
         {overlay.toolStroke && (
           <path
             data-vector-tool-stroke={overlay.toolStroke.tool}

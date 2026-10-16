@@ -243,6 +243,27 @@
     {#if closing}
       <circle cx={closing.x} cy={closing.y} r={as} stroke={accentColor} />
     {/if}
+    {#if overlay.builder}
+      {@const builder = overlay.builder}
+      <g data-vector-builder={builder.mode}>
+        {#each builder.faces as d, i (i)}
+          <path
+            data-vector-builder-face=""
+            {d}
+            fill={builder.mode === 'erase' ? THEME.builderEraseFill : THEME.builderFill}
+            fill-rule="nonzero"
+            stroke={builder.mode === 'erase' ? THEME.builderErase : accentColor}
+            stroke-width={1}
+          />
+        {/each}
+        {#each builder.lines as d, i (i)}
+          <path data-vector-builder-line="" {d} fill="none" stroke={THEME.builderErase} stroke-width={3} stroke-linecap="round" />
+        {/each}
+        {#if builder.trail}
+          <path data-vector-builder-trail="" d={builder.trail} fill="none" stroke={builder.mode === 'erase' ? THEME.builderErase : accentColor} stroke-width={1} />
+        {/if}
+      </g>
+    {/if}
     {#if overlay.toolStroke}
       <path
         data-vector-tool-stroke={overlay.toolStroke.tool}

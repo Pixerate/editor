@@ -5,6 +5,8 @@ import {
   VECTOR_TOOL_SHORTCUTS,
   VECTOR_EDIT_TOGGLES,
   VECTOR_PATH_ACTIONS,
+  VECTOR_PATHFINDER_ACTIONS,
+  VECTOR_FILL_GAP,
   VECTOR_ARROWHEADS,
   VECTOR_ARROWHEAD_LABELS,
   VECTOR_CORNER_KINDS,
@@ -37,7 +39,7 @@ export interface VectorToolbarProps {
   tools?: readonly VectorTool[];
   /** Undo / redo buttons (default `true`). */
   showHistory?: boolean;
-  /** Boolean, group, arrange and align buttons (default `true`). */
+  /** Boolean, Pathfinder, group, arrange and align buttons (default `true`). */
   showArrange?: boolean;
   /** The snapping toggle (default `true`). */
   showSnap?: boolean;
@@ -163,6 +165,19 @@ export function VectorToolbar({ controller, tools = VECTOR_TOOLS, showHistory = 
               />
             </label>
           )}
+          {state.tool === 'paintBucket' && (
+            <button
+              type="button"
+              data-vector-fill-gap=""
+              className={buttonClass}
+              aria-pressed={editing.fillGap > 0}
+              title="Close small gaps between path ends when filling"
+              aria-label="Close gaps"
+              onClick={() => controller.setEditing({ fillGap: editing.fillGap > 0 ? 0 : VECTOR_FILL_GAP })}
+            >
+              Gaps
+            </button>
+          )}
         </div>
       )}
       {showArrange && (
@@ -174,6 +189,22 @@ export function VectorToolbar({ controller, tools = VECTOR_TOOLS, showHistory = 
             {act('⊻', 'Exclude', () => controller.booleanOp('exclude'), count < 2)}
             {act('G', 'Group', () => controller.group(), count < 1)}
             {act('U', 'Ungroup', () => controller.ungroup(), !groupSelected)}
+          </div>
+          <div className="ml-1 flex items-center gap-1" role="group" aria-label="Pathfinder">
+            {VECTOR_PATHFINDER_ACTIONS.map((a) => (
+              <button
+                key={a.id}
+                type="button"
+                data-vector-pathfinder={a.id}
+                className={buttonClass}
+                title={a.title}
+                aria-label={a.title}
+                disabled={count < a.min}
+                onClick={() => void controller.pathfinder(a.id)}
+              >
+                {a.label}
+              </button>
+            ))}
           </div>
           <div className="ml-1 flex items-center gap-1" role="group" aria-label="Arrange">
             {act('⇈', 'Bring to Front', () => controller.arrange('front'), count < 1)}

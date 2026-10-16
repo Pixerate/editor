@@ -1,8 +1,8 @@
 import type { CommandSpec } from '../commands/registry.js';
 import type { VectorEditorController, VectorShapeInput } from './controller.js';
 import { vectorNodeBounds, vectorNodeRotation, vectorParentMatrix, vectorPathData, IDENTITY_MATRIX } from './geometry.js';
-import type { VectorAlign, VectorAnchorRef, VectorArrange, VectorAverageAxis, VectorBooleanOperation, VectorCornerKind, VectorNode, VectorStyle, VectorTool } from './types.js';
-import { VECTOR_ARROWHEADS, VECTOR_CORNER_KINDS, VECTOR_TOOLS, type VectorWidthPoint } from './types.js';
+import type { VectorAlign, VectorAnchorRef, VectorArrange, VectorAverageAxis, VectorBooleanOperation, VectorCornerKind, VectorNode, VectorPathfinderOperation, VectorStyle, VectorTool } from './types.js';
+import { VECTOR_ARROWHEADS, VECTOR_CORNER_KINDS, VECTOR_PATHFINDER_OPERATIONS, VECTOR_TOOLS, type VectorWidthPoint } from './types.js';
 import { VECTOR_WIDTH_PRESET_IDS, type VectorTaperOptions, type VectorWaveOptions, type VectorWidthPreset } from './width.js';
 
 export interface VectorCommandOptions {
@@ -373,6 +373,65 @@ export function createVectorCommands(controller: VectorEditorController, options
 			run: (_ctx: unknown, params: { operation: VectorBooleanOperation; ids?: string[] }) => {
 				const id = controller.booleanOp(params.operation, { ids: ids(params) });
 				if (!id) fail('Select at least two overlapping paths (the result was empty).');
+				return { id };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}pathfinder`,
+			label: 'Pathfinder…',
+			keywords: ['divide', 'trim', 'merge', 'crop', 'outline', 'minus back', 'split', 'faces'],
+			description:
+				'Pathfinder over the given paths (bottom to top): divide (every face its own shape, painted like the top-most shape over it; open unfilled paths cut), trim (hidden parts removed), merge (trim, then touching parts of one fill joined), crop (the top shape crops the others), outline (outlines cut into open strokes where they meet) or minusBack (the top shape minus everything below). Results replace the paths, grouped when there are several.',
+			params: { type: 'object', properties: { operation: { type: 'string', enum: [...VECTOR_PATHFINDER_OPERATIONS] }, ids: IDS }, required: ['operation'] },
+			undoable: true,
+			run: (_ctx: unknown, params: { operation: VectorPathfinderOperation; ids?: string[] }) => {
+				if (!VECTOR_PATHFINDER_OPERATIONS.includes(params.operation)) fail(`Unknown Pathfinder operation "${params.operation}".`);
+				const created = controller.pathfinder(params.operation, { ids: ids(params) });
+				if (!created.length) fail('Nothing came out: select paths that overlap (two or more, except for divide and outline).');
+				return { ids: created, selection: [...controller.getState().selection] };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}shapeBuilderFaces`,
+			label: 'List Shape Builder Faces',
+			keywords: ['shape builder', 'regions', 'faces', 'planar'],
+			description: 'Lists the faces the given paths divide the plane into: path data, area, a point inside and the ids of the paths filling each (empty when only outlines enclose it).',
+			params: { type: 'object', properties: { ids: IDS } },
+			run: (_ctx: unknown, params: { ids?: string[] } | undefined) => ({ faces: controller.getShapeBuilderFaces({ ids: ids(params) }) })
+		},
+		{
+			...base,
+			id: `${prefix}shapeBuilder`,
+			label: 'Shape Builder',
+			keywords: ['merge faces', 'build shape', 'combine regions', 'delete region'],
+			description:
+				'Shape Builder gesture over the faces of the given paths: `points` is the pointer path in document units (one point is a click; [[x, y], …]; use the points from shapeBuilderFaces). Merges the faces it touches into one shape, or with `erase: true` deletes them and the pieces of unfilled open paths within `tolerance`. Shapes covering those faces lose that area.',
+			params: {
+				type: 'object',
+				properties: { points: POINTS, erase: { type: 'boolean' }, tolerance: { type: 'number', minimum: 0 }, ids: IDS },
+				required: ['points']
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: { points: [number, number][]; erase?: boolean; tolerance?: number; ids?: string[] }) => {
+				const result = controller.shapeBuilder(params.points.map(([x, y]) => ({ x, y })), { ids: ids(params), erase: params.erase, tolerance: params.tolerance });
+				check(result);
+				return { merged: result.merged, faces: result.faces, lines: result.lines };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}fillRegion`,
+			label: 'Fill Region',
+			keywords: ['paint bucket', 'live paint', 'fill area', 'enclosed'],
+			description:
+				'Paint bucket: fills the area the visible outlines enclose around `point` (crossings split, nested shapes left as holes) with a new path in the current fill, below the selection or on top. `gap` closes gaps up to that size between loose ends.',
+			params: { type: 'object', properties: { point: { type: 'array', items: { type: 'number' }, minItems: 2, maxItems: 2, description: '[x, y] in document units.' }, gap: { type: 'number', minimum: 0 } }, required: ['point'] },
+			undoable: true,
+			run: (_ctx: unknown, params: { point: [number, number]; gap?: number }) => {
+				const id = controller.fillRegion({ x: params.point[0], y: params.point[1] }, { gap: params.gap });
+				if (!id) fail('No closed region surrounds that point.');
 				return { id };
 			}
 		},
