@@ -21,6 +21,19 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/vector] Snap Guides at 90° Need Exact Axis Directions
+
+- **Issue / Symptom**: A pen point placed straight below the previous one landed at `x = -6.1e-15` instead of `0`, failing exact comparisons and leaving near-zero noise in the saved document.
+- **Root Cause**: Construction guides are built from `cos` / `sin` of their angle, and `Math.cos(Math.PI / 2)` is `6.1e-17`, not 0. Projecting onto that "vertical" direction moved the point off its anchor's x by the residue times the distance.
+- **Solution / Workaround**: `construction` in `vector/snap.ts` rounds direction components below `1e-12` to exactly 0, and slides compute the coordinate of the line they land on directly (`x: l.v`) instead of `at + dir * s`. Do the same for any angle-derived direction that should be axis-aligned.
+
+### [core/vector] Gather Snap Targets Before the Gesture Changes the Document
+
+- **Issue / Symptom**: A shape being drawn snapped to its own growing bounds, and Alt-duplicating during a move snapped the copy to nothing where the originals stood (or to itself).
+- **Root Cause**: Targets are gathered once per gesture from a document snapshot. The shape tool adds the new node on press, and Alt-drag swaps the drag's base document for one with duplicates, so targets taken from the wrong snapshot include (or exclude) the wrong nodes.
+- **Solution / Workaround**: The shape tool gathers drawing targets *before* inserting its node and keeps them on the drag; a move drops its targets when it duplicates, so the next move gathers them again excluding the new selection (the originals become targets). The anchor drag excludes the moving anchors and the segments through them, and the handle drag excludes its path's bounds and segments, which move with the pointer.
+
+
 ### [core/vector] The "Nearest Rotation" of a Mirrored Matrix Is Undefined
 
 - **Issue / Symptom**: Flipping a rotated vector shape made its selection box snap back to axis-aligned (the rotation was lost and everything was baked into the anchors).

@@ -21,6 +21,7 @@ import {
 	type AffineMatrix
 } from './geometry.js';
 import { vectorPaintToSvg } from './svg.js';
+import type { VectorGuideKind, VectorSnapKind } from './snap.js';
 import type { VectorAnchorRef, VectorAnchorType, VectorBounds, VectorHandleRef, VectorNode, VectorPaint, VectorPathNode, VectorTransformHandle, Vec2 } from './types.js';
 
 export interface VectorRenderPath {
@@ -85,6 +86,23 @@ export interface VectorRenderHandle {
 	hovered: boolean;
 }
 
+/** A smart guide line in screen pixels. */
+export interface VectorRenderGuideLine {
+	kind: VectorGuideKind;
+	x1: number;
+	y1: number;
+	x2: number;
+	y2: number;
+}
+
+/** A smart guide label ("anchor", "intersect", "align", "centre", a gap or a size) at a screen position. */
+export interface VectorRenderGuideLabel {
+	kind: VectorSnapKind;
+	x: number;
+	y: number;
+	text: string;
+}
+
 export interface VectorOverlayRenderData {
 	/** Outlines (screen-space path data) of hovered and selected nodes. */
 	outlines: { id: string; d: string; selected: boolean }[];
@@ -104,6 +122,8 @@ export interface VectorOverlayRenderData {
 	penPreview: string | null;
 	/** Artboard rectangle, screen space. */
 	artboard: VectorBounds;
+	/** Smart guides of the snap in progress, screen space (empty when nothing snapped). */
+	guides: { lines: VectorRenderGuideLine[]; labels: VectorRenderGuideLabel[] };
 	/** A short status, e.g. "W 120 × H 80" or "45°". */
 	status: string | null;
 }
@@ -260,7 +280,20 @@ export function getVectorOverlayRenderData(state: VectorEditorState): VectorOver
 		if (b) status = `W ${fmt(b.width)} × H ${fmt(b.height)}`;
 	}
 
-	return { outlines, selectionBox, anchors, handles, marquee, penPreview, artboard, status };
+	const guides: VectorOverlayRenderData['guides'] = { lines: [], labels: [] };
+	if (state.guides) {
+		for (const l of state.guides.lines) {
+			const a = toScreen(state, { x: l.x1, y: l.y1 });
+			const b = toScreen(state, { x: l.x2, y: l.y2 });
+			guides.lines.push({ kind: l.kind, x1: fmt(a.x), y1: fmt(a.y), x2: fmt(b.x), y2: fmt(b.y) });
+		}
+		for (const l of state.guides.labels) {
+			const p = toScreen(state, l);
+			guides.labels.push({ kind: l.kind, x: fmt(p.x), y: fmt(p.y), text: l.text });
+		}
+	}
+
+	return { outlines, selectionBox, anchors, handles, marquee, penPreview, artboard, guides, status };
 }
 
 // ---------------------------------------------------------------------------
@@ -270,6 +303,8 @@ export function getVectorOverlayRenderData(state: VectorEditorState): VectorOver
 /** Colours and sizes (screen pixels) the bundled canvases draw the overlay with. */
 export const VECTOR_OVERLAY_THEME = {
 	accent: '#0ea5e9',
+	/** Smart guide lines and labels. */
+	guide: '#ff3dfc',
 	handleFill: '#ffffff',
 	marqueeFill: 'rgba(14, 165, 233, 0.08)',
 	transformHandleSize: 8,

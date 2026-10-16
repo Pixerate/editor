@@ -485,6 +485,38 @@ function intersectSubdivided(
 	}
 }
 
+/** A crossing or touch of two segments: the parameter on each and the point. */
+export interface SegmentIntersection {
+	ta: number;
+	tb: number;
+	point: Point;
+}
+
+/**
+ * Every point where two segments (lines, quadratics or cubics, as control points) cross or
+ * touch, by the same subdivision search the boolean operations use: flat sub-curves, chord
+ * intersection, Newton polishing. Hits closer than `epsilon` (default: 1e-9 of the segments'
+ * size) are one. Coincident stretches report the hits the search finds along them.
+ */
+export function segmentIntersections(a: BezierSegment, b: BezierSegment, options: { epsilon?: number; budget?: number } = {}): SegmentIntersection[] {
+	let size = 1;
+	for (const [x, y] of [...a, ...b]) size = Math.max(size, Math.abs(x), Math.abs(y));
+	const eps = options.epsilon ?? size * 1e-9;
+	const found: PairEvent[] = [];
+	const ctx: IntersectContext = { eps, leaves: 0, budget: options.budget ?? 4096 };
+	try {
+		intersectSubdivided(a.slice(), 0, 1, b.slice(), 0, 1, a, b, ctx, found, 0);
+	} catch (error) {
+		if (!(error instanceof PathOpsError)) throw error;
+	}
+	const out: SegmentIntersection[] = [];
+	for (const ev of found.sort((x, y) => x.tp - y.tp)) {
+		if (out.some((o) => dist(o.point, ev.point) <= eps * 4)) continue;
+		out.push({ ta: ev.tp, tb: ev.tq, point: ev.point });
+	}
+	return out;
+}
+
 function nearestOn(piece: Piece, p: Point, eps: number): { t: number; distance: number } | null {
 	if (p[0] < piece.minX - eps || p[0] > piece.maxX + eps || p[1] < piece.minY - eps || p[1] > piece.maxY + eps) return null;
 	return segmentNearest(piece.pts, p);

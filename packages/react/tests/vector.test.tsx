@@ -92,6 +92,35 @@ describe("VectorCanvas", () => {
     expect(vectorNodeBounds(c.getNode("a")!)).toMatchObject({ x: 0, y: 0 });
   });
 
+  it("draws smart guides while a drag snaps, and clears them on release", async () => {
+    const c = make();
+    await act(async () => root.render(<VectorCanvas controller={c} fitOnMount={false} />));
+    const svg = q("svg");
+    pointer(svg, "pointerdown", 50, 50);
+    pointer(svg, "pointermove", 147, 72);
+    // The right edge (197) lines up with the artboard's centre line.
+    expect(vectorNodeBounds(c.getNode("a")!)).toMatchObject({ x: 100, y: 22 });
+    const lines = qa("[data-vector-guides] [data-vector-guide]");
+    expect(lines).toHaveLength(1);
+    expect(lines[0].getAttribute("data-vector-guide")).toBe("align");
+    expect([lines[0].getAttribute("x1"), lines[0].getAttribute("x2")]).toEqual(["200", "200"]);
+    expect(qa("[data-vector-guide-label]").map((l) => l.textContent)).toEqual(["align"]);
+    pointer(svg, "pointerup", 147, 72);
+    expect(qa("[data-vector-guide]")).toHaveLength(0);
+    expect(qa("[data-vector-guide-label]")).toHaveLength(0);
+  });
+
+  it("labels the anchor the pen tool will land on", async () => {
+    const c = make();
+    c.setTool("pen");
+    await act(async () => root.render(<VectorCanvas controller={c} fitOnMount={false} />));
+    pointer(q("svg"), "pointermove", 98, 102);
+    expect(c.getState().pointer).toEqual({ x: 100, y: 100 });
+    const label = q("[data-vector-guide-label]");
+    expect(label.getAttribute("data-vector-guide-label")).toBe("anchor");
+    expect(label.textContent).toBe("anchor");
+  });
+
   it("draws with the pen tool and shows anchors and the rubber band", async () => {
     const c = make();
     await act(async () => root.render(<VectorCanvas controller={c} fitOnMount={false} />));
@@ -163,6 +192,19 @@ describe("VectorToolbar and VectorStylePanel", () => {
     click(union);
     expect(c.getState().document.nodes).toHaveLength(1);
     expect((q('button[aria-label^="Undo"]') as HTMLButtonElement).title).toBe("Undo Union");
+  });
+
+  it("toggles snapping", async () => {
+    const c = make();
+    await act(async () => root.render(<VectorToolbar controller={c} />));
+    const snap = q('[data-vector-snap]');
+    expect(snap.getAttribute("aria-pressed")).toBe("true");
+    expect(snap.title).toMatch(/to bypass/);
+    click(snap);
+    expect(c.getState().snap.objects).toBe(false);
+    expect(snap.getAttribute("aria-pressed")).toBe("false");
+    click(snap);
+    expect(c.getState().snap.objects).toBe(true);
   });
 
   it("edits the selection style, or the defaults when nothing is selected", async () => {

@@ -73,6 +73,35 @@ describe("VectorCanvas (svelte)", () => {
     expect(vectorNodeBounds(c.getNode("a")!)).toMatchObject({ x: 0, y: 0 });
   });
 
+  it("draws smart guides while a drag snaps, and clears them on release", () => {
+    const c = make();
+    const t = render(VectorCanvas, { controller: c, fitOnMount: false });
+    const svg = t.querySelector("svg")!;
+    pointer(svg, "pointerdown", 50, 50);
+    pointer(svg, "pointermove", 147, 72);
+    // The right edge (197) lines up with the artboard's centre line.
+    expect(vectorNodeBounds(c.getNode("a")!)).toMatchObject({ x: 100, y: 22 });
+    const lines = Array.from(t.querySelectorAll("[data-vector-guides] [data-vector-guide]"));
+    expect(lines).toHaveLength(1);
+    expect(lines[0].getAttribute("data-vector-guide")).toBe("align");
+    expect([lines[0].getAttribute("x1"), lines[0].getAttribute("x2")]).toEqual(["200", "200"]);
+    expect(Array.from(t.querySelectorAll("[data-vector-guide-label]")).map((l) => l.textContent)).toEqual(["align"]);
+    pointer(svg, "pointerup", 147, 72);
+    expect(t.querySelectorAll("[data-vector-guide]")).toHaveLength(0);
+    expect(t.querySelectorAll("[data-vector-guide-label]")).toHaveLength(0);
+  });
+
+  it("labels the anchor the pen tool will land on", () => {
+    const c = make();
+    c.setTool("pen");
+    const t = render(VectorCanvas, { controller: c, fitOnMount: false });
+    pointer(t.querySelector("svg")!, "pointermove", 98, 102);
+    expect(c.getState().pointer).toEqual({ x: 100, y: 100 });
+    const label = t.querySelector("[data-vector-guide-label]")!;
+    expect(label.getAttribute("data-vector-guide-label")).toBe("anchor");
+    expect(label.textContent).toBe("anchor");
+  });
+
   it("draws with the pen tool and shows anchors and the rubber band", () => {
     const c = make();
     const t = render(VectorCanvas, { controller: c, fitOnMount: false });
@@ -123,6 +152,19 @@ describe("VectorCanvas (svelte)", () => {
 });
 
 describe("VectorToolbar and VectorStylePanel (svelte)", () => {
+  it("toggles snapping", () => {
+    const c = make();
+    const t = render(VectorToolbar, { controller: c });
+    const snap = t.querySelector("[data-vector-snap]") as HTMLButtonElement;
+    expect(snap.getAttribute("aria-pressed")).toBe("true");
+    expect(snap.title).toMatch(/to bypass/);
+    click(snap);
+    expect(c.getState().snap.objects).toBe(false);
+    expect(snap.getAttribute("aria-pressed")).toBe("false");
+    click(snap);
+    expect(c.getState().snap.objects).toBe(true);
+  });
+
   it("switches tools and runs boolean operations", () => {
     const c = make();
     c.addShape({ kind: "rect", x: 50, y: 0, width: 100, height: 100 });

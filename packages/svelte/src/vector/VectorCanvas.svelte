@@ -26,6 +26,8 @@
     checkerboard?: boolean;
     /** Overlay accent colour (default sky blue). */
     accentColor?: string;
+    /** Smart guide colour (default magenta). */
+    guideColor?: string;
     /** Prefix for gradient ids (keep it unique per page). */
     idPrefix?: string;
     class?: string;
@@ -39,6 +41,7 @@
     fitOnMount = true,
     checkerboard = true,
     accentColor = THEME.accent,
+    guideColor = THEME.guide,
     idPrefix = `ve${++nextId}-`,
     class: className = '',
     style = '',
@@ -230,6 +233,26 @@
         stroke-dasharray="3 2"
       />
     {/if}
+    {#if overlay.guides.lines.length}
+      <g data-vector-guides="" stroke={guideColor}>
+        {#each overlay.guides.lines as l, i (i)}
+          <line data-vector-guide={l.kind} x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} stroke-dasharray={l.kind === 'construction' ? '4 3' : undefined} />
+        {/each}
+      </g>
+    {/if}
+    {#each overlay.guides.labels as l, i (i)}
+      <text
+        data-vector-guide-label={l.kind}
+        x={l.x + 6}
+        y={l.y - 6}
+        font-size="10"
+        fill={guideColor}
+        stroke="#ffffff"
+        stroke-width="3"
+        paint-order="stroke"
+        style="font-family:system-ui,sans-serif">{l.text}</text
+      >
+    {/each}
     {#if overlay.status}
       <text data-vector-status="" x="8" y="100%" dy="-8" font-size="11" fill={accentColor} style="font-family:system-ui,sans-serif">{overlay.status}</text>
     {/if}

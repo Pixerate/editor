@@ -11,6 +11,9 @@ import {
 } from '@pixerate/editor/vector';
 import { useVectorEditorState } from './useVectorEditor';
 
+const VECTOR_SNAP_TITLE = 'Snap to objects';
+const modKeyLabel = () => (typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform ?? '') ? '⌘' : 'Ctrl');
+
 const buttonClass =
   'inline-flex h-8 min-w-8 items-center justify-center rounded-md border border-border bg-background px-2 text-xs font-medium text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40 aria-pressed:bg-primary aria-pressed:text-primary-foreground';
 
@@ -22,11 +25,13 @@ export interface VectorToolbarProps {
   showHistory?: boolean;
   /** Boolean, group, arrange and align buttons (default `true`). */
   showArrange?: boolean;
+  /** The snapping toggle (default `true`). */
+  showSnap?: boolean;
   className?: string;
 }
 
-/** Tool picker plus undo, boolean operations, grouping, stacking and alignment. */
-export function VectorToolbar({ controller, tools = VECTOR_TOOLS, showHistory = true, showArrange = true, className }: VectorToolbarProps) {
+/** Tool picker plus undo, snapping, boolean operations, grouping, stacking and alignment. */
+export function VectorToolbar({ controller, tools = VECTOR_TOOLS, showHistory = true, showArrange = true, showSnap = true, className }: VectorToolbarProps) {
   const state = useVectorEditorState(controller);
   const count = state.selection.length;
   const groupSelected = state.selection.some((id) => controller.getNode(id)?.type === 'group');
@@ -57,6 +62,21 @@ export function VectorToolbar({ controller, tools = VECTOR_TOOLS, showHistory = 
         <div className="ml-1 flex items-center gap-1" role="group" aria-label="History">
           {act('↶', state.canUndo ? `Undo ${state.undoLabel}` : 'Undo', () => controller.undo(), !state.canUndo)}
           {act('↷', state.canRedo ? `Redo ${state.redoLabel}` : 'Redo', () => controller.redo(), !state.canRedo)}
+        </div>
+      )}
+      {showSnap && (
+        <div className="ml-1 flex items-center gap-1" role="group" aria-label="Snapping">
+          <button
+            type="button"
+            data-vector-snap=""
+            className={buttonClass}
+            aria-pressed={state.snap.objects}
+            title={`${VECTOR_SNAP_TITLE} (hold ${modKeyLabel()} to bypass)`}
+            aria-label={VECTOR_SNAP_TITLE}
+            onClick={() => controller.toggleSnapping()}
+          >
+            Snap
+          </button>
         </div>
       )}
       {showArrange && (

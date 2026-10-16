@@ -20,6 +20,8 @@ export interface VectorCanvasProps {
   checkerboard?: boolean;
   /** Overlay accent colour (default sky blue). */
   accentColor?: string;
+  /** Smart guide colour (default magenta). */
+  guideColor?: string;
   className?: string;
   style?: React.CSSProperties;
   /** Accessible label (default "Vector canvas"). */
@@ -86,6 +88,7 @@ export function VectorCanvas({
   fitOnMount = true,
   checkerboard = true,
   accentColor = THEME.accent,
+  guideColor = THEME.guide,
   className,
   style,
   'aria-label': ariaLabel = 'Vector canvas',
@@ -252,6 +255,29 @@ export function VectorCanvas({
             strokeDasharray="3 2"
           />
         )}
+        {overlay.guides.lines.length > 0 && (
+          <g data-vector-guides="" stroke={guideColor}>
+            {overlay.guides.lines.map((l, i) => (
+              <line key={i} data-vector-guide={l.kind} x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} strokeDasharray={l.kind === 'construction' ? '4 3' : undefined} />
+            ))}
+          </g>
+        )}
+        {overlay.guides.labels.map((l, i) => (
+          <text
+            key={i}
+            data-vector-guide-label={l.kind}
+            x={l.x + 6}
+            y={l.y - 6}
+            fontSize={10}
+            fill={guideColor}
+            stroke="#ffffff"
+            strokeWidth={3}
+            paintOrder="stroke"
+            style={{ fontFamily: 'system-ui, sans-serif' }}
+          >
+            {l.text}
+          </text>
+        ))}
         {overlay.status && (
           <text data-vector-status="" x={8} y="100%" dy={-8} fontSize={11} fill={accentColor} style={{ fontFamily: 'system-ui, sans-serif' }}>
             {overlay.status}

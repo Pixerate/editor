@@ -48,6 +48,7 @@ import {
 	type AffineMatrix
 } from './geometry.js';
 import { parseVectorSvg, vectorDocumentToSvg, type VectorSvgExportOptions } from './svg.js';
+import { constrainToLeave, VECTOR_CONSTRUCTION_ANGLES, VectorSnapTargets, type VectorSnapGuides, type VectorSnapLeave } from './snap.js';
 import type {
 	Vec2,
 	VectorAlign,
@@ -77,9 +78,23 @@ import type {
 // ---------------------------------------------------------------------------
 
 export interface VectorSnapOptions {
-	/** Grid size in document units (0 = off, default 0). */
+	/** Grid size in document units (0 = off, default 0). Points and boxes that snap to no object snap to it. */
 	grid: number;
+	/**
+	 * Snap to other objects (default true): anchors, paths and their intersections, bounding-box
+	 * edges and centres, the artboard, construction angles, equal spacing and matching sizes.
+	 */
+	objects: boolean;
+	/** Show smart guide lines and labels while snapping (default true). */
+	guides: boolean;
+	/** How near a target pulls, in screen pixels (default 5). */
+	threshold: number;
+	/** Construction guide angles through the point a drawn point leaves from, in degrees (default 0, 45, 90, 135). */
+	angles: readonly number[];
 }
+
+/** Snap options new editors start with. Hold Cmd / Ctrl (`mod`) during a drag to bypass snapping. */
+export const DEFAULT_VECTOR_SNAP: Readonly<VectorSnapOptions> = { grid: 0, objects: true, guides: true, threshold: 5, angles: VECTOR_CONSTRUCTION_ANGLES };
 
 export interface VectorEditorOptions {
 	document?: VectorDocument;
@@ -149,6 +164,8 @@ export interface VectorEditorState {
 	viewport: VectorViewport;
 	defaults: Readonly<Required<Pick<VectorDefaults, 'polygonSides' | 'starPoints' | 'starInnerRatio' | 'cornerRadius'>> & VectorStyle>;
 	snap: VectorSnapOptions;
+	/** Smart guides of the snap in progress, in document units (null when there are none). */
+	guides: VectorSnapGuides | null;
 	hitRadius: number;
 	hover: VectorHover | null;
 	/** A CSS cursor for the canvas. */
@@ -473,15 +490,18 @@ interface Snapshot {
 	pen: { nodeId: string; subpath: number } | null;
 }
 
+/** Snap targets of a drag, gathered on its first move that needs them. */
+type DragTargets = { targets?: VectorSnapTargets };
+
 type Drag =
-	| { kind: 'move'; start: Vec2; origin: Vec2 | null; before: Snapshot; base: VectorDocument; moved: boolean; duplicated: boolean; clickId: string | null }
-	| { kind: 'scale'; handle: VectorTransformHandle; start: Vec2; frame: VectorSelectionFrame; before: Snapshot; base: VectorDocument }
+	| ({ kind: 'move'; start: Vec2; origin: VectorBounds | null; before: Snapshot; base: VectorDocument; moved: boolean; duplicated: boolean; clickId: string | null } & DragTargets)
+	| ({ kind: 'scale'; handle: VectorTransformHandle; start: Vec2; frame: VectorSelectionFrame; before: Snapshot; base: VectorDocument } & DragTargets)
 	| { kind: 'rotate'; start: Vec2; center: Vec2; before: Snapshot; base: VectorDocument }
 	| { kind: 'marquee'; start: Vec2; base: string[]; baseAnchors: VectorAnchorRef[]; anchorsMode: boolean }
-	| { kind: 'anchors'; start: Vec2; before: Snapshot; base: VectorDocument; moved: boolean; clickRef: VectorAnchorRef | null }
-	| { kind: 'handle'; ref: VectorHandleRef; before: Snapshot; base: VectorDocument }
+	| ({ kind: 'anchors'; start: Vec2; before: Snapshot; base: VectorDocument; moved: boolean; clickRef: VectorAnchorRef | null; lead: VectorAnchorRef | null } & DragTargets)
+	| ({ kind: 'handle'; ref: VectorHandleRef; before: Snapshot; base: VectorDocument } & DragTargets)
 	| { kind: 'pull'; ref: VectorAnchorRef; before: Snapshot; base: VectorDocument; label: string; outOnly: boolean; closing: boolean; altBreaks: boolean }
-	| { kind: 'shape'; tool: VectorTool; start: Vec2; nodeId: string; before: Snapshot }
+	| ({ kind: 'shape'; tool: VectorTool; start: Vec2; nodeId: string; before: Snapshot } & DragTargets)
 	| { kind: 'pencil'; nodeId: string; points: Point[]; before: Snapshot }
 	| { kind: 'pan'; start: Vec2; viewport: VectorViewport };
 
@@ -508,6 +528,11 @@ export class VectorEditorController {
 	private pointer: Vec2 | null = null;
 	private drag: Drag | null = null;
 	private interaction: VectorInteraction | null = null;
+	private guides: VectorSnapGuides | null = null;
+	/** Whether the last `snapDrawn` landed on an object (guides may be hidden). */
+	private snappedToObject = false;
+	/** Drawing targets for hovering the pen and shape tools, kept while the document and the excluded path stay the same. */
+	private hoverTargets: { doc: VectorDocument; exclude: string; targets: VectorSnapTargets } | null = null;
 	private spaceHeld = false;
 	private clipboard: VectorNode[] | null = null;
 	private readonly createId: () => string;
@@ -526,7 +551,7 @@ export class VectorEditorController {
 		this.tool = options.tool ?? 'select';
 		this.defaults = { ...DEFAULT_DEFAULTS, ...(options.defaults ?? {}) } as VectorEditorState['defaults'];
 		this.viewport = { x: 0, y: 0, zoom: 1, ...(options.viewport ?? {}) };
-		this.snap = { grid: 0, ...(options.snap ?? {}) };
+		this.snap = { ...DEFAULT_VECTOR_SNAP, ...(options.snap ?? {}) };
 		this.hitRadius = options.hitRadius ?? 6;
 		this.createId = options.createId ?? defaultCreateId;
 		this.onChange = options.onChange;
@@ -582,6 +607,7 @@ export class VectorEditorController {
 			viewport: this.viewport,
 			defaults: this.defaults,
 			snap: this.snap,
+			guides: this.guides,
 			hitRadius: this.hitRadius,
 			hover: this.hover,
 			cursor: this.cursorFor(),
@@ -791,6 +817,7 @@ export class VectorEditorController {
 		this.cancelDrag();
 		this.tool = tool;
 		this.hover = null;
+		this.guides = null;
 		if (tool !== 'direct') {
 			this.anchors = [];
 			this.editingId = null;
@@ -805,20 +832,83 @@ export class VectorEditorController {
 
 	setSnap(snap: Partial<VectorSnapOptions>): void {
 		this.snap = { ...this.snap, ...snap };
+		if (!this.snap.guides || !this.snap.objects) this.guides = null;
 		this.notify();
 	}
 
-	private snapPoint(p: Vec2): Vec2 {
-		const g = this.snap.grid;
-		if (!g || g <= 0) return p;
-		return { x: Math.round(p.x / g) * g, y: Math.round(p.y / g) * g };
+	/** Turns object snapping on or off (the toolbar's snapping toggle). */
+	toggleSnapping(on: boolean = !this.snap.objects): void {
+		this.setSnap({ objects: on });
 	}
 
-	private snapDelta(dx: number, dy: number, origin: Vec2 | null): { dx: number; dy: number } {
+	private gridValue(v: number): number {
 		const g = this.snap.grid;
-		if (!g || g <= 0 || !origin) return { dx, dy };
-		const target = this.snapPoint({ x: origin.x + dx, y: origin.y + dy });
-		return { dx: target.x - origin.x, dy: target.y - origin.y };
+		return g > 0 ? Math.round(v / g) * g : v;
+	}
+
+	private snapPoint(p: Vec2): Vec2 {
+		return { x: this.gridValue(p.x), y: this.gridValue(p.y) };
+	}
+
+	/** The pull distance in document units. */
+	private snapTolerance(): number {
+		return this.snap.threshold / this.viewport.zoom;
+	}
+
+	private setGuides(guides: VectorSnapGuides | null) {
+		this.guides = guides && this.snap.guides && (guides.lines.length || guides.labels.length) ? guides : null;
+	}
+
+	/**
+	 * Where a drawn or dragged point `p` goes: onto the smart guide `targets` (gathered by
+	 * `gather` when missing), else onto the grid, kept to `leave`'s constraint. Cmd / Ctrl
+	 * bypasses snapping.
+	 */
+	private snapDrawn(p: Vec2, leave: VectorSnapLeave | null, input: VectorModifiers, targets: () => VectorSnapTargets): Vec2 {
+		this.snappedToObject = false;
+		if (input.mod) {
+			this.setGuides(null);
+			return constrainToLeave(leave, p);
+		}
+		if (this.snap.objects) {
+			const withAngles = leave ? { ...leave, angles: this.snap.angles } : null;
+			const res = targets().snapFrom(p, withAngles, this.snapTolerance());
+			if (res.kind) {
+				this.snappedToObject = true;
+				this.setGuides(res);
+				// An axis lined up with nothing still goes to the grid.
+				return leave?.constrain ? res.point : { x: res.x ? res.point.x : this.gridValue(res.point.x), y: res.y ? res.point.y : this.gridValue(res.point.y) };
+			}
+		}
+		this.setGuides(null);
+		return constrainToLeave(leave, this.snapPoint(p));
+	}
+
+	/** Drawing targets for the pen and shape tools, reused while the document stays the same. */
+	private drawingTargets(exclude: string | null): VectorSnapTargets {
+		const key = exclude ?? '';
+		const cached = this.hoverTargets;
+		if (cached && cached.doc === this.doc && cached.exclude === key) return cached.targets;
+		const targets = VectorSnapTargets.forDrawing(this.doc, exclude ? [exclude] : []);
+		this.hoverTargets = { doc: this.doc, exclude: key, targets };
+		return targets;
+	}
+
+	/** Where the pointer at `p` would place a point with the pen or a shape tool (and the guides showing why). */
+	private hoverSnap(p: Vec2, input: VectorModifiers): Vec2 {
+		if (this.tool === 'pen') {
+			const sp = this.pen ? (this.getNode(this.pen.nodeId) as VectorPathNode | undefined)?.subpaths[this.pen.subpath] : undefined;
+			if (this.pen && sp && this.hover?.anchor) {
+				this.setGuides(null);
+				return p;
+			}
+			const last = this.pen && sp ? getAnchorWorld(this.doc, { nodeId: this.pen.nodeId, subpath: this.pen.subpath, index: sp.anchors.length - 1 }) : undefined;
+			const leave = last ? { at: { x: last.x, y: last.y }, constrain: input.shift ? ('angle' as const) : null } : null;
+			return this.snapDrawn(p, leave, input, () => this.drawingTargets(this.pen?.nodeId ?? null));
+		}
+		if (this.tool !== 'select' && this.tool !== 'direct' && this.tool !== 'pencil') return this.snapDrawn(p, null, input, () => this.drawingTargets(null));
+		this.setGuides(null);
+		return p;
 	}
 
 	// -------------------------------------------------------------------------
@@ -1823,7 +1913,7 @@ export class VectorEditorController {
 			case 'pencil':
 				return this.downPencil(p);
 			default:
-				return this.downShape(p);
+				return this.downShape(p, input);
 		}
 	}
 
@@ -1898,7 +1988,7 @@ export class VectorEditorController {
 					return;
 				}
 			} else if (!selected) this.anchors = [anchor];
-			this.drag = { kind: 'anchors', start: p, before: this.snapshot(), base: this.doc, moved: false, clickRef: selected && !input.shift ? anchor : null };
+			this.drag = { kind: 'anchors', start: p, before: this.snapshot(), base: this.doc, moved: false, clickRef: selected && !input.shift ? anchor : null, lead: anchor };
 			this.notify();
 			return;
 		}
@@ -1914,7 +2004,7 @@ export class VectorEditorController {
 				const ref = { nodeId: id, subpath: seg.subpath, index };
 				this.anchors = [ref];
 				this.editingId = id;
-				this.drag = { kind: 'anchors', start: p, before, base: this.doc, moved: true, clickRef: null };
+				this.drag = { kind: 'anchors', start: p, before, base: this.doc, moved: true, clickRef: null, lead: ref };
 				this.notify(true);
 				return;
 			}
@@ -1922,7 +2012,7 @@ export class VectorEditorController {
 			const b = { nodeId: id, subpath: seg.subpath, index: (seg.segment + 1) % sp.anchors.length };
 			this.anchors = input.shift ? [...this.anchors.filter((r) => !sameRef(r, a) && !sameRef(r, b)), a, b] : [a, b];
 			this.editingId = id;
-			this.drag = { kind: 'anchors', start: p, before: this.snapshot(), base: this.doc, moved: false, clickRef: null };
+			this.drag = { kind: 'anchors', start: p, before: this.snapshot(), base: this.doc, moved: false, clickRef: null, lead: null };
 			this.notify();
 			return;
 		}
@@ -1932,7 +2022,7 @@ export class VectorEditorController {
 			if (!input.shift) this.selection = [path.id];
 			else if (!this.selection.includes(path.id)) this.selection = [...this.selection, path.id];
 			this.anchors = path.subpaths.flatMap((sp, s) => sp.anchors.map((_, i) => ({ nodeId: path.id, subpath: s, index: i })));
-			this.drag = { kind: 'anchors', start: p, before: this.snapshot(), base: this.doc, moved: false, clickRef: null };
+			this.drag = { kind: 'anchors', start: p, before: this.snapshot(), base: this.doc, moved: false, clickRef: null, lead: null };
 			this.notify();
 			return;
 		}
@@ -1958,9 +2048,9 @@ export class VectorEditorController {
 				this.notify(true);
 				return;
 			}
-			let pt = this.snapPoint(p);
 			const last = getAnchorWorld(this.doc, { nodeId: pen.nodeId, subpath: pen.subpath, index: sp.anchors.length - 1 })!;
-			if (input.shift) pt = constrain45(last, pt);
+			const leave = { at: { x: last.x, y: last.y }, constrain: input.shift ? ('angle' as const) : null };
+			let pt = this.snapDrawn(p, leave, input, () => this.drawingTargets(pen.nodeId));
 			pt = this.toLocal(pen.nodeId, pt);
 			const node = this.getNode(pen.nodeId) as VectorPathNode;
 			const anchors = [...sp.anchors, { x: pt.x, y: pt.y }];
@@ -1991,7 +2081,7 @@ export class VectorEditorController {
 			this.notify(this.doc !== before.doc);
 			return;
 		}
-		const pt = this.snapPoint(p);
+		const pt = this.snapDrawn(p, null, input, () => this.drawingTargets(null));
 		const node: VectorPathNode = { id: this.newId(), type: 'path', name: 'Path', ...this.styleFor(true), subpaths: [{ anchors: [{ x: pt.x, y: pt.y }], closed: false }] };
 		this.setDoc([...this.doc.nodes, node]);
 		this.pen = { nodeId: node.id, subpath: 0 };
@@ -2021,13 +2111,15 @@ export class VectorEditorController {
 		this.notify(true);
 	}
 
-	private downShape(p: Vec2) {
+	private downShape(p: Vec2, input: VectorPointerInput) {
 		const before = this.snapshot();
-		const start = this.snapPoint(p);
+		// The targets are gathered before the new shape joins the document, and kept for the drag.
+		const targets = this.drawingTargets(null);
+		const start = this.snapDrawn(p, null, input, () => targets);
 		const kind = this.tool as VectorShapeInput['kind'];
 		const node = this.createShapeNode({ kind, x: start.x, y: start.y, width: 0, height: 0 });
 		this.setDoc([...this.doc.nodes, node]);
-		this.drag = { kind: 'shape', tool: this.tool, start, nodeId: node.id, before };
+		this.drag = { kind: 'shape', tool: this.tool, start, nodeId: node.id, before, targets };
 		this.interaction = { type: 'draw', tool: this.tool, nodeId: node.id, bounds: { x: start.x, y: start.y, width: 0, height: 0 } };
 		this.notify(true);
 	}
@@ -2039,9 +2131,11 @@ export class VectorEditorController {
 		if (!drag) {
 			const hover = this.computeHover(screen);
 			const pointerMatters = this.tool === 'pen' && !!this.pen;
-			if (this.sameHover(hover, this.hover) && !pointerMatters) return;
+			const guides = this.guides;
 			this.hover = hover;
-			this.pointer = p;
+			const pointer = this.hoverSnap(p, input);
+			if (this.sameHover(hover, this.state.hover) && !pointerMatters && JSON.stringify(guides) === JSON.stringify(this.guides)) return;
+			this.pointer = pointer;
 			this.notify();
 			return;
 		}
@@ -2062,8 +2156,10 @@ export class VectorEditorController {
 					const created: string[] = [];
 					drag.base = this.withDuplicates(drag.base, this.selectedRoots(), { x: 0, y: 0 }, created);
 					this.selection = created;
+					// The originals stay behind as targets.
+					drag.targets = undefined;
 				}
-				({ dx, dy } = this.snapDelta(dx, dy, drag.origin));
+				({ dx, dy } = this.snapMove(drag, dx, dy, input));
 				this.doc = this.transformed(drag.base, new Set(this.selectedRoots()), translateMatrix(dx, dy));
 				this.interaction = { type: 'move', dx, dy };
 				this.notify(true);
@@ -2073,7 +2169,13 @@ export class VectorEditorController {
 				// Scale in the box's own (possibly rotated) frame.
 				const angle = drag.frame.angle;
 				const q = angle ? applyMatrix(rotateMatrix(-angle), p) : p;
-				const { sx, sy, origin } = scaleFor(drag.handle, drag.frame, q, input);
+				let { sx, sy, origin } = scaleFor(drag.handle, drag.frame, q, input);
+				if (this.snap.objects && !input.mod && drag.handle !== 'rotate') {
+					drag.targets ??= VectorSnapTargets.forResize(drag.base, this.selectedRoots());
+					const res = drag.targets.snapScale(drag.frame, drag.handle, sx, sy, input, this.snapTolerance());
+					({ sx, sy } = res);
+					this.setGuides(res);
+				} else this.setGuides(null);
 				const ids = new Set(this.selectedRoots());
 				this.doc = this.transformed(drag.base, ids, this.inFrame(angle, scaleMatrix(sx, sy, origin)));
 				this.interaction = { type: 'scale', handle: drag.handle, sx, sy };
@@ -2117,9 +2219,14 @@ export class VectorEditorController {
 				let dy = p.y - drag.start.y;
 				if (!drag.moved && Math.hypot(dx, dy) * this.viewport.zoom < 2) return;
 				drag.moved = true;
-				if (input.shift) Math.abs(dx) > Math.abs(dy) ? (dy = 0) : (dx = 0);
-				const lead = this.anchors.length ? getAnchorWorld(drag.base, this.anchors[0]) : undefined;
-				({ dx, dy } = this.snapDelta(dx, dy, lead ?? null));
+				const lead = this.leadAnchor(drag);
+				if (lead) {
+					// The grabbed (or nearest) anchor snaps; the others move with it.
+					const leave = input.shift ? { at: lead, constrain: 'axis' as const, curves: false } : null;
+					const q = this.snapDrawn({ x: lead.x + dx, y: lead.y + dy }, leave, input, () => (drag.targets ??= VectorSnapTargets.forAnchorDrag(drag.base, this.anchors)));
+					dx = q.x - lead.x;
+					dy = q.y - lead.y;
+				} else if (input.shift) Math.abs(dx) > Math.abs(dy) ? (dy = 0) : (dx = 0);
 				this.doc = this.movedAnchors(drag.base, this.anchors, dx, dy);
 				this.interaction = { type: 'anchors', dx, dy };
 				this.notify(true);
@@ -2127,8 +2234,8 @@ export class VectorEditorController {
 			}
 			case 'handle': {
 				const anchor = getAnchorWorld(drag.base, drag.ref);
-				let pt = this.snapPoint(p);
-				if (input.shift && anchor) pt = constrain45(anchor, pt);
+				const leave = anchor ? { at: { x: anchor.x, y: anchor.y }, constrain: input.shift ? ('angle' as const) : null } : null;
+				const pt = this.snapDrawn(p, leave, input, () => (drag.targets ??= VectorSnapTargets.forHandle(drag.base, drag.ref.nodeId)));
 				const local = this.toLocal(drag.ref.nodeId, pt, drag.base);
 				this.doc = this.updateAnchors(drag.base, [drag.ref], (a) => moveAnchorHandle(a, drag.ref.handle, local, input.alt));
 				this.interaction = { type: 'handle', ref: drag.ref };
@@ -2143,6 +2250,7 @@ export class VectorEditorController {
 					this.notify(true);
 					return;
 				}
+				this.guides = null;
 				let pt = p;
 				if (input.shift) pt = constrain45(anchor, pt);
 				const side = drag.closing ? 'in' : 'out';
@@ -2158,7 +2266,9 @@ export class VectorEditorController {
 			case 'shape': {
 				const node = this.getNode(drag.nodeId);
 				if (node?.type !== 'path') return;
-				let end = this.snapPoint(p);
+				const leave = { at: drag.start, constrain: input.shift ? (drag.tool === 'line' ? ('angle' as const) : ('square' as const)) : null, curves: false };
+				let end = this.snapDrawn(p, leave, input, () => (drag.targets ??= this.drawingTargets(null)));
+				if (!this.snappedToObject && drag.tool !== 'line' && !input.shift && !input.mod && this.snap.objects && drag.targets) end = this.matchShapeSize(drag.targets, drag.start, end, input.alt);
 				let start = drag.start;
 				let bounds: VectorBounds;
 				if (drag.tool === 'line') {
@@ -2205,12 +2315,69 @@ export class VectorEditorController {
 		}
 	}
 
+	/** Snaps a move of the selection by (dx, dy): its bounds line up with targets or space evenly, else go to the grid. */
+	private snapMove(drag: Extract<Drag, { kind: 'move' }>, dx: number, dy: number, input: VectorModifiers): { dx: number; dy: number } {
+		const origin = drag.origin;
+		if (input.mod || !origin) {
+			this.setGuides(null);
+			return { dx, dy };
+		}
+		// A Shift-locked axis stays put.
+		const axes = { x: !input.shift || dx !== 0, y: !input.shift || dy !== 0 };
+		let res = null;
+		if (this.snap.objects) {
+			drag.targets ??= VectorSnapTargets.forMove(drag.base, this.selectedRoots());
+			res = drag.targets.snapRect({ ...origin, x: origin.x + dx, y: origin.y + dy }, this.snapTolerance(), { spacing: true, axes });
+		}
+		this.setGuides(res);
+		return {
+			dx: res?.x ? dx + res.dx : axes.x ? this.gridValue(origin.x + dx) - origin.x : dx,
+			dy: res?.y ? dy + res.dy : axes.y ? this.gridValue(origin.y + dy) - origin.y : dy
+		};
+	}
+
+	/** The anchor a point drag snaps by, where it started: the grabbed one, else the moving one nearest the press. */
+	private leadAnchor(drag: Extract<Drag, { kind: 'anchors' }>): Vec2 | null {
+		const ref = drag.lead && this.anchors.some((a) => sameRef(a, drag.lead!)) ? drag.lead : null;
+		if (ref) {
+			const a = getAnchorWorld(drag.base, ref);
+			return a ? { x: a.x, y: a.y } : null;
+		}
+		let best: Vec2 | null = null;
+		for (const r of this.anchors) {
+			const a = getAnchorWorld(drag.base, r);
+			if (a && (!best || Math.hypot(a.x - drag.start.x, a.y - drag.start.y) < Math.hypot(best.x - drag.start.x, best.y - drag.start.y))) best = { x: a.x, y: a.y };
+		}
+		return best;
+	}
+
+	/** A shape's dragged corner moved so its width or height matches another object's, when one is within reach. */
+	private matchShapeSize(targets: VectorSnapTargets, start: Vec2, end: Vec2, fromCentre = false): Vec2 {
+		// Dragged from the centre, the shape is twice as large as the drag.
+		const k = fromCentre ? 2 : 1;
+		const tol = this.snapTolerance() * k;
+		const out = { ...end };
+		const guides: VectorSnapGuides = { lines: [], labels: [] };
+		for (const axis of ['x', 'y'] as const) {
+			const d = end[axis] - start[axis];
+			const len = Math.abs(d) > 1e-9 ? targets.matchSize(Math.abs(d) * k, tol) : null;
+			if (len === null || len <= 0) continue;
+			out[axis] = start[axis] + (Math.sign(d) * len) / k;
+			const from = { ...out, [axis]: fromCentre ? 2 * start[axis] - out[axis] : start[axis] };
+			guides.lines.push({ kind: 'size', x1: from.x, y1: from.y, x2: out.x, y2: out.y });
+			guides.labels.push({ kind: 'size', x: (from.x + out.x) / 2, y: (from.y + out.y) / 2, text: `${axis === 'x' ? 'W' : 'H'} ${Math.round(len * 100) / 100}` });
+		}
+		this.setGuides(guides);
+		return out;
+	}
+
 	/** Primary button released. */
 	pointerUp(screen?: Vec2, input: VectorPointerInput = {}): void {
 		if (screen && this.drag && this.drag.kind !== 'pan') this.pointerMove(screen, input);
 		const drag = this.drag;
 		this.drag = null;
 		this.interaction = null;
+		this.guides = null;
 		if (!drag) return;
 		switch (drag.kind) {
 			case 'pan':
@@ -2280,9 +2447,10 @@ export class VectorEditorController {
 	/** The pointer left the canvas. */
 	pointerLeave(): void {
 		if (this.drag) return;
-		if (!this.hover && !this.pointer) return;
+		if (!this.hover && !this.pointer && !this.guides) return;
 		this.hover = null;
 		this.pointer = null;
+		this.guides = null;
 		this.notify();
 	}
 
@@ -2292,6 +2460,7 @@ export class VectorEditorController {
 		if (!drag) return;
 		this.drag = null;
 		this.interaction = null;
+		this.guides = null;
 		if (drag.kind === 'pan') {
 			this.notify();
 			return;

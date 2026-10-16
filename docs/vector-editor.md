@@ -86,9 +86,34 @@ The selection box follows the selection's rotation when every selected node shar
 
 Programmatic API, all undoable: `setRotation`, `addShape`, `addPath`, `addNode`, `updateNode`, `setStyle`, `removeNodes`, `translate`, `scale`, `rotate`, `flip`, `transform(matrix)`, `align`, `distribute`, `arrange`, `group`, `ungroup`, `duplicate`, `booleanOp('union' | 'subtract' | 'intersect' | 'exclude')`, `combine`, `breakApart`, `moveAnchor`, `moveHandle`, `convertAnchors`, `insertAnchorAt`, `deleteAnchors`, `setClosed`, `reversePaths`, `copy` / `cut` / `paste` (JSON text, or SVG markup on paste), `loadSvg`, `importSvg`, `setDocument`, `setArtboard`. Viewport: `zoomAt`, `zoomToFit`, `panBy`, `setViewport`, `screenToDocument`, `documentToScreen`.
 
+## Smart guides and snapping
+
+Drags snap to the other objects in the drawing while `snap.objects` is on (the default), and show labelled smart guides while `snap.guides` is on:
+
+```ts
+const editor = new VectorEditorController({
+  snap: { objects: true, guides: true, threshold: 5, grid: 0, angles: [0, 45, 90, 135] },
+});
+editor.setSnap({ grid: 8 });   // the grid catches whatever snaps to no object
+editor.toggleSnapping();       // object snapping off / on (the toolbar's "Snap" button)
+```
+
+| Gesture | Snaps |
+| :--- | :--- |
+| Move (select tool) | The selection's bounding box: its edges and centre line up with other objects' edges, centres and anchors' boxes and the artboard; on an axis that lines up with nothing it spaces itself evenly in its row or column (centred between neighbours, or repeating a gap between two others) |
+| Resize (selection box) | The dragged handle lands on an anchor or centre, else the moving corner / side lines up with targets — along the box's own axes when it is rotated; a side that lines up with nothing can match another object's width or height |
+| Anchors (direct tool) | The grabbed anchor as a point (see below); the other moving anchors, and the segments through them, are no targets |
+| Handles, pen points, shape start and corner | As a point, leaving from the anchor (or the shape's start); shapes also match other objects' sizes |
+
+A point snaps, in this order: kept to its Shift constraint (45° steps, a square, or an axis) and slid into line with the nearest target; onto an **anchor** or **centre**; onto an **intersection** of two paths (curve–curve included, every crossing); onto the **perpendicular** foot or a **tangent** point from where it leaves; onto a **path**; onto a construction angle through where it leaves; or **align**ed on x and y with targets. An axis that snaps to nothing still goes to the grid when `grid` is set.
+
+Hold **Cmd / Ctrl** during a drag to bypass snapping. The pull distance is `threshold` screen pixels, so it stays the same at any zoom. Targets are in document space (world matrices and `vectorPathWorldBezier`), so rotated nodes snap exactly, and they are gathered once per gesture and kept sorted by x and y, so each pointer move is a few binary searches. The pen and shape tools snap (and show guides) while hovering too.
+
+`state.guides` holds the guides of the snap in progress in document units: `lines` (`kind`: `align`, `construction`, `spacing` or `size`) and `labels` (`anchor`, `centre`, `intersect`, `perpendicular`, `tangent`, `path`, `align`, gap distances and `W …` / `H …` sizes). For custom tools, `VectorSnapTargets.forMove` / `forResize` / `forDrawing` / `forAnchorDrag` / `forHandle` gather targets and `snapFrom`, `snapRect` and `snapScale` snap with them; `segmentIntersections` (path ops) finds every crossing of two Bézier segments.
+
 ## Rendering
 
-`getVectorSceneRenderData(state)` returns the document as SVG-ready paths (with gradient defs) and a `transform` for the document layer; `getVectorOverlayRenderData(state)` returns the overlay in screen pixels: outlines, the selection box with its handles, anchors, handles, the marquee, the pen's rubber band and a status string. Draw the overlay outside the transformed layer so handles keep their size at any zoom. Scene nodes carry an SVG `transform` when rotated, and the selection box comes unrotated with a `transform` (`rotate(angle cx cy)`) to draw it in — handle `screen` positions are the true on-screen points. The bundled React and Svelte canvases are thin renderers over these two functions.
+`getVectorSceneRenderData(state)` returns the document as SVG-ready paths (with gradient defs) and a `transform` for the document layer; `getVectorOverlayRenderData(state)` returns the overlay in screen pixels: outlines, the selection box with its handles, anchors, handles, the marquee, the pen's rubber band, smart guide lines and labels (`guides`) and a status string. Draw the overlay outside the transformed layer so handles keep their size at any zoom. Scene nodes carry an SVG `transform` when rotated, and the selection box comes unrotated with a `transform` (`rotate(angle cx cy)`) to draw it in — handle `screen` positions are the true on-screen points. The bundled React and Svelte canvases are thin renderers over these two functions.
 
 ## SVG
 
@@ -114,7 +139,7 @@ function Drawing() {
 }
 ```
 
-`<VectorCanvas>`, `<VectorToolbar>` and `<VectorStylePanel>` can be used on their own; `useVectorEditor` / `useVectorEditorState` give the state.
+`<VectorCanvas>` (smart guides drawn in `guideColor`), `<VectorToolbar>` (with a snapping toggle, `showSnap`) and `<VectorStylePanel>` can be used on their own; `useVectorEditor` / `useVectorEditorState` give the state.
 
 ## Svelte
 
@@ -129,7 +154,7 @@ function Drawing() {
 <VectorEditor {controller} height={520} />
 ```
 
-`createVectorEditor(controllerOrOptions)` exposes the state reactively (call `destroy()` when done).
+`createVectorEditor(controllerOrOptions)` exposes the state reactively (call `destroy()` when done). `<VectorCanvas>` takes `guideColor` and `<VectorToolbar>` `showSnap`, as in React.
 
 ## Agent commands
 
