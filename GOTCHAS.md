@@ -21,6 +21,18 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/vector] Knife Cuts: a Thin Strip Leaves Slits, and Gap-Free Chords Need Care Around Holes
+
+- **Issue / Symptom**: Cutting a shape by subtracting a thin stroke of the knife line (as vectorcraft does with a 0.05 pt strip) leaves the pieces apart by that width, visible at high zoom and wrong for exact geometry; cutting a ring once with exact chords produced a stray "hole" piece, and the next cut started at the previous cut's end point.
+- **Root Cause**: Any strip has width. With exact chords instead, a chord from the outline into a hole does not separate anything — it merges the two loops — and after a split both new loops contain the chord, so the knife's own segments lie on the boundary and its exit point is found again as a crossing.
+- **Solution / Workaround**: `knifePath` (`vector/pathCut.ts`) splits one loop per chord into two loops that share it, or joins an outline and a hole into one loop with a zero-width slit; faces are regrouped by loop orientation, and holes are placed by a sample point *off* the chord segments (chords lie on two loops). Crossings are recomputed per face after each cut, only beyond the knife position of the last cut (a cursor), and collinear overlaps are not crossings, so the chord the knife just made is never hit again.
+
+### [core/vector] Deleting a Point: Passing Through It Is a Worse Fit Than the Least-Error Cubic
+
+- **Issue / Symptom**: Healing a deleted point with a curve forced through it (figcraft's `heal_handles`) kept the point but bulged away from the old outline — on an S-curve the new curve strayed 30 units against 2.6 for a least-squares fit.
+- **Root Cause**: Two cubics meeting at a point rarely equal one cubic through that point; forcing the pass-through spends the curve's two degrees of freedom on one point instead of the whole outline.
+- **Solution / Workaround**: `removeAnchorKeepingShape` samples both old segments and fits one cubic with the neighbours' tangents, searching (golden section) for the parameter where it passes the joint. `removeRedundantPoints` uses the same search: plain chord-length parameters with Newton steps could not get under 0.05 units even for two exact halves of one cubic.
+
 ### [core/vector] Snap Guides at 90° Need Exact Axis Directions
 
 - **Issue / Symptom**: A pen point placed straight below the previous one landed at `x = -6.1e-15` instead of `0`, failing exact comparisons and leaving near-zero noise in the saved document.

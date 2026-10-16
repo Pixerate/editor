@@ -221,6 +221,31 @@
     {#if closing}
       <circle cx={closing.x} cy={closing.y} r={as} stroke={accentColor} />
     {/if}
+    {#if overlay.toolStroke}
+      <path
+        data-vector-tool-stroke={overlay.toolStroke.tool}
+        d={overlay.toolStroke.d}
+        stroke={overlay.toolStroke.tool === 'eraser' ? THEME.eraserFill : accentColor}
+        stroke-width={overlay.toolStroke.tool === 'eraser' ? overlay.toolStroke.width : 1}
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-dasharray={overlay.toolStroke.tool === 'knife' ? '5 3' : undefined}
+      />
+    {/if}
+    {#if overlay.pencilString}
+      <line
+        data-vector-pencil-string=""
+        x1={overlay.pencilString.x1}
+        y1={overlay.pencilString.y1}
+        x2={overlay.pencilString.x2}
+        y2={overlay.pencilString.y2}
+        stroke={accentColor}
+        stroke-dasharray="2 2"
+      />
+    {/if}
+    {#if overlay.cutPoint}
+      <circle data-vector-cut-point="" cx={overlay.cutPoint.x} cy={overlay.cutPoint.y} r={THEME.handleRadius + 1} fill={THEME.handleFill} stroke={accentColor} />
+    {/if}
     {#if overlay.marquee}
       <rect
         data-vector-marquee=""

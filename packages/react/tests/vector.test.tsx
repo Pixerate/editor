@@ -226,6 +226,71 @@ describe("VectorToolbar and VectorStylePanel", () => {
   });
 });
 
+describe("path editing (React)", () => {
+  it("bends a segment, previews knife strokes and shows the scissors cut point", async () => {
+    const c = make();
+    c.setTool("direct");
+    c.select(["a"]);
+    await act(async () => root.render(<VectorCanvas controller={c} fitOnMount={false} />));
+    const svg = q("svg");
+    pointer(svg, "pointerdown", 50, 0);
+    pointer(svg, "pointermove", 50, -20);
+    pointer(svg, "pointerup", 50, -40);
+    expect(c.getState().undoLabel).toBe("Bend Segment");
+    expect(q('[data-vector-scene] path').getAttribute("d")).toMatch(/^M0 0C/);
+    key(svg, "k");
+    pointer(svg, "pointerdown", -10, 150);
+    pointer(svg, "pointermove", 60, 150);
+    expect(q("[data-vector-tool-stroke]").getAttribute("data-vector-tool-stroke")).toBe("knife");
+    pointer(svg, "pointerup", 60, 150);
+    expect(qa("[data-vector-tool-stroke]")).toHaveLength(0);
+    key(svg, "c");
+    pointer(svg, "pointermove", 100, 50);
+    expect(q("[data-vector-cut-point]").getAttribute("cx")).toBe("100");
+  });
+
+  it("shows the eraser swath and the pencil's lazy-mouse string", async () => {
+    const c = make();
+    c.setEditing({ pencilSmoothing: 0.3 });
+    await act(async () => root.render(<VectorCanvas controller={c} fitOnMount={false} />));
+    const svg = q("svg");
+    key(svg, "e");
+    pointer(svg, "pointerdown", 50, -20);
+    pointer(svg, "pointermove", 50, 120);
+    expect(q("[data-vector-tool-stroke]").getAttribute("stroke-width")).toBe("10");
+    pointer(svg, "pointerup", 50, 120);
+    expect(c.getState().document.nodes).toHaveLength(2);
+    key(svg, "n");
+    pointer(svg, "pointerdown", 200, 200);
+    pointer(svg, "pointermove", 210, 200);
+    expect(qa("[data-vector-pencil-string]")).toHaveLength(1);
+    pointer(svg, "pointerup", 260, 200);
+  });
+
+  it("toolbar runs Join and Smooth, toggles settings and shows tool inputs", async () => {
+    const c = make();
+    c.addPath("M200 0 L300 0", { stroke: "#000" });
+    await act(async () => root.render(<VectorToolbar controller={c} />));
+    const join = q('[data-vector-path-action="join"]') as HTMLButtonElement;
+    expect(join.title).toMatch(/Join \((⌘|Ctrl)\+J\)/);
+    click(join);
+    expect((c.getNode(c.getState().selection[0]) as any).subpaths[0].closed).toBe(true);
+    expect((q('[data-vector-path-action="average"]') as HTMLButtonElement).disabled).toBe(true);
+    const curv = q('[data-vector-edit="curvatureMoves"]');
+    expect(curv.getAttribute("aria-pressed")).toBe("false");
+    click(curv);
+    expect(c.getState().editing.curvatureMoves).toBe(true);
+    expect(curv.getAttribute("aria-pressed")).toBe("true");
+    expect(qa('input[aria-label="Eraser size"]')).toHaveLength(0);
+    click(q('[data-vector-tool="eraser"]'));
+    const size = q<HTMLInputElement>('input[aria-label="Eraser size"]');
+    expect(size.value).toBe("10");
+    click(q('[data-vector-tool="pencil"]'));
+    expect(qa('input[aria-label="Pencil smoothing"]')).toHaveLength(1);
+    expect(qa('[data-vector-tool="scissors"], [data-vector-tool="knife"]')).toHaveLength(2);
+  });
+});
+
 describe("VectorEditor and hooks", () => {
   it("renders toolbar, canvas and style panel", async () => {
     const c = make();

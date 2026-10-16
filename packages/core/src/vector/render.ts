@@ -7,7 +7,15 @@ import { bezierPathToSvg, transformBezierPath } from '../canvas/pathops/bezier.j
 import type { SvgGradientDef } from '../canvas/gradient.js';
 
 export type { SvgGradientDef };
-import { getAnchorWorld, getVectorSelectionBoxGeometry, getVisibleAnchors, getVisibleHandles, type VectorEditorState, type VectorSelectionBoxGeometry } from './controller.js';
+import {
+	getAnchorWorld,
+	getVectorSelectionBoxGeometry,
+	getVisibleAnchors,
+	getVisibleHandles,
+	type VectorEditorController,
+	type VectorEditorState,
+	type VectorSelectionBoxGeometry
+} from './controller.js';
 import {
 	findVectorNode,
 	IDENTITY_MATRIX,
@@ -124,6 +132,15 @@ export interface VectorOverlayRenderData {
 	artboard: VectorBounds;
 	/** Smart guides of the snap in progress, screen space (empty when nothing snapped). */
 	guides: { lines: VectorRenderGuideLine[]; labels: VectorRenderGuideLabel[] };
+	/**
+	 * The knife or eraser stroke being drawn, screen space: `d` is an open polyline; draw the
+	 * eraser's with a round-capped stroke `width` pixels wide (0 for the knife: a thin line).
+	 */
+	toolStroke: { tool: 'knife' | 'eraser'; d: string; width: number } | null;
+	/** The pencil's lazy-mouse string from the pen to the pointer, screen space. */
+	pencilString: { x1: number; y1: number; x2: number; y2: number } | null;
+	/** Where the scissors would cut (screen space). */
+	cutPoint: Vec2 | null;
 	/** A short status, e.g. "W 120 × H 80" or "45°". */
 	status: string | null;
 }
@@ -293,7 +310,21 @@ export function getVectorOverlayRenderData(state: VectorEditorState): VectorOver
 		}
 	}
 
-	return { outlines, selectionBox, anchors, handles, marquee, penPreview, artboard, guides, status };
+	let toolStroke: VectorOverlayRenderData['toolStroke'] = null;
+	if (it?.type === 'stroke') {
+		const pts = it.points.map((q) => toScreen(state, q));
+		const d = pts.map((q, i) => `${i ? 'L' : 'M'}${fmt(q.x)} ${fmt(q.y)}`).join('') + (pts.length === 1 ? `L${fmt(pts[0].x)} ${fmt(pts[0].y)}` : '');
+		toolStroke = { tool: it.tool, d, width: fmt(it.width * z) };
+	}
+	let pencilString: VectorOverlayRenderData['pencilString'] = null;
+	if (it?.type === 'draw' && it.string) {
+		const a = toScreen(state, it.string[0]);
+		const b = toScreen(state, it.string[1]);
+		pencilString = { x1: fmt(a.x), y1: fmt(a.y), x2: fmt(b.x), y2: fmt(b.y) };
+	}
+	const cutPoint = state.tool === 'scissors' && state.hover?.segment && !it ? (({ x, y }) => ({ x: fmt(x), y: fmt(y) }))(toScreen(state, state.hover.segment.point)) : null;
+
+	return { outlines, selectionBox, anchors, handles, marquee, penPreview, artboard, guides, status, toolStroke, pencilString, cutPoint };
 }
 
 // ---------------------------------------------------------------------------
@@ -307,6 +338,8 @@ export const VECTOR_OVERLAY_THEME = {
 	guide: '#ff3dfc',
 	handleFill: '#ffffff',
 	marqueeFill: 'rgba(14, 165, 233, 0.08)',
+	/** The eraser's swath while it is dragged. */
+	eraserFill: 'rgba(239, 68, 68, 0.25)',
 	transformHandleSize: 8,
 	anchorSize: 7,
 	handleRadius: 3.5
@@ -385,3 +418,36 @@ export function vectorPaintToHex(paint: VectorPaint | undefined): string | null 
 	const hex = m[1].length === 3 ? m[1].replace(/./g, (c) => c + c) : m[1];
 	return `#${hex.toLowerCase()}`;
 }
+
+// ---------------------------------------------------------------------------
+// Toolbar helpers
+// ---------------------------------------------------------------------------
+
+/** A path-editing button of the bundled toolbars. */
+export interface VectorPathAction {
+	id: 'join' | 'average' | 'cut' | 'clean' | 'smooth';
+	label: string;
+	title: string;
+	/** Shortcut after Cmd / Ctrl, if any. */
+	shortcut?: string;
+	/** Whether it can run with `selected` nodes and `points` selected anchors (direct tool). */
+	enabled: (selected: number, points: number) => boolean;
+	run: (controller: VectorEditorController) => unknown;
+}
+
+/** Join, Average, Cut at Points, Remove Redundant Points and Smooth, as the toolbars show them. */
+export const VECTOR_PATH_ACTIONS: readonly VectorPathAction[] = [
+	{ id: 'join', label: '⋈', title: 'Join', shortcut: 'J', enabled: (s, p) => s + p > 0, run: (c) => c.joinPaths() },
+	{ id: 'average', label: '⊹', title: 'Average Points', shortcut: 'Alt+J', enabled: (_s, p) => p > 1, run: (c) => c.averageAnchors('both') },
+	{ id: 'cut', label: '✂·', title: 'Cut at Points', enabled: (_s, p) => p > 0, run: (c) => c.cutAtAnchors() },
+	{ id: 'clean', label: '⌁', title: 'Remove Redundant Points', enabled: (s, p) => s + p > 0, run: (c) => c.removeRedundantPoints() },
+	{ id: 'smooth', label: '∿', title: 'Smooth', enabled: (s, p) => s + p > 0, run: (c) => c.smoothPaths() }
+];
+
+/** The on / off path-editing settings the toolbars toggle. */
+export const VECTOR_EDIT_TOGGLES: readonly { key: 'keepShapeOnDelete' | 'curvatureMoves' | 'recognizeShapes'; label: string; title: string }[] = [
+	{ key: 'keepShapeOnDelete', label: 'Keep', title: 'Keep shape when deleting points' },
+	{ key: 'curvatureMoves', label: 'Curv', title: 'Curvature point moves (Alt flips while dragging)' },
+	{ key: 'recognizeShapes', label: 'Shapes', title: 'Turn pencil scribbles into shapes' }
+];
+

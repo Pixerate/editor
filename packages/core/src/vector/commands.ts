@@ -1,7 +1,7 @@
 import type { CommandSpec } from '../commands/registry.js';
 import type { VectorEditorController, VectorShapeInput } from './controller.js';
 import { vectorNodeBounds, vectorNodeRotation, vectorParentMatrix, vectorPathData, IDENTITY_MATRIX } from './geometry.js';
-import type { VectorAlign, VectorArrange, VectorBooleanOperation, VectorNode, VectorStyle, VectorTool } from './types.js';
+import type { VectorAlign, VectorAnchorRef, VectorArrange, VectorAverageAxis, VectorBooleanOperation, VectorNode, VectorStyle, VectorTool } from './types.js';
 import { VECTOR_TOOLS } from './types.js';
 
 export interface VectorCommandOptions {
@@ -39,6 +39,23 @@ const fail = (message: string): never => {
 };
 
 const IDS = { type: 'array', items: { type: 'string' }, description: 'Node ids (default: the selection).' } as const;
+
+const ANCHORS = {
+	type: 'array',
+	items: {
+		type: 'object',
+		properties: { nodeId: { type: 'string' }, subpath: { type: 'integer', minimum: 0 }, index: { type: 'integer', minimum: 0 } },
+		required: ['nodeId', 'subpath', 'index']
+	},
+	description: 'Anchors as { nodeId, subpath, index } (default: the selected points).'
+} as const;
+
+const POINTS = {
+	type: 'array',
+	items: { type: 'array', items: { type: 'number' }, minItems: 2, maxItems: 2 },
+	minItems: 1,
+	description: 'Polyline [[x, y], …] in document units.'
+} as const;
 
 const PAINT = {
 	description: 'A CSS colour, `null` for none, or a gradient `{ type: "linear", angle, stops: [{ offset, color }] }`.'
@@ -82,6 +99,14 @@ export function createVectorCommands(controller: VectorEditorController, options
 		return list;
 	};
 	const enabledFor = (_: unknown, params: { ids?: string[] } | undefined) => (params?.ids?.length ? true : hasSelection());
+	const anchorsOf = (refs: VectorAnchorRef[] | undefined): VectorAnchorRef[] => {
+		if (!refs) return [...controller.getState().selectedAnchors];
+		for (const r of refs) {
+			const node = controller.getNode(r.nodeId);
+			if (node?.type !== 'path' || !node.subpaths[r.subpath]?.anchors[r.index]) fail(`There is no anchor ${r.index} on subpath ${r.subpath} of "${r.nodeId}".`);
+		}
+		return refs;
+	};
 
 	const list = (): { width: number; height: number; nodes: VectorNodeListing[]; selection: readonly string[]; tool: VectorTool } => {
 		const state = controller.getState();
@@ -323,6 +348,189 @@ export function createVectorCommands(controller: VectorEditorController, options
 			run: (_ctx: unknown, params: { ids?: string[] } | undefined) => {
 				check(controller.ungroup({ ids: ids(params) }));
 				return { selection: controller.getState().selection };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}deleteAnchors`,
+			label: 'Delete Points',
+			keywords: ['remove', 'anchor', 'point', 'node'],
+			description:
+				'Deletes anchors. With `keepShape` (default: the editor setting, on) the neighbouring handles are refitted so the outline keeps its shape; off, the neighbours are joined as they are.',
+			params: { type: 'object', properties: { anchors: ANCHORS, keepShape: { type: 'boolean' } } },
+			undoable: true,
+			run: (_ctx: unknown, params: { anchors?: VectorAnchorRef[]; keepShape?: boolean } | undefined) => {
+				check(controller.deleteAnchors(anchorsOf(params?.anchors), { keepShape: params?.keepShape }));
+				return { ok: true };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}moveAnchor`,
+			label: 'Move Point…',
+			keywords: ['anchor', 'drag', 'curvature'],
+			description: 'Moves one anchor to (x, y) in document units. `curvature: true` bends its two segments like the Curvature tool instead of carrying its handles along.',
+			params: {
+				type: 'object',
+				properties: { nodeId: { type: 'string' }, subpath: { type: 'integer', minimum: 0 }, index: { type: 'integer', minimum: 0 }, x: { type: 'number' }, y: { type: 'number' }, curvature: { type: 'boolean' } },
+				required: ['nodeId', 'subpath', 'index', 'x', 'y']
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: VectorAnchorRef & { x: number; y: number; curvature?: boolean }) => {
+				check(controller.moveAnchor({ nodeId: params.nodeId, subpath: params.subpath, index: params.index }, { x: params.x, y: params.y }, { curvature: params.curvature }));
+				return { ok: true };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}bendSegment`,
+			label: 'Bend Segment…',
+			keywords: ['curve', 'segment', 'drag'],
+			description: 'Bends segment `segment` (from anchor `segment` to the next) so the curve passes through (x, y) at parameter `t` (default 0.5).',
+			params: {
+				type: 'object',
+				properties: {
+					nodeId: { type: 'string' },
+					subpath: { type: 'integer', minimum: 0 },
+					segment: { type: 'integer', minimum: 0 },
+					x: { type: 'number' },
+					y: { type: 'number' },
+					t: { type: 'number', minimum: 0, maximum: 1 }
+				},
+				required: ['nodeId', 'subpath', 'segment', 'x', 'y']
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: { nodeId: string; subpath: number; segment: number; x: number; y: number; t?: number }) => {
+				check(controller.bendSegment({ nodeId: params.nodeId, subpath: params.subpath, segment: params.segment }, { x: params.x, y: params.y }, params.t));
+				return { ok: true };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}join`,
+			label: 'Join',
+			shortcut: 'Mod+J',
+			keywords: ['connect', 'close', 'merge', 'endpoints'],
+			description: 'Joins the open subpaths of paths nearest endpoints first (ends within `tolerance` merge); a single open path is closed.',
+			params: { type: 'object', properties: { ids: IDS, tolerance: { type: 'number', minimum: 0 } } },
+			undoable: true,
+			run: (_ctx: unknown, params: { ids?: string[]; tolerance?: number } | undefined) => {
+				check(controller.joinPaths({ ids: params?.ids ? ids(params) : undefined, tolerance: params?.tolerance }));
+				return { selection: controller.getState().selection };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}average`,
+			label: 'Average Points…',
+			shortcut: 'Mod+Alt+J',
+			keywords: ['align', 'points', 'anchors', 'collapse'],
+			description: 'Moves anchors onto their average position: the same y (`horizontal`), the same x (`vertical`) or the same point (`both`, default).',
+			params: { type: 'object', properties: { axis: { type: 'string', enum: ['horizontal', 'vertical', 'both'] }, anchors: ANCHORS } },
+			undoable: true,
+			run: (_ctx: unknown, params: { axis?: VectorAverageAxis; anchors?: VectorAnchorRef[] } | undefined) => {
+				check(controller.averageAnchors(params?.axis ?? 'both', anchorsOf(params?.anchors)));
+				return { ok: true };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}removeRedundantPoints`,
+			label: 'Remove Redundant Points',
+			keywords: ['simplify', 'clean up', 'anchors', 'collinear'],
+			description: 'Drops anchors that can go without moving the outline more than `tolerance` document units (default 0.5).',
+			params: { type: 'object', properties: { ids: IDS, tolerance: { type: 'number', minimum: 0 } } },
+			enabled: enabledFor,
+			undoable: true,
+			run: (_ctx: unknown, params: { ids?: string[]; tolerance?: number } | undefined) => {
+				check(controller.removeRedundantPoints({ ids: params?.ids ? ids(params) : undefined, tolerance: params?.tolerance }));
+				return { ok: true };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}smooth`,
+			label: 'Smooth Path',
+			keywords: ['round', 'soften', 'handles', 'curves'],
+			description: 'Pulls the handles of paths (or of the selected points) towards smooth tangents by `amount` (0–1, default 1).',
+			params: { type: 'object', properties: { ids: IDS, amount: { type: 'number', minimum: 0, maximum: 1 }, anchors: ANCHORS } },
+			undoable: true,
+			run: (_ctx: unknown, params: { ids?: string[]; amount?: number; anchors?: VectorAnchorRef[] } | undefined) => {
+				check(controller.smoothPaths({ ids: params?.ids ? ids(params) : undefined, amount: params?.amount, refs: params?.anchors }));
+				return { ok: true };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}cut`,
+			label: 'Cut Path (Scissors)…',
+			keywords: ['scissors', 'split', 'open', 'break'],
+			description: 'Scissors: cuts path `nodeId` at the outline point nearest (x, y), or cuts at `anchors`. A closed path opens; an open one splits in two.',
+			params: { type: 'object', properties: { nodeId: { type: 'string' }, x: { type: 'number' }, y: { type: 'number' }, anchors: ANCHORS } },
+			undoable: true,
+			run: (_ctx: unknown, params: { nodeId?: string; x?: number; y?: number; anchors?: VectorAnchorRef[] } | undefined) => {
+				if (params?.nodeId !== undefined) {
+					if (!controller.getNode(params.nodeId)) fail(`There is no node "${params.nodeId}".`);
+					if (params.x === undefined || params.y === undefined) fail('Pass x and y with nodeId.');
+					const created = controller.cutPathAt(params.nodeId, { x: params.x!, y: params.y! });
+					if (!created) fail('Nothing to cut there (the end of an open path, or a locked path).');
+					return { ids: created };
+				}
+				check(controller.cutAtAnchors(anchorsOf(params?.anchors)));
+				return { ids: controller.getState().selection };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}knife`,
+			label: 'Knife…',
+			keywords: ['slice', 'cut', 'split', 'divide'],
+			description: 'Cuts closed paths along a polyline wherever it crosses them edge to edge (no gap between pieces). Cuts `ids`, else the selection, else every path the line crosses.',
+			params: { type: 'object', properties: { points: { ...POINTS, minItems: 2 }, ids: IDS }, required: ['points'] },
+			undoable: true,
+			run: (_ctx: unknown, params: { points: [number, number][]; ids?: string[] }) => {
+				const created = controller.knife(params.points.map(([x, y]) => ({ x, y })), { ids: params.ids ? ids(params) : undefined });
+				if (!created.length) fail('The knife did not cross any closed path from edge to edge.');
+				return { ids: created };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}erase`,
+			label: 'Erase…',
+			keywords: ['eraser', 'rub out', 'remove'],
+			description:
+				'Erases a round stroke of diameter `size` (default: the eraser size setting) along a polyline: filled shapes lose the area, outlines are cut under it. Erases from `ids`, else the selection, else every path it reaches.',
+			params: { type: 'object', properties: { points: POINTS, size: { type: 'number', exclusiveMinimum: 0 }, ids: IDS }, required: ['points'] },
+			undoable: true,
+			run: (_ctx: unknown, params: { points: [number, number][]; size?: number; ids?: string[] }) => {
+				const changed = controller.erase(params.points.map(([x, y]) => ({ x, y })), { size: params.size, ids: params.ids ? ids(params) : undefined });
+				if (!changed.length) fail('The eraser did not touch any path.');
+				return { ids: changed.filter((id) => controller.getNode(id)) };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}setEditing`,
+			label: 'Path Editing Options…',
+			keywords: ['settings', 'curvature', 'pencil', 'smoothing', 'lazy mouse', 'shapes', 'eraser'],
+			description:
+				'Sets how editing behaves: `keepShapeOnDelete`, `curvatureMoves` (anchor drags bend like the Curvature tool), `pencilSmoothing` (lazy mouse, 0–1), `recognizeShapes` (pencil scribbles become lines, rectangles, ellipses, polygons) and `eraserSize`.',
+			params: {
+				type: 'object',
+				properties: {
+					keepShapeOnDelete: { type: 'boolean' },
+					curvatureMoves: { type: 'boolean' },
+					pencilSmoothing: { type: 'number', minimum: 0, maximum: 1 },
+					recognizeShapes: { type: 'boolean' },
+					eraserSize: { type: 'number', exclusiveMinimum: 0 }
+				}
+			},
+			run: (_ctx: unknown, params: Record<string, unknown> | undefined) => {
+				const patch: Record<string, unknown> = {};
+				for (const key of ['keepShapeOnDelete', 'curvatureMoves', 'pencilSmoothing', 'recognizeShapes', 'eraserSize']) if (params?.[key] !== undefined) patch[key] = params[key];
+				controller.setEditing(patch);
+				return { editing: controller.getState().editing };
 			}
 		},
 		{

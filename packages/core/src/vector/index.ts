@@ -5,3 +5,6 @@ export * from './controller.js';
 export * from './render.js';
 export * from './commands.js';
 export * from './snap.js';
+export * from './pathEdit.js';
+export * from './pathCut.js';
+export * from './ink.js';

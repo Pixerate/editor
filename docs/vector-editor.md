@@ -73,18 +73,47 @@ canvas.onkeyup = (e) => editor.keyUp(toVectorKeyInput(e));
 | Tool (key) | Pointer |
 | :--- | :--- |
 | Select (V) | Click / Shift-click / marquee to select; drag to move (Shift locks an axis, Alt duplicates); box handles resize (Shift keeps proportions, Alt from the centre); the round handle rotates (Shift snaps to 15°); double-click a path to edit its points |
-| Direct select (A) | Click or marquee points; drag points, handles (Alt breaks a smooth pair) or a segment; Alt-drag a point to pull out smooth handles; Alt-click a segment to add a point; double-click a point to toggle corner / smooth |
+| Direct select (A) | Click or marquee points; drag points (a lone point bends its segments when Curvature moves are on; Alt during the drag flips that) or handles (Alt breaks a smooth pair); click a segment to select its points, drag it to bend it through the pointer; Alt-drag a point to pull out smooth handles; Alt-click a segment to add a point; double-click a point to toggle corner / smooth |
 | Pen (P) | Click for corners, drag for curves (Alt moves only the outgoing handle, Shift snaps to 45°); click the first point to close; Enter / Escape / double-click to finish; click an open path's end to continue it; Backspace removes the last point |
-| Pencil (N) | Freehand; the stroke is fitted to cubic Béziers |
+| Pencil (N) | Freehand; the stroke is fitted to cubic Béziers. Lazy-mouse smoothing (`pencilSmoothing`) and shape recognition (`recognizeShapes`) are optional |
+| Scissors (C) | Click a path: cuts it there (at an anchor when one is near). A closed path opens; an open one splits into two paths |
+| Knife (K) | Drag across filled shapes: each stretch that crosses one from edge to edge cuts it, with no gap between the pieces. Cuts the selection, or with nothing selected every shape it crosses |
+| Eraser (E) | Drag: rubs out a round stroke `eraserSize` wide. Filled shapes lose that area (pieces that come apart become separate paths), outlines are cut under it. Erases from the selection, or every path it reaches |
 | Rectangle (R), Ellipse (O), Polygon (Y), Star (S), Line (L) | Drag out a shape (Shift: square / 45°, Alt: from the centre); returns to Select |
 
-Other keys: Delete / Backspace, arrows (Shift = 10), Mod+Z / Mod+Shift+Z, Mod+A, Mod+D, Mod+G / Mod+Shift+G, Mod+] / Mod+[ (Alt: to front / back), Mod+= / Mod+- / Mod+0, Space-drag or middle-drag to pan, Mod+wheel to zoom.
+Other keys: Delete / Backspace, arrows (Shift = 10), Mod+Z / Mod+Shift+Z, Mod+A, Mod+D, Mod+G / Mod+Shift+G, Mod+J (Join) / Mod+Alt+J (Average), Mod+] / Mod+[ (Alt: to front / back), Mod+= / Mod+- / Mod+0, Space-drag or middle-drag to pan, Mod+wheel to zoom.
 
 Every gesture is one undo step (`Move`, `Scale`, `Draw Rectangle`, `Add Point`, `Close Path`, …), recorded in the controller's `HistoryManager` (pass `history` to share one with the rest of the app). `Escape` during a drag puts everything back.
 
 The selection box follows the selection's rotation when every selected node shares one (`state.selectionFrame.angle`); its resize handles, `scale` and `flip` act along those rotated axes, and `setRotation(degrees)` turns each node to an absolute angle. `state.selectionBounds` stays the axis-aligned box used by align and distribute.
 
 Programmatic API, all undoable: `setRotation`, `addShape`, `addPath`, `addNode`, `updateNode`, `setStyle`, `removeNodes`, `translate`, `scale`, `rotate`, `flip`, `transform(matrix)`, `align`, `distribute`, `arrange`, `group`, `ungroup`, `duplicate`, `booleanOp('union' | 'subtract' | 'intersect' | 'exclude')`, `combine`, `breakApart`, `moveAnchor`, `moveHandle`, `convertAnchors`, `insertAnchorAt`, `deleteAnchors`, `setClosed`, `reversePaths`, `copy` / `cut` / `paste` (JSON text, or SVG markup on paste), `loadSvg`, `importSvg`, `setDocument`, `setArtboard`. Viewport: `zoomAt`, `zoomToFit`, `panBy`, `setViewport`, `screenToDocument`, `documentToScreen`.
+
+## Path editing
+
+All path editing happens in each node's own space: pointer positions go through the node's world matrix first, so rotated nodes and nodes in rotated groups edit exactly. Every gesture and action is one undo step.
+
+```ts
+const editor = new VectorEditorController({
+  editing: { keepShapeOnDelete: true, curvatureMoves: false, pencilSmoothing: 0, recognizeShapes: false, eraserSize: 10 },
+});
+editor.setEditing({ curvatureMoves: true, pencilSmoothing: 0.4 });
+```
+
+| Action | What it does |
+| :--- | :--- |
+| `deleteAnchors(refs, { keepShape })` | Deletes points without opening the path. With `keepShape` (default `keepShapeOnDelete`, on) the two neighbours keep their handle directions and their facing handles are refitted so one cubic follows the two old segments with the least error; two straight segments become one; an end of an open path drops its segment. Off, the neighbours are joined with their handles as they are |
+| Segment drag / `bendSegment(ref, to, t)` | Bends a segment so the curve passes through the pointer at the grabbed parameter: both handles go to the chord's thirds plus one shared offset, `B(t) = L(t) + 3t(1 − t)·offset` (t clamped to 0.05–0.95). Smooth end points stay smooth |
+| Curvature move / `moveAnchor(ref, to, { curvature: true })` | Only the two segments at the point change: the neighbours' facing handles keep their direction and scale with their chords, a smooth point turns along the line through its neighbours, a corner keeps its handles (or none) |
+| `joinPaths({ ids, tolerance })` | Joins open subpaths nearest endpoints first (ends within `tolerance`, default the pick distance, merge; others get a straight segment); a single open subpath is closed. The lowest path keeps its id, style and space |
+| `averageAnchors(axis)` | Moves the selected points to their average y (`horizontal`), x (`vertical`) or point (`both`), in document space |
+| `removeRedundantPoints({ tolerance })` | Drops collinear and duplicate points and smooth joints one cubic can replace within `tolerance` (default 0.5) |
+| `smoothPaths({ amount, refs })` | Pulls handles towards Catmull-Rom-like tangents (a third of the way to each neighbour); only the selected points with the direct tool |
+| `cutPathAt(id, point)` / `cutAtAnchors(refs)` | Scissors |
+| `knife(points, { ids })` | Knife. Crossings are exact (line–cubic roots); each chord splits the loop it starts and ends on into two loops sharing it, or joins an outline to a hole first (a ring cut once becomes a C shape; cut twice, two pieces). A stroke that starts or ends inside a shape does not cut there |
+| `erase(points, { ids, size })` | Eraser: the stroke's area (`outlineStroke` with round caps and joins) is subtracted from filled closed paths; outlines are cut at their exact intersections with it and keep the original curves |
+
+The pencil's lazy mouse is a pulled string up to 100 screen pixels long (`pencilSmoothing` × 100): the pen moves only when the pointer pulls the string tight, and catches up at the end of the stroke. With `recognizeShapes`, a stroke that stays close to a straight chord becomes a line, and a closed one an ellipse (points on the inscribed ellipse), a rectangle (four upright corners) or a polygon of up to eight corners; nearly square boxes become squares and circles. The pure functions are exported too: `removeAnchorKeepingShape`, `bendSegment`, `curvatureMoveAnchor`, `cutSubpathAt`, `splitSubpathAt`, `joinSubpaths`, `smoothSubpath`, `removeRedundantPoints`, `knifePath`, `eraserRegion`, `eraseFromFill`, `eraseFromOutline`, `splitIntoFaces`, `LazyMouse` and `recognizeInkShape`.
 
 ## Smart guides and snapping
 
@@ -113,7 +142,7 @@ Hold **Cmd / Ctrl** during a drag to bypass snapping. The pull distance is `thre
 
 ## Rendering
 
-`getVectorSceneRenderData(state)` returns the document as SVG-ready paths (with gradient defs) and a `transform` for the document layer; `getVectorOverlayRenderData(state)` returns the overlay in screen pixels: outlines, the selection box with its handles, anchors, handles, the marquee, the pen's rubber band, smart guide lines and labels (`guides`) and a status string. Draw the overlay outside the transformed layer so handles keep their size at any zoom. Scene nodes carry an SVG `transform` when rotated, and the selection box comes unrotated with a `transform` (`rotate(angle cx cy)`) to draw it in — handle `screen` positions are the true on-screen points. The bundled React and Svelte canvases are thin renderers over these two functions.
+`getVectorSceneRenderData(state)` returns the document as SVG-ready paths (with gradient defs) and a `transform` for the document layer; `getVectorOverlayRenderData(state)` returns the overlay in screen pixels: outlines, the selection box with its handles, anchors, handles, the marquee, the pen's rubber band, smart guide lines and labels (`guides`), the knife or eraser stroke being drawn (`toolStroke`), the pencil's lazy-mouse string (`pencilString`), the scissors cut point (`cutPoint`) and a status string. Draw the overlay outside the transformed layer so handles keep their size at any zoom. Scene nodes carry an SVG `transform` when rotated, and the selection box comes unrotated with a `transform` (`rotate(angle cx cy)`) to draw it in — handle `screen` positions are the true on-screen points. The bundled React and Svelte canvases are thin renderers over these two functions.
 
 ## SVG
 
@@ -139,7 +168,7 @@ function Drawing() {
 }
 ```
 
-`<VectorCanvas>` (smart guides drawn in `guideColor`), `<VectorToolbar>` (with a snapping toggle, `showSnap`) and `<VectorStylePanel>` can be used on their own; `useVectorEditor` / `useVectorEditorState` give the state.
+`<VectorCanvas>` (smart guides drawn in `guideColor`), `<VectorToolbar>` (with a snapping toggle, `showSnap`, and a path-editing group, `showPathEdit`: Join, Average, Cut at Points, Remove Redundant Points, Smooth, the Keep shape / Curvature / Shapes toggles, and the pencil smoothing and eraser size inputs while those tools are active) and `<VectorStylePanel>` can be used on their own; `useVectorEditor` / `useVectorEditorState` give the state.
 
 ## Svelte
 
@@ -154,8 +183,8 @@ function Drawing() {
 <VectorEditor {controller} height={520} />
 ```
 
-`createVectorEditor(controllerOrOptions)` exposes the state reactively (call `destroy()` when done). `<VectorCanvas>` takes `guideColor` and `<VectorToolbar>` `showSnap`, as in React.
+`createVectorEditor(controllerOrOptions)` exposes the state reactively (call `destroy()` when done). `<VectorCanvas>` takes `guideColor` and `<VectorToolbar>` `showSnap` and `showPathEdit`, as in React. Both toolbars build the path-editing group from `VECTOR_PATH_ACTIONS` and `VECTOR_EDIT_TOGGLES`.
 
 ## Agent commands
 
-`createVectorCommands(controller)` returns `vector.list`, `vector.select`, `vector.addShape`, `vector.addPath`, `vector.setStyle`, `vector.transform`, `vector.delete`, `vector.boolean`, `vector.align`, `vector.distribute`, `vector.arrange`, `vector.group`, `vector.ungroup`, `vector.setTool`, `vector.exportSvg` and `vector.importSvg`. Register them in a `CommandRegistry` and `createCommandToolProvider` exposes them as agent tools.
+`createVectorCommands(controller)` returns `vector.list`, `vector.select`, `vector.addShape`, `vector.addPath`, `vector.setStyle`, `vector.transform`, `vector.delete`, `vector.boolean`, `vector.align`, `vector.distribute`, `vector.arrange`, `vector.group`, `vector.ungroup`, `vector.deleteAnchors`, `vector.moveAnchor`, `vector.bendSegment`, `vector.join`, `vector.average`, `vector.removeRedundantPoints`, `vector.smooth`, `vector.cut`, `vector.knife`, `vector.erase`, `vector.setEditing`, `vector.setTool`, `vector.exportSvg` and `vector.importSvg`. Register them in a `CommandRegistry` and `createCommandToolProvider` exposes them as agent tools.

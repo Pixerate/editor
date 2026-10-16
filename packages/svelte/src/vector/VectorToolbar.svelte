@@ -3,6 +3,8 @@
     VECTOR_TOOLS,
     VECTOR_TOOL_GLYPHS,
     VECTOR_TOOL_SHORTCUTS,
+    VECTOR_EDIT_TOGGLES,
+    VECTOR_PATH_ACTIONS,
     vectorToolLabel,
     type VectorEditorController,
     type VectorTool
@@ -20,10 +22,16 @@
     showArrange?: boolean;
     /** The snapping toggle (default `true`). */
     showSnap?: boolean;
+    /**
+     * Path editing: Join, Average, Cut at Points, Remove Redundant Points, Smooth, the Keep
+     * Shape / Curvature / Shapes toggles, and the pencil smoothing and eraser size inputs while
+     * those tools are active (default `true`).
+     */
+    showPathEdit?: boolean;
     class?: string;
   }
 
-  let { controller, tools = VECTOR_TOOLS, showHistory = true, showArrange = true, showSnap = true, class: className = '' }: Props = $props();
+  let { controller, tools = VECTOR_TOOLS, showHistory = true, showArrange = true, showSnap = true, showPathEdit = true, class: className = '' }: Props = $props();
 
   const snapTitle = 'Snap to objects';
   const modKey = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform ?? '') ? '⌘' : 'Ctrl';
@@ -31,6 +39,7 @@
   const store = vectorStateOf(() => controller);
   const view = $derived(store.current);
   const count = $derived(view.selection.length);
+  const points = $derived(view.tool === 'direct' ? view.selectedAnchors.length : 0);
   const groupSelected = $derived(view.selection.some((id) => controller.getNode(id)?.type === 'group'));
 
   const combine = $derived([
@@ -94,6 +103,68 @@
       >
         Snap
       </button>
+    </div>
+  {/if}
+  {#if showPathEdit}
+    <div class="ml-1 flex items-center gap-1" role="group" aria-label="Path editing">
+      {#each VECTOR_PATH_ACTIONS as a (a.id)}
+        <button
+          type="button"
+          data-vector-path-action={a.id}
+          class={vectorButtonClass}
+          title={a.shortcut ? `${a.title} (${modKey}+${a.shortcut})` : a.title}
+          aria-label={a.title}
+          disabled={!a.enabled(count, points)}
+          onclick={() => void a.run(controller)}
+        >
+          {a.label}
+        </button>
+      {/each}
+      {#each VECTOR_EDIT_TOGGLES as t (t.key)}
+        <button
+          type="button"
+          data-vector-edit={t.key}
+          class={vectorButtonClass}
+          aria-pressed={view.editing[t.key]}
+          title={t.title}
+          aria-label={t.title}
+          onclick={() => controller.setEditing({ [t.key]: !view.editing[t.key] })}
+        >
+          {t.label}
+        </button>
+      {/each}
+      {#if view.tool === 'pencil'}
+        <label class="flex items-center gap-1 text-xs text-foreground">
+          Smoothing
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            aria-label="Pencil smoothing"
+            class="h-4 w-20 accent-primary"
+            value={view.editing.pencilSmoothing}
+            oninput={(e) => controller.setEditing({ pencilSmoothing: parseFloat(e.currentTarget.value) })}
+          />
+        </label>
+      {/if}
+      {#if view.tool === 'eraser'}
+        <label class="flex items-center gap-1 text-xs text-foreground">
+          Size
+          <input
+            type="number"
+            min="0.5"
+            step="1"
+            aria-label="Eraser size"
+            class="h-7 w-16 rounded border border-border bg-background px-1.5 text-xs"
+            value={view.editing.eraserSize}
+            oninput={(e) => {
+              const n = parseFloat(e.currentTarget.value);
+              if (Number.isFinite(n) && n > 0) controller.setEditing({ eraserSize: n });
+            }}
+          />
+        </label>
+      {/if}
     </div>
   {/if}
   {#if showArrange}
