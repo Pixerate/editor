@@ -15,3 +15,5 @@ export * from './varstroke.js';
 export * from './builder.js';
 export * from './blend.js';
 export * from './blendGroup.js';
+export * from './appearance.js';
+export * from './pathEffects.js';

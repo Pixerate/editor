@@ -42,6 +42,7 @@ import {
 import { PlanarMap, cutOutPiece, type PlanarChain } from '../canvas/pathops/planar.js';
 import type { PathfinderOperation, PathfinderShape } from '../canvas/pathops/pathfinder.js';
 import { hasPaint, multiplyMatrices, nodeMatrix, subpathsToBezier, vectorPathWorldBezier, vectorStrokeOutline, IDENTITY_MATRIX, type AffineMatrix } from './geometry.js';
+import { expandVectorAppearance } from './appearance.js';
 import type { Vec2, VectorDocument, VectorNode, VectorPaint, VectorPathNode, VectorSubpath } from './types.js';
 
 /** A path node with the matrix of its parent space (parent → document). */
@@ -52,12 +53,15 @@ export interface VectorPathEntry {
 
 /**
  * The path nodes inside `roots` (or every node when `roots` is null), bottom to top, with their
- * parent matrices. Hidden nodes are skipped, and locked ones unless `locked` is true.
+ * parent matrices. Hidden nodes are skipped, and locked ones unless `locked` is true. Live nodes
+ * (path effects, live booleans) take part as drawn (`expandVectorAppearance`: their entries are
+ * the expanded paths, whose ids may not be in the document) unless `expand` is false.
  */
-export function vectorPathEntries(doc: VectorDocument, roots: readonly string[] | null, options: { locked?: boolean } = {}): VectorPathEntry[] {
+export function vectorPathEntries(doc: VectorDocument, roots: readonly string[] | null, options: { locked?: boolean; expand?: boolean } = {}): VectorPathEntry[] {
 	const out: VectorPathEntry[] = [];
-	const visit = (node: VectorNode, parent: AffineMatrix, inside: boolean) => {
-		if (node.visible === false || (node.locked && !options.locked)) return;
+	const visit = (stored: VectorNode, parent: AffineMatrix, inside: boolean) => {
+		if (stored.visible === false || (stored.locked && !options.locked)) return;
+		const node = options.expand === false ? stored : expandVectorAppearance(stored);
 		const picked = inside || roots === null || roots.includes(node.id);
 		if (node.type === 'group') {
 			const m = multiplyMatrices(nodeMatrix(node), parent);
@@ -130,7 +134,7 @@ const STROKE_KEYS = [
  * in the paint of the area the edge bounds. Never carries the node's id, transform or geometry.
  */
 export function vectorResultStyle(node: VectorPathNode, paint: VectorPathfinderPaint, edge = false): Omit<VectorPathNode, 'id' | 'subpaths'> {
-	const { id: _id, subpaths: _s, transform: _t, ...rest } = node;
+	const { id: _id, subpaths: _s, transform: _t, effects: _e, booleanOperation: _b, ...rest } = node;
 	const base: Omit<VectorPathNode, 'id' | 'subpaths'> = { ...rest, fillRule: 'nonzero' };
 	if (edge) {
 		for (const k of STROKE_KEYS) delete (base as Record<string, unknown>)[k];
