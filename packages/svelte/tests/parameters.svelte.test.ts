@@ -72,7 +72,8 @@ const click = (el: Element | null) => {
 
 describe("createParameters", () => {
   it("follows the controller and binds actions", () => {
-    const controller = new ParametersController({ schema });
+    // A fixed random source: Math.random can land back on the default (speed 1), leaving nothing modified.
+    const controller = new ParametersController({ schema, random: () => 0.75 });
     const params = createParameters(controller);
     cleanups.push(params.destroy);
     expect(params.values.speed).toBe(1);
@@ -83,6 +84,7 @@ describe("createParameters", () => {
     params.undo();
     expect(params.values.speed).toBe(1);
     params.randomize(["speed"]);
+    expect(params.values.speed).toBe(3);
     expect(params.state.modified).toBe(true);
     const own = createParameters({ schema });
     cleanups.push(own.destroy);
