@@ -1,8 +1,11 @@
 import React, { useState } from "react";
-import { ellipseSubpath, rectSubpath, setSubpathCorners, starSubpath, type VectorDocument } from "@pixerate/editor/vector";
+import { createVectorEffect, ellipseSubpath, rectSubpath, setSubpathCorners, starSubpath, type VectorDocument, type VectorEffect } from "@pixerate/editor/vector";
 import { VectorEditor, useVectorCommands, useVectorEditorController, useVectorEditorState } from "@pixerate/editor-react/vector";
 import { PenTool } from "lucide-react";
 import { demoCommandRegistry } from "../agentTools";
+
+/** A live path effect for the sample document (defaults filled in). */
+const effect = (type: VectorEffect["type"], id: string, params: Record<string, unknown>) => createVectorEffect(type, id, params)!;
 
 const STARTER: VectorDocument = {
   width: 800,
@@ -16,6 +19,8 @@ const STARTER: VectorDocument = {
       fill: { type: "radial", stops: [{ offset: 0, color: "#fde68a" }, { offset: 1, color: "#f97316" }] },
       stroke: null,
       subpaths: [ellipseSubpath({ x: 560, y: 70, width: 140, height: 140 })],
+      // Path effects: the rays are a smooth Zig Zag of the circle (the anchors stay a circle).
+      effects: [effect("zigzag", "rays", { size: 7, ridges: 3, smooth: true })],
     },
     {
       id: "hill",
@@ -74,6 +79,31 @@ const STARTER: VectorDocument = {
       children: [
         { id: "blend-a", type: "path", name: "Blend start", fill: "#0ea5e9", stroke: null, subpaths: [rectSubpath({ x: 331, y: 46, width: 28, height: 28 }, 4)] },
         { id: "blend-b", type: "path", name: "Blend end", fill: "#f43f5e", stroke: null, subpaths: [starSubpath({ x: 505, y: 40, width: 40, height: 40 }, 5, 0.45)] },
+      ],
+    },
+    {
+      // A repeater turns one petal into a flower, fading round; Trim Paths below it draws the petals on.
+      id: "flower",
+      type: "path",
+      name: "Flower",
+      fill: "#fb7185",
+      stroke: "#9f1239",
+      strokeWidth: 1.5,
+      subpaths: [ellipseSubpath({ x: 110, y: 372, width: 20, height: 44 })],
+      effects: [
+        effect("repeater", "petals", { copies: 8, rotation: 45, position: { x: 0, y: 0 }, anchor: { x: 0, y: 24 }, endOpacity: 55 }),
+        effect("trim", "draw-on", { start: 0, end: 100, mode: "individual" }),
+      ],
+    },
+    {
+      // A live boolean: the hole is its own editable shape (select the badge, then pick an operand).
+      id: "badge",
+      type: "group",
+      name: "Live boolean",
+      liveBoolean: "subtract",
+      children: [
+        { id: "badge-card", type: "path", name: "Badge", fill: "#a855f7", stroke: "#581c87", strokeWidth: 2, subpaths: [rectSubpath({ x: 200, y: 400, width: 110, height: 70 }, 14)] },
+        { id: "badge-hole", type: "path", name: "Hole", fill: "#000000", stroke: null, subpaths: [ellipseSubpath({ x: 238, y: 418, width: 34, height: 34 })] },
       ],
     },
     {

@@ -639,6 +639,84 @@ describe("Blend (React)", () => {
   });
 });
 
+describe("path effects and live booleans (React)", () => {
+  const pair = () =>
+    new VectorEditorController({
+      document: {
+        width: 400,
+        height: 300,
+        nodes: [
+          { id: "a", type: "path", fill: "#ff0000", stroke: null, subpaths: [rectSubpath({ x: 0, y: 0, width: 100, height: 100 })] },
+          { id: "b", type: "path", fill: "#0000ff", stroke: null, subpaths: [rectSubpath({ x: 50, y: 50, width: 100, height: 100 })] },
+        ],
+      },
+      createId: () => `fx${++n}`,
+    });
+
+  it("adds, edits, toggles, reorders, removes and expands effects", async () => {
+    const c = pair();
+    c.select(["a"]);
+    await act(async () => root.render(<VectorStylePanel controller={c} />));
+    expect(q("[data-vector-effects]")).toBeTruthy();
+    expect(q<HTMLButtonElement>('button[aria-label="Expand Appearance"]').disabled).toBe(true);
+    await setValue(q<HTMLSelectElement>('select[aria-label="Add effect"]'), "zigzag");
+    const effects = () => c.getNode("a")!.effects ?? [];
+    expect(effects().map((e) => e.type)).toEqual(["zigzag"]);
+    expect(qa("[data-vector-effect]")).toHaveLength(1);
+    // A slider drag is one undo step.
+    const slider = q<HTMLInputElement>('input[aria-label="Zig Zag Size slider"]');
+    for (const v of ["7", "8", "9"]) await setValue(slider, v);
+    act(() => slider.dispatchEvent(new Event("pointerup", { bubbles: true })));
+    expect((effects()[0].params as any).size).toBe(9);
+    expect(q<HTMLInputElement>('input[aria-label="Zig Zag Size"]').value).toBe("9");
+    act(() => void c.undo());
+    expect((effects()[0].params as any).size).toBe(5);
+    act(() => void c.redo());
+    click(q('input[aria-label="Zig Zag Smooth"]'));
+    expect((effects()[0].params as any).smooth).toBe(true);
+    click(q('input[aria-label="Zig Zag on"]'));
+    expect(effects()[0].enabled).toBe(false);
+    await setValue(q<HTMLSelectElement>('select[aria-label="Add effect"]'), "repeater");
+    expect(effects().map((e) => e.type)).toEqual(["zigzag", "repeater"]);
+    await setValue(q<HTMLInputElement>('input[aria-label="Repeater Position x"]'), "150");
+    expect((effects()[1].params as any).position).toEqual({ x: 150, y: 0 });
+    click(q('button[aria-label="Move Repeater up"]'));
+    expect(effects().map((e) => e.type)).toEqual(["repeater", "zigzag"]);
+    click(q('button[aria-label="Remove Zig Zag"]'));
+    expect(effects().map((e) => e.type)).toEqual(["repeater"]);
+    expect(q<HTMLButtonElement>('button[aria-label="Expand Appearance"]').disabled).toBe(false);
+    click(q('button[aria-label="Expand Appearance"]'));
+    expect(c.getNode("a")!.type).toBe("group");
+    expect(c.getState().undoLabel).toBe("Expand Appearance");
+  });
+
+  it("renders effected geometry and live booleans", async () => {
+    const c = pair();
+    c.addEffect("repeater", { ids: ["a"], params: { copies: 3, position: { x: 120, y: 0 } } });
+    await act(async () => root.render(<VectorCanvas controller={c} fitOnMount={false} />));
+    expect(qa('[data-vector-scene] [data-vector-id^="a~fx"]')).toHaveLength(3);
+    act(() => void c.removeEffect("a", c.getNode("a")!.effects![0].id));
+    act(() => void c.booleanOp("subtract", { ids: ["a", "b"], live: true }));
+    const id = c.getState().selection[0];
+    const result = q(`[data-vector-scene] [data-vector-id="${id}"] path`);
+    expect(result.getAttribute("d")).toBe("M0 0L100 0L100 50L50 50L50 100L0 100Z");
+  });
+
+  it("toolbar makes live booleans", async () => {
+    const c = pair();
+    await act(async () => root.render(<VectorToolbar controller={c} />));
+    act(() => c.select(["a", "b"]));
+    click(q("[data-vector-live-boolean]"));
+    expect(q("[data-vector-live-boolean]").getAttribute("aria-pressed")).toBe("true");
+    click(q('button[aria-label="Union"]'));
+    const g = c.getNode(c.getState().selection[0]) as any;
+    expect(g.liveBoolean).toBe("union");
+    expect(g.children.map((k: any) => k.id)).toEqual(["a", "b"]);
+    click(q('button[aria-label="Exclude"]'));
+    expect((c.getNode(g.id) as any).liveBoolean).toBe("exclude");
+  });
+});
+
 describe("VectorEditor and hooks", () => {
   it("renders toolbar, canvas and style panel", async () => {
     const c = make();

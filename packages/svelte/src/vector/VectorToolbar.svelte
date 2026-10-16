@@ -50,11 +50,14 @@
   const points = $derived(view.tool === 'direct' ? view.selectedAnchors.length : 0);
   const groupSelected = $derived(view.selection.some((id) => controller.getNode(id)?.type === 'group'));
 
+  // Live booleans keep the operands editable; a lone live group or its operands take the operation too.
+  let live = $state(false);
+  const booleanDisabled = $derived(live ? count < 1 : count < 2);
   const combine = $derived([
-    { label: '∪', title: 'Union', run: () => controller.booleanOp('union'), disabled: count < 2 },
-    { label: '−', title: 'Subtract', run: () => controller.booleanOp('subtract'), disabled: count < 2 },
-    { label: '∩', title: 'Intersect', run: () => controller.booleanOp('intersect'), disabled: count < 2 },
-    { label: '⊻', title: 'Exclude', run: () => controller.booleanOp('exclude'), disabled: count < 2 },
+    { label: '∪', title: 'Union', run: () => controller.booleanOp('union', { live }), disabled: booleanDisabled },
+    { label: '−', title: 'Subtract', run: () => controller.booleanOp('subtract', { live }), disabled: booleanDisabled },
+    { label: '∩', title: 'Intersect', run: () => controller.booleanOp('intersect', { live }), disabled: booleanDisabled },
+    { label: '⊻', title: 'Exclude', run: () => controller.booleanOp('exclude', { live }), disabled: booleanDisabled },
     { label: 'G', title: 'Group', run: () => controller.group(), disabled: count < 1 },
     { label: 'U', title: 'Ungroup', run: () => controller.ungroup(), disabled: !groupSelected }
   ]);
@@ -193,6 +196,17 @@
   {/if}
   {#if showArrange}
     <div class="ml-1 flex items-center gap-1" role="group" aria-label="Combine">
+      <button
+        type="button"
+        data-vector-live-boolean=""
+        class={vectorButtonClass}
+        aria-pressed={live}
+        title="Live booleans: keep the shapes editable"
+        aria-label="Live booleans"
+        onclick={() => (live = !live)}
+      >
+        Live
+      </button>
       {#each combine as item (item.title)}{@render action(item)}{/each}
     </div>
     <div class="ml-1 flex items-center gap-1" role="group" aria-label="Pathfinder">

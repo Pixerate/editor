@@ -588,6 +588,90 @@ describe("VectorEditor and runes (svelte)", () => {
   });
 });
 
+describe("path effects and live booleans (svelte)", () => {
+  const pair = () =>
+    new VectorEditorController({
+      document: {
+        width: 400,
+        height: 300,
+        nodes: [
+          { id: "a", type: "path", fill: "#ff0000", stroke: null, subpaths: [rectSubpath({ x: 0, y: 0, width: 100, height: 100 })] },
+          { id: "b", type: "path", fill: "#0000ff", stroke: null, subpaths: [rectSubpath({ x: 50, y: 50, width: 100, height: 100 })] },
+        ],
+      },
+      createId: () => `sfx${++n}`,
+    });
+
+  it("adds, edits, toggles, reorders, removes and expands effects", () => {
+    const c = pair();
+    c.select(["a"]);
+    const t = render(VectorStylePanel, { controller: c });
+    const q = <T extends Element = HTMLElement>(sel: string) => t.querySelector(sel) as T;
+    expect(q("[data-vector-effects]")).toBeTruthy();
+    expect(q<HTMLButtonElement>('button[aria-label="Expand Appearance"]').disabled).toBe(true);
+    setValue(q<HTMLSelectElement>('select[aria-label="Add effect"]'), "zigzag");
+    const effects = () => c.getNode("a")!.effects ?? [];
+    expect(effects().map((e) => e.type)).toEqual(["zigzag"]);
+    expect(t.querySelectorAll("[data-vector-effect]")).toHaveLength(1);
+    // A slider drag is one undo step.
+    const slider = q<HTMLInputElement>('input[aria-label="Zig Zag Size slider"]');
+    for (const v of ["7", "8", "9"]) setValue(slider, v);
+    slider.dispatchEvent(new Event("pointerup", { bubbles: true }));
+    flushSync();
+    expect((effects()[0].params as any).size).toBe(9);
+    expect(q<HTMLInputElement>('input[aria-label="Zig Zag Size"]').value).toBe("9");
+    c.undo();
+    flushSync();
+    expect((effects()[0].params as any).size).toBe(5);
+    c.redo();
+    flushSync();
+    click(q('input[aria-label="Zig Zag Smooth"]'));
+    expect((effects()[0].params as any).smooth).toBe(true);
+    click(q('input[aria-label="Zig Zag on"]'));
+    expect(effects()[0].enabled).toBe(false);
+    setValue(q<HTMLSelectElement>('select[aria-label="Add effect"]'), "repeater");
+    expect(effects().map((e) => e.type)).toEqual(["zigzag", "repeater"]);
+    setValue(q<HTMLInputElement>('input[aria-label="Repeater Position x"]'), "150");
+    expect((effects()[1].params as any).position).toEqual({ x: 150, y: 0 });
+    click(q('button[aria-label="Move Repeater up"]'));
+    expect(effects().map((e) => e.type)).toEqual(["repeater", "zigzag"]);
+    click(q('button[aria-label="Remove Zig Zag"]'));
+    expect(effects().map((e) => e.type)).toEqual(["repeater"]);
+    expect(q<HTMLButtonElement>('button[aria-label="Expand Appearance"]').disabled).toBe(false);
+    click(q('button[aria-label="Expand Appearance"]'));
+    expect(c.getNode("a")!.type).toBe("group");
+    expect(c.getState().undoLabel).toBe("Expand Appearance");
+  });
+
+  it("renders effected geometry and live booleans", () => {
+    const c = pair();
+    c.addEffect("repeater", { ids: ["a"], params: { copies: 3, position: { x: 120, y: 0 } } });
+    const t = render(VectorCanvas, { controller: c, fitOnMount: false });
+    expect(t.querySelectorAll('[data-vector-scene] [data-vector-id^="a~fx"]')).toHaveLength(3);
+    c.removeEffect("a", c.getNode("a")!.effects![0].id);
+    c.booleanOp("subtract", { ids: ["a", "b"], live: true });
+    flushSync();
+    const id = c.getState().selection[0];
+    const result = t.querySelector(`[data-vector-scene] [data-vector-id="${id}"] path`)!;
+    expect(result.getAttribute("d")).toBe("M0 0L100 0L100 50L50 50L50 100L0 100Z");
+  });
+
+  it("toolbar makes live booleans", () => {
+    const c = pair();
+    const t = render(VectorToolbar, { controller: c });
+    c.select(["a", "b"]);
+    flushSync();
+    click(t.querySelector("[data-vector-live-boolean]"));
+    expect(t.querySelector("[data-vector-live-boolean]")!.getAttribute("aria-pressed")).toBe("true");
+    click(t.querySelector('button[aria-label="Union"]'));
+    const g = c.getNode(c.getState().selection[0]) as any;
+    expect(g.liveBoolean).toBe("union");
+    expect(g.children.map((k: any) => k.id)).toEqual(["a", "b"]);
+    click(t.querySelector('button[aria-label="Exclude"]'));
+    expect((c.getNode(g.id) as any).liveBoolean).toBe("exclude");
+  });
+});
+
 describe("Blend (svelte)", () => {
   const pair = () =>
     new VectorEditorController({
