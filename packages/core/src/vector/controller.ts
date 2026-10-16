@@ -99,6 +99,7 @@ import {
 	vectorPathEntries,
 	vectorPathfinderShape,
 	vectorResultStyle,
+	vectorBuilderErasedEdges,
 	vectorShapeBuilderHit,
 	vectorShapeBuilderMap,
 	type VectorBuilderTouched,
@@ -353,6 +354,8 @@ export interface VectorShapeBuilderResult {
 	merged: string | null;
 	faces: number;
 	lines: number;
+	/** Outline edges erased (cut out of the paths they lie on). */
+	edges: number;
 }
 
 /** A face of the Shape Builder map (document units). */
@@ -2205,20 +2208,23 @@ export class VectorEditorController {
 	 * Shape Builder gesture along `points` (document units; one point is a click) over the faces
 	 * the selected (or given) paths make. Merges the faces touched into one shape styled like the
 	 * top-most shape over the first face (the current fill for a face only outlines enclose);
-	 * with `erase` deletes them, and the pieces of unfilled open paths within `tolerance`. Every
-	 * shape covering a touched face loses that area. One undo step.
+	 * with `erase` deletes them, the pieces of unfilled open paths and the edges of other outlines
+	 * (cut where paths meet) within `tolerance`: a deleted edge opens a closed subpath there,
+	 * splits an open one or takes a subpath it runs all the way round, and edges bounding a face
+	 * deleted in the same gesture go with the face. Every shape covering a touched face loses
+	 * that area; paths keep their own transforms. One undo step.
 	 */
 	shapeBuilder(points: readonly Vec2[], options: { ids?: readonly string[]; erase?: boolean; tolerance?: number } = {}): VectorShapeBuilderResult {
-		const none = (message: string): VectorShapeBuilderResult => ({ ok: false, message, merged: null, faces: 0, lines: 0 });
+		const none = (message: string): VectorShapeBuilderResult => ({ ok: false, message, merged: null, faces: 0, lines: 0, edges: 0 });
 		if (!points.length || !points.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y))) return none('Give the points of the gesture.');
 		const m = this.shapeBuilderMap(options.ids);
 		if (!m) return none('Select paths that make faces.');
 		const erase = !!options.erase;
 		const tol = erase ? (options.tolerance ?? this.builderLineTolerance()) : null;
-		const touched: VectorBuilderTouched = { faces: [], lines: [] };
+		const touched: VectorBuilderTouched = { faces: [], lines: [], edges: [] };
 		const size = m.map.faces.reduce((s, f) => Math.max(s, f.bounds.maxX - f.bounds.minX, f.bounds.maxY - f.bounds.minY), 1);
 		for (const p of samplePolyline(points, Math.max(size / 2000, 0.25 / this.viewport.zoom))) addBuilderHit(touched, vectorShapeBuilderHit(m, p, tol));
-		if (!touched.faces.length && !touched.lines.length) return none('There is no face under the pointer.');
+		if (!touched.faces.length && !touched.lines.length && !touched.edges.length) return none('There is no face under the pointer.');
 		return this.applyShapeBuilder(m, touched, erase);
 	}
 
@@ -2235,6 +2241,7 @@ export class VectorEditorController {
 				const r = plan.replace.get(i);
 				if (r === undefined) list.push(node);
 				else if (r?.kind === 'fill') list.push({ ...node, fillRule: 'nonzero', subpaths: bezierToSubpaths(toLocal(r.path)) });
+				else if (r?.kind === 'outline') list.push({ ...node, subpaths: bezierToSubpaths(toLocal(r.path)) });
 				else if (r?.kind === 'pieces') {
 					r.paths.forEach((path, k) =>
 						list.push({ ...node, id: k === 0 ? node.id : this.newId(), subpaths: bezierToSubpaths(toLocal(path)).map((sp) => ({ ...sp, closed: false })) })
@@ -2266,7 +2273,7 @@ export class VectorEditorController {
 			this.editingId = null;
 		});
 		this.builderCache = null;
-		return { ok: true, merged: mergedId, faces: touched.faces.length, lines: touched.lines.length };
+		return { ok: true, merged: mergedId, faces: touched.faces.length, lines: touched.lines.length, edges: erase ? vectorBuilderErasedEdges(m, touched).length : 0 };
 	}
 
 	/** The paint bucket's map of the visible outlines, cached per document and gap. */
@@ -2327,7 +2334,9 @@ export class VectorEditorController {
 		const key = hit ? `${alt ? 'erase' : 'merge'}:${JSON.stringify(hit)}` : null;
 		if (key === this.builderHoverKey) return false;
 		this.builderHoverKey = key;
-		this.builderPreview = hit && m ? this.builderPreviewOf(m, 'face' in hit ? { faces: [hit.face], lines: [] } : { faces: [], lines: [hit.line] }, alt, null) : null;
+		const touched: VectorBuilderTouched = { faces: [], lines: [], edges: [] };
+		addBuilderHit(touched, hit);
+		this.builderPreview = hit && m ? this.builderPreviewOf(m, touched, alt, null) : null;
 		return true;
 	}
 
@@ -2336,7 +2345,8 @@ export class VectorEditorController {
 		return {
 			mode: erase ? 'erase' : 'merge',
 			faces: touched.faces.map((f) => faces[f].path),
-			lines: touched.lines.map((k) => m.pieces[k].path),
+			// Edges bounding a face touched too go with the face, so they are not shown apart.
+			lines: [...touched.lines.map((k) => m.pieces[k].path), ...(erase ? vectorBuilderErasedEdges(m, touched).map((k) => m.edges[k].path) : [])],
 			trail
 		};
 	}
@@ -2353,7 +2363,7 @@ export class VectorEditorController {
 		const m = this.selectedRoots().length ? this.shapeBuilderMap() : null;
 		if (!m) return;
 		const erase = !!input.alt;
-		const touched: VectorBuilderTouched = { faces: [], lines: [] };
+		const touched: VectorBuilderTouched = { faces: [], lines: [], edges: [] };
 		addBuilderHit(touched, vectorShapeBuilderHit(m, p, erase ? this.builderLineTolerance() : null));
 		this.drag = { kind: 'builder', erase, points: [p], touched, map: m };
 		this.interaction = { type: 'builder', mode: erase ? 'erase' : 'merge', points: [p] };
@@ -2375,7 +2385,7 @@ export class VectorEditorController {
 	private upBuilder(drag: Extract<Drag, { kind: 'builder' }>) {
 		this.builderPreview = null;
 		this.builderHoverKey = null;
-		if (!drag.touched.faces.length && !drag.touched.lines.length) {
+		if (!drag.touched.faces.length && !drag.touched.lines.length && !drag.touched.edges.length) {
 			this.notify();
 			return;
 		}
