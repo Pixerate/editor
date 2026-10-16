@@ -4,7 +4,17 @@
  * `<polyline>`, `<polygon>`, linear / radial gradients, presentation attributes, `style`
  * declarations and `transform`s. Text, images, clip paths, masks, filters and `<use>` are
  * skipped.
+ *
+ * Live corners export as their cut outline plus `data-vector-d` (the sharp path) and
+ * `data-vector-corners` (the radii), so the editor's own SVG imports with editable corners.
+ * Inside / outside strokes, which SVG cannot express, export (after vectorcraft
+ * `crates/svg/src/lib.rs`, MIT OR Apache-2.0) as a `<g data-vector-path>` holding the fill, a
+ * stroke of twice the width clipped to the shape (inside) or masked by it (outside), and the
+ * arrowheads as filled outlines; import merges such a group back into one path.
  */
+import { bezierPathToSvg } from '../canvas/pathops/bezier.js';
+import { bezierPathBounds } from '../canvas/pathops/bezier.js';
+import { hasStrokeExtras, vectorStrokeOutlinePath, vectorStrokeParts, vectorStrokeReach } from './stroke.js';
 import { gradientToSvgDef, type CanvasGradientDef, type GradientStop, type SvgGradientDef } from '../canvas/gradient.js';
 import { formatNumber } from '../canvas/shapeGeometry.js';
 import {
@@ -17,12 +27,29 @@ import {
 	rectSubpath,
 	rotateMatrix,
 	scaleMatrix,
+	subpathsToBezier,
 	transformVectorNode,
 	translateMatrix,
 	vectorPathData,
 	type AffineMatrix
 } from './geometry.js';
-import type { VectorDocument, VectorFillRule, VectorGroupNode, VectorLineCap, VectorLineJoin, VectorNode, VectorPaint, VectorPathNode, VectorSubpath } from './types.js';
+import {
+	VECTOR_ARROWHEADS,
+	VECTOR_CORNER_KINDS,
+	type VectorArrowhead,
+	type VectorCornerKind,
+	type VectorDocument,
+	type VectorFillRule,
+	type VectorGroupNode,
+	type VectorLineCap,
+	type VectorLineJoin,
+	type VectorNode,
+	type VectorPaint,
+	type VectorBounds,
+	type VectorPathNode,
+	type VectorStrokeAlign,
+	type VectorSubpath
+} from './types.js';
 
 // ---------------------------------------------------------------------------
 // Export
@@ -39,6 +66,38 @@ export interface VectorSvgExportOptions {
 	idPrefix?: string;
 	/** Indent nested elements (default true). */
 	pretty?: boolean;
+	/**
+	 * How strokes with an inside / outside alignment or arrowheads are written: `clip` (default)
+	 * as a double-width stroke clipped or masked by the shape plus filled heads, `outline` as
+	 * one filled path of the area the stroke paints.
+	 */
+	strokes?: 'clip' | 'outline';
+}
+
+/** `data-vector-corners`: the live corners of subpaths as `subpath.index:radius[:kind]`, space separated. */
+export function vectorCornersAttribute(subpaths: readonly VectorSubpath[], precision = 3): string {
+	const out: string[] = [];
+	subpaths.forEach((sp, s) =>
+		sp.anchors.forEach((a, i) => {
+			if (!a.corner || !(a.corner.radius > 0)) return;
+			out.push(`${s}.${i}:${formatNumber(a.corner.radius, precision)}${a.corner.kind && a.corner.kind !== 'round' ? `:${a.corner.kind}` : ''}`);
+		})
+	);
+	return out.join(' ');
+}
+
+/** Puts `data-vector-corners` back on subpaths (malformed entries are ignored). */
+export function applyVectorCornersAttribute(subpaths: VectorSubpath[], value: string): VectorSubpath[] {
+	for (const item of value.trim().split(/\s+/)) {
+		const m = /^(\d+)\.(\d+):([\d.eE+-]+)(?::([a-z]+))?$/.exec(item);
+		if (!m) continue;
+		const a = subpaths[+m[1]]?.anchors[+m[2]];
+		const radius = parseFloat(m[3]);
+		if (!a || !(radius > 0)) continue;
+		const kind = VECTOR_CORNER_KINDS.includes(m[4] as VectorCornerKind) ? (m[4] as VectorCornerKind) : undefined;
+		a.corner = { radius, ...(kind && kind !== 'round' ? { kind } : {}) };
+	}
+	return subpaths;
 }
 
 const escapeAttr = (value: string) => value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -49,6 +108,40 @@ export function vectorPaintToSvg(paint: VectorPaint | undefined, gradientId: str
 	if (typeof paint === 'string') return { value: paint, gradient: null };
 	return { value: `url(#${gradientId})`, gradient: gradientToSvgDef(paint as CanvasGradientDef, gradientId) };
 }
+
+/** The parts of an aligned or arrowed stroke (see `VectorRenderPath.strokeParts`). */
+export interface VectorRenderStrokeParts {
+	align: VectorStrokeAlign;
+	/** The line the stroke follows (shortened under `tip`-aligned heads). */
+	d: string;
+	/** Width to draw it with: twice the stroke width when aligned, half of it being clipped away. */
+	width: number;
+	/**
+	 * Inside: a `<clipPath id>` holding the shape (`d`, `clip-rule` = `fillRule`). Outside: a
+	 * `<mask id>` in user space over `bounds`, white with the shape (`d`) in black.
+	 */
+	clip: { kind: 'clip' | 'mask'; id: string; bounds: VectorBounds } | null;
+	/** Arrowhead outlines (fill with `stroke`, nonzero). */
+	heads: string[];
+}
+
+/** The stroke parts of a path whose stroke needs more than one element, in its own space (undefined otherwise). */
+export function vectorStrokeSvgParts(node: VectorPathNode, clipId: string, precision = 3): VectorRenderStrokeParts | undefined {
+	if (!hasPaint(node.stroke) || !hasStrokeExtras(node)) return undefined;
+	const path = subpathsToBezier(node.subpaths);
+	const parts = vectorStrokeParts(path, node);
+	if (parts.align === 'center' && !parts.heads.length) return undefined;
+	let clip: VectorRenderStrokeParts['clip'] = null;
+	if (parts.align !== 'center') {
+		const b = bezierPathBounds(path);
+		const pad = vectorStrokeReach(node) + 1;
+		const bounds = b ? { x: round2(b.minX - pad), y: round2(b.minY - pad), width: round2(b.maxX - b.minX + 2 * pad), height: round2(b.maxY - b.minY + 2 * pad) } : { x: 0, y: 0, width: 0, height: 0 };
+		clip = { kind: parts.align === 'inside' ? 'clip' : 'mask', id: clipId, bounds };
+	}
+	return { align: parts.align, d: bezierPathToSvg(parts.line, { precision }), width: parts.drawWidth, clip, heads: parts.heads.map((h) => bezierPathToSvg(h.path, { precision })) };
+}
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
 
 function gradientMarkup(def: SvgGradientDef): string {
 	const tag = def.type === 'radial' ? 'radialGradient' : 'linearGradient';
@@ -91,15 +184,54 @@ export function vectorDocumentToSvg(doc: VectorDocument, options: VectorSvgExpor
 		const stroke = vectorPaintToSvg(node.stroke, `${prefix}stroke-${node.id}`);
 		if (fill.gradient) defs.push(gradientMarkup(fill.gradient));
 		if (stroke.gradient) defs.push(gradientMarkup(stroke.gradient));
-		let attrs = `${common(node)} d="${vectorPathData(node, precision)}" fill="${escapeAttr(fill.value)}"`;
-		if (node.fillRule === 'evenodd') attrs += ` fill-rule="evenodd"`;
-		if (stroke.value !== 'none') {
-			attrs += ` stroke="${escapeAttr(stroke.value)}" stroke-width="${num(node.strokeWidth ?? 1)}"`;
-			if (node.strokeLinecap && node.strokeLinecap !== 'butt') attrs += ` stroke-linecap="${node.strokeLinecap}"`;
-			if (node.strokeLinejoin && node.strokeLinejoin !== 'miter') attrs += ` stroke-linejoin="${node.strokeLinejoin}"`;
-			if (node.strokeDasharray?.length) attrs += ` stroke-dasharray="${node.strokeDasharray.map(num).join(' ')}"`;
+		const d = vectorPathData(node, precision);
+		const corners = vectorCornersAttribute(node.subpaths, precision);
+		const live = corners ? ` data-vector-d="${bezierPathToSvg(subpathsToBezier(node.subpaths, { corners: false }), { precision })}" data-vector-corners="${corners}"` : '';
+		const fillAttrs = ` fill="${escapeAttr(fill.value)}"${node.fillRule === 'evenodd' ? ` fill-rule="evenodd"` : ''}`;
+		const lineAttrs = (width: number) => {
+			let out = ` stroke="${escapeAttr(stroke.value)}" stroke-width="${num(width)}"`;
+			if (node.strokeLinecap && node.strokeLinecap !== 'butt') out += ` stroke-linecap="${node.strokeLinecap}"`;
+			if (node.strokeLinejoin && node.strokeLinejoin !== 'miter') out += ` stroke-linejoin="${node.strokeLinejoin}"`;
+			if (node.strokeDasharray?.length) out += ` stroke-dasharray="${node.strokeDasharray.map(num).join(' ')}"`;
+			return out;
+		};
+		const parts = stroke.value !== 'none' ? vectorStrokeSvgParts(node, `${prefix}clip-${node.id}`, precision) : undefined;
+		if (!parts) {
+			lines.push(`${indent(depth)}<path${common(node)} d="${d}"${fillAttrs}${stroke.value !== 'none' ? lineAttrs(node.strokeWidth ?? 1) : ''}${live}/>`);
+			return;
 		}
-		lines.push(`${indent(depth)}<path${attrs}/>`);
+		// The stroke options SVG has no attribute for, kept for import.
+		let data = ` data-vector-path="" data-vector-stroke-width="${num(node.strokeWidth ?? 1)}"`;
+		if (parts.align !== 'center') data += ` data-vector-stroke-align="${parts.align}"`;
+		if (node.startArrow) data += ` data-vector-start-arrow="${node.startArrow}"`;
+		if (node.endArrow) data += ` data-vector-end-arrow="${node.endArrow}"`;
+		if (node.arrowAlign && node.arrowAlign !== 'extend') data += ` data-vector-arrow-align="${node.arrowAlign}"`;
+		if (node.startArrowScale !== undefined && node.startArrowScale !== 1) data += ` data-vector-start-arrow-scale="${num(node.startArrowScale)}"`;
+		if (node.endArrowScale !== undefined && node.endArrowScale !== 1) data += ` data-vector-end-arrow-scale="${num(node.endArrowScale)}"`;
+		lines.push(`${indent(depth)}<g${common(node)}${data}>`);
+		lines.push(`${indent(depth + 1)}<path data-vector-part="fill" d="${d}"${fillAttrs}${live}/>`);
+		if (options.strokes === 'outline') {
+			const area = bezierPathToSvg(vectorStrokeOutlinePath(subpathsToBezier(node.subpaths), node), { precision });
+			lines.push(`${indent(depth + 1)}<path data-vector-part="stroke-outline" d="${area}" fill="${escapeAttr(stroke.value)}"/>`);
+		} else {
+			let clip = '';
+			if (parts.clip) {
+				const rule = node.fillRule === 'evenodd' ? 'evenodd' : 'nonzero';
+				const id = escapeAttr(parts.clip.id);
+				if (parts.clip.kind === 'clip') {
+					defs.push(`<clipPath id="${id}"><path d="${d}" clip-rule="${rule}"/></clipPath>`);
+					clip = ` clip-path="url(#${id})"`;
+				} else {
+					const b = parts.clip.bounds;
+					const box = `x="${num(b.x)}" y="${num(b.y)}" width="${num(b.width)}" height="${num(b.height)}"`;
+					defs.push(`<mask id="${id}" maskUnits="userSpaceOnUse" ${box}><rect ${box} fill="#fff"/><path d="${d}" fill="#000" fill-rule="${rule}"/></mask>`);
+					clip = ` mask="url(#${id})"`;
+				}
+			}
+			lines.push(`${indent(depth + 1)}<path data-vector-part="stroke" d="${parts.d}" fill="none"${lineAttrs(parts.width)}${clip}/>`);
+			for (const h of parts.heads) lines.push(`${indent(depth + 1)}<path data-vector-part="head" d="${h}" fill="${escapeAttr(stroke.value)}"/>`);
+		}
+		lines.push(`${indent(depth)}</g>`);
 	};
 
 	for (const node of doc.nodes) emit(node, 1);
@@ -357,8 +489,14 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 	const shapeOf = (el: Element): VectorSubpath[] | null => {
 		const a = el.attrs;
 		switch (el.name) {
-			case 'path':
+			case 'path': {
+				// Our own export: the sharp path and its live corners.
+				if (a['data-vector-d'] && a['data-vector-corners']) {
+					const sharp = bezierToSubpaths(a['data-vector-d']);
+					if (sharp.length) return applyVectorCornersAttribute(sharp, a['data-vector-corners']);
+				}
 				return a.d ? bezierToSubpaths(a.d) : null;
+			}
 			case 'rect': {
 				const w = length(a.width);
 				const h = length(a.height);
@@ -393,6 +531,65 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 		return null;
 	};
 
+	const strokeStyle = (s: InheritedStyle): Partial<VectorPathNode> => ({
+		...(s.strokeWidth ? { strokeWidth: length(s.strokeWidth, 1) } : {}),
+		...(s.strokeLinecap ? { strokeLinecap: s.strokeLinecap as VectorLineCap } : {}),
+		...(s.strokeLinejoin ? { strokeLinejoin: s.strokeLinejoin as VectorLineJoin } : {}),
+		...(s.strokeDasharray && s.strokeDasharray !== 'none' ? { strokeDasharray: numberList(s.strokeDasharray) } : {}),
+		...(s.fillRule === 'evenodd' ? { fillRule: 'evenodd' as VectorFillRule } : {})
+	});
+
+	/** A node mapped by `m` (scale and skew baked in, stroke width scaled). */
+	const placed = (node: VectorPathNode, m: AffineMatrix): VectorPathNode => {
+		if (m === IDENTITY_MATRIX) return node;
+		const next = transformVectorNode(node, m);
+		const strokeScale = Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2]));
+		if (hasPaint(next.stroke) && strokeScale > 0 && Math.abs(strokeScale - 1) > 1e-9) next.strokeWidth = (next.strokeWidth ?? 1) * strokeScale;
+		return next;
+	};
+
+	/**
+	 * A `<g data-vector-path>` from our own export (an aligned or arrowed stroke drawn in parts)
+	 * as the one path it came from: the fill part's outline and fill, the stroke part's paint and
+	 * line style, and the options the group's data attributes keep.
+	 */
+	const mergedPath = (g: Element, style: InheritedStyle, m: AffineMatrix, meta: Partial<VectorPathNode>): VectorPathNode | null => {
+		const part = (name: string) => g.children.find((c) => c.name === 'path' && c.attrs['data-vector-part'] === name);
+		const fillEl = part('fill');
+		const subpaths = fillEl ? shapeOf(fillEl) : null;
+		if (!fillEl || !subpaths?.length) return null;
+		const a = g.attrs;
+		const fs = readStyle(fillEl, style);
+		const strokeEl = part('stroke');
+		const outlineEl = part('stroke-outline');
+		const ss = strokeEl ? readStyle(strokeEl, style) : null;
+		const width = length(a['data-vector-stroke-width'], ss ? length(ss.strokeWidth, 1) : 1);
+		const arrow = (v: string | undefined) => (VECTOR_ARROWHEADS.includes(v as VectorArrowhead) ? (v as VectorArrowhead) : undefined);
+		const scale = (v: string | undefined) => {
+			const n = v === undefined ? NaN : parseFloat(v);
+			return n > 0 ? n : undefined;
+		};
+		const align = a['data-vector-stroke-align'];
+		const node: VectorPathNode = {
+			id: idFor(g),
+			type: 'path',
+			...meta,
+			subpaths,
+			fill: paint(fs.fill),
+			stroke: ss ? paint(ss.stroke) : outlineEl ? paint(readStyle(outlineEl, style).fill) : null,
+			...(ss ? strokeStyle(ss) : {}),
+			...(fs.fillRule === 'evenodd' ? { fillRule: 'evenodd' as VectorFillRule } : {}),
+			strokeWidth: width,
+			...(align === 'inside' || align === 'outside' ? { strokeAlign: align } : {}),
+			...(arrow(a['data-vector-start-arrow']) ? { startArrow: arrow(a['data-vector-start-arrow']) } : {}),
+			...(arrow(a['data-vector-end-arrow']) ? { endArrow: arrow(a['data-vector-end-arrow']) } : {}),
+			...(a['data-vector-arrow-align'] === 'tip' ? { arrowAlign: 'tip' as const } : {}),
+			...(scale(a['data-vector-start-arrow-scale']) ? { startArrowScale: scale(a['data-vector-start-arrow-scale']) } : {}),
+			...(scale(a['data-vector-end-arrow-scale']) ? { endArrowScale: scale(a['data-vector-end-arrow-scale']) } : {})
+		};
+		return placed(node, m);
+	};
+
 	const visit = (el: Element, style: InheritedStyle, matrix: AffineMatrix): VectorNode[] => {
 		const out: VectorNode[] = [];
 		for (const child of el.children) {
@@ -406,6 +603,11 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 				...(opacity !== undefined && Number.isFinite(opacity) && opacity < 1 ? { opacity } : {}),
 				...(hidden ? { visible: false } : {})
 			};
+			if (child.name === 'g' && child.attrs['data-vector-path'] !== undefined) {
+				const node = mergedPath(child, s, m, meta);
+				if (node) out.push(node);
+				continue;
+			}
 			if (child.name === 'g' || child.name === 'svg' || child.name === 'a' || child.name === 'switch') {
 				const children = visit(child, s, m);
 				if (!children.length) continue;
@@ -415,24 +617,18 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 			}
 			const subpaths = shapeOf(child);
 			if (!subpaths || !subpaths.length) continue;
-			let node: VectorPathNode = {
-				id: idFor(child),
-				type: 'path',
-				...meta,
-				subpaths,
-				fill: child.name === 'line' ? null : paint(s.fill),
-				stroke: paint(s.stroke),
-				...(s.strokeWidth ? { strokeWidth: length(s.strokeWidth, 1) } : {}),
-				...(s.strokeLinecap ? { strokeLinecap: s.strokeLinecap as VectorLineCap } : {}),
-				...(s.strokeLinejoin ? { strokeLinejoin: s.strokeLinejoin as VectorLineJoin } : {}),
-				...(s.strokeDasharray && s.strokeDasharray !== 'none' ? { strokeDasharray: numberList(s.strokeDasharray) } : {}),
-				...(s.fillRule === 'evenodd' ? { fillRule: 'evenodd' as VectorFillRule } : {})
-			};
-			if (m !== IDENTITY_MATRIX) {
-				node = transformVectorNode(node, m);
-				const strokeScale = Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2]));
-				if (hasPaint(node.stroke) && strokeScale > 0 && Math.abs(strokeScale - 1) > 1e-9) node.strokeWidth = (node.strokeWidth ?? 1) * strokeScale;
-			}
+			const node = placed(
+				{
+					id: idFor(child),
+					type: 'path',
+					...meta,
+					subpaths,
+					fill: child.name === 'line' ? null : paint(s.fill),
+					stroke: paint(s.stroke),
+					...strokeStyle(s)
+				},
+				m
+			);
 			out.push(node);
 		}
 		return out;

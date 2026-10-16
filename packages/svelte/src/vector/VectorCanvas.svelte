@@ -218,6 +218,12 @@
         <circle data-vector-anchor={a.ref.index} cx={a.x} cy={a.y} r={size / 2} fill={a.selected ? accentColor : THEME.handleFill} stroke={accentColor} />
       {/if}
     {/each}
+    {#each overlay.cornerWidgets as w (`corner:${anchorKey(w)}`)}
+      <g data-vector-corner-widget={w.ref.index} data-corner-kind={w.kind}>
+        <circle cx={w.x} cy={w.y} r={THEME.cornerWidgetRadius + (w.hovered ? 1 : 0)} fill={THEME.handleFill} stroke={accentColor} />
+        <circle cx={w.x} cy={w.y} r={1.5} fill={accentColor} />
+      </g>
+    {/each}
     {#if closing}
       <circle cx={closing.x} cy={closing.y} r={as} stroke={accentColor} />
     {/if}

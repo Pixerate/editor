@@ -17,9 +17,12 @@ import {
 	type BezierPath,
 	type BezierPathInput
 } from '../canvas/pathops/bezier.js';
+import { expandVectorCorners, setSubpathCorners } from './corners.js';
+import { hitTestVectorStroke, vectorStrokeOutlinePath } from './stroke.js';
 import type {
 	VectorAnchor,
 	VectorAnchorType,
+	VectorCornerKind,
 	VectorBounds,
 	VectorDocument,
 	VectorGroupNode,
@@ -43,7 +46,8 @@ export const cloneAnchor = (a: VectorAnchor): VectorAnchor => ({
 	y: a.y,
 	...(a.in ? { in: { x: a.in.x, y: a.in.y } } : {}),
 	...(a.out ? { out: { x: a.out.x, y: a.out.y } } : {}),
-	...(a.type && a.type !== 'corner' ? { type: a.type } : {})
+	...(a.type && a.type !== 'corner' ? { type: a.type } : {}),
+	...(a.corner ? { corner: { ...a.corner } } : {})
 });
 
 export const cloneSubpath = (s: VectorSubpath): VectorSubpath => ({ anchors: s.anchors.map(cloneAnchor), closed: s.closed });
@@ -91,10 +95,13 @@ export function subpathSegment(sp: VectorSubpath, i: number): Point[] {
 	return [[a.x, a.y], [c1.x, c1.y], [c2.x, c2.y], [b.x, b.y]];
 }
 
-/** Absolute `M` / `L` / `C` / `Z` commands of subpaths. */
-export function subpathsToBezier(subpaths: readonly VectorSubpath[]): BezierPath {
+/**
+ * Absolute `M` / `L` / `C` / `Z` commands of subpaths, with live corners cut
+ * (`expandVectorCorners`). Pass `{ corners: false }` for the stored anchors as they are.
+ */
+export function subpathsToBezier(subpaths: readonly VectorSubpath[], options: { corners?: boolean } = {}): BezierPath {
 	const out: BezierPath = [];
-	for (const sp of subpaths) {
+	for (const sp of options.corners === false ? subpaths : expandVectorCorners(subpaths)) {
 		if (sp.anchors.length === 0) continue;
 		const first = sp.anchors[0];
 		out.push({ type: 'M', x: first.x, y: first.y });
@@ -309,8 +316,9 @@ export function boundsFromPoints(a: Vec2, b: Vec2): VectorBounds {
 // ---------------------------------------------------------------------------
 
 /**
- * Whether `p` hits a node: inside its fill (when it has one) or within half its stroke
- * width plus `tolerance` of its outline. A group is hit when any visible child is.
+ * Whether `p` hits a node: inside its fill (when it has one), on its stroke as drawn (its
+ * alignment and arrowheads respected) or within `tolerance` of either. A group is hit when
+ * any visible child is.
  */
 export function hitTestVectorNode(node: VectorNode, p: Vec2, tolerance = 0, parent: AffineMatrix = IDENTITY_MATRIX): boolean {
 	if (node.visible === false) return false;
@@ -322,8 +330,17 @@ export function hitTestVectorNode(node: VectorNode, p: Vec2, tolerance = 0, pare
 	if (path.length === 0) return false;
 	const point: Point = [p.x, p.y];
 	if (hasPaint(node.fill) && pointInBezierPath(path, point, node.fillRule ?? 'nonzero')) return true;
-	const reach = (hasPaint(node.stroke) ? (node.strokeWidth ?? 1) / 2 : 0) + tolerance;
-	return distanceToBezierPath(path, point) <= reach;
+	if (hasPaint(node.stroke)) return hitTestVectorStroke(path, p, node, tolerance);
+	return distanceToBezierPath(path, point) <= tolerance;
+}
+
+/**
+ * The area a path node's stroke paints (alignment, caps, joins, dashes and arrowheads
+ * included), as a filled path in the space `parent` maps to. Empty without a stroke.
+ */
+export function vectorStrokeOutline(node: VectorPathNode, parent: AffineMatrix = IDENTITY_MATRIX): BezierPath {
+	if (!hasPaint(node.stroke) || !((node.strokeWidth ?? 1) > 0)) return [];
+	return vectorStrokeOutlinePath(vectorPathWorldBezier(node, parent), node);
 }
 
 /** The topmost node hit by `p` (skipping hidden and locked ones), or null. */
@@ -455,6 +472,7 @@ function bakeIntoGeometry<T extends VectorNode>(node: T, m: AffineMatrix): T {
 				if (a.in) next.in = applyMatrix(m, a.in);
 				if (a.out) next.out = applyMatrix(m, a.out);
 				if (a.type) next.type = a.type;
+				if (a.corner) next.corner = { ...a.corner };
 				return next;
 			})
 		}))
@@ -626,6 +644,7 @@ export function reverseSubpath(sp: VectorSubpath): VectorSubpath {
 			if (a.out) next.in = { ...a.out };
 			if (a.in) next.out = { ...a.in };
 			if (a.type) next.type = a.type;
+			if (a.corner) next.corner = { ...a.corner };
 			return next;
 		});
 	return { anchors, closed: sp.closed };
@@ -638,25 +657,14 @@ export function reverseSubpath(sp: VectorSubpath): VectorSubpath {
 /** Handle length that makes a cubic approximate a quarter circle. */
 export const KAPPA = 0.5522847498307936;
 
-/** A rectangle, optionally with rounded corners (clamped to half the shorter side). */
-export function rectSubpath(b: VectorBounds, radius = 0): VectorSubpath {
+/**
+ * A rectangle. A `radius` becomes a live corner on each of its four anchors (drawn round, and
+ * clamped to half the shorter side, when the path is turned into curves).
+ */
+export function rectSubpath(b: VectorBounds, radius = 0, kind?: VectorCornerKind): VectorSubpath {
 	const { x, y, width: w, height: h } = b;
-	const r = Math.max(0, Math.min(radius, w / 2, h / 2));
-	if (r <= EPS) {
-		return { anchors: [{ x, y }, { x: x + w, y }, { x: x + w, y: y + h }, { x, y: y + h }], closed: true };
-	}
-	const k = r * KAPPA;
-	const anchors: VectorAnchor[] = [
-		{ x: x + r, y, in: { x: x + r - k, y } },
-		{ x: x + w - r, y, out: { x: x + w - r + k, y } },
-		{ x: x + w, y: y + r, in: { x: x + w, y: y + r - k } },
-		{ x: x + w, y: y + h - r, out: { x: x + w, y: y + h - r + k } },
-		{ x: x + w - r, y: y + h, in: { x: x + w - r + k, y: y + h } },
-		{ x: x + r, y: y + h, out: { x: x + r - k, y: y + h } },
-		{ x, y: y + h - r, in: { x, y: y + h - r + k } },
-		{ x, y: y + r, out: { x, y: y + r - k } }
-	];
-	return { anchors, closed: true };
+	const sp: VectorSubpath = { anchors: [{ x, y }, { x: x + w, y }, { x: x + w, y: y + h }, { x, y: y + h }], closed: true };
+	return radius > 0 ? setSubpathCorners(sp, radius, kind) : sp;
 }
 
 /** An ellipse inscribed in a box (four smooth anchors). */

@@ -8,3 +8,5 @@ export * from './snap.js';
 export * from './pathEdit.js';
 export * from './pathCut.js';
 export * from './ink.js';
+export * from './corners.js';
+export * from './stroke.js';

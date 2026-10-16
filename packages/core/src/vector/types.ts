@@ -18,6 +18,25 @@ export interface Vec2 {
 export type VectorAnchorType = 'corner' | 'smooth' | 'symmetric';
 
 /**
+ * Live corner shapes: `round` (an arc tangent to both sides), `inverted` (an arc centred on
+ * the corner, cut into the shape) and `chamfer` (a straight bevel).
+ */
+export type VectorCornerKind = 'round' | 'inverted' | 'chamfer';
+
+export const VECTOR_CORNER_KINDS: readonly VectorCornerKind[] = ['round', 'inverted', 'chamfer'];
+
+/**
+ * A live corner: drawn rounded (or cut) at render, hit-test, bounds, boolean, outline and export
+ * time while the stored anchor stays sharp. The radius shrinks to fit when the sides are short:
+ * the cut reaches at most halfway along each side.
+ */
+export interface VectorCorner {
+	radius: number;
+	/** Default `round`. */
+	kind?: VectorCornerKind;
+}
+
+/**
  * One anchor of a subpath. Handles are absolute document positions; a missing (or `null`)
  * handle sits on the anchor, so a segment with no handles at either end is a straight line.
  */
@@ -30,6 +49,8 @@ export interface VectorAnchor {
 	out?: Vec2 | null;
 	/** Default `corner`. */
 	type?: VectorAnchorType;
+	/** Live corner radius. Ignored on smooth / symmetric anchors and the ends of open subpaths. */
+	corner?: VectorCorner | null;
 }
 
 /** A chain of anchors joined by line or cubic Bézier segments. */
@@ -45,6 +66,19 @@ export type VectorPaint = string | CanvasGradientDef | null;
 export type VectorFillRule = 'nonzero' | 'evenodd';
 export type VectorLineCap = 'butt' | 'round' | 'square';
 export type VectorLineJoin = 'miter' | 'round' | 'bevel';
+/**
+ * Where the stroke sits on the outline: centred on it, inside the shape or outside it. Only
+ * shapes whose subpaths are all closed have an inside; open paths always stroke centred.
+ */
+export type VectorStrokeAlign = 'center' | 'inside' | 'outside';
+/** Arrowheads and end markers for the ends of open paths. */
+export type VectorArrowhead = 'triangle' | 'arrow' | 'open' | 'circle' | 'square' | 'bar';
+export const VECTOR_ARROWHEADS: readonly VectorArrowhead[] = ['triangle', 'arrow', 'open', 'circle', 'square', 'bar'];
+/**
+ * `extend`: the head's tip sits past the end point and the path keeps its length; `tip`: the
+ * tip sits on the end point and the stroke is shortened under the head.
+ */
+export type VectorArrowAlign = 'extend' | 'tip';
 
 /** Paint and stroke settings of a path. */
 export interface VectorStyle {
@@ -57,6 +91,18 @@ export interface VectorStyle {
 	strokeDasharray?: number[];
 	/** Default `nonzero`. */
 	fillRule?: VectorFillRule;
+	/** Default `center`. */
+	strokeAlign?: VectorStrokeAlign;
+	/** Head at the start of the first subpath when it is open, or none. */
+	startArrow?: VectorArrowhead | null;
+	/** Head at the end of the last subpath when it is open, or none. */
+	endArrow?: VectorArrowhead | null;
+	/** Default `extend`. */
+	arrowAlign?: VectorArrowAlign;
+	/** Size of the start head as a multiple of the stroke width (default 1: a head 4 widths long). */
+	startArrowScale?: number;
+	/** Size of the end head (default 1). */
+	endArrowScale?: number;
 }
 
 interface VectorNodeBase {
@@ -158,8 +204,10 @@ export interface VectorDefaults extends VectorStyle {
 	starPoints?: number;
 	/** Inner radius of the star tool as a fraction of the outer one (default 0.5). */
 	starInnerRatio?: number;
-	/** Corner radius of the rectangle tool (default 0). */
+	/** Live corner radius the rectangle, polygon and star tools give their corners (default 0). */
 	cornerRadius?: number;
+	/** Corner kind of those tools (default `round`). */
+	cornerKind?: VectorCornerKind;
 }
 
 export type VectorAlign = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom';

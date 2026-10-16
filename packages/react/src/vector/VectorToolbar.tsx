@@ -5,10 +5,18 @@ import {
   VECTOR_TOOL_SHORTCUTS,
   VECTOR_EDIT_TOGGLES,
   VECTOR_PATH_ACTIONS,
+  VECTOR_ARROWHEADS,
+  VECTOR_ARROWHEAD_LABELS,
+  VECTOR_CORNER_KINDS,
+  VECTOR_CORNER_KIND_LABELS,
+  VECTOR_STROKE_ALIGN_LABELS,
   getVectorSelectionStyle,
   vectorPaintToHex,
   vectorToolLabel,
+  type VectorArrowhead,
+  type VectorCornerKind,
   type VectorEditorController,
+  type VectorStrokeAlign,
   type VectorTool,
 } from '@pixerate/editor/vector';
 import { useVectorEditorState } from './useVectorEditor';
@@ -184,14 +192,70 @@ export interface VectorStylePanelProps {
   className?: string;
 }
 
+const selectClass = 'h-7 min-w-0 flex-1 rounded border border-border bg-background px-1 text-xs';
+const numberClass = 'h-7 w-16 rounded border border-border bg-background px-1.5 text-xs';
+
 /**
- * Fill, stroke, stroke width and opacity of the selection; with nothing selected it edits
- * the defaults for new shapes.
+ * Fill, stroke, stroke width and alignment, arrowheads, live corner radius and opacity of the
+ * selection (corners of the selected points with the direct tool); with nothing selected it
+ * edits the defaults for new shapes.
  */
 export function VectorStylePanel({ controller, className }: VectorStylePanelProps) {
   const state = useVectorEditorState(controller);
   const style = getVectorSelectionStyle(state);
-  const source = style ?? { fill: state.defaults.fill ?? null, stroke: state.defaults.stroke ?? null, strokeWidth: state.defaults.strokeWidth ?? 1, opacity: 1 };
+  const d = state.defaults;
+  const source = style ?? {
+    fill: d.fill ?? null,
+    stroke: d.stroke ?? null,
+    strokeWidth: d.strokeWidth ?? 1,
+    opacity: 1,
+    strokeAlign: d.strokeAlign ?? 'center',
+    startArrow: d.startArrow ?? null,
+    endArrow: d.endArrow ?? null,
+    arrowAlign: d.arrowAlign ?? 'extend',
+    startArrowScale: d.startArrowScale ?? 1,
+    endArrowScale: d.endArrowScale ?? 1,
+    cornerRadius: d.cornerRadius,
+    cornerKind: d.cornerKind ?? 'round',
+    corners: 1,
+    hasOpenPath: true,
+  };
+  const setCorners = (patch: { radius?: number; kind?: VectorCornerKind }) => {
+    if (!style) controller.setDefaults({ ...(patch.radius !== undefined ? { cornerRadius: patch.radius } : {}), ...(patch.kind ? { cornerKind: patch.kind } : {}) });
+    else if (patch.radius !== undefined) controller.setCornerRadius(patch.radius);
+    else if (patch.kind) controller.setCornerKind(patch.kind);
+  };
+  const mixed = (key: keyof NonNullable<typeof style>['mixed']) => (style?.mixed[key] ? <span className="text-[11px] text-muted-foreground">Mixed</span> : null);
+  const arrowRow = (end: 'start' | 'end', label: string) => {
+    const key = end === 'start' ? 'startArrow' : 'endArrow';
+    const scaleKey = end === 'start' ? 'startArrowScale' : 'endArrowScale';
+    return (
+      <div className="flex items-center gap-2" data-vector-style={key}>
+        <span className="w-16 text-xs text-foreground">{label}</span>
+        <select aria-label={`${label} arrowhead`} className={selectClass} value={source[key] ?? ''} onChange={(e) => apply({ [key]: (e.target.value || null) as VectorArrowhead | null })}>
+          <option value="">None</option>
+          {VECTOR_ARROWHEADS.map((h) => (
+            <option key={h} value={h}>
+              {VECTOR_ARROWHEAD_LABELS[h]}
+            </option>
+          ))}
+        </select>
+        <input
+          type="number"
+          min={0.1}
+          step={0.25}
+          aria-label={`${label} arrowhead scale`}
+          title="Scale (× stroke width)"
+          className={numberClass}
+          value={source[scaleKey]}
+          onChange={(e) => {
+            const n = parseFloat(e.target.value);
+            if (Number.isFinite(n) && n > 0) apply({ [scaleKey]: n });
+          }}
+        />
+      </div>
+    );
+  };
   const apply = (patch: Record<string, unknown>) => {
     if (style) controller.setStyle(patch);
     else controller.setDefaults(patch);
@@ -239,6 +303,57 @@ export function VectorStylePanel({ controller, className }: VectorStylePanelProp
           }}
         />
       </label>
+      <label className="flex items-center gap-2 text-xs text-foreground" data-vector-style="strokeAlign">
+        <span className="w-16">Align</span>
+        <select aria-label="Stroke alignment" className={selectClass} value={source.strokeAlign} onChange={(e) => apply({ strokeAlign: e.target.value as VectorStrokeAlign })}>
+          {(Object.keys(VECTOR_STROKE_ALIGN_LABELS) as VectorStrokeAlign[]).map((a) => (
+            <option key={a} value={a}>
+              {VECTOR_STROKE_ALIGN_LABELS[a]}
+            </option>
+          ))}
+        </select>
+        {mixed('strokeAlign')}
+      </label>
+      {source.hasOpenPath && (
+        <>
+          {arrowRow('start', 'Start')}
+          {arrowRow('end', 'End')}
+          {(source.startArrow || source.endArrow) && (
+            <label className="flex items-center gap-2 text-xs text-foreground" data-vector-style="arrowAlign">
+              <span className="w-16">Heads</span>
+              <select aria-label="Arrowhead alignment" className={selectClass} value={source.arrowAlign} onChange={(e) => apply({ arrowAlign: e.target.value })}>
+                <option value="extend">Tip past end</option>
+                <option value="tip">Tip at end</option>
+              </select>
+            </label>
+          )}
+        </>
+      )}
+      {source.corners > 0 && (
+        <div className="flex items-center gap-2" data-vector-style="corners">
+          <span className="w-16 text-xs text-foreground">Corners</span>
+          <input
+            type="number"
+            min={0}
+            step={1}
+            aria-label="Corner radius"
+            className={numberClass}
+            value={Math.round(source.cornerRadius * 100) / 100}
+            onChange={(e) => {
+              const n = parseFloat(e.target.value);
+              if (Number.isFinite(n) && n >= 0) setCorners({ radius: n });
+            }}
+          />
+          <select aria-label="Corner kind" className={selectClass} value={source.cornerKind} onChange={(e) => setCorners({ kind: e.target.value as VectorCornerKind })}>
+            {VECTOR_CORNER_KINDS.map((k) => (
+              <option key={k} value={k}>
+                {VECTOR_CORNER_KIND_LABELS[k]}
+              </option>
+            ))}
+          </select>
+          {mixed('cornerRadius')}
+        </div>
+      )}
       {style && (
         <label className="flex items-center gap-2 text-xs text-foreground">
           <span className="w-16">Opacity</span>

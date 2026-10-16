@@ -226,6 +226,79 @@ describe("VectorToolbar and VectorStylePanel", () => {
   });
 });
 
+const setValue = async (el: HTMLInputElement | HTMLSelectElement, value: string) =>
+  act(async () => {
+    const proto = el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+    Object.getOwnPropertyDescriptor(proto, "value")!.set!.call(el, value);
+    el.dispatchEvent(new Event(el instanceof HTMLSelectElement ? "change" : "input", { bubbles: true }));
+  });
+
+describe("live corners, stroke alignment and arrowheads (React)", () => {
+  it("draws aligned strokes in parts, clipped or masked, and arrowheads", async () => {
+    const c = make();
+    c.setStyle({ stroke: "#000", strokeWidth: 4, strokeAlign: "inside" }, ["a"]);
+    const line = c.addPath("M0 200 L100 200", { stroke: "#00f", endArrow: "triangle" });
+    await act(async () => root.render(<VectorCanvas controller={c} fitOnMount={false} />));
+    const g = q('[data-vector-scene] g[data-vector-id="a"]');
+    expect(g.getAttribute("data-vector-stroke-align")).toBe("inside");
+    const stroke = g.querySelector('[data-vector-part="stroke"]')!;
+    expect(stroke.getAttribute("stroke-width")).toBe("8");
+    const clipId = stroke.getAttribute("clip-path")!.match(/url\(#(.+)\)/)![1];
+    expect(g.querySelector(`clipPath[id="${clipId}"] path`)!.getAttribute("d")).toBe("M0 0L100 0L100 100L0 100Z");
+    expect(g.querySelector('[data-vector-part="fill"]')!.getAttribute("fill")).toBe("#ff0000");
+    await act(async () => c.setStyle({ strokeAlign: "outside" }, ["a"]));
+    expect(q('[data-vector-id="a"] mask rect').getAttribute("fill")).toBe("#fff");
+    expect(q('[data-vector-id="a"] [data-vector-part="stroke"]').getAttribute("mask")).toMatch(/^url\(#/);
+    const heads = qa(`[data-vector-id="${line}"] [data-vector-part="head"]`);
+    expect(heads).toHaveLength(1);
+    expect(heads[0].getAttribute("fill")).toBe("#00f");
+  });
+
+  it("drags a live corner widget with the direct tool", async () => {
+    const c = make();
+    c.setTool("direct");
+    c.select(["a"]);
+    await act(async () => root.render(<VectorCanvas controller={c} fitOnMount={false} />));
+    expect(qa("[data-vector-corner-widget]")).toHaveLength(4);
+    const svg = q("svg");
+    pointer(svg, "pointerdown", 10, 10);
+    pointer(svg, "pointermove", 20, 20);
+    expect(q("[data-vector-status]").textContent).toBe("R 10");
+    pointer(svg, "pointerup", 20, 20);
+    expect((c.getNode("a") as any).subpaths[0].anchors.map((a: any) => a.corner?.radius)).toEqual([10, 10, 10, 10]);
+    expect(q('[data-vector-scene] path[data-vector-id="a"]').getAttribute("d")).toContain("C");
+  });
+
+  it("style panel edits alignment, corners and arrowheads", async () => {
+    const c = make();
+    c.select(["a"]);
+    await act(async () => root.render(<VectorStylePanel controller={c} />));
+    await setValue(q<HTMLSelectElement>('select[aria-label="Stroke alignment"]'), "outside");
+    expect((c.getNode("a") as any).strokeAlign).toBe("outside");
+    await setValue(q<HTMLInputElement>('input[aria-label="Corner radius"]'), "12");
+    expect((c.getNode("a") as any).subpaths[0].anchors.every((a: any) => a.corner?.radius === 12)).toBe(true);
+    await setValue(q<HTMLSelectElement>('select[aria-label="Corner kind"]'), "chamfer");
+    expect((c.getNode("a") as any).subpaths[0].anchors[0].corner).toEqual({ radius: 12, kind: "chamfer" });
+    // Closed shapes have no ends for arrowheads.
+    expect(q('select[aria-label="End arrowhead"]')).toBeNull();
+    const line = c.addPath("M0 200 L100 200", { stroke: "#000" });
+    await act(async () => c.select([line]));
+    expect(q('[data-vector-style="corners"]')).toBeNull();
+    await setValue(q<HTMLSelectElement>('select[aria-label="End arrowhead"]'), "circle");
+    expect((c.getNode(line) as any).endArrow).toBe("circle");
+    await setValue(q<HTMLSelectElement>('select[aria-label="Arrowhead alignment"]'), "tip");
+    expect((c.getNode(line) as any).arrowAlign).toBe("tip");
+    await setValue(q<HTMLInputElement>('input[aria-label="End arrowhead scale"]'), "2");
+    expect((c.getNode(line) as any).endArrowScale).toBe(2);
+    await setValue(q<HTMLSelectElement>('select[aria-label="End arrowhead"]'), "");
+    expect((c.getNode(line) as any).endArrow).toBeNull();
+    // Nothing selected: the defaults for new shapes.
+    await act(async () => c.select([]));
+    await setValue(q<HTMLInputElement>('input[aria-label="Corner radius"]'), "5");
+    expect(c.getState().defaults.cornerRadius).toBe(5);
+  });
+});
+
 describe("path editing (React)", () => {
   it("bends a segment, previews knife strokes and shows the scissors cut point", async () => {
     const c = make();
