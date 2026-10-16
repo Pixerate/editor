@@ -1202,3 +1202,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Alt-erasing what looks like one side of a rectangle can take two sides (and the corner between them); a cut path loses its live corner radii; and a filled open path's erased edge can bring back its invisible closing segment.
 - **Root Cause**: `PlanarMap.chains()` only breaks a run where other paths meet it (or it ends), so a corner inside another shape is mid-edge. The edges are cut out of the document-space outline from `vectorPathWorldBezier`, which already has live corners cut into curves. A filled open subpath that encloses an area is closed in the map, so its edges may run over the closing segment.
 - **Solution / Workaround**: Pick test points and expectations by junctions, not anchors. `cutOutPiece` treats filled open subpaths as rings with an invisible closing span (`real..len`) and stops kept runs at it, so it never becomes a visible segment. The cut result is mapped back through the inverse of the node's matrix and written with `bezierToSubpaths`, keeping the node's transform; the corner radii are not kept. `VectorShapeBuilderMap.edges` is a lazy getter: spreading the map evaluates it, so pass the map itself around.
+
+### [tests] `randomize()` Tests Flake When the Random Value Lands on the Default
+
+- **Issue / Symptom**: The React and Svelte parameters binding tests occasionally failed in CI at `expect(state.modified).toBe(true)` right after `randomize(["speed"])`.
+- **Root Cause**: The controller used `Math.random`, and the field snaps to its step: any draw in about [0.2375, 0.2625) gives back the default `speed` of 1, so nothing is modified (about a 1 in 40 chance).
+- **Solution / Workaround**: Give the controller a fixed source in tests (`new ParametersController({ schema, random: () => 0.75 })`) or call `randomize({ seed })`, and assert the value it picks. Never assert a change after an unseeded randomize.

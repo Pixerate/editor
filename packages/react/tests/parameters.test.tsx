@@ -88,7 +88,8 @@ async function click(el: Element) {
 
 describe("useParameters", () => {
   it("follows the controller and binds actions", async () => {
-    const controller = new ParametersController({ schema });
+    // A fixed random source: Math.random can land back on the default (speed 1), leaving nothing modified.
+    const controller = new ParametersController({ schema, random: () => 0.75 });
     const ref: { result: UseParametersResult | null; renders: number } = { result: null, renders: 0 };
     function Test() {
       ref.result = useParameters(controller);
@@ -103,6 +104,7 @@ describe("useParameters", () => {
     await act(async () => ref.result!.undo());
     expect(q("[data-speed]").textContent).toBe("1");
     await act(async () => ref.result!.randomize(["speed"]));
+    expect(q("[data-speed]").textContent).toBe("3");
     expect(ref.result!.state.modified).toBe(true);
   });
 
