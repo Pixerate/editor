@@ -36,7 +36,7 @@ describe("@pixerate/editor-react Exports", () => {
       readFileSync(fileURLToPath(new URL("../package.json", import.meta.url)), "utf8")
     );
 
-    expect(pkg.peerDependencies["@pixerate/editor"]).toBe(">=0.29.0 <1");
+    expect(pkg.peerDependencies["@pixerate/editor"]).toMatch(/^>=0\.\d+\.0.*<1/);
     expect(pkg.dependencies?.["@pixerate/editor"]).toBeUndefined();
   });
 });

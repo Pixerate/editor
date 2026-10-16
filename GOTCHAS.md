@@ -1028,6 +1028,13 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: If each node erasure removes the node dynamically or splices indices step-by-step without a baseline snapshot, undoing the compound command by re-inserting elements or reversing individual removals drifts relative to remaining nodes or fails to preserve original sibling ordering.
 - **Solution / Workaround**: In `createCanvasDrawController`, capture `dragStartNodes = [...options.getNodes()]` upon `startStroke` when `tool === 'eraser'`. During `endStroke`, if any nodes were deleted, register a single history command whose `undo` action restores the exact pre-drag snapshot (`options.setNodes(dragStartNodes)`), ensuring absolute fidelity of node list order, layer hierarchy, and z-indexes across continuous eraser sweeps.
 
+### [changesets/release] Peer Dependency Range Assertions in Package Tests
+
+- **Issue / Symptom**: The `Release` workflow fails at the `pnpm test` step after `pnpm version-packages` (`changeset version`), with an assertion error such as `expected '>=0.30.0 <1.0.0-0' to be '>=0.29.0 <1'`.
+- **Root Cause**: `@changesets/cli` automatically synchronizes and bumps `peerDependencies` across monorepo workspace packages when a core package version increments. Any unit tests asserting strict exact string equality against a static version string fail as soon as Changeset bumps the package in the release pipeline.
+- **Solution / Workaround**: Test package.json `peerDependencies` using regex patterns that accommodate dynamic minor/patch version increases (e.g. `expect(pkg.peerDependencies["@pixerate/editor"]).toMatch(/^>=0\.\d+\.0.*<1/)`) while still enforcing exclusion from direct `dependencies`.
+
+
 ### [react|svelte/canvas] Pointer-Events and Spacebar Panning in Freehand Drawing Overlays
 
 - **Issue / Symptom**: When an interactive SVG drawing overlay (`CanvasDrawLayer`) covers the canvas, standard xyflow panning, node dragging, and canvas selection are blocked. Conversely, if pointer events are disabled, drawing gestures cannot be captured. Furthermore, users cannot pan the canvas without first switching away from the drawing tool.
