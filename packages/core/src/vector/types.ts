@@ -188,10 +188,43 @@ export interface VectorHandleRef extends VectorAnchorRef {
  * Canvas tools. `direct` edits anchors, handles and segments; the shape tools drag out a new
  * shape; `scissors` cuts a path at a point, `knife` cuts filled shapes along a freehand stroke,
  * `eraser` rubs out the area under one and `width` drags a stroke's width at a point.
+ * `shapeBuilder` merges (Alt: deletes) the faces the selected shapes make, and `paintBucket`
+ * fills the region the visible outlines enclose around a click with a new shape.
  */
-export type VectorTool = 'select' | 'direct' | 'pen' | 'pencil' | 'rect' | 'ellipse' | 'polygon' | 'star' | 'line' | 'scissors' | 'knife' | 'eraser' | 'width';
+export type VectorTool =
+	| 'select'
+	| 'direct'
+	| 'pen'
+	| 'pencil'
+	| 'rect'
+	| 'ellipse'
+	| 'polygon'
+	| 'star'
+	| 'line'
+	| 'scissors'
+	| 'knife'
+	| 'eraser'
+	| 'width'
+	| 'shapeBuilder'
+	| 'paintBucket';
 
-export const VECTOR_TOOLS: readonly VectorTool[] = ['select', 'direct', 'pen', 'pencil', 'rect', 'ellipse', 'polygon', 'star', 'line', 'scissors', 'knife', 'eraser', 'width'];
+export const VECTOR_TOOLS: readonly VectorTool[] = [
+	'select',
+	'direct',
+	'pen',
+	'pencil',
+	'rect',
+	'ellipse',
+	'polygon',
+	'star',
+	'line',
+	'scissors',
+	'knife',
+	'eraser',
+	'width',
+	'shapeBuilder',
+	'paintBucket'
+];
 
 /** Keyboard modifiers held during a pointer event. */
 export interface VectorModifiers {
@@ -231,6 +264,14 @@ export interface VectorDefaults extends VectorStyle {
 export type VectorAlign = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom';
 export type VectorDistribute = 'horizontal' | 'vertical';
 export type VectorBooleanOperation = 'union' | 'subtract' | 'intersect' | 'exclude';
+/**
+ * Pathfinder operations: `divide` (every face its own shape), `trim` (hidden parts removed),
+ * `merge` (Trim, then touching parts of one fill joined), `crop` (the top shape crops the others),
+ * `outline` (outlines cut into open strokes where they meet) and `minusBack` (the top shape minus
+ * everything below it).
+ */
+export type VectorPathfinderOperation = 'divide' | 'trim' | 'merge' | 'crop' | 'outline' | 'minusBack';
+export const VECTOR_PATHFINDER_OPERATIONS: readonly VectorPathfinderOperation[] = ['divide', 'trim', 'merge', 'crop', 'outline', 'minusBack'];
 export type VectorArrange = 'front' | 'forward' | 'backward' | 'back';
 /** Average: line anchors up on a horizontal line (same y), a vertical one (same x), or both. */
 export type VectorAverageAxis = 'horizontal' | 'vertical' | 'both';

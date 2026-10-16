@@ -55,8 +55,22 @@ export {
 	type PathOpsReport,
 	type PathBooleanResult,
 	type PathPiece,
-	type DividePathsResult
+	type DividePathsResult,
+	pathBooleanSelect,
+	planarSplit,
+	type PathSelectResult,
+	type PlanarSplitEdge,
+	type PlanarSplitResult
 } from './boolean.js';
+export { PlanarMap, interiorPoint, type PlanarInput, type PlanarMapOptions, type PlanarFace, type PlanarChain } from './planar.js';
+export {
+	pathfinder,
+	PATHFINDER_OPERATIONS,
+	type PathfinderOperation,
+	type PathfinderShape,
+	type PathfinderPiece,
+	type PathfinderResult
+} from './pathfinder.js';
 export {
 	outlineStroke,
 	offsetPath,

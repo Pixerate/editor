@@ -2,7 +2,9 @@ import { HistoryManager } from '../history/HistoryManager.js';
 import type { Command } from '../history/types.js';
 import { fitCubics } from '../canvas/curveFit.js';
 import { pathBoolean } from '../canvas/pathops/boolean.js';
-import { bezierPathBounds, transformBezierPath, type BezierPath } from '../canvas/pathops/bezier.js';
+import { pathfinder as runPathfinder } from '../canvas/pathops/pathfinder.js';
+import type { PlanarMap } from '../canvas/pathops/planar.js';
+import { bezierPathBounds, bezierPathToSvg, transformBezierPath, type BezierPath } from '../canvas/pathops/bezier.js';
 import type { Point } from '../canvas/types.js';
 import {
 	bezierToSubpaths,
@@ -89,6 +91,19 @@ import {
 } from './pathEdit.js';
 import { eraseFromFill, eraseFromOutline, eraserRegion, knifePath, polylineBounds, simplifyPolyline } from './pathCut.js';
 import { LazyMouse, recognizeInkShape, vectorInkShapeName, type VectorInkShape } from './ink.js';
+import {
+	addBuilderHit,
+	planShapeBuilder,
+	samplePolyline,
+	vectorFillMap,
+	vectorPathEntries,
+	vectorPathfinderShape,
+	vectorResultStyle,
+	vectorShapeBuilderHit,
+	vectorShapeBuilderMap,
+	type VectorBuilderTouched,
+	type VectorShapeBuilderMap
+} from './builder.js';
 import type {
 	Vec2,
 	VectorAlign,
@@ -107,6 +122,7 @@ import type {
 	VectorHandleRef,
 	VectorModifiers,
 	VectorNode,
+	VectorPathfinderOperation,
 	VectorPathNode,
 	VectorSegmentRef,
 	VectorStyle,
@@ -163,7 +179,15 @@ export interface VectorPathEditOptions {
 	 * only, `all` for any pointer that reports pressure, `off` never.
 	 */
 	pencilPressure: 'pen' | 'all' | 'off';
+	/**
+	 * Paint bucket: gaps up to this distance (document units) between loose ends of outlines are
+	 * closed when finding the region to fill (default 0, off).
+	 */
+	fillGap: number;
 }
+
+/** The gap the toolbars' "Close gaps" toggle sets (document units). */
+export const VECTOR_FILL_GAP = 6;
 
 /** Path-editing options new editors start with. */
 export const DEFAULT_VECTOR_PATH_EDIT: Readonly<VectorPathEditOptions> = {
@@ -172,7 +196,8 @@ export const DEFAULT_VECTOR_PATH_EDIT: Readonly<VectorPathEditOptions> = {
 	pencilSmoothing: 0,
 	recognizeShapes: false,
 	eraserSize: 10,
-	pencilPressure: 'pen'
+	pencilPressure: 'pen',
+	fillGap: 0
 };
 
 /** Longest pencil lazy-mouse string (at smoothing 1), in screen pixels. */
@@ -260,6 +285,7 @@ export type VectorInteraction =
 	| { type: 'corner'; ref: VectorAnchorRef; radius: number }
 	| { type: 'draw'; tool: VectorTool; nodeId: string; bounds: VectorBounds; string?: [Vec2, Vec2] }
 	| { type: 'stroke'; tool: 'knife' | 'eraser'; points: Vec2[]; width: number }
+	| { type: 'builder'; mode: 'merge' | 'erase'; points: Vec2[] }
 	| { type: 'width'; ref: VectorWidthPointRef; mode: 'width' | 'move'; width: number }
 	| { type: 'pen'; nodeId: string }
 	| { type: 'pan' };
@@ -295,6 +321,8 @@ export interface VectorEditorState {
 	pen: { nodeId: string; subpath: number } | null;
 	/** Last pointer position in document units (for the pen preview), or null when outside. */
 	pointer: Vec2 | null;
+	/** Shape Builder and paint bucket highlight: faces, line pieces and the gesture's trail. */
+	builder: VectorBuilderPreview | null;
 	canUndo: boolean;
 	canRedo: boolean;
 	undoLabel: string;
@@ -304,6 +332,40 @@ export interface VectorEditorState {
 }
 
 export type VectorActionResult = { ok: true } | { ok: false; message: string };
+
+/**
+ * What the Shape Builder or paint bucket highlights, in document units: the faces (filled paths
+ * as SVG path data) under the pointer or touched by the drag, the line pieces an erase would
+ * delete, and the drag's trail. `mode` is `merge`, `erase` (Alt) or `fill` (paint bucket).
+ */
+export interface VectorBuilderPreview {
+	mode: 'merge' | 'erase' | 'fill';
+	faces: BezierPath[];
+	lines: BezierPath[];
+	trail: Vec2[] | null;
+}
+
+/** Result of a Shape Builder gesture. */
+export interface VectorShapeBuilderResult {
+	ok: boolean;
+	message?: string;
+	/** Id of the merged shape (none when erasing). */
+	merged: string | null;
+	faces: number;
+	lines: number;
+}
+
+/** A face of the Shape Builder map (document units). */
+export interface VectorShapeBuilderFace {
+	index: number;
+	/** SVG path data. */
+	d: string;
+	area: number;
+	/** Ids of the paths whose fill covers it, bottom to top (empty for an area only outlines enclose). */
+	sources: string[];
+	/** A point inside it. */
+	point: Vec2 | null;
+}
 
 export interface AddVectorNodeOptions {
 	/** Group to add into (default: the root). */
@@ -688,10 +750,28 @@ const TOOL_LABELS: Record<VectorTool, string> = {
 	scissors: 'Scissors',
 	knife: 'Knife',
 	eraser: 'Eraser',
-	width: 'Width'
+	width: 'Width',
+	shapeBuilder: 'Shape Builder',
+	paintBucket: 'Paint Bucket'
 };
 
-const TOOL_KEYS: Record<string, VectorTool> = { v: 'select', a: 'direct', p: 'pen', n: 'pencil', r: 'rect', o: 'ellipse', y: 'polygon', s: 'star', l: 'line', c: 'scissors', k: 'knife', e: 'eraser', w: 'width' };
+const TOOL_KEYS: Record<string, VectorTool> = {
+	v: 'select',
+	a: 'direct',
+	p: 'pen',
+	n: 'pencil',
+	r: 'rect',
+	o: 'ellipse',
+	y: 'polygon',
+	s: 'star',
+	l: 'line',
+	c: 'scissors',
+	k: 'knife',
+	e: 'eraser',
+	w: 'width',
+	m: 'shapeBuilder',
+	b: 'paintBucket'
+};
 
 export function vectorToolLabel(tool: VectorTool): string {
 	return TOOL_LABELS[tool];
@@ -711,7 +791,9 @@ export const VECTOR_TOOL_SHORTCUTS: Readonly<Record<VectorTool, string>> = {
 	scissors: 'C',
 	knife: 'K',
 	eraser: 'E',
-	width: 'W'
+	width: 'W',
+	shapeBuilder: 'M',
+	paintBucket: 'B'
 };
 
 /** Short glyphs for tool buttons (pair them with `vectorToolLabel` for the accessible name). */
@@ -728,7 +810,9 @@ export const VECTOR_TOOL_GLYPHS: Readonly<Record<VectorTool, string>> = {
 	scissors: '✂',
 	knife: '⟋',
 	eraser: '⌫',
-	width: '⇹'
+	width: '⇹',
+	shapeBuilder: '⊕',
+	paintBucket: '◍'
 };
 
 /** Tools that drag out a shape (they snap while hovering). */
@@ -742,6 +826,16 @@ const BOOLEAN_OPS: Record<VectorBooleanOperation, 'union' | 'difference' | 'inte
 };
 
 const BOOLEAN_LABELS: Record<VectorBooleanOperation, string> = { union: 'Union', subtract: 'Subtract', intersect: 'Intersect', exclude: 'Exclude' };
+
+/** Names of the Pathfinder operations (undo steps, groups and buttons). */
+export const VECTOR_PATHFINDER_LABELS: Readonly<Record<VectorPathfinderOperation, string>> = {
+	divide: 'Divide',
+	trim: 'Trim',
+	merge: 'Merge',
+	crop: 'Crop',
+	outline: 'Outline',
+	minusBack: 'Minus Back'
+};
 
 /** Replaces nodes by id anywhere in the tree (structural sharing for untouched branches). */
 function mapTree(nodes: readonly VectorNode[], fn: (node: VectorNode) => VectorNode | null): VectorNode[] {
@@ -814,6 +908,7 @@ type Drag =
 	| { kind: 'bend'; ref: VectorSegmentRef; t: number; start: Vec2; before: Snapshot; base: VectorDocument; moved: boolean }
 	| { kind: 'corner'; widget: VectorCornerWidget; refs: VectorAnchorRef[]; start: Vec2; before: Snapshot; base: VectorDocument; moved: boolean; alt: boolean; shift: boolean }
 	| { kind: 'stroke'; tool: 'knife' | 'eraser'; points: Vec2[]; before: Snapshot }
+	| { kind: 'builder'; erase: boolean; points: Vec2[]; touched: VectorBuilderTouched; map: VectorShapeBuilderMap }
 	| { kind: 'pull'; ref: VectorAnchorRef; before: Snapshot; base: VectorDocument; label: string; outOnly: boolean; closing: boolean; altBreaks: boolean }
 	| ({ kind: 'shape'; tool: VectorTool; start: Vec2; nodeId: string; before: Snapshot } & DragTargets)
 	| { kind: 'pencil'; nodeId: string; points: Point[]; before: Snapshot; lazy: LazyMouse; pressures: number[] | null; pressure: number }
@@ -868,6 +963,13 @@ export class VectorEditorController {
 	private hoverTargets: { doc: VectorDocument; exclude: string; targets: VectorSnapTargets } | null = null;
 	private spaceHeld = false;
 	private clipboard: VectorNode[] | null = null;
+	/** Shape Builder map of the selection, kept while the document and the selection stay the same. */
+	private builderCache: { doc: VectorDocument; key: string; map: VectorShapeBuilderMap | null } | null = null;
+	/** Paint bucket map of the visible outlines. */
+	private fillCache: { doc: VectorDocument; gap: number; map: PlanarMap | null } | null = null;
+	private builderPreview: VectorBuilderPreview | null = null;
+	/** What the highlight shows, to skip notifying when the pointer stays over the same face. */
+	private builderHoverKey: string | null = null;
 	private readonly createId: () => string;
 	private readonly onChange?: (document: VectorDocument) => void;
 	private readonly listeners = new Set<(state: VectorEditorState) => void>();
@@ -950,6 +1052,7 @@ export class VectorEditorController {
 			interaction: this.interaction,
 			pen: this.pen,
 			pointer: this.pointer,
+			builder: this.builderPreview,
 			canUndo: h.canUndo,
 			canRedo: h.canRedo,
 			undoLabel: h.undoName,
@@ -1014,6 +1117,11 @@ export class VectorEditorController {
 				if (this.drag?.kind === 'width') return this.drag.mode === 'move' ? 'grabbing' : 'ew-resize';
 				if (h?.widthPoint) return h.widthPoint.part === 'center' ? 'grab' : 'ew-resize';
 				return h?.strokeSpot ? 'copy' : 'default';
+			case 'shapeBuilder':
+				if (!this.builderPreview?.faces.length && !this.builderPreview?.lines.length) return 'crosshair';
+				return this.builderPreview.mode === 'erase' ? 'not-allowed' : 'cell';
+			case 'paintBucket':
+				return this.builderPreview ? 'cell' : 'crosshair';
 			default:
 				return 'crosshair';
 		}
@@ -1159,6 +1267,8 @@ export class VectorEditorController {
 		this.hover = null;
 		this.guides = null;
 		this.widthPoint = null;
+		this.builderPreview = null;
+		this.builderHoverKey = null;
 		if (tool !== 'direct') {
 			this.anchors = [];
 			this.editingId = null;
@@ -2015,6 +2125,261 @@ export class VectorEditorController {
 			this.selection = created;
 		});
 		return { ok: true };
+	}
+
+	// -------------------------------------------------------------------------
+	// Pathfinder, Shape Builder and paint bucket
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Pathfinder: Divide, Trim, Merge, Crop, Outline or Minus Back over the selected (or given)
+	 * paths, in document space (rotated nodes and groups included, live corners cut). Unfilled
+	 * stroked paths take part as the area their stroke paints (Divide: open ones cut instead).
+	 * The results replace the operands at the place of the top-most one, grouped when there are
+	 * several; each keeps the style of the operand whose area it is. Returns the new path ids,
+	 * or an empty list when nothing came out.
+	 */
+	pathfinder(op: VectorPathfinderOperation, options: { ids?: readonly string[] } = {}): string[] {
+		const roots = options.ids ?? this.selectedRoots();
+		const entries = vectorPathEntries(this.doc, roots);
+		if (entries.length < (op === 'divide' || op === 'outline' ? 1 : 2)) return [];
+		const shapes = entries.map((e) => vectorPathfinderShape(e, op));
+		const result = runPathfinder(op, shapes);
+		if (result.error || !result.pieces.length) return [];
+		const last = entries[entries.length - 1].node.id;
+		const topRoot = [...roots].reverse().find((r) => { const n = this.getNode(r); return !!n && !!findVectorNode([n], last); }) ?? last;
+		const nodes: VectorPathNode[] = [];
+		for (const piece of result.pieces) {
+			const subpaths = bezierToSubpaths(this.intoParentSpace(topRoot, piece.path)).map((sp) => (piece.open ? { ...sp, closed: false } : sp));
+			if (!subpaths.length) continue;
+			const source = entries[piece.source].node;
+			const style = vectorResultStyle(source, shapes[piece.source].paint, op === 'outline');
+			nodes.push({ ...style, type: 'path', id: this.newId(), name: source.name ?? 'Path', subpaths });
+		}
+		if (!nodes.length) return [];
+		const label = VECTOR_PATHFINDER_LABELS[op];
+		const container: VectorNode = nodes.length > 1 ? { id: this.newId(), type: 'group', name: label, children: nodes } : nodes[0];
+		const drop = new Set([...entries.map((e) => e.node.id), ...roots]);
+		this.change(label, () => {
+			this.setDoc(mapTree(this.doc.nodes, (n) => (n.id === topRoot ? container : drop.has(n.id) ? null : n)));
+			this.selection = [container.id];
+			this.anchors = [];
+			this.editingId = null;
+		});
+		return nodes.map((n) => n.id);
+	}
+
+	/** The Shape Builder map of the selected (or given) paths, cached per document and selection. */
+	private shapeBuilderMap(ids?: readonly string[]): VectorShapeBuilderMap | null {
+		const roots = ids ?? this.selectedRoots();
+		const key = roots.join('\u0000');
+		if (this.builderCache?.doc === this.doc && this.builderCache.key === key) return this.builderCache.map;
+		const entries = roots.length ? vectorPathEntries(this.doc, roots) : [];
+		const map = entries.length ? vectorShapeBuilderMap(entries) : null;
+		this.builderCache = { doc: this.doc, key, map };
+		return map;
+	}
+
+	/** The faces the Shape Builder offers for the selected (or given) paths (document units). */
+	getShapeBuilderFaces(options: { ids?: readonly string[] } = {}): VectorShapeBuilderFace[] {
+		const m = this.shapeBuilderMap(options.ids);
+		if (!m) return [];
+		return m.map.faces.map((f, index) => {
+			const p = m.map.faceInterior(index);
+			return {
+				index,
+				d: bezierPathToSvg(f.path, { precision: 3 }),
+				area: f.area,
+				sources: m.map.faceSources(index).map((i) => m.entries[i].node.id),
+				point: p ? { x: p[0], y: p[1] } : null
+			};
+		});
+	}
+
+	/** Pick distance of the Shape Builder's erase for line pieces (document units). */
+	private builderLineTolerance(): number {
+		return Math.max(this.hitRadius, 4) / this.viewport.zoom;
+	}
+
+	/**
+	 * Shape Builder gesture along `points` (document units; one point is a click) over the faces
+	 * the selected (or given) paths make. Merges the faces touched into one shape styled like the
+	 * top-most shape over the first face (the current fill for a face only outlines enclose);
+	 * with `erase` deletes them, and the pieces of unfilled open paths within `tolerance`. Every
+	 * shape covering a touched face loses that area. One undo step.
+	 */
+	shapeBuilder(points: readonly Vec2[], options: { ids?: readonly string[]; erase?: boolean; tolerance?: number } = {}): VectorShapeBuilderResult {
+		const none = (message: string): VectorShapeBuilderResult => ({ ok: false, message, merged: null, faces: 0, lines: 0 });
+		if (!points.length || !points.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y))) return none('Give the points of the gesture.');
+		const m = this.shapeBuilderMap(options.ids);
+		if (!m) return none('Select paths that make faces.');
+		const erase = !!options.erase;
+		const tol = erase ? (options.tolerance ?? this.builderLineTolerance()) : null;
+		const touched: VectorBuilderTouched = { faces: [], lines: [] };
+		const size = m.map.faces.reduce((s, f) => Math.max(s, f.bounds.maxX - f.bounds.minX, f.bounds.maxY - f.bounds.minY), 1);
+		for (const p of samplePolyline(points, Math.max(size / 2000, 0.25 / this.viewport.zoom))) addBuilderHit(touched, vectorShapeBuilderHit(m, p, tol));
+		if (!touched.faces.length && !touched.lines.length) return none('There is no face under the pointer.');
+		return this.applyShapeBuilder(m, touched, erase);
+	}
+
+	private applyShapeBuilder(m: VectorShapeBuilderMap, touched: VectorBuilderTouched, erase: boolean): VectorShapeBuilderResult {
+		const plan = planShapeBuilder(m, touched, erase);
+		let mergedId: string | null = null;
+		const created = new Map<string, string[]>();
+		this.change(erase ? 'Shape Builder Delete' : 'Shape Builder', () => {
+			let nodes = this.doc.nodes;
+			m.entries.forEach((entry, i) => {
+				const node = entry.node;
+				const toLocal = (path: BezierPath) => transformBezierPath(path, invertMatrix(multiplyMatrices(nodeMatrix(node), entry.parent)));
+				const list: VectorNode[] = [];
+				const r = plan.replace.get(i);
+				if (r === undefined) list.push(node);
+				else if (r?.kind === 'fill') list.push({ ...node, fillRule: 'nonzero', subpaths: bezierToSubpaths(toLocal(r.path)) });
+				else if (r?.kind === 'pieces') {
+					r.paths.forEach((path, k) =>
+						list.push({ ...node, id: k === 0 ? node.id : this.newId(), subpaths: bezierToSubpaths(toLocal(path)).map((sp) => ({ ...sp, closed: false })) })
+					);
+				}
+				if (plan.merged && plan.merged.style === i) {
+					mergedId = this.newId();
+					const merged: VectorPathNode = {
+						...vectorResultStyle(node, 'fill'),
+						type: 'path',
+						id: mergedId,
+						name: 'Shape',
+						...(node.transform ? { transform: node.transform } : {}),
+						subpaths: bezierToSubpaths(toLocal(plan.merged.path))
+					};
+					if (plan.merged.currentFill || !hasPaint(merged.fill)) merged.fill = hasPaint(this.defaults.fill) ? this.defaults.fill! : '#808080';
+					list.push(merged);
+				}
+				if (r === undefined && list.length === 1) return;
+				created.set(node.id, list.map((n) => n.id));
+				nodes = spliceTree(nodes, node.id, list);
+			});
+			this.setDoc(nodes);
+			// The shapes stay selected so the next gesture works on them too.
+			const selection = this.selection.flatMap((id) => created.get(id) ?? [id]);
+			if (mergedId && !selection.includes(mergedId)) selection.push(mergedId);
+			this.selection = selection.filter((id, k) => !!this.getNode(id) && selection.indexOf(id) === k);
+			this.anchors = [];
+			this.editingId = null;
+		});
+		this.builderCache = null;
+		return { ok: true, merged: mergedId, faces: touched.faces.length, lines: touched.lines.length };
+	}
+
+	/** The paint bucket's map of the visible outlines, cached per document and gap. */
+	private fillMap(gap: number): PlanarMap | null {
+		if (this.fillCache?.doc === this.doc && this.fillCache.gap === gap) return this.fillCache.map;
+		const map = vectorFillMap(this.doc, gap);
+		this.fillCache = { doc: this.doc, gap, map };
+		return map;
+	}
+
+	/**
+	 * Paint bucket: the region the visible outlines enclose around `point` (document units),
+	 * crossings split and islands left as holes, becomes a new path filled with the current fill
+	 * default, placed just below the selection (or on top when nothing is selected). `gap`
+	 * (default `editing.fillGap`) closes gaps up to that size between loose ends. Returns the new
+	 * path's id, or null when nothing encloses the point.
+	 */
+	fillRegion(point: Vec2, options: { gap?: number } = {}): string | null {
+		if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) return null;
+		const region = this.fillMap(options.gap ?? this.editing.fillGap)?.regionAt([point.x, point.y]);
+		if (!region?.length) return null;
+		// Below the lowest selected node, in its parent.
+		let below: string | null = null;
+		const roots = new Set(this.selectedRoots());
+		walkVectorNodes(this.doc.nodes, (n) => {
+			if (!below && roots.has(n.id)) below = n.id;
+		});
+		const subpaths = bezierToSubpaths(below ? this.intoParentSpace(below, region) : region);
+		if (!subpaths.length) return null;
+		const id = this.newId();
+		const node: VectorPathNode = { id, type: 'path', name: 'Fill', ...this.styleFor(false), stroke: null, fillRule: 'nonzero', subpaths };
+		if (!hasPaint(node.fill)) node.fill = '#808080';
+		const target = below as string | null;
+		this.change('Fill Region', () => {
+			if (target) {
+				const current = this.getNode(target)!;
+				this.setDoc(spliceTree(this.doc.nodes, target, [node, current]));
+			} else this.setDoc([...this.doc.nodes, node]);
+			if (!target) this.selection = [id];
+			this.anchors = [];
+			this.editingId = null;
+		});
+		return id;
+	}
+
+	/** Updates the Shape Builder / paint bucket highlight for the pointer at `p`; true when it changed. */
+	private hoverBuilder(p: Vec2, alt: boolean): boolean {
+		if (this.tool === 'paintBucket') {
+			const region = this.fillMap(this.editing.fillGap)?.regionAt([p.x, p.y]) ?? null;
+			const key = region ? bezierPathToSvg(region, { precision: 2 }) : null;
+			if (key === this.builderHoverKey) return false;
+			this.builderHoverKey = key;
+			this.builderPreview = region ? { mode: 'fill', faces: [region], lines: [], trail: null } : null;
+			return true;
+		}
+		const m = this.selectedRoots().length ? this.shapeBuilderMap() : null;
+		const hit = m ? vectorShapeBuilderHit(m, p, alt ? this.builderLineTolerance() : null) : null;
+		const key = hit ? `${alt ? 'erase' : 'merge'}:${JSON.stringify(hit)}` : null;
+		if (key === this.builderHoverKey) return false;
+		this.builderHoverKey = key;
+		this.builderPreview = hit && m ? this.builderPreviewOf(m, 'face' in hit ? { faces: [hit.face], lines: [] } : { faces: [], lines: [hit.line] }, alt, null) : null;
+		return true;
+	}
+
+	private builderPreviewOf(m: VectorShapeBuilderMap, touched: VectorBuilderTouched, erase: boolean, trail: Vec2[] | null): VectorBuilderPreview {
+		const faces = m.map.faces;
+		return {
+			mode: erase ? 'erase' : 'merge',
+			faces: touched.faces.map((f) => faces[f].path),
+			lines: touched.lines.map((k) => m.pieces[k].path),
+			trail
+		};
+	}
+
+	private downBuilder(p: Vec2, input: VectorPointerInput) {
+		this.builderHoverKey = null;
+		if (this.tool === 'paintBucket') {
+			this.fillRegion(p);
+			this.builderPreview = null;
+			this.hoverBuilder(p, false);
+			this.notify();
+			return;
+		}
+		const m = this.selectedRoots().length ? this.shapeBuilderMap() : null;
+		if (!m) return;
+		const erase = !!input.alt;
+		const touched: VectorBuilderTouched = { faces: [], lines: [] };
+		addBuilderHit(touched, vectorShapeBuilderHit(m, p, erase ? this.builderLineTolerance() : null));
+		this.drag = { kind: 'builder', erase, points: [p], touched, map: m };
+		this.interaction = { type: 'builder', mode: erase ? 'erase' : 'merge', points: [p] };
+		this.builderPreview = this.builderPreviewOf(m, touched, erase, [p]);
+		this.notify();
+	}
+
+	private moveBuilder(drag: Extract<Drag, { kind: 'builder' }>, p: Vec2) {
+		const last = drag.points[drag.points.length - 1];
+		if (Math.hypot(p.x - last.x, p.y - last.y) * this.viewport.zoom < 1) return;
+		const tol = drag.erase ? this.builderLineTolerance() : null;
+		for (const q of samplePolyline([last, p], 2 / this.viewport.zoom)) addBuilderHit(drag.touched, vectorShapeBuilderHit(drag.map, q, tol));
+		drag.points.push(p);
+		this.interaction = { type: 'builder', mode: drag.erase ? 'erase' : 'merge', points: drag.points.slice() };
+		this.builderPreview = this.builderPreviewOf(drag.map, drag.touched, drag.erase, drag.points.slice());
+		this.notify();
+	}
+
+	private upBuilder(drag: Extract<Drag, { kind: 'builder' }>) {
+		this.builderPreview = null;
+		this.builderHoverKey = null;
+		if (!drag.touched.faces.length && !drag.touched.lines.length) {
+			this.notify();
+			return;
+		}
+		this.applyShapeBuilder(drag.map, drag.touched, drag.erase);
 	}
 
 	// -------------------------------------------------------------------------
@@ -2906,6 +3271,9 @@ export class VectorEditorController {
 				return this.downPencil(p, input);
 			case 'width':
 				return this.downWidth(screen, p, input);
+			case 'shapeBuilder':
+			case 'paintBucket':
+				return this.downBuilder(p, input);
 			case 'scissors': {
 				const seg = this.nearestOutline(p);
 				if (seg) this.cutPathAt(seg.nodeId, seg.point);
@@ -3147,6 +3515,11 @@ export class VectorEditorController {
 	pointerMove(screen: Vec2, input: VectorPointerInput = {}): void {
 		const p = this.screenToDocument(screen);
 		const drag = this.drag;
+		if (!drag && (this.tool === 'shapeBuilder' || this.tool === 'paintBucket')) {
+			this.pointer = p;
+			if (this.hoverBuilder(p, !!input.alt)) this.notify();
+			return;
+		}
 		if (!drag) {
 			const hover = this.computeHover(screen);
 			const pointerMatters = this.tool === 'pen' && !!this.pen;
@@ -3285,6 +3658,8 @@ export class VectorEditorController {
 				this.notify(true);
 				return;
 			}
+			case 'builder':
+				return this.moveBuilder(drag, p);
 			case 'stroke': {
 				const last = drag.points[drag.points.length - 1];
 				if (Math.hypot(p.x - last.x, p.y - last.y) * this.viewport.zoom < 1.5) return;
@@ -3526,6 +3901,8 @@ export class VectorEditorController {
 				} else this.notify();
 				return;
 			}
+			case 'builder':
+				return this.upBuilder(drag);
 			case 'stroke': {
 				this.notify();
 				if (drag.tool === 'knife') this.knife(drag.points);
@@ -3599,7 +3976,8 @@ export class VectorEditorController {
 		this.drag = null;
 		this.interaction = null;
 		this.guides = null;
-		if (drag.kind === 'pan') {
+		if (drag.kind === 'pan' || drag.kind === 'builder') {
+			if (drag.kind === 'builder') this.builderPreview = null;
 			this.notify();
 			return;
 		}

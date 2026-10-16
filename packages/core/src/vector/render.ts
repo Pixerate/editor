@@ -3,7 +3,7 @@
  * gradient defs) and the overlay (screen-space selection box, anchors, handles, marquee and
  * pen preview). React, Svelte or plain DOM code turns these into `<svg>` elements.
  */
-import { bezierPathToSvg, transformBezierPath } from '../canvas/pathops/bezier.js';
+import { bezierPathToSvg, transformBezierPath, type BezierPath } from '../canvas/pathops/bezier.js';
 import type { SvgGradientDef } from '../canvas/gradient.js';
 
 export type { SvgGradientDef };
@@ -45,6 +45,7 @@ import type {
 	VectorHandleRef,
 	VectorNode,
 	VectorPaint,
+	VectorPathfinderOperation,
 	VectorPathNode,
 	VectorStrokeAlign,
 	VectorTransformHandle,
@@ -209,6 +210,12 @@ export interface VectorOverlayRenderData {
 	 * `left` to `right` and a hollow diamond at (`x`, `y`).
 	 */
 	widthSpot: { x: number; y: number; left: Vec2; right: Vec2 } | null;
+	/**
+	 * Shape Builder and paint bucket highlight (screen space): `faces` are filled paths (fill
+	 * them translucent and outline them), `lines` are line pieces an erase deletes, `trail` is
+	 * the drag's polyline. `mode` is `merge`, `erase` (Alt) or `fill` (paint bucket).
+	 */
+	builder: { mode: 'merge' | 'erase' | 'fill'; faces: string[]; lines: string[]; trail: string | null } | null;
 	/** A short status, e.g. "W 120 × H 80" or "45°". */
 	status: string | null;
 }
@@ -415,7 +422,20 @@ export function getVectorOverlayRenderData(state: VectorEditorState): VectorOver
 	const widthSpot = spot ? { ...sc(spot.point), left: sc(spot.left), right: sc(spot.right) } : null;
 	if (it?.type === 'width') status = it.mode === 'move' ? 'Move width point' : `W ${fmt(it.width)}`;
 
-	return { outlines, selectionBox, anchors, handles, marquee, penPreview, artboard, guides, status, toolStroke, pencilString, cutPoint, cornerWidgets, widthPoints, widthSpot };
+	let builder: VectorOverlayRenderData['builder'] = null;
+	if (state.builder) {
+		const v = state.viewport;
+		const view: AffineMatrix = [v.zoom, 0, 0, v.zoom, v.x, v.y];
+		const d = (path: BezierPath) => bezierPathToSvg(transformBezierPath(path, view), { precision: 2 });
+		const trail = state.builder.trail && state.builder.trail.length > 1 ? state.builder.trail.map((q, i) => `${i ? 'L' : 'M'}${sc(q).x} ${sc(q).y}`).join('') : null;
+		builder = { mode: state.builder.mode, faces: state.builder.faces.map(d), lines: state.builder.lines.map(d), trail };
+		if (state.builder.mode !== 'fill' && it?.type === 'builder') {
+			const n = state.builder.faces.length;
+			status = state.builder.mode === 'erase' ? `Delete ${n} ${n === 1 ? 'face' : 'faces'}` : `Merge ${n} ${n === 1 ? 'face' : 'faces'}`;
+		}
+	}
+
+	return { outlines, selectionBox, anchors, handles, marquee, penPreview, artboard, guides, status, toolStroke, pencilString, cutPoint, cornerWidgets, widthPoints, widthSpot, builder };
 }
 
 // ---------------------------------------------------------------------------
@@ -437,7 +457,12 @@ export const VECTOR_OVERLAY_THEME = {
 	/** Radius of a live corner widget (a ring with a dot). */
 	cornerWidgetRadius: 4,
 	/** Half the diagonal of a width point's diamond. */
-	widthPointSize: 5
+	widthPointSize: 5,
+	/** Shape Builder faces to merge and paint bucket regions. */
+	builderFill: 'rgba(14, 165, 233, 0.22)',
+	/** Shape Builder faces and line pieces an Alt gesture deletes. */
+	builderErase: '#ef4444',
+	builderEraseFill: 'rgba(239, 68, 68, 0.22)'
 } as const;
 
 /** SVG path data of the diamond a width point is drawn with (screen pixels). */
@@ -646,6 +671,25 @@ export const VECTOR_PATH_ACTIONS: readonly VectorPathAction[] = [
 	{ id: 'clean', label: '⌁', title: 'Remove Redundant Points', enabled: (s, p) => s + p > 0, run: (c) => c.removeRedundantPoints() },
 	{ id: 'smooth', label: '∿', title: 'Smooth', enabled: (s, p) => s + p > 0, run: (c) => c.smoothPaths() },
 	{ id: 'outline', label: '⊡', title: 'Outline Stroke', enabled: (s) => s > 0, run: (c) => c.outlineStroke() }
+];
+
+/** A Pathfinder button of the bundled toolbars. */
+export interface VectorPathfinderAction {
+	id: VectorPathfinderOperation;
+	label: string;
+	title: string;
+	/** Paths (or groups) it needs selected. */
+	min: number;
+}
+
+/** Divide, Trim, Merge, Crop, Outline and Minus Back, as the toolbars show them. */
+export const VECTOR_PATHFINDER_ACTIONS: readonly VectorPathfinderAction[] = [
+	{ id: 'divide', label: '⊞', title: 'Divide', min: 1 },
+	{ id: 'trim', label: '⧉', title: 'Trim', min: 2 },
+	{ id: 'merge', label: '⧈', title: 'Merge', min: 2 },
+	{ id: 'crop', label: '⌗', title: 'Crop', min: 2 },
+	{ id: 'outline', label: '⬚', title: 'Outline', min: 1 },
+	{ id: 'minusBack', label: '⊖', title: 'Minus Back', min: 2 }
 ];
 
 /** The on / off path-editing settings the toolbars toggle. */

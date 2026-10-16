@@ -12,3 +12,4 @@ export * from './corners.js';
 export * from './stroke.js';
 export * from './width.js';
 export * from './varstroke.js';
+export * from './builder.js';

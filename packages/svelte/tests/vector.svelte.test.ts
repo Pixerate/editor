@@ -347,6 +347,74 @@ describe("variable-width strokes (svelte)", () => {
   });
 });
 
+describe("Pathfinder, Shape Builder and paint bucket (svelte)", () => {
+  const two = () =>
+    new VectorEditorController({
+      document: {
+        width: 400,
+        height: 300,
+        nodes: [
+          { id: "a", type: "path", fill: "#ff0000", stroke: null, subpaths: [rectSubpath({ x: 0, y: 0, width: 100, height: 100 })] },
+          { id: "b", type: "path", fill: "#0000ff", stroke: null, subpaths: [rectSubpath({ x: 50, y: 50, width: 100, height: 100 })] },
+        ],
+      },
+      createId: () => `p${++n}`,
+    });
+
+  it("highlights the hovered and dragged faces and merges them on release", () => {
+    const c = two();
+    c.select(["a", "b"]);
+    const t = render(VectorCanvas, { controller: c, fitOnMount: false });
+    const svg = t.querySelector("svg")!;
+    key(svg, "m");
+    expect(c.getState().tool).toBe("shapeBuilder");
+    pointer(svg, "pointermove", 75, 75);
+    expect(t.querySelector("[data-vector-builder]")!.getAttribute("data-vector-builder")).toBe("merge");
+    expect(t.querySelectorAll("[data-vector-builder-face]")).toHaveLength(1);
+    pointer(svg, "pointerdown", 20, 20);
+    pointer(svg, "pointermove", 75, 75);
+    expect(t.querySelectorAll("[data-vector-builder-face]")).toHaveLength(2);
+    expect(t.querySelectorAll("[data-vector-builder-trail]")).toHaveLength(1);
+    pointer(svg, "pointerup", 75, 75);
+    expect(t.querySelectorAll("[data-vector-builder-face]")).toHaveLength(0);
+    expect(c.getState().undoLabel).toBe("Shape Builder");
+    pointer(svg, "pointermove", 120, 120, { altKey: true });
+    expect(t.querySelector("[data-vector-builder]")!.getAttribute("data-vector-builder")).toBe("erase");
+  });
+
+  it("previews the paint bucket region", () => {
+    const c = make();
+    c.updateNode("a", { fill: null, stroke: "#000000" });
+    const t = render(VectorCanvas, { controller: c, fitOnMount: false });
+    const svg = t.querySelector("svg")!;
+    key(svg, "b");
+    pointer(svg, "pointermove", 50, 50);
+    expect(t.querySelector("[data-vector-builder]")!.getAttribute("data-vector-builder")).toBe("fill");
+    expect(t.querySelectorAll("[data-vector-builder-face]")).toHaveLength(1);
+    pointer(svg, "pointerdown", 50, 50);
+    pointer(svg, "pointerup", 50, 50);
+    expect(c.getState().document.nodes).toHaveLength(2);
+  });
+
+  it("toolbar runs Pathfinder operations and toggles gap closing", () => {
+    const c = two();
+    const t = render(VectorToolbar, { controller: c });
+    const divide = t.querySelector('[data-vector-pathfinder="divide"]') as HTMLButtonElement;
+    expect(divide.disabled).toBe(true);
+    expect(t.querySelectorAll("[data-vector-pathfinder]")).toHaveLength(6);
+    c.select(["a", "b"]);
+    flushSync();
+    click(t.querySelector('[data-vector-pathfinder="trim"]'));
+    expect(c.getState().undoLabel).toBe("Trim");
+    expect(t.querySelectorAll("[data-vector-fill-gap]")).toHaveLength(0);
+    click(t.querySelector('[data-vector-tool="paintBucket"]'));
+    const gap = t.querySelector("[data-vector-fill-gap]")!;
+    expect(gap.getAttribute("aria-pressed")).toBe("false");
+    click(gap);
+    expect(c.getState().editing.fillGap).toBeGreaterThan(0);
+  });
+});
+
 describe("path editing (svelte)", () => {
   it("bends a segment, previews knife strokes and shows the scissors cut point", () => {
     const c = make();

@@ -5,6 +5,8 @@
     VECTOR_TOOL_SHORTCUTS,
     VECTOR_EDIT_TOGGLES,
     VECTOR_PATH_ACTIONS,
+    VECTOR_PATHFINDER_ACTIONS,
+    VECTOR_FILL_GAP,
     vectorToolLabel,
     type VectorEditorController,
     type VectorTool
@@ -18,7 +20,7 @@
     tools?: readonly VectorTool[];
     /** Undo / redo buttons (default `true`). */
     showHistory?: boolean;
-    /** Boolean, group, arrange and align buttons (default `true`). */
+    /** Boolean, Pathfinder, group, arrange and align buttons (default `true`). */
     showArrange?: boolean;
     /** The snapping toggle (default `true`). */
     showSnap?: boolean;
@@ -165,11 +167,39 @@
           />
         </label>
       {/if}
+      {#if view.tool === 'paintBucket'}
+        <button
+          type="button"
+          data-vector-fill-gap=""
+          class={vectorButtonClass}
+          aria-pressed={view.editing.fillGap > 0}
+          title="Close small gaps between path ends when filling"
+          aria-label="Close gaps"
+          onclick={() => controller.setEditing({ fillGap: view.editing.fillGap > 0 ? 0 : VECTOR_FILL_GAP })}
+        >
+          Gaps
+        </button>
+      {/if}
     </div>
   {/if}
   {#if showArrange}
     <div class="ml-1 flex items-center gap-1" role="group" aria-label="Combine">
       {#each combine as item (item.title)}{@render action(item)}{/each}
+    </div>
+    <div class="ml-1 flex items-center gap-1" role="group" aria-label="Pathfinder">
+      {#each VECTOR_PATHFINDER_ACTIONS as a (a.id)}
+        <button
+          type="button"
+          data-vector-pathfinder={a.id}
+          class={vectorButtonClass}
+          title={a.title}
+          aria-label={a.title}
+          disabled={count < a.min}
+          onclick={() => controller.pathfinder(a.id)}
+        >
+          {a.label}
+        </button>
+      {/each}
     </div>
     <div class="ml-1 flex items-center gap-1" role="group" aria-label="Arrange">
       {#each arrange as item (item.title)}{@render action(item)}{/each}
