@@ -4,6 +4,7 @@
  * pen preview). React, Svelte or plain DOM code turns these into `<svg>` elements.
  */
 import { bezierPathToSvg, transformBezierPath, type BezierPath } from '../canvas/pathops/bezier.js';
+import { hatchPath } from '../canvas/pathops/hatch.js';
 import type { SvgGradientDef } from '../canvas/gradient.js';
 
 export type { SvgGradientDef };
@@ -212,16 +213,21 @@ export interface VectorOverlayRenderData {
 	widthSpot: { x: number; y: number; left: Vec2; right: Vec2 } | null;
 	/**
 	 * Shape Builder and paint bucket highlight (screen space): `faces` are filled paths (fill
-	 * them translucent and outline them), `lines` are line pieces an erase deletes, `trail` is
-	 * the drag's polyline. `mode` is `merge`, `erase` (Alt) or `fill` (paint bucket).
+	 * them translucent and outline them), `hatches` the 45° hatch lines over each face
+	 * (`hatchPath`, a few pixels apart; merge and erase only, empty strings for the paint
+	 * bucket: stroke them over the translucent fill), `lines` are the line pieces and outline
+	 * edges an erase deletes, `trail` is the drag's polyline. `mode` is `merge`, `erase` (Alt)
+	 * or `fill` (paint bucket).
 	 */
-	builder: { mode: 'merge' | 'erase' | 'fill'; faces: string[]; lines: string[]; trail: string | null } | null;
+	builder: { mode: 'merge' | 'erase' | 'fill'; faces: string[]; hatches: string[]; lines: string[]; trail: string | null } | null;
 	/** A short status, e.g. "W 120 × H 80" or "45°". */
 	status: string | null;
 }
 
 const fmt = (n: number) => Math.round(n * 100) / 100;
 const fmtMatrix = (m: AffineMatrix) => `matrix(${m.map((n) => Math.round(n * 1e6) / 1e6).join(' ')})`;
+/** Distance between the Shape Builder's hatch lines over a face (screen pixels). */
+export const VECTOR_BUILDER_HATCH_GAP = 6;
 
 function renderNode(node: VectorNode, defs: SvgGradientDef[], idPrefix: string): VectorRenderNode | null {
 	if (node.visible === false) return null;
@@ -426,9 +432,17 @@ export function getVectorOverlayRenderData(state: VectorEditorState): VectorOver
 	if (state.builder) {
 		const v = state.viewport;
 		const view: AffineMatrix = [v.zoom, 0, 0, v.zoom, v.x, v.y];
-		const d = (path: BezierPath) => bezierPathToSvg(transformBezierPath(path, view), { precision: 2 });
+		const svg = (path: BezierPath) => bezierPathToSvg(path, { precision: 2 });
+		const screen = state.builder.faces.map((f) => transformBezierPath(f, view));
+		const hatch = state.builder.mode !== 'fill';
 		const trail = state.builder.trail && state.builder.trail.length > 1 ? state.builder.trail.map((q, i) => `${i ? 'L' : 'M'}${sc(q).x} ${sc(q).y}`).join('') : null;
-		builder = { mode: state.builder.mode, faces: state.builder.faces.map(d), lines: state.builder.lines.map(d), trail };
+		builder = {
+			mode: state.builder.mode,
+			faces: screen.map(svg),
+			hatches: screen.map((f) => (hatch ? svg(hatchPath(f, { gap: VECTOR_BUILDER_HATCH_GAP })) : '')),
+			lines: state.builder.lines.map((l) => svg(transformBezierPath(l, view))),
+			trail
+		};
 		if (state.builder.mode !== 'fill' && it?.type === 'builder') {
 			const n = state.builder.faces.length;
 			status = state.builder.mode === 'erase' ? `Delete ${n} ${n === 1 ? 'face' : 'faces'}` : `Merge ${n} ${n === 1 ? 'face' : 'faces'}`;
@@ -462,7 +476,9 @@ export const VECTOR_OVERLAY_THEME = {
 	builderFill: 'rgba(14, 165, 233, 0.22)',
 	/** Shape Builder faces and line pieces an Alt gesture deletes. */
 	builderErase: '#ef4444',
-	builderEraseFill: 'rgba(239, 68, 68, 0.22)'
+	builderEraseFill: 'rgba(239, 68, 68, 0.22)',
+	/** Opacity of the hatch lines over Shape Builder faces (drawn in the face's outline colour). */
+	builderHatchOpacity: 0.6
 } as const;
 
 /** SVG path data of the diamond a width point is drawn with (screen pixels). */

@@ -3,7 +3,7 @@ import { describe, it, expect, beforeAll, beforeEach, afterEach } from "vitest";
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { CommandRegistry } from "@pixerate/editor/commands";
-import { VectorEditorController, rectSubpath, vectorNodeBounds, type VectorDocument } from "@pixerate/editor/vector";
+import { VectorEditorController, rectSubpath, vectorNodeBounds, type VectorDocument, type VectorPathNode } from "@pixerate/editor/vector";
 import {
   VectorCanvas,
   VectorEditor,
@@ -519,6 +519,27 @@ describe("Pathfinder, Shape Builder and paint bucket (React)", () => {
     expect(q("[data-vector-builder]").getAttribute("data-vector-builder")).toBe("erase");
   });
 
+  it("hatches hovered faces and erases an outline edge with Alt", async () => {
+    const c = two();
+    c.select(["a", "b"]);
+    await act(async () => root.render(<VectorCanvas controller={c} fitOnMount={false} />));
+    const svg = q("svg");
+    key(svg, "m");
+    pointer(svg, "pointermove", 75, 75);
+    expect(qa("[data-vector-builder-hatch]")).toHaveLength(1);
+    expect(q("[data-vector-builder-hatch]").getAttribute("d")).toMatch(/^M/);
+    // a's corner inside b: the edge, not the face.
+    pointer(svg, "pointermove", 101, 75, { altKey: true });
+    expect(qa("[data-vector-builder-face]")).toHaveLength(0);
+    expect(qa("[data-vector-builder-hatch]")).toHaveLength(0);
+    expect(qa("[data-vector-builder-line]")).toHaveLength(1);
+    pointer(svg, "pointerdown", 101, 75, { altKey: true });
+    pointer(svg, "pointerup", 101, 75, { altKey: true });
+    const a = c.getNode("a") as VectorPathNode;
+    expect(a.subpaths[0].closed).toBe(false);
+    expect(c.getState().undoLabel).toBe("Shape Builder Delete");
+  });
+
   it("previews the paint bucket region", async () => {
     const c = make();
     c.updateNode("a", { fill: null, stroke: "#000000" });
@@ -528,6 +549,7 @@ describe("Pathfinder, Shape Builder and paint bucket (React)", () => {
     pointer(svg, "pointermove", 50, 50);
     expect(q("[data-vector-builder]").getAttribute("data-vector-builder")).toBe("fill");
     expect(qa("[data-vector-builder-face]")).toHaveLength(1);
+    expect(qa("[data-vector-builder-hatch]")).toHaveLength(0);
     pointer(svg, "pointerdown", 50, 50);
     pointer(svg, "pointerup", 50, 50);
     expect(c.getState().document.nodes).toHaveLength(2);

@@ -259,6 +259,18 @@
             stroke-width={1}
           />
         {/each}
+        {#each builder.hatches as d, i (i)}
+          {#if d}
+            <path
+              data-vector-builder-hatch=""
+              {d}
+              fill="none"
+              stroke={builder.mode === 'erase' ? THEME.builderErase : accentColor}
+              stroke-opacity={THEME.builderHatchOpacity}
+              stroke-width={1}
+            />
+          {/if}
+        {/each}
         {#each builder.lines as d, i (i)}
           <path data-vector-builder-line="" {d} fill="none" stroke={THEME.builderErase} stroke-width={3} stroke-linecap="round" />
         {/each}

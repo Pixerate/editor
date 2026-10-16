@@ -21,7 +21,7 @@
  * Adjacency is kept in per-vertex lists and half-edge slots (no scans over all edges per step).
  *
  * Ported from vectorcraft-main/crates/pathops/src/planar.rs (`map`, `Map::merge`, `build`,
- * `interior_point`, `without_spurs`, `leaving_angle`), figcraft-main/crates/doc/src/vector_faces.rs
+ * `interior_point`, `without_spurs`, `leaving_angle`, `cut_out`), figcraft-main/crates/doc/src/vector_faces.rs
  * (`faces`: half-edge walk with an angle-sorted next edge, the winding deciding inside or
  * outside) and cadcraft-main/crates/geom/src/region.rs (`enclosing_loop`, `boundary_at_gap`:
  * a ray from the point, the sharpest left turn, islands as holes, gaps between open ends
@@ -37,6 +37,7 @@ import {
 	flattenChain,
 	pathToContours,
 	segmentLength,
+	segmentNearest,
 	segmentPoint,
 	segmentTangent,
 	solveMonotone,
@@ -627,4 +628,144 @@ function closeGaps(vertices: Point[], edges: Edge[], gap: number) {
 		joined.add(u);
 		joined.add(best);
 	}
+}
+
+// -- cutting edges out of outlines (vectorcraft `cut_out`) ---------------------
+
+/** Whether a contour, closed, encloses an area (rather than retracing itself). */
+export function contourEnclosesArea(contour: BezierContour): boolean {
+	const segs = closeContour(contour, true);
+	if (!segs.length) return false;
+	const b = boundsOf(segs);
+	const w = b.maxX - b.minX;
+	const h = b.maxY - b.minY;
+	return Math.abs(contourSignedArea(segs)) > 1e-9 * (w * w + h * h);
+}
+
+/** The point of a chain nearest `p`, as a parameter `segment + t`, with its distance. */
+function nearestU(segs: readonly BezierSegment[], p: Point): { u: number; d: number } | null {
+	let best: { u: number; d: number } | null = null;
+	segs.forEach((seg, k) => {
+		const n = segmentNearest(seg, p);
+		if (!best || n.distance < best.d) best = { u: k + n.t, d: n.distance };
+	});
+	return best;
+}
+
+/** The run of a chain from parameter `u0` to `u1` (`u0 < u1`, unrolled past the end of a ring). */
+function span(segs: readonly BezierSegment[], u0: number, u1: number): BezierSegment[] {
+	const n = segs.length;
+	if (!n || !Number.isFinite(u0) || !Number.isFinite(u1)) return [];
+	const first = Math.max(0, Math.floor(u0));
+	const last = Math.min(Math.max(0, Math.ceil(u1)), first + 2 * n);
+	const out: BezierSegment[] = [];
+	for (let k = first; k < last; k++) {
+		const t0 = Math.min(1, Math.max(0, u0 - k));
+		const t1 = Math.min(1, Math.max(0, u1 - k));
+		if (t1 - t0 > 1e-12) out.push(subSegment(segs[k % n], t0, t1));
+	}
+	return out;
+}
+
+/**
+ * A run with its end points within `tol` of one of `to` put exactly on it (where the planar map
+ * put the junction a piece ends at), the neighbouring handles moving with them.
+ */
+function snapEnds(segs: BezierSegment[], to: readonly Point[], tol: number): BezierSegment[] {
+	if (!segs.length) return segs;
+	const out = segs.map((s) => [...s]);
+	const move = (seg: Point[], end: number, handle: number) => {
+		const q = to.find((t) => dist(t, seg[end]) <= tol);
+		if (!q) return;
+		const d: Point = [q[0] - seg[end][0], q[1] - seg[end][1]];
+		seg[end] = q;
+		if (seg.length === 4) seg[handle] = [seg[handle][0] + d[0], seg[handle][1] + d[1]];
+	};
+	move(out[0], 0, 1);
+	const last = out[out.length - 1];
+	move(last, last.length - 1, last.length - 2);
+	return out;
+}
+
+/**
+ * `path` without `piece`, a run along one of its subpaths between two points (a Shape Builder
+ * edge from `PlanarMap.chains`): a closed subpath opens there, an open one splits in two (or
+ * loses an end), and a piece that runs all the way round (`closed`, or ending where it starts)
+ * takes its subpath with it. With `fillCloses`, open subpaths that enclose an area run on round
+ * an invisible closing edge, as the Shape Builder sees a filled path: a piece may run over it,
+ * and it never comes back as a visible segment. Null when the piece does not lie on `path`
+ * within `tol`.
+ *
+ * Ported from vectorcraft-main/crates/pathops/src/planar.rs (`cut_out`, `nearest_u`, `span`,
+ * `snap_ends`). MIT OR Apache-2.0, © ArtCraft Team and contributors. See THIRD_PARTY_NOTICES.md.
+ */
+export function cutOutPiece(path: BezierPathInput, piece: { segments: readonly BezierSegment[]; closed?: boolean }, fillCloses: boolean, tol: number): BezierPath | null {
+	const segs = piece.segments;
+	if (!segs.length) return null;
+	// A point well inside the piece: the middle of its longest segment.
+	let mid: Point | null = null;
+	let longest = -1;
+	let perimeter = 0;
+	for (const seg of segs) {
+		const len = segmentLength(seg);
+		perimeter += len;
+		if (len > longest) {
+			longest = len;
+			mid = segmentPoint(seg, 0.5);
+		}
+	}
+	// A speck (where paths touch): there is nothing to cut.
+	if (!mid || perimeter <= tol) return null;
+	const a = segs[0][0];
+	const lastSeg = segs[segs.length - 1];
+	const b = lastSeg[lastSeg.length - 1];
+	const whole = !!piece.closed || dist(a, b) <= tol;
+	const contours = pathToContours(path);
+	// Each subpath as the piece may run along it: round its closing edge when it has one.
+	let found: { index: number; ring: BezierSegment[]; closed: boolean; um: number; d: number } | null = null;
+	contours.forEach((c, index) => {
+		if (!c.segments.length) return;
+		const closed = c.closed || (fillCloses && contourEnclosesArea(c));
+		const ring = closeContour(c, closed);
+		const n = nearestU(ring, mid!);
+		if (n && n.d <= tol && (!found || n.d < found.d)) found = { index, ring, closed, um: n.u, d: n.d };
+	});
+	if (!found) return null;
+	const { index, ring, closed, um } = found as { index: number; ring: BezierSegment[]; closed: boolean; um: number };
+	const len = ring.length;
+	const real = closeContour(contours[index]).length;
+	const at = (p: Point) => {
+		const n = nearestU(ring, p);
+		return n && n.d <= tol ? n.u : null;
+	};
+	// The parameter spans of the ring that stay (unrolled past the end of a ring).
+	let keep: [number, number][] = [];
+	if (!whole) {
+		const ua = at(a);
+		const ub = at(b);
+		if (ua === null || ub === null) return null;
+		if (closed) {
+			const fwd = (from: number, to: number) => (((to - from) % len) + len) % len;
+			// The piece runs from one end through `mid` to the other; what stays runs on round.
+			const [start, end] = fwd(ua, um) <= fwd(ua, ub) ? [ub, ua] : [ua, ub];
+			const rest = fwd(start, end);
+			if (rest > 1e-9 && len - rest > 1e-9) {
+				// Where the ring closes with an invisible edge (`real..len`), what stays stops at it.
+				const parts: [number, number][] = real >= len ? [[0, 2 * len]] : [[0, real], [len, len + real]];
+				keep = parts.map(([lo, hi]): [number, number] => [Math.max(start, lo), Math.min(start + rest, hi)]).filter(([x, y]) => y - x > 1e-9);
+			}
+		} else {
+			const lo = Math.min(ua, ub);
+			const hi = Math.max(ua, ub);
+			if (um < lo - 1e-9 || um > hi + 1e-9) return null;
+			keep = ([[0, lo], [hi, len]] as [number, number][]).filter(([x, y]) => y - x > 1e-9);
+		}
+	}
+	const out: BezierContour[] = contours.slice(0, index);
+	for (const [u0, u1] of keep) {
+		const run = span(ring, u0, u1);
+		if (run.length) out.push({ segments: snapEnds(run, [a, b], tol), closed: false });
+	}
+	out.push(...contours.slice(index + 1));
+	return contoursToPath(out);
 }
