@@ -56,7 +56,7 @@ export function VectorTab() {
           <p className="text-xs text-slate-400">
             Headless <code>VectorEditorController</code> (<code>@pixerate/editor/vector</code>) with React bindings. Pen (P): click for corners, drag for curves,
             click the first point to close. Direct select (A): drag points and handles, Alt-drag a point for smooth handles, Alt-click a segment to add a point.
-            Space-drag pans, Cmd/Ctrl+wheel zooms.
+            Drags snap to other shapes with labelled smart guides (hold Cmd/Ctrl to bypass, or switch Snap off in the toolbar). Space-drag pans, Cmd/Ctrl+wheel zooms.
           </p>
         </div>
       </div>

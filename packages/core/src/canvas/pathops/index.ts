@@ -46,6 +46,8 @@ export {
 	normalizeBezierPath,
 	bezierPathArea,
 	PathOpsError,
+	segmentIntersections,
+	type SegmentIntersection,
 	type PathBooleanOperation,
 	type PathOperand,
 	type PathOperandInput,

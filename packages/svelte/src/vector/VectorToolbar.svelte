@@ -18,10 +18,15 @@
     showHistory?: boolean;
     /** Boolean, group, arrange and align buttons (default `true`). */
     showArrange?: boolean;
+    /** The snapping toggle (default `true`). */
+    showSnap?: boolean;
     class?: string;
   }
 
-  let { controller, tools = VECTOR_TOOLS, showHistory = true, showArrange = true, class: className = '' }: Props = $props();
+  let { controller, tools = VECTOR_TOOLS, showHistory = true, showArrange = true, showSnap = true, class: className = '' }: Props = $props();
+
+  const snapTitle = 'Snap to objects';
+  const modKey = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform ?? '') ? '⌘' : 'Ctrl';
 
   const store = vectorStateOf(() => controller);
   const view = $derived(store.current);
@@ -74,6 +79,21 @@
     <div class="ml-1 flex items-center gap-1" role="group" aria-label="History">
       {@render action({ label: '↶', title: view.canUndo ? `Undo ${view.undoLabel}` : 'Undo', run: () => controller.undo(), disabled: !view.canUndo })}
       {@render action({ label: '↷', title: view.canRedo ? `Redo ${view.redoLabel}` : 'Redo', run: () => controller.redo(), disabled: !view.canRedo })}
+    </div>
+  {/if}
+  {#if showSnap}
+    <div class="ml-1 flex items-center gap-1" role="group" aria-label="Snapping">
+      <button
+        type="button"
+        data-vector-snap=""
+        class={vectorButtonClass}
+        aria-pressed={view.snap.objects}
+        title="{snapTitle} (hold {modKey} to bypass)"
+        aria-label={snapTitle}
+        onclick={() => controller.toggleSnapping()}
+      >
+        Snap
+      </button>
     </div>
   {/if}
   {#if showArrange}

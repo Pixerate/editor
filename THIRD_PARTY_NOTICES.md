@@ -8,6 +8,12 @@ All sources below are from the ArtCraft "craft" apps, each licensed **MIT OR Apa
 © 2026 ArtCraft Team and the respective app's contributors. They are used here under the MIT licence
 reproduced at the end of this file. Paths are relative to each source repository.
 
+## cadcraft
+
+© 2026 ArtCraft Team and the CadCraft contributors.
+
+- `crates/engine/src/snap/curves.rs` (`Param::solve` with the `perpendicular` and `tangent` conditions: sign changes of sampled conditions narrowed by bisection, near-zero check, degenerate "every point qualifies" case) → `solveOnSegment` and `VectorSnapTargets` perpendicular / tangent snaps in `packages/core/src/vector/snap.ts`
+
 ## craft-libs
 
 © 2026 ArtCraft Team and the craft-libs contributors.
@@ -18,12 +24,19 @@ reproduced at the end of this file. Paths are relative to each source repository
 - `crates/settings/src/store.rs` (debounced save, `retry_delay` exponential backoff with cap) → `packages/core/src/persistence/autosave.ts`, `exponentialBackoff` in `packages/core/src/persistence/recoveryPolicy.ts`
 - Test cases from `crates/settings/tests/migrate.rs`, `tests/recovery.rs` and `tests/store.rs`, re-expressed → `packages/core/tests/persistence-migrate.test.ts`, `packages/core/tests/persistence-policy.test.ts`
 
+## designcraft
+
+© 2026 ArtCraft Team and the DesignCraft contributors.
+
+- `crates/tools/src/snap.rs` (`pass_dimensions`: a resized or created object's side matches another object's width or height in its own frame, nearest within the zone, when nothing else snapped on that axis) → `VectorSnapTargets.snapScale` / `matchSize` in `packages/core/src/vector/snap.ts`
+
 ## figcraft
 
 © 2026 ArtCraft Team and the FigCraft contributors.
 
 - `crates/engine/src/distance.rs` (`between`, `inside`, `to_guide`, `label`) → `packages/core/src/canvas/measure.ts`
 - `crates/engine/src/measure_tests.rs` (test cases re-expressed) → `packages/core/tests/canvas-measure.test.ts`
+- `crates/engine/src/snap.rs` (`spacings` / `equal_spacing` / `spacing_guides`: centred between neighbours, repeating the gap of the pair before or after, gap labels; threshold in screen pixels divided by the zoom) → `VectorSnapTargets.snapRect` in `packages/core/src/vector/snap.ts`; its equal-spacing cases re-expressed → `packages/core/tests/vector-snap.test.ts`
 - `crates/layout/src/lib.rs` (`layout_frame`, `distribute`, `main_offsets`, `fit_hug_text`, `enforce_limits`, `item_baseline`, `resize_child`, `grid_place`, `resolve_tracks`, `track_content`, `grid_geometry`, `layout_grid`, `apply_constraints`, `layout_page`, `layout_up`, `coherent_sizing`, `clamp_size`) → `packages/core/src/canvas/autoLayout.ts`
 - `crates/layout/src/{tests.rs,behaviour_tests.rs,nested_tests.rs,content_align_tests.rs}` (test cases re-expressed) → `packages/core/tests/canvas-auto-layout.test.ts`
 - `crates/doc/src/styles.rs` (`Collection`, `Mode`, `Variable`, `VariableValue`, `Variables::resolve`, `default_mode`, `current_mode`, `find_mode`, `scopes_for`, `normalize_scopes`, `in_scope`) → `packages/core/src/tokens/types.ts`, `packages/core/src/tokens/model.ts`
@@ -126,6 +139,8 @@ GridCraft. Apache POI is © The Apache Software Foundation, licensed under the A
 © 2026 ArtCraft Team and the VectorCraft contributors.
 
 - `crates/tools/src/guides.rs` (`snap_scale`) → `packages/core/src/canvas/resizeSnap.ts`
+- `crates/tools/src/guides.rs` (`Targets` gathered once per gesture and kept x / y sorted with `within` bisection lookups; `for_move`, `for_drawing`, `for_handle`, `for_anchor_drag` leaving the moving anchors and their segments out, `push_segments`; the `snap_from` priority — Shift-constrained ray, point, intersection, on-segment, construction angle, x / y alignment — with `slide`, `lined_up`, `on_segment`, `crossing`; `align_rects`, `snap_rects`, `even_spacing`, `gap_marks`; `snap_scale` for rotated boxes; `Leave`, `construction`; the "anchor" / "centre" / "path" / "intersect" / "align" labels) → `packages/core/src/vector/snap.ts`; the curve–curve `meeting` search was not ported (`segmentIntersections` in `packages/core/src/canvas/pathops/boolean.ts` finds every crossing instead)
+- Test cases from `crates/tools/src/guides.rs`, re-expressed → `packages/core/tests/vector-snap.test.ts`
 - `crates/geom/src/snap.rs` (`snap_to_grid`) → `snapToGrid` in `packages/core/src/canvas/guides.ts`
 - `crates/pathops/src/fit.rs` (`fit_cubics`, `fit_single`, `fit_single_from`, `generate`, `newton`, `chord_params`, `is_straight`) → `packages/core/src/canvas/curveFit.ts`
 - `crates/pathops/src/edit.rs` (`simplify_with` corner splitting) → `packages/core/src/canvas/curveFit.ts`

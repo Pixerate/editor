@@ -4,3 +4,4 @@ export * from './svg.js';
 export * from './controller.js';
 export * from './render.js';
 export * from './commands.js';
+export * from './snap.js';
