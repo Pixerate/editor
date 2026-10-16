@@ -407,7 +407,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 			label: 'Shape Builder',
 			keywords: ['merge faces', 'build shape', 'combine regions', 'delete region'],
 			description:
-				'Shape Builder gesture over the faces of the given paths: `points` is the pointer path in document units (one point is a click; [[x, y], …]; use the points from shapeBuilderFaces). Merges the faces it touches into one shape, or with `erase: true` deletes them and the pieces of unfilled open paths within `tolerance`. Shapes covering those faces lose that area.',
+				'Shape Builder gesture over the faces of the given paths: `points` is the pointer path in document units (one point is a click; [[x, y], …]; use the points from shapeBuilderFaces). Merges the faces it touches into one shape, or with `erase: true` deletes them, the pieces of unfilled open paths and the edges of other outlines (cut where paths meet) within `tolerance`; a deleted edge opens its path there, and edges bounding a deleted face go with it. Shapes covering those faces lose that area. Returns the counts of faces, line pieces and edges.',
 			params: {
 				type: 'object',
 				properties: { points: POINTS, erase: { type: 'boolean' }, tolerance: { type: 'number', minimum: 0 }, ids: IDS },
@@ -417,7 +417,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 			run: (_ctx: unknown, params: { points: [number, number][]; erase?: boolean; tolerance?: number; ids?: string[] }) => {
 				const result = controller.shapeBuilder(params.points.map(([x, y]) => ({ x, y })), { ids: ids(params), erase: params.erase, tolerance: params.tolerance });
 				check(result);
-				return { merged: result.merged, faces: result.faces, lines: result.lines };
+				return { merged: result.merged, faces: result.faces, lines: result.lines, edges: result.edges };
 			}
 		},
 		{

@@ -333,6 +333,19 @@ export function VectorCanvas({
                 strokeWidth={1}
               />
             ))}
+            {overlay.builder.hatches.map((d, i) =>
+              d ? (
+                <path
+                  key={`h${i}`}
+                  data-vector-builder-hatch=""
+                  d={d}
+                  fill="none"
+                  stroke={overlay.builder!.mode === 'erase' ? THEME.builderErase : accentColor}
+                  strokeOpacity={THEME.builderHatchOpacity}
+                  strokeWidth={1}
+                />
+              ) : null
+            )}
             {overlay.builder.lines.map((d, i) => (
               <path key={`l${i}`} data-vector-builder-line="" d={d} fill="none" stroke={THEME.builderErase} strokeWidth={3} strokeLinecap="round" />
             ))}

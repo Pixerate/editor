@@ -1,7 +1,8 @@
 /**
  * Pathfinder operations, the Shape Builder tool and the paint bucket in the vector editor.
  *
- * Shape Builder cases re-expressed from vectorcraft-main/crates/engine/src/tests_build.rs and
+ * Shape Builder cases re-expressed from vectorcraft-main/crates/engine/src/tests_build.rs,
+ * vectorcraft-main/crates/tools/src/builder.rs (edges, hatch) and
  * figcraft-main/crates/engine/src/shapebuilder.rs tests (MIT OR Apache-2.0, © ArtCraft Team and
  * contributors). See THIRD_PARTY_NOTICES.md.
  */
@@ -19,8 +20,8 @@ import {
 	type VectorSubpath
 } from '../src/vector/index.js';
 import { CommandRegistry } from '../src/commands/index.js';
-import { bezierPathArea, pointInBezierPath } from '../src/canvas/pathops/index.js';
-import { subpathsToBezier, vectorPathWorldBezier, vectorParentMatrix, IDENTITY_MATRIX } from '../src/vector/geometry.js';
+import { bezierPathArea, bezierPathBounds, hatchPath, pathToContours, pointInBezierPath } from '../src/canvas/pathops/index.js';
+import { applyMatrix, subpathsToBezier, vectorPathWorldBezier, vectorParentMatrix, IDENTITY_MATRIX } from '../src/vector/geometry.js';
 
 const pathNode = (id: string, subpaths: VectorSubpath[], extra: Partial<VectorPathNode> = {}): VectorPathNode => ({ id, type: 'path', subpaths, fill: '#ff0000', stroke: null, ...extra });
 const rectNode = (id: string, x: number, y: number, w = 100, h = 100, extra: Partial<VectorPathNode> = {}) => pathNode(id, [rectSubpath({ x, y, width: w, height: h })], extra);
@@ -276,6 +277,157 @@ describe('Shape Builder', () => {
 		const result = await registry.execute('vector.shapeBuilder', { ids: ['a', 'b'], points: [[75, 75]], erase: true });
 		expect(result.ok).toBe(true);
 		near(area(c, 'a'), 7500);
+	});
+});
+
+describe('Shape Builder: erasing outline edges', () => {
+	const two = () => doc(rectNode('a', 0, 0), rectNode('b', 50, 50, 100, 100, { fill: '#0000ff' }));
+	const pts = (sp: VectorSubpath) => sp.anchors.map((a) => [Math.round(a.x * 1e6) / 1e6, Math.round(a.y * 1e6) / 1e6]);
+
+	it('Alt on an edge opens the rectangle there, as one undo step', () => {
+		const c = make(two());
+		c.select(['a', 'b']);
+		c.setTool('shapeBuilder');
+		// a's corner inside b, between the points where b's outline crosses a's.
+		c.pointerMove({ x: 101, y: 75 }, { alt: true });
+		const hover = getVectorOverlayRenderData(c.getState()).builder!;
+		expect(hover.mode).toBe('erase');
+		expect(hover.faces).toHaveLength(0);
+		expect(hover.lines).toHaveLength(1);
+		// Without Alt it is the face under the pointer.
+		c.pointerMove({ x: 101, y: 75 });
+		expect(c.getState().builder?.faces).toHaveLength(1);
+		const before = c.getDocument();
+		const b = c.getNode('b');
+		c.pointerDown({ x: 101, y: 75 }, { alt: true });
+		c.pointerUp({ x: 101, y: 75 }, { alt: true });
+		const a = path(c, 'a');
+		expect(a.subpaths).toHaveLength(1);
+		expect(a.subpaths[0].closed).toBe(false);
+		expect(pts(a.subpaths[0])).toEqual([[50, 100], [0, 100], [0, 0], [100, 0], [100, 50]]);
+		// Still filled; b is untouched.
+		expect(a.fill).toBe('#ff0000');
+		expect(c.getNode('b')).toBe(b);
+		expect(c.getState().undoLabel).toBe('Shape Builder Delete');
+		c.undo();
+		expect(c.getDocument().nodes).toEqual(before.nodes);
+		expect(c.getState().canUndo).toBe(false);
+	});
+
+	it('cuts an edge of a rotated node in its own space and keeps the transform', () => {
+		const t = [...rotateMatrix(30)] as unknown as VectorPathNode['transform'];
+		const c = make(doc(rectNode('a', 0, 0, 100, 100, { transform: t }), rectNode('b', 50, 50, 100, 100, { transform: t, fill: '#0000ff' })));
+		const at = applyMatrix(t!, { x: 100, y: 75 });
+		const result = c.shapeBuilder([at], { ids: ['a', 'b'], erase: true, tolerance: 2 });
+		expect(result).toMatchObject({ ok: true, faces: 0, lines: 0, edges: 1 });
+		const a = path(c, 'a');
+		expect(a.transform).toEqual(t);
+		expect(a.subpaths[0].closed).toBe(false);
+		expect(pts(a.subpaths[0])).toEqual([[50, 100], [0, 100], [0, 0], [100, 0], [100, 50]]);
+	});
+
+	it('an edge running past the start of a subpath leaves one open run', () => {
+		// b covers a's top-left corner, where a's subpath starts.
+		const c = make(doc(rectNode('a', 0, 0), rectNode('b', -50, -50, 100, 100, { fill: '#0000ff' })));
+		const result = c.shapeBuilder([{ x: 0.5, y: 25 }], { ids: ['a', 'b'], erase: true, tolerance: 2 });
+		expect(result.edges).toBe(1);
+		const a = path(c, 'a');
+		expect(a.subpaths).toHaveLength(1);
+		expect(a.subpaths[0].closed).toBe(false);
+		expect(pts(a.subpaths[0])).toEqual([[50, 0], [100, 0], [100, 100], [0, 100], [0, 50]]);
+	});
+
+	it("a filled open subpath's invisible closing edge never comes back", () => {
+		// A filled open triangle (its closing diagonal is not drawn) crossed by a bar.
+		const tri = pathNode('t', [{ anchors: [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }], closed: false }]);
+		const c = make(doc(tri, rectNode('b', 40, -20, 20, 140, { fill: '#0000ff' })));
+		// The run from (60, 0) round the right side to (60, 60) on the invisible diagonal.
+		const result = c.shapeBuilder([{ x: 100, y: 50 }], { ids: ['t', 'b'], erase: true, tolerance: 2 });
+		expect(result.edges).toBe(1);
+		const t = path(c, 't');
+		expect(t.subpaths).toHaveLength(1);
+		expect(t.subpaths[0].closed).toBe(false);
+		expect(pts(t.subpaths[0])).toEqual([[0, 0], [60, 0]]);
+	});
+
+	it('edges bounding a face deleted in the same drag go with the face', () => {
+		const c = make(two());
+		c.select(['a', 'b']);
+		c.setTool('shapeBuilder');
+		// From a's own face across b's outline into the overlap.
+		c.pointerDown({ x: 20, y: 40 }, { alt: true });
+		c.pointerMove({ x: 75, y: 80 }, { alt: true });
+		const preview = c.getState().builder!;
+		expect(preview.faces).toHaveLength(2);
+		expect(preview.lines).toHaveLength(0);
+		c.pointerUp({ x: 75, y: 80 }, { alt: true });
+		expect(c.getNode('a')).toBeUndefined();
+		const b = path(c, 'b');
+		expect(b.subpaths.every((sp) => sp.closed)).toBe(true);
+		near(area(c, 'b'), 7500);
+		const result = make(two()).shapeBuilder([{ x: 20, y: 40 }, { x: 75, y: 80 }], { ids: ['a', 'b'], erase: true });
+		expect(result).toMatchObject({ ok: true, faces: 2, edges: 0 });
+	});
+
+	it('a whole closed subpath with no junction on it goes', () => {
+		const c = make(doc(rectNode('a', 0, 0), rectNode('b', 200, 0, 50, 50, { fill: '#0000ff' })));
+		const result = c.shapeBuilder([{ x: 225, y: 0.5 }], { ids: ['a', 'b'], erase: true, tolerance: 2 });
+		expect(result.edges).toBe(1);
+		expect(c.getNode('b')).toBeUndefined();
+		expect(path(c, 'a').subpaths[0].closed).toBe(true);
+	});
+
+	it('the agent command reports the edges erased', async () => {
+		const c = make(two());
+		const registry = new CommandRegistry();
+		for (const spec of createVectorCommands(c)) registry.register(spec);
+		const result = await registry.execute('vector.shapeBuilder', { ids: ['a', 'b'], points: [[101, 75]], erase: true, tolerance: 2 });
+		expect(result.ok).toBe(true);
+		expect(result.ok && result.result).toMatchObject({ faces: 0, lines: 0, edges: 1 });
+	});
+});
+
+describe('Shape Builder hatch', () => {
+	it('hatchPath draws 45° lines clipped to the face', () => {
+		const h = hatchPath('M0 0 L40 0 L40 20 L0 20 Z', { gap: 4 });
+		const b = bezierPathBounds(h)!;
+		expect(b.minX).toBeGreaterThanOrEqual(-1e-6);
+		expect(b.minY).toBeGreaterThanOrEqual(-1e-6);
+		expect(b.maxX).toBeLessThanOrEqual(40 + 1e-6);
+		expect(b.maxY).toBeLessThanOrEqual(20 + 1e-6);
+		const lines = pathToContours(h);
+		expect(lines.length).toBeGreaterThan(10);
+		for (const l of lines) {
+			const [p, q] = l.segments[0];
+			near(Math.abs(q[0] - p[0]), Math.abs(q[1] - p[1]), 1e-6);
+		}
+		// Holes stay clear, and the count is capped.
+		const ring = hatchPath('M0 0 L100 0 L100 100 L0 100 Z M25 25 L25 75 L75 75 L75 25 Z', { gap: 2 });
+		expect(pointInBezierPath(ring, [50, 50])).toBe(false);
+		for (const l of pathToContours(ring)) {
+			const [p, q] = l.segments[0];
+			const m: [number, number] = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
+			expect(m[0] > 25 + 1e-6 && m[0] < 75 - 1e-6 && m[1] > 25 + 1e-6 && m[1] < 75 - 1e-6).toBe(false);
+		}
+		expect(pathToContours(hatchPath('M0 0 L1000 0 L1000 1000 L0 1000 Z', { gap: 0.01, maxLines: 50 })).length).toBeLessThanOrEqual(52);
+		expect(hatchPath('M0 0 L10 0')).toEqual([]);
+	});
+
+	it('the overlay hatches merge and erase faces, not paint bucket regions', () => {
+		const c = make(doc(rectNode('a', 0, 0), rectNode('b', 50, 50, 100, 100, { fill: '#0000ff' })));
+		c.select(['a', 'b']);
+		c.setTool('shapeBuilder');
+		c.pointerMove({ x: 75, y: 75 });
+		let overlay = getVectorOverlayRenderData(c.getState()).builder!;
+		expect(overlay.hatches).toHaveLength(1);
+		expect(overlay.hatches[0]).toMatch(/^M[\d.-]+ [\d.-]+L/);
+		c.pointerMove({ x: 75, y: 75 }, { alt: true });
+		expect(getVectorOverlayRenderData(c.getState()).builder!.hatches[0]).toMatch(/^M/);
+		c.setTool('paintBucket');
+		c.pointerMove({ x: 75, y: 75 });
+		overlay = getVectorOverlayRenderData(c.getState()).builder!;
+		expect(overlay.mode).toBe('fill');
+		expect(overlay.hatches).toEqual(['']);
 	});
 });
 

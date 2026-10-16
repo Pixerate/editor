@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { flushSync, mount, unmount } from "svelte";
 import { CommandRegistry } from "@pixerate/editor/commands";
-import { VectorEditorController, rectSubpath, vectorNodeBounds, type VectorDocument } from "@pixerate/editor/vector";
+import { VectorEditorController, rectSubpath, vectorNodeBounds, type VectorDocument, type VectorPathNode } from "@pixerate/editor/vector";
 import { VectorCanvas, VectorEditor, VectorStylePanel, VectorToolbar, createVectorEditor, useVectorCommands } from "../src/vector";
 
 let cleanups: (() => void)[] = [];
@@ -382,6 +382,27 @@ describe("Pathfinder, Shape Builder and paint bucket (svelte)", () => {
     expect(t.querySelector("[data-vector-builder]")!.getAttribute("data-vector-builder")).toBe("erase");
   });
 
+  it("hatches hovered faces and erases an outline edge with Alt", () => {
+    const c = two();
+    c.select(["a", "b"]);
+    const t = render(VectorCanvas, { controller: c, fitOnMount: false });
+    const svg = t.querySelector("svg")!;
+    key(svg, "m");
+    pointer(svg, "pointermove", 75, 75);
+    expect(t.querySelectorAll("[data-vector-builder-hatch]")).toHaveLength(1);
+    expect(t.querySelector("[data-vector-builder-hatch]")!.getAttribute("d")).toMatch(/^M/);
+    // a's corner inside b: the edge, not the face.
+    pointer(svg, "pointermove", 101, 75, { altKey: true });
+    expect(t.querySelectorAll("[data-vector-builder-face]")).toHaveLength(0);
+    expect(t.querySelectorAll("[data-vector-builder-hatch]")).toHaveLength(0);
+    expect(t.querySelectorAll("[data-vector-builder-line]")).toHaveLength(1);
+    pointer(svg, "pointerdown", 101, 75, { altKey: true });
+    pointer(svg, "pointerup", 101, 75, { altKey: true });
+    const a = c.getNode("a") as VectorPathNode;
+    expect(a.subpaths[0].closed).toBe(false);
+    expect(c.getState().undoLabel).toBe("Shape Builder Delete");
+  });
+
   it("previews the paint bucket region", () => {
     const c = make();
     c.updateNode("a", { fill: null, stroke: "#000000" });
@@ -391,6 +412,7 @@ describe("Pathfinder, Shape Builder and paint bucket (svelte)", () => {
     pointer(svg, "pointermove", 50, 50);
     expect(t.querySelector("[data-vector-builder]")!.getAttribute("data-vector-builder")).toBe("fill");
     expect(t.querySelectorAll("[data-vector-builder-face]")).toHaveLength(1);
+    expect(t.querySelectorAll("[data-vector-builder-hatch]")).toHaveLength(0);
     pointer(svg, "pointerdown", 50, 50);
     pointer(svg, "pointerup", 50, 50);
     expect(c.getState().document.nodes).toHaveLength(2);

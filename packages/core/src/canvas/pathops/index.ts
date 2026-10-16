@@ -62,7 +62,8 @@ export {
 	type PlanarSplitEdge,
 	type PlanarSplitResult
 } from './boolean.js';
-export { PlanarMap, interiorPoint, type PlanarInput, type PlanarMapOptions, type PlanarFace, type PlanarChain } from './planar.js';
+export { PlanarMap, interiorPoint, cutOutPiece, contourEnclosesArea, type PlanarInput, type PlanarMapOptions, type PlanarFace, type PlanarChain } from './planar.js';
+export { hatchPath, type HatchOptions } from './hatch.js';
 export {
 	pathfinder,
 	PATHFINDER_OPERATIONS,
