@@ -17,6 +17,7 @@
   } from '@pixerate/editor/vector';
   import { vectorStateOf } from './subscribe.svelte.js';
   import { vectorButtonClass } from './styles.js';
+  import VectorEffectsPanel from './VectorEffectsPanel.svelte';
 
   interface Props {
     controller: VectorEditorController;
@@ -217,5 +218,6 @@
         oninput={(e) => apply({ opacity: parseFloat(e.currentTarget.value) })}
       />
     </label>
+    <VectorEffectsPanel {controller} />
   {/if}
 </div>
