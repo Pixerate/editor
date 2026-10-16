@@ -18,10 +18,12 @@ import { bezierPathToSvg } from '../canvas/pathops/bezier.js';
 import { bezierPathBounds } from '../canvas/pathops/bezier.js';
 import { hasStrokeExtras, strokeWidthProfileOf, vectorStrokeLineArea, vectorStrokeOutlinePath, vectorStrokeParts, vectorStrokeReach } from './stroke.js';
 import { sanitizeWidthProfile } from './width.js';
+import { hasOwnVectorAppearance, sanitizeVectorEffects, transformVectorEffects, vectorAppearanceNodes } from './appearance.js';
 import { gradientToSvgDef, type CanvasGradientDef, type GradientStop, type SvgGradientDef } from '../canvas/gradient.js';
 import { formatNumber } from '../canvas/shapeGeometry.js';
 import {
 	bezierToSubpaths,
+	decomposeRigid,
 	ellipseSubpath,
 	hasPaint,
 	IDENTITY_MATRIX,
@@ -41,6 +43,7 @@ import {
 	VECTOR_CORNER_KINDS,
 	type VectorArrowhead,
 	type VectorBlend,
+	type VectorBooleanOperation,
 	type VectorCornerKind,
 	type VectorDocument,
 	type VectorFillRule,
@@ -248,11 +251,32 @@ export function vectorDocumentToSvg(doc: VectorDocument, options: VectorSvgExpor
 		if (node.visible === false) out += ` display="none"`;
 		if (node.blendStep) out += ` data-vector-blend-step=""`;
 		if (node.type === 'group' && node.blend) out += ` data-vector-blend="${escapeAttr(JSON.stringify(node.blend))}"`;
+		if (node.booleanOperation) out += ` data-vector-boolean-operation="${node.booleanOperation}"`;
 		return out;
 	};
 
 	const emit = (node: VectorNode, depth: number) => {
 		if (node.visible === false && !options.includeHidden) return;
+		if (hasOwnVectorAppearance(node)) {
+			// Live: what it draws, then the editable source (hidden) for import.
+			const live = {
+				kind: node.type,
+				...(node.effects?.length ? { effects: node.effects } : {}),
+				...(node.type === 'group' && node.liveBoolean ? { liveBoolean: node.liveBoolean } : {})
+			};
+			lines.push(`${indent(depth)}<g${common(node)} data-vector-live="${escapeAttr(JSON.stringify(live))}">`);
+			lines.push(`${indent(depth + 1)}<g data-vector-part="appearance">`);
+			for (const shape of vectorAppearanceNodes(node)) emit(shape, depth + 2);
+			lines.push(`${indent(depth + 1)}</g>`);
+			lines.push(`${indent(depth + 1)}<g data-vector-part="source" display="none">`);
+			if (node.type === 'path') {
+				const { effects: _e, transform: _t, opacity: _o, visible: _v, booleanOperation: _b, blendStep: _s, ...source } = node;
+				emit({ ...source, id: `${node.id}~src` }, depth + 2);
+			} else for (const child of node.children) emit(child, depth + 2);
+			lines.push(`${indent(depth + 1)}</g>`);
+			lines.push(`${indent(depth)}</g>`);
+			return;
+		}
 		if (node.type === 'group') {
 			lines.push(`${indent(depth)}<g${common(node)}>`);
 			for (const child of node.children) emit(child, depth + 1);
@@ -338,6 +362,8 @@ export function vectorDocumentToSvg(doc: VectorDocument, options: VectorSvgExpor
 // ---------------------------------------------------------------------------
 // Import
 // ---------------------------------------------------------------------------
+
+const BOOLEAN_OPERATIONS: readonly VectorBooleanOperation[] = ['union', 'subtract', 'intersect', 'exclude'];
 
 export interface VectorSvgImportOptions {
 	/** Makes ids for elements without a usable `id` (default `node-1`, `node-2`, …). */
@@ -687,6 +713,40 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 		return placed(node, m);
 	};
 
+	/**
+	 * A `<g data-vector-live>` from our own export (path effects or a live boolean) as the node it
+	 * came from: its hidden source part with the effects put back (their offsets carried through
+	 * what import bakes into the geometry). The drawn appearance part is regenerated.
+	 */
+	const liveNode = (g: Element, style: InheritedStyle, m: AffineMatrix, meta: Pick<VectorNode, "name" | "opacity" | "visible" | "booleanOperation">): VectorNode | null => {
+		let raw: Record<string, unknown> = {};
+		try {
+			raw = JSON.parse(g.attrs['data-vector-live']) ?? {};
+		} catch {
+			raw = {};
+		}
+		const sourceEl = g.children.find((c) => c.name === 'g' && c.attrs['data-vector-part'] === 'source');
+		if (!sourceEl) return null;
+		const inner = visit(sourceEl, style, m);
+		const effects = sanitizeVectorEffects(raw.effects);
+		const liveBoolean = BOOLEAN_OPERATIONS.includes(raw.liveBoolean as VectorBooleanOperation) ? (raw.liveBoolean as VectorBooleanOperation) : null;
+		const id = idFor(g);
+		if (raw.kind === 'path') {
+			const path = inner.find((n): n is VectorPathNode => n.type === 'path');
+			if (!path) return null;
+			const { residual } = decomposeRigid(m);
+			const { visible: _v, ...rest } = path;
+			return { ...rest, id, ...meta, ...(effects.length ? { effects: transformVectorEffects(effects, residual) } : {}) };
+		}
+		if (!inner.length) return null;
+		const group: VectorGroupNode = { id, type: 'group', ...meta, children: inner };
+		if (effects.length) group.effects = transformVectorEffects(effects, m);
+		if (liveBoolean) group.liveBoolean = liveBoolean;
+		const blend = blendFromAttribute(g.attrs['data-vector-blend'], m);
+		if (blend) group.blend = blend;
+		return group;
+	};
+
 	const visit = (el: Element, style: InheritedStyle, matrix: AffineMatrix): VectorNode[] => {
 		const out: VectorNode[] = [];
 		for (const child of el.children) {
@@ -702,6 +762,13 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 			};
 			// A blend's in-betweens are regenerated from its keys.
 			if (child.attrs['data-vector-blend-step'] !== undefined) continue;
+			const operation = child.attrs['data-vector-boolean-operation'];
+			if (BOOLEAN_OPERATIONS.includes(operation as VectorBooleanOperation)) (meta as { booleanOperation?: VectorBooleanOperation }).booleanOperation = operation as VectorBooleanOperation;
+			if (child.name === 'g' && child.attrs['data-vector-live'] !== undefined) {
+				const node = liveNode(child, s, m, meta);
+				if (node) out.push(node);
+				continue;
+			}
 			if (child.name === 'g' && child.attrs['data-vector-path'] !== undefined) {
 				const node = mergedPath(child, s, m, meta);
 				if (node) out.push(node);

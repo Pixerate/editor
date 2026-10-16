@@ -87,6 +87,17 @@ import {
 	releaseVectorBlend,
 	vectorBlendKeyTargets
 } from './blendGroup.js';
+import {
+	createVectorEffect,
+	expandVectorAppearance,
+	hasOwnVectorAppearance,
+	hasVectorAppearance,
+	isVectorLiveBoolean,
+	normalizeVectorEffectParams,
+	vectorAppearanceOutline,
+	vectorEnteredGroups,
+	VECTOR_EFFECT_LABELS
+} from './appearance.js';
 import { constrainToLeave, VECTOR_CONSTRUCTION_ANGLES, VectorSnapTargets, type VectorSnapGuides, type VectorSnapLeave } from './snap.js';
 import {
 	bendSegment as bendSubpathSegment,
@@ -116,6 +127,8 @@ import {
 } from './builder.js';
 import type {
 	Vec2,
+	VectorEffect,
+	VectorEffectType,
 	VectorAlign,
 	VectorAnchor,
 	VectorAnchorRef,
@@ -959,6 +972,14 @@ function spliceTree(nodes: readonly VectorNode[], id: string, replacements: read
 
 const toPoint = (p: Vec2): Point => [p.x, p.y];
 
+/** A node's place and state (transform, visibility, lock, operand operation), for a node taking its place. */
+const placementOf = (n: VectorNode) => ({
+	...(n.transform ? { transform: n.transform } : {}),
+	...(n.visible === false ? { visible: false } : {}),
+	...(n.locked ? { locked: true } : {}),
+	...(n.booleanOperation ? { booleanOperation: n.booleanOperation } : {})
+});
+
 const isRoot = (m: AffineMatrix) => m === IDENTITY_MATRIX || (m[0] === 1 && m[1] === 0 && m[2] === 0 && m[3] === 1 && m[4] === 0 && m[5] === 0);
 
 let idCounter = 0;
@@ -1270,8 +1291,11 @@ export class VectorEditorController {
 		this.notify(docChanged);
 	}
 
-	/** Records the change from `before` to the current state as one undo step. */
-	private commit(name: string, before: Snapshot) {
+	/**
+	 * Records the change from `before` to the current state as one undo step. Consecutive
+	 * changes with the same `merge` key (a slider drag) fold into one step.
+	 */
+	private commit(name: string, before: Snapshot, merge?: string) {
 		this.doc = this.refreshed(this.doc);
 		const after = this.snapshot();
 		if (before.doc === after.doc) {
@@ -1282,18 +1306,25 @@ export class VectorEditorController {
 			name,
 			execute: () => this.restore(after),
 			undo: () => this.restore(before),
-			redo: () => this.restore(after)
+			redo: () => this.restore(after),
+			...(merge ? { tag: merge } : {})
 		};
 		this.committing = true;
-		this.history.execute(command);
+		if (merge) this.history.executeMerged(command, { key: merge });
+		else this.history.execute(command);
 		this.committing = false;
 	}
 
-	/** Runs `fn` (which updates fields) and records it as one undo step. */
-	private change(name: string, fn: () => void): void {
+	/** Runs `fn` (which updates fields) and records it as one undo step (merged by `merge` key). */
+	private change(name: string, fn: () => void, merge?: string): void {
 		const before = this.snapshot();
 		fn();
-		this.commit(name, before);
+		this.commit(name, before, merge);
+	}
+
+	/** Ends a merged edit (a slider released): the next change starts a new undo step. */
+	endMergedEdit(): void {
+		this.history.endGesture();
 	}
 
 	private setDoc(nodes: VectorNode[]) {
@@ -1900,7 +1931,8 @@ export class VectorEditorController {
 		const replace = new Map<string, VectorNode[]>();
 		for (const p of paths) {
 			// In the node's own space: the new paths keep its transform.
-			const outline = bezierToSubpaths(vectorStrokeOutlinePath(subpathsToBezier(p.subpaths), p));
+			// As drawn: path effects applied (the outline itself carries none).
+			const outline = bezierToSubpaths(vectorStrokeOutlinePath(vectorAppearanceOutline(p), p));
 			if (!outline.length) continue;
 			const {
 				stroke,
@@ -1915,11 +1947,12 @@ export class VectorEditorController {
 				startArrowScale: _ss,
 				endArrowScale: _es,
 				strokeWidthProfile: _wp,
+				effects,
 				...rest
 			} = cloneVectorNode(p);
 			const id = this.newId();
 			const strokeNode: VectorPathNode = { ...rest, id, name: `${p.name ?? 'Path'} Stroke`, subpaths: outline, fill: stroke ?? null, stroke: null, fillRule: 'nonzero' };
-			const list: VectorNode[] = hasPaint(p.fill) ? [{ ...rest, stroke: null }, strokeNode] : [strokeNode];
+			const list: VectorNode[] = hasPaint(p.fill) ? [{ ...rest, ...(effects ? { effects } : {}), stroke: null }, strokeNode] : [strokeNode];
 			created.push(id);
 			replace.set(p.id, list);
 		}
@@ -1933,6 +1966,130 @@ export class VectorEditorController {
 			this.editingId = null;
 		});
 		return created;
+	}
+
+	// -------------------------------------------------------------------------
+	// Path effects
+	// -------------------------------------------------------------------------
+
+	/** Selected (or given) nodes that can carry effects: the roots of the selection. */
+	private effectTargets(ids?: readonly string[]): VectorNode[] {
+		return (ids ?? this.selectedRoots()).map((id) => this.getNode(id)).filter((n): n is VectorNode => !!n && !n.blendStep);
+	}
+
+	/**
+	 * Adds an effect of `type` to the selected (or given) nodes, at the bottom of each stack (or
+	 * at `index`), with default parameters merged with `params`. A repeater's copies start one
+	 * shape width apart. One undo step; returns the new effect ids (one per node, in order).
+	 */
+	addEffect(type: VectorEffectType, options: { ids?: readonly string[]; params?: Record<string, unknown>; index?: number } = {}): string[] {
+		const targets = this.effectTargets(options.ids);
+		if (!targets.length || !createVectorEffect(type, '')) return [];
+		const created: string[] = [];
+		const next = new Map<string, VectorNode>();
+		for (const node of targets) {
+			const list = node.effects ?? [];
+			let k = list.length + 1;
+			while (list.some((e) => e.id === `fx${k}`)) k++;
+			const params: Record<string, unknown> = { ...(options.params ?? {}) };
+			if (type === 'repeater' && params.position === undefined) {
+				const b = bezierPathBounds(vectorAppearanceOutline(node));
+				if (b && b.maxX - b.minX > 0) params.position = { x: Math.round((b.maxX - b.minX) * 1.25 * 100) / 100, y: 0 };
+			}
+			const effect = createVectorEffect(type, `fx${k}`, params)!;
+			const at = options.index === undefined ? list.length : Math.min(list.length, Math.max(0, Math.round(options.index)));
+			next.set(node.id, { ...node, effects: [...list.slice(0, at), effect, ...list.slice(at)] } as VectorNode);
+			created.push(effect.id);
+		}
+		this.change(`Add ${VECTOR_EFFECT_LABELS[type]}`, () => this.setDoc(mapTree(this.doc.nodes, (n) => next.get(n.id) ?? n)));
+		return created;
+	}
+
+	private editEffects(nodeId: string, label: string, fn: (effects: VectorEffect[]) => VectorEffect[] | string, merge?: string): VectorActionResult {
+		const node = this.getNode(nodeId);
+		if (!node) return { ok: false, message: `There is no node "${nodeId}".` };
+		const result = fn(node.effects ?? []);
+		if (typeof result === 'string') return { ok: false, message: result };
+		this.change(label, () => this.replaceNode(nodeId, (result.length ? { ...node, effects: result } : (({ effects: _e, ...rest }) => rest)(node)) as VectorNode), merge);
+		return { ok: true };
+	}
+
+	/**
+	 * Turns an effect on or off and changes its parameters (unknown or invalid values are
+	 * ignored). With `merge` (true, or a key of your own), consecutive updates of the same effect
+	 * fold into one undo step, as a slider drag should; call `endMergedEdit` when it ends.
+	 */
+	updateEffect(nodeId: string, effectId: string, patch: { enabled?: boolean; params?: Record<string, unknown> }, options: { merge?: boolean | string } = {}): VectorActionResult {
+		const merge = options.merge === true ? `effect:${nodeId}:${effectId}` : options.merge || undefined;
+		const node = this.getNode(nodeId);
+		const current = node?.effects?.find((e) => e.id === effectId);
+		const label = current ? VECTOR_EFFECT_LABELS[current.type] ?? 'Effect' : 'Effect';
+		return this.editEffects(
+			nodeId,
+			`Edit ${label}`,
+			(list) => {
+				const i = list.findIndex((e) => e.id === effectId);
+				if (i < 0) return `Node "${nodeId}" has no effect "${effectId}".`;
+				const e = list[i];
+				const params = patch.params ? normalizeVectorEffectParams(e.type, patch.params, e.params as never) : e.params;
+				const next = { ...e, params, ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}) } as VectorEffect;
+				if (next.enabled !== false) delete (next as { enabled?: boolean }).enabled;
+				return list.map((x, j) => (j === i ? next : x));
+			},
+			merge
+		);
+	}
+
+	/** Removes an effect from a node's stack. */
+	removeEffect(nodeId: string, effectId: string): VectorActionResult {
+		return this.editEffects(nodeId, 'Remove Effect', (list) => (list.some((e) => e.id === effectId) ? list.filter((e) => e.id !== effectId) : `Node "${nodeId}" has no effect "${effectId}".`));
+	}
+
+	/** Moves an effect to position `index` of its stack (0 is applied first). */
+	moveEffect(nodeId: string, effectId: string, index: number): VectorActionResult {
+		return this.editEffects(nodeId, 'Reorder Effects', (list) => {
+			const i = list.findIndex((e) => e.id === effectId);
+			if (i < 0) return `Node "${nodeId}" has no effect "${effectId}".`;
+			const to = Math.min(list.length - 1, Math.max(0, Math.round(index)));
+			const out = list.slice();
+			const [e] = out.splice(i, 1);
+			out.splice(to, 0, e);
+			return out;
+		});
+	}
+
+	/**
+	 * Expand Appearance: bakes the path effects and live booleans of the selected (or given)
+	 * nodes, and of everything inside them, into plain paths. A node keeps its id (a group when
+	 * it draws as several shapes); the shapes it made get new ids. Returns the ids of the expanded
+	 * nodes (empty when none was live).
+	 */
+	expandAppearance(options: { ids?: readonly string[] } = {}): string[] {
+		const roots = (options.ids ?? this.selectedRoots()).map((id) => this.getNode(id)).filter((n): n is VectorNode => !!n && hasVectorAppearance(n));
+		if (!roots.length) return [];
+		const fresh = (n: VectorNode): VectorNode => {
+			const id = n.id.includes('~fx') ? this.newId() : n.id;
+			return n.type === 'group' ? { ...n, id, children: n.children.map(fresh) } : { ...n, id };
+		};
+		const bake = (n: VectorNode): VectorNode => {
+			if (!hasVectorAppearance(n)) return n;
+			if (!hasOwnVectorAppearance(n)) return { ...(n as VectorGroupNode), children: (n as VectorGroupNode).children.map(bake) };
+			let e = expandVectorAppearance(n);
+			// A live group that draws as one shape becomes that path, in the group's place.
+			if (e.type === 'group' && e.children.length === 1 && e.children[0].type === 'path') {
+				const { id: _id, opacity, name, ...child } = e.children[0];
+				const k = (e.opacity ?? 1) * (opacity ?? 1);
+				e = { ...child, id: e.id, name: e.name ?? name, ...placementOf(e), ...(k < 1 ? { opacity: k } : {}) } as VectorPathNode;
+			}
+			return fresh(e);
+		};
+		const next = new Map(roots.map((n) => [n.id, bake(n)]));
+		this.change('Expand Appearance', () => {
+			this.setDoc(mapTree(this.doc.nodes, (n) => next.get(n.id) ?? n));
+			this.anchors = [];
+			this.editingId = null;
+		});
+		return roots.map((n) => n.id);
 	}
 
 	rename(id: string, name: string): VectorActionResult {
@@ -2255,6 +2412,7 @@ export class VectorEditorController {
 						out.push(
 							...n.children
 								.map((c) => (c.blendStep ? (({ blendStep: _s, locked: _l, ...rest }) => rest as VectorNode)(c) : c))
+								.map((c) => (c.booleanOperation ? (({ booleanOperation: _b, ...rest }) => rest as VectorNode)(c) : c))
 								.map((c) => (n.transform ? transformVectorNode(c, m) : c))
 								.map((c) => (opacity !== undefined && opacity < 1 ? { ...c, opacity: (c.opacity ?? 1) * opacity } : c))
 						);
@@ -2295,36 +2453,95 @@ export class VectorEditorController {
 	/**
 	 * Combines the selected paths (two or more) into one with a boolean operation. `subtract`
 	 * removes the upper shapes from the lowest one. The result takes the lowest shape's style
-	 * and place.
+	 * and place. Shapes take part as drawn (path effects and live booleans applied).
+	 *
+	 * With `live`, the operands stay editable instead: a lone live boolean group gets the
+	 * operation (its operands follow it again), operands of live boolean groups get it as their
+	 * own, and anything else (two or more nodes with one parent) is wrapped in a new live boolean
+	 * group. Returns the result's (or the live group's) id, or null.
 	 */
-	booleanOp(op: VectorBooleanOperation, options: { ids?: readonly string[] } = {}): string | null {
+	booleanOp(op: VectorBooleanOperation, options: { ids?: readonly string[]; live?: boolean } = {}): string | null {
 		const roots = options.ids ?? this.selectedRoots();
-		const order: string[] = [];
-		walkVectorNodes(this.doc.nodes, (n) => {
-			if (roots.includes(n.id)) for (const p of collectPathNodes(n)) order.push(p.id);
-		});
-		const paths = [...new Set(order)].map((id) => this.getNode(id) as VectorPathNode);
-		if (paths.length < 2) return null;
+		if (options.live) return this.liveBooleanOp(op, roots);
+		const entries = vectorPathEntries(this.doc, roots, { locked: true });
+		if (entries.length < 2) return null;
 		const result = pathBoolean(
 			BOOLEAN_OPS[op],
-			paths.map((p) => ({
-				path: vectorPathWorldBezier(
-					{ ...p, subpaths: p.subpaths.filter((s) => s.anchors.length > 1).map((s) => ({ ...s, closed: true })) },
-					vectorParentMatrix(this.doc.nodes, p.id) ?? IDENTITY_MATRIX
-				),
-				fillRule: p.fillRule ?? 'nonzero'
+			entries.map((e) => ({
+				path: vectorPathWorldBezier({ ...e.node, subpaths: e.node.subpaths.filter((s) => s.anchors.length > 1).map((s) => ({ ...s, closed: true })) }, e.parent),
+				fillRule: e.node.fillRule ?? 'nonzero'
 			}))
 		);
-		const base = paths[0];
-		const anchorRoot = roots.find((r) => findVectorNode([this.getNode(r)!], base.id)) ?? base.id;
+		const base = entries[0].node;
+		const anchorRoot = roots.find((r) => this.holds(r, base.id)) ?? base.id;
 		const subpaths = bezierToSubpaths(this.intoParentSpace(anchorRoot, result.path));
 		if (result.error || !subpaths.length) return null;
 		const id = this.newId();
-		const { transform: _t, ...baseRest } = cloneVectorNode(base);
+		const { transform: _t, effects: _e, booleanOperation: _b, ...baseRest } = cloneVectorNode(base);
 		const node: VectorPathNode = { ...baseRest, id, name: BOOLEAN_LABELS[op], subpaths };
-		const drop = new Set([...paths.map((p) => p.id), ...roots]);
+		const drop = new Set([...entries.map((e) => e.node.id), ...roots]);
 		this.change(BOOLEAN_LABELS[op], () => {
 			this.setDoc(mapTree(this.doc.nodes, (n) => (n.id === anchorRoot ? node : drop.has(n.id) ? null : n)));
+			this.selection = [id];
+			this.anchors = [];
+			this.editingId = null;
+		});
+		return id;
+	}
+
+	/** Whether stored node `rootId` holds `id` as drawn (`id` may be an expanded path inside it). */
+	private holds(rootId: string, id: string): boolean {
+		const n = this.getNode(rootId);
+		return !!n && (!!findVectorNode([n], id) || !!findVectorNode([expandVectorAppearance(n)], id));
+	}
+
+	private liveBooleanOp(op: VectorBooleanOperation, roots: readonly string[]): string | null {
+		const nodes = roots.map((id) => this.getNode(id));
+		if (!nodes.length || nodes.some((n) => !n)) return null;
+		const label = `Live ${BOOLEAN_LABELS[op]}`;
+		const lone = nodes.length === 1 ? nodes[0] : null;
+		if (isVectorLiveBoolean(lone)) {
+			const children = lone.children.map((c) => (c.booleanOperation ? (({ booleanOperation: _b, ...rest }) => rest as VectorNode)(c) : c));
+			this.change(label, () => this.replaceNode(lone.id, { ...lone, liveBoolean: op, children }));
+			return lone.id;
+		}
+		const parents = roots.map((id) => locateVectorNode(this.doc.nodes, id)?.parent ?? null);
+		if (parents.every((g) => isVectorLiveBoolean(g))) {
+			const set = new Set(roots);
+			this.change(label, () =>
+				this.setDoc(
+					mapTree(this.doc.nodes, (n) => {
+						if (n.type !== 'group' || !n.liveBoolean || !n.children.some((c) => set.has(c.id))) return n;
+						const group = n;
+						const children = group.children.map((c) => {
+							if (!set.has(c.id)) return c;
+							const { booleanOperation: _b, ...rest } = c;
+							return (op === group.liveBoolean ? rest : { ...rest, booleanOperation: op }) as VectorNode;
+						});
+						return { ...group, children };
+					})
+				)
+			);
+			return parents[0]!.id;
+		}
+		if (nodes.length < 2) return null;
+		const parent = parents[0]?.id ?? null;
+		if (parents.some((g) => (g?.id ?? null) !== parent)) return null;
+		const id = this.newId();
+		this.change(label, () => {
+			const set = new Set(roots);
+			const wrap = (list: readonly VectorNode[]): VectorNode[] => {
+				const members = list.filter((n) => set.has(n.id)).map((c) => (c.booleanOperation ? (({ booleanOperation: _b, ...rest }) => rest as VectorNode)(c) : c));
+				const top = Math.max(...list.map((n, i) => (set.has(n.id) ? i : -1)));
+				const out: VectorNode[] = [];
+				list.forEach((n, i) => {
+					if (i === top) out.push({ id, type: 'group', name: BOOLEAN_LABELS[op], liveBoolean: op, children: members });
+					if (!set.has(n.id)) out.push(n);
+				});
+				return out;
+			};
+			if (parent === null) this.setDoc(wrap(this.doc.nodes));
+			else this.setDoc(mapTree(this.doc.nodes, (n) => (n.id === parent && n.type === 'group' ? { ...n, children: wrap(n.children) } : n)));
 			this.selection = [id];
 			this.anchors = [];
 			this.editingId = null;
@@ -2335,15 +2552,13 @@ export class VectorEditorController {
 	/** Joins the selected paths into one compound path (subpaths kept, lowest style). */
 	combine(options: { ids?: readonly string[] } = {}): string | null {
 		const roots = options.ids ?? this.selectedRoots();
-		const paths: VectorPathNode[] = [];
-		walkVectorNodes(this.doc.nodes, (n) => {
-			if (roots.includes(n.id)) paths.push(...collectPathNodes(n));
-		});
-		if (paths.length < 2) return null;
+		const entries = vectorPathEntries(this.doc, roots, { locked: true });
+		if (entries.length < 2) return null;
+		const paths = entries.map((e) => e.node);
 		const id = this.newId();
-		const first = roots.find((r) => findVectorNode([this.getNode(r)!], paths[0].id)) ?? paths[0].id;
-		const subpaths = paths.flatMap((p) => bezierToSubpaths(this.intoParentSpace(first, vectorPathWorldBezier(p, vectorParentMatrix(this.doc.nodes, p.id) ?? IDENTITY_MATRIX))));
-		const { transform: _t, ...baseRest } = cloneVectorNode(paths[0]);
+		const first = roots.find((r) => this.holds(r, paths[0].id)) ?? paths[0].id;
+		const subpaths = entries.flatMap((e) => bezierToSubpaths(this.intoParentSpace(first, vectorPathWorldBezier(e.node, e.parent))));
+		const { transform: _t, effects: _e, booleanOperation: _b, ...baseRest } = cloneVectorNode(paths[0]);
 		const node: VectorPathNode = { ...baseRest, id, name: 'Compound Path', subpaths };
 		const drop = new Set([...paths.map((p) => p.id), ...roots]);
 		this.change('Combine', () => {
@@ -2403,7 +2618,7 @@ export class VectorEditorController {
 		const result = runPathfinder(op, shapes);
 		if (result.error || !result.pieces.length) return [];
 		const last = entries[entries.length - 1].node.id;
-		const topRoot = [...roots].reverse().find((r) => { const n = this.getNode(r); return !!n && !!findVectorNode([n], last); }) ?? last;
+		const topRoot = [...roots].reverse().find((r) => this.holds(r, last)) ?? last;
 		const nodes: VectorPathNode[] = [];
 		for (const piece of result.pieces) {
 			const subpaths = bezierToSubpaths(this.intoParentSpace(topRoot, piece.path)).map((sp) => (piece.open ? { ...sp, closed: false } : sp));
@@ -2609,7 +2824,8 @@ export class VectorEditorController {
 		const roots = ids ?? this.selectedRoots();
 		const key = roots.join('\u0000');
 		if (this.builderCache?.doc === this.doc && this.builderCache.key === key) return this.builderCache.map;
-		const entries = roots.length ? vectorPathEntries(this.doc, roots) : [];
+		// The Shape Builder edits the shapes it takes area from: their stored geometry.
+		const entries = roots.length ? vectorPathEntries(this.doc, roots, { expand: false }) : [];
 		const map = entries.length ? vectorShapeBuilderMap(entries) : null;
 		this.builderCache = { doc: this.doc, key, map };
 		return map;
@@ -3463,16 +3679,25 @@ export class VectorEditorController {
 	}
 
 	/** Deepest unlocked visible path under `p`. */
+	/** Live groups being edited (selected, or holding the selection or the edited path): their children are hit as stored. */
+	private enteredGroups(): Set<string> {
+		return vectorEnteredGroups(this.doc.nodes, this.editingId ? [...this.selection, this.editingId] : this.selection);
+	}
+
 	private hitPath(p: Vec2): VectorPathNode | null {
 		const tol = this.tolerance();
+		const entered = this.enteredGroups();
 		const search = (list: readonly VectorNode[], parent: AffineMatrix): VectorPathNode | null => {
 			for (let i = list.length - 1; i >= 0; i--) {
 				const n = list[i];
 				if (n.visible === false || n.locked) continue;
 				if (n.type === 'group') {
+					// A live group not being edited is hit where it draws (a click in a subtracted
+					// hole goes through), then picks the child under the pointer.
+					if (hasOwnVectorAppearance(n) && !entered.has(n.id) && !hitTestVectorNode(n, p, tol, parent, { entered })) continue;
 					const found = search(n.children, multiplyMatrices(nodeMatrix(n), parent));
 					if (found) return found;
-				} else if (hitTestVectorNode(n, p, tol, parent)) return n;
+				} else if (hitTestVectorNode(n, p, tol, parent, { entered })) return n;
 			}
 			return null;
 		};
@@ -3499,7 +3724,7 @@ export class VectorEditorController {
 			case 'select': {
 				const handle = this.hitTransformHandle(screen);
 				if (handle) return { nodeId: null, transformHandle: handle };
-				const node = hitTestVectorNodes(this.doc.nodes, p, this.tolerance());
+				const node = hitTestVectorNodes(this.doc.nodes, p, this.tolerance(), { entered: this.enteredGroups() });
 				return node ? { nodeId: node.id } : null;
 			}
 			case 'direct': {
@@ -3849,7 +4074,7 @@ export class VectorEditorController {
 			this.notify();
 			return;
 		}
-		const node = hitTestVectorNodes(this.doc.nodes, p, this.tolerance());
+		const node = hitTestVectorNodes(this.doc.nodes, p, this.tolerance(), { entered: this.enteredGroups() });
 		if (node) {
 			const selected = this.selection.includes(node.id);
 			if (input.shift) {

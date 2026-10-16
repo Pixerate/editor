@@ -1232,3 +1232,21 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: A live blend has to follow every edit of its keys (drags included) without each tool knowing about blends, and undo must restore steps that match the keys.
 - **Root Cause**: Steps are derived data stored in the document (so the scene, bounds, hit-tests and SVG export see them), and the controller mutates `this.doc` in many places.
 - **Solution / Workaround**: `refreshVectorBlends` runs on the document in `notify()` (live during drags) and at the start of `commit()` (so history snapshots hold the refreshed document). It returns the same objects when nothing changed: generated children are cached per first key and reused while the keys are the same objects and the blend options serialise the same, and morph correspondences are cached per key pair. Steps are locked (`locked: true`) so the select tool picks the blend group and the direct tool only reaches keys; transforms of the group bake its replaced spine with the children (`bakeIntoGeometry`).
+
+### [core/vector] Expanded Appearance Paths Have Ids That Are Not in the Document
+
+- **Issue / Symptom**: After path effects and live booleans were routed through `vectorPathEntries`, the Pathfinder and `booleanOp` failed to put their result back: `findVectorNode([root], entry.node.id)` found nothing, so the result replaced no node.
+- **Root Cause**: `expandVectorAppearance` turns a node drawing several shapes (a repeater, a live group) into a group of paths with ids `<id>~fx<n>`. Those are derived nodes, never stored; only the top node keeps its stored id.
+- **Solution / Workaround**: Look entries up through the expanded tree as well (`controller.holds(rootId, id)` checks `findVectorNode` on the node and on `expandVectorAppearance(node)`), drop the roots by their stored ids, and give derived nodes fresh ids before storing them (Expand Appearance does). Code that edits the shapes it reads (the Shape Builder) must ask for the stored geometry with `vectorPathEntries(doc, roots, { expand: false })`.
+
+### [core/vector] Merged Undo Steps Need the Command's `tag` Equal to Its Gesture Key
+
+- **Issue / Symptom**: A slider drag committed with `history.executeMerged(command, { key })` folded into one undo step, but the step kept growing: every move added another undo / redo part.
+- **Root Cause**: `HistoryManager.executeMerged` only replaces the top step's last part ("the same absolute command again") when the new command's `tag` equals that part's tag; otherwise it appends a part.
+- **Solution / Workaround**: The controller's `commit(name, before, merge)` sets `tag: merge` on the snapshot command, so the step keeps the pre-drag `before` and only the latest `after`. Ending the drag calls `endMergedEdit()` (`history.endGesture()`) so the next drag of the same control starts a new step.
+
+### [core/vector] Wiggle's Hash Needs Exact 64-bit Arithmetic
+
+- **Issue / Symptom**: A wiggle ported with JavaScript numbers gave different (and less random) noise than the source, and lost precision past 2⁵³.
+- **Root Cause**: effectcraft's `splitmix` / `hash` rely on wrapping `u64` multiplication and shifts; `Math.imul` is 32-bit and doubles lose the low bits.
+- **Solution / Workaround**: `pathEffects.ts` runs `splitmix` on `BigInt`s masked to 64 bits (`BigInt.asUintN(64, …)` for negative lattice indices) and converts only the final `h >> 11` to a number. It is called a few thousand times per wiggle, which is cheap; results are cached per node anyway.

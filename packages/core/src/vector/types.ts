@@ -144,6 +144,17 @@ interface VectorNodeBase {
 	 * the blend options change, and are locked (clicks select the blend group).
 	 */
 	blendStep?: boolean;
+	/**
+	 * Live path effects, applied top to bottom: each acts on every path above it (the node's own
+	 * outline, or a group's children, then the result of the effects before it), and effects after a
+	 * repeater act on its copies. The stored anchors and children never change.
+	 */
+	effects?: VectorEffect[] | null;
+	/**
+	 * As an operand of a live boolean group: how it combines with the result of the operands below
+	 * it. Absent: the group's `liveBoolean` operation.
+	 */
+	booleanOperation?: VectorBooleanOperation | null;
 }
 
 /** A shape made of one or more subpaths (holes and compound shapes included). */
@@ -194,6 +205,12 @@ export interface VectorGroupNode extends VectorNodeBase {
 	 * stacking order, and the steps between them are regenerated whenever a key changes.
 	 */
 	blend?: VectorBlend | null;
+	/**
+	 * Makes the group a live boolean: its children stay editable operands, folded bottom to top
+	 * (each by its own `booleanOperation` or this one), and the group draws as the result in the
+	 * bottom operand's style.
+	 */
+	liveBoolean?: VectorBooleanOperation | null;
 }
 
 export type VectorNode = VectorPathNode | VectorGroupNode;
@@ -322,6 +339,107 @@ export const VECTOR_PATHFINDER_OPERATIONS: readonly VectorPathfinderOperation[] 
 export type VectorArrange = 'front' | 'forward' | 'backward' | 'back';
 /** Average: line anchors up on a horizontal line (same y), a vertical one (same x), or both. */
 export type VectorAverageAxis = 'horizontal' | 'vertical' | 'both';
+
+/**
+ * Live path effects (After Effects' path operators): `trim` (Trim Paths), `roundCorners`,
+ * `puckerBloat`, `twist`, `zigzag`, `wiggle` (Wiggle Paths), `offset` (Offset Paths), `merge`
+ * (Merge Paths) and `repeater`.
+ */
+export type VectorEffectType = 'trim' | 'roundCorners' | 'puckerBloat' | 'twist' | 'zigzag' | 'wiggle' | 'offset' | 'merge' | 'repeater';
+export const VECTOR_EFFECT_TYPES: readonly VectorEffectType[] = ['trim', 'roundCorners', 'puckerBloat', 'twist', 'zigzag', 'wiggle', 'offset', 'merge', 'repeater'];
+
+/** Merge Paths modes: a compound path (no boolean), union, the first minus the others, intersection or exclusion. */
+export type VectorMergeMode = 'merge' | 'add' | 'subtract' | 'intersect' | 'exclude';
+export const VECTOR_MERGE_MODES: readonly VectorMergeMode[] = ['merge', 'add', 'subtract', 'intersect', 'exclude'];
+
+/** Parameters of each effect type. Lengths are in the node's own units, angles in degrees, percentages 0–100. */
+export interface VectorEffectParamsMap {
+	trim: {
+		/** Start and end of the kept part, percent of the length (swapped when start > end). */
+		start: number;
+		end: number;
+		/** Shifts both, in degrees (360° = once round). */
+		offset: number;
+		/**
+		 * `simultaneous`: every path trimmed by the same fractions of its own length;
+		 * `individual`: the paths laid end to end in stacking order and trimmed as one length.
+		 */
+		mode: 'simultaneous' | 'individual';
+	};
+	roundCorners: { radius: number };
+	/** Percent, −100 (pucker: spiky) to 100 (bloat: bulging). */
+	puckerBloat: { amount: number };
+	twist: {
+		/** Turn at the farthest point from the centre (none at the centre). */
+		angle: number;
+		/** The centre as an offset from the middle of the paths' bounds. */
+		center: Vec2;
+	};
+	zigzag: {
+		/** How far the points move to either side. */
+		size: number;
+		/** Ridges per segment. */
+		ridges: number;
+		/** Rounded waves instead of sharp zig zags. */
+		smooth: boolean;
+	};
+	wiggle: {
+		/** Largest displacement. */
+		size: number;
+		/** Points added per segment. */
+		detail: number;
+		smooth: boolean;
+		/** Wiggles per second. */
+		speed: number;
+		/** Percent: how much neighbouring points move together. */
+		correlation: number;
+		/** Degrees (360° = one wiggle). */
+		phase: number;
+		/** The same seed (and time) always gives the same wiggle. */
+		seed: number;
+		/** Seconds: where along the wiggle's motion it is drawn. */
+		time: number;
+	};
+	offset: {
+		/** Grows (positive) or shrinks (negative) the shapes. */
+		amount: number;
+		join: VectorLineJoin;
+		miterLimit: number;
+		/** Copies, copy i offset by `amount · (i + 1 + copyOffset)`. */
+		copies: number;
+		copyOffset: number;
+	};
+	merge: { mode: VectorMergeMode };
+	repeater: {
+		/** Copies, the original included; a fraction fades the last copy. */
+		copies: number;
+		/** Shifts the copies along: copy i is transformed `i + offset` times. */
+		offset: number;
+		/** Each step: move, about `anchor` turn by `rotation` and scale by `scale` percent. */
+		position: Vec2;
+		/** Offset from the middle of the paths' bounds. */
+		anchor: Vec2;
+		rotation: number;
+		scale: Vec2;
+		/** Percent opacity of the first and last copies (in between interpolated). */
+		startOpacity: number;
+		endOpacity: number;
+		/** `below`: each copy draws under the one before it; `above`: over it. */
+		composite: 'below' | 'above';
+	};
+}
+
+/** One entry of an effect stack. */
+export type VectorEffect = {
+	[K in VectorEffectType]: {
+		/** Unique within the node. */
+		id: string;
+		type: K;
+		/** Disabled effects are skipped. Default true. */
+		enabled?: boolean;
+		params: VectorEffectParamsMap[K];
+	};
+}[VectorEffectType];
 
 /** Identifies one segment of a path node: from anchor `segment` to the next. */
 export interface VectorSegmentRef {

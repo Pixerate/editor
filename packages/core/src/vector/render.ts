@@ -38,6 +38,17 @@ import {
 } from './geometry.js';
 import { vectorPaintToSvg, vectorStrokeSvgParts, type VectorRenderStrokeParts } from './svg.js';
 import { vectorCorners } from './corners.js';
+import {
+	expandVectorAppearance,
+	hasOwnVectorAppearance,
+	hasVectorAppearance,
+	vectorAppearanceOutline,
+	vectorEnteredGroups,
+	VECTOR_EFFECT_LABELS,
+	VECTOR_EFFECT_PARAM_SPECS,
+	type VectorEffectParamSpec
+} from './appearance.js';
+import { VECTOR_EFFECT_TYPES, type VectorEffectType } from './types.js';
 import { isVectorBlendGroup, resolveVectorBlendOptions, vectorBlendRailAt, vectorBlendSpine } from './blendGroup.js';
 import type { VectorGuideKind, VectorSnapKind } from './snap.js';
 import type {
@@ -247,8 +258,10 @@ const fmtMatrix = (m: AffineMatrix) => `matrix(${m.map((n) => Math.round(n * 1e6
 /** Distance between the Shape Builder's hatch lines over a face (screen pixels). */
 export const VECTOR_BUILDER_HATCH_GAP = 6;
 
-function renderNode(node: VectorNode, defs: SvgGradientDef[], idPrefix: string): VectorRenderNode | null {
-	if (node.visible === false) return null;
+function renderNode(stored: VectorNode, defs: SvgGradientDef[], idPrefix: string): VectorRenderNode | null {
+	if (stored.visible === false) return null;
+	// Path effects and live booleans draw as their expanded shapes.
+	const node = expandVectorAppearance(stored);
 	if (node.type === 'group') {
 		const children = node.children.map((c) => renderNode(c, defs, idPrefix)).filter((c): c is VectorRenderNode => !!c);
 		return { kind: 'group', id: node.id, ...(node.transform ? { transform: fmtMatrix(node.transform) } : {}), opacity: node.opacity ?? 1, children };
@@ -296,20 +309,30 @@ export function getVectorSceneRenderData(state: Pick<VectorEditorState, 'documen
 
 const toScreen = (state: Pick<VectorEditorState, 'viewport'>, p: Vec2) => ({ x: p.x * state.viewport.zoom + state.viewport.x, y: p.y * state.viewport.zoom + state.viewport.y });
 
-function screenOutline(state: VectorEditorState, node: VectorNode): string {
+function screenOutline(state: VectorEditorState, node: VectorNode, entered: ReadonlySet<string>): string {
 	const v = state.viewport;
 	const view: AffineMatrix = [v.zoom, 0, 0, v.zoom, v.x, v.y];
 	const parent = vectorParentMatrix(state.document.nodes, node.id) ?? IDENTITY_MATRIX;
-	return collectWithMatrix(node, parent)
-		.map(({ path, parent: m }) => bezierPathToSvg(transformBezierPath(vectorPathWorldBezier(path, m), view), { precision: 2 }))
+	return outlinePaths(node, parent, entered)
+		.map((path) => bezierPathToSvg(transformBezierPath(path, view), { precision: 2 }))
 		.join(' ');
 }
 
-/** Path nodes in a subtree with the matrix of their parent space → document. */
-function collectWithMatrix(node: VectorNode, parent: AffineMatrix): { path: VectorPathNode; parent: AffineMatrix }[] {
-	if (node.type === 'path') return [{ path: node, parent }];
+/**
+ * Document-space outlines of a subtree: paths as stored (their anchors are what is edited; the
+ * scene shows their effects), live groups as drawn unless they are being edited (then their
+ * children, as figcraft outlines a boolean group's operands).
+ */
+function outlinePaths(node: VectorNode, parent: AffineMatrix, entered: ReadonlySet<string>): BezierPath[] {
+	if (node.type === 'path') return [vectorPathWorldBezier(node, parent, { effects: false })];
 	const m = multiplyMatrices(nodeMatrix(node), parent);
-	return node.children.flatMap((c) => collectWithMatrix(c, m));
+	if (hasOwnVectorAppearance(node) && !entered.has(node.id)) return [transformBezierPath(vectorAppearanceOutline(node), m)];
+	return node.children.filter((c) => c.visible !== false).flatMap((c) => outlinePaths(c, m, entered));
+}
+
+/** Live groups being edited in `state` (see `vectorEnteredGroups`). */
+export function getVectorEnteredGroups(state: Pick<VectorEditorState, 'document' | 'selection' | 'editingId'>): Set<string> {
+	return vectorEnteredGroups(state.document.nodes, state.editingId ? [...state.selection, state.editingId] : state.selection);
 }
 
 function collect(node: VectorNode): VectorPathNode[] {
@@ -322,13 +345,14 @@ export function getVectorOverlayRenderData(state: VectorEditorState): VectorOver
 	const doc = state.document;
 	const z = state.viewport.zoom;
 	const outlines: VectorOverlayRenderData['outlines'] = [];
+	const entered = getVectorEnteredGroups(state);
 	const seen = new Set<string>();
 	const outline = (id: string, selected: boolean) => {
 		if (seen.has(id)) return;
 		const node = findVectorNode(doc.nodes, id);
 		if (!node || node.visible === false) return;
 		seen.add(id);
-		outlines.push({ id, d: screenOutline(state, node), selected });
+		outlines.push({ id, d: screenOutline(state, node, entered), selected });
 	};
 	for (const id of state.selection) outline(id, true);
 	if (state.editingId) outline(state.editingId, true);
@@ -509,7 +533,7 @@ function blendOverlay(state: VectorEditorState): VectorOverlayRenderData['blend'
 		const from = state.blendStart ? findVectorNode(doc.nodes, state.blendStart.nodeId) : undefined;
 		if (from && state.blendStart) {
 			const a = state.blendStart.anchor === null ? undefined : getAnchorWorld(doc, { nodeId: from.id, subpath: 0, index: state.blendStart.anchor });
-			start = { d: screenOutline(state, from), anchor: a ? sc(a, view) : null };
+			start = { d: screenOutline(state, from, new Set()), anchor: a ? sc(a, view) : null };
 		}
 		const hovered = state.hover?.nodeId ? findVectorNode(doc.nodes, state.hover.nodeId) : undefined;
 		if (hovered?.type === 'path' && hovered.subpaths[0]) {
@@ -831,3 +855,52 @@ export const VECTOR_EDIT_TOGGLES: readonly { key: 'keepShapeOnDelete' | 'curvatu
 	{ key: 'recognizeShapes', label: 'Shapes', title: 'Turn pencil scribbles into shapes' }
 ];
 
+
+// ---------------------------------------------------------------------------
+// Effects panel
+// ---------------------------------------------------------------------------
+
+/** One effect of the listed stack, with what a panel needs to edit it. */
+export interface VectorEffectsPanelItem {
+	id: string;
+	type: VectorEffectType;
+	label: string;
+	enabled: boolean;
+	params: Record<string, unknown>;
+	specs: readonly VectorEffectParamSpec[];
+}
+
+/** What an Effects panel shows for the selection. */
+export interface VectorEffectsPanelData {
+	/** The node whose stack is listed (when one node is selected), else null. */
+	nodeId: string | null;
+	/** Selected nodes an added effect goes to. */
+	count: number;
+	/** The listed stack, applied top to bottom. */
+	effects: VectorEffectsPanelItem[];
+	/** Something selected is live (Expand Appearance applies). */
+	expandable: boolean;
+}
+
+/** Effect types in menu order, with their names. */
+export const VECTOR_EFFECT_MENU: readonly { type: VectorEffectType; label: string }[] = VECTOR_EFFECT_TYPES.map((type) => ({ type, label: VECTOR_EFFECT_LABELS[type] }));
+
+/** The Effects panel of the selection, or null when nothing that takes effects is selected. */
+export function getVectorEffectsPanel(state: Pick<VectorEditorState, 'document' | 'selection'>): VectorEffectsPanelData | null {
+	const nodes = state.selection.map((id) => findVectorNode(state.document.nodes, id)).filter((n): n is VectorNode => !!n && !n.blendStep);
+	if (!nodes.length) return null;
+	const one = nodes.length === 1 ? nodes[0] : null;
+	return {
+		nodeId: one?.id ?? null,
+		count: nodes.length,
+		effects: (one?.effects ?? []).map((e) => ({
+			id: e.id,
+			type: e.type,
+			label: VECTOR_EFFECT_LABELS[e.type] ?? e.type,
+			enabled: e.enabled !== false,
+			params: e.params as unknown as Record<string, unknown>,
+			specs: VECTOR_EFFECT_PARAM_SPECS[e.type] ?? []
+		})),
+		expandable: nodes.some(hasVectorAppearance)
+	};
+}
