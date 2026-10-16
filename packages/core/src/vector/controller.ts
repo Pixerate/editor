@@ -2,7 +2,7 @@ import { HistoryManager } from '../history/HistoryManager.js';
 import type { Command } from '../history/types.js';
 import { fitCubics } from '../canvas/curveFit.js';
 import { pathBoolean } from '../canvas/pathops/boolean.js';
-import { transformBezierPath, type BezierPath } from '../canvas/pathops/bezier.js';
+import { bezierPathBounds, transformBezierPath, type BezierPath } from '../canvas/pathops/bezier.js';
 import type { Point } from '../canvas/types.js';
 import {
 	bezierToSubpaths,
@@ -21,6 +21,7 @@ import {
 	locateVectorNode,
 	moveAnchorHandle,
 	nearestSegment,
+	hasPaint,
 	nodeMatrix,
 	invertMatrix,
 	applyMatrix,
@@ -49,6 +50,18 @@ import {
 } from './geometry.js';
 import { parseVectorSvg, vectorDocumentToSvg, type VectorSvgExportOptions } from './svg.js';
 import { constrainToLeave, VECTOR_CONSTRUCTION_ANGLES, VectorSnapTargets, type VectorSnapGuides, type VectorSnapLeave } from './snap.js';
+import {
+	bendSegment as bendSubpathSegment,
+	curvatureMoveAnchor,
+	cutSubpathAt,
+	joinSubpaths,
+	removeAnchorsKeepingShape,
+	removeRedundantPoints as removeRedundantSubpathPoints,
+	smoothSubpath,
+	splitSubpathAt
+} from './pathEdit.js';
+import { eraseFromFill, eraseFromOutline, eraserRegion, knifePath, polylineBounds, simplifyPolyline } from './pathCut.js';
+import { LazyMouse, recognizeInkShape, vectorInkShapeName, type VectorInkShape } from './ink.js';
 import type {
 	Vec2,
 	VectorAlign,
@@ -56,6 +69,7 @@ import type {
 	VectorAnchorRef,
 	VectorAnchorType,
 	VectorArrange,
+	VectorAverageAxis,
 	VectorBooleanOperation,
 	VectorBounds,
 	VectorDefaults,
@@ -66,6 +80,7 @@ import type {
 	VectorModifiers,
 	VectorNode,
 	VectorPathNode,
+	VectorSegmentRef,
 	VectorStyle,
 	VectorSubpath,
 	VectorTool,
@@ -96,6 +111,32 @@ export interface VectorSnapOptions {
 /** Snap options new editors start with. Hold Cmd / Ctrl (`mod`) during a drag to bypass snapping. */
 export const DEFAULT_VECTOR_SNAP: Readonly<VectorSnapOptions> = { grid: 0, objects: true, guides: true, threshold: 5, angles: VECTOR_CONSTRUCTION_ANGLES };
 
+/** How path-editing gestures and the pencil, knife and eraser behave. */
+export interface VectorPathEditOptions {
+	/**
+	 * Deleting anchors refits the neighbouring handles so the shape stays (default true). Off,
+	 * the neighbours are joined with their handles as they are.
+	 */
+	keepShapeOnDelete: boolean;
+	/**
+	 * Dragging one anchor with the direct tool bends its two segments like the Curvature tool,
+	 * keeping the segments beyond still (default false). Alt held during the drag flips it.
+	 */
+	curvatureMoves: boolean;
+	/** Pencil lazy-mouse smoothing, 0–1: the pulled string is up to 100 screen pixels long (default 0, off). */
+	pencilSmoothing: number;
+	/** Pencil strokes that look like a line, rectangle, ellipse or polygon become that shape (default false). */
+	recognizeShapes: boolean;
+	/** Eraser diameter in document units (default 10). */
+	eraserSize: number;
+}
+
+/** Path-editing options new editors start with. */
+export const DEFAULT_VECTOR_PATH_EDIT: Readonly<VectorPathEditOptions> = { keepShapeOnDelete: true, curvatureMoves: false, pencilSmoothing: 0, recognizeShapes: false, eraserSize: 10 };
+
+/** Longest pencil lazy-mouse string (at smoothing 1), in screen pixels. */
+export const VECTOR_PENCIL_STRING_PX = 100;
+
 export interface VectorEditorOptions {
 	document?: VectorDocument;
 	/** History to record into, e.g. one shared with the rest of the app (default: a new one). */
@@ -106,6 +147,7 @@ export interface VectorEditorOptions {
 	defaults?: VectorDefaults;
 	viewport?: Partial<VectorViewport>;
 	snap?: Partial<VectorSnapOptions>;
+	editing?: Partial<VectorPathEditOptions>;
 	/** Pick distance for anchors, handles and outlines in screen pixels (default 6). */
 	hitRadius?: number;
 	/** Id factory for new nodes. */
@@ -131,6 +173,7 @@ export interface VectorHover {
 	nodeId: string | null;
 	anchor?: VectorAnchorRef;
 	handle?: VectorHandleRef;
+	/** A segment under the pointer (direct tool and scissors); `point` is in document space. */
 	segment?: { nodeId: string; subpath: number; segment: number; t: number; point: Vec2 };
 	transformHandle?: VectorTransformHandle;
 }
@@ -143,7 +186,9 @@ export type VectorInteraction =
 	| { type: 'rotate'; angle: number }
 	| { type: 'anchors'; dx: number; dy: number }
 	| { type: 'handle'; ref: VectorHandleRef }
-	| { type: 'draw'; tool: VectorTool; nodeId: string; bounds: VectorBounds }
+	| { type: 'bend'; ref: VectorSegmentRef }
+	| { type: 'draw'; tool: VectorTool; nodeId: string; bounds: VectorBounds; string?: [Vec2, Vec2] }
+	| { type: 'stroke'; tool: 'knife' | 'eraser'; points: Vec2[]; width: number }
 	| { type: 'pen'; nodeId: string }
 	| { type: 'pan' };
 
@@ -164,6 +209,7 @@ export interface VectorEditorState {
 	viewport: VectorViewport;
 	defaults: Readonly<Required<Pick<VectorDefaults, 'polygonSides' | 'starPoints' | 'starInnerRatio' | 'cornerRadius'>> & VectorStyle>;
 	snap: VectorSnapOptions;
+	editing: VectorPathEditOptions;
 	/** Smart guides of the snap in progress, in document units (null when there are none). */
 	guides: VectorSnapGuides | null;
 	hitRadius: number;
@@ -413,10 +459,13 @@ const TOOL_LABELS: Record<VectorTool, string> = {
 	ellipse: 'Ellipse',
 	polygon: 'Polygon',
 	star: 'Star',
-	line: 'Line'
+	line: 'Line',
+	scissors: 'Scissors',
+	knife: 'Knife',
+	eraser: 'Eraser'
 };
 
-const TOOL_KEYS: Record<string, VectorTool> = { v: 'select', a: 'direct', p: 'pen', n: 'pencil', r: 'rect', o: 'ellipse', e: 'ellipse', y: 'polygon', s: 'star', l: 'line' };
+const TOOL_KEYS: Record<string, VectorTool> = { v: 'select', a: 'direct', p: 'pen', n: 'pencil', r: 'rect', o: 'ellipse', y: 'polygon', s: 'star', l: 'line', c: 'scissors', k: 'knife', e: 'eraser' };
 
 export function vectorToolLabel(tool: VectorTool): string {
 	return TOOL_LABELS[tool];
@@ -432,7 +481,10 @@ export const VECTOR_TOOL_SHORTCUTS: Readonly<Record<VectorTool, string>> = {
 	ellipse: 'O',
 	polygon: 'Y',
 	star: 'S',
-	line: 'L'
+	line: 'L',
+	scissors: 'C',
+	knife: 'K',
+	eraser: 'E'
 };
 
 /** Short glyphs for tool buttons (pair them with `vectorToolLabel` for the accessible name). */
@@ -445,8 +497,14 @@ export const VECTOR_TOOL_GLYPHS: Readonly<Record<VectorTool, string>> = {
 	ellipse: '◯',
 	polygon: '⬡',
 	star: '☆',
-	line: '╱'
+	line: '╱',
+	scissors: '✂',
+	knife: '⟋',
+	eraser: '⌫'
 };
+
+/** Tools that drag out a shape (they snap while hovering). */
+const SHAPE_TOOLS: ReadonlySet<VectorTool> = new Set(['rect', 'ellipse', 'polygon', 'star', 'line']);
 
 const BOOLEAN_OPS: Record<VectorBooleanOperation, 'union' | 'difference' | 'intersection' | 'xor'> = {
 	union: 'union',
@@ -472,6 +530,31 @@ function mapTree(nodes: readonly VectorNode[], fn: (node: VectorNode) => VectorN
 	}
 	return changed ? out : (nodes as VectorNode[]);
 }
+
+/** Replaces node `id` anywhere in the tree with `replacements` (none removes it). */
+function spliceTree(nodes: readonly VectorNode[], id: string, replacements: readonly VectorNode[]): VectorNode[] {
+	let changed = false;
+	const out: VectorNode[] = [];
+	for (const node of nodes) {
+		if (node.id === id) {
+			changed = true;
+			out.push(...replacements);
+			continue;
+		}
+		if (node.type === 'group') {
+			const children = spliceTree(node.children, id, replacements);
+			if (children !== node.children) {
+				changed = true;
+				out.push({ ...node, children });
+				continue;
+			}
+		}
+		out.push(node);
+	}
+	return changed ? out : (nodes as VectorNode[]);
+}
+
+const toPoint = (p: Vec2): Point => [p.x, p.y];
 
 const isRoot = (m: AffineMatrix) => m === IDENTITY_MATRIX || (m[0] === 1 && m[1] === 0 && m[2] === 0 && m[3] === 1 && m[4] === 0 && m[5] === 0);
 
@@ -500,9 +583,11 @@ type Drag =
 	| { kind: 'marquee'; start: Vec2; base: string[]; baseAnchors: VectorAnchorRef[]; anchorsMode: boolean }
 	| ({ kind: 'anchors'; start: Vec2; before: Snapshot; base: VectorDocument; moved: boolean; clickRef: VectorAnchorRef | null; lead: VectorAnchorRef | null } & DragTargets)
 	| ({ kind: 'handle'; ref: VectorHandleRef; before: Snapshot; base: VectorDocument } & DragTargets)
+	| { kind: 'bend'; ref: VectorSegmentRef; t: number; start: Vec2; before: Snapshot; base: VectorDocument; moved: boolean }
+	| { kind: 'stroke'; tool: 'knife' | 'eraser'; points: Vec2[]; before: Snapshot }
 	| { kind: 'pull'; ref: VectorAnchorRef; before: Snapshot; base: VectorDocument; label: string; outOnly: boolean; closing: boolean; altBreaks: boolean }
 	| ({ kind: 'shape'; tool: VectorTool; start: Vec2; nodeId: string; before: Snapshot } & DragTargets)
-	| { kind: 'pencil'; nodeId: string; points: Point[]; before: Snapshot }
+	| { kind: 'pencil'; nodeId: string; points: Point[]; before: Snapshot; lazy: LazyMouse }
 	| { kind: 'pan'; start: Vec2; viewport: VectorViewport };
 
 /**
@@ -523,6 +608,7 @@ export class VectorEditorController {
 	private defaults: VectorEditorState['defaults'];
 	private viewport: VectorViewport;
 	private snap: VectorSnapOptions;
+	private editing: VectorPathEditOptions;
 	private hitRadius: number;
 	private hover: VectorHover | null = null;
 	private pointer: Vec2 | null = null;
@@ -552,6 +638,7 @@ export class VectorEditorController {
 		this.defaults = { ...DEFAULT_DEFAULTS, ...(options.defaults ?? {}) } as VectorEditorState['defaults'];
 		this.viewport = { x: 0, y: 0, zoom: 1, ...(options.viewport ?? {}) };
 		this.snap = { ...DEFAULT_VECTOR_SNAP, ...(options.snap ?? {}) };
+		this.editing = { ...DEFAULT_VECTOR_PATH_EDIT, ...(options.editing ?? {}) };
 		this.hitRadius = options.hitRadius ?? 6;
 		this.createId = options.createId ?? defaultCreateId;
 		this.onChange = options.onChange;
@@ -607,6 +694,7 @@ export class VectorEditorController {
 			viewport: this.viewport,
 			defaults: this.defaults,
 			snap: this.snap,
+			editing: this.editing,
 			guides: this.guides,
 			hitRadius: this.hitRadius,
 			hover: this.hover,
@@ -836,6 +924,15 @@ export class VectorEditorController {
 		this.notify();
 	}
 
+	/** Changes how deleting, dragging anchors, the pencil and the eraser behave. */
+	setEditing(editing: Partial<VectorPathEditOptions>): void {
+		const next = { ...this.editing, ...editing };
+		next.pencilSmoothing = Math.min(1, Math.max(0, Number.isFinite(next.pencilSmoothing) ? next.pencilSmoothing : 0));
+		if (!(next.eraserSize > 0)) next.eraserSize = this.editing.eraserSize;
+		this.editing = next;
+		this.notify();
+	}
+
 	/** Turns object snapping on or off (the toolbar's snapping toggle). */
 	toggleSnapping(on: boolean = !this.snap.objects): void {
 		this.setSnap({ objects: on });
@@ -906,7 +1003,7 @@ export class VectorEditorController {
 			const leave = last ? { at: { x: last.x, y: last.y }, constrain: input.shift ? ('angle' as const) : null } : null;
 			return this.snapDrawn(p, leave, input, () => this.drawingTargets(this.pen?.nodeId ?? null));
 		}
-		if (this.tool !== 'select' && this.tool !== 'direct' && this.tool !== 'pencil') return this.snapDrawn(p, null, input, () => this.drawingTargets(null));
+		if (SHAPE_TOOLS.has(this.tool)) return this.snapDrawn(p, null, input, () => this.drawingTargets(null));
 		this.setGuides(null);
 		return p;
 	}
@@ -1563,12 +1660,50 @@ export class VectorEditorController {
 		});
 	}
 
-	/** Moves one anchor to a document position (handles follow). */
-	moveAnchor(ref: VectorAnchorRef, to: Vec2): VectorActionResult {
+	/**
+	 * Moves one anchor to a document position. Its handles follow; with `curvature` (default:
+	 * the `curvatureMoves` setting) its two segments bend instead, as the Curvature tool does.
+	 */
+	moveAnchor(ref: VectorAnchorRef, to: Vec2, options: { curvature?: boolean } = {}): VectorActionResult {
 		const a = getAnchorWorld(this.doc, ref);
 		if (!a) return { ok: false, message: 'There is no such anchor.' };
+		const curvature = options.curvature ?? this.editing.curvatureMoves;
 		this.change('Move Point', () => {
-			this.doc = this.movedAnchors(this.doc, [ref], to.x - a.x, to.y - a.y);
+			this.doc = curvature ? this.curvatureMoved(this.doc, ref, to) : this.movedAnchors(this.doc, [ref], to.x - a.x, to.y - a.y);
+		});
+		return { ok: true };
+	}
+
+	/** `doc` with anchor `ref` moved to document point `to` by a Curvature-tool move. */
+	private curvatureMoved(doc: VectorDocument, ref: VectorAnchorRef, to: Vec2): VectorDocument {
+		const node = findVectorNode(doc.nodes, ref.nodeId);
+		if (node?.type !== 'path' || node.locked || !node.subpaths[ref.subpath]) return doc;
+		const q = this.toLocal(ref.nodeId, to, doc);
+		const subpaths = node.subpaths.map((sp, i) => (i === ref.subpath ? curvatureMoveAnchor(sp, ref.index, q) : sp));
+		const nodes = mapTree(doc.nodes, (n) => (n.id === ref.nodeId ? { ...node, subpaths } : n));
+		return { ...doc, nodes };
+	}
+
+	/** `doc` with segment `ref` bent through document point `p` at parameter `t`. */
+	private bent(doc: VectorDocument, ref: VectorSegmentRef, t: number, p: Vec2): VectorDocument {
+		const node = findVectorNode(doc.nodes, ref.nodeId);
+		if (node?.type !== 'path' || node.locked || !node.subpaths[ref.subpath]) return doc;
+		const q = this.toLocal(ref.nodeId, p, doc);
+		const subpaths = node.subpaths.map((sp, i) => (i === ref.subpath ? bendSubpathSegment(sp, ref.segment, t, q) : sp));
+		return { ...doc, nodes: mapTree(doc.nodes, (n) => (n.id === ref.nodeId ? { ...node, subpaths } : n)) };
+	}
+
+	/**
+	 * Bends a segment so the curve passes through document point `to` at parameter `t`
+	 * (default 0.5, clamped to 0.05–0.95); see `bendSegment` in `pathEdit`.
+	 */
+	bendSegment(ref: VectorSegmentRef, to: Vec2, t = 0.5): VectorActionResult {
+		const node = this.getNode(ref.nodeId);
+		const sp = node?.type === 'path' ? node.subpaths[ref.subpath] : undefined;
+		if (!sp || ref.segment < 0 || ref.segment >= (sp.closed ? sp.anchors.length : sp.anchors.length - 1) || sp.anchors.length < 2) return { ok: false, message: 'There is no such segment.' };
+		if (node!.locked) return { ok: false, message: 'The path is locked.' };
+		this.change('Bend Segment', () => {
+			this.doc = this.bent(this.doc, ref, t, to);
 		});
 		return { ok: true };
 	}
@@ -1615,16 +1750,25 @@ export class VectorEditorController {
 		return ref;
 	}
 
-	/** Deletes the selected anchors; empty subpaths and paths go too. */
-	deleteAnchors(refs: readonly VectorAnchorRef[] = this.anchors): VectorActionResult {
+	/**
+	 * Deletes the selected (or given) anchors; subpaths left with one anchor and empty paths go
+	 * too. With `keepShape` (default: the `keepShapeOnDelete` setting, on) the neighbours'
+	 * handles are refitted so the path keeps its shape; off, the neighbours are joined as they are.
+	 */
+	deleteAnchors(refs: readonly VectorAnchorRef[] = this.anchors, options: { keepShape?: boolean } = {}): VectorActionResult {
 		if (!refs.length) return { ok: false, message: 'Select points to delete.' };
+		const keepShape = options.keepShape ?? this.editing.keepShapeOnDelete;
 		this.change('Delete Points', () => {
 			const nodes = mapTree(this.doc.nodes, (n) => {
-				if (n.type !== 'path') return n;
+				if (n.type !== 'path' || n.locked) return n;
 				const mine = refs.filter((r) => r.nodeId === n.id);
 				if (!mine.length) return n;
 				const subpaths = n.subpaths
-					.map((sp, s) => removeAnchors(sp, mine.filter((r) => r.subpath === s).map((r) => r.index)))
+					.map((sp, s) => {
+						const indices = mine.filter((r) => r.subpath === s).map((r) => r.index);
+						if (!indices.length) return sp;
+						return keepShape ? removeAnchorsKeepingShape(sp, indices) : removeAnchors(sp, indices);
+					})
 					.filter((sp) => sp.anchors.length > 1);
 				return subpaths.length ? { ...n, subpaths } : null;
 			});
@@ -1667,6 +1811,285 @@ export class VectorEditorController {
 			this.anchors = [];
 		});
 		return { ok: true };
+	}
+
+	// -------------------------------------------------------------------------
+	// Path clean-up, Scissors, Knife and Eraser
+	// -------------------------------------------------------------------------
+
+	/** Unlocked path nodes in the given roots (default: the paths being edited, else the selection). */
+	private pathTargets(ids?: readonly string[]): VectorPathNode[] {
+		const roots = ids ?? (this.tool === 'direct' && this.anchors.length ? [...new Set(this.anchors.map((r) => r.nodeId))] : this.selection);
+		const out = new Map<string, VectorPathNode>();
+		for (const id of roots) {
+			const node = this.getNode(id);
+			if (node && !node.locked) for (const p of collectPathNodes(node)) if (!p.locked) out.set(p.id, p);
+		}
+		// Document order, bottom to top.
+		const order: string[] = [];
+		walkVectorNodes(this.doc.nodes, (n) => {
+			if (out.has(n.id)) order.push(n.id);
+		});
+		return order.map((id) => out.get(id)!);
+	}
+
+	/** Subpaths of node `from` mapped into node `to`'s own space. */
+	private subpathsIn(from: VectorPathNode, to: string): VectorSubpath[] {
+		const m = multiplyMatrices(this.worldOf(from.id), invertMatrix(this.worldOf(to)));
+		if (isRoot(m)) return from.subpaths;
+		const map = (p: Vec2) => applyMatrix(m, p);
+		return from.subpaths.map((sp) => ({
+			closed: sp.closed,
+			anchors: sp.anchors.map((a) => ({ ...map(a), ...(a.in ? { in: map(a.in) } : {}), ...(a.out ? { out: map(a.out) } : {}), ...(a.type ? { type: a.type } : {}) }))
+		}));
+	}
+
+	/**
+	 * Replaces a path with pieces: each entry becomes one path (the first keeps the node's id and
+	 * place, the others go just above it with the same style). No pieces removes the path.
+	 * Returns the ids of the paths now standing in for it.
+	 */
+	private replaceWithPieces(node: VectorPathNode, pieces: readonly VectorSubpath[][]): string[] {
+		const nodes = pieces.filter((p) => p.length).map((subpaths, i) => ({ ...node, id: i === 0 ? node.id : this.newId(), subpaths }) as VectorPathNode);
+		this.setDoc(spliceTree(this.doc.nodes, node.id, nodes));
+		return nodes.map((n) => n.id);
+	}
+
+	/** Clears anchor selections, editing and pen state that no longer point at anything. */
+	private dropStaleRefs() {
+		this.selection = this.selection.filter((id) => this.getNode(id));
+		this.anchors = this.anchors.filter((r) => getAnchor(this.doc, r));
+		if (this.editingId && !this.getNode(this.editingId)) this.editingId = null;
+		if (this.pen && !this.getNode(this.pen.nodeId)) this.pen = null;
+	}
+
+	/**
+	 * Join: the open subpaths of the selected (or given) paths become one open path, joined
+	 * nearest endpoints first (ends within `tolerance` document units merge into one anchor,
+	 * others get a straight segment); a single open subpath is closed. The result replaces the
+	 * lowest path, in its space and style. Default tolerance: the pick distance.
+	 */
+	joinPaths(options: { ids?: readonly string[]; tolerance?: number } = {}): VectorActionResult {
+		const paths = this.pathTargets(options.ids);
+		if (!paths.length) return { ok: false, message: 'Select paths to join.' };
+		const base = paths[0];
+		const all = paths.flatMap((p) => this.subpathsIn(p, base.id));
+		if (!all.some((sp) => !sp.closed && sp.anchors.length > 1)) return { ok: false, message: 'There are no open paths to join.' };
+		const subpaths = joinSubpaths(all, options.tolerance ?? this.tolerance());
+		const drop = new Set(paths.slice(1).map((p) => p.id));
+		this.change('Join', () => {
+			this.setDoc(mapTree(this.doc.nodes, (n) => (n.id === base.id ? { ...base, subpaths } : drop.has(n.id) ? null : n)));
+			this.selection = [base.id];
+			this.anchors = [];
+			if (this.editingId && drop.has(this.editingId)) this.editingId = base.id;
+			this.dropStaleRefs();
+		});
+		return { ok: true };
+	}
+
+	/** Average: moves the selected (or given) anchors onto their average position along `axis`, in document space. */
+	averageAnchors(axis: VectorAverageAxis = 'both', refs: readonly VectorAnchorRef[] = this.anchors): VectorActionResult {
+		const points = refs.map((r) => ({ ref: r, at: getAnchorWorld(this.doc, r) })).filter((p): p is { ref: VectorAnchorRef; at: NonNullable<ReturnType<typeof getAnchorWorld>> } => !!p.at);
+		if (points.length < 2) return { ok: false, message: 'Select at least two points to average.' };
+		const cx = points.reduce((s, p) => s + p.at.x, 0) / points.length;
+		const cy = points.reduce((s, p) => s + p.at.y, 0) / points.length;
+		this.change('Average', () => {
+			for (const { ref, at } of points) {
+				const dx = axis === 'horizontal' ? 0 : cx - at.x;
+				const dy = axis === 'vertical' ? 0 : cy - at.y;
+				if (dx || dy) this.doc = this.movedAnchors(this.doc, [ref], dx, dy);
+			}
+		});
+		return { ok: true };
+	}
+
+	/** Applies `fn` to every subpath of the target paths as one undo step. */
+	private editSubpaths(label: string, ids: readonly string[] | undefined, fn: (sp: VectorSubpath, node: VectorPathNode, index: number) => VectorSubpath): VectorActionResult {
+		const paths = this.pathTargets(ids);
+		if (!paths.length) return { ok: false, message: 'Select a path.' };
+		const set = new Set(paths.map((p) => p.id));
+		this.change(label, () => {
+			this.setDoc(mapTree(this.doc.nodes, (n) => (n.type === 'path' && set.has(n.id) ? { ...n, subpaths: n.subpaths.map((sp, i) => fn(sp, n, i)) } : n)));
+			this.dropStaleRefs();
+		});
+		return { ok: true };
+	}
+
+	/**
+	 * Remove Redundant Points: drops anchors of the selected (or given) paths that can go
+	 * without moving the outline more than `tolerance` document units (default 0.5).
+	 */
+	removeRedundantPoints(options: { ids?: readonly string[]; tolerance?: number } = {}): VectorActionResult {
+		const tolerance = options.tolerance ?? 0.5;
+		return this.editSubpaths('Remove Redundant Points', options.ids, (sp) => removeRedundantSubpathPoints(sp, tolerance));
+	}
+
+	/**
+	 * Smooth: pulls handles towards smooth tangents by `amount` (0–1, default 1). With the direct
+	 * tool and points selected, only those points change.
+	 */
+	smoothPaths(options: { ids?: readonly string[]; amount?: number; refs?: readonly VectorAnchorRef[] } = {}): VectorActionResult {
+		const refs = options.refs ?? (!options.ids && this.tool === 'direct' && this.anchors.length ? this.anchors : null);
+		const ids = options.ids ?? (refs ? [...new Set(refs.map((r) => r.nodeId))] : undefined);
+		return this.editSubpaths('Smooth', ids, (sp, node, i) => {
+			const only = refs ? new Set(refs.filter((r) => r.nodeId === node.id && r.subpath === i).map((r) => r.index)) : undefined;
+			return only && !only.size ? sp : smoothSubpath(sp, options.amount ?? 1, only);
+		});
+	}
+
+	/** Splits a cut subpath into pieces: separate paths for a one-subpath node, subpaths in place for a compound one. */
+	private applyCuts(node: VectorPathNode, cut: (sp: VectorSubpath, index: number) => VectorSubpath[] | null): string[] | null {
+		const results = node.subpaths.map((sp, i) => cut(sp, i));
+		if (results.every((r) => !r)) return null;
+		const subpaths = node.subpaths.flatMap((sp, i) => results[i] ?? [sp]);
+		if (node.subpaths.length === 1) return this.replaceWithPieces(node, subpaths.map((sp) => [sp]));
+		this.replaceNode(node.id, { ...node, subpaths });
+		return [node.id];
+	}
+
+	/**
+	 * Scissors: cuts path `nodeId` at the outline point nearest document point `point` (at an
+	 * anchor when within the pick distance of one). A closed subpath opens there; an open one
+	 * splits in two (a one-subpath path becomes two paths). Returns the ids of the paths.
+	 */
+	cutPathAt(nodeId: string, point: Vec2): string[] | null {
+		const node = this.getNode(nodeId);
+		if (node?.type !== 'path' || node.locked) return null;
+		const local = this.toLocal(nodeId, point);
+		const hit = nearestSegment(node, local);
+		if (!hit) return null;
+		const sp = node.subpaths[hit.subpath];
+		const n = sp.anchors.length;
+		const near = [hit.segment, (hit.segment + 1) % n].find((i) => Math.hypot(sp.anchors[i].x - hit.point.x, sp.anchors[i].y - hit.point.y) <= this.tolerance());
+		if (!sp.closed && n > 1 && (near === 0 || near === n - 1) && !(hit.t > 1e-6 && hit.t < 1 - 1e-6)) return null;
+		let ids: string[] | null = null;
+		this.change('Cut Path', () => {
+			ids = this.applyCuts(node, (s, i) => (i !== hit.subpath ? null : near !== undefined ? cutSubpathAt(s, [near]) : splitSubpathAt(s, hit.segment, hit.t)));
+			if (ids) {
+				this.selection = ids;
+				this.anchors = [];
+				if (this.editingId === nodeId) this.editingId = null;
+			}
+			this.dropStaleRefs();
+		});
+		return ids;
+	}
+
+	/** Scissors on the selected (or given) anchors: each cuts its subpath there (see `cutPathAt`). */
+	cutAtAnchors(refs: readonly VectorAnchorRef[] = this.anchors): VectorActionResult {
+		const byNode = new Map<string, VectorAnchorRef[]>();
+		for (const r of refs) if (getAnchor(this.doc, r)) byNode.set(r.nodeId, [...(byNode.get(r.nodeId) ?? []), r]);
+		if (!byNode.size) return { ok: false, message: 'Select points to cut at.' };
+		const created: string[] = [];
+		this.change('Cut Path', () => {
+			for (const [id, list] of byNode) {
+				const node = this.getNode(id) as VectorPathNode;
+				if (node.locked) continue;
+				const ids = this.applyCuts(node, (sp, i) => {
+					const at = list.filter((r) => r.subpath === i).map((r) => r.index);
+					const pieces = at.length ? cutSubpathAt(sp, at) : null;
+					return pieces && !(pieces.length === 1 && pieces[0].closed === sp.closed) ? pieces : null;
+				});
+				if (ids) created.push(...ids);
+			}
+			if (created.length) this.selection = created;
+			this.anchors = [];
+			this.dropStaleRefs();
+		});
+		return created.length ? { ok: true } : { ok: false, message: 'Points at the ends of open paths do not cut.' };
+	}
+
+	/** Visible, unlocked paths a stroke over `points` can reach: in `ids`, the selection, or (with neither) any whose bounds it crosses. */
+	private strokeTargets(points: readonly Vec2[], ids: readonly string[] | undefined, pad: number): VectorPathNode[] {
+		const blocked = new Set<string>();
+		walkVectorNodes(this.doc.nodes, (n, parent) => {
+			if (n.visible === false || n.locked || (parent && blocked.has(parent.id))) blocked.add(n.id);
+		});
+		const visible = (p: VectorPathNode) => !blocked.has(p.id);
+		if (ids?.length || this.selection.length) return this.pathTargets(ids ?? this.selection).filter(visible);
+		const box = polylineBounds(points.map(toPoint), pad);
+		if (!box) return [];
+		const out: VectorPathNode[] = [];
+		walkVectorNodes(this.doc.nodes, (n) => {
+			if (n.type !== 'path' || !visible(n)) return;
+			const b = vectorNodeBounds(n, vectorParentMatrix(this.doc.nodes, n.id) ?? IDENTITY_MATRIX);
+			if (b && boundsIntersect(b, box)) out.push(n);
+		});
+		return out;
+	}
+
+	/** A stroke's points in node `id`'s own space. */
+	private localPoints(id: string, points: readonly Vec2[]): Point[] {
+		const inv = invertMatrix(this.worldOf(id));
+		return points.map((p) => toPoint(applyMatrix(inv, p)));
+	}
+
+	/**
+	 * Knife: cuts closed paths along the polyline `points` (document space) wherever it crosses
+	 * them from edge to edge, with no gap between the pieces. It cuts the given paths, the
+	 * selection, or (with neither) every path it crosses. Returns the ids of the pieces (empty
+	 * when nothing was cut).
+	 */
+	knife(points: readonly Vec2[], options: { ids?: readonly string[] } = {}): string[] {
+		const pts = simplifyPolyline(points.map(toPoint), 0.25 / this.viewport.zoom).map(([x, y]) => ({ x, y }));
+		if (pts.length < 2) return [];
+		const plan: { node: VectorPathNode; pieces: VectorSubpath[][] }[] = [];
+		for (const node of this.strokeTargets(pts, options.ids, 0)) {
+			const closed = node.subpaths.filter((sp) => sp.anchors.length > 1);
+			if (!closed.length || closed.some((sp) => !sp.closed)) continue;
+			const result = knifePath(subpathsToBezier(closed), node.fillRule ?? 'nonzero', this.localPoints(node.id, pts));
+			if (result) plan.push({ node, pieces: result.map((path) => bezierToSubpaths(path)) });
+		}
+		if (!plan.length) return [];
+		const created: string[] = [];
+		this.change('Knife', () => {
+			for (const { node, pieces } of plan) created.push(...this.replaceWithPieces(node, pieces));
+			this.selection = created;
+			this.anchors = [];
+			this.dropStaleRefs();
+		});
+		return created;
+	}
+
+	/**
+	 * Eraser: rubs out a round stroke of diameter `size` (default: the `eraserSize` setting)
+	 * along `points` (document space). Filled closed paths lose that area (pieces that come
+	 * apart become separate paths); outlines are cut where they pass under it. It erases from
+	 * the given paths, the selection, or (with neither) every path it reaches. Returns the ids
+	 * of the paths it changed or created.
+	 */
+	erase(points: readonly Vec2[], options: { ids?: readonly string[]; size?: number } = {}): string[] {
+		const width = options.size ?? this.editing.eraserSize;
+		if (!(width > 0) || !points.length) return [];
+		const pts = simplifyPolyline(points.map(toPoint), Math.min(width * 0.05, 0.25 / this.viewport.zoom));
+		const region = eraserRegion(pts, width);
+		if (!region.length) return [];
+		const plan: { node: VectorPathNode; pieces: VectorSubpath[][] }[] = [];
+		const rb = bezierPathBounds(region);
+		const reach = rb ? [{ x: rb.minX, y: rb.minY }, { x: rb.maxX, y: rb.maxY }] : points;
+		for (const node of this.strokeTargets(reach, options.ids, 0)) {
+			const local = transformBezierPath(region, invertMatrix(this.worldOf(node.id)));
+			const live = node.subpaths.filter((sp) => sp.anchors.length > 1);
+			if (!live.length) continue;
+			if (hasPaint(node.fill) && live.every((sp) => sp.closed)) {
+				const faces = eraseFromFill(subpathsToBezier(live), node.fillRule ?? 'nonzero', local);
+				if (faces) plan.push({ node, pieces: faces.map((f) => bezierToSubpaths(f)) });
+				continue;
+			}
+			const results = live.map((sp) => eraseFromOutline(sp, local));
+			if (results.every((r) => !r)) continue;
+			const subpaths = live.flatMap((sp, i) => results[i] ?? [sp]);
+			plan.push({ node, pieces: live.length === 1 ? subpaths.map((sp) => [sp]) : [subpaths] });
+		}
+		if (!plan.length) return [];
+		const changed: string[] = [];
+		this.change('Erase', () => {
+			for (const { node, pieces } of plan) changed.push(...this.replaceWithPieces(node, pieces));
+			this.anchors = [];
+			this.dropStaleRefs();
+			if (this.selection.length || options.ids) this.selection = [...new Set([...this.selection, ...changed.filter((id) => this.getNode(id))])];
+		});
+		return changed;
 	}
 
 	/** Ends the pen path being drawn (a lone anchor is removed). */
@@ -1882,9 +2305,39 @@ export class VectorEditorController {
 				const anchor = this.hitAnchor(screen, refs);
 				return anchor ? { nodeId: anchor.nodeId, anchor } : null;
 			}
+			case 'scissors': {
+				const seg = this.nearestOutline(p);
+				return seg ? { nodeId: seg.nodeId, segment: seg } : null;
+			}
 			default:
 				return null;
 		}
+	}
+
+	/** The nearest outline point of any visible, unlocked path within the pick distance of document point `p`. */
+	private nearestOutline(p: Vec2): NonNullable<VectorHover['segment']> | null {
+		let best: (NonNullable<VectorHover['segment']> & { distance: number }) | null = null;
+		const tol = this.tolerance();
+		const visit = (list: readonly VectorNode[], parent: AffineMatrix) => {
+			for (let i = list.length - 1; i >= 0; i--) {
+				const n = list[i];
+				if (n.visible === false || n.locked) continue;
+				const m = multiplyMatrices(nodeMatrix(n), parent);
+				if (n.type === 'group') {
+					visit(n.children, m);
+					continue;
+				}
+				const hit = nearestSegment(n, applyMatrix(invertMatrix(m), p));
+				// Node matrices are rigid, so local distances are document distances.
+				if (hit && hit.distance <= tol && (!best || hit.distance < best.distance - 1e-9)) {
+					best = { nodeId: n.id, subpath: hit.subpath, segment: hit.segment, t: hit.t, point: applyMatrix(m, hit.point), distance: hit.distance };
+				}
+			}
+		};
+		visit(this.doc.nodes, IDENTITY_MATRIX);
+		if (!best) return null;
+		const { distance: _d, ...seg } = best as NonNullable<VectorHover['segment']> & { distance: number };
+		return seg;
 	}
 
 	private sameHover(a: VectorHover | null, b: VectorHover | null): boolean {
@@ -1912,6 +2365,17 @@ export class VectorEditorController {
 				return this.downPen(screen, p, input);
 			case 'pencil':
 				return this.downPencil(p);
+			case 'scissors': {
+				const seg = this.nearestOutline(p);
+				if (seg) this.cutPathAt(seg.nodeId, seg.point);
+				return;
+			}
+			case 'knife':
+			case 'eraser':
+				this.drag = { kind: 'stroke', tool: this.tool, points: [p], before: this.snapshot() };
+				this.interaction = { type: 'stroke', tool: this.tool, points: [p], width: this.tool === 'eraser' ? this.editing.eraserSize : 0 };
+				this.notify();
+				return;
 			default:
 				return this.downShape(p, input);
 		}
@@ -2008,11 +2472,12 @@ export class VectorEditorController {
 				this.notify(true);
 				return;
 			}
+			// A click selects the segment's anchors; a drag bends it through the pointer.
 			const a = { nodeId: id, subpath: seg.subpath, index: seg.segment };
 			const b = { nodeId: id, subpath: seg.subpath, index: (seg.segment + 1) % sp.anchors.length };
 			this.anchors = input.shift ? [...this.anchors.filter((r) => !sameRef(r, a) && !sameRef(r, b)), a, b] : [a, b];
 			this.editingId = id;
-			this.drag = { kind: 'anchors', start: p, before: this.snapshot(), base: this.doc, moved: false, clickRef: null, lead: null };
+			this.drag = { kind: 'bend', ref: { nodeId: id, subpath: seg.subpath, segment: seg.segment }, t: seg.t, start: p, before: this.snapshot(), base: this.doc, moved: false };
 			this.notify();
 			return;
 		}
@@ -2106,7 +2571,9 @@ export class VectorEditorController {
 			subpaths: [{ anchors: [{ x: p.x, y: p.y }], closed: false }]
 		};
 		this.setDoc([...this.doc.nodes, node]);
-		this.drag = { kind: 'pencil', nodeId: node.id, points: [[p.x, p.y]], before };
+		const lazy = new LazyMouse((this.editing.pencilSmoothing * VECTOR_PENCIL_STRING_PX) / this.viewport.zoom);
+		lazy.push([p.x, p.y]);
+		this.drag = { kind: 'pencil', nodeId: node.id, points: [[p.x, p.y]], before, lazy };
 		this.interaction = { type: 'draw', tool: 'pencil', nodeId: node.id, bounds: { x: p.x, y: p.y, width: 0, height: 0 } };
 		this.notify(true);
 	}
@@ -2227,7 +2694,11 @@ export class VectorEditorController {
 					dx = q.x - lead.x;
 					dy = q.y - lead.y;
 				} else if (input.shift) Math.abs(dx) > Math.abs(dy) ? (dy = 0) : (dx = 0);
-				this.doc = this.movedAnchors(drag.base, this.anchors, dx, dy);
+				const single = this.anchors.length === 1 ? this.anchors[0] : null;
+				const from = single ? getAnchorWorld(drag.base, single) : undefined;
+				// A lone point bends its segments with the Curvature setting (Alt held flips it).
+				if (single && from && this.editing.curvatureMoves !== !!input.alt) this.doc = this.curvatureMoved(drag.base, single, { x: from.x + dx, y: from.y + dy });
+				else this.doc = this.movedAnchors(drag.base, this.anchors, dx, dy);
 				this.interaction = { type: 'anchors', dx, dy };
 				this.notify(true);
 				return;
@@ -2240,6 +2711,22 @@ export class VectorEditorController {
 				this.doc = this.updateAnchors(drag.base, [drag.ref], (a) => moveAnchorHandle(a, drag.ref.handle, local, input.alt));
 				this.interaction = { type: 'handle', ref: drag.ref };
 				this.notify(true);
+				return;
+			}
+			case 'bend': {
+				if (!drag.moved && Math.hypot(p.x - drag.start.x, p.y - drag.start.y) * this.viewport.zoom < 2) return;
+				drag.moved = true;
+				this.doc = this.bent(drag.base, drag.ref, drag.t, p);
+				this.interaction = { type: 'bend', ref: drag.ref };
+				this.notify(true);
+				return;
+			}
+			case 'stroke': {
+				const last = drag.points[drag.points.length - 1];
+				if (Math.hypot(p.x - last.x, p.y - last.y) * this.viewport.zoom < 1.5) return;
+				drag.points.push(p);
+				this.interaction = { type: 'stroke', tool: drag.tool, points: drag.points.slice(), width: drag.tool === 'eraser' ? this.editing.eraserSize : 0 };
+				this.notify();
 				return;
 			}
 			case 'pull': {
@@ -2296,10 +2783,22 @@ export class VectorEditorController {
 			}
 			case 'pencil': {
 				const last = drag.points[drag.points.length - 1];
-				if (Math.hypot(p.x - last[0], p.y - last[1]) * this.viewport.zoom < 1.5) return;
-				drag.points.push([p.x, p.y]);
+				let moved = false;
+				for (const q of drag.lazy.push([p.x, p.y])) {
+					if (Math.hypot(q[0] - last[0], q[1] - last[1]) * this.viewport.zoom < 1.5) continue;
+					drag.points.push(q);
+					moved = true;
+				}
+				const string = drag.lazy.string();
 				const node = this.getNode(drag.nodeId);
 				if (node?.type !== 'path') return;
+				if (!moved) {
+					if (string && this.interaction?.type === 'draw') {
+						this.interaction = { ...this.interaction, string: [{ x: string[0][0], y: string[0][1] }, { x: string[1][0], y: string[1][1] }] };
+						this.notify();
+					}
+					return;
+				}
 				this.replaceNode(drag.nodeId, { ...node, subpaths: [{ anchors: drag.points.map(([x, y]) => ({ x, y })), closed: false }] });
 				const xs = drag.points.map((q) => q[0]);
 				const ys = drag.points.map((q) => q[1]);
@@ -2307,7 +2806,8 @@ export class VectorEditorController {
 					type: 'draw',
 					tool: 'pencil',
 					nodeId: drag.nodeId,
-					bounds: { x: Math.min(...xs), y: Math.min(...ys), width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys) }
+					bounds: { x: Math.min(...xs), y: Math.min(...ys), width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys) },
+					...(string ? { string: [{ x: string[0][0], y: string[0][1] }, { x: string[1][0], y: string[1][1] }] as [Vec2, Vec2] } : {})
 				};
 				this.notify(true);
 				return;
@@ -2405,6 +2905,18 @@ export class VectorEditorController {
 				return this.commit(drag.before.doc !== drag.base ? 'Add Point' : 'Move Points', drag.before);
 			case 'handle':
 				return this.commit('Move Handle', drag.before);
+			case 'bend':
+				if (!drag.moved) {
+					this.notify();
+					return;
+				}
+				return this.commit('Bend Segment', drag.before);
+			case 'stroke': {
+				this.notify();
+				if (drag.tool === 'knife') this.knife(drag.points);
+				else this.erase(drag.points);
+				return;
+			}
 			case 'pull':
 				if (drag.closing) this.pen = null;
 				return this.commit(drag.label, drag.before);
@@ -2428,6 +2940,13 @@ export class VectorEditorController {
 					this.doc = drag.before.doc;
 					this.notify(true);
 					return;
+				}
+				for (const q of drag.lazy.finish()) drag.points.push(q);
+				const shape = this.editing.recognizeShapes ? recognizeInkShape(drag.points, { minSize: 6 / this.viewport.zoom }) : null;
+				if (shape) {
+					this.replaceNode(drag.nodeId, { ...node, name: inkShapeLabel(shape), subpaths: [inkShapeSubpath(shape)] });
+					this.selection = [drag.nodeId];
+					return this.commit(`Draw ${inkShapeLabel(shape)}`, drag.before);
 				}
 				const fitted = fitCubics(drag.points, 1.5 / this.viewport.zoom, { cornerAngleDeg: 60 });
 				const anchors: VectorAnchor[] = [];
@@ -2540,6 +3059,8 @@ export class VectorEditorController {
 				case 'g':
 					input.shift ? this.ungroup() : this.group();
 					return true;
+				case 'j':
+					return input.alt ? this.averageAnchors('both').ok : this.joinPaths().ok;
 				case ']':
 					this.arrange(input.alt ? 'front' : 'forward');
 					return true;
@@ -2619,6 +3140,26 @@ export class VectorEditorController {
 			this.spaceHeld = false;
 			this.notify();
 		}
+	}
+}
+
+/** "Rectangle", "Square", "Ellipse", "Circle", "Line", "Triangle" or "Polygon". */
+function inkShapeLabel(shape: VectorInkShape): string {
+	const name = vectorInkShapeName(shape);
+	return name[0].toUpperCase() + name.slice(1);
+}
+
+/** The subpath of a recognised pencil shape. */
+function inkShapeSubpath(shape: VectorInkShape): VectorSubpath {
+	switch (shape.kind) {
+		case 'line':
+			return lineSubpath({ x: shape.a[0], y: shape.a[1] }, { x: shape.b[0], y: shape.b[1] });
+		case 'rect':
+			return rectSubpath(shape);
+		case 'ellipse':
+			return ellipseSubpath(shape);
+		case 'polygon':
+			return { anchors: shape.points.map(([x, y]) => ({ x, y })), closed: true };
 	}
 }
 

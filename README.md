@@ -22,7 +22,7 @@ Editors for creative and AI apps: prompts, rich-text documents, spreadsheets, a 
 | **Import / export** | Import `.docx`, `.md`, `.html`, `.txt`, `.rtf`, PDF (layout-aware) and Notion/Confluence zips; export Word `.docx` with comments and tracked changes | `@pixerate/editor`, `/export` |
 | **Spreadsheet** | Formula engine (dynamic arrays, `LAMBDA`, defined names, multiple sheets), Excel number formats, conditional formatting, data validation, sort/filter/freeze/merge, CSV, fast recalculation, virtualised grid | `@pixerate/editor/spreadsheet` |
 | **Canvas** | Node graph tools on xyflow: align and distribute, smart guides, auto layout, curve-preserving shape booleans, design tokens with light/dark modes, components and instances, keyframe animation | `@pixerate/editor/canvas`, `/tokens`, `/animation` |
-| **Vector editor** | Headless pen, pencil, shape and direct-selection tools over Bézier paths and groups: transforms with selection handles, boolean operations, align / distribute, grouping and stacking, smart guides with object and grid snapping, undo per gesture, DOM-free SVG import / export and agent commands | `@pixerate/editor/vector` |
+| **Vector editor** | Headless pen, pencil, shape, direct-selection, scissors, knife and eraser tools over Bézier paths and groups: shape-keeping point deletion, segment bending, transforms with selection handles, boolean operations, align / distribute, grouping and stacking, smart guides with object and grid snapping, undo per gesture, DOM-free SVG import / export and agent commands | `@pixerate/editor/vector` |
 | **Image editor** | Canvas 2D crop/rotate, adjustments and adjustment layers, blend modes, histogram, selections and masks (magic wand, Refine Edge), annotations | `@pixerate/editor/image-editor` |
 | **Parameters** | Schema-driven control panel for effects, shaders, generators and component props: sliders, toggles, choices, colours, vectors, image pickers and text, with groups, conditional fields, presets, undo, randomize and keyframe diamonds | `@pixerate/editor/parameters` |
 | **Commands and agents** | One command registry for shortcuts, the command palette and AI agent tools (MCP-style `tools/list` / `tools/call`) | `@pixerate/editor/commands`, `/agent` |
@@ -313,15 +313,16 @@ Every feature is available from core and from both framework packages. "Via core
 </details>
 
 <details>
-<summary><strong>Vector editor</strong> (7)</summary>
+<summary><strong>Vector editor</strong> (8)</summary>
 
 | Feature | Core | React | Svelte |
 | :--- | :---: | :---: | :---: |
 | Vector Document Model (Bézier paths with corner / smooth / symmetric anchors, compound paths, groups, gradients, hidden / locked nodes, rigid per-node transforms) | `VectorDocument` & geometry helpers (`/vector`) | `<VectorCanvas>` | `<VectorCanvas>` |
-| Vector Tools (select, direct select, pen, pencil, rectangle, ellipse, polygon, star, line; keyboard shortcuts; pan / zoom; grid snapping) | `VectorEditorController` | `useVectorEditor`, `useVectorEditorController` & `useVectorEditorState` | `createVectorEditor` |
+| Vector Tools (select, direct select, pen, pencil with lazy-mouse smoothing and shape recognition, rectangle, ellipse, polygon, star, line, scissors, knife, eraser; keyboard shortcuts; pan / zoom; grid snapping) | `VectorEditorController` | `useVectorEditor`, `useVectorEditorController` & `useVectorEditorState` | `createVectorEditor` |
 | Vector Smart Guides & Object Snapping (anchors, paths, curve intersections, perpendicular / tangent points, edges, centres, artboard, construction angles, equal spacing, matching sizes; rotated nodes; Cmd / Ctrl bypass; labelled guides) | `VectorSnapTargets`, `setSnap` & `getVectorOverlayRenderData().guides` | `<VectorCanvas>` guides & `<VectorToolbar>` snapping toggle | `<VectorCanvas>` guides & `<VectorToolbar>` snapping toggle |
 | Vector Transforms (move, resize and rotate handles with a selection box that stays rotated, set rotation, flip, align, distribute, arrange, group / ungroup, duplicate, copy / paste) | `transform`, `setRotation`, `align`, `distribute`, `arrange`, `group` | `<VectorToolbar>` | `<VectorToolbar>` |
 | Vector Path Editing (move points and handles, add / delete points, convert corner ↔ smooth, close / open, reverse) and Boolean Operations | `insertAnchorAt`, `convertAnchors`, `booleanOp` | `<VectorCanvas>` & `<VectorToolbar>` | `<VectorCanvas>` & `<VectorToolbar>` |
+| Vector Path Clean-Up & Cutting (shape-keeping point deletion, segment bending, Curvature point moves, Join, Average, Remove Redundant Points, Smooth, Scissors, gap-free Knife, Eraser; all in each node's own space) | `deleteAnchors`, `bendSegment`, `joinPaths`, `knife`, `erase`, `setEditing` & `pathEdit` / `pathCut` helpers | `<VectorCanvas>` strokes & `<VectorToolbar>` path-editing group | `<VectorCanvas>` strokes & `<VectorToolbar>` path-editing group |
 | Vector Style Panel (fill, stroke, width, opacity; defaults for new shapes) | `getVectorSelectionStyle` & `setStyle` | `<VectorStylePanel>` | `<VectorStylePanel>` |
 | Vector SVG Import / Export & Agent Commands | `parseVectorSvg`, `vectorDocumentToSvg` & `createVectorCommands` | `useVectorCommands` | `useVectorCommands` |
 

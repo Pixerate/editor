@@ -120,10 +120,14 @@ export interface VectorHandleRef extends VectorAnchorRef {
 	handle: 'in' | 'out';
 }
 
-/** Canvas tools. `direct` edits anchors and handles; the shape tools drag out a new shape. */
-export type VectorTool = 'select' | 'direct' | 'pen' | 'pencil' | 'rect' | 'ellipse' | 'polygon' | 'star' | 'line';
+/**
+ * Canvas tools. `direct` edits anchors, handles and segments; the shape tools drag out a new
+ * shape; `scissors` cuts a path at a point, `knife` cuts filled shapes along a freehand stroke
+ * and `eraser` rubs out the area under one.
+ */
+export type VectorTool = 'select' | 'direct' | 'pen' | 'pencil' | 'rect' | 'ellipse' | 'polygon' | 'star' | 'line' | 'scissors' | 'knife' | 'eraser';
 
-export const VECTOR_TOOLS: readonly VectorTool[] = ['select', 'direct', 'pen', 'pencil', 'rect', 'ellipse', 'polygon', 'star', 'line'];
+export const VECTOR_TOOLS: readonly VectorTool[] = ['select', 'direct', 'pen', 'pencil', 'rect', 'ellipse', 'polygon', 'star', 'line', 'scissors', 'knife', 'eraser'];
 
 /** Keyboard modifiers held during a pointer event. */
 export interface VectorModifiers {
@@ -162,3 +166,12 @@ export type VectorAlign = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bott
 export type VectorDistribute = 'horizontal' | 'vertical';
 export type VectorBooleanOperation = 'union' | 'subtract' | 'intersect' | 'exclude';
 export type VectorArrange = 'front' | 'forward' | 'backward' | 'back';
+/** Average: line anchors up on a horizontal line (same y), a vertical one (same x), or both. */
+export type VectorAverageAxis = 'horizontal' | 'vertical' | 'both';
+
+/** Identifies one segment of a path node: from anchor `segment` to the next. */
+export interface VectorSegmentRef {
+	nodeId: string;
+	subpath: number;
+	segment: number;
+}

@@ -3,6 +3,8 @@ import {
   VECTOR_TOOLS,
   VECTOR_TOOL_GLYPHS,
   VECTOR_TOOL_SHORTCUTS,
+  VECTOR_EDIT_TOGGLES,
+  VECTOR_PATH_ACTIONS,
   getVectorSelectionStyle,
   vectorPaintToHex,
   vectorToolLabel,
@@ -27,13 +29,21 @@ export interface VectorToolbarProps {
   showArrange?: boolean;
   /** The snapping toggle (default `true`). */
   showSnap?: boolean;
+  /**
+   * Path editing: Join, Average, Cut at Points, Remove Redundant Points, Smooth, the Keep
+   * Shape / Curvature / Shapes toggles, and the pencil smoothing and eraser size inputs while
+   * those tools are active (default `true`).
+   */
+  showPathEdit?: boolean;
   className?: string;
 }
 
 /** Tool picker plus undo, snapping, boolean operations, grouping, stacking and alignment. */
-export function VectorToolbar({ controller, tools = VECTOR_TOOLS, showHistory = true, showArrange = true, showSnap = true, className }: VectorToolbarProps) {
+export function VectorToolbar({ controller, tools = VECTOR_TOOLS, showHistory = true, showArrange = true, showSnap = true, showPathEdit = true, className }: VectorToolbarProps) {
   const state = useVectorEditorState(controller);
   const count = state.selection.length;
+  const points = state.tool === 'direct' ? state.selectedAnchors.length : 0;
+  const editing = state.editing;
   const groupSelected = state.selection.some((id) => controller.getNode(id)?.type === 'group');
   const act = (label: string, title: string, run: () => unknown, disabled = false) => (
     <button key={label} type="button" className={buttonClass} title={title} aria-label={title} disabled={disabled} onClick={() => void run()}>
@@ -77,6 +87,70 @@ export function VectorToolbar({ controller, tools = VECTOR_TOOLS, showHistory = 
           >
             Snap
           </button>
+        </div>
+      )}
+      {showPathEdit && (
+        <div className="ml-1 flex items-center gap-1" role="group" aria-label="Path editing">
+          {VECTOR_PATH_ACTIONS.map((a) => (
+            <button
+              key={a.id}
+              type="button"
+              data-vector-path-action={a.id}
+              className={buttonClass}
+              title={a.shortcut ? `${a.title} (${modKeyLabel()}+${a.shortcut})` : a.title}
+              aria-label={a.title}
+              disabled={!a.enabled(count, points)}
+              onClick={() => void a.run(controller)}
+            >
+              {a.label}
+            </button>
+          ))}
+          {VECTOR_EDIT_TOGGLES.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              data-vector-edit={t.key}
+              className={buttonClass}
+              aria-pressed={editing[t.key]}
+              title={t.title}
+              aria-label={t.title}
+              onClick={() => controller.setEditing({ [t.key]: !editing[t.key] })}
+            >
+              {t.label}
+            </button>
+          ))}
+          {state.tool === 'pencil' && (
+            <label className="flex items-center gap-1 text-xs text-foreground">
+              Smoothing
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                aria-label="Pencil smoothing"
+                className="h-4 w-20 accent-primary"
+                value={editing.pencilSmoothing}
+                onChange={(e) => controller.setEditing({ pencilSmoothing: parseFloat(e.target.value) })}
+              />
+            </label>
+          )}
+          {state.tool === 'eraser' && (
+            <label className="flex items-center gap-1 text-xs text-foreground">
+              Size
+              <input
+                type="number"
+                min={0.5}
+                step={1}
+                aria-label="Eraser size"
+                className="h-7 w-16 rounded border border-border bg-background px-1.5 text-xs"
+                value={editing.eraserSize}
+                onChange={(e) => {
+                  const n = parseFloat(e.target.value);
+                  if (Number.isFinite(n) && n > 0) controller.setEditing({ eraserSize: n });
+                }}
+              />
+            </label>
+          )}
         </div>
       )}
       {showArrange && (

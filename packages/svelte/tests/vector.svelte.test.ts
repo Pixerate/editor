@@ -200,6 +200,70 @@ describe("VectorToolbar and VectorStylePanel (svelte)", () => {
   });
 });
 
+describe("path editing (svelte)", () => {
+  it("bends a segment, previews knife strokes and shows the scissors cut point", () => {
+    const c = make();
+    c.setTool("direct");
+    c.select(["a"]);
+    const t = render(VectorCanvas, { controller: c, fitOnMount: false });
+    const svg = t.querySelector("svg")!;
+    pointer(svg, "pointerdown", 50, 0);
+    pointer(svg, "pointermove", 50, -20);
+    pointer(svg, "pointerup", 50, -40);
+    expect(c.getState().undoLabel).toBe("Bend Segment");
+    expect(t.querySelector("[data-vector-scene] path")!.getAttribute("d")).toMatch(/^M0 0C/);
+    key(svg, "k");
+    pointer(svg, "pointerdown", -10, 150);
+    pointer(svg, "pointermove", 60, 150);
+    expect(t.querySelector("[data-vector-tool-stroke]")!.getAttribute("data-vector-tool-stroke")).toBe("knife");
+    pointer(svg, "pointerup", 60, 150);
+    expect(t.querySelectorAll("[data-vector-tool-stroke]")).toHaveLength(0);
+    key(svg, "c");
+    pointer(svg, "pointermove", 100, 50);
+    expect(t.querySelector("[data-vector-cut-point]")!.getAttribute("cx")).toBe("100");
+  });
+
+  it("shows the eraser swath and the pencil's lazy-mouse string", () => {
+    const c = make();
+    c.setEditing({ pencilSmoothing: 0.3 });
+    const t = render(VectorCanvas, { controller: c, fitOnMount: false });
+    const svg = t.querySelector("svg")!;
+    key(svg, "e");
+    pointer(svg, "pointerdown", 50, -20);
+    pointer(svg, "pointermove", 50, 120);
+    expect(t.querySelector("[data-vector-tool-stroke]")!.getAttribute("stroke-width")).toBe("10");
+    pointer(svg, "pointerup", 50, 120);
+    expect(c.getState().document.nodes).toHaveLength(2);
+    key(svg, "n");
+    pointer(svg, "pointerdown", 200, 200);
+    pointer(svg, "pointermove", 210, 200);
+    expect(t.querySelectorAll("[data-vector-pencil-string]")).toHaveLength(1);
+    pointer(svg, "pointerup", 260, 200);
+  });
+
+  it("toolbar runs Join and Smooth, toggles settings and shows tool inputs", () => {
+    const c = make();
+    c.addPath("M200 0 L300 0", { stroke: "#000" });
+    const t = render(VectorToolbar, { controller: c });
+    const join = t.querySelector('[data-vector-path-action="join"]') as HTMLButtonElement;
+    expect(join.title).toMatch(/Join \((⌘|Ctrl)\+J\)/);
+    click(join);
+    expect((c.getNode(c.getState().selection[0]) as any).subpaths[0].closed).toBe(true);
+    expect((t.querySelector('[data-vector-path-action="average"]') as HTMLButtonElement).disabled).toBe(true);
+    const curv = t.querySelector('[data-vector-edit="curvatureMoves"]')!;
+    expect(curv.getAttribute("aria-pressed")).toBe("false");
+    click(curv);
+    expect(c.getState().editing.curvatureMoves).toBe(true);
+    expect(curv.getAttribute("aria-pressed")).toBe("true");
+    expect(t.querySelectorAll('input[aria-label="Eraser size"]')).toHaveLength(0);
+    click(t.querySelector('[data-vector-tool="eraser"]'));
+    expect((t.querySelector('input[aria-label="Eraser size"]') as HTMLInputElement).value).toBe("10");
+    click(t.querySelector('[data-vector-tool="pencil"]'));
+    expect(t.querySelectorAll('input[aria-label="Pencil smoothing"]')).toHaveLength(1);
+    expect(t.querySelectorAll('[data-vector-tool="scissors"], [data-vector-tool="knife"]')).toHaveLength(2);
+  });
+});
+
 describe("VectorEditor and runes (svelte)", () => {
   it("renders toolbar, canvas and style panel", () => {
     const t = render(VectorEditor, { controller: make(), canvasProps: { fitOnMount: false } });

@@ -191,6 +191,16 @@ function fitSingleFrom(pts: Point[], u: number[], t0: Vec, t1: Vec): [CubicSegme
 	return [best, bestErr, bestSplit];
 }
 
+/**
+ * The best single cubic from the first to the last of `points`, leaving along the unit tangent
+ * `t0` and arriving along `t1` (forward), with the points starting at parameters `params`
+ * (refined by Newton steps). Returns the curve and its largest point error.
+ */
+export function fitCubicWithTangents(points: readonly Point[], params: readonly number[], t0: Point, t1: Point): { curve: CubicSegment; error: number } {
+	const [curve, error] = fitSingleFrom(points.slice(), params.slice(), [t0[0], t0[1]], [t1[0], t1[1]]);
+	return { curve, error };
+}
+
 function fitRec(pts: Point[], t0: Vec, t1: Vec, tol: number, out: CubicSegment[], depth: number) {
 	const n = pts.length;
 	if (n === 2) {
