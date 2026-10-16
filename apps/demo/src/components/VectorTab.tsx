@@ -61,6 +61,31 @@ const STARTER: VectorDocument = {
       arrowAlign: "tip",
       subpaths: [{ closed: false, anchors: [{ x: 340, y: 250, out: { x: 420, y: 180 } }, { x: 540, y: 170, in: { x: 470, y: 120 } }] }],
     },
+    {
+      id: "brush",
+      type: "path",
+      name: "Tapered stroke",
+      fill: null,
+      stroke: "#7c3aed",
+      strokeWidth: 12,
+      strokeLinecap: "round",
+      // Thin at both ends, swelling in the middle: drag it with the Width tool (W) to reshape.
+      strokeWidthProfile: [
+        { t: 0, left: 0, right: 0 },
+        { t: 0.35, left: 1.2, right: 0.8 },
+        { t: 1, left: 0, right: 0 },
+      ],
+      subpaths: [
+        {
+          closed: false,
+          anchors: [
+            { x: 340, y: 430, out: { x: 420, y: 360 } },
+            { x: 520, y: 400, in: { x: 470, y: 450 }, out: { x: 570, y: 350 }, type: "smooth" },
+            { x: 700, y: 380, in: { x: 640, y: 330 } },
+          ],
+        },
+      ],
+    },
   ],
 };
 
@@ -77,7 +102,7 @@ export function VectorTab() {
           <h2 className="text-lg font-semibold text-slate-100">Vector editor</h2>
           <p className="text-xs text-slate-400">
             Headless <code>VectorEditorController</code> (<code>@pixerate/editor/vector</code>) with React bindings. Pen (P): click for corners, drag for curves,
-            click the first point to close. Direct select (A): drag points and handles, Alt-drag a point for smooth handles, Alt-click a segment to add a point.
+            click the first point to close. Direct select (A): drag points and handles, Alt-drag a point for smooth handles, Alt-click a segment to add a point. Width (W): drag a stroke to taper it (Alt: one side); pen pressure shapes pencil strokes.
             Drags snap to other shapes with labelled smart guides (hold Cmd/Ctrl to bypass, or switch Snap off in the toolbar). Space-drag pans, Cmd/Ctrl+wheel zooms.
           </p>
         </div>

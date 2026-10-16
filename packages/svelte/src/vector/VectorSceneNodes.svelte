@@ -31,6 +31,16 @@
         </defs>
       {/if}
       <path data-vector-part="fill" d={node.d} fill={node.fill} fill-rule={node.fillRule} stroke="none" />
+      {#if sp.outline !== undefined}
+        <!-- A variable-width stroke: its outline, filled. -->
+        <path
+          data-vector-part="stroke-outline"
+          d={sp.outline}
+          fill={node.stroke}
+          clip-path={sp.clip?.kind === 'clip' ? `url(#${sp.clip.id})` : undefined}
+          mask={sp.clip?.kind === 'mask' ? `url(#${sp.clip.id})` : undefined}
+        />
+      {:else}
       <path
         data-vector-part="stroke"
         d={sp.d}
@@ -43,6 +53,7 @@
         clip-path={sp.clip?.kind === 'clip' ? `url(#${sp.clip.id})` : undefined}
         mask={sp.clip?.kind === 'mask' ? `url(#${sp.clip.id})` : undefined}
       />
+      {/if}
       {#each sp.heads as head, i (i)}
         <path data-vector-part="head" d={head} fill={node.stroke} />
       {/each}

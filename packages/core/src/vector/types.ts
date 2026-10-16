@@ -80,6 +80,18 @@ export const VECTOR_ARROWHEADS: readonly VectorArrowhead[] = ['triangle', 'arrow
  */
 export type VectorArrowAlign = 'extend' | 'tip';
 
+/**
+ * One point of a variable-width stroke profile. `t` is the position along the subpath by
+ * length (0 at its start, 1 at its end); `left` and `right` are how far the stroke reaches on
+ * each side, as multiples of half the stroke width (looking along the path on screen, y down).
+ * A uniform stroke has 1 on both sides. Two points at the same `t` make a step.
+ */
+export interface VectorWidthPoint {
+	t: number;
+	left: number;
+	right: number;
+}
+
 /** Paint and stroke settings of a path. */
 export interface VectorStyle {
 	fill?: VectorPaint;
@@ -103,6 +115,12 @@ export interface VectorStyle {
 	startArrowScale?: number;
 	/** Size of the end head (default 1). */
 	endArrowScale?: number;
+	/**
+	 * Variable width: side scales along each subpath, interpolated with a monotone cubic (see
+	 * `widthProfileAt`). Absent, empty or `null` strokes at a uniform width. A profiled stroke is
+	 * drawn as its filled outline.
+	 */
+	strokeWidthProfile?: VectorWidthPoint[] | null;
 }
 
 interface VectorNodeBase {
@@ -168,12 +186,12 @@ export interface VectorHandleRef extends VectorAnchorRef {
 
 /**
  * Canvas tools. `direct` edits anchors, handles and segments; the shape tools drag out a new
- * shape; `scissors` cuts a path at a point, `knife` cuts filled shapes along a freehand stroke
- * and `eraser` rubs out the area under one.
+ * shape; `scissors` cuts a path at a point, `knife` cuts filled shapes along a freehand stroke,
+ * `eraser` rubs out the area under one and `width` drags a stroke's width at a point.
  */
-export type VectorTool = 'select' | 'direct' | 'pen' | 'pencil' | 'rect' | 'ellipse' | 'polygon' | 'star' | 'line' | 'scissors' | 'knife' | 'eraser';
+export type VectorTool = 'select' | 'direct' | 'pen' | 'pencil' | 'rect' | 'ellipse' | 'polygon' | 'star' | 'line' | 'scissors' | 'knife' | 'eraser' | 'width';
 
-export const VECTOR_TOOLS: readonly VectorTool[] = ['select', 'direct', 'pen', 'pencil', 'rect', 'ellipse', 'polygon', 'star', 'line', 'scissors', 'knife', 'eraser'];
+export const VECTOR_TOOLS: readonly VectorTool[] = ['select', 'direct', 'pen', 'pencil', 'rect', 'ellipse', 'polygon', 'star', 'line', 'scissors', 'knife', 'eraser', 'width'];
 
 /** Keyboard modifiers held during a pointer event. */
 export interface VectorModifiers {

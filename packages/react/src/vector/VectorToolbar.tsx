@@ -10,7 +10,10 @@ import {
   VECTOR_CORNER_KINDS,
   VECTOR_CORNER_KIND_LABELS,
   VECTOR_STROKE_ALIGN_LABELS,
+  VECTOR_WIDTH_PRESETS,
   getVectorSelectionStyle,
+  widthProfilePreset,
+  widthProfilePresetId,
   vectorPaintToHex,
   vectorToolLabel,
   type VectorArrowhead,
@@ -18,6 +21,7 @@ import {
   type VectorEditorController,
   type VectorStrokeAlign,
   type VectorTool,
+  type VectorWidthPreset,
 } from '@pixerate/editor/vector';
 import { useVectorEditorState } from './useVectorEditor';
 
@@ -196,7 +200,7 @@ const selectClass = 'h-7 min-w-0 flex-1 rounded border border-border bg-backgrou
 const numberClass = 'h-7 w-16 rounded border border-border bg-background px-1.5 text-xs';
 
 /**
- * Fill, stroke, stroke width and alignment, arrowheads, live corner radius and opacity of the
+ * Fill, stroke, stroke width, alignment and width profile, arrowheads, live corner radius and opacity of the
  * selection (corners of the selected points with the direct tool); with nothing selected it
  * edits the defaults for new shapes.
  */
@@ -215,6 +219,7 @@ export function VectorStylePanel({ controller, className }: VectorStylePanelProp
     arrowAlign: d.arrowAlign ?? 'extend',
     startArrowScale: d.startArrowScale ?? 1,
     endArrowScale: d.endArrowScale ?? 1,
+    widthProfile: widthProfilePresetId(d.strokeWidthProfile),
     cornerRadius: d.cornerRadius,
     cornerKind: d.cornerKind ?? 'round',
     corners: 1,
@@ -224,6 +229,10 @@ export function VectorStylePanel({ controller, className }: VectorStylePanelProp
     if (!style) controller.setDefaults({ ...(patch.radius !== undefined ? { cornerRadius: patch.radius } : {}), ...(patch.kind ? { cornerKind: patch.kind } : {}) });
     else if (patch.radius !== undefined) controller.setCornerRadius(patch.radius);
     else if (patch.kind) controller.setCornerKind(patch.kind);
+  };
+  const setProfile = (id: VectorWidthPreset) => {
+    if (style) controller.setWidthProfile(id);
+    else controller.setDefaults({ strokeWidthProfile: widthProfilePreset(id)?.length ? widthProfilePreset(id) : null });
   };
   const mixed = (key: keyof NonNullable<typeof style>['mixed']) => (style?.mixed[key] ? <span className="text-[11px] text-muted-foreground">Mixed</span> : null);
   const arrowRow = (end: 'start' | 'end', label: string) => {
@@ -314,6 +323,39 @@ export function VectorStylePanel({ controller, className }: VectorStylePanelProp
         </select>
         {mixed('strokeAlign')}
       </label>
+      <div className="flex items-center gap-2 text-xs text-foreground" data-vector-style="widthProfile">
+        <span className="w-16">Profile</span>
+        <select
+          aria-label="Width profile"
+          className={selectClass}
+          value={source.widthProfile}
+          onChange={(e) => {
+            if (e.target.value !== 'custom') setProfile(e.target.value as VectorWidthPreset);
+          }}
+        >
+          {VECTOR_WIDTH_PRESETS.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.label}
+            </option>
+          ))}
+          {source.widthProfile === 'custom' && (
+            <option value="custom" disabled>
+              Custom
+            </option>
+          )}
+        </select>
+        <button
+          type="button"
+          className={buttonClass}
+          title="Reset to uniform width"
+          aria-label="Reset to uniform width"
+          disabled={source.widthProfile === 'uniform' && !style?.mixed.widthProfile}
+          onClick={() => setProfile('uniform')}
+        >
+          ═
+        </button>
+        {mixed('widthProfile')}
+      </div>
       {source.hasOpenPath && (
         <>
           {arrowRow('start', 'Start')}

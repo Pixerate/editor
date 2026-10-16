@@ -2,7 +2,8 @@ import type { CommandSpec } from '../commands/registry.js';
 import type { VectorEditorController, VectorShapeInput } from './controller.js';
 import { vectorNodeBounds, vectorNodeRotation, vectorParentMatrix, vectorPathData, IDENTITY_MATRIX } from './geometry.js';
 import type { VectorAlign, VectorAnchorRef, VectorArrange, VectorAverageAxis, VectorBooleanOperation, VectorCornerKind, VectorNode, VectorStyle, VectorTool } from './types.js';
-import { VECTOR_ARROWHEADS, VECTOR_CORNER_KINDS, VECTOR_TOOLS } from './types.js';
+import { VECTOR_ARROWHEADS, VECTOR_CORNER_KINDS, VECTOR_TOOLS, type VectorWidthPoint } from './types.js';
+import { VECTOR_WIDTH_PRESET_IDS, type VectorTaperOptions, type VectorWaveOptions, type VectorWidthPreset } from './width.js';
 
 export interface VectorCommandOptions {
 	/** Id prefix (default `vector.`); use one per editor when several are registered. */
@@ -57,6 +58,20 @@ const POINTS = {
 	description: 'Polyline [[x, y], …] in document units.'
 } as const;
 
+const WIDTH_POINTS = {
+	type: ['array', 'null'],
+	items: {
+		type: 'object',
+		properties: {
+			t: { type: 'number', minimum: 0, maximum: 1, description: 'Position along each subpath by length (0 start, 1 end).' },
+			left: { type: 'number', minimum: 0, description: 'Left side as a multiple of half the stroke width (1 = uniform).' },
+			right: { type: 'number', minimum: 0, description: 'Right side (looking along the path, y down).' }
+		},
+		required: ['t', 'left', 'right']
+	},
+	description: 'Variable-width profile points, interpolated smoothly (monotone cubic); two points at one `t` make a step. `null` or `[]` strokes at a uniform width.'
+} as const;
+
 const PAINT = {
 	description: 'A CSS colour, `null` for none, or a gradient `{ type: "linear", angle, stops: [{ offset, color }] }`.'
 } as const;
@@ -74,7 +89,8 @@ const STYLE_PROPS = {
 	endArrow: { type: ['string', 'null'], enum: [...VECTOR_ARROWHEADS, null], description: 'Head at the end of an open path, or null for none.' },
 	arrowAlign: { type: 'string', enum: ['extend', 'tip'], description: '`extend`: the tip sits past the end point; `tip`: on it, the stroke shortened under the head.' },
 	startArrowScale: { type: 'number', exclusiveMinimum: 0, description: 'Start head size as a multiple of the stroke width (default 1).' },
-	endArrowScale: { type: 'number', exclusiveMinimum: 0, description: 'End head size as a multiple of the stroke width (default 1).' }
+	endArrowScale: { type: 'number', exclusiveMinimum: 0, description: 'End head size as a multiple of the stroke width (default 1).' },
+	strokeWidthProfile: WIDTH_POINTS
 } as const;
 
 const pickStyle = (params: Record<string, unknown>): VectorStyle => {
@@ -243,6 +259,48 @@ export function createVectorCommands(controller: VectorEditorController, options
 				else if (params?.kind) check(controller.setCornerKind(params.kind, target));
 				else fail('Pass `radius` and / or `kind`.');
 				return { ok: true };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}setWidthProfile`,
+			label: 'Width Profile…',
+			keywords: ['variable width', 'taper', 'tapered', 'pressure', 'profile', 'brush', 'calligraphy', 'bulge', 'thick', 'thin'],
+			description:
+				'Gives the stroke of paths a variable width: a `preset` (`uniform` removes the profile), explicit `points` ({ t, left, right }: side scales along each subpath), or a parametric `taper` (startLength / endLength as fractions of the path, startWidth / endWidth 0–1, startEase / endEase 0–1) and / or `wave` (amount 0–1, cycles, phase in degrees). Profiled strokes draw as filled outlines; Outline Stroke bakes them.',
+			params: {
+				type: 'object',
+				properties: {
+					ids: IDS,
+					preset: { type: 'string', enum: VECTOR_WIDTH_PRESET_IDS },
+					points: WIDTH_POINTS,
+					taper: {
+						type: 'object',
+						properties: {
+							startLength: { type: 'number', minimum: 0, maximum: 1 },
+							endLength: { type: 'number', minimum: 0, maximum: 1 },
+							startWidth: { type: 'number', minimum: 0, maximum: 1 },
+							endWidth: { type: 'number', minimum: 0, maximum: 1 },
+							startEase: { type: 'number', minimum: 0, maximum: 1 },
+							endEase: { type: 'number', minimum: 0, maximum: 1 }
+						}
+					},
+					wave: { type: 'object', properties: { amount: { type: 'number', minimum: 0, maximum: 1 }, cycles: { type: 'number', exclusiveMinimum: 0 }, phase: { type: 'number' } } }
+				}
+			},
+			enabled: enabledFor,
+			undoable: true,
+			run: (
+				_ctx: unknown,
+				params: { ids?: string[]; preset?: VectorWidthPreset; points?: VectorWidthPoint[] | null; taper?: VectorTaperOptions; wave?: VectorWaveOptions } | undefined
+			) => {
+				const target = { ids: ids(params) };
+				if (params?.preset) check(controller.setWidthProfile(params.preset, target));
+				else if (params?.points !== undefined) check(controller.setWidthProfile(params.points ?? null, target));
+				else if (params?.taper || params?.wave) check(controller.setWidthProfile({ taper: params.taper, wave: params.wave }, target));
+				else fail('Pass `preset`, `points`, `taper` or `wave`.');
+				const node = controller.getNode(target.ids[0]);
+				return { ok: true, points: node?.type === 'path' ? (node.strokeWidthProfile ?? []) : [] };
 			}
 		},
 		{
@@ -555,7 +613,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 			label: 'Path Editing Options…',
 			keywords: ['settings', 'curvature', 'pencil', 'smoothing', 'lazy mouse', 'shapes', 'eraser'],
 			description:
-				'Sets how editing behaves: `keepShapeOnDelete`, `curvatureMoves` (anchor drags bend like the Curvature tool), `pencilSmoothing` (lazy mouse, 0–1), `recognizeShapes` (pencil scribbles become lines, rectangles, ellipses, polygons) and `eraserSize`.',
+				'Sets how editing behaves: `keepShapeOnDelete`, `curvatureMoves` (anchor drags bend like the Curvature tool), `pencilSmoothing` (lazy mouse, 0–1), `recognizeShapes` (pencil scribbles become lines, rectangles, ellipses, polygons), `eraserSize` and `pencilPressure` (`pen`: record pen pressure on pencil strokes as a width profile, `all`: any pointer reporting pressure, `off`).',
 			params: {
 				type: 'object',
 				properties: {
@@ -563,12 +621,13 @@ export function createVectorCommands(controller: VectorEditorController, options
 					curvatureMoves: { type: 'boolean' },
 					pencilSmoothing: { type: 'number', minimum: 0, maximum: 1 },
 					recognizeShapes: { type: 'boolean' },
-					eraserSize: { type: 'number', exclusiveMinimum: 0 }
+					eraserSize: { type: 'number', exclusiveMinimum: 0 },
+					pencilPressure: { type: 'string', enum: ['pen', 'all', 'off'] }
 				}
 			},
 			run: (_ctx: unknown, params: Record<string, unknown> | undefined) => {
 				const patch: Record<string, unknown> = {};
-				for (const key of ['keepShapeOnDelete', 'curvatureMoves', 'pencilSmoothing', 'recognizeShapes', 'eraserSize']) if (params?.[key] !== undefined) patch[key] = params[key];
+				for (const key of ['keepShapeOnDelete', 'curvatureMoves', 'pencilSmoothing', 'recognizeShapes', 'eraserSize', 'pencilPressure']) if (params?.[key] !== undefined) patch[key] = params[key];
 				controller.setEditing(patch);
 				return { editing: controller.getState().editing };
 			}

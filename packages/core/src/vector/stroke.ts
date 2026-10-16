@@ -27,7 +27,9 @@ import {
 } from '../canvas/pathops/bezier.js';
 import { pathBoolean, type PathOperandInput } from '../canvas/pathops/boolean.js';
 import { outlineStroke } from '../canvas/pathops/stroke.js';
-import type { VectorArrowhead, VectorStrokeAlign, VectorStyle, Vec2 } from './types.js';
+import type { VectorArrowhead, VectorStrokeAlign, VectorStyle, VectorWidthPoint, Vec2 } from './types.js';
+import { nearestStrokePosition, variableStrokeOutline } from './varstroke.js';
+import { isUniformWidthProfile, sanitizeWidthProfile, widthProfileAt, widthProfileMaxScale } from './width.js';
 
 /** Handle length that makes a cubic approximate a quarter circle. */
 const KAPPA = 0.5522847498307936;
@@ -69,9 +71,29 @@ export function effectiveStrokeAlign(style: Pick<VectorStyle, 'strokeAlign'>, cl
 	return closedShape ? a : 'center';
 }
 
-/** True when the style asks for more than a plain centred stroke (an alignment or arrowheads). */
+/** The style's width profile, sanitised, or null when the stroke is uniform. */
+export function strokeWidthProfileOf(style: Pick<VectorStyle, 'strokeWidthProfile'>): VectorWidthPoint[] | null {
+	if (!style.strokeWidthProfile?.length) return null;
+	const p = sanitizeWidthProfile(style.strokeWidthProfile);
+	return isUniformWidthProfile(p) ? null : p;
+}
+
+/** True when the style asks for more than a plain centred stroke (an alignment, arrowheads or a width profile). */
 export function hasStrokeExtras(style: VectorStyle): boolean {
-	return (style.strokeAlign ?? 'center') !== 'center' || !!style.startArrow || !!style.endArrow;
+	return (style.strokeAlign ?? 'center') !== 'center' || !!style.startArrow || !!style.endArrow || !!strokeWidthProfileOf(style);
+}
+
+/**
+ * The area of the stroke along `parts.line` before alignment clipping: SVG's stroke for a
+ * uniform width, the variable-width outline (`variableStrokeOutline`) for a profiled one.
+ */
+export function vectorStrokeLineArea(parts: Pick<VectorStrokeParts, 'line' | 'drawWidth'>, style: VectorStyle, tolerance?: number): BezierPath {
+	const profile = strokeWidthProfileOf(style);
+	const dash = style.strokeDasharray?.length ? { dash: style.strokeDasharray } : {};
+	const join = style.strokeLinejoin ?? 'miter';
+	const cap = style.strokeLinecap ?? 'butt';
+	if (profile) return variableStrokeOutline(parts.line, { width: parts.drawWidth, profile, join, cap, ...dash, ...(tolerance ? { tolerance } : {}) });
+	return outlineStroke(parts.line, { width: parts.drawWidth, join, cap, ...dash, ...(tolerance ? { tolerance } : {}) });
 }
 
 const capExtent = (style: VectorStyle, width: number) => (style.strokeLinecap === 'round' || style.strokeLinecap === 'square' ? width / 2 : 0);
@@ -254,12 +276,7 @@ export function vectorStrokeParts(path: BezierPath, style: VectorStyle): VectorS
  */
 export function vectorStrokeOutlinePath(path: BezierPath, style: VectorStyle): BezierPath {
 	const parts = vectorStrokeParts(path, style);
-	const stroke = outlineStroke(parts.line, {
-		width: parts.drawWidth,
-		join: style.strokeLinejoin ?? 'miter',
-		cap: style.strokeLinecap ?? 'butt',
-		...(style.strokeDasharray?.length ? { dash: style.strokeDasharray } : {})
-	});
+	const stroke = vectorStrokeLineArea(parts, style);
 	const fill: PathOperandInput = { path, fillRule: style.fillRule ?? 'nonzero' };
 	let area = stroke;
 	if (parts.align === 'inside') area = pathBoolean('intersection', [stroke, fill]).path;
@@ -281,9 +298,28 @@ export function hitTestVectorStroke(path: BezierPath, p: Vec2, style: VectorStyl
 		if (pointInBezierPath(h.path, point) || (tolerance > 0 && distanceToBezierPath(h.path, point) <= tolerance)) return true;
 	}
 	if (!parts.line.length) return false;
-	const d = distanceToBezierPath(parts.line, point);
-	if (parts.align === 'center') return d <= width / 2 + tolerance;
-	if (d > width + tolerance) return false;
+	const profile = strokeWidthProfileOf(style);
+	let d: number;
+	let reach = width / 2;
+	if (profile) {
+		// The side width at the nearest point of the centre line (twice it when aligned).
+		const near = nearestStrokePosition(parts.line, point);
+		if (!near) return false;
+		d = near.distance;
+		const w = widthProfileAt(profile, near.t);
+		reach = (width / 2) * (near.side === 'left' ? w.left : w.right);
+		if (parts.align !== 'center') reach *= 2;
+		const atEnd = near.t <= 1e-9 || near.t >= 1 - 1e-9;
+		if (atEnd && (style.strokeLinecap === 'round' || style.strokeLinecap === 'square') && d > reach) {
+			// Past an open end the cap reaches as far as the width there.
+			reach = Math.max(reach, ((width / 2) * (w.left + w.right)) / 2);
+		}
+	} else {
+		d = distanceToBezierPath(parts.line, point);
+		if (parts.align !== 'center') reach = width;
+	}
+	if (parts.align === 'center') return d <= reach + tolerance;
+	if (d > reach + tolerance) return false;
 	if (d <= tolerance) return true;
 	const inside = pointInBezierPath(path, point, style.fillRule ?? 'nonzero');
 	return parts.align === 'inside' ? inside : !inside;
@@ -291,7 +327,7 @@ export function hitTestVectorStroke(path: BezierPath, p: Vec2, style: VectorStyl
 
 /** How far the stroke can reach past the outline (for padding bounds and masks). */
 export function vectorStrokeReach(style: VectorStyle): number {
-	const width = style.strokeWidth ?? 1;
+	const width = (style.strokeWidth ?? 1) * widthProfileMaxScale(strokeWidthProfileOf(style));
 	const align = style.strokeAlign ?? 'center';
 	let reach = align === 'center' ? width / 2 : align === 'outside' ? width : 0;
 	if (style.strokeLinejoin !== 'round' && style.strokeLinejoin !== 'bevel') reach *= 4;

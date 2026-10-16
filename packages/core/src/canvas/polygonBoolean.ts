@@ -440,6 +440,27 @@ function buildOverlay(inputs: PolygonInput[], options: PolygonBooleanOptions): O
 
 	const right: number[][] = [];
 	const left: number[][] = [];
+	// Rays only meet edges whose span on the ray's axis covers the ray: index the edges in bands
+	// along each of the two axes rays run across, so each ray tests one band, not every edge.
+	const bandCount = Math.max(1, Math.min(4096, Math.ceil(Math.sqrt(edges.length))));
+	const bandIndex = (horizontal: boolean) => {
+		const lo = (e: Overlay['edges'][number]) => (horizontal ? Math.min(-e.a.x, -e.b.x) : Math.min(e.a.y, e.b.y));
+		const hi = (e: Overlay['edges'][number]) => (horizontal ? Math.max(-e.a.x, -e.b.x) : Math.max(e.a.y, e.b.y));
+		let min = Infinity;
+		let max = -Infinity;
+		for (const e of edges) {
+			min = Math.min(min, lo(e));
+			max = Math.max(max, hi(e));
+		}
+		const size = max > min ? (max - min) / bandCount : 1;
+		const band = (v: number) => Math.min(bandCount - 1, Math.max(0, Math.floor((v - min) / size)));
+		const bands: number[][] = Array.from({ length: bandCount }, () => []);
+		edges.forEach((e, j) => {
+			for (let k = band(lo(e)); k <= band(hi(e)); k++) bands[k].push(j);
+		});
+		return (v: number) => bands[band(v)];
+	};
+	const bandsFor = new Map<boolean, (v: number) => number[]>();
 	for (let i = 0; i < edges.length; i++) {
 		const edge = edges[i];
 		// Cast the ray across the edge rather than along it: rotating by −90° keeps windings
@@ -454,7 +475,8 @@ function buildOverlay(inputs: PolygonInput[], options: PolygonBooleanOptions): O
 		const mx = (ax + bx) / 2;
 		const my = (ay + by) / 2;
 		const winding = new Array(count).fill(0);
-		for (let j = 0; j < edges.length; j++) {
+		if (!bandsFor.has(horizontal)) bandsFor.set(horizontal, bandIndex(horizontal));
+		for (const j of bandsFor.get(horizontal)!(my)) {
 			if (j === i) continue;
 			const other = edges[j];
 			const oax = tx(other.a);

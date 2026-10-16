@@ -30,6 +30,12 @@ reproduced at the end of this file. Paths are relative to each source repository
 
 - `crates/tools/src/snap.rs` (`pass_dimensions`: a resized or created object's side matches another object's width or height in its own frame, nearest within the zone, when nothing else snapped on that axis) → `VectorSnapTargets.snapScale` / `matchSize` in `packages/core/src/vector/snap.ts`
 
+## effectcraft
+
+© 2026 ArtCraft Team and the EffectCraft contributors.
+
+- `crates/path/src/varstroke.rs` (`outline`: a variable-width stroke as the union of positively wound trapezoids per flattened segment, round wedges at bends and the caps, filled non-zero; `flatten` with a width-sampling step; `dash_intervals`; `width_factor` with the `Taper` lengths, widths and quarter-circle `ease` and the `Wave` amount, cycles and phase) → `variableStrokeRings` / `variableStrokeOutline` / `dashIntervals` in `packages/core/src/vector/varstroke.ts` and `taperWaveFactor` / `generateWidthProfile` in `packages/core/src/vector/width.ts`; the pieces are emitted as the boundary they add up to (offset sides, outer joins, inner sides trimmed at the offsets' crossing or routed through the centre) instead of being unioned one by one, and the result is refitted with cubics; test cases re-expressed → `packages/core/tests/vector-width.test.ts`
+
 ## figcraft
 
 © 2026 ArtCraft Team and the FigCraft contributors.
@@ -50,6 +56,8 @@ reproduced at the end of this file. Paths are relative to each source repository
 - `crates/engine/src/vectoredit/ops.rs` (`bend`: handles at the chord's thirds plus one shared offset so the segment passes through the pointer at `t`, `t` clamped to 0.05–0.95) → `bendSegment` in `packages/core/src/vector/pathEdit.ts`; its `delete_vertices` / `heal_handles` (a healed curve through the deleted point) were compared and not ported, as the least-error refit followed the old segments more closely
 - `crates/doc/src/vector.rs` (`VectorNetwork::rounded` / `corner`, `trim`, `start_dir`: each side of a rounded point trimmed by arc length with the radius clamped so a cut takes at most half of each side, the round cut a cubic with handles `4/3 · tan(φ/4) · ρ` along the sides' directions at the cut, a curved side keeping the rest of its curve) → `packages/core/src/vector/corners.ts`
 - `crates/pathops/src/lib.rs` (`stroke_outline_of`: an inside stroke as twice the width intersected with the fill, an outside one as twice the width minus the fill, open shapes always centred) → `packages/core/src/vector/stroke.ts`
+- `crates/doc/src/props.rs` (`WidthProfile` / `WidthPoint`: `sanitized`, side scales, `interp` with Fritsch–Carlson `tangent` and `secant` — monotone cubic, flat before the first and after the last point — `insert_here`, `set_point` kept between neighbours, `max_scale`) → `packages/core/src/vector/width.ts`
+- `crates/pathops/src/width.rs` (`variable_outline`: one-sided widths offset along each side's normal, the outer side joined with the style's join and the inner side through the centre) → `packages/core/src/vector/varstroke.ts`
 
 ## filmcraft
 
@@ -163,6 +171,8 @@ GridCraft. Apache POI is © The Apache Software Foundation, licensed under the A
 - `crates/effects/src/stroke/arrow.rs` (`pieces`, `end_of`, `cut_point`, `trim`, `inset`, `shape`, the `ring` / `arm` / `bar` sizes and `NOTCH`: arrowheads on the open ends of the first and last subpaths, `Tip` vs `Extend` alignment, the stroke ending under the head) and `crates/doc/src/appearance.rs` (`arrow_weight`) → `packages/core/src/vector/stroke.ts`; only the triangle, arrow, open arrow, circle, square and bar heads were ported
 - `crates/svg/src/lib.rs` (stroke alignment written as a double-width stroke clipped to the shape for inside and masked by it for outside) → `packages/core/src/vector/svg.ts`
 - Test cases from `crates/geom/src/corners.rs`, `crates/tools/src/corners.rs` and `crates/effects/src/stroke/arrow.rs`, re-expressed → `packages/core/tests/vector-corners-strokes.test.ts`
+- `crates/doc/src/appearance.rs` (`WidthProfile` as `(t, left, right)` points, two points at one `t` making a step, `PRESETS` with Taper Start / End, Lens, Pinch, Teardrop and Wave, `preset_id` / `id_of`, and `PressureProfile` simplification) → `packages/core/src/vector/width.ts`; its linear interpolation was replaced by figcraft's monotone cubic
+- `crates/tools/src/distort/width.rs` (the Width tool: the stroke under the pointer and its width there, dragging outward to add or widen a width point — symmetric, Alt one side — dragging a point's centre to slide it along the path, its handle ends to widen it, width-point diamonds and side handles in the overlay, Delete removing the selected point) → `getVectorWidthHandles`, the `width` hover and drag in `packages/core/src/vector/controller.ts` and the overlay's `widthPoints` / `widthSpot` in `packages/core/src/vector/render.ts`; copying, multi-point selection and the width-point dialog were not ported
 ---
 
 ## wordcraft

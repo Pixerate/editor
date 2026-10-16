@@ -21,6 +21,24 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/vector] Unioning a Variable-Width Stroke Piece by Piece Is Quadratic
+
+- **Issue / Symptom**: Building a tapered stroke as effectcraft does — a trapezoid per flattened segment plus a wedge per bend, unioned non-zero — took 86 s for a 120-wiggle pencil line, and the polygon boolean's winding pass alone was O(edges²).
+- **Root Cause**: Every piece overlaps its neighbours, so the overlay sees thousands of crossings, and `buildOverlay` cast each edge's ray against every other edge.
+- **Solution / Workaround**: `variableStrokeRings` emits the boundary the pieces add up to (winding numbers add, so the non-zero fill is identical): offset sides, the join on the outer side, and on the inner side the point where the two offsets cross (that corner is covered by both trapezoids) or, when they don't cross, a detour through the centre point. Never normalise the orientation of those rings (a closed path's inner ring must stay reversed). `polygonBoolean` now bands edges along the ray axis. Very wide strokes on tight zig-zags still self-overlap heavily (seconds for extreme cases); render data is cached per node object (`vectorStrokeSvgParts`) so it is only rebuilt when the node changes.
+
+### [core/vector] A Pen Reports Zero Pressure on `pointerup`
+
+- **Issue / Symptom**: Pencil strokes drawn with a pen always ended in a pinched tip.
+- **Root Cause**: `PointerEvent.pressure` is 0 on `pointerup` (and for buttons released), and `pointerUp` replays the last position through `pointerMove`.
+- **Solution / Workaround**: `pointerUp` drops `pressure` from the input it replays, and the pencil keeps the last pressure for points without one. A mouse reports 0.5 while a button is down, so recording is limited to `pointerType === 'pen'` unless `pencilPressure: 'all'`.
+
+### [core/vector] Width Profiles Must Follow Path Reversal and Mirroring
+
+- **Issue / Symptom**: After Reverse Path or a flip, a one-sided or tapered stroke moved to the other end or the other side.
+- **Root Cause**: Profile positions are fractions along the path and sides are relative to its direction; reversing changes both, mirroring swaps left and right.
+- **Solution / Workaround**: `reversePaths` applies `reverseWidthProfile` (t → 1 − t, sides swapped) and `bakeIntoGeometry` applies `mirrorWidthProfile` when the matrix has a negative determinant.
+
 ### [core/vector] Knife Cuts: a Thin Strip Leaves Slits, and Gap-Free Chords Need Care Around Holes
 
 - **Issue / Symptom**: Cutting a shape by subtracting a thin stroke of the knife line (as vectorcraft does with a 0.05 pt strip) leaves the pieces apart by that width, visible at high zoom and wrong for exact geometry; cutting a ring once with exact chords produced a stray "hole" piece, and the next cut started at the previous cut's end point.
