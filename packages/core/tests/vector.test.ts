@@ -23,6 +23,14 @@ import {
 	vectorNodeBounds,
 	vectorPathData,
 	VectorEditorController,
+	decomposeRigid,
+	multiplyMatrices,
+	matrixRotation,
+	scaleMatrix,
+	translateMatrix,
+	vectorNodeRotation,
+	getAnchorWorld,
+	type VectorGroupNode,
 	type VectorDocument,
 	type VectorPathNode
 } from '../src/vector/index.js';
@@ -613,7 +621,7 @@ describe('vector render data', () => {
 		expect(scene.nodes[0]).toMatchObject({ kind: 'path', fill: 'url(#ve-fill-a)', stroke: '#000', strokeDasharray: '4 2' });
 		const overlay = getVectorOverlayRenderData(c.getState());
 		expect(overlay.selectionBox).toMatchObject({ x: 10, y: 20, width: 200, height: 200 });
-		expect(overlay.selectionBox!.handles.find((h) => h.handle === 'rotate')).toEqual({ handle: 'rotate', x: 110, y: -4 });
+		expect(overlay.selectionBox!.handles.find((h) => h.handle === 'rotate')).toEqual({ handle: 'rotate', x: 110, y: -4, screen: { x: 110, y: -4 } });
 		expect(overlay.outlines[0].d.startsWith('M10 20')).toBe(true);
 		expect(overlay.artboard).toEqual({ x: 10, y: 20, width: 800, height: 600 });
 	});
@@ -639,3 +647,140 @@ describe('vector commands', () => {
 		expect((registry.execute('vector.addPath', { d: 'M0 0 L 10 10', stroke: '#000' })).ok).toBe(true);
 	});
 });
+
+describe('per-node transforms', () => {
+	const close = (m: readonly number[], n: readonly number[]) => m.forEach((v, i) => expect(v).toBeCloseTo(n[i], 9));
+
+	it('keeps rotation in a rigid transform and bakes scale into the anchors', () => {
+		const rotated = transformVectorNode(rectNode('a', 0, 0, 100, 50), rotateMatrix(30));
+		expect(vectorNodeRotation(rotated)).toBeCloseTo(30);
+		expect(rotated.subpaths).toEqual(rectNode('a', 0, 0, 100, 50).subpaths); // geometry untouched
+		const scaled = transformVectorNode(rotated, multiplyMatrices(multiplyMatrices(rotateMatrix(-30), scaleMatrix(2, 1)), rotateMatrix(30)));
+		expect(vectorNodeRotation(scaled)).toBeCloseTo(30);
+		const local = vectorNodeBounds({ ...scaled, transform: undefined })!;
+		expect(local.width).toBeCloseTo(200);
+		expect(local.height).toBeCloseTo(50);
+		const moved = transformVectorNode(rectNode('b', 0, 0), translateMatrix(5, 5));
+		expect(moved.transform).toBeUndefined(); // unrotated nodes store positions directly
+		expect(vectorNodeBounds(moved)).toMatchObject({ x: 5, y: 5 });
+	});
+
+	it('splits any matrix into residual × rigid', () => {
+		const m = multiplyMatrices(multiplyMatrices([1, 0.3, 0, 1, 0, 0], scaleMatrix(2, 3)), multiplyMatrices(rotateMatrix(40), translateMatrix(7, -2)));
+		const { rigid, residual } = decomposeRigid(m);
+		close(multiplyMatrices(residual, rigid), m);
+		expect(rigid[0] * rigid[3] - rigid[1] * rigid[2]).toBeCloseTo(1);
+		expect(matrixRotation(scaleMatrix(-1, 1))).toBe(0);
+		expect(matrixRotation(multiplyMatrices(scaleMatrix(-1, 1), rotateMatrix(30)))).toBeCloseTo(30);
+	});
+
+	it('keeps the selection box rotated through rotate, resize and flip', () => {
+		const c = make(doc(rectNode('a', 100, 100, 100, 50, { stroke: '#000', strokeWidth: 4 })));
+		c.select(['a']);
+		c.rotate(30);
+		const f = c.getState().selectionFrame!;
+		expect(f.angle).toBeCloseTo(30);
+		expect(f.width).toBeCloseTo(100);
+		expect(f.height).toBeCloseTo(50);
+		c.scale(2, 1);
+		const g = c.getState().selectionFrame!;
+		expect(g.angle).toBeCloseTo(30);
+		expect(g.width).toBeCloseTo(200);
+		expect(g.height).toBeCloseTo(50);
+		expect((c.getNode('a') as VectorPathNode).strokeWidth).toBe(4);
+		c.flip('horizontal');
+		expect(c.getState().selectionFrame!.angle).toBeCloseTo(30);
+		expect(c.getState().selectionFrame!.width).toBeCloseTo(200);
+		c.setRotation(0);
+		expect(c.getNode('a')!.transform).toBeUndefined();
+		expect(c.getState().selectionFrame!.angle).toBe(0);
+		expect(c.getState().selectionFrame!.width).toBeCloseTo(200);
+	});
+
+	it('resizes a rotated node with the handles along its own axes', () => {
+		const c = make(doc(rectNode('a', 0, 0, 100, 100)));
+		c.select(['a']);
+		c.rotate(90, { origin: { x: 50, y: 50 } });
+		const before = c.getState().selectionFrame!;
+		expect(before.angle).toBeCloseTo(90);
+		const handle = getVectorOverlayRenderData(c.getState()).selectionBox!.handles.find((h) => h.handle === 'e')!;
+		c.pointerMove(handle.screen);
+		expect(c.getState().cursor).toBe('ns-resize'); // the "e" handle points down after 90°
+		c.pointerDown(handle.screen);
+		c.pointerUp({ x: handle.screen.x, y: handle.screen.y + 100 });
+		const after = c.getState().selectionFrame!;
+		expect(after.angle).toBeCloseTo(90);
+		expect(after.width).toBeCloseTo(200);
+		expect(after.height).toBeCloseTo(100);
+	});
+
+	it('hit-tests the rotated shape, not its axis-aligned box', () => {
+		const c = make(doc(rectNode('a', 0, 45, 100, 10)));
+		c.rotate(45, { ids: ['a'], origin: { x: 50, y: 50 } });
+		expect(hitTestVectorNode(c.getNode('a')!, { x: 50, y: 50 })).toBe(true);
+		expect(hitTestVectorNode(c.getNode('a')!, { x: 85, y: 85 })).toBe(true);
+		expect(hitTestVectorNode(c.getNode('a')!, { x: 85, y: 15 })).toBe(false);
+	});
+
+	it('edits anchors of a rotated path in document space', () => {
+		const c = make(doc(rectNode('a', 0, 0, 100, 100)));
+		c.rotate(90, { ids: ['a'], origin: { x: 0, y: 0 } });
+		const ref = { nodeId: 'a', subpath: 0, index: 1 }; // local (100, 0) → document (0, 100)
+		const w = getAnchorWorld(c.getState().document, ref)!;
+		expect(w.x).toBeCloseTo(0);
+		expect(w.y).toBeCloseTo(100);
+		c.setTool('direct');
+		c.select(['a']);
+		c.pointerDown({ x: 0, y: 100 });
+		c.pointerUp({ x: 0, y: 100 });
+		expect(c.getState().selectedAnchors).toEqual([ref]);
+		c.keyDown({ key: 'ArrowRight', shift: true }); // +10 in document x
+		const moved = getAnchorWorld(c.getState().document, ref)!;
+		expect(moved.x).toBeCloseTo(10);
+		expect(moved.y).toBeCloseTo(100);
+	});
+
+	it('composes group transforms into children on ungroup', () => {
+		const c = make(doc(rectNode('a', 0, 0, 10, 10), rectNode('b', 20, 0, 10, 10)));
+		c.select(['a', 'b']);
+		const g = c.group()!;
+		c.rotate(60);
+		expect(vectorNodeRotation(c.getNode(g)!)).toBeCloseTo(60);
+		expect(c.getNode('a')!.transform).toBeUndefined();
+		const before = vectorNodeBounds(c.getNode(g)!)!;
+		c.ungroup();
+		expect(vectorNodeRotation(c.getNode('a')!)).toBeCloseTo(60);
+		const after = unionBoundsOf(c, ['a', 'b']);
+		expect(after.x).toBeCloseTo(before.x);
+		expect(after.width).toBeCloseTo(before.width);
+	});
+
+	it('runs booleans on rotated shapes in document space', () => {
+		const c = make(doc(rectNode('a', 0, 0, 100, 100), rectNode('b', 50, 0, 100, 100)));
+		c.rotate(90, { ids: ['b'] });
+		c.select(['a', 'b']);
+		const id = c.booleanOp('union')!;
+		expect(c.getNode(id)!.transform).toBeUndefined();
+		expect(vectorNodeBounds(c.getNode(id)!)).toEqual({ x: 0, y: 0, width: 150, height: 100 });
+	});
+
+	it('writes and reads rotations as SVG matrices', () => {
+		const c = make(doc(rectNode('a', 0, 0, 100, 50)));
+		c.rotate(30, { ids: ['a'] });
+		const svg = c.toSvg();
+		expect(svg).toMatch(/<path id="a" transform="matrix\(0\.866025 0\.5 -0\.5 0\.866025 /);
+		const back = parseVectorSvg(svg).nodes[0];
+		expect(vectorNodeRotation(back)).toBeCloseTo(30);
+		const imported = parseVectorSvg('<svg width="10" height="10"><g transform="rotate(45)"><rect width="4" height="2" transform="scale(2)"/></g></svg>');
+		const rect = (imported.nodes[0] as VectorGroupNode).children[0];
+		expect(vectorNodeRotation(rect)).toBeCloseTo(45);
+		expect(vectorNodeBounds({ ...rect, transform: undefined })).toEqual({ x: 0, y: 0, width: 8, height: 4 });
+	});
+});
+
+function unionBoundsOf(c: VectorEditorController, ids: string[]) {
+	const bs = ids.map((id) => vectorNodeBounds(c.getNode(id)!)!);
+	const x = Math.min(...bs.map((b) => b.x));
+	const r = Math.max(...bs.map((b) => b.x + b.width));
+	return { x, width: r - x };
+}

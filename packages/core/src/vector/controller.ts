@@ -2,6 +2,7 @@ import { HistoryManager } from '../history/HistoryManager.js';
 import type { Command } from '../history/types.js';
 import { fitCubics } from '../canvas/curveFit.js';
 import { pathBoolean } from '../canvas/pathops/boolean.js';
+import { transformBezierPath, type BezierPath } from '../canvas/pathops/bezier.js';
 import type { Point } from '../canvas/types.js';
 import {
 	bezierToSubpaths,
@@ -20,6 +21,16 @@ import {
 	locateVectorNode,
 	moveAnchorHandle,
 	nearestSegment,
+	nodeMatrix,
+	invertMatrix,
+	applyMatrix,
+	applyMatrixLinear,
+	multiplyMatrices,
+	matrixRotation,
+	vectorWorldMatrix,
+	vectorParentMatrix,
+	vectorPathWorldBezier,
+	IDENTITY_MATRIX,
 	polygonSubpath,
 	rectSubpath,
 	removeAnchors,
@@ -131,8 +142,10 @@ export interface VectorEditorState {
 	selectedAnchors: readonly VectorAnchorRef[];
 	/** The path whose anchors are being edited, if any. */
 	editingId: string | null;
-	/** Bounds of the selected nodes in document units. */
+	/** Axis-aligned bounds of the selected nodes in document units. */
 	selectionBounds: VectorBounds | null;
+	/** The selection box, rotated with the selection when its nodes share a rotation. */
+	selectionFrame: VectorSelectionFrame | null;
 	viewport: VectorViewport;
 	defaults: Readonly<Required<Pick<VectorDefaults, 'polygonSides' | 'starPoints' | 'starInnerRatio' | 'cornerRadius'>> & VectorStyle>;
 	snap: VectorSnapOptions;
@@ -275,11 +288,47 @@ export function getVisibleHandles(
 	return out;
 }
 
-/** Looks up an anchor. */
+/** Looks up an anchor (positions in its node's own space). */
 export function getAnchor(doc: VectorDocument, ref: VectorAnchorRef): VectorAnchor | undefined {
 	const node = findVectorNode(doc.nodes, ref.nodeId);
 	return node?.type === 'path' ? node.subpaths[ref.subpath]?.anchors[ref.index] : undefined;
 }
+
+/** An anchor with its position and handles in document space (its node's transforms applied). */
+export function getAnchorWorld(doc: VectorDocument, ref: VectorAnchorRef): { x: number; y: number; in?: Vec2; out?: Vec2; type?: VectorAnchorType } | undefined {
+	const a = getAnchor(doc, ref);
+	if (!a) return undefined;
+	const m = vectorWorldMatrix(doc.nodes, ref.nodeId) ?? IDENTITY_MATRIX;
+	const p = applyMatrix(m, a);
+	return { x: p.x, y: p.y, ...(a.in ? { in: applyMatrix(m, a.in) } : {}), ...(a.out ? { out: applyMatrix(m, a.out) } : {}), ...(a.type ? { type: a.type } : {}) };
+}
+
+/**
+ * The selection box: `angle` is the shared rotation of the selected nodes (0 when they
+ * differ), `x / y / width / height` the bounds in the box's own frame (document space
+ * rotated by −angle). A frame point `q` is at `rotateMatrix(angle)` applied to `q`.
+ */
+export interface VectorSelectionFrame {
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+	angle: number;
+}
+
+/** The selection frame of nodes `ids` (see `VectorSelectionFrame`), or null when they have no points. */
+export function getVectorSelectionFrame(doc: VectorDocument, ids: readonly string[]): VectorSelectionFrame | null {
+	const nodes = ids.map((id) => ({ node: findVectorNode(doc.nodes, id), parent: vectorParentMatrix(doc.nodes, id) ?? IDENTITY_MATRIX })).filter((n) => n.node);
+	if (!nodes.length) return null;
+	const angles = nodes.map((n) => matrixRotation(multiplyMatrices(nodeMatrix(n.node!), n.parent)));
+	const same = angles.every((a) => Math.abs(normalizeAngle(a - angles[0])) < 1e-6);
+	const angle = same ? angles[0] : 0;
+	const unrotate = rotateMatrix(-angle);
+	const b = unionBounds(nodes.map((n) => vectorNodeBounds(n.node!, multiplyMatrices(n.parent, unrotate))));
+	return b ? { ...b, angle } : null;
+}
+
+const normalizeAngle = (a: number) => ((((a + 180) % 360) + 360) % 360) - 180;
 
 /** Screen positions of the selection box handles for a box given in screen pixels. */
 export function getTransformHandlePositions(box: VectorBounds): { handle: VectorTransformHandle; x: number; y: number }[] {
@@ -297,17 +346,46 @@ export function getTransformHandlePositions(box: VectorBounds): { handle: Vector
 	];
 }
 
-const RESIZE_CURSORS: Record<VectorTransformHandle, string> = {
-	nw: 'nwse-resize',
-	se: 'nwse-resize',
-	ne: 'nesw-resize',
-	sw: 'nesw-resize',
-	n: 'ns-resize',
-	s: 'ns-resize',
-	e: 'ew-resize',
-	w: 'ew-resize',
-	rotate: 'grab'
-};
+/**
+ * Screen geometry of a selection box. `box` and each handle's `x / y` are the unrotated box
+ * in screen pixels; draw them inside a group with `transform` (a `rotate(angle cx cy)`),
+ * or use `screen` for the true on-screen positions (hit-testing).
+ */
+export interface VectorSelectionBoxGeometry {
+	box: VectorBounds;
+	angle: number;
+	transform: string;
+	handles: { handle: VectorTransformHandle; x: number; y: number; screen: Vec2 }[];
+	/** The four corners on screen, clockwise from the top left. */
+	corners: Vec2[];
+}
+
+export function getVectorSelectionBoxGeometry(frame: VectorSelectionFrame, viewport: VectorViewport): VectorSelectionBoxGeometry {
+	const z = viewport.zoom;
+	const box = { x: frame.x * z + viewport.x, y: frame.y * z + viewport.y, width: frame.width * z, height: frame.height * z };
+	const rot = rotateMatrix(frame.angle, { x: viewport.x, y: viewport.y });
+	const toScreen = (p: Vec2): Vec2 => (frame.angle ? applyMatrix(rot, p) : { x: p.x, y: p.y });
+	const handles = getTransformHandlePositions(box).map((h) => ({ ...h, screen: toScreen(h) }));
+	const corners = [
+		{ x: box.x, y: box.y },
+		{ x: box.x + box.width, y: box.y },
+		{ x: box.x + box.width, y: box.y + box.height },
+		{ x: box.x, y: box.y + box.height }
+	].map(toScreen);
+	const r = (n: number) => Math.round(n * 1000) / 1000;
+	return { box, angle: frame.angle, transform: frame.angle ? `rotate(${r(frame.angle)} ${r(viewport.x)} ${r(viewport.y)})` : '', handles, corners };
+}
+
+const RESIZE_CURSOR_ORDER = ['ew-resize', 'nwse-resize', 'ns-resize', 'nesw-resize'];
+const HANDLE_ANGLES: Partial<Record<VectorTransformHandle, number>> = { e: 0, se: 45, s: 90, sw: 135, w: 180, nw: 225, n: 270, ne: 315 };
+
+/** The resize cursor for a handle of a box rotated by `angle` degrees. */
+export function vectorResizeCursor(handle: VectorTransformHandle, angle = 0): string {
+	if (handle === 'rotate') return 'grab';
+	const a = (((HANDLE_ANGLES[handle]! + angle) % 180) + 180) % 180;
+	return RESIZE_CURSOR_ORDER[Math.round(a / 45) % 4];
+}
+
 
 const TOOL_LABELS: Record<VectorTool, string> = {
 	select: 'Select',
@@ -378,6 +456,8 @@ function mapTree(nodes: readonly VectorNode[], fn: (node: VectorNode) => VectorN
 	return changed ? out : (nodes as VectorNode[]);
 }
 
+const isRoot = (m: AffineMatrix) => m === IDENTITY_MATRIX || (m[0] === 1 && m[1] === 0 && m[2] === 0 && m[3] === 1 && m[4] === 0 && m[5] === 0);
+
 let idCounter = 0;
 const defaultCreateId = () => `vn-${Date.now().toString(36)}${(++idCounter).toString(36)}`;
 
@@ -395,7 +475,7 @@ interface Snapshot {
 
 type Drag =
 	| { kind: 'move'; start: Vec2; origin: Vec2 | null; before: Snapshot; base: VectorDocument; moved: boolean; duplicated: boolean; clickId: string | null }
-	| { kind: 'scale'; handle: VectorTransformHandle; start: Vec2; bounds: VectorBounds; before: Snapshot; base: VectorDocument }
+	| { kind: 'scale'; handle: VectorTransformHandle; start: Vec2; frame: VectorSelectionFrame; before: Snapshot; base: VectorDocument }
 	| { kind: 'rotate'; start: Vec2; center: Vec2; before: Snapshot; base: VectorDocument }
 	| { kind: 'marquee'; start: Vec2; base: string[]; baseAnchors: VectorAnchorRef[]; anchorsMode: boolean }
 	| { kind: 'anchors'; start: Vec2; before: Snapshot; base: VectorDocument; moved: boolean; clickRef: VectorAnchorRef | null }
@@ -498,6 +578,7 @@ export class VectorEditorController {
 			selectedAnchors: this.anchors,
 			editingId: this.editingId,
 			selectionBounds: this.boundsOf(this.selection),
+			selectionFrame: this.frameOf(this.selectedRoots()),
 			viewport: this.viewport,
 			defaults: this.defaults,
 			snap: this.snap,
@@ -530,7 +611,26 @@ export class VectorEditorController {
 	}
 
 	private boundsOf(ids: readonly string[]): VectorBounds | null {
-		return unionBounds(ids.map((id) => this.getNode(id)).map((n) => (n ? vectorNodeBounds(n) : null)));
+		return unionBounds(
+			ids.map((id) => {
+				const n = this.getNode(id);
+				return n ? vectorNodeBounds(n, vectorParentMatrix(this.doc.nodes, id) ?? IDENTITY_MATRIX) : null;
+			})
+		);
+	}
+
+	private frameOf(ids: readonly string[]): VectorSelectionFrame | null {
+		return getVectorSelectionFrame(this.doc, ids);
+	}
+
+	/** Local → document matrix of a node in `doc` (default: the current document). */
+	private worldOf(id: string, doc: VectorDocument = this.doc): AffineMatrix {
+		return vectorWorldMatrix(doc.nodes, id) ?? IDENTITY_MATRIX;
+	}
+
+	/** A document point in node `id`'s own space. */
+	private toLocal(id: string, p: Vec2, doc: VectorDocument = this.doc): Vec2 {
+		return applyMatrix(invertMatrix(this.worldOf(id, doc)), p);
 	}
 
 	private cursorFor(): string {
@@ -540,7 +640,7 @@ export class VectorEditorController {
 		const h = this.hover;
 		switch (this.tool) {
 			case 'select':
-				if (h?.transformHandle) return RESIZE_CURSORS[h.transformHandle];
+				if (h?.transformHandle) return vectorResizeCursor(h.transformHandle, this.frameOf(this.selectedRoots())?.angle ?? 0);
 				return h?.nodeId ? 'move' : 'default';
 			case 'direct':
 				if (h?.anchor || h?.handle) return 'pointer';
@@ -986,6 +1086,12 @@ export class VectorEditorController {
 	// Transforms
 	// -------------------------------------------------------------------------
 
+	/** `m`, given in a frame rotated by `angle`, as a document-space matrix. */
+	private inFrame(angle: number, m: AffineMatrix): AffineMatrix {
+		if (!angle) return m;
+		return multiplyMatrices(multiplyMatrices(rotateMatrix(-angle), m), rotateMatrix(angle));
+	}
+
 	/** Applies a matrix to the selected (or given) nodes as one undo step. */
 	transform(matrix: AffineMatrix, options: { ids?: readonly string[]; label?: string } = {}): VectorActionResult {
 		const ids = new Set(options.ids ?? this.selectedRoots());
@@ -996,8 +1102,26 @@ export class VectorEditorController {
 		return { ok: true };
 	}
 
+	/** `doc` with nodes `ids` moved by `m`, given in document space. */
 	private transformed(doc: VectorDocument, ids: ReadonlySet<string>, m: AffineMatrix): VectorDocument {
-		const nodes = mapTree(doc.nodes, (n) => (ids.has(n.id) && !n.locked ? transformVectorNode(n, m) : n));
+		const visit = (list: readonly VectorNode[], parent: AffineMatrix): VectorNode[] => {
+			let changed = false;
+			const out = list.map((n) => {
+				let next = n;
+				if (ids.has(n.id) && !n.locked) {
+					// `m` in the node's parent space: parent → document, m, document → parent.
+					const local = isRoot(parent) ? m : multiplyMatrices(multiplyMatrices(parent, m), invertMatrix(parent));
+					next = transformVectorNode(n, local);
+				} else if (n.type === 'group') {
+					const children = visit(n.children, multiplyMatrices(nodeMatrix(n), parent));
+					if (children !== n.children) next = { ...n, children };
+				}
+				if (next !== n) changed = true;
+				return next;
+			});
+			return changed ? out : (list as VectorNode[]);
+		};
+		const nodes = visit(doc.nodes, IDENTITY_MATRIX);
 		return nodes === doc.nodes ? doc : { ...doc, nodes };
 	}
 
@@ -1011,28 +1135,52 @@ export class VectorEditorController {
 		return this.transform(translateMatrix(dx, dy), { ids: options.ids, label: 'Move' });
 	}
 
-	/** Scales around `origin` (default: the selection centre). */
+	/** The selection frame's centre in document space. */
+	private frameCenter(frame: VectorSelectionFrame): Vec2 {
+		return applyMatrix(rotateMatrix(frame.angle), { x: frame.x + frame.width / 2, y: frame.y + frame.height / 2 });
+	}
+
+	/**
+	 * Scales along the selection box's own axes (rotated with the selection when its nodes
+	 * share a rotation) around `origin` (default: the box centre, in document space).
+	 */
 	scale(sx: number, sy: number = sx, options: { ids?: readonly string[]; origin?: Vec2 } = {}): VectorActionResult {
-		const b = this.boundsOf(options.ids ?? this.selectedRoots());
-		if (!b) return { ok: false, message: 'Nothing is selected.' };
-		const origin = options.origin ?? { x: b.x + b.width / 2, y: b.y + b.height / 2 };
-		return this.transform(scaleMatrix(sx, sy, origin), { ids: options.ids, label: 'Scale' });
+		const frame = this.frameOf(options.ids ?? this.selectedRoots());
+		if (!frame) return { ok: false, message: 'Nothing is selected.' };
+		const origin = applyMatrix(rotateMatrix(-frame.angle), options.origin ?? this.frameCenter(frame));
+		return this.transform(this.inFrame(frame.angle, scaleMatrix(sx, sy, origin)), { ids: options.ids, label: 'Scale' });
 	}
 
 	/** Rotates clockwise by `degrees` around `origin` (default: the selection centre). */
 	rotate(degrees: number, options: { ids?: readonly string[]; origin?: Vec2 } = {}): VectorActionResult {
-		const b = this.boundsOf(options.ids ?? this.selectedRoots());
-		if (!b) return { ok: false, message: 'Nothing is selected.' };
-		const origin = options.origin ?? { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+		const frame = this.frameOf(options.ids ?? this.selectedRoots());
+		if (!frame) return { ok: false, message: 'Nothing is selected.' };
+		const origin = options.origin ?? this.frameCenter(frame);
 		return this.transform(rotateMatrix(degrees, origin), { ids: options.ids, label: 'Rotate' });
 	}
 
+	/** Sets each selected (or given) node's rotation to `degrees`, turning it around its own centre. */
+	setRotation(degrees: number, options: { ids?: readonly string[] } = {}): VectorActionResult {
+		const ids = options.ids ?? this.selectedRoots();
+		if (!ids.length) return { ok: false, message: 'Nothing is selected.' };
+		this.change('Set Rotation', () => {
+			for (const id of ids) {
+				const frame = this.frameOf([id]);
+				if (!frame) continue;
+				const delta = normalizeAngle(degrees - frame.angle);
+				if (Math.abs(delta) > 1e-9) this.doc = this.transformed(this.doc, new Set([id]), rotateMatrix(delta, this.frameCenter(frame)));
+			}
+		});
+		return { ok: true };
+	}
+
+	/** Mirrors along the selection box's own axes. */
 	flip(axis: 'horizontal' | 'vertical', options: { ids?: readonly string[] } = {}): VectorActionResult {
-		const b = this.boundsOf(options.ids ?? this.selectedRoots());
-		if (!b) return { ok: false, message: 'Nothing is selected.' };
-		const c = { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+		const frame = this.frameOf(options.ids ?? this.selectedRoots());
+		if (!frame) return { ok: false, message: 'Nothing is selected.' };
+		const c = { x: frame.x + frame.width / 2, y: frame.y + frame.height / 2 };
 		const m = axis === 'horizontal' ? scaleMatrix(-1, 1, c) : scaleMatrix(1, -1, c);
-		return this.transform(m, { ids: options.ids, label: axis === 'horizontal' ? 'Flip Horizontal' : 'Flip Vertical' });
+		return this.transform(this.inFrame(frame.angle, m), { ids: options.ids, label: axis === 'horizontal' ? 'Flip Horizontal' : 'Flip Vertical' });
 	}
 
 	/**
@@ -1164,7 +1312,12 @@ export class VectorEditorController {
 					if (set.has(n.id) && n.type === 'group') {
 						changed = true;
 						const opacity = n.opacity;
-						out.push(...n.children.map((c) => (opacity !== undefined && opacity < 1 ? { ...c, opacity: (c.opacity ?? 1) * opacity } : c)));
+						const m = nodeMatrix(n);
+						out.push(
+							...n.children
+								.map((c) => (n.transform ? transformVectorNode(c, m) : c))
+								.map((c) => (opacity !== undefined && opacity < 1 ? { ...c, opacity: (c.opacity ?? 1) * opacity } : c))
+						);
 					} else if (n.type === 'group') {
 						const children = flatten(n.children);
 						if (children !== n.children) changed = true;
@@ -1214,15 +1367,22 @@ export class VectorEditorController {
 		if (paths.length < 2) return null;
 		const result = pathBoolean(
 			BOOLEAN_OPS[op],
-			paths.map((p) => ({ path: subpathsToBezier(p.subpaths.filter((s) => s.anchors.length > 1).map((s) => ({ ...s, closed: true }))), fillRule: p.fillRule ?? 'nonzero' }))
+			paths.map((p) => ({
+				path: vectorPathWorldBezier(
+					{ ...p, subpaths: p.subpaths.filter((s) => s.anchors.length > 1).map((s) => ({ ...s, closed: true })) },
+					vectorParentMatrix(this.doc.nodes, p.id) ?? IDENTITY_MATRIX
+				),
+				fillRule: p.fillRule ?? 'nonzero'
+			}))
 		);
-		const subpaths = bezierToSubpaths(result.path);
-		if (result.error || !subpaths.length) return null;
 		const base = paths[0];
-		const id = this.newId();
-		const node: VectorPathNode = { ...cloneVectorNode(base), id, name: BOOLEAN_LABELS[op], subpaths };
-		const drop = new Set([...paths.map((p) => p.id), ...roots]);
 		const anchorRoot = roots.find((r) => findVectorNode([this.getNode(r)!], base.id)) ?? base.id;
+		const subpaths = bezierToSubpaths(this.intoParentSpace(anchorRoot, result.path));
+		if (result.error || !subpaths.length) return null;
+		const id = this.newId();
+		const { transform: _t, ...baseRest } = cloneVectorNode(base);
+		const node: VectorPathNode = { ...baseRest, id, name: BOOLEAN_LABELS[op], subpaths };
+		const drop = new Set([...paths.map((p) => p.id), ...roots]);
 		this.change(BOOLEAN_LABELS[op], () => {
 			this.setDoc(mapTree(this.doc.nodes, (n) => (n.id === anchorRoot ? node : drop.has(n.id) ? null : n)));
 			this.selection = [id];
@@ -1241,15 +1401,23 @@ export class VectorEditorController {
 		});
 		if (paths.length < 2) return null;
 		const id = this.newId();
-		const node: VectorPathNode = { ...cloneVectorNode(paths[0]), id, name: 'Compound Path', subpaths: paths.flatMap((p) => cloneVectorNode(p).subpaths) };
-		const drop = new Set([...paths.map((p) => p.id), ...roots]);
 		const first = roots.find((r) => findVectorNode([this.getNode(r)!], paths[0].id)) ?? paths[0].id;
+		const subpaths = paths.flatMap((p) => bezierToSubpaths(this.intoParentSpace(first, vectorPathWorldBezier(p, vectorParentMatrix(this.doc.nodes, p.id) ?? IDENTITY_MATRIX))));
+		const { transform: _t, ...baseRest } = cloneVectorNode(paths[0]);
+		const node: VectorPathNode = { ...baseRest, id, name: 'Compound Path', subpaths };
+		const drop = new Set([...paths.map((p) => p.id), ...roots]);
 		this.change('Combine', () => {
 			this.setDoc(mapTree(this.doc.nodes, (n) => (n.id === first ? node : drop.has(n.id) ? null : n)));
 			this.selection = [id];
 			this.anchors = [];
 		});
 		return id;
+	}
+
+	/** A document-space path mapped into the parent space of node `id`. */
+	private intoParentSpace(id: string, path: BezierPath): BezierPath {
+		const parent = vectorParentMatrix(this.doc.nodes, id) ?? IDENTITY_MATRIX;
+		return isRoot(parent) ? path : transformBezierPath(path, invertMatrix(parent));
 	}
 
 	/** Splits selected compound paths into one path per subpath. */
@@ -1295,13 +1463,19 @@ export class VectorEditorController {
 		return nodes === doc.nodes ? doc : { ...doc, nodes };
 	}
 
+	/** Moves anchors by a document-space offset (converted into each node's own space). */
 	private movedAnchors(doc: VectorDocument, refs: readonly VectorAnchorRef[], dx: number, dy: number): VectorDocument {
-		return this.updateAnchors(doc, refs, (a) => translateAnchor(a, dx, dy));
+		const local = new Map<string, Vec2>();
+		for (const r of refs) if (!local.has(r.nodeId)) local.set(r.nodeId, applyMatrixLinear(invertMatrix(this.worldOf(r.nodeId, doc)), { x: dx, y: dy }));
+		return this.updateAnchors(doc, refs, (a, ref) => {
+			const d = local.get(ref.nodeId)!;
+			return translateAnchor(a, d.x, d.y);
+		});
 	}
 
-	/** Moves one anchor to a position (handles follow). */
+	/** Moves one anchor to a document position (handles follow). */
 	moveAnchor(ref: VectorAnchorRef, to: Vec2): VectorActionResult {
-		const a = getAnchor(this.doc, ref);
+		const a = getAnchorWorld(this.doc, ref);
 		if (!a) return { ok: false, message: 'There is no such anchor.' };
 		this.change('Move Point', () => {
 			this.doc = this.movedAnchors(this.doc, [ref], to.x - a.x, to.y - a.y);
@@ -1309,11 +1483,12 @@ export class VectorEditorController {
 		return { ok: true };
 	}
 
-	/** Moves one handle (see `moveAnchorHandle` for how the opposite handle follows). */
+	/** Moves one handle to a document position (see `moveAnchorHandle` for how the opposite handle follows). */
 	moveHandle(ref: VectorHandleRef, to: Vec2, options: { breakHandles?: boolean } = {}): VectorActionResult {
 		if (!getAnchor(this.doc, ref)) return { ok: false, message: 'There is no such anchor.' };
+		const local = this.toLocal(ref.nodeId, to);
 		this.change('Move Handle', () => {
-			this.doc = this.updateAnchors(this.doc, [ref], (a) => moveAnchorHandle(a, ref.handle, to, options.breakHandles));
+			this.doc = this.updateAnchors(this.doc, [ref], (a) => moveAnchorHandle(a, ref.handle, local, options.breakHandles));
 		});
 		return { ok: true };
 	}
@@ -1334,11 +1509,11 @@ export class VectorEditorController {
 		return { ok: true };
 	}
 
-	/** Adds an anchor on the nearest segment of `nodeId` to `point` (shape unchanged). */
+	/** Adds an anchor on the nearest segment of `nodeId` to document point `point` (shape unchanged). */
 	insertAnchorAt(nodeId: string, point: Vec2): VectorAnchorRef | null {
 		const node = this.getNode(nodeId);
 		if (node?.type !== 'path') return null;
-		const hit = nearestSegment(node, point);
+		const hit = nearestSegment(node, this.toLocal(nodeId, point));
 		if (!hit) return null;
 		const { subpath, index } = insertAnchor(node.subpaths[hit.subpath], hit.segment, hit.t);
 		const ref = { nodeId, subpath: hit.subpath, index };
@@ -1519,21 +1694,19 @@ export class VectorEditorController {
 
 	private hitTransformHandle(screen: Vec2): VectorTransformHandle | null {
 		if (this.tool !== 'select' || !this.selection.length) return null;
-		const b = this.boundsOf(this.selectedRoots());
-		if (!b) return null;
-		const tl = this.documentToScreen(b);
-		const box = { x: tl.x, y: tl.y, width: b.width * this.viewport.zoom, height: b.height * this.viewport.zoom };
+		const frame = this.frameOf(this.selectedRoots());
+		if (!frame) return null;
+		const { box, handles } = getVectorSelectionBoxGeometry(frame, this.viewport);
 		const r = this.hitRadius + 2;
-		const handles = getTransformHandlePositions(box);
 		// Tiny boxes: only corners and rotation, so the box can still be grabbed.
 		const usable = box.width < 2 * r || box.height < 2 * r ? handles.filter((h) => h.handle.length === 2 || h.handle === 'rotate') : handles;
-		for (const h of usable) if (Math.abs(h.x - screen.x) <= r && Math.abs(h.y - screen.y) <= r) return h.handle;
+		for (const h of usable) if (Math.hypot(h.screen.x - screen.x, h.screen.y - screen.y) <= r * Math.SQRT2) return h.handle;
 		return null;
 	}
 
 	private hitHandle(screen: Vec2): VectorHandleRef | null {
 		for (const ref of getVisibleHandles(this.view()).reverse()) {
-			const a = getAnchor(this.doc, ref);
+			const a = getAnchorWorld(this.doc, ref);
 			const h = a?.[ref.handle];
 			if (!h) continue;
 			const s = this.documentToScreen(h);
@@ -1546,7 +1719,7 @@ export class VectorEditorController {
 		let best: VectorAnchorRef | null = null;
 		let bestD = Infinity;
 		for (const ref of refs) {
-			const a = getAnchor(this.doc, ref);
+			const a = getAnchorWorld(this.doc, ref);
 			if (!a) continue;
 			const s = this.documentToScreen(a);
 			const d = Math.hypot(s.x - screen.x, s.y - screen.y);
@@ -1561,18 +1734,18 @@ export class VectorEditorController {
 	/** Deepest unlocked visible path under `p`. */
 	private hitPath(p: Vec2): VectorPathNode | null {
 		const tol = this.tolerance();
-		const search = (list: readonly VectorNode[]): VectorPathNode | null => {
+		const search = (list: readonly VectorNode[], parent: AffineMatrix): VectorPathNode | null => {
 			for (let i = list.length - 1; i >= 0; i--) {
 				const n = list[i];
 				if (n.visible === false || n.locked) continue;
 				if (n.type === 'group') {
-					const found = search(n.children);
+					const found = search(n.children, multiplyMatrices(nodeMatrix(n), parent));
 					if (found) return found;
-				} else if (hitTestVectorNode(n, p, tol)) return n;
+				} else if (hitTestVectorNode(n, p, tol, parent)) return n;
 			}
 			return null;
 		};
-		return search(this.doc.nodes);
+		return search(this.doc.nodes, IDENTITY_MATRIX);
 	}
 
 	/** Endpoints of open subpaths of unlocked visible paths (pen tool resumes from them). */
@@ -1605,8 +1778,11 @@ export class VectorEditorController {
 				if (anchor) return { nodeId: anchor.nodeId, anchor };
 				for (const id of getEditablePathIds(this.view())) {
 					const node = this.getNode(id) as VectorPathNode;
-					const seg = nearestSegment(node, p);
-					if (seg && seg.distance <= this.tolerance()) return { nodeId: id, segment: { nodeId: id, subpath: seg.subpath, segment: seg.segment, t: seg.t, point: seg.point } };
+					const seg = nearestSegment(node, this.toLocal(id, p));
+					if (seg && seg.distance <= this.tolerance()) {
+						const point = applyMatrix(this.worldOf(id), seg.point);
+						return { nodeId: id, segment: { nodeId: id, subpath: seg.subpath, segment: seg.segment, t: seg.t, point } };
+					}
 				}
 				const path = this.hitPath(p);
 				return path ? { nodeId: path.id } : null;
@@ -1654,12 +1830,13 @@ export class VectorEditorController {
 	private downSelect(screen: Vec2, p: Vec2, input: VectorPointerInput) {
 		const handle = this.hitTransformHandle(screen);
 		if (handle) {
-			const bounds = this.boundsOf(this.selectedRoots())!;
+			const frame = this.frameOf(this.selectedRoots())!;
 			const before = this.snapshot();
+			const center = applyMatrix(rotateMatrix(frame.angle), { x: frame.x + frame.width / 2, y: frame.y + frame.height / 2 });
 			this.drag =
 				handle === 'rotate'
-					? { kind: 'rotate', start: p, center: { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }, before, base: this.doc }
-					: { kind: 'scale', handle, start: p, bounds, before, base: this.doc };
+					? { kind: 'rotate', start: p, center, before, base: this.doc }
+					: { kind: 'scale', handle, start: p, frame, before, base: this.doc };
 			this.interaction = handle === 'rotate' ? { type: 'rotate', angle: 0 } : { type: 'scale', handle, sx: 1, sy: 1 };
 			this.notify();
 			return;
@@ -1727,7 +1904,7 @@ export class VectorEditorController {
 		}
 		for (const id of getEditablePathIds(this.view())) {
 			const node = this.getNode(id) as VectorPathNode;
-			const seg = nearestSegment(node, p);
+			const seg = nearestSegment(node, this.toLocal(id, p));
 			if (!seg || seg.distance > this.tolerance()) continue;
 			const sp = node.subpaths[seg.subpath];
 			if (input.alt) {
@@ -1782,8 +1959,9 @@ export class VectorEditorController {
 				return;
 			}
 			let pt = this.snapPoint(p);
-			const last = sp.anchors[sp.anchors.length - 1];
+			const last = getAnchorWorld(this.doc, { nodeId: pen.nodeId, subpath: pen.subpath, index: sp.anchors.length - 1 })!;
 			if (input.shift) pt = constrain45(last, pt);
+			pt = this.toLocal(pen.nodeId, pt);
 			const node = this.getNode(pen.nodeId) as VectorPathNode;
 			const anchors = [...sp.anchors, { x: pt.x, y: pt.y }];
 			this.replaceNode(pen.nodeId, { ...node, subpaths: node.subpaths.map((s, i) => (i === pen.subpath ? { ...s, anchors } : s)) });
@@ -1892,9 +2070,12 @@ export class VectorEditorController {
 				return;
 			}
 			case 'scale': {
-				const { sx, sy, origin } = scaleFor(drag.handle, drag.bounds, p, input);
+				// Scale in the box's own (possibly rotated) frame.
+				const angle = drag.frame.angle;
+				const q = angle ? applyMatrix(rotateMatrix(-angle), p) : p;
+				const { sx, sy, origin } = scaleFor(drag.handle, drag.frame, q, input);
 				const ids = new Set(this.selectedRoots());
-				this.doc = this.transformed(drag.base, ids, scaleMatrix(sx, sy, origin));
+				this.doc = this.transformed(drag.base, ids, this.inFrame(angle, scaleMatrix(sx, sy, origin)));
 				this.interaction = { type: 'scale', handle: drag.handle, sx, sy };
 				this.notify(true);
 				return;
@@ -1914,7 +2095,7 @@ export class VectorEditorController {
 				this.interaction = { type: 'marquee', bounds };
 				if (drag.anchorsMode) {
 					const inside = getVisibleAnchors(this.view()).filter((r) => {
-						const a = getAnchor(this.doc, r)!;
+						const a = getAnchorWorld(this.doc, r)!;
 						return a.x >= bounds.x && a.x <= bounds.x + bounds.width && a.y >= bounds.y && a.y <= bounds.y + bounds.height;
 					});
 					this.anchors = [...drag.baseAnchors, ...inside.filter((r) => !drag.baseAnchors.some((b) => sameRef(b, r)))];
@@ -1937,7 +2118,7 @@ export class VectorEditorController {
 				if (!drag.moved && Math.hypot(dx, dy) * this.viewport.zoom < 2) return;
 				drag.moved = true;
 				if (input.shift) Math.abs(dx) > Math.abs(dy) ? (dy = 0) : (dx = 0);
-				const lead = this.anchors.length ? getAnchor(drag.base, this.anchors[0]) : undefined;
+				const lead = this.anchors.length ? getAnchorWorld(drag.base, this.anchors[0]) : undefined;
 				({ dx, dy } = this.snapDelta(dx, dy, lead ?? null));
 				this.doc = this.movedAnchors(drag.base, this.anchors, dx, dy);
 				this.interaction = { type: 'anchors', dx, dy };
@@ -1945,16 +2126,17 @@ export class VectorEditorController {
 				return;
 			}
 			case 'handle': {
-				const anchor = getAnchor(drag.base, drag.ref);
+				const anchor = getAnchorWorld(drag.base, drag.ref);
 				let pt = this.snapPoint(p);
 				if (input.shift && anchor) pt = constrain45(anchor, pt);
-				this.doc = this.updateAnchors(drag.base, [drag.ref], (a) => moveAnchorHandle(a, drag.ref.handle, pt, input.alt));
+				const local = this.toLocal(drag.ref.nodeId, pt, drag.base);
+				this.doc = this.updateAnchors(drag.base, [drag.ref], (a) => moveAnchorHandle(a, drag.ref.handle, local, input.alt));
 				this.interaction = { type: 'handle', ref: drag.ref };
 				this.notify(true);
 				return;
 			}
 			case 'pull': {
-				const anchor = getAnchor(drag.base, drag.ref);
+				const anchor = getAnchorWorld(drag.base, drag.ref);
 				if (!anchor) return;
 				if (Math.hypot(p.x - anchor.x, p.y - anchor.y) * this.viewport.zoom < 2) {
 					this.doc = drag.base;
@@ -1965,7 +2147,7 @@ export class VectorEditorController {
 				if (input.shift) pt = constrain45(anchor, pt);
 				const side = drag.closing ? 'in' : 'out';
 				// Dragging out of the closing anchor pulls its incoming handle toward the pointer's mirror.
-				const pos = drag.closing ? { x: 2 * anchor.x - pt.x, y: 2 * anchor.y - pt.y } : pt;
+				const pos = this.toLocal(drag.ref.nodeId, drag.closing ? { x: 2 * anchor.x - pt.x, y: 2 * anchor.y - pt.y } : pt, drag.base);
 				this.doc = this.updateAnchors(drag.base, [drag.ref], (a) => {
 					if (drag.outOnly || (drag.altBreaks && input.alt)) return moveAnchorHandle(a, side, pos, true);
 					return moveAnchorHandle({ ...a, type: 'symmetric' }, side, pos);
@@ -2146,7 +2328,7 @@ export class VectorEditorController {
 			const id = this.hover?.segment?.nodeId ?? this.editingId;
 			if (id) {
 				const node = this.getNode(id) as VectorPathNode | undefined;
-				const seg = node ? nearestSegment(node, p) : null;
+				const seg = node ? nearestSegment(node, this.toLocal(id, p)) : null;
 				if (seg && seg.distance <= this.tolerance()) this.insertAnchorAt(id, p);
 			}
 			return;

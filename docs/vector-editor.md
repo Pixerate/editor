@@ -37,6 +37,9 @@ const doc: VectorDocument = {
 - A **path** has one or more subpaths (holes and compound shapes), a fill and stroke (any CSS colour, a gradient, or `null`), stroke width / caps / joins / dashes, a fill rule and opacity.
 - An **anchor** has optional `in` / `out` handles (absolute document positions). A segment with no handles at either end is a straight line; otherwise it is a cubic Bézier. `type` is `corner`, `smooth` (handles in line) or `symmetric` (in line, equal length) and decides how the opposite handle follows when one is dragged.
 - A **group** selects and transforms its children together. Nodes can be hidden (`visible: false`) or locked (drawn, not pickable).
+- A node's optional **`transform`** places it in its parent's space. It is always *rigid* (rotation + translation): anchors and children live in the node's own space. `transformVectorNode(node, m)` composes `m`, keeps the rotation in `transform` and bakes any scale, skew or mirroring into the anchors (or children), so stroke widths, hit-testing tolerances and the rotated selection box stay exact. Unrotated nodes have no `transform` and store document positions directly.
+
+Matrix helpers: `decomposeRigid` (any matrix → residual × rigid), `matrixRotation`, `vectorNodeRotation`, `vectorWorldMatrix` / `vectorParentMatrix` (a node's local / parent space → document), `vectorPathWorldBezier`, `invertMatrix`, `getAnchorWorld` and `getVectorSelectionFrame`. Bounds and hit-tests take an optional parent matrix and default to the node's parent space.
 
 Geometry helpers work on this model directly: `vectorPathData`, `bezierToSubpaths` (SVG path data → anchors, quadratics and arcs become cubics), `vectorNodeBounds` (exact curve bounds), `hitTestVectorNode`, `nearestSegment`, `insertAnchor` (de Casteljau split, shape unchanged), `convertAnchor`, `moveAnchorHandle`, `transformVectorNode` with `translateMatrix` / `scaleMatrix` / `rotateMatrix`, and shape factories (`rectSubpath`, `ellipseSubpath`, `polygonSubpath`, `starSubpath`, `lineSubpath`).
 
@@ -79,11 +82,13 @@ Other keys: Delete / Backspace, arrows (Shift = 10), Mod+Z / Mod+Shift+Z, Mod+A,
 
 Every gesture is one undo step (`Move`, `Scale`, `Draw Rectangle`, `Add Point`, `Close Path`, …), recorded in the controller's `HistoryManager` (pass `history` to share one with the rest of the app). `Escape` during a drag puts everything back.
 
-Programmatic API, all undoable: `addShape`, `addPath`, `addNode`, `updateNode`, `setStyle`, `removeNodes`, `translate`, `scale`, `rotate`, `flip`, `transform(matrix)`, `align`, `distribute`, `arrange`, `group`, `ungroup`, `duplicate`, `booleanOp('union' | 'subtract' | 'intersect' | 'exclude')`, `combine`, `breakApart`, `moveAnchor`, `moveHandle`, `convertAnchors`, `insertAnchorAt`, `deleteAnchors`, `setClosed`, `reversePaths`, `copy` / `cut` / `paste` (JSON text, or SVG markup on paste), `loadSvg`, `importSvg`, `setDocument`, `setArtboard`. Viewport: `zoomAt`, `zoomToFit`, `panBy`, `setViewport`, `screenToDocument`, `documentToScreen`.
+The selection box follows the selection's rotation when every selected node shares one (`state.selectionFrame.angle`); its resize handles, `scale` and `flip` act along those rotated axes, and `setRotation(degrees)` turns each node to an absolute angle. `state.selectionBounds` stays the axis-aligned box used by align and distribute.
+
+Programmatic API, all undoable: `setRotation`, `addShape`, `addPath`, `addNode`, `updateNode`, `setStyle`, `removeNodes`, `translate`, `scale`, `rotate`, `flip`, `transform(matrix)`, `align`, `distribute`, `arrange`, `group`, `ungroup`, `duplicate`, `booleanOp('union' | 'subtract' | 'intersect' | 'exclude')`, `combine`, `breakApart`, `moveAnchor`, `moveHandle`, `convertAnchors`, `insertAnchorAt`, `deleteAnchors`, `setClosed`, `reversePaths`, `copy` / `cut` / `paste` (JSON text, or SVG markup on paste), `loadSvg`, `importSvg`, `setDocument`, `setArtboard`. Viewport: `zoomAt`, `zoomToFit`, `panBy`, `setViewport`, `screenToDocument`, `documentToScreen`.
 
 ## Rendering
 
-`getVectorSceneRenderData(state)` returns the document as SVG-ready paths (with gradient defs) and a `transform` for the document layer; `getVectorOverlayRenderData(state)` returns the overlay in screen pixels: outlines, the selection box with its handles, anchors, handles, the marquee, the pen's rubber band and a status string. Draw the overlay outside the transformed layer so handles keep their size at any zoom. The bundled React and Svelte canvases are thin renderers over these two functions.
+`getVectorSceneRenderData(state)` returns the document as SVG-ready paths (with gradient defs) and a `transform` for the document layer; `getVectorOverlayRenderData(state)` returns the overlay in screen pixels: outlines, the selection box with its handles, anchors, handles, the marquee, the pen's rubber band and a status string. Draw the overlay outside the transformed layer so handles keep their size at any zoom. Scene nodes carry an SVG `transform` when rotated, and the selection box comes unrotated with a `transform` (`rotate(angle cx cy)`) to draw it in — handle `screen` positions are the true on-screen points. The bundled React and Svelte canvases are thin renderers over these two functions.
 
 ## SVG
 
@@ -95,7 +100,7 @@ const doc = parseVectorSvg(markup);        // DOM-free: path, rect, circle, elli
 const svg = vectorDocumentToSvg(doc);      // standalone SVG with <defs> for gradients
 ```
 
-Transforms are baked into the anchors on import (stroke widths are scaled by the transform's average scale). Text, images, clip paths, masks, filters and `<use>` are skipped.
+On import each shape's transform is split: its rotation becomes the node's `transform` and any scale or skew is baked into the anchors (stroke widths are scaled by the transform's average scale). Export writes rotated nodes with `transform="matrix(…)"`. Text, images, clip paths, masks, filters and `<use>` are skipped.
 
 ## React
 

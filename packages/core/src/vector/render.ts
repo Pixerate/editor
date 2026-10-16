@@ -7,14 +7,27 @@ import { bezierPathToSvg, transformBezierPath } from '../canvas/pathops/bezier.j
 import type { SvgGradientDef } from '../canvas/gradient.js';
 
 export type { SvgGradientDef };
-import { getAnchor, getTransformHandlePositions, getVisibleAnchors, getVisibleHandles, type VectorEditorState } from './controller.js';
-import { findVectorNode, inferAnchorType, subpathsToBezier, vectorNodeBounds, vectorPathData } from './geometry.js';
+import { getAnchorWorld, getVectorSelectionBoxGeometry, getVisibleAnchors, getVisibleHandles, type VectorEditorState, type VectorSelectionBoxGeometry } from './controller.js';
+import {
+	findVectorNode,
+	IDENTITY_MATRIX,
+	inferAnchorType,
+	multiplyMatrices,
+	nodeMatrix,
+	vectorNodeBounds,
+	vectorParentMatrix,
+	vectorPathData,
+	vectorPathWorldBezier,
+	type AffineMatrix
+} from './geometry.js';
 import { vectorPaintToSvg } from './svg.js';
 import type { VectorAnchorRef, VectorAnchorType, VectorBounds, VectorHandleRef, VectorNode, VectorPaint, VectorPathNode, VectorTransformHandle, Vec2 } from './types.js';
 
 export interface VectorRenderPath {
 	kind: 'path';
 	id: string;
+	/** SVG `transform` (`matrix(…)`) for a rotated node. */
+	transform?: string;
 	d: string;
 	/** `none`, a colour, or `url(#id)` of a gradient in `defs`. */
 	fill: string;
@@ -30,6 +43,8 @@ export interface VectorRenderPath {
 export interface VectorRenderGroup {
 	kind: 'group';
 	id: string;
+	/** SVG `transform` (`matrix(…)`) for a rotated group. */
+	transform?: string;
 	opacity: number;
 	children: VectorRenderNode[];
 }
@@ -73,8 +88,14 @@ export interface VectorRenderHandle {
 export interface VectorOverlayRenderData {
 	/** Outlines (screen-space path data) of hovered and selected nodes. */
 	outlines: { id: string; d: string; selected: boolean }[];
-	/** Selection box with resize and rotate handles (select tool), screen space. */
-	selectionBox: { x: number; y: number; width: number; height: number; handles: { handle: VectorTransformHandle; x: number; y: number }[] } | null;
+	/**
+	 * Selection box with resize and rotate handles (select tool). `x / y / width / height` and
+	 * each handle's `x / y` are the unrotated box in screen pixels: draw them inside
+	 * `<g transform={transform}>`. `corners` and each handle's `screen` are true positions.
+	 */
+	selectionBox:
+		| (VectorBounds & { angle: number; transform: string; corners: Vec2[]; handles: VectorSelectionBoxGeometry['handles'] })
+		| null;
 	anchors: VectorRenderAnchor[];
 	handles: VectorRenderHandle[];
 	/** Marquee rectangle, screen space. */
@@ -88,12 +109,13 @@ export interface VectorOverlayRenderData {
 }
 
 const fmt = (n: number) => Math.round(n * 100) / 100;
+const fmtMatrix = (m: AffineMatrix) => `matrix(${m.map((n) => Math.round(n * 1e6) / 1e6).join(' ')})`;
 
 function renderNode(node: VectorNode, defs: SvgGradientDef[], idPrefix: string): VectorRenderNode | null {
 	if (node.visible === false) return null;
 	if (node.type === 'group') {
 		const children = node.children.map((c) => renderNode(c, defs, idPrefix)).filter((c): c is VectorRenderNode => !!c);
-		return { kind: 'group', id: node.id, opacity: node.opacity ?? 1, children };
+		return { kind: 'group', id: node.id, ...(node.transform ? { transform: fmtMatrix(node.transform) } : {}), opacity: node.opacity ?? 1, children };
 	}
 	const fill = vectorPaintToSvg(node.fill, `${idPrefix}fill-${node.id}`);
 	const stroke = vectorPaintToSvg(node.stroke, `${idPrefix}stroke-${node.id}`);
@@ -102,6 +124,7 @@ function renderNode(node: VectorNode, defs: SvgGradientDef[], idPrefix: string):
 	return {
 		kind: 'path',
 		id: node.id,
+		...(node.transform ? { transform: fmtMatrix(node.transform) } : {}),
 		d: vectorPathData(node),
 		fill: fill.value,
 		stroke: stroke.value,
@@ -137,8 +160,18 @@ const toScreen = (state: Pick<VectorEditorState, 'viewport'>, p: Vec2) => ({ x: 
 
 function screenOutline(state: VectorEditorState, node: VectorNode): string {
 	const v = state.viewport;
-	const paths = node.type === 'path' ? [node] : collect(node);
-	return paths.map((p) => bezierPathToSvg(transformBezierPath(subpathsToBezier(p.subpaths), [v.zoom, 0, 0, v.zoom, v.x, v.y]), { precision: 2 })).join(' ');
+	const view: AffineMatrix = [v.zoom, 0, 0, v.zoom, v.x, v.y];
+	const parent = vectorParentMatrix(state.document.nodes, node.id) ?? IDENTITY_MATRIX;
+	return collectWithMatrix(node, parent)
+		.map(({ path, parent: m }) => bezierPathToSvg(transformBezierPath(vectorPathWorldBezier(path, m), view), { precision: 2 }))
+		.join(' ');
+}
+
+/** Path nodes in a subtree with the matrix of their parent space → document. */
+function collectWithMatrix(node: VectorNode, parent: AffineMatrix): { path: VectorPathNode; parent: AffineMatrix }[] {
+	if (node.type === 'path') return [{ path: node, parent }];
+	const m = multiplyMatrices(nodeMatrix(node), parent);
+	return node.children.flatMap((c) => collectWithMatrix(c, m));
 }
 
 function collect(node: VectorNode): VectorPathNode[] {
@@ -164,23 +197,21 @@ export function getVectorOverlayRenderData(state: VectorEditorState): VectorOver
 	if (state.hover?.nodeId && !state.interaction) outline(state.hover.nodeId, false);
 
 	let selectionBox: VectorOverlayRenderData['selectionBox'] = null;
-	if (state.tool === 'select' && state.selectionBounds && state.interaction?.type !== 'marquee') {
-		const b = state.selectionBounds;
-		const tl = toScreen(state, b);
-		const box = { x: tl.x, y: tl.y, width: b.width * z, height: b.height * z };
-		selectionBox = { ...box, handles: getTransformHandlePositions(box) };
+	if (state.tool === 'select' && state.selectionFrame && state.interaction?.type !== 'marquee') {
+		const g = getVectorSelectionBoxGeometry(state.selectionFrame, state.viewport);
+		selectionBox = { ...g.box, angle: g.angle, transform: g.transform, corners: g.corners, handles: g.handles };
 	}
 
 	const selected = (r: VectorAnchorRef) => state.selectedAnchors.some((a) => a.nodeId === r.nodeId && a.subpath === r.subpath && a.index === r.index);
 	const sameAnchor = (a: VectorAnchorRef | undefined, b: VectorAnchorRef) => !!a && a.nodeId === b.nodeId && a.subpath === b.subpath && a.index === b.index;
 	const anchors: VectorRenderAnchor[] = getVisibleAnchors(state).map((ref) => {
-		const a = getAnchor(doc, ref)!;
+		const a = getAnchorWorld(doc, ref)!;
 		const s = toScreen(state, a);
 		const closes = !!state.pen && state.pen.nodeId === ref.nodeId && state.pen.subpath === ref.subpath && ref.index === 0;
 		return { ref, x: s.x, y: s.y, type: a.type ?? inferAnchorType(a), selected: selected(ref), hovered: sameAnchor(state.hover?.anchor, ref), closes };
 	});
 	if (state.tool === 'pen' && !state.pen && state.hover?.anchor) {
-		const a = getAnchor(doc, state.hover.anchor);
+		const a = getAnchorWorld(doc, state.hover.anchor);
 		if (a) {
 			const s = toScreen(state, a);
 			anchors.push({ ref: state.hover.anchor, x: s.x, y: s.y, type: a.type ?? 'corner', selected: false, hovered: true, closes: false });
@@ -188,7 +219,7 @@ export function getVectorOverlayRenderData(state: VectorEditorState): VectorOver
 	}
 
 	const handles: VectorRenderHandle[] = getVisibleHandles(state).flatMap((ref) => {
-		const a = getAnchor(doc, ref);
+		const a = getAnchorWorld(doc, ref);
 		const h = a?.[ref.handle];
 		if (!a || !h) return [];
 		const s = toScreen(state, h);
@@ -208,7 +239,7 @@ export function getVectorOverlayRenderData(state: VectorEditorState): VectorOver
 	if (state.tool === 'pen' && state.pen && state.pointer && !state.interaction) {
 		const node = findVectorNode(doc.nodes, state.pen.nodeId);
 		const sp = node?.type === 'path' ? node.subpaths[state.pen.subpath] : undefined;
-		const last = sp?.anchors[sp.anchors.length - 1];
+		const last = sp ? getAnchorWorld(doc, { nodeId: state.pen.nodeId, subpath: state.pen.subpath, index: sp.anchors.length - 1 }) : undefined;
 		if (last) {
 			const a = toScreen(state, last);
 			const p = toScreen(state, state.pointer);
@@ -225,7 +256,7 @@ export function getVectorOverlayRenderData(state: VectorEditorState): VectorOver
 	if (it?.type === 'rotate') status = `${Math.round(it.angle)}°`;
 	else if (it?.type === 'move' || it?.type === 'anchors') status = `Δ ${fmt(it.dx)}, ${fmt(it.dy)}`;
 	else if (it?.type === 'scale' || it?.type === 'draw') {
-		const b = it.type === 'draw' ? (findVectorNode(doc.nodes, it.nodeId) ? vectorNodeBounds(findVectorNode(doc.nodes, it.nodeId)!) : null) : state.selectionBounds;
+		const b = it.type === 'draw' ? (findVectorNode(doc.nodes, it.nodeId) ? vectorNodeBounds(findVectorNode(doc.nodes, it.nodeId)!) : null) : state.selectionFrame;
 		if (b) status = `W ${fmt(b.width)} × H ${fmt(b.height)}`;
 	}
 

@@ -73,6 +73,7 @@ export function vectorDocumentToSvg(doc: VectorDocument, options: VectorSvgExpor
 
 	const common = (node: VectorNode) => {
 		let out = ` id="${escapeAttr(node.id)}"`;
+		if (node.transform) out += ` transform="matrix(${node.transform.map((n) => formatNumber(n, 6)).join(' ')})"`;
 		if (node.opacity !== undefined && node.opacity < 1) out += ` opacity="${num(node.opacity)}"`;
 		if (node.visible === false) out += ` display="none"`;
 		return out;

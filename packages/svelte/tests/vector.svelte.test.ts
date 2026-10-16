@@ -100,6 +100,15 @@ describe("VectorCanvas (svelte)", () => {
     expect(c.getState().tool).toBe("select");
   });
 
+  it("renders rotated nodes with a rotated selection box", () => {
+    const c = make();
+    c.select(["a"]);
+    c.rotate(30);
+    const t = render(VectorCanvas, { controller: c, fitOnMount: false });
+    expect(t.querySelector('[data-vector-scene] path[data-vector-id="a"]')!.getAttribute("transform")).toMatch(/^matrix\(0\.866025 0\.5 -0\.5 0\.866025 /);
+    expect(t.querySelector("[data-vector-selection]")!.getAttribute("transform")).toBe("rotate(30 0 0)");
+  });
+
   it("shows a marquee while dragging on empty canvas", () => {
     const c = make();
     const t = render(VectorCanvas, { controller: c, fitOnMount: false });

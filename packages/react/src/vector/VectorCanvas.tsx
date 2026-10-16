@@ -53,13 +53,14 @@ export function VectorSceneNodes({ nodes }: { nodes: readonly VectorRenderNode[]
     <>
       {nodes.map((node) =>
         node.kind === 'group' ? (
-          <g key={node.id} data-vector-id={node.id} opacity={node.opacity < 1 ? node.opacity : undefined}>
+          <g key={node.id} data-vector-id={node.id} transform={node.transform} opacity={node.opacity < 1 ? node.opacity : undefined}>
             <VectorSceneNodes nodes={node.children} />
           </g>
         ) : (
           <path
             key={node.id}
             data-vector-id={node.id}
+            transform={node.transform}
             d={node.d}
             fill={node.fill}
             fillRule={node.fillRule}
@@ -208,7 +209,7 @@ export function VectorCanvas({
         ))}
         {overlay.penPreview && <path d={overlay.penPreview} stroke={accentColor} strokeDasharray="4 3" />}
         {box && (
-          <g data-vector-selection="">
+          <g data-vector-selection="" transform={box.transform || undefined}>
             <rect x={box.x} y={box.y} width={box.width} height={box.height} stroke={accentColor} />
             <line x1={box.x + box.width / 2} y1={box.y} x2={box.x + box.width / 2} y2={box.y - 24} stroke={accentColor} />
             {box.handles.map((h) =>

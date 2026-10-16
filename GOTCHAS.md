@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/vector] The "Nearest Rotation" of a Mirrored Matrix Is Undefined
+
+- **Issue / Symptom**: Flipping a rotated vector shape made its selection box snap back to axis-aligned (the rotation was lost and everything was baked into the anchors).
+- **Root Cause**: Node transforms are kept rigid by splitting a matrix into a rotation and a residual. The rotation came from `atan2(b − c, a + d)`, which is the closest rotation only for matrices with a positive determinant. For a mirrored matrix such as `R(30°)·diag(−1, 1)` both terms are 0, so the angle came out as 0.
+- **Solution / Workaround**: `matrixRotation` uses `atan2(−b − c, d − a)` when `det < 0` (the rotation left after undoing a horizontal flip) and lets the residual carry the reflection. Shapes keep their angle through flips.
+
 ### [svelte] A Local Variable Named `state` Breaks `$state()` in the Same Component
 
 - **Issue / Symptom**: `svelte-check` reports `Cannot use 'state' as a store. 'state' needs to be an object with a subscribe method on it` on a line like `let svg = $state();`, in a component that also has `const state = $derived(...)`.
