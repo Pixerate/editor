@@ -63,7 +63,13 @@ import {
   Highlighter,
   Eraser,
   MousePointer,
+  Square,
+  Circle,
+  Star,
+  Brush,
+  Plus,
 } from "lucide-react";
+import type { ShapeDescription } from "@pixerate/editor-react/canvas";
 import { demoCommandRegistry, demoToolRegistry } from "../agentTools";
 import { AutoLayoutDemo } from "./AutoLayoutDemo";
 import { TokensDemo } from "./TokensDemo";
@@ -111,6 +117,27 @@ const box = (
   data: { label, color },
   style: { width, height },
 });
+
+const shapeNode = (
+  id: string,
+  label: string,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  shape: ShapeDescription
+): BoxNode => ({
+  id,
+  type: "shape",
+  position: { x, y },
+  width,
+  height,
+  style: { width, height },
+  data: { label, color: (shape as any).stroke ?? (shape as any).fill ?? "#38bdf8", shape },
+});
+
+let nextNodeId = 1;
+const getUniqueNodeId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${nextNodeId++}`;
 
 const INITIAL_NODES: BoxNode[] = [
   box("brief", "Brief", 40, 60, 140, 60, "#f43f5e"),
@@ -191,6 +218,86 @@ const CanvasDemo: React.FC = () => {
   );
   useRegisterCommands(demoCommandRegistry, commands);
   useEffect(() => demoCommandRegistry.invalidate(), [nodes, history.canUndo, history.canRedo]);
+
+  const addNodeWithUndo = useCallback((node: BoxNode) => {
+    history.manager.execute({
+      execute: () => {
+        setNodes((prev) => [...prev, node]);
+      },
+      undo: () => {
+        setNodes((prev) => prev.filter((n) => n.id !== node.id));
+      },
+    });
+  }, [history.manager]);
+
+  const addShape = useCallback((kind: "rect" | "ellipse" | "star") => {
+    const vp = flow.getViewport();
+    // Canvas coordinates centered roughly in view
+    const cx = (-vp.x + 400) / (vp.zoom || 1);
+    const cy = (-vp.y + 240) / (vp.zoom || 1);
+
+    if (kind === "rect") {
+      const node = shapeNode(
+        getUniqueNodeId("shape-rect"),
+        "Rectangle",
+        cx - 60,
+        cy - 40,
+        120,
+        80,
+        { kind: "rect", cornerRadius: 8, fill: "#0ea5e933", stroke: "#0ea5e9", strokeWidth: 2 }
+      );
+      addNodeWithUndo(node);
+    } else if (kind === "ellipse") {
+      const node = shapeNode(
+        getUniqueNodeId("shape-ellipse"),
+        "Circle",
+        cx - 50,
+        cy - 50,
+        100,
+        100,
+        { kind: "ellipse", fill: "#8b5cf633", stroke: "#8b5cf6", strokeWidth: 2 }
+      );
+      addNodeWithUndo(node);
+    } else if (kind === "star") {
+      const node = shapeNode(
+        getUniqueNodeId("shape-star"),
+        "Star",
+        cx - 50,
+        cy - 50,
+        100,
+        100,
+        { kind: "star", points: 5, innerRadius: 0.5, fill: "#f59e0b33", stroke: "#f59e0b", strokeWidth: 2 }
+      );
+      addNodeWithUndo(node);
+    }
+  }, [flow, addNodeWithUndo]);
+
+  const addSampleDrawing = useCallback(() => {
+    const vp = flow.getViewport();
+    const cx = (-vp.x + 360) / (vp.zoom || 1);
+    const cy = (-vp.y + 220) / (vp.zoom || 1);
+
+    // Decorative smooth spiral / wave stroke
+    const d = "M 10 70 C 30 10, 70 10, 90 70 C 110 130, 150 130, 170 70 C 190 10, 230 10, 250 70";
+    const node = shapeNode(
+      getUniqueNodeId("drawing"),
+      "Wave Drawing",
+      cx - 130,
+      cy - 40,
+      260,
+      80,
+      {
+        kind: "path",
+        d,
+        viewBox: [0, 0, 260, 80],
+        stroke: "#ec4899",
+        strokeWidth: 4,
+        fill: "none",
+        opacity: 0.95,
+      }
+    );
+    addNodeWithUndo(node);
+  }, [flow, addNodeWithUndo]);
 
   const onNodesChange = useCallback(
     (changes: NodeChange<BoxNode>[]) =>
@@ -360,6 +467,45 @@ const CanvasDemo: React.FC = () => {
           </div>
         )}
         <div className="w-px h-5 bg-slate-800 mx-1" />
+        <div className="flex items-center gap-0.5 bg-slate-800/60 rounded p-0.5" title="Insert shapes into canvas">
+          <button
+            type="button"
+            className={`${btn} p-1.5`}
+            onClick={() => addShape("rect")}
+            title="Add Rectangle Shape"
+            aria-label="Add Rectangle Shape"
+          >
+            <Square className="w-4 h-4 text-sky-400" />
+          </button>
+          <button
+            type="button"
+            className={`${btn} p-1.5`}
+            onClick={() => addShape("ellipse")}
+            title="Add Circle Shape"
+            aria-label="Add Circle Shape"
+          >
+            <Circle className="w-4 h-4 text-purple-400" />
+          </button>
+          <button
+            type="button"
+            className={`${btn} p-1.5`}
+            onClick={() => addShape("star")}
+            title="Add Star Shape"
+            aria-label="Add Star Shape"
+          >
+            <Star className="w-4 h-4 text-amber-400" />
+          </button>
+          <button
+            type="button"
+            className={`${btn} p-1.5`}
+            onClick={addSampleDrawing}
+            title="Add Sample Freehand Drawing"
+            aria-label="Add Sample Freehand Drawing"
+          >
+            <Brush className="w-4 h-4 text-pink-400" />
+          </button>
+        </div>
+        <div className="w-px h-5 bg-slate-800 mx-1" />
         <button type="button" className={btn} disabled={!history.canUndo} onClick={() => history.undo()} title="Undo (Mod+Z)" aria-label="Undo">
           <Undo2 className="w-4 h-4" />
         </button>
@@ -429,9 +575,9 @@ const CanvasDemo: React.FC = () => {
       <p className="text-xs text-slate-500">
         Drag a node near another to see smart guides (edges, centres, equal spacing) and snapping; resize a selected node
         from its handles to snap its edges (10px grid otherwise). Hold Alt / Option and hover a node to measure distances
-        from the selection. Shift-click or drag a
-        selection box to select several nodes. Shortcuts: Alt+A/H/D/W/V/S align, Alt+Shift+H/V distribute, Mod+L lock,
-        Mod+]/[ layer order, PageDown/PageUp scenes, Mod+Z undo.
+        from the selection. Shift-click or drag a selection box to select several nodes. Use toolbar buttons to insert shapes
+        (Rectangle, Circle, Star) or a sample drawing, or pick Pen (P), Highlighter (H), or Eraser (E) to sketch directly onto the canvas.
+        Shortcuts: Alt+A/H/D/W/V/S align, Alt+Shift+H/V distribute, Mod+L lock, Mod+]/[ layer order, PageDown/PageUp scenes, Mod+Z undo.
       </p>
 
       <AutoLayoutDemo />
