@@ -3,6 +3,7 @@
 // contributors), test cases re-expressed. See THIRD_PARTY_NOTICES.md.
 import { describe, expect, it } from 'vitest';
 import {
+	arrowheadWeight,
 	createVectorCommands,
 	generateWidthProfile,
 	getVectorOverlayRenderData,
@@ -23,6 +24,8 @@ import {
 	variableStrokeRings,
 	vectorDocumentToSvg,
 	vectorStrokeOutline,
+	vectorStrokeParts,
+	vectorStrokeReach,
 	vectorStrokeSvgParts,
 	VectorEditorController,
 	VECTOR_TOOL_SHORTCUTS,
@@ -350,7 +353,7 @@ describe('width tool', () => {
 		expect(p).toHaveLength(3);
 		// The edge follows the pointer: 20 from the path is a side scale of 4 (half width 5).
 		expect(p[1]).toEqual({ t: 0.5, left: 4, right: 4 });
-		expect(c.getState().selectedWidthPoint).toMatchObject({ nodeId: 'p', index: 1 });
+		expect(c.getState().selectedWidthPoints).toEqual([expect.objectContaining({ nodeId: 'p', index: 1 })]);
 		expect(c.getState().undoLabel).toBe('Width Point');
 		const overlay = getVectorOverlayRenderData(c.getState());
 		expect(overlay.widthPoints).toHaveLength(3);
@@ -394,6 +397,226 @@ describe('width tool', () => {
 		c.pointerUp({ x: 150, y: 220 });
 		expect(path(c, 'p').strokeWidthProfile).toBeUndefined();
 		expect(getVectorWidthHandles(c.getState())).toEqual([]);
+	});
+});
+
+describe('width tool: copies, steps and multi-selection', () => {
+	// A 200-long line (x 50–250, y 100) with a 10 stroke and width points at t = 0.25, 0.5, 0.75
+	// (x = 100, 150, 200), half width 5 either side. Cases re-expressed from vectorcraft width.rs.
+	const setup = () => {
+		const profile = [sym(0, 1), sym(0.25, 1), sym(0.5, 1), sym(0.75, 1), sym(1, 1)];
+		const c = make(doc(pathNode('p', [line(50, 100, 250, 100)], { strokeWidth: 10, strokeWidthProfile: profile })));
+		c.setTool('width');
+		return c;
+	};
+	const ts = (c: VectorEditorController) => path(c, 'p').strokeWidthProfile!.map((q) => Math.round(q.t * 1000) / 1000);
+	const selected = (c: VectorEditorController) => c.getState().selectedWidthPoints.map((r) => r.index);
+	const shift = { shift: true };
+
+	it('Shift-click selects several points that move together', () => {
+		const c = setup();
+		c.pointerDown({ x: 100, y: 100 });
+		c.pointerUp({ x: 100, y: 100 });
+		c.pointerDown({ x: 200, y: 100 }, shift);
+		c.pointerUp({ x: 200, y: 100 }, shift);
+		expect(selected(c)).toEqual([1, 3]);
+		expect(getVectorOverlayRenderData(c.getState()).widthPoints.filter((w) => w.selected)).toHaveLength(2);
+		// Dragging one of them 20 along moves both by a tenth of the path, as one undo step.
+		c.pointerDown({ x: 100, y: 100 });
+		c.pointerMove({ x: 120, y: 103 });
+		c.pointerUp({ x: 120, y: 103 });
+		expect(ts(c)).toEqual([0, 0.35, 0.5, 0.85, 1]);
+		expect(c.getState().undoLabel).toBe('Move Width Points');
+		expect(selected(c).sort()).toEqual([1, 3]);
+		// Moving past an unselected point re-sorts the profile; the selection follows.
+		c.pointerDown({ x: 120, y: 100 });
+		c.pointerMove({ x: 160, y: 100 });
+		c.pointerUp({ x: 160, y: 100 });
+		expect(ts(c)).toEqual([0, 0.5, 0.55, 1, 1]);
+		expect(selected(c).sort()).toEqual([2, 3]);
+		c.undo();
+		c.undo();
+		expect(ts(c)).toEqual([0, 0.25, 0.5, 0.75, 1]);
+	});
+
+	it('widens every selected point by as much as the dragged one', () => {
+		const c = setup();
+		c.selectWidthPoints([
+			{ nodeId: 'p', index: 1, subpath: 0 },
+			{ nodeId: 'p', index: 3, subpath: 0 }
+		]);
+		c.pointerDown({ x: 200, y: 105 });
+		c.pointerMove({ x: 200, y: 110 });
+		c.pointerUp({ x: 200, y: 110 });
+		const p = path(c, 'p').strokeWidthProfile!;
+		expect([p[1], p[2], p[3]]).toEqual([sym(0.25, 2), sym(0.5, 1), sym(0.75, 2)]);
+		expect(c.getState().undoLabel).toBe('Width Points');
+		// Alt on a handle end: one side only, for all of them.
+		c.pointerDown({ x: 100, y: 90 }, { alt: true });
+		c.pointerMove({ x: 100, y: 85 }, { alt: true });
+		c.pointerUp({ x: 100, y: 85 }, { alt: true });
+		const q = path(c, 'p').strokeWidthProfile!;
+		expect([q[1], q[3]]).toEqual([{ t: 0.25, left: 3, right: 2 }, { t: 0.75, left: 3, right: 2 }]);
+	});
+
+	it('Shift-click takes a point out; a plain click picks one of several; Delete removes them all', () => {
+		const c = setup();
+		c.selectWidthPoints([1, 2, 3].map((index) => ({ nodeId: 'p', index, subpath: 0 })));
+		expect(selected(c)).toEqual([1, 2, 3]);
+		c.pointerDown({ x: 150, y: 100 }, shift);
+		expect(c.getState().interaction).toBeNull();
+		c.pointerUp({ x: 150, y: 100 }, shift);
+		expect(selected(c)).toEqual([1, 3]);
+		c.pointerDown({ x: 200, y: 100 });
+		c.pointerUp({ x: 200, y: 100 });
+		expect(selected(c)).toEqual([3]);
+		c.selectWidthPoints([1, 2, 3].map((index) => ({ nodeId: 'p', index, subpath: 0 })));
+		expect(c.keyDown({ key: 'Delete' })).toBe(true);
+		expect(ts(c)).toEqual([0, 1]);
+		expect(c.getState().undoLabel).toBe('Delete Width Points');
+		expect(selected(c)).toEqual([]);
+		// A click away from strokes deselects; Shift keeps the selection.
+		c.selectWidthPoints([{ nodeId: 'p', index: 0, subpath: 0 }]);
+		c.pointerDown({ x: 150, y: 250 }, shift);
+		c.pointerUp({ x: 150, y: 250 }, shift);
+		expect(selected(c)).toEqual([0]);
+		c.pointerDown({ x: 150, y: 250 });
+		c.pointerUp({ x: 150, y: 250 });
+		expect(selected(c)).toEqual([]);
+	});
+
+	it('Alt-drags a centre to slide a copy, which can pass other points', () => {
+		const c = setup();
+		c.pointerDown({ x: 100, y: 100 }, { alt: true });
+		c.pointerMove({ x: 130, y: 100 }, { alt: true });
+		expect(c.getState().interaction).toMatchObject({ type: 'width', mode: 'copy' });
+		expect(c.getState().cursor).toBe('grabbing');
+		expect(getVectorOverlayRenderData(c.getState()).status).toBe('Copy width point');
+		c.pointerMove({ x: 180, y: 100 }, { alt: true });
+		c.pointerUp({ x: 180, y: 100 }, { alt: true });
+		expect(ts(c)).toEqual([0, 0.25, 0.5, 0.65, 0.75, 1]);
+		expect(c.getState().undoLabel).toBe('Copy Width Point');
+		expect(selected(c)).toEqual([3]);
+		c.undo();
+		expect(ts(c)).toEqual([0, 0.25, 0.5, 0.75, 1]);
+	});
+
+	it('dropping a slid point onto another makes a discontinuous point', () => {
+		const c = setup();
+		c.setStyle({ strokeWidthProfile: [sym(0, 1), sym(0.25, 3), sym(0.5, 1), sym(1, 1)] }, ['p']);
+		// Within the pick distance of the point at 0.5: it lands exactly there.
+		c.pointerDown({ x: 100, y: 100 });
+		c.pointerMove({ x: 147, y: 100 });
+		c.pointerUp({ x: 147, y: 100 });
+		const p = path(c, 'p').strokeWidthProfile!;
+		expect(p).toEqual([sym(0, 1), sym(0.5, 3), sym(0.5, 1), sym(1, 1)]);
+		// The width steps there.
+		expect(widthProfileAt(p, 0.5 - 1e-9).left).toBeCloseTo(3, 6);
+		expect(widthProfileAt(p, 0.5).left).toBe(1);
+		// A copy dropped onto a point steps too.
+		c.pointerDown({ x: 250, y: 100 }, { alt: true });
+		c.pointerMove({ x: 52, y: 100 }, { alt: true });
+		c.pointerUp({ x: 52, y: 100 }, { alt: true });
+		expect(ts(c)).toEqual([0, 0, 0.5, 0.5, 1]);
+	});
+});
+
+describe('width point editor', () => {
+	const setup = () => {
+		const profile = [sym(0, 1), sym(0.25, 2), sym(0.75, 1), sym(1, 1)];
+		const c = make(doc(pathNode('p', [line(50, 100, 250, 100)], { strokeWidth: 10, strokeWidthProfile: profile })));
+		c.setTool('width');
+		return c;
+	};
+
+	it('opens on a double-clicked width point and applies t, left and right in document units', () => {
+		const c = setup();
+		c.doubleClick({ x: 100, y: 100 });
+		expect(c.getState().widthPointEdit).toEqual({ nodeId: 'p', subpath: 0, index: 1, t: 0.25, left: 10, right: 10, point: { x: 100, y: 100 } });
+		expect(c.getState().selectedWidthPoints).toEqual([{ nodeId: 'p', index: 1, subpath: 0 }]);
+		expect(c.commitWidthPointEdit({ left: 15, right: 2.5 })).toEqual({ ok: true });
+		expect(path(c, 'p').strokeWidthProfile![1]).toEqual({ t: 0.25, left: 3, right: 0.5 });
+		expect(c.getState().widthPointEdit).toBeNull();
+		expect(c.getState().undoLabel).toBe('Width Point');
+		// Moving it past a neighbour re-sorts the profile and keeps it selected.
+		expect(c.setWidthPoint({ nodeId: 'p', index: 1 }, { t: 0.9 })).toEqual({ ok: true });
+		expect(path(c, 'p').strokeWidthProfile!.map((q) => q.t)).toEqual([0, 0.75, 0.9, 1]);
+		expect(c.getState().selectedWidthPoints[0].index).toBe(2);
+		// Onto another point's t: a step.
+		c.setWidthPoint({ nodeId: 'p', index: 2 }, { t: 0.75 });
+		expect(path(c, 'p').strokeWidthProfile!.map((q) => q.t)).toEqual([0, 0.75, 0.75, 1]);
+	});
+
+	it('opens on a stroke spot and adds a point there on apply; Escape and undo close it', () => {
+		const c = setup();
+		c.doubleClick({ x: 150, y: 102 });
+		const edit = c.getState().widthPointEdit!;
+		expect(edit).toMatchObject({ nodeId: 'p', index: null, t: 0.5 });
+		expect(edit.left).toBeGreaterThan(5);
+		expect(edit.left).toBeLessThan(10);
+		c.commitWidthPointEdit({ left: 20, right: 20 });
+		expect(path(c, 'p').strokeWidthProfile).toHaveLength(5);
+		expect(path(c, 'p').strokeWidthProfile![2]).toEqual(sym(0.5, 4));
+		c.doubleClick({ x: 150, y: 100 });
+		expect(c.getState().widthPointEdit?.index).toBe(2);
+		expect(c.keyDown({ key: 'Escape' })).toBe(true);
+		expect(c.getState().widthPointEdit).toBeNull();
+		expect(c.getState().tool).toBe('width');
+		c.doubleClick({ x: 150, y: 100 });
+		c.undo();
+		expect(c.getState().widthPointEdit).toBeNull();
+		// Not on a stroke: nothing opens; other tools ignore it.
+		c.doubleClick({ x: 150, y: 250 });
+		expect(c.getState().widthPointEdit).toBeNull();
+		expect(c.openWidthPointEdit({ nodeId: 'p', index: 99 })).toBe(false);
+		expect(c.commitWidthPointEdit({ left: 1 })).toMatchObject({ ok: false });
+	});
+
+	it('validates setWidthPoint and works without a profile', () => {
+		const c = make(doc(pathNode('p', [line(50, 100, 250, 100)], { strokeWidth: 10 }), pathNode('f', [line(0, 0, 10, 10)], { stroke: null })));
+		expect(c.setWidthPoint({ nodeId: 'p' }, { left: 1 })).toMatchObject({ ok: false });
+		expect(c.setWidthPoint({ nodeId: 'f' }, { t: 0.5 })).toMatchObject({ ok: false });
+		expect(c.setWidthPoint({ nodeId: 'x' }, { t: 0.5 })).toMatchObject({ ok: false });
+		expect(c.setWidthPoint({ nodeId: 'p', index: 3 }, { t: 0.5 })).toMatchObject({ ok: false });
+		expect(c.setWidthPoint({ nodeId: 'p' }, { t: 0.5, left: 0 })).toEqual({ ok: true });
+		expect(path(c, 'p').strokeWidthProfile).toEqual([sym(0, 1), { t: 0.5, left: 0, right: 1 }, sym(1, 1)]);
+	});
+
+	it('is exposed as the vector.setWidthPoint command', () => {
+		const c = make(doc(pathNode('p', [line(50, 100, 250, 100)], { strokeWidth: 10 })));
+		const registry = new CommandRegistry();
+		for (const cmd of createVectorCommands(c)) registry.register(cmd);
+		const r = registry.execute('vector.setWidthPoint', { id: 'p', t: 0.25, left: 10, right: 10 }) as any;
+		expect(r).toMatchObject({ ok: true });
+		expect(path(c, 'p').strokeWidthProfile![1]).toEqual(sym(0.25, 2));
+		registry.execute('vector.setWidthPoint', { id: 'p', index: 1, right: 0 });
+		expect(path(c, 'p').strokeWidthProfile![1]).toEqual({ t: 0.25, left: 2, right: 0 });
+	});
+});
+
+describe('arrowheads on profiled strokes', () => {
+	const head = (profile: VectorWidthPoint[] | null, extra: Partial<VectorPathNode> = {}) => {
+		const node = pathNode('a', [line(0, 0, 100, 0)], { strokeWidth: 4, endArrow: 'triangle', startArrow: 'bar', strokeWidthProfile: profile, ...extra });
+		return { end: arrowheadWeight(node, 'end'), start: arrowheadWeight(node, 'start') };
+	};
+
+	it('sizes heads from the width just before them, the stroke width as a floor', () => {
+		expect(head(null)).toEqual({ end: 4, start: 4 });
+		// Tapering to nothing at the end: still a full-size head.
+		expect(head([sym(0, 1), sym(1, 0)]).end).toBe(4);
+		// Swelling to 3× at the end, 2.5× (mean of 3 and 2) at the start.
+		expect(head([{ t: 0, left: 3, right: 2 }, sym(1, 3)])).toEqual({ end: 12, start: 10 });
+		// The scale multiplies the profiled width.
+		expect(head([sym(0, 1), sym(1, 2)], { endArrowScale: 0.5 }).end).toBe(4);
+	});
+
+	it('draws the bigger head and pads the stroke reach for it', () => {
+		const node = pathNode('a', [line(0, 0, 100, 0)], { strokeWidth: 4, endArrow: 'triangle', strokeWidthProfile: [sym(0, 1), sym(1, 3)] });
+		const parts = vectorStrokeParts(subpathsToBezier(node.subpaths), node);
+		const ys = parts.heads[0].path.flatMap((cmd) => ('y' in cmd ? [cmd.y] : []));
+		// A head is 4 weights wide: 4 × 12 = 48.
+		expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(48, 6);
+		expect(vectorStrokeReach(node)).toBeGreaterThanOrEqual(8 * 12);
 	});
 });
 

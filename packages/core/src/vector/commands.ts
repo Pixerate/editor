@@ -305,6 +305,32 @@ export function createVectorCommands(controller: VectorEditorController, options
 		},
 		{
 			...base,
+			id: `${prefix}setWidthPoint`,
+			label: 'Width Point…',
+			keywords: ['width point', 'variable width', 'stroke width at', 'taper', 'profile'],
+			description:
+				'Sets one width point of a path\'s stroke profile numerically: `index` names an existing point (see `vector.setWidthProfile`\'s result), leave it out to add one at `t`. `left` / `right` are side widths in document units (how far the stroke reaches on each side), `t` the position along each subpath (0–1); a point moved onto another\'s `t` makes a step. Returns the profile.',
+			params: {
+				type: 'object',
+				properties: {
+					id: { type: 'string', description: 'The path.' },
+					index: { type: 'integer', minimum: 0 },
+					t: { type: 'number', minimum: 0, maximum: 1 },
+					left: { type: 'number', minimum: 0 },
+					right: { type: 'number', minimum: 0 }
+				},
+				required: ['id']
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: { id: string; index?: number; t?: number; left?: number; right?: number } | undefined) => {
+				if (!params?.id) fail('Pass the path `id`.');
+				check(controller.setWidthPoint({ nodeId: params!.id, index: params!.index ?? null }, { t: params!.t, left: params!.left, right: params!.right }));
+				const node = controller.getNode(params!.id);
+				return { ok: true, points: node?.type === 'path' ? (node.strokeWidthProfile ?? []) : [] };
+			}
+		},
+		{
+			...base,
 			id: `${prefix}outlineStroke`,
 			label: 'Outline Stroke',
 			keywords: ['expand', 'stroke to path', 'outline', 'convert stroke'],

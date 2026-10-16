@@ -420,7 +420,7 @@ export function getVectorOverlayRenderData(state: VectorEditorState): VectorOver
 	});
 	const spot = state.tool === 'width' && !it ? state.hover?.strokeSpot : null;
 	const widthSpot = spot ? { ...sc(spot.point), left: sc(spot.left), right: sc(spot.right) } : null;
-	if (it?.type === 'width') status = it.mode === 'move' ? 'Move width point' : `W ${fmt(it.width)}`;
+	if (it?.type === 'width') status = it.mode === 'move' ? 'Move width point' : it.mode === 'copy' ? 'Copy width point' : `W ${fmt(it.width)}`;
 
 	let builder: VectorOverlayRenderData['builder'] = null;
 	if (state.builder) {

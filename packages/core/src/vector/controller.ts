@@ -75,7 +75,9 @@ import {
 	widthProfilePreset,
 	type VectorTaperOptions,
 	type VectorWaveOptions,
-	type VectorWidthPreset
+	type VectorWidthPreset,
+	VECTOR_WIDTH_PROFILE_MAX_POINTS,
+	VECTOR_WIDTH_SAME_T
 } from './width.js';
 import { parseVectorSvg, vectorDocumentToSvg, type VectorSvgExportOptions } from './svg.js';
 import { constrainToLeave, VECTOR_CONSTRUCTION_ANGLES, VectorSnapTargets, type VectorSnapGuides, type VectorSnapLeave } from './snap.js';
@@ -251,6 +253,22 @@ export interface VectorStrokeSpot {
 	right: Vec2;
 }
 
+/**
+ * The width point being edited numerically (double-click with the width tool): `index` is the
+ * point's, or null for a new point at `t` (a double-click on a stroke away from its points).
+ * `left` / `right` are side widths in document units (how far the stroke reaches on each side),
+ * `point` is where it sits on the path, in document space.
+ */
+export interface VectorWidthPointEdit {
+	nodeId: string;
+	subpath: number;
+	index: number | null;
+	t: number;
+	left: number;
+	right: number;
+	point: Vec2;
+}
+
 /** A key press as the controller needs it. */
 export interface VectorKeyInput extends VectorModifiers {
 	/** `KeyboardEvent.key`. */
@@ -286,7 +304,7 @@ export type VectorInteraction =
 	| { type: 'draw'; tool: VectorTool; nodeId: string; bounds: VectorBounds; string?: [Vec2, Vec2] }
 	| { type: 'stroke'; tool: 'knife' | 'eraser'; points: Vec2[]; width: number }
 	| { type: 'builder'; mode: 'merge' | 'erase'; points: Vec2[] }
-	| { type: 'width'; ref: VectorWidthPointRef; mode: 'width' | 'move'; width: number }
+	| { type: 'width'; ref: VectorWidthPointRef; mode: 'width' | 'move' | 'copy'; width: number }
 	| { type: 'pen'; nodeId: string }
 	| { type: 'pan' };
 
@@ -298,8 +316,10 @@ export interface VectorEditorState {
 	selection: readonly string[];
 	/** Selected anchors (direct tool). */
 	selectedAnchors: readonly VectorAnchorRef[];
-	/** The selected width point (width tool); Delete removes it. */
-	selectedWidthPoint: VectorWidthPointRef | null;
+	/** The selected width points (width tool, all on one path); Delete removes them. */
+	selectedWidthPoints: readonly VectorWidthPointRef[];
+	/** The width point open for numeric editing (double-click with the width tool), if any. */
+	widthPointEdit: VectorWidthPointEdit | null;
 	/** The path whose anchors are being edited, if any. */
 	editingId: string | null;
 	/** Axis-aligned bounds of the selected nodes in document units. */
@@ -585,13 +605,24 @@ export interface VectorWidthHandle {
 }
 
 /**
+ * Moves the points at `indices` of `profile` by `dt` along the path (kept in 0–1) and re-sorts
+ * it (stably, so steps keep their order); `renumber` maps each old index to its new one.
+ */
+function shiftWidthPoints(profile: readonly VectorWidthPoint[], indices: readonly number[], dt: number): { points: VectorWidthPoint[]; renumber: Map<number, number> } {
+	const moving = new Set(indices);
+	const tagged = profile.map((p, i) => ({ p: moving.has(i) ? { ...p, t: Math.min(Math.max(p.t + dt, 0), 1) } : { ...p }, i }));
+	tagged.sort((a, b) => a.p.t - b.p.t || a.i - b.i);
+	return { points: tagged.map((x) => x.p), renumber: new Map(tagged.map((x, k) => [x.i, k])) };
+}
+
+/**
  * The width points the width tool shows: every profile point on every subpath of the stroke
  * under the pointer, the selected paths and the stroke being edited. Ported from ArtCraft
  * vectorcraft `crates/tools/src/distort/width.rs` (MIT OR Apache-2.0, see
  * THIRD_PARTY_NOTICES.md), as are the `width` drag and hover below.
  */
 export function getVectorWidthHandles(
-	state: Pick<VectorEditorState, 'document' | 'selection' | 'tool' | 'hover' | 'interaction' | 'selectedWidthPoint'>
+	state: Pick<VectorEditorState, 'document' | 'selection' | 'tool' | 'hover' | 'interaction' | 'selectedWidthPoints'>
 ): VectorWidthHandle[] {
 	if (state.tool !== 'width') return [];
 	const ids = new Set<string>();
@@ -601,7 +632,7 @@ export function getVectorWidthHandles(
 	}
 	if (state.hover?.nodeId) ids.add(state.hover.nodeId);
 	if (state.interaction?.type === 'width') ids.add(state.interaction.ref.nodeId);
-	if (state.selectedWidthPoint) ids.add(state.selectedWidthPoint.nodeId);
+	for (const r of state.selectedWidthPoints) ids.add(r.nodeId);
 	const out: VectorWidthHandle[] = [];
 	for (const id of ids) {
 		const node = findVectorNode(state.document.nodes, id);
@@ -620,7 +651,6 @@ export function getVectorWidthHandles(
 				const p = applyMatrix(m, c);
 				const l = applyMatrix(m, { x: c.x + n.x * w.left * g.unit, y: c.y + n.y * w.left * g.unit });
 				const r = applyMatrix(m, { x: c.x - n.x * w.right * g.unit, y: c.y - n.y * w.right * g.unit });
-				const sel = state.selectedWidthPoint;
 				out.push({
 					ref: { nodeId: id, index, subpath: sp },
 					x: p.x,
@@ -630,7 +660,7 @@ export function getVectorWidthHandles(
 					t: w.t,
 					leftScale: w.left,
 					rightScale: w.right,
-					selected: !!sel && sel.nodeId === id && sel.index === index
+					selected: state.selectedWidthPoints.some((r) => r.nodeId === id && r.index === index)
 				});
 			});
 		}
@@ -915,8 +945,17 @@ type Drag =
 	| {
 			kind: 'width';
 			ref: VectorWidthPointRef;
-			mode: 'width' | 'move';
+			/** `copy`: Alt-drag a centre to slide a copy of the point. */
+			mode: 'width' | 'move' | 'copy';
 			side: 'both' | 'left' | 'right';
+			/** The index the drag started on (the source of a copy). */
+			source: number;
+			/** Other selected points of the path that move or widen with it (indices into `profile`). */
+			group: number[];
+			/** Shift-click (adding the point): a click without a move keeps the other selected points. */
+			shift: boolean;
+			/** Old index → new index after a group move re-sorted the profile. */
+			renumber: Map<number, number> | null;
 			/** The stroke line's point and left normal where the drag started (node space). */
 			origin: Vec2;
 			normal: Vec2;
@@ -943,7 +982,8 @@ export class VectorEditorController {
 	private doc: VectorDocument;
 	private selection: string[] = [];
 	private anchors: VectorAnchorRef[] = [];
-	private widthPoint: VectorWidthPointRef | null = null;
+	private widthPoints: VectorWidthPointRef[] = [];
+	private widthEdit: VectorWidthPointEdit | null = null;
 	private editingId: string | null = null;
 	private pen: { nodeId: string; subpath: number } | null = null;
 	private tool: VectorTool;
@@ -1037,7 +1077,8 @@ export class VectorEditorController {
 			tool: this.tool,
 			selection: this.selection,
 			selectedAnchors: this.anchors,
-			selectedWidthPoint: this.widthPoint,
+			selectedWidthPoints: this.widthPoints,
+			widthPointEdit: this.widthEdit,
 			editingId: this.editingId,
 			selectionBounds: this.boundsOf(this.selection),
 			selectionFrame: this.frameOf(this.selectedRoots()),
@@ -1114,7 +1155,7 @@ export class VectorEditorController {
 			case 'pen':
 				return h?.anchor ? 'pointer' : 'crosshair';
 			case 'width':
-				if (this.drag?.kind === 'width') return this.drag.mode === 'move' ? 'grabbing' : 'ew-resize';
+				if (this.drag?.kind === 'width') return this.drag.mode === 'width' ? 'ew-resize' : 'grabbing';
 				if (h?.widthPoint) return h.widthPoint.part === 'center' ? 'grab' : 'ew-resize';
 				return h?.strokeSpot ? 'copy' : 'default';
 			case 'shapeBuilder':
@@ -1137,6 +1178,8 @@ export class VectorEditorController {
 
 	private restore(s: Snapshot) {
 		const docChanged = s.doc !== this.doc || this.committing;
+		// Undo / redo can renumber width points: drop the ones that are gone and close the editor.
+		if (!this.committing) this.widthEdit = null;
 		this.committing = false;
 		this.applying = true;
 		try {
@@ -1145,6 +1188,13 @@ export class VectorEditorController {
 			this.anchors = s.anchors.filter((r) => getAnchor(this.doc, r));
 			this.editingId = s.editingId && this.getNode(s.editingId) ? s.editingId : null;
 			this.pen = s.pen && (this.getNode(s.pen.nodeId) as VectorPathNode | undefined)?.subpaths?.[s.pen.subpath] ? s.pen : null;
+			if (this.widthPoints.length) {
+				const kept = this.widthPoints.filter((r) => {
+					const n = this.getNode(r.nodeId);
+					return n?.type === 'path' && !!n.strokeWidthProfile?.[r.index];
+				});
+				if (kept.length !== this.widthPoints.length) this.widthPoints = kept;
+			}
 		} finally {
 			this.applying = false;
 		}
@@ -1266,7 +1316,8 @@ export class VectorEditorController {
 		this.tool = tool;
 		this.hover = null;
 		this.guides = null;
-		this.widthPoint = null;
+		this.widthPoints = [];
+		this.widthEdit = null;
 		this.builderPreview = null;
 		this.builderHoverKey = null;
 		if (tool !== 'direct') {
@@ -1573,18 +1624,151 @@ export class VectorEditorController {
 			const p = profile as { taper?: VectorTaperOptions; wave?: VectorWaveOptions };
 			points = p.taper || p.wave ? generateWidthProfile(p) : [];
 		}
-		this.widthPoint = null;
+		this.widthPoints = [];
+		this.widthEdit = null;
 		return this.setStyle({ strokeWidthProfile: points.length ? points : null }, options.ids ?? this.selection, { label: points.length ? 'Width Profile' : 'Uniform Width' });
 	}
 
-	/** Removes one width point of a path's profile (the width tool's Delete). */
+	/** Removes one width point of a path's profile. */
 	removeWidthPoint(ref: Pick<VectorWidthPointRef, 'nodeId' | 'index'>): VectorActionResult {
-		const node = this.getNode(ref.nodeId);
-		if (node?.type !== 'path' || !node.strokeWidthProfile?.[ref.index]) return { ok: false, message: 'There is no such width point.' };
-		const rest = removeWidthPoints(sanitizeWidthProfile(node.strokeWidthProfile), [ref.index]);
-		this.widthPoint = null;
-		this.change('Delete Width Point', () => this.replaceNode(node.id, withStyle(node, { strokeWidthProfile: rest.length ? rest : null })));
+		return this.removeWidthPoints([ref]);
+	}
+
+	/** Removes width points (default: the selected ones — the width tool's Delete), as one undo step. */
+	removeWidthPoints(refs: readonly Pick<VectorWidthPointRef, 'nodeId' | 'index'>[] = this.widthPoints): VectorActionResult {
+		const byNode = new Map<string, number[]>();
+		for (const r of refs) {
+			const node = this.getNode(r.nodeId);
+			if (node?.type !== 'path' || !node.strokeWidthProfile?.[r.index]) continue;
+			byNode.set(r.nodeId, [...(byNode.get(r.nodeId) ?? []), r.index]);
+		}
+		if (!byNode.size) return { ok: false, message: 'There is no such width point.' };
+		const count = [...byNode.values()].reduce((n, l) => n + new Set(l).size, 0);
+		this.widthPoints = [];
+		this.widthEdit = null;
+		this.change(count > 1 ? 'Delete Width Points' : 'Delete Width Point', () => {
+			for (const [id, indices] of byNode) {
+				const node = this.getNode(id) as VectorPathNode;
+				const rest = removeWidthPoints(sanitizeWidthProfile(node.strokeWidthProfile), indices);
+				this.replaceNode(id, withStyle(node, { strokeWidthProfile: rest.length ? rest : null }));
+			}
+		});
 		return { ok: true };
+	}
+
+	/** Selects width points (width tool); points on other paths than the first are dropped. */
+	selectWidthPoints(refs: readonly VectorWidthPointRef[]): void {
+		const first = refs[0]?.nodeId;
+		const next: VectorWidthPointRef[] = [];
+		for (const r of refs) {
+			if (r.nodeId !== first || next.some((q) => q.index === r.index)) continue;
+			const n = this.getNode(r.nodeId);
+			if (n?.type === 'path' && n.strokeWidthProfile?.[r.index]) next.push({ nodeId: r.nodeId, index: r.index, subpath: r.subpath ?? 0 });
+		}
+		this.widthPoints = next;
+		this.notify();
+	}
+
+	/**
+	 * Sets one width point numerically: `index` names an existing point of path `nodeId`, null
+	 * (or left out) adds one at `values.t`. `left` / `right` are side widths in document units
+	 * (how far the stroke reaches on each side of the path), `t` the position along each subpath
+	 * (0–1). A point moved onto another one's `t` makes a step there. Selects the point and
+	 * refreshes an open width-point editor; one undo step. Ported from ArtCraft vectorcraft's
+	 * Width Point Edit dialog (`crates/tools/src/distort/width.rs`, MIT OR Apache-2.0).
+	 */
+	setWidthPoint(target: { nodeId: string; index?: number | null }, values: { t?: number; left?: number; right?: number }): VectorActionResult {
+		const node = this.getNode(target.nodeId);
+		if (node?.type !== 'path') return { ok: false, message: 'There is no such path.' };
+		const g = vectorStrokeWidthGeometry(node);
+		if (!g || !(g.unit > 0)) return { ok: false, message: 'The path has no visible stroke.' };
+		const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
+		const t = num(values.t);
+		const left = num(values.left);
+		const right = num(values.right);
+		const scale = (w: number | undefined) => (w === undefined ? undefined : Math.max(0, w) / g.unit);
+		const profile = sanitizeWidthProfile(node.strokeWidthProfile);
+		let points: VectorWidthPoint[];
+		let index: number;
+		const existing = target.index ?? null;
+		if (existing === null) {
+			if (t === undefined) return { ok: false, message: 'A new width point needs a position t.' };
+			if (profile.length >= VECTOR_WIDTH_PROFILE_MAX_POINTS) return { ok: false, message: 'The profile has too many width points.' };
+			({ points, index } = insertWidthPoint(profile.length ? profile : null, t, { left: scale(left), right: scale(right) }, { step: true }));
+		} else {
+			const p = profile[existing];
+			if (!p) return { ok: false, message: 'There is no such width point.' };
+			const sides = { left: scale(left) ?? p.left, right: scale(right) ?? p.right };
+			const tt = t === undefined ? p.t : Math.min(Math.max(t, 0), 1);
+			if (Math.abs(tt - p.t) <= VECTOR_WIDTH_SAME_T) {
+				points = setWidthPoint(profile, existing, sides);
+				index = existing;
+			} else {
+				// Free to pass its neighbours: take it out and put it back at its new place.
+				const rest = removeWidthPoints(profile, [existing]);
+				if (rest.length) ({ points, index } = insertWidthPoint(rest, tt, sides, { step: true }));
+				else {
+					points = [{ t: tt, ...sides }];
+					index = 0;
+				}
+			}
+		}
+		const subpath = this.widthEdit?.nodeId === node.id ? this.widthEdit.subpath : this.widthPoints.find((r) => r.nodeId === node.id)?.subpath ?? 0;
+		const edit = this.widthEdit;
+		this.change('Width Point', () => this.replaceNode(node.id, withStyle(node, { strokeWidthProfile: points })));
+		this.widthPoints = [{ nodeId: node.id, index, subpath }];
+		if (edit?.nodeId === node.id && (edit.index === existing || existing === null)) this.widthEdit = this.widthEditFor(node.id, subpath, index, null);
+		this.notify();
+		return { ok: true };
+	}
+
+	/**
+	 * Opens the width-point editor (what a double-click with the width tool does) on a width
+	 * point, or on a spot of a stroke (`t` without `index`: applying it adds a point there).
+	 * Returns false when the path has no visible stroke.
+	 */
+	openWidthPointEdit(target: { nodeId: string; subpath?: number; index?: number | null; t?: number }): boolean {
+		const edit = this.widthEditFor(target.nodeId, target.subpath ?? 0, target.index ?? null, target.t ?? null);
+		if (!edit) return false;
+		this.widthEdit = edit;
+		this.widthPoints = edit.index === null ? [] : [{ nodeId: edit.nodeId, index: edit.index, subpath: edit.subpath }];
+		this.notify();
+		return true;
+	}
+
+	/** Closes the width-point editor without changing anything. */
+	closeWidthPointEdit(): void {
+		if (!this.widthEdit) return;
+		this.widthEdit = null;
+		this.notify();
+	}
+
+	/** Applies `values` to the width point being edited (see `setWidthPoint`) and closes the editor. */
+	commitWidthPointEdit(values: { t?: number; left?: number; right?: number }): VectorActionResult {
+		const edit = this.widthEdit;
+		if (!edit) return { ok: false, message: 'No width point is being edited.' };
+		const r = this.setWidthPoint({ nodeId: edit.nodeId, index: edit.index }, edit.index === null ? { t: edit.t, ...values } : values);
+		if (r.ok) this.closeWidthPointEdit();
+		return r;
+	}
+
+	/** The editor's view of point `index` (or of the stroke at `t` when index is null) of `nodeId`. */
+	private widthEditFor(nodeId: string, subpath: number, index: number | null, t: number | null): VectorWidthPointEdit | null {
+		const node = this.getNode(nodeId);
+		if (node?.type !== 'path') return null;
+		const g = vectorStrokeWidthGeometry(node);
+		if (!g) return null;
+		const profile = sanitizeWidthProfile(node.strokeWidthProfile);
+		const p = index === null ? null : profile[index];
+		if (index !== null && !p) return null;
+		const tt = p ? p.t : Math.min(Math.max(t ?? 0, 0), 1);
+		const sides = p ?? widthProfileAt(profile.length ? profile : null, tt);
+		const sp = Math.min(Math.max(0, subpath), Math.max(0, node.subpaths.length - 1));
+		const at = strokePositionPoint(g.line, sp, tt);
+		const round = (v: number) => Math.round(v * 1e6) / 1e6;
+		const q = at ? applyMatrix(this.worldOf(nodeId), { x: at.point[0], y: at.point[1] }) : { x: 0, y: 0 };
+		const point = { x: round(q.x), y: round(q.y) };
+		return { nodeId, subpath: sp, index, t: round(tt), left: round(sides.left * g.unit), right: round(sides.right * g.unit), point };
 	}
 
 	/**
@@ -3098,15 +3282,23 @@ export class VectorEditorController {
 		}
 	}
 
-	private widthView() {
-		return { document: this.doc, selection: this.selection, tool: this.tool, hover: this.hover, interaction: this.interaction, selectedWidthPoint: this.widthPoint };
+	private widthView(): Pick<VectorEditorState, 'document' | 'selection' | 'tool' | 'hover' | 'interaction' | 'selectedWidthPoints'> {
+		return { document: this.doc, selection: this.selection, tool: this.tool, hover: this.hover, interaction: this.interaction, selectedWidthPoints: this.widthPoints };
 	}
 
 	/** The width point centre or side end under `screen` (width tool). */
 	private hitWidthHandle(screen: Vec2): { ref: VectorWidthPointRef & { part: 'center' | 'left' | 'right' } } | null {
+		const shown = this.hitWidthHandleIn(screen, this.widthView());
+		if (shown) return shown;
+		// The points of the stroke under the pointer, when no hover has shown them yet.
+		const spot = this.strokeSpotAt(this.screenToDocument(screen));
+		return spot && spot.nodeId !== this.hover?.nodeId ? this.hitWidthHandleIn(screen, { ...this.widthView(), hover: { nodeId: spot.nodeId } }) : null;
+	}
+
+	private hitWidthHandleIn(screen: Vec2, view: Pick<VectorEditorState, 'document' | 'selection' | 'tool' | 'hover' | 'interaction' | 'selectedWidthPoints'>): { ref: VectorWidthPointRef & { part: 'center' | 'left' | 'right' } } | null {
 		let best: { ref: VectorWidthPointRef & { part: 'center' | 'left' | 'right' } } | null = null;
 		let bestD = Infinity;
-		for (const h of getVectorWidthHandles(this.widthView())) {
+		for (const h of getVectorWidthHandles(view)) {
 			for (const [part, q] of [['center', h], ['left', h.left], ['right', h.right]] as const) {
 				const s = this.documentToScreen(q);
 				const d = Math.hypot(s.x - screen.x, s.y - screen.y);
@@ -3162,19 +3354,21 @@ export class VectorEditorController {
 		const nodeId = hit?.ref.nodeId ?? spot?.nodeId;
 		const node = nodeId ? this.getNode(nodeId) : undefined;
 		const g = node?.type === 'path' ? vectorStrokeWidthGeometry(node) : null;
+		if (this.widthEdit) this.widthEdit = null;
 		if (!node || node.type !== 'path' || !g) {
-			if (this.widthPoint) {
-				this.widthPoint = null;
-				this.notify();
-			}
+			// A click away from strokes deselects (Shift keeps the selection).
+			if (!input.shift) this.widthPoints = [];
+			this.notify();
 			return;
 		}
 		const before = this.snapshot();
 		const local = this.toLocal(node.id, p);
 		let profile: VectorWidthPoint[];
 		let ref: VectorWidthPointRef;
-		let mode: 'width' | 'move' = 'width';
+		let mode: 'width' | 'move' | 'copy' = 'width';
 		let side: 'both' | 'left' | 'right' = 'both';
+		let group: number[] = [];
+		let shift = false;
 		let t: number;
 		let subpath: number;
 		if (hit) {
@@ -3182,8 +3376,21 @@ export class VectorEditorController {
 			ref = { nodeId: node.id, index: hit.ref.index, subpath: hit.ref.subpath };
 			t = profile[ref.index]?.t ?? 0;
 			subpath = hit.ref.subpath;
-			if (hit.ref.part === 'center') mode = 'move';
+			if (hit.ref.part === 'center') mode = input.alt && profile.length < VECTOR_WIDTH_PROFILE_MAX_POINTS ? 'copy' : 'move';
 			else if (input.alt) side = hit.ref.part;
+			const same = this.widthPoints.length > 0 && this.widthPoints[0].nodeId === node.id;
+			const selected = same && this.widthPoints.some((r) => r.index === ref.index);
+			if (input.shift && mode !== 'copy') {
+				// Shift-click adds the point to the selection, or takes it out (and drags nothing).
+				if (selected) {
+					this.widthPoints = this.widthPoints.filter((r) => r.index !== ref.index);
+					this.notify();
+					return;
+				}
+				this.widthPoints = same ? [...this.widthPoints, ref] : [ref];
+				shift = true;
+			} else if (mode === 'copy' || !selected) this.widthPoints = [ref];
+			if (mode !== 'copy') group = this.widthPoints.filter((r) => r.index !== ref.index).map((r) => r.index);
 		} else {
 			const near = nearestStrokePosition(g.line, [local.x, local.y])!;
 			const inserted = insertWidthPoint(strokeWidthProfileOf(node), near.t);
@@ -3192,17 +3399,21 @@ export class VectorEditorController {
 			t = near.t;
 			ref = { nodeId: node.id, index: inserted.index, subpath };
 			if (input.alt) side = near.side;
+			this.widthPoints = [ref];
 		}
 		const at = strokePositionPoint(g.line, subpath, t);
 		if (!at) return;
 		const base = { ...this.doc, nodes: mapTree(this.doc.nodes, (n) => (n.id === node.id ? { ...(n as VectorPathNode), strokeWidthProfile: profile } : n)) };
 		this.doc = base;
-		this.widthPoint = { nodeId: node.id, index: ref.index, subpath };
 		this.drag = {
 			kind: 'width',
 			ref,
 			mode,
 			side,
+			source: ref.index,
+			group,
+			shift,
+			renumber: null,
 			origin: { x: at.point[0], y: at.point[1] },
 			normal: { x: at.tangent[1], y: -at.tangent[0] },
 			unit: g.unit,
@@ -3216,6 +3427,32 @@ export class VectorEditorController {
 		const w = profile[ref.index];
 		this.interaction = { type: 'width', ref, mode, width: (w.left + w.right) * g.unit };
 		this.notify(!hit);
+	}
+
+	/**
+	 * A width-tool slide to `t` on the dragged point's subpath lands exactly on another width
+	 * point (not `skip`) within the pick distance on screen: dropping a point onto another makes
+	 * a discontinuous point (two points at one `t`, the width steps there).
+	 */
+	private snapWidthT(drag: Extract<Drag, { kind: 'width' }>, node: VectorPathNode, line: BezierPath, t: number, skip: number): number {
+		const m = this.worldOf(node.id, drag.base);
+		const at = strokePositionPoint(line, drag.ref.subpath, t);
+		if (!at) return t;
+		const here = this.documentToScreen(applyMatrix(m, { x: at.point[0], y: at.point[1] }));
+		let best = t;
+		let bestD = this.hitRadius;
+		drag.profile.forEach((w, i) => {
+			if (i === skip || drag.group.includes(i)) return;
+			const q = strokePositionPoint(line, drag.ref.subpath, w.t);
+			if (!q) return;
+			const s = this.documentToScreen(applyMatrix(m, { x: q.point[0], y: q.point[1] }));
+			const d = Math.hypot(s.x - here.x, s.y - here.y);
+			if (d <= bestD) {
+				best = w.t;
+				bestD = d;
+			}
+		});
+		return best;
 	}
 
 	/** The nearest outline point of any visible, unlocked path within the pick distance of document point `p`. */
@@ -3725,20 +3962,38 @@ export class VectorEditorController {
 				drag.moved = true;
 				const node = findVectorNode(drag.base.nodes, drag.ref.nodeId) as VectorPathNode;
 				const local = this.toLocal(node.id, p, drag.base);
+				const src = drag.profile[drag.source];
 				let profile: VectorWidthPoint[];
-				if (drag.mode === 'move') {
+				let index = drag.source;
+				if (drag.mode !== 'width') {
 					const g = vectorStrokeWidthGeometry(node);
 					const near = g ? nearestStrokePosition(g.line, [local.x, local.y], drag.ref.subpath) : null;
-					if (!near) return;
-					profile = setWidthPoint(drag.profile, drag.ref.index, { t: near.t });
+					if (!g || !near) return;
+					const t = drag.group.length ? near.t : this.snapWidthT(drag, node, g.line, near.t, drag.source);
+					if (drag.mode === 'copy') {
+						// The source stays; a copy of it slides (and may pass other points).
+						({ points: profile, index } = insertWidthPoint(drag.profile, t, { left: src.left, right: src.right }, { step: true }));
+					} else if (drag.group.length) {
+						const shifted = shiftWidthPoints(drag.profile, [drag.source, ...drag.group], t - src.t);
+						profile = shifted.points;
+						drag.renumber = shifted.renumber;
+						index = shifted.renumber.get(drag.source) ?? drag.source;
+					} else profile = setWidthPoint(drag.profile, drag.source, { t });
 				} else {
 					const off = ((local.x - drag.origin.x) * drag.normal.x + (local.y - drag.origin.y) * drag.normal.y) / drag.unit;
 					const patch =
 						drag.side === 'both' ? { left: Math.abs(off), right: Math.abs(off) } : drag.side === 'left' ? { left: Math.max(0, off) } : { right: Math.max(0, -off) };
-					profile = setWidthPoint(drag.profile, drag.ref.index, patch);
+					profile = setWidthPoint(drag.profile, drag.source, patch);
+					if (drag.group.length) {
+						// Every selected point widens by as much as the dragged one.
+						const dl = profile[drag.source].left - src.left;
+						const dr = profile[drag.source].right - src.right;
+						for (const i of drag.group) profile = setWidthPoint(profile, i, { left: Math.max(0, drag.profile[i].left + dl), right: Math.max(0, drag.profile[i].right + dr) });
+					}
 				}
 				this.doc = { ...drag.base, nodes: mapTree(drag.base.nodes, (n) => (n.id === node.id ? { ...(n as VectorPathNode), strokeWidthProfile: profile } : n)) };
-				const w = profile[drag.ref.index];
+				drag.ref = { ...drag.ref, index };
+				const w = profile[index];
 				this.interaction = { type: 'width', ref: drag.ref, mode: drag.mode, width: (w.left + w.right) * drag.unit };
 				this.notify(true);
 				return;
@@ -3892,13 +4147,25 @@ export class VectorEditorController {
 				return;
 			}
 			case 'width': {
-				if (drag.moved) return this.commit(drag.mode === 'move' ? 'Move Width Point' : 'Width Point', drag.before);
-				// A click adds nothing; on a width point it selects it.
+				if (drag.moved) {
+					const several = drag.group.length > 0;
+					if (drag.mode === 'copy') this.widthPoints = [drag.ref];
+					else if (drag.mode === 'move' && several) {
+						// Points moved together stay selected (re-sorting may renumber them).
+						this.widthPoints = [drag.source, ...drag.group].map((i) => ({ ...drag.ref, index: drag.renumber?.get(i) ?? i }));
+					} else if (!several) this.widthPoints = [drag.ref];
+					const label = drag.mode === 'copy' ? 'Copy Width Point' : drag.mode === 'move' ? (several ? 'Move Width Points' : 'Move Width Point') : several ? 'Width Points' : 'Width Point';
+					return this.commit(label, drag.before);
+				}
+				// A click adds nothing; on a width point it selects it (just it, among several selected).
 				if (drag.created) {
 					this.doc = drag.before.doc;
-					this.widthPoint = null;
+					this.widthPoints = [];
 					this.notify(true);
-				} else this.notify();
+				} else {
+					if (!drag.shift && drag.group.length) this.widthPoints = [drag.ref];
+					this.notify();
+				}
 				return;
 			}
 			case 'builder':
@@ -3990,7 +4257,10 @@ export class VectorEditorController {
 		this.restore(drag.before);
 	}
 
-	/** Double click: select tool enters path editing, direct tool toggles an anchor or adds one. */
+	/**
+	 * Double click: select tool enters path editing, direct tool toggles an anchor or adds one,
+	 * width tool opens the width-point editor (`widthPointEdit`).
+	 */
 	doubleClick(screen: Vec2): void {
 		const p = this.screenToDocument(screen);
 		if (this.tool === 'select') {
@@ -4016,6 +4286,17 @@ export class VectorEditorController {
 				const seg = node ? nearestSegment(node, this.toLocal(id, p)) : null;
 				if (seg && seg.distance <= this.tolerance()) this.insertAnchorAt(id, p);
 			}
+			return;
+		}
+		if (this.tool === 'width') {
+			// Width Point Edit: on a width point, or on a stroke (applying it adds a point there).
+			const hit = this.hitWidthHandle(screen);
+			if (hit) {
+				this.openWidthPointEdit(hit.ref);
+				return;
+			}
+			const spot = this.strokeSpotAt(p);
+			if (spot) this.openWidthPointEdit({ nodeId: spot.nodeId, subpath: spot.subpath, t: spot.t });
 			return;
 		}
 		if (this.tool === 'pen') this.finishPath();
@@ -4080,8 +4361,9 @@ export class VectorEditorController {
 		switch (key) {
 			case 'Escape':
 				if (this.drag) this.cancelDrag();
-				else if (this.tool === 'width' && this.widthPoint) {
-					this.widthPoint = null;
+				else if (this.widthEdit) this.closeWidthPointEdit();
+				else if (this.tool === 'width' && this.widthPoints.length) {
+					this.widthPoints = [];
 					this.notify();
 				}
 				else if (this.pen) this.finishPath();
@@ -4105,7 +4387,7 @@ export class VectorEditorController {
 				return false;
 			case 'Delete':
 			case 'Backspace':
-				if (this.tool === 'width' && this.widthPoint) return this.removeWidthPoint(this.widthPoint).ok;
+				if (this.tool === 'width' && this.widthPoints.length) return this.removeWidthPoints().ok;
 				if (this.pen) {
 					const node = this.getNode(this.pen.nodeId) as VectorPathNode;
 					const sp = node.subpaths[this.pen.subpath];
