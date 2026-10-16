@@ -1179,6 +1179,24 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: `render.ts` already imports `vectorPaintToSvg` from `svg.ts`, and the controller imports `svg.ts` for `toSvg` / `loadSvg`.
 - **Solution / Workaround**: Keep helpers both need in `svg.ts` (or lower: `stroke.ts`, `corners.ts`, `geometry.ts`), e.g. `vectorStrokeSvgParts` and the `VectorRenderStrokeParts` type, and import them into `render.ts`. `stroke.ts` and `corners.ts` import only path ops and types, so `geometry.ts` can use them.
 
+### [core/vector] Width Handles Only Hit-Test on Paths the Overlay Already Shows
+
+- **Issue / Symptom**: A width-tool press or double-click on a width point added a new point (or opened the editor on a stroke spot) instead of grabbing the existing one, when no pointer move had hovered the path first (tests, touch, a double-click straight after a tool switch).
+- **Root Cause**: `getVectorWidthHandles` lists the points of the hovered, selected and dragged paths only, and `hitWidthHandle` searched that list.
+- **Solution / Workaround**: `hitWidthHandle` falls back to the points of the stroke under the pointer (`strokeSpotAt`) when the shown ones miss. Keep any new width gesture going through it rather than `getVectorWidthHandles(state)` directly.
+
+### [core/vector] Moving Several Width Points Re-Sorts the Profile and Renumbers Them
+
+- **Issue / Symptom**: After a multi-point move (or a copy, or `setWidthPoint` with a new `t`) the selection pointed at the wrong points, or a step's two halves swapped.
+- **Root Cause**: Width points are addressed by index into a profile kept sorted by `t`; a group move or a copy can pass other points. `setWidthPoint` from `width.ts` clamps a single point between its neighbours to keep indices stable, but group moves and the numeric editor deliberately don't.
+- **Solution / Workaround**: Sort stably with the old index as the tie-break and carry an old → new map (`shiftWidthPoints` in `controller.ts`, `drag.renumber`); insert copies and moved points with `insertWidthPoint(…, { step: true })` and use the returned index. Undo restores the profile but not the selection, so `restore` drops selected refs whose index no longer exists and closes the width-point editor.
+
+### [react|svelte/vector] HTML Inside the Canvas `<svg>` Must Stop Its Events
+
+- **Issue / Symptom**: Typing Delete in the width-point editor deleted width points, clicking it started a width drag, and copying from its inputs copied the drawing.
+- **Root Cause**: The editor lives in a `<foreignObject>` inside the canvas `<svg>`, whose `pointerdown` (focus + pointer capture), `keydown`, `dblclick` and clipboard handlers see every bubbling event. `isVectorTextTarget` only covers keys typed into text fields, not buttons.
+- **Solution / Workaround**: `VectorWidthPointEditor` stops propagation of pointer, double-click, key and clipboard events on its `<form>` (Svelte's delegated handlers honour `stopPropagation` too) and hands focus back to the closest `<svg>` when it closes.
+
 ### [core/vector] Shape Builder Edges Run Between Junctions, Not Anchors, and Cutting One Flattens Live Corners
 
 - **Issue / Symptom**: Alt-erasing what looks like one side of a rectangle can take two sides (and the corner between them); a cut path loses its live corner radii; and a filled open path's erased edge can bring back its invisible closing segment.

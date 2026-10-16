@@ -338,6 +338,55 @@ describe("variable-width strokes (React)", () => {
     expect((c.getNode(line) as any).strokeWidthProfile).toHaveLength(2);
   });
 
+  it("Shift-selects, Alt-copies and edits width points numerically", async () => {
+    const c = make();
+    const profile = [0, 0.25, 0.5, 0.75, 1].map((t) => ({ t, left: 1, right: 1 }));
+    const line = c.addPath("M0 200 L200 200", { stroke: "#000", strokeWidth: 10, strokeWidthProfile: profile });
+    await act(async () => root.render(<VectorCanvas controller={c} fitOnMount={false} />));
+    const svg = q("svg");
+    const ts = () => (c.getNode(line) as any).strokeWidthProfile.map((p: any) => Math.round(p.t * 1000) / 1000);
+    key(svg, "w");
+    pointer(svg, "pointerdown", 50, 200);
+    pointer(svg, "pointerup", 50, 200);
+    pointer(svg, "pointerdown", 150, 200, { shiftKey: true });
+    pointer(svg, "pointerup", 150, 200, { shiftKey: true });
+    expect(qa("[data-vector-width-point][data-selected]")).toHaveLength(2);
+    // Both move with the one dragged; Delete removes both.
+    pointer(svg, "pointerdown", 50, 200);
+    pointer(svg, "pointermove", 70, 200);
+    pointer(svg, "pointerup", 70, 200);
+    expect(ts()).toEqual([0, 0.35, 0.5, 0.85, 1]);
+    key(svg, "Delete");
+    expect(ts()).toEqual([0, 0.5, 1]);
+    // Alt-drag the centre: a copy slides.
+    pointer(svg, "pointerdown", 100, 200, { altKey: true });
+    pointer(svg, "pointermove", 140, 200, { altKey: true });
+    pointer(svg, "pointerup", 140, 200, { altKey: true });
+    expect(ts()).toEqual([0, 0.5, 0.7, 1]);
+    // Double-click opens Width Point Edit beside the point.
+    act(() => void svg.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, clientX: 140, clientY: 200 })));
+    const pos = q<HTMLInputElement>('input[aria-label="Width point position"]');
+    expect(pos.value).toBe("70");
+    expect(q<HTMLInputElement>('input[aria-label="Width point left side"]').value).toBe("5");
+    expect(q("[data-vector-width-point-edit]").getAttribute("x")).toBe("152");
+    // Keys typed in it don't reach the canvas.
+    expect(key(pos, "Delete").defaultPrevented).toBe(false);
+    expect(ts()).toEqual([0, 0.5, 0.7, 1]);
+    await setValue(pos, "60");
+    await setValue(q<HTMLInputElement>('input[aria-label="Width point left side"]'), "15");
+    click(q('[data-vector-width-point-editor] button[type="submit"]'));
+    expect((c.getNode(line) as any).strokeWidthProfile[2]).toEqual({ t: 0.6, left: 3, right: 1 });
+    expect(qa("[data-vector-width-point-editor]")).toHaveLength(0);
+    // Escape closes it without changes.
+    act(() => void svg.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, clientX: 120, clientY: 200 })));
+    const left = q<HTMLInputElement>('input[aria-label="Width point left side"]');
+    await setValue(left, "40");
+    key(left, "Escape");
+    expect(qa("[data-vector-width-point-editor]")).toHaveLength(0);
+    expect((c.getNode(line) as any).strokeWidthProfile[2]).toEqual({ t: 0.6, left: 3, right: 1 });
+    expect(c.getState().tool).toBe("width");
+  });
+
   it("records pen pressure on pencil strokes", async () => {
     const c = make();
     await act(async () => root.render(<VectorCanvas controller={c} fitOnMount={false} />));

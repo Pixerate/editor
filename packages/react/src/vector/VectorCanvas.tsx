@@ -13,6 +13,7 @@ import {
   type SvgGradientDef,
 } from '@pixerate/editor/vector';
 import { useVectorEditorState } from './useVectorEditor';
+import { VectorWidthPointEditor } from './VectorWidthPointEditor';
 
 export interface VectorCanvasProps {
   controller: VectorEditorController;
@@ -208,6 +209,8 @@ export function VectorCanvas({
   const hs = THEME.transformHandleSize;
   const as = THEME.anchorSize;
   const box = overlay.selectionBox;
+  const edit = state.widthPointEdit;
+  const editAt = edit && { x: edit.point.x * state.viewport.zoom + state.viewport.x, y: edit.point.y * state.viewport.zoom + state.viewport.y };
 
   return (
     <svg
@@ -416,6 +419,12 @@ export function VectorCanvas({
           </text>
         )}
       </g>
+      {edit && editAt && (
+        // Width Point Edit (double-click with the width tool), beside the point.
+        <foreignObject data-vector-width-point-edit="" x={editAt.x + 12} y={editAt.y + 12} width={180} height={140} style={{ overflow: 'visible' }}>
+          <VectorWidthPointEditor key={`${edit.nodeId}:${edit.index}:${edit.t}`} controller={controller} edit={edit} accentColor={accentColor} />
+        </foreignObject>
+      )}
     </svg>
   );
 }

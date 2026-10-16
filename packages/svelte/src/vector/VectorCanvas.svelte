@@ -17,6 +17,7 @@
   } from '@pixerate/editor/vector';
   import VectorGradientDefs from './VectorGradientDefs.svelte';
   import VectorSceneNodes from './VectorSceneNodes.svelte';
+  import VectorWidthPointEditor from './VectorWidthPointEditor.svelte';
   import { vectorStateOf } from './subscribe.svelte.js';
 
   interface Props {
@@ -54,6 +55,8 @@
   const scene = $derived(getVectorSceneRenderData(view, { idPrefix }));
   const overlay = $derived(getVectorOverlayRenderData(view));
   const box = $derived(overlay.selectionBox);
+  const edit = $derived(view.widthPointEdit);
+  const editAt = $derived(edit ? { x: edit.point.x * view.viewport.zoom + view.viewport.x, y: edit.point.y * view.viewport.zoom + view.viewport.y } : null);
   const closing = $derived(view.tool === 'pen' ? overlay.anchors.find((a) => a.closes && a.hovered) : undefined);
   const hs = THEME.transformHandleSize;
   const as = THEME.anchorSize;
@@ -337,4 +340,12 @@
       <text data-vector-status="" x="8" y="100%" dy="-8" font-size="11" fill={accentColor} style="font-family:system-ui,sans-serif">{overlay.status}</text>
     {/if}
   </g>
+  {#if edit && editAt}
+    <!-- Width Point Edit (double-click with the width tool), beside the point. -->
+    <foreignObject data-vector-width-point-edit="" x={editAt.x + 12} y={editAt.y + 12} width="180" height="140" style="overflow:visible">
+      {#key `${edit.nodeId}:${edit.index}:${edit.t}`}
+        <VectorWidthPointEditor {controller} {edit} {accentColor} />
+      {/key}
+    </foreignObject>
+  {/if}
 </svg>

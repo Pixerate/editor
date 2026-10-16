@@ -98,11 +98,20 @@ export function vectorStrokeLineArea(parts: Pick<VectorStrokeParts, 'line' | 'dr
 
 const capExtent = (style: VectorStyle, width: number) => (style.strokeLinecap === 'round' || style.strokeLinecap === 'square' ? width / 2 : 0);
 
-/** The weight of a head: the stroke width times its scale (at least 0.25). A head is 4 weights long and wide. */
+/**
+ * The weight of a head: the stroke's width just before it times the head's scale (at least
+ * 0.25). A head is 4 weights long and wide. On a variable-width stroke the width there is the
+ * profile's (the mean of its two sides at that end), floored at the stroke width, so a stroke
+ * that tapers to nothing still gets a full-size head and one that swells gets a bigger one.
+ */
 export function arrowheadWeight(style: VectorStyle, end: 'start' | 'end'): number {
 	const scale = end === 'start' ? style.startArrowScale : style.endArrowScale;
 	const s = typeof scale === 'number' && scale > 0 && Number.isFinite(scale) ? scale : 1;
-	return Math.max(0.25, (style.strokeWidth ?? 1) * s);
+	const width = style.strokeWidth ?? 1;
+	const profile = strokeWidthProfileOf(style);
+	const at = profile ? widthProfileAt(profile, end === 'start' ? 0 : 1) : null;
+	const here = at ? Math.max(width, (width * (at.left + at.right)) / 2) : width;
+	return Math.max(0.25, here * s);
 }
 
 /** Distance from the tip where the stroke ends, for a stroke whose cap reaches `cap` past its end. */
