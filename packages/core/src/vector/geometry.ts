@@ -2,6 +2,7 @@
  * Vector path geometry: anchors and handles to Bézier paths and back, bounds, hit-testing,
  * affine transforms, segment splitting, anchor-type conversion and shape factories.
  */
+import { isVectorGradient, transformVectorPaint } from './gradient.js';
 import type { Point } from '../canvas/types.js';
 import {
 	bezierPathBounds,
@@ -20,6 +21,7 @@ import {
 import { expandVectorCorners, setSubpathCorners } from './corners.js';
 import { hitTestVectorStroke, vectorStrokeOutlinePath } from './stroke.js';
 import { mirrorWidthProfile } from './width.js';
+import { expandVectorAppearance, hasOwnVectorAppearance, transformVectorEffects, vectorAppearanceOutline } from './appearance.js';
 import type {
 	VectorAnchor,
 	VectorAnchorType,
@@ -118,9 +120,9 @@ export function subpathsToBezier(subpaths: readonly VectorSubpath[], options: { 
 	return out;
 }
 
-/** The node's outline as Bézier commands. Groups have none. */
+/** The node's outline as Bézier commands, as drawn (path effects applied). Groups have none. */
 export function vectorNodeToBezier(node: VectorNode): BezierPath {
-	return node.type === 'path' ? subpathsToBezier(node.subpaths) : [];
+	return node.type === 'path' ? vectorAppearanceOutline(node) : [];
 }
 
 /** SVG path data (`d`) of a path node or subpaths. */
@@ -263,10 +265,13 @@ export function nodeMatrix(node: VectorNode): AffineMatrix {
 	return node.transform ?? IDENTITY_MATRIX;
 }
 
-/** A path node's outline in the space `parent` maps to (default: its parent's space). */
-export function vectorPathWorldBezier(node: VectorPathNode, parent: AffineMatrix = IDENTITY_MATRIX): BezierPath {
+/**
+ * A path node's outline in the space `parent` maps to (default: its parent's space), as drawn:
+ * live corners cut and path effects applied (`{ effects: false }`: the stored path only).
+ */
+export function vectorPathWorldBezier(node: VectorPathNode, parent: AffineMatrix = IDENTITY_MATRIX, options: { effects?: boolean } = {}): BezierPath {
 	const m = multiplyMatrices(nodeMatrix(node), parent);
-	const path = subpathsToBezier(node.subpaths);
+	const path = options.effects === false || !hasOwnVectorAppearance(node) ? subpathsToBezier(node.subpaths) : vectorAppearanceOutline(node);
 	return isIdentityMatrix(m) ? path : transformBezierPath(path, m);
 }
 
@@ -276,6 +281,7 @@ export function vectorPathWorldBezier(node: VectorPathNode, parent: AffineMatrix
  * the node has no points.
  */
 export function vectorNodeBounds(node: VectorNode, parent: AffineMatrix = IDENTITY_MATRIX): VectorBounds | null {
+	node = expandVectorAppearance(node);
 	if (node.type === 'group') {
 		const m = multiplyMatrices(nodeMatrix(node), parent);
 		return unionBounds(node.children.map((c) => vectorNodeBounds(c, m)));
@@ -316,16 +322,27 @@ export function boundsFromPoints(a: Vec2, b: Vec2): VectorBounds {
 // Hit-testing
 // ---------------------------------------------------------------------------
 
+/** Options of `hitTestVectorNode`. */
+export interface VectorHitTestOptions {
+	/**
+	 * Live groups (live booleans or groups with effects) hit by their children as stored rather
+	 * than by what they draw: the groups being edited.
+	 */
+	entered?: ReadonlySet<string>;
+}
+
 /**
- * Whether `p` hits a node: inside its fill (when it has one), on its stroke as drawn (its
- * alignment and arrowheads respected) or within `tolerance` of either. A group is hit when
- * any visible child is.
+ * Whether `p` hits a node as drawn (path effects and live booleans applied): inside its fill
+ * (when it has one), on its stroke (its alignment and arrowheads respected) or within
+ * `tolerance` of either. A group is hit when any visible child is.
  */
-export function hitTestVectorNode(node: VectorNode, p: Vec2, tolerance = 0, parent: AffineMatrix = IDENTITY_MATRIX): boolean {
+export function hitTestVectorNode(node: VectorNode, p: Vec2, tolerance = 0, parent: AffineMatrix = IDENTITY_MATRIX, options: VectorHitTestOptions = {}): boolean {
 	if (node.visible === false) return false;
+	// Plain groups recurse as stored, so an entered live group deeper down still hits by its children.
+	if (!(node.type === 'group' && (!hasOwnVectorAppearance(node) || options.entered?.has(node.id)))) node = expandVectorAppearance(node);
 	if (node.type === 'group') {
 		const m = multiplyMatrices(nodeMatrix(node), parent);
-		return node.children.some((c) => hitTestVectorNode(c, p, tolerance, m));
+		return node.children.some((c) => hitTestVectorNode(c, p, tolerance, m, options));
 	}
 	const path = vectorPathWorldBezier(node, parent);
 	if (path.length === 0) return false;
@@ -345,11 +362,11 @@ export function vectorStrokeOutline(node: VectorPathNode, parent: AffineMatrix =
 }
 
 /** The topmost node hit by `p` (skipping hidden and locked ones), or null. */
-export function hitTestVectorNodes(nodes: readonly VectorNode[], p: Vec2, tolerance = 0): VectorNode | null {
+export function hitTestVectorNodes(nodes: readonly VectorNode[], p: Vec2, tolerance = 0, options: VectorHitTestOptions = {}): VectorNode | null {
 	for (let i = nodes.length - 1; i >= 0; i--) {
 		const node = nodes[i];
 		if (node.visible === false || node.locked) continue;
-		if (hitTestVectorNode(node, p, tolerance)) return node;
+		if (hitTestVectorNode(node, p, tolerance, IDENTITY_MATRIX, options)) return node;
 	}
 	return null;
 }
@@ -458,27 +475,41 @@ export function decomposeRigid(m: AffineMatrix): { rigid: AffineMatrix; residual
 	};
 }
 
+function mapAnchor(a: VectorAnchor, m: AffineMatrix): VectorAnchor {
+	const p = applyMatrix(m, a);
+	const next: VectorAnchor = { x: p.x, y: p.y };
+	if (a.in) next.in = applyMatrix(m, a.in);
+	if (a.out) next.out = applyMatrix(m, a.out);
+	if (a.type) next.type = a.type;
+	if (a.corner) next.corner = { ...a.corner };
+	return next;
+}
+
 /** Every anchor and handle mapped through `m` (the node's own `transform` is untouched). */
 function bakeIntoGeometry<T extends VectorNode>(node: T, m: AffineMatrix): T {
 	if (isIdentityMatrix(m)) return node;
-	if (node.type === 'group') return { ...node, children: node.children.map((c) => transformVectorNode(c, m)) };
+	if (node.effects?.length) node = { ...node, effects: transformVectorEffects(node.effects, m, node) } as T;
+	if (node.type === 'group') {
+		const group = node as VectorGroupNode;
+		const children = group.children.map((c) => transformVectorNode(c, m));
+		// A blend's replaced spine lives in the group's space too.
+		const spine = group.blend?.spine;
+		if (!spine) return { ...group, children } as T;
+		const moved = { closed: spine.closed, anchors: spine.anchors.map((a) => mapAnchor(a, m)) };
+		return { ...group, children, blend: { ...group.blend, spine: moved } } as T;
+	}
 	const path = node as VectorPathNode;
 	// A mirror swaps the sides of a variable-width stroke (the path still runs the same way).
 	const mirrored = m[0] * m[3] - m[1] * m[2] < 0 && path.strokeWidthProfile?.length;
 	return {
 		...path,
 		...(mirrored ? { strokeWidthProfile: mirrorWidthProfile(path.strokeWidthProfile!) } : {}),
+		// Gradients in the node's own space move with its geometry.
+		...(isVectorGradient(path.fill) ? { fill: transformVectorPaint(path.fill, m) } : {}),
+		...(isVectorGradient(path.stroke) ? { stroke: transformVectorPaint(path.stroke, m) } : {}),
 		subpaths: path.subpaths.map((sp) => ({
 			closed: sp.closed,
-			anchors: sp.anchors.map((a) => {
-				const p = applyMatrix(m, a);
-				const next: VectorAnchor = { x: p.x, y: p.y };
-				if (a.in) next.in = applyMatrix(m, a.in);
-				if (a.out) next.out = applyMatrix(m, a.out);
-				if (a.type) next.type = a.type;
-				if (a.corner) next.corner = { ...a.corner };
-				return next;
-			})
+			anchors: sp.anchors.map((a) => mapAnchor(a, m))
 		}))
 	} as T;
 }

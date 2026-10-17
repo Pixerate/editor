@@ -11,6 +11,8 @@ import {
   type VectorRenderNode,
   type VectorRenderPath,
   type SvgGradientDef,
+  type VectorPaintDef,
+  type VectorRenderGradientAnnotator,
 } from '@pixerate/editor/vector';
 import { useVectorEditorState } from './useVectorEditor';
 import { VectorWidthPointEditor } from './VectorWidthPointEditor';
@@ -31,24 +33,85 @@ export interface VectorCanvasProps {
   'aria-label'?: string;
 }
 
-/** Renders `<linearGradient>` / `<radialGradient>` descriptors. */
-export function VectorGradientDefs({ defs }: { defs: readonly SvgGradientDef[] }) {
+function GradientElement({ def }: { def: SvgGradientDef }) {
+  const stops = def.stops.map((s, i) => <stop key={i} offset={s.offset} stopColor={s.stopColor} stopOpacity={s.stopOpacity} />);
+  return def.type === 'radial' ? (
+    <radialGradient id={def.id} {...(def.attrs as any)}>
+      {stops}
+    </radialGradient>
+  ) : (
+    <linearGradient id={def.id} {...(def.attrs as any)}>
+      {stops}
+    </linearGradient>
+  );
+}
+
+/**
+ * Renders paint servers: `<linearGradient>` / `<radialGradient>` descriptors and patterns of
+ * gradient tiles (conic, diamond and stroke-mode gradients).
+ */
+export function VectorGradientDefs({ defs }: { defs: readonly VectorPaintDef[] }) {
   if (!defs.length) return null;
   return (
     <defs>
-      {defs.map((def) => {
-        const stops = def.stops.map((s, i) => <stop key={i} offset={s.offset} stopColor={s.stopColor} stopOpacity={s.stopOpacity} />);
-        return def.type === 'radial' ? (
-          <radialGradient key={def.id} id={def.id} {...(def.attrs as any)}>
-            {stops}
-          </radialGradient>
+      {defs.map((def) =>
+        def.type === 'pattern' ? (
+          <pattern key={def.id} id={def.id} {...(def.attrs as any)}>
+            {def.gradients.map((g) => (
+              <GradientElement key={g.id} def={g} />
+            ))}
+            {def.tiles.map((t, i) => (
+              <path key={i} d={t.d} fill={t.fill} />
+            ))}
+          </pattern>
         ) : (
-          <linearGradient key={def.id} id={def.id} {...(def.attrs as any)}>
-            {stops}
-          </linearGradient>
-        );
-      })}
+          <GradientElement key={def.id} def={def} />
+        )
+      )}
     </defs>
+  );
+}
+
+/** The gradient tool's annotator (screen space): extent, bar, handles, stop chips and midpoints. */
+export function VectorGradientAnnotator({ annotator: g, accentColor = THEME.accent }: { annotator: VectorRenderGradientAnnotator; accentColor?: string }) {
+  const r = THEME.handleRadius + 1.5;
+  const ring = (p: { x: number; y: number; hovered: boolean }, part: string, size = r) => (
+    <circle data-vector-gradient-handle={part} cx={p.x} cy={p.y} r={size + (p.hovered ? 1 : 0)} fill={THEME.handleFill} stroke={accentColor} strokeWidth={p.hovered ? 2 : 1} />
+  );
+  return (
+    <g data-vector-gradient-annotator={g.type}>
+      {g.extent && <path data-vector-gradient-extent="" d={g.extent} fill="none" stroke={accentColor} strokeDasharray="4 3" />}
+      <line x1={g.start.x} y1={g.start.y} x2={g.end.x} y2={g.end.y} stroke="#ffffff" strokeWidth={3} />
+      <line data-vector-gradient-bar="" x1={g.start.x} y1={g.start.y} x2={g.end.x} y2={g.end.y} stroke={accentColor} />
+      {g.aspect && <line x1={g.start.x} y1={g.start.y} x2={g.aspect.x} y2={g.aspect.y} stroke={accentColor} strokeDasharray="2 2" />}
+      {ring(g.start, 'start')}
+      <rect
+        data-vector-gradient-handle={g.end.handle}
+        x={g.end.x - r}
+        y={g.end.y - r}
+        width={2 * r}
+        height={2 * r}
+        fill={THEME.handleFill}
+        stroke={accentColor}
+        strokeWidth={g.end.hovered ? 2 : 1}
+      />
+      {g.aspect && ring(g.aspect, 'aspect', THEME.handleRadius)}
+      {g.focal && (
+        <g data-vector-gradient-handle="focal">
+          <circle cx={g.focal.x} cy={g.focal.y} r={THEME.handleRadius - 1 + (g.focal.hovered ? 1 : 0)} fill={accentColor} stroke={THEME.handleFill} />
+        </g>
+      )}
+      {g.midpoints.map((m) => (
+        <path key={m.index} data-vector-gradient-midpoint={m.index} d={vectorDiamondPath(m.x, m.y, 4 + (m.hovered ? 1 : 0))} fill={THEME.handleFill} stroke={accentColor} />
+      ))}
+      {g.stops.map((s) => (
+        <g key={s.index} data-vector-gradient-stop={s.index} data-selected={s.selected || undefined} opacity={g.removing && s.selected ? 0.35 : 1}>
+          <line x1={s.barX} y1={s.barY} x2={s.x} y2={s.y} stroke={accentColor} />
+          <rect x={s.x - 5} y={s.y - 5} width={10} height={10} rx={2} fill={s.color} fillOpacity={s.opacity} stroke={s.selected ? accentColor : '#ffffff'} strokeWidth={s.selected || s.hovered ? 2 : 1} />
+          <rect x={s.x - 6.5} y={s.y - 6.5} width={13} height={13} rx={3} fill="none" stroke={s.selected ? '#ffffff' : accentColor} />
+        </g>
+      ))}
+    </g>
   );
 }
 
@@ -271,7 +334,7 @@ export function VectorCanvas({
         ))}
         {overlay.penPreview && <path d={overlay.penPreview} stroke={accentColor} strokeDasharray="4 3" />}
         {box && (
-          <g data-vector-selection="" transform={box.transform || undefined}>
+          <g data-vector-selection="" data-free-distort={box.freeDistort || undefined} transform={box.transform || undefined}>
             <rect x={box.x} y={box.y} width={box.width} height={box.height} stroke={accentColor} />
             <line x1={box.x + box.width / 2} y1={box.y} x2={box.x + box.width / 2} y2={box.y - 24} stroke={accentColor} />
             {box.handles.map((h) =>
@@ -281,6 +344,29 @@ export function VectorCanvas({
                 <rect key={h.handle} data-handle={h.handle} x={h.x - hs / 2} y={h.y - hs / 2} width={hs} height={hs} fill={THEME.handleFill} stroke={accentColor} />
               ),
             )}
+          </g>
+        )}
+        {overlay.distort && (
+          <g data-vector-distort={overlay.distort.mode}>
+            <path d={overlay.distort.d} stroke={accentColor} />
+            {overlay.distort.corners.map((c, i) => (
+              <rect key={i} x={c.x - hs / 2} y={c.y - hs / 2} width={hs} height={hs} fill={THEME.handleFill} stroke={accentColor} />
+            ))}
+          </g>
+        )}
+        {overlay.envelope && (
+          <g data-vector-envelope-mesh={overlay.envelope.nodeId}>
+            <path data-vector-envelope-grid="" d={overlay.envelope.grid} stroke={accentColor} strokeOpacity={0.8} />
+            {overlay.envelope.handles.map((h) => (
+              <g key={h.index} data-vector-envelope-handle={h.index}>
+                <line x1={h.anchorX} y1={h.anchorY} x2={h.x} y2={h.y} stroke={accentColor} strokeOpacity={0.6} />
+                <circle cx={h.x} cy={h.y} r={THEME.handleRadius + (h.hovered || h.active ? 1 : 0)} fill={h.active ? accentColor : THEME.handleFill} stroke={accentColor} />
+              </g>
+            ))}
+            {overlay.envelope.anchors.map((a) => {
+              const size = as + (a.hovered || a.active ? 2 : 0);
+              return <rect key={a.index} data-vector-envelope-anchor={a.index} x={a.x - size / 2} y={a.y - size / 2} width={size} height={size} fill={a.active ? accentColor : THEME.handleFill} stroke={accentColor} />;
+            })}
           </g>
         )}
         {overlay.handles.map((h) => (
@@ -305,6 +391,33 @@ export function VectorCanvas({
             <circle cx={w.x} cy={w.y} r={1.5} fill={accentColor} />
           </g>
         ))}
+        {overlay.blend.spines.map((sp) => (
+          <g key={`blend:${sp.id}`} data-vector-blend-spine={sp.id} data-replaced={sp.replaced || undefined}>
+            <path d={sp.d} fill="none" stroke={accentColor} strokeDasharray="4 3" />
+            {sp.keys.map((k, i) => (
+              <circle key={i} cx={k.x} cy={k.y} r={THEME.handleRadius} fill={THEME.handleFill} stroke={accentColor} />
+            ))}
+          </g>
+        ))}
+        {overlay.blend.start && (
+          <g data-vector-blend-start="">
+            <path d={overlay.blend.start.d} fill="none" stroke={accentColor} strokeWidth={2} />
+            {overlay.blend.start.anchor && <circle cx={overlay.blend.start.anchor.x} cy={overlay.blend.start.anchor.y} r={THEME.handleRadius + 1} fill={accentColor} />}
+          </g>
+        )}
+        {overlay.blend.anchors.map((a, i) => (
+          <rect
+            key={`blend-anchor:${i}`}
+            data-vector-blend-anchor={i}
+            x={a.x - as / 2}
+            y={a.y - as / 2}
+            width={as}
+            height={as}
+            fill={a.hovered ? accentColor : THEME.handleFill}
+            stroke={accentColor}
+          />
+        ))}
+        {overlay.gradient && <VectorGradientAnnotator annotator={overlay.gradient} accentColor={accentColor} />}
         {overlay.widthSpot && (
           <g data-vector-width-spot="">
             <line x1={overlay.widthSpot.left.x} y1={overlay.widthSpot.left.y} x2={overlay.widthSpot.right.x} y2={overlay.widthSpot.right.y} stroke={accentColor} strokeDasharray="3 2" />

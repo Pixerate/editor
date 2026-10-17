@@ -573,6 +573,240 @@ describe("Pathfinder, Shape Builder and paint bucket (React)", () => {
   });
 });
 
+describe("Blend (React)", () => {
+  const pair = () =>
+    new VectorEditorController({
+      document: {
+        width: 400,
+        height: 300,
+        nodes: [
+          { id: "a", type: "path", fill: "#ff0000", stroke: null, subpaths: [rectSubpath({ x: 0, y: 0, width: 20, height: 20 })] },
+          { id: "b", type: "path", fill: "#0000ff", stroke: null, subpaths: [rectSubpath({ x: 200, y: 0, width: 20, height: 20 })] },
+          { id: "s", type: "path", fill: null, stroke: "#000000", subpaths: [{ closed: false, anchors: [{ x: 10, y: 200 }, { x: 110, y: 100 }, { x: 210, y: 200 }] }] },
+        ],
+      },
+      createId: () => `bl${++n}`,
+    });
+
+  it("toolbar makes a blend, edits its spacing, replaces its spine and expands it", async () => {
+    const c = pair();
+    await act(async () => root.render(<VectorToolbar controller={c} />));
+    const make = q<HTMLButtonElement>('[data-vector-blend-action="make"]');
+    expect(make.disabled).toBe(true);
+    expect(q<HTMLButtonElement>('[data-vector-blend-action="expand"]').disabled).toBe(true);
+    act(() => c.select(["a", "b"]));
+    click(make);
+    const id = c.getState().selection[0];
+    const blend = () => c.getNode(id) as any;
+    expect(blend().blend).toBeTruthy();
+    expect(blend().children.filter((k: any) => k.blendStep)).toHaveLength(5);
+    await setValue(q<HTMLInputElement>('input[aria-label="Blend steps"]'), "2");
+    expect(blend().children.filter((k: any) => k.blendStep)).toHaveLength(2);
+    await setValue(q<HTMLSelectElement>('select[aria-label="Blend spacing"]'), "distance");
+    expect(blend().blend.spacing).toBe("distance");
+    expect(q('input[aria-label="Blend distance"]')).toBeTruthy();
+    click(q('[data-vector-blend-action="orient"]'));
+    expect(blend().blend.orientToSpine).toBe(true);
+    expect(q('[data-vector-blend-action="orient"]').getAttribute("aria-pressed")).toBe("true");
+    act(() => c.select([id, "s"]));
+    click(q('[data-vector-blend-action="spine"]'));
+    expect(blend().blend.spine.anchors).toHaveLength(3);
+    expect(c.getNode("s")).toBeUndefined();
+    click(q('[data-vector-blend-action="expand"]'));
+    expect(blend().blend).toBeUndefined();
+    expect(c.getState().undoLabel).toBe("Expand Blend");
+  });
+
+  it("draws the spine and the Blend tool's first pick", async () => {
+    const c = pair();
+    const id = c.blend({ ids: ["a", "b"], steps: 3 })!;
+    await act(async () => root.render(<VectorCanvas controller={c} fitOnMount={false} />));
+    expect(qa("[data-vector-scene] path")).toHaveLength(6);
+    expect(q(`[data-vector-blend-spine="${id}"]`)).toBeTruthy();
+    expect(qa(`[data-vector-blend-spine="${id}"] circle`)).toHaveLength(2);
+    const svg = q("svg");
+    key(svg, "j");
+    expect(c.getState().tool).toBe("blend");
+    act(() => c.select([]));
+    pointer(svg, "pointermove", 10, 200);
+    expect(qa("[data-vector-blend-anchor]")).toHaveLength(3);
+    pointer(svg, "pointerdown", 10, 200);
+    pointer(svg, "pointerup", 10, 200);
+    expect(q("[data-vector-blend-start] circle")).toBeTruthy();
+    pointer(svg, "pointerdown", 100, 10);
+    expect(c.getState().blendStart).toBeNull();
+    expect(c.getState().undoLabel).toBe("Blend");
+  });
+});
+
+describe("path effects and live booleans (React)", () => {
+  const pair = () =>
+    new VectorEditorController({
+      document: {
+        width: 400,
+        height: 300,
+        nodes: [
+          { id: "a", type: "path", fill: "#ff0000", stroke: null, subpaths: [rectSubpath({ x: 0, y: 0, width: 100, height: 100 })] },
+          { id: "b", type: "path", fill: "#0000ff", stroke: null, subpaths: [rectSubpath({ x: 50, y: 50, width: 100, height: 100 })] },
+        ],
+      },
+      createId: () => `fx${++n}`,
+    });
+
+  it("adds, edits, toggles, reorders, removes and expands effects", async () => {
+    const c = pair();
+    c.select(["a"]);
+    await act(async () => root.render(<VectorStylePanel controller={c} />));
+    expect(q("[data-vector-effects]")).toBeTruthy();
+    expect(q<HTMLButtonElement>('button[aria-label="Expand Appearance"]').disabled).toBe(true);
+    await setValue(q<HTMLSelectElement>('select[aria-label="Add effect"]'), "zigzag");
+    const effects = () => c.getNode("a")!.effects ?? [];
+    expect(effects().map((e) => e.type)).toEqual(["zigzag"]);
+    expect(qa("[data-vector-effect]")).toHaveLength(1);
+    // A slider drag is one undo step.
+    const slider = q<HTMLInputElement>('input[aria-label="Zig Zag Size slider"]');
+    for (const v of ["7", "8", "9"]) await setValue(slider, v);
+    act(() => slider.dispatchEvent(new Event("pointerup", { bubbles: true })));
+    expect((effects()[0].params as any).size).toBe(9);
+    expect(q<HTMLInputElement>('input[aria-label="Zig Zag Size"]').value).toBe("9");
+    act(() => void c.undo());
+    expect((effects()[0].params as any).size).toBe(5);
+    act(() => void c.redo());
+    click(q('input[aria-label="Zig Zag Smooth"]'));
+    expect((effects()[0].params as any).smooth).toBe(true);
+    click(q('input[aria-label="Zig Zag on"]'));
+    expect(effects()[0].enabled).toBe(false);
+    await setValue(q<HTMLSelectElement>('select[aria-label="Add effect"]'), "repeater");
+    expect(effects().map((e) => e.type)).toEqual(["zigzag", "repeater"]);
+    await setValue(q<HTMLInputElement>('input[aria-label="Repeater Position x"]'), "150");
+    expect((effects()[1].params as any).position).toEqual({ x: 150, y: 0 });
+    click(q('button[aria-label="Move Repeater up"]'));
+    expect(effects().map((e) => e.type)).toEqual(["repeater", "zigzag"]);
+    click(q('button[aria-label="Remove Zig Zag"]'));
+    expect(effects().map((e) => e.type)).toEqual(["repeater"]);
+    expect(q<HTMLButtonElement>('button[aria-label="Expand Appearance"]').disabled).toBe(false);
+    click(q('button[aria-label="Expand Appearance"]'));
+    expect(c.getNode("a")!.type).toBe("group");
+    expect(c.getState().undoLabel).toBe("Expand Appearance");
+  });
+
+  it("renders effected geometry and live booleans", async () => {
+    const c = pair();
+    c.addEffect("repeater", { ids: ["a"], params: { copies: 3, position: { x: 120, y: 0 } } });
+    await act(async () => root.render(<VectorCanvas controller={c} fitOnMount={false} />));
+    expect(qa('[data-vector-scene] [data-vector-id^="a~fx"]')).toHaveLength(3);
+    act(() => void c.removeEffect("a", c.getNode("a")!.effects![0].id));
+    act(() => void c.booleanOp("subtract", { ids: ["a", "b"], live: true }));
+    const id = c.getState().selection[0];
+    const result = q(`[data-vector-scene] [data-vector-id="${id}"] path`);
+    expect(result.getAttribute("d")).toBe("M0 0L100 0L100 50L50 50L50 100L0 100Z");
+  });
+
+  it("toolbar makes live booleans", async () => {
+    const c = pair();
+    await act(async () => root.render(<VectorToolbar controller={c} />));
+    act(() => c.select(["a", "b"]));
+    click(q("[data-vector-live-boolean]"));
+    expect(q("[data-vector-live-boolean]").getAttribute("aria-pressed")).toBe("true");
+    click(q('button[aria-label="Union"]'));
+    const g = c.getNode(c.getState().selection[0]) as any;
+    expect(g.liveBoolean).toBe("union");
+    expect(g.children.map((k: any) => k.id)).toEqual(["a", "b"]);
+    click(q('button[aria-label="Exclude"]'));
+    expect((c.getNode(g.id) as any).liveBoolean).toBe("exclude");
+  });
+});
+
+describe("gradients (React)", () => {
+  const fillOf = (c: VectorEditorController) => (c.getNode("a") as VectorPathNode).fill as any;
+
+  it("renders conic patterns and the gradient tool's annotator, and drags its handles", async () => {
+    const c = make();
+    c.select(["a"]);
+    c.setGradient({ type: "conic", stops: [{ offset: 0, color: "#ff0000" }, { offset: 0.5, color: "#00ff00" }, { offset: 1, color: "#0000ff" }] });
+    await act(async () => root.render(<VectorCanvas controller={c} fitOnMount={false} />));
+    const pattern = q('pattern[id$="fill-a"]');
+    expect(pattern.getAttribute("patternUnits")).toBe("userSpaceOnUse");
+    expect(pattern.querySelectorAll("linearGradient").length).toBe(72);
+    expect(q('[data-vector-scene] path[data-vector-id="a"]').getAttribute("fill")).toBe(`url(#${pattern.id})`);
+    const svg = q("svg");
+    key(svg, "g");
+    expect(c.getState().tool).toBe("gradient");
+    expect(q('[data-vector-gradient-annotator="conic"]')).toBeTruthy();
+    expect(qa("[data-vector-gradient-stop]")).toHaveLength(3);
+    expect(qa("[data-vector-gradient-midpoint]")).toHaveLength(2);
+    expect(q('[data-vector-gradient-handle="radius"]')).toBeTruthy();
+    expect(q('[data-vector-gradient-handle="aspect"]')).toBeTruthy();
+    const a = c.getGradientAnnotator()!;
+    pointer(svg, "pointerdown", a.end.x, a.end.y);
+    pointer(svg, "pointermove", a.end.x + 10, a.end.y + 20);
+    pointer(svg, "pointerup", a.end.x + 20, a.end.y + 40);
+    expect(c.getGradientAnnotator()!.end.x).toBeCloseTo(a.end.x + 20);
+    expect(c.getState().undoLabel).toBe("Gradient Handle");
+    // Drag a stop off the bar: removed in one step.
+    const s = c.getGradientAnnotator()!.stops[1];
+    pointer(svg, "pointerdown", s.x, s.y);
+    pointer(svg, "pointermove", s.x, s.y + 70);
+    expect(q('[data-vector-status]').textContent).toBe("Release to delete the stop");
+    pointer(svg, "pointerup", s.x, s.y + 70);
+    expect(fillOf(c).stops).toHaveLength(2);
+    expect(qa("[data-vector-gradient-stop]")).toHaveLength(2);
+    // A diamond renders four quadrants.
+    act(() => void c.setGradient({ type: "diamond" }));
+    expect(q('pattern[id$="fill-a"]').querySelectorAll("path")).toHaveLength(4);
+  });
+
+  it("drags out a new gradient over a shape", async () => {
+    const c = make();
+    await act(async () => root.render(<VectorCanvas controller={c} fitOnMount={false} />));
+    const svg = q("svg");
+    key(svg, "g");
+    pointer(svg, "pointerdown", 10, 50);
+    pointer(svg, "pointermove", 50, 50);
+    pointer(svg, "pointerup", 90, 50);
+    expect(fillOf(c)).toMatchObject({ type: "linear", start: { x: 10, y: 50 }, end: { x: 90, y: 50 } });
+    expect(qa("linearGradient")).toHaveLength(1);
+    expect(q("[data-vector-gradient-bar]").getAttribute("x2")).toBe("90");
+  });
+
+  it("gradient editor edits type, stops, midpoints, colour space, spread, stroke mode and reverse", async () => {
+    const c = make();
+    c.select(["a"]);
+    await act(async () => root.render(<VectorStylePanel controller={c} />));
+    expect(q('[data-vector-gradient-editor="fill"]')).toBeTruthy();
+    expect(q("[data-vector-gradient-ramp]")).toBeNull();
+    await setValue(q<HTMLSelectElement>('select[aria-label="Gradient type"]'), "radial");
+    expect(fillOf(c)).toMatchObject({ type: "radial", stops: [{ offset: 0, color: "#ff0000" }, { offset: 1, color: "#ffffff" }] });
+    // Click the ramp: a stop at the middle (jsdom has no layout), selected.
+    click(q('[aria-label="Add gradient stop"]'));
+    expect(fillOf(c).stops.map((s: any) => s.offset)).toEqual([0, 0.5, 1]);
+    expect(q('[data-vector-gradient-stop="1"]').getAttribute("aria-pressed")).toBe("true");
+    await setValue(q<HTMLInputElement>('input[aria-label="Stop colour"]'), "#00ff00");
+    expect(fillOf(c).stops[1].color).toBe("#00ff00");
+    await setValue(q<HTMLInputElement>('input[aria-label="Stop midpoint"]'), "30");
+    expect(fillOf(c).stops[1].midpoint).toBeCloseTo(0.3);
+    await setValue(q<HTMLInputElement>('input[aria-label="Stop opacity"]'), "50");
+    expect(fillOf(c).stops[1].opacity).toBeCloseTo(0.5);
+    await setValue(q<HTMLInputElement>('input[aria-label="Stop position"]'), "25");
+    expect(fillOf(c).stops[1].offset).toBeCloseTo(0.25);
+    await setValue(q<HTMLSelectElement>('select[aria-label="Gradient interpolation"]'), "oklab");
+    await setValue(q<HTMLSelectElement>('select[aria-label="Gradient spread"]'), "reflect");
+    expect(fillOf(c)).toMatchObject({ interpolation: "oklab", spread: "reflect" });
+    click(q('button[aria-label="Reverse gradient"]'));
+    expect(fillOf(c).stops[0].color).toBe("#ffffff");
+    click(q('button[aria-label="Delete stop"]'));
+    expect(fillOf(c).stops).toHaveLength(2);
+    // The stroke: a gradient along it.
+    click(qa("[data-vector-gradient-editor] button").find((b) => b.textContent === "Stroke")!);
+    expect(q('[data-vector-gradient-editor="stroke"]')).toBeTruthy();
+    await setValue(q<HTMLSelectElement>('select[aria-label="Gradient type"]'), "linear");
+    await setValue(q<HTMLSelectElement>('select[aria-label="Gradient on stroke"]'), "along");
+    expect((c.getNode("a") as VectorPathNode).stroke).toMatchObject({ type: "linear", strokeMode: "along" });
+    await setValue(q<HTMLSelectElement>('select[aria-label="Gradient type"]'), "solid");
+    expect((c.getNode("a") as VectorPathNode).stroke).toBe("#000000");
+  });
+});
+
 describe("VectorEditor and hooks", () => {
   it("renders toolbar, canvas and style panel", async () => {
     const c = make();
@@ -611,5 +845,145 @@ describe("VectorEditor and hooks", () => {
     expect(controller.getState().document.nodes).toHaveLength(2);
     await act(async () => root.render(<div />));
     expect(registry.has("vector.addShape")).toBe(false);
+  });
+
+  it("keeps the History buttons in step under StrictMode", async () => {
+    let controller!: VectorEditorController;
+    function Host() {
+      controller = useVectorEditorController({ document: doc() });
+      return <VectorToolbar controller={controller} />;
+    }
+    await act(async () =>
+      root.render(
+        <React.StrictMode>
+          <Host />
+        </React.StrictMode>,
+      ),
+    );
+    const undo = () => q<HTMLButtonElement>('[role="group"][aria-label="History"] button[aria-label^="Undo"]');
+    const redo = () => q<HTMLButtonElement>('[role="group"][aria-label="History"] button[aria-label^="Redo"]');
+    expect(undo().disabled).toBe(true);
+    expect(redo().disabled).toBe(true);
+    await act(async () => void controller.addShape({ kind: "rect", x: 0, y: 0, width: 5, height: 5 }));
+    expect(undo().disabled).toBe(false);
+    expect(undo().getAttribute("aria-label")).toBe(`Undo ${controller.getState().undoLabel}`);
+    expect(redo().disabled).toBe(true);
+    click(undo());
+    expect(controller.getState().canRedo).toBe(true);
+    expect(undo().disabled).toBe(true);
+    expect(undo().getAttribute("aria-label")).toBe("Undo");
+    expect(redo().disabled).toBe(false);
+    expect(redo().getAttribute("aria-label")).toBe(`Redo ${controller.getState().redoLabel}`);
+  });
+});
+
+describe("distort and envelopes (React)", () => {
+  const envelopeOf = (c: VectorEditorController, id = "a") => (c.getNode(id)!.effects ?? []).find((e) => e.type === "envelope") as any;
+
+  it("makes, edits, releases and expands an envelope from the panel", async () => {
+    const c = make();
+    c.select(["a"]);
+    await act(async () => root.render(<VectorStylePanel controller={c} />));
+    expect(q("[data-vector-envelope]")).toBeTruthy();
+    expect(q<HTMLButtonElement>('button[aria-label="Release Envelope"]').disabled).toBe(true);
+    expect(q<HTMLButtonElement>('button[aria-label="Make with Top Object"]').disabled).toBe(true);
+    click(q('button[aria-label="Make with Warp"]'));
+    expect(envelopeOf(c).params).toMatchObject({ style: "arc", bend: 50 });
+    expect(q<HTMLButtonElement>('button[aria-label="Make with Warp"]').disabled).toBe(true);
+    await setValue(q<HTMLSelectElement>('select[aria-label="Envelope warp"]'), "flag");
+    expect(envelopeOf(c).params.style).toBe("flag");
+    // A slider drag is one undo step.
+    const slider = q<HTMLInputElement>('input[aria-label="Envelope Bend % slider"]');
+    for (const v of ["20", "30", "-40"]) await setValue(slider, v);
+    act(() => slider.dispatchEvent(new Event("pointerup", { bubbles: true })));
+    expect(envelopeOf(c).params.bend).toBe(-40);
+    expect(q<HTMLInputElement>('input[aria-label="Envelope Bend %"]').value).toBe("-40");
+    act(() => void c.undo());
+    expect(envelopeOf(c).params.bend).toBe(50);
+    act(() => void c.redo());
+    await setValue(q<HTMLInputElement>('input[aria-label="Envelope Horizontal distortion %"]'), "25");
+    expect(envelopeOf(c).params.horizontal).toBe(25);
+    await setValue(q<HTMLSelectElement>('select[aria-label="Envelope orientation"]'), "vertical");
+    expect(envelopeOf(c).params.orientation).toBe("vertical");
+    await setValue(q<HTMLInputElement>('input[aria-label="Envelope mesh rows"]'), "3");
+    expect(envelopeOf(c).params.rows).toBe(3);
+    // Switching to Mesh makes the preset an editable mesh of that size; the sliders go.
+    await setValue(q<HTMLSelectElement>('select[aria-label="Envelope warp"]'), "mesh");
+    expect(envelopeOf(c).params.mesh.vs).toHaveLength(4);
+    expect(q('input[aria-label="Envelope Bend % slider"]')).toBeNull();
+    click(q('button[aria-label="Expand Envelope"]'));
+    expect(envelopeOf(c)).toBeUndefined();
+    expect(c.getState().undoLabel).toBe("Expand Appearance");
+    act(() => void c.undo());
+    click(q('button[aria-label="Release Envelope"]'));
+    expect(envelopeOf(c)).toBeUndefined();
+    expect(c.getDocument().nodes).toHaveLength(2);
+  });
+
+  it("makes an envelope with a mesh of the chosen size, and with the top object", async () => {
+    const c = make();
+    c.addShape({ kind: "ellipse", x: -20, y: -20, width: 140, height: 140 });
+    c.select(["a", c.getDocument().nodes[1].id]);
+    await act(async () => root.render(<VectorStylePanel controller={c} />));
+    expect(q<HTMLButtonElement>('button[aria-label="Make with Top Object"]').disabled).toBe(false);
+    click(q('button[aria-label="Make with Top Object"]'));
+    expect(c.getDocument().nodes).toHaveLength(1);
+    expect(envelopeOf(c).params.style).toBe("mesh");
+    act(() => void c.undo());
+    act(() => c.select(["a"]));
+    await setValue(q<HTMLInputElement>('input[aria-label="Envelope mesh columns"]'), "3");
+    click(q('button[aria-label="Make with Mesh"]'));
+    expect(envelopeOf(c).params).toMatchObject({ style: "mesh", columns: 3, rows: 2 });
+  });
+
+  it("draws the envelope mesh with the Envelope tool and drags its anchors", async () => {
+    const c = make();
+    c.select(["a"]);
+    c.envelope({ style: "mesh", rows: 2, columns: 2 });
+    c.setTool("envelope");
+    await act(async () => root.render(<VectorCanvas controller={c} fitOnMount={false} />));
+    expect(q("[data-vector-envelope-mesh]").getAttribute("data-vector-envelope-mesh")).toBe("a");
+    expect(q("[data-vector-envelope-grid]").getAttribute("d")).toContain("C");
+    expect(qa("[data-vector-envelope-anchor]")).toHaveLength(9);
+    expect(qa("[data-vector-envelope-handle]")).toHaveLength(24);
+    const svg = q("svg");
+    pointer(svg, "pointerdown", 50, 50);
+    pointer(svg, "pointermove", 60, 40);
+    pointer(svg, "pointerup", 60, 40);
+    expect(envelopeOf(c).params.mesh.points[3 * 7 + 3]).toEqual({ x: 60, y: 40 });
+    expect(q('[data-vector-envelope-anchor="24"]').getAttribute("x")).toBe(String(60 - 3.5));
+    expect(c.getState().undoLabel).toBe("Edit Envelope");
+    act(() => void c.setTool("select"));
+    expect(q("[data-vector-envelope-mesh]")).toBeNull();
+  });
+
+  it("toggles Free Distort from the toolbar and drags a corner in perspective on the canvas", async () => {
+    const c = make();
+    c.select(["a"]);
+    await act(async () =>
+      root.render(
+        <>
+          <VectorToolbar controller={c} />
+          <VectorCanvas controller={c} fitOnMount={false} />
+        </>,
+      ),
+    );
+    const toggle = q("[data-vector-free-distort]");
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+    click(toggle);
+    expect(c.getState().freeDistort).toBe(true);
+    expect(q("[data-vector-selection]").getAttribute("data-free-distort")).toBe("true");
+    const svg = q("svg[role=application]");
+    pointer(svg, "pointerdown", 100, 100);
+    pointer(svg, "pointermove", 120, 130);
+    expect(q("[data-vector-distort]").getAttribute("data-vector-distort")).toBe("distort");
+    expect(q("[data-vector-selection]")).toBeNull();
+    pointer(svg, "pointerup", 120, 130);
+    expect(q("[data-vector-distort]")).toBeNull();
+    const a = (c.getNode("a") as VectorPathNode).subpaths[0].anchors;
+    expect(a[2].x).toBeCloseTo(120, 9);
+    expect(a[2].y).toBeCloseTo(130, 9);
+    expect(a[0]).toMatchObject({ x: 0, y: 0 });
+    expect(c.getState().undoLabel).toBe("Distort");
   });
 });

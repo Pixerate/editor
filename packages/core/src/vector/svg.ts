@@ -18,10 +18,15 @@ import { bezierPathToSvg } from '../canvas/pathops/bezier.js';
 import { bezierPathBounds } from '../canvas/pathops/bezier.js';
 import { hasStrokeExtras, strokeWidthProfileOf, vectorStrokeLineArea, vectorStrokeOutlinePath, vectorStrokeParts, vectorStrokeReach } from './stroke.js';
 import { sanitizeWidthProfile } from './width.js';
-import { gradientToSvgDef, type CanvasGradientDef, type GradientStop, type SvgGradientDef } from '../canvas/gradient.js';
+import { hasOwnVectorAppearance, sanitizeVectorEffects, transformVectorEffects, vectorAppearanceNodes } from './appearance.js';
+import { angleToSvgLinearCoords, type SvgGradientDef } from '../canvas/gradient.js';
+import { bezierPathBounds as pathBounds } from '../canvas/pathops/bezier.js';
+import { isVectorGradient, sanitizeVectorGradient, vectorGradientSvgDefs, type VectorPaintDef } from './gradient.js';
+import { vectorStrokeGradientDefs } from './gradientStroke.js';
 import { formatNumber } from '../canvas/shapeGeometry.js';
 import {
 	bezierToSubpaths,
+	decomposeRigid,
 	ellipseSubpath,
 	hasPaint,
 	IDENTITY_MATRIX,
@@ -40,9 +45,13 @@ import {
 	VECTOR_ARROWHEADS,
 	VECTOR_CORNER_KINDS,
 	type VectorArrowhead,
+	type VectorBlend,
+	type VectorBooleanOperation,
 	type VectorCornerKind,
 	type VectorDocument,
 	type VectorFillRule,
+	type VectorGradient,
+	type VectorGradientStop,
 	type VectorGroupNode,
 	type VectorLineCap,
 	type VectorLineJoin,
@@ -106,11 +115,50 @@ export function applyVectorCornersAttribute(subpaths: VectorSubpath[], value: st
 
 const escapeAttr = (value: string) => value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-/** A paint as an SVG attribute value plus the gradient def it needs (if any). */
-export function vectorPaintToSvg(paint: VectorPaint | undefined, gradientId: string): { value: string; gradient: SvgGradientDef | null } {
-	if (!hasPaint(paint)) return { value: 'none', gradient: null };
-	if (typeof paint === 'string') return { value: paint, gradient: null };
-	return { value: `url(#${gradientId})`, gradient: gradientToSvgDef(paint as CanvasGradientDef, gradientId) };
+/** Where a paint goes: what `vectorPaintToSvg` needs to place a gradient on a shape. */
+export interface VectorPaintSvgOptions {
+	/** The path painted (its box places `objectBoundingBox` gradients; strokes need its geometry). */
+	node?: VectorPathNode;
+	/** `stroke` lays `along` / `across` gradients on the stroke and covers its reach (default `fill`). */
+	role?: 'fill' | 'stroke';
+	precision?: number;
+}
+
+/** The box of a path's drawn outline in its own space (null when it has no points). */
+export function vectorPathLocalBounds(node: VectorPathNode): VectorBounds | null {
+	const b = pathBounds(subpathsToBezier(node.subpaths));
+	return b ? { x: b.minX, y: b.minY, width: b.maxX - b.minX, height: b.maxY - b.minY } : null;
+}
+
+/** Paint defs are recomputed only when the node (or the id / role asked for) changes. */
+const paintCache = new WeakMap<object, Map<string, VectorPaintDef[]>>();
+
+/**
+ * A paint as an SVG attribute value plus the paint servers it needs (`url(#id)` refers to the
+ * first). Gradients sit in the painted element's user space (the node's own space).
+ */
+export function vectorPaintToSvg(paint: VectorPaint | undefined, gradientId: string, options: VectorPaintSvgOptions = {}): { value: string; defs: VectorPaintDef[] } {
+	if (!hasPaint(paint)) return { value: 'none', defs: [] };
+	if (typeof paint === 'string') return { value: paint, defs: [] };
+	if (!isVectorGradient(paint)) return { value: 'none', defs: [] };
+	const role = options.role ?? 'fill';
+	const precision = options.precision ?? 3;
+	const key = `${gradientId}|${role}|${precision}`;
+	const owner: object = options.node ?? paint;
+	const cached = paintCache.get(owner)?.get(key);
+	if (cached && (!options.node || (role === 'fill' ? options.node.fill : options.node.stroke) === paint)) return { value: `url(#${gradientId})`, defs: cached };
+	const node = options.node;
+	const bounds = node ? vectorPathLocalBounds(node) : null;
+	const reach = node && role === 'stroke' ? vectorStrokeReach(node) + 1 : 1;
+	const area = bounds ? { x: bounds.x - reach, y: bounds.y - reach, width: bounds.width + 2 * reach, height: bounds.height + 2 * reach } : null;
+	const defs =
+		node && role === 'stroke' && (paint.strokeMode === 'along' || paint.strokeMode === 'across')
+			? vectorStrokeGradientDefs(paint, gradientId, node, { bounds, area, precision })
+			: vectorGradientSvgDefs(paint, gradientId, { bounds, area, precision });
+	let byKey = paintCache.get(owner);
+	if (!byKey) paintCache.set(owner, (byKey = new Map()));
+	byKey.set(key, defs);
+	return { value: `url(#${gradientId})`, defs };
 }
 
 /** The parts of an aligned or arrowed stroke (see `VectorRenderPath.strokeParts`). */
@@ -187,7 +235,7 @@ export function widthProfileFromAttribute(value: string | undefined): VectorWidt
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-function gradientMarkup(def: SvgGradientDef): string {
+function gradientMarkup(def: SvgGradientDef, extra = ''): string {
 	const tag = def.type === 'radial' ? 'radialGradient' : 'linearGradient';
 	const attrs = Object.entries(def.attrs)
 		.map(([k, v]) => ` ${k}="${escapeAttr(String(v))}"`)
@@ -195,7 +243,57 @@ function gradientMarkup(def: SvgGradientDef): string {
 	const stops = def.stops
 		.map((s) => `<stop offset="${s.offset}" stop-color="${escapeAttr(s.stopColor)}"${s.stopOpacity !== undefined ? ` stop-opacity="${s.stopOpacity}"` : ''}/>`)
 		.join('');
-	return `<${tag} id="${escapeAttr(def.id)}"${attrs}>${stops}</${tag}>`;
+	return `<${tag} id="${escapeAttr(def.id)}"${attrs}${extra}>${stops}</${tag}>`;
+}
+
+/**
+ * A paint server's markup. The first def of a gradient carries `data-vector-gradient` (the
+ * gradient as JSON, in the node's space) so import restores what SVG cannot say: midpoints,
+ * interpolation, smoothness, conic / reflected / diamond styles and stroke modes.
+ */
+function paintDefMarkup(def: VectorPaintDef, gradient?: VectorGradient): string {
+	const extra = gradient ? ` data-vector-gradient="${escapeAttr(JSON.stringify(gradient))}"` : '';
+	if (def.type !== 'pattern') return gradientMarkup(def, extra);
+	const attrs = Object.entries(def.attrs)
+		.map(([k, v]) => ` ${k}="${escapeAttr(String(v))}"`)
+		.join('');
+	const inner = def.gradients.map((g) => gradientMarkup(g)).join('') + def.tiles.map((t) => `<path d="${t.d}" fill="${escapeAttr(t.fill)}"/>`).join('');
+	return `<pattern id="${escapeAttr(def.id)}"${attrs}${extra}>${inner}</pattern>`;
+}
+
+/** Markup of a paint's defs (the gradient's data attribute on the first). */
+const paintMarkup = (paint: VectorPaint | undefined, defs: readonly VectorPaintDef[]) => defs.map((d, i) => paintDefMarkup(d, i === 0 && isVectorGradient(paint) ? paint : undefined));
+
+/**
+ * `data-vector-blend` (a blend group's options as JSON, its spine in the group's space) back to
+ * a blend, the spine carried by `m` (import bakes group transforms into the children).
+ */
+function blendFromAttribute(value: string | undefined, m: AffineMatrix): VectorBlend | null {
+	if (!value) return null;
+	let raw: unknown;
+	try {
+		raw = JSON.parse(value);
+	} catch {
+		return null;
+	}
+	if (!raw || typeof raw !== 'object') return null;
+	const r = raw as Record<string, unknown>;
+	const out: VectorBlend = {};
+	if (r.spacing === 'steps' || r.spacing === 'distance' || r.spacing === 'smoothColor') out.spacing = r.spacing;
+	if (typeof r.steps === 'number' && Number.isFinite(r.steps)) out.steps = Math.min(1000, Math.max(1, Math.round(r.steps)));
+	if (typeof r.distance === 'number' && r.distance > 0) out.distance = r.distance;
+	if (typeof r.orientToSpine === 'boolean') out.orientToSpine = r.orientToSpine;
+	if (typeof r.linear === 'boolean') out.linear = r.linear;
+	if (r.starts && typeof r.starts === 'object') {
+		const starts = Object.fromEntries(Object.entries(r.starts as Record<string, unknown>).filter((e): e is [string, number] => Number.isInteger(e[1]) && (e[1] as number) >= 0));
+		if (Object.keys(starts).length) out.starts = starts;
+	}
+	const spine = r.spine as VectorSubpath | null | undefined;
+	if (spine && Array.isArray(spine.anchors) && spine.anchors.every((a) => a && Number.isFinite(a.x) && Number.isFinite(a.y))) {
+		const sp: VectorSubpath = { closed: !!spine.closed, anchors: spine.anchors.map((a) => ({ x: a.x, y: a.y, ...(a.in ? { in: { x: a.in.x, y: a.in.y } } : {}), ...(a.out ? { out: { x: a.out.x, y: a.out.y } } : {}) })) };
+		out.spine = m === IDENTITY_MATRIX ? sp : transformVectorNode<VectorPathNode>({ id: '', type: 'path', subpaths: [sp] }, m).subpaths[0];
+	}
+	return out;
 }
 
 /** Serializes a vector document as a standalone SVG string. */
@@ -213,21 +311,43 @@ export function vectorDocumentToSvg(doc: VectorDocument, options: VectorSvgExpor
 		if (node.transform) out += ` transform="matrix(${node.transform.map((n) => formatNumber(n, 6)).join(' ')})"`;
 		if (node.opacity !== undefined && node.opacity < 1) out += ` opacity="${num(node.opacity)}"`;
 		if (node.visible === false) out += ` display="none"`;
+		if (node.blendStep) out += ` data-vector-blend-step=""`;
+		if (node.type === 'group' && node.blend) out += ` data-vector-blend="${escapeAttr(JSON.stringify(node.blend))}"`;
+		if (node.booleanOperation) out += ` data-vector-boolean-operation="${node.booleanOperation}"`;
 		return out;
 	};
 
 	const emit = (node: VectorNode, depth: number) => {
 		if (node.visible === false && !options.includeHidden) return;
+		if (hasOwnVectorAppearance(node)) {
+			// Live: what it draws, then the editable source (hidden) for import.
+			const live = {
+				kind: node.type,
+				...(node.effects?.length ? { effects: node.effects } : {}),
+				...(node.type === 'group' && node.liveBoolean ? { liveBoolean: node.liveBoolean } : {})
+			};
+			lines.push(`${indent(depth)}<g${common(node)} data-vector-live="${escapeAttr(JSON.stringify(live))}">`);
+			lines.push(`${indent(depth + 1)}<g data-vector-part="appearance">`);
+			for (const shape of vectorAppearanceNodes(node)) emit(shape, depth + 2);
+			lines.push(`${indent(depth + 1)}</g>`);
+			lines.push(`${indent(depth + 1)}<g data-vector-part="source" display="none">`);
+			if (node.type === 'path') {
+				const { effects: _e, transform: _t, opacity: _o, visible: _v, booleanOperation: _b, blendStep: _s, ...source } = node;
+				emit({ ...source, id: `${node.id}~src` }, depth + 2);
+			} else for (const child of node.children) emit(child, depth + 2);
+			lines.push(`${indent(depth + 1)}</g>`);
+			lines.push(`${indent(depth)}</g>`);
+			return;
+		}
 		if (node.type === 'group') {
 			lines.push(`${indent(depth)}<g${common(node)}>`);
 			for (const child of node.children) emit(child, depth + 1);
 			lines.push(`${indent(depth)}</g>`);
 			return;
 		}
-		const fill = vectorPaintToSvg(node.fill, `${prefix}fill-${node.id}`);
-		const stroke = vectorPaintToSvg(node.stroke, `${prefix}stroke-${node.id}`);
-		if (fill.gradient) defs.push(gradientMarkup(fill.gradient));
-		if (stroke.gradient) defs.push(gradientMarkup(stroke.gradient));
+		const fill = vectorPaintToSvg(node.fill, `${prefix}fill-${node.id}`, { node, precision });
+		const stroke = vectorPaintToSvg(node.stroke, `${prefix}stroke-${node.id}`, { node, role: 'stroke', precision });
+		defs.push(...paintMarkup(node.fill, fill.defs), ...paintMarkup(node.stroke, stroke.defs));
 		const d = vectorPathData(node, precision);
 		const corners = vectorCornersAttribute(node.subpaths, precision);
 		const live = corners ? ` data-vector-d="${bezierPathToSvg(subpathsToBezier(node.subpaths, { corners: false }), { precision })}" data-vector-corners="${corners}"` : '';
@@ -303,6 +423,8 @@ export function vectorDocumentToSvg(doc: VectorDocument, options: VectorSvgExpor
 // ---------------------------------------------------------------------------
 // Import
 // ---------------------------------------------------------------------------
+
+const BOOLEAN_OPERATIONS: readonly VectorBooleanOperation[] = ['union', 'subtract', 'intersect', 'exclude'];
 
 export interface VectorSvgImportOptions {
 	/** Makes ids for elements without a usable `id` (default `node-1`, `node-2`, …). */
@@ -450,7 +572,7 @@ function readStyle(el: Element, parent: InheritedStyle): InheritedStyle {
 	return out;
 }
 
-function readStops(el: Element): GradientStop[] {
+function readStops(el: Element): VectorGradientStop[] {
 	return el.children
 		.filter((c) => c.name === 'stop')
 		.map((c) => {
@@ -478,30 +600,105 @@ const fraction = (s: string | undefined, fallback: number) => {
 	return s.trim().endsWith('%') ? n / 100 : n;
 };
 
+const PAINT_SERVERS = new Set(['linearGradient', 'radialGradient', 'pattern']);
+
 function collectGradients(el: Element, raw: Map<string, Element>) {
-	if ((el.name === 'linearGradient' || el.name === 'radialGradient') && el.attrs.id) raw.set(el.attrs.id, el);
+	if (PAINT_SERVERS.has(el.name) && el.attrs.id) raw.set(el.attrs.id, el);
 	for (const c of el.children) collectGradients(c, raw);
 }
 
-function resolveGradient(id: string, raw: Map<string, Element>, seen = new Set<string>()): CanvasGradientDef | null {
-	const el = raw.get(id);
-	if (!el || seen.has(id)) return null;
-	seen.add(id);
-	let stops = readStops(el);
-	const href = el.attrs.href ?? el.attrs['xlink:href'];
-	if (!stops.length && href?.startsWith('#')) stops = resolveGradient(href.slice(1), raw, seen)?.stops ?? [];
-	if (!stops.length) return null;
-	if (el.name === 'radialGradient') {
-		return { type: 'radial', cx: fraction(el.attrs.cx, 0.5), cy: fraction(el.attrs.cy, 0.5), r: fraction(el.attrs.r, 0.5), stops };
+/** The gradient a `data-vector-gradient` attribute (our own export) holds, or null. */
+function gradientFromAttribute(value: string | undefined): VectorGradient | null {
+	if (!value) return null;
+	try {
+		return sanitizeVectorGradient(JSON.parse(value));
+	} catch {
+		return null;
 	}
-	const x1 = fraction(el.attrs.x1, 0);
-	const y1 = fraction(el.attrs.y1, 0);
-	const x2 = fraction(el.attrs.x2, 1);
-	const y2 = fraction(el.attrs.y2, 0);
-	// CSS angle: 0° points up, clockwise.
-	const angle = Math.round(((Math.atan2(x2 - x1, -(y2 - y1)) * 180) / Math.PI + 360) % 360);
-	return { type: 'linear', angle, stops };
 }
+
+/**
+ * A `<linearGradient>` / `<radialGradient>` (attributes and stops inherited through `href`) as a
+ * vector gradient: `gradientUnits`, `gradientTransform`, `spreadMethod`, `fx`, `fy` and `fr` read.
+ * Box gradients that match the angle / centre shorthand keep it.
+ */
+function resolveGradient(id: string, raw: Map<string, Element>): VectorGradient | null {
+	const first = raw.get(id);
+	if (!first) return null;
+	const own = gradientFromAttribute(first.attrs['data-vector-gradient']);
+	if (own) return own;
+	if (first.name === 'pattern') return null;
+	// The href chain: attributes and stops come from the nearest element that has them.
+	const chain: Element[] = [];
+	for (let el: Element | undefined = first; el && !chain.includes(el) && chain.length < 32; ) {
+		chain.push(el);
+		const href: string | undefined = el.attrs.href ?? el.attrs['xlink:href'];
+		el = href?.startsWith('#') ? raw.get(href.slice(1)) : undefined;
+	}
+	const attr = (name: string) => chain.find((el) => el.attrs[name] !== undefined)?.attrs[name];
+	const stops = chain.map(readStops).find((s) => s.length) ?? [];
+	if (!stops.length) return null;
+	const user = attr('gradientUnits') === 'userSpaceOnUse';
+	const t = parseSvgTransform(attr('gradientTransform'));
+	const plain = t === IDENTITY_MATRIX || (t[0] === 1 && t[1] === 0 && t[2] === 0 && t[3] === 1 && t[4] === 0 && t[5] === 0);
+	const at = (name: string, fallback: number) => (user ? length(attr(name), fallback) : fraction(attr(name), fallback));
+	const spreadAttr = attr('spreadMethod');
+	const spread = spreadAttr === 'reflect' || spreadAttr === 'repeat' ? { spread: spreadAttr as 'reflect' | 'repeat' } : {};
+	const map = (p: { x: number; y: number }) => applySvgMatrix(t, p);
+	if (first.name === 'radialGradient') {
+		const cx = at('cx', user ? 0 : 0.5);
+		const cy = at('cy', user ? 0 : 0.5);
+		const r = at('r', user ? 0 : 0.5);
+		const fx = attr('fx') !== undefined ? at('fx', cx) : cx;
+		const fy = attr('fy') !== undefined ? at('fy', cy) : cy;
+		const fr = attr('fr') !== undefined ? at('fr', 0) : 0;
+		const focal = Math.abs(fx - cx) > 1e-9 || Math.abs(fy - cy) > 1e-9;
+		if (!user && plain && !focal && !(fr > 0)) return { type: 'radial', cx, cy, r, stops, ...spread };
+		const g: VectorGradient = {
+			type: 'radial',
+			stops,
+			start: map({ x: cx, y: cy }),
+			end: map({ x: cx + r, y: cy }),
+			width: map({ x: cx, y: cy + r }),
+			units: user ? 'userSpaceOnUse' : 'objectBoundingBox',
+			...spread
+		};
+		if (focal) g.focal = map({ x: fx, y: fy });
+		if (fr > 0 && r > 0) g.focalRadius = Math.min(0.99, fr / r);
+		return g;
+	}
+	const x1 = at('x1', 0);
+	const y1 = at('y1', 0);
+	const x2 = attr('x2') !== undefined ? at('x2', 1) : user ? 0 : 1;
+	const y2 = at('y2', 0);
+	if (!user && plain) {
+		// CSS angle: 0° points up, clockwise. Keep the shorthand when it paints the same.
+		const angle = Math.round(((Math.atan2(x2 - x1, -(y2 - y1)) * 180) / Math.PI + 360) % 360);
+		const c = angleToSvgLinearCoords(angle);
+		const len = Math.hypot(x2 - x1, y2 - y1);
+		const d = len > 0 ? { x: (x2 - x1) / len, y: (y2 - y1) / len } : { x: 0, y: 1 };
+		const along = (x: number, y: number) => x * d.x + y * d.y;
+		const same =
+			len > 0 &&
+			Math.abs((c.x2 - c.x1) * d.y - (c.y2 - c.y1) * d.x) < 1e-3 &&
+			Math.abs(along(c.x1, c.y1) - along(x1, y1)) < 1e-3 &&
+			Math.abs(along(c.x2, c.y2) - along(x2, y2)) < 1e-3;
+		if (same) return { type: 'linear', angle, stops, ...spread };
+	}
+	const start = { x: x1, y: y1 };
+	const end = { x: x2, y: y2 };
+	return {
+		type: 'linear',
+		stops,
+		start: map(start),
+		end: map(end),
+		width: map({ x: x1 - (y2 - y1), y: y1 + (x2 - x1) }),
+		units: user ? 'userSpaceOnUse' : 'objectBoundingBox',
+		...spread
+	};
+}
+
+const applySvgMatrix = (m: AffineMatrix, p: { x: number; y: number }) => ({ x: m[0] * p.x + m[2] * p.y + m[4], y: m[1] * p.x + m[3] * p.y + m[5] });
 
 /** Parses SVG markup into a vector document. Throws when there is no `<svg>` element. */
 export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}): VectorDocument {
@@ -652,6 +849,40 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 		return placed(node, m);
 	};
 
+	/**
+	 * A `<g data-vector-live>` from our own export (path effects or a live boolean) as the node it
+	 * came from: its hidden source part with the effects put back (their offsets carried through
+	 * what import bakes into the geometry). The drawn appearance part is regenerated.
+	 */
+	const liveNode = (g: Element, style: InheritedStyle, m: AffineMatrix, meta: Pick<VectorNode, "name" | "opacity" | "visible" | "booleanOperation">): VectorNode | null => {
+		let raw: Record<string, unknown> = {};
+		try {
+			raw = JSON.parse(g.attrs['data-vector-live']) ?? {};
+		} catch {
+			raw = {};
+		}
+		const sourceEl = g.children.find((c) => c.name === 'g' && c.attrs['data-vector-part'] === 'source');
+		if (!sourceEl) return null;
+		const inner = visit(sourceEl, style, m);
+		const effects = sanitizeVectorEffects(raw.effects);
+		const liveBoolean = BOOLEAN_OPERATIONS.includes(raw.liveBoolean as VectorBooleanOperation) ? (raw.liveBoolean as VectorBooleanOperation) : null;
+		const id = idFor(g);
+		if (raw.kind === 'path') {
+			const path = inner.find((n): n is VectorPathNode => n.type === 'path');
+			if (!path) return null;
+			const { residual } = decomposeRigid(m);
+			const { visible: _v, ...rest } = path;
+			return { ...rest, id, ...meta, ...(effects.length ? { effects: transformVectorEffects(effects, residual) } : {}) };
+		}
+		if (!inner.length) return null;
+		const group: VectorGroupNode = { id, type: 'group', ...meta, children: inner };
+		if (effects.length) group.effects = transformVectorEffects(effects, m);
+		if (liveBoolean) group.liveBoolean = liveBoolean;
+		const blend = blendFromAttribute(g.attrs['data-vector-blend'], m);
+		if (blend) group.blend = blend;
+		return group;
+	};
+
 	const visit = (el: Element, style: InheritedStyle, matrix: AffineMatrix): VectorNode[] => {
 		const out: VectorNode[] = [];
 		for (const child of el.children) {
@@ -665,6 +896,15 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 				...(opacity !== undefined && Number.isFinite(opacity) && opacity < 1 ? { opacity } : {}),
 				...(hidden ? { visible: false } : {})
 			};
+			// A blend's in-betweens are regenerated from its keys.
+			if (child.attrs['data-vector-blend-step'] !== undefined) continue;
+			const operation = child.attrs['data-vector-boolean-operation'];
+			if (BOOLEAN_OPERATIONS.includes(operation as VectorBooleanOperation)) (meta as { booleanOperation?: VectorBooleanOperation }).booleanOperation = operation as VectorBooleanOperation;
+			if (child.name === 'g' && child.attrs['data-vector-live'] !== undefined) {
+				const node = liveNode(child, s, m, meta);
+				if (node) out.push(node);
+				continue;
+			}
 			if (child.name === 'g' && child.attrs['data-vector-path'] !== undefined) {
 				const node = mergedPath(child, s, m, meta);
 				if (node) out.push(node);
@@ -674,6 +914,8 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 				const children = visit(child, s, m);
 				if (!children.length) continue;
 				const group: VectorGroupNode = { id: idFor(child), type: 'group', ...meta, children };
+				const blend = child.name === 'g' ? blendFromAttribute(child.attrs['data-vector-blend'], m) : null;
+				if (blend) group.blend = blend;
 				out.push(group);
 				continue;
 			}

@@ -1,5 +1,72 @@
 # @pixerate/editor-svelte
 
+## 0.41.0
+
+### Minor Changes
+
+- da26571: Add distort tools and live envelopes to the vector editor.
+
+  - Free Distort mode of the selection box (`setFreeDistort`, `state.freeDistort`): dragging a corner distorts the selection in perspective by an exact homography (Shift+Alt+Mod: symmetric perspective), a side moves its two corners and Mod-dragging a side skews along it. `distort(corners)` and `skew(ax, ay)` do the same from code, on rotated nodes too (mapped in document space, written back into each node's own space). One undo step per gesture.
+  - Adaptive path mapping (`mapVectorSubpaths`, `mapVectorPoints`, `mapBezierPath`): curves stay Bézier paths through any map within a tolerance, refitted to fewer anchors where possible; straight lines stay straight under a projective map. User-space gradient handles are mapped with the shape. Homography helpers: `vectorHomography`, `applyVectorHomography`, `orderVectorQuad`.
+  - A non-destructive `envelope` effect: Photoshop's fifteen warp presets (arc, arc lower / upper, arch, bulge, shell lower / upper, flag, wave, fish, rise, fisheye, inflate, squeeze, twist) with bend, horizontal / vertical distortion and orientation, or an editable bicubic mesh of rows × columns (split exactly with de Casteljau). Expand Appearance bakes it; Release gives its shape back as a path; Make with Top Object uses a closed path's outline as the envelope. Controller `envelope`, `makeEnvelopeWithTopObject`, `releaseEnvelope`; mesh helpers in `warp.ts`.
+  - An Envelope tool (U) that drags the mesh's anchors and handles, or pulls the surface from inside a patch, drawn in the overlay of both canvases.
+  - Agent commands `vector.distort`, `vector.skew` and `vector.envelope`.
+  - React and Svelte: a Distort toggle in `VectorToolbar` (`showDistort`), `VectorEnvelopePanel` (in `VectorStylePanel`: Make with Warp / Mesh / Top Object, warp preset, bend and distortion sliders, orientation, mesh rows and columns, Release, Expand), and the Free Distort quad and envelope mesh on `VectorCanvas`. The Effects panel lists an envelope without its parameters, which the Envelope panel edits.
+
+### Patch Changes
+
+- Updated dependencies [da26571]
+  - @pixerate/editor@0.44.0
+
+## 0.40.0
+
+### Minor Changes
+
+- 2663d50: Upgrade gradients in the vector editor.
+
+  - Gradient paints (`VectorGradient`, a superset of the canvas package's `CanvasGradientDef`, which is unchanged) gain conic, reflected and diamond styles; stop midpoints; sRGB / linear-light / Oklab interpolation and smoothness; pad / reflect / repeat spread; a radial focal point, focal radius and aspect; explicit start / end / aspect frames in the shape's box or its own space (the angle / centre shorthand still works, and node-space gradients follow scale and skew); and `strokeMode` (within, along or across a stroke).
+  - Rendering and SVG export stay DOM-free and plain SVG: midpoints and colour spaces become extra stops, conic and diamond gradients and stroke modes become `<pattern>`s of linear-gradient tiles, and every field round-trips through `data-vector-gradient`. Import reads `fx`, `fy`, `fr`, `spreadMethod`, `gradientTransform`, `gradientUnits="userSpaceOnUse"` and `href` inheritance. `vectorPaintToSvg` now returns `{ value, defs }` and `scene.defs` holds `VectorPaintDef`s (gradients and patterns).
+  - A Gradient tool (G): drag to set the vector, handles for start, end / radius, aspect and focal point, click the bar to add a stop, drag stops along it or off it to delete them, drag midpoints; one undo step per gesture.
+  - Controller `setGradient`, `setGradientStop`, `addGradientStop`, `removeGradientStop`, `reverseGradient`, `setGradientTarget` and `selectGradientStop`; agent command `vector.setGradient` and a gradient paint schema for `vector.setStyle`; blends mix the new fields.
+  - React and Svelte: `VectorGradientEditor` (in `VectorStylePanel`: type, stops with colour, opacity, position and midpoint, colour space, smoothness, spread, stroke mode, reverse), `VectorGradientAnnotator` on the canvas, and `VectorGradientDefs` rendering patterns.
+
+### Patch Changes
+
+- Updated dependencies [2663d50]
+- Updated dependencies [57c2fa0]
+  - @pixerate/editor@0.43.0
+
+## 0.39.0
+
+### Minor Changes
+
+- d8d1c26: Add non-destructive path effects and live booleans to the vector editor.
+
+  - Paths and groups carry an editable effect stack (`effects`: Trim Paths simultaneous / individual, Round Corners, Pucker & Bloat, Twist, Zig Zag, seeded Wiggle Paths, Offset Paths with copies, Merge Paths, Repeater with an opacity ramp and fractional copies), stacked as in After Effects: effects act on every path above them and effects after a repeater act on its copies. `expandVectorAppearance` evaluates them in one cached place that rendering, hit-testing, bounds, snapping, booleans, the Pathfinder, Outline Stroke and SVG export read; anchors stay editable.
+  - Controller: `addEffect`, `updateEffect` (slider drags merge into one undo step with `{ merge }` / `endMergedEdit`), `moveEffect`, `removeEffect`, `expandAppearance`, and `booleanOp(op, { live })` for live boolean groups whose operands stay editable, each with its own operation, folded with a prefix cache. The destructive `booleanOp` stays the default.
+  - Agent commands `vector.addEffect`, `vector.updateEffect`, `vector.removeEffect`, `vector.expandAppearance` and a `live` option on `vector.boolean`; SVG export keeps effects and live booleans for round-tripping.
+  - React and Svelte: an Effects section in `VectorStylePanel` (also `VectorEffectsPanel`) and a Live toggle for the toolbar's boolean buttons.
+
+### Patch Changes
+
+- Updated dependencies [d8d1c26]
+  - @pixerate/editor@0.42.0
+
+## 0.38.0
+
+### Minor Changes
+
+- a774bc8: Add live blends and path morphing to the vector editor.
+
+  - `createVectorMorph` / `interpolateVectorPaths`: anchors inserted by arc length, the start and winding chosen by best fit and shape context, Procrustes in-betweens that turn rather than collapse, contours growing from points, open/closed pairs, live corners, rigid transforms, and paint (OKLab colours, resampled gradients, stroke width, opacity, dashes, width profiles). `evaluateVectorPathKeyframes` morphs path keyframes with the animation easings.
+  - Blend groups (`blend`, `setBlendOptions`, `replaceBlendSpine`, `expandBlend`, `releaseBlend`, `addBlendKey`): keys plus in-betweens regenerated whenever a key changes, spaced by steps, distance or smooth colour, optionally following a replaced spine and oriented to it. A Blend tool (J), a spine overlay, `vector.blend` / `vector.blendOptions` / `vector.expandBlend` / `vector.releaseBlend` / `vector.replaceSpine` commands, and SVG round-trip.
+  - React and Svelte: a Blend group in `VectorToolbar` (`showBlend`) and spine / Blend tool rendering in `VectorCanvas`.
+
+### Patch Changes
+
+- Updated dependencies [a774bc8]
+  - @pixerate/editor@0.41.0
+
 ## 0.37.0
 
 ### Minor Changes

@@ -16,6 +16,7 @@
     type VectorEditorController
   } from '@pixerate/editor/vector';
   import VectorGradientDefs from './VectorGradientDefs.svelte';
+  import VectorGradientAnnotator from './VectorGradientAnnotator.svelte';
   import VectorSceneNodes from './VectorSceneNodes.svelte';
   import VectorWidthPointEditor from './VectorWidthPointEditor.svelte';
   import { vectorStateOf } from './subscribe.svelte.js';
@@ -188,7 +189,7 @@
       <path d={overlay.penPreview} stroke={accentColor} stroke-dasharray="4 3" />
     {/if}
     {#if box}
-      <g data-vector-selection="" transform={box.transform || undefined}>
+      <g data-vector-selection="" data-free-distort={box.freeDistort || undefined} transform={box.transform || undefined}>
         <rect x={box.x} y={box.y} width={box.width} height={box.height} stroke={accentColor} />
         <line x1={box.x + box.width / 2} y1={box.y} x2={box.x + box.width / 2} y2={box.y - 24} stroke={accentColor} />
         {#each box.handles as h (h.handle)}
@@ -197,6 +198,29 @@
           {:else}
             <rect data-handle={h.handle} x={h.x - hs / 2} y={h.y - hs / 2} width={hs} height={hs} fill={THEME.handleFill} stroke={accentColor} />
           {/if}
+        {/each}
+      </g>
+    {/if}
+    {#if overlay.distort}
+      <g data-vector-distort={overlay.distort.mode}>
+        <path d={overlay.distort.d} stroke={accentColor} />
+        {#each overlay.distort.corners as c, i (i)}
+          <rect x={c.x - hs / 2} y={c.y - hs / 2} width={hs} height={hs} fill={THEME.handleFill} stroke={accentColor} />
+        {/each}
+      </g>
+    {/if}
+    {#if overlay.envelope}
+      <g data-vector-envelope-mesh={overlay.envelope.nodeId}>
+        <path data-vector-envelope-grid="" d={overlay.envelope.grid} stroke={accentColor} stroke-opacity="0.8" />
+        {#each overlay.envelope.handles as h (h.index)}
+          <g data-vector-envelope-handle={h.index}>
+            <line x1={h.anchorX} y1={h.anchorY} x2={h.x} y2={h.y} stroke={accentColor} stroke-opacity="0.6" />
+            <circle cx={h.x} cy={h.y} r={THEME.handleRadius + (h.hovered || h.active ? 1 : 0)} fill={h.active ? accentColor : THEME.handleFill} stroke={accentColor} />
+          </g>
+        {/each}
+        {#each overlay.envelope.anchors as a (a.index)}
+          {@const size = as + (a.hovered || a.active ? 2 : 0)}
+          <rect data-vector-envelope-anchor={a.index} x={a.x - size / 2} y={a.y - size / 2} width={size} height={size} fill={a.active ? accentColor : THEME.handleFill} stroke={accentColor} />
         {/each}
       </g>
     {/if}
@@ -228,6 +252,26 @@
         <circle cx={w.x} cy={w.y} r={1.5} fill={accentColor} />
       </g>
     {/each}
+    {#each overlay.blend.spines as sp (sp.id)}
+      <g data-vector-blend-spine={sp.id} data-replaced={sp.replaced || undefined}>
+        <path d={sp.d} fill="none" stroke={accentColor} stroke-dasharray="4 3" />
+        {#each sp.keys as k, i (i)}
+          <circle cx={k.x} cy={k.y} r={THEME.handleRadius} fill={THEME.handleFill} stroke={accentColor} />
+        {/each}
+      </g>
+    {/each}
+    {#if overlay.blend.start}
+      <g data-vector-blend-start="">
+        <path d={overlay.blend.start.d} fill="none" stroke={accentColor} stroke-width="2" />
+        {#if overlay.blend.start.anchor}
+          <circle cx={overlay.blend.start.anchor.x} cy={overlay.blend.start.anchor.y} r={THEME.handleRadius + 1} fill={accentColor} />
+        {/if}
+      </g>
+    {/if}
+    {#each overlay.blend.anchors as a, i (i)}
+      <rect data-vector-blend-anchor={i} x={a.x - as / 2} y={a.y - as / 2} width={as} height={as} fill={a.hovered ? accentColor : THEME.handleFill} stroke={accentColor} />
+    {/each}
+    {#if overlay.gradient}<VectorGradientAnnotator annotator={overlay.gradient} {accentColor} />{/if}
     {#if overlay.widthSpot}
       <g data-vector-width-spot="">
         <line x1={overlay.widthSpot.left.x} y1={overlay.widthSpot.left.y} x2={overlay.widthSpot.right.x} y2={overlay.widthSpot.right.y} stroke={accentColor} stroke-dasharray="3 2" />

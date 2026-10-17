@@ -13,12 +13,17 @@ import {
   VECTOR_CORNER_KIND_LABELS,
   VECTOR_STROKE_ALIGN_LABELS,
   VECTOR_WIDTH_PRESETS,
+  VECTOR_BLEND_SPACINGS,
+  VECTOR_BLEND_SPACING_LABELS,
+  applyVectorBlendOptions,
+  getVectorBlendControls,
   getVectorSelectionStyle,
   widthProfilePreset,
   widthProfilePresetId,
   vectorPaintToHex,
   vectorToolLabel,
   type VectorArrowhead,
+  type VectorBlendSpacing,
   type VectorCornerKind,
   type VectorEditorController,
   type VectorStrokeAlign,
@@ -26,6 +31,9 @@ import {
   type VectorWidthPreset,
 } from '@pixerate/editor/vector';
 import { useVectorEditorState } from './useVectorEditor';
+import { VectorEffectsPanel } from './VectorEffectsPanel';
+import { VectorEnvelopePanel } from './VectorEnvelopePanel';
+import { VectorGradientEditor } from './VectorGradientEditor';
 
 const VECTOR_SNAP_TITLE = 'Snap to objects';
 const modKeyLabel = () => (typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform ?? '') ? '⌘' : 'Ctrl');
@@ -49,16 +57,36 @@ export interface VectorToolbarProps {
    * those tools are active (default `true`).
    */
   showPathEdit?: boolean;
+  /**
+   * Blend: Make Blend, spacing (steps, distance or smooth colour), steps / distance, orient to
+   * spine, Replace Spine, Expand and Release (default `true`).
+   */
+  showBlend?: boolean;
+  /** The Free Distort toggle of the selection box (default `true`). */
+  showDistort?: boolean;
   className?: string;
 }
 
 /** Tool picker plus undo, snapping, boolean operations, grouping, stacking and alignment. */
-export function VectorToolbar({ controller, tools = VECTOR_TOOLS, showHistory = true, showArrange = true, showSnap = true, showPathEdit = true, className }: VectorToolbarProps) {
+export function VectorToolbar({
+  controller,
+  tools = VECTOR_TOOLS,
+  showHistory = true,
+  showArrange = true,
+  showSnap = true,
+  showPathEdit = true,
+  showBlend = true,
+  showDistort = true,
+  className,
+}: VectorToolbarProps) {
   const state = useVectorEditorState(controller);
   const count = state.selection.length;
   const points = state.tool === 'direct' ? state.selectedAnchors.length : 0;
   const editing = state.editing;
   const groupSelected = state.selection.some((id) => controller.getNode(id)?.type === 'group');
+  // Live booleans keep the operands editable; a lone live group or its operands take the operation too.
+  const [live, setLive] = React.useState(false);
+  const booleanDisabled = live ? count < 1 : count < 2;
   const act = (label: string, title: string, run: () => unknown, disabled = false) => (
     <button key={label} type="button" className={buttonClass} title={title} aria-label={title} disabled={disabled} onClick={() => void run()}>
       {label}
@@ -180,13 +208,40 @@ export function VectorToolbar({ controller, tools = VECTOR_TOOLS, showHistory = 
           )}
         </div>
       )}
+      {showDistort && (
+        <div className="ml-1 flex items-center gap-1" role="group" aria-label="Distort">
+          <button
+            type="button"
+            data-vector-free-distort=""
+            className={buttonClass}
+            aria-pressed={state.freeDistort}
+            title={`Free Distort: drag a corner of the selection box to distort in perspective (Shift+Alt+${modKeyLabel()}: symmetric perspective; ${modKeyLabel()}-drag a side to skew)`}
+            aria-label="Free Distort"
+            onClick={() => controller.setFreeDistort(!state.freeDistort)}
+          >
+            Distort
+          </button>
+        </div>
+      )}
+      {showBlend && <VectorBlendControls controller={controller} />}
       {showArrange && (
         <>
           <div className="ml-1 flex items-center gap-1" role="group" aria-label="Combine">
-            {act('∪', 'Union', () => controller.booleanOp('union'), count < 2)}
-            {act('−', 'Subtract', () => controller.booleanOp('subtract'), count < 2)}
-            {act('∩', 'Intersect', () => controller.booleanOp('intersect'), count < 2)}
-            {act('⊻', 'Exclude', () => controller.booleanOp('exclude'), count < 2)}
+            <button
+              type="button"
+              data-vector-live-boolean=""
+              className={buttonClass}
+              aria-pressed={live}
+              title="Live booleans: keep the shapes editable"
+              aria-label="Live booleans"
+              onClick={() => setLive(!live)}
+            >
+              Live
+            </button>
+            {act('∪', 'Union', () => controller.booleanOp('union', { live }), booleanDisabled)}
+            {act('−', 'Subtract', () => controller.booleanOp('subtract', { live }), booleanDisabled)}
+            {act('∩', 'Intersect', () => controller.booleanOp('intersect', { live }), booleanDisabled)}
+            {act('⊻', 'Exclude', () => controller.booleanOp('exclude', { live }), booleanDisabled)}
             {act('G', 'Group', () => controller.group(), count < 1)}
             {act('U', 'Ungroup', () => controller.ungroup(), !groupSelected)}
           </div>
@@ -222,6 +277,76 @@ export function VectorToolbar({ controller, tools = VECTOR_TOOLS, showHistory = 
   );
 }
 
+/** Blend buttons and options: they edit the selected blends and the options new blends get. */
+function VectorBlendControls({ controller }: { controller: VectorEditorController }) {
+  const state = useVectorEditorState(controller);
+  const blend = getVectorBlendControls(state);
+  const o = blend.options;
+  const selected = blend.ids.length > 0;
+  return (
+    <div className="ml-1 flex items-center gap-1" role="group" aria-label="Blend" data-vector-blend-controls="">
+      <button type="button" data-vector-blend-action="make" className={buttonClass} title="Make Blend" aria-label="Make Blend" disabled={!blend.canBlend} onClick={() => controller.blend()}>
+        ⧓
+      </button>
+      <select
+        aria-label="Blend spacing"
+        className="h-7 rounded border border-border bg-background px-1 text-xs"
+        value={o.spacing}
+        onChange={(e) => applyVectorBlendOptions(controller, { spacing: e.target.value as VectorBlendSpacing })}
+      >
+        {VECTOR_BLEND_SPACINGS.map((sp) => (
+          <option key={sp} value={sp}>
+            {VECTOR_BLEND_SPACING_LABELS[sp]}
+          </option>
+        ))}
+      </select>
+      {o.spacing !== 'smoothColor' && (
+        <input
+          type="number"
+          min={o.spacing === 'steps' ? 1 : 0.5}
+          step={1}
+          aria-label={o.spacing === 'steps' ? 'Blend steps' : 'Blend distance'}
+          className="h-7 w-16 rounded border border-border bg-background px-1.5 text-xs"
+          value={o.spacing === 'steps' ? o.steps : o.distance}
+          onChange={(e) => {
+            const n = parseFloat(e.target.value);
+            if (!Number.isFinite(n) || n <= 0) return;
+            applyVectorBlendOptions(controller, o.spacing === 'steps' ? { steps: n } : { distance: n });
+          }}
+        />
+      )}
+      <button
+        type="button"
+        data-vector-blend-action="orient"
+        className={buttonClass}
+        aria-pressed={o.orientToSpine}
+        title="Orient steps to the spine"
+        aria-label="Orient to spine"
+        onClick={() => applyVectorBlendOptions(controller, { orientToSpine: !o.orientToSpine })}
+      >
+        ⤿
+      </button>
+      <button
+        type="button"
+        data-vector-blend-action="spine"
+        className={buttonClass}
+        title="Replace Spine (select a blend and a path)"
+        aria-label="Replace Spine"
+        disabled={!blend.canReplaceSpine}
+        onClick={() => controller.replaceBlendSpine()}
+      >
+        ⌇
+      </button>
+      <button type="button" data-vector-blend-action="expand" className={buttonClass} title="Expand Blend" aria-label="Expand Blend" disabled={!selected} onClick={() => controller.expandBlend()}>
+        ⧉
+      </button>
+      <button type="button" data-vector-blend-action="release" className={buttonClass} title="Release Blend" aria-label="Release Blend" disabled={!selected} onClick={() => controller.releaseBlend()}>
+        ⧄
+      </button>
+    </div>
+  );
+}
+
 export interface VectorStylePanelProps {
   controller: VectorEditorController;
   className?: string;
@@ -231,7 +356,7 @@ const selectClass = 'h-7 min-w-0 flex-1 rounded border border-border bg-backgrou
 const numberClass = 'h-7 w-16 rounded border border-border bg-background px-1.5 text-xs';
 
 /**
- * Fill, stroke, stroke width, alignment and width profile, arrowheads, live corner radius and opacity of the
+ * Fill, stroke and their gradients (`VectorGradientEditor`), stroke width, alignment and width profile, arrowheads, live corner radius, opacity, path effects (`VectorEffectsPanel`) and envelope (`VectorEnvelopePanel`) of the
  * selection (corners of the selected points with the direct tool); with nothing selected it
  * edits the defaults for new shapes.
  */
@@ -328,6 +453,7 @@ export function VectorStylePanel({ controller, className }: VectorStylePanelProp
       <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{style ? 'Selection' : 'New shapes'}</p>
       {paintRow('fill', 'Fill')}
       {paintRow('stroke', 'Stroke')}
+      {style && <VectorGradientEditor controller={controller} />}
       <label className="flex items-center gap-2 text-xs text-foreground">
         <span className="w-16">Width</span>
         <input
@@ -442,6 +568,8 @@ export function VectorStylePanel({ controller, className }: VectorStylePanelProp
           />
         </label>
       )}
+      {style && <VectorEffectsPanel controller={controller} />}
+      {style && <VectorEnvelopePanel controller={controller} />}
     </div>
   );
 }

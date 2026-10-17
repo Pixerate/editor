@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { HistoryManager } from '../src/history/HistoryManager.js';
 import {
 	bezierToSubpaths,
 	convertAnchor,
@@ -241,6 +242,22 @@ describe('vector svg', () => {
 });
 
 describe('VectorEditorController', () => {
+	it('reconnects to the history when subscribed again after destroy (React StrictMode)', () => {
+		const history = new HistoryManager();
+		const c = new VectorEditorController({ document: doc(rectNode('a', 0, 0)), history, createId: ids });
+		c.addShape({ kind: 'rect', x: 0, y: 0, width: 5, height: 5 });
+		c.destroy();
+		history.clear();
+		expect(c.getState().canUndo).toBe(true);
+		const seen: boolean[] = [];
+		c.subscribe((s) => seen.push(s.canUndo));
+		expect(c.getState().canUndo).toBe(false);
+		c.addShape({ kind: 'rect', x: 0, y: 0, width: 5, height: 5 });
+		history.clear();
+		expect(seen.at(-1)).toBe(false);
+		expect(c.getState().canUndo).toBe(false);
+	});
+
 	it('returns a stable state snapshot until something changes', () => {
 		const c = make(doc(rectNode('a', 0, 0)));
 		const s = c.getState();

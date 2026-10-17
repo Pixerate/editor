@@ -13,6 +13,7 @@
   } from '@pixerate/editor/vector';
   import { vectorStateOf } from './subscribe.svelte.js';
   import { vectorButtonClass } from './styles.js';
+  import VectorBlendControls from './VectorBlendControls.svelte';
 
   interface Props {
     controller: VectorEditorController;
@@ -30,10 +31,27 @@
      * those tools are active (default `true`).
      */
     showPathEdit?: boolean;
+    /**
+     * Blend: Make Blend, spacing (steps, distance or smooth colour), steps / distance, orient to
+     * spine, Replace Spine, Expand and Release (default `true`).
+     */
+    showBlend?: boolean;
+    /** The Free Distort toggle of the selection box (default `true`). */
+    showDistort?: boolean;
     class?: string;
   }
 
-  let { controller, tools = VECTOR_TOOLS, showHistory = true, showArrange = true, showSnap = true, showPathEdit = true, class: className = '' }: Props = $props();
+  let {
+    controller,
+    tools = VECTOR_TOOLS,
+    showHistory = true,
+    showArrange = true,
+    showSnap = true,
+    showPathEdit = true,
+    showBlend = true,
+    showDistort = true,
+    class: className = ''
+  }: Props = $props();
 
   const snapTitle = 'Snap to objects';
   const modKey = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform ?? '') ? '⌘' : 'Ctrl';
@@ -44,11 +62,14 @@
   const points = $derived(view.tool === 'direct' ? view.selectedAnchors.length : 0);
   const groupSelected = $derived(view.selection.some((id) => controller.getNode(id)?.type === 'group'));
 
+  // Live booleans keep the operands editable; a lone live group or its operands take the operation too.
+  let live = $state(false);
+  const booleanDisabled = $derived(live ? count < 1 : count < 2);
   const combine = $derived([
-    { label: '∪', title: 'Union', run: () => controller.booleanOp('union'), disabled: count < 2 },
-    { label: '−', title: 'Subtract', run: () => controller.booleanOp('subtract'), disabled: count < 2 },
-    { label: '∩', title: 'Intersect', run: () => controller.booleanOp('intersect'), disabled: count < 2 },
-    { label: '⊻', title: 'Exclude', run: () => controller.booleanOp('exclude'), disabled: count < 2 },
+    { label: '∪', title: 'Union', run: () => controller.booleanOp('union', { live }), disabled: booleanDisabled },
+    { label: '−', title: 'Subtract', run: () => controller.booleanOp('subtract', { live }), disabled: booleanDisabled },
+    { label: '∩', title: 'Intersect', run: () => controller.booleanOp('intersect', { live }), disabled: booleanDisabled },
+    { label: '⊻', title: 'Exclude', run: () => controller.booleanOp('exclude', { live }), disabled: booleanDisabled },
     { label: 'G', title: 'Group', run: () => controller.group(), disabled: count < 1 },
     { label: 'U', title: 'Ungroup', run: () => controller.ungroup(), disabled: !groupSelected }
   ]);
@@ -182,8 +203,37 @@
       {/if}
     </div>
   {/if}
+  {#if showDistort}
+    <div class="ml-1 flex items-center gap-1" role="group" aria-label="Distort">
+      <button
+        type="button"
+        data-vector-free-distort=""
+        class={vectorButtonClass}
+        aria-pressed={view.freeDistort}
+        title="Free Distort: drag a corner of the selection box to distort in perspective (Shift+Alt+{modKey}: symmetric perspective; {modKey}-drag a side to skew)"
+        aria-label="Free Distort"
+        onclick={() => controller.setFreeDistort(!view.freeDistort)}
+      >
+        Distort
+      </button>
+    </div>
+  {/if}
+  {#if showBlend}
+    <VectorBlendControls {controller} />
+  {/if}
   {#if showArrange}
     <div class="ml-1 flex items-center gap-1" role="group" aria-label="Combine">
+      <button
+        type="button"
+        data-vector-live-boolean=""
+        class={vectorButtonClass}
+        aria-pressed={live}
+        title="Live booleans: keep the shapes editable"
+        aria-label="Live booleans"
+        onclick={() => (live = !live)}
+      >
+        Live
+      </button>
       {#each combine as item (item.title)}{@render action(item)}{/each}
     </div>
     <div class="ml-1 flex items-center gap-1" role="group" aria-label="Pathfinder">

@@ -79,7 +79,63 @@ import {
 	VECTOR_WIDTH_PROFILE_MAX_POINTS,
 	VECTOR_WIDTH_SAME_T
 } from './width.js';
-import { parseVectorSvg, vectorDocumentToSvg, type VectorSvgExportOptions } from './svg.js';
+import { parseVectorSvg, vectorDocumentToSvg, vectorPathLocalBounds, type VectorSvgExportOptions } from './svg.js';
+import {
+	applyVectorGradientPatch,
+	defaultVectorGradient,
+	insertVectorGradientStop,
+	isVectorGradient,
+	moveVectorGradientHandle,
+	moveVectorGradientStop,
+	removeVectorGradientStop,
+	setVectorGradientVector,
+	sortedVectorGradientStops,
+	vectorGradientMidpointFromPosition,
+	type VectorGradientHandle,
+	type VectorGradientPatch
+} from './gradient.js';
+import {
+	getVectorGradientAnnotator,
+	hitVectorGradientAnnotator,
+	vectorGradientBarPosition,
+	VECTOR_GRADIENT_OFF_BAR,
+	VECTOR_GRADIENT_STOP_GAP,
+	type VectorGradientAnnotator,
+	type VectorGradientPart,
+	type VectorGradientTarget
+} from './gradientTool.js';
+import {
+	expandVectorBlend,
+	isVectorBlendGroup,
+	refreshVectorBlends,
+	releaseVectorBlend,
+	vectorBlendKeyTargets
+} from './blendGroup.js';
+import {
+	createVectorEffect,
+	expandVectorAppearance,
+	hasOwnVectorAppearance,
+	hasVectorAppearance,
+	isVectorLiveBoolean,
+	normalizeVectorEffectParams,
+	vectorAppearanceOutline,
+	vectorEnteredGroups,
+	vectorEnvelopeFrame,
+	vectorNodeEnvelope,
+	type VectorEnvelopeParams,
+	VECTOR_EFFECT_LABELS
+} from './appearance.js';
+import { applyVectorHomography, vectorHomography, vectorHomographyKeepsQuad } from './perspective.js';
+import { distortVectorNode, vectorBoxCorners, vectorDistortQuad, vectorShearForSide, vectorSkewMatrix, VECTOR_DISTORT_TOLERANCE, type VectorDistortMode } from './distort.js';
+import {
+	dragVectorMeshPoint,
+	pullVectorMesh,
+	resizeVectorMesh,
+	vectorMeshEditPoints,
+	vectorMeshFromOutline,
+	vectorMeshOutline,
+	vectorMeshParamAt
+} from './warp.js';
 import { constrainToLeave, VECTOR_CONSTRUCTION_ANGLES, VectorSnapTargets, type VectorSnapGuides, type VectorSnapLeave } from './snap.js';
 import {
 	bendSegment as bendSubpathSegment,
@@ -107,14 +163,19 @@ import {
 	type VectorBuilderTouched,
 	type VectorShapeBuilderMap
 } from './builder.js';
+import type { VectorGradient, VectorWarpMesh } from './types.js';
 import type {
 	Vec2,
+	VectorEffect,
+	VectorEffectType,
 	VectorAlign,
 	VectorAnchor,
 	VectorAnchorRef,
 	VectorAnchorType,
 	VectorArrange,
 	VectorAverageAxis,
+	VectorBlend,
+	VectorBlendOptions,
 	VectorBooleanOperation,
 	VectorBounds,
 	VectorCornerKind,
@@ -223,6 +284,8 @@ export interface VectorEditorOptions {
 	createId?: () => string;
 	/** Called after the document changes (edits, undo, redo, load). */
 	onChange?: (document: VectorDocument) => void;
+	/** Start in Free Distort mode (see `setFreeDistort`). */
+	freeDistort?: boolean;
 }
 
 /** A pointer event as the controller needs it. Positions are in screen pixels relative to the canvas. */
@@ -290,6 +353,10 @@ export interface VectorHover {
 	widthPoint?: VectorWidthPointRef & { part: 'center' | 'left' | 'right' };
 	/** A spot on a stroke away from its width points (width tool). */
 	strokeSpot?: VectorStrokeSpot;
+	/** A part of the gradient annotator (gradient tool). */
+	gradient?: VectorGradientPart;
+	/** A control point of the selected envelope's mesh (`index`), or a spot inside it (`index` null): Envelope tool. */
+	envelope?: { nodeId: string; index: number | null };
 }
 
 /** The drag in progress, for overlays and status text. */
@@ -307,6 +374,12 @@ export type VectorInteraction =
 	| { type: 'builder'; mode: 'merge' | 'erase'; points: Vec2[] }
 	| { type: 'width'; ref: VectorWidthPointRef; mode: 'width' | 'move' | 'copy'; width: number }
 	| { type: 'pen'; nodeId: string }
+	/** A gradient tool drag: drawing a new vector, or a handle, stop, midpoint or the bar (`removing`: a stop dragged off the bar). */
+	| { type: 'gradient'; part: 'create' | VectorGradientPart['kind']; handle?: VectorGradientHandle; removing?: boolean }
+	/** Free Distort: the selection box's corners as dragged so far (document space, clockwise from the top left). */
+	| { type: 'distort'; mode: VectorDistortMode | 'skew'; corners: Vec2[] }
+	/** Envelope tool: a mesh point (`index`) or the surface (`index` null) being dragged. */
+	| { type: 'envelope'; nodeId: string; index: number | null }
 	| { type: 'pan' };
 
 /** A snapshot of the editor. The same object is returned until something changes. */
@@ -344,6 +417,18 @@ export interface VectorEditorState {
 	pointer: Vec2 | null;
 	/** Shape Builder and paint bucket highlight: faces, line pieces and the gesture's trail. */
 	builder: VectorBuilderPreview | null;
+	/** The Blend tool's first click: the shape (and anchor of its first subpath) the next click blends from. */
+	blendStart: VectorBlendStart | null;
+	/** Options new blends get. */
+	blendDefaults: VectorBlendOptions;
+	/** The paint the gradient tool and gradient editor work on, and the selected stop (index into the sorted stops). */
+	gradientEdit: { target: VectorGradientTarget; stop: number | null };
+	/**
+	 * Free Distort mode of the selection box: dragging a corner distorts in perspective (each corner
+	 * on its own; Shift+Alt+Mod: symmetric perspective), a side moves its two corners, and Mod-dragging
+	 * a side skews along it (Alt: about the centre).
+	 */
+	freeDistort: boolean;
 	canUndo: boolean;
 	canRedo: boolean;
 	undoLabel: string;
@@ -353,6 +438,37 @@ export interface VectorEditorState {
 }
 
 export type VectorActionResult = { ok: true } | { ok: false; message: string };
+
+/** The shape the Blend tool blends from (its first click). */
+export interface VectorBlendStart {
+	nodeId: string;
+	/** The clicked anchor of its first subpath, or null for the shape as a whole. */
+	anchor: number | null;
+}
+
+/** Blend settings and options of `VectorEditorController.blend`. */
+export interface VectorBlendInput extends VectorBlendOptions {
+	/** Nodes to blend (default: the selection), in stacking order unless `keepOrder`. */
+	ids?: readonly string[];
+	/** Blend in the order given instead of stacking order. */
+	keepOrder?: boolean;
+	/** Start anchor of each key's first subpath, by key id. */
+	starts?: Record<string, number>;
+	name?: string;
+}
+
+const BLEND_OPTION_KEYS = ['spacing', 'steps', 'distance', 'orientToSpine', 'linear'] as const;
+
+/** The blend options in `input`, valid ones only. */
+function blendOptionsOf(input: Partial<VectorBlendOptions>): VectorBlendOptions {
+	const out: VectorBlendOptions = {};
+	if (input.spacing === 'steps' || input.spacing === 'distance' || input.spacing === 'smoothColor') out.spacing = input.spacing;
+	if (typeof input.steps === 'number' && Number.isFinite(input.steps)) out.steps = Math.min(1000, Math.max(1, Math.round(input.steps)));
+	if (typeof input.distance === 'number' && Number.isFinite(input.distance) && input.distance > 0) out.distance = input.distance;
+	if (typeof input.orientToSpine === 'boolean') out.orientToSpine = input.orientToSpine;
+	if (typeof input.linear === 'boolean') out.linear = input.linear;
+	return out;
+}
 
 /**
  * What the Shape Builder or paint bucket highlights, in document units: the faces (filled paths
@@ -759,6 +875,21 @@ export function getVectorSelectionBoxGeometry(frame: VectorSelectionFrame, viewp
 	return { box, angle: frame.angle, transform: frame.angle ? `rotate(${r(frame.angle)} ${r(viewport.x)} ${r(viewport.y)})` : '', handles, corners };
 }
 
+/**
+ * The node the Envelope tool edits: the one selected node with an enabled envelope, with the
+ * envelope's mesh and box (node space) and the node → document matrix. Null otherwise.
+ */
+export function getVectorEnvelopeTarget(
+	doc: VectorDocument,
+	selection: readonly string[]
+): { node: VectorNode; frame: { effectId: string; bounds: VectorBounds; mesh: VectorWarpMesh }; world: AffineMatrix } | null {
+	if (selection.length !== 1) return null;
+	const node = findVectorNode(doc.nodes, selection[0]);
+	if (!node || !vectorNodeEnvelope(node)) return null;
+	const frame = vectorEnvelopeFrame(node);
+	return frame ? { node, frame, world: vectorWorldMatrix(doc.nodes, node.id) ?? IDENTITY_MATRIX } : null;
+}
+
 const RESIZE_CURSOR_ORDER = ['ew-resize', 'nwse-resize', 'ns-resize', 'nesw-resize'];
 const HANDLE_ANGLES: Partial<Record<VectorTransformHandle, number>> = { e: 0, se: 45, s: 90, sw: 135, w: 180, nw: 225, n: 270, ne: 315 };
 
@@ -785,7 +916,10 @@ const TOOL_LABELS: Record<VectorTool, string> = {
 	eraser: 'Eraser',
 	width: 'Width',
 	shapeBuilder: 'Shape Builder',
-	paintBucket: 'Paint Bucket'
+	paintBucket: 'Paint Bucket',
+	blend: 'Blend',
+	gradient: 'Gradient',
+	envelope: 'Envelope Mesh'
 };
 
 const TOOL_KEYS: Record<string, VectorTool> = {
@@ -803,7 +937,10 @@ const TOOL_KEYS: Record<string, VectorTool> = {
 	e: 'eraser',
 	w: 'width',
 	m: 'shapeBuilder',
-	b: 'paintBucket'
+	b: 'paintBucket',
+	j: 'blend',
+	g: 'gradient',
+	u: 'envelope'
 };
 
 export function vectorToolLabel(tool: VectorTool): string {
@@ -826,7 +963,10 @@ export const VECTOR_TOOL_SHORTCUTS: Readonly<Record<VectorTool, string>> = {
 	eraser: 'E',
 	width: 'W',
 	shapeBuilder: 'M',
-	paintBucket: 'B'
+	paintBucket: 'B',
+	blend: 'J',
+	gradient: 'G',
+	envelope: 'U'
 };
 
 /** Short glyphs for tool buttons (pair them with `vectorToolLabel` for the accessible name). */
@@ -845,7 +985,10 @@ export const VECTOR_TOOL_GLYPHS: Readonly<Record<VectorTool, string>> = {
 	eraser: '⌫',
 	width: '⇹',
 	shapeBuilder: '⊕',
-	paintBucket: '◍'
+	paintBucket: '◍',
+	blend: '⧓',
+	gradient: '◐',
+	envelope: '⌗'
 };
 
 /** Tools that drag out a shape (they snap while hovering). */
@@ -911,6 +1054,14 @@ function spliceTree(nodes: readonly VectorNode[], id: string, replacements: read
 
 const toPoint = (p: Vec2): Point => [p.x, p.y];
 
+/** A node's place and state (transform, visibility, lock, operand operation), for a node taking its place. */
+const placementOf = (n: VectorNode) => ({
+	...(n.transform ? { transform: n.transform } : {}),
+	...(n.visible === false ? { visible: false } : {}),
+	...(n.locked ? { locked: true } : {}),
+	...(n.booleanOperation ? { booleanOperation: n.booleanOperation } : {})
+});
+
 const isRoot = (m: AffineMatrix) => m === IDENTITY_MATRIX || (m[0] === 1 && m[1] === 0 && m[2] === 0 && m[3] === 1 && m[4] === 0 && m[5] === 0);
 
 let idCounter = 0;
@@ -933,7 +1084,21 @@ type DragTargets = { targets?: VectorSnapTargets };
 
 type Drag =
 	| ({ kind: 'move'; start: Vec2; origin: VectorBounds | null; before: Snapshot; base: VectorDocument; moved: boolean; duplicated: boolean; clickId: string | null } & DragTargets)
-	| ({ kind: 'scale'; handle: VectorTransformHandle; start: Vec2; frame: VectorSelectionFrame; before: Snapshot; base: VectorDocument } & DragTargets)
+	| ({ kind: 'scale'; handle: VectorTransformHandle; start: Vec2; frame: VectorSelectionFrame; before: Snapshot; base: VectorDocument; op?: string } & DragTargets)
+	| {
+			kind: 'envelope';
+			nodeId: string;
+			effectId: string;
+			/** The mesh at the start (node space) and the document it belongs to. */
+			base: VectorWarpMesh;
+			baseDoc: VectorDocument;
+			before: Snapshot;
+			index: number | null;
+			s: number;
+			t: number;
+			start: Vec2;
+			moved: boolean;
+	  }
 	| { kind: 'rotate'; start: Vec2; center: Vec2; before: Snapshot; base: VectorDocument }
 	| { kind: 'marquee'; start: Vec2; base: string[]; baseAnchors: VectorAnchorRef[]; anchorsMode: boolean }
 	| ({ kind: 'anchors'; start: Vec2; before: Snapshot; base: VectorDocument; moved: boolean; clickRef: VectorAnchorRef | null; lead: VectorAnchorRef | null } & DragTargets)
@@ -970,6 +1135,21 @@ type Drag =
 			start: Vec2;
 			moved: boolean;
 			created: boolean;
+	  }
+	| {
+			kind: 'gradient';
+			/** What was grabbed: null draws a new vector over `targets`. */
+			part: VectorGradientPart | null;
+			nodeId: string | null;
+			targets: string[];
+			annotator: VectorGradientAnnotator | null;
+			start: Vec2;
+			startDoc: Vec2;
+			before: Snapshot;
+			base: VectorDocument;
+			moved: boolean;
+			/** The dragged stop's index now (null once dragged off the bar). */
+			stop: number | null;
 	  }
 	| { kind: 'pan'; start: Vec2; viewport: VectorViewport };
 
@@ -1011,6 +1191,11 @@ export class VectorEditorController {
 	/** Paint bucket map of the visible outlines. */
 	private fillCache: { doc: VectorDocument; gap: number; map: PlanarMap | null } | null = null;
 	private builderPreview: VectorBuilderPreview | null = null;
+	private blendStart: VectorBlendStart | null = null;
+	/** Options new blends get (the toolbars edit them along with the selected blend's). */
+	private blendDefaults: VectorBlendOptions = {};
+	private gradientEdit: VectorEditorState['gradientEdit'] = { target: 'fill', stop: null };
+	private freeDistort = false;
 	/** What the highlight shows, to skip notifying when the pointer stays over the same face. */
 	private builderHoverKey: string | null = null;
 	private readonly createId: () => string;
@@ -1026,6 +1211,7 @@ export class VectorEditorController {
 	constructor(options: VectorEditorOptions = {}) {
 		this.history = options.history ?? new HistoryManager();
 		this.doc = options.document ? cloneVectorDocument(options.document) : { width: 800, height: 600, nodes: [] };
+		this.doc = this.refreshed(this.doc);
 		this.tool = options.tool ?? 'select';
 		this.defaults = { ...DEFAULT_DEFAULTS, ...(options.defaults ?? {}) } as VectorEditorState['defaults'];
 		this.viewport = { x: 0, y: 0, zoom: 1, ...(options.viewport ?? {}) };
@@ -1034,17 +1220,32 @@ export class VectorEditorController {
 		this.hitRadius = options.hitRadius ?? 6;
 		this.createId = options.createId ?? defaultCreateId;
 		this.onChange = options.onChange;
+		this.freeDistort = !!options.freeDistort;
 		this.state = this.computeState();
-		this.cleanups.push(
-			this.history.subscribe((h) => {
-				const s = this.state;
-				if (this.applying || (s.canUndo === h.canUndo && s.canRedo === h.canRedo && s.undoLabel === h.undoName && s.redoLabel === h.redoName)) return;
-				this.notify();
-			})
-		);
+		this.connect();
 	}
 
-	/** Stops listening to the history. */
+	/** Listens to the history (once; again after `destroy`). */
+	private connect(): void {
+		if (this.cleanups.length) return;
+		this.cleanups.push(
+			this.history.subscribe((h) => {
+				if (!this.applying && this.historyDiffers(h)) this.notify();
+			})
+		);
+		// Catch up on history changes made while disconnected.
+		if (this.historyDiffers(this.history.getState())) this.state = this.computeState();
+	}
+
+	private historyDiffers(h: ReturnType<HistoryManager['getState']>): boolean {
+		const s = this.state;
+		return s.canUndo !== h.canUndo || s.canRedo !== h.canRedo || s.undoLabel !== h.undoName || s.redoLabel !== h.redoName;
+	}
+
+	/**
+	 * Stops listening to the history and drops all listeners. A later `subscribe` reconnects, so a
+	 * controller torn down by React StrictMode's double effect keeps working when it is reused.
+	 */
 	destroy(): void {
 		this.cleanups.splice(0).forEach((fn) => fn());
 		this.listeners.clear();
@@ -1059,6 +1260,7 @@ export class VectorEditorController {
 
 	/** Calls `listener` after every change. Returns an unsubscribe function. */
 	subscribe = (listener: (state: VectorEditorState) => void): (() => void) => {
+		this.connect();
 		this.listeners.add(listener);
 		return () => {
 			this.listeners.delete(listener);
@@ -1097,6 +1299,10 @@ export class VectorEditorController {
 			pen: this.pen,
 			pointer: this.pointer,
 			builder: this.builderPreview,
+			blendStart: this.blendStart,
+			blendDefaults: this.blendDefaults,
+			gradientEdit: this.gradientEdit,
+			freeDistort: this.freeDistort,
 			canUndo: h.canUndo,
 			canRedo: h.canRedo,
 			undoLabel: h.undoName,
@@ -1105,7 +1311,17 @@ export class VectorEditorController {
 		};
 	}
 
+	/** `doc` with its blends' steps brought up to date (the same object when they already are). */
+	private refreshed(doc: VectorDocument): VectorDocument {
+		const nodes = refreshVectorBlends(doc.nodes);
+		return nodes === doc.nodes ? doc : { ...doc, nodes };
+	}
+
 	private notify(docChanged = false) {
+		// Blends regenerate their steps after every edit of a key (drags included).
+		const fresh = this.refreshed(this.doc);
+		if (fresh !== this.doc) this.doc = fresh;
+		if (this.blendStart && !this.getNode(this.blendStart.nodeId)) this.blendStart = null;
 		this.revision++;
 		this.state = this.computeState();
 		if (docChanged) this.onChange?.(this.doc);
@@ -1149,8 +1365,13 @@ export class VectorEditorController {
 		const h = this.hover;
 		switch (this.tool) {
 			case 'select':
+				if (h?.transformHandle && this.freeDistort && h.transformHandle !== 'rotate') return 'crosshair';
 				if (h?.transformHandle) return vectorResizeCursor(h.transformHandle, this.frameOf(this.selectedRoots())?.angle ?? 0);
 				return h?.nodeId ? 'move' : 'default';
+			case 'envelope':
+				if (this.drag?.kind === 'envelope') return 'grabbing';
+				if (h?.envelope) return h.envelope.index === null ? 'grab' : 'pointer';
+				return h?.nodeId ? 'pointer' : 'default';
 			case 'direct':
 				if (h?.anchor || h?.handle || h?.corner) return 'pointer';
 				if (h?.segment) return 'copy';
@@ -1166,6 +1387,15 @@ export class VectorEditorController {
 				return this.builderPreview.mode === 'erase' ? 'not-allowed' : 'cell';
 			case 'paintBucket':
 				return this.builderPreview ? 'cell' : 'crosshair';
+			case 'blend':
+				return h?.nodeId ? (this.blendStart && this.blendStart.nodeId !== h.nodeId ? 'copy' : 'pointer') : 'crosshair';
+			case 'gradient': {
+				const part = this.drag?.kind === 'gradient' ? this.drag.part : h?.gradient;
+				if (!part) return 'crosshair';
+				if (part.kind === 'bar') return this.drag ? 'grabbing' : 'copy';
+				if (part.kind === 'handle' && part.handle === 'start') return this.drag ? 'grabbing' : 'move';
+				return 'pointer';
+			}
 			default:
 				return 'crosshair';
 		}
@@ -1204,8 +1434,12 @@ export class VectorEditorController {
 		this.notify(docChanged);
 	}
 
-	/** Records the change from `before` to the current state as one undo step. */
-	private commit(name: string, before: Snapshot) {
+	/**
+	 * Records the change from `before` to the current state as one undo step. Consecutive
+	 * changes with the same `merge` key (a slider drag) fold into one step.
+	 */
+	private commit(name: string, before: Snapshot, merge?: string) {
+		this.doc = this.refreshed(this.doc);
 		const after = this.snapshot();
 		if (before.doc === after.doc) {
 			this.notify();
@@ -1215,18 +1449,25 @@ export class VectorEditorController {
 			name,
 			execute: () => this.restore(after),
 			undo: () => this.restore(before),
-			redo: () => this.restore(after)
+			redo: () => this.restore(after),
+			...(merge ? { tag: merge } : {})
 		};
 		this.committing = true;
-		this.history.execute(command);
+		if (merge) this.history.executeMerged(command, { key: merge });
+		else this.history.execute(command);
 		this.committing = false;
 	}
 
-	/** Runs `fn` (which updates fields) and records it as one undo step. */
-	private change(name: string, fn: () => void): void {
+	/** Runs `fn` (which updates fields) and records it as one undo step (merged by `merge` key). */
+	private change(name: string, fn: () => void, merge?: string): void {
 		const before = this.snapshot();
 		fn();
-		this.commit(name, before);
+		this.commit(name, before, merge);
+	}
+
+	/** Ends a merged edit (a slider released): the next change starts a new undo step. */
+	endMergedEdit(): void {
+		this.history.endGesture();
 	}
 
 	private setDoc(nodes: VectorNode[]) {
@@ -1323,6 +1564,7 @@ export class VectorEditorController {
 		this.widthEdit = null;
 		this.builderPreview = null;
 		this.builderHoverKey = null;
+		this.blendStart = null;
 		if (tool !== 'direct') {
 			this.anchors = [];
 			this.editingId = null;
@@ -1632,6 +1874,259 @@ export class VectorEditorController {
 		return this.setStyle({ strokeWidthProfile: points.length ? points : null }, options.ids ?? this.selection, { label: points.length ? 'Width Profile' : 'Uniform Width' });
 	}
 
+	// -------------------------------------------------------------------------
+	// Gradients
+	// -------------------------------------------------------------------------
+
+	/** Which paint (fill or stroke) the gradient tool and editor work on. */
+	setGradientTarget(target: VectorGradientTarget): void {
+		if (target === this.gradientEdit.target) return;
+		this.gradientEdit = { target, stop: null };
+		this.notify();
+	}
+
+	/** Selects a stop of the gradient being edited (index into its sorted stops), or none. */
+	selectGradientStop(index: number | null): void {
+		if (index === this.gradientEdit.stop) return;
+		this.gradientEdit = { ...this.gradientEdit, stop: index };
+		this.notify();
+	}
+
+	/** The gradient tool's annotator for the selection (screen pixels), or null when its paint is not a gradient. */
+	getGradientAnnotator(): VectorGradientAnnotator | null {
+		return getVectorGradientAnnotator(this.doc, this.selection, this.viewport, this.gradientEdit.target);
+	}
+
+	/** Unlocked paths of `ids` (default: the selection). */
+	private gradientPaths(ids: readonly string[] = this.selection): VectorPathNode[] {
+		const out = new Map<string, VectorPathNode>();
+		for (const id of ids) {
+			const node = this.getNode(id);
+			if (node && !node.locked) for (const p of collectPathNodes(node)) if (!p.locked) out.set(p.id, p);
+		}
+		return [...out.values()];
+	}
+
+	/**
+	 * Edits the gradient of the `target` paint (default: the editor's) of the selected (or given)
+	 * paths with `patch`: a colour or no paint becomes a gradient (`patch.type`, default linear,
+	 * from the colour to white). Consecutive edits with the same `merge` key are one undo step.
+	 */
+	setGradient(patch: VectorGradientPatch, options: { ids?: readonly string[]; target?: VectorGradientTarget; label?: string; merge?: string } = {}): VectorActionResult {
+		const target = options.target ?? this.gradientEdit.target;
+		const paths = this.gradientPaths(options.ids ?? this.selection);
+		if (!paths.length) return { ok: false, message: 'Nothing is selected.' };
+		const next = new Map<string, VectorPathNode>();
+		for (const path of paths) {
+			const paint = path[target];
+			const base = isVectorGradient(paint) ? paint : defaultVectorGradient(patch.type ?? 'linear', paint);
+			const g = applyVectorGradientPatch(base, patch);
+			if (!g) return { ok: false, message: 'That is not a valid gradient: it needs at least one stop with an offset and a colour.' };
+			next.set(path.id, { ...path, [target]: g });
+		}
+		this.change(options.label ?? 'Gradient', () => this.setDoc(mapTree(this.doc.nodes, (n) => next.get(n.id) ?? n)), options.merge);
+		const stops = (next.values().next().value?.[target] as { stops: unknown[] } | undefined)?.stops.length ?? 0;
+		if (this.gradientEdit.stop !== null && this.gradientEdit.stop >= stops) this.gradientEdit = { ...this.gradientEdit, stop: null };
+		return { ok: true };
+	}
+
+	/** Applies `fn` to every target gradient of the selection (paths whose paint is not a gradient are skipped). */
+	private editGradients(label: string, fn: (stops: VectorGradient['stops']) => VectorGradient['stops'] | null, merge?: string): VectorActionResult {
+		const target = this.gradientEdit.target;
+		const paths = this.gradientPaths().filter((p) => isVectorGradient(p[target]));
+		if (!paths.length) return { ok: false, message: 'The selection has no gradient.' };
+		const next = new Map<string, VectorPathNode>();
+		for (const path of paths) {
+			const g = path[target] as VectorGradient;
+			const stops = fn(sortedVectorGradientStops(g));
+			if (!stops) return { ok: false, message: 'A gradient keeps at least two stops.' };
+			next.set(path.id, { ...path, [target]: { ...g, stops } });
+		}
+		this.change(label, () => this.setDoc(mapTree(this.doc.nodes, (n) => next.get(n.id) ?? n)), merge);
+		return { ok: true };
+	}
+
+	/** Changes stop `index` (colour, opacity, offset or midpoint) of the selection's gradients; selects it. */
+	setGradientStop(index: number, patch: { color?: string; opacity?: number; offset?: number; midpoint?: number }, options: { merge?: string } = {}): VectorActionResult {
+		let moved = index;
+		const result = this.editGradients(
+			'Gradient Stop',
+			(stops) => {
+				if (!stops[index]) return stops;
+				let next = stops.map((s, i) => {
+					if (i !== index) return s;
+					const out = { ...s };
+					if (patch.color !== undefined) out.color = patch.color;
+					if (patch.opacity !== undefined && Number.isFinite(patch.opacity)) {
+						const o = Math.min(1, Math.max(0, patch.opacity));
+						if (o < 1) out.opacity = o;
+						else delete out.opacity;
+					}
+					if (patch.midpoint !== undefined && Number.isFinite(patch.midpoint)) {
+						const m = Math.min(0.95, Math.max(0.05, patch.midpoint));
+						if (Math.abs(m - 0.5) > 1e-3) out.midpoint = m;
+						else delete out.midpoint;
+					}
+					return out;
+				});
+				if (patch.offset !== undefined && Number.isFinite(patch.offset)) ({ stops: next, index: moved } = moveVectorGradientStop(next, index, patch.offset));
+				return next;
+			},
+			options.merge
+		);
+		if (result.ok) this.selectGradientStop(moved);
+		return result;
+	}
+
+	/** Adds a stop at `offset` (painting what the gradient paints there) to the selection's gradients and selects it. */
+	addGradientStop(offset: number): VectorActionResult {
+		let index = 0;
+		const target = this.gradientEdit.target;
+		const result = this.editGradients('Add Gradient Stop', (stops) => {
+			const path = this.gradientPaths().find((p) => isVectorGradient(p[target]));
+			const r = insertVectorGradientStop({ ...(path![target] as VectorGradient), stops }, offset);
+			index = r.index;
+			return r.stops;
+		});
+		if (result.ok) this.selectGradientStop(index);
+		return result;
+	}
+
+	/** Removes stop `index` of the selection's gradients (never below two stops). */
+	removeGradientStop(index: number): VectorActionResult {
+		const result = this.editGradients('Delete Gradient Stop', (stops) => removeVectorGradientStop(stops, index));
+		if (result.ok) this.selectGradientStop(null);
+		return result;
+	}
+
+	/** Reverses the selection's gradients (stops and midpoints). */
+	reverseGradient(): VectorActionResult {
+		return this.setGradient({ reverse: true }, { label: 'Reverse Gradient' });
+	}
+
+	/** `doc` with path `id`'s `target` paint replaced. */
+	private withGradient(doc: VectorDocument, id: string, target: VectorGradientTarget, g: VectorGradient): VectorDocument {
+		return { ...doc, nodes: mapTree(doc.nodes, (n) => (n.id === id ? ({ ...n, [target]: g } as VectorNode) : n)) };
+	}
+
+	private downGradient(screen: Vec2, p: Vec2, input: VectorPointerInput) {
+		const before = this.snapshot();
+		const a = this.getGradientAnnotator();
+		let part = a ? hitVectorGradientAnnotator(a, screen) : null;
+		if (a && part) {
+			// Alt on a radial gradient's centre grabs its focal point (they sit together until moved).
+			if (part.kind === 'handle' && part.handle === 'start' && input.alt && a.gradient.type === 'radial') part = { kind: 'handle', handle: 'focal' };
+			if (part.kind === 'stop') this.gradientEdit = { ...this.gradientEdit, stop: part.index };
+			this.drag = { kind: 'gradient', part, nodeId: a.nodeId, targets: [a.nodeId], annotator: a, start: screen, startDoc: p, before, base: this.doc, moved: false, stop: part.kind === 'stop' ? part.index : null };
+			this.interaction = { type: 'gradient', part: part.kind, ...(part.kind === 'handle' ? { handle: part.handle } : {}) };
+			this.notify();
+			return;
+		}
+		// Elsewhere a drag draws a new vector over the path under the pointer (selecting it) or the selection.
+		const hit = this.hitPath(p);
+		if (hit && !this.gradientPaths().some((n) => n.id === hit.id)) {
+			this.selection = [hit.id];
+			this.gradientEdit = { ...this.gradientEdit, stop: null };
+		}
+		const targets = this.gradientPaths().map((n) => n.id);
+		if (!targets.length) {
+			if (this.selection.length) this.clearSelection();
+			return;
+		}
+		this.drag = { kind: 'gradient', part: null, nodeId: null, targets, annotator: null, start: screen, startDoc: p, before, base: this.doc, moved: false, stop: null };
+		this.interaction = { type: 'gradient', part: 'create' };
+		this.notify();
+	}
+
+	private moveGradient(drag: Extract<Drag, { kind: 'gradient' }>, screen: Vec2, p: Vec2, input: VectorPointerInput) {
+		if (!drag.moved && Math.hypot(screen.x - drag.start.x, screen.y - drag.start.y) < 3) return;
+		drag.moved = true;
+		const target = this.gradientEdit.target;
+		const base = drag.base;
+		const constrained = (from: Vec2, to: Vec2) => {
+			if (!input.shift) return to;
+			const ang = Math.round(Math.atan2(to.y - from.y, to.x - from.x) / (Math.PI / 4)) * (Math.PI / 4);
+			const len = Math.hypot(to.x - from.x, to.y - from.y);
+			return { x: from.x + Math.cos(ang) * len, y: from.y + Math.sin(ang) * len };
+		};
+		if (!drag.part) {
+			const end = constrained(drag.startDoc, p);
+			let doc = base;
+			for (const id of drag.targets) {
+				const node = findVectorNode(base.nodes, id) as VectorPathNode | undefined;
+				if (!node) continue;
+				const paint = node[target];
+				const g = isVectorGradient(paint) ? paint : defaultVectorGradient('linear', paint);
+				doc = this.withGradient(doc, id, target, setVectorGradientVector(g, vectorPathLocalBounds(node), this.toLocal(id, drag.startDoc, base), this.toLocal(id, end, base)));
+			}
+			this.doc = doc;
+			this.notify(true);
+			return;
+		}
+		const id = drag.nodeId!;
+		const node = findVectorNode(base.nodes, id) as VectorPathNode;
+		const g = node[target] as VectorGradient;
+		const bounds = vectorPathLocalBounds(node);
+		const local = (q: Vec2) => this.toLocal(id, q, base);
+		const part = drag.part;
+		let next: VectorGradient = g;
+		if (part.kind === 'handle') {
+			let to = p;
+			// Shift keeps the vector at 45° steps from the start.
+			if (part.handle === 'end' || part.handle === 'radius') to = constrained(this.screenToDocument(drag.annotator!.start), p);
+			next = moveVectorGradientHandle(g, bounds, part.handle, local(to), local(drag.startDoc));
+		} else if (part.kind === 'bar') {
+			next = moveVectorGradientHandle(g, bounds, 'start', local(p), local(drag.startDoc));
+		} else {
+			const a = drag.annotator!;
+			const pos = vectorGradientBarPosition(a, screen);
+			const stops = sortedVectorGradientStops(g);
+			if (part.kind === 'stop') {
+				const off = Math.abs(pos.across - VECTOR_GRADIENT_STOP_GAP) > VECTOR_GRADIENT_OFF_BAR;
+				const removed = off ? removeVectorGradientStop(stops, part.index) : null;
+				if (removed) {
+					next = { ...g, stops: removed };
+					drag.stop = null;
+				} else {
+					const r = moveVectorGradientStop(stops, part.index, Math.min(1, Math.max(0, pos.offset)));
+					next = { ...g, stops: r.stops };
+					drag.stop = r.index;
+				}
+				this.interaction = { type: 'gradient', part: 'stop', ...(removed ? { removing: true } : {}) };
+				this.gradientEdit = { ...this.gradientEdit, stop: drag.stop };
+			} else {
+				const m = vectorGradientMidpointFromPosition(stops, part.index, pos.offset);
+				if (m !== null) next = { ...g, stops: stops.map((s, i) => (i !== part.index ? s : Math.abs(m - 0.5) < 1e-3 ? (({ midpoint: _m, ...rest }) => rest)(s) : { ...s, midpoint: m })) };
+			}
+		}
+		this.doc = this.withGradient(base, id, target, next);
+		this.notify(true);
+	}
+
+	private upGradient(drag: Extract<Drag, { kind: 'gradient' }>) {
+		const part = drag.part;
+		if (!drag.moved) {
+			if (part?.kind === 'bar') {
+				this.addGradientStop(part.offset);
+				return;
+			}
+			this.notify();
+			return;
+		}
+		const label = !part
+			? 'Gradient'
+			: part.kind === 'stop'
+				? drag.stop === null
+					? 'Delete Gradient Stop'
+					: 'Move Gradient Stop'
+				: part.kind === 'midpoint'
+					? 'Gradient Midpoint'
+					: part.kind === 'bar' || (part.kind === 'handle' && part.handle === 'start')
+						? 'Move Gradient'
+						: 'Gradient Handle';
+		return this.commit(label, drag.before);
+	}
+
 	/** Removes one width point of a path's profile. */
 	removeWidthPoint(ref: Pick<VectorWidthPointRef, 'nodeId' | 'index'>): VectorActionResult {
 		return this.removeWidthPoints([ref]);
@@ -1832,7 +2327,8 @@ export class VectorEditorController {
 		const replace = new Map<string, VectorNode[]>();
 		for (const p of paths) {
 			// In the node's own space: the new paths keep its transform.
-			const outline = bezierToSubpaths(vectorStrokeOutlinePath(subpathsToBezier(p.subpaths), p));
+			// As drawn: path effects applied (the outline itself carries none).
+			const outline = bezierToSubpaths(vectorStrokeOutlinePath(vectorAppearanceOutline(p), p));
 			if (!outline.length) continue;
 			const {
 				stroke,
@@ -1847,11 +2343,12 @@ export class VectorEditorController {
 				startArrowScale: _ss,
 				endArrowScale: _es,
 				strokeWidthProfile: _wp,
+				effects,
 				...rest
 			} = cloneVectorNode(p);
 			const id = this.newId();
 			const strokeNode: VectorPathNode = { ...rest, id, name: `${p.name ?? 'Path'} Stroke`, subpaths: outline, fill: stroke ?? null, stroke: null, fillRule: 'nonzero' };
-			const list: VectorNode[] = hasPaint(p.fill) ? [{ ...rest, stroke: null }, strokeNode] : [strokeNode];
+			const list: VectorNode[] = hasPaint(p.fill) ? [{ ...rest, ...(effects ? { effects } : {}), stroke: null }, strokeNode] : [strokeNode];
 			created.push(id);
 			replace.set(p.id, list);
 		}
@@ -1865,6 +2362,131 @@ export class VectorEditorController {
 			this.editingId = null;
 		});
 		return created;
+	}
+
+	// -------------------------------------------------------------------------
+	// Path effects
+	// -------------------------------------------------------------------------
+
+	/** Selected (or given) nodes that can carry effects: the roots of the selection. */
+	private effectTargets(ids?: readonly string[]): VectorNode[] {
+		return (ids ?? this.selectedRoots()).map((id) => this.getNode(id)).filter((n): n is VectorNode => !!n && !n.blendStep);
+	}
+
+	/**
+	 * Adds an effect of `type` to the selected (or given) nodes, at the bottom of each stack (or
+	 * at `index`), with default parameters merged with `params`. A repeater's copies start one
+	 * shape width apart. One undo step; returns the new effect ids (one per node, in order).
+	 */
+	addEffect(type: VectorEffectType, options: { ids?: readonly string[]; params?: Record<string, unknown>; index?: number } = {}): string[] {
+		const targets = this.effectTargets(options.ids);
+		if (!targets.length || !createVectorEffect(type, '')) return [];
+		const created: string[] = [];
+		const next = new Map<string, VectorNode>();
+		for (const node of targets) {
+			const list = node.effects ?? [];
+			let k = list.length + 1;
+			while (list.some((e) => e.id === `fx${k}`)) k++;
+			const params: Record<string, unknown> = { ...(options.params ?? {}) };
+			if (type === 'repeater' && params.position === undefined) {
+				const b = bezierPathBounds(vectorAppearanceOutline(node));
+				if (b && b.maxX - b.minX > 0) params.position = { x: Math.round((b.maxX - b.minX) * 1.25 * 100) / 100, y: 0 };
+			}
+			const effect = createVectorEffect(type, `fx${k}`, params)!;
+			const at = options.index === undefined ? list.length : Math.min(list.length, Math.max(0, Math.round(options.index)));
+			next.set(node.id, { ...node, effects: [...list.slice(0, at), effect, ...list.slice(at)] } as VectorNode);
+			created.push(effect.id);
+		}
+		this.change(`Add ${VECTOR_EFFECT_LABELS[type]}`, () => this.setDoc(mapTree(this.doc.nodes, (n) => next.get(n.id) ?? n)));
+		return created;
+	}
+
+	private editEffects(nodeId: string, label: string, fn: (effects: VectorEffect[]) => VectorEffect[] | string, merge?: string): VectorActionResult {
+		const node = this.getNode(nodeId);
+		if (!node) return { ok: false, message: `There is no node "${nodeId}".` };
+		const result = fn(node.effects ?? []);
+		if (typeof result === 'string') return { ok: false, message: result };
+		this.change(label, () => this.replaceNode(nodeId, (result.length ? { ...node, effects: result } : (({ effects: _e, ...rest }) => rest)(node)) as VectorNode), merge);
+		return { ok: true };
+	}
+
+	/**
+	 * Turns an effect on or off and changes its parameters (unknown or invalid values are
+	 * ignored). With `merge` (true, or a key of your own), consecutive updates of the same effect
+	 * fold into one undo step, as a slider drag should; call `endMergedEdit` when it ends.
+	 */
+	updateEffect(nodeId: string, effectId: string, patch: { enabled?: boolean; params?: Record<string, unknown> }, options: { merge?: boolean | string } = {}): VectorActionResult {
+		const merge = options.merge === true ? `effect:${nodeId}:${effectId}` : options.merge || undefined;
+		const node = this.getNode(nodeId);
+		const current = node?.effects?.find((e) => e.id === effectId);
+		const label = current ? VECTOR_EFFECT_LABELS[current.type] ?? 'Effect' : 'Effect';
+		return this.editEffects(
+			nodeId,
+			`Edit ${label}`,
+			(list) => {
+				const i = list.findIndex((e) => e.id === effectId);
+				if (i < 0) return `Node "${nodeId}" has no effect "${effectId}".`;
+				const e = list[i];
+				const raw = patch.params && e.type === 'envelope' && node ? this.envelopeParams(node, e, patch.params) : patch.params;
+				const params = raw ? normalizeVectorEffectParams(e.type, raw, e.params as never) : e.params;
+				const next = { ...e, params, ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}) } as VectorEffect;
+				if (next.enabled !== false) delete (next as { enabled?: boolean }).enabled;
+				return list.map((x, j) => (j === i ? next : x));
+			},
+			merge
+		);
+	}
+
+	/** Removes an effect from a node's stack. */
+	removeEffect(nodeId: string, effectId: string): VectorActionResult {
+		return this.editEffects(nodeId, 'Remove Effect', (list) => (list.some((e) => e.id === effectId) ? list.filter((e) => e.id !== effectId) : `Node "${nodeId}" has no effect "${effectId}".`));
+	}
+
+	/** Moves an effect to position `index` of its stack (0 is applied first). */
+	moveEffect(nodeId: string, effectId: string, index: number): VectorActionResult {
+		return this.editEffects(nodeId, 'Reorder Effects', (list) => {
+			const i = list.findIndex((e) => e.id === effectId);
+			if (i < 0) return `Node "${nodeId}" has no effect "${effectId}".`;
+			const to = Math.min(list.length - 1, Math.max(0, Math.round(index)));
+			const out = list.slice();
+			const [e] = out.splice(i, 1);
+			out.splice(to, 0, e);
+			return out;
+		});
+	}
+
+	/**
+	 * Expand Appearance: bakes the path effects and live booleans of the selected (or given)
+	 * nodes, and of everything inside them, into plain paths. A node keeps its id (a group when
+	 * it draws as several shapes); the shapes it made get new ids. Returns the ids of the expanded
+	 * nodes (empty when none was live).
+	 */
+	expandAppearance(options: { ids?: readonly string[] } = {}): string[] {
+		const roots = (options.ids ?? this.selectedRoots()).map((id) => this.getNode(id)).filter((n): n is VectorNode => !!n && hasVectorAppearance(n));
+		if (!roots.length) return [];
+		const fresh = (n: VectorNode): VectorNode => {
+			const id = n.id.includes('~fx') ? this.newId() : n.id;
+			return n.type === 'group' ? { ...n, id, children: n.children.map(fresh) } : { ...n, id };
+		};
+		const bake = (n: VectorNode): VectorNode => {
+			if (!hasVectorAppearance(n)) return n;
+			if (!hasOwnVectorAppearance(n)) return { ...(n as VectorGroupNode), children: (n as VectorGroupNode).children.map(bake) };
+			let e = expandVectorAppearance(n);
+			// A live group that draws as one shape becomes that path, in the group's place.
+			if (e.type === 'group' && e.children.length === 1 && e.children[0].type === 'path') {
+				const { id: _id, opacity, name, ...child } = e.children[0];
+				const k = (e.opacity ?? 1) * (opacity ?? 1);
+				e = { ...child, id: e.id, name: e.name ?? name, ...placementOf(e), ...(k < 1 ? { opacity: k } : {}) } as VectorPathNode;
+			}
+			return fresh(e);
+		};
+		const next = new Map(roots.map((n) => [n.id, bake(n)]));
+		this.change('Expand Appearance', () => {
+			this.setDoc(mapTree(this.doc.nodes, (n) => next.get(n.id) ?? n));
+			this.anchors = [];
+			this.editingId = null;
+		});
+		return roots.map((n) => n.id);
 	}
 
 	rename(id: string, name: string): VectorActionResult {
@@ -1961,6 +2583,341 @@ export class VectorEditorController {
 	private inFrame(angle: number, m: AffineMatrix): AffineMatrix {
 		if (!angle) return m;
 		return multiplyMatrices(multiplyMatrices(rotateMatrix(-angle), m), rotateMatrix(angle));
+	}
+
+	/** The selection frame's corners in document space, clockwise from the top left. */
+	private frameCorners(frame: VectorSelectionFrame): Vec2[] {
+		const rot = rotateMatrix(frame.angle);
+		return vectorBoxCorners(frame).map((c) => (frame.angle ? applyMatrix(rot, c) : c));
+	}
+
+	/** `doc` with nodes `ids` sent through `f` (a map of document space), each in its own space (see `distortVectorNode`). */
+	private distorted(doc: VectorDocument, ids: ReadonlySet<string>, f: (p: Vec2) => Vec2, tolerance = VECTOR_DISTORT_TOLERANCE): VectorDocument {
+		const visit = (list: readonly VectorNode[], parent: AffineMatrix): VectorNode[] => {
+			let changed = false;
+			const out = list.map((n) => {
+				let next = n;
+				if (ids.has(n.id) && !n.locked) next = distortVectorNode(n, parent, f, tolerance);
+				else if (n.type === 'group') {
+					const children = visit(n.children, multiplyMatrices(nodeMatrix(n), parent));
+					if (children !== n.children) next = { ...n, children };
+				}
+				if (next !== n) changed = true;
+				return next;
+			});
+			return changed ? out : (list as VectorNode[]);
+		};
+		const nodes = visit(doc.nodes, IDENTITY_MATRIX);
+		return nodes === doc.nodes ? doc : { ...doc, nodes };
+	}
+
+	/**
+	 * Free Distort mode of the selection box (`state.freeDistort`): dragging a corner distorts the
+	 * selection in perspective, each corner on its own (Shift+Alt+Mod: symmetric perspective, the
+	 * corner beside it moving the other way); dragging a side moves its two corners; Mod-dragging a
+	 * side skews along it (Alt: about the centre). Each drag is one undo step.
+	 */
+	setFreeDistort(on: boolean): void {
+		if (this.freeDistort === on) return;
+		this.freeDistort = on;
+		this.notify();
+	}
+
+	/**
+	 * Distorts the selected (or given) nodes so the corners of their selection box (clockwise from
+	 * the top left, in the box's own rotation) land on `corners` (document space): a projective map,
+	 * so straight lines stay straight. Curves are followed within `tolerance` (document units).
+	 * One undo step.
+	 */
+	distort(corners: readonly Vec2[], options: { ids?: readonly string[]; tolerance?: number } = {}): VectorActionResult {
+		const ids = options.ids ?? this.selectedRoots();
+		const frame = this.frameOf(ids);
+		if (!frame) return { ok: false, message: 'Nothing is selected.' };
+		if (!(frame.width > 0 && frame.height > 0)) return { ok: false, message: 'The selection has no area to distort.' };
+		const from = this.frameCorners(frame);
+		const h = corners.length === 4 ? vectorHomography(from, corners) : null;
+		if (!h || !vectorHomographyKeepsQuad(h, from)) return { ok: false, message: 'The four corners must make a convex quadrilateral, clockwise from the top left.' };
+		this.change('Distort', () => {
+			this.doc = this.distorted(this.doc, new Set(ids), (p) => applyVectorHomography(h, p) ?? p, options.tolerance);
+		});
+		return { ok: true };
+	}
+
+	/**
+	 * Skews the selected (or given) nodes along the selection box's own axes by `ax` degrees
+	 * horizontally (x' = x + tan(ax)·y: vertical lines lean right for positive angles) and `ay`
+	 * vertically, about `origin` (default: the box centre, document space). One undo step.
+	 */
+	skew(ax: number, ay = 0, options: { ids?: readonly string[]; origin?: Vec2 } = {}): VectorActionResult {
+		const frame = this.frameOf(options.ids ?? this.selectedRoots());
+		if (!frame) return { ok: false, message: 'Nothing is selected.' };
+		if (![ax, ay].every((v) => Number.isFinite(v) && Math.abs(v) < 89.9)) return { ok: false, message: 'Skew angles must be between −89.9° and 89.9°.' };
+		const origin = applyMatrix(rotateMatrix(-frame.angle), options.origin ?? this.frameCenter(frame));
+		return this.transform(this.inFrame(frame.angle, vectorSkewMatrix(ax, ay, origin)), { ids: options.ids, label: 'Skew' });
+	}
+
+	/** A selection box handle dragged in Free Distort mode. */
+	private moveDistort(drag: Extract<Drag, { kind: 'scale' }>, p: Vec2, input: VectorPointerInput) {
+		const angle = drag.frame.angle;
+		const unrotate = (v: Vec2) => (angle ? applyMatrix(rotateMatrix(-angle), v) : v);
+		const q = unrotate(p);
+		const q0 = unrotate(drag.start);
+		const d = { x: q.x - q0.x, y: q.y - q0.y };
+		const ids = new Set(this.selectedRoots());
+		const from = this.frameCorners(drag.frame);
+		const corner = drag.handle.length === 2;
+		this.setGuides(null);
+		if (!corner && input.mod) {
+			const m = this.inFrame(angle, vectorShearForSide(drag.frame, drag.handle, d, !!input.alt));
+			drag.op = 'Skew';
+			this.doc = this.transformed(drag.base, ids, m);
+			this.interaction = { type: 'distort', mode: 'skew', corners: from.map((c) => applyMatrix(m, c)) };
+			this.notify(true);
+			return;
+		}
+		const mode: VectorDistortMode = corner && input.mod && input.alt && input.shift ? 'perspective' : 'distort';
+		const rot = rotateMatrix(angle);
+		const quad = vectorDistortQuad(drag.frame, drag.handle, d, mode).map((c) => (angle ? applyMatrix(rot, c) : c));
+		const h = vectorHomography(from, quad);
+		// A quad that folds over keeps the last good shape.
+		if (!h || !vectorHomographyKeepsQuad(h, from)) return;
+		drag.op = mode === 'perspective' ? 'Perspective' : 'Distort';
+		this.doc = this.distorted(drag.base, ids, (pt) => applyVectorHomography(h, pt) ?? pt);
+		this.interaction = { type: 'distort', mode, corners: quad };
+		this.notify(true);
+	}
+
+	// -------------------------------------------------------------------------
+	// Envelopes
+	// -------------------------------------------------------------------------
+
+	/** Selected (or given) roots that can carry an envelope. */
+	private envelopeTargets(ids?: readonly string[]): VectorNode[] {
+		return this.effectTargets(ids).filter((n) => !n.locked);
+	}
+
+	/** Envelope parameters for `node` after `patch`: a preset switched to a mesh becomes the mesh it stood for. */
+	private envelopeParams(node: VectorNode, current: Extract<VectorEffect, { type: 'envelope' }> | null, patch: Record<string, unknown>): Record<string, unknown> {
+		if (patch.style !== 'mesh' || patch.mesh !== undefined || !current || current.params.style === 'mesh') return patch;
+		const frame = vectorEnvelopeFrame(node, current.id);
+		if (!frame) return patch;
+		const rows = typeof patch.rows === 'number' ? patch.rows : current.params.rows;
+		const columns = typeof patch.columns === 'number' ? patch.columns : current.params.columns;
+		return { ...patch, mesh: resizeVectorMesh(frame.mesh, columns, rows) };
+	}
+
+	/**
+	 * Gives the selected (or given) nodes an envelope distortion, or changes the one they have: a
+	 * warp preset (`style` with `bend`, `horizontal` and `vertical` in percent and `orientation`) or
+	 * a mesh (`style: 'mesh'` with `rows` and `columns`, and optionally its `mesh` points). The
+	 * envelope stays live (an `envelope` effect: edit it with the Envelope tool, Expand Appearance
+	 * bakes it). One undo step (with `merge`, consecutive changes fold into one, as a slider drag
+	 * should). Returns the envelope of each node.
+	 */
+	envelope(params: Partial<VectorEnvelopeParams> = {}, options: { ids?: readonly string[]; merge?: boolean } = {}): { nodeId: string; effectId: string }[] {
+		const targets = this.envelopeTargets(options.ids);
+		if (!targets.length) return [];
+		const out: { nodeId: string; effectId: string }[] = [];
+		const next = new Map<string, VectorNode>();
+		const raw = params as Record<string, unknown>;
+		for (const node of targets) {
+			const list = node.effects ?? [];
+			const current = (list.find((e) => e.type === 'envelope') as Extract<VectorEffect, { type: 'envelope' }> | undefined) ?? null;
+			if (current) {
+				const p = normalizeVectorEffectParams('envelope', this.envelopeParams(node, current, raw), current.params)!;
+				const { enabled: _e, ...rest } = current;
+				next.set(node.id, { ...node, effects: list.map((e) => (e === current ? { ...rest, params: p } : e)) } as VectorNode);
+				out.push({ nodeId: node.id, effectId: current.id });
+			} else {
+				let k = list.length + 1;
+				while (list.some((e) => e.id === `fx${k}`)) k++;
+				const effect = createVectorEffect('envelope', `fx${k}`, raw)!;
+				next.set(node.id, { ...node, effects: [...list, effect] } as VectorNode);
+				out.push({ nodeId: node.id, effectId: effect.id });
+			}
+		}
+		const made = out.some((o) => !targets.find((n) => n.id === o.nodeId)?.effects?.some((e) => e.id === o.effectId));
+		const merge = options.merge ? `envelope:${out.map((o) => o.nodeId).join(',')}` : undefined;
+		this.change(made ? (params.style === 'mesh' ? 'Make Envelope with Mesh' : 'Make Envelope with Warp') : 'Edit Envelope', () => this.setDoc(mapTree(this.doc.nodes, (n) => next.get(n.id) ?? n)), merge);
+		return out;
+	}
+
+	/**
+	 * Make with Top Object: the topmost selected object's outline (a closed path) becomes the envelope
+	 * of the other selected objects (grouped when there are several; they must share a parent), as a
+	 * mesh of `columns × rows` patches whose border follows the outline. The top object is used up.
+	 * One undo step; returns the id of the enveloped node.
+	 */
+	makeEnvelopeWithTopObject(options: { ids?: readonly string[]; rows?: number; columns?: number } = {}): VectorActionResult & { nodeId?: string } {
+		const ids = options.ids ?? this.selectedRoots();
+		if (ids.length < 2) return { ok: false, message: 'Select the objects and, on top of them, the shape to use as the envelope.' };
+		const order = new Map<string, number>();
+		walkVectorNodes(this.doc.nodes, (n) => order.set(n.id, order.size));
+		const sorted = ids.filter((id) => order.has(id)).sort((a, b) => order.get(a)! - order.get(b)!);
+		const topId = sorted[sorted.length - 1];
+		const top = this.getNode(topId);
+		const outline = top?.type === 'path' ? top.subpaths.find((sp) => sp.closed && sp.anchors.length > 1) : undefined;
+		if (!top || !outline) return { ok: false, message: 'The top object must be a path with a closed outline.' };
+		const contents = sorted.slice(0, -1).map((id) => this.getNode(id)!);
+		if (contents.some((n) => n.locked)) return { ok: false, message: 'Locked objects cannot be enveloped.' };
+		const parents = contents.map((n) => locateVectorNode(this.doc.nodes, n.id)?.parent?.id ?? null);
+		if (parents.some((p) => p !== parents[0])) return { ok: false, message: 'The objects to envelope must be in the same group.' };
+		// The node that gets the envelope: the one object, or a new group of them in place of the topmost.
+		const target: VectorNode =
+			contents.length === 1 ? contents[0] : { id: this.newId(), type: 'group', name: 'Envelope', children: contents.map((n) => n) };
+		const parentToDoc = parents[0] ? this.worldOf(parents[0]) : IDENTITY_MATRIX;
+		const targetToDoc = multiplyMatrices(nodeMatrix(target), parentToDoc);
+		const toLocal = multiplyMatrices(this.worldOf(topId), invertMatrix(targetToDoc));
+		const local = {
+			closed: true,
+			anchors: outline.anchors.map((a) => ({
+				...applyMatrix(toLocal, a),
+				...(a.in ? { in: applyMatrix(toLocal, a.in) } : {}),
+				...(a.out ? { out: applyMatrix(toLocal, a.out) } : {})
+			}))
+		};
+		const mesh = vectorMeshFromOutline(local, options.columns ?? 4, options.rows ?? 4);
+		if (!mesh) return { ok: false, message: 'The top object’s outline is too small to use as an envelope.' };
+		const list = target.effects ?? [];
+		let k = list.length + 1;
+		while (list.some((e) => e.id === `fx${k}`)) k++;
+		const effect = createVectorEffect('envelope', `fx${k}`, { style: 'mesh', mesh })!;
+		const enveloped = { ...target, effects: [...list, effect] } as VectorNode;
+		this.change('Make Envelope with Top Object', () => {
+			let nodes = spliceTree(this.doc.nodes, topId, []);
+			if (contents.length === 1) nodes = spliceTree(nodes, target.id, [enveloped]);
+			else {
+				const last = contents[contents.length - 1].id;
+				for (const n of contents.slice(0, -1)) nodes = spliceTree(nodes, n.id, []);
+				nodes = spliceTree(nodes, last, [enveloped]);
+			}
+			this.setDoc(nodes);
+			this.selection = [target.id];
+			this.anchors = [];
+			this.editingId = null;
+		});
+		return { ok: true, nodeId: target.id };
+	}
+
+	/**
+	 * Release: the selected (or given) nodes lose their envelope, and its shape (the mesh's border)
+	 * comes back as a path above each of them. One undo step; returns the new paths' ids.
+	 */
+	releaseEnvelope(options: { ids?: readonly string[] } = {}): string[] {
+		const targets = this.envelopeTargets(options.ids).filter((n) => n.effects?.some((e) => e.type === 'envelope'));
+		if (!targets.length) return [];
+		const created: string[] = [];
+		const replace = new Map<string, VectorNode[]>();
+		for (const node of targets) {
+			const effect = node.effects!.find((e) => e.type === 'envelope')!;
+			const frame = vectorEnvelopeFrame(node, effect.id);
+			const rest = node.effects!.filter((e) => e !== effect);
+			const { effects: _e, ...plain } = node;
+			const kept = (rest.length ? { ...plain, effects: rest } : plain) as VectorNode;
+			if (!frame) {
+				replace.set(node.id, [kept]);
+				continue;
+			}
+			const id = this.newId();
+			created.push(id);
+			const shape: VectorPathNode = {
+				id,
+				type: 'path',
+				name: 'Envelope',
+				...(node.transform ? { transform: node.transform } : {}),
+				subpaths: [vectorMeshOutline(frame.mesh)],
+				fill: null,
+				stroke: '#808080',
+				strokeWidth: 1
+			};
+			replace.set(node.id, [kept, shape]);
+		}
+		this.change('Release Envelope', () => {
+			let nodes = this.doc.nodes;
+			for (const [id, list] of replace) nodes = spliceTree(nodes, id, list);
+			this.setDoc(nodes);
+			this.selection = [...targets.map((n) => n.id), ...created];
+			this.anchors = [];
+		});
+		return created;
+	}
+
+	/** The selected node the Envelope tool edits, with its mesh (node space) and node → document matrix. */
+	private envelopeTarget() {
+		const target = getVectorEnvelopeTarget(this.doc, this.selection);
+		return target && !target.node.locked ? target : null;
+	}
+
+	/** The envelope mesh point under `screen` (handles first), or a spot inside the mesh. */
+	private hitEnvelope(screen: Vec2, p: Vec2): { target: NonNullable<ReturnType<VectorEditorController['envelopeTarget']>>; index: number | null; s: number; t: number } | null {
+		const target = this.envelopeTarget();
+		if (!target) return null;
+		const { mesh } = target.frame;
+		const pts = vectorMeshEditPoints(mesh);
+		let best: number | null = null;
+		let bestD = Infinity;
+		for (const index of [...pts.handles.map((h) => h.index), ...pts.anchors]) {
+			const s = this.documentToScreen(applyMatrix(target.world, mesh.points[index]));
+			const d = Math.hypot(s.x - screen.x, s.y - screen.y);
+			// Handles come first, so an anchor wins only when it is clearly nearer.
+			if (d <= this.hitRadius && d < bestD - 0.5) {
+				best = index;
+				bestD = d;
+			}
+		}
+		if (best !== null) return { target, index: best, s: 0, t: 0 };
+		const local = applyMatrix(invertMatrix(target.world), p);
+		const at = vectorMeshParamAt(mesh, local);
+		if (at.distance > this.tolerance()) return null;
+		return { target, index: null, s: at.s, t: at.t };
+	}
+
+	private downEnvelope(screen: Vec2, p: Vec2, input: VectorPointerInput) {
+		const hit = this.hitEnvelope(screen, p);
+		if (hit) {
+			const { node, frame } = hit.target;
+			this.drag = {
+				kind: 'envelope',
+				nodeId: node.id,
+				effectId: frame.effectId,
+				base: frame.mesh,
+				baseDoc: this.doc,
+				before: this.snapshot(),
+				index: hit.index,
+				s: hit.s,
+				t: hit.t,
+				start: this.toLocal(node.id, p),
+				moved: false
+			};
+			this.interaction = { type: 'envelope', nodeId: node.id, index: hit.index };
+			this.notify();
+			return;
+		}
+		// Elsewhere: pick the object to edit.
+		const node = hitTestVectorNodes(this.doc.nodes, p, this.tolerance(), { entered: this.enteredGroups() });
+		if (node) this.selection = input.shift ? (this.selection.includes(node.id) ? this.selection.filter((id) => id !== node.id) : [...this.selection, node.id]) : [node.id];
+		else if (!input.shift) this.selection = [];
+		this.anchors = [];
+		this.notify();
+	}
+
+	private moveEnvelope(drag: Extract<Drag, { kind: 'envelope' }>, p: Vec2) {
+		const local = this.toLocal(drag.nodeId, p, drag.baseDoc);
+		const d = { x: local.x - drag.start.x, y: local.y - drag.start.y };
+		if (!drag.moved && Math.hypot(d.x, d.y) * this.viewport.zoom < 1) return;
+		drag.moved = true;
+		const mesh = drag.index !== null ? dragVectorMeshPoint(drag.base, drag.index, d) : pullVectorMesh(drag.base, drag.s, drag.t, d);
+		const nodes = mapTree(drag.baseDoc.nodes, (n) => {
+			if (n.id !== drag.nodeId) return n;
+			const effects = (n.effects ?? []).map((e) =>
+				e.id === drag.effectId && e.type === 'envelope'
+					? { ...e, params: { ...e.params, style: 'mesh' as const, mesh, columns: mesh.us.length - 1, rows: mesh.vs.length - 1 } }
+					: e
+			);
+			return { ...n, effects } as VectorNode;
+		});
+		this.doc = { ...drag.baseDoc, nodes };
+		this.notify(true);
 	}
 
 	/** Applies a matrix to the selected (or given) nodes as one undo step. */
@@ -2186,6 +3143,8 @@ export class VectorEditorController {
 						const m = nodeMatrix(n);
 						out.push(
 							...n.children
+								.map((c) => (c.blendStep ? (({ blendStep: _s, locked: _l, ...rest }) => rest as VectorNode)(c) : c))
+								.map((c) => (c.booleanOperation ? (({ booleanOperation: _b, ...rest }) => rest as VectorNode)(c) : c))
 								.map((c) => (n.transform ? transformVectorNode(c, m) : c))
 								.map((c) => (opacity !== undefined && opacity < 1 ? { ...c, opacity: (c.opacity ?? 1) * opacity } : c))
 						);
@@ -2226,36 +3185,95 @@ export class VectorEditorController {
 	/**
 	 * Combines the selected paths (two or more) into one with a boolean operation. `subtract`
 	 * removes the upper shapes from the lowest one. The result takes the lowest shape's style
-	 * and place.
+	 * and place. Shapes take part as drawn (path effects and live booleans applied).
+	 *
+	 * With `live`, the operands stay editable instead: a lone live boolean group gets the
+	 * operation (its operands follow it again), operands of live boolean groups get it as their
+	 * own, and anything else (two or more nodes with one parent) is wrapped in a new live boolean
+	 * group. Returns the result's (or the live group's) id, or null.
 	 */
-	booleanOp(op: VectorBooleanOperation, options: { ids?: readonly string[] } = {}): string | null {
+	booleanOp(op: VectorBooleanOperation, options: { ids?: readonly string[]; live?: boolean } = {}): string | null {
 		const roots = options.ids ?? this.selectedRoots();
-		const order: string[] = [];
-		walkVectorNodes(this.doc.nodes, (n) => {
-			if (roots.includes(n.id)) for (const p of collectPathNodes(n)) order.push(p.id);
-		});
-		const paths = [...new Set(order)].map((id) => this.getNode(id) as VectorPathNode);
-		if (paths.length < 2) return null;
+		if (options.live) return this.liveBooleanOp(op, roots);
+		const entries = vectorPathEntries(this.doc, roots, { locked: true });
+		if (entries.length < 2) return null;
 		const result = pathBoolean(
 			BOOLEAN_OPS[op],
-			paths.map((p) => ({
-				path: vectorPathWorldBezier(
-					{ ...p, subpaths: p.subpaths.filter((s) => s.anchors.length > 1).map((s) => ({ ...s, closed: true })) },
-					vectorParentMatrix(this.doc.nodes, p.id) ?? IDENTITY_MATRIX
-				),
-				fillRule: p.fillRule ?? 'nonzero'
+			entries.map((e) => ({
+				path: vectorPathWorldBezier({ ...e.node, subpaths: e.node.subpaths.filter((s) => s.anchors.length > 1).map((s) => ({ ...s, closed: true })) }, e.parent),
+				fillRule: e.node.fillRule ?? 'nonzero'
 			}))
 		);
-		const base = paths[0];
-		const anchorRoot = roots.find((r) => findVectorNode([this.getNode(r)!], base.id)) ?? base.id;
+		const base = entries[0].node;
+		const anchorRoot = roots.find((r) => this.holds(r, base.id)) ?? base.id;
 		const subpaths = bezierToSubpaths(this.intoParentSpace(anchorRoot, result.path));
 		if (result.error || !subpaths.length) return null;
 		const id = this.newId();
-		const { transform: _t, ...baseRest } = cloneVectorNode(base);
+		const { transform: _t, effects: _e, booleanOperation: _b, ...baseRest } = cloneVectorNode(base);
 		const node: VectorPathNode = { ...baseRest, id, name: BOOLEAN_LABELS[op], subpaths };
-		const drop = new Set([...paths.map((p) => p.id), ...roots]);
+		const drop = new Set([...entries.map((e) => e.node.id), ...roots]);
 		this.change(BOOLEAN_LABELS[op], () => {
 			this.setDoc(mapTree(this.doc.nodes, (n) => (n.id === anchorRoot ? node : drop.has(n.id) ? null : n)));
+			this.selection = [id];
+			this.anchors = [];
+			this.editingId = null;
+		});
+		return id;
+	}
+
+	/** Whether stored node `rootId` holds `id` as drawn (`id` may be an expanded path inside it). */
+	private holds(rootId: string, id: string): boolean {
+		const n = this.getNode(rootId);
+		return !!n && (!!findVectorNode([n], id) || !!findVectorNode([expandVectorAppearance(n)], id));
+	}
+
+	private liveBooleanOp(op: VectorBooleanOperation, roots: readonly string[]): string | null {
+		const nodes = roots.map((id) => this.getNode(id));
+		if (!nodes.length || nodes.some((n) => !n)) return null;
+		const label = `Live ${BOOLEAN_LABELS[op]}`;
+		const lone = nodes.length === 1 ? nodes[0] : null;
+		if (isVectorLiveBoolean(lone)) {
+			const children = lone.children.map((c) => (c.booleanOperation ? (({ booleanOperation: _b, ...rest }) => rest as VectorNode)(c) : c));
+			this.change(label, () => this.replaceNode(lone.id, { ...lone, liveBoolean: op, children }));
+			return lone.id;
+		}
+		const parents = roots.map((id) => locateVectorNode(this.doc.nodes, id)?.parent ?? null);
+		if (parents.every((g) => isVectorLiveBoolean(g))) {
+			const set = new Set(roots);
+			this.change(label, () =>
+				this.setDoc(
+					mapTree(this.doc.nodes, (n) => {
+						if (n.type !== 'group' || !n.liveBoolean || !n.children.some((c) => set.has(c.id))) return n;
+						const group = n;
+						const children = group.children.map((c) => {
+							if (!set.has(c.id)) return c;
+							const { booleanOperation: _b, ...rest } = c;
+							return (op === group.liveBoolean ? rest : { ...rest, booleanOperation: op }) as VectorNode;
+						});
+						return { ...group, children };
+					})
+				)
+			);
+			return parents[0]!.id;
+		}
+		if (nodes.length < 2) return null;
+		const parent = parents[0]?.id ?? null;
+		if (parents.some((g) => (g?.id ?? null) !== parent)) return null;
+		const id = this.newId();
+		this.change(label, () => {
+			const set = new Set(roots);
+			const wrap = (list: readonly VectorNode[]): VectorNode[] => {
+				const members = list.filter((n) => set.has(n.id)).map((c) => (c.booleanOperation ? (({ booleanOperation: _b, ...rest }) => rest as VectorNode)(c) : c));
+				const top = Math.max(...list.map((n, i) => (set.has(n.id) ? i : -1)));
+				const out: VectorNode[] = [];
+				list.forEach((n, i) => {
+					if (i === top) out.push({ id, type: 'group', name: BOOLEAN_LABELS[op], liveBoolean: op, children: members });
+					if (!set.has(n.id)) out.push(n);
+				});
+				return out;
+			};
+			if (parent === null) this.setDoc(wrap(this.doc.nodes));
+			else this.setDoc(mapTree(this.doc.nodes, (n) => (n.id === parent && n.type === 'group' ? { ...n, children: wrap(n.children) } : n)));
 			this.selection = [id];
 			this.anchors = [];
 			this.editingId = null;
@@ -2266,15 +3284,13 @@ export class VectorEditorController {
 	/** Joins the selected paths into one compound path (subpaths kept, lowest style). */
 	combine(options: { ids?: readonly string[] } = {}): string | null {
 		const roots = options.ids ?? this.selectedRoots();
-		const paths: VectorPathNode[] = [];
-		walkVectorNodes(this.doc.nodes, (n) => {
-			if (roots.includes(n.id)) paths.push(...collectPathNodes(n));
-		});
-		if (paths.length < 2) return null;
+		const entries = vectorPathEntries(this.doc, roots, { locked: true });
+		if (entries.length < 2) return null;
+		const paths = entries.map((e) => e.node);
 		const id = this.newId();
-		const first = roots.find((r) => findVectorNode([this.getNode(r)!], paths[0].id)) ?? paths[0].id;
-		const subpaths = paths.flatMap((p) => bezierToSubpaths(this.intoParentSpace(first, vectorPathWorldBezier(p, vectorParentMatrix(this.doc.nodes, p.id) ?? IDENTITY_MATRIX))));
-		const { transform: _t, ...baseRest } = cloneVectorNode(paths[0]);
+		const first = roots.find((r) => this.holds(r, paths[0].id)) ?? paths[0].id;
+		const subpaths = entries.flatMap((e) => bezierToSubpaths(this.intoParentSpace(first, vectorPathWorldBezier(e.node, e.parent))));
+		const { transform: _t, effects: _e, booleanOperation: _b, ...baseRest } = cloneVectorNode(paths[0]);
 		const node: VectorPathNode = { ...baseRest, id, name: 'Compound Path', subpaths };
 		const drop = new Set([...paths.map((p) => p.id), ...roots]);
 		this.change('Combine', () => {
@@ -2334,7 +3350,7 @@ export class VectorEditorController {
 		const result = runPathfinder(op, shapes);
 		if (result.error || !result.pieces.length) return [];
 		const last = entries[entries.length - 1].node.id;
-		const topRoot = [...roots].reverse().find((r) => { const n = this.getNode(r); return !!n && !!findVectorNode([n], last); }) ?? last;
+		const topRoot = [...roots].reverse().find((r) => this.holds(r, last)) ?? last;
 		const nodes: VectorPathNode[] = [];
 		for (const piece of result.pieces) {
 			const subpaths = bezierToSubpaths(this.intoParentSpace(topRoot, piece.path)).map((sp) => (piece.open ? { ...sp, closed: false } : sp));
@@ -2357,11 +3373,191 @@ export class VectorEditorController {
 	}
 
 	/** The Shape Builder map of the selected (or given) paths, cached per document and selection. */
+	// -------------------------------------------------------------------------
+	// Blends
+	// -------------------------------------------------------------------------
+
+	/** Selected (or given) blend groups; a selected key or step counts as its blend. */
+	private blendTargets(ids?: readonly string[]): (VectorGroupNode & { blend: VectorBlend })[] {
+		const out = new Map<string, VectorGroupNode & { blend: VectorBlend }>();
+		for (const id of ids ?? this.selection) {
+			const node = this.getNode(id);
+			const group = isVectorBlendGroup(node) ? node : locateVectorNode(this.doc.nodes, id)?.parent;
+			if (isVectorBlendGroup(group)) out.set(group.id, group);
+		}
+		return [...out.values()];
+	}
+
+	/**
+	 * Blends two or more selected (or given) paths or groups: they become the keys of a live
+	 * blend group (bottom to top, or in the order given with `keepOrder`) whose in-betweens are
+	 * regenerated whenever a key or the options change. The keys must share a parent. Returns
+	 * the blend group's id, or null.
+	 */
+	blend(input: VectorBlendInput = {}): string | null {
+		const ids = [...new Set(input.ids ?? this.selectedRoots())].filter((id) => {
+			const n = this.getNode(id);
+			return !!n && !n.blendStep && !n.locked;
+		});
+		if (ids.length < 2) return null;
+		const locs = ids.map((id) => locateVectorNode(this.doc.nodes, id)!);
+		const parent = locs[0].parent?.id ?? null;
+		if (locs.some((l) => (l.parent?.id ?? null) !== parent)) return null;
+		const order = input.keepOrder ? ids : ids.slice().sort((a, b) => locs[ids.indexOf(a)].index - locs[ids.indexOf(b)].index);
+		const blend: VectorBlend = blendOptionsOf({ ...this.blendDefaults, ...input });
+		if (input.starts) {
+			const starts = Object.fromEntries(Object.entries(input.starts).filter(([k, v]) => order.includes(k) && Number.isInteger(v) && v >= 0));
+			if (Object.keys(starts).length) blend.starts = starts;
+		}
+		const id = this.newId();
+		this.change('Blend', () => {
+			const set = new Set(order);
+			const regroup = (list: readonly VectorNode[]): VectorNode[] => {
+				const members = order.map((m) => list.find((n) => n.id === m)!);
+				const top = Math.max(...members.map((m) => list.indexOf(m)));
+				const out: VectorNode[] = [];
+				list.forEach((n, i) => {
+					if (i === top) out.push({ id, type: 'group', name: input.name ?? 'Blend', blend, children: members });
+					if (!set.has(n.id)) out.push(n);
+				});
+				return out;
+			};
+			if (parent === null) this.setDoc(regroup(this.doc.nodes));
+			else this.setDoc(mapTree(this.doc.nodes, (n) => (n.id === parent && n.type === 'group' ? { ...n, children: regroup(n.children) } : n)));
+			this.selection = [id];
+			this.anchors = [];
+			this.editingId = null;
+		});
+		return id;
+	}
+
+	/** Sets the options new blends get (spacing, steps, distance, orientation, morph). */
+	setBlendDefaults(patch: Partial<VectorBlendOptions>): void {
+		this.blendDefaults = { ...this.blendDefaults, ...blendOptionsOf(patch) };
+		this.notify();
+	}
+
+	/**
+	 * Adds a node as the last key of a blend (it must share the blend's parent); `start` is the
+	 * anchor of its first subpath the blend starts from. One undo step.
+	 */
+	addBlendKey(blendId: string, nodeId: string, options: { start?: number | null } = {}): VectorActionResult {
+		const group = this.getNode(blendId);
+		const node = this.getNode(nodeId);
+		if (!isVectorBlendGroup(group)) return { ok: false, message: `"${blendId}" is not a blend.` };
+		if (!node || node.blendStep || node.locked || node.id === blendId) return { ok: false, message: `"${nodeId}" cannot be a key.` };
+		const parentOf = (id: string) => locateVectorNode(this.doc.nodes, id)?.parent?.id ?? null;
+		if (parentOf(blendId) !== parentOf(nodeId)) return { ok: false, message: 'The new key must sit beside the blend (same parent).' };
+		const start = options.start;
+		this.change('Blend', () => {
+			const blend = start !== null && start !== undefined ? { ...group.blend, starts: { ...group.blend.starts, [nodeId]: start } } : group.blend;
+			// The key leaves its place and joins the blend.
+			const m = invertMatrix(nodeMatrix(group));
+			const key = group.transform ? transformVectorNode(node, m) : node;
+			// Two passes: the key must not be removed again from inside the blend.
+			const without = mapTree(this.doc.nodes, (n) => (n.id === nodeId ? null : n));
+			this.setDoc(spliceTree(without, blendId, [{ ...group, blend, children: [...group.children, key] }]));
+			this.selection = [blendId];
+			this.anchors = [];
+		});
+		return { ok: true };
+	}
+
+	/** Changes the spacing, steps, distance, orientation or morph of the selected (or given) blends. */
+	setBlendOptions(patch: Partial<VectorBlendOptions>, options: { ids?: readonly string[] } = {}): VectorActionResult {
+		const groups = this.blendTargets(options.ids);
+		if (!groups.length) return { ok: false, message: 'Select a blend.' };
+		const clean = blendOptionsOf(patch);
+		if (!Object.keys(clean).length) return { ok: false, message: 'No valid blend options were given.' };
+		const set = new Set(groups.map((g) => g.id));
+		this.change('Blend Options', () => {
+			this.setDoc(mapTree(this.doc.nodes, (n) => (set.has(n.id) && n.type === 'group' && n.blend ? { ...n, blend: { ...n.blend, ...clean } } : n)));
+		});
+		return { ok: true };
+	}
+
+	/** Expand: turns the selected (or given) blends into plain groups of their keys and steps. Returns their ids. */
+	expandBlend(options: { ids?: readonly string[] } = {}): string[] {
+		const groups = this.blendTargets(options.ids);
+		if (!groups.length) return [];
+		const set = new Set(groups.map((g) => g.id));
+		const used = new Set<string>();
+		walkVectorNodes(this.doc.nodes, (n) => used.add(n.id));
+		const fresh = () => {
+			let id = this.createId();
+			while (used.has(id)) id = this.createId();
+			used.add(id);
+			return id;
+		};
+		this.change('Expand Blend', () => {
+			this.setDoc(mapTree(this.doc.nodes, (n) => (set.has(n.id) && n.type === 'group' ? expandVectorBlend(n, fresh) : n)));
+			this.selection = [...set];
+			this.anchors = [];
+		});
+		return [...set];
+	}
+
+	/** Release: replaces the selected (or given) blends with their keys (and a replaced spine as a path). */
+	releaseBlend(options: { ids?: readonly string[] } = {}): string[] {
+		const groups = this.blendTargets(options.ids);
+		if (!groups.length) return [];
+		const released: string[] = [];
+		this.change('Release Blend', () => {
+			for (const g of groups) {
+				const nodes = releaseVectorBlend(g, () => this.newId());
+				released.push(...nodes.map((n) => n.id));
+				this.setDoc(spliceTree(this.doc.nodes, g.id, nodes));
+			}
+			this.selection = released;
+			this.anchors = [];
+		});
+		return released;
+	}
+
+	/**
+	 * Replace Spine: the selected blend's steps follow the selected path instead of the straight
+	 * lines between its keys. The path's first subpath becomes the spine (the path is removed)
+	 * and the keys move onto it, spread evenly by arc length.
+	 */
+	replaceBlendSpine(options: { ids?: readonly string[] } = {}): VectorActionResult {
+		const roots = options.ids ?? this.selectedRoots();
+		const groups = this.blendTargets(roots);
+		const paths = roots.map((id) => this.getNode(id)).filter((n): n is VectorPathNode => n?.type === 'path' && !n.blendStep && !isVectorBlendGroup(locateVectorNode(this.doc.nodes, n.id)?.parent));
+		if (groups.length !== 1 || paths.length !== 1) return { ok: false, message: 'Select one blend and one path to be its spine.' };
+		const group = groups[0];
+		const path = paths[0];
+		const first = path.subpaths.find((sp) => sp.anchors.length >= 2);
+		if (!first) return { ok: false, message: 'The spine needs a path with at least two points.' };
+		// The path's first subpath in the blend group's own space.
+		const m = multiplyMatrices(this.worldOf(path.id), invertMatrix(this.worldOf(group.id)));
+		const spine = transformVectorNode<VectorPathNode>({ id: '', type: 'path', subpaths: [first] }, m).subpaths[0];
+		this.change('Replace Spine', () => {
+			const withSpine: VectorGroupNode = { ...group, blend: { ...group.blend, spine } };
+			const targets = vectorBlendKeyTargets(withSpine);
+			let k = 0;
+			const children = withSpine.children.map((c) => {
+				if (c.blendStep) return c;
+				const target = targets[k++];
+				const b = vectorNodeBounds(c);
+				if (!target || !b) return c;
+				const dx = target[0] - (b.x + b.width / 2);
+				const dy = target[1] - (b.y + b.height / 2);
+				return Math.hypot(dx, dy) > 1e-9 ? transformVectorNode(c, translateMatrix(dx, dy)) : c;
+			});
+			this.setDoc(mapTree(this.doc.nodes, (n) => (n.id === path.id ? null : n.id === group.id ? { ...withSpine, children } : n)));
+			this.selection = [group.id];
+			this.anchors = [];
+			if (this.editingId === path.id) this.editingId = null;
+		});
+		return { ok: true };
+	}
+
 	private shapeBuilderMap(ids?: readonly string[]): VectorShapeBuilderMap | null {
 		const roots = ids ?? this.selectedRoots();
 		const key = roots.join('\u0000');
 		if (this.builderCache?.doc === this.doc && this.builderCache.key === key) return this.builderCache.map;
-		const entries = roots.length ? vectorPathEntries(this.doc, roots) : [];
+		// The Shape Builder edits the shapes it takes area from: their stored geometry.
+		const entries = roots.length ? vectorPathEntries(this.doc, roots, { expand: false }) : [];
 		const map = entries.length ? vectorShapeBuilderMap(entries) : null;
 		this.builderCache = { doc: this.doc, key, map };
 		return map;
@@ -3215,16 +4411,25 @@ export class VectorEditorController {
 	}
 
 	/** Deepest unlocked visible path under `p`. */
+	/** Live groups being edited (selected, or holding the selection or the edited path): their children are hit as stored. */
+	private enteredGroups(): Set<string> {
+		return vectorEnteredGroups(this.doc.nodes, this.editingId ? [...this.selection, this.editingId] : this.selection);
+	}
+
 	private hitPath(p: Vec2): VectorPathNode | null {
 		const tol = this.tolerance();
+		const entered = this.enteredGroups();
 		const search = (list: readonly VectorNode[], parent: AffineMatrix): VectorPathNode | null => {
 			for (let i = list.length - 1; i >= 0; i--) {
 				const n = list[i];
 				if (n.visible === false || n.locked) continue;
 				if (n.type === 'group') {
+					// A live group not being edited is hit where it draws (a click in a subtracted
+					// hole goes through), then picks the child under the pointer.
+					if (hasOwnVectorAppearance(n) && !entered.has(n.id) && !hitTestVectorNode(n, p, tol, parent, { entered })) continue;
 					const found = search(n.children, multiplyMatrices(nodeMatrix(n), parent));
 					if (found) return found;
-				} else if (hitTestVectorNode(n, p, tol, parent)) return n;
+				} else if (hitTestVectorNode(n, p, tol, parent, { entered })) return n;
 			}
 			return null;
 		};
@@ -3251,7 +4456,7 @@ export class VectorEditorController {
 			case 'select': {
 				const handle = this.hitTransformHandle(screen);
 				if (handle) return { nodeId: null, transformHandle: handle };
-				const node = hitTestVectorNodes(this.doc.nodes, p, this.tolerance());
+				const node = hitTestVectorNodes(this.doc.nodes, p, this.tolerance(), { entered: this.enteredGroups() });
 				return node ? { nodeId: node.id } : null;
 			}
 			case 'direct': {
@@ -3281,11 +4486,29 @@ export class VectorEditorController {
 				const seg = this.nearestOutline(p);
 				return seg ? { nodeId: seg.nodeId, segment: seg } : null;
 			}
+			case 'blend': {
+				const hit = this.blendHit(screen, p);
+				if (!hit) return null;
+				return hit.anchor === null ? { nodeId: hit.nodeId } : { nodeId: hit.nodeId, anchor: { nodeId: hit.nodeId, subpath: 0, index: hit.anchor } };
+			}
 			case 'width': {
 				const hit = this.hitWidthHandle(screen);
 				if (hit) return { nodeId: hit.ref.nodeId, widthPoint: hit.ref };
 				const spot = this.strokeSpotAt(p);
 				return spot ? { nodeId: spot.nodeId, strokeSpot: spot } : null;
+			}
+			case 'gradient': {
+				const a = this.getGradientAnnotator();
+				const part = a ? hitVectorGradientAnnotator(a, screen) : null;
+				if (a && part) return { nodeId: a.nodeId, gradient: part };
+				const path = this.hitPath(p);
+				return path ? { nodeId: path.id } : null;
+			}
+			case 'envelope': {
+				const hit = this.hitEnvelope(screen, p);
+				if (hit) return { nodeId: hit.target.node.id, envelope: { nodeId: hit.target.node.id, index: hit.index } };
+				const node = hitTestVectorNodes(this.doc.nodes, p, this.tolerance(), { entered: this.enteredGroups() });
+				return node ? { nodeId: node.id } : null;
 			}
 			default:
 				return null;
@@ -3521,6 +4744,12 @@ export class VectorEditorController {
 			case 'shapeBuilder':
 			case 'paintBucket':
 				return this.downBuilder(p, input);
+			case 'blend':
+				return this.downBlend(screen, p);
+			case 'gradient':
+				return this.downGradient(screen, p, input);
+			case 'envelope':
+				return this.downEnvelope(screen, p, input);
 			case 'scissors': {
 				const seg = this.nearestOutline(p);
 				if (seg) this.cutPathAt(seg.nodeId, seg.point);
@@ -3537,6 +4766,49 @@ export class VectorEditorController {
 		}
 	}
 
+	/** The shape under the pointer for the Blend tool, and the anchor of its first subpath under it. */
+	private blendHit(screen: Vec2, p: Vec2): VectorBlendStart | null {
+		const node = hitTestVectorNodes(this.doc.nodes, p, this.tolerance());
+		if (!node) return null;
+		let anchor: number | null = null;
+		if (node.type === 'path' && node.subpaths[0]) {
+			const refs = node.subpaths[0].anchors.map((_, index) => ({ nodeId: node.id, subpath: 0, index }));
+			anchor = this.hitAnchor(screen, refs)?.index ?? null;
+		}
+		return { nodeId: node.id, anchor };
+	}
+
+	/** Blend tool: the first click picks the shape to blend from, the next one blends it into the shape clicked. */
+	private downBlend(screen: Vec2, p: Vec2) {
+		const hit = this.blendHit(screen, p);
+		const start = this.blendStart;
+		if (!hit) {
+			if (start) {
+				this.blendStart = null;
+				this.notify();
+			}
+			return;
+		}
+		if (!start || start.nodeId === hit.nodeId) {
+			this.blendStart = hit;
+			this.selection = [hit.nodeId];
+			this.anchors = [];
+			this.notify();
+			return;
+		}
+		this.blendStart = null;
+		const first = this.getNode(start.nodeId);
+		if (isVectorBlendGroup(first)) {
+			// Clicking on from a blend adds the shape as its next key.
+			if (!this.addBlendKey(first.id, hit.nodeId, { start: hit.anchor }).ok) this.notify();
+			return;
+		}
+		const starts: Record<string, number> = {};
+		if (start.anchor !== null) starts[start.nodeId] = start.anchor;
+		if (hit.anchor !== null) starts[hit.nodeId] = hit.anchor;
+		if (!this.blend({ ids: [start.nodeId, hit.nodeId], keepOrder: true, starts })) this.notify();
+	}
+
 	private downSelect(screen: Vec2, p: Vec2, input: VectorPointerInput) {
 		const handle = this.hitTransformHandle(screen);
 		if (handle) {
@@ -3551,7 +4823,7 @@ export class VectorEditorController {
 			this.notify();
 			return;
 		}
-		const node = hitTestVectorNodes(this.doc.nodes, p, this.tolerance());
+		const node = hitTestVectorNodes(this.doc.nodes, p, this.tolerance(), { entered: this.enteredGroups() });
 		if (node) {
 			const selected = this.selection.includes(node.id);
 			if (input.shift) {
@@ -3784,6 +5056,10 @@ export class VectorEditorController {
 				this.viewport = { ...drag.viewport, x: drag.viewport.x + screen.x - drag.start.x, y: drag.viewport.y + screen.y - drag.start.y };
 				this.notify();
 				return;
+			case 'gradient':
+				return this.moveGradient(drag, screen, p, input);
+			case 'envelope':
+				return this.moveEnvelope(drag, p);
 			case 'move': {
 				let dx = p.x - drag.start.x;
 				let dy = p.y - drag.start.y;
@@ -3805,6 +5081,7 @@ export class VectorEditorController {
 				return;
 			}
 			case 'scale': {
+				if (this.freeDistort && drag.handle !== 'rotate') return this.moveDistort(drag, p, input);
 				// Scale in the box's own (possibly rotated) frame.
 				const angle = drag.frame.angle;
 				const q = angle ? applyMatrix(rotateMatrix(-angle), p) : p;
@@ -4122,7 +5399,13 @@ export class VectorEditorController {
 				}
 				return this.commit(drag.duplicated ? 'Duplicate' : 'Move', drag.before);
 			case 'scale':
-				return this.commit('Scale', drag.before);
+				return this.commit(drag.op ?? 'Scale', drag.before);
+			case 'envelope':
+				if (!drag.moved) {
+					this.notify();
+					return;
+				}
+				return this.commit('Edit Envelope', drag.before);
 			case 'rotate':
 				return this.commit('Rotate', drag.before);
 			case 'anchors':
@@ -4180,6 +5463,8 @@ export class VectorEditorController {
 			}
 			case 'builder':
 				return this.upBuilder(drag);
+			case 'gradient':
+				return this.upGradient(drag);
 			case 'stroke': {
 				this.notify();
 				if (drag.tool === 'knife') this.knife(drag.points);
@@ -4377,7 +5662,10 @@ export class VectorEditorController {
 					this.notify();
 				}
 				else if (this.pen) this.finishPath();
-				else if (this.tool === 'direct' && this.anchors.length) {
+				else if (this.blendStart) {
+					this.blendStart = null;
+					this.notify();
+				} else if (this.tool === 'direct' && this.anchors.length) {
 					this.anchors = [];
 					this.notify();
 				} else if (this.tool !== 'select') this.setTool('select');
@@ -4398,6 +5686,7 @@ export class VectorEditorController {
 			case 'Delete':
 			case 'Backspace':
 				if (this.tool === 'width' && this.widthPoints.length) return this.removeWidthPoints().ok;
+				if (this.tool === 'gradient' && this.gradientEdit.stop !== null) return this.removeGradientStop(this.gradientEdit.stop).ok;
 				if (this.pen) {
 					const node = this.getNode(this.pen.nodeId) as VectorPathNode;
 					const sp = node.subpaths[this.pen.subpath];

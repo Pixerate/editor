@@ -17,6 +17,9 @@
   } from '@pixerate/editor/vector';
   import { vectorStateOf } from './subscribe.svelte.js';
   import { vectorButtonClass } from './styles.js';
+  import VectorEffectsPanel from './VectorEffectsPanel.svelte';
+  import VectorEnvelopePanel from './VectorEnvelopePanel.svelte';
+  import VectorGradientEditor from './VectorGradientEditor.svelte';
 
   interface Props {
     controller: VectorEditorController;
@@ -102,6 +105,7 @@
       {#if style?.mixed[key]}<span class="text-[11px] text-muted-foreground">Mixed</span>{/if}
     </div>
   {/each}
+  {#if style}<VectorGradientEditor {controller} />{/if}
   <label class="flex items-center gap-2 text-xs text-foreground">
     <span class="w-16">Width</span>
     <input
@@ -217,5 +221,7 @@
         oninput={(e) => apply({ opacity: parseFloat(e.currentTarget.value) })}
       />
     </label>
+    <VectorEffectsPanel {controller} />
+    <VectorEnvelopePanel {controller} />
   {/if}
 </div>

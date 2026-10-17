@@ -60,8 +60,100 @@ export interface VectorSubpath {
 	closed: boolean;
 }
 
+/**
+ * Gradient styles: `linear` (start → end), `radial` (centred on the start, reaching the end;
+ * focal point and aspect), `conic` (an angle sweep around the start, from the end's direction
+ * towards the aspect handle's: clockwise on screen), `reflected` (linear mirrored about the
+ * start) and `diamond` (`|u| + |v|` in the gradient's frame: a rhombus through the end and the
+ * aspect handle).
+ */
+export type VectorGradientType = 'linear' | 'radial' | 'conic' | 'reflected' | 'diamond';
+export const VECTOR_GRADIENT_TYPES: readonly VectorGradientType[] = ['linear', 'radial', 'conic', 'reflected', 'diamond'];
+
+/** What a gradient paints past its ends: the end colours, mirrored periods or repeated periods. */
+export type VectorGradientSpread = 'pad' | 'reflect' | 'repeat';
+export const VECTOR_GRADIENT_SPREADS: readonly VectorGradientSpread[] = ['pad', 'reflect', 'repeat'];
+
+/** Where colours mix between stops: sRGB (SVG's own), linear light or Oklab. */
+export type VectorGradientInterpolation = 'srgb' | 'linear' | 'oklab';
+export const VECTOR_GRADIENT_INTERPOLATIONS: readonly VectorGradientInterpolation[] = ['srgb', 'linear', 'oklab'];
+
+/**
+ * The space a gradient's points are in: fractions of the shape's bounding box (SVG's
+ * `objectBoundingBox`, the default) or the node's own coordinates (`userSpaceOnUse`).
+ */
+export type VectorGradientUnits = 'objectBoundingBox' | 'userSpaceOnUse';
+
+/**
+ * How a gradient lies on a stroke: `within` (laid over the stroke's area like a fill), `along`
+ * (t runs from 0 at the start of each subpath to 1 at its end) or `across` (from the stroke's
+ * left edge to its right edge, looking along the path).
+ */
+export type VectorStrokeGradientMode = 'within' | 'along' | 'across';
+export const VECTOR_STROKE_GRADIENT_MODES: readonly VectorStrokeGradientMode[] = ['within', 'along', 'across'];
+
+/** A colour stop. `opacity` multiplies the colour's own alpha. */
+export interface VectorGradientStop {
+	/** 0–1. */
+	offset: number;
+	color: string;
+	/** 0–1, default 1. */
+	opacity?: number;
+	/**
+	 * Where, between this stop and the next (0–1 of the way), the colour is half-way between
+	 * them. Default 0.5 (an even mix).
+	 */
+	midpoint?: number;
+}
+
+/**
+ * A gradient paint. `CanvasGradientDef` (the canvas package's linear `angle` / radial
+ * `cx, cy, r` gradients) is a valid value: those fields are the shorthand form. Explicit
+ * geometry (`start` / `end`, in `units`) wins over the shorthand.
+ */
+export interface VectorGradient {
+	type: VectorGradientType;
+	stops: VectorGradientStop[];
+	/**
+	 * Shorthand direction in degrees, CSS style (0 points up, clockwise): a linear or reflected
+	 * gradient's direction across the box (default 180), a conic gradient's start angle or a
+	 * diamond's turn (default 90).
+	 */
+	angle?: number;
+	/** Shorthand centre and radius of radial, conic and diamond gradients (fractions of the box, default 0.5). */
+	cx?: number;
+	cy?: number;
+	r?: number;
+	/** Where t = 0: a linear gradient's start, the centre of the other styles. */
+	start?: Vec2;
+	/** Where t = 1 along the gradient's main axis (a radial gradient's radius). */
+	end?: Vec2;
+	/**
+	 * The end of the secondary axis (radial, conic and diamond): its distance from `start` over
+	 * the main axis' length is the aspect ratio. Absent: square to the main axis, as long.
+	 */
+	width?: Vec2 | null;
+	/** A radial gradient's focal point (where t = 0); absent: the centre. */
+	focal?: Vec2 | null;
+	/** Radius of the focal circle as a fraction of the radius (SVG `fr`, default 0). */
+	focalRadius?: number;
+	/** Space of `start`, `end`, `width` and `focal` (default `objectBoundingBox`). */
+	units?: VectorGradientUnits;
+	/** Default `pad`. */
+	spread?: VectorGradientSpread;
+	/** Default `srgb`. */
+	interpolation?: VectorGradientInterpolation;
+	/**
+	 * 0–1: how far the colours follow a smooth spline through the stops instead of straight
+	 * lines (Photoshop's Smoothness). Default 0.
+	 */
+	smoothness?: number;
+	/** On a stroke: how the gradient lies on it (default `within`). Ignored on fills. */
+	strokeMode?: VectorStrokeGradientMode;
+}
+
 /** A fill or stroke: any CSS colour, a gradient, or `null` / `'none'` for no paint. */
-export type VectorPaint = string | CanvasGradientDef | null;
+export type VectorPaint = string | VectorGradient | CanvasGradientDef | null;
 
 export type VectorFillRule = 'nonzero' | 'evenodd';
 export type VectorLineCap = 'butt' | 'round' | 'square';
@@ -139,6 +231,22 @@ interface VectorNodeBase {
 	 * them into the geometry, so stroke widths and the rotated selection box stay exact.
 	 */
 	transform?: VectorMatrix;
+	/**
+	 * An in-between a blend group generated from its keys. Steps are rebuilt whenever a key or
+	 * the blend options change, and are locked (clicks select the blend group).
+	 */
+	blendStep?: boolean;
+	/**
+	 * Live path effects, applied top to bottom: each acts on every path above it (the node's own
+	 * outline, or a group's children, then the result of the effects before it), and effects after a
+	 * repeater act on its copies. The stored anchors and children never change.
+	 */
+	effects?: VectorEffect[] | null;
+	/**
+	 * As an operand of a live boolean group: how it combines with the result of the operands below
+	 * it. Absent: the group's `liveBoolean` operation.
+	 */
+	booleanOperation?: VectorBooleanOperation | null;
 }
 
 /** A shape made of one or more subpaths (holes and compound shapes included). */
@@ -147,10 +255,54 @@ export interface VectorPathNode extends VectorNodeBase, VectorStyle {
 	subpaths: VectorSubpath[];
 }
 
+/**
+ * How a blend spaces its in-betweens: a number of `steps` between each pair of keys, a fixed
+ * `distance` between steps along the spine, or `smoothColor` (as many steps as the colours
+ * need for a smooth ramp; by distance when the colours match).
+ */
+export type VectorBlendSpacing = 'steps' | 'distance' | 'smoothColor';
+export const VECTOR_BLEND_SPACINGS: readonly VectorBlendSpacing[] = ['steps', 'distance', 'smoothColor'];
+
+/** Settings of a blend. */
+export interface VectorBlendOptions {
+	/** Default `steps`. */
+	spacing?: VectorBlendSpacing;
+	/** Steps between each pair of keys with `steps` spacing (default 5). */
+	steps?: number;
+	/** Distance between steps along the spine with `distance` spacing (default 20). */
+	distance?: number;
+	/** Turn the steps with the spine's direction (default `false`: they keep the keys' orientation). */
+	orientToSpine?: boolean;
+	/** Move anchors in straight lines instead of the rotation-aware morph (default `false`). */
+	linear?: boolean;
+}
+
+/** A live blend: the group's keys plus how the in-betweens are made and laid out. */
+export interface VectorBlend extends VectorBlendOptions {
+	/**
+	 * A replaced spine in the group's space: the steps follow it instead of the straight lines
+	 * between the keys' centres (the keys sit along it, spread evenly by arc length).
+	 */
+	spine?: VectorSubpath | null;
+	/** The anchor of each key's first subpath its blend starts from, by key id (the Blend tool's clicks). */
+	starts?: Record<string, number>;
+}
+
 /** A group of nodes that select and transform together. */
 export interface VectorGroupNode extends VectorNodeBase {
 	type: 'group';
 	children: VectorNode[];
+	/**
+	 * Makes the group a live blend: its children that are not `blendStep`s are the keys, in
+	 * stacking order, and the steps between them are regenerated whenever a key changes.
+	 */
+	blend?: VectorBlend | null;
+	/**
+	 * Makes the group a live boolean: its children stay editable operands, folded bottom to top
+	 * (each by its own `booleanOperation` or this one), and the group draws as the result in the
+	 * bottom operand's style.
+	 */
+	liveBoolean?: VectorBooleanOperation | null;
 }
 
 export type VectorNode = VectorPathNode | VectorGroupNode;
@@ -189,7 +341,10 @@ export interface VectorHandleRef extends VectorAnchorRef {
  * shape; `scissors` cuts a path at a point, `knife` cuts filled shapes along a freehand stroke,
  * `eraser` rubs out the area under one and `width` drags a stroke's width at a point.
  * `shapeBuilder` merges (Alt: deletes) the faces the selected shapes make, and `paintBucket`
- * fills the region the visible outlines enclose around a click with a new shape.
+ * fills the region the visible outlines enclose around a click with a new shape. `blend`
+ * blends the shape clicked first into the one clicked next (clicking an anchor of a closed path
+ * starts the blend there). `envelope` edits the mesh of the selection's envelope: drag its
+ * anchors and handles, or inside a patch to pull the surface.
  */
 export type VectorTool =
 	| 'select'
@@ -206,7 +361,10 @@ export type VectorTool =
 	| 'eraser'
 	| 'width'
 	| 'shapeBuilder'
-	| 'paintBucket';
+	| 'paintBucket'
+	| 'blend'
+	| 'gradient'
+	| 'envelope';
 
 export const VECTOR_TOOLS: readonly VectorTool[] = [
 	'select',
@@ -223,7 +381,10 @@ export const VECTOR_TOOLS: readonly VectorTool[] = [
 	'eraser',
 	'width',
 	'shapeBuilder',
-	'paintBucket'
+	'paintBucket',
+	'blend',
+	'gradient',
+	'envelope'
 ];
 
 /** Keyboard modifiers held during a pointer event. */
@@ -275,6 +436,155 @@ export const VECTOR_PATHFINDER_OPERATIONS: readonly VectorPathfinderOperation[] 
 export type VectorArrange = 'front' | 'forward' | 'backward' | 'back';
 /** Average: line anchors up on a horizontal line (same y), a vertical one (same x), or both. */
 export type VectorAverageAxis = 'horizontal' | 'vertical' | 'both';
+
+/**
+ * Live path effects (After Effects' path operators): `trim` (Trim Paths), `roundCorners`,
+ * `puckerBloat`, `twist`, `zigzag`, `wiggle` (Wiggle Paths), `offset` (Offset Paths), `merge`
+ * (Merge Paths), `repeater` and `envelope` (an envelope distortion: a warp preset or a mesh).
+ */
+export type VectorEffectType = 'trim' | 'roundCorners' | 'puckerBloat' | 'twist' | 'zigzag' | 'wiggle' | 'offset' | 'merge' | 'repeater' | 'envelope';
+export const VECTOR_EFFECT_TYPES: readonly VectorEffectType[] = ['trim', 'roundCorners', 'puckerBloat', 'twist', 'zigzag', 'wiggle', 'offset', 'merge', 'repeater', 'envelope'];
+
+/** Warp presets (Photoshop's fifteen, in menu order). */
+export type VectorWarpStyle =
+	| 'arc'
+	| 'arcLower'
+	| 'arcUpper'
+	| 'arch'
+	| 'bulge'
+	| 'shellLower'
+	| 'shellUpper'
+	| 'flag'
+	| 'wave'
+	| 'fish'
+	| 'rise'
+	| 'fisheye'
+	| 'inflate'
+	| 'squeeze'
+	| 'twist';
+
+/**
+ * A grid of bicubic Bézier patches mapping a source box onto the plane. `us` / `vs` are the patch
+ * boundaries as fractions of the box (increasing, first 0, last 1); `points` is the
+ * `(3·(us.length − 1) + 1) × (3·(vs.length − 1) + 1)` control grid, row by row, in the node's own
+ * space. Neighbouring patches share their edge row: anchors sit where both indices are multiples
+ * of 3, handles where one is.
+ */
+export interface VectorWarpMesh {
+	us: number[];
+	vs: number[];
+	points: Vec2[];
+}
+
+/** Merge Paths modes: a compound path (no boolean), union, the first minus the others, intersection or exclusion. */
+export type VectorMergeMode = 'merge' | 'add' | 'subtract' | 'intersect' | 'exclude';
+export const VECTOR_MERGE_MODES: readonly VectorMergeMode[] = ['merge', 'add', 'subtract', 'intersect', 'exclude'];
+
+/** Parameters of each effect type. Lengths are in the node's own units, angles in degrees, percentages 0–100. */
+export interface VectorEffectParamsMap {
+	trim: {
+		/** Start and end of the kept part, percent of the length (swapped when start > end). */
+		start: number;
+		end: number;
+		/** Shifts both, in degrees (360° = once round). */
+		offset: number;
+		/**
+		 * `simultaneous`: every path trimmed by the same fractions of its own length;
+		 * `individual`: the paths laid end to end in stacking order and trimmed as one length.
+		 */
+		mode: 'simultaneous' | 'individual';
+	};
+	roundCorners: { radius: number };
+	/** Percent, −100 (pucker: spiky) to 100 (bloat: bulging). */
+	puckerBloat: { amount: number };
+	twist: {
+		/** Turn at the farthest point from the centre (none at the centre). */
+		angle: number;
+		/** The centre as an offset from the middle of the paths' bounds. */
+		center: Vec2;
+	};
+	zigzag: {
+		/** How far the points move to either side. */
+		size: number;
+		/** Ridges per segment. */
+		ridges: number;
+		/** Rounded waves instead of sharp zig zags. */
+		smooth: boolean;
+	};
+	wiggle: {
+		/** Largest displacement. */
+		size: number;
+		/** Points added per segment. */
+		detail: number;
+		smooth: boolean;
+		/** Wiggles per second. */
+		speed: number;
+		/** Percent: how much neighbouring points move together. */
+		correlation: number;
+		/** Degrees (360° = one wiggle). */
+		phase: number;
+		/** The same seed (and time) always gives the same wiggle. */
+		seed: number;
+		/** Seconds: where along the wiggle's motion it is drawn. */
+		time: number;
+	};
+	offset: {
+		/** Grows (positive) or shrinks (negative) the shapes. */
+		amount: number;
+		join: VectorLineJoin;
+		miterLimit: number;
+		/** Copies, copy i offset by `amount · (i + 1 + copyOffset)`. */
+		copies: number;
+		copyOffset: number;
+	};
+	merge: { mode: VectorMergeMode };
+	repeater: {
+		/** Copies, the original included; a fraction fades the last copy. */
+		copies: number;
+		/** Shifts the copies along: copy i is transformed `i + offset` times. */
+		offset: number;
+		/** Each step: move, about `anchor` turn by `rotation` and scale by `scale` percent. */
+		position: Vec2;
+		/** Offset from the middle of the paths' bounds. */
+		anchor: Vec2;
+		rotation: number;
+		scale: Vec2;
+		/** Percent opacity of the first and last copies (in between interpolated). */
+		startOpacity: number;
+		endOpacity: number;
+		/** `below`: each copy draws under the one before it; `above`: over it. */
+		composite: 'below' | 'above';
+	};
+	/**
+	 * Envelope distortion: the paths above it are mapped from their combined bounds through a warp
+	 * preset (bend and horizontal / vertical distortion in percent) or, with style `mesh`, through
+	 * `mesh` (null: the flat mesh of `columns × rows` patches over the bounds). The bounds are
+	 * taken afresh each time, so editing the contents keeps the envelope.
+	 */
+	envelope: {
+		style: VectorWarpStyle | 'mesh';
+		bend: number;
+		horizontal: number;
+		vertical: number;
+		orientation: 'horizontal' | 'vertical';
+		/** Patches of the mesh (a preset turns into a mesh of this size when it is edited). */
+		rows: number;
+		columns: number;
+		mesh: VectorWarpMesh | null;
+	};
+}
+
+/** One entry of an effect stack. */
+export type VectorEffect = {
+	[K in VectorEffectType]: {
+		/** Unique within the node. */
+		id: string;
+		type: K;
+		/** Disabled effects are skipped. Default true. */
+		enabled?: boolean;
+		params: VectorEffectParamsMap[K];
+	};
+}[VectorEffectType];
 
 /** Identifies one segment of a path node: from anchor `segment` to the next. */
 export interface VectorSegmentRef {

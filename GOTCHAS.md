@@ -1209,6 +1209,102 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: The controller used `Math.random`, and the field snaps to its step: any draw in about [0.2375, 0.2625) gives back the default `speed` of 1, so nothing is modified (about a 1 in 40 chance).
 - **Solution / Workaround**: Give the controller a fixed source in tests (`new ParametersController({ schema, random: () => 0.75 })`) or call `randomize({ seed })`, and assert the value it picks. Never assert a change after an unseeded randomize.
 
+### [core/vector] Picking a Morph's Start Anchor by Position Squashes Turned Shapes
+
+- **Issue / Symptom**: Blending a horizontal bar into the same bar turned 90° gave a middle step that was a fat square (area up a third) instead of the bar half turned, even with the Procrustes in-between.
+- **Root Cause**: effectcraft's `correspond` scores each cyclic start by how far corresponding anchors are apart once both shapes are centred and scaled. That cost is not rotation-invariant: the start that pairs each corner with the nearest one (a squash) beats the one that pairs it with the turned corner, and Procrustes then finds no rotation to follow. Its absolute-angle shape-context histograms push the same way.
+- **Solution / Workaround**: `bestStart` in `vector/blend.ts` scores what is left after the best-fit rotation and scale (`1 − (dot² + cross²) / n²` on unit-RMS point sets, O(n) per start), plus `0.1 · (1 − cos θ)` so the least turning wins among equal fits (circles, squares), plus shape contexts whose angles are measured from the contour's direction (rotation-invariant).
+
+### [core/vector] Largest-Remainder Anchor Allocation Must Treat Rounding Noise as a Tie
+
+- **Issue / Symptom**: A star and the same star turned did not keep their area through a blend: the in-betweens came out slightly distorted.
+- **Root Cause**: When a contour's segments all have the same length, the fractional parts of their anchor shares differ only by floating-point noise, and that noise — different for the turned copy — decided which segments got the extra anchors. The two shapes were refined differently, so no start lined them up exactly.
+- **Solution / Workaround**: `refineMorphContour` sorts remainders with a 1e-9 tolerance and breaks ties by segment index, so congruent shapes are split alike.
+
+### [core/vector] `mapTree` Visits the Node It Just Returned
+
+- **Issue / Symptom**: Adding a shape to a blend with `mapTree(nodes, (n) => n.id === key ? null : n.id === blend ? { ...blend, children: [...children, key] } : n)` reported success, but the key vanished from the document.
+- **Root Cause**: The controller's `mapTree` recurses into the children of whatever the callback returns, so the moved key was found inside the new group and removed again.
+- **Solution / Workaround**: Remove first, then insert with `spliceTree` (or any pass that does not re-run the callback on its own output).
+
+### [core/vector] Blend Steps Are Rebuilt in `notify()` and `commit()`, Keyed by Key Identity
+
+- **Issue / Symptom**: A live blend has to follow every edit of its keys (drags included) without each tool knowing about blends, and undo must restore steps that match the keys.
+- **Root Cause**: Steps are derived data stored in the document (so the scene, bounds, hit-tests and SVG export see them), and the controller mutates `this.doc` in many places.
+- **Solution / Workaround**: `refreshVectorBlends` runs on the document in `notify()` (live during drags) and at the start of `commit()` (so history snapshots hold the refreshed document). It returns the same objects when nothing changed: generated children are cached per first key and reused while the keys are the same objects and the blend options serialise the same, and morph correspondences are cached per key pair. Steps are locked (`locked: true`) so the select tool picks the blend group and the direct tool only reaches keys; transforms of the group bake its replaced spine with the children (`bakeIntoGeometry`).
+
+### [core/vector] Expanded Appearance Paths Have Ids That Are Not in the Document
+
+- **Issue / Symptom**: After path effects and live booleans were routed through `vectorPathEntries`, the Pathfinder and `booleanOp` failed to put their result back: `findVectorNode([root], entry.node.id)` found nothing, so the result replaced no node.
+- **Root Cause**: `expandVectorAppearance` turns a node drawing several shapes (a repeater, a live group) into a group of paths with ids `<id>~fx<n>`. Those are derived nodes, never stored; only the top node keeps its stored id.
+- **Solution / Workaround**: Look entries up through the expanded tree as well (`controller.holds(rootId, id)` checks `findVectorNode` on the node and on `expandVectorAppearance(node)`), drop the roots by their stored ids, and give derived nodes fresh ids before storing them (Expand Appearance does). Code that edits the shapes it reads (the Shape Builder) must ask for the stored geometry with `vectorPathEntries(doc, roots, { expand: false })`.
+
+### [core/vector] Merged Undo Steps Need the Command's `tag` Equal to Its Gesture Key
+
+- **Issue / Symptom**: A slider drag committed with `history.executeMerged(command, { key })` folded into one undo step, but the step kept growing: every move added another undo / redo part.
+- **Root Cause**: `HistoryManager.executeMerged` only replaces the top step's last part ("the same absolute command again") when the new command's `tag` equals that part's tag; otherwise it appends a part.
+- **Solution / Workaround**: The controller's `commit(name, before, merge)` sets `tag: merge` on the snapshot command, so the step keeps the pre-drag `before` and only the latest `after`. Ending the drag calls `endMergedEdit()` (`history.endGesture()`) so the next drag of the same control starts a new step.
+
+### [core/vector] Wiggle's Hash Needs Exact 64-bit Arithmetic
+
+- **Issue / Symptom**: A wiggle ported with JavaScript numbers gave different (and less random) noise than the source, and lost precision past 2⁵³.
+- **Root Cause**: effectcraft's `splitmix` / `hash` rely on wrapping `u64` multiplication and shifts; `Math.imul` is 32-bit and doubles lose the low bits.
+- **Solution / Workaround**: `pathEffects.ts` runs `splitmix` on `BigInt`s masked to 64 bits (`BigInt.asUintN(64, …)` for negative lattice indices) and converts only the final `h >> 11` to a number. It is called a few thousand times per wiggle, which is cheap; results are cached per node anyway.
+
+### [core|react/vector] StrictMode's Double Effect Destroys the Controller `useVectorEditorController` Keeps
+
+- **Issue / Symptom**: In the dev demo (React StrictMode) the toolbar's History buttons lagged one step: after an edit Undo stayed disabled, after an undo Redo stayed disabled — though `controller.getState()` was right whenever it was next read.
+- **Root Cause**: `useVectorEditorController` creates the controller once in a ref and calls `controller.destroy()` in an effect cleanup. StrictMode runs effects, cleans them up and runs them again, so `destroy()` dropped the controller's history subscription while the same controller stayed in use. History-only changes (labels, `canUndo`/`canRedo`) then reached the UI only with the next document change.
+- **Solution / Workaround**: The controller's history connection is idempotent (`connect()`), made in the constructor and again on every `subscribe()`, catching up on history changes missed while disconnected. StrictMode's re-run of `useSyncExternalStore`'s subscribe effect reconnects it. Any core controller whose `destroy()` a React hook calls from a ref-kept instance needs the same treatment (or must be created inside the effect).
+
+### [core/vector] `objectBoundingBox` Gradients Paint Nothing on a Straight Line
+
+- **Issue / Symptom**: A gradient stroke on a horizontal or vertical line (or a stroke part drawn on a different element than the fill) disappears or shifts.
+- **Root Cause**: SVG maps `objectBoundingBox` gradients onto the painted element's own geometry box; a box with no height (or width) is singular, so browsers paint nothing, and each element of a stroke drawn in parts has its own box.
+- **Solution / Workaround**: The vector editor writes every gradient in `userSpaceOnUse` with the shape's box as the `gradientTransform` (`vectorBoxMatrix`), computed once per node from its outline, and a side with no extent takes the other side's (centred). Fill, stroke parts and effect copies then share one frame.
+
+### [core/vector] A Linear Gradient's t Is a Projection, Not a Frame Coordinate
+
+- **Issue / Symptom**: A `userSpaceOnUse` linear gradient on a sheared shape exported to SVG paints at the wrong angle, though the editor's own sampling is right.
+- **Root Cause**: The model measures t as the u coordinate in the start / end / width frame (exact under any affine map), but SVG's `x1 y1 x2 y2` measures the projection onto x1 → x2, which only agrees while the width axis is square to the main axis.
+- **Solution / Workaround**: `vectorGradientSvgDefs` writes `x1 y1 x2 y2` when the frame is square and `x1=0 x2=1` with the frame as `gradientTransform` otherwise. Keep that check if the export changes.
+
+### [core/vector] Adaptive Stop Expansion Must Probe Near the Ends of Each Piece
+
+- **Issue / Symptom**: Oklab or linear-light gradients exported as stops were off by two colour levels just after a stop whose colour has a zero channel.
+- **Root Cause**: Converting back to sRGB applies the gamma curve, whose slope is steepest next to 0, so the error of a straight piece peaks close to its end; checking only the quarter points missed it.
+- **Solution / Workaround**: `expandVectorGradientStops` checks each piece at 3 %, 10 %, 25 %, 50 %, 75 %, 90 % and 97 % before accepting it. The tests compare 2000 samples against the true ramp.
+
+### [core/vector] Gradient Samples on a Period's Edge or a Conic Centre Are Ambiguous
+
+- **Issue / Symptom**: Tests comparing a `repeat` gradient (or a conic one) with its exported paint server fail at a few grid points with a completely different colour.
+- **Root Cause**: At t exactly on a whole number, `repeat` gives 0 or 1 depending on rounding (the first or last stop), and a conic gradient's angle is undefined at its centre and jumps at its seam.
+- **Solution / Workaround**: Skip sample points within 1e-4 of a period edge, the centre and the seam; anywhere else the paint server must match the model within 2 / 255. The canvases' checkerboard is also a `<pattern>`: select a gradient pattern by its id (`pattern[id$="fill-a"]`), not by tag.
+
+### [core|react|svelte/vector] Pattern Content Starts at the Tile's Corner
+
+- **Issue / Symptom**: Conic and diamond fills (patterns of gradient tiles) drew nothing, or the wrong part of the sweep, in the browser although every `<pattern>`, tile and gradient was there.
+- **Root Cause**: Without a `viewBox`, an SVG `<pattern>`'s content coordinate system has its origin at the tile's `(x, y)`, not at the user-space origin, so content written in user space was shifted by the tile's position (outside the tile).
+- **Solution / Workaround**: `patternAttrs` gives every pattern a `viewBox` equal to its tile (`x y width height`), which maps content coordinates one to one onto the user space. Keep it when rendering `VectorSvgPatternDef.attrs`.
+
+### [core/vector] Warp Meshes Must Extrapolate Outside Their Box
+
+- **Issue / Symptom**: Curved shapes under an envelope gained far more anchors than straight ones and came out lumpy near the box edges, although the warp itself was smooth.
+- **Root Cause**: The envelope's box is the paths' tight curve bounds, so Bézier handles routinely lie outside it. The ported `locate` clamped the box fraction to 0–1, which squashed every handle outside the box onto the border; the adaptive mapper then saw the mapped control polygon stray from the mapped curve and kept splitting.
+- **Solution / Workaround**: `locate` in `warp.ts` no longer clamps: outside 0–1 the end patches' polynomials simply continue, so handles past the box map smoothly. Callers that need a point on the surface (`vectorMeshParamAt`) clamp their own parameters.
+
+### [react|svelte/vector] Two Panels Editing One Effect Collide on Their Labels
+
+- **Issue / Symptom**: After switching an envelope to Mesh, tests still found the "Envelope Bend % slider" the Envelope panel had just hidden.
+- **Root Cause**: The generic Effects panel builds a control per entry of `VECTOR_EFFECT_PARAM_SPECS` and labels it `${effect label} ${param label}`, so it rendered the envelope's bend, distortion, orientation and mesh-size controls with exactly the Envelope panel's labels, regardless of the style.
+- **Solution / Workaround**: `getVectorEffectsPanel` returns no `specs` for an envelope (it still lists it to toggle, reorder and remove); `VectorEnvelopePanel` edits it. The specs stay in `VECTOR_EFFECT_PARAM_SPECS` because `normalizeVectorEffectParams` validates against them.
+
+### [core/vector] Free Distort Takes Over Mod on the Selection Box
+
+- **Issue / Symptom**: Mod-dragging a box handle normally scales without snapping; in Free Distort mode it skews (sides) or, with Shift+Alt, makes a symmetric perspective (corners).
+- **Root Cause**: Illustrator's Free Transform modifiers (Cmd on a side shears, Cmd+Alt+Shift on a corner is perspective) clash with the editor's "hold Mod to bypass snapping".
+- **Solution / Workaround**: The distort modifiers apply only while `state.freeDistort` is on (the toolbar's Distort toggle); out of that mode the box scales as before. Distort drags never snap.
+
 ### [core/agent] Agents Can't Turn Plain Text into ProseMirror Positions
 
 - **Issue / Symptom**: An agent read the document with `get_text`, counted characters to the word it wanted, and called `insert_text { at }`. The text landed a few characters off, more so further down the document.

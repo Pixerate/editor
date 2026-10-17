@@ -6,11 +6,14 @@
 import { bezierPathToSvg, transformBezierPath, type BezierPath } from '../canvas/pathops/bezier.js';
 import { hatchPath } from '../canvas/pathops/hatch.js';
 import type { SvgGradientDef } from '../canvas/gradient.js';
+import { expandVectorGradientStops, isCentredVectorGradient, isVectorGradient, parseVectorColor, sortedVectorGradientStops, type VectorGradientHandle, type VectorPaintDef } from './gradient.js';
+import { getVectorGradientAnnotator, VECTOR_GRADIENT_STOP_GAP } from './gradientTool.js';
 
 export type { SvgGradientDef };
 import {
 	getAnchorWorld,
 	getVectorCornerWidgets,
+	getVectorEnvelopeTarget,
 	getVectorSelectionBoxGeometry,
 	getVectorWidthHandles,
 	getVisibleAnchors,
@@ -23,6 +26,10 @@ import {
 import { sanitizeWidthProfile, widthProfilePresetId, type VectorWidthPreset } from './width.js';
 import {
 	findVectorNode,
+	walkVectorNodes,
+	locateVectorNode,
+	subpathsToBezier,
+	vectorWorldMatrix,
 	IDENTITY_MATRIX,
 	inferAnchorType,
 	multiplyMatrices,
@@ -35,14 +42,37 @@ import {
 } from './geometry.js';
 import { vectorPaintToSvg, vectorStrokeSvgParts, type VectorRenderStrokeParts } from './svg.js';
 import { vectorCorners } from './corners.js';
+import {
+	expandVectorAppearance,
+	hasOwnVectorAppearance,
+	hasVectorAppearance,
+	vectorAppearanceOutline,
+	vectorEnteredGroups,
+	VECTOR_EFFECT_LABELS,
+	VECTOR_EFFECT_PARAM_SPECS,
+	type VectorEffectParamSpec,
+	type VectorEnvelopeParams
+} from './appearance.js';
+import { vectorMeshEditPoints, vectorMeshGridCurves, VECTOR_WARP_STYLES, VECTOR_WARP_STYLE_LABELS } from './warp.js';
+import { VECTOR_EFFECT_TYPES, type VectorEffectType } from './types.js';
+import { isVectorBlendGroup, resolveVectorBlendOptions, vectorBlendRailAt, vectorBlendSpine } from './blendGroup.js';
 import type { VectorGuideKind, VectorSnapKind } from './snap.js';
 import type {
 	VectorAnchorRef,
 	VectorAnchorType,
 	VectorArrowAlign,
 	VectorArrowhead,
+	VectorBlendOptions,
+	VectorBlendSpacing,
 	VectorBounds,
 	VectorCornerKind,
+	VectorGradient,
+	VectorGradientInterpolation,
+	VectorGradientSpread,
+	VectorGradientStop,
+	VectorGradientType,
+	VectorStrokeGradientMode,
+	VectorGroupNode,
 	VectorHandleRef,
 	VectorNode,
 	VectorPaint,
@@ -95,8 +125,12 @@ export interface VectorSceneRenderData {
 	width: number;
 	height: number;
 	background?: string;
-	/** Gradients referenced by `fill` / `stroke` values. */
-	defs: SvgGradientDef[];
+	/**
+	 * Paint servers referenced by `fill` / `stroke` values: `<linearGradient>` /
+	 * `<radialGradient>` descriptors and `pattern`s (conic, diamond and stroke-mode gradients:
+	 * draw each of `gradients`, then each tile filled, inside a `<pattern>`).
+	 */
+	defs: VectorPaintDef[];
 	/** Visible nodes, bottom to top. */
 	nodes: VectorRenderNode[];
 }
@@ -178,8 +212,25 @@ export interface VectorOverlayRenderData {
 	 * `<g transform={transform}>`. `corners` and each handle's `screen` are true positions.
 	 */
 	selectionBox:
-		| (VectorBounds & { angle: number; transform: string; corners: Vec2[]; handles: VectorSelectionBoxGeometry['handles'] })
+		| (VectorBounds & { angle: number; transform: string; corners: Vec2[]; handles: VectorSelectionBoxGeometry['handles']; freeDistort: boolean })
 		| null;
+	/**
+	 * A Free Distort drag (screen space): the quad the selection box's corners make so far (`d`,
+	 * closed path data) and its corners clockwise from the top left. The box is hidden meanwhile.
+	 */
+	distort: { mode: 'distort' | 'perspective' | 'skew'; d: string; corners: Vec2[] } | null;
+	/**
+	 * The Envelope tool's mesh of the selected envelope (screen space): `grid` is the grid lines as
+	 * path data, `anchors` the points where they cross and `handles` the handles along them, each
+	 * with the anchor it belongs to (`index` is the point's index in the mesh). Draw anchors as
+	 * squares and handles as dots joined to their anchors.
+	 */
+	envelope: {
+		nodeId: string;
+		grid: string;
+		anchors: { index: number; x: number; y: number; hovered: boolean; active: boolean }[];
+		handles: { index: number; x: number; y: number; anchorX: number; anchorY: number; hovered: boolean; active: boolean }[];
+	} | null;
 	anchors: VectorRenderAnchor[];
 	handles: VectorRenderHandle[];
 	/** Marquee rectangle, screen space. */
@@ -220,8 +271,41 @@ export interface VectorOverlayRenderData {
 	 * or `fill` (paint bucket).
 	 */
 	builder: { mode: 'merge' | 'erase' | 'fill'; faces: string[]; hatches: string[]; lines: string[]; trail: string | null } | null;
+	/**
+	 * Blends (screen space): the spine of each selected blend (`d`, draw it dashed; `keys` are
+	 * where its keys sit on it; `replaced` when it is a replaced spine) and, with the Blend tool,
+	 * the outline of the shape it blends from (`start`, with the clicked anchor) and the anchors
+	 * of the first subpath under the pointer (click one to start the blend there).
+	 */
+	blend: {
+		spines: { id: string; d: string; keys: Vec2[]; replaced: boolean }[];
+		start: { d: string; anchor: Vec2 | null } | null;
+		anchors: { x: number; y: number; hovered: boolean }[];
+	};
+	/** The gradient tool's annotator over the selection's gradient (screen space), or null. */
+	gradient: VectorRenderGradientAnnotator | null;
 	/** A short status, e.g. "W 120 × H 80" or "45°". */
 	status: string | null;
+}
+
+/**
+ * The gradient annotator in screen pixels: draw the `extent` outline (dashed), the bar from
+ * `start` to `end`, the handles, each stop's chip (a swatch at `x, y` with a tick to `barX, barY`;
+ * `removing`: the dragged stop is off the bar and will be deleted, draw it faded) and the
+ * midpoint diamonds.
+ */
+export interface VectorRenderGradientAnnotator {
+	nodeId: string;
+	type: VectorGradientType;
+	start: { x: number; y: number; hovered: boolean };
+	/** `radius` for radial, conic and diamond gradients. */
+	end: { x: number; y: number; hovered: boolean; handle: 'end' | 'radius' };
+	aspect: { x: number; y: number; hovered: boolean } | null;
+	focal: { x: number; y: number; hovered: boolean } | null;
+	stops: { index: number; x: number; y: number; barX: number; barY: number; color: string; opacity: number; selected: boolean; hovered: boolean }[];
+	midpoints: { index: number; x: number; y: number; hovered: boolean }[];
+	extent: string | null;
+	removing: boolean;
 }
 
 const fmt = (n: number) => Math.round(n * 100) / 100;
@@ -229,16 +313,17 @@ const fmtMatrix = (m: AffineMatrix) => `matrix(${m.map((n) => Math.round(n * 1e6
 /** Distance between the Shape Builder's hatch lines over a face (screen pixels). */
 export const VECTOR_BUILDER_HATCH_GAP = 6;
 
-function renderNode(node: VectorNode, defs: SvgGradientDef[], idPrefix: string): VectorRenderNode | null {
-	if (node.visible === false) return null;
+function renderNode(stored: VectorNode, defs: VectorPaintDef[], idPrefix: string): VectorRenderNode | null {
+	if (stored.visible === false) return null;
+	// Path effects and live booleans draw as their expanded shapes.
+	const node = expandVectorAppearance(stored);
 	if (node.type === 'group') {
 		const children = node.children.map((c) => renderNode(c, defs, idPrefix)).filter((c): c is VectorRenderNode => !!c);
 		return { kind: 'group', id: node.id, ...(node.transform ? { transform: fmtMatrix(node.transform) } : {}), opacity: node.opacity ?? 1, children };
 	}
-	const fill = vectorPaintToSvg(node.fill, `${idPrefix}fill-${node.id}`);
-	const stroke = vectorPaintToSvg(node.stroke, `${idPrefix}stroke-${node.id}`);
-	if (fill.gradient) defs.push(fill.gradient);
-	if (stroke.gradient) defs.push(stroke.gradient);
+	const fill = vectorPaintToSvg(node.fill, `${idPrefix}fill-${node.id}`, { node });
+	const stroke = vectorPaintToSvg(node.stroke, `${idPrefix}stroke-${node.id}`, { node, role: 'stroke' });
+	defs.push(...fill.defs, ...stroke.defs);
 	const strokeParts = stroke.value !== 'none' ? vectorStrokeSvgParts(node, `${idPrefix}clip-${node.id}`) : undefined;
 	return {
 		kind: 'path',
@@ -262,7 +347,7 @@ function renderNode(node: VectorNode, defs: SvgGradientDef[], idPrefix: string):
  * `<defs>` block. Pass a unique `idPrefix` when several editors share a page.
  */
 export function getVectorSceneRenderData(state: Pick<VectorEditorState, 'document' | 'viewport'>, options: { idPrefix?: string } = {}): VectorSceneRenderData {
-	const defs: SvgGradientDef[] = [];
+	const defs: VectorPaintDef[] = [];
 	const prefix = options.idPrefix ?? 've-';
 	const nodes = state.document.nodes.map((n) => renderNode(n, defs, prefix)).filter((n): n is VectorRenderNode => !!n);
 	const v = state.viewport;
@@ -278,20 +363,30 @@ export function getVectorSceneRenderData(state: Pick<VectorEditorState, 'documen
 
 const toScreen = (state: Pick<VectorEditorState, 'viewport'>, p: Vec2) => ({ x: p.x * state.viewport.zoom + state.viewport.x, y: p.y * state.viewport.zoom + state.viewport.y });
 
-function screenOutline(state: VectorEditorState, node: VectorNode): string {
+function screenOutline(state: VectorEditorState, node: VectorNode, entered: ReadonlySet<string>): string {
 	const v = state.viewport;
 	const view: AffineMatrix = [v.zoom, 0, 0, v.zoom, v.x, v.y];
 	const parent = vectorParentMatrix(state.document.nodes, node.id) ?? IDENTITY_MATRIX;
-	return collectWithMatrix(node, parent)
-		.map(({ path, parent: m }) => bezierPathToSvg(transformBezierPath(vectorPathWorldBezier(path, m), view), { precision: 2 }))
+	return outlinePaths(node, parent, entered)
+		.map((path) => bezierPathToSvg(transformBezierPath(path, view), { precision: 2 }))
 		.join(' ');
 }
 
-/** Path nodes in a subtree with the matrix of their parent space → document. */
-function collectWithMatrix(node: VectorNode, parent: AffineMatrix): { path: VectorPathNode; parent: AffineMatrix }[] {
-	if (node.type === 'path') return [{ path: node, parent }];
+/**
+ * Document-space outlines of a subtree: paths as stored (their anchors are what is edited; the
+ * scene shows their effects), live groups as drawn unless they are being edited (then their
+ * children, as figcraft outlines a boolean group's operands).
+ */
+function outlinePaths(node: VectorNode, parent: AffineMatrix, entered: ReadonlySet<string>): BezierPath[] {
+	if (node.type === 'path') return [vectorPathWorldBezier(node, parent, { effects: false })];
 	const m = multiplyMatrices(nodeMatrix(node), parent);
-	return node.children.flatMap((c) => collectWithMatrix(c, m));
+	if (hasOwnVectorAppearance(node) && !entered.has(node.id)) return [transformBezierPath(vectorAppearanceOutline(node), m)];
+	return node.children.filter((c) => c.visible !== false).flatMap((c) => outlinePaths(c, m, entered));
+}
+
+/** Live groups being edited in `state` (see `vectorEnteredGroups`). */
+export function getVectorEnteredGroups(state: Pick<VectorEditorState, 'document' | 'selection' | 'editingId'>): Set<string> {
+	return vectorEnteredGroups(state.document.nodes, state.editingId ? [...state.selection, state.editingId] : state.selection);
 }
 
 function collect(node: VectorNode): VectorPathNode[] {
@@ -304,22 +399,23 @@ export function getVectorOverlayRenderData(state: VectorEditorState): VectorOver
 	const doc = state.document;
 	const z = state.viewport.zoom;
 	const outlines: VectorOverlayRenderData['outlines'] = [];
+	const entered = getVectorEnteredGroups(state);
 	const seen = new Set<string>();
 	const outline = (id: string, selected: boolean) => {
 		if (seen.has(id)) return;
 		const node = findVectorNode(doc.nodes, id);
 		if (!node || node.visible === false) return;
 		seen.add(id);
-		outlines.push({ id, d: screenOutline(state, node), selected });
+		outlines.push({ id, d: screenOutline(state, node, entered), selected });
 	};
 	for (const id of state.selection) outline(id, true);
 	if (state.editingId) outline(state.editingId, true);
 	if (state.hover?.nodeId && !state.interaction) outline(state.hover.nodeId, false);
 
 	let selectionBox: VectorOverlayRenderData['selectionBox'] = null;
-	if (state.tool === 'select' && state.selectionFrame && state.interaction?.type !== 'marquee') {
+	if (state.tool === 'select' && state.selectionFrame && state.interaction?.type !== 'marquee' && state.interaction?.type !== 'distort') {
 		const g = getVectorSelectionBoxGeometry(state.selectionFrame, state.viewport);
-		selectionBox = { ...g.box, angle: g.angle, transform: g.transform, corners: g.corners, handles: g.handles };
+		selectionBox = { ...g.box, angle: g.angle, transform: g.transform, corners: g.corners, handles: g.handles, freeDistort: state.freeDistort };
 	}
 
 	const selected = (r: VectorAnchorRef) => state.selectedAnchors.some((a) => a.nodeId === r.nodeId && a.subpath === r.subpath && a.index === r.index);
@@ -449,8 +545,222 @@ export function getVectorOverlayRenderData(state: VectorEditorState): VectorOver
 		}
 	}
 
-	return { outlines, selectionBox, anchors, handles, marquee, penPreview, artboard, guides, status, toolStroke, pencilString, cutPoint, cornerWidgets, widthPoints, widthSpot, builder };
+	const blend = blendOverlay(state);
+	if (state.tool === 'blend' && !it) status = state.blendStart ? 'Click another shape to blend into' : 'Click a shape to blend from';
+
+	let gradient: VectorRenderGradientAnnotator | null = null;
+	if (state.tool === 'gradient') {
+		gradient = gradientOverlay(state);
+		if (!gradient && !it) status = 'Drag across a shape to set a gradient';
+		else if (it?.type === 'gradient' && it.removing) status = 'Release to delete the stop';
+	}
+
+	let distort: VectorOverlayRenderData['distort'] = null;
+	if (it?.type === 'distort') {
+		const corners = it.corners.map(sc);
+		distort = { mode: it.mode, corners, d: corners.map((c, i) => `${i ? 'L' : 'M'}${c.x} ${c.y}`).join('') + 'Z' };
+		status = it.mode === 'skew' ? 'Skew' : it.mode === 'perspective' ? 'Perspective' : 'Distort';
+	}
+
+	const envelope = state.tool === 'envelope' ? envelopeOverlay(state) : null;
+	if (state.tool === 'envelope' && !envelope && !it) status = 'Select an object with an envelope to edit its mesh';
+
+	return { outlines, selectionBox, distort, anchors, handles, marquee, penPreview, artboard, guides, status, toolStroke, pencilString, cutPoint, cornerWidgets, widthPoints, widthSpot, builder, blend, gradient, envelope };
 }
+
+function envelopeOverlay(state: VectorEditorState): VectorOverlayRenderData['envelope'] {
+	const target = getVectorEnvelopeTarget(state.document, state.selection);
+	if (!target) return null;
+	const v = state.viewport;
+	const m = multiplyMatrices(target.world, [v.zoom, 0, 0, v.zoom, v.x, v.y]);
+	const sc = (p: Vec2) => ({ x: fmt(m[0] * p.x + m[2] * p.y + m[4]), y: fmt(m[1] * p.x + m[3] * p.y + m[5]) });
+	const { mesh } = target.frame;
+	const grid = vectorMeshGridCurves(mesh)
+		.map((c) => {
+			const [a, b, cc, d] = c.map(sc);
+			return `M${a.x} ${a.y}C${b.x} ${b.y} ${cc.x} ${cc.y} ${d.x} ${d.y}`;
+		})
+		.join('');
+	const hover = state.hover?.envelope?.nodeId === target.node.id ? state.hover.envelope.index : undefined;
+	const it = state.interaction;
+	const active = it?.type === 'envelope' && it.nodeId === target.node.id ? it.index : undefined;
+	const pts = vectorMeshEditPoints(mesh);
+	return {
+		nodeId: target.node.id,
+		grid,
+		anchors: pts.anchors.map((index) => ({ index, ...sc(mesh.points[index]), hovered: !it && hover === index, active: active === index })),
+		handles: pts.handles.map((h) => {
+			const a = sc(mesh.points[h.anchor]);
+			return { index: h.index, ...sc(mesh.points[h.index]), anchorX: a.x, anchorY: a.y, hovered: !it && hover === h.index, active: active === h.index };
+		})
+	};
+}
+
+/** Warp choices of an envelope: the fifteen presets, then Mesh. */
+export const VECTOR_ENVELOPE_STYLE_OPTIONS: readonly { value: VectorEnvelopeParams['style']; label: string }[] = [
+	...VECTOR_WARP_STYLES.map((value) => ({ value, label: VECTOR_WARP_STYLE_LABELS[value] })),
+	{ value: 'mesh', label: 'Mesh' }
+];
+
+/** What a Distort / Envelope panel shows for the selection. */
+export interface VectorEnvelopePanelData {
+	/** The one selected node, or null when several are selected. */
+	nodeId: string | null;
+	count: number;
+	/** The selected node's envelope (the first one in its stack), if any. */
+	envelope: { effectId: string; enabled: boolean; params: VectorEnvelopeParams } | null;
+	/** Some selected node can take an envelope (Make with Warp / Mesh). */
+	canMake: boolean;
+	/** Make with Top Object: several objects selected and the topmost is a closed path. */
+	canMakeWithTopObject: boolean;
+	/** Some selected node has an envelope (Release, Expand). */
+	canRelease: boolean;
+}
+
+/** The Distort / Envelope panel of the selection, or null when nothing is selected. */
+export function getVectorEnvelopePanel(state: Pick<VectorEditorState, 'document' | 'selection'>): VectorEnvelopePanelData | null {
+	const nodes = state.selection.map((id) => findVectorNode(state.document.nodes, id)).filter((n): n is VectorNode => !!n && !n.blendStep);
+	if (!nodes.length) return null;
+	const one = nodes.length === 1 ? nodes[0] : null;
+	const first = one?.effects?.find((e) => e.type === 'envelope');
+	const order = new Map<string, number>();
+	walkVectorNodes(state.document.nodes, (n) => order.set(n.id, order.size));
+	const top = nodes.length > 1 ? nodes.slice().sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))[nodes.length - 1] : null;
+	return {
+		nodeId: one?.id ?? null,
+		count: nodes.length,
+		envelope: first?.type === 'envelope' ? { effectId: first.id, enabled: first.enabled !== false, params: first.params } : null,
+		canMake: nodes.some((n) => !n.locked),
+		canMakeWithTopObject: top?.type === 'path' && top.subpaths.some((sp) => sp.closed && sp.anchors.length > 1),
+		canRelease: nodes.some((n) => !n.locked && !!n.effects?.some((e) => e.type === 'envelope'))
+	};
+}
+
+function gradientOverlay(state: VectorEditorState): VectorRenderGradientAnnotator | null {
+	const a = getVectorGradientAnnotator(state.document, state.selection, state.viewport, state.gradientEdit.target);
+	if (!a) return null;
+	const hover = state.interaction ? null : state.hover?.gradient;
+	const handleHovered = (h: VectorGradientHandle) => hover?.kind === 'handle' && hover.handle === h;
+	const pt = (p: Vec2) => ({ x: fmt(p.x), y: fmt(p.y) });
+	const centred = isCentredVectorGradient(a.gradient.type);
+	const removing = state.interaction?.type === 'gradient' && !!state.interaction.removing;
+	return {
+		nodeId: a.nodeId,
+		type: a.gradient.type,
+		start: { ...pt(a.start), hovered: handleHovered('start') },
+		end: { ...pt(a.end), hovered: handleHovered(centred ? 'radius' : 'end'), handle: centred ? 'radius' : 'end' },
+		aspect: a.aspect ? { ...pt(a.aspect), hovered: handleHovered('aspect') } : null,
+		focal: a.focal ? { ...pt(a.focal), hovered: handleHovered('focal') } : null,
+		stops: a.stops.map((s) => ({
+			index: s.index,
+			...pt(s),
+			barX: fmt(s.x - a.normal.x * VECTOR_GRADIENT_STOP_GAP),
+			barY: fmt(s.y - a.normal.y * VECTOR_GRADIENT_STOP_GAP),
+			color: s.color,
+			opacity: s.opacity ?? 1,
+			selected: state.gradientEdit.stop === s.index,
+			hovered: hover?.kind === 'stop' && hover.index === s.index
+		})),
+		midpoints: a.midpoints.map((m) => ({ index: m.index, ...pt(m), hovered: hover?.kind === 'midpoint' && hover.index === m.index })),
+		extent: a.extent,
+		removing
+	};
+}
+
+/** Blend groups the selection covers (a selected key counts as its blend). */
+function selectedBlends(state: Pick<VectorEditorState, 'document' | 'selection'>): VectorGroupNode[] {
+	const out = new Map<string, VectorGroupNode>();
+	for (const id of state.selection) {
+		const node = findVectorNode(state.document.nodes, id);
+		const group = isVectorBlendGroup(node) ? node : locateVectorNode(state.document.nodes, id)?.parent;
+		if (isVectorBlendGroup(group)) out.set(group.id, group);
+	}
+	return [...out.values()];
+}
+
+function blendOverlay(state: VectorEditorState): VectorOverlayRenderData['blend'] {
+	const v = state.viewport;
+	const view: AffineMatrix = [v.zoom, 0, 0, v.zoom, v.x, v.y];
+	const doc = state.document;
+	const sc = (p: Vec2, m: AffineMatrix) => {
+		const q = { x: m[0] * p.x + m[2] * p.y + m[4], y: m[1] * p.x + m[3] * p.y + m[5] };
+		return { x: fmt(q.x), y: fmt(q.y) };
+	};
+	const spines = selectedBlends(state).flatMap((g) => {
+		const s = vectorBlendSpine(g);
+		if (!s) return [];
+		const m = multiplyMatrices(vectorWorldMatrix(doc.nodes, g.id) ?? IDENTITY_MATRIX, view);
+		const d = bezierPathToSvg(transformBezierPath(subpathsToBezier([s.spine], { corners: false }), m), { precision: 2 });
+		const keys = s.stops.map((stop) => {
+			const p = vectorBlendRailAt(s.rail, stop).point;
+			return sc({ x: p[0], y: p[1] }, m);
+		});
+		return [{ id: g.id, d, keys, replaced: s.replaced }];
+	});
+	let start: VectorOverlayRenderData['blend']['start'] = null;
+	const anchors: VectorOverlayRenderData['blend']['anchors'] = [];
+	if (state.tool === 'blend') {
+		const from = state.blendStart ? findVectorNode(doc.nodes, state.blendStart.nodeId) : undefined;
+		if (from && state.blendStart) {
+			const a = state.blendStart.anchor === null ? undefined : getAnchorWorld(doc, { nodeId: from.id, subpath: 0, index: state.blendStart.anchor });
+			start = { d: screenOutline(state, from, new Set()), anchor: a ? sc(a, view) : null };
+		}
+		const hovered = state.hover?.nodeId ? findVectorNode(doc.nodes, state.hover.nodeId) : undefined;
+		if (hovered?.type === 'path' && hovered.subpaths[0]) {
+			hovered.subpaths[0].anchors.forEach((_, index) => {
+				const a = getAnchorWorld(doc, { nodeId: hovered.id, subpath: 0, index });
+				if (a) anchors.push({ ...sc(a, view), hovered: state.hover?.anchor?.index === index });
+			});
+		}
+	}
+	return { spines, start, anchors };
+}
+
+/** What the Blend controls of a toolbar or style panel show. */
+export interface VectorBlendControls {
+	/** Ids of the selected blends (a selected key counts as its blend). */
+	ids: string[];
+	/** The first selected blend's options, or the options new blends get. */
+	options: Required<VectorBlendOptions>;
+	/** Two or more shapes that share a parent are selected: Blend can run. */
+	canBlend: boolean;
+	/** One blend and one path are selected: Replace Spine can run. */
+	canReplaceSpine: boolean;
+	/** The first selected blend follows a replaced spine. */
+	hasSpine: boolean;
+}
+
+/** State of the Blend controls for the current selection. */
+export function getVectorBlendControls(state: Pick<VectorEditorState, 'document' | 'selection' | 'blendDefaults'>): VectorBlendControls {
+	const blends = selectedBlends(state);
+	const doc = state.document;
+	const roots = state.selection.filter((id) => {
+		const node = findVectorNode(doc.nodes, id);
+		return !!node && !node.blendStep && !node.locked && !state.selection.includes(locateVectorNode(doc.nodes, id)?.parent?.id ?? '');
+	});
+	const parents = new Set(roots.map((id) => locateVectorNode(doc.nodes, id)?.parent?.id ?? null));
+	const paths = roots.filter((id) => findVectorNode(doc.nodes, id)?.type === 'path' && !isVectorBlendGroup(locateVectorNode(doc.nodes, id)?.parent));
+	const first = blends[0];
+	return {
+		ids: blends.map((g) => g.id),
+		options: resolveVectorBlendOptions(first ? first.blend : state.blendDefaults),
+		canBlend: roots.length >= 2 && parents.size === 1,
+		canReplaceSpine: blends.length === 1 && paths.length === 1,
+		hasSpine: !!first?.blend?.spine
+	};
+}
+
+/**
+ * Applies blend options from a toolbar: to the selected blends (one undo step) and to the
+ * options new blends get, so the controls keep showing what was picked.
+ */
+export function applyVectorBlendOptions(controller: VectorEditorController, patch: Partial<VectorBlendOptions>): void {
+	controller.setBlendDefaults(patch);
+	if (getVectorBlendControls(controller.getState()).ids.length) controller.setBlendOptions(patch);
+}
+
+/** Labels of the blend spacing modes, for toolbars. */
+export const VECTOR_BLEND_SPACING_LABELS: Readonly<Record<VectorBlendSpacing, string>> = { steps: 'Specified Steps', distance: 'Specified Distance', smoothColor: 'Smooth Color' };
 
 // ---------------------------------------------------------------------------
 // Event adapters (duck-typed, so they work with DOM, React and Svelte events)
@@ -664,6 +974,77 @@ export function vectorPaintToHex(paint: VectorPaint | undefined): string | null 
 }
 
 // ---------------------------------------------------------------------------
+// Gradient editor
+// ---------------------------------------------------------------------------
+
+export const VECTOR_GRADIENT_TYPE_LABELS: Readonly<Record<VectorGradientType, string>> = { linear: 'Linear', radial: 'Radial', conic: 'Conic', reflected: 'Reflected', diamond: 'Diamond' };
+export const VECTOR_GRADIENT_SPREAD_LABELS: Readonly<Record<VectorGradientSpread, string>> = { pad: 'Pad', reflect: 'Reflect', repeat: 'Repeat' };
+export const VECTOR_GRADIENT_INTERPOLATION_LABELS: Readonly<Record<VectorGradientInterpolation, string>> = { srgb: 'sRGB', linear: 'Linear light', oklab: 'Oklab' };
+export const VECTOR_STROKE_GRADIENT_MODE_LABELS: Readonly<Record<VectorStrokeGradientMode, string>> = { within: 'Within stroke', along: 'Along stroke', across: 'Across stroke' };
+
+/** What a gradient editor shows for the selection's `target` paint (see `getVectorGradientEditor`). */
+export interface VectorGradientEditorData {
+	target: 'fill' | 'stroke';
+	/** The first selected path's paint is a gradient. */
+	gradient: VectorGradient | null;
+	/** The paint as a `#rrggbb` colour when it is one (what a new gradient starts from). */
+	color: string | null;
+	/** Sorted stops; `index` is what `setGradientStop` takes. */
+	stops: (VectorGradientStop & { index: number; selected: boolean })[];
+	selected: (VectorGradientStop & { index: number; last: boolean }) | null;
+	/** A CSS `linear-gradient(to right, …)` of the ramp (midpoints and colour space expanded). */
+	preview: string | null;
+	type: VectorGradientType | null;
+	spread: VectorGradientSpread;
+	interpolation: VectorGradientInterpolation;
+	smoothness: number;
+	strokeMode: VectorStrokeGradientMode;
+	/** The selected paths' gradients differ. */
+	mixed: boolean;
+}
+
+/** The gradient editor of the selection's fill or stroke (`state.gradientEdit.target`), or null with nothing selected. */
+export function getVectorGradientEditor(state: Pick<VectorEditorState, 'document' | 'selection' | 'gradientEdit'>): VectorGradientEditorData | null {
+	const paths: VectorPathNode[] = [];
+	for (const id of state.selection) {
+		const node = findVectorNode(state.document.nodes, id);
+		if (node) paths.push(...collect(node));
+	}
+	if (!paths.length) return null;
+	const target = state.gradientEdit.target;
+	const paint = paths[0][target];
+	const gradient = isVectorGradient(paint) ? paint : null;
+	const sorted = gradient ? sortedVectorGradientStops(gradient) : [];
+	const stopIndex = state.gradientEdit.stop;
+	const stops = sorted.map((s, index) => ({ ...s, index, selected: index === stopIndex }));
+	const sel = stopIndex !== null && sorted[stopIndex] ? { ...sorted[stopIndex], index: stopIndex, last: stopIndex === sorted.length - 1 } : null;
+	const preview = gradient
+		? `linear-gradient(to right, ${expandVectorGradientStops(gradient)
+				.map((s) => {
+					const c = parseVectorColor(s.color);
+					const a = (c?.[3] ?? 1) * (s.opacity ?? 1);
+					const color = c ? `rgba(${Math.round(c[0] * 255)}, ${Math.round(c[1] * 255)}, ${Math.round(c[2] * 255)}, ${Math.round(a * 1000) / 1000})` : s.color;
+					return `${color} ${Math.round(s.offset * 10000) / 100}%`;
+				})
+				.join(', ')})`
+		: null;
+	return {
+		target,
+		gradient,
+		color: vectorPaintToHex(paint),
+		stops,
+		selected: sel,
+		preview,
+		type: gradient?.type ?? null,
+		spread: gradient?.spread ?? 'pad',
+		interpolation: gradient?.interpolation ?? 'srgb',
+		smoothness: gradient?.smoothness ?? 0,
+		strokeMode: gradient?.strokeMode ?? 'within',
+		mixed: paths.some((p) => JSON.stringify(p[target] ?? null) !== JSON.stringify(paint ?? null))
+	};
+}
+
+// ---------------------------------------------------------------------------
 // Toolbar helpers
 // ---------------------------------------------------------------------------
 
@@ -715,3 +1096,54 @@ export const VECTOR_EDIT_TOGGLES: readonly { key: 'keepShapeOnDelete' | 'curvatu
 	{ key: 'recognizeShapes', label: 'Shapes', title: 'Turn pencil scribbles into shapes' }
 ];
 
+
+// ---------------------------------------------------------------------------
+// Effects panel
+// ---------------------------------------------------------------------------
+
+/** One effect of the listed stack, with what a panel needs to edit it. */
+export interface VectorEffectsPanelItem {
+	id: string;
+	type: VectorEffectType;
+	label: string;
+	enabled: boolean;
+	params: Record<string, unknown>;
+	/** The parameters to edit (none for an envelope: `getVectorEnvelopePanel` and the Envelope panels edit it). */
+	specs: readonly VectorEffectParamSpec[];
+}
+
+/** What an Effects panel shows for the selection. */
+export interface VectorEffectsPanelData {
+	/** The node whose stack is listed (when one node is selected), else null. */
+	nodeId: string | null;
+	/** Selected nodes an added effect goes to. */
+	count: number;
+	/** The listed stack, applied top to bottom. */
+	effects: VectorEffectsPanelItem[];
+	/** Something selected is live (Expand Appearance applies). */
+	expandable: boolean;
+}
+
+/** Effect types in menu order, with their names. */
+export const VECTOR_EFFECT_MENU: readonly { type: VectorEffectType; label: string }[] = VECTOR_EFFECT_TYPES.map((type) => ({ type, label: VECTOR_EFFECT_LABELS[type] }));
+
+/** The Effects panel of the selection, or null when nothing that takes effects is selected. */
+export function getVectorEffectsPanel(state: Pick<VectorEditorState, 'document' | 'selection'>): VectorEffectsPanelData | null {
+	const nodes = state.selection.map((id) => findVectorNode(state.document.nodes, id)).filter((n): n is VectorNode => !!n && !n.blendStep);
+	if (!nodes.length) return null;
+	const one = nodes.length === 1 ? nodes[0] : null;
+	return {
+		nodeId: one?.id ?? null,
+		count: nodes.length,
+		effects: (one?.effects ?? []).map((e) => ({
+			id: e.id,
+			type: e.type,
+			label: VECTOR_EFFECT_LABELS[e.type] ?? e.type,
+			enabled: e.enabled !== false,
+			params: e.params as unknown as Record<string, unknown>,
+			// The Envelope panel (`getVectorEnvelopePanel`) edits an envelope's warp and mesh.
+			specs: e.type === 'envelope' ? [] : (VECTOR_EFFECT_PARAM_SPECS[e.type] ?? [])
+		})),
+		expandable: nodes.some(hasVectorAppearance)
+	};
+}
