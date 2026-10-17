@@ -26,7 +26,7 @@
   let { controller, showInspector = true, showDataGrid = true, showToolbar = true, pngOptions, height = 380, canvasProps = {}, class: className = '' }: Props = $props();
 
   const view = chartStateOf(() => controller);
-  const state = $derived(view.current);
+  const chart = $derived(view.current);
   let pngError = $state<string | null>(null);
   function downloadPng() {
     pngError = null;
@@ -37,18 +37,18 @@
 <div class="flex flex-col gap-2 {className}" data-chart-editor="">
   {#if showToolbar}
     <div class="flex items-center gap-1" data-chart-toolbar="">
-      <button type="button" class={chartButtonClass} disabled={!state.canUndo} title={state.undoLabel ? `Undo ${state.undoLabel}` : 'Undo'} data-action="undo" onclick={() => controller.undo()}>Undo</button>
-      <button type="button" class={chartButtonClass} disabled={!state.canRedo} title={state.redoLabel ? `Redo ${state.redoLabel}` : 'Redo'} data-action="redo" onclick={() => controller.redo()}>Redo</button>
+      <button type="button" class={chartButtonClass} disabled={!chart.canUndo} title={chart.undoLabel ? `Undo ${chart.undoLabel}` : 'Undo'} data-action="undo" onclick={() => controller.undo()}>Undo</button>
+      <button type="button" class={chartButtonClass} disabled={!chart.canRedo} title={chart.redoLabel ? `Redo ${chart.redoLabel}` : 'Redo'} data-action="redo" onclick={() => controller.redo()}>Redo</button>
       <button type="button" class={chartButtonClass} title="Download the chart as a PNG image" data-action="download-png" onclick={downloadPng}>Download PNG</button>
-      <span class="ml-2 truncate text-xs text-muted-foreground" data-chart-selection="" aria-live="polite">{describeChartSelection(controller, state.selection)}</span>
+      <span class="ml-2 truncate text-xs text-muted-foreground" data-chart-selection="" aria-live="polite">{describeChartSelection(controller, chart.selection)}</span>
     </div>
   {/if}
   {#if pngError}
     <p role="alert" class="rounded-md border border-destructive/40 bg-destructive/10 px-2 py-1 text-xs text-destructive" data-chart-png-error="">{pngError}</p>
   {/if}
-  {#if state.issues.length > 0}
+  {#if chart.issues.length > 0}
     <p role="alert" class="rounded-md border border-destructive/40 bg-destructive/10 px-2 py-1 text-xs text-destructive" data-chart-issues="">
-      {state.issues.map((i) => i.message).join(' ')}
+      {chart.issues.map((i) => i.message).join(' ')}
     </p>
   {/if}
   <div class="flex min-h-0 flex-col gap-2 md:flex-row">
