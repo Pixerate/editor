@@ -1108,16 +1108,30 @@ export class VectorEditorController {
 		this.createId = options.createId ?? defaultCreateId;
 		this.onChange = options.onChange;
 		this.state = this.computeState();
-		this.cleanups.push(
-			this.history.subscribe((h) => {
-				const s = this.state;
-				if (this.applying || (s.canUndo === h.canUndo && s.canRedo === h.canRedo && s.undoLabel === h.undoName && s.redoLabel === h.redoName)) return;
-				this.notify();
-			})
-		);
+		this.connect();
 	}
 
-	/** Stops listening to the history. */
+	/** Listens to the history (once; again after `destroy`). */
+	private connect(): void {
+		if (this.cleanups.length) return;
+		this.cleanups.push(
+			this.history.subscribe((h) => {
+				if (!this.applying && this.historyDiffers(h)) this.notify();
+			})
+		);
+		// Catch up on history changes made while disconnected.
+		if (this.historyDiffers(this.history.getState())) this.state = this.computeState();
+	}
+
+	private historyDiffers(h: ReturnType<HistoryManager['getState']>): boolean {
+		const s = this.state;
+		return s.canUndo !== h.canUndo || s.canRedo !== h.canRedo || s.undoLabel !== h.undoName || s.redoLabel !== h.redoName;
+	}
+
+	/**
+	 * Stops listening to the history and drops all listeners. A later `subscribe` reconnects, so a
+	 * controller torn down by React StrictMode's double effect keeps working when it is reused.
+	 */
 	destroy(): void {
 		this.cleanups.splice(0).forEach((fn) => fn());
 		this.listeners.clear();
@@ -1132,6 +1146,7 @@ export class VectorEditorController {
 
 	/** Calls `listener` after every change. Returns an unsubscribe function. */
 	subscribe = (listener: (state: VectorEditorState) => void): (() => void) => {
+		this.connect();
 		this.listeners.add(listener);
 		return () => {
 			this.listeners.delete(listener);
