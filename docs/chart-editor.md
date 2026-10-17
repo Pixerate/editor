@@ -144,7 +144,30 @@ const { xml, issues } = chartToOoxml(spec); // c:chartSpace with literal data
 const { spec, unsupported, lossless } = chartFromOoxml(xml, { DOMParser }); // also chartex parts
 ```
 
-The comment keeps what Mermaid cannot express, so text round-trips exactly while any Mermaid renderer still draws the basic chart. DOCX imports return embedded charts in `DocumentImport.charts` and show each as a caption and a data table (see GOTCHAS for why not an SVG image).
+The comment keeps what Mermaid cannot express, so text round-trips exactly while any Mermaid renderer still draws the basic chart. DOCX imports return embedded charts in `DocumentImport.charts` and write each as a `<div data-type="chart">` holding its spec: a live chart in editors with the chart node (below), otherwise a caption and a data table (see GOTCHAS for why not an SVG image).
+
+## Charts in documents
+
+`createRichTextPreset({ chart: true })` adds a `chart` block node and an inline `sparkline` node to the rich-text editor (`chart: { sparkline: false }` leaves the sparkline out).
+
+```ts
+import { createRichTextPreset, getDocumentCharts } from "@pixerate/editor";
+import { createReactChartNodeView } from "@pixerate/editor-react"; // or createSvelteChartNodeView from @pixerate/editor-svelte
+
+const extensions = createRichTextPreset({ chart: { nodeView: createReactChartNodeView() } });
+editor.commands.insertChart({ spec: { type: "bar", categories: ["Q1", "Q2"], series: [{ name: "Sales", values: [3, 5] }] }, height: 280 });
+editor.commands.updateChart(id, { spec: nextSpec });
+editor.commands.insertSparkline({ values: [3, 5, 4, 8], kind: "line" });
+getDocumentCharts(editor.state.doc); // [{ id, pos, node, spec }]
+```
+
+- **Attributes**: `id` (unique; copies and imports get fresh ids), `spec` (a normalized `ChartSpec`), `width` (`null` fills the line) and `height` (default 320).
+- **HTML**: `<div data-type="chart" data-chart="{…}" data-chart-id data-width data-height>` with a static SVG inside (drawn with `chartSceneToDomSpec` in `DEFAULT_CHART_THEME`, or the node's `theme` option), so exported HTML shows the chart without script. Parsing reads `data-chart`; a missing or broken spec keeps the div's fallback content.
+- **Markdown**: a ` ```mermaid ` block from `chartToMermaid` (the fence grows past any backticks in the text). `xychart-beta`, `pie` and `radar-beta` blocks parse back into charts, including hand-written ones; other Mermaid diagrams stay code blocks. Sparklines are written as their `<span data-type="sparkline">`, which the markdown sanitizer allows.
+- **Plain text**: `[Chart: title]`, and a sparkline's label.
+- **In the editor**: the node view (`ChartNodeView` in core, mounted by `createReactChartNodeView` or `createSvelteChartNodeView`) draws `<ChartCanvas>` read-only. A click selects the chart and opens it for editing: the canvas becomes interactive, the data grid and the inspector open in a panel below it (side by side when the document is wide enough). Every edit is a document transaction (drags once they end), so the editor's undo covers them; undo, `updateChart` and agent edits load back into the canvas. Done, Escape or moving the selection closes it; a read-only editor never opens it. Without a `nodeView`, the editor shows the static SVG. The React view renders in its own root, so React context does not reach it.
+- **Agents**: `createRichTextToolProvider` adds `list_document_charts` (always), and `insert_chart`, `update_chart_in_document` (by `chartId` or `pos`; fields merge into the spec, axes and legend field by field, given series replace all) and `insert_sparkline` while the editor is editable. Invalid input changes nothing and comes back as sentences; each call is one undo step.
+- **DOCX**: imported charts become chart nodes when the schema has the node; otherwise they stay a caption and a table.
 
 ## Streaming, agent cursors and sparklines
 

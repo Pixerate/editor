@@ -13,6 +13,7 @@ import {
   TableBubbleMenu,
   useRegisterCommands,
   ExportDocxButton,
+  createReactChartNodeView,
 } from "@pixerate/editor-react";
 import { CommentStore, DEFAULT_TABLE_TOOLBAR, createTableCommands, getCrossReferenceTargets } from "@pixerate/editor";
 import type { DocxExportReport } from "@pixerate/editor/export";
@@ -36,10 +37,38 @@ import {
   Wand2,
   Search,
   Table as TableIcon,
+  BarChart3,
+  TrendingUp,
 } from "lucide-react";
 import { demoCommandRegistry, demoToolRegistry } from "../agentTools";
 import { RichDocumentAutosave } from "./RichDocumentAutosave";
 import { samplePdfFile, samplePdfRegistry } from "../samplePdf";
+
+/** The chart inserted by the toolbar's chart button. */
+const NEW_CHART = {
+  type: "bar" as const,
+  title: "Quarterly revenue",
+  categories: ["Q1", "Q2", "Q3", "Q4"],
+  series: [
+    { id: "north", name: "North", values: [42, 48, 51, 60] },
+    { id: "south", name: "South", values: [30, 35, 33, 41] },
+  ],
+};
+
+const DEMO_CHART = {
+  type: "line",
+  title: "Weekly active editors",
+  categories: ["W1", "W2", "W3", "W4", "W5", "W6"],
+  series: [
+    { id: "react", name: "React", values: [120, 135, 150, 148, 170, 190] },
+    { id: "svelte", name: "Svelte", values: [80, 92, 101, 118, 125, 140] },
+  ],
+};
+
+const attr = (value: unknown) => JSON.stringify(value).replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+
+/** Charts are edited in place by the React node view (read-only until clicked). */
+const CHART_NODE_VIEW = createReactChartNodeView();
 
 const INITIAL_CONTENT = `
   <h1 id="h-welcome">Welcome to Rich Text Document Editing</h1>
@@ -63,6 +92,9 @@ const INITIAL_CONTENT = `
     <tr><td><p>Table toolbar and bubble menu</p></td><td><p>TableToolbar</p></td><td><p>TableToolbar</p></td></tr>
     <tr><td><p>Insert-table grid</p></td><td colspan="2"><p>InsertTableGrid (both)</p></td></tr>
   </tbody></table>
+  <h2 id="h-charts">Charts</h2>
+  <p>Charts are live document nodes: click one to edit it on the canvas, in the inspector or in the data grid; undo works like any other edit. Markdown export writes a <code>mermaid</code> block, DOCX import inserts embedded Word charts as charts, and agents use <code>insert_chart</code>, <code>list_document_charts</code> and <code>update_chart_in_document</code>. Sparklines sit inline: signups <span data-type="sparkline" data-values="[3,5,4,8,9,12]" data-kind="line"></span> and margin <span data-type="sparkline" data-values="[2,-1,3,4,-2,5]" data-kind="column"></span>.</p>
+  <div data-type="chart" data-chart-id="chart-demo" data-height="280" data-chart="${attr(DEMO_CHART)}"></div>
   <h2 id="h-review">Review and Word export</h2>
   <p>This paragraph carries <span data-comment-id="demo-comment">a comment thread with a reply</span> and tracked changes: <del data-change-type="deletion" data-change-id="demo-del" data-author-id="ana" data-author-name="Ana Editor" data-created-at="1767225600000">old wording</del><ins data-change-type="insertion" data-change-id="demo-ins" data-author-id="ana" data-author-name="Ana Editor" data-created-at="1767225600000">new wording</ins>. “Export to Word” writes them to a <code>.docx</code> with authors, dates, replies and resolved state.</p>
   <h2 id="h-import">Import and clipboard</h2>
@@ -114,6 +146,7 @@ export const RichDocumentTab: React.FC = () => {
       crossReferences: true,
       findReplace: true,
       paragraphStyles: true,
+      chart: { nodeView: CHART_NODE_VIEW },
       comments: { store: commentStore, author: { id: "you", name: "You" } },
       trackChanges: { enabled: false, author: { id: "you", name: "You" } },
       autocorrect: {
@@ -236,6 +269,16 @@ export const RichDocumentTab: React.FC = () => {
             </div>
           )}
         </div>
+        <button onClick={() => editor.chain().focus().insertChart({ spec: NEW_CHART }).run()} className={btn(editor.isActive("chart"))} title="Insert chart">
+          <BarChart3 className="w-4 h-4" />
+        </button>
+        <button
+          onClick={() => editor.chain().focus().insertSparkline({ values: [4, 6, 5, 9, 7, 11] }).run()}
+          className={btn()}
+          title="Insert sparkline"
+        >
+          <TrendingUp className="w-4 h-4" />
+        </button>
         <button onClick={() => editor.chain().focus().insertTableOfContents().run()} className={btn()} title="Insert table of contents">
           <ListTree className="w-4 h-4" />
         </button>

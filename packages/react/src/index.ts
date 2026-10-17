@@ -66,3 +66,4 @@ export * from "./persistence";
 export * from "./generation";
 export * from "./find-replace";
 export * from "./tables";
+export * from "./chart-node";

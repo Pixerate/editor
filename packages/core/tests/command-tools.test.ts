@@ -186,6 +186,8 @@ describe('built-in tool providers have complete MCP annotations', () => {
 		// Hosts with their own tool sets: checked to the same standard.
 		registry.register(createImageEditorToolProvider(new ImageEditorController(), { id: 'img', namespace: 'img' }));
 		registry.register(createChartToolProvider(new ChartController(), { id: 'chart', namespace: 'chart' }));
+		const chartDoc = new Editor({ extensions: createRichTextPreset({ chart: true }), content: '<p>x</p>' });
+		registry.register(createRichTextToolProvider(chartDoc, { id: 'chart-doc', namespace: 'chartdoc' }));
 		registry.register(
 			createGenerationToolProvider({ namespace: 'gen', models: [], generate: () => ({}), estimate: () => ({}) })
 		);
@@ -207,6 +209,8 @@ describe('built-in tool providers have complete MCP annotations', () => {
 			}
 		}
 		expect(undescribed).toEqual([]);
+		expect(allTools.map((t) => t.name)).toEqual(expect.arrayContaining(['chartdoc__insert_chart', 'chartdoc__update_chart_in_document', 'chartdoc__list_document_charts', 'chartdoc__insert_sparkline']));
 		editor.destroy();
+		chartDoc.destroy();
 	});
 });

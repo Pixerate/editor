@@ -188,7 +188,7 @@ Every feature is available from core and from both framework packages. "Via core
 </details>
 
 <details>
-<summary><strong>Rich text</strong> (14)</summary>
+<summary><strong>Rich text</strong> (15)</summary>
 
 | Feature | Core | React | Svelte |
 | :--- | :---: | :---: | :---: |
@@ -206,6 +206,7 @@ Every feature is available from core and from both framework packages. "Via core
 | Tables (header rows/columns/cells, `colspan`/`rowspan`, resizable columns, cell alignment and background, never nested by paste or import; on by default, `table: false` to flatten) | `createTableExtensions` (`table` preset option), `createTableCommands`, `getTableState`, `createTableStore`, `edit_table` agent tool | `TableToolbar`, `TableBubbleMenu`, `InsertTableGrid`, `useTableMenu` | `TableToolbar`, `TableBubbleMenu`, `InsertTableGrid`, `createTableMenu` |
 | Tables in exports and review (tab-separated plain text, GFM markdown or HTML fallback, GFM import, tracked row/column/table insertions and deletions, compare) | ✅ | Via core | Via core |
 | Rich Clipboard MIME (`application/x.pixerate.document+json`) | `RichClipboard` | `richClipboard` | `richClipboard` prop |
+| Chart & Sparkline Nodes (`chart` preset option: live chart blocks storing a `ChartSpec`, static SVG in HTML, ` ```mermaid ` in markdown, DOCX charts imported as charts, inline sparklines; click to edit with the inspector; `insert_chart`, `list_document_charts`, `update_chart_in_document`, `insert_sparkline` agent tools) | `Chart`, `Sparkline`, `ChartNodeView`, `getDocumentCharts` | `createReactChartNodeView`, `<ChartNodeView>` | `createSvelteChartNodeView`, `<ChartNodeView>` |
 
 </details>
 
@@ -233,7 +234,7 @@ Every feature is available from core and from both framework packages. "Via core
 | :--- | :---: | :---: | :---: |
 | File Import Registry (`.md`, `.html`, `.txt`, `.rtf`, `.docx`; pluggable adapters) | ✅ | `useFileImport` + `fileImport` | `createFileImport` + `fileImport` prop |
 | Drag-and-Drop File Import at Drop Position | `FileImport` | ✅ | ✅ |
-| DOCX Import (headings, lists, tables, links, images, footnotes; dependency-free) | `docxImportAdapter` | Via core | Via core |
+| DOCX Import (headings, lists, tables, links, images, footnotes, charts — as `chart` nodes when the schema has them, else a caption and a data table; dependency-free) | `docxImportAdapter` | Via core | Via core |
 | DOCX Import of comments (replies, resolved), tracked changes (`trackedChanges: "marks"`: insertions, deletions, moves, `w:rPrChange`, `w:pPrChange`) and paragraph styles | `docxToDocumentImport`, `applyImportedReviewData` | Via core (`useFileImport` applies them) | Via core (`createFileImport` applies them) |
 | Word (.docx) Export (styles, lists, tables, images, comments with replies, tracked changes with authors and dates, `privacy: "strip-authors"`) | `exportDocx`, `exportDocxBlob`, `DocxExportController` (`@pixerate/editor/export`) | `useDocxExport`, `ExportDocxButton` | `createDocxExport`, `ExportDocxButton` |
 | PDF Import (injected pdf.js, opt-in) with layout analysis: reading order across columns, headings, lists, ruled and unruled tables, running headers/footers removed | `createPdfImportAdapter`, `analyzePdfLayout` | Via core | Via core |
@@ -355,7 +356,7 @@ Every feature is available from core and from both framework packages. "Via core
 | Secondary Axis, Numeric-X Scatter, Date Axes & Bar Spacing (`yAxis2`, `series.axis`, `series.x` / `sizes`, `xAxis.kind: "date"` with calendar label steps, `gapWidth` / `overlap`, fixed tick `step`) | `ChartSpec`, `chartDateLabels` | `<ChartInspector>` | `<ChartInspector>` |
 | Trendlines (linear, exponential, logarithmic, power, polynomial 2–6, moving average; forecast, fixed intercept, equation and R² labels) | `fitChartTrendline`, `addTrendline`, `trendlineFit` | `<ChartInspector>` | `<ChartInspector>` |
 | Chart Formats, Markers, Labels & Colours (spreadsheet format codes, marker shapes, per-point colours, label position with fit checks and contrast, quick layouts and colour schemes, shaded palette cycling, colour-blind check) | `formatChartNumber`, `CHART_LAYOUT_PRESETS`, `CHART_COLOR_SCHEMES`, `checkChartColors` | `<ChartInspector>` | `<ChartInspector>` |
-| Chart Text Formats (Mermaid `xychart-beta` / `pie` / `radar-beta` round trip with a `%% @pixerate` comment; Office `c:chartSpace` and chartex read / write; charts in DOCX imports) | `chartToMermaid`, `chartFromMermaid`, `findMermaidCharts`, `chartFromOoxml`, `chartToOoxml` | Via core | Via core |
+| Chart Text Formats (Mermaid `xychart-beta` / `pie` / `radar-beta` round trip with a `%% @pixerate` comment; Office `c:chartSpace` and chartex read / write; charts in DOCX imports, as `chart` nodes in documents) | `chartToMermaid`, `chartFromMermaid`, `findMermaidCharts`, `chartFromOoxml`, `chartToOoxml` | Via core | Via core |
 | Chart Streaming, Presence & Sparklines (lenient partial Mermaid / JSON, steady axes, tweened scenes; agent cursors that act out edits as one undo step; word-sized line / column / win-loss charts) | `ChartStream`, `blendChartScenes`, `ChartDirector`, `ChartPresence`, `layoutSparkline` | `<ChartStreamingView>`, `useChartDirector`, `<ChartSparkline>` | `<ChartStreamingView>`, `createChartDirector`, `<ChartSparkline>` |
 | Chart Summaries & Accessibility (per-series min / max / mean / trend, layout warnings, plain-language description, SVG `<title>` and `<desc>`, recommendations from table shape) | `summarizeChart`, `describeChart`, `recommendChartTypes`, `chartFromTable` | Via core | Via core |
 

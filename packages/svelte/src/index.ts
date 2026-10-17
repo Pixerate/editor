@@ -91,3 +91,5 @@ export * from "./persistence/index.js";
 export * from "./generation/index.js";
 export * from "./find-replace/index.js";
 export * from "./tables/index.js";
+
+export * from "./chart-node/index.js";
