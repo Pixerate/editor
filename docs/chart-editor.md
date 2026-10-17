@@ -170,6 +170,29 @@ Office round trips include error bars (`c:errBars`, with `c:errDir` on scatter a
 
 The comment keeps what Mermaid cannot express, so text round-trips exactly while any Mermaid renderer still draws the basic chart. DOCX imports return embedded charts in `DocumentImport.charts` and write each as a `<div data-type="chart">` holding its spec: a live chart in editors with the chart node (below), otherwise a caption and a data table (see GOTCHAS for why not an SVG image).
 
+### Charts in Excel, PowerPoint and Word files
+
+`extractOfficeCharts(bytes, { DOMParser })` opens an `.xlsx`, `.pptx` or `.docx` file with the built-in ZIP reader, works out which it is from the main part, and reads every chart with `chartFromOoxml` (DrawingML and Office 2016 chartex). `extractXlsxCharts`, `extractPptxCharts` and `extractDocxCharts` do the same but throw when the file is the wrong kind.
+
+```ts
+import { extractOfficeCharts, describeOfficeChartPlace } from "@pixerate/editor/chart";
+
+const { format, charts } = await extractOfficeCharts(await file.arrayBuffer());
+for (const chart of charts) {
+  // chart-1 · Sales!B2 · bar · "Revenue"  (xlsx: sheet, anchor "B2", range "B2:H18"; pptx: slide 3)
+  console.log(chart.id, describeOfficeChartPlace(chart), chart.spec.type, chart.title, chart.unsupported, chart.lossless);
+}
+controller.load(charts[0].spec);
+```
+
+- **Excel**: each sheet's `<drawing r:id>` → `xl/drawings/drawingN.xml` → `c:chart` / `cx:chart r:id` → `xl/charts/chartN.xml`. Charts carry the sheet name, the anchor cell of the `xdr:from` marker and, for two-cell anchors, the covered range. Chart sheets have a sheet name but no anchor.
+- **PowerPoint**: slides in `p:sldIdLst` order (not part-name order) → `p:graphicFrame` → chart part, with the 1-based slide number.
+- **Word**: charts in the body, the same ones `docxImportAdapter` returns in `DocumentImport.charts`.
+
+Data comes from the cached values in the chart part; the embedded workbook is not read. There is no `.xlsx` cell import yet, so charts are not attached to a spreadsheet import result.
+
+For agents, `createOfficeChartToolProvider({ files, controller, readOnly })` registers `list_open_files` (with `files`), `list_file_charts`, `get_file_chart` and, with a `controller`, `load_file_chart` (one undo step, hidden while read-only). With `files` the tools take an open file's `name`; without it they take the file as base64 `data`. React and Svelte register it with `useOfficeChartToolProvider(registry, options)`.
+
 ## Charts in documents
 
 `createRichTextPreset({ chart: true })` adds a `chart` block node and an inline `sparkline` node to the rich-text editor (`chart: { sparkline: false }` leaves the sparkline out).
