@@ -65,6 +65,7 @@ import {
 import { FindReplace, type FindReplaceOptions } from "./find-replace/extension";
 import { ParagraphStyles, type ParagraphStylesOptions } from "./paragraph-styles/extension";
 import { createTableExtensions, type RichTextTableOptions } from "./table/extension";
+import { Chart, Sparkline, type ChartNodeOptions, type SparklineNodeOptions } from "./chart";
 
 /**
  * The TipTap packages whose commands the preset installs. Exported only so the
@@ -139,6 +140,13 @@ export interface RichTextPresetOptions {
    * imported tables are flattened into paragraphs as before.
    */
   table?: Partial<RichTextTableOptions> | boolean;
+  /**
+   * Live chart blocks (`chart`, storing a `ChartSpec`) and inline sparklines
+   * (`sparkline`). Off by default. Pass `{ nodeView }` from the React or Svelte
+   * package to edit charts in place; DOCX imports then insert real charts
+   * instead of a caption and a data table.
+   */
+  chart?: (Partial<ChartNodeOptions> & { sparkline?: Partial<SparklineNodeOptions> | boolean }) | boolean;
 }
 
 const optionObject = <T>(value: T | boolean | undefined): T | Record<string, never> =>
@@ -362,6 +370,14 @@ export function createRichTextPreset(
 
   if (options.findReplace) {
     extensions.push(FindReplace.configure(optionObject(options.findReplace)));
+  }
+
+  if (options.chart) {
+    const { sparkline = true, ...chartOptions } = optionObject(options.chart) as Partial<ChartNodeOptions> & {
+      sparkline?: Partial<SparklineNodeOptions> | boolean;
+    };
+    extensions.push(Chart.configure(chartOptions));
+    if (sparkline) extensions.push(Sparkline.configure(optionObject(sparkline)));
   }
 
   if (options.paragraphStyles) {

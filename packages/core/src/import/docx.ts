@@ -42,8 +42,8 @@ import { readZip, type ZipArchive, type ZipReadOptions } from "./zip";
  * paragraph and character styles of `styles.xml` are returned as a style
  * registry (`styles`), and body paragraphs with a custom style get
  * `data-style`. Paragraphs in the `Block Text` style become block quotes, and
- * paragraphs in the `Code` style code blocks. Text boxes, charts, shapes,
- * equations and page layout are not imported.
+ * paragraphs in the `Code` style code blocks. Charts become `chart` nodes (see
+ * the `charts` option). Text boxes, shapes, equations and page layout are not imported.
  */
 
 export const DOCX_MIME_TYPES = [
@@ -73,8 +73,10 @@ export interface DocxImportOptions {
   /** Embed images from `word/media` as data URLs (default `true`). */
   images?: boolean;
   /**
-   * Read embedded charts (`word/charts/chartN.xml`, default `true`). Each becomes a caption
-   * and a table of its data in the HTML, and its full spec is returned in `charts`.
+   * Read embedded charts (`word/charts/chartN.xml`, default `true`). Each becomes a
+   * `<div data-type="chart">` holding its spec: a live chart in editors with the `chart` node
+   * (`createRichTextPreset({ chart: true })`), otherwise a caption and a table of its data.
+   * The full specs are also returned in `charts`.
    */
   charts?: boolean;
   /** Images larger than this many bytes are skipped (default 10 MiB). */
@@ -363,11 +365,17 @@ async function loadCharts(
   return charts;
 }
 
-/** A chart's data as an HTML table (categories down, series across). */
-function chartTableHtml(chart: ImportedChart): string {
+/**
+ * A chart as a `chart` node block: `<div data-type="chart" data-chart="{spec}">` around a
+ * caption and a table of its data (categories down, series across). Editors with the chart
+ * node read the spec; without it, the div is a plain wrapper and the caption and table stay.
+ */
+function chartBlockHtml(chart: ImportedChart): string {
   const [head, ...rows] = chartDataToTable(chart.spec);
   const cell = (v: unknown, tag: "th" | "td") => `<${tag}><p>${escapeHtml(v === null || v === undefined ? "" : String(v))}</p></${tag}>`;
-  return `<table><tbody><tr>${head.map((h) => cell(h, "th")).join("")}</tr>${rows.map((r) => `<tr>${r.map((v, i) => cell(v, i ? "td" : "th")).join("")}</tr>`).join("")}</tbody></table>`;
+  const table = `<table><tbody><tr>${head.map((h) => cell(h, "th")).join("")}</tr>${rows.map((r) => `<tr>${r.map((v, i) => cell(v, i ? "td" : "th")).join("")}</tr>`).join("")}</tbody></table>`;
+  const caption = `<p>${escapeHtml(`[Chart: ${chart.title || "untitled"}]`)}</p>`;
+  return `<div data-type="chart" data-chart-id="${escapeHtml(chart.id)}" data-chart="${escapeHtml(JSON.stringify(chart.spec))}">${caption}${table}</div>`;
 }
 
 /** Preloads the images a part references, keyed by relationship id. */
@@ -913,7 +921,8 @@ function renderSegments(segments: Segment[], code = false): string {
       if (seg.kind === "text") inner += escapeHtml(seg.text);
       else if (seg.kind === "br") inner += code ? "\n" : "<br>";
       else if (seg.kind === "img") inner += code ? "" : `<img src="${escapeHtml(seg.src)}" alt="${escapeHtml(seg.alt)}">`;
-      else if (seg.kind === "chart") inner += escapeHtml(`[Chart: ${seg.chart.title || "untitled"}]`);
+      // Outside code, the chart is a block after the paragraph (`chartBlockHtml`).
+      else if (seg.kind === "chart") inner += code ? escapeHtml(`[Chart: ${seg.chart.title || "untitled"}]`) : "";
       else inner += `<sup>${seg.n}</sup>`;
     }
     const format = segments[i].format;
@@ -1348,10 +1357,13 @@ function renderBlocks(container: Element, ctx: RenderContext, part: Part, topLev
     const styleAttr =
       !heading && !list && mappedStyle && mappedStyle !== NORMAL_STYLE_ID ? ` data-style="${escapeHtml(mappedStyle)}"` : "";
     const changeAttr = topLevel && !list && ctx.tracked === "marks" ? blockChangeAttr(pPr, ctx) : "";
-    const tables = renderer.charts.map(chartTableHtml).join("");
-    const blockHtml = (heading
-      ? `<h${heading}${changeAttr}>${inner}</h${heading}>`
-      : `<p${styleAttr}${changeAttr}>${inner}</p>`) + tables;
+    const charts = renderer.charts.map(chartBlockHtml).join("");
+    // A paragraph that only anchored charts is left out.
+    const blockHtml = (charts && !inner && !heading
+      ? ""
+      : heading
+        ? `<h${heading}${changeAttr}>${inner}</h${heading}>`
+        : `<p${styleAttr}${changeAttr}>${inner}</p>`) + charts;
     if (!list) {
       closeAll();
       html += blockHtml;

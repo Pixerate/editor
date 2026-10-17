@@ -20,3 +20,4 @@ export * from "./document-structure";
 export * from "./find-replace";
 export * from "./paragraph-styles";
 export * from "./table";
+export * from "./chart";

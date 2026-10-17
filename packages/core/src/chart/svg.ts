@@ -16,38 +16,49 @@ export function chartTextTransform(mark: ChartTextMark): string | undefined {
 
 const escape = (text: string) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-function attrs(values: Record<string, string | number | undefined>): string {
-	return Object.entries(values)
-		.filter(([, v]) => v !== undefined && v !== '')
-		.map(([k, v]) => ` ${k}="${escape(String(v))}"`)
-		.join('');
+/** A mark as an SVG tag name, its attributes (unset ones dropped) and its text. */
+function markParts(mark: ChartMark, fontFamily: string): { tag: string; attrs: Record<string, string>; text?: string } {
+	const common = { opacity: mark.opacity, 'data-role': mark.role };
+	const parts = (tag: string, values: Record<string, string | number | undefined>, text?: string) => ({
+		tag,
+		attrs: Object.fromEntries(Object.entries(values).filter(([, v]) => v !== undefined && v !== '').map(([k, v]) => [k, String(v)])),
+		text
+	});
+	switch (mark.kind) {
+		case 'rect':
+			return parts('rect', { x: mark.x, y: mark.y, width: mark.width, height: mark.height, rx: mark.radius, fill: mark.fill, stroke: mark.stroke, 'stroke-width': mark.strokeWidth, ...common });
+		case 'path':
+			return parts('path', { d: mark.d, fill: mark.fill ?? 'none', stroke: mark.stroke, 'stroke-width': mark.strokeWidth, 'stroke-dasharray': mark.dash, 'stroke-linejoin': 'round', 'stroke-linecap': 'round', ...common });
+		case 'circle':
+			return parts('circle', { cx: mark.cx, cy: mark.cy, r: mark.r, fill: mark.fill, stroke: mark.stroke, 'stroke-width': mark.strokeWidth, ...common });
+		case 'line':
+			return parts('line', { x1: mark.x1, y1: mark.y1, x2: mark.x2, y2: mark.y2, stroke: mark.stroke, 'stroke-width': mark.strokeWidth, 'stroke-dasharray': mark.dash, ...common });
+		case 'text':
+			return parts(
+				'text',
+				{
+					x: mark.x,
+					y: mark.y,
+					'text-anchor': mark.anchor,
+					'dominant-baseline': chartTextBaseline(mark.baseline),
+					'font-size': mark.size,
+					'font-weight': mark.weight,
+					'font-family': fontFamily,
+					fill: mark.fill,
+					transform: chartTextTransform(mark),
+					...common
+				},
+				mark.text
+			);
+	}
 }
 
 function markToSvg(mark: ChartMark, fontFamily: string): string {
-	const common = { opacity: mark.opacity, 'data-role': mark.role };
-	switch (mark.kind) {
-		case 'rect':
-			return `<rect${attrs({ x: mark.x, y: mark.y, width: mark.width, height: mark.height, rx: mark.radius, fill: mark.fill, stroke: mark.stroke, 'stroke-width': mark.strokeWidth, ...common })}/>`;
-		case 'path':
-			return `<path${attrs({ d: mark.d, fill: mark.fill ?? 'none', stroke: mark.stroke, 'stroke-width': mark.strokeWidth, 'stroke-dasharray': mark.dash, 'stroke-linejoin': 'round', 'stroke-linecap': 'round', ...common })}/>`;
-		case 'circle':
-			return `<circle${attrs({ cx: mark.cx, cy: mark.cy, r: mark.r, fill: mark.fill, stroke: mark.stroke, 'stroke-width': mark.strokeWidth, ...common })}/>`;
-		case 'line':
-			return `<line${attrs({ x1: mark.x1, y1: mark.y1, x2: mark.x2, y2: mark.y2, stroke: mark.stroke, 'stroke-width': mark.strokeWidth, 'stroke-dasharray': mark.dash, ...common })}/>`;
-		case 'text':
-			return `<text${attrs({
-				x: mark.x,
-				y: mark.y,
-				'text-anchor': mark.anchor,
-				'dominant-baseline': chartTextBaseline(mark.baseline),
-				'font-size': mark.size,
-				'font-weight': mark.weight,
-				'font-family': fontFamily,
-				fill: mark.fill,
-				transform: chartTextTransform(mark),
-				...common
-			})}>${escape(mark.text)}</text>`;
-	}
+	const { tag, attrs, text } = markParts(mark, fontFamily);
+	const attrText = Object.entries(attrs)
+		.map(([k, v]) => ` ${k}="${escape(v)}"`)
+		.join('');
+	return text === undefined ? `<${tag}${attrText}/>` : `<${tag}${attrText}>${escape(text)}</${tag}>`;
 }
 
 export interface ChartSvgOptions {
@@ -78,4 +89,37 @@ export function chartSceneToSvg(scene: ChartScene, options: ChartSvgOptions = {}
 export function chartToSvg(spec: ChartSpec, options: Omit<ChartLayoutOptions, 'selection'> & ChartSvgOptions): string {
 	const scene = layoutChart(spec, { ...options, selection: null });
 	return chartSceneToSvg(scene, { ...options, ariaLabel: options.ariaLabel ?? (spec.title || undefined), description: options.description ?? describeChart(spec) });
+}
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/** A ProseMirror / TipTap `DOMOutputSpec` array (kept structural so this module needs no TipTap types). */
+export type ChartDomSpec = [string, Record<string, string>, ...(ChartDomSpec | string)[]];
+
+/**
+ * Writes a laid-out scene as a ProseMirror `DOMOutputSpec` (SVG-namespaced tags), so a
+ * TipTap node's `renderHTML` can draw a chart without parsing an SVG string. Same output
+ * as `chartSceneToSvg`.
+ */
+export function chartSceneToDomSpec(scene: ChartScene, options: ChartSvgOptions & { attrs?: Record<string, string> } = {}): ChartDomSpec {
+	const hide = options.hideSelection ?? true;
+	const font = scene.theme.fontFamily;
+	const tag = (name: string) => `${SVG_NS} ${name}`;
+	const children: ChartDomSpec[] = [];
+	if (options.ariaLabel) children.push([tag('title'), {}, options.ariaLabel]);
+	if (options.description) children.push([tag('desc'), {}, options.description]);
+	for (const mark of scene.marks) {
+		if (hide && mark.role === 'selection') continue;
+		const { tag: name, attrs, text } = markParts(mark, font);
+		children.push(text === undefined ? [tag(name), attrs] : [tag(name), attrs, text]);
+	}
+	const attrs: Record<string, string> = {
+		width: String(scene.width),
+		height: String(scene.height),
+		viewBox: `0 0 ${scene.width} ${scene.height}`,
+		role: 'img',
+		...(options.ariaLabel ? { 'aria-label': options.ariaLabel } : {}),
+		...options.attrs
+	};
+	return [tag('svg'), attrs, ...children];
 }

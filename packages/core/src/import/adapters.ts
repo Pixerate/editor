@@ -38,8 +38,9 @@ export interface DocumentImport {
   /** Paragraph and character styles the file defines; set by the DOCX adapter. */
   styles?: StyleRegistry;
   /**
-   * Charts embedded in the file (DOCX), in document order. The HTML shows each as a caption
-   * and a table of its data; render `spec` with the chart editor for the real chart.
+   * Charts embedded in the file (DOCX), in document order. The HTML holds each as a
+   * `<div data-type="chart">`: a `chart` node when the schema has one, otherwise a caption and
+   * a table of its data.
    */
   charts?: ImportedChart[];
 }

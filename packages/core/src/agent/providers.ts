@@ -26,6 +26,7 @@ import {
 	MCP_TOOL_VIEW_EDITOR
 } from '../tools/definitions.js';
 import type { AgentStep, EditorSnapshot } from './types.js';
+import { createDocumentChartTools } from './documentChartTools.js';
 import type { CanvasEdge, CanvasNode } from '../canvas/types.js';
 
 export interface ToolProviderOptions {
@@ -110,8 +111,10 @@ function findMatches(
 /**
  * Tools for a mounted rich-text editor: `get_text` and `find_text` (always),
  * plus `insert_text`, `replace_text`, `replace_range`, `replace_selection` and
- * `set_selection` while the editor is editable, and `edit_table` when the
- * schema has tables (`createRichTextPreset`'s `table`).
+ * `set_selection` while the editor is editable, `edit_table` when the
+ * schema has tables (`createRichTextPreset`'s `table`), and the chart tools
+ * (`list_document_charts`; `insert_chart`, `update_chart_in_document` and
+ * `insert_sparkline` while editable) when it has charts (`chart`).
  * Positions are ProseMirror document positions (as in `selection.from`), not
  * plain-text offsets; `find_text` and `get_text {blocks: true}` return them.
  * The provider re-announces its tool list when editability changes and
@@ -122,6 +125,7 @@ export function createRichTextToolProvider(
 	options: ToolProviderOptions
 ): AgentToolProvider {
 	const editor = () => toEditor(target);
+	const charts = createDocumentChartTools(editor);
 
 	const getText: AgentTool = {
 		name: 'get_text',
@@ -437,9 +441,9 @@ export function createRichTextToolProvider(
 		tools: () => {
 			const ed = editor();
 			if (!ed || ed.isDestroyed) return [];
-			if (!ed.isEditable) return [getText, findText];
+			if (!ed.isEditable) return [getText, findText, ...charts.read()];
 			const tools = [getText, findText, insertText, replaceText, replaceRange, replaceSelection, setSelection];
-			return isTableEnabled(ed) ? [...tools, editTable] : tools;
+			return [...tools, ...(isTableEnabled(ed) ? [editTable] : []), ...charts.read(), ...charts.write()];
 		},
 		subscribe: (notify) => {
 			const ed = editor();

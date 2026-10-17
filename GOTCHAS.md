@@ -1369,7 +1369,7 @@ All contributors and AI assistants should check this file before starting work a
 
 - **Issue / Symptom**: Charts imported from DOCX as SVG `<img>` tags vanished from the HTML.
 - **Root Cause**: `sanitizeImportedHtml` validates `src` with markdown-it's `validateLink`, which only allows `data:image/(gif|png|jpeg|webp)`. SVG data URLs are rejected on purpose (SVG can carry script when opened directly).
-- **Solution / Workaround**: The DOCX importer writes each chart as a caption plus a data table and returns the full spec in `DocumentImport.charts`; hosts render it with the chart editor. Do not widen the URL allowlist for SVG.
+- **Solution / Workaround**: The DOCX importer writes each chart as `<div data-type="chart" data-chart="{spec}">` around a caption and a data table, and returns the full spec in `DocumentImport.charts`. With the `chart` node in the schema the div becomes a live chart; without it the div is a plain wrapper and the caption and table stay. The chart node's own HTML carries its static SVG inline (the sanitizer drops it with its content on import; the spec in `data-chart` is what is parsed). Do not widen the URL allowlist for SVG.
 
 ### [core/chart] Atomic `run_commands` Only Covers Edits in the Registry's History
 
@@ -1394,3 +1394,33 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: After a grouped Dependabot bump (#136), table, track-changes and document-structure tests failed with `Can not convert <…> to a Fragment (looks like multiple versions of prosemirror-model were loaded)`.
 - **Root Cause**: `prosemirror-markdown@1.13.8` resolved `prosemirror-model@1.25.12`, while the TipTap packages stayed on 1.25.11. ProseMirror checks node types by identity, so nodes from one copy are rejected by the other.
 - **Solution / Workaround**: Run `pnpm dedupe` and commit the lockfile. After any dependency bump, check that `pnpm-lock.yaml` has a single `prosemirror-model@` entry.
+
+### [core/extensions] An Attribute's `parseHTML` Overrides the Parse Rule's `getAttrs`
+
+- **Issue / Symptom**: A ```` ```mermaid ```` block parsed into a chart node with an empty spec, although the `pre` parse rule's `getAttrs` returned the spec read from the code.
+- **Root Cause**: TipTap wraps every parse rule: it calls the rule's `getAttrs`, then each attribute's own `parseHTML(element)`, and spreads the attribute values over the rule's. Only `null` / `undefined` leave the rule's value in place, so `parseHTML: (el) => read(el) ?? fallback` always wins.
+- **Solution / Workaround**: When a node has several parse rules, attribute `parseHTML` must return `null` when its source is missing (the chart's `spec` and `height` do); the attribute `default` still applies when neither sets it.
+
+### [core/extensions] `addNodeView` Cannot Opt Out by Returning `null`
+
+- **Issue / Symptom**: A node whose `addNodeView` returned `null` when no framework view was configured would throw when ProseMirror created the node view.
+- **Root Cause**: TipTap only checks that the `addNodeView` *field* exists, then calls the factory it returns for every node; a `null` factory is called like a function.
+- **Solution / Workaround**: Always return a factory. `createChartNodeView(mount, renderStatic)` mounts the framework component when there is one, and otherwise draws (and redraws on update) the same static SVG as `renderHTML`.
+
+### [core/agent] Quick Agent Edits Merge Into One Undo Step
+
+- **Issue / Symptom**: `insert_chart` followed by two `update_chart_in_document` calls was undone in one Mod-Z, removing the chart.
+- **Root Cause**: `prosemirror-history` groups transactions that arrive within `newGroupDelay` (500 ms), and tool calls come back to back.
+- **Solution / Workaround**: The chart tools mark their transaction with `closeHistory(tr)` (`@tiptap/pm/history`), so each call starts its own undo step.
+
+### [react|svelte/chart] A Chart Node View Keeps Its Own Controller in Step With the Document
+
+- **Issue / Symptom**: Writing every `ChartController` change into the document turned one bar drag into dozens of document steps, and undo in the editor left the canvas showing the old chart.
+- **Root Cause**: The canvas, inspector and data grid edit a `ChartController`; the document stores the spec as a node attribute. They are two sources of truth.
+- **Solution / Workaround**: `ChartNodeView` (core) subscribes to the controller and writes the spec with `setNodeMarkup` only when no gesture is running, skipping specs equal to the node's. Its `update(node)` loads a changed spec into the controller with `clearHistory: true` (undo, agent tools, collaborators). While the inspector is open `stopEvent` returns `true`, so inputs and keys stay in the inspector, and `ignoreMutation` always returns `true`. The React view renders in its own root (`createRoot`), so app context does not reach it, and it unmounts in a microtask because ProseMirror can destroy node views during a React render. The Svelte component takes the state as `view`, not `state` (see "A Variable Named `state` Breaks `$state`").
+
+### [svelte/packaging] `Foo.svelte` and `foo.svelte.ts` Collide on Case-Insensitive Disks
+
+- **Issue / Symptom**: `svelte-check` warned "Cannot write file `dist/chart-node/chartNodeView.svelte.js` because it would be overwritten by multiple input files", next to `ChartNodeView.svelte`.
+- **Root Cause**: A component `ChartNodeView.svelte` and a rune module `chartNodeView.svelte.ts` both emit `…/[Cc]hartNodeView.svelte.js` / `.d.ts`; macOS and Windows file systems treat the names as one file.
+- **Solution / Workaround**: Give rune modules a name that differs from every component in the folder by more than case (here `createChartNodeView.svelte.ts`).
