@@ -30,7 +30,7 @@ function randomStep(c: ChartController, r: () => number) {
   const spec = c.getSpec();
   const series = spec.series[Math.floor(r() * Math.max(1, spec.series.length))];
   const index = Math.floor(r() * Math.max(1, spec.categories.length + 1)) - (r() < 0.1 ? 2 : 0);
-  switch (Math.floor(r() * 16)) {
+  switch (Math.floor(r() * 19)) {
     case 0:
       return c.setType(pick(CHART_TYPES));
     case 1:
@@ -61,6 +61,14 @@ function randomStep(c: ChartController, r: () => number) {
       return c.pasteCells(Math.floor(r() * 3), Math.floor(r() * 3) - 1, [[pick(JUNK), pick(JUNK)], [pick(JUNK), pick(JUNK)]]);
     case 14:
       return c.update({ yAxis: { format: pick([{}, { style: "percent" }, { code: '#,##0.0,,"M"' }, { code: "0.00E+00" }, { style: "compact" }]) as any } });
+    case 15:
+      return c.setAxis(pick(["x", "y", "y2"] as const), { scale: pick(["log", "linear", null, "log"] as const), logBase: pick([null, 2, 10, 1, pick(JUNK)]) as any, reverse: r() < 0.5, ...(r() < 0.2 ? { min: pick(JUNK) as any } : {}) } as any);
+    case 16:
+    case 17: {
+      const amounts = () => spec.categories.map(() => (r() < 0.7 ? Math.abs(Number(pick(JUNK))) || null : pick(JUNK)));
+      const bars = pick([null, { type: "fixed", value: r() * 5 }, { type: "percent" }, { type: "stddev", value: 2, direction: "plus" }, { type: "stderr", cap: false }, { type: "custom", plus: amounts(), minus: r() < 0.5 ? amounts() : undefined }, { type: "fixed", value: pick(JUNK) }]);
+      return series && c.updateSeries(series.id, { [r() < 0.7 ? "errorBars" : "xErrorBars"]: bars } as any);
+    }
     default:
       return c.undo();
   }
@@ -86,7 +94,8 @@ describe("chart properties: random command sequences", () => {
         expect(bad, `seed ${seed} step ${step} ${spec.type} ${size.width}`).toEqual([]);
       }
     }
-    expect(chartToSvg(c.toJSON(), { width: 320, height: 200 })).not.toMatch(/NaN|Infinity/);
+    // Geometry only: series names and labels may be the text "NaN".
+    expect(chartToSvg(c.toJSON(), { width: 320, height: 200 })).not.toMatch(/\b(?:x|y|x1|x2|y1|y2|cx|cy|r|width|height|d|transform)="[^"]*(?:NaN|Infinity)/);
     // Redo anything a trailing undo took back, so "final" is the tip of the history.
     while (c.redo());
     const final = JSON.stringify(c.toJSON());

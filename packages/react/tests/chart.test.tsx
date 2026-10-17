@@ -243,6 +243,42 @@ describe("ChartInspector", () => {
     expect(q('[data-section="series"]')).toBeNull();
   });
 
+  it("reverses axes, makes value axes logarithmic and edits error bars", async () => {
+    const controller = new ChartController({ spec: sales });
+    await render(<ChartInspector controller={controller} />);
+    expect(q('[data-option="xAxis.scale"]')).toBeNull();
+    await act(async () => q<HTMLInputElement>('[data-option="yAxis.scale"]').click());
+    expect(controller.getSpec().yAxis.scale).toBe("log");
+    expect(q('[data-option="yAxis.step"]')).toBeNull();
+    await type(q<HTMLInputElement>('[data-option="yAxis.logBase"]'), "2");
+    expect(controller.getSpec().yAxis.logBase).toBe(2);
+    await type(q<HTMLInputElement>('[data-option="yAxis.logBase"]'), "1");
+    expect(controller.getSpec().yAxis.logBase).toBe(2);
+    await act(async () => q<HTMLInputElement>('[data-option="xAxis.reverse"]').click());
+    expect(controller.getSpec().xAxis.reverse).toBe(true);
+    await act(async () => controller.select({ kind: "series", seriesId: "south" }));
+    expect(q('[data-option="series.xErrorBars.type"]')).toBeNull();
+    await type(q<HTMLSelectElement>('[data-option="series.errorBars.type"]'), "percent");
+    expect(controller.getSeries("south")!.errorBars).toEqual({ type: "percent" });
+    await type(q<HTMLInputElement>('[data-option="series.errorBars.value"]'), "12");
+    await type(q<HTMLSelectElement>('[data-option="series.errorBars.direction"]'), "plus");
+    await act(async () => q<HTMLInputElement>('[data-option="series.errorBars.cap"]').click());
+    expect(controller.getSeries("south")!.errorBars).toEqual({ type: "percent", value: 12, direction: "plus", cap: false });
+    await type(q<HTMLSelectElement>('[data-option="series.errorBars.type"]'), "custom");
+    expect(controller.getSeries("south")!.errorBars).toMatchObject({ type: "custom", plus: [0.96, 1.32, 1.68] });
+    await type(q<HTMLInputElement>('[data-option="series.errorBars.plus"]'), "1, -, 2");
+    expect(controller.getSeries("south")!.errorBars!.plus).toEqual([1, null, 2]);
+    await type(q<HTMLInputElement>('[data-option="series.errorBars.minus"]'), "0.5 0.5 0.5");
+    expect(controller.getSeries("south")!.errorBars!.minus).toEqual([0.5, 0.5, 0.5]);
+    await type(q<HTMLSelectElement>('[data-option="series.errorBars.type"]'), "");
+    expect(controller.getSeries("south")!.errorBars).toBeUndefined();
+    await act(async () => controller.setType("scatter"));
+    await act(async () => controller.updateSeries("south", { x: [1, 2, 3] }));
+    expect(q('[data-option="xAxis.scale"]')).not.toBeNull();
+    await type(q<HTMLSelectElement>('[data-option="series.xErrorBars.type"]'), "fixed");
+    expect(controller.getSeries("south")!.xErrorBars).toEqual({ type: "fixed" });
+  });
+
   it("limits sections", async () => {
     const controller = new ChartController({ spec: sales });
     await render(<ChartInspector controller={controller} sections={["type"]} />);

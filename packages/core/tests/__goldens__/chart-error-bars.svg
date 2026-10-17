@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="300" viewBox="0 0 480 300" role="img" aria-label="Trial results" aria-labelledby="chart-title chart-desc">
+<title id="chart-title">Trial results</title>
+<desc id="chart-desc">Trial results: a bar chart showing 2 series over 3 categories (Control to High dose). Week 4 ranges from 4.2 (Control) to 9.1 (High dose), rising, up 117% from first to last. Target ranges from 5 (Control) to 8 (High dose), rising, up 60% from first to last. Week 4 has custom error bars. Target has +10% error bars.</desc>
+<rect x="0" y="0" width="480" height="300" fill="#ffffff" data-role="background"/>
+<text x="240" y="12" text-anchor="middle" dominant-baseline="hanging" font-size="15" font-weight="600" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" data-role="title">Trial results</text>
+<rect x="180.04" y="273.65000000000003" width="10" height="10" rx="2" fill="#4269d0" data-role="legend-swatch"/>
+<text x="196.04" y="278.65000000000003" text-anchor="start" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" data-role="legend-label">Week 4</text>
+<line x1="247" y1="278.65000000000003" x2="257" y2="278.65000000000003" stroke="#efb118" stroke-width="2.5" data-role="legend-swatch"/>
+<text x="263" y="278.65000000000003" text-anchor="start" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" data-role="legend-label">Target</text>
+<line x1="32.32" y1="245.70000000000002" x2="460" y2="245.70000000000002" stroke="#e2e8f0" stroke-width="1" data-role="grid"/>
+<line x1="32.32" y1="179.05" x2="460" y2="179.05" stroke="#e2e8f0" stroke-width="1" data-role="grid"/>
+<line x1="32.32" y1="112.4" x2="460" y2="112.4" stroke="#e2e8f0" stroke-width="1" data-role="grid"/>
+<line x1="32.32" y1="45.75" x2="460" y2="45.75" stroke="#e2e8f0" stroke-width="1" data-role="grid"/>
+<text x="24.32" y="245.70000000000002" text-anchor="end" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">0</text>
+<text x="24.32" y="179.05" text-anchor="end" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">5</text>
+<text x="24.32" y="112.4" text-anchor="end" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">10</text>
+<text x="24.32" y="45.75" text-anchor="end" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">15</text>
+<line x1="32.32" y1="245.70000000000002" x2="460" y2="245.70000000000002" stroke="#94a3b8" stroke-width="1" data-role="axis"/>
+<text x="103.6" y="251.70000000000002" text-anchor="middle" dominant-baseline="hanging" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">Control</text>
+<text x="246.16" y="251.70000000000002" text-anchor="middle" dominant-baseline="hanging" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">Low dose</text>
+<text x="388.71999999999997" y="251.70000000000002" text-anchor="middle" dominant-baseline="hanging" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">High dose</text>
+<rect x="52.2784" y="189.714" width="102.6432" height="55.98600000000002" rx="2" fill="#4269d0" data-role="bar"/>
+<rect x="194.8384" y="155.056" width="102.6432" height="90.644" rx="2" fill="#4269d0" data-role="bar"/>
+<rect x="337.3984" y="124.397" width="102.6432" height="121.30300000000001" rx="2" fill="#4269d0" data-role="bar"/>
+<path d="M103.6,179.05L246.16,152.39L388.72,139.06" fill="none" stroke="#efb118" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" data-role="line"/>
+<circle cx="103.6" cy="179.05" r="3.5" fill="#ffffff" stroke="#efb118" stroke-width="2" data-role="point"/>
+<circle cx="246.16" cy="152.39" r="3.5" fill="#ffffff" stroke="#efb118" stroke-width="2" data-role="point"/>
+<circle cx="388.71999999999997" cy="139.06" r="3.5" fill="#ffffff" stroke="#efb118" stroke-width="2" data-role="point"/>
+<path d="M103.6,196.38L103.6,181.72M98.6,196.38L108.6,196.38M98.6,181.72L108.6,181.72" fill="none" stroke="#0f172a" stroke-width="1.25" stroke-linejoin="round" stroke-linecap="round" data-role="error-bar"/>
+<path d="M246.16,165.72L246.16,140.39M241.16,165.72L251.16,165.72M241.16,140.39L251.16,140.39" fill="none" stroke="#0f172a" stroke-width="1.25" stroke-linejoin="round" stroke-linecap="round" data-role="error-bar"/>
+<path d="M388.72,143.06L388.72,112.4M383.72,143.06L393.72,143.06M383.72,112.4L393.72,112.4" fill="none" stroke="#0f172a" stroke-width="1.25" stroke-linejoin="round" stroke-linecap="round" data-role="error-bar"/>
+<path d="M103.6,179.05L103.6,172.39M99.6,172.39L107.6,172.39" fill="none" stroke="#efb118" stroke-width="1.25" stroke-linejoin="round" stroke-linecap="round" data-role="error-bar"/>
+<path d="M246.16,152.39L246.16,143.06M242.16,143.06L250.16,143.06" fill="none" stroke="#efb118" stroke-width="1.25" stroke-linejoin="round" stroke-linecap="round" data-role="error-bar"/>
+<path d="M388.72,139.06L388.72,128.4M384.72,128.4L392.72,128.4" fill="none" stroke="#efb118" stroke-width="1.25" stroke-linejoin="round" stroke-linecap="round" data-role="error-bar"/>
+</svg>
