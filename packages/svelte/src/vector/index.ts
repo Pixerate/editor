@@ -10,6 +10,8 @@ export { default as VectorStylePanel } from "./VectorStylePanel.svelte";
 export { default as VectorEffectsPanel } from "./VectorEffectsPanel.svelte";
 export { default as VectorSceneNodes } from "./VectorSceneNodes.svelte";
 export { default as VectorGradientDefs } from "./VectorGradientDefs.svelte";
+export { default as VectorGradientAnnotator } from "./VectorGradientAnnotator.svelte";
+export { default as VectorGradientEditor } from "./VectorGradientEditor.svelte";
 export * from "./createVectorEditor.svelte.js";
 export { vectorStateOf } from "./subscribe.svelte.js";
 export * from "./styles.js";

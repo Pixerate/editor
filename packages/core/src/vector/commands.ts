@@ -5,7 +5,8 @@ import type { VectorAlign, VectorAnchorRef, VectorArrange, VectorAverageAxis, Ve
 import { VECTOR_ARROWHEADS, VECTOR_CORNER_KINDS, VECTOR_EFFECT_TYPES, VECTOR_PATHFINDER_OPERATIONS, VECTOR_TOOLS, type VectorEffect, type VectorEffectType, type VectorWidthPoint } from './types.js';
 import { VECTOR_WIDTH_PRESET_IDS, type VectorTaperOptions, type VectorWaveOptions, type VectorWidthPreset } from './width.js';
 import { resolveVectorBlendOptions, vectorBlendKeys } from './blendGroup.js';
-import { VECTOR_BLEND_SPACINGS, type VectorBlendOptions } from './types.js';
+import { VECTOR_BLEND_SPACINGS, VECTOR_GRADIENT_INTERPOLATIONS, VECTOR_GRADIENT_SPREADS, VECTOR_GRADIENT_TYPES, VECTOR_STROKE_GRADIENT_MODES, type VectorBlendOptions } from './types.js';
+import { sanitizeVectorGradient, type VectorGradientPatch } from './gradient.js';
 
 export interface VectorCommandOptions {
 	/** Id prefix (default `vector.`); use one per editor when several are registered. */
@@ -101,8 +102,45 @@ const checkBlendOptions = (params: Partial<VectorBlendOptions> | undefined) => {
 	if (params?.distance !== undefined && !(Number.isFinite(params.distance) && params.distance > 0)) fail('distance must be positive.');
 };
 
+const POINT = { type: 'object', properties: { x: { type: 'number' }, y: { type: 'number' } }, required: ['x', 'y'] } as const;
+
+/** Gradient fields shared by paints and `setGradient`. */
+const GRADIENT_PROPS = {
+	type: { type: 'string', enum: VECTOR_GRADIENT_TYPES, description: 'linear, radial, conic (an angle sweep), reflected (linear mirrored about the start) or diamond.' },
+	stops: {
+		type: 'array',
+		minItems: 1,
+		items: {
+			type: 'object',
+			properties: {
+				offset: { type: 'number', minimum: 0, maximum: 1 },
+				color: { type: 'string', description: 'A CSS colour.' },
+				opacity: { type: 'number', minimum: 0, maximum: 1 },
+				midpoint: { type: 'number', minimum: 0.05, maximum: 0.95, description: 'Where between this stop and the next the colours are half-mixed (default 0.5).' }
+			},
+			required: ['offset', 'color']
+		}
+	},
+	angle: { type: 'number', description: 'Shorthand direction in degrees (0 up, clockwise): linear / reflected direction across the box, conic start angle, diamond turn.' },
+	cx: { type: 'number', description: 'Shorthand centre x of radial / conic / diamond gradients, a fraction of the box (default 0.5).' },
+	cy: { type: 'number' },
+	r: { type: 'number', description: 'Shorthand radius, a fraction of the box (default 0.5).' },
+	start: { ...POINT, description: 'Explicit start (centre of radial / conic / diamond), in `units`. Wins over the shorthand.' },
+	end: { ...POINT, description: 'Explicit end of the main axis (the radius of radial / conic / diamond).' },
+	width: { ...POINT, description: 'End of the secondary axis (aspect and turn of radial / conic / diamond); default square to the main axis, as long.' },
+	focal: { ...POINT, description: 'Radial focal point (where t = 0), in `units`.' },
+	focalRadius: { type: 'number', minimum: 0, maximum: 0.99, description: 'Radial focal circle radius as a fraction of the radius (SVG fr).' },
+	units: { type: 'string', enum: ['objectBoundingBox', 'userSpaceOnUse'], description: 'Space of start / end / width / focal: fractions of the shape box (default) or the node\'s own coordinates.' },
+	spread: { type: 'string', enum: VECTOR_GRADIENT_SPREADS, description: 'What paints past the ends: pad (default), reflect or repeat.' },
+	interpolation: { type: 'string', enum: VECTOR_GRADIENT_INTERPOLATIONS, description: 'Colour mixing space: srgb (default), linear (light) or oklab.' },
+	smoothness: { type: 'number', minimum: 0, maximum: 1, description: 'Bends the ramp along a smooth spline through the stops (0 = straight).' },
+	strokeMode: { type: 'string', enum: VECTOR_STROKE_GRADIENT_MODES, description: 'On strokes: within (default, like a fill), along the path or across it.' }
+} as const;
+
 const PAINT = {
-	description: 'A CSS colour, `null` for none, or a gradient `{ type: "linear", angle, stops: [{ offset, color }] }`.'
+	description:
+		'A CSS colour, `null` for none, or a gradient object: `{ type: "linear" | "radial" | "conic" | "reflected" | "diamond", stops: [{ offset, color, opacity?, midpoint? }] }` plus the shorthand `angle` / `cx, cy, r` or explicit `start`, `end`, `width`, `focal`, `focalRadius`, `units`, and `spread`, `interpolation`, `smoothness`, `strokeMode` (see vector.setGradient).',
+	anyOf: [{ type: 'string' }, { type: 'null' }, { type: 'object', properties: GRADIENT_PROPS, required: ['type', 'stops'] }]
 } as const;
 
 const STYLE_PROPS = {
@@ -125,6 +163,10 @@ const STYLE_PROPS = {
 const pickStyle = (params: Record<string, unknown>): VectorStyle => {
 	const out: Record<string, unknown> = {};
 	for (const key of Object.keys(STYLE_PROPS)) if (params[key] !== undefined) out[key] = params[key];
+	for (const key of ['fill', 'stroke'] as const) {
+		const paint = out[key];
+		if (paint && typeof paint === 'object') out[key] = sanitizeVectorGradient(paint) ?? fail(`${key} is not a valid gradient: give a type and at least one stop { offset, color }.`);
+	}
 	return out as VectorStyle;
 };
 
@@ -277,6 +319,27 @@ export function createVectorCommands(controller: VectorEditorController, options
 				if (!Object.keys(style).length) fail('Pass at least one style property.');
 				check(controller.setStyle(style, ids(params)));
 				return { ok: true };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}setGradient`,
+			label: 'Gradient…',
+			keywords: ['gradient', 'linear', 'radial', 'conic', 'angle', 'reflected', 'diamond', 'stops', 'midpoint', 'oklab', 'spread', 'focal', 'along stroke', 'across stroke', 'reverse'],
+			description:
+				'Edits the gradient of the fill (default) or stroke of paths (groups apply to every path inside): any gradient field (missing ones keep their value; a colour becomes a gradient from it to white), `aspect` (secondary axis over main axis), `reverse` (flip the stops and midpoints), `focal` / `width` null to remove them. Midpoints, smoothness and oklab / linear interpolation export to SVG as extra stops; conic and diamond gradients as patterns.',
+			params: { type: 'object', properties: { ids: IDS, target: { type: 'string', enum: ['fill', 'stroke'] }, ...GRADIENT_PROPS, aspect: { type: 'number' }, reverse: { type: 'boolean' } } },
+			enabled: enabledFor,
+			undoable: true,
+			run: (_ctx: unknown, params: ({ ids?: string[]; target?: 'fill' | 'stroke' } & VectorGradientPatch) | undefined) => {
+				const { ids: _i, target, ...patch } = params ?? {};
+				if (patch.type !== undefined && !VECTOR_GRADIENT_TYPES.includes(patch.type)) fail(`Unknown gradient type "${patch.type}".`);
+				if (patch.stops !== undefined && !(Array.isArray(patch.stops) && patch.stops.length)) fail('stops needs at least one { offset, color }.');
+				check(controller.setGradient(patch, { ids: ids(params), target: target ?? 'fill' }));
+				const id = ids(params)[0];
+				const node = id ? controller.getNode(id) : undefined;
+				const path = node?.type === 'path' ? node : undefined;
+				return { ok: true, ...(path ? { gradient: path[target ?? 'fill'] } : {}) };
 			}
 		},
 		{

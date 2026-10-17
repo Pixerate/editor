@@ -16,7 +16,7 @@
  *   pair turns the same way), so a nonzero fill keeps its holes.
  * - **In-betweens** follow the shapes' best-fit rotation and scale (Procrustes), with the
  *   leftover difference blended in linearly, so a turning shape turns instead of collapsing.
- * - **Paint**: colours mix in OKLab, gradients of one kind resample their stops to a common
+ * - **Paint**: colours mix in OKLab, gradients of one style resample their stops to a common
  *   set, a missing paint fades from transparent; stroke width, opacity, dashes, arrowhead
  *   scales and width profiles interpolate, and the rest switches halfway.
  * - **Transforms**: both shapes are blended in their parent's space; the in-between's rigid
@@ -26,7 +26,7 @@
  */
 import type { Point } from '../canvas/types.js';
 import { segmentLength, segmentParamAtLength, splitSegment } from '../canvas/pathops/bezier.js';
-import type { CanvasGradientDef, GradientStop } from '../canvas/gradient.js';
+import { expandVectorGradientStops, explicitVectorGradient, hasExplicitGradientGeometry, isVectorGradient, sampleVectorGradient, sortedVectorGradientStops, vectorGradientPoints } from './gradient.js';
 import { mixColorsOklab } from '../animation/color.js';
 import { evaluateEasing, type AnimationEasing } from '../animation/easing.js';
 import { expandVectorCorners } from './corners.js';
@@ -43,7 +43,7 @@ import {
 	type AffineMatrix
 } from './geometry.js';
 import { reverseWidthProfile, widthProfileAt } from './width.js';
-import type { VectorAnchor, VectorBounds, VectorGroupNode, VectorNode, VectorPaint, VectorPathNode, VectorStyle, VectorSubpath, VectorWidthPoint } from './types.js';
+import type { Vec2, VectorAnchor, VectorBounds, VectorGradient, VectorGradientStop, VectorGroupNode, VectorNode, VectorPaint, VectorPathNode, VectorStyle, VectorSubpath, VectorWidthPoint } from './types.js';
 
 // ---------------------------------------------------------------------------
 // Options
@@ -641,31 +641,14 @@ export function interpolateVectorColor(a: string, b: string, t: number): string 
 	return mixColorsOklab(a, b, t) ?? (t < 0.5 ? a : b);
 }
 
-function sortedStops(g: CanvasGradientDef): GradientStop[] {
-	return g.stops.slice().sort((x, y) => x.offset - y.offset);
-}
-
-/** What a gradient paints at `offset`: colour mixed in OKLab and opacity. */
-function sampleGradient(stops: readonly GradientStop[], offset: number): { color: string; opacity: number } {
-	if (!stops.length) return { color: 'transparent', opacity: 1 };
-	const first = stops[0];
-	const last = stops[stops.length - 1];
-	if (offset <= first.offset) return { color: first.color, opacity: first.opacity ?? 1 };
-	if (offset >= last.offset) return { color: last.color, opacity: last.opacity ?? 1 };
-	let i = 0;
-	while (i + 1 < stops.length && stops[i + 1].offset < offset) i++;
-	const x = stops[i];
-	const y = stops[i + 1];
-	const u = y.offset - x.offset > 1e-12 ? (offset - x.offset) / (y.offset - x.offset) : 1;
-	return { color: interpolateVectorColor(x.color, y.color, u), opacity: lerpN(x.opacity ?? 1, y.opacity ?? 1, u) };
-}
-
-/** A gradient's stops resampled at `offsets`, each painting what the gradient paints there. */
-export function resampleGradientStops(g: CanvasGradientDef, offsets: readonly number[]): GradientStop[] {
-	const stops = sortedStops(g);
+/**
+ * A gradient's stops resampled at `offsets`, each painting what the gradient paints there (its
+ * midpoints, smoothness and interpolation space included).
+ */
+export function resampleGradientStops(g: VectorGradient, offsets: readonly number[]): VectorGradientStop[] {
 	return offsets.map((offset) => {
-		const s = sampleGradient(stops, offset);
-		return s.opacity < 1 ? { offset, color: s.color, opacity: s.opacity } : { offset, color: s.color };
+		const s = sampleVectorGradient(g, offset);
+		return s.opacity < 1 ? { offset, color: s.color, opacity: Math.round(s.opacity * 1e4) / 1e4 } : { offset, color: s.color };
 	});
 }
 
@@ -674,13 +657,17 @@ function lerpAngle(a: number, b: number, t: number): number {
 	return a + d * t;
 }
 
-/** Two gradients of one kind: stops at every offset either has, mixed. Null for different kinds. */
-function lerpGradient(a: CanvasGradientDef, b: CanvasGradientDef, t: number): CanvasGradientDef | null {
-	if (a.type !== b.type) return null;
-	let stopsA = sortedStops(a);
-	let stopsB = sortedStops(b);
-	if (stopsA.length !== stopsB.length) {
-		const offs = [...stopsA, ...stopsB].map((s) => s.offset).filter(Number.isFinite).sort((x, y) => x - y);
+const lerpPoint = (a: Vec2, b: Vec2, t: number): Vec2 => ({ x: lerpN(a.x, b.x, t), y: lerpN(a.y, b.y, t) });
+const sameColourModel = (a: VectorGradient, b: VectorGradient) => (a.interpolation ?? 'srgb') === (b.interpolation ?? 'srgb') && (a.smoothness ?? 0) === (b.smoothness ?? 0);
+
+/** Stops of two gradients mixed: stop by stop (midpoints too) when they match, else resampled to a common set. */
+function lerpStops(a: VectorGradient, b: VectorGradient, t: number): { stops: VectorGradientStop[]; resampled: boolean } {
+	let stopsA = sortedVectorGradientStops(a);
+	let stopsB = sortedVectorGradientStops(b);
+	const resampled = stopsA.length !== stopsB.length || !sameColourModel(a, b);
+	if (resampled) {
+		// Where either gradient bends (its own stops and the extra stops its midpoints and colour space need).
+		const offs = [...expandVectorGradientStops(a), ...expandVectorGradientStops(b), ...stopsA, ...stopsB].map((s) => s.offset).filter(Number.isFinite).sort((x, y) => x - y);
 		const common = offs.filter((o, i) => i === 0 || o - offs[i - 1] > 1e-4);
 		stopsA = resampleGradientStops(a, common);
 		stopsB = resampleGradientStops(b, common);
@@ -688,19 +675,66 @@ function lerpGradient(a: CanvasGradientDef, b: CanvasGradientDef, t: number): Ca
 	const stops = stopsA.map((x, i) => {
 		const y = stopsB[i];
 		const opacity = lerpN(x.opacity ?? 1, y.opacity ?? 1, t);
-		const stop: GradientStop = { offset: lerpN(x.offset, y.offset, t), color: interpolateVectorColor(x.color, y.color, t) };
+		const stop: VectorGradientStop = { offset: lerpN(x.offset, y.offset, t), color: interpolateVectorColor(x.color, y.color, t) };
 		if (opacity < 1) stop.opacity = opacity;
+		const mid = lerpN(x.midpoint ?? 0.5, y.midpoint ?? 0.5, t);
+		if (Math.abs(mid - 0.5) > 1e-6) stop.midpoint = mid;
 		return stop;
 	});
-	if (a.type === 'linear' && b.type === 'linear') return { type: 'linear', angle: lerpAngle(a.angle ?? 90, b.angle ?? 90, t), stops };
-	const ra = a as Extract<CanvasGradientDef, { type: 'radial' }>;
-	const rb = b as Extract<CanvasGradientDef, { type: 'radial' }>;
-	return { type: 'radial', cx: lerpN(ra.cx ?? 0.5, rb.cx ?? 0.5, t), cy: lerpN(ra.cy ?? 0.5, rb.cy ?? 0.5, t), r: lerpN(ra.r ?? 0.5, rb.r ?? 0.5, t), stops };
+	return { stops, resampled };
+}
+
+/**
+ * Two gradients of one style: stops mixed, then the placement — the shorthand angle / centre /
+ * radius, or the start, end, aspect and focal points when both carry them in the same units
+ * (one in the box and one in the node's space switch halfway). Null for different styles.
+ */
+function lerpGradient(a: VectorGradient, b: VectorGradient, t: number): VectorGradient | null {
+	if (a.type !== b.type) return null;
+	const { stops, resampled } = lerpStops(a, b, t);
+	const near = t < 0.5 ? a : b;
+	const out: VectorGradient = { type: a.type, stops };
+	if (!resampled) {
+		if (a.interpolation && a.interpolation !== 'srgb') out.interpolation = a.interpolation;
+		if (a.smoothness) out.smoothness = a.smoothness;
+	}
+	if (near.spread && near.spread !== 'pad') out.spread = near.spread;
+	if (near.strokeMode && near.strokeMode !== 'within') out.strokeMode = near.strokeMode;
+	const ea = hasExplicitGradientGeometry(a);
+	const eb = hasExplicitGradientGeometry(b);
+	if (!ea && !eb) {
+		if (a.angle !== undefined || b.angle !== undefined || a.type === 'linear' || a.type === 'reflected') {
+			const fallback = a.type === 'linear' || a.type === 'reflected' ? 180 : 90;
+			out.angle = lerpAngle(a.angle ?? fallback, b.angle ?? fallback, t);
+		}
+		if (a.type !== 'linear' && a.type !== 'reflected') {
+			out.cx = lerpN(a.cx ?? 0.5, b.cx ?? 0.5, t);
+			out.cy = lerpN(a.cy ?? 0.5, b.cy ?? 0.5, t);
+			out.r = lerpN(a.r ?? 0.5, b.r ?? 0.5, t);
+		}
+		return out;
+	}
+	const pa = vectorGradientPoints(a);
+	const pb = vectorGradientPoints(b);
+	if (pa.units !== pb.units) {
+		const src = explicitVectorGradient(near);
+		return { ...src, stops: out.stops, ...(out.interpolation ? { interpolation: out.interpolation } : {}), ...(out.smoothness ? { smoothness: out.smoothness } : {}) };
+	}
+	out.start = lerpPoint(pa.start, pb.start, t);
+	out.end = lerpPoint(pa.end, pb.end, t);
+	out.width = lerpPoint(pa.width, pb.width, t);
+	out.units = pa.units;
+	if (a.type === 'radial') {
+		if (pa.focal || pb.focal) out.focal = lerpPoint(pa.focal ?? pa.start, pb.focal ?? pb.start, t);
+		const fr = lerpN(pa.focalRadius, pb.focalRadius, t);
+		if (fr > 0) out.focalRadius = fr;
+	}
+	return out;
 }
 
 /** A gradient shaped like `like` painting one colour (or nothing). */
-function solidLike(color: string | null, like: CanvasGradientDef): CanvasGradientDef {
-	return { ...like, stops: like.stops.map((s) => (color === null ? { offset: s.offset, color: s.color, opacity: 0 } : { offset: s.offset, color })) } as CanvasGradientDef;
+function solidLike(color: string | null, like: VectorGradient): VectorGradient {
+	return { ...like, stops: like.stops.map((s) => (color === null ? { offset: s.offset, color: s.color, opacity: 0 } : { offset: s.offset, color })) };
 }
 
 /**
@@ -717,8 +751,8 @@ export function interpolateVectorPaint(a: VectorPaint | undefined, b: VectorPain
 	if (typeof a === 'string' && pa && typeof b === 'string' && pb) return interpolateVectorColor(a, b, t);
 	if (!pa && typeof b === 'string') return interpolateVectorColor('transparent', b, t);
 	if (!pb && typeof a === 'string') return interpolateVectorColor(a, 'transparent', t);
-	const ga = pa && typeof a === 'object' && a ? a : null;
-	const gb = pb && typeof b === 'object' && b ? b : null;
+	const ga = pa && isVectorGradient(a) ? a : null;
+	const gb = pb && isVectorGradient(b) ? b : null;
 	if (ga && gb) return lerpGradient(ga, gb, t) ?? (t < 0.5 ? a : b);
 	if (gb) return lerpGradient(solidLike(pa ? (a as string) : null, gb), gb, t) ?? b;
 	if (ga) return lerpGradient(ga, solidLike(pb ? (b as string) : null, ga), t) ?? a;

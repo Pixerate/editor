@@ -79,7 +79,31 @@ import {
 	VECTOR_WIDTH_PROFILE_MAX_POINTS,
 	VECTOR_WIDTH_SAME_T
 } from './width.js';
-import { parseVectorSvg, vectorDocumentToSvg, type VectorSvgExportOptions } from './svg.js';
+import { parseVectorSvg, vectorDocumentToSvg, vectorPathLocalBounds, type VectorSvgExportOptions } from './svg.js';
+import {
+	applyVectorGradientPatch,
+	defaultVectorGradient,
+	insertVectorGradientStop,
+	isVectorGradient,
+	moveVectorGradientHandle,
+	moveVectorGradientStop,
+	removeVectorGradientStop,
+	setVectorGradientVector,
+	sortedVectorGradientStops,
+	vectorGradientMidpointFromPosition,
+	type VectorGradientHandle,
+	type VectorGradientPatch
+} from './gradient.js';
+import {
+	getVectorGradientAnnotator,
+	hitVectorGradientAnnotator,
+	vectorGradientBarPosition,
+	VECTOR_GRADIENT_OFF_BAR,
+	VECTOR_GRADIENT_STOP_GAP,
+	type VectorGradientAnnotator,
+	type VectorGradientPart,
+	type VectorGradientTarget
+} from './gradientTool.js';
 import {
 	expandVectorBlend,
 	isVectorBlendGroup,
@@ -125,6 +149,7 @@ import {
 	type VectorBuilderTouched,
 	type VectorShapeBuilderMap
 } from './builder.js';
+import type { VectorGradient } from './types.js';
 import type {
 	Vec2,
 	VectorEffect,
@@ -312,6 +337,8 @@ export interface VectorHover {
 	widthPoint?: VectorWidthPointRef & { part: 'center' | 'left' | 'right' };
 	/** A spot on a stroke away from its width points (width tool). */
 	strokeSpot?: VectorStrokeSpot;
+	/** A part of the gradient annotator (gradient tool). */
+	gradient?: VectorGradientPart;
 }
 
 /** The drag in progress, for overlays and status text. */
@@ -329,6 +356,8 @@ export type VectorInteraction =
 	| { type: 'builder'; mode: 'merge' | 'erase'; points: Vec2[] }
 	| { type: 'width'; ref: VectorWidthPointRef; mode: 'width' | 'move' | 'copy'; width: number }
 	| { type: 'pen'; nodeId: string }
+	/** A gradient tool drag: drawing a new vector, or a handle, stop, midpoint or the bar (`removing`: a stop dragged off the bar). */
+	| { type: 'gradient'; part: 'create' | VectorGradientPart['kind']; handle?: VectorGradientHandle; removing?: boolean }
 	| { type: 'pan' };
 
 /** A snapshot of the editor. The same object is returned until something changes. */
@@ -370,6 +399,8 @@ export interface VectorEditorState {
 	blendStart: VectorBlendStart | null;
 	/** Options new blends get. */
 	blendDefaults: VectorBlendOptions;
+	/** The paint the gradient tool and gradient editor work on, and the selected stop (index into the sorted stops). */
+	gradientEdit: { target: VectorGradientTarget; stop: number | null };
 	canUndo: boolean;
 	canRedo: boolean;
 	undoLabel: string;
@@ -843,7 +874,8 @@ const TOOL_LABELS: Record<VectorTool, string> = {
 	width: 'Width',
 	shapeBuilder: 'Shape Builder',
 	paintBucket: 'Paint Bucket',
-	blend: 'Blend'
+	blend: 'Blend',
+	gradient: 'Gradient'
 };
 
 const TOOL_KEYS: Record<string, VectorTool> = {
@@ -862,7 +894,8 @@ const TOOL_KEYS: Record<string, VectorTool> = {
 	w: 'width',
 	m: 'shapeBuilder',
 	b: 'paintBucket',
-	j: 'blend'
+	j: 'blend',
+	g: 'gradient'
 };
 
 export function vectorToolLabel(tool: VectorTool): string {
@@ -886,7 +919,8 @@ export const VECTOR_TOOL_SHORTCUTS: Readonly<Record<VectorTool, string>> = {
 	width: 'W',
 	shapeBuilder: 'M',
 	paintBucket: 'B',
-	blend: 'J'
+	blend: 'J',
+	gradient: 'G'
 };
 
 /** Short glyphs for tool buttons (pair them with `vectorToolLabel` for the accessible name). */
@@ -906,7 +940,8 @@ export const VECTOR_TOOL_GLYPHS: Readonly<Record<VectorTool, string>> = {
 	width: '⇹',
 	shapeBuilder: '⊕',
 	paintBucket: '◍',
-	blend: '⧓'
+	blend: '⧓',
+	gradient: '◐'
 };
 
 /** Tools that drag out a shape (they snap while hovering). */
@@ -1040,6 +1075,21 @@ type Drag =
 			moved: boolean;
 			created: boolean;
 	  }
+	| {
+			kind: 'gradient';
+			/** What was grabbed: null draws a new vector over `targets`. */
+			part: VectorGradientPart | null;
+			nodeId: string | null;
+			targets: string[];
+			annotator: VectorGradientAnnotator | null;
+			start: Vec2;
+			startDoc: Vec2;
+			before: Snapshot;
+			base: VectorDocument;
+			moved: boolean;
+			/** The dragged stop's index now (null once dragged off the bar). */
+			stop: number | null;
+	  }
 	| { kind: 'pan'; start: Vec2; viewport: VectorViewport };
 
 /**
@@ -1083,6 +1133,7 @@ export class VectorEditorController {
 	private blendStart: VectorBlendStart | null = null;
 	/** Options new blends get (the toolbars edit them along with the selected blend's). */
 	private blendDefaults: VectorBlendOptions = {};
+	private gradientEdit: VectorEditorState['gradientEdit'] = { target: 'fill', stop: null };
 	/** What the highlight shows, to skip notifying when the pointer stays over the same face. */
 	private builderHoverKey: string | null = null;
 	private readonly createId: () => string;
@@ -1187,6 +1238,7 @@ export class VectorEditorController {
 			builder: this.builderPreview,
 			blendStart: this.blendStart,
 			blendDefaults: this.blendDefaults,
+			gradientEdit: this.gradientEdit,
 			canUndo: h.canUndo,
 			canRedo: h.canRedo,
 			undoLabel: h.undoName,
@@ -1268,6 +1320,13 @@ export class VectorEditorController {
 				return this.builderPreview ? 'cell' : 'crosshair';
 			case 'blend':
 				return h?.nodeId ? (this.blendStart && this.blendStart.nodeId !== h.nodeId ? 'copy' : 'pointer') : 'crosshair';
+			case 'gradient': {
+				const part = this.drag?.kind === 'gradient' ? this.drag.part : h?.gradient;
+				if (!part) return 'crosshair';
+				if (part.kind === 'bar') return this.drag ? 'grabbing' : 'copy';
+				if (part.kind === 'handle' && part.handle === 'start') return this.drag ? 'grabbing' : 'move';
+				return 'pointer';
+			}
 			default:
 				return 'crosshair';
 		}
@@ -1744,6 +1803,259 @@ export class VectorEditorController {
 		this.widthPoints = [];
 		this.widthEdit = null;
 		return this.setStyle({ strokeWidthProfile: points.length ? points : null }, options.ids ?? this.selection, { label: points.length ? 'Width Profile' : 'Uniform Width' });
+	}
+
+	// -------------------------------------------------------------------------
+	// Gradients
+	// -------------------------------------------------------------------------
+
+	/** Which paint (fill or stroke) the gradient tool and editor work on. */
+	setGradientTarget(target: VectorGradientTarget): void {
+		if (target === this.gradientEdit.target) return;
+		this.gradientEdit = { target, stop: null };
+		this.notify();
+	}
+
+	/** Selects a stop of the gradient being edited (index into its sorted stops), or none. */
+	selectGradientStop(index: number | null): void {
+		if (index === this.gradientEdit.stop) return;
+		this.gradientEdit = { ...this.gradientEdit, stop: index };
+		this.notify();
+	}
+
+	/** The gradient tool's annotator for the selection (screen pixels), or null when its paint is not a gradient. */
+	getGradientAnnotator(): VectorGradientAnnotator | null {
+		return getVectorGradientAnnotator(this.doc, this.selection, this.viewport, this.gradientEdit.target);
+	}
+
+	/** Unlocked paths of `ids` (default: the selection). */
+	private gradientPaths(ids: readonly string[] = this.selection): VectorPathNode[] {
+		const out = new Map<string, VectorPathNode>();
+		for (const id of ids) {
+			const node = this.getNode(id);
+			if (node && !node.locked) for (const p of collectPathNodes(node)) if (!p.locked) out.set(p.id, p);
+		}
+		return [...out.values()];
+	}
+
+	/**
+	 * Edits the gradient of the `target` paint (default: the editor's) of the selected (or given)
+	 * paths with `patch`: a colour or no paint becomes a gradient (`patch.type`, default linear,
+	 * from the colour to white). Consecutive edits with the same `merge` key are one undo step.
+	 */
+	setGradient(patch: VectorGradientPatch, options: { ids?: readonly string[]; target?: VectorGradientTarget; label?: string; merge?: string } = {}): VectorActionResult {
+		const target = options.target ?? this.gradientEdit.target;
+		const paths = this.gradientPaths(options.ids ?? this.selection);
+		if (!paths.length) return { ok: false, message: 'Nothing is selected.' };
+		const next = new Map<string, VectorPathNode>();
+		for (const path of paths) {
+			const paint = path[target];
+			const base = isVectorGradient(paint) ? paint : defaultVectorGradient(patch.type ?? 'linear', paint);
+			const g = applyVectorGradientPatch(base, patch);
+			if (!g) return { ok: false, message: 'That is not a valid gradient: it needs at least one stop with an offset and a colour.' };
+			next.set(path.id, { ...path, [target]: g });
+		}
+		this.change(options.label ?? 'Gradient', () => this.setDoc(mapTree(this.doc.nodes, (n) => next.get(n.id) ?? n)), options.merge);
+		const stops = (next.values().next().value?.[target] as { stops: unknown[] } | undefined)?.stops.length ?? 0;
+		if (this.gradientEdit.stop !== null && this.gradientEdit.stop >= stops) this.gradientEdit = { ...this.gradientEdit, stop: null };
+		return { ok: true };
+	}
+
+	/** Applies `fn` to every target gradient of the selection (paths whose paint is not a gradient are skipped). */
+	private editGradients(label: string, fn: (stops: VectorGradient['stops']) => VectorGradient['stops'] | null, merge?: string): VectorActionResult {
+		const target = this.gradientEdit.target;
+		const paths = this.gradientPaths().filter((p) => isVectorGradient(p[target]));
+		if (!paths.length) return { ok: false, message: 'The selection has no gradient.' };
+		const next = new Map<string, VectorPathNode>();
+		for (const path of paths) {
+			const g = path[target] as VectorGradient;
+			const stops = fn(sortedVectorGradientStops(g));
+			if (!stops) return { ok: false, message: 'A gradient keeps at least two stops.' };
+			next.set(path.id, { ...path, [target]: { ...g, stops } });
+		}
+		this.change(label, () => this.setDoc(mapTree(this.doc.nodes, (n) => next.get(n.id) ?? n)), merge);
+		return { ok: true };
+	}
+
+	/** Changes stop `index` (colour, opacity, offset or midpoint) of the selection's gradients; selects it. */
+	setGradientStop(index: number, patch: { color?: string; opacity?: number; offset?: number; midpoint?: number }, options: { merge?: string } = {}): VectorActionResult {
+		let moved = index;
+		const result = this.editGradients(
+			'Gradient Stop',
+			(stops) => {
+				if (!stops[index]) return stops;
+				let next = stops.map((s, i) => {
+					if (i !== index) return s;
+					const out = { ...s };
+					if (patch.color !== undefined) out.color = patch.color;
+					if (patch.opacity !== undefined && Number.isFinite(patch.opacity)) {
+						const o = Math.min(1, Math.max(0, patch.opacity));
+						if (o < 1) out.opacity = o;
+						else delete out.opacity;
+					}
+					if (patch.midpoint !== undefined && Number.isFinite(patch.midpoint)) {
+						const m = Math.min(0.95, Math.max(0.05, patch.midpoint));
+						if (Math.abs(m - 0.5) > 1e-3) out.midpoint = m;
+						else delete out.midpoint;
+					}
+					return out;
+				});
+				if (patch.offset !== undefined && Number.isFinite(patch.offset)) ({ stops: next, index: moved } = moveVectorGradientStop(next, index, patch.offset));
+				return next;
+			},
+			options.merge
+		);
+		if (result.ok) this.selectGradientStop(moved);
+		return result;
+	}
+
+	/** Adds a stop at `offset` (painting what the gradient paints there) to the selection's gradients and selects it. */
+	addGradientStop(offset: number): VectorActionResult {
+		let index = 0;
+		const target = this.gradientEdit.target;
+		const result = this.editGradients('Add Gradient Stop', (stops) => {
+			const path = this.gradientPaths().find((p) => isVectorGradient(p[target]));
+			const r = insertVectorGradientStop({ ...(path![target] as VectorGradient), stops }, offset);
+			index = r.index;
+			return r.stops;
+		});
+		if (result.ok) this.selectGradientStop(index);
+		return result;
+	}
+
+	/** Removes stop `index` of the selection's gradients (never below two stops). */
+	removeGradientStop(index: number): VectorActionResult {
+		const result = this.editGradients('Delete Gradient Stop', (stops) => removeVectorGradientStop(stops, index));
+		if (result.ok) this.selectGradientStop(null);
+		return result;
+	}
+
+	/** Reverses the selection's gradients (stops and midpoints). */
+	reverseGradient(): VectorActionResult {
+		return this.setGradient({ reverse: true }, { label: 'Reverse Gradient' });
+	}
+
+	/** `doc` with path `id`'s `target` paint replaced. */
+	private withGradient(doc: VectorDocument, id: string, target: VectorGradientTarget, g: VectorGradient): VectorDocument {
+		return { ...doc, nodes: mapTree(doc.nodes, (n) => (n.id === id ? ({ ...n, [target]: g } as VectorNode) : n)) };
+	}
+
+	private downGradient(screen: Vec2, p: Vec2, input: VectorPointerInput) {
+		const before = this.snapshot();
+		const a = this.getGradientAnnotator();
+		let part = a ? hitVectorGradientAnnotator(a, screen) : null;
+		if (a && part) {
+			// Alt on a radial gradient's centre grabs its focal point (they sit together until moved).
+			if (part.kind === 'handle' && part.handle === 'start' && input.alt && a.gradient.type === 'radial') part = { kind: 'handle', handle: 'focal' };
+			if (part.kind === 'stop') this.gradientEdit = { ...this.gradientEdit, stop: part.index };
+			this.drag = { kind: 'gradient', part, nodeId: a.nodeId, targets: [a.nodeId], annotator: a, start: screen, startDoc: p, before, base: this.doc, moved: false, stop: part.kind === 'stop' ? part.index : null };
+			this.interaction = { type: 'gradient', part: part.kind, ...(part.kind === 'handle' ? { handle: part.handle } : {}) };
+			this.notify();
+			return;
+		}
+		// Elsewhere a drag draws a new vector over the path under the pointer (selecting it) or the selection.
+		const hit = this.hitPath(p);
+		if (hit && !this.gradientPaths().some((n) => n.id === hit.id)) {
+			this.selection = [hit.id];
+			this.gradientEdit = { ...this.gradientEdit, stop: null };
+		}
+		const targets = this.gradientPaths().map((n) => n.id);
+		if (!targets.length) {
+			if (this.selection.length) this.clearSelection();
+			return;
+		}
+		this.drag = { kind: 'gradient', part: null, nodeId: null, targets, annotator: null, start: screen, startDoc: p, before, base: this.doc, moved: false, stop: null };
+		this.interaction = { type: 'gradient', part: 'create' };
+		this.notify();
+	}
+
+	private moveGradient(drag: Extract<Drag, { kind: 'gradient' }>, screen: Vec2, p: Vec2, input: VectorPointerInput) {
+		if (!drag.moved && Math.hypot(screen.x - drag.start.x, screen.y - drag.start.y) < 3) return;
+		drag.moved = true;
+		const target = this.gradientEdit.target;
+		const base = drag.base;
+		const constrained = (from: Vec2, to: Vec2) => {
+			if (!input.shift) return to;
+			const ang = Math.round(Math.atan2(to.y - from.y, to.x - from.x) / (Math.PI / 4)) * (Math.PI / 4);
+			const len = Math.hypot(to.x - from.x, to.y - from.y);
+			return { x: from.x + Math.cos(ang) * len, y: from.y + Math.sin(ang) * len };
+		};
+		if (!drag.part) {
+			const end = constrained(drag.startDoc, p);
+			let doc = base;
+			for (const id of drag.targets) {
+				const node = findVectorNode(base.nodes, id) as VectorPathNode | undefined;
+				if (!node) continue;
+				const paint = node[target];
+				const g = isVectorGradient(paint) ? paint : defaultVectorGradient('linear', paint);
+				doc = this.withGradient(doc, id, target, setVectorGradientVector(g, vectorPathLocalBounds(node), this.toLocal(id, drag.startDoc, base), this.toLocal(id, end, base)));
+			}
+			this.doc = doc;
+			this.notify(true);
+			return;
+		}
+		const id = drag.nodeId!;
+		const node = findVectorNode(base.nodes, id) as VectorPathNode;
+		const g = node[target] as VectorGradient;
+		const bounds = vectorPathLocalBounds(node);
+		const local = (q: Vec2) => this.toLocal(id, q, base);
+		const part = drag.part;
+		let next: VectorGradient = g;
+		if (part.kind === 'handle') {
+			let to = p;
+			// Shift keeps the vector at 45° steps from the start.
+			if (part.handle === 'end' || part.handle === 'radius') to = constrained(this.screenToDocument(drag.annotator!.start), p);
+			next = moveVectorGradientHandle(g, bounds, part.handle, local(to), local(drag.startDoc));
+		} else if (part.kind === 'bar') {
+			next = moveVectorGradientHandle(g, bounds, 'start', local(p), local(drag.startDoc));
+		} else {
+			const a = drag.annotator!;
+			const pos = vectorGradientBarPosition(a, screen);
+			const stops = sortedVectorGradientStops(g);
+			if (part.kind === 'stop') {
+				const off = Math.abs(pos.across - VECTOR_GRADIENT_STOP_GAP) > VECTOR_GRADIENT_OFF_BAR;
+				const removed = off ? removeVectorGradientStop(stops, part.index) : null;
+				if (removed) {
+					next = { ...g, stops: removed };
+					drag.stop = null;
+				} else {
+					const r = moveVectorGradientStop(stops, part.index, Math.min(1, Math.max(0, pos.offset)));
+					next = { ...g, stops: r.stops };
+					drag.stop = r.index;
+				}
+				this.interaction = { type: 'gradient', part: 'stop', ...(removed ? { removing: true } : {}) };
+				this.gradientEdit = { ...this.gradientEdit, stop: drag.stop };
+			} else {
+				const m = vectorGradientMidpointFromPosition(stops, part.index, pos.offset);
+				if (m !== null) next = { ...g, stops: stops.map((s, i) => (i !== part.index ? s : Math.abs(m - 0.5) < 1e-3 ? (({ midpoint: _m, ...rest }) => rest)(s) : { ...s, midpoint: m })) };
+			}
+		}
+		this.doc = this.withGradient(base, id, target, next);
+		this.notify(true);
+	}
+
+	private upGradient(drag: Extract<Drag, { kind: 'gradient' }>) {
+		const part = drag.part;
+		if (!drag.moved) {
+			if (part?.kind === 'bar') {
+				this.addGradientStop(part.offset);
+				return;
+			}
+			this.notify();
+			return;
+		}
+		const label = !part
+			? 'Gradient'
+			: part.kind === 'stop'
+				? drag.stop === null
+					? 'Delete Gradient Stop'
+					: 'Move Gradient Stop'
+				: part.kind === 'midpoint'
+					? 'Gradient Midpoint'
+					: part.kind === 'bar' || (part.kind === 'handle' && part.handle === 'start')
+						? 'Move Gradient'
+						: 'Gradient Handle';
+		return this.commit(label, drag.before);
 	}
 
 	/** Removes one width point of a path's profile. */
@@ -3780,6 +4092,13 @@ export class VectorEditorController {
 				const spot = this.strokeSpotAt(p);
 				return spot ? { nodeId: spot.nodeId, strokeSpot: spot } : null;
 			}
+			case 'gradient': {
+				const a = this.getGradientAnnotator();
+				const part = a ? hitVectorGradientAnnotator(a, screen) : null;
+				if (a && part) return { nodeId: a.nodeId, gradient: part };
+				const path = this.hitPath(p);
+				return path ? { nodeId: path.id } : null;
+			}
 			default:
 				return null;
 		}
@@ -4016,6 +4335,8 @@ export class VectorEditorController {
 				return this.downBuilder(p, input);
 			case 'blend':
 				return this.downBlend(screen, p);
+			case 'gradient':
+				return this.downGradient(screen, p, input);
 			case 'scissors': {
 				const seg = this.nearestOutline(p);
 				if (seg) this.cutPathAt(seg.nodeId, seg.point);
@@ -4322,6 +4643,8 @@ export class VectorEditorController {
 				this.viewport = { ...drag.viewport, x: drag.viewport.x + screen.x - drag.start.x, y: drag.viewport.y + screen.y - drag.start.y };
 				this.notify();
 				return;
+			case 'gradient':
+				return this.moveGradient(drag, screen, p, input);
 			case 'move': {
 				let dx = p.x - drag.start.x;
 				let dy = p.y - drag.start.y;
@@ -4718,6 +5041,8 @@ export class VectorEditorController {
 			}
 			case 'builder':
 				return this.upBuilder(drag);
+			case 'gradient':
+				return this.upGradient(drag);
 			case 'stroke': {
 				this.notify();
 				if (drag.tool === 'knife') this.knife(drag.points);
@@ -4939,6 +5264,7 @@ export class VectorEditorController {
 			case 'Delete':
 			case 'Backspace':
 				if (this.tool === 'width' && this.widthPoints.length) return this.removeWidthPoints().ok;
+				if (this.tool === 'gradient' && this.gradientEdit.stop !== null) return this.removeGradientStop(this.gradientEdit.stop).ok;
 				if (this.pen) {
 					const node = this.getNode(this.pen.nodeId) as VectorPathNode;
 					const sp = node.subpaths[this.pen.subpath];

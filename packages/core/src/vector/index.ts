@@ -17,3 +17,6 @@ export * from './blend.js';
 export * from './blendGroup.js';
 export * from './appearance.js';
 export * from './pathEffects.js';
+export * from './gradient.js';
+export * from './gradientStroke.js';
+export * from './gradientTool.js';

@@ -740,3 +740,91 @@ describe("Blend (svelte)", () => {
     expect(c.getState().undoLabel).toBe("Blend");
   });
 });
+
+describe("gradients (svelte)", () => {
+  const fillOf = (c: VectorEditorController) => (c.getNode("a") as VectorPathNode).fill as any;
+
+  it("renders conic patterns and the gradient tool's annotator, and drags its handles", () => {
+    const c = make();
+    c.select(["a"]);
+    c.setGradient({ type: "conic", stops: [{ offset: 0, color: "#ff0000" }, { offset: 0.5, color: "#00ff00" }, { offset: 1, color: "#0000ff" }] });
+    const t = render(VectorCanvas, { controller: c, fitOnMount: false });
+    const pattern = t.querySelector('pattern[id$="fill-a"]')!;
+    expect(pattern.getAttribute("patternUnits")).toBe("userSpaceOnUse");
+    expect(pattern.querySelectorAll("linearGradient").length).toBe(72);
+    expect(t.querySelector('[data-vector-scene] path[data-vector-id="a"]')!.getAttribute("fill")).toBe(`url(#${pattern.id})`);
+    const svg = t.querySelector("svg")!;
+    key(svg, "g");
+    expect(c.getState().tool).toBe("gradient");
+    expect(t.querySelector('[data-vector-gradient-annotator="conic"]')).toBeTruthy();
+    expect(t.querySelectorAll("[data-vector-gradient-stop]")).toHaveLength(3);
+    expect(t.querySelectorAll("[data-vector-gradient-midpoint]")).toHaveLength(2);
+    expect(t.querySelector('[data-vector-gradient-handle="radius"]')).toBeTruthy();
+    expect(t.querySelector('[data-vector-gradient-handle="aspect"]')).toBeTruthy();
+    const a = c.getGradientAnnotator()!;
+    pointer(svg, "pointerdown", a.end.x, a.end.y);
+    pointer(svg, "pointermove", a.end.x + 10, a.end.y + 20);
+    pointer(svg, "pointerup", a.end.x + 20, a.end.y + 40);
+    expect(c.getGradientAnnotator()!.end.x).toBeCloseTo(a.end.x + 20);
+    expect(c.getState().undoLabel).toBe("Gradient Handle");
+    const s = c.getGradientAnnotator()!.stops[1];
+    pointer(svg, "pointerdown", s.x, s.y);
+    pointer(svg, "pointermove", s.x, s.y + 70);
+    expect(t.querySelector("[data-vector-status]")!.textContent).toBe("Release to delete the stop");
+    pointer(svg, "pointerup", s.x, s.y + 70);
+    expect(fillOf(c).stops).toHaveLength(2);
+    expect(t.querySelectorAll("[data-vector-gradient-stop]")).toHaveLength(2);
+    c.setGradient({ type: "diamond" });
+    flushSync();
+    expect(t.querySelector('pattern[id$="fill-a"]')!.querySelectorAll("path")).toHaveLength(4);
+  });
+
+  it("drags out a new gradient over a shape", () => {
+    const c = make();
+    const t = render(VectorCanvas, { controller: c, fitOnMount: false });
+    const svg = t.querySelector("svg")!;
+    key(svg, "g");
+    pointer(svg, "pointerdown", 10, 50);
+    pointer(svg, "pointermove", 50, 50);
+    pointer(svg, "pointerup", 90, 50);
+    expect(fillOf(c)).toMatchObject({ type: "linear", start: { x: 10, y: 50 }, end: { x: 90, y: 50 } });
+    expect(t.querySelectorAll("linearGradient")).toHaveLength(1);
+    expect(t.querySelector("[data-vector-gradient-bar]")!.getAttribute("x2")).toBe("90");
+  });
+
+  it("gradient editor edits type, stops, midpoints, colour space, spread, stroke mode and reverse", () => {
+    const c = make();
+    c.select(["a"]);
+    const t = render(VectorStylePanel, { controller: c });
+    const q = <T extends Element = HTMLElement>(sel: string) => t.querySelector(sel) as T;
+    expect(q('[data-vector-gradient-editor="fill"]')).toBeTruthy();
+    expect(q("[data-vector-gradient-ramp]")).toBeNull();
+    setValue(q<HTMLSelectElement>('select[aria-label="Gradient type"]'), "radial");
+    expect(fillOf(c)).toMatchObject({ type: "radial", stops: [{ offset: 0, color: "#ff0000" }, { offset: 1, color: "#ffffff" }] });
+    click(q('[aria-label="Add gradient stop"]'));
+    expect(fillOf(c).stops.map((s: any) => s.offset)).toEqual([0, 0.5, 1]);
+    expect(q('[data-vector-gradient-stop="1"]').getAttribute("aria-pressed")).toBe("true");
+    setValue(q<HTMLInputElement>('input[aria-label="Stop colour"]'), "#00ff00");
+    expect(fillOf(c).stops[1].color).toBe("#00ff00");
+    setValue(q<HTMLInputElement>('input[aria-label="Stop midpoint"]'), "30");
+    expect(fillOf(c).stops[1].midpoint).toBeCloseTo(0.3);
+    setValue(q<HTMLInputElement>('input[aria-label="Stop opacity"]'), "50");
+    expect(fillOf(c).stops[1].opacity).toBeCloseTo(0.5);
+    setValue(q<HTMLInputElement>('input[aria-label="Stop position"]'), "25");
+    expect(fillOf(c).stops[1].offset).toBeCloseTo(0.25);
+    setValue(q<HTMLSelectElement>('select[aria-label="Gradient interpolation"]'), "oklab");
+    setValue(q<HTMLSelectElement>('select[aria-label="Gradient spread"]'), "reflect");
+    expect(fillOf(c)).toMatchObject({ interpolation: "oklab", spread: "reflect" });
+    click(q('button[aria-label="Reverse gradient"]'));
+    expect(fillOf(c).stops[0].color).toBe("#ffffff");
+    click(q('button[aria-label="Delete stop"]'));
+    expect(fillOf(c).stops).toHaveLength(2);
+    click(Array.from(t.querySelectorAll("[data-vector-gradient-editor] button")).find((b) => b.textContent === "Stroke")!);
+    expect(q('[data-vector-gradient-editor="stroke"]')).toBeTruthy();
+    setValue(q<HTMLSelectElement>('select[aria-label="Gradient type"]'), "linear");
+    setValue(q<HTMLSelectElement>('select[aria-label="Gradient on stroke"]'), "along");
+    expect((c.getNode("a") as VectorPathNode).stroke).toMatchObject({ type: "linear", strokeMode: "along" });
+    setValue(q<HTMLSelectElement>('select[aria-label="Gradient type"]'), "solid");
+    expect((c.getNode("a") as VectorPathNode).stroke).toBe("#000000");
+  });
+});
