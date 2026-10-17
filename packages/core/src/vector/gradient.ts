@@ -606,6 +606,23 @@ export function transformVectorGradient(g: VectorGradient, m: VectorMatrix): Vec
 	return { ...g, start: apply(m, p.start), end: apply(m, p.end), width: apply(m, p.width), ...(p.focal ? { focal: apply(m, p.focal) } : {}) };
 }
 
+/**
+ * A gradient after its node's geometry goes through a non-affine map `f` (Free Distort, an
+ * envelope): handles in the node's own space (`userSpaceOnUse`) are mapped point by point, which
+ * keeps the gradient's frame where the shape went; bounding-box gradients are left alone, as they
+ * already follow the shape's new bounds.
+ */
+export function mapVectorGradient(g: VectorGradient, f: (p: Vec2) => Vec2): VectorGradient {
+	if (!hasExplicitGradientGeometry(g) || g.units !== 'userSpaceOnUse') return g;
+	const p = vectorGradientPoints(g);
+	return { ...g, start: f(p.start), end: f(p.end), width: f(p.width), ...(p.focal ? { focal: f(p.focal) } : {}) };
+}
+
+/** A paint after its node's geometry goes through a non-affine map `f` (see `mapVectorGradient`). */
+export function mapVectorPaint<T extends VectorPaint | undefined>(paint: T, f: (p: Vec2) => Vec2): T {
+	return (isVectorGradient(paint) ? mapVectorGradient(paint, f) : paint) as T;
+}
+
 /** A paint after its node's geometry is mapped by `m` (colours unchanged). */
 export function transformVectorPaint<T extends VectorPaint | undefined>(paint: T, m: VectorMatrix): T {
 	return (isVectorGradient(paint) ? transformVectorGradient(paint, m) : paint) as T;

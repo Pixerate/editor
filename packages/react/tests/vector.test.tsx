@@ -876,3 +876,114 @@ describe("VectorEditor and hooks", () => {
     expect(redo().getAttribute("aria-label")).toBe(`Redo ${controller.getState().redoLabel}`);
   });
 });
+
+describe("distort and envelopes (React)", () => {
+  const envelopeOf = (c: VectorEditorController, id = "a") => (c.getNode(id)!.effects ?? []).find((e) => e.type === "envelope") as any;
+
+  it("makes, edits, releases and expands an envelope from the panel", async () => {
+    const c = make();
+    c.select(["a"]);
+    await act(async () => root.render(<VectorStylePanel controller={c} />));
+    expect(q("[data-vector-envelope]")).toBeTruthy();
+    expect(q<HTMLButtonElement>('button[aria-label="Release Envelope"]').disabled).toBe(true);
+    expect(q<HTMLButtonElement>('button[aria-label="Make with Top Object"]').disabled).toBe(true);
+    click(q('button[aria-label="Make with Warp"]'));
+    expect(envelopeOf(c).params).toMatchObject({ style: "arc", bend: 50 });
+    expect(q<HTMLButtonElement>('button[aria-label="Make with Warp"]').disabled).toBe(true);
+    await setValue(q<HTMLSelectElement>('select[aria-label="Envelope warp"]'), "flag");
+    expect(envelopeOf(c).params.style).toBe("flag");
+    // A slider drag is one undo step.
+    const slider = q<HTMLInputElement>('input[aria-label="Envelope Bend % slider"]');
+    for (const v of ["20", "30", "-40"]) await setValue(slider, v);
+    act(() => slider.dispatchEvent(new Event("pointerup", { bubbles: true })));
+    expect(envelopeOf(c).params.bend).toBe(-40);
+    expect(q<HTMLInputElement>('input[aria-label="Envelope Bend %"]').value).toBe("-40");
+    act(() => void c.undo());
+    expect(envelopeOf(c).params.bend).toBe(50);
+    act(() => void c.redo());
+    await setValue(q<HTMLInputElement>('input[aria-label="Envelope Horizontal distortion %"]'), "25");
+    expect(envelopeOf(c).params.horizontal).toBe(25);
+    await setValue(q<HTMLSelectElement>('select[aria-label="Envelope orientation"]'), "vertical");
+    expect(envelopeOf(c).params.orientation).toBe("vertical");
+    await setValue(q<HTMLInputElement>('input[aria-label="Envelope mesh rows"]'), "3");
+    expect(envelopeOf(c).params.rows).toBe(3);
+    // Switching to Mesh makes the preset an editable mesh of that size; the sliders go.
+    await setValue(q<HTMLSelectElement>('select[aria-label="Envelope warp"]'), "mesh");
+    expect(envelopeOf(c).params.mesh.vs).toHaveLength(4);
+    expect(q('input[aria-label="Envelope Bend % slider"]')).toBeNull();
+    click(q('button[aria-label="Expand Envelope"]'));
+    expect(envelopeOf(c)).toBeUndefined();
+    expect(c.getState().undoLabel).toBe("Expand Appearance");
+    act(() => void c.undo());
+    click(q('button[aria-label="Release Envelope"]'));
+    expect(envelopeOf(c)).toBeUndefined();
+    expect(c.getDocument().nodes).toHaveLength(2);
+  });
+
+  it("makes an envelope with a mesh of the chosen size, and with the top object", async () => {
+    const c = make();
+    c.addShape({ kind: "ellipse", x: -20, y: -20, width: 140, height: 140 });
+    c.select(["a", c.getDocument().nodes[1].id]);
+    await act(async () => root.render(<VectorStylePanel controller={c} />));
+    expect(q<HTMLButtonElement>('button[aria-label="Make with Top Object"]').disabled).toBe(false);
+    click(q('button[aria-label="Make with Top Object"]'));
+    expect(c.getDocument().nodes).toHaveLength(1);
+    expect(envelopeOf(c).params.style).toBe("mesh");
+    act(() => void c.undo());
+    act(() => c.select(["a"]));
+    await setValue(q<HTMLInputElement>('input[aria-label="Envelope mesh columns"]'), "3");
+    click(q('button[aria-label="Make with Mesh"]'));
+    expect(envelopeOf(c).params).toMatchObject({ style: "mesh", columns: 3, rows: 2 });
+  });
+
+  it("draws the envelope mesh with the Envelope tool and drags its anchors", async () => {
+    const c = make();
+    c.select(["a"]);
+    c.envelope({ style: "mesh", rows: 2, columns: 2 });
+    c.setTool("envelope");
+    await act(async () => root.render(<VectorCanvas controller={c} fitOnMount={false} />));
+    expect(q("[data-vector-envelope-mesh]").getAttribute("data-vector-envelope-mesh")).toBe("a");
+    expect(q("[data-vector-envelope-grid]").getAttribute("d")).toContain("C");
+    expect(qa("[data-vector-envelope-anchor]")).toHaveLength(9);
+    expect(qa("[data-vector-envelope-handle]")).toHaveLength(24);
+    const svg = q("svg");
+    pointer(svg, "pointerdown", 50, 50);
+    pointer(svg, "pointermove", 60, 40);
+    pointer(svg, "pointerup", 60, 40);
+    expect(envelopeOf(c).params.mesh.points[3 * 7 + 3]).toEqual({ x: 60, y: 40 });
+    expect(q('[data-vector-envelope-anchor="24"]').getAttribute("x")).toBe(String(60 - 3.5));
+    expect(c.getState().undoLabel).toBe("Edit Envelope");
+    act(() => void c.setTool("select"));
+    expect(q("[data-vector-envelope-mesh]")).toBeNull();
+  });
+
+  it("toggles Free Distort from the toolbar and drags a corner in perspective on the canvas", async () => {
+    const c = make();
+    c.select(["a"]);
+    await act(async () =>
+      root.render(
+        <>
+          <VectorToolbar controller={c} />
+          <VectorCanvas controller={c} fitOnMount={false} />
+        </>,
+      ),
+    );
+    const toggle = q("[data-vector-free-distort]");
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+    click(toggle);
+    expect(c.getState().freeDistort).toBe(true);
+    expect(q("[data-vector-selection]").getAttribute("data-free-distort")).toBe("true");
+    const svg = q("svg[role=application]");
+    pointer(svg, "pointerdown", 100, 100);
+    pointer(svg, "pointermove", 120, 130);
+    expect(q("[data-vector-distort]").getAttribute("data-vector-distort")).toBe("distort");
+    expect(q("[data-vector-selection]")).toBeNull();
+    pointer(svg, "pointerup", 120, 130);
+    expect(q("[data-vector-distort]")).toBeNull();
+    const a = (c.getNode("a") as VectorPathNode).subpaths[0].anchors;
+    expect(a[2].x).toBeCloseTo(120, 9);
+    expect(a[2].y).toBeCloseTo(130, 9);
+    expect(a[0]).toMatchObject({ x: 0, y: 0 });
+    expect(c.getState().undoLabel).toBe("Distort");
+  });
+});

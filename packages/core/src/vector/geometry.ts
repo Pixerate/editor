@@ -488,7 +488,7 @@ function mapAnchor(a: VectorAnchor, m: AffineMatrix): VectorAnchor {
 /** Every anchor and handle mapped through `m` (the node's own `transform` is untouched). */
 function bakeIntoGeometry<T extends VectorNode>(node: T, m: AffineMatrix): T {
 	if (isIdentityMatrix(m)) return node;
-	if (node.effects?.length) node = { ...node, effects: transformVectorEffects(node.effects, m) } as T;
+	if (node.effects?.length) node = { ...node, effects: transformVectorEffects(node.effects, m, node) } as T;
 	if (node.type === 'group') {
 		const group = node as VectorGroupNode;
 		const children = group.children.map((c) => transformVectorNode(c, m));

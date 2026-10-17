@@ -25,7 +25,7 @@
  * `crates/engine/src/booleans.rs` (`operand_op`, `result_outline`); and the live-object model of
  * vectorcraft `crates/doc/src/live.rs` (`expand_live`, `expanded_group`, `subtree_has_live`).
  */
-import { transformBezierPath, type AffineMatrix, type BezierPath } from '../canvas/pathops/bezier.js';
+import { bezierPathBounds, transformBezierPath, type AffineMatrix, type BezierPath } from '../canvas/pathops/bezier.js';
 import { pathBoolean } from '../canvas/pathops/boolean.js';
 import { bezierToSubpaths, isIdentityMatrix, subpathsToBezier } from './geometry.js';
 import {
@@ -41,7 +41,19 @@ import {
 	wigglePaths,
 	zigzagPaths
 } from './pathEffects.js';
+import { mapBezierPath } from './pathMap.js';
+import {
+	VECTOR_WARP_STYLES,
+	VECTOR_WARP_STYLE_LABELS,
+	evalVectorMesh,
+	isValidVectorMesh,
+	mapVectorMeshPoints,
+	resizeVectorMesh,
+	vectorIdentityMesh,
+	vectorWarpPresetMesh
+} from './warp.js';
 import type {
+	VectorBounds,
 	Vec2,
 	VectorBooleanOperation,
 	VectorEffect,
@@ -50,7 +62,8 @@ import type {
 	VectorFillRule,
 	VectorGroupNode,
 	VectorNode,
-	VectorPathNode
+	VectorPathNode,
+	VectorWarpMesh
 } from './types.js';
 
 /** One shape of a node's appearance: a path in the node's own space, painted in `source`'s style. */
@@ -88,7 +101,8 @@ export const VECTOR_EFFECT_DEFAULTS: { readonly [K in VectorEffectType]: VectorE
 		startOpacity: 100,
 		endOpacity: 100,
 		composite: 'below'
-	}
+	},
+	envelope: { style: 'arc', bend: 50, horizontal: 0, vertical: 0, orientation: 'horizontal', rows: 2, columns: 2, mesh: null }
 };
 
 export const VECTOR_EFFECT_LABELS: Record<VectorEffectType, string> = {
@@ -100,7 +114,8 @@ export const VECTOR_EFFECT_LABELS: Record<VectorEffectType, string> = {
 	wiggle: 'Wiggle Paths',
 	offset: 'Offset Paths',
 	merge: 'Merge Paths',
-	repeater: 'Repeater'
+	repeater: 'Repeater',
+	envelope: 'Envelope'
 };
 
 /** How a panel edits one effect parameter. */
@@ -195,8 +210,83 @@ export const VECTOR_EFFECT_PARAM_SPECS: Record<VectorEffectType, VectorEffectPar
 				{ value: 'above', label: 'Above' }
 			]
 		}
+	],
+	envelope: [
+		{
+			key: 'style',
+			label: 'Warp',
+			kind: 'select',
+			options: [...VECTOR_WARP_STYLES.map((value) => ({ value, label: VECTOR_WARP_STYLE_LABELS[value] })), { value: 'mesh', label: 'Mesh' }]
+		},
+		{ key: 'bend', label: 'Bend %', kind: 'number', min: -100, max: 100, step: 1, slider: true },
+		{ key: 'horizontal', label: 'Horizontal distortion %', kind: 'number', min: -100, max: 100, step: 1, slider: true },
+		{ key: 'vertical', label: 'Vertical distortion %', kind: 'number', min: -100, max: 100, step: 1, slider: true },
+		{
+			key: 'orientation',
+			label: 'Orientation',
+			kind: 'select',
+			options: [
+				{ value: 'horizontal', label: 'Horizontal' },
+				{ value: 'vertical', label: 'Vertical' }
+			]
+		},
+		{ key: 'rows', label: 'Mesh rows', kind: 'number', min: 1, max: 16, step: 1 },
+		{ key: 'columns', label: 'Mesh columns', kind: 'number', min: 1, max: 16, step: 1 }
 	]
 };
+
+/** Envelope parameters. */
+export type VectorEnvelopeParams = VectorEffectParamsMap['envelope'];
+
+const cloneMesh = (m: VectorWarpMesh): VectorWarpMesh => ({ us: m.us.slice(), vs: m.vs.slice(), points: m.points.map((p) => ({ x: p.x, y: p.y })) });
+
+/**
+ * The envelope's mesh over `bounds` (the paths' combined bounds), in the node's space: its own
+ * mesh, the flat mesh of `columns × rows` patches, or a preset split exactly into that many patches.
+ */
+export function vectorEnvelopeMesh(params: VectorEnvelopeParams, bounds: VectorBounds): VectorWarpMesh {
+	if (params.style === 'mesh') return params.mesh ?? vectorIdentityMesh(bounds, params.columns, params.rows);
+	const preset = vectorWarpPresetMesh({ style: params.style, bend: params.bend, horizontal: params.horizontal, vertical: params.vertical, orientation: params.orientation }, bounds);
+	return preset ? resizeVectorMesh(preset, params.columns, params.rows) : vectorIdentityMesh(bounds, params.columns, params.rows);
+}
+
+/** The envelope as a map of the node's space over `bounds`, or null when it changes nothing (or the box is empty). */
+export function vectorEnvelopeMap(params: VectorEnvelopeParams, bounds: VectorBounds | null): ((p: { x: number; y: number }) => { x: number; y: number }) | null {
+	if (!bounds || !(bounds.width > 0 && bounds.height > 0)) return null;
+	const mesh =
+		params.style === 'mesh'
+			? params.mesh
+			: vectorWarpPresetMesh({ style: params.style, bend: params.bend, horizontal: params.horizontal, vertical: params.vertical, orientation: params.orientation }, bounds);
+	if (!mesh) return null;
+	const { x, y, width, height } = bounds;
+	return (p) => evalVectorMesh(mesh, (p.x - x) / width, (p.y - y) / height);
+}
+
+/** Combined bounds of paths. */
+function pathsBounds(paths: readonly BezierPath[]): VectorBounds | null {
+	let minX = Infinity;
+	let minY = Infinity;
+	let maxX = -Infinity;
+	let maxY = -Infinity;
+	for (const p of paths) {
+		const b = bezierPathBounds(p);
+		if (!b) continue;
+		minX = Math.min(minX, b.minX);
+		minY = Math.min(minY, b.minY);
+		maxX = Math.max(maxX, b.maxX);
+		maxY = Math.max(maxY, b.maxY);
+	}
+	return minX <= maxX ? { x: minX, y: minY, width: maxX - minX, height: maxY - minY } : null;
+}
+
+/** The paths through an envelope (each mapped adaptively, within a tolerance relative to their size). */
+function envelopePaths(paths: BezierPath[], params: VectorEnvelopeParams): BezierPath[] {
+	const bounds = pathsBounds(paths);
+	const f = vectorEnvelopeMap(params, bounds);
+	if (!f || !bounds) return paths;
+	const tol = Math.min(0.25, Math.max(0.01, Math.hypot(bounds.width, bounds.height) / 2000));
+	return paths.map((p) => (p.length ? mapBezierPath(p, f, tol) : p));
+}
 
 const isVec2 = (v: unknown): v is Vec2 => !!v && typeof v === 'object' && Number.isFinite((v as Vec2).x) && Number.isFinite((v as Vec2).y);
 
@@ -215,6 +305,19 @@ export function normalizeVectorEffectParams<K extends VectorEffectType>(type: K,
 		else if (spec.kind === 'boolean' && typeof v === 'boolean') out[spec.key] = v;
 		else if (spec.kind === 'vec2' && isVec2(v)) out[spec.key] = { x: v.x, y: v.y };
 		else if (spec.kind === 'select' && spec.options.some((o) => o.value === v)) out[spec.key] = v;
+	}
+	if (type === 'envelope') {
+		const o = out as unknown as VectorEnvelopeParams;
+		o.rows = Math.round(o.rows);
+		o.columns = Math.round(o.columns);
+		const given = params?.mesh;
+		let mesh: VectorWarpMesh | null = given !== undefined ? (isValidVectorMesh(given) ? cloneMesh(given) : null) : o.mesh;
+		if (o.style !== 'mesh') mesh = null;
+		if (mesh && given !== undefined) {
+			o.columns = mesh.us.length - 1;
+			o.rows = mesh.vs.length - 1;
+		} else if (mesh) mesh = resizeVectorMesh(mesh, o.columns, o.rows);
+		o.mesh = mesh;
 	}
 	return out as VectorEffectParamsMap[K];
 }
@@ -443,6 +546,11 @@ export function applyVectorEffects(shapes: readonly VectorAppearanceShape[], eff
 				list = [{ ...first, path: mergePaths(list.map((s) => s.path), e.params.mode) }];
 				break;
 			}
+			case 'envelope': {
+				const params = e.params;
+				list = mapPaths(list, (p) => envelopePaths(p, params));
+				break;
+			}
 			case 'repeater': {
 				const r = e.params;
 				const copies = repeatPaths(
@@ -497,6 +605,44 @@ function liveBooleanShapes(group: VectorGroupNode): VectorAppearanceShape[] {
 
 const shapeCache = new WeakMap<VectorNode, VectorAppearanceShape[]>();
 
+/** What a node's effect stack starts from: its own outline, its live boolean result or its children's shapes. */
+function baseShapes(node: VectorNode): VectorAppearanceShape[] {
+	if (node.type === 'path') return [{ source: node, path: subpathsToBezier(node.subpaths), opacity: 1, order: [] }];
+	if (node.liveBoolean) return liveBooleanShapes(node);
+	return node.children.flatMap((c, i) => childShapes(c, i));
+}
+
+/** The paths entering effect `effectId` of the node's stack (those above it applied), in the node's own space. */
+export function vectorEffectInputPaths(node: VectorNode, effectId: string): BezierPath[] | null {
+	const list = node.effects ?? [];
+	const i = list.findIndex((e) => e.id === effectId);
+	if (i < 0) return null;
+	return applyVectorEffects(baseShapes(node), list.slice(0, i)).map((s) => s.path);
+}
+
+/** The box effect `effectId` (an envelope) bends: the combined bounds of the paths entering it, in the node's own space. */
+export function vectorEffectInputBounds(node: VectorNode, effectId: string): VectorBounds | null {
+	const paths = vectorEffectInputPaths(node, effectId);
+	return paths ? pathsBounds(paths) : null;
+}
+
+/** The node's first enabled envelope effect, or null. */
+export function vectorNodeEnvelope(node: VectorNode | null | undefined): Extract<VectorEffect, { type: 'envelope' }> | null {
+	return (node?.effects?.find((e) => e.type === 'envelope' && e.enabled !== false) as Extract<VectorEffect, { type: 'envelope' }> | undefined) ?? null;
+}
+
+/**
+ * The editable mesh of a node's envelope (its own mesh, or the preset or flat mesh it stands for)
+ * with the box it bends, in the node's own space; null without an envelope or contents.
+ */
+export function vectorEnvelopeFrame(node: VectorNode, effectId?: string): { effectId: string; bounds: VectorBounds; mesh: VectorWarpMesh } | null {
+	const e = effectId ? node.effects?.find((x) => x.id === effectId) : vectorNodeEnvelope(node);
+	if (!e || e.type !== 'envelope') return null;
+	const bounds = vectorEffectInputBounds(node, e.id);
+	if (!bounds || !(bounds.width > 0 && bounds.height > 0)) return null;
+	return { effectId: e.id, bounds, mesh: vectorEnvelopeMesh(e.params, bounds) };
+}
+
 /**
  * What a node draws as: shapes in its own space (its `transform` and opacity not applied),
  * bottom to top, with its effects and those of everything inside it applied. Cached per node
@@ -505,11 +651,7 @@ const shapeCache = new WeakMap<VectorNode, VectorAppearanceShape[]>();
 export function vectorAppearanceShapes(node: VectorNode): VectorAppearanceShape[] {
 	const hit = shapeCache.get(node);
 	if (hit) return hit;
-	let base: VectorAppearanceShape[];
-	if (node.type === 'path') base = [{ source: node, path: subpathsToBezier(node.subpaths), opacity: 1, order: [] }];
-	else if (node.liveBoolean) base = liveBooleanShapes(node);
-	else base = node.children.flatMap((c, i) => childShapes(c, i));
-	const out = applyVectorEffects(base, node.effects).sort((a, b) => compareOrder(a.order, b.order));
+	const out = applyVectorEffects(baseShapes(node), node.effects).sort((a, b) => compareOrder(a.order, b.order));
 	shapeCache.set(node, out);
 	return out;
 }
@@ -640,10 +782,21 @@ export function sanitizeVectorEffects(value: unknown): VectorEffect[] {
  * flipping it): offsets and positions move with it, angles turn the other way when it mirrors.
  * Lengths such as sizes and radii are kept, like stroke widths.
  */
-export function transformVectorEffects(effects: readonly VectorEffect[], m: AffineMatrix): VectorEffect[] {
+export function transformVectorEffects(effects: readonly VectorEffect[], m: AffineMatrix, node?: VectorNode): VectorEffect[] {
 	const lin = (v: Vec2): Vec2 => ({ x: m[0] * v.x + m[2] * v.y, y: m[1] * v.x + m[3] * v.y });
+	const full = (v: Vec2): Vec2 => ({ x: m[0] * v.x + m[2] * v.y + m[4], y: m[1] * v.x + m[3] * v.y + m[5] });
 	const mirror = m[0] * m[3] - m[1] * m[2] < 0 ? -1 : 1;
+	// A preset is laid over the box of what it bends, so it follows a move or a scale by itself; a
+	// skew or a mirror turns it into a mesh, which maps like the geometry.
+	const axisScale = Math.abs(m[1]) < 1e-12 && Math.abs(m[2]) < 1e-12 && m[0] > 0 && m[3] > 0;
 	return effects.map((e) => {
+		if (e.type === 'envelope') {
+			if (e.params.style === 'mesh') return e.params.mesh ? { ...e, params: { ...e.params, mesh: mapVectorMeshPoints(e.params.mesh, full) } } : e;
+			if (axisScale || !node) return e;
+			const bounds = vectorEffectInputBounds(node, e.id);
+			if (!bounds || !vectorEnvelopeMap(e.params, bounds)) return e;
+			return { ...e, params: { ...e.params, style: 'mesh', mesh: mapVectorMeshPoints(vectorEnvelopeMesh(e.params, bounds), full) } };
+		}
 		if (e.type === 'twist') return { ...e, params: { ...e.params, center: lin(e.params.center), angle: e.params.angle * mirror } };
 		if (e.type === 'repeater')
 			return { ...e, params: { ...e.params, position: lin(e.params.position), anchor: lin(e.params.anchor), rotation: e.params.rotation * mirror } };

@@ -1286,3 +1286,21 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Conic and diamond fills (patterns of gradient tiles) drew nothing, or the wrong part of the sweep, in the browser although every `<pattern>`, tile and gradient was there.
 - **Root Cause**: Without a `viewBox`, an SVG `<pattern>`'s content coordinate system has its origin at the tile's `(x, y)`, not at the user-space origin, so content written in user space was shifted by the tile's position (outside the tile).
 - **Solution / Workaround**: `patternAttrs` gives every pattern a `viewBox` equal to its tile (`x y width height`), which maps content coordinates one to one onto the user space. Keep it when rendering `VectorSvgPatternDef.attrs`.
+
+### [core/vector] Warp Meshes Must Extrapolate Outside Their Box
+
+- **Issue / Symptom**: Curved shapes under an envelope gained far more anchors than straight ones and came out lumpy near the box edges, although the warp itself was smooth.
+- **Root Cause**: The envelope's box is the paths' tight curve bounds, so Bézier handles routinely lie outside it. The ported `locate` clamped the box fraction to 0–1, which squashed every handle outside the box onto the border; the adaptive mapper then saw the mapped control polygon stray from the mapped curve and kept splitting.
+- **Solution / Workaround**: `locate` in `warp.ts` no longer clamps: outside 0–1 the end patches' polynomials simply continue, so handles past the box map smoothly. Callers that need a point on the surface (`vectorMeshParamAt`) clamp their own parameters.
+
+### [react|svelte/vector] Two Panels Editing One Effect Collide on Their Labels
+
+- **Issue / Symptom**: After switching an envelope to Mesh, tests still found the "Envelope Bend % slider" the Envelope panel had just hidden.
+- **Root Cause**: The generic Effects panel builds a control per entry of `VECTOR_EFFECT_PARAM_SPECS` and labels it `${effect label} ${param label}`, so it rendered the envelope's bend, distortion, orientation and mesh-size controls with exactly the Envelope panel's labels, regardless of the style.
+- **Solution / Workaround**: `getVectorEffectsPanel` returns no `specs` for an envelope (it still lists it to toggle, reorder and remove); `VectorEnvelopePanel` edits it. The specs stay in `VECTOR_EFFECT_PARAM_SPECS` because `normalizeVectorEffectParams` validates against them.
+
+### [core/vector] Free Distort Takes Over Mod on the Selection Box
+
+- **Issue / Symptom**: Mod-dragging a box handle normally scales without snapping; in Free Distort mode it skews (sides) or, with Shift+Alt, makes a symmetric perspective (corners).
+- **Root Cause**: Illustrator's Free Transform modifiers (Cmd on a side shears, Cmd+Alt+Shift on a corner is perspective) clash with the editor's "hold Mod to bypass snapping".
+- **Solution / Workaround**: The distort modifiers apply only while `state.freeDistort` is on (the toolbar's Distort toggle); out of that mode the box scales as before. Distort drags never snap.

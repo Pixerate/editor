@@ -156,6 +156,19 @@ const STARTER: VectorDocument = {
       subpaths: [rectSubpath({ x: 330, y: 292, width: 120, height: 26 }, 13)],
     },
     {
+      // A live envelope warp: the stripes stay editable. Change the warp in the Envelope panel, or pick
+      // the Envelope tool (U) and drag its mesh (it becomes a mesh envelope); Expand bakes it.
+      id: "flag",
+      type: "group",
+      name: "Warped flag",
+      children: [
+        { id: "flag-top", type: "path", name: "Stripe", fill: "#0ea5e9", stroke: null, subpaths: [rectSubpath({ x: 580, y: 230, width: 180, height: 18 })] },
+        { id: "flag-mid", type: "path", name: "Stripe", fill: "#ffffff", stroke: null, subpaths: [rectSubpath({ x: 580, y: 248, width: 180, height: 18 })] },
+        { id: "flag-low", type: "path", name: "Stripe", fill: "#f43f5e", stroke: null, subpaths: [rectSubpath({ x: 580, y: 266, width: 180, height: 18 })] },
+      ],
+      effects: [effect("envelope", "warp", { style: "flag", bend: 25 })],
+    },
+    {
       id: "brush",
       type: "path",
       name: "Tapered stroke",
@@ -197,6 +210,7 @@ export function VectorTab() {
           <p className="text-xs text-slate-400">
             Headless <code>VectorEditorController</code> (<code>@pixerate/editor/vector</code>) with React bindings. Pen (P): click for corners, drag for curves,
             click the first point to close. Direct select (A): drag points and handles, Alt-drag a point for smooth handles, Alt-click a segment to add a point. Width (W): drag a stroke to taper it (Alt: one side); pen pressure shapes pencil strokes.
+            Distort (toolbar): drag a corner of the selection box in perspective (Shift+Alt+Cmd/Ctrl: symmetric, Cmd/Ctrl-drag a side: skew). Envelope tool (U): drag the mesh of a warped object.
             Drags snap to other shapes with labelled smart guides (hold Cmd/Ctrl to bypass, or switch Snap off in the toolbar). Space-drag pans, Cmd/Ctrl+wheel zooms.
           </p>
         </div>

@@ -36,10 +36,22 @@
      * spine, Replace Spine, Expand and Release (default `true`).
      */
     showBlend?: boolean;
+    /** The Free Distort toggle of the selection box (default `true`). */
+    showDistort?: boolean;
     class?: string;
   }
 
-  let { controller, tools = VECTOR_TOOLS, showHistory = true, showArrange = true, showSnap = true, showPathEdit = true, showBlend = true, class: className = '' }: Props = $props();
+  let {
+    controller,
+    tools = VECTOR_TOOLS,
+    showHistory = true,
+    showArrange = true,
+    showSnap = true,
+    showPathEdit = true,
+    showBlend = true,
+    showDistort = true,
+    class: className = ''
+  }: Props = $props();
 
   const snapTitle = 'Snap to objects';
   const modKey = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform ?? '') ? '⌘' : 'Ctrl';
@@ -189,6 +201,21 @@
           Gaps
         </button>
       {/if}
+    </div>
+  {/if}
+  {#if showDistort}
+    <div class="ml-1 flex items-center gap-1" role="group" aria-label="Distort">
+      <button
+        type="button"
+        data-vector-free-distort=""
+        class={vectorButtonClass}
+        aria-pressed={view.freeDistort}
+        title="Free Distort: drag a corner of the selection box to distort in perspective (Shift+Alt+{modKey}: symmetric perspective; {modKey}-drag a side to skew)"
+        aria-label="Free Distort"
+        onclick={() => controller.setFreeDistort(!view.freeDistort)}
+      >
+        Distort
+      </button>
     </div>
   {/if}
   {#if showBlend}

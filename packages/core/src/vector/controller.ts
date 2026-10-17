@@ -120,8 +120,22 @@ import {
 	normalizeVectorEffectParams,
 	vectorAppearanceOutline,
 	vectorEnteredGroups,
+	vectorEnvelopeFrame,
+	vectorNodeEnvelope,
+	type VectorEnvelopeParams,
 	VECTOR_EFFECT_LABELS
 } from './appearance.js';
+import { applyVectorHomography, vectorHomography, vectorHomographyKeepsQuad } from './perspective.js';
+import { distortVectorNode, vectorBoxCorners, vectorDistortQuad, vectorShearForSide, vectorSkewMatrix, VECTOR_DISTORT_TOLERANCE, type VectorDistortMode } from './distort.js';
+import {
+	dragVectorMeshPoint,
+	pullVectorMesh,
+	resizeVectorMesh,
+	vectorMeshEditPoints,
+	vectorMeshFromOutline,
+	vectorMeshOutline,
+	vectorMeshParamAt
+} from './warp.js';
 import { constrainToLeave, VECTOR_CONSTRUCTION_ANGLES, VectorSnapTargets, type VectorSnapGuides, type VectorSnapLeave } from './snap.js';
 import {
 	bendSegment as bendSubpathSegment,
@@ -149,7 +163,7 @@ import {
 	type VectorBuilderTouched,
 	type VectorShapeBuilderMap
 } from './builder.js';
-import type { VectorGradient } from './types.js';
+import type { VectorGradient, VectorWarpMesh } from './types.js';
 import type {
 	Vec2,
 	VectorEffect,
@@ -270,6 +284,8 @@ export interface VectorEditorOptions {
 	createId?: () => string;
 	/** Called after the document changes (edits, undo, redo, load). */
 	onChange?: (document: VectorDocument) => void;
+	/** Start in Free Distort mode (see `setFreeDistort`). */
+	freeDistort?: boolean;
 }
 
 /** A pointer event as the controller needs it. Positions are in screen pixels relative to the canvas. */
@@ -339,6 +355,8 @@ export interface VectorHover {
 	strokeSpot?: VectorStrokeSpot;
 	/** A part of the gradient annotator (gradient tool). */
 	gradient?: VectorGradientPart;
+	/** A control point of the selected envelope's mesh (`index`), or a spot inside it (`index` null): Envelope tool. */
+	envelope?: { nodeId: string; index: number | null };
 }
 
 /** The drag in progress, for overlays and status text. */
@@ -358,6 +376,10 @@ export type VectorInteraction =
 	| { type: 'pen'; nodeId: string }
 	/** A gradient tool drag: drawing a new vector, or a handle, stop, midpoint or the bar (`removing`: a stop dragged off the bar). */
 	| { type: 'gradient'; part: 'create' | VectorGradientPart['kind']; handle?: VectorGradientHandle; removing?: boolean }
+	/** Free Distort: the selection box's corners as dragged so far (document space, clockwise from the top left). */
+	| { type: 'distort'; mode: VectorDistortMode | 'skew'; corners: Vec2[] }
+	/** Envelope tool: a mesh point (`index`) or the surface (`index` null) being dragged. */
+	| { type: 'envelope'; nodeId: string; index: number | null }
 	| { type: 'pan' };
 
 /** A snapshot of the editor. The same object is returned until something changes. */
@@ -401,6 +423,12 @@ export interface VectorEditorState {
 	blendDefaults: VectorBlendOptions;
 	/** The paint the gradient tool and gradient editor work on, and the selected stop (index into the sorted stops). */
 	gradientEdit: { target: VectorGradientTarget; stop: number | null };
+	/**
+	 * Free Distort mode of the selection box: dragging a corner distorts in perspective (each corner
+	 * on its own; Shift+Alt+Mod: symmetric perspective), a side moves its two corners, and Mod-dragging
+	 * a side skews along it (Alt: about the centre).
+	 */
+	freeDistort: boolean;
 	canUndo: boolean;
 	canRedo: boolean;
 	undoLabel: string;
@@ -847,6 +875,21 @@ export function getVectorSelectionBoxGeometry(frame: VectorSelectionFrame, viewp
 	return { box, angle: frame.angle, transform: frame.angle ? `rotate(${r(frame.angle)} ${r(viewport.x)} ${r(viewport.y)})` : '', handles, corners };
 }
 
+/**
+ * The node the Envelope tool edits: the one selected node with an enabled envelope, with the
+ * envelope's mesh and box (node space) and the node → document matrix. Null otherwise.
+ */
+export function getVectorEnvelopeTarget(
+	doc: VectorDocument,
+	selection: readonly string[]
+): { node: VectorNode; frame: { effectId: string; bounds: VectorBounds; mesh: VectorWarpMesh }; world: AffineMatrix } | null {
+	if (selection.length !== 1) return null;
+	const node = findVectorNode(doc.nodes, selection[0]);
+	if (!node || !vectorNodeEnvelope(node)) return null;
+	const frame = vectorEnvelopeFrame(node);
+	return frame ? { node, frame, world: vectorWorldMatrix(doc.nodes, node.id) ?? IDENTITY_MATRIX } : null;
+}
+
 const RESIZE_CURSOR_ORDER = ['ew-resize', 'nwse-resize', 'ns-resize', 'nesw-resize'];
 const HANDLE_ANGLES: Partial<Record<VectorTransformHandle, number>> = { e: 0, se: 45, s: 90, sw: 135, w: 180, nw: 225, n: 270, ne: 315 };
 
@@ -875,7 +918,8 @@ const TOOL_LABELS: Record<VectorTool, string> = {
 	shapeBuilder: 'Shape Builder',
 	paintBucket: 'Paint Bucket',
 	blend: 'Blend',
-	gradient: 'Gradient'
+	gradient: 'Gradient',
+	envelope: 'Envelope Mesh'
 };
 
 const TOOL_KEYS: Record<string, VectorTool> = {
@@ -895,7 +939,8 @@ const TOOL_KEYS: Record<string, VectorTool> = {
 	m: 'shapeBuilder',
 	b: 'paintBucket',
 	j: 'blend',
-	g: 'gradient'
+	g: 'gradient',
+	u: 'envelope'
 };
 
 export function vectorToolLabel(tool: VectorTool): string {
@@ -920,7 +965,8 @@ export const VECTOR_TOOL_SHORTCUTS: Readonly<Record<VectorTool, string>> = {
 	shapeBuilder: 'M',
 	paintBucket: 'B',
 	blend: 'J',
-	gradient: 'G'
+	gradient: 'G',
+	envelope: 'U'
 };
 
 /** Short glyphs for tool buttons (pair them with `vectorToolLabel` for the accessible name). */
@@ -941,7 +987,8 @@ export const VECTOR_TOOL_GLYPHS: Readonly<Record<VectorTool, string>> = {
 	shapeBuilder: '⊕',
 	paintBucket: '◍',
 	blend: '⧓',
-	gradient: '◐'
+	gradient: '◐',
+	envelope: '⌗'
 };
 
 /** Tools that drag out a shape (they snap while hovering). */
@@ -1037,7 +1084,21 @@ type DragTargets = { targets?: VectorSnapTargets };
 
 type Drag =
 	| ({ kind: 'move'; start: Vec2; origin: VectorBounds | null; before: Snapshot; base: VectorDocument; moved: boolean; duplicated: boolean; clickId: string | null } & DragTargets)
-	| ({ kind: 'scale'; handle: VectorTransformHandle; start: Vec2; frame: VectorSelectionFrame; before: Snapshot; base: VectorDocument } & DragTargets)
+	| ({ kind: 'scale'; handle: VectorTransformHandle; start: Vec2; frame: VectorSelectionFrame; before: Snapshot; base: VectorDocument; op?: string } & DragTargets)
+	| {
+			kind: 'envelope';
+			nodeId: string;
+			effectId: string;
+			/** The mesh at the start (node space) and the document it belongs to. */
+			base: VectorWarpMesh;
+			baseDoc: VectorDocument;
+			before: Snapshot;
+			index: number | null;
+			s: number;
+			t: number;
+			start: Vec2;
+			moved: boolean;
+	  }
 	| { kind: 'rotate'; start: Vec2; center: Vec2; before: Snapshot; base: VectorDocument }
 	| { kind: 'marquee'; start: Vec2; base: string[]; baseAnchors: VectorAnchorRef[]; anchorsMode: boolean }
 	| ({ kind: 'anchors'; start: Vec2; before: Snapshot; base: VectorDocument; moved: boolean; clickRef: VectorAnchorRef | null; lead: VectorAnchorRef | null } & DragTargets)
@@ -1134,6 +1195,7 @@ export class VectorEditorController {
 	/** Options new blends get (the toolbars edit them along with the selected blend's). */
 	private blendDefaults: VectorBlendOptions = {};
 	private gradientEdit: VectorEditorState['gradientEdit'] = { target: 'fill', stop: null };
+	private freeDistort = false;
 	/** What the highlight shows, to skip notifying when the pointer stays over the same face. */
 	private builderHoverKey: string | null = null;
 	private readonly createId: () => string;
@@ -1158,6 +1220,7 @@ export class VectorEditorController {
 		this.hitRadius = options.hitRadius ?? 6;
 		this.createId = options.createId ?? defaultCreateId;
 		this.onChange = options.onChange;
+		this.freeDistort = !!options.freeDistort;
 		this.state = this.computeState();
 		this.connect();
 	}
@@ -1239,6 +1302,7 @@ export class VectorEditorController {
 			blendStart: this.blendStart,
 			blendDefaults: this.blendDefaults,
 			gradientEdit: this.gradientEdit,
+			freeDistort: this.freeDistort,
 			canUndo: h.canUndo,
 			canRedo: h.canRedo,
 			undoLabel: h.undoName,
@@ -1301,8 +1365,13 @@ export class VectorEditorController {
 		const h = this.hover;
 		switch (this.tool) {
 			case 'select':
+				if (h?.transformHandle && this.freeDistort && h.transformHandle !== 'rotate') return 'crosshair';
 				if (h?.transformHandle) return vectorResizeCursor(h.transformHandle, this.frameOf(this.selectedRoots())?.angle ?? 0);
 				return h?.nodeId ? 'move' : 'default';
+			case 'envelope':
+				if (this.drag?.kind === 'envelope') return 'grabbing';
+				if (h?.envelope) return h.envelope.index === null ? 'grab' : 'pointer';
+				return h?.nodeId ? 'pointer' : 'default';
 			case 'direct':
 				if (h?.anchor || h?.handle || h?.corner) return 'pointer';
 				if (h?.segment) return 'copy';
@@ -2358,7 +2427,8 @@ export class VectorEditorController {
 				const i = list.findIndex((e) => e.id === effectId);
 				if (i < 0) return `Node "${nodeId}" has no effect "${effectId}".`;
 				const e = list[i];
-				const params = patch.params ? normalizeVectorEffectParams(e.type, patch.params, e.params as never) : e.params;
+				const raw = patch.params && e.type === 'envelope' && node ? this.envelopeParams(node, e, patch.params) : patch.params;
+				const params = raw ? normalizeVectorEffectParams(e.type, raw, e.params as never) : e.params;
 				const next = { ...e, params, ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}) } as VectorEffect;
 				if (next.enabled !== false) delete (next as { enabled?: boolean }).enabled;
 				return list.map((x, j) => (j === i ? next : x));
@@ -2513,6 +2583,341 @@ export class VectorEditorController {
 	private inFrame(angle: number, m: AffineMatrix): AffineMatrix {
 		if (!angle) return m;
 		return multiplyMatrices(multiplyMatrices(rotateMatrix(-angle), m), rotateMatrix(angle));
+	}
+
+	/** The selection frame's corners in document space, clockwise from the top left. */
+	private frameCorners(frame: VectorSelectionFrame): Vec2[] {
+		const rot = rotateMatrix(frame.angle);
+		return vectorBoxCorners(frame).map((c) => (frame.angle ? applyMatrix(rot, c) : c));
+	}
+
+	/** `doc` with nodes `ids` sent through `f` (a map of document space), each in its own space (see `distortVectorNode`). */
+	private distorted(doc: VectorDocument, ids: ReadonlySet<string>, f: (p: Vec2) => Vec2, tolerance = VECTOR_DISTORT_TOLERANCE): VectorDocument {
+		const visit = (list: readonly VectorNode[], parent: AffineMatrix): VectorNode[] => {
+			let changed = false;
+			const out = list.map((n) => {
+				let next = n;
+				if (ids.has(n.id) && !n.locked) next = distortVectorNode(n, parent, f, tolerance);
+				else if (n.type === 'group') {
+					const children = visit(n.children, multiplyMatrices(nodeMatrix(n), parent));
+					if (children !== n.children) next = { ...n, children };
+				}
+				if (next !== n) changed = true;
+				return next;
+			});
+			return changed ? out : (list as VectorNode[]);
+		};
+		const nodes = visit(doc.nodes, IDENTITY_MATRIX);
+		return nodes === doc.nodes ? doc : { ...doc, nodes };
+	}
+
+	/**
+	 * Free Distort mode of the selection box (`state.freeDistort`): dragging a corner distorts the
+	 * selection in perspective, each corner on its own (Shift+Alt+Mod: symmetric perspective, the
+	 * corner beside it moving the other way); dragging a side moves its two corners; Mod-dragging a
+	 * side skews along it (Alt: about the centre). Each drag is one undo step.
+	 */
+	setFreeDistort(on: boolean): void {
+		if (this.freeDistort === on) return;
+		this.freeDistort = on;
+		this.notify();
+	}
+
+	/**
+	 * Distorts the selected (or given) nodes so the corners of their selection box (clockwise from
+	 * the top left, in the box's own rotation) land on `corners` (document space): a projective map,
+	 * so straight lines stay straight. Curves are followed within `tolerance` (document units).
+	 * One undo step.
+	 */
+	distort(corners: readonly Vec2[], options: { ids?: readonly string[]; tolerance?: number } = {}): VectorActionResult {
+		const ids = options.ids ?? this.selectedRoots();
+		const frame = this.frameOf(ids);
+		if (!frame) return { ok: false, message: 'Nothing is selected.' };
+		if (!(frame.width > 0 && frame.height > 0)) return { ok: false, message: 'The selection has no area to distort.' };
+		const from = this.frameCorners(frame);
+		const h = corners.length === 4 ? vectorHomography(from, corners) : null;
+		if (!h || !vectorHomographyKeepsQuad(h, from)) return { ok: false, message: 'The four corners must make a convex quadrilateral, clockwise from the top left.' };
+		this.change('Distort', () => {
+			this.doc = this.distorted(this.doc, new Set(ids), (p) => applyVectorHomography(h, p) ?? p, options.tolerance);
+		});
+		return { ok: true };
+	}
+
+	/**
+	 * Skews the selected (or given) nodes along the selection box's own axes by `ax` degrees
+	 * horizontally (x' = x + tan(ax)·y: vertical lines lean right for positive angles) and `ay`
+	 * vertically, about `origin` (default: the box centre, document space). One undo step.
+	 */
+	skew(ax: number, ay = 0, options: { ids?: readonly string[]; origin?: Vec2 } = {}): VectorActionResult {
+		const frame = this.frameOf(options.ids ?? this.selectedRoots());
+		if (!frame) return { ok: false, message: 'Nothing is selected.' };
+		if (![ax, ay].every((v) => Number.isFinite(v) && Math.abs(v) < 89.9)) return { ok: false, message: 'Skew angles must be between −89.9° and 89.9°.' };
+		const origin = applyMatrix(rotateMatrix(-frame.angle), options.origin ?? this.frameCenter(frame));
+		return this.transform(this.inFrame(frame.angle, vectorSkewMatrix(ax, ay, origin)), { ids: options.ids, label: 'Skew' });
+	}
+
+	/** A selection box handle dragged in Free Distort mode. */
+	private moveDistort(drag: Extract<Drag, { kind: 'scale' }>, p: Vec2, input: VectorPointerInput) {
+		const angle = drag.frame.angle;
+		const unrotate = (v: Vec2) => (angle ? applyMatrix(rotateMatrix(-angle), v) : v);
+		const q = unrotate(p);
+		const q0 = unrotate(drag.start);
+		const d = { x: q.x - q0.x, y: q.y - q0.y };
+		const ids = new Set(this.selectedRoots());
+		const from = this.frameCorners(drag.frame);
+		const corner = drag.handle.length === 2;
+		this.setGuides(null);
+		if (!corner && input.mod) {
+			const m = this.inFrame(angle, vectorShearForSide(drag.frame, drag.handle, d, !!input.alt));
+			drag.op = 'Skew';
+			this.doc = this.transformed(drag.base, ids, m);
+			this.interaction = { type: 'distort', mode: 'skew', corners: from.map((c) => applyMatrix(m, c)) };
+			this.notify(true);
+			return;
+		}
+		const mode: VectorDistortMode = corner && input.mod && input.alt && input.shift ? 'perspective' : 'distort';
+		const rot = rotateMatrix(angle);
+		const quad = vectorDistortQuad(drag.frame, drag.handle, d, mode).map((c) => (angle ? applyMatrix(rot, c) : c));
+		const h = vectorHomography(from, quad);
+		// A quad that folds over keeps the last good shape.
+		if (!h || !vectorHomographyKeepsQuad(h, from)) return;
+		drag.op = mode === 'perspective' ? 'Perspective' : 'Distort';
+		this.doc = this.distorted(drag.base, ids, (pt) => applyVectorHomography(h, pt) ?? pt);
+		this.interaction = { type: 'distort', mode, corners: quad };
+		this.notify(true);
+	}
+
+	// -------------------------------------------------------------------------
+	// Envelopes
+	// -------------------------------------------------------------------------
+
+	/** Selected (or given) roots that can carry an envelope. */
+	private envelopeTargets(ids?: readonly string[]): VectorNode[] {
+		return this.effectTargets(ids).filter((n) => !n.locked);
+	}
+
+	/** Envelope parameters for `node` after `patch`: a preset switched to a mesh becomes the mesh it stood for. */
+	private envelopeParams(node: VectorNode, current: Extract<VectorEffect, { type: 'envelope' }> | null, patch: Record<string, unknown>): Record<string, unknown> {
+		if (patch.style !== 'mesh' || patch.mesh !== undefined || !current || current.params.style === 'mesh') return patch;
+		const frame = vectorEnvelopeFrame(node, current.id);
+		if (!frame) return patch;
+		const rows = typeof patch.rows === 'number' ? patch.rows : current.params.rows;
+		const columns = typeof patch.columns === 'number' ? patch.columns : current.params.columns;
+		return { ...patch, mesh: resizeVectorMesh(frame.mesh, columns, rows) };
+	}
+
+	/**
+	 * Gives the selected (or given) nodes an envelope distortion, or changes the one they have: a
+	 * warp preset (`style` with `bend`, `horizontal` and `vertical` in percent and `orientation`) or
+	 * a mesh (`style: 'mesh'` with `rows` and `columns`, and optionally its `mesh` points). The
+	 * envelope stays live (an `envelope` effect: edit it with the Envelope tool, Expand Appearance
+	 * bakes it). One undo step (with `merge`, consecutive changes fold into one, as a slider drag
+	 * should). Returns the envelope of each node.
+	 */
+	envelope(params: Partial<VectorEnvelopeParams> = {}, options: { ids?: readonly string[]; merge?: boolean } = {}): { nodeId: string; effectId: string }[] {
+		const targets = this.envelopeTargets(options.ids);
+		if (!targets.length) return [];
+		const out: { nodeId: string; effectId: string }[] = [];
+		const next = new Map<string, VectorNode>();
+		const raw = params as Record<string, unknown>;
+		for (const node of targets) {
+			const list = node.effects ?? [];
+			const current = (list.find((e) => e.type === 'envelope') as Extract<VectorEffect, { type: 'envelope' }> | undefined) ?? null;
+			if (current) {
+				const p = normalizeVectorEffectParams('envelope', this.envelopeParams(node, current, raw), current.params)!;
+				const { enabled: _e, ...rest } = current;
+				next.set(node.id, { ...node, effects: list.map((e) => (e === current ? { ...rest, params: p } : e)) } as VectorNode);
+				out.push({ nodeId: node.id, effectId: current.id });
+			} else {
+				let k = list.length + 1;
+				while (list.some((e) => e.id === `fx${k}`)) k++;
+				const effect = createVectorEffect('envelope', `fx${k}`, raw)!;
+				next.set(node.id, { ...node, effects: [...list, effect] } as VectorNode);
+				out.push({ nodeId: node.id, effectId: effect.id });
+			}
+		}
+		const made = out.some((o) => !targets.find((n) => n.id === o.nodeId)?.effects?.some((e) => e.id === o.effectId));
+		const merge = options.merge ? `envelope:${out.map((o) => o.nodeId).join(',')}` : undefined;
+		this.change(made ? (params.style === 'mesh' ? 'Make Envelope with Mesh' : 'Make Envelope with Warp') : 'Edit Envelope', () => this.setDoc(mapTree(this.doc.nodes, (n) => next.get(n.id) ?? n)), merge);
+		return out;
+	}
+
+	/**
+	 * Make with Top Object: the topmost selected object's outline (a closed path) becomes the envelope
+	 * of the other selected objects (grouped when there are several; they must share a parent), as a
+	 * mesh of `columns × rows` patches whose border follows the outline. The top object is used up.
+	 * One undo step; returns the id of the enveloped node.
+	 */
+	makeEnvelopeWithTopObject(options: { ids?: readonly string[]; rows?: number; columns?: number } = {}): VectorActionResult & { nodeId?: string } {
+		const ids = options.ids ?? this.selectedRoots();
+		if (ids.length < 2) return { ok: false, message: 'Select the objects and, on top of them, the shape to use as the envelope.' };
+		const order = new Map<string, number>();
+		walkVectorNodes(this.doc.nodes, (n) => order.set(n.id, order.size));
+		const sorted = ids.filter((id) => order.has(id)).sort((a, b) => order.get(a)! - order.get(b)!);
+		const topId = sorted[sorted.length - 1];
+		const top = this.getNode(topId);
+		const outline = top?.type === 'path' ? top.subpaths.find((sp) => sp.closed && sp.anchors.length > 1) : undefined;
+		if (!top || !outline) return { ok: false, message: 'The top object must be a path with a closed outline.' };
+		const contents = sorted.slice(0, -1).map((id) => this.getNode(id)!);
+		if (contents.some((n) => n.locked)) return { ok: false, message: 'Locked objects cannot be enveloped.' };
+		const parents = contents.map((n) => locateVectorNode(this.doc.nodes, n.id)?.parent?.id ?? null);
+		if (parents.some((p) => p !== parents[0])) return { ok: false, message: 'The objects to envelope must be in the same group.' };
+		// The node that gets the envelope: the one object, or a new group of them in place of the topmost.
+		const target: VectorNode =
+			contents.length === 1 ? contents[0] : { id: this.newId(), type: 'group', name: 'Envelope', children: contents.map((n) => n) };
+		const parentToDoc = parents[0] ? this.worldOf(parents[0]) : IDENTITY_MATRIX;
+		const targetToDoc = multiplyMatrices(nodeMatrix(target), parentToDoc);
+		const toLocal = multiplyMatrices(this.worldOf(topId), invertMatrix(targetToDoc));
+		const local = {
+			closed: true,
+			anchors: outline.anchors.map((a) => ({
+				...applyMatrix(toLocal, a),
+				...(a.in ? { in: applyMatrix(toLocal, a.in) } : {}),
+				...(a.out ? { out: applyMatrix(toLocal, a.out) } : {})
+			}))
+		};
+		const mesh = vectorMeshFromOutline(local, options.columns ?? 4, options.rows ?? 4);
+		if (!mesh) return { ok: false, message: 'The top object’s outline is too small to use as an envelope.' };
+		const list = target.effects ?? [];
+		let k = list.length + 1;
+		while (list.some((e) => e.id === `fx${k}`)) k++;
+		const effect = createVectorEffect('envelope', `fx${k}`, { style: 'mesh', mesh })!;
+		const enveloped = { ...target, effects: [...list, effect] } as VectorNode;
+		this.change('Make Envelope with Top Object', () => {
+			let nodes = spliceTree(this.doc.nodes, topId, []);
+			if (contents.length === 1) nodes = spliceTree(nodes, target.id, [enveloped]);
+			else {
+				const last = contents[contents.length - 1].id;
+				for (const n of contents.slice(0, -1)) nodes = spliceTree(nodes, n.id, []);
+				nodes = spliceTree(nodes, last, [enveloped]);
+			}
+			this.setDoc(nodes);
+			this.selection = [target.id];
+			this.anchors = [];
+			this.editingId = null;
+		});
+		return { ok: true, nodeId: target.id };
+	}
+
+	/**
+	 * Release: the selected (or given) nodes lose their envelope, and its shape (the mesh's border)
+	 * comes back as a path above each of them. One undo step; returns the new paths' ids.
+	 */
+	releaseEnvelope(options: { ids?: readonly string[] } = {}): string[] {
+		const targets = this.envelopeTargets(options.ids).filter((n) => n.effects?.some((e) => e.type === 'envelope'));
+		if (!targets.length) return [];
+		const created: string[] = [];
+		const replace = new Map<string, VectorNode[]>();
+		for (const node of targets) {
+			const effect = node.effects!.find((e) => e.type === 'envelope')!;
+			const frame = vectorEnvelopeFrame(node, effect.id);
+			const rest = node.effects!.filter((e) => e !== effect);
+			const { effects: _e, ...plain } = node;
+			const kept = (rest.length ? { ...plain, effects: rest } : plain) as VectorNode;
+			if (!frame) {
+				replace.set(node.id, [kept]);
+				continue;
+			}
+			const id = this.newId();
+			created.push(id);
+			const shape: VectorPathNode = {
+				id,
+				type: 'path',
+				name: 'Envelope',
+				...(node.transform ? { transform: node.transform } : {}),
+				subpaths: [vectorMeshOutline(frame.mesh)],
+				fill: null,
+				stroke: '#808080',
+				strokeWidth: 1
+			};
+			replace.set(node.id, [kept, shape]);
+		}
+		this.change('Release Envelope', () => {
+			let nodes = this.doc.nodes;
+			for (const [id, list] of replace) nodes = spliceTree(nodes, id, list);
+			this.setDoc(nodes);
+			this.selection = [...targets.map((n) => n.id), ...created];
+			this.anchors = [];
+		});
+		return created;
+	}
+
+	/** The selected node the Envelope tool edits, with its mesh (node space) and node → document matrix. */
+	private envelopeTarget() {
+		const target = getVectorEnvelopeTarget(this.doc, this.selection);
+		return target && !target.node.locked ? target : null;
+	}
+
+	/** The envelope mesh point under `screen` (handles first), or a spot inside the mesh. */
+	private hitEnvelope(screen: Vec2, p: Vec2): { target: NonNullable<ReturnType<VectorEditorController['envelopeTarget']>>; index: number | null; s: number; t: number } | null {
+		const target = this.envelopeTarget();
+		if (!target) return null;
+		const { mesh } = target.frame;
+		const pts = vectorMeshEditPoints(mesh);
+		let best: number | null = null;
+		let bestD = Infinity;
+		for (const index of [...pts.handles.map((h) => h.index), ...pts.anchors]) {
+			const s = this.documentToScreen(applyMatrix(target.world, mesh.points[index]));
+			const d = Math.hypot(s.x - screen.x, s.y - screen.y);
+			// Handles come first, so an anchor wins only when it is clearly nearer.
+			if (d <= this.hitRadius && d < bestD - 0.5) {
+				best = index;
+				bestD = d;
+			}
+		}
+		if (best !== null) return { target, index: best, s: 0, t: 0 };
+		const local = applyMatrix(invertMatrix(target.world), p);
+		const at = vectorMeshParamAt(mesh, local);
+		if (at.distance > this.tolerance()) return null;
+		return { target, index: null, s: at.s, t: at.t };
+	}
+
+	private downEnvelope(screen: Vec2, p: Vec2, input: VectorPointerInput) {
+		const hit = this.hitEnvelope(screen, p);
+		if (hit) {
+			const { node, frame } = hit.target;
+			this.drag = {
+				kind: 'envelope',
+				nodeId: node.id,
+				effectId: frame.effectId,
+				base: frame.mesh,
+				baseDoc: this.doc,
+				before: this.snapshot(),
+				index: hit.index,
+				s: hit.s,
+				t: hit.t,
+				start: this.toLocal(node.id, p),
+				moved: false
+			};
+			this.interaction = { type: 'envelope', nodeId: node.id, index: hit.index };
+			this.notify();
+			return;
+		}
+		// Elsewhere: pick the object to edit.
+		const node = hitTestVectorNodes(this.doc.nodes, p, this.tolerance(), { entered: this.enteredGroups() });
+		if (node) this.selection = input.shift ? (this.selection.includes(node.id) ? this.selection.filter((id) => id !== node.id) : [...this.selection, node.id]) : [node.id];
+		else if (!input.shift) this.selection = [];
+		this.anchors = [];
+		this.notify();
+	}
+
+	private moveEnvelope(drag: Extract<Drag, { kind: 'envelope' }>, p: Vec2) {
+		const local = this.toLocal(drag.nodeId, p, drag.baseDoc);
+		const d = { x: local.x - drag.start.x, y: local.y - drag.start.y };
+		if (!drag.moved && Math.hypot(d.x, d.y) * this.viewport.zoom < 1) return;
+		drag.moved = true;
+		const mesh = drag.index !== null ? dragVectorMeshPoint(drag.base, drag.index, d) : pullVectorMesh(drag.base, drag.s, drag.t, d);
+		const nodes = mapTree(drag.baseDoc.nodes, (n) => {
+			if (n.id !== drag.nodeId) return n;
+			const effects = (n.effects ?? []).map((e) =>
+				e.id === drag.effectId && e.type === 'envelope'
+					? { ...e, params: { ...e.params, style: 'mesh' as const, mesh, columns: mesh.us.length - 1, rows: mesh.vs.length - 1 } }
+					: e
+			);
+			return { ...n, effects } as VectorNode;
+		});
+		this.doc = { ...drag.baseDoc, nodes };
+		this.notify(true);
 	}
 
 	/** Applies a matrix to the selected (or given) nodes as one undo step. */
@@ -4099,6 +4504,12 @@ export class VectorEditorController {
 				const path = this.hitPath(p);
 				return path ? { nodeId: path.id } : null;
 			}
+			case 'envelope': {
+				const hit = this.hitEnvelope(screen, p);
+				if (hit) return { nodeId: hit.target.node.id, envelope: { nodeId: hit.target.node.id, index: hit.index } };
+				const node = hitTestVectorNodes(this.doc.nodes, p, this.tolerance(), { entered: this.enteredGroups() });
+				return node ? { nodeId: node.id } : null;
+			}
 			default:
 				return null;
 		}
@@ -4337,6 +4748,8 @@ export class VectorEditorController {
 				return this.downBlend(screen, p);
 			case 'gradient':
 				return this.downGradient(screen, p, input);
+			case 'envelope':
+				return this.downEnvelope(screen, p, input);
 			case 'scissors': {
 				const seg = this.nearestOutline(p);
 				if (seg) this.cutPathAt(seg.nodeId, seg.point);
@@ -4645,6 +5058,8 @@ export class VectorEditorController {
 				return;
 			case 'gradient':
 				return this.moveGradient(drag, screen, p, input);
+			case 'envelope':
+				return this.moveEnvelope(drag, p);
 			case 'move': {
 				let dx = p.x - drag.start.x;
 				let dy = p.y - drag.start.y;
@@ -4666,6 +5081,7 @@ export class VectorEditorController {
 				return;
 			}
 			case 'scale': {
+				if (this.freeDistort && drag.handle !== 'rotate') return this.moveDistort(drag, p, input);
 				// Scale in the box's own (possibly rotated) frame.
 				const angle = drag.frame.angle;
 				const q = angle ? applyMatrix(rotateMatrix(-angle), p) : p;
@@ -4983,7 +5399,13 @@ export class VectorEditorController {
 				}
 				return this.commit(drag.duplicated ? 'Duplicate' : 'Move', drag.before);
 			case 'scale':
-				return this.commit('Scale', drag.before);
+				return this.commit(drag.op ?? 'Scale', drag.before);
+			case 'envelope':
+				if (!drag.moved) {
+					this.notify();
+					return;
+				}
+				return this.commit('Edit Envelope', drag.before);
 			case 'rotate':
 				return this.commit('Rotate', drag.before);
 			case 'anchors':
