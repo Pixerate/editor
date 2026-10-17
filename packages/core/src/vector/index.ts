@@ -20,3 +20,7 @@ export * from './pathEffects.js';
 export * from './gradient.js';
 export * from './gradientStroke.js';
 export * from './gradientTool.js';
+export * from './perspective.js';
+export * from './pathMap.js';
+export * from './warp.js';
+export * from './distort.js';

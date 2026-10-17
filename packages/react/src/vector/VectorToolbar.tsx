@@ -32,6 +32,7 @@ import {
 } from '@pixerate/editor/vector';
 import { useVectorEditorState } from './useVectorEditor';
 import { VectorEffectsPanel } from './VectorEffectsPanel';
+import { VectorEnvelopePanel } from './VectorEnvelopePanel';
 import { VectorGradientEditor } from './VectorGradientEditor';
 
 const VECTOR_SNAP_TITLE = 'Snap to objects';
@@ -61,6 +62,8 @@ export interface VectorToolbarProps {
    * spine, Replace Spine, Expand and Release (default `true`).
    */
   showBlend?: boolean;
+  /** The Free Distort toggle of the selection box (default `true`). */
+  showDistort?: boolean;
   className?: string;
 }
 
@@ -73,6 +76,7 @@ export function VectorToolbar({
   showSnap = true,
   showPathEdit = true,
   showBlend = true,
+  showDistort = true,
   className,
 }: VectorToolbarProps) {
   const state = useVectorEditorState(controller);
@@ -202,6 +206,21 @@ export function VectorToolbar({
               Gaps
             </button>
           )}
+        </div>
+      )}
+      {showDistort && (
+        <div className="ml-1 flex items-center gap-1" role="group" aria-label="Distort">
+          <button
+            type="button"
+            data-vector-free-distort=""
+            className={buttonClass}
+            aria-pressed={state.freeDistort}
+            title={`Free Distort: drag a corner of the selection box to distort in perspective (Shift+Alt+${modKeyLabel()}: symmetric perspective; ${modKeyLabel()}-drag a side to skew)`}
+            aria-label="Free Distort"
+            onClick={() => controller.setFreeDistort(!state.freeDistort)}
+          >
+            Distort
+          </button>
         </div>
       )}
       {showBlend && <VectorBlendControls controller={controller} />}
@@ -337,7 +356,7 @@ const selectClass = 'h-7 min-w-0 flex-1 rounded border border-border bg-backgrou
 const numberClass = 'h-7 w-16 rounded border border-border bg-background px-1.5 text-xs';
 
 /**
- * Fill, stroke and their gradients (`VectorGradientEditor`), stroke width, alignment and width profile, arrowheads, live corner radius, opacity and path effects (`VectorEffectsPanel`) of the
+ * Fill, stroke and their gradients (`VectorGradientEditor`), stroke width, alignment and width profile, arrowheads, live corner radius, opacity, path effects (`VectorEffectsPanel`) and envelope (`VectorEnvelopePanel`) of the
  * selection (corners of the selected points with the direct tool); with nothing selected it
  * edits the defaults for new shapes.
  */
@@ -550,6 +569,7 @@ export function VectorStylePanel({ controller, className }: VectorStylePanelProp
         </label>
       )}
       {style && <VectorEffectsPanel controller={controller} />}
+      {style && <VectorEnvelopePanel controller={controller} />}
     </div>
   );
 }

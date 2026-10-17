@@ -343,7 +343,8 @@ export interface VectorHandleRef extends VectorAnchorRef {
  * `shapeBuilder` merges (Alt: deletes) the faces the selected shapes make, and `paintBucket`
  * fills the region the visible outlines enclose around a click with a new shape. `blend`
  * blends the shape clicked first into the one clicked next (clicking an anchor of a closed path
- * starts the blend there).
+ * starts the blend there). `envelope` edits the mesh of the selection's envelope: drag its
+ * anchors and handles, or inside a patch to pull the surface.
  */
 export type VectorTool =
 	| 'select'
@@ -362,7 +363,8 @@ export type VectorTool =
 	| 'shapeBuilder'
 	| 'paintBucket'
 	| 'blend'
-	| 'gradient';
+	| 'gradient'
+	| 'envelope';
 
 export const VECTOR_TOOLS: readonly VectorTool[] = [
 	'select',
@@ -381,7 +383,8 @@ export const VECTOR_TOOLS: readonly VectorTool[] = [
 	'shapeBuilder',
 	'paintBucket',
 	'blend',
-	'gradient'
+	'gradient',
+	'envelope'
 ];
 
 /** Keyboard modifiers held during a pointer event. */
@@ -437,10 +440,41 @@ export type VectorAverageAxis = 'horizontal' | 'vertical' | 'both';
 /**
  * Live path effects (After Effects' path operators): `trim` (Trim Paths), `roundCorners`,
  * `puckerBloat`, `twist`, `zigzag`, `wiggle` (Wiggle Paths), `offset` (Offset Paths), `merge`
- * (Merge Paths) and `repeater`.
+ * (Merge Paths), `repeater` and `envelope` (an envelope distortion: a warp preset or a mesh).
  */
-export type VectorEffectType = 'trim' | 'roundCorners' | 'puckerBloat' | 'twist' | 'zigzag' | 'wiggle' | 'offset' | 'merge' | 'repeater';
-export const VECTOR_EFFECT_TYPES: readonly VectorEffectType[] = ['trim', 'roundCorners', 'puckerBloat', 'twist', 'zigzag', 'wiggle', 'offset', 'merge', 'repeater'];
+export type VectorEffectType = 'trim' | 'roundCorners' | 'puckerBloat' | 'twist' | 'zigzag' | 'wiggle' | 'offset' | 'merge' | 'repeater' | 'envelope';
+export const VECTOR_EFFECT_TYPES: readonly VectorEffectType[] = ['trim', 'roundCorners', 'puckerBloat', 'twist', 'zigzag', 'wiggle', 'offset', 'merge', 'repeater', 'envelope'];
+
+/** Warp presets (Photoshop's fifteen, in menu order). */
+export type VectorWarpStyle =
+	| 'arc'
+	| 'arcLower'
+	| 'arcUpper'
+	| 'arch'
+	| 'bulge'
+	| 'shellLower'
+	| 'shellUpper'
+	| 'flag'
+	| 'wave'
+	| 'fish'
+	| 'rise'
+	| 'fisheye'
+	| 'inflate'
+	| 'squeeze'
+	| 'twist';
+
+/**
+ * A grid of bicubic Bézier patches mapping a source box onto the plane. `us` / `vs` are the patch
+ * boundaries as fractions of the box (increasing, first 0, last 1); `points` is the
+ * `(3·(us.length − 1) + 1) × (3·(vs.length − 1) + 1)` control grid, row by row, in the node's own
+ * space. Neighbouring patches share their edge row: anchors sit where both indices are multiples
+ * of 3, handles where one is.
+ */
+export interface VectorWarpMesh {
+	us: number[];
+	vs: number[];
+	points: Vec2[];
+}
 
 /** Merge Paths modes: a compound path (no boolean), union, the first minus the others, intersection or exclusion. */
 export type VectorMergeMode = 'merge' | 'add' | 'subtract' | 'intersect' | 'exclude';
@@ -520,6 +554,23 @@ export interface VectorEffectParamsMap {
 		endOpacity: number;
 		/** `below`: each copy draws under the one before it; `above`: over it. */
 		composite: 'below' | 'above';
+	};
+	/**
+	 * Envelope distortion: the paths above it are mapped from their combined bounds through a warp
+	 * preset (bend and horizontal / vertical distortion in percent) or, with style `mesh`, through
+	 * `mesh` (null: the flat mesh of `columns × rows` patches over the bounds). The bounds are
+	 * taken afresh each time, so editing the contents keeps the envelope.
+	 */
+	envelope: {
+		style: VectorWarpStyle | 'mesh';
+		bend: number;
+		horizontal: number;
+		vertical: number;
+		orientation: 'horizontal' | 'vertical';
+		/** Patches of the mesh (a preset turns into a mesh of this size when it is edited). */
+		rows: number;
+		columns: number;
+		mesh: VectorWarpMesh | null;
 	};
 }
 

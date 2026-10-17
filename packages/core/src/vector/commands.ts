@@ -7,6 +7,8 @@ import { VECTOR_WIDTH_PRESET_IDS, type VectorTaperOptions, type VectorWaveOption
 import { resolveVectorBlendOptions, vectorBlendKeys } from './blendGroup.js';
 import { VECTOR_BLEND_SPACINGS, VECTOR_GRADIENT_INTERPOLATIONS, VECTOR_GRADIENT_SPREADS, VECTOR_GRADIENT_TYPES, VECTOR_STROKE_GRADIENT_MODES, type VectorBlendOptions } from './types.js';
 import { sanitizeVectorGradient, type VectorGradientPatch } from './gradient.js';
+import { isValidVectorMesh, VECTOR_WARP_STYLES } from './warp.js';
+import type { VectorEnvelopeParams } from './appearance.js';
 
 export interface VectorCommandOptions {
 	/** Id prefix (default `vector.`); use one per editor when several are registered. */
@@ -49,7 +51,7 @@ export interface VectorNodeListing {
 }
 
 const EFFECT_PARAMS_DESCRIPTION =
-	'Effect parameters (missing ones keep their value or default). trim: start, end (percent), offset (degrees), mode simultaneous|individual. roundCorners: radius. puckerBloat: amount (−100…100). twist: angle, center {x, y} (offset from the middle). zigzag: size, ridges, smooth. wiggle: size, detail, smooth, speed, correlation, phase, seed, time (seconds). offset: amount, join miter|round|bevel, miterLimit, copies, copyOffset. merge: mode merge|add|subtract|intersect|exclude. repeater: copies (fractions fade the last), offset, position {x, y}, anchor {x, y} (offset from the middle), rotation, scale {x, y} (percent), startOpacity, endOpacity (percent), composite below|above.';
+	'Effect parameters (missing ones keep their value or default). trim: start, end (percent), offset (degrees), mode simultaneous|individual. roundCorners: radius. puckerBloat: amount (−100…100). twist: angle, center {x, y} (offset from the middle). zigzag: size, ridges, smooth. wiggle: size, detail, smooth, speed, correlation, phase, seed, time (seconds). offset: amount, join miter|round|bevel, miterLimit, copies, copyOffset. merge: mode merge|add|subtract|intersect|exclude. repeater: copies (fractions fade the last), offset, position {x, y}, anchor {x, y} (offset from the middle), rotation, scale {x, y} (percent), startOpacity, endOpacity (percent), composite below|above. envelope: style (a warp preset: arc|arcLower|arcUpper|arch|bulge|shellLower|shellUpper|flag|wave|fish|rise|fisheye|inflate|squeeze|twist, or mesh), bend, horizontal, vertical (percent, −100…100), orientation horizontal|vertical, rows, columns, mesh { us, vs, points } (node space; prefer vector.envelope).';
 
 const fail = (message: string): never => {
 	throw new Error(message);
@@ -441,6 +443,131 @@ export function createVectorCommands(controller: VectorEditorController, options
 				const created = controller.outlineStroke({ ids: params?.ids ? ids(params) : undefined });
 				if (!created.length) fail('No selected path has a stroke.');
 				return { ids: created };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}distort`,
+			label: 'Free Distort…',
+			keywords: ['distort', 'perspective', 'free distort', 'corners', 'projective', 'keystone'],
+			description:
+				'Free Distort: moves the four corners of the selection box (clockwise from the top left, in the box’s own rotation) to `corners` in document units, distorting the nodes in perspective (straight lines stay straight; curves are followed within `tolerance`). The corners must make a convex quadrilateral. One undo step.',
+			params: {
+				type: 'object',
+				properties: {
+					ids: IDS,
+					corners: { type: 'array', items: POINT, minItems: 4, maxItems: 4, description: 'New top-left, top-right, bottom-right and bottom-left corners.' },
+					tolerance: { type: 'number', exclusiveMinimum: 0, description: 'How closely curves follow the distortion (document units, default 0.05).' }
+				},
+				required: ['corners']
+			},
+			enabled: enabledFor,
+			undoable: true,
+			run: (_ctx: unknown, params: { ids?: string[]; corners: { x: number; y: number }[]; tolerance?: number }) => {
+				check(controller.distort(params.corners, { ids: ids(params), tolerance: params.tolerance }));
+				const frame = controller.getState().selectionFrame;
+				return { ok: true, bounds: frame ? { x: frame.x, y: frame.y, width: frame.width, height: frame.height } : null };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}skew`,
+			label: 'Skew…',
+			keywords: ['skew', 'shear', 'slant', 'oblique'],
+			description:
+				'Skews nodes along the selection box’s axes: `ax` degrees horizontally (vertical lines lean right for positive angles) and `ay` degrees vertically, about the box centre or `origin`. One undo step.',
+			params: {
+				type: 'object',
+				properties: {
+					ids: IDS,
+					ax: { type: 'number', minimum: -89.9, maximum: 89.9 },
+					ay: { type: 'number', minimum: -89.9, maximum: 89.9 },
+					origin: POINT
+				}
+			},
+			enabled: enabledFor,
+			undoable: true,
+			run: (_ctx: unknown, params: { ids?: string[]; ax?: number; ay?: number; origin?: { x: number; y: number } }) => {
+				check(controller.skew(params.ax ?? 0, params.ay ?? 0, { ids: ids(params), origin: params.origin }));
+				return { ok: true };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}envelope`,
+			label: 'Envelope Distort…',
+			keywords: ['envelope', 'warp', 'mesh', 'arc', 'arch', 'bulge', 'flag', 'wave', 'fish', 'rise', 'fisheye', 'inflate', 'squeeze', 'twist', 'shell', 'bend', 'distort'],
+			description:
+				'Envelope distortion that stays editable (a live `envelope` effect). Give `preset` (with `bend`, `horizontal`, `vertical` in percent, −100…100, and `orientation`) to warp, or `mesh` ({ rows, columns } and optionally `points`, the control grid row by row in the node’s own space) for an editable mesh; a node that already has an envelope is changed. `topObject: true` uses the topmost selected closed path as the envelope of the others; `release: true` removes the envelope and gives back its shape as a path; `expand: true` bakes it (Expand Appearance). One undo step.',
+			params: {
+				type: 'object',
+				properties: {
+					ids: IDS,
+					preset: { type: 'string', enum: VECTOR_WARP_STYLES },
+					bend: { type: 'number', minimum: -100, maximum: 100 },
+					horizontal: { type: 'number', minimum: -100, maximum: 100 },
+					vertical: { type: 'number', minimum: -100, maximum: 100 },
+					orientation: { type: 'string', enum: ['horizontal', 'vertical'] },
+					mesh: {
+						type: 'object',
+						properties: {
+							rows: { type: 'integer', minimum: 1, maximum: 16 },
+							columns: { type: 'integer', minimum: 1, maximum: 16 },
+							points: { type: 'array', items: POINT, description: '(3·columns + 1) × (3·rows + 1) control points, row by row (node space).' }
+						}
+					},
+					topObject: { type: 'boolean' },
+					release: { type: 'boolean' },
+					expand: { type: 'boolean' }
+				}
+			},
+			enabled: enabledFor,
+			undoable: true,
+			run: (
+				_ctx: unknown,
+				params: {
+					ids?: string[];
+					preset?: string;
+					bend?: number;
+					horizontal?: number;
+					vertical?: number;
+					orientation?: 'horizontal' | 'vertical';
+					mesh?: { rows?: number; columns?: number; points?: { x: number; y: number }[] };
+					topObject?: boolean;
+					release?: boolean;
+					expand?: boolean;
+				}
+			) => {
+				const target = ids(params);
+				if (params.release) return { released: target, shapes: controller.releaseEnvelope({ ids: target }) };
+				if (params.expand) return { expanded: controller.expandAppearance({ ids: target }) };
+				if (params.topObject) {
+					const r = controller.makeEnvelopeWithTopObject({ ids: target, rows: params.mesh?.rows, columns: params.mesh?.columns });
+					check(r);
+					return { nodeId: r.nodeId };
+				}
+				if (params.preset !== undefined && !(VECTOR_WARP_STYLES as readonly string[]).includes(params.preset)) fail(`Unknown warp preset "${params.preset}".`);
+				const patch: Partial<VectorEnvelopeParams> = {};
+				if (params.preset) patch.style = params.preset as VectorEnvelopeParams['style'];
+				for (const k of ['bend', 'horizontal', 'vertical'] as const) if (params[k] !== undefined) patch[k] = params[k];
+				if (params.orientation) patch.orientation = params.orientation;
+				if (params.mesh) {
+					if (params.preset) fail('Give either `preset` or `mesh`, not both.');
+					patch.style = 'mesh';
+					const columns = params.mesh.columns ?? 2;
+					const rows = params.mesh.rows ?? 2;
+					patch.columns = columns;
+					patch.rows = rows;
+					if (params.mesh.points) {
+						const even = (n: number) => Array.from({ length: n + 1 }, (_, i) => i / n);
+						const mesh = { us: even(columns), vs: even(rows), points: params.mesh.points.map((p) => ({ x: p.x, y: p.y })) };
+						if (!isValidVectorMesh(mesh)) fail(`A ${columns} × ${rows} mesh needs ${(3 * columns + 1) * (3 * rows + 1)} finite points.`);
+						patch.mesh = mesh;
+					}
+				}
+				const made = controller.envelope(patch, { ids: target });
+				if (!made.length) fail('Nothing to envelope.');
+				return { envelopes: made };
 			}
 		},
 		{

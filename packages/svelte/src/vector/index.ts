@@ -8,6 +8,7 @@ export { default as VectorWidthPointEditor } from "./VectorWidthPointEditor.svel
 export { default as VectorToolbar } from "./VectorToolbar.svelte";
 export { default as VectorStylePanel } from "./VectorStylePanel.svelte";
 export { default as VectorEffectsPanel } from "./VectorEffectsPanel.svelte";
+export { default as VectorEnvelopePanel } from "./VectorEnvelopePanel.svelte";
 export { default as VectorSceneNodes } from "./VectorSceneNodes.svelte";
 export { default as VectorGradientDefs } from "./VectorGradientDefs.svelte";
 export { default as VectorGradientAnnotator } from "./VectorGradientAnnotator.svelte";

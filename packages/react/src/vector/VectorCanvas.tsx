@@ -334,7 +334,7 @@ export function VectorCanvas({
         ))}
         {overlay.penPreview && <path d={overlay.penPreview} stroke={accentColor} strokeDasharray="4 3" />}
         {box && (
-          <g data-vector-selection="" transform={box.transform || undefined}>
+          <g data-vector-selection="" data-free-distort={box.freeDistort || undefined} transform={box.transform || undefined}>
             <rect x={box.x} y={box.y} width={box.width} height={box.height} stroke={accentColor} />
             <line x1={box.x + box.width / 2} y1={box.y} x2={box.x + box.width / 2} y2={box.y - 24} stroke={accentColor} />
             {box.handles.map((h) =>
@@ -344,6 +344,29 @@ export function VectorCanvas({
                 <rect key={h.handle} data-handle={h.handle} x={h.x - hs / 2} y={h.y - hs / 2} width={hs} height={hs} fill={THEME.handleFill} stroke={accentColor} />
               ),
             )}
+          </g>
+        )}
+        {overlay.distort && (
+          <g data-vector-distort={overlay.distort.mode}>
+            <path d={overlay.distort.d} stroke={accentColor} />
+            {overlay.distort.corners.map((c, i) => (
+              <rect key={i} x={c.x - hs / 2} y={c.y - hs / 2} width={hs} height={hs} fill={THEME.handleFill} stroke={accentColor} />
+            ))}
+          </g>
+        )}
+        {overlay.envelope && (
+          <g data-vector-envelope-mesh={overlay.envelope.nodeId}>
+            <path data-vector-envelope-grid="" d={overlay.envelope.grid} stroke={accentColor} strokeOpacity={0.8} />
+            {overlay.envelope.handles.map((h) => (
+              <g key={h.index} data-vector-envelope-handle={h.index}>
+                <line x1={h.anchorX} y1={h.anchorY} x2={h.x} y2={h.y} stroke={accentColor} strokeOpacity={0.6} />
+                <circle cx={h.x} cy={h.y} r={THEME.handleRadius + (h.hovered || h.active ? 1 : 0)} fill={h.active ? accentColor : THEME.handleFill} stroke={accentColor} />
+              </g>
+            ))}
+            {overlay.envelope.anchors.map((a) => {
+              const size = as + (a.hovered || a.active ? 2 : 0);
+              return <rect key={a.index} data-vector-envelope-anchor={a.index} x={a.x - size / 2} y={a.y - size / 2} width={size} height={size} fill={a.active ? accentColor : THEME.handleFill} stroke={accentColor} />;
+            })}
           </g>
         )}
         {overlay.handles.map((h) => (

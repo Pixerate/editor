@@ -18,6 +18,7 @@
   import { vectorStateOf } from './subscribe.svelte.js';
   import { vectorButtonClass } from './styles.js';
   import VectorEffectsPanel from './VectorEffectsPanel.svelte';
+  import VectorEnvelopePanel from './VectorEnvelopePanel.svelte';
   import VectorGradientEditor from './VectorGradientEditor.svelte';
 
   interface Props {
@@ -221,5 +222,6 @@
       />
     </label>
     <VectorEffectsPanel {controller} />
+    <VectorEnvelopePanel {controller} />
   {/if}
 </div>

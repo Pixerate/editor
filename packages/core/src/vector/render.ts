@@ -13,6 +13,7 @@ export type { SvgGradientDef };
 import {
 	getAnchorWorld,
 	getVectorCornerWidgets,
+	getVectorEnvelopeTarget,
 	getVectorSelectionBoxGeometry,
 	getVectorWidthHandles,
 	getVisibleAnchors,
@@ -25,6 +26,7 @@ import {
 import { sanitizeWidthProfile, widthProfilePresetId, type VectorWidthPreset } from './width.js';
 import {
 	findVectorNode,
+	walkVectorNodes,
 	locateVectorNode,
 	subpathsToBezier,
 	vectorWorldMatrix,
@@ -48,8 +50,10 @@ import {
 	vectorEnteredGroups,
 	VECTOR_EFFECT_LABELS,
 	VECTOR_EFFECT_PARAM_SPECS,
-	type VectorEffectParamSpec
+	type VectorEffectParamSpec,
+	type VectorEnvelopeParams
 } from './appearance.js';
+import { vectorMeshEditPoints, vectorMeshGridCurves, VECTOR_WARP_STYLES, VECTOR_WARP_STYLE_LABELS } from './warp.js';
 import { VECTOR_EFFECT_TYPES, type VectorEffectType } from './types.js';
 import { isVectorBlendGroup, resolveVectorBlendOptions, vectorBlendRailAt, vectorBlendSpine } from './blendGroup.js';
 import type { VectorGuideKind, VectorSnapKind } from './snap.js';
@@ -208,8 +212,25 @@ export interface VectorOverlayRenderData {
 	 * `<g transform={transform}>`. `corners` and each handle's `screen` are true positions.
 	 */
 	selectionBox:
-		| (VectorBounds & { angle: number; transform: string; corners: Vec2[]; handles: VectorSelectionBoxGeometry['handles'] })
+		| (VectorBounds & { angle: number; transform: string; corners: Vec2[]; handles: VectorSelectionBoxGeometry['handles']; freeDistort: boolean })
 		| null;
+	/**
+	 * A Free Distort drag (screen space): the quad the selection box's corners make so far (`d`,
+	 * closed path data) and its corners clockwise from the top left. The box is hidden meanwhile.
+	 */
+	distort: { mode: 'distort' | 'perspective' | 'skew'; d: string; corners: Vec2[] } | null;
+	/**
+	 * The Envelope tool's mesh of the selected envelope (screen space): `grid` is the grid lines as
+	 * path data, `anchors` the points where they cross and `handles` the handles along them, each
+	 * with the anchor it belongs to (`index` is the point's index in the mesh). Draw anchors as
+	 * squares and handles as dots joined to their anchors.
+	 */
+	envelope: {
+		nodeId: string;
+		grid: string;
+		anchors: { index: number; x: number; y: number; hovered: boolean; active: boolean }[];
+		handles: { index: number; x: number; y: number; anchorX: number; anchorY: number; hovered: boolean; active: boolean }[];
+	} | null;
 	anchors: VectorRenderAnchor[];
 	handles: VectorRenderHandle[];
 	/** Marquee rectangle, screen space. */
@@ -392,9 +413,9 @@ export function getVectorOverlayRenderData(state: VectorEditorState): VectorOver
 	if (state.hover?.nodeId && !state.interaction) outline(state.hover.nodeId, false);
 
 	let selectionBox: VectorOverlayRenderData['selectionBox'] = null;
-	if (state.tool === 'select' && state.selectionFrame && state.interaction?.type !== 'marquee') {
+	if (state.tool === 'select' && state.selectionFrame && state.interaction?.type !== 'marquee' && state.interaction?.type !== 'distort') {
 		const g = getVectorSelectionBoxGeometry(state.selectionFrame, state.viewport);
-		selectionBox = { ...g.box, angle: g.angle, transform: g.transform, corners: g.corners, handles: g.handles };
+		selectionBox = { ...g.box, angle: g.angle, transform: g.transform, corners: g.corners, handles: g.handles, freeDistort: state.freeDistort };
 	}
 
 	const selected = (r: VectorAnchorRef) => state.selectedAnchors.some((a) => a.nodeId === r.nodeId && a.subpath === r.subpath && a.index === r.index);
@@ -534,7 +555,85 @@ export function getVectorOverlayRenderData(state: VectorEditorState): VectorOver
 		else if (it?.type === 'gradient' && it.removing) status = 'Release to delete the stop';
 	}
 
-	return { outlines, selectionBox, anchors, handles, marquee, penPreview, artboard, guides, status, toolStroke, pencilString, cutPoint, cornerWidgets, widthPoints, widthSpot, builder, blend, gradient };
+	let distort: VectorOverlayRenderData['distort'] = null;
+	if (it?.type === 'distort') {
+		const corners = it.corners.map(sc);
+		distort = { mode: it.mode, corners, d: corners.map((c, i) => `${i ? 'L' : 'M'}${c.x} ${c.y}`).join('') + 'Z' };
+		status = it.mode === 'skew' ? 'Skew' : it.mode === 'perspective' ? 'Perspective' : 'Distort';
+	}
+
+	const envelope = state.tool === 'envelope' ? envelopeOverlay(state) : null;
+	if (state.tool === 'envelope' && !envelope && !it) status = 'Select an object with an envelope to edit its mesh';
+
+	return { outlines, selectionBox, distort, anchors, handles, marquee, penPreview, artboard, guides, status, toolStroke, pencilString, cutPoint, cornerWidgets, widthPoints, widthSpot, builder, blend, gradient, envelope };
+}
+
+function envelopeOverlay(state: VectorEditorState): VectorOverlayRenderData['envelope'] {
+	const target = getVectorEnvelopeTarget(state.document, state.selection);
+	if (!target) return null;
+	const v = state.viewport;
+	const m = multiplyMatrices(target.world, [v.zoom, 0, 0, v.zoom, v.x, v.y]);
+	const sc = (p: Vec2) => ({ x: fmt(m[0] * p.x + m[2] * p.y + m[4]), y: fmt(m[1] * p.x + m[3] * p.y + m[5]) });
+	const { mesh } = target.frame;
+	const grid = vectorMeshGridCurves(mesh)
+		.map((c) => {
+			const [a, b, cc, d] = c.map(sc);
+			return `M${a.x} ${a.y}C${b.x} ${b.y} ${cc.x} ${cc.y} ${d.x} ${d.y}`;
+		})
+		.join('');
+	const hover = state.hover?.envelope?.nodeId === target.node.id ? state.hover.envelope.index : undefined;
+	const it = state.interaction;
+	const active = it?.type === 'envelope' && it.nodeId === target.node.id ? it.index : undefined;
+	const pts = vectorMeshEditPoints(mesh);
+	return {
+		nodeId: target.node.id,
+		grid,
+		anchors: pts.anchors.map((index) => ({ index, ...sc(mesh.points[index]), hovered: !it && hover === index, active: active === index })),
+		handles: pts.handles.map((h) => {
+			const a = sc(mesh.points[h.anchor]);
+			return { index: h.index, ...sc(mesh.points[h.index]), anchorX: a.x, anchorY: a.y, hovered: !it && hover === h.index, active: active === h.index };
+		})
+	};
+}
+
+/** Warp choices of an envelope: the fifteen presets, then Mesh. */
+export const VECTOR_ENVELOPE_STYLE_OPTIONS: readonly { value: VectorEnvelopeParams['style']; label: string }[] = [
+	...VECTOR_WARP_STYLES.map((value) => ({ value, label: VECTOR_WARP_STYLE_LABELS[value] })),
+	{ value: 'mesh', label: 'Mesh' }
+];
+
+/** What a Distort / Envelope panel shows for the selection. */
+export interface VectorEnvelopePanelData {
+	/** The one selected node, or null when several are selected. */
+	nodeId: string | null;
+	count: number;
+	/** The selected node's envelope (the first one in its stack), if any. */
+	envelope: { effectId: string; enabled: boolean; params: VectorEnvelopeParams } | null;
+	/** Some selected node can take an envelope (Make with Warp / Mesh). */
+	canMake: boolean;
+	/** Make with Top Object: several objects selected and the topmost is a closed path. */
+	canMakeWithTopObject: boolean;
+	/** Some selected node has an envelope (Release, Expand). */
+	canRelease: boolean;
+}
+
+/** The Distort / Envelope panel of the selection, or null when nothing is selected. */
+export function getVectorEnvelopePanel(state: Pick<VectorEditorState, 'document' | 'selection'>): VectorEnvelopePanelData | null {
+	const nodes = state.selection.map((id) => findVectorNode(state.document.nodes, id)).filter((n): n is VectorNode => !!n && !n.blendStep);
+	if (!nodes.length) return null;
+	const one = nodes.length === 1 ? nodes[0] : null;
+	const first = one?.effects?.find((e) => e.type === 'envelope');
+	const order = new Map<string, number>();
+	walkVectorNodes(state.document.nodes, (n) => order.set(n.id, order.size));
+	const top = nodes.length > 1 ? nodes.slice().sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))[nodes.length - 1] : null;
+	return {
+		nodeId: one?.id ?? null,
+		count: nodes.length,
+		envelope: first?.type === 'envelope' ? { effectId: first.id, enabled: first.enabled !== false, params: first.params } : null,
+		canMake: nodes.some((n) => !n.locked),
+		canMakeWithTopObject: top?.type === 'path' && top.subpaths.some((sp) => sp.closed && sp.anchors.length > 1),
+		canRelease: nodes.some((n) => !n.locked && !!n.effects?.some((e) => e.type === 'envelope'))
+	};
 }
 
 function gradientOverlay(state: VectorEditorState): VectorRenderGradientAnnotator | null {
@@ -1009,6 +1108,7 @@ export interface VectorEffectsPanelItem {
 	label: string;
 	enabled: boolean;
 	params: Record<string, unknown>;
+	/** The parameters to edit (none for an envelope: `getVectorEnvelopePanel` and the Envelope panels edit it). */
 	specs: readonly VectorEffectParamSpec[];
 }
 
@@ -1041,7 +1141,8 @@ export function getVectorEffectsPanel(state: Pick<VectorEditorState, 'document' 
 			label: VECTOR_EFFECT_LABELS[e.type] ?? e.type,
 			enabled: e.enabled !== false,
 			params: e.params as unknown as Record<string, unknown>,
-			specs: VECTOR_EFFECT_PARAM_SPECS[e.type] ?? []
+			// The Envelope panel (`getVectorEnvelopePanel`) edits an envelope's warp and mesh.
+			specs: e.type === 'envelope' ? [] : (VECTOR_EFFECT_PARAM_SPECS[e.type] ?? [])
 		})),
 		expandable: nodes.some(hasVectorAppearance)
 	};
