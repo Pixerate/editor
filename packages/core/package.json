@@ -108,6 +108,11 @@
       "types": "./dist/vector/index.d.ts",
       "import": "./dist/vector/index.js",
       "require": "./dist/vector/index.cjs"
+    },
+    "./chart": {
+      "types": "./dist/chart/index.d.ts",
+      "import": "./dist/chart/index.js",
+      "require": "./dist/chart/index.cjs"
     }
   },
   "files": [

@@ -4,7 +4,10 @@ import path from "path";
 
 const dist = path.resolve(__dirname, "../dist");
 
-/** Bare (package) specifiers reachable from an ESM or CJS entry, following relative chunk imports. */
+/**
+ * Bare (package) specifiers reachable from an ESM or CJS entry, following relative chunk imports.
+ * `import` / `export` right after a quote is text (e.g. a command keyword), not a statement.
+ */
 function reachablePackages(entry: string): Set<string> {
   const seen = new Set<string>();
   const packages = new Set<string>();
@@ -13,7 +16,7 @@ function reachablePackages(entry: string): Set<string> {
     seen.add(file);
     const source = readFileSync(file, "utf8");
     const specifiers = source.matchAll(
-      /(?:import|export)\s*(?:[^'"]*?\sfrom\s*)?['"]([^'"]+)['"]|(?:import|require)\(\s*['"]([^'"]+)['"]\s*\)/g,
+      /(?<![\w$."'])(?:import|export)\s*(?:[^'"]*?\sfrom\s*)?['"]([^'"]+)['"]|(?<![\w$."'])(?:import|require)\(\s*['"]([^'"]+)['"]\s*\)/g,
     );
     for (const match of specifiers) {
       const specifier = match[1] ?? match[2];
@@ -26,7 +29,7 @@ function reachablePackages(entry: string): Set<string> {
 }
 
 describe("subpath entry isolation", () => {
-  it.each(["spreadsheet/index.js", "image-editor/index.js", "history/index.js", "animation/index.js", "grammar/index.js", "commands/index.js", "persistence/index.js", "generation/index.js", "tokens/index.js", "export/index.js", "parameters/index.js", "vector/index.js"])(
+  it.each(["spreadsheet/index.js", "image-editor/index.js", "history/index.js", "animation/index.js", "grammar/index.js", "commands/index.js", "persistence/index.js", "generation/index.js", "tokens/index.js", "export/index.js", "parameters/index.js", "vector/index.js", "chart/index.js"])(
     "%s pulls in no third-party packages",
     (entry) => {
       expect([...reachablePackages(entry)]).toEqual([]);

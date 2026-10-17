@@ -63,6 +63,11 @@
       "svelte": "./dist/vector/index.js",
       "default": "./dist/vector/index.js"
     },
+    "./chart": {
+      "types": "./dist/chart/index.d.ts",
+      "svelte": "./dist/chart/index.js",
+      "default": "./dist/chart/index.js"
+    },
     "./package.json": "./package.json"
   },
   "typesVersions": {
@@ -93,6 +98,9 @@
       ],
       "vector": [
         "./dist/vector/index.d.ts"
+      ],
+      "chart": [
+        "./dist/chart/index.d.ts"
       ]
     }
   },

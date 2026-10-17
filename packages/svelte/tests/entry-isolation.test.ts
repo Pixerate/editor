@@ -41,6 +41,7 @@ describe("subpath entry isolation", () => {
     ["tokens/index.js", "tokens"],
     ["parameters/index.js", "parameters"],
     ["vector/index.js", "vector"],
+    ["chart/index.js", "chart"],
   ])("%s pulls in nothing beyond Svelte and @pixerate/editor/%s", (entry, coreSubpath) => {
     const packages = [...reachablePackages(entry)];
     expect(packages).toContain(`@pixerate/editor/${coreSubpath}`);

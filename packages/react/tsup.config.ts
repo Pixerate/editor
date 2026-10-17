@@ -11,7 +11,8 @@ export default defineConfig({
     "generation/index": "src/generation/index.ts",
     "tokens/index": "src/tokens/index.ts",
     "parameters/index": "src/parameters/index.ts",
-    "vector/index": "src/vector/index.ts"
+    "vector/index": "src/vector/index.ts",
+    "chart/index": "src/chart/index.ts"
   },
   format: ["esm", "cjs"],
   dts: true,
