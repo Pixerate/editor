@@ -1,5 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { chartToMermaid, chartToSvg, chartFromMermaid, recommendChartTypes, summarizeChart, type ChartSpec } from "@pixerate/editor/chart";
+import {
+  chartToMermaid,
+  chartToSvg,
+  chartFromMermaid,
+  describeOfficeChartPlace,
+  extractOfficeCharts,
+  recommendChartTypes,
+  summarizeChart,
+  type ChartSpec,
+  type OfficeChartFile,
+  type OfficeChartsResult,
+} from "@pixerate/editor/chart";
 import { parseCsv } from "@pixerate/editor/spreadsheet";
 import {
   ChartEditor,
@@ -10,6 +21,7 @@ import {
   useChartDirector,
   useChartState,
   useChartToolProvider,
+  useOfficeChartToolProvider,
 } from "@pixerate/editor-react/chart";
 import { BarChart3 } from "lucide-react";
 import { demoCommandRegistry, demoToolRegistry } from "../agentTools";
@@ -134,6 +146,22 @@ export function ChartTab() {
   const { presence, director, sceneRef } = useChartDirector(controller);
   useChartCommands(demoCommandRegistry, controller);
   useChartToolProvider(demoToolRegistry, controller, { id: "chart", namespace: "chart", director, actor: { id: "agent", name: "Agent" } });
+  // Office files the user opened: listed in the "Open an Office file" panel and readable by the agent.
+  const [officeFiles, setOfficeFiles] = useState<OfficeChartFile[]>([]);
+  const officeFilesRef = useRef(officeFiles);
+  officeFilesRef.current = officeFiles;
+  useOfficeChartToolProvider(demoToolRegistry, { id: "chart-files", namespace: "chart_files", controller, files: () => officeFilesRef.current });
+  const [officeCharts, setOfficeCharts] = useState<{ file: string; result?: OfficeChartsResult; error?: string } | null>(null);
+  const openOfficeFile = async (file: File | undefined) => {
+    if (!file) return;
+    const data = new Uint8Array(await file.arrayBuffer());
+    setOfficeFiles((files) => [...files.filter((f) => f.name !== file.name), { name: file.name, data }]);
+    try {
+      setOfficeCharts({ file: file.name, result: await extractOfficeCharts(data) });
+    } catch (error) {
+      setOfficeCharts({ file: file.name, error: (error as Error).message });
+    }
+  };
   const [csv, setCsv] = useState(SAMPLE_CSV);
   const [copied, setCopied] = useState(false);
   const [mermaid, setMermaid] = useState("");
@@ -235,6 +263,46 @@ export function ChartTab() {
             ))}
         </div>
       </div>
+
+      <details className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-xs text-slate-300" data-office-charts="">
+        <summary className="cursor-pointer text-slate-200">Open an Office file</summary>
+        <p className="mt-2 text-slate-400">
+          Read the charts in an Excel workbook, PowerPoint deck or Word document and load one into the editor. Agents can do the same with the{" "}
+          <code>chart_files__*</code> tools (<code>list_open_files</code>, <code>list_file_charts</code>, <code>load_file_chart</code>).
+        </p>
+        <input
+          type="file"
+          accept=".xlsx,.xlsm,.pptx,.pptm,.docx,.docm"
+          className="mt-2 block text-xs text-slate-300"
+          onChange={(e) => {
+            void openOfficeFile(e.target.files?.[0]);
+            e.target.value = "";
+          }}
+        />
+        {officeCharts?.error && <p className="mt-2 text-amber-400">{officeCharts.error}</p>}
+        {officeCharts?.result && (
+          <div className="mt-2 space-y-1.5">
+            <p className="text-slate-400">
+              {officeCharts.file}: {officeCharts.result.charts.length} chart{officeCharts.result.charts.length === 1 ? "" : "s"}
+            </p>
+            {officeCharts.result.charts.map((chart) => (
+              <div key={chart.id} className="flex flex-wrap items-center gap-2">
+                <button type="button" className={button} onClick={() => controller.load(chart.spec)}>
+                  Load
+                </button>
+                <span>
+                  {chart.title || chart.name || "Untitled"} <span className="text-slate-500">({chart.spec.type}, {describeOfficeChartPlace(chart)})</span>
+                </span>
+                {[...chart.unsupported.map((u) => `Not kept: ${u}`), ...chart.issues].slice(0, 3).map((m) => (
+                  <span key={m} className="text-amber-400">
+                    {m}
+                  </span>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
+      </details>
 
       <details className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-xs text-slate-300">
         <summary className="cursor-pointer text-slate-200">Import CSV</summary>

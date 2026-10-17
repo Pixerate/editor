@@ -13,7 +13,7 @@ import { CommandRegistry, createCommandToolProvider, createHistoryCommands } fro
 import { HistoryManager } from '../src/history';
 import { ImageEditorController, createImageEditorToolProvider } from '../src/image-editor';
 import { createGenerationToolProvider } from '../src/generation';
-import { ChartController, createChartToolProvider } from '../src/chart';
+import { ChartController, createChartToolProvider, createOfficeChartToolProvider } from '../src/chart';
 import { createRichTextPreset, SpreadsheetController } from '../src';
 
 beforeAll(() => {
@@ -186,6 +186,8 @@ describe('built-in tool providers have complete MCP annotations', () => {
 		// Hosts with their own tool sets: checked to the same standard.
 		registry.register(createImageEditorToolProvider(new ImageEditorController(), { id: 'img', namespace: 'img' }));
 		registry.register(createChartToolProvider(new ChartController(), { id: 'chart', namespace: 'chart' }));
+		registry.register(createOfficeChartToolProvider({ id: 'office', namespace: 'office', files: () => [], controller: new ChartController() }));
+		registry.register(createOfficeChartToolProvider({ id: 'office-data', namespace: 'officedata' }));
 		const chartDoc = new Editor({ extensions: createRichTextPreset({ chart: true }), content: '<p>x</p>' });
 		registry.register(createRichTextToolProvider(chartDoc, { id: 'chart-doc', namespace: 'chartdoc' }));
 		registry.register(

@@ -6,6 +6,8 @@ import {
   ChartPresence,
   createChartCommands,
   createChartToolProvider,
+  createOfficeChartToolProvider,
+  type OfficeChartToolProviderOptions,
   layoutChart,
   type ChartScene,
   type ChartToolProviderOptions,
@@ -99,6 +101,35 @@ export function useChartToolProvider(registry: ToolRegistry | null | undefined, 
     if (!registry) return;
     return registry.register(createChartToolProvider(controller, { ...latest.current, id, namespace }));
   }, [registry, controller, id, namespace]);
+}
+
+/**
+ * Registers the Office-file chart tools (`createOfficeChartToolProvider`: `list_file_charts`,
+ * `get_file_chart`, and `load_file_chart` with a `controller`) while mounted. `files` and
+ * `readOnly` are read on every call, so they can change without re-registering.
+ */
+export function useOfficeChartToolProvider(registry: ToolRegistry | null | undefined, options: OfficeChartToolProviderOptions = {}): void {
+  const latest = useRef(options);
+  latest.current = options;
+  const { id, namespace, controller } = options;
+  const hasFiles = !!options.files;
+  useEffect(() => {
+    if (!registry) return;
+    const current = latest.current;
+    return registry.register(
+      createOfficeChartToolProvider({
+        ...current,
+        id,
+        namespace,
+        controller,
+        files: hasFiles ? () => latest.current.files?.() ?? [] : undefined,
+        readOnly: () => {
+          const r = latest.current.readOnly;
+          return (typeof r === 'function' ? r() : r) ?? false;
+        },
+      }),
+    );
+  }, [registry, id, namespace, controller, hasFiles]);
 }
 
 /**

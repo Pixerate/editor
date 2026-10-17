@@ -21,3 +21,5 @@ export * from './ooxml.js';
 export * from './tools.js';
 export * from './stream.js';
 export * from './presence.js';
+export * from './office-files.js';
+export * from './file-tools.js';

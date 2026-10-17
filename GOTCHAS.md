@@ -1424,3 +1424,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: `svelte-check` warned "Cannot write file `dist/chart-node/chartNodeView.svelte.js` because it would be overwritten by multiple input files", next to `ChartNodeView.svelte`.
 - **Root Cause**: A component `ChartNodeView.svelte` and a rune module `chartNodeView.svelte.ts` both emit `…/[Cc]hartNodeView.svelte.js` / `.d.ts`; macOS and Windows file systems treat the names as one file.
 - **Solution / Workaround**: Give rune modules a name that differs from every component in the folder by more than case (here `createChartNodeView.svelte.ts`).
+
+### [core/chart] PowerPoint Slide Order Is Not Part-Name Order, and Excel Chartex Hides in `mc:AlternateContent`
+
+- **Issue / Symptom**: Reading `ppt/slides/slideN.xml` by name numbers charts on the wrong slide after slides were reordered; looking for `c:chart` only in an Excel drawing misses waterfall, funnel, treemap, histogram and box charts.
+- **Root Cause**: PowerPoint keeps part names when slides move; the order lives in `p:sldIdLst` in `presentation.xml`. Office 2016 charts are `cx:chart` references (chartex namespace, `chartEx` relationship) inside `mc:AlternateContent/mc:Choice`, with a picture or empty `mc:Fallback`.
+- **Solution / Workaround**: `extractPptxCharts` walks `p:sldId r:id` in order and numbers slides by position. `extractOfficeCharts` matches any `chart` element in the DrawingML chart, strict chart or chartex namespace (wherever it is nested) and dedupes by target part, so a fallback that also points at a chart is not read twice.
