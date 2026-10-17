@@ -26,3 +26,16 @@ export * from './lines-grammar/index.js';
 export { createPassthroughAdapter, type PassthroughBody } from './passthrough.js';
 export * from './controller.js';
 export * from './tools.js';
+export * from './draft.js';
+export * from './director.js';
+export {
+	PresenceStore,
+	PerformanceQueue,
+	createInstantPresenceClock,
+	realPresenceClock,
+	PRESENCE_COLORS,
+	type PresenceActor,
+	type PresenceActorInfo,
+	type PresenceClock,
+	type PresenceState
+} from '../animation/presence.js';

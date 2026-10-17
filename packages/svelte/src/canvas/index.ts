@@ -673,3 +673,7 @@ export {
 	type SvelteMermaidDiagram,
 	type SvelteMermaidStream
 } from './createMermaidDiagram.svelte.js';
+
+// Agent cursors acting out diagram edits
+export { default as DiagramPresenceLayer } from './DiagramPresenceLayer.svelte';
+export { createDiagramDirector, type CreateDiagramDirectorOptions, type SvelteDiagramDirector } from './createDiagramDirector.svelte.js';

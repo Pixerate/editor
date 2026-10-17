@@ -1,8 +1,8 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { flushSync, mount, unmount } from 'svelte';
 import { ToolRegistry } from '@pixerate/editor/tools';
-import { DiagramController, createDiagramToolProvider } from '@pixerate/editor/diagram';
-import { MermaidDiagramGroup, MermaidDiagramNode, createMermaidDiagram, createMermaidStream } from '../../src/canvas';
+import { DiagramController, createDiagramToolProvider, createInstantPresenceClock } from '@pixerate/editor/diagram';
+import { DiagramPresenceLayer, MermaidDiagramGroup, MermaidDiagramNode, createDiagramDirector, createMermaidDiagram, createMermaidStream } from '../../src/canvas';
 import { useAgentToolProvider } from '../../src';
 
 let cleanups: (() => void)[] = [];
@@ -95,5 +95,38 @@ describe('MermaidDiagramNode (Svelte)', () => {
 		expect(el.textContent).toContain('lines');
 		expect(el.getAttribute('style')).toContain('--pixerate-diagram-node-bg: #fde68a');
 		expect(target.querySelector('.pixerate-diagram-group')!.textContent!.trim()).toBe('Box');
+	});
+});
+
+describe('createDiagramDirector (Svelte)', () => {
+	it('acts out agent tool calls with a cursor drawn by DiagramPresenceLayer', async () => {
+		const registry = new ToolRegistry();
+		const controller = new DiagramController({ source: SOURCE });
+		const diagram = createMermaidDiagram(controller);
+		const clock = createInstantPresenceClock();
+		const director = createDiagramDirector(controller, { placement: () => diagram.layout, clock, linger: 0 });
+		cleanups.push(diagram.destroy, director.destroy);
+		registry.register(createDiagramToolProvider(controller, { director: director.director }));
+		let shown = 0;
+		director.presence.subscribe((s) => {
+			if (s.actors.length) shown++;
+		});
+		await registry.callTool('connect_diagram_nodes', { source: 'C', target: 'A', label: 'loop' });
+		expect(shown).toBeGreaterThan(5);
+		expect(diagram.source).toContain('C -->|loop| A');
+
+		const target = document.createElement('div');
+		document.body.appendChild(target);
+		const layer = mount(DiagramPresenceLayer, { target, props: { presence: director.presence, viewport: { x: 10, y: 20, zoom: 2 } } });
+		director.presence.set({ id: 'agent', x: 5, y: 5, message: 'Hi' });
+		flushSync();
+		cleanups.push(() => {
+			unmount(layer);
+			target.remove();
+		});
+		expect(director.state.actors).toHaveLength(1);
+		const cursor = target.querySelector('[data-actor="agent"]') as HTMLElement;
+		expect(cursor.getAttribute('style')).toContain('translate(20px, 30px)');
+		expect(cursor.textContent!.trim()).toBe('Hi');
 	});
 });
