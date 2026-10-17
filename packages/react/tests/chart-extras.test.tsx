@@ -4,7 +4,7 @@ import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { ToolRegistry } from "@pixerate/editor/tools";
 import { ChartController, ChartPresence, type ChartSpec } from "@pixerate/editor/chart";
-import { ChartCanvas, ChartEditor, ChartInspector, ChartSparkline, ChartStreamingView, useChartDirector, useChartToolProvider } from "../src/chart";
+import { ChartCanvas, ChartEditor, ChartInspector, ChartSparkline, ChartStreamingView, useChartDirector, useChartToolProvider, useOfficeChartToolProvider } from "../src/chart";
 
 let container: HTMLDivElement;
 let root: any;
@@ -156,6 +156,23 @@ describe("chart agent hooks", () => {
     });
     expect(result.isError).toBeFalsy();
     expect(controller.getSpec().series[0].values[0]).toBe(30);
+    await render(null);
+    expect(registry.listTools().tools).toHaveLength(0);
+  });
+
+  it("registers the Office-file chart tools and follows a changing file list", async () => {
+    const registry = new ToolRegistry();
+    let files: { name: string; data: Uint8Array }[] = [];
+    function Host() {
+      const controller = React.useMemo(() => new ChartController({ spec: sales }), []);
+      useOfficeChartToolProvider(registry, { controller, files: () => files });
+      return null;
+    }
+    await render(<Host />);
+    expect(registry.listTools().tools.map((t) => t.name)).toEqual(["list_open_files", "list_file_charts", "get_file_chart", "load_file_chart"]);
+    files = [{ name: "a.xlsx", data: new Uint8Array(3) }];
+    const listed: any = await registry.callTool("list_open_files", {});
+    expect(listed.structuredContent).toEqual({ files: [{ name: "a.xlsx", bytes: 3 }] });
     await render(null);
     expect(registry.listTools().tools).toHaveLength(0);
   });

@@ -7,6 +7,8 @@ import {
   createChartCommands,
   createChartRasterizer,
   createChartToolProvider,
+  createOfficeChartToolProvider,
+  type OfficeChartToolProviderOptions,
   layoutChart,
   type ChartScene,
   type ChartToolProviderOptions,
@@ -127,6 +129,22 @@ export function useChartToolProvider(
     if (!target) return;
     const { rasterize, ...rest } = options;
     return target.register(createChartToolProvider(controller, { ...rest, rasterize: rasterize === false ? undefined : (rasterize ?? createChartRasterizer()) }));
+  });
+}
+
+/**
+ * Registers the Office-file chart tools (`createOfficeChartToolProvider`: `list_file_charts`,
+ * `get_file_chart`, and `load_file_chart` with a `controller`) for the lifetime of the calling
+ * component. Pass a getter to follow a changing registry.
+ */
+export function useOfficeChartToolProvider(
+  registry: ToolRegistry | null | undefined | (() => ToolRegistry | null | undefined),
+  options: OfficeChartToolProviderOptions = {},
+): void {
+  $effect(() => {
+    const target = typeof registry === "function" ? registry() : registry;
+    if (!target) return;
+    return target.register(createOfficeChartToolProvider(untrack(() => options)));
   });
 }
 
