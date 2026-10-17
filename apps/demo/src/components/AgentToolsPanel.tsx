@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import type { McpToolDefinition, McpToolResult } from "@pixerate/editor/agent";
-import { Bot, Play } from "lucide-react";
+import { Bot, Play, Plug } from "lucide-react";
+import { useToolBridge } from "@pixerate/editor-react";
 import { demoToolRegistry } from "../agentTools";
 
 /** Example arguments for a tool, so "Call" works without typing JSON. */
@@ -22,6 +23,50 @@ function exampleArgsFor(tool: McpToolDefinition): string {
   for (const key of tool.inputSchema.required ?? []) args[key] = "";
   return JSON.stringify(args, null, 2);
 }
+
+/**
+ * Connects the demo's registry to a local MCP bridge (`npx pixerate-mcp-bridge`), so an MCP
+ * client (Claude Desktop, Claude Code) can call the tools of the open tab.
+ */
+const BridgeConnect: React.FC = () => {
+  const [on, setOn] = useState(false);
+  const [token, setToken] = useState("");
+  const options = useMemo(() => (on ? { name: "Pixerate demo", token: token || undefined } : null), [on, token]);
+  const bridge = useToolBridge(demoToolRegistry, options);
+  const label =
+    bridge.status === "connected"
+      ? `connected as ${bridge.editorId}`
+      : bridge.status === "off"
+        ? "off"
+        : bridge.status === "disconnected"
+          ? `not connected${bridge.detail ? ` (${bridge.detail})` : ""}, retrying…`
+          : bridge.status;
+  return (
+    <div className="flex flex-wrap items-center gap-2 mb-3 text-xs" data-testid="mcp-bridge">
+      <Plug className="w-3.5 h-3.5 text-cyan-400" />
+      <span className="text-slate-400">MCP bridge</span>
+      <input
+        type="password"
+        value={token}
+        onChange={(e) => setToken(e.target.value)}
+        placeholder="token (optional)"
+        aria-label="MCP bridge token"
+        className="w-36 bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200"
+      />
+      <button
+        type="button"
+        onClick={() => setOn((v) => !v)}
+        className="px-2.5 py-1 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200"
+      >
+        {on ? "Disconnect" : "Connect"}
+      </button>
+      <span className={bridge.status === "connected" ? "text-emerald-400" : "text-slate-500"}>{label}</span>
+      <span className="text-slate-600">
+        Run <code className="text-slate-400">npx pixerate-mcp-bridge</code> and add it to your MCP client.
+      </span>
+    </div>
+  );
+};
 
 /**
  * Live view of the demo's `ToolRegistry`: the MCP `tools/list` result,
@@ -98,6 +143,7 @@ export const AgentToolsPanel: React.FC = () => {
           {tools.length} tools · {changeCount} listChanged
         </span>
       </div>
+      <BridgeConnect />
       <p className="text-xs text-slate-400 mb-3">
         Each mounted editor registers a tool provider with{" "}
         <code className="text-slate-300">useAgentToolProvider</code>. Switch tabs
