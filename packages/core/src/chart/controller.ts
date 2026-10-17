@@ -1,5 +1,5 @@
 import { HistoryManager } from '../history/HistoryManager.js';
-import type { Command } from '../history/types.js';
+import type { Command, HistoryMark } from '../history/types.js';
 import { parseCsv, parseTsv } from '../spreadsheet/csv.js';
 import { sameChartSelection } from './layout.js';
 import {
@@ -22,6 +22,22 @@ import type {
 	ChartType,
 	ChartValue
 } from './types.js';
+
+/** Structural equality of JSON-like values (specs are plain data; key order does not matter). */
+function sameChartJson(a: unknown, b: unknown): boolean {
+	if (a === b) return true;
+	if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return Number.isNaN(a) && Number.isNaN(b);
+	if (Array.isArray(a) !== Array.isArray(b)) return false;
+	if (Array.isArray(a)) {
+		const bb = b as unknown[];
+		return a.length === bb.length && a.every((v, i) => sameChartJson(v, bb[i]));
+	}
+	const ao = a as Record<string, unknown>;
+	const bo = b as Record<string, unknown>;
+	const keys = Object.keys(ao).filter((k) => ao[k] !== undefined);
+	if (keys.length !== Object.keys(bo).filter((k) => bo[k] !== undefined).length) return false;
+	return keys.every((k) => Object.prototype.hasOwnProperty.call(bo, k) && sameChartJson(ao[k], bo[k]));
+}
 
 export interface ChartControllerOptions {
 	/** Starting chart (any partial or saved spec; problems are reported in `state.issues`). */
@@ -100,6 +116,7 @@ export class ChartController {
 	private issues: ChartIssue[] = [];
 	private gestureKey: string | null = null;
 	private gestureCount = 0;
+	private gestureStart: { spec: ChartSpec; mark: HistoryMark } | null = null;
 	private revision = 0;
 	private applying = false;
 	private readonly onChange?: ChartControllerOptions['onChange'];
@@ -222,7 +239,15 @@ export class ChartController {
 
 	private commit(label: string, next: ChartSpec, select?: ChartSelection | null) {
 		const before = this.spec;
+		const hadIssues = this.issues.length > 0;
 		this.issues = [];
+		// A no-op edit (same value, same title, …) records no undo step.
+		if (sameChartJson(before, next)) {
+			const reselect = select !== undefined && !sameChartSelection(this.selection, select) && !(select === null && this.selection === null);
+			if (reselect) this.selection = select;
+			if (reselect || hadIssues) this.notify(false);
+			return;
+		}
 		const command: Command = {
 			name: label,
 			tag: 'chart',
@@ -615,6 +640,7 @@ export class ChartController {
 		this.history.endGesture();
 		this.gestureKey = key;
 		this.gestureCount++;
+		this.gestureStart = { spec: this.spec, mark: this.history.mark() };
 		this.notify(false);
 	}
 
@@ -622,6 +648,10 @@ export class ChartController {
 		if (this.gestureKey === null) return;
 		this.gestureKey = null;
 		this.history.endGesture();
+		// A drag that ends where it started leaves no undo step behind.
+		const start = this.gestureStart;
+		this.gestureStart = null;
+		if (start && sameChartJson(start.spec, this.spec)) this.history.revertTo(start.mark);
 		this.notify(false);
 	}
 

@@ -25,6 +25,11 @@ export interface ChartLayoutOptions {
 	measureText?: ChartTextMeasure;
 	/** Shown when there is nothing to draw (default "No data"). */
 	emptyMessage?: string;
+	/**
+	 * Fixes the value axis to this range (over `yAxis.min` / `yAxis.max`). Canvases pass
+	 * `ChartPointDrag.valueDomain` during a drag so the axis does not rescale under the pointer.
+	 */
+	valueDomain?: { min: number; max: number } | null;
 }
 
 /** A DOM-free text width estimate (average glyph ≈ 0.56 em, bold ≈ 0.6 em). */
@@ -45,6 +50,25 @@ export function sameChartSelection(a: ChartSelection | null | undefined, b: Char
 		default:
 			return true;
 	}
+}
+
+/**
+ * Black or white text for a label drawn on `fill` (#rgb, #rrggbb or rgb()), by perceived
+ * luminance (0.299 R + 0.587 G + 0.114 B). Unparseable colours (CSS variables) get white.
+ */
+export function contrastingTextColor(fill: string): string {
+	let rgb: number[] | null = null;
+	const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(fill.trim());
+	if (hex) {
+		const h = hex[1].length === 3 ? [...hex[1]].map((c) => c + c).join('') : hex[1];
+		rgb = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
+	} else {
+		const fn = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/i.exec(fill.trim());
+		if (fn) rgb = fn.slice(1, 4).map(Number);
+	}
+	if (!rgb) return '#ffffff';
+	const luminance = (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) / 255;
+	return luminance > 0.5 ? '#0f172a' : '#ffffff';
 }
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -252,8 +276,11 @@ export function layoutChart(spec: ChartSpec, options: ChartLayoutOptions): Chart
 	const xAxis = spec.xAxis;
 	const yAxis = spec.yAxis;
 	const titleBand = fs * 1.3 + 6;
+	const frozen = options.valueDomain;
+	const fixedMin = frozen && Number.isFinite(frozen.min) ? frozen.min : yAxis.min;
+	const fixedMax = frozen && Number.isFinite(frozen.max) ? frozen.max : yAxis.max;
 	const valueLen0 = horizontal ? area.width : area.height;
-	let scale = niceScale(lo, hi, Math.max(2, Math.min(10, Math.round(valueLen0 / 56))), yAxis.min, yAxis.max);
+	let scale = niceScale(lo, hi, Math.max(2, Math.min(10, Math.round(valueLen0 / 56))), fixedMin, fixedMax);
 	const tickText = (t: number) => formatChartNumber(t, valueFormat, valueFormat.decimals ?? stepDecimals(scale.step));
 	const valueLabelWidth = Math.max(0, ...scale.ticks.map((t) => measure(tickText(t), fs)));
 	const catLabelWidth = Math.max(0, ...spec.categories.map((c) => measure(c, fs)));
@@ -278,7 +305,7 @@ export function layoutChart(spec: ChartSpec, options: ChartLayoutOptions): Chart
 		width: Math.max(1, area.width - left - rightPad),
 		height: Math.max(1, area.height - bottom - (horizontal ? 4 : fs / 2 + 2))
 	};
-	scale = niceScale(lo, hi, Math.max(2, Math.min(10, Math.round((horizontal ? plot.width : plot.height) / 56))), yAxis.min, yAxis.max);
+	scale = niceScale(lo, hi, Math.max(2, Math.min(10, Math.round((horizontal ? plot.width : plot.height) / 56))), fixedMin, fixedMax);
 
 	const domain: [number, number] = [scale.min, scale.max];
 	const valueRange: [number, number] = horizontal ? [plot.x, plot.x + plot.width] : [plot.y + plot.height, plot.y];
@@ -400,6 +427,9 @@ export function layoutChart(spec: ChartSpec, options: ChartLayoutOptions): Chart
 				if (selected) outline(`bar-${s.id}-${i}-selection`, { x: rect.x - 2, y: rect.y - 2, width: rect.width + 4, height: rect.height + 4 });
 				if (spec.dataLabels) {
 					const v = percent ? seg[1] - seg[0] : raw;
+					const text = dataLabel(v);
+					// Inside a stacked segment: only when it fits along the value axis.
+					if (stacked && Math.abs(b - a) < (horizontal ? measure(text, fs - 1) + 4 : fs + 1)) return;
 					const end = valuePx(seg[1]);
 					const outward = (seg[1] >= seg[0] ? 1 : -1) * (horizontal ? 1 : -1);
 					const [lx, ly] = map({ c: c0 + cw / 2, v: stacked ? (a + b) / 2 : end + outward * 4 });
@@ -409,11 +439,11 @@ export function layoutChart(spec: ChartSpec, options: ChartLayoutOptions): Chart
 						role: 'data-label',
 						x: lx,
 						y: ly,
-						text: dataLabel(v),
+						text,
 						anchor: horizontal && !stacked ? (outward > 0 ? 'start' : 'end') : 'middle',
 						baseline: horizontal || stacked ? 'middle' : outward < 0 ? 'bottom' : 'top',
 						size: fs - 1,
-						fill: stacked ? '#ffffff' : theme.text,
+						fill: stacked ? contrastingTextColor(color) : theme.text,
 						target
 					});
 				}

@@ -64,6 +64,8 @@
     return () => observer.disconnect();
   });
   let drag: ChartPointDrag | null = null;
+  // Frozen while a point is dragged so the value axis does not rescale under the pointer.
+  let valueDomain = $state<ChartPointDrag['valueDomain'] | null>(null);
 
   const sceneWidth = $derived((responsive && measured) || width);
   const fullTheme = $derived({ ...CSS_VARIABLE_CHART_THEME, ...theme });
@@ -74,7 +76,8 @@
       theme: fullTheme,
       selection: editable ? view.current.selection : null,
       measureText,
-      emptyMessage
+      emptyMessage,
+      valueDomain
     })
   );
   const byKey = $derived(new Map(scene.marks.map((m) => [m.key, m])));
@@ -92,7 +95,10 @@
     const target = key ? byKey.get(key)?.target : undefined;
     controller.select(target ?? null);
     drag = startChartPointDrag(controller, scene, target, scenePoint(e));
-    if (drag) svg?.setPointerCapture?.(e.pointerId);
+    if (drag) {
+      valueDomain = drag.valueDomain;
+      svg?.setPointerCapture?.(e.pointerId);
+    }
   }
   function pointermove(e: PointerEvent) {
     drag?.move(scenePoint(e));
@@ -100,6 +106,7 @@
   function endDrag() {
     drag?.end();
     drag = null;
+    valueDomain = null;
   }
   function keydown(e: KeyboardEvent) {
     if (editable && handleChartKey(controller, scene, e)) e.preventDefault();
