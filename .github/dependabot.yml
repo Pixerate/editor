@@ -5,7 +5,7 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 3
     ignore:
       # TipTap is a peer dependency pinned to ^2.11.5. A major upgrade must move
       # every @tiptap/* package (and tiptap-markdown) together in a deliberate,
