@@ -423,6 +423,7 @@ Every feature is available from core and from both framework packages. "Via core
 - [Canvas](docs/canvas.md)
 - [Parameters editor](docs/parameters.md)
 - [Vector editor](docs/vector-editor.md)
+- [Vector editor roadmap](docs/vector-roadmap.md)
 - [CI/CD and releases](docs/ci-cd-release.md)
 - [Known pitfalls and workarounds (GOTCHAS)](GOTCHAS.md)
 
