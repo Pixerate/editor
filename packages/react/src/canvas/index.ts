@@ -664,3 +664,6 @@ export {
 	type MermaidDiagramNodeData,
 	type MermaidDiagramNodeProps
 } from './MermaidDiagramNode.js';
+
+// Static previews of Mermaid diagrams
+export { MermaidThumbnail, type MermaidThumbnailProps } from './MermaidThumbnail.js';

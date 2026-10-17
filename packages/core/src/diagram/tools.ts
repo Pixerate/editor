@@ -21,6 +21,13 @@ export interface DiagramToolProviderOptions {
 	 * node of an auto-laid diagram does not shift the others.
 	 */
 	getPositions?: () => Readonly<Record<string, Point>>;
+	/**
+	 * Draws the diagram as standalone SVG (e.g. `(o) => mermaidToSvg(controller.getDocument(), o)`
+	 * from `@pixerate/editor/canvas`). Enables `render_diagram`.
+	 */
+	renderSvg?: (options: { maxWidth?: number; maxHeight?: number }) => { svg: string; width: number; height: number };
+	/** Turns that SVG into PNG (e.g. `rasterizeSvg`), so `render_diagram` can return an image. */
+	rasterize?: (svg: string, size: { width: number; height: number }) => Promise<{ data: string; mimeType: string }> | { data: string; mimeType: string };
 }
 
 const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
@@ -434,7 +441,30 @@ export function createDiagramToolProvider(controller: DiagramController, options
 		}
 	};
 
-	const reads = [getDiagram, exportMermaid, findDiagrams];
+	const renderDiagram: AgentTool = {
+		name: 'render_diagram',
+		title: 'Render the diagram',
+		description:
+			'Draws the diagram without changing it, to check it visually: standalone SVG text by default, or a PNG image (format "png") when the host can rasterize. Positions match the canvas.',
+		inputSchema: object({
+			format: { type: 'string', enum: ['svg', 'png'], description: 'svg (default) or png (only when the host supports it).' },
+			maxWidth: { type: 'number', minimum: 16, description: 'Fit within this width in px (default: natural size).' },
+			maxHeight: { type: 'number', minimum: 16, description: 'Fit within this height in px (default: natural size).' }
+		}),
+		annotations: { title: 'Render the diagram', ...READ },
+		handler: async ({ format = 'svg', maxWidth, maxHeight }) => {
+			if (doc().tier !== 'editable') throw new Error(`A ${doc().family} diagram is kept as Mermaid text and cannot be drawn here; use export_diagram_mermaid.`);
+			const drawn = options.renderSvg!({ maxWidth, maxHeight });
+			if (format === 'png') {
+				if (!options.rasterize) throw new Error('This host cannot make PNG images; call render_diagram with format "svg".');
+				const image = await options.rasterize(drawn.svg, { width: drawn.width, height: drawn.height });
+				return { content: [{ type: 'image', data: image.data, mimeType: image.mimeType }] };
+			}
+			return { format: 'svg', width: drawn.width, height: drawn.height, svg: drawn.svg };
+		}
+	};
+
+	const reads = [getDiagram, exportMermaid, findDiagrams, ...(options.renderSvg ? [renderDiagram] : [])];
 	const writes = [loadMermaid, addNode, removeElements, renameNode, setShape, setStyle, connect, removeEdges, labelEdge, reconnect, setDirection, group, ungroup, move, undo, redo];
 
 	return {

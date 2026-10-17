@@ -4,7 +4,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ToolRegistry } from '@pixerate/editor/tools';
 import { DiagramController, createDiagramToolProvider } from '@pixerate/editor/diagram';
-import { MermaidDiagramNode, MermaidDiagramGroup, useMermaidDiagram, useMermaidStream, type UseMermaidDiagramResult, type UseMermaidStreamResult } from '../src/canvas';
+import { MermaidDiagramNode, MermaidDiagramGroup, MermaidThumbnail, useMermaidDiagram, useMermaidStream, type UseMermaidDiagramResult, type UseMermaidStreamResult } from '../src/canvas';
 import { useAgentToolProvider } from '../src';
 
 let container: HTMLDivElement;
@@ -122,5 +122,22 @@ describe('MermaidDiagramNode', () => {
 		expect(node.style.getPropertyValue('--pixerate-diagram-node-bg')).toBe('#fde68a');
 		expect(node.querySelector('.handle')).not.toBeNull();
 		expect(container.querySelector('.pixerate-diagram-group')!.textContent).toBe('Box');
+	});
+});
+
+describe('MermaidThumbnail', () => {
+	it('draws a fitted static preview, or the fallback for text-only families', async () => {
+		await act(async () =>
+			root.render(
+				<>
+					<MermaidThumbnail source={SOURCE} maxWidth={120} className="t1" />
+					<MermaidThumbnail source={'pie\n  "a" : 1'} fallback={<em>no preview</em>} />
+				</>
+			)
+		);
+		const svg = container.querySelector('.t1 svg')!;
+		expect(Number(svg.getAttribute('width'))).toBeLessThanOrEqual(120);
+		expect(svg.querySelectorAll('[data-node]')).toHaveLength(3);
+		expect(container.querySelector('em')!.textContent).toBe('no preview');
 	});
 });

@@ -15,11 +15,21 @@ import {
   type NodeChange,
   type NodeProps,
 } from "@xyflow/react";
-import { MermaidDiagramGroup, MermaidDiagramNode, useMermaidDiagram, useMermaidStream } from "@pixerate/editor-react/canvas";
+import { MermaidDiagramGroup, MermaidDiagramNode, MermaidThumbnail, useMermaidDiagram, useMermaidStream } from "@pixerate/editor-react/canvas";
 import { useAgentToolProvider } from "@pixerate/editor-react";
-import { mermaidEdgeDash, mermaidEdgeMarker, type MermaidFlowEdge, type MermaidFlowNode } from "@pixerate/editor/canvas";
+import {
+  DIAGRAM_SVG_DARK_THEME,
+  diagramFileName,
+  downloadDiagramPng,
+  mermaidEdgeDash,
+  mermaidEdgeMarker,
+  mermaidToSvg,
+  rasterizeSvg,
+  type MermaidFlowEdge,
+  type MermaidFlowNode,
+} from "@pixerate/editor/canvas";
 import { DiagramController, createDiagramToolProvider, findMermaidSources } from "@pixerate/editor/diagram";
-import { GitBranch, Play, Redo2, Undo2 } from "lucide-react";
+import { Download, GitBranch, Play, Redo2, Undo2 } from "lucide-react";
 import { demoToolRegistry } from "../agentTools";
 
 const SAMPLES: Record<string, string> = {
@@ -124,9 +134,19 @@ const MermaidEditorPane: React.FC = () => {
   const controller = useMemo(() => new DiagramController({ source: SAMPLES.Flowchart }), []);
   const diagram = useMermaidDiagram(controller);
   const positions = useRef(diagram.layout.positions);
+  const layoutRef = useRef(diagram.layout);
+  layoutRef.current = diagram.layout;
   positions.current = diagram.layout.positions;
   const provider = useMemo(
-    () => createDiagramToolProvider(controller, { id: "diagram", namespace: "diagram", getPositions: () => positions.current }),
+    () =>
+      createDiagramToolProvider(controller, {
+        id: "diagram",
+        namespace: "diagram",
+        getPositions: () => positions.current,
+        // render_diagram: SVG from the canvas layout, PNG through the browser.
+        renderSvg: (o) => mermaidToSvg(controller.getDocument(), { ...o, layout: layoutRef.current }),
+        rasterize: (svg, size) => rasterizeSvg(svg, size),
+      }),
     [controller],
   );
   useAgentToolProvider(demoToolRegistry, provider);
@@ -209,6 +229,31 @@ const MermaidEditorPane: React.FC = () => {
           <button type="button" className={btn} disabled={!diagram.state.canRedo} onClick={diagram.redo} aria-label="Redo diagram edit">
             <Redo2 className="w-3.5 h-3.5" />
           </button>
+          <button
+            type="button"
+            className={btn}
+            disabled={!diagram.state.editable}
+            onClick={() => void downloadDiagramPng(diagram.document, { layout: diagram.layout, theme: DIAGRAM_SVG_DARK_THEME })}
+            title="Download the diagram as PNG"
+          >
+            <Download className="w-3.5 h-3.5" /> PNG
+          </button>
+          <button
+            type="button"
+            className={btn}
+            disabled={!diagram.state.editable}
+            onClick={() => {
+              const { svg } = mermaidToSvg(diagram.document, { layout: diagram.layout });
+              const link = document.createElement("a");
+              link.href = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
+              link.download = diagramFileName(diagram.document, "svg");
+              link.click();
+              URL.revokeObjectURL(link.href);
+            }}
+            title="Download the diagram as SVG"
+          >
+            <Download className="w-3.5 h-3.5" /> SVG
+          </button>
           <span className="text-[11px] text-slate-500">
             {diagram.state.family} · {diagram.document.graph.nodes.length} nodes · {diagram.document.graph.edges.length} edges
           </span>
@@ -244,6 +289,23 @@ const MermaidEditorPane: React.FC = () => {
           </div>
         </DirectionContext.Provider>
         {diagram.state.issue && <p className="text-xs text-amber-400">{diagram.state.issue}</p>}
+        <div className="flex flex-wrap gap-2" aria-label="Sample thumbnails">
+          {Object.entries(SAMPLES).map(([name, sampleSource]) => (
+            <button
+              key={name}
+              type="button"
+              title={`Open the ${name} sample`}
+              onClick={() => {
+                diagram.load(sampleSource, { clearHistory: true });
+                refit();
+              }}
+              className={`rounded-lg border p-1.5 bg-slate-950 hover:border-sky-500 ${name === sample ? "border-sky-500" : "border-slate-800"}`}
+            >
+              <MermaidThumbnail source={sampleSource} maxWidth={140} maxHeight={80} theme={DIAGRAM_SVG_DARK_THEME} />
+              <div className="text-[10px] text-slate-400 mt-1">{name}</div>
+            </button>
+          ))}
+        </div>
       </div>
       <div className="space-y-2">
         <label className="text-xs font-semibold uppercase tracking-wider text-slate-400" htmlFor="mermaid-source">

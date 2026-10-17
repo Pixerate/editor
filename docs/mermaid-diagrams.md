@@ -57,3 +57,28 @@ Both return `nodes`, `edges`, `layout`, `source` and `moveNodes`, `connect`, `re
 ## Agent tools
 
 `createDiagramToolProvider(controller, { getPositions })` registers 19 tools: `get_diagram`, `export_diagram_mermaid`, `find_mermaid_diagrams` (always), and `load_diagram_mermaid`, `add_diagram_node`, `remove_diagram_nodes`, `rename_diagram_node`, `set_diagram_node_shape`, `set_diagram_node_style`, `connect_diagram_nodes`, `remove_diagram_edges`, `set_diagram_edge_label`, `reconnect_diagram_edge`, `set_diagram_direction`, `group_diagram_nodes`, `ungroup_diagram_group`, `move_diagram_nodes`, `undo_diagram`, `redo_diagram` (hidden while read-only). Write tools return the ids they created. Pass `getPositions` (the canvas layout's positions) so `move_diagram_nodes` pins the rest of an auto-laid diagram.
+
+## Export and thumbnails
+
+`mermaidToSvg(doc, options)` draws a diagram as standalone SVG from its layout, using stored positions and auto-layout for the rest, so it matches the canvas. You can also pass the canvas' own `layout`. It needs no canvas, DOM or Mermaid runtime.
+
+What it draws:
+- groups
+- nodes in their Mermaid shapes, with `style` / `classDef` colours
+- class members and ER attributes
+- edges with labels, dash patterns and arrow heads
+
+Options:
+- `theme`: concrete colours, because CSS variables do not apply inside an image. `DIAGRAM_SVG_LIGHT_THEME` and `DIAGRAM_SVG_DARK_THEME` are provided.
+- `padding`, `transparent`, `title`.
+- `maxWidth` / `maxHeight`: fit the drawing inside a box without enlarging it.
+
+Related helpers:
+- `mermaidThumbnailSvg` fits within 240 × 160 by default.
+- `rasterizeSvg(svg, { width, height, scale, maxSize, background })` makes a PNG in the browser through a canvas.
+- `downloadDiagramPng(doc, options)` saves one.
+- `diagramFileName` names files after the diagram's title.
+
+`<MermaidThumbnail source maxWidth maxHeight theme fallback>` (React and Svelte) shows a static preview, or `fallback` for families that are kept as text.
+
+For agents, pass `renderSvg` (and `rasterize` for PNG) to `createDiagramToolProvider`. That adds `render_diagram { format: "svg" | "png", maxWidth, maxHeight }`, so a model can look at the diagram it is editing.

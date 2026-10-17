@@ -673,3 +673,6 @@ export {
 	type SvelteMermaidDiagram,
 	type SvelteMermaidStream
 } from './createMermaidDiagram.svelte.js';
+
+// Static previews of Mermaid diagrams
+export { default as MermaidThumbnail } from './MermaidThumbnail.svelte';
