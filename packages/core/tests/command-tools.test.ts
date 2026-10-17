@@ -6,10 +6,13 @@ import {
 	createRichTextToolProvider,
 	createSpreadsheetToolProvider,
 	createEditorMcpToolProvider,
+	createCanvasComponentToolProvider,
 	type AgentToolProvider
 } from '../src/agent';
 import { CommandRegistry, createCommandToolProvider, createHistoryCommands } from '../src/commands';
 import { HistoryManager } from '../src/history';
+import { ImageEditorController, createImageEditorToolProvider } from '../src/image-editor';
+import { createGenerationToolProvider } from '../src/generation';
 import { createRichTextPreset, SpreadsheetController } from '../src';
 
 beforeAll(() => {
@@ -170,13 +173,24 @@ describe('built-in tool providers have complete MCP annotations', () => {
 				applySteps: () => {},
 				captureView: () => ({ data: '', mimeType: 'image/png' })
 			}),
-			createCommandToolProvider(new CommandRegistry())
+			createCommandToolProvider(new CommandRegistry()),
+			// Only the tool list is read, so a stub controller with the variant methods will do.
+			createCanvasComponentToolProvider({ addVariant: () => {}, removeVariant: () => {} } as any)
 		];
 		const registry = new ToolRegistry();
 		providers.forEach((p) => registry.register(p));
 		const tools = registry.listTools().tools;
-		expect(tools.length).toBe(4 + 2 + 4 + 3);
-		for (const tool of tools) {
+		// rich text 8, spreadsheet 7, editor (state + 7 canvas + 4 prompt + view) 13, commands 3, components 17
+		expect(tools.length).toBe(8 + 7 + 13 + 3 + 17);
+		// Hosts with their own tool sets: checked to the same standard.
+		registry.register(createImageEditorToolProvider(new ImageEditorController(), { id: 'img', namespace: 'img' }));
+		registry.register(
+			createGenerationToolProvider({ namespace: 'gen', models: [], generate: () => ({}), estimate: () => ({}) })
+		);
+		const allTools = registry.listTools().tools;
+		expect(allTools.length).toBeGreaterThan(tools.length);
+		const undescribed: string[] = [];
+		for (const tool of allTools) {
 			expect(typeof tool.title, `${tool.name} title`).toBe('string');
 			expect(tool.annotations?.title, `${tool.name} annotations.title`).toBe(tool.title);
 			for (const hint of ['readOnlyHint', 'destructiveHint', 'idempotentHint', 'openWorldHint'] as const) {
@@ -184,7 +198,13 @@ describe('built-in tool providers have complete MCP annotations', () => {
 			}
 			// A read-only tool is never destructive.
 			if (tool.annotations?.readOnlyHint) expect(tool.annotations.destructiveHint).toBe(false);
+			// Every argument is described, so a model knows what to pass.
+			expect(tool.description, `${tool.name} description`).toBeTruthy();
+			for (const [key, prop] of Object.entries(tool.inputSchema.properties ?? {})) {
+				if (!(prop as any).description) undescribed.push(`${tool.name}.${key}`);
+			}
 		}
+		expect(undescribed).toEqual([]);
 		editor.destroy();
 	});
 });

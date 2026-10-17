@@ -137,6 +137,7 @@ export function createCommandToolProvider<TContext = any>(
 				steps: {
 					type: 'array',
 					minItems: 1,
+					description: 'Commands to run in order.',
 					items: {
 						type: 'object',
 						properties: {

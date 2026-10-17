@@ -19,6 +19,18 @@ export interface JsonSchema {
 	maxItems?: number;
 	minimum?: number;
 	maximum?: number;
+	exclusiveMinimum?: number;
+	exclusiveMaximum?: number;
+	multipleOf?: number;
+	uniqueItems?: boolean;
+	anyOf?: readonly JsonSchema[];
+	oneOf?: readonly JsonSchema[];
+	allOf?: readonly JsonSchema[];
+	not?: JsonSchema;
+	/** Local reference only: `#`, `#/$defs/<name>` or `#/definitions/<name>`. */
+	$ref?: string;
+	$defs?: { readonly [key: string]: JsonSchema };
+	definitions?: { readonly [key: string]: JsonSchema };
 	minLength?: number;
 	maxLength?: number;
 	pattern?: string;
@@ -49,16 +61,81 @@ function matchesType(value: unknown, type: JsonSchemaType): boolean {
 
 const isEqual = (a: unknown, b: unknown) => a === b || JSON.stringify(a) === JSON.stringify(b);
 
+/** Resolves a local `$ref` (`#`, `#/$defs/a`, `#/definitions/a/properties/b`, ...) against `root`. */
+function resolveRef(ref: string, root: JsonSchema): JsonSchema | undefined {
+	if (ref === '#') return root;
+	if (!ref.startsWith('#/')) return undefined;
+	let node: unknown = root;
+	for (const raw of ref.slice(2).split('/')) {
+		const key = decodeURIComponent(raw).replace(/~1/g, '/').replace(/~0/g, '~');
+		if (!node || typeof node !== 'object') return undefined;
+		node = (node as Record<string, unknown>)[key];
+	}
+	return node && typeof node === 'object' ? (node as JsonSchema) : undefined;
+}
+
+/** Most `$ref` hops followed before a reference cycle is reported. */
+const MAX_REF_DEPTH = 32;
+
 /**
  * Validates `value` against `schema` and returns every error found (an empty
  * array means valid). Supports `type` (incl. arrays of types), `enum`, `const`,
  * `properties`, `required`, `additionalProperties`, `items`, `minItems`,
- * `maxItems`, `minimum`, `maximum`, `minLength`, `maxLength` and `pattern`.
+ * `maxItems`, `uniqueItems`, `minimum`, `maximum`, `exclusiveMinimum`,
+ * `exclusiveMaximum`, `multipleOf`, `minLength`, `maxLength`, `pattern`,
+ * `anyOf`, `oneOf`, `allOf`, `not` and local `$ref`s (`#/$defs/...`).
+ * Other keywords (`format`, `if`/`then`, `patternProperties`, remote refs...)
+ * are ignored.
+ *
+ * When no `anyOf` / `oneOf` branch matches, the errors of the closest branch
+ * (the one with the fewest errors) are reported, so a caller sees what to fix
+ * rather than only "no branch matched".
  */
-export function validateJsonSchema(value: unknown, schema: JsonSchema | undefined, path = ''): SchemaValidationError[] {
+export function validateJsonSchema(
+	value: unknown,
+	schema: JsonSchema | undefined,
+	path = '',
+	root: JsonSchema | undefined = schema,
+	refDepth = 0
+): SchemaValidationError[] {
 	if (!schema || typeof schema !== 'object') return [];
 	const errors: SchemaValidationError[] = [];
 	const at = path || '/';
+	const recurse = (child: unknown, childSchema: JsonSchema | undefined, childPath: string) =>
+		validateJsonSchema(child, childSchema, childPath, root, refDepth);
+
+	if (typeof schema.$ref === 'string') {
+		const target = root ? resolveRef(schema.$ref, root) : undefined;
+		if (!target) {
+			errors.push({ path: at, message: `Unresolvable schema reference ${schema.$ref}.` });
+		} else if (refDepth >= MAX_REF_DEPTH) {
+			errors.push({ path: at, message: `Schema reference ${schema.$ref} is nested too deeply.` });
+		} else {
+			errors.push(...validateJsonSchema(value, target, path, root, refDepth + 1));
+		}
+		// Sibling keywords still apply (2019-09+ semantics).
+	}
+
+	if (schema.allOf) {
+		for (const branch of schema.allOf) errors.push(...recurse(value, branch, path));
+	}
+	if (schema.anyOf || schema.oneOf) {
+		const branches = (schema.anyOf ?? schema.oneOf)!;
+		const results = branches.map((branch) => recurse(value, branch, path));
+		const matching = results.filter((r) => r.length === 0).length;
+		if (matching === 0 && results.length > 0) {
+			const closest = results.reduce((best, r) => (r.length < best.length ? r : best));
+			errors.push(
+				{ path: at, message: `Does not match any allowed shape (${branches.length} options); closest match failed with:` },
+				...closest
+			);
+		} else if (schema.oneOf && !schema.anyOf && matching > 1) {
+			errors.push({ path: at, message: `Matches ${matching} shapes; exactly one is allowed.` });
+		}
+	}
+	if (schema.not && recurse(value, schema.not, path).length === 0) {
+		errors.push({ path: at, message: 'Matches a disallowed shape.' });
+	}
 
 	if (schema.type !== undefined) {
 		const types = (Array.isArray(schema.type) ? schema.type : [schema.type]) as JsonSchemaType[];
@@ -104,6 +181,18 @@ export function validateJsonSchema(value: unknown, schema: JsonSchema | undefine
 		if (schema.maximum !== undefined && value > schema.maximum) {
 			errors.push({ path: at, message: `Must be <= ${schema.maximum}.` });
 		}
+		if (typeof schema.exclusiveMinimum === 'number' && value <= schema.exclusiveMinimum) {
+			errors.push({ path: at, message: `Must be > ${schema.exclusiveMinimum}.` });
+		}
+		if (typeof schema.exclusiveMaximum === 'number' && value >= schema.exclusiveMaximum) {
+			errors.push({ path: at, message: `Must be < ${schema.exclusiveMaximum}.` });
+		}
+		if (schema.multipleOf !== undefined && schema.multipleOf > 0) {
+			const quotient = value / schema.multipleOf;
+			if (Math.abs(quotient - Math.round(quotient)) > 1e-9) {
+				errors.push({ path: at, message: `Must be a multiple of ${schema.multipleOf}.` });
+			}
+		}
 	}
 
 	if (Array.isArray(value)) {
@@ -113,9 +202,17 @@ export function validateJsonSchema(value: unknown, schema: JsonSchema | undefine
 		if (schema.maxItems !== undefined && value.length > schema.maxItems) {
 			errors.push({ path: at, message: `Must have at most ${schema.maxItems} items.` });
 		}
+		if (schema.uniqueItems) {
+			const seen = new Set<string>();
+			value.forEach((item, index) => {
+				const key = JSON.stringify(item);
+				if (seen.has(key)) errors.push({ path: `${path}/${index}`, message: 'Duplicate item; items must be unique.' });
+				seen.add(key);
+			});
+		}
 		if (schema.items) {
 			value.forEach((item, index) => {
-				errors.push(...validateJsonSchema(item, schema.items, `${path}/${index}`));
+				errors.push(...recurse(item, schema.items, `${path}/${index}`));
 			});
 		}
 	}
@@ -131,11 +228,15 @@ export function validateJsonSchema(value: unknown, schema: JsonSchema | undefine
 		for (const [key, child] of Object.entries(obj)) {
 			if (child === undefined) continue;
 			if (key in properties) {
-				errors.push(...validateJsonSchema(child, properties[key], `${path}/${key}`));
+				errors.push(...recurse(child, properties[key], `${path}/${key}`));
 			} else if (schema.additionalProperties === false) {
-				errors.push({ path: `${path}/${key}`, message: `Unknown property "${key}".` });
+				const known = Object.keys(properties);
+				errors.push({
+					path: `${path}/${key}`,
+					message: `Unknown property "${key}".${known.length ? ` Allowed: ${known.join(', ')}.` : ''}`
+				});
 			} else if (typeof schema.additionalProperties === 'object') {
-				errors.push(...validateJsonSchema(child, schema.additionalProperties, `${path}/${key}`));
+				errors.push(...recurse(child, schema.additionalProperties, `${path}/${key}`));
 			}
 		}
 	}

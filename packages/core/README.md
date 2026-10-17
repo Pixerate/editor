@@ -206,7 +206,32 @@ registry.onListChanged((tools) => server.sendToolListChanged());
 await registry.callTool("insert_text", { text: "Hello" }); // { content: [...], structuredContent }
 ```
 
-`createEditorMcpToolProvider` exposes the static tools (`get_editor_state`, `edit_canvas`, `edit_prompt`, `view_editor`) through the registry, and `planToolCall` turns any tool call into planner steps (`step:tool_call` for registry tools).
+Built-in providers:
+
+| Provider | Tools |
+| :--- | :--- |
+| `createRichTextToolProvider(editor, { id })` | `get_text` (`format`, `blocks: true` for every paragraph's positions), `find_text`, `insert_text`, `replace_text` (all matches or the n-th, one undo step), `replace_range`, `replace_selection`, `set_selection`, `edit_table` (when tables are on). Read-only editors get `get_text` and `find_text`. |
+| `createSpreadsheetToolProvider(controller, { id })` | `get_range`, `set_cell`, `set_range` (2D block, one undo step, refuses read-only targets), `insert_rows`, `delete_rows`, `insert_columns`, `delete_columns` |
+| `createEditorMcpToolProvider({ id, getSnapshot, applySteps })` | `get_editor_state`, `canvas_add_node`, `canvas_remove_nodes`, `canvas_connect`, `canvas_update_node`, `canvas_layout`, `canvas_select`, `canvas_highlight`, `prompt_insert_text`, `prompt_replace_range`, `prompt_set_variable`, `prompt_select`, `view_editor` (with `captureView`) |
+| `createCanvasComponentToolProvider`, `createCommandToolProvider`, `createImageEditorToolProvider`, `createGenerationToolProvider` | See the canvas, commands, image editor and generation docs |
+
+Text tools take ProseMirror document positions, not plain-text offsets: `find_text` and `get_text { blocks: true }` return them. The canvas tools check node ids against `getSnapshot()` (unknown ids, an id that already exists, self-edges and unordered ranges are tool errors the model can fix) and return what they created: `{ applied, steps, created: { nodes: [{ id, position }], edges: [{ id, source, target }] } }`. Pass `toolStyle: "combined"` for the older `edit_canvas` / `edit_prompt` tools with an `operation` argument, and `surfaces: { canvas: false }` to expose only the prompt tools. `planToolCall` turns any tool call into planner steps (`step:tool_call` for registry tools), and `validateAgentCommand` runs the same checks for hosts that drive the planner directly.
+
+Tool `inputSchema`s are validated by `validateJsonSchema`, which supports `type`, `enum`, `const`, `properties`, `required`, `additionalProperties`, `items`, `minItems` / `maxItems`, `uniqueItems`, `minimum` / `maximum`, `exclusiveMinimum` / `exclusiveMaximum`, `multipleOf`, `minLength` / `maxLength`, `pattern`, `anyOf`, `oneOf`, `allOf`, `not` and local `$ref`s (`#/$defs/...`). Other keywords are ignored.
+
+### Serving the registry over MCP
+
+`createMcpServer(registry, { name, version, send })` (in `/tools`, no dependencies) answers MCP JSON-RPC messages from any transport: stdio lines, a WebSocket, `postMessage` or an HTTP handler. It handles `initialize` (protocol version negotiation), `ping`, `tools/list`, `tools/call` and `notifications/cancelled` (aborts the call's `signal`), and sends `notifications/tools/list_changed` through `send` once the client is initialized.
+
+```ts
+import { createMcpServer } from "@pixerate/editor/tools";
+
+const server = createMcpServer(registry, { name: "my-app", version: "1.0.0", send: (msg) => socket.send(JSON.stringify(msg)) });
+socket.onmessage = async (event) => {
+  const response = await server.handle(event.data);
+  if (response) socket.send(JSON.stringify(response));
+};
+```
 
 ### Without TipTap: `@pixerate/editor/tools`
 
@@ -223,7 +248,7 @@ const list = registry.listTools(); // MCP tools/list result
 const result = await registry.callTool(name, args); // MCP tools/call result
 ```
 
-It exports `ToolRegistry`, `createToolRegistry`, `ToolRegistryError`, the tool types (`AgentTool`, `AgentToolProvider`, `AgentToolHandler`, `ToolCallContext`, `McpToolDefinition`, `McpToolResult`, `McpListToolsResult`, `ToolCallError`), `validateJsonSchema` / `SchemaValidationError`, and the static `EDITOR_MCP_TOOLS` definitions. `/agent` re-exports all of it, so existing imports keep working. `createEditorMcpToolProvider` stays in `/agent` because its `layout` operation runs dagre.
+It exports `ToolRegistry`, `createToolRegistry`, `ToolRegistryError`, the tool types (`AgentTool`, `AgentToolProvider`, `AgentToolHandler`, `ToolCallContext`, `McpToolDefinition`, `McpToolResult`, `McpListToolsResult`, `ToolCallError`), `validateJsonSchema` / `SchemaValidationError`, the static tool definitions (`EDITOR_MCP_TOOLS`, `EDITOR_CANVAS_TOOLS`, `EDITOR_PROMPT_TOOLS`) and `createMcpServer`. `/agent` re-exports all of it, so existing imports keep working. `createEditorMcpToolProvider` stays in `/agent` because its `layout` operation runs dagre.
 
 ## Commands, shortcuts and the command palette
 

@@ -407,7 +407,7 @@ describe("edit_table agent tool", () => {
     const text = await registry.callTool("get_text", {});
     expect((text.structuredContent as any).content).toContain("\t\t");
     editor.setEditable(false);
-    expect(registry.listTools().tools.map((t) => t.name)).toEqual(["get_text"]);
+    expect(registry.listTools().tools.map((t) => t.name)).toEqual(["get_text", "find_text"]);
     editor.destroy();
   });
 });

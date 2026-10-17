@@ -79,11 +79,29 @@ Our core value proposition is **parity across JavaScript, React, and Svelte**:
 3. **Consumer Parity Check**:
    - Ensure the React package (`@pixerate/editor-react`) maintains full backwards compatibility with `usePromptEditor` options, milestone tracking, and clipboard handling.
    - Ensure the Svelte package (`@pixerate/editor-svelte`) maintains full backwards compatibility with `EditableTextNodeEditor` props, bubble menus, and reactive store behaviors.
-4. **The Parity Test**: Before opening a PR or completing a refactor, review the feature matrix in `README.md` and ensure no cell in the React or Svelte column is left behind.
+4. **The Parity Test**: Before opening a PR or completing a refactor, review the feature matrix in `README.md` and ensure no cell in the React or Svelte column is left behind, and that the feature has an agent path (see section 4).
 
 ---
 
-## 4. Maintain and Check `GOTCHAS.md`
+## 4. Agent Interactions Are First-Class Citizens
+
+AI agents are users of this library in the same way that people at a keyboard are. Every capability must work equally well for both. An agent tool is never something to add later.
+
+1. **Ship the agent path with the feature**: Any user-facing capability, in any package, must be reachable by an agent in the same change. Expose it through a tool provider (`AgentToolProvider` registered in a `ToolRegistry`) or through a command with a `params` JSON Schema (`CommandRegistry` → `createCommandToolProvider`). A feature that only has a UI is incomplete.
+2. **Design tools for a model, not for a function signature**:
+   - **One tool per operation.** Do not add catch-all tools with an `operation` enum and a loose bag of optional arguments. Each tool gets a strict `inputSchema` with `required` and `additionalProperties: false`.
+   - **Describe everything.** Every tool has a `title`, a `description` saying what it does and what it returns, and all four annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`). Every argument has a `description` with units and defaults.
+   - **Close the loop.** Write tools take ids or positions that a read tool returns (e.g. `find_text` → `replace_range`). Write tools return what they created or changed (new ids, the resulting range or value), so the agent never has to guess or re-read the whole state.
+   - **Fail usefully.** Validate inputs against the current state (unknown ids, out-of-range positions, read-only targets) before changing anything. Throw errors that say what is wrong and how to fix it. They become `isError` tool results the model can act on. Never apply part of a change and then fail silently.
+   - **One user action = one undo step.** Bulk tools (`set_range`, `replace_text`) apply as a single history entry. Side effects that cost money or can't be reversed take an idempotency key.
+   - **Respect state.** Read-only or disabled surfaces still expose their read tools and hide or refuse their write tools, with the reason.
+3. **Keep the tool layer dependency-free**: `ToolRegistry`, `validateJsonSchema`, the static tool definitions and `createMcpServer` live in `packages/core/src/tools` and must not import TipTap, ProseMirror, dagre or any framework (`tests/entry-isolation.test.ts` enforces this). Providers that need those live next to their feature or in `src/agent`.
+4. **Parity applies to agents too**: React and Svelte expose providers through `useAgentToolProvider`. The demo tab for a feature must register its providers so they show in its agent-tools panel.
+5. **Test it like a user would**: Every new tool needs tests that call it through `ToolRegistry.callTool` with valid and invalid arguments and check the result shape and error messages. Add new providers to the conformance test in `packages/core/tests/command-tools.test.ts`. It fails when a tool is missing a title, an annotation, or an argument description.
+
+---
+
+## 5. Maintain and Check `GOTCHAS.md`
 
 All agents and contributors must consult and maintain [`GOTCHAS.md`](./GOTCHAS.md):
 
@@ -96,7 +114,7 @@ All agents and contributors must consult and maintain [`GOTCHAS.md`](./GOTCHAS.m
 
 ---
 
-## 5. Build and Verification Checklist
+## 6. Build and Verification Checklist
 
 Before pushing changes:
 ```bash
@@ -109,5 +127,7 @@ pnpm test
 # 3. Verify demo app compiles and runs
 pnpm --filter demo build
 
-# 4. Record any newly discovered pitfalls or workarounds in GOTCHAS.md
+# 4. Check that new capabilities have agent tools (section 4), with tests
+
+# 5. Record any newly discovered pitfalls or workarounds in GOTCHAS.md
 ```
