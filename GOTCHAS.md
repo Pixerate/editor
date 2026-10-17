@@ -1448,3 +1448,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: The full test run reported an unhandled `ReferenceError: document is not defined` from `prosemirror-view`'s `DOMObserver.flush`, attributed to `chart-node.test.ts`, while that file passed on its own.
 - **Root Cause**: Editors created in a test and never destroyed keep ProseMirror's DOM observer timers. Under load, a timer fires after the file's jsdom environment is torn down.
 - **Solution / Workaround**: Destroy every editor a test creates. `chart-node.test.ts` tracks them in an `afterEach`.
+
+### [core/chart] A Chart SVG Drawn to a Canvas Comes Out Black
+
+- **Issue / Symptom**: A PNG made from a live chart's SVG (or `chartToSvg` with `CSS_VARIABLE_CHART_THEME`) had black text, axes and grid lines, and a serif font, although the chart looked right on the page.
+- **Root Cause**: An SVG loaded through an `<img>` (which is how it reaches a canvas) is a separate document: the page's stylesheets and custom properties do not apply. `fill="var(--foreground, #0f172a)"` then has no `--foreground`, and some browsers treat `var()` in a presentation attribute as invalid outright, falling back to the initial paint (black). `currentColor` and `font-family="inherit"` have nothing to inherit either.
+- **Solution / Workaround**: Run `resolveChartSvgPaints(svg, { scope })` before drawing (`rasterizeChartSvg` does): it replaces `var()` with the custom property's computed value on `scope` (or the fallback), `currentColor` with the scope's colour and `inherit` fonts with its font, and drops attributes left empty. Pass the chart's container as `scope` when the theme is scoped to a wrapper (e.g. `.dark`). Agent tools render with `DEFAULT_CHART_THEME` (concrete colours), so their PNGs do not depend on the page. jsdom has no canvas: tests stub `getContext`, `toDataURL` and `Image`.

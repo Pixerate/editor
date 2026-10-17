@@ -5,6 +5,7 @@ import {
   ChartDirector,
   ChartPresence,
   createChartCommands,
+  createChartRasterizer,
   createChartToolProvider,
   layoutChart,
   type ChartScene,
@@ -108,19 +109,24 @@ export function useChartCommands(
   });
 }
 
+/** `useChartToolProvider` options: `rasterize` defaults to a canvas rasterizer in the browser (`false` turns PNG off). */
+export type ChartToolProviderHookOptions = Omit<ChartToolProviderOptions, "rasterize"> & { rasterize?: ChartToolProviderOptions["rasterize"] | false };
+
 /**
  * Registers the chart's agent tools (`createChartToolProvider`) with a `ToolRegistry` for the
- * lifetime of the calling component. Pass a getter to follow a changing registry.
+ * lifetime of the calling component. Pass a getter to follow a changing registry. In the
+ * browser, `render_chart { format: "png" }` works out of the box (`createChartRasterizer`).
  */
 export function useChartToolProvider(
   registry: ToolRegistry | null | undefined | (() => ToolRegistry | null | undefined),
   controller: ChartController,
-  options: ChartToolProviderOptions = {},
+  options: ChartToolProviderHookOptions = {},
 ): void {
   $effect(() => {
     const target = typeof registry === "function" ? registry() : registry;
     if (!target) return;
-    return target.register(createChartToolProvider(controller, options));
+    const { rasterize, ...rest } = options;
+    return target.register(createChartToolProvider(controller, { ...rest, rasterize: rasterize === false ? undefined : (rasterize ?? createChartRasterizer()) }));
   });
 }
 

@@ -32,8 +32,8 @@ import {
 	chartSliceColor
 } from './spec.js';
 import { AXIS, CATEGORY_REF, CHART_UPDATE_PROPERTIES, FORMAT, HEIGHT, SERIES_PROPS, SERIES_REF, TRENDLINE_PROPS, VALUE, WIDTH } from './schemas.js';
-import { summarizeChart } from './summary.js';
-import { chartToSvg } from './svg.js';
+import { describeChart, summarizeChart } from './summary.js';
+import { chartSceneToSvg } from './svg.js';
 import type { ChartSelection, ChartTrendline } from './types.js';
 
 type ParserCtor = { new (): DOMParser };
@@ -62,6 +62,13 @@ export interface ChartToolProviderOptions {
 	/** Turns SVG into an image so `render_chart` can return PNG (e.g. through a canvas). */
 	rasterize?: (svg: string, size: { width: number; height: number }) => Promise<{ data: string; mimeType: string }> | { data: string; mimeType: string };
 }
+
+/**
+ * When to look at the chart, for `render_chart`'s description (after vectorcraft's
+ * `render_preview` and Ursula's VIEW_DIAGRAM_INSTRUCTIONS).
+ */
+export const RENDER_CHART_INSTRUCTIONS =
+	'Draws the chart without changing it so you can check how it looks: SVG text by default, or a PNG image with format "png" when the host can rasterize. Returns the layout warnings (hidden or thinned labels, dropped markers) alongside. An image costs tokens, so render after a batch of edits rather than after each one, and use it to check what text cannot tell you: overlapping or cut-off labels, a crowded legend, unreadable colours, whether the chart reads at the given size. For values, ids and warnings alone, get_chart is cheaper.';
 
 const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
 const WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } as const;
@@ -131,22 +138,36 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 	const renderChart: AgentTool = {
 		name: 'render_chart',
 		title: 'Render the chart',
-		description:
-			'Draws the chart without changing it, to check it visually: SVG text by default, or a PNG image (format "png") when the host can rasterize. Look for overlapping or hidden labels; get_chart lists layout warnings without a render.',
+		description: RENDER_CHART_INSTRUCTIONS,
 		inputSchema: {
 			type: 'object',
-			properties: { width: WIDTH, height: HEIGHT, format: { type: 'string', enum: ['svg', 'png'], description: 'svg (default) or png (only when the host supports it).' } },
+			properties: {
+				width: WIDTH,
+				height: HEIGHT,
+				format: { type: 'string', enum: ['svg', 'png'], description: 'svg (default): the SVG document as text. png: an image to look at (only when the host can rasterize; costs image tokens).' }
+			},
 			additionalProperties: false
 		},
 		annotations: { title: 'Render the chart', ...READ },
 		handler: async ({ width = size.width, height = size.height, format = 'svg' }) => {
-			const svg = chartToSvg(controller.toJSON(), { width, height });
+			const json = controller.toJSON();
+			const scene = layoutChart(json, { width, height, selection: null });
+			const svg = chartSceneToSvg(scene, { ariaLabel: json.title || undefined, description: describeChart(json) });
+			const warnings = scene.warnings;
 			if (format === 'png') {
-				if (!options.rasterize) fail('This host cannot rasterize charts; call render_chart with format "svg".');
+				if (!options.rasterize) fail('This host cannot rasterize charts; call render_chart with format "svg", or get_chart for the layout warnings.');
 				const image = await options.rasterize!(svg, { width, height });
-				return { content: [{ type: 'image', data: image.data, mimeType: image.mimeType }], structuredContent: { width, height, mimeType: image.mimeType } };
+				const info = { width, height, mimeType: image.mimeType, warnings };
+				const note = warnings.length ? `Layout warnings: ${warnings.map((w) => w.message).join(' ')}` : 'No layout warnings.';
+				return {
+					content: [
+						{ type: 'image', data: image.data, mimeType: image.mimeType },
+						{ type: 'text', text: `Chart at ${width} × ${height}. ${note}` }
+					],
+					structuredContent: info
+				};
 			}
-			return { svg, width, height };
+			return { svg, width, height, warnings };
 		}
 	};
 

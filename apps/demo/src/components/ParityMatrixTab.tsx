@@ -62,6 +62,7 @@ const PRODUCTIVITY_FEATURES: ParityRow[] = [
   row("Chart Inspector (type, titles, axes, legend, formats, series)", "update, setAxis, setLegend & updateSeries", "<ChartInspector>", "<ChartInspector>", "All-or-nothing edits with sentence errors"),
   row("Chart SVG Export & Agent Commands", "chartToSvg & createChartCommands", "useChartCommands", "useChartCommands", "Series and categories addressed by name"),
   row("Chart Agent Tools (28, one per operation)", "createChartToolProvider", "useChartToolProvider", "useChartToolProvider", "Read-only hides writes; drags and keys go through the real interaction code"),
+  row("Chart PNG Previews & Download", "rasterizeChartSvg, downloadChartPng & render_chart { format: \"png\" }", "useChartToolProvider (default rasterizer) & <ChartEditor> Download PNG", "useChartToolProvider (default rasterizer) & <ChartEditor> Download PNG", "CSS-variable paints are resolved before drawing; longest side ≤ 1024 px"),
   row("More Chart Types (bubble, radar, waterfall, histogram, box, funnel, treemap)", "layoutChart families", "<ChartCanvas>", "<ChartCanvas>", "Algorithms ported from GridCraft"),
   row("Secondary Axis, Numeric-X Scatter, Date Axes & Trendlines", "yAxis2, series.x, chartDateLabels & fitChartTrendline", "<ChartInspector>", "<ChartInspector>", "Trendline fits return coefficients and R²"),
   row("Chart Mermaid & Office XML Round Trip", "chartToMermaid, chartFromMermaid, chartToOoxml & chartFromOoxml", "Via core", "Via core", "Charts in DOCX imports come back as specs"),
