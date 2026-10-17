@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   chartToMermaid,
   chartToSvg,
+  downloadChartPng,
   chartFromMermaid,
   describeOfficeChartPlace,
   extractOfficeCharts,
@@ -186,6 +187,12 @@ export function ChartTab() {
     }
   };
 
+  const [pngError, setPngError] = useState("");
+  const downloadPng = () => {
+    setPngError("");
+    downloadChartPng(state.spec, { width: 800, height: 450 }).catch((error: unknown) => setPngError(error instanceof Error ? error.message : String(error)));
+  };
+
   const stream = () => {
     if (timer.current) clearInterval(timer.current);
     let i = 0;
@@ -230,6 +237,9 @@ export function ChartTab() {
           </button>
           <button type="button" className={button} onClick={copySvg}>
             {copied ? "Copied!" : "Copy SVG"}
+          </button>
+          <button type="button" className={button} onClick={downloadPng} title={pngError || "Download the chart as an 800 × 450 PNG (drawn at 2×, longest side 1024 px)"}>
+            {pngError ? "PNG failed" : "Download PNG"}
           </button>
         </div>
       </div>

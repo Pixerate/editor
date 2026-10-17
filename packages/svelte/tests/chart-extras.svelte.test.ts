@@ -1,8 +1,8 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { flushSync, mount, unmount } from "svelte";
 import { ToolRegistry } from "@pixerate/editor/tools";
 import { ChartController, ChartPresence, type ChartSpec } from "@pixerate/editor/chart";
-import { ChartCanvas, ChartInspector, ChartSparkline, ChartStreamingView, createChartDirector, useChartToolProvider, useOfficeChartToolProvider } from "../src/chart";
+import { ChartCanvas, ChartEditor, ChartInspector, ChartSparkline, ChartStreamingView, createChartDirector, useChartToolProvider, useOfficeChartToolProvider } from "../src/chart";
 
 let cleanups: (() => void)[] = [];
 afterEach(() => {
@@ -18,6 +18,28 @@ const sales: Partial<ChartSpec> = {
     { id: "south", name: "South", values: [8, 11, 14] },
   ],
 };
+
+/** jsdom has no canvas or image decoding: stub them and record the SVG handed to the image. */
+function stubCanvas() {
+  const loaded: string[] = [];
+  class FakeImage {
+    onload: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    set src(value: string) {
+      loaded.push(decodeURIComponent(value.slice(value.indexOf(",") + 1)));
+      queueMicrotask(() => this.onload?.());
+    }
+  }
+  vi.stubGlobal("Image", FakeImage);
+  vi.spyOn(window, "Image", "get").mockReturnValue(FakeImage as never);
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({ fillStyle: "", fillRect() {}, drawImage() {} } as never);
+  vi.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockReturnValue("data:image/png;base64,iVBORw0KGgo=");
+  const downloads: string[] = [];
+  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
+    downloads.push(this.download);
+  });
+  return { loaded, downloads };
+}
 
 function render(component: any, props: Record<string, any>) {
   const target = document.createElement("div");
@@ -144,5 +166,48 @@ describe("chart agent helpers", () => {
     expect(listed.structuredContent).toEqual({ files: [{ name: "a.xlsx", bytes: 3 }] });
     cleanup();
     expect(registry.listTools().tools).toHaveLength(0);
+  });
+});
+
+describe("chart PNG previews", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("rasterizes render_chart by default in the browser, with the warnings", async () => {
+    const canvas = stubCanvas();
+    const registry = new ToolRegistry();
+    const controller = new ChartController({ spec: sales });
+    let cleanup = $effect.root(() => useChartToolProvider(registry, controller));
+    flushSync();
+    let result: any = await registry.callTool("render_chart", { format: "png", width: 320, height: 200 });
+    expect(result.isError).toBeFalsy();
+    expect(result.content[0]).toEqual({ type: "image", data: "iVBORw0KGgo=", mimeType: "image/png" });
+    expect(result.content[1].text).toMatch(/^Chart at 320 × 200/);
+    expect(result.structuredContent.warnings).toEqual(expect.any(Array));
+    expect(canvas.loaded[0]).toMatch(/^<svg/);
+    expect(canvas.loaded[0]).not.toContain("var(");
+    cleanup();
+    cleanup = $effect.root(() => useChartToolProvider(registry, controller, { rasterize: false }));
+    flushSync();
+    result = await registry.callTool("render_chart", { format: "png" });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/cannot rasterize/);
+    cleanup();
+  });
+
+  it("downloads a PNG from the ChartEditor toolbar", async () => {
+    const canvas = stubCanvas();
+    const controller = new ChartController({ spec: sales });
+    const el = render(ChartEditor, { controller, canvasProps: { responsive: false }, pngOptions: { filename: "sales.png" } });
+    const button = el.querySelector('[data-action="download-png"]') as HTMLButtonElement;
+    expect(button.textContent).toBe("Download PNG");
+    button.click();
+    await new Promise((r) => setTimeout(r, 0));
+    flushSync();
+    expect(canvas.downloads).toEqual(["sales.png"]);
+    expect(canvas.loaded[0]).toContain("Quarterly sales");
+    expect(el.querySelector("[data-chart-png-error]")).toBeNull();
   });
 });

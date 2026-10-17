@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.50.0
+
+### Minor Changes
+
+- 39d5cba: feat(canvas,image-editor,vector): add `PIXERATE_BRAND_GRADIENT`, UI-agnostic agent presence trajectory/rotation math and `AgentCursorPresence`, region mosaic/blur image filters (`applyRegionMosaic`, `applyRegionBlur`), and CSS transform scale compensation in `VectorCanvas`
+
 ## 0.49.0
 
 ### Minor Changes

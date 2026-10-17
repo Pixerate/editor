@@ -23,3 +23,11 @@ export type CurvesEditorProps = ComponentProps<typeof CurvesEditorComponent>;
 export type ControlSliderProps = ComponentProps<typeof ControlSliderComponent>;
 export type SelectionOptionsBarProps = ComponentProps<typeof SelectionOptionsBarComponent>;
 export type RefineEdgePanelProps = ComponentProps<typeof RefineEdgePanelComponent>;
+
+export {
+	applyRegionMosaic,
+	applyRegionBlur,
+	resolveMosaicRegionBounds,
+	type MosaicRegion,
+	type MosaicImageDataLike
+} from '@pixerate/editor/image-editor';
