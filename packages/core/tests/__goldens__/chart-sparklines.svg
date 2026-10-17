@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="80" height="20" viewBox="0 0 80 20" role="img">
+<path d="M2,18L17.2,10L32.4,14M62.8,2L78,6" fill="none" stroke="#4269d0" stroke-width="1.25" stroke-linejoin="round" stroke-linecap="round" data-role="line"/>
+<circle cx="62.800000000000004" cy="2" r="2.1" fill="#4269d0" data-role="point"/>
+<circle cx="2" cy="18" r="2.1" fill="#e5484d" data-role="point"/>
+</svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="60" height="20" viewBox="0 0 60 20" role="img">
+<rect x="3.8666666666666663" y="8.4" width="14.933333333333335" height="3.1999999999999993" fill="#4269d0" data-role="bar"/>
+<rect x="22.533333333333335" y="11.6" width="14.933333333333335" height="6.4" fill="#e5484d" data-role="bar"/>
+<rect x="41.2" y="2" width="14.933333333333335" height="9.6" fill="#4269d0" data-role="bar"/>
+</svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="60" height="20" viewBox="0 0 60 20" role="img">
+<rect x="3.3999999999999995" y="2" width="11.200000000000001" height="8" fill="#4269d0" data-role="bar"/>
+<rect x="17.4" y="10" width="11.200000000000001" height="8" fill="#e5484d" data-role="bar"/>
+<rect x="45.4" y="2" width="11.200000000000001" height="8" fill="#4269d0" data-role="bar"/>
+</svg>

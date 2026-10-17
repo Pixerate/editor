@@ -8,7 +8,7 @@
 import { createChartSpec, normalizeChartSpec } from "@pixerate/editor/chart";
 
 const spec = createChartSpec({
-  type: "bar", // bar · line · area · scatter · pie · donut
+  type: "bar", // bar · line · area · scatter · bubble · pie · donut · radar · waterfall · histogram · box · funnel · treemap
   title: "Quarterly revenue",
   categories: ["Q1", "Q2", "Q3", "Q4"],
   series: [
@@ -24,7 +24,7 @@ const spec = createChartSpec({
 - `xAxis` is always the category axis and `yAxis` the value axis, whatever the orientation. Horizontal bars (`orientation: "horizontal"`) draw categories down the left and values along the bottom.
 - Pies and donuts draw the first visible series, one slice per category; the legend lists categories.
 - Bars and areas stack separately; lines and scatter series are never stacked. `percent` scales each category's stack to 100% (dragging is disabled there, since values are shown as shares).
-- `normalizeChartSpec(input)` checks everything and returns `{ spec, issues }`: problems become sentences (`type must be one of "bar", …; got "radar".`) and are replaced by defaults, so the result always draws. Series values are padded or trimmed to the categories, and duplicate series ids are renamed.
+- `normalizeChartSpec(input)` checks everything and returns `{ spec, issues }`: problems become sentences (`type must be one of "bar", …; got "gauge".`) and are replaced by defaults, so the result always draws. Series values are padded or trimmed to the categories, and duplicate series ids are renamed.
 - `parseChartValue` reads numbers the way people type them: `1,234.5`, `12%` (0.12), `$40`, `(3)` (−3), blank for a gap.
 
 ## Layout and rendering
@@ -105,3 +105,59 @@ function Revenue() {
 ## Agent commands
 
 `createChartCommands(controller, { prefix })` returns `CommandSpec`s for a `CommandRegistry`: `chart.describe` (spec plus a data table), `chart.update`, `chart.setData`, `chart.setValues` (series by id or name, category by index or label), `chart.addSeries`, `chart.updateSeries`, `chart.removeSeries`, `chart.addCategory`, `chart.removeCategory`, `chart.importCsv`, `chart.exportSvg`, `chart.undo` and `chart.redo`. Parameters are JSON Schema; failures throw sentences, which the registry returns as `{ ok: false, code: "failed", message }`.
+
+## Chart types
+
+| Type | Data | Notes |
+| --- | --- | --- |
+| `bar`, `line`, `area`, `scatter` | one value per category per series | combos via `series.type`; `series.axis: "secondary"` uses `yAxis2` on the right (top for horizontal bars) |
+| `scatter` with `series.x`, `bubble` | `x`, `values` (y) and `sizes` per category | numeric x axis (`xAxis` min / max / step / format); bubble area ∝ size |
+| `pie`, `donut`, `funnel`, `treemap` | the first visible series, one item per category | colours per category; `pointColors` overrides |
+| `radar` | one spoke per category, one polygon per series | needs 3 categories (draws as a line chart until then) |
+| `waterfall` | the first series as increases / decreases | categories labelled "total" / "subtotal" are running totals; `showTotal` appends one |
+| `histogram` | every value of the visible series | `bins` (default √n, 1–100); right-inclusive bins |
+| `box` | one box per visible series | Tukey whiskers (1.5 × IQR), outliers, mean ✕ |
+
+Other spec fields: `xAxis.kind: "date"` (categories read as dates, labelled with calendar steps that fit), `axis.step` (fixed tick distance), `format.code` (spreadsheet codes such as `#,##0.0,,"M"`, using the spreadsheet's own format engine), `gapWidth` / `overlap` (bar spacing), `labelPosition` (`auto` drops labels that do not fit and picks dark or white text by contrast), and per series `marker`, `curve`, `dataLabels`, `format`, `pointColors` and `trendlines`.
+
+## Trendlines
+
+```ts
+chart.addTrendline("sales", { type: "polynomial", order: 2, forward: 2, showEquation: true, showR2: true });
+chart.trendlineFit("sales", 0); // { coefficients, r2, equation, points, evaluate(x) }
+```
+
+Linear, exponential, logarithmic, power, polynomial (2–6) and moving-average fits, as spreadsheets compute them. Category charts fit against x = 1, 2, 3, …. Trendlines need an unstacked bar, line, area, scatter or bubble chart.
+
+## Layout warnings, summaries and accessibility
+
+`layoutChart` returns `scene.warnings` for anything it had to leave out (hidden or shortened labels, a truncated legend, thinned lines, skipped non-finite values). `summarizeChart(spec, size)` adds per-series min / max / mean / trend, the axes as drawn, a colour check and `describeChart`'s plain-language description, which `chartToSvg` also writes as `<desc>`. `checkChartColors` tests a palette with normal vision and three colour-vision deficiencies. `CHART_LAYOUT_PRESETS` and `CHART_COLOR_SCHEMES` (including monochrome and Okabe–Ito) apply through `applyPreset`.
+
+## Mermaid and Office files
+
+```ts
+const text = chartToMermaid(spec); // xychart-beta, pie or radar-beta + one "%% @pixerate {…}" comment
+const { spec, issues } = chartFromMermaid(text); // issues carry 1-based line numbers; never throws
+findMermaidCharts(markdownOrChat); // fenced or bare charts
+
+const { xml, issues } = chartToOoxml(spec); // c:chartSpace with literal data
+const { spec, unsupported, lossless } = chartFromOoxml(xml, { DOMParser }); // also chartex parts
+```
+
+The comment keeps what Mermaid cannot express, so text round-trips exactly while any Mermaid renderer still draws the basic chart. DOCX imports return embedded charts in `DocumentImport.charts` and show each as a caption and a data table (see GOTCHAS for why not an SVG image).
+
+## Streaming, agent cursors and sparklines
+
+- `ChartStream` reads Mermaid or JSON that is still arriving; the axis only grows until `complete`. `<ChartStreamingView source complete />` (React and Svelte) tweens between layouts with `blendChartScenes`.
+- `ChartDirector` acts agent commands out on the canvas: a cursor (from `ChartPresence`, drawn by `ChartCanvas`'s `presence` prop) moves to a bar, drags it to the new value and the call commits as one undo step. `useChartDirector` (React) / `createChartDirector` (Svelte) wire it up; pass `director` to the tool provider to animate `set_chart_values` and `select_chart_element`.
+- `layoutSparkline` / `<ChartSparkline>` draw word-sized line, column and win/loss charts.
+
+## Interaction
+
+Drags snap to nearby values (zero, the start value, other series at the category, neighbours, ticks) within 6 px, then to a tenth of a tick. `move(point, { fine, lockAxis, noSnap })` maps to Alt, Shift and Ctrl / ⌘ in the canvases; `cancel()` (Escape) takes the drag back with no undo step. Scatter charts with x values drag in both directions. `chartHitTest` finds the mark under a point for hosts without DOM events.
+
+## Agent tools
+
+`createChartToolProvider(controller, { readOnly, director, rasterize, DOMParser })` registers 28 tools, one per operation: `get_chart`, `render_chart`, `check_chart_colors`, `recommend_chart`, `get_chart_trendline`, `list_chart_presets`, `export_chart_mermaid`, `export_chart_ooxml`, `update_chart`, `set_chart_data`, `set_chart_values`, `add_chart_series`, `update_chart_series`, `remove_chart_series`, `add_chart_category`, `remove_chart_category`, `import_chart_csv` (with `chartType: "auto"`), `import_chart_mermaid`, `import_chart_ooxml`, `add_chart_trendline`, `remove_chart_trendline`, `apply_chart_preset`, `transpose_chart`, `select_chart_element`, `drag_chart_point` and `press_chart_key` (through the same code as the pointer and keyboard), `undo_chart` and `redo_chart`. Write tools are hidden while `readOnly` is set, and `get_chart` says why.
+
+For several commands at once, `run_commands` accepts `"$0.id"` / `"$last.path"` references to earlier results and `atomic: true` (one undo step, all or nothing) when the registry shares a `history` with the controllers.

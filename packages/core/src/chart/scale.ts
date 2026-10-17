@@ -1,3 +1,4 @@
+import { formatChartValueWithCode } from './numfmt.js';
 import type { ChartNumberFormat } from './types.js';
 
 /** A "nice" step (1, 2, 2.5 or 5 × 10ⁿ) for about `count` intervals over `span`. */
@@ -108,6 +109,7 @@ const CURRENCY_SYMBOLS: Record<string, string> = { USD: '$', EUR: '€', GBP: '�
  */
 export function formatChartNumber(value: number | null | undefined, format: ChartNumberFormat = {}, fallbackDecimals?: number): string {
 	if (value === null || value === undefined || !Number.isFinite(value)) return '';
+	if (format.code) return `${format.prefix ?? ''}${formatChartValueWithCode(value, format.code)}${format.suffix ?? ''}`;
 	const style = format.style ?? 'number';
 	let body: string;
 	const decimalsFor = (v: number) => {

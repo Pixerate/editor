@@ -30,12 +30,15 @@ reproduced at the end of this file. Paths are relative to each source repository
 © 2026 ArtCraft Team and the DeckCraft contributors.
 
 - `crates/geom/src/morph.rs` (`contours`: every segment as a cubic, lines with handles at thirds; `align`: contours paired in order, one without a partner meeting a point at the same place relative to the other outline's box (`place`); `turn`: a closed contour restarted at another anchor; `match_pair`: the closed side of a pair turned, open paired with closed) → `subpathToMorphContour`, `turnMorphContour` and `correspondMorphContours` in `packages/core/src/vector/blend.ts`; anchors are inserted by arc length rather than split evenly per curve, and the winding of closed shapes follows their areas (effectcraft) instead of a cost comparison; test cases re-expressed → `packages/core/tests/vector-blend.test.ts`
+- `crates/pptx/src/read/chart.rs` (DrawingML chart reading: group → type mapping, secondary value axis by axis id and position rather than file order, cached and literal data, data-label number-format precedence, point fills) → `chartFromOoxml` in `packages/core/src/chart/ooxml.ts`
 
 ## designcraft
 
 © 2026 ArtCraft Team and the DesignCraft contributors.
 
 - `crates/tools/src/snap.rs` (`pass_dimensions`: a resized or created object's side matches another object's width or height in its own frame, nearest within the zone, when nothing else snapped on that axis) → `VectorSnapTargets.snapScale` / `matchSize` in `packages/core/src/vector/snap.ts`
+- `crates/color/src/cms/mod.rs` (`simulate_cvd`: Machado–Oliveira–Fernandes 2009 colour-vision matrices in linear RGB) → `simulateChartVision` and `checkChartColors` in `packages/core/src/chart/color.ts`
+- `crates/mcp/src/tools.rs` (`key`: keys through the real keyboard path) → `press_chart_key` in `packages/core/src/chart/tools.ts`
 
 ## effectcraft
 
@@ -46,6 +49,7 @@ reproduced at the end of this file. Paths are relative to each source repository
 - `crates/path/src/ops.rs` (`trim` / `trim_individually` with `trim_intervals` and `Measured::append`: start / end percentages swapped when reversed, an offset in degrees wrapping round, a piece that starts where the last ended continuing it; `pucker_bloat`; `round_corners`; `offset` with copies at `amount · (i + 1 + copy_offset)`; `twist` with subdivided segments and handles mapped through the warp's derivative; `resample` and `emit` (corner bisectors, smooth handles as a fraction of the pieces); `zigzag`; `WiggleParams`, `splitmix`, `hash`, the Catmull-Rom `noise` and `wiggle`; `MergeMode` and `merge`) → `trimPaths`, `trimPathsIndividually`, `puckerBloatPaths`, `offsetPaths`, `twistPaths`, `zigzagPaths`, `wigglePaths` and `mergePaths` in `packages/core/src/vector/pathEffects.ts`; arc lengths come from our `segmentLength` / `trimSegments`, offsets from `offsetPath`, booleans from `pathBoolean`, and Round Corners (`roundCornerPaths`) uses our live-corner maths (a true radius) instead of the port's setback arc; the wiggle's time is a plain parameter; test cases from `crates/path/src/ops/tests.rs` re-expressed → `packages/core/tests/vector-effects.test.ts`
 - `crates/render/src/shapes.rs` (the module's stacking rule — an operator acts on every path above it in its group, nested groups included, and operators below a repeater act on its copies; the `"repeater"` branch of `collect()`: copy i transformed by `translate(position·k) · rotate(rotation·k) · scale^k` about the anchor with `k = i + offset`, opacity ramped from start to end, a fractional count fading the last copy, below / above composite order; Merge Paths painting with the paint below it) → `applyVectorEffects` / `vectorAppearanceShapes` in `packages/core/src/vector/appearance.ts` and `vectorRepeaterCopies` / `repeatPaths` in `packages/core/src/vector/pathEffects.ts`; effects live on path and group nodes rather than as items among paints, each shape painted in its source path's style (merged results in the bottom one's), and the repeater's anchor is an offset from the middle of the shapes' bounds
 - `crates/render/src/shapes.rs` (`GradientRamp::new` / `t`: a radial gradient's focal point and t measured along the ray from it to the circle, the same as SVG `fx` / `fy`) → `vectorGradientFocalParam` in `packages/core/src/vector/gradient.ts`, generalised to SVG's focal circle (`fr`); test cases re-expressed → `packages/core/tests/vector-gradient.test.ts`
+- `crates/ui-egui/src/panels/graph.rs` and `graph_tools.rs` (value range frozen while a key is dragged, Shift locks to the axis moved most, `snap_px` nearest candidate within a few screen pixels) → `startChartPointDrag` and `snapChartDragValue` in `packages/core/src/chart/interaction.ts`
 
 ## figcraft
 
@@ -89,6 +93,9 @@ reproduced at the end of this file. Paths are relative to each source repository
 - `crates/project/src/keyframe.rs` (`Keyframe`, `Param::value_at` segment evaluation and hold, `set_at` inheriting the previous interpolation, `remove_keyframe_at` keeping the last value, `toggle_animation` keeping the value at a time, temporal influence easing, `cubic_bezier_y_for_x` Newton + bisection solver) → `packages/core/src/canvas/animation/{easing,model,evaluate,edit}.ts`
 - `crates/engine/src/keyframe_move.rs` (`move_many`: one common delta across lanes clamped to the movement range, remove-all-originals-then-insert, validation without partial edits, at most 4096 keys) → `moveKeyframes` / `scaleKeyframes` in `packages/core/src/canvas/animation/edit.ts`, keyframe drags in `packages/core/src/canvas/animation/controller.ts`
 - `crates/project/src/keyframe.rs` tests, `crates/engine/src/keyframe_move.rs` tests and `crates/ui-egui/tests/keyframes_ui.rs` (group move and undo as one step, snapping within a screen-space threshold, Escape cancelling a drag preview; test cases re-expressed) → `packages/core/tests/canvas-animation.test.ts`, `packages/react/tests/canvas-animation.test.tsx`, `packages/svelte/tests/canvas/canvas-animation.test.ts`
+- `crates/ui-egui/src/panels/timeline.rs` (`ruler_steps`: the first step on a ladder that keeps labels apart) → `chartDateLabels` in `packages/core/src/chart/date.ts`, with calendar units
+- `crates/scopes/src/summary.rs` (numeric summaries for agents that check visuals without looking) → `summarizeChart` in `packages/core/src/chart/summary.ts`
+- `crates/golden` (committed reference renders with a regenerate mode) → `packages/core/tests/chart-golden.test.ts`
 
 ## gridcraft
 
@@ -113,6 +120,13 @@ reproduced at the end of this file. Paths are relative to each source repository
 `TEXT()` result) come from Apache POI's `test-data/spreadsheet/NumberFormatApproxTests.xlsx`, as collected in
 GridCraft. Apache POI is © The Apache Software Foundation, licensed under the Apache License, Version 2.0
 (https://www.apache.org/licenses/LICENSE-2.0).
+- `crates/chart/src/trend.rs` (least-squares trendlines on transformed data, polynomial normal equations on centred / scaled x, Gaussian elimination, fixed intercept with uncentred R², equation text, moving average, legend names) → `packages/core/src/chart/trend.ts`; test cases re-expressed → `packages/core/tests/chart-features.test.ts`
+- `crates/chart/src/render.rs` (`histogram` binning, `quantile` and `box_whisker`, `squarify` treemap, `waterfall`, `funnel`, `radar`, `decimate`, marker de-duplication, `clip_segment`, label colour by fill, legend height cap, `finalize`) → `packages/core/src/chart/stats.ts`, `layout-families.ts`, `layout-cartesian.ts` and `layout.ts`
+- `crates/chart/src/resolve.rs` (palette tint cycle after the base colours) → `cyclePaletteColor` in `packages/core/src/chart/color.ts`
+- `crates/chart/src/sparkline.rs` → `layoutSparkline` in `packages/core/src/chart/sparkline.ts`
+- `crates/engine/src/cmd/insert.rs` (`series_from_range`, `scatter_x_from_first`, `recommend_charts`) → `packages/core/src/chart/recommend.ts`
+- `crates/engine/src/cmd/extra.rs` (`chart.quickLayout`, `chart.changeColors`) → `packages/core/src/chart/presets.ts`
+- `crates/xlsx/src/chartex.rs` (chartex parts for waterfall, funnel, treemap, histogram and box charts) → `chartFromOoxml` in `packages/core/src/chart/ooxml.ts`
 
 ## lightcraft
 
@@ -124,6 +138,8 @@ GridCraft. Apache POI is © The Apache Software Foundation, licensed under the A
 - `crates/pipeline/src/local.rs` (relative white balance with neutral-luminance normalisation) → `packages/core/src/image-editor/color.ts`
 - `crates/develop/src/settings.rs` and `docs/process-versions.md` (process version semantics) → `packages/core/src/image-editor/color.ts`
 - `crates/develop/src/controls.rs` (`ControlSpec` table: id, label, section, range, default, step, decimals, track style; clamping) → `packages/core/src/image-editor/controls.ts`
+- `crates/ui-egui/src/tests_curve.rs` (Alt moves a point a tenth as far) → `ChartDragMoveOptions.fine` in `packages/core/src/chart/interaction.ts`
+- `crates/mcp/src/tools.rs` (`pointer_gesture` in normalized coordinates) → `drag_chart_point` in `packages/core/src/chart/tools.ts`
 
 ## pdfcraft
 
@@ -205,6 +221,9 @@ GridCraft. Apache POI is © The Apache Software Foundation, licensed under the A
 - `crates/svg/src/import/spread.rs` (`expand`, `whole_period`, `mirror`: `reflect` and `repeat` emulated by repeating the stops over the periods the painted area needs, every other one mirrored for reflect, capped at 64) → `periodicVectorGradientStops` / `expandVectorGradientSpread` in `packages/core/src/vector/gradient.ts`, used where SVG has no spread mode for the style (reflected gradients that pad or repeat); import keeps `spreadMethod` as the gradient's `spread`; test cases re-expressed → `packages/core/tests/vector-gradient.test.ts`
 - `crates/effects/src/stroke/gradient.rs` (gradients along and across a stroke: ribs through the flattened path on the bisectors of gentle turns, square ribs and a fill in the corner's colour at sharp ones, slices between ribs painted with the part of the gradient between them — along — or from the stroke's left edge to its right — across — clipped to the stroke) → `vectorStrokeGradientDefs` in `packages/core/src/vector/gradientStroke.ts`, written as a `<pattern>` of slices the stroke paints through (no clip); a sharp corner gets one patch instead of a fan of ribs
 - `crates/tools/src/xform/gradient.rs` (the Gradient tool's annotator: a bar from the start to the end handle with stop chips below it and midpoint diamonds above, a radial's extent ellipse with its aspect handle and focal point; click the bar to add a stop, drag a stop along it or off it to delete it; Shift constrains the vector) → `packages/core/src/vector/gradientTool.ts` and the `gradient` tool in `packages/core/src/vector/controller.ts`
+- `crates/mcp/src/tools.rs` (`command_batch`: `$N.path` result references, atomic batches with a label; `render_preview`) → `run_commands` in `packages/core/src/commands/agentTools.ts` and `render_chart` in `packages/core/src/chart/tools.ts`
+- `crates/testkit/src/strategies.rs` and `invariants.rs` (random command sequences with junk values, invariants, undo-all / redo-all) → `packages/core/tests/chart-property.test.ts`
+- `crates/svg/src/export.rs` (`<title>` and `<desc>` in exported SVG) → `chartSceneToSvg` in `packages/core/src/chart/svg.ts`
 
 ## wordcraft
 
@@ -230,6 +249,7 @@ GridCraft. Apache POI is © The Apache Software Foundation, licensed under the A
 - `crates/docx/src/read/mod.rs` (`read_comments`: comments keyed by the `w14:paraId` of their last paragraph, `commentEx` parents and `done`) and `crates/docx/src/read/story.rs` (tracked insertions, deletions and named move ranges) → `packages/core/src/import/docx.ts`
 - Test cases from `crates/docx/tests/privacy.rs` (`remove_personal_information_and_dates_on_save`: the two-commenter fixture, no names or initials in any part, "Author" / "A"), `crates/docx/tests/roundtrip.rs` and `crates/docx/tests/fixtures.rs` (comments, replies, tracked changes and moves surviving a save and reload), re-expressed → `packages/core/tests/docx-export.test.ts`
 - `crates/engine/src/cmd/ink_shape.rs` (`recognise`, `ellipse_rms`, `snap_square`, `corners`, `turning`, `rdp`, `upright`, `MIN_SIZE`, `MAX_CORNERS`) → `recognizeInkShape` in `packages/core/src/vector/ink.ts`; its test cases re-expressed → `packages/core/tests/vector-path-edit.test.ts`
+- `crates/docx/src/chart_spec.rs` (a chart is editable only when it regenerates without loss) → `ChartOoxmlReadResult.lossless` and the DOCX chart import in `packages/core/src/import/docx.ts`
 
 ## MIT License
 

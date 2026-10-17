@@ -319,6 +319,11 @@ export class CommandRegistry<TContext = any> {
 		return { spec, params: input };
 	}
 
+	/** The history `undoable` commands (and atomic agent batches) record into, if any. */
+	get history(): CommandHistoryTarget | undefined {
+		return this.options.history;
+	}
+
 	private invoke(spec: CommandSpec<TContext>, params: any, context: TContext): unknown {
 		const history = this.options.history;
 		if (!spec.undoable || !history) return spec.run(context, params);

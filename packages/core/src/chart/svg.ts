@@ -1,4 +1,7 @@
+// `<title>` and `<desc>` on exported SVG follow vectorcraft-main/crates/svg/src/export.rs (MIT OR Apache-2.0,
+// © ArtCraft Team and contributors). See THIRD_PARTY_NOTICES.md.
 import { layoutChart, type ChartLayoutOptions } from './layout.js';
+import { describeChart } from './summary.js';
 import type { ChartMark, ChartScene, ChartSpec, ChartTextMark } from './types.js';
 
 /** SVG `dominant-baseline` for a text mark's baseline (shared by every renderer). */
@@ -52,6 +55,8 @@ export interface ChartSvgOptions {
 	hideSelection?: boolean;
 	/** Accessible title (default: the chart title). */
 	ariaLabel?: string;
+	/** A longer description written as `<desc>` (`chartToSvg` defaults to `describeChart`). */
+	description?: string;
 }
 
 /** Writes a laid-out scene as a standalone SVG document string. */
@@ -63,11 +68,14 @@ export function chartSceneToSvg(scene: ChartScene, options: ChartSvgOptions = {}
 		.map((m) => markToSvg(m, font))
 		.join('');
 	const label = options.ariaLabel;
-	return `<svg xmlns="http://www.w3.org/2000/svg" width="${scene.width}" height="${scene.height}" viewBox="0 0 ${scene.width} ${scene.height}" role="img"${label ? ` aria-label="${escape(label)}"` : ''}>${body}</svg>`;
+	const desc = options.description;
+	const labelled = [label ? 'chart-title' : '', desc ? 'chart-desc' : ''].filter(Boolean).join(' ');
+	const head = `${label ? `<title id="chart-title">${escape(label)}</title>` : ''}${desc ? `<desc id="chart-desc">${escape(desc)}</desc>` : ''}`;
+	return `<svg xmlns="http://www.w3.org/2000/svg" width="${scene.width}" height="${scene.height}" viewBox="0 0 ${scene.width} ${scene.height}" role="img"${label ? ` aria-label="${escape(label)}"` : ''}${labelled ? ` aria-labelledby="${labelled}"` : ''}>${head}${body}</svg>`;
 }
 
 /** Lays out and writes a chart as SVG, e.g. for export or server rendering. */
 export function chartToSvg(spec: ChartSpec, options: Omit<ChartLayoutOptions, 'selection'> & ChartSvgOptions): string {
 	const scene = layoutChart(spec, { ...options, selection: null });
-	return chartSceneToSvg(scene, { ...options, ariaLabel: options.ariaLabel ?? (spec.title || undefined) });
+	return chartSceneToSvg(scene, { ...options, ariaLabel: options.ariaLabel ?? (spec.title || undefined), description: options.description ?? describeChart(spec) });
 }

@@ -1,7 +1,14 @@
 import { untrack } from "svelte";
+import type { ToolRegistry } from "@pixerate/editor/tools";
 import {
   ChartController,
+  ChartDirector,
+  ChartPresence,
   createChartCommands,
+  createChartToolProvider,
+  layoutChart,
+  type ChartScene,
+  type ChartToolProviderOptions,
   type ChartActionResult,
   type ChartCommandOptions,
   type ChartControllerOptions,
@@ -99,4 +106,33 @@ export function useChartCommands(
     if (!target) return;
     return target.register(createChartCommands(controller, options));
   });
+}
+
+/**
+ * Registers the chart's agent tools (`createChartToolProvider`) with a `ToolRegistry` for the
+ * lifetime of the calling component. Pass a getter to follow a changing registry.
+ */
+export function useChartToolProvider(
+  registry: ToolRegistry | null | undefined | (() => ToolRegistry | null | undefined),
+  controller: ChartController,
+  options: ChartToolProviderOptions = {},
+): void {
+  $effect(() => {
+    const target = typeof registry === "function" ? registry() : registry;
+    if (!target) return;
+    return target.register(createChartToolProvider(controller, options));
+  });
+}
+
+/**
+ * A `ChartPresence` and `ChartDirector` for a chart: pass `presence` and `sceneRef` to
+ * `ChartCanvas`, and `director` to `useChartToolProvider` so agent edits are acted out with a
+ * cursor.
+ */
+export function createChartDirector(controller: ChartController, options: { speed?: number; size?: { width: number; height: number } } = {}) {
+  const sceneRef: { current: ChartScene | null } = { current: null };
+  const presence = new ChartPresence();
+  const size = options.size ?? { width: 640, height: 400 };
+  const director = new ChartDirector(controller, presence, { scene: () => sceneRef.current ?? layoutChart(controller.getSpec(), size), speed: options.speed });
+  return { presence, director, sceneRef };
 }

@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="300" viewBox="0 0 480 300" role="img" aria-label="Revenue and margin" aria-labelledby="chart-title chart-desc">
+<title id="chart-title">Revenue and margin</title>
+<desc id="chart-desc">Revenue and margin: a bar chart showing 3 series over 4 categories (Q1 to Q4). North America ranges from 42 (Q1) to 60.3 (Q4), rising, up 44% from first to last. Europe ranges from 29.8 (Q2) to 41.2 (Q4), rising, up 33% from first to last. Margin ranges from 0.21 (Q1) to 0.28 (Q4), rising, up 33% from first to last.</desc>
+<rect x="0" y="0" width="480" height="300" fill="#ffffff" data-role="background"/>
+<text x="240" y="12" text-anchor="middle" dominant-baseline="hanging" font-size="15" font-weight="600" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" data-role="title">Revenue and margin</text>
+<rect x="124.99999999999999" y="273.65000000000003" width="10" height="10" rx="2" fill="#4269d0" data-role="legend-swatch"/>
+<text x="141" y="278.65000000000003" text-anchor="start" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" data-role="legend-label">North America</text>
+<rect x="235.07999999999998" y="273.65000000000003" width="10" height="10" rx="2" fill="#efb118" data-role="legend-swatch"/>
+<text x="251.07999999999998" y="278.65000000000003" text-anchor="start" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" data-role="legend-label">Europe</text>
+<line x1="302.03999999999996" y1="278.65000000000003" x2="312.03999999999996" y2="278.65000000000003" stroke="#ff725c" stroke-width="2.5" data-role="legend-swatch"/>
+<text x="318.03999999999996" y="278.65000000000003" text-anchor="start" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" data-role="legend-label">Margin</text>
+<line x1="32.32" y1="245.70000000000002" x2="441.52" y2="245.70000000000002" stroke="#e2e8f0" stroke-width="1" data-role="grid"/>
+<line x1="32.32" y1="195.7125" x2="441.52" y2="195.7125" stroke="#e2e8f0" stroke-width="1" data-role="grid"/>
+<line x1="32.32" y1="145.72500000000002" x2="441.52" y2="145.72500000000002" stroke="#e2e8f0" stroke-width="1" data-role="grid"/>
+<line x1="32.32" y1="95.73750000000001" x2="441.52" y2="95.73750000000001" stroke="#e2e8f0" stroke-width="1" data-role="grid"/>
+<line x1="32.32" y1="45.75" x2="441.52" y2="45.75" stroke="#e2e8f0" stroke-width="1" data-role="grid"/>
+<text x="24.32" y="245.70000000000002" text-anchor="end" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">0</text>
+<text x="24.32" y="195.7125" text-anchor="end" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">20</text>
+<text x="24.32" y="145.72500000000002" text-anchor="end" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">40</text>
+<text x="24.32" y="95.73750000000001" text-anchor="end" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">60</text>
+<text x="24.32" y="45.75" text-anchor="end" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">80</text>
+<text x="449.52" y="245.70000000000002" text-anchor="start" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">20%</text>
+<text x="449.52" y="205.71000000000004" text-anchor="start" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">22%</text>
+<text x="449.52" y="165.72000000000003" text-anchor="start" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">24%</text>
+<text x="449.52" y="125.72999999999999" text-anchor="start" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">26%</text>
+<text x="449.52" y="85.73999999999992" text-anchor="start" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">28%</text>
+<text x="449.52" y="45.75" text-anchor="start" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">30%</text>
+<line x1="32.32" y1="245.70000000000002" x2="441.52" y2="245.70000000000002" stroke="#94a3b8" stroke-width="1" data-role="axis"/>
+<text x="83.47" y="251.70000000000002" text-anchor="middle" dominant-baseline="hanging" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">Q1</text>
+<text x="185.76999999999998" y="251.70000000000002" text-anchor="middle" dominant-baseline="hanging" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">Q2</text>
+<text x="288.07" y="251.70000000000002" text-anchor="middle" dominant-baseline="hanging" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">Q3</text>
+<text x="390.37" y="251.70000000000002" text-anchor="middle" dominant-baseline="hanging" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">Q4</text>
+<rect x="46.642" y="140.72625" width="34.743396226415086" height="104.97375000000002" rx="2" fill="#4269d0" data-role="bar"/>
+<rect x="148.94199999999998" y="124.48031250000001" width="34.743396226415086" height="121.2196875" rx="2" fill="#4269d0" data-role="bar"/>
+<rect x="251.242" y="117.732" width="34.743396226415086" height="127.96800000000002" rx="2" fill="#4269d0" data-role="bar"/>
+<rect x="353.54200000000003" y="94.98768750000002" width="34.743396226415086" height="150.7123125" rx="2" fill="#4269d0" data-role="bar"/>
+<rect x="85.5546037735849" y="168.219375" width="34.743396226415086" height="77.480625" rx="2" fill="#efb118" data-role="bar"/>
+<rect x="187.85460377358487" y="171.21862500000003" width="34.743396226415086" height="74.48137499999999" rx="2" fill="#efb118" data-role="bar"/>
+<rect x="290.1546037735849" y="156.72225" width="34.743396226415086" height="88.97775000000001" rx="2" fill="#efb118" data-role="bar"/>
+<rect x="392.45460377358495" y="142.72575" width="34.743396226415086" height="102.97425000000001" rx="2" fill="#efb118" data-role="bar"/>
+<path d="M83.47,225.71L185.77,165.72L288.07,185.72L390.37,85.74" fill="none" stroke="#ff725c" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" data-role="line"/>
+<path d="M83.47,221.16L88.02,225.71L83.47,230.26L78.92,225.71Z" fill="#ffffff" stroke="#ff725c" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" data-role="point"/>
+<path d="M185.77,161.17L190.32,165.72L185.77,170.27L181.22,165.72Z" fill="#ffffff" stroke="#ff725c" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" data-role="point"/>
+<path d="M288.07,181.17L292.62,185.72L288.07,190.27L283.52,185.72Z" fill="#ffffff" stroke="#ff725c" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" data-role="point"/>
+<path d="M390.37,81.19L394.92,85.74L390.37,90.29L385.82,85.74Z" fill="#ffffff" stroke="#ff725c" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" data-role="point"/>
+<text x="64.01369811320754" y="136.72625" text-anchor="middle" dominant-baseline="text-after-edge" font-size="10" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" data-role="data-label">42</text>
+<text x="166.31369811320752" y="120.48031250000001" text-anchor="middle" dominant-baseline="text-after-edge" font-size="10" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" data-role="data-label">48.5</text>
+<text x="268.61369811320753" y="113.732" text-anchor="middle" dominant-baseline="text-after-edge" font-size="10" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" data-role="data-label">51.2</text>
+<text x="370.9136981132076" y="90.98768750000002" text-anchor="middle" dominant-baseline="text-after-edge" font-size="10" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" data-role="data-label">60.3</text>
+<text x="102.92630188679244" y="164.219375" text-anchor="middle" dominant-baseline="text-after-edge" font-size="10" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" data-role="data-label">31</text>
+<text x="205.2263018867924" y="167.21862500000003" text-anchor="middle" dominant-baseline="text-after-edge" font-size="10" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" data-role="data-label">29.8</text>
+<text x="307.52630188679245" y="152.72225" text-anchor="middle" dominant-baseline="text-after-edge" font-size="10" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" data-role="data-label">35.6</text>
+<text x="409.8263018867925" y="138.72575" text-anchor="middle" dominant-baseline="text-after-edge" font-size="10" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" data-role="data-label">41.2</text>
+<text x="83.47" y="217.70500000000004" text-anchor="middle" dominant-baseline="text-after-edge" font-size="10" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" data-role="data-label">21%</text>
+<text x="185.76999999999998" y="157.72000000000003" text-anchor="middle" dominant-baseline="text-after-edge" font-size="10" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" data-role="data-label">24%</text>
+<text x="288.07" y="177.715" text-anchor="middle" dominant-baseline="text-after-edge" font-size="10" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" data-role="data-label">23%</text>
+<text x="390.37" y="77.73999999999992" text-anchor="middle" dominant-baseline="text-after-edge" font-size="10" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" data-role="data-label">28%</text>
+</svg>

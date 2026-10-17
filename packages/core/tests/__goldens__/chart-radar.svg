@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="300" viewBox="0 0 480 300" role="img" aria-labelledby="chart-desc">
+<desc id="chart-desc">A radar chart showing 2 series over 5 categories (Speed to Price). A ranges from 2 (Comfort) to 5 (Range), falling. B ranges from 2 (Range) to 5 (Power), falling.</desc>
+<rect x="0" y="0" width="480" height="300" fill="#ffffff" data-role="background"/>
+<rect x="210.84" y="273.65000000000003" width="10" height="10" rx="2" fill="#4269d0" data-role="legend-swatch"/>
+<text x="226.84" y="278.65000000000003" text-anchor="start" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" data-role="legend-label">A</text>
+<rect x="247" y="273.65000000000003" width="10" height="10" rx="2" fill="#efb118" data-role="legend-swatch"/>
+<text x="263" y="278.65000000000003" text-anchor="start" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" data-role="legend-label">B</text>
+<path d="M240,83.63L291.38,120.96L271.76,181.36L208.24,181.36L188.62,120.96Z" fill="none" stroke="#e2e8f0" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" data-role="grid"/>
+<path d="M240,29.6L342.76,104.26L303.51,225.06L176.49,225.06L137.24,104.26Z" fill="none" stroke="#e2e8f0" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" data-role="grid"/>
+<line x1="240" y1="137.65" x2="240" y2="29.599999999999994" stroke="#e2e8f0" stroke-width="1" data-role="axis"/>
+<text x="240" y="21.599999999999994" text-anchor="middle" dominant-baseline="text-after-edge" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">Speed</text>
+<line x1="240" y1="137.65" x2="342.76165658569136" y2="104.26071375778693" stroke="#e2e8f0" stroke-width="1" data-role="axis"/>
+<text x="350.3701087160526" y="101.78857780278736" text-anchor="start" dominant-baseline="text-after-edge" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">Power</text>
+<line x1="240" y1="137.65" x2="303.51019651020175" y2="225.0642862422131" stroke="#e2e8f0" stroke-width="1" data-role="axis"/>
+<text x="308.2124785285415" y="231.53642219721266" text-anchor="start" dominant-baseline="hanging" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">Range</text>
+<line x1="240" y1="137.65" x2="176.48980348979828" y2="225.0642862422131" stroke="#e2e8f0" stroke-width="1" data-role="axis"/>
+<text x="171.7875214714585" y="231.5364221972127" text-anchor="end" dominant-baseline="hanging" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">Comfort</text>
+<line x1="240" y1="137.65" x2="137.23834341430864" y2="104.26071375778696" stroke="#e2e8f0" stroke-width="1" data-role="axis"/>
+<text x="129.62989128394742" y="101.78857780278739" text-anchor="end" dominant-baseline="text-after-edge" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">Price</text>
+<text x="244" y="137.65" text-anchor="start" dominant-baseline="text-after-edge" font-size="10" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">0.0</text>
+<text x="244" y="83.625" text-anchor="start" dominant-baseline="text-after-edge" font-size="10" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">2.5</text>
+<text x="244" y="29.599999999999994" text-anchor="start" dominant-baseline="text-after-edge" font-size="10" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">5.0</text>
+<path d="M240,51.21L301.66,117.62L303.51,225.06L214.6,172.62L157.79,110.94Z" fill="#4269d0" stroke-linejoin="round" stroke-linecap="round" opacity="0.15" data-role="area"/>
+<path d="M240,51.21L301.66,117.62L303.51,225.06L214.6,172.62L157.79,110.94Z" fill="none" stroke="#4269d0" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" data-role="line"/>
+<circle cx="240" cy="51.209999999999994" r="3.5" fill="#ffffff" stroke="#4269d0" stroke-width="2" data-role="point"/>
+<circle cx="301.6569939514148" cy="117.61642825467216" r="3.5" fill="#ffffff" stroke="#4269d0" stroke-width="2" data-role="point"/>
+<circle cx="303.51019651020175" cy="225.0642862422131" r="3.5" fill="#ffffff" stroke="#4269d0" stroke-width="2" data-role="point"/>
+<circle cx="214.5959213959193" cy="172.61571449688523" r="3.5" fill="#ffffff" stroke="#4269d0" stroke-width="2" data-role="point"/>
+<circle cx="157.79067473144693" cy="110.93857100622957" r="3.5" fill="#ffffff" stroke="#4269d0" stroke-width="2" data-role="point"/>
+<path d="M240,72.82L342.76,104.26L265.4,172.62L189.19,207.58L178.34,117.62Z" fill="#efb118" stroke-linejoin="round" stroke-linecap="round" opacity="0.15" data-role="area"/>
+<path d="M240,72.82L342.76,104.26L265.4,172.62L189.19,207.58L178.34,117.62Z" fill="none" stroke="#efb118" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" data-role="line"/>
+<circle cx="240" cy="72.82000000000001" r="3.5" fill="#ffffff" stroke="#efb118" stroke-width="2" data-role="point"/>
+<circle cx="342.76165658569136" cy="104.26071375778693" r="3.5" fill="#ffffff" stroke="#efb118" stroke-width="2" data-role="point"/>
+<circle cx="265.4040786040807" cy="172.61571449688523" r="3.5" fill="#ffffff" stroke="#efb118" stroke-width="2" data-role="point"/>
+<circle cx="189.1918427918386" cy="207.5814289937705" r="3.5" fill="#ffffff" stroke="#efb118" stroke-width="2" data-role="point"/>
+<circle cx="178.34300604858518" cy="117.61642825467217" r="3.5" fill="#ffffff" stroke="#efb118" stroke-width="2" data-role="point"/>
+</svg>

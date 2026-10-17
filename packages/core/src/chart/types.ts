@@ -1,5 +1,30 @@
-/** Chart kinds. `bar`, `line`, `area` and `scatter` are cartesian; series may mix them (a combo chart). */
-export type ChartType = 'bar' | 'line' | 'area' | 'scatter' | 'pie' | 'donut';
+/**
+ * Chart kinds.
+ *
+ * - `bar`, `line`, `area` and `scatter` are cartesian: categories along one axis, values along
+ *   the other, and series may mix them (a combo chart). A scatter chart whose series carry
+ *   numeric `x` values plots them on a numeric x axis instead.
+ * - `bubble` plots `x`, `y` (the values) and `sizes` per series.
+ * - `pie` and `donut` draw the first visible series, one slice per category.
+ * - `radar` draws each series as a polygon over one spoke per category.
+ * - `waterfall` draws the first series as running increases and decreases.
+ * - `histogram` bins every value of the visible series; `box` draws one box and whiskers per series.
+ * - `funnel` and `treemap` draw the first series, one bar or rectangle per category.
+ */
+export type ChartType =
+	| 'bar'
+	| 'line'
+	| 'area'
+	| 'scatter'
+	| 'bubble'
+	| 'pie'
+	| 'donut'
+	| 'radar'
+	| 'waterfall'
+	| 'histogram'
+	| 'box'
+	| 'funnel'
+	| 'treemap';
 
 /** How a series is drawn in a cartesian chart. */
 export type ChartSeriesType = 'bar' | 'line' | 'area' | 'scatter';
@@ -7,11 +32,39 @@ export type ChartSeriesType = 'bar' | 'line' | 'area' | 'scatter';
 /** One data value; `null` is a gap (missing value). */
 export type ChartValue = number | null;
 
+/** Point marker shapes for line, area and scatter series. */
+export type ChartMarker = 'circle' | 'square' | 'diamond' | 'triangle' | 'cross' | 'none';
+
+/** Trendline fits (as in spreadsheets). */
+export type ChartTrendlineType = 'linear' | 'exponential' | 'logarithmic' | 'power' | 'polynomial' | 'moving-average';
+
+export interface ChartTrendline {
+	type: ChartTrendlineType;
+	/** Polynomial order, 2–6 (default 2). */
+	order?: number;
+	/** Moving-average period, 2 or more (default 2). */
+	period?: number;
+	/** Extend the line this many x units past the last point (default 0). */
+	forward?: number;
+	/** Extend the line this many x units before the first point (default 0). */
+	backward?: number;
+	/** Force the line through this y at x = 0 (linear, polynomial and exponential only). */
+	intercept?: number | null;
+	/** Write the fitted equation on the chart. */
+	showEquation?: boolean;
+	/** Write R² on the chart. */
+	showR2?: boolean;
+	/** Legend name (default: e.g. "Linear (Sales)"). */
+	name?: string;
+	/** CSS colour (default: the series colour). */
+	color?: string;
+}
+
 export interface ChartSeries {
 	/** Stable id (unique within the chart). */
 	id: string;
 	name: string;
-	/** One value per category. */
+	/** One value per category (the y values of a scatter or bubble chart). */
 	values: ChartValue[];
 	/** CSS colour (default: the palette colour for the series' position). */
 	color?: string;
@@ -19,6 +72,24 @@ export interface ChartSeries {
 	type?: ChartSeriesType;
 	/** Hidden series keep their data but are not drawn or scaled. */
 	hidden?: boolean;
+	/** Plot against the secondary value axis (on the right). */
+	axis?: 'primary' | 'secondary';
+	/** Numeric x per category (scatter and bubble charts). */
+	x?: ChartValue[];
+	/** Bubble sizes per category (bubble charts; area is proportional to size). */
+	sizes?: ChartValue[];
+	/** Colour overrides per category (`null` keeps the series colour). */
+	pointColors?: (string | null)[];
+	/** Point marker (default: circles on lines when `points` is on). */
+	marker?: ChartMarker;
+	/** Line interpolation for this series (default: the chart's `curve`). */
+	curve?: ChartCurve;
+	/** Value labels for this series (default: the chart's `dataLabels`). */
+	dataLabels?: boolean;
+	/** How this series' data labels are written (default: the value axis format). */
+	format?: ChartNumberFormat;
+	/** Fitted lines drawn over the series. */
+	trendlines?: ChartTrendline[];
 }
 
 export interface ChartNumberFormat {
@@ -30,6 +101,12 @@ export interface ChartNumberFormat {
 	currency?: string;
 	prefix?: string;
 	suffix?: string;
+	/**
+	 * A spreadsheet format code such as `#,##0.0,,"M"` or `0.0%;[Red]-0.0%`. When set it
+	 * wins over the other fields. Supports sections (positive;negative;zero), digit
+	 * placeholders, thousands separators and scaling, percent, scientific and literal text.
+	 */
+	code?: string;
 }
 
 export interface ChartAxis {
@@ -40,10 +117,17 @@ export interface ChartAxis {
 	min: number | null;
 	/** Fixed upper bound (default: from the data). */
 	max: number | null;
+	/** Fixed distance between ticks (default: a round number from the plot size). */
+	step: number | null;
 	/** Grid lines at each tick (default: on for the value axis). */
 	gridlines: boolean;
-	/** How tick and data labels are written (value axis only). */
+	/** How tick and data labels are written (value axes, and the x axis of scatter charts). */
 	format: ChartNumberFormat;
+	/**
+	 * Category axis only: `date` reads the categories as dates (ISO `2024-03-01`, `2024-03`,
+	 * `2024`), labels them with calendar steps that fit, and thins the rest.
+	 */
+	kind?: 'category' | 'date';
 }
 
 export type ChartLegendPosition = 'top' | 'bottom' | 'left' | 'right';
@@ -56,6 +140,8 @@ export interface ChartLegend {
 export type ChartStacking = 'none' | 'stacked' | 'percent';
 export type ChartOrientation = 'vertical' | 'horizontal';
 export type ChartCurve = 'linear' | 'smooth' | 'step';
+/** Where bar labels go: `auto` puts them outside, or centred on stacked segments, and drops ones that do not fit. */
+export type ChartLabelPosition = 'auto' | 'inside' | 'outside' | 'center';
 
 /** A whole chart: data plus presentation. Plain JSON, safe to persist. */
 export interface ChartSpec {
@@ -66,10 +152,12 @@ export interface ChartSpec {
 	/** Category labels (the x axis, or pie slices). */
 	categories: string[];
 	series: ChartSeries[];
-	/** The category axis. */
+	/** The category axis (or the numeric x axis of a scatter or bubble chart). */
 	xAxis: ChartAxis;
 	/** The value axis. */
 	yAxis: ChartAxis;
+	/** The secondary value axis, drawn on the right when a visible series uses it. */
+	yAxis2: ChartAxis;
 	legend: ChartLegend;
 	/** Stack bars and areas (`percent` scales each category to 100%). */
 	stacking: ChartStacking;
@@ -81,10 +169,20 @@ export interface ChartSpec {
 	points: boolean;
 	/** Value labels on bars, points and slices. */
 	dataLabels: boolean;
-	/** Series colours in order (cycled). */
+	/** Where bar value labels go. */
+	labelPosition: ChartLabelPosition;
+	/** Series colours in order (cycled through lighter and darker shades once used up). */
 	palette: string[];
 	/** Donut hole as a fraction of the radius (0–0.9). */
 	innerRadius: number;
+	/** Empty space between category groups, as a fraction of the category width (0–0.9). */
+	gapWidth: number;
+	/** How much bars in a group overlap, as a fraction of a bar's width (-1 to 1; negative is a gap). */
+	overlap: number;
+	/** Histogram bin count (`null`: √n, between 1 and 100). */
+	bins: number | null;
+	/** Waterfall: append a running-total bar (categories labelled "total" are always totals). */
+	showTotal: boolean;
 }
 
 /** What a click selects. */
@@ -93,10 +191,11 @@ export type ChartSelection =
 	| { kind: 'title' }
 	| { kind: 'subtitle' }
 	| { kind: 'legend' }
-	| { kind: 'axis'; axis: 'x' | 'y' }
+	| { kind: 'axis'; axis: 'x' | 'y' | 'y2' }
 	| { kind: 'series'; seriesId: string }
 	| { kind: 'point'; seriesId: string; index: number }
-	| { kind: 'category'; index: number };
+	| { kind: 'category'; index: number }
+	| { kind: 'trendline'; seriesId: string; index: number };
 
 /** Colours and type used to lay out a chart. Any CSS colour strings work. */
 export interface ChartTheme {
@@ -110,6 +209,10 @@ export interface ChartTheme {
 	axis: string;
 	/** Outline drawn around the selected mark. */
 	selection: string;
+	/** Waterfall increases. */
+	positive: string;
+	/** Waterfall decreases. */
+	negative: string;
 	fontFamily: string;
 	fontSize: number;
 	titleSize: number;
@@ -137,9 +240,17 @@ export type ChartMarkRole =
 	| 'area'
 	| 'point'
 	| 'slice'
+	| 'cell'
+	| 'box'
+	| 'whisker'
+	| 'outlier'
+	| 'connector'
+	| 'trendline'
+	| 'trendline-label'
 	| 'data-label'
 	| 'legend-swatch'
 	| 'legend-label'
+	| 'drag-readout'
 	| 'selection'
 	| 'empty';
 
@@ -215,11 +326,17 @@ export type ChartMark = ChartRectMark | ChartPathMark | ChartCircleMark | ChartL
 
 /** Maps between data values and scene pixels along one axis of the plot. */
 export interface ChartValueScale {
-	/** `y` for vertical charts, `x` for horizontal bars. */
+	/** `y` for vertical charts, `x` for horizontal bars and the numeric x axis of scatter charts. */
 	axis: 'x' | 'y';
 	domain: [number, number];
 	range: [number, number];
 	ticks: number[];
+}
+
+/** Something the layout had to leave out or shorten, as a sentence (for agents and screen readers). */
+export interface ChartWarning {
+	code: 'labels-hidden' | 'labels-truncated' | 'legend-truncated' | 'points-decimated' | 'values-skipped' | 'data-labels-hidden' | 'type-fallback';
+	message: string;
 }
 
 /** A laid-out chart: drawing primitives in scene pixels, ready for SVG, canvas or anything else. */
@@ -232,12 +349,20 @@ export interface ChartScene {
 	marks: ChartMark[];
 	/** The value scale of a cartesian chart (absent for pies and empty charts). */
 	valueScale?: ChartValueScale;
+	/** The secondary value scale, when a visible series uses it. */
+	valueScale2?: ChartValueScale;
+	/** The numeric x scale of a scatter or bubble chart with x values. */
+	xScale?: ChartValueScale;
 	/** Percent-stacked: values are shown as shares, so dragging is disabled. */
 	percent: boolean;
 	theme: ChartTheme;
+	/** What was left out or shortened (hidden labels, decimated lines, …). */
+	warnings: ChartWarning[];
 }
 
 export interface ChartIssue {
 	path: string;
 	message: string;
+	/** 1-based source line, for text formats such as Mermaid. */
+	line?: number;
 }

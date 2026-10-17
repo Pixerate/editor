@@ -11,7 +11,9 @@ import {
   type ParagraphFormat,
   type StyleDefinition,
 } from "../extensions/paragraph-styles/registry";
-import type { DocumentImport, DocumentImportAdapter } from "./adapters";
+import { CHART_OOXML_NS, chartFromOoxml } from "../chart/ooxml";
+import { chartDataToTable } from "../chart/spec";
+import type { DocumentImport, DocumentImportAdapter, ImportedChart } from "./adapters";
 import { ImportError } from "./registry";
 import { readZip, type ZipArchive, type ZipReadOptions } from "./zip";
 
@@ -70,6 +72,11 @@ export interface DocxImportOptions {
   paragraphStyles?: boolean;
   /** Embed images from `word/media` as data URLs (default `true`). */
   images?: boolean;
+  /**
+   * Read embedded charts (`word/charts/chartN.xml`, default `true`). Each becomes a caption
+   * and a table of its data in the HTML, and its full spec is returned in `charts`.
+   */
+  charts?: boolean;
   /** Images larger than this many bytes are skipped (default 10 MiB). */
   maxImageSize?: number;
   /** Limits for reading the DOCX container (default: 100 MiB extracted, 5 000 entries). */
@@ -168,6 +175,8 @@ interface Numbering {
 interface Part {
   rels: Map<string, Relationship>;
   images: Map<string, string>;
+  /** Charts by relationship id. */
+  charts: Map<string, ImportedChart>;
 }
 
 interface Note {
@@ -197,13 +206,16 @@ interface RenderContext {
   /** Segments emitted so far; adjacent changes by the same author and time share an id. */
   segmentCount: number;
   lastChange: { key: string; changeId: string; end: number } | null;
+  /** Charts in document order (the import's `charts`). */
+  charts: ImportedChart[];
 }
 
 type Segment =
   | { kind: "text"; text: string; format: Format }
   | { kind: "br"; format: Format }
   | { kind: "img"; src: string; alt: string; format: Format }
-  | { kind: "note"; n: number; format: Format };
+  | { kind: "note"; n: number; format: Format }
+  | { kind: "chart"; chart: ImportedChart; format: Format };
 
 // --- XML helpers -----------------------------------------------------------
 
@@ -318,6 +330,44 @@ function toBase64(bytes: Uint8Array): string {
     binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + CHUNK)));
   }
   return btoa(binary);
+}
+
+/** Reads the charts a part references (`c:chart r:id`), keyed by relationship id. */
+async function loadCharts(
+  zip: ZipArchive,
+  Parser: { new (): DOMParser },
+  root: Document,
+  rels: Map<string, Relationship>,
+  options: DocxImportOptions,
+): Promise<Map<string, ImportedChart>> {
+  const charts = new Map<string, ImportedChart>();
+  if (options.charts === false) return charts;
+  for (const el of descendants(root, "chart")) {
+    if (el.namespaceURI !== CHART_OOXML_NS) continue;
+    const id = attr(el, "id");
+    const rel = id ? rels.get(id) : undefined;
+    if (!id || !rel || rel.external || charts.has(id)) continue;
+    const entry = zip.get(rel.target);
+    if (!entry) continue;
+    const read = chartFromOoxml(await zip.readText(entry), { DOMParser: Parser });
+    charts.set(id, {
+      id: `chart-${charts.size + 1}`,
+      path: rel.target,
+      title: read.spec.title,
+      spec: read.spec,
+      issues: read.issues.map((i) => i.message),
+      unsupported: read.unsupported,
+      lossless: read.lossless,
+    });
+  }
+  return charts;
+}
+
+/** A chart's data as an HTML table (categories down, series across). */
+function chartTableHtml(chart: ImportedChart): string {
+  const [head, ...rows] = chartDataToTable(chart.spec);
+  const cell = (v: unknown, tag: "th" | "td") => `<${tag}><p>${escapeHtml(v === null || v === undefined ? "" : String(v))}</p></${tag}>`;
+  return `<table><tbody><tr>${head.map((h) => cell(h, "th")).join("")}</tr>${rows.map((r) => `<tr>${r.map((v, i) => cell(v, i ? "td" : "th")).join("")}</tr>`).join("")}</tbody></table>`;
 }
 
 /** Preloads the images a part references, keyed by relationship id. */
@@ -863,6 +913,7 @@ function renderSegments(segments: Segment[], code = false): string {
       if (seg.kind === "text") inner += escapeHtml(seg.text);
       else if (seg.kind === "br") inner += code ? "\n" : "<br>";
       else if (seg.kind === "img") inner += code ? "" : `<img src="${escapeHtml(seg.src)}" alt="${escapeHtml(seg.alt)}">`;
+      else if (seg.kind === "chart") inner += escapeHtml(`[Chart: ${seg.chart.title || "untitled"}]`);
       else inner += `<sup>${seg.n}</sup>`;
     }
     const format = segments[i].format;
@@ -1059,7 +1110,7 @@ class ParagraphRenderer {
     if (child.localName === "AlternateContent") {
       // Prefer the first branch that yields an image (mc:Choice, then mc:Fallback).
       const branch = childElements(child).find(
-        (b) => descendants(b, "blip").length || descendants(b, "imagedata").length,
+        (b) => descendants(b, "blip").length || descendants(b, "imagedata").length || descendants(b, "chart").some((el) => el.namespaceURI === CHART_OOXML_NS),
       );
       if (branch) this.image(branch, format, push);
       return;
@@ -1124,7 +1175,18 @@ class ParagraphRenderer {
     }
   }
 
+  /** Charts this paragraph contains, in order. */
+  charts: ImportedChart[] = [];
+
   private image(container: Element, format: Format, push: (segment: Segment) => void) {
+    const chartRef = descendants(container, "chart").find((el) => el.namespaceURI === CHART_OOXML_NS);
+    const chart = chartRef ? this.part.charts.get(attr(chartRef, "id") ?? "") : undefined;
+    if (chart) {
+      if (!this.ctx.charts.includes(chart)) this.ctx.charts.push(chart);
+      this.charts.push(chart);
+      push({ kind: "chart", chart, format });
+      return;
+    }
     const blip = descendants(container, "blip")[0];
     const imageData = descendants(container, "imagedata")[0];
     const id = blip ? attr(blip, "embed") : attr(imageData, "id");
@@ -1286,9 +1348,10 @@ function renderBlocks(container: Element, ctx: RenderContext, part: Part, topLev
     const styleAttr =
       !heading && !list && mappedStyle && mappedStyle !== NORMAL_STYLE_ID ? ` data-style="${escapeHtml(mappedStyle)}"` : "";
     const changeAttr = topLevel && !list && ctx.tracked === "marks" ? blockChangeAttr(pPr, ctx) : "";
-    const blockHtml = heading
+    const tables = renderer.charts.map(chartTableHtml).join("");
+    const blockHtml = (heading
       ? `<h${heading}${changeAttr}>${inner}</h${heading}>`
-      : `<p${styleAttr}${changeAttr}>${inner}</p>`;
+      : `<p${styleAttr}${changeAttr}>${inner}</p>`) + tables;
     if (!list) {
       closeAll();
       html += blockHtml;
@@ -1456,6 +1519,7 @@ export async function docxToDocumentImport(
     moveIds: new Map(),
     segmentCount: 0,
     lastChange: null,
+    charts: [],
   };
 
   for (const kind of ["footnote", "endnote"] as const) {
@@ -1463,7 +1527,7 @@ export async function docxToDocumentImport(
     const notesXml = await readXmlPart(zip, Parser, path);
     if (!notesXml) continue;
     const noteRels = await readRelationships(zip, Parser, path);
-    const part: Part = { rels: noteRels, images: await loadImages(zip, notesXml, noteRels, options) };
+    const part: Part = { rels: noteRels, images: await loadImages(zip, notesXml, noteRels, options), charts: await loadCharts(zip, Parser, notesXml, noteRels, options) };
     descendants(notesXml, kind)
       .filter((note) => isW(note))
       .forEach((note) => {
@@ -1473,7 +1537,7 @@ export async function docxToDocumentImport(
       });
   }
 
-  const part: Part = { rels, images: await loadImages(zip, documentXml, rels, options) };
+  const part: Part = { rels, images: await loadImages(zip, documentXml, rels, options), charts: await loadCharts(zip, Parser, documentXml, rels, options) };
   let html = renderBlocks(body, ctx, part, true);
   if (ctx.noteOrder.length) {
     // Notes may reference further notes; render until the list stops growing.
@@ -1487,6 +1551,7 @@ export async function docxToDocumentImport(
   const sanitized = sanitizeImportedHtml(html);
   const result: DocumentImport = { html: sanitized, text: htmlToPlainText(sanitized) };
   if (threads.length) result.comments = { version: 1, threads };
+  if (ctx.charts.length) result.charts = ctx.charts;
   if (useStyles) {
     const definitions = styleDefinitions(styles, styleIds);
     if (definitions.length) result.styles = createStyleRegistry({ styles: definitions });

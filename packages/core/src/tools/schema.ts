@@ -233,7 +233,7 @@ export function validateJsonSchema(
 				const known = Object.keys(properties);
 				errors.push({
 					path: `${path}/${key}`,
-					message: `Unknown property "${key}".${known.length ? ` Allowed: ${known.join(', ')}.` : ''}`
+					message: `Unknown property "${key}".${closestName(key, known)}${known.length ? ` Allowed: ${known.join(', ')}.` : ''}`
 				});
 			} else if (typeof schema.additionalProperties === 'object') {
 				errors.push(...recurse(child, schema.additionalProperties, `${path}/${key}`));
@@ -242,4 +242,35 @@ export function validateJsonSchema(
 	}
 
 	return errors;
+}
+
+/** Edit distance between two short strings (case-insensitive). */
+function editDistance(a: string, b: string): number {
+	a = a.toLowerCase();
+	b = b.toLowerCase();
+	const row = Array.from({ length: b.length + 1 }, (_, j) => j);
+	for (let i = 1; i <= a.length; i++) {
+		let prev = row[0];
+		row[0] = i;
+		for (let j = 1; j <= b.length; j++) {
+			const tmp = row[j];
+			row[j] = Math.min(row[j] + 1, row[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
+			prev = tmp;
+		}
+	}
+	return row[b.length];
+}
+
+/** ` Did you mean "x"?` for the nearest known name within a couple of edits, else ''. */
+function closestName(name: string, known: readonly string[]): string {
+	let best = '';
+	let bestDistance = Infinity;
+	for (const k of known) {
+		const d = editDistance(name, k);
+		if (d < bestDistance) {
+			best = k;
+			bestDistance = d;
+		}
+	}
+	return best && bestDistance <= Math.max(1, Math.min(2, Math.floor(name.length / 2))) ? ` Did you mean "${best}"?` : '';
 }

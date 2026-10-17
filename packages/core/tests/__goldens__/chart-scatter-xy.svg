@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="300" viewBox="0 0 480 300" role="img" aria-labelledby="chart-desc">
+<desc id="chart-desc">A scatter chart showing 1 series of points. P ranges from 158 (a) to 180 (e), rising, up 14% from first to last.</desc>
+<rect x="0" y="0" width="480" height="300" fill="#ffffff" data-role="background"/>
+<line x1="58.78" y1="250.1" x2="456" y2="250.1" stroke="#e2e8f0" stroke-width="1" data-role="grid"/>
+<line x1="58.78" y1="192.45" x2="456" y2="192.45" stroke="#e2e8f0" stroke-width="1" data-role="grid"/>
+<line x1="58.78" y1="134.8" x2="456" y2="134.8" stroke="#e2e8f0" stroke-width="1" data-role="grid"/>
+<line x1="58.78" y1="77.15" x2="456" y2="77.15" stroke="#e2e8f0" stroke-width="1" data-role="grid"/>
+<line x1="58.78" y1="19.5" x2="456" y2="19.5" stroke="#e2e8f0" stroke-width="1" data-role="grid"/>
+<text x="50.78" y="250.1" text-anchor="end" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">150</text>
+<text x="50.78" y="192.45" text-anchor="end" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">160</text>
+<text x="50.78" y="134.8" text-anchor="end" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">170</text>
+<text x="50.78" y="77.15" text-anchor="end" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">180</text>
+<text x="50.78" y="19.5" text-anchor="end" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">190</text>
+<line x1="58.78" y1="250.1" x2="456" y2="250.1" stroke="#94a3b8" stroke-width="1" data-role="axis"/>
+<text x="58.78" y="256.1" text-anchor="middle" dominant-baseline="hanging" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">50</text>
+<text x="124.98333333333333" y="256.1" text-anchor="middle" dominant-baseline="hanging" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">55</text>
+<text x="191.18666666666667" y="256.1" text-anchor="middle" dominant-baseline="hanging" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">60</text>
+<text x="257.39" y="256.1" text-anchor="middle" dominant-baseline="hanging" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">65</text>
+<text x="323.59333333333336" y="256.1" text-anchor="middle" dominant-baseline="hanging" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">70</text>
+<text x="389.79666666666674" y="256.1" text-anchor="middle" dominant-baseline="hanging" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">75</text>
+<text x="456" y="256.1" text-anchor="middle" dominant-baseline="hanging" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">80</text>
+<text x="257.39" y="288" text-anchor="middle" dominant-baseline="text-after-edge" font-size="12" font-weight="500" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" data-role="axis-title">Weight</text>
+<text x="12" y="134.8" text-anchor="middle" dominant-baseline="hanging" font-size="12" font-weight="500" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" transform="rotate(-90 12 134.8)" data-role="axis-title">Height</text>
+<circle cx="85.26133333333334" cy="203.98" r="4.5" fill="#4269d0" stroke="#4269d0" stroke-width="2" opacity="0.85" data-role="point"/>
+<circle cx="151.4646666666667" cy="180.92000000000002" r="4.5" fill="#4269d0" stroke="#4269d0" stroke-width="2" opacity="0.85" data-role="point"/>
+<circle cx="270.6306666666667" cy="129.035" r="4.5" fill="#4269d0" stroke="#4269d0" stroke-width="2" opacity="0.85" data-role="point"/>
+<circle cx="244.14933333333335" cy="146.32999999999998" r="4.5" fill="#4269d0" stroke="#4269d0" stroke-width="2" opacity="0.85" data-role="point"/>
+<circle cx="429.5186666666667" cy="77.15" r="4.5" fill="#4269d0" stroke="#4269d0" stroke-width="2" opacity="0.85" data-role="point"/>
+</svg>

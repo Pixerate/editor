@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="300" viewBox="0 0 480 300" role="img" aria-labelledby="chart-desc">
+<desc id="chart-desc">A donut chart of S across 3 categories, totalling 10. The largest is A at 5 (50%); the smallest is C at 2 (20%).</desc>
+<rect x="0" y="0" width="480" height="300" fill="#ffffff" data-role="background"/>
+<rect x="192.76" y="273.65000000000003" width="10" height="10" rx="2" fill="#4269d0" data-role="legend-swatch"/>
+<text x="208.76" y="278.65000000000003" text-anchor="start" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" data-role="legend-label">A</text>
+<rect x="228.92" y="273.65000000000003" width="10" height="10" rx="2" fill="#efb118" data-role="legend-swatch"/>
+<text x="244.92" y="278.65000000000003" text-anchor="start" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" data-role="legend-label">B</text>
+<rect x="265.08" y="273.65000000000003" width="10" height="10" rx="2" fill="#ff725c" data-role="legend-swatch"/>
+<text x="281.08" y="278.65000000000003" text-anchor="start" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" data-role="legend-label">C</text>
+<path d="M240,36.2A101.45,101.45 0 0 1 240,239.1L240,193.45A55.8,55.8 0 0 0 240,81.85Z" fill="#4269d0" stroke="#ffffff" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" data-role="slice"/>
+<text x="353.55" y="137.65" text-anchor="start" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" data-role="data-label">50%</text>
+<path d="M240,239.1A101.45,101.45 0 0 1 143.52,106.3L186.93,120.41A55.8,55.8 0 0 0 240,193.45Z" fill="#efb118" stroke="#ffffff" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" data-role="slice"/>
+<text x="148.13612028872473" y="204.39301539781036" text-anchor="end" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" data-role="data-label">30%</text>
+<path d="M143.52,106.3A101.45,101.45 0 0 1 240,36.2L240,81.85A55.8,55.8 0 0 0 186.93,120.41Z" fill="#ff725c" stroke="#ffffff" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" data-role="slice"/>
+<text x="173.25698460218965" y="45.78612028872473" text-anchor="end" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" data-role="data-label">20%</text>
+<text x="240" y="137.65" text-anchor="middle" dominant-baseline="central" font-size="19" font-weight="600" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" data-role="data-label">10</text>
+</svg>

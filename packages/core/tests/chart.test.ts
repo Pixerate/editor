@@ -87,7 +87,7 @@ describe("chart spec", () => {
 
   it("reports bad input as sentences and still returns a drawable spec", () => {
     const { spec, issues } = normalizeChartSpec({
-      type: "radar",
+      type: "gauge",
       categories: ["a"],
       series: [{ id: "x", name: "A", values: ["oops"] }, { id: "x", name: "B", values: [2] }],
       yAxis: { min: 10, max: 5 },
@@ -425,7 +425,7 @@ describe("chart commands", () => {
     const bad: any = await registry.execute("chart.setValues", { cells: [{ series: "East", category: 0, value: 1 }] });
     expect(bad).toMatchObject({ ok: false, code: "failed" });
     expect(bad.message).toMatch(/no series "East"/);
-    const invalid: any = await registry.execute("chart.update", { type: "radar" });
+    const invalid: any = await registry.execute("chart.update", { type: "gauge" });
     expect(invalid.ok).toBe(false);
   });
 

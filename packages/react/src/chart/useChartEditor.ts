@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
+import type { ToolRegistry } from '@pixerate/editor/tools';
 import {
   ChartController,
+  ChartDirector,
+  ChartPresence,
   createChartCommands,
+  createChartToolProvider,
+  layoutChart,
+  type ChartScene,
+  type ChartToolProviderOptions,
   type ChartActionResult,
   type ChartCommandOptions,
   type ChartControllerOptions,
@@ -78,4 +85,35 @@ export function useChartCommands(registry: ChartCommandTarget | null | undefined
     if (!registry) return;
     return registry.register(createChartCommands(controller, { prefix, group, scope }));
   }, [registry, controller, prefix, group, scope]);
+}
+
+/**
+ * Registers the chart's agent tools (`createChartToolProvider`) with a `ToolRegistry` while
+ * mounted. Options are read when the controller or registry changes.
+ */
+export function useChartToolProvider(registry: ToolRegistry | null | undefined, controller: ChartController, options: ChartToolProviderOptions = {}): void {
+  const latest = useRef(options);
+  latest.current = options;
+  const { id, namespace } = options;
+  useEffect(() => {
+    if (!registry) return;
+    return registry.register(createChartToolProvider(controller, { ...latest.current, id, namespace }));
+  }, [registry, controller, id, namespace]);
+}
+
+/**
+ * A `ChartPresence` and `ChartDirector` for a chart: pass `presence` and `sceneRef` to
+ * `ChartCanvas`, and `director` to `useChartToolProvider` so agent edits are acted out with a
+ * cursor.
+ */
+export function useChartDirector(controller: ChartController, options: { speed?: number; size?: { width: number; height: number } } = {}) {
+  const sceneRef = useRef<ChartScene | null>(null);
+  const ref = useRef<{ presence: ChartPresence; director: ChartDirector } | null>(null);
+  if (!ref.current) {
+    const presence = new ChartPresence();
+    const size = options.size ?? { width: 640, height: 400 };
+    const director = new ChartDirector(controller, presence, { scene: () => sceneRef.current ?? layoutChart(controller.getSpec(), size), speed: options.speed });
+    ref.current = { presence, director };
+  }
+  return { ...ref.current, sceneRef };
 }

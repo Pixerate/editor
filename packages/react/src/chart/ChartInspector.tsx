@@ -1,5 +1,14 @@
 import React, { useId } from 'react';
 import {
+  CHART_COLOR_SCHEMES,
+  CHART_LABEL_POSITIONS,
+  CHART_LAYOUT_PRESETS,
+  CHART_MARKERS,
+  CHART_TRENDLINE_TYPES,
+  checkChartColors,
+  chartFamily,
+  chartSupportsTrendlines,
+  chartTrendlineName,
   CHART_CURVES,
   CHART_LEGEND_POSITIONS,
   CHART_NUMBER_STYLES,
@@ -26,7 +35,7 @@ export interface ChartInspectorProps {
   className?: string;
 }
 
-export type ChartInspectorSection = 'type' | 'titles' | 'options' | 'legend' | 'axes' | 'series';
+export type ChartInspectorSection = 'type' | 'style' | 'titles' | 'options' | 'legend' | 'axes' | 'series';
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -62,7 +71,7 @@ function Select<T extends string>({ id, value, options, onChange, name, labels }
   );
 }
 
-function AxisSection({ controller, axis, value, idBase, horizontal }: { controller: ChartController; axis: 'x' | 'y'; value: ChartAxis; idBase: string; horizontal: boolean }) {
+function AxisSection({ controller, axis, value, idBase, horizontal, numeric = false }: { controller: ChartController; axis: 'x' | 'y' | 'y2'; value: ChartAxis; idBase: string; horizontal: boolean; numeric?: boolean }) {
   const set = (patch: Partial<ChartAxis>) => controller.setAxis(axis, patch);
   const setFormat = (patch: Partial<ChartNumberFormat>) => set({ format: { ...value.format, ...patch } });
   const bound = (key: 'min' | 'max') => (
@@ -76,21 +85,39 @@ function AxisSection({ controller, axis, value, idBase, horizontal }: { controll
       onCommit={(text) => set({ [key]: text.trim() === '' ? null : Number(text) }).ok}
     />
   );
-  const name = axis === 'x' ? 'Category axis' : 'Value axis';
+  const name = axis === 'x' ? (numeric ? 'X axis' : 'Category axis') : axis === 'y' ? 'Value axis' : 'Secondary axis';
+  const valueAxis = axis !== 'x' || numeric;
+  const key = axis === 'y2' ? 'yAxis2' : `${axis}Axis`;
   return (
     <div className={chartSectionClass} data-section={`axis-${axis}`}>
       <div className="flex items-center justify-between">
         <h4 className="text-xs font-semibold text-foreground">
           {name}
-          <span className="ml-1 font-normal text-muted-foreground">({axis === 'x' ? (horizontal ? 'left' : 'bottom') : horizontal ? 'bottom' : 'left'})</span>
+          <span className="ml-1 font-normal text-muted-foreground">({axis === 'x' ? (horizontal ? 'left' : 'bottom') : axis === 'y2' ? (horizontal ? 'top' : 'right') : horizontal ? 'bottom' : 'left'})</span>
         </h4>
         <Toggle label="Show" name={`${axis}Axis.show`} checked={value.show} onChange={(show) => set({ show })} />
       </div>
       <Field label="Title" htmlFor={`${idBase}-${axis}-title`}>
         <ChartCommitInput id={`${idBase}-${axis}-title`} value={value.title} data-option={`${axis}Axis.title`} className={chartInputClass} onCommit={(title) => void set({ title })} />
       </Field>
-      <Toggle label="Grid lines" name={`${axis}Axis.gridlines`} checked={value.gridlines} onChange={(gridlines) => set({ gridlines })} />
-      {axis === 'y' && (
+      <div className="flex flex-wrap gap-x-4 gap-y-1">
+        <Toggle label="Grid lines" name={`${key}.gridlines`} checked={value.gridlines} onChange={(gridlines) => set({ gridlines })} />
+        {axis === 'x' && !numeric && <Toggle label="Dates" name="xAxis.kind" checked={value.kind === 'date'} onChange={(dates) => set({ kind: dates ? 'date' : undefined } as Partial<ChartAxis>)} />}
+      </div>
+      {valueAxis && (
+        <Field label="Step" htmlFor={`${idBase}-${axis}-step`}>
+          <ChartCommitInput
+            id={`${idBase}-${axis}-step`}
+            value={value.step === null ? '' : String(value.step)}
+            placeholder="Auto"
+            inputMode="decimal"
+            data-option={`${key}.step`}
+            className={chartInputClass}
+            onCommit={(text) => set({ step: text.trim() === '' ? null : Number(text) }).ok}
+          />
+        </Field>
+      )}
+      {valueAxis && (
         <>
           <Field label="Min / max">
             <div className="flex gap-1">
@@ -98,16 +125,16 @@ function AxisSection({ controller, axis, value, idBase, horizontal }: { controll
               {bound('max')}
             </div>
           </Field>
-          <Field label="Format" htmlFor={`${idBase}-y-format`}>
+          <Field label="Format" htmlFor={`${idBase}-${axis}-format`}>
             <div className="flex gap-1">
-              <Select id={`${idBase}-y-format`} name="yAxis.format.style" value={value.format.style ?? 'number'} options={CHART_NUMBER_STYLES} onChange={(style) => setFormat({ style })} />
+               <Select id={`${idBase}-${axis}-format`} name={`${key}.format.style`} value={value.format.style ?? 'number'} options={CHART_NUMBER_STYLES} onChange={(style) => setFormat({ style })} />
               <ChartCommitInput
                 value={value.format.decimals === undefined ? '' : String(value.format.decimals)}
                 placeholder="Auto"
                 aria-label="Decimals"
                 title="Decimals"
                 inputMode="numeric"
-                data-option="yAxis.format.decimals"
+                data-option={`${key}.format.decimals`}
                 className={`${chartInputClass} w-14 shrink-0`}
                 onCommit={(text) => {
                   const format = { ...value.format };
@@ -119,10 +146,25 @@ function AxisSection({ controller, axis, value, idBase, horizontal }: { controll
             </div>
           </Field>
           {value.format.style === 'currency' && (
-            <Field label="Currency" htmlFor={`${idBase}-y-currency`}>
-              <ChartCommitInput id={`${idBase}-y-currency`} value={value.format.currency ?? 'USD'} data-option="yAxis.format.currency" className={chartInputClass} onCommit={(currency) => void setFormat({ currency: currency.toUpperCase() })} />
+            <Field label="Currency" htmlFor={`${idBase}-${axis}-currency`}>
+              <ChartCommitInput id={`${idBase}-${axis}-currency`} value={value.format.currency ?? 'USD'} data-option={`${key}.format.currency`} className={chartInputClass} onCommit={(currency) => void setFormat({ currency: currency.toUpperCase() })} />
             </Field>
           )}
+          <Field label="Code" htmlFor={`${idBase}-${axis}-code`}>
+            <ChartCommitInput
+              id={`${idBase}-${axis}-code`}
+              value={value.format.code ?? ''}
+              placeholder={'e.g. #,##0.0,,"M"'}
+              data-option={`${key}.format.code`}
+              className={chartInputClass}
+              onCommit={(code) => {
+                const format = { ...value.format };
+                if (code.trim()) format.code = code.trim();
+                else delete format.code;
+                return set({ format }).ok;
+              }}
+            />
+          </Field>
         </>
       )}
     </div>
@@ -138,7 +180,11 @@ export function ChartInspector({ controller, sections, className }: ChartInspect
   const idBase = useId();
   const show = (section: ChartInspectorSection) => !sections || sections.includes(section);
   const cartesian = isCartesianChart(spec.type);
+  const family = chartFamily(spec);
+  const hasAxes = family === 'cartesian' || family === 'xy' || family === 'waterfall' || family === 'histogram' || family === 'box';
   const types = spec.series.map((s) => chartSeriesType(spec, s));
+  const usesSecondary = family === 'cartesian' && spec.series.some((s) => s.axis === 'secondary' && !s.hidden);
+  const colorCheck = checkChartColors(spec.series.filter((s) => !s.hidden).map((s) => chartSeriesColor(spec, spec.series.indexOf(s))));
   const hasBars = cartesian && types.includes('bar');
   const hasLines = cartesian && types.some((t) => t === 'line' || t === 'area');
   const seriesIndex = selectedSeries ? spec.series.findIndex((s) => s.id === selectedSeries.id) : -1;
@@ -154,6 +200,39 @@ export function ChartInspector({ controller, sections, className }: ChartInspect
               </button>
             ))}
           </div>
+        </div>
+      )}
+
+      {show('style') && (
+        <div className={chartSectionClass} data-section="style">
+          <Field label="Layout" htmlFor={`${idBase}-layout`}>
+            <select id={`${idBase}-layout`} className={chartInputClass} value="" data-option="preset.layout" onChange={(e) => e.currentTarget.value && controller.applyPreset({ layout: e.currentTarget.value })}>
+              <option value="">Quick layout…</option>
+              {CHART_LAYOUT_PRESETS.map((p) => (
+                <option key={p.id} value={p.id} title={p.description}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Colours" htmlFor={`${idBase}-colors`}>
+            <select id={`${idBase}-colors`} className={chartInputClass} value={CHART_COLOR_SCHEMES.find((c) => c.palette.join() === spec.palette.join())?.id ?? ''} data-option="preset.colors" onChange={(e) => e.currentTarget.value && controller.applyPreset({ colors: e.currentTarget.value })}>
+              <option value="">Custom</option>
+              {CHART_COLOR_SCHEMES.map((c) => (
+                <option key={c.id} value={c.id} title={c.description}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </Field>
+          {!colorCheck.ok && (
+            <p className="text-[11px] leading-snug text-amber-600 dark:text-amber-400" data-chart-color-warning="">
+              {colorCheck.issues[0]}
+            </p>
+          )}
+          <button type="button" className={chartButtonClass} data-action="transpose" onClick={() => controller.transpose()}>
+            Switch rows and columns
+          </button>
         </div>
       )}
 
@@ -208,7 +287,35 @@ export function ChartInspector({ controller, sections, className }: ChartInspect
               />
             </Field>
           )}
+          {hasBars && (
+            <Field label="Spacing" htmlFor={`${idBase}-gap`}>
+              <input
+                id={`${idBase}-gap`}
+                type="range"
+                min={0}
+                max={0.9}
+                step={0.02}
+                value={spec.gapWidth}
+                data-option="gapWidth"
+                className="w-full accent-primary"
+                onPointerDown={() => controller.beginGesture('gapWidth')}
+                onPointerUp={() => controller.endGesture()}
+                onChange={(e) => controller.update({ gapWidth: Number(e.currentTarget.value) })}
+              />
+            </Field>
+          )}
+          {spec.dataLabels && hasBars && (
+            <Field label="Labels" htmlFor={`${idBase}-label-position`}>
+              <Select id={`${idBase}-label-position`} name="labelPosition" value={spec.labelPosition} options={CHART_LABEL_POSITIONS} onChange={(labelPosition) => controller.update({ labelPosition })} />
+            </Field>
+          )}
+          {spec.type === 'histogram' && (
+            <Field label="Bins" htmlFor={`${idBase}-bins`}>
+              <ChartCommitInput id={`${idBase}-bins`} value={spec.bins === null ? '' : String(spec.bins)} placeholder="Auto" inputMode="numeric" data-option="bins" className={chartInputClass} onCommit={(text) => controller.update({ bins: text.trim() === '' ? null : Number(text) }).ok} />
+            </Field>
+          )}
           <div className="flex flex-wrap gap-x-4 gap-y-1">
+            {spec.type === 'waterfall' && <Toggle label="Total bar" name="showTotal" checked={spec.showTotal} onChange={(showTotal) => controller.update({ showTotal })} />}
             {hasLines && <Toggle label="Points" name="points" checked={spec.points} onChange={(points) => controller.update({ points })} />}
             <Toggle label="Data labels" name="dataLabels" checked={spec.dataLabels} onChange={(dataLabels) => controller.update({ dataLabels })} />
           </div>
@@ -233,10 +340,11 @@ export function ChartInspector({ controller, sections, className }: ChartInspect
         </div>
       )}
 
-      {show('axes') && cartesian && (
+      {show('axes') && hasAxes && (
         <>
-          <AxisSection controller={controller} axis="x" value={spec.xAxis} idBase={idBase} horizontal={spec.orientation === 'horizontal'} />
+          {family !== 'box' && family !== 'histogram' && <AxisSection controller={controller} axis="x" value={spec.xAxis} idBase={idBase} horizontal={spec.orientation === 'horizontal'} numeric={family === 'xy'} />}
           <AxisSection controller={controller} axis="y" value={spec.yAxis} idBase={idBase} horizontal={spec.orientation === 'horizontal'} />
+          {usesSecondary && <AxisSection controller={controller} axis="y2" value={spec.yAxis2} idBase={idBase} horizontal={spec.orientation === 'horizontal'} />}
         </>
       )}
 
@@ -283,8 +391,54 @@ export function ChartInspector({ controller, sections, className }: ChartInspect
               </select>
             </Field>
           )}
+          {(cartesian || family === 'xy') && ['line', 'area', 'scatter'].includes(chartSeriesType(spec, selectedSeries)) && (
+            <Field label="Marker" htmlFor={`${idBase}-series-marker`}>
+              <select
+                id={`${idBase}-series-marker`}
+                className={chartInputClass}
+                value={selectedSeries.marker ?? ''}
+                data-option="series.marker"
+                onChange={(e) => controller.updateSeries(selectedSeries.id, { marker: (e.currentTarget.value || null) as any })}
+              >
+                <option value="">Default</option>
+                {CHART_MARKERS.map((m) => (
+                  <option key={m} value={m}>
+                    {cap(m)}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
+          {chartSupportsTrendlines(spec.type, spec.stacking) && (
+            <div className="space-y-1" data-section="trendlines">
+              {(selectedSeries.trendlines ?? []).map((t, i) => (
+                <div key={i} className="flex items-center gap-1" data-trendline={i}>
+                  <span className="flex-1 truncate text-muted-foreground">{chartTrendlineName(t, selectedSeries.name)}</span>
+                  <Toggle label="R²" name={`trendline.${i}.showR2`} checked={!!t.showR2} onChange={(showR2) => controller.updateTrendline(selectedSeries.id, i, { showR2 })} />
+                  <button type="button" className={chartButtonClass} aria-label="Delete trendline" data-action="trendline-delete" onClick={() => controller.removeTrendline(selectedSeries.id, i)}>
+                    ×
+                  </button>
+                </div>
+              ))}
+              <select
+                className={chartInputClass}
+                value=""
+                aria-label="Add trendline"
+                data-option="trendline.add"
+                onChange={(e) => e.currentTarget.value && controller.addTrendline(selectedSeries.id, { type: e.currentTarget.value as any })}
+              >
+                <option value="">Add trendline…</option>
+                {CHART_TRENDLINE_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {cap(t.replace('-', ' '))}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="flex flex-wrap items-center gap-1">
             <Toggle label="Hidden" name="series.hidden" checked={!!selectedSeries.hidden} onChange={(hidden) => controller.updateSeries(selectedSeries.id, { hidden })} />
+            {family === 'cartesian' && <Toggle label="Secondary axis" name="series.axis" checked={selectedSeries.axis === 'secondary'} onChange={(secondary) => controller.updateSeries(selectedSeries.id, { axis: secondary ? 'secondary' : null })} />}
             <span className="flex-1" />
             <button type="button" className={chartButtonClass} disabled={seriesIndex <= 0} aria-label="Move series earlier" data-action="series-up" onClick={() => controller.moveSeries(selectedSeries.id, seriesIndex - 1)}>
               ↑

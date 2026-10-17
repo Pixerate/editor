@@ -4,3 +4,4 @@ export * from './ChartCanvas';
 export * from './ChartDataGrid';
 export * from './ChartInspector';
 export * from './ChartEditor';
+export * from './ChartStreamingView';
