@@ -190,7 +190,7 @@ getDocumentCharts(editor.state.doc); // [{ id, pos, node, spec }]
 - **Plain text**: `[Chart: title]`, and a sparkline's label.
 - **In the editor**: the node view (`ChartNodeView` in core, mounted by `createReactChartNodeView` or `createSvelteChartNodeView`) draws `<ChartCanvas>` read-only. A click selects the chart and opens it for editing: the canvas becomes interactive, the data grid and the inspector open in a panel below it (side by side when the document is wide enough). Every edit is a document transaction (drags once they end), so the editor's undo covers them; undo, `updateChart` and agent edits load back into the canvas. Done, Escape or moving the selection closes it; a read-only editor never opens it. Without a `nodeView`, the editor shows the static SVG. The React view renders in its own root, so React context does not reach it.
 - **Agents**: `createRichTextToolProvider` adds `list_document_charts` (always), and `insert_chart`, `update_chart_in_document` (by `chartId` or `pos`; fields merge into the spec, axes and legend field by field, given series replace all) and `insert_sparkline` while the editor is editable. Invalid input changes nothing and comes back as sentences; each call is one undo step.
-- **DOCX**: imported charts become chart nodes when the schema has the node; otherwise they stay a caption and a table.
+- **DOCX**: imported charts become chart nodes when the schema has the node; otherwise they stay a caption and a table. `exportDocx` writes chart nodes back as native Word charts (`word/charts/chartN.xml`, sized from the node; no width = the page text width) and sparklines as text (their label, or `▁▅█` bars).
 
 ## Streaming, agent cursors and sparklines
 
