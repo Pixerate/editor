@@ -113,6 +113,11 @@
       "types": "./dist/chart/index.d.ts",
       "import": "./dist/chart/index.js",
       "require": "./dist/chart/index.cjs"
+    },
+    "./diagram": {
+      "types": "./dist/diagram/index.d.ts",
+      "import": "./dist/diagram/index.js",
+      "require": "./dist/diagram/index.cjs"
     }
   },
   "files": [

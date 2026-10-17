@@ -661,3 +661,15 @@ export {
 	type CurvedPathOptions
 } from '@pixerate/editor/canvas';
 
+
+// Mermaid diagrams (flowchart, state, class, ER) on the canvas, with streaming
+export { default as MermaidDiagramNode } from './MermaidDiagramNode.svelte';
+export { default as MermaidDiagramGroup } from './MermaidDiagramGroup.svelte';
+export {
+	createMermaidDiagram,
+	createMermaidStream,
+	type CreateMermaidDiagramOptions,
+	type CreateMermaidStreamOptions,
+	type SvelteMermaidDiagram,
+	type SvelteMermaidStream
+} from './createMermaidDiagram.svelte.js';

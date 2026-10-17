@@ -76,6 +76,7 @@ import {
 } from "@pixerate/editor-react/canvas";
 import { demoCommandRegistry, demoToolRegistry } from "../agentTools";
 import { AutoLayoutDemo } from "./AutoLayoutDemo";
+import { MermaidDiagramDemo } from "./MermaidDiagramDemo";
 import { TokensDemo } from "./TokensDemo";
 import { ShapeOpsDemo } from "./ShapeOpsDemo";
 import { AnimationDemo } from "./AnimationDemo";
@@ -651,6 +652,8 @@ const CanvasDemo: React.FC = () => {
         (Rectangle, Circle, Star) or a sample drawing, or pick Pen (P), Highlighter (H), or Eraser (E) to sketch directly onto the canvas.
         Shortcuts: Alt+A/H/D/W/V/S align, Alt+Shift+H/V distribute, Mod+L lock, Mod+]/[ layer order, PageDown/PageUp scenes, Mod+Z undo.
       </p>
+
+      <MermaidDiagramDemo />
 
       <AutoLayoutDemo />
 
