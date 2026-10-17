@@ -1442,3 +1442,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Dragging one node of a diagram without a `%% @pixerate` layout moved every other node by the same offset.
 - **Root Cause**: `ensureDiagramLayout` keeps stored positions and aligns the auto layout of the rest on them (Ursula's blend). With one stored node, the whole auto layout is shifted to match it.
 - **Solution / Workaround**: Pin the current positions on the first move: `mermaidMovesFromCanvas(..., { stored: doc.meta.layout })` (the React / Svelte bindings do) and `createDiagramToolProvider(controller, { getPositions })` for agent moves.
+
+### [core/chart] Agent Cursors Never Disappeared After `linger`
+
+- **Issue / Symptom**: A `ChartDirector` cursor stayed on the chart after its command finished, although `linger` should hide it.
+- **Root Cause**: The queue stored `run.catch(...)` but the linger check compared the stored promise with `run`, which never matched, so the cursor was never removed.
+- **Solution / Workaround**: The per-actor queue now lives in `PerformanceQueue` (`animation/presence.ts`), shared by the chart and diagram directors, and compares against the promise it stored.
