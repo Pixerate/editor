@@ -1,6 +1,8 @@
 import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import type { JsonSchema } from '../tools/schema.js';
+import type { PresenceActorInfo } from '../animation/presence.js';
 import { diagramShapes, diagramSupportsGroups, type DiagramController } from './controller.js';
+import type { DiagramDirector } from './director.js';
 import { detectFamily } from './document.js';
 import { findMermaidSources } from './source/find.js';
 import { DIRECTIONS, type EditOp, type MermaidDocument, type Point } from './types.js';
@@ -28,6 +30,14 @@ export interface DiagramToolProviderOptions {
 	renderSvg?: (options: { maxWidth?: number; maxHeight?: number }) => { svg: string; width: number; height: number };
 	/** Turns that SVG into PNG (e.g. `rasterizeSvg`), so `render_diagram` can return an image. */
 	rasterize?: (svg: string, size: { width: number; height: number }) => Promise<{ data: string; mimeType: string }> | { data: string; mimeType: string };
+	/**
+	 * Acts out every write with a visible cursor (see `DiagramDirector`): it moves to the node,
+	 * clicks, drags, connects and types, and a whole-diagram load is drawn statement by
+	 * statement. Each call is still one undo step. Without it, edits apply at once.
+	 */
+	director?: DiagramDirector;
+	/** Who the cursor belongs to (default `{ id: 'agent', name: 'Agent' }`). */
+	actor?: PresenceActorInfo;
 }
 
 const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
@@ -98,8 +108,9 @@ export function createDiagramToolProvider(controller: DiagramController, options
 		return controller.getState().readOnly ? 'This diagram is read-only.' : null;
 	};
 	const doc = () => controller.getDocument();
-	const apply = (ops: EditOp | EditOp[], label: string) => {
-		const result = controller.apply(ops, label);
+	const actor = options.actor ?? { id: 'agent', name: 'Agent' };
+	const apply = async (ops: EditOp | EditOp[], label: string) => {
+		const result = options.director ? await options.director.perform(actor, Array.isArray(ops) ? ops : [ops], label) : controller.apply(ops, label);
 		if (!result.ok) throw new Error(result.message);
 		return result.document;
 	};
@@ -130,7 +141,7 @@ export function createDiagramToolProvider(controller: DiagramController, options
 			'Returns the diagram: its Mermaid family (flowchart, state, class, er; other families are text only), direction, nodes (id, label, shape, parentId), edges (id, source, target, label), groups (subgraphs / composite states), the shapes nodes can take, stored canvas positions, any parse diagnostics and the selection. Use the ids it returns with the write tools.',
 		inputSchema: object({ includeSource: { type: 'boolean', description: 'Also return the Mermaid text (default false).' } }),
 		annotations: { title: 'Read the diagram', ...READ },
-		handler: ({ includeSource = false }) => {
+		handler: async ({ includeSource = false }) => {
 			const reason = readOnlyReason();
 			return {
 				...describeDiagram(doc()),
@@ -148,7 +159,7 @@ export function createDiagramToolProvider(controller: DiagramController, options
 			'Returns the diagram as Mermaid text. Canvas positions are kept in a "%% @pixerate {…}" comment that Mermaid ignores; pass withLayout false to leave it out.',
 		inputSchema: object({ withLayout: { type: 'boolean', description: 'Keep the %% @pixerate layout comment (default true).' } }),
 		annotations: { title: 'Export the diagram as Mermaid', ...READ },
-		handler: ({ withLayout = true }) => {
+		handler: async ({ withLayout = true }) => {
 			const source = doc().source;
 			return { family: doc().family, source: withLayout ? source : source.replace(/^[ \t]*%%\s*@(?:pixerate|ursula)\s+\{.*\}[ \t]*(\r?\n|$)/gm, '') };
 		}
@@ -171,14 +182,14 @@ export function createDiagramToolProvider(controller: DiagramController, options
 			'Replaces the whole diagram with Mermaid text (one undo step). Flowchart, state, class and ER diagrams become editable on the canvas; other families are kept as text. Returns the family, node and edge counts and any parse diagnostics. Prefer the per-operation tools for small changes: they keep the rest of the text as written.',
 		inputSchema: object({ source: { type: 'string', minLength: 1, description: 'Mermaid text, starting with a header such as "flowchart LR".' } }, ['source']),
 		annotations: { title: 'Replace the diagram with Mermaid', ...DESTRUCTIVE },
-		handler: ({ source }) => {
+		handler: async ({ source }) => {
 			// A fenced block (```mermaid … ```) is unwrapped; a bare diagram is taken as written.
 			const fenced = /^\s*(`{3,}|~{3,})/m.test(source) ? findMermaidSources(source) : [];
 			if (fenced.length > 1) throw new Error(`The text holds ${fenced.length} diagrams; pass one (find_mermaid_diagrams lists them).`);
 			const text = fenced[0]?.source ?? source;
 			if (detectFamily(text) === 'unknown')
 				throw new Error('The text has no Mermaid header (e.g. "flowchart LR", "stateDiagram-v2", "classDiagram", "erDiagram"); nothing was changed.');
-			const result = controller.load(text);
+			const result = options.director ? await options.director.playSource(actor, text) : controller.load(text);
 			if (!result.ok) throw new Error(result.message);
 			const d = result.document;
 			return {
@@ -211,7 +222,7 @@ export function createDiagramToolProvider(controller: DiagramController, options
 			['label']
 		),
 		annotations: { title: 'Add a node', ...WRITE },
-		handler: ({ label, id, shape, parentId, from, edgeLabel, x, y }) => {
+		handler: async ({ label, id, shape, parentId, from, edgeLabel, x, y }) => {
 			requireEditable();
 			if ((x === undefined) !== (y === undefined)) throw new Error('Give both x and y, or neither to place the node automatically.');
 			if (edgeLabel !== undefined && from === undefined) throw new Error('edgeLabel needs "from", the node the edge starts at.');
@@ -221,7 +232,7 @@ export function createDiagramToolProvider(controller: DiagramController, options
 				{ type: 'addNode', node: { id: nodeId, label, ...(shape ? { shape } : {}), ...(parentId ? { parentId } : {}) }, ...(x !== undefined ? { position: [x, y] as const } : {}) }
 			];
 			if (from !== undefined) ops.push({ type: 'addEdge', edge: { source: from, target: nodeId, ...(edgeLabel ? { label: edgeLabel } : {}) } });
-			const d = apply(ops, 'Add node');
+			const d = await apply(ops, 'Add node');
 			const edges = newEdges(before, d);
 			return { node: nodeOut(d, nodeId), ...(edges.length ? { edge: edges[0] } : {}) };
 		}
@@ -234,10 +245,10 @@ export function createDiagramToolProvider(controller: DiagramController, options
 			'Deletes nodes with every edge that touches them. A group id removes the group but keeps its contents. Returns the removed ids and the ids of the edges that went with them.',
 		inputSchema: object({ ids: IDS('Node or group ids from get_diagram.') }, ['ids']),
 		annotations: { title: 'Remove nodes or groups', ...DESTRUCTIVE },
-		handler: ({ ids }) => {
+		handler: async ({ ids }) => {
 			requireEditable();
 			const before = doc().graph.edges.map((e) => e.id);
-			const d = apply({ type: 'removeNodes', ids }, ids.length === 1 ? 'Delete node' : 'Delete nodes');
+			const d = await apply({ type: 'removeNodes', ids }, ids.length === 1 ? 'Delete node' : 'Delete nodes');
 			const after = new Set(d.graph.edges.map((e) => e.id));
 			return { removed: ids, removedEdges: before.filter((id) => !after.has(id)) };
 		}
@@ -249,10 +260,10 @@ export function createDiagramToolProvider(controller: DiagramController, options
 		description: 'Changes the label of a node or group. Returns the node with its new label.',
 		inputSchema: object({ id: { ...ID, description: 'A node or group id from get_diagram.' }, label: LABEL('The new label.') }, ['id', 'label']),
 		annotations: { title: 'Rename a node or group', ...WRITE_IDEMPOTENT },
-		handler: ({ id, label }) => {
+		handler: async ({ id, label }) => {
 			requireEditable();
 			const isGroup = doc().graph.groups.some((g) => g.id === id);
-			const d = apply(isGroup ? { type: 'renameGroup', id, label } : { type: 'renameNode', id, label }, 'Rename');
+			const d = await apply(isGroup ? { type: 'renameGroup', id, label } : { type: 'renameNode', id, label }, 'Rename');
 			return { node: nodeOut(d, id) };
 		}
 	};
@@ -263,9 +274,9 @@ export function createDiagramToolProvider(controller: DiagramController, options
 		description: 'Changes a node\'s shape (flowchart and state diagrams). Use one of the shapes get_diagram lists. Returns the node.',
 		inputSchema: object({ id: ID, shape: { type: 'string', minLength: 1, description: 'Shape name, e.g. "rect", "rounded", "diam", "cyl", "circle".' } }, ['id', 'shape']),
 		annotations: { title: 'Change a node\'s shape', ...WRITE_IDEMPOTENT },
-		handler: ({ id, shape }) => {
+		handler: async ({ id, shape }) => {
 			requireEditable();
-			return { node: nodeOut(apply({ type: 'setNodeShape', id, shape }, 'Change shape'), id) };
+			return { node: nodeOut(await apply({ type: 'setNodeShape', id, shape }, 'Change shape'), id) };
 		}
 	};
 
@@ -279,9 +290,9 @@ export function createDiagramToolProvider(controller: DiagramController, options
 			['id', 'styles']
 		),
 		annotations: { title: 'Style a node', ...WRITE_IDEMPOTENT },
-		handler: ({ id, styles }) => {
+		handler: async ({ id, styles }) => {
 			requireEditable();
-			const d = apply({ type: 'setNodeStyles', id, styles }, 'Style node');
+			const d = await apply({ type: 'setNodeStyles', id, styles }, 'Style node');
 			return { id, styles: d.graph.nodes.find((n) => n.id === id)?.styles ?? [] };
 		}
 	};
@@ -292,10 +303,10 @@ export function createDiagramToolProvider(controller: DiagramController, options
 		description: 'Draws an edge from one existing node to another, with an optional label. Returns the new edge with its id.',
 		inputSchema: object({ source: { ...ID, description: 'Node the edge starts at.' }, target: { ...ID, description: 'Node the edge ends at.' }, label: LABEL('Edge label (optional).') }, ['source', 'target']),
 		annotations: { title: 'Connect two nodes', ...WRITE },
-		handler: ({ source, target, label }) => {
+		handler: async ({ source, target, label }) => {
 			requireEditable();
 			const before = edgeIds();
-			const d = apply({ type: 'addEdge', edge: { source, target, ...(label ? { label } : {}) } }, 'Connect');
+			const d = await apply({ type: 'addEdge', edge: { source, target, ...(label ? { label } : {}) } }, 'Connect');
 			return { edge: newEdges(before, d)[0] ?? null };
 		}
 	};
@@ -306,9 +317,9 @@ export function createDiagramToolProvider(controller: DiagramController, options
 		description: 'Deletes edges by id; the nodes stay. Returns the removed ids.',
 		inputSchema: object({ ids: IDS('Edge ids from get_diagram.') }, ['ids']),
 		annotations: { title: 'Remove edges', ...DESTRUCTIVE },
-		handler: ({ ids }) => {
+		handler: async ({ ids }) => {
 			requireEditable();
-			apply({ type: 'removeEdges', ids }, ids.length === 1 ? 'Delete edge' : 'Delete edges');
+			await apply({ type: 'removeEdges', ids }, ids.length === 1 ? 'Delete edge' : 'Delete edges');
 			return { removed: ids };
 		}
 	};
@@ -319,9 +330,9 @@ export function createDiagramToolProvider(controller: DiagramController, options
 		description: 'Sets an edge\'s label; an empty string removes it. Returns the edge.',
 		inputSchema: object({ id: EDGE_ID, label: LABEL('The new label ("" removes it).') }, ['id', 'label']),
 		annotations: { title: 'Label an edge', ...WRITE_IDEMPOTENT },
-		handler: ({ id, label }) => {
+		handler: async ({ id, label }) => {
 			requireEditable();
-			const d = apply({ type: 'setEdgeLabel', id, label }, 'Label edge');
+			const d = await apply({ type: 'setEdgeLabel', id, label }, 'Label edge');
 			const e = d.graph.edges.find((x) => x.id === id);
 			return { edge: e ? { id: e.id, source: e.source, target: e.target, label: e.label ?? '' } : { id, label } };
 		}
@@ -333,10 +344,10 @@ export function createDiagramToolProvider(controller: DiagramController, options
 		description: 'Moves an edge to new endpoints, keeping its label and style. Returns the edge (its id may change with its endpoints).',
 		inputSchema: object({ id: EDGE_ID, source: { ...ID, description: 'New start node.' }, target: { ...ID, description: 'New end node.' } }, ['id', 'source', 'target']),
 		annotations: { title: 'Reconnect an edge', ...WRITE },
-		handler: ({ id, source, target }) => {
+		handler: async ({ id, source, target }) => {
 			requireEditable();
 			const index = doc().graph.edges.findIndex((e) => e.id === id);
-			const d = apply({ type: 'reconnectEdge', id, source, target }, 'Reconnect edge');
+			const d = await apply({ type: 'reconnectEdge', id, source, target }, 'Reconnect edge');
 			const e = d.graph.edges.find((x) => x.id === id) ?? d.graph.edges.find((x, i) => i === index && x.source === source && x.target === target) ?? d.graph.edges.find((x) => x.source === source && x.target === target);
 			return { edge: e ? { id: e.id, source: e.source, target: e.target, ...(e.label ? { label: e.label } : {}) } : null };
 		}
@@ -348,9 +359,9 @@ export function createDiagramToolProvider(controller: DiagramController, options
 		description: 'Sets the direction the diagram flows in: TB / TD (top to bottom), BT, LR (left to right) or RL. Returns the direction.',
 		inputSchema: object({ direction: { type: 'string', enum: [...DIRECTIONS], description: 'TB, TD, BT, LR or RL.' } }, ['direction']),
 		annotations: { title: 'Set the layout direction', ...WRITE_IDEMPOTENT },
-		handler: ({ direction }) => {
+		handler: async ({ direction }) => {
 			requireEditable();
-			return { direction: apply({ type: 'setDirection', direction }, 'Change direction').graph.direction };
+			return { direction: (await apply({ type: 'setDirection', direction }, 'Change direction')).graph.direction };
 		}
 	};
 
@@ -367,11 +378,11 @@ export function createDiagramToolProvider(controller: DiagramController, options
 			['nodeIds', 'label']
 		),
 		annotations: { title: 'Group nodes', ...WRITE },
-		handler: ({ nodeIds, label, id }) => {
+		handler: async ({ nodeIds, label, id }) => {
 			requireEditable();
 			if (!diagramSupportsGroups(doc().family)) throw new Error(`${doc().family} diagrams have no groups.`);
 			const groupId = id ?? controller.nextId('G');
-			apply({ type: 'groupNodes', groupId, label, nodeIds }, 'Group');
+			await apply({ type: 'groupNodes', groupId, label, nodeIds }, 'Group');
 			return { group: { id: groupId, label, nodeIds } };
 		}
 	};
@@ -382,10 +393,10 @@ export function createDiagramToolProvider(controller: DiagramController, options
 		description: 'Removes a group and keeps its nodes (they move to the group\'s parent). Returns the ids that were in it.',
 		inputSchema: object({ id: { type: 'string', minLength: 1, description: 'A group id from get_diagram.' } }, ['id']),
 		annotations: { title: 'Ungroup', ...DESTRUCTIVE },
-		handler: ({ id }) => {
+		handler: async ({ id }) => {
 			requireEditable();
 			const members = [...doc().graph.nodes, ...doc().graph.groups].filter((x) => x.parentId === id).map((x) => x.id);
-			apply({ type: 'ungroup', groupId: id }, 'Ungroup');
+			await apply({ type: 'ungroup', groupId: id }, 'Ungroup');
 			return { ungrouped: id, members };
 		}
 	};
@@ -407,10 +418,10 @@ export function createDiagramToolProvider(controller: DiagramController, options
 			['moves']
 		),
 		annotations: { title: 'Move nodes', ...WRITE_IDEMPOTENT },
-		handler: ({ moves }) => {
+		handler: async ({ moves }) => {
 			const list = moves as Array<{ id: string; x: number; y: number }>;
 			requireEditable();
-			apply({ type: 'moveNodes', moves: pinned(list.map((m) => ({ id: m.id, position: [m.x, m.y] as const }))) }, 'Move');
+			await apply({ type: 'moveNodes', moves: pinned(list.map((m) => ({ id: m.id, position: [m.x, m.y] as const }))) }, 'Move');
 			return { moved: moves };
 		}
 	};
@@ -421,7 +432,7 @@ export function createDiagramToolProvider(controller: DiagramController, options
 		description: 'Undoes the last diagram edit. Returns whether something was undone and its label.',
 		inputSchema: object({}),
 		annotations: { title: 'Undo a diagram edit', ...WRITE },
-		handler: () => {
+		handler: async () => {
 			const label = controller.getState().undoLabel;
 			const undone = controller.undo();
 			return { undone, ...(undone ? { label } : {}) };
@@ -434,7 +445,7 @@ export function createDiagramToolProvider(controller: DiagramController, options
 		description: 'Redoes the last undone diagram edit. Returns whether something was redone and its label.',
 		inputSchema: object({}),
 		annotations: { title: 'Redo a diagram edit', ...WRITE },
-		handler: () => {
+		handler: async () => {
 			const label = controller.getState().redoLabel;
 			const redone = controller.redo();
 			return { redone, ...(redone ? { label } : {}) };

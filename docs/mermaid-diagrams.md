@@ -82,3 +82,17 @@ Related helpers:
 `<MermaidThumbnail source maxWidth maxHeight theme fallback>` (React and Svelte) shows a static preview, or `fallback` for families that are kept as text.
 
 For agents, pass `renderSvg` (and `rasterize` for PNG) to `createDiagramToolProvider`. That adds `render_diagram { format: "svg" | "png", maxWidth, maxHeight }`, so a model can look at the diagram it is editing.
+
+## Agent cursors
+
+`DiagramDirector` acts agent edits out on the canvas (Ursula's remote control): the cursor moves to the node, clicks, drags nodes live, draws connections from source to target and types labels, then the edit lands. Each call is one undo step. The whole batch is checked before the cursor moves; if the diagram changes underneath (the user deletes the target), the call's earlier edits are rolled back and the call fails with a sentence. A new node is placed one rank along the diagram's direction from the node it is connected from, clear of other nodes, and the rest of an auto-laid diagram is pinned first so nothing shifts. `playSource` draws a whole-diagram write statement by statement when it extends what is there (`draftFrames`).
+
+```ts
+import { DiagramDirector, PresenceStore, createDiagramToolProvider } from "@pixerate/editor/diagram";
+
+const presence = new PresenceStore();
+const director = new DiagramDirector(controller, presence, { placement: () => mermaidToCanvas(controller.getDocument()).layout });
+registry.register(createDiagramToolProvider(controller, { director, actor: { id: "agent", name: "Agent" } }));
+```
+
+`planDiagramEdit` is pure (same document, placement and edit give the same steps) and the clock is injectable (`createInstantPresenceClock`), so performances are repeatable in tests. React: `useDiagramDirector(controller, { placement })` and `<DiagramPresenceLayer presence viewport>`; Svelte: `createDiagramDirector` and the same component. The presence store, clock, cursor tween and per-actor queue live in `@pixerate/editor/animation` and are shared with `ChartDirector`.

@@ -676,3 +676,7 @@ export {
 
 // Static previews of Mermaid diagrams
 export { default as MermaidThumbnail } from './MermaidThumbnail.svelte';
+
+// Agent cursors acting out diagram edits
+export { default as DiagramPresenceLayer } from './DiagramPresenceLayer.svelte';
+export { createDiagramDirector, type CreateDiagramDirectorOptions, type SvelteDiagramDirector } from './createDiagramDirector.svelte.js';

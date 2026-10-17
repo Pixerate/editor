@@ -281,7 +281,7 @@ Every feature is available from core and from both framework packages. "Via core
 </details>
 
 <details>
-<summary><strong>Canvas</strong> (32)</summary>
+<summary><strong>Canvas</strong> (33)</summary>
 
 | Feature | Core | React | Svelte |
 | :--- | :---: | :---: | :---: |
@@ -307,6 +307,7 @@ Every feature is available from core and from both framework packages. "Via core
 | Mermaid Streaming View & Finder (nodes held back until an edge places them, glide between layouts; diagrams found in Markdown, chat and bare text) | `DiagramStream`, `blendDiagramLayout`, `streamedDiagramText` & `findMermaidSources` | `useMermaidStream` | `createMermaidStream` |
 | Mermaid Diagram Agent Tools (19 tools: read, export, find, load, add / remove / rename / reshape / style nodes, connect / label / reconnect edges, groups, direction, moves, undo / redo; checked against the diagram first) | `createDiagramToolProvider` | `useAgentToolProvider` | `useAgentToolProvider` |
 | Mermaid Diagram Export & Thumbnails (standalone SVG matching the canvas layout, with Mermaid styles, arrow heads and labels; fitted thumbnails; PNG in the browser; `render_diagram` agent tool) | `mermaidToSvg`, `mermaidThumbnailSvg`, `rasterizeSvg` & `downloadDiagramPng` (`/canvas`) | `<MermaidThumbnail>` | `<MermaidThumbnail>` |
+| Mermaid Diagram Agent Cursors (agent edits acted out on the canvas: move, click, drag, connect, type; a whole-diagram write drawn statement by statement; one undo step per call, rolled back if the diagram changed underneath; pure planner, injectable clock; shared with the chart director) | `DiagramDirector`, `planDiagramEdit`, `draftFrames`, `PresenceStore` & `PerformanceQueue` (`/animation`) | `useDiagramDirector` & `<DiagramPresenceLayer>` | `createDiagramDirector` & `<DiagramPresenceLayer>` |
 | Canvas Shape Boolean Ops (Unite / Intersect / Subtract / Exclude / Divide, curve-preserving) | `combineShapeNodes`, `pathBoolean` & `polygonBoolean` | `useCanvasArrange` | `createCanvasArrange` |
 | Canvas Offset Path & Outline Stroke (joins, caps, miter limit, dashes) | `offsetPath`, `outlineStroke`, `offsetShapeNodes` & `outlineShapeNodeStrokes` | `useCanvasArrange` (`offsetShapes`, `outlineStroke`) | `createCanvasArrange` (`offsetShapes`, `outlineStroke`) |
 | Canvas Shape Commands (palette / context menu) | `createShapeCommands` | Via core & `useRegisterCommands` | Via core & `useRegisterCommands` |

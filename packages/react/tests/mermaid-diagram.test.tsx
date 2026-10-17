@@ -3,8 +3,8 @@ import { JSDOM } from 'jsdom';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ToolRegistry } from '@pixerate/editor/tools';
-import { DiagramController, createDiagramToolProvider } from '@pixerate/editor/diagram';
-import { MermaidDiagramNode, MermaidDiagramGroup, MermaidThumbnail, useMermaidDiagram, useMermaidStream, type UseMermaidDiagramResult, type UseMermaidStreamResult } from '../src/canvas';
+import { DiagramController, createDiagramToolProvider, createInstantPresenceClock } from '@pixerate/editor/diagram';
+import { DiagramPresenceLayer, MermaidDiagramNode, MermaidDiagramGroup, MermaidThumbnail, useDiagramDirector, useMermaidDiagram, useMermaidStream, type UseMermaidDiagramResult, type UseMermaidStreamResult } from '../src/canvas';
 import { useAgentToolProvider } from '../src';
 
 let container: HTMLDivElement;
@@ -139,5 +139,36 @@ describe('MermaidThumbnail', () => {
 		expect(Number(svg.getAttribute('width'))).toBeLessThanOrEqual(120);
 		expect(svg.querySelectorAll('[data-node]')).toHaveLength(3);
 		expect(container.querySelector('em')!.textContent).toBe('no preview');
+	});
+});
+
+describe('useDiagramDirector', () => {
+	it('acts out agent tool calls with a cursor drawn by DiagramPresenceLayer', async () => {
+		const registry = new ToolRegistry();
+		const controller = new DiagramController({ source: SOURCE });
+		const clock = createInstantPresenceClock();
+		let diagram!: UseMermaidDiagramResult;
+		let director!: ReturnType<typeof useDiagramDirector>;
+		function Probe() {
+			diagram = useMermaidDiagram(controller);
+			director = useDiagramDirector(controller, { placement: () => diagram.layout, clock, linger: 0 });
+			const provider = React.useMemo(() => createDiagramToolProvider(controller, { director: director.director }), []);
+			useAgentToolProvider(registry, provider);
+			return <DiagramPresenceLayer presence={director.presence} viewport={{ x: 10, y: 20, zoom: 2 }} />;
+		}
+		await act(async () => root.render(<Probe />));
+		let shown = 0;
+		director.presence.subscribe((s) => {
+			if (s.actors.length) shown++;
+		});
+		await act(async () => void (await registry.callTool('connect_diagram_nodes', { source: 'C', target: 'A', label: 'loop' })));
+		expect(shown).toBeGreaterThan(5);
+		expect(diagram.source).toContain('C -->|loop| A');
+		expect(clock.elapsed()).toBeGreaterThan(500);
+		director.presence.set({ id: 'agent', x: 5, y: 5, message: 'Hi' });
+		await act(async () => {});
+		const cursor = container.querySelector('[data-actor="agent"]') as HTMLElement;
+		expect(cursor.style.transform).toBe('translate(20px, 30px)');
+		expect(cursor.textContent).toBe('Hi');
 	});
 });
