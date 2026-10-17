@@ -1358,3 +1358,27 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Dragging a bar past the axis maximum rescaled the axis under the pointer, so the bar seemed to run away. Dragging back to the start, or setting a value to what it already was, still left an undo step.
 - **Root Cause**: Every move relaid the chart with a fresh `niceScale` over the new data. The controller recorded every commit and merged gesture steps without comparing them to the starting spec.
 - **Solution / Workaround**: `startChartPointDrag` returns `valueDomain`. Canvases keep it in state and pass it to `layoutChart({ valueDomain })` until `end()`. `ChartController.commit` returns early when the next spec is structurally equal to the current one, and `endGesture` calls `history.revertTo(mark)` when the spec is back where the gesture began.
+
+### [svelte] A Variable Named `state` Breaks `$state` in the Same Component
+
+- **Issue / Symptom**: `let state = $state.raw(...)` in `ChartPresenceLayer.svelte` failed svelte-check with "Block-scoped variable '$state' used before its declaration" and "Cannot use 'state' as a store".
+- **Root Cause**: In a component, `$name` means "subscribe to the store `name`". With a local variable called `state`, the compiler reads `$state` as a store subscription to it, not as the rune.
+- **Solution / Workaround**: Never name a component variable `state` (or `derived`, `effect`, `props`). Use `current`, `view` or similar.
+
+### [core/import] Imported HTML Drops `data:image/svg+xml` Images
+
+- **Issue / Symptom**: Charts imported from DOCX as SVG `<img>` tags vanished from the HTML.
+- **Root Cause**: `sanitizeImportedHtml` validates `src` with markdown-it's `validateLink`, which only allows `data:image/(gif|png|jpeg|webp)`. SVG data URLs are rejected on purpose (SVG can carry script when opened directly).
+- **Solution / Workaround**: The DOCX importer writes each chart as a caption plus a data table and returns the full spec in `DocumentImport.charts`; hosts render it with the chart editor. Do not widen the URL allowlist for SVG.
+
+### [core/chart] Atomic `run_commands` Only Covers Edits in the Registry's History
+
+- **Issue / Symptom**: `run_commands { atomic: true }` left chart edits applied after a later step failed.
+- **Root Cause**: The batch is a `history.batch` on the `CommandRegistry`'s own `history`. A `ChartController` created without `history` records into its own `HistoryManager`, which the batch never sees.
+- **Solution / Workaround**: Share one `HistoryManager` between the registry (`new CommandRegistry({ history })`) and the controllers (`new ChartController({ history })`). Without a registry history, atomic batches are refused with a sentence.
+
+### [core/chart] A User Drag During an Agent Performance Ends the Agent's Undo Step
+
+- **Issue / Symptom**: If the user drags a bar while `ChartDirector` is acting out an agent's edits, the agent's edits before and after the drag become separate undo steps.
+- **Root Cause**: `ChartController` holds one gesture at a time; `beginGesture` from the user's drag ends the director's gesture.
+- **Solution / Workaround**: Accepted: both sets of edits still apply and undo correctly, only the grouping differs. Hosts that need strict grouping can disable editing (`editable={false}`) while `presence` shows an active actor.

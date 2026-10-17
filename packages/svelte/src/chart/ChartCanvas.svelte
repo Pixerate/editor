@@ -3,19 +3,20 @@
   import {
     CSS_VARIABLE_CHART_THEME,
     chartClientToScene,
-    chartTextBaseline,
-    chartTextTransform,
     describeChartSelection,
     handleChartKey,
     layoutChart,
     startChartPointDrag,
     type ChartController,
-    type ChartMark,
     type ChartPointDrag,
+    type ChartPresence,
+    type ChartScene,
     type ChartTextMeasure,
     type ChartTheme
   } from '@pixerate/editor/chart';
   import { chartStateOf } from './createChartEditor.svelte.js';
+  import ChartMarks from './ChartMarks.svelte';
+  import ChartPresenceLayer from './ChartPresenceLayer.svelte';
 
   interface Props {
     controller: ChartController;
@@ -33,6 +34,10 @@
     measureText?: ChartTextMeasure;
     emptyMessage?: string;
     class?: string;
+    /** Agent cursors to draw over the chart (see `ChartDirector`). */
+    presence?: ChartPresence;
+    /** Receives the scene as drawn (e.g. for `ChartDirector`'s `scene`). */
+    sceneRef?: { current: ChartScene | null };
   }
 
   let {
@@ -44,7 +49,9 @@
     editable = true,
     measureText,
     emptyMessage,
-    class: className = ''
+    class: className = '',
+    presence,
+    sceneRef
   }: Props = $props();
 
   const view = chartStateOf(() => controller);
@@ -64,8 +71,8 @@
     return () => observer.disconnect();
   });
   let drag: ChartPointDrag | null = null;
-  // Frozen while a point is dragged so the value axis does not rescale under the pointer.
-  let valueDomain = $state<ChartPointDrag['valueDomain'] | null>(null);
+  // Frozen while a point is dragged so the axes do not rescale under the pointer.
+  let frozen = $state.raw<{ valueDomain: ChartPointDrag['valueDomain']; valueDomain2: ChartPointDrag['valueDomain2'] | null; xDomain: ChartPointDrag['xDomain'] | null; readout: ChartPointDrag['target'] } | null>(null);
 
   const sceneWidth = $derived((responsive && measured) || width);
   const fullTheme = $derived({ ...CSS_VARIABLE_CHART_THEME, ...theme });
@@ -77,16 +84,20 @@
       selection: editable ? view.current.selection : null,
       measureText,
       emptyMessage,
-      valueDomain
+      valueDomain: frozen?.valueDomain,
+      valueDomain2: frozen?.valueDomain2,
+      xDomain: frozen?.xDomain,
+      readout: frozen?.readout
     })
   );
+  $effect(() => {
+    if (sceneRef) sceneRef.current = scene;
+  });
   const byKey = $derived(new Map(scene.marks.map((m) => [m.key, m])));
   const label = $derived(view.current.spec.title || 'Chart');
 
   onDestroy(() => drag?.end());
 
-  const pointerEvents = (mark: ChartMark) => (mark.role === 'selection' || (!mark.target && mark.role !== 'background') ? 'none' : undefined);
-  const cursor = (mark: ChartMark) => (editable && mark.target && mark.role !== 'background' ? 'pointer' : undefined);
   const scenePoint = (e: PointerEvent) => chartClientToScene(scene, svg!.getBoundingClientRect(), e.clientX, e.clientY);
 
   function pointerdown(e: PointerEvent) {
@@ -96,19 +107,26 @@
     controller.select(target ?? null);
     drag = startChartPointDrag(controller, scene, target, scenePoint(e));
     if (drag) {
-      valueDomain = drag.valueDomain;
+      frozen = { valueDomain: drag.valueDomain, valueDomain2: drag.valueDomain2 ?? null, xDomain: drag.xDomain ?? null, readout: drag.target };
       svg?.setPointerCapture?.(e.pointerId);
     }
   }
   function pointermove(e: PointerEvent) {
-    drag?.move(scenePoint(e));
+    drag?.move(scenePoint(e), { fine: e.altKey, lockAxis: e.shiftKey, noSnap: e.ctrlKey || e.metaKey });
   }
   function endDrag() {
     drag?.end();
     drag = null;
-    valueDomain = null;
+    frozen = null;
   }
   function keydown(e: KeyboardEvent) {
+    if (drag && e.key === 'Escape') {
+      drag.cancel();
+      drag = null;
+      frozen = null;
+      e.preventDefault();
+      return;
+    }
     if (editable && handleChartKey(controller, scene, e)) e.preventDefault();
   }
 </script>
@@ -130,91 +148,7 @@
     onpointercancel={endDrag}
     onkeydown={keydown}
   >
-    {#each scene.marks as mark (mark.key)}
-      {#if mark.kind === 'rect'}
-        <rect
-          data-role={mark.role}
-          data-chart-key={mark.target ? mark.key : undefined}
-          data-selected={mark.selected ? '' : undefined}
-          x={mark.x}
-          y={mark.y}
-          width={mark.width}
-          height={mark.height}
-          rx={mark.radius}
-          opacity={mark.opacity}
-          pointer-events={pointerEvents(mark)}
-          cursor={cursor(mark)}
-          style:fill={mark.fill}
-          style:stroke={mark.stroke}
-          style:stroke-width={mark.strokeWidth}
-        />
-      {:else if mark.kind === 'path'}
-        <path
-          data-role={mark.role}
-          data-chart-key={mark.target ? mark.key : undefined}
-          data-selected={mark.selected ? '' : undefined}
-          d={mark.d}
-          stroke-linejoin="round"
-          stroke-linecap="round"
-          stroke-dasharray={mark.dash}
-          opacity={mark.opacity}
-          pointer-events={pointerEvents(mark)}
-          cursor={cursor(mark)}
-          style:fill={mark.fill ?? 'none'}
-          style:stroke={mark.stroke}
-          style:stroke-width={mark.strokeWidth}
-        />
-      {:else if mark.kind === 'circle'}
-        <circle
-          data-role={mark.role}
-          data-chart-key={mark.target ? mark.key : undefined}
-          data-selected={mark.selected ? '' : undefined}
-          cx={mark.cx}
-          cy={mark.cy}
-          r={mark.r}
-          opacity={mark.opacity}
-          pointer-events={pointerEvents(mark)}
-          cursor={cursor(mark)}
-          style:fill={mark.fill}
-          style:stroke={mark.stroke}
-          style:stroke-width={mark.strokeWidth}
-        />
-      {:else if mark.kind === 'line'}
-        <line
-          data-role={mark.role}
-          data-chart-key={mark.target ? mark.key : undefined}
-          data-selected={mark.selected ? '' : undefined}
-          x1={mark.x1}
-          y1={mark.y1}
-          x2={mark.x2}
-          y2={mark.y2}
-          stroke-dasharray={mark.dash}
-          opacity={mark.opacity}
-          pointer-events={pointerEvents(mark)}
-          cursor={cursor(mark)}
-          style:stroke={mark.stroke}
-          style:stroke-width={mark.strokeWidth}
-        />
-      {:else}
-        <text
-          data-role={mark.role}
-          data-chart-key={mark.target ? mark.key : undefined}
-          data-selected={mark.selected ? '' : undefined}
-          x={mark.x}
-          y={mark.y}
-          text-anchor={mark.anchor}
-          dominant-baseline={chartTextBaseline(mark.baseline)}
-          transform={chartTextTransform(mark)}
-          opacity={mark.opacity}
-          pointer-events={pointerEvents(mark)}
-          cursor={cursor(mark)}
-          style:fill={mark.fill}
-          style:font-size="{mark.size}px"
-          style:font-weight={mark.weight}
-          style:font-family={scene.theme.fontFamily}
-          style:user-select="none">{mark.text}</text
-        >
-      {/if}
-    {/each}
+    <ChartMarks marks={scene.marks} fontFamily={scene.theme.fontFamily} interactive={editable} />
+    {#if presence}<ChartPresenceLayer {presence} />{/if}
   </svg>
 </div>

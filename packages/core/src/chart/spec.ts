@@ -1,9 +1,12 @@
+import { cyclePaletteColor } from './color.js';
 import type {
 	ChartAxis,
 	ChartCurve,
 	ChartIssue,
+	ChartLabelPosition,
 	ChartLegend,
 	ChartLegendPosition,
+	ChartMarker,
 	ChartNumberFormat,
 	ChartOrientation,
 	ChartSeries,
@@ -11,11 +14,17 @@ import type {
 	ChartSpec,
 	ChartStacking,
 	ChartTheme,
+	ChartTrendline,
+	ChartTrendlineType,
 	ChartType,
 	ChartValue
 } from './types.js';
 
-export const CHART_TYPES: readonly ChartType[] = ['bar', 'line', 'area', 'scatter', 'pie', 'donut'];
+export const CHART_TYPES: readonly ChartType[] = ['bar', 'line', 'area', 'scatter', 'bubble', 'pie', 'donut', 'radar', 'waterfall', 'histogram', 'box', 'funnel', 'treemap'];
+export const CHART_MARKERS: readonly ChartMarker[] = ['circle', 'square', 'diamond', 'triangle', 'cross', 'none'];
+export const CHART_TRENDLINE_TYPES: readonly ChartTrendlineType[] = ['linear', 'exponential', 'logarithmic', 'power', 'polynomial', 'moving-average'];
+export const CHART_LABEL_POSITIONS: readonly ChartLabelPosition[] = ['auto', 'inside', 'outside', 'center'];
+export const CHART_AXIS_KINDS: readonly NonNullable<ChartAxis['kind']>[] = ['category', 'date'];
 export const CHART_SERIES_TYPES: readonly ChartSeriesType[] = ['bar', 'line', 'area', 'scatter'];
 export const CHART_STACKINGS: readonly ChartStacking[] = ['none', 'stacked', 'percent'];
 export const CHART_CURVES: readonly ChartCurve[] = ['linear', 'smooth', 'step'];
@@ -29,9 +38,19 @@ export const CHART_TYPE_LABELS: Readonly<Record<ChartType, string>> = {
 	line: 'Line',
 	area: 'Area',
 	scatter: 'Scatter',
+	bubble: 'Bubble',
 	pie: 'Pie',
-	donut: 'Donut'
+	donut: 'Donut',
+	radar: 'Radar',
+	waterfall: 'Waterfall',
+	histogram: 'Histogram',
+	box: 'Box plot',
+	funnel: 'Funnel',
+	treemap: 'Treemap'
 };
+
+/** How a chart type is laid out. */
+export type ChartFamily = 'cartesian' | 'xy' | 'pie' | 'radar' | 'waterfall' | 'histogram' | 'box' | 'funnel' | 'treemap';
 
 /** A colour-blind-friendly categorical palette (Okabe–Ito order, tuned for light and dark backgrounds). */
 export const DEFAULT_CHART_PALETTE: readonly string[] = ['#4269d0', '#efb118', '#ff725c', '#6cc5b0', '#3ca951', '#ff8ab7', '#a463f2', '#97bbf5', '#9c6b4e', '#9498a0'];
@@ -44,6 +63,8 @@ export const DEFAULT_CHART_THEME: ChartTheme = {
 	grid: '#e2e8f0',
 	axis: '#94a3b8',
 	selection: '#2563eb',
+	positive: '#3ca951',
+	negative: '#e5484d',
 	fontFamily: 'system-ui, -apple-system, "Segoe UI", sans-serif',
 	fontSize: 11,
 	titleSize: 15
@@ -66,12 +87,45 @@ export const CSS_VARIABLE_CHART_THEME: ChartTheme = {
 	fontFamily: 'inherit'
 };
 
+/** Bar, line, area and scatter: categories (or numeric x) against values, series may mix. */
 export function isCartesianChart(type: ChartType): boolean {
-	return type !== 'pie' && type !== 'donut';
+	return type === 'bar' || type === 'line' || type === 'area' || type === 'scatter';
+}
+
+/** Whether the chart plots series against a numeric x axis (bubble charts, and scatter charts with x values). */
+export function isXyChart(spec: Pick<ChartSpec, 'type' | 'series'>): boolean {
+	if (spec.type === 'bubble') return true;
+	return spec.type === 'scatter' && spec.series.some((s) => !s.hidden && Array.isArray(s.x) && s.x.some((v) => v !== null));
+}
+
+/** How a chart is laid out (see `ChartType`). */
+export function chartFamily(spec: Pick<ChartSpec, 'type' | 'series'>): ChartFamily {
+	if (isXyChart(spec)) return 'xy';
+	switch (spec.type) {
+		case 'pie':
+		case 'donut':
+			return 'pie';
+		case 'radar':
+		case 'waterfall':
+		case 'histogram':
+		case 'box':
+		case 'funnel':
+		case 'treemap':
+			return spec.type;
+		case 'bubble':
+			return 'xy';
+		default:
+			return 'cartesian';
+	}
+}
+
+/** Chart types whose legend lists categories (one colour per category) rather than series. */
+export function chartColorsByCategory(type: ChartType): boolean {
+	return type === 'pie' || type === 'donut' || type === 'funnel' || type === 'treemap';
 }
 
 export function defaultChartAxis(value: boolean): ChartAxis {
-	return { show: true, title: '', min: null, max: null, gridlines: value, format: {} };
+	return { show: true, title: '', min: null, max: null, step: null, gridlines: value, format: {} };
 }
 
 /** A complete spec with every default filled in. */
@@ -83,19 +137,23 @@ export function createChartSpec(partial: Partial<ChartSpec> = {}): ChartSpec {
 export function chartSeriesColor(spec: Pick<ChartSpec, 'palette' | 'series'>, seriesIndex: number): string {
 	const series = spec.series[seriesIndex];
 	if (series?.color) return series.color;
-	const palette = spec.palette.length ? spec.palette : DEFAULT_CHART_PALETTE;
-	return palette[seriesIndex % palette.length];
+	return cyclePaletteColor(spec.palette.length ? spec.palette : DEFAULT_CHART_PALETTE, seriesIndex);
 }
 
 /** The colour a pie slice is drawn with (by category). */
 export function chartSliceColor(spec: Pick<ChartSpec, 'palette'>, index: number): string {
-	const palette = spec.palette.length ? spec.palette : DEFAULT_CHART_PALETTE;
-	return palette[index % palette.length];
+	return cyclePaletteColor(spec.palette.length ? spec.palette : DEFAULT_CHART_PALETTE, index);
+}
+
+/** The colour of one bar or point: its override, else the series colour. */
+export function chartPointColor(spec: Pick<ChartSpec, 'palette' | 'series'>, seriesIndex: number, index: number): string {
+	return spec.series[seriesIndex]?.pointColors?.[index] || chartSeriesColor(spec, seriesIndex);
 }
 
 /** How a series is drawn in a cartesian chart. */
 export function chartSeriesType(spec: Pick<ChartSpec, 'type'>, series: ChartSeries): ChartSeriesType {
 	if (series.type) return series.type;
+	if (spec.type === 'bubble') return 'scatter';
 	return isCartesianChart(spec.type) ? (spec.type as ChartSeriesType) : 'bar';
 }
 
@@ -178,7 +236,7 @@ function normalizeFormat(value: unknown, path: string, issues: ChartIssue[]): Ch
 		if (Number.isInteger(d) && d >= 0 && d <= 10) out.decimals = d;
 		else issues.push({ path: `${path}.decimals`, message: `${path}.decimals must be a whole number from 0 to 10.` });
 	}
-	for (const key of ['currency', 'prefix', 'suffix'] as const) {
+	for (const key of ['currency', 'prefix', 'suffix', 'code'] as const) {
 		if (value[key] !== undefined) out[key] = text(value[key], '', `${path}.${key}`, issues);
 	}
 	return out;
@@ -197,14 +255,23 @@ export function normalizeChartAxis(value: unknown, fallback: ChartAxis, path: st
 		min = fallback.min;
 		max = fallback.max;
 	}
-	return {
+	let step = 'step' in value ? bound(value.step, `${path}.step`, issues) : fallback.step;
+	if (step !== null && !(step > 0)) {
+		issues.push({ path: `${path}.step`, message: `${path}.step must be greater than 0 (or null for automatic).` });
+		step = fallback.step;
+	}
+	const axis: ChartAxis = {
 		show: flag(value.show, fallback.show, `${path}.show`, issues),
 		title: text(value.title, fallback.title, `${path}.title`, issues),
 		min,
 		max,
+		step,
 		gridlines: flag(value.gridlines, fallback.gridlines, `${path}.gridlines`, issues),
 		format: 'format' in value ? normalizeFormat(value.format, `${path}.format`, issues) : { ...fallback.format }
 	};
+	const kind = 'kind' in value ? (value.kind === null ? undefined : pick(value.kind, CHART_AXIS_KINDS, 'category', `${path}.kind`, issues)) : fallback.kind;
+	if (kind && kind !== 'category') axis.kind = kind;
+	return axis;
 }
 
 function normalizeLegend(value: unknown, issues: ChartIssue[]): ChartLegend {
@@ -264,7 +331,83 @@ function normalizeSeries(value: unknown, length: number, used: Set<string>, inde
 	if (typeof value.color === 'string' && value.color.trim()) series.color = value.color.trim();
 	if (value.type !== undefined && value.type !== null) series.type = pick(value.type, CHART_SERIES_TYPES, 'bar', `${path}.type`, issues);
 	if (value.hidden === true) series.hidden = true;
+	if (value.axis !== undefined && value.axis !== null && pick(value.axis, ['primary', 'secondary'] as const, 'primary', `${path}.axis`, issues) === 'secondary') series.axis = 'secondary';
+	for (const key of ['x', 'sizes'] as const) {
+		if (value[key] === undefined || value[key] === null) continue;
+		const list = normalizeChartValues(value[key], length, `${path}.${key}`, issues);
+		if (list.some((v) => v !== null)) series[key] = list;
+	}
+	if (key(value, 'sizes') && series.sizes?.some((v) => v !== null && v < 0)) {
+		issues.push({ path: `${path}.sizes`, message: `${path}.sizes must not be negative.` });
+		series.sizes = series.sizes.map((v) => (v !== null && v < 0 ? null : v));
+	}
+	if (value.pointColors !== undefined && value.pointColors !== null) {
+		if (!Array.isArray(value.pointColors)) issues.push({ path: `${path}.pointColors`, message: `${path}.pointColors must be an array of colours or nulls.` });
+		else {
+			const colors = Array.from({ length }, (_, i) => {
+				const c = (value.pointColors as unknown[])[i];
+				return typeof c === 'string' && c.trim() ? c.trim() : null;
+			});
+			if (colors.some((c) => c !== null)) series.pointColors = colors;
+		}
+	}
+	if (value.marker !== undefined && value.marker !== null) series.marker = pick(value.marker, CHART_MARKERS, 'circle', `${path}.marker`, issues);
+	if (value.curve !== undefined && value.curve !== null) series.curve = pick(value.curve, CHART_CURVES, 'linear', `${path}.curve`, issues);
+	if (value.dataLabels !== undefined && value.dataLabels !== null) series.dataLabels = flag(value.dataLabels, false, `${path}.dataLabels`, issues);
+	if (value.format !== undefined && value.format !== null) {
+		const format = normalizeFormat(value.format, `${path}.format`, issues);
+		if (Object.keys(format).length) series.format = format;
+	}
+	if (value.trendlines !== undefined && value.trendlines !== null) {
+		if (!Array.isArray(value.trendlines)) issues.push({ path: `${path}.trendlines`, message: `${path}.trendlines must be an array.` });
+		else {
+			const lines = value.trendlines.map((t, i) => normalizeChartTrendline(t, `${path}.trendlines[${i}]`, issues)).filter((t): t is ChartTrendline => t !== null);
+			if (lines.length) series.trendlines = lines;
+		}
+	}
 	return series;
+}
+
+const key = (value: Record<string, unknown>, name: string) => value[name] !== undefined && value[name] !== null;
+
+/** Checks one trendline; `null` (reported) when it is unusable. */
+export function normalizeChartTrendline(value: unknown, path: string, issues: ChartIssue[] = []): ChartTrendline | null {
+	if (!isRecord(value)) {
+		issues.push({ path, message: `${path} must be an object with a type.` });
+		return null;
+	}
+	const type = pick(value.type, CHART_TRENDLINE_TYPES, 'linear', `${path}.type`, issues);
+	const line: ChartTrendline = { type };
+	const whole = (name: 'order' | 'period', min: number, max: number) => {
+		if (!key(value, name)) return;
+		const n = Number(value[name]);
+		if (Number.isInteger(n) && n >= min && n <= max) line[name] = n;
+		else issues.push({ path: `${path}.${name}`, message: `${path}.${name} must be a whole number from ${min} to ${max}.` });
+	};
+	if (type === 'polynomial') whole('order', 2, 6);
+	if (type === 'moving-average') whole('period', 2, 1000);
+	for (const name of ['forward', 'backward'] as const) {
+		if (!key(value, name)) continue;
+		const n = Number(value[name]);
+		if (Number.isFinite(n) && n >= 0) {
+			if (n > 0) line[name] = n;
+		} else issues.push({ path: `${path}.${name}`, message: `${path}.${name} must be a number of x units, 0 or more.` });
+	}
+	if (key(value, 'intercept')) {
+		const n = Number(value.intercept);
+		if (!Number.isFinite(n)) issues.push({ path: `${path}.intercept`, message: `${path}.intercept must be a number or null.` });
+		else if (type === 'linear' || type === 'polynomial' || type === 'exponential') {
+			if (type === 'exponential' && n <= 0) issues.push({ path: `${path}.intercept`, message: `${path}.intercept must be greater than 0 for an exponential trendline.` });
+			else line.intercept = n;
+		} else issues.push({ path: `${path}.intercept`, message: `A ${type} trendline cannot have a fixed intercept; use linear, polynomial or exponential.` });
+	}
+	for (const name of ['showEquation', 'showR2'] as const) if (key(value, name) && flag(value[name], false, `${path}.${name}`, issues)) line[name] = true;
+	for (const name of ['name', 'color'] as const) {
+		if (!key(value, name)) continue;
+		const t = text(value[name], '', `${path}.${name}`, issues).trim();
+		if (t) line[name] = t;
+	}
+	return line;
 }
 
 /**
@@ -299,11 +442,21 @@ export function normalizeChartSpec(input: unknown): { spec: ChartSpec; issues: C
 		else issues.push({ path: 'palette', message: 'palette must list at least one colour.' });
 	} else if (value.palette !== undefined) issues.push({ path: 'palette', message: 'palette must be an array of colours.' });
 
-	let innerRadius = 0.55;
-	if (value.innerRadius !== undefined) {
-		const r = Number(value.innerRadius);
-		if (Number.isFinite(r) && r >= 0 && r <= 0.9) innerRadius = r;
-		else issues.push({ path: 'innerRadius', message: 'innerRadius must be a number from 0 to 0.9.' });
+	const fraction = (name: string, fallback: number, min: number, max: number) => {
+		if (value[name] === undefined) return fallback;
+		const r = Number(value[name]);
+		if (value[name] !== null && Number.isFinite(r) && r >= min && r <= max) return r;
+		issues.push({ path: name, message: `${name} must be a number from ${min} to ${max}.` });
+		return fallback;
+	};
+	const innerRadius = fraction('innerRadius', 0.55, 0, 0.9);
+	const gapWidth = fraction('gapWidth', 0.28, 0, 0.9);
+	const overlap = fraction('overlap', -0.12, -1, 1);
+	let bins: number | null = null;
+	if (value.bins !== undefined && value.bins !== null) {
+		const b = Number(value.bins);
+		if (Number.isInteger(b) && b >= 1 && b <= 500) bins = b;
+		else issues.push({ path: 'bins', message: 'bins must be a whole number from 1 to 500, or null for automatic.' });
 	}
 
 	const spec: ChartSpec = {
@@ -315,14 +468,20 @@ export function normalizeChartSpec(input: unknown): { spec: ChartSpec; issues: C
 		series,
 		xAxis: normalizeChartAxis(value.xAxis, defaultChartAxis(false), 'xAxis', issues),
 		yAxis: normalizeChartAxis(value.yAxis, defaultChartAxis(true), 'yAxis', issues),
+		yAxis2: normalizeChartAxis(value.yAxis2, defaultChartAxis(false), 'yAxis2', issues),
 		legend: normalizeLegend(value.legend, issues),
 		stacking: pick(value.stacking, CHART_STACKINGS, 'none', 'stacking', issues),
 		orientation: pick(value.orientation, CHART_ORIENTATIONS, 'vertical', 'orientation', issues),
 		curve: pick(value.curve, CHART_CURVES, 'linear', 'curve', issues),
 		points: flag(value.points, true, 'points', issues),
 		dataLabels: flag(value.dataLabels, false, 'dataLabels', issues),
+		labelPosition: pick(value.labelPosition, CHART_LABEL_POSITIONS, 'auto', 'labelPosition', issues),
 		palette,
-		innerRadius
+		innerRadius,
+		gapWidth,
+		overlap,
+		bins,
+		showTotal: flag(value.showTotal, true, 'showTotal', issues)
 	};
 	return { spec, issues };
 }
@@ -335,13 +494,20 @@ export function cloneChartSpec(spec: ChartSpec): ChartSpec {
 		series: spec.series.map(cloneChartSeries),
 		xAxis: { ...spec.xAxis, format: { ...spec.xAxis.format } },
 		yAxis: { ...spec.yAxis, format: { ...spec.yAxis.format } },
+		yAxis2: { ...spec.yAxis2, format: { ...spec.yAxis2.format } },
 		legend: { ...spec.legend },
 		palette: [...spec.palette]
 	};
 }
 
 export function cloneChartSeries(series: ChartSeries): ChartSeries {
-	return { ...series, values: [...series.values] };
+	const copy: ChartSeries = { ...series, values: [...series.values] };
+	if (series.x) copy.x = [...series.x];
+	if (series.sizes) copy.sizes = [...series.sizes];
+	if (series.pointColors) copy.pointColors = [...series.pointColors];
+	if (series.format) copy.format = { ...series.format };
+	if (series.trendlines) copy.trendlines = series.trendlines.map((t) => ({ ...t }));
+	return copy;
 }
 
 export interface ChartTableOptions {
@@ -350,8 +516,16 @@ export interface ChartTableOptions {
 	 * series. `rows`: the first row holds categories and each other row is a series.
 	 */
 	seriesIn?: 'columns' | 'rows';
-	/** The first row (or column for `rows`) holds series names (default `true`). */
-	header?: boolean;
+	/**
+	 * The first row (or column for `rows`) holds series names (default `true`). `auto`: only
+	 * when one of its value cells is not a number.
+	 */
+	header?: boolean | 'auto';
+	/**
+	 * Read the first column as numeric x values (scatter and bubble charts): every series gets
+	 * them as `x`, and the categories are their labels.
+	 */
+	xFromFirstColumn?: boolean;
 }
 
 export interface ChartTableData {
@@ -365,7 +539,6 @@ export interface ChartTableData {
  * series. Cells that are not numbers become gaps and are reported.
  */
 export function chartDataFromTable(rows: ReadonlyArray<ReadonlyArray<unknown>>, options: ChartTableOptions = {}): ChartTableData {
-	const header = options.header ?? true;
 	let grid = rows.map((r) => [...r]).filter((r) => r.some((c) => c !== null && c !== undefined && String(c).trim() !== ''));
 	if (options.seriesIn === 'rows') {
 		const width = Math.max(0, ...grid.map((r) => r.length));
@@ -374,6 +547,7 @@ export function chartDataFromTable(rows: ReadonlyArray<ReadonlyArray<unknown>>, 
 	const issues: ChartIssue[] = [];
 	if (!grid.length) return { categories: [], series: [], issues };
 	const width = Math.max(...grid.map((r) => r.length));
+	const header = options.header === 'auto' ? grid[0].slice(1).some((c) => c !== null && c !== undefined && String(c).trim() !== '' && parseChartValue(c) === undefined) : (options.header ?? true);
 	const names = header ? grid[0] : [];
 	const body = header ? grid.slice(1) : grid;
 	const categories = body.map((r, i) => {
@@ -392,6 +566,14 @@ export function chartDataFromTable(rows: ReadonlyArray<ReadonlyArray<unknown>>, 
 			return parsed;
 		});
 		series.push({ id: `series-${col}`, name, values });
+	}
+	if (options.xFromFirstColumn) {
+		const x = body.map((r, i) => {
+			const parsed = parseChartValue(r[0] ?? null);
+			if (parsed === undefined) issues.push({ path: `x[${i}]`, message: `"${String(r[0])}" in the first column is not a number; that point has no x.` });
+			return parsed ?? null;
+		});
+		for (const s of series) s.x = [...x];
 	}
 	return { categories, series, issues };
 }

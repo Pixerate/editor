@@ -1,4 +1,6 @@
-// Portions ported from filmcraft-main/crates/automation/src/server.rs (MIT OR Apache-2.0, © ArtCraft Team and contributors). See THIRD_PARTY_NOTICES.md.
+// Portions ported from filmcraft-main/crates/automation/src/server.rs, and `$N.path` result references with
+// atomic batches from vectorcraft-main/crates/mcp/src/tools.rs (`command_batch`) (MIT OR Apache-2.0, © ArtCraft
+// Team and contributors). See THIRD_PARTY_NOTICES.md.
 import type { AgentTool, AgentToolProvider, McpToolResult } from '../tools/registry.js';
 import { rankCommands } from './palette.js';
 import type { CommandRegistry, CommandResult } from './registry.js';
@@ -42,10 +44,12 @@ function errorResult(result: Extract<CommandResult, { ok: false }>): McpToolResu
  *   enablement (with the reason a command is disabled).
  * - `run_command {id, params?}`: runs one command; disabled commands, unknown params and
  *   failures come back as `isError` results with a `{code, message}` error.
- * - `run_commands {steps: [{id, params?}], stopOnError?}`: runs steps **in order**, each as
- *   its own command (and undo step). It is not atomic: steps that succeeded before a failure
- *   stay applied. For all-or-nothing behaviour, register a command that runs the steps
- *   inside `HistoryManager.batch` (or mark it `undoable` on a registry with `history`).
+ * - `run_commands {steps: [{id, params?}], stopOnError?, atomic?, label?}`: runs steps **in
+ *   order**. A param string `"$0.id"` or `"$last.id"` is replaced by that path of an earlier
+ *   step's result (e.g. `addSeries` then `setValues` on the new series). By default each step
+ *   is its own undo step and steps before a failure stay applied; `atomic: true` (on a
+ *   registry with `history`) runs them as one undo step named `label` and takes everything
+ *   back when one fails.
  *
  * The id enum in `run_command`'s schema follows the registered commands, so the
  * `ToolRegistry` announces `listChanged` when commands are added or removed.
@@ -62,6 +66,25 @@ export function createCommandToolProvider<TContext = any>(
 	const visible = () =>
 		registry.list({ scope: options.scope, context: context() }).filter((e) => !options.exclude?.(e.id));
 	const allowed = (id: string) => registry.has(id) && !options.exclude?.(id) && visible().some((e) => e.id === id);
+
+	/** Replaces `"$N.path"` / `"$last.path"` strings with values from earlier results. */
+	function resolveRefs(value: unknown, results: unknown[]): unknown {
+		if (typeof value === 'string') {
+			const m = /^\$(\d+|last)((?:\.[\w-]+|\[\d+\])*)$/.exec(value);
+			if (!m) return value;
+			const index = m[1] === 'last' ? results.length - 1 : Number(m[1]);
+			if (index < 0 || index >= results.length) throw new Error(`"${value}" refers to step ${m[1]}, but only ${results.length} step${results.length === 1 ? ' has' : 's have'} run.`);
+			let cur: unknown = results[index];
+			for (const part of m[2].match(/[\w-]+/g) ?? []) {
+				if (cur === null || typeof cur !== 'object' || !(part in (cur as object))) throw new Error(`"${value}": step ${index}'s result has no "${part}".`);
+				cur = (cur as Record<string, unknown>)[part];
+			}
+			return cur;
+		}
+		if (Array.isArray(value)) return value.map((v) => resolveRefs(v, results));
+		if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, resolveRefs(v, results)]));
+		return value;
+	}
 
 	async function runOne(id: string, params: unknown): Promise<CommandResult> {
 		if (!allowed(id)) return { ok: false, id, code: 'unknown_command', message: `Unknown command "${id}".` };
@@ -130,25 +153,28 @@ export function createCommandToolProvider<TContext = any>(
 		name: 'run_commands',
 		title: 'Run several commands',
 		description:
-			'Runs several commands in order: {steps: [{id, params?}], stopOnError?: true}. Each step is its own command and undo step; the batch is NOT atomic (steps before a failure stay applied). Returns {completed, failed, results: [{id, ok, result | code, message}]}.',
+			'Runs several commands in order: {steps: [{id, params?}], stopOnError?: true, atomic?: false, label?}. A param string "$0.id" or "$last.id" is replaced by that path of an earlier step\'s result, so you can use an id a step created without another round trip. Not atomic by default (each step is its own undo step and steps before a failure stay applied); atomic: true makes the batch one undo step named label and takes everything back if a step fails. Returns {completed, failed, skipped, results: [{id, ok, result | code, message}]}.',
 		inputSchema: {
 			type: 'object',
 			properties: {
 				steps: {
 					type: 'array',
 					minItems: 1,
-					description: 'Commands to run in order.',
+					maxItems: 256,
+					description: 'Commands to run in order (at most 256).',
 					items: {
 						type: 'object',
 						properties: {
 							id: { type: 'string', description: 'Command id.' },
-							params: { type: 'object', description: 'Command parameters.' }
+							params: { type: 'object', description: 'Command parameters; strings like "$0.id" or "$last.series[0]" refer to earlier results.' }
 						},
 						required: ['id'],
 						additionalProperties: false
 					}
 				},
-				stopOnError: { type: 'boolean', description: 'Stop at the first failing step (default true).' }
+				stopOnError: { type: 'boolean', description: 'Stop at the first failing step (default true). Ignored when atomic.' },
+				atomic: { type: 'boolean', description: 'Run every step as one undo step, all or nothing (default false). Needs a registry created with a history.' },
+				label: { type: 'string', description: 'Undo step name for an atomic batch (default "Run commands").' }
 			},
 			required: ['steps'],
 			additionalProperties: false
@@ -160,22 +186,81 @@ export function createCommandToolProvider<TContext = any>(
 			idempotentHint: false,
 			openWorldHint: false
 		},
-		handler: async ({ steps, stopOnError = true }) => {
+		handler: async ({ steps, stopOnError = true, atomic = false, label = 'Run commands' }) => {
 			let completed = 0;
 			let failed = 0;
 			const results: Array<Record<string, unknown>> = [];
-			for (const step of steps as Array<{ id: string; params?: unknown }>) {
-				const result = await runOne(step.id, step.params);
+			const values: unknown[] = [];
+			const list = steps as Array<{ id: string; params?: unknown }>;
+			const step = (s: { id: string; params?: unknown }, run: (id: string, params: unknown) => CommandResult): boolean => {
+				let params: unknown;
+				try {
+					params = resolveRefs(s.params, values);
+				} catch (error) {
+					failed++;
+					results.push({ id: s.id, ok: false, code: 'invalid_params', message: (error as Error).message });
+					return false;
+				}
+				const result = run(s.id, params);
 				if (result.ok) {
 					completed++;
-					results.push({ id: result.id, ok: true, result: toJson(result.result) });
+					const value = toJson(result.result);
+					values.push(value);
+					results.push({ id: result.id, ok: true, result: value });
+					return true;
+				}
+				failed++;
+				values.push(null);
+				results.push({ id: result.id, ok: false, code: result.code, message: result.message });
+				return false;
+			};
+			if (atomic) {
+				const history = registry.history;
+				if (!history) {
+					const message = 'atomic batches need a CommandRegistry created with { history }; run the steps without atomic, or ask the host to share its history.';
+					return { isError: true, content: [{ type: 'text', text: message }], structuredContent: { error: { code: 'unsupported', message } } };
+				}
+				const syncRun = (id: string, params: unknown): CommandResult => {
+					if (!allowed(id)) return { ok: false, id, code: 'unknown_command', message: `Unknown command "${id}".` };
+					const r = registry.execute(id, params ?? {}, context());
+					if (r.ok && r.result && typeof (r.result as Promise<unknown>).then === 'function') return { ok: false, id, code: 'failed', message: `"${id}" runs asynchronously and cannot be part of an atomic batch.` };
+					return r;
+				};
+				try {
+					history.batch(String(label), () => {
+						for (const s of list) if (!step(s, syncRun)) throw new Error('rollback');
+					});
+				} catch {
+					// The batch rolled back: nothing stays applied.
+				}
+				const summary = { completed: failed ? 0 : completed, failed, skipped: list.length - completed - failed, rolledBack: failed > 0, results };
+				return failed > 0 ? { isError: true, content: [{ type: 'text', text: JSON.stringify(summary) }], structuredContent: summary } : summary;
+			}
+			for (const s of list) {
+				let params: unknown;
+				try {
+					params = resolveRefs(s.params, values);
+				} catch (error) {
+					failed++;
+					values.push(null);
+					results.push({ id: s.id, ok: false, code: 'invalid_params', message: (error as Error).message });
+					if (stopOnError) break;
+					continue;
+				}
+				const result = await runOne(s.id, params);
+				if (result.ok) {
+					completed++;
+					const value = toJson(result.result);
+					values.push(value);
+					results.push({ id: result.id, ok: true, result: value });
 				} else {
 					failed++;
+					values.push(null);
 					results.push({ id: result.id, ok: false, code: result.code, message: result.message });
 					if (stopOnError) break;
 				}
 			}
-			const summary = { completed, failed, skipped: steps.length - completed - failed, results };
+			const summary = { completed, failed, skipped: list.length - completed - failed, results };
 			return failed > 0
 				? { isError: true, content: [{ type: 'text', text: JSON.stringify(summary) }], structuredContent: summary }
 				: summary;

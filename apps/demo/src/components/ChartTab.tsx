@@ -1,8 +1,20 @@
-import React, { useState } from "react";
-import { chartToSvg, type ChartSpec } from "@pixerate/editor/chart";
-import { ChartEditor, useChartCommands, useChartController, useChartState } from "@pixerate/editor-react/chart";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { chartToMermaid, chartToSvg, chartFromMermaid, recommendChartTypes, summarizeChart, type ChartSpec } from "@pixerate/editor/chart";
+import { parseCsv } from "@pixerate/editor/spreadsheet";
+import {
+  ChartEditor,
+  ChartSparkline,
+  ChartStreamingView,
+  useChartCommands,
+  useChartController,
+  useChartDirector,
+  useChartState,
+  useChartToolProvider,
+} from "@pixerate/editor-react/chart";
 import { BarChart3 } from "lucide-react";
-import { demoCommandRegistry } from "../agentTools";
+import { demoCommandRegistry, demoToolRegistry } from "../agentTools";
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 const SAMPLES: Record<string, Partial<ChartSpec>> = {
   Revenue: {
@@ -14,9 +26,10 @@ const SAMPLES: Record<string, Partial<ChartSpec>> = {
       { id: "na", name: "North America", values: [42000, 48500, 51200, 60300] },
       { id: "eu", name: "Europe", values: [31000, 29800, 35600, 41200] },
       { id: "apac", name: "Asia Pacific", values: [18000, 22400, 27900, 33100] },
-      { id: "target", name: "Target", values: [90000, 95000, 105000, 120000], type: "line" },
+      { id: "margin", name: "Margin", values: [0.21, 0.24, 0.23, 0.28], type: "line", axis: "secondary", marker: "diamond" },
     ],
-    yAxis: { show: true, title: "", min: null, max: null, gridlines: true, format: { style: "currency" } },
+    yAxis: { show: true, title: "", min: null, max: null, step: null, gridlines: true, format: { style: "currency" } },
+    yAxis2: { show: true, title: "Margin", min: null, max: null, step: null, gridlines: false, format: { style: "percent" } },
   },
   "Web traffic": {
     type: "area",
@@ -29,7 +42,71 @@ const SAMPLES: Record<string, Partial<ChartSpec>> = {
     ],
     stacking: "stacked",
     curve: "smooth",
-    yAxis: { show: true, title: "", min: null, max: null, gridlines: true, format: { style: "compact" } },
+    yAxis: { show: true, title: "", min: null, max: null, step: null, gridlines: true, format: { style: "compact" } },
+  },
+  Trend: {
+    type: "line",
+    title: "Monthly signups",
+    xAxis: { show: true, title: "", min: null, max: null, step: null, gridlines: false, format: {}, kind: "date" },
+    categories: MONTHS.map((_, i) => `2025-${String(i + 1).padStart(2, "0")}`),
+    series: [{ id: "signups", name: "Signups", values: [120, 135, 128, 160, 172, 169, 190, 205, 198, 230, 244, 260], trendlines: [{ type: "linear", forward: 2, showEquation: true, showR2: true }] }],
+  },
+  Scatter: {
+    type: "scatter",
+    title: "Height vs weight",
+    categories: ["a", "b", "c", "d", "e", "f", "g", "h"],
+    series: [{ id: "people", name: "People", values: [158, 162, 171, 168, 180, 186, 175, 191], x: [52, 57, 66, 64, 78, 88, 72, 95], trendlines: [{ type: "linear", showR2: true }] }],
+    xAxis: { show: true, title: "Weight (kg)", min: null, max: null, step: null, gridlines: true, format: {} },
+    yAxis: { show: true, title: "Height (cm)", min: null, max: null, step: null, gridlines: true, format: {} },
+  },
+  Bubble: {
+    type: "bubble",
+    title: "Markets",
+    categories: ["UK", "DE", "FR", "US", "JP"],
+    series: [{ id: "m", name: "Markets", values: [12, 18, 9, 30, 14], x: [2.1, 3.4, 1.8, 6.2, 2.9], sizes: [67, 83, 68, 331, 125] }],
+    xAxis: { show: true, title: "Growth %", min: null, max: null, step: null, gridlines: true, format: {} },
+  },
+  Waterfall: {
+    type: "waterfall",
+    title: "Cash flow",
+    categories: ["Opening", "Sales", "Refunds", "Salaries", "Subtotal", "Tax"],
+    series: [{ id: "cash", name: "Cash", values: [120, 85, -12, -60, null, -18] }],
+    dataLabels: true,
+  },
+  Histogram: {
+    type: "histogram",
+    title: "Response times (ms)",
+    categories: Array.from({ length: 120 }, (_, i) => String(i + 1)),
+    series: [{ id: "t", name: "Times", values: Array.from({ length: 120 }, (_, i) => Math.round(220 + 60 * Math.sin(i * 1.7) + 40 * Math.cos(i * 0.31) + (i % 17))) }],
+  },
+  "Box plot": {
+    type: "box",
+    title: "Scores by class",
+    categories: Array.from({ length: 24 }, (_, i) => String(i + 1)),
+    series: ["A", "B", "C"].map((name, k) => ({ id: name, name: `Class ${name}`, values: Array.from({ length: 24 }, (_, i) => 55 + k * 6 + ((i * (7 + k)) % 23) + (i === 5 && k === 1 ? 30 : 0)) })),
+  },
+  Radar: {
+    type: "radar",
+    title: "Product comparison",
+    categories: ["Speed", "Power", "Range", "Comfort", "Price"],
+    series: [
+      { id: "a", name: "Model A", values: [4, 3, 5, 2, 4] },
+      { id: "b", name: "Model B", values: [3, 5, 2, 4, 3] },
+    ],
+  },
+  Funnel: {
+    type: "funnel",
+    title: "Signup funnel",
+    categories: ["Visits", "Sign-ups", "Trials", "Paid"],
+    series: [{ id: "u", name: "Users", values: [12000, 4200, 1800, 640] }],
+    yAxis: { show: true, title: "", min: null, max: null, step: null, gridlines: true, format: { code: "#,##0" } },
+  },
+  Treemap: {
+    type: "treemap",
+    title: "Sales by region",
+    categories: ["North", "South", "East", "West", "Central", "Online", "Other"],
+    series: [{ id: "s", name: "Sales", values: [40, 25, 18, 12, 9, 30, 3] }],
+    yAxis: { show: true, title: "", min: null, max: null, step: null, gridlines: true, format: { code: '$#,##0"k"' } },
   },
   "Market share": {
     type: "donut",
@@ -43,12 +120,32 @@ const SAMPLES: Record<string, Partial<ChartSpec>> = {
 
 const SAMPLE_CSV = "Month,Coffee,Tea\nJan,120,80\nFeb,135,76\nMar,150,90\nApr,142,101\nMay,160,95";
 
+const STREAM_SOURCE = `xychart-beta
+    title "Revenue (streamed)"
+    x-axis [Jan, Feb, Mar, Apr, May, Jun, Jul, Aug]
+    y-axis "USD (k)"
+    bar "Revenue" [32, 41, 38, 52, 61, 58, 70, 76]
+    line "Forecast" [30, 38, 42, 50, 56, 62, 68, 74]
+`;
+
 export function ChartTab() {
   const controller = useChartController({ spec: SAMPLES.Revenue });
   const state = useChartState(controller);
+  const { presence, director, sceneRef } = useChartDirector(controller);
   useChartCommands(demoCommandRegistry, controller);
+  useChartToolProvider(demoToolRegistry, controller, { id: "chart", namespace: "chart", director, actor: { id: "agent", name: "Agent" } });
   const [csv, setCsv] = useState(SAMPLE_CSV);
   const [copied, setCopied] = useState(false);
+  const [mermaid, setMermaid] = useState("");
+  const [mermaidIssues, setMermaidIssues] = useState<string[]>([]);
+  const [streamed, setStreamed] = useState({ text: "", complete: false });
+  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => () => {
+    if (timer.current) clearInterval(timer.current);
+  }, []);
+
+  const summary = useMemo(() => summarizeChart(state.spec as ChartSpec, { width: 640, height: 400 }), [state.spec]);
+  const recommendations = useMemo(() => recommendChartTypes(parseCsv(csv)), [csv]);
 
   const copySvg = async () => {
     const svg = chartToSvg(state.spec, { width: 800, height: 450 });
@@ -61,6 +158,29 @@ export function ChartTab() {
     }
   };
 
+  const stream = () => {
+    if (timer.current) clearInterval(timer.current);
+    let i = 0;
+    setStreamed({ text: "", complete: false });
+    timer.current = setInterval(() => {
+      i += 3;
+      const done = i >= STREAM_SOURCE.length;
+      setStreamed({ text: STREAM_SOURCE.slice(0, i), complete: done });
+      if (done && timer.current) clearInterval(timer.current);
+    }, 30);
+  };
+
+  const agentDemo = () => {
+    const spec = controller.getSpec();
+    const first = spec.series.find((s) => !s.hidden && s.axis !== "secondary");
+    if (!first) return;
+    void director.perform({ id: "agent", name: "Agent" }, [
+      { kind: "say", text: "Checking the data…" },
+      ...first.values.slice(0, 3).map((v, index) => ({ kind: "setValue" as const, seriesId: first.id, index, value: Math.round((v ?? 0) * 1.15), note: index === 0 ? "Adding 15%" : undefined })),
+      { kind: "update" as const, patch: { title: `${spec.title || "Chart"} (+15%)` } },
+    ]);
+  };
+
   const button = "px-2.5 py-1 rounded-md text-xs border border-slate-700 bg-slate-800/60 text-slate-200 hover:bg-slate-700";
   return (
     <section className="space-y-4">
@@ -70,38 +190,109 @@ export function ChartTab() {
           <div>
             <h2 className="text-lg font-semibold text-slate-100">Chart editor</h2>
             <p className="text-xs text-slate-400">
-              Click any part of the chart to select it, drag bars and points to change values, use ← → ↑ ↓ and Delete with the chart focused, or edit the grid below
-              (paste TSV from a spreadsheet). Agents get <code>chart.*</code> commands in the palette.
+              Click any part of the chart to select it, drag bars and points to change values (Alt: fine, Shift: one axis, Esc: cancel), use ← → ↑ ↓ and Delete with the
+              chart focused, or edit the grid below (paste TSV from a spreadsheet). Agents get <code>chart__*</code> tools in the panel and <code>chart.*</code> commands
+              in the palette; their edits are acted out with a cursor.
             </p>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
-          {Object.keys(SAMPLES).map((name) => (
-            <button key={name} type="button" className={button} onClick={() => controller.load(SAMPLES[name], { clearHistory: true })}>
-              {name}
-            </button>
-          ))}
+          <button type="button" className={button} onClick={agentDemo}>
+            Agent demo
+          </button>
           <button type="button" className={button} onClick={copySvg}>
             {copied ? "Copied!" : "Copy SVG"}
           </button>
         </div>
       </div>
+      <div className="flex flex-wrap gap-1.5">
+        {Object.keys(SAMPLES).map((name) => (
+          <button key={name} type="button" className={button} onClick={() => controller.load(SAMPLES[name], { clearHistory: true })}>
+            {name}
+          </button>
+        ))}
+      </div>
 
       <div className="rounded-xl border border-slate-800 bg-slate-900 p-3">
-        <ChartEditor controller={controller} height={400} />
+        <ChartEditor controller={controller} height={400} canvasProps={{ presence, sceneRef }} />
+      </div>
+
+      <div className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-xs text-slate-300 space-y-1" data-chart-summary="">
+        <p>{summary.description}</p>
+        {summary.warnings.map((w) => (
+          <p key={w.message} className="text-amber-400">
+            {w.message}
+          </p>
+        ))}
+        {!summary.colors.ok && <p className="text-amber-400">{summary.colors.issues[0]}</p>}
+        <div className="flex flex-wrap gap-3 pt-1">
+          {state.spec.series
+            .filter((s) => !s.hidden)
+            .map((s) => (
+              <span key={s.id} className="inline-flex items-center gap-1.5">
+                {s.name} <ChartSparkline values={s.values} highLow kind={state.spec.type === "bar" ? "column" : "line"} />
+              </span>
+            ))}
+        </div>
       </div>
 
       <details className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-xs text-slate-300">
         <summary className="cursor-pointer text-slate-200">Import CSV</summary>
-        <textarea
-          value={csv}
-          onChange={(e) => setCsv(e.target.value)}
-          rows={6}
-          className="mt-2 w-full rounded-md border border-slate-700 bg-slate-950 p-2 font-mono text-xs text-slate-200"
-        />
-        <button type="button" className={`${button} mt-2`} onClick={() => controller.importCsv(csv)}>
-          Replace data
+        <textarea value={csv} onChange={(e) => setCsv(e.target.value)} rows={6} className="mt-2 w-full rounded-md border border-slate-700 bg-slate-950 p-2 font-mono text-xs text-slate-200" />
+        <p className="mt-1 text-slate-400">Suggested: {recommendations.map((r) => r.label).join(", ") || "—"}</p>
+        <div className="mt-2 flex gap-1.5">
+          <button type="button" className={button} onClick={() => controller.importCsv(csv)}>
+            Replace data
+          </button>
+          <button
+            type="button"
+            className={button}
+            onClick={() => {
+              const rec = recommendations[0];
+              controller.importCsv(csv);
+              if (rec) controller.update({ type: rec.type, stacking: rec.stacking ?? "none" });
+            }}
+          >
+            Replace data and pick a type
+          </button>
+        </div>
+      </details>
+
+      <details className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-xs text-slate-300">
+        <summary className="cursor-pointer text-slate-200">Mermaid</summary>
+        <textarea value={mermaid} onChange={(e) => setMermaid(e.target.value)} rows={8} placeholder="xychart-beta, pie or radar-beta" className="mt-2 w-full rounded-md border border-slate-700 bg-slate-950 p-2 font-mono text-xs text-slate-200" />
+        {mermaidIssues.map((m) => (
+          <p key={m} className="text-amber-400">
+            {m}
+          </p>
+        ))}
+        <div className="mt-2 flex gap-1.5">
+          <button type="button" className={button} onClick={() => setMermaid(chartToMermaid(controller.toJSON()))}>
+            Export
+          </button>
+          <button
+            type="button"
+            className={button}
+            onClick={() => {
+              const read = chartFromMermaid(mermaid);
+              setMermaidIssues(read.issues.map((i) => i.message));
+              if (read.family) controller.load(read.spec);
+            }}
+          >
+            Import
+          </button>
+        </div>
+      </details>
+
+      <details className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-xs text-slate-300">
+        <summary className="cursor-pointer text-slate-200">Streaming from a model</summary>
+        <button type="button" className={`${button} mt-2`} onClick={stream}>
+          Stream a chart
         </button>
+        <div className="mt-2 grid gap-3 md:grid-cols-2">
+          <pre className="whitespace-pre-wrap rounded-md border border-slate-700 bg-slate-950 p-2 font-mono text-[11px] text-slate-300 min-h-[140px]">{streamed.text}</pre>
+          {streamed.text && <ChartStreamingView source={streamed.text} complete={streamed.complete} width={420} height={260} />}
+        </div>
       </details>
     </section>
   );

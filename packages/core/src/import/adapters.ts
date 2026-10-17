@@ -1,3 +1,4 @@
+import type { ChartSpec } from "../chart/types";
 import { markdownToTipTapHtml } from "../serializers/markdown";
 import { htmlToPlainText } from "../serializers/plain-text";
 import { plainTextToParagraphHtml, sanitizeImportedHtml } from "../serializers/html";
@@ -36,6 +37,27 @@ export interface DocumentImport {
   comments?: SerializedComments;
   /** Paragraph and character styles the file defines; set by the DOCX adapter. */
   styles?: StyleRegistry;
+  /**
+   * Charts embedded in the file (DOCX), in document order. The HTML shows each as a caption
+   * and a table of its data; render `spec` with the chart editor for the real chart.
+   */
+  charts?: ImportedChart[];
+}
+
+/** A chart read from an imported file. */
+export interface ImportedChart {
+  /** `chart-1`, `chart-2`, … in document order. */
+  id: string;
+  /** The part it came from, e.g. `word/charts/chart1.xml`. */
+  path: string;
+  title: string;
+  spec: ChartSpec;
+  /** Problems reading it, as sentences. */
+  issues: string[];
+  /** Features the chart editor cannot hold (3-D, stock, …). */
+  unsupported: string[];
+  /** Writing `spec` back loses nothing. */
+  lossless: boolean;
 }
 
 export type DocumentImportAdapter = ImportAdapter<DocumentImport>;

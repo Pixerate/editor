@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="300" viewBox="0 0 480 300" role="img" aria-labelledby="chart-desc">
+<desc id="chart-desc">A treemap chart of Sales across 5 categories, totalling 125. The largest is North at 40 (32%); the smallest is West at 12 (10%).</desc>
+<rect x="0" y="0" width="480" height="300" fill="#ffffff" data-role="background"/>
+<rect x="98.07999999999998" y="273.65000000000003" width="10" height="10" rx="2" fill="#4269d0" data-role="legend-swatch"/>
+<text x="114.07999999999998" y="278.65000000000003" text-anchor="start" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" data-role="legend-label">North</text>
+<rect x="158.88" y="273.65000000000003" width="10" height="10" rx="2" fill="#efb118" data-role="legend-swatch"/>
+<text x="174.88" y="278.65000000000003" text-anchor="start" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" data-role="legend-label">South</text>
+<rect x="219.68" y="273.65000000000003" width="10" height="10" rx="2" fill="#ff725c" data-role="legend-swatch"/>
+<text x="235.68" y="278.65000000000003" text-anchor="start" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" data-role="legend-label">East</text>
+<rect x="274.32" y="273.65000000000003" width="10" height="10" rx="2" fill="#6cc5b0" data-role="legend-swatch"/>
+<text x="290.32" y="278.65000000000003" text-anchor="start" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" data-role="legend-label">West</text>
+<rect x="328.96" y="273.65000000000003" width="10" height="10" rx="2" fill="#3ca951" data-role="legend-swatch"/>
+<text x="344.96" y="278.65000000000003" text-anchor="start" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" data-role="legend-label">Online</text>
+<rect x="12" y="12" width="145.92" height="251.29999999999998" fill="#4269d0" stroke="#ffffff" stroke-width="1.5" data-role="cell"/>
+<text x="16" y="16" text-anchor="start" dominant-baseline="hanging" font-size="11" font-weight="600" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#ffffff" data-role="data-label">North</text>
+<text x="16" y="31.2" text-anchor="start" dominant-baseline="hanging" font-size="10" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#ffffff" data-role="data-label">40</text>
+<rect x="157.92" y="149.0727272727273" width="200.63999999999996" height="114.22727272727273" fill="#efb118" stroke="#ffffff" stroke-width="1.5" data-role="cell"/>
+<text x="161.92" y="153.0727272727273" text-anchor="start" dominant-baseline="hanging" font-size="11" font-weight="600" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" data-role="data-label">South</text>
+<text x="161.92" y="168.27272727272728" text-anchor="start" dominant-baseline="hanging" font-size="10" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" data-role="data-label">25</text>
+<rect x="358.55999999999995" y="12" width="109.44000000000008" height="150.7799999999999" fill="#ff725c" stroke="#ffffff" stroke-width="1.5" data-role="cell"/>
+<text x="362.55999999999995" y="16" text-anchor="start" dominant-baseline="hanging" font-size="11" font-weight="600" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" data-role="data-label">East</text>
+<text x="362.55999999999995" y="31.2" text-anchor="start" dominant-baseline="hanging" font-size="10" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" data-role="data-label">18</text>
+<rect x="358.55999999999995" y="162.7799999999999" width="109.43999999999986" height="100.52000000000012" fill="#6cc5b0" stroke="#ffffff" stroke-width="1.5" data-role="cell"/>
+<text x="362.55999999999995" y="166.7799999999999" text-anchor="start" dominant-baseline="hanging" font-size="11" font-weight="600" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" data-role="data-label">West</text>
+<text x="362.55999999999995" y="181.97999999999988" text-anchor="start" dominant-baseline="hanging" font-size="10" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" data-role="data-label">12</text>
+<rect x="157.92" y="12" width="200.63999999999996" height="137.0727272727273" fill="#3ca951" stroke="#ffffff" stroke-width="1.5" data-role="cell"/>
+<text x="161.92" y="16" text-anchor="start" dominant-baseline="hanging" font-size="11" font-weight="600" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#ffffff" data-role="data-label">Online</text>
+<text x="161.92" y="31.2" text-anchor="start" dominant-baseline="hanging" font-size="10" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#ffffff" data-role="data-label">30</text>
+</svg>

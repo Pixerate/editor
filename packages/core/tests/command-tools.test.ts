@@ -13,6 +13,7 @@ import { CommandRegistry, createCommandToolProvider, createHistoryCommands } fro
 import { HistoryManager } from '../src/history';
 import { ImageEditorController, createImageEditorToolProvider } from '../src/image-editor';
 import { createGenerationToolProvider } from '../src/generation';
+import { ChartController, createChartToolProvider } from '../src/chart';
 import { createRichTextPreset, SpreadsheetController } from '../src';
 
 beforeAll(() => {
@@ -184,6 +185,7 @@ describe('built-in tool providers have complete MCP annotations', () => {
 		expect(tools.length).toBe(8 + 7 + 13 + 3 + 17);
 		// Hosts with their own tool sets: checked to the same standard.
 		registry.register(createImageEditorToolProvider(new ImageEditorController(), { id: 'img', namespace: 'img' }));
+		registry.register(createChartToolProvider(new ChartController(), { id: 'chart', namespace: 'chart' }));
 		registry.register(
 			createGenerationToolProvider({ namespace: 'gen', models: [], generate: () => ({}), estimate: () => ({}) })
 		);

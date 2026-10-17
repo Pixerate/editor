@@ -2,8 +2,12 @@ import { HistoryManager } from '../history/HistoryManager.js';
 import type { Command, HistoryMark } from '../history/types.js';
 import { parseCsv, parseTsv } from '../spreadsheet/csv.js';
 import { sameChartSelection } from './layout.js';
+import { chartPresetPatch } from './presets.js';
+import { chartFamily } from './spec.js';
+import { chartMovingAverage, chartSupportsTrendlines, fitChartTrendline, type ChartTrendFit } from './trend.js';
 import {
 	chartDataFromTable,
+	normalizeChartTrendline,
 	cloneChartSeries,
 	cloneChartSpec,
 	normalizeChartSpec,
@@ -14,11 +18,15 @@ import {
 import type {
 	ChartAxis,
 	ChartIssue,
+	ChartCurve,
 	ChartLegend,
+	ChartMarker,
+	ChartNumberFormat,
 	ChartSelection,
 	ChartSeries,
 	ChartSeriesType,
 	ChartSpec,
+	ChartTrendline,
 	ChartType,
 	ChartValue
 } from './types.js';
@@ -52,7 +60,7 @@ export interface ChartControllerOptions {
 export interface ChartState {
 	spec: Readonly<ChartSpec>;
 	selection: ChartSelection | null;
-	/** The series the selection belongs to (a series or one of its points). */
+	/** The series the selection belongs to (a series, one of its points or one of its trendlines). */
 	selectedSeries: ChartSeries | null;
 	/** The category the selection belongs to (a category or a point). */
 	selectedIndex: number | null;
@@ -71,9 +79,10 @@ export interface ChartState {
 export type ChartActionResult = { ok: true } | { ok: false; message: string; issues?: ChartIssue[] };
 
 /** Top-level fields with partial axes and legend. */
-export type ChartSpecPatch = Partial<Omit<ChartSpec, 'version' | 'xAxis' | 'yAxis' | 'legend'>> & {
+export type ChartSpecPatch = Partial<Omit<ChartSpec, 'version' | 'xAxis' | 'yAxis' | 'yAxis2' | 'legend'>> & {
 	xAxis?: Partial<ChartAxis>;
 	yAxis?: Partial<ChartAxis>;
+	yAxis2?: Partial<ChartAxis>;
 	legend?: Partial<ChartLegend>;
 };
 
@@ -84,8 +93,18 @@ export interface ChartSeriesInput {
 	color?: string;
 	type?: ChartSeriesType;
 	hidden?: boolean;
+	axis?: 'primary' | 'secondary';
+	x?: readonly unknown[];
+	sizes?: readonly unknown[];
+	pointColors?: readonly (string | null)[];
+	marker?: ChartMarker;
+	curve?: ChartCurve;
+	dataLabels?: boolean;
+	format?: ChartNumberFormat;
+	trendlines?: readonly ChartTrendline[];
 }
 
+/** Changes to one series; `null` resets a field to the chart's default. */
 export interface ChartSeriesPatch {
 	name?: string;
 	/** `null` goes back to the palette colour. */
@@ -93,6 +112,14 @@ export interface ChartSeriesPatch {
 	/** `null` follows the chart type. */
 	type?: ChartSeriesType | null;
 	hidden?: boolean;
+	axis?: 'primary' | 'secondary' | null;
+	x?: readonly unknown[] | null;
+	sizes?: readonly unknown[] | null;
+	pointColors?: readonly (string | null)[] | null;
+	marker?: ChartMarker | null;
+	curve?: ChartCurve | null;
+	dataLabels?: boolean | null;
+	format?: ChartNumberFormat | null;
 }
 
 export interface ChartEditOptions {
@@ -173,7 +200,7 @@ export class ChartController {
 	private computeState(): ChartState {
 		const h = this.history.getState();
 		const sel = this.selection;
-		const seriesId = sel?.kind === 'series' || sel?.kind === 'point' ? sel.seriesId : null;
+		const seriesId = sel?.kind === 'series' || sel?.kind === 'point' || sel?.kind === 'trendline' ? sel.seriesId : null;
 		return {
 			spec: this.spec,
 			selection: sel,
@@ -217,6 +244,8 @@ export class ChartController {
 				return spec.series.some((s) => s.id === sel.seriesId) && sel.index < spec.categories.length ? sel : null;
 			case 'category':
 				return sel.index < spec.categories.length ? sel : null;
+			case 'trendline':
+				return spec.series.find((s) => s.id === sel.seriesId)?.trendlines?.[sel.index] ? sel : null;
 			case 'title':
 				return spec.title ? sel : null;
 			case 'subtitle':
@@ -298,6 +327,7 @@ export class ChartController {
 			...patch,
 			xAxis: patch.xAxis ? { ...s.xAxis, ...patch.xAxis } : s.xAxis,
 			yAxis: patch.yAxis ? { ...s.yAxis, ...patch.yAxis } : s.yAxis,
+			yAxis2: patch.yAxis2 ? { ...s.yAxis2, ...patch.yAxis2 } : s.yAxis2,
 			legend: patch.legend ? { ...s.legend, ...patch.legend } : s.legend,
 			version: 1
 		};
@@ -320,9 +350,21 @@ export class ChartController {
 		return this.update({ subtitle }, { label: 'Edit subtitle' });
 	}
 
-	/** Changes the category (`x`) or value (`y`) axis. */
-	setAxis(axis: 'x' | 'y', patch: Partial<ChartAxis>): ChartActionResult {
-		return this.update(axis === 'x' ? { xAxis: patch } : { yAxis: patch }, { label: `Change ${axis === 'x' ? 'category' : 'value'} axis` });
+	/** Changes the category (`x`), value (`y`) or secondary value (`y2`) axis. */
+	setAxis(axis: 'x' | 'y' | 'y2', patch: Partial<ChartAxis>): ChartActionResult {
+		const key = axis === 'x' ? 'xAxis' : axis === 'y' ? 'yAxis' : 'yAxis2';
+		return this.update({ [key]: patch }, { label: `Change ${axis === 'x' ? 'category' : axis === 'y' ? 'value' : 'secondary value'} axis` });
+	}
+
+	/**
+	 * Applies a named quick layout and / or colour scheme (see `CHART_LAYOUT_PRESETS` and
+	 * `CHART_COLOR_SCHEMES`) as one undo step.
+	 */
+	applyPreset(options: { layout?: string; colors?: string }): ChartActionResult {
+		const preset = chartPresetPatch(options);
+		if (!preset.ok) return this.reject(preset.message);
+		const label = options.layout && options.colors ? 'Apply chart style' : options.layout ? 'Apply quick layout' : 'Change colours';
+		return this.update(preset.patch, { label });
 	}
 
 	setLegend(patch: Partial<ChartLegend>): ChartActionResult {
@@ -392,7 +434,7 @@ export class ChartController {
 		const name = input.name ?? `Series ${this.spec.series.length + 1}`;
 		const at = Math.max(0, Math.min(this.spec.series.length, options.at ?? this.spec.series.length));
 		const series = [...this.spec.series];
-		series.splice(at, 0, { ...input, id, name, values: (input.values ?? []) as ChartValue[] });
+		series.splice(at, 0, { ...input, id, name, values: (input.values ?? []) as ChartValue[] } as unknown as ChartSeries);
 		const { spec, issues } = normalizeChartSpec({ ...this.spec, series });
 		if (issues.length) return this.reject(issues.map((i) => i.message).join(' '), issues) as { ok: false; message: string };
 		this.commit(`Add series "${name}"`, spec, { kind: 'series', seriesId: id });
@@ -424,6 +466,13 @@ export class ChartController {
 			if (patch.hidden) next.hidden = true;
 			else delete next.hidden;
 		}
+		const resettable = ['axis', 'x', 'sizes', 'pointColors', 'marker', 'curve', 'dataLabels', 'format'] as const;
+		for (const key of resettable) {
+			if (!(key in patch) || patch[key] === undefined) continue;
+			if (patch[key] === null) delete (next as any)[key];
+			else (next as any)[key] = patch[key];
+		}
+		if (next.axis === 'primary') delete next.axis;
 		const series2 = this.spec.series.map((s) => (s.id === id ? next : s));
 		const { spec, issues } = normalizeChartSpec({ ...this.spec, series: series2 });
 		if (issues.length) return this.reject(issues.map((i) => i.message).join(' '), issues);
@@ -588,6 +637,113 @@ export class ChartController {
 	}
 
 	// -------------------------------------------------------------------------
+	// Trendlines
+	// -------------------------------------------------------------------------
+
+	/** Adds a trendline to a series and selects it. Returns its index (and the fit, when it can be computed). */
+	addTrendline(seriesId: string, input: ChartTrendline): { ok: true; index: number; fit: ChartTrendFit | null } | { ok: false; message: string; issues?: ChartIssue[] } {
+		const series = this.getSeries(seriesId);
+		if (!series) return this.unknownSeries(seriesId) as { ok: false; message: string };
+		if (!chartSupportsTrendlines(this.spec.type, this.spec.stacking))
+			return this.reject(`Trendlines need an unstacked bar, line, area, scatter or bubble chart; this is a ${this.spec.stacking !== 'none' ? `${this.spec.stacking} ` : ''}${this.spec.type} chart.`) as { ok: false; message: string };
+		const issues: ChartIssue[] = [];
+		const line = normalizeChartTrendline(input, 'trendline', issues);
+		if (!line || issues.length) return this.reject(issues.map((i) => i.message).join(' ') || 'The trendline is not valid.', issues) as { ok: false; message: string };
+		const index = series.trendlines?.length ?? 0;
+		const next = this.edited((d) => {
+			const s = d.series.find((x) => x.id === seriesId)!;
+			s.trendlines = [...(s.trendlines ?? []), line];
+		});
+		this.commit(`Add trendline to "${series.name}"`, next, { kind: 'trendline', seriesId, index });
+		return { ok: true, index, fit: this.trendlineFit(seriesId, index) };
+	}
+
+	/** Changes a trendline (all-or-nothing). */
+	updateTrendline(seriesId: string, index: number, patch: Partial<ChartTrendline>): ChartActionResult {
+		const series = this.getSeries(seriesId);
+		if (!series) return this.unknownSeries(seriesId);
+		const current = series.trendlines?.[index];
+		if (!current) return fail(`"${series.name}" has no trendline ${index}; ${series.trendlines?.length ? `expected 0 to ${series.trendlines.length - 1}` : 'it has none yet'}.`);
+		const issues: ChartIssue[] = [];
+		const merged: Record<string, unknown> = { ...current, ...patch };
+		for (const [k, v] of Object.entries(patch)) if (v === null) delete merged[k];
+		const line = normalizeChartTrendline(merged, 'trendline', issues);
+		if (!line || issues.length) return this.reject(issues.map((i) => i.message).join(' '), issues);
+		this.commit(
+			'Change trendline',
+			this.edited((d) => {
+				d.series.find((x) => x.id === seriesId)!.trendlines![index] = line;
+			})
+		);
+		return { ok: true };
+	}
+
+	removeTrendline(seriesId: string, index: number): ChartActionResult {
+		const series = this.getSeries(seriesId);
+		if (!series) return this.unknownSeries(seriesId);
+		if (!series.trendlines?.[index]) return fail(`"${series.name}" has no trendline ${index}.`);
+		this.commit(
+			'Delete trendline',
+			this.edited((d) => {
+				const s = d.series.find((x) => x.id === seriesId)!;
+				s.trendlines = s.trendlines!.filter((_, i) => i !== index);
+				if (!s.trendlines.length) delete s.trendlines;
+			})
+		);
+		return { ok: true };
+	}
+
+	/** The points a series' trendlines are fitted to: (x, y) with x = 1, 2, 3 … on category charts. */
+	trendlinePoints(seriesId: string): [number, number][] {
+		const series = this.getSeries(seriesId);
+		if (!series) return [];
+		const xy = chartFamily(this.spec) === 'xy';
+		const out: [number, number][] = [];
+		series.values.forEach((v, i) => {
+			const x = xy ? (series.x?.[i] ?? (this.spec.type === 'bubble' ? i + 1 : null)) : i + 1;
+			if (v !== null && x !== null && Number.isFinite(v) && Number.isFinite(x)) out.push([x, v]);
+		});
+		return out;
+	}
+
+	/** The fitted coefficients, R² and equation of a trendline (null for moving averages or unfittable data). */
+	trendlineFit(seriesId: string, index: number): ChartTrendFit | null {
+		const line = this.getSeries(seriesId)?.trendlines?.[index];
+		if (!line) return null;
+		return fitChartTrendline(line, this.trendlinePoints(seriesId));
+	}
+
+	/** The moving-average points of a trendline (empty for other kinds). */
+	trendlineMovingAverage(seriesId: string, index: number): [number, number][] {
+		const line = this.getSeries(seriesId)?.trendlines?.[index];
+		if (!line || line.type !== 'moving-average') return [];
+		return chartMovingAverage(this.trendlinePoints(seriesId), line.period ?? 2);
+	}
+
+	// -------------------------------------------------------------------------
+	// Reshaping
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Switches rows and columns: series become categories and categories become series (one
+	 * undo step). Series colours, types and other per-series settings are dropped.
+	 */
+	transpose(): ChartActionResult {
+		const s = this.spec;
+		if (!s.series.length || !s.categories.length) return this.reject('There is no data to switch: the chart needs at least one series and one category.');
+		const used = new Set<string>();
+		const series: ChartSeries[] = s.categories.map((name, i) => {
+			let id = `series-${i + 1}`;
+			for (let k = i + 2; used.has(id); k++) id = `series-${k}`;
+			used.add(id);
+			return { id, name, values: s.series.map((x) => x.values[i] ?? null) };
+		});
+		const { spec } = normalizeChartSpec({ ...s, categories: s.series.map((x) => x.name), series });
+		this.commit('Switch rows and columns', spec, null);
+		return { ok: true };
+	}
+
+	// -------------------------------------------------------------------------
 	// Selection and gestures
 	// -------------------------------------------------------------------------
 
@@ -621,6 +777,8 @@ export class ChartController {
 				return this.setLegend({ show: false });
 			case 'axis':
 				return this.setAxis(sel.axis, { show: false });
+			case 'trendline':
+				return this.removeTrendline(sel.seriesId, sel.index);
 			default:
 				return fail('The chart itself cannot be deleted.');
 		}
@@ -641,6 +799,20 @@ export class ChartController {
 		this.gestureKey = key;
 		this.gestureCount++;
 		this.gestureStart = { spec: this.spec, mark: this.history.mark() };
+		this.notify(false);
+	}
+
+	/**
+	 * Cancels the gesture in progress (Escape during a drag): everything it changed is taken
+	 * back and leaves no undo or redo step.
+	 */
+	cancelGesture(): void {
+		if (this.gestureKey === null) return;
+		const start = this.gestureStart;
+		this.gestureKey = null;
+		this.gestureStart = null;
+		this.history.endGesture();
+		if (start) this.history.revertTo(start.mark);
 		this.notify(false);
 	}
 
@@ -718,6 +890,12 @@ function updateLabel(patch: ChartSpecPatch): string {
 		series: 'Edit series',
 		xAxis: 'Change category axis',
 		yAxis: 'Change value axis',
+		yAxis2: 'Change secondary value axis',
+		labelPosition: 'Change label position',
+		gapWidth: 'Change bar spacing',
+		overlap: 'Change bar overlap',
+		bins: 'Change histogram bins',
+		showTotal: 'Toggle waterfall total',
 		legend: 'Change legend',
 		stacking: 'Change stacking',
 		orientation: 'Change orientation',

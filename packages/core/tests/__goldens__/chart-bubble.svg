@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="300" viewBox="0 0 480 300" role="img" aria-labelledby="chart-desc">
+<desc id="chart-desc">A bubble chart showing 1 series of points. M ranges from 10 (a) to 20 (b), rising, up 50% from first to last.</desc>
+<rect x="0" y="0" width="480" height="300" fill="#ffffff" data-role="background"/>
+<line x1="44.64" y1="250.32799999999997" x2="456" y2="250.32799999999997" stroke="#e2e8f0" stroke-width="1" data-role="grid"/>
+<line x1="44.64" y1="180.076" x2="456" y2="180.076" stroke="#e2e8f0" stroke-width="1" data-role="grid"/>
+<line x1="44.64" y1="109.82400000000001" x2="456" y2="109.82400000000001" stroke="#e2e8f0" stroke-width="1" data-role="grid"/>
+<line x1="44.64" y1="39.572" x2="456" y2="39.572" stroke="#e2e8f0" stroke-width="1" data-role="grid"/>
+<text x="36.64" y="250.32799999999997" text-anchor="end" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">10</text>
+<text x="36.64" y="180.076" text-anchor="end" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">15</text>
+<text x="36.64" y="109.82400000000001" text-anchor="end" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">20</text>
+<text x="36.64" y="39.572" text-anchor="end" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">25</text>
+<line x1="44.64" y1="270.4" x2="456" y2="270.4" stroke="#94a3b8" stroke-width="1" data-role="axis"/>
+<text x="64.712" y="276.4" text-anchor="middle" dominant-baseline="hanging" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">1.0</text>
+<text x="138.9552" y="276.4" text-anchor="middle" dominant-baseline="hanging" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">1.5</text>
+<text x="213.1984" y="276.4" text-anchor="middle" dominant-baseline="hanging" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">2.0</text>
+<text x="287.4416" y="276.4" text-anchor="middle" dominant-baseline="hanging" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">2.5</text>
+<text x="361.6848" y="276.4" text-anchor="middle" dominant-baseline="hanging" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">3.0</text>
+<text x="435.928" y="276.4" text-anchor="middle" dominant-baseline="hanging" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">3.5</text>
+<circle cx="213.1984" cy="109.82400000000001" r="20.072" fill="#4269d0" stroke="#4269d0" stroke-width="1" opacity="0.6" data-role="point"/>
+<circle cx="361.6848" cy="180.076" r="10.036" fill="#4269d0" stroke="#4269d0" stroke-width="1" opacity="0.6" data-role="point"/>
+<circle cx="64.712" cy="250.32799999999997" r="7.096523655988191" fill="#4269d0" stroke="#4269d0" stroke-width="1" opacity="0.6" data-role="point"/>
+</svg>
