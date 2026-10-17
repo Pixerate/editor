@@ -1448,6 +1448,7 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: The full test run reported an unhandled `ReferenceError: document is not defined` from `prosemirror-view`'s `DOMObserver.flush`, attributed to `chart-node.test.ts`, while that file passed on its own.
 - **Root Cause**: Editors created in a test and never destroyed keep ProseMirror's DOM observer timers. Under load, a timer fires after the file's jsdom environment is torn down.
 - **Solution / Workaround**: Destroy every editor a test creates. `chart-node.test.ts` tracks them in an `afterEach`.
+
 ### [core/chart] Don't Recover a Category Index From a Pixel
 
 - **Issue / Symptom**: With `xAxis.reverse`, stacked areas filled down to the wrong series' baseline.
