@@ -38,7 +38,17 @@ export interface SvgGradientDef {
 	stops: SvgGradientStop[];
 }
 
+export const PIXERATE_BRAND_GRADIENT: CanvasLinearGradient = {
+	type: 'linear',
+	angle: 135,
+	stops: [
+		{ offset: 0, color: '#8E51FF' },
+		{ offset: 1, color: '#e12afb' }
+	]
+};
+
 export const CANVAS_GRADIENT_PRESETS: Record<string, CanvasLinearGradient> = {
+	pixerate: PIXERATE_BRAND_GRADIENT,
 	sunset: {
 		type: 'linear',
 		angle: 90,

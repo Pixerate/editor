@@ -104,6 +104,7 @@ export { default as FloatingHorizontalScrollbar } from './FloatingHorizontalScro
 
 // Agent presence visual layer
 export { default as AgentPresenceLayer } from './AgentPresenceLayer.svelte';
+export { default as AgentCursorPresence } from './AgentCursorPresence.svelte';
 
 // Streaming canvas rune
 export {
@@ -631,6 +632,7 @@ export {
 	type FreehandTool,
 	type StrokeToShapeNodeOptions,
 	// Gradients
+	PIXERATE_BRAND_GRADIENT,
 	CANVAS_GRADIENT_PRESETS,
 	isCanvasGradient,
 	parseCssGradient,
@@ -642,6 +644,20 @@ export {
 	type CanvasRadialGradient,
 	type CanvasGradientDef,
 	type SvgGradientStop,
-	type SvgGradientDef
+	type SvgGradientDef,
+	// Agent presence math & types
+	DEFAULT_CURSOR_INACTIVITY_MS,
+	CARD_INSPECTION_ZONES,
+	hashString,
+	getAgentCardAnchor,
+	calculateCurvedPath,
+	getNaturalMovementTiming,
+	getCursorTransitionDuration,
+	calculateCursorArrowRotation,
+	formatAgentCursorName,
+	isAgentCursor,
+	type CanvasAgentCursor,
+	type CardInspectionZone,
+	type CurvedPathOptions
 } from '@pixerate/editor/canvas';
 

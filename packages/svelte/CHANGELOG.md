@@ -1,5 +1,23 @@
 # @pixerate/editor-svelte
 
+## 0.45.0
+
+### Minor Changes
+
+- 39d5cba: feat(canvas,image-editor,vector): add `PIXERATE_BRAND_GRADIENT`, UI-agnostic agent presence trajectory/rotation math and `AgentCursorPresence`, region mosaic/blur image filters (`applyRegionMosaic`, `applyRegionBlur`), and CSS transform scale compensation in `VectorCanvas`
+
+### Patch Changes
+
+- Updated dependencies [39d5cba]
+  - @pixerate/editor@0.50.0
+
+## 0.44.1
+
+### Patch Changes
+
+- Updated dependencies [c286ab1]
+  - @pixerate/editor@0.49.0
+
 ## 0.44.0
 
 ### Minor Changes
