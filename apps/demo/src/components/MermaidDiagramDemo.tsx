@@ -9,17 +9,18 @@ import {
   Position,
   applyNodeChanges,
   useReactFlow,
+  useViewport,
   type Connection,
   type Edge,
   type Node,
   type NodeChange,
   type NodeProps,
 } from "@xyflow/react";
-import { MermaidDiagramGroup, MermaidDiagramNode, useMermaidDiagram, useMermaidStream } from "@pixerate/editor-react/canvas";
+import { DiagramPresenceLayer, MermaidDiagramGroup, MermaidDiagramNode, useDiagramDirector, useMermaidDiagram, useMermaidStream } from "@pixerate/editor-react/canvas";
 import { useAgentToolProvider } from "@pixerate/editor-react";
 import { mermaidEdgeDash, mermaidEdgeMarker, type MermaidFlowEdge, type MermaidFlowNode } from "@pixerate/editor/canvas";
 import { DiagramController, createDiagramToolProvider, findMermaidSources } from "@pixerate/editor/diagram";
-import { GitBranch, Play, Redo2, Undo2 } from "lucide-react";
+import { Bot, GitBranch, Play, Redo2, Undo2 } from "lucide-react";
 import { demoToolRegistry } from "../agentTools";
 
 const SAMPLES: Record<string, string> = {
@@ -125,10 +126,34 @@ const MermaidEditorPane: React.FC = () => {
   const diagram = useMermaidDiagram(controller);
   const positions = useRef(diagram.layout.positions);
   positions.current = diagram.layout.positions;
+  // Agent edits (from the tools panel, an MCP client or the button below) are acted out by a cursor.
+  const { presence, director } = useDiagramDirector(controller, { placement: () => ({ positions: positions.current, sizes: diagram.layout.sizes }) });
   const provider = useMemo(
-    () => createDiagramToolProvider(controller, { id: "diagram", namespace: "diagram", getPositions: () => positions.current }),
-    [controller],
+    () =>
+      createDiagramToolProvider(controller, {
+        id: "diagram",
+        namespace: "diagram",
+        getPositions: () => positions.current,
+        director,
+        actor: { id: "agent", name: "Agent" },
+      }),
+    [controller, director],
   );
+  const viewport = useViewport();
+  const [acting, setActing] = useState(false);
+  const agentEdit = async () => {
+    const graph = controller.getDocument().graph;
+    const from = graph.nodes.find((n) => !n.data?.synthetic)?.id;
+    if (!from) return;
+    setActing(true);
+    try {
+      const added: any = await demoToolRegistry.callTool("diagram__add_diagram_node", { label: "Follow up", from, edgeLabel: "then" });
+      const id = added.structuredContent?.node?.id;
+      if (id) await demoToolRegistry.callTool("diagram__rename_diagram_node", { id, label: "Follow up with customer" });
+    } finally {
+      setActing(false);
+    }
+  };
   useAgentToolProvider(demoToolRegistry, provider);
 
   // React Flow moves nodes while dragging; the diagram only hears about the drop.
@@ -203,6 +228,9 @@ const MermaidEditorPane: React.FC = () => {
           >
             + Node
           </button>
+          <button type="button" className={btn} disabled={!diagram.state.editable || acting} onClick={agentEdit} title="Calls the diagram__* agent tools; a cursor acts them out">
+            <Bot className="w-3.5 h-3.5" /> Agent edit
+          </button>
           <button type="button" className={btn} disabled={!diagram.state.canUndo} onClick={diagram.undo} aria-label="Undo diagram edit">
             <Undo2 className="w-3.5 h-3.5" />
           </button>
@@ -241,6 +269,7 @@ const MermaidEditorPane: React.FC = () => {
               <Background />
               <Controls showInteractive={false} />
             </ReactFlow>
+            <DiagramPresenceLayer presence={presence} viewport={viewport} />
           </div>
         </DirectionContext.Provider>
         {diagram.state.issue && <p className="text-xs text-amber-400">{diagram.state.issue}</p>}
@@ -346,7 +375,8 @@ export const MermaidDiagramDemo: React.FC = () => (
       Pick a sample or paste Mermaid (a ```mermaid block from Markdown or chat works too). Drag nodes, connect handles,
       double-click to rename, Backspace to delete: only the statements you touch are rewritten, and positions are kept
       in a <code>%% @pixerate</code> comment that Mermaid ignores. Agents get the same edits through the{" "}
-      <code>diagram__*</code> tools.
+      <code>diagram__*</code> tools, acted out by a cursor (try "Agent edit"); a diagram the agent loads that extends
+      the current one is drawn statement by statement.
     </p>
   </div>
 );
