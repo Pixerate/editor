@@ -183,4 +183,18 @@ Drags snap to nearby values (zero, the start value, other series at the category
 
 `createChartToolProvider(controller, { readOnly, director, rasterize, DOMParser })` registers 28 tools, one per operation: `get_chart`, `render_chart`, `check_chart_colors`, `recommend_chart`, `get_chart_trendline`, `list_chart_presets`, `export_chart_mermaid`, `export_chart_ooxml`, `update_chart`, `set_chart_data`, `set_chart_values`, `add_chart_series`, `update_chart_series`, `remove_chart_series`, `add_chart_category`, `remove_chart_category`, `import_chart_csv` (with `chartType: "auto"`), `import_chart_mermaid`, `import_chart_ooxml`, `add_chart_trendline`, `remove_chart_trendline`, `apply_chart_preset`, `transpose_chart`, `select_chart_element`, `drag_chart_point` and `press_chart_key` (through the same code as the pointer and keyboard), `undo_chart` and `redo_chart`. Write tools are hidden while `readOnly` is set, and `get_chart` says why.
 
+### PNG previews
+
+`render_chart` returns SVG text by default and, with `format: "png"`, an image block plus a text block with the layout warnings (also in `structuredContent.warnings`). Its description tells the model that an image costs tokens and is for checking what text cannot show (overlapping or cut-off labels, a crowded legend, colours). PNG needs a `rasterize(svg, { width, height })` option; the React and Svelte `useChartToolProvider` pass `createChartRasterizer()` in the browser (pass `rasterize: false` to turn PNG off, or your own function, e.g. resvg on a server).
+
+```ts
+import { rasterizeChartSvg, downloadChartPng, chartToSvg } from '@pixerate/editor/chart';
+
+const svg = chartToSvg(spec, { width: 640, height: 400 });
+const { data, mimeType, width, height } = await rasterizeChartSvg(svg, { width: 640, height: 400 }); // base64 PNG, 1024 × 640
+await downloadChartPng(spec, { width: 800, height: 450, filename: 'revenue.png' });
+```
+
+`rasterizeChartSvg(svg, { width, height, scale = 2, maxSize = 1024, background = '#ffffff', scope })` first runs `resolveChartSvgPaints`: `var(--x, fallback)` becomes the variable's value on `scope` (default the root element), `currentColor` its colour and `font-family="inherit"` its font. An SVG drawn through an `<img>` or canvas does not see the page's CSS, so without this step a chart laid out with `CSS_VARIABLE_CHART_THEME` (what the canvases use) draws its text and grid black. It then draws through an `Image` onto a canvas (longest side ≤ `maxSize`) and throws a message saying what to do instead when there is no DOM or 2D canvas. `<ChartEditor>`'s toolbar has a Download PNG button (`pngOptions` sets size, theme, scale and file name).
+
 For several commands at once, `run_commands` accepts `"$0.id"` / `"$last.path"` references to earlier results and `atomic: true` (one undo step, all or nothing) when the registry shares a `history` with the controllers.
