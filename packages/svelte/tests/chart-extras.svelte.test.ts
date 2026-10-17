@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import { flushSync, mount, unmount } from "svelte";
 import { ToolRegistry } from "@pixerate/editor/tools";
 import { ChartController, ChartPresence, type ChartSpec } from "@pixerate/editor/chart";
-import { ChartCanvas, ChartEditor, ChartInspector, ChartSparkline, ChartStreamingView, createChartDirector, useChartToolProvider } from "../src/chart";
+import { ChartCanvas, ChartEditor, ChartInspector, ChartSparkline, ChartStreamingView, createChartDirector, useChartToolProvider, useOfficeChartToolProvider } from "../src/chart";
 
 let cleanups: (() => void)[] = [];
 afterEach(() => {
@@ -149,6 +149,21 @@ describe("chart agent helpers", () => {
     const result: any = await registry.callTool("set_chart_values", { cells: [{ series: "north", category: "Q1", value: 30 }] });
     expect(result.isError).toBeFalsy();
     expect(controller.getSpec().series[0].values[0]).toBe(30);
+    cleanup();
+    expect(registry.listTools().tools).toHaveLength(0);
+  });
+
+  it("registers the Office-file chart tools for the component's lifetime", async () => {
+    const registry = new ToolRegistry();
+    const controller = new ChartController({ spec: sales });
+    const files = [{ name: "a.xlsx", data: new Uint8Array(3) }];
+    const cleanup = $effect.root(() => {
+      useOfficeChartToolProvider(registry, { controller, files: () => files });
+    });
+    flushSync();
+    expect(registry.listTools().tools.map((t) => t.name)).toEqual(["list_open_files", "list_file_charts", "get_file_chart", "load_file_chart"]);
+    const listed: any = await registry.callTool("list_open_files", {});
+    expect(listed.structuredContent).toEqual({ files: [{ name: "a.xlsx", bytes: 3 }] });
     cleanup();
     expect(registry.listTools().tools).toHaveLength(0);
   });
