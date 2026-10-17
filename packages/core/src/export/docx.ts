@@ -1,4 +1,6 @@
 // Portions ported from wordcraft/crates/docx/src/write/mod.rs, wordcraft/crates/docx/src/write/story.rs, wordcraft/crates/docx/src/write/props.rs and wordcraft/crates/docx/src/package.rs (MIT OR Apache-2.0, © ArtCraft Team and contributors). See THIRD_PARTY_NOTICES.md.
+import { CHART_OOXML_CONTENT_TYPE, CHART_OOXML_NS, CHART_OOXML_RELATIONSHIP, chartToOoxml } from "../chart/ooxml";
+import { normalizeChartSpec } from "../chart/spec";
 import type { CommentThread, ReviewAuthor, SerializedComments } from "../extensions/comment-store";
 import {
   DEFAULT_STYLES,
@@ -33,7 +35,9 @@ import { writeZip, type ZipWriteEntry } from "./zip-writer";
  * style registry, with `basedOn` / `next` / `link`), `numbering.xml` (one
  * `w:num` per list), `settings.xml`, `comments.xml` +
  * `commentsExtended.xml` (replies and resolved state) + `people.xml` (author
- * ids), `docProps/core.xml` and `docProps/app.xml`, plus embedded images.
+ * ids), `docProps/core.xml` and `docProps/app.xml`, plus embedded images and
+ * charts (`chart` nodes become native Word charts in `word/charts/chartN.xml`;
+ * inline `sparkline` nodes are written as text: their label, or ▁▃▇ bars).
  *
  * Tracked insertions, deletions, moves (`w:moveFrom` / `w:moveTo` with
  * named move ranges), formatting changes (`w:rPrChange`) and block changes
@@ -122,6 +126,8 @@ export interface DocxExportReport {
     paragraphs: number;
     tables: number;
     images: number;
+    /** `chart` nodes written as native Word charts. */
+    charts: number;
     comments: number;
     replies: number;
     trackedChanges: number;
@@ -507,11 +513,12 @@ interface CommentEntry {
 class DocxBuilder {
   readonly report: DocxExportReport = {
     dropped: [],
-    written: { paragraphs: 0, tables: 0, images: 0, comments: 0, replies: 0, trackedChanges: 0 },
+    written: { paragraphs: 0, tables: 0, images: 0, charts: 0, comments: 0, replies: 0, trackedChanges: 0 },
   };
   private rels = new Relationships();
   private media: { name: string; bytes: Uint8Array }[] = [];
   private mediaTypes = new Set<string>();
+  private charts: string[] = [];
   private nums: { numId: number; abstractId: number; start?: number; level: number }[] = [];
   private revisionId = 0;
   private docPrId = 0;
@@ -684,6 +691,9 @@ class DocxBuilder {
       case "image":
         this.paragraph(w, { type: "paragraph", content: [node] }, ctx);
         return;
+      case "chart":
+        this.chartParagraph(w, node, ctx);
+        return;
       default:
         break;
     }
@@ -822,6 +832,12 @@ class DocxBuilder {
         case "image":
           out.push({ kind: "image", node, last: true, marks });
           break;
+        case "sparkline": {
+          const text = sparklineText(node.attrs);
+          this.drop("node", "sparkline", "written as text (its label, or ▁▃▇ bars)");
+          out.push({ kind: "text", text, node, last: true, marks });
+          break;
+        }
         case "mention": {
           const label = node.attrs?.label ?? node.attrs?.id ?? "";
           out.push({ kind: "text", text: label ? `@${label}` : "", node, last: true, marks });
@@ -1046,6 +1062,60 @@ class DocxBuilder {
     w.open("a:prstGeom", { prst: "rect" }).empty("a:avLst").close("a:prstGeom").close("pic:spPr");
     w.close("pic:pic").close("a:graphicData").close("a:graphic").close("wp:inline").close("w:drawing");
     return w.toString();
+  }
+
+  // -- Charts -----------------------------------------------------------------
+
+  /** A `chart` node as a paragraph holding a native Word chart (`c:chart` in `wp:inline`). */
+  private chartParagraph(w: XmlWriter, node: DocxJSONNode, ctx: BlockContext): void {
+    const raw = node.attrs?.spec;
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+      this.drop("node", "chart", "chart has no spec");
+      return;
+    }
+    const spec = normalizeChartSpec(raw).spec;
+    const written = chartToOoxml(spec);
+    for (const issue of written.issues) this.drop("node", "chart", issue);
+    const name = `chart${this.charts.length + 1}.xml`;
+    this.charts.push(written.xml);
+    const relId = this.rels.add(CHART_OOXML_RELATIONSHIP, `charts/${name}`);
+    // A chart without a width fills the line (the page's text width).
+    let width = pixelAttr(node.attrs?.width) ?? MAX_IMAGE_WIDTH_PX;
+    let height = pixelAttr(node.attrs?.height) ?? 320;
+    if (width > MAX_IMAGE_WIDTH_PX) {
+      height = (height * MAX_IMAGE_WIDTH_PX) / width;
+      width = MAX_IMAGE_WIDTH_PX;
+    }
+    const cx = pxToEmu(width);
+    const cy = pxToEmu(height);
+    const id = ++this.docPrId;
+    const title = spec.title || "";
+    this.report.written.charts++;
+
+    const drawing = new XmlWriter(false);
+    drawing.open("w:r").open("w:drawing").open("wp:inline", { distT: 0, distB: 0, distL: 0, distR: 0 });
+    drawing.empty("wp:extent", { cx, cy }).empty("wp:effectExtent", { l: 0, t: 0, r: 0, b: 0 });
+    drawing.empty("wp:docPr", { id, name: `Chart ${id}`, descr: title || undefined, title: title || undefined });
+    drawing.empty("wp:cNvGraphicFramePr");
+    drawing.open("a:graphic").open("a:graphicData", { uri: CHART_OOXML_NS });
+    drawing.empty("c:chart", { "xmlns:c": CHART_OOXML_NS, "r:id": relId });
+    drawing.close("a:graphicData").close("a:graphic").close("wp:inline").close("w:drawing").close("w:r");
+
+    this.report.written.paragraphs++;
+    w.open("w:p");
+    const indent = ctx.quoteLevel * INDENT_STEP;
+    const jc = alignment(node.attrs?.textAlign);
+    if (indent || jc) {
+      w.open("w:pPr");
+      if (indent) w.empty("w:ind", { "w:left": indent });
+      if (jc) w.val("w:jc", jc);
+      w.close("w:pPr");
+    }
+    // The chart carries the comment marks of an atom node, if any.
+    this.commentStarts(w, node.marks ?? []);
+    w.raw(drawing.toString());
+    this.commentEndsAfter(w, node);
+    w.close("w:p");
   }
 
   // -- Tables -------------------------------------------------------------------
@@ -1381,6 +1451,7 @@ class DocxBuilder {
     if (people) add("word/people.xml", people, `${CT_WML}people+xml`);
     parts.push({ name: "word/_rels/document.xml.rels", data: this.rels.xml() });
     for (const file of this.media) parts.push({ name: `word/media/${file.name}`, data: file.bytes });
+    this.charts.forEach((xml, i) => add(`word/charts/chart${i + 1}.xml`, xml, CHART_OOXML_CONTENT_TYPE));
     add("docProps/core.xml", this.coreXml(now), "application/vnd.openxmlformats-package.core-properties+xml");
     const app = new XmlWriter();
     app.open("Properties", { xmlns: "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" });
@@ -1407,8 +1478,22 @@ class DocxBuilder {
   }
 }
 
+const SPARK_BARS = "▁▂▃▄▅▆▇█";
+
+/** A sparkline as text: its label, else one block character per value (▁ lowest, █ highest). */
+function sparklineText(attrs: Record<string, any> | undefined): string {
+  if (typeof attrs?.label === "string" && attrs.label.trim()) return attrs.label;
+  const values: number[] = (Array.isArray(attrs?.values) ? attrs.values : []).filter(
+    (v: unknown): v is number => typeof v === "number" && Number.isFinite(v),
+  );
+  if (!values.length) return "";
+  const min = Math.min(...values);
+  const span = Math.max(...values) - min;
+  return values.map((v) => SPARK_BARS[span ? Math.round(((v - min) / span) * (SPARK_BARS.length - 1)) : 3]).join("");
+}
+
 const isInlineType = (type: string | undefined) =>
-  type === "hardBreak" || type === "image" || type === "mention" || type === "text";
+  type === "hardBreak" || type === "image" || type === "mention" || type === "sparkline" || type === "text";
 
 /** Styles written when the document uses them but the registry has no definition. */
 const EXTRA_STYLES: Record<string, StyleDefinition> = {

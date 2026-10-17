@@ -13,6 +13,8 @@ import {
   escapeXmlText,
   exportDocx,
   getTrackedChanges,
+  getDocumentCharts,
+  insertImportedDocument,
   readZip,
   applyImportedReviewData,
   writeZip,
@@ -20,6 +22,7 @@ import {
   docxFileName,
   type DocxJSONNode,
 } from "../src";
+import { createChartSpec } from "../src/chart";
 import { buildZip } from "./helpers/zip-writer";
 import { measureGrowth } from "./helpers/growth";
 
@@ -619,5 +622,119 @@ describe("DOCX export: rich-text tables", () => {
     expect(strip(next.getJSON())).toEqual(strip(editor.getJSON()));
     editor.destroy();
     next.destroy();
+  });
+});
+
+describe("exportDocx: charts and sparklines", () => {
+  const SPEC = createChartSpec({
+    type: "bar",
+    title: "Revenue",
+    categories: ["Q1", "Q2", "Q3"],
+    series: [
+      { id: "north", name: "North", values: [10, 20, 15], color: "#4472c4" },
+      { id: "south", name: "South", values: [5, 8, 12], color: "#ed7d31" },
+    ],
+  });
+  const makeChartEditor = (content: any = "") => new Editor({ extensions: createRichTextPreset({ chart: true }), content });
+  const chartDoc = (attrs: Record<string, unknown>, more: DocxJSONNode[] = []): DocxJSONNode => ({
+    type: "doc",
+    content: [{ type: "paragraph", content: [{ type: "text", text: "Before" }] }, { type: "chart", attrs }, ...more],
+  });
+
+  it("writes a chart node as a native Word chart part", async () => {
+    const { data, report } = await exportDocx(chartDoc({ id: "c1", spec: SPEC, width: 480, height: 240 }));
+    expect(report.dropped).toEqual([]);
+    expect(report.written.charts).toBe(1);
+    const files = await parts(data);
+    const chart = xml(files["word/charts/chart1.xml"]);
+    expect(chart.documentElement.localName).toBe("chartSpace");
+    expect(files["[Content_Types].xml"]).toContain(
+      'PartName="/word/charts/chart1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"',
+    );
+    const rels = xml(files["word/_rels/document.xml.rels"]);
+    const rel = [...rels.getElementsByTagName("Relationship")].find((r) => r.getAttribute("Target") === "charts/chart1.xml");
+    expect(rel?.getAttribute("Type")).toBe("http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart");
+    const doc = xml(files["word/document.xml"]);
+    const ref = doc.getElementsByTagNameNS("http://schemas.openxmlformats.org/drawingml/2006/chart", "chart")[0];
+    expect(ref.getAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships", "id")).toBe(rel?.getAttribute("Id"));
+    const extent = doc.getElementsByTagName("wp:extent")[0];
+    // 480 × 240 px at 9525 EMU per pixel.
+    expect(extent.getAttribute("cx")).toBe(String(480 * 9525));
+    expect(extent.getAttribute("cy")).toBe(String(240 * 9525));
+    expect(doc.getElementsByTagName("wp:docPr")[0].getAttribute("title")).toBe("Revenue");
+  });
+
+  it("sizes a chart without a width to the page text width", async () => {
+    const { data } = await exportDocx(chartDoc({ id: "c1", spec: SPEC, width: null, height: 300 }));
+    const extent = xml((await parts(data))["word/document.xml"]).getElementsByTagName("wp:extent")[0];
+    expect(extent.getAttribute("cx")).toBe(String(624 * 9525)); // 6.5"
+    expect(extent.getAttribute("cy")).toBe(String(300 * 9525));
+  });
+
+  it("scales a chart wider than the page down, keeping its aspect ratio", async () => {
+    const { data } = await exportDocx(chartDoc({ id: "c1", spec: SPEC, width: 1248, height: 400 }));
+    const extent = xml((await parts(data))["word/document.xml"]).getElementsByTagName("wp:extent")[0];
+    expect(extent.getAttribute("cx")).toBe(String(624 * 9525));
+    expect(extent.getAttribute("cy")).toBe(String(200 * 9525));
+  });
+
+  it("round-trips a chart node through Word into an editor with the chart node", async () => {
+    const editor = makeChartEditor(chartDoc({ id: "c1", spec: SPEC, width: 480, height: 240 }));
+    const original = getDocumentCharts(editor.state.doc)[0].spec;
+    const { data, report } = await exportDocx(editor);
+    expect(report.dropped).toEqual([]);
+    const imported = await docxToDocumentImport(data);
+    expect(imported.charts).toHaveLength(1);
+    expect(imported.charts![0].lossless).toBe(true);
+    const next = makeChartEditor();
+    insertImportedDocument(next, imported, { at: 0 });
+    const charts = getDocumentCharts(next.state.doc);
+    expect(charts).toHaveLength(1);
+    // DrawingML has no series ids: the import numbers them, everything else matches.
+    const withoutIds = (spec: typeof original) => ({ ...spec, series: spec.series.map(({ id: _id, ...rest }) => rest) });
+    expect(charts[0].spec.series.map((s) => s.id)).toEqual(["series-1", "series-2"]);
+    expect(withoutIds(charts[0].spec)).toEqual(withoutIds(original));
+    expect(next.getText({ blockSeparator: "|" })).toContain("Before");
+    editor.destroy();
+    next.destroy();
+  });
+
+  it("writes several charts as separate parts", async () => {
+    const pie = createChartSpec({ type: "pie", title: "Share", categories: ["A", "B"], series: [{ name: "S", values: [1, 2] }] });
+    const { data, report } = await exportDocx(chartDoc({ spec: SPEC }, [{ type: "chart", attrs: { spec: pie } }]));
+    expect(report.written.charts).toBe(2);
+    const imported = await docxToDocumentImport(data);
+    expect(imported.charts!.map((c) => c.spec.type)).toEqual(["bar", "pie"]);
+    expect(imported.charts!.map((c) => c.path)).toEqual(["word/charts/chart1.xml", "word/charts/chart2.xml"]);
+  });
+
+  it("reports what DrawingML cannot hold and drops a chart without a spec", async () => {
+    const waterfall = createChartSpec({ type: "waterfall", categories: ["A", "B"], series: [{ name: "S", values: [1, -2] }] });
+    const { report } = await exportDocx(chartDoc({ spec: waterfall }, [{ type: "chart", attrs: { spec: null } }]));
+    expect(report.written.charts).toBe(1);
+    expect(report.dropped).toEqual([
+      expect.objectContaining({ kind: "node", name: "chart", reason: expect.stringContaining("written as bar charts") }),
+      { kind: "node", name: "chart", reason: "chart has no spec", count: 1 },
+    ]);
+  });
+
+  it("writes sparklines as text: their label, else block characters", async () => {
+    const doc: DocxJSONNode = {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: "Trend " },
+            { type: "sparkline", attrs: { values: [1, 5, 9], label: null } },
+            { type: "text", text: " and " },
+            { type: "sparkline", attrs: { values: [1, 2], label: "up 2%" } },
+          ],
+        },
+      ],
+    };
+    const { data, report } = await exportDocx(doc);
+    expect(report.dropped).toEqual([{ kind: "node", name: "sparkline", reason: "written as text (its label, or ▁▃▇ bars)", count: 2 }]);
+    expect((await docxToDocumentImport(data)).html).toBe("<p>Trend ▁▅█ and up 2%</p>");
   });
 });
