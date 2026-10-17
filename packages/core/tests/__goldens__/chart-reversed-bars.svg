@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="300" viewBox="0 0 480 300" role="img" aria-labelledby="chart-desc">
+<desc id="chart-desc">A bar chart showing 1 series over 3 categories (First to Third). Rank ranges from 3 (First) to 8 (Third), rising, up 167% from first to last. The value axis is reversed. The category axis is reversed.</desc>
+<rect x="0" y="0" width="480" height="300" fill="#ffffff" data-role="background"/>
+<line x1="460" y1="16" x2="460" y2="270.4" stroke="#e2e8f0" stroke-width="1" data-role="grid"/>
+<line x1="359.24" y1="16" x2="359.24" y2="270.4" stroke="#e2e8f0" stroke-width="1" data-role="grid"/>
+<line x1="258.48" y1="16" x2="258.48" y2="270.4" stroke="#e2e8f0" stroke-width="1" data-role="grid"/>
+<line x1="157.71999999999997" y1="16" x2="157.71999999999997" y2="270.4" stroke="#e2e8f0" stroke-width="1" data-role="grid"/>
+<line x1="56.95999999999998" y1="16" x2="56.95999999999998" y2="270.4" stroke="#e2e8f0" stroke-width="1" data-role="grid"/>
+<text x="460" y="276.4" text-anchor="middle" dominant-baseline="hanging" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">0</text>
+<text x="359.24" y="276.4" text-anchor="middle" dominant-baseline="hanging" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">2</text>
+<text x="258.48" y="276.4" text-anchor="middle" dominant-baseline="hanging" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">4</text>
+<text x="157.71999999999997" y="276.4" text-anchor="middle" dominant-baseline="hanging" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">6</text>
+<text x="56.95999999999998" y="276.4" text-anchor="middle" dominant-baseline="hanging" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">8</text>
+<line x1="460" y1="16" x2="460" y2="270.4" stroke="#94a3b8" stroke-width="1" data-role="axis"/>
+<text x="48.96" y="228" text-anchor="end" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">First</text>
+<text x="48.96" y="143.2" text-anchor="end" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">Second</text>
+<text x="48.96" y="58.4" text-anchor="end" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">Third</text>
+<rect x="308.86" y="197.472" width="151.14" height="61.056" rx="2" fill="#4269d0" data-role="bar"/>
+<rect x="208.1" y="112.672" width="251.9" height="61.056" rx="2" fill="#4269d0" data-role="bar"/>
+<rect x="56.95999999999998" y="27.872" width="403.04" height="61.056" rx="2" fill="#4269d0" data-role="bar"/>
+<text x="304.86" y="228" text-anchor="end" dominant-baseline="central" font-size="10" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" data-role="data-label">3</text>
+<text x="204.1" y="143.2" text-anchor="end" dominant-baseline="central" font-size="10" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" data-role="data-label">5</text>
+<text x="60.95999999999998" y="58.4" text-anchor="start" dominant-baseline="central" font-size="10" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#ffffff" data-role="data-label">8</text>
+</svg>

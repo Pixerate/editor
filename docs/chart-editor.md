@@ -129,6 +129,28 @@ chart.trendlineFit("sales", 0); // { coefficients, r2, equation, points, evaluat
 
 Linear, exponential, logarithmic, power, polynomial (2–6) and moving-average fits, as spreadsheets compute them. Category charts fit against x = 1, 2, 3, …. Trendlines need an unstacked bar, line, area, scatter or bubble chart.
 
+## Error bars
+
+```ts
+chart.updateSeries("sales", { errorBars: { type: "percent", value: 10 } }); // ±10% of each value
+chart.updateSeries("trial", { errorBars: { type: "custom", plus: [0.6, 1.1, 0.9], minus: [0.5, 0.8, 1.4], cap: false } });
+chart.updateSeries("points", { xErrorBars: { type: "fixed", value: 2, direction: "plus" } }); // scatter x
+chart.updateSeries("sales", { errorBars: null }); // remove
+```
+
+Bar, line, area and scatter series take `errorBars` along the value axis; scatter and bubble series with numeric x also take `xErrorBars`. The types follow Excel's `c:errValType`: `fixed` (`value`, default 1), `percent` (`value` percent of each point, default 5), `stddev` (`value` sample standard deviations, default 1, drawn around the series mean as Excel does), `stderr` (sample standard deviation / √n at every point) and `custom` (`plus` / `minus` per category, minus defaulting to plus). `direction` is `both`, `plus` or `minus`; `cap: false` drops the end caps. They are drawn as `error-bar` path marks that select their series, sit on the stack top of stacked series (scaled to shares when 100% stacked), and are included in the axis range. `chartErrorAmounts(bars, values)` gives the centre and reach at each point.
+
+## Logarithmic and reversed axes
+
+```ts
+chart.setAxis("y", { scale: "log" }); // ticks 1, 10, 100, … (or 1-2-5 over a few decades)
+chart.setAxis("y2", { scale: "log", logBase: 2 });
+chart.setAxis("x", { reverse: true }); // categories right to left (or the scatter x axis)
+chart.setAxis("y", { reverse: true }); // values from the top down
+```
+
+`scale: "log"` works on `yAxis`, `yAxis2` and the numeric x axis of scatter and bubble charts (it is ignored on a category axis). Values of 0 or less cannot be placed: they are skipped with a `values-skipped` layout warning, bars rise from the bottom of the axis, `min` / `max` must be above 0, the tick `step` does not apply, and percent stacking is refused with a sentence. `reverse` works on every axis. Scenes carry `logBase` on their `ChartValueScale`; `chartScaleToPixel` / `chartScaleFromPixel` map through it, so `chartValueAtPoint`, drags (which move by ratio on a log axis) and ↑ ↓ (a tenth of a power per press) follow the axis as drawn. Both are written to Office files as `c:logBase` and `c:orientation val="maxMin"`.
+
 ## Layout warnings, summaries and accessibility
 
 `layoutChart` returns `scene.warnings` for anything it had to leave out (hidden or shortened labels, a truncated legend, thinned lines, skipped non-finite values). `summarizeChart(spec, size)` adds per-series min / max / mean / trend, the axes as drawn, a colour check and `describeChart`'s plain-language description, which `chartToSvg` also writes as `<desc>`. `checkChartColors` tests a palette with normal vision and three colour-vision deficiencies. `CHART_LAYOUT_PRESETS` and `CHART_COLOR_SCHEMES` (including monochrome and Okabe–Ito) apply through `applyPreset`.
@@ -144,7 +166,32 @@ const { xml, issues } = chartToOoxml(spec); // c:chartSpace with literal data
 const { spec, unsupported, lossless } = chartFromOoxml(xml, { DOMParser }); // also chartex parts
 ```
 
+Office round trips include error bars (`c:errBars`, with `c:errDir` on scatter and bubble series), logarithmic axes (`c:logBase`) and reversed axes (`c:orientation val="maxMin"`).
+
 The comment keeps what Mermaid cannot express, so text round-trips exactly while any Mermaid renderer still draws the basic chart. DOCX imports return embedded charts in `DocumentImport.charts` and write each as a `<div data-type="chart">` holding its spec: a live chart in editors with the chart node (below), otherwise a caption and a data table (see GOTCHAS for why not an SVG image).
+
+### Charts in Excel, PowerPoint and Word files
+
+`extractOfficeCharts(bytes, { DOMParser })` opens an `.xlsx`, `.pptx` or `.docx` file with the built-in ZIP reader, works out which it is from the main part, and reads every chart with `chartFromOoxml` (DrawingML and Office 2016 chartex). `extractXlsxCharts`, `extractPptxCharts` and `extractDocxCharts` do the same but throw when the file is the wrong kind.
+
+```ts
+import { extractOfficeCharts, describeOfficeChartPlace } from "@pixerate/editor/chart";
+
+const { format, charts } = await extractOfficeCharts(await file.arrayBuffer());
+for (const chart of charts) {
+  // chart-1 · Sales!B2 · bar · "Revenue"  (xlsx: sheet, anchor "B2", range "B2:H18"; pptx: slide 3)
+  console.log(chart.id, describeOfficeChartPlace(chart), chart.spec.type, chart.title, chart.unsupported, chart.lossless);
+}
+controller.load(charts[0].spec);
+```
+
+- **Excel**: each sheet's `<drawing r:id>` → `xl/drawings/drawingN.xml` → `c:chart` / `cx:chart r:id` → `xl/charts/chartN.xml`. Charts carry the sheet name, the anchor cell of the `xdr:from` marker and, for two-cell anchors, the covered range. Chart sheets have a sheet name but no anchor.
+- **PowerPoint**: slides in `p:sldIdLst` order (not part-name order) → `p:graphicFrame` → chart part, with the 1-based slide number.
+- **Word**: charts in the body, the same ones `docxImportAdapter` returns in `DocumentImport.charts`.
+
+Data comes from the cached values in the chart part; the embedded workbook is not read. There is no `.xlsx` cell import yet, so charts are not attached to a spreadsheet import result.
+
+For agents, `createOfficeChartToolProvider({ files, controller, readOnly })` registers `list_open_files` (with `files`), `list_file_charts`, `get_file_chart` and, with a `controller`, `load_file_chart` (one undo step, hidden while read-only). With `files` the tools take an open file's `name`; without it they take the file as base64 `data`. React and Svelte register it with `useOfficeChartToolProvider(registry, options)`.
 
 ## Charts in documents
 
@@ -182,5 +229,19 @@ Drags snap to nearby values (zero, the start value, other series at the category
 ## Agent tools
 
 `createChartToolProvider(controller, { readOnly, director, rasterize, DOMParser })` registers 28 tools, one per operation: `get_chart`, `render_chart`, `check_chart_colors`, `recommend_chart`, `get_chart_trendline`, `list_chart_presets`, `export_chart_mermaid`, `export_chart_ooxml`, `update_chart`, `set_chart_data`, `set_chart_values`, `add_chart_series`, `update_chart_series`, `remove_chart_series`, `add_chart_category`, `remove_chart_category`, `import_chart_csv` (with `chartType: "auto"`), `import_chart_mermaid`, `import_chart_ooxml`, `add_chart_trendline`, `remove_chart_trendline`, `apply_chart_preset`, `transpose_chart`, `select_chart_element`, `drag_chart_point` and `press_chart_key` (through the same code as the pointer and keyboard), `undo_chart` and `redo_chart`. Write tools are hidden while `readOnly` is set, and `get_chart` says why.
+
+### PNG previews
+
+`render_chart` returns SVG text by default and, with `format: "png"`, an image block plus a text block with the layout warnings (also in `structuredContent.warnings`). Its description tells the model that an image costs tokens and is for checking what text cannot show (overlapping or cut-off labels, a crowded legend, colours). PNG needs a `rasterize(svg, { width, height })` option; the React and Svelte `useChartToolProvider` pass `createChartRasterizer()` in the browser (pass `rasterize: false` to turn PNG off, or your own function, e.g. resvg on a server).
+
+```ts
+import { rasterizeChartSvg, downloadChartPng, chartToSvg } from '@pixerate/editor/chart';
+
+const svg = chartToSvg(spec, { width: 640, height: 400 });
+const { data, mimeType, width, height } = await rasterizeChartSvg(svg, { width: 640, height: 400 }); // base64 PNG, 1024 × 640
+await downloadChartPng(spec, { width: 800, height: 450, filename: 'revenue.png' });
+```
+
+`rasterizeChartSvg(svg, { width, height, scale = 2, maxSize = 1024, background = '#ffffff', scope })` first runs `resolveChartSvgPaints`: `var(--x, fallback)` becomes the variable's value on `scope` (default the root element), `currentColor` its colour and `font-family="inherit"` its font. An SVG drawn through an `<img>` or canvas does not see the page's CSS, so without this step a chart laid out with `CSS_VARIABLE_CHART_THEME` (what the canvases use) draws its text and grid black. It then draws through an `Image` onto a canvas (longest side ≤ `maxSize`) and throws a message saying what to do instead when there is no DOM or 2D canvas. `<ChartEditor>`'s toolbar has a Download PNG button (`pngOptions` sets size, theme, scale and file name).
 
 For several commands at once, `run_commands` accepts `"$0.id"` / `"$last.path"` references to earlier results and `atomic: true` (one undo step, all or nothing) when the registry shares a `history` with the controllers.

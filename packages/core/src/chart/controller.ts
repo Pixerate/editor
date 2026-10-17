@@ -19,6 +19,7 @@ import type {
 	ChartAxis,
 	ChartIssue,
 	ChartCurve,
+	ChartErrorBars,
 	ChartLegend,
 	ChartMarker,
 	ChartNumberFormat,
@@ -102,6 +103,8 @@ export interface ChartSeriesInput {
 	dataLabels?: boolean;
 	format?: ChartNumberFormat;
 	trendlines?: readonly ChartTrendline[];
+	errorBars?: ChartErrorBars;
+	xErrorBars?: ChartErrorBars;
 }
 
 /** Changes to one series; `null` resets a field to the chart's default. */
@@ -120,6 +123,10 @@ export interface ChartSeriesPatch {
 	curve?: ChartCurve | null;
 	dataLabels?: boolean | null;
 	format?: ChartNumberFormat | null;
+	/** `null` removes the error bars. */
+	errorBars?: ChartErrorBars | null;
+	/** `null` removes the x error bars. */
+	xErrorBars?: ChartErrorBars | null;
 }
 
 export interface ChartEditOptions {
@@ -466,7 +473,7 @@ export class ChartController {
 			if (patch.hidden) next.hidden = true;
 			else delete next.hidden;
 		}
-		const resettable = ['axis', 'x', 'sizes', 'pointColors', 'marker', 'curve', 'dataLabels', 'format'] as const;
+		const resettable = ['axis', 'x', 'sizes', 'pointColors', 'marker', 'curve', 'dataLabels', 'format', 'errorBars', 'xErrorBars'] as const;
 		for (const key of resettable) {
 			if (!(key in patch) || patch[key] === undefined) continue;
 			if (patch[key] === null) delete (next as any)[key];

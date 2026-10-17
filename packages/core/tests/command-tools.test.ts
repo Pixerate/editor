@@ -13,7 +13,7 @@ import { CommandRegistry, createCommandToolProvider, createHistoryCommands } fro
 import { HistoryManager } from '../src/history';
 import { ImageEditorController, createImageEditorToolProvider } from '../src/image-editor';
 import { createGenerationToolProvider } from '../src/generation';
-import { ChartController, createChartToolProvider } from '../src/chart';
+import { ChartController, createChartToolProvider, createOfficeChartToolProvider } from '../src/chart';
 import { DiagramController, createDiagramToolProvider } from '../src/diagram';
 import { createRichTextPreset, SpreadsheetController } from '../src';
 
@@ -188,6 +188,8 @@ describe('built-in tool providers have complete MCP annotations', () => {
 		registry.register(createImageEditorToolProvider(new ImageEditorController(), { id: 'img', namespace: 'img' }));
 		registry.register(createChartToolProvider(new ChartController(), { id: 'chart', namespace: 'chart' }));
 		registry.register(createDiagramToolProvider(new DiagramController(), { id: 'diagram', namespace: 'diagram' }));
+		registry.register(createOfficeChartToolProvider({ id: 'office', namespace: 'office', files: () => [], controller: new ChartController() }));
+		registry.register(createOfficeChartToolProvider({ id: 'office-data', namespace: 'officedata' }));
 		const chartDoc = new Editor({ extensions: createRichTextPreset({ chart: true }), content: '<p>x</p>' });
 		registry.register(createRichTextToolProvider(chartDoc, { id: 'chart-doc', namespace: 'chartdoc' }));
 		registry.register(

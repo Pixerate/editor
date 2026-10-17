@@ -3,7 +3,7 @@
 import { layoutCartesian, layoutXy, trendlineLegendItems } from './layout-cartesian.js';
 import { layoutBox, layoutFunnel, layoutHistogram, layoutPie, layoutRadar, layoutTreemap, layoutWaterfall } from './layout-families.js';
 import { estimateChartTextWidth, sameChartSelection, type ChartLayoutOptions, type FamilyResult, type LayoutCtx } from './layout-shared.js';
-import { formatChartNumber, linearMap } from './scale.js';
+import { chartScaleFromPixel, formatChartNumber } from './scale.js';
 import { chartColorsByCategory, chartFamily, chartSeriesColor, chartSeriesType, chartSliceColor, DEFAULT_CHART_THEME } from './spec.js';
 import type { ChartMark, ChartRect, ChartScene, ChartSelection, ChartSpec, ChartTheme, ChartWarning } from './types.js';
 
@@ -319,24 +319,29 @@ function finalizeMarks(marks: ChartMark[], width: number, height: number): Chart
 /**
  * The data value at a scene point along the value axis (for dragging a bar or point), or
  * `undefined` when the scene has no value scale or is percent-stacked. `secondary` reads the
- * secondary axis.
+ * secondary axis. Reversed and logarithmic axes are mapped as drawn.
  */
 export function chartValueAtPoint(scene: ChartScene, point: { x: number; y: number }, secondary = false): number | undefined {
 	const scale = secondary ? (scene.valueScale2 ?? scene.valueScale) : scene.valueScale;
 	if (!scale || scene.percent) return undefined;
 	const px = scale.axis === 'y' ? point.y : point.x;
-	return linearMap(px, scale.range, scale.domain);
+	return chartScaleFromPixel(px, scale);
 }
 
 /** The x value at a scene point on a scatter or bubble chart, or `undefined` without a numeric x axis. */
 export function chartXAtPoint(scene: ChartScene, point: { x: number; y: number }): number | undefined {
 	const scale = scene.xScale;
 	if (!scale) return undefined;
-	return linearMap(point.x, scale.range, scale.domain);
+	return chartScaleFromPixel(point.x, scale);
 }
 
-/** The value a drag should store: snapped to a tenth of the tick step (or `step`) and kept finite. */
-export function snapChartValue(scene: ChartScene, value: number, step?: number, ticks: readonly number[] = scene.valueScale?.ticks ?? []): number {
+/**
+ * The value a drag should store: snapped to a tenth of the tick step (or `step`) and kept
+ * finite. On a logarithmic axis (`logBase`, without a `step`) ticks are not evenly spaced, so
+ * the value is rounded to two significant digits instead.
+ */
+export function snapChartValue(scene: ChartScene, value: number, step?: number, ticks: readonly number[] = scene.valueScale?.ticks ?? [], logBase?: number): number {
+	if (logBase && step === undefined) return value > 0 && Number.isFinite(value) ? Number(value.toPrecision(2)) : value;
 	const unit = step ?? (ticks.length > 1 ? (ticks[1] - ticks[0]) / 10 : 1);
 	if (!(unit > 0)) return value;
 	const snapped = Math.round(value / unit) * unit;

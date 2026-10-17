@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="300" viewBox="0 0 480 300" role="img" aria-labelledby="chart-desc">
+<desc id="chart-desc">A scatter chart showing 1 series of points. Response ranges from 12 (a) to 38 (d), rising, up 217% from first to last. The x axis is logarithmic (base 10). Response has ±standard error bars and x ±25% error bars.</desc>
+<rect x="0" y="0" width="480" height="300" fill="#ffffff" data-role="background"/>
+<line x1="32.32" y1="250.1" x2="456" y2="250.1" stroke="#e2e8f0" stroke-width="1" data-role="grid"/>
+<line x1="32.32" y1="203.98" x2="456" y2="203.98" stroke="#e2e8f0" stroke-width="1" data-role="grid"/>
+<line x1="32.32" y1="157.85999999999999" x2="456" y2="157.85999999999999" stroke="#e2e8f0" stroke-width="1" data-role="grid"/>
+<line x1="32.32" y1="111.74000000000001" x2="456" y2="111.74000000000001" stroke="#e2e8f0" stroke-width="1" data-role="grid"/>
+<line x1="32.32" y1="65.61999999999998" x2="456" y2="65.61999999999998" stroke="#e2e8f0" stroke-width="1" data-role="grid"/>
+<line x1="32.32" y1="19.5" x2="456" y2="19.5" stroke="#e2e8f0" stroke-width="1" data-role="grid"/>
+<text x="24.32" y="250.1" text-anchor="end" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">0</text>
+<text x="24.32" y="203.98" text-anchor="end" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">10</text>
+<text x="24.32" y="157.85999999999999" text-anchor="end" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">20</text>
+<text x="24.32" y="111.74000000000001" text-anchor="end" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">30</text>
+<text x="24.32" y="65.61999999999998" text-anchor="end" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">40</text>
+<text x="24.32" y="19.5" text-anchor="end" dominant-baseline="central" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">50</text>
+<line x1="32.32" y1="250.1" x2="456" y2="250.1" stroke="#94a3b8" stroke-width="1" data-role="axis"/>
+<text x="32.32" y="256.1" text-anchor="middle" dominant-baseline="hanging" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">0.1</text>
+<text x="117.05599999999998" y="256.1" text-anchor="middle" dominant-baseline="hanging" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">1</text>
+<text x="201.792" y="256.1" text-anchor="middle" dominant-baseline="hanging" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">10</text>
+<text x="286.528" y="256.1" text-anchor="middle" dominant-baseline="hanging" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">100</text>
+<text x="371.26399999999995" y="256.1" text-anchor="middle" dominant-baseline="hanging" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">1,000</text>
+<text x="456" y="256.1" text-anchor="middle" dominant-baseline="hanging" font-size="11" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#64748b" data-role="tick-label">10,000</text>
+<text x="244.16" y="288" text-anchor="middle" dominant-baseline="text-after-edge" font-size="12" font-weight="500" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif" fill="#0f172a" data-role="axis-title">Dose</text>
+<circle cx="117.05599999999998" cy="194.756" r="4.5" fill="#4269d0" stroke="#4269d0" stroke-width="2" opacity="0.85" data-role="point"/>
+<circle cx="201.792" cy="157.85999999999999" r="4.5" fill="#4269d0" stroke="#4269d0" stroke-width="2" opacity="0.85" data-role="point"/>
+<circle cx="286.528" cy="107.12799999999999" r="4.5" fill="#4269d0" stroke="#4269d0" stroke-width="2" opacity="0.85" data-role="point"/>
+<circle cx="371.26399999999995" cy="74.844" r="4.5" fill="#4269d0" stroke="#4269d0" stroke-width="2" opacity="0.85" data-role="point"/>
+<path d="M117.06,221.34L117.06,168.17M113.06,221.34L121.06,221.34M113.06,168.17L121.06,168.17" fill="none" stroke="#4269d0" stroke-width="1.25" stroke-linejoin="round" stroke-linecap="round" data-role="error-bar"/>
+<path d="M106.47,194.76L125.27,194.76M106.47,190.76L106.47,198.76M125.27,190.76L125.27,198.76" fill="none" stroke="#4269d0" stroke-width="1.25" stroke-linejoin="round" stroke-linecap="round" data-role="error-bar"/>
+<path d="M201.79,184.45L201.79,131.27M197.79,184.45L205.79,184.45M197.79,131.27L205.79,131.27" fill="none" stroke="#4269d0" stroke-width="1.25" stroke-linejoin="round" stroke-linecap="round" data-role="error-bar"/>
+<path d="M191.21,157.86L210,157.86M191.21,153.86L191.21,161.86M210,153.86L210,161.86" fill="none" stroke="#4269d0" stroke-width="1.25" stroke-linejoin="round" stroke-linecap="round" data-role="error-bar"/>
+<path d="M286.53,133.71L286.53,80.54M282.53,133.71L290.53,133.71M282.53,80.54L290.53,80.54" fill="none" stroke="#4269d0" stroke-width="1.25" stroke-linejoin="round" stroke-linecap="round" data-role="error-bar"/>
+<path d="M275.94,107.13L294.74,107.13M275.94,103.13L275.94,111.13M294.74,103.13L294.74,111.13" fill="none" stroke="#4269d0" stroke-width="1.25" stroke-linejoin="round" stroke-linecap="round" data-role="error-bar"/>
+<path d="M371.26,101.43L371.26,48.26M367.26,101.43L375.26,101.43M367.26,48.26L375.26,48.26" fill="none" stroke="#4269d0" stroke-width="1.25" stroke-linejoin="round" stroke-linecap="round" data-role="error-bar"/>
+<path d="M360.68,74.84L379.48,74.84M360.68,70.84L360.68,78.84M379.48,70.84L379.48,78.84" fill="none" stroke="#4269d0" stroke-width="1.25" stroke-linejoin="round" stroke-linecap="round" data-role="error-bar"/>
+</svg>

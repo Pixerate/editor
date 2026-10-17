@@ -5,7 +5,10 @@ import {
   ChartDirector,
   ChartPresence,
   createChartCommands,
+  createChartRasterizer,
   createChartToolProvider,
+  createOfficeChartToolProvider,
+  type OfficeChartToolProviderOptions,
   layoutChart,
   type ChartScene,
   type ChartToolProviderOptions,
@@ -87,18 +90,52 @@ export function useChartCommands(registry: ChartCommandTarget | null | undefined
   }, [registry, controller, prefix, group, scope]);
 }
 
+/** `useChartToolProvider` options: `rasterize` defaults to a canvas rasterizer in the browser (`false` turns PNG off). */
+export type ChartToolProviderHookOptions = Omit<ChartToolProviderOptions, 'rasterize'> & { rasterize?: ChartToolProviderOptions['rasterize'] | false };
+
 /**
  * Registers the chart's agent tools (`createChartToolProvider`) with a `ToolRegistry` while
- * mounted. Options are read when the controller or registry changes.
+ * mounted. Options are read when the controller or registry changes. In the browser,
+ * `render_chart { format: "png" }` works out of the box (`createChartRasterizer`).
  */
-export function useChartToolProvider(registry: ToolRegistry | null | undefined, controller: ChartController, options: ChartToolProviderOptions = {}): void {
+export function useChartToolProvider(registry: ToolRegistry | null | undefined, controller: ChartController, options: ChartToolProviderHookOptions = {}): void {
   const latest = useRef(options);
   latest.current = options;
   const { id, namespace } = options;
   useEffect(() => {
     if (!registry) return;
-    return registry.register(createChartToolProvider(controller, { ...latest.current, id, namespace }));
+    const { rasterize, ...rest } = latest.current;
+    return registry.register(createChartToolProvider(controller, { ...rest, id, namespace, rasterize: rasterize === false ? undefined : (rasterize ?? createChartRasterizer()) }));
   }, [registry, controller, id, namespace]);
+}
+
+/**
+ * Registers the Office-file chart tools (`createOfficeChartToolProvider`: `list_file_charts`,
+ * `get_file_chart`, and `load_file_chart` with a `controller`) while mounted. `files` and
+ * `readOnly` are read on every call, so they can change without re-registering.
+ */
+export function useOfficeChartToolProvider(registry: ToolRegistry | null | undefined, options: OfficeChartToolProviderOptions = {}): void {
+  const latest = useRef(options);
+  latest.current = options;
+  const { id, namespace, controller } = options;
+  const hasFiles = !!options.files;
+  useEffect(() => {
+    if (!registry) return;
+    const current = latest.current;
+    return registry.register(
+      createOfficeChartToolProvider({
+        ...current,
+        id,
+        namespace,
+        controller,
+        files: hasFiles ? () => latest.current.files?.() ?? [] : undefined,
+        readOnly: () => {
+          const r = latest.current.readOnly;
+          return (typeof r === 'function' ? r() : r) ?? false;
+        },
+      }),
+    );
+  }, [registry, id, namespace, controller, hasFiles]);
 }
 
 /**

@@ -1,5 +1,17 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { chartToMermaid, chartToSvg, chartFromMermaid, recommendChartTypes, summarizeChart, type ChartSpec } from "@pixerate/editor/chart";
+import {
+  chartToMermaid,
+  chartToSvg,
+  downloadChartPng,
+  chartFromMermaid,
+  describeOfficeChartPlace,
+  extractOfficeCharts,
+  recommendChartTypes,
+  summarizeChart,
+  type ChartSpec,
+  type OfficeChartFile,
+  type OfficeChartsResult,
+} from "@pixerate/editor/chart";
 import { parseCsv } from "@pixerate/editor/spreadsheet";
 import {
   ChartEditor,
@@ -10,6 +22,7 @@ import {
   useChartDirector,
   useChartState,
   useChartToolProvider,
+  useOfficeChartToolProvider,
 } from "@pixerate/editor-react/chart";
 import { BarChart3 } from "lucide-react";
 import { demoCommandRegistry, demoToolRegistry } from "../agentTools";
@@ -58,6 +71,28 @@ const SAMPLES: Record<string, Partial<ChartSpec>> = {
     series: [{ id: "people", name: "People", values: [158, 162, 171, 168, 180, 186, 175, 191], x: [52, 57, 66, 64, 78, 88, 72, 95], trendlines: [{ type: "linear", showR2: true }] }],
     xAxis: { show: true, title: "Weight (kg)", min: null, max: null, step: null, gridlines: true, format: {} },
     yAxis: { show: true, title: "Height (cm)", min: null, max: null, step: null, gridlines: true, format: {} },
+  },
+  "Error bars": {
+    type: "bar",
+    title: "Trial results",
+    subtitle: "Mean score with 95% intervals",
+    categories: ["Control", "Low dose", "High dose"],
+    series: [
+      { id: "week4", name: "Week 4", values: [4.2, 6.8, 9.1], errorBars: { type: "custom", plus: [0.6, 1.1, 0.9], minus: [0.5, 0.8, 1.4] } },
+      { id: "week8", name: "Week 8", values: [4.5, 7.9, 11.2], errorBars: { type: "percent", value: 10 } },
+      { id: "target", name: "Target", type: "line", values: [5, 8, 10], marker: "diamond" },
+    ],
+  },
+  "Log scale": {
+    type: "line",
+    title: "Active users",
+    subtitle: "Logarithmic value axis",
+    categories: ["2018", "2019", "2020", "2021", "2022", "2023", "2024"],
+    series: [
+      { id: "app", name: "App", values: [40, 310, 2800, 21000, 160000, 900000, 2400000] },
+      { id: "web", name: "Web", values: [1200, 2600, 5100, 9800, 21000, 40000, 76000] },
+    ],
+    yAxis: { show: true, title: "Users", min: null, max: null, step: null, gridlines: true, format: { style: "compact" }, scale: "log" },
   },
   Bubble: {
     type: "bubble",
@@ -134,6 +169,22 @@ export function ChartTab() {
   const { presence, director, sceneRef } = useChartDirector(controller);
   useChartCommands(demoCommandRegistry, controller);
   useChartToolProvider(demoToolRegistry, controller, { id: "chart", namespace: "chart", director, actor: { id: "agent", name: "Agent" } });
+  // Office files the user opened: listed in the "Open an Office file" panel and readable by the agent.
+  const [officeFiles, setOfficeFiles] = useState<OfficeChartFile[]>([]);
+  const officeFilesRef = useRef(officeFiles);
+  officeFilesRef.current = officeFiles;
+  useOfficeChartToolProvider(demoToolRegistry, { id: "chart-files", namespace: "chart_files", controller, files: () => officeFilesRef.current });
+  const [officeCharts, setOfficeCharts] = useState<{ file: string; result?: OfficeChartsResult; error?: string } | null>(null);
+  const openOfficeFile = async (file: File | undefined) => {
+    if (!file) return;
+    const data = new Uint8Array(await file.arrayBuffer());
+    setOfficeFiles((files) => [...files.filter((f) => f.name !== file.name), { name: file.name, data }]);
+    try {
+      setOfficeCharts({ file: file.name, result: await extractOfficeCharts(data) });
+    } catch (error) {
+      setOfficeCharts({ file: file.name, error: (error as Error).message });
+    }
+  };
   const [csv, setCsv] = useState(SAMPLE_CSV);
   const [copied, setCopied] = useState(false);
   const [mermaid, setMermaid] = useState("");
@@ -156,6 +207,12 @@ export function ChartTab() {
     } catch {
       window.open(URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" })), "_blank");
     }
+  };
+
+  const [pngError, setPngError] = useState("");
+  const downloadPng = () => {
+    setPngError("");
+    downloadChartPng(state.spec, { width: 800, height: 450 }).catch((error: unknown) => setPngError(error instanceof Error ? error.message : String(error)));
   };
 
   const stream = () => {
@@ -203,6 +260,9 @@ export function ChartTab() {
           <button type="button" className={button} onClick={copySvg}>
             {copied ? "Copied!" : "Copy SVG"}
           </button>
+          <button type="button" className={button} onClick={downloadPng} title={pngError || "Download the chart as an 800 × 450 PNG (drawn at 2×, longest side 1024 px)"}>
+            {pngError ? "PNG failed" : "Download PNG"}
+          </button>
         </div>
       </div>
       <div className="flex flex-wrap gap-1.5">
@@ -235,6 +295,46 @@ export function ChartTab() {
             ))}
         </div>
       </div>
+
+      <details className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-xs text-slate-300" data-office-charts="">
+        <summary className="cursor-pointer text-slate-200">Open an Office file</summary>
+        <p className="mt-2 text-slate-400">
+          Read the charts in an Excel workbook, PowerPoint deck or Word document and load one into the editor. Agents can do the same with the{" "}
+          <code>chart_files__*</code> tools (<code>list_open_files</code>, <code>list_file_charts</code>, <code>load_file_chart</code>).
+        </p>
+        <input
+          type="file"
+          accept=".xlsx,.xlsm,.pptx,.pptm,.docx,.docm"
+          className="mt-2 block text-xs text-slate-300"
+          onChange={(e) => {
+            void openOfficeFile(e.target.files?.[0]);
+            e.target.value = "";
+          }}
+        />
+        {officeCharts?.error && <p className="mt-2 text-amber-400">{officeCharts.error}</p>}
+        {officeCharts?.result && (
+          <div className="mt-2 space-y-1.5">
+            <p className="text-slate-400">
+              {officeCharts.file}: {officeCharts.result.charts.length} chart{officeCharts.result.charts.length === 1 ? "" : "s"}
+            </p>
+            {officeCharts.result.charts.map((chart) => (
+              <div key={chart.id} className="flex flex-wrap items-center gap-2">
+                <button type="button" className={button} onClick={() => controller.load(chart.spec)}>
+                  Load
+                </button>
+                <span>
+                  {chart.title || chart.name || "Untitled"} <span className="text-slate-500">({chart.spec.type}, {describeOfficeChartPlace(chart)})</span>
+                </span>
+                {[...chart.unsupported.map((u) => `Not kept: ${u}`), ...chart.issues].slice(0, 3).map((m) => (
+                  <span key={m} className="text-amber-400">
+                    {m}
+                  </span>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
+      </details>
 
       <details className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-xs text-slate-300">
         <summary className="cursor-pointer text-slate-200">Import CSV</summary>
