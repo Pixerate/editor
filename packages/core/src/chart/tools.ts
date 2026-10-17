@@ -267,7 +267,7 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 		name: 'update_chart',
 		title: 'Change chart presentation',
 		description:
-			'Changes how the chart looks, as one undo step: type, titles, axes (xAxis = categories or numeric x, yAxis = values, yAxis2 = secondary values), legend, stacking, orientation, curve, points, data labels and their position, palette, donut hole, bar spacing, histogram bins, waterfall total. All-or-nothing: invalid values change nothing and come back as sentences. Returns the new spec.',
+			'Changes how the chart looks, as one undo step: type, titles, axes (xAxis = categories or numeric x, yAxis = values, yAxis2 = secondary values; each can be reversed, and value axes can be logarithmic with scale "log"), legend, stacking, orientation, curve, points, data labels and their position, palette, donut hole, bar spacing, histogram bins, waterfall total. All-or-nothing: invalid values change nothing and come back as sentences. Returns the new spec.',
 		inputSchema: {
 			type: 'object',
 			properties: CHART_UPDATE_PROPERTIES,
@@ -359,7 +359,7 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 	const updateSeries: AgentTool = {
 		name: 'update_chart_series',
 		title: 'Change a series',
-		description: 'Renames, recolours, hides, moves to the secondary axis or changes how a series is drawn (marker, curve, labels, format, x values, bubble sizes, point colours). null resets a field. Values change with set_chart_values. Returns the series.',
+		description: 'Renames, recolours, hides, moves to the secondary axis or changes how a series is drawn (marker, curve, labels, format, x values, bubble sizes, point colours, error bars). null resets a field. Values change with set_chart_values. Returns the series.',
 		inputSchema: {
 			type: 'object',
 			properties: { series: SERIES_REF, ...Object.fromEntries(Object.entries(SERIES_PROPS).filter(([k]) => k !== 'values')) },

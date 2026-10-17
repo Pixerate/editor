@@ -1448,6 +1448,23 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: The full test run reported an unhandled `ReferenceError: document is not defined` from `prosemirror-view`'s `DOMObserver.flush`, attributed to `chart-node.test.ts`, while that file passed on its own.
 - **Root Cause**: Editors created in a test and never destroyed keep ProseMirror's DOM observer timers. Under load, a timer fires after the file's jsdom environment is torn down.
 - **Solution / Workaround**: Destroy every editor a test creates. `chart-node.test.ts` tracks them in an `afterEach`.
+### [core/chart] Don't Recover a Category Index From a Pixel
+
+- **Issue / Symptom**: With `xAxis.reverse`, stacked areas filled down to the wrong series' baseline.
+- **Root Cause**: The area layout turned each point's x pixel back into a category index (`(c - catStart) / band - 0.5`), which assumes categories run left to right.
+- **Solution / Workaround**: Points carry their index (`Pt.i`) and everything maps index → pixel through `catCenter(i)` (which handles reversing, and fractional indexes for trendlines). Never invert pixels to find data.
+
+### [core/chart] Straight Trendlines Need Sampling on a Log Axis
+
+- **Issue / Symptom**: A linear trendline vanished on a logarithmic value axis whenever one end of it went to 0 or below.
+- **Root Cause**: Linear fits were drawn from two samples (the ends). On a log axis the line is a curve, and an end with no pixel (value ≤ 0 → NaN) was dropped, leaving one point and no path.
+- **Solution / Workaround**: `drawTrendlines` samples linear fits like the others (200 steps) when either axis is logarithmic and drops samples with non-finite pixels. Value → pixel on log axes goes through `chartScaleToPixel`, which returns NaN for values ≤ 0; `ScaleInfo.px` clamps those to the lower end instead, so bars and area baselines still start at the bottom.
+
+### [core/chart] Property Tests: Series Names Can Be the Text "NaN"
+
+- **Issue / Symptom**: Adding new random steps to `chart-property.test.ts` made a seed fail with `NaN` in the SVG, although every mark was finite.
+- **Root Cause**: The extra steps shifted the random sequence; a paste then named a series `NaN` (junk cell text), which the SVG legend and `<desc>` write verbatim. The test searched the whole SVG for `NaN|Infinity`.
+- **Solution / Workaround**: Check geometry attributes only (`x=`, `y=`, `d=`, `cx=`, `width=`, …). When adding steps to the property test, expect other seeds to explore new paths and read the failure before assuming the new feature is at fault.
 
 ### [core/chart] A Chart SVG Drawn to a Canvas Comes Out Black
 

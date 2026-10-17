@@ -60,6 +60,34 @@ export interface ChartTrendline {
 	color?: string;
 }
 
+/** How error amounts are worked out (as in spreadsheets: Excel's `c:errValType`). */
+export type ChartErrorBarType = 'fixed' | 'percent' | 'stddev' | 'stderr' | 'custom';
+
+/**
+ * Error bars on a series (Excel's `c:errBars`). Amounts are in data units and drawn from each
+ * point, except `stddev`, which is drawn around the series mean as Excel does.
+ */
+export interface ChartErrorBars {
+	/**
+	 * - `fixed`: the same amount at every point (`value`, default 1).
+	 * - `percent`: `value` percent of each point's value (default 5).
+	 * - `stddev`: `value` standard deviations of the series (default 1), around the series mean.
+	 * - `stderr`: the standard error of the series (sample standard deviation / √n) at every point.
+	 * - `custom`: per-point amounts from `plus` and `minus`.
+	 */
+	type: ChartErrorBarType;
+	/** The amount for `fixed`, `percent` and `stddev` (see `type` for defaults). */
+	value?: number;
+	/** Custom amounts above each point (0 or more; `null`: none). */
+	plus?: ChartValue[];
+	/** Custom amounts below each point (0 or more; `null`: none). Defaults to `plus`. */
+	minus?: ChartValue[];
+	/** Which way the bars go (default `both`). */
+	direction?: 'both' | 'plus' | 'minus';
+	/** Draw end caps (default `true`). */
+	cap?: boolean;
+}
+
 export interface ChartSeries {
 	/** Stable id (unique within the chart). */
 	id: string;
@@ -90,6 +118,10 @@ export interface ChartSeries {
 	format?: ChartNumberFormat;
 	/** Fitted lines drawn over the series. */
 	trendlines?: ChartTrendline[];
+	/** Error bars along the value axis (bar, line, area and scatter series). */
+	errorBars?: ChartErrorBars;
+	/** Error bars along the numeric x axis (scatter charts with x values). */
+	xErrorBars?: ChartErrorBars;
 }
 
 export interface ChartNumberFormat {
@@ -128,6 +160,16 @@ export interface ChartAxis {
 	 * `2024`), labels them with calendar steps that fit, and thins the rest.
 	 */
 	kind?: 'category' | 'date';
+	/**
+	 * Value axes (and the numeric x axis of scatter and bubble charts): `log` spaces ticks by
+	 * powers of `logBase`. Values of 0 or less cannot be drawn and are skipped. Not allowed with
+	 * percent stacking. Absent means `linear`.
+	 */
+	scale?: 'linear' | 'log';
+	/** Base of a logarithmic axis, 2–1000 (default 10). */
+	logBase?: number;
+	/** Run the axis the other way: values from the top down, or categories from right to left. */
+	reverse?: boolean;
 }
 
 export type ChartLegendPosition = 'top' | 'bottom' | 'left' | 'right';
@@ -247,6 +289,7 @@ export type ChartMarkRole =
 	| 'connector'
 	| 'trendline'
 	| 'trendline-label'
+	| 'error-bar'
 	| 'data-label'
 	| 'legend-swatch'
 	| 'legend-label'
@@ -331,6 +374,8 @@ export interface ChartValueScale {
 	domain: [number, number];
 	range: [number, number];
 	ticks: number[];
+	/** Set when the axis is logarithmic: values map by their logarithm in this base. */
+	logBase?: number;
 }
 
 /** Something the layout had to leave out or shorten, as a sentence (for agents and screen readers). */

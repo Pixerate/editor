@@ -15,11 +15,12 @@ import {
 	type LayoutCtx,
 	type Pt
 } from './layout-shared.js';
-import { formatChartNumber, linearMap, stepDecimals, type NiceScale } from './scale.js';
+import { chartErrorAmounts } from './errorbars.js';
+import { chartScaleToPixel, formatChartNumber, stepDecimals, type NiceScale } from './scale.js';
 import { chartPointColor, chartSeriesColor, chartSeriesType } from './spec.js';
 import { decimateChartPoints } from './stats.js';
 import { chartMovingAverage, chartSupportsTrendlines, chartTrendlineName, fitChartTrendline, trendNumberText } from './trend.js';
-import type { ChartAxis, ChartMark, ChartMarker, ChartNumberFormat, ChartRect, ChartSelection, ChartSeries, ChartSeriesType, ChartValueScale } from './types.js';
+import type { ChartAxis, ChartErrorBars, ChartMark, ChartMarker, ChartNumberFormat, ChartRect, ChartSelection, ChartSeries, ChartSeriesType, ChartValue, ChartValueScale } from './types.js';
 
 /** Data labels are skipped on series with more points than this. */
 export const MAX_CHART_DATA_LABELS = 200;
@@ -46,10 +47,12 @@ export interface ScaleInfo {
 	px(v: number): number;
 	/** Value → pixel, not clamped. */
 	raw(v: number): number;
-	/** Pixel of 0 (or the nearest end). */
+	/** Pixel of 0 (or the nearest end; the lower end on a log axis). */
 	zero: number;
 	format: ChartNumberFormat;
 	tickText(t: number): string;
+	/** Set when the axis is logarithmic. */
+	logBase?: number;
 }
 
 export interface CategoryFrame {
@@ -76,11 +79,19 @@ export interface CategoryFrameInput {
 	categoryAxis?: ChartAxis;
 }
 
-function scaleInfo(scale: NiceScale, range: [number, number], format: ChartNumberFormat): ScaleInfo {
-	const domain: [number, number] = [scale.min, scale.max];
-	const raw = (v: number) => linearMap(v, domain, range);
-	const px = (v: number) => raw(Math.min(scale.max, Math.max(scale.min, v)));
-	return { scale, range, px, raw, zero: px(0), format, tickText: (t) => formatChartNumber(t, format, format.decimals ?? stepDecimals(scale.step)) };
+/**
+ * Value ↔ pixel for one axis: logarithmic when `axis.scale` is `log` (values of 0 or less
+ * clamp to the lower end), and running the other way when `axis.reverse` is set.
+ */
+export function scaleInfo(scale: NiceScale, range: [number, number], format: ChartNumberFormat, axis?: Pick<ChartAxis, 'scale' | 'logBase' | 'reverse'>): ScaleInfo {
+	const logBase = axis?.scale === 'log' ? (axis.logBase ?? 10) : undefined;
+	const r: [number, number] = axis?.reverse ? [range[1], range[0]] : range;
+	const vs = { domain: [scale.min, scale.max] as [number, number], range: r, logBase };
+	const raw = (v: number) => chartScaleToPixel(v, vs);
+	const px = (v: number) => (logBase && !(v > 0) ? r[0] : raw(Math.min(scale.max, Math.max(scale.min, v))));
+	// Log ticks span powers, so each is written with the decimals it needs.
+	const tickText = (t: number) => formatChartNumber(t, format, logBase ? format.decimals : (format.decimals ?? stepDecimals(scale.step)));
+	return { scale, range: r, px, raw, zero: px(0), format, tickText, ...(logBase ? { logBase } : {}) };
 }
 
 /**
@@ -98,7 +109,7 @@ export function categoryFrame(ctx: LayoutCtx, area: ChartRect, input: CategoryFr
 
 	const estimate = (v: ValueAxisInput, length: number) => {
 		const s = axisScale(v.lo, v.hi, length, v.axis, v.frozen, v.headroom);
-		const info = scaleInfo(s, [0, 1], v.format);
+		const info = scaleInfo(s, [0, 1], v.format, v.axis);
 		return Math.max(0, ...s.ticks.map((t) => measure(info.tickText(t), fs)));
 	};
 	const valueLen0 = horizontal ? area.width : area.height;
@@ -137,13 +148,14 @@ export function categoryFrame(ctx: LayoutCtx, area: ChartRect, input: CategoryFr
 	};
 	const valueLen = horizontal ? plot.width : plot.height;
 	const range: [number, number] = horizontal ? [plot.x, plot.x + plot.width] : [plot.y + plot.height, plot.y];
-	const value = scaleInfo(axisScale(primary.lo, primary.hi, valueLen, primary.axis, primary.frozen, primary.headroom), range, primary.format);
-	const value2 = secondary ? scaleInfo(axisScale(secondary.lo, secondary.hi, valueLen, secondary.axis, secondary.frozen, secondary.headroom), range, secondary.format) : undefined;
+	const value = scaleInfo(axisScale(primary.lo, primary.hi, valueLen, primary.axis, primary.frozen, primary.headroom), range, primary.format, primary.axis);
+	const value2 = secondary ? scaleInfo(axisScale(secondary.lo, secondary.hi, valueLen, secondary.axis, secondary.frozen, secondary.headroom), range, secondary.format, secondary.axis) : undefined;
 
 	const catStart = horizontal ? plot.y : plot.x;
 	const catLen = horizontal ? plot.height : plot.width;
 	const band = catLen / n;
-	const catCenter = (i: number) => catStart + band * (i + 0.5);
+	// A reversed category axis runs from the far end; `i` may be fractional (trendlines).
+	const catCenter = (i: number) => catStart + band * (xAxis.reverse ? n - i - 0.5 : i + 0.5);
 	const map = (p: Pt): [number, number] => (horizontal ? [p.v, p.c] : [p.c, p.v]);
 
 	// Grid lines
@@ -262,7 +274,30 @@ export function categoryFrame(ctx: LayoutCtx, area: ChartRect, input: CategoryFr
 	return { plot, horizontal, n, band, catStart, catLen, catCenter, map, value, value2 };
 }
 
-export const toValueScale = (info: ScaleInfo, axis: 'x' | 'y'): ChartValueScale => ({ axis, domain: [info.scale.min, info.scale.max], range: info.range, ticks: info.scale.ticks });
+export const toValueScale = (info: ScaleInfo, axis: 'x' | 'y'): ChartValueScale => ({ axis, domain: [info.scale.min, info.scale.max], range: info.range, ticks: info.scale.ticks, ...(info.logBase ? { logBase: info.logBase } : {}) });
+
+type ChartErrorAmountLike = ReturnType<typeof chartErrorAmounts>[number];
+
+/** An error bar in value units: its centre and ends. */
+interface ErrorSpan {
+	center: number;
+	lo: number;
+	hi: number;
+}
+
+/**
+ * One error bar as path data: a stem from pixel `a` to `b` along the value direction at `c`
+ * across it, with caps `width` wide at the ends that have them. `map` turns (across, along)
+ * into x / y.
+ */
+function errorBarPath(map: (p: Pt) => [number, number], c: number, a: number, b: number, width: number, capA: boolean, capB: boolean): string {
+	if (!Number.isFinite(a) || !Number.isFinite(b) || !Number.isFinite(c) || (Math.abs(a - b) < 0.01 && !capA && !capB)) return '';
+	const at = (across: number, along: number) => map({ c: across, v: along }).map(r2).join(',');
+	let d = `M${at(c, a)}L${at(c, b)}`;
+	if (capA) d += `M${at(c - width / 2, a)}L${at(c + width / 2, a)}`;
+	if (capB) d += `M${at(c - width / 2, b)}L${at(c + width / 2, b)}`;
+	return d;
+}
 
 interface Stack {
 	/** Per category: [bottom, top] of this series' segment, or null for a gap. */
@@ -288,13 +323,14 @@ interface TrendLabel {
  * Draws the trendlines of one series: `points` in data units, `toPx` maps them to the scene,
  * `xRange` is the fitted span (extended by forward/backward).
  */
-function drawTrendlines(ctx: LayoutCtx, plot: ChartRect, series: ChartSeries, color: string, points: [number, number][], toPx: (x: number, y: number) => [number, number], labels: TrendLabel[]) {
+function drawTrendlines(ctx: LayoutCtx, plot: ChartRect, series: ChartSeries, color: string, points: [number, number][], toPx: (x: number, y: number) => [number, number], labels: TrendLabel[], logAxis = false) {
 	(series.trendlines ?? []).forEach((t, ti) => {
 		const target: ChartSelection = { kind: 'trendline', seriesId: series.id, index: ti };
 		const selected = ctx.isSelected(target);
 		const stroke = t.color ?? color;
 		let px: [number, number][] = [];
-		if (t.type === 'moving-average') px = chartMovingAverage(points, t.period ?? 2).map(([x, y]) => toPx(x, y));
+		const finitePx = (q: [number, number]) => Number.isFinite(q[0]) && Number.isFinite(q[1]);
+		if (t.type === 'moving-average') px = chartMovingAverage(points, t.period ?? 2).map(([x, y]) => toPx(x, y)).filter(finitePx);
 		else {
 			const fit = fitChartTrendline(t, points);
 			if (!fit) {
@@ -304,11 +340,14 @@ function drawTrendlines(ctx: LayoutCtx, plot: ChartRect, series: ChartSeries, co
 			const xs = points.map((p) => p[0]);
 			const lo = Math.min(...xs) - (t.backward ?? 0);
 			const hi = Math.max(...xs) + (t.forward ?? 0);
-			const steps = t.type === 'linear' ? 1 : 200;
+			// A straight fit is a curve on a log axis: sample it like the others.
+			const steps = t.type === 'linear' && !logAxis ? 1 : 200;
 			for (let k = 0; k <= steps; k++) {
 				const x = lo + ((hi - lo) * k) / steps;
 				const y = fit.evaluate(x);
-				if (y !== null) px.push(toPx(x, y));
+				const q = y === null ? null : toPx(x, y);
+				// Log axes have no pixel for values of 0 or less.
+				if (q && finitePx(q)) px.push(q);
 			}
 			if (t.showEquation) labels.push({ text: fit.equation, color: stroke, target });
 			if (t.showR2) labels.push({ text: fit.r2 === null ? 'R² = #N/A' : `R² = ${trendNumberText(fit.r2)}`, color: stroke, target });
@@ -399,10 +438,31 @@ export function layoutCartesian(ctx: LayoutCtx, area: ChartRect, visible: ChartS
 		}
 	}
 
+	const logOf = (secondary: boolean) => (secondary ? spec.yAxis2 : spec.yAxis).scale === 'log';
+	// Error bars in value units where they are drawn: on stack tops, scaled to shares when percent-stacked.
+	const errors = new Map<string, (ErrorSpan | null)[]>();
+	for (const s of visible) {
+		if (!s.errorBars) continue;
+		const stack = stacks.get(s.id);
+		errors.set(
+			s.id,
+			chartErrorAmounts(s.errorBars, s.values).map((e, i) => {
+				const raw = s.values[i];
+				const seg = stack?.segments[i];
+				if (!e || raw === null || (stack && !seg)) return null;
+				const k = seg && percent ? (raw ? (seg[1] - seg[0]) / raw : 0) : 1;
+				const center = (seg ? seg[1] : raw) + (e.center - raw) * k;
+				return { center, lo: center - e.minus * k, hi: center + e.plus * k };
+			})
+		);
+	}
+
 	const range = (secondary: boolean) => {
 		let lo = Infinity;
 		let hi = -Infinity;
+		const log = logOf(secondary);
 		const see = (v: number) => {
+			if (!Number.isFinite(v) || (log && !(v > 0))) return;
 			lo = Math.min(lo, v);
 			hi = Math.max(hi, v);
 		};
@@ -410,13 +470,18 @@ export function layoutCartesian(ctx: LayoutCtx, area: ChartRect, visible: ChartS
 		for (const s of group) {
 			const stack = stacks.get(s.id);
 			if (stack) stack.segments.forEach((seg) => seg && (see(seg[0]), see(seg[1])));
-			else s.values.forEach((v) => v !== null && Number.isFinite(v) && see(v));
+			else s.values.forEach((v) => v !== null && see(v));
+			errors.get(s.id)?.forEach((e) => e && (see(e.lo), see(e.hi)));
+		}
+		if (log) {
+			const skipped = group.reduce((t, s) => t + s.values.filter((v) => v !== null && Number.isFinite(v) && v <= 0).length, 0);
+			if (skipped) ctx.warn('values-skipped', `${skipped} value${skipped === 1 ? '' : 's'} of 0 or less cannot be drawn on the logarithmic ${secondary ? 'secondary ' : ''}value axis and ${skipped === 1 ? 'was' : 'were'} skipped.`);
 		}
 		if (!Number.isFinite(lo)) {
-			lo = 0;
-			hi = 1;
+			lo = log ? 1 : 0;
+			hi = log ? 10 : 1;
 		}
-		if (group.some((s) => types.get(s.id) === 'bar' || types.get(s.id) === 'area')) {
+		if (!log && group.some((s) => types.get(s.id) === 'bar' || types.get(s.id) === 'area')) {
 			lo = Math.min(lo, 0);
 			hi = Math.max(hi, 0);
 		}
@@ -444,6 +509,7 @@ export function layoutCartesian(ctx: LayoutCtx, area: ChartRect, visible: ChartS
 	const barWidth = slots ? groupWidth / (slots - (slots - 1) * o) : 0;
 	const slotOf = (s: ChartSeries) => (stacked ? barAxes.indexOf(onSecondary(s)) : bars.indexOf(s));
 	const labelMarks: ChartMark[] = [];
+	const errorMarks: ChartMark[] = [];
 	const trendLabels: TrendLabel[] = [];
 	let hiddenLabels = 0;
 	const trendsAllowed = chartSupportsTrendlines(spec.type, spec.stacking);
@@ -458,6 +524,7 @@ export function layoutCartesian(ctx: LayoutCtx, area: ChartRect, visible: ChartS
 		const seriesTarget: ChartSelection = { kind: 'series', seriesId: s.id };
 		const info = infoOf(s);
 		const valuePx = info.px;
+		const log = logOf(onSecondary(s));
 		const labelsOn = (s.dataLabels ?? spec.dataLabels) && s.values.length <= MAX_CHART_DATA_LABELS;
 		if ((s.dataLabels ?? spec.dataLabels) && !labelsOn) ctx.warn('data-labels-hidden', `Data labels are off for "${s.name}": it has more than ${MAX_CHART_DATA_LABELS} points.`);
 		const labelFormat = s.format ?? info.format;
@@ -468,6 +535,7 @@ export function layoutCartesian(ctx: LayoutCtx, area: ChartRect, visible: ChartS
 			s.values.forEach((raw, i) => {
 				const seg = stack ? stack.segments[i] : raw === null ? null : ([0, raw] as [number, number]);
 				if (!seg || raw === null || !Number.isFinite(raw)) return;
+				if (log && (raw <= 0 || seg[1] <= 0)) return;
 				const a = valuePx(seg[0]);
 				const b = valuePx(seg[1]);
 				const c0 = catCenter(i) - groupWidth / 2 + slot * barWidth * (1 - o);
@@ -492,7 +560,9 @@ export function layoutCartesian(ctx: LayoutCtx, area: ChartRect, visible: ChartS
 				if (labelsOn) {
 					const v = percent ? seg[1] - seg[0] : raw;
 					const text = dataLabel(v);
-					const at = barLabel(ctx, text, rect, horizontal, seg[1] >= seg[0], stacked, fill, plot);
+					// Which way the bar grows on screen (reversed and log axes included).
+					const grows = horizontal ? b >= a : b <= a;
+					const at = barLabel(ctx, text, rect, horizontal, grows, stacked, fill, plot);
 					if (!at) {
 						hiddenLabels++;
 						return;
@@ -505,7 +575,7 @@ export function layoutCartesian(ctx: LayoutCtx, area: ChartRect, visible: ChartS
 			const curve = s.curve ?? spec.curve;
 			const pointValue = (i: number): number | null => {
 				const v = stack ? (stack.segments[i]?.[1] ?? null) : s.values[i];
-				return v !== null && Number.isFinite(v) ? v : null;
+				return v !== null && Number.isFinite(v) && !(log && (v <= 0 || (s.values[i] ?? 0) <= 0)) ? v : null;
 			};
 			const runs: Pt[][] = [];
 			let run: Pt[] = [];
@@ -516,7 +586,7 @@ export function layoutCartesian(ctx: LayoutCtx, area: ChartRect, visible: ChartS
 					run = [];
 					continue;
 				}
-				run.push({ c: catCenter(i), v: valuePx(v) });
+				run.push({ c: catCenter(i), v: valuePx(v), i });
 			}
 			if (run.length) runs.push(run);
 			const thin = (r: Pt[]) => {
@@ -531,7 +601,7 @@ export function layoutCartesian(ctx: LayoutCtx, area: ChartRect, visible: ChartS
 				// Stacked areas fill down to the series below; others down to zero.
 				const parts = drawn.map((r) => {
 					const baseline = stack
-						? r.map((pt) => ({ c: pt.c, v: valuePx(stack.segments[Math.round((pt.c - catStart) / band - 0.5)]?.[0] ?? 0) })).reverse()
+						? r.map((pt) => ({ c: pt.c, v: valuePx(stack.segments[pt.i!]?.[0] ?? 0) })).reverse()
 						: [
 								{ c: r[r.length - 1].c, v: info.zero },
 								{ c: r[0].c, v: info.zero }
@@ -585,15 +655,27 @@ export function layoutCartesian(ctx: LayoutCtx, area: ChartRect, visible: ChartS
 				}
 			}
 		}
+		const errs = errors.get(s.id);
+		if (errs) {
+			const slot = type === 'bar' ? slotOf(s) : 0;
+			const capWidth = type === 'bar' ? Math.min(10, barWidth * 0.5) : 8;
+			const cap = s.errorBars!.cap !== false;
+			errs.forEach((e, i) => {
+				if (!e || (log && !((s.values[i] ?? 0) > 0))) return;
+				const c = type === 'bar' ? catCenter(i) - groupWidth / 2 + slot * barWidth * (1 - o) + barWidth / 2 : catCenter(i);
+				const d = errorBarPath(map, c, valuePx(e.lo), valuePx(e.hi), capWidth, cap && e.lo < e.center, cap && e.hi > e.center);
+				if (d) errorMarks.push({ kind: 'path', key: `error-bar-${s.id}-${i}`, role: 'error-bar', d, fill: 'none', stroke: type === 'bar' ? theme.text : color, strokeWidth: selSeries ? 2 : 1.25, target: seriesTarget, selected: selSeries });
+			});
+		}
 		if (trendsAllowed && s.trendlines?.length) {
 			// Category charts fit against x = 1, 2, 3, … (as spreadsheets do).
 			const points: [number, number][] = [];
 			s.values.forEach((v, i) => v !== null && Number.isFinite(v) && points.push([i + 1, v]));
-			const toPx = (x: number, y: number) => map({ c: catStart + band * (x - 0.5), v: info.raw(y) });
-			drawTrendlines(ctx, plot, s, color, points, toPx, trendLabels);
+			const toPx = (x: number, y: number) => map({ c: catCenter(x - 1), v: info.raw(y) });
+			drawTrendlines(ctx, plot, s, color, points, toPx, trendLabels, !!info.logBase);
 		}
 	}
-	marks.push(...labelMarks);
+	marks.push(...errorMarks, ...labelMarks);
 	drawTrendLabels(ctx, plot, trendLabels);
 	if (hiddenLabels) ctx.warn('data-labels-hidden', `${hiddenLabels} data label${hiddenLabels === 1 ? '' : 's'} did not fit and ${hiddenLabels === 1 ? 'is' : 'are'} hidden.`);
 	return {
@@ -608,37 +690,66 @@ export function layoutCartesian(ctx: LayoutCtx, area: ChartRect, visible: ChartS
 export function layoutXy(ctx: LayoutCtx, area: ChartRect, visible: ChartSeries[]): FamilyResult {
 	const { spec, theme, marks, measure, fs } = ctx;
 	const bubble = spec.type === 'bubble';
+	const yAxis = spec.yAxis;
+	const xAxis = spec.xAxis;
+	const xLog = xAxis.scale === 'log';
+	const yLog = yAxis.scale === 'log';
+	let skipped = 0;
 	const pointsOf = (s: ChartSeries) =>
 		s.values
 			.map((y, i) => ({ i, x: s.x?.[i] ?? (bubble || !s.x ? i + 1 : null), y, size: s.sizes?.[i] ?? null }))
-			.filter((p): p is { i: number; x: number; y: number; size: number | null } => p.x !== null && p.y !== null && Number.isFinite(p.x) && Number.isFinite(p.y));
+			.filter((p): p is { i: number; x: number; y: number; size: number | null } => {
+				if (p.x === null || p.y === null || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return false;
+				// Log axes cannot place 0 or less.
+				if ((xLog && p.x <= 0) || (yLog && p.y <= 0)) return (skipped++, false);
+				return true;
+			});
 	const all = visible.map((s) => ({ s, pts: pointsOf(s) }));
+	if (skipped) ctx.warn('values-skipped', `${skipped} point${skipped === 1 ? '' : 's'} with a value of 0 or less cannot be drawn on the logarithmic ${xLog && yLog ? 'axes' : xLog ? 'x axis' : 'value axis'} and ${skipped === 1 ? 'was' : 'were'} skipped.`);
+	// Error bars per point, keyed by series id and point index.
+	const yErrors = new Map<string, (ChartErrorAmountLike | null)[]>();
+	const xErrors = new Map<string, (ChartErrorAmountLike | null)[]>();
+	for (const { s } of all) {
+		if (s.errorBars) yErrors.set(s.id, chartErrorAmounts(s.errorBars, s.values));
+		if (s.xErrorBars) xErrors.set(s.id, chartErrorAmounts(s.xErrorBars, s.values.map((_, i) => (s.x?.[i] ?? (bubble || !s.x ? i + 1 : null)) as ChartValue)));
+	}
 	let xlo = Infinity;
 	let xhi = -Infinity;
 	let ylo = Infinity;
 	let yhi = -Infinity;
 	let maxSize = 0;
+	const seeX = (v: number) => {
+		if (!Number.isFinite(v) || (xLog && !(v > 0))) return;
+		xlo = Math.min(xlo, v);
+		xhi = Math.max(xhi, v);
+	};
+	const seeY = (v: number) => {
+		if (!Number.isFinite(v) || (yLog && !(v > 0))) return;
+		ylo = Math.min(ylo, v);
+		yhi = Math.max(yhi, v);
+	};
 	for (const { s, pts } of all) {
 		for (const p of pts) {
-			xlo = Math.min(xlo, p.x);
-			xhi = Math.max(xhi, p.x);
-			ylo = Math.min(ylo, p.y);
-			yhi = Math.max(yhi, p.y);
+			seeX(p.x);
+			seeY(p.y);
 			if (p.size !== null && p.size > maxSize) maxSize = p.size;
+			const ey = yErrors.get(s.id)?.[p.i];
+			if (ey) (seeY(ey.center - ey.minus), seeY(ey.center + ey.plus));
+			const ex = xErrors.get(s.id)?.[p.i];
+			if (ex) (seeX(ex.center - ex.minus), seeX(ex.center + ex.plus));
 		}
 		// Forecasts widen the x axis.
 		for (const t of s.trendlines ?? []) {
 			if (!pts.length) continue;
-			xlo = Math.min(xlo, Math.min(...pts.map((p) => p.x)) - (t.backward ?? 0));
-			xhi = Math.max(xhi, Math.max(...pts.map((p) => p.x)) + (t.forward ?? 0));
+			seeX(Math.min(...pts.map((p) => p.x)) - (t.backward ?? 0));
+			seeX(Math.max(...pts.map((p) => p.x)) + (t.forward ?? 0));
 		}
 	}
-	if (!Number.isFinite(xlo)) [xlo, xhi, ylo, yhi] = [0, 1, 0, 1];
+	if (!Number.isFinite(xlo)) [xlo, xhi] = xLog ? [1, 10] : [0, 1];
+	if (!Number.isFinite(ylo)) [ylo, yhi] = yLog ? [1, 10] : [0, 1];
 	const titleBand = fs * 1.3 + 6;
-	const yAxis = spec.yAxis;
-	const xAxis = spec.xAxis;
 	const yEst = axisScale(ylo, yhi, area.height, yAxis, ctx.options.valueDomain, true);
-	const yText = (t: number, step: number) => formatChartNumber(t, yAxis.format, yAxis.format.decimals ?? stepDecimals(step));
+	const yText = (t: number, step: number) => formatChartNumber(t, yAxis.format, yAxis.format.decimals ?? (yLog ? undefined : stepDecimals(step)));
 	const left = (yAxis.show ? Math.max(0, ...yEst.ticks.map((t) => measure(yText(t, yEst.step), fs))) + 8 : 2) + (yAxis.title ? titleBand : 0);
 	const bottom = (xAxis.show ? fs * 1.6 : 2) + (xAxis.title ? titleBand : 0);
 	const plot: ChartRect = { x: area.x + left, y: area.y + fs / 2 + 2, width: Math.max(1, area.width - left - 12), height: Math.max(1, area.height - bottom - fs / 2 - 2) };
@@ -649,10 +760,10 @@ export function layoutXy(ctx: LayoutCtx, area: ChartRect, visible: ChartSeries[]
 	const xScale = axisScale(xlo, xhi, plot.width, xAxis, ctx.options.xDomain, true);
 	const xRange: [number, number] = [plot.x + inset, plot.x + plot.width - inset];
 	const yRange: [number, number] = [plot.y + plot.height - inset, plot.y + inset];
-	const xRaw = (x: number) => linearMap(x, [xScale.min, xScale.max], xRange);
-	const yRaw = (y: number) => linearMap(y, [yScale.min, yScale.max], yRange);
-	const xPx = (x: number) => xRaw(Math.min(xScale.max, Math.max(xScale.min, x)));
-	const yPx = (y: number) => yRaw(Math.min(yScale.max, Math.max(yScale.min, y)));
+	const xInfo = scaleInfo(xScale, xRange, xAxis.format, xAxis);
+	const yInfo = scaleInfo(yScale, yRange, yAxis.format, yAxis);
+	const { raw: xRaw, px: xPx } = xInfo;
+	const { raw: yRaw, px: yPx } = yInfo;
 	const xTarget: ChartSelection = { kind: 'axis', axis: 'x' };
 	const yTarget: ChartSelection = { kind: 'axis', axis: 'y' };
 
@@ -660,11 +771,13 @@ export function layoutXy(ctx: LayoutCtx, area: ChartRect, visible: ChartSeries[]
 	if (xAxis.gridlines) xScale.ticks.forEach((t, i) => marks.push({ kind: 'line', key: `grid-x-${i}`, role: 'grid', x1: xPx(t), y1: plot.y, x2: xPx(t), y2: plot.y + plot.height, stroke: theme.grid, strokeWidth: 1 }));
 	if (yAxis.show) yScale.ticks.forEach((t, i) => marks.push({ kind: 'text', key: `tick-y-${i}`, role: 'tick-label', x: plot.x - 8, y: yPx(t), text: yText(t, yScale.step), anchor: 'end', baseline: 'middle', size: fs, fill: theme.mutedText, target: yTarget }));
 	if (xAxis.show) {
-		const y0 = yScale.min <= 0 && yScale.max >= 0 ? yPx(0) : plot.y + plot.height;
+		// The x axis crosses at y = 0, else along the lower end of the y axis (the top when reversed).
+		const y0 = !yLog && yScale.min <= 0 && yScale.max >= 0 ? yPx(0) : yAxis.reverse ? plot.y : plot.y + plot.height;
 		marks.push({ kind: 'line', key: 'axis-x', role: 'axis', x1: plot.x, y1: y0, x2: plot.x + plot.width, y2: y0, stroke: theme.axis, strokeWidth: 1, target: xTarget });
-		const texts = xScale.ticks.map((t) => formatChartNumber(t, xAxis.format, xAxis.format.decimals ?? stepDecimals(xScale.step)));
+		const texts = xScale.ticks.map((t) => formatChartNumber(t, xAxis.format, xAxis.format.decimals ?? (xLog ? undefined : stepDecimals(xScale.step))));
 		const widest = Math.max(0, ...texts.map((t) => measure(t, fs)));
-		const spacing = xScale.ticks.length > 1 ? Math.abs(xPx(xScale.ticks[1]) - xPx(xScale.ticks[0])) : Infinity;
+		// Log ticks are unevenly spaced: thin by the closest pair.
+		const spacing = Math.min(Infinity, ...xScale.ticks.slice(1).map((t, i) => Math.abs(xPx(t) - xPx(xScale.ticks[i]))));
 		const every = Math.max(1, Math.ceil((widest + 8) / spacing));
 		xScale.ticks.forEach((t, i) => {
 			if (i % every) return;
@@ -679,6 +792,7 @@ export function layoutXy(ctx: LayoutCtx, area: ChartRect, visible: ChartSeries[]
 	}
 
 	const labelMarks: ChartMark[] = [];
+	const errorMarks: ChartMark[] = [];
 	const trendLabels: TrendLabel[] = [];
 	// Bigger bubbles first, so small ones stay clickable on top.
 	for (const { s, pts } of all) {
@@ -716,14 +830,33 @@ export function layoutXy(ctx: LayoutCtx, area: ChartRect, visible: ChartSeries[]
 			if (selected) marks.push({ kind: 'circle', key: `point-${s.id}-${p.i}-selection`, role: 'selection', cx, cy, r: r + 3.5, fill: 'none', stroke: theme.selection, strokeWidth: 1.5 });
 			if (labelsOn) labelMarks.push({ kind: 'text', key: `label-${s.id}-${p.i}`, role: 'data-label', x: cx, y: cy - r - 4, text: formatChartNumber(p.y, labelFormat), anchor: 'middle', baseline: 'bottom', size: fs - 1, fill: theme.text, target });
 		}
-		if (s.trendlines?.length) drawTrendlines(ctx, plot, s, color, pts.map((p) => [p.x, p.y]), (x, y) => [xRaw(x), yRaw(y)], trendLabels);
+		// Error bars: y bars vertical through the point, x bars horizontal.
+		const stroke = color;
+		const errorBar = (key: string, d: string) => d && errorMarks.push({ kind: 'path', key, role: 'error-bar', d, fill: 'none', stroke, strokeWidth: selSeries ? 2 : 1.25, target: seriesTarget, selected: selSeries });
+		for (const p of pts) {
+			const ey = yErrors.get(s.id)?.[p.i];
+			if (ey) {
+				const lo = ey.center - ey.minus;
+				const hi = ey.center + ey.plus;
+				const cap = s.errorBars!.cap !== false;
+				errorBar(`error-bar-${s.id}-${p.i}`, errorBarPath((q) => [q.c, q.v], xPx(p.x), yPx(lo), yPx(hi), 8, cap && lo < ey.center, cap && hi > ey.center));
+			}
+			const ex = xErrors.get(s.id)?.[p.i];
+			if (ex) {
+				const lo = ex.center - ex.minus;
+				const hi = ex.center + ex.plus;
+				const cap = s.xErrorBars!.cap !== false;
+				errorBar(`error-bar-x-${s.id}-${p.i}`, errorBarPath((q) => [q.v, q.c], yPx(p.y), xPx(lo), xPx(hi), 8, cap && lo < ex.center, cap && hi > ex.center));
+			}
+		}
+		if (s.trendlines?.length) drawTrendlines(ctx, plot, s, color, pts.map((p) => [p.x, p.y]), (x, y) => [xRaw(x), yRaw(y)], trendLabels, xLog || yLog);
 	}
-	marks.push(...labelMarks);
+	marks.push(...errorMarks, ...labelMarks);
 	drawTrendLabels(ctx, plot, trendLabels);
 	return {
 		plot,
-		valueScale: { axis: 'y', domain: [yScale.min, yScale.max], range: yRange, ticks: yScale.ticks },
-		xScale: { axis: 'x', domain: [xScale.min, xScale.max], range: xRange, ticks: xScale.ticks }
+		valueScale: toValueScale(yInfo, 'y'),
+		xScale: toValueScale(xInfo, 'x')
 	};
 }
 
