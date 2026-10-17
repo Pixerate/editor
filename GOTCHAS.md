@@ -1442,3 +1442,11 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Dragging one node of a diagram without a `%% @pixerate` layout moved every other node by the same offset.
 - **Root Cause**: `ensureDiagramLayout` keeps stored positions and aligns the auto layout of the rest on them (Ursula's blend). With one stored node, the whole auto layout is shifted to match it.
 - **Solution / Workaround**: Pin the current positions on the first move: `mermaidMovesFromCanvas(..., { stored: doc.meta.layout })` (the React / Svelte bindings do) and `createDiagramToolProvider(controller, { getPositions })` for agent moves.
+- **Root Cause**: jsdom replaces the global `Event`, and Node's built-in WebSocket (undici) rejects events that are not its own. Under the `node` environment, the Svelte tests resolve the server build, where `$effect.root` does not run.
+- **Solution / Workaround**: Test the network path in core under the `node` environment (`tests/tool-bridge.test.ts`). Test runes with a fake socket passed as `options.WebSocket`.
+
+### [core/tests] Undestroyed TipTap Editors Crash Later Test Files ("document is not defined")
+
+- **Issue / Symptom**: The full test run reported an unhandled `ReferenceError: document is not defined` from `prosemirror-view`'s `DOMObserver.flush`, attributed to `chart-node.test.ts`, while that file passed on its own.
+- **Root Cause**: Editors created in a test and never destroyed keep ProseMirror's DOM observer timers. Under load, a timer fires after the file's jsdom environment is torn down.
+- **Solution / Workaround**: Destroy every editor a test creates. `chart-node.test.ts` tracks them in an `afterEach`.
