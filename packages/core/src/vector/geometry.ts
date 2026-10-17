@@ -2,6 +2,7 @@
  * Vector path geometry: anchors and handles to Bézier paths and back, bounds, hit-testing,
  * affine transforms, segment splitting, anchor-type conversion and shape factories.
  */
+import { isVectorGradient, transformVectorPaint } from './gradient.js';
 import type { Point } from '../canvas/types.js';
 import {
 	bezierPathBounds,
@@ -503,6 +504,9 @@ function bakeIntoGeometry<T extends VectorNode>(node: T, m: AffineMatrix): T {
 	return {
 		...path,
 		...(mirrored ? { strokeWidthProfile: mirrorWidthProfile(path.strokeWidthProfile!) } : {}),
+		// Gradients in the node's own space move with its geometry.
+		...(isVectorGradient(path.fill) ? { fill: transformVectorPaint(path.fill, m) } : {}),
+		...(isVectorGradient(path.stroke) ? { stroke: transformVectorPaint(path.stroke, m) } : {}),
 		subpaths: path.subpaths.map((sp) => ({
 			closed: sp.closed,
 			anchors: sp.anchors.map((a) => mapAnchor(a, m))

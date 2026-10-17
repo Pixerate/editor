@@ -16,7 +16,14 @@ const STARTER: VectorDocument = {
       id: "sun",
       type: "path",
       name: "Sun",
-      fill: { type: "radial", stops: [{ offset: 0, color: "#fde68a" }, { offset: 1, color: "#f97316" }] },
+      // A radial gradient with an off-centre focal point (Gradient tool, G: Alt-drag the centre to move it).
+      fill: {
+        type: "radial",
+        start: { x: 0.5, y: 0.5 },
+        end: { x: 1, y: 0.5 },
+        focal: { x: 0.4, y: 0.38 },
+        stops: [{ offset: 0, color: "#fef9c3" }, { offset: 0.45, color: "#fde68a", midpoint: 0.4 }, { offset: 1, color: "#f97316" }],
+      },
       stroke: null,
       subpaths: [ellipseSubpath({ x: 560, y: 70, width: 140, height: 140 })],
       // Path effects: the rays are a smooth Zig Zag of the circle (the anchors stay a circle).
@@ -42,7 +49,16 @@ const STARTER: VectorDocument = {
         },
       ],
     },
-    { id: "card", type: "path", name: "Card", fill: "#e0f2fe", stroke: "#0369a1", strokeWidth: 2, subpaths: [rectSubpath({ x: 80, y: 60, width: 220, height: 140 }, 18)] },
+    {
+      id: "card",
+      type: "path",
+      name: "Card",
+      // Mixed in Oklab with a midpoint: SVG gets extra stops so it looks the same.
+      fill: { type: "linear", angle: 135, interpolation: "oklab", stops: [{ offset: 0, color: "#e0f2fe", midpoint: 0.35 }, { offset: 1, color: "#38bdf8" }] },
+      stroke: "#0369a1",
+      strokeWidth: 2,
+      subpaths: [rectSubpath({ x: 80, y: 60, width: 220, height: 140 }, 18)],
+    },
     {
       id: "star",
       type: "path",
@@ -58,7 +74,8 @@ const STARTER: VectorDocument = {
       type: "path",
       name: "Arrow",
       fill: null,
-      stroke: "#334155",
+      // A gradient along the stroke, from the tail to the head.
+      stroke: { type: "linear", strokeMode: "along", stops: [{ offset: 0, color: "#334155" }, { offset: 1, color: "#0ea5e9" }] },
       strokeWidth: 3,
       strokeLinecap: "round",
       startArrow: "circle",
@@ -105,6 +122,38 @@ const STARTER: VectorDocument = {
         { id: "badge-card", type: "path", name: "Badge", fill: "#a855f7", stroke: "#581c87", strokeWidth: 2, subpaths: [rectSubpath({ x: 200, y: 400, width: 110, height: 70 }, 14)] },
         { id: "badge-hole", type: "path", name: "Hole", fill: "#000000", stroke: null, subpaths: [ellipseSubpath({ x: 238, y: 418, width: 34, height: 34 })] },
       ],
+    },
+    {
+      // Conic, diamond and reflected gradients have no SVG element: they render as patterns of gradient tiles.
+      id: "wheel",
+      type: "path",
+      name: "Colour wheel",
+      fill: {
+        type: "conic",
+        angle: 0,
+        interpolation: "oklab",
+        stops: ["#ef4444", "#eab308", "#22c55e", "#06b6d4", "#3b82f6", "#d946ef", "#ef4444"].map((color, i) => ({ offset: i / 6, color })),
+      },
+      stroke: "#ffffff",
+      strokeWidth: 2,
+      subpaths: [ellipseSubpath({ x: 716, y: 306, width: 60, height: 60 })],
+    },
+    {
+      id: "gem",
+      type: "path",
+      name: "Gem",
+      fill: { type: "diamond", r: 0.25, spread: "reflect", stops: [{ offset: 0, color: "#eef2ff" }, { offset: 1, color: "#6366f1" }] },
+      stroke: "#3730a3",
+      strokeWidth: 2,
+      subpaths: [rectSubpath({ x: 640, y: 428, width: 56, height: 56 }, 8)],
+    },
+    {
+      id: "ribbon",
+      type: "path",
+      name: "Ribbon",
+      fill: { type: "reflected", angle: 180, stops: [{ offset: 0, color: "#fef3c7" }, { offset: 1, color: "#b45309" }] },
+      stroke: null,
+      subpaths: [rectSubpath({ x: 330, y: 292, width: 120, height: 26 }, 13)],
     },
     {
       id: "brush",

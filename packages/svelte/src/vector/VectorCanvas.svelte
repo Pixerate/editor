@@ -16,6 +16,7 @@
     type VectorEditorController
   } from '@pixerate/editor/vector';
   import VectorGradientDefs from './VectorGradientDefs.svelte';
+  import VectorGradientAnnotator from './VectorGradientAnnotator.svelte';
   import VectorSceneNodes from './VectorSceneNodes.svelte';
   import VectorWidthPointEditor from './VectorWidthPointEditor.svelte';
   import { vectorStateOf } from './subscribe.svelte.js';
@@ -247,6 +248,7 @@
     {#each overlay.blend.anchors as a, i (i)}
       <rect data-vector-blend-anchor={i} x={a.x - as / 2} y={a.y - as / 2} width={as} height={as} fill={a.hovered ? accentColor : THEME.handleFill} stroke={accentColor} />
     {/each}
+    {#if overlay.gradient}<VectorGradientAnnotator annotator={overlay.gradient} {accentColor} />{/if}
     {#if overlay.widthSpot}
       <g data-vector-width-spot="">
         <line x1={overlay.widthSpot.left.x} y1={overlay.widthSpot.left.y} x2={overlay.widthSpot.right.x} y2={overlay.widthSpot.right.y} stroke={accentColor} stroke-dasharray="3 2" />

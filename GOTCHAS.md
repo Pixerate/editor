@@ -1256,3 +1256,33 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: In the dev demo (React StrictMode) the toolbar's History buttons lagged one step: after an edit Undo stayed disabled, after an undo Redo stayed disabled — though `controller.getState()` was right whenever it was next read.
 - **Root Cause**: `useVectorEditorController` creates the controller once in a ref and calls `controller.destroy()` in an effect cleanup. StrictMode runs effects, cleans them up and runs them again, so `destroy()` dropped the controller's history subscription while the same controller stayed in use. History-only changes (labels, `canUndo`/`canRedo`) then reached the UI only with the next document change.
 - **Solution / Workaround**: The controller's history connection is idempotent (`connect()`), made in the constructor and again on every `subscribe()`, catching up on history changes missed while disconnected. StrictMode's re-run of `useSyncExternalStore`'s subscribe effect reconnects it. Any core controller whose `destroy()` a React hook calls from a ref-kept instance needs the same treatment (or must be created inside the effect).
+
+### [core/vector] `objectBoundingBox` Gradients Paint Nothing on a Straight Line
+
+- **Issue / Symptom**: A gradient stroke on a horizontal or vertical line (or a stroke part drawn on a different element than the fill) disappears or shifts.
+- **Root Cause**: SVG maps `objectBoundingBox` gradients onto the painted element's own geometry box; a box with no height (or width) is singular, so browsers paint nothing, and each element of a stroke drawn in parts has its own box.
+- **Solution / Workaround**: The vector editor writes every gradient in `userSpaceOnUse` with the shape's box as the `gradientTransform` (`vectorBoxMatrix`), computed once per node from its outline, and a side with no extent takes the other side's (centred). Fill, stroke parts and effect copies then share one frame.
+
+### [core/vector] A Linear Gradient's t Is a Projection, Not a Frame Coordinate
+
+- **Issue / Symptom**: A `userSpaceOnUse` linear gradient on a sheared shape exported to SVG paints at the wrong angle, though the editor's own sampling is right.
+- **Root Cause**: The model measures t as the u coordinate in the start / end / width frame (exact under any affine map), but SVG's `x1 y1 x2 y2` measures the projection onto x1 → x2, which only agrees while the width axis is square to the main axis.
+- **Solution / Workaround**: `vectorGradientSvgDefs` writes `x1 y1 x2 y2` when the frame is square and `x1=0 x2=1` with the frame as `gradientTransform` otherwise. Keep that check if the export changes.
+
+### [core/vector] Adaptive Stop Expansion Must Probe Near the Ends of Each Piece
+
+- **Issue / Symptom**: Oklab or linear-light gradients exported as stops were off by two colour levels just after a stop whose colour has a zero channel.
+- **Root Cause**: Converting back to sRGB applies the gamma curve, whose slope is steepest next to 0, so the error of a straight piece peaks close to its end; checking only the quarter points missed it.
+- **Solution / Workaround**: `expandVectorGradientStops` checks each piece at 3 %, 10 %, 25 %, 50 %, 75 %, 90 % and 97 % before accepting it. The tests compare 2000 samples against the true ramp.
+
+### [core/vector] Gradient Samples on a Period's Edge or a Conic Centre Are Ambiguous
+
+- **Issue / Symptom**: Tests comparing a `repeat` gradient (or a conic one) with its exported paint server fail at a few grid points with a completely different colour.
+- **Root Cause**: At t exactly on a whole number, `repeat` gives 0 or 1 depending on rounding (the first or last stop), and a conic gradient's angle is undefined at its centre and jumps at its seam.
+- **Solution / Workaround**: Skip sample points within 1e-4 of a period edge, the centre and the seam; anywhere else the paint server must match the model within 2 / 255. The canvases' checkerboard is also a `<pattern>`: select a gradient pattern by its id (`pattern[id$="fill-a"]`), not by tag.
+
+### [core|react|svelte/vector] Pattern Content Starts at the Tile's Corner
+
+- **Issue / Symptom**: Conic and diamond fills (patterns of gradient tiles) drew nothing, or the wrong part of the sweep, in the browser although every `<pattern>`, tile and gradient was there.
+- **Root Cause**: Without a `viewBox`, an SVG `<pattern>`'s content coordinate system has its origin at the tile's `(x, y)`, not at the user-space origin, so content written in user space was shifted by the tile's position (outside the tile).
+- **Solution / Workaround**: `patternAttrs` gives every pattern a `viewBox` equal to its tile (`x y width height`), which maps content coordinates one to one onto the user space. Keep it when rendering `VectorSvgPatternDef.attrs`.

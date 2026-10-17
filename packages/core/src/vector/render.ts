@@ -6,6 +6,8 @@
 import { bezierPathToSvg, transformBezierPath, type BezierPath } from '../canvas/pathops/bezier.js';
 import { hatchPath } from '../canvas/pathops/hatch.js';
 import type { SvgGradientDef } from '../canvas/gradient.js';
+import { expandVectorGradientStops, isCentredVectorGradient, isVectorGradient, parseVectorColor, sortedVectorGradientStops, type VectorGradientHandle, type VectorPaintDef } from './gradient.js';
+import { getVectorGradientAnnotator, VECTOR_GRADIENT_STOP_GAP } from './gradientTool.js';
 
 export type { SvgGradientDef };
 import {
@@ -60,6 +62,12 @@ import type {
 	VectorBlendSpacing,
 	VectorBounds,
 	VectorCornerKind,
+	VectorGradient,
+	VectorGradientInterpolation,
+	VectorGradientSpread,
+	VectorGradientStop,
+	VectorGradientType,
+	VectorStrokeGradientMode,
 	VectorGroupNode,
 	VectorHandleRef,
 	VectorNode,
@@ -113,8 +121,12 @@ export interface VectorSceneRenderData {
 	width: number;
 	height: number;
 	background?: string;
-	/** Gradients referenced by `fill` / `stroke` values. */
-	defs: SvgGradientDef[];
+	/**
+	 * Paint servers referenced by `fill` / `stroke` values: `<linearGradient>` /
+	 * `<radialGradient>` descriptors and `pattern`s (conic, diamond and stroke-mode gradients:
+	 * draw each of `gradients`, then each tile filled, inside a `<pattern>`).
+	 */
+	defs: VectorPaintDef[];
 	/** Visible nodes, bottom to top. */
 	nodes: VectorRenderNode[];
 }
@@ -249,8 +261,30 @@ export interface VectorOverlayRenderData {
 		start: { d: string; anchor: Vec2 | null } | null;
 		anchors: { x: number; y: number; hovered: boolean }[];
 	};
+	/** The gradient tool's annotator over the selection's gradient (screen space), or null. */
+	gradient: VectorRenderGradientAnnotator | null;
 	/** A short status, e.g. "W 120 × H 80" or "45°". */
 	status: string | null;
+}
+
+/**
+ * The gradient annotator in screen pixels: draw the `extent` outline (dashed), the bar from
+ * `start` to `end`, the handles, each stop's chip (a swatch at `x, y` with a tick to `barX, barY`;
+ * `removing`: the dragged stop is off the bar and will be deleted, draw it faded) and the
+ * midpoint diamonds.
+ */
+export interface VectorRenderGradientAnnotator {
+	nodeId: string;
+	type: VectorGradientType;
+	start: { x: number; y: number; hovered: boolean };
+	/** `radius` for radial, conic and diamond gradients. */
+	end: { x: number; y: number; hovered: boolean; handle: 'end' | 'radius' };
+	aspect: { x: number; y: number; hovered: boolean } | null;
+	focal: { x: number; y: number; hovered: boolean } | null;
+	stops: { index: number; x: number; y: number; barX: number; barY: number; color: string; opacity: number; selected: boolean; hovered: boolean }[];
+	midpoints: { index: number; x: number; y: number; hovered: boolean }[];
+	extent: string | null;
+	removing: boolean;
 }
 
 const fmt = (n: number) => Math.round(n * 100) / 100;
@@ -258,7 +292,7 @@ const fmtMatrix = (m: AffineMatrix) => `matrix(${m.map((n) => Math.round(n * 1e6
 /** Distance between the Shape Builder's hatch lines over a face (screen pixels). */
 export const VECTOR_BUILDER_HATCH_GAP = 6;
 
-function renderNode(stored: VectorNode, defs: SvgGradientDef[], idPrefix: string): VectorRenderNode | null {
+function renderNode(stored: VectorNode, defs: VectorPaintDef[], idPrefix: string): VectorRenderNode | null {
 	if (stored.visible === false) return null;
 	// Path effects and live booleans draw as their expanded shapes.
 	const node = expandVectorAppearance(stored);
@@ -266,10 +300,9 @@ function renderNode(stored: VectorNode, defs: SvgGradientDef[], idPrefix: string
 		const children = node.children.map((c) => renderNode(c, defs, idPrefix)).filter((c): c is VectorRenderNode => !!c);
 		return { kind: 'group', id: node.id, ...(node.transform ? { transform: fmtMatrix(node.transform) } : {}), opacity: node.opacity ?? 1, children };
 	}
-	const fill = vectorPaintToSvg(node.fill, `${idPrefix}fill-${node.id}`);
-	const stroke = vectorPaintToSvg(node.stroke, `${idPrefix}stroke-${node.id}`);
-	if (fill.gradient) defs.push(fill.gradient);
-	if (stroke.gradient) defs.push(stroke.gradient);
+	const fill = vectorPaintToSvg(node.fill, `${idPrefix}fill-${node.id}`, { node });
+	const stroke = vectorPaintToSvg(node.stroke, `${idPrefix}stroke-${node.id}`, { node, role: 'stroke' });
+	defs.push(...fill.defs, ...stroke.defs);
 	const strokeParts = stroke.value !== 'none' ? vectorStrokeSvgParts(node, `${idPrefix}clip-${node.id}`) : undefined;
 	return {
 		kind: 'path',
@@ -293,7 +326,7 @@ function renderNode(stored: VectorNode, defs: SvgGradientDef[], idPrefix: string
  * `<defs>` block. Pass a unique `idPrefix` when several editors share a page.
  */
 export function getVectorSceneRenderData(state: Pick<VectorEditorState, 'document' | 'viewport'>, options: { idPrefix?: string } = {}): VectorSceneRenderData {
-	const defs: SvgGradientDef[] = [];
+	const defs: VectorPaintDef[] = [];
 	const prefix = options.idPrefix ?? 've-';
 	const nodes = state.document.nodes.map((n) => renderNode(n, defs, prefix)).filter((n): n is VectorRenderNode => !!n);
 	const v = state.viewport;
@@ -494,7 +527,45 @@ export function getVectorOverlayRenderData(state: VectorEditorState): VectorOver
 	const blend = blendOverlay(state);
 	if (state.tool === 'blend' && !it) status = state.blendStart ? 'Click another shape to blend into' : 'Click a shape to blend from';
 
-	return { outlines, selectionBox, anchors, handles, marquee, penPreview, artboard, guides, status, toolStroke, pencilString, cutPoint, cornerWidgets, widthPoints, widthSpot, builder, blend };
+	let gradient: VectorRenderGradientAnnotator | null = null;
+	if (state.tool === 'gradient') {
+		gradient = gradientOverlay(state);
+		if (!gradient && !it) status = 'Drag across a shape to set a gradient';
+		else if (it?.type === 'gradient' && it.removing) status = 'Release to delete the stop';
+	}
+
+	return { outlines, selectionBox, anchors, handles, marquee, penPreview, artboard, guides, status, toolStroke, pencilString, cutPoint, cornerWidgets, widthPoints, widthSpot, builder, blend, gradient };
+}
+
+function gradientOverlay(state: VectorEditorState): VectorRenderGradientAnnotator | null {
+	const a = getVectorGradientAnnotator(state.document, state.selection, state.viewport, state.gradientEdit.target);
+	if (!a) return null;
+	const hover = state.interaction ? null : state.hover?.gradient;
+	const handleHovered = (h: VectorGradientHandle) => hover?.kind === 'handle' && hover.handle === h;
+	const pt = (p: Vec2) => ({ x: fmt(p.x), y: fmt(p.y) });
+	const centred = isCentredVectorGradient(a.gradient.type);
+	const removing = state.interaction?.type === 'gradient' && !!state.interaction.removing;
+	return {
+		nodeId: a.nodeId,
+		type: a.gradient.type,
+		start: { ...pt(a.start), hovered: handleHovered('start') },
+		end: { ...pt(a.end), hovered: handleHovered(centred ? 'radius' : 'end'), handle: centred ? 'radius' : 'end' },
+		aspect: a.aspect ? { ...pt(a.aspect), hovered: handleHovered('aspect') } : null,
+		focal: a.focal ? { ...pt(a.focal), hovered: handleHovered('focal') } : null,
+		stops: a.stops.map((s) => ({
+			index: s.index,
+			...pt(s),
+			barX: fmt(s.x - a.normal.x * VECTOR_GRADIENT_STOP_GAP),
+			barY: fmt(s.y - a.normal.y * VECTOR_GRADIENT_STOP_GAP),
+			color: s.color,
+			opacity: s.opacity ?? 1,
+			selected: state.gradientEdit.stop === s.index,
+			hovered: hover?.kind === 'stop' && hover.index === s.index
+		})),
+		midpoints: a.midpoints.map((m) => ({ index: m.index, ...pt(m), hovered: hover?.kind === 'midpoint' && hover.index === m.index })),
+		extent: a.extent,
+		removing
+	};
 }
 
 /** Blend groups the selection covers (a selected key counts as its blend). */
@@ -801,6 +872,77 @@ export function vectorPaintToHex(paint: VectorPaint | undefined): string | null 
 	if (!m) return null;
 	const hex = m[1].length === 3 ? m[1].replace(/./g, (c) => c + c) : m[1];
 	return `#${hex.toLowerCase()}`;
+}
+
+// ---------------------------------------------------------------------------
+// Gradient editor
+// ---------------------------------------------------------------------------
+
+export const VECTOR_GRADIENT_TYPE_LABELS: Readonly<Record<VectorGradientType, string>> = { linear: 'Linear', radial: 'Radial', conic: 'Conic', reflected: 'Reflected', diamond: 'Diamond' };
+export const VECTOR_GRADIENT_SPREAD_LABELS: Readonly<Record<VectorGradientSpread, string>> = { pad: 'Pad', reflect: 'Reflect', repeat: 'Repeat' };
+export const VECTOR_GRADIENT_INTERPOLATION_LABELS: Readonly<Record<VectorGradientInterpolation, string>> = { srgb: 'sRGB', linear: 'Linear light', oklab: 'Oklab' };
+export const VECTOR_STROKE_GRADIENT_MODE_LABELS: Readonly<Record<VectorStrokeGradientMode, string>> = { within: 'Within stroke', along: 'Along stroke', across: 'Across stroke' };
+
+/** What a gradient editor shows for the selection's `target` paint (see `getVectorGradientEditor`). */
+export interface VectorGradientEditorData {
+	target: 'fill' | 'stroke';
+	/** The first selected path's paint is a gradient. */
+	gradient: VectorGradient | null;
+	/** The paint as a `#rrggbb` colour when it is one (what a new gradient starts from). */
+	color: string | null;
+	/** Sorted stops; `index` is what `setGradientStop` takes. */
+	stops: (VectorGradientStop & { index: number; selected: boolean })[];
+	selected: (VectorGradientStop & { index: number; last: boolean }) | null;
+	/** A CSS `linear-gradient(to right, …)` of the ramp (midpoints and colour space expanded). */
+	preview: string | null;
+	type: VectorGradientType | null;
+	spread: VectorGradientSpread;
+	interpolation: VectorGradientInterpolation;
+	smoothness: number;
+	strokeMode: VectorStrokeGradientMode;
+	/** The selected paths' gradients differ. */
+	mixed: boolean;
+}
+
+/** The gradient editor of the selection's fill or stroke (`state.gradientEdit.target`), or null with nothing selected. */
+export function getVectorGradientEditor(state: Pick<VectorEditorState, 'document' | 'selection' | 'gradientEdit'>): VectorGradientEditorData | null {
+	const paths: VectorPathNode[] = [];
+	for (const id of state.selection) {
+		const node = findVectorNode(state.document.nodes, id);
+		if (node) paths.push(...collect(node));
+	}
+	if (!paths.length) return null;
+	const target = state.gradientEdit.target;
+	const paint = paths[0][target];
+	const gradient = isVectorGradient(paint) ? paint : null;
+	const sorted = gradient ? sortedVectorGradientStops(gradient) : [];
+	const stopIndex = state.gradientEdit.stop;
+	const stops = sorted.map((s, index) => ({ ...s, index, selected: index === stopIndex }));
+	const sel = stopIndex !== null && sorted[stopIndex] ? { ...sorted[stopIndex], index: stopIndex, last: stopIndex === sorted.length - 1 } : null;
+	const preview = gradient
+		? `linear-gradient(to right, ${expandVectorGradientStops(gradient)
+				.map((s) => {
+					const c = parseVectorColor(s.color);
+					const a = (c?.[3] ?? 1) * (s.opacity ?? 1);
+					const color = c ? `rgba(${Math.round(c[0] * 255)}, ${Math.round(c[1] * 255)}, ${Math.round(c[2] * 255)}, ${Math.round(a * 1000) / 1000})` : s.color;
+					return `${color} ${Math.round(s.offset * 10000) / 100}%`;
+				})
+				.join(', ')})`
+		: null;
+	return {
+		target,
+		gradient,
+		color: vectorPaintToHex(paint),
+		stops,
+		selected: sel,
+		preview,
+		type: gradient?.type ?? null,
+		spread: gradient?.spread ?? 'pad',
+		interpolation: gradient?.interpolation ?? 'srgb',
+		smoothness: gradient?.smoothness ?? 0,
+		strokeMode: gradient?.strokeMode ?? 'within',
+		mixed: paths.some((p) => JSON.stringify(p[target] ?? null) !== JSON.stringify(paint ?? null))
+	};
 }
 
 // ---------------------------------------------------------------------------

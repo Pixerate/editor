@@ -60,8 +60,100 @@ export interface VectorSubpath {
 	closed: boolean;
 }
 
+/**
+ * Gradient styles: `linear` (start → end), `radial` (centred on the start, reaching the end;
+ * focal point and aspect), `conic` (an angle sweep around the start, from the end's direction
+ * towards the aspect handle's: clockwise on screen), `reflected` (linear mirrored about the
+ * start) and `diamond` (`|u| + |v|` in the gradient's frame: a rhombus through the end and the
+ * aspect handle).
+ */
+export type VectorGradientType = 'linear' | 'radial' | 'conic' | 'reflected' | 'diamond';
+export const VECTOR_GRADIENT_TYPES: readonly VectorGradientType[] = ['linear', 'radial', 'conic', 'reflected', 'diamond'];
+
+/** What a gradient paints past its ends: the end colours, mirrored periods or repeated periods. */
+export type VectorGradientSpread = 'pad' | 'reflect' | 'repeat';
+export const VECTOR_GRADIENT_SPREADS: readonly VectorGradientSpread[] = ['pad', 'reflect', 'repeat'];
+
+/** Where colours mix between stops: sRGB (SVG's own), linear light or Oklab. */
+export type VectorGradientInterpolation = 'srgb' | 'linear' | 'oklab';
+export const VECTOR_GRADIENT_INTERPOLATIONS: readonly VectorGradientInterpolation[] = ['srgb', 'linear', 'oklab'];
+
+/**
+ * The space a gradient's points are in: fractions of the shape's bounding box (SVG's
+ * `objectBoundingBox`, the default) or the node's own coordinates (`userSpaceOnUse`).
+ */
+export type VectorGradientUnits = 'objectBoundingBox' | 'userSpaceOnUse';
+
+/**
+ * How a gradient lies on a stroke: `within` (laid over the stroke's area like a fill), `along`
+ * (t runs from 0 at the start of each subpath to 1 at its end) or `across` (from the stroke's
+ * left edge to its right edge, looking along the path).
+ */
+export type VectorStrokeGradientMode = 'within' | 'along' | 'across';
+export const VECTOR_STROKE_GRADIENT_MODES: readonly VectorStrokeGradientMode[] = ['within', 'along', 'across'];
+
+/** A colour stop. `opacity` multiplies the colour's own alpha. */
+export interface VectorGradientStop {
+	/** 0–1. */
+	offset: number;
+	color: string;
+	/** 0–1, default 1. */
+	opacity?: number;
+	/**
+	 * Where, between this stop and the next (0–1 of the way), the colour is half-way between
+	 * them. Default 0.5 (an even mix).
+	 */
+	midpoint?: number;
+}
+
+/**
+ * A gradient paint. `CanvasGradientDef` (the canvas package's linear `angle` / radial
+ * `cx, cy, r` gradients) is a valid value: those fields are the shorthand form. Explicit
+ * geometry (`start` / `end`, in `units`) wins over the shorthand.
+ */
+export interface VectorGradient {
+	type: VectorGradientType;
+	stops: VectorGradientStop[];
+	/**
+	 * Shorthand direction in degrees, CSS style (0 points up, clockwise): a linear or reflected
+	 * gradient's direction across the box (default 180), a conic gradient's start angle or a
+	 * diamond's turn (default 90).
+	 */
+	angle?: number;
+	/** Shorthand centre and radius of radial, conic and diamond gradients (fractions of the box, default 0.5). */
+	cx?: number;
+	cy?: number;
+	r?: number;
+	/** Where t = 0: a linear gradient's start, the centre of the other styles. */
+	start?: Vec2;
+	/** Where t = 1 along the gradient's main axis (a radial gradient's radius). */
+	end?: Vec2;
+	/**
+	 * The end of the secondary axis (radial, conic and diamond): its distance from `start` over
+	 * the main axis' length is the aspect ratio. Absent: square to the main axis, as long.
+	 */
+	width?: Vec2 | null;
+	/** A radial gradient's focal point (where t = 0); absent: the centre. */
+	focal?: Vec2 | null;
+	/** Radius of the focal circle as a fraction of the radius (SVG `fr`, default 0). */
+	focalRadius?: number;
+	/** Space of `start`, `end`, `width` and `focal` (default `objectBoundingBox`). */
+	units?: VectorGradientUnits;
+	/** Default `pad`. */
+	spread?: VectorGradientSpread;
+	/** Default `srgb`. */
+	interpolation?: VectorGradientInterpolation;
+	/**
+	 * 0–1: how far the colours follow a smooth spline through the stops instead of straight
+	 * lines (Photoshop's Smoothness). Default 0.
+	 */
+	smoothness?: number;
+	/** On a stroke: how the gradient lies on it (default `within`). Ignored on fills. */
+	strokeMode?: VectorStrokeGradientMode;
+}
+
 /** A fill or stroke: any CSS colour, a gradient, or `null` / `'none'` for no paint. */
-export type VectorPaint = string | CanvasGradientDef | null;
+export type VectorPaint = string | VectorGradient | CanvasGradientDef | null;
 
 export type VectorFillRule = 'nonzero' | 'evenodd';
 export type VectorLineCap = 'butt' | 'round' | 'square';
@@ -269,7 +361,8 @@ export type VectorTool =
 	| 'width'
 	| 'shapeBuilder'
 	| 'paintBucket'
-	| 'blend';
+	| 'blend'
+	| 'gradient';
 
 export const VECTOR_TOOLS: readonly VectorTool[] = [
 	'select',
@@ -287,7 +380,8 @@ export const VECTOR_TOOLS: readonly VectorTool[] = [
 	'width',
 	'shapeBuilder',
 	'paintBucket',
-	'blend'
+	'blend',
+	'gradient'
 ];
 
 /** Keyboard modifiers held during a pointer event. */

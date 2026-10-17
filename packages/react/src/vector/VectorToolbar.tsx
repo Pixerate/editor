@@ -32,6 +32,7 @@ import {
 } from '@pixerate/editor/vector';
 import { useVectorEditorState } from './useVectorEditor';
 import { VectorEffectsPanel } from './VectorEffectsPanel';
+import { VectorGradientEditor } from './VectorGradientEditor';
 
 const VECTOR_SNAP_TITLE = 'Snap to objects';
 const modKeyLabel = () => (typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform ?? '') ? '⌘' : 'Ctrl');
@@ -336,7 +337,7 @@ const selectClass = 'h-7 min-w-0 flex-1 rounded border border-border bg-backgrou
 const numberClass = 'h-7 w-16 rounded border border-border bg-background px-1.5 text-xs';
 
 /**
- * Fill, stroke, stroke width, alignment and width profile, arrowheads, live corner radius, opacity and path effects (`VectorEffectsPanel`) of the
+ * Fill, stroke and their gradients (`VectorGradientEditor`), stroke width, alignment and width profile, arrowheads, live corner radius, opacity and path effects (`VectorEffectsPanel`) of the
  * selection (corners of the selected points with the direct tool); with nothing selected it
  * edits the defaults for new shapes.
  */
@@ -433,6 +434,7 @@ export function VectorStylePanel({ controller, className }: VectorStylePanelProp
       <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{style ? 'Selection' : 'New shapes'}</p>
       {paintRow('fill', 'Fill')}
       {paintRow('stroke', 'Stroke')}
+      {style && <VectorGradientEditor controller={controller} />}
       <label className="flex items-center gap-2 text-xs text-foreground">
         <span className="w-16">Width</span>
         <input
