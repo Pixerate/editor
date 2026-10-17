@@ -1,5 +1,5 @@
-import React from 'react';
-import { describeChartSelection, type ChartController } from '@pixerate/editor/chart';
+import React, { useState } from 'react';
+import { describeChartSelection, downloadChartPng, type ChartController, type DownloadChartPngOptions } from '@pixerate/editor/chart';
 import { ChartCanvas, type ChartCanvasProps } from './ChartCanvas';
 import { ChartDataGrid } from './ChartDataGrid';
 import { ChartInspector } from './ChartInspector';
@@ -12,8 +12,10 @@ export interface ChartEditorProps {
   showInspector?: boolean;
   /** The data grid under the chart (default `true`). */
   showDataGrid?: boolean;
-  /** Undo / redo and the selection readout (default `true`). */
+  /** Undo / redo, Download PNG and the selection readout (default `true`). */
   showToolbar?: boolean;
+  /** Size, theme, scale and file name for the toolbar's Download PNG (default 800 × 450, light theme). */
+  pngOptions?: DownloadChartPngOptions;
   /** Chart height in pixels (default 380). */
   height?: number;
   canvasProps?: Omit<ChartCanvasProps, 'controller' | 'height'>;
@@ -21,8 +23,13 @@ export interface ChartEditorProps {
 }
 
 /** Toolbar, chart, settings sidebar and data grid for a `ChartController`. */
-export function ChartEditor({ controller, showInspector = true, showDataGrid = true, showToolbar = true, height = 380, canvasProps, className }: ChartEditorProps) {
+export function ChartEditor({ controller, showInspector = true, showDataGrid = true, showToolbar = true, pngOptions, height = 380, canvasProps, className }: ChartEditorProps) {
   const state = useChartState(controller);
+  const [pngError, setPngError] = useState<string | null>(null);
+  const downloadPng = () => {
+    setPngError(null);
+    downloadChartPng(controller.toJSON(), pngOptions).catch((error: unknown) => setPngError(error instanceof Error ? error.message : String(error)));
+  };
   return (
     <div className={`flex flex-col gap-2 ${className ?? ''}`} data-chart-editor="">
       {showToolbar && (
@@ -33,10 +40,18 @@ export function ChartEditor({ controller, showInspector = true, showDataGrid = t
           <button type="button" className={chartButtonClass} disabled={!state.canRedo} title={state.redoLabel ? `Redo ${state.redoLabel}` : 'Redo'} data-action="redo" onClick={() => controller.redo()}>
             Redo
           </button>
+          <button type="button" className={chartButtonClass} title="Download the chart as a PNG image" data-action="download-png" onClick={downloadPng}>
+            Download PNG
+          </button>
           <span className="ml-2 truncate text-xs text-muted-foreground" data-chart-selection="" aria-live="polite">
             {describeChartSelection(controller, state.selection)}
           </span>
         </div>
+      )}
+      {pngError && (
+        <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 px-2 py-1 text-xs text-destructive" data-chart-png-error="">
+          {pngError}
+        </p>
       )}
       {state.issues.length > 0 && (
         <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 px-2 py-1 text-xs text-destructive" data-chart-issues="">

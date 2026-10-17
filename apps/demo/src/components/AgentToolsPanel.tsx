@@ -11,6 +11,7 @@ const EXAMPLE_ARGS: Record<string, Record<string, unknown>> = {
   edit_table: { operation: "insertTable", rows: 2, cols: 3, withHeaderRow: true },
   get_range: { range: "A1:F4" },
   set_cell: { cell: "D2", value: "200" },
+  render_chart: { format: "png" },
 };
 
 function exampleArgsFor(tool: McpToolDefinition): string {
@@ -161,18 +162,28 @@ export const AgentToolsPanel: React.FC = () => {
               <Play className="w-3.5 h-3.5" /> Call tool
             </button>
             {result && (
-              <pre
+              <div
                 data-testid="agent-tool-result"
-                className={`p-2 rounded-lg border text-[11px] font-mono whitespace-pre-wrap break-words max-h-48 overflow-y-auto ${
+                className={`p-2 rounded-lg border text-[11px] font-mono whitespace-pre-wrap break-words max-h-96 overflow-y-auto space-y-2 ${
                   result.isError
                     ? "border-red-500/40 bg-red-950/30 text-red-300"
                     : "border-slate-800 bg-slate-950 text-slate-300"
                 }`}
               >
-                {result.content
-                  .map((block) => (block.type === "text" ? String(block.text) : `[${block.type}]`))
-                  .join("\n")}
-              </pre>
+                {result.content.map((block, i) =>
+                  block.type === "image" ? (
+                    <img
+                      key={i}
+                      data-testid="agent-tool-result-image"
+                      src={`data:${block.mimeType};base64,${block.data}`}
+                      alt={`Tool result image (${block.mimeType})`}
+                      className="max-w-full rounded border border-slate-800 bg-white"
+                    />
+                  ) : (
+                    <div key={i}>{block.type === "text" ? String(block.text) : `[${block.type}]`}</div>
+                  ),
+                )}
+              </div>
             )}
           </div>
         </div>
