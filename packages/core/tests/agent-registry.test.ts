@@ -303,6 +303,7 @@ describe('Planner integration with tool calls', () => {
 		registry.register(
 			createEditorMcpToolProvider({
 				id: 'studio',
+				toolStyle: 'combined',
 				getSnapshot: () => snapshot,
 				applySteps: (steps) => {
 					applied.push(...steps);
@@ -321,8 +322,11 @@ describe('Planner integration with tool calls', () => {
 
 		// Schema validation uses the static enum.
 		expect((await registry.callTool('edit_canvas', { operation: 'explode' })).isError).toBe(true);
-		const missing = await registry.callTool('edit_canvas', { operation: 'connect' });
+		const missing = await registry.callTool('edit_canvas', { operation: 'connect', source: 'n1' });
 		expect((missing.structuredContent as any).error.code).toBe('tool_failed');
+		expect((missing.structuredContent as any).error.message).toBe(
+			'Operation "connect" requires source, target; missing: target.'
+		);
 
 		const withView = createEditorMcpToolProvider({
 			id: 'v',
@@ -341,7 +345,16 @@ describe('Built-in tool providers', () => {
 		const editor = new Editor({ extensions: createRichTextPreset(), content: '<p>Hello world</p>' });
 		const registry = new ToolRegistry();
 		registry.register(createRichTextToolProvider(editor, { id: 'doc' }));
-		expect(registry.listTools().tools.map((t) => t.name)).toEqual(['get_text', 'insert_text', 'replace_selection', 'edit_table']);
+		expect(registry.listTools().tools.map((t) => t.name)).toEqual([
+			'get_text',
+			'find_text',
+			'insert_text',
+			'replace_text',
+			'replace_range',
+			'replace_selection',
+			'set_selection',
+			'edit_table'
+		]);
 
 		const text = await registry.callTool('get_text', {});
 		expect(text.structuredContent).toMatchObject({ format: 'text', content: 'Hello world' });
@@ -379,7 +392,7 @@ describe('Built-in tool providers', () => {
 		controller.editor.setEditable(false);
 		vi.runAllTimers();
 		expect(listener).toHaveBeenCalledTimes(1);
-		expect(registry.listTools().tools.map((t) => t.name)).toEqual(['get_text']);
+		expect(registry.listTools().tools.map((t) => t.name)).toEqual(['get_text', 'find_text']);
 
 		controller.destroy();
 		vi.runAllTimers();
@@ -391,7 +404,15 @@ describe('Built-in tool providers', () => {
 		const sheet = new SpreadsheetController();
 		const registry = new ToolRegistry();
 		registry.register(createSpreadsheetToolProvider(sheet, { id: 'sheet', namespace: 'sheet' }));
-		expect(registry.listTools().tools.map((t) => t.name)).toEqual(['sheet__get_range', 'sheet__set_cell']);
+		expect(registry.listTools().tools.map((t) => t.name)).toEqual([
+			'sheet__get_range',
+			'sheet__set_cell',
+			'sheet__set_range',
+			'sheet__insert_rows',
+			'sheet__delete_rows',
+			'sheet__insert_columns',
+			'sheet__delete_columns'
+		]);
 
 		await registry.callTool('sheet__set_cell', { cell: 'A1', value: 2 });
 		await registry.callTool('sheet__set_cell', { cell: 'b1', value: '=A1*21' });

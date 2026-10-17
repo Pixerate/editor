@@ -224,7 +224,7 @@ const FEATURES: ParityRow[] = [
     core: true,
     react: true,
     svelte: true,
-    note: "planAgentCommand and EDITOR_MCP_TOOLS (including view_editor)",
+    note: "planAgentCommand, validateAgentCommand, per-operation canvas_* / prompt_* tools, createMcpServer",
   },
   {
     feature: "Image Editor Canvas Engine & Transformations",

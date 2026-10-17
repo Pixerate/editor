@@ -266,9 +266,27 @@ export function planAgentCommand<
 	}
 }
 
+const CANVAS_TOOL_OPERATIONS: Record<string, string> = {
+	canvas_add_node: 'add_node',
+	canvas_remove_nodes: 'remove_nodes',
+	canvas_connect: 'connect',
+	canvas_update_node: 'update_node',
+	canvas_layout: 'layout',
+	canvas_select: 'select',
+	canvas_highlight: 'highlight'
+};
+
+const PROMPT_TOOL_OPERATIONS: Record<string, string> = {
+	prompt_insert_text: 'insert_text',
+	prompt_replace_range: 'replace_range',
+	prompt_set_variable: 'set_variable',
+	prompt_select: 'select'
+};
+
 /**
- * Converts an MCP tool call into a planner command. `edit_canvas` and
- * `edit_prompt` (see `tools.ts`) map to canvas/prompt commands using the MCP
+ * Converts an MCP tool call into a planner command. `edit_canvas` /
+ * `edit_prompt` and the per-operation `canvas_*` / `prompt_*` tools (see
+ * `tools/definitions.ts`) map to canvas/prompt commands using the MCP
  * schema's vocabulary; every other tool, including dynamic `ToolRegistry`
  * tools, becomes a `tool:call` command. Returns `null` when a static tool's
  * arguments are missing what the operation needs.
@@ -281,11 +299,17 @@ export function toolCallToAgentCommand<
 		Array.isArray(value) && value.every((v) => typeof v === 'string') ? value : null;
 	const num = (value: unknown) => typeof value === 'number' && Number.isFinite(value);
 
-	if (name === 'edit_canvas') {
-		switch (args.operation) {
+	const canvasOperation = name === 'edit_canvas' ? args.operation : CANVAS_TOOL_OPERATIONS[name];
+	if (canvasOperation !== undefined) {
+		switch (canvasOperation) {
 			case 'add_node':
-				return args.node && typeof args.node === 'object'
-					? { type: 'canvas:add_node', node: args.node, nearNodeId: args.nearNodeId, side: args.side }
+				return args.node && typeof args.node === 'object' && !Array.isArray(args.node)
+					? {
+							type: 'canvas:add_node',
+							node: { ...args.node, data: args.node.data ?? {} },
+							nearNodeId: args.nearNodeId,
+							side: args.side
+						}
 					: null;
 			case 'remove_nodes':
 				return ids(args.nodeIds) ? { type: 'canvas:remove_nodes', nodeIds: args.nodeIds } : null;
@@ -304,14 +328,22 @@ export function toolCallToAgentCommand<
 			case 'select':
 				return ids(args.nodeIds) ? { type: 'canvas:select', nodeIds: args.nodeIds } : null;
 			case 'highlight':
-				return ids(args.nodeIds) ? { type: 'canvas:highlight', nodeIds: args.nodeIds } : null;
+				return ids(args.nodeIds)
+					? {
+							type: 'canvas:highlight',
+							nodeIds: args.nodeIds,
+							...(typeof args.color === 'string' ? { color: args.color } : {}),
+							...(num(args.durationMs) ? { durationMs: args.durationMs } : {})
+						}
+					: null;
 			default:
 				return null;
 		}
 	}
 
-	if (name === 'edit_prompt') {
-		switch (args.operation) {
+	const promptOperation = name === 'edit_prompt' ? args.operation : PROMPT_TOOL_OPERATIONS[name];
+	if (promptOperation !== undefined) {
+		switch (promptOperation) {
 			case 'insert_text':
 				return typeof args.text === 'string'
 					? { type: 'prompt:insert_text', text: args.text, at: num(args.at) ? args.at : undefined }
@@ -332,6 +364,58 @@ export function toolCallToAgentCommand<
 	}
 
 	return { type: 'tool:call', name, arguments: args };
+}
+
+/**
+ * Checks a command against the snapshot before it is planned and returns a
+ * message an agent can act on, or `null` when it is valid: node ids must
+ * exist (and a new node's id must not), an edge needs two different existing
+ * nodes, and prompt ranges must be ordered. Prompt positions are host-defined,
+ * so their upper bound is left to the host's `applySteps`.
+ * The planner itself stays lenient (it falls back instead of failing), so
+ * tool providers call this first.
+ */
+export function validateAgentCommand<
+	TNode extends CanvasNode = CanvasNode,
+	TEdge extends CanvasEdge = CanvasEdge
+>(command: AgentCommand<TNode, TEdge>, snapshot: EditorSnapshot<TNode, TEdge>): string | null {
+	const known = new Set((snapshot.canvas?.nodes ?? []).map((n) => n.id));
+	const missing = (nodeIds: readonly string[]) => {
+		const unknown = nodeIds.filter((id) => !known.has(id));
+		return unknown.length
+			? `Unknown node id${unknown.length > 1 ? 's' : ''}: ${unknown.map((id) => JSON.stringify(id)).join(', ')}. Call get_editor_state for the current ids.`
+			: null;
+	};
+	const range = (from: number, to: number) => {
+		if (from < 0 || to < 0) return 'Positions must be >= 0.';
+		if (from > to) return `"from" (${from}) must not be after "to" (${to}).`;
+		return null;
+	};
+
+	switch (command.type) {
+		case 'canvas:add_node':
+			if (command.node.id && known.has(command.node.id)) return `A node with id "${command.node.id}" already exists.`;
+			return command.nearNodeId ? missing([command.nearNodeId]) : null;
+		case 'canvas:remove_nodes':
+		case 'canvas:highlight':
+			return command.nodeIds.length ? missing(command.nodeIds) : 'Pass at least one node id.';
+		case 'canvas:select':
+			return missing(command.nodeIds);
+		case 'canvas:connect':
+			if (command.source === command.target) return 'An edge needs two different nodes.';
+			return missing([command.source, command.target]);
+		case 'canvas:update_node':
+			return missing([command.id]);
+		case 'prompt:insert_text':
+			return command.at !== undefined ? range(command.at, command.at) : null;
+		case 'prompt:replace_range':
+		case 'prompt:select':
+			return range(command.from, command.to);
+		case 'choreography:say':
+			return command.atNodeId ? missing([command.atNodeId]) : null;
+		default:
+			return null;
+	}
 }
 
 /**
