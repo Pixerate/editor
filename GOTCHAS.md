@@ -1443,6 +1443,17 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: `ensureDiagramLayout` keeps stored positions and aligns the auto layout of the rest on them (Ursula's blend). With one stored node, the whole auto layout is shifted to match it.
 - **Solution / Workaround**: Pin the current positions on the first move: `mermaidMovesFromCanvas(..., { stored: doc.meta.layout })` (the React / Svelte bindings do) and `createDiagramToolProvider(controller, { getPositions })` for agent moves.
 
+### [core/bridge] `http.close()` Hangs While a WebSocket Peer Stays Open
+
+- **Issue / Symptom**: Closing the tool bridge in tests hung until the test timed out.
+- **Root Cause**: Upgraded sockets are no longer HTTP connections, so `server.closeAllConnections()` does not touch them, but `server.close()` still waits for them. A peer that never answers a close frame keeps the server open.
+- **Solution / Workaround**: The bridge tracks every upgraded socket and destroys them on `close()`. A closed WebSocket is also destroyed one second after its close frame if the peer stays silent.
+
+### [svelte/tests] Node's WebSocket Fails Under jsdom ("event" must be an instance of Event)
+
+- **Issue / Symptom**: A Svelte test that opened a real WebSocket under the jsdom environment threw `The "event" argument must be an instance of Event`.
+- **Root Cause**: jsdom replaces the global `Event`, and Node's built-in WebSocket (undici) rejects events that are not its own. Under the `node` environment, the Svelte tests resolve the server build, where `$effect.root` does not run.
+- **Solution / Workaround**: Test the network path in core under the `node` environment (`tests/tool-bridge.test.ts`). Test runes with a fake socket passed as `options.WebSocket`.
 ### [core/chart] Agent Cursors Never Disappeared After `linger`
 
 - **Issue / Symptom**: A `ChartDirector` cursor stayed on the chart after its command finished, although `linger` should hide it.

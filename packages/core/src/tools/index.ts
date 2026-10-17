@@ -11,3 +11,4 @@ export * from './schema.js';
 export * from './registry.js';
 export * from './definitions.js';
 export * from './mcp-server.js';
+export * from './bridge-client.js';

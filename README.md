@@ -27,7 +27,7 @@ Editors for creative and AI apps: prompts, rich-text documents, spreadsheets, a 
 | **Chart editor** | Bar, line, area, scatter, bubble, pie, donut, radar, waterfall, histogram, box, funnel and treemap charts (combos with a secondary axis, stacked and 100% stacked, horizontal bars, numeric-x scatter, date axes, trendlines, spreadsheet format codes) from a validated JSON spec; a DOM-free layout engine with click targets and layout warnings, drag-to-edit with snapping, keyboard editing, a data grid with paste and CSV import, presets and colour-blind checks, Mermaid and Office (DOCX / PPTX chart XML) import and export, charts read from `.xlsx` / `.pptx` / `.docx` files, streaming views, sparklines, accessible SVG and PNG, and 28 agent tools whose edits can be acted out with a cursor | `@pixerate/editor/chart` |
 | **Image editor** | Canvas 2D crop/rotate, adjustments and adjustment layers, blend modes, histogram, selections and masks (magic wand, Refine Edge), annotations | `@pixerate/editor/image-editor` |
 | **Parameters** | Schema-driven control panel for effects, shaders, generators and component props: sliders, toggles, choices, colours, vectors, image pickers and text, with groups, conditional fields, presets, undo, randomize and keyframe diamonds | `@pixerate/editor/parameters` |
-| **Commands and agents** | One command registry for shortcuts, the command palette and AI agent tools (MCP-style `tools/list` / `tools/call`) | `@pixerate/editor/commands`, `/agent` |
+| **Commands and agents** | One command registry for shortcuts, the command palette and AI agent tools (MCP-style `tools/list` / `tools/call`), and an MCP bridge so Claude Desktop, Claude Code or an IDE can drive editors open in a browser | `@pixerate/editor/commands`, `/agent` |
 | **History and saving** | Undo/redo with gesture merging, dirty-vs-saved tracking, autosave with crash recovery, storage adapters (localStorage, IndexedDB, OPFS) | `@pixerate/editor/history`, `/persistence` |
 | **AI generation** | Model capabilities and request planning, settings forms, job progress, generation records with Recreate, asset mentions with roles | `@pixerate/editor/generation` |
 
@@ -406,7 +406,7 @@ Every feature is available from core and from both framework packages. "Via core
 </details>
 
 <details>
-<summary><strong>Commands and agent tools</strong> (10)</summary>
+<summary><strong>Commands and agent tools</strong> (11)</summary>
 
 | Feature | Core | React | Svelte |
 | :--- | :---: | :---: | :---: |
@@ -416,6 +416,7 @@ Every feature is available from core and from both framework packages. "Via core
 | Command Palette (fuzzy ranking, recents, shortcuts, disabled reasons) | `rankCommands` & `createCommandPaletteController` | `<CommandPalette>` & `useCommandPalette` | `<CommandPalette>` & `createCommandPalette` |
 | Commands as Agent Tools (`list_commands`, `run_command`, `run_commands`) | `createCommandToolProvider` | Via core | Via core |
 | MCP Server over any transport (`initialize`, `tools/list`, `tools/call`, cancellation, `list_changed`) | `createMcpServer` (`/tools`) | Via core | Via core |
+| MCP Bridge to Live Editors (one Node MCP process, stdio, drives pages over a localhost WebSocket: origin allowlist, token, `editor` routing and `list_editors`, cancellation, timeouts, reconnect; `pixerate-mcp-bridge` CLI; no dependencies) | `createToolBridge` (`/bridge`, Node) & `connectToolBridge` (`/tools`) | `useToolBridge` | `useToolBridge` |
 | Rich-Text Agent Tools (`find_text`, `replace_text`, `replace_range`, `set_selection`, positions via `get_text {blocks}`) | `createRichTextToolProvider` | Via core & `useAgentToolProvider` | Via core & `useAgentToolProvider` |
 | Canvas & Prompt Agent Tools (one strict tool per operation, created ids returned, ids checked against the snapshot) | `createEditorMcpToolProvider` & `validateAgentCommand` | Via core & `useAgentToolProvider` | Via core & `useAgentToolProvider` |
 | Spreadsheet Agent Tools (`get_range`, `set_cell`, `set_range`, insert/delete rows and columns) | `createSpreadsheetToolProvider` | Via core & `useAgentToolProvider` | Via core & `useAgentToolProvider` |
@@ -461,6 +462,7 @@ Every feature is available from core and from both framework packages. "Via core
 - [Prompt grammar and resolution](docs/prompt-engine.md)
 - [Canvas](docs/canvas.md)
 - [Mermaid diagrams](docs/mermaid-diagrams.md)
+- [MCP bridge](docs/mcp-bridge.md)
 - [Parameters editor](docs/parameters.md)
 - [Vector editor](docs/vector-editor.md)
 - [Vector editor roadmap](docs/vector-roadmap.md)

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import path from "path";
+import { builtinModules } from "module";
 
 const dist = path.resolve(__dirname, "../dist");
 
@@ -59,6 +60,10 @@ describe("subpath entry isolation", () => {
     expect(agent.EDITOR_MCP_TOOLS).toBe(tools.EDITOR_MCP_TOOLS);
     expect(typeof agent.createRichTextToolProvider).toBe("function");
     expect(tools.createRichTextToolProvider).toBeUndefined();
+  });
+
+  it.each(["bridge/index.js", "bridge/cli.js"])("%s only pulls in Node built-ins", (entry) => {
+    expect([...reachablePackages(entry)].filter((name) => !builtinModules.includes(name.replace(/^node:/, "")))).toEqual([]);
   });
 
   it("root entry does not pull in dagre", () => {
