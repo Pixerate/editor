@@ -129,6 +129,28 @@ chart.trendlineFit("sales", 0); // { coefficients, r2, equation, points, evaluat
 
 Linear, exponential, logarithmic, power, polynomial (2–6) and moving-average fits, as spreadsheets compute them. Category charts fit against x = 1, 2, 3, …. Trendlines need an unstacked bar, line, area, scatter or bubble chart.
 
+## Error bars
+
+```ts
+chart.updateSeries("sales", { errorBars: { type: "percent", value: 10 } }); // ±10% of each value
+chart.updateSeries("trial", { errorBars: { type: "custom", plus: [0.6, 1.1, 0.9], minus: [0.5, 0.8, 1.4], cap: false } });
+chart.updateSeries("points", { xErrorBars: { type: "fixed", value: 2, direction: "plus" } }); // scatter x
+chart.updateSeries("sales", { errorBars: null }); // remove
+```
+
+Bar, line, area and scatter series take `errorBars` along the value axis; scatter and bubble series with numeric x also take `xErrorBars`. The types follow Excel's `c:errValType`: `fixed` (`value`, default 1), `percent` (`value` percent of each point, default 5), `stddev` (`value` sample standard deviations, default 1, drawn around the series mean as Excel does), `stderr` (sample standard deviation / √n at every point) and `custom` (`plus` / `minus` per category, minus defaulting to plus). `direction` is `both`, `plus` or `minus`; `cap: false` drops the end caps. They are drawn as `error-bar` path marks that select their series, sit on the stack top of stacked series (scaled to shares when 100% stacked), and are included in the axis range. `chartErrorAmounts(bars, values)` gives the centre and reach at each point.
+
+## Logarithmic and reversed axes
+
+```ts
+chart.setAxis("y", { scale: "log" }); // ticks 1, 10, 100, … (or 1-2-5 over a few decades)
+chart.setAxis("y2", { scale: "log", logBase: 2 });
+chart.setAxis("x", { reverse: true }); // categories right to left (or the scatter x axis)
+chart.setAxis("y", { reverse: true }); // values from the top down
+```
+
+`scale: "log"` works on `yAxis`, `yAxis2` and the numeric x axis of scatter and bubble charts (it is ignored on a category axis). Values of 0 or less cannot be placed: they are skipped with a `values-skipped` layout warning, bars rise from the bottom of the axis, `min` / `max` must be above 0, the tick `step` does not apply, and percent stacking is refused with a sentence. `reverse` works on every axis. Scenes carry `logBase` on their `ChartValueScale`; `chartScaleToPixel` / `chartScaleFromPixel` map through it, so `chartValueAtPoint`, drags (which move by ratio on a log axis) and ↑ ↓ (a tenth of a power per press) follow the axis as drawn. Both are written to Office files as `c:logBase` and `c:orientation val="maxMin"`.
+
 ## Layout warnings, summaries and accessibility
 
 `layoutChart` returns `scene.warnings` for anything it had to leave out (hidden or shortened labels, a truncated legend, thinned lines, skipped non-finite values). `summarizeChart(spec, size)` adds per-series min / max / mean / trend, the axes as drawn, a colour check and `describeChart`'s plain-language description, which `chartToSvg` also writes as `<desc>`. `checkChartColors` tests a palette with normal vision and three colour-vision deficiencies. `CHART_LAYOUT_PRESETS` and `CHART_COLOR_SCHEMES` (including monochrome and Okabe–Ito) apply through `applyPreset`.
@@ -143,6 +165,8 @@ findMermaidCharts(markdownOrChat); // fenced or bare charts
 const { xml, issues } = chartToOoxml(spec); // c:chartSpace with literal data
 const { spec, unsupported, lossless } = chartFromOoxml(xml, { DOMParser }); // also chartex parts
 ```
+
+Office round trips include error bars (`c:errBars`, with `c:errDir` on scatter and bubble series), logarithmic axes (`c:logBase`) and reversed axes (`c:orientation val="maxMin"`).
 
 The comment keeps what Mermaid cannot express, so text round-trips exactly while any Mermaid renderer still draws the basic chart. DOCX imports return embedded charts in `DocumentImport.charts` and write each as a `<div data-type="chart">` holding its spec: a live chart in editors with the chart node (below), otherwise a caption and a data table (see GOTCHAS for why not an SVG image).
 

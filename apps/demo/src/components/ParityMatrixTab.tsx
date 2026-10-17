@@ -61,6 +61,7 @@ const PRODUCTIVITY_FEATURES: ParityRow[] = [
   row("Chart Agent Tools (28, one per operation)", "createChartToolProvider", "useChartToolProvider", "useChartToolProvider", "Read-only hides writes; drags and keys go through the real interaction code"),
   row("More Chart Types (bubble, radar, waterfall, histogram, box, funnel, treemap)", "layoutChart families", "<ChartCanvas>", "<ChartCanvas>", "Algorithms ported from GridCraft"),
   row("Secondary Axis, Numeric-X Scatter, Date Axes & Trendlines", "yAxis2, series.x, chartDateLabels & fitChartTrendline", "<ChartInspector>", "<ChartInspector>", "Trendline fits return coefficients and R²"),
+  row("Chart Error Bars, Log & Reversed Axes", "series.errorBars / xErrorBars, axis.scale / logBase / reverse & chartErrorAmounts", "<ChartInspector>", "<ChartInspector>", "Office c:errBars, c:logBase and maxMin round trip; set through update_chart / update_chart_series"),
   row("Chart Mermaid & Office XML Round Trip", "chartToMermaid, chartFromMermaid, chartToOoxml & chartFromOoxml", "Via core", "Via core", "Charts in DOCX imports come back as specs"),
   row("Chart Streaming, Agent Cursors & Sparklines", "ChartStream, ChartDirector & layoutSparkline", "<ChartStreamingView>, useChartDirector & <ChartSparkline>", "<ChartStreamingView>, createChartDirector & <ChartSparkline>", "Agent edits act out with a cursor and stay one undo step"),
   row("Chart Summaries, Colour Checks & Accessible SVG", "summarizeChart, checkChartColors & chartToSvg", "Via core", "Via core", "Agents verify charts without rendering"),

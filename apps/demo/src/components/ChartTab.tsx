@@ -59,6 +59,28 @@ const SAMPLES: Record<string, Partial<ChartSpec>> = {
     xAxis: { show: true, title: "Weight (kg)", min: null, max: null, step: null, gridlines: true, format: {} },
     yAxis: { show: true, title: "Height (cm)", min: null, max: null, step: null, gridlines: true, format: {} },
   },
+  "Error bars": {
+    type: "bar",
+    title: "Trial results",
+    subtitle: "Mean score with 95% intervals",
+    categories: ["Control", "Low dose", "High dose"],
+    series: [
+      { id: "week4", name: "Week 4", values: [4.2, 6.8, 9.1], errorBars: { type: "custom", plus: [0.6, 1.1, 0.9], minus: [0.5, 0.8, 1.4] } },
+      { id: "week8", name: "Week 8", values: [4.5, 7.9, 11.2], errorBars: { type: "percent", value: 10 } },
+      { id: "target", name: "Target", type: "line", values: [5, 8, 10], marker: "diamond" },
+    ],
+  },
+  "Log scale": {
+    type: "line",
+    title: "Active users",
+    subtitle: "Logarithmic value axis",
+    categories: ["2018", "2019", "2020", "2021", "2022", "2023", "2024"],
+    series: [
+      { id: "app", name: "App", values: [40, 310, 2800, 21000, 160000, 900000, 2400000] },
+      { id: "web", name: "Web", values: [1200, 2600, 5100, 9800, 21000, 40000, 76000] },
+    ],
+    yAxis: { show: true, title: "Users", min: null, max: null, step: null, gridlines: true, format: { style: "compact" }, scale: "log" },
+  },
   Bubble: {
     type: "bubble",
     title: "Markets",

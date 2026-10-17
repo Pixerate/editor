@@ -4,7 +4,7 @@
 // (MIT OR Apache-2.0, © ArtCraft Team and contributors). See THIRD_PARTY_NOTICES.md.
 import type { ChartController } from './controller.js';
 import { chartValueAtPoint, chartXAtPoint, snapChartValue } from './layout.js';
-import { linearMap } from './scale.js';
+import { chartScaleToPixel } from './scale.js';
 import { chartFamily } from './spec.js';
 import type { ChartScene, ChartSelection, ChartValueScale } from './types.js';
 
@@ -78,13 +78,14 @@ export function snapChartDragValue(scene: ChartScene, value: number, options: Ch
 	const scale = options.scale ?? scene.valueScale;
 	const tolerance = options.tolerancePx ?? 6;
 	if (scale) {
-		const px = (v: number) => linearMap(v, scale.domain, scale.range);
+		const px = (v: number) => chartScaleToPixel(v, scale);
 		const at = px(value);
 		let best: number | null = null;
 		let bestDist = tolerance;
 		for (const c of [...(options.candidates ?? []), ...scale.ticks]) {
 			if (!Number.isFinite(c)) continue;
 			const d = Math.abs(px(c) - at);
+			if (!Number.isFinite(d)) continue;
 			if (d <= bestDist) {
 				best = c;
 				bestDist = d;
@@ -92,7 +93,7 @@ export function snapChartDragValue(scene: ChartScene, value: number, options: Ch
 		}
 		if (best !== null) return best;
 	}
-	return snapChartValue(scene, value, options.step, scale?.ticks);
+	return snapChartValue(scene, value, options.step, scale?.ticks, scale?.logBase);
 }
 
 /**
@@ -136,28 +137,35 @@ export function startChartPointDrag(controller: ChartController, scene: ChartSce
 			const at = chartValueAtPoint(scene, point, secondary);
 			if (at === undefined) return;
 			const factor = moveOptions.fine ? 0.1 : 1;
-			let dy = (at - startAt) * factor;
-			let dx = 0;
+			// Linear axes move by the distance the pointer moved; log axes by the ratio, so the
+			// point stays under the pointer.
+			const moved = (from: number, to: number, s: ChartValueScale, value: number) =>
+				s.logBase && value > 0 && from > 0 && to > 0 ? value * Math.pow(to / from, factor) : value + (to - from) * factor;
+			let moveY = true;
+			let moveX = false;
+			let atX: number | undefined;
 			if (xy && startX !== null && startAtX !== undefined) {
-				const atX = chartXAtPoint(scene, point);
-				if (atX !== undefined) dx = (atX - startAtX) * factor;
+				atX = chartXAtPoint(scene, point);
+				moveX = atX !== undefined;
 				if (moveOptions.lockAxis) {
 					// Keep the axis the pointer moved further along (in pixels).
-					if (Math.abs(point.x - start.x) >= Math.abs(point.y - start.y)) dy = 0;
-					else dx = 0;
+					if (Math.abs(point.x - start.x) >= Math.abs(point.y - start.y)) moveY = false;
+					else moveX = false;
 				}
 			}
 			const snap = (v: number, s: ChartValueScale, c: readonly number[]) => {
 				if (moveOptions.noSnap) return Number(v.toPrecision(12));
 				if (moveOptions.fine) {
+					if (s.logBase && !options.step) return v > 0 ? Number(v.toPrecision(3)) : v;
 					const unit = options.step ? options.step / 10 : s.ticks.length > 1 ? (s.ticks[1] - s.ticks[0]) / 100 : undefined;
 					return snapChartValue(scene, v, unit, s.ticks);
 				}
 				return snapChartDragValue(scene, v, { candidates: c, tolerancePx: options.tolerancePx, step: options.step, scale: s });
 			};
-			const y = snap(startValue + dy, scale, candidates);
+			const y = moveY ? snap(moved(startAt, at, scale, startValue), scale, candidates) : startValue;
 			if (xy && startX !== null) {
-				const x = dx !== 0 ? snap(startX + dx, scene.xScale!, [0, startX]) : startX;
+				const nextX = moveX ? moved(startAtX!, atX!, scene.xScale!, startX) : startX;
+				const x = nextX !== startX ? snap(nextX, scene.xScale!, [0, startX]) : startX;
 				const xs = [...(series.x ?? [])];
 				xs[index] = x;
 				controller.setValue(seriesId, index, y, { label });
@@ -219,11 +227,22 @@ export function handleChartKey(controller: ChartController, scene: ChartScene | 
 		case 'ArrowUp':
 		case 'ArrowDown': {
 			if (selection?.kind !== 'point' || scene?.percent) return false;
-			const secondary = controller.getSeries(selection.seriesId)?.axis === 'secondary';
-			const ticks = (secondary ? scene?.valueScale2 : null)?.ticks ?? scene?.valueScale?.ticks ?? [];
+			const series = controller.getSeries(selection.seriesId);
+			const secondary = series?.axis === 'secondary';
+			const scale = (secondary ? scene?.valueScale2 : null) ?? scene?.valueScale;
+			const ticks = scale?.ticks ?? [];
+			const up = event.key === 'ArrowUp';
+			const current = series?.values[selection.index] ?? null;
+			if (scale?.logBase && current !== null && current > 0) {
+				// Log axes step by ratios: a tenth of a power of the base (Shift: a whole power; Alt: a hundredth).
+				const power = event.shiftKey ? 1 : event.altKey ? 0.01 : 0.1;
+				const next = Number((current * Math.pow(scale.logBase, up ? power : -power)).toPrecision(event.altKey ? 4 : 3));
+				controller.nudgeValue(selection.seriesId, selection.index, next - current);
+				return true;
+			}
 			const step = ticks.length > 1 ? ticks[1] - ticks[0] : 1;
 			const amount = event.shiftKey ? step : event.altKey ? step / 100 : step / 10;
-			controller.nudgeValue(selection.seriesId, selection.index, amount * (event.key === 'ArrowUp' ? 1 : -1));
+			controller.nudgeValue(selection.seriesId, selection.index, amount * (up ? 1 : -1));
 			return true;
 		}
 		default:
