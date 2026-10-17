@@ -1448,3 +1448,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: A `ChartDirector` cursor stayed on the chart after its command finished, although `linger` should hide it.
 - **Root Cause**: The queue stored `run.catch(...)` but the linger check compared the stored promise with `run`, which never matched, so the cursor was never removed.
 - **Solution / Workaround**: The per-actor queue now lives in `PerformanceQueue` (`animation/presence.ts`), shared by the chart and diagram directors, and compares against the promise it stored.
+
+### [core/tests] Undestroyed TipTap Editors Crash Later Test Files ("document is not defined")
+
+- **Issue / Symptom**: The full test run reported an unhandled `ReferenceError: document is not defined` from `prosemirror-view`'s `DOMObserver.flush`, attributed to `chart-node.test.ts`, while that file passed on its own.
+- **Root Cause**: Editors created in a test and never destroyed keep ProseMirror's DOM observer timers. Under load, a timer fires after the file's jsdom environment is torn down.
+- **Solution / Workaround**: Destroy every editor a test creates. `chart-node.test.ts` tracks them in an `afterEach`.

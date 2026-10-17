@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { Editor } from "@tiptap/core";
 import { NodeSelection } from "@tiptap/pm/state";
 import {
@@ -19,6 +19,18 @@ import { buildDocx, p } from "./helpers/zip-writer";
 import { ToolRegistry } from "../src/tools/registry";
 import { createRichTextToolProvider } from "../src/agent/providers";
 
+// Editors left alive keep ProseMirror's DOMObserver timers, which can fire after jsdom is torn down.
+const created: Editor[] = [];
+class TrackedEditor extends Editor {
+  constructor(options?: ConstructorParameters<typeof Editor>[0]) {
+    super(options);
+    created.push(this);
+  }
+}
+afterEach(() => {
+  for (const editor of created.splice(0)) if (!editor.isDestroyed) editor.destroy();
+});
+
 const SPEC = createChartSpec({
   type: "bar",
   title: "Revenue",
@@ -31,13 +43,13 @@ const SPEC = createChartSpec({
 });
 
 const make = (content: any = "", options: Record<string, unknown> = {}) =>
-  new Editor({ extensions: createRichTextPreset({ chart: true, markdown: true, ...options }), content });
+  new TrackedEditor({ extensions: createRichTextPreset({ chart: true, markdown: true, ...options }), content });
 
 const chartNodes = (editor: Editor) => getDocumentCharts(editor.state.doc);
 
 describe("chart node", () => {
   it("is opt-in", () => {
-    expect(isChartEnabled(new Editor({ extensions: createRichTextPreset() }))).toBe(false);
+    expect(isChartEnabled(new TrackedEditor({ extensions: createRichTextPreset() }))).toBe(false);
     const editor = make();
     expect(isChartEnabled(editor)).toBe(true);
     expect(editor.schema.nodes.sparkline).toBeDefined();
@@ -178,7 +190,7 @@ describe("chart node view", () => {
 
   it("draws the static SVG without a framework view", () => {
     const element = document.createElement("div");
-    const editor = new Editor({ element, extensions: createRichTextPreset({ chart: true }), content: { type: "doc", content: [{ type: "chart", attrs: { id: "c1", spec: SPEC } }] } });
+    const editor = new TrackedEditor({ element, extensions: createRichTextPreset({ chart: true }), content: { type: "doc", content: [{ type: "chart", attrs: { id: "c1", spec: SPEC } }] } });
     const dom = element.querySelector(".pixerate-chart-node")!;
     expect(dom.querySelector("svg")?.getAttribute("aria-label")).toBe("Revenue");
     editor.commands.updateChart("c1", { spec: { ...SPEC, title: "Costs" } });
@@ -189,7 +201,7 @@ describe("chart node view", () => {
   it("keeps the controller and the document in step", () => {
     const { states, nodeView, destroyed } = mountable();
     const element = document.createElement("div");
-    const editor = new Editor({ element, extensions: createRichTextPreset({ chart: { nodeView } }), content: { type: "doc", content: [{ type: "chart", attrs: { id: "c1", spec: SPEC } }] } });
+    const editor = new TrackedEditor({ element, extensions: createRichTextPreset({ chart: { nodeView } }), content: { type: "doc", content: [{ type: "chart", attrs: { id: "c1", spec: SPEC } }] } });
     const first = states[0];
     expect(first).toMatchObject({ id: "c1", editing: false, selected: false, editable: true, width: null, height: 320 });
     expect(first.controller.getSpec()).toEqual(SPEC);
@@ -231,7 +243,7 @@ describe("chart node view", () => {
   it("lets inspector events through only while editing, and resizes", () => {
     const { states, nodeView } = mountable();
     const element = document.createElement("div");
-    const editor = new Editor({ element, extensions: [...createRichTextPreset({ chart: { nodeView } })], content: { type: "doc", content: [{ type: "chart", attrs: { id: "c1", spec: SPEC } }] } });
+    const editor = new TrackedEditor({ element, extensions: [...createRichTextPreset({ chart: { nodeView } })], content: { type: "doc", content: [{ type: "chart", attrs: { id: "c1", spec: SPEC } }] } });
     const view = (editor.view as any).docView.children[0].spec as ChartNodeView;
     expect(view).toBeInstanceOf(ChartNodeView);
     expect(view.stopEvent(new Event("keydown"))).toBe(false);
@@ -306,7 +318,7 @@ describe("document chart tools", () => {
 
   it("are listed only when the schema has charts, and only reads while read-only", () => {
     const plain = new ToolRegistry();
-    plain.register(createRichTextToolProvider(new Editor({ extensions: createRichTextPreset() }), { id: "doc" }));
+    plain.register(createRichTextToolProvider(new TrackedEditor({ extensions: createRichTextPreset() }), { id: "doc" }));
     expect(names(plain)).not.toContain("list_document_charts");
     const { editor, registry } = setup();
     expect(names(registry)).toEqual(expect.arrayContaining(["list_document_charts", "insert_chart", "update_chart_in_document", "insert_sparkline"]));
