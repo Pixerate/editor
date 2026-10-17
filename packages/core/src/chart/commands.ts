@@ -76,7 +76,7 @@ export function createChartCommands(controller: ChartController, options: ChartC
 			label: 'Change Chart…',
 			keywords: ['chart', 'title', 'axis', 'legend', 'stack', 'style', 'format', 'type'],
 			description:
-				'Changes chart presentation as one undo step: type, titles, axes (xAxis = categories, yAxis = values, yAxis2 = secondary values), legend, stacking, orientation, curve, points, data labels, palette, donut hole, bar spacing, histogram bins or waterfall total. Invalid values change nothing and return why.',
+				'Changes chart presentation as one undo step: type, titles, axes (xAxis = categories, yAxis = values, yAxis2 = secondary values; reverse, and scale "log" on value axes), legend, stacking, orientation, curve, points, data labels, palette, donut hole, bar spacing, histogram bins or waterfall total. Invalid values change nothing and return why.',
 			params: object(CHART_UPDATE_PROPERTIES),
 			run: (_ctx: unknown, params: ChartSpecPatch) => {
 				check(controller.update(params));
@@ -130,7 +130,7 @@ export function createChartCommands(controller: ChartController, options: ChartC
 			id: `${prefix}updateSeries`,
 			label: 'Change Series…',
 			keywords: ['chart', 'series', 'rename', 'colour', 'color', 'hide', 'axis', 'marker'],
-			description: 'Renames, recolours, hides, moves to the secondary axis or changes how a series is drawn (null resets a field).',
+			description: 'Renames, recolours, hides, moves to the secondary axis or changes how a series is drawn, including error bars (null resets a field).',
 			params: object({ series: SERIES_REF, ...Object.fromEntries(Object.entries(SERIES_PROPS).filter(([k]) => k !== 'values')) }, ['series']),
 			run: (_ctx: unknown, params: { series: string } & Record<string, unknown>) => {
 				const { series, ...patch } = params;

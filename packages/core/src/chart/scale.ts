@@ -1,5 +1,5 @@
 import { formatChartValueWithCode } from './numfmt.js';
-import type { ChartNumberFormat } from './types.js';
+import type { ChartNumberFormat, ChartValueScale } from './types.js';
 
 /** A "nice" step (1, 2, 2.5 or 5 × 10ⁿ) for about `count` intervals over `span`. */
 export function niceStep(span: number, count: number): number {
@@ -145,4 +145,65 @@ export function linearMap(value: number, domain: readonly [number, number], rang
 	const [r0, r1] = range;
 	if (d1 === d0) return (r0 + r1) / 2;
 	return r0 + ((value - d0) / (d1 - d0)) * (r1 - r0);
+}
+
+/** Rounds float noise off a tick without flushing tiny values to 0 (log ticks such as 1e-15). */
+const tidy = (n: number) => (n === 0 ? 0 : Number(n.toPrecision(12)));
+
+/**
+ * A logarithmic scale over `[lo, hi]` (only positive values count): the ends extend to whole
+ * powers of `base` unless fixed, and ticks sit on the powers, thinned to about `count`, or, in
+ * base 10 over a few decades, on the 1-2-5 steps between them. `step` is the base. Non-positive
+ * or non-finite ends fall back to the data, and no positive data at all gives 1 to `base`.
+ */
+export function niceLogScale(lo: number, hi: number, count = 5, base = 10, fixedMin: number | null = null, fixedMax: number | null = null): NiceScale {
+	if (!(base > 1) || !Number.isFinite(base)) base = 10;
+	if (fixedMin !== null && !(fixedMin > 0 && Number.isFinite(fixedMin))) fixedMin = null;
+	if (fixedMax !== null && !(fixedMax > 0 && Number.isFinite(fixedMax))) fixedMax = null;
+	if (!(lo > 0) || !Number.isFinite(lo)) lo = hi > 0 && Number.isFinite(hi) ? hi : (fixedMin ?? 1);
+	if (!(hi > 0) || !Number.isFinite(hi)) hi = Math.max(lo, fixedMax ?? lo * base);
+	if (lo > hi) [lo, hi] = [hi, lo];
+	const log = (v: number) => Math.log(v) / Math.log(base);
+	const e0 = Math.floor(log(fixedMin ?? lo) + 1e-9);
+	let e1 = Math.ceil(log(fixedMax ?? hi) - 1e-9);
+	if (e1 <= e0) e1 = e0 + 1;
+	let min = fixedMin ?? tidy(Math.pow(base, e0));
+	let max = fixedMax ?? tidy(Math.pow(base, e1));
+	if (!(max > min)) {
+		if (fixedMax === null) max = tidy(min * base);
+		else min = tidy(max / base);
+	}
+	if (!Number.isFinite(max)) max = Number.MAX_VALUE;
+	if (!(min > 0)) min = Number.MIN_VALUE;
+	const inside = (t: number) => t >= min * (1 - 1e-9) && t <= max * (1 + 1e-9);
+	const decades = Math.max(1, log(max) - log(min));
+	let ticks: number[] = [];
+	const first = Math.ceil(log(min) - 1e-9);
+	const last = Math.floor(log(max) + 1e-9);
+	if (base === 10 && decades * 3 <= count + 1) {
+		for (let e = first - 1; e <= last; e++) for (const m of [1, 2, 5]) ticks.push(tidy(m * Math.pow(10, e)));
+	} else {
+		const every = Math.max(1, Math.ceil((last - first + 1) / (count + 2)));
+		for (let e = Math.ceil(first / every) * every; e <= last && ticks.length < 1000; e += every) ticks.push(tidy(Math.pow(base, e)));
+	}
+	ticks = ticks.filter((t) => Number.isFinite(t) && t > 0 && inside(t));
+	// A fixed range inside one power: fall back to evenly spaced ticks between the ends.
+	if (ticks.length < 2) ticks = niceScale(min, max, count, min, max).ticks.filter((t) => t > 0);
+	return { min, max, step: base, ticks: [...new Set(ticks)].sort((a, b) => a - b) };
+}
+
+/**
+ * A data value's pixel on a value scale: linear, or by logarithm when `scale.logBase` is set
+ * (values of 0 or less have no pixel there and give NaN).
+ */
+export function chartScaleToPixel(value: number, scale: Pick<ChartValueScale, 'domain' | 'range' | 'logBase'>): number {
+	if (!scale.logBase) return linearMap(value, scale.domain, scale.range);
+	if (!(value > 0)) return NaN;
+	return linearMap(Math.log(value), [Math.log(scale.domain[0]), Math.log(scale.domain[1])], scale.range);
+}
+
+/** The data value at a pixel on a value scale (the inverse of `chartScaleToPixel`). */
+export function chartScaleFromPixel(px: number, scale: Pick<ChartValueScale, 'domain' | 'range' | 'logBase'>): number {
+	if (!scale.logBase) return linearMap(px, scale.range, scale.domain);
+	return Math.exp(linearMap(px, scale.range, [Math.log(scale.domain[0]), Math.log(scale.domain[1])]));
 }
