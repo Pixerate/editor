@@ -97,7 +97,13 @@
 
   function local(e: { clientX: number; clientY: number }) {
     const rect = svg?.getBoundingClientRect();
-    return { x: e.clientX - (rect?.left ?? 0), y: e.clientY - (rect?.top ?? 0) };
+    if (!rect || !svg) return { x: e.clientX, y: e.clientY };
+    const scaleX = rect.width > 0 && svg.clientWidth > 0 ? svg.clientWidth / rect.width : 1;
+    const scaleY = rect.height > 0 && svg.clientHeight > 0 ? svg.clientHeight / rect.height : 1;
+    return {
+      x: (e.clientX - rect.left) * scaleX,
+      y: (e.clientY - rect.top) * scaleY
+    };
   }
 
   function onPointerDown(e: PointerEvent) {
