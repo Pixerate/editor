@@ -94,3 +94,4 @@ export function mermaidMovesFromCanvas(
 	return { type: 'moveNodes', moves };
 }
 export * from './shapes.js';
+export * from './export.js';

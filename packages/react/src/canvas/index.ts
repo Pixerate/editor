@@ -665,6 +665,9 @@ export {
 	type MermaidDiagramNodeProps
 } from './MermaidDiagramNode.js';
 
+// Static previews of Mermaid diagrams
+export { MermaidThumbnail, type MermaidThumbnailProps } from './MermaidThumbnail.js';
+
 // Agent cursors acting out diagram edits
 export { useDiagramDirector, usePresenceState, type UseDiagramDirectorOptions } from './useDiagramDirector.js';
 export { DiagramPresenceLayer, type DiagramPresenceLayerProps } from './DiagramPresenceLayer.js';

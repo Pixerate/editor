@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { flushSync, mount, unmount } from 'svelte';
 import { ToolRegistry } from '@pixerate/editor/tools';
 import { DiagramController, createDiagramToolProvider, createInstantPresenceClock } from '@pixerate/editor/diagram';
-import { DiagramPresenceLayer, MermaidDiagramGroup, MermaidDiagramNode, createDiagramDirector, createMermaidDiagram, createMermaidStream } from '../../src/canvas';
+import { DiagramPresenceLayer, MermaidDiagramGroup, MermaidDiagramNode, MermaidThumbnail, createDiagramDirector, createMermaidDiagram, createMermaidStream } from '../../src/canvas';
 import { useAgentToolProvider } from '../../src';
 
 let cleanups: (() => void)[] = [];
@@ -95,6 +95,22 @@ describe('MermaidDiagramNode (Svelte)', () => {
 		expect(el.textContent).toContain('lines');
 		expect(el.getAttribute('style')).toContain('--pixerate-diagram-node-bg: #fde68a');
 		expect(target.querySelector('.pixerate-diagram-group')!.textContent!.trim()).toBe('Box');
+	});
+});
+
+describe('MermaidThumbnail (Svelte)', () => {
+	it('draws a fitted static preview (parity with React)', () => {
+		const target = document.createElement('div');
+		document.body.appendChild(target);
+		const thumb = mount(MermaidThumbnail, { target, props: { source: SOURCE, maxWidth: 120 } });
+		flushSync();
+		cleanups.push(() => {
+			unmount(thumb);
+			target.remove();
+		});
+		const svg = target.querySelector('.pixerate-diagram-thumbnail svg')!;
+		expect(Number(svg.getAttribute('width'))).toBeLessThanOrEqual(120);
+		expect(svg.querySelectorAll('[data-node]')).toHaveLength(3);
 	});
 });
 
