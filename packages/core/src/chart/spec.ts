@@ -1,7 +1,9 @@
 import { cyclePaletteColor } from './color.js';
+import { CHART_ERROR_BAR_DIRECTIONS, CHART_ERROR_BAR_TYPES } from './errorbars.js';
 import type {
 	ChartAxis,
 	ChartCurve,
+	ChartErrorBars,
 	ChartIssue,
 	ChartLabelPosition,
 	ChartLegend,
@@ -25,6 +27,7 @@ export const CHART_MARKERS: readonly ChartMarker[] = ['circle', 'square', 'diamo
 export const CHART_TRENDLINE_TYPES: readonly ChartTrendlineType[] = ['linear', 'exponential', 'logarithmic', 'power', 'polynomial', 'moving-average'];
 export const CHART_LABEL_POSITIONS: readonly ChartLabelPosition[] = ['auto', 'inside', 'outside', 'center'];
 export const CHART_AXIS_KINDS: readonly NonNullable<ChartAxis['kind']>[] = ['category', 'date'];
+export const CHART_AXIS_SCALES: readonly NonNullable<ChartAxis['scale']>[] = ['linear', 'log'];
 export const CHART_SERIES_TYPES: readonly ChartSeriesType[] = ['bar', 'line', 'area', 'scatter'];
 export const CHART_STACKINGS: readonly ChartStacking[] = ['none', 'stacked', 'percent'];
 export const CHART_CURVES: readonly ChartCurve[] = ['linear', 'smooth', 'step'];
@@ -271,6 +274,24 @@ export function normalizeChartAxis(value: unknown, fallback: ChartAxis, path: st
 	};
 	const kind = 'kind' in value ? (value.kind === null ? undefined : pick(value.kind, CHART_AXIS_KINDS, 'category', `${path}.kind`, issues)) : fallback.kind;
 	if (kind && kind !== 'category') axis.kind = kind;
+	const scale = 'scale' in value ? (value.scale === null ? 'linear' : pick(value.scale, CHART_AXIS_SCALES, 'linear', `${path}.scale`, issues)) : (fallback.scale ?? 'linear');
+	if (scale === 'log') {
+		axis.scale = 'log';
+		const base = 'logBase' in value ? value.logBase : fallback.logBase;
+		if (base !== undefined && base !== null) {
+			const b = Number(base);
+			if (Number.isFinite(b) && b >= 2 && b <= 1000) {
+				if (b !== 10) axis.logBase = b;
+			} else issues.push({ path: `${path}.logBase`, message: `${path}.logBase must be a number from 2 to 1000 (default 10).` });
+		}
+		for (const end of ['min', 'max'] as const) {
+			if (axis[end] !== null && !(axis[end]! > 0)) {
+				issues.push({ path: `${path}.${end}`, message: `${path}.${end} must be greater than 0 on a logarithmic axis (or null for automatic); got ${axis[end]}.` });
+				axis[end] = null;
+			}
+		}
+	}
+	if ('reverse' in value ? value.reverse !== null && flag(value.reverse, false, `${path}.reverse`, issues) : fallback.reverse) axis.reverse = true;
 	return axis;
 }
 
@@ -358,6 +379,11 @@ function normalizeSeries(value: unknown, length: number, used: Set<string>, inde
 		const format = normalizeFormat(value.format, `${path}.format`, issues);
 		if (Object.keys(format).length) series.format = format;
 	}
+	for (const name of ['errorBars', 'xErrorBars'] as const) {
+		if (!key(value, name)) continue;
+		const bars = normalizeChartErrorBars(value[name], length, `${path}.${name}`, issues);
+		if (bars) series[name] = bars;
+	}
 	if (value.trendlines !== undefined && value.trendlines !== null) {
 		if (!Array.isArray(value.trendlines)) issues.push({ path: `${path}.trendlines`, message: `${path}.trendlines must be an array.` });
 		else {
@@ -369,6 +395,41 @@ function normalizeSeries(value: unknown, length: number, used: Set<string>, inde
 }
 
 const key = (value: Record<string, unknown>, name: string) => value[name] !== undefined && value[name] !== null;
+
+/** Checks one set of error bars; `null` (reported) when it is unusable. Custom amounts are padded to `length`. */
+export function normalizeChartErrorBars(value: unknown, length: number, path: string, issues: ChartIssue[] = []): ChartErrorBars | null {
+	if (!isRecord(value)) {
+		issues.push({ path, message: `${path} must be an object with a type (${CHART_ERROR_BAR_TYPES.join(', ')}), or null for none.` });
+		return null;
+	}
+	const before = issues.length;
+	const type = pick(value.type, CHART_ERROR_BAR_TYPES, 'fixed', `${path}.type`, issues);
+	if (value.type === undefined) issues.push({ path: `${path}.type`, message: `${path}.type is required: one of ${CHART_ERROR_BAR_TYPES.map((t) => `"${t}"`).join(', ')}.` });
+	const bars: ChartErrorBars = { type };
+	if (key(value, 'value')) {
+		const n = Number(value.value);
+		if (type === 'stderr' || type === 'custom') issues.push({ path: `${path}.value`, message: `${type} error bars take no value; ${type === 'custom' ? 'pass plus and minus amounts instead' : 'the amount comes from the data'}.` });
+		else if (Number.isFinite(n) && n >= 0) bars.value = n;
+		else issues.push({ path: `${path}.value`, message: `${path}.value must be a number, 0 or more${type === 'percent' ? ' (a percentage, e.g. 5 for 5%)' : ''}.` });
+	}
+	for (const name of ['plus', 'minus'] as const) {
+		if (!key(value, name)) continue;
+		if (type !== 'custom') {
+			issues.push({ path: `${path}.${name}`, message: `${path}.${name} only applies to custom error bars; set type to "custom".` });
+			continue;
+		}
+		const list = normalizeChartValues(value[name], length, `${path}.${name}`, issues);
+		if (list.some((v) => v !== null && v < 0)) issues.push({ path: `${path}.${name}`, message: `${path}.${name} amounts must be 0 or more (distances from the point).` });
+		else bars[name] = list;
+	}
+	if (type === 'custom' && !bars.plus && !bars.minus && issues.length === before) issues.push({ path: `${path}.plus`, message: `Custom error bars need plus and / or minus amounts, one per category.` });
+	if (key(value, 'direction')) {
+		const direction = pick(value.direction, CHART_ERROR_BAR_DIRECTIONS, 'both', `${path}.direction`, issues);
+		if (direction !== 'both') bars.direction = direction;
+	}
+	if (key(value, 'cap') && !flag(value.cap, true, `${path}.cap`, issues)) bars.cap = false;
+	return issues.length > before ? null : bars;
+}
 
 /** Checks one trendline; `null` (reported) when it is unusable. */
 export function normalizeChartTrendline(value: unknown, path: string, issues: ChartIssue[] = []): ChartTrendline | null {
@@ -483,6 +544,13 @@ export function normalizeChartSpec(input: unknown): { spec: ChartSpec; issues: C
 		bins,
 		showTotal: flag(value.showTotal, true, 'showTotal', issues)
 	};
+	if (spec.stacking === 'percent')
+		for (const name of ['yAxis', 'yAxis2'] as const) {
+			if (spec[name].scale !== 'log') continue;
+			issues.push({ path: `${name}.scale`, message: `A logarithmic ${name} cannot show percent stacking (shares from 0% to 100% include 0); use stacking "stacked" or "none", or a linear axis.` });
+			delete spec[name].scale;
+			delete spec[name].logBase;
+		}
 	return { spec, issues };
 }
 
@@ -507,6 +575,11 @@ export function cloneChartSeries(series: ChartSeries): ChartSeries {
 	if (series.pointColors) copy.pointColors = [...series.pointColors];
 	if (series.format) copy.format = { ...series.format };
 	if (series.trendlines) copy.trendlines = series.trendlines.map((t) => ({ ...t }));
+	for (const name of ['errorBars', 'xErrorBars'] as const) {
+		const bars = series[name];
+		if (!bars) continue;
+		copy[name] = { ...bars, ...(bars.plus ? { plus: [...bars.plus] } : {}), ...(bars.minus ? { minus: [...bars.minus] } : {}) };
+	}
 	return copy;
 }
 

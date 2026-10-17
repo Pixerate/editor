@@ -1,6 +1,8 @@
 import type { JsonSchema } from '../tools/schema.js';
+import { CHART_ERROR_BAR_DIRECTIONS, CHART_ERROR_BAR_TYPES } from './errorbars.js';
 import {
 	CHART_AXIS_KINDS,
+	CHART_AXIS_SCALES,
 	CHART_CURVES,
 	CHART_LABEL_POSITIONS,
 	CHART_LEGEND_POSITIONS,
@@ -46,7 +48,15 @@ export const AXIS = (what: string): JsonSchema => ({
 		step: { type: ['number', 'null'], exclusiveMinimum: 0, description: 'Fixed distance between ticks, or null for automatic.' },
 		gridlines: { type: 'boolean', description: 'Grid lines at each tick.' },
 		format: FORMAT,
-		kind: { type: ['string', 'null'], enum: [...CHART_AXIS_KINDS, null], description: 'Category axis only: "date" reads categories as dates and labels them by calendar steps.' }
+		kind: { type: ['string', 'null'], enum: [...CHART_AXIS_KINDS, null], description: 'Category axis only: "date" reads categories as dates and labels them by calendar steps.' },
+		scale: {
+			type: ['string', 'null'],
+			enum: [...CHART_AXIS_SCALES, null],
+			description:
+				'Value axes and the numeric x axis of scatter / bubble charts: "log" spaces ticks by powers of logBase (values of 0 or less are skipped; min and max must be above 0; not with percent stacking). "linear" or null is the default. Ignored on a category axis.'
+		},
+		logBase: { type: ['number', 'null'], minimum: 2, maximum: 1000, description: 'Base of a log axis, 2 to 1000 (default 10; null resets).' },
+		reverse: { type: ['boolean', 'null'], description: 'Run the axis the other way: values from the top down (or right to left), categories from the far end. Default false.' }
 	},
 	additionalProperties: false
 });
@@ -64,6 +74,25 @@ export const TRENDLINE_PROPS: Record<string, JsonSchema> = {
 	color: { type: 'string', description: 'CSS colour (default: the series colour).' }
 };
 
+export const ERROR_BARS = (what: string): JsonSchema => ({
+	type: ['object', 'null'],
+	description: `${what} null removes them.`,
+	properties: {
+		type: {
+			type: 'string',
+			enum: [...CHART_ERROR_BAR_TYPES],
+			description: 'fixed: the same amount at every point; percent: a percentage of each value; stddev: value standard deviations of the series, drawn around the series mean (as Excel does); stderr: the standard error of the series at every point; custom: per-point plus / minus amounts.'
+		},
+		value: { type: 'number', minimum: 0, description: 'Amount in data units for fixed (default 1), percent of each value for percent (default 5), number of standard deviations for stddev (default 1). Not for stderr or custom.' },
+		plus: { type: 'array', items: VALUE, description: 'custom only: amount above each point, one per category, in data units (0 or more; null for none).' },
+		minus: { type: 'array', items: VALUE, description: 'custom only: amount below each point, one per category (default: the plus amounts).' },
+		direction: { type: 'string', enum: [...CHART_ERROR_BAR_DIRECTIONS], description: 'both (default), plus (only above) or minus (only below).' },
+		cap: { type: 'boolean', description: 'Draw end caps (default true).' }
+	},
+	required: ['type'],
+	additionalProperties: false
+});
+
 export const SERIES_PROPS: Record<string, JsonSchema> = {
 	name: { type: 'string', description: 'Series name (legend and data grid header).' },
 	values: { type: 'array', items: VALUE, description: 'One value per category, in category order (padded with gaps).' },
@@ -77,7 +106,9 @@ export const SERIES_PROPS: Record<string, JsonSchema> = {
 	marker: { type: ['string', 'null'], enum: [...CHART_MARKERS, null], description: 'Point marker shape for line, area and scatter series.' },
 	curve: { type: ['string', 'null'], enum: [...CHART_CURVES, null], description: 'Line shape for this series: linear, smooth or step.' },
 	dataLabels: { type: ['boolean', 'null'], description: 'Value labels for this series (null follows the chart).' },
-	format: { ...FORMAT, type: ['object', 'null'], description: 'How this series\' labels are written (null follows the value axis).' }
+	format: { ...FORMAT, type: ['object', 'null'], description: 'How this series\' labels are written (null follows the value axis).' },
+	errorBars: ERROR_BARS('Error bars along the value axis (bar, line, area and scatter series; on stacked charts they sit on the stack top).'),
+	xErrorBars: ERROR_BARS('Error bars along the x axis (scatter and bubble charts with numeric x values; amounts in x units).')
 };
 
 
