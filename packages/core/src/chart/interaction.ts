@@ -20,6 +20,11 @@ export function canDragChartPoint(controller: ChartController, scene: ChartScene
 }
 
 export interface ChartPointDrag {
+	/**
+	 * The value axis range when the drag started. Pass it to `layoutChart` (`valueDomain`)
+	 * until `end()` so the axis does not rescale under the pointer.
+	 */
+	readonly valueDomain: { min: number; max: number };
 	/** Moves the value with the pointer (scene coordinates). */
 	move(point: { x: number; y: number }): void;
 	/** Ends the drag (one undo step for the whole drag). */
@@ -40,7 +45,9 @@ export function startChartPointDrag(controller: ChartController, scene: ChartSce
 	if (startAt === undefined) return null;
 	controller.beginGesture(`drag:${seriesId}:${index}`);
 	let ended = false;
+	const [min, max] = scene.valueScale!.domain;
 	return {
+		valueDomain: { min, max },
 		move(point) {
 			if (ended) return;
 			const at = chartValueAtPoint(scene, point);

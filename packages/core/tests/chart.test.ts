@@ -19,7 +19,9 @@ import {
   snapChartValue,
   chartClientToScene,
   chartColorInputValue,
+  contrastingTextColor,
   describeChartSelection,
+  stepDecimals,
   handleChartKey,
   startChartPointDrag,
   type ChartMark,
@@ -499,5 +501,127 @@ describe("chartColorInputValue", () => {
     expect(chartColorInputValue("#ABCDEF")).toBe("#abcdef");
     expect(chartColorInputValue("#f0a")).toBe("#ff00aa");
     expect(chartColorInputValue("rebeccapurple")).toBe("#000000");
+  });
+});
+
+describe("chart editor fixes", () => {
+  const tickLabels = (scene: ChartScene) => byRole(scene, "tick-label").filter((m: any) => m.target?.kind === "axis").map((m: any) => m.text);
+
+  it("counts the decimals of the step itself, not just its magnitude", () => {
+    expect(stepDecimals(1)).toBe(0);
+    expect(stepDecimals(5)).toBe(0);
+    expect(stepDecimals(2.5)).toBe(1);
+    expect(stepDecimals(0.25)).toBe(2);
+    expect(stepDecimals(0.2)).toBe(1);
+    expect(stepDecimals(0.025)).toBe(3);
+    expect(stepDecimals(1e-9)).toBe(6);
+    expect(stepDecimals(0)).toBe(0);
+    expect(stepDecimals(NaN)).toBe(0);
+    const s = niceScale(0, 10, 4);
+    expect(s.step).toBe(2.5);
+    expect(s.ticks.map((t) => formatChartNumber(t, {}, stepDecimals(s.step)))).toEqual(["0.0", "2.5", "5.0", "7.5", "10.0"]);
+    const unit = niceScale(0, 1, 4);
+    expect(unit.ticks.map((t) => formatChartNumber(t, {}, stepDecimals(unit.step)))).toEqual(["0.00", "0.25", "0.50", "0.75", "1.00"]);
+    expect(formatChartNumber(0.025, { style: "percent" }, stepDecimals(0.025))).toBe("2.5%");
+  });
+
+  it("labels 2.5-step axes without merging ticks", () => {
+    const scene = layoutChart(createChartSpec({ categories: ["a", "b"], series: [{ id: "s", name: "S", values: [0, 10] }] }), { width: 640, height: 230 });
+    const labels = tickLabels(scene).filter((t) => /\d/.test(t) && !/^[ab]$/.test(t));
+    expect(new Set(labels).size).toBe(labels.length);
+  });
+
+  it("builds ticks without a running sum, even near 1e16", () => {
+    const big = niceScale(1e16, 1e16 + 4);
+    expect(big.ticks.length).toBeGreaterThan(1);
+    expect(big.ticks.length).toBeLessThanOrEqual(5);
+    for (let i = 1; i < big.ticks.length; i++) expect(big.ticks[i]).toBeGreaterThan(big.ticks[i - 1]);
+    expect(big.ticks[0]).toBe(1e16);
+    expect(big.ticks[big.ticks.length - 1]).toBe(1e16 + 4);
+    // Many ticks stay capped.
+    expect(niceScale(0, 1, 1e9).ticks.length).toBeLessThanOrEqual(1000);
+  });
+
+  it("handles extreme and non-finite ranges", () => {
+    const huge = niceScale(-Number.MAX_VALUE, Number.MAX_VALUE);
+    expect(Number.isFinite(huge.min) && Number.isFinite(huge.max) && Number.isFinite(huge.step)).toBe(true);
+    expect(huge.ticks.length).toBeGreaterThan(1);
+    expect(huge.ticks.every(Number.isFinite)).toBe(true);
+    expect(huge.ticks).toContain(0);
+    // Non-finite fixed ends fall back to the data range, then to 0..1.
+    expect(niceScale(0, 22, 5, NaN, Infinity)).toMatchObject({ min: 0, max: 25 });
+    expect(niceScale(NaN, Infinity)).toMatchObject({ min: 0, max: 1 });
+  });
+
+  it("picks stacked label colours by fill luminance and skips labels that do not fit", () => {
+    expect(contrastingTextColor("#efb118")).not.toBe("#ffffff");
+    expect(contrastingTextColor("#fff")).not.toBe("#ffffff");
+    expect(contrastingTextColor("rgb(250, 250, 200)")).not.toBe("#ffffff");
+    expect(contrastingTextColor("#4269d0")).toBe("#ffffff");
+    expect(contrastingTextColor("var(--x)")).toBe("#ffffff");
+    const spec = createChartSpec({
+      categories: ["a", "b"],
+      stacking: "stacked",
+      dataLabels: true,
+      palette: ["#1e3a8a", "#fde047"],
+      series: [
+        { id: "dark", name: "Dark", values: [50, 50] },
+        { id: "light", name: "Light", values: [50, 0.2] },
+      ],
+    });
+    const labels = byRole(layoutChart(spec, { width: 640, height: 400 }), "data-label") as any[];
+    expect(labels.find((m) => m.key === "label-dark-0").fill).toBe("#ffffff");
+    expect(labels.find((m) => m.key === "label-light-0").fill).toBe(contrastingTextColor("#fde047"));
+    expect(labels.find((m) => m.key === "label-light-1")).toBeUndefined();
+    // Horizontal: the label must fit along x.
+    const narrow = createChartSpec({ ...spec, orientation: "horizontal", series: [{ id: "a", name: "A", values: [1000, 1000] }, { id: "b", name: "B", values: [1, 1] }] });
+    const hLabels = byRole(layoutChart(narrow, { width: 640, height: 400 }), "data-label") as any[];
+    expect(hLabels.some((m) => m.key === "label-a-0")).toBe(true);
+    expect(hLabels.some((m) => m.key === "label-b-0")).toBe(false);
+  });
+
+  it("records no undo step for no-op edits", () => {
+    const c = new ChartController({ spec: sales });
+    const count = () => c.history.getState().undoCount;
+    c.setValue("north", 0, 12);
+    expect(count()).toBe(0);
+    c.update({ title: "Quarterly sales" });
+    expect(count()).toBe(0);
+    c.update({ yAxis: { ...c.getSpec().yAxis } });
+    expect(count()).toBe(0);
+    c.setValue("north", 0, 13);
+    expect(count()).toBe(1);
+    c.setValue("north", 0, 13);
+    expect(count()).toBe(1);
+  });
+
+  it("drops the undo step of a drag that ends where it started", () => {
+    const c = new ChartController({ spec: sales });
+    const scene = layoutChart(c.getSpec() as ChartSpec, { width: 640, height: 400 });
+    const { range, domain } = scene.valueScale!;
+    const pxPerUnit = (range[0] - range[1]) / (domain[1] - domain[0]);
+    const drag = startChartPointDrag(c, scene, { kind: "point", seriesId: "north", index: 0 }, { x: 100, y: 200 })!;
+    drag.move({ x: 100, y: 200 - pxPerUnit * 4 });
+    expect(c.getSpec().series[0].values[0]).toBe(16);
+    drag.move({ x: 100, y: 200 });
+    drag.end();
+    expect(c.getSpec().series[0].values[0]).toBe(12);
+    expect(c.history.getState().undoCount).toBe(0);
+    expect(c.history.getState().canRedo).toBe(false);
+  });
+
+  it("freezes the value domain during a drag", () => {
+    const c = new ChartController({ spec: sales });
+    const scene = layoutChart(c.getSpec() as ChartSpec, { width: 640, height: 400 });
+    expect(scene.valueScale!.domain).toEqual([0, 25]);
+    const drag = startChartPointDrag(c, scene, { kind: "point", seriesId: "north", index: 3 }, { x: 100, y: 200 })!;
+    expect(drag.valueDomain).toEqual({ min: 0, max: 25 });
+    c.setValue("north", 3, 60);
+    const free = layoutChart(c.getSpec() as ChartSpec, { width: 640, height: 400 });
+    expect(free.valueScale!.domain[1]).toBeGreaterThanOrEqual(60);
+    const frozen = layoutChart(c.getSpec() as ChartSpec, { width: 640, height: 400, valueDomain: drag.valueDomain });
+    expect(frozen.valueScale!.domain).toEqual([0, 25]);
+    expect(frozen.valueScale!.ticks).toEqual(scene.valueScale!.ticks);
+    drag.end();
   });
 });

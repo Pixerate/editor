@@ -26,9 +26,13 @@ export interface NiceScale {
  * inside them.
  */
 export function niceScale(min: number, max: number, count = 5, fixedMin: number | null = null, fixedMax: number | null = null): NiceScale {
+	// Non-finite fixed ends fall back to the data range, and a non-finite data range to 0..1.
+	if (fixedMin !== null && !Number.isFinite(fixedMin)) fixedMin = null;
+	if (fixedMax !== null && !Number.isFinite(fixedMax)) fixedMax = null;
 	let lo = fixedMin ?? min;
 	let hi = fixedMax ?? max;
 	if (!Number.isFinite(lo) || !Number.isFinite(hi)) {
+		fixedMin = fixedMax = null;
 		lo = 0;
 		hi = 1;
 	}
@@ -39,19 +43,46 @@ export function niceScale(min: number, max: number, count = 5, fixedMin: number 
 		if (fixedMin === null && lo !== 0) lo -= pad;
 		if (fixedMax === null || lo === hi) hi += pad;
 	}
-	const step = niceStep(hi - lo, count);
-	const niceMin = fixedMin ?? clean(Math.floor(lo / step + 1e-9) * step);
-	const niceMax = fixedMax ?? clean(Math.ceil(hi / step - 1e-9) * step);
+	// Near ±Number.MAX_VALUE the span overflows to Infinity: halve it and double the step.
+	const span = hi - lo;
+	const step = Number.isFinite(span) ? niceStep(span, count) : niceStep(hi / 2 - lo / 2, count) * 2;
+	// Rounding outwards can overflow too; keep the data end then.
+	const finiteOr = (n: number, fallback: number) => (Number.isFinite(n) ? n : fallback);
+	const niceMin = fixedMin ?? finiteOr(snap(Math.floor(lo / step + 1e-9) * step, step), lo);
+	const niceMax = fixedMax ?? finiteOr(snap(Math.ceil(hi / step - 1e-9) * step, step), hi);
+	// Ticks are first + i·step (never a running sum, which stalls once step is below the
+	// float spacing, e.g. near 1e16) and deduplicated where neighbours round to one float.
+	const firstIndex = Math.ceil(niceMin / step - 1e-9);
+	const lastIndex = Math.floor(niceMax / step + 1e-9);
+	const n = Math.min(999, Math.max(-1, lastIndex - firstIndex));
 	const ticks: number[] = [];
-	const first = Math.ceil(niceMin / step - 1e-9) * step;
-	for (let t = first, i = 0; t <= niceMax + step * 1e-9 && i < 1000; t += step, i++) ticks.push(clean(t));
+	for (let i = 0; i <= n; i++) {
+		const t = snap((firstIndex + i) * step, step);
+		if (Number.isFinite(t) && t !== ticks[ticks.length - 1]) ticks.push(t);
+	}
 	return { min: niceMin, max: niceMax, step, ticks };
 }
 
-/** Decimals needed to tell ticks `step` apart (at most 6). */
+/** `clean`, unless that moves `n` by a noticeable part of `step` (large numbers such as 1e16 + 2). */
+function snap(n: number, step: number): number {
+	const c = clean(n);
+	return Math.abs(c - n) <= step * 1e-6 ? c : n;
+}
+
+/** Decimals needed to write ticks `step` apart exactly: 1 → 0, 2.5 → 1, 0.25 → 2 (at most 6). */
 export function stepDecimals(step: number): number {
-	if (!(step > 0) || step >= 1) return 0;
-	return Math.min(6, Math.max(0, Math.ceil(-Math.log10(step) - 1e-9)));
+	if (!(step > 0) || !Number.isFinite(step)) return 0;
+	for (let d = 0; d < 6; d++) {
+		const scaled = step * Math.pow(10, d);
+		if (Math.abs(scaled - Math.round(scaled)) < 1e-9) return d;
+	}
+	return 6;
+}
+
+/** Decimals that show the leading digit of `value` (0.12 → 1, 0.012 → 2; at most 6). */
+function magnitudeDecimals(value: number): number {
+	if (!(value > 0) || value >= 1) return 0;
+	return Math.min(6, Math.max(0, Math.ceil(-Math.log10(value) - 1e-9)));
 }
 
 const COMPACT = [
@@ -82,7 +113,7 @@ export function formatChartNumber(value: number | null | undefined, format: Char
 	const decimalsFor = (v: number) => {
 		if (format.decimals !== undefined) return format.decimals;
 		if (fallbackDecimals !== undefined) return fallbackDecimals;
-		return Number.isInteger(v) ? 0 : Math.abs(v) < 1 ? Math.min(4, Math.max(2, stepDecimals(Math.abs(v)) + 1)) : 2;
+		return Number.isInteger(v) ? 0 : Math.abs(v) < 1 ? Math.min(4, Math.max(2, magnitudeDecimals(Math.abs(v)) + 1)) : 2;
 	};
 	const trim = (s: string) => (format.decimals === undefined && fallbackDecimals === undefined && s.includes('.') ? s.replace(/\.?0+$/, '') : s);
 	if (style === 'percent') {

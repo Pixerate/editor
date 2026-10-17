@@ -1346,3 +1346,15 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: A server that reports every failure the same way breaks clients. If a call to a tool that was removed (its editor unmounted) comes back as a normal tool result, the model keeps retrying it. If a cancelled `tools/call` still sends its late result, the client sees a response to a request it no longer tracks.
 - **Root Cause**: The MCP spec puts an unknown tool or malformed `params` at the JSON-RPC level (`-32602`), while invalid arguments and execution failures are `isError` results the model reads. Cancellation (`notifications/cancelled`) means the server must not respond to that request.
 - **Solution / Workaround**: `createMcpServer` returns `-32602` for unknown tools and non-object `arguments`, passes `invalid_arguments` / `tool_failed` through as `isError` results, aborts the call's `AbortSignal` on cancellation and resolves `handle()` to `null` for it. `notifications/tools/list_changed` is only sent after `notifications/initialized`.
+
+### [core/chart] Tick Steps Below the Float Spacing Stall a Running Sum
+
+- **Issue / Symptom**: `niceScale(1e16, 1e16 + 4)` returned up to 1000 identical ticks, and axis labels with a 2.5 step merged (`0 | 3 | 5 | 8 | 10`).
+- **Root Cause**: Ticks were built with `t += step`. Near 1e16 the float spacing is 2, so adding 1 rounds back to the same value and the loop only stops at its cap. Separately, label decimals came from the step's order of magnitude, which says 0 decimals for 2.5 and 1 for 0.25. `clean()` (`toPrecision(12)`) also flattens 1e16 + 2 to 1e16.
+- **Solution / Workaround**: Compute tick `i` as `(firstIndex + i) * step`, drop neighbours that round to the same float, and only `clean` when that moves a value by less than a millionth of the step. `stepDecimals` counts the decimals of the step itself. When `hi - lo` overflows (±`Number.MAX_VALUE`), take the step from the half span and double it.
+
+### [core/chart] A Drag Must Freeze the Value Axis and Drop No-op Steps
+
+- **Issue / Symptom**: Dragging a bar past the axis maximum rescaled the axis under the pointer, so the bar seemed to run away. Dragging back to the start, or setting a value to what it already was, still left an undo step.
+- **Root Cause**: Every move relaid the chart with a fresh `niceScale` over the new data. The controller recorded every commit and merged gesture steps without comparing them to the starting spec.
+- **Solution / Workaround**: `startChartPointDrag` returns `valueDomain`. Canvases keep it in state and pass it to `layoutChart({ valueDomain })` until `end()`. `ChartController.commit` returns early when the next spec is structurally equal to the current one, and `endGesture` calls `history.revertTo(mark)` when the spec is back where the gesture began.

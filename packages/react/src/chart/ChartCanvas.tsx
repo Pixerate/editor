@@ -92,6 +92,8 @@ export function ChartCanvas({ controller, width = 640, height = 400, responsive 
   const svg = useRef<SVGSVGElement>(null);
   const drag = useRef<ChartPointDrag | null>(null);
   const [measured, setMeasured] = useState<number | null>(null);
+  // Frozen while a point is dragged so the value axis does not rescale under the pointer.
+  const [valueDomain, setValueDomain] = useState<ChartPointDrag['valueDomain'] | null>(null);
 
   useEffect(() => {
     const el = wrapper.current;
@@ -107,8 +109,8 @@ export function ChartCanvas({ controller, width = 640, height = 400, responsive 
   const sceneWidth = (responsive && measured) || width;
   const fullTheme = useMemo(() => ({ ...CSS_VARIABLE_CHART_THEME, ...theme }), [theme]);
   const scene = useMemo(
-    () => layoutChart(state.spec, { width: sceneWidth, height, theme: fullTheme, selection: editable ? state.selection : null, measureText, emptyMessage }),
-    [state.spec, state.selection, sceneWidth, height, fullTheme, editable, measureText, emptyMessage],
+    () => layoutChart(state.spec, { width: sceneWidth, height, theme: fullTheme, selection: editable ? state.selection : null, measureText, emptyMessage, valueDomain }),
+    [state.spec, state.selection, sceneWidth, height, fullTheme, editable, measureText, emptyMessage, valueDomain],
   );
   const byKey = useMemo(() => new Map(scene.marks.map((m) => [m.key, m])), [scene]);
 
@@ -122,7 +124,10 @@ export function ChartCanvas({ controller, width = 640, height = 400, responsive 
     const target = key ? byKey.get(key)?.target : undefined;
     controller.select(target ?? null);
     drag.current = startChartPointDrag(controller, scene, target, scenePoint(e));
-    if (drag.current) svg.current?.setPointerCapture?.(e.pointerId);
+    if (drag.current) {
+      setValueDomain(drag.current.valueDomain);
+      svg.current?.setPointerCapture?.(e.pointerId);
+    }
   };
   const onPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
     if (drag.current) drag.current.move(scenePoint(e));
@@ -130,6 +135,7 @@ export function ChartCanvas({ controller, width = 640, height = 400, responsive 
   const endDrag = () => {
     drag.current?.end();
     drag.current = null;
+    setValueDomain(null);
   };
   const onKeyDown = (e: React.KeyboardEvent<SVGSVGElement>) => {
     if (editable && handleChartKey(controller, scene, e)) e.preventDefault();
