@@ -1364,3 +1364,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: The Release run failed after merging a patch changeset: `expected '>=0.46.1 <1.0.0-0' to match /^>=0\.\d+\.0.*<1/` in `packages/react/tests/react.test.ts`. PR CI passed because it runs the tests before `changeset version`.
 - **Root Cause**: `updateInternalDependencies: "patch"` makes `changeset version` raise the react package's `@pixerate/editor` peer range to the new core version, which ends in `.1` after a patch release. The test assumed it always ends in `.0`.
 - **Solution / Workaround**: The test accepts any `>=0.x.y <1` range. To catch this class of failure before merging, run `pnpm version-packages && pnpm test`, then discard the version changes.
+
+### [monorepo] Dependabot Bumps Can Load Two Copies of `prosemirror-model`
+
+- **Issue / Symptom**: After a grouped Dependabot bump (#136), table, track-changes and document-structure tests failed with `Can not convert <…> to a Fragment (looks like multiple versions of prosemirror-model were loaded)`.
+- **Root Cause**: `prosemirror-markdown@1.13.8` resolved `prosemirror-model@1.25.12`, while the TipTap packages stayed on 1.25.11. ProseMirror checks node types by identity, so nodes from one copy are rejected by the other.
+- **Solution / Workaround**: Run `pnpm dedupe` and commit the lockfile. After any dependency bump, check that `pnpm-lock.yaml` has a single `prosemirror-model@` entry.
