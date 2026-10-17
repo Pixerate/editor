@@ -138,11 +138,38 @@ describe("chart agent tools", () => {
 
   it("renders SVG, or PNG when the host can rasterize", async () => {
     const { call } = setup();
-    expect((await call("render_chart", { width: 300, height: 200 })).value.svg).toMatch(/^<svg[^>]*width="300"/);
-    expect((await call("render_chart", { format: "png" })).error).toMatch(/cannot rasterize/);
-    const png = setup({ rasterize: () => ({ data: "AAAA", mimeType: "image/png" }) });
-    const { result } = await png.call("render_chart", { format: "png" });
+    const svg = (await call("render_chart", { width: 300, height: 200 })).value;
+    expect(svg.svg).toMatch(/^<svg[^>]*width="300"/);
+    expect(Array.isArray(svg.warnings)).toBe(true);
+    expect((await call("render_chart", { format: "png" })).error).toMatch(/cannot rasterize.*format "svg"/);
+    const sizes: unknown[] = [];
+    const png = setup({
+      rasterize: (drawn, size) => {
+        sizes.push(size);
+        expect(drawn).toMatch(/^<svg/);
+        return { data: "AAAA", mimeType: "image/png" };
+      },
+    });
+    const { result, value } = await png.call("render_chart", { format: "png", width: 320, height: 200 });
+    expect(sizes).toEqual([{ width: 320, height: 200 }]);
     expect(result.content[0]).toEqual({ type: "image", data: "AAAA", mimeType: "image/png" });
+    expect(result.content[1]).toEqual({ type: "text", text: expect.stringMatching(/^Chart at 320 × 200\. (No layout warnings\.|Layout warnings: )/) });
+    expect(value).toMatchObject({ width: 320, height: 200, mimeType: "image/png", warnings: expect.any(Array) });
+  });
+
+  it("returns the layout warnings with the image and says when to look", async () => {
+    const crowded = new ChartController({
+      spec: { type: "bar", categories: Array.from({ length: 60 }, (_, i) => `A long category label ${i}`), series: [{ id: "s", name: "S", values: Array.from({ length: 60 }, (_, i) => i) }] },
+    });
+    const registry = new ToolRegistry();
+    registry.register(createChartToolProvider(crowded, { rasterize: () => ({ data: "AAAA", mimeType: "image/png" }) }));
+    const result: any = await registry.callTool("render_chart", { format: "png", width: 200, height: 150 });
+    expect(result.structuredContent.warnings.length).toBeGreaterThan(0);
+    expect(result.content[1].text).toContain(result.structuredContent.warnings[0].message);
+    const tool = registry.listTools().tools.find((t: any) => t.name === "render_chart")!;
+    expect(tool.description).toMatch(/costs tokens/);
+    expect(tool.description).toMatch(/overlapping/);
+    expect(tool.description).toMatch(/get_chart is cheaper/);
   });
 
   it("checks colours and recommends types", async () => {
