@@ -6,6 +6,7 @@ import {
 	angleToSvgLinearCoords,
 	gradientToSvgDef,
 	CANVAS_GRADIENT_PRESETS,
+	PIXERATE_BRAND_GRADIENT,
 	getShapeRenderData,
 	type CanvasLinearGradient,
 	type CanvasRadialGradient,
@@ -22,7 +23,17 @@ describe('canvas gradients (core)', () => {
 		expect(isCanvasGradient({ type: 'mesh', stops: [] })).toBe(false);
 	});
 
-	it('provides standard gradient presets', () => {
+	it('provides standard gradient presets including pixerate brand gradient', () => {
+		expect(PIXERATE_BRAND_GRADIENT).toEqual({
+			type: 'linear',
+			angle: 135,
+			stops: [
+				{ offset: 0, color: '#8E51FF' },
+				{ offset: 1, color: '#e12afb' }
+			]
+		});
+		expect(CANVAS_GRADIENT_PRESETS.pixerate).toEqual(PIXERATE_BRAND_GRADIENT);
+		expect(resolveCanvasGradient('pixerate')).toEqual(PIXERATE_BRAND_GRADIENT);
 		expect(CANVAS_GRADIENT_PRESETS.sunset.type).toBe('linear');
 		expect(CANVAS_GRADIENT_PRESETS.sunset.stops.length).toBeGreaterThanOrEqual(2);
 		expect(CANVAS_GRADIENT_PRESETS.ocean.type).toBe('linear');
