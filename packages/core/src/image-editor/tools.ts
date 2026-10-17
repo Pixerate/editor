@@ -187,11 +187,11 @@ export function createImageEditorToolProvider(
     inputSchema: {
       type: 'object',
       properties: {
-        kind: { type: 'string', enum: ADJUSTMENT_KINDS.map((k) => k.kind) },
+        kind: { type: 'string', enum: ADJUSTMENT_KINDS.map((k) => k.kind), description: 'Adjustment kind.' },
         params: { type: 'object', description: 'Initial parameters (see list_controls); merged with neutral defaults.' },
-        opacity: { type: 'number', minimum: 0, maximum: 1 },
-        blend: { type: 'string', enum: BLEND_MODES.map((m) => m.id) },
-        name: { type: 'string' },
+        opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Layer opacity 0-1 (default 1).' },
+        blend: { type: 'string', enum: BLEND_MODES.map((m) => m.id), description: 'Blend mode (default normal).' },
+        name: { type: 'string', description: 'Layer name shown in the layers panel.' },
       },
       required: ['kind'],
       additionalProperties: false,

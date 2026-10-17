@@ -5,8 +5,38 @@ import type { ToolProviderOptions } from './providers.js';
 const IDS = { type: 'array', items: { type: 'string' }, description: 'Node ids (default: the selection).' } as const;
 const ID = { type: 'string', description: 'An instance, or a layer inside one (default: the first selected node).' } as const;
 
+const COMPONENT_ID = { type: 'string', description: 'Component or component set id (from list_components).' } as const;
+const PARENT_ID = { type: 'string', description: 'Frame to place the instance in (default: the canvas root).' } as const;
+const X = { type: 'number', description: 'X position (canvas coordinates, or relative to the parent frame).' } as const;
+const Y = { type: 'number', description: 'Y position (canvas coordinates, or relative to the parent frame).' } as const;
+
 const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
 const WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } as const;
+const DESTRUCTIVE = { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false } as const;
+
+/** Tool titles shown by MCP clients. */
+const TITLES: Record<string, string> = {
+	list_components: 'List components',
+	inspect_instance: 'Inspect an instance',
+	create_component: 'Create a component',
+	combine_as_variants: 'Combine as variants',
+	create_instance: 'Create an instance',
+	set_instance_properties: 'Set instance properties',
+	swap_instance: 'Swap an instance',
+	reset_overrides: 'Reset overrides',
+	push_overrides: 'Push overrides to the main component',
+	detach_instance: 'Detach instances',
+	go_to_main_component: 'Go to the main component',
+	restore_main_component: 'Restore the main component',
+	add_variant: 'Add a variant',
+	remove_variant: 'Remove a variant',
+	set_variant_properties: 'Set variant properties',
+	rename_variant_property: 'Rename a variant property',
+	rename_variant_value: 'Rename a variant value'
+};
+
+/** Tools that discard state the agent cannot get back by calling another tool. */
+const DESTRUCTIVE_TOOLS = new Set(['reset_overrides', 'push_overrides', 'detach_instance', 'remove_variant']);
 
 type Outcome = { ok: true; ids: string[] } | { ok: false; reason: string };
 const check = (result: Outcome) => {
@@ -36,9 +66,13 @@ export function createCanvasComponentToolProvider(
 		extra: { required?: string[]; readOnly?: boolean } = {}
 	): AgentTool => ({
 		name,
+		title: TITLES[name],
 		description,
 		inputSchema: { type: 'object', properties: properties as never, ...(extra.required ? { required: extra.required } : {}), additionalProperties: false },
-		annotations: extra.readOnly ? READ : WRITE,
+		annotations: {
+			title: TITLES[name],
+			...(extra.readOnly ? READ : DESTRUCTIVE_TOOLS.has(name) ? DESTRUCTIVE : WRITE)
+		},
 		handler
 	});
 	const tools: AgentTool[] = [
@@ -66,10 +100,10 @@ export function createCanvasComponentToolProvider(
 			'create_instance',
 			'Places an instance of a component or component set, optionally inside a frame, at a position, with property values.',
 			{
-				componentId: { type: 'string' },
-				parentId: { type: 'string' },
-				x: { type: 'number' },
-				y: { type: 'number' },
+				componentId: COMPONENT_ID,
+				parentId: PARENT_ID,
+				x: X,
+				y: Y,
 				properties: { type: 'object', additionalProperties: true, description: 'Variant and component property values.' }
 			},
 			({ componentId, parentId, x, y, properties }) =>
@@ -85,21 +119,28 @@ export function createCanvasComponentToolProvider(
 		tool(
 			'set_instance_properties',
 			'Sets property values of instances: variant properties switch the variant (keeping compatible overrides), booleans toggle layers, text sets text, instance swap takes a component id.',
-			{ properties: { type: 'object', additionalProperties: true }, ids: IDS },
+			{
+				properties: {
+					type: 'object',
+					additionalProperties: true,
+					description: 'Property name → value (see inspect_instance for the names and types).'
+				},
+				ids: IDS
+			},
 			({ properties, ids }) => check(controller.setInstanceProperties(properties, ids)),
 			{ required: ['properties'] }
 		),
 		tool(
 			'swap_instance',
 			'Makes instances show another component (or a set’s default variant), keeping overrides of layers with matching names.',
-			{ componentId: { type: 'string' }, ids: IDS },
+			{ componentId: COMPONENT_ID, ids: IDS },
 			({ componentId, ids }) => check(controller.swapInstance(componentId, ids)),
 			{ required: ['componentId'] }
 		),
 		tool(
 			'reset_overrides',
 			'Resets overrides: of a whole instance (default), of one layer, or one override group such as "data.label" or "shape.fill".',
-			{ id: ID, group: { type: 'string' } },
+			{ id: ID, group: { type: 'string', description: 'Override group, e.g. "data.label" or "shape.fill" (default: all).' } },
 			({ id, group }) => check(controller.resetOverrides(id, group))
 		),
 		tool('push_overrides', 'Copies an instance’s overrides to its main component (and so to every other instance).', { id: ID }, ({ id }) =>
@@ -123,7 +164,7 @@ export function createCanvasComponentToolProvider(
 			tool(
 				'add_variant',
 				'Adds a variant to a component set by duplicating one (default: the set’s default variant) with new property values. Unnamed properties keep the source’s values; new property names are added to every variant ("Default"). A combination another variant has is refused. Without values the next "VariantN" is used.',
-				{ setId: SET, from: { type: 'string', description: 'Variant to duplicate.' }, variant: VALUES, x: { type: 'number' }, y: { type: 'number' } },
+				{ setId: SET, from: { type: 'string', description: 'Variant to duplicate.' }, variant: VALUES, x: X, y: Y },
 				({ setId, from, variant, x, y }) =>
 					check(
 						controller.addVariant(setId, {
@@ -149,14 +190,23 @@ export function createCanvasComponentToolProvider(
 			tool(
 				'rename_variant_property',
 				'Renames a variant property across a component set (instances keep their variant).',
-				{ name: { type: 'string' }, newName: { type: 'string' }, setId: SET },
+				{
+					name: { type: 'string', description: 'Current property name.' },
+					newName: { type: 'string', description: 'New property name.' },
+					setId: SET
+				},
 				({ name, newName, setId }) => check(controller.renameVariantProperty(name, newName, setId)),
 				{ required: ['name', 'newName'] }
 			),
 			tool(
 				'rename_variant_value',
 				'Renames a value of a variant property across a component set (instances keep their variant).',
-				{ property: { type: 'string' }, value: { type: 'string' }, newValue: { type: 'string' }, setId: SET },
+				{
+					property: { type: 'string', description: 'Variant property name.' },
+					value: { type: 'string', description: 'Current value.' },
+					newValue: { type: 'string', description: 'New value.' },
+					setId: SET
+				},
 				({ property, value, newValue, setId }) => check(controller.renameVariantValue(property, value, newValue, setId)),
 				{ required: ['property', 'value', 'newValue'] }
 			)

@@ -1304,3 +1304,27 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Mod-dragging a box handle normally scales without snapping; in Free Distort mode it skews (sides) or, with Shift+Alt, makes a symmetric perspective (corners).
 - **Root Cause**: Illustrator's Free Transform modifiers (Cmd on a side shears, Cmd+Alt+Shift on a corner is perspective) clash with the editor's "hold Mod to bypass snapping".
 - **Solution / Workaround**: The distort modifiers apply only while `state.freeDistort` is on (the toolbar's Distort toggle); out of that mode the box scales as before. Distort drags never snap.
+
+### [core/agent] Agents Can't Turn Plain Text into ProseMirror Positions
+
+- **Issue / Symptom**: An agent read the document with `get_text`, counted characters to the word it wanted, and called `insert_text { at }`. The text landed a few characters off, more so further down the document.
+- **Root Cause**: Editing tools take ProseMirror document positions. Each block boundary adds positions that don't exist in the plain text (`<p>a</p><p>b</p>`: "b" is at 4, not at offset 2), and inline nodes count as one position. Plain-text offsets and document positions only agree at the start of the first paragraph.
+- **Solution / Workaround**: Never ask a model to compute positions. `find_text` returns `{from, to}` for each match, and `get_text { blocks: true }` returns each textblock's `from`/`to`. Edits by content go through `replace_text`, which searches and replaces in one transaction (last match first, so earlier positions stay valid). Any new tool that takes positions must have a read tool that returns them.
+
+### [core/agent] The Planner Is Lenient, So Tool Providers Must Validate First
+
+- **Issue / Symptom**: `edit_canvas { operation: "remove_nodes", nodeIds: ["typo"] }` reported `applied: 1`, and nothing happened. An added node without an id got a generated id the agent never saw, so its next `connect` call used a made-up id.
+- **Root Cause**: `planAgentCommand` is built for UI choreography. It falls back instead of failing (unknown anchor → place beside the last node) and plans steps for ids that don't exist, leaving `applySteps` to ignore them. The provider returned only step types.
+- **Solution / Workaround**: `createEditorMcpToolProvider` runs `validateAgentCommand(command, snapshot)` before planning. Unknown ids, an id that already exists, self-edges and unordered ranges come back as tool errors naming the bad id. Results include `created: { nodes, edges }` with the generated ids. Hosts that call the planner directly should call `validateAgentCommand` too. Prompt positions are host-defined, so only their order is checked.
+
+### [core/tools] `anyOf` / `oneOf` Errors Must Point at the Closest Branch
+
+- **Issue / Symptom**: With composition keywords, a validator that only says "does not match any schema" leaves a model guessing. A model that retries blindly tends to swap to the other branch instead of fixing the one field it got wrong.
+- **Root Cause**: Every branch fails for its own reasons, and reporting all of them buries the useful one.
+- **Solution / Workaround**: `validateJsonSchema` reports one summary error plus the errors of the branch with the fewest errors (usually the one whose `const` discriminator matched). `$ref` only resolves local pointers (`#`, `#/$defs/...`) and stops after 32 hops, so recursive schemas (`items: { $ref: "#" }`) work and cycles can't hang the registry. Keywords it doesn't know are ignored, so tool authors should stick to the documented list.
+
+### [core/tools] MCP Distinguishes Protocol Errors from Tool Errors
+
+- **Issue / Symptom**: A server that reports every failure the same way breaks clients. If a call to a tool that was removed (its editor unmounted) comes back as a normal tool result, the model keeps retrying it. If a cancelled `tools/call` still sends its late result, the client sees a response to a request it no longer tracks.
+- **Root Cause**: The MCP spec puts an unknown tool or malformed `params` at the JSON-RPC level (`-32602`), while invalid arguments and execution failures are `isError` results the model reads. Cancellation (`notifications/cancelled`) means the server must not respond to that request.
+- **Solution / Workaround**: `createMcpServer` returns `-32602` for unknown tools and non-object `arguments`, passes `invalid_arguments` / `tool_failed` through as `isError` results, aborts the call's `AbortSignal` on cancellation and resolves `handle()` to `null` for it. `notifications/tools/list_changed` is only sent after `notifications/initialized`.

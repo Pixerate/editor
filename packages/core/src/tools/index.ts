@@ -1,7 +1,7 @@
 /**
- * `@pixerate/editor/tools`: the agent tool registry, JSON Schema validation and
- * the static MCP tool definitions, with no TipTap, ProseMirror or dagre
- * imports. Use it from non-text hosts (canvas-only, spreadsheet-only, effect
+ * `@pixerate/editor/tools`: the agent tool registry, JSON Schema validation,
+ * the static MCP tool definitions and a transport-agnostic MCP server
+ * (`createMcpServer`), with no TipTap, ProseMirror or dagre imports. Use it from non-text hosts (canvas-only, spreadsheet-only, effect
  * editors) that combine `AgentToolProvider`s and serve MCP `tools/list` /
  * `tools/call`. The editor-bound providers (`createRichTextToolProvider`,
  * `createEditorMcpToolProvider`, ...) live in `@pixerate/editor/agent`, which
@@ -10,3 +10,4 @@
 export * from './schema.js';
 export * from './registry.js';
 export * from './definitions.js';
+export * from './mcp-server.js';

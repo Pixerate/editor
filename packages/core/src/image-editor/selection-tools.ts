@@ -62,11 +62,11 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
     inputSchema: {
       type: 'object',
       properties: {
-        shape: { type: 'string', enum: ['rect', 'ellipse', 'all', 'none', 'invert'] },
-        x: { type: 'number' },
-        y: { type: 'number' },
-        width: { type: 'number' },
-        height: { type: 'number' },
+        shape: { type: 'string', enum: ['rect', 'ellipse', 'all', 'none', 'invert'], description: 'What to select.' },
+        x: { type: 'number', description: 'rect / ellipse: left edge in natural image pixels.' },
+        y: { type: 'number', description: 'rect / ellipse: top edge in natural image pixels.' },
+        width: { type: 'number', description: 'rect / ellipse: width in natural image pixels.' },
+        height: { type: 'number', description: 'rect / ellipse: height in natural image pixels.' },
         mode: modeSchema,
         feather: { type: 'number', minimum: 0, description: 'Feather radius in pixels (default 0).' },
       },
@@ -111,8 +111,8 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
     inputSchema: {
       type: 'object',
       properties: {
-        x: { type: 'number' },
-        y: { type: 'number' },
+        x: { type: 'number', description: 'Seed point x in natural image pixels.' },
+        y: { type: 'number', description: 'Seed point y in natural image pixels.' },
         color: { type: 'string', description: '#rrggbb: select this colour everywhere instead of a seed point.' },
         tolerance: { type: 'number', minimum: 0, maximum: 255, description: 'Magic wand tolerance (default 32).' },
         contiguous: { type: 'boolean', description: 'Only the connected region around (x, y) (default true).' },
@@ -143,8 +143,8 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
     inputSchema: {
       type: 'object',
       properties: {
-        op: { type: 'string', enum: [...SELECTION_MODIFY_OPS] },
-        radius: { type: 'number', minimum: 0, maximum: 500 },
+        op: { type: 'string', enum: [...SELECTION_MODIFY_OPS], description: 'How to modify the selection.' },
+        radius: { type: 'number', minimum: 0, maximum: 500, description: 'Radius in pixels.' },
       },
       required: ['op', 'radius'],
       additionalProperties: false,
@@ -166,12 +166,12 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
     inputSchema: {
       type: 'object',
       properties: {
-        radius: { type: 'number', minimum: 0, maximum: 64 },
-        smartRadius: { type: 'boolean' },
-        smooth: { type: 'number', minimum: 0, maximum: 100 },
-        feather: { type: 'number', minimum: 0, maximum: 250 },
-        contrast: { type: 'number', minimum: 0, maximum: 100 },
-        shiftEdge: { type: 'number', minimum: -100, maximum: 100 },
+        radius: { type: 'number', minimum: 0, maximum: 64, description: 'Edge detection radius in pixels.' },
+        smartRadius: { type: 'boolean', description: 'Adapt the radius to hard and soft edges.' },
+        smooth: { type: 'number', minimum: 0, maximum: 100, description: 'Smooth the edge outline (0-100).' },
+        feather: { type: 'number', minimum: 0, maximum: 250, description: 'Feather the edge (pixels).' },
+        contrast: { type: 'number', minimum: 0, maximum: 100, description: 'Sharpen the edge transition (0-100).' },
+        shiftEdge: { type: 'number', minimum: -100, maximum: 100, description: 'Move the edge out (+) or in (-), in percent.' },
       },
       additionalProperties: false,
     },
@@ -198,11 +198,11 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
     inputSchema: {
       type: 'object',
       properties: {
-        layerId: { type: 'string' },
-        kind: { type: 'string', enum: ADJUSTMENT_KINDS.map((k) => k.kind) },
-        params: { type: 'object' },
-        density: { type: 'number', minimum: 0, maximum: 1 },
-        feather: { type: 'number', minimum: 0, maximum: 1000 },
+        layerId: { type: 'string', description: 'Existing adjustment layer to mask.' },
+        kind: { type: 'string', enum: ADJUSTMENT_KINDS.map((k) => k.kind), description: 'Kind of a new layer to add and mask (instead of layerId).' },
+        params: { type: 'object', description: 'Parameters for the new layer (see list_controls).' },
+        density: { type: 'number', minimum: 0, maximum: 1, description: 'Mask density 0-1.' },
+        feather: { type: 'number', minimum: 0, maximum: 1000, description: 'Mask feather in pixels.' },
       },
       additionalProperties: false,
     },
