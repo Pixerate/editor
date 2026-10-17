@@ -33,6 +33,7 @@
     --foreground: rgb(var(--foreground-rgb));
     --border: rgb(var(--border-rgb));
     --muted: rgb(var(--muted-rgb));
+    --muted-foreground: rgb(var(--muted-foreground-rgb));
     --primary: rgb(var(--primary-rgb));
     --popover: rgb(var(--popover-rgb));
     color-scheme: dark;

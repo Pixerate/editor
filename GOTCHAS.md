@@ -21,6 +21,24 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [react|svelte/chart] Inline SVG Colours Must Use `var(--x, fallback)`, Not shadcn's `hsl(var(--x))`
+
+- **Issue / Symptom**: A chart theme written as `hsl(var(--foreground))` drew black text and invisible grid lines in the demo.
+- **Root Cause**: The demo (and the other components' inline styles) define `--foreground`, `--border`, `--primary`, … as full colours (`rgb(...)`) plus `--x-rgb` channels for Tailwind. Only shadcn's own CSS stores bare HSL channels, so `hsl(var(--x))` is invalid everywhere else. SVG presentation attributes also don't reliably resolve `var()`.
+- **Solution / Workaround**: `CSS_VARIABLE_CHART_THEME` uses `var(--foreground, #0f172a)`-style values (as `SpreadsheetEditor` does), and the canvases put colours in `style`, not `fill=` / `stroke=` attributes. The demo defines `--muted-foreground` for it.
+
+### [svelte] `bind:clientWidth` Throws in jsdom Tests
+
+- **Issue / Symptom**: Every Svelte test mounting `ChartCanvas` failed with `ReferenceError: ResizeObserver is not defined`.
+- **Root Cause**: Svelte implements `bind:clientWidth` with `ResizeObserver`, which jsdom does not provide, and the binding runs even when the measured width is unused.
+- **Solution / Workaround**: Observe the element in an `$effect` guarded by `typeof ResizeObserver === "undefined"` (as the React canvas does) and fall back to the `width` prop.
+
+### [core/chart] `load()` Keeps the Undo Stack, So Undo Can Bring Back the Old Chart
+
+- **Issue / Symptom**: In the demo, loading a sample chart and pressing Undo replaced the sample with the previous chart from before an earlier drag.
+- **Root Cause**: Edits record before / after snapshots of the whole spec; `load` swaps the spec without an undo step, so the next undo applies an older snapshot.
+- **Solution / Workaround**: Call `load(spec, { clearHistory: true })` when it replaces the whole document (opening a file, switching samples). Without `clearHistory`, use it only to refresh the chart with equivalent data.
+
 ### [core/vector] Merging Faces by a Boolean Union of Their Outlines Leaves Seams
 
 - **Issue / Symptom**: Shape Builder merges built by uniting the faces' own outlines can leave a hairline gap or a spur along the edge two faces shared, and a merged shape whose faces only touched at a corner could come out with a sliver.

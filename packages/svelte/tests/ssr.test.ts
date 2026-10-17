@@ -7,6 +7,8 @@ import { ParametersPanel } from "../src/parameters";
 import { ParametersController } from "@pixerate/editor/parameters";
 import { VectorEditor } from "../src/vector";
 import { VectorEditorController, rectSubpath } from "@pixerate/editor/vector";
+import { ChartEditor } from "../src/chart";
+import { ChartController } from "@pixerate/editor/chart";
 
 describe("SSR", () => {
   it("renders components on the server without touching the DOM", () => {
@@ -39,5 +41,9 @@ describe("SSR", () => {
       document: { width: 100, height: 100, nodes: [{ id: "a", type: "path", fill: "#f00", subpaths: [rectSubpath({ x: 0, y: 0, width: 10, height: 10 })] }] },
     });
     expect(render(VectorEditor, { props: { controller: vector } }).body).toContain('data-vector-id="a"');
+    const chart = new ChartController({ spec: { title: "Sales", categories: ["Q1"], series: [{ id: "n", name: "North", values: [3] }] } });
+    const chartBody = render(ChartEditor, { props: { controller: chart } }).body;
+    expect(chartBody).toContain('data-chart-key="bar-n-0"');
+    expect(chartBody).toContain('data-cell="n:0"');
   });
 });

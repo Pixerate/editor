@@ -11,6 +11,7 @@ const CanvasTab = lazy(() => import("./components/CanvasTab").then((m) => ({ def
 const ImageEditorTab = lazy(() => import("./components/ImageEditorTab").then((m) => ({ default: m.ImageEditorTab })));
 const ParametersTab = lazy(() => import("./components/ParametersTab").then((m) => ({ default: m.ParametersTab })));
 const VectorTab = lazy(() => import("./components/VectorTab").then((m) => ({ default: m.VectorTab })));
+const ChartTab = lazy(() => import("./components/ChartTab").then((m) => ({ default: m.ChartTab })));
 const ParityMatrixTab = lazy(() => import("./components/ParityMatrixTab").then((m) => ({ default: m.ParityMatrixTab })));
 import { AgentToolsPanel } from "./components/AgentToolsPanel";
 import {
@@ -22,9 +23,10 @@ import {
   Shapes,
   SlidersHorizontal,
   PenTool,
+  BarChart3,
 } from "lucide-react";
 
-type TabId = "prompt" | "rich" | "sheet" | "canvas" | "vector" | "image" | "params" | "parity";
+type TabId = "prompt" | "rich" | "sheet" | "canvas" | "vector" | "chart" | "image" | "params" | "parity";
 
 const TABS: Array<{ id: TabId; label: string; icon: React.ElementType }> = [
   { id: "prompt", label: "Prompt Studio", icon: Sparkles },
@@ -32,6 +34,7 @@ const TABS: Array<{ id: TabId; label: string; icon: React.ElementType }> = [
   { id: "sheet", label: "Spreadsheet", icon: Table2 },
   { id: "canvas", label: "Canvas", icon: Shapes },
   { id: "vector", label: "Vector", icon: PenTool },
+  { id: "chart", label: "Chart", icon: BarChart3 },
   { id: "image", label: "Image Editor", icon: ImageIcon },
   { id: "params", label: "Parameters", icon: SlidersHorizontal },
   { id: "parity", label: "Feature Parity Matrix", icon: CheckCircle2 },
@@ -146,6 +149,7 @@ export default function App() {
           {activeTab === "image" && <ImageEditorTab />}
           {activeTab === "params" && <ParametersTab />}
           {activeTab === "vector" && <VectorTab />}
+          {activeTab === "chart" && <ChartTab />}
           {activeTab === "parity" && <ParityMatrixTab />}
         </Suspense>
         {activeTab !== "parity" && <AgentToolsPanel />}

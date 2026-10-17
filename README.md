@@ -23,6 +23,7 @@ Editors for creative and AI apps: prompts, rich-text documents, spreadsheets, a 
 | **Spreadsheet** | Formula engine (dynamic arrays, `LAMBDA`, defined names, multiple sheets), Excel number formats, conditional formatting, data validation, sort/filter/freeze/merge, CSV, fast recalculation, virtualised grid | `@pixerate/editor/spreadsheet` |
 | **Canvas** | Node graph tools on xyflow: align and distribute, smart guides, auto layout, curve-preserving shape booleans, design tokens with light/dark modes, components and instances, keyframe animation | `@pixerate/editor/canvas`, `/tokens`, `/animation` |
 | **Vector editor** | Headless pen, pencil, shape, direct-selection, scissors, knife, eraser, width, Shape Builder, paint bucket, blend, gradient and envelope-mesh tools over Bézier paths and groups: shape-keeping point deletion, segment bending, transforms with selection handles, Free Distort (perspective) and skew, live envelope warps (fifteen presets and editable Bézier meshes, Make with Top Object), boolean and Pathfinder operations, live blends with rotation-aware path morphing, non-destructive path effects (trim, round corners, pucker & bloat, twist, zig zag, wiggle, offset, merge, repeater) and live booleans, linear, radial (focal point, aspect), conic, reflected and diamond gradients with stop midpoints, sRGB / linear-light / Oklab interpolation, spread modes and gradients along or across strokes, live per-corner radii (round, inverted, chamfer), inside / outside strokes, arrowheads, variable-width (tapered / pressure) strokes, align / distribute, grouping and stacking, smart guides with object and grid snapping, undo per gesture, DOM-free SVG import / export and agent commands | `@pixerate/editor/vector` |
+| **Chart editor** | Bar, line, area, scatter, pie and donut charts (combos, stacked and 100% stacked, horizontal bars, smooth / step lines) from a validated JSON spec; a DOM-free layout engine that emits drawing primitives with click targets, drag-to-edit bars and points, keyboard editing, an editable data grid with spreadsheet paste and CSV import, axes, legends and number formats, undo per gesture, SVG export and agent commands | `@pixerate/editor/chart` |
 | **Image editor** | Canvas 2D crop/rotate, adjustments and adjustment layers, blend modes, histogram, selections and masks (magic wand, Refine Edge), annotations | `@pixerate/editor/image-editor` |
 | **Parameters** | Schema-driven control panel for effects, shaders, generators and component props: sliders, toggles, choices, colours, vectors, image pickers and text, with groups, conditional fields, presets, undo, randomize and keyframe diamonds | `@pixerate/editor/parameters` |
 | **Commands and agents** | One command registry for shortcuts, the command palette and AI agent tools (MCP-style `tools/list` / `tools/call`) | `@pixerate/editor/commands`, `/agent` |
@@ -337,6 +338,22 @@ Every feature is available from core and from both framework packages. "Via core
 </details>
 
 <details>
+<summary><strong>Chart editor</strong> (8)</summary>
+
+| Feature | Core | React | Svelte |
+| :--- | :---: | :---: | :---: |
+| Chart Spec (bar, line, area, scatter, pie, donut; per-series types for combos; stacking none / stacked / 100%; horizontal bars; linear / smooth / step curves; points, data labels, palette, donut hole) with sentence validation | `ChartSpec`, `normalizeChartSpec` & `createChartSpec` (`/chart`) | `<ChartCanvas>` | `<ChartCanvas>` |
+| DOM-free Chart Layout (nice ticks, rotated / thinned category labels, wrapped legends on any side, axis titles, gaps for blank values, monotone smooth curves, selection outlines, pluggable text measuring and themes) | `layoutChart` → `ChartScene` of rects, paths, circles, lines and text with click targets | `<ChartCanvas>` (follows its container's width) | `<ChartCanvas>` (follows its container's width) |
+| Chart Controller (stable `getState`, `subscribe`, all-or-nothing `update`, selection, `toJSON` / `load`, shared or own `HistoryManager`) | `ChartController` | `useChartEditor`, `useChartController` & `useChartState` | `createChartEditor` |
+| Chart Interaction (click to select title, axes, legend, series, points and categories; drag bars and points to new values as one undo step, stacked bars too; ← → ↑ ↓, Delete, Escape) | `startChartPointDrag`, `handleChartKey`, `chartValueAtPoint` & `describeChartSelection` | `<ChartCanvas>` | `<ChartCanvas>` |
+| Chart Data Grid (rename, recolour, hide, add and delete series and categories; numbers as typed — `1,200`, `12%`, `(3)`, blank for a gap; TSV / CSV paste grows the grid) | `setValue`, `pasteCells`, `addSeries`, `addCategory`, `parseChartValue` | `<ChartDataGrid>` | `<ChartDataGrid>` |
+| Chart Inspector (type, titles, stacking, orientation, curve, points, data labels, legend, axes with fixed bounds, grid lines and number formats, selected series colour / type / order) | `update`, `setAxis`, `setLegend`, `updateSeries`, `moveSeries` | `<ChartInspector>` & `<ChartEditor>` | `<ChartInspector>` & `<ChartEditor>` |
+| Chart Data Import / Export (tables with series in columns or rows, CSV / TSV, colours kept by series name) and SVG Export | `chartDataFromTable`, `chartDataToTable`, `importCsv`, `chartToSvg` & `chartSceneToSvg` | Via core | Via core |
+| Chart Commands & Agent Tools (`chart.describe`, `update`, `setData`, `setValues` by series and category name, `addSeries`, `importCsv`, `exportSvg`, …) | `createChartCommands` | `useChartCommands` | `useChartCommands` |
+
+</details>
+
+<details>
 <summary><strong>Image editor</strong> (10)</summary>
 
 | Feature | Core | React | Svelte |
@@ -428,6 +445,7 @@ Every feature is available from core and from both framework packages. "Via core
 - [Parameters editor](docs/parameters.md)
 - [Vector editor](docs/vector-editor.md)
 - [Vector editor roadmap](docs/vector-roadmap.md)
+- [Chart editor](docs/chart-editor.md)
 - [CI/CD and releases](docs/ci-cd-release.md)
 - [Known pitfalls and workarounds (GOTCHAS)](GOTCHAS.md)
 
