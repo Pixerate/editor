@@ -28,3 +28,4 @@ export * from './componentsController.js';
 export * from './freehand.js';
 export * from './drawController.js';
 export * from './gradient.js';
+export * from './mermaid/index.js';

@@ -23,6 +23,7 @@ Editors for creative and AI apps: prompts, rich-text documents, spreadsheets, a 
 | **Spreadsheet** | Formula engine (dynamic arrays, `LAMBDA`, defined names, multiple sheets), Excel number formats, conditional formatting, data validation, sort/filter/freeze/merge, CSV, fast recalculation, virtualised grid | `@pixerate/editor/spreadsheet` |
 | **Canvas** | Node graph tools on xyflow: align and distribute, smart guides, auto layout, curve-preserving shape booleans, design tokens with light/dark modes, components and instances, keyframe animation | `@pixerate/editor/canvas`, `/tokens`, `/animation` |
 | **Vector editor** | Headless pen, pencil, shape, direct-selection, scissors, knife, eraser, width, Shape Builder, paint bucket, blend, gradient and envelope-mesh tools over Bézier paths and groups: shape-keeping point deletion, segment bending, transforms with selection handles, Free Distort (perspective) and skew, live envelope warps (fifteen presets and editable Bézier meshes, Make with Top Object), boolean and Pathfinder operations, live blends with rotation-aware path morphing, non-destructive path effects (trim, round corners, pucker & bloat, twist, zig zag, wiggle, offset, merge, repeater) and live booleans, linear, radial (focal point, aspect), conic, reflected and diamond gradients with stop midpoints, sRGB / linear-light / Oklab interpolation, spread modes and gradients along or across strokes, live per-corner radii (round, inverted, chamfer), inside / outside strokes, arrowheads, variable-width (tapered / pressure) strokes, align / distribute, grouping and stacking, smart guides with object and grid snapping, undo per gesture, DOM-free SVG import / export and agent commands | `@pixerate/editor/vector` |
+| **Mermaid diagrams** | Flowchart, state, class and ER diagrams parsed from Mermaid and edited on the canvas: untouched statements, comments and formatting round-trip byte for byte, edits rewrite only the statements they touch, positions live in a `%% @pixerate` comment; nested groups with dagre layout, a streaming view for diagrams a model is still writing, `findMermaidSources` for Mermaid in Markdown or chat, and 19 agent tools | `@pixerate/editor/diagram`, `/canvas` |
 | **Chart editor** | Bar, line, area, scatter, bubble, pie, donut, radar, waterfall, histogram, box, funnel and treemap charts (combos with a secondary axis, stacked and 100% stacked, horizontal bars, numeric-x scatter, date axes, trendlines, spreadsheet format codes) from a validated JSON spec; a DOM-free layout engine with click targets and layout warnings, drag-to-edit with snapping, keyboard editing, a data grid with paste and CSV import, presets and colour-blind checks, Mermaid and Office (DOCX / PPTX chart XML) import and export, streaming views, sparklines, accessible SVG, and 28 agent tools whose edits can be acted out with a cursor | `@pixerate/editor/chart` |
 | **Image editor** | Canvas 2D crop/rotate, adjustments and adjustment layers, blend modes, histogram, selections and masks (magic wand, Refine Edge), annotations | `@pixerate/editor/image-editor` |
 | **Parameters** | Schema-driven control panel for effects, shaders, generators and component props: sliders, toggles, choices, colours, vectors, image pickers and text, with groups, conditional fields, presets, undo, randomize and keyframe diamonds | `@pixerate/editor/parameters` |
@@ -280,7 +281,7 @@ Every feature is available from core and from both framework packages. "Via core
 </details>
 
 <details>
-<summary><strong>Canvas</strong> (27)</summary>
+<summary><strong>Canvas</strong> (31)</summary>
 
 | Feature | Core | React | Svelte |
 | :--- | :---: | :---: | :---: |
@@ -301,6 +302,10 @@ Every feature is available from core and from both framework packages. "Via core
 | Canvas Scenes (saved viewports, next / previous) | `CanvasScenesStore` | `useCanvasScenes` | `createCanvasScenes` |
 | Canvas Connector Snapping to Shape Sides | ✅ | Via core | Via core |
 | Canvas Arrange Keyboard Shortcuts | `matchArrangeShortcut` | `useCanvasArrangeShortcuts` | `createCanvasArrangeShortcuts` |
+| Mermaid Diagram Model (flowchart, state, class, ER; lossless parse / serialise, statement-level edits, `%% @pixerate` layout comment, Ursula's `@ursula` read; other families kept as text) | `parseMermaid`, `applyEdits`, `serializeMermaid` & `DiagramController` (`/diagram`) | `useMermaidDiagram` & `useDiagramState` | `createMermaidDiagram` |
+| Mermaid Diagrams on the Canvas (dagre with nested groups and per-group direction, stored positions blended with new nodes, drags back to `moveNodes`, SVG geometry for the flowchart and state shapes) | `mermaidToCanvas`, `ensureDiagramLayout`, `mermaidMovesFromCanvas` & `mermaidShapePaths` (`/canvas`) | `<MermaidDiagramNode>` & `<MermaidDiagramGroup>` | `<MermaidDiagramNode>` & `<MermaidDiagramGroup>` |
+| Mermaid Streaming View & Finder (nodes held back until an edge places them, glide between layouts; diagrams found in Markdown, chat and bare text) | `DiagramStream`, `blendDiagramLayout`, `streamedDiagramText` & `findMermaidSources` | `useMermaidStream` | `createMermaidStream` |
+| Mermaid Diagram Agent Tools (19 tools: read, export, find, load, add / remove / rename / reshape / style nodes, connect / label / reconnect edges, groups, direction, moves, undo / redo; checked against the diagram first) | `createDiagramToolProvider` | `useAgentToolProvider` | `useAgentToolProvider` |
 | Canvas Shape Boolean Ops (Unite / Intersect / Subtract / Exclude / Divide, curve-preserving) | `combineShapeNodes`, `pathBoolean` & `polygonBoolean` | `useCanvasArrange` | `createCanvasArrange` |
 | Canvas Offset Path & Outline Stroke (joins, caps, miter limit, dashes) | `offsetPath`, `outlineStroke`, `offsetShapeNodes` & `outlineShapeNodeStrokes` | `useCanvasArrange` (`offsetShapes`, `outlineStroke`) | `createCanvasArrange` (`offsetShapes`, `outlineStroke`) |
 | Canvas Shape Commands (palette / context menu) | `createShapeCommands` | Via core & `useRegisterCommands` | Via core & `useRegisterCommands` |
@@ -451,6 +456,7 @@ Every feature is available from core and from both framework packages. "Via core
 - [Architecture](docs/architecture.md)
 - [Prompt grammar and resolution](docs/prompt-engine.md)
 - [Canvas](docs/canvas.md)
+- [Mermaid diagrams](docs/mermaid-diagrams.md)
 - [Parameters editor](docs/parameters.md)
 - [Vector editor](docs/vector-editor.md)
 - [Vector editor roadmap](docs/vector-roadmap.md)

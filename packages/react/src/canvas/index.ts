@@ -645,3 +645,22 @@ export {
 	type SvgGradientStop,
 	type SvgGradientDef
 } from '@pixerate/editor/canvas';
+
+// Mermaid diagrams (flowchart, state, class, ER) on the canvas, with streaming
+export {
+	useMermaidDiagram,
+	useMermaidStream,
+	useDiagramState,
+	type UseMermaidDiagramOptions,
+	type UseMermaidDiagramResult,
+	type UseMermaidStreamOptions,
+	type UseMermaidStreamResult
+} from './useMermaidDiagram.js';
+
+export {
+	MermaidDiagramNode,
+	MermaidDiagramGroup,
+	mermaidNodeStyle,
+	type MermaidDiagramNodeData,
+	type MermaidDiagramNodeProps
+} from './MermaidDiagramNode.js';

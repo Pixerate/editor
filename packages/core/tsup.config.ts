@@ -22,6 +22,7 @@ export default defineConfig({
     "parameters/index": "src/parameters/index.ts",
     "vector/index": "src/vector/index.ts",
     "chart/index": "src/chart/index.ts",
+    "diagram/index": "src/diagram/index.ts",
   },
   format: ["esm", "cjs"],
   dts: true,

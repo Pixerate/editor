@@ -1430,3 +1430,15 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: A chart exported with `exportDocx` and imported again has the same data, colours and options, but its series ids are `series-1`, `series-2`, … instead of the originals, and colours come back lower-case.
 - **Root Cause**: `chartToOoxml` writes a DrawingML `c:chartSpace`, which has no place for a series id; `chartFromOoxml` numbers series on read and writes colours as lower-case hex. The import also does not read the drawing's `wp:extent`, so the node's `width` / `height` fall back to the defaults.
 - **Solution / Workaround**: Compare round-tripped specs without series ids (as `tests/docx-export.test.ts` does), and do not key anything that must survive a Word round trip on series ids. Sparklines have no Word equivalent here and are exported as text (label, or `▁▅█` bars).
+
+### [react|svelte/canvas] Streamed Nodes Lose Their Edges in React Flow
+
+- **Issue / Symptom**: In the Mermaid streaming view, only the last edges to arrive were drawn; earlier ones vanished while nodes glided between layouts.
+- **Root Cause**: Every tween frame passes new node objects. Without `measured`, React Flow treats a changed node object as unmeasured and drops its handle bounds, and edges whose handles have no bounds are not rendered.
+- **Solution / Workaround**: Keep the sizes React Flow reports (`dimensions` changes in `onNodesChange`) and pass them back as `node.measured` (see `MermaidDiagramDemo.tsx`). Controlled editors that already apply `applyNodeChanges` are not affected.
+
+### [core/canvas] Moving One Node of an Auto-Laid Mermaid Diagram Shifted the Others
+
+- **Issue / Symptom**: Dragging one node of a diagram without a `%% @pixerate` layout moved every other node by the same offset.
+- **Root Cause**: `ensureDiagramLayout` keeps stored positions and aligns the auto layout of the rest on them (Ursula's blend). With one stored node, the whole auto layout is shifted to match it.
+- **Solution / Workaround**: Pin the current positions on the first move: `mermaidMovesFromCanvas(..., { stored: doc.meta.layout })` (the React / Svelte bindings do) and `createDiagramToolProvider(controller, { getPositions })` for agent moves.
