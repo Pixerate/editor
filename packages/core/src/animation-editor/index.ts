@@ -12,6 +12,7 @@ export * from './issues.js';
 export * from './parse.js';
 export * from './compile.js';
 export * from './evaluate.js';
+export * from './onion.js';
 export * from './check.js';
 export * from './edit.js';
 export * from './flair.js';

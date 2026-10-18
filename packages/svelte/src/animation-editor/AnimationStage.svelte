@@ -1,19 +1,23 @@
 <script lang="ts">
-  import type { AnimationEditorController, MotionFrameOptions } from '@pixerate/editor/animation-editor';
+  import type { AnimationEditorController, MotionFrameOptions, MotionOnionSkin } from '@pixerate/editor/animation-editor';
   import { animationEditorStateOf } from './createAnimationEditor.svelte.js';
 
   interface Props {
     controller: AnimationEditorController;
     /** Control values to preview (`{ accent: "#0ea5e9" }`). */
     values?: MotionFrameOptions['values'];
+    /** Faded frames either side of the playhead. */
+    onionSkin?: MotionOnionSkin;
+    /** Draw where nodes travel: true for every node whose place changes, or a list of ids. */
+    motionPaths?: boolean | readonly string[];
     class?: string;
   }
 
-  let { controller, values, class: className = '' }: Props = $props();
+  let { controller, values, onionSkin, motionPaths, class: className = '' }: Props = $props();
   const view = animationEditorStateOf(() => controller);
   const svg = $derived(
     controller
-      .toSvg(view.current.time, { pretty: false, idPrefix: 'ae-', values })
+      .toSvg(view.current.time, { pretty: false, idPrefix: 'ae-', values, onionSkin, motionPaths })
       .replace(/<svg ([^>]*?)width="[^"]*" height="[^"]*"/, '<svg $1width="100%" height="100%"')
   );
 </script>

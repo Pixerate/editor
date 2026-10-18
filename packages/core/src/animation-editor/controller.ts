@@ -1,3 +1,4 @@
+import { motionStageSvg, type MotionOverlayOptions } from './onion.js';
 import type { Clock } from '../animation/clock.js';
 import type { AnimationLoopMode } from '../animation/evaluate.js';
 import { AnimationPlayer } from '../animation/player.js';
@@ -302,8 +303,8 @@ export class AnimationEditorController {
 	}
 
 	/** The scene at `time` (default: the playhead) as SVG. */
-	toSvg(time = this.player.currentTime, options: MotionSvgOptions = {}): string {
-		return motionFrameToSvg(this.scene, time, options);
+	toSvg(time = this.player.currentTime, options: MotionSvgOptions & MotionOverlayOptions = {}): string {
+		return motionStageSvg(this.scene, time, options);
 	}
 
 	/** The scene as a Flair `SvgMotion`. */

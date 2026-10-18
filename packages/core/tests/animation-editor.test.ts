@@ -18,6 +18,10 @@ import {
 	toFlairSvgMotion,
 	toFlairVectorEffect,
 	MOTION_EASE_OUT,
+	motionGhosts,
+	motionMovingIds,
+	motionPath,
+	motionStageSvg,
 	motionFlairPrimitive,
 	fromFlairSvgMotion,
 	fromFlairVectorEffect,
@@ -886,5 +890,53 @@ describe('importing from Flair', () => {
 		const broken = await registry.callTool('import_flair_effect', { motion: { svg: '<nope/>' } });
 		expect(broken.isError).toBe(true);
 		expect(JSON.stringify(broken.content)).toMatch(/could not be imported[\s\S]*Nothing was changed/);
+	});
+});
+
+describe('onion skin and motion paths', () => {
+	const s = scene([{ id: 'one', run: [{ type: 'enter', targets: ['dot'], duration: 200 }, { type: 'move', targets: ['box'], by: { x: 100, y: 0 }, ease: 'linear', duration: 1000 }, { type: 'move', targets: ['box'], by: { x: 0, y: 50 }, ease: 'linear', duration: 500 }] }]);
+
+	it('places ghosts either side of the playhead, fading with distance', () => {
+		expect(motionGhosts(s, 500, { before: 2, after: 1, spacing: 100 })).toEqual([
+			{ time: 400, offset: -1, opacity: 0.35 },
+			{ time: 300, offset: -2, opacity: 0.175 },
+			{ time: 600, offset: 1, opacity: 0.35 }
+		]);
+		expect(motionGhosts(s, 50, { before: 3, spacing: 100 })).toEqual([]);
+		expect(motionGhosts(s, 900, { before: 2, after: 1, spacing: 'commands' }).map((g) => g.time)).toEqual([200, 0, 1200]);
+	});
+
+	it('traces where a node travels, with a dot at each change', () => {
+		expect(motionMovingIds(s)).toEqual(['box']);
+		const p = motionPath(s, 'box', { step: 250 });
+		expect(p.points[0]).toEqual({ t: 0, x: 50, y: 50 });
+		expect(p.points.find((q) => q.t === 500)).toEqual({ t: 500, x: 80, y: 50 }); // the move starts at 200 ms
+		expect(p.keys.map((k) => [k.x, k.y])).toEqual([[50, 50], [150, 50], [150, 100]]);
+		expect(() => motionPath(s, 'nope')).toThrow(/no element "nope"/);
+	});
+
+	it('draws ghosts under the frame and paths over it, keeping ids unique', () => {
+		const svg = motionStageSvg(s, 600, { onionSkin: { before: 2, spacing: 200 }, motionPaths: true, pretty: false });
+		expect(svg.match(/data-onion="before"/g)).toHaveLength(2);
+		expect(svg.match(/ id="box"/g)).toHaveLength(1);
+		expect(svg.indexOf('data-onion')).toBeLessThan(svg.indexOf(' id="box"'));
+		expect(svg.indexOf('data-motion-path="box"')).toBeGreaterThan(svg.indexOf(' id="box"'));
+		expect(svg).toMatch(/^<svg[^>]*><rect width="400" height="200" fill="#ffffff"\/><g data-onion/);
+		expect(motionStageSvg(s, 600, { pretty: false })).toBe(motionFrameToSvg(s, 600, { pretty: false }));
+	});
+
+	it('shows motion to agents in pictures and in numbers', async () => {
+		const controller = new AnimationEditorController({ scene: s });
+		const registry = new ToolRegistry();
+		registry.register(createAnimationEditorToolProvider(controller));
+		const frame = (await registry.callTool('render_animation_frame', { time: 600, onion_skin: { before: 1 }, motion_paths: ['box'] })).structuredContent as any;
+		expect(frame.svg).toContain('data-onion="before"');
+		expect(frame.svg).toContain('data-motion-path="box"');
+		const bad = await registry.callTool('render_animation_frame', { time: 600, motion_paths: ['bx'] });
+		expect(bad.isError).toBe(true);
+		expect(JSON.stringify(bad.content)).toContain('did you mean');
+		const path = (await registry.callTool('get_motion_path', { node: 'box', step: 500 })).structuredContent as any;
+		expect(path.keys).toHaveLength(3);
+		expect((await registry.callTool('get_motion_path', { node: 'ghost' })).isError).toBe(true);
 	});
 });
