@@ -1,5 +1,5 @@
 import type { Editor } from '@tiptap/core';
-import { plainTextToSlice, getEditorText } from '../serializers/plain-text.js';
+import { getEditorText } from '../serializers/plain-text.js';
 import { getEditorMarkdown } from '../serializers/markdown.js';
 import { TextSelection } from '@tiptap/pm/state';
 import {
@@ -28,6 +28,16 @@ import {
 import type { AgentStep, EditorSnapshot } from './types.js';
 import { createDocumentChartTools } from './documentChartTools.js';
 import type { CanvasEdge, CanvasNode } from '../canvas/types.js';
+import {
+	DEFAULT_AGENT_CARET_COLOR,
+	DEFAULT_AGENT_CARET_NAME,
+	clearAgentCaret,
+	markAgentChanges,
+	replaceWithTextTransaction,
+	setAgentCaret,
+	typeAgentText,
+	type AgentTypingOptions
+} from '../extensions/agent-caret.js';
 
 export interface ToolProviderOptions {
 	/** Provider id (unique per registry). */
@@ -45,17 +55,6 @@ export type RichTextToolTarget = Editor | { editor: Editor };
 
 const toEditor = (target: RichTextToolTarget): Editor =>
 	'commands' in target ? (target as Editor) : (target as { editor: Editor }).editor;
-
-/** Replaces `from..to` with literal text (HTML is not parsed; newlines split paragraphs). */
-function replaceWithText(editor: Editor, from: number, to: number, text: string) {
-	const { state, view } = editor;
-	const tr = /[\r\n]/.test(text)
-		? state.tr.replace(from, to, plainTextToSlice(text, state.schema))
-		: text
-			? state.tr.insertText(text, from, to)
-			: state.tr.delete(from, to);
-	view.dispatch(tr.scrollIntoView());
-}
 
 function selectionInfo(editor: Editor) {
 	const { from, to } = editor.state.selection;
@@ -78,6 +77,102 @@ function textBlocks(editor: Editor) {
 		return false;
 	});
 	return blocks;
+}
+
+/** How the rich-text tools show the agent at work in the document. */
+export interface RichTextAgentPresence {
+	/** Caret id (default: the provider id). */
+	id?: string;
+	/** Name on the caret's tag (default "Agent"). */
+	name?: string;
+	/** CSS colour of the caret and its highlights (default violet). */
+	color?: string;
+	/**
+	 * Type inserted and replacement text out a few characters at a time (still one undo step).
+	 * Default false: edits land at once. `true` uses the default speed.
+	 */
+	typing?: boolean | AgentTypingOptions;
+	/** Hide the caret this long after the last tool call, in ms (default 12000; 0 keeps it). */
+	idleMs?: number;
+	/** Keep changed text tinted this long, in ms (default 1500; 0 keeps the tint until the next edit). */
+	changedMs?: number;
+}
+
+export interface RichTextToolProviderOptions extends ToolProviderOptions {
+	/**
+	 * Draw the agent's caret in the document where it reads and writes, as collaborators' carets
+	 * look in Google Docs (default true). `false` leaves the document untouched by presence.
+	 */
+	presence?: boolean | RichTextAgentPresence;
+}
+
+/** Shows the agent's caret, selection and changes in a rich-text editor for the tools. */
+function createTextPresence(editor: () => Editor, providerId: string, option: RichTextToolProviderOptions['presence']) {
+	const config: RichTextAgentPresence | null = option === false ? null : option === true || option === undefined ? {} : option;
+	const caret = {
+		id: config?.id ?? providerId,
+		name: config?.name ?? DEFAULT_AGENT_CARET_NAME,
+		color: config?.color ?? DEFAULT_AGENT_CARET_COLOR
+	};
+	const typing: AgentTypingOptions | null = !config?.typing ? null : config.typing === true ? {} : config.typing;
+	const idleMs = config?.idleMs ?? 12000;
+	const changedMs = config?.changedMs ?? 1500;
+	let idleTimer: ReturnType<typeof setTimeout> | undefined;
+	let tintTimer: ReturnType<typeof setTimeout> | undefined;
+
+	const live = () => {
+		const ed = editor();
+		return config && ed && !ed.isDestroyed ? ed : null;
+	};
+	const touch = () => {
+		clearTimeout(idleTimer);
+		if (idleMs > 0) idleTimer = setTimeout(() => live() && clearAgentCaret(live()!, caret.id), idleMs);
+	};
+	const tint = (ed: Editor, ranges: Array<{ from: number; to: number }>) => {
+		clearTimeout(tintTimer);
+		markAgentChanges(ed, caret.id, ranges);
+		if (changedMs > 0 && ranges.length) tintTimer = setTimeout(() => live() && markAgentChanges(live()!, caret.id, []), changedMs);
+	};
+
+	return {
+		/** Puts the caret at `head`, selecting from `anchor`. */
+		show(anchor: number, head = anchor) {
+			const ed = live();
+			if (!ed) return;
+			setAgentCaret(ed, { ...caret, from: anchor, to: head });
+			touch();
+		},
+		/** Shows the caret after ranges just changed by a tool, tinting them. */
+		changed(ranges: Array<{ from: number; to: number }>) {
+			const ed = live();
+			if (!ed || !ranges.length) return;
+			const last = ranges[ranges.length - 1];
+			setAgentCaret(ed, { ...caret, from: last.to });
+			tint(ed, ranges);
+			touch();
+		},
+		/** Replaces `from..to` with literal text, typed out when typing is on. Returns the inserted range. */
+		async write(ed: Editor, from: number, to: number, text: string, signal?: AbortSignal) {
+			if (live() && typing) {
+				clearTimeout(tintTimer);
+				const range = await typeAgentText(ed, { ...typing, from, to, text, caret, signal });
+				if (changedMs > 0) tintTimer = setTimeout(() => live() && markAgentChanges(live()!, caret.id, []), changedMs);
+				touch();
+				return range;
+			}
+			const tr = replaceWithTextTransaction(ed.state, from, to, text);
+			const end = tr.mapping.map(to, 1);
+			const range = { from: Math.min(tr.mapping.map(from, -1), end), to: end };
+			ed.view.dispatch(tr.scrollIntoView());
+			if (range.from < range.to) this.changed([range]);
+			else this.show(range.to);
+			return range;
+		},
+		dispose() {
+			clearTimeout(idleTimer);
+			clearTimeout(tintTimer);
+		}
+	};
 }
 
 const FIND_SCHEMA_PROPERTIES = {
@@ -122,10 +217,11 @@ function findMatches(
  */
 export function createRichTextToolProvider(
 	target: RichTextToolTarget,
-	options: ToolProviderOptions
+	options: RichTextToolProviderOptions
 ): AgentToolProvider {
 	const editor = () => toEditor(target);
 	const charts = createDocumentChartTools(editor);
+	const presence = createTextPresence(editor, options.id, options.presence);
 
 	const getText: AgentTool = {
 		name: 'get_text',
@@ -174,7 +270,8 @@ export function createRichTextToolProvider(
 		name: 'insert_text',
 		title: 'Insert text',
 		description:
-			'Inserts literal text (newlines start new paragraphs) at a document position, or at the cursor when `at` is omitted.',
+			'Inserts literal text (newlines start new paragraphs) at a document position, or at the cursor when `at` is omitted. ' +
+			'Returns the inserted `range` {from, to}.',
 		inputSchema: {
 			type: 'object',
 			properties: {
@@ -191,15 +288,15 @@ export function createRichTextToolProvider(
 			idempotentHint: false,
 			openWorldHint: false
 		},
-		handler: ({ text, at }) => {
+		handler: async ({ text, at }, { signal }) => {
 			const ed = editor();
 			const size = ed.state.doc.content.size;
 			if (at !== undefined && at > size) {
 				throw new Error(`Position ${at} is outside the document (size ${size}).`);
 			}
 			const { from, to } = ed.state.selection;
-			replaceWithText(ed, at ?? from, at ?? to, text);
-			return { inserted: text.length, selection: selectionInfo(ed) };
+			const range = await presence.write(ed, at ?? from, at ?? to, text, signal);
+			return { inserted: text.length, range, selection: selectionInfo(ed) };
 		}
 	};
 
@@ -230,6 +327,7 @@ export function createRichTextToolProvider(
 			const ed = editor();
 			const { doc } = ed.state;
 			const { matches, truncated } = findMatches(ed, query, flags);
+			if (matches.length) presence.show(matches[0].from, matches[0].to);
 			return {
 				total: matches.length,
 				truncated: truncated || matches.length > maxResults,
@@ -287,10 +385,12 @@ export function createRichTextToolProvider(
 			const tr = ed.state.tr;
 			const ends = applyReplacements(tr, chosen);
 			ed.view.dispatch(tr.scrollIntoView());
+			const ranges = chosen.map((m, i) => ({ from: tr.mapping.map(m.from, -1), to: ends[i] }));
+			presence.changed(ranges.filter((r) => r.from < r.to));
 			return {
 				replaced: chosen.length,
 				total: matches.length,
-				ranges: chosen.map((m, i) => ({ from: tr.mapping.map(m.from, -1), to: ends[i] })),
+				ranges,
 				selection: selectionInfo(ed)
 			};
 		}
@@ -301,7 +401,7 @@ export function createRichTextToolProvider(
 		title: 'Replace a range',
 		description:
 			'Replaces the content between two document positions (from get_text `blocks` or find_text) with literal text. ' +
-			'from === to inserts; an empty text deletes.',
+			'from === to inserts; an empty text deletes. Returns the new text\'s `range` {from, to}.',
 		inputSchema: {
 			type: 'object',
 			properties: {
@@ -319,11 +419,11 @@ export function createRichTextToolProvider(
 			idempotentHint: false,
 			openWorldHint: false
 		},
-		handler: ({ from, to, text }) => {
+		handler: async ({ from, to, text }, { signal }) => {
 			const ed = editor();
 			checkRange(ed, from, to);
-			replaceWithText(ed, from, to, text);
-			return { replaced: { from, to }, selection: selectionInfo(ed), size: ed.state.doc.content.size };
+			const range = await presence.write(ed, from, to, text, signal);
+			return { replaced: { from, to }, range, selection: selectionInfo(ed), size: ed.state.doc.content.size };
 		}
 	};
 
@@ -352,14 +452,18 @@ export function createRichTextToolProvider(
 			checkRange(ed, from, to);
 			const { doc } = ed.state;
 			ed.view.dispatch(ed.state.tr.setSelection(TextSelection.between(doc.resolve(from), doc.resolve(to))));
-			return { selection: selectionInfo(ed) };
+			const selection = selectionInfo(ed);
+			presence.show(selection.from, selection.to);
+			return { selection };
 		}
 	};
 
 	const replaceSelection: AgentTool = {
 		name: 'replace_selection',
 		title: 'Replace selection',
-		description: 'Replaces the selected content with literal text (an empty string deletes the selection).',
+		description:
+			'Replaces the selected content with literal text (an empty string deletes the selection). ' +
+			'Returns the new text\'s `range` {from, to}.',
 		inputSchema: {
 			type: 'object',
 			properties: { text: { type: 'string', description: 'Replacement text.' } },
@@ -373,11 +477,11 @@ export function createRichTextToolProvider(
 			idempotentHint: false,
 			openWorldHint: false
 		},
-		handler: ({ text }) => {
+		handler: async ({ text }, { signal }) => {
 			const ed = editor();
 			const { from, to } = ed.state.selection;
-			replaceWithText(ed, from, to, text);
-			return { replaced: { from, to }, selection: selectionInfo(ed) };
+			const range = await presence.write(ed, from, to, text, signal);
+			return { replaced: { from, to }, range, selection: selectionInfo(ed) };
 		}
 	};
 
@@ -453,6 +557,7 @@ export function createRichTextToolProvider(
 			return () => {
 				ed.off('update', notify);
 				ed.off('destroy', notify);
+				presence.dispose();
 			};
 		}
 	};

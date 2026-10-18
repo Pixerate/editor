@@ -85,6 +85,23 @@ export interface VectorSvgExportOptions {
 	 * one filled path of the area the stroke paints.
 	 */
 	strokes?: 'clip' | 'outline';
+	/**
+	 * Groups to write round nodes, by node id, outermost first: to move a node from outside it
+	 * or clip it (the animation editor's reveals and its Flair export use this).
+	 */
+	wrap?: Readonly<Record<string, readonly VectorSvgWrapper[]>>;
+}
+
+/** A group written round a node (see `VectorSvgExportOptions.wrap`). */
+export interface VectorSvgWrapper {
+	id?: string;
+	/** An SVG `transform` attribute. */
+	transform?: string;
+	/**
+	 * Clips the group through a rect (`x`, `y`, `width`, `height`) or circle (`cx`, `cy`, `r`) in
+	 * the units of the group's own box (`clipPathUnits="objectBoundingBox"`: 0–1 across it).
+	 */
+	clip?: { id: string; shape: 'rect' | 'circle'; shapeId?: string; attrs: Readonly<Record<string, number>> };
 }
 
 /** `data-vector-corners`: the live corners of subpaths as `subpath.index:radius[:kind]`, space separated. */
@@ -319,6 +336,22 @@ export function vectorDocumentToSvg(doc: VectorDocument, options: VectorSvgExpor
 
 	const emit = (node: VectorNode, depth: number) => {
 		if (node.visible === false && !options.includeHidden) return;
+		const wrappers = options.wrap?.[node.id] ?? [];
+		wrappers.forEach((w, i) => {
+			let attrs = w.id !== undefined ? ` id="${escapeAttr(w.id)}"` : '';
+			if (w.transform) attrs += ` transform="${escapeAttr(w.transform)}"`;
+			if (w.clip) {
+				const shape = Object.entries(w.clip.attrs).map(([k, v]) => ` ${k}="${formatNumber(v, 4)}"`).join('');
+				defs.push(`<clipPath id="${escapeAttr(w.clip.id)}" clipPathUnits="objectBoundingBox"><${w.clip.shape}${w.clip.shapeId !== undefined ? ` id="${escapeAttr(w.clip.shapeId)}"` : ''}${shape}/></clipPath>`);
+				attrs += ` clip-path="url(#${escapeAttr(w.clip.id)})"`;
+			}
+			lines.push(`${indent(depth + i)}<g${attrs}>`);
+		});
+		emitNode(node, depth + wrappers.length);
+		for (let i = wrappers.length - 1; i >= 0; i--) lines.push(`${indent(depth + i)}</g>`);
+	};
+
+	const emitNode = (node: VectorNode, depth: number) => {
 		if (hasOwnVectorAppearance(node)) {
 			// Live: what it draws, then the editable source (hidden) for import.
 			const live = {

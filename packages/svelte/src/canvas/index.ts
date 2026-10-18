@@ -662,3 +662,24 @@ export {
 	type CurvedPathOptions
 } from '@pixerate/editor/canvas';
 
+
+// Mermaid diagrams on the canvas (flowchart, state, class, ER as nodes and edges; the other
+// families as their own picture with MermaidFamilyScene), with streaming
+export { default as MermaidFamilyScene } from './MermaidFamilyScene.svelte';
+export { default as MermaidDiagramNode } from './MermaidDiagramNode.svelte';
+export { default as MermaidDiagramGroup } from './MermaidDiagramGroup.svelte';
+export {
+	createMermaidDiagram,
+	createMermaidStream,
+	type CreateMermaidDiagramOptions,
+	type CreateMermaidStreamOptions,
+	type SvelteMermaidDiagram,
+	type SvelteMermaidStream
+} from './createMermaidDiagram.svelte.js';
+
+// Static previews of Mermaid diagrams
+export { default as MermaidThumbnail } from './MermaidThumbnail.svelte';
+
+// Agent cursors acting out diagram edits
+export { default as DiagramPresenceLayer } from './DiagramPresenceLayer.svelte';
+export { createDiagramDirector, type CreateDiagramDirectorOptions, type SvelteDiagramDirector } from './createDiagramDirector.svelte.js';

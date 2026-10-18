@@ -229,6 +229,45 @@ describe("ChartInspector", () => {
     expect(q('[data-section="series"]')).toBeNull();
   });
 
+  it("reverses axes, makes value axes logarithmic and edits error bars", () => {
+    const controller = new ChartController({ spec: sales });
+    const el = render(ChartInspector, { controller });
+    const q = <T extends Element = HTMLElement>(sel: string) => el.querySelector(sel) as T;
+    expect(q('[data-option="xAxis.scale"]')).toBeNull();
+    click(q('[data-option="yAxis.scale"]'));
+    expect(controller.getSpec().yAxis.scale).toBe("log");
+    expect(q('[data-option="yAxis.step"]')).toBeNull();
+    type(q<HTMLInputElement>('[data-option="yAxis.logBase"]'), "2");
+    expect(controller.getSpec().yAxis.logBase).toBe(2);
+    type(q<HTMLInputElement>('[data-option="yAxis.logBase"]'), "1");
+    expect(controller.getSpec().yAxis.logBase).toBe(2);
+    click(q('[data-option="xAxis.reverse"]'));
+    expect(controller.getSpec().xAxis.reverse).toBe(true);
+    controller.select({ kind: "series", seriesId: "south" });
+    flushSync();
+    expect(q('[data-option="series.xErrorBars.type"]')).toBeNull();
+    type(q<HTMLSelectElement>('[data-option="series.errorBars.type"]'), "percent");
+    expect(controller.getSeries("south")!.errorBars).toEqual({ type: "percent" });
+    type(q<HTMLInputElement>('[data-option="series.errorBars.value"]'), "12");
+    type(q<HTMLSelectElement>('[data-option="series.errorBars.direction"]'), "plus");
+    click(q('[data-option="series.errorBars.cap"]'));
+    expect(controller.getSeries("south")!.errorBars).toEqual({ type: "percent", value: 12, direction: "plus", cap: false });
+    type(q<HTMLSelectElement>('[data-option="series.errorBars.type"]'), "custom");
+    expect(controller.getSeries("south")!.errorBars).toMatchObject({ type: "custom", plus: [0.96, 1.32, 1.68] });
+    type(q<HTMLInputElement>('[data-option="series.errorBars.plus"]'), "1, -, 2");
+    expect(controller.getSeries("south")!.errorBars!.plus).toEqual([1, null, 2]);
+    type(q<HTMLInputElement>('[data-option="series.errorBars.minus"]'), "0.5 0.5 0.5");
+    expect(controller.getSeries("south")!.errorBars!.minus).toEqual([0.5, 0.5, 0.5]);
+    type(q<HTMLSelectElement>('[data-option="series.errorBars.type"]'), "");
+    expect(controller.getSeries("south")!.errorBars).toBeUndefined();
+    controller.setType("scatter");
+    controller.updateSeries("south", { x: [1, 2, 3] });
+    flushSync();
+    expect(q('[data-option="xAxis.scale"]')).not.toBeNull();
+    type(q<HTMLSelectElement>('[data-option="series.xErrorBars.type"]'), "fixed");
+    expect(controller.getSeries("south")!.xErrorBars).toEqual({ type: "fixed" });
+  });
+
   it("limits sections", () => {
     const controller = new ChartController({ spec: sales });
     const el = render(ChartInspector, { controller, sections: ["type"] });
@@ -244,6 +283,11 @@ describe("ChartEditor", () => {
     expect(q("[data-chart-canvas]")).not.toBeNull();
     expect(q("[data-chart-inspector]")).not.toBeNull();
     expect(q("[data-chart-grid]")).not.toBeNull();
+    // Side by side, the inspector is taken out of flow so the canvas alone sets the row's height and it scrolls.
+    const inspector = q("[data-chart-inspector]");
+    expect(inspector.className).toMatch(/md:absolute md:inset-0/);
+    expect(inspector.className).toMatch(/overflow-y-auto/);
+    expect(inspector.parentElement!.className).toMatch(/\brelative\b/);
     expect(q<HTMLButtonElement>('[data-action="undo"]').disabled).toBe(true);
     click(q('[data-chart-type="area"]'));
     expect(q("[data-chart-canvas] [data-role=area]")).not.toBeNull();

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import {
   useEditor,
   EditorContent,
@@ -42,6 +42,9 @@ import {
 } from "lucide-react";
 import { demoCommandRegistry, demoToolRegistry } from "../agentTools";
 import { RichDocumentAutosave } from "./RichDocumentAutosave";
+import { AgentScriptPanel } from "./AgentScriptPanel";
+import { demoTextPresence } from "../agentScript";
+import { DOCUMENT_SCRIPTS } from "../agentScripts";
 import { samplePdfFile, samplePdfRegistry } from "../samplePdf";
 
 /** The chart inserted by the toolbar's chart button. */
@@ -183,7 +186,7 @@ export const RichDocumentTab: React.FC = () => {
   const pdfSummary = sampleImport.structureSummary;
 
   const provider = useMemo(
-    () => (editor ? createRichTextToolProvider(editor, { id: "document", namespace: "doc" }) : null),
+    () => (editor ? createRichTextToolProvider(editor, { id: "document", namespace: "doc", presence: demoTextPresence() }) : null),
     [editor]
   );
   useAgentToolProvider(demoToolRegistry, provider);
@@ -202,6 +205,7 @@ export const RichDocumentTab: React.FC = () => {
       active ? "bg-rose-500/20 text-rose-300" : "text-slate-400"
     }`;
 
+  const agentStage = useRef<HTMLDivElement>(null);
   return (
     <div className="space-y-4">
       <RichDocumentAutosave editor={editor} />
@@ -468,7 +472,7 @@ export const RichDocumentTab: React.FC = () => {
         </aside>
 
         {/* Editor Content Area */}
-        <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 shadow-xl relative min-w-0">
+        <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 shadow-xl relative min-w-0" ref={agentStage}>
           <BubbleMenu editor={editor} className="bg-slate-800 text-slate-100 border border-slate-700 shadow-xl rounded-md p-1 flex items-center gap-1">
             <button
               onClick={() => editor.chain().focus().toggleBold().run()}
@@ -508,6 +512,7 @@ export const RichDocumentTab: React.FC = () => {
           <EditorContent editor={editor} />
         </div>
       </div>
+      <AgentScriptPanel scripts={DOCUMENT_SCRIPTS} stage={agentStage} hint="Plays a scripted agent turn with the doc__* tools: it edits a sentence by position and inserts a live chart block." />
     </div>
   );
 };

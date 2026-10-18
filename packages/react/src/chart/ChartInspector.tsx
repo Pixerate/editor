@@ -1,6 +1,9 @@
 import React, { useId } from 'react';
 import {
   CHART_COLOR_SCHEMES,
+  CHART_ERROR_BAR_DIRECTIONS,
+  CHART_ERROR_BAR_LABELS,
+  CHART_ERROR_BAR_TYPES,
   CHART_LABEL_POSITIONS,
   CHART_LAYOUT_PRESETS,
   CHART_MARKERS,
@@ -17,12 +20,19 @@ import {
   CHART_TYPE_LABELS,
   CHART_TYPES,
   chartColorInputValue,
+  chartErrorBarsOfType,
   chartSeriesColor,
+  defaultChartErrorBarValue,
+  formatChartAmountList,
+  parseChartAmountList,
   chartSeriesType,
   isCartesianChart,
   type ChartAxis,
   type ChartController,
+  type ChartErrorBars,
+  type ChartErrorBarType,
   type ChartNumberFormat,
+  type ChartSeries,
 } from '@pixerate/editor/chart';
 import { useChartState } from './useChartEditor';
 import { ChartCommitInput } from './ChartDataGrid';
@@ -71,7 +81,7 @@ function Select<T extends string>({ id, value, options, onChange, name, labels }
   );
 }
 
-function AxisSection({ controller, axis, value, idBase, horizontal, numeric = false }: { controller: ChartController; axis: 'x' | 'y' | 'y2'; value: ChartAxis; idBase: string; horizontal: boolean; numeric?: boolean }) {
+function AxisSection({ controller, axis, value, idBase, horizontal, numeric = false, scales = false }: { controller: ChartController; axis: 'x' | 'y' | 'y2'; value: ChartAxis; idBase: string; horizontal: boolean; numeric?: boolean; scales?: boolean }) {
   const set = (patch: Partial<ChartAxis>) => controller.setAxis(axis, patch);
   const setFormat = (patch: Partial<ChartNumberFormat>) => set({ format: { ...value.format, ...patch } });
   const bound = (key: 'min' | 'max') => (
@@ -103,8 +113,22 @@ function AxisSection({ controller, axis, value, idBase, horizontal, numeric = fa
       <div className="flex flex-wrap gap-x-4 gap-y-1">
         <Toggle label="Grid lines" name={`${key}.gridlines`} checked={value.gridlines} onChange={(gridlines) => set({ gridlines })} />
         {axis === 'x' && !numeric && <Toggle label="Dates" name="xAxis.kind" checked={value.kind === 'date'} onChange={(dates) => set({ kind: dates ? 'date' : undefined } as Partial<ChartAxis>)} />}
+        {scales && <Toggle label="Reverse" name={`${key}.reverse`} checked={!!value.reverse} onChange={(reverse) => set({ reverse })} />}
+        {scales && valueAxis && <Toggle label="Log scale" name={`${key}.scale`} checked={value.scale === 'log'} onChange={(log) => set({ scale: log ? 'log' : 'linear' })} />}
       </div>
-      {valueAxis && (
+      {scales && valueAxis && value.scale === 'log' && (
+        <Field label="Log base" htmlFor={`${idBase}-${axis}-log-base`}>
+          <ChartCommitInput
+            id={`${idBase}-${axis}-log-base`}
+            value={String(value.logBase ?? 10)}
+            inputMode="decimal"
+            data-option={`${key}.logBase`}
+            className={chartInputClass}
+            onCommit={(text) => set({ logBase: text.trim() === '' ? undefined : Number(text) }).ok}
+          />
+        </Field>
+      )}
+      {valueAxis && value.scale !== 'log' && (
         <Field label="Step" htmlFor={`${idBase}-${axis}-step`}>
           <ChartCommitInput
             id={`${idBase}-${axis}-step`}
@@ -171,6 +195,69 @@ function AxisSection({ controller, axis, value, idBase, horizontal, numeric = fa
   );
 }
 
+/** Error bar type, amount, direction and caps for one series (`which`: y or x error bars). */
+function ErrorBarFields({ controller, series, which, idBase }: { controller: ChartController; series: ChartSeries; which: 'errorBars' | 'xErrorBars'; idBase: string }) {
+  const bars = series[which];
+  const key = `series.${which}`;
+  const id = `${idBase}-${which}`;
+  const values = which === 'xErrorBars' ? (series.x ?? []) : series.values;
+  const set = (next: ChartErrorBars | null) => controller.updateSeries(series.id, { [which]: next });
+  const patch = (p: Partial<ChartErrorBars>) => bars && set({ ...bars, ...p });
+  return (
+    <div className="space-y-1.5" data-section={which === 'errorBars' ? 'error-bars' : 'x-error-bars'}>
+      <Field label={which === 'errorBars' ? 'Error bars' : 'X error bars'} htmlFor={`${id}-type`}>
+        <select id={`${id}-type`} className={chartInputClass} value={bars?.type ?? ''} data-option={`${key}.type`} onChange={(e) => set(chartErrorBarsOfType(e.currentTarget.value as ChartErrorBarType | '', bars, values))}>
+          <option value="">None</option>
+          {CHART_ERROR_BAR_TYPES.map((t) => (
+            <option key={t} value={t}>
+              {CHART_ERROR_BAR_LABELS[t]}
+            </option>
+          ))}
+        </select>
+      </Field>
+      {bars && (bars.type === 'fixed' || bars.type === 'percent' || bars.type === 'stddev') && (
+        <Field label={bars.type === 'percent' ? 'Percent' : bars.type === 'stddev' ? 'Deviations' : 'Amount'} htmlFor={`${id}-value`}>
+          <ChartCommitInput id={`${id}-value`} value={String(bars.value ?? defaultChartErrorBarValue(bars.type))} inputMode="decimal" data-option={`${key}.value`} className={chartInputClass} onCommit={(text) => !!patch({ value: text.trim() === '' ? undefined : Number(text) })?.ok} />
+        </Field>
+      )}
+      {bars?.type === 'custom' && (
+        <>
+          <Field label="Plus" htmlFor={`${id}-plus`}>
+            <ChartCommitInput id={`${id}-plus`} value={formatChartAmountList(bars.plus)} placeholder="1, 2, -, 0.5" data-option={`${key}.plus`} className={chartInputClass} onCommit={(text) => !!patch({ plus: parseChartAmountList(text) as ChartErrorBars['plus'] })?.ok} />
+          </Field>
+          <Field label="Minus" htmlFor={`${id}-minus`}>
+            <ChartCommitInput
+              id={`${id}-minus`}
+              value={formatChartAmountList(bars.minus)}
+              placeholder="Same as plus"
+              data-option={`${key}.minus`}
+              className={chartInputClass}
+              onCommit={(text) => {
+                const next = { ...bars };
+                if (text.trim()) next.minus = parseChartAmountList(text) as ChartErrorBars['minus'];
+                else delete next.minus;
+                return set(next).ok;
+              }}
+            />
+          </Field>
+        </>
+      )}
+      {bars && (
+        <div className="flex items-center gap-2">
+          <select className={`${chartInputClass} flex-1`} aria-label="Error bar direction" value={bars.direction ?? 'both'} data-option={`${key}.direction`} onChange={(e) => patch({ direction: e.currentTarget.value as ChartErrorBars['direction'] })}>
+            {CHART_ERROR_BAR_DIRECTIONS.map((d) => (
+              <option key={d} value={d}>
+                {d === 'both' ? 'Both ways' : d === 'plus' ? 'Plus only' : 'Minus only'}
+              </option>
+            ))}
+          </select>
+          <Toggle label="Caps" name={`${key}.cap`} checked={bars.cap !== false} onChange={(cap) => patch({ cap })} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
  * Settings for a chart controller: type, titles, stacking and line options, legend, both
  * axes and the selected series. Every change is one undo step.
@@ -188,6 +275,8 @@ export function ChartInspector({ controller, sections, className }: ChartInspect
   const hasBars = cartesian && types.includes('bar');
   const hasLines = cartesian && types.some((t) => t === 'line' || t === 'area');
   const seriesIndex = selectedSeries ? spec.series.findIndex((s) => s.id === selectedSeries.id) : -1;
+  // Log and reversed axes and error bars are drawn by the bar / line / area / scatter layouts.
+  const scales = family === 'cartesian' || family === 'xy';
 
   return (
     <div className={`space-y-3 text-xs ${className ?? ''}`} data-chart-inspector="">
@@ -342,9 +431,9 @@ export function ChartInspector({ controller, sections, className }: ChartInspect
 
       {show('axes') && hasAxes && (
         <>
-          {family !== 'box' && family !== 'histogram' && <AxisSection controller={controller} axis="x" value={spec.xAxis} idBase={idBase} horizontal={spec.orientation === 'horizontal'} numeric={family === 'xy'} />}
-          <AxisSection controller={controller} axis="y" value={spec.yAxis} idBase={idBase} horizontal={spec.orientation === 'horizontal'} />
-          {usesSecondary && <AxisSection controller={controller} axis="y2" value={spec.yAxis2} idBase={idBase} horizontal={spec.orientation === 'horizontal'} />}
+          {family !== 'box' && family !== 'histogram' && <AxisSection controller={controller} axis="x" value={spec.xAxis} idBase={idBase} horizontal={spec.orientation === 'horizontal'} numeric={family === 'xy'} scales={scales} />}
+          <AxisSection controller={controller} axis="y" value={spec.yAxis} idBase={idBase} horizontal={spec.orientation === 'horizontal'} scales={scales} />
+          {usesSecondary && <AxisSection controller={controller} axis="y2" value={spec.yAxis2} idBase={idBase} horizontal={spec.orientation === 'horizontal'} scales={scales} />}
         </>
       )}
 
@@ -409,6 +498,8 @@ export function ChartInspector({ controller, sections, className }: ChartInspect
               </select>
             </Field>
           )}
+          {scales && <ErrorBarFields controller={controller} series={selectedSeries} which="errorBars" idBase={idBase} />}
+          {family === 'xy' && <ErrorBarFields controller={controller} series={selectedSeries} which="xErrorBars" idBase={idBase} />}
           {chartSupportsTrendlines(spec.type, spec.stacking) && (
             <div className="space-y-1" data-section="trendlines">
               {(selectedSeries.trendlines ?? []).map((t, i) => (

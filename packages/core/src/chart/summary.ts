@@ -2,12 +2,22 @@
 // filmcraft-main/crates/scopes/src/summary.rs (MIT OR Apache-2.0, © ArtCraft Team and contributors). See
 // THIRD_PARTY_NOTICES.md.
 import { checkChartColors, type ChartColorCheck } from './color.js';
+import { describeChartErrorBars } from './errorbars.js';
 import { layoutChart } from './layout.js';
 import type { ChartLayoutOptions } from './layout-shared.js';
 import { formatChartNumber } from './scale.js';
 import { chartColorsByCategory, chartFamily, chartSeriesColor, chartSliceColor, CHART_TYPE_LABELS } from './spec.js';
 import { summarizeChartSeries, type ChartSeriesSummary } from './stats.js';
-import type { ChartScene, ChartSpec, ChartWarning } from './types.js';
+import type { ChartAxis, ChartScene, ChartSpec, ChartWarning } from './types.js';
+
+/** An axis as drawn. `logBase` is set on a logarithmic axis, `reversed` when it runs the other way. */
+export interface ChartAxisSummary {
+	min: number;
+	max: number;
+	ticks: number[];
+	logBase?: number;
+	reversed?: boolean;
+}
 
 export interface ChartSummary {
 	type: ChartSpec['type'];
@@ -15,9 +25,9 @@ export interface ChartSummary {
 	categories: number;
 	series: ChartSeriesSummary[];
 	/** The value axis as drawn: range and ticks (absent for pies and treemaps). */
-	valueAxis?: { min: number; max: number; ticks: number[] };
-	secondaryAxis?: { min: number; max: number; ticks: number[] };
-	xAxis?: { min: number; max: number; ticks: number[] };
+	valueAxis?: ChartAxisSummary;
+	secondaryAxis?: ChartAxisSummary;
+	xAxis?: ChartAxisSummary;
 	/** What the layout left out at this size (hidden labels, thinned lines, …). */
 	warnings: ChartWarning[];
 	/** Whether the series colours can be told apart (also with colour-blindness). */
@@ -36,15 +46,16 @@ export function summarizeChart(spec: ChartSpec, size: Pick<ChartLayoutOptions, '
 	const series = visible.map((s) => summarizeChartSeries(s, spec.categories));
 	const colors = chartColorsByCategory(spec.type) ? spec.categories.map((_, i) => visible[0]?.pointColors?.[i] || chartSliceColor(spec, i)) : visible.map((s) => chartSeriesColor(spec, spec.series.indexOf(s)));
 	const check = checkChartColors(colors, { surface: scene.theme.surface.startsWith('var(') ? '#ffffff' : scene.theme.surface });
-	const axis = (s: ChartScene['valueScale']) => (s ? { min: s.domain[0], max: s.domain[1], ticks: [...s.ticks] } : undefined);
+	const axis = (s: ChartScene['valueScale'], a: ChartAxis): ChartAxisSummary | undefined =>
+		s ? { min: s.domain[0], max: s.domain[1], ticks: [...s.ticks], ...(s.logBase ? { logBase: s.logBase } : {}), ...(a.reverse ? { reversed: true } : {}) } : undefined;
 	return {
 		type: spec.type,
 		title: spec.title,
 		categories: spec.categories.length,
 		series,
-		...(scene.valueScale ? { valueAxis: axis(scene.valueScale) } : {}),
-		...(scene.valueScale2 ? { secondaryAxis: axis(scene.valueScale2) } : {}),
-		...(scene.xScale ? { xAxis: axis(scene.xScale) } : {}),
+		...(scene.valueScale ? { valueAxis: axis(scene.valueScale, spec.yAxis) } : {}),
+		...(scene.valueScale2 ? { secondaryAxis: axis(scene.valueScale2, spec.yAxis2) } : {}),
+		...(scene.xScale ? { xAxis: axis(scene.xScale, spec.xAxis) } : {}),
 		warnings: scene.warnings,
 		colors: { ok: check.ok, issues: check.issues },
 		description: describeChart(spec, series)
@@ -93,5 +104,21 @@ export function describeChart(spec: ChartSpec, series = spec.series.filter((s) =
 		parts.push(`${s.name} ranges from ${fmt(s.min)} (${s.minAt}) to ${fmt(s.max)} (${s.maxAt})${trend}.`);
 	}
 	if (series.length > 8) parts.push(`${series.length - 8} more series are not described.`);
+	// Axis scales and error bars change how the picture reads.
+	const axes: string[] = [];
+	for (const [a, name] of [
+		[spec.yAxis, 'value axis'],
+		[spec.yAxis2, 'secondary value axis'],
+		[spec.xAxis, family === 'xy' ? 'x axis' : 'category axis']
+	] as const) {
+		if (name === 'secondary value axis' && !spec.series.some((s) => !s.hidden && s.axis === 'secondary')) continue;
+		const log = a.scale === 'log' && (name !== 'category axis');
+		if (log || a.reverse) axes.push(`The ${name} is ${[log ? `logarithmic (base ${a.logBase ?? 10})` : '', a.reverse ? 'reversed' : ''].filter(Boolean).join(' and ')}.`);
+	}
+	parts.push(...axes);
+	for (const s of spec.series.filter((x) => !x.hidden && (x.errorBars || x.xErrorBars)).slice(0, 8)) {
+		const bars = [s.errorBars ? describeChartErrorBars(s.errorBars) : '', s.xErrorBars ? `x ${describeChartErrorBars(s.xErrorBars)}` : ''].filter(Boolean).join(' and ');
+		parts.push(`${s.name} has ${bars}.`);
+	}
 	return parts.join(' ');
 }

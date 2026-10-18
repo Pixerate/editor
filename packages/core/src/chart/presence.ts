@@ -5,76 +5,34 @@ import type { ChartController, ChartSpecPatch } from './controller.js';
 import { linearMap } from './scale.js';
 import type { ChartScene, ChartSelection, ChartSpec } from './types.js';
 
-export interface ChartPresenceActor {
-	id: string;
-	name: string;
-	color: string;
-	/** Cursor position in scene coordinates. */
-	x: number;
-	y: number;
-	/** The button is down (dragging). */
-	pressed: boolean;
-	/** A short note shown next to the cursor (what the agent is doing). */
-	message?: string;
-}
+import {
+	PRESENCE_COLORS,
+	PerformanceQueue,
+	PresenceStore,
+	createInstantPresenceClock,
+	realPresenceClock,
+	tweenPresenceCursor,
+	type PresenceActor,
+	type PresenceActorInfo,
+	type PresenceClock,
+	type PresenceState
+} from '../animation/presence.js';
 
-export interface ChartPresenceState {
-	actors: readonly ChartPresenceActor[];
-}
+export type ChartPresenceActor = PresenceActor;
+export type ChartPresenceState = PresenceState;
 
 /** Cursor positions and notes of agents acting on a chart, for an overlay. */
-export class ChartPresence {
-	private state: ChartPresenceState = { actors: [] };
-	private readonly listeners = new Set<(state: ChartPresenceState) => void>();
+export class ChartPresence extends PresenceStore {}
 
-	getState = (): ChartPresenceState => this.state;
-
-	subscribe = (listener: (state: ChartPresenceState) => void): (() => void) => {
-		this.listeners.add(listener);
-		return () => {
-			this.listeners.delete(listener);
-		};
-	};
-
-	/** Adds or changes an actor. */
-	set(actor: Pick<ChartPresenceActor, 'id'> & Partial<ChartPresenceActor>): void {
-		const current = this.state.actors.find((a) => a.id === actor.id);
-		const next: ChartPresenceActor = { name: actor.id, color: CHART_PRESENCE_COLORS[this.state.actors.length % CHART_PRESENCE_COLORS.length], x: 0, y: 0, pressed: false, ...current, ...actor };
-		this.state = { actors: current ? this.state.actors.map((a) => (a.id === actor.id ? next : a)) : [...this.state.actors, next] };
-		this.listeners.forEach((l) => l(this.state));
-	}
-
-	remove(id: string): void {
-		if (!this.state.actors.some((a) => a.id === id)) return;
-		this.state = { actors: this.state.actors.filter((a) => a.id !== id) };
-		this.listeners.forEach((l) => l(this.state));
-	}
-}
-
-export const CHART_PRESENCE_COLORS: readonly string[] = ['#7c3aed', '#db2777', '#0891b2', '#ea580c', '#16a34a'];
+export const CHART_PRESENCE_COLORS: readonly string[] = PRESENCE_COLORS;
 
 /** Time for performances: real timers, or an instant clock for tests and recordings. */
-export interface ChartClock {
-	now(): number;
-	wait(ms: number): Promise<void>;
-}
+export type ChartClock = PresenceClock;
 
-export const realChartClock: ChartClock = {
-	now: () => Date.now(),
-	wait: (ms) => new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)))
-};
+export const realChartClock: ChartClock = realPresenceClock;
 
 /** A clock whose waits finish at once while its time still advances (repeatable performances). */
-export function createInstantChartClock(start = 0): ChartClock & { elapsed(): number } {
-	let t = start;
-	return {
-		now: () => t,
-		wait: async (ms) => {
-			t += Math.max(0, ms);
-		},
-		elapsed: () => t - start
-	};
-}
+export const createInstantChartClock = createInstantPresenceClock;
 
 /** What an agent asks for. Each command commits as one undo step. */
 export type ChartAgentCommand =
@@ -170,11 +128,7 @@ export interface ChartDirectorOptions {
 	linger?: number;
 }
 
-export interface ChartDirectorActor {
-	id: string;
-	name?: string;
-	color?: string;
-}
+export type ChartDirectorActor = PresenceActorInfo;
 
 export type ChartPerformanceResult = { ok: true; command: ChartAgentCommand } | { ok: false; command: ChartAgentCommand; message: string };
 
@@ -185,9 +139,8 @@ export type ChartPerformanceResult = { ok: true; command: ChartAgentCommand } | 
  * fails with a sentence instead of editing something else.
  */
 export class ChartDirector {
-	private readonly queues = new Map<string, Promise<unknown>>();
 	private readonly clock: ChartClock;
-	private calls = 0;
+	private readonly queue: PerformanceQueue;
 
 	constructor(
 		private readonly controller: ChartController,
@@ -195,31 +148,21 @@ export class ChartDirector {
 		private readonly options: ChartDirectorOptions
 	) {
 		this.clock = options.clock ?? realChartClock;
+		this.queue = new PerformanceQueue(presence, {
+			clock: this.clock,
+			linger: options.linger,
+			beginGesture: (key) => controller.beginGesture(key),
+			endGesture: () => controller.endGesture()
+		});
 	}
 
 	/** Acts out `commands` in order for `actor`. Resolves with one result per command. */
 	perform(actor: ChartDirectorActor, commands: readonly ChartAgentCommand[]): Promise<ChartPerformanceResult[]> {
-		const prev = this.queues.get(actor.id) ?? Promise.resolve();
-		const run = prev.then(async () => {
+		return this.queue.run(actor, async () => {
 			const results: ChartPerformanceResult[] = [];
-			this.presence.set({ id: actor.id, ...(actor.name ? { name: actor.name } : {}), ...(actor.color ? { color: actor.color } : {}) });
-			// Everything one call changes is one undo step.
-			this.controller.beginGesture(`agent:${actor.id}:${++this.calls}`);
-			try {
-				for (const command of commands) results.push(await this.performOne(actor.id, command));
-			} finally {
-				this.controller.endGesture();
-				this.presence.set({ id: actor.id, message: undefined, pressed: false });
-			}
-			const linger = this.options.linger ?? 1500;
-			if (linger > 0) {
-				await this.clock.wait(linger);
-				if (this.queues.get(actor.id) === run) this.presence.remove(actor.id);
-			}
+			for (const command of commands) results.push(await this.performOne(actor.id, command));
 			return results;
 		});
-		this.queues.set(actor.id, run.catch(() => undefined));
-		return run;
 	}
 
 	private stale(command: ChartAgentCommand): string | null {
@@ -233,15 +176,8 @@ export class ChartDirector {
 		return null;
 	}
 
-	private async move(id: string, from: { x: number; y: number }, to: { x: number; y: number }, ms: number, each?: (t: number) => void) {
-		const frames = Math.max(1, Math.round(ms / 16));
-		for (let f = 1; f <= frames; f++) {
-			const t = f / frames;
-			const e = 1 - Math.pow(1 - t, 3);
-			this.presence.set({ id, x: from.x + (to.x - from.x) * e, y: from.y + (to.y - from.y) * e });
-			each?.(e);
-			await this.clock.wait(ms / frames);
-		}
+	private move(id: string, from: { x: number; y: number }, to: { x: number; y: number }, ms: number, each?: (t: number) => void) {
+		return tweenPresenceCursor(this.presence, this.clock, id, from, to, ms, each);
 	}
 
 	private async performOne(id: string, command: ChartAgentCommand): Promise<ChartPerformanceResult> {

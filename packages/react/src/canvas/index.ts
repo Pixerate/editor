@@ -645,3 +645,31 @@ export {
 	type SvgGradientStop,
 	type SvgGradientDef
 } from '@pixerate/editor/canvas';
+
+// Mermaid diagrams on the canvas (flowchart, state, class, ER as nodes and edges; the other
+// families as their own picture with MermaidFamilyScene), with streaming
+export { MermaidFamilyScene, type MermaidFamilySceneProps } from './MermaidFamilyScene.js';
+export {
+	useMermaidDiagram,
+	useMermaidStream,
+	useDiagramState,
+	type UseMermaidDiagramOptions,
+	type UseMermaidDiagramResult,
+	type UseMermaidStreamOptions,
+	type UseMermaidStreamResult
+} from './useMermaidDiagram.js';
+
+export {
+	MermaidDiagramNode,
+	MermaidDiagramGroup,
+	mermaidNodeStyle,
+	type MermaidDiagramNodeData,
+	type MermaidDiagramNodeProps
+} from './MermaidDiagramNode.js';
+
+// Static previews of Mermaid diagrams
+export { MermaidThumbnail, type MermaidThumbnailProps } from './MermaidThumbnail.js';
+
+// Agent cursors acting out diagram edits
+export { useDiagramDirector, usePresenceState, type UseDiagramDirectorOptions } from './useDiagramDirector.js';
+export { DiagramPresenceLayer, type DiagramPresenceLayerProps } from './DiagramPresenceLayer.js';

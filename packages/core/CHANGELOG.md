@@ -1,5 +1,327 @@
 # @pixerate/editor
 
+## 0.76.0
+
+### Minor Changes
+
+- 9e22068: Add a UI-agnostic video editor (`@pixerate/editor/video-editor`). Projects are plain JSON: video, audio and image assets on video and audio tracks, with media clips (in point, speed, volume, fades, opacity, fit, transform), titles, colour clips and markers. `applyVideoEdits` adds, moves, trims (with ripple), splits, deletes (with ripple) and closes gaps all or nothing, and never adds an error; crossfade, dip and wipe transitions play over the cut, with handle checks that say the longest transition that fits. `videoFrameAt` gives the layers and sounds at any moment, `VideoPreviewEngine` plays a project on a canvas in the browser, `VideoEditorController` adds undo, playback, selection and snapping, and projects export to an ffmpeg command or a CMX 3600 EDL. `createVideoEditorToolProvider` exposes 29 agent tools. React (`@pixerate/editor-react/video-editor`) and Svelte (`@pixerate/editor-svelte/video-editor`) add `<VideoEditor>`, `<VideoPreview>`, `<VideoTimeline>`, `<VideoTransport>`, `<ClipInspector>`, `<MediaBin>` and `useVideoEditor` / `createVideoEditor` with `useVideoEditorTools`.
+
+## 0.75.0
+
+### Minor Changes
+
+- 27c66fe: Outlined text can animate a letter, word or line at a time.
+
+  - **Splitting:** any command takes `split: "letter" | "word" | "line"` for a group of letter paths, meaning text converted to outlines.
+  - **Reading order:** letters are sorted into lines by vertical overlap and into words by spacing (`motionTextLayout`), then staggered. Defaults are 40 ms a letter, 120 a word and 300 a line.
+  - **Order:** `cascade` sets it: forward, backward, from the centre, from the edges, or a seeded random that is the same every time.
+  - **Checks:** `split-not-text` warns when the target isn't a group of letter paths.
+  - **Agents:** a new read tool, `get_text_layout`, shows the letters, words and lines.
+
+## 0.74.0
+
+### Minor Changes
+
+- b8500f6: Animation scenes can be imported from PowerPoint with `fromPptxAnimation` and the `import_pptx_animation` agent tool (base64 `.pptx`, `slide`, dry run).
+
+  - **Shapes:** a slide's shapes become the artwork: preset and custom geometry, groups, solid fills, outlines and theme colours.
+  - **Animation:** its animation pane becomes a shot per click, and the scene plays on click.
+    - Entrances, exits and emphasis map to the editor's commands, and motion paths become follows along hidden paths.
+    - With previous and after previous, delays, repeats, auto-reverse and acceleration carry over.
+  - **Notes:** text, pictures, charts and effects with no match are listed.
+  - **Demo:** the animation tab can import a slide.
+
+## 0.73.0
+
+### Minor Changes
+
+- 015ef78: Animation scenes can have motion blur.
+
+  - **Setting:** `scene.motionBlur` takes `shutter` (degrees, default 180) and `samples` (default 8, at most 32).
+  - **Sampling:** each frame on the stage, in `render_animation_frame` and in contact sheets averages moments across the shutter (`motionBlurTimes`). There are more moments for faster motion and none when nothing moves, added exactly with `plus-lighter`.
+  - **Unchanged:** `motionFrameToSvg` and the Flair and Lottie exports stay sharp, and the exports say so.
+  - **Agents:** `set_animation_settings` sets or clears `motionBlur`.
+  - **React and Svelte:** `SceneSettings` has a Motion blur select.
+
+## 0.72.0
+
+### Minor Changes
+
+- c3f10fd: Animation scenes get drivers: properties that follow other nodes' properties.
+
+  - **What they're for:** parallax, a wheel turning as it rolls, a shadow fading as something rises.
+  - **How they work:** `scene.drivers` maps a source's change from rest, times `factor` plus `offset` and clamped, onto the target's x, y, rotation, scale or opacity, on top of its own commands. Chains are followed.
+  - **Checks:** a loop between drivers is a `driver-cycle` error, and unknown nodes are named with "did you mean".
+  - **Export:** Flair and Lottie sample driven properties wherever their sources change.
+  - **Core:** `motionPropertyValue`, `applyMotionDrivers` and `motionDriverSources`. `formatMotionDrivers` and `parseMotionDrivers` read and write drivers one a line (`dot.x <- box.x * 0.5`).
+  - **Agents:** a new `set_animation_drivers` tool, and `get_animation` lists drivers.
+  - **React and Svelte:** `SceneSettings` has a Drivers box.
+
+## 0.71.0
+
+### Minor Changes
+
+- 2f6469d: The animation editor's agent tools get easier to use in fewer calls.
+
+  - **References in batches:** in an `edit_animation` batch, later ops can use what earlier ones made: `"$0.indexes[0]"` is the first command op 1 added, `"$last.shot"` is the shot the op before changed, and `"$$"` is a literal `$`. The tool returns each op's outcome. `resolveMotionEditRefs` does the same outside the tools.
+  - **Contact sheet:** `render_animation_frame` takes `times` (and `columns`) to draw several moments as one labelled contact sheet (`motionContactSheetSvg`), as SVG or PNG.
+  - **Tests:** new tests do realistic agent tasks only through the tools. Golden fingerprints of frames catch any change to how scenes draw (regenerate with `vitest -u`).
+
+## 0.70.0
+
+### Minor Changes
+
+- 9728f84: Drawing on (`draw`, `enter` with style `draw`, `exit` with style `undraw`) can order a group's strokes.
+
+  - **Sequence:** `order: "sequence"` draws one stroke after another, each for a time in proportion to its length. Add `sortBy: "distance"` and an `origin` for a radial reveal.
+  - **Speed:** `pace: "speed"` draws all strokes at one speed, starting or finishing together (`align`).
+  - **Comet:** `draw` takes `comet`, a short stroke that runs along the path and off the end.
+  - **Export:** Lottie writes the comet's tail as the trim start.
+  - **Checks:** they treat a group as drawn when any of its strokes is.
+
+## 0.69.0
+
+### Minor Changes
+
+- ea2b6d9: Animation scenes get reusable clips.
+
+  - **Clips:** `scene.clips` holds named command lists written against the target `"$"`.
+  - **Playing:** a `play` command plays a clip on any nodes, with stagger and `speed`. Each command of the clip is timed as in a shot, and the clip's length comes from its commands (`motionClipLayout`).
+  - **Checks:** `unknown-clip` (with "did you mean") flags a play of a missing clip, and clips that name missing nodes are reported. Clips cannot play clips.
+  - **Agent tools:** `set_animation_clip` defines, replaces or deletes a clip, refusing to delete one still being played. `copy_animation` gives other nodes one node's motion, inserting each copy after its original as one undo step. `get_animation` lists clips with their lengths.
+
+## 0.68.0
+
+### Minor Changes
+
+- 97b6868: `move` takes `via` waypoints, so a node follows a smooth path that passes exactly through each point.
+
+  - **Smoothness:** each axis is a monotone cubic. Velocity carries through every waypoint, and the path never overshoots one: turning points and flat stretches stay put, like Blender's clamped handles.
+  - **Pacing:** `pacing: "even"` (the default) keeps the speed steady along the path, and `"equal"` gives each stretch the same time.
+  - **Default length:** 700 ms plus 400 ms per waypoint.
+  - **Export:** each leg is a cubic-bezier ease per axis. Flair and Lottie take one ease per transform, so those exports sample the path.
+  - **New exports:** `smoothMotionLegs` and `smoothMotionTimes`.
+
+## 0.67.1
+
+### Patch Changes
+
+- 21866a8: Click-triggered scenes now export the way Flair's player plays them.
+
+  - **The problem:** Flair's player shows a click-triggered picture still until the first click, then plays steps 0 and 1 together. That made the first click play the first two shots at once.
+  - **Export:** shot n now goes on step n + 1. Each click plays one shot, and after the last the first plays again.
+  - **Import:** importing a click effect folds its step 0 into the first shot.
+
+## 0.67.0
+
+### Minor Changes
+
+- 3c7b434: Animation scenes can play on a trigger: `trigger` is `click`, `hover`, `press` or `scroll`.
+
+  - **Click export:** the Flair export turns each shot into a Flair step timed from the shot's start. The first shot plays on load, and each click plays the next.
+  - **Hover, press and scroll:** these play, rewind or scrub the whole scene.
+  - **Effects:** `toFlairVectorEffect` and the export tools carry the trigger, `FlairMotionExport.trigger` says what to pass to `SvgPlayer`, and `export*` options take `trigger` (null for none).
+  - **Import:** Flair imports keep an effect's trigger.
+  - **Lottie:** the Lottie export notes that it plays through.
+  - **Checks:** `trigger-loop`, `click-one-shot` and `click-cue`.
+  - **Agents:** `set_animation_settings` and `get_animation` handle `trigger`.
+  - **React and Svelte:** the scene settings panel has a "Plays on" select.
+
+## 0.66.1
+
+### Patch Changes
+
+- aeeac37: `toLottie` now leaves hidden artwork nodes (`visible: false`) out of the exported file. They were written as groups marked `hd: true`, which lottie-web ignores on groups, so hidden follow routes and morph targets showed in Lottie players. Follows and morphs that use a hidden node are unchanged: they are sampled into keyframes.
+
+## 0.66.0
+
+### Minor Changes
+
+- 28493c5: The animation editor can now be used by hand, not just played.
+
+  - **`<AnimationEditor>`** (React and Svelte) brings together the stage, a playhead scrubber and panels for editing commands, shots and scene settings, with undo and redo (⌘Z / ⇧⌘Z). Pass `editable={false}` to get a player with no editing.
+  - **`<PlayheadScrubber>`**: a time ruler with shot bands, beat-grid and narration marks, drag or arrow keys to scrub, play / pause, and a loop mode.
+  - **`<CommandList>`**: a shot's commands in order. Add, reorder, duplicate and delete commands, and change `with` and `delay` inline.
+  - **`<CommandInspector>`**: a form generated from `MOTION_COMMAND_SCHEMA`, the schema the agent tools take. Enums appear as selects, numbers show their units and limits, and nodes and targets have pickers. It shows the Flair primitive each command plays.
+  - **`<EasePicker>`**: easing presets, including the springs, with a curve preview sampled from `evaluateEasing`. A spring is drawn over the time it takes to settle.
+  - **Stage picking**: click an element in `<AnimationStage>` (`onPick` / `onpick`) to pick it, or shift-click to add it to or remove it from the selected command's targets. Picked elements and targets are outlined (`highlight`).
+  - **`<ShotInspector>`**: a shot's label, hold, speed and camera framing, a cue picker for `at` (a beat or a narration word), and buttons to add, move and delete shots.
+  - **`<SceneSettings>`**: loop, frame rate, stepped time, target length with a Fit button (`fitMotionScene`), a beat grid, and narration words.
+  - Every change is one `controller.apply` edit, so it is one undo step. When an edit is refused, the reason is shown.
+  - **Core:** the components share helpers: `motionCommandFields`, `parseMotionFieldInput`, `motionFieldEdit`, `defaultMotionCommand`, `motionCommandRows`, `duplicateMotionCommandEdit`, `motionEasingCurve` / `motionEasingPath`, `motionNodeAtElement`, `highlightMotionSvg`, `motionRulerTicks`, `fitMotionSceneEdits`, `motionCueChoices`, `parseMotionNarration` and `formatMotionNarration`.
+  - **New edit and agent tool:** `move_command` reorders a command within its shot as one undo step.
+  - **Flair import:** preset colours written as `[r, g, b]` channel arrays, as Flair's catalog writes them, are now read as hex.
+
+## 0.65.0
+
+### Minor Changes
+
+- 2751617: The animation stage shows motion on a still.
+
+  - **Onion skin:** faded ghost frames either side of the playhead. Ghosts are a set time apart, or fall on the moments commands start and end, and fade with distance.
+  - **Motion paths:** a dashed line where each node's centre travels, with a dot where each change starts or ends.
+  - **Core:** `motionGhosts`, `motionPath`, `motionMovingIds`, `motionPathsSvg` and `motionStageSvg`. `controller.toSvg` takes `onionSkin`, `motionPaths` and `motionPathColor`.
+  - **React and Svelte:** `<AnimationStage>` and `<AnimationEditor>` take `onionSkin` and `motionPaths`.
+  - **Agents:** `render_animation_frame` takes `onion_skin` and `motion_paths`, and a new read tool, `get_motion_path`, returns the path as numbers.
+  - **Demo:** the animation tab has toggles for both.
+
+## 0.64.0
+
+### Minor Changes
+
+- 333ad75: Animation scenes export to Lottie with `toLottie` and the `export_lottie` agent tool. The output is Bodymovin JSON v5 for lottie-web and the iOS and Android players.
+
+  - **Structure:** one shape layer whose groups mirror the artwork. Each node is an outer group for its animated pose (anchor at its centre) around an inner group for its own transform.
+  - **Paint and drawing:** paths have solid fills and strokes with their colour, width and opacity animated. Drawing on becomes trim paths, the camera becomes a root transform, and each shot gets a marker.
+  - **Keyframes:** a change driven by one cubic-bezier ease (mirrored repeats included) is an eased keyframe pair. Springs, elastic, behaviours, stepped time, follows, additive layers and camera moves are sampled at `fps`. A test compares Lottie's values against the editor's frame by frame.
+  - **Notes:** the export lists what it could not carry over: gradients, dashes, reveal clips, skewed groups and morphs that change point counts.
+  - **Demo:** the animation tab has an Export Lottie button.
+
+## 0.63.0
+
+### Minor Changes
+
+- 2da00e7: Animation shots can be cued to music or a voiceover.
+
+  - **Timing tracks:** a scene can carry a `beat` grid (`bpm`, `offset`, `meter`) and `narration` word timings, for example from TTS or speech-to-text.
+  - **Cues:** a shot's `at` cue (`{ beat }`, `{ word }` or `{ ms }`) starts it on that moment, and the shot before holds until then.
+  - **Checks:** `cue-missed` warns when the shot before runs past a cue, and `unknown-cue` flags a beat with no grid or a word the narration lacks.
+  - **Helpers:** `motionBeatTime`, `motionBeatAt` and `motionCueTime`. `MotionShotTiming` gains `cue` and `missedBy`.
+  - **Agents:** a new read tool, `get_timing_grid`, lists beats (with bar and beat) and words with their times. `set_animation_settings` sets the beat grid and narration, and shot tools take `at`.
+
+## 0.62.0
+
+### Minor Changes
+
+- 70ae8ed: Animation scenes can be fitted to a length.
+
+  - **Shot speed:** a shot's `speed` scales all of its time: camera move, delays, durations, staggers and hold.
+  - **Fitting:** `fitMotionScene(scene, ms, { keep })` and the `fit_animation` agent tool (one undo step, with a dry run) set the shots' speeds so the scene lasts `ms`. Kept shots play as they are, and the rest stretch or squeeze together. This follows After Effects' protected regions.
+  - **Refusals:** it refuses, with the reason, when the kept shots alone outlast the target or a speed would leave 0.05–20×.
+  - **Checks:** the length warnings now point to `fit_animation`.
+
+## 0.61.0
+
+### Minor Changes
+
+- 82031d8: The animation editor gains Smart Animate: the `match` command tweens a group into another group (usually hidden), part by part.
+
+  - **Pairing:** parts pair by name, then by id with the groups' own ids taken out (`card-a-title` ↔ `card-b-title`), then by kind in stacking order. Nested groups pair their own parts the same way.
+  - **Morphing:** each part morphs into its partner's shape, paint and place. Parts with no partner fade out.
+  - **Checks:** `match-unpaired` notes the parts of `into` that have no partner (they cannot appear), and `match-self` refuses a group matched into itself or into a group it holds.
+  - **Agents:** `matchMotionNodes` returns the pairing, and the command has an agent-tool schema.
+
+## 0.60.0
+
+### Minor Changes
+
+- 2feef94: The animation editor stacks motion. A command with `blend: "add"` becomes a layer over the target's pose instead of a change that the next one takes over from. It stacks with whatever else moves the target, and what it adds stays once it ends.
+
+  - **Emphasis:** pulse, shake, teeter, wave and wiggle are additive by default, so a shake during a slide shakes as it slides and lands where the slide ends. Pass `blend: "replace"` for the old take-over.
+  - **Move, rotate and scale:** they take `blend: "add"` too. Offsets and turns add; scales multiply.
+  - **Overlap check:** additive layers are no longer reported as overlapping.
+  - **Flair export:** a layer on its own is one exact change; layers that overlap the pose are sampled.
+  - **New exports:** `motionAddTrackKey`, `withMotionLayers`, `MOTION_ADDITIVE_PROPERTIES` and `MOTION_BLENDS`.
+
+- c3503c6: Agents now edit rich text inline, the way collaborators do in Google Docs. `createRichTextToolProvider` draws the agent's caret, with its name, where its tools read and write. `find_text` and `set_selection` highlight the agent's selection, and edits tint the new text for a moment. With `presence: { typing: true }`, inserted and replacement text is typed out a few characters at a time. It is still one undo step, and it rolls back if the call is cancelled.
+
+  `insert_text`, `replace_range` and `replace_selection` now return the new text's `range`. The caret is on by default; pass `presence: false` to turn it off. The new building blocks are `AgentCaret`, `setAgentCaret`, `clearAgentCaret`, `markAgentChanges` and `typeAgentText`.
+
+## 0.59.0
+
+### Minor Changes
+
+- 24703a8: The animation editor gains timing features and imports from Flair.
+
+  - **Springs:** Figma's named springs are new easing presets (`spring-gentle`, `spring-quick`, `spring-bouncy`, `spring-slow`; `SPRING_PRESETS`). A command with a spring and no `duration` lasts until the spring settles (`springSettleMs`). A new `spring-cut-short` warning flags a spring given less time than it needs. The tools accept spring and elastic objects.
+  - **Repeat:** any command except `enter` and `exit` can `repeat`, with `repeatMode` `loop`, `mirror` (every other cycle plays backwards) or `offset` (carry on from where the last ended). `duration` is one cycle; see `motionCycleDuration` and `motionCommandRepeat`.
+  - **Stepped time:** `steps` on a command, or on the scene with `set_animation_settings`, holds poses on a frame grid ("on twos").
+  - **Geometric zoom:** `geometric` on `scale` and on cameras zooms at a steady rate.
+  - **Flair export:** a `flair` version option (default `0.39`) decides what is written exactly. Flair 0.39 takes springs, stepped time as `strobe`, and mirrored repeats as reversed curves (`reverseCubicBezier`). Older versions get these sampled.
+  - **Flair import:** `fromFlairSvgMotion` and `fromFlairVectorEffect`, plus the `import_flair_effect` agent tool (with a dry run), turn a Flair motion or catalog effect into a scene. Colour placeholders become controls, each step becomes a shot, and behaviours become emphasis commands, with notes on anything that does not carry over.
+
+## 0.58.0
+
+### Minor Changes
+
+- 5af1e38: The animation editor plays Flair's clip-path reveals, and exports them and follows to Flair exactly:
+
+  - **New styles:** `enter` gains `wipe` (an edge travelling `direction`, default right), `iris` (from the centre; `shape`: `circle` or `box`) and `split` (from a line through the middle; `orientation`: `horizontal` or `vertical`). `exit` gains `wipe`. They match Flair's `entrance.wipe`, `entrance.iris`, `entrance.split` and `exit.wipe`, padding the clip for the stroke. A node with no width or height fades instead, and `checkMotionScene` warns `reveal-no-box`.
+  - **Frames:** reveals are clips in the node's box units, `MotionFrame.clips` (the vector model has no clips). `motionFrameToSvg` and `<AnimationStage>` wrap each clipped node in a group with an `objectBoundingBox` clip path, through `vectorDocumentToSvg`'s new `wrap` option.
+  - **Flair export:** a reveal is a wrapper group plus a clip rect or circle whose attributes animate. A follow is Flair's `along` (with `orient` when it turns) on a wrapper, along a copy of the path in the node's parent's units, instead of sampled transform steps.
+  - **Follows** are measured in the node's parent's units (a follow inside a rotated or scaled group now turns the right way), and with `rotate`, moves made during the follow turn with the path. `motionNodeOffset` takes a `follow` flag and returns the follow apart.
+
+- 5af1e38: The animation editor speaks Flair's motion primitives (`@pixerate/flair/motion`). Shared commands and primitives have the same names and defaults:
+
+  - **New entrances:** `enter` gains the `zoom` and `rise` styles, and a starting `scale` for `pop` and `zoom`.
+  - **New emphasis commands:** `teeter`, `wave`, `wiggle` (seeded smooth noise; the same seed always wanders the same way, and by default each target gets its own seed from its id) and `color-pulse`.
+  - **Shake:** `shake` takes an `axis`.
+  - **Primitive names:** `motionFlairPrimitive` and `get_animation`'s `flairPrimitive` name the Flair primitive each command plays.
+
+  Pulses, shakes and the new emphasis commands are now Flair behaviours. `MotionSegment.wave` is replaced by `behavior` (and `index`), and `@pixerate/editor/animation` exports `behaviorProgress`, `fractalWiggle` and `motionSeedFromId`, ported from Flair so the numbers match.
+
+  The Flair export writes these behaviours as one exact change with `behavior` instead of sampling them. This needs Flair 0.38 or later; pass `behaviors: false` (also on `export_flair_motion` and `export_flair_effect`) to sample them for older Flair.
+
+## 0.57.0
+
+### Minor Changes
+
+- f362946: The animation editor's Flair export writes cubic-bezier easings (`ease`, `ease-in`, `ease-out`, `ease-in-out`, the back eases and custom `{ type: 'cubic-bezier' }` curves) as one change with `ease: [x1, y1, x2, y2]` instead of sampling them into linear steps; Flair's own names are still used where they match within 1%. This needs Flair 0.36 or later: pass `curves: false` (also on the `export_flair_motion` and `export_flair_effect` agent tools) to sample them for older Flair. Adds `flairCurveFor` and the `FlairEase` type. Overshooting curves on colours, opacity and draw-on stay sampled, since their values cannot pass their ends.
+
+## 0.56.0
+
+### Minor Changes
+
+- 391d3d0: Mermaid diagrams reach parity with Ursula: pie, mindmap, quadrant, C4, architecture, sequence, gitGraph, Gantt, timeline, journey, XY and radar diagrams are now editable statement by statement (lossless, like flowcharts), with family layouts and their own pictures (`mermaidToScene`, also used by `mermaidToSvg`, thumbnails and PNG export). `parseSankey` and `parseTreemap` read sankey and treemap data. `familyUI` describes each family's shapes, defaults and data fields, and `checkFieldData` validates them. Agents get `set_diagram_node_data`, `set_diagram_edge_data`, `set_diagram_settings` and `set_diagram_title`, and `get_diagram` lists the fields and values. React and Svelte add `<MermaidFamilyScene>`, plus `scene` and `renameTarget` on `useMermaidDiagram` / `createMermaidDiagram` (which also take `{ sceneTheme, layoutOptions }` as a second argument).
+
+## 0.55.0
+
+### Minor Changes
+
+- f945529: Publish the vector animation editor (`@pixerate/editor/animation-editor`, `@pixerate/editor-react/animation-editor`, `@pixerate/editor-svelte/animation-editor`) and Mermaid diagram export. The 0.54.0 / 0.41.0 / 0.49.0 packages on npm were built before these landed (a release that failed part-way had already published those versions), so they do not contain them even though their changelogs list them.
+
+## 0.54.0
+
+### Minor Changes
+
+- ea93937: Mermaid diagrams can now be exported and previewed (ported from Ursula's thumbnails and PNG export). `mermaidToSvg` draws a standalone SVG that matches the canvas layout, with Mermaid styles, arrow heads and labels. `mermaidThumbnailSvg` fits it to a box. `rasterizeSvg` and `downloadDiagramPng` make PNGs in the browser. `createDiagramToolProvider({ renderSvg, rasterize })` adds a `render_diagram` agent tool. React and Svelte add `<MermaidThumbnail>`.
+- 14bd63e: Add an MCP bridge (ported from Ursula): `@pixerate/editor/bridge` (Node only, no dependencies) runs one MCP server over stdio that drives editors open in a browser over a localhost WebSocket. It has an origin allowlist, an optional token, `list_editors`, an `editor` argument for picking an editor, cancellation, timeouts and port retry. The `pixerate-mcp-bridge` CLI starts it. Pages connect their `ToolRegistry` with `connectToolBridge` (`@pixerate/editor/tools`), which re-sends the tool list on change and reconnects after the bridge restarts. React and Svelte add `useToolBridge`.
+- e4a0275: Add a UI-agnostic animation editor for vector artwork (`@pixerate/editor/animation-editor`), modelled on Lingo's scenes. A `MotionScene` is the vector editor's artwork plus shots of commands (enter, exit, draw, move, rotate, scale, fade, style, morph, follow a path, pulse, shake, live path-effect tweens) and camera moves, with timing taken from the content. `motionFrameAt` / `motionFrameToSvg` draw any frame, `checkMotionScene` reports coded issues with "did you mean" suggestions, `AnimationEditorController` edits all-or-nothing with undo and plays on an injectable clock, and `createAnimationEditorToolProvider` gives agents 22 tools. `toFlairSvgMotion`, `toFlairVectorEffect` and `toFlairEffectDocument` export to Flair's vector motion, catalog effects (with colour controls and presets) and effect editor. React adds `useAnimationEditor`, `useAnimationEditorTools`, `<AnimationEditor>`, `<AnimationStage>` and `<ShotTimeline>` (`@pixerate/editor-react/animation-editor`); Svelte adds `createAnimationEditor`, `useAnimationEditorTools` and the same components (`@pixerate/editor-svelte/animation-editor`).
+
+## 0.53.0
+
+### Minor Changes
+
+- 883d9d7: Charts: error bars, logarithmic axes and reversed axes.
+
+  - Series take `errorBars` (bar, line, area, scatter) and `xErrorBars` (scatter / bubble x): `fixed`, `percent`, `stddev` (around the series mean, as Excel), `stderr` or `custom` plus / minus amounts, with `direction` and `cap`. Drawn as `error-bar` marks, on stack tops when stacked, and included in the axis range. `chartErrorAmounts`, `describeChartErrorBars`, `chartErrorBarsOfType`.
+  - Value axes and the scatter x axis take `scale: "log"` with `logBase` (2–1000, default 10): power or 1-2-5 ticks (`niceLogScale`), values of 0 or less skipped with a `values-skipped` warning, refused with percent stacking. `ChartValueScale.logBase`, `chartScaleToPixel` / `chartScaleFromPixel`; drags move by ratio and ↑ ↓ step by a tenth of a power.
+  - Every axis takes `reverse: true`.
+  - Office import / export reads and writes `c:errBars`, `c:logBase` and `c:orientation maxMin` (no longer reported as unsupported); Mermaid keeps them in the `%% @pixerate` comment.
+  - `update_chart` / `update_chart_series` (tools and commands) describe the new fields; summaries and descriptions mention log and reversed axes and error bars.
+  - `<ChartInspector>` (React and Svelte): Reverse and Log scale toggles with a log base on axes, and error bar type, amount, custom amounts, direction and caps on the selected series.
+
+- 3acb651: Agent edits to Mermaid diagrams can now be acted out by a cursor (ported from Ursula's remote control): `DiagramDirector` moves, clicks, drags, connects and types on the canvas, draws a whole-diagram write statement by statement (`draftFrames`), and commits each call as one undo step (rolled back if the diagram changed underneath). Pass it to `createDiagramToolProvider({ director })`. The presence store, clock, cursor tween and per-actor queue (`PresenceStore`, `PerformanceQueue`, `createInstantPresenceClock`) move to `@pixerate/editor/animation` and are shared with `ChartDirector`, which now hides cursors after `linger` as documented. React adds `useDiagramDirector` and `<DiagramPresenceLayer>`; Svelte adds `createDiagramDirector` and `<DiagramPresenceLayer>`.
+- d01edac: Add Mermaid diagrams (ported from Ursula): `@pixerate/editor/diagram` parses and writes flowchart, state, class and ER diagrams losslessly (untouched statements round-trip byte for byte, edits rewrite only what they touch, positions in a `%% @pixerate` comment; Ursula's `@ursula` comment is still read), with `DiagramController` (validated, undoable edits), `findMermaidSources` and 19 agent tools (`createDiagramToolProvider`). `@pixerate/editor/canvas` adds `mermaidToCanvas` (dagre layout with nested groups, stored positions blended with new nodes), `mermaidMovesFromCanvas`, `DiagramStream` for diagrams that are still being written, and Mermaid shape geometry. React adds `useMermaidDiagram`, `useMermaidStream`, `<MermaidDiagramNode>` and `<MermaidDiagramGroup>`; Svelte adds `createMermaidDiagram`, `createMermaidStream` and the same components.
+
+## 0.52.0
+
+### Minor Changes
+
+- 52ae1ba: Read charts from Excel, PowerPoint and Word files. `extractOfficeCharts` (and `extractXlsxCharts`, `extractPptxCharts`, `extractDocxCharts`) in `@pixerate/editor/chart` return every chart in a file as a `ChartSpec` with where it sits: the sheet and anchor cell in a workbook, the slide number in a deck. DrawingML and Office 2016 chartex charts are both read. `createOfficeChartToolProvider` gives agents `list_open_files`, `list_file_charts`, `get_file_chart` and `load_file_chart`, and React and Svelte register it with `useOfficeChartToolProvider`.
+
+## 0.51.0
+
+### Minor Changes
+
+- e3c9c3e: Chart PNG previews. Core adds `rasterizeChartSvg` (resolves CSS-variable paints with `resolveChartSvgPaints`, so charts no longer draw black, then draws through a canvas at 2× with the longest side ≤ 1024 px), `createChartRasterizer`, `downloadChartPng` and `chartFileName`. `render_chart` now says when an image is worth its tokens, returns the layout warnings with SVG and PNG results, and the React and Svelte `useChartToolProvider` pass a browser rasterizer by default so `render_chart { format: "png" }` works out of the box (`rasterize: false` turns it off). `<ChartEditor>` gains a Download PNG toolbar button (`pngOptions`).
+
+## 0.50.0
+
+### Minor Changes
+
+- 39d5cba: feat(canvas,image-editor,vector): add `PIXERATE_BRAND_GRADIENT`, UI-agnostic agent presence trajectory/rotation math and `AgentCursorPresence`, region mosaic/blur image filters (`applyRegionMosaic`, `applyRegionBlur`), and CSS transform scale compensation in `VectorCanvas`
+
 ## 0.49.0
 
 ### Minor Changes

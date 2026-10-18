@@ -27,6 +27,8 @@ import {
   Rows3,
 } from "lucide-react";
 import { demoToolRegistry } from "../agentTools";
+import { AgentScriptPanel } from "./AgentScriptPanel";
+import { SHEET_SCRIPTS } from "../agentScripts";
 
 // CSV and TSV adapters for `importFileIntoSpreadsheet` (registered once).
 registerSpreadsheetImportAdapters(defaultImportRegistry);
@@ -298,6 +300,7 @@ export const SpreadsheetTab: React.FC = () => {
     [csvPreview]
   );
 
+  const agentStage = useRef<HTMLDivElement>(null);
   const buttonClass =
     "flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors";
 
@@ -352,6 +355,7 @@ export const SpreadsheetTab: React.FC = () => {
         </span>
       </div>
 
+      <div className="relative" ref={agentStage}>
       <div
         className={`h-[560px] rounded-xl overflow-hidden border ${
           dragOver ? "border-emerald-500 ring-2 ring-emerald-500/40" : "border-slate-800"
@@ -372,6 +376,8 @@ export const SpreadsheetTab: React.FC = () => {
       >
         <SpreadsheetEditor state={state} showSheetTabs />
       </div>
+      </div>
+      <AgentScriptPanel scripts={SHEET_SCRIPTS} stage={agentStage} hint="Plays a scripted agent turn with the sheet__* tools: it reads a range, writes formulas with set_range and checks what they computed." />
 
       {showNames && (
         <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 text-slate-200">

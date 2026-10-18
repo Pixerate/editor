@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import path from "path";
+import { builtinModules } from "module";
 
 const dist = path.resolve(__dirname, "../dist");
 
@@ -29,7 +30,7 @@ function reachablePackages(entry: string): Set<string> {
 }
 
 describe("subpath entry isolation", () => {
-  it.each(["spreadsheet/index.js", "image-editor/index.js", "history/index.js", "animation/index.js", "grammar/index.js", "commands/index.js", "persistence/index.js", "generation/index.js", "tokens/index.js", "export/index.js", "parameters/index.js", "vector/index.js", "chart/index.js"])(
+  it.each(["spreadsheet/index.js", "image-editor/index.js", "history/index.js", "animation/index.js", "animation-editor/index.js", "video-editor/index.js", "grammar/index.js", "commands/index.js", "persistence/index.js", "generation/index.js", "tokens/index.js", "export/index.js", "parameters/index.js", "vector/index.js", "chart/index.js", "diagram/index.js"])(
     "%s pulls in no third-party packages",
     (entry) => {
       expect([...reachablePackages(entry)]).toEqual([]);
@@ -59,6 +60,10 @@ describe("subpath entry isolation", () => {
     expect(agent.EDITOR_MCP_TOOLS).toBe(tools.EDITOR_MCP_TOOLS);
     expect(typeof agent.createRichTextToolProvider).toBe("function");
     expect(tools.createRichTextToolProvider).toBeUndefined();
+  });
+
+  it.each(["bridge/index.js", "bridge/cli.js"])("%s only pulls in Node built-ins", (entry) => {
+    expect([...reachablePackages(entry)].filter((name) => !builtinModules.includes(name.replace(/^node:/, "")))).toEqual([]);
   });
 
   it("root entry does not pull in dagre", () => {

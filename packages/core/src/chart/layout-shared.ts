@@ -1,4 +1,4 @@
-import { niceScale, type NiceScale } from './scale.js';
+import { niceLogScale, niceScale, type NiceScale } from './scale.js';
 import type { ChartAxis, ChartMark, ChartMarker, ChartRect, ChartScene, ChartSelection, ChartSpec, ChartTheme, ChartValueScale, ChartWarning } from './types.js';
 
 export type ChartTextMeasure = (text: string, size: number, weight?: number) => number;
@@ -100,6 +100,8 @@ export type ChartSceneBase = Omit<ChartScene, 'marks' | 'warnings' | 'theme' | '
 export interface Pt {
 	c: number;
 	v: number;
+	/** The category index the point belongs to (when it has one). */
+	i?: number;
 }
 
 /** Path through points (in category/value pixel space) with the chosen curve; `map` turns them into x/y. */
@@ -195,6 +197,8 @@ export const tickCount = (length: number) => Math.max(2, Math.min(10, Math.round
 export function axisScale(lo: number, hi: number, length: number, axis: ChartAxis, frozen?: { min: number; max: number } | null, headroom = false): NiceScale {
 	const fixedMin = frozen && Number.isFinite(frozen.min) ? frozen.min : axis.min;
 	const fixedMax = frozen && Number.isFinite(frozen.max) ? frozen.max : axis.max;
+	// Log axes end on powers of the base (the step does not apply); `lo` / `hi` are the positive data range.
+	if (axis.scale === 'log') return niceLogScale(lo, hi, tickCount(length), axis.logBase ?? 10, fixedMin, fixedMax);
 	const step = axis.step;
 	if (step && step > 0 && Number.isFinite(lo) && Number.isFinite(hi)) {
 		let min = fixedMin ?? Math.floor(lo / step + 1e-9) * step;

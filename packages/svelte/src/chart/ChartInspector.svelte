@@ -10,6 +10,9 @@
   import {
     CHART_COLOR_SCHEMES,
     CHART_CURVES,
+    CHART_ERROR_BAR_DIRECTIONS,
+    CHART_ERROR_BAR_LABELS,
+    CHART_ERROR_BAR_TYPES,
     CHART_LABEL_POSITIONS,
     CHART_LAYOUT_PRESETS,
     CHART_LEGEND_POSITIONS,
@@ -22,14 +25,21 @@
     CHART_TYPES,
     checkChartColors,
     chartColorInputValue,
+    chartErrorBarsOfType,
     chartFamily,
     chartSeriesColor,
     chartSeriesType,
     chartSupportsTrendlines,
     chartTrendlineName,
+    defaultChartErrorBarValue,
+    formatChartAmountList,
     isCartesianChart,
+    parseChartAmountList,
     type ChartAxis,
     type ChartController,
+    type ChartErrorBars,
+    type ChartErrorBarType,
+    type ChartSeries,
     type ChartLabelPosition,
     type ChartMarker,
     type ChartNumberFormat,
@@ -66,6 +76,8 @@
   const currentScheme = $derived(CHART_COLOR_SCHEMES.find((c) => c.palette.join() === spec.palette.join())?.id ?? '');
   const seriesIndex = $derived(selectedSeries ? spec.series.findIndex((s) => s.id === selectedSeries.id) : -1);
   const horizontal = $derived(spec.orientation === 'horizontal');
+  // Log and reversed axes and error bars are drawn by the bar / line / area / scatter layouts.
+  const scales = $derived(family === 'cartesian' || family === 'xy');
   const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
   const stackingLabels: Record<string, string> = { none: 'None', stacked: 'Stacked', percent: '100%' };
 
@@ -85,6 +97,17 @@
     else delete format.code;
     return setAxis(axis, { format }).ok;
   }
+  const setBars = (series: ChartSeries, which: 'errorBars' | 'xErrorBars', next: ChartErrorBars | null) => controller.updateSeries(series.id, { [which]: next });
+  const patchBars = (series: ChartSeries, which: 'errorBars' | 'xErrorBars', patch: Partial<ChartErrorBars>) => {
+    const bars = series[which];
+    return bars ? setBars(series, which, { ...bars, ...patch }).ok : false;
+  };
+  function commitMinus(series: ChartSeries, which: 'errorBars' | 'xErrorBars', text: string) {
+    const next = { ...series[which]! };
+    if (text.trim()) next.minus = parseChartAmountList(text) as ChartErrorBars['minus'];
+    else delete next.minus;
+    return setBars(series, which, next).ok;
+  }
   const side = (axis: 'x' | 'y' | 'y2') => (axis === 'x' ? (horizontal ? 'left' : 'bottom') : axis === 'y2' ? (horizontal ? 'top' : 'right') : horizontal ? 'bottom' : 'left');
 </script>
 
@@ -93,6 +116,67 @@
     <input type="checkbox" class="h-3.5 w-3.5 accent-primary" {checked} data-option={name} onchange={(e) => onchange(e.currentTarget.checked)} />
     {label}
   </label>
+{/snippet}
+
+{#snippet errorBarFields(series: ChartSeries, which: 'errorBars' | 'xErrorBars')}
+  {@const bars = series[which]}
+  {@const key = `series.${which}`}
+  {@const id = `${idPrefix}-${which}`}
+  <div class="space-y-1.5" data-section={which === 'errorBars' ? 'error-bars' : 'x-error-bars'}>
+    <div class="flex items-center gap-2">
+      <label for="{id}-type" class="{chartLabelClass} w-20 shrink-0">{which === 'errorBars' ? 'Error bars' : 'X error bars'}</label>
+      <select
+        id="{id}-type"
+        class={chartInputClass}
+        value={bars?.type ?? ''}
+        data-option="{key}.type"
+        onchange={(e) => setBars(series, which, chartErrorBarsOfType(e.currentTarget.value as ChartErrorBarType | '', bars, which === 'xErrorBars' ? (series.x ?? []) : series.values))}
+      >
+        <option value="">None</option>
+        {#each CHART_ERROR_BAR_TYPES as t (t)}
+          <option value={t}>{CHART_ERROR_BAR_LABELS[t]}</option>
+        {/each}
+      </select>
+    </div>
+    {#if bars && (bars.type === 'fixed' || bars.type === 'percent' || bars.type === 'stddev')}
+      <div class="flex items-center gap-2">
+        <label for="{id}-value" class="{chartLabelClass} w-20 shrink-0">{bars.type === 'percent' ? 'Percent' : bars.type === 'stddev' ? 'Deviations' : 'Amount'}</label>
+        <div class="min-w-0 flex-1">
+          <ChartCommitInput id="{id}-value" value={String(bars.value ?? defaultChartErrorBarValue(bars.type))} inputmode="decimal" data-option="{key}.value" oncommit={(text) => patchBars(series, which, { value: text.trim() === '' ? undefined : Number(text) })} />
+        </div>
+      </div>
+    {/if}
+    {#if bars?.type === 'custom'}
+      <div class="flex items-center gap-2">
+        <label for="{id}-plus" class="{chartLabelClass} w-20 shrink-0">Plus</label>
+        <div class="min-w-0 flex-1">
+          <ChartCommitInput id="{id}-plus" value={formatChartAmountList(bars.plus)} placeholder="1, 2, -, 0.5" data-option="{key}.plus" oncommit={(text) => patchBars(series, which, { plus: parseChartAmountList(text) as ChartErrorBars['plus'] })} />
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <label for="{id}-minus" class="{chartLabelClass} w-20 shrink-0">Minus</label>
+        <div class="min-w-0 flex-1">
+          <ChartCommitInput id="{id}-minus" value={formatChartAmountList(bars.minus)} placeholder="Same as plus" data-option="{key}.minus" oncommit={(text) => commitMinus(series, which, text)} />
+        </div>
+      </div>
+    {/if}
+    {#if bars}
+      <div class="flex items-center gap-2">
+        <select
+          class="{chartInputClass} flex-1"
+          aria-label="Error bar direction"
+          value={bars.direction ?? 'both'}
+          data-option="{key}.direction"
+          onchange={(e) => patchBars(series, which, { direction: e.currentTarget.value as ChartErrorBars['direction'] })}
+        >
+          {#each CHART_ERROR_BAR_DIRECTIONS as d (d)}
+            <option value={d}>{d === 'both' ? 'Both ways' : d === 'plus' ? 'Plus only' : 'Minus only'}</option>
+          {/each}
+        </select>
+        {@render toggle('Caps', `${key}.cap`, bars.cap !== false, (cap) => patchBars(series, which, { cap }))}
+      </div>
+    {/if}
+  </div>
 {/snippet}
 
 {#snippet axisSection(axis: 'x' | 'y' | 'y2', value: ChartAxis, numeric: boolean)}
@@ -117,14 +201,30 @@
       {#if axis === 'x' && !numeric}
         {@render toggle('Dates', 'xAxis.kind', value.kind === 'date', (dates) => setAxis('x', { kind: dates ? 'date' : undefined } as Partial<ChartAxis>))}
       {/if}
+      {#if scales}
+        {@render toggle('Reverse', `${key}.reverse`, !!value.reverse, (reverse) => setAxis(axis, { reverse }))}
+      {/if}
+      {#if scales && valueAxis}
+        {@render toggle('Log scale', `${key}.scale`, value.scale === 'log', (log) => setAxis(axis, { scale: log ? 'log' : 'linear' }))}
+      {/if}
     </div>
-    {#if valueAxis}
+    {#if scales && valueAxis && value.scale === 'log'}
+      <div class="flex items-center gap-2">
+        <label for="{idPrefix}-{axis}-log-base" class="{chartLabelClass} w-20 shrink-0">Log base</label>
+        <div class="min-w-0 flex-1">
+          <ChartCommitInput id="{idPrefix}-{axis}-log-base" value={String(value.logBase ?? 10)} inputmode="decimal" data-option="{key}.logBase" oncommit={(text) => setAxis(axis, { logBase: text.trim() === '' ? undefined : Number(text) }).ok} />
+        </div>
+      </div>
+    {/if}
+    {#if valueAxis && value.scale !== 'log'}
       <div class="flex items-center gap-2">
         <label for="{idPrefix}-{axis}-step" class="{chartLabelClass} w-20 shrink-0">Step</label>
         <div class="min-w-0 flex-1">
           <ChartCommitInput id="{idPrefix}-{axis}-step" value={value.step === null ? '' : String(value.step)} placeholder="Auto" inputmode="decimal" data-option="{key}.step" oncommit={commitNumber(axis, 'step')} />
         </div>
       </div>
+    {/if}
+    {#if valueAxis}
       <div class="flex items-center gap-2">
         <span class="{chartLabelClass} w-20 shrink-0">Min / max</span>
         <div class="flex min-w-0 flex-1 gap-1">
@@ -427,6 +527,12 @@
             {/each}
           </select>
         </div>
+      {/if}
+      {#if scales}
+        {@render errorBarFields(series, 'errorBars')}
+      {/if}
+      {#if family === 'xy'}
+        {@render errorBarFields(series, 'xErrorBars')}
       {/if}
       {#if chartSupportsTrendlines(spec.type, spec.stacking)}
         <div class="space-y-1" data-section="trendlines">

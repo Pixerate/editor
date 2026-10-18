@@ -21,3 +21,4 @@ export * from "./find-replace";
 export * from "./paragraph-styles";
 export * from "./table";
 export * from "./chart";
+export * from "./agent-caret";

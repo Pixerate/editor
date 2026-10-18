@@ -177,3 +177,26 @@ describe("useAgentToolProvider (Svelte)", () => {
     editor.destroy();
   });
 });
+
+describe("agent caret in a mounted EditableTextNodeEditor", () => {
+  it("draws the agent's caret where the rich-text tools write, as one undo step", async () => {
+    const { editor, destroy } = mountEditor({ content: "<p>Hello brave world</p>" });
+    const registry = new ToolRegistry();
+    const cleanup = $effect.root(() => {
+      useAgentToolProvider(
+        registry,
+        createRichTextToolProvider(editor, { id: "doc", presence: { name: "Claude", typing: { charsPerSecond: Infinity } } })
+      );
+    });
+    flushSync();
+    const result = await registry.callTool("replace_range", { from: 7, to: 12, text: "bold" });
+    expect(result.structuredContent).toMatchObject({ range: { from: 7, to: 11 } });
+    const caret = editor.view.dom.querySelector(".pe-agent-caret");
+    expect(caret?.querySelector(".pe-agent-caret-label")?.textContent).toBe("Claude");
+    expect(editor.view.dom.querySelector(".pe-agent-changed")?.textContent).toBe("bold");
+    editor.commands.undo();
+    expect(editor.getText()).toBe("Hello brave world");
+    cleanup();
+    destroy();
+  });
+});
