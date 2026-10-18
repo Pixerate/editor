@@ -355,7 +355,7 @@ Every feature is available from core and from both framework packages. "Via core
 | Frames at Any Time (vector document and camera, SVG with the camera as the viewBox, colour control values) | `motionFrameAt`, `motionFrameToSvg` | `<AnimationStage>` | `<AnimationStage>` |
 | Animation Editor (undoable all-or-nothing edits, playback on an injectable clock, shot selection, read-only) | `AnimationEditorController`, `applyMotionEdits` | `useAnimationEditor` & `<AnimationEditor>`, `<ShotTimeline>` | `createAnimationEditor` & `<AnimationEditor>`, `<ShotTimeline>` |
 | Animation Checks (coded issues with severity, shot, command, ids and measured / needed values; "did you mean" for unknown ids) | `checkMotionScene`, `MOTION_ISSUE_CODES` | Issue list in `<AnimationEditor>` | Issue list in `<AnimationEditor>` |
-| Flair Export (`SvgMotion`, catalog `VectorEffect` with colour controls and presets, `EffectDocument`; exact where Flair's curves match, sampled otherwise) | `toFlairSvgMotion`, `toFlairVectorEffect`, `toFlairEffectDocument` | Via core | Via core |
+| Flair Export (`SvgMotion`, catalog `VectorEffect` with colour controls and presets, `EffectDocument`; exact for Flair's curves and, with Flair ≥ 0.36, any cubic-bezier ease; springs, elastic, follows, morphs and pulses sampled) | `toFlairSvgMotion`, `toFlairVectorEffect`, `toFlairEffectDocument` | Via core | Via core |
 | Animation Agent Tools (22 tools: read, find elements, check, render a frame, export to Flair, artwork from SVG, add / change / move / delete shots and commands, settings, controls, batched edits with dry run, seek, undo / redo) | `createAnimationEditorToolProvider`, `ANIMATION_EDITOR_AGENT_INSTRUCTIONS` | `useAnimationEditorTools` | `useAnimationEditorTools` |
 
 </details>

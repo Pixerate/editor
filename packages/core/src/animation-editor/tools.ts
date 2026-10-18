@@ -338,14 +338,20 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 		}
 	};
 
+	const CURVES_DESCRIPTION =
+		'Write cubic-bezier easings (ease, ease-in, ease-out, ease-in-out, back eases, custom curves) as one change with ease: [x1, y1, x2, y2] (default true). Needs Flair 0.36 or later; false samples them into linear steps for older Flair.';
+
 	const exportFlairMotion: AgentTool = {
 		name: 'export_flair_motion',
 		title: 'Export as Flair vector motion',
 		description:
 			'Returns the animation as a Flair SvgMotion ({ svg, animate }) that Flair\'s SvgPlayer plays, plus its hold, how many changes were sampled into linear steps, and notes on anything not carried over.',
-		inputSchema: object({ fps: { type: 'number', minimum: 1, maximum: 120, description: 'Sampling rate for changes Flair cannot express exactly (default: the scene\'s fps, else 30).' } }),
+		inputSchema: object({
+			fps: { type: 'number', minimum: 1, maximum: 120, description: 'Sampling rate for changes Flair cannot express exactly (default: the scene\'s fps, else 30).' },
+			curves: { type: 'boolean', description: CURVES_DESCRIPTION }
+		}),
 		annotations: { title: 'Export as Flair vector motion', ...READ },
-		handler: ({ fps }) => controller.toFlairMotion(fps ? { fps } : {})
+		handler: ({ fps, curves }) => controller.toFlairMotion({ ...(fps ? { fps } : {}), ...(curves === undefined ? {} : { curves }) })
 	};
 
 	const exportFlairEffect: AgentTool = {
@@ -358,7 +364,8 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 			name: { type: 'string', minLength: 1, description: 'Display name (default: the scene\'s name).' },
 			description: { type: 'string', description: 'One sentence (default: the scene\'s description).' },
 			category: { type: 'string', minLength: 1, description: 'Flair catalog category, e.g. icon, loader, ui, data, text, morph (default icon).' },
-			tags: { type: 'array', items: { type: 'string' }, description: 'Search tags (default none).' }
+			tags: { type: 'array', items: { type: 'string' }, description: 'Search tags (default none).' },
+			curves: { type: 'boolean', description: CURVES_DESCRIPTION }
 		}),
 		annotations: { title: 'Export as a Flair effect', ...READ },
 		handler: (args) => controller.toFlairEffect(args)

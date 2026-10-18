@@ -9,6 +9,7 @@ import {
 	compileMotionScene,
 	createAnimationEditorToolProvider,
 	createMotionScene,
+	flairCurveFor,
 	flairEaseFor,
 	motionFrameAt,
 	motionFrameToSvg,
@@ -22,7 +23,7 @@ import {
 } from '../src/animation-editor';
 import { ManualClock } from '../src/animation';
 import { ToolRegistry } from '../src/tools';
-import { createVectorEffect, ellipseSubpath, findVectorNode, rectSubpath, type VectorDocument, type VectorPathNode } from '../src/vector';
+import { createVectorEffect, ellipseSubpath, findVectorNode, rectSubpath, starSubpath, type VectorDocument, type VectorPathNode } from '../src/vector';
 
 const ARTWORK: VectorDocument = {
 	width: 400,
@@ -287,6 +288,33 @@ describe('AnimationEditorController', () => {
 	});
 });
 
+// The scene of the demo's Animation tab (apps/demo/src/components/AnimationTab.tsx).
+const DEMO_SCENE: MotionScene = {
+	version: 1,
+	name: 'Badge reveal',
+	artwork: {
+		width: 640,
+		height: 360,
+		background: '#0f172a',
+		nodes: [
+			{ id: 'ring', type: 'path', fill: null, stroke: '#38bdf8', strokeWidth: 6, subpaths: [ellipseSubpath({ x: 220, y: 80, width: 200, height: 200 })], effects: [createVectorEffect('wiggle', 'wobble', { size: 4, detail: 8, time: 0 })!] },
+			{ id: 'badge', type: 'path', fill: '#f43f5e', stroke: null, subpaths: [ellipseSubpath({ x: 250, y: 110, width: 140, height: 140 })] },
+			{ id: 'check', type: 'path', fill: null, stroke: '#ffffff', strokeWidth: 12, strokeLinecap: 'round', strokeLinejoin: 'round', subpaths: [{ closed: false, anchors: [{ x: 285, y: 182 }, { x: 310, y: 208 }, { x: 356, y: 156 }] }] },
+			{ id: 'arc', type: 'path', visible: false, fill: null, stroke: '#94a3b8', subpaths: [{ closed: false, anchors: [{ x: 60, y: 300, out: { x: 160, y: 20 } }, { x: 580, y: 60, in: { x: 420, y: 0 } }] }] },
+			{ id: 'spark', type: 'path', fill: '#fde047', stroke: null, subpaths: [starSubpath({ x: 48, y: 288, width: 24, height: 24 }, 4, 0.35)] },
+			{ id: 'tile', type: 'path', fill: '#a78bfa', stroke: null, subpaths: [rectSubpath({ x: 500, y: 250, width: 70, height: 70 }, 10)] },
+			{ id: 'star', type: 'path', visible: false, fill: '#facc15', stroke: null, subpaths: [starSubpath({ x: 495, y: 245, width: 80, height: 80 }, 5, 0.45)] }
+		]
+	},
+	loop: 'loop',
+	shots: [
+		{ id: 'badge', run: [{ type: 'enter', targets: ['ring'], style: 'draw', duration: 900 }, { type: 'enter', targets: ['badge'], style: 'pop', with: 'previous', delay: 300 }, { type: 'enter', targets: ['check'], style: 'draw', duration: 500 }] },
+		{ id: 'spark', run: [{ type: 'enter', targets: ['spark'], duration: 200 }, { type: 'follow', targets: ['spark'], path: 'arc', rotate: true, duration: 1200 }, { type: 'exit', targets: ['spark'], style: 'shrink' }], hold: 200 },
+		{ id: 'star', run: [{ type: 'enter', targets: ['tile'], style: 'grow' }, { type: 'morph', targets: ['tile'], into: 'star' }, { type: 'effect', targets: ['ring'], effect: 'wobble', param: 'time', to: 2, duration: 900, with: 'previous' }] },
+		{ id: 'focus', camera: { frame: 'ring', padding: 40 }, run: [{ type: 'pulse', targets: ['badge'], count: 2, duration: 800 }], hold: 800 }
+	]
+};
+
 describe('Flair export', () => {
 	const s = scene(
 		[
@@ -300,6 +328,49 @@ describe('Flair export', () => {
 		expect(flairEaseFor('linear')).toBe('linear');
 		expect(flairEaseFor(MOTION_EASE_OUT)).toBe('out');
 		expect(flairEaseFor('ease-in-back')).toBeUndefined();
+	});
+
+	it('writes cubic-bezier eases as curves, keeping Flair names where they match', () => {
+		expect(flairCurveFor(MOTION_EASE_OUT)).toBe('out');
+		expect(flairCurveFor('ease-in-back')).toEqual([0.36, 0, 0.66, -0.56]);
+		expect(flairCurveFor({ type: 'cubic-bezier', x1: 0.2, y1: 0.8, x2: 0.4, y2: 1 })).toEqual([0.2, 0.8, 0.4, 1]);
+		expect(flairCurveFor('ease-in-back', false)).toBeUndefined();
+		for (const ease of ['spring', 'elastic', 'ease-out-elastic', 'hold', { type: 'spring', stiffness: 300 }] as const) expect(flairCurveFor(ease)).toBeUndefined();
+	});
+
+	it('exports a back-eased move as one change, and samples it with curves off', () => {
+		const back = scene([{ id: 'one', run: [{ type: 'move', targets: ['box'], by: { x: 100, y: 0 }, duration: 500, ease: 'ease-in-back' }] }]);
+		const out = toFlairSvgMotion(back);
+		const moves = (out.motion.animate ?? []).filter((a) => a.id === 'box' && a.attrs?.transform);
+		expect(moves).toHaveLength(1);
+		expect(moves[0]).toMatchObject({ ms: 500, ease: [0.36, 0, 0.66, -0.56] });
+		expect(moves[0].attrs?.transform?.[1]).toMatch(/^translate\(100 0\)/);
+		expect(out.sampled).toBe(0);
+		const old = toFlairSvgMotion(back, { curves: false });
+		expect(old.sampled).toBe(15);
+		expect(old.motion.animate?.every((a) => typeof a.ease === 'string')).toBe(true);
+	});
+
+	it('samples overshooting curves on colours and opacity, which cannot pass their ends', () => {
+		const pop = scene([{ id: 'one', run: [{ type: 'style', targets: ['box'], fill: '#000000', duration: 300, ease: 'ease-out-back' }, { type: 'style', targets: ['dot'], fill: '#000000', duration: 300, ease: 'ease-in' }] }]);
+		const animate = toFlairSvgMotion(pop).motion.animate ?? [];
+		expect(animate.filter((a) => a.id === 'box').length).toBeGreaterThan(1);
+		expect(animate.filter((a) => a.id === 'dot')).toEqual([expect.objectContaining({ ms: 300, ease: [0.42, 0, 1, 1], attrs: { fill: ['#0ea5e9', '#000000'] } })]);
+	});
+
+	it('samples only the demo scene\'s follow, shape changes and pulse', () => {
+		const out = toFlairSvgMotion(DEMO_SCENE);
+		const old = toFlairSvgMotion(DEMO_SCENE, { curves: false });
+		expect(old.sampled).toBe(152);
+		// The badge's back-eased pop and the spark's ease-in exit are now one change each.
+		expect(out.sampled).toBe(114);
+		const animate = out.motion.animate ?? [];
+		expect(animate).toContainEqual(expect.objectContaining({ id: 'badge', delay: 300, ms: 600, ease: [0.34, 1.56, 0.64, 1] }));
+		expect(animate.filter((a) => a.id === 'spark' && Array.isArray(a.ease)).map((a) => Object.keys(a.attrs ?? {})[0]).sort()).toEqual(['opacity', 'transform']);
+		// What is left: the follow (spark's transform), the morph and wobble (each path's d) and the pulse (badge's transform).
+		const steps = animate.filter((a) => a.ease === 'linear').map((a) => `${a.id} ${Object.keys(a.attrs ?? {})[0]}`);
+		expect(new Set(steps)).toEqual(new Set(['spark transform', 'ring d', 'tile d', 'badge transform']));
+		expect(out.duration).toBe(old.duration);
 	});
 
 	it('writes one exact change where Flair can, and samples the rest', () => {
@@ -386,6 +457,11 @@ describe('animation editor tools', () => {
 		expect(controller.getState().canUndo).toBe(true);
 		const effect = json(await registry.callTool('export_flair_effect', { category: 'icon' }));
 		expect(effect).toMatchObject({ kind: 'vector', id: 'demo', category: 'icon' });
+		expect((await registry.callTool('export_flair_effect', { curves: 'no' })).isError).toBe(true);
+		await registry.callTool('add_commands', { shot: 'one', commands: [{ type: 'move', targets: ['dot'], by: { x: 50, y: 0 }, duration: 400, ease: 'ease-out-back' }] });
+		const curved = json(await registry.callTool('export_flair_motion', {}));
+		expect(curved.motion.animate).toContainEqual(expect.objectContaining({ id: 'dot', ms: 400, ease: [0.34, 1.56, 0.64, 1] }));
+		expect(json(await registry.callTool('export_flair_motion', { curves: false })).sampled).toBe(curved.sampled + 12);
 		const replaced = await registry.callTool('set_animation_artwork_svg', { svg: '<svg viewBox="0 0 100 100"><circle id="dot" cx="50" cy="50" r="10" fill="#000"/></svg>' });
 		expect(replaced.isError).toBeFalsy();
 		expect(json(replaced).elements.map((e: { id: string }) => e.id)).toEqual(['dot']);
