@@ -19,6 +19,7 @@ import {
 	toFlairVectorEffect,
 	MOTION_EASE_OUT,
 	motionFlairPrimitive,
+	matchMotionNodes,
 	fromFlairSvgMotion,
 	fromFlairVectorEffect,
 	type FlairSvgAnimation,
@@ -28,7 +29,7 @@ import {
 } from '../src/animation-editor';
 import { ManualClock, SPRING_PRESETS, springSettleMs } from '../src/animation';
 import { ToolRegistry } from '../src/tools';
-import { createVectorEffect, ellipseSubpath, findVectorNode, rectSubpath, starSubpath, type VectorDocument, type VectorPathNode } from '../src/vector';
+import { createVectorEffect, ellipseSubpath, findVectorNode, rectSubpath, starSubpath, type VectorDocument, type VectorNode, type VectorPathNode } from '../src/vector';
 
 const ARTWORK: VectorDocument = {
 	width: 400,
@@ -204,6 +205,8 @@ describe('checkMotionScene', () => {
 			)
 		);
 		collect(scene([{ id: 'g', run: [{ type: 'style', targets: ['box'], fill: '#000000' }] }], { artwork: { ...ARTWORK, nodes: [{ ...ARTWORK.nodes[0], fill: { type: 'linear', stops: [{ offset: 0, color: '#000' }, { offset: 1, color: '#fff' }] } } as VectorPathNode] }, target: [0, 0.5] }));
+		const twin = { id: 'twin', type: 'group', visible: false, children: [{ id: 'twin-a', type: 'path', fill: '#000000', subpaths: [rectSubpath({ x: 0, y: 0, width: 5, height: 5 })] }, { id: 'twin-b', type: 'path', fill: '#000000', subpaths: [rectSubpath({ x: 9, y: 0, width: 5, height: 5 })] }, { id: 'twin-c', type: 'group', children: [] }] } as VectorNode;
+		collect(scene([{ id: 'm', run: [{ type: 'match', targets: ['pair'], into: 'twin' }, { type: 'match', targets: ['pair'], into: 'a' }] }], { artwork: { ...ARTWORK, nodes: [...ARTWORK.nodes, twin] } }));
 		expect([...reported].sort()).toEqual(Object.keys(MOTION_ISSUE_CODES).sort());
 	});
 
@@ -938,6 +941,68 @@ describe('additive layers', () => {
 		expect(ok.isError).toBeFalsy();
 		expect((ok.structuredContent as any).issues.warnings).toBe(0);
 		const bad = await registry.callTool('add_commands', { shot: 'one', commands: [{ type: 'pulse', targets: ['box'], blend: 'stack' }] });
+		expect(bad.isError).toBe(true);
+	});
+});
+
+describe('Smart Animate (match)', () => {
+	const STATES: VectorDocument = {
+		width: 400,
+		height: 200,
+		nodes: [
+			{ id: 'card-a', type: 'group', children: [
+				{ id: 'card-a-bg', type: 'path', fill: '#ffffff', subpaths: [rectSubpath({ x: 20, y: 20, width: 100, height: 60 })] },
+				{ id: 'card-a-title', type: 'path', name: 'Title', fill: '#111111', subpaths: [rectSubpath({ x: 30, y: 30, width: 50, height: 10 })] },
+				{ id: 'card-a-badge', type: 'path', fill: '#ef4444', subpaths: [ellipseSubpath({ x: 100, y: 25, width: 10, height: 10 })] }
+			] },
+			{ id: 'card-b', type: 'group', visible: false, children: [
+				{ id: 'heading', type: 'path', name: 'Title', fill: '#2563eb', subpaths: [rectSubpath({ x: 200, y: 40, width: 120, height: 20 })] },
+				{ id: 'card-b-bg', type: 'path', fill: '#f1f5f9', subpaths: [rectSubpath({ x: 180, y: 20, width: 200, height: 160 })] },
+				{ id: 'card-b-avatar', type: 'path', fill: '#22c55e', subpaths: [ellipseSubpath({ x: 190, y: 120, width: 40, height: 40 })] },
+				{ id: 'card-b-extra', type: 'group', children: [] }
+			] }
+		]
+	};
+	const s: MotionScene = { version: 1, name: 'states', artwork: STATES, shots: [{ id: 'one', run: [{ type: 'match', targets: ['card-a'], into: 'card-b', ease: 'linear' }] }] };
+
+	it('pairs parts by name, then by id without the group ids, then by kind', () => {
+		const m = matchMotionNodes(STATES.nodes[0], STATES.nodes[1]);
+		expect(m.pairs).toEqual([['card-a-title', 'heading'], ['card-a-bg', 'card-b-bg'], ['card-a-badge', 'card-b-avatar']]);
+		expect(m.unpairedFrom).toEqual([]);
+		expect(m.unpairedInto).toEqual(['card-b-extra']);
+	});
+
+	it('morphs each part into its partner, shape, paint and place', () => {
+		const end = motionFrameAt(s, 900).document;
+		expect(path(end, 'card-a-title').fill).toBe('#2563eb');
+		const title = path(end, 'card-a-title').subpaths[0].anchors;
+		expect(Math.min(...title.map((a) => a.x))).toBeCloseTo(200, 3);
+		const mid = motionFrameAt(s, 450).document;
+		const bgX = Math.min(...path(mid, 'card-a-bg').subpaths[0].anchors.map((a) => a.x));
+		expect(bgX).toBeGreaterThan(20);
+		expect(bgX).toBeLessThan(180);
+		expect(compileMotionScene(s).commands[0].duration).toBe(900);
+	});
+
+	it('fades out parts with no partner and reports parts that cannot appear', () => {
+		const fewer: MotionScene = { ...s, artwork: { ...STATES, nodes: [STATES.nodes[0], { ...(STATES.nodes[1] as any), children: (STATES.nodes[1] as any).children.slice(0, 2) }] } };
+		expect(path(motionFrameAt(fewer, 900).document, 'card-a-badge').opacity).toBe(0);
+		const issues = checkMotionScene(s);
+		expect(issues.find((i) => i.code === 'match-unpaired')).toMatchObject({ severity: 'note', ids: ['card-b-extra'] });
+		const self = checkMotionScene({ ...s, shots: [{ id: 'one', run: [{ type: 'match', targets: ['card-a'], into: 'card-a-bg' }] }] });
+		expect(self.find((i) => i.code === 'match-self')).toBeDefined();
+		const unknown = checkMotionScene({ ...s, shots: [{ id: 'one', run: [{ type: 'match', targets: ['card-a'], into: 'card-c' }] }] });
+		expect(unknown.find((i) => i.code === 'unknown-shape')?.message).toContain('card-a');
+	});
+
+	it('is reachable through the agent tools', async () => {
+		const controller = new AnimationEditorController({ scene: { ...s, shots: [] } });
+		const registry = new ToolRegistry();
+		registry.register(createAnimationEditorToolProvider(controller));
+		const ok = await registry.callTool('insert_shots', { shots: [{ id: 'flip', run: [{ type: 'match', targets: ['card-a'], into: 'card-b' }] }] });
+		expect(ok.isError).toBeFalsy();
+		expect((ok.structuredContent as any).issues.notes).toBe(1);
+		const bad = await registry.callTool('add_commands', { shot: 'flip', commands: [{ type: 'match', targets: ['card-a'] }] });
 		expect(bad.isError).toBe(true);
 	});
 });

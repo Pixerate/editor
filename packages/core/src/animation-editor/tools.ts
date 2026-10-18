@@ -118,6 +118,7 @@ export const MOTION_COMMAND_SCHEMA: JsonSchema = {
 			stroke: { type: 'string', description: 'CSS colour (hex, rgb(), rgba()).' },
 			strokeWidth: { type: 'number', minimum: 0, description: 'Document units.' }
 		}),
+		command('match', 'Smart Animate: tweens a group into another group (usually hidden), part by part. Parts pair by name, then by id with the group ids taken out (card-a-title ↔ card-b-title), then by kind in order; each takes its partner\'s shape, paint and place. Unpaired parts fade out; parts of "into" with no partner do not appear (check_animation lists them).', { into: { type: 'string', minLength: 1, description: 'Id of the group to become.' } }, ['into']),
 		command('morph', 'Morphs each target into the shape (and paint) of another node, which usually stays hidden.', { into: { type: 'string', minLength: 1, description: 'Id of the node whose shape to take.' } }, ['into']),
 		command('follow', 'Moves targets along a path node, centre on the path.', {
 			path: { type: 'string', minLength: 1, description: 'Id of a path node (it can be hidden).' },

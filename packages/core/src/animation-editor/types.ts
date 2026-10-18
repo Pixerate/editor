@@ -219,6 +219,18 @@ export interface MotionMorphCommand extends MotionCommandBase {
 	into: string;
 }
 
+/**
+ * Smart Animate: tweens a group into another group (`into`, usually hidden), part by part. Each
+ * part of the target takes the shape, paint and place of its partner in `into`, paired by name,
+ * then by id (`card-a-title` ↔ `card-b-title`), then by kind in order. Parts with no partner fade
+ * out; parts of `into` with no partner do not appear (`check` lists them).
+ */
+export interface MotionMatchCommand extends MotionCommandBase {
+	type: 'match';
+	/** Id of the group (or node) to become. */
+	into: string;
+}
+
 /** Moves targets along a path node, centre on the path. */
 export interface MotionFollowCommand extends MotionCommandBase {
 	type: 'follow';
@@ -361,6 +373,7 @@ export type MotionCommand =
 	| MotionFadeCommand
 	| MotionStyleCommand
 	| MotionMorphCommand
+	| MotionMatchCommand
 	| MotionFollowCommand
 	| MotionPulseCommand
 	| MotionShakeCommand
@@ -383,6 +396,7 @@ export const MOTION_COMMAND_TYPES: readonly MotionCommandType[] = [
 	'fade',
 	'style',
 	'morph',
+	'match',
 	'follow',
 	'pulse',
 	'shake',
@@ -429,6 +443,7 @@ export const MOTION_DEFAULT_DURATIONS: Readonly<Record<Exclude<MotionCommandType
 	fade: 400,
 	style: 500,
 	morph: 900,
+	match: 900,
 	follow: 1400,
 	pulse: 600,
 	shake: 500,
