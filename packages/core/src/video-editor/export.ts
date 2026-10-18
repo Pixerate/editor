@@ -1,6 +1,6 @@
 import { placeVideoRect } from './evaluate.js';
 import { formatVideoTimecode, sortedVideoClips, videoAssetMap, videoClipBefore, videoClipEnd, videoClipOverhang, videoClipSpeed, videoProjectDuration } from './timeline.js';
-import type { VideoAsset, VideoClip, VideoProject, VideoTrack } from './types.js';
+import type { VideoAsset, VideoClip, VideoProject, VideoTextClip, VideoTrack } from './types.js';
 
 // ---------------------------------------------------------------------------------------------
 // CMX 3600 EDL
@@ -83,6 +83,13 @@ export interface VideoFfmpegOptions {
 	crf?: number;
 	/** A font file for titles (drawtext's `fontfile`); default the system's font for the family. */
 	fontFile?: string;
+	/**
+	 * Titles as images instead of `drawtext` (which needs an ffmpeg built with libfreetype; Homebrew's
+	 * is not): return the path or URL of a transparent PNG the size of the frame showing the title as
+	 * the preview draws it (`videoTitleFrame` + `drawVideoFrame`). It is overlaid like a still, with
+	 * the title's opacity and fades.
+	 */
+	titleImage?: (clip: VideoTextClip, size: { width: number; height: number }) => string;
 }
 
 export interface VideoFfmpegExport {
@@ -147,6 +154,7 @@ export function toVideoFfmpeg(project: VideoProject, options: VideoFfmpegOptions
 	const graph: string[] = [`color=c=${color(project.background ?? '#000000')}:s=${W}x${H}:r=${fps}:d=${sec(D)},format=yuva420p[base]`];
 	const audio: string[] = [];
 	let cur = 'base';
+	let usesDrawtext = false;
 	let k = 0;
 	const input = (clip: VideoClip & { type: 'media' }, asset: VideoAsset, lead: number, tail: number) => {
 		const speed = videoClipSpeed(clip);
@@ -190,7 +198,11 @@ export function toVideoFfmpeg(project: VideoProject, options: VideoFfmpegOptions
 			if (track.kind !== 'video' || track.hidden) continue;
 			const enable = `enable='between(t,${sec(t0)},${sec(t0 + span)})'`;
 			const next = `v${k++}`;
-			if (clip.type === 'text') {
+			if (clip.type === 'text' && options.titleImage) {
+				inputs.push(['-loop', '1', '-framerate', String(fps), '-t', sec(span), '-i', options.titleImage(clip, { width: project.width, height: project.height })]);
+				index = inputs.length - 1;
+			} else if (clip.type === 'text') {
+				usesDrawtext = true;
 				const op = clip.opacity ?? 1;
 				const alpha = [String(op), clip.fadeIn ? `min(1,(t-${sec(clip.start)})/${sec(clip.fadeIn)})` : '', clip.fadeOut ? `min(1,(${sec(end)}-t)/${sec(clip.fadeOut)})` : ''].filter(Boolean).join('*');
 				const x = clip.transform?.x ?? 0;
@@ -212,7 +224,8 @@ export function toVideoFfmpeg(project: VideoProject, options: VideoFfmpegOptions
 				continue;
 			}
 			const size = asset ? { width: asset.width ?? project.width, height: asset.height ?? project.height } : { width: project.width, height: project.height };
-			const rect = placeVideoRect(project, size, clip.fit ?? (clip.type === 'media' ? 'contain' : 'fill'), clip.transform);
+			// A title image already has the title placed (and turned) in a full frame.
+			const rect = clip.type === 'text' ? { x: 0, y: 0, width: project.width, height: project.height } : placeVideoRect(project, size, clip.fit ?? (clip.type === 'media' ? 'contain' : 'fill'), clip.transform);
 			const chain: string[] = [];
 			let source: string;
 			if (clip.type === 'color') source = `color=c=${color(clip.color)}:s=${even(rect.width)}x${even(rect.height)}:r=${fps}:d=${sec(span)}`;
@@ -232,7 +245,7 @@ export function toVideoFfmpeg(project: VideoProject, options: VideoFfmpegOptions
 				const test = dir === 'right' ? `lt(X,W*${p})` : dir === 'left' ? `gt(X,W*(1-${p}))` : dir === 'down' ? `lt(Y,H*${p})` : `gt(Y,H*(1-${p}))`;
 				chain.push(`geq=lum='lum(X,Y)':cb='cb(X,Y)':cr='cr(X,Y)':a='if(${test},alpha(X,Y),0)'`);
 			}
-			if (clip.transform?.rotation) chain.push(`rotate=${clip.transform.rotation}*PI/180:c=none:ow=rotw(${clip.transform.rotation}*PI/180):oh=roth(${clip.transform.rotation}*PI/180)`);
+			if (clip.transform?.rotation && clip.type !== 'text') chain.push(`rotate=${clip.transform.rotation}*PI/180:c=none:ow=rotw(${clip.transform.rotation}*PI/180):oh=roth(${clip.transform.rotation}*PI/180)`);
 			chain.push(`setpts=PTS+${sec(t0)}/TB`);
 			const cx = rect.x + rect.width / 2;
 			const cy = rect.y + rect.height / 2;
@@ -253,6 +266,7 @@ export function toVideoFfmpeg(project: VideoProject, options: VideoFfmpegOptions
 	if (audio.length) graph.push(`${audio.join('')}amix=inputs=${audio.length}:normalize=0:duration=longest,apad,atrim=0:${sec(D)}[aout]`);
 	if (project.tracks.some((t) => t.clips.some((c) => c.type === 'media' && assets.get(c.asset)?.kind === 'video' && assets.get(c.asset)?.hasAudio === undefined)))
 		notes.push('Video assets are assumed to have sound; set "hasAudio": false on any that do not, or ffmpeg will stop at a missing audio stream.');
+	if (usesDrawtext) notes.push('Titles use drawtext, which needs an ffmpeg built with libfreetype (Homebrew\'s is not: check `ffmpeg -filters | grep drawtext`); pass titleImage to render them as images instead.');
 	const filterComplex = graph.join(';');
 	const args = [
 		'-y',

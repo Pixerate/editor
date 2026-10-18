@@ -1,5 +1,5 @@
 import { sortedVideoClips, videoAssetMap, videoClipAfter, videoClipBefore, videoClipEnd, videoClipSpeed } from './timeline.js';
-import type { VideoAsset, VideoClip, VideoFit, VideoProject, VideoTrack, VideoWipeDirection } from './types.js';
+import type { VideoAsset, VideoClip, VideoFit, VideoProject, VideoTextClip, VideoTrack, VideoWipeDirection } from './types.js';
 
 /** A rectangle in frame pixels. */
 export interface VideoRect {
@@ -74,6 +74,21 @@ export function placeVideoRect(frame: { width: number; height: number }, size: {
 	const cx = frame.width / 2 + (transform?.x ?? 0);
 	const cy = frame.height / 2 + (transform?.y ?? 0);
 	return { x: cx - w / 2, y: cy - h / 2, width: w, height: h };
+}
+
+/** A title's text and style with the defaults filled in. */
+export function videoTextStyle(clip: VideoTextClip): NonNullable<VideoLayer['text']> {
+	return { text: clip.text, color: clip.color ?? '#ffffff', fontSize: clip.fontSize ?? 64, fontFamily: clip.fontFamily ?? 'sans-serif', fontWeight: clip.fontWeight ?? 700, ...(clip.background ? { background: clip.background } : {}) };
+}
+
+/**
+ * A frame holding only one title, fully opaque on a transparent background, placed as the preview
+ * places it: draw it with `drawVideoFrame` and save the canvas as a PNG to give the ffmpeg export
+ * titles without `drawtext` (`VideoFfmpegOptions.titleImage`). Fades and opacity are left to the export.
+ */
+export function videoTitleFrame(project: VideoProject, clip: VideoTextClip): VideoFrame {
+	const layer: VideoLayer = { clip: clip.id, track: '', type: 'text', opacity: 1, rect: placeVideoRect(project, project, 'fill', clip.transform), rotation: clip.transform?.rotation ?? 0, text: videoTextStyle(clip) };
+	return { time: clip.start, width: project.width, height: project.height, background: 'rgba(0,0,0,0)', layers: [layer], audio: [] };
 }
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
@@ -157,7 +172,7 @@ export function videoFrameAt(project: VideoProject, time: number): VideoFrame {
 			const layer: VideoLayer = { clip: clip.id, track: track.id, type: clip.type, opacity: clamp01(opacity), rect, rotation: clip.transform?.rotation ?? 0 };
 			if (wipe) layer.wipe = wipe;
 			if (clip.type === 'media') Object.assign(layer, { asset: asset!.id, assetKind: asset!.kind, src: asset!.src, sourceTime });
-			if (clip.type === 'text') layer.text = { text: clip.text, color: clip.color ?? '#ffffff', fontSize: clip.fontSize ?? 64, fontFamily: clip.fontFamily ?? 'sans-serif', fontWeight: clip.fontWeight ?? 700, ...(clip.background ? { background: clip.background } : {}) };
+			if (clip.type === 'text') layer.text = videoTextStyle(clip);
 			if (clip.type === 'color') layer.color = clip.color;
 			if (layer.opacity > 0) layers.push(layer);
 			if (dip && dip.opacity > 0) layers.push({ clip: `transition:${incoming ? clip.id : outgoing!.next.id}`, track: track.id, type: 'color', color: dip.color, opacity: clamp01(dip.opacity), rect: { x: 0, y: 0, width: project.width, height: project.height }, rotation: 0 });

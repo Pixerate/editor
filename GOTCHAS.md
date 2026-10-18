@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/video-editor] Homebrew's ffmpeg Has No `drawtext`
+
+- **Issue / Symptom**: Rendering a project with titles fails at once with `Filter not found`, although every other filter in the graph exists.
+- **Root Cause**: `drawtext` needs ffmpeg built with libfreetype. Homebrew's `ffmpeg` formula (9.x) is built without it, and so are other slim builds.
+- **Solution / Workaround**: Pass `titleImage` to `toVideoFfmpeg`. Each title then goes in as a transparent full-frame PNG, overlaid like a still with its opacity and fades. In a browser, draw `videoTitleFrame(project, clip)` with `drawVideoFrame` and save the canvas. The export's notes mention `drawtext` whenever it is used. `tests/video-editor-ffmpeg.test.ts` checks `ffmpeg -filters` and falls back to a title image.
+
 ### [react|svelte/video-editor] A Clip Dragged to Another Track Loses Its Pointer Capture
 
 - **Issue / Symptom**: Dragging a clip into another track's row stopped following the pointer, and releasing it did nothing.
