@@ -20,10 +20,11 @@ const SCENE_KEYS = ['version', 'name', 'description', 'artwork', 'shots', 'clips
 const SHOT_KEYS = ['id', 'label', 'camera', 'at', 'run', 'hold', 'speed'];
 const CAMERA_KEYS = ['x', 'y', 'width', 'height', 'frame', 'padding', 'ease', 'ms', 'geometric'];
 const BASE_KEYS = ['type', 'targets', 'duration', 'delay', 'stagger', 'with', 'ease', 'note', 'repeat', 'repeatMode', 'steps'];
+const DRAW_ORDER_KEYS = ['order', 'pace', 'align', 'sortBy', 'origin'];
 const COMMAND_KEYS: Record<string, string[]> = {
-	enter: [...BASE_KEYS, 'style', 'direction', 'distance', 'scale', 'shape', 'orientation'],
-	exit: [...BASE_KEYS, 'style', 'direction', 'distance'],
-	draw: [...BASE_KEYS, 'from', 'to'],
+	enter: [...BASE_KEYS, ...DRAW_ORDER_KEYS, 'style', 'direction', 'distance', 'scale', 'shape', 'orientation'],
+	exit: [...BASE_KEYS, ...DRAW_ORDER_KEYS, 'style', 'direction', 'distance'],
+	draw: [...BASE_KEYS, ...DRAW_ORDER_KEYS, 'from', 'to', 'comet'],
 	move: [...BASE_KEYS, 'by', 'to', 'via', 'pacing', 'blend'],
 	rotate: [...BASE_KEYS, 'by', 'to', 'blend'],
 	scale: [...BASE_KEYS, 'to', 'geometric', 'blend'],
@@ -71,6 +72,14 @@ export function commandShapeProblems(command: unknown, where: string): string[] 
 		if (command[key] !== undefined && !isNum(command[key])) p(`"${key}" must be a number.`);
 	};
 	if (command.with !== undefined && command.with !== 'after' && command.with !== 'previous') p(`"with" must be "after" or "previous".`);
+	if (DRAW_ORDER_KEYS.some((k) => command[k] !== undefined)) {
+		if ((type === 'enter' && command.style !== 'draw') || (type === 'exit' && command.style !== 'undraw')) p(`"order", "pace", "align", "sortBy" and "origin" go with drawing: style "${type === 'enter' ? 'draw' : 'undraw'}".`);
+		if (command.order !== undefined && command.order !== 'together' && command.order !== 'sequence') p(`"order" must be "together" or "sequence" (one stroke after another).`);
+		if (command.pace !== undefined && command.pace !== 'time' && command.pace !== 'speed') p(`"pace" must be "time" (each stroke takes the whole time) or "speed" (all at one speed).`);
+		if (command.align !== undefined && command.align !== 'start' && command.align !== 'end') p(`"align" must be "start" or "end".`);
+		if (command.sortBy !== undefined && command.sortBy !== 'document' && command.sortBy !== 'distance') p(`"sortBy" must be "document" or "distance".`);
+		if (command.origin !== undefined && !isPoint(command.origin)) p(`"origin" must be { "x": number, "y": number } (document units).`);
+	}
 	if (command.note !== undefined && typeof command.note !== 'string') p(`"note" must be a string.`);
 	if (type === 'wait') {
 		if (!isNum(command.duration) || command.duration < 0) p(`"duration" must be a number of milliseconds ≥ 0.`);
@@ -104,6 +113,8 @@ export function commandShapeProblems(command: unknown, where: string): string[] 
 		case 'draw':
 			fraction('from');
 			fraction('to');
+			fraction('comet');
+			if (command.comet !== undefined && (command.from !== undefined || command.to !== undefined)) p(`"comet" runs the whole path; leave out "from" and "to".`);
 			break;
 		case 'move':
 			if (command.by === undefined && command.to === undefined) p(`give "by" (an offset) or "to" (a point).`);

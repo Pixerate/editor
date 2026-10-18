@@ -28,6 +28,7 @@ import {
 	type MotionCommand,
 	type MotionCue,
 	type MotionDirection,
+	type MotionDrawOrder,
 	type MotionIrisShape,
 	type MotionRect,
 	type MotionSplitOrientation,
@@ -708,6 +709,48 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 			return typeof v === 'number' ? v : 0;
 		};
 		const ease = command.ease;
+		/**
+		 * When each stroke of the target draws, for an order other than all at once over the whole
+		 * time (null then): one after another by length, or all at one speed.
+		 */
+		const drawWindows = (s: number, e: number, o: MotionDrawOrder): { id: string; start: number; end: number }[] | null => {
+			const order = o.order ?? 'together';
+			const pace = o.pace ?? 'time';
+			if (order === 'together' && pace === 'time') return null;
+			const paths = entry.node.type === 'path' ? [entry.node] : collectPathNodes(entry.node);
+			let list = paths.map((p) => {
+				const at = nodes.get(p.id);
+				let first = { x: 0, y: 0 };
+				try {
+					const m = vectorPathWorldBezier(p, at?.parentWorld ?? IDENTITY_MATRIX, { effects: false })[0];
+					if (m && m.type === 'M') first = { x: m.x, y: m.y };
+				} catch {
+					/* unmeasurable: sorts first */
+				}
+				return { id: p.id, len: Math.max(1e-6, motionPathLength(p, at?.parentWorld)), first };
+			});
+			if (!list.length) return null;
+			const span = Math.max(0, e - s);
+			if (order === 'sequence') {
+				if (o.sortBy === 'distance') {
+					const b = entry.bounds;
+					const origin = o.origin ?? (b ? { x: b.x + b.width / 2, y: b.y + b.height / 2 } : { x: 0, y: 0 });
+					list = [...list].sort((a, c) => Math.hypot(a.first.x - origin.x, a.first.y - origin.y) - Math.hypot(c.first.x - origin.x, c.first.y - origin.y));
+				}
+				const total = list.reduce((sum, p) => sum + p.len, 0);
+				let at = s;
+				return list.map((p) => {
+					const w = { id: p.id, start: at, end: at + (span * p.len) / total };
+					at = w.end;
+					return w;
+				});
+			}
+			const longest = Math.max(...list.map((p) => p.len));
+			return list.map((p) => {
+				const d = (span * p.len) / longest;
+				return o.align === 'end' ? { id: p.id, start: e - d, end: e } : { id: p.id, start: s, end: s + d };
+			});
+		};
 		switch (command.type) {
 			case 'enter': {
 				const style = command.style ?? 'fade';
@@ -724,7 +767,9 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 					break;
 				}
 				if (style === 'draw') {
-					seg('drawEnd', 1, ease ?? MOTION_EASE_IN_OUT, start, start + duration * 0.75, { from: 0 });
+					const windows = drawWindows(start, start + duration * 0.75, command);
+					if (windows) for (const w of windows) push({ node: w.id, property: 'drawEnd', start: w.start, end: w.end, from: 0, to: 1, ease: ease ?? MOTION_EASE_IN_OUT, ...where });
+					else seg('drawEnd', 1, ease ?? MOTION_EASE_IN_OUT, start, start + duration * 0.75, { from: 0 });
 					seg('fillOpacity', 1, MOTION_EASE_OUT, start + duration * 0.6, end, { from: 0 });
 					break;
 				}
@@ -758,7 +803,9 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 				if (wipe) seg(wipe.property, wipe.to, ease ?? 'ease-in', start, end, { from: wipe.from });
 				else if (style === 'undraw') {
 					seg('fillOpacity', 0, 'ease-in', start, start + duration * 0.4);
-					seg('drawEnd', 0, ease ?? MOTION_EASE_IN_OUT);
+					const windows = drawWindows(start, end, command);
+					if (windows) for (const w of windows) push({ node: w.id, property: 'drawEnd', start: w.start, end: w.end, from: valueAt(w.id, 'drawEnd', w.start), to: 0, ease: ease ?? MOTION_EASE_IN_OUT, ...where });
+					else seg('drawEnd', 0, ease ?? MOTION_EASE_IN_OUT);
 				} else if (style === 'shrink') {
 					seg('scaleX', 0, ease ?? 'ease-in');
 					seg('scaleY', 0, ease ?? 'ease-in');
@@ -774,8 +821,19 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 			}
 			case 'draw': {
 				// A stroke not drawn before draws on from nothing (and is hidden until then).
-				const drawn = tracks.has(motionTrackKey(node, 'drawEnd'));
-				seg('drawEnd', command.to ?? 1, ease ?? MOTION_EASE_IN_OUT, start, end, command.from !== undefined ? { from: command.from } : drawn ? {} : { from: 0 });
+				const e = ease ?? MOTION_EASE_IN_OUT;
+				const comet = command.comet !== undefined ? Math.min(1, Math.max(0, command.comet)) : undefined;
+				const windows = drawWindows(start, end, command) ?? [{ id: node, start, end }];
+				for (const w of windows) {
+					if (comet !== undefined) {
+						// A travelling stroke: the head runs 0 → 1 + comet and the tail comet behind it, both clamped, so it leaves the path empty.
+						push({ node: w.id, property: 'drawEnd', start: w.start, end: w.end, from: 0, to: 1 + comet, ease: e, ...where });
+						push({ node: w.id, property: 'drawStart', start: w.start, end: w.end, from: -comet, to: 1, ease: e, ...where });
+						continue;
+					}
+					const drawn = tracks.has(motionTrackKey(w.id, 'drawEnd'));
+					push({ node: w.id, property: 'drawEnd', start: w.start, end: w.end, from: command.from ?? (drawn ? valueAt(w.id, 'drawEnd', w.start) : 0), to: command.to ?? 1, ease: e, ...where });
+				}
 				break;
 			}
 			case 'move': {

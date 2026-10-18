@@ -313,11 +313,15 @@ export function toLottie(scene: MotionScene, options: LottieExportOptions = {}):
 		const widthFrom = owner(path, 'strokeWidth');
 		const fadeFrom = owner(path, 'fillOpacity');
 		const drawFrom = owner(path, 'drawEnd');
-		if (drawFrom) {
-			const draw = track(drawFrom, 'drawEnd');
-			items.push({ ty: 'tm', nm: 'Draw on', s: { a: 0, k: 0 }, e: animate(draw, (t) => [Math.min(1, Math.max(0, Number(trackValue(draw, t) ?? 1))) * 100]), o: { a: 0, k: 0 }, m: 1 });
+		const tailFrom = owner(path, 'drawStart');
+		if (drawFrom || tailFrom) {
+			// Trim paths: the end draws on; the start follows it for a travelling stroke (draw with comet).
+			const pct = (track: readonly MotionSegment[], fallback: number) => (t: number) => [Math.min(1, Math.max(0, Number(trackValue(track, t) ?? fallback))) * 100];
+			const head = drawFrom ? track(drawFrom, 'drawEnd') : [];
+			const tail = tailFrom ? track(tailFrom, 'drawStart') : [];
+			items.push({ ty: 'tm', nm: 'Draw on', s: tail.length ? animate(tail, pct(tail, 0)) : { a: 0, k: 0 }, e: head.length ? animate(head, pct(head, 1)) : { a: 0, k: 100 }, o: { a: 0, k: 0 }, m: 1 });
 		}
-		if (owner(path, 'drawStart')) notes.push(`"${path.id}": drawing from a start other than 0 is not exported.`);
+
 		const stroke = paintOf(path.stroke, 'stroke', path.id);
 		if (stroke || strokeFrom) {
 			const colour = strokeFrom ? track(strokeFrom, 'stroke') : [];

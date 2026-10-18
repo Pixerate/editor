@@ -86,6 +86,13 @@ const BLEND = (fallback: 'replace' | 'add'): JsonSchema => ({
 	enum: [...MOTION_BLENDS],
 	description: `"add" makes it a layer over the pose that stacks with other changes (a shake on a slide); "replace" makes it a change the next one takes over from (default ${fallback}).`
 });
+const DRAW_ORDER: Record<string, JsonSchema> = {
+	order: { type: 'string', enum: ['together', 'sequence'], description: 'For drawing a group or several paths: together (default) or sequence (one stroke after another, each for a time in proportion to its length).' },
+	pace: { type: 'string', enum: ['time', 'speed'], description: 'With together: time (default, every stroke takes the whole time) or speed (all at one speed, so short strokes take less).' },
+	align: { type: 'string', enum: ['start', 'end'], description: 'With pace speed: start them together (default) or finish them together.' },
+	sortBy: { type: 'string', enum: ['document', 'distance'], description: 'With sequence: stacking order (default) or distance from origin (a radial reveal).' },
+	origin: object({ x: { type: 'number', description: 'Document units.' }, y: { type: 'number', description: 'Document units.' } }, ['x', 'y'], 'With sortBy distance: where strokes are drawn out from (default the target\'s centre).')
+};
 const command = (type: string, description: string, extra: Record<string, JsonSchema> = {}, required: string[] = []): JsonSchema =>
 	object({ type: { const: type, description }, ...BASE, ...extra }, ['type', 'targets', ...required], description);
 
@@ -93,7 +100,7 @@ const command = (type: string, description: string, extra: Record<string, JsonSc
 export const MOTION_COMMAND_SCHEMA: JsonSchema = {
 	description: `A command (one of ${MOTION_COMMAND_TYPES.join(', ')}). Commands in a shot play one after another unless "with": "previous".`,
 	oneOf: [
-		command('enter', 'Brings hidden targets in; they are hidden before this shot.', {
+		command('enter', 'Brings hidden targets in; they are hidden before this shot.', { ...DRAW_ORDER,
 			style: {
 				type: 'string',
 				enum: [...MOTION_ENTER_STYLES],
@@ -106,12 +113,12 @@ export const MOTION_COMMAND_SCHEMA: JsonSchema = {
 			shape: { type: 'string', enum: [...MOTION_IRIS_SHAPES], description: 'For iris: open through a circle (default; an ellipse on a box that is not square) or a box.' },
 			orientation: { type: 'string', enum: [...MOTION_SPLIT_ORIENTATIONS], description: 'For split: horizontal (default) opens up and down from a horizontal line through the middle; vertical opens left and right.' }
 		}),
-		command('exit', 'Takes targets out.', {
+		command('exit', 'Takes targets out.', { ...DRAW_ORDER,
 			style: { type: 'string', enum: [...MOTION_EXIT_STYLES], description: 'fade (default), shrink, slide, undraw, or wipe (hides behind a travelling edge through a clip over the target\'s box: a wipe in, reversed).' },
 			direction: { type: 'string', enum: [...MOTION_DIRECTIONS], description: 'For slide: direction of travel (default down). For wipe: the way the edge travels (default right, hiding from the left).' },
 			distance: { type: 'number', description: 'For slide: document units (default 40).' }
 		}),
-		command('draw', 'Draws strokes on (or off) to a fraction of their length.', { to: FRACTION('Fraction drawn at the end (default 1).'), from: FRACTION('Fraction drawn at the start (default: what is drawn now).') }),
+		command('draw', 'Draws strokes on (or off) to a fraction of their length.', { ...DRAW_ORDER, comet: FRACTION('A travelling stroke this fraction of the length long: it runs along the path and off the end (leave out from and to).'), to: FRACTION('Fraction drawn at the end (default 1).'), from: FRACTION('Fraction drawn at the start (default: what is drawn now).') }),
 		command('move', 'Moves targets by an offset or so their centre lands on a point.', { via: { type: 'array', items: POINT('A point the centre passes through.'), minItems: 1, maxItems: 64, description: 'Waypoints (document units) the centre passes through on the way to "to" or "by", smoothly (velocity carries through each) and without overshooting any. Default length 700 ms + 400 per waypoint.' }, pacing: { type: 'string', enum: ['even', 'equal'], description: 'With via: even (default) keeps the speed steady along the path; equal gives each stretch the same time.' }, blend: BLEND('replace'), by: POINT('Offset in document units.'), to: POINT('Point (document coordinates) for the centre.') }),
 		command('rotate', 'Turns targets about their centre (degrees, clockwise).', { blend: BLEND('replace'), by: { type: 'number', description: 'Degrees to turn by.' }, to: { type: 'number', description: 'Angle to turn to, in degrees from rest.' } }),
 		command('scale', 'Scales targets about their centre (1 = rest size).', { blend: BLEND('replace'), to: { description: 'A factor, or { x, y } factors.', anyOf: [{ type: 'number' }, POINT('Factors per axis.')] }, geometric: { type: 'boolean', description: 'Grow by a steady factor, which reads as an even zoom (default false).' } }, ['to']),

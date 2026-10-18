@@ -15,6 +15,7 @@ Commands
 - enter (fade, pop, grow, slide, draw) and exit (fade, shrink, slide, undraw) bring things in and out.
 - enter also reveals through a clip over the target's box: wipe (behind an edge travelling "direction", default right), iris (from the centre; "shape": circle or box) and split (from a line through the middle; "orientation": horizontal or vertical). exit wipe hides the same way. Reveals need a width and a height: use draw / undraw for a straight line.
 - draw draws strokes on to a fraction; move, rotate, scale and fade change the pose (about the centre); style blends solid colours and stroke width.
+- Drawing a group of strokes: "order": "sequence" draws them one after another (a signature, a diagram), "sortBy": "distance" from "origin" reveals outward, "pace": "speed" keeps one speed; draw with "comet": 0.2 sends a short stroke along a path and off the end.
 - Reuse motion: set_animation_clip defines a clip (commands targeting "$"), and { "type": "play", "clip": name, "targets": [...] } plays it on any nodes (with stagger and speed). copy_animation gives other nodes one node's motion.
 - move takes "via" waypoints for a curved, smooth path that passes exactly through each point (steady speed by default); use it instead of chaining moves, which stop at each point.
 - enter also has zoom (settles from larger) and rise (rises a short way, overshooting a touch); pop and zoom take a starting "scale".

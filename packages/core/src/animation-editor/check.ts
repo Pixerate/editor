@@ -48,7 +48,16 @@ function visibleAt(timeline: MotionTimeline, id: string, time: number, node: Vec
 	const circle = clip('clipCircle');
 	if (Array.isArray(circle) && circle[2] <= 1e-4) return false;
 	const hasFill = node.type === 'path' ? !!node.fill && node.fill !== 'none' : collectPathNodes(node).some((p) => p.fill && p.fill !== 'none');
-	return num('drawEnd', 1) > 0.01 || (hasFill && num('fillOpacity', 1) > 0.01);
+	// A group's strokes may each draw on in turn (draw order): drawn when any of them is.
+	const drawn =
+		num('drawEnd', 1) > 0.01 &&
+		(node.type === 'path' ||
+			collectPathNodes(node).length === 0 ||
+			collectPathNodes(node).some((p) => {
+				const v = trackValue(timeline.tracks.get(motionTrackKey(p.id, 'drawEnd')), time);
+				return typeof v !== 'number' || v > 0.01;
+			}));
+	return drawn || (hasFill && num('fillOpacity', 1) > 0.01);
 }
 
 /**
