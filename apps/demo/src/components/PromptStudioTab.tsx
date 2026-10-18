@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import {
   usePromptEditor,
   EditorContent,
@@ -22,6 +22,8 @@ import {
 } from "lucide-react";
 import { demoToolRegistry } from "../agentTools";
 import { GenerationHistoryDemo } from "./GenerationHistoryDemo";
+import { AgentScriptPanel } from "./AgentScriptPanel";
+import { PROMPT_SCRIPTS } from "../agentScripts";
 
 const SAMPLE_PROMPT =
   "A photorealistic portrait of {character|a weathered sea captain|Who is in the shot?} in {{cyberpunk_city}}, __award_winning__ composition{?lens}, shot with a {lens|35mm|Lens focal length} lens{/lens}{!lens}, wide angle{/lens}.";
@@ -140,10 +142,12 @@ export const PromptStudioTab: React.FC = () => {
     }
   };
 
+  const agentStage = useRef<HTMLDivElement>(null);
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
       {/* Left Column: Editor & Controls */}
       <div className="lg:col-span-7 space-y-4">
+        <AgentScriptPanel scripts={PROMPT_SCRIPTS} stage={agentStage} hint="Plays a scripted agent turn with the prompt__* tools: find_text returns positions, replace_range and insert_text edit there." />
         <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-5 shadow-xl relative">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
@@ -157,7 +161,7 @@ export const PromptStudioTab: React.FC = () => {
             </span>
           </div>
 
-          <div className="relative">
+          <div className="relative" ref={agentStage}>
             <EditorContent editor={editor} />
 
             {/* Slash Command Floating Menu */}

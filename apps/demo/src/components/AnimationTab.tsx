@@ -1,10 +1,12 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { Clapperboard } from "lucide-react";
 import { createVectorEffect, ellipseSubpath, rectSubpath, starSubpath, type VectorDocument } from "@pixerate/editor/vector";
 import type { MotionScene } from "@pixerate/editor/animation-editor";
 import { AnimationEditor, useAnimationEditorController, useAnimationEditorState, useAnimationEditorTools } from "@pixerate/editor-react/animation-editor";
 import { VectorEditor, useVectorEditorController } from "@pixerate/editor-react/vector";
 import { demoToolRegistry } from "../agentTools";
+import { AgentScriptPanel } from "./AgentScriptPanel";
+import { ANIMATION_SCRIPTS } from "../agentScripts";
 
 const ARTWORK: VectorDocument = {
   width: 640,
@@ -78,6 +80,7 @@ export function AnimationTab() {
   const [output, setOutput] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const vector = useVectorEditorController({ document: ARTWORK });
+  const agentStage = useRef<HTMLDivElement>(null);
   const errors = state.issues.filter((i) => i.severity === "error").length;
 
   return (
@@ -93,7 +96,8 @@ export function AnimationTab() {
           </p>
         </div>
       </div>
-      <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-3">
+      <AgentScriptPanel scripts={ANIMATION_SCRIPTS} stage={agentStage} hint="Plays a scripted agent turn with the animation__* tools: a new shot, its commands, a check, then playback." />
+      <div className="relative rounded-xl border border-slate-800 bg-slate-900/50 p-3" ref={agentStage}>
         <AnimationEditor controller={controller} values={{ accent }} />
       </div>
       <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">

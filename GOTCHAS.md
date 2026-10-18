@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [demo] An Agent Cursor Animated With `requestAnimationFrame` Hangs in a Hidden Tab
+
+- **Issue / Symptom**: A scripted agent run (the demo's "Ask the agent" panel) stopped partway with its buttons disabled when the page was in a background tab or a hidden preview pane.
+- **Root Cause**: The cursor glide awaited a promise resolved from a `requestAnimationFrame` loop, and browsers do not run animation frames for hidden documents, so the promise never settled and the next tool call never ran.
+- **Solution / Workaround**: Jump straight to the target when `document.hidden`, and also resolve the glide from a `setTimeout` a little after its duration (as Ursula's director skips animation in hidden tabs). Never make agent tool calls wait on animation frames alone.
+
 ### [react|svelte/chart] Inline SVG Colours Must Use `var(--x, fallback)`, Not shadcn's `hsl(var(--x))`
 
 - **Issue / Symptom**: A chart theme written as `hsl(var(--foreground))` drew black text and invisible grid lines in the demo.
