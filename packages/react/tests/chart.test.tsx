@@ -293,6 +293,11 @@ describe("ChartEditor", () => {
     expect(q("[data-chart-canvas]")).not.toBeNull();
     expect(q("[data-chart-inspector]")).not.toBeNull();
     expect(q("[data-chart-grid]")).not.toBeNull();
+    // Side by side, the inspector is taken out of flow so the canvas alone sets the row's height and it scrolls.
+    const inspector = q("[data-chart-inspector]");
+    expect(inspector.className).toMatch(/md:absolute md:inset-0/);
+    expect(inspector.className).toMatch(/overflow-y-auto/);
+    expect(inspector.parentElement!.className).toMatch(/\brelative\b/);
     expect((q('[data-action="undo"]') as HTMLButtonElement).disabled).toBe(true);
     await act(async () => q('[data-chart-type="area"]').click());
     expect(q("[data-chart-canvas] [data-role=area]")).not.toBeNull();
