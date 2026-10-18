@@ -13,8 +13,12 @@ How it plays
 
 Commands
 - enter (fade, pop, grow, slide, draw) and exit (fade, shrink, slide, undraw) bring things in and out.
+- enter also reveals through a clip over the target's box: wipe (behind an edge travelling "direction", default right), iris (from the centre; "shape": circle or box) and split (from a line through the middle; "orientation": horizontal or vertical). exit wipe hides the same way. Reveals need a width and a height: use draw / undraw for a straight line.
 - draw draws strokes on to a fraction; move, rotate, scale and fade change the pose (about the centre); style blends solid colours and stroke width.
-- morph turns a shape into another node's shape (keep the target hidden); follow moves along a path node; pulse and shake draw the eye.
+- enter also has zoom (settles from larger) and rise (rises a short way, overshooting a touch); pop and zoom take a starting "scale".
+- morph turns a shape into another node's shape (keep the target hidden); follow moves along a path node (with "rotate", moves made meanwhile turn with the path).
+- Emphasis draws the eye and returns to rest: pulse (swell), shake (side to side, or "axis": "vertical"), teeter (rock), wave (bob, no settling), wiggle (seeded wander; the same seed wanders the same way) and color-pulse (tint and back).
+- Commands share their names and defaults with Flair's motion primitives (get_animation shows each one's "flairPrimitive"), and emphasis, reveals and follows export to Flair exactly.
 - effect tweens a numeric parameter of a live path effect already on the node (twist angle, wiggle time, zig zag size).
 
 Working method

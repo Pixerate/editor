@@ -54,9 +54,9 @@ const SCENE: MotionScene = {
     },
     {
       id: "star",
-      label: "Tile becomes a star",
+      label: "Tile irises in, becomes a star",
       run: [
-        { type: "enter", targets: ["tile"], style: "grow" },
+        { type: "enter", targets: ["tile"], style: "iris" },
         { type: "morph", targets: ["tile"], into: "star" },
         { type: "effect", targets: ["ring"], effect: "wobble", param: "time", to: 2, duration: 900, with: "previous" },
       ],
@@ -65,7 +65,10 @@ const SCENE: MotionScene = {
       id: "focus",
       label: "Close on the badge",
       camera: { frame: "ring", padding: 40 },
-      run: [{ type: "pulse", targets: ["badge"], count: 2, duration: 800 }],
+      run: [
+        { type: "pulse", targets: ["badge"], count: 2, duration: 800 },
+        { type: "color-pulse", targets: ["ring"], paint: "stroke", color: "#f59e0b", count: 2, duration: 800, with: "previous" },
+      ],
       hold: 800,
     },
   ],

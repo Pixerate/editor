@@ -1,18 +1,29 @@
 import { normalizeTokenColor, hexToRgba, rgbaToHex } from '../tokens/color.js';
 import { createVectorMorph, type VectorMorph } from '../vector/blend.js';
-import { bezierPathLength, bezierPathPointAtLength } from '../canvas/pathops/bezier.js';
+import { bezierPathLength, bezierPathPointAtLength, transformBezierPath, type BezierPath } from '../canvas/pathops/bezier.js';
 import { createVectorEffect } from '../vector/appearance.js';
-import { applyMatrix, invertMatrix, multiplyMatrices, nodeMatrix, rotateMatrix, scaleMatrix, translateMatrix, vectorPathWorldBezier, isIdentityMatrix, type AffineMatrix } from '../vector/geometry.js';
-import { vectorDocumentToSvg, type VectorSvgExportOptions } from '../vector/svg.js';
+import { invertMatrix, multiplyMatrices, nodeMatrix, rotateMatrix, scaleMatrix, translateMatrix, vectorPathWorldBezier, isIdentityMatrix, type AffineMatrix } from '../vector/geometry.js';
+import { vectorDocumentToSvg, type VectorSvgExportOptions, type VectorSvgWrapper } from '../vector/svg.js';
 import type { VectorDocument, VectorEffect, VectorGradient, VectorNode, VectorPaint, VectorPathNode } from '../vector/types.js';
 import { activeSegment, compileMotionScene, indexMotionNodes, motionTrackKey, segmentProgress, trackValue, type MotionNodeEntry, type MotionProperty, type MotionTimeline } from './compile.js';
 import type { MotionRect, MotionScene } from './types.js';
+
+/**
+ * A reveal clip (`wipe`, `iris`, `split`) in the units of the node's own box: 0–1 across it,
+ * as SVG's `clipPathUnits="objectBoundingBox"` and Flair's clip reveals are.
+ */
+export type MotionClipShape = { shape: 'rect'; x: number; y: number; width: number; height: number } | { shape: 'circle'; cx: number; cy: number; r: number };
 
 /** The artwork as it stands at one time, and where the camera looks. */
 export interface MotionFrame {
 	time: number;
 	document: VectorDocument;
 	camera: MotionRect;
+	/**
+	 * Reveal clips by node id, outermost first: draw each of those nodes inside a group clipped
+	 * to each shape (`motionFrameToSvg` does). The vector model has no clips, so they ride here.
+	 */
+	clips: Record<string, MotionClipShape[]>;
 }
 
 export interface MotionFrameOptions {
@@ -102,47 +113,76 @@ function shapeAt(entry: MotionNodeEntry, timeline: MotionTimeline, nodes: Map<st
 	return morphBetween(shapeIn(entry, a), shapeIn(entry, b)).at(u);
 }
 
-/** Where a follow puts the node's centre (parent space), and the path's angle in degrees. */
-function followAt(entry: MotionNodeEntry, timeline: MotionTimeline, nodes: Map<string, MotionNodeEntry>, time: number): { x: number; y: number; angle: number } | null {
-	const track = timeline.tracks.get(motionTrackKey(entry.node.id, 'follow'));
-	const s = activeSegment(track, time) ?? track?.[0];
-	if (!s?.path) return null;
-	const path = nodes.get(s.path);
+/**
+ * The path a node follows, in the node's parent's space (live effects left off), or null when
+ * `path` is not a path or cannot be measured. Lengths and turns along it are measured there.
+ */
+export function motionFollowRoute(entry: MotionNodeEntry, path: MotionNodeEntry | undefined): BezierPath | null {
 	if (!path || path.node.type !== 'path') return null;
-	const progress = Number(trackValue(track, time));
-	if (!(progress >= 0)) return null;
 	try {
-		const bezier = vectorPathWorldBezier(path.node, path.parentWorld, { effects: false });
-		const at = bezierPathPointAtLength(bezier, Math.min(1, Math.max(0, progress)) * bezierPathLength(bezier));
-		if (!at) return null;
-		const p = applyMatrix(invertMatrix(entry.parentWorld), { x: at.point[0], y: at.point[1] });
-		return { x: p.x, y: p.y, angle: s.rotate ? (at.angle * 180) / Math.PI : 0 };
+		return transformBezierPath(vectorPathWorldBezier(path.node, path.parentWorld, { effects: false }), invertMatrix(entry.parentWorld));
 	} catch {
 		return null;
 	}
 }
 
-/** The transform a node's offsets, turn, scale and follow add (parent space), or null when none. */
-export function motionNodeOffset(entry: MotionNodeEntry, timeline: MotionTimeline, time: number, nodes = indexMotionNodes([entry.node])): { matrix: AffineMatrix; dx: number; dy: number; rotation: number; scaleX: number; scaleY: number } | null {
+/** Where a follow puts the node's centre (parent space), and the path's angle there in degrees. */
+function followAt(entry: MotionNodeEntry, timeline: MotionTimeline, nodes: Map<string, MotionNodeEntry>, time: number): { x: number; y: number; angle: number } | null {
+	const track = timeline.tracks.get(motionTrackKey(entry.node.id, 'follow'));
+	const s = activeSegment(track, time) ?? track?.[0];
+	if (!s?.path) return null;
+	const route = motionFollowRoute(entry, nodes.get(s.path));
+	const progress = Number(trackValue(track, time));
+	if (!route || !(progress >= 0)) return null;
+	try {
+		const at = bezierPathPointAtLength(route, Math.min(1, Math.max(0, progress)) * bezierPathLength(route));
+		if (!at) return null;
+		return { x: at.point[0], y: at.point[1], angle: s.rotate ? (at.angle * 180) / Math.PI : 0 };
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * The transform a node's offsets, turn, scale and follow add (parent space), or null when none:
+ * scaled and turned about its centre, offset by `dx`, `dy`, then (following a path) its centre
+ * carried to the point on the path and turned with it, as Flair's `along` carries a wrapper.
+ * `raw` ignores behaviours (the pose a pulse or shake swings towards, as Flair is given it);
+ * `follow: false` leaves the follow out (`dx` … `scaleY` never include it).
+ */
+export function motionNodeOffset(
+	entry: MotionNodeEntry,
+	timeline: MotionTimeline,
+	time: number,
+	nodes = indexMotionNodes([entry.node]),
+	raw = false,
+	follow = true
+): { matrix: AffineMatrix; dx: number; dy: number; rotation: number; scaleX: number; scaleY: number; follow: { x: number; y: number; angle: number } | null } | null {
 	const read = (p: MotionProperty, rest: number) => {
-		const v = trackValue(timeline.tracks.get(motionTrackKey(entry.node.id, p)), time);
+		const v = trackValue(timeline.tracks.get(motionTrackKey(entry.node.id, p)), time, raw);
 		return typeof v === 'number' ? v : rest;
 	};
-	if (!TRANSFORM_PROPS.some((p) => timeline.tracks.has(motionTrackKey(entry.node.id, p)))) return null;
-	let dx = read('x', 0);
-	let dy = read('y', 0);
-	let rotation = read('rotation', 0);
+	if (!TRANSFORM_PROPS.some((p) => (follow || p !== 'follow') && timeline.tracks.has(motionTrackKey(entry.node.id, p)))) return null;
+	const dx = read('x', 0);
+	const dy = read('y', 0);
+	const rotation = read('rotation', 0);
 	const scaleX = read('scaleX', 1);
 	const scaleY = read('scaleY', 1);
-	const follow = followAt(entry, timeline, nodes, time);
-	if (follow) {
-		dx += follow.x - entry.center.x;
-		dy += follow.y - entry.center.y;
-		rotation += follow.angle;
-	}
 	const c = entry.center;
-	const matrix = multiplyMatrices(multiplyMatrices(scaleMatrix(scaleX, scaleY, c), rotateMatrix(rotation, c)), translateMatrix(dx, dy));
-	return { matrix, dx, dy, rotation, scaleX, scaleY };
+	let matrix = multiplyMatrices(multiplyMatrices(scaleMatrix(scaleX, scaleY, c), rotateMatrix(rotation, c)), translateMatrix(dx, dy));
+	const along = follow ? followAt(entry, timeline, nodes, time) : null;
+	if (along) matrix = multiplyMatrices(matrix, multiplyMatrices(multiplyMatrices(translateMatrix(-c.x, -c.y), rotateMatrix(along.angle)), translateMatrix(along.x, along.y)));
+	return { matrix, dx, dy, rotation, scaleX, scaleY, follow: along };
+}
+
+/** A node's reveal clips at `time`, outermost first (rect, then circle), with sizes kept ≥ 0. */
+export function motionNodeClips(id: string, timeline: MotionTimeline, time: number): MotionClipShape[] {
+	const out: MotionClipShape[] = [];
+	const rect = trackValue(timeline.tracks.get(motionTrackKey(id, 'clipRect')), time);
+	if (Array.isArray(rect) && rect.length === 4) out.push({ shape: 'rect', x: tidy(rect[0]), y: tidy(rect[1]), width: Math.max(0, tidy(rect[2])), height: Math.max(0, tidy(rect[3])) });
+	const circle = trackValue(timeline.tracks.get(motionTrackKey(id, 'clipCircle')), time);
+	if (Array.isArray(circle) && circle.length === 3) out.push({ shape: 'circle', cx: tidy(circle[0]), cy: tidy(circle[1]), r: Math.max(0, tidy(circle[2])) });
+	return out;
 }
 
 /**
@@ -156,6 +196,7 @@ export function motionFrameAt(scene: MotionScene, time: number, options: MotionF
 	const drawOn = options.draw !== false;
 	const value = (id: string, p: MotionProperty) => trackValue(timeline.tracks.get(motionTrackKey(id, p)), time);
 	const animated = new Set(timeline.segments.map((seg) => seg.node));
+	const clips: Record<string, MotionClipShape[]> = {};
 
 	const visit = (node: VectorNode): VectorNode => {
 		let out: VectorNode = node.type === 'group' ? { ...node, children: node.children.map(visit) } : node;
@@ -163,6 +204,8 @@ export function motionFrameAt(scene: MotionScene, time: number, options: MotionF
 		const entry = nodes.get(node.id);
 		if (!entry) return out;
 		const id = node.id;
+		const clip = motionNodeClips(id, timeline, time);
+		if (clip.length) clips[id] = clip;
 
 		const shape = shapeAt(entry, timeline, nodes, time);
 		if (shape) {
@@ -233,15 +276,25 @@ export function motionFrameAt(scene: MotionScene, time: number, options: MotionF
 	const document: VectorDocument = { ...s.artwork, nodes: s.artwork.nodes.map(visit) };
 	const cam = trackValue(timeline.tracks.get(motionTrackKey('', 'camera')), time);
 	const box = Array.isArray(cam) ? cam : [0, 0, s.artwork.width, s.artwork.height];
-	return { time, document, camera: { x: tidy(box[0]), y: tidy(box[1]), width: tidy(box[2]), height: tidy(box[3]) } };
+	return { time, document, camera: { x: tidy(box[0]), y: tidy(box[1]), width: tidy(box[2]), height: tidy(box[3]) }, clips };
 }
 
 export interface MotionSvgOptions extends MotionFrameOptions, VectorSvgExportOptions {}
 
-/** The scene at `time` as a standalone SVG (the camera becomes the `viewBox`). */
+/** A clip shape's SVG attributes. */
+export function motionClipAttrs(clip: MotionClipShape): Record<string, number> {
+	const { shape: _shape, ...attrs } = clip;
+	return attrs;
+}
+
+/** The scene at `time` as a standalone SVG (the camera becomes the `viewBox`, reveal clips wrap their nodes). */
 export function motionFrameToSvg(scene: MotionScene, time: number, options: MotionSvgOptions = {}): string {
 	const frame = motionFrameAt(scene, time, options);
-	return withViewBox(vectorDocumentToSvg(frame.document, options), frame.camera);
+	const prefix = options.idPrefix ?? 'vg-';
+	const wrap: Record<string, readonly VectorSvgWrapper[]> = { ...options.wrap };
+	for (const [id, clips] of Object.entries(frame.clips))
+		wrap[id] = [...(wrap[id] ?? []), ...clips.map((clip, i) => ({ clip: { id: `${prefix}reveal-${id}-${i}`, shape: clip.shape, attrs: motionClipAttrs(clip) } }))];
+	return withViewBox(vectorDocumentToSvg(frame.document, { ...options, wrap }), frame.camera);
 }
 
 /** Replaces the root `viewBox` of an SVG string. */

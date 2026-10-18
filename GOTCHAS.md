@@ -1514,6 +1514,32 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: Flair's `out` is `1 − (1 − t)³` and `in-out` the piecewise cubic, which differ from CSS `ease-out` / `ease-in-out` by up to ~7%. Separately, a move animates `x` and `y` as two segments, so an interval had two active segments and fell back to sampling.
 - **Solution / Workaround**: The editor's defaults are `MOTION_EASE_OUT` (`cubic-bezier(1/3, 1, 2/3, 1)`, exactly Flair's `out`) and `MOTION_EASE_IN_OUT` (within 1% of Flair's `in-out`). `flairEaseFor` matches a curve to a Flair name within 1%, and the exporter writes one change when every active segment spans the same interval with the same curve.
 
+### [core/animation-editor] Emphasis Behaviours Must Match Flair Number for Number
+
+- **Issue / Symptom**: An exported wiggle or shake would play differently in Flair from the editor's preview, even though both "wiggle with seed 3".
+- **Root Cause**: Flair plays an `SvgAnimation.behavior` (Flair ≥ 0.38) by swinging every number in the value from `from` towards `to` by `behaviorProgress`. A wriggle wanders each number on its own noise channel, keyed by that number's position in the value. The editor can't import Flair (Flair depends on the editor), so it carries its own copy of the maths (`animation/behavior.ts`: SplitMix64 hashing, quintic value noise, FNV-1a seeds from ids).
+- **Solution / Workaround**:
+  - Keep `animation/behavior.ts` identical to Flair's `vector/motion.ts`, `scene/behavior.ts` and `time/noise.ts`. `tests/animation-behavior.test.ts` pins values computed by Flair's own code; recompute them when Flair changes.
+  - Emphasis segments store the peak in `to` (a pulse's swollen scale, a shake's far point) and a `behavior`. The exporter sends `to` with behaviours ignored (`trackValue(…, raw)`).
+  - `MotionSegment.index` must match the number's position in the exported transform `translate(dx dy) rotate(r cx cy) …`: x is 0, y is 1 and the angle is 2. If the transform string's order changes, change the indices too.
+  - A behaviour exports as one change only when every segment active over that interval shares the same span, ease and behaviour. Otherwise it is sampled.
+
+### [core/animation-editor] Reveal Clips Live on the Frame, Not in the Vector Model
+
+- **Issue / Symptom**: `wipe`, `iris` and `split` (Flair's `entrance.wipe` / `iris` / `split` and `exit.wipe`) need a clip path, but a frame is a `VectorDocument`, which has no clips. Clipping in document units would also disagree with Flair as soon as the node moves or scales.
+- **Root Cause**: Flair reveals through a `<clipPath clipPathUnits="objectBoundingBox">` on a wrapper group, so the clip is in the units of the wrapped element's current box (0–1 across it) and follows the element. Its padding (`stroke reach / box + 0.02`, at most 1) is a share of the box, and a box with no width or height (a lone straight line) cannot be clipped.
+- **Solution / Workaround**:
+  - The clip rides beside the document: `clipRect` (`[x, y, width, height]`) and `clipCircle` (`[cx, cy, r]`) tracks in unit-box space, rounded to 4 places like Flair's `clipParts`, and `MotionFrame.clips` by node id. `motionFrameToSvg` (and so both `<AnimationStage>`s) writes the wrapper through `vectorDocumentToSvg`'s `wrap` option. Anything that draws a `MotionFrame` without `motionFrameToSvg` must apply `clips` itself.
+  - The Flair export writes the same wrappers (`<id>--reveal`, `<id>--iris`, clip `…-clip`, shape `…-clip-shape`) and animates only the shape attributes that change. Clip wrappers sit outside the follow wrappers, so the box they measure is the node as it moves, as in the editor.
+  - A clip stays after its reveal (open, or shut after a wipe out). Every `enter` opens leftover clips at once, and a reveal sets opacity at its start, or a later fade in (whose `from` holds back to time 0) would hide it all along.
+  - A reveal of a node with no box fades instead, and `checkMotionScene` warns `reveal-no-box`.
+
+### [core/animation-editor] Follows Are Measured in the Parent's Units, and Offsets Turn With Them
+
+- **Issue / Symptom**: A follow was sampled into dozens of transform steps for Flair, and a follow inside a rotated or scaled group turned to the wrong angle.
+- **Root Cause**: Flair's `along` moves a wrapper by `translate(point) rotate(angle)` measured on the path's own `d` (`getPointAtLength`), in the units of the wrapper's parent. The editor measured length and angle in document space and added the follow to the node's own offset, so an offset made during an oriented follow did not turn with the path as it does under Flair's wrapper.
+- **Solution / Workaround**: `motionFollowRoute` maps the path into the node's parent's units and the follow is measured there. `motionNodeOffset` composes scale, turn and offset about the centre, then `translate(−centre)`, the path's turn and the point, the same as Flair's `<id>--follow` / `<id>--follow-centre` wrappers. The export writes the route as a `<defs>` path in those units (so a hidden path, or one in another group, still works) and one `along` per follow. Overshooting eases on an oriented follow are sampled: past the path's ends Flair measures no direction and stops turning.
+
 ### [core/animation-editor] Back Eases Cannot Go to Flair on Colours or Opacity
 
 - **Issue / Symptom**: Writing an overshooting cubic-bezier (`ease-out-back`, `ease-in-back`, any curve with `y1` or `y2` outside 0–1) as a Flair `ease` tuple on a `fill` / `stroke` change would make Flair produce invalid hex colours, and on opacity or draw-on it would disagree with the editor.

@@ -1,7 +1,7 @@
 import { normalizeTokenColor } from '../tokens/color.js';
 import { collectPathNodes } from '../vector/geometry.js';
 import type { VectorNode } from '../vector/types.js';
-import { compileMotionScene, indexMotionNodes, motionTrackKey, trackValue, type MotionTimeline } from './compile.js';
+import { compileMotionScene, indexMotionNodes, motionRevealPadding, motionTrackKey, trackValue, type MotionTimeline } from './compile.js';
 import { motionFrameAt } from './evaluate.js';
 import { motionIssue, namedWithSuggestion, type MotionIssue } from './issues.js';
 import type { MotionCommand, MotionScene } from './types.js';
@@ -39,6 +39,12 @@ function visibleAt(timeline: MotionTimeline, id: string, time: number, node: Vec
 	if (node.visible === false) return false;
 	if (num('opacity', node.opacity ?? 1) <= 0.01) return false;
 	if (Math.abs(num('scaleX', 1) * num('scaleY', 1)) <= 1e-4) return false;
+	// A reveal clip with no area (before a wipe in, after a wipe out).
+	const clip = (p: 'clipRect' | 'clipCircle') => trackValue(timeline.tracks.get(motionTrackKey(id, p)), time);
+	const rect = clip('clipRect');
+	if (Array.isArray(rect) && (rect[2] <= 1e-4 || rect[3] <= 1e-4)) return false;
+	const circle = clip('clipCircle');
+	if (Array.isArray(circle) && circle[2] <= 1e-4) return false;
 	const hasFill = node.type === 'path' ? !!node.fill && node.fill !== 'none' : collectPathNodes(node).some((p) => p.fill && p.fill !== 'none');
 	return num('drawEnd', 1) > 0.01 || (hasFill && num('fillOpacity', 1) > 0.01);
 }
@@ -88,6 +94,11 @@ export function checkMotionScene(scene: MotionScene): MotionIssue[] {
 			if (command.type === 'follow' && known(command.path, 'unknown-path', 'path', where) && nodes.get(command.path)!.node.type !== 'path')
 				issues.push(motionIssue('not-a-path', `"${command.path}" is a group; follow a single path node.`, { ...where, ids: [command.path] }));
 			if (command.type === 'morph') known(command.into, 'unknown-shape', 'shape', where);
+			const style = command.type === 'enter' || command.type === 'exit' ? command.style : undefined;
+			if (style === 'wipe' || style === 'iris' || style === 'split')
+				for (const id of targets)
+					if (!motionRevealPadding(nodes.get(id)!))
+						issues.push(motionIssue('reveal-no-box', `"${id}" has no width or height (a straight line), so a ${style} cannot clip it and it fades instead; use style "${command.type === 'enter' ? 'draw' : 'undraw'}" for a line.`, { ...where, ids: [id] }));
 			if (command.type === 'style') {
 				for (const key of ['fill', 'stroke'] as const) {
 					const color = command[key];
@@ -103,6 +114,18 @@ export function checkMotionScene(scene: MotionScene): MotionIssue[] {
 							issues.push(motionIssue('paint-not-color', `"${id}" has a gradient ${key}; it switches to ${color} at the end instead of blending.`, { ...where, ids: [id] }));
 					}
 				}
+			}
+			if (command.type === 'color-pulse') {
+				const key = command.paint ?? 'fill';
+				const color = command.color ?? '#f59e0b';
+				if (normalizeTokenColor(color) === null) issues.push(motionIssue('invalid-color', `color "${color}" is not a colour this editor reads; use hex ("#0ea5e9"), rgb() or rgba().`, where));
+				else
+					for (const id of targets) {
+						const node = nodes.get(id)!.node;
+						const paths = node.type === 'path' ? [node] : collectPathNodes(node);
+						if (paths.some((p) => typeof p[key] !== 'string'))
+							issues.push(motionIssue('paint-not-color', `"${id}" has a gradient or no ${key}, so a colour pulse cannot tint it; give it a solid ${key} or pulse the ${key === 'fill' ? 'stroke' : 'fill'}.`, { ...where, ids: [id] }));
+					}
 			}
 			if (command.type === 'effect') {
 				for (const id of targets) {

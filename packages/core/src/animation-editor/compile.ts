@@ -1,4 +1,5 @@
 import { mixColorsOklab } from '../animation/color.js';
+import { behaviorProgress, motionSeedFromId, type MotionBehavior } from '../animation/behavior.js';
 import { evaluateEasing, type AnimationEasing } from '../animation/easing.js';
 import { bezierPathLength } from '../canvas/pathops/bezier.js';
 import {
@@ -22,7 +23,9 @@ import {
 	type MotionCamera,
 	type MotionCommand,
 	type MotionDirection,
+	type MotionIrisShape,
 	type MotionRect,
+	type MotionSplitOrientation,
 	type MotionScene
 } from './types.js';
 
@@ -37,7 +40,9 @@ import {
  * Properties a segment can change. Offsets (`x`, `y`, `rotation`) are relative to the rest
  * pose, scales multiply it, and turns and scales are about the node's centre at rest.
  * `effect:<effectId>:<param>` tweens a live path effect's parameter. `camera` (node `""`) is
- * the view box `[x, y, width, height]`.
+ * the view box `[x, y, width, height]`. `clipRect` (`[x, y, width, height]`) and `clipCircle`
+ * (`[cx, cy, r]`) are the reveal clips of `wipe`, `iris` and `split`, in the units of the
+ * node's own box (0–1 across it, SVG's `objectBoundingBox`), as Flair's clip reveals are.
  */
 export type MotionProperty =
 	| 'opacity'
@@ -54,17 +59,12 @@ export type MotionProperty =
 	| 'drawEnd'
 	| 'shape'
 	| 'follow'
+	| 'clipRect'
+	| 'clipCircle'
 	| 'camera'
 	| `effect:${string}:${string}`;
 
 export type MotionValue = number | string | readonly number[];
-
-/** An oscillation laid over a segment (`pulse`: scale up and back; `shake`: side to side, settling). */
-export interface MotionWave {
-	kind: 'pulse' | 'shake';
-	amount: number;
-	count: number;
-}
 
 export interface MotionSegment {
 	/** Node id (`""` for the camera). */
@@ -78,7 +78,16 @@ export interface MotionSegment {
 	/** The shot and command (index in `run`) it comes from. */
 	shot: string;
 	command: number;
-	wave?: MotionWave;
+	/**
+	 * How the change gets from `from` to `to` when not straight along its ease (a pulse there and
+	 * back, a settling oscillation, a wriggle): Flair's `behavior`, exported as is.
+	 */
+	behavior?: MotionBehavior;
+	/**
+	 * Which number of the node's exported value this is (x 0, y 1, rotation 2, matching the
+	 * transform Flair is given), so a wriggle wanders each on the channel Flair uses. Default 0.
+	 */
+	index?: number;
 	/** For `follow`: the path node id, and whether to turn with it. */
 	path?: string;
 	rotate?: boolean;
@@ -128,6 +137,8 @@ export interface MotionNodeEntry {
 	center: { x: number; y: number };
 	/** Bounds at rest in document space. */
 	bounds: VectorBounds | null;
+	/** Bounds at rest in its parent's space (what a reveal clip's box is). */
+	box: VectorBounds | null;
 }
 
 const indexCache = new WeakMap<object, Map<string, MotionNodeEntry>>();
@@ -142,7 +153,7 @@ export function indexMotionNodes(nodes: readonly VectorNode[]): Map<string, Moti
 			const local = vectorNodeBounds(node);
 			const bounds = vectorNodeBounds(node, parentWorld);
 			const center = local ? { x: local.x + local.width / 2, y: local.y + local.height / 2 } : { x: 0, y: 0 };
-			if (!out.has(node.id)) out.set(node.id, { node, ancestors, parentWorld, center, bounds });
+			if (!out.has(node.id)) out.set(node.id, { node, ancestors, parentWorld, center, bounds, box: local });
 			if (node.type === 'group') walk(node.children, multiplyMatrices(nodeMatrix(node), parentWorld), [...ancestors, node.id]);
 		}
 	};
@@ -161,6 +172,78 @@ function firstPaint(node: VectorNode, key: 'fill' | 'stroke'): string | undefine
 		if (s) return s;
 	}
 	return undefined;
+}
+
+/** How far a stroke reaches past the outline: half its width (all of it outside, none inside). */
+function strokeReach(node: VectorNode): number {
+	let reach = 0;
+	for (const p of node.type === 'path' ? [node] : collectPathNodes(node)) {
+		if (p.stroke == null || p.stroke === 'none') continue;
+		const width = p.strokeWidth ?? 1;
+		reach = Math.max(reach, p.strokeAlign === 'outside' ? width : p.strokeAlign === 'inside' ? 0 : width / 2);
+	}
+	return reach;
+}
+
+/**
+ * How far past its box (as a share of its width and height) a reveal clip reaches, so it shows
+ * the whole stroke: the stroke's reach over the box plus 0.02, at most 1 (Flair's padding). Null
+ * when the box has no width or height (a lone straight line), which a clip cannot reveal.
+ */
+export function motionRevealPadding(entry: MotionNodeEntry): readonly [number, number] | null {
+	const box = entry.box;
+	if (!box || !(box.width > 0) || !(box.height > 0)) return null;
+	const s = strokeReach(entry.node);
+	return [Math.min(1, s / box.width + 0.02), Math.min(1, s / box.height + 0.02)];
+}
+
+/** Clip numbers as Flair writes them (4 decimals). */
+const clipRound = (n: number) => Math.round(n * 1e4) / 1e4 || 0;
+
+/** A reveal clip that shows the whole node (padded past its box), in its box's units. */
+function revealFull(property: 'clipRect' | 'clipCircle', [px, py]: readonly [number, number]): number[] {
+	return (property === 'clipRect' ? [-px, -py, 1 + 2 * px, 1 + 2 * py] : [0.5, 0.5, Math.hypot(0.5 + px, 0.5 + py)]).map(clipRound);
+}
+
+const OPPOSITE: Record<MotionDirection, MotionDirection> = { up: 'down', down: 'up', left: 'right', right: 'left' };
+
+/** What a reveal clip animates: a wipe (in, or out with `hide`), an iris or a split. */
+export type MotionReveal = { style: 'wipe'; direction?: MotionDirection; hide?: boolean } | { style: 'iris'; shape?: MotionIrisShape } | { style: 'split'; orientation?: MotionSplitOrientation };
+
+/**
+ * The reveal clip a `wipe`, `iris` or `split` animates, from and to (Flair's `entrance.wipe`,
+ * `entrance.iris`, `entrance.split` and `exit.wipe`), or null when the node's box has no width
+ * or height. An exit wipe is the enter wipe the other way, reversed in time.
+ */
+export function motionRevealClip(entry: MotionNodeEntry, reveal: MotionReveal): { property: 'clipRect' | 'clipCircle'; from: number[]; to: number[] } | null {
+	const pad = motionRevealPadding(entry);
+	if (!pad) return null;
+	const [px, py] = pad;
+	const [w, h] = [1 + 2 * px, 1 + 2 * py];
+	const rect = (from: number[], to: number[]) => ({ property: 'clipRect' as const, from: from.map(clipRound), to: to.map(clipRound) });
+	if (reveal.style === 'iris') {
+		if (reveal.shape === 'box') return rect([0.5, 0.5, 0, 0], [-px, -py, w, h]);
+		return { property: 'clipCircle', from: [0.5, 0.5, 0], to: revealFull('clipCircle', pad) };
+	}
+	if (reveal.style === 'split') {
+		if (reveal.orientation === 'vertical') return rect([0.5, -py, 0, h], [-px, -py, w, h]);
+		return rect([-px, 0.5, w, 0], [-px, -py, w, h]);
+	}
+	const direction = reveal.direction ?? 'right';
+	if (reveal.hide) {
+		const shown = motionRevealClip(entry, { style: 'wipe', direction: OPPOSITE[direction] })!;
+		return { ...shown, from: shown.to, to: shown.from };
+	}
+	switch (direction) {
+		case 'right':
+			return rect([-px, -py, 0, h], [-px, -py, w, h]);
+		case 'left':
+			return rect([1 + px, -py, 0, h], [-px, -py, w, h]);
+		case 'down':
+			return rect([-px, -py, w, 0], [-px, -py, w, h]);
+		case 'up':
+			return rect([-px, 1 + py, w, 0], [-px, -py, w, h]);
+	}
 }
 
 /** A property's value with no animation. */
@@ -191,6 +274,11 @@ export function motionRestValue(entry: MotionNodeEntry | undefined, property: Mo
 		}
 		case 'shape':
 			return node?.id ?? '';
+		case 'clipRect':
+		case 'clipCircle': {
+			const pad = entry && motionRevealPadding(entry);
+			return pad ? revealFull(property, pad) : [];
+		}
 		case 'camera':
 			return [0, 0, artwork.width, artwork.height];
 	}
@@ -217,17 +305,19 @@ export function interpolateMotionValue(from: MotionValue, to: MotionValue, u: nu
 export function segmentProgress(segment: MotionSegment, time: number): { u: number; eased: number } {
 	const span = segment.end - segment.start;
 	const u = span <= 0 ? 1 : Math.min(1, Math.max(0, (time - segment.start) / span));
-	return { u, eased: segment.wave ? u : evaluateEasing(segment.ease, u, span) };
+	return { u, eased: evaluateEasing(segment.ease, u, span) };
 }
 
-/** A segment's value at `time`. */
-export function segmentValue(segment: MotionSegment, time: number): MotionValue {
-	const { u, eased } = segmentProgress(segment, time);
-	const v = interpolateMotionValue(segment.from, segment.to, eased);
-	if (!segment.wave || typeof v !== 'number') return v;
-	const { kind, amount, count } = segment.wave;
-	if (kind === 'pulse') return v * (1 + amount * Math.sin(Math.PI * u * count) ** 2);
-	return v + amount * Math.sin(2 * Math.PI * u * count) * (1 - u);
+/**
+ * A segment's value at `time`: along its ease, through its behaviour when it has one. `raw`
+ * ignores the behaviour (the value it swings towards), as Flair is given it.
+ */
+export function segmentValue(segment: MotionSegment, time: number, raw = false): MotionValue {
+	const { eased } = segmentProgress(segment, time);
+	if (!segment.behavior || raw) return interpolateMotionValue(segment.from, segment.to, eased);
+	const p = behaviorProgress(segment.behavior, eased, segment.index ?? 0, segment.end - segment.start);
+	// Colours (a colour pulse) mix only between their ends; numbers swing past them.
+	return typeof segment.from === 'string' ? interpolateMotionValue(segment.from, segment.to, Math.min(1, Math.max(0, p))) : interpolateMotionValue(segment.from, segment.to, p);
 }
 
 /** The segment in effect at `time` (the latest to have started), if any. */
@@ -238,11 +328,11 @@ export function activeSegment(track: readonly MotionSegment[] | undefined, time:
 	return found;
 }
 
-/** A track's value at `time`, or `undefined` when nothing animates it. */
-export function trackValue(track: readonly MotionSegment[] | undefined, time: number): MotionValue | undefined {
+/** A track's value at `time`, or `undefined` when nothing animates it. `raw` ignores behaviours (see `segmentValue`). */
+export function trackValue(track: readonly MotionSegment[] | undefined, time: number, raw = false): MotionValue | undefined {
 	if (!track?.length) return undefined;
 	const s = activeSegment(track, time);
-	if (s) return segmentValue(s, time);
+	if (s) return segmentValue(s, time, raw);
 	let first = track[0];
 	for (const t of track) if (t.start < first.start) first = t;
 	return first.from;
@@ -410,15 +500,31 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 			case 'enter': {
 				const style = command.style ?? 'fade';
 				const opacity = rest('opacity');
+				const reveal =
+					style === 'wipe' ? motionRevealClip(entry, { style, direction: command.direction }) : style === 'iris' ? motionRevealClip(entry, { style, shape: command.shape }) : style === 'split' ? motionRevealClip(entry, { style, orientation: command.orientation }) : null;
+				// An earlier reveal or wipe out leaves its clip; entering opens it again, at once.
+				for (const p of ['clipRect', 'clipCircle'] as const) if (p !== reveal?.property && tracks.has(motionTrackKey(node, p))) seg(p, rest(p), 'linear', start, start);
+				if (reveal) {
+					// The clip reveals. Opacity is set at once too, so a node faded out before shows again,
+					// and a later fade in (whose start would hold back to time 0) leaves this one alone.
+					seg('opacity', opacity, 'linear', start, start);
+					seg(reveal.property, reveal.to, ease ?? MOTION_EASE_OUT, start, end, { from: reveal.from });
+					break;
+				}
 				if (style === 'draw') {
 					seg('drawEnd', 1, ease ?? MOTION_EASE_IN_OUT, start, start + duration * 0.75, { from: 0 });
 					seg('fillOpacity', 1, MOTION_EASE_OUT, start + duration * 0.6, end, { from: 0 });
 					break;
 				}
-				if (style === 'pop') {
-					seg('opacity', opacity, MOTION_EASE_OUT, start, start + duration * 0.4, { from: 0 });
-					seg('scaleX', 1, ease ?? 'ease-out-back', start, end, { from: 0.5 });
-					seg('scaleY', 1, ease ?? 'ease-out-back', start, end, { from: 0.5 });
+				if (style === 'pop' || style === 'zoom') {
+					const from = command.scale ?? (style === 'pop' ? 0.5 : 1.6);
+					seg('opacity', opacity, MOTION_EASE_OUT, start, start + duration * (style === 'pop' ? 0.4 : 0.5), { from: 0 });
+					seg('scaleX', 1, ease ?? (style === 'pop' ? 'ease-out-back' : MOTION_EASE_OUT), start, end, { from });
+					seg('scaleY', 1, ease ?? (style === 'pop' ? 'ease-out-back' : MOTION_EASE_OUT), start, end, { from });
+				} else if (style === 'rise') {
+					const y = num('y');
+					seg('opacity', opacity, MOTION_EASE_OUT, start, start + duration * 0.5, { from: 0 });
+					seg('y', y, ease ?? 'ease-out-back', start, end, { from: y + (command.distance ?? 20) });
 				} else if (style === 'grow') {
 					seg('opacity', opacity, MOTION_EASE_OUT, start, start + duration * 0.3, { from: 0 });
 					seg('scaleX', 1, ease ?? MOTION_EASE_OUT, start, end, { from: 0 });
@@ -431,12 +537,14 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 					seg('opacity', opacity, MOTION_EASE_OUT, start, end, { from: 0 });
 					seg('x', x, ease ?? MOTION_EASE_OUT, start, end, { from: x - dir.x * distance });
 					seg('y', y, ease ?? MOTION_EASE_OUT, start, end, { from: y - dir.y * distance });
-				} else seg('opacity', opacity, ease ?? MOTION_EASE_OUT, start, end, { from: 0 });
+				} else seg('opacity', opacity, ease ?? MOTION_EASE_OUT, start, end, { from: 0 }); // fade, and a reveal of a node with no box
 				break;
 			}
 			case 'exit': {
 				const style = command.style ?? 'fade';
-				if (style === 'undraw') {
+				const wipe = style === 'wipe' ? motionRevealClip(entry, { style, direction: command.direction, hide: true }) : null;
+				if (wipe) seg(wipe.property, wipe.to, ease ?? 'ease-in', start, end, { from: wipe.from });
+				else if (style === 'undraw') {
 					seg('fillOpacity', 0, 'ease-in', start, start + duration * 0.4);
 					seg('drawEnd', 0, ease ?? MOTION_EASE_IN_OUT);
 				} else if (style === 'shrink') {
@@ -449,7 +557,7 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 					seg('x', num('x') + dir.x * distance, ease ?? 'ease-in');
 					seg('y', num('y') + dir.y * distance, ease ?? 'ease-in');
 					seg('opacity', 0, ease ?? 'ease-in');
-				} else seg('opacity', 0, ease ?? 'ease-in');
+				} else seg('opacity', 0, ease ?? 'ease-in'); // fade, and a wipe of a node with no box
 				break;
 			}
 			case 'draw': {
@@ -458,7 +566,6 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 				seg('drawEnd', command.to ?? 1, ease ?? MOTION_EASE_IN_OUT, start, end, command.from !== undefined ? { from: command.from } : drawn ? {} : { from: 0 });
 				break;
 			}
-				break;
 			case 'move': {
 				const e = ease ?? MOTION_EASE_IN_OUT;
 				let dx = command.by?.x ?? 0;
@@ -497,14 +604,35 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 			case 'follow':
 				seg('follow', command.to ?? 1, ease ?? MOTION_EASE_IN_OUT, start, end, { from: command.from ?? 0, path: command.path, rotate: command.rotate ?? false });
 				break;
+			// Emphasis: a change toward a peak that a behaviour swings round (as Flair's primitives do).
 			case 'pulse': {
-				const wave: MotionWave = { kind: 'pulse', amount: command.amount ?? 0.15, count: command.count ?? 1 };
-				seg('scaleX', num('scaleX'), 'linear', start, end, { wave });
-				seg('scaleY', num('scaleY'), 'linear', start, end, { wave });
+				const behavior: MotionBehavior = { type: 'pulse', count: command.count ?? 1 };
+				const k = 1 + (command.amount ?? 0.15);
+				seg('scaleX', num('scaleX') * k, ease ?? 'linear', start, end, { behavior });
+				seg('scaleY', num('scaleY') * k, ease ?? 'linear', start, end, { behavior });
 				break;
 			}
-			case 'shake':
-				seg('x', num('x'), 'linear', start, end, { wave: { kind: 'shake', amount: command.amount ?? 8, count: command.count ?? 3 } });
+			case 'shake': {
+				const p = command.axis === 'vertical' ? 'y' : 'x';
+				seg(p, num(p) + (command.amount ?? 8), ease ?? 'linear', start, end, { behavior: { type: 'oscillate', count: command.count ?? 3, decay: 1 } });
+				break;
+			}
+			case 'teeter':
+				seg('rotation', num('rotation') + (command.angle ?? 8), ease ?? 'linear', start, end, { behavior: { type: 'oscillate', count: command.count ?? 3, decay: 1 } });
+				break;
+			case 'wave':
+				seg('y', num('y') - (command.amount ?? 6), ease ?? 'linear', start, end, { behavior: { type: 'oscillate', count: command.count ?? 2 } });
+				break;
+			case 'wiggle': {
+				const behavior: MotionBehavior = { type: 'wriggle', frequency: command.frequency ?? 3, octaves: command.octaves ?? 2, seed: command.seed || motionSeedFromId(node) };
+				const amount = command.amount ?? 6;
+				seg('x', num('x') + amount, ease ?? 'linear', start, end, { behavior, index: 0 });
+				seg('y', num('y') + amount, ease ?? 'linear', start, end, { behavior, index: 1 });
+				if (command.rotate) seg('rotation', num('rotation') + command.rotate, ease ?? 'linear', start, end, { behavior, index: 2 });
+				break;
+			}
+			case 'color-pulse':
+				seg(command.paint ?? 'fill', command.color ?? '#f59e0b', ease ?? 'linear', start, end, { behavior: { type: 'pulse', count: command.count ?? 1 } });
 				break;
 			case 'effect':
 				seg(`effect:${command.effect}:${command.param}`, command.to, ease ?? MOTION_EASE_IN_OUT);

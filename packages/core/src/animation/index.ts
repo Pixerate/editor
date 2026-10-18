@@ -5,6 +5,7 @@
  * everything here.
  */
 export * from './easing.js';
+export * from './behavior.js';
 export * from './color.js';
 export * from './keyframes.js';
 export * from './evaluate.js';
