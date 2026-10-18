@@ -1634,3 +1634,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Tests and examples that used `pie` to show "this family is kept as text" (validation refusals, `render_diagram` refusals, `<MermaidThumbnail fallback>`) started failing once the statement adapters were ported.
 - **Root Cause**: Pie, mindmap, quadrant, C4, architecture, sequence, gitGraph, Gantt, timeline, journey, XY and radar are now `editable` and drawn as scenes.
 - **Solution / Workaround**: Use `sankey-beta` (or block, packet, kanban, treemap) as the render-only example.
+
+### [core/animation-editor] lottie-web Ignores `hd: true` on Shape Groups
+
+- **Issue / Symptom**: A hidden node (`visible: false`, such as the demo's "arc" follow route) showed up in the Export Lottie preview, though the editor's own stage never draws it.
+- **Root Cause**: `toLottie` wrote each node as a `gr` group and marked hidden ones `hd: true`. lottie-web 5.12 honours `hd` only on paths, fills and strokes; for a `gr` it builds and draws the children anyway.
+- **Solution / Workaround**: Leave hidden nodes out of the file. Nothing in a Lottie file refers to another shape by id: follows and morphs are sampled into keyframes from the scene, so a hidden route or morph target is not needed in the output. To hide a shape you must keep, set its transform opacity to 0 instead of relying on `hd`.

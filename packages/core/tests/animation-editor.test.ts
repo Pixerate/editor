@@ -1206,6 +1206,21 @@ describe('Lottie export', () => {
 		}
 	});
 
+	it('leaves hidden nodes out, even when they are a follow route or morph target', () => {
+		const hidden: VectorDocument = { ...ARTWORK, nodes: [...ARTWORK.nodes, { id: 'ghost', type: 'group', visible: false, children: [{ id: 'inside', type: 'path', fill: '#000000', subpaths: [rectSubpath({ x: 0, y: 0, width: 10, height: 10 })] }] }] };
+		const s = scene([{ id: 'one', run: [{ type: 'follow', targets: ['dot'], path: 'track', duration: 400, ease: 'linear' }, { type: 'morph', targets: ['box'], into: 'circle', duration: 400, with: 'previous' }] }], { artwork: hidden });
+		const { lottie } = toLottie(s);
+		// lottie-web ignores `hd` on groups, so a hidden node must not be in the file at all.
+		for (const id of ['track', 'circle', 'ghost', 'inside']) expect(groupOf(lottie, id)).toBeUndefined();
+		expect(JSON.stringify(lottie)).not.toMatch(/"hd"/);
+		// The route and target still drive what they are used by.
+		const entry = indexMotionNodes(ARTWORK.nodes).get('dot')!;
+		const m = path(motionFrameAt(s, 200).document, 'dot').transform!;
+		const c = [entry.center.x, entry.center.y];
+		expect(at(trOf(lottie, 'dot').p, 6)[1]).toBeCloseTo(m[1] * c[0] + m[3] * c[1] + m[5], 1);
+		expect(groupOf(lottie, 'box')).toBeDefined();
+	});
+
 	it('notes what Lottie cannot take', () => {
 		const art: VectorDocument = { ...ARTWORK, nodes: [...ARTWORK.nodes.slice(0, 1).map((n) => ({ ...n, strokeDasharray: [4, 2], fill: { type: 'linear', stops: [{ offset: 0, color: '#000' }, { offset: 1, color: '#fff' }] } }) as VectorNode)] };
 		const { notes } = toLottie({ ...scene([{ id: 'one', run: [{ type: 'enter', targets: ['box'] }] }]), artwork: art });
