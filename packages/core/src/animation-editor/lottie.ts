@@ -348,6 +348,11 @@ export function toLottie(scene: MotionScene, options: LottieExportOptions = {}):
 		return items;
 	};
 
+	// Hidden nodes are never drawn (the stage gives them display="none"), so they are left out. Marking
+	// their group `hd: true` is not enough: lottie-web honours `hd` on paths, fills and strokes but not on
+	// groups. Follow routes and morph targets are sampled into keyframes, so nothing in the file needs them.
+	const shown = (list: readonly VectorNode[]) => list.filter((n) => n.visible !== false);
+
 	const nodeGroup = (node: VectorNode): LottieShape => {
 		const entry = nodes.get(node.id)!;
 		if (timeline.tracks.has(motionTrackKey(node.id, 'clipRect')) || timeline.tracks.has(motionTrackKey(node.id, 'clipCircle')))
@@ -357,7 +362,7 @@ export function toLottie(scene: MotionScene, options: LottieExportOptions = {}):
 		if (node.type === 'path') inner = [...pathShapes(node)];
 		else {
 			// Later children draw on top: Lottie lists the top item first.
-			inner = [...node.children].reverse().map(nodeGroup);
+			inner = shown(node.children).reverse().map(nodeGroup);
 			const m = nodeMatrix(node);
 			if (m !== IDENTITY_MATRIX) {
 				const parts = staticParts(m);
@@ -370,11 +375,11 @@ export function toLottie(scene: MotionScene, options: LottieExportOptions = {}):
 			}
 		}
 		const body: LottieShape = { ty: 'gr', nm: `${node.id} (own)`, it: [...inner, innerTr] };
-		return { ty: 'gr', nm: node.name ?? node.id, ...(node.visible === false ? { hd: true } : {}), it: [body, poseTransform(entry)] };
+		return { ty: 'gr', nm: node.name ?? node.id, it: [body, poseTransform(entry)] };
 	};
 
 	const artwork = { ...scene.artwork, nodes: expandVectorAppearances(scene.artwork.nodes) };
-	const content = [...artwork.nodes].reverse().map(nodeGroup);
+	const content = shown(artwork.nodes).reverse().map(nodeGroup);
 	if (artwork.background && rgba(artwork.background))
 		content.push({ ty: 'gr', nm: 'Background', it: [{ ty: 'rc', nm: 'Background', p: { a: 0, k: [artwork.width / 2, artwork.height / 2] }, s: { a: 0, k: [artwork.width, artwork.height] }, r: { a: 0, k: 0 } }, { ty: 'fl', c: { a: 0, k: rgba(artwork.background)!.map(round) }, o: { a: 0, k: 100 }, r: 1 }, STATIC_TR()] });
 
