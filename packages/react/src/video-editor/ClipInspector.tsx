@@ -1,0 +1,196 @@
+import React from 'react';
+import {
+  findVideoClip,
+  formatVideoSeconds,
+  VIDEO_TRANSITION_TYPES,
+  type VideoClip,
+  type VideoEditorController,
+  type VideoTransitionType,
+} from '@pixerate/editor/video-editor';
+import { useVideoEditorState } from './useVideoEditor';
+
+export interface ClipInspectorProps {
+  controller: VideoEditorController;
+  className?: string;
+}
+
+const field = 'w-full rounded border border-border bg-transparent px-1 py-0.5 text-xs disabled:opacity-50';
+const DEFAULT_TRANSITION = 500;
+
+/** An input (or textarea) that commits on blur or Enter, and resets when its value changes from outside. */
+function Commit({
+  value,
+  onCommit,
+  multiline,
+  ...rest
+}: { value: string; onCommit: (raw: string) => void; multiline?: boolean } & Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'defaultValue'>) {
+  const commit = (raw: string) => {
+    if (raw !== value) onCommit(raw);
+  };
+  if (multiline)
+    return (
+      <textarea
+        key={value}
+        className={field}
+        rows={2}
+        defaultValue={value}
+        disabled={rest.disabled}
+        aria-label={rest['aria-label']}
+        onBlur={(e) => commit(e.currentTarget.value)}
+      />
+    );
+  return <input key={value} className={field} {...rest} defaultValue={value} onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()} onBlur={(e) => commit(e.currentTarget.value)} />;
+}
+
+function Row({ label, name, children }: { label: string; name: string; children: React.ReactNode }) {
+  return (
+    <label className="grid grid-cols-[5.5rem_minmax(0,1fr)] items-center gap-2 text-xs" data-field={name}>
+      <span className="text-muted-foreground">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+/**
+ * Edits the one selected clip: its name, opacity and fades; volume, speed and mute for media;
+ * text, colour, size and background for titles; colour for colour clips; and the transition into
+ * it. Each change is one undo step (`update_clip` / `set_transition`), committed on blur or change.
+ */
+export function ClipInspector({ controller, className = '' }: ClipInspectorProps) {
+  const state = useVideoEditorState(controller);
+  const { project, selection, readOnly } = state;
+  if (selection.length !== 1)
+    return (
+      <p className={`text-xs text-muted-foreground ${className}`} data-clip-inspector="">
+        {selection.length ? `${selection.length} clips selected. Select one clip to edit it.` : 'Select a clip on the timeline to edit it.'}
+      </p>
+    );
+  const at = findVideoClip(project, selection[0]);
+  if (!at) return null;
+  const clip: VideoClip = at.clip;
+  const disabled = readOnly || !!at.track.locked;
+
+  const set = (key: string, value: unknown, label = `Change ${key}`) => {
+    if (value === undefined || value === '') controller.apply({ op: 'update_clip', clip: clip.id, remove: [key] }, label);
+    else controller.apply({ op: 'update_clip', clip: clip.id, set: { [key]: value } }, label);
+  };
+  const num = (key: string, raw: string, label?: string) => {
+    const trimmed = raw.trim();
+    if (!trimmed) return set(key, undefined, label);
+    const n = Number(trimmed);
+    if (Number.isFinite(n)) set(key, n, label);
+  };
+  const text = (key: string, label?: string) => {
+    const value = (clip as unknown as Record<string, unknown>)[key];
+    return (
+      <Commit value={value === undefined ? '' : String(value)} aria-label={label ?? key} disabled={disabled} onCommit={(raw) => set(key, raw.trim() || undefined, `Change ${label ?? key}`)} />
+    );
+  };
+  const number = (key: string, label: string, attrs: { min?: number; max?: number; step?: number } = {}) => {
+    const value = (clip as unknown as Record<string, unknown>)[key];
+    return <Commit type="number" value={value === undefined ? '' : String(value)} aria-label={label} disabled={disabled} onCommit={(raw) => num(key, raw, `Change ${label.toLowerCase()}`)} {...attrs} />;
+  };
+
+  const transition = clip.transition;
+  return (
+    <div className={`flex flex-col gap-1.5 ${className}`} data-clip-inspector="" data-clip-id={clip.id}>
+      <div className="flex items-center gap-2 text-xs">
+        <span className="font-medium">{clip.type === 'media' ? 'Media clip' : clip.type === 'text' ? 'Title' : 'Colour clip'}</span>
+        <code className="text-muted-foreground">{clip.id}</code>
+        {at.track.locked && <span className="text-amber-500">locked track</span>}
+      </div>
+      <Row label="Name" name="name">
+        {text('name', 'Name')}
+      </Row>
+      <Row label="Start" name="start">
+        <span className="tabular-nums text-xs">{formatVideoSeconds(clip.start)}</span>
+      </Row>
+      <Row label="Duration" name="duration">
+        <span className="tabular-nums text-xs">{formatVideoSeconds(clip.duration)}</span>
+      </Row>
+      {clip.type !== 'media' || project.assets.find((a) => a.id === clip.asset)?.kind !== 'audio' ? (
+        <Row label="Opacity" name="opacity">
+          {number('opacity', 'Opacity', { min: 0, max: 1, step: 0.05 })}
+        </Row>
+      ) : null}
+      <Row label="Fade in (ms)" name="fadeIn">
+        {number('fadeIn', 'Fade in', { min: 0, step: 100 })}
+      </Row>
+      <Row label="Fade out (ms)" name="fadeOut">
+        {number('fadeOut', 'Fade out', { min: 0, step: 100 })}
+      </Row>
+      {clip.type === 'media' && (
+        <>
+          <Row label="Volume" name="volume">
+            {number('volume', 'Volume', { min: 0, step: 0.1 })}
+          </Row>
+          <Row label="Speed" name="speed">
+            {number('speed', 'Speed', { min: 0.1, step: 0.25 })}
+          </Row>
+          <Row label="Muted" name="muted">
+            <input type="checkbox" className="justify-self-start" checked={!!clip.muted} disabled={disabled} aria-label="Muted" onChange={(e) => set('muted', e.target.checked || undefined, e.target.checked ? 'Mute clip' : 'Unmute clip')} />
+          </Row>
+        </>
+      )}
+      {clip.type === 'text' && (
+        <>
+          <Row label="Text" name="text">
+            <Commit multiline value={clip.text} aria-label="Text" disabled={disabled} onCommit={(raw) => set('text', raw, 'Change text')} />
+          </Row>
+          <Row label="Colour" name="color">
+            {text('color', 'Colour')}
+          </Row>
+          <Row label="Font size" name="fontSize">
+            {number('fontSize', 'Font size', { min: 1, step: 2 })}
+          </Row>
+          <Row label="Background" name="background">
+            {text('background', 'Background')}
+          </Row>
+        </>
+      )}
+      {clip.type === 'color' && (
+        <Row label="Colour" name="color">
+          <Commit value={clip.color} aria-label="Colour" disabled={disabled} onCommit={(raw) => raw.trim() && set('color', raw.trim(), 'Change colour')} />
+        </Row>
+      )}
+      <Row label="Transition in" name="transition">
+        <select
+          className={field}
+          value={transition?.type ?? ''}
+          disabled={disabled}
+          aria-label="Transition"
+          onChange={(e) => {
+            const type = e.target.value as VideoTransitionType | '';
+            controller.apply(
+              { op: 'set_transition', clip: clip.id, transition: type ? { ...transition, type, duration: transition?.duration ?? DEFAULT_TRANSITION } : null },
+              type ? 'Set transition' : 'Remove transition',
+            );
+          }}
+        >
+          <option value="">None</option>
+          {VIDEO_TRANSITION_TYPES.map((t) => (
+            <option key={t} value={t}>
+              {t === 'crossfade' ? 'Crossfade' : t === 'dip' ? 'Dip to colour' : 'Wipe'}
+            </option>
+          ))}
+        </select>
+      </Row>
+      {transition && (
+        <Row label="Length (ms)" name="transitionDuration">
+          <Commit
+            type="number"
+            min={1}
+            step={100}
+            value={String(transition.duration)}
+            aria-label="Transition length"
+            disabled={disabled}
+            onCommit={(raw) => {
+              const n = Number(raw);
+              if (raw.trim() && Number.isFinite(n) && n > 0) controller.apply({ op: 'set_transition', clip: clip.id, transition: { ...transition, duration: n } }, 'Change transition length');
+            }}
+          />
+        </Row>
+      )}
+    </div>
+  );
+}

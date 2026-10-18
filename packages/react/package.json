@@ -73,6 +73,11 @@
       "types": "./dist/chart/index.d.ts",
       "import": "./dist/chart/index.js",
       "require": "./dist/chart/index.cjs"
+    },
+    "./video-editor": {
+      "types": "./dist/video-editor/index.d.ts",
+      "import": "./dist/video-editor/index.js",
+      "require": "./dist/video-editor/index.cjs"
     }
   },
   "typesVersions": {
@@ -109,6 +114,9 @@
       ],
       "chart": [
         "./dist/chart/index.d.ts"
+      ],
+      "video-editor": [
+        "./dist/video-editor/index.d.ts"
       ]
     }
   },

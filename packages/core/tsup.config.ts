@@ -10,6 +10,7 @@ export default defineConfig({
     "history/index": "src/history/index.ts",
     "animation/index": "src/animation/index.ts",
     "animation-editor/index": "src/animation-editor/index.ts",
+    "video-editor/index": "src/video-editor/index.ts",
     "canvas/index": "src/canvas/index.ts",
     "agent/index": "src/agent/index.ts",
     "tools/index": "src/tools/index.ts",

@@ -1,0 +1,197 @@
+import { VIDEO_CLIP_TYPES, VIDEO_FITS, VIDEO_TRANSITION_TYPES, VIDEO_WIPE_DIRECTIONS, type VideoAsset, type VideoClip, type VideoMarker, type VideoProject, type VideoTrack, type VideoTransform, type VideoTransition } from './types.js';
+
+const isObject = (v: unknown): v is Record<string, any> => typeof v === 'object' && v !== null && !Array.isArray(v);
+const fail = (path: string, what: string): never => {
+	throw new Error(`${path} ${what}.`);
+};
+const str = (v: unknown, path: string, optional = false): string | undefined => {
+	if (v === undefined && optional) return undefined;
+	if (typeof v !== 'string' || (!optional && !v.length)) fail(path, 'must be a non-empty string');
+	return v as string;
+};
+const num = (v: unknown, path: string, { min, positive, optional, max }: { min?: number; positive?: boolean; optional?: boolean; max?: number } = {}): number | undefined => {
+	if (v === undefined && optional) return undefined;
+	if (typeof v !== 'number' || !Number.isFinite(v)) return fail(path, 'must be a number');
+	if (positive && !(v > 0)) fail(path, 'must be greater than 0');
+	if (min !== undefined && v < min) fail(path, `must be at least ${min}`);
+	if (max !== undefined && v > max) fail(path, `must be at most ${max}`);
+	return v;
+};
+const bool = (v: unknown, path: string): boolean | undefined => {
+	if (v === undefined) return undefined;
+	if (typeof v !== 'boolean') fail(path, 'must be true or false');
+	return v as boolean;
+};
+const oneOf = <T extends string>(v: unknown, options: readonly T[], path: string, optional = true): T | undefined => {
+	if (v === undefined && optional) return undefined;
+	if (!options.includes(v as T)) fail(path, `must be one of ${options.map((o) => `"${o}"`).join(', ')}`);
+	return v as T;
+};
+/** Copies only the defined keys, so parsed objects carry no `undefined` fields. */
+const compact = <T extends object>(o: T): T => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as T;
+
+export function parseVideoTransform(v: unknown, path: string): VideoTransform | undefined {
+	if (v === undefined) return undefined;
+	if (!isObject(v)) return fail(path, 'must be an object { x, y, scale, rotation }');
+	for (const key of Object.keys(v)) if (!['x', 'y', 'scale', 'rotation'].includes(key)) fail(`${path}.${key}`, 'is not a transform field (x, y, scale, rotation)');
+	return compact({ x: num(v.x, `${path}.x`, { optional: true }), y: num(v.y, `${path}.y`, { optional: true }), scale: num(v.scale, `${path}.scale`, { optional: true, min: 0 }), rotation: num(v.rotation, `${path}.rotation`, { optional: true }) });
+}
+
+export function parseVideoTransition(v: unknown, path: string): VideoTransition | undefined {
+	if (v === undefined) return undefined;
+	if (!isObject(v)) return fail(path, 'must be an object { type, duration }');
+	return compact({
+		type: oneOf(v.type, VIDEO_TRANSITION_TYPES, `${path}.type`, false)!,
+		duration: num(v.duration, `${path}.duration`, { positive: true })!,
+		color: str(v.color, `${path}.color`, true),
+		direction: oneOf(v.direction, VIDEO_WIPE_DIRECTIONS, `${path}.direction`)
+	});
+}
+
+export function parseVideoAsset(v: unknown, path = 'asset'): VideoAsset {
+	if (!isObject(v)) return fail(path, 'must be an object');
+	const kind = oneOf(v.kind, ['video', 'audio', 'image'] as const, `${path}.kind`, false)!;
+	const asset: VideoAsset = compact({
+		id: str(v.id, `${path}.id`)!,
+		kind,
+		src: str(v.src, `${path}.src`)!,
+		name: str(v.name, `${path}.name`, true),
+		duration: num(v.duration, `${path}.duration`, { optional: true, positive: true }),
+		width: num(v.width, `${path}.width`, { optional: true, positive: true }),
+		height: num(v.height, `${path}.height`, { optional: true, positive: true }),
+		hasAudio: bool(v.hasAudio, `${path}.hasAudio`),
+		poster: str(v.poster, `${path}.poster`, true)
+	});
+	if (kind === 'image' && asset.duration !== undefined) fail(`${path}.duration`, 'is only for video and audio assets');
+	return asset;
+}
+
+export function parseVideoClip(v: unknown, path = 'clip'): VideoClip {
+	if (!isObject(v)) return fail(path, 'must be an object');
+	const type = oneOf(v.type ?? 'media', VIDEO_CLIP_TYPES, `${path}.type`, false)!;
+	const base = {
+		id: str(v.id, `${path}.id`)!,
+		name: str(v.name, `${path}.name`, true),
+		start: num(v.start, `${path}.start`, { min: 0 })!,
+		duration: num(v.duration, `${path}.duration`, { positive: true })!,
+		opacity: num(v.opacity, `${path}.opacity`, { optional: true, min: 0, max: 1 }),
+		transform: parseVideoTransform(v.transform, `${path}.transform`),
+		fit: oneOf(v.fit, VIDEO_FITS, `${path}.fit`),
+		fadeIn: num(v.fadeIn, `${path}.fadeIn`, { optional: true, min: 0 }),
+		fadeOut: num(v.fadeOut, `${path}.fadeOut`, { optional: true, min: 0 }),
+		transition: parseVideoTransition(v.transition, `${path}.transition`)
+	};
+	if (type === 'media')
+		return compact({
+			type,
+			...base,
+			asset: str(v.asset, `${path}.asset`)!,
+			in: num(v.in, `${path}.in`, { optional: true, min: 0 }),
+			speed: num(v.speed, `${path}.speed`, { optional: true, min: 0.05, max: 20 }),
+			volume: num(v.volume, `${path}.volume`, { optional: true, min: 0, max: 4 }),
+			muted: bool(v.muted, `${path}.muted`)
+		});
+	if (type === 'text')
+		return compact({
+			type,
+			...base,
+			text: str(v.text, `${path}.text`)!,
+			color: str(v.color, `${path}.color`, true),
+			fontSize: num(v.fontSize, `${path}.fontSize`, { optional: true, positive: true }),
+			fontFamily: str(v.fontFamily, `${path}.fontFamily`, true),
+			fontWeight: num(v.fontWeight, `${path}.fontWeight`, { optional: true, min: 100, max: 1000 }),
+			background: str(v.background, `${path}.background`, true)
+		});
+	return compact({ type, ...base, color: str(v.color, `${path}.color`)! });
+}
+
+export function parseVideoTrack(v: unknown, path = 'track'): VideoTrack {
+	if (!isObject(v)) return fail(path, 'must be an object');
+	if (v.clips !== undefined && !Array.isArray(v.clips)) fail(`${path}.clips`, 'must be an array');
+	return compact({
+		id: str(v.id, `${path}.id`)!,
+		kind: oneOf(v.kind, ['video', 'audio'] as const, `${path}.kind`, false)!,
+		name: str(v.name, `${path}.name`, true),
+		muted: bool(v.muted, `${path}.muted`),
+		hidden: bool(v.hidden, `${path}.hidden`),
+		locked: bool(v.locked, `${path}.locked`),
+		volume: num(v.volume, `${path}.volume`, { optional: true, min: 0, max: 4 }),
+		clips: ((v.clips ?? []) as unknown[]).map((c, i) => parseVideoClip(c, `${path}.clips[${i}]`))
+	});
+}
+
+export function parseVideoMarker(v: unknown, path = 'marker'): VideoMarker {
+	if (!isObject(v)) return fail(path, 'must be an object');
+	return compact({ id: str(v.id, `${path}.id`)!, time: num(v.time, `${path}.time`, { min: 0 })!, label: str(v.label, `${path}.label`, true), color: str(v.color, `${path}.color`, true) });
+}
+
+/**
+ * Reads a project from JSON text or an object, checking every field. Throws an error naming the
+ * first bad field (`tracks[0].clips[2].duration must be greater than 0.`). Ids must be unique
+ * within assets, tracks, clips and markers. Overlaps and missing media are left to
+ * `checkVideoProject`, so a project with problems can still be opened and fixed.
+ */
+export function parseVideoProject(input: unknown): VideoProject {
+	let v = input;
+	if (typeof v === 'string') {
+		try {
+			v = JSON.parse(v);
+		} catch (error) {
+			throw new Error(`The project is not valid JSON: ${(error as Error).message}`);
+		}
+	}
+	if (!isObject(v)) return fail('The project', 'must be an object');
+	if (v.version !== undefined && v.version !== 1) fail('version', 'must be 1');
+	for (const key of ['assets', 'tracks', 'markers']) if (v[key] !== undefined && !Array.isArray(v[key])) fail(key, 'must be an array');
+	const project: VideoProject = compact({
+		version: 1 as const,
+		name: str(v.name, 'name', true),
+		width: num(v.width, 'width', { positive: true })!,
+		height: num(v.height, 'height', { positive: true })!,
+		fps: num(v.fps ?? 30, 'fps', { positive: true, max: 240 })!,
+		background: str(v.background, 'background', true),
+		assets: ((v.assets ?? []) as unknown[]).map((a, i) => parseVideoAsset(a, `assets[${i}]`)),
+		tracks: ((v.tracks ?? []) as unknown[]).map((t, i) => parseVideoTrack(t, `tracks[${i}]`)),
+		markers: v.markers === undefined ? undefined : (v.markers as unknown[]).map((m, i) => parseVideoMarker(m, `markers[${i}]`))
+	});
+	const unique = (ids: string[], what: string) => {
+		const seen = new Set<string>();
+		for (const id of ids) {
+			if (seen.has(id)) throw new Error(`Two ${what} share the id "${id}"; ids must be unique.`);
+			seen.add(id);
+		}
+	};
+	unique(project.assets.map((a) => a.id), 'assets');
+	unique(project.tracks.map((t) => t.id), 'tracks');
+	unique(project.tracks.flatMap((t) => t.clips.map((c) => c.id)), 'clips');
+	unique((project.markers ?? []).map((m) => m.id), 'markers');
+	return project;
+}
+
+export interface CreateVideoProjectOptions {
+	name?: string;
+	/** Default 1920. */
+	width?: number;
+	/** Default 1080. */
+	height?: number;
+	/** Default 30. */
+	fps?: number;
+	background?: string;
+}
+
+/** An empty project with one video track (`v1`) and one audio track (`a1`). */
+export function createVideoProject(options: CreateVideoProjectOptions = {}): VideoProject {
+	return compact({
+		version: 1 as const,
+		name: options.name,
+		width: options.width ?? 1920,
+		height: options.height ?? 1080,
+		fps: options.fps ?? 30,
+		background: options.background,
+		assets: [],
+		tracks: [
+			{ id: 'v1', kind: 'video' as const, name: 'Video 1', clips: [] },
+			{ id: 'a1', kind: 'audio' as const, name: 'Audio 1', clips: [] }
+		]
+	});
+}
