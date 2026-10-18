@@ -1537,3 +1537,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Tests and examples that used `pie` to show "this family is kept as text" (validation refusals, `render_diagram` refusals, `<MermaidThumbnail fallback>`) started failing once the statement adapters were ported.
 - **Root Cause**: Pie, mindmap, quadrant, C4, architecture, sequence, gitGraph, Gantt, timeline, journey, XY and radar are now `editable` and drawn as scenes.
 - **Solution / Workaround**: Use `sankey-beta` (or block, packet, kanban, treemap) as the render-only example.
+
+### [react|svelte/canvas] A Drag on a Scene Mark Is Followed by a Click
+
+- **Issue / Symptom**: Dropping a dragged Gantt bar or quadrant point also selected it (or cleared the selection when the drop ended over the background).
+- **Root Cause**: The browser fires `click` after `pointerup` on the element under the pointer, whether or not the pointer moved in between.
+- **Solution / Workaround**: `MermaidFamilyScene` sets a `dragged` flag once the pointer travels past `DIAGRAM_DRAG_THRESHOLD` and swallows the next click. Drag coordinates go through `svg.getScreenCTM().inverse()`, so they stay right when the scene is drawn scaled; jsdom has no `getScreenCTM`, so tests fall back to client coordinates.

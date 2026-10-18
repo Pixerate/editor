@@ -10,12 +10,16 @@ import {
 	CSS_VARIABLE_DIAGRAM_SCENE_THEME,
 	DiagramStream,
 	blendDiagramLayout,
+	diagramDragLabel,
 	diagramRenameOp,
 	familySceneFromLayout,
+	planDiagramDrag,
+	withDiagramDragHandles,
 	easeDiagramTween,
 	mermaidMovesFromCanvas,
 	mermaidToCanvas,
 	type DiagramLayout,
+	type DiagramDrag,
 	type DiagramLayoutOptions,
 	type DiagramScene,
 	type DiagramSceneTheme,
@@ -46,7 +50,8 @@ export interface SvelteMermaidDiagram {
 	/**
 	 * The family's own picture (pie, Gantt, sequence, XY, radar…) with the selection marked;
 	 * null for families drawn as nodes and edges (flowchart, state, class, ER) and text-only
-	 * ones. Render it with `MermaidFamilyScene` (reactive).
+	 * ones. Render it with `MermaidFamilyScene` (reactive). When editable, its draggable marks
+	 * carry `drag` (and a selected Gantt task its grips): pass `drop` as `ondragend`.
 	 */
 	readonly scene: DiagramScene | null;
 	apply(ops: EditOp | EditOp[], label?: string): DiagramActionResult;
@@ -60,6 +65,8 @@ export interface SvelteMermaidDiagram {
 	rename(id: string, label: string): DiagramActionResult;
 	/** Renames what a scene mark targets: the title (`::title`), a group, an edge or a node. */
 	renameTarget(target: string, label: string): DiagramActionResult | null;
+	/** Applies a finished drag on the scene (`planDiagramDrag`) as one undo step; null when it changes nothing. */
+	drop(drag: DiagramDrag): DiagramActionResult | null;
 	select(ids: readonly string[]): void;
 	undo(): void;
 	redo(): void;
@@ -82,11 +89,12 @@ export function createMermaidDiagram(
 	const sceneTheme = (controllerOrOptions instanceof DiagramController ? undefined : controllerOrOptions.sceneTheme) ?? view.sceneTheme;
 	let state = $state.raw(controller.getState());
 	const canvas = $derived(mermaidToCanvas(state.document, { ...layoutOptions, editable: state.editable }));
-	const scene = $derived(
-		state.document.tier === 'editable'
-			? familySceneFromLayout(state.document.family, state.document.graph, canvas.layout, { theme: { ...CSS_VARIABLE_DIAGRAM_SCENE_THEME, ...sceneTheme }, selection: state.selection })
-			: null
-	);
+	const scene = $derived.by(() => {
+		if (state.document.tier !== 'editable') return null;
+		const theme = { ...CSS_VARIABLE_DIAGRAM_SCENE_THEME, ...sceneTheme };
+		const drawn = familySceneFromLayout(state.document.family, state.document.graph, canvas.layout, { theme, selection: state.selection });
+		return drawn && state.editable ? withDiagramDragHandles(drawn, { theme, selection: state.selection }) : drawn;
+	});
 	const unsubscribe = controller.subscribe((next) => {
 		state = next;
 	});
@@ -137,6 +145,11 @@ export function createMermaidDiagram(
 		renameTarget: (target, label) => {
 			const op = diagramRenameOp(controller.getDocument(), target, label);
 			return op ? controller.apply(op, 'Rename') : null;
+		},
+		drop: (drag) => {
+			if (!controller.getState().editable) return null;
+			const ops = planDiagramDrag(controller.getDocument(), canvas.layout, drag);
+			return ops.length ? controller.apply(ops, diagramDragLabel(drag.kind)) : null;
 		},
 		select: (ids) => controller.select(ids),
 		undo: () => void controller.undo(),

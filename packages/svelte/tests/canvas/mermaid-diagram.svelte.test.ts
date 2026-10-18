@@ -205,3 +205,47 @@ describe('MermaidFamilyScene (Svelte)', () => {
 		expect(diagram.source).toContain('A[Begin]');
 	});
 });
+
+describe('MermaidFamilyScene dragging (Svelte)', () => {
+	it('drags a quadrant point to new coordinates as one undo step (parity with React)', () => {
+		const diagram = createMermaidDiagram({ source: 'quadrantChart\n  Idea A: [0.3, 0.8]\n  Idea B: [0.7, 0.6]\n' });
+		cleanups.push(diagram.destroy);
+		const target = document.createElement('div');
+		document.body.appendChild(target);
+		const props = $state({ scene: diagram.scene!, ondragend: diagram.drop, onselect: (id: string | null) => diagram.select(id ? [id] : []) });
+		const scene = mount(MermaidFamilyScene, { target, props });
+		const sync = $effect.root(() => {
+			$effect(() => {
+				props.scene = diagram.scene!;
+			});
+		});
+		flushSync();
+		cleanups.push(() => {
+			sync();
+			unmount(scene);
+			target.remove();
+		});
+		const point = target.querySelector('[data-role="point"][data-drag="move"]')!;
+		expect(point).not.toBeNull();
+		const before = diagram.source;
+		const cx = Number(point.getAttribute('cx'));
+		const cy = Number(point.getAttribute('cy'));
+		point.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: cx, clientY: cy }));
+		window.dispatchEvent(new MouseEvent('pointermove', { clientX: cx + 40, clientY: cy + 40 }));
+		flushSync();
+		expect(target.querySelector('[data-role="point"][data-drag="move"]')!.getAttribute('transform')).toBe('translate(40 40)');
+		window.dispatchEvent(new MouseEvent('pointerup', { clientX: cx + 40, clientY: cy + 40 }));
+		point.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+		flushSync();
+		expect(diagram.source).not.toContain('Idea A: [0.3, 0.8]');
+		expect(diagram.state.selection).toEqual([]);
+		diagram.undo();
+		expect(diagram.source).toBe(before);
+	});
+
+	it('draws no drag handles while read-only', () => {
+		const diagram = createMermaidDiagram({ source: 'quadrantChart\n  Idea A: [0.3, 0.8]\n', readOnly: true });
+		cleanups.push(diagram.destroy);
+		expect(diagram.scene!.marks.some((m) => m.drag)).toBe(false);
+	});
+});

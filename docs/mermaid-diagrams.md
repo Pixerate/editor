@@ -55,6 +55,23 @@ findMermaidSources(markdown); // [{ source, family, title? }] for each ```mermai
 
 `mermaidToScene(doc, { theme, selection })` draws a family as its own picture: a list of marks (`rect`, `path`, `circle`, `line`, `text`) in canvas coordinates. A mark's `target` is the node, edge or group it selects (`DIAGRAM_TITLE_TARGET` for the title); marks without one are decoration. It returns `null` for flowchart, state, class and ER (drawn as nodes and edges) and for text-only families. XY and radar charts are drawn with the chart module's layout.
 
+### Dragging
+
+`withDiagramDragHandles(scene, { selection })` marks which marks can be dragged (`mark.drag`) and adds the grips of a selected Gantt task. `planDiagramDrag(doc, layout, drag)` turns a finished drag into edits the adapters already understand, applied as one undo step:
+
+| Family | Drag | Edit |
+| :--- | :--- | :--- |
+| Gantt | a bar sideways / up or down; its grip; its knob onto another task | new dates / another row or section; duration; `after` dependency |
+| Journey | a face up or down; a task sideways | score 1–5; another column or section |
+| Quadrant | a point | its `[x, y]` |
+| Sequence | a participant sideways; a lifeline onto another; a message up or down | new order; a new message; message order |
+| Timeline | a period sideways | another column or section |
+| Mindmap | a topic onto another topic | new parent (with its subtree) |
+| gitGraph | a branch tip onto another branch's tip | `merge` |
+| C4, architecture | an element, service or group | kept position; into or out of a group |
+
+`previewDiagramDrag(scene, drag)` is the scene mid-drag (the node follows the pointer through `mark.offset`, a face snaps to whole scores, a link draws a rubber band). `planDiagramReorder(doc, id, before)` moves a participant, journey task, timeline period or Gantt task before another node by id, as the matching drop would.
+
 `diagramRenameOp(doc, target, label)` turns a double-click on a mark into the right edit (`setTitle`, `renameGroup`, `setEdgeLabel` or `renameNode`). `registerFamilyScene` adds or replaces a family's drawing. `DIAGRAM_SCENE_LIGHT_THEME`, `DIAGRAM_SCENE_DARK_THEME` and `CSS_VARIABLE_DIAGRAM_SCENE_THEME` hold the colours.
 
 ## React and Svelte
@@ -64,15 +81,15 @@ findMermaidSources(markdown); // [{ source, family, title? }] for each ```mermai
 | Editable diagram | `useMermaidDiagram(controllerOrOptions)` | `createMermaidDiagram(controllerOrOptions)` |
 | Streaming view | `useMermaidStream(source, { complete })` | `createMermaidStream()` then `update(source, complete)` |
 | Nodes | `<MermaidDiagramNode>`, `<MermaidDiagramGroup>` (pass handles as children) | same |
-| Family pictures | `<MermaidFamilyScene scene onSelect onOpen>` | `<MermaidFamilyScene scene onselect onopen>` |
+| Family pictures | `<MermaidFamilyScene scene onSelect onOpen onDragEnd>` | `<MermaidFamilyScene scene onselect onopen ondragend>` |
 
-Both return `nodes`, `edges`, `layout`, `scene`, `source` and `moveNodes`, `connect`, `remove`, `rename`, `renameTarget`, `apply`, `load`, `undo`, `redo`. `scene` is the family's picture (null for node-and-edge families); render it with `MermaidFamilyScene`, select with `select([target])` and rename with `renameTarget(target, label)`. Pass `{ sceneTheme }` as the second argument (or in the options) for colours other than the page's CSS variables. The demo's Canvas tab wires them to React Flow (`apps/demo/src/components/MermaidDiagramDemo.tsx`).
+Both return `nodes`, `edges`, `layout`, `scene`, `source` and `moveNodes`, `connect`, `remove`, `rename`, `renameTarget`, `drop`, `apply`, `load`, `undo`, `redo`. `scene` is the family's picture (null for node-and-edge families); render it with `MermaidFamilyScene`, select with `select([target])`, rename with `renameTarget(target, label)` and pass `drop` as `onDragEnd` to make it draggable (the scene carries drag handles only while the diagram is editable). Pass `{ sceneTheme }` as the second argument (or in the options) for colours other than the page's CSS variables. The demo's Canvas tab wires them to React Flow (`apps/demo/src/components/MermaidDiagramDemo.tsx`).
 
 ## Agent tools
 
-`createDiagramToolProvider(controller, { getPositions })` registers 23 tools: `get_diagram`, `export_diagram_mermaid`, `find_mermaid_diagrams` (always), and `load_diagram_mermaid`, `add_diagram_node`, `remove_diagram_nodes`, `rename_diagram_node`, `set_diagram_node_shape`, `set_diagram_node_style`, `set_diagram_node_data`, `connect_diagram_nodes`, `remove_diagram_edges`, `set_diagram_edge_label`, `set_diagram_edge_data`, `reconnect_diagram_edge`, `set_diagram_direction`, `set_diagram_title`, `set_diagram_settings`, `group_diagram_nodes`, `ungroup_diagram_group`, `move_diagram_nodes`, `undo_diagram`, `redo_diagram` (hidden while read-only). Write tools return the ids they created.
+`createDiagramToolProvider(controller, { getPositions })` registers 25 tools: `get_diagram`, `export_diagram_mermaid`, `find_mermaid_diagrams` (always), and `load_diagram_mermaid`, `add_diagram_node`, `remove_diagram_nodes`, `rename_diagram_node`, `set_diagram_node_shape`, `set_diagram_node_style`, `set_diagram_node_data`, `connect_diagram_nodes`, `remove_diagram_edges`, `set_diagram_edge_label`, `set_diagram_edge_data`, `reconnect_diagram_edge`, `set_diagram_direction`, `set_diagram_title`, `set_diagram_settings`, `group_diagram_nodes`, `ungroup_diagram_group`, `set_diagram_node_parent`, `reorder_diagram_node`, `move_diagram_nodes`, `undo_diagram`, `redo_diagram` (hidden while read-only). Write tools return the ids they created.
 
-`get_diagram` lists each family's data fields (`fields.node`, `fields.edge`, `fields.diagram`, with types and ranges) and the current values (`data` on nodes and edges, `settings`). The three data tools check keys and value types against those fields before anything changes, and `null` clears a field. `add_diagram_node` uses the family's id scheme and defaults (a new pie slice gets `slice4` and a value of 10) and takes `data` for the rest. Pass `getPositions` (the canvas layout's positions) so `move_diagram_nodes` pins the rest of an auto-laid diagram.
+`get_diagram` lists each family's data fields (`fields.node`, `fields.edge`, `fields.diagram`, with types and ranges) and the current values (`data` on nodes and edges, `settings`). The three data tools check keys and value types against those fields before anything changes, and `null` clears a field. Everything a person does by dragging has a tool: data fields for dates, scores and coordinates, `reorder_diagram_node` for sideways drags, `set_diagram_node_parent` for drops into groups, `connect_diagram_nodes` for dependencies, messages and merges, and `reconnect_diagram_edge` for re-parenting a mindmap topic. `add_diagram_node` uses the family's id scheme and defaults (a new pie slice gets `slice4` and a value of 10) and takes `data` for the rest. Pass `getPositions` (the canvas layout's positions) so `move_diagram_nodes` pins the rest of an auto-laid diagram.
 
 ## Export and thumbnails
 

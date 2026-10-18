@@ -227,3 +227,44 @@ describe('MermaidFamilyScene', () => {
 		expect(diagram.source).toContain('A[Begin]');
 	});
 });
+
+describe('MermaidFamilyScene dragging', () => {
+	it('drags a quadrant point to new coordinates as one undo step', async () => {
+		let diagram!: UseMermaidDiagramResult;
+		function Probe() {
+			diagram = useMermaidDiagram({ source: 'quadrantChart\n  Idea A: [0.3, 0.8]\n  Idea B: [0.7, 0.6]\n' });
+			return diagram.scene ? <MermaidFamilyScene scene={diagram.scene} onDragEnd={diagram.drop} onSelect={(t) => diagram.select(t ? [t] : [])} /> : null;
+		}
+		await act(async () => root.render(<Probe />));
+		const point = container.querySelector('[data-role="point"][data-drag="move"]')!;
+		expect(point).not.toBeNull();
+		const before = diagram.source;
+		const cx = Number(point.getAttribute('cx'));
+		const cy = Number(point.getAttribute('cy'));
+		await act(async () => {
+			point.dispatchEvent(new window.MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: cx, clientY: cy }));
+			window.dispatchEvent(new window.MouseEvent('pointermove', { clientX: cx + 40, clientY: cy + 40 }));
+		});
+		// Mid-drag the point follows the pointer.
+		expect(container.querySelector('[data-role="point"][data-drag="move"]')!.getAttribute('transform')).toBe('translate(40 40)');
+		await act(async () => {
+			window.dispatchEvent(new window.MouseEvent('pointerup', { clientX: cx + 40, clientY: cy + 40 }));
+			point.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+		});
+		expect(diagram.source).not.toBe(before);
+		expect(diagram.source).not.toContain('Idea A: [0.3, 0.8]');
+		expect(diagram.state.selection).toEqual([]); // the click after a drag does not select
+		await act(async () => diagram.undo());
+		expect(diagram.source).toBe(before);
+	});
+
+	it('draws no drag handles while read-only', async () => {
+		let diagram!: UseMermaidDiagramResult;
+		function Probe() {
+			diagram = useMermaidDiagram({ source: 'quadrantChart\n  Idea A: [0.3, 0.8]\n', readOnly: true });
+			return diagram.scene ? <MermaidFamilyScene scene={diagram.scene} onDragEnd={diagram.drop} /> : null;
+		}
+		await act(async () => root.render(<Probe />));
+		expect(container.querySelector('[data-drag]')).toBeNull();
+	});
+});

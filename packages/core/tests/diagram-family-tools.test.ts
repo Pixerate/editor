@@ -140,3 +140,43 @@ describe("diagram agent tools for chart families", () => {
     expect((await sankey.call("set_diagram_title", { title: "x" })).error).toMatch(/only be changed as Mermaid text/);
   });
 });
+
+describe("agent tools for what people do by dragging", () => {
+  it("reorders sequence participants and journey tasks, across sections", async () => {
+    const { call, controller } = setup("sequenceDiagram\n  participant A\n  participant B\n  participant C\n  A->>B: hi\n");
+    const moved = await call("reorder_diagram_node", { id: "C", before: "A" });
+    expect(moved.error).toBeNull();
+    expect(moved.value.order).toEqual(["C", "A", "B"]);
+    expect(controller.getSource().indexOf("participant C")).toBeLessThan(controller.getSource().indexOf("participant A"));
+    expect((await call("reorder_diagram_node", { id: "A", before: null })).value.order).toEqual(["C", "B", "A"]);
+    await call("undo_diagram");
+    expect((await call("get_diagram")).value.nodes.map((n: any) => n.id)).toContain("C");
+    await expectValidMermaid(controller.getSource());
+
+    const journey = setup(FAMILY_TEMPLATES.journey!);
+    const ids = (await journey.call("get_diagram")).value.nodes.map((n: any) => n.id);
+    const res = await journey.call("reorder_diagram_node", { id: ids[2], before: ids[0] });
+    expect(res.value.order[0]).toBe(ids[2]);
+    expect(res.value.parentId).toBeDefined();
+  });
+
+  it("explains reorders it cannot make", async () => {
+    const { call } = setup(FAMILY_TEMPLATES.pie!);
+    expect((await call("reorder_diagram_node", { id: "slice1", before: null })).error).toMatch(/have no order to change/);
+    const seq = setup(FAMILY_TEMPLATES.sequence!);
+    expect((await seq.call("reorder_diagram_node", { id: "Q", before: null })).error).toMatch(/There is no node "Q"/);
+  });
+
+  it("moves architecture services into and out of a group", async () => {
+    const { call, controller } = setup(FAMILY_TEMPLATES.architecture!);
+    const into = await call("set_diagram_node_parent", { ids: ["edge"], parentId: "app" });
+    expect(into.error).toBeNull();
+    expect(into.value.nodes[0]).toMatchObject({ id: "edge", parentId: "app" });
+    expect(controller.getSource()).toContain("service edge(internet)[Edge] in app");
+    const out = await call("set_diagram_node_parent", { ids: ["web"], parentId: null });
+    expect(out.value.nodes[0].parentId).toBeUndefined();
+    expect((await call("set_diagram_node_parent", { ids: ["web"], parentId: "nope" })).error).toMatch(/There is no group "nope"/);
+    expect((setup(FAMILY_TEMPLATES.pie!).call("set_diagram_node_parent", { ids: ["slice1"], parentId: null }))).resolves.toMatchObject({ error: expect.stringMatching(/have no groups/) });
+    await expectValidMermaid(controller.getSource());
+  });
+});

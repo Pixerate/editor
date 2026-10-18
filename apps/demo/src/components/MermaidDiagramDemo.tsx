@@ -364,6 +364,7 @@ const MermaidEditorPane: React.FC = () => {
               selectionColor="#38bdf8"
               markerColor="#94a3b8"
               onSelect={(target) => diagram.select(target && target !== "::title" ? [target] : [])}
+              onDragEnd={diagram.drop}
               onOpen={(target) => {
                 const label = window.prompt(target === "::title" ? "Title" : "Label", diagramTargetLabel(diagram.document, target) ?? "");
                 if (label !== null) diagram.renameTarget(target, label);
@@ -524,7 +525,10 @@ export const MermaidDiagramDemo: React.FC = () => (
       Pick a sample or paste Mermaid (a ```mermaid block from Markdown or chat works too). Flowchart, state, class and
       ER diagrams are boxes and connectors: drag nodes, connect handles, double-click to rename, Backspace to delete.
       Sequence, Gantt, pie, quadrant, XY, radar, timeline, journey, mindmap, gitGraph, C4 and architecture diagrams are
-      drawn as Mermaid draws them: click to select, double-click to rename, and edit values in the fields below. Either way only the statements you touch are rewritten, and positions are kept
+      drawn as Mermaid draws them: click to select, double-click to rename, drag to edit (Gantt bars to new dates or rows,
+      a selected bar's grip to resize and its knob onto another task to link them, journey faces to rescore, quadrant
+      points, participants, tasks, periods and messages to reorder, mindmap topics onto a new parent, a branch tip onto
+      another to merge, C4 and architecture nodes anywhere, into or out of groups), and edit values in the fields below. Either way only the statements you touch are rewritten, and positions are kept
       in a <code>%% @pixerate</code> comment that Mermaid ignores. Agents get the same edits through the{" "}
       <code>diagram__*</code> tools, acted out by a cursor (try "Agent edit"); a diagram the agent loads that extends
       the current one is drawn statement by statement.

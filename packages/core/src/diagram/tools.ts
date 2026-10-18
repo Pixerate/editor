@@ -3,6 +3,14 @@ import type { JsonSchema } from '../tools/schema.js';
 import type { PresenceActorInfo } from '../animation/presence.js';
 import { diagramShapes, diagramSupportsGroups, type DiagramController } from './controller.js';
 import { checkFieldData, describeFields, familyUI, pickFieldData } from './families/index.js';
+import { DIAGRAM_ORDER_AXIS, planDiagramReorder } from './reorder.js';
+import { getFamilyLayout } from './layout-registry.js';
+
+/** The family's own layout (families positioned by their data), or null. */
+function getFamilyLayoutFor(d: MermaidDocument) {
+	const layout = getFamilyLayout(d.family);
+	return layout ? layout(d.graph, d.meta, { measure: () => ({ width: 160, height: 56 }) }) : null;
+}
 import type { DiagramDirector } from './director.js';
 import { detectFamily } from './document.js';
 import { findMermaidSources } from './source/find.js';
@@ -561,6 +569,57 @@ export function createDiagramToolProvider(controller: DiagramController, options
 		}
 	};
 
+	const orderOf = (d: MermaidDocument) => {
+		const axis = DIAGRAM_ORDER_AXIS[d.family];
+		if (!axis) return d.graph.nodes.map((n) => n.id);
+		const k = axis === 'x' ? 0 : 1;
+		const layout = getFamilyLayoutFor(d);
+		return d.graph.nodes.filter((n) => layout?.positions[n.id]).sort((a, b) => layout!.positions[a.id]![k] - layout!.positions[b.id]![k]).map((n) => n.id);
+	};
+
+	const reorderNode: AgentTool = {
+		name: 'reorder_diagram_node',
+		title: 'Move a node earlier or later',
+		description:
+			'Moves a sequence participant, journey task, timeline period or Gantt task to just before another node, or to the end (before: null). Placing it next to a node in another section or box moves it there. Same as dragging it sideways (up or down for Gantt). Returns the new order of node ids and the node\'s parent.',
+		inputSchema: object(
+			{
+				id: ID,
+				before: { type: ['string', 'null'], description: 'The node id to place it in front of, or null to move it to the end.' }
+			},
+			['id', 'before']
+		),
+		annotations: { title: 'Move a node earlier or later', ...WRITE_IDEMPOTENT },
+		handler: async ({ id, before }) => {
+			requireEditable();
+			const ops = planDiagramReorder(doc(), id, before);
+			const d = ops.length ? await apply(ops, 'Reorder') : doc();
+			const node = d.graph.nodes.find((n) => n.id === id);
+			return { order: orderOf(d), ...(node?.parentId ? { parentId: node.parentId } : {}) };
+		}
+	};
+
+	const setParent: AgentTool = {
+		name: 'set_diagram_node_parent',
+		title: 'Move nodes into or out of a group',
+		description:
+			'Moves existing nodes into an existing group (a subgraph, composite state, namespace, C4 boundary, architecture group, sequence box or section), or out of every group with parentId null. Same as dropping them into or out of the group on the canvas. Use group_diagram_nodes to create a new group. Returns the nodes with their parents.',
+		inputSchema: object(
+			{
+				ids: IDS('Node ids from get_diagram.'),
+				parentId: { type: ['string', 'null'], description: 'A group id from get_diagram, or null to take the nodes out of their groups.' }
+			},
+			['ids', 'parentId']
+		),
+		annotations: { title: 'Move nodes into or out of a group', ...WRITE_IDEMPOTENT },
+		handler: async ({ ids, parentId }) => {
+			requireEditable();
+			if (!diagramSupportsGroups(doc().family)) throw new Error(`${doc().family} diagrams have no groups.`);
+			const d = await apply({ type: 'setNodeParent', ids, parentId: parentId ?? undefined }, parentId ? 'Move into group' : 'Move out of group');
+			return { nodes: ids.map((id: string) => nodeOut(d, id)) };
+		}
+	};
+
 	const renderDiagram: AgentTool = {
 		name: 'render_diagram',
 		title: 'Render the diagram',
@@ -585,7 +644,7 @@ export function createDiagramToolProvider(controller: DiagramController, options
 	};
 
 	const reads = [getDiagram, exportMermaid, findDiagrams, ...(options.renderSvg ? [renderDiagram] : [])];
-	const writes = [loadMermaid, addNode, removeElements, renameNode, setShape, setStyle, setNodeData, connect, removeEdges, labelEdge, setEdgeData, reconnect, setDirection, setTitle, setSettings, group, ungroup, move, undo, redo];
+	const writes = [loadMermaid, addNode, removeElements, renameNode, setShape, setStyle, setNodeData, connect, removeEdges, labelEdge, setEdgeData, reconnect, setDirection, setTitle, setSettings, group, ungroup, setParent, reorderNode, move, undo, redo];
 
 	return {
 		id: options.id ?? 'diagram',

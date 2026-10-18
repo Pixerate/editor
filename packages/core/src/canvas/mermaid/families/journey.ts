@@ -118,16 +118,16 @@ export const journeyScene: FamilyScene = ({ graph, theme }) => {
 		const r = M.faceRadius;
 		marks.push(
 			{ kind: 'circle', key: `face:${t.id}`, role: 'face', target: t.id, cx: x, cy: y, r, fill: theme.nodeFill, stroke: ink, strokeWidth: 2 },
-			{ kind: 'circle', key: `eye-l:${t.id}`, role: 'face-eye', cx: x - r / 3, cy: y - r / 3, r: 1.5, fill: ink, stroke: ink, strokeWidth: 2 },
-			{ kind: 'circle', key: `eye-r:${t.id}`, role: 'face-eye', cx: x + r / 3, cy: y - r / 3, r: 1.5, fill: ink, stroke: ink, strokeWidth: 2 }
+			{ kind: 'circle', key: `eye-l:${t.id}`, role: 'face-eye', target: t.id, cx: x - r / 3, cy: y - r / 3, r: 1.5, fill: ink, stroke: ink, strokeWidth: 2 },
+			{ kind: 'circle', key: `eye-r:${t.id}`, role: 'face-eye', target: t.id, cx: x + r / 3, cy: y - r / 3, r: 1.5, fill: ink, stroke: ink, strokeWidth: 2 }
 		);
 		if (t.score > 3)
 			// Lower half circle centred 2px below the middle.
-			marks.push({ kind: 'path', key: `mouth:${t.id}`, role: 'face-mouth', d: `M${x + 7},${y + 2} A7,7 0 0 1 ${x - 7},${y + 2}`, fill: 'none', stroke: ink, strokeWidth: 1, box: { x: x - 7, y: y + 2, width: 14, height: 7 } });
+			marks.push({ kind: 'path', key: `mouth:${t.id}`, role: 'face-mouth', target: t.id, d: `M${x + 7},${y + 2} A7,7 0 0 1 ${x - 7},${y + 2}`, fill: 'none', stroke: ink, strokeWidth: 1, box: { x: x - 7, y: y + 2, width: 14, height: 7 } });
 		else if (t.score < 3)
 			// Upper half circle centred 7px below the middle.
-			marks.push({ kind: 'path', key: `mouth:${t.id}`, role: 'face-mouth', d: `M${x - 7},${y + 7} A7,7 0 0 1 ${x + 7},${y + 7}`, fill: 'none', stroke: ink, strokeWidth: 1, box: { x: x - 7, y, width: 14, height: 7 } });
-		else marks.push({ kind: 'line', key: `mouth:${t.id}`, role: 'face-mouth', x1: x - 5, y1: y + 7, x2: x + 5, y2: y + 7, stroke: ink, strokeWidth: 1 });
+			marks.push({ kind: 'path', key: `mouth:${t.id}`, role: 'face-mouth', target: t.id, d: `M${x - 7},${y + 7} A7,7 0 0 1 ${x + 7},${y + 7}`, fill: 'none', stroke: ink, strokeWidth: 1, box: { x: x - 7, y, width: 14, height: 7 } });
+		else marks.push({ kind: 'line', key: `mouth:${t.id}`, role: 'face-mouth', target: t.id, x1: x - 5, y1: y + 7, x2: x + 5, y2: y + 7, stroke: ink, strokeWidth: 1 });
 	}
 
 	for (const group of graph.groups) {

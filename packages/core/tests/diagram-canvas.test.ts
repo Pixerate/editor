@@ -146,6 +146,8 @@ describe("diagram agent tools", () => {
       "set_diagram_settings",
       "group_diagram_nodes",
       "ungroup_diagram_group",
+      "set_diagram_node_parent",
+      "reorder_diagram_node",
       "move_diagram_nodes",
       "undo_diagram",
       "redo_diagram",

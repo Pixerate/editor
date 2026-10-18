@@ -11,12 +11,16 @@ import {
 	CSS_VARIABLE_DIAGRAM_SCENE_THEME,
 	DiagramStream,
 	blendDiagramLayout,
+	diagramDragLabel,
 	diagramRenameOp,
 	familySceneFromLayout,
+	planDiagramDrag,
+	withDiagramDragHandles,
 	easeDiagramTween,
 	mermaidMovesFromCanvas,
 	mermaidToCanvas,
 	type DiagramLayout,
+	type DiagramDrag,
 	type DiagramLayoutOptions,
 	type DiagramScene,
 	type DiagramSceneTheme,
@@ -46,7 +50,8 @@ export interface UseMermaidDiagramResult {
 	/**
 	 * The family's own picture (pie, Gantt, sequence, XY, radar…) with the selection marked;
 	 * null for families drawn as nodes and edges (flowchart, state, class, ER) and text-only
-	 * ones. Render it with `MermaidFamilyScene`.
+	 * ones. Render it with `MermaidFamilyScene`. When editable, its draggable marks carry
+	 * `drag` (and a selected Gantt task its grips): pass `drop` as `onDragEnd`.
 	 */
 	scene: DiagramScene | null;
 	apply: (ops: EditOp | EditOp[], label?: string) => DiagramActionResult;
@@ -60,6 +65,8 @@ export interface UseMermaidDiagramResult {
 	rename: (id: string, label: string) => DiagramActionResult;
 	/** Renames what a scene mark targets: the title (`::title`), a group, an edge or a node. */
 	renameTarget: (target: string, label: string) => DiagramActionResult | null;
+	/** Applies a finished drag on the scene (`planDiagramDrag`) as one undo step; null when it changes nothing. */
+	drop: (drag: DiagramDrag) => DiagramActionResult | null;
 	select: (ids: readonly string[]) => void;
 	undo: () => void;
 	redo: () => void;
@@ -96,12 +103,14 @@ export function useMermaidDiagram(
 		[state.document, state.editable]
 	);
 	const scene = useMemo(
-		() =>
-			state.document.tier === 'editable'
-				? familySceneFromLayout(state.document.family, state.document.graph, canvas.layout, { theme: { ...CSS_VARIABLE_DIAGRAM_SCENE_THEME, ...sceneTheme }, selection: state.selection })
-				: null,
+		() => {
+			if (state.document.tier !== 'editable') return null;
+			const theme = { ...CSS_VARIABLE_DIAGRAM_SCENE_THEME, ...sceneTheme };
+			const drawn = familySceneFromLayout(state.document.family, state.document.graph, canvas.layout, { theme, selection: state.selection });
+			return drawn && state.editable ? withDiagramDragHandles(drawn, { theme, selection: state.selection }) : drawn;
+		},
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-		[state.document, canvas.layout, state.selection]
+		[state.document, canvas.layout, state.selection, state.editable]
 	);
 	const layoutRef = useRef(canvas.layout);
 	layoutRef.current = canvas.layout;
@@ -134,6 +143,11 @@ export function useMermaidDiagram(
 			renameTarget: (target: string, label: string) => {
 				const op = diagramRenameOp(controller.getDocument(), target, label);
 				return op ? controller.apply(op, 'Rename') : null;
+			},
+			drop: (drag: DiagramDrag) => {
+				if (!controller.getState().editable) return null;
+				const ops = planDiagramDrag(controller.getDocument(), layoutRef.current, drag);
+				return ops.length ? controller.apply(ops, diagramDragLabel(drag.kind)) : null;
 			},
 			select: (ids: readonly string[]) => controller.select(ids),
 			undo: () => void controller.undo(),

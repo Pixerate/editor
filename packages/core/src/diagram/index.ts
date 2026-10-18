@@ -28,6 +28,7 @@ export * from './lines-grammar/index.js';
 export * from './statements/index.js';
 export * from './families/index.js';
 export * from './layout-registry.js';
+export * from './reorder.js';
 export * from './pie/index.js';
 export * from './xychart/index.js';
 export * from './radar/index.js';
