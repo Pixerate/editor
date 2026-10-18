@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/agent-caret] Typing an Agent Edit Out Frame by Frame Breaks Undo Unless the Frames Stay Out of History
+
+- **Issue / Symptom**: Dispatching an agent's text a few characters at a time left one undo step per frame, or merged the frames with whatever the user typed in the same half-second.
+- **Root Cause**: `prosemirror-history` records every transaction unless it has `addToHistory: false`, and it groups adjacent ones by time (`newGroupDelay`, 500 ms). It has no way to group a set of transactions by their source.
+- **Solution / Workaround**: `typeAgentText` dispatches frames with `addToHistory: false` (and `TRACK_CHANGES_SKIP_META`). At the end it rolls them back by applying the frames' inverted steps, then dispatches the whole edit once with history. Both dispatches happen in the same tick, so the screen never shows the rollback. If someone else edited while the agent typed (the plugin marks its span `foreign`), it replaces the typed span with the original slice instead. Also, a transaction holds only one meta per plugin key, so the typed span and the caret are set in separate transactions.
+
 ### [demo] An Agent Cursor Animated With `requestAnimationFrame` Hangs in a Hidden Tab
 
 - **Issue / Symptom**: A scripted agent run (the demo's "Ask the agent" panel) stopped partway with its buttons disabled when the page was in a background tab or a hidden preview pane.

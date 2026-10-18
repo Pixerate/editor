@@ -424,7 +424,7 @@ Every feature is available from core and from both framework packages. "Via core
 </details>
 
 <details>
-<summary><strong>Commands and agent tools</strong> (11)</summary>
+<summary><strong>Commands and agent tools</strong> (12)</summary>
 
 | Feature | Core | React | Svelte |
 | :--- | :---: | :---: | :---: |
@@ -436,6 +436,7 @@ Every feature is available from core and from both framework packages. "Via core
 | MCP Server over any transport (`initialize`, `tools/list`, `tools/call`, cancellation, `list_changed`) | `createMcpServer` (`/tools`) | Via core | Via core |
 | MCP Bridge to Live Editors (one Node MCP process, stdio, drives pages over a localhost WebSocket: origin allowlist, token, `editor` routing and `list_editors`, cancellation, timeouts, reconnect; `pixerate-mcp-bridge` CLI; no dependencies) | `createToolBridge` (`/bridge`, Node) & `connectToolBridge` (`/tools`) | `useToolBridge` | `useToolBridge` |
 | Rich-Text Agent Tools (`find_text`, `replace_text`, `replace_range`, `set_selection`, positions via `get_text {blocks}`) | `createRichTextToolProvider` | Via core & `useAgentToolProvider` | Via core & `useAgentToolProvider` |
+| Inline Agent Carets in Text (a named caret, selection and changed-text tint drawn as decorations where the rich-text tools read and write, as collaborators' carets look in Google Docs; optional typing playback that stays one undo step and rolls back if cancelled; `presence` option, on by default) | `AgentCaret`, `setAgentCaret`, `typeAgentText` & `createRichTextToolProvider({ presence })` | Via core & `useAgentToolProvider` | Via core & `useAgentToolProvider` |
 | Canvas & Prompt Agent Tools (one strict tool per operation, created ids returned, ids checked against the snapshot) | `createEditorMcpToolProvider` & `validateAgentCommand` | Via core & `useAgentToolProvider` | Via core & `useAgentToolProvider` |
 | Spreadsheet Agent Tools (`get_range`, `set_cell`, `set_range`, insert/delete rows and columns) | `createSpreadsheetToolProvider` | Via core & `useAgentToolProvider` | Via core & `useAgentToolProvider` |
 | Built-in Commands (history undo/redo, canvas arrange, spreadsheet table) | `createHistoryCommands`, `createArrangeCommands`, `createSpreadsheetCommands` | Via core | Via core |
