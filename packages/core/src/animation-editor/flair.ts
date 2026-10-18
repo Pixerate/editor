@@ -6,7 +6,7 @@ import { expandVectorAppearance, expandVectorAppearances } from '../vector/appea
 import { IDENTITY_MATRIX, collectPathNodes, invertMatrix, nodeMatrix, vectorPathWorldBezier } from '../vector/geometry.js';
 import { vectorDocumentToSvg, type VectorSvgWrapper } from '../vector/svg.js';
 import type { VectorNode, VectorPathNode } from '../vector/types.js';
-import { compileMotionScene, indexMotionNodes, motionTrackKey, segmentValue, trackValue, type MotionProperty, type MotionSegment } from './compile.js';
+import { compileMotionScene, indexMotionNodes, motionAddTrackKey, motionTrackKey, segmentValue, trackValue, type MotionProperty, type MotionSegment } from './compile.js';
 import { motionClipAttrs, motionFollowRoute, motionFrameAt, motionNodeClips, motionNodeOffset } from './evaluate.js';
 import type { MotionScene } from './types.js';
 
@@ -315,7 +315,8 @@ export function toFlairSvgMotion(scene: MotionScene, options: FlairExportOptions
 
 		// The node's own moves, turns and scales (a follow is carried by its wrappers).
 		const followed = follows.some((x) => x.id === id);
-		const transformSegments = TRANSFORM_PROPS.flatMap((p) => (followed && p === 'follow' ? [] : track(id, p)));
+		// Additive layers share the transform: alone in a stretch they are one change, overlapping the pose they are sampled.
+		const transformSegments = TRANSFORM_PROPS.flatMap((p) => (followed && p === 'follow' ? [] : [...track(id, p), ...(timeline.tracks.get(motionAddTrackKey(id, p)) ?? [])]));
 		if (transformSegments.length) {
 			const base = node.transform ? ` matrix(${node.transform.map(f).join(' ')})` : '';
 			const c = entry.center;

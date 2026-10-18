@@ -1520,6 +1520,16 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: Flair's `out` is `1 − (1 − t)³` and `in-out` the piecewise cubic, which differ from CSS `ease-out` / `ease-in-out` by up to ~7%. Separately, a move animates `x` and `y` as two segments, so an interval had two active segments and fell back to sampling.
 - **Solution / Workaround**: The editor's defaults are `MOTION_EASE_OUT` (`cubic-bezier(1/3, 1, 2/3, 1)`, exactly Flair's `out`) and `MOTION_EASE_IN_OUT` (within 1% of Flair's `in-out`). `flairEaseFor` matches a curve to a Flair name within 1%, and the exporter writes one change when every active segment spans the same interval with the same curve.
 
+### [core/animation-editor] Additive Layers Live on Their Own Tracks, Not on the Pose's
+
+- **Issue / Symptom**: A shake that started during a slide cut the slide off: the box jumped back and shook in place. Putting additive deltas on the same track as the pose counted them twice once a later move started from the composed value.
+- **Root Cause**: A track's value is its latest *started* segment, and every `from` is read from the track. An offset added in the same place leaks into the next segment's `from`.
+- **Solution / Workaround**:
+  - Segments with `blend: 'add'` go on `motionAddTrackKey(node, property)` and run from 0 (offsets, turns) or 1 (scales). `withMotionLayers` adds or multiplies every started layer onto the pose.
+  - Commands read `from` from the pose track only (`valueAt`), so layers never feed back into it.
+  - The overlap check skips add tracks. The Flair export puts layers on the node's transform channel: alone in a stretch they are one exact change, and overlapping the pose they are sampled (Flair has no layers).
+  - Emphasis defaults to `add`; `blend: 'replace'` gives the old take-over.
+
 ### [core] The Entry-Isolation Test Reads `-import"` in a String as an Import
 
 - **Issue / Symptom**: `tests/entry-isolation.test.ts` reported a third-party package named `, artwork, shots, …` for `/animation-editor` after a default scene name `'flair-import'` was added.
@@ -1536,6 +1546,12 @@ All contributors and AI assistants should check this file before starting work a
   - The Flair export writes such a copy from its value at the start to its value at the end, with `reverseCubicBezier` (`[1 − x2, 1 − y2, 1 − x1, 1 − y1]`). A reversed spring has no curve, so it is sampled.
   - `offset` adds the cycle's change once per cycle, and only to numbers. Colours and shapes repeat like `loop`.
   - `duration` is one cycle. `motionCommandDuration` includes every repeat, and `motionCycleDuration` is one.
+
+### [core/animation-editor] `match` Morphs Parts, So the `into` Group Stays Hidden and Its Extra Parts Never Show
+
+- **Issue / Symptom**: After a `match`, parts that only the end state has (a new avatar, say) were missing. The `into` group, if visible, sat on top of the target the whole time.
+- **Root Cause**: `match` morphs each part of the target into its partner (shape, paint and place, as `morph` does) and fades out parts with no partner. Nothing of `into` is drawn: it is a description of the end state.
+- **Solution / Workaround**: Keep `into` hidden (`visible: false`). For every part the end state adds, put a partner in the target with the same name or id, which can start tiny or with no fill. `check` reports `match-unpaired` (a note) for parts of `into` with no partner, and `match-self` when one group holds the other.
 
 ### [core/animation-editor] Emphasis Behaviours Must Match Flair Number for Number
 

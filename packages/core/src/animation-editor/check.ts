@@ -1,4 +1,5 @@
 import { resolveEasing, springSettleMs } from '../animation/easing.js';
+import { matchMotionNodes } from './match.js';
 import { normalizeTokenColor } from '../tokens/color.js';
 import { collectPathNodes } from '../vector/geometry.js';
 import type { VectorNode } from '../vector/types.js';
@@ -103,6 +104,19 @@ export function checkMotionScene(scene: MotionScene): MotionIssue[] {
 			if (command.type === 'follow' && known(command.path, 'unknown-path', 'path', where) && nodes.get(command.path)!.node.type !== 'path')
 				issues.push(motionIssue('not-a-path', `"${command.path}" is a group; follow a single path node.`, { ...where, ids: [command.path] }));
 			if (command.type === 'morph') known(command.into, 'unknown-shape', 'shape', where);
+			if (command.type === 'match' && known(command.into, 'unknown-shape', 'group', where)) {
+				const into = nodes.get(command.into)!;
+				for (const id of targets) {
+					const entry = nodes.get(id)!;
+					if (id === command.into || into.ancestors.includes(id) || entry.ancestors.includes(command.into)) {
+						issues.push(motionIssue('match-self', `"${id}" cannot match "${command.into}": one is the other or holds it. Match two separate groups (the second usually hidden).`, { ...where, ids: [id, command.into] }));
+						continue;
+					}
+					const m = matchMotionNodes(entry.node, into.node);
+					if (m.unpairedInto.length)
+						issues.push(motionIssue('match-unpaired', `${m.unpairedInto.map((x) => `"${x}"`).join(', ')} in "${command.into}" ${m.unpairedInto.length > 1 ? 'have' : 'has'} no partner in "${id}", so ${m.unpairedInto.length > 1 ? 'they do' : 'it does'} not appear; add a part with the same name or id to "${id}" (it can start hidden or tiny).`, { ...where, ids: m.unpairedInto }));
+				}
+			}
 			const style = command.type === 'enter' || command.type === 'exit' ? command.style : undefined;
 			if (style === 'wipe' || style === 'iris' || style === 'split')
 				for (const id of targets)
@@ -163,8 +177,23 @@ export function checkMotionScene(scene: MotionScene): MotionIssue[] {
 		});
 	});
 
+	// Cues: they must resolve, and the shot before must have ended by then.
+	scene.shots.forEach((shot, i) => {
+		if (!shot.at) return;
+		const timing = timeline.shots[i];
+		if (timing.cue === undefined) {
+			const what = shot.at.beat !== undefined ? `beat ${shot.at.beat}, but the scene has no beat grid; set one with set_animation_settings ({ "beat": { "bpm": … } })` : `word ${shot.at.word}, but the narration has ${scene.narration?.words.length ?? 0} words (indexes from 0)`;
+			issues.push(motionIssue('unknown-cue', `Shot "${shot.id}" is cued to ${what}.`, { shot: shot.id }));
+		} else if (timing.missedBy !== undefined) {
+			const late = Math.round(timing.missedBy);
+			issues.push(motionIssue('cue-missed', `Shot "${shot.id}" is cued at ${Math.round(timing.cue)} ms but starts ${late} ms late, because the shot before runs until ${Math.round(timing.start)} ms; shorten that shot (its hold, durations or speed) or cue this one later.`, { shot: shot.id, measured: late, needed: 0, unit: 'ms' }));
+		}
+	});
+
 	// Two segments changing the same property of a node at the same time.
 	for (const [key, track] of timeline.tracks) {
+		// Additive layers stack by design.
+		if (key.endsWith('\u0000add')) continue;
 		for (let i = 1; i < track.length; i++) {
 			const a = track[i - 1];
 			const b = track[i];
@@ -211,8 +240,8 @@ export function checkMotionScene(scene: MotionScene): MotionIssue[] {
 	if (scene.target && scene.shots.length) {
 		const seconds = Math.round(timeline.duration / 100) / 10;
 		const [min, max] = scene.target;
-		if (seconds > max) issues.push(motionIssue('scene-too-long', `The scene runs ${seconds} s, past its ${max} s target; shorten holds or durations.`, { measured: seconds, needed: max, unit: 's' }));
-		if (seconds < min) issues.push(motionIssue('scene-too-short', `The scene runs ${seconds} s, under its ${min} s target; hold longer or add shots.`, { measured: seconds, needed: min, unit: 's' }));
+		if (seconds > max) issues.push(motionIssue('scene-too-long', `The scene runs ${seconds} s, past its ${max} s target; shorten holds or durations, or fit it (fit_animation).`, { measured: seconds, needed: max, unit: 's' }));
+		if (seconds < min) issues.push(motionIssue('scene-too-short', `The scene runs ${seconds} s, under its ${min} s target; hold longer, add shots, or fit it (fit_animation).`, { measured: seconds, needed: min, unit: 's' }));
 	}
 	return issues;
 }

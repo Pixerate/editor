@@ -19,12 +19,18 @@ import {
 	toFlairVectorEffect,
 	MOTION_EASE_OUT,
 	motionFlairPrimitive,
+	matchMotionNodes,
+	fitMotionScene,
+	motionBeatAt,
+	motionBeatTime,
+	motionCueTime,
 	toLottie,
 	indexMotionNodes,
 	type LottieValue,
 	fromFlairSvgMotion,
 	fromFlairVectorEffect,
 	type FlairSvgAnimation,
+	type MotionCommand,
 	type MotionIssueCode,
 	type MotionScene
 } from '../src/animation-editor';
@@ -206,6 +212,9 @@ describe('checkMotionScene', () => {
 			)
 		);
 		collect(scene([{ id: 'g', run: [{ type: 'style', targets: ['box'], fill: '#000000' }] }], { artwork: { ...ARTWORK, nodes: [{ ...ARTWORK.nodes[0], fill: { type: 'linear', stops: [{ offset: 0, color: '#000' }, { offset: 1, color: '#fff' }] } } as VectorPathNode] }, target: [0, 0.5] }));
+		const twin = { id: 'twin', type: 'group', visible: false, children: [{ id: 'twin-a', type: 'path', fill: '#000000', subpaths: [rectSubpath({ x: 0, y: 0, width: 5, height: 5 })] }, { id: 'twin-b', type: 'path', fill: '#000000', subpaths: [rectSubpath({ x: 9, y: 0, width: 5, height: 5 })] }, { id: 'twin-c', type: 'group', children: [] }] } as VectorNode;
+		collect(scene([{ id: 'm', run: [{ type: 'match', targets: ['pair'], into: 'twin' }, { type: 'match', targets: ['pair'], into: 'a' }] }], { artwork: { ...ARTWORK, nodes: [...ARTWORK.nodes, twin] } }));
+		collect(scene([{ id: 'long', run: [{ type: 'wait', duration: 2000 }] }, { id: 'hit', at: { beat: 1 }, run: [] }, { id: 'say', at: { word: 3 }, run: [] }], { beat: { bpm: 120 } }));
 		expect([...reported].sort()).toEqual(Object.keys(MOTION_ISSUE_CODES).sort());
 	});
 
@@ -889,6 +898,235 @@ describe('importing from Flair', () => {
 		const broken = await registry.callTool('import_flair_effect', { motion: { svg: '<nope/>' } });
 		expect(broken.isError).toBe(true);
 		expect(JSON.stringify(broken.content)).toMatch(/could not be imported[\s\S]*Nothing was changed/);
+	});
+});
+
+describe('additive layers', () => {
+	const xAt = (s: MotionScene, t: number, id = 'box') => path(motionFrameAt(s, t).document, id).transform?.[4] ?? 0;
+
+	it('stacks emphasis on a move under way instead of cutting it off', () => {
+		const slide = (shake: Partial<MotionCommand>) => scene([{ id: 'one', run: [{ type: 'move', targets: ['box'], by: { x: 100, y: 0 }, ease: 'linear', duration: 1000 }, { type: 'shake', targets: ['box'], amount: 10, count: 2, duration: 400, delay: 300, with: 'previous', ...shake } as MotionCommand] }]);
+		const stacked = slide({});
+		const plainMove = scene([{ id: 'one', run: [{ type: 'move', targets: ['box'], by: { x: 100, y: 0 }, ease: 'linear', duration: 1000 }] }]);
+		// The move carries on under the shake and lands where it would have.
+		expect(xAt(stacked, 1000)).toBeCloseTo(100, 6);
+		expect(xAt(stacked, 350) - xAt(plainMove, 350)).toBeCloseTo(10 * (1 - 0.125), 3);
+		expect(xAt(stacked, 800)).toBeCloseTo(80, 6);
+		expect(checkMotionScene(stacked).some((i) => i.code === 'overlap')).toBe(false);
+		// blend "replace" brings back the old behaviour: the shake takes over x, with a warning.
+		const replaced = slide({ blend: 'replace' });
+		expect(xAt(replaced, 800)).toBeCloseTo(30, 6);
+		expect(checkMotionScene(replaced).some((i) => i.code === 'overlap')).toBe(true);
+	});
+
+	it('keeps what an additive move, turn or scale adds, on top of later changes', () => {
+		const moves = scene([{ id: 'one', run: [{ type: 'move', targets: ['box'], by: { x: 20, y: 0 }, blend: 'add', duration: 200 }, { type: 'move', targets: ['box'], by: { x: 50, y: 0 }, duration: 200 }] }]);
+		expect(xAt(moves, 400)).toBeCloseTo(70, 6);
+		const scales = scene([{ id: 'one', run: [{ type: 'scale', targets: ['box'], to: 2, blend: 'add', duration: 200 }, { type: 'scale', targets: ['box'], to: 1.5, duration: 200 }] }]);
+		expect(path(motionFrameAt(scales, 400).document, 'box').transform?.[0]).toBeCloseTo(3, 6);
+		const turns = scene([{ id: 'one', run: [{ type: 'rotate', targets: ['box'], to: 30, blend: 'add', duration: 200 }, { type: 'rotate', targets: ['box'], by: 15, duration: 200 }] }]);
+		const m = path(motionFrameAt(turns, 400).document, 'box').transform!;
+		expect((Math.atan2(m[1], m[0]) * 180) / Math.PI).toBeCloseTo(45, 4);
+	});
+
+	it('exports a layer alone exactly and samples layers that overlap the pose', () => {
+		const alone = scene([{ id: 'one', run: [{ type: 'move', targets: ['box'], by: { x: 40, y: 0 }, duration: 400 }, { type: 'pulse', targets: ['box'] }] }]);
+		expect(toFlairSvgMotion(alone).sampled).toBe(0);
+		const overlapping = scene([{ id: 'one', run: [{ type: 'move', targets: ['box'], by: { x: 40, y: 0 }, duration: 800 }, { type: 'pulse', targets: ['box'], with: 'previous', delay: 200 }] }]);
+		const out = toFlairSvgMotion(overlapping);
+		expect(out.sampled).toBeGreaterThan(0);
+		// Sampled frames still land on the editor's.
+		const last = animateOf(out).filter((a) => a.id === 'box').at(-1)!;
+		expect(last.attrs!.transform![1]).toMatch(/^translate\(40 0\)/);
+	});
+
+	it('checks and exposes "blend"', async () => {
+		expect(() => parseMotionScene(scene([{ id: 'one', run: [{ type: 'move', targets: ['box'], by: { x: 1, y: 0 }, blend: 'multiply' } as never, { type: 'fade', targets: ['box'], to: 0, blend: 'add' } as never] }]))).toThrow(/"blend" must be "replace"[\s\S]*unknown field "blend"/);
+		const controller = new AnimationEditorController({ scene: createMotionScene(ARTWORK, { name: 'demo' }) });
+		const registry = new ToolRegistry();
+		registry.register(createAnimationEditorToolProvider(controller));
+		const ok = await registry.callTool('insert_shots', { shots: [{ id: 'one', run: [{ type: 'rotate', targets: ['box'], by: 90, duration: 800 }, { type: 'teeter', targets: ['box'], with: 'previous', delay: 200 }] }] });
+		expect(ok.isError).toBeFalsy();
+		expect((ok.structuredContent as any).issues.warnings).toBe(0);
+		const bad = await registry.callTool('add_commands', { shot: 'one', commands: [{ type: 'pulse', targets: ['box'], blend: 'stack' }] });
+		expect(bad.isError).toBe(true);
+	});
+});
+
+describe('Smart Animate (match)', () => {
+	const STATES: VectorDocument = {
+		width: 400,
+		height: 200,
+		nodes: [
+			{ id: 'card-a', type: 'group', children: [
+				{ id: 'card-a-bg', type: 'path', fill: '#ffffff', subpaths: [rectSubpath({ x: 20, y: 20, width: 100, height: 60 })] },
+				{ id: 'card-a-title', type: 'path', name: 'Title', fill: '#111111', subpaths: [rectSubpath({ x: 30, y: 30, width: 50, height: 10 })] },
+				{ id: 'card-a-badge', type: 'path', fill: '#ef4444', subpaths: [ellipseSubpath({ x: 100, y: 25, width: 10, height: 10 })] }
+			] },
+			{ id: 'card-b', type: 'group', visible: false, children: [
+				{ id: 'heading', type: 'path', name: 'Title', fill: '#2563eb', subpaths: [rectSubpath({ x: 200, y: 40, width: 120, height: 20 })] },
+				{ id: 'card-b-bg', type: 'path', fill: '#f1f5f9', subpaths: [rectSubpath({ x: 180, y: 20, width: 200, height: 160 })] },
+				{ id: 'card-b-avatar', type: 'path', fill: '#22c55e', subpaths: [ellipseSubpath({ x: 190, y: 120, width: 40, height: 40 })] },
+				{ id: 'card-b-extra', type: 'group', children: [] }
+			] }
+		]
+	};
+	const s: MotionScene = { version: 1, name: 'states', artwork: STATES, shots: [{ id: 'one', run: [{ type: 'match', targets: ['card-a'], into: 'card-b', ease: 'linear' }] }] };
+
+	it('pairs parts by name, then by id without the group ids, then by kind', () => {
+		const m = matchMotionNodes(STATES.nodes[0], STATES.nodes[1]);
+		expect(m.pairs).toEqual([['card-a-title', 'heading'], ['card-a-bg', 'card-b-bg'], ['card-a-badge', 'card-b-avatar']]);
+		expect(m.unpairedFrom).toEqual([]);
+		expect(m.unpairedInto).toEqual(['card-b-extra']);
+	});
+
+	it('morphs each part into its partner, shape, paint and place', () => {
+		const end = motionFrameAt(s, 900).document;
+		expect(path(end, 'card-a-title').fill).toBe('#2563eb');
+		const title = path(end, 'card-a-title').subpaths[0].anchors;
+		expect(Math.min(...title.map((a) => a.x))).toBeCloseTo(200, 3);
+		const mid = motionFrameAt(s, 450).document;
+		const bgX = Math.min(...path(mid, 'card-a-bg').subpaths[0].anchors.map((a) => a.x));
+		expect(bgX).toBeGreaterThan(20);
+		expect(bgX).toBeLessThan(180);
+		expect(compileMotionScene(s).commands[0].duration).toBe(900);
+	});
+
+	it('fades out parts with no partner and reports parts that cannot appear', () => {
+		const fewer: MotionScene = { ...s, artwork: { ...STATES, nodes: [STATES.nodes[0], { ...(STATES.nodes[1] as any), children: (STATES.nodes[1] as any).children.slice(0, 2) }] } };
+		expect(path(motionFrameAt(fewer, 900).document, 'card-a-badge').opacity).toBe(0);
+		const issues = checkMotionScene(s);
+		expect(issues.find((i) => i.code === 'match-unpaired')).toMatchObject({ severity: 'note', ids: ['card-b-extra'] });
+		const self = checkMotionScene({ ...s, shots: [{ id: 'one', run: [{ type: 'match', targets: ['card-a'], into: 'card-a-bg' }] }] });
+		expect(self.find((i) => i.code === 'match-self')).toBeDefined();
+		const unknown = checkMotionScene({ ...s, shots: [{ id: 'one', run: [{ type: 'match', targets: ['card-a'], into: 'card-c' }] }] });
+		expect(unknown.find((i) => i.code === 'unknown-shape')?.message).toContain('card-a');
+	});
+
+	it('is reachable through the agent tools', async () => {
+		const controller = new AnimationEditorController({ scene: { ...s, shots: [] } });
+		const registry = new ToolRegistry();
+		registry.register(createAnimationEditorToolProvider(controller));
+		const ok = await registry.callTool('insert_shots', { shots: [{ id: 'flip', run: [{ type: 'match', targets: ['card-a'], into: 'card-b' }] }] });
+		expect(ok.isError).toBeFalsy();
+		expect((ok.structuredContent as any).issues.notes).toBe(1);
+		const bad = await registry.callTool('add_commands', { shot: 'flip', commands: [{ type: 'match', targets: ['card-a'] }] });
+		expect(bad.isError).toBe(true);
+	});
+});
+
+describe('fitting a scene to a length', () => {
+	const s = scene([
+		{ id: 'logo', run: [{ type: 'enter', targets: ['box'], duration: 400 }], hold: 600 },
+		{ id: 'body', run: [{ type: 'move', targets: ['box'], by: { x: 50, y: 0 }, duration: 1000 }, { type: 'pulse', targets: ['dot'], delay: 200, with: 'previous' }], hold: 400 },
+		{ id: 'end', camera: { frame: 'dot', ms: 600 }, run: [{ type: 'fade', targets: ['box'], to: 0, duration: 400 }] }
+	]);
+
+	it('plays a shot faster or slower with speed, scaling every part of it', () => {
+		const fast: MotionScene = { ...s, shots: s.shots.map((x) => (x.id === 'body' ? { ...x, speed: 2 } : x)) };
+		const before = compileMotionScene(s).shots[1];
+		const after = compileMotionScene(fast).shots[1];
+		expect(after.end - after.start).toBeCloseTo((before.end - before.start) / 2, 6);
+		expect(compileMotionScene(fast).commands.find((c) => c.shot === 'body' && c.type === 'pulse')).toMatchObject({ start: after.start + 100, duration: 300 });
+	});
+
+	it('fits the length, keeping kept shots as they are and the rest in proportion', () => {
+		const total = compileMotionScene(s).duration;
+		const logo = compileMotionScene(s).shots[0];
+		const fit = fitMotionScene(s, total + 2000, { keep: ['logo'] });
+		expect(fit.duration).toBeCloseTo(total + 2000, -1);
+		const t = compileMotionScene(fit.scene);
+		expect(t.shots[0].end - t.shots[0].start).toBe(logo.end - logo.start);
+		expect(Object.keys(fit.speeds)).toEqual(['body', 'end']);
+		expect(fit.speeds.body).toBeCloseTo(fit.speeds.end, 6);
+		expect(fit.speeds.body).toBeLessThan(1);
+		// Refitting composes with the speeds already set.
+		expect(fitMotionScene(fit.scene, total).duration).toBeCloseTo(total, -1);
+	});
+
+	it('refuses fits it cannot make, saying why', () => {
+		expect(() => fitMotionScene(s, 500, { keep: ['logo'] })).toThrow(/kept shots alone last 1000 ms/);
+		expect(() => fitMotionScene(s, 5000, { keep: ['lgo'] })).toThrow(/"lgo" \(did you mean "logo"\?\)/);
+		expect(() => fitMotionScene(s, 5000, { keep: ['logo', 'body', 'end'] })).toThrow(/Every shot is kept/);
+		expect(() => fitMotionScene(s, 10)).toThrow(/speeds run 0.05–20/);
+		expect(() => parseMotionScene({ ...s, shots: [{ ...s.shots[0], speed: 0 }] })).toThrow(/"speed" must be a number from 0.05 to 20/);
+	});
+
+	it('fits through the agent tool as one undo step, with a dry run', async () => {
+		const controller = new AnimationEditorController({ scene: s });
+		const registry = new ToolRegistry();
+		registry.register(createAnimationEditorToolProvider(controller));
+		const total = compileMotionScene(s).duration;
+		const dry = (await registry.callTool('fit_animation', { seconds: (total + 1000) / 1000, keep: ['logo'], dry_run: true })).structuredContent as any;
+		expect(dry).toMatchObject({ dry_run: true });
+		expect(controller.getState().scene).toBe(s);
+		const done = (await registry.callTool('fit_animation', { seconds: (total + 1000) / 1000, keep: ['logo'] })).structuredContent as any;
+		expect(done.duration).toBeCloseTo(total + 1000, -1);
+		expect(controller.getState().scene.shots[0].speed).toBeUndefined();
+		expect((await registry.callTool('undo_animation', {})).structuredContent).toMatchObject({ undone: true, label: 'Fit to length' });
+		const bad = await registry.callTool('fit_animation', { seconds: 0.2, keep: ['logo'] });
+		expect(bad.isError).toBe(true);
+		expect(controller.getState().scene).toBe(s);
+	});
+});
+
+describe('cueing shots to a beat or a voiceover', () => {
+	const words = [{ text: 'Meet', start: 0, end: 300 }, { text: 'the', start: 320, end: 400 }, { text: 'new', start: 420, end: 700 }, { text: 'badge', start: 2600, end: 3100 }];
+	const s = scene(
+		[
+			{ id: 'intro', run: [{ type: 'enter', targets: ['box'], duration: 400 }], hold: 100 },
+			{ id: 'drop', at: { beat: 4 }, run: [{ type: 'pulse', targets: ['box'], duration: 400 }], hold: 0 },
+			{ id: 'name', at: { word: 3 }, run: [{ type: 'enter', targets: ['dot'] }] }
+		],
+		{ beat: { bpm: 120, offset: 100 }, narration: { words } }
+	);
+
+	it('reads beats and cue times', () => {
+		expect(motionBeatTime({ bpm: 120, offset: 100 }, 4)).toBe(2100);
+		expect(motionBeatAt({ bpm: 120, offset: 100, meter: 4 }, 2100)).toEqual({ beat: 4, bar: 2, beatInBar: 1 });
+		expect(motionBeatAt({ bpm: 120 }, 1250)).toMatchObject({ bar: 1, beatInBar: 3 });
+		expect(motionCueTime(s, { word: 3 })).toBe(2600);
+		expect(motionCueTime(s, { ms: 50 })).toBe(50);
+		expect(motionCueTime({}, { beat: 2 })).toBeUndefined();
+	});
+
+	it('holds the shot before until each cue', () => {
+		const t = compileMotionScene(s);
+		// intro ends at 500 but holds to beat 4 (2100); drop's pulse ends at 2500 and it holds to the word "badge" (2600).
+		expect(t.shots.map((x) => [x.start, x.end, x.cue ?? null])).toEqual([[0, 2100, null], [2100, 2600, 2100], [2600, 3800, 2600]]);
+		expect(checkMotionScene(s).filter((i) => i.code === 'cue-missed' || i.code === 'unknown-cue')).toEqual([]);
+	});
+
+	it('reports missed and unknown cues', () => {
+		const late = scene([{ id: 'long', run: [{ type: 'move', targets: ['box'], by: { x: 10, y: 0 }, duration: 3000 }] }, { id: 'hit', at: { beat: 2 }, run: [] }, { id: 'say', at: { word: 9 }, run: [] }], { beat: { bpm: 120 }, narration: { words } });
+		const issues = checkMotionScene(late);
+		expect(issues.find((i) => i.code === 'cue-missed')).toMatchObject({ shot: 'hit', measured: 2600 });
+		expect(issues.find((i) => i.code === 'unknown-cue')?.message).toContain('word 9, but the narration has 4 words');
+		const noGrid = checkMotionScene(scene([{ id: 'a', at: { beat: 1 }, run: [] }]));
+		expect(noGrid.find((i) => i.code === 'unknown-cue')?.message).toContain('no beat grid');
+		const bad = () => parseMotionScene(scene([{ id: 'a', at: { beat: 1, word: 2 } as never, run: [] }], { beat: { bpm: 0 } as never, narration: { words: [{ text: 'a', start: 5 }, { text: 'b', start: 1 }] } }));
+		for (const said of [/"at" must give one of/, /"beat" must be/, /"narration" must be/]) expect(bad).toThrow(said);
+	});
+
+	it('works through the agent tools', async () => {
+		const controller = new AnimationEditorController({ scene: createMotionScene(ARTWORK, { name: 'demo' }) });
+		const registry = new ToolRegistry();
+		registry.register(createAnimationEditorToolProvider(controller));
+		const empty = (await registry.callTool('get_timing_grid', {})).structuredContent as any;
+		expect(empty).toMatchObject({ beats: [], words: [] });
+		expect(empty.hint).toContain('bpm');
+		expect((await registry.callTool('set_animation_settings', { beat: { bpm: 90, meter: 3 }, narration: { words } })).isError).toBeFalsy();
+		const grid = (await registry.callTool('get_timing_grid', { to: 2000 })).structuredContent as any;
+		expect(grid.beats.slice(0, 4).map((b: any) => [b.ms, b.bar, b.beatInBar])).toEqual([[0, 1, 1], [667, 1, 2], [1333, 1, 3], [2000, 2, 1]]);
+		expect(grid.words.map((w: any) => w.text)).toEqual(['Meet', 'the', 'new']);
+		const added = await registry.callTool('insert_shots', { shots: [{ id: 'a', run: [{ type: 'enter', targets: ['box'] }] }, { id: 'b', at: { word: 3 }, run: [] }] });
+		expect((added.structuredContent as any).shots[1]).toMatchObject({ id: 'b', start: 2600 });
+		const read = (await registry.callTool('get_shot', { shot: 'b' })).structuredContent as any;
+		expect(JSON.stringify(read)).toContain('"cue":2600');
+		const bad = await registry.callTool('set_animation_settings', { narration: { words: [{ text: 'x', start: 10 }, { text: 'y', start: 5 }] } });
+		expect(bad.isError).toBe(true);
+		expect((await registry.callTool('set_animation_settings', { beat: null })).isError).toBeFalsy();
+		expect(controller.getState().scene.beat).toBeUndefined();
 	});
 });
 

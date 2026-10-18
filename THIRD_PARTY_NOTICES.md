@@ -30,6 +30,7 @@ reproduced at the end of this file. Paths are relative to each source repository
 © 2026 ArtCraft Team and the DeckCraft contributors.
 
 - `crates/geom/src/morph.rs` (`contours`: every segment as a cubic, lines with handles at thirds; `align`: contours paired in order, one without a partner meeting a point at the same place relative to the other outline's box (`place`); `turn`: a closed contour restarted at another anchor; `match_pair`: the closed side of a pair turned, open paired with closed) → `subpathToMorphContour`, `turnMorphContour` and `correspondMorphContours` in `packages/core/src/vector/blend.ts`; anchors are inserted by arc length rather than split evenly per curve, and the winding of closed shapes follows their areas (effectcraft) instead of a cost comparison; test cases re-expressed → `packages/core/tests/vector-blend.test.ts`
+- `crates/anim/src/morph.rs` (`morph_pairs`: shapes paired in passes, each used once — by name, then by matching content, then by kind — and unpaired shapes faded out) → `matchMotionNodes` and the `match` command in `packages/core/src/animation-editor/match.ts` and `compile.ts`; the passes are name, then id with the groups' own ids taken out, then kind in stacking order, and paired groups pair their own parts
 - `crates/pptx/src/read/chart.rs` (DrawingML chart reading: group → type mapping, secondary value axis by axis id and position rather than file order, cached and literal data, data-label number-format precedence, point fills) → `chartFromOoxml` in `packages/core/src/chart/ooxml.ts`
 
 ## designcraft
@@ -51,12 +52,14 @@ reproduced at the end of this file. Paths are relative to each source repository
 - `crates/render/src/shapes.rs` (`GradientRamp::new` / `t`: a radial gradient's focal point and t measured along the ray from it to the circle, the same as SVG `fx` / `fy`) → `vectorGradientFocalParam` in `packages/core/src/vector/gradient.ts`, generalised to SVG's focal circle (`fr`); test cases re-expressed → `packages/core/tests/vector-gradient.test.ts`
 - `crates/ui-egui/src/panels/graph.rs` and `graph_tools.rs` (value range frozen while a key is dragged, Shift locks to the axis moved most, `snap_px` nearest candidate within a few screen pixels) → `startChartPointDrag` and `snapChartDragValue` in `packages/core/src/chart/interaction.ts`
 
+- `crates/render/src/eval.rs` (`responsive_source_time` with `protected_regions`: when a composition is stretched, protected spans play at their own speed and the rest absorb the change at one shared rate) → `fitMotionScene` and the `fit_animation` tool in `packages/core/src/animation-editor/fit.ts`; whole shots are kept instead of marker spans, and the fit sets each shot's `speed`
 - `crates/lottie/src/anim.rs`, `shapes.rs` and `export.rs` (animated properties as Bodymovin keyframes, a cubic ease as the keys' `o` / `i` tangents and holds as `h: 1`; shapes as groups with `sh`, `fl`, `st`, `tm` and a closing `tr`, listed top first; markers; a warning for every feature with no Lottie equivalent) → `toLottie` in `packages/core/src/animation-editor/lottie.ts`; the scene is one shape layer, each node an outer group for its animated pose around an inner one for its own transform, and stretches no single ease describes are sampled
 
 ## figcraft
 
 © 2026 ArtCraft Team and the FigCraft contributors.
 
+- `crates/ui-egui/src/present.rs` (`match_layers`: Smart Animate pairs layers by their name path, nested groups pairing their own layers, and fades out what has no partner) → `matchMotionNodes` in `packages/core/src/animation-editor/match.ts`
 - `crates/engine/src/distance.rs` (`between`, `inside`, `to_guide`, `label`) → `packages/core/src/canvas/measure.ts`
 - `crates/engine/src/measure_tests.rs` (test cases re-expressed) → `packages/core/tests/canvas-measure.test.ts`
 - `crates/engine/src/snap.rs` (`spacings` / `equal_spacing` / `spacing_guides`: centred between neighbours, repeating the gap of the pair before or after, gap labels; threshold in screen pixels divided by the zoom) → `VectorSnapTargets.snapRect` in `packages/core/src/vector/snap.ts`; its equal-spacing cases re-expressed → `packages/core/tests/vector-snap.test.ts`
@@ -183,6 +186,7 @@ GridCraft. Apache POI is © The Apache Software Foundation, licensed under the A
 
 - `crates/engine/src/lib.rs` (`Engine::execute_merged`, `hold_merge`, `end_merge`) → `packages/core/src/history/HistoryManager.ts`
 - `crates/engine/src/lib.rs` (`Engine::is_dirty`, `same_document`, `mark_clean`) → `packages/core/src/dirty.ts`
+- `crates/time/src/tempo.rs` and `grid.rs` (beats from a tempo and an offset, counted into bars by the meter) → `motionBeatTime` and `motionBeatAt` in `packages/core/src/animation-editor/compile.ts`; one steady tempo instead of a tempo map, with shots cued to beats instead of positions snapped to a grid
 
 ## vectorcraft
 
