@@ -23,6 +23,7 @@ import {
 	motionPath,
 	motionStageSvg,
 	motionFlairPrimitive,
+	motionClipLayout,
 	smoothMotionLegs,
 	matchMotionNodes,
 	fitMotionScene,
@@ -222,6 +223,7 @@ describe('checkMotionScene', () => {
 		collect(scene([{ id: 'long', run: [{ type: 'wait', duration: 2000 }] }, { id: 'hit', at: { beat: 1 }, run: [] }, { id: 'say', at: { word: 3 }, run: [] }], { beat: { bpm: 120 } }));
 		collect(scene([{ id: 'only', run: [] }], { trigger: 'click', loop: 'loop' }));
 		collect(scene([{ id: 'a', run: [] }, { id: 'b', at: { ms: 5000 }, run: [] }], { trigger: 'click' }));
+		collect(scene([{ id: 'p', run: [{ type: 'play', targets: ['box'], clip: 'nope' }] }]));
 		expect([...reported].sort()).toEqual(Object.keys(MOTION_ISSUE_CODES).sort());
 	});
 
@@ -1404,5 +1406,52 @@ describe('smooth moves through waypoints', () => {
 		expect((ok.structuredContent as any).duration).toBe(1100 + 600);
 		const bad = await registry.callTool('add_commands', { shot: 'arc', commands: [{ type: 'move', targets: ['box'], to: { x: 1, y: 1 }, via: [{ x: 'a' }] }] });
 		expect(bad.isError).toBe(true);
+	});
+});
+
+describe('reusable clips', () => {
+	const CLIPS = {
+		'pop-settle': { description: 'Pops, then settles', run: [{ type: 'scale', targets: ['$'], to: 1.3, duration: 200 }, { type: 'scale', targets: ['$'], to: 1, duration: 300 }, { type: 'fade', targets: ['$', 'dot'], to: 0.5, duration: 200, with: 'previous' }] }
+	} as MotionScene['clips'];
+	const s = scene([{ id: 'one', run: [{ type: 'play', targets: ['box', 'line'], clip: 'pop-settle', stagger: 100 }] }], { clips: CLIPS });
+
+	it('lays a clip out as in a shot and plays it on each target', () => {
+		const layout = motionClipLayout(s, 'pop-settle', 'box');
+		expect(layout.length).toBe(500);
+		expect(layout.items.map((i) => [i.command.type, i.target, i.start])).toEqual([['scale', 'box', 0], ['scale', 'box', 200], ['fade', 'box', 200], ['fade', 'dot', 200]]);
+		const t = compileMotionScene(s);
+		expect(t.commands[0]).toMatchObject({ type: 'play', start: 0, end: 600, duration: 500 });
+		expect(path(motionFrameAt(s, 200).document, 'box').transform?.[0]).toBeCloseTo(1.3, 6);
+		expect(path(motionFrameAt(s, 300).document, 'line').transform?.[0]).toBeCloseTo(1.3, 6);
+		expect(path(motionFrameAt(s, 600).document, 'line').transform?.[0] ?? 1).toBeCloseTo(1, 6);
+		// Faster, and with the shot's speed too.
+		expect(compileMotionScene(scene([{ id: 'one', run: [{ type: 'play', targets: ['box'], clip: 'pop-settle', speed: 2 }] }], { clips: CLIPS })).commands[0].duration).toBe(250);
+	});
+
+	it('checks clips and plays', () => {
+		const codes = checkMotionScene(scene([{ id: 'one', run: [{ type: 'play', targets: ['box'], clip: 'pop-setle' }] }], { clips: { ...CLIPS, bad: { run: [{ type: 'fade', targets: ['ghost'], to: 0 }] } } as MotionScene['clips'] }));
+		expect(codes.find((i) => i.code === 'unknown-clip')?.message).toContain('did you mean "pop-settle"');
+		expect(codes.find((i) => i.code === 'unknown-target' && i.message.includes('Clip "bad"'))).toBeDefined();
+		expect(() => parseMotionScene(scene([], { clips: { 'no good': { run: [{ type: 'play', targets: ['$'], clip: 'x' }] } } as never }))).toThrow(/a clip name is letters[\s\S]*cannot play another clip/);
+	});
+
+	it('defines, plays, copies and deletes clips through the agent tools', async () => {
+		const controller = new AnimationEditorController({ scene: createMotionScene(ARTWORK, { name: 'demo' }) });
+		const registry = new ToolRegistry();
+		registry.register(createAnimationEditorToolProvider(controller));
+		const set = await registry.callTool('set_animation_clip', { name: 'pop-settle', clip: CLIPS!['pop-settle'] });
+		expect(set.structuredContent).toMatchObject({ clip: 'pop-settle', length: 500 });
+		expect(((await registry.callTool('get_animation', {})).structuredContent as any).clips).toEqual({ 'pop-settle': { description: 'Pops, then settles', commands: 3, length: 500 } });
+		await registry.callTool('insert_shots', { shots: [{ id: 'one', run: [{ type: 'play', targets: ['box'], clip: 'pop-settle' }, { type: 'move', targets: ['box'], by: { x: 10, y: 0 } }] }] });
+		const copy = await registry.callTool('copy_animation', { from: 'box', to: ['a', 'b'], stagger: 50 });
+		expect(copy.structuredContent).toMatchObject({ copied: { one: 2 } });
+		expect(controller.getState().scene.shots[0].run.map((c) => (c.type === 'wait' ? 'wait' : `${c.type}:${c.targets.join('+')}`))).toEqual(['play:box', 'play:a+b', 'move:box', 'move:a+b']);
+		expect((await registry.callTool('undo_animation', {})).structuredContent).toMatchObject({ label: 'Copy animation' });
+		const busy = await registry.callTool('set_animation_clip', { name: 'pop-settle', clip: null });
+		expect(busy.isError).toBe(true);
+		expect(JSON.stringify(busy.content)).toContain('remove those play commands first');
+		const nothing = await registry.callTool('copy_animation', { from: 'dot', to: ['a'] });
+		expect(nothing.isError).toBe(true);
+		expect((await registry.callTool('copy_animation', { from: 'box', to: ['bx'] })).isError).toBe(true);
 	});
 });

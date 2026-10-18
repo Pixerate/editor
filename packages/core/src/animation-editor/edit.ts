@@ -1,8 +1,8 @@
 import type { VectorDocument } from '../vector/types.js';
 import { checkMotionScene } from './check.js';
 import { motionIssueKey, motionIssueLine, namedWithSuggestion, type MotionIssue } from './issues.js';
-import { commandShapeProblems, motionSceneShapeProblems, shotShapeProblems } from './parse.js';
-import type { MotionCommand, MotionControl, MotionPreset, MotionScene, MotionShot } from './types.js';
+import { clipsShapeProblems, commandShapeProblems, motionSceneShapeProblems, shotShapeProblems } from './parse.js';
+import type { MotionClip, MotionCommand, MotionControl, MotionPreset, MotionScene, MotionShot } from './types.js';
 
 /**
  * Edits as data: each is a pure function of the scene, all or nothing. An edit that leaves the
@@ -22,6 +22,7 @@ export type MotionEdit =
 	| { op: 'move_command'; shot: string; command: number; to: number }
 	| { op: 'set_artwork'; artwork: VectorDocument }
 	| { op: 'set_controls'; controls: MotionControl[]; presets?: MotionPreset[] }
+	| { op: 'set_clip'; name: string; clip: MotionClip | null }
 	| { op: 'replace_scene'; scene: MotionScene };
 
 export type MotionEditOp = MotionEdit['op'];
@@ -38,6 +39,7 @@ export const MOTION_EDIT_OPS: readonly MotionEditOp[] = [
 	'move_command',
 	'set_artwork',
 	'set_controls',
+	'set_clip',
 	'replace_scene'
 ];
 
@@ -109,6 +111,23 @@ function applyOne(scene: MotionScene, edit: MotionEdit): MotionScene {
 			}
 			if (edit.target === null) delete next.target;
 			else if (edit.target !== undefined) next.target = edit.target;
+			return next;
+		}
+		case 'set_clip': {
+			if (typeof edit.name !== 'string' || !edit.name) fail('Give the clip a "name".');
+			const clips = { ...(scene.clips ?? {}) };
+			if (edit.clip === null) {
+				if (!clips[edit.name]) fail(`There is no clip ${namedWithSuggestion(edit.name, Object.keys(clips))} to delete.`);
+				const playing = scene.shots.filter((s) => s.run.some((c) => c.type === 'play' && c.clip === edit.name)).map((s) => `"${s.id}"`);
+				if (playing.length) fail(`Clip "${edit.name}" is played in shot${playing.length > 1 ? 's' : ''} ${playing.join(', ')}; remove those play commands first.`);
+				delete clips[edit.name];
+			} else {
+				const problems = clipsShapeProblems({ [edit.name]: edit.clip });
+				if (problems.length) fail(problems.join(' '));
+				clips[edit.name] = edit.clip;
+			}
+			const next: MotionScene = { ...scene, clips };
+			if (!Object.keys(clips).length) delete next.clips;
 			return next;
 		}
 		case 'insert_shots': {

@@ -101,7 +101,7 @@ describe('animation editor form helpers', () => {
 		for (const type of MOTION_COMMAND_TYPES) {
 			const command = defaultMotionCommand(type, ['box'], SCENE);
 			if ('error' in command) {
-				expect(['effect', 'match', 'morph'], type).toContain(type);
+				expect(['effect', 'match', 'morph', 'play'], type).toContain(type);
 				continue;
 			}
 			const result = applyMotionEdits(SCENE, { op: 'add_commands', shot: 'intro', commands: [command] });

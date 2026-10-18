@@ -176,6 +176,10 @@ export function defaultMotionCommand(type: MotionCommandType, targets: readonly 
 			const into = other((e) => e.node.type === 'group' && e.node.visible === false) ?? other((e) => e.node.type === 'group');
 			return into ? ({ type, ...base, into } as MotionCommand) : { error: 'Match needs another group to become; group the end state (it can stay hidden).' };
 		}
+		case 'play': {
+			const clip = Object.keys(scene.clips ?? {})[0];
+			return clip ? { type, ...base, clip } : { error: 'Play needs a clip; define one first (set_animation_clip), with "$" as its target.' };
+		}
 		case 'follow': {
 			const path = other((e) => e.node.type === 'path' && e.node.visible === false) ?? other((e) => e.node.type === 'path');
 			return path ? { type, ...base, path } : { error: 'Follow needs a path to travel along; draw one (it can stay hidden).' };

@@ -3,7 +3,7 @@ import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import type { JsonSchema } from '../tools/schema.js';
 import { parseVectorSvg } from '../vector/svg.js';
 import type { VectorNode } from '../vector/types.js';
-import { compileMotionScene, indexMotionNodes, motionBeatAt, motionBeatTime } from './compile.js';
+import { compileMotionScene, indexMotionNodes, motionClipLayout, motionBeatAt, motionBeatTime } from './compile.js';
 import { fitMotionScene } from './fit.js';
 import { toLottie } from './lottie.js';
 import { motionPath } from './onion.js';
@@ -11,7 +11,7 @@ import { fromFlairSvgMotion, fromFlairVectorEffect, type FlairImportResult } fro
 import type { AnimationEditorController } from './controller.js';
 import { MOTION_EDIT_OPS, type MotionEdit, type MotionEditResult } from './edit.js';
 import { motionIssueLine, namedWithSuggestion, type MotionIssue } from './issues.js';
-import { MOTION_COMMAND_TYPES, MOTION_DIRECTIONS, MOTION_ENTER_STYLES, MOTION_EXIT_STYLES, MOTION_IRIS_SHAPES, MOTION_REPEAT_MODES, MOTION_BLENDS, MOTION_SPLIT_ORIENTATIONS, motionFlairPrimitive, type MotionScene } from './types.js';
+import { MOTION_COMMAND_TYPES, MOTION_DIRECTIONS, MOTION_ENTER_STYLES, MOTION_EXIT_STYLES, MOTION_IRIS_SHAPES, MOTION_REPEAT_MODES, MOTION_BLENDS, MOTION_SPLIT_ORIENTATIONS, motionFlairPrimitive, type MotionCommand, type MotionScene } from './types.js';
 
 export interface AnimationEditorToolProviderOptions {
 	/** Provider id (unique per registry). Default `animation`. */
@@ -121,6 +121,20 @@ export const MOTION_COMMAND_SCHEMA: JsonSchema = {
 			stroke: { type: 'string', description: 'CSS colour (hex, rgb(), rgba()).' },
 			strokeWidth: { type: 'number', minimum: 0, description: 'Document units.' }
 		}),
+		object(
+			{
+				type: { const: 'play', description: 'Plays a clip (set_animation_clip) on the targets: its commands, with "$" standing for each target, timed as in a shot.' },
+				targets: NODE_IDS,
+				clip: { type: 'string', minLength: 1, description: 'The clip\'s name (get_animation lists them).' },
+				speed: { type: 'number', minimum: 0.05, maximum: 20, description: 'Play it this many times as fast (default 1).' },
+				delay: BASE.delay,
+				stagger: BASE.stagger,
+				with: BASE.with,
+				note: BASE.note
+			},
+			['type', 'targets', 'clip'],
+			'Plays a clip on the targets.'
+		),
 		command('match', 'Smart Animate: tweens a group into another group (usually hidden), part by part. Parts pair by name, then by id with the group ids taken out (card-a-title ↔ card-b-title), then by kind in order; each takes its partner\'s shape, paint and place. Unpaired parts fade out; parts of "into" with no partner do not appear (check_animation lists them).', { into: { type: 'string', minLength: 1, description: 'Id of the group to become.' } }, ['into']),
 		command('morph', 'Morphs each target into the shape (and paint) of another node, which usually stays hidden.', { into: { type: 'string', minLength: 1, description: 'Id of the node whose shape to take.' } }, ['into']),
 		command('follow', 'Moves targets along a path node, centre on the path.', {
@@ -349,6 +363,7 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 				...(s.target ? { target: s.target } : {}),
 				...(includeElements ? { elements: describeMotionElements(s) } : {}),
 				shots: describeMotionShots(s),
+				...(s.clips ? { clips: Object.fromEntries(Object.entries(s.clips).map(([name, c]) => [name, { ...(c.description ? { description: c.description } : {}), commands: c.run.length, length: Math.round(motionClipLayout(s, name, '$').length) }])) } : {}),
 				...(s.controls ? { controls: s.controls } : {}),
 				...(s.presets ? { presets: s.presets } : {}),
 				issues: issueSummary(controller.getState().issues),
@@ -624,6 +639,70 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 		}
 	};
 
+	const setClip: AgentTool = {
+		name: 'set_animation_clip',
+		title: 'Define a reusable clip',
+		description:
+			'Defines, replaces or (with clip null) deletes a named clip: commands written against the target "$" that a play command plays on any node, e.g. a "pop-settle" or "attention" used many times. One undo step. Returns the clip\'s length and the timing.',
+		inputSchema: object(
+			{
+				name: { type: 'string', pattern: '^[A-Za-z_][\\w-]*$', description: 'Clip name, e.g. "pop-settle".' },
+				clip: {
+					anyOf: [object({ description: { type: 'string', description: 'What it does, in a few words.' }, run: { type: 'array', items: MOTION_COMMAND_SCHEMA, minItems: 1, description: 'Commands, timed as in a shot; target "$" for the node it is played on. Clips cannot play clips.' } }, ['run']), { type: 'null' }],
+					description: 'The clip, or null to delete it (refused while a play command uses it).'
+				}
+			},
+			['name', 'clip']
+		),
+		annotations: { title: 'Define a reusable clip', ...WRITE_IDEMPOTENT },
+		handler: ({ name, clip }) => apply({ op: 'set_clip', name, clip }, clip === null ? 'Delete clip' : 'Set clip', (s) => (clip === null ? { deleted: name } : { clip: name, length: Math.round(motionClipLayout(s, name, '$').length) }))
+	};
+
+	const copyAnimation: AgentTool = {
+		name: 'copy_animation',
+		title: 'Copy one node\'s animation to others',
+		description:
+			'Copies every command that animates "from" (in all shots, or the ones given) so it also animates "to": each copy goes right after its original and starts with it. One undo step. Returns how many commands were copied per shot. For motion you will reuse often, a clip (set_animation_clip + play) is tidier.',
+		inputSchema: object(
+			{
+				from: { type: 'string', minLength: 1, description: 'Element id whose commands to copy.' },
+				to: { type: 'array', items: { type: 'string', minLength: 1 }, minItems: 1, description: 'Element ids to give the same motion.' },
+				shots: { type: 'array', items: SHOT_ID, description: 'Only these shots (default all).' },
+				stagger: MS('Start each copy this much after the one before (default 0)')
+			},
+			['from', 'to']
+		),
+		annotations: { title: 'Copy one node\'s animation to others', ...WRITE },
+		handler: ({ from, to, shots, stagger }) => {
+			const s = scene();
+			const ids = describeMotionElements(s).map((e) => e.id);
+			for (const id of [from, ...to]) if (!ids.includes(id)) throw new Error(`There is no element ${namedWithSuggestion(id, ids)}. Nothing was changed.`);
+			if (to.includes(from)) throw new Error(`"to" includes "${from}" itself; give other elements. Nothing was changed.`);
+			const only = shots ? new Set<string>(shots) : null;
+			if (only) for (const id of only) if (!s.shots.some((x) => x.id === id)) throw new Error(`There is no shot ${namedWithSuggestion(id, s.shots.map((x) => x.id))}. Nothing was changed.`);
+			const copied: Record<string, number> = {};
+			const edits: MotionEdit[] = [];
+			for (const shot of s.shots) {
+				if (only && !only.has(shot.id)) continue;
+				const run: MotionCommand[] = [];
+				let n = 0;
+				for (const c of shot.run) {
+					run.push(c);
+					if (c.type === 'wait' || !c.targets.includes(from)) continue;
+					const { delay: _delay, ...rest } = c;
+					run.push({ ...rest, targets: to, with: 'previous', ...(stagger ? { stagger } : {}) } as MotionCommand);
+					n++;
+				}
+				if (n) {
+					copied[shot.id] = n;
+					edits.push({ op: 'update_shot', shot: shot.id, set: { run } });
+				}
+			}
+			if (!edits.length) throw new Error(`No command animates "${from}"${only ? ' in those shots' : ''}; nothing to copy.`);
+			return apply(edits, 'Copy animation', () => ({ copied }));
+		}
+	};
+
 	const insertShots: AgentTool = {
 		name: 'insert_shots',
 		title: 'Add shots',
@@ -821,7 +900,7 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 	};
 
 	const reads = [getAnimation, getShot, findElements, getMotionPath, getTimingGrid, checkAnimation, renderFrame, exportFlairMotion, exportFlairEffect, exportLottie, seekAnimation];
-	const writes = [setArtworkSvg, fitAnimation, importFlairEffect, insertShots, updateShot, deleteShots, moveShot, addCommands, updateCommand, deleteCommands, moveCommand, setSettings, setControls, editAnimation, writeAnimation, undo, redo];
+	const writes = [setArtworkSvg, setClip, copyAnimation, fitAnimation, importFlairEffect, insertShots, updateShot, deleteShots, moveShot, addCommands, updateCommand, deleteCommands, moveCommand, setSettings, setControls, editAnimation, writeAnimation, undo, redo];
 
 	return {
 		id: options.id ?? 'animation',

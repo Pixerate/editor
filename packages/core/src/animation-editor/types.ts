@@ -44,6 +44,11 @@ export interface MotionScene {
 	narration?: MotionNarration;
 	/** Wanted length in seconds `[min, max]`; `check` warns outside it. */
 	target?: [number, number];
+	/**
+	 * Reusable motion: named command lists written against the target `"$"`, played on any
+	 * node with a `play` command (a "pop and settle" or "attention" you use many times).
+	 */
+	clips?: Record<string, MotionClip>;
 	/** Parameters a Flair effect made from this scene exposes (see `toFlairVectorEffect`). */
 	controls?: MotionControl[];
 	/** Named sets of control values. */
@@ -290,6 +295,25 @@ export interface MotionMatchCommand extends MotionCommandBase {
 	into: string;
 }
 
+/** A reusable piece of motion: commands that target `"$"` (whatever `play` names), timed as in a shot. */
+export interface MotionClip {
+	description?: string;
+	/** Commands, timed as in a shot; `"$"` in `targets` stands for the node played on. Clips cannot play clips. */
+	run: MotionCommand[];
+}
+
+/** The placeholder target in a clip's commands. */
+export const MOTION_CLIP_TARGET = '$';
+
+/** Plays a clip (`scene.clips`) on the targets: its commands, with `"$"` standing for each target. */
+export interface MotionPlayCommand extends MotionCommandBase {
+	type: 'play';
+	/** The clip's name. */
+	clip: string;
+	/** Play it this many times as fast (default 1). */
+	speed?: number;
+}
+
 /** Moves targets along a path node, centre on the path. */
 export interface MotionFollowCommand extends MotionCommandBase {
 	type: 'follow';
@@ -433,6 +457,7 @@ export type MotionCommand =
 	| MotionStyleCommand
 	| MotionMorphCommand
 	| MotionMatchCommand
+	| MotionPlayCommand
 	| MotionFollowCommand
 	| MotionPulseCommand
 	| MotionShakeCommand
@@ -456,6 +481,7 @@ export const MOTION_COMMAND_TYPES: readonly MotionCommandType[] = [
 	'style',
 	'morph',
 	'match',
+	'play',
 	'follow',
 	'pulse',
 	'shake',
@@ -503,6 +529,8 @@ export const MOTION_DEFAULT_DURATIONS: Readonly<Record<Exclude<MotionCommandType
 	style: 500,
 	morph: 900,
 	match: 900,
+	/** A clip's length comes from its commands (this is only a fallback). */
+	play: 600,
 	follow: 1400,
 	pulse: 600,
 	shake: 500,

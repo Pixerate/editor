@@ -22,6 +22,7 @@ import {
 	MOTION_DEFAULT_HOLD,
 	MOTION_DRAW_MS_PER_UNIT,
 	MOTION_DRAW_RANGE,
+	MOTION_CLIP_TARGET,
 	type MotionBeatGrid,
 	type MotionCamera,
 	type MotionCommand,
@@ -487,9 +488,49 @@ export function motionCommandDuration(command: MotionCommand, scene: MotionScene
 	return motionCycleDuration(command, scene, target) * motionCommandRepeat(command);
 }
 
+/** One command of a clip played on a target: when it starts (ms from the play's start), its target and one cycle's length. */
+export interface MotionClipItem {
+	command: Exclude<MotionCommand, { type: 'wait' }>;
+	target: string;
+	start: number;
+	cycle: number;
+}
+
+/** A clip's commands for `target` (`"$"` replaced), timed as in a shot from 0 at `speed`; unknown clips give nothing. */
+export function motionClipLayout(scene: MotionScene, clip: string, target: string, speed = 1): { items: MotionClipItem[]; length: number } {
+	const run = scene.clips?.[clip]?.run;
+	if (!run) return { items: [], length: 0 };
+	const f = speed > 0 && Number.isFinite(speed) ? 1 / speed : 1;
+	const items: MotionClipItem[] = [];
+	let runEnd = 0;
+	let prevStart = 0;
+	run.forEach((raw, i) => {
+		const base = raw.with === 'previous' && i > 0 ? prevStart : runEnd;
+		if (raw.type === 'wait') {
+			prevStart = base;
+			runEnd = Math.max(runEnd, base + raw.duration * f);
+			return;
+		}
+		if (raw.type === 'play') return;
+		const command = { ...raw, targets: raw.targets.map((t) => (t === MOTION_CLIP_TARGET ? target : t)) } as Exclude<MotionCommand, { type: 'wait' }>;
+		const begin = base + (command.delay ?? 0) * f;
+		let end = begin;
+		command.targets.forEach((t, k) => {
+			const cycle = motionCycleDuration(command, scene, t) * f;
+			const s = begin + k * (command.stagger ?? 0) * f;
+			items.push({ command, target: t, start: s, cycle });
+			end = Math.max(end, s + cycle * motionCommandRepeat(command));
+		});
+		prevStart = begin;
+		runEnd = Math.max(runEnd, end);
+	});
+	return { items, length: runEnd };
+}
+
 /** How long one cycle of a command takes for one target (ms): its `duration`, a spring's settle time, the line's length for a draw, or the type's default. */
 export function motionCycleDuration(command: MotionCommand, scene: MotionScene, target?: string): number {
 	if (command.type === 'wait') return command.duration;
+	if (command.type === 'play') return motionClipLayout(scene, command.clip, target ?? MOTION_CLIP_TARGET, command.speed).length;
 	if (command.duration !== undefined) return command.duration;
 	if (command.ease !== undefined) {
 		const ease = resolveEasing(command.ease);
@@ -599,6 +640,20 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 		const shot = scene.shots[timing.shotIndex];
 		const command = shot.run[timing.command];
 		if (command.type === 'wait') continue;
+		if (command.type === 'play') {
+			// A clip: each of its commands becomes its own job, at its time in the clip.
+			const f = motionShotTimeScale(shot);
+			command.targets.forEach((target, k) => {
+				if (!nodes.has(target)) return;
+				const at = timing.start + k * (command.stagger ?? 0) * f;
+				for (const item of motionClipLayout(scene, command.clip, target, (command.speed ?? 1) / f).items) {
+					const entry = nodes.get(item.target);
+					if (!entry) continue;
+					jobs.push({ start: at + item.start, order: order++, run: () => compileRepeated(item.command, item.target, entry, at + item.start, item.cycle, timing) });
+				}
+			});
+			continue;
+		}
 		command.targets.forEach((target, k) => {
 			const entry = nodes.get(target);
 			if (!entry) return;
