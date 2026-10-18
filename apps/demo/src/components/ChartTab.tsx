@@ -167,6 +167,7 @@ const STREAM_SOURCE = `xychart-beta
 
 export function ChartTab() {
   const controller = useChartController({ spec: SAMPLES.Revenue });
+  const agentStage = useRef<HTMLDivElement>(null);
   const state = useChartState(controller);
   const { presence, director, sceneRef } = useChartDirector(controller);
   useChartCommands(demoCommandRegistry, controller);
@@ -261,10 +262,10 @@ export function ChartTab() {
         ))}
       </div>
 
-      <div className="rounded-xl border border-slate-800 bg-slate-900 p-3">
+      <div className="relative rounded-xl border border-slate-800 bg-slate-900 p-3" ref={agentStage}>
         <ChartEditor controller={controller} height={400} canvasProps={{ presence, sceneRef }} />
       </div>
-      <AgentScriptPanel scripts={CHART_SCRIPTS} hint="Plays a scripted agent turn with the chart__* tools. Value changes go through the chart's director, so its cursor drags each bar into place." />
+      <AgentScriptPanel scripts={CHART_SCRIPTS} stage={agentStage} hint="Plays a scripted agent turn with the chart__* tools. Value changes go through the chart's director, so its cursor drags each bar into place." />
 
       <div className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-xs text-slate-300 space-y-1" data-chart-summary="">
         <p>{summary.description}</p>

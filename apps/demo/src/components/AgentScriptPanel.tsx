@@ -112,7 +112,7 @@ export interface AgentScriptPanelProps {
   scripts: AgentScript[];
   /**
    * The editor the agent works in. Its element should be `position: relative`; the cursor is drawn
-   * inside it. Leave it out for editors that draw their own agent cursor (charts, diagrams).
+   * inside it. Leave it out for editors that draw their own agent cursor (diagrams).
    */
   stage?: React.RefObject<HTMLElement | null>;
   /** The agent's name on its cursor. */

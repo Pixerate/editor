@@ -56,7 +56,10 @@
       <ChartCanvas {controller} {height} {...canvasProps} />
     </div>
     {#if showInspector}
-      <ChartInspector {controller} class="w-full shrink-0 overflow-y-auto rounded-md border border-border p-3 md:w-64" />
+      <!-- Side by side, the canvas sets the row's height and the inspector scrolls within it. -->
+      <div class="relative w-full shrink-0 md:w-64">
+        <ChartInspector {controller} class="overflow-y-auto rounded-md border border-border p-3 md:absolute md:inset-0" />
+      </div>
     {/if}
   </div>
   {#if showDataGrid}

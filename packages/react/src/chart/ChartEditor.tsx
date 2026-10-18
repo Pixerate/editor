@@ -62,7 +62,12 @@ export function ChartEditor({ controller, showInspector = true, showDataGrid = t
         <div className="min-w-0 flex-1 rounded-md border border-border bg-background p-1">
           <ChartCanvas controller={controller} height={height} {...canvasProps} />
         </div>
-        {showInspector && <ChartInspector controller={controller} className="w-full shrink-0 overflow-y-auto rounded-md border border-border p-3 md:w-64" />}
+        {showInspector && (
+          // Side by side, the canvas sets the row's height and the inspector scrolls within it.
+          <div className="relative w-full shrink-0 md:w-64">
+            <ChartInspector controller={controller} className="overflow-y-auto rounded-md border border-border p-3 md:absolute md:inset-0" />
+          </div>
+        )}
       </div>
       {showDataGrid && <ChartDataGrid controller={controller} />}
     </div>
