@@ -22,6 +22,15 @@ export interface MotionScene {
 	shots: MotionShot[];
 	/** Playback past the end: stop (`none`, default), `loop` or `ping-pong`. */
 	loop?: AnimationLoopMode;
+	/**
+	 * Plays in answer to the viewer instead of on its own (exported to Flair's player):
+	 * - `click`: the first shot plays on load, and each click plays the next shot; after the last,
+	 *   a click plays the second again, so a last shot that leads back to how the first ended toggles.
+	 * - `hover` / `press`: plays forward while the pointer is over (or down on) it, and back when it leaves.
+	 * - `scroll`: scrubs through the scene as it scrolls through the viewport.
+	 * The editor previews it played through; `loop` does not apply.
+	 */
+	trigger?: MotionTrigger;
 	/** Frame rate used to sample motion that a target format cannot express exactly (default 30). */
 	fps?: number;
 	/**
@@ -40,6 +49,10 @@ export interface MotionScene {
 	/** Named sets of control values. */
 	presets?: MotionPreset[];
 }
+
+/** What the viewer does to play a triggered scene (see `MotionScene.trigger`). */
+export type MotionTrigger = 'click' | 'hover' | 'press' | 'scroll';
+export const MOTION_TRIGGERS: readonly MotionTrigger[] = ['click', 'hover', 'press', 'scroll'];
 
 /** A rectangle of the artwork, in document units. */
 export interface MotionRect {

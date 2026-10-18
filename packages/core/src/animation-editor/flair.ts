@@ -8,7 +8,7 @@ import { vectorDocumentToSvg, type VectorSvgWrapper } from '../vector/svg.js';
 import type { VectorNode, VectorPathNode } from '../vector/types.js';
 import { compileMotionScene, indexMotionNodes, motionAddTrackKey, motionTrackKey, segmentValue, trackValue, type MotionProperty, type MotionSegment } from './compile.js';
 import { motionClipAttrs, motionFollowRoute, motionFrameAt, motionNodeClips, motionNodeOffset } from './evaluate.js';
-import type { MotionScene } from './types.js';
+import type { MotionScene, MotionTrigger } from './types.js';
 
 /**
  * Export to Flair (`@pixerate/flair`): a scene becomes an `SvgMotion` (one SVG plus a list of
@@ -121,9 +121,16 @@ export interface FlairMotionExport {
 	sampled: number;
 	/** What could not be carried over, in sentences. */
 	notes: string[];
+	/** How the viewer plays it: pass to Flair's `SvgPlayer` as `{ trigger }` (from the scene's `trigger`). */
+	trigger?: MotionTrigger;
 }
 
 export interface FlairExportOptions {
+	/**
+	 * Play in answer to the viewer (default: the scene's `trigger`; null for none). With `click`
+	 * each shot is a Flair step: shot 0 plays on load and each click plays the next.
+	 */
+	trigger?: MotionTrigger | null;
 	/** Sampling rate for changes Flair cannot express exactly (default: the scene's `fps`, else 30). */
 	fps?: number;
 	/** Decimal places (default 3). */
@@ -475,12 +482,30 @@ export function toFlairSvgMotion(scene: MotionScene, options: FlairExportOptions
 		}
 	}
 	animate.sort((x, y) => (x.delay ?? 0) - (y.delay ?? 0));
+	const lastChange = animate.reduce((m, a) => Math.max(m, (a.delay ?? 0) + (a.ms ?? 0)), 0);
+
+	// A click trigger plays shot by shot: each change goes on its shot's step, timed from the shot's start.
+	const trigger = options.trigger === null ? undefined : (options.trigger ?? scene.trigger);
+	if (trigger === 'click' && timeline.shots.length > 1) {
+		for (const a of animate) {
+			const at = a.delay ?? 0;
+			let step = 0;
+			timeline.shots.forEach((shot, i) => {
+				if (shot.start <= at + 1e-6) step = i;
+			});
+			const delay = round(at - timeline.shots[step].start);
+			delete a.delay;
+			if (delay > 0) a.delay = delay;
+			if (step > 0) a.step = step;
+		}
+		animate.sort((x, y) => (x.step ?? 0) - (y.step ?? 0) || (x.delay ?? 0) - (y.delay ?? 0));
+	}
+	if (trigger && (scene.loop ?? 'none') !== 'none') notes.push(`The scene plays on ${trigger}, so its loop does not apply in Flair.`);
 
 	// The SVG: the artwork at rest, live effects drawn as plain paths so shapes can be tweened,
 	// with the wrappers that reveals and follows animate, and the routes follows take.
 	let svg = vectorDocumentToSvg({ ...scene.artwork, nodes: expandVectorAppearances(scene.artwork.nodes) }, { pretty: false, precision, wrap });
 	if (routes.length) svg = svg.replace(/^(<svg[^>]*>)/, `$1<defs>${routes.join('')}</defs>`);
-	const lastChange = animate.reduce((m, a) => Math.max(m, (a.delay ?? 0) + (a.ms ?? 0)), 0);
 
 	// Controls: each stands for its default colour wherever it appears.
 	let motion: FlairSvgMotion = { svg, animate };
@@ -492,7 +517,7 @@ export function toFlairSvgMotion(scene: MotionScene, options: FlairExportOptions
 		svg = svg.slice(0, header) + swap(svg.slice(header));
 		motion = { svg, animate: animate.map((a) => (a.attrs ? { ...a, attrs: Object.fromEntries(Object.entries(a.attrs).map(([k, [x, y]]) => [k, [typeof x === 'string' ? swap(x) : x, typeof y === 'string' ? swap(y) : y] as const])) } : a)) };
 	}
-	return { motion, duration: timeline.duration, hold: Math.max(0, round(timeline.duration - lastChange)), sampled, notes: [...new Set(notes)] };
+	return { motion, duration: timeline.duration, hold: Math.max(0, round(timeline.duration - lastChange)), sampled, notes: [...new Set(notes)], ...(trigger ? { trigger } : {}) };
 }
 
 export interface FlairEffectOptions extends FlairExportOptions {
@@ -503,7 +528,6 @@ export interface FlairEffectOptions extends FlairExportOptions {
 	/** Flair catalog category (default `icon`). */
 	category?: string;
 	tags?: string[];
-	trigger?: FlairVectorEffect['trigger'];
 }
 
 const kebab = (text: string) =>
@@ -527,7 +551,7 @@ export function toFlairVectorEffect(scene: MotionScene, options: FlairEffectOpti
 		motion: out.motion,
 		hold: out.hold,
 		...(scene.presets?.length ? { presets: scene.presets } : {}),
-		...(options.trigger ? { trigger: options.trigger } : {})
+		...(out.trigger ? { trigger: out.trigger } : {})
 	};
 }
 
@@ -541,7 +565,8 @@ export function toFlairEffectDocument(scene: MotionScene, options: FlairExportOp
 		values: Object.fromEntries((scene.controls ?? []).map((c) => [c.name, c.default])),
 		tracks: {},
 		duration: out.duration,
-		loop: (scene.loop ?? 'none') !== 'none',
+		// Flair's editor documents have no trigger: a click scene keeps its steps, and plays through there.
+		loop: !out.trigger && (scene.loop ?? 'none') !== 'none',
 		presets: scene.presets ?? []
 	};
 }

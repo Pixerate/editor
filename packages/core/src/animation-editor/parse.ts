@@ -1,6 +1,6 @@
 import { isAnimationEasing } from '../animation/easing.js';
 import { namedWithSuggestion } from './issues.js';
-import { MOTION_COMMAND_TYPES, MOTION_DIRECTIONS, MOTION_ENTER_STYLES, MOTION_EXIT_STYLES, MOTION_REPEAT_MODES, MOTION_BLENDS, MOTION_IRIS_SHAPES, MOTION_SPLIT_ORIENTATIONS, type MotionCommand, type MotionScene, type MotionShot } from './types.js';
+import { MOTION_COMMAND_TYPES, MOTION_DIRECTIONS, MOTION_ENTER_STYLES, MOTION_EXIT_STYLES, MOTION_REPEAT_MODES, MOTION_TRIGGERS, MOTION_BLENDS, MOTION_IRIS_SHAPES, MOTION_SPLIT_ORIENTATIONS, type MotionCommand, type MotionScene, type MotionShot } from './types.js';
 
 /**
  * Shape checking: whether a value is a well-formed scene, listing every problem at once.
@@ -16,7 +16,7 @@ export class MotionSceneFormatError extends Error {
 	}
 }
 
-const SCENE_KEYS = ['version', 'name', 'description', 'artwork', 'shots', 'loop', 'fps', 'steps', 'beat', 'narration', 'target', 'controls', 'presets'];
+const SCENE_KEYS = ['version', 'name', 'description', 'artwork', 'shots', 'loop', 'trigger', 'fps', 'steps', 'beat', 'narration', 'target', 'controls', 'presets'];
 const SHOT_KEYS = ['id', 'label', 'camera', 'at', 'run', 'hold', 'speed'];
 const CAMERA_KEYS = ['x', 'y', 'width', 'height', 'frame', 'padding', 'ease', 'ms', 'geometric'];
 const BASE_KEYS = ['type', 'targets', 'duration', 'delay', 'stagger', 'with', 'ease', 'note', 'repeat', 'repeatMode', 'steps'];
@@ -217,6 +217,7 @@ export function motionSceneShapeProblems(input: unknown): string[] {
 	const art = input.artwork;
 	if (!isObject(art) || !isNum(art.width) || !isNum(art.height) || !(art.width > 0) || !(art.height > 0) || !Array.isArray(art.nodes))
 		problems.push('Scene: "artwork" must be a vector document { width, height, nodes }.');
+	if (input.trigger !== undefined && !(MOTION_TRIGGERS as readonly unknown[]).includes(input.trigger)) problems.push(`Scene: "trigger" must be one of ${MOTION_TRIGGERS.join(', ')}.`);
 	if (input.loop !== undefined && !['none', 'loop', 'ping-pong'].includes(input.loop as string)) problems.push('Scene: "loop" must be "none", "loop" or "ping-pong".');
 	if (input.fps !== undefined && !(isNum(input.fps) && input.fps > 0 && input.fps <= 120)) problems.push('Scene: "fps" must be a number from 1 to 120.');
 	if (input.beat !== undefined) {

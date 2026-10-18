@@ -219,6 +219,8 @@ describe('checkMotionScene', () => {
 		const twin = { id: 'twin', type: 'group', visible: false, children: [{ id: 'twin-a', type: 'path', fill: '#000000', subpaths: [rectSubpath({ x: 0, y: 0, width: 5, height: 5 })] }, { id: 'twin-b', type: 'path', fill: '#000000', subpaths: [rectSubpath({ x: 9, y: 0, width: 5, height: 5 })] }, { id: 'twin-c', type: 'group', children: [] }] } as VectorNode;
 		collect(scene([{ id: 'm', run: [{ type: 'match', targets: ['pair'], into: 'twin' }, { type: 'match', targets: ['pair'], into: 'a' }] }], { artwork: { ...ARTWORK, nodes: [...ARTWORK.nodes, twin] } }));
 		collect(scene([{ id: 'long', run: [{ type: 'wait', duration: 2000 }] }, { id: 'hit', at: { beat: 1 }, run: [] }, { id: 'say', at: { word: 3 }, run: [] }], { beat: { bpm: 120 } }));
+		collect(scene([{ id: 'only', run: [] }], { trigger: 'click', loop: 'loop' }));
+		collect(scene([{ id: 'a', run: [] }, { id: 'b', at: { ms: 5000 }, run: [] }], { trigger: 'click' }));
 		expect([...reported].sort()).toEqual(Object.keys(MOTION_ISSUE_CODES).sort());
 	});
 
@@ -881,7 +883,8 @@ describe('importing from Flair', () => {
 			{ type: 'draw', targets: ['line'], from: 0, to: 1, duration: 500, ease: expect.anything(), with: 'previous', delay: 200 }
 		]);
 		expect(s.shots[1]).toMatchObject({ camera: { x: 0, y: 0, width: 100, height: 50, ms: 300 }, hold: 300, run: [{ type: 'follow', path: 'route', rotate: true, ease: { type: 'spring', stiffness: 200, damping: 20 } }] });
-		for (const said of [/Each Flair step became a shot/, /"line": count is not part of scenes/, /"ghost" was skipped: the artwork has no element with that id/, /plays on hover/]) expect(notes.join('\n')).toMatch(said);
+		for (const said of [/Each Flair step became a shot/, /"line": count is not part of scenes/, /"ghost" was skipped: the artwork has no element with that id/]) expect(notes.join('\n')).toMatch(said);
+		expect(s.trigger).toBe('hover');
 	});
 
 	it('imports through the agent tool, with a dry run and useful errors', async () => {
@@ -1284,5 +1287,58 @@ describe('onion skin and motion paths', () => {
 		const path = (await registry.callTool('get_motion_path', { node: 'box', step: 500 })).structuredContent as any;
 		expect(path.keys).toHaveLength(3);
 		expect((await registry.callTool('get_motion_path', { node: 'ghost' })).isError).toBe(true);
+	});
+});
+
+describe('playing on a trigger', () => {
+	const s = scene(
+		[
+			{ id: 'open', run: [{ type: 'enter', targets: ['box'], duration: 400 }], hold: 200 },
+			{ id: 'grow', camera: { frame: 'box', ms: 500 }, run: [{ type: 'scale', targets: ['box'], to: 1.5, duration: 300, delay: 100 }] },
+			{ id: 'close', run: [{ type: 'scale', targets: ['box'], to: 1, duration: 300 }] }
+		],
+		{ trigger: 'click' }
+	);
+
+	it('exports a click scene shot by shot as Flair steps timed from each shot', () => {
+		const out = toFlairSvgMotion(s);
+		expect(out.trigger).toBe('click');
+		const steps = animateOf(out).map((a) => [a.step ?? 0, a.delay ?? 0, a.view ? 'view' : Object.keys(a.attrs ?? {})[0]]);
+		expect(steps).toEqual([[0, 0, 'opacity'], [1, 0, 'view'], [1, 600, 'transform'], [2, 0, 'transform']]);
+		expect(toFlairVectorEffect(s)).toMatchObject({ trigger: 'click' });
+		// Without the trigger (or for hover, press and scroll) everything stays on step 0, timed from the start.
+		expect(animateOf(toFlairSvgMotion(s, { trigger: null })).every((a) => a.step === undefined)).toBe(true);
+		expect(animateOf(toFlairSvgMotion({ ...s, trigger: 'hover' })).every((a) => a.step === undefined)).toBe(true);
+		expect(toFlairEffectDocument({ ...s, loop: 'loop' }).loop).toBe(false);
+	});
+
+	it('round-trips the trigger through Flair import, and notes it for Lottie', () => {
+		const effect = toFlairVectorEffect(s);
+		const back = fromFlairVectorEffect(effect);
+		expect(back.scene.trigger).toBe('click');
+		expect(back.scene.shots.map((x) => x.id)).toEqual(['step-0', 'step-1', 'step-2']);
+		expect(toLottie(s).notes.join(' ')).toContain('plays on click');
+	});
+
+	it('checks loops, cues and single shots against the trigger', () => {
+		const codes = (x: MotionScene) => checkMotionScene(x).map((i) => i.code);
+		expect(codes({ ...s, loop: 'loop' })).toContain('trigger-loop');
+		expect(codes({ ...s, shots: [s.shots[0]] })).toContain('click-one-shot');
+		expect(codes({ ...s, shots: [s.shots[0], { ...s.shots[1], at: { ms: 4000 } }] })).toContain('click-cue');
+		expect(codes({ ...s, trigger: 'hover', shots: [s.shots[0], { ...s.shots[1], at: { ms: 4000 } }] })).not.toContain('click-cue');
+		expect(() => parseMotionScene({ ...s, trigger: 'tap' })).toThrow(/"trigger" must be one of click, hover, press, scroll/);
+	});
+
+	it('sets and clears the trigger through the agent tools', async () => {
+		const controller = new AnimationEditorController({ scene: { ...s, trigger: undefined } });
+		const registry = new ToolRegistry();
+		registry.register(createAnimationEditorToolProvider(controller));
+		expect((await registry.callTool('set_animation_settings', { trigger: 'click' })).isError).toBeFalsy();
+		expect(((await registry.callTool('get_animation', {})).structuredContent as any).trigger).toBe('click');
+		const exported = (await registry.callTool('export_flair_effect', {})).structuredContent as any;
+		expect(exported.trigger).toBe('click');
+		expect((await registry.callTool('set_animation_settings', { trigger: 'tap' })).isError).toBe(true);
+		expect((await registry.callTool('set_animation_settings', { trigger: null })).isError).toBeFalsy();
+		expect(controller.getState().scene.trigger).toBeUndefined();
 	});
 });

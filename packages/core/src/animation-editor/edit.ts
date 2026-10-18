@@ -11,7 +11,7 @@ import type { MotionCommand, MotionControl, MotionPreset, MotionScene, MotionSho
  * fixed a step at a time.
  */
 export type MotionEdit =
-	| { op: 'set_settings'; name?: string; description?: string | null; loop?: MotionScene['loop']; fps?: number; steps?: number | null; beat?: MotionScene['beat'] | null; narration?: MotionScene['narration'] | null; target?: [number, number] | null }
+	| { op: 'set_settings'; name?: string; description?: string | null; loop?: MotionScene['loop']; trigger?: MotionScene['trigger'] | null; fps?: number; steps?: number | null; beat?: MotionScene['beat'] | null; narration?: MotionScene['narration'] | null; target?: [number, number] | null }
 	| { op: 'insert_shots'; shots: MotionShot[]; at?: number }
 	| { op: 'update_shot'; shot: string; set?: Partial<MotionShot>; remove?: ('label' | 'camera' | 'hold' | 'speed' | 'at')[] }
 	| { op: 'delete_shots'; shots: string[] }
@@ -88,6 +88,11 @@ function applyOne(scene: MotionScene, edit: MotionEdit): MotionScene {
 			if (edit.description === null) delete next.description;
 			else if (edit.description !== undefined) next.description = edit.description;
 			if (edit.loop !== undefined) next.loop = edit.loop;
+			if (edit.trigger === null) delete next.trigger;
+			else if (edit.trigger !== undefined) {
+				if (!['click', 'hover', 'press', 'scroll'].includes(edit.trigger)) fail('"trigger" must be click, hover, press or scroll, or null to play on its own.');
+				next.trigger = edit.trigger;
+			}
 			if (edit.fps !== undefined) next.fps = edit.fps;
 			if (edit.steps === null) delete next.steps;
 			else if (edit.steps !== undefined) {
