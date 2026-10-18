@@ -509,6 +509,7 @@ export function toFlairSvgMotion(scene: MotionScene, options: FlairExportOptions
 		}
 		animate.sort((x, y) => (x.step ?? 0) - (y.step ?? 0) || (x.delay ?? 0) - (y.delay ?? 0));
 	}
+	if (scene.motionBlur) notes.push('Motion blur is drawn on the stage only; Flair plays the scene sharp.');
 	if (trigger && (scene.loop ?? 'none') !== 'none') notes.push(`The scene plays on ${trigger}, so its loop does not apply in Flair.`);
 
 	// The SVG: the artwork at rest, live effects drawn as plain paths so shapes can be tweened,

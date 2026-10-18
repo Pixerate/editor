@@ -18,6 +18,7 @@ import {
 	toFlairSvgMotion,
 	toFlairVectorEffect,
 	MOTION_EASE_OUT,
+	motionBlurTimes,
 	motionGhosts,
 	motionMovingIds,
 	motionPath,
@@ -1560,5 +1561,44 @@ describe('drivers', () => {
 		expect(JSON.stringify(loop.content)).toContain('loop');
 		expect((await registry.callTool('set_animation_drivers', { drivers: [] })).isError).toBeFalsy();
 		expect(controller.getState().scene.drivers).toBeUndefined();
+	});
+});
+
+describe('motion blur', () => {
+	const fast = scene([{ id: 'one', run: [{ type: 'move', targets: ['box'], by: { x: 300, y: 0 }, ease: 'linear', duration: 500 }] }], { motionBlur: { shutter: 180, samples: 8 } });
+
+	it('averages more moments the faster things move, and none when still', () => {
+		// 300 units in 500 ms is 10 units across half a 30 fps frame: 7 moments.
+		const times = motionBlurTimes(fast, 250, fast.motionBlur);
+		expect(times).toHaveLength(7);
+		expect(times[0]).toBeCloseTo(250 - 1000 / 30 / 4 + 1000 / 30 / 2 / 14, 6);
+		expect(motionBlurTimes(fast, 900, fast.motionBlur)).toEqual([900]);
+		expect(motionBlurTimes(fast, 250, { shutter: 180, samples: 3 })).toHaveLength(3);
+		const slow = scene([{ id: 'one', run: [{ type: 'move', targets: ['box'], by: { x: 10, y: 0 }, duration: 2000 }] }]);
+		expect(motionBlurTimes(slow, 1000, {})).toEqual([1000]);
+	});
+
+	it('draws the moments as an exact average on the stage, keeping each id once', () => {
+		const svg = motionStageSvg(fast, 250, { pretty: false });
+		expect(svg).toMatch(/^<svg[^>]*><rect width="400" height="200" fill="#ffffff"\/><g data-motion-blur="7" style="isolation:isolate">/);
+		expect(svg.match(/mix-blend-mode:plus-lighter/g)).toHaveLength(7);
+		expect(svg.match(/ id="box"/g)).toHaveLength(1);
+		expect(motionStageSvg(fast, 250, { pretty: false, motionBlur: false })).toBe(motionFrameToSvg(fast, 250, { pretty: false }));
+		expect(motionFrameToSvg(fast, 250, { pretty: false })).not.toContain('data-motion-blur');
+		expect(toFlairSvgMotion(fast).notes.join(' ')).toContain('Motion blur is drawn on the stage only');
+		expect(toLottie(fast).notes.join(' ')).toContain('Motion blur');
+	});
+
+	it('is set and cleared through the agent tools, and checked', async () => {
+		expect(() => parseMotionScene({ ...fast, motionBlur: { shutter: 0, samples: 99 } })).toThrow(/"motionBlur" must be/);
+		const controller = new AnimationEditorController({ scene: { ...fast, motionBlur: undefined } });
+		const registry = new ToolRegistry();
+		registry.register(createAnimationEditorToolProvider(controller));
+		expect((await registry.callTool('set_animation_settings', { motionBlur: { shutter: 360 } })).isError).toBeFalsy();
+		const frame = (await registry.callTool('render_animation_frame', { time: 250 })).structuredContent as any;
+		expect(frame.svg).toContain('data-motion-blur');
+		expect((await registry.callTool('set_animation_settings', { motionBlur: { samples: 1 } })).isError).toBe(true);
+		expect((await registry.callTool('set_animation_settings', { motionBlur: null })).isError).toBeFalsy();
+		expect(controller.getState().scene.motionBlur).toBeUndefined();
 	});
 });

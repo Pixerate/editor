@@ -60,6 +60,13 @@ export function SceneSettings({ controller, className = '' }: SceneSettingsProps
           <option value="loop">Loop</option>
           <option value="ping-pong">Ping-pong</option>
         </select>
+        <label className="text-muted-foreground">Motion blur</label>
+        <select className={input} aria-label="Motion blur" disabled={readOnly} value={scene.motionBlur ? String(scene.motionBlur.shutter ?? 180) : ''} onChange={(e) => settings({ motionBlur: e.target.value ? { ...(scene.motionBlur ?? {}), shutter: Number(e.target.value) } : null }, 'Change motion blur')}>
+          <option value="">Off</option>
+          <option value="90">Light (90°)</option>
+          <option value="180">Normal (180°)</option>
+          <option value="360">Heavy (360°)</option>
+        </select>
         <label className="text-muted-foreground">Plays on</label>
         <select className={input} aria-label="Scene trigger" title="How a viewer plays it when exported to Flair" disabled={readOnly} value={scene.trigger ?? ''} onChange={(e) => settings({ trigger: (e.target.value || null) as MotionTrigger | null }, 'Change trigger')}>
           <option value="">Its own (autoplay)</option>

@@ -1,6 +1,6 @@
 import { compileMotionScene, indexMotionNodes, type MotionProperty } from './compile.js';
 import { motionFrameAt, motionFrameToSvg, type MotionSvgOptions } from './evaluate.js';
-import type { MotionRect, MotionScene } from './types.js';
+import type { MotionBlur, MotionRect, MotionScene } from './types.js';
 
 /**
  * Seeing motion on a still: onion skin (faded frames either side of the playhead) and motion
@@ -128,6 +128,48 @@ export interface MotionOverlayOptions {
 	motionPaths?: boolean | readonly string[];
 	/** Colour of motion paths (default `#f43f5e`). */
 	motionPathColor?: string;
+	/** Motion blur (default: the scene's `motionBlur`; false for none). */
+	motionBlur?: MotionBlur | false;
+}
+
+/**
+ * The moments a frame at `time` averages for motion blur: spread across the shutter (centred on
+ * `time`), as many as the fastest moving node needs to look smooth (about one per 1.5 document
+ * units it travels), and just `[time]` when nothing moves.
+ */
+export function motionBlurTimes(scene: MotionScene, time: number, blur: MotionBlur = {}): number[] {
+	const shutter = Math.min(720, Math.max(0, blur.shutter ?? 180));
+	const most = Math.max(1, Math.min(32, Math.floor(blur.samples ?? 8)));
+	const span = ((1000 / (scene.fps ?? 30)) * shutter) / 360;
+	if (span <= 0 || most <= 1) return [time];
+	const ids = motionMovingIds(scene);
+	if (!ids.length) return [time];
+	const a = indexMotionNodes(motionFrameAt(scene, time - span / 2).document.nodes);
+	const b = indexMotionNodes(motionFrameAt(scene, time + span / 2).document.nodes);
+	let travel = 0;
+	for (const id of ids) {
+		const p = a.get(id)?.bounds;
+		const q = b.get(id)?.bounds;
+		if (p && q) travel = Math.max(travel, Math.abs(p.x - q.x), Math.abs(p.y - q.y), Math.abs(p.x + p.width - q.x - q.width), Math.abs(p.y + p.height - q.y - q.height));
+	}
+	const n = Math.min(most, Math.ceil(travel / 1.5));
+	if (n <= 1) return [time];
+	return Array.from({ length: n }, (_, k) => time - span / 2 + (span * (k + 0.5)) / n);
+}
+
+/** Moments averaged into one picture: added (plus-lighter) at 1/n each in an isolated group, an exact average, transparency included. */
+function averagedFrames(scene: MotionScene, times: readonly number[], options: MotionSvgOptions, prefix: string): string {
+	const n = times.length;
+	return `<g data-motion-blur="${n}" style="isolation:isolate">${times
+		.map((t, k) => {
+			const own = `${prefix}blur${k}-`;
+			const frame = motionFrameToSvg(scene, t, { ...options, idPrefix: own, background: false });
+			const view = /viewBox="([^"]*)"/.exec(frame)?.[1] ?? '';
+			// Element ids stay on the last moment only, so the picture has each once.
+			const inner = k === n - 1 ? innerSvg(frame) : innerSvg(frame).replace(new RegExp(` id="(?!${own.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})[^"]*"`, 'g'), '');
+			return `<svg viewBox="${view}" preserveAspectRatio="none" style="mix-blend-mode:plus-lighter" opacity="${Math.round(10000 / n) / 10000}">${inner}</svg>`;
+		})
+		.join('')}</g>`;
 }
 
 /** The inside of a standalone SVG (between its root tags). */
@@ -139,10 +181,19 @@ const innerSvg = (svg: string) => svg.slice(svg.indexOf('>') + 1, svg.lastIndexO
  * `motionFrameToSvg`.
  */
 export function motionStageSvg(scene: MotionScene, time: number, options: MotionSvgOptions & MotionOverlayOptions = {}): string {
-	const { onionSkin, motionPaths, motionPathColor, ...svgOptions } = options;
-	const current = motionFrameToSvg(scene, time, svgOptions);
-	if (!onionSkin && !motionPaths) return current;
+	const { onionSkin, motionPaths, motionPathColor, motionBlur, ...svgOptions } = options;
 	const prefix = svgOptions.idPrefix ?? 'vg-';
+	let current = motionFrameToSvg(scene, time, svgOptions);
+	const blur = motionBlur === false ? undefined : (motionBlur ?? scene.motionBlur);
+	const blurTimes = blur ? motionBlurTimes(scene, time, blur) : [time];
+	if (blurTimes.length > 1) {
+		// The background once, then the moments averaged over it (compositing is linear, so this is the average of whole frames).
+		const open = current.indexOf('>') + 1;
+		const body = current.slice(open, current.lastIndexOf('</svg>'));
+		const bg = svgOptions.background !== false && scene.artwork.background ? (/^\s*<rect[^>]*\/>/.exec(body)?.[0] ?? '') : '';
+		current = `${current.slice(0, open)}${bg}${averagedFrames(scene, blurTimes, svgOptions, prefix)}</svg>`;
+	}
+	if (!onionSkin && !motionPaths) return current;
 	const ghosts = onionSkin
 		? motionGhosts(scene, time, onionSkin).map((g, i) => {
 				const own = `${prefix}ghost${i}-`;

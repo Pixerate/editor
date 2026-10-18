@@ -227,6 +227,10 @@ const SETTINGS: Record<string, JsonSchema> = {
 	},
 	fps: { type: 'number', minimum: 1, maximum: 120, description: 'Sampling rate for exports (default 30).' },
 	steps: { anyOf: [{ type: 'number', exclusiveMinimum: 0, maximum: 120 }, { type: 'null' }], description: 'Stepped time for every command without its own: changes hold on a grid of this many frames per second (12 = "on twos" at 24 fps) for a hand-drawn look; null makes it smooth again (default).' },
+	motionBlur: {
+		anyOf: [object({ shutter: { type: 'number', exclusiveMinimum: 0, maximum: 720, description: 'Shutter angle in degrees of a frame (default 180; 360 is a whole frame, more blur).' }, samples: { type: 'integer', minimum: 2, maximum: 32, description: 'Most moments a frame averages (default 8).' } }), { type: 'null' }],
+		description: 'Motion blur on the stage and in rendered frames (not exported to Flair or Lottie); null turns it off.'
+	},
 	beat: {
 		anyOf: [
 			object({ bpm: { type: 'number', minimum: 1, maximum: 1000, description: 'Beats a minute.' }, offset: { type: 'number', description: 'When beat 0 falls, ms (default 0).' }, meter: { type: 'integer', minimum: 1, description: 'Beats a bar (default 4).' } }, ['bpm']),
@@ -372,6 +376,7 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 				shots: describeMotionShots(s),
 				...(s.clips ? { clips: Object.fromEntries(Object.entries(s.clips).map(([name, c]) => [name, { ...(c.description ? { description: c.description } : {}), commands: c.run.length, length: Math.round(motionClipLayout(s, name, '$').length) }])) } : {}),
 				...(s.drivers ? { drivers: s.drivers } : {}),
+				...(s.motionBlur ? { motionBlur: s.motionBlur } : {}),
 				...(s.controls ? { controls: s.controls } : {}),
 				...(s.presets ? { presets: s.presets } : {}),
 				issues: issueSummary(controller.getState().issues),

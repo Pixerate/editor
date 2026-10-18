@@ -100,6 +100,13 @@
       <option value="loop">Loop</option>
       <option value="ping-pong">Ping-pong</option>
     </select>
+    <span class="text-muted-foreground">Motion blur</span>
+    <select class={input} aria-label="Motion blur" disabled={editor.readOnly} value={scene.motionBlur ? String(scene.motionBlur.shutter ?? 180) : ''} onchange={(e) => settings({ motionBlur: e.currentTarget.value ? { ...(scene.motionBlur ?? {}), shutter: Number(e.currentTarget.value) } : null }, 'Change motion blur')}>
+      <option value="">Off</option>
+      <option value="90">Light (90°)</option>
+      <option value="180">Normal (180°)</option>
+      <option value="360">Heavy (360°)</option>
+    </select>
     <span class="text-muted-foreground">Plays on</span>
     <select class={input} aria-label="Scene trigger" title="How a viewer plays it when exported to Flair" disabled={editor.readOnly} value={scene.trigger ?? ''} onchange={(e) => settings({ trigger: (e.currentTarget.value || null) as MotionTrigger | null }, 'Change trigger')}>
       <option value="">Its own (autoplay)</option>
