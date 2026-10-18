@@ -1304,7 +1304,8 @@ describe('playing on a trigger', () => {
 		const out = toFlairSvgMotion(s);
 		expect(out.trigger).toBe('click');
 		const steps = animateOf(out).map((a) => [a.step ?? 0, a.delay ?? 0, a.view ? 'view' : Object.keys(a.attrs ?? {})[0]]);
-		expect(steps).toEqual([[0, 0, 'opacity'], [1, 0, 'view'], [1, 600, 'transform'], [2, 0, 'transform']]);
+		// Flair's player waits for the first click and plays step 0 with step 1, so shot n is step n + 1.
+		expect(steps).toEqual([[1, 0, 'opacity'], [2, 0, 'view'], [2, 600, 'transform'], [3, 0, 'transform']]);
 		expect(toFlairVectorEffect(s)).toMatchObject({ trigger: 'click' });
 		// Without the trigger (or for hover, press and scroll) everything stays on step 0, timed from the start.
 		expect(animateOf(toFlairSvgMotion(s, { trigger: null })).every((a) => a.step === undefined)).toBe(true);
@@ -1316,7 +1317,12 @@ describe('playing on a trigger', () => {
 		const effect = toFlairVectorEffect(s);
 		const back = fromFlairVectorEffect(effect);
 		expect(back.scene.trigger).toBe('click');
-		expect(back.scene.shots.map((x) => x.id)).toEqual(['step-0', 'step-1', 'step-2']);
+		expect(back.scene.shots.map((x) => x.id)).toEqual(['step-1', 'step-2', 'step-3']);
+		// And back out again, unchanged.
+		expect(toFlairSvgMotion(back.scene).motion.animate!.map((a) => a.step)).toEqual(toFlairSvgMotion(s).motion.animate!.map((a) => a.step));
+		// A Flair-made click effect's step 0 plays with its first click, so it joins the first shot.
+		const made = fromFlairVectorEffect({ ...effect, motion: { ...effect.motion, animate: [{ id: 'box', ms: 200, attrs: { opacity: [0, 1] } }, ...effect.motion.animate!.filter((a) => (a.step ?? 0) > 1)] } });
+		expect(made.scene.shots.map((x) => [x.id, x.run.length])).toEqual([['step-1', 1], ['step-2', 1], ['step-3', 1]]); // step 2's view is its camera
 		expect(toLottie(s).notes.join(' ')).toContain('plays on click');
 	});
 

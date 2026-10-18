@@ -24,8 +24,8 @@ export interface MotionScene {
 	loop?: AnimationLoopMode;
 	/**
 	 * Plays in answer to the viewer instead of on its own (exported to Flair's player):
-	 * - `click`: the first shot plays on load, and each click plays the next shot; after the last,
-	 *   a click plays the second again, so a last shot that leads back to how the first ended toggles.
+	 * - `click`: nothing plays until the viewer clicks; each click plays the next shot, and after the
+	 *   last one a click plays the first again, so a last shot that puts things back makes a toggle.
 	 * - `hover` / `press`: plays forward while the pointer is over (or down on) it, and back when it leaves.
 	 * - `scroll`: scrubs through the scene as it scrolls through the viewport.
 	 * The editor previews it played through; `loop` does not apply.
