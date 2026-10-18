@@ -22,6 +22,7 @@ import {
 	fromFlairSvgMotion,
 	fromFlairVectorEffect,
 	type FlairSvgAnimation,
+	type MotionCommand,
 	type MotionIssueCode,
 	type MotionScene
 } from '../src/animation-editor';
@@ -886,5 +887,57 @@ describe('importing from Flair', () => {
 		const broken = await registry.callTool('import_flair_effect', { motion: { svg: '<nope/>' } });
 		expect(broken.isError).toBe(true);
 		expect(JSON.stringify(broken.content)).toMatch(/could not be imported[\s\S]*Nothing was changed/);
+	});
+});
+
+describe('additive layers', () => {
+	const xAt = (s: MotionScene, t: number, id = 'box') => path(motionFrameAt(s, t).document, id).transform?.[4] ?? 0;
+
+	it('stacks emphasis on a move under way instead of cutting it off', () => {
+		const slide = (shake: Partial<MotionCommand>) => scene([{ id: 'one', run: [{ type: 'move', targets: ['box'], by: { x: 100, y: 0 }, ease: 'linear', duration: 1000 }, { type: 'shake', targets: ['box'], amount: 10, count: 2, duration: 400, delay: 300, with: 'previous', ...shake } as MotionCommand] }]);
+		const stacked = slide({});
+		const plainMove = scene([{ id: 'one', run: [{ type: 'move', targets: ['box'], by: { x: 100, y: 0 }, ease: 'linear', duration: 1000 }] }]);
+		// The move carries on under the shake and lands where it would have.
+		expect(xAt(stacked, 1000)).toBeCloseTo(100, 6);
+		expect(xAt(stacked, 350) - xAt(plainMove, 350)).toBeCloseTo(10 * (1 - 0.125), 3);
+		expect(xAt(stacked, 800)).toBeCloseTo(80, 6);
+		expect(checkMotionScene(stacked).some((i) => i.code === 'overlap')).toBe(false);
+		// blend "replace" brings back the old behaviour: the shake takes over x, with a warning.
+		const replaced = slide({ blend: 'replace' });
+		expect(xAt(replaced, 800)).toBeCloseTo(30, 6);
+		expect(checkMotionScene(replaced).some((i) => i.code === 'overlap')).toBe(true);
+	});
+
+	it('keeps what an additive move, turn or scale adds, on top of later changes', () => {
+		const moves = scene([{ id: 'one', run: [{ type: 'move', targets: ['box'], by: { x: 20, y: 0 }, blend: 'add', duration: 200 }, { type: 'move', targets: ['box'], by: { x: 50, y: 0 }, duration: 200 }] }]);
+		expect(xAt(moves, 400)).toBeCloseTo(70, 6);
+		const scales = scene([{ id: 'one', run: [{ type: 'scale', targets: ['box'], to: 2, blend: 'add', duration: 200 }, { type: 'scale', targets: ['box'], to: 1.5, duration: 200 }] }]);
+		expect(path(motionFrameAt(scales, 400).document, 'box').transform?.[0]).toBeCloseTo(3, 6);
+		const turns = scene([{ id: 'one', run: [{ type: 'rotate', targets: ['box'], to: 30, blend: 'add', duration: 200 }, { type: 'rotate', targets: ['box'], by: 15, duration: 200 }] }]);
+		const m = path(motionFrameAt(turns, 400).document, 'box').transform!;
+		expect((Math.atan2(m[1], m[0]) * 180) / Math.PI).toBeCloseTo(45, 4);
+	});
+
+	it('exports a layer alone exactly and samples layers that overlap the pose', () => {
+		const alone = scene([{ id: 'one', run: [{ type: 'move', targets: ['box'], by: { x: 40, y: 0 }, duration: 400 }, { type: 'pulse', targets: ['box'] }] }]);
+		expect(toFlairSvgMotion(alone).sampled).toBe(0);
+		const overlapping = scene([{ id: 'one', run: [{ type: 'move', targets: ['box'], by: { x: 40, y: 0 }, duration: 800 }, { type: 'pulse', targets: ['box'], with: 'previous', delay: 200 }] }]);
+		const out = toFlairSvgMotion(overlapping);
+		expect(out.sampled).toBeGreaterThan(0);
+		// Sampled frames still land on the editor's.
+		const last = animateOf(out).filter((a) => a.id === 'box').at(-1)!;
+		expect(last.attrs!.transform![1]).toMatch(/^translate\(40 0\)/);
+	});
+
+	it('checks and exposes "blend"', async () => {
+		expect(() => parseMotionScene(scene([{ id: 'one', run: [{ type: 'move', targets: ['box'], by: { x: 1, y: 0 }, blend: 'multiply' } as never, { type: 'fade', targets: ['box'], to: 0, blend: 'add' } as never] }]))).toThrow(/"blend" must be "replace"[\s\S]*unknown field "blend"/);
+		const controller = new AnimationEditorController({ scene: createMotionScene(ARTWORK, { name: 'demo' }) });
+		const registry = new ToolRegistry();
+		registry.register(createAnimationEditorToolProvider(controller));
+		const ok = await registry.callTool('insert_shots', { shots: [{ id: 'one', run: [{ type: 'rotate', targets: ['box'], by: 90, duration: 800 }, { type: 'teeter', targets: ['box'], with: 'previous', delay: 200 }] }] });
+		expect(ok.isError).toBeFalsy();
+		expect((ok.structuredContent as any).issues.warnings).toBe(0);
+		const bad = await registry.callTool('add_commands', { shot: 'one', commands: [{ type: 'pulse', targets: ['box'], blend: 'stack' }] });
+		expect(bad.isError).toBe(true);
 	});
 });

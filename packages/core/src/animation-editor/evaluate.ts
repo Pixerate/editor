@@ -5,7 +5,7 @@ import { createVectorEffect } from '../vector/appearance.js';
 import { invertMatrix, multiplyMatrices, nodeMatrix, rotateMatrix, scaleMatrix, translateMatrix, vectorPathWorldBezier, isIdentityMatrix, type AffineMatrix } from '../vector/geometry.js';
 import { vectorDocumentToSvg, type VectorSvgExportOptions, type VectorSvgWrapper } from '../vector/svg.js';
 import type { VectorDocument, VectorEffect, VectorGradient, VectorNode, VectorPaint, VectorPathNode } from '../vector/types.js';
-import { activeSegment, compileMotionScene, indexMotionNodes, motionTrackKey, segmentProgress, trackValue, type MotionNodeEntry, type MotionProperty, type MotionTimeline } from './compile.js';
+import { activeSegment, compileMotionScene, indexMotionNodes, motionAddTrackKey, motionTrackKey, withMotionLayers, segmentProgress, trackValue, type MotionNodeEntry, type MotionProperty, type MotionTimeline } from './compile.js';
 import type { MotionRect, MotionScene } from './types.js';
 
 /**
@@ -158,11 +158,12 @@ export function motionNodeOffset(
 	raw = false,
 	follow = true
 ): { matrix: AffineMatrix; dx: number; dy: number; rotation: number; scaleX: number; scaleY: number; follow: { x: number; y: number; angle: number } | null } | null {
+	// The pose, with any additive layers (emphasis, blend "add") on top.
 	const read = (p: MotionProperty, rest: number) => {
 		const v = trackValue(timeline.tracks.get(motionTrackKey(entry.node.id, p)), time, raw);
-		return typeof v === 'number' ? v : rest;
+		return withMotionLayers(timeline, entry.node.id, p, typeof v === 'number' ? v : rest, time, raw);
 	};
-	if (!TRANSFORM_PROPS.some((p) => (follow || p !== 'follow') && timeline.tracks.has(motionTrackKey(entry.node.id, p)))) return null;
+	if (!TRANSFORM_PROPS.some((p) => (follow || p !== 'follow') && (timeline.tracks.has(motionTrackKey(entry.node.id, p)) || timeline.tracks.has(motionAddTrackKey(entry.node.id, p))))) return null;
 	const dx = read('x', 0);
 	const dy = read('y', 0);
 	const rotation = read('rotation', 0);

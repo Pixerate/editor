@@ -1520,6 +1520,16 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: Flair's `out` is `1 − (1 − t)³` and `in-out` the piecewise cubic, which differ from CSS `ease-out` / `ease-in-out` by up to ~7%. Separately, a move animates `x` and `y` as two segments, so an interval had two active segments and fell back to sampling.
 - **Solution / Workaround**: The editor's defaults are `MOTION_EASE_OUT` (`cubic-bezier(1/3, 1, 2/3, 1)`, exactly Flair's `out`) and `MOTION_EASE_IN_OUT` (within 1% of Flair's `in-out`). `flairEaseFor` matches a curve to a Flair name within 1%, and the exporter writes one change when every active segment spans the same interval with the same curve.
 
+### [core/animation-editor] Additive Layers Live on Their Own Tracks, Not on the Pose's
+
+- **Issue / Symptom**: A shake that started during a slide cut the slide off: the box jumped back and shook in place. Putting additive deltas on the same track as the pose counted them twice once a later move started from the composed value.
+- **Root Cause**: A track's value is its latest *started* segment, and every `from` is read from the track. An offset added in the same place leaks into the next segment's `from`.
+- **Solution / Workaround**:
+  - Segments with `blend: 'add'` go on `motionAddTrackKey(node, property)` and run from 0 (offsets, turns) or 1 (scales). `withMotionLayers` adds or multiplies every started layer onto the pose.
+  - Commands read `from` from the pose track only (`valueAt`), so layers never feed back into it.
+  - The overlap check skips add tracks. The Flair export puts layers on the node's transform channel: alone in a stretch they are one exact change, and overlapping the pose they are sampled (Flair has no layers).
+  - Emphasis defaults to `add`; `blend: 'replace'` gives the old take-over.
+
 ### [core] The Entry-Isolation Test Reads `-import"` in a String as an Import
 
 - **Issue / Symptom**: `tests/entry-isolation.test.ts` reported a third-party package named `, artwork, shots, …` for `/animation-editor` after a default scene name `'flair-import'` was added.

@@ -94,6 +94,12 @@ export interface MotionSegment {
 	steps?: number;
 	/** Numbers change by a steady factor (`from·(to/from)^u`); a camera zooms at a steady rate. */
 	geometric?: boolean;
+	/**
+	 * `add`: the segment is a layer over the node's pose rather than a change to it. It lives on
+	 * its own track (`motionAddTrackKey`), runs from 0 (offsets, turns) or 1 (scales), and what
+	 * it adds stays once it ends, on top of whatever the pose does.
+	 */
+	blend?: 'add';
 	/** For `follow`: the path node id, and whether to turn with it. */
 	path?: string;
 	rotate?: boolean;
@@ -372,6 +378,29 @@ export function trackValue(track: readonly MotionSegment[] | undefined, time: nu
 
 export const motionTrackKey = (node: string, property: MotionProperty) => `${node}\u0000${property}`;
 
+/** The track of a node property's additive layers (segments with `blend: 'add'`). */
+export const motionAddTrackKey = (node: string, property: MotionProperty) => `${node}\u0000${property}\u0000add`;
+
+/** Properties that take additive layers: offsets and turns add, scales multiply. */
+export const MOTION_ADDITIVE_PROPERTIES: readonly MotionProperty[] = ['x', 'y', 'rotation', 'scaleX', 'scaleY'];
+
+/**
+ * A property's value with its additive layers on top of `base` (its pose): every layer that has
+ * started adds its value (offsets, turns) or multiplies by it (scales). `raw` ignores behaviours.
+ */
+export function withMotionLayers(timeline: Pick<MotionTimeline, 'tracks'>, node: string, property: MotionProperty, base: number, time: number, raw = false): number {
+	const layers = timeline.tracks.get(motionAddTrackKey(node, property));
+	if (!layers) return base;
+	const scale = property === 'scaleX' || property === 'scaleY';
+	let v = base;
+	for (const layer of layers) {
+		if (layer.start > time) continue;
+		const x = Number(segmentValue(layer, time, raw));
+		if (Number.isFinite(x)) v = scale ? v * x : v + x;
+	}
+	return v;
+}
+
 /** Grows a rectangle to the artwork's aspect ratio (about its centre). */
 export function fitMotionRect(rect: MotionRect, aspect: number): MotionRect {
 	const cx = rect.x + rect.width / 2;
@@ -502,7 +531,7 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 		return v ?? motionRestValue(nodes.get(node), property, artwork);
 	};
 	const push = (segment: MotionSegment) => {
-		const key = motionTrackKey(segment.node, segment.property);
+		const key = segment.blend === 'add' ? motionAddTrackKey(segment.node, segment.property) : motionTrackKey(segment.node, segment.property);
 		let track = tracks.get(key);
 		if (!track) tracks.set(key, (track = []));
 		track.push(segment);
@@ -657,18 +686,26 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 					dx = target.x - (entry.center.x + num('x'));
 					dy = target.y - (entry.center.y + num('y'));
 				}
-				seg('x', num('x') + dx, e);
-				seg('y', num('y') + dy, e);
+				if (command.blend === 'add') {
+					seg('x', dx, e, start, end, { from: 0, blend: 'add' });
+					seg('y', dy, e, start, end, { from: 0, blend: 'add' });
+				} else {
+					seg('x', num('x') + dx, e);
+					seg('y', num('y') + dy, e);
+				}
 				break;
 			}
-			case 'rotate':
-				seg('rotation', command.to ?? num('rotation') + (command.by ?? 0), ease ?? MOTION_EASE_IN_OUT);
+			case 'rotate': {
+				const e = ease ?? MOTION_EASE_IN_OUT;
+				if (command.blend === 'add') seg('rotation', command.to !== undefined ? command.to - num('rotation') : (command.by ?? 0), e, start, end, { from: 0, blend: 'add' });
+				else seg('rotation', command.to ?? num('rotation') + (command.by ?? 0), e);
 				break;
+			}
 			case 'scale': {
 				const to = typeof command.to === 'number' ? { x: command.to, y: command.to } : command.to;
-				const geometric = command.geometric ? { geometric: true } : {};
-				seg('scaleX', to.x, ease ?? MOTION_EASE_IN_OUT, start, end, geometric);
-				seg('scaleY', to.y, ease ?? MOTION_EASE_IN_OUT, start, end, geometric);
+				const extra = { ...(command.geometric ? { geometric: true } : {}), ...(command.blend === 'add' ? { from: 1, blend: 'add' as const } : {}) };
+				seg('scaleX', to.x, ease ?? MOTION_EASE_IN_OUT, start, end, extra);
+				seg('scaleY', to.y, ease ?? MOTION_EASE_IN_OUT, start, end, extra);
 				break;
 			}
 			case 'fade':
@@ -686,30 +723,33 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 				seg('follow', command.to ?? 1, ease ?? MOTION_EASE_IN_OUT, start, end, { from: command.from ?? 0, path: command.path, rotate: command.rotate ?? false });
 				break;
 			// Emphasis: a change toward a peak that a behaviour swings round (as Flair's primitives do).
-			case 'pulse': {
-				const behavior: MotionBehavior = { type: 'pulse', count: command.count ?? 1 };
-				const k = 1 + (command.amount ?? 0.15);
-				seg('scaleX', num('scaleX') * k, ease ?? 'linear', start, end, { behavior });
-				seg('scaleY', num('scaleY') * k, ease ?? 'linear', start, end, { behavior });
-				break;
-			}
-			case 'shake': {
-				const p = command.axis === 'vertical' ? 'y' : 'x';
-				seg(p, num(p) + (command.amount ?? 8), ease ?? 'linear', start, end, { behavior: { type: 'oscillate', count: command.count ?? 3, decay: 1 } });
-				break;
-			}
+			case 'pulse':
+			case 'shake':
 			case 'teeter':
-				seg('rotation', num('rotation') + (command.angle ?? 8), ease ?? 'linear', start, end, { behavior: { type: 'oscillate', count: command.count ?? 3, decay: 1 } });
-				break;
 			case 'wave':
-				seg('y', num('y') - (command.amount ?? 6), ease ?? 'linear', start, end, { behavior: { type: 'oscillate', count: command.count ?? 2 } });
-				break;
 			case 'wiggle': {
-				const behavior: MotionBehavior = { type: 'wriggle', frequency: command.frequency ?? 3, octaves: command.octaves ?? 2, seed: command.seed || motionSeedFromId(node) };
-				const amount = command.amount ?? 6;
-				seg('x', num('x') + amount, ease ?? 'linear', start, end, { behavior, index: 0 });
-				seg('y', num('y') + amount, ease ?? 'linear', start, end, { behavior, index: 1 });
-				if (command.rotate) seg('rotation', num('rotation') + command.rotate, ease ?? 'linear', start, end, { behavior, index: 2 });
+				// Emphasis is a layer over the pose by default (blend "add"), so it rides on a move or turn under way.
+				const add = (command.blend ?? 'add') === 'add';
+				// A change of `by` (offsets, turns) or by a factor (scales), as a layer or on the pose.
+				const swing = (p: MotionProperty, by: number, extra: Partial<MotionSegment>) => {
+					const scale = p === 'scaleX' || p === 'scaleY';
+					if (add) seg(p, by, ease ?? 'linear', start, end, { from: scale ? 1 : 0, blend: 'add', ...extra });
+					else seg(p, scale ? num(p) * by : num(p) + by, ease ?? 'linear', start, end, extra);
+				};
+				if (command.type === 'pulse') {
+					const behavior: MotionBehavior = { type: 'pulse', count: command.count ?? 1 };
+					swing('scaleX', 1 + (command.amount ?? 0.15), { behavior });
+					swing('scaleY', 1 + (command.amount ?? 0.15), { behavior });
+				} else if (command.type === 'shake') swing(command.axis === 'vertical' ? 'y' : 'x', command.amount ?? 8, { behavior: { type: 'oscillate', count: command.count ?? 3, decay: 1 } });
+				else if (command.type === 'teeter') swing('rotation', command.angle ?? 8, { behavior: { type: 'oscillate', count: command.count ?? 3, decay: 1 } });
+				else if (command.type === 'wave') swing('y', -(command.amount ?? 6), { behavior: { type: 'oscillate', count: command.count ?? 2 } });
+				else {
+					const behavior: MotionBehavior = { type: 'wriggle', frequency: command.frequency ?? 3, octaves: command.octaves ?? 2, seed: command.seed || motionSeedFromId(node) };
+					const amount = command.amount ?? 6;
+					swing('x', amount, { behavior, index: 0 });
+					swing('y', amount, { behavior, index: 1 });
+					if (command.rotate) swing('rotation', command.rotate, { behavior, index: 2 });
+				}
 				break;
 			}
 			case 'color-pulse':
