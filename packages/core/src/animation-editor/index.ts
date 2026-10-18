@@ -23,3 +23,4 @@ export * from './lottie.js';
 export * from './controller.js';
 export * from './tools.js';
 export * from './instructions.js';
+export * from './form.js';

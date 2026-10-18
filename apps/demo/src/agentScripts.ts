@@ -327,6 +327,11 @@ export const ANIMATION_SCRIPTS: AgentScript[] = [
         tool: "animation__add_commands",
         args: { shot: "finale", commands: [{ type: "teeter", targets: ["check"], count: 3, angle: 10 }] },
       },
+      {
+        say: "Moving the teeter first, so the check reacts before the badge celebrates.",
+        tool: "animation__move_command",
+        args: { shot: "finale", command: 2, to: 0 },
+      },
       { say: "Checking for problems before playing it.", tool: "animation__check_animation", args: {} },
       { say: "Playing the finale.", tool: "animation__seek_animation", args: { shot: "finale", play: true }, target: { text: "Finale" } },
     ],

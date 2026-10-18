@@ -1,0 +1,373 @@
+{
+ "kind": "vector",
+ "id": "zap-icon",
+ "name": "Zap icon",
+ "description": "A lightning bolt icon that draws itself on, flashes with a burst of glow and sparks, then settles.",
+ "category": "electric",
+ "tags": [
+  "electric",
+  "icon",
+  "lightning",
+  "bolt",
+  "ui",
+  "energy"
+ ],
+ "hold": 1000,
+ "presets": [
+  {
+   "name": "Electric blue",
+   "values": {
+    "bolt": [
+     0.22,
+     0.74,
+     0.97
+    ],
+    "glow": [
+     0.73,
+     0.9,
+     0.99
+    ]
+   }
+  },
+  {
+   "name": "Light",
+   "values": {
+    "background": [
+     1,
+     1,
+     1
+    ],
+    "bolt": [
+     0.92,
+     0.7,
+     0.03
+    ],
+    "glow": [
+     0.99,
+     0.83,
+     0.3
+    ]
+   }
+  }
+ ],
+ "motion": {
+  "svg": "<svg viewBox=\"0 0 120 120\"><!-- {{background: color default=#0B1020 label='Background'}} {{bolt: color default=#FACC15 label='Bolt'}} {{glow: color default=#FDE68A label='Glow'}} --><defs><filter id=\"zapGlow\" x=\"-60%\" y=\"-60%\" width=\"220%\" height=\"220%\"><feGaussianBlur stdDeviation=\"7\"/></filter></defs><rect width=\"120\" height=\"120\" fill=\"{{background}}\"/><circle id=\"burst\" cx=\"60\" cy=\"60\" r=\"20\" fill=\"none\" stroke=\"{{glow}}\" stroke-width=\"6\" opacity=\"0\"/><path id=\"halo\" d=\"M68 8 L28 66 L56 66 L46 112 L92 48 L64 48 L76 8 Z\" fill=\"{{glow}}\" filter=\"url(#zapGlow)\" opacity=\"0\"/><line id=\"s0\" x1=\"77.2\" y1=\"35.4\" x2=\"77.2\" y2=\"35.4\" stroke=\"{{glow}}\" stroke-width=\"3\" stroke-linecap=\"round\" opacity=\"0\"/><line id=\"s1\" x1=\"87.2\" y1=\"72.7\" x2=\"87.2\" y2=\"72.7\" stroke=\"{{glow}}\" stroke-width=\"3\" stroke-linecap=\"round\" opacity=\"0\"/><line id=\"s2\" x1=\"31.8\" y1=\"70.3\" x2=\"31.8\" y2=\"70.3\" stroke=\"{{glow}}\" stroke-width=\"3\" stroke-linecap=\"round\" opacity=\"0\"/><line id=\"s3\" x1=\"35.4\" y1=\"42.8\" x2=\"35.4\" y2=\"42.8\" stroke=\"{{glow}}\" stroke-width=\"3\" stroke-linecap=\"round\" opacity=\"0\"/><g id=\"zap\" transform=\"translate(60 60) scale(1) translate(-60 -60)\"><path id=\"fill\" d=\"M68 8 L28 66 L56 66 L46 112 L92 48 L64 48 L76 8 Z\" fill=\"{{bolt}}\" fill-opacity=\"0\"/><path id=\"outline\" d=\"M68 8 L28 66 L56 66 L46 112 L92 48 L64 48 L76 8 Z\" fill=\"none\" stroke=\"{{bolt}}\" stroke-width=\"3.5\" stroke-linejoin=\"round\"/></g></svg>",
+  "animate": [
+   {
+    "id": "outline",
+    "draw": true,
+    "ms": 550,
+    "ease": "in-out"
+   },
+   {
+    "id": "fill",
+    "attrs": {
+     "fill-opacity": [
+      0,
+      1
+     ]
+    },
+    "delay": 500,
+    "ms": 100
+   },
+   {
+    "id": "zap",
+    "attrs": {
+     "transform": [
+      "translate(60 60) scale(1) translate(-60 -60)",
+      "translate(60 60) scale(1.16) translate(-60 -60)"
+     ]
+    },
+    "delay": 560,
+    "ms": 110,
+    "ease": "out"
+   },
+   {
+    "id": "zap",
+    "attrs": {
+     "transform": [
+      "translate(60 60) scale(1.16) translate(-60 -60)",
+      "translate(60 60) scale(1) translate(-60 -60)"
+     ]
+    },
+    "delay": 670,
+    "ms": 320,
+    "ease": "in-out"
+   },
+   {
+    "id": "halo",
+    "attrs": {
+     "opacity": [
+      0,
+      1
+     ]
+    },
+    "delay": 560,
+    "ms": 70
+   },
+   {
+    "id": "halo",
+    "attrs": {
+     "opacity": [
+      1,
+      0.35
+     ]
+    },
+    "delay": 630,
+    "ms": 600,
+    "ease": "out"
+   },
+   {
+    "id": "burst",
+    "attrs": {
+     "opacity": [
+      0,
+      0
+     ]
+    },
+    "delay": 0,
+    "ms": 0
+   },
+   {
+    "id": "burst",
+    "attrs": {
+     "r": [
+      20,
+      58
+     ],
+     "stroke-width": [
+      6,
+      0
+     ],
+     "opacity": [
+      0.9,
+      0
+     ]
+    },
+    "delay": 560,
+    "ms": 520,
+    "ease": "out"
+   },
+   {
+    "id": "s0",
+    "attrs": {
+     "opacity": [
+      0,
+      1
+     ]
+    },
+    "delay": 570,
+    "ms": 30
+   },
+   {
+    "id": "s0",
+    "attrs": {
+     "x2": [
+      77.2,
+      86.4
+     ],
+     "y2": [
+      35.4,
+      22.3
+     ]
+    },
+    "delay": 570,
+    "ms": 150,
+    "ease": "out"
+   },
+   {
+    "id": "s0",
+    "attrs": {
+     "x1": [
+      77.2,
+      92.1
+     ],
+     "y1": [
+      35.4,
+      14.1
+     ],
+     "x2": [
+      86.4,
+      92.1
+     ],
+     "y2": [
+      22.3,
+      14.1
+     ],
+     "opacity": [
+      1,
+      0
+     ]
+    },
+    "delay": 720,
+    "ms": 220,
+    "ease": "out"
+   },
+   {
+    "id": "s1",
+    "attrs": {
+     "opacity": [
+      0,
+      1
+     ]
+    },
+    "delay": 595,
+    "ms": 30
+   },
+   {
+    "id": "s1",
+    "attrs": {
+     "x2": [
+      87.2,
+      101.7
+     ],
+     "y2": [
+      72.7,
+      79.4
+     ]
+    },
+    "delay": 595,
+    "ms": 150,
+    "ease": "out"
+   },
+   {
+    "id": "s1",
+    "attrs": {
+     "x1": [
+      87.2,
+      110.8
+     ],
+     "y1": [
+      72.7,
+      83.7
+     ],
+     "x2": [
+      101.7,
+      110.8
+     ],
+     "y2": [
+      79.4,
+      83.7
+     ],
+     "opacity": [
+      1,
+      0
+     ]
+    },
+    "delay": 745,
+    "ms": 220,
+    "ease": "out"
+   },
+   {
+    "id": "s2",
+    "attrs": {
+     "opacity": [
+      0,
+      1
+     ]
+    },
+    "delay": 620,
+    "ms": 30
+   },
+   {
+    "id": "s2",
+    "attrs": {
+     "x2": [
+      31.8,
+      16.8
+     ],
+     "y2": [
+      70.3,
+      75.7
+     ]
+    },
+    "delay": 620,
+    "ms": 150,
+    "ease": "out"
+   },
+   {
+    "id": "s2",
+    "attrs": {
+     "x1": [
+      31.8,
+      7.4
+     ],
+     "y1": [
+      70.3,
+      79.2
+     ],
+     "x2": [
+      16.8,
+      7.4
+     ],
+     "y2": [
+      75.7,
+      79.2
+     ],
+     "opacity": [
+      1,
+      0
+     ]
+    },
+    "delay": 770,
+    "ms": 220,
+    "ease": "out"
+   },
+   {
+    "id": "s3",
+    "attrs": {
+     "opacity": [
+      0,
+      1
+     ]
+    },
+    "delay": 645,
+    "ms": 30
+   },
+   {
+    "id": "s3",
+    "attrs": {
+     "x2": [
+      35.4,
+      22.3
+     ],
+     "y2": [
+      42.8,
+      33.6
+     ]
+    },
+    "delay": 645,
+    "ms": 150,
+    "ease": "out"
+   },
+   {
+    "id": "s3",
+    "attrs": {
+     "x1": [
+      35.4,
+      14.1
+     ],
+     "y1": [
+      42.8,
+      27.9
+     ],
+     "x2": [
+      22.3,
+      14.1
+     ],
+     "y2": [
+      33.6,
+      27.9
+     ],
+     "opacity": [
+      1,
+      0
+     ]
+    },
+    "delay": 795,
+    "ms": 220,
+    "ease": "out"
+   }
+  ]
+ }
+}

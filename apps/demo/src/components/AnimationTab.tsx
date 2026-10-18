@@ -1,12 +1,19 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Clapperboard } from "lucide-react";
 import { createVectorEffect, ellipseSubpath, rectSubpath, starSubpath, type VectorDocument } from "@pixerate/editor/vector";
-import { toLottie, type MotionScene } from "@pixerate/editor/animation-editor";
+import { AnimationEditorController, fromFlairVectorEffect, toLottie, type FlairVectorEffect, type LottieAnimation, type MotionScene } from "@pixerate/editor/animation-editor";
 import { AnimationEditor, useAnimationEditorController, useAnimationEditorState, useAnimationEditorTools } from "@pixerate/editor-react/animation-editor";
 import { VectorEditor, useVectorEditorController } from "@pixerate/editor-react/vector";
 import { demoToolRegistry } from "../agentTools";
 import { AgentScriptPanel } from "./AgentScriptPanel";
 import { ANIMATION_SCRIPTS } from "../agentScripts";
+import bookmark from "../flair-samples/bookmark.json";
+import checkbox from "../flair-samples/checkbox.json";
+import powerButton from "../flair-samples/power-button.json";
+import zapIcon from "../flair-samples/zap-icon.json";
+
+/** Effects from Flair's catalog (`@pixerate/flair/catalog`), saved as JSON so the demo needs no Flair dependency. */
+const FLAIR_SAMPLES = [checkbox, bookmark, powerButton, zapIcon] as unknown as FlairVectorEffect[];
 
 const ARTWORK: VectorDocument = {
   width: 640,
@@ -74,19 +81,86 @@ const SCENE: MotionScene = {
   ],
 };
 
-/** Vector animation: shots over vector artwork, agent tools, and export to Flair. */
+const button = "rounded border border-slate-700 px-2 py-1 hover:bg-slate-800 disabled:opacity-40";
+
+type Exported = { kind: "flair"; effect: FlairVectorEffect } | { kind: "lottie"; lottie: LottieAnimation; notes: string[] } | { kind: "json"; scene: MotionScene };
+
+function download(name: string, data: unknown) {
+  const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** Plays an exported Flair effect by importing it back: what Flair gets, as the editor reads it. */
+function FlairPreview({ effect }: { effect: FlairVectorEffect }) {
+  const controller = useMemo(() => {
+    const { scene } = fromFlairVectorEffect(effect);
+    return new AnimationEditorController({ scene: { ...scene, loop: "loop" }, readOnly: true });
+  }, [effect]);
+  useEffect(() => {
+    controller.play();
+    return () => controller.destroy();
+  }, [controller]);
+  return <AnimationEditor controller={controller} editable={false} showIssues={false} />;
+}
+
+/** Plays exported Lottie JSON with lottie-web (loaded on demand, demo only). */
+function LottiePreview({ lottie }: { lottie: LottieAnimation }) {
+  const host = useRef<HTMLDivElement>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let anim: { destroy(): void } | null = null;
+    let cancelled = false;
+    import("lottie-web")
+      .then(({ default: player }) => {
+        if (cancelled || !host.current) return;
+        anim = player.loadAnimation({ container: host.current, renderer: "svg", loop: true, autoplay: true, animationData: structuredClone(lottie) });
+      })
+      .catch((e) => setError(String(e)));
+    return () => {
+      cancelled = true;
+      anim?.destroy();
+    };
+  }, [lottie]);
+  return (
+    <div>
+      <div ref={host} className="w-full overflow-hidden rounded-md border border-slate-800 bg-slate-950" style={{ aspectRatio: `${lottie.w} / ${lottie.h}` }} data-lottie-preview="" />
+      {error && <p className="mt-1 text-xs text-red-400">{error}</p>}
+    </div>
+  );
+}
+
+/**
+ * Vector animation: the whole hand editor (stage picking, scrubber, command list and inspector,
+ * shot and scene settings), agent tools, Flair import and Flair / Lottie export with previews.
+ */
 export function AnimationTab() {
   const controller = useAnimationEditorController({ scene: SCENE });
   const state = useAnimationEditorState(controller);
   useAnimationEditorTools(demoToolRegistry, controller, { id: "animation", namespace: "animation" });
   const [accent, setAccent] = useState("#f43f5e");
-  const [output, setOutput] = useState<string | null>(null);
+  const [exported, setExported] = useState<Exported | null>(null);
+  const [message, setMessage] = useState<{ title: string; lines: string[] } | null>(null);
   const [editing, setEditing] = useState(false);
-  const [onion, setOnion] = useState(false);
-  const [paths, setPaths] = useState(false);
   const vector = useVectorEditorController({ document: ARTWORK });
   const agentStage = useRef<HTMLDivElement>(null);
   const errors = state.issues.filter((i) => i.severity === "error").length;
+  const accentControl = state.scene.controls?.find((c) => c.name === "accent");
+  // Everything enters later, so a stage at 0 s is empty: open on the badge once it has popped in.
+  useEffect(() => controller.seek(1800), [controller]);
+
+  const loadFlair = (id: string) => {
+    const effect = FLAIR_SAMPLES.find((e) => e.id === id);
+    if (!effect) return;
+    const { scene, notes } = fromFlairVectorEffect(effect);
+    const result = controller.load(scene, { clearHistory: false });
+    setExported(null);
+    setMessage(result.ok ? { title: `Loaded “${effect.name}” from Flair (undo to go back)`, lines: notes } : { title: "Could not load it", lines: [result.error] });
+    if (result.ok) controller.select({ shot: scene.shots[0]?.id ?? "" });
+  };
 
   return (
     <div className="space-y-4">
@@ -95,50 +169,67 @@ export function AnimationTab() {
         <div>
           <h2 className="text-lg font-semibold text-slate-100">Vector animation</h2>
           <p className="text-xs text-slate-400">
-            Headless <code>AnimationEditorController</code> (<code>@pixerate/editor/animation-editor</code>). A scene is vector artwork plus shots of commands (enter, draw, move,
-            morph, follow, pulse, live-effect tweens); timing comes from the content. Click a shot to jump to it. Agents use the <code>animation__*</code> tools; export to Flair
-            as vector motion or a catalog effect with colour controls.
+            Headless <code>AnimationEditorController</code> (<code>@pixerate/editor/animation-editor</code>) with the React controls from{" "}
+            <code>@pixerate/editor-react/animation-editor</code>. Scrub the ruler, pick a shot, then add, reorder and edit its commands; click an element on the stage to pick
+            it (shift-click toggles it as a target of the selected command). Every change is one undo step (⌘Z). Agents use the same edits through the{" "}
+            <code>animation__*</code> tools.
           </p>
         </div>
       </div>
       <div className="relative rounded-xl border border-slate-800 bg-slate-900/50 p-3" ref={agentStage}>
-        <AnimationEditor controller={controller} values={{ accent }} onionSkin={onion ? { before: 3, after: 1 } : undefined} motionPaths={paths} />
+        <AnimationEditor controller={controller} values={accentControl ? { accent } : undefined} />
       </div>
-      <AgentScriptPanel scripts={ANIMATION_SCRIPTS} stage={agentStage} hint="Plays a scripted agent turn with the animation__* tools: a new shot, its commands, a check, then playback." />
+      <AgentScriptPanel scripts={ANIMATION_SCRIPTS} stage={agentStage} hint="Plays a scripted agent turn with the animation__* tools: a new shot, its commands, a reorder, a check, then playback." />
       <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
         <span>
           {state.shots.length} shots · {(state.duration / 1000).toFixed(1)} s · {errors} errors · {state.issues.length - errors} warnings and notes
         </span>
-        <label className="flex items-center gap-1">
-          Badge colour <input type="color" value={accent} onChange={(e) => setAccent(e.currentTarget.value)} />
-        </label>
-        <button type="button" className="rounded border border-slate-700 px-2 py-1 hover:bg-slate-800" onClick={() => controller.undo()} disabled={!state.canUndo}>
-          Undo
+        {accentControl && (
+          <label className="flex items-center gap-1">
+            {accentControl.label ?? "Accent"} <input type="color" value={accent} onChange={(e) => setAccent(e.currentTarget.value)} />
+          </label>
+        )}
+        <select className="rounded border border-slate-700 bg-slate-900 px-2 py-1" aria-label="Load from Flair" value="" onChange={(e) => loadFlair(e.target.value)} data-load-flair="">
+          <option value="">Load from Flair…</option>
+          {FLAIR_SAMPLES.map((e) => (
+            <option key={e.id} value={e.id}>
+              {e.name} ({e.category})
+            </option>
+          ))}
+        </select>
+        <button type="button" className={button} onClick={() => { controller.load(SCENE, { clearHistory: true }); setMessage(null); }}>
+          Reset demo scene
         </button>
-        <button type="button" className="rounded border border-slate-700 px-2 py-1 hover:bg-slate-800" onClick={() => setOutput(JSON.stringify(controller.toFlairEffect({ category: "icon", tags: ["badge", "success"] }), null, 2))}>
-          Export Flair effect
+        <button type="button" className={button} onClick={() => setExported({ kind: "flair", effect: controller.toFlairEffect({ category: "icon", tags: ["demo"] }) })} data-export="flair">
+          Export Flair
         </button>
-        <button type="button" className="rounded border border-slate-700 px-2 py-1 hover:bg-slate-800" onClick={() => setOutput(JSON.stringify(toLottie(state.scene).lottie, null, 2))}>
+        <button type="button" className={button} onClick={() => { const out = toLottie(state.scene); setExported({ kind: "lottie", lottie: out.lottie, notes: out.notes }); }} data-export="lottie">
           Export Lottie
         </button>
-        <label className="flex items-center gap-1">
-          <input type="checkbox" checked={onion} onChange={(e) => setOnion(e.target.checked)} /> Onion skin
-        </label>
-        <label className="flex items-center gap-1">
-          <input type="checkbox" checked={paths} onChange={(e) => setPaths(e.target.checked)} /> Motion paths
-        </label>
-        <button type="button" className="rounded border border-slate-700 px-2 py-1 hover:bg-slate-800" onClick={() => setOutput(JSON.stringify(state.scene, null, 2))}>
+        <button type="button" className={button} onClick={() => setExported({ kind: "json", scene: state.scene })}>
           Scene JSON
         </button>
-        <button type="button" className="rounded border border-slate-700 px-2 py-1 hover:bg-slate-800" onClick={() => setEditing((e) => !e)}>
+        <button type="button" className={button} onClick={() => setEditing((e) => !e)}>
           {editing ? "Hide artwork editor" : "Edit artwork"}
         </button>
-        {output && (
-          <button type="button" className="rounded border border-slate-700 px-2 py-1 hover:bg-slate-800" onClick={() => setOutput(null)}>
-            Hide
-          </button>
-        )}
       </div>
+      {message && (
+        <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-3 text-xs text-slate-300" data-import-notes="">
+          <div className="flex items-center gap-2">
+            <span className="font-medium">{message.title}</span>
+            <button type="button" className={`${button} ml-auto`} onClick={() => setMessage(null)}>
+              Dismiss
+            </button>
+          </div>
+          {message.lines.length > 0 && (
+            <ul className="mt-1 list-disc space-y-0.5 pl-4 text-slate-400">
+              {message.lines.map((line, i) => (
+                <li key={i}>{line}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
       {editing && (
         <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-900/50 p-3">
           <VectorEditor controller={vector} height={360} />
@@ -147,14 +238,50 @@ export function AnimationTab() {
             className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800"
             onClick={() => {
               const result = controller.setArtwork(vector.getState().document);
-              if (!result.ok) setOutput(result.error);
+              setMessage(result.ok ? null : { title: "The artwork was not used", lines: [result.error] });
             }}
           >
             Use this artwork
           </button>
         </div>
       )}
-      {output && <pre className="max-h-80 overflow-auto rounded-lg border border-slate-800 bg-slate-900 p-3 text-[11px] text-slate-300">{output}</pre>}
+      {exported && (
+        <div className="grid gap-3 rounded-xl border border-slate-800 bg-slate-900/50 p-3 text-xs text-slate-300 lg:grid-cols-2" data-export-preview={exported.kind}>
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="font-medium">{exported.kind === "flair" ? "Flair vector effect (re-imported preview)" : exported.kind === "lottie" ? "Lottie (played by lottie-web)" : "Scene JSON"}</span>
+              <button
+                type="button"
+                className={`${button} ml-auto`}
+                onClick={() =>
+                  exported.kind === "flair"
+                    ? download(`${exported.effect.id}.flair.json`, exported.effect)
+                    : exported.kind === "lottie"
+                      ? download(`${state.scene.name}.lottie.json`, exported.lottie)
+                      : download(`${state.scene.name}.scene.json`, exported.scene)
+                }
+              >
+                Download
+              </button>
+              <button type="button" className={button} onClick={() => setExported(null)}>
+                Close
+              </button>
+            </div>
+            {exported.kind === "flair" && <FlairPreview effect={exported.effect} />}
+            {exported.kind === "lottie" && <LottiePreview lottie={exported.lottie} />}
+            {exported.kind === "lottie" && exported.notes.length > 0 && (
+              <ul className="list-disc space-y-0.5 pl-4 text-slate-400">
+                {exported.notes.map((n, i) => (
+                  <li key={i}>{n}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <pre className="max-h-96 overflow-auto rounded-lg border border-slate-800 bg-slate-950 p-3 text-[11px] text-slate-300">
+            {JSON.stringify(exported.kind === "flair" ? exported.effect : exported.kind === "lottie" ? exported.lottie : exported.scene, null, 2)}
+          </pre>
+        </div>
+      )}
     </div>
   );
 }
