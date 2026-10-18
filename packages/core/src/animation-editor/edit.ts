@@ -11,9 +11,9 @@ import type { MotionCommand, MotionControl, MotionPreset, MotionScene, MotionSho
  * fixed a step at a time.
  */
 export type MotionEdit =
-	| { op: 'set_settings'; name?: string; description?: string | null; loop?: MotionScene['loop']; fps?: number; steps?: number | null; target?: [number, number] | null }
+	| { op: 'set_settings'; name?: string; description?: string | null; loop?: MotionScene['loop']; fps?: number; steps?: number | null; beat?: MotionScene['beat'] | null; narration?: MotionScene['narration'] | null; target?: [number, number] | null }
 	| { op: 'insert_shots'; shots: MotionShot[]; at?: number }
-	| { op: 'update_shot'; shot: string; set?: Partial<MotionShot>; remove?: ('label' | 'camera' | 'hold' | 'speed')[] }
+	| { op: 'update_shot'; shot: string; set?: Partial<MotionShot>; remove?: ('label' | 'camera' | 'hold' | 'speed' | 'at')[] }
 	| { op: 'delete_shots'; shots: string[] }
 	| { op: 'move_shot'; shot: string; to: number }
 	| { op: 'add_commands'; shot: string; commands: MotionCommand[]; at?: number }
@@ -91,6 +91,14 @@ function applyOne(scene: MotionScene, edit: MotionEdit): MotionScene {
 			else if (edit.steps !== undefined) {
 				if (!(typeof edit.steps === 'number' && edit.steps > 0 && edit.steps <= 120)) fail('"steps" must be frames per second from above 0 to 120 (12 is "on twos" at 24 fps), or null for smooth.');
 				next.steps = edit.steps;
+			}
+			for (const key of ['beat', 'narration'] as const) {
+				if (edit[key] === null) delete next[key];
+				else if (edit[key] !== undefined) (next as unknown as Record<string, unknown>)[key] = edit[key];
+			}
+			{
+				const problems = motionSceneShapeProblems(next).filter((p) => /"beat"|"narration"/.test(p));
+				if (problems.length) fail(problems.join(' '));
 			}
 			if (edit.target === null) delete next.target;
 			else if (edit.target !== undefined) next.target = edit.target;

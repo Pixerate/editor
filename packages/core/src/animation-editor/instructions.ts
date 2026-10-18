@@ -21,6 +21,7 @@ Commands
 - Emphasis stacks on other motion: a shake during a slide shakes as it slides. Give move, rotate or scale "blend": "add" to stack them too (what they add stays); "blend": "replace" makes a change take over instead.
 - Any command but enter and exit can "repeat" (loop, mirror back and forth, or offset to carry on: rotate by 90, repeat 4 is a full turn); "duration" is one cycle.
 - Springs ("spring-gentle", "spring-quick", "spring-bouncy", "spring-slow" or { "type": "spring", … }) feel physical; leave "duration" out and the spring sets it.
+- To time shots to music or a voiceover: set a "beat" grid or "narration" word timings with set_animation_settings, read them with get_timing_grid, and give a shot "at": { "beat": n } or { "word": i }. The shot before holds until the cue; check_animation warns when a cue is missed.
 - "steps": 12 (on a command, or for the whole scene with set_animation_settings) holds poses "on twos" for a hand-drawn look. "geometric": true on scale or a camera zooms at an even rate.
 - Commands share their names and defaults with Flair's motion primitives (get_animation shows each one's "flairPrimitive"), and emphasis, reveals and follows export to Flair exactly.
 - effect tweens a numeric parameter of a live path effect already on the node (twist angle, wiggle time, zig zag size).
