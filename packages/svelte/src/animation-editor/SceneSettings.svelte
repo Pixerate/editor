@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { fitMotionSceneEdits, formatMotionNarration, parseMotionNarration, type AnimationEditorController, type MotionEdit } from '@pixerate/editor/animation-editor';
+  import { fitMotionSceneEdits, formatMotionNarration, parseMotionNarration, type AnimationEditorController, type MotionEdit, type MotionTrigger } from '@pixerate/editor/animation-editor';
   import { animationEditorStateOf } from './createAnimationEditor.svelte.js';
 
   interface Props {
@@ -89,6 +89,14 @@
       <option value="none">Off</option>
       <option value="loop">Loop</option>
       <option value="ping-pong">Ping-pong</option>
+    </select>
+    <span class="text-muted-foreground">Plays on</span>
+    <select class={input} aria-label="Scene trigger" title="How a viewer plays it when exported to Flair" disabled={editor.readOnly} value={scene.trigger ?? ''} onchange={(e) => settings({ trigger: (e.currentTarget.value || null) as MotionTrigger | null }, 'Change trigger')}>
+      <option value="">Its own (autoplay)</option>
+      <option value="click">Click (a shot per click)</option>
+      <option value="hover">Hover</option>
+      <option value="press">Press</option>
+      <option value="scroll">Scroll</option>
     </select>
     <span class="text-muted-foreground">Frame rate</span>
     <div class="flex items-center gap-1">

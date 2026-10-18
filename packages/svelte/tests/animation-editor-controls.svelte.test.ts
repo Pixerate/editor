@@ -198,6 +198,11 @@ describe("animation editor controls (Svelte)", () => {
     expect(controller.getState().duration).toBe(800);
     act(() => q<HTMLButtonElement>("[data-add-shot]").click());
     expect(controller.getState().scene.shots.map((s) => s.id)).toEqual(["intro", "away", "shot"]);
+    change(q<HTMLSelectElement>('select[aria-label="Scene trigger"]'), "click");
+    expect(controller.getState().scene.trigger).toBe("click");
+    expect(controller.toFlairMotion().motion.animate?.some((a) => a.step === 1)).toBe(true);
+    change(q<HTMLSelectElement>('select[aria-label="Scene trigger"]'), "");
+    expect(controller.getState().scene.trigger).toBeUndefined();
     controller.destroy();
   });
 });

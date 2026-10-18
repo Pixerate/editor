@@ -200,6 +200,11 @@ describe("animation editor controls (React)", () => {
     expect(controller.getState().duration).toBe(800);
     act(() => $<HTMLButtonElement>("[data-add-shot]").click());
     expect(controller.getState().scene.shots.map((s) => s.id)).toEqual(["intro", "away", "shot"]);
+    change($<HTMLSelectElement>('select[aria-label="Scene trigger"]'), "click");
+    expect(controller.getState().scene.trigger).toBe("click");
+    expect(controller.toFlairMotion().motion.animate?.some((a) => a.step === 1)).toBe(true);
+    change($<HTMLSelectElement>('select[aria-label="Scene trigger"]'), "");
+    expect(controller.getState().scene.trigger).toBeUndefined();
     controller.destroy();
   });
 });

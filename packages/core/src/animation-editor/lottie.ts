@@ -163,6 +163,7 @@ export function toLottie(scene: MotionScene, options: LottieExportOptions = {}):
 	const timeline = compileMotionScene(scene);
 	const nodes = indexMotionNodes(scene.artwork.nodes);
 	const notes: string[] = [];
+	if (scene.trigger) notes.push(`The scene plays on ${scene.trigger}; Lottie has no trigger, so it plays through (markers show where each shot starts, for a player to stop at).`);
 	let sampled = 0;
 	const track = (id: string, p: MotionProperty) => timeline.tracks.get(motionTrackKey(id, p)) ?? [];
 	// Additive layers (blend "add"), on their own tracks when the editor has them.

@@ -259,8 +259,8 @@ export function fromFlairVectorEffect(effect: FlairVectorEffect, options: FlairI
 	const presets = (effect.presets ?? [])
 		.map((p) => ({ name: p.name, values: Object.fromEntries(Object.entries(p.values).flatMap(([k, v]) => (names.has(k) && presetColor(v) ? [[k, presetColor(v)!]] : []))) }))
 		.filter((p) => Object.keys(p.values).length);
-	const scene: MotionScene = { ...result.scene, ...(effect.description ? { description: effect.description } : {}), ...(presets.length ? { presets } : {}) };
+	// Flair's steps became shots, so a click trigger plays them shot by shot again on export.
+	const scene: MotionScene = { ...result.scene, ...(effect.description ? { description: effect.description } : {}), ...(presets.length ? { presets } : {}), ...(effect.trigger ? { trigger: effect.trigger } : {}) };
 	const notes = [...result.notes];
-	if (effect.trigger) notes.push(`The effect plays on ${effect.trigger}; scenes play through, so the trigger is not kept (pass it back to toFlairVectorEffect).`);
 	return { scene, notes, issues: checkMotionScene(scene) };
 }

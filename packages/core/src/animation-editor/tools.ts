@@ -200,6 +200,10 @@ const SETTINGS: Record<string, JsonSchema> = {
 	name: { type: 'string', minLength: 1, description: 'Short name, e.g. "logo-reveal".' },
 	description: { type: ['string', 'null'], description: 'What it shows; null clears.' },
 	loop: { type: 'string', enum: ['none', 'loop', 'ping-pong'], description: 'Playback past the end (default none).' },
+	trigger: {
+		anyOf: [{ type: 'string', enum: ['click', 'hover', 'press', 'scroll'] }, { type: 'null' }],
+		description: 'Play in answer to the viewer when exported to Flair: click (the first shot plays on load, each click plays the next shot), hover or press (plays while the pointer is over or down, rewinds when it leaves), scroll (scrubs as it scrolls past). null plays on its own (default). The editor previews it played through.'
+	},
 	fps: { type: 'number', minimum: 1, maximum: 120, description: 'Sampling rate for exports (default 30).' },
 	steps: { anyOf: [{ type: 'number', exclusiveMinimum: 0, maximum: 120 }, { type: 'null' }], description: 'Stepped time for every command without its own: changes hold on a grid of this many frames per second (12 = "on twos" at 24 fps) for a hand-drawn look; null makes it smooth again (default).' },
 	beat: {
@@ -341,6 +345,7 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 				artwork: { width: s.artwork.width, height: s.artwork.height },
 				duration: compileMotionScene(s).duration,
 				loop: s.loop ?? 'none',
+				...(s.trigger ? { trigger: s.trigger } : {}),
 				...(s.target ? { target: s.target } : {}),
 				...(includeElements ? { elements: describeMotionElements(s) } : {}),
 				shots: describeMotionShots(s),
@@ -727,7 +732,7 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 	const setSettings: AgentTool = {
 		name: 'set_animation_settings',
 		title: 'Change animation settings',
-		description: 'Sets the name, description, loop mode, export frame rate, stepped time, beat grid, narration word timings or target length. Returns the timing.',
+		description: 'Sets the name, description, loop mode, trigger (click, hover, press or scroll), export frame rate, stepped time, beat grid, narration word timings or target length. Returns the timing.',
 		inputSchema: object(SETTINGS),
 		annotations: { title: 'Change animation settings', ...WRITE_IDEMPOTENT },
 		handler: (args) => apply({ op: 'set_settings', ...args }, 'Change settings')

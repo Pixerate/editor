@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { fitMotionSceneEdits, formatMotionNarration, parseMotionNarration, type AnimationEditorController, type MotionEdit } from '@pixerate/editor/animation-editor';
+import { fitMotionSceneEdits, formatMotionNarration, parseMotionNarration, type AnimationEditorController, type MotionEdit, type MotionTrigger } from '@pixerate/editor/animation-editor';
 import { CommitInput } from './CommitInput';
 import { useAnimationEditorState } from './useAnimationEditor';
 
@@ -59,6 +59,14 @@ export function SceneSettings({ controller, className = '' }: SceneSettingsProps
           <option value="none">Off</option>
           <option value="loop">Loop</option>
           <option value="ping-pong">Ping-pong</option>
+        </select>
+        <label className="text-muted-foreground">Plays on</label>
+        <select className={input} aria-label="Scene trigger" title="How a viewer plays it when exported to Flair" disabled={readOnly} value={scene.trigger ?? ''} onChange={(e) => settings({ trigger: (e.target.value || null) as MotionTrigger | null }, 'Change trigger')}>
+          <option value="">Its own (autoplay)</option>
+          <option value="click">Click (a shot per click)</option>
+          <option value="hover">Hover</option>
+          <option value="press">Press</option>
+          <option value="scroll">Scroll</option>
         </select>
         <label className="text-muted-foreground">Frame rate</label>
         <div className="flex items-center gap-1">
