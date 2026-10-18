@@ -53,6 +53,7 @@ reproduced at the end of this file. Paths are relative to each source repository
 - `crates/ui-egui/src/panels/graph.rs` and `graph_tools.rs` (value range frozen while a key is dragged, Shift locks to the axis moved most, `snap_px` nearest candidate within a few screen pixels) → `startChartPointDrag` and `snapChartDragValue` in `packages/core/src/chart/interaction.ts`
 
 - `crates/render/src/eval.rs` (`responsive_source_time` with `protected_regions`: when a composition is stretched, protected spans play at their own speed and the rest absorb the change at one shared rate) → `fitMotionScene` and the `fit_animation` tool in `packages/core/src/animation-editor/fit.ts`; whole shots are kept instead of marker spans, and the fit sets each shot's `speed`
+- `crates/lottie/src/anim.rs`, `shapes.rs` and `export.rs` (animated properties as Bodymovin keyframes, a cubic ease as the keys' `o` / `i` tangents and holds as `h: 1`; shapes as groups with `sh`, `fl`, `st`, `tm` and a closing `tr`, listed top first; markers; a warning for every feature with no Lottie equivalent) → `toLottie` in `packages/core/src/animation-editor/lottie.ts`; the scene is one shape layer, each node an outer group for its animated pose around an inner one for its own transform, and stretches no single ease describes are sampled
 
 ## figcraft
 

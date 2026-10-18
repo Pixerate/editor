@@ -24,6 +24,9 @@ import {
 	motionBeatAt,
 	motionBeatTime,
 	motionCueTime,
+	toLottie,
+	indexMotionNodes,
+	type LottieValue,
 	fromFlairSvgMotion,
 	fromFlairVectorEffect,
 	type FlairSvgAnimation,
@@ -31,7 +34,7 @@ import {
 	type MotionIssueCode,
 	type MotionScene
 } from '../src/animation-editor';
-import { ManualClock, SPRING_PRESETS, springSettleMs } from '../src/animation';
+import { ManualClock, SPRING_PRESETS, cubicBezierAt, springSettleMs } from '../src/animation';
 import { ToolRegistry } from '../src/tools';
 import { createVectorEffect, ellipseSubpath, findVectorNode, rectSubpath, starSubpath, type VectorDocument, type VectorNode, type VectorPathNode } from '../src/vector';
 
@@ -1124,5 +1127,95 @@ describe('cueing shots to a beat or a voiceover', () => {
 		expect(bad.isError).toBe(true);
 		expect((await registry.callTool('set_animation_settings', { beat: null })).isError).toBeFalsy();
 		expect(controller.getState().scene.beat).toBeUndefined();
+	});
+});
+
+describe('Lottie export', () => {
+	// A small Lottie evaluator: a property at a frame, keys eased by their bezier (as lottie-web does).
+	const at = (prop: LottieValue, f: number): number[] => {
+		if (prop.a === 0) return Array.isArray(prop.k) ? prop.k : [prop.k];
+		const keys = prop.k;
+		if (f <= keys[0].t) return keys[0].s;
+		for (let n = 0; n + 1 < keys.length; n++) {
+			const a = keys[n];
+			const b = keys[n + 1];
+			if (f >= b.t) continue;
+			if (a.h) return a.s;
+			const u = (f - a.t) / (b.t - a.t);
+			const e = cubicBezierAt(a.o!.x[0], a.o!.y[0], a.i!.x[0], a.i!.y[0], u);
+			return a.s.map((v, i) => v + (b.s[i] - v) * e);
+		}
+		return keys[keys.length - 1].s;
+	};
+	const groupOf = (lottie: any, id: string) => {
+		const find = (items: any[]): any => {
+			for (const it of items) {
+				if (it.ty !== 'gr') continue;
+				if (it.it?.[0]?.nm === `${id} (own)`) return it;
+				const deeper = find(it.it ?? []);
+				if (deeper) return deeper;
+			}
+		};
+		return find(lottie.layers[0].shapes);
+	};
+	const trOf = (lottie: any, id: string) => groupOf(lottie, id).it.at(-1);
+
+	const s = scene([
+		{ id: 'one', run: [{ type: 'enter', targets: ['box'] }, { type: 'move', targets: ['box'], by: { x: 60, y: 20 }, ease: 'ease-in' }, { type: 'rotate', targets: ['dot'], by: 90, with: 'previous' }, { type: 'draw', targets: ['line'], from: 0 }] },
+		{ id: 'two', label: 'Spring', run: [{ type: 'scale', targets: ['box'], to: 1.5, ease: 'spring-bouncy' }, { type: 'style', targets: ['dot'], fill: '#000000', with: 'previous' }] }
+	]);
+
+	it('writes a Bodymovin animation with a marker per shot', () => {
+		const { lottie } = toLottie(s);
+		expect(lottie).toMatchObject({ v: '5.7.4', fr: 30, ip: 0, w: 400, h: 200, nm: 'test' });
+		expect(lottie.op).toBe(Math.ceil((compileMotionScene(s).duration * 30) / 1000));
+		expect(lottie.markers.map((m) => m.cm)).toEqual(['one', 'Spring']);
+		expect(lottie.layers[0]).toMatchObject({ ty: 4, ip: 0, op: lottie.op });
+		const box = groupOf(lottie, 'box').it[0].it;
+		expect(box.map((x: any) => x.ty)).toEqual(['sh', 'st', 'fl', 'tr']);
+		expect(box[0].ks.k).toMatchObject({ c: true, v: [[20, 20], [80, 20], [80, 80], [20, 80]] });
+		expect(box[2].c.k).toEqual([0.937, 0.267, 0.267, 1]);
+		// The trim that draws the line on.
+		expect(groupOf(lottie, 'line').it[0].it.map((x: any) => x.ty)).toEqual(['sh', 'tm', 'st', 'tr']);
+	});
+
+	it('keys eased changes exactly, and samples springs, matching the editor frame by frame', () => {
+		const { lottie, sampled } = toLottie(s);
+		const box = trOf(lottie, 'box');
+		// The move is one eased key pair; the bouncy spring is sampled.
+		expect(box.p.k.filter((k: any) => k.o?.x[0] === 0.42)).toHaveLength(1);
+		expect(sampled).toBeGreaterThan(10);
+		for (const t of [0, 300, 600, 900, 1100, 1400, 1700, 2100, 2500]) {
+			const f = (t * 30) / 1000;
+			for (const id of ['box', 'dot']) {
+				const entry = indexMotionNodes(ARTWORK.nodes).get(id)!;
+				const m = path(motionFrameAt(s, t).document, id).transform ?? [1, 0, 0, 1, 0, 0];
+				const tr = trOf(lottie, id);
+				const c = [entry.center.x, entry.center.y];
+				const p = at(tr.p, f);
+				// Where the editor puts the centre, and where Lottie does.
+				expect(p[0]).toBeCloseTo(m[0] * c[0] + m[2] * c[1] + m[4], 1);
+				expect(p[1]).toBeCloseTo(m[1] * c[0] + m[3] * c[1] + m[5], 1);
+				expect(at(tr.s, f)[0] / 100).toBeCloseTo(Math.hypot(m[0], m[1]), 2);
+				expect(at(tr.o, f)[0] / 100).toBeCloseTo(path(motionFrameAt(s, t).document, id).opacity ?? 1, 2);
+			}
+		}
+	});
+
+	it('notes what Lottie cannot take', () => {
+		const art: VectorDocument = { ...ARTWORK, nodes: [...ARTWORK.nodes.slice(0, 1).map((n) => ({ ...n, strokeDasharray: [4, 2], fill: { type: 'linear', stops: [{ offset: 0, color: '#000' }, { offset: 1, color: '#fff' }] } }) as VectorNode)] };
+		const { notes } = toLottie({ ...scene([{ id: 'one', run: [{ type: 'enter', targets: ['box'] }] }]), artwork: art });
+		for (const said of [/fill is a gradient/, /dashes are not exported/]) expect(notes.join('\n')).toMatch(said);
+	});
+
+	it('exports through the agent tool', async () => {
+		const controller = new AnimationEditorController({ scene: s });
+		const registry = new ToolRegistry();
+		registry.register(createAnimationEditorToolProvider(controller));
+		const out = (await registry.callTool('export_lottie', { fps: 24 })).structuredContent as any;
+		expect(out.lottie).toMatchObject({ fr: 24, v: '5.7.4' });
+		expect(out.sampled).toBeGreaterThan(0);
+		const bad = await registry.callTool('export_lottie', { fps: 0 });
+		expect(bad.isError).toBe(true);
 	});
 });
