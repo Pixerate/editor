@@ -16,7 +16,7 @@ Commands
 - enter also reveals through a clip over the target's box: wipe (behind an edge travelling "direction", default right), iris (from the centre; "shape": circle or box) and split (from a line through the middle; "orientation": horizontal or vertical). exit wipe hides the same way. Reveals need a width and a height: use draw / undraw for a straight line.
 - draw draws strokes on to a fraction; move, rotate, scale and fade change the pose (about the centre); style blends solid colours and stroke width.
 - enter also has zoom (settles from larger) and rise (rises a short way, overshooting a touch); pop and zoom take a starting "scale".
-- morph turns a shape into another node's shape (keep the target hidden); follow moves along a path node (with "rotate", moves made meanwhile turn with the path).
+- morph turns a shape into another node's shape (keep the target hidden); match does the same for a whole group, part by part (Smart Animate: draw the end state as a second, hidden group whose parts share names with the first); follow moves along a path node (with "rotate", moves made meanwhile turn with the path).
 - Emphasis draws the eye and returns to rest: pulse (swell), shake (side to side, or "axis": "vertical"), teeter (rock), wave (bob, no settling), wiggle (seeded wander; the same seed wanders the same way) and color-pulse (tint and back).
 - Emphasis stacks on other motion: a shake during a slide shakes as it slides. Give move, rotate or scale "blend": "add" to stack them too (what they add stays); "blend": "replace" makes a change take over instead.
 - Any command but enter and exit can "repeat" (loop, mirror back and forth, or offset to carry on: rotate by 90, repeat 4 is a full turn); "duration" is one cycle.

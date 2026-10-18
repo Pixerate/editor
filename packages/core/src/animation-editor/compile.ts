@@ -1,4 +1,5 @@
 import { mixColorsOklab } from '../animation/color.js';
+import { matchMotionNodes } from './match.js';
 import { behaviorProgress, motionSeedFromId, type MotionBehavior } from '../animation/behavior.js';
 import { evaluateEasing, resolveEasing, springSettleMs, type AnimationEasing } from '../animation/easing.js';
 import { bezierPathLength } from '../canvas/pathops/bezier.js';
@@ -719,6 +720,16 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 			case 'morph':
 				seg('shape', command.into, ease ?? MOTION_EASE_IN_OUT);
 				break;
+			case 'match': {
+				// Smart Animate: each part morphs into its partner in `into`; parts with no partner fade out.
+				const into = nodes.get(command.into);
+				if (!into || command.into === node) break;
+				const match = matchMotionNodes(entry.node, into.node);
+				const e = ease ?? MOTION_EASE_IN_OUT;
+				for (const [a, b] of match.pairs) push({ node: a, property: 'shape', start, end, from: valueAt(a, 'shape', start), to: b, ease: e, ...where });
+				for (const a of match.unpairedFrom) push({ node: a, property: 'opacity', start, end, from: valueAt(a, 'opacity', start), to: 0, ease: e, ...where });
+				break;
+			}
 			case 'follow':
 				seg('follow', command.to ?? 1, ease ?? MOTION_EASE_IN_OUT, start, end, { from: command.from ?? 0, path: command.path, rotate: command.rotate ?? false });
 				break;

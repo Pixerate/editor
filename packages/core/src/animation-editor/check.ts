@@ -1,4 +1,5 @@
 import { resolveEasing, springSettleMs } from '../animation/easing.js';
+import { matchMotionNodes } from './match.js';
 import { normalizeTokenColor } from '../tokens/color.js';
 import { collectPathNodes } from '../vector/geometry.js';
 import type { VectorNode } from '../vector/types.js';
@@ -103,6 +104,19 @@ export function checkMotionScene(scene: MotionScene): MotionIssue[] {
 			if (command.type === 'follow' && known(command.path, 'unknown-path', 'path', where) && nodes.get(command.path)!.node.type !== 'path')
 				issues.push(motionIssue('not-a-path', `"${command.path}" is a group; follow a single path node.`, { ...where, ids: [command.path] }));
 			if (command.type === 'morph') known(command.into, 'unknown-shape', 'shape', where);
+			if (command.type === 'match' && known(command.into, 'unknown-shape', 'group', where)) {
+				const into = nodes.get(command.into)!;
+				for (const id of targets) {
+					const entry = nodes.get(id)!;
+					if (id === command.into || into.ancestors.includes(id) || entry.ancestors.includes(command.into)) {
+						issues.push(motionIssue('match-self', `"${id}" cannot match "${command.into}": one is the other or holds it. Match two separate groups (the second usually hidden).`, { ...where, ids: [id, command.into] }));
+						continue;
+					}
+					const m = matchMotionNodes(entry.node, into.node);
+					if (m.unpairedInto.length)
+						issues.push(motionIssue('match-unpaired', `${m.unpairedInto.map((x) => `"${x}"`).join(', ')} in "${command.into}" ${m.unpairedInto.length > 1 ? 'have' : 'has'} no partner in "${id}", so ${m.unpairedInto.length > 1 ? 'they do' : 'it does'} not appear; add a part with the same name or id to "${id}" (it can start hidden or tiny).`, { ...where, ids: m.unpairedInto }));
+				}
+			}
 			const style = command.type === 'enter' || command.type === 'exit' ? command.style : undefined;
 			if (style === 'wipe' || style === 'iris' || style === 'split')
 				for (const id of targets)

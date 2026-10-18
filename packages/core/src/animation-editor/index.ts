@@ -11,6 +11,7 @@ export * from './types.js';
 export * from './issues.js';
 export * from './parse.js';
 export * from './compile.js';
+export * from './match.js';
 export * from './evaluate.js';
 export * from './check.js';
 export * from './edit.js';

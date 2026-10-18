@@ -30,6 +30,7 @@ const COMMAND_KEYS: Record<string, string[]> = {
 	fade: [...BASE_KEYS, 'to'],
 	style: [...BASE_KEYS, 'fill', 'stroke', 'strokeWidth'],
 	morph: [...BASE_KEYS, 'into'],
+	match: [...BASE_KEYS, 'into'],
 	follow: [...BASE_KEYS, 'path', 'rotate', 'from', 'to'],
 	pulse: [...BASE_KEYS, 'amount', 'count', 'blend'],
 	shake: [...BASE_KEYS, 'amount', 'count', 'axis', 'blend'],
@@ -129,7 +130,8 @@ export function commandShapeProblems(command: unknown, where: string): string[] 
 			if (command.strokeWidth !== undefined && !(isNum(command.strokeWidth) && command.strokeWidth >= 0)) p(`"strokeWidth" must be a number ≥ 0.`);
 			break;
 		case 'morph':
-			if (typeof command.into !== 'string' || !command.into) p(`"into" must be the id of a node whose shape to take.`);
+		case 'match':
+			if (typeof command.into !== 'string' || !command.into) p(`"into" must be the id of a ${type === 'match' ? 'group to become' : 'node whose shape to take'}.`);
 			break;
 		case 'follow':
 			if (typeof command.path !== 'string' || !command.path) p(`"path" must be the id of a path node.`);

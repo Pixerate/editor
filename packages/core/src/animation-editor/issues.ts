@@ -16,6 +16,8 @@ export const MOTION_ISSUE_CODES = {
 	'not-a-path': { severity: 'error', wording: 'A follow path must be a path node, not a group.' },
 	'reveal-no-box': { severity: 'warning', wording: 'A wipe, iris or split cannot clip a node with no width or height (a lone straight line), so it fades instead.' },
 	'unknown-shape': { severity: 'error', wording: 'A morph names a shape the artwork does not have.' },
+	'match-self': { severity: 'error', wording: 'A match turns a group into itself or into a group it holds (or that holds it).' },
+	'match-unpaired': { severity: 'note', wording: 'Parts of a match\'s "into" group have no partner in the target, so they do not appear.' },
 	'unknown-effect': { severity: 'error', wording: 'An effect command names an effect the node does not have.' },
 	'unknown-effect-param': { severity: 'error', wording: 'An effect command names a parameter that is not a number of that effect.' },
 	'unknown-frame': { severity: 'error', wording: 'A camera frames a node the artwork does not have.' },

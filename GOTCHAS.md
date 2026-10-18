@@ -1547,6 +1547,12 @@ All contributors and AI assistants should check this file before starting work a
   - `offset` adds the cycle's change once per cycle, and only to numbers. Colours and shapes repeat like `loop`.
   - `duration` is one cycle. `motionCommandDuration` includes every repeat, and `motionCycleDuration` is one.
 
+### [core/animation-editor] `match` Morphs Parts, So the `into` Group Stays Hidden and Its Extra Parts Never Show
+
+- **Issue / Symptom**: After a `match`, parts that only the end state has (a new avatar, say) were missing. The `into` group, if visible, sat on top of the target the whole time.
+- **Root Cause**: `match` morphs each part of the target into its partner (shape, paint and place, as `morph` does) and fades out parts with no partner. Nothing of `into` is drawn: it is a description of the end state.
+- **Solution / Workaround**: Keep `into` hidden (`visible: false`). For every part the end state adds, put a partner in the target with the same name or id, which can start tiny or with no fill. `check` reports `match-unpaired` (a note) for parts of `into` with no partner, and `match-self` when one group holds the other.
+
 ### [core/animation-editor] Emphasis Behaviours Must Match Flair Number for Number
 
 - **Issue / Symptom**: An exported wiggle or shake would play differently in Flair from the editor's preview, even though both "wiggle with seed 3".

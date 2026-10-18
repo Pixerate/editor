@@ -30,6 +30,7 @@ reproduced at the end of this file. Paths are relative to each source repository
 © 2026 ArtCraft Team and the DeckCraft contributors.
 
 - `crates/geom/src/morph.rs` (`contours`: every segment as a cubic, lines with handles at thirds; `align`: contours paired in order, one without a partner meeting a point at the same place relative to the other outline's box (`place`); `turn`: a closed contour restarted at another anchor; `match_pair`: the closed side of a pair turned, open paired with closed) → `subpathToMorphContour`, `turnMorphContour` and `correspondMorphContours` in `packages/core/src/vector/blend.ts`; anchors are inserted by arc length rather than split evenly per curve, and the winding of closed shapes follows their areas (effectcraft) instead of a cost comparison; test cases re-expressed → `packages/core/tests/vector-blend.test.ts`
+- `crates/anim/src/morph.rs` (`morph_pairs`: shapes paired in passes, each used once — by name, then by matching content, then by kind — and unpaired shapes faded out) → `matchMotionNodes` and the `match` command in `packages/core/src/animation-editor/match.ts` and `compile.ts`; the passes are name, then id with the groups' own ids taken out, then kind in stacking order, and paired groups pair their own parts
 - `crates/pptx/src/read/chart.rs` (DrawingML chart reading: group → type mapping, secondary value axis by axis id and position rather than file order, cached and literal data, data-label number-format precedence, point fills) → `chartFromOoxml` in `packages/core/src/chart/ooxml.ts`
 
 ## designcraft
@@ -55,6 +56,7 @@ reproduced at the end of this file. Paths are relative to each source repository
 
 © 2026 ArtCraft Team and the FigCraft contributors.
 
+- `crates/ui-egui/src/present.rs` (`match_layers`: Smart Animate pairs layers by their name path, nested groups pairing their own layers, and fades out what has no partner) → `matchMotionNodes` in `packages/core/src/animation-editor/match.ts`
 - `crates/engine/src/distance.rs` (`between`, `inside`, `to_guide`, `label`) → `packages/core/src/canvas/measure.ts`
 - `crates/engine/src/measure_tests.rs` (test cases re-expressed) → `packages/core/tests/canvas-measure.test.ts`
 - `crates/engine/src/snap.rs` (`spacings` / `equal_spacing` / `spacing_guides`: centred between neighbours, repeating the gap of the pair before or after, gap labels; threshold in screen pixels divided by the zoom) → `VectorSnapTargets.snapRect` in `packages/core/src/vector/snap.ts`; its equal-spacing cases re-expressed → `packages/core/tests/vector-snap.test.ts`
