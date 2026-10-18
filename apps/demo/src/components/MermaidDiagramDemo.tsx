@@ -259,7 +259,6 @@ const MermaidEditorPane: React.FC = () => {
   return (
     <div className="grid gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
       <div className="space-y-2">
-        <AgentScriptPanel scripts={DIAGRAM_SCRIPTS} hint="Plays a scripted agent turn with the diagram__* tools; the diagram's director moves its cursor to each node it adds or changes." />
         <div className="flex flex-wrap items-center gap-2" role="toolbar" aria-label="Mermaid diagram">
           <GitBranch className="w-4 h-4 text-sky-400" />
           <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 mr-1">Mermaid diagram</span>
@@ -389,6 +388,7 @@ const MermaidEditorPane: React.FC = () => {
           </div>
         </DirectionContext.Provider>
         )}
+        <AgentScriptPanel scripts={DIAGRAM_SCRIPTS} hint="Plays a scripted agent turn with the diagram__* tools; the diagram's director moves its cursor to each node it adds or changes." />
         <FieldInspector diagram={diagram} />
         {diagram.state.issue && <p className="text-xs text-amber-400">{diagram.state.issue}</p>}
         <div className="flex flex-wrap gap-2" aria-label="Sample thumbnails">

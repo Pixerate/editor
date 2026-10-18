@@ -218,10 +218,10 @@ export function VectorTab() {
           </p>
         </div>
       </div>
-      <AgentScriptPanel scripts={VECTOR_SCRIPTS} stage={agentStage} hint="Plays a scripted agent turn through commands__run_command with the vector.* commands (the same ones in the command palette)." />
       <div className="relative rounded-xl border border-slate-800 bg-slate-900/50 p-3" ref={agentStage}>
         <VectorEditor controller={controller} height={520} />
       </div>
+      <AgentScriptPanel scripts={VECTOR_SCRIPTS} stage={agentStage} hint="Plays a scripted agent turn through commands__run_command with the vector.* commands (the same ones in the command palette)." />
       <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
         <span>
           {state.document.nodes.length} nodes · {state.selection.length} selected · {Math.round(state.viewport.zoom * 100)}%
