@@ -66,6 +66,14 @@ export interface FlairSvgAnimation {
 	behavior?: MotionBehavior;
 	/** Flair 0.39 and later: stepped time, held on a grid of this many frames per second. */
 	strobe?: number;
+	/** Flair 0.39 and later: whole cycles to play (default 1); with `alternate`, every other one backwards. */
+	repeat?: number;
+	alternate?: boolean;
+	/** Flair features scenes do not have (imports skip them with a note). */
+	count?: readonly [number, number];
+	write?: string;
+	scramble?: string;
+	solo?: number;
 	view?: readonly [number, number, number, number] | string;
 }
 

@@ -25,7 +25,7 @@ Commands
 - effect tweens a numeric parameter of a live path effect already on the node (twist angle, wiggle time, zig zag size).
 
 Working method
-1. get_animation to learn the element ids (set_animation_artwork_svg first if there is no artwork: give every element you will animate an id).
+1. get_animation to learn the element ids (set_animation_artwork_svg first if there is no artwork: give every element you will animate an id; or import_flair_effect to start from a Flair effect and edit it).
 2. Plan a few shots, each one idea. Add them with insert_shots, or edit_animation to make several edits as one step (dry_run first when unsure).
 3. check_animation and fix every error and warning; render_animation_frame (shot + "end") to look at the result.
 4. To make a reusable Flair effect, set_animation_controls (colour controls stand for every use of their default colour) and export_flair_effect.

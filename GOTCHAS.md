@@ -1514,6 +1514,23 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: Flair's `out` is `1 − (1 − t)³` and `in-out` the piecewise cubic, which differ from CSS `ease-out` / `ease-in-out` by up to ~7%. Separately, a move animates `x` and `y` as two segments, so an interval had two active segments and fell back to sampling.
 - **Solution / Workaround**: The editor's defaults are `MOTION_EASE_OUT` (`cubic-bezier(1/3, 1, 2/3, 1)`, exactly Flair's `out`) and `MOTION_EASE_IN_OUT` (within 1% of Flair's `in-out`). `flairEaseFor` matches a curve to a Flair name within 1%, and the exporter writes one change when every active segment spans the same interval with the same curve.
 
+### [core] The Entry-Isolation Test Reads `-import"` in a String as an Import
+
+- **Issue / Symptom**: `tests/entry-isolation.test.ts` reported a third-party package named `, artwork, shots, …` for `/animation-editor` after a default scene name `'flair-import'` was added.
+- **Root Cause**: The test scans the built files with a regex for `import … "x"`. Its lookbehind does not exclude `-`, so `"flair-import"` followed by a quote matches as an import of whatever text runs to the next quote.
+- **Solution / Workaround**: Don't end string literals in shipped code with `-import` or `-export` (`'from-flair'` is used instead). If such a name is needed, tighten the test's lookbehind to exclude `-`.
+
+### [core/animation-editor] Repeats Are Laid Out as Segments, and a Mirrored Cycle Runs Its Curve Backwards
+
+- **Issue / Symptom**: A mirrored repeat that swapped `from` and `to` played a different curve on the way back (an ease-in came back as an ease-in, not an ease-out). After a repeat, the next command started from the wrong value.
+- **Root Cause**: Swapping the ends keeps the ease running forward. Real time reversal shows at `u` what the forward run showed at `1 − u`.
+- **Solution / Workaround**:
+  - `compileRepeated` compiles one cycle, then copies its segments for each further cycle. Later commands read values through the same tracks, so they start where the repeat ended.
+  - A mirrored copy keeps its ends and sets `reverse`: `segmentProgress` evaluates the ease at `1 − u`.
+  - The Flair export writes such a copy from its value at the start to its value at the end, with `reverseCubicBezier` (`[1 − x2, 1 − y2, 1 − x1, 1 − y1]`). A reversed spring has no curve, so it is sampled.
+  - `offset` adds the cycle's change once per cycle, and only to numbers. Colours and shapes repeat like `loop`.
+  - `duration` is one cycle. `motionCommandDuration` includes every repeat, and `motionCycleDuration` is one.
+
 ### [core/animation-editor] Emphasis Behaviours Must Match Flair Number for Number
 
 - **Issue / Symptom**: An exported wiggle or shake would play differently in Flair from the editor's preview, even though both "wiggle with seed 3".

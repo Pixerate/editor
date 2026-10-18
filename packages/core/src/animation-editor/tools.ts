@@ -4,6 +4,7 @@ import type { JsonSchema } from '../tools/schema.js';
 import { parseVectorSvg } from '../vector/svg.js';
 import type { VectorNode } from '../vector/types.js';
 import { compileMotionScene, indexMotionNodes } from './compile.js';
+import { fromFlairSvgMotion, fromFlairVectorEffect, type FlairImportResult } from './flair-import.js';
 import type { AnimationEditorController } from './controller.js';
 import { MOTION_EDIT_OPS, type MotionEdit, type MotionEditResult } from './edit.js';
 import { motionIssueLine, type MotionIssue } from './issues.js';
@@ -448,6 +449,36 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 		}
 	};
 
+	const importFlairEffect: AgentTool = {
+		name: 'import_flair_effect',
+		title: 'Import a Flair effect',
+		description:
+			'Replaces the whole animation with a Flair vector effect or SvgMotion (one undo step): its SVG becomes the artwork, {{name: color}} placeholders become colour controls, and each Flair step becomes a shot of commands (fade, enter, style, move, rotate, scale, draw, follow, pulse, shake, teeter, wave, wiggle, color-pulse). Returns the shots, the elements, notes on anything not carried over and the issues. With dry_run it only reports what the import would give.',
+		inputSchema: object(
+			{
+				effect: { type: 'object', description: 'A Flair catalog vector effect { kind: "vector", id, name, motion: { svg, animate }, hold?, presets? }. Give this or "motion".' },
+				motion: { type: 'object', description: 'A Flair SvgMotion { svg, animate }. Give this or "effect".' },
+				name: { type: 'string', minLength: 1, description: 'Name for the scene (default: the effect\'s id, else "from-flair").' },
+				dry_run: { type: 'boolean', description: 'Report without replacing anything (default false).' }
+			},
+			[]
+		),
+		annotations: { title: 'Import a Flair effect', ...DESTRUCTIVE },
+		handler: ({ effect, motion, name, dry_run = false }) => {
+			if ((effect === undefined) === (motion === undefined)) throw new Error('Give exactly one of "effect" (a Flair vector effect) or "motion" (a Flair SvgMotion). Nothing was changed.');
+			let result: FlairImportResult;
+			try {
+				result = effect !== undefined ? fromFlairVectorEffect(effect, name ? { name } : {}) : fromFlairSvgMotion(motion, name ? { name } : {});
+			} catch (error) {
+				throw new Error(`The Flair effect could not be imported: ${(error as Error).message} Nothing was changed.`);
+			}
+			const report = { notes: result.notes, issues: issueSummary(result.issues), shots: describeMotionShots(result.scene).map(({ id, start, end, commands }) => ({ id, start, end, commands: commands.length })) };
+			if (dry_run) return { dry_run: true, ...report, hint: 'Nothing was replaced; call again without dry_run to import.' };
+			const applied = controller.apply({ op: 'replace_scene', scene: result.scene }, 'Import Flair effect');
+			return outcome(applied, applied.ok ? { ...report, elements: describeMotionElements(result.scene) } : {});
+		}
+	};
+
 	const insertShots: AgentTool = {
 		name: 'insert_shots',
 		title: 'Add shots',
@@ -627,7 +658,7 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 	};
 
 	const reads = [getAnimation, getShot, findElements, checkAnimation, renderFrame, exportFlairMotion, exportFlairEffect, seekAnimation];
-	const writes = [setArtworkSvg, insertShots, updateShot, deleteShots, moveShot, addCommands, updateCommand, deleteCommands, setSettings, setControls, editAnimation, writeAnimation, undo, redo];
+	const writes = [setArtworkSvg, importFlairEffect, insertShots, updateShot, deleteShots, moveShot, addCommands, updateCommand, deleteCommands, setSettings, setControls, editAnimation, writeAnimation, undo, redo];
 
 	return {
 		id: options.id ?? 'animation',
