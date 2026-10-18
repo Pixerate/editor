@@ -16,7 +16,7 @@ export class MotionSceneFormatError extends Error {
 	}
 }
 
-const SCENE_KEYS = ['version', 'name', 'description', 'artwork', 'shots', 'clips', 'drivers', 'loop', 'trigger', 'fps', 'steps', 'beat', 'narration', 'target', 'controls', 'presets'];
+const SCENE_KEYS = ['version', 'name', 'description', 'artwork', 'shots', 'clips', 'drivers', 'motionBlur', 'loop', 'trigger', 'fps', 'steps', 'beat', 'narration', 'target', 'controls', 'presets'];
 const SHOT_KEYS = ['id', 'label', 'camera', 'at', 'run', 'hold', 'speed'];
 const CAMERA_KEYS = ['x', 'y', 'width', 'height', 'frame', 'padding', 'ease', 'ms', 'geometric'];
 const BASE_KEYS = ['type', 'targets', 'duration', 'delay', 'stagger', 'with', 'ease', 'note', 'repeat', 'repeatMode', 'steps'];
@@ -278,6 +278,11 @@ export function motionSceneShapeProblems(input: unknown): string[] {
 		problems.push('Scene: "artwork" must be a vector document { width, height, nodes }.');
 	if (input.clips !== undefined) problems.push(...clipsShapeProblems(input.clips));
 	if (input.drivers !== undefined) problems.push(...driversShapeProblems(input.drivers));
+	if (input.motionBlur !== undefined) {
+		const b = input.motionBlur;
+		if (!isObject(b) || Object.keys(b).some((k) => k !== 'shutter' && k !== 'samples') || (b.shutter !== undefined && !(isNum(b.shutter) && b.shutter > 0 && b.shutter <= 720)) || (b.samples !== undefined && !(Number.isInteger(b.samples) && (b.samples as number) >= 2 && (b.samples as number) <= 32)))
+			problems.push('Scene: "motionBlur" must be { "shutter"?: degrees above 0 up to 720 (default 180), "samples"?: 2 to 32 (default 8) }.');
+	}
 	if (input.trigger !== undefined && !(MOTION_TRIGGERS as readonly unknown[]).includes(input.trigger)) problems.push(`Scene: "trigger" must be one of ${MOTION_TRIGGERS.join(', ')}.`);
 	if (input.loop !== undefined && !['none', 'loop', 'ping-pong'].includes(input.loop as string)) problems.push('Scene: "loop" must be "none", "loop" or "ping-pong".');
 	if (input.fps !== undefined && !(isNum(input.fps) && input.fps > 0 && input.fps <= 120)) problems.push('Scene: "fps" must be a number from 1 to 120.');

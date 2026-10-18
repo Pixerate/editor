@@ -1591,6 +1591,16 @@ All contributors and AI assistants should check this file before starting work a
   - `visibleAt` counts a group as drawn when its own `drawEnd` and at least one stroke's are above zero.
   - The Flair export finds the owning node per path, so per-stroke windows export as exact `draw` changes. A comet's tail (`drawStart`) does not export, because Flair draws from the start of the path. Lottie writes it as the trim's start.
 
+### [core/animation-editor] Averaging Frames in SVG Needs `plus-lighter`, Not Stacked Opacity
+
+- **Issue / Symptom**: Motion blur made by stacking N frames at opacity 1/N came out too faint and tinted towards the first frame. A running average (layer k at 1/(k+1)) was right on an opaque background, but wrong wherever frames are transparent: a shape in only the first layer stayed fully opaque.
+- **Root Cause**: The normal "over" composite is not a sum, so N layers at 1/N do not average.
+- **Solution / Workaround**:
+  - `motionStageSvg` adds the moments with `mix-blend-mode: plus-lighter`, each at opacity 1/N, inside an `isolation: isolate` group. That is an exact average of premultiplied colour, transparency included.
+  - The background is drawn once underneath. Compositing is linear, so this equals the average of whole frames.
+  - Element ids stay on the last moment only.
+  - Exports (Flair, Lottie) and `motionFrameToSvg` stay sharp; the exporters note it.
+
 ### [core/animation-editor] Emphasis Behaviours Must Match Flair Number for Number
 
 - **Issue / Symptom**: An exported wiggle or shake would play differently in Flair from the editor's preview, even though both "wiggle with seed 3".

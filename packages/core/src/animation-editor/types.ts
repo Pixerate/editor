@@ -54,6 +54,11 @@ export interface MotionScene {
 	 * foreground (parallax), a wheel turning as it rolls. Each adds to what its target's commands do.
 	 */
 	drivers?: MotionDriver[];
+	/**
+	 * Motion blur on the stage and in rendered frames (not in exports): each frame averages a few
+	 * moments across the shutter, more for faster motion.
+	 */
+	motionBlur?: MotionBlur;
 	/** Parameters a Flair effect made from this scene exposes (see `toFlairVectorEffect`). */
 	controls?: MotionControl[];
 	/** Named sets of control values. */
@@ -327,6 +332,14 @@ export interface MotionClip {
 	description?: string;
 	/** Commands, timed as in a shot; `"$"` in `targets` stands for the node played on. Clips cannot play clips. */
 	run: MotionCommand[];
+}
+
+/** Motion blur: how long the shutter is open and how many moments a frame averages at most. */
+export interface MotionBlur {
+	/** Shutter angle in degrees of a frame at the scene's fps (default 180: half a frame; 360 is a whole frame). */
+	shutter?: number;
+	/** Most moments a frame averages (default 8, at most 32); fewer for slower motion. */
+	samples?: number;
 }
 
 /** Properties a driver reads and drives: offsets (document units), turn (degrees), scales and opacity. */
