@@ -1455,3 +1455,59 @@ describe('reusable clips', () => {
 		expect((await registry.callTool('copy_animation', { from: 'box', to: ['bx'] })).isError).toBe(true);
 	});
 });
+
+describe('drawing order, pace and comets', () => {
+	const LINES: VectorDocument = {
+		width: 400,
+		height: 200,
+		nodes: [
+			{ id: 'sig', type: 'group', children: [
+				{ id: 'far', type: 'path', fill: null, stroke: '#000000', strokeWidth: 2, subpaths: [{ closed: false, anchors: [{ x: 300, y: 100 }, { x: 390, y: 100 }] }] },
+				{ id: 'long', type: 'path', fill: null, stroke: '#000000', strokeWidth: 2, subpaths: [{ closed: false, anchors: [{ x: 10, y: 50 }, { x: 310, y: 50 }] }] },
+				{ id: 'near', type: 'path', fill: null, stroke: '#000000', strokeWidth: 2, subpaths: [{ closed: false, anchors: [{ x: 200, y: 110 }, { x: 260, y: 110 }] }] }
+			] }
+		]
+	};
+	const make = (command: Record<string, unknown>) => ({ version: 1, name: 'lines', artwork: LINES, shots: [{ id: 'one', run: [{ targets: ['sig'], duration: 900, ease: 'linear', ...command } as MotionCommand] }] }) as MotionScene;
+	const windows = (s: MotionScene) => compileMotionScene(s).segments.filter((g) => g.property === 'drawEnd').map((g) => [g.node, Math.round(g.start), Math.round(g.end)]);
+
+	it('draws strokes one after another, by length, in stacking order or out from a point', () => {
+		expect(windows(make({ type: 'draw', order: 'sequence' }))).toEqual([['far', 0, 180], ['long', 180, 780], ['near', 780, 900]]);
+		expect(windows(make({ type: 'draw', order: 'sequence', sortBy: 'distance', origin: { x: 200, y: 100 } })).map((w) => w[0])).toEqual(['near', 'far', 'long']);
+		const s = make({ type: 'draw', order: 'sequence' });
+		const doc = motionFrameAt(s, 400).document;
+		expect(path(doc, 'far').effects ?? []).toEqual([]);
+		expect(path(doc, 'near').effects?.[0]).toMatchObject({ params: { start: 0, end: 0 } });
+	});
+
+	it('draws at one speed, starting or finishing together', () => {
+		expect(windows(make({ type: 'draw', pace: 'speed' })).sort()).toEqual([['far', 0, 270], ['long', 0, 900], ['near', 0, 180]]);
+		expect(windows(make({ type: 'draw', pace: 'speed', align: 'end' })).sort()).toEqual([['far', 630, 900], ['long', 0, 900], ['near', 720, 900]]);
+		// Entering by drawing in sequence keeps the group hidden until its first stroke starts, without a warning.
+		const enter = make({ type: 'enter', style: 'draw', order: 'sequence' });
+		expect(windows(enter)[0]).toEqual(['far', 0, 135]); // 90 of 450 units, over the first 75% of 900 ms
+		expect(checkMotionScene(enter).some((i) => i.code === 'enter-visible')).toBe(false);
+	});
+
+	it('runs a comet along each stroke and off the end, and exports its tail to Lottie', () => {
+		const s = make({ type: 'draw', comet: 0.25 });
+		const trim = (t: number) => path(motionFrameAt(s, t).document, 'long').effects?.[0]?.params as { start: number; end: number } | undefined;
+		expect(trim(450)).toMatchObject({ start: 37.5, end: 62.5 });
+		expect(trim(900)).toMatchObject({ start: 100, end: 100 });
+		const lottie = toLottie(s).lottie as any;
+		const tm = JSON.stringify(lottie).includes('"ty":"tm"');
+		expect(tm).toBe(true);
+		expect(JSON.stringify(lottie)).toMatch(/"nm":"Draw on","s":\{"a":1/);
+	});
+
+	it('checks the options', async () => {
+		expect(() => parseMotionScene(make({ type: 'enter', style: 'fade', order: 'sequence' }))).toThrow(/go with drawing: style "draw"/);
+		expect(() => parseMotionScene(make({ type: 'draw', order: 'zigzag', comet: 2, from: 0 }))).toThrow(/"order" must be[\s\S]*"comet" must be a fraction[\s\S]*leave out "from" and "to"/);
+		const controller = new AnimationEditorController({ scene: { ...make({ type: 'wait', duration: 100 }), shots: [] } });
+		const registry = new ToolRegistry();
+		registry.register(createAnimationEditorToolProvider(controller));
+		const ok = await registry.callTool('insert_shots', { shots: [{ id: 'sign', run: [{ type: 'draw', targets: ['sig'], order: 'sequence', sortBy: 'distance', origin: { x: 0, y: 0 } }] }] });
+		expect(ok.isError).toBeFalsy();
+		expect((await registry.callTool('add_commands', { shot: 'sign', commands: [{ type: 'draw', targets: ['sig'], pace: 'fast' }] })).isError).toBe(true);
+	});
+});

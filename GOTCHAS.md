@@ -1582,6 +1582,15 @@ All contributors and AI assistants should check this file before starting work a
   - The checks note a looped triggered scene (`trigger-loop`), a one-shot click scene (`click-one-shot`) and cues on click (`click-cue`, since clicks decide when shots start).
   - Flair's `EffectDocument` has no trigger, so `toFlairEffectDocument` keeps the steps but plays through.
 
+### [core/animation-editor] Stroke Order Puts `drawEnd` on Each Path, and a Group's Own `drawEnd` Overrides It
+
+- **Issue / Symptom**: A group drawn on in sequence, then drawn again with a plain `draw` on the group, ignored the per-stroke timing. Checks warned "enters while it is already showing" for a group whose strokes were each still undrawn.
+- **Root Cause**: With `order`, `pace` or `comet`, `drawEnd` (and `drawStart`) segments go on each path, not on the group. Frames visit children first, then apply the group's own `drawEnd` to every path in it, replacing a child's trim.
+- **Solution / Workaround**:
+  - Draw a group either per stroke (with an order) or as a whole; don't mix them in one scene.
+  - `visibleAt` counts a group as drawn when its own `drawEnd` and at least one stroke's are above zero.
+  - The Flair export finds the owning node per path, so per-stroke windows export as exact `draw` changes. A comet's tail (`drawStart`) does not export, because Flair draws from the start of the path. Lottie writes it as the trim's start.
+
 ### [core/animation-editor] Emphasis Behaviours Must Match Flair Number for Number
 
 - **Issue / Symptom**: An exported wiggle or shake would play differently in Flair from the editor's preview, even though both "wiggle with seed 3".

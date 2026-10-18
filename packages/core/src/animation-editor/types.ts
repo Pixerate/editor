@@ -170,7 +170,7 @@ export type MotionSplitOrientation = 'horizontal' | 'vertical';
  * Brings hidden targets in. Targets entered in a shot are hidden before it. Each style is a
  * Flair motion primitive (`entrance.<style>`) with the same defaults.
  */
-export interface MotionEnterCommand extends MotionCommandBase {
+export interface MotionEnterCommand extends MotionCommandBase, MotionDrawOrder {
 	type: 'enter';
 	/**
 	 * Default `fade`. `draw` draws the outline on, then fades the fill in. `pop` scales up past
@@ -195,7 +195,7 @@ export interface MotionEnterCommand extends MotionCommandBase {
 }
 
 /** Takes targets out. */
-export interface MotionExitCommand extends MotionCommandBase {
+export interface MotionExitCommand extends MotionCommandBase, MotionDrawOrder {
 	type: 'exit';
 	/** Default `fade`. `wipe` hides the target behind an edge travelling `direction` (a wipe in, reversed). */
 	style?: MotionExitStyle;
@@ -204,9 +204,31 @@ export interface MotionExitCommand extends MotionCommandBase {
 	distance?: number;
 }
 
+/**
+ * How the strokes of a group (or several paths) draw on or off together. Default: all at once,
+ * each over the whole time.
+ */
+export interface MotionDrawOrder {
+	/** `together` (default) or `sequence`: one stroke after another, each for a time in proportion to its length. */
+	order?: 'together' | 'sequence';
+	/** With `together`: `time` (default) gives every stroke the whole time; `speed` draws them all at one speed, so short ones take less. */
+	pace?: 'time' | 'speed';
+	/** With `pace: "speed"`: `start` (default) starts them together, `end` finishes them together. */
+	align?: 'start' | 'end';
+	/** With `sequence`: `document` (default, stacking order) or `distance` from `origin` (a radial reveal). */
+	sortBy?: 'document' | 'distance';
+	/** With `sortBy: "distance"`: the point (document units) strokes are drawn out from (default the target's centre). */
+	origin?: { x: number; y: number };
+}
+
 /** Draws a stroke on (or off) between two fractions of its length. */
-export interface MotionDrawCommand extends MotionCommandBase {
+export interface MotionDrawCommand extends MotionCommandBase, MotionDrawOrder {
 	type: 'draw';
+	/**
+	 * A travelling stroke this fraction of the length long (0–1): it runs along the path and off
+	 * the end, instead of drawing it on and leaving it.
+	 */
+	comet?: number;
 	/** Fraction drawn at the end (default 1). */
 	to?: number;
 	/** Fraction drawn at the start (default: what is drawn now). */
