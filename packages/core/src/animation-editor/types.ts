@@ -80,9 +80,13 @@ export interface MotionCommandBase {
 	note?: string;
 }
 
-export type MotionEnterStyle = 'fade' | 'pop' | 'grow' | 'slide' | 'draw' | 'zoom' | 'rise';
-export type MotionExitStyle = 'fade' | 'shrink' | 'slide' | 'undraw';
+export type MotionEnterStyle = 'fade' | 'pop' | 'grow' | 'slide' | 'draw' | 'zoom' | 'rise' | 'wipe' | 'iris' | 'split';
+export type MotionExitStyle = 'fade' | 'shrink' | 'slide' | 'undraw' | 'wipe';
 export type MotionDirection = 'up' | 'down' | 'left' | 'right';
+/** The opening an `iris` reveals through. */
+export type MotionIrisShape = 'circle' | 'box';
+/** The line a `split` opens from. */
+export type MotionSplitOrientation = 'horizontal' | 'vertical';
 
 /**
  * Brings hidden targets in. Targets entered in a shot are hidden before it. Each style is a
@@ -93,22 +97,31 @@ export interface MotionEnterCommand extends MotionCommandBase {
 	/**
 	 * Default `fade`. `draw` draws the outline on, then fades the fill in. `pop` scales up past
 	 * full size and settles; `zoom` settles from larger; `rise` rises a short way with a little
-	 * overshoot.
+	 * overshoot. `wipe`, `iris` and `split` reveal the target through a clip over its box (see
+	 * `MotionFrame.clips`), reaching past it far enough to show its whole stroke.
 	 */
 	style?: MotionEnterStyle;
-	/** For `slide`: the direction of travel (default `up`). */
+	/**
+	 * For `slide`: the direction of travel (default `up`). For `wipe`: the way the edge travels
+	 * (default `right`, which reveals from the left).
+	 */
 	direction?: MotionDirection;
 	/** For `slide` (default 40) and `rise` (default 20): how far in document units. */
 	distance?: number;
 	/** For `pop` (default 0.5) and `zoom` (default 1.6): the starting scale. */
 	scale?: number;
+	/** For `iris`: open through a `circle` (default; an ellipse on a box that is not square) or a `box`. */
+	shape?: MotionIrisShape;
+	/** For `split`: open up and down from a `horizontal` line through the middle (default), or left and right from a `vertical` one. */
+	orientation?: MotionSplitOrientation;
 }
 
 /** Takes targets out. */
 export interface MotionExitCommand extends MotionCommandBase {
 	type: 'exit';
-	/** Default `fade`. */
+	/** Default `fade`. `wipe` hides the target behind an edge travelling `direction` (a wipe in, reversed). */
 	style?: MotionExitStyle;
+	/** For `slide`: the direction of travel (default `down`). For `wipe`: the way the edge travels (default `right`, which hides from the left). */
 	direction?: MotionDirection;
 	distance?: number;
 }
@@ -167,7 +180,10 @@ export interface MotionFollowCommand extends MotionCommandBase {
 	type: 'follow';
 	/** Id of a path node in the artwork (it can be hidden). */
 	path: string;
-	/** Turn with the path's direction (default false). */
+	/**
+	 * Turn with the path's direction (default false). Moves, shakes and wiggles made during the
+	 * follow then turn with it too: they are offsets from the target's place on the path.
+	 */
 	rotate?: boolean;
 	/** Fractions of the path's length to travel between (default 0 → 1). */
 	from?: number;
@@ -298,8 +314,10 @@ export const MOTION_COMMAND_TYPES: readonly MotionCommandType[] = [
 	'effect',
 	'wait'
 ];
-export const MOTION_ENTER_STYLES: readonly MotionEnterStyle[] = ['fade', 'pop', 'grow', 'slide', 'draw', 'zoom', 'rise'];
-export const MOTION_EXIT_STYLES: readonly MotionExitStyle[] = ['fade', 'shrink', 'slide', 'undraw'];
+export const MOTION_ENTER_STYLES: readonly MotionEnterStyle[] = ['fade', 'pop', 'grow', 'slide', 'draw', 'zoom', 'rise', 'wipe', 'iris', 'split'];
+export const MOTION_EXIT_STYLES: readonly MotionExitStyle[] = ['fade', 'shrink', 'slide', 'undraw', 'wipe'];
+export const MOTION_IRIS_SHAPES: readonly MotionIrisShape[] = ['circle', 'box'];
+export const MOTION_SPLIT_ORIENTATIONS: readonly MotionSplitOrientation[] = ['horizontal', 'vertical'];
 export const MOTION_DIRECTIONS: readonly MotionDirection[] = ['up', 'down', 'left', 'right'];
 
 /**
