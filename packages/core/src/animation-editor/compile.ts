@@ -27,7 +27,8 @@ import {
 	type MotionIrisShape,
 	type MotionRect,
 	type MotionSplitOrientation,
-	type MotionScene
+	type MotionScene,
+	type MotionShot
 } from './types.js';
 
 /**
@@ -440,6 +441,11 @@ export function motionPathLength(node: VectorNode, parentWorld: AffineMatrix = I
 	return longest;
 }
 
+/** How much a shot's `speed` stretches its time (1 / speed; 1 when unset or not above 0). */
+export function motionShotTimeScale(shot: MotionShot): number {
+	return typeof shot.speed === 'number' && shot.speed > 0 && Number.isFinite(shot.speed) ? 1 / shot.speed : 1;
+}
+
 /** How many times a command plays (1 for `enter`, `exit` and `wait`, which do not repeat). */
 export function motionCommandRepeat(command: MotionCommand): number {
 	if (command.type === 'wait' || command.type === 'enter' || command.type === 'exit') return 1;
@@ -497,10 +503,12 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 	scene.shots.forEach((shot, index) => {
 		const start = t;
 		let cursor = start;
+		// A shot's speed scales all of its time: camera move, delays, durations, staggers and hold.
+		const f = motionShotTimeScale(shot);
 		if (shot.camera) {
 			const rect = resolveMotionCamera(shot.camera, scene);
 			if (rect && rect.width > 0 && rect.height > 0) {
-				const ms = index === 0 ? 0 : (shot.camera.ms ?? MOTION_CAMERA_MS);
+				const ms = index === 0 ? 0 : (shot.camera.ms ?? MOTION_CAMERA_MS) * f;
 				cameraMoves.push({ shot: shot.id, start, end: start + ms, to: rect, ease: shot.camera.ease ?? MOTION_EASE_IN_OUT, geometric: shot.camera.geometric === true });
 				cursor = start + ms;
 			}
@@ -510,16 +518,16 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 		let prevStart = cursor;
 		shot.run.forEach((command, i) => {
 			const base = command.with === 'previous' && i > 0 ? prevStart : runEnd;
-			const begin = base + (command.type === 'wait' ? 0 : (command.delay ?? 0));
+			const begin = base + (command.type === 'wait' ? 0 : (command.delay ?? 0) * f);
 			const targets = command.type === 'wait' ? [] : command.targets;
-			const durations = command.type === 'wait' ? [command.duration] : targets.map((id) => motionCommandDuration(command, scene, id));
-			const stagger = command.type === 'wait' ? 0 : (command.stagger ?? 0);
+			const durations = command.type === 'wait' ? [command.duration * f] : targets.map((id) => motionCommandDuration(command, scene, id) * f);
+			const stagger = command.type === 'wait' ? 0 : (command.stagger ?? 0) * f;
 			const end = durations.reduce((m, d, k) => Math.max(m, begin + k * stagger + d), begin);
 			commands.push({ shot: shot.id, shotIndex: index, command: i, type: command.type, start: begin, end, duration: durations[0] ?? 0 });
 			prevStart = begin;
 			runEnd = Math.max(runEnd, end);
 		});
-		const end = runEnd + (shot.hold ?? MOTION_DEFAULT_HOLD);
+		const end = runEnd + (shot.hold ?? MOTION_DEFAULT_HOLD) * f;
 		shots.push({ id: shot.id, index, ...(shot.label ? { label: shot.label } : {}), start, commandsStart, commandsEnd: runEnd, end });
 		t = end;
 	});
@@ -556,8 +564,9 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 		command.targets.forEach((target, k) => {
 			const entry = nodes.get(target);
 			if (!entry) return;
-			const start = timing.start + k * (command.stagger ?? 0);
-			const cycle = motionCycleDuration(command, scene, target);
+			const f = motionShotTimeScale(shot);
+			const start = timing.start + k * (command.stagger ?? 0) * f;
+			const cycle = motionCycleDuration(command, scene, target) * f;
 			jobs.push({ start, order: order++, run: () => compileRepeated(command, target, entry, start, cycle, timing) });
 		});
 	}

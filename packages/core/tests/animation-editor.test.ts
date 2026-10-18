@@ -20,6 +20,7 @@ import {
 	MOTION_EASE_OUT,
 	motionFlairPrimitive,
 	matchMotionNodes,
+	fitMotionScene,
 	fromFlairSvgMotion,
 	fromFlairVectorEffect,
 	type FlairSvgAnimation,
@@ -1004,5 +1005,60 @@ describe('Smart Animate (match)', () => {
 		expect((ok.structuredContent as any).issues.notes).toBe(1);
 		const bad = await registry.callTool('add_commands', { shot: 'flip', commands: [{ type: 'match', targets: ['card-a'] }] });
 		expect(bad.isError).toBe(true);
+	});
+});
+
+describe('fitting a scene to a length', () => {
+	const s = scene([
+		{ id: 'logo', run: [{ type: 'enter', targets: ['box'], duration: 400 }], hold: 600 },
+		{ id: 'body', run: [{ type: 'move', targets: ['box'], by: { x: 50, y: 0 }, duration: 1000 }, { type: 'pulse', targets: ['dot'], delay: 200, with: 'previous' }], hold: 400 },
+		{ id: 'end', camera: { frame: 'dot', ms: 600 }, run: [{ type: 'fade', targets: ['box'], to: 0, duration: 400 }] }
+	]);
+
+	it('plays a shot faster or slower with speed, scaling every part of it', () => {
+		const fast: MotionScene = { ...s, shots: s.shots.map((x) => (x.id === 'body' ? { ...x, speed: 2 } : x)) };
+		const before = compileMotionScene(s).shots[1];
+		const after = compileMotionScene(fast).shots[1];
+		expect(after.end - after.start).toBeCloseTo((before.end - before.start) / 2, 6);
+		expect(compileMotionScene(fast).commands.find((c) => c.shot === 'body' && c.type === 'pulse')).toMatchObject({ start: after.start + 100, duration: 300 });
+	});
+
+	it('fits the length, keeping kept shots as they are and the rest in proportion', () => {
+		const total = compileMotionScene(s).duration;
+		const logo = compileMotionScene(s).shots[0];
+		const fit = fitMotionScene(s, total + 2000, { keep: ['logo'] });
+		expect(fit.duration).toBeCloseTo(total + 2000, -1);
+		const t = compileMotionScene(fit.scene);
+		expect(t.shots[0].end - t.shots[0].start).toBe(logo.end - logo.start);
+		expect(Object.keys(fit.speeds)).toEqual(['body', 'end']);
+		expect(fit.speeds.body).toBeCloseTo(fit.speeds.end, 6);
+		expect(fit.speeds.body).toBeLessThan(1);
+		// Refitting composes with the speeds already set.
+		expect(fitMotionScene(fit.scene, total).duration).toBeCloseTo(total, -1);
+	});
+
+	it('refuses fits it cannot make, saying why', () => {
+		expect(() => fitMotionScene(s, 500, { keep: ['logo'] })).toThrow(/kept shots alone last 1000 ms/);
+		expect(() => fitMotionScene(s, 5000, { keep: ['lgo'] })).toThrow(/"lgo" \(did you mean "logo"\?\)/);
+		expect(() => fitMotionScene(s, 5000, { keep: ['logo', 'body', 'end'] })).toThrow(/Every shot is kept/);
+		expect(() => fitMotionScene(s, 10)).toThrow(/speeds run 0.05–20/);
+		expect(() => parseMotionScene({ ...s, shots: [{ ...s.shots[0], speed: 0 }] })).toThrow(/"speed" must be a number from 0.05 to 20/);
+	});
+
+	it('fits through the agent tool as one undo step, with a dry run', async () => {
+		const controller = new AnimationEditorController({ scene: s });
+		const registry = new ToolRegistry();
+		registry.register(createAnimationEditorToolProvider(controller));
+		const total = compileMotionScene(s).duration;
+		const dry = (await registry.callTool('fit_animation', { seconds: (total + 1000) / 1000, keep: ['logo'], dry_run: true })).structuredContent as any;
+		expect(dry).toMatchObject({ dry_run: true });
+		expect(controller.getState().scene).toBe(s);
+		const done = (await registry.callTool('fit_animation', { seconds: (total + 1000) / 1000, keep: ['logo'] })).structuredContent as any;
+		expect(done.duration).toBeCloseTo(total + 1000, -1);
+		expect(controller.getState().scene.shots[0].speed).toBeUndefined();
+		expect((await registry.callTool('undo_animation', {})).structuredContent).toMatchObject({ undone: true, label: 'Fit to length' });
+		const bad = await registry.callTool('fit_animation', { seconds: 0.2, keep: ['logo'] });
+		expect(bad.isError).toBe(true);
+		expect(controller.getState().scene).toBe(s);
 	});
 });

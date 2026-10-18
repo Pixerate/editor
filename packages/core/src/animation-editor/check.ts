@@ -227,8 +227,8 @@ export function checkMotionScene(scene: MotionScene): MotionIssue[] {
 	if (scene.target && scene.shots.length) {
 		const seconds = Math.round(timeline.duration / 100) / 10;
 		const [min, max] = scene.target;
-		if (seconds > max) issues.push(motionIssue('scene-too-long', `The scene runs ${seconds} s, past its ${max} s target; shorten holds or durations.`, { measured: seconds, needed: max, unit: 's' }));
-		if (seconds < min) issues.push(motionIssue('scene-too-short', `The scene runs ${seconds} s, under its ${min} s target; hold longer or add shots.`, { measured: seconds, needed: min, unit: 's' }));
+		if (seconds > max) issues.push(motionIssue('scene-too-long', `The scene runs ${seconds} s, past its ${max} s target; shorten holds or durations, or fit it (fit_animation).`, { measured: seconds, needed: max, unit: 's' }));
+		if (seconds < min) issues.push(motionIssue('scene-too-short', `The scene runs ${seconds} s, under its ${min} s target; hold longer, add shots, or fit it (fit_animation).`, { measured: seconds, needed: min, unit: 's' }));
 	}
 	return issues;
 }
