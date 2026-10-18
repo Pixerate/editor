@@ -100,7 +100,7 @@ const AgentCursor: React.FC<{ cursor: CursorState; name: string }> = ({ cursor, 
       <div className="absolute left-4 top-4 flex flex-col items-start gap-1">
         <span className="rounded-full bg-violet-600 px-2 py-0.5 text-[10px] font-semibold text-white shadow whitespace-nowrap">{name}</span>
         {cursor.bubble && (
-          <span className="w-max max-w-[240px] rounded-lg rounded-tl-none bg-white px-2.5 py-1.5 text-xs text-slate-800 shadow-lg">{cursor.bubble}</span>
+          <span className="w-max max-w-[240px] rounded-lg rounded-tl-none bg-white px-2.5 py-1.5 text-xs text-slate-800 shadow-lg ring-1 ring-slate-900/15">{cursor.bubble}</span>
         )}
       </div>
     </div>
@@ -159,7 +159,7 @@ export const AgentScriptPanel: React.FC<AgentScriptPanelProps> = ({ scripts, sta
     const to = { x: focus.x + Math.min(rect.width / 2, 40), y: focus.y + rect.height / 2 };
     const from = placed.current ? { x: cursorRef.current.x, y: cursorRef.current.y } : { x: box.width - 60, y: 24 };
     placed.current = true;
-    patchCursor({ visible: true, focus: undefined });
+    patchCursor({ x: from.x, y: from.y, visible: true, focus: undefined });
     const dist = Math.hypot(to.x - from.x, to.y - from.y);
     const ms = Number.isFinite(run.speed) ? Math.min(900, 260 + dist * 0.5) / run.speed : 0;
     // A hidden tab gets no animation frames: jump instead of waiting for them.

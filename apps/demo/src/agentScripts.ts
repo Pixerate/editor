@@ -240,12 +240,27 @@ export const DIAGRAM_SCRIPTS: AgentScript[] = [
   },
 ];
 
+/**
+ * A box in artwork coordinates, on screen: the artboard is drawn at the document's size, so its
+ * rectangle maps document units to the viewport (for shapes that don't exist until the call).
+ */
+function artboardBox(x: number, y: number, width: number, height: number) {
+  return (stage: HTMLElement, ctx: AgentScriptContext) => {
+    const board = stage.querySelector("[data-vector-artboard]")?.getBoundingClientRect();
+    const doc = ctx.results.doc?.result;
+    if (!board || !(doc?.width > 0 && doc?.height > 0)) return null;
+    const sx = board.width / doc.width;
+    const sy = board.height / doc.height;
+    return new DOMRect(board.left + x * sx, board.top + y * sy, width * sx, height * sy);
+  };
+}
+
 export const VECTOR_SCRIPTS: AgentScript[] = [
   {
     id: "vector-night",
     prompt: "Turn the scene into night",
     steps: [
-      { say: "Listing the artwork's shapes.", ...command("vector.list") },
+      { say: "Listing the artwork's shapes.", ...command("vector.list"), as: "doc", target: { selector: "[data-vector-artboard]" } },
       {
         say: "The sun becomes a pale moon: same radial gradient, cooler stops.",
         ...command("vector.setGradient", {
@@ -258,12 +273,12 @@ export const VECTOR_SCRIPTS: AgentScript[] = [
             { offset: 1, color: "#64748b" },
           ],
         }),
-        target: { selector: '[data-node-id="sun"]' },
+        target: { selector: '[data-vector-id="sun"]' },
       },
-      { say: "Darkening the hill.", ...command("vector.setStyle", { ids: ["hill"], fill: "#14532d", stroke: "#052e16" }), target: { selector: '[data-node-id="hill"]' } },
-      { say: "A few stars in the sky.", ...command("vector.addShape", { kind: "star", x: 360, y: 40, width: 26, height: 26, points: 5, innerRatio: 0.45, fill: "#fde68a", name: "Star" }) },
-      { ...command("vector.addShape", { kind: "star", x: 440, y: 120, width: 18, height: 18, points: 5, innerRatio: 0.45, fill: "#fef3c7", name: "Star" }) },
-      { ...command("vector.addShape", { kind: "star", x: 520, y: 30, width: 14, height: 14, points: 5, innerRatio: 0.45, fill: "#fef9c3", name: "Star" }) },
+      { say: "Darkening the hill.", ...command("vector.setStyle", { ids: ["hill"], fill: "#14532d", stroke: "#052e16" }), target: { selector: '[data-vector-id="hill"]' } },
+      { say: "A few stars in the sky.", ...command("vector.addShape", { kind: "star", x: 360, y: 40, width: 26, height: 26, points: 5, innerRatio: 0.45, fill: "#fde68a", name: "Star" }), target: artboardBox(360, 40, 26, 26) },
+      { ...command("vector.addShape", { kind: "star", x: 440, y: 120, width: 18, height: 18, points: 5, innerRatio: 0.45, fill: "#fef3c7", name: "Star" }), target: artboardBox(440, 120, 18, 18) },
+      { ...command("vector.addShape", { kind: "star", x: 520, y: 30, width: 14, height: 14, points: 5, innerRatio: 0.45, fill: "#fef9c3", name: "Star" }), target: artboardBox(520, 30, 14, 14) },
     ],
   },
 ];
