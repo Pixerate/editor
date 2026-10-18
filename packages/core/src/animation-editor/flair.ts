@@ -1,4 +1,4 @@
-import { evaluateEasing, type AnimationEasing } from '../animation/easing.js';
+import { evaluateEasing, resolveEasing, type AnimationEasing } from '../animation/easing.js';
 import { bezierPathToSvg, transformBezierPath } from '../canvas/pathops/bezier.js';
 import { normalizeTokenColor } from '../tokens/color.js';
 import { expandVectorAppearance, expandVectorAppearances } from '../vector/appearance.js';
@@ -15,13 +15,17 @@ import type { MotionScene } from './types.js';
  * Flair's effect editor. The types are mirrored here so this package does not depend on Flair.
  *
  * Changes are exact where Flair can express them: a change with a linear, cubic-out or
- * cubic-in-out curve (the editor's defaults) is one change. Anything else (other easings,
- * pulses and shakes, follows, morphs and live-effect tweens) is sampled at the scene's `fps`
- * into short linear changes, which Flair plays the same way.
+ * cubic-in-out curve (the editor's defaults) is one change, and so (Flair 0.36 and later) is
+ * one with any cubic-bezier curve, written as `[x1, y1, x2, y2]`. Anything else (springs,
+ * elastic, `hold`, pulses and shakes, follows, morphs and live-effect tweens) is sampled at the
+ * scene's `fps` into short linear changes, which Flair plays the same way.
  */
 
 /** Flair's easing names. */
 export type FlairEaseName = 'linear' | 'in-out' | 'out';
+
+/** A Flair easing: a name, or (Flair 0.36 and later) a CSS cubic-bezier `[x1, y1, x2, y2]`. */
+export type FlairEase = FlairEaseName | readonly [number, number, number, number];
 
 /** Flair's curves, for matching. */
 export const FLAIR_EASES: Readonly<Record<FlairEaseName, (t: number) => number>> = {
@@ -36,7 +40,7 @@ export interface FlairSvgAnimation {
 	step?: number;
 	delay?: number;
 	ms?: number;
-	ease?: FlairEaseName;
+	ease?: FlairEase;
 	attrs?: Record<string, readonly [string | number, string | number]>;
 	draw?: boolean | readonly [number, number];
 	view?: readonly [number, number, number, number] | string;
@@ -92,6 +96,13 @@ export interface FlairExportOptions {
 	fps?: number;
 	/** Decimal places (default 3). */
 	precision?: number;
+	/**
+	 * Write cubic-bezier easings (the `ease`, `ease-in`, `ease-out`, `ease-in-out`, `ease-in-back`
+	 * and `ease-out-back` presets, and `{ type: 'cubic-bezier' }` curves) as one change with
+	 * `ease: [x1, y1, x2, y2]` (default true). Needs Flair 0.36 or later; set false for older
+	 * Flair, and they are sampled into linear steps.
+	 */
+	curves?: boolean;
 }
 
 /** The Flair easing that matches `ease` (within 1% everywhere), if any. */
@@ -107,6 +118,22 @@ export function flairEaseFor(ease: AnimationEasing): FlairEaseName | undefined {
 	return undefined;
 }
 
+/**
+ * The Flair easing for `ease`: a Flair name when one matches within 1%, else (with `curves`,
+ * the default) the curve's `[x1, y1, x2, y2]` when it is a cubic-bezier. Undefined for curves
+ * Flair cannot play (springs, elastic, `hold`), which are sampled.
+ */
+export function flairCurveFor(ease: AnimationEasing, curves = true): FlairEase | undefined {
+	const name = flairEaseFor(ease);
+	if (name || !curves) return name;
+	const resolved = resolveEasing(ease);
+	if (resolved === 'hold' || resolved.type !== 'cubic-bezier') return undefined;
+	return [resolved.x1, resolved.y1, resolved.x2, resolved.y2];
+}
+
+/** Whether a curve leaves 0–1 (a back ease), so its values pass `from` or `to`. */
+const overshoots = (ease: FlairEase) => typeof ease !== 'string' && (ease[1] < 0 || ease[1] > 1 || ease[3] < 0 || ease[3] > 1);
+
 type ChannelValue = number | string | readonly number[];
 
 interface Channel {
@@ -115,6 +142,11 @@ interface Channel {
 	attr?: string;
 	segments: MotionSegment[];
 	exact: (segment: MotionSegment) => boolean;
+	/**
+	 * Whether a value past `from` → `to` plays the same in Flair as in the editor. Transforms and
+	 * the camera extrapolate; colours would leave 0–255 and opacity and draw-on are clamped here.
+	 */
+	overshoot?: boolean;
 	value: (time: number) => ChannelValue;
 }
 
@@ -130,6 +162,7 @@ function hex6(color: unknown): string {
 export function toFlairSvgMotion(scene: MotionScene, options: FlairExportOptions = {}): FlairMotionExport {
 	const fps = options.fps ?? scene.fps ?? 30;
 	const precision = options.precision ?? 3;
+	const curves = options.curves ?? true;
 	const round = (n: number) => Math.round(n * 10 ** precision) / 10 ** precision;
 	const f = (n: number) => String(round(n));
 	const timeline = compileMotionScene(scene);
@@ -164,6 +197,7 @@ export function toFlairSvgMotion(scene: MotionScene, options: FlairExportOptions
 				attr: 'transform',
 				segments: transformSegments,
 				exact: (s) => LINEAR_TRANSFORM.has(s.property) && !s.wave,
+				overshoot: true,
 				value: (t) => {
 					const o = motionNodeOffset(entry, timeline, t, nodes)!;
 					return `translate(${f(o.dx)} ${f(o.dy)}) rotate(${f(o.rotation)} ${f(c.x)} ${f(c.y)}) translate(${f(c.x)} ${f(c.y)}) scale(${f(o.scaleX)} ${f(o.scaleY)}) translate(${f(-c.x)} ${f(-c.y)})${base}`;
@@ -216,13 +250,13 @@ export function toFlairSvgMotion(scene: MotionScene, options: FlairExportOptions
 	}
 
 	const camera = track('', 'camera');
-	if (camera.length) channels.push({ id: '', kind: 'view', segments: [...camera], exact: () => true, value: (t) => (trackValue(camera, t) as number[]).map(round) });
+	if (camera.length) channels.push({ id: '', kind: 'view', segments: [...camera], exact: () => true, overshoot: true, value: (t) => (trackValue(camera, t) as number[]).map(round) });
 
 	const animate: FlairSvgAnimation[] = [];
 	let sampled = 0;
 	const same = (a: ChannelValue, b: ChannelValue) => JSON.stringify(a) === JSON.stringify(b);
-	const emit = (channel: Channel, delay: number, ms: number, from: ChannelValue, to: ChannelValue, ease: FlairEaseName) => {
-		const base = { ...(channel.id ? { id: channel.id } : {}), ...(delay > 0 ? { delay: round(delay) } : {}), ms: round(ms), ease };
+	const emit = (channel: Channel, delay: number, ms: number, from: ChannelValue, to: ChannelValue, ease: FlairEase) => {
+		const base = { ...(channel.id ? { id: channel.id } : {}), ...(delay > 0 ? { delay: round(delay) } : {}), ms: round(ms), ease: typeof ease === 'string' ? ease : (ease.map(round) as unknown as FlairEase) };
 		if (channel.kind === 'view') animate.push({ ...base, view: to as unknown as [number, number, number, number] });
 		else if (channel.kind === 'draw') animate.push({ ...base, draw: [from as number, to as number] });
 		else animate.push({ ...base, attrs: { [channel.attr!]: [from as string | number, to as string | number] } });
@@ -240,7 +274,8 @@ export function toFlairSvgMotion(scene: MotionScene, options: FlairExportOptions
 			// One change when every active segment spans exactly this interval with one exact curve (a move's x and y, say).
 			const first = active[0];
 			const together = active.every((x) => x.start === a && x.end === b && channel.exact(x) && JSON.stringify(x.ease) === JSON.stringify(first.ease));
-			const ease = together ? flairEaseFor(first.ease) : undefined;
+			const curve = together ? flairCurveFor(first.ease, curves) : undefined;
+			const ease = curve && (!overshoots(curve) || channel.overshoot) ? curve : undefined;
 			if (ease) {
 				const from = channel.value(a);
 				const to = channel.value(b);

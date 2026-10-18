@@ -1508,6 +1508,12 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: Flair's `out` is `1 − (1 − t)³` and `in-out` the piecewise cubic, which differ from CSS `ease-out` / `ease-in-out` by up to ~7%. Separately, a move animates `x` and `y` as two segments, so an interval had two active segments and fell back to sampling.
 - **Solution / Workaround**: The editor's defaults are `MOTION_EASE_OUT` (`cubic-bezier(1/3, 1, 2/3, 1)`, exactly Flair's `out`) and `MOTION_EASE_IN_OUT` (within 1% of Flair's `in-out`). `flairEaseFor` matches a curve to a Flair name within 1%, and the exporter writes one change when every active segment spans the same interval with the same curve.
 
+### [core/animation-editor] Back Eases Cannot Go to Flair on Colours or Opacity
+
+- **Issue / Symptom**: Writing an overshooting cubic-bezier (`ease-out-back`, `ease-in-back`, any curve with `y1` or `y2` outside 0–1) as a Flair `ease` tuple on a `fill` / `stroke` change would make Flair produce invalid hex colours, and on opacity or draw-on it would disagree with the editor.
+- **Root Cause**: Flair's `lerpAttr` blends hex channels with the eased progress unclamped, so a progress past 1 or below 0 gives channel values outside 0–255. The editor clamps opacity and draw-on to 0–1 when it evaluates them.
+- **Solution / Workaround**: `toFlairSvgMotion` only writes an overshooting curve on channels that extrapolate the same in both (transforms and the camera `view`); elsewhere it samples. Curves that stay in 0–1 (`ease-in`, `ease`, …) are written as tuples on every channel.
+
 ### [svelte] `role="listitem"` on a `<button>` Is an a11y Warning
 
 - **Issue / Symptom**: `svelte-check` / vite-plugin-svelte warns `a11y_no_interactive_element_to_noninteractive_role` for a list of shot buttons.
