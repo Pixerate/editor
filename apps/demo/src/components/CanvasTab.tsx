@@ -411,7 +411,6 @@ const CanvasDemo: React.FC = () => {
 
   return (
     <div className="space-y-3">
-      <AgentScriptPanel scripts={CANVAS_SCRIPTS} stage={agentStage} hint="Plays a scripted agent turn with the canvas__* tools: list_nodes returns the ids that align_nodes takes." />
       <div
         className="bg-slate-900/80 border border-slate-800 rounded-xl p-2 flex flex-wrap items-center gap-1 shadow-md"
         role="toolbar"
@@ -610,6 +609,7 @@ const CanvasDemo: React.FC = () => {
           <CanvasDrawLayer draw={draw} viewport={viewport} />
         </ReactFlow>
       </div>
+      <AgentScriptPanel scripts={CANVAS_SCRIPTS} stage={agentStage} hint="Plays a scripted agent turn with the canvas__* tools: list_nodes returns the ids that align_nodes takes." />
 
       {/* Scene strip */}
       <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-3 flex flex-wrap items-center gap-2" aria-label="Scenes">

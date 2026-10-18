@@ -96,10 +96,10 @@ export function AnimationTab() {
           </p>
         </div>
       </div>
-      <AgentScriptPanel scripts={ANIMATION_SCRIPTS} stage={agentStage} hint="Plays a scripted agent turn with the animation__* tools: a new shot, its commands, a check, then playback." />
       <div className="relative rounded-xl border border-slate-800 bg-slate-900/50 p-3" ref={agentStage}>
         <AnimationEditor controller={controller} values={{ accent }} />
       </div>
+      <AgentScriptPanel scripts={ANIMATION_SCRIPTS} stage={agentStage} hint="Plays a scripted agent turn with the animation__* tools: a new shot, its commands, a check, then playback." />
       <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
         <span>
           {state.shots.length} shots · {(state.duration / 1000).toFixed(1)} s · {errors} errors · {state.issues.length - errors} warnings and notes

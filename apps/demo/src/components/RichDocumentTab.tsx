@@ -208,7 +208,6 @@ export const RichDocumentTab: React.FC = () => {
   return (
     <div className="space-y-4">
       <RichDocumentAutosave editor={editor} />
-      <AgentScriptPanel scripts={DOCUMENT_SCRIPTS} stage={agentStage} hint="Plays a scripted agent turn with the doc__* tools: it edits a sentence by position and inserts a live chart block." />
       {/* Editor Toolbar */}
       <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-3 flex flex-wrap items-center gap-1 shadow-md">
         <StylesGallery
@@ -512,6 +511,7 @@ export const RichDocumentTab: React.FC = () => {
           <EditorContent editor={editor} />
         </div>
       </div>
+      <AgentScriptPanel scripts={DOCUMENT_SCRIPTS} stage={agentStage} hint="Plays a scripted agent turn with the doc__* tools: it edits a sentence by position and inserts a live chart block." />
     </div>
   );
 };

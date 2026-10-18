@@ -253,7 +253,6 @@ export function ChartTab() {
           </button>
         </div>
       </div>
-      <AgentScriptPanel scripts={CHART_SCRIPTS} hint="Plays a scripted agent turn with the chart__* tools. Value changes go through the chart's director, so its cursor drags each bar into place." />
       <div className="flex flex-wrap gap-1.5">
         {Object.keys(SAMPLES).map((name) => (
           <button key={name} type="button" className={button} onClick={() => controller.load(SAMPLES[name], { clearHistory: true })}>
@@ -265,6 +264,7 @@ export function ChartTab() {
       <div className="rounded-xl border border-slate-800 bg-slate-900 p-3">
         <ChartEditor controller={controller} height={400} canvasProps={{ presence, sceneRef }} />
       </div>
+      <AgentScriptPanel scripts={CHART_SCRIPTS} hint="Plays a scripted agent turn with the chart__* tools. Value changes go through the chart's director, so its cursor drags each bar into place." />
 
       <div className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-xs text-slate-300 space-y-1" data-chart-summary="">
         <p>{summary.description}</p>

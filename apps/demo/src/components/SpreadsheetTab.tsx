@@ -306,7 +306,6 @@ export const SpreadsheetTab: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      <AgentScriptPanel scripts={SHEET_SCRIPTS} stage={agentStage} hint="Plays a scripted agent turn with the sheet__* tools: it reads a range, writes formulas with set_range and checks what they computed." />
       <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-3 flex flex-wrap items-center gap-2 shadow-md">
         <div className="flex items-center gap-2 mr-2">
           <Table2 className="w-4 h-4 text-emerald-400" />
@@ -378,6 +377,7 @@ export const SpreadsheetTab: React.FC = () => {
         <SpreadsheetEditor state={state} showSheetTabs />
       </div>
       </div>
+      <AgentScriptPanel scripts={SHEET_SCRIPTS} stage={agentStage} hint="Plays a scripted agent turn with the sheet__* tools: it reads a range, writes formulas with set_range and checks what they computed." />
 
       {showNames && (
         <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 text-slate-200">

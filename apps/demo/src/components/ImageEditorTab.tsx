@@ -142,7 +142,6 @@ export function ImageEditorTab() {
         {maskNote && <span className="text-slate-400">{maskNote}</span>}
       </div>
 
-      <AgentScriptPanel scripts={IMAGE_SCRIPTS} stage={agentStage} hint="Plays a scripted agent turn with the image__* tools: adjustments and layers as single undo steps, selections, masks, and a rendered preview." />
 
       {/* Editor Component */}
       <div className="relative w-full" ref={agentStage}>
@@ -153,6 +152,7 @@ export function ImageEditorTab() {
           }}
         />
       </div>
+      <AgentScriptPanel scripts={IMAGE_SCRIPTS} stage={agentStage} hint="Plays a scripted agent turn with the image__* tools: adjustments and layers as single undo steps, selections, masks, and a rendered preview." />
 
       {/* Export Preview */}
       {exportedUrl && (

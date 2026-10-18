@@ -213,7 +213,6 @@ export function ParametersTab() {
         </p>
       </div>
 
-      <AgentScriptPanel scripts={PARAMETER_SCRIPTS} stage={agentStage} hint="Plays a scripted agent turn through commands__run_command with the parameters.* commands; each set is validated against the schema and is one undo step." />
       <div className="relative grid gap-4 lg:grid-cols-[1fr_340px]" ref={agentStage}>
         <div className="space-y-3">
           <GlowPreview values={state.values} time={state.time} />
@@ -247,6 +246,7 @@ export function ParametersTab() {
           <ParametersPanel controller={controller} />
         </div>
       </div>
+      <AgentScriptPanel scripts={PARAMETER_SCRIPTS} stage={agentStage} hint="Plays a scripted agent turn through commands__run_command with the parameters.* commands; each set is validated against the schema and is one undo step." />
 
       <ShaderControlsDemo />
     </div>
