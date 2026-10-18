@@ -1,9 +1,25 @@
-import type { McpToolResult, ToolRegistry } from "@pixerate/editor/agent";
+import type { McpToolResult, RichTextAgentPresence, ToolRegistry } from "@pixerate/editor/agent";
 
 // Scripted agents for the demo, after Ursula's "▶ Demo agent" (dev/whiteboard.tsx): a list of
 // steps, each a note to the user and / or one MCP tool call, played at reading speed with Skip and
 // Stop. The calls go through the same `ToolRegistry` an MCP client uses, so a script shows exactly
 // what a real agent would do, and later steps read ids and positions from earlier results.
+
+/** The demo's agent speed (`?agentSpeed=2`, or `Infinity` for no animation). */
+export const demoAgentSpeed = () => Number(new URLSearchParams(window.location.search).get("agentSpeed") ?? 1) || 1;
+
+/**
+ * The agent's caret in the text editors' tools: drawn inline where it reads and writes, typing
+ * replacements out at the demo's agent speed (each edit is still one undo step).
+ */
+export function demoTextPresence(): RichTextAgentPresence {
+  const speed = demoAgentSpeed();
+  return {
+    name: "Agent",
+    color: "#8b5cf6",
+    typing: Number.isFinite(speed) ? { charsPerSecond: 40 * speed, maxDurationMs: 1600 / speed, selectMs: 350 / speed } : false,
+  };
+}
 
 /** What earlier steps returned, for the arguments of later ones. */
 export interface AgentScriptContext {

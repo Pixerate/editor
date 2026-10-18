@@ -23,6 +23,7 @@ import {
 import { demoToolRegistry } from "../agentTools";
 import { GenerationHistoryDemo } from "./GenerationHistoryDemo";
 import { AgentScriptPanel } from "./AgentScriptPanel";
+import { demoTextPresence } from "../agentScript";
 import { PROMPT_SCRIPTS } from "../agentScripts";
 
 const SAMPLE_PROMPT =
@@ -111,7 +112,7 @@ export const PromptStudioTab: React.FC = () => {
   });
 
   const provider = useMemo(
-    () => (editor ? createRichTextToolProvider(editor, { id: "prompt", namespace: "prompt" }) : null),
+    () => (editor ? createRichTextToolProvider(editor, { id: "prompt", namespace: "prompt", presence: demoTextPresence() }) : null),
     [editor]
   );
   useAgentToolProvider(demoToolRegistry, provider);

@@ -43,6 +43,7 @@ import {
 import { demoCommandRegistry, demoToolRegistry } from "../agentTools";
 import { RichDocumentAutosave } from "./RichDocumentAutosave";
 import { AgentScriptPanel } from "./AgentScriptPanel";
+import { demoTextPresence } from "../agentScript";
 import { DOCUMENT_SCRIPTS } from "../agentScripts";
 import { samplePdfFile, samplePdfRegistry } from "../samplePdf";
 
@@ -185,7 +186,7 @@ export const RichDocumentTab: React.FC = () => {
   const pdfSummary = sampleImport.structureSummary;
 
   const provider = useMemo(
-    () => (editor ? createRichTextToolProvider(editor, { id: "document", namespace: "doc" }) : null),
+    () => (editor ? createRichTextToolProvider(editor, { id: "document", namespace: "doc", presence: demoTextPresence() }) : null),
     [editor]
   );
   useAgentToolProvider(demoToolRegistry, provider);

@@ -4,6 +4,7 @@ import type { McpToolResult } from "@pixerate/editor/agent";
 import { Bot, FastForward, Play, Square, User } from "lucide-react";
 import { demoToolRegistry } from "../agentTools";
 import {
+  demoAgentSpeed,
   resultValue,
   runAgentScript,
   type AgentRunControl,
@@ -112,7 +113,8 @@ export interface AgentScriptPanelProps {
   scripts: AgentScript[];
   /**
    * The editor the agent works in. Its element should be `position: relative`; the cursor is drawn
-   * inside it. Leave it out for editors that draw their own agent cursor (diagrams).
+   * inside it. Leave it out for editors that draw their own agent cursor (diagrams). Text editors
+   * draw an inline caret (`createRichTextToolProvider`'s `presence`), so their text steps have no target.
    */
   stage?: React.RefObject<HTMLElement | null>;
   /** The agent's name on its cursor. */
@@ -188,7 +190,7 @@ export const AgentScriptPanel: React.FC<AgentScriptPanelProps> = ({ scripts, sta
   const play = async (script: AgentScript) => {
     if (running) return;
     clearTimeout(idleTimer.current);
-    const run: AgentRunControl = { speed: Number(new URLSearchParams(window.location.search).get("agentSpeed") ?? 1) || 1, stopped: false };
+    const run: AgentRunControl = { speed: demoAgentSpeed(), stopped: false };
     control.current = run;
     setRunning(script.id);
     setEntries([{ kind: "user", text: script.prompt }]);

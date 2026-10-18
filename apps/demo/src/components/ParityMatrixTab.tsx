@@ -56,6 +56,7 @@ const PRODUCTIVITY_FEATURES: ParityRow[] = [
   row("Mermaid Streaming View & Finder", "DiagramStream & findMermaidSources", "useMermaidStream", "createMermaidStream", "Nodes glide in as a model writes Mermaid"),
   row("Mermaid Diagram Agent Tools", "createDiagramToolProvider", "useAgentToolProvider", "useAgentToolProvider", "23 tools, checked against the diagram and family fields before any change"),
   row("Mermaid Diagram Export & Thumbnails", "mermaidToSvg, rasterizeSvg & downloadDiagramPng", "<MermaidThumbnail>", "<MermaidThumbnail>", "SVG and PNG without the canvas mounted; render_diagram tool"),
+  row("Inline Agent Carets in Text (presence, typeAgentText)", "AgentCaret & createRichTextToolProvider presence", "Via core & useAgentToolProvider", "Via core & useAgentToolProvider", "Named caret, selection and changed-text tint as decorations; typed edits stay one undo step"),
   row("Mermaid Diagram Agent Cursors", "DiagramDirector & draftFrames", "useDiagramDirector & <DiagramPresenceLayer>", "createDiagramDirector & <DiagramPresenceLayer>", "Agent edits acted out by a cursor; one undo step per call"),
   row("Canvas Keyframe Animation & Timeline", "evaluateAnimation & createCanvasAnimationController", "useCanvasAnimation & <AnimationTimeline>", "createCanvasAnimation & <AnimationTimeline>", "OKLab colours, springs, record mode, snapping"),
   row("Canvas Animation Export & Commands", "exportCssAnimation & createCanvasAnimationCommands", "Via core", "Via core", "CSS @keyframes, Web Animations, agent tools"),
