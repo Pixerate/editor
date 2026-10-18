@@ -8,6 +8,7 @@ import { fitMotionScene } from './fit.js';
 import { toLottie } from './lottie.js';
 import { motionContactSheetSvg, motionPath } from './onion.js';
 import { fromFlairSvgMotion, fromFlairVectorEffect, type FlairImportResult } from './flair-import.js';
+import { fromPptxAnimation, type PptxAnimationImport } from './pptx.js';
 import type { AnimationEditorController } from './controller.js';
 import { MOTION_EDIT_OPS, resolveMotionEditRefs, type MotionEdit, type MotionEditResult } from './edit.js';
 import { motionIssueLine, namedWithSuggestion, type MotionIssue } from './issues.js';
@@ -612,6 +613,35 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 		}
 	};
 
+	const importPptx: AgentTool = {
+		name: 'import_pptx_animation',
+		title: 'Import a PowerPoint slide\'s animation',
+		description:
+			'Replaces the whole animation with a PowerPoint slide (one undo step): its shapes become the artwork and its animation pane becomes shots, a shot per click (with previous / after previous, delays, repeats and acceleration kept; the scene plays on click). Text, pictures and charts are left out and effects with no match fade, with notes. Returns the shots, notes and issues. With dry_run it only reports them.',
+		inputSchema: object(
+			{
+				data: { type: 'string', minLength: 1, description: 'The .pptx file, base64-encoded.' },
+				slide: { type: 'integer', minimum: 1, description: 'Which slide (1 = first, default 1).' },
+				dry_run: { type: 'boolean', description: 'Report without replacing anything (default false).' }
+			},
+			['data']
+		),
+		annotations: { title: 'Import a PowerPoint slide\'s animation', ...DESTRUCTIVE },
+		handler: async ({ data, slide, dry_run = false }) => {
+			let result: PptxAnimationImport;
+			try {
+				const bytes = Uint8Array.from(atob(data.replace(/\s+/g, '')), (c) => c.charCodeAt(0));
+				result = await fromPptxAnimation(bytes, slide ? { slide } : {});
+			} catch (error) {
+				throw new Error(`The slide could not be imported: ${(error as Error).message} Nothing was changed.`);
+			}
+			const report = { slides: result.slides, notes: result.notes, issues: issueSummary(result.issues), shots: describeMotionShots(result.scene).map(({ id, start, end, commands }) => ({ id, start, end, commands: commands.length })) };
+			if (dry_run) return { dry_run: true, ...report, hint: 'Nothing was replaced; call again without dry_run to import.' };
+			const applied = controller.apply({ op: 'replace_scene', scene: result.scene }, 'Import PowerPoint slide');
+			return outcome(applied, applied.ok ? { ...report, elements: describeMotionElements(result.scene) } : {});
+		}
+	};
+
 	const importFlairEffect: AgentTool = {
 		name: 'import_flair_effect',
 		title: 'Import a Flair effect',
@@ -961,7 +991,7 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 	};
 
 	const reads = [getAnimation, getShot, findElements, getMotionPath, getTimingGrid, checkAnimation, renderFrame, exportFlairMotion, exportFlairEffect, exportLottie, seekAnimation];
-	const writes = [setArtworkSvg, setDrivers, setClip, copyAnimation, fitAnimation, importFlairEffect, insertShots, updateShot, deleteShots, moveShot, addCommands, updateCommand, deleteCommands, moveCommand, setSettings, setControls, editAnimation, writeAnimation, undo, redo];
+	const writes = [setArtworkSvg, importPptx, setDrivers, setClip, copyAnimation, fitAnimation, importFlairEffect, insertShots, updateShot, deleteShots, moveShot, addCommands, updateCommand, deleteCommands, moveCommand, setSettings, setControls, editAnimation, writeAnimation, undo, redo];
 
 	return {
 		id: options.id ?? 'animation',
