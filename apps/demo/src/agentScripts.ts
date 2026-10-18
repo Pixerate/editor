@@ -291,9 +291,9 @@ export const ANIMATION_SCRIPTS: AgentScript[] = [
         },
       },
       {
-        say: "Then the check gives a little shake.",
+        say: "Then the check teeters, rocking and settling (Flair's emphasis.teeter).",
         tool: "animation__add_commands",
-        args: { shot: "finale", commands: [{ type: "shake", targets: ["check"], count: 3 }] },
+        args: { shot: "finale", commands: [{ type: "teeter", targets: ["check"], count: 3, angle: 10 }] },
       },
       { say: "Checking for problems before playing it.", tool: "animation__check_animation", args: {} },
       { say: "Playing the finale.", tool: "animation__seek_animation", args: { shot: "finale", play: true }, target: { text: "Finale" } },

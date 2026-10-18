@@ -1514,6 +1514,16 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: Flair's `out` is `1 − (1 − t)³` and `in-out` the piecewise cubic, which differ from CSS `ease-out` / `ease-in-out` by up to ~7%. Separately, a move animates `x` and `y` as two segments, so an interval had two active segments and fell back to sampling.
 - **Solution / Workaround**: The editor's defaults are `MOTION_EASE_OUT` (`cubic-bezier(1/3, 1, 2/3, 1)`, exactly Flair's `out`) and `MOTION_EASE_IN_OUT` (within 1% of Flair's `in-out`). `flairEaseFor` matches a curve to a Flair name within 1%, and the exporter writes one change when every active segment spans the same interval with the same curve.
 
+### [core/animation-editor] Emphasis Behaviours Must Match Flair Number for Number
+
+- **Issue / Symptom**: An exported wiggle or shake would play differently in Flair from the editor's preview, even though both "wiggle with seed 3".
+- **Root Cause**: Flair plays an `SvgAnimation.behavior` (Flair ≥ 0.38) by swinging every number in the value from `from` towards `to` by `behaviorProgress`. A wriggle wanders each number on its own noise channel, keyed by that number's position in the value. The editor can't import Flair (Flair depends on the editor), so it carries its own copy of the maths (`animation/behavior.ts`: SplitMix64 hashing, quintic value noise, FNV-1a seeds from ids).
+- **Solution / Workaround**:
+  - Keep `animation/behavior.ts` identical to Flair's `vector/motion.ts`, `scene/behavior.ts` and `time/noise.ts`. `tests/animation-behavior.test.ts` pins values computed by Flair's own code; recompute them when Flair changes.
+  - Emphasis segments store the peak in `to` (a pulse's swollen scale, a shake's far point) and a `behavior`. The exporter sends `to` with behaviours ignored (`trackValue(…, raw)`).
+  - `MotionSegment.index` must match the number's position in the exported transform `translate(dx dy) rotate(r cx cy) …`: x is 0, y is 1 and the angle is 2. If the transform string's order changes, change the indices too.
+  - A behaviour exports as one change only when every segment active over that interval shares the same span, ease and behaviour. Otherwise it is sampled.
+
 ### [core/animation-editor] Back Eases Cannot Go to Flair on Colours or Opacity
 
 - **Issue / Symptom**: Writing an overshooting cubic-bezier (`ease-out-back`, `ease-in-back`, any curve with `y1` or `y2` outside 0–1) as a Flair `ease` tuple on a `fill` / `stroke` change would make Flair produce invalid hex colours, and on opacity or draw-on it would disagree with the editor.

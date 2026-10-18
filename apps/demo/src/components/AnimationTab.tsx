@@ -65,7 +65,10 @@ const SCENE: MotionScene = {
       id: "focus",
       label: "Close on the badge",
       camera: { frame: "ring", padding: 40 },
-      run: [{ type: "pulse", targets: ["badge"], count: 2, duration: 800 }],
+      run: [
+        { type: "pulse", targets: ["badge"], count: 2, duration: 800 },
+        { type: "color-pulse", targets: ["ring"], paint: "stroke", color: "#f59e0b", count: 2, duration: 800, with: "previous" },
+      ],
       hold: 800,
     },
   ],
