@@ -6,9 +6,9 @@ import { expandVectorAppearance, expandVectorAppearances } from '../vector/appea
 import { IDENTITY_MATRIX, collectPathNodes, invertMatrix, nodeMatrix, vectorPathWorldBezier } from '../vector/geometry.js';
 import { vectorDocumentToSvg, type VectorSvgWrapper } from '../vector/svg.js';
 import type { VectorNode, VectorPathNode } from '../vector/types.js';
-import { compileMotionScene, indexMotionNodes, motionAddTrackKey, motionTrackKey, segmentValue, trackValue, type MotionProperty, type MotionSegment } from './compile.js';
+import { compileMotionScene, indexMotionNodes, motionAddTrackKey, motionTrackKey, segmentValue, trackValue, type MotionProperty, type MotionSegment, motionDrivenNodes, motionDriverSources, motionPropertyValue } from './compile.js';
 import { motionClipAttrs, motionFollowRoute, motionFrameAt, motionNodeClips, motionNodeOffset } from './evaluate.js';
-import type { MotionScene, MotionTrigger } from './types.js';
+import type { MotionDrivenProperty, MotionScene, MotionTrigger } from './types.js';
 
 /**
  * Export to Flair (`@pixerate/flair`): a scene becomes an `SvgMotion` (one SVG plus a list of
@@ -263,7 +263,14 @@ export function toFlairSvgMotion(scene: MotionScene, options: FlairExportOptions
 		return [...entry.ancestors, path.id].find((id) => timeline.tracks.has(motionTrackKey(id, p)));
 	};
 
-	const animatedNodes = new Set(timeline.segments.map((s) => s.node).filter(Boolean));
+	const animatedNodes = new Set([...timeline.segments.map((s) => s.node).filter(Boolean), ...motionDrivenNodes(timeline)]);
+	// What drivers depend on: a driven property is sampled wherever its sources change.
+	const drivenBy = new WeakSet<MotionSegment>();
+	const sourcesOf = (id: string, props: MotionDrivenProperty[]) => motionDriverSources(timeline, id, props).map((s) => {
+		const copy = { ...s };
+		drivenBy.add(copy);
+		return copy;
+	});
 	const pathsSeen = new Set<string>();
 	// Groups written round nodes (outermost first), routes for `along`, and the ids they take.
 	const wrap: Record<string, VectorSvgWrapper[]> = {};
@@ -318,13 +325,14 @@ export function toFlairSvgMotion(scene: MotionScene, options: FlairExportOptions
 			}
 		}
 
-		if (timeline.tracks.has(motionTrackKey(id, 'opacity')))
-			channels.push({ id, kind: 'attr', attr: 'opacity', segments: [...track(id, 'opacity')], exact: plays, value: (t) => round(Math.min(1, Math.max(0, Number(trackValue(track(id, 'opacity'), t))))) });
+		const opacitySources = sourcesOf(id, ['opacity']);
+		if (timeline.tracks.has(motionTrackKey(id, 'opacity')) || opacitySources.length)
+			channels.push({ id, kind: 'attr', attr: 'opacity', segments: [...track(id, 'opacity'), ...opacitySources], exact: (s) => plays(s) && !drivenBy.has(s), value: (t) => round(motionPropertyValue(timeline, id, 'opacity', t)) });
 
 		// The node's own moves, turns and scales (a follow is carried by its wrappers).
 		const followed = follows.some((x) => x.id === id);
 		// Additive layers share the transform: alone in a stretch they are one change, overlapping the pose they are sampled.
-		const transformSegments = TRANSFORM_PROPS.flatMap((p) => (followed && p === 'follow' ? [] : [...track(id, p), ...(timeline.tracks.get(motionAddTrackKey(id, p)) ?? [])]));
+		const transformSegments = [...TRANSFORM_PROPS.flatMap((p) => (followed && p === 'follow' ? [] : [...track(id, p), ...(timeline.tracks.get(motionAddTrackKey(id, p)) ?? [])])), ...sourcesOf(id, ['x', 'y', 'rotation', 'scaleX', 'scaleY'])];
 		if (transformSegments.length) {
 			const base = node.transform ? ` matrix(${node.transform.map(f).join(' ')})` : '';
 			const c = entry.center;
@@ -337,7 +345,7 @@ export function toFlairSvgMotion(scene: MotionScene, options: FlairExportOptions
 				kind: 'attr',
 				attr: 'transform',
 				segments: transformSegments,
-				exact: (s) => LINEAR_TRANSFORM.has(s.property) && plays(s),
+				exact: (s) => LINEAR_TRANSFORM.has(s.property) && plays(s) && !drivenBy.has(s),
 				overshoot: true,
 				// x, y and the angle are the transform's numbers 0, 1 and 2 (`MotionSegment.index`).
 				value: (t) => transformAt(t, false),

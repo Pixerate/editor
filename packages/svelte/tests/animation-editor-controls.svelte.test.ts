@@ -203,6 +203,8 @@ describe("animation editor controls (Svelte)", () => {
     expect(controller.toFlairMotion().motion.animate?.some((a) => a.step === 1)).toBe(true);
     change(q<HTMLSelectElement>('select[aria-label="Scene trigger"]'), "");
     expect(controller.getState().scene.trigger).toBeUndefined();
+    change(q<HTMLTextAreaElement>('textarea[aria-label="Drivers"]'), "dot.x <- box.x * 0.5");
+    expect(controller.getState().scene.drivers).toEqual([{ target: "dot", property: "x", source: { node: "box", property: "x" }, factor: 0.5 }]);
     controller.destroy();
   });
 });

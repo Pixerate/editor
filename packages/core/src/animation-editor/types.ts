@@ -49,6 +49,11 @@ export interface MotionScene {
 	 * node with a `play` command (a "pop and settle" or "attention" you use many times).
 	 */
 	clips?: Record<string, MotionClip>;
+	/**
+	 * Properties that follow other properties: a background moving at half the speed of the
+	 * foreground (parallax), a wheel turning as it rolls. Each adds to what its target's commands do.
+	 */
+	drivers?: MotionDriver[];
 	/** Parameters a Flair effect made from this scene exposes (see `toFlairVectorEffect`). */
 	controls?: MotionControl[];
 	/** Named sets of control values. */
@@ -322,6 +327,30 @@ export interface MotionClip {
 	description?: string;
 	/** Commands, timed as in a shot; `"$"` in `targets` stands for the node played on. Clips cannot play clips. */
 	run: MotionCommand[];
+}
+
+/** Properties a driver reads and drives: offsets (document units), turn (degrees), scales and opacity. */
+export type MotionDrivenProperty = 'x' | 'y' | 'rotation' | 'scaleX' | 'scaleY' | 'opacity';
+export const MOTION_DRIVEN_PROPERTIES: readonly MotionDrivenProperty[] = ['x', 'y', 'rotation', 'scaleX', 'scaleY', 'opacity'];
+
+/**
+ * One property following another. Both are read as a change from rest (offsets and turns from
+ * 0, scales and opacity from 1): the target's property changes by `source change · factor + offset`,
+ * clamped to `clamp`, on top of its own commands (added to offsets and turns, multiplied into
+ * scales and opacity as 1 + change).
+ */
+export interface MotionDriver {
+	/** The node that follows. */
+	target: string;
+	property: MotionDrivenProperty;
+	/** The node and property it follows. */
+	source: { node: string; property: MotionDrivenProperty };
+	/** Default 1 (0.5 moves at half the speed; 360 / (2π·radius) turns a wheel by how far it rolls). */
+	factor?: number;
+	/** Added to the change (default 0). */
+	offset?: number;
+	/** Limits the change to `[min, max]`. */
+	clamp?: [number, number];
 }
 
 /** The placeholder target in a clip's commands. */

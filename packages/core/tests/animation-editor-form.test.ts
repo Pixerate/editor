@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { ToolRegistry } from '../src/tools/index.js';
 import {
+	formatMotionDrivers,
+	parseMotionDrivers,
 	AnimationEditorController,
 	MOTION_COMMAND_TYPES,
 	createAnimationEditorToolProvider,
@@ -220,5 +222,21 @@ describe('Flair catalog presets', () => {
 			{ name: 'Green', values: { accent: '#21b366' } },
 			{ name: 'Rose', values: { accent: '#f43f5e' } }
 		]);
+	});
+});
+
+describe('driver text', () => {
+	it('reads and writes drivers one a line', () => {
+		const text = 'dot.x <- box.x * 0.5\nline.opacity <- box.x * -0.01 + 0.2 [-0.8, 0]\nwheel.rotation <- wheel.x';
+		const parsed = parseMotionDrivers(text);
+		expect(parsed).toEqual({ drivers: [
+			{ target: 'dot', property: 'x', source: { node: 'box', property: 'x' }, factor: 0.5 },
+			{ target: 'line', property: 'opacity', source: { node: 'box', property: 'x' }, factor: -0.01, offset: 0.2, clamp: [-0.8, 0] },
+			{ target: 'wheel', property: 'rotation', source: { node: 'wheel', property: 'x' } }
+		] });
+		expect(formatMotionDrivers('drivers' in parsed ? parsed.drivers : [])).toBe(text);
+		expect(parseMotionDrivers('')).toEqual({ drivers: [] });
+		expect(parseMotionDrivers('dot.x follows box')).toEqual({ error: expect.stringMatching(/should read "target.property <- source.property"/) });
+		expect(parseMotionDrivers('dot.skew <- box.x')).toEqual({ error: expect.stringMatching(/"skew" is not a property/) });
 	});
 });

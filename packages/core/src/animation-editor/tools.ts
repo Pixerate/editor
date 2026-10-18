@@ -371,6 +371,7 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 				...(includeElements ? { elements: describeMotionElements(s) } : {}),
 				shots: describeMotionShots(s),
 				...(s.clips ? { clips: Object.fromEntries(Object.entries(s.clips).map(([name, c]) => [name, { ...(c.description ? { description: c.description } : {}), commands: c.run.length, length: Math.round(motionClipLayout(s, name, '$').length) }])) } : {}),
+				...(s.drivers ? { drivers: s.drivers } : {}),
 				...(s.controls ? { controls: s.controls } : {}),
 				...(s.presets ? { presets: s.presets } : {}),
 				issues: issueSummary(controller.getState().issues),
@@ -659,6 +660,38 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 		}
 	};
 
+	const PROP: JsonSchema = { type: 'string', enum: ['x', 'y', 'rotation', 'scaleX', 'scaleY', 'opacity'], description: 'x / y (offset, document units), rotation (degrees), scaleX / scaleY or opacity (1 = rest).' };
+	const setDrivers: AgentTool = {
+		name: 'set_animation_drivers',
+		title: 'Make properties follow others',
+		description:
+			'Replaces the drivers (empty clears them): each makes a target\'s property follow a source node\'s property, as a change from rest — target change = source change · factor + offset, clamped — added to offsets and turns, multiplied into scales and opacity, on top of the target\'s own commands. For parallax (x follows x · 0.5), a wheel turning as it rolls (rotation follows x · 360 / (2π·radius)), a shadow fading as a ball rises (opacity follows y · 0.005). One undo step; loops between drivers are refused by check_animation. Returns the timing and issues.',
+		inputSchema: object(
+			{
+				drivers: {
+					type: 'array',
+					maxItems: 64,
+					items: object(
+						{
+							target: { type: 'string', minLength: 1, description: 'Element id that follows.' },
+							property: PROP,
+							source: object({ node: { type: 'string', minLength: 1, description: 'Element id it follows.' }, property: PROP }, ['node', 'property'], 'What it follows.'),
+							factor: { type: 'number', description: 'Multiplies the source\'s change (default 1).' },
+							offset: { type: 'number', description: 'Added to the change (default 0).' },
+							clamp: { type: 'array', items: { type: 'number' }, minItems: 2, maxItems: 2, description: 'Limits the change to [min, max].' }
+						},
+						['target', 'property', 'source'],
+						'One property following another.'
+					),
+					description: 'Every driver (the list replaces the current one).'
+				}
+			},
+			['drivers']
+		),
+		annotations: { title: 'Make properties follow others', ...WRITE_IDEMPOTENT },
+		handler: ({ drivers }) => apply({ op: 'set_drivers', drivers }, 'Set drivers')
+	};
+
 	const setClip: AgentTool = {
 		name: 'set_animation_clip',
 		title: 'Define a reusable clip',
@@ -923,7 +956,7 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 	};
 
 	const reads = [getAnimation, getShot, findElements, getMotionPath, getTimingGrid, checkAnimation, renderFrame, exportFlairMotion, exportFlairEffect, exportLottie, seekAnimation];
-	const writes = [setArtworkSvg, setClip, copyAnimation, fitAnimation, importFlairEffect, insertShots, updateShot, deleteShots, moveShot, addCommands, updateCommand, deleteCommands, moveCommand, setSettings, setControls, editAnimation, writeAnimation, undo, redo];
+	const writes = [setArtworkSvg, setDrivers, setClip, copyAnimation, fitAnimation, importFlairEffect, insertShots, updateShot, deleteShots, moveShot, addCommands, updateCommand, deleteCommands, moveCommand, setSettings, setControls, editAnimation, writeAnimation, undo, redo];
 
 	return {
 		id: options.id ?? 'animation',

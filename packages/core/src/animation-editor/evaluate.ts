@@ -5,8 +5,8 @@ import { createVectorEffect } from '../vector/appearance.js';
 import { invertMatrix, multiplyMatrices, nodeMatrix, rotateMatrix, scaleMatrix, translateMatrix, vectorPathWorldBezier, isIdentityMatrix, type AffineMatrix } from '../vector/geometry.js';
 import { vectorDocumentToSvg, type VectorSvgExportOptions, type VectorSvgWrapper } from '../vector/svg.js';
 import type { VectorDocument, VectorEffect, VectorGradient, VectorNode, VectorPaint, VectorPathNode } from '../vector/types.js';
-import { activeSegment, compileMotionScene, indexMotionNodes, motionAddTrackKey, motionTrackKey, withMotionLayers, segmentProgress, trackValue, type MotionNodeEntry, type MotionProperty, type MotionTimeline } from './compile.js';
-import type { MotionRect, MotionScene } from './types.js';
+import { activeSegment, compileMotionScene, indexMotionNodes, motionAddTrackKey, motionTrackKey, withMotionLayers, segmentProgress, trackValue, type MotionNodeEntry, type MotionProperty, type MotionTimeline, applyMotionDrivers, motionDrivenNodes, motionPropertyValue } from './compile.js';
+import type { MotionDrivenProperty, MotionRect, MotionScene } from './types.js';
 
 /**
  * A reveal clip (`wipe`, `iris`, `split`) in the units of the node's own box: 0–1 across it,
@@ -161,9 +161,12 @@ export function motionNodeOffset(
 	// The pose, with any additive layers (emphasis, blend "add") on top.
 	const read = (p: MotionProperty, rest: number) => {
 		const v = trackValue(timeline.tracks.get(motionTrackKey(entry.node.id, p)), time, raw);
-		return withMotionLayers(timeline, entry.node.id, p, typeof v === 'number' ? v : rest, time, raw);
+		const layered = withMotionLayers(timeline, entry.node.id, p, typeof v === 'number' ? v : rest, time, raw);
+		// Drivers: properties that follow other nodes' properties.
+		return p === 'follow' ? layered : applyMotionDrivers(timeline, entry.node.id, p as MotionDrivenProperty, layered, time, raw);
 	};
-	if (!TRANSFORM_PROPS.some((p) => (follow || p !== 'follow') && (timeline.tracks.has(motionTrackKey(entry.node.id, p)) || timeline.tracks.has(motionAddTrackKey(entry.node.id, p))))) return null;
+	const driven = timeline.drivers?.some((d) => d.target === entry.node.id && d.property !== 'opacity');
+	if (!driven && !TRANSFORM_PROPS.some((p) => (follow || p !== 'follow') && (timeline.tracks.has(motionTrackKey(entry.node.id, p)) || timeline.tracks.has(motionAddTrackKey(entry.node.id, p))))) return null;
 	const dx = read('x', 0);
 	const dy = read('y', 0);
 	const rotation = read('rotation', 0);
@@ -196,7 +199,7 @@ export function motionFrameAt(scene: MotionScene, time: number, options: MotionF
 	const nodes = indexMotionNodes(s.artwork.nodes);
 	const drawOn = options.draw !== false;
 	const value = (id: string, p: MotionProperty) => trackValue(timeline.tracks.get(motionTrackKey(id, p)), time);
-	const animated = new Set(timeline.segments.map((seg) => seg.node));
+	const animated = new Set([...timeline.segments.map((seg) => seg.node), ...motionDrivenNodes(timeline)]);
 	const clips: Record<string, MotionClipShape[]> = {};
 
 	const visit = (node: VectorNode): VectorNode => {
@@ -259,7 +262,7 @@ export function motionFrameAt(scene: MotionScene, time: number, options: MotionF
 			});
 		}
 
-		const opacity = value(id, 'opacity');
+		const opacity = timeline.drivers?.some((d) => d.target === id && d.property === 'opacity') ? motionPropertyValue(timeline, id, 'opacity', time) : value(id, 'opacity');
 		if (typeof opacity === 'number') {
 			const o = Math.min(1, Math.max(0, tidy(opacity)));
 			out = { ...out, opacity: o };

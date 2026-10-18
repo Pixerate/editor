@@ -205,6 +205,9 @@ describe("animation editor controls (React)", () => {
     expect(controller.toFlairMotion().motion.animate?.some((a) => a.step === 1)).toBe(true);
     change($<HTMLSelectElement>('select[aria-label="Scene trigger"]'), "");
     expect(controller.getState().scene.trigger).toBeUndefined();
+    const drivers = $<HTMLTextAreaElement>('textarea[aria-label="Drivers"]');
+    act(() => { drivers.value = "dot.x <- box.x * 0.5"; drivers.dispatchEvent(new FocusEvent("blur")); drivers.dispatchEvent(new FocusEvent("focusout", { bubbles: true })); });
+    expect(controller.getState().scene.drivers).toEqual([{ target: "dot", property: "x", source: { node: "box", property: "x" }, factor: 0.5 }]);
     controller.destroy();
   });
 });

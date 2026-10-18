@@ -23,6 +23,7 @@ import {
 	motionPath,
 	motionStageSvg,
 	motionFlairPrimitive,
+	motionPropertyValue,
 	motionClipLayout,
 	smoothMotionLegs,
 	matchMotionNodes,
@@ -224,6 +225,7 @@ describe('checkMotionScene', () => {
 		collect(scene([{ id: 'only', run: [] }], { trigger: 'click', loop: 'loop' }));
 		collect(scene([{ id: 'a', run: [] }, { id: 'b', at: { ms: 5000 }, run: [] }], { trigger: 'click' }));
 		collect(scene([{ id: 'p', run: [{ type: 'play', targets: ['box'], clip: 'nope' }] }]));
+		collect(scene([], { drivers: [{ target: 'box', property: 'x', source: { node: 'dot', property: 'x' } }, { target: 'dot', property: 'x', source: { node: 'box', property: 'x' } }] }));
 		expect([...reported].sort()).toEqual(Object.keys(MOTION_ISSUE_CODES).sort());
 	});
 
@@ -1509,5 +1511,54 @@ describe('drawing order, pace and comets', () => {
 		const ok = await registry.callTool('insert_shots', { shots: [{ id: 'sign', run: [{ type: 'draw', targets: ['sig'], order: 'sequence', sortBy: 'distance', origin: { x: 0, y: 0 } }] }] });
 		expect(ok.isError).toBeFalsy();
 		expect((await registry.callTool('add_commands', { shot: 'sign', commands: [{ type: 'draw', targets: ['sig'], pace: 'fast' }] })).isError).toBe(true);
+	});
+});
+
+describe('drivers', () => {
+	const xOf = (s: MotionScene, t: number, id: string) => path(motionFrameAt(s, t).document, id).transform?.[4] ?? 0;
+	const s = scene([{ id: 'one', run: [{ type: 'move', targets: ['box'], by: { x: 100, y: 0 }, ease: 'linear', duration: 1000 }] }], {
+		drivers: [
+			{ target: 'dot', property: 'x', source: { node: 'box', property: 'x' }, factor: 0.5 },
+			{ target: 'line', property: 'opacity', source: { node: 'box', property: 'x' }, factor: -0.01, clamp: [-0.8, 0] },
+			{ target: 'a', property: 'x', source: { node: 'dot', property: 'x' }, factor: 2 }
+		]
+	});
+
+	it('makes a property follow another, through chains, on top of its own commands', () => {
+		expect(xOf(s, 500, 'dot')).toBeCloseTo(25, 6);
+		expect(xOf(s, 1000, 'dot')).toBeCloseTo(50, 6);
+		expect(xOf(s, 1000, 'a')).toBeCloseTo(100, 6);
+		expect(path(motionFrameAt(s, 500).document, 'line').opacity).toBeCloseTo(0.5, 6);
+		expect(path(motionFrameAt(s, 1000).document, 'line').opacity).toBeCloseTo(0.2, 6);
+		const t = compileMotionScene(s);
+		expect(motionPropertyValue(t, 'dot', 'x', 1000)).toBeCloseTo(50, 6);
+		const own = { ...s, shots: [{ ...s.shots[0], run: [...s.shots[0].run, { type: 'move', targets: ['dot'], by: { x: 0, y: 30 }, duration: 1000, with: 'previous' } as MotionCommand] }] };
+		expect(path(motionFrameAt(own, 1000).document, 'dot').transform?.slice(4)).toEqual([50, 30]);
+	});
+
+	it('exports driven properties sampled wherever their sources change', () => {
+		const flair = toFlairSvgMotion(s);
+		expect(animateOf(flair).filter((a) => a.id === 'dot').length).toBeGreaterThan(5);
+		expect(animateOf(flair).filter((a) => a.id === 'line' && a.attrs?.opacity).length).toBeGreaterThan(5);
+		expect(animateOf(flair).filter((a) => a.id === 'dot').at(-1)!.attrs!.transform![1]).toMatch(/^translate\(50 0\)/);
+		const lottie = JSON.stringify(toLottie(s).lottie);
+		expect(lottie).toContain('"nm":"dot (own)"');
+	});
+
+	it('checks drivers: unknown nodes, loops and shapes', async () => {
+		const issues = checkMotionScene(scene([], { drivers: [{ target: 'bx', property: 'x', source: { node: 'box', property: 'y' } }, { target: 'box', property: 'y', source: { node: 'dot', property: 'x' } }, { target: 'dot', property: 'x', source: { node: 'box', property: 'y' } }] }));
+		expect(issues.find((i) => i.code === 'unknown-target')?.message).toContain('"bx" (did you mean "box"?)');
+		expect(issues.find((i) => i.code === 'driver-cycle')?.message).toMatch(/box\.y ← dot\.x ← box\.y/);
+		expect(() => parseMotionScene(scene([], { drivers: [{ target: 'box', property: 'skew', source: { node: 'dot' }, clamp: [1, 0] }] as never }))).toThrow(/"property" must be one of[\s\S]*"source" must be[\s\S]*"clamp" must be \[min, max\]/);
+		const controller = new AnimationEditorController({ scene: createMotionScene(ARTWORK, { name: 'demo' }) });
+		const registry = new ToolRegistry();
+		registry.register(createAnimationEditorToolProvider(controller));
+		expect((await registry.callTool('set_animation_drivers', { drivers: s.drivers })).isError).toBeFalsy();
+		expect(((await registry.callTool('get_animation', {})).structuredContent as any).drivers).toHaveLength(3);
+		const loop = await registry.callTool('set_animation_drivers', { drivers: [{ target: 'box', property: 'x', source: { node: 'dot', property: 'x' } }, { target: 'dot', property: 'x', source: { node: 'box', property: 'x' } }] });
+		expect(loop.isError).toBe(true);
+		expect(JSON.stringify(loop.content)).toContain('loop');
+		expect((await registry.callTool('set_animation_drivers', { drivers: [] })).isError).toBeFalsy();
+		expect(controller.getState().scene.drivers).toBeUndefined();
 	});
 });
