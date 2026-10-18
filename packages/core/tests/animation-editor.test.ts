@@ -23,6 +23,7 @@ import {
 	motionPath,
 	motionStageSvg,
 	motionFlairPrimitive,
+	smoothMotionLegs,
 	matchMotionNodes,
 	fitMotionScene,
 	motionBeatAt,
@@ -1346,5 +1347,62 @@ describe('playing on a trigger', () => {
 		expect((await registry.callTool('set_animation_settings', { trigger: 'tap' })).isError).toBe(true);
 		expect((await registry.callTool('set_animation_settings', { trigger: null })).isError).toBeFalsy();
 		expect(controller.getState().scene.trigger).toBeUndefined();
+	});
+});
+
+describe('smooth moves through waypoints', () => {
+	const at = (s: MotionScene, t: number) => {
+		const m = path(motionFrameAt(s, t).document, 'box').transform ?? [1, 0, 0, 1, 0, 0];
+		return { x: 50 + m[4], y: 50 + m[5] };
+	};
+	// box's centre is (50, 50).
+	const s = scene([{ id: 'one', run: [{ type: 'move', targets: ['box'], via: [{ x: 150, y: 20 }, { x: 250, y: 120 }], to: { x: 350, y: 60 }, duration: 1200 }] }]);
+
+	it('passes exactly through each waypoint and lands on the end', () => {
+		const t = compileMotionScene(s);
+		const xs = t.tracks.get('box\u0000x')!;
+		expect(xs.map((g) => [Math.round(g.start), Math.round(g.end)])).toEqual(xs.map((_, i) => [Math.round(xs[i].start), Math.round(xs[i].end)]));
+		expect(xs).toHaveLength(3);
+		for (const [i, p] of [[1, { x: 150, y: 20 }], [2, { x: 250, y: 120 }]] as const) {
+			const q = at(s, xs[i].start);
+			expect(q.x).toBeCloseTo(p.x, 6);
+			expect(q.y).toBeCloseTo(p.y, 6);
+		}
+		expect(at(s, 1200)).toEqual({ x: 350, y: 60 });
+	});
+
+	it('keeps velocity through waypoints and never overshoots them', () => {
+		const xs = compileMotionScene(s).tracks.get('box\u0000y')!;
+		const k = xs[1].start;
+		const v = (a: number, b: number) => (at(s, b).y - at(s, a).y) / (b - a);
+		expect(v(k - 1, k)).toBeCloseTo(v(k, k + 1), 1);
+		const ys = Array.from({ length: 121 }, (_, i) => at(s, i * 10).y);
+		expect(Math.min(...ys)).toBeGreaterThanOrEqual(20 - 1e-6);
+		expect(Math.max(...ys)).toBeLessThanOrEqual(120 + 1e-6);
+		// Monotone legs: a flat stretch stays flat.
+		expect(smoothMotionLegs([0, 100, 200], [0, 0, 10])[0]).toMatchObject({ ease: 'linear', from: 0, to: 0 });
+	});
+
+	it('paces by distance or equally, and samples paths for Flair (x and y ease differently)', () => {
+		const even = compileMotionScene(s).tracks.get('box\u0000x')!.map((g) => g.end - g.start);
+		const equal = compileMotionScene(scene([{ id: 'one', run: [{ type: 'move', targets: ['box'], via: [{ x: 150, y: 20 }, { x: 250, y: 120 }], to: { x: 350, y: 60 }, duration: 1200, pacing: 'equal' }] }])).tracks.get('box\u0000x')!.map((g) => g.end - g.start);
+		expect(equal.map(Math.round)).toEqual([400, 400, 400]);
+		expect(even[1]).toBeGreaterThan(even[0]);
+		const flair = toFlairSvgMotion(s);
+		expect(flair.sampled).toBeGreaterThan(0);
+		expect(animateOf(flair).at(-1)!.attrs!.transform![1]).toMatch(/^translate\(300 10\)/);
+		expect(compileMotionScene(scene([{ id: 'one', run: [{ type: 'move', targets: ['box'], via: [{ x: 60, y: 60 }, { x: 70, y: 70 }], by: { x: 50, y: 0 } }] }])).duration).toBe(700 + 800 + 600);
+	});
+
+	it('checks waypoints and takes them through the agent tools', async () => {
+		expect(() => parseMotionScene(scene([{ id: 'one', run: [{ type: 'move', targets: ['box'], by: { x: 1, y: 0 }, via: [] } as never, { type: 'move', targets: ['box'], by: { x: 1, y: 0 }, pacing: 'even' } as never] }]))).toThrow(/"via" must be a list[\s\S]*"pacing" goes with "via"/);
+		const controller = new AnimationEditorController({ scene: createMotionScene(ARTWORK, { name: 'demo' }) });
+		const registry = new ToolRegistry();
+		registry.register(createAnimationEditorToolProvider(controller));
+		const ok = await registry.callTool('insert_shots', { shots: [{ id: 'arc', run: [{ type: 'move', targets: ['box'], via: [{ x: 120, y: 20 }], to: { x: 200, y: 50 } }] }] });
+		expect(ok.isError).toBeFalsy();
+		expect((ok.structuredContent as any).duration).toBe(1100 + 600);
+		const bad = await registry.callTool('add_commands', { shot: 'arc', commands: [{ type: 'move', targets: ['box'], to: { x: 1, y: 1 }, via: [{ x: 'a' }] }] });
+		expect(bad.isError).toBe(true);
 	});
 });

@@ -220,6 +220,13 @@ export interface MotionMoveCommand extends MotionCommandBase {
 	type: 'move';
 	by?: { x: number; y: number };
 	to?: { x: number; y: number };
+	/**
+	 * Points (document units) the centre passes through on the way, in order. The path is
+	 * smooth (velocity carries through each point) and never overshoots a point.
+	 */
+	via?: { x: number; y: number }[];
+	/** With `via`: `even` (default) keeps the speed steady along the path, `equal` gives each leg the same time. */
+	pacing?: 'even' | 'equal';
 }
 
 /** Turns targets about their centre, by or to an angle in degrees (clockwise). */

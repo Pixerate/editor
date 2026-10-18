@@ -1,5 +1,6 @@
 import { mixColorsOklab } from '../animation/color.js';
 import { matchMotionNodes } from './match.js';
+import { smoothMotionLegs, smoothMotionTimes } from './smooth.js';
 import { behaviorProgress, motionSeedFromId, type MotionBehavior } from '../animation/behavior.js';
 import { evaluateEasing, resolveEasing, springSettleMs, type AnimationEasing } from '../animation/easing.js';
 import { bezierPathLength } from '../canvas/pathops/bezier.js';
@@ -500,6 +501,8 @@ export function motionCycleDuration(command: MotionCommand, scene: MotionScene, 
 		const ms = length * MOTION_DRAW_MS_PER_UNIT;
 		return Math.round(Math.min(MOTION_DRAW_RANGE[1], Math.max(MOTION_DRAW_RANGE[0], ms)));
 	}
+	// A move through waypoints takes longer the more stretches it has.
+	if (command.type === 'move' && command.via?.length) return MOTION_DEFAULT_DURATIONS.move + 400 * command.via.length;
 	return MOTION_DEFAULT_DURATIONS[command.type];
 }
 
@@ -730,6 +733,21 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 					const target = applyMatrix(inv, command.to);
 					dx = target.x - (entry.center.x + num('x'));
 					dy = target.y - (entry.center.y + num('y'));
+				}
+				if (command.via?.length) {
+					// Through waypoints: offsets per axis as monotone cubics, one eased leg per stretch.
+					const inv = invertMatrix(entry.parentWorld);
+					const x0 = num('x');
+					const y0 = num('y');
+					const add = command.blend === 'add';
+					const offsets = [{ x: 0, y: 0 }, ...command.via.map((p) => applyMatrix(inv, p)).map((p) => ({ x: p.x - entry.center.x - x0, y: p.y - entry.center.y - y0 })), { x: dx, y: dy }];
+					const times = smoothMotionTimes(offsets, start, end - start, command.pacing ?? 'even');
+					for (const axis of ['x', 'y'] as const) {
+						const base = add ? 0 : axis === 'x' ? x0 : y0;
+						for (const leg of smoothMotionLegs(times, offsets.map((o) => o[axis])))
+							seg(axis, base + leg.to, leg.ease, leg.start, leg.end, { from: base + leg.from, ...(add ? { blend: 'add' as const } : {}) });
+					}
+					break;
 				}
 				if (command.blend === 'add') {
 					seg('x', dx, e, start, end, { from: 0, blend: 'add' });
