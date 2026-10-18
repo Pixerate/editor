@@ -29,6 +29,10 @@ export interface MotionScene {
 	 * per second ("on twos" at 12), for a hand-drawn look. Default: smooth.
 	 */
 	steps?: number;
+	/** A beat grid to cue shots to (`MotionShot.at.beat`): music or a voiceover's rhythm. */
+	beat?: MotionBeatGrid;
+	/** A voiceover's words with their times, to cue shots to (`MotionShot.at.word`). */
+	narration?: MotionNarration;
 	/** Wanted length in seconds `[min, max]`; `check` warns outside it. */
 	target?: [number, number];
 	/** Parameters a Flair effect made from this scene exposes (see `toFlairVectorEffect`). */
@@ -56,6 +60,30 @@ export type MotionCamera = (MotionRect | { frame: string; padding?: number }) & 
 	geometric?: boolean;
 };
 
+/** A steady beat: `bpm` beats a minute, the first at `offset` ms, `meter` beats a bar. */
+export interface MotionBeatGrid {
+	bpm: number;
+	/** When beat 0 falls, ms (default 0). */
+	offset?: number;
+	/** Beats in a bar (default 4), for reading beats as bar and beat. */
+	meter?: number;
+}
+
+/** A voiceover: its words in order, each with when it is said (ms), from a TTS or speech-to-text word timing. */
+export interface MotionNarration {
+	words: { text: string; start: number; end?: number }[];
+}
+
+/** When a shot is cued to start: on a beat, on a narration word, or at a time. */
+export interface MotionCue {
+	/** Beat number on the scene's beat grid, from 0 (fractions for off-beats: 2.5 is the "and" of beat 3). */
+	beat?: number;
+	/** Index of a word in the scene's narration, from 0. */
+	word?: number;
+	/** A time in ms. */
+	ms?: number;
+}
+
 /** One beat of the animation. */
 export interface MotionShot {
 	/** Stable id (unique in the scene), e.g. `intro`. */
@@ -64,6 +92,12 @@ export interface MotionShot {
 	label?: string;
 	/** Omit to keep the current framing. */
 	camera?: MotionCamera;
+	/**
+	 * Start on a cue: a beat, a narration word or a time. The shot before holds until then; a
+	 * cue that comes before the shot before has ended is missed (`check` says by how much).
+	 * Give one of `beat`, `word` or `ms`.
+	 */
+	at?: MotionCue;
 	/** Commands, played one after another (unless a command says `with: "previous"`). */
 	run: MotionCommand[];
 	/** Milliseconds to hold after the commands finish (default 600). */

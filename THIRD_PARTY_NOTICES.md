@@ -181,6 +181,7 @@ GridCraft. Apache POI is © The Apache Software Foundation, licensed under the A
 
 - `crates/engine/src/lib.rs` (`Engine::execute_merged`, `hold_merge`, `end_merge`) → `packages/core/src/history/HistoryManager.ts`
 - `crates/engine/src/lib.rs` (`Engine::is_dirty`, `same_document`, `mark_clean`) → `packages/core/src/dirty.ts`
+- `crates/time/src/tempo.rs` and `grid.rs` (beats from a tempo and an offset, counted into bars by the meter) → `motionBeatTime` and `motionBeatAt` in `packages/core/src/animation-editor/compile.ts`; one steady tempo instead of a tempo map, with shots cued to beats instead of positions snapped to a grid
 
 ## vectorcraft
 

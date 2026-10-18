@@ -28,6 +28,8 @@ export const MOTION_ISSUE_CODES = {
 	'out-of-frame': { severity: 'warning', wording: 'A node a command animates ends up outside the camera.' },
 	'too-fast': { severity: 'warning', wording: 'A change is too quick to follow.' },
 	'spring-cut-short': { severity: 'warning', wording: 'A spring is given a duration shorter than it takes to settle, so it jumps to its end.' },
+	'unknown-cue': { severity: 'error', wording: 'A shot is cued to a beat with no beat grid, or to a word the narration does not have.' },
+	'cue-missed': { severity: 'warning', wording: 'A shot starts after its cue, because the shot before runs past it.' },
 	'scene-too-long': { severity: 'warning', wording: 'The scene runs past its target length.' },
 	'scene-too-short': { severity: 'warning', wording: 'The scene ends before its target length.' },
 	'unknown-control-color': { severity: 'warning', wording: 'A control stands for a colour the scene never uses.' },

@@ -20,8 +20,10 @@ import {
 	MOTION_DEFAULT_HOLD,
 	MOTION_DRAW_MS_PER_UNIT,
 	MOTION_DRAW_RANGE,
+	type MotionBeatGrid,
 	type MotionCamera,
 	type MotionCommand,
+	type MotionCue,
 	type MotionDirection,
 	type MotionIrisShape,
 	type MotionRect,
@@ -109,6 +111,10 @@ export interface MotionShotTiming {
 	/** When the last command ends (the hold follows). */
 	commandsEnd: number;
 	end: number;
+	/** The time the shot is cued to start (`at`), when it has a cue that resolves. */
+	cue?: number;
+	/** How late the shot starts after its cue (ms), when the shot before ran past it. */
+	missedBy?: number;
 }
 
 export interface MotionCommandTiming {
@@ -410,6 +416,28 @@ export function motionPathLength(node: VectorNode, parentWorld: AffineMatrix = I
 	return longest;
 }
 
+// Beat grid adapted from soundcraft-main/crates/time/src/{tempo,grid}.rs (MIT OR Apache-2.0, © ArtCraft Team and contributors).
+/** When beat `beat` falls on a grid, ms: `offset + beat · 60000 / bpm`. */
+export function motionBeatTime(grid: MotionBeatGrid, beat: number): number {
+	return (grid.offset ?? 0) + (beat * 60000) / grid.bpm;
+}
+
+/** The beat (fractional) at `ms` on a grid, and its bar and beat in the bar (both from 1). */
+export function motionBeatAt(grid: MotionBeatGrid, ms: number): { beat: number; bar: number; beatInBar: number } {
+	const beat = ((ms - (grid.offset ?? 0)) * grid.bpm) / 60000;
+	const meter = Math.max(1, Math.round(grid.meter ?? 4));
+	const whole = Math.floor(beat + 1e-9);
+	return { beat, bar: Math.floor(whole / meter) + 1, beatInBar: (((whole % meter) + meter) % meter) + 1 };
+}
+
+/** The time a cue names, ms, or undefined when it names a beat with no grid or a word the narration lacks. */
+export function motionCueTime(scene: Pick<MotionScene, 'beat' | 'narration'>, cue: MotionCue): number | undefined {
+	if (typeof cue.ms === 'number') return Math.max(0, cue.ms);
+	if (typeof cue.beat === 'number') return scene.beat && scene.beat.bpm > 0 ? Math.max(0, motionBeatTime(scene.beat, cue.beat)) : undefined;
+	if (typeof cue.word === 'number') return scene.narration?.words[cue.word]?.start;
+	return undefined;
+}
+
 /** How many times a command plays (1 for `enter`, `exit` and `wait`, which do not repeat). */
 export function motionCommandRepeat(command: MotionCommand): number {
 	if (command.type === 'wait' || command.type === 'enter' || command.type === 'exit') return 1;
@@ -465,6 +493,13 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 	const cameraMoves: { shot: string; start: number; end: number; to: MotionRect; ease: AnimationEasing; geometric: boolean }[] = [];
 	let t = 0;
 	scene.shots.forEach((shot, index) => {
+		// A cue holds the shot before until it comes (or, for the first shot, waits from 0).
+		const cue = shot.at ? motionCueTime(scene, shot.at) : undefined;
+		if (cue !== undefined && cue > t) {
+			if (shots.length) shots[shots.length - 1].end = cue;
+			t = cue;
+		}
+		const missedBy = cue !== undefined && t - cue > 0.5 ? t - cue : undefined;
 		const start = t;
 		let cursor = start;
 		if (shot.camera) {
@@ -490,7 +525,7 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 			runEnd = Math.max(runEnd, end);
 		});
 		const end = runEnd + (shot.hold ?? MOTION_DEFAULT_HOLD);
-		shots.push({ id: shot.id, index, ...(shot.label ? { label: shot.label } : {}), start, commandsStart, commandsEnd: runEnd, end });
+		shots.push({ id: shot.id, index, ...(shot.label ? { label: shot.label } : {}), start, commandsStart, commandsEnd: runEnd, end, ...(cue !== undefined ? { cue } : {}), ...(missedBy !== undefined ? { missedBy } : {}) });
 		t = end;
 	});
 

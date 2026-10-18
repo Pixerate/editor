@@ -163,6 +163,19 @@ export function checkMotionScene(scene: MotionScene): MotionIssue[] {
 		});
 	});
 
+	// Cues: they must resolve, and the shot before must have ended by then.
+	scene.shots.forEach((shot, i) => {
+		if (!shot.at) return;
+		const timing = timeline.shots[i];
+		if (timing.cue === undefined) {
+			const what = shot.at.beat !== undefined ? `beat ${shot.at.beat}, but the scene has no beat grid; set one with set_animation_settings ({ "beat": { "bpm": … } })` : `word ${shot.at.word}, but the narration has ${scene.narration?.words.length ?? 0} words (indexes from 0)`;
+			issues.push(motionIssue('unknown-cue', `Shot "${shot.id}" is cued to ${what}.`, { shot: shot.id }));
+		} else if (timing.missedBy !== undefined) {
+			const late = Math.round(timing.missedBy);
+			issues.push(motionIssue('cue-missed', `Shot "${shot.id}" is cued at ${Math.round(timing.cue)} ms but starts ${late} ms late, because the shot before runs until ${Math.round(timing.start)} ms; shorten that shot (its hold, durations or speed) or cue this one later.`, { shot: shot.id, measured: late, needed: 0, unit: 'ms' }));
+		}
+	});
+
 	// Two segments changing the same property of a node at the same time.
 	for (const [key, track] of timeline.tracks) {
 		for (let i = 1; i < track.length; i++) {

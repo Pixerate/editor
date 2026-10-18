@@ -16,8 +16,8 @@ export class MotionSceneFormatError extends Error {
 	}
 }
 
-const SCENE_KEYS = ['version', 'name', 'description', 'artwork', 'shots', 'loop', 'fps', 'steps', 'target', 'controls', 'presets'];
-const SHOT_KEYS = ['id', 'label', 'camera', 'run', 'hold'];
+const SCENE_KEYS = ['version', 'name', 'description', 'artwork', 'shots', 'loop', 'fps', 'steps', 'beat', 'narration', 'target', 'controls', 'presets'];
+const SHOT_KEYS = ['id', 'label', 'camera', 'at', 'run', 'hold'];
 const CAMERA_KEYS = ['x', 'y', 'width', 'height', 'frame', 'padding', 'ease', 'ms', 'geometric'];
 const BASE_KEYS = ['type', 'targets', 'duration', 'delay', 'stagger', 'with', 'ease', 'note', 'repeat', 'repeatMode', 'steps'];
 const COMMAND_KEYS: Record<string, string[]> = {
@@ -173,6 +173,16 @@ export function shotShapeProblems(shot: unknown, where: string): string[] {
 	const name = typeof shot.id === 'string' ? `Shot "${shot.id}"` : where;
 	if (shot.label !== undefined && typeof shot.label !== 'string') problems.push(`${name}: "label" must be a string.`);
 	if (shot.hold !== undefined && !(isNum(shot.hold) && shot.hold >= 0)) problems.push(`${name}: "hold" must be a number of milliseconds ≥ 0.`);
+	if (shot.at !== undefined) {
+		const at = shot.at;
+		const given = isObject(at) ? (['beat', 'word', 'ms'] as const).filter((k) => at[k] !== undefined) : [];
+		if (!isObject(at) || given.length !== 1) problems.push(`${name}: "at" must give one of { "beat": number }, { "word": index } or { "ms": number }.`);
+		else {
+			unknownKeys(at, ['beat', 'word', 'ms'], `${name} at`, problems);
+			const k = given[0];
+			if (!isNum(at[k]) || (at[k] as number) < 0 || (k === 'word' && !Number.isInteger(at[k]))) problems.push(`${name}: "at.${k}" must be ${k === 'word' ? 'a word index ≥ 0' : 'a number ≥ 0'}.`);
+		}
+	}
 	if (shot.camera !== undefined) {
 		const c = shot.camera;
 		if (!isObject(c)) problems.push(`${name}: "camera" must be an object.`);
@@ -205,6 +215,16 @@ export function motionSceneShapeProblems(input: unknown): string[] {
 		problems.push('Scene: "artwork" must be a vector document { width, height, nodes }.');
 	if (input.loop !== undefined && !['none', 'loop', 'ping-pong'].includes(input.loop as string)) problems.push('Scene: "loop" must be "none", "loop" or "ping-pong".');
 	if (input.fps !== undefined && !(isNum(input.fps) && input.fps > 0 && input.fps <= 120)) problems.push('Scene: "fps" must be a number from 1 to 120.');
+	if (input.beat !== undefined) {
+		const b = input.beat;
+		if (!isObject(b) || !(isNum(b.bpm) && b.bpm >= 1 && b.bpm <= 1000) || (b.offset !== undefined && !isNum(b.offset)) || (b.meter !== undefined && !(Number.isInteger(b.meter) && (b.meter as number) >= 1)))
+			problems.push('Scene: "beat" must be { "bpm": 1–1000, "offset"?: ms, "meter"?: beats a bar }.');
+	}
+	if (input.narration !== undefined) {
+		const n = input.narration;
+		if (!isObject(n) || !Array.isArray(n.words) || !n.words.every((w, i, all) => isObject(w) && typeof w.text === 'string' && isNum(w.start) && w.start >= 0 && (w.end === undefined || (isNum(w.end) && w.end >= w.start)) && (i === 0 || w.start >= ((all[i - 1] as Record<string, number>).start ?? 0))))
+			problems.push('Scene: "narration" must be { "words": [{ "text", "start": ms, "end"?: ms }, …] } in time order.');
+	}
 	if (input.steps !== undefined && !(isNum(input.steps) && input.steps > 0 && input.steps <= 120)) problems.push('Scene: "steps" must be frames per second from above 0 to 120.');
 	if (input.target !== undefined && !(Array.isArray(input.target) && input.target.length === 2 && input.target.every(isNum) && input.target[0] <= input.target[1]))
 		problems.push('Scene: "target" must be [min, max] seconds.');

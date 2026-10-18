@@ -19,6 +19,9 @@ import {
 	toFlairVectorEffect,
 	MOTION_EASE_OUT,
 	motionFlairPrimitive,
+	motionBeatAt,
+	motionBeatTime,
+	motionCueTime,
 	fromFlairSvgMotion,
 	fromFlairVectorEffect,
 	type FlairSvgAnimation,
@@ -203,6 +206,7 @@ describe('checkMotionScene', () => {
 			)
 		);
 		collect(scene([{ id: 'g', run: [{ type: 'style', targets: ['box'], fill: '#000000' }] }], { artwork: { ...ARTWORK, nodes: [{ ...ARTWORK.nodes[0], fill: { type: 'linear', stops: [{ offset: 0, color: '#000' }, { offset: 1, color: '#fff' }] } } as VectorPathNode] }, target: [0, 0.5] }));
+		collect(scene([{ id: 'long', run: [{ type: 'wait', duration: 2000 }] }, { id: 'hit', at: { beat: 1 }, run: [] }, { id: 'say', at: { word: 3 }, run: [] }], { beat: { bpm: 120 } }));
 		expect([...reported].sort()).toEqual(Object.keys(MOTION_ISSUE_CODES).sort());
 	});
 
@@ -886,5 +890,65 @@ describe('importing from Flair', () => {
 		const broken = await registry.callTool('import_flair_effect', { motion: { svg: '<nope/>' } });
 		expect(broken.isError).toBe(true);
 		expect(JSON.stringify(broken.content)).toMatch(/could not be imported[\s\S]*Nothing was changed/);
+	});
+});
+
+describe('cueing shots to a beat or a voiceover', () => {
+	const words = [{ text: 'Meet', start: 0, end: 300 }, { text: 'the', start: 320, end: 400 }, { text: 'new', start: 420, end: 700 }, { text: 'badge', start: 2600, end: 3100 }];
+	const s = scene(
+		[
+			{ id: 'intro', run: [{ type: 'enter', targets: ['box'], duration: 400 }], hold: 100 },
+			{ id: 'drop', at: { beat: 4 }, run: [{ type: 'pulse', targets: ['box'], duration: 400 }], hold: 0 },
+			{ id: 'name', at: { word: 3 }, run: [{ type: 'enter', targets: ['dot'] }] }
+		],
+		{ beat: { bpm: 120, offset: 100 }, narration: { words } }
+	);
+
+	it('reads beats and cue times', () => {
+		expect(motionBeatTime({ bpm: 120, offset: 100 }, 4)).toBe(2100);
+		expect(motionBeatAt({ bpm: 120, offset: 100, meter: 4 }, 2100)).toEqual({ beat: 4, bar: 2, beatInBar: 1 });
+		expect(motionBeatAt({ bpm: 120 }, 1250)).toMatchObject({ bar: 1, beatInBar: 3 });
+		expect(motionCueTime(s, { word: 3 })).toBe(2600);
+		expect(motionCueTime(s, { ms: 50 })).toBe(50);
+		expect(motionCueTime({}, { beat: 2 })).toBeUndefined();
+	});
+
+	it('holds the shot before until each cue', () => {
+		const t = compileMotionScene(s);
+		// intro ends at 500 but holds to beat 4 (2100); drop's pulse ends at 2500 and it holds to the word "badge" (2600).
+		expect(t.shots.map((x) => [x.start, x.end, x.cue ?? null])).toEqual([[0, 2100, null], [2100, 2600, 2100], [2600, 3800, 2600]]);
+		expect(checkMotionScene(s).filter((i) => i.code === 'cue-missed' || i.code === 'unknown-cue')).toEqual([]);
+	});
+
+	it('reports missed and unknown cues', () => {
+		const late = scene([{ id: 'long', run: [{ type: 'move', targets: ['box'], by: { x: 10, y: 0 }, duration: 3000 }] }, { id: 'hit', at: { beat: 2 }, run: [] }, { id: 'say', at: { word: 9 }, run: [] }], { beat: { bpm: 120 }, narration: { words } });
+		const issues = checkMotionScene(late);
+		expect(issues.find((i) => i.code === 'cue-missed')).toMatchObject({ shot: 'hit', measured: 2600 });
+		expect(issues.find((i) => i.code === 'unknown-cue')?.message).toContain('word 9, but the narration has 4 words');
+		const noGrid = checkMotionScene(scene([{ id: 'a', at: { beat: 1 }, run: [] }]));
+		expect(noGrid.find((i) => i.code === 'unknown-cue')?.message).toContain('no beat grid');
+		const bad = () => parseMotionScene(scene([{ id: 'a', at: { beat: 1, word: 2 } as never, run: [] }], { beat: { bpm: 0 } as never, narration: { words: [{ text: 'a', start: 5 }, { text: 'b', start: 1 }] } }));
+		for (const said of [/"at" must give one of/, /"beat" must be/, /"narration" must be/]) expect(bad).toThrow(said);
+	});
+
+	it('works through the agent tools', async () => {
+		const controller = new AnimationEditorController({ scene: createMotionScene(ARTWORK, { name: 'demo' }) });
+		const registry = new ToolRegistry();
+		registry.register(createAnimationEditorToolProvider(controller));
+		const empty = (await registry.callTool('get_timing_grid', {})).structuredContent as any;
+		expect(empty).toMatchObject({ beats: [], words: [] });
+		expect(empty.hint).toContain('bpm');
+		expect((await registry.callTool('set_animation_settings', { beat: { bpm: 90, meter: 3 }, narration: { words } })).isError).toBeFalsy();
+		const grid = (await registry.callTool('get_timing_grid', { to: 2000 })).structuredContent as any;
+		expect(grid.beats.slice(0, 4).map((b: any) => [b.ms, b.bar, b.beatInBar])).toEqual([[0, 1, 1], [667, 1, 2], [1333, 1, 3], [2000, 2, 1]]);
+		expect(grid.words.map((w: any) => w.text)).toEqual(['Meet', 'the', 'new']);
+		const added = await registry.callTool('insert_shots', { shots: [{ id: 'a', run: [{ type: 'enter', targets: ['box'] }] }, { id: 'b', at: { word: 3 }, run: [] }] });
+		expect((added.structuredContent as any).shots[1]).toMatchObject({ id: 'b', start: 2600 });
+		const read = (await registry.callTool('get_shot', { shot: 'b' })).structuredContent as any;
+		expect(JSON.stringify(read)).toContain('"cue":2600');
+		const bad = await registry.callTool('set_animation_settings', { narration: { words: [{ text: 'x', start: 10 }, { text: 'y', start: 5 }] } });
+		expect(bad.isError).toBe(true);
+		expect((await registry.callTool('set_animation_settings', { beat: null })).isError).toBeFalsy();
+		expect(controller.getState().scene.beat).toBeUndefined();
 	});
 });

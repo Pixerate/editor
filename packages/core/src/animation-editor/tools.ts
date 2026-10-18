@@ -3,7 +3,7 @@ import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import type { JsonSchema } from '../tools/schema.js';
 import { parseVectorSvg } from '../vector/svg.js';
 import type { VectorNode } from '../vector/types.js';
-import { compileMotionScene, indexMotionNodes } from './compile.js';
+import { compileMotionScene, indexMotionNodes, motionBeatAt, motionBeatTime } from './compile.js';
 import { fromFlairSvgMotion, fromFlairVectorEffect, type FlairImportResult } from './flair-import.js';
 import type { AnimationEditorController } from './controller.js';
 import { MOTION_EDIT_OPS, type MotionEdit, type MotionEditResult } from './edit.js';
@@ -166,7 +166,12 @@ const SHOT_FIELDS: Record<string, JsonSchema> = {
 	label: { type: 'string', description: 'What happens, in a few words.' },
 	camera: CAMERA,
 	run: { type: 'array', items: MOTION_COMMAND_SCHEMA, description: 'Commands, in order.' },
-	hold: MS('Hold after the commands (default 600)')
+	hold: MS('Hold after the commands (default 600)'),
+	at: object(
+		{ beat: { type: 'number', minimum: 0, description: 'Beat number on the scene\'s beat grid, from 0 (2.5 is the "and" of beat 3).' }, word: { type: 'integer', minimum: 0, description: 'Index of a narration word, from 0.' }, ms: { type: 'number', minimum: 0, description: 'A time in ms.' } },
+		[],
+		'Start this shot on a cue (give one of beat, word or ms); the shot before holds until then. get_timing_grid lists beats and words.'
+	)
 };
 const SHOT: JsonSchema = object({ id: { type: 'string', pattern: '^[A-Za-z0-9_][\\w.-]*$', description: 'Unique shot id, e.g. "intro".' }, ...SHOT_FIELDS }, ['id', 'run'], 'A shot.');
 const CONTROL: JsonSchema = object(
@@ -187,6 +192,20 @@ const SETTINGS: Record<string, JsonSchema> = {
 	loop: { type: 'string', enum: ['none', 'loop', 'ping-pong'], description: 'Playback past the end (default none).' },
 	fps: { type: 'number', minimum: 1, maximum: 120, description: 'Sampling rate for exports (default 30).' },
 	steps: { anyOf: [{ type: 'number', exclusiveMinimum: 0, maximum: 120 }, { type: 'null' }], description: 'Stepped time for every command without its own: changes hold on a grid of this many frames per second (12 = "on twos" at 24 fps) for a hand-drawn look; null makes it smooth again (default).' },
+	beat: {
+		anyOf: [
+			object({ bpm: { type: 'number', minimum: 1, maximum: 1000, description: 'Beats a minute.' }, offset: { type: 'number', description: 'When beat 0 falls, ms (default 0).' }, meter: { type: 'integer', minimum: 1, description: 'Beats a bar (default 4).' } }, ['bpm']),
+			{ type: 'null' }
+		],
+		description: 'A beat grid (music or a voiceover\'s rhythm) that shots can be cued to with "at": { "beat": n }; null clears.'
+	},
+	narration: {
+		anyOf: [
+			object({ words: { type: 'array', items: object({ text: { type: 'string', description: 'The word.' }, start: { type: 'number', minimum: 0, description: 'When it is said, ms.' }, end: { type: 'number', minimum: 0, description: 'When it ends, ms.' } }, ['text', 'start']), description: 'Words in time order, from a TTS or speech-to-text word timing.' } }, ['words']),
+			{ type: 'null' }
+		],
+		description: 'A voiceover\'s word timings that shots can be cued to with "at": { "word": index }; null clears.'
+	},
 	target: { anyOf: [{ type: 'array', items: { type: 'number', minimum: 0 }, minItems: 2, maxItems: 2 }, { type: 'null' }], description: 'Wanted length [min, max] in seconds; null clears.' }
 };
 
@@ -196,7 +215,7 @@ const EDIT_OP: JsonSchema = {
 	oneOf: [
 		object({ op: { const: 'set_settings', description: 'Like set_animation_settings.' }, ...SETTINGS }, ['op']),
 		object({ op: { const: 'insert_shots', description: 'Like insert_shots.' }, shots: { type: 'array', items: SHOT, minItems: 1, description: 'Shots to add.' }, at: { type: 'integer', minimum: 0, description: 'Position (default: the end).' } }, ['op', 'shots']),
-		object({ op: { const: 'update_shot', description: 'Like update_shot.' }, shot: SHOT_ID, set: object({ id: SHOT.properties!.id, ...SHOT_FIELDS }, [], 'Fields to replace.'), remove: { type: 'array', items: { type: 'string', enum: ['label', 'camera', 'hold'] }, description: 'Fields to clear.' } }, ['op', 'shot']),
+		object({ op: { const: 'update_shot', description: 'Like update_shot.' }, shot: SHOT_ID, set: object({ id: SHOT.properties!.id, ...SHOT_FIELDS }, [], 'Fields to replace.'), remove: { type: 'array', items: { type: 'string', enum: ['label', 'camera', 'hold', 'at'] }, description: 'Fields to clear.' } }, ['op', 'shot']),
 		object({ op: { const: 'delete_shots', description: 'Like delete_shots.' }, shots: { type: 'array', items: SHOT_ID, minItems: 1, description: 'Shot ids.' } }, ['op', 'shots']),
 		object({ op: { const: 'move_shot', description: 'Like move_shot.' }, shot: SHOT_ID, to: { type: 'integer', minimum: 0, description: 'New position (0 = first).' } }, ['op', 'shot', 'to']),
 		object({ op: { const: 'add_commands', description: 'Like add_commands.' }, shot: SHOT_ID, commands: { type: 'array', items: MOTION_COMMAND_SCHEMA, minItems: 1, description: 'Commands to add.' }, at: { type: 'integer', minimum: 0, description: 'Index in the shot\'s run (default: the end).' } }, ['op', 'shot', 'commands']),
@@ -247,6 +266,8 @@ export function describeMotionShots(scene: MotionScene) {
 			end: t.end,
 			...(shot.camera ? { camera: shot.camera } : {}),
 			...(shot.hold !== undefined ? { hold: shot.hold } : {}),
+			...(t.cue !== undefined ? { cue: Math.round(t.cue) } : {}),
+			...(t.missedBy !== undefined ? { missedBy: Math.round(t.missedBy) } : {}),
 			commands: shot.run.map((c, index) => {
 				const ct = timeline.commands.find((x) => x.shotIndex === i && x.command === index)!;
 				const primitive = motionFlairPrimitive(c);
@@ -397,6 +418,47 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 	const BEHAVIORS_DESCRIPTION =
 		'Write pulses, shakes, teeters, waves, wiggles and colour pulses as one change with a Flair behavior, so they play exactly (default true; needs Flair 0.38 or later). False samples them into linear steps for older Flair.';
 
+	const getTimingGrid: AgentTool = {
+		name: 'get_timing_grid',
+		title: 'Read the beat grid and narration',
+		description:
+			'Returns the beats (number, time in ms, bar and beat in the bar) and narration words (index, text, start, end) between two times, to cue shots to with "at". Also says which shot plays at each. Without a beat grid or narration, that part is empty and says how to add one.',
+		inputSchema: object({
+			from: { type: 'number', minimum: 0, description: 'From this time, ms (default 0).' },
+			to: { type: 'number', minimum: 0, description: 'Up to this time, ms (default: the end of the animation, or of the narration if later).' },
+			limit: { type: 'integer', minimum: 1, maximum: 1000, description: 'At most this many beats and words each (default 200).' }
+		}),
+		annotations: { title: 'Read the beat grid and narration', ...READ },
+		handler: ({ from = 0, to, limit = 200 }) => {
+			const s = scene();
+			const timeline = compileMotionScene(s);
+			const words = s.narration?.words ?? [];
+			const end = to ?? Math.max(timeline.duration, words.length ? (words[words.length - 1].end ?? words[words.length - 1].start) : 0);
+			const shotAt = (ms: number) => timeline.shots.find((x) => ms >= x.start && ms < x.end)?.id;
+			const beats: { beat: number; ms: number; bar: number; beatInBar: number; shot?: string }[] = [];
+			if (s.beat && s.beat.bpm > 0) {
+				const first = Math.max(0, Math.ceil(motionBeatAt(s.beat, from).beat - 1e-9));
+				for (let b = first; beats.length < limit; b++) {
+					const ms = motionBeatTime(s.beat, b);
+					if (ms > end) break;
+					const at = motionBeatAt(s.beat, ms);
+					const shot = shotAt(ms);
+					beats.push({ beat: b, ms: Math.round(ms), bar: at.bar, beatInBar: at.beatInBar, ...(shot ? { shot } : {}) });
+				}
+			}
+			const listed = words
+				.map((w, index) => ({ index, text: w.text, start: w.start, ...(w.end !== undefined ? { end: w.end } : {}), ...(shotAt(w.start) ? { shot: shotAt(w.start) } : {}) }))
+				.filter((w) => w.start >= from && w.start <= end)
+				.slice(0, limit);
+			return {
+				from,
+				to: Math.round(end),
+				...(s.beat ? { grid: s.beat, beats } : { beats: [], hint: 'No beat grid: set_animation_settings with { "beat": { "bpm": 120 } }.' }),
+				...(words.length ? { words: listed } : { words: [], narrationHint: 'No narration: set_animation_settings with { "narration": { "words": [{ "text", "start" }, …] } }.' })
+			};
+		}
+	};
+
 	const exportFlairMotion: AgentTool = {
 		name: 'export_flair_motion',
 		title: 'Export as Flair vector motion',
@@ -496,7 +558,7 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 			{
 				shot: SHOT_ID,
 				set: object({ id: SHOT.properties!.id, ...SHOT_FIELDS }, [], 'Fields to replace.'),
-				remove: { type: 'array', items: { type: 'string', enum: ['label', 'camera', 'hold'] }, description: 'Fields to clear.' }
+				remove: { type: 'array', items: { type: 'string', enum: ['label', 'camera', 'hold', 'at'] }, description: 'Fields to clear.' }
 			},
 			['shot']
 		),
@@ -569,7 +631,7 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 	const setSettings: AgentTool = {
 		name: 'set_animation_settings',
 		title: 'Change animation settings',
-		description: 'Sets the name, description, loop mode, export frame rate, stepped time or target length. Returns the timing.',
+		description: 'Sets the name, description, loop mode, export frame rate, stepped time, beat grid, narration word timings or target length. Returns the timing.',
 		inputSchema: object(SETTINGS),
 		annotations: { title: 'Change animation settings', ...WRITE_IDEMPOTENT },
 		handler: (args) => apply({ op: 'set_settings', ...args }, 'Change settings')
@@ -657,7 +719,7 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 		}
 	};
 
-	const reads = [getAnimation, getShot, findElements, checkAnimation, renderFrame, exportFlairMotion, exportFlairEffect, seekAnimation];
+	const reads = [getAnimation, getShot, findElements, getTimingGrid, checkAnimation, renderFrame, exportFlairMotion, exportFlairEffect, seekAnimation];
 	const writes = [setArtworkSvg, importFlairEffect, insertShots, updateShot, deleteShots, moveShot, addCommands, updateCommand, deleteCommands, setSettings, setControls, editAnimation, writeAnimation, undo, redo];
 
 	return {
