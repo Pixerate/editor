@@ -1,8 +1,10 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { createVectorEffect, ellipseSubpath, rectSubpath, setSubpathCorners, starSubpath, type VectorDocument, type VectorEffect } from "@pixerate/editor/vector";
 import { VectorEditor, useVectorCommands, useVectorEditorController, useVectorEditorState } from "@pixerate/editor-react/vector";
 import { PenTool } from "lucide-react";
 import { demoCommandRegistry } from "../agentTools";
+import { AgentScriptPanel } from "./AgentScriptPanel";
+import { VECTOR_SCRIPTS } from "../agentScripts";
 
 /** A live path effect for the sample document (defaults filled in). */
 const effect = (type: VectorEffect["type"], id: string, params: Record<string, unknown>) => createVectorEffect(type, id, params)!;
@@ -201,6 +203,7 @@ export function VectorTab() {
   const state = useVectorEditorState(controller);
   useVectorCommands(demoCommandRegistry, controller);
   const [svg, setSvg] = useState<string | null>(null);
+  const agentStage = useRef<HTMLDivElement>(null);
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
@@ -215,7 +218,8 @@ export function VectorTab() {
           </p>
         </div>
       </div>
-      <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-3">
+      <AgentScriptPanel scripts={VECTOR_SCRIPTS} stage={agentStage} hint="Plays a scripted agent turn through commands__run_command with the vector.* commands (the same ones in the command palette)." />
+      <div className="relative rounded-xl border border-slate-800 bg-slate-900/50 p-3" ref={agentStage}>
         <VectorEditor controller={controller} height={520} />
       </div>
       <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">

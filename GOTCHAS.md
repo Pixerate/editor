@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [demo] An Agent Cursor Animated With `requestAnimationFrame` Hangs in a Hidden Tab
+
+- **Issue / Symptom**: A scripted agent run (the demo's "Ask the agent" panel) stopped partway with its buttons disabled when the page was in a background tab or a hidden preview pane.
+- **Root Cause**: The cursor glide awaited a promise resolved from a `requestAnimationFrame` loop, and browsers do not run animation frames for hidden documents, so the promise never settled and the next tool call never ran.
+- **Solution / Workaround**: Jump straight to the target when `document.hidden`, and also resolve the glide from a `setTimeout` a little after its duration (as Ursula's director skips animation in hidden tabs). Never make agent tool calls wait on animation frames alone.
+
 ### [react|svelte/chart] Inline SVG Colours Must Use `var(--x, fallback)`, Not shadcn's `hsl(var(--x))`
 
 - **Issue / Symptom**: A chart theme written as `hsl(var(--foreground))` drew black text and invisible grid lines in the demo.
@@ -1525,6 +1531,8 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: After #152 merged, the Release run succeeded but printed "No unpublished projects to publish". npm's `@pixerate/editor@0.54.0` lacked `/animation-editor`, although `main`'s CHANGELOG for 0.54.0 lists it.
 - **Root Cause**: The Release run for #151 versioned and published the packages, then failed ("Some packages failed to publish") before it pushed its `chore(release)` commit. `main` kept the pending changesets, so the next run computed the same versions from them, folded in #152's changeset, and found 0.54.0 / 0.41.0 / 0.49.0 already on npm.
 - **Solution / Workaround**: After a failed Release, compare `npm view @pixerate/editor version` with `main`'s `packages/core/package.json`. If npm has a version that `main` has not committed yet, merge a new changeset so the next release bumps past it. Check what was published with `npm view @pixerate/editor@<version> exports`.
+- **It also happened from a race (#154 / #155)**: #154's release published 0.56.0, but #155 merged while that release was running, so pushing its version commit was rejected (non-fast-forward). The push step ended in `|| echo "Failed to push tags"`, so the run still showed green. #155's release then recomputed 0.56.0 and failed with `E409 Cannot publish over previously staged version`. An extra changeset doesn't help here: changesets merges every pending minor into one bump, giving the same version again. The fix was to commit #154's version bump on its own, keeping #155's changeset pending.
+- **Since then**: the release workflow pushes the version commit to `main` *before* publishing, rebasing onto merges that landed meanwhile and failing loudly if it can't. It also refuses to publish when a version `main` hasn't recorded is already on npm.
 
 ### [core/canvas] Self-Registering Modules Are Dropped Because the Package Is `sideEffects: false`
 

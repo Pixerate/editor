@@ -1,5 +1,17 @@
 # @pixerate/editor
 
+## 0.57.0
+
+### Minor Changes
+
+- f362946: The animation editor's Flair export writes cubic-bezier easings (`ease`, `ease-in`, `ease-out`, `ease-in-out`, the back eases and custom `{ type: 'cubic-bezier' }` curves) as one change with `ease: [x1, y1, x2, y2]` instead of sampling them into linear steps; Flair's own names are still used where they match within 1%. This needs Flair 0.36 or later: pass `curves: false` (also on the `export_flair_motion` and `export_flair_effect` agent tools) to sample them for older Flair. Adds `flairCurveFor` and the `FlairEase` type. Overshooting curves on colours, opacity and draw-on stay sampled, since their values cannot pass their ends.
+
+## 0.56.0
+
+### Minor Changes
+
+- 391d3d0: Mermaid diagrams reach parity with Ursula: pie, mindmap, quadrant, C4, architecture, sequence, gitGraph, Gantt, timeline, journey, XY and radar diagrams are now editable statement by statement (lossless, like flowcharts), with family layouts and their own pictures (`mermaidToScene`, also used by `mermaidToSvg`, thumbnails and PNG export). `parseSankey` and `parseTreemap` read sankey and treemap data. `familyUI` describes each family's shapes, defaults and data fields, and `checkFieldData` validates them. Agents get `set_diagram_node_data`, `set_diagram_edge_data`, `set_diagram_settings` and `set_diagram_title`, and `get_diagram` lists the fields and values. React and Svelte add `<MermaidFamilyScene>`, plus `scene` and `renameTarget` on `useMermaidDiagram` / `createMermaidDiagram` (which also take `{ sceneTheme, layoutOptions }` as a second argument).
+
 ## 0.55.0
 
 ### Minor Changes
