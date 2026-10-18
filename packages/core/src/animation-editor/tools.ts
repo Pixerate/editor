@@ -4,6 +4,7 @@ import type { JsonSchema } from '../tools/schema.js';
 import { parseVectorSvg } from '../vector/svg.js';
 import type { VectorNode } from '../vector/types.js';
 import { compileMotionScene, indexMotionNodes } from './compile.js';
+import { toLottie } from './lottie.js';
 import { fromFlairSvgMotion, fromFlairVectorEffect, type FlairImportResult } from './flair-import.js';
 import type { AnimationEditorController } from './controller.js';
 import { MOTION_EDIT_OPS, type MotionEdit, type MotionEditResult } from './edit.js';
@@ -412,6 +413,16 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 		handler: ({ fps, curves, behaviors, flair }) => controller.toFlairMotion({ ...(fps ? { fps } : {}), ...(curves === undefined ? {} : { curves }), ...(behaviors === undefined ? {} : { behaviors }), ...(flair ? { flair } : {}) })
 	};
 
+	const exportLottie: AgentTool = {
+		name: 'export_lottie',
+		title: 'Export as Lottie',
+		description:
+			'Returns the animation as Lottie (Bodymovin JSON, v5) for lottie-web and the mobile Lottie players: one shape layer whose groups mirror the artwork, a marker per shot, eased changes as keyframes with bezier easing and the rest sampled. Also returns how many keyframes were sampled and notes on anything not carried over (gradients, dashes, reveal clips, morphs that change point counts).',
+		inputSchema: object({ fps: { type: 'number', minimum: 1, maximum: 120, description: 'Frame rate (default: the scene\'s fps, else 30).' } }),
+		annotations: { title: 'Export as Lottie', ...READ },
+		handler: ({ fps }) => toLottie(scene(), fps ? { fps } : {})
+	};
+
 	const exportFlairEffect: AgentTool = {
 		name: 'export_flair_effect',
 		title: 'Export as a Flair effect',
@@ -657,7 +668,7 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 		}
 	};
 
-	const reads = [getAnimation, getShot, findElements, checkAnimation, renderFrame, exportFlairMotion, exportFlairEffect, seekAnimation];
+	const reads = [getAnimation, getShot, findElements, checkAnimation, renderFrame, exportFlairMotion, exportFlairEffect, exportLottie, seekAnimation];
 	const writes = [setArtworkSvg, importFlairEffect, insertShots, updateShot, deleteShots, moveShot, addCommands, updateCommand, deleteCommands, setSettings, setControls, editAnimation, writeAnimation, undo, redo];
 
 	return {

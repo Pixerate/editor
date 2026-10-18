@@ -51,6 +51,8 @@ reproduced at the end of this file. Paths are relative to each source repository
 - `crates/render/src/shapes.rs` (`GradientRamp::new` / `t`: a radial gradient's focal point and t measured along the ray from it to the circle, the same as SVG `fx` / `fy`) → `vectorGradientFocalParam` in `packages/core/src/vector/gradient.ts`, generalised to SVG's focal circle (`fr`); test cases re-expressed → `packages/core/tests/vector-gradient.test.ts`
 - `crates/ui-egui/src/panels/graph.rs` and `graph_tools.rs` (value range frozen while a key is dragged, Shift locks to the axis moved most, `snap_px` nearest candidate within a few screen pixels) → `startChartPointDrag` and `snapChartDragValue` in `packages/core/src/chart/interaction.ts`
 
+- `crates/lottie/src/anim.rs`, `shapes.rs` and `export.rs` (animated properties as Bodymovin keyframes, a cubic ease as the keys' `o` / `i` tangents and holds as `h: 1`; shapes as groups with `sh`, `fl`, `st`, `tm` and a closing `tr`, listed top first; markers; a warning for every feature with no Lottie equivalent) → `toLottie` in `packages/core/src/animation-editor/lottie.ts`; the scene is one shape layer, each node an outer group for its animated pose around an inner one for its own transform, and stretches no single ease describes are sampled
+
 ## figcraft
 
 © 2026 ArtCraft Team and the FigCraft contributors.

@@ -16,6 +16,7 @@ export * from './check.js';
 export * from './edit.js';
 export * from './flair.js';
 export * from './flair-import.js';
+export * from './lottie.js';
 export * from './controller.js';
 export * from './tools.js';
 export * from './instructions.js';
