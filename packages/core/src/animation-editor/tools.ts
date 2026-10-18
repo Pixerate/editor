@@ -6,10 +6,11 @@ import type { VectorNode } from '../vector/types.js';
 import { compileMotionScene, indexMotionNodes, motionBeatAt, motionBeatTime } from './compile.js';
 import { fitMotionScene } from './fit.js';
 import { toLottie } from './lottie.js';
+import { motionPath } from './onion.js';
 import { fromFlairSvgMotion, fromFlairVectorEffect, type FlairImportResult } from './flair-import.js';
 import type { AnimationEditorController } from './controller.js';
 import { MOTION_EDIT_OPS, type MotionEdit, type MotionEditResult } from './edit.js';
-import { motionIssueLine, type MotionIssue } from './issues.js';
+import { motionIssueLine, namedWithSuggestion, type MotionIssue } from './issues.js';
 import { MOTION_COMMAND_TYPES, MOTION_DIRECTIONS, MOTION_ENTER_STYLES, MOTION_EXIT_STYLES, MOTION_IRIS_SHAPES, MOTION_REPEAT_MODES, MOTION_BLENDS, MOTION_SPLIT_ORIENTATIONS, motionFlairPrimitive, type MotionScene } from './types.js';
 
 export interface AnimationEditorToolProviderOptions {
@@ -399,10 +400,20 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 			time: MS('Time from the start'),
 			shot: { ...SHOT_ID, description: 'Render a moment of this shot instead of "time".' },
 			at: { type: 'string', enum: ['start', 'middle', 'end'], description: 'With shot: which moment (default end: everything drawn, before the next shot).' },
-			format: { type: 'string', enum: ['svg', 'png'], description: 'svg (default) or png (only when the host supports it).' }
+			format: { type: 'string', enum: ['svg', 'png'], description: 'svg (default) or png (only when the host supports it).' },
+			onion_skin: object(
+				{
+					before: { type: 'integer', minimum: 0, maximum: 12, description: 'Ghost frames before the moment (default 2).' },
+					after: { type: 'integer', minimum: 0, maximum: 12, description: 'Ghost frames after it (default 0).' },
+					spacing: { anyOf: [{ type: 'number', exclusiveMinimum: 0 }, { type: 'string', enum: ['commands'] }], description: 'Ms between ghosts (default 83, every other frame at 24 fps), or "commands" for the moments commands start and end.' }
+				},
+				[],
+				'Draw faded frames either side of the moment, to see motion in one picture.'
+			),
+			motion_paths: { anyOf: [{ type: 'boolean' }, { type: 'array', items: { type: 'string', minLength: 1 } }], description: 'Draw where nodes travel (dashed, with a dot where each change starts or ends): true for every node whose place changes, or a list of ids.' }
 		}),
 		annotations: { title: 'Render a frame', ...READ },
-		handler: async ({ time, shot, at = 'end', format = 'svg' }) => {
+		handler: async ({ time, shot, at = 'end', format = 'svg', onion_skin, motion_paths }) => {
 			const s = scene();
 			let t = time ?? controller.getState().time;
 			if (shot !== undefined) {
@@ -410,7 +421,11 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 				if (!timing) throw new Error(`There is no shot "${shot}"; the shots are ${s.shots.map((x) => `"${x.id}"`).join(', ') || 'none yet'}.`);
 				t = at === 'start' ? timing.start : at === 'middle' ? (timing.commandsStart + timing.commandsEnd) / 2 : Math.max(timing.start, timing.end - 1);
 			}
-			const svg = controller.toSvg(t, { pretty: false });
+			if (Array.isArray(motion_paths)) {
+				const known = new Set(describeMotionElements(s).map((e) => e.id));
+				for (const id of motion_paths) if (!known.has(id)) throw new Error(`There is no element ${namedWithSuggestion(id, known)} to draw a motion path for.`);
+			}
+			const svg = controller.toSvg(t, { pretty: false, ...(onion_skin ? { onionSkin: onion_skin } : {}), ...(motion_paths ? { motionPaths: motion_paths } : {}) });
 			if (format === 'png') {
 				if (!options.rasterize) throw new Error('This host cannot make PNG images; call render_animation_frame with format "svg".');
 				const image = await options.rasterize(svg, { width: s.artwork.width, height: s.artwork.height });
@@ -465,6 +480,26 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 				...(s.beat ? { grid: s.beat, beats } : { beats: [], hint: 'No beat grid: set_animation_settings with { "beat": { "bpm": 120 } }.' }),
 				...(words.length ? { words: listed } : { words: [], narrationHint: 'No narration: set_animation_settings with { "narration": { "words": [{ "text", "start" }, …] } }.' })
 			};
+		}
+	};
+
+	const getMotionPath: AgentTool = {
+		name: 'get_motion_path',
+		title: 'Read where a node travels',
+		description:
+			'Returns where a node\'s centre is over time, in document units (sampled), and where it is each time a change that moves it starts or ends. Use it to check a path, spacing or arc without reading pictures; render_animation_frame with motion_paths draws it.',
+		inputSchema: object({
+			node: { type: 'string', minLength: 1, description: 'Element id from get_animation.' },
+			from: { type: 'number', minimum: 0, description: 'From this time, ms (default 0).' },
+			to: { type: 'number', minimum: 0, description: 'To this time, ms (default the end).' },
+			step: { type: 'number', exclusiveMinimum: 0, description: 'Ms between samples (default 33; at most 400 samples).' }
+		}, ['node']),
+		annotations: { title: 'Read where a node travels', ...READ },
+		handler: ({ node, from, to, step }) => {
+			const s = scene();
+			const ids = describeMotionElements(s).map((e) => e.id);
+			if (!ids.includes(node)) throw new Error(`There is no element ${namedWithSuggestion(node, ids)}.`);
+			return motionPath(s, node, { from, to, step });
 		}
 	};
 
@@ -761,7 +796,7 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 		}
 	};
 
-	const reads = [getAnimation, getShot, findElements, getTimingGrid, checkAnimation, renderFrame, exportFlairMotion, exportFlairEffect, exportLottie, seekAnimation];
+	const reads = [getAnimation, getShot, findElements, getMotionPath, getTimingGrid, checkAnimation, renderFrame, exportFlairMotion, exportFlairEffect, exportLottie, seekAnimation];
 	const writes = [setArtworkSvg, fitAnimation, importFlairEffect, insertShots, updateShot, deleteShots, moveShot, addCommands, updateCommand, deleteCommands, setSettings, setControls, editAnimation, writeAnimation, undo, redo];
 
 	return {

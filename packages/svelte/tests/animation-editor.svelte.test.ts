@@ -59,6 +59,17 @@ describe("AnimationEditor (Svelte)", () => {
     controller.destroy();
   });
 
+  it("draws onion skin and motion paths on the stage", () => {
+    const controller = new AnimationEditorController({ scene: SCENE });
+    controller.seek(600);
+    const { target } = render(AnimationEditor, { controller, onionSkin: { before: 2 }, motionPaths: true });
+    const stage = target.querySelector("[data-animation-stage]")!;
+    expect(stage.querySelectorAll('[data-onion="before"]')).toHaveLength(2);
+    expect(stage.querySelectorAll("#box")).toHaveLength(1);
+    expect(stage.querySelector('[data-motion-path="box"] polyline')).not.toBeNull();
+    controller.destroy();
+  });
+
   it("marks shots with issues and lists them", () => {
     const controller = new AnimationEditorController({ scene: { ...SCENE, shots: [{ id: "bad", run: [{ type: "enter", targets: ["bx"] }] }] } });
     const { target } = render(AnimationEditor, { controller });
