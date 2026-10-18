@@ -1,5 +1,21 @@
 # @pixerate/editor
 
+## 0.60.0
+
+### Minor Changes
+
+- 2feef94: The animation editor stacks motion. A command with `blend: "add"` becomes a layer over the target's pose instead of a change that the next one takes over from. It stacks with whatever else moves the target, and what it adds stays once it ends.
+
+  - **Emphasis:** pulse, shake, teeter, wave and wiggle are additive by default, so a shake during a slide shakes as it slides and lands where the slide ends. Pass `blend: "replace"` for the old take-over.
+  - **Move, rotate and scale:** they take `blend: "add"` too. Offsets and turns add; scales multiply.
+  - **Overlap check:** additive layers are no longer reported as overlapping.
+  - **Flair export:** a layer on its own is one exact change; layers that overlap the pose are sampled.
+  - **New exports:** `motionAddTrackKey`, `withMotionLayers`, `MOTION_ADDITIVE_PROPERTIES` and `MOTION_BLENDS`.
+
+- c3503c6: Agents now edit rich text inline, the way collaborators do in Google Docs. `createRichTextToolProvider` draws the agent's caret, with its name, where its tools read and write. `find_text` and `set_selection` highlight the agent's selection, and edits tint the new text for a moment. With `presence: { typing: true }`, inserted and replacement text is typed out a few characters at a time. It is still one undo step, and it rolls back if the call is cancelled.
+
+  `insert_text`, `replace_range` and `replace_selection` now return the new text's `range`. The caret is on by default; pass `presence: false` to turn it off. The new building blocks are `AgentCaret`, `setAgentCaret`, `clearAgentCaret`, `markAgentChanges` and `typeAgentText`.
+
 ## 0.59.0
 
 ### Minor Changes
