@@ -1,8 +1,8 @@
 import type { VectorDocument } from '../vector/types.js';
 import { checkMotionScene } from './check.js';
 import { motionIssueKey, motionIssueLine, namedWithSuggestion, type MotionIssue } from './issues.js';
-import { clipsShapeProblems, commandShapeProblems, motionSceneShapeProblems, shotShapeProblems } from './parse.js';
-import type { MotionClip, MotionCommand, MotionControl, MotionPreset, MotionScene, MotionShot } from './types.js';
+import { clipsShapeProblems, driversShapeProblems, commandShapeProblems, motionSceneShapeProblems, shotShapeProblems } from './parse.js';
+import type { MotionClip, MotionDriver, MotionCommand, MotionControl, MotionPreset, MotionScene, MotionShot } from './types.js';
 
 /**
  * Edits as data: each is a pure function of the scene, all or nothing. An edit that leaves the
@@ -23,6 +23,7 @@ export type MotionEdit =
 	| { op: 'set_artwork'; artwork: VectorDocument }
 	| { op: 'set_controls'; controls: MotionControl[]; presets?: MotionPreset[] }
 	| { op: 'set_clip'; name: string; clip: MotionClip | null }
+	| { op: 'set_drivers'; drivers: MotionDriver[] }
 	| { op: 'replace_scene'; scene: MotionScene };
 
 export type MotionEditOp = MotionEdit['op'];
@@ -40,6 +41,7 @@ export const MOTION_EDIT_OPS: readonly MotionEditOp[] = [
 	'set_artwork',
 	'set_controls',
 	'set_clip',
+	'set_drivers',
 	'replace_scene'
 ];
 
@@ -111,6 +113,13 @@ function applyOne(scene: MotionScene, edit: MotionEdit): MotionScene {
 			}
 			if (edit.target === null) delete next.target;
 			else if (edit.target !== undefined) next.target = edit.target;
+			return next;
+		}
+		case 'set_drivers': {
+			const problems = driversShapeProblems(edit.drivers);
+			if (problems.length) fail(problems.join(' '));
+			const next: MotionScene = { ...scene, drivers: edit.drivers };
+			if (!edit.drivers.length) delete next.drivers;
 			return next;
 		}
 		case 'set_clip': {

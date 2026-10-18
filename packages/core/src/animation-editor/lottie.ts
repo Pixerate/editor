@@ -5,7 +5,7 @@ import { normalizeTokenColor } from '../tokens/color.js';
 import { expandVectorAppearances } from '../vector/appearance.js';
 import { IDENTITY_MATRIX, nodeMatrix, vectorPathWorldBezier, type AffineMatrix } from '../vector/geometry.js';
 import type { VectorNode, VectorPaint, VectorPathNode } from '../vector/types.js';
-import { compileMotionScene, indexMotionNodes, motionTrackKey, trackValue, type MotionNodeEntry, type MotionProperty, type MotionSegment } from './compile.js';
+import { compileMotionScene, indexMotionNodes, motionTrackKey, trackValue, type MotionNodeEntry, type MotionProperty, type MotionSegment, motionDriverSources, motionPropertyValue } from './compile.js';
 import { motionFrameAt, motionNodeOffset } from './evaluate.js';
 import type { MotionScene } from './types.js';
 
@@ -247,17 +247,24 @@ export function toLottie(scene: MotionScene, options: LottieExportOptions = {}):
 		const tr = STATIC_TR();
 		const c = [entry.center.x, entry.center.y].map(round);
 		const own = (p: MotionProperty) => track(id, p);
-		const layered = (['x', 'y', 'rotation', 'scaleX', 'scaleY'] as MotionProperty[]).some((p) => layers(id, p).length);
+		// Drivers' sources count as layers: the driven pose is sampled wherever they change.
+		const sources = motionDriverSources(timeline, id, ['x', 'y', 'rotation', 'scaleX', 'scaleY']);
+		const layered = (['x', 'y', 'rotation', 'scaleX', 'scaleY'] as MotionProperty[]).some((p) => layers(id, p).length) || sources.length > 0;
 		const moving = (['x', 'y', 'rotation', 'scaleX', 'scaleY', 'follow'] as MotionProperty[]).some((p) => own(p).length) || layered;
 		if (moving) {
 			// Position, rotation and scale are separate in Lottie, so each is exact on its own; follows and layers mix them and are sampled.
 			const mixed = own('follow').length > 0 || layered;
 			tr.a = { a: 0, k: c };
-			tr.p = animate(mixed ? [...own('x'), ...own('y'), ...own('follow'), ...layers(id, 'x'), ...layers(id, 'y')] : [...own('x'), ...own('y')], (t) => poseAt(entry, t).p, !mixed);
-			tr.r = animate(mixed ? [...own('rotation'), ...own('follow'), ...layers(id, 'rotation')] : own('rotation'), (t) => [poseAt(entry, t).r], !mixed);
-			tr.s = animate(mixed ? [...own('scaleX'), ...own('scaleY'), ...layers(id, 'scaleX'), ...layers(id, 'scaleY')] : [...own('scaleX'), ...own('scaleY')], (t) => poseAt(entry, t).s, !mixed);
+			tr.p = animate(mixed ? [...own('x'), ...own('y'), ...own('follow'), ...layers(id, 'x'), ...layers(id, 'y'), ...sources] : [...own('x'), ...own('y')], (t) => poseAt(entry, t).p, !mixed);
+			tr.r = animate(mixed ? [...own('rotation'), ...own('follow'), ...layers(id, 'rotation'), ...sources] : own('rotation'), (t) => [poseAt(entry, t).r], !mixed);
+			tr.s = animate(mixed ? [...own('scaleX'), ...own('scaleY'), ...layers(id, 'scaleX'), ...layers(id, 'scaleY'), ...sources] : [...own('scaleX'), ...own('scaleY')], (t) => poseAt(entry, t).s, !mixed);
 			// Lottie needs the position where the anchor is when nothing moves it.
 			if ((tr.p as LottieValue).a === 0) tr.p = { a: 0, k: poseAt(entry, 0).p.map(round) };
+		}
+		const opacitySources = motionDriverSources(timeline, id, ['opacity']);
+		if (opacitySources.length) {
+			tr.o = animate([...own('opacity'), ...opacitySources], (t) => [motionPropertyValue(timeline, id, 'opacity', t) * 100], false);
+			return tr;
 		}
 		const opacity = own('opacity');
 		const rest = entry.node.opacity ?? 1;

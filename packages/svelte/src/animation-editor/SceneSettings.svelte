@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { fitMotionSceneEdits, formatMotionNarration, parseMotionNarration, type AnimationEditorController, type MotionEdit, type MotionTrigger } from '@pixerate/editor/animation-editor';
+  import { fitMotionSceneEdits, formatMotionDrivers, formatMotionNarration, parseMotionDrivers, parseMotionNarration, type AnimationEditorController, type MotionEdit, type MotionTrigger } from '@pixerate/editor/animation-editor';
   import { animationEditorStateOf } from './createAnimationEditor.svelte.js';
 
   interface Props {
@@ -16,6 +16,7 @@
   const beat = $derived(scene.beat);
   const target = $derived(scene.target);
   const narration = $derived(formatMotionNarration(scene.narration));
+  const drivers = $derived(formatMotionDrivers(scene.drivers));
   let localError = $state<{ text: string; revision: number } | null>(null);
   let fitTo = $state('');
   const fitSeconds = $derived(fitTo || String(target ? (target[0] + target[1]) / 2 : Math.round(editor.duration / 100) / 10));
@@ -66,6 +67,15 @@
     } catch (e) {
       setLocal((e as Error).message);
     }
+  }
+  function setDrivers(text: string) {
+    if (text === drivers) return;
+    const parsed = parseMotionDrivers(text);
+    if ('error' in parsed) {
+      setLocal(parsed.error);
+      return;
+    }
+    apply({ op: 'set_drivers', drivers: parsed.drivers }, parsed.drivers.length ? 'Set drivers' : 'Clear drivers');
   }
   function setNarration(text: string) {
     if (text === narration) return;
@@ -135,6 +145,10 @@
   <label class="flex flex-col gap-0.5">
     <span class="text-muted-foreground">Narration (a word a line: start ms, then the word)</span>
     <textarea class="{input} h-20 font-mono" aria-label="Narration" placeholder={'0 Meet\n320 the\n480 badge'} disabled={editor.readOnly} value={narration} onchange={(e) => setNarration(e.currentTarget.value)}></textarea>
+  </label>
+  <label class="flex flex-col gap-0.5">
+    <span class="text-muted-foreground">Drivers (one a line: target.property &lt;- source.property * factor)</span>
+    <textarea class="{input} h-14 font-mono" aria-label="Drivers" placeholder={'back.x <- front.x * 0.5\nwheel.rotation <- wheel.x * 2.86'} disabled={editor.readOnly} value={drivers} onchange={(e) => setDrivers(e.currentTarget.value)}></textarea>
   </label>
   {#if message}
     <p class="text-red-500" role="alert" data-edit-error="">{message}</p>

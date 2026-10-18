@@ -28,6 +28,8 @@ import {
 	type MotionCommand,
 	type MotionCue,
 	type MotionDirection,
+	type MotionDriver,
+	type MotionDrivenProperty,
 	type MotionDrawOrder,
 	type MotionIrisShape,
 	type MotionRect,
@@ -147,6 +149,10 @@ export interface MotionTimeline {
 	segments: MotionSegment[];
 	/** Segments per `node\u0000property`, in start order. */
 	tracks: ReadonlyMap<string, readonly MotionSegment[]>;
+	/** The scene's drivers (properties that follow other properties). */
+	drivers?: readonly MotionDriver[];
+	/** Rest opacity per node, for drivers that read opacity. */
+	restOpacity?: ReadonlyMap<string, number>;
 }
 
 /** Where a node sits in the artwork. */
@@ -475,6 +481,56 @@ export function motionCueTime(scene: Pick<MotionScene, 'beat' | 'narration'>, cu
 	if (typeof cue.beat === 'number') return scene.beat && scene.beat.bpm > 0 ? Math.max(0, motionBeatTime(scene.beat, cue.beat)) : undefined;
 	if (typeof cue.word === 'number') return scene.narration?.words[cue.word]?.start;
 	return undefined;
+}
+
+const SCALE_LIKE = new Set<MotionProperty>(['scaleX', 'scaleY', 'opacity']);
+
+/**
+ * A node property's value at `time` with its commands, additive layers and drivers: offsets and
+ * turns from 0, scales from 1, opacity from the node's own. `raw` ignores behaviours.
+ */
+export function motionPropertyValue(timeline: MotionTimeline, node: string, property: MotionDrivenProperty, time: number, raw = false, depth = 0): number {
+	const rest = property === 'opacity' ? (timeline.restOpacity?.get(node) ?? 1) : SCALE_LIKE.has(property) ? 1 : 0;
+	const v = trackValue(timeline.tracks.get(motionTrackKey(node, property)), time, raw);
+	const base = property === 'opacity' ? (typeof v === 'number' ? v : rest) : withMotionLayers(timeline, node, property, typeof v === 'number' ? v : rest, time, raw);
+	return applyMotionDrivers(timeline, node, property, base, time, raw, depth);
+}
+
+/** `value` with the drivers of `node`'s `property` applied (a no-op without drivers). Chains of drivers are followed up to 8 deep; `check` reports cycles. */
+export function applyMotionDrivers(timeline: MotionTimeline, node: string, property: MotionDrivenProperty, value: number, time: number, raw = false, depth = 0): number {
+	if (!timeline.drivers || depth > 8) return value;
+	let v = value;
+	for (const d of timeline.drivers) {
+		if (d.target !== node || d.property !== property) continue;
+		const src = motionPropertyValue(timeline, d.source.node, d.source.property, time, raw, depth + 1);
+		const srcRest = d.source.property === 'opacity' ? (timeline.restOpacity?.get(d.source.node) ?? 1) : SCALE_LIKE.has(d.source.property) ? 1 : 0;
+		let change = (src - srcRest) * (d.factor ?? 1) + (d.offset ?? 0);
+		if (d.clamp) change = Math.min(d.clamp[1], Math.max(d.clamp[0], change));
+		v = SCALE_LIKE.has(property) ? v * (1 + change) : v + change;
+	}
+	return property === 'opacity' ? Math.min(1, Math.max(0, v)) : v;
+}
+
+/** Nodes driven by a driver (directly). */
+export function motionDrivenNodes(timeline: MotionTimeline): Set<string> {
+	return new Set((timeline.drivers ?? []).map((d) => d.target));
+}
+
+/**
+ * The segments a node's drivers depend on (its sources', followed down chains), for exporters that
+ * must sample a driven property wherever its sources change.
+ */
+export function motionDriverSources(timeline: MotionTimeline, node: string, properties: readonly MotionDrivenProperty[], seen = new Set<string>()): MotionSegment[] {
+	const out: MotionSegment[] = [];
+	for (const d of timeline.drivers ?? []) {
+		if (d.target !== node || !properties.includes(d.property)) continue;
+		const key = `${d.source.node}\u0000${d.source.property}`;
+		if (seen.has(key)) continue;
+		seen.add(key);
+		out.push(...(timeline.tracks.get(motionTrackKey(d.source.node, d.source.property)) ?? []), ...(timeline.tracks.get(`${motionTrackKey(d.source.node, d.source.property)}\u0000add`) ?? []));
+		out.push(...motionDriverSources(timeline, d.source.node, [d.source.property], seen));
+	}
+	return out;
 }
 
 /** How many times a command plays (1 for `enter`, `exit` and `wait`, which do not repeat). */
@@ -950,7 +1006,7 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 	for (const track of tracks.values()) track.sort((a, b) => a.start - b.start);
 	segments.sort((a, b) => a.start - b.start);
 	const duration = shots.length ? shots[shots.length - 1].end : 0;
-	const timeline: MotionTimeline = { duration, shots, commands, segments, tracks };
+	const timeline: MotionTimeline = { duration, shots, commands, segments, tracks, ...(scene.drivers?.length ? { drivers: scene.drivers, restOpacity: new Map([...nodes].map(([id, e]) => [id, e.node.opacity ?? 1])) } : {}) };
 	timelineCache.set(scene, timeline);
 	return timeline;
 }

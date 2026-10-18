@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { fitMotionSceneEdits, formatMotionNarration, parseMotionNarration, type AnimationEditorController, type MotionEdit, type MotionTrigger } from '@pixerate/editor/animation-editor';
+import { fitMotionSceneEdits, formatMotionDrivers, formatMotionNarration, parseMotionDrivers, parseMotionNarration, type AnimationEditorController, type MotionEdit, type MotionTrigger } from '@pixerate/editor/animation-editor';
 import { CommitInput } from './CommitInput';
 import { useAnimationEditorState } from './useAnimationEditor';
 
@@ -130,6 +130,23 @@ export function SceneSettings({ controller, className = '' }: SceneSettingsProps
             const parsed = parseMotionNarration(e.currentTarget.value);
             if ('error' in parsed) return setLocal(parsed.error);
             settings({ narration: parsed.narration }, parsed.narration ? 'Change narration' : 'Clear narration');
+          }}
+        />
+      </label>
+      <label className="flex flex-col gap-0.5">
+        <span className="text-muted-foreground">Drivers (one a line: target.property &lt;- source.property * factor)</span>
+        <textarea
+          key={formatMotionDrivers(scene.drivers)}
+          className={`${input} h-14 font-mono`}
+          aria-label="Drivers"
+          placeholder={'back.x <- front.x * 0.5\nwheel.rotation <- wheel.x * 2.86'}
+          disabled={readOnly}
+          defaultValue={formatMotionDrivers(scene.drivers)}
+          onBlur={(e) => {
+            if (e.currentTarget.value === formatMotionDrivers(scene.drivers)) return;
+            const parsed = parseMotionDrivers(e.currentTarget.value);
+            if ('error' in parsed) return setLocal(parsed.error);
+            apply({ op: 'set_drivers', drivers: parsed.drivers }, parsed.drivers.length ? 'Set drivers' : 'Clear drivers');
           }}
         />
       </label>

@@ -1,6 +1,6 @@
 import { isAnimationEasing } from '../animation/easing.js';
 import { namedWithSuggestion } from './issues.js';
-import { MOTION_COMMAND_TYPES, MOTION_DIRECTIONS, MOTION_ENTER_STYLES, MOTION_EXIT_STYLES, MOTION_REPEAT_MODES, MOTION_TRIGGERS, MOTION_BLENDS, MOTION_IRIS_SHAPES, MOTION_SPLIT_ORIENTATIONS, type MotionCommand, type MotionScene, type MotionShot } from './types.js';
+import { MOTION_COMMAND_TYPES, MOTION_DIRECTIONS, MOTION_ENTER_STYLES, MOTION_EXIT_STYLES, MOTION_REPEAT_MODES, MOTION_TRIGGERS, MOTION_DRIVEN_PROPERTIES, MOTION_BLENDS, MOTION_IRIS_SHAPES, MOTION_SPLIT_ORIENTATIONS, type MotionCommand, type MotionScene, type MotionShot } from './types.js';
 
 /**
  * Shape checking: whether a value is a well-formed scene, listing every problem at once.
@@ -16,7 +16,7 @@ export class MotionSceneFormatError extends Error {
 	}
 }
 
-const SCENE_KEYS = ['version', 'name', 'description', 'artwork', 'shots', 'clips', 'loop', 'trigger', 'fps', 'steps', 'beat', 'narration', 'target', 'controls', 'presets'];
+const SCENE_KEYS = ['version', 'name', 'description', 'artwork', 'shots', 'clips', 'drivers', 'loop', 'trigger', 'fps', 'steps', 'beat', 'narration', 'target', 'controls', 'presets'];
 const SHOT_KEYS = ['id', 'label', 'camera', 'at', 'run', 'hold', 'speed'];
 const CAMERA_KEYS = ['x', 'y', 'width', 'height', 'frame', 'padding', 'ease', 'ms', 'geometric'];
 const BASE_KEYS = ['type', 'targets', 'duration', 'delay', 'stagger', 'with', 'ease', 'note', 'repeat', 'repeatMode', 'steps'];
@@ -207,6 +207,25 @@ export function clipsShapeProblems(clips: unknown): string[] {
 	return problems;
 }
 
+/** Problems with a scene's `drivers`. */
+export function driversShapeProblems(drivers: unknown): string[] {
+	if (!Array.isArray(drivers)) return ['Scene: "drivers" must be a list of { target, property, source: { node, property }, factor?, offset?, clamp? }.'];
+	const problems: string[] = [];
+	const props = MOTION_DRIVEN_PROPERTIES as readonly unknown[];
+	drivers.forEach((d, i) => {
+		const where = `Driver ${i + 1}`;
+		if (!isObject(d)) return void problems.push(`${where} must be an object.`);
+		unknownKeys(d, ['target', 'property', 'source', 'factor', 'offset', 'clamp'], where, problems);
+		if (typeof d.target !== 'string' || !d.target) problems.push(`${where}: "target" must be the id of the node that follows.`);
+		if (!props.includes(d.property)) problems.push(`${where}: "property" must be one of ${MOTION_DRIVEN_PROPERTIES.join(', ')}.`);
+		if (!isObject(d.source) || typeof d.source.node !== 'string' || !d.source.node || !props.includes(d.source.property)) problems.push(`${where}: "source" must be { "node": id, "property": one of ${MOTION_DRIVEN_PROPERTIES.join(', ')} }.`);
+		if (d.factor !== undefined && !isNum(d.factor)) problems.push(`${where}: "factor" must be a number.`);
+		if (d.offset !== undefined && !isNum(d.offset)) problems.push(`${where}: "offset" must be a number.`);
+		if (d.clamp !== undefined && !(Array.isArray(d.clamp) && d.clamp.length === 2 && d.clamp.every(isNum) && d.clamp[0] <= d.clamp[1])) problems.push(`${where}: "clamp" must be [min, max].`);
+	});
+	return problems;
+}
+
 /** Problems with one shot's shape. */
 export function shotShapeProblems(shot: unknown, where: string): string[] {
 	if (!isObject(shot)) return [`${where} must be an object.`];
@@ -258,6 +277,7 @@ export function motionSceneShapeProblems(input: unknown): string[] {
 	if (!isObject(art) || !isNum(art.width) || !isNum(art.height) || !(art.width > 0) || !(art.height > 0) || !Array.isArray(art.nodes))
 		problems.push('Scene: "artwork" must be a vector document { width, height, nodes }.');
 	if (input.clips !== undefined) problems.push(...clipsShapeProblems(input.clips));
+	if (input.drivers !== undefined) problems.push(...driversShapeProblems(input.drivers));
 	if (input.trigger !== undefined && !(MOTION_TRIGGERS as readonly unknown[]).includes(input.trigger)) problems.push(`Scene: "trigger" must be one of ${MOTION_TRIGGERS.join(', ')}.`);
 	if (input.loop !== undefined && !['none', 'loop', 'ping-pong'].includes(input.loop as string)) problems.push('Scene: "loop" must be "none", "loop" or "ping-pong".');
 	if (input.fps !== undefined && !(isNum(input.fps) && input.fps > 0 && input.fps <= 120)) problems.push('Scene: "fps" must be a number from 1 to 120.');

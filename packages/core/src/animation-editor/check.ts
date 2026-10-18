@@ -188,6 +188,30 @@ export function checkMotionScene(scene: MotionScene): MotionIssue[] {
 		});
 	});
 
+	// Drivers: their nodes must exist, and they must not follow each other round in a loop.
+	const drivers = scene.drivers ?? [];
+	drivers.forEach((d, i) => {
+		for (const id of [d.target, d.source.node])
+			if (!nodes.has(id)) issues.push(motionIssue('unknown-target', `Driver ${i + 1} names ${namedWithSuggestion(id, [...nodes.keys()])}, which the artwork does not have.`, { ids: [id] }));
+	});
+	{
+		const key = (n: string, p: string) => `${n}.${p}`;
+		const edges = new Map<string, string[]>();
+		for (const d of drivers) edges.set(key(d.target, d.property), [...(edges.get(key(d.target, d.property)) ?? []), key(d.source.node, d.source.property)]);
+		const state = new Map<string, 1 | 2>();
+		const loop: string[] = [];
+		const visit = (k: string, trail: string[]): boolean => {
+			if (state.get(k) === 2) return false;
+			if (state.get(k) === 1) return loop.push(...trail.slice(trail.indexOf(k)), k), true;
+			state.set(k, 1);
+			for (const n of edges.get(k) ?? []) if (visit(n, [...trail, k])) return true;
+			state.set(k, 2);
+			return false;
+		};
+		for (const k of edges.keys()) if (visit(k, [])) break;
+		if (loop.length) issues.push(motionIssue('driver-cycle', `Drivers follow each other round in a loop (${loop.join(' ← ')}); remove one of them.`, { ids: [...new Set(loop.map((k) => k.split('.')[0]))] }));
+	}
+
 	// Clips: the nodes they name besides "$" must exist.
 	for (const [name, clip] of Object.entries(scene.clips ?? {}))
 		for (const command of clip.run)

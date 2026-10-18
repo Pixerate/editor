@@ -4,7 +4,7 @@ import { compileMotionScene, indexMotionNodes, motionBeatAt, motionBeatTime, mot
 import type { MotionEdit } from './edit.js';
 import { fitMotionScene, type MotionFitOptions } from './fit.js';
 import { MOTION_COMMAND_SCHEMA } from './tools.js';
-import { motionFlairPrimitive, type MotionCommand, type MotionCommandType, type MotionCue, type MotionNarration, type MotionScene } from './types.js';
+import { MOTION_DRIVEN_PROPERTIES, motionFlairPrimitive, type MotionCommand, type MotionCommandType, type MotionCue, type MotionDrivenProperty, type MotionDriver, type MotionNarration, type MotionScene } from './types.js';
 
 /**
  * Helpers for hand-editing UIs (React's and Svelte's command inspector, ease picker, cue picker,
@@ -407,4 +407,31 @@ export function parseMotionNarration(text: string): { narration: MotionNarration
 		words.push({ text: m[2], start });
 	}
 	return { narration: { words } };
+}
+
+/** Drivers as text, one a line: `dot.x <- box.x * 0.5 + 2 [-10, 10]` (factor, offset and clamp optional). */
+export function formatMotionDrivers(drivers: readonly MotionDriver[] | undefined): string {
+	return (drivers ?? [])
+		.map((d) => `${d.target}.${d.property} <- ${d.source.node}.${d.source.property}${d.factor !== undefined && d.factor !== 1 ? ` * ${d.factor}` : ''}${d.offset ? ` ${d.offset < 0 ? '-' : '+'} ${Math.abs(d.offset)}` : ''}${d.clamp ? ` [${d.clamp[0]}, ${d.clamp[1]}]` : ''}`)
+		.join('\n');
+}
+
+/** Reads drivers typed one a line (see `formatMotionDrivers`); empty text clears them. */
+export function parseMotionDrivers(text: string): { drivers: MotionDriver[] } | { error: string } {
+	const props = MOTION_DRIVEN_PROPERTIES as readonly string[];
+	const drivers: MotionDriver[] = [];
+	const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+	for (const [i, line] of lines.entries()) {
+		const m = /^([\w.-]+)\.(\w+)\s*<-\s*([\w.-]+)\.(\w+)\s*(?:\*\s*(-?[\d.]+(?:e-?\d+)?))?\s*(?:([+-])\s*([\d.]+(?:e-?\d+)?))?\s*(?:\[\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\])?$/.exec(line);
+		if (!m) return { error: `Line ${i + 1} ("${line}") should read "target.property <- source.property", optionally "* factor", "+ offset" and "[min, max]", e.g. "dot.x <- box.x * 0.5".` };
+		const [, target, property, node, sourceProperty, factor, sign, offset, min, max] = m;
+		for (const p of [property, sourceProperty]) if (!props.includes(p)) return { error: `Line ${i + 1}: "${p}" is not a property drivers use; use ${MOTION_DRIVEN_PROPERTIES.join(', ')}.` };
+		const d: MotionDriver = { target, property: property as MotionDrivenProperty, source: { node, property: sourceProperty as MotionDrivenProperty } };
+		if (factor !== undefined) d.factor = Number(factor);
+		if (offset !== undefined) d.offset = (sign === '-' ? -1 : 1) * Number(offset);
+		if (min !== undefined) d.clamp = [Number(min), Number(max)];
+		if ([d.factor, d.offset, ...(d.clamp ?? [])].some((n) => n !== undefined && !Number.isFinite(n))) return { error: `Line ${i + 1} has a number that cannot be read.` };
+		drivers.push(d);
+	}
+	return { drivers };
 }
