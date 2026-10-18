@@ -32,8 +32,10 @@ import {
   type MermaidFlowNode,
 } from "@pixerate/editor/canvas";
 import { DiagramController, FAMILY_TEMPLATES, FAMILY_TITLES, createDiagramToolProvider, familyUI, findMermaidSources, type DiagramFamily, type FieldSpec } from "@pixerate/editor/diagram";
-import { Bot, Download, GitBranch, Play, Redo2, Undo2 } from "lucide-react";
+import { Download, GitBranch, Play, Redo2, Undo2 } from "lucide-react";
 import { demoToolRegistry } from "../agentTools";
+import { AgentScriptPanel } from "./AgentScriptPanel";
+import { DIAGRAM_SCRIPTS } from "../agentScripts";
 
 const SAMPLES: Record<string, string> = {
   Flowchart: `---
@@ -220,20 +222,6 @@ const MermaidEditorPane: React.FC = () => {
     [controller, director],
   );
   const viewport = useViewport();
-  const [acting, setActing] = useState(false);
-  const agentEdit = async () => {
-    const graph = controller.getDocument().graph;
-    const from = graph.nodes.find((n) => !n.data?.synthetic)?.id;
-    if (!from) return;
-    setActing(true);
-    try {
-      const added: any = await demoToolRegistry.callTool("diagram__add_diagram_node", { label: "Follow up", from, edgeLabel: "then" });
-      const id = added.structuredContent?.node?.id;
-      if (id) await demoToolRegistry.callTool("diagram__rename_diagram_node", { id, label: "Follow up with customer" });
-    } finally {
-      setActing(false);
-    }
-  };
   useAgentToolProvider(demoToolRegistry, provider);
 
   // React Flow moves nodes while dragging; the diagram only hears about the drop.
@@ -271,6 +259,7 @@ const MermaidEditorPane: React.FC = () => {
   return (
     <div className="grid gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
       <div className="space-y-2">
+        <AgentScriptPanel scripts={DIAGRAM_SCRIPTS} hint="Plays a scripted agent turn with the diagram__* tools; the diagram's director moves its cursor to each node it adds or changes." />
         <div className="flex flex-wrap items-center gap-2" role="toolbar" aria-label="Mermaid diagram">
           <GitBranch className="w-4 h-4 text-sky-400" />
           <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 mr-1">Mermaid diagram</span>
@@ -317,9 +306,6 @@ const MermaidEditorPane: React.FC = () => {
             }}
           >
             + {familyUI(diagram.state.family)?.nodeNoun ?? "Node"}
-          </button>
-          <button type="button" className={btn} disabled={!diagram.state.editable || acting} onClick={agentEdit} title="Calls the diagram__* agent tools; a cursor acts them out">
-            <Bot className="w-3.5 h-3.5" /> Agent edit
           </button>
           <button type="button" className={btn} disabled={!diagram.state.canUndo} onClick={diagram.undo} aria-label="Undo diagram edit">
             <Undo2 className="w-3.5 h-3.5" />

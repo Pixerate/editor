@@ -26,6 +26,8 @@ import {
 } from "@pixerate/editor-react/chart";
 import { BarChart3 } from "lucide-react";
 import { demoCommandRegistry, demoToolRegistry } from "../agentTools";
+import { AgentScriptPanel } from "./AgentScriptPanel";
+import { CHART_SCRIPTS } from "../agentScripts";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -227,17 +229,6 @@ export function ChartTab() {
     }, 30);
   };
 
-  const agentDemo = () => {
-    const spec = controller.getSpec();
-    const first = spec.series.find((s) => !s.hidden && s.axis !== "secondary");
-    if (!first) return;
-    void director.perform({ id: "agent", name: "Agent" }, [
-      { kind: "say", text: "Checking the data…" },
-      ...first.values.slice(0, 3).map((v, index) => ({ kind: "setValue" as const, seriesId: first.id, index, value: Math.round((v ?? 0) * 1.15), note: index === 0 ? "Adding 15%" : undefined })),
-      { kind: "update" as const, patch: { title: `${spec.title || "Chart"} (+15%)` } },
-    ]);
-  };
-
   const button = "px-2.5 py-1 rounded-md text-xs border border-slate-700 bg-slate-800/60 text-slate-200 hover:bg-slate-700";
   return (
     <section className="space-y-4">
@@ -254,9 +245,6 @@ export function ChartTab() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
-          <button type="button" className={button} onClick={agentDemo}>
-            Agent demo
-          </button>
           <button type="button" className={button} onClick={copySvg}>
             {copied ? "Copied!" : "Copy SVG"}
           </button>
@@ -265,6 +253,7 @@ export function ChartTab() {
           </button>
         </div>
       </div>
+      <AgentScriptPanel scripts={CHART_SCRIPTS} hint="Plays a scripted agent turn with the chart__* tools. Value changes go through the chart's director, so its cursor drags each bar into place." />
       <div className="flex flex-wrap gap-1.5">
         {Object.keys(SAMPLES).map((name) => (
           <button key={name} type="button" className={button} onClick={() => controller.load(SAMPLES[name], { clearHistory: true })}>

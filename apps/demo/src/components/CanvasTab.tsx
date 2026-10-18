@@ -81,6 +81,8 @@ import { TokensDemo } from "./TokensDemo";
 import { ShapeOpsDemo } from "./ShapeOpsDemo";
 import { AnimationDemo } from "./AnimationDemo";
 import { ComponentsDemo } from "./ComponentsDemo";
+import { AgentScriptPanel } from "./AgentScriptPanel";
+import { CANVAS_SCRIPTS } from "../agentScripts";
 
 type BoxData = { label: string; color: string; locked?: boolean; shape?: any };
 type BoxNode = Node<BoxData, string>;
@@ -402,12 +404,14 @@ const CanvasDemo: React.FC = () => {
   }, [arrange, flow]);
   useAgentToolProvider(demoToolRegistry, provider);
 
+  const agentStage = useRef<HTMLDivElement>(null);
   const btn =
     "p-2 rounded hover:bg-slate-800 transition-colors text-slate-300 disabled:opacity-40 disabled:hover:bg-transparent";
   const needs = (min: number) => selectedCount < min;
 
   return (
     <div className="space-y-3">
+      <AgentScriptPanel scripts={CANVAS_SCRIPTS} stage={agentStage} hint="Plays a scripted agent turn with the canvas__* tools: list_nodes returns the ids that align_nodes takes." />
       <div
         className="bg-slate-900/80 border border-slate-800 rounded-xl p-2 flex flex-wrap items-center gap-1 shadow-md"
         role="toolbar"
@@ -587,7 +591,7 @@ const CanvasDemo: React.FC = () => {
         </button>
       </div>
 
-      <div className="h-[520px] rounded-xl overflow-hidden border border-slate-800 bg-slate-950 relative" data-testid="canvas-pane">
+      <div className="h-[520px] rounded-xl overflow-hidden border border-slate-800 bg-slate-950 relative" data-testid="canvas-pane" ref={agentStage}>
         <ReactFlow
           nodes={nodes}
           edges={edges}

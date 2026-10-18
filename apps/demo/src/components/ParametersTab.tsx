@@ -13,6 +13,8 @@ import {
 import { ParametersPanel, useParameterCommands, useParameters, useParametersController } from "@pixerate/editor-react/parameters";
 import { Pause, Play, SlidersHorizontal } from "lucide-react";
 import { demoCommandRegistry } from "../agentTools";
+import { AgentScriptPanel } from "./AgentScriptPanel";
+import { PARAMETER_SCRIPTS } from "../agentScripts";
 
 /** Small inline SVG backdrops, so the image picker works offline. */
 const backdrop = (from: string, to: string) =>
@@ -167,6 +169,7 @@ export function ParametersTab() {
   const controller = useParametersController({ schema: SCHEMA, keyframes });
   const { state } = useParameters(controller);
   useParameterCommands(demoCommandRegistry, controller, { group: "Parameters" });
+  const agentStage = useRef<HTMLDivElement>(null);
 
   const [playing, setPlaying] = useState(false);
   const seek = (time: number) => {
@@ -210,7 +213,8 @@ export function ParametersTab() {
         </p>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
+      <AgentScriptPanel scripts={PARAMETER_SCRIPTS} stage={agentStage} hint="Plays a scripted agent turn through commands__run_command with the parameters.* commands; each set is validated against the schema and is one undo step." />
+      <div className="relative grid gap-4 lg:grid-cols-[1fr_340px]" ref={agentStage}>
         <div className="space-y-3">
           <GlowPreview values={state.values} time={state.time} />
           <div className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-900 px-3 py-2" role="group" aria-label="Timeline">
