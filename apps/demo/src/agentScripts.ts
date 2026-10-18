@@ -405,3 +405,67 @@ export const PARAMETER_SCRIPTS: AgentScript[] = [
     ],
   },
 ];
+
+/** The timeline block of a clip, for the agent's cursor. */
+const clipTarget = (id: string) => ({ selector: `[data-clip="${id}"]` });
+
+export const VIDEO_SCRIPTS: AgentScript[] = [
+  {
+    id: "video-tighten",
+    prompt: "Cut the ocean shot to 2 seconds and add an end card",
+    steps: [
+      { say: "Reading the project: tracks, clips and their times.", tool: "video__get_video_project", args: {} },
+      {
+        say: "Splitting the ocean shot 2 seconds in…",
+        tool: "video__split_video_clip",
+        args: { clip: "shot-2", at: 6000 },
+        as: "split",
+        target: clipTarget("shot-2"),
+      },
+      {
+        say: "…and ripple deleting the rest, so the forest shot moves up and keeps its dip.",
+        tool: "video__delete_video_clips",
+        args: (ctx) => ({ clips: [ctx.results.split.right.id], ripple: true }),
+        target: (stage, ctx) => stage.querySelector(`[data-clip="${ctx.results.split.right.id}"]`),
+      },
+      { say: "The Forest marker is now 2 seconds late; moving it to the new cut.", tool: "video__remove_video_marker", args: { marker: "m-forest" } },
+      { tool: "video__add_video_marker", args: { time: 6000, label: "Forest" } },
+      {
+        say: "Ending the music with the picture (its fade out stays).",
+        tool: "video__trim_video_clip",
+        args: { clip: "score", edge: "end", to: 10000 },
+        target: clipTarget("score"),
+      },
+      {
+        say: "An end card over the last two seconds.",
+        tool: "video__add_video_clip",
+        args: { track: "titles", clip: { type: "text", id: "end-card", text: "Thanks for watching", start: 8000, duration: 2000, fontSize: 64, background: "#0f172acc", fadeIn: 400 } },
+      },
+      { say: "Checking for problems.", tool: "video__check_video_project", args: {} },
+      { say: "Playing it from just before the new cut.", tool: "video__seek_video", args: { time: 5000, play: true }, target: clipTarget("end-card") },
+    ],
+  },
+  {
+    id: "video-vertical",
+    prompt: "Make a vertical 9:16 version for social",
+    steps: [
+      { say: "Reading the project first.", tool: "video__get_video_project", args: {} },
+      { say: "Switching the frame to 1080 × 1920.", tool: "video__set_video_settings", args: { width: 1080, height: 1920, name: "Pixerate reel (vertical)" } },
+      {
+        say: "Filling the tall frame: the shots crop to cover it, and the titles get bigger and move up out of the way, as one undo step.",
+        tool: "video__edit_video",
+        args: {
+          ops: [
+            { op: "update_clip", clip: "shot-1", set: { fit: "cover" } },
+            { op: "update_clip", clip: "shot-2", set: { fit: "cover" } },
+            { op: "update_clip", clip: "shot-3", set: { fit: "cover" } },
+            { op: "update_clip", clip: "title", set: { fontSize: 88 } },
+            { op: "update_clip", clip: "lower-third", set: { fontSize: 44, transform: { y: 600 } } },
+          ],
+        },
+      },
+      { say: "Rendering three moments to check the framing.", tool: "video__render_video_frame", args: { times: [1000, 5000, 9000], columns: 3 } },
+      { say: "Playing it from the start.", tool: "video__seek_video", args: { time: 0, play: true } },
+    ],
+  },
+];
