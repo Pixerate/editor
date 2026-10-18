@@ -6,7 +6,7 @@ import type { VectorNode } from '../vector/types.js';
 import { compileMotionScene, indexMotionNodes, motionRevealPadding, motionTrackKey, trackValue, type MotionTimeline } from './compile.js';
 import { motionFrameAt } from './evaluate.js';
 import { motionIssue, namedWithSuggestion, type MotionIssue } from './issues.js';
-import type { MotionCommand, MotionScene } from './types.js';
+import { MOTION_CLIP_TARGET, type MotionCommand, type MotionScene } from './types.js';
 
 /** Changes shorter than this (ms) are too quick to follow. */
 export const MOTION_MIN_CHANGE_MS = 120;
@@ -104,6 +104,8 @@ export function checkMotionScene(scene: MotionScene): MotionIssue[] {
 			if (command.type === 'follow' && known(command.path, 'unknown-path', 'path', where) && nodes.get(command.path)!.node.type !== 'path')
 				issues.push(motionIssue('not-a-path', `"${command.path}" is a group; follow a single path node.`, { ...where, ids: [command.path] }));
 			if (command.type === 'morph') known(command.into, 'unknown-shape', 'shape', where);
+			if (command.type === 'play' && !scene.clips?.[command.clip])
+				issues.push(motionIssue('unknown-clip', `There is no clip ${namedWithSuggestion(command.clip, Object.keys(scene.clips ?? {}))}; define it with set_animation_clip.`, where));
 			if (command.type === 'match' && known(command.into, 'unknown-shape', 'group', where)) {
 				const into = nodes.get(command.into)!;
 				for (const id of targets) {
@@ -176,6 +178,13 @@ export function checkMotionScene(scene: MotionScene): MotionIssue[] {
 			}
 		});
 	});
+
+	// Clips: the nodes they name besides "$" must exist.
+	for (const [name, clip] of Object.entries(scene.clips ?? {}))
+		for (const command of clip.run)
+			if (command.type !== 'wait')
+				for (const id of command.targets)
+					if (id !== MOTION_CLIP_TARGET && !nodes.has(id)) issues.push(motionIssue('unknown-target', `Clip "${name}" names ${namedWithSuggestion(id, [...nodes.keys()])}, which the artwork does not have; use "$" for the node the clip is played on.`, { ids: [id] }));
 
 	// Triggers: what Flair's player does with a scene played in answer to the viewer.
 	if (scene.trigger) {

@@ -16,7 +16,7 @@ export class MotionSceneFormatError extends Error {
 	}
 }
 
-const SCENE_KEYS = ['version', 'name', 'description', 'artwork', 'shots', 'loop', 'trigger', 'fps', 'steps', 'beat', 'narration', 'target', 'controls', 'presets'];
+const SCENE_KEYS = ['version', 'name', 'description', 'artwork', 'shots', 'clips', 'loop', 'trigger', 'fps', 'steps', 'beat', 'narration', 'target', 'controls', 'presets'];
 const SHOT_KEYS = ['id', 'label', 'camera', 'at', 'run', 'hold', 'speed'];
 const CAMERA_KEYS = ['x', 'y', 'width', 'height', 'frame', 'padding', 'ease', 'ms', 'geometric'];
 const BASE_KEYS = ['type', 'targets', 'duration', 'delay', 'stagger', 'with', 'ease', 'note', 'repeat', 'repeatMode', 'steps'];
@@ -31,6 +31,7 @@ const COMMAND_KEYS: Record<string, string[]> = {
 	style: [...BASE_KEYS, 'fill', 'stroke', 'strokeWidth'],
 	morph: [...BASE_KEYS, 'into'],
 	match: [...BASE_KEYS, 'into'],
+	play: ['type', 'targets', 'delay', 'stagger', 'with', 'note', 'clip', 'speed'],
 	follow: [...BASE_KEYS, 'path', 'rotate', 'from', 'to'],
 	pulse: [...BASE_KEYS, 'amount', 'count', 'blend'],
 	shake: [...BASE_KEYS, 'amount', 'count', 'axis', 'blend'],
@@ -132,6 +133,10 @@ export function commandShapeProblems(command: unknown, where: string): string[] 
 			if (command.stroke !== undefined && typeof command.stroke !== 'string') p(`"stroke" must be a CSS colour.`);
 			if (command.strokeWidth !== undefined && !(isNum(command.strokeWidth) && command.strokeWidth >= 0)) p(`"strokeWidth" must be a number ≥ 0.`);
 			break;
+		case 'play':
+			if (typeof command.clip !== 'string' || !command.clip) p(`"clip" must be the name of one of the scene's clips.`);
+			if (command.speed !== undefined && !(isNum(command.speed) && command.speed >= 0.05 && command.speed <= 20)) p(`"speed" must be a number from 0.05 to 20 (2 plays the clip twice as fast).`);
+			break;
 		case 'morph':
 		case 'match':
 			if (typeof command.into !== 'string' || !command.into) p(`"into" must be the id of a ${type === 'match' ? 'group to become' : 'node whose shape to take'}.`);
@@ -166,6 +171,27 @@ export function commandShapeProblems(command: unknown, where: string): string[] 
 			if (typeof command.param !== 'string' || !command.param) p(`"param" must name a numeric parameter of the effect.`);
 			if (!isNum(command.to)) p(`"to" must be a number.`);
 			break;
+	}
+	return problems;
+}
+
+/** Problems with a scene's `clips`: names, and each clip's commands (which may target `"$"` but not play clips). */
+export function clipsShapeProblems(clips: unknown): string[] {
+	if (!isObject(clips)) return ['Scene: "clips" must be an object of named clips { "pop": { "run": [ … ] } }.'];
+	const problems: string[] = [];
+	for (const [name, clip] of Object.entries(clips)) {
+		const where = `Clip "${name}"`;
+		if (!/^[A-Za-z_][\w-]*$/.test(name)) problems.push(`${where}: a clip name is letters, digits, "_" or "-" (e.g. "pop-in").`);
+		if (!isObject(clip) || !Array.isArray(clip.run)) {
+			problems.push(`${where} must be { "description"?, "run": [commands] }.`);
+			continue;
+		}
+		unknownKeys(clip, ['description', 'run'], where, problems);
+		if (clip.description !== undefined && typeof clip.description !== 'string') problems.push(`${where}: "description" must be a string.`);
+		clip.run.forEach((command, i) => {
+			if (isObject(command) && command.type === 'play') problems.push(`${where}, command ${i + 1}: a clip cannot play another clip; copy its commands in instead.`);
+			else problems.push(...commandShapeProblems(command, `${where}, command ${i + 1}`));
+		});
 	}
 	return problems;
 }
@@ -220,6 +246,7 @@ export function motionSceneShapeProblems(input: unknown): string[] {
 	const art = input.artwork;
 	if (!isObject(art) || !isNum(art.width) || !isNum(art.height) || !(art.width > 0) || !(art.height > 0) || !Array.isArray(art.nodes))
 		problems.push('Scene: "artwork" must be a vector document { width, height, nodes }.');
+	if (input.clips !== undefined) problems.push(...clipsShapeProblems(input.clips));
 	if (input.trigger !== undefined && !(MOTION_TRIGGERS as readonly unknown[]).includes(input.trigger)) problems.push(`Scene: "trigger" must be one of ${MOTION_TRIGGERS.join(', ')}.`);
 	if (input.loop !== undefined && !['none', 'loop', 'ping-pong'].includes(input.loop as string)) problems.push('Scene: "loop" must be "none", "loop" or "ping-pong".');
 	if (input.fps !== undefined && !(isNum(input.fps) && input.fps > 0 && input.fps <= 120)) problems.push('Scene: "fps" must be a number from 1 to 120.');
