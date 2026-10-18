@@ -8,7 +8,7 @@ import { fromFlairSvgMotion, fromFlairVectorEffect, type FlairImportResult } fro
 import type { AnimationEditorController } from './controller.js';
 import { MOTION_EDIT_OPS, type MotionEdit, type MotionEditResult } from './edit.js';
 import { motionIssueLine, type MotionIssue } from './issues.js';
-import { MOTION_COMMAND_TYPES, MOTION_DIRECTIONS, MOTION_ENTER_STYLES, MOTION_EXIT_STYLES, MOTION_IRIS_SHAPES, MOTION_REPEAT_MODES, MOTION_SPLIT_ORIENTATIONS, motionFlairPrimitive, type MotionScene } from './types.js';
+import { MOTION_COMMAND_TYPES, MOTION_DIRECTIONS, MOTION_ENTER_STYLES, MOTION_EXIT_STYLES, MOTION_IRIS_SHAPES, MOTION_REPEAT_MODES, MOTION_BLENDS, MOTION_SPLIT_ORIENTATIONS, motionFlairPrimitive, type MotionScene } from './types.js';
 
 export interface AnimationEditorToolProviderOptions {
 	/** Provider id (unique per registry). Default `animation`. */
@@ -78,6 +78,11 @@ const BASE: Record<string, JsonSchema> = {
 	repeatMode: { type: 'string', enum: [...MOTION_REPEAT_MODES], description: 'loop (default) restarts each cycle, mirror plays every other one backwards, offset carries on from where the last ended (rotate by 90 with repeat 4 makes a full turn).' },
 	steps: { type: 'number', exclusiveMinimum: 0, maximum: 120, description: 'Stepped time: hold on a grid of this many frames per second (12 = "on twos"). Default: the scene\'s steps, else smooth.' }
 };
+const BLEND = (fallback: 'replace' | 'add'): JsonSchema => ({
+	type: 'string',
+	enum: [...MOTION_BLENDS],
+	description: `"add" makes it a layer over the pose that stacks with other changes (a shake on a slide); "replace" makes it a change the next one takes over from (default ${fallback}).`
+});
 const command = (type: string, description: string, extra: Record<string, JsonSchema> = {}, required: string[] = []): JsonSchema =>
 	object({ type: { const: type, description }, ...BASE, ...extra }, ['type', 'targets', ...required], description);
 
@@ -104,9 +109,9 @@ export const MOTION_COMMAND_SCHEMA: JsonSchema = {
 			distance: { type: 'number', description: 'For slide: document units (default 40).' }
 		}),
 		command('draw', 'Draws strokes on (or off) to a fraction of their length.', { to: FRACTION('Fraction drawn at the end (default 1).'), from: FRACTION('Fraction drawn at the start (default: what is drawn now).') }),
-		command('move', 'Moves targets by an offset or so their centre lands on a point.', { by: POINT('Offset in document units.'), to: POINT('Point (document coordinates) for the centre.') }),
-		command('rotate', 'Turns targets about their centre (degrees, clockwise).', { by: { type: 'number', description: 'Degrees to turn by.' }, to: { type: 'number', description: 'Angle to turn to, in degrees from rest.' } }),
-		command('scale', 'Scales targets about their centre (1 = rest size).', { to: { description: 'A factor, or { x, y } factors.', anyOf: [{ type: 'number' }, POINT('Factors per axis.')] }, geometric: { type: 'boolean', description: 'Grow by a steady factor, which reads as an even zoom (default false).' } }, ['to']),
+		command('move', 'Moves targets by an offset or so their centre lands on a point.', { blend: BLEND('replace'), by: POINT('Offset in document units.'), to: POINT('Point (document coordinates) for the centre.') }),
+		command('rotate', 'Turns targets about their centre (degrees, clockwise).', { blend: BLEND('replace'), by: { type: 'number', description: 'Degrees to turn by.' }, to: { type: 'number', description: 'Angle to turn to, in degrees from rest.' } }),
+		command('scale', 'Scales targets about their centre (1 = rest size).', { blend: BLEND('replace'), to: { description: 'A factor, or { x, y } factors.', anyOf: [{ type: 'number' }, POINT('Factors per axis.')] }, geometric: { type: 'boolean', description: 'Grow by a steady factor, which reads as an even zoom (default false).' } }, ['to']),
 		command('fade', 'Changes opacity.', { to: FRACTION('Opacity at the end (0–1).') }, ['to']),
 		command('style', 'Blends solid fill / stroke colours (in OKLab) and stroke width. On a group it changes every path in it.', {
 			fill: { type: 'string', description: 'CSS colour (hex, rgb(), rgba()).' },
@@ -120,15 +125,15 @@ export const MOTION_COMMAND_SCHEMA: JsonSchema = {
 			from: FRACTION('Where to start along the path (default 0).'),
 			to: FRACTION('Where to end along the path (default 1).')
 		}, ['path']),
-		command('pulse', 'Scales up and back to draw the eye.', { amount: { type: 'number', description: 'Extra scale at the peak (default 0.15).' }, count: { type: 'integer', minimum: 1, description: 'Pulses (default 1).' } }),
-		command('shake', 'Shakes side to side (or up and down), settling.', {
+		command('pulse', 'Scales up and back to draw the eye.', { blend: BLEND('add'), amount: { type: 'number', description: 'Extra scale at the peak (default 0.15).' }, count: { type: 'integer', minimum: 1, description: 'Pulses (default 1).' } }),
+		command('shake', 'Shakes side to side (or up and down), settling.', { blend: BLEND('add'),
 			amount: { type: 'number', description: 'Document units (default 8).' },
 			count: { type: 'integer', minimum: 1, description: 'Shakes (default 3).' },
 			axis: { type: 'string', enum: ['horizontal', 'vertical'], description: 'Default horizontal.' }
 		}),
-		command('teeter', 'Rocks about the centre either way, settling.', { angle: { type: 'number', description: 'Degrees either way (default 8).' }, count: { type: 'integer', minimum: 1, description: 'Rocks (default 3).' } }),
-		command('wave', 'Bobs up and down without settling, like something floating (default 1000 ms).', { amount: { type: 'number', description: 'Height in document units (default 6).' }, count: { type: 'integer', minimum: 1, description: 'Bobs (default 2).' } }),
-		command('wiggle', 'Wanders about its place as smooth seeded noise, easing out of and back to rest (default 1500 ms). The same seed always wanders the same way.', {
+		command('teeter', 'Rocks about the centre either way, settling.', { blend: BLEND('add'), angle: { type: 'number', description: 'Degrees either way (default 8).' }, count: { type: 'integer', minimum: 1, description: 'Rocks (default 3).' } }),
+		command('wave', 'Bobs up and down without settling, like something floating (default 1000 ms).', { blend: BLEND('add'), amount: { type: 'number', description: 'Height in document units (default 6).' }, count: { type: 'integer', minimum: 1, description: 'Bobs (default 2).' } }),
+		command('wiggle', 'Wanders about its place as smooth seeded noise, easing out of and back to rest (default 1500 ms). The same seed always wanders the same way.', { blend: BLEND('add'),
 			amount: { type: 'number', description: 'Up to about this far, in document units (default 6).' },
 			frequency: { type: 'number', exclusiveMinimum: 0, description: 'Wanders per second, in Hz (default 3).' },
 			octaves: { type: 'integer', minimum: 1, maximum: 8, description: 'Layers of finer detail (default 2).' },

@@ -165,6 +165,8 @@ export function checkMotionScene(scene: MotionScene): MotionIssue[] {
 
 	// Two segments changing the same property of a node at the same time.
 	for (const [key, track] of timeline.tracks) {
+		// Additive layers stack by design.
+		if (key.endsWith('\u0000add')) continue;
 		for (let i = 1; i < track.length; i++) {
 			const a = track[i - 1];
 			const b = track[i];
