@@ -21,6 +21,24 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [svelte] A Local Named `state` Breaks `$state` Runes in the Same Component
+
+- **Issue / Symptom**: `svelte-check` reports "Cannot use 'state' as a store. 'state' needs to be an object with a subscribe method" on every `$state(...)` call in a component, although the runes work at runtime and in tests.
+- **Root Cause**: In a component with a top-level variable `state`, Svelte reads `$state` as a store auto-subscription to that variable instead of as the rune.
+- **Solution / Workaround**: Don't name a component-level variable `state` in a component that uses `$state`. The animation-editor panels call the controller snapshot `editor` (`const editor = $derived(view.current)`). Older components that never use the rune, such as `ShotTimeline.svelte`, can keep `state`.
+
+### [react|svelte/animation-editor] A Panel's Own Error Hides the Controller's Newer One
+
+- **Issue / Symptom**: A panel showed "Effect needs a target…" (its own validation message) after a later edit was refused by the controller, so the newer, real reason never appeared.
+- **Root Cause**: The panels show `localError ?? state.error`. A local message set before the refusal is never cleared, so it keeps winning.
+- **Solution / Workaround**: Store the local message with the controller's `revision` at the time and show it only while `state.revision` is unchanged. Any change to the editor, including a refusal (which bumps the revision), hands the line back to `state.error`.
+
+### [core/animation-editor] Flair Catalog Presets Hold Colours as `[r, g, b]` Arrays
+
+- **Issue / Symptom**: Scenes imported from real Flair catalog effects (`checkbox`, `bookmark`…) had presets whose values were arrays like `[0.13, 0.7, 0.4]`, although `MotionPreset.values` expects colour strings.
+- **Root Cause**: Flair's `EffectPreset.values` are `ControlValue`s. For colour controls these are channel arrays from 0 to 1, which Flair turns into hex with `rgbToHex`. The editor's mirror type assumed hex strings.
+- **Solution / Workaround**: `fromFlairVectorEffect` converts arrays the same way Flair does: each channel is clamped to 0–1, multiplied by 255, rounded and written as hex. `FlairVectorEffect.presets` now types both forms.
+
 ### [core/agent-caret] Typing an Agent Edit Out Frame by Frame Breaks Undo Unless the Frames Stay Out of History
 
 - **Issue / Symptom**: Dispatching an agent's text a few characters at a time left one undo step per frame, or merged the frames with whatever the user typed in the same half-second.

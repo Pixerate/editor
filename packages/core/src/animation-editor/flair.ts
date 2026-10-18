@@ -92,7 +92,8 @@ export interface FlairVectorEffect {
 	category: string;
 	tags: string[];
 	motion: FlairSvgMotion;
-	presets?: { name: string; values: Record<string, string> }[];
+	/** Values are `#rrggbb` strings, or `[r, g, b]` channels from 0 to 1 (Flair's catalog writes both); imports turn them into hex. */
+	presets?: { name: string; values: Record<string, string | readonly number[]> }[];
 	/** Ms on the last frame before looping. */
 	hold?: number;
 	trigger?: 'hover' | 'press' | 'click' | 'scroll';

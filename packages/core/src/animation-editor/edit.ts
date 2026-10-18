@@ -19,6 +19,7 @@ export type MotionEdit =
 	| { op: 'add_commands'; shot: string; commands: MotionCommand[]; at?: number }
 	| { op: 'update_command'; shot: string; command: number; set?: Record<string, unknown>; remove?: string[] }
 	| { op: 'delete_commands'; shot: string; commands: number[] }
+	| { op: 'move_command'; shot: string; command: number; to: number }
 	| { op: 'set_artwork'; artwork: VectorDocument }
 	| { op: 'set_controls'; controls: MotionControl[]; presets?: MotionPreset[] }
 	| { op: 'replace_scene'; scene: MotionScene };
@@ -34,6 +35,7 @@ export const MOTION_EDIT_OPS: readonly MotionEditOp[] = [
 	'add_commands',
 	'update_command',
 	'delete_commands',
+	'move_command',
 	'set_artwork',
 	'set_controls',
 	'replace_scene'
@@ -174,6 +176,16 @@ function applyOne(scene: MotionScene, edit: MotionEdit): MotionScene {
 				if (!Number.isInteger(k) || k < 0 || k >= run.length) fail(`Shot "${edit.shot}" has no command ${k}; indexes run from 0 to ${run.length - 1}.`);
 			const drop = new Set(edit.commands);
 			return replaceShot(scene, i, { ...scene.shots[i], run: run.filter((_, k) => !drop.has(k)) });
+		}
+		case 'move_command': {
+			const i = shotIndex(scene, edit.shot);
+			const run = [...scene.shots[i].run];
+			if (!Number.isInteger(edit.command) || edit.command < 0 || edit.command >= run.length)
+				fail(`Shot "${edit.shot}" has ${run.length} command${run.length === 1 ? '' : 's'}; "command" must be an index from 0 to ${run.length - 1} (got ${edit.command}).`);
+			const to = position(edit.to, run.length - 1, '"to"');
+			const [moved] = run.splice(edit.command, 1);
+			run.splice(to, 0, moved);
+			return replaceShot(scene, i, { ...scene.shots[i], run });
 		}
 		case 'set_artwork':
 			return { ...scene, artwork: edit.artwork };

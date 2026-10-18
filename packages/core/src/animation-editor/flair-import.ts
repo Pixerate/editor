@@ -240,12 +240,25 @@ export function fromFlairSvgMotion(input: FlairSvgMotion, options: FlairImportOp
 	return { scene, notes: [...new Set(notes)], issues: checkMotionScene(scene) };
 }
 
+/** A preset colour as `#rrggbb`: Flair writes them as hex strings or as `[r, g, b]` arrays of 0–1 channels (as its `rgbToHex` reads them). */
+function presetColor(value: unknown): string | undefined {
+	if (typeof value === 'string') return /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : value;
+	if (Array.isArray(value) && value.length >= 3 && value.slice(0, 3).every((n) => typeof n === 'number' && Number.isFinite(n)))
+		return `#${value
+			.slice(0, 3)
+			.map((n: number) => Math.round(Math.min(1, Math.max(0, n)) * 255).toString(16).padStart(2, '0'))
+			.join('')}`;
+	return undefined;
+}
+
 /** A Flair catalog `VectorEffect` as a scene: its motion, name, description, colour controls and presets. */
 export function fromFlairVectorEffect(effect: FlairVectorEffect, options: FlairImportOptions = {}): FlairImportResult {
 	if (!effect || effect.kind !== 'vector' || !effect.motion) throw new Error('Give a Flair vector effect: { kind: "vector", id, name, motion: { svg, animate } }.');
 	const result = fromFlairSvgMotion(effect.motion, { name: options.name ?? effect.id ?? effect.name, hold: options.hold ?? effect.hold });
 	const names = new Set((result.scene.controls ?? []).map((c) => c.name));
-	const presets = (effect.presets ?? []).map((p) => ({ name: p.name, values: Object.fromEntries(Object.entries(p.values).filter(([k]) => names.has(k))) })).filter((p) => Object.keys(p.values).length);
+	const presets = (effect.presets ?? [])
+		.map((p) => ({ name: p.name, values: Object.fromEntries(Object.entries(p.values).flatMap(([k, v]) => (names.has(k) && presetColor(v) ? [[k, presetColor(v)!]] : []))) }))
+		.filter((p) => Object.keys(p.values).length);
 	const scene: MotionScene = { ...result.scene, ...(effect.description ? { description: effect.description } : {}), ...(presets.length ? { presets } : {}) };
 	const notes = [...result.notes];
 	if (effect.trigger) notes.push(`The effect plays on ${effect.trigger}; scenes play through, so the trigger is not kept (pass it back to toFlairVectorEffect).`);

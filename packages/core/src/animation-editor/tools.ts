@@ -230,6 +230,7 @@ const EDIT_OP: JsonSchema = {
 		object({ op: { const: 'move_shot', description: 'Like move_shot.' }, shot: SHOT_ID, to: { type: 'integer', minimum: 0, description: 'New position (0 = first).' } }, ['op', 'shot', 'to']),
 		object({ op: { const: 'add_commands', description: 'Like add_commands.' }, shot: SHOT_ID, commands: { type: 'array', items: MOTION_COMMAND_SCHEMA, minItems: 1, description: 'Commands to add.' }, at: { type: 'integer', minimum: 0, description: 'Index in the shot\'s run (default: the end).' } }, ['op', 'shot', 'commands']),
 		object({ op: { const: 'update_command', description: 'Like update_command.' }, shot: SHOT_ID, command: { type: 'integer', minimum: 0, description: 'Index in the shot\'s run.' }, set: { type: 'object', description: 'Command fields to replace.' }, remove: { type: 'array', items: { type: 'string' }, description: 'Command fields to clear.' } }, ['op', 'shot', 'command']),
+		object({ op: { const: 'move_command', description: 'Like move_command.' }, shot: SHOT_ID, command: { type: 'integer', minimum: 0, description: 'Index in the shot\'s run.' }, to: { type: 'integer', minimum: 0, description: 'New index in the run (0 = first).' } }, ['op', 'shot', 'command', 'to']),
 		object({ op: { const: 'delete_commands', description: 'Like delete_commands.' }, shot: SHOT_ID, commands: { type: 'array', items: { type: 'integer', minimum: 0 }, minItems: 1, description: 'Indexes in the shot\'s run.' } }, ['op', 'shot', 'commands']),
 		object({ op: { const: 'set_controls', description: 'Like set_controls.' }, controls: { type: 'array', items: CONTROL, description: 'Controls (empty clears).' }, presets: { type: 'array', items: PRESET, description: 'Presets (empty clears).' } }, ['op', 'controls'])
 	]
@@ -705,6 +706,24 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 		handler: ({ shot, commands }) => apply({ op: 'delete_commands', shot, commands }, 'Delete commands')
 	};
 
+	const moveCommand: AgentTool = {
+		name: 'move_command',
+		title: 'Reorder a command',
+		description:
+			'Moves one command to a new index in its shot\'s run (0 = first), as one undo step; the others close up around it. A command with "with": "previous" then starts with its new neighbour. Returns the command\'s new index, its old one and the shot\'s timing.',
+		inputSchema: object(
+			{
+				shot: SHOT_ID,
+				command: { type: 'integer', minimum: 0, description: 'Index of the command in the shot\'s run (from get_animation).' },
+				to: { type: 'integer', minimum: 0, description: 'Its new index, 0 = first (at most the last index).' }
+			},
+			['shot', 'command', 'to']
+		),
+		annotations: { title: 'Reorder a command', ...WRITE },
+		handler: ({ shot, command, to }) =>
+			apply({ op: 'move_command', shot, command, to }, 'Move command', (s) => ({ shot, command: to, from: command, commands: describeMotionShots(s).find((x) => x.id === shot)!.commands.map((c) => ({ index: c.index, type: c.type, start: c.start, end: c.end })) }))
+	};
+
 	const setSettings: AgentTool = {
 		name: 'set_animation_settings',
 		title: 'Change animation settings',
@@ -797,7 +816,7 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 	};
 
 	const reads = [getAnimation, getShot, findElements, getMotionPath, getTimingGrid, checkAnimation, renderFrame, exportFlairMotion, exportFlairEffect, exportLottie, seekAnimation];
-	const writes = [setArtworkSvg, fitAnimation, importFlairEffect, insertShots, updateShot, deleteShots, moveShot, addCommands, updateCommand, deleteCommands, setSettings, setControls, editAnimation, writeAnimation, undo, redo];
+	const writes = [setArtworkSvg, fitAnimation, importFlairEffect, insertShots, updateShot, deleteShots, moveShot, addCommands, updateCommand, deleteCommands, moveCommand, setSettings, setControls, editAnimation, writeAnimation, undo, redo];
 
 	return {
 		id: options.id ?? 'animation',
