@@ -49,6 +49,11 @@
       "import": "./dist/animation/index.js",
       "require": "./dist/animation/index.cjs"
     },
+    "./animation-editor": {
+      "types": "./dist/animation-editor/index.d.ts",
+      "import": "./dist/animation-editor/index.js",
+      "require": "./dist/animation-editor/index.cjs"
+    },
     "./canvas": {
       "types": "./dist/canvas/index.d.ts",
       "import": "./dist/canvas/index.js",

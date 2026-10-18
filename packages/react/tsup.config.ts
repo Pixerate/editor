@@ -12,6 +12,7 @@ export default defineConfig({
     "tokens/index": "src/tokens/index.ts",
     "parameters/index": "src/parameters/index.ts",
     "vector/index": "src/vector/index.ts",
+    "animation-editor/index": "src/animation-editor/index.ts",
     "chart/index": "src/chart/index.ts"
   },
   format: ["esm", "cjs"],

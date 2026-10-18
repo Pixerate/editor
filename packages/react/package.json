@@ -64,6 +64,11 @@
       "import": "./dist/vector/index.js",
       "require": "./dist/vector/index.cjs"
     },
+    "./animation-editor": {
+      "types": "./dist/animation-editor/index.d.ts",
+      "import": "./dist/animation-editor/index.js",
+      "require": "./dist/animation-editor/index.cjs"
+    },
     "./chart": {
       "types": "./dist/chart/index.d.ts",
       "import": "./dist/chart/index.js",
@@ -98,6 +103,9 @@
       ],
       "vector": [
         "./dist/vector/index.d.ts"
+      ],
+      "animation-editor": [
+        "./dist/animation-editor/index.d.ts"
       ],
       "chart": [
         "./dist/chart/index.d.ts"
