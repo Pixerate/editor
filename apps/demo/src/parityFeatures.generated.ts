@@ -764,6 +764,13 @@ export const PARITY_AREAS: ParityArea[] = [
         "swift": "Planned (#533)"
       },
       {
+        "feature": "Mermaid Family Dragging (Gantt dates, rows, durations and dependencies; journey scores; quadrant points; reordering participants, tasks, periods and messages; mindmap re-parenting; gitGraph merges; C4 / architecture placement into and out of groups; live preview; one undo step)",
+        "core": "`withDiagramDragHandles`, `planDiagramDrag`, `previewDiagramDrag` (`/canvas`) & `planDiagramReorder` (`/diagram`)",
+        "react": "`useMermaidDiagram().drop` & `<MermaidFamilyScene onDragEnd>`",
+        "svelte": "`createMermaidDiagram().drop` & `<MermaidFamilyScene ondragend>`",
+        "swift": "Planned (#533)"
+      },
+      {
         "feature": "Mermaid Diagrams on the Canvas (dagre with nested groups and per-group direction, stored positions blended with new nodes, drags back to `moveNodes`, SVG geometry for the flowchart and state shapes)",
         "core": "`mermaidToCanvas`, `ensureDiagramLayout`, `mermaidMovesFromCanvas` & `mermaidShapePaths` (`/canvas`)",
         "react": "`<MermaidDiagramNode>` & `<MermaidDiagramGroup>`",
@@ -778,7 +785,7 @@ export const PARITY_AREAS: ParityArea[] = [
         "swift": "Planned (#533)"
       },
       {
-        "feature": "Mermaid Diagram Agent Tools (23 tools: read, export, find, load, add / remove / rename / reshape / style nodes, node and edge data fields, diagram settings and title, connect / label / reconnect edges, groups, direction, moves, undo / redo; checked against the diagram and the family's fields first)",
+        "feature": "Mermaid Diagram Agent Tools (25 tools: read, export, find, load, add / remove / rename / reshape / style nodes, node and edge data fields, diagram settings and title, reorder, move into groups, connect / label / reconnect edges, groups, direction, moves, undo / redo; checked against the diagram and the family's fields first)",
         "core": "`createDiagramToolProvider`",
         "react": "`useAgentToolProvider`",
         "svelte": "`useAgentToolProvider`",

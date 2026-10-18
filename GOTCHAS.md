@@ -4726,3 +4726,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: In the Swift Effects panel on iPad, a shader's controls read "UScale", "UBackgroundAlpha"; the effect paint's repeat menu wrapped to "Re-peat" beside the length field; and pickers such as a layer style's blend mode showed only their value, with nothing saying what it set.
 - **Root Cause**: (1) `EffectValuesView` capitalised the control's name instead of using the label the web panels use (`parameterLabel`: the schema `title`, else `humanizeParameterId`). (2) Outside a `Form`, a menu-style `Picker` shows its label on macOS but not on iPadOS, and a menu picker squeezed into a row with other controls wraps its value.
 - **Solution / Workaround**: Label controls with `effectControlLabel(name, schema)` and choice options with `humanizeParameterId`. Put a choice in `PaintPickerRow` (label on the left, a `Menu` holding an inline `Picker` on the right, so the value takes the row's font), one per row. Check panel changes at iPad width, not only in the macOS demo.
+
+### [react|svelte/canvas] A Drag on a Scene Mark Is Followed by a Click
+
+- **Issue / Symptom**: Dropping a dragged Gantt bar or quadrant point also selected it (or cleared the selection when the drop ended over the background).
+- **Root Cause**: The browser fires `click` after `pointerup` on the element under the pointer, whether or not the pointer moved in between.
+- **Solution / Workaround**: `MermaidFamilyScene` sets a `dragged` flag once the pointer travels past `DIAGRAM_DRAG_THRESHOLD` and swallows the next click. Drag coordinates go through `svg.getScreenCTM().inverse()`, so they stay right when the scene is drawn scaled; jsdom has no `getScreenCTM`, so tests fall back to client coordinates.

@@ -47,7 +47,8 @@ This skill is the method. `pixerate-diagram` has the full tool reference and the
 4. **Decisions.** Each `diam` node has a question label and exactly the exits it needs, each
    labelled (`set_diagram_edge_label`).
    **Check:** every edge leaving a decision has a `label`.
-5. **Lanes.** `group_diagram_nodes` per actor with a clear `label` ("Customer", "Shop").
+5. **Lanes.** `group_diagram_nodes` per actor with a clear `label` ("Customer", "Shop"). A step
+   in the wrong lane moves with `set_diagram_node_parent` (the lane's id as `parentId`).
    **Check:** each node's `parentId` is its actor's lane.
 6. **Look.** `render_diagram` once: crossings, long labels, crowding. Shorten labels, reorder,
    or switch direction (`set_diagram_direction`) if it reads badly.
@@ -94,6 +95,6 @@ exit ("yes", "no").
 - `load_diagram_mermaid`: write a new flow in one call
 - `add_diagram_node`, `connect_diagram_nodes`, `remove_diagram_nodes`, `remove_diagram_edges`: change the flow
 - `rename_diagram_node`, `set_diagram_node_shape`, `set_diagram_edge_label`: labels and shapes
-- `group_diagram_nodes`, `ungroup_diagram_group`: lanes
+- `group_diagram_nodes`, `ungroup_diagram_group`, `set_diagram_node_parent`: lanes, and moving steps between them
 - `set_diagram_direction`, `set_diagram_title`: layout and title
 - `undo_diagram`: take back a step
