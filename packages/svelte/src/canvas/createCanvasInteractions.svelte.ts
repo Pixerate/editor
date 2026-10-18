@@ -110,3 +110,42 @@ export function restorePanelPointerEvents(panelSelector = '.svelte-flow__panel')
 		(panel as HTMLElement).style.pointerEvents = 'auto';
 	});
 }
+
+/**
+ * Action / helper to isolate canvas gestures (wheel, pointerdown) on floating overlays,
+ * HUDs, toolbars, or modal dialogs sitting above a zoomable/pannable canvas, preventing wheel events
+ * from bubbling to XYFlow or canvas viewport zoom/pan handlers.
+ */
+export function isolateCanvasGestures(
+	node: HTMLElement,
+	options: { wheel?: boolean; pointer?: boolean } = {}
+) {
+	const { wheel = true, pointer = false } = options;
+
+	function handleWheel(e: WheelEvent) {
+		e.stopPropagation();
+	}
+
+	function handlePointerDown(e: Event) {
+		e.stopPropagation();
+	}
+
+	if (wheel) {
+		node.addEventListener('wheel', handleWheel, { passive: false });
+	}
+	if (pointer) {
+		node.addEventListener('pointerdown', handlePointerDown);
+	}
+
+	return {
+		destroy() {
+			if (wheel) {
+				node.removeEventListener('wheel', handleWheel);
+			}
+			if (pointer) {
+				node.removeEventListener('pointerdown', handlePointerDown);
+			}
+		}
+	};
+}
+
