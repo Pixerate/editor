@@ -23,7 +23,7 @@ import {
 	type MotionIssueCode,
 	type MotionScene
 } from '../src/animation-editor';
-import { ManualClock } from '../src/animation';
+import { ManualClock, SPRING_PRESETS, springSettleMs } from '../src/animation';
 import { ToolRegistry } from '../src/tools';
 import { createVectorEffect, ellipseSubpath, findVectorNode, rectSubpath, starSubpath, type VectorDocument, type VectorPathNode } from '../src/vector';
 
@@ -188,7 +188,8 @@ describe('checkMotionScene', () => {
 						{ type: 'effect', targets: ['spin'], effect: 'tw', param: 'angel', to: 1 },
 						{ type: 'style', targets: ['box'], fill: 'not-a-colour' },
 						{ type: 'fade', targets: ['box'], to: 0.5, duration: 50 },
-						{ type: 'enter', targets: ['line'], style: 'wipe' }
+						{ type: 'enter', targets: ['line'], style: 'wipe' },
+						{ type: 'scale', targets: ['box'], to: 1.2, ease: 'spring-gentle', duration: 300 }
 					] },
 					{ id: 'x', run: [] },
 					{ id: 'y', camera: { frame: 'ghost' }, run: [] },
@@ -686,8 +687,10 @@ describe('Flair clip reveals and follows', () => {
 		expect(animate).toContainEqual({ id: 'dart--follow', along: 'dart--follow-route', orient: true, ms: 1000, ease: 'linear', at: [0, 1] });
 		// The node's own transform leaves the follow to the wrapper.
 		expect(animate.find((a) => a.id === 'dart')?.attrs?.transform).toEqual(['translate(0 0) rotate(0 320 120) translate(320 120) scale(1 1) translate(-320 -120)', 'translate(10 0) rotate(0 320 120) translate(320 120) scale(1 1) translate(-320 -120)']);
-		// A spring cannot be one change: it is sampled into linear steps along the path.
-		const sprung = toFlairSvgMotion({ ...s, shots: [{ id: 'one', run: [{ type: 'follow', targets: ['dart'], path: 'route', ease: 'spring', duration: 500 }] }] });
+		// A spring is one change for Flair 0.39; older Flair gets it sampled into linear steps along the path.
+		const springScene: MotionScene = { ...s, shots: [{ id: 'one', run: [{ type: 'follow', targets: ['dart'], path: 'route', ease: 'spring', duration: 500 }] }] };
+		expect(animateOf(toFlairSvgMotion(springScene))).toEqual([expect.objectContaining({ along: 'dart--follow-route', ms: 500, ease: { spring: { mass: 1, stiffness: 170, damping: 26, velocity: 0 } } })]);
+		const sprung = toFlairSvgMotion(springScene, { flair: '0.38' });
 		expect(sprung.sampled).toBe(15);
 		expect(animateOf(sprung).every((a) => a.along === 'dart--follow-route' && a.ease === 'linear')).toBe(true);
 	});
@@ -717,5 +720,83 @@ describe('Flair clip reveals and follows', () => {
 		const check = (await registry.callTool('check_animation', {})).structuredContent as any;
 		expect(JSON.stringify(check)).toContain('reveal-no-box');
 		expect(() => parseMotionScene(scene([{ id: 'one', run: [{ type: 'enter', targets: ['box'], style: 'iris', shape: 'star' } as never] }]))).toThrow(/"shape" must be one of circle, box/);
+	});
+});
+
+describe('timing: springs, repeats, stepped time and geometric zoom', () => {
+	const rotationAt = (s: MotionScene, t: number, id = 'box') => {
+		const m = path(motionFrameAt(s, t).document, id).transform;
+		return m ? (Math.atan2(m[1], m[0]) * 180) / Math.PI : 0;
+	};
+
+	it('lets a spring set its own length, and warns when one is cut short', () => {
+		expect(springSettleMs(SPRING_PRESETS['spring-quick'])).toBe(Math.round(6.9 / ((20 / (2 * Math.sqrt(300))) * Math.sqrt(300)) * 1000));
+		const s = scene([{ id: 'one', run: [{ type: 'scale', targets: ['box'], to: 1.5, ease: 'spring-bouncy' }, { type: 'move', targets: ['dot'], by: { x: 10, y: 0 }, ease: { type: 'spring', stiffness: 100, damping: 15 } }] }]);
+		expect(compileMotionScene(s).commands.map((c) => c.duration)).toEqual([springSettleMs(SPRING_PRESETS['spring-bouncy']), springSettleMs({ stiffness: 100, damping: 15 })]);
+		// A bouncy spring overshoots before it settles.
+		const peak = Math.max(...Array.from({ length: 40 }, (_, i) => path(motionFrameAt(s, i * 20).document, 'box').transform?.[0] ?? 1));
+		expect(peak).toBeGreaterThan(1.5);
+		const cut = checkMotionScene(scene([{ id: 'one', run: [{ type: 'scale', targets: ['box'], to: 1.5, ease: 'spring-slow', duration: 200 }] }]));
+		expect(cut.find((i) => i.code === 'spring-cut-short')).toMatchObject({ measured: 200, needed: springSettleMs(SPRING_PRESETS['spring-slow']) });
+	});
+
+	it('repeats in loop, mirror and offset modes', () => {
+		const make = (repeatMode: 'loop' | 'mirror' | 'offset') => scene([{ id: 'one', run: [{ type: 'rotate', targets: ['box'], by: 90, ease: 'linear', duration: 100, repeat: 4, repeatMode }] }]);
+		expect(compileMotionScene(make('loop')).commands[0]).toMatchObject({ start: 0, end: 400, duration: 400 });
+		expect(rotationAt(make('loop'), 150)).toBeCloseTo(45, 6);
+		expect(rotationAt(make('mirror'), 150)).toBeCloseTo(45, 6);
+		expect(rotationAt(make('mirror'), 125)).toBeCloseTo(67.5, 3);
+		expect(rotationAt(make('mirror'), 400)).toBeCloseTo(0, 6);
+		expect(rotationAt(make('offset'), 250)).toBeCloseTo(-135, 6); // 225°
+		expect(rotationAt(make('offset'), 400)).toBeCloseTo(0, 6); // 360°
+		expect(() => parseMotionScene(scene([{ id: 'one', run: [{ type: 'enter', targets: ['box'], repeat: 2 } as never, { type: 'fade', targets: ['box'], to: 0, repeat: 1.5, repeatMode: 'bounce' } as never] }]))).toThrow(/"repeat" is not for enter[\s\S]*"repeat" must be a whole number[\s\S]*"repeatMode" must be one of loop, mirror, offset/);
+	});
+
+	it('exports mirrored repeats as one change each with the curve run backwards', () => {
+		const s = scene([{ id: 'one', run: [{ type: 'move', targets: ['box'], by: { x: 40, y: 0 }, ease: 'ease-in', duration: 200, repeat: 2, repeatMode: 'mirror' }] }]);
+		const out = toFlairSvgMotion(s);
+		expect(out.sampled).toBe(0);
+		const moves = animateOf(out).filter((a) => a.id === 'box');
+		expect(moves.map((a) => [a.delay ?? 0, a.ease])).toEqual([[0, [0.42, 0, 1, 1]], [200, [0, 0, 0.58, 1]]]);
+		expect(moves[1].attrs!.transform![0]).toMatch(/^translate\(40 0\)/);
+	});
+
+	it('holds poses on stepped time and exports it as a Flair strobe', () => {
+		const s = scene([{ id: 'one', run: [{ type: 'move', targets: ['box'], by: { x: 100, y: 0 }, ease: 'linear', duration: 1000 }] }], { steps: 12 });
+		const x = (t: number) => path(motionFrameAt(s, t).document, 'box').transform?.[4] ?? 0;
+		expect(x(90)).toBeCloseTo(8.333, 2);
+		expect(x(160)).toBeCloseTo(8.333, 2);
+		expect(x(170)).toBeCloseTo(16.667, 2);
+		expect(x(1000)).toBe(100);
+		const out = toFlairSvgMotion(s);
+		expect(animateOf(out)).toEqual([expect.objectContaining({ id: 'box', ms: 1000, ease: 'linear', strobe: 12 })]);
+		expect(toFlairSvgMotion(s, { flair: '0.38' }).sampled).toBeGreaterThan(10);
+	});
+
+	it('zooms at a steady rate with geometric scale and cameras', () => {
+		const s = scene([{ id: 'one', run: [{ type: 'scale', targets: ['box'], to: 4, ease: 'linear', duration: 1000, geometric: true }] }]);
+		expect(path(motionFrameAt(s, 500).document, 'box').transform?.[0]).toBeCloseTo(2, 6);
+		const cam = scene([{ id: 'a', run: [{ type: 'wait', duration: 10 }] }, { id: 'b', camera: { x: 150, y: 50, width: 100, height: 50, ms: 1000, ease: 'linear', geometric: true }, run: [] }]);
+		const start = compileMotionScene(cam).shots[1].start;
+		const mid = motionFrameAt(cam, start + 500).camera;
+		expect(mid.width).toBeCloseTo(200, 6);
+		// The centre (200, 100) → (200, 75) keeps pace with the size: two thirds of the way when the width has gone 400 → 200 of 400 → 100.
+		expect(mid.y + mid.height / 2).toBeCloseTo(100 - 25 * (2 / 3), 3);
+		expect(toFlairSvgMotion(s).sampled).toBeGreaterThan(0);
+	});
+
+	it('takes the new options through the agent tools', async () => {
+		const controller = new AnimationEditorController({ scene: createMotionScene(ARTWORK, { name: 'demo' }) });
+		const registry = new ToolRegistry();
+		registry.register(createAnimationEditorToolProvider(controller));
+		const ok = await registry.callTool('insert_shots', { shots: [{ id: 'spin', run: [{ type: 'rotate', targets: ['box'], by: 90, repeat: 4, repeatMode: 'offset', ease: 'spring-quick', steps: 12 }] }] });
+		expect(ok.isError).toBeFalsy();
+		expect((ok.structuredContent as any).duration).toBe(springSettleMs(SPRING_PRESETS['spring-quick']) * 4 + 600);
+		expect((await registry.callTool('set_animation_settings', { steps: 8 })).isError).toBeFalsy();
+		expect(controller.getState().scene.steps).toBe(8);
+		const bad = await registry.callTool('set_animation_settings', { steps: 0 });
+		expect(bad.isError).toBe(true);
+		const flair = (await registry.callTool('export_flair_motion', { flair: '0.36' })).structuredContent as any;
+		expect(flair.sampled).toBeGreaterThan(0);
 	});
 });

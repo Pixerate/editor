@@ -24,7 +24,11 @@ export type AnimationEasingPreset =
 	| 'ease-in-elastic'
 	| 'ease-in-out-elastic'
 	| 'elastic'
-	| 'spring';
+	| 'spring'
+	| 'spring-gentle'
+	| 'spring-quick'
+	| 'spring-bouncy'
+	| 'spring-slow';
 
 export interface CubicBezierEasing {
 	type: 'cubic-bezier';
@@ -72,6 +76,10 @@ export const ANIMATION_EASING_PRESETS: readonly AnimationEasingPreset[] = [
 	'ease-in-out-elastic',
 	'elastic',
 	'spring',
+	'spring-gentle',
+	'spring-quick',
+	'spring-bouncy',
+	'spring-slow',
 	'hold'
 ];
 
@@ -89,7 +97,11 @@ export const ANIMATION_EASING_LABELS: Readonly<Record<AnimationEasingPreset, str
 	'ease-in-elastic': 'Elastic in',
 	'ease-in-out-elastic': 'Elastic in-out',
 	elastic: 'Elastic',
-	spring: 'Spring'
+	spring: 'Spring',
+	'spring-gentle': 'Spring (gentle)',
+	'spring-quick': 'Spring (quick)',
+	'spring-bouncy': 'Spring (bouncy)',
+	'spring-slow': 'Spring (slow)'
 };
 
 /** The CSS control points of the bezier presets (CSS Easing Functions Level 1 values for the CSS keywords). */
@@ -104,6 +116,42 @@ export const CUBIC_BEZIER_PRESETS: Readonly<Record<string, readonly [number, num
 };
 
 const DEFAULT_SPRING = { stiffness: 170, damping: 26, mass: 1, velocity: 0 };
+
+/**
+ * Figma's named springs (mass 1): gentle 100 / 15, quick 300 / 20, bouncy 600 / 15, slow 80 / 20
+ * (stiffness / damping). Each plays until it settles (see `springSettleMs`).
+ */
+export const SPRING_PRESETS: Readonly<Record<'spring-gentle' | 'spring-quick' | 'spring-bouncy' | 'spring-slow', Required<Omit<SpringEasing, 'type'>>>> = {
+	'spring-gentle': { mass: 1, stiffness: 100, damping: 15, velocity: 0 },
+	'spring-quick': { mass: 1, stiffness: 300, damping: 20, velocity: 0 },
+	'spring-bouncy': { mass: 1, stiffness: 600, damping: 15, velocity: 0 },
+	'spring-slow': { mass: 1, stiffness: 80, damping: 20, velocity: 0 }
+};
+
+/**
+ * How long a spring takes to settle within 0.1% of its target, in ms (clamped to 50–10000):
+ * 6.9 / (ζ·ω₀) s when under-damped, else 9.2 / its slowest rate.
+ */
+export function springSettleMs(spring: Omit<SpringEasing, 'type'>): number {
+	const stiffness = Math.max(1e-6, finite(spring.stiffness, DEFAULT_SPRING.stiffness));
+	const damping = Math.max(0, finite(spring.damping, DEFAULT_SPRING.damping));
+	const mass = Math.max(1e-6, finite(spring.mass, DEFAULT_SPRING.mass));
+	const w0 = Math.sqrt(stiffness / mass);
+	const zeta = damping / (2 * Math.sqrt(stiffness * mass));
+	let seconds: number;
+	if (zeta <= 0) seconds = Infinity;
+	else if (zeta < 1 - 1e-6) seconds = 6.9 / (zeta * w0);
+	else if (zeta <= 1 + 1e-6) seconds = 9.2 / w0;
+	else seconds = 9.2 / (w0 * (zeta - Math.sqrt(zeta * zeta - 1)));
+	return Math.round(Math.min(10000, Math.max(50, seconds * 1000)));
+}
+
+/** The same curve run backwards in time (`1 − e(1 − u)`) for a cubic-bezier, or null for other easings. */
+export function reverseCubicBezier(easing: AnimationEasing | string | undefined | null): CubicBezierEasing | null {
+	const r = resolveEasing(easing);
+	if (r === 'hold' || r.type !== 'cubic-bezier') return null;
+	return { type: 'cubic-bezier', x1: 1 - r.x2, y1: 1 - r.y2, x2: 1 - r.x1, y2: 1 - r.y1 };
+}
 const DEFAULT_ELASTIC = { amplitude: 1, period: 0.3, mode: 'out' as const };
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -214,6 +262,7 @@ export function resolveEasing(
 ): CubicBezierEasing | Required<SpringEasing> | Required<ElasticEasing> | 'hold' {
 	if (easing === 'hold') return 'hold';
 	if (easing === 'spring') return { type: 'spring', ...DEFAULT_SPRING };
+	if (typeof easing === 'string' && easing in SPRING_PRESETS) return { type: 'spring', ...SPRING_PRESETS[easing as keyof typeof SPRING_PRESETS] };
 	if (easing === 'elastic' || easing === 'ease-out-elastic') {
 		return { type: 'elastic', ...DEFAULT_ELASTIC, mode: 'out' };
 	}

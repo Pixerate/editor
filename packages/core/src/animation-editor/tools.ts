@@ -7,7 +7,7 @@ import { compileMotionScene, indexMotionNodes } from './compile.js';
 import type { AnimationEditorController } from './controller.js';
 import { MOTION_EDIT_OPS, type MotionEdit, type MotionEditResult } from './edit.js';
 import { motionIssueLine, type MotionIssue } from './issues.js';
-import { MOTION_COMMAND_TYPES, MOTION_DIRECTIONS, MOTION_ENTER_STYLES, MOTION_EXIT_STYLES, MOTION_IRIS_SHAPES, MOTION_SPLIT_ORIENTATIONS, motionFlairPrimitive, type MotionScene } from './types.js';
+import { MOTION_COMMAND_TYPES, MOTION_DIRECTIONS, MOTION_ENTER_STYLES, MOTION_EXIT_STYLES, MOTION_IRIS_SHAPES, MOTION_REPEAT_MODES, MOTION_SPLIT_ORIENTATIONS, motionFlairPrimitive, type MotionScene } from './types.js';
 
 export interface AnimationEditorToolProviderOptions {
 	/** Provider id (unique per registry). Default `animation`. */
@@ -39,10 +39,29 @@ const MS = (what: string) => ({ type: 'number', minimum: 0, description: `${what
 const FRACTION = (what: string) => ({ type: 'number', minimum: 0, maximum: 1, description: what }) as const;
 const POINT = (what: string) => object({ x: { type: 'number', description: 'Document units.' }, y: { type: 'number', description: 'Document units.' } }, ['x', 'y'], what);
 const EASE: JsonSchema = {
-	description: `Easing: a preset (${ANIMATION_EASING_PRESETS.join(', ')}) or { "type": "cubic-bezier", "x1", "y1", "x2", "y2" }. Default: a cubic ease-out for entrances, cubic ease-in-out for moves.`,
+	description: `Easing: a preset (${ANIMATION_EASING_PRESETS.join(', ')}), { "type": "cubic-bezier", "x1", "y1", "x2", "y2" }, { "type": "spring", … } or { "type": "elastic", … }. The spring presets are Figma's: gentle, quick, bouncy, slow. A command with a spring and no "duration" lasts until the spring settles. Default: a cubic ease-out for entrances, cubic ease-in-out for moves.`,
 	anyOf: [
 		{ type: 'string', enum: [...ANIMATION_EASING_PRESETS] },
-		object({ type: { const: 'cubic-bezier', description: 'Curve kind.' }, x1: { type: 'number', description: 'Out handle x (0–1).' }, y1: { type: 'number', description: 'Out handle y.' }, x2: { type: 'number', description: 'In handle x (0–1).' }, y2: { type: 'number', description: 'In handle y.' } }, ['type', 'x1', 'y1', 'x2', 'y2'])
+		object({ type: { const: 'cubic-bezier', description: 'Curve kind.' }, x1: { type: 'number', description: 'Out handle x (0–1).' }, y1: { type: 'number', description: 'Out handle y.' }, x2: { type: 'number', description: 'In handle x (0–1).' }, y2: { type: 'number', description: 'In handle y.' } }, ['type', 'x1', 'y1', 'x2', 'y2']),
+		object(
+			{
+				type: { const: 'spring', description: 'A damped spring (may overshoot).' },
+				stiffness: { type: 'number', exclusiveMinimum: 0, description: 'Stiffness (default 170; quick 300, bouncy 600).' },
+				damping: { type: 'number', minimum: 0, description: 'Damping (default 26; lower bounces more).' },
+				mass: { type: 'number', exclusiveMinimum: 0, description: 'Mass (default 1).' },
+				velocity: { type: 'number', description: 'Starting speed, in changes per second (default 0).' }
+			},
+			['type']
+		),
+		object(
+			{
+				type: { const: 'elastic', description: 'A decaying wobble.' },
+				amplitude: { type: 'number', minimum: 0, description: 'Overshoot factor (default 1).' },
+				period: { type: 'number', exclusiveMinimum: 0, description: 'Wobble period as a fraction of the length (default 0.3).' },
+				mode: { type: 'string', enum: ['out', 'in', 'in-out'], description: 'Where it wobbles (default out).' }
+			},
+			['type']
+		)
 	]
 };
 
@@ -53,7 +72,10 @@ const BASE: Record<string, JsonSchema> = {
 	stagger: MS('Start each further target this much later (default 0)'),
 	with: { type: 'string', enum: ['after', 'previous'], description: '"after" (default) starts when the commands before it finish; "previous" starts together with the command before.' },
 	ease: EASE,
-	note: { type: 'string', description: 'Why this command is here, in a few words.' }
+	note: { type: 'string', description: 'Why this command is here, in a few words.' },
+	repeat: { type: 'integer', minimum: 1, maximum: 1000, description: 'Play it this many times (default 1); "duration" is one cycle. Not for enter or exit.' },
+	repeatMode: { type: 'string', enum: [...MOTION_REPEAT_MODES], description: 'loop (default) restarts each cycle, mirror plays every other one backwards, offset carries on from where the last ended (rotate by 90 with repeat 4 makes a full turn).' },
+	steps: { type: 'number', exclusiveMinimum: 0, maximum: 120, description: 'Stepped time: hold on a grid of this many frames per second (12 = "on twos"). Default: the scene\'s steps, else smooth.' }
 };
 const command = (type: string, description: string, extra: Record<string, JsonSchema> = {}, required: string[] = []): JsonSchema =>
 	object({ type: { const: type, description }, ...BASE, ...extra }, ['type', 'targets', ...required], description);
@@ -83,7 +105,7 @@ export const MOTION_COMMAND_SCHEMA: JsonSchema = {
 		command('draw', 'Draws strokes on (or off) to a fraction of their length.', { to: FRACTION('Fraction drawn at the end (default 1).'), from: FRACTION('Fraction drawn at the start (default: what is drawn now).') }),
 		command('move', 'Moves targets by an offset or so their centre lands on a point.', { by: POINT('Offset in document units.'), to: POINT('Point (document coordinates) for the centre.') }),
 		command('rotate', 'Turns targets about their centre (degrees, clockwise).', { by: { type: 'number', description: 'Degrees to turn by.' }, to: { type: 'number', description: 'Angle to turn to, in degrees from rest.' } }),
-		command('scale', 'Scales targets about their centre (1 = rest size).', { to: { description: 'A factor, or { x, y } factors.', anyOf: [{ type: 'number' }, POINT('Factors per axis.')] } }, ['to']),
+		command('scale', 'Scales targets about their centre (1 = rest size).', { to: { description: 'A factor, or { x, y } factors.', anyOf: [{ type: 'number' }, POINT('Factors per axis.')] }, geometric: { type: 'boolean', description: 'Grow by a steady factor, which reads as an even zoom (default false).' } }, ['to']),
 		command('fade', 'Changes opacity.', { to: FRACTION('Opacity at the end (0–1).') }, ['to']),
 		command('style', 'Blends solid fill / stroke colours (in OKLab) and stroke width. On a group it changes every path in it.', {
 			fill: { type: 'string', description: 'CSS colour (hex, rgb(), rgba()).' },
@@ -130,11 +152,12 @@ export const MOTION_COMMAND_SCHEMA: JsonSchema = {
 	]
 };
 
+const GEOMETRIC_CAMERA: JsonSchema = { type: 'boolean', description: 'Zoom at a steady rate, so a big zoom does not rush at the start (default false).' };
 const CAMERA: JsonSchema = {
 	description: 'Where the camera looks: a rectangle { x, y, width, height } in document units, or { frame: "<node id>", padding } to frame a node (fitted to the artwork\'s shape). It eases there over "ms" (default 1000); the first shot cuts.',
 	anyOf: [
-		object({ x: { type: 'number', description: 'Left.' }, y: { type: 'number', description: 'Top.' }, width: { type: 'number', exclusiveMinimum: 0, description: 'Width.' }, height: { type: 'number', exclusiveMinimum: 0, description: 'Height.' }, ease: EASE, ms: MS('Camera move length') }, ['x', 'y', 'width', 'height']),
-		object({ frame: { type: 'string', minLength: 1, description: 'Node id to frame.' }, padding: { type: 'number', description: 'Margin around it (default 24).' }, ease: EASE, ms: MS('Camera move length') }, ['frame'])
+		object({ x: { type: 'number', description: 'Left.' }, y: { type: 'number', description: 'Top.' }, width: { type: 'number', exclusiveMinimum: 0, description: 'Width.' }, height: { type: 'number', exclusiveMinimum: 0, description: 'Height.' }, ease: EASE, ms: MS('Camera move length'), geometric: GEOMETRIC_CAMERA }, ['x', 'y', 'width', 'height']),
+		object({ frame: { type: 'string', minLength: 1, description: 'Node id to frame.' }, padding: { type: 'number', description: 'Margin around it (default 24).' }, ease: EASE, ms: MS('Camera move length'), geometric: GEOMETRIC_CAMERA }, ['frame'])
 	]
 };
 
@@ -162,6 +185,7 @@ const SETTINGS: Record<string, JsonSchema> = {
 	description: { type: ['string', 'null'], description: 'What it shows; null clears.' },
 	loop: { type: 'string', enum: ['none', 'loop', 'ping-pong'], description: 'Playback past the end (default none).' },
 	fps: { type: 'number', minimum: 1, maximum: 120, description: 'Sampling rate for exports (default 30).' },
+	steps: { anyOf: [{ type: 'number', exclusiveMinimum: 0, maximum: 120 }, { type: 'null' }], description: 'Stepped time for every command without its own: changes hold on a grid of this many frames per second (12 = "on twos" at 24 fps) for a hand-drawn look; null makes it smooth again (default).' },
 	target: { anyOf: [{ type: 'array', items: { type: 'number', minimum: 0 }, minItems: 2, maxItems: 2 }, { type: 'null' }], description: 'Wanted length [min, max] in seconds; null clears.' }
 };
 
@@ -367,6 +391,8 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 
 	const CURVES_DESCRIPTION =
 		'Write cubic-bezier easings (ease, ease-in, ease-out, ease-in-out, back eases, custom curves) as one change with ease: [x1, y1, x2, y2] (default true). Needs Flair 0.36 or later; false samples them into linear steps for older Flair.';
+	const FLAIR_DESCRIPTION =
+		'The Flair version to export for (default 0.39): springs and stepped time need 0.39, behaviours 0.38, cubic-bezier curves 0.36; older versions get those sampled into linear steps.';
 	const BEHAVIORS_DESCRIPTION =
 		'Write pulses, shakes, teeters, waves, wiggles and colour pulses as one change with a Flair behavior, so they play exactly (default true; needs Flair 0.38 or later). False samples them into linear steps for older Flair.';
 
@@ -378,10 +404,11 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 		inputSchema: object({
 			fps: { type: 'number', minimum: 1, maximum: 120, description: 'Sampling rate for changes Flair cannot express exactly (default: the scene\'s fps, else 30).' },
 			curves: { type: 'boolean', description: CURVES_DESCRIPTION },
-			behaviors: { type: 'boolean', description: BEHAVIORS_DESCRIPTION }
+			behaviors: { type: 'boolean', description: BEHAVIORS_DESCRIPTION },
+			flair: { type: 'string', pattern: '^\\d+\\.\\d+(\\.\\d+)?$', description: FLAIR_DESCRIPTION }
 		}),
 		annotations: { title: 'Export as Flair vector motion', ...READ },
-		handler: ({ fps, curves, behaviors }) => controller.toFlairMotion({ ...(fps ? { fps } : {}), ...(curves === undefined ? {} : { curves }), ...(behaviors === undefined ? {} : { behaviors }) })
+		handler: ({ fps, curves, behaviors, flair }) => controller.toFlairMotion({ ...(fps ? { fps } : {}), ...(curves === undefined ? {} : { curves }), ...(behaviors === undefined ? {} : { behaviors }), ...(flair ? { flair } : {}) })
 	};
 
 	const exportFlairEffect: AgentTool = {
@@ -396,7 +423,8 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 			category: { type: 'string', minLength: 1, description: 'Flair catalog category, e.g. icon, loader, ui, data, text, morph (default icon).' },
 			tags: { type: 'array', items: { type: 'string' }, description: 'Search tags (default none).' },
 			curves: { type: 'boolean', description: CURVES_DESCRIPTION },
-			behaviors: { type: 'boolean', description: BEHAVIORS_DESCRIPTION }
+			behaviors: { type: 'boolean', description: BEHAVIORS_DESCRIPTION },
+			flair: { type: 'string', pattern: '^\\d+\\.\\d+(\\.\\d+)?$', description: FLAIR_DESCRIPTION }
 		}),
 		annotations: { title: 'Export as a Flair effect', ...READ },
 		handler: (args) => controller.toFlairEffect(args)
@@ -510,7 +538,7 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 	const setSettings: AgentTool = {
 		name: 'set_animation_settings',
 		title: 'Change animation settings',
-		description: 'Sets the name, description, loop mode, export frame rate or target length. Returns the timing.',
+		description: 'Sets the name, description, loop mode, export frame rate, stepped time or target length. Returns the timing.',
 		inputSchema: object(SETTINGS),
 		annotations: { title: 'Change animation settings', ...WRITE_IDEMPOTENT },
 		handler: (args) => apply({ op: 'set_settings', ...args }, 'Change settings')

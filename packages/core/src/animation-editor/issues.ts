@@ -27,6 +27,7 @@ export const MOTION_ISSUE_CODES = {
 	'exit-hidden': { severity: 'warning', wording: 'A node exits or animates while it is hidden.' },
 	'out-of-frame': { severity: 'warning', wording: 'A node a command animates ends up outside the camera.' },
 	'too-fast': { severity: 'warning', wording: 'A change is too quick to follow.' },
+	'spring-cut-short': { severity: 'warning', wording: 'A spring is given a duration shorter than it takes to settle, so it jumps to its end.' },
 	'scene-too-long': { severity: 'warning', wording: 'The scene runs past its target length.' },
 	'scene-too-short': { severity: 'warning', wording: 'The scene ends before its target length.' },
 	'unknown-control-color': { severity: 'warning', wording: 'A control stands for a colour the scene never uses.' },

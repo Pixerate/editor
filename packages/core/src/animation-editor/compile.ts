@@ -1,6 +1,6 @@
 import { mixColorsOklab } from '../animation/color.js';
 import { behaviorProgress, motionSeedFromId, type MotionBehavior } from '../animation/behavior.js';
-import { evaluateEasing, type AnimationEasing } from '../animation/easing.js';
+import { evaluateEasing, resolveEasing, springSettleMs, type AnimationEasing } from '../animation/easing.js';
 import { bezierPathLength } from '../canvas/pathops/bezier.js';
 import {
 	IDENTITY_MATRIX,
@@ -88,6 +88,12 @@ export interface MotionSegment {
 	 * transform Flair is given), so a wriggle wanders each on the channel Flair uses. Default 0.
 	 */
 	index?: number;
+	/** Played backwards in time (a mirrored repeat): progress runs 1 → 0 through the ease. */
+	reverse?: boolean;
+	/** Stepped time: progress holds on a grid of this many frames per second from the start. */
+	steps?: number;
+	/** Numbers change by a steady factor (`from·(to/from)^u`); a camera zooms at a steady rate. */
+	geometric?: boolean;
 	/** For `follow`: the path node id, and whether to turn with it. */
 	path?: string;
 	rotate?: boolean;
@@ -301,11 +307,33 @@ export function interpolateMotionValue(from: MotionValue, to: MotionValue, u: nu
 	return u < 1 ? from : to;
 }
 
-/** Progress (0–1, unclamped by the easing) of a segment at `time`. */
+/** Progress (0–1, unclamped by the easing) of a segment at `time`: stepped, reversed and eased as the segment says. */
 export function segmentProgress(segment: MotionSegment, time: number): { u: number; eased: number } {
 	const span = segment.end - segment.start;
-	const u = span <= 0 ? 1 : Math.min(1, Math.max(0, (time - segment.start) / span));
-	return { u, eased: evaluateEasing(segment.ease, u, span) };
+	let elapsed = time - segment.start;
+	if (segment.steps && segment.steps > 0 && elapsed < span) elapsed = (Math.floor((elapsed * segment.steps) / 1000 + 1e-9) / segment.steps) * 1000;
+	const u = span <= 0 ? 1 : Math.min(1, Math.max(0, elapsed / span));
+	// A reversed segment plays its forward run backwards: at u it shows what it showed at 1 − u.
+	return { u, eased: evaluateEasing(segment.ease, segment.reverse ? 1 - u : u, span) };
+}
+
+/** `from` → `to` by a steady factor: numbers above 0 grow geometrically; a camera box zooms at a steady rate, its centre keeping pace. */
+function geometricValue(from: MotionValue, to: MotionValue, e: number): MotionValue | undefined {
+	const grow = (a: number, b: number) => (a > 0 && b > 0 ? a * (b / a) ** e : undefined);
+	if (typeof from === 'number' && typeof to === 'number') return grow(from, to);
+	if (Array.isArray(from) && Array.isArray(to) && from.length === 4 && to.length === 4) {
+		const [x0, y0, w0, h0] = from as number[];
+		const [x1, y1, w1, h1] = to as number[];
+		const w = grow(w0, w1);
+		const h = grow(h0, h1);
+		if (w === undefined || h === undefined) return undefined;
+		// The centre moves the same share of the way as the size has changed.
+		const f = Math.abs(w1 - w0) > 1e-9 ? (w - w0) / (w1 - w0) : e;
+		const cx = x0 + w0 / 2 + (x1 + w1 / 2 - x0 - w0 / 2) * f;
+		const cy = y0 + h0 / 2 + (y1 + h1 / 2 - y0 - h0 / 2) * f;
+		return [cx - w / 2, cy - h / 2, w, h];
+	}
+	return undefined;
 }
 
 /**
@@ -314,6 +342,10 @@ export function segmentProgress(segment: MotionSegment, time: number): { u: numb
  */
 export function segmentValue(segment: MotionSegment, time: number, raw = false): MotionValue {
 	const { eased } = segmentProgress(segment, time);
+	if (segment.geometric && !segment.behavior) {
+		const g = geometricValue(segment.from, segment.to, eased);
+		if (g !== undefined) return g;
+	}
 	if (!segment.behavior || raw) return interpolateMotionValue(segment.from, segment.to, eased);
 	const p = behaviorProgress(segment.behavior, eased, segment.index ?? 0, segment.end - segment.start);
 	// Colours (a colour pulse) mix only between their ends; numbers swing past them.
@@ -378,10 +410,26 @@ export function motionPathLength(node: VectorNode, parentWorld: AffineMatrix = I
 	return longest;
 }
 
-/** How long one target of a command takes (ms). */
+/** How many times a command plays (1 for `enter`, `exit` and `wait`, which do not repeat). */
+export function motionCommandRepeat(command: MotionCommand): number {
+	if (command.type === 'wait' || command.type === 'enter' || command.type === 'exit') return 1;
+	const n = command.repeat ?? 1;
+	return Number.isInteger(n) && n >= 1 ? n : 1;
+}
+
+/** How long one target of a command takes (ms), every repeat included. */
 export function motionCommandDuration(command: MotionCommand, scene: MotionScene, target?: string): number {
+	return motionCycleDuration(command, scene, target) * motionCommandRepeat(command);
+}
+
+/** How long one cycle of a command takes for one target (ms): its `duration`, a spring's settle time, the line's length for a draw, or the type's default. */
+export function motionCycleDuration(command: MotionCommand, scene: MotionScene, target?: string): number {
 	if (command.type === 'wait') return command.duration;
 	if (command.duration !== undefined) return command.duration;
+	if (command.ease !== undefined) {
+		const ease = resolveEasing(command.ease);
+		if (ease !== 'hold' && ease.type === 'spring') return springSettleMs(ease);
+	}
 	if (command.type === 'draw' || (command.type === 'enter' && command.style === 'draw') || (command.type === 'exit' && command.style === 'undraw')) {
 		const entry = target ? indexMotionNodes(scene.artwork.nodes).get(target) : undefined;
 		const length = entry ? motionPathLength(entry.node) : 0;
@@ -414,7 +462,7 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 	// Pass 1: timing.
 	const shots: MotionShotTiming[] = [];
 	const commands: MotionCommandTiming[] = [];
-	const cameraMoves: { shot: string; start: number; end: number; to: MotionRect; ease: AnimationEasing }[] = [];
+	const cameraMoves: { shot: string; start: number; end: number; to: MotionRect; ease: AnimationEasing; geometric: boolean }[] = [];
 	let t = 0;
 	scene.shots.forEach((shot, index) => {
 		const start = t;
@@ -423,7 +471,7 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 			const rect = resolveMotionCamera(shot.camera, scene);
 			if (rect && rect.width > 0 && rect.height > 0) {
 				const ms = index === 0 ? 0 : (shot.camera.ms ?? MOTION_CAMERA_MS);
-				cameraMoves.push({ shot: shot.id, start, end: start + ms, to: rect, ease: shot.camera.ease ?? MOTION_EASE_IN_OUT });
+				cameraMoves.push({ shot: shot.id, start, end: start + ms, to: rect, ease: shot.camera.ease ?? MOTION_EASE_IN_OUT, geometric: shot.camera.geometric === true });
 				cursor = start + ms;
 			}
 		}
@@ -468,7 +516,7 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 		jobs.push({
 			start: move.start,
 			order: order++,
-			run: () => push({ node: '', property: 'camera', start: move.start, end: move.end, from: valueAt('', 'camera', move.start), to: [move.to.x, move.to.y, move.to.width, move.to.height], ease: move.ease, shot: move.shot, command: -1 })
+			run: () => push({ node: '', property: 'camera', start: move.start, end: move.end, from: valueAt('', 'camera', move.start), to: [move.to.x, move.to.y, move.to.width, move.to.height], ease: move.ease, shot: move.shot, command: -1, ...(move.geometric ? { geometric: true } : {}) })
 		});
 	}
 	for (const timing of commands) {
@@ -479,11 +527,43 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 			const entry = nodes.get(target);
 			if (!entry) return;
 			const start = timing.start + k * (command.stagger ?? 0);
-			const duration = motionCommandDuration(command, scene, target);
-			jobs.push({ start, order: order++, run: () => compileCommand(command, target, entry, start, duration, timing) });
+			const cycle = motionCycleDuration(command, scene, target);
+			jobs.push({ start, order: order++, run: () => compileRepeated(command, target, entry, start, cycle, timing) });
 		});
 	}
 	jobs.sort((a, b) => a.start - b.start || a.order - b.order).forEach((job) => job.run());
+
+	/**
+	 * Compiles one cycle, then lays further cycles after it: `loop` restarts each from the first
+	 * cycle's start, `mirror` plays every other one backwards, `offset` carries numbers on from
+	 * where the last ended. Stepped time goes on every segment the command makes.
+	 */
+	function compileRepeated(command: Exclude<MotionCommand, { type: 'wait' }>, node: string, entry: MotionNodeEntry, start: number, cycle: number, timing: MotionCommandTiming) {
+		const first = segments.length;
+		compileCommand(command, node, entry, start, cycle, timing);
+		const made = segments.slice(first);
+		const steps = command.steps ?? scene.steps;
+		if (steps && steps > 0) for (const s of made) s.steps = steps;
+		const n = motionCommandRepeat(command);
+		const mode = command.repeatMode ?? 'loop';
+		const shift = (v: MotionValue, by: MotionValue, k: number): MotionValue => {
+			if (typeof v === 'number' && typeof by === 'number') return v + by * k;
+			if (Array.isArray(v) && Array.isArray(by) && v.length === by.length) return v.map((x, i) => x + (by[i] as number) * k);
+			return v;
+		};
+		for (let k = 1; k < n; k++) {
+			const at = start + k * cycle;
+			for (const s of made) {
+				if (mode === 'mirror' && k % 2 === 1) {
+					push({ ...s, start: at + (start + cycle - s.end), end: at + (start + cycle - s.start), reverse: !s.reverse });
+					continue;
+				}
+				const delta: MotionValue = typeof s.from === 'number' && typeof s.to === 'number' ? s.to - s.from : Array.isArray(s.from) && Array.isArray(s.to) && s.from.length === s.to.length ? s.to.map((x, i) => (x as number) - (s.from as number[])[i]) : 0;
+				const by = mode === 'offset' ? delta : 0;
+				push({ ...s, start: at + (s.start - start), end: at + (s.end - start), from: shift(s.from, by, k), to: shift(s.to, by, k) });
+			}
+		}
+	}
 
 	function compileCommand(command: Exclude<MotionCommand, { type: 'wait' }>, node: string, entry: MotionNodeEntry, start: number, duration: number, timing: MotionCommandTiming) {
 		const end = start + duration;
@@ -586,8 +666,9 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 				break;
 			case 'scale': {
 				const to = typeof command.to === 'number' ? { x: command.to, y: command.to } : command.to;
-				seg('scaleX', to.x, ease ?? MOTION_EASE_IN_OUT);
-				seg('scaleY', to.y, ease ?? MOTION_EASE_IN_OUT);
+				const geometric = command.geometric ? { geometric: true } : {};
+				seg('scaleX', to.x, ease ?? MOTION_EASE_IN_OUT, start, end, geometric);
+				seg('scaleY', to.y, ease ?? MOTION_EASE_IN_OUT, start, end, geometric);
 				break;
 			}
 			case 'fade':

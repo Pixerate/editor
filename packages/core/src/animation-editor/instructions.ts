@@ -18,6 +18,9 @@ Commands
 - enter also has zoom (settles from larger) and rise (rises a short way, overshooting a touch); pop and zoom take a starting "scale".
 - morph turns a shape into another node's shape (keep the target hidden); follow moves along a path node (with "rotate", moves made meanwhile turn with the path).
 - Emphasis draws the eye and returns to rest: pulse (swell), shake (side to side, or "axis": "vertical"), teeter (rock), wave (bob, no settling), wiggle (seeded wander; the same seed wanders the same way) and color-pulse (tint and back).
+- Any command but enter and exit can "repeat" (loop, mirror back and forth, or offset to carry on: rotate by 90, repeat 4 is a full turn); "duration" is one cycle.
+- Springs ("spring-gentle", "spring-quick", "spring-bouncy", "spring-slow" or { "type": "spring", … }) feel physical; leave "duration" out and the spring sets it.
+- "steps": 12 (on a command, or for the whole scene with set_animation_settings) holds poses "on twos" for a hand-drawn look. "geometric": true on scale or a camera zooms at an even rate.
 - Commands share their names and defaults with Flair's motion primitives (get_animation shows each one's "flairPrimitive"), and emphasis, reveals and follows export to Flair exactly.
 - effect tweens a numeric parameter of a live path effect already on the node (twist angle, wiggle time, zig zag size).
 
