@@ -63,6 +63,11 @@
       "svelte": "./dist/vector/index.js",
       "default": "./dist/vector/index.js"
     },
+    "./animation-editor": {
+      "types": "./dist/animation-editor/index.d.ts",
+      "svelte": "./dist/animation-editor/index.js",
+      "default": "./dist/animation-editor/index.js"
+    },
     "./chart": {
       "types": "./dist/chart/index.d.ts",
       "svelte": "./dist/chart/index.js",
@@ -98,6 +103,9 @@
       ],
       "vector": [
         "./dist/vector/index.d.ts"
+      ],
+      "animation-editor": [
+        "./dist/animation-editor/index.d.ts"
       ],
       "chart": [
         "./dist/chart/index.d.ts"

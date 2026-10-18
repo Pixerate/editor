@@ -1495,3 +1495,21 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Reading `ppt/slides/slideN.xml` by name numbers charts on the wrong slide after slides were reordered; looking for `c:chart` only in an Excel drawing misses waterfall, funnel, treemap, histogram and box charts.
 - **Root Cause**: PowerPoint keeps part names when slides move; the order lives in `p:sldIdLst` in `presentation.xml`. Office 2016 charts are `cx:chart` references (chartex namespace, `chartEx` relationship) inside `mc:AlternateContent/mc:Choice`, with a picture or empty `mc:Fallback`.
 - **Solution / Workaround**: `extractPptxCharts` walks `p:sldId r:id` in order and numbers slides by position. `extractOfficeCharts` matches any `chart` element in the DrawingML chart, strict chart or chartex namespace (wherever it is nested) and dedupes by target part, so a fallback that also points at a chart is not read twice.
+
+### [core/animation-editor] A Segment's Value Is the Latest One *Started*, Not a Keyframe Track
+
+- **Issue / Symptom**: Treating an animation scene's compiled segments like keyframes (sorting by end, or blending overlapping segments) made entering nodes visible before they entered, and made the Flair export disagree with the editor's own frames.
+- **Root Cause**: The animation editor (and Flair's `svgFrame`) give a property the value of the latest segment to have started, holding its `from` before the first one. That is what hides a node until its `enter`. Segments of one command can start later than segments of a command compiled after it (an `enter: "draw"` fades its fill in at 60%), so tracks are not in start order while compiling.
+- **Solution / Workaround**: `activeSegment` scans the whole track for the latest start (ties go to the later segment) instead of breaking early, and `compileMotionScene` sorts each track by start once it is done. A `draw` on a stroke with no draw-on yet starts from 0, like an enter.
+
+### [core/animation-editor] Flair's Easings Are Cubic Polynomials, Not CSS Curves
+
+- **Issue / Symptom**: Exported Flair motion was sampled into dozens of 33 ms linear steps for plain moves.
+- **Root Cause**: Flair's `out` is `1 − (1 − t)³` and `in-out` the piecewise cubic, which differ from CSS `ease-out` / `ease-in-out` by up to ~7%. Separately, a move animates `x` and `y` as two segments, so an interval had two active segments and fell back to sampling.
+- **Solution / Workaround**: The editor's defaults are `MOTION_EASE_OUT` (`cubic-bezier(1/3, 1, 2/3, 1)`, exactly Flair's `out`) and `MOTION_EASE_IN_OUT` (within 1% of Flair's `in-out`). `flairEaseFor` matches a curve to a Flair name within 1%, and the exporter writes one change when every active segment spans the same interval with the same curve.
+
+### [svelte] `role="listitem"` on a `<button>` Is an a11y Warning
+
+- **Issue / Symptom**: `svelte-check` / vite-plugin-svelte warns `a11y_no_interactive_element_to_noninteractive_role` for a list of shot buttons.
+- **Root Cause**: Svelte refuses non-interactive roles on interactive elements.
+- **Solution / Workaround**: Wrap the buttons in `role="group"` with an `aria-label` and leave the buttons' own role alone (React matches it for parity).
