@@ -1,3 +1,4 @@
+import { resolveEasing, springSettleMs } from '../animation/easing.js';
 import { normalizeTokenColor } from '../tokens/color.js';
 import { collectPathNodes } from '../vector/geometry.js';
 import type { VectorNode } from '../vector/types.js';
@@ -91,6 +92,14 @@ export function checkMotionScene(scene: MotionScene): MotionIssue[] {
 			const timing = timeline.commands.find((c) => c.shot === shot.id && c.command === i);
 			if (timing && timing.duration > 0 && timing.duration < MOTION_MIN_CHANGE_MS)
 				issues.push(motionIssue('too-fast', `This ${command.type} lasts ${timing.duration} ms, too quick to follow; make it at least ${MOTION_MIN_CHANGE_MS} ms.`, { ...where, measured: timing.duration, needed: MOTION_MIN_CHANGE_MS, unit: 'ms', ids: targets }));
+			if (command.duration !== undefined && command.ease !== undefined) {
+				const ease = resolveEasing(command.ease);
+				if (ease !== 'hold' && ease.type === 'spring') {
+					const settle = springSettleMs(ease);
+					if (command.duration < settle * 0.9)
+						issues.push(motionIssue('spring-cut-short', `This ${command.type}'s spring takes ${settle} ms to settle but lasts ${command.duration} ms, so it jumps to its end; leave "duration" out (the spring sets it) or make it at least ${settle} ms.`, { ...where, measured: command.duration, needed: settle, unit: 'ms', ids: targets }));
+				}
+			}
 			if (command.type === 'follow' && known(command.path, 'unknown-path', 'path', where) && nodes.get(command.path)!.node.type !== 'path')
 				issues.push(motionIssue('not-a-path', `"${command.path}" is a group; follow a single path node.`, { ...where, ids: [command.path] }));
 			if (command.type === 'morph') known(command.into, 'unknown-shape', 'shape', where);

@@ -24,6 +24,11 @@ export interface MotionScene {
 	loop?: AnimationLoopMode;
 	/** Frame rate used to sample motion that a target format cannot express exactly (default 30). */
 	fps?: number;
+	/**
+	 * Stepped time for every command that gives none: changes hold on a grid of this many frames
+	 * per second ("on twos" at 12), for a hand-drawn look. Default: smooth.
+	 */
+	steps?: number;
 	/** Wanted length in seconds `[min, max]`; `check` warns outside it. */
 	target?: [number, number];
 	/** Parameters a Flair effect made from this scene exposes (see `toFlairVectorEffect`). */
@@ -47,6 +52,8 @@ export interface MotionRect {
 export type MotionCamera = (MotionRect | { frame: string; padding?: number }) & {
 	ease?: AnimationEasing;
 	ms?: number;
+	/** Zoom at a steady rate (the size changes by the same factor each moment) instead of linearly. */
+	geometric?: boolean;
 };
 
 /** One beat of the animation. */
@@ -67,7 +74,7 @@ export interface MotionShot {
 export interface MotionCommandBase {
 	/** Node ids from the artwork (groups animate as one). */
 	targets: string[];
-	/** Length in ms for each target (each type has a default; `draw` follows the path length). */
+	/** Length in ms for each target, one cycle when repeating (each type has a default; `draw` follows the path length; a spring `ease` lasts until it settles). */
 	duration?: number;
 	/** Wait this many ms before starting (default 0). */
 	delay?: number;
@@ -75,9 +82,23 @@ export interface MotionCommandBase {
 	stagger?: number;
 	/** `after` (default) starts when the commands before it finish; `previous` starts with the command before. */
 	with?: 'after' | 'previous';
+	/** An easing; a spring with no `duration` lasts until it settles. */
 	ease?: AnimationEasing;
 	/** Why this command is here (for people and agents reading the scene). */
 	note?: string;
+	/**
+	 * Play the change this many times (a whole number, default 1); `duration` is one cycle. Not
+	 * for `enter`, `exit` or `wait`.
+	 */
+	repeat?: number;
+	/**
+	 * How repeats follow each other: `loop` (default) starts each cycle afresh, `mirror` plays
+	 * every other one backwards, `offset` carries on from where the last ended (rotate by 90,
+	 * repeat 4: a full turn). Colours and shapes offset like `loop`.
+	 */
+	repeatMode?: 'loop' | 'mirror' | 'offset';
+	/** Stepped time: hold the change on a grid of this many frames per second (default: the scene's `steps`, else smooth). */
+	steps?: number;
 }
 
 export type MotionEnterStyle = 'fade' | 'pop' | 'grow' | 'slide' | 'draw' | 'zoom' | 'rise' | 'wipe' | 'iris' | 'split';
@@ -153,6 +174,8 @@ export interface MotionRotateCommand extends MotionCommandBase {
 export interface MotionScaleCommand extends MotionCommandBase {
 	type: 'scale';
 	to: number | { x: number; y: number };
+	/** Grow at a steady rate (the same factor each moment), which reads as an even zoom. */
+	geometric?: boolean;
 }
 
 /** Changes opacity (0–1). */
@@ -315,6 +338,7 @@ export const MOTION_COMMAND_TYPES: readonly MotionCommandType[] = [
 	'wait'
 ];
 export const MOTION_ENTER_STYLES: readonly MotionEnterStyle[] = ['fade', 'pop', 'grow', 'slide', 'draw', 'zoom', 'rise', 'wipe', 'iris', 'split'];
+export const MOTION_REPEAT_MODES = ['loop', 'mirror', 'offset'] as const;
 export const MOTION_EXIT_STYLES: readonly MotionExitStyle[] = ['fade', 'shrink', 'slide', 'undraw', 'wipe'];
 export const MOTION_IRIS_SHAPES: readonly MotionIrisShape[] = ['circle', 'box'];
 export const MOTION_SPLIT_ORIENTATIONS: readonly MotionSplitOrientation[] = ['horizontal', 'vertical'];

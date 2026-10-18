@@ -11,7 +11,7 @@ import type { MotionCommand, MotionControl, MotionPreset, MotionScene, MotionSho
  * fixed a step at a time.
  */
 export type MotionEdit =
-	| { op: 'set_settings'; name?: string; description?: string | null; loop?: MotionScene['loop']; fps?: number; target?: [number, number] | null }
+	| { op: 'set_settings'; name?: string; description?: string | null; loop?: MotionScene['loop']; fps?: number; steps?: number | null; target?: [number, number] | null }
 	| { op: 'insert_shots'; shots: MotionShot[]; at?: number }
 	| { op: 'update_shot'; shot: string; set?: Partial<MotionShot>; remove?: ('label' | 'camera' | 'hold')[] }
 	| { op: 'delete_shots'; shots: string[] }
@@ -87,6 +87,11 @@ function applyOne(scene: MotionScene, edit: MotionEdit): MotionScene {
 			else if (edit.description !== undefined) next.description = edit.description;
 			if (edit.loop !== undefined) next.loop = edit.loop;
 			if (edit.fps !== undefined) next.fps = edit.fps;
+			if (edit.steps === null) delete next.steps;
+			else if (edit.steps !== undefined) {
+				if (!(typeof edit.steps === 'number' && edit.steps > 0 && edit.steps <= 120)) fail('"steps" must be frames per second from above 0 to 120 (12 is "on twos" at 24 fps), or null for smooth.');
+				next.steps = edit.steps;
+			}
 			if (edit.target === null) delete next.target;
 			else if (edit.target !== undefined) next.target = edit.target;
 			return next;

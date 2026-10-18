@@ -1,5 +1,5 @@
 import type { MotionBehavior } from '../animation/behavior.js';
-import { evaluateEasing, resolveEasing, type AnimationEasing } from '../animation/easing.js';
+import { evaluateEasing, resolveEasing, reverseCubicBezier, type AnimationEasing } from '../animation/easing.js';
 import { bezierPathToSvg, transformBezierPath } from '../canvas/pathops/bezier.js';
 import { normalizeTokenColor } from '../tokens/color.js';
 import { expandVectorAppearance, expandVectorAppearances } from '../vector/appearance.js';
@@ -33,8 +33,13 @@ import type { MotionScene } from './types.js';
 /** Flair's easing names. */
 export type FlairEaseName = 'linear' | 'in-out' | 'out';
 
-/** A Flair easing: a name, or (Flair 0.36 and later) a CSS cubic-bezier `[x1, y1, x2, y2]`. */
-export type FlairEase = FlairEaseName | readonly [number, number, number, number];
+/** Flair's spring ease (Flair 0.39 and later): the editor's spring, number for number. */
+export interface FlairSpringEase {
+	spring: { mass?: number; stiffness?: number; damping?: number; velocity?: number };
+}
+
+/** A Flair easing: a name, (Flair 0.36 and later) a CSS cubic-bezier `[x1, y1, x2, y2]`, or (0.39) a spring. */
+export type FlairEase = FlairEaseName | readonly [number, number, number, number] | FlairSpringEase;
 
 /** Flair's curves, for matching. */
 export const FLAIR_EASES: Readonly<Record<FlairEaseName, (t: number) => number>> = {
@@ -59,6 +64,16 @@ export interface FlairSvgAnimation {
 	orient?: boolean;
 	/** Flair 0.38 and later: how the change swings from → to (see `MotionBehavior`). */
 	behavior?: MotionBehavior;
+	/** Flair 0.39 and later: stepped time, held on a grid of this many frames per second. */
+	strobe?: number;
+	/** Flair 0.39 and later: whole cycles to play (default 1); with `alternate`, every other one backwards. */
+	repeat?: number;
+	alternate?: boolean;
+	/** Flair features scenes do not have (imports skip them with a note). */
+	count?: readonly [number, number];
+	write?: string;
+	scramble?: string;
+	solo?: number;
 	view?: readonly [number, number, number, number] | string;
 }
 
@@ -125,6 +140,23 @@ export interface FlairExportOptions {
 	 * older Flair, and they are sampled into linear steps.
 	 */
 	behaviors?: boolean;
+	/**
+	 * The Flair version the export is for (default `0.39`): it decides what is written exactly
+	 * and what is sampled. 0.36 adds cubic-bezier curves, 0.38 behaviours, 0.39 springs and
+	 * stepped time (`strobe`). `curves` and `behaviors` override it.
+	 */
+	flair?: string;
+}
+
+/** The Flair version exports target by default. */
+export const FLAIR_EXPORT_VERSION = '0.39';
+
+/** Whether Flair `version` is at least `min` (dotted numbers). */
+export function flairAtLeast(version: string, min: string): boolean {
+	const a = version.split('.').map((n) => parseInt(n, 10) || 0);
+	const b = min.split('.').map((n) => parseInt(n, 10) || 0);
+	for (let i = 0; i < Math.max(a.length, b.length); i++) if ((a[i] ?? 0) !== (b[i] ?? 0)) return (a[i] ?? 0) > (b[i] ?? 0);
+	return true;
 }
 
 /** The Flair easing that matches `ease` (within 1% everywhere), if any. */
@@ -153,8 +185,8 @@ export function flairCurveFor(ease: AnimationEasing, curves = true): FlairEase |
 	return [resolved.x1, resolved.y1, resolved.x2, resolved.y2];
 }
 
-/** Whether a curve leaves 0–1 (a back ease), so its values pass `from` or `to`. */
-const overshoots = (ease: FlairEase) => typeof ease !== 'string' && (ease[1] < 0 || ease[1] > 1 || ease[3] < 0 || ease[3] > 1);
+/** Whether a curve leaves 0–1 (a back ease or a spring), so its values pass `from` or `to`. */
+const overshoots = (ease: FlairEase) => typeof ease !== 'string' && ('spring' in ease || ease[1] < 0 || ease[1] > 1 || ease[3] < 0 || ease[3] > 1);
 
 type ChannelValue = number | string | readonly number[];
 
@@ -188,10 +220,26 @@ function hex6(color: unknown): string {
 export function toFlairSvgMotion(scene: MotionScene, options: FlairExportOptions = {}): FlairMotionExport {
 	const fps = options.fps ?? scene.fps ?? 30;
 	const precision = options.precision ?? 3;
-	const curves = options.curves ?? true;
-	const behaviors = options.behaviors ?? true;
+	const flair = options.flair ?? FLAIR_EXPORT_VERSION;
+	const curves = options.curves ?? flairAtLeast(flair, '0.36');
+	const behaviors = options.behaviors ?? flairAtLeast(flair, '0.38');
+	const springs = flairAtLeast(flair, '0.39');
+	const strobes = flairAtLeast(flair, '0.39');
+	const writeEase = (ease: FlairEase): FlairEase => (typeof ease === 'string' || 'spring' in ease ? ease : (ease.map(round) as unknown as FlairEase));
+	// The ease Flair is given for a segment: its curve (run backwards for a mirrored repeat) or its spring, if Flair can take it.
+	const easeOf = (segment: MotionSegment): FlairEase | undefined => {
+		const resolved = resolveEasing(segment.ease);
+		if (resolved !== 'hold' && resolved.type === 'spring') {
+			if (!springs || segment.reverse) return undefined;
+			const { mass, stiffness, damping, velocity } = resolved;
+			return { spring: { mass, stiffness, damping, velocity } };
+		}
+		if (!segment.reverse) return flairCurveFor(segment.ease, curves);
+		const back = reverseCubicBezier(segment.ease);
+		return back && curves ? flairCurveFor(back, curves) : undefined;
+	};
 	// A segment with a behaviour plays exactly when Flair can be given the behaviour.
-	const plays = (s: MotionSegment) => !s.behavior || behaviors;
+	const plays = (s: MotionSegment) => (!s.behavior || behaviors) && (!s.steps || strobes) && !s.geometric;
 	const round = (n: number) => Math.round(n * 10 ** precision) / 10 ** precision;
 	const f = (n: number) => String(round(n));
 	const timeline = compileMotionScene(scene);
@@ -338,8 +386,16 @@ export function toFlairSvgMotion(scene: MotionScene, options: FlairExportOptions
 	const animate: FlairSvgAnimation[] = [];
 	let sampled = 0;
 	const same = (a: ChannelValue, b: ChannelValue) => JSON.stringify(a) === JSON.stringify(b);
-	const emit = (channel: Channel, delay: number, ms: number, from: ChannelValue, to: ChannelValue, ease: FlairEase, behavior?: MotionBehavior) => {
-		const base = { ...(channel.id ? { id: channel.id } : {}), ...(delay > 0 ? { delay: round(delay) } : {}), ms: round(ms), ease: typeof ease === 'string' ? ease : (ease.map(round) as unknown as FlairEase), ...(behavior ? { behavior } : {}) };
+	const emit = (channel: Channel, delay: number, ms: number, from: ChannelValue, to: ChannelValue, ease: FlairEase, segment?: MotionSegment) => {
+		const written = writeEase(ease);
+		const base = {
+			...(channel.id ? { id: channel.id } : {}),
+			...(delay > 0 ? { delay: round(delay) } : {}),
+			ms: round(ms),
+			ease: written,
+			...(segment?.behavior ? { behavior: segment.behavior } : {}),
+			...(segment?.steps ? { strobe: segment.steps } : {})
+		};
 		if (channel.kind === 'view') animate.push({ ...base, view: to as unknown as [number, number, number, number] });
 		else if (channel.kind === 'draw') animate.push({ ...base, draw: [from as number, to as number] });
 		else if (channel.kind === 'attrs') {
@@ -367,15 +423,14 @@ export function toFlairSvgMotion(scene: MotionScene, options: FlairExportOptions
 			// One change when every active segment spans exactly this interval with one exact curve (a move's x and y, say).
 			const first = active[0];
 			// A behaviour (pulse, shake, wriggle…) is one change toward the value it swings round, when every active segment shares it.
-			const together = active.every(
-				(x) => x.start === a && x.end === b && channel.exact(x) && JSON.stringify(x.ease) === JSON.stringify(first.ease) && JSON.stringify(x.behavior) === JSON.stringify(first.behavior)
-			);
-			const curve = together ? flairCurveFor(first.ease, curves) : undefined;
+			const key = (x: MotionSegment) => JSON.stringify([x.ease, x.behavior, x.reverse ?? false, x.steps ?? 0]);
+			const together = active.every((x) => x.start === a && x.end === b && channel.exact(x) && key(x) === key(first));
+			const curve = together ? easeOf(first) : undefined;
 			const ease = curve && (!overshoots(curve) || channel.overshoot) ? curve : undefined;
 			if (ease) {
 				const from = channel.value(a);
 				const to = first.behavior ? (channel.raw ?? channel.value)(b) : channel.value(b);
-				if (!same(from, to) || channel.kind === 'view') emit(channel, a, b - a, from, to, ease, first.behavior);
+				if (!same(from, to) || channel.kind === 'view') emit(channel, a, b - a, from, to, ease, first);
 				continue;
 			}
 			const n = Math.max(1, Math.ceil(((b - a) * fps) / 1000));
@@ -399,10 +454,11 @@ export function toFlairSvgMotion(scene: MotionScene, options: FlairExportOptions
 		for (const seg of follow.segments) {
 			const along = { id: follow.wrapper, along: follow.routes.get(seg.path!)!, ...(seg.rotate ? { orient: true } : {}) };
 			const progress = (t: number) => round(Math.min(1, Math.max(0, Number(segmentValue(seg, t)))));
-			const curve = seg.end > seg.start ? flairCurveFor(seg.ease, curves) : 'linear';
+			const curve = seg.end > seg.start ? (plays(seg) ? easeOf(seg) : undefined) : 'linear';
 			// Past the ends, Flair stops turning (its direction is measured either side of the point), so overshoots are sampled.
 			if (curve && !(overshoots(curve) && seg.rotate)) {
-				animate.push({ ...along, ...(seg.start > 0 ? { delay: round(seg.start) } : {}), ms: round(seg.end - seg.start), ease: typeof curve === 'string' ? curve : (curve.map(round) as unknown as FlairEase), at: [round(Number(seg.from)), round(Number(seg.to))] });
+				const ends = seg.reverse ? [Number(seg.to), Number(seg.from)] : [Number(seg.from), Number(seg.to)];
+				animate.push({ ...along, ...(seg.start > 0 ? { delay: round(seg.start) } : {}), ms: round(seg.end - seg.start), ease: writeEase(curve), ...(seg.steps ? { strobe: seg.steps } : {}), at: [round(ends[0]), round(ends[1])] });
 				continue;
 			}
 			// Sampled up to the next follow's start, which takes over there.

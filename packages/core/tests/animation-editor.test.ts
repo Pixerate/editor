@@ -19,11 +19,13 @@ import {
 	toFlairVectorEffect,
 	MOTION_EASE_OUT,
 	motionFlairPrimitive,
+	fromFlairSvgMotion,
+	fromFlairVectorEffect,
 	type FlairSvgAnimation,
 	type MotionIssueCode,
 	type MotionScene
 } from '../src/animation-editor';
-import { ManualClock } from '../src/animation';
+import { ManualClock, SPRING_PRESETS, springSettleMs } from '../src/animation';
 import { ToolRegistry } from '../src/tools';
 import { createVectorEffect, ellipseSubpath, findVectorNode, rectSubpath, starSubpath, type VectorDocument, type VectorPathNode } from '../src/vector';
 
@@ -188,7 +190,8 @@ describe('checkMotionScene', () => {
 						{ type: 'effect', targets: ['spin'], effect: 'tw', param: 'angel', to: 1 },
 						{ type: 'style', targets: ['box'], fill: 'not-a-colour' },
 						{ type: 'fade', targets: ['box'], to: 0.5, duration: 50 },
-						{ type: 'enter', targets: ['line'], style: 'wipe' }
+						{ type: 'enter', targets: ['line'], style: 'wipe' },
+						{ type: 'scale', targets: ['box'], to: 1.2, ease: 'spring-gentle', duration: 300 }
 					] },
 					{ id: 'x', run: [] },
 					{ id: 'y', camera: { frame: 'ghost' }, run: [] },
@@ -686,8 +689,10 @@ describe('Flair clip reveals and follows', () => {
 		expect(animate).toContainEqual({ id: 'dart--follow', along: 'dart--follow-route', orient: true, ms: 1000, ease: 'linear', at: [0, 1] });
 		// The node's own transform leaves the follow to the wrapper.
 		expect(animate.find((a) => a.id === 'dart')?.attrs?.transform).toEqual(['translate(0 0) rotate(0 320 120) translate(320 120) scale(1 1) translate(-320 -120)', 'translate(10 0) rotate(0 320 120) translate(320 120) scale(1 1) translate(-320 -120)']);
-		// A spring cannot be one change: it is sampled into linear steps along the path.
-		const sprung = toFlairSvgMotion({ ...s, shots: [{ id: 'one', run: [{ type: 'follow', targets: ['dart'], path: 'route', ease: 'spring', duration: 500 }] }] });
+		// A spring is one change for Flair 0.39; older Flair gets it sampled into linear steps along the path.
+		const springScene: MotionScene = { ...s, shots: [{ id: 'one', run: [{ type: 'follow', targets: ['dart'], path: 'route', ease: 'spring', duration: 500 }] }] };
+		expect(animateOf(toFlairSvgMotion(springScene))).toEqual([expect.objectContaining({ along: 'dart--follow-route', ms: 500, ease: { spring: { mass: 1, stiffness: 170, damping: 26, velocity: 0 } } })]);
+		const sprung = toFlairSvgMotion(springScene, { flair: '0.38' });
 		expect(sprung.sampled).toBe(15);
 		expect(animateOf(sprung).every((a) => a.along === 'dart--follow-route' && a.ease === 'linear')).toBe(true);
 	});
@@ -717,5 +722,169 @@ describe('Flair clip reveals and follows', () => {
 		const check = (await registry.callTool('check_animation', {})).structuredContent as any;
 		expect(JSON.stringify(check)).toContain('reveal-no-box');
 		expect(() => parseMotionScene(scene([{ id: 'one', run: [{ type: 'enter', targets: ['box'], style: 'iris', shape: 'star' } as never] }]))).toThrow(/"shape" must be one of circle, box/);
+	});
+});
+
+describe('timing: springs, repeats, stepped time and geometric zoom', () => {
+	const rotationAt = (s: MotionScene, t: number, id = 'box') => {
+		const m = path(motionFrameAt(s, t).document, id).transform;
+		return m ? (Math.atan2(m[1], m[0]) * 180) / Math.PI : 0;
+	};
+
+	it('lets a spring set its own length, and warns when one is cut short', () => {
+		expect(springSettleMs(SPRING_PRESETS['spring-quick'])).toBe(Math.round(6.9 / ((20 / (2 * Math.sqrt(300))) * Math.sqrt(300)) * 1000));
+		const s = scene([{ id: 'one', run: [{ type: 'scale', targets: ['box'], to: 1.5, ease: 'spring-bouncy' }, { type: 'move', targets: ['dot'], by: { x: 10, y: 0 }, ease: { type: 'spring', stiffness: 100, damping: 15 } }] }]);
+		expect(compileMotionScene(s).commands.map((c) => c.duration)).toEqual([springSettleMs(SPRING_PRESETS['spring-bouncy']), springSettleMs({ stiffness: 100, damping: 15 })]);
+		// A bouncy spring overshoots before it settles.
+		const peak = Math.max(...Array.from({ length: 40 }, (_, i) => path(motionFrameAt(s, i * 20).document, 'box').transform?.[0] ?? 1));
+		expect(peak).toBeGreaterThan(1.5);
+		const cut = checkMotionScene(scene([{ id: 'one', run: [{ type: 'scale', targets: ['box'], to: 1.5, ease: 'spring-slow', duration: 200 }] }]));
+		expect(cut.find((i) => i.code === 'spring-cut-short')).toMatchObject({ measured: 200, needed: springSettleMs(SPRING_PRESETS['spring-slow']) });
+	});
+
+	it('repeats in loop, mirror and offset modes', () => {
+		const make = (repeatMode: 'loop' | 'mirror' | 'offset') => scene([{ id: 'one', run: [{ type: 'rotate', targets: ['box'], by: 90, ease: 'linear', duration: 100, repeat: 4, repeatMode }] }]);
+		expect(compileMotionScene(make('loop')).commands[0]).toMatchObject({ start: 0, end: 400, duration: 400 });
+		expect(rotationAt(make('loop'), 150)).toBeCloseTo(45, 6);
+		expect(rotationAt(make('mirror'), 150)).toBeCloseTo(45, 6);
+		expect(rotationAt(make('mirror'), 125)).toBeCloseTo(67.5, 3);
+		expect(rotationAt(make('mirror'), 400)).toBeCloseTo(0, 6);
+		expect(rotationAt(make('offset'), 250)).toBeCloseTo(-135, 6); // 225°
+		expect(rotationAt(make('offset'), 400)).toBeCloseTo(0, 6); // 360°
+		expect(() => parseMotionScene(scene([{ id: 'one', run: [{ type: 'enter', targets: ['box'], repeat: 2 } as never, { type: 'fade', targets: ['box'], to: 0, repeat: 1.5, repeatMode: 'bounce' } as never] }]))).toThrow(/"repeat" is not for enter[\s\S]*"repeat" must be a whole number[\s\S]*"repeatMode" must be one of loop, mirror, offset/);
+	});
+
+	it('exports mirrored repeats as one change each with the curve run backwards', () => {
+		const s = scene([{ id: 'one', run: [{ type: 'move', targets: ['box'], by: { x: 40, y: 0 }, ease: 'ease-in', duration: 200, repeat: 2, repeatMode: 'mirror' }] }]);
+		const out = toFlairSvgMotion(s);
+		expect(out.sampled).toBe(0);
+		const moves = animateOf(out).filter((a) => a.id === 'box');
+		expect(moves.map((a) => [a.delay ?? 0, a.ease])).toEqual([[0, [0.42, 0, 1, 1]], [200, [0, 0, 0.58, 1]]]);
+		expect(moves[1].attrs!.transform![0]).toMatch(/^translate\(40 0\)/);
+	});
+
+	it('holds poses on stepped time and exports it as a Flair strobe', () => {
+		const s = scene([{ id: 'one', run: [{ type: 'move', targets: ['box'], by: { x: 100, y: 0 }, ease: 'linear', duration: 1000 }] }], { steps: 12 });
+		const x = (t: number) => path(motionFrameAt(s, t).document, 'box').transform?.[4] ?? 0;
+		expect(x(90)).toBeCloseTo(8.333, 2);
+		expect(x(160)).toBeCloseTo(8.333, 2);
+		expect(x(170)).toBeCloseTo(16.667, 2);
+		expect(x(1000)).toBe(100);
+		const out = toFlairSvgMotion(s);
+		expect(animateOf(out)).toEqual([expect.objectContaining({ id: 'box', ms: 1000, ease: 'linear', strobe: 12 })]);
+		expect(toFlairSvgMotion(s, { flair: '0.38' }).sampled).toBeGreaterThan(10);
+	});
+
+	it('zooms at a steady rate with geometric scale and cameras', () => {
+		const s = scene([{ id: 'one', run: [{ type: 'scale', targets: ['box'], to: 4, ease: 'linear', duration: 1000, geometric: true }] }]);
+		expect(path(motionFrameAt(s, 500).document, 'box').transform?.[0]).toBeCloseTo(2, 6);
+		const cam = scene([{ id: 'a', run: [{ type: 'wait', duration: 10 }] }, { id: 'b', camera: { x: 150, y: 50, width: 100, height: 50, ms: 1000, ease: 'linear', geometric: true }, run: [] }]);
+		const start = compileMotionScene(cam).shots[1].start;
+		const mid = motionFrameAt(cam, start + 500).camera;
+		expect(mid.width).toBeCloseTo(200, 6);
+		// The centre (200, 100) → (200, 75) keeps pace with the size: two thirds of the way when the width has gone 400 → 200 of 400 → 100.
+		expect(mid.y + mid.height / 2).toBeCloseTo(100 - 25 * (2 / 3), 3);
+		expect(toFlairSvgMotion(s).sampled).toBeGreaterThan(0);
+	});
+
+	it('takes the new options through the agent tools', async () => {
+		const controller = new AnimationEditorController({ scene: createMotionScene(ARTWORK, { name: 'demo' }) });
+		const registry = new ToolRegistry();
+		registry.register(createAnimationEditorToolProvider(controller));
+		const ok = await registry.callTool('insert_shots', { shots: [{ id: 'spin', run: [{ type: 'rotate', targets: ['box'], by: 90, repeat: 4, repeatMode: 'offset', ease: 'spring-quick', steps: 12 }] }] });
+		expect(ok.isError).toBeFalsy();
+		expect((ok.structuredContent as any).duration).toBe(springSettleMs(SPRING_PRESETS['spring-quick']) * 4 + 600);
+		expect((await registry.callTool('set_animation_settings', { steps: 8 })).isError).toBeFalsy();
+		expect(controller.getState().scene.steps).toBe(8);
+		const bad = await registry.callTool('set_animation_settings', { steps: 0 });
+		expect(bad.isError).toBe(true);
+		const flair = (await registry.callTool('export_flair_motion', { flair: '0.36' })).structuredContent as any;
+		expect(flair.sampled).toBeGreaterThan(0);
+	});
+});
+
+describe('importing from Flair', () => {
+	const ART_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="200" height="100"><path id="dot" d="M40 40h20v20h-20z" fill="{{accent: color default=#0EA5E9 label=\'Accent\'}}"/><path id="line" d="M10 90L190 90" fill="none" stroke="#111111" stroke-width="2"/><path id="route" d="M0 50L200 50" fill="none" stroke="none"/></svg>';
+
+	it('round-trips an exported scene to the same frames', () => {
+		const s = scene([
+			{ id: 'one', run: [{ type: 'enter', targets: ['box'] }, { type: 'move', targets: ['box'], by: { x: 40, y: 10 }, ease: 'ease-in' }, { type: 'rotate', targets: ['dot'], by: 30, with: 'previous' }, { type: 'draw', targets: ['line'], from: 0 }] },
+			{ id: 'two', run: [{ type: 'pulse', targets: ['box'], count: 2 }, { type: 'teeter', targets: ['dot'], with: 'previous' }, { type: 'wiggle', targets: ['a'], amount: 5, seed: 9, with: 'previous' }, { type: 'color-pulse', targets: ['b'], color: '#000000', with: 'previous' }] }
+		]);
+		const exported = toFlairSvgMotion(s);
+		expect(exported.sampled).toBe(0);
+		// One Flair step: the import has one shot holding every command at the times they had.
+		const { scene: back, notes } = fromFlairSvgMotion(exported.motion, { hold: exported.hold });
+		expect(notes).toEqual([]);
+		expect(back.shots).toHaveLength(1);
+		const types = back.shots[0].run.map((c) => c.type);
+		expect(types).toEqual(expect.arrayContaining(['enter', 'move', 'rotate', 'draw', 'pulse', 'teeter', 'wiggle', 'color-pulse']));
+		expect(compileMotionScene(back).duration).toBe(compileMotionScene(s).duration);
+		for (const t of [0, 300, 700, 1000, 1500, 2100, 2500, 2900]) {
+			const a = motionFrameAt(s, t).document;
+			const b = motionFrameAt(back, t).document;
+			for (const id of ['box', 'dot', 'line', 'a', 'b']) {
+				const pa = path(a, id);
+				const pb = path(b, id);
+				(pa.transform ?? [1, 0, 0, 1, 0, 0]).forEach((v, i) => expect((pb.transform ?? [1, 0, 0, 1, 0, 0])[i]).toBeCloseTo(v, 2));
+				expect(pb.opacity ?? 1).toBeCloseTo(pa.opacity ?? 1, 3);
+				expect(pb.fill).toEqual(pa.fill);
+			}
+		}
+	});
+
+	it('reads placeholders as colour controls, steps as shots, and follows and views', () => {
+		const effect = {
+			kind: 'vector' as const,
+			id: 'dot-run',
+			name: 'Dot run',
+			description: 'A dot runs along.',
+			category: 'icon',
+			tags: [],
+			hold: 300,
+			trigger: 'hover' as const,
+			presets: [{ name: 'Rose', values: { accent: '#f43f5e', size: '3' } }],
+			motion: {
+				svg: ART_SVG,
+				animate: [
+					{ id: 'dot', ms: 400, ease: 'out' as const, attrs: { opacity: [0, 1] as const } },
+					{ id: 'line', delay: 200, ms: 500, draw: true },
+					{ step: 1, view: [0, 0, 100, 50] as const, ms: 300 },
+					{ step: 1, id: 'dot', delay: 300, ms: 1000, along: 'route', at: [0, 1] as const, orient: true, ease: { spring: { stiffness: 200, damping: 20 } } },
+					{ step: 1, id: 'line', delay: 300, ms: 600, count: [0, 10] as const },
+					{ step: 1, id: 'ghost', ms: 200, attrs: { opacity: [1, 0] as const } }
+				]
+			}
+		};
+		const { scene: s, notes } = fromFlairVectorEffect(effect);
+		expect(s).toMatchObject({ name: 'dot-run', description: 'A dot runs along.', controls: [{ name: 'accent', type: 'color', default: '#0ea5e9', label: 'Accent' }], presets: [{ name: 'Rose', values: { accent: '#f43f5e' } }] });
+		expect(path(s.artwork, 'dot').fill).toBe('#0ea5e9');
+		expect(s.shots.map((x) => x.id)).toEqual(['step-0', 'step-1']);
+		expect(s.shots[0].run).toEqual([
+			{ type: 'enter', targets: ['dot'], style: 'fade', duration: 400, ease: MOTION_EASE_OUT },
+			{ type: 'draw', targets: ['line'], from: 0, to: 1, duration: 500, ease: expect.anything(), with: 'previous', delay: 200 }
+		]);
+		expect(s.shots[1]).toMatchObject({ camera: { x: 0, y: 0, width: 100, height: 50, ms: 300 }, hold: 300, run: [{ type: 'follow', path: 'route', rotate: true, ease: { type: 'spring', stiffness: 200, damping: 20 } }] });
+		for (const said of [/Each Flair step became a shot/, /"line": count is not part of scenes/, /"ghost" was skipped: the artwork has no element with that id/, /plays on hover/]) expect(notes.join('\n')).toMatch(said);
+	});
+
+	it('imports through the agent tool, with a dry run and useful errors', async () => {
+		const controller = new AnimationEditorController({ scene: createMotionScene(ARTWORK, { name: 'demo' }) });
+		const registry = new ToolRegistry();
+		registry.register(createAnimationEditorToolProvider(controller));
+		const motion = { svg: ART_SVG, animate: [{ id: 'dot', ms: 600, behavior: { type: 'oscillate', count: 3, decay: 1 }, attrs: { transform: ['translate(0 0)', 'translate(8 0)'] } }] };
+		const dry = (await registry.callTool('import_flair_effect', { motion, dry_run: true })).structuredContent as any;
+		expect(dry).toMatchObject({ dry_run: true, notes: [], shots: [{ id: 'step-0', commands: 1 }] });
+		expect(controller.getState().scene.name).toBe('demo');
+		const done = await registry.callTool('import_flair_effect', { motion, name: 'shaker' });
+		expect(done.isError).toBeFalsy();
+		expect(controller.getState().scene).toMatchObject({ name: 'shaker', shots: [{ run: [{ type: 'shake', targets: ['dot'], amount: 8, count: 3 }] }] });
+		expect((await registry.callTool('undo_animation', {})).structuredContent).toMatchObject({ undone: true, label: 'Import Flair effect' });
+		const both = await registry.callTool('import_flair_effect', { motion, effect: { kind: 'vector', motion } });
+		expect(both.isError).toBe(true);
+		expect(JSON.stringify(both.content)).toMatch(/exactly one of/);
+		const broken = await registry.callTool('import_flair_effect', { motion: { svg: '<nope/>' } });
+		expect(broken.isError).toBe(true);
+		expect(JSON.stringify(broken.content)).toMatch(/could not be imported[\s\S]*Nothing was changed/);
 	});
 });
