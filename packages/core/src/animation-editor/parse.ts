@@ -21,7 +21,7 @@ const SHOT_KEYS = ['id', 'label', 'camera', 'run', 'hold'];
 const CAMERA_KEYS = ['x', 'y', 'width', 'height', 'frame', 'padding', 'ease', 'ms'];
 const BASE_KEYS = ['type', 'targets', 'duration', 'delay', 'stagger', 'with', 'ease', 'note'];
 const COMMAND_KEYS: Record<string, string[]> = {
-	enter: [...BASE_KEYS, 'style', 'direction', 'distance'],
+	enter: [...BASE_KEYS, 'style', 'direction', 'distance', 'scale'],
 	exit: [...BASE_KEYS, 'style', 'direction', 'distance'],
 	draw: [...BASE_KEYS, 'from', 'to'],
 	move: [...BASE_KEYS, 'by', 'to'],
@@ -32,7 +32,11 @@ const COMMAND_KEYS: Record<string, string[]> = {
 	morph: [...BASE_KEYS, 'into'],
 	follow: [...BASE_KEYS, 'path', 'rotate', 'from', 'to'],
 	pulse: [...BASE_KEYS, 'amount', 'count'],
-	shake: [...BASE_KEYS, 'amount', 'count'],
+	shake: [...BASE_KEYS, 'amount', 'count', 'axis'],
+	teeter: [...BASE_KEYS, 'angle', 'count'],
+	wave: [...BASE_KEYS, 'amount', 'count'],
+	wiggle: [...BASE_KEYS, 'amount', 'frequency', 'octaves', 'rotate', 'seed'],
+	'color-pulse': [...BASE_KEYS, 'color', 'paint', 'count'],
 	effect: [...BASE_KEYS, 'effect', 'param', 'to'],
 	wait: ['type', 'duration', 'with', 'note']
 };
@@ -83,6 +87,7 @@ export function commandShapeProblems(command: unknown, where: string): string[] 
 				p(`"style" must be one of ${styles.join(', ')}${typeof command.style === 'string' ? ` (got ${namedWithSuggestion(command.style, styles)})` : ''}.`);
 			if (command.direction !== undefined && !(MOTION_DIRECTIONS as readonly unknown[]).includes(command.direction)) p(`"direction" must be one of ${MOTION_DIRECTIONS.join(', ')}.`);
 			optionalNumber('distance');
+			if (command.scale !== undefined && !(isNum(command.scale) && command.scale >= 0)) p(`"scale" must be a number ≥ 0 (the starting scale for pop and zoom).`);
 			break;
 		}
 		case 'draw':
@@ -124,8 +129,22 @@ export function commandShapeProblems(command: unknown, where: string): string[] 
 			break;
 		case 'pulse':
 		case 'shake':
+		case 'teeter':
+		case 'wave':
+		case 'color-pulse':
 			optionalNumber('amount');
+			optionalNumber('angle');
 			if (command.count !== undefined && !(Number.isInteger(command.count) && (command.count as number) >= 1)) p(`"count" must be a whole number ≥ 1.`);
+			if (command.axis !== undefined && command.axis !== 'horizontal' && command.axis !== 'vertical') p(`"axis" must be "horizontal" or "vertical".`);
+			if (command.color !== undefined && typeof command.color !== 'string') p(`"color" must be a CSS colour.`);
+			if (command.paint !== undefined && command.paint !== 'fill' && command.paint !== 'stroke') p(`"paint" must be "fill" or "stroke".`);
+			break;
+		case 'wiggle':
+			optionalNumber('amount');
+			optionalNumber('rotate');
+			if (command.frequency !== undefined && !(isNum(command.frequency) && command.frequency > 0)) p(`"frequency" must be a number of Hz > 0.`);
+			if (command.octaves !== undefined && !(Number.isInteger(command.octaves) && (command.octaves as number) >= 1 && (command.octaves as number) <= 8)) p(`"octaves" must be a whole number from 1 to 8.`);
+			if (command.seed !== undefined && !(Number.isInteger(command.seed) && (command.seed as number) >= 0)) p(`"seed" must be a whole number ≥ 0.`);
 			break;
 		case 'effect':
 			if (typeof command.effect !== 'string' || !command.effect) p(`"effect" must be the id of one of the node's effects.`);

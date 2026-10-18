@@ -80,19 +80,28 @@ export interface MotionCommandBase {
 	note?: string;
 }
 
-export type MotionEnterStyle = 'fade' | 'pop' | 'grow' | 'slide' | 'draw';
+export type MotionEnterStyle = 'fade' | 'pop' | 'grow' | 'slide' | 'draw' | 'zoom' | 'rise';
 export type MotionExitStyle = 'fade' | 'shrink' | 'slide' | 'undraw';
 export type MotionDirection = 'up' | 'down' | 'left' | 'right';
 
-/** Brings hidden targets in. Targets entered in a shot are hidden before it. */
+/**
+ * Brings hidden targets in. Targets entered in a shot are hidden before it. Each style is a
+ * Flair motion primitive (`entrance.<style>`) with the same defaults.
+ */
 export interface MotionEnterCommand extends MotionCommandBase {
 	type: 'enter';
-	/** Default `fade`. `draw` draws the outline on, then fades the fill in. */
+	/**
+	 * Default `fade`. `draw` draws the outline on, then fades the fill in. `pop` scales up past
+	 * full size and settles; `zoom` settles from larger; `rise` rises a short way with a little
+	 * overshoot.
+	 */
 	style?: MotionEnterStyle;
 	/** For `slide`: the direction of travel (default `up`). */
 	direction?: MotionDirection;
-	/** For `slide`: how far in document units (default 40). */
+	/** For `slide` (default 40) and `rise` (default 20): how far in document units. */
 	distance?: number;
+	/** For `pop` (default 0.5) and `zoom` (default 1.6): the starting scale. */
+	scale?: number;
 }
 
 /** Takes targets out. */
@@ -173,11 +182,59 @@ export interface MotionPulseCommand extends MotionCommandBase {
 	count?: number;
 }
 
-/** Shakes side to side, settling. */
+/** Shakes side to side (or up and down), settling. */
 export interface MotionShakeCommand extends MotionCommandBase {
 	type: 'shake';
 	/** Distance in document units (default 8). */
 	amount?: number;
+	count?: number;
+	/** Default `horizontal`. */
+	axis?: 'horizontal' | 'vertical';
+}
+
+/** Rocks about the centre by `angle` either way, settling (Flair's `emphasis.teeter`). */
+export interface MotionTeeterCommand extends MotionCommandBase {
+	type: 'teeter';
+	/** Degrees either way (default 8). */
+	angle?: number;
+	/** Rocks (default 3). */
+	count?: number;
+}
+
+/** Bobs up and down without settling, like something floating (Flair's `emphasis.wave`). */
+export interface MotionWaveCommand extends MotionCommandBase {
+	type: 'wave';
+	/** Height in document units (default 6). */
+	amount?: number;
+	/** Bobs (default 2). */
+	count?: number;
+}
+
+/**
+ * Wanders about its place as smooth seeded noise, easing out of and back to rest (Flair's
+ * `emphasis.wiggle`). The same seed always wanders the same way.
+ */
+export interface MotionWiggleCommand extends MotionCommandBase {
+	type: 'wiggle';
+	/** Up to about this far, in document units (default 6). */
+	amount?: number;
+	/** Wanders per second, in Hz (default 3). */
+	frequency?: number;
+	/** Layers of finer detail (default 2). */
+	octaves?: number;
+	/** Also turns about the centre by up to about this many degrees (default 0). */
+	rotate?: number;
+	/** A whole number; default: one picked from the target's id, so each target wanders its own way. */
+	seed?: number;
+}
+
+/** Tints solid paint toward a colour and back, `count` times (Flair's `emphasis.color-pulse`). */
+export interface MotionColorPulseCommand extends MotionCommandBase {
+	type: 'color-pulse';
+	/** The tint (default `#f59e0b`). Mixes in OKLab. */
+	color?: string;
+	/** Which paint (default `fill`). On a group it tints every path in it. */
+	paint?: 'fill' | 'stroke';
 	count?: number;
 }
 
@@ -212,6 +269,10 @@ export type MotionCommand =
 	| MotionFollowCommand
 	| MotionPulseCommand
 	| MotionShakeCommand
+	| MotionTeeterCommand
+	| MotionWaveCommand
+	| MotionWiggleCommand
+	| MotionColorPulseCommand
 	| MotionEffectCommand
 	| MotionWaitCommand;
 
@@ -230,10 +291,14 @@ export const MOTION_COMMAND_TYPES: readonly MotionCommandType[] = [
 	'follow',
 	'pulse',
 	'shake',
+	'teeter',
+	'wave',
+	'wiggle',
+	'color-pulse',
 	'effect',
 	'wait'
 ];
-export const MOTION_ENTER_STYLES: readonly MotionEnterStyle[] = ['fade', 'pop', 'grow', 'slide', 'draw'];
+export const MOTION_ENTER_STYLES: readonly MotionEnterStyle[] = ['fade', 'pop', 'grow', 'slide', 'draw', 'zoom', 'rise'];
 export const MOTION_EXIT_STYLES: readonly MotionExitStyle[] = ['fade', 'shrink', 'slide', 'undraw'];
 export const MOTION_DIRECTIONS: readonly MotionDirection[] = ['up', 'down', 'left', 'right'];
 
@@ -268,6 +333,10 @@ export const MOTION_DEFAULT_DURATIONS: Readonly<Record<Exclude<MotionCommandType
 	follow: 1400,
 	pulse: 600,
 	shake: 500,
+	teeter: 600,
+	wave: 1000,
+	wiggle: 1500,
+	'color-pulse': 600,
 	effect: 900
 };
 
@@ -278,3 +347,30 @@ export const MOTION_CAMERA_MS = 1000;
 /** `draw` lasts `length × MOTION_DRAW_MS_PER_UNIT`, clamped to `MOTION_DRAW_RANGE`. */
 export const MOTION_DRAW_MS_PER_UNIT = 1.5;
 export const MOTION_DRAW_RANGE: readonly [number, number] = [500, 2500];
+
+/**
+ * The Flair motion primitive (`@pixerate/flair/motion`) a command plays, or undefined when
+ * Flair has none (`move`, `scale`, `fade`, `style`, `morph`, `effect`, `wait` are the editor's
+ * own). Commands and primitives of the same name take the same parameters and defaults.
+ */
+export function motionFlairPrimitive(command: MotionCommand): string | undefined {
+	switch (command.type) {
+		case 'enter':
+			return `entrance.${command.style ?? 'fade'}`;
+		case 'exit':
+			return `exit.${command.style ?? 'fade'}`;
+		case 'pulse':
+		case 'shake':
+		case 'teeter':
+		case 'wave':
+		case 'wiggle':
+		case 'color-pulse':
+			return `emphasis.${command.type}`;
+		case 'rotate':
+			return command.by !== undefined ? 'emphasis.spin' : undefined;
+		case 'follow':
+			return 'path.follow';
+		default:
+			return undefined;
+	}
+}

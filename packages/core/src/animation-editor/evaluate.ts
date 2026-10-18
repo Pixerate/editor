@@ -122,10 +122,13 @@ function followAt(entry: MotionNodeEntry, timeline: MotionTimeline, nodes: Map<s
 	}
 }
 
-/** The transform a node's offsets, turn, scale and follow add (parent space), or null when none. */
-export function motionNodeOffset(entry: MotionNodeEntry, timeline: MotionTimeline, time: number, nodes = indexMotionNodes([entry.node])): { matrix: AffineMatrix; dx: number; dy: number; rotation: number; scaleX: number; scaleY: number } | null {
+/**
+ * The transform a node's offsets, turn, scale and follow add (parent space), or null when none.
+ * `raw` ignores behaviours (the pose a pulse or shake swings towards, as Flair is given it).
+ */
+export function motionNodeOffset(entry: MotionNodeEntry, timeline: MotionTimeline, time: number, nodes = indexMotionNodes([entry.node]), raw = false): { matrix: AffineMatrix; dx: number; dy: number; rotation: number; scaleX: number; scaleY: number } | null {
 	const read = (p: MotionProperty, rest: number) => {
-		const v = trackValue(timeline.tracks.get(motionTrackKey(entry.node.id, p)), time);
+		const v = trackValue(timeline.tracks.get(motionTrackKey(entry.node.id, p)), time, raw);
 		return typeof v === 'number' ? v : rest;
 	};
 	if (!TRANSFORM_PROPS.some((p) => timeline.tracks.has(motionTrackKey(entry.node.id, p)))) return null;

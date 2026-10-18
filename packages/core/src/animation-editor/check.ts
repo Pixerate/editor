@@ -104,6 +104,18 @@ export function checkMotionScene(scene: MotionScene): MotionIssue[] {
 					}
 				}
 			}
+			if (command.type === 'color-pulse') {
+				const key = command.paint ?? 'fill';
+				const color = command.color ?? '#f59e0b';
+				if (normalizeTokenColor(color) === null) issues.push(motionIssue('invalid-color', `color "${color}" is not a colour this editor reads; use hex ("#0ea5e9"), rgb() or rgba().`, where));
+				else
+					for (const id of targets) {
+						const node = nodes.get(id)!.node;
+						const paths = node.type === 'path' ? [node] : collectPathNodes(node);
+						if (paths.some((p) => typeof p[key] !== 'string'))
+							issues.push(motionIssue('paint-not-color', `"${id}" has a gradient or no ${key}, so a colour pulse cannot tint it; give it a solid ${key} or pulse the ${key === 'fill' ? 'stroke' : 'fill'}.`, { ...where, ids: [id] }));
+					}
+			}
 			if (command.type === 'effect') {
 				for (const id of targets) {
 					const node = nodes.get(id)!.node;

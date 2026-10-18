@@ -18,6 +18,8 @@ import {
 	toFlairSvgMotion,
 	toFlairVectorEffect,
 	MOTION_EASE_OUT,
+	motionFlairPrimitive,
+	type FlairSvgAnimation,
 	type MotionIssueCode,
 	type MotionScene
 } from '../src/animation-editor';
@@ -289,6 +291,8 @@ describe('AnimationEditorController', () => {
 });
 
 // The scene of the demo's Animation tab (apps/demo/src/components/AnimationTab.tsx).
+const animateOf = (out: { motion: { animate?: FlairSvgAnimation[] } }) => out.motion.animate ?? [];
+
 const DEMO_SCENE: MotionScene = {
 	version: 1,
 	name: 'Badge reveal',
@@ -358,18 +362,19 @@ describe('Flair export', () => {
 		expect(animate.filter((a) => a.id === 'dot')).toEqual([expect.objectContaining({ ms: 300, ease: [0.42, 0, 1, 1], attrs: { fill: ['#0ea5e9', '#000000'] } })]);
 	});
 
-	it('samples only the demo scene\'s follow, shape changes and pulse', () => {
+	it('samples only the demo scene\'s follow and shape changes', () => {
 		const out = toFlairSvgMotion(DEMO_SCENE);
-		const old = toFlairSvgMotion(DEMO_SCENE, { curves: false });
+		const old = toFlairSvgMotion(DEMO_SCENE, { curves: false, behaviors: false });
 		expect(old.sampled).toBe(152);
-		// The badge's back-eased pop and the spark's ease-in exit are now one change each.
-		expect(out.sampled).toBe(114);
+		// The badge's back-eased pop, the spark's ease-in exit and the badge's pulse are now one change each.
+		expect(out.sampled).toBe(90);
+		expect(animateOf(out).filter((a) => a.behavior)).toEqual([expect.objectContaining({ id: 'badge', ease: 'linear', behavior: { type: 'pulse', count: 2 } })]);
 		const animate = out.motion.animate ?? [];
 		expect(animate).toContainEqual(expect.objectContaining({ id: 'badge', delay: 300, ms: 600, ease: [0.34, 1.56, 0.64, 1] }));
 		expect(animate.filter((a) => a.id === 'spark' && Array.isArray(a.ease)).map((a) => Object.keys(a.attrs ?? {})[0]).sort()).toEqual(['opacity', 'transform']);
-		// What is left: the follow (spark's transform), the morph and wobble (each path's d) and the pulse (badge's transform).
-		const steps = animate.filter((a) => a.ease === 'linear').map((a) => `${a.id} ${Object.keys(a.attrs ?? {})[0]}`);
-		expect(new Set(steps)).toEqual(new Set(['spark transform', 'ring d', 'tile d', 'badge transform']));
+		// What is left: the follow (spark's transform) and the morph and wobble (each path's d).
+		const steps = animate.filter((a) => a.ease === 'linear' && !a.behavior).map((a) => `${a.id} ${Object.keys(a.attrs ?? {})[0]}`);
+		expect(new Set(steps)).toEqual(new Set(['spark transform', 'ring d', 'tile d']));
 		expect(out.duration).toBe(old.duration);
 	});
 
@@ -386,8 +391,10 @@ describe('Flair export', () => {
 		expect(animate.some((a) => a.view)).toBe(true);
 		// Group paint goes to each path in it.
 		expect(animate.filter((a) => a.attrs?.fill?.[1] === '#000000').map((a) => a.id).sort()).toEqual(['a', 'b']);
-		// The pulse is sampled into linear steps.
-		expect(out.sampled).toBeGreaterThan(3);
+		// The pulse is one change with a behaviour (sampled into linear steps for Flair before 0.38).
+		expect(animate.filter((a) => a.id === 'dot' && a.attrs?.transform)).toEqual([expect.objectContaining({ ease: 'linear', behavior: { type: 'pulse', count: 1 } })]);
+		expect(out.sampled).toBe(0);
+		expect(toFlairSvgMotion(s, { behaviors: false }).sampled).toBeGreaterThan(3);
 		expect(out.hold).toBe(600);
 		expect(out.duration).toBe(compileMotionScene(s).duration);
 	});
@@ -474,5 +481,101 @@ describe('animation editor tools', () => {
 		const names = registry.listTools().tools.map((t) => t.name);
 		expect(names).toContain('get_animation');
 		expect(names).not.toContain('add_commands');
+	});
+});
+
+describe('Flair motion primitives', () => {
+	const transformOf = (doc: VectorDocument, id: string) => path(doc, id).transform;
+	const offsetX = (doc: VectorDocument, id: string) => transformOf(doc, id)?.[4] ?? 0;
+
+	it('names the Flair primitive each command plays', () => {
+		expect(motionFlairPrimitive({ type: 'enter', targets: ['box'] })).toBe('entrance.fade');
+		expect(motionFlairPrimitive({ type: 'enter', targets: ['box'], style: 'zoom' })).toBe('entrance.zoom');
+		expect(motionFlairPrimitive({ type: 'exit', targets: ['box'], style: 'undraw' })).toBe('exit.undraw');
+		expect(motionFlairPrimitive({ type: 'color-pulse', targets: ['box'] })).toBe('emphasis.color-pulse');
+		expect(motionFlairPrimitive({ type: 'rotate', targets: ['box'], by: 360 })).toBe('emphasis.spin');
+		expect(motionFlairPrimitive({ type: 'follow', targets: ['box'], path: 'track' })).toBe('path.follow');
+		expect(motionFlairPrimitive({ type: 'move', targets: ['box'], by: { x: 1, y: 0 } })).toBeUndefined();
+	});
+
+	it('times new commands by their Flair defaults and zooms and rises in', () => {
+		const s = scene([{ id: 'one', run: [{ type: 'enter', targets: ['box'], style: 'zoom' }, { type: 'enter', targets: ['dot'], style: 'rise' }, { type: 'teeter', targets: ['box'] }, { type: 'wave', targets: ['dot'] }, { type: 'wiggle', targets: ['box'] }, { type: 'color-pulse', targets: ['dot'] }] }]);
+		expect(compileMotionScene(s).commands.map((c) => c.duration)).toEqual([600, 600, 600, 1000, 1500, 600]);
+		const start = motionFrameAt(s, 0).document;
+		expect(path(start, 'box').opacity).toBe(0);
+		expect(transformOf(start, 'box')?.[0]).toBeCloseTo(1.6, 6);
+		// The rise starts when the zoom ends, 20 units low.
+		expect(transformOf(motionFrameAt(s, 600).document, 'dot')?.[5]).toBeCloseTo(20, 6);
+		expect(transformOf(motionFrameAt(s, 600).document, 'box')).toBeUndefined();
+		const risen = motionFrameAt(s, 1200).document;
+		expect(transformOf(risen, 'dot')).toBeUndefined();
+		expect(path(risen, 'dot').opacity).toBeUndefined();
+	});
+
+	it('swings emphasis round the pose and comes back to rest', () => {
+		const s = scene([{ id: 'one', run: [{ type: 'teeter', targets: ['box'] }, { type: 'wave', targets: ['dot'], with: 'previous' }, { type: 'color-pulse', targets: ['a'], color: '#000000', with: 'previous' }, { type: 'shake', targets: ['b'], axis: 'vertical', with: 'previous' }] }]);
+		const mid = motionFrameAt(s, 125).document;
+		expect(transformOf(mid, 'box')).toBeDefined();
+		expect(transformOf(mid, 'dot')?.[5]).toBeLessThan(0);
+		expect(path(mid, 'a').fill).not.toBe('#f59e0b');
+		expect(transformOf(mid, 'b')?.[5]).not.toBe(0);
+		const end = motionFrameAt(s, 1000).document;
+		for (const id of ['box', 'dot', 'b']) (transformOf(end, id) ?? [1, 0, 0, 1, 0, 0]).forEach((v, i) => expect(v).toBeCloseTo([1, 0, 0, 1, 0, 0][i], 6));
+		expect(path(end, 'a').fill).toBe('#f59e0b');
+	});
+
+	it('wiggles the same way every time, each target on its own seed', () => {
+		const s = scene([{ id: 'one', run: [{ type: 'wiggle', targets: ['box', 'dot'], amount: 10, rotate: 15 }] }]);
+		const at = (t: number) => motionFrameAt(s, t).document;
+		expect(offsetX(at(700), 'box')).toBe(offsetX(at(700), 'box'));
+		expect(offsetX(at(700), 'box')).not.toBe(offsetX(at(700), 'dot'));
+		expect(offsetX(at(0), 'box')).toBe(0);
+		expect(transformOf(at(1500), 'box')).toBeUndefined();
+		const seeded = scene([{ id: 'one', run: [{ type: 'wiggle', targets: ['box', 'dot'], amount: 10, seed: 5 }] }]);
+		const a = path(motionFrameAt(seeded, 700).document, 'box').transform!;
+		const b = path(motionFrameAt(seeded, 700).document, 'dot').transform!;
+		expect([a[4], a[5]]).toEqual([b[4], b[5]]);
+	});
+
+	it('exports emphasis as one change with a Flair behaviour, x and y on their own wriggle channels', () => {
+		const s = scene([{ id: 'one', run: [{ type: 'wiggle', targets: ['box'], amount: 10, seed: 3 }, { type: 'teeter', targets: ['dot'] }, { type: 'color-pulse', targets: ['line'], paint: 'stroke', color: '#ff0000' }] }]);
+		const out = toFlairSvgMotion(s);
+		expect(out.sampled).toBe(0);
+		const animate = animateOf(out);
+		const wiggle = animate.find((a) => a.id === 'box')!;
+		expect(wiggle).toMatchObject({ ms: 1500, ease: 'linear', behavior: { type: 'wriggle', frequency: 3, octaves: 2, seed: 3 } });
+		expect(wiggle.attrs!.transform![0]).toMatch(/^translate\(0 0\) rotate\(0 /);
+		expect(wiggle.attrs!.transform![1]).toMatch(/^translate\(10 10\) rotate\(0 /);
+		expect(animate.find((a) => a.id === 'dot')).toMatchObject({ behavior: { type: 'oscillate', count: 3, decay: 1 } });
+		expect(animate.find((a) => a.id === 'line')).toMatchObject({ attrs: { stroke: ['#111111', '#ff0000'] }, behavior: { type: 'pulse', count: 1 } });
+		const old = toFlairSvgMotion(s, { behaviors: false });
+		expect(old.sampled).toBeGreaterThan(30);
+		expect(animateOf(old).some((a) => a.behavior)).toBe(false);
+	});
+
+	it('checks new commands: shapes, defaults and paint', () => {
+		expect(() => parseMotionScene(scene([{ id: 'one', run: [{ type: 'wiggle', targets: ['box'], octaves: 9, seed: -1 } as never, { type: 'shake', targets: ['box'], axis: 'diagonal' } as never, { type: 'color-pulse', targets: ['box'], paint: 'both' } as never, { type: 'enter', targets: ['box'], style: 'zom' } as never] }]))).toThrow(
+			/"octaves" must be a whole number from 1 to 8[\s\S]*"seed" must be a whole number ≥ 0[\s\S]*"axis" must be "horizontal" or "vertical"[\s\S]*"paint" must be "fill" or "stroke"[\s\S]*"zom" \(did you mean "zoom"\?\)/
+		);
+		const issues = checkMotionScene(scene([{ id: 'one', run: [{ type: 'color-pulse', targets: ['line'] }, { type: 'color-pulse', targets: ['box'], color: 'nope' }] }]));
+		expect(issues.map((i) => i.code)).toEqual(['paint-not-color', 'invalid-color']);
+		expect(issues[0].message).toContain('"line" has a gradient or no fill');
+	});
+
+	it('are reachable through the agent tools, with useful errors', async () => {
+		const controller = new AnimationEditorController({ scene: createMotionScene(ARTWORK, { name: 'demo' }) });
+		const registry = new ToolRegistry();
+		registry.register(createAnimationEditorToolProvider(controller));
+		const ok = await registry.callTool('insert_shots', { shots: [{ id: 'hey', run: [{ type: 'enter', targets: ['box'], style: 'rise', distance: 30 }, { type: 'wave', targets: ['box'], count: 3 }] }] });
+		expect(ok.isError).toBeFalsy();
+		const read = (await registry.callTool('get_animation', {})).structuredContent as any;
+		expect(read.shots[0].commands.map((c: { flairPrimitive?: string }) => c.flairPrimitive)).toEqual(['entrance.rise', 'emphasis.wave']);
+		const bad = await registry.callTool('add_commands', { shot: 'hey', commands: [{ type: 'wiggle', targets: ['box'], octaves: 0 }] });
+		expect(bad.isError).toBe(true);
+		expect(JSON.stringify(bad.content)).toMatch(/octaves/);
+		expect(controller.getState().scene.shots[0].run).toHaveLength(2);
+		const flair = (await registry.callTool('export_flair_motion', { behaviors: false })).structuredContent as any;
+		expect(flair.sampled).toBeGreaterThan(0);
+		expect((await registry.callTool('export_flair_motion', {})).structuredContent).toMatchObject({ sampled: 0 });
 	});
 });

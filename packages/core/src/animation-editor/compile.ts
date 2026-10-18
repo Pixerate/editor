@@ -1,4 +1,5 @@
 import { mixColorsOklab } from '../animation/color.js';
+import { behaviorProgress, motionSeedFromId, type MotionBehavior } from '../animation/behavior.js';
 import { evaluateEasing, type AnimationEasing } from '../animation/easing.js';
 import { bezierPathLength } from '../canvas/pathops/bezier.js';
 import {
@@ -59,13 +60,6 @@ export type MotionProperty =
 
 export type MotionValue = number | string | readonly number[];
 
-/** An oscillation laid over a segment (`pulse`: scale up and back; `shake`: side to side, settling). */
-export interface MotionWave {
-	kind: 'pulse' | 'shake';
-	amount: number;
-	count: number;
-}
-
 export interface MotionSegment {
 	/** Node id (`""` for the camera). */
 	node: string;
@@ -78,7 +72,16 @@ export interface MotionSegment {
 	/** The shot and command (index in `run`) it comes from. */
 	shot: string;
 	command: number;
-	wave?: MotionWave;
+	/**
+	 * How the change gets from `from` to `to` when not straight along its ease (a pulse there and
+	 * back, a settling oscillation, a wriggle): Flair's `behavior`, exported as is.
+	 */
+	behavior?: MotionBehavior;
+	/**
+	 * Which number of the node's exported value this is (x 0, y 1, rotation 2, matching the
+	 * transform Flair is given), so a wriggle wanders each on the channel Flair uses. Default 0.
+	 */
+	index?: number;
 	/** For `follow`: the path node id, and whether to turn with it. */
 	path?: string;
 	rotate?: boolean;
@@ -217,17 +220,19 @@ export function interpolateMotionValue(from: MotionValue, to: MotionValue, u: nu
 export function segmentProgress(segment: MotionSegment, time: number): { u: number; eased: number } {
 	const span = segment.end - segment.start;
 	const u = span <= 0 ? 1 : Math.min(1, Math.max(0, (time - segment.start) / span));
-	return { u, eased: segment.wave ? u : evaluateEasing(segment.ease, u, span) };
+	return { u, eased: evaluateEasing(segment.ease, u, span) };
 }
 
-/** A segment's value at `time`. */
-export function segmentValue(segment: MotionSegment, time: number): MotionValue {
-	const { u, eased } = segmentProgress(segment, time);
-	const v = interpolateMotionValue(segment.from, segment.to, eased);
-	if (!segment.wave || typeof v !== 'number') return v;
-	const { kind, amount, count } = segment.wave;
-	if (kind === 'pulse') return v * (1 + amount * Math.sin(Math.PI * u * count) ** 2);
-	return v + amount * Math.sin(2 * Math.PI * u * count) * (1 - u);
+/**
+ * A segment's value at `time`: along its ease, through its behaviour when it has one. `raw`
+ * ignores the behaviour (the value it swings towards), as Flair is given it.
+ */
+export function segmentValue(segment: MotionSegment, time: number, raw = false): MotionValue {
+	const { eased } = segmentProgress(segment, time);
+	if (!segment.behavior || raw) return interpolateMotionValue(segment.from, segment.to, eased);
+	const p = behaviorProgress(segment.behavior, eased, segment.index ?? 0, segment.end - segment.start);
+	// Colours (a colour pulse) mix only between their ends; numbers swing past them.
+	return typeof segment.from === 'string' ? interpolateMotionValue(segment.from, segment.to, Math.min(1, Math.max(0, p))) : interpolateMotionValue(segment.from, segment.to, p);
 }
 
 /** The segment in effect at `time` (the latest to have started), if any. */
@@ -238,11 +243,11 @@ export function activeSegment(track: readonly MotionSegment[] | undefined, time:
 	return found;
 }
 
-/** A track's value at `time`, or `undefined` when nothing animates it. */
-export function trackValue(track: readonly MotionSegment[] | undefined, time: number): MotionValue | undefined {
+/** A track's value at `time`, or `undefined` when nothing animates it. `raw` ignores behaviours (see `segmentValue`). */
+export function trackValue(track: readonly MotionSegment[] | undefined, time: number, raw = false): MotionValue | undefined {
 	if (!track?.length) return undefined;
 	const s = activeSegment(track, time);
-	if (s) return segmentValue(s, time);
+	if (s) return segmentValue(s, time, raw);
 	let first = track[0];
 	for (const t of track) if (t.start < first.start) first = t;
 	return first.from;
@@ -415,10 +420,15 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 					seg('fillOpacity', 1, MOTION_EASE_OUT, start + duration * 0.6, end, { from: 0 });
 					break;
 				}
-				if (style === 'pop') {
-					seg('opacity', opacity, MOTION_EASE_OUT, start, start + duration * 0.4, { from: 0 });
-					seg('scaleX', 1, ease ?? 'ease-out-back', start, end, { from: 0.5 });
-					seg('scaleY', 1, ease ?? 'ease-out-back', start, end, { from: 0.5 });
+				if (style === 'pop' || style === 'zoom') {
+					const from = command.scale ?? (style === 'pop' ? 0.5 : 1.6);
+					seg('opacity', opacity, MOTION_EASE_OUT, start, start + duration * (style === 'pop' ? 0.4 : 0.5), { from: 0 });
+					seg('scaleX', 1, ease ?? (style === 'pop' ? 'ease-out-back' : MOTION_EASE_OUT), start, end, { from });
+					seg('scaleY', 1, ease ?? (style === 'pop' ? 'ease-out-back' : MOTION_EASE_OUT), start, end, { from });
+				} else if (style === 'rise') {
+					const y = num('y');
+					seg('opacity', opacity, MOTION_EASE_OUT, start, start + duration * 0.5, { from: 0 });
+					seg('y', y, ease ?? 'ease-out-back', start, end, { from: y + (command.distance ?? 20) });
 				} else if (style === 'grow') {
 					seg('opacity', opacity, MOTION_EASE_OUT, start, start + duration * 0.3, { from: 0 });
 					seg('scaleX', 1, ease ?? MOTION_EASE_OUT, start, end, { from: 0 });
@@ -497,14 +507,35 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 			case 'follow':
 				seg('follow', command.to ?? 1, ease ?? MOTION_EASE_IN_OUT, start, end, { from: command.from ?? 0, path: command.path, rotate: command.rotate ?? false });
 				break;
+			// Emphasis: a change toward a peak that a behaviour swings round (as Flair's primitives do).
 			case 'pulse': {
-				const wave: MotionWave = { kind: 'pulse', amount: command.amount ?? 0.15, count: command.count ?? 1 };
-				seg('scaleX', num('scaleX'), 'linear', start, end, { wave });
-				seg('scaleY', num('scaleY'), 'linear', start, end, { wave });
+				const behavior: MotionBehavior = { type: 'pulse', count: command.count ?? 1 };
+				const k = 1 + (command.amount ?? 0.15);
+				seg('scaleX', num('scaleX') * k, ease ?? 'linear', start, end, { behavior });
+				seg('scaleY', num('scaleY') * k, ease ?? 'linear', start, end, { behavior });
 				break;
 			}
-			case 'shake':
-				seg('x', num('x'), 'linear', start, end, { wave: { kind: 'shake', amount: command.amount ?? 8, count: command.count ?? 3 } });
+			case 'shake': {
+				const p = command.axis === 'vertical' ? 'y' : 'x';
+				seg(p, num(p) + (command.amount ?? 8), ease ?? 'linear', start, end, { behavior: { type: 'oscillate', count: command.count ?? 3, decay: 1 } });
+				break;
+			}
+			case 'teeter':
+				seg('rotation', num('rotation') + (command.angle ?? 8), ease ?? 'linear', start, end, { behavior: { type: 'oscillate', count: command.count ?? 3, decay: 1 } });
+				break;
+			case 'wave':
+				seg('y', num('y') - (command.amount ?? 6), ease ?? 'linear', start, end, { behavior: { type: 'oscillate', count: command.count ?? 2 } });
+				break;
+			case 'wiggle': {
+				const behavior: MotionBehavior = { type: 'wriggle', frequency: command.frequency ?? 3, octaves: command.octaves ?? 2, seed: command.seed || motionSeedFromId(node) };
+				const amount = command.amount ?? 6;
+				seg('x', num('x') + amount, ease ?? 'linear', start, end, { behavior, index: 0 });
+				seg('y', num('y') + amount, ease ?? 'linear', start, end, { behavior, index: 1 });
+				if (command.rotate) seg('rotation', num('rotation') + command.rotate, ease ?? 'linear', start, end, { behavior, index: 2 });
+				break;
+			}
+			case 'color-pulse':
+				seg(command.paint ?? 'fill', command.color ?? '#f59e0b', ease ?? 'linear', start, end, { behavior: { type: 'pulse', count: command.count ?? 1 } });
 				break;
 			case 'effect':
 				seg(`effect:${command.effect}:${command.param}`, command.to, ease ?? MOTION_EASE_IN_OUT);

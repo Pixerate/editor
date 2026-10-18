@@ -1,3 +1,4 @@
+import type { MotionBehavior } from '../animation/behavior.js';
 import { evaluateEasing, resolveEasing, type AnimationEasing } from '../animation/easing.js';
 import { bezierPathToSvg, transformBezierPath } from '../canvas/pathops/bezier.js';
 import { normalizeTokenColor } from '../tokens/color.js';
@@ -17,8 +18,9 @@ import type { MotionScene } from './types.js';
  * Changes are exact where Flair can express them: a change with a linear, cubic-out or
  * cubic-in-out curve (the editor's defaults) is one change, and so (Flair 0.36 and later) is
  * one with any cubic-bezier curve, written as `[x1, y1, x2, y2]`. Anything else (springs,
- * elastic, `hold`, pulses and shakes, follows, morphs and live-effect tweens) is sampled at the
- * scene's `fps` into short linear changes, which Flair plays the same way.
+ * elastic, `hold`, follows, morphs and live-effect tweens) is sampled at the
+ * scene's `fps` into short linear changes, which Flair plays the same way. Pulses, shakes,
+ * teeters, waves, wiggles and colour pulses are one change with a `behavior` (Flair 0.38).
  */
 
 /** Flair's easing names. */
@@ -43,6 +45,8 @@ export interface FlairSvgAnimation {
 	ease?: FlairEase;
 	attrs?: Record<string, readonly [string | number, string | number]>;
 	draw?: boolean | readonly [number, number];
+	/** Flair 0.38 and later: how the change swings from → to (see `MotionBehavior`). */
+	behavior?: MotionBehavior;
 	view?: readonly [number, number, number, number] | string;
 }
 
@@ -103,6 +107,12 @@ export interface FlairExportOptions {
 	 * Flair, and they are sampled into linear steps.
 	 */
 	curves?: boolean;
+	/**
+	 * Write pulses, shakes, teeters, waves, wiggles and colour pulses as one change with a Flair
+	 * `behavior` (default true), so they play exactly. Needs Flair 0.38 or later; set false for
+	 * older Flair, and they are sampled into linear steps.
+	 */
+	behaviors?: boolean;
 }
 
 /** The Flair easing that matches `ease` (within 1% everywhere), if any. */
@@ -148,6 +158,8 @@ interface Channel {
 	 */
 	overshoot?: boolean;
 	value: (time: number) => ChannelValue;
+	/** The value with behaviours ignored: what a behaviour swings towards (default `value`). */
+	raw?: (time: number) => ChannelValue;
 }
 
 const TRANSFORM_PROPS: MotionProperty[] = ['x', 'y', 'rotation', 'scaleX', 'scaleY', 'follow'];
@@ -163,6 +175,9 @@ export function toFlairSvgMotion(scene: MotionScene, options: FlairExportOptions
 	const fps = options.fps ?? scene.fps ?? 30;
 	const precision = options.precision ?? 3;
 	const curves = options.curves ?? true;
+	const behaviors = options.behaviors ?? true;
+	// A segment with a behaviour plays exactly when Flair can be given the behaviour.
+	const plays = (s: MotionSegment) => !s.behavior || behaviors;
 	const round = (n: number) => Math.round(n * 10 ** precision) / 10 ** precision;
 	const f = (n: number) => String(round(n));
 	const timeline = compileMotionScene(scene);
@@ -185,23 +200,26 @@ export function toFlairSvgMotion(scene: MotionScene, options: FlairExportOptions
 		const node = entry.node;
 
 		if (timeline.tracks.has(motionTrackKey(id, 'opacity')))
-			channels.push({ id, kind: 'attr', attr: 'opacity', segments: [...track(id, 'opacity')], exact: (s) => !s.wave, value: (t) => round(Math.min(1, Math.max(0, Number(trackValue(track(id, 'opacity'), t))))) });
+			channels.push({ id, kind: 'attr', attr: 'opacity', segments: [...track(id, 'opacity')], exact: plays, value: (t) => round(Math.min(1, Math.max(0, Number(trackValue(track(id, 'opacity'), t))))) });
 
 		const transformSegments = TRANSFORM_PROPS.flatMap((p) => track(id, p));
 		if (transformSegments.length) {
 			const base = node.transform ? ` matrix(${node.transform.map(f).join(' ')})` : '';
 			const c = entry.center;
+			const transformAt = (t: number, raw: boolean) => {
+				const o = motionNodeOffset(entry, timeline, t, nodes, raw)!;
+				return `translate(${f(o.dx)} ${f(o.dy)}) rotate(${f(o.rotation)} ${f(c.x)} ${f(c.y)}) translate(${f(c.x)} ${f(c.y)}) scale(${f(o.scaleX)} ${f(o.scaleY)}) translate(${f(-c.x)} ${f(-c.y)})${base}`;
+			};
 			channels.push({
 				id,
 				kind: 'attr',
 				attr: 'transform',
 				segments: transformSegments,
-				exact: (s) => LINEAR_TRANSFORM.has(s.property) && !s.wave,
+				exact: (s) => LINEAR_TRANSFORM.has(s.property) && plays(s),
 				overshoot: true,
-				value: (t) => {
-					const o = motionNodeOffset(entry, timeline, t, nodes)!;
-					return `translate(${f(o.dx)} ${f(o.dy)}) rotate(${f(o.rotation)} ${f(c.x)} ${f(c.y)}) translate(${f(c.x)} ${f(c.y)}) scale(${f(o.scaleX)} ${f(o.scaleY)}) translate(${f(-c.x)} ${f(-c.y)})${base}`;
-				}
+				// x, y and the angle are the transform's numbers 0, 1 and 2 (`MotionSegment.index`).
+				value: (t) => transformAt(t, false),
+				raw: (t) => transformAt(t, true)
 			});
 		}
 
@@ -212,7 +230,7 @@ export function toFlairSvgMotion(scene: MotionScene, options: FlairExportOptions
 			pathsSeen.add(path.id);
 			const paint = (p: 'fill' | 'stroke', attr: string) => {
 				const from = owner(path, p);
-				if (from) channels.push({ id: path.id, kind: 'attr', attr, segments: [...track(from, p)], exact: () => true, value: (t) => hex6(trackValue(track(from, p), t)) });
+				if (from) channels.push({ id: path.id, kind: 'attr', attr, segments: [...track(from, p)], exact: plays, value: (t) => hex6(trackValue(track(from, p), t)), raw: (t) => hex6(trackValue(track(from, p), t, true)) });
 			};
 			paint('fill', 'fill');
 			paint('stroke', 'stroke');
@@ -255,8 +273,8 @@ export function toFlairSvgMotion(scene: MotionScene, options: FlairExportOptions
 	const animate: FlairSvgAnimation[] = [];
 	let sampled = 0;
 	const same = (a: ChannelValue, b: ChannelValue) => JSON.stringify(a) === JSON.stringify(b);
-	const emit = (channel: Channel, delay: number, ms: number, from: ChannelValue, to: ChannelValue, ease: FlairEase) => {
-		const base = { ...(channel.id ? { id: channel.id } : {}), ...(delay > 0 ? { delay: round(delay) } : {}), ms: round(ms), ease: typeof ease === 'string' ? ease : (ease.map(round) as unknown as FlairEase) };
+	const emit = (channel: Channel, delay: number, ms: number, from: ChannelValue, to: ChannelValue, ease: FlairEase, behavior?: MotionBehavior) => {
+		const base = { ...(channel.id ? { id: channel.id } : {}), ...(delay > 0 ? { delay: round(delay) } : {}), ms: round(ms), ease: typeof ease === 'string' ? ease : (ease.map(round) as unknown as FlairEase), ...(behavior ? { behavior } : {}) };
 		if (channel.kind === 'view') animate.push({ ...base, view: to as unknown as [number, number, number, number] });
 		else if (channel.kind === 'draw') animate.push({ ...base, draw: [from as number, to as number] });
 		else animate.push({ ...base, attrs: { [channel.attr!]: [from as string | number, to as string | number] } });
@@ -273,13 +291,16 @@ export function toFlairSvgMotion(scene: MotionScene, options: FlairExportOptions
 			if (!active.length) continue;
 			// One change when every active segment spans exactly this interval with one exact curve (a move's x and y, say).
 			const first = active[0];
-			const together = active.every((x) => x.start === a && x.end === b && channel.exact(x) && JSON.stringify(x.ease) === JSON.stringify(first.ease));
+			// A behaviour (pulse, shake, wriggle…) is one change toward the value it swings round, when every active segment shares it.
+			const together = active.every(
+				(x) => x.start === a && x.end === b && channel.exact(x) && JSON.stringify(x.ease) === JSON.stringify(first.ease) && JSON.stringify(x.behavior) === JSON.stringify(first.behavior)
+			);
 			const curve = together ? flairCurveFor(first.ease, curves) : undefined;
 			const ease = curve && (!overshoots(curve) || channel.overshoot) ? curve : undefined;
 			if (ease) {
 				const from = channel.value(a);
-				const to = channel.value(b);
-				if (!same(from, to) || channel.kind === 'view') emit(channel, a, b - a, from, to, ease);
+				const to = first.behavior ? (channel.raw ?? channel.value)(b) : channel.value(b);
+				if (!same(from, to) || channel.kind === 'view') emit(channel, a, b - a, from, to, ease, first.behavior);
 				continue;
 			}
 			const n = Math.max(1, Math.ceil(((b - a) * fps) / 1000));

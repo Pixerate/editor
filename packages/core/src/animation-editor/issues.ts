@@ -20,7 +20,7 @@ export const MOTION_ISSUE_CODES = {
 	'unknown-frame': { severity: 'error', wording: 'A camera frames a node the artwork does not have.' },
 	'invalid-camera': { severity: 'error', wording: 'A camera rectangle has no area.' },
 	'invalid-color': { severity: 'error', wording: 'A colour cannot be read.' },
-	'paint-not-color': { severity: 'warning', wording: 'A style command recolours a gradient or empty paint, which only switches at the end.' },
+	'paint-not-color': { severity: 'warning', wording: 'A style command recolours a gradient or empty paint, which only switches at the end, or a colour pulse has no solid paint to tint.' },
 	'overlap': { severity: 'warning', wording: 'Two commands change the same property of a node at the same time; the later one wins.' },
 	'enter-visible': { severity: 'warning', wording: 'A node enters while it is already showing, so it blinks out first.' },
 	'exit-hidden': { severity: 'warning', wording: 'A node exits or animates while it is hidden.' },

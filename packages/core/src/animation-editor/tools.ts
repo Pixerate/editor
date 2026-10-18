@@ -7,7 +7,7 @@ import { compileMotionScene, indexMotionNodes } from './compile.js';
 import type { AnimationEditorController } from './controller.js';
 import { MOTION_EDIT_OPS, type MotionEdit, type MotionEditResult } from './edit.js';
 import { motionIssueLine, type MotionIssue } from './issues.js';
-import { MOTION_COMMAND_TYPES, MOTION_DIRECTIONS, MOTION_ENTER_STYLES, MOTION_EXIT_STYLES, type MotionScene } from './types.js';
+import { MOTION_COMMAND_TYPES, MOTION_DIRECTIONS, MOTION_ENTER_STYLES, MOTION_EXIT_STYLES, motionFlairPrimitive, type MotionScene } from './types.js';
 
 export interface AnimationEditorToolProviderOptions {
 	/** Provider id (unique per registry). Default `animation`. */
@@ -63,9 +63,14 @@ export const MOTION_COMMAND_SCHEMA: JsonSchema = {
 	description: `A command (one of ${MOTION_COMMAND_TYPES.join(', ')}). Commands in a shot play one after another unless "with": "previous".`,
 	oneOf: [
 		command('enter', 'Brings hidden targets in; they are hidden before this shot.', {
-			style: { type: 'string', enum: [...MOTION_ENTER_STYLES], description: 'fade (default), pop, grow, slide, or draw (outline drawn on, then the fill fades in).' },
+			style: {
+				type: 'string',
+				enum: [...MOTION_ENTER_STYLES],
+				description: 'fade (default), pop (scales up past full size and settles), grow (from nothing), slide, draw (outline drawn on, then the fill fades in), zoom (settles from larger) or rise (rises a short way, overshooting a touch).'
+			},
 			direction: { type: 'string', enum: [...MOTION_DIRECTIONS], description: 'For slide: direction of travel (default up).' },
-			distance: { type: 'number', description: 'For slide: document units (default 40).' }
+			distance: { type: 'number', description: 'For slide (default 40) and rise (default 20): document units.' },
+			scale: { type: 'number', minimum: 0, description: 'For pop (default 0.5) and zoom (default 1.6): the starting scale (1 = rest size).' }
 		}),
 		command('exit', 'Takes targets out.', {
 			style: { type: 'string', enum: [...MOTION_EXIT_STYLES], description: 'fade (default), shrink, slide or undraw.' },
@@ -90,7 +95,25 @@ export const MOTION_COMMAND_SCHEMA: JsonSchema = {
 			to: FRACTION('Where to end along the path (default 1).')
 		}, ['path']),
 		command('pulse', 'Scales up and back to draw the eye.', { amount: { type: 'number', description: 'Extra scale at the peak (default 0.15).' }, count: { type: 'integer', minimum: 1, description: 'Pulses (default 1).' } }),
-		command('shake', 'Shakes side to side, settling.', { amount: { type: 'number', description: 'Document units (default 8).' }, count: { type: 'integer', minimum: 1, description: 'Shakes (default 3).' } }),
+		command('shake', 'Shakes side to side (or up and down), settling.', {
+			amount: { type: 'number', description: 'Document units (default 8).' },
+			count: { type: 'integer', minimum: 1, description: 'Shakes (default 3).' },
+			axis: { type: 'string', enum: ['horizontal', 'vertical'], description: 'Default horizontal.' }
+		}),
+		command('teeter', 'Rocks about the centre either way, settling.', { angle: { type: 'number', description: 'Degrees either way (default 8).' }, count: { type: 'integer', minimum: 1, description: 'Rocks (default 3).' } }),
+		command('wave', 'Bobs up and down without settling, like something floating (default 1000 ms).', { amount: { type: 'number', description: 'Height in document units (default 6).' }, count: { type: 'integer', minimum: 1, description: 'Bobs (default 2).' } }),
+		command('wiggle', 'Wanders about its place as smooth seeded noise, easing out of and back to rest (default 1500 ms). The same seed always wanders the same way.', {
+			amount: { type: 'number', description: 'Up to about this far, in document units (default 6).' },
+			frequency: { type: 'number', exclusiveMinimum: 0, description: 'Wanders per second, in Hz (default 3).' },
+			octaves: { type: 'integer', minimum: 1, maximum: 8, description: 'Layers of finer detail (default 2).' },
+			rotate: { type: 'number', description: 'Also turns about the centre by up to about this many degrees (default 0).' },
+			seed: { type: 'integer', minimum: 0, description: 'Default: one picked from the target id, so each target wanders its own way.' }
+		}),
+		command('color-pulse', 'Tints solid paint toward a colour and back (mixed in OKLab). On a group it tints every path in it.', {
+			color: { type: 'string', description: 'The tint, a CSS colour (default "#f59e0b").' },
+			paint: { type: 'string', enum: ['fill', 'stroke'], description: 'Which paint (default fill).' },
+			count: { type: 'integer', minimum: 1, description: 'Pulses (default 1).' }
+		}),
 		command('effect', 'Tweens a numeric parameter of a live path effect on the targets (twist angle, wiggle time, zig zag size, trim offset…).', {
 			effect: { type: 'string', minLength: 1, description: 'Effect id from get_animation\'s element "effects".' },
 			param: { type: 'string', minLength: 1, description: 'A numeric parameter of that effect (listed with it).' },
@@ -198,7 +221,8 @@ export function describeMotionShots(scene: MotionScene) {
 			...(shot.hold !== undefined ? { hold: shot.hold } : {}),
 			commands: shot.run.map((c, index) => {
 				const ct = timeline.commands.find((x) => x.shotIndex === i && x.command === index)!;
-				return { index, ...c, start: ct.start, end: ct.end };
+				const primitive = motionFlairPrimitive(c);
+				return { index, ...c, start: ct.start, end: ct.end, ...(primitive ? { flairPrimitive: primitive } : {}) };
 			})
 		};
 	});
@@ -245,7 +269,7 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 		name: 'get_animation',
 		title: 'Read the animation',
 		description:
-			'Returns the vector animation: its name, artwork size, length (ms), loop mode, the artwork\'s elements (id, type, name, parent, bounds, solid paints, live effects with their numeric parameters), every shot with its commands and their start/end times, Flair controls, and a summary of issues. Use the ids it returns with the write tools.',
+			'Returns the vector animation: its name, artwork size, length (ms), loop mode, the artwork\'s elements (id, type, name, parent, bounds, solid paints, live effects with their numeric parameters), every shot with its commands and their start/end times (and, where Flair has one, the Flair motion primitive a command plays as "flairPrimitive", e.g. "entrance.pop"), Flair controls, and a summary of issues. Use the ids it returns with the write tools.',
 		inputSchema: object({ includeElements: { type: 'boolean', description: 'Include the artwork\'s elements (default true).' } }),
 		annotations: { title: 'Read the animation', ...READ },
 		handler: ({ includeElements = true }) => {
@@ -340,6 +364,8 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 
 	const CURVES_DESCRIPTION =
 		'Write cubic-bezier easings (ease, ease-in, ease-out, ease-in-out, back eases, custom curves) as one change with ease: [x1, y1, x2, y2] (default true). Needs Flair 0.36 or later; false samples them into linear steps for older Flair.';
+	const BEHAVIORS_DESCRIPTION =
+		'Write pulses, shakes, teeters, waves, wiggles and colour pulses as one change with a Flair behavior, so they play exactly (default true; needs Flair 0.38 or later). False samples them into linear steps for older Flair.';
 
 	const exportFlairMotion: AgentTool = {
 		name: 'export_flair_motion',
@@ -348,10 +374,11 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 			'Returns the animation as a Flair SvgMotion ({ svg, animate }) that Flair\'s SvgPlayer plays, plus its hold, how many changes were sampled into linear steps, and notes on anything not carried over.',
 		inputSchema: object({
 			fps: { type: 'number', minimum: 1, maximum: 120, description: 'Sampling rate for changes Flair cannot express exactly (default: the scene\'s fps, else 30).' },
-			curves: { type: 'boolean', description: CURVES_DESCRIPTION }
+			curves: { type: 'boolean', description: CURVES_DESCRIPTION },
+			behaviors: { type: 'boolean', description: BEHAVIORS_DESCRIPTION }
 		}),
 		annotations: { title: 'Export as Flair vector motion', ...READ },
-		handler: ({ fps, curves }) => controller.toFlairMotion({ ...(fps ? { fps } : {}), ...(curves === undefined ? {} : { curves }) })
+		handler: ({ fps, curves, behaviors }) => controller.toFlairMotion({ ...(fps ? { fps } : {}), ...(curves === undefined ? {} : { curves }), ...(behaviors === undefined ? {} : { behaviors }) })
 	};
 
 	const exportFlairEffect: AgentTool = {
@@ -365,7 +392,8 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 			description: { type: 'string', description: 'One sentence (default: the scene\'s description).' },
 			category: { type: 'string', minLength: 1, description: 'Flair catalog category, e.g. icon, loader, ui, data, text, morph (default icon).' },
 			tags: { type: 'array', items: { type: 'string' }, description: 'Search tags (default none).' },
-			curves: { type: 'boolean', description: CURVES_DESCRIPTION }
+			curves: { type: 'boolean', description: CURVES_DESCRIPTION },
+			behaviors: { type: 'boolean', description: BEHAVIORS_DESCRIPTION }
 		}),
 		annotations: { title: 'Export as a Flair effect', ...READ },
 		handler: (args) => controller.toFlairEffect(args)
