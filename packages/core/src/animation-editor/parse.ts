@@ -1,6 +1,6 @@
 import { isAnimationEasing } from '../animation/easing.js';
 import { namedWithSuggestion } from './issues.js';
-import { MOTION_COMMAND_TYPES, MOTION_DIRECTIONS, MOTION_ENTER_STYLES, MOTION_EXIT_STYLES, MOTION_REPEAT_MODES, MOTION_TRIGGERS, MOTION_DRIVEN_PROPERTIES, MOTION_BLENDS, MOTION_IRIS_SHAPES, MOTION_SPLIT_ORIENTATIONS, type MotionCommand, type MotionScene, type MotionShot } from './types.js';
+import { MOTION_COMMAND_TYPES, MOTION_DIRECTIONS, MOTION_ENTER_STYLES, MOTION_EXIT_STYLES, MOTION_REPEAT_MODES, MOTION_TRIGGERS, MOTION_TEXT_UNITS, MOTION_CASCADES, MOTION_DRIVEN_PROPERTIES, MOTION_BLENDS, MOTION_IRIS_SHAPES, MOTION_SPLIT_ORIENTATIONS, type MotionCommand, type MotionScene, type MotionShot } from './types.js';
 
 /**
  * Shape checking: whether a value is a well-formed scene, listing every problem at once.
@@ -19,7 +19,7 @@ export class MotionSceneFormatError extends Error {
 const SCENE_KEYS = ['version', 'name', 'description', 'artwork', 'shots', 'clips', 'drivers', 'motionBlur', 'loop', 'trigger', 'fps', 'steps', 'beat', 'narration', 'target', 'controls', 'presets'];
 const SHOT_KEYS = ['id', 'label', 'camera', 'at', 'run', 'hold', 'speed'];
 const CAMERA_KEYS = ['x', 'y', 'width', 'height', 'frame', 'padding', 'ease', 'ms', 'geometric'];
-const BASE_KEYS = ['type', 'targets', 'duration', 'delay', 'stagger', 'with', 'ease', 'note', 'repeat', 'repeatMode', 'steps'];
+const BASE_KEYS = ['type', 'targets', 'duration', 'delay', 'stagger', 'with', 'ease', 'note', 'repeat', 'repeatMode', 'steps', 'split', 'cascade'];
 const DRAW_ORDER_KEYS = ['order', 'pace', 'align', 'sortBy', 'origin'];
 const COMMAND_KEYS: Record<string, string[]> = {
 	enter: [...BASE_KEYS, ...DRAW_ORDER_KEYS, 'style', 'direction', 'distance', 'scale', 'shape', 'orientation'],
@@ -95,6 +95,9 @@ export function commandShapeProblems(command: unknown, where: string): string[] 
 		else if (!(Number.isInteger(command.repeat) && (command.repeat as number) >= 1 && (command.repeat as number) <= 1000)) p(`"repeat" must be a whole number from 1 to 1000.`);
 	}
 	if (command.blend !== undefined && !(MOTION_BLENDS as readonly unknown[]).includes(command.blend)) p(`"blend" must be "replace" (the change takes over) or "add" (a layer on top).`);
+	if (command.split !== undefined && !(MOTION_TEXT_UNITS as readonly unknown[]).includes(command.split)) p(`"split" must be letter, word or line (for outlined text: a group of letter paths).`);
+	if (command.cascade !== undefined && !(MOTION_CASCADES as readonly unknown[]).includes(command.cascade)) p(`"cascade" must be one of ${MOTION_CASCADES.join(', ')}.`);
+	if (command.cascade !== undefined && command.split === undefined) p(`"cascade" goes with "split".`);
 	if (command.repeatMode !== undefined && !(MOTION_REPEAT_MODES as readonly unknown[]).includes(command.repeatMode)) p(`"repeatMode" must be one of ${MOTION_REPEAT_MODES.join(', ')}.`);
 	if (command.steps !== undefined && !(isNum(command.steps) && command.steps > 0 && command.steps <= 120)) p(`"steps" must be frames per second from above 0 to 120 (12 holds each pose for two frames at 24 fps).`);
 	switch (type) {

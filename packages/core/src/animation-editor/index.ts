@@ -13,6 +13,7 @@ export * from './parse.js';
 export * from './compile.js';
 export * from './match.js';
 export * from './smooth.js';
+export * from './text.js';
 export * from './evaluate.js';
 export * from './onion.js';
 export * from './check.js';

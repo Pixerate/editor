@@ -1,5 +1,6 @@
 import { resolveEasing, springSettleMs } from '../animation/easing.js';
 import { matchMotionNodes } from './match.js';
+import { motionTextLayout } from './text.js';
 import { normalizeTokenColor } from '../tokens/color.js';
 import { collectPathNodes } from '../vector/geometry.js';
 import type { VectorNode } from '../vector/types.js';
@@ -113,6 +114,10 @@ export function checkMotionScene(scene: MotionScene): MotionIssue[] {
 			if (command.type === 'follow' && known(command.path, 'unknown-path', 'path', where) && nodes.get(command.path)!.node.type !== 'path')
 				issues.push(motionIssue('not-a-path', `"${command.path}" is a group; follow a single path node.`, { ...where, ids: [command.path] }));
 			if (command.type === 'morph') known(command.into, 'unknown-shape', 'shape', where);
+			if (command.type !== 'play' && command.split)
+				for (const id of targets)
+					if (!motionTextLayout(nodes, id))
+						issues.push(motionIssue('split-not-text', `"${id}" is not a group of letter paths, so "split": "${command.split}" animates it as a whole; convert the text to outlines and group the letters (get_text_layout shows how they read).`, { ...where, ids: [id] }));
 			if (command.type === 'play' && !scene.clips?.[command.clip])
 				issues.push(motionIssue('unknown-clip', `There is no clip ${namedWithSuggestion(command.clip, Object.keys(scene.clips ?? {}))}; define it with set_animation_clip.`, where));
 			if (command.type === 'match' && known(command.into, 'unknown-shape', 'group', where)) {

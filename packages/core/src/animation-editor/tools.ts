@@ -7,6 +7,7 @@ import { compileMotionScene, indexMotionNodes, motionClipLayout, motionBeatAt, m
 import { fitMotionScene } from './fit.js';
 import { toLottie } from './lottie.js';
 import { motionContactSheetSvg, motionPath } from './onion.js';
+import { motionTextLayout } from './text.js';
 import { fromFlairSvgMotion, fromFlairVectorEffect, type FlairImportResult } from './flair-import.js';
 import { fromPptxAnimation, type PptxAnimationImport } from './pptx.js';
 import type { AnimationEditorController } from './controller.js';
@@ -78,6 +79,8 @@ const BASE: Record<string, JsonSchema> = {
 	with: { type: 'string', enum: ['after', 'previous'], description: '"after" (default) starts when the commands before it finish; "previous" starts together with the command before.' },
 	ease: EASE,
 	note: { type: 'string', description: 'Why this command is here, in a few words.' },
+	split: { type: 'string', enum: ['letter', 'word', 'line'], description: 'For outlined text (a group of letter paths): animate it a letter, word or line at a time in reading order, staggered (default 40 ms a letter, 120 a word, 300 a line). get_text_layout shows the units.' },
+	cascade: { type: 'string', enum: ['forward', 'backward', 'center', 'edges', 'random'], description: 'With split: the order units go in (default forward; random is the same every time).' },
 	repeat: { type: 'integer', minimum: 1, maximum: 1000, description: 'Play it this many times (default 1); "duration" is one cycle. Not for enter or exit.' },
 	repeatMode: { type: 'string', enum: [...MOTION_REPEAT_MODES], description: 'loop (default) restarts each cycle, mirror plays every other one backwards, offset carries on from where the last ended (rotate by 90 with repeat 4 makes a full turn).' },
 	steps: { type: 'number', exclusiveMinimum: 0, maximum: 120, description: 'Stepped time: hold on a grid of this many frames per second (12 = "on twos"). Default: the scene\'s steps, else smooth.' }
@@ -528,6 +531,23 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 				...(s.beat ? { grid: s.beat, beats } : { beats: [], hint: 'No beat grid: set_animation_settings with { "beat": { "bpm": 120 } }.' }),
 				...(words.length ? { words: listed } : { words: [], narrationHint: 'No narration: set_animation_settings with { "narration": { "words": [{ "text", "start" }, …] } }.' })
 			};
+		}
+	};
+
+	const getTextLayout: AgentTool = {
+		name: 'get_text_layout',
+		title: 'Read outlined text as letters, words and lines',
+		description:
+			'Returns how a group of letter paths (text converted to outlines) reads: its lines, each a list of words, each a list of letter ids, in reading order — the units a command with "split": "letter" | "word" | "line" animates. Errors if the element is not a group with paths.',
+		inputSchema: object({ group: { type: 'string', minLength: 1, description: 'Element id of the group of letters.' } }, ['group']),
+		annotations: { title: 'Read outlined text as letters, words and lines', ...READ },
+		handler: ({ group }) => {
+			const s = scene();
+			const nodes = indexMotionNodes(s.artwork.nodes);
+			if (!nodes.has(group)) throw new Error(`There is no element ${namedWithSuggestion(group, [...nodes.keys()])}.`);
+			const layout = motionTextLayout(nodes, group);
+			if (!layout) throw new Error(`"${group}" is not a group of paths; convert the text to outlines (one path a letter) and group it.`);
+			return { group, letters: layout.lines.reduce((n, l) => n + l.words.reduce((m, w) => m + w.letters.length, 0), 0), ...layout };
 		}
 	};
 
@@ -990,7 +1010,7 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 		}
 	};
 
-	const reads = [getAnimation, getShot, findElements, getMotionPath, getTimingGrid, checkAnimation, renderFrame, exportFlairMotion, exportFlairEffect, exportLottie, seekAnimation];
+	const reads = [getAnimation, getShot, findElements, getTextLayout, getMotionPath, getTimingGrid, checkAnimation, renderFrame, exportFlairMotion, exportFlairEffect, exportLottie, seekAnimation];
 	const writes = [setArtworkSvg, importPptx, setDrivers, setClip, copyAnimation, fitAnimation, importFlairEffect, insertShots, updateShot, deleteShots, moveShot, addCommands, updateCommand, deleteCommands, moveCommand, setSettings, setControls, editAnimation, writeAnimation, undo, redo];
 
 	return {

@@ -137,10 +137,24 @@ export interface MotionShot {
 	speed?: number;
 }
 
+/** How `split` splits outlined text. */
+export type MotionTextUnit = 'letter' | 'word' | 'line';
+export const MOTION_TEXT_UNITS: readonly MotionTextUnit[] = ['letter', 'word', 'line'];
+/** The order `split` units animate in. */
+export type MotionCascade = 'forward' | 'backward' | 'center' | 'edges' | 'random';
+export const MOTION_CASCADES: readonly MotionCascade[] = ['forward', 'backward', 'center', 'edges', 'random'];
+
 /** Fields every command takes. */
 export interface MotionCommandBase {
-	/** Node ids from the artwork (groups animate as one). */
+	/** Node ids from the artwork (groups animate as one, unless `split` splits their text). */
 	targets: string[];
+	/**
+	 * For outlined text (a group of letter paths): animate it a letter, word or line at a time,
+	 * staggered in reading order (default stagger 40 ms a letter, 120 a word, 300 a line).
+	 */
+	split?: MotionTextUnit;
+	/** With `split`: the order units go in (default `forward`). `random` is the same every time. */
+	cascade?: MotionCascade;
 	/** Length in ms for each target, one cycle when repeating (each type has a default; `draw` follows the path length; a spring `ease` lasts until it settles). */
 	duration?: number;
 	/** Wait this many ms before starting (default 0). */
