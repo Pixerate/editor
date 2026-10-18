@@ -1519,3 +1519,21 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: After #152 merged, the Release run succeeded but printed "No unpublished projects to publish". npm's `@pixerate/editor@0.54.0` lacked `/animation-editor`, although `main`'s CHANGELOG for 0.54.0 lists it.
 - **Root Cause**: The Release run for #151 versioned and published the packages, then failed ("Some packages failed to publish") before it pushed its `chore(release)` commit. `main` kept the pending changesets, so the next run computed the same versions from them, folded in #152's changeset, and found 0.54.0 / 0.41.0 / 0.49.0 already on npm.
 - **Solution / Workaround**: After a failed Release, compare `npm view @pixerate/editor version` with `main`'s `packages/core/package.json`. If npm has a version that `main` has not committed yet, merge a new changeset so the next release bumps past it. Check what was published with `npm view @pixerate/editor@<version> exports`.
+
+### [core/canvas] Self-Registering Modules Are Dropped Because the Package Is `sideEffects: false`
+
+- **Issue / Symptom**: A module that only calls `registerFamilyScene(...)` at import time (and exports nothing anyone uses) works in tests but draws nothing in an app build: the family falls back to plain boxes.
+- **Root Cause**: `packages/core/package.json` declares `"sideEffects": false`, so consumers' bundlers may drop any module whose exports are unused, together with its top-level registration call. Family *layouts* are safe only because `diagram/registry.ts` imports each adapter module for its exported adapter, which keeps the module (and its `registerFamilyLayout` call).
+- **Solution / Workaround**: Family scenes export a function each (`pieScene`, `ganttScene`, …) and `canvas/mermaid/families/index.ts` collects them in `BUILTIN_FAMILY_SCENES`, which `scene.ts` imports to seed its registry. Keep new built-in registries static like this; reserve `register*` for hosts adding their own.
+
+### [core/diagram] Tests That Parse Mermaid With Titles Need the jsdom Environment
+
+- **Issue / Symptom**: Ported Ursula tests failed with `TypeError: DOMPurify.sanitize is not a function` inside Mermaid's `setDiagramTitle` (pie, quadrant, C4, gitGraph…), while flowchart tests passed.
+- **Root Cause**: Mermaid sanitises titles and labels with DOMPurify, which needs a `window`. Ursula ran every test under jsdom from its vitest config; core's config uses the Node environment, and flowchart parsing happens to skip the sanitiser.
+- **Solution / Workaround**: Start any test that calls Mermaid (`expectValidMermaid`, `mermaidDb`, `mermaidSummary`) with `// @vitest-environment jsdom`.
+
+### [core/diagram] `pie` Is No Longer a Text-Only Example
+
+- **Issue / Symptom**: Tests and examples that used `pie` to show "this family is kept as text" (validation refusals, `render_diagram` refusals, `<MermaidThumbnail fallback>`) started failing once the statement adapters were ported.
+- **Root Cause**: Pie, mindmap, quadrant, C4, architecture, sequence, gitGraph, Gantt, timeline, journey, XY and radar are now `editable` and drawn as scenes.
+- **Solution / Workaround**: Use `sankey-beta` (or block, packet, kanban, treemap) as the render-only example.

@@ -2,6 +2,7 @@ import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import type { JsonSchema } from '../tools/schema.js';
 import type { PresenceActorInfo } from '../animation/presence.js';
 import { diagramShapes, diagramSupportsGroups, type DiagramController } from './controller.js';
+import { checkFieldData, describeFields, familyUI, pickFieldData } from './families/index.js';
 import type { DiagramDirector } from './director.js';
 import { detectFamily } from './document.js';
 import { findMermaidSources } from './source/find.js';
@@ -49,6 +50,8 @@ const ID = { type: 'string', minLength: 1, description: 'A node id from get_diag
 const IDS = (what: string) => ({ type: 'array', items: { type: 'string', minLength: 1 }, minItems: 1, description: what }) as const;
 const EDGE_ID = { type: 'string', minLength: 1, description: 'An edge id from get_diagram (e.g. "L_A_B_0").' } as const;
 const LABEL = (what: string) => ({ type: 'string', description: what }) as const;
+/** A field value: string, number, boolean, array (numbers, lines, tags) or null to clear. */
+const FIELD_VALUE = { type: ['string', 'number', 'boolean', 'array', 'null'] } as const;
 const object = (properties: Record<string, JsonSchema>, required: string[] = []) => ({
 	type: 'object' as const,
 	properties,
@@ -59,6 +62,8 @@ const object = (properties: Record<string, JsonSchema>, required: string[] = [])
 /** What an agent needs to know about a document: ids, labels, shapes, structure. */
 export function describeDiagram(doc: MermaidDocument) {
 	const { graph } = doc;
+	const ui = familyUI(doc.family);
+	const settings = pickFieldData(ui?.diagramFields, graph.data);
 	return {
 		family: doc.family,
 		editable: doc.tier === 'editable',
@@ -71,7 +76,8 @@ export function describeDiagram(doc: MermaidDocument) {
 			...(n.parentId ? { parentId: n.parentId } : {}),
 			...(n.classes.length ? { classes: n.classes } : {}),
 			...(n.styles.length ? { styles: n.styles } : {}),
-			...(n.data?.synthetic ? { synthetic: true } : {})
+			...(n.data?.synthetic ? { synthetic: true } : {}),
+			...(ui?.nodeFields && Object.keys(pickFieldData(ui.nodeFields, n.data)).length ? { data: pickFieldData(ui.nodeFields, n.data) } : {})
 		})),
 		edges: graph.edges.map((e) => ({
 			id: e.id,
@@ -79,7 +85,8 @@ export function describeDiagram(doc: MermaidDocument) {
 			target: e.target,
 			...(e.label ? { label: e.label } : {}),
 			pattern: e.pattern,
-			arrowEnd: e.arrowEnd
+			arrowEnd: e.arrowEnd,
+			...(ui?.edgeFields && Object.keys(pickFieldData(ui.edgeFields, e.data)).length ? { data: pickFieldData(ui.edgeFields, e.data) } : {})
 		})),
 		groups: graph.groups.map((g) => ({
 			id: g.id,
@@ -88,6 +95,16 @@ export function describeDiagram(doc: MermaidDocument) {
 			...(g.direction ? { direction: g.direction } : {})
 		})),
 		shapes: diagramShapes(doc.family),
+		...(Object.keys(settings).length ? { settings } : {}),
+		...(ui && (ui.nodeFields?.length || ui.edgeFields?.length || ui.diagramFields?.length)
+			? {
+					fields: {
+						...(ui.nodeFields?.length ? { node: describeFields(ui.nodeFields) } : {}),
+						...(ui.edgeFields?.length ? { edge: describeFields(ui.edgeFields) } : {}),
+						...(ui.diagramFields?.length ? { diagram: describeFields(ui.diagramFields) } : {})
+					}
+				}
+			: {}),
 		positions: Object.fromEntries(Object.entries(doc.meta.layout ?? {}).map(([id, [x, y]]) => [id, { x: Math.round(x), y: Math.round(y) }])),
 		...(doc.diagnostics.length ? { diagnostics: doc.diagnostics.map((d) => ({ severity: d.severity, message: d.message, ...(d.line ? { line: d.line } : {}) })) } : {})
 	};
@@ -138,7 +155,7 @@ export function createDiagramToolProvider(controller: DiagramController, options
 		name: 'get_diagram',
 		title: 'Read the diagram',
 		description:
-			'Returns the diagram: its Mermaid family (flowchart, state, class, er; other families are text only), direction, nodes (id, label, shape, parentId), edges (id, source, target, label), groups (subgraphs / composite states), the shapes nodes can take, stored canvas positions, any parse diagnostics and the selection. Use the ids it returns with the write tools.',
+			'Returns the diagram: its Mermaid family (flowchart, state, class, er, pie, mindmap, quadrant, c4, architecture, sequence, gitGraph, gantt, timeline, journey, xychart, radar; sankey, block, packet, kanban and treemap are text only), direction, title, nodes (id, label, shape, parentId, data), edges (id, source, target, label, data), groups (subgraphs, composite states, sections, boxes…), the shapes nodes can take, diagram settings, the data fields each family offers ("fields": node, edge and diagram field keys with their types), stored canvas positions, any parse diagnostics and the selection. Use the ids and field keys it returns with the write tools.',
 		inputSchema: object({ includeSource: { type: 'boolean', description: 'Also return the Mermaid text (default false).' } }),
 		annotations: { title: 'Read the diagram', ...READ },
 		handler: async ({ includeSource = false }) => {
@@ -179,7 +196,7 @@ export function createDiagramToolProvider(controller: DiagramController, options
 		name: 'load_diagram_mermaid',
 		title: 'Replace the diagram with Mermaid',
 		description:
-			'Replaces the whole diagram with Mermaid text (one undo step). Flowchart, state, class and ER diagrams become editable on the canvas; other families are kept as text. Returns the family, node and edge counts and any parse diagnostics. Prefer the per-operation tools for small changes: they keep the rest of the text as written.',
+			'Replaces the whole diagram with Mermaid text (one undo step). Flowchart, state, class, ER, pie, mindmap, quadrant, C4, architecture, sequence, gitGraph, Gantt, timeline, journey, XY and radar diagrams become editable; sankey, block, packet, kanban and treemap are kept as text. Returns the family, node and edge counts and any parse diagnostics. Prefer the per-operation tools for small changes: they keep the rest of the text as written.',
 		inputSchema: object({ source: { type: 'string', minLength: 1, description: 'Mermaid text, starting with a header such as "flowchart LR".' } }, ['source']),
 		annotations: { title: 'Replace the diagram with Mermaid', ...DESTRUCTIVE },
 		handler: async ({ source }) => {
@@ -211,8 +228,9 @@ export function createDiagramToolProvider(controller: DiagramController, options
 		inputSchema: object(
 			{
 				label: LABEL('Text shown in the node.'),
-				id: { type: 'string', pattern: '^[A-Za-z0-9_][\\w.-]*$', description: 'Mermaid id (default: the next free "N<number>").' },
-				shape: { type: 'string', description: 'One of the shapes get_diagram lists (default "rect"). Flowchart and state diagrams only.' },
+				id: { type: 'string', pattern: '^[A-Za-z0-9_][\\w.-]*$', description: 'Mermaid id (default: the next free id for the family, e.g. "n3", "slice4", "task2").' },
+				shape: { type: 'string', description: 'One of the shapes get_diagram lists (default: the family\'s usual node, e.g. "rect").' },
+				data: { type: 'object', additionalProperties: FIELD_VALUE, description: 'Values for the family\'s node fields (get_diagram "fields.node"), e.g. {"value": 40} for a pie slice. Defaults fill in the rest.' },
 				parentId: { type: 'string', description: 'Group (subgraph) to add the node to.' },
 				from: { type: 'string', description: 'An existing node to connect to the new node.' },
 				edgeLabel: LABEL('Label of the edge from "from" (needs "from").'),
@@ -222,14 +240,22 @@ export function createDiagramToolProvider(controller: DiagramController, options
 			['label']
 		),
 		annotations: { title: 'Add a node', ...WRITE },
-		handler: async ({ label, id, shape, parentId, from, edgeLabel, x, y }) => {
+		handler: async ({ label, id, shape, parentId, from, edgeLabel, x, y, data }) => {
 			requireEditable();
 			if ((x === undefined) !== (y === undefined)) throw new Error('Give both x and y, or neither to place the node automatically.');
 			if (edgeLabel !== undefined && from === undefined) throw new Error('edgeLabel needs "from", the node the edge starts at.');
-			const nodeId = id ?? controller.nextId();
+			const ui = familyUI(doc().family);
+			const nodeId = id ?? (ui && !['flowchart', 'state', 'class', 'er'].includes(ui.family) ? ui.nextId(doc().graph) : controller.nextId());
+			const defaults = ui?.newNode?.(doc().graph, parentId) ?? {};
+			const nodeShape = shape ?? defaults.shape;
+			const nodeData = { ...(defaults.data ?? {}), ...(data ? checkFieldData(ui?.nodeFields, data, `a ${doc().family} node`, nodeShape) : {}) };
 			const before = edgeIds();
 			const ops: EditOp[] = [
-				{ type: 'addNode', node: { id: nodeId, label, ...(shape ? { shape } : {}), ...(parentId ? { parentId } : {}) }, ...(x !== undefined ? { position: [x, y] as const } : {}) }
+				{
+					type: 'addNode',
+					node: { ...defaults, id: nodeId, label, ...(nodeShape ? { shape: nodeShape } : {}), ...(parentId ? { parentId } : {}), ...(Object.keys(nodeData).length ? { data: nodeData } : {}) },
+					...(x !== undefined ? { position: [x, y] as const } : {})
+				}
 			];
 			if (from !== undefined) ops.push({ type: 'addEdge', edge: { source: from, target: nodeId, ...(edgeLabel ? { label: edgeLabel } : {}) } });
 			const d = await apply(ops, 'Add node');
@@ -452,6 +478,89 @@ export function createDiagramToolProvider(controller: DiagramController, options
 		}
 	};
 
+	const fieldsOf = (kind: 'node' | 'edge' | 'diagram') => {
+		const ui = familyUI(doc().family);
+		return kind === 'node' ? ui?.nodeFields : kind === 'edge' ? ui?.edgeFields : ui?.diagramFields;
+	};
+
+	const setNodeData: AgentTool = {
+		name: 'set_diagram_node_data',
+		title: 'Set a node\'s data fields',
+		description:
+			'Sets values of a node\'s data fields: a pie slice\'s value, a Gantt task\'s start and end, a quadrant point\'s x and y, a journey task\'s score, an XY series\' values, a C4 element\'s technology… Field keys and types are listed in get_diagram "fields.node"; null clears a field. Returns the node with its data.',
+		inputSchema: object(
+			{
+				id: ID,
+				data: { type: 'object', additionalProperties: FIELD_VALUE, description: 'Field key → value, e.g. {"value": 40} or {"x": 0.3, "y": 0.8}. null clears the field.' }
+			},
+			['id', 'data']
+		),
+		annotations: { title: 'Set a node\'s data fields', ...WRITE_IDEMPOTENT },
+		handler: async ({ id, data }) => {
+			requireEditable();
+			const node = doc().graph.nodes.find((n) => n.id === id);
+			if (!node) throw new Error(`There is no node "${id}"; call get_diagram for the node ids.`);
+			const patch = checkFieldData(fieldsOf('node'), data, `a ${doc().family} node`, node.shape);
+			const d = await apply({ type: 'setNodeData', id, data: patch }, 'Edit data');
+			const after = d.graph.nodes.find((n) => n.id === id);
+			return { node: { ...nodeOut(d, id), data: pickFieldData(fieldsOf('node'), after?.data) } };
+		}
+	};
+
+	const setEdgeData: AgentTool = {
+		name: 'set_diagram_edge_data',
+		title: 'Set an edge\'s data fields',
+		description:
+			'Sets values of an edge\'s data fields: a sequence message\'s activation, a C4 relation\'s technology, an architecture edge\'s sides… Field keys and types are listed in get_diagram "fields.edge"; null clears a field. Returns the edge with its data.',
+		inputSchema: object(
+			{
+				id: EDGE_ID,
+				data: { type: 'object', additionalProperties: FIELD_VALUE, description: 'Field key → value. null clears the field.' }
+			},
+			['id', 'data']
+		),
+		annotations: { title: 'Set an edge\'s data fields', ...WRITE_IDEMPOTENT },
+		handler: async ({ id, data }) => {
+			requireEditable();
+			if (!doc().graph.edges.some((e) => e.id === id)) throw new Error(`There is no edge "${id}"; call get_diagram for the edge ids.`);
+			const patch = checkFieldData(fieldsOf('edge'), data, `a ${doc().family} edge`);
+			const d = await apply({ type: 'setEdgeData', id, data: patch }, 'Edit data');
+			const edge = d.graph.edges.find((e) => e.id === id);
+			return { edge: { id, ...(edge ? { source: edge.source, target: edge.target } : {}), data: pickFieldData(fieldsOf('edge'), edge?.data) } };
+		}
+	};
+
+	const setSettings: AgentTool = {
+		name: 'set_diagram_settings',
+		title: 'Change diagram settings',
+		description:
+			'Sets diagram-level fields: a pie chart\'s showData, a Gantt chart\'s dateFormat and excludes, a quadrant chart\'s axis labels, an XY chart\'s categories and axis range, sequence autonumbering… Field keys and types are listed in get_diagram "fields.diagram"; null clears a field. Returns all settings.',
+		inputSchema: object(
+			{ data: { type: 'object', additionalProperties: FIELD_VALUE, description: 'Field key → value. null clears the field.' } },
+			['data']
+		),
+		annotations: { title: 'Change diagram settings', ...WRITE_IDEMPOTENT },
+		handler: async ({ data }) => {
+			requireEditable();
+			const patch = checkFieldData(fieldsOf('diagram'), data, `a ${doc().family} diagram`);
+			const d = await apply({ type: 'setGraphData', data: patch }, 'Edit settings');
+			return { settings: pickFieldData(fieldsOf('diagram'), d.graph.data) };
+		}
+	};
+
+	const setTitle: AgentTool = {
+		name: 'set_diagram_title',
+		title: 'Set the diagram title',
+		description: 'Sets the title shown above the diagram (a title statement, or frontmatter for families without one), or removes it with null. Returns the title.',
+		inputSchema: object({ title: { type: ['string', 'null'], description: 'The new title, or null to remove it.' } }, ['title']),
+		annotations: { title: 'Set the diagram title', ...WRITE_IDEMPOTENT },
+		handler: async ({ title }) => {
+			requireEditable();
+			const d = await apply({ type: 'setTitle', title: title === null || title === '' ? undefined : title }, 'Set title');
+			return { title: d.graph.title ?? null };
+		}
+	};
+
 	const renderDiagram: AgentTool = {
 		name: 'render_diagram',
 		title: 'Render the diagram',
@@ -476,7 +585,7 @@ export function createDiagramToolProvider(controller: DiagramController, options
 	};
 
 	const reads = [getDiagram, exportMermaid, findDiagrams, ...(options.renderSvg ? [renderDiagram] : [])];
-	const writes = [loadMermaid, addNode, removeElements, renameNode, setShape, setStyle, connect, removeEdges, labelEdge, reconnect, setDirection, group, ungroup, move, undo, redo];
+	const writes = [loadMermaid, addNode, removeElements, renameNode, setShape, setStyle, setNodeData, connect, removeEdges, labelEdge, setEdgeData, reconnect, setDirection, setTitle, setSettings, group, ungroup, move, undo, redo];
 
 	return {
 		id: options.id ?? 'diagram',

@@ -1,5 +1,6 @@
 import dagre from "@dagrejs/dagre";
-import type { DiagramGraph, DiagramMeta, GraphNode, Point } from "../../diagram/types.js";
+import type { DiagramFamily, DiagramGraph, DiagramMeta, GraphNode, Point } from "../../diagram/types.js";
+import { getFamilyLayout } from "../../diagram/layout-registry.js";
 
 /**
 
@@ -25,6 +26,11 @@ export interface DiagramLayoutOptions {
   groupPadding?: number;
   /** Height reserved for a group's title (default 32). */
   groupTitleHeight?: number;
+  /**
+   * Diagram family. A family that registered its own layout (`registerFamilyLayout`:
+   * pie, quadrant, sequence, Gantt…) is laid out from its data instead of with dagre.
+   */
+  family?: DiagramFamily;
 }
 
 export const DEFAULT_DIAGRAM_NODE_WIDTH = 160;
@@ -147,6 +153,8 @@ function rankdir(direction: string): "TB" | "BT" | "LR" | "RL" {
  */
 export function autoLayoutDiagram(graph: DiagramGraph, options: DiagramLayoutOptions = {}): DiagramLayout {
   const measure = options.measure ?? estimateDiagramNodeSize;
+  const custom = getFamilyLayout(options.family);
+  if (custom) return custom(graph, { v: 1 }, { ...options, measure });
   const nodeSep = options.nodeSep ?? 48;
   const rankSep = options.rankSep ?? 72;
   const pad = options.groupPadding ?? 24;
@@ -269,6 +277,8 @@ export function ensureDiagramLayout(
   options?: DiagramLayoutOptions,
 ): DiagramLayout {
   const measure = options?.measure ?? estimateDiagramNodeSize;
+  const custom = getFamilyLayout(options?.family);
+  if (custom) return custom(graph, meta, { ...(options ?? {}), measure });
   const stored = meta.layout ?? {};
   const allIds = [...graph.nodes.map((n) => n.id), ...graph.groups.map((g) => g.id)];
   const missing = allIds.filter((id) => !stored[id]);

@@ -1,6 +1,6 @@
 # Mermaid diagrams
 
-`@pixerate/editor/diagram` reads and writes Mermaid without losing anything, and `@pixerate/editor/canvas` puts flowchart, state, class and ER diagrams on a React Flow / Svelte Flow canvas. Ported from Ursula.
+`@pixerate/editor/diagram` reads and writes Mermaid without losing anything. `@pixerate/editor/canvas` puts flowchart, state, class and ER diagrams on a React Flow / Svelte Flow canvas, and draws the other editable families (sequence, Gantt, pie, quadrant, XY, radar, timeline, journey, mindmap, gitGraph, C4, architecture) the way Mermaid draws them. Ported from Ursula.
 
 ## What round-trips
 
@@ -15,7 +15,13 @@
   ```
 
   `requirementDiagram` rejects `%%` comments in its body, so it keeps them under a `pixerate:` frontmatter key. Ursula's `%% @ursula` comment and `ursula:` key are read too and rewritten as `@pixerate` on the next edit.
-- Families other than flowchart, state, class and ER (sequence, Gantt, pie, …) parse as `render-only` documents: their text is kept, and only `load` / `replaceSource` changes them. Charts (`xychart`, `pie`, `radar`) have their own editor in `@pixerate/editor/chart`.
+- Sixteen families are `editable`: flowchart, state, class and ER (graph grammars), and pie, mindmap, quadrant, C4, architecture, sequence, gitGraph, Gantt, timeline, journey, XY (`xychart-beta`) and radar (`radar-beta`) through statement adapters. Each statement is edited on its own; lines the adapter does not model are kept verbatim.
+- Sankey, block, packet, kanban, treemap and unknown input parse as `render-only` documents: their text is kept, and only `load` / `replaceSource` changes them. `parseSankey` and `parseTreemap` read sankey links and treemap hierarchies as data (never throwing; a `DiagramDataError` names the line).
+- Charts (`xychart`, `pie`, `radar`) also have their own editor in `@pixerate/editor/chart`.
+
+## Family vocabulary
+
+`familyUI(family)` (from `@pixerate/editor/diagram`) describes what each family offers: its shapes, edge kinds, whether it has groups and a direction, a `nextId` for new nodes and `newNode` defaults, and its data fields. `nodeFields` are written with `setNodeData` (a pie slice's `value`, a Gantt task's `start` / `end` / `tags`, a quadrant point's `x` / `y`), `edgeFields` with `setEdgeData` (sequence activation, C4 technology, architecture sides) and `diagramFields` with `setGraphData` (pie `showData`, Gantt `dateFormat`, XY axes). `checkFieldData(fields, data, what, shape)` validates a patch against them. `FAMILY_TEMPLATES`, `FAMILY_BLANKS`, `FAMILY_TITLES` and `FAMILY_DESCRIPTIONS` are starter sources and labels for type pickers.
 
 ## Core
 
@@ -43,6 +49,13 @@ findMermaidSources(markdown); // [{ source, family, title? }] for each ```mermai
 - `mermaidMovesFromCanvas(layout, moved, all, { stored: doc.meta.layout })` turns a drop into a `moveNodes` edit. Pass `stored` so the rest of an auto-laid diagram is pinned where it is; without it, moving one node shifts the others (the blend aligns on the stored positions).
 - `DiagramStream` follows Mermaid that is still arriving (a model's reply, prose before the fence included): nodes appear once an edge places them, and the layout is only recomputed when nodes, edges or groups change. `blendDiagramLayout` tweens between layouts.
 - `mermaidShapePaths(shape, w, h)` draws the flowchart and state shapes as SVG paths; `mermaidNodePaint` maps Mermaid `style` / `classDef` to CSS custom properties.
+- Families positioned by their data register a layout (`registerFamilyLayout`) that `ensureDiagramLayout(graph, meta, { family })` uses instead of dagre: pie slices share the pie's box, sequence participants sit in columns, Gantt bars on a date axis, and so on.
+
+### Family pictures
+
+`mermaidToScene(doc, { theme, selection })` draws a family as its own picture: a list of marks (`rect`, `path`, `circle`, `line`, `text`) in canvas coordinates. A mark's `target` is the node, edge or group it selects (`DIAGRAM_TITLE_TARGET` for the title); marks without one are decoration. It returns `null` for flowchart, state, class and ER (drawn as nodes and edges) and for text-only families. XY and radar charts are drawn with the chart module's layout.
+
+`diagramRenameOp(doc, target, label)` turns a double-click on a mark into the right edit (`setTitle`, `renameGroup`, `setEdgeLabel` or `renameNode`). `registerFamilyScene` adds or replaces a family's drawing. `DIAGRAM_SCENE_LIGHT_THEME`, `DIAGRAM_SCENE_DARK_THEME` and `CSS_VARIABLE_DIAGRAM_SCENE_THEME` hold the colours.
 
 ## React and Svelte
 
@@ -51,12 +64,15 @@ findMermaidSources(markdown); // [{ source, family, title? }] for each ```mermai
 | Editable diagram | `useMermaidDiagram(controllerOrOptions)` | `createMermaidDiagram(controllerOrOptions)` |
 | Streaming view | `useMermaidStream(source, { complete })` | `createMermaidStream()` then `update(source, complete)` |
 | Nodes | `<MermaidDiagramNode>`, `<MermaidDiagramGroup>` (pass handles as children) | same |
+| Family pictures | `<MermaidFamilyScene scene onSelect onOpen>` | `<MermaidFamilyScene scene onselect onopen>` |
 
-Both return `nodes`, `edges`, `layout`, `source` and `moveNodes`, `connect`, `remove`, `rename`, `apply`, `load`, `undo`, `redo`. The demo's Canvas tab wires them to React Flow (`apps/demo/src/components/MermaidDiagramDemo.tsx`).
+Both return `nodes`, `edges`, `layout`, `scene`, `source` and `moveNodes`, `connect`, `remove`, `rename`, `renameTarget`, `apply`, `load`, `undo`, `redo`. `scene` is the family's picture (null for node-and-edge families); render it with `MermaidFamilyScene`, select with `select([target])` and rename with `renameTarget(target, label)`. Pass `{ sceneTheme }` as the second argument (or in the options) for colours other than the page's CSS variables. The demo's Canvas tab wires them to React Flow (`apps/demo/src/components/MermaidDiagramDemo.tsx`).
 
 ## Agent tools
 
-`createDiagramToolProvider(controller, { getPositions })` registers 19 tools: `get_diagram`, `export_diagram_mermaid`, `find_mermaid_diagrams` (always), and `load_diagram_mermaid`, `add_diagram_node`, `remove_diagram_nodes`, `rename_diagram_node`, `set_diagram_node_shape`, `set_diagram_node_style`, `connect_diagram_nodes`, `remove_diagram_edges`, `set_diagram_edge_label`, `reconnect_diagram_edge`, `set_diagram_direction`, `group_diagram_nodes`, `ungroup_diagram_group`, `move_diagram_nodes`, `undo_diagram`, `redo_diagram` (hidden while read-only). Write tools return the ids they created. Pass `getPositions` (the canvas layout's positions) so `move_diagram_nodes` pins the rest of an auto-laid diagram.
+`createDiagramToolProvider(controller, { getPositions })` registers 23 tools: `get_diagram`, `export_diagram_mermaid`, `find_mermaid_diagrams` (always), and `load_diagram_mermaid`, `add_diagram_node`, `remove_diagram_nodes`, `rename_diagram_node`, `set_diagram_node_shape`, `set_diagram_node_style`, `set_diagram_node_data`, `connect_diagram_nodes`, `remove_diagram_edges`, `set_diagram_edge_label`, `set_diagram_edge_data`, `reconnect_diagram_edge`, `set_diagram_direction`, `set_diagram_title`, `set_diagram_settings`, `group_diagram_nodes`, `ungroup_diagram_group`, `move_diagram_nodes`, `undo_diagram`, `redo_diagram` (hidden while read-only). Write tools return the ids they created.
+
+`get_diagram` lists each family's data fields (`fields.node`, `fields.edge`, `fields.diagram`, with types and ranges) and the current values (`data` on nodes and edges, `settings`). The three data tools check keys and value types against those fields before anything changes, and `null` clears a field. `add_diagram_node` uses the family's id scheme and defaults (a new pie slice gets `slice4` and a value of 10) and takes `data` for the rest. Pass `getPositions` (the canvas layout's positions) so `move_diagram_nodes` pins the rest of an auto-laid diagram.
 
 ## Export and thumbnails
 
@@ -67,9 +83,10 @@ What it draws:
 - nodes in their Mermaid shapes, with `style` / `classDef` colours
 - class members and ER attributes
 - edges with labels, dash patterns and arrow heads
+- the other editable families as their picture (`mermaidToScene`)
 
 Options:
-- `theme`: concrete colours, because CSS variables do not apply inside an image. `DIAGRAM_SVG_LIGHT_THEME` and `DIAGRAM_SVG_DARK_THEME` are provided.
+- `theme`: concrete colours, because CSS variables do not apply inside an image. `DIAGRAM_SVG_LIGHT_THEME` and `DIAGRAM_SVG_DARK_THEME` are provided; family pictures also read the scene fields (`palette`, `grid`, `mutedText`), see `DIAGRAM_SCENE_DARK_THEME`.
 - `padding`, `transparent`, `title`.
 - `maxWidth` / `maxHeight`: fit the drawing inside a box without enlarging it.
 
