@@ -24,7 +24,7 @@ const COMMAND_KEYS: Record<string, string[]> = {
 	enter: [...BASE_KEYS, 'style', 'direction', 'distance', 'scale', 'shape', 'orientation'],
 	exit: [...BASE_KEYS, 'style', 'direction', 'distance'],
 	draw: [...BASE_KEYS, 'from', 'to'],
-	move: [...BASE_KEYS, 'by', 'to', 'blend'],
+	move: [...BASE_KEYS, 'by', 'to', 'via', 'pacing', 'blend'],
 	rotate: [...BASE_KEYS, 'by', 'to', 'blend'],
 	scale: [...BASE_KEYS, 'to', 'geometric', 'blend'],
 	fade: [...BASE_KEYS, 'to'],
@@ -109,6 +109,9 @@ export function commandShapeProblems(command: unknown, where: string): string[] 
 			if (command.by !== undefined && command.to !== undefined) p(`give "by" or "to", not both.`);
 			if (command.by !== undefined && !isPoint(command.by)) p(`"by" must be { "x": number, "y": number }.`);
 			if (command.to !== undefined && !isPoint(command.to)) p(`"to" must be { "x": number, "y": number }.`);
+			if (command.via !== undefined && !(Array.isArray(command.via) && command.via.length > 0 && command.via.length <= 64 && command.via.every(isPoint))) p(`"via" must be a list of 1 to 64 points { "x": number, "y": number } (document units).`);
+			if (command.pacing !== undefined && command.pacing !== 'even' && command.pacing !== 'equal') p(`"pacing" must be "even" (steady speed) or "equal" (each leg the same time).`);
+			if (command.pacing !== undefined && command.via === undefined) p(`"pacing" goes with "via".`);
 			break;
 		case 'rotate':
 			if (command.by === undefined && command.to === undefined) p(`give "by" or "to" (degrees).`);
