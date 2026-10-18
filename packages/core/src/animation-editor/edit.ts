@@ -267,6 +267,77 @@ export function applyMotionEdits(scene: MotionScene, edits: MotionEdit | readonl
 	return { ok: true, scene: next, issues, hints: editHints(before, issues) };
 }
 
+/** What one edit made, for later edits in a batch to refer to (`"$0.indexes[0]"`). */
+export interface MotionEditOutcome {
+	op: string;
+	/** The shot it changed or added to. */
+	shot?: string;
+	/** Shots it added. */
+	shots?: string[];
+	/** Indexes of the commands it added (or where it moved one). */
+	indexes?: number[];
+	/** The clip it set. */
+	clip?: string;
+}
+
+const REF = /^\$(\d+|last)((?:\.[A-Za-z_]\w*|\[\d+\])+)$/;
+
+/**
+ * Resolves references to earlier edits' outcomes in a batch: a string `"$N.path"` (`$last` for the
+ * one before) is replaced by that value, e.g. `"$0.indexes[0]"` for the index of the first command
+ * edit 0 added; `"$$..."` is a literal `$`. Returns the resolved edits with what each made, or why
+ * a reference does not resolve. Nothing is applied.
+ */
+export function resolveMotionEditRefs(scene: MotionScene, edits: readonly MotionEdit[]): { ok: true; edits: MotionEdit[]; outcomes: MotionEditOutcome[] } | { ok: false; error: string } {
+	const outcomes: MotionEditOutcome[] = [];
+	const resolved: MotionEdit[] = [];
+	let next = scene;
+	for (let i = 0; i < edits.length; i++) {
+		const where = `op ${i + 1} (${edits[i]?.op})`;
+		let problem: string | null = null;
+		const walk = (v: unknown): unknown => {
+			if (typeof v === 'string') {
+				if (v.startsWith('$$')) return v.slice(1);
+				const m = REF.exec(v);
+				if (!m) return v;
+				const n = m[1] === 'last' ? i - 1 : Number(m[1]);
+				if (!(n >= 0 && n < i)) {
+					problem = `${where}: "${v}" refers to op ${n + 1}, but only ops before this one (1 to ${i}) can be referred to.`;
+					return v;
+				}
+				let value: unknown = outcomes[n];
+				for (const part of m[2].match(/\.[A-Za-z_]\w*|\[\d+\]/g) ?? []) value = value == null ? undefined : (value as Record<string, unknown>)[part.startsWith('.') ? part.slice(1) : part.slice(1, -1)];
+				if (value === undefined) problem = `${where}: "${v}" has no value; op ${n + 1} made ${JSON.stringify(outcomes[n])}.`;
+				return value;
+			}
+			if (Array.isArray(v)) return v.map(walk);
+			if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, walk(x)]));
+			return v;
+		};
+		const edit = walk(edits[i]) as MotionEdit;
+		if (problem) return { ok: false, error: `${problem} Nothing was changed.` };
+		const before = next;
+		try {
+			next = applyOne(next, edit);
+		} catch (error) {
+			if (error instanceof EditError) return { ok: false, error: `${where}: ${error.message} Nothing was changed.` };
+			throw error;
+		}
+		resolved.push(edit);
+		const out: MotionEditOutcome = { op: edit.op };
+		if (edit.op === 'insert_shots') out.shots = edit.shots.map((s) => s.id);
+		if ('shot' in edit && typeof edit.shot === 'string') out.shot = edit.op === 'update_shot' && edit.set?.id ? edit.set.id : edit.shot;
+		if (edit.op === 'add_commands') {
+			const at = edit.at ?? before.shots.find((s) => s.id === edit.shot)?.run.length ?? 0;
+			out.indexes = edit.commands.map((_, k) => at + k);
+		}
+		if (edit.op === 'move_command') out.indexes = [edit.to];
+		if (edit.op === 'set_clip') out.clip = edit.name;
+		outcomes.push(out);
+	}
+	return { ok: true, edits: resolved, outcomes };
+}
+
 /** An empty scene over `artwork`. */
 export function createMotionScene(artwork: VectorDocument, init: Partial<Omit<MotionScene, 'artwork' | 'version'>> = {}): MotionScene {
 	return { version: 1, name: init.name ?? 'animation', ...init, artwork, shots: init.shots ?? [] };

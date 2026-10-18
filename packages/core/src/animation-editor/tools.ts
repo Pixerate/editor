@@ -6,10 +6,10 @@ import type { VectorNode } from '../vector/types.js';
 import { compileMotionScene, indexMotionNodes, motionClipLayout, motionBeatAt, motionBeatTime } from './compile.js';
 import { fitMotionScene } from './fit.js';
 import { toLottie } from './lottie.js';
-import { motionPath } from './onion.js';
+import { motionContactSheetSvg, motionPath } from './onion.js';
 import { fromFlairSvgMotion, fromFlairVectorEffect, type FlairImportResult } from './flair-import.js';
 import type { AnimationEditorController } from './controller.js';
-import { MOTION_EDIT_OPS, type MotionEdit, type MotionEditResult } from './edit.js';
+import { MOTION_EDIT_OPS, resolveMotionEditRefs, type MotionEdit, type MotionEditResult } from './edit.js';
 import { motionIssueLine, namedWithSuggestion, type MotionIssue } from './issues.js';
 import { MOTION_COMMAND_TYPES, MOTION_DIRECTIONS, MOTION_ENTER_STYLES, MOTION_EXIT_STYLES, MOTION_IRIS_SHAPES, MOTION_REPEAT_MODES, MOTION_BLENDS, MOTION_SPLIT_ORIENTATIONS, motionFlairPrimitive, type MotionCommand, type MotionScene } from './types.js';
 
@@ -254,9 +254,9 @@ const EDIT_OP: JsonSchema = {
 		object({ op: { const: 'delete_shots', description: 'Like delete_shots.' }, shots: { type: 'array', items: SHOT_ID, minItems: 1, description: 'Shot ids.' } }, ['op', 'shots']),
 		object({ op: { const: 'move_shot', description: 'Like move_shot.' }, shot: SHOT_ID, to: { type: 'integer', minimum: 0, description: 'New position (0 = first).' } }, ['op', 'shot', 'to']),
 		object({ op: { const: 'add_commands', description: 'Like add_commands.' }, shot: SHOT_ID, commands: { type: 'array', items: MOTION_COMMAND_SCHEMA, minItems: 1, description: 'Commands to add.' }, at: { type: 'integer', minimum: 0, description: 'Index in the shot\'s run (default: the end).' } }, ['op', 'shot', 'commands']),
-		object({ op: { const: 'update_command', description: 'Like update_command.' }, shot: SHOT_ID, command: { type: 'integer', minimum: 0, description: 'Index in the shot\'s run.' }, set: { type: 'object', description: 'Command fields to replace.' }, remove: { type: 'array', items: { type: 'string' }, description: 'Command fields to clear.' } }, ['op', 'shot', 'command']),
-		object({ op: { const: 'move_command', description: 'Like move_command.' }, shot: SHOT_ID, command: { type: 'integer', minimum: 0, description: 'Index in the shot\'s run.' }, to: { type: 'integer', minimum: 0, description: 'New index in the run (0 = first).' } }, ['op', 'shot', 'command', 'to']),
-		object({ op: { const: 'delete_commands', description: 'Like delete_commands.' }, shot: SHOT_ID, commands: { type: 'array', items: { type: 'integer', minimum: 0 }, minItems: 1, description: 'Indexes in the shot\'s run.' } }, ['op', 'shot', 'commands']),
+		object({ op: { const: 'update_command', description: 'Like update_command.' }, shot: SHOT_ID, command: { anyOf: [{ type: 'integer', minimum: 0 }, { type: 'string', pattern: '^\\$(\\d+|last)[.\\[]' }], description: 'Index in the shot\'s run, or a reference to an earlier op\'s outcome such as "$0.indexes[0]".' }, set: { type: 'object', description: 'Command fields to replace.' }, remove: { type: 'array', items: { type: 'string' }, description: 'Command fields to clear.' } }, ['op', 'shot', 'command']),
+		object({ op: { const: 'move_command', description: 'Like move_command.' }, shot: SHOT_ID, command: { anyOf: [{ type: 'integer', minimum: 0 }, { type: 'string', pattern: '^\\$(\\d+|last)[.\\[]' }], description: 'Index in the shot\'s run, or a reference to an earlier op\'s outcome such as "$0.indexes[0]".' }, to: { type: 'integer', minimum: 0, description: 'New index in the run (0 = first).' } }, ['op', 'shot', 'command', 'to']),
+		object({ op: { const: 'delete_commands', description: 'Like delete_commands.' }, shot: SHOT_ID, commands: { type: 'array', items: { anyOf: [{ type: 'integer', minimum: 0 }, { type: 'string', pattern: '^\\$(\\d+|last)[.\\[]' }], description: 'An index, or a reference to an earlier op\'s outcome such as "$0.indexes[0]".' }, minItems: 1, description: 'Indexes in the shot\'s run.' } }, ['op', 'shot', 'commands']),
 		object({ op: { const: 'set_controls', description: 'Like set_controls.' }, controls: { type: 'array', items: CONTROL, description: 'Controls (empty clears).' }, presets: { type: 'array', items: PRESET, description: 'Presets (empty clears).' } }, ['op', 'controls'])
 	]
 };
@@ -423,7 +423,7 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 		name: 'render_animation_frame',
 		title: 'Render a frame',
 		description:
-			'Draws the animation at one moment without changing it, to check it: standalone SVG by default, or a PNG image (format "png") when the host can rasterize. Give a time in ms, or a shot and where in it.',
+			'Draws the animation at one moment (or, with times, several moments as one labelled contact sheet) without changing it, to check it: standalone SVG by default, or a PNG image (format "png") when the host can rasterize. Give a time in ms, or a shot and where in it.',
 		inputSchema: object({
 			time: MS('Time from the start'),
 			shot: { ...SHOT_ID, description: 'Render a moment of this shot instead of "time".' },
@@ -438,10 +438,12 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 				[],
 				'Draw faded frames either side of the moment, to see motion in one picture.'
 			),
+			times: { type: 'array', items: { type: 'number', minimum: 0 }, minItems: 2, maxItems: 16, description: 'Several moments (ms) to draw as one contact sheet, each labelled with its time and shot, instead of one frame. Overrides time and shot.' },
+			columns: { type: 'integer', minimum: 1, maximum: 8, description: 'With times: frames a row (default about square).' },
 			motion_paths: { anyOf: [{ type: 'boolean' }, { type: 'array', items: { type: 'string', minLength: 1 } }], description: 'Draw where nodes travel (dashed, with a dot where each change starts or ends): true for every node whose place changes, or a list of ids.' }
 		}),
 		annotations: { title: 'Render a frame', ...READ },
-		handler: async ({ time, shot, at = 'end', format = 'svg', onion_skin, motion_paths }) => {
+		handler: async ({ time, shot, at = 'end', format = 'svg', onion_skin, motion_paths, times, columns }) => {
 			const s = scene();
 			let t = time ?? controller.getState().time;
 			if (shot !== undefined) {
@@ -453,7 +455,18 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 				const known = new Set(describeMotionElements(s).map((e) => e.id));
 				for (const id of motion_paths) if (!known.has(id)) throw new Error(`There is no element ${namedWithSuggestion(id, known)} to draw a motion path for.`);
 			}
-			const svg = controller.toSvg(t, { pretty: false, ...(onion_skin ? { onionSkin: onion_skin } : {}), ...(motion_paths ? { motionPaths: motion_paths } : {}) });
+			const overlays = { ...(onion_skin ? { onionSkin: onion_skin } : {}), ...(motion_paths ? { motionPaths: motion_paths } : {}) };
+			if (times) {
+				const sheet = motionContactSheetSvg(s, times, { pretty: false, ...overlays, ...(columns ? { columns } : {}) });
+				if (format === 'png') {
+					if (!options.rasterize) throw new Error('This host cannot make PNG images; call render_animation_frame with format "svg".');
+					const size = /width="(\d+)" height="(\d+)"/.exec(sheet)!;
+					const image = await options.rasterize(sheet, { width: Number(size[1]), height: Number(size[2]) });
+					return { content: [{ type: 'image', data: image.data, mimeType: image.mimeType }] };
+				}
+				return { times, svg: sheet };
+			}
+			const svg = controller.toSvg(t, { pretty: false, ...overlays });
 			if (format === 'png') {
 				if (!options.rasterize) throw new Error('This host cannot make PNG images; call render_animation_frame with format "svg".');
 				const image = await options.rasterize(svg, { width: s.artwork.width, height: s.artwork.height });
@@ -838,12 +851,15 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 		name: 'edit_animation',
 		title: 'Make several edits at once',
 		description:
-			'Applies several edits in order as one undo step, all or nothing: if one fails, nothing changes and the error names the op ("op 2 (add_commands): …"). With dry_run it only reports the timing and issues the edits would give.',
+			'Applies several edits in order as one undo step, all or nothing: if one fails, nothing changes and the error names the op ("op 2 (add_commands): …"). A later op can use what an earlier one made: "$0.indexes[0]" is the index of the first command op 1 added, "$last.shot" the shot the op before changed. Returns each op\'s outcome (shot, shots, indexes, clip), the timing and issues. With dry_run it only reports them.',
 		inputSchema: object({ ops: { type: 'array', items: EDIT_OP, minItems: 1, description: 'Edits, applied in order.' }, dry_run: { type: 'boolean', description: 'Check without applying (default false).' } }, ['ops']),
 		annotations: { title: 'Make several edits at once', ...WRITE },
 		handler: ({ ops, dry_run = false }) => {
-			const result = controller.apply(ops, 'Edit animation', { dryRun: dry_run });
-			return outcome(result, dry_run ? { dry_run: true, hint: 'Nothing was applied; call again without dry_run to apply.' } : {});
+			// Later ops may refer to what earlier ones made ("$0.indexes[0]").
+			const refs = resolveMotionEditRefs(controller.getScene(), ops);
+			if (!refs.ok) throw new Error(refs.error);
+			const result = controller.apply(refs.edits, 'Edit animation', { dryRun: dry_run });
+			return outcome(result, { outcomes: refs.outcomes, ...(dry_run ? { dry_run: true, hint: 'Nothing was applied; call again without dry_run to apply.' } : {}) });
 		}
 	};
 

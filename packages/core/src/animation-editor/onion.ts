@@ -160,3 +160,40 @@ export function motionStageSvg(scene: MotionScene, time: number, options: Motion
 	const bg = svgOptions.background !== false && scene.artwork.background ? /^\s*<rect[^>]*\/>/.exec(body)?.[0] ?? '' : '';
 	return `${current.slice(0, open)}${bg}${ghosts.join('')}${body.slice(bg.length)}${paths}</svg>`;
 }
+
+export interface MotionContactSheetOptions extends MotionSvgOptions, MotionOverlayOptions {
+	/** Frames a row (default: about square). */
+	columns?: number;
+	/** Write each frame's time (and shot) under it (default true). */
+	labels?: boolean;
+}
+
+/**
+ * Several moments of the scene in one SVG, in a grid with each frame's time and shot under it:
+ * a contact sheet, to see a whole animation (or an agent's change to it) at a glance.
+ */
+export function motionContactSheetSvg(scene: MotionScene, times: readonly number[], options: MotionContactSheetOptions = {}): string {
+	const { columns, labels = true, ...frameOptions } = options;
+	const n = Math.max(1, times.length);
+	const cols = Math.max(1, Math.min(n, Math.floor(columns ?? Math.ceil(Math.sqrt(n)))));
+	const rows = Math.ceil(n / cols);
+	const { width: w, height: h } = scene.artwork;
+	const gap = Math.round(Math.max(w, h) * 0.04);
+	const label = labels ? Math.round(Math.max(12, h * 0.08)) : 0;
+	const timeline = compileMotionScene(scene);
+	const W = cols * w + (cols + 1) * gap;
+	const H = rows * (h + label) + (rows + 1) * gap;
+	const prefix = frameOptions.idPrefix ?? 'vg-';
+	const cells = times.map((t, i) => {
+		const x = gap + (i % cols) * (w + gap);
+		const y = gap + Math.floor(i / cols) * (h + label + gap);
+		const frame = motionStageSvg(scene, t, { ...frameOptions, idPrefix: `${prefix}f${i}-` });
+		const view = /viewBox="([^"]*)"/.exec(frame)?.[1] ?? `0 0 ${w} ${h}`;
+		// Each frame keeps its own ids under its prefix; element ids are dropped so frames never clash.
+		const inner = innerSvg(frame).replace(new RegExp(` id="(?!${`${prefix}f${i}-`.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})[^"]*"`, 'g'), '');
+		const shot = timeline.shots.find((s) => t >= s.start && t < s.end) ?? timeline.shots[timeline.shots.length - 1];
+		const caption = labels ? `<text x="${x + w / 2}" y="${y + h + label * 0.8}" font-family="system-ui, sans-serif" font-size="${Math.round(label * 0.7)}" text-anchor="middle" fill="#64748b">${(t / 1000).toFixed(2)} s${shot ? ` · ${shot.id.replace(/[<&]/g, '')}` : ''}</text>` : '';
+		return `<svg x="${x}" y="${y}" width="${w}" height="${h}" viewBox="${view}" overflow="hidden">${inner}</svg><rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="#cbd5e1"/>${caption}`;
+	});
+	return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><rect width="${W}" height="${H}" fill="#f8fafc"/>${cells.join('')}</svg>`;
+}
