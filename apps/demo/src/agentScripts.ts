@@ -130,6 +130,18 @@ export const SHEET_SCRIPTS: AgentScript[] = [
   },
 ];
 
+/**
+ * A control in the chart inspector, scrolled into view first: the inspector scrolls on its own, so
+ * the control may be outside it. Value drags have no target, since the chart's director draws them.
+ */
+function inspectorControl(selector: string) {
+  return (stage: HTMLElement) => {
+    const el = stage.querySelector(`[data-chart-inspector] ${selector}`);
+    el?.scrollIntoView({ block: "nearest" });
+    return el;
+  };
+}
+
 export const CHART_SCRIPTS: AgentScript[] = [
   {
     id: "chart-compose",
@@ -146,15 +158,17 @@ export const CHART_SCRIPTS: AgentScript[] = [
           ],
         },
         as: "data",
+        target: { selector: "[data-chart-grid]" },
       },
-      { say: "A grouped bar chart with titles.", tool: "chart__update_chart", args: { type: "bar", title: "Revenue by quarter", subtitle: "$k, 2026" } },
+      { say: "A grouped bar chart with titles.", tool: "chart__update_chart", args: { type: "bar", title: "Revenue by quarter", subtitle: "$k, 2026" }, target: inspectorControl('[data-chart-type="bar"]') },
       {
         say: "Online is the growth story, so it gets a linear trend.",
         tool: "chart__add_chart_trendline",
         args: (ctx) => ({ series: seriesId(ctx.results.data, "Online"), type: "linear", showR2: true }),
+        target: { selector: "[data-chart-canvas]" },
       },
-      { say: "Colour-blind safe palette, presentation layout.", tool: "chart__apply_chart_preset", args: { layout: "presentation", colors: "okabe-ito" } },
-      { say: "Rendering it to check how it reads.", tool: "chart__render_chart", args: { format: "png" } },
+      { say: "Colour-blind safe palette, presentation layout.", tool: "chart__apply_chart_preset", args: { layout: "presentation", colors: "okabe-ito" }, target: inspectorControl('[data-option="preset.colors"]') },
+      { say: "Rendering it to check how it reads.", tool: "chart__render_chart", args: { format: "png" }, target: { selector: '[data-action="download-png"]' } },
     ],
   },
   {
@@ -174,7 +188,12 @@ export const CHART_SCRIPTS: AgentScript[] = [
           };
         },
       },
-      { say: "Saying so in the title.", tool: "chart__update_chart", args: (ctx) => ({ title: `${(ctx.results.chart.spec ?? ctx.results.chart).title || "Chart"} (+15%)` }) },
+      {
+        say: "Saying so in the title.",
+        tool: "chart__update_chart",
+        args: (ctx) => ({ title: `${(ctx.results.chart.spec ?? ctx.results.chart).title || "Chart"} (+15%)` }),
+        target: inspectorControl('[data-option="title"]'),
+      },
     ],
   },
 ];
