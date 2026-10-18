@@ -12,6 +12,8 @@ export * from './layout.js';
 export * from './toFlow.js';
 export * from './view.js';
 export * from './stream.js';
+export * from './scene.js';
+export * from './families/index.js';
 
 export interface MermaidCanvasOptions extends DiagramLayoutOptions {
 	/** Nodes can be dragged, connected and selected (default false). */
@@ -32,7 +34,7 @@ export interface MermaidCanvas {
  * relative to their parent as React Flow / Svelte Flow expect) and edges.
  */
 export function mermaidToCanvas(doc: MermaidDocument, options: MermaidCanvasOptions = {}): MermaidCanvas {
-	const layout = options.layout ?? ensureDiagramLayout(doc.graph, doc.meta, options);
+	const layout = options.layout ?? ensureDiagramLayout(doc.graph, doc.meta, { family: doc.family, ...options });
 	return {
 		nodes: mermaidFlowNodes(doc.graph, layout, { editable: options.editable }),
 		edges: mermaidFlowEdges(doc.graph, { editable: options.editable }),

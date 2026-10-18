@@ -89,7 +89,7 @@ describe("DiagramController", () => {
     expect(validateDiagramEdit(doc, { type: "addNode", node: { id: "Z", parentId: "Q" } })).toMatch(/There is no group "Q"; existing groups are "S"/);
     expect(validateDiagramEdit(doc, { type: "setDirection", direction: "XY" })).toMatch(/Unknown direction/);
     expect(validateDiagramEdit(parseMermaid("erDiagram\n  A ||--o{ B : has"), { type: "groupNodes", groupId: "G", label: "g", nodeIds: ["A"] })).toMatch(/no groups/);
-    expect(validateDiagramEdit(parseMermaid("pie\n  \"a\" : 1"), { type: "renameNode", id: "a", label: "b" })).toMatch(/only be edited as Mermaid text/);
+    expect(validateDiagramEdit(parseMermaid("sankey-beta\n  a,b,1"), { type: "renameNode", id: "a", label: "b" })).toMatch(/only be edited as Mermaid text/);
   });
 
   it("merges a drag into one undo step and refuses edits when read-only", () => {
@@ -135,11 +135,15 @@ describe("diagram agent tools", () => {
       "rename_diagram_node",
       "set_diagram_node_shape",
       "set_diagram_node_style",
+      "set_diagram_node_data",
       "connect_diagram_nodes",
       "remove_diagram_edges",
       "set_diagram_edge_label",
+      "set_diagram_edge_data",
       "reconnect_diagram_edge",
       "set_diagram_direction",
+      "set_diagram_title",
+      "set_diagram_settings",
       "group_diagram_nodes",
       "ungroup_diagram_group",
       "move_diagram_nodes",
@@ -250,10 +254,10 @@ describe("diagram agent tools", () => {
     expect(loaded.value).toMatchObject({ family: "class", editable: true, nodes: 2, edges: 1 });
     expect((await call("undo_diagram")).value.undone).toBe(true);
     expect(controller.getSource()).toBe(SOURCE);
-    await call("load_diagram_mermaid", { source: "pie\n  \"a\" : 1\n" });
-    const pie = await call("add_diagram_node", { label: "x" });
-    expect(pie.error).toMatch(/only be changed as Mermaid text/);
-    expect((await call("get_diagram")).value).toMatchObject({ family: "pie", editable: false });
+    await call("load_diagram_mermaid", { source: "sankey-beta\n  a,b,1\n" });
+    const sankey = await call("add_diagram_node", { label: "x" });
+    expect(sankey.error).toMatch(/only be changed as Mermaid text/);
+    expect((await call("get_diagram")).value).toMatchObject({ family: "sankey", editable: false });
   });
 
   it("edits state, class and ER diagrams so Mermaid still parses them", async () => {

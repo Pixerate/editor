@@ -3,21 +3,49 @@ import type { Command } from '../history/types.js';
 import { applyEdits, parseMermaid } from './document.js';
 import { FLOWCHART_SHAPES } from './flowchart/shapes.js';
 import { STATE_SHAPES } from './lines-grammar/state.js';
+import { familyUI } from './families/index.js';
 import { DIRECTIONS, type DiagramFamily, type EditOp, type MermaidDocument } from './types.js';
 
-/** Families that can be edited on the canvas; every other family is kept as text. */
-export const EDITABLE_DIAGRAM_FAMILIES = ['flowchart', 'state', 'class', 'er'] as const;
+/** Families that can be edited statement by statement; every other family is kept as text. */
+export const EDITABLE_DIAGRAM_FAMILIES = [
+	'flowchart',
+	'state',
+	'class',
+	'er',
+	'pie',
+	'mindmap',
+	'quadrant',
+	'c4',
+	'architecture',
+	'sequence',
+	'gitGraph',
+	'gantt',
+	'timeline',
+	'journey',
+	'xychart',
+	'radar'
+] as const;
 
-/** The shapes a node of `family` can take (`setNodeShape`), as canonical names. */
+/**
+ * The shapes a node of `family` can take (`setNodeShape`), as canonical names. Empty when
+ * the family has nothing to choose between (class boxes, ER entities, pie slices…).
+ */
 export function diagramShapes(family: DiagramFamily): string[] {
 	if (family === 'flowchart') return FLOWCHART_SHAPES.map((shape) => shape.name);
 	if (family === 'state') return STATE_SHAPES.map((shape) => shape.name);
-	return [];
+	if (family === 'class' || family === 'er') return [];
+	const shapes = familyUI(family)?.shapes ?? [];
+	return shapes.length > 1 ? shapes.map((shape) => shape.value) : [];
 }
 
-/** Whether the family has groups (subgraphs, composite states, namespaces). ER diagrams do not. */
+/** Whether the family has groups (subgraphs, composite states, namespaces, boxes, sections…). */
 export function diagramSupportsGroups(family: DiagramFamily): boolean {
-	return family === 'flowchart' || family === 'state' || family === 'class';
+	return familyUI(family)?.groups.supported ?? false;
+}
+
+/** Whether the family has a direction (`setDirection`): false for families whose positions follow their data (pie, sequence, Gantt…). */
+export function diagramSupportsDirection(family: DiagramFamily): boolean {
+	return familyUI(family)?.directions !== false;
 }
 
 const quote = (ids: Iterable<string>) => [...ids].map((id) => `"${id}"`).join(', ');
@@ -98,6 +126,7 @@ export function validateDiagramEdit(doc: MermaidDocument, op: EditOp): string | 
 		case 'setNodeParent':
 			return first(...op.ids.map((id) => node(id, true)), group(op.parentId));
 		case 'setDirection':
+			if (!diagramSupportsDirection(family)) return `${family} diagrams have no direction.`;
 			return (DIRECTIONS as readonly string[]).includes(op.direction)
 				? null
 				: `Unknown direction "${op.direction}"; use one of ${quote(DIRECTIONS)}.`;
@@ -123,7 +152,7 @@ export interface DiagramState {
 	/** The Mermaid text, always in step with `document`. */
 	source: string;
 	family: DiagramFamily;
-	/** True for flowchart, state, class and ER diagrams that are not read-only. */
+	/** True for families with an adapter (see {@link EDITABLE_DIAGRAM_FAMILIES}) that are not read-only. */
 	editable: boolean;
 	readOnly: boolean;
 	/** Selected node, group or edge ids. */

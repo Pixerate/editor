@@ -16,11 +16,13 @@ import {
   type NodeChange,
   type NodeProps,
 } from "@xyflow/react";
-import { DiagramPresenceLayer, MermaidDiagramGroup, MermaidDiagramNode, MermaidThumbnail, useDiagramDirector, useMermaidDiagram, useMermaidStream } from "@pixerate/editor-react/canvas";
+import { DiagramPresenceLayer, MermaidDiagramGroup, MermaidDiagramNode, MermaidFamilyScene, MermaidThumbnail, useDiagramDirector, useMermaidDiagram, useMermaidStream, type UseMermaidDiagramResult } from "@pixerate/editor-react/canvas";
 import { useAgentToolProvider } from "@pixerate/editor-react";
 import {
+  DIAGRAM_SCENE_DARK_THEME,
   DIAGRAM_SVG_DARK_THEME,
   diagramFileName,
+  diagramTargetLabel,
   downloadDiagramPng,
   mermaidEdgeDash,
   mermaidEdgeMarker,
@@ -29,7 +31,7 @@ import {
   type MermaidFlowEdge,
   type MermaidFlowNode,
 } from "@pixerate/editor/canvas";
-import { DiagramController, createDiagramToolProvider, findMermaidSources } from "@pixerate/editor/diagram";
+import { DiagramController, FAMILY_TEMPLATES, FAMILY_TITLES, createDiagramToolProvider, familyUI, findMermaidSources, type DiagramFamily, type FieldSpec } from "@pixerate/editor/diagram";
 import { Bot, Download, GitBranch, Play, Redo2, Undo2 } from "lucide-react";
 import { demoToolRegistry } from "../agentTools";
 
@@ -75,6 +77,69 @@ flowchart LR
     string email
   }
 `,
+};
+
+// Every other family Mermaid can edit statement by statement, drawn as its own picture.
+for (const family of ["sequence", "gantt", "pie", "quadrant", "xychart", "radar", "timeline", "journey", "mindmap", "gitGraph", "c4", "architecture"] as DiagramFamily[]) {
+  SAMPLES[FAMILY_TITLES[family]] = FAMILY_TEMPLATES[family]!;
+}
+
+/** Reads a field's input text as the value its type takes (undefined clears it). */
+function fieldValue(field: FieldSpec, text: string): unknown {
+  const t = text.trim();
+  if (!t) return undefined;
+  if (field.type === "number") return Number.isFinite(Number(t)) ? Number(t) : undefined;
+  if (field.type === "numbers") return t.split(/[,\s]+/).filter(Boolean).map(Number).filter(Number.isFinite);
+  if (field.type === "tags" || field.type === "lines") return t.split(field.type === "tags" ? "," : "\n").map((x) => x.trim()).filter(Boolean);
+  return t;
+}
+const fieldText = (value: unknown) => (Array.isArray(value) ? value.join(", ") : value === undefined || value === null ? "" : String(value));
+
+/** Data fields of the selected node and the diagram settings, written with setNodeData / setGraphData. */
+const FieldInspector: React.FC<{ diagram: UseMermaidDiagramResult }> = ({ diagram }) => {
+  const ui = familyUI(diagram.state.family);
+  const node = diagram.document.graph.nodes.find((n) => diagram.state.selection.includes(n.id));
+  const nodeFields = (ui?.nodeFields ?? []).filter((f) => !f.shapes || (node && f.shapes.includes(node.shape)));
+  const diagramFields = ui?.diagramFields ?? [];
+  if (!diagram.state.editable || (!nodeFields.length && !diagramFields.length)) return null;
+  const input = (field: FieldSpec, value: unknown, write: (v: unknown) => void) =>
+    field.type === "boolean" ? (
+      <input type="checkbox" checked={!!value} onChange={(e) => write(e.target.checked)} />
+    ) : field.type === "select" ? (
+      <select className="bg-slate-800 border border-slate-700 rounded px-1 py-0.5" value={fieldText(value)} onChange={(e) => write(e.target.value || undefined)}>
+        <option value="">—</option>
+        {(field.options ?? []).map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    ) : (
+      <input
+        key={`${node?.id}:${fieldText(value)}`}
+        className="bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 w-40"
+        defaultValue={fieldText(value)}
+        placeholder={field.placeholder ?? field.hint}
+        onBlur={(e) => e.target.value !== fieldText(value) && write(fieldValue(field, e.target.value))}
+      />
+    );
+  return (
+    <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-[11px] text-slate-300" aria-label="Diagram data fields">
+      {node &&
+        nodeFields.map((f) => (
+          <label key={`n:${f.key}`} className="flex items-center gap-1.5">
+            <span className="text-slate-500">{f.label}</span>
+            {input(f, node.data?.[f.key], (v) => diagram.apply({ type: "setNodeData", id: node.id, data: { [f.key]: v } }, "Edit data"))}
+          </label>
+        ))}
+      {diagramFields.map((f) => (
+        <label key={`d:${f.key}`} className="flex items-center gap-1.5">
+          <span className="text-slate-500">{f.label}</span>
+          {input(f, diagram.document.graph.data?.[f.key], (v) => diagram.apply({ type: "setGraphData", data: { [f.key]: v } }, "Edit settings"))}
+        </label>
+      ))}
+    </div>
+  );
 };
 
 const STREAM_SAMPLE = "Here is the plan:\n\n```mermaid\nflowchart TD\n  brief[Brief] --> research[Research]\n  research --> draft[Draft]\n  draft --> review{Review}\n  review -- changes --> draft\n  review -- approved --> publish[(Publish)]\n  publish --> share([Share])\n```\n";
@@ -133,7 +198,7 @@ const btn = "flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-lg border bor
 
 const MermaidEditorPane: React.FC = () => {
   const controller = useMemo(() => new DiagramController({ source: SAMPLES.Flowchart }), []);
-  const diagram = useMermaidDiagram(controller);
+  const diagram = useMermaidDiagram(controller, { sceneTheme: DIAGRAM_SCENE_DARK_THEME });
   const positions = useRef(diagram.layout.positions);
   const layoutRef = useRef(diagram.layout);
   layoutRef.current = diagram.layout;
@@ -233,15 +298,25 @@ const MermaidEditorPane: React.FC = () => {
             className={btn}
             disabled={!diagram.state.editable}
             onClick={() => {
+              const ui = familyUI(diagram.state.family);
+              const graph = diagram.document.graph;
+              const from = diagram.state.selection.find((s) => graph.nodes.some((n) => n.id === s));
+              if (diagram.scene && ui) {
+                // Families drawn from their data: the family picks the id and the defaults.
+                const parentId = graph.nodes.find((n) => n.id === from)?.parentId;
+                const id = ui.nextId(graph);
+                diagram.apply({ type: "addNode", node: { label: `New ${ui.nodeNoun.toLowerCase()}`, ...ui.newNode?.(graph, parentId), id } }, "Add node");
+                diagram.select([id]);
+                return;
+              }
               const id = controller.nextId();
-              const from = diagram.state.selection.find((s) => diagram.document.graph.nodes.some((n) => n.id === s));
               diagram.apply(
                 [{ type: "addNode", node: { id, label: "New step" } }, ...(from ? [{ type: "addEdge" as const, edge: { source: from, target: id } }] : [])],
                 "Add node",
               );
             }}
           >
-            + Node
+            + {familyUI(diagram.state.family)?.nodeNoun ?? "Node"}
           </button>
           <button type="button" className={btn} disabled={!diagram.state.editable || acting} onClick={agentEdit} title="Calls the diagram__* agent tools; a cursor acts them out">
             <Bot className="w-3.5 h-3.5" /> Agent edit
@@ -281,6 +356,21 @@ const MermaidEditorPane: React.FC = () => {
             {diagram.state.family} · {diagram.document.graph.nodes.length} nodes · {diagram.document.graph.edges.length} edges
           </span>
         </div>
+        {diagram.scene ? (
+          <div className="h-[420px] rounded-xl overflow-auto border border-slate-800 bg-slate-950 p-2 flex items-center justify-center" data-testid="mermaid-pane">
+            <MermaidFamilyScene
+              scene={diagram.scene}
+              style={{ maxHeight: "100%" }}
+              selectionColor="#38bdf8"
+              markerColor="#94a3b8"
+              onSelect={(target) => diagram.select(target && target !== "::title" ? [target] : [])}
+              onOpen={(target) => {
+                const label = window.prompt(target === "::title" ? "Title" : "Label", diagramTargetLabel(diagram.document, target) ?? "");
+                if (label !== null) diagram.renameTarget(target, label);
+              }}
+            />
+          </div>
+        ) : (
         <DirectionContext.Provider value={diagram.document.graph.direction.toUpperCase().replace("TD", "TB")}>
           <div className="h-[420px] rounded-xl overflow-hidden border border-slate-800 bg-slate-950 relative" data-testid="mermaid-pane">
             <ReactFlow
@@ -312,6 +402,8 @@ const MermaidEditorPane: React.FC = () => {
             <DiagramPresenceLayer presence={presence} viewport={viewport} />
           </div>
         </DirectionContext.Provider>
+        )}
+        <FieldInspector diagram={diagram} />
         {diagram.state.issue && <p className="text-xs text-amber-400">{diagram.state.issue}</p>}
         <div className="flex flex-wrap gap-2" aria-label="Sample thumbnails">
           {Object.entries(SAMPLES).map(([name, sampleSource]) => (
@@ -429,8 +521,10 @@ export const MermaidDiagramDemo: React.FC = () => (
       <MermaidStreamPane />
     </ReactFlowProvider>
     <p className="text-xs text-slate-500">
-      Pick a sample or paste Mermaid (a ```mermaid block from Markdown or chat works too). Drag nodes, connect handles,
-      double-click to rename, Backspace to delete: only the statements you touch are rewritten, and positions are kept
+      Pick a sample or paste Mermaid (a ```mermaid block from Markdown or chat works too). Flowchart, state, class and
+      ER diagrams are boxes and connectors: drag nodes, connect handles, double-click to rename, Backspace to delete.
+      Sequence, Gantt, pie, quadrant, XY, radar, timeline, journey, mindmap, gitGraph, C4 and architecture diagrams are
+      drawn as Mermaid draws them: click to select, double-click to rename, and edit values in the fields below. Either way only the statements you touch are rewritten, and positions are kept
       in a <code>%% @pixerate</code> comment that Mermaid ignores. Agents get the same edits through the{" "}
       <code>diagram__*</code> tools, acted out by a cursor (try "Agent edit"); a diagram the agent loads that extends
       the current one is drawn statement by statement.

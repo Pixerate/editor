@@ -662,7 +662,9 @@ export {
 } from '@pixerate/editor/canvas';
 
 
-// Mermaid diagrams (flowchart, state, class, ER) on the canvas, with streaming
+// Mermaid diagrams on the canvas (flowchart, state, class, ER as nodes and edges; the other
+// families as their own picture with MermaidFamilyScene), with streaming
+export { default as MermaidFamilyScene } from './MermaidFamilyScene.svelte';
 export { default as MermaidDiagramNode } from './MermaidDiagramNode.svelte';
 export { default as MermaidDiagramGroup } from './MermaidDiagramGroup.svelte';
 export {

@@ -47,7 +47,7 @@ export class DiagramStream {
 		const key = fingerprint(document.graph);
 		if (key === this.lastKey && this.layout) return { document, layout: this.layout, relaid: false };
 		this.lastKey = key;
-		this.layout = ensureDiagramLayout(document.graph, document.meta, this.options);
+		this.layout = ensureDiagramLayout(document.graph, document.meta, { family: document.family, ...this.options });
 		return { document, layout: this.layout, relaid: true };
 	}
 

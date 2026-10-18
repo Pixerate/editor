@@ -5,54 +5,16 @@ import type { DiagramGraph, MermaidDocument } from '../../diagram/types.js';
 import { ensureDiagramLayout, type DiagramLayout, type DiagramLayoutOptions } from './layout.js';
 import { mermaidEdgeMarker, mermaidLabelLines, mermaidNodeMembers, mermaidShapePaths } from './shapes.js';
 import { mermaidEdgeDash, resolveMermaidStyles } from './toFlow.js';
+import { DIAGRAM_SVG_LIGHT_THEME } from './theme.js';
+import { DIAGRAM_SCENE_LIGHT_THEME, diagramMarksToSvg, familySceneFromLayout, type DiagramSceneTheme } from './scene.js';
 
-/** Concrete colours (no CSS variables), so the SVG draws the same as a file, an `<img>` or a PNG. */
-export interface DiagramSvgTheme {
-	background: string;
-	nodeFill: string;
-	nodeStroke: string;
-	text: string;
-	edge: string;
-	edgeLabelBackground: string;
-	groupFill: string;
-	groupStroke: string;
-	groupText: string;
-	fontFamily: string;
-	fontSize: number;
-}
-
-export const DIAGRAM_SVG_LIGHT_THEME: DiagramSvgTheme = {
-	background: '#ffffff',
-	nodeFill: '#ffffff',
-	nodeStroke: '#0f172a',
-	text: '#0f172a',
-	edge: '#64748b',
-	edgeLabelBackground: '#ffffff',
-	groupFill: '#f8fafc',
-	groupStroke: '#cbd5e1',
-	groupText: '#475569',
-	fontFamily: 'system-ui, -apple-system, "Segoe UI", sans-serif',
-	fontSize: 13
-};
-
-export const DIAGRAM_SVG_DARK_THEME: DiagramSvgTheme = {
-	background: '#0f172a',
-	nodeFill: '#1e293b',
-	nodeStroke: '#e2e8f0',
-	text: '#f1f5f9',
-	edge: '#94a3b8',
-	edgeLabelBackground: '#0f172a',
-	groupFill: '#111c33',
-	groupStroke: '#334155',
-	groupText: '#94a3b8',
-	fontFamily: 'system-ui, -apple-system, "Segoe UI", sans-serif',
-	fontSize: 13
-};
+export { DIAGRAM_SVG_DARK_THEME, DIAGRAM_SVG_LIGHT_THEME, type DiagramSvgTheme } from './theme.js';
 
 export interface DiagramSvgOptions extends DiagramLayoutOptions {
 	/** A layout to draw instead of computing one (e.g. the canvas' current layout). */
 	layout?: DiagramLayout;
-	theme?: Partial<DiagramSvgTheme>;
+	/** Colours; the scene colours (`palette`, `grid`…) are used by families drawn as scenes. */
+	theme?: Partial<DiagramSceneTheme>;
 	/** Room around the diagram in px (default 16). */
 	padding?: number;
 	/**
@@ -101,27 +63,35 @@ function exitPoint(box: Box, to: { x: number; y: number }): { x: number; y: numb
 }
 
 /**
- * Draws a Mermaid diagram (flowchart, state, class, ER) as a standalone SVG: groups, nodes in
- * their Mermaid shapes with `style` / `classDef` colours, labels, class members and ER
- * attributes, and edges with labels, line patterns and arrow heads. Uses stored
- * `%% @pixerate` positions (auto-layout for the rest), so it matches the canvas. Pure: no DOM.
+ * Draws a Mermaid diagram as a standalone SVG. Flowchart, state, class and ER diagrams: groups,
+ * nodes in their Mermaid shapes with `style` / `classDef` colours, labels, class members and
+ * ER attributes, and edges with labels, line patterns and arrow heads. Families with their own
+ * picture (pie, Gantt, sequence, XY, radar…) are drawn from their scene (`mermaidToScene`).
+ * Uses stored `%% @pixerate` positions (auto-layout for the rest), so it matches the canvas.
+ * Pure: no DOM.
  */
 export function mermaidToSvg(doc: MermaidDocument, options: DiagramSvgOptions = {}): DiagramSvg {
 	const theme = { ...DIAGRAM_SVG_LIGHT_THEME, ...options.theme };
 	const pad = options.padding ?? 16;
 	const graph: DiagramGraph = doc.graph;
-	const layout = options.layout ?? ensureDiagramLayout(graph, doc.meta, options);
+	const layout = options.layout ?? ensureDiagramLayout(graph, doc.meta, { family: doc.family, ...options });
 	const boxOf = (id: string): Box | null => {
 		const p = layout.positions[id];
 		if (!p) return null;
 		const s = layout.sizes[id] ?? { width: 160, height: 56 };
 		return { x: p[0], y: p[1], width: s.width, height: s.height };
 	};
+	const scene = doc.tier === 'editable' ? familySceneFromLayout(doc.family, graph, layout, { theme: { ...DIAGRAM_SCENE_LIGHT_THEME, ...theme } }) : null;
 	let minX = Infinity;
 	let minY = Infinity;
 	let maxX = -Infinity;
 	let maxY = -Infinity;
-	for (const id of Object.keys(layout.positions)) {
+	if (scene && scene.marks.length) {
+		minX = scene.x;
+		minY = scene.y;
+		maxX = scene.x + scene.width;
+		maxY = scene.y + scene.height;
+	} else for (const id of Object.keys(layout.positions)) {
 		const b = boxOf(id)!;
 		minX = Math.min(minX, b.x);
 		minY = Math.min(minY, b.y);
@@ -149,6 +119,10 @@ export function mermaidToSvg(doc: MermaidDocument, options: DiagramSvgOptions = 
 	);
 	if (!options.transparent) out.push(`<rect width="${naturalWidth}" height="${naturalHeight}" fill="${esc(theme.background)}"/>`);
 	out.push(`<g transform="translate(${n(ox)} ${n(oy)})">`);
+	if (scene) {
+		out.push(diagramMarksToSvg(scene.marks, { ...DIAGRAM_SCENE_LIGHT_THEME, ...theme }), '</g></svg>');
+		return { svg: out.join(''), width, height, naturalWidth, naturalHeight };
+	}
 
 	// Groups, outermost first.
 	const depth = (id: string) => {

@@ -8,13 +8,18 @@ import {
 	type MermaidDocument
 } from '@pixerate/editor/diagram';
 import {
+	CSS_VARIABLE_DIAGRAM_SCENE_THEME,
 	DiagramStream,
 	blendDiagramLayout,
+	diagramRenameOp,
+	familySceneFromLayout,
 	easeDiagramTween,
 	mermaidMovesFromCanvas,
 	mermaidToCanvas,
 	type DiagramLayout,
 	type DiagramLayoutOptions,
+	type DiagramScene,
+	type DiagramSceneTheme,
 	type MermaidFlowEdge,
 	type MermaidFlowNode
 } from '@pixerate/editor/canvas';
@@ -22,6 +27,8 @@ import {
 export interface UseMermaidDiagramOptions extends DiagramControllerOptions {
 	/** Layout spacing and node measuring for new nodes (stored positions always win). */
 	layoutOptions?: DiagramLayoutOptions;
+	/** Colours for families drawn as scenes (default: the page's CSS colour variables). */
+	sceneTheme?: Partial<DiagramSceneTheme>;
 }
 
 type Placed = { id: string; position: { x: number; y: number }; parentId?: string };
@@ -36,6 +43,12 @@ export interface UseMermaidDiagramResult {
 	nodes: MermaidFlowNode[];
 	edges: MermaidFlowEdge[];
 	layout: DiagramLayout;
+	/**
+	 * The family's own picture (pie, Gantt, sequence, XY, radar…) with the selection marked;
+	 * null for families drawn as nodes and edges (flowchart, state, class, ER) and text-only
+	 * ones. Render it with `MermaidFamilyScene`.
+	 */
+	scene: DiagramScene | null;
 	apply: (ops: EditOp | EditOp[], label?: string) => DiagramActionResult;
 	/** Replaces the source; `clearHistory` when opening a different diagram. */
 	load: (source: string, options?: { clearHistory?: boolean }) => DiagramActionResult;
@@ -45,6 +58,8 @@ export interface UseMermaidDiagramResult {
 	/** Removes nodes / groups (with their edges) and edges by id, as one undo step. */
 	remove: (ids: readonly string[]) => DiagramActionResult;
 	rename: (id: string, label: string) => DiagramActionResult;
+	/** Renames what a scene mark targets: the title (`::title`), a group, an edge or a node. */
+	renameTarget: (target: string, label: string) => DiagramActionResult | null;
 	select: (ids: readonly string[]) => void;
 	undo: () => void;
 	redo: () => void;
@@ -60,7 +75,11 @@ export function useDiagramState(controller: DiagramController): DiagramState {
  * one from options), lays it out and returns canvas nodes and edges with bound edits. Every
  * edit rewrites only the statements it touches; positions go into `%% @pixerate`.
  */
-export function useMermaidDiagram(controllerOrOptions: DiagramController | UseMermaidDiagramOptions = {}): UseMermaidDiagramResult {
+export function useMermaidDiagram(
+	controllerOrOptions: DiagramController | UseMermaidDiagramOptions = {},
+	/** Layout and scene colours when passing a controller (options carry them otherwise). */
+	view: Pick<UseMermaidDiagramOptions, 'layoutOptions' | 'sceneTheme'> = {}
+): UseMermaidDiagramResult {
 	const own = useRef<DiagramController | null>(null);
 	let controller: DiagramController;
 	if (controllerOrOptions instanceof DiagramController) controller = controllerOrOptions;
@@ -68,12 +87,21 @@ export function useMermaidDiagram(controllerOrOptions: DiagramController | UseMe
 		if (!own.current) own.current = new DiagramController(controllerOrOptions);
 		controller = own.current;
 	}
-	const layoutOptions = controllerOrOptions instanceof DiagramController ? undefined : controllerOrOptions.layoutOptions;
+	const layoutOptions = (controllerOrOptions instanceof DiagramController ? undefined : controllerOrOptions.layoutOptions) ?? view.layoutOptions;
+	const sceneTheme = (controllerOrOptions instanceof DiagramController ? undefined : controllerOrOptions.sceneTheme) ?? view.sceneTheme;
 	const state = useDiagramState(controller);
 	const canvas = useMemo(
 		() => mermaidToCanvas(state.document, { ...layoutOptions, editable: state.editable }),
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 		[state.document, state.editable]
+	);
+	const scene = useMemo(
+		() =>
+			state.document.tier === 'editable'
+				? familySceneFromLayout(state.document.family, state.document.graph, canvas.layout, { theme: { ...CSS_VARIABLE_DIAGRAM_SCENE_THEME, ...sceneTheme }, selection: state.selection })
+				: null,
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+		[state.document, canvas.layout, state.selection]
 	);
 	const layoutRef = useRef(canvas.layout);
 	layoutRef.current = canvas.layout;
@@ -103,13 +131,17 @@ export function useMermaidDiagram(controllerOrOptions: DiagramController | UseMe
 					controller.getDocument().graph.groups.some((g) => g.id === id) ? { type: 'renameGroup', id, label } : { type: 'renameNode', id, label },
 					'Rename'
 				),
+			renameTarget: (target: string, label: string) => {
+				const op = diagramRenameOp(controller.getDocument(), target, label);
+				return op ? controller.apply(op, 'Rename') : null;
+			},
 			select: (ids: readonly string[]) => controller.select(ids),
 			undo: () => void controller.undo(),
 			redo: () => void controller.redo()
 		}),
 		[controller]
 	);
-	return { controller, state, document: state.document, source: state.source, ...canvas, ...actions };
+	return { controller, state, document: state.document, source: state.source, ...canvas, scene, ...actions };
 }
 
 export interface UseMermaidStreamOptions extends DiagramLayoutOptions {

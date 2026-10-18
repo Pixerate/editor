@@ -4,7 +4,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ToolRegistry } from '@pixerate/editor/tools';
 import { DiagramController, createDiagramToolProvider, createInstantPresenceClock } from '@pixerate/editor/diagram';
-import { DiagramPresenceLayer, MermaidDiagramNode, MermaidDiagramGroup, MermaidThumbnail, useDiagramDirector, useMermaidDiagram, useMermaidStream, type UseMermaidDiagramResult, type UseMermaidStreamResult } from '../src/canvas';
+import { DiagramPresenceLayer, MermaidDiagramNode, MermaidDiagramGroup, MermaidFamilyScene, MermaidThumbnail, useDiagramDirector, useMermaidDiagram, useMermaidStream, type UseMermaidDiagramResult, type UseMermaidStreamResult } from '../src/canvas';
 import { useAgentToolProvider } from '../src';
 
 let container: HTMLDivElement;
@@ -131,7 +131,7 @@ describe('MermaidThumbnail', () => {
 			root.render(
 				<>
 					<MermaidThumbnail source={SOURCE} maxWidth={120} className="t1" />
-					<MermaidThumbnail source={'pie\n  "a" : 1'} fallback={<em>no preview</em>} />
+					<MermaidThumbnail source={'sankey-beta\n  a,b,1'} fallback={<em>no preview</em>} />
 				</>
 			)
 		);
@@ -170,5 +170,60 @@ describe('useDiagramDirector', () => {
 		const cursor = container.querySelector('[data-actor="agent"]') as HTMLElement;
 		expect(cursor.style.transform).toBe('translate(20px, 30px)');
 		expect(cursor.textContent).toBe('Hi');
+	});
+});
+
+const PIE = 'pie showData\n  title Share\n  "A" : 40\n  "B" : 60\n';
+
+describe('MermaidFamilyScene', () => {
+	it('draws a family as its own picture, selects marks and renames on double-click', async () => {
+		let diagram!: UseMermaidDiagramResult;
+		const opened: string[] = [];
+		function Probe() {
+			diagram = useMermaidDiagram({ source: PIE });
+			return diagram.scene ? (
+				<MermaidFamilyScene
+					scene={diagram.scene}
+					onSelect={(target) => diagram.select(target ? [target] : [])}
+					onOpen={(target) => {
+						opened.push(target);
+						diagram.renameTarget(target, target === '::title' ? 'Market' : 'Alpha');
+					}}
+				/>
+			) : null;
+		}
+		await act(async () => root.render(<Probe />));
+		const svg = container.querySelector('svg.pixerate-diagram-scene')!;
+		expect(svg.getAttribute('data-family')).toBe('pie');
+		const wedges = svg.querySelectorAll('[data-role="slice"]');
+		expect(wedges).toHaveLength(2);
+		const id = wedges[0]!.getAttribute('data-target')!;
+		await act(async () => wedges[0]!.dispatchEvent(new window.MouseEvent('click', { bubbles: true })));
+		expect(diagram.state.selection).toEqual([id]);
+		expect(container.querySelector(`[data-role="slice"][data-target="${id}"]`)!.hasAttribute('data-selected')).toBe(true);
+		await act(async () => wedges[0]!.dispatchEvent(new window.MouseEvent('dblclick', { bubbles: true })));
+		expect(diagram.source).toContain('"Alpha" : 40');
+		const title = container.querySelector('[data-role="title"]')!;
+		await act(async () => title.dispatchEvent(new window.MouseEvent('dblclick', { bubbles: true })));
+		expect(diagram.source).toContain('title Market');
+		expect(opened).toEqual([id, '::title']);
+		await act(async () => svg.dispatchEvent(new window.MouseEvent('click', { bubbles: true })));
+		expect(diagram.state.selection).toEqual([]);
+	});
+
+	it('has no scene for families drawn as nodes and edges', async () => {
+		let diagram!: UseMermaidDiagramResult;
+		function Probe() {
+			diagram = useMermaidDiagram({ source: SOURCE });
+			return null;
+		}
+		await act(async () => root.render(<Probe />));
+		expect(diagram.scene).toBeNull();
+		let ok: boolean | undefined;
+		await act(async () => {
+			ok = diagram.renameTarget('A', 'Begin')?.ok;
+		});
+		expect(ok).toBe(true);
+		expect(diagram.source).toContain('A[Begin]');
 	});
 });

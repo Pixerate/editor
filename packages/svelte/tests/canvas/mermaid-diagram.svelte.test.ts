@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { flushSync, mount, unmount } from 'svelte';
 import { ToolRegistry } from '@pixerate/editor/tools';
 import { DiagramController, createDiagramToolProvider, createInstantPresenceClock } from '@pixerate/editor/diagram';
-import { DiagramPresenceLayer, MermaidDiagramGroup, MermaidDiagramNode, MermaidThumbnail, createDiagramDirector, createMermaidDiagram, createMermaidStream } from '../../src/canvas';
+import { DiagramPresenceLayer, MermaidDiagramGroup, MermaidDiagramNode, MermaidFamilyScene, MermaidThumbnail, createDiagramDirector, createMermaidDiagram, createMermaidStream } from '../../src/canvas';
 import { useAgentToolProvider } from '../../src';
 
 let cleanups: (() => void)[] = [];
@@ -144,5 +144,64 @@ describe('createDiagramDirector (Svelte)', () => {
 		const cursor = target.querySelector('[data-actor="agent"]') as HTMLElement;
 		expect(cursor.getAttribute('style')).toContain('translate(20px, 30px)');
 		expect(cursor.textContent!.trim()).toBe('Hi');
+	});
+});
+
+const PIE = 'pie showData\n  title Share\n  "A" : 40\n  "B" : 60\n';
+
+describe('MermaidFamilyScene (Svelte)', () => {
+	it('draws a family as its own picture, selects marks and renames on double-click (parity with React)', () => {
+		const diagram = createMermaidDiagram({ source: PIE });
+		cleanups.push(diagram.destroy);
+		expect(diagram.scene?.family).toBe('pie');
+		const opened: string[] = [];
+		const target = document.createElement('div');
+		document.body.appendChild(target);
+		const props = $state({
+			scene: diagram.scene!,
+			onselect: (id: string | null) => diagram.select(id ? [id] : []),
+			onopen: (id: string) => {
+				opened.push(id);
+				diagram.renameTarget(id, id === '::title' ? 'Market' : 'Alpha');
+			}
+		});
+		const scene = mount(MermaidFamilyScene, { target, props });
+		const sync = $effect.root(() => {
+			$effect(() => {
+				props.scene = diagram.scene!;
+			});
+		});
+		flushSync();
+		cleanups.push(() => {
+			sync();
+			unmount(scene);
+			target.remove();
+		});
+		const svg = target.querySelector('svg.pixerate-diagram-scene')!;
+		const wedges = svg.querySelectorAll('[data-role="slice"]');
+		expect(wedges).toHaveLength(2);
+		const id = wedges[0]!.getAttribute('data-target')!;
+		wedges[0]!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+		flushSync();
+		expect(diagram.state.selection).toEqual([id]);
+		expect(target.querySelector(`[data-role="slice"][data-target="${id}"]`)!.hasAttribute('data-selected')).toBe(true);
+		wedges[0]!.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+		flushSync();
+		expect(diagram.source).toContain('"Alpha" : 40');
+		target.querySelector('[data-role="title"]')!.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+		flushSync();
+		expect(diagram.source).toContain('title Market');
+		expect(opened).toEqual([id, '::title']);
+		svg.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+		flushSync();
+		expect(diagram.state.selection).toEqual([]);
+	});
+
+	it('has no scene for families drawn as nodes and edges', () => {
+		const diagram = createMermaidDiagram({ source: SOURCE });
+		cleanups.push(diagram.destroy);
+		expect(diagram.scene).toBeNull();
+		expect(diagram.renameTarget('A', 'Begin')?.ok).toBe(true);
+		expect(diagram.source).toContain('A[Begin]');
 	});
 });

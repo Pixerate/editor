@@ -7,13 +7,18 @@ import {
 	type MermaidDocument
 } from '@pixerate/editor/diagram';
 import {
+	CSS_VARIABLE_DIAGRAM_SCENE_THEME,
 	DiagramStream,
 	blendDiagramLayout,
+	diagramRenameOp,
+	familySceneFromLayout,
 	easeDiagramTween,
 	mermaidMovesFromCanvas,
 	mermaidToCanvas,
 	type DiagramLayout,
 	type DiagramLayoutOptions,
+	type DiagramScene,
+	type DiagramSceneTheme,
 	type MermaidFlowEdge,
 	type MermaidFlowNode
 } from '@pixerate/editor/canvas';
@@ -21,6 +26,8 @@ import {
 export interface CreateMermaidDiagramOptions extends DiagramControllerOptions {
 	/** Layout spacing and node measuring for new nodes (stored positions always win). */
 	layoutOptions?: DiagramLayoutOptions;
+	/** Colours for families drawn as scenes (default: the page's CSS colour variables). */
+	sceneTheme?: Partial<DiagramSceneTheme>;
 }
 
 type Placed = { id: string; position: { x: number; y: number }; parentId?: string };
@@ -36,6 +43,12 @@ export interface SvelteMermaidDiagram {
 	readonly nodes: MermaidFlowNode[];
 	readonly edges: MermaidFlowEdge[];
 	readonly layout: DiagramLayout;
+	/**
+	 * The family's own picture (pie, Gantt, sequence, XY, radar…) with the selection marked;
+	 * null for families drawn as nodes and edges (flowchart, state, class, ER) and text-only
+	 * ones. Render it with `MermaidFamilyScene` (reactive).
+	 */
+	readonly scene: DiagramScene | null;
 	apply(ops: EditOp | EditOp[], label?: string): DiagramActionResult;
 	/** Replaces the source; `clearHistory` when opening a different diagram. */
 	load(source: string, options?: { clearHistory?: boolean }): DiagramActionResult;
@@ -45,6 +58,8 @@ export interface SvelteMermaidDiagram {
 	/** Removes nodes / groups (with their edges) and edges by id, as one undo step. */
 	remove(ids: readonly string[]): DiagramActionResult;
 	rename(id: string, label: string): DiagramActionResult;
+	/** Renames what a scene mark targets: the title (`::title`), a group, an edge or a node. */
+	renameTarget(target: string, label: string): DiagramActionResult | null;
 	select(ids: readonly string[]): void;
 	undo(): void;
 	redo(): void;
@@ -57,11 +72,21 @@ export interface SvelteMermaidDiagram {
  * `DiagramController` (or creates one from options), lays it out and exposes canvas
  * nodes and edges reactively with bound edits. Parity with React's `useMermaidDiagram`.
  */
-export function createMermaidDiagram(controllerOrOptions: DiagramController | CreateMermaidDiagramOptions = {}): SvelteMermaidDiagram {
+export function createMermaidDiagram(
+	controllerOrOptions: DiagramController | CreateMermaidDiagramOptions = {},
+	/** Layout and scene colours when passing a controller (options carry them otherwise). */
+	view: Pick<CreateMermaidDiagramOptions, 'layoutOptions' | 'sceneTheme'> = {}
+): SvelteMermaidDiagram {
 	const controller = controllerOrOptions instanceof DiagramController ? controllerOrOptions : new DiagramController(controllerOrOptions);
-	const layoutOptions = controllerOrOptions instanceof DiagramController ? undefined : controllerOrOptions.layoutOptions;
+	const layoutOptions = (controllerOrOptions instanceof DiagramController ? undefined : controllerOrOptions.layoutOptions) ?? view.layoutOptions;
+	const sceneTheme = (controllerOrOptions instanceof DiagramController ? undefined : controllerOrOptions.sceneTheme) ?? view.sceneTheme;
 	let state = $state.raw(controller.getState());
 	const canvas = $derived(mermaidToCanvas(state.document, { ...layoutOptions, editable: state.editable }));
+	const scene = $derived(
+		state.document.tier === 'editable'
+			? familySceneFromLayout(state.document.family, state.document.graph, canvas.layout, { theme: { ...CSS_VARIABLE_DIAGRAM_SCENE_THEME, ...sceneTheme }, selection: state.selection })
+			: null
+	);
 	const unsubscribe = controller.subscribe((next) => {
 		state = next;
 	});
@@ -85,6 +110,9 @@ export function createMermaidDiagram(controllerOrOptions: DiagramController | Cr
 		get layout() {
 			return canvas.layout;
 		},
+		get scene() {
+			return scene;
+		},
 		apply: (ops, label) => controller.apply(ops, label),
 		load: (source, options) => controller.load(source, options),
 		moveNodes: (moved, all = moved) => {
@@ -106,6 +134,10 @@ export function createMermaidDiagram(controllerOrOptions: DiagramController | Cr
 				controller.getDocument().graph.groups.some((g) => g.id === id) ? { type: 'renameGroup', id, label } : { type: 'renameNode', id, label },
 				'Rename'
 			),
+		renameTarget: (target, label) => {
+			const op = diagramRenameOp(controller.getDocument(), target, label);
+			return op ? controller.apply(op, 'Rename') : null;
+		},
 		select: (ids) => controller.select(ids),
 		undo: () => void controller.undo(),
 		redo: () => void controller.redo(),

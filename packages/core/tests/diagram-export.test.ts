@@ -155,7 +155,7 @@ describe("render_diagram tool", () => {
     plain.register(createDiagramToolProvider(new DiagramController({ source: SOURCE })));
     expect(plain.hasTool("render_diagram")).toBe(false);
     const { registry, controller } = setup();
-    controller.load('pie\n  "a" : 1\n', { clearHistory: true });
+    controller.load('sankey-beta\n  a,b,1\n', { clearHistory: true });
     const result: any = await registry.callTool("render_diagram", {});
     expect(result.content[0].text).toMatch(/kept as Mermaid text/);
   });
