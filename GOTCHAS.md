@@ -1513,3 +1513,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: `svelte-check` / vite-plugin-svelte warns `a11y_no_interactive_element_to_noninteractive_role` for a list of shot buttons.
 - **Root Cause**: Svelte refuses non-interactive roles on interactive elements.
 - **Solution / Workaround**: Wrap the buttons in `role="group"` with an `aria-label` and leave the buttons' own role alone (React matches it for parity).
+
+### [monorepo/release] A Release That Fails Part-Way Can Publish Versions Whose Changelog Lands Later
+
+- **Issue / Symptom**: After #152 merged, the Release run succeeded but printed "No unpublished projects to publish". npm's `@pixerate/editor@0.54.0` lacked `/animation-editor`, although `main`'s CHANGELOG for 0.54.0 lists it.
+- **Root Cause**: The Release run for #151 versioned and published the packages, then failed ("Some packages failed to publish") before it pushed its `chore(release)` commit. `main` kept the pending changesets, so the next run computed the same versions from them, folded in #152's changeset, and found 0.54.0 / 0.41.0 / 0.49.0 already on npm.
+- **Solution / Workaround**: After a failed Release, compare `npm view @pixerate/editor version` with `main`'s `packages/core/package.json`. If npm has a version that `main` has not committed yet, merge a new changeset so the next release bumps past it. Check what was published with `npm view @pixerate/editor@<version> exports`.
