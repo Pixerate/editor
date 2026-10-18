@@ -35,6 +35,11 @@ export interface FlairImportOptions {
 	name?: string;
 	/** Hold after the last shot, ms (default: the effect's `hold`, else 600). */
 	hold?: number;
+	/**
+	 * The motion plays on click: Flair plays step 0 together with step 1 on the first click, so
+	 * both become the first shot (as `toFlairSvgMotion` writes them).
+	 */
+	clickSteps?: boolean;
 }
 
 /** A `{{name}}` placeholder or `{{name: type attributes}}` declaration, as Flair writes them. */
@@ -196,7 +201,8 @@ export function fromFlairSvgMotion(input: FlairSvgMotion, options: FlairImportOp
 	const nodes = indexMotionNodes(artwork.nodes);
 	const byStep = new Map<number, FlairSvgAnimation[]>();
 	for (const anim of motion.animate ?? []) {
-		const step = Math.max(0, Math.floor(anim.step ?? 0));
+		const raw = Math.max(0, Math.floor(anim.step ?? 0));
+		const step = options.clickSteps ? Math.max(1, raw) : raw;
 		if (!byStep.has(step)) byStep.set(step, []);
 		byStep.get(step)!.push(anim);
 	}
@@ -254,7 +260,7 @@ function presetColor(value: unknown): string | undefined {
 /** A Flair catalog `VectorEffect` as a scene: its motion, name, description, colour controls and presets. */
 export function fromFlairVectorEffect(effect: FlairVectorEffect, options: FlairImportOptions = {}): FlairImportResult {
 	if (!effect || effect.kind !== 'vector' || !effect.motion) throw new Error('Give a Flair vector effect: { kind: "vector", id, name, motion: { svg, animate } }.');
-	const result = fromFlairSvgMotion(effect.motion, { name: options.name ?? effect.id ?? effect.name, hold: options.hold ?? effect.hold });
+	const result = fromFlairSvgMotion(effect.motion, { name: options.name ?? effect.id ?? effect.name, hold: options.hold ?? effect.hold, ...(effect.trigger === 'click' ? { clickSteps: true } : {}) });
 	const names = new Set((result.scene.controls ?? []).map((c) => c.name));
 	const presets = (effect.presets ?? [])
 		.map((p) => ({ name: p.name, values: Object.fromEntries(Object.entries(p.values).flatMap(([k, v]) => (names.has(k) && presetColor(v) ? [[k, presetColor(v)!]] : []))) }))

@@ -181,7 +181,7 @@ export function checkMotionScene(scene: MotionScene): MotionIssue[] {
 	if (scene.trigger) {
 		if ((scene.loop ?? 'none') !== 'none') issues.push(motionIssue('trigger-loop', `The scene plays on ${scene.trigger}, so its "${scene.loop}" loop does not apply; set loop to "none" or remove the trigger.`, {}));
 		if (scene.trigger === 'click') {
-			if (scene.shots.length === 1) issues.push(motionIssue('click-one-shot', 'The scene plays on click but has one shot, so every click replays it from the start; split it into shots (the first plays on load, each click plays the next).', { shot: scene.shots[0].id }));
+			if (scene.shots.length === 1) issues.push(motionIssue('click-one-shot', 'The scene plays on click but has one shot, so every click replays it from the start; split it into shots (each click plays the next one).', { shot: scene.shots[0].id }));
 			scene.shots.forEach((shot, i) => {
 				if (i > 0 && shot.at) issues.push(motionIssue('click-cue', `Shot "${shot.id}" is cued, but on click a shot starts when it is clicked to; remove its "at" or the trigger.`, { shot: shot.id }));
 			});

@@ -1571,13 +1571,14 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: `match` morphs each part of the target into its partner (shape, paint and place, as `morph` does) and fades out parts with no partner. Nothing of `into` is drawn: it is a description of the end state.
 - **Solution / Workaround**: Keep `into` hidden (`visible: false`). For every part the end state adds, put a partner in the target with the same name or id, which can start tiny or with no fill. `check` reports `match-unpaired` (a note) for parts of `into` with no partner, and `match-self` when one group holds the other.
 
-### [core/animation-editor] A Click-Triggered Scene Plays Shot 0 on Load, and Wraps to Shot 1
+### [core/animation-editor] Flair's Click Trigger Plays Nothing Until the First Click, Then Steps 0 and 1 Together
 
-- **Issue / Symptom**: A click-triggered export of a "show, then hide" scene never hid again after the third click. A hover-triggered one with several steps played only its first shot.
-- **Root Cause**: Flair's `SvgPlayer` starts a triggered picture with no step times. Step 0 plays at once, and each click (`advance`) plays the next step. After the last step it goes back to step 1, not 0, so the picture toggles only when its last step leads back to how step 0 ended. Hover, press and scroll ignore steps altogether.
+- **Issue / Symptom**: The first click-trigger export put shot 0 on step 0, expecting it to play on load. In Flair's player (checked in a browser with 0.40) nothing played on load, and the first click played shots 0 and 1 together. A hover-triggered scene with several steps would play only its first.
+- **Root Cause**: A triggered `SvgPlayer` does not autoplay. It draws time 0 and waits. Each click (`advance`) records a step start at the current time and plays. Step 0 starts at time 0, which the first click is also at, so steps 0 and 1 start together. After the last step a click goes back to step 1. Hover, press and scroll ignore steps altogether.
 - **Solution / Workaround**:
-  - `toFlairSvgMotion` turns shots into steps (each change's `delay` measured from its shot's start) only for `click`. Other triggers keep everything on step 0.
-  - For a toggle, make the last shot return to the pose the first shot leaves.
+  - For `click`, `toFlairSvgMotion` puts shot n on step n + 1 (each change's `delay` measured from its shot's start) and leaves step 0 empty. Each click plays one shot, and after the last the first plays again. Other triggers keep everything on step 0.
+  - For a toggle, make the last shot put things back the way the scene starts.
+  - Importing a click effect (`clickSteps`) folds step 0 into the first shot, the way Flair plays it.
   - The checks note a looped triggered scene (`trigger-loop`), a one-shot click scene (`click-one-shot`) and cues on click (`click-cue`, since clicks decide when shots start).
   - Flair's `EffectDocument` has no trigger, so `toFlairEffectDocument` keeps the steps but plays through.
 

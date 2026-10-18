@@ -128,7 +128,7 @@ export interface FlairMotionExport {
 export interface FlairExportOptions {
 	/**
 	 * Play in answer to the viewer (default: the scene's `trigger`; null for none). With `click`
-	 * each shot is a Flair step: shot 0 plays on load and each click plays the next.
+	 * shot n is Flair step n + 1: nothing plays until the first click, and each click plays the next shot.
 	 */
 	trigger?: MotionTrigger | null;
 	/** Sampling rate for changes Flair cannot express exactly (default: the scene's `fps`, else 30). */
@@ -484,9 +484,10 @@ export function toFlairSvgMotion(scene: MotionScene, options: FlairExportOptions
 	animate.sort((x, y) => (x.delay ?? 0) - (y.delay ?? 0));
 	const lastChange = animate.reduce((m, a) => Math.max(m, (a.delay ?? 0) + (a.ms ?? 0)), 0);
 
-	// A click trigger plays shot by shot: each change goes on its shot's step, timed from the shot's start.
+	// A click trigger plays shot by shot. Flair's player shows step 0 until the first click and then
+	// plays it with step 1, so shot n goes on step n + 1: each click plays one shot, from the start.
 	const trigger = options.trigger === null ? undefined : (options.trigger ?? scene.trigger);
-	if (trigger === 'click' && timeline.shots.length > 1) {
+	if (trigger === 'click' && timeline.shots.length) {
 		for (const a of animate) {
 			const at = a.delay ?? 0;
 			let step = 0;
@@ -496,7 +497,7 @@ export function toFlairSvgMotion(scene: MotionScene, options: FlairExportOptions
 			const delay = round(at - timeline.shots[step].start);
 			delete a.delay;
 			if (delay > 0) a.delay = delay;
-			if (step > 0) a.step = step;
+			a.step = step + 1;
 		}
 		animate.sort((x, y) => (x.step ?? 0) - (y.step ?? 0) || (x.delay ?? 0) - (y.delay ?? 0));
 	}

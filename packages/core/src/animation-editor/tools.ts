@@ -202,7 +202,7 @@ const SETTINGS: Record<string, JsonSchema> = {
 	loop: { type: 'string', enum: ['none', 'loop', 'ping-pong'], description: 'Playback past the end (default none).' },
 	trigger: {
 		anyOf: [{ type: 'string', enum: ['click', 'hover', 'press', 'scroll'] }, { type: 'null' }],
-		description: 'Play in answer to the viewer when exported to Flair: click (the first shot plays on load, each click plays the next shot), hover or press (plays while the pointer is over or down, rewinds when it leaves), scroll (scrubs as it scrolls past). null plays on its own (default). The editor previews it played through.'
+		description: 'Play in answer to the viewer when exported to Flair: click (nothing plays until a click; each click plays the next shot, then the first again), hover or press (plays while the pointer is over or down, rewinds when it leaves), scroll (scrubs as it scrolls past). null plays on its own (default). The editor previews it played through.'
 	},
 	fps: { type: 'number', minimum: 1, maximum: 120, description: 'Sampling rate for exports (default 30).' },
 	steps: { anyOf: [{ type: 'number', exclusiveMinimum: 0, maximum: 120 }, { type: 'null' }], description: 'Stepped time for every command without its own: changes hold on a grid of this many frames per second (12 = "on twos" at 24 fps) for a hand-drawn look; null makes it smooth again (default).' },
