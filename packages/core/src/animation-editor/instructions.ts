@@ -15,6 +15,7 @@ Commands
 - enter (fade, pop, grow, slide, draw) and exit (fade, shrink, slide, undraw) bring things in and out.
 - enter also reveals through a clip over the target's box: wipe (behind an edge travelling "direction", default right), iris (from the centre; "shape": circle or box) and split (from a line through the middle; "orientation": horizontal or vertical). exit wipe hides the same way. Reveals need a width and a height: use draw / undraw for a straight line.
 - draw draws strokes on to a fraction; move, rotate, scale and fade change the pose (about the centre); style blends solid colours and stroke width.
+- Text: convert it to outlines (a group with a path per letter) and give a command "split": "letter", "word" or "line" (and "cascade") to animate it a unit at a time; get_text_layout shows the units.
 - Drawing a group of strokes: "order": "sequence" draws them one after another (a signature, a diagram), "sortBy": "distance" from "origin" reveals outward, "pace": "speed" keeps one speed; draw with "comet": 0.2 sends a short stroke along a path and off the end.
 - Fast motion reads better with blur: set_animation_settings { "motionBlur": { "shutter": 180 } } (stage and rendered frames only).
 - Tie properties together with set_animation_drivers: parallax layers, a wheel that turns as it rolls, a shadow that fades as something rises. Drivers add to the target's own commands.

@@ -18,6 +18,8 @@ import {
 	toFlairSvgMotion,
 	toFlairVectorEffect,
 	MOTION_EASE_OUT,
+	motionCascade,
+	motionTextLayout,
 	motionBlurTimes,
 	motionGhosts,
 	motionMovingIds,
@@ -227,6 +229,7 @@ describe('checkMotionScene', () => {
 		collect(scene([{ id: 'a', run: [] }, { id: 'b', at: { ms: 5000 }, run: [] }], { trigger: 'click' }));
 		collect(scene([{ id: 'p', run: [{ type: 'play', targets: ['box'], clip: 'nope' }] }]));
 		collect(scene([], { drivers: [{ target: 'box', property: 'x', source: { node: 'dot', property: 'x' } }, { target: 'dot', property: 'x', source: { node: 'box', property: 'x' } }] }));
+		collect(scene([{ id: 's', run: [{ type: 'enter', targets: ['box'], split: 'letter' }] }]));
 		expect([...reported].sort()).toEqual(Object.keys(MOTION_ISSUE_CODES).sort());
 	});
 
@@ -1600,5 +1603,59 @@ describe('motion blur', () => {
 		expect((await registry.callTool('set_animation_settings', { motionBlur: { samples: 1 } })).isError).toBe(true);
 		expect((await registry.callTool('set_animation_settings', { motionBlur: null })).isError).toBeFalsy();
 		expect(controller.getState().scene.motionBlur).toBeUndefined();
+	});
+});
+
+describe('text by letter, word and line', () => {
+	// "HI YO" over "GO": letters as rectangles, a wider gap between words.
+	const letter = (id: string, x: number, y: number) => ({ id, type: 'path', fill: '#111111', subpaths: [rectSubpath({ x, y, width: 10, height: 20 })] }) as VectorNode;
+	const TEXT: VectorDocument = {
+		width: 400,
+		height: 200,
+		nodes: [{ id: 'title', type: 'group', children: [letter('o2', 70, 10), letter('h', 10, 12), letter('i', 22, 10), letter('y', 58, 11), letter('g', 10, 50), letter('o', 22, 52)] }]
+	};
+	const make = (command: Record<string, unknown>) => ({ version: 1, name: 't', artwork: TEXT, shots: [{ id: 'one', run: [{ type: 'enter', targets: ['title'], duration: 200, ...command } as MotionCommand] }] }) as MotionScene;
+	const starts = (s: MotionScene) => Object.fromEntries(compileMotionScene(s).segments.filter((g) => g.property === 'opacity').map((g) => [g.node, g.start]));
+
+	it('reads outlined text as lines of words of letters', () => {
+		const layout = motionTextLayout(indexMotionNodes(TEXT.nodes), 'title');
+		expect(layout).toEqual({ lines: [{ words: [{ letters: ['h', 'i'] }, { letters: ['y', 'o2'] }] }, { words: [{ letters: ['g', 'o'] }] }] });
+		expect(motionTextLayout(indexMotionNodes(TEXT.nodes), 'h')).toBeNull();
+	});
+
+	it('staggers letters, words or lines in reading order', () => {
+		expect(starts(make({ split: 'letter' }))).toEqual({ h: 0, i: 40, y: 80, o2: 120, g: 160, o: 200 });
+		expect(starts(make({ split: 'word', stagger: 100 }))).toEqual({ h: 0, i: 0, y: 100, o2: 100, g: 200, o: 200 });
+		expect(starts(make({ split: 'line' }))).toEqual({ h: 0, i: 0, y: 0, o2: 0, g: 300, o: 300 });
+		expect(compileMotionScene(make({ split: 'letter' })).commands[0]).toMatchObject({ start: 0, end: 400 });
+		// Each letter is hidden until its turn.
+		const doc = motionFrameAt(make({ split: 'letter' }), 100).document;
+		const op = (id: string) => indexMotionNodes(doc.nodes).get(id)!.node.opacity ?? 1;
+		expect(op('h')).toBeGreaterThan(op('y'));
+		expect(op('o')).toBe(0);
+	});
+
+	it('cascades forward, backward, from the centre, from the edges or at random', () => {
+		const xs = [0, 1, 2, 3, 4];
+		expect(motionCascade(xs, 'backward')).toEqual([4, 3, 2, 1, 0]);
+		expect(motionCascade(xs, 'center')).toEqual([2, 1, 3, 0, 4]);
+		expect(motionCascade(xs, 'edges')).toEqual([0, 4, 1, 3, 2]);
+		expect(motionCascade(xs, 'random', 7)).toEqual(motionCascade(xs, 'random', 7));
+		expect([...motionCascade(xs, 'random', 7)].sort()).toEqual(xs);
+		expect(starts(make({ split: 'word', cascade: 'backward' }))).toEqual({ g: 0, o: 0, y: 120, o2: 120, h: 240, i: 240 });
+	});
+
+	it('checks split targets and shows the layout to agents', async () => {
+		const issues = checkMotionScene(make({ targets: ['title'], split: 'letter' }));
+		expect(issues.some((i) => i.code === 'split-not-text')).toBe(false);
+		expect(() => parseMotionScene(make({ split: 'glyph', cascade: 'sideways' }))).toThrow(/"split" must be letter, word or line[\s\S]*"cascade" must be one of/);
+		expect(() => parseMotionScene(make({ cascade: 'backward' }))).toThrow(/"cascade" goes with "split"/);
+		const controller = new AnimationEditorController({ scene: make({}) });
+		const registry = new ToolRegistry();
+		registry.register(createAnimationEditorToolProvider(controller));
+		const layout = (await registry.callTool('get_text_layout', { group: 'title' })).structuredContent as any;
+		expect(layout).toMatchObject({ group: 'title', letters: 6, lines: [{ words: [{ letters: ['h', 'i'] }, { letters: ['y', 'o2'] }] }, { words: [{ letters: ['g', 'o'] }] }] });
+		expect((await registry.callTool('get_text_layout', { group: 'h' })).isError).toBe(true);
+		expect((await registry.callTool('add_commands', { shot: 'one', commands: [{ type: 'wave', targets: ['title'], split: 'letter', cascade: 'center' }] })).isError).toBeFalsy();
 	});
 });

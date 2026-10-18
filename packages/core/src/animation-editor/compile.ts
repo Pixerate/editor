@@ -1,6 +1,7 @@
 import { mixColorsOklab } from '../animation/color.js';
 import { matchMotionNodes } from './match.js';
 import { smoothMotionLegs, smoothMotionTimes } from './smooth.js';
+import { motionCommandSlots } from './text.js';
 import { behaviorProgress, motionSeedFromId, type MotionBehavior } from '../animation/behavior.js';
 import { evaluateEasing, resolveEasing, springSettleMs, type AnimationEasing } from '../animation/easing.js';
 import { bezierPathLength } from '../canvas/pathops/bezier.js';
@@ -655,10 +656,12 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 		shot.run.forEach((command, i) => {
 			const base = command.with === 'previous' && i > 0 ? prevStart : runEnd;
 			const begin = base + (command.type === 'wait' ? 0 : (command.delay ?? 0) * f);
-			const targets = command.type === 'wait' ? [] : command.targets;
-			const durations = command.type === 'wait' ? [command.duration * f] : targets.map((id) => motionCommandDuration(command, scene, id) * f);
-			const stagger = command.type === 'wait' ? 0 : (command.stagger ?? 0) * f;
-			const end = durations.reduce((m, d, k) => Math.max(m, begin + k * stagger + d), begin);
+			// What it animates, each in a stagger slot (with `split`, the letters of outlined text by letter, word or line).
+			const split = command.type === 'wait' ? null : motionCommandSlots(nodes, command);
+			const slots = split?.slots ?? [];
+			const durations = command.type === 'wait' ? [command.duration * f] : slots.map((s) => motionCommandDuration(command, scene, s.id) * f);
+			const stagger = (split?.stagger ?? 0) * f;
+			const end = durations.reduce((m, d, k) => Math.max(m, begin + (slots[k]?.slot ?? k) * stagger + d), begin);
 			commands.push({ shot: shot.id, shotIndex: index, command: i, type: command.type, start: begin, end, duration: durations[0] ?? 0 });
 			prevStart = begin;
 			runEnd = Math.max(runEnd, end);
@@ -711,14 +714,15 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 			});
 			continue;
 		}
-		command.targets.forEach((target, k) => {
+		const split = motionCommandSlots(nodes, command);
+		for (const { id: target, slot } of split.slots) {
 			const entry = nodes.get(target);
-			if (!entry) return;
+			if (!entry) continue;
 			const f = motionShotTimeScale(shot);
-			const start = timing.start + k * (command.stagger ?? 0) * f;
+			const start = timing.start + slot * split.stagger * f;
 			const cycle = motionCycleDuration(command, scene, target) * f;
 			jobs.push({ start, order: order++, run: () => compileRepeated(command, target, entry, start, cycle, timing) });
-		});
+		}
 	}
 	jobs.sort((a, b) => a.start - b.start || a.order - b.order).forEach((job) => job.run());
 
