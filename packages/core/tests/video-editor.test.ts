@@ -344,8 +344,24 @@ describe('exports', () => {
 		expect(ff.filterComplex).toMatch(/amix=inputs=2:normalize=0:duration=longest,apad,atrim=0:7\[aout\]/);
 		expect(ff.args.slice(-3)).toEqual(['-t', '7', 'out.mp4']);
 		expect(ff.command).toMatch(/^ffmpeg -y -ss 0 -t 7 -i song\.mp3 -ss 2 /);
-		expect(ff.notes).toEqual(['Video assets are assumed to have sound; set "hasAudio": false on any that do not, or ffmpeg will stop at a missing audio stream.']);
+		expect(ff.notes).toEqual([
+			'Video assets are assumed to have sound; set "hasAudio": false on any that do not, or ffmpeg will stop at a missing audio stream.',
+			'Titles use drawtext, which needs an ffmpeg built with libfreetype (Homebrew\'s is not: check `ffmpeg -filters | grep drawtext`); pass titleImage to render them as images instead.'
+		]);
+		// With titleImage, the title is an image input overlaid full-frame with its fade, and no drawtext.
+		const imaged = toVideoFfmpeg(p, { output: 'out.mp4', titleImage: (c, size) => `${c.id}-${size.width}x${size.height}.png` });
+		expect(imaged.filterComplex).not.toContain('drawtext');
+		expect(imaged.args).toEqual(expect.arrayContaining(['-loop', '1', '-framerate', '25', '-t', '2', '-i', 'c1-1280x720.png']));
+		expect(imaged.filterComplex).toMatch(/\[3:v\]setpts=PTS-STARTPTS,fps=25,scale=1280:720,format=yuva420p,fade=t=in:st=0:d=0\.5:alpha=1,setpts=PTS\+0\/TB\[lv\d\]/);
+		expect(imaged.notes.some((n) => n.includes('drawtext'))).toBe(false);
 		expect(() => toVideoFfmpeg(createVideoProject())).toThrow(/no clips/);
+	});
+
+	it('draws a title alone on a transparent frame, for titleImage', async () => {
+		const { videoTitleFrame } = await import('../src/video-editor');
+		const frame = videoTitleFrame(project(), { id: 't', type: 'text', text: 'Hi', start: 1000, duration: 500, opacity: 0.5, fadeIn: 200, transform: { y: 100, rotation: 10 } });
+		expect(frame).toMatchObject({ width: 1280, height: 720, background: 'rgba(0,0,0,0)', audio: [] });
+		expect(frame.layers).toEqual([{ clip: 't', track: '', type: 'text', opacity: 1, rect: { x: 0, y: 100, width: 1280, height: 720 }, rotation: 10, text: { text: 'Hi', color: '#ffffff', fontSize: 64, fontFamily: 'sans-serif', fontWeight: 700 } }]);
 	});
 
 	it('escapes filter values at both levels', () => {
