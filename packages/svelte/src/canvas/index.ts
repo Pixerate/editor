@@ -47,6 +47,7 @@ export {
 	defaultSvelteFlowPreset,
 	miroCompatiblePreset,
 	restorePanelPointerEvents,
+	isolateCanvasGestures,
 	type CreateCanvasInteractionsOptions
 } from './createCanvasInteractions.svelte.js';
 

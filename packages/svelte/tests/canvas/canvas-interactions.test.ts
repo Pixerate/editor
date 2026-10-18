@@ -3,7 +3,8 @@ import {
   createCanvasInteractions,
   defaultSvelteFlowPreset,
   miroCompatiblePreset,
-  restorePanelPointerEvents
+  restorePanelPointerEvents,
+  isolateCanvasGestures
 } from '../../src/canvas/createCanvasInteractions.svelte.js';
 
 describe('createCanvasInteractions', () => {
@@ -82,5 +83,25 @@ describe('createCanvasInteractions', () => {
 
     expect(panel.style.pointerEvents).toBe('auto');
     document.body.removeChild(panel);
+  });
+
+  it('stops wheel and pointerdown propagation with isolateCanvasGestures', () => {
+    const el = document.createElement('div');
+    document.body.appendChild(el);
+
+    const action = isolateCanvasGestures(el, { wheel: true, pointer: true });
+
+    const wheelEvent = new WheelEvent('wheel', { bubbles: true, cancelable: true });
+    const stopPropagationSpy = vi.spyOn(wheelEvent, 'stopPropagation');
+    el.dispatchEvent(wheelEvent);
+    expect(stopPropagationSpy).toHaveBeenCalled();
+
+    const pointerEvent = new PointerEvent('pointerdown', { bubbles: true, cancelable: true });
+    const pointerStopSpy = vi.spyOn(pointerEvent, 'stopPropagation');
+    el.dispatchEvent(pointerEvent);
+    expect(pointerStopSpy).toHaveBeenCalled();
+
+    action.destroy();
+    document.body.removeChild(el);
   });
 });
