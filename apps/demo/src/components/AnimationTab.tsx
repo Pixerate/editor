@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Clapperboard } from "lucide-react";
 import { createVectorEffect, ellipseSubpath, rectSubpath, starSubpath, type VectorDocument } from "@pixerate/editor/vector";
-import { AnimationEditorController, fromFlairVectorEffect, toLottie, type FlairVectorEffect, type LottieAnimation, type MotionScene } from "@pixerate/editor/animation-editor";
+import { AnimationEditorController, fromFlairVectorEffect, fromPptxAnimation, toLottie, type FlairVectorEffect, type LottieAnimation, type MotionScene } from "@pixerate/editor/animation-editor";
 import { AnimationEditor, useAnimationEditorController, useAnimationEditorState, useAnimationEditorTools } from "@pixerate/editor-react/animation-editor";
 import { VectorEditor, useVectorEditorController } from "@pixerate/editor-react/vector";
 import { demoToolRegistry } from "../agentTools";
@@ -162,6 +162,19 @@ export function AnimationTab() {
     if (result.ok) controller.select({ shot: scene.shots[0]?.id ?? "" });
   };
 
+  const loadPptx = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      const { scene, notes } = await fromPptxAnimation(await file.arrayBuffer());
+      const result = controller.load(scene, { clearHistory: false });
+      setExported(null);
+      setMessage(result.ok ? { title: `Imported slide 1 of “${file.name}” (undo to go back)`, lines: notes } : { title: "Could not load it", lines: [result.error] });
+      if (result.ok) controller.select({ shot: scene.shots[0]?.id ?? "" });
+    } catch (e) {
+      setMessage({ title: "Could not import it", lines: [(e as Error).message] });
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
@@ -197,6 +210,10 @@ export function AnimationTab() {
             </option>
           ))}
         </select>
+        <label className={`${button} cursor-pointer`}>
+          Import PowerPoint…
+          <input type="file" accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation" className="hidden" aria-label="Import PowerPoint slide" onChange={(e) => { void loadPptx(e.currentTarget.files?.[0]); e.currentTarget.value = ""; }} />
+        </label>
         <button type="button" className={button} onClick={() => { controller.load(SCENE, { clearHistory: true }); setMessage(null); }}>
           Reset demo scene
         </button>
