@@ -54,9 +54,9 @@ const SCENE: MotionScene = {
     },
     {
       id: "star",
-      label: "Tile becomes a star",
+      label: "Tile irises in, becomes a star",
       run: [
-        { type: "enter", targets: ["tile"], style: "grow" },
+        { type: "enter", targets: ["tile"], style: "iris" },
         { type: "morph", targets: ["tile"], into: "star" },
         { type: "effect", targets: ["ring"], effect: "wobble", param: "time", to: 2, duration: 900, with: "previous" },
       ],

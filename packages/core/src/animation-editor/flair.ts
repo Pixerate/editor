@@ -4,10 +4,10 @@ import { bezierPathToSvg, transformBezierPath } from '../canvas/pathops/bezier.j
 import { normalizeTokenColor } from '../tokens/color.js';
 import { expandVectorAppearance, expandVectorAppearances } from '../vector/appearance.js';
 import { IDENTITY_MATRIX, collectPathNodes, invertMatrix, nodeMatrix, vectorPathWorldBezier } from '../vector/geometry.js';
-import { vectorDocumentToSvg } from '../vector/svg.js';
+import { vectorDocumentToSvg, type VectorSvgWrapper } from '../vector/svg.js';
 import type { VectorNode, VectorPathNode } from '../vector/types.js';
-import { compileMotionScene, indexMotionNodes, motionTrackKey, trackValue, type MotionProperty, type MotionSegment } from './compile.js';
-import { motionFrameAt, motionNodeOffset } from './evaluate.js';
+import { compileMotionScene, indexMotionNodes, motionTrackKey, segmentValue, trackValue, type MotionProperty, type MotionSegment } from './compile.js';
+import { motionClipAttrs, motionFollowRoute, motionFrameAt, motionNodeClips, motionNodeOffset } from './evaluate.js';
 import type { MotionScene } from './types.js';
 
 /**
@@ -18,9 +18,16 @@ import type { MotionScene } from './types.js';
  * Changes are exact where Flair can express them: a change with a linear, cubic-out or
  * cubic-in-out curve (the editor's defaults) is one change, and so (Flair 0.36 and later) is
  * one with any cubic-bezier curve, written as `[x1, y1, x2, y2]`. Anything else (springs,
- * elastic, `hold`, follows, morphs and live-effect tweens) is sampled at the
+ * elastic, `hold`, morphs and live-effect tweens) is sampled at the
  * scene's `fps` into short linear changes, which Flair plays the same way. Pulses, shakes,
  * teeters, waves, wiggles and colour pulses are one change with a `behavior` (Flair 0.38).
+ *
+ * Reveals (`wipe`, `iris`, `split`) wrap their node in a group clipped through a rect or circle
+ * in the group's own box units (`clipPathUnits="objectBoundingBox"`), as Flair's
+ * `entrance.wipe` does, and animate the shape's attributes. A follow wraps its node in a group
+ * that Flair's `along` carries along a copy of the path in the node's parent's units (written
+ * in `<defs>`, so the path may be hidden or anywhere), turning with it for `orient`, as
+ * Flair's `path.follow` does.
  */
 
 /** Flair's easing names. */
@@ -45,6 +52,11 @@ export interface FlairSvgAnimation {
 	ease?: FlairEase;
 	attrs?: Record<string, readonly [string | number, string | number]>;
 	draw?: boolean | readonly [number, number];
+	/** Moves the element along a path (by id), from and to the fractions of its length in `at`. */
+	along?: string;
+	at?: readonly [number, number];
+	/** With `along`: turns the element with the path's direction. */
+	orient?: boolean;
 	/** Flair 0.38 and later: how the change swings from → to (see `MotionBehavior`). */
 	behavior?: MotionBehavior;
 	view?: readonly [number, number, number, number] | string;
@@ -148,8 +160,10 @@ type ChannelValue = number | string | readonly number[];
 
 interface Channel {
 	id: string;
-	kind: 'attr' | 'draw' | 'view';
+	/** `attrs`: several number attributes changing together (`attrs` names them, `value` gives them in order). */
+	kind: 'attr' | 'attrs' | 'draw' | 'view';
 	attr?: string;
+	attrs?: readonly string[];
 	segments: MotionSegment[];
 	exact: (segment: MotionSegment) => boolean;
 	/**
@@ -195,19 +209,70 @@ export function toFlairSvgMotion(scene: MotionScene, options: FlairExportOptions
 
 	const animatedNodes = new Set(timeline.segments.map((s) => s.node).filter(Boolean));
 	const pathsSeen = new Set<string>();
+	// Groups written round nodes (outermost first), routes for `along`, and the ids they take.
+	const wrap: Record<string, VectorSvgWrapper[]> = {};
+	const routes: string[] = [];
+	const follows: { id: string; wrapper: string; routes: Map<string, string>; segments: MotionSegment[] }[] = [];
+	const usedIds = new Set(nodes.keys());
+	const freshId = (base: string) => {
+		let id = base;
+		for (let n = 2; usedIds.has(id); n++) id = `${base}-${n}`;
+		usedIds.add(id);
+		return id;
+	};
 	for (const id of animatedNodes) {
 		const entry = nodes.get(id)!;
 		const node = entry.node;
+		// Wrappers only go round nodes that are drawn (a hidden node is left out of the SVG).
+		const drawn = [...entry.ancestors.map((a) => nodes.get(a)!.node), node].every((n) => n.visible !== false);
+
+		// Reveal clips: a group clipped through a shape whose attributes change (outermost: it clips what the follow carries).
+		for (const [p, name] of [['clipRect', 'reveal'], ['clipCircle', 'iris']] as const) {
+			if (!drawn || !timeline.tracks.has(motionTrackKey(id, p))) continue;
+			const wrapper = freshId(`${id}--${name}`);
+			const clipId = freshId(`${wrapper}-clip`);
+			const shapeId = freshId(`${wrapper}-clip-shape`);
+			const clipAt = (t: number) => motionNodeClips(id, timeline, t).find((c) => c.shape === (p === 'clipRect' ? 'rect' : 'circle'))!;
+			const rest = clipAt(0);
+			(wrap[id] ??= []).push({ id: wrapper, clip: { id: clipId, shapeId, shape: rest.shape, attrs: motionClipAttrs(rest) } });
+			channels.push({ id: shapeId, kind: 'attrs', attrs: Object.keys(motionClipAttrs(rest)), segments: [...track(id, p)], exact: () => true, value: (t) => Object.values(motionClipAttrs(clipAt(t))).map((v) => Math.round(v * 1e4) / 1e4) });
+		}
+
+		// A follow: Flair's `along` carries a wrapper, and an inner one puts the node's centre on it.
+		const followSegments = track(id, 'follow');
+		if (drawn && followSegments.length) {
+			const ids = new Map<string, string>();
+			for (const seg of followSegments) {
+				if (!seg.path || ids.has(seg.path)) continue;
+				const route = motionFollowRoute(entry, nodes.get(seg.path));
+				if (!route) continue;
+				const routeId = freshId(`${id}--follow-route`);
+				ids.set(seg.path, routeId);
+				routes.push(`<path id="${routeId}" d="${bezierPathToSvg(route, { precision })}" fill="none"/>`);
+			}
+			if (ids.size) {
+				const wrapper = freshId(`${id}--follow`);
+				const centre = freshId(`${id}--follow-centre`);
+				const c = entry.center;
+				// Where the follow puts it at the start, for players that draw a still frame without `along`.
+				const at = motionNodeOffset(entry, timeline, 0, nodes)?.follow;
+				const placed = at ? `translate(${f(at.x)} ${f(at.y)})${at.angle ? ` rotate(${f(at.angle)})` : ''}` : undefined;
+				(wrap[id] ??= []).push({ id: wrapper, ...(placed ? { transform: placed } : {}) }, { id: centre, transform: `translate(${f(-c.x)} ${f(-c.y)})` });
+				follows.push({ id, wrapper, routes: ids, segments: followSegments.filter((seg) => seg.path && ids.has(seg.path)) });
+			}
+		}
 
 		if (timeline.tracks.has(motionTrackKey(id, 'opacity')))
 			channels.push({ id, kind: 'attr', attr: 'opacity', segments: [...track(id, 'opacity')], exact: plays, value: (t) => round(Math.min(1, Math.max(0, Number(trackValue(track(id, 'opacity'), t))))) });
 
-		const transformSegments = TRANSFORM_PROPS.flatMap((p) => track(id, p));
+		// The node's own moves, turns and scales (a follow is carried by its wrappers).
+		const followed = follows.some((x) => x.id === id);
+		const transformSegments = TRANSFORM_PROPS.flatMap((p) => (followed && p === 'follow' ? [] : track(id, p)));
 		if (transformSegments.length) {
 			const base = node.transform ? ` matrix(${node.transform.map(f).join(' ')})` : '';
 			const c = entry.center;
 			const transformAt = (t: number, raw: boolean) => {
-				const o = motionNodeOffset(entry, timeline, t, nodes, raw)!;
+				const o = motionNodeOffset(entry, timeline, t, nodes, raw, !followed)!;
 				return `translate(${f(o.dx)} ${f(o.dy)}) rotate(${f(o.rotation)} ${f(c.x)} ${f(c.y)}) translate(${f(c.x)} ${f(c.y)}) scale(${f(o.scaleX)} ${f(o.scaleY)}) translate(${f(-c.x)} ${f(-c.y)})${base}`;
 			};
 			channels.push({
@@ -277,12 +342,22 @@ export function toFlairSvgMotion(scene: MotionScene, options: FlairExportOptions
 		const base = { ...(channel.id ? { id: channel.id } : {}), ...(delay > 0 ? { delay: round(delay) } : {}), ms: round(ms), ease: typeof ease === 'string' ? ease : (ease.map(round) as unknown as FlairEase), ...(behavior ? { behavior } : {}) };
 		if (channel.kind === 'view') animate.push({ ...base, view: to as unknown as [number, number, number, number] });
 		else if (channel.kind === 'draw') animate.push({ ...base, draw: [from as number, to as number] });
+		else if (channel.kind === 'attrs') {
+			// Only the numbers that change (as Flair's clip reveals write them).
+			const [a, b] = [from as readonly number[], to as readonly number[]];
+			const attrs = Object.fromEntries(channel.attrs!.flatMap((name, k) => (a[k] !== b[k] ? [[name, [a[k], b[k]] as const]] : [])));
+			animate.push({ ...base, attrs });
+		}
 		else animate.push({ ...base, attrs: { [channel.attr!]: [from as string | number, to as string | number] } });
 	};
 
 	for (const channel of channels) {
 		const cuts = channel.segments.filter((s) => s.end <= s.start);
-		for (const cut of cuts) emit(channel, cut.start, 0, channel.value(Math.max(0, cut.start - 1e-3)), channel.value(cut.start), 'linear');
+		for (const cut of cuts) {
+			const [from, to] = [channel.value(Math.max(0, cut.start - 1e-3)), channel.value(cut.start)];
+			// A cut to where the value already is changes nothing (at 0 it sets the start, so it stays).
+			if (cut.start <= 0 || !same(from, to) || channel.kind === 'view') emit(channel, cut.start, 0, from, to, 'linear');
+		}
 		const times = [...new Set(channel.segments.flatMap((s) => [s.start, s.end]))].sort((a, b) => a - b);
 		for (let i = 0; i + 1 < times.length; i++) {
 			const a = times[i];
@@ -317,10 +392,36 @@ export function toFlairSvgMotion(scene: MotionScene, options: FlairExportOptions
 			}
 		}
 	}
+
+	// Follows: one `along` per follow, sampled into linear steps only for curves Flair cannot play.
+	for (const follow of follows) {
+		const starts = follow.segments.map((seg) => seg.start);
+		for (const seg of follow.segments) {
+			const along = { id: follow.wrapper, along: follow.routes.get(seg.path!)!, ...(seg.rotate ? { orient: true } : {}) };
+			const progress = (t: number) => round(Math.min(1, Math.max(0, Number(segmentValue(seg, t)))));
+			const curve = seg.end > seg.start ? flairCurveFor(seg.ease, curves) : 'linear';
+			// Past the ends, Flair stops turning (its direction is measured either side of the point), so overshoots are sampled.
+			if (curve && !(overshoots(curve) && seg.rotate)) {
+				animate.push({ ...along, ...(seg.start > 0 ? { delay: round(seg.start) } : {}), ms: round(seg.end - seg.start), ease: typeof curve === 'string' ? curve : (curve.map(round) as unknown as FlairEase), at: [round(Number(seg.from)), round(Number(seg.to))] });
+				continue;
+			}
+			// Sampled up to the next follow's start, which takes over there.
+			const until = Math.min(seg.end, ...starts.filter((t) => t > seg.start));
+			const n = Math.max(1, Math.ceil(((until - seg.start) * fps) / 1000));
+			for (let k = 1; k <= n; k++) {
+				const t0 = seg.start + ((until - seg.start) * (k - 1)) / n;
+				const t1 = seg.start + ((until - seg.start) * k) / n;
+				animate.push({ ...along, ...(t0 > 0 ? { delay: round(t0) } : {}), ms: round(t1 - t0), ease: 'linear', at: [progress(t0), progress(t1)] });
+				sampled++;
+			}
+		}
+	}
 	animate.sort((x, y) => (x.delay ?? 0) - (y.delay ?? 0));
 
-	// The SVG: the artwork at rest, live effects drawn as plain paths so shapes can be tweened.
-	let svg = vectorDocumentToSvg({ ...scene.artwork, nodes: expandVectorAppearances(scene.artwork.nodes) }, { pretty: false, precision });
+	// The SVG: the artwork at rest, live effects drawn as plain paths so shapes can be tweened,
+	// with the wrappers that reveals and follows animate, and the routes follows take.
+	let svg = vectorDocumentToSvg({ ...scene.artwork, nodes: expandVectorAppearances(scene.artwork.nodes) }, { pretty: false, precision, wrap });
+	if (routes.length) svg = svg.replace(/^(<svg[^>]*>)/, `$1<defs>${routes.join('')}</defs>`);
 	const lastChange = animate.reduce((m, a) => Math.max(m, (a.delay ?? 0) + (a.ms ?? 0)), 0);
 
 	// Controls: each stands for its default colour wherever it appears.

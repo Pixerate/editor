@@ -14,6 +14,7 @@ export const MOTION_ISSUE_CODES = {
 	'unknown-target': { severity: 'error', wording: 'A command names a node the artwork does not have.' },
 	'unknown-path': { severity: 'error', wording: 'A follow command names a path the artwork does not have.' },
 	'not-a-path': { severity: 'error', wording: 'A follow path must be a path node, not a group.' },
+	'reveal-no-box': { severity: 'warning', wording: 'A wipe, iris or split cannot clip a node with no width or height (a lone straight line), so it fades instead.' },
 	'unknown-shape': { severity: 'error', wording: 'A morph names a shape the artwork does not have.' },
 	'unknown-effect': { severity: 'error', wording: 'An effect command names an effect the node does not have.' },
 	'unknown-effect-param': { severity: 'error', wording: 'An effect command names a parameter that is not a number of that effect.' },

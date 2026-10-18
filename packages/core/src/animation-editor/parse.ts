@@ -1,6 +1,6 @@
 import { isAnimationEasing } from '../animation/easing.js';
 import { namedWithSuggestion } from './issues.js';
-import { MOTION_COMMAND_TYPES, MOTION_DIRECTIONS, MOTION_ENTER_STYLES, MOTION_EXIT_STYLES, type MotionCommand, type MotionScene, type MotionShot } from './types.js';
+import { MOTION_COMMAND_TYPES, MOTION_DIRECTIONS, MOTION_ENTER_STYLES, MOTION_EXIT_STYLES, MOTION_IRIS_SHAPES, MOTION_SPLIT_ORIENTATIONS, type MotionCommand, type MotionScene, type MotionShot } from './types.js';
 
 /**
  * Shape checking: whether a value is a well-formed scene, listing every problem at once.
@@ -21,7 +21,7 @@ const SHOT_KEYS = ['id', 'label', 'camera', 'run', 'hold'];
 const CAMERA_KEYS = ['x', 'y', 'width', 'height', 'frame', 'padding', 'ease', 'ms'];
 const BASE_KEYS = ['type', 'targets', 'duration', 'delay', 'stagger', 'with', 'ease', 'note'];
 const COMMAND_KEYS: Record<string, string[]> = {
-	enter: [...BASE_KEYS, 'style', 'direction', 'distance', 'scale'],
+	enter: [...BASE_KEYS, 'style', 'direction', 'distance', 'scale', 'shape', 'orientation'],
 	exit: [...BASE_KEYS, 'style', 'direction', 'distance'],
 	draw: [...BASE_KEYS, 'from', 'to'],
 	move: [...BASE_KEYS, 'by', 'to'],
@@ -88,6 +88,8 @@ export function commandShapeProblems(command: unknown, where: string): string[] 
 			if (command.direction !== undefined && !(MOTION_DIRECTIONS as readonly unknown[]).includes(command.direction)) p(`"direction" must be one of ${MOTION_DIRECTIONS.join(', ')}.`);
 			optionalNumber('distance');
 			if (command.scale !== undefined && !(isNum(command.scale) && command.scale >= 0)) p(`"scale" must be a number ≥ 0 (the starting scale for pop and zoom).`);
+			if (command.shape !== undefined && !(MOTION_IRIS_SHAPES as readonly unknown[]).includes(command.shape)) p(`"shape" must be one of ${MOTION_IRIS_SHAPES.join(', ')} (the opening of an iris).`);
+			if (command.orientation !== undefined && !(MOTION_SPLIT_ORIENTATIONS as readonly unknown[]).includes(command.orientation)) p(`"orientation" must be one of ${MOTION_SPLIT_ORIENTATIONS.join(', ')} (the line a split opens from).`);
 			break;
 		}
 		case 'draw':

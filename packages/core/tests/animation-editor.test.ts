@@ -187,7 +187,8 @@ describe('checkMotionScene', () => {
 						{ type: 'effect', targets: ['spin'], effect: 'tww', param: 'angle', to: 1 },
 						{ type: 'effect', targets: ['spin'], effect: 'tw', param: 'angel', to: 1 },
 						{ type: 'style', targets: ['box'], fill: 'not-a-colour' },
-						{ type: 'fade', targets: ['box'], to: 0.5, duration: 50 }
+						{ type: 'fade', targets: ['box'], to: 0.5, duration: 50 },
+						{ type: 'enter', targets: ['line'], style: 'wipe' }
 					] },
 					{ id: 'x', run: [] },
 					{ id: 'y', camera: { frame: 'ghost' }, run: [] },
@@ -362,19 +363,23 @@ describe('Flair export', () => {
 		expect(animate.filter((a) => a.id === 'dot')).toEqual([expect.objectContaining({ ms: 300, ease: [0.42, 0, 1, 1], attrs: { fill: ['#0ea5e9', '#000000'] } })]);
 	});
 
-	it('samples only the demo scene\'s follow and shape changes', () => {
+	it('samples only the demo scene\'s shape changes', () => {
 		const out = toFlairSvgMotion(DEMO_SCENE);
 		const old = toFlairSvgMotion(DEMO_SCENE, { curves: false, behaviors: false });
-		expect(old.sampled).toBe(152);
+		expect(old.sampled).toBe(116);
 		// The badge's back-eased pop, the spark's ease-in exit and the badge's pulse are now one change each.
-		expect(out.sampled).toBe(90);
+		expect(out.sampled).toBe(54);
+		// The spark's follow is one `along` on a wrapper, turning with a copy of the arc.
+		expect(animateOf(out).filter((a) => a.along)).toEqual([{ id: 'spark--follow', along: 'spark--follow-route', orient: true, delay: 2200, ms: 1200, ease: 'in-out', at: [0, 1] }]);
+		expect(out.motion.svg).toContain('<defs><path id="spark--follow-route" d="M60 300C160 20 420 0 580 60" fill="none"/></defs>');
+		expect(out.motion.svg).toMatch(/<g id="spark--follow" transform="translate\(60 300\) rotate\(-70\.\d+\)"><g id="spark--follow-centre" transform="translate\(-60 -300\)"><path id="spark"/);
 		expect(animateOf(out).filter((a) => a.behavior)).toEqual([expect.objectContaining({ id: 'badge', ease: 'linear', behavior: { type: 'pulse', count: 2 } })]);
 		const animate = out.motion.animate ?? [];
 		expect(animate).toContainEqual(expect.objectContaining({ id: 'badge', delay: 300, ms: 600, ease: [0.34, 1.56, 0.64, 1] }));
 		expect(animate.filter((a) => a.id === 'spark' && Array.isArray(a.ease)).map((a) => Object.keys(a.attrs ?? {})[0]).sort()).toEqual(['opacity', 'transform']);
-		// What is left: the follow (spark's transform) and the morph and wobble (each path's d).
+		// What is left: the morph and wobble (each path's d).
 		const steps = animate.filter((a) => a.ease === 'linear' && !a.behavior).map((a) => `${a.id} ${Object.keys(a.attrs ?? {})[0]}`);
-		expect(new Set(steps)).toEqual(new Set(['spark transform', 'ring d', 'tile d']));
+		expect(new Set(steps)).toEqual(new Set(['ring d', 'tile d']));
 		expect(out.duration).toBe(old.duration);
 	});
 
@@ -577,5 +582,140 @@ describe('Flair motion primitives', () => {
 		const flair = (await registry.callTool('export_flair_motion', { behaviors: false })).structuredContent as any;
 		expect(flair.sampled).toBeGreaterThan(0);
 		expect((await registry.callTool('export_flair_motion', {})).structuredContent).toMatchObject({ sampled: 0 });
+	});
+});
+
+describe('Flair clip reveals and follows', () => {
+	// The box is 60 × 60 with a 2-unit stroke: Flair pads its clip by 1/60 + 0.02 of the box.
+	const P = Math.round((1 / 60 + 0.02) * 1e4) / 1e4;
+	const W = Math.round((1 + 2 * (1 / 60 + 0.02)) * 1e4) / 1e4;
+	const R = Math.round(Math.hypot(0.5 + 1 / 60 + 0.02, 0.5 + 1 / 60 + 0.02) * 1e4) / 1e4;
+	const clipsOf = (s: MotionScene, t: number) => motionFrameAt(s, t).clips;
+
+	it('names the Flair primitives', () => {
+		for (const style of ['wipe', 'iris', 'split'] as const) expect(motionFlairPrimitive({ type: 'enter', targets: ['box'], style })).toBe(`entrance.${style}`);
+		expect(motionFlairPrimitive({ type: 'exit', targets: ['box'], style: 'wipe' })).toBe('exit.wipe');
+	});
+
+	it("reveals through Flair's clips in the node's box units, padded for the stroke", () => {
+		const reveal = (extra: Record<string, unknown>) => scene([{ id: 'one', run: [{ type: 'enter', targets: ['box'], ...extra } as never] }]);
+		// wipe (default right): the width opens from the left edge.
+		expect(clipsOf(reveal({ style: 'wipe' }), 0).box).toEqual([{ shape: 'rect', x: -P, y: -P, width: 0, height: W }]);
+		expect(clipsOf(reveal({ style: 'wipe' }), 600).box).toEqual([{ shape: 'rect', x: -P, y: -P, width: W, height: W }]);
+		expect(clipsOf(reveal({ style: 'wipe' }), 300).box[0]).toMatchObject({ width: Math.round(W * (1 - 0.5 ** 3) * 1e6) / 1e6 });
+		expect(clipsOf(reveal({ style: 'wipe', direction: 'left' }), 0).box).toEqual([{ shape: 'rect', x: 1 + P, y: -P, width: 0, height: W }]);
+		expect(clipsOf(reveal({ style: 'wipe', direction: 'up' }), 0).box).toEqual([{ shape: 'rect', x: -P, y: 1 + P, width: W, height: 0 }]);
+		// iris: a circle (an ellipse on a box that is not square) from the centre, or a box.
+		expect(clipsOf(reveal({ style: 'iris' }), 0).box).toEqual([{ shape: 'circle', cx: 0.5, cy: 0.5, r: 0 }]);
+		expect(clipsOf(reveal({ style: 'iris' }), 600).box).toEqual([{ shape: 'circle', cx: 0.5, cy: 0.5, r: R }]);
+		expect(clipsOf(reveal({ style: 'iris', shape: 'box' }), 0).box).toEqual([{ shape: 'rect', x: 0.5, y: 0.5, width: 0, height: 0 }]);
+		// split: from a line through the middle.
+		expect(clipsOf(reveal({ style: 'split' }), 0).box).toEqual([{ shape: 'rect', x: -P, y: 0.5, width: W, height: 0 }]);
+		expect(clipsOf(reveal({ style: 'split', orientation: 'vertical' }), 0).box).toEqual([{ shape: 'rect', x: 0.5, y: -P, width: 0, height: W }]);
+		// No stroke: just Flair's 0.02.
+		expect(clipsOf(scene([{ id: 'one', run: [{ type: 'enter', targets: ['dot'], style: 'wipe' }] }]), 0).dot).toEqual([{ shape: 'rect', x: -0.02, y: -0.02, width: 0, height: 1.04 }]);
+	});
+
+	it('wipes out the other way, and opens the clip again on the next enter', () => {
+		const s = scene([{ id: 'one', run: [{ type: 'enter', targets: ['box'], style: 'iris' }, { type: 'exit', targets: ['box'], style: 'wipe' }, { type: 'enter', targets: ['box'], delay: 100 }] }]);
+		expect(compileMotionScene(s).commands[1].duration).toBe(450);
+		expect(clipsOf(s, 600).box).toEqual([{ shape: 'rect', x: -P, y: -P, width: W, height: W }, { shape: 'circle', cx: 0.5, cy: 0.5, r: R }]);
+		// The edge travels right: the left of the box goes first.
+		expect(clipsOf(s, 1050).box[0]).toEqual({ shape: 'rect', x: 1 + P, y: -P, width: 0, height: W });
+		// The fade in opens the clip at once.
+		expect(clipsOf(s, 1151).box[0]).toEqual({ shape: 'rect', x: -P, y: -P, width: W, height: W });
+		expect(path(motionFrameAt(s, 1151).document, 'box').opacity).toBeLessThan(0.1);
+		expect(checkMotionScene(s).map((i) => i.code)).toEqual([]);
+		const late = scene([{ id: 'one', run: [{ type: 'enter', targets: ['box'], style: 'wipe' }, { type: 'exit', targets: ['box'], style: 'wipe' }, { type: 'pulse', targets: ['box'] }] }]);
+		expect(checkMotionScene(late).map((i) => i.code)).toEqual(['exit-hidden']);
+	});
+
+	it('draws the frame inside a group clipped in objectBoundingBox units', () => {
+		const s = scene([{ id: 'one', run: [{ type: 'enter', targets: ['box'], style: 'iris' }] }]);
+		const svg = motionFrameToSvg(s, 300, { idPrefix: 'ae-', pretty: false });
+		expect(svg).toContain(`<clipPath id="ae-reveal-box-0" clipPathUnits="objectBoundingBox"><circle cx="0.5" cy="0.5" r="`);
+		expect(svg).toMatch(/<g clip-path="url\(#ae-reveal-box-0\)"><path id="box"[^>]*\/><\/g>/);
+		expect(motionFrameToSvg(scene([]), 0)).not.toContain('clip-path');
+	});
+
+	it('fades a straight line it cannot clip, with a warning', () => {
+		const s = scene([{ id: 'one', run: [{ type: 'enter', targets: ['line'], style: 'split' }] }]);
+		expect(path(motionFrameAt(s, 0).document, 'line').opacity).toBe(0);
+		expect(motionFrameAt(s, 0).clips).toEqual({});
+		const issue = checkMotionScene(s).find((i) => i.code === 'reveal-no-box');
+		expect(issue).toMatchObject({ severity: 'warning', ids: ['line'] });
+		expect(issue?.message).toContain('use style "draw"');
+	});
+
+	it('exports a wrapper group and its animated clip shape exactly, as Flair writes them', () => {
+		const s = scene([{ id: 'one', run: [{ type: 'enter', targets: ['box'], style: 'wipe' }, { type: 'enter', targets: ['dot'], style: 'iris', with: 'previous' }, { type: 'exit', targets: ['box'], style: 'wipe', direction: 'down' }] }]);
+		const out = toFlairSvgMotion(s);
+		const { svg, animate = [] } = out.motion;
+		expect(out.sampled).toBe(0);
+		expect(svg).toContain(`<clipPath id="box--reveal-clip" clipPathUnits="objectBoundingBox"><rect id="box--reveal-clip-shape" x="${-P}" y="${-P}" width="0" height="${W}"/></clipPath>`);
+		expect(svg).toMatch(/<g id="box--reveal" clip-path="url\(#box--reveal-clip\)"><path id="box"/);
+		expect(svg).toContain('<clipPath id="dot--iris-clip" clipPathUnits="objectBoundingBox"><circle id="dot--iris-clip-shape" cx="0.5" cy="0.5" r="0"/>');
+		expect(animate).toContainEqual({ id: 'box--reveal-clip-shape', ms: 600, ease: 'out', attrs: { width: [0, W] } });
+		expect(animate).toContainEqual({ id: 'dot--iris-clip-shape', ms: 600, ease: 'out', attrs: { r: [0, 0.7354] } });
+		// exit.wipe down: the reveal upwards, reversed; Flair's exit ease.
+		expect(animate).toContainEqual({ id: 'box--reveal-clip-shape', delay: 600, ms: 450, ease: [0.42, 0, 1, 1], attrs: { y: [-P, 1 + P], height: [W, 0] } });
+		for (const a of animate) expect(svg).toContain(`id="${a.id}"`);
+	});
+
+	it('follows in the parent\'s units, with moves turning with the path, and exports it as along + orient', () => {
+		const art: VectorDocument = {
+			width: 400,
+			height: 400,
+			nodes: [
+				{ id: 'route', type: 'path', visible: false, fill: null, stroke: '#999999', subpaths: [{ closed: false, anchors: [{ x: 0, y: 0 }, { x: 100, y: 100 }] }] },
+				{ id: 'shrunk', type: 'group', transform: [0.5, 0, 0, 0.5, 0, 0], children: [{ id: 'dart', type: 'path', fill: '#000000', subpaths: [rectSubpath({ x: 300, y: 100, width: 40, height: 40 })] }] }
+			]
+		};
+		const s: MotionScene = { version: 1, name: 'f', artwork: art, shots: [{ id: 'one', run: [{ type: 'follow', targets: ['dart'], path: 'route', rotate: true, ease: 'linear', duration: 1000 }, { type: 'move', targets: ['dart'], by: { x: 10, y: 0 }, ease: 'linear', duration: 1000, with: 'previous' }] }] };
+		// The route is (0, 0) → (200, 200) in the group's units, at 45°; the move turns with it.
+		const m = path(motionFrameAt(s, 1000).document, 'dart').transform!;
+		const centre = { x: m[0] * 320 + m[2] * 120 + m[4], y: m[1] * 320 + m[3] * 120 + m[5] };
+		expect(centre.x).toBeCloseTo(200 + 10 * Math.SQRT1_2, 3);
+		expect(centre.y).toBeCloseTo(200 + 10 * Math.SQRT1_2, 3);
+		expect(Math.atan2(m[1], m[0]) * (180 / Math.PI)).toBeCloseTo(45, 4);
+		const out = toFlairSvgMotion(s);
+		const { svg, animate = [] } = out.motion;
+		expect(out.sampled).toBe(0);
+		expect(svg).toContain('<path id="dart--follow-route" d="M0 0L200 200" fill="none"/>');
+		expect(svg).toContain('<g id="dart--follow" transform="translate(0 0) rotate(45)"><g id="dart--follow-centre" transform="translate(-320 -120)"><path id="dart"');
+		expect(animate).toContainEqual({ id: 'dart--follow', along: 'dart--follow-route', orient: true, ms: 1000, ease: 'linear', at: [0, 1] });
+		// The node's own transform leaves the follow to the wrapper.
+		expect(animate.find((a) => a.id === 'dart')?.attrs?.transform).toEqual(['translate(0 0) rotate(0 320 120) translate(320 120) scale(1 1) translate(-320 -120)', 'translate(10 0) rotate(0 320 120) translate(320 120) scale(1 1) translate(-320 -120)']);
+		// A spring cannot be one change: it is sampled into linear steps along the path.
+		const sprung = toFlairSvgMotion({ ...s, shots: [{ id: 'one', run: [{ type: 'follow', targets: ['dart'], path: 'route', ease: 'spring', duration: 500 }] }] });
+		expect(sprung.sampled).toBe(15);
+		expect(animateOf(sprung).every((a) => a.along === 'dart--follow-route' && a.ease === 'linear')).toBe(true);
+	});
+
+	it('are reachable through the agent tools, with useful errors', async () => {
+		const controller = new AnimationEditorController({ scene: createMotionScene(ARTWORK, { name: 'demo' }) });
+		const registry = new ToolRegistry();
+		registry.register(createAnimationEditorToolProvider(controller));
+		const ok = await registry.callTool('insert_shots', {
+			shots: [{ id: 'in', run: [{ type: 'enter', targets: ['box'], style: 'wipe', direction: 'left' }, { type: 'enter', targets: ['dot'], style: 'iris', shape: 'box' }, { type: 'enter', targets: ['pair'], style: 'split', orientation: 'vertical' }, { type: 'exit', targets: ['box'], style: 'wipe' }] }]
+		});
+		expect(ok.isError).toBeFalsy();
+		const read = (await registry.callTool('get_animation', {})).structuredContent as any;
+		expect(read.shots[0].commands.map((c: { flairPrimitive?: string }) => c.flairPrimitive)).toEqual(['entrance.wipe', 'entrance.iris', 'entrance.split', 'exit.wipe']);
+		const frame = (await registry.callTool('render_animation_frame', { shot: 'in', at: 'start' })).structuredContent as any;
+		expect(frame.svg).toContain('clipPathUnits="objectBoundingBox"');
+		const flair = (await registry.callTool('export_flair_motion', {})).structuredContent as any;
+		expect(flair.sampled).toBe(0);
+		expect(flair.motion.animate.map((a: FlairSvgAnimation) => a.id)).toEqual(expect.arrayContaining(['box--reveal-clip-shape', 'dot--reveal-clip-shape', 'pair--reveal-clip-shape']));
+		for (const [cmd, field] of [[{ type: 'enter', targets: ['box'], style: 'iris', shape: 'star' }, 'shape'], [{ type: 'enter', targets: ['box'], style: 'split', orientation: 'diagonal' }, 'orientation'], [{ type: 'exit', targets: ['box'], style: 'iris' }, '']] as const) {
+			const bad = await registry.callTool('add_commands', { shot: 'in', commands: [cmd] });
+			expect(bad.isError).toBe(true);
+			expect(JSON.stringify(bad.content)).toContain(field);
+		}
+		expect(controller.getState().scene.shots[0].run).toHaveLength(4);
+		await registry.callTool('add_commands', { shot: 'in', commands: [{ type: 'enter', targets: ['line'], style: 'wipe' }] });
+		const check = (await registry.callTool('check_animation', {})).structuredContent as any;
+		expect(JSON.stringify(check)).toContain('reveal-no-box');
+		expect(() => parseMotionScene(scene([{ id: 'one', run: [{ type: 'enter', targets: ['box'], style: 'iris', shape: 'star' } as never] }]))).toThrow(/"shape" must be one of circle, box/);
 	});
 });

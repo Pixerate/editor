@@ -7,7 +7,7 @@ import { compileMotionScene, indexMotionNodes } from './compile.js';
 import type { AnimationEditorController } from './controller.js';
 import { MOTION_EDIT_OPS, type MotionEdit, type MotionEditResult } from './edit.js';
 import { motionIssueLine, type MotionIssue } from './issues.js';
-import { MOTION_COMMAND_TYPES, MOTION_DIRECTIONS, MOTION_ENTER_STYLES, MOTION_EXIT_STYLES, motionFlairPrimitive, type MotionScene } from './types.js';
+import { MOTION_COMMAND_TYPES, MOTION_DIRECTIONS, MOTION_ENTER_STYLES, MOTION_EXIT_STYLES, MOTION_IRIS_SHAPES, MOTION_SPLIT_ORIENTATIONS, motionFlairPrimitive, type MotionScene } from './types.js';
 
 export interface AnimationEditorToolProviderOptions {
 	/** Provider id (unique per registry). Default `animation`. */
@@ -66,15 +66,18 @@ export const MOTION_COMMAND_SCHEMA: JsonSchema = {
 			style: {
 				type: 'string',
 				enum: [...MOTION_ENTER_STYLES],
-				description: 'fade (default), pop (scales up past full size and settles), grow (from nothing), slide, draw (outline drawn on, then the fill fades in), zoom (settles from larger) or rise (rises a short way, overshooting a touch).'
+				description:
+					'fade (default), pop (scales up past full size and settles), grow (from nothing), slide, draw (outline drawn on, then the fill fades in), zoom (settles from larger), rise (rises a short way, overshooting a touch), or a reveal through a clip over the target\'s box: wipe (behind a travelling edge), iris (from the centre outwards) or split (from a line through the middle). Reveals need a box with a width and a height (not a lone straight line).'
 			},
-			direction: { type: 'string', enum: [...MOTION_DIRECTIONS], description: 'For slide: direction of travel (default up).' },
+			direction: { type: 'string', enum: [...MOTION_DIRECTIONS], description: 'For slide: direction of travel (default up). For wipe: the way the edge travels (default right, revealing from the left).' },
 			distance: { type: 'number', description: 'For slide (default 40) and rise (default 20): document units.' },
-			scale: { type: 'number', minimum: 0, description: 'For pop (default 0.5) and zoom (default 1.6): the starting scale (1 = rest size).' }
+			scale: { type: 'number', minimum: 0, description: 'For pop (default 0.5) and zoom (default 1.6): the starting scale (1 = rest size).' },
+			shape: { type: 'string', enum: [...MOTION_IRIS_SHAPES], description: 'For iris: open through a circle (default; an ellipse on a box that is not square) or a box.' },
+			orientation: { type: 'string', enum: [...MOTION_SPLIT_ORIENTATIONS], description: 'For split: horizontal (default) opens up and down from a horizontal line through the middle; vertical opens left and right.' }
 		}),
 		command('exit', 'Takes targets out.', {
-			style: { type: 'string', enum: [...MOTION_EXIT_STYLES], description: 'fade (default), shrink, slide or undraw.' },
-			direction: { type: 'string', enum: [...MOTION_DIRECTIONS], description: 'For slide: direction of travel (default down).' },
+			style: { type: 'string', enum: [...MOTION_EXIT_STYLES], description: 'fade (default), shrink, slide, undraw, or wipe (hides behind a travelling edge through a clip over the target\'s box: a wipe in, reversed).' },
+			direction: { type: 'string', enum: [...MOTION_DIRECTIONS], description: 'For slide: direction of travel (default down). For wipe: the way the edge travels (default right, hiding from the left).' },
 			distance: { type: 'number', description: 'For slide: document units (default 40).' }
 		}),
 		command('draw', 'Draws strokes on (or off) to a fraction of their length.', { to: FRACTION('Fraction drawn at the end (default 1).'), from: FRACTION('Fraction drawn at the start (default: what is drawn now).') }),
@@ -90,7 +93,7 @@ export const MOTION_COMMAND_SCHEMA: JsonSchema = {
 		command('morph', 'Morphs each target into the shape (and paint) of another node, which usually stays hidden.', { into: { type: 'string', minLength: 1, description: 'Id of the node whose shape to take.' } }, ['into']),
 		command('follow', 'Moves targets along a path node, centre on the path.', {
 			path: { type: 'string', minLength: 1, description: 'Id of a path node (it can be hidden).' },
-			rotate: { type: 'boolean', description: 'Turn with the path (default false).' },
+			rotate: { type: 'boolean', description: 'Turn with the path (default false); moves and shakes made meanwhile turn with it too.' },
 			from: FRACTION('Where to start along the path (default 0).'),
 			to: FRACTION('Where to end along the path (default 1).')
 		}, ['path']),
