@@ -2,7 +2,8 @@ import type { AgentScript, AgentScriptContext } from "./agentScript";
 
 // One or two scripted requests per editor. Every step is a real tool call through the demo's
 // ToolRegistry (the same tools listed in "Agent tools for this editor"); later steps take ids and
-// positions from earlier results, as a model would.
+// positions from earlier results, as a model would. Text edits need no pointer target: the text
+// tools draw the agent's caret inline and type replacements out.
 
 /** The first match of a `find_text` result. */
 const firstMatch = (ctx: AgentScriptContext, key: string) => {
@@ -27,13 +28,11 @@ export const PROMPT_SCRIPTS: AgentScript[] = [
       {
         tool: "prompt__replace_range",
         args: (ctx) => ({ ...pick(firstMatch(ctx, "style")), text: "rain-soaked film-noir portrait" }),
-        target: { text: "photorealistic portrait" },
       },
       { say: "Adding lighting after the composition, leaving the variables alone.", tool: "prompt__find_text", args: { query: "composition" }, as: "composition" },
       {
         tool: "prompt__insert_text",
         args: (ctx) => ({ at: firstMatch(ctx, "composition").to, text: ", low-key lighting, neon signs reflected in wet asphalt" }),
-        target: { text: "composition" },
       },
       { say: "Checking the result.", tool: "prompt__get_text", args: { format: "text" } },
     ],
@@ -52,7 +51,6 @@ export const DOCUMENT_SCRIPTS: AgentScript[] = [
       {
         tool: "doc__replace_range",
         args: (ctx) => ({ ...pick(firstMatch(ctx, "intro")), text: "tables, charts, footnotes, review and Word import" }),
-        target: { text: "standard document rich text capabilities" },
       },
       { say: "Now a chart, placed just before the Charts paragraph.", tool: "doc__find_text", args: { query: "Charts are live document nodes" }, as: "charts" },
       {
