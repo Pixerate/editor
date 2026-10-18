@@ -21,6 +21,36 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [react|svelte/video-editor] A Clip Dragged to Another Track Loses Its Pointer Capture
+
+- **Issue / Symptom**: Dragging a clip into another track's row stopped following the pointer, and releasing it did nothing.
+- **Root Cause**: The clip block is rendered inside its track's row. Once the drag preview moves it to another row, the framework remounts the block under a new parent, so the element that called `setPointerCapture` is gone and its `pointermove` / `pointerup` handlers never fire again.
+- **Solution / Workaround**: Follow the drag with `pointermove`, `pointerup` and `pointercancel` listeners on `window`, added at pointer down and removed on release, instead of handlers on the clip element.
+
+### [react|svelte/video-editor] Testing `<VideoPreview>` in jsdom
+
+- **Issue / Symptom**: Preview tests log "Not implemented: HTMLCanvasElement.prototype.getContext" and "Not implemented: HTMLMediaElement's pause()" / "load()", and nothing can be asserted about drawing.
+- **Root Cause**: jsdom implements neither canvas drawing nor media playback.
+- **Solution / Workaround**: `VideoPreviewEngine` accepts a null context and injectable `createMedia` / `context`. In component tests, stub `HTMLCanvasElement.prototype.getContext` (null, or a recording Proxy to assert draws) and `HTMLMediaElement.prototype.pause` / `load`. In Svelte, don't put `role="img"` on the `<canvas>` (svelte-check treats canvas as interactive); an `aria-label` is enough.
+
+### [core/video-editor] ffmpeg `drawtext` Text Needs Escaping Twice
+
+- **Issue / Symptom**: A title with a colon, apostrophe or comma (`It's 10:30, live`) breaks the ffmpeg render with "No option name near…" or a truncated title, even though the args are passed without a shell.
+- **Root Cause**: A filtergraph is parsed at two levels: the graph splits on `,` `;` `[` `]` and quotes, then each filter splits its options on `:` and drawtext expands `%`. Each level consumes one layer of backslashes.
+- **Solution / Workaround**: Escape option-level characters (`\ ' : %`) first, then graph-level characters (`\ ' [ ] , ;`) — `ffmpegFilterValue` does both in that order. Do not add shell quoting on top when passing `args` to `spawn`; only `command` (the one-line string) is shell-quoted.
+
+### [core/video-editor] A Dip Must Not Use Handles, or Valid Cuts Are Refused
+
+- **Issue / Symptom**: Setting a dip-to-black between two clips trimmed to the very ends of their media was refused for lack of handles, and the preview played a moment of the next clip's audio before the cut.
+- **Root Cause**: Crossfades and wipes play both clips past the cut (half the transition each side), so they need media beyond the out and in points. A dip only shows the outgoing clip before the cut and the incoming one after it, under the colour, but the shared overhang code treated it like a crossfade.
+- **Solution / Workaround**: `videoClipOverhang`, `checkVideoProject` and the ffmpeg export treat a dip as needing no handles, and `videoFrameAt` skips the hidden half of each clip for pictures and sound. Any new transition type must decide which side of the cut each clip plays on and update all of these together.
+
+### [core/video-editor] Snapping a Moved Clip Must Ignore the Edge That Did Not Snap
+
+- **Issue / Symptom**: Dragging a clip so its end lands near another clip's start did not snap; the clip stayed exactly where the pointer left it.
+- **Root Cause**: `planVideoClipDrag` snaps both the head and the tail and keeps whichever moved the clip less. An edge with no snap point nearby "moves" it by 0, so it always won.
+- **Solution / Workaround**: Only edges that actually snapped (a non-zero shift) compete; with none, the raw position is kept.
+
 ### [svelte] A Local Named `state` Breaks `$state` Runes in the Same Component
 
 - **Issue / Symptom**: `svelte-check` reports "Cannot use 'state' as a store. 'state' needs to be an object with a subscribe method" on every `$state(...)` call in a component, although the runes work at runtime and in tests.

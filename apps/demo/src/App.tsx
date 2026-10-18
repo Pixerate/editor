@@ -12,6 +12,7 @@ const ImageEditorTab = lazy(() => import("./components/ImageEditorTab").then((m)
 const ParametersTab = lazy(() => import("./components/ParametersTab").then((m) => ({ default: m.ParametersTab })));
 const VectorTab = lazy(() => import("./components/VectorTab").then((m) => ({ default: m.VectorTab })));
 const AnimationTab = lazy(() => import("./components/AnimationTab").then((m) => ({ default: m.AnimationTab })));
+const VideoTab = lazy(() => import("./components/VideoTab").then((m) => ({ default: m.VideoTab })));
 const ChartTab = lazy(() => import("./components/ChartTab").then((m) => ({ default: m.ChartTab })));
 const ParityMatrixTab = lazy(() => import("./components/ParityMatrixTab").then((m) => ({ default: m.ParityMatrixTab })));
 import { AgentToolsPanel } from "./components/AgentToolsPanel";
@@ -26,9 +27,10 @@ import {
   PenTool,
   BarChart3,
   Clapperboard,
+  Film,
 } from "lucide-react";
 
-type TabId = "prompt" | "rich" | "sheet" | "canvas" | "vector" | "animation" | "chart" | "image" | "params" | "parity";
+type TabId = "prompt" | "rich" | "sheet" | "canvas" | "vector" | "animation" | "video" | "chart" | "image" | "params" | "parity";
 
 interface TabInfo {
   id: TabId;
@@ -60,6 +62,7 @@ const GROUPS: Array<{ label: string; tabs: TabInfo[] }> = [
       { id: "canvas", label: "Canvas", icon: Shapes, hint: "Diagrams, components, layout" },
       { id: "vector", label: "Vector", icon: PenTool, hint: "Paths, effects, gradients" },
       { id: "animation", label: "Animation", icon: Clapperboard, hint: "Shots over vector art, Flair export" },
+      { id: "video", label: "Video", icon: Film, hint: "Tracks, trims, transitions, ffmpeg" },
       { id: "image", label: "Image", icon: ImageIcon, hint: "Adjustments, layers, masks" },
     ],
   },
@@ -217,6 +220,7 @@ export default function App() {
           {activeTab === "params" && <ParametersTab />}
           {activeTab === "vector" && <VectorTab />}
           {activeTab === "animation" && <AnimationTab />}
+          {activeTab === "video" && <VideoTab />}
           {activeTab === "chart" && <ChartTab />}
           {activeTab === "parity" && <ParityMatrixTab />}
         </Suspense>
