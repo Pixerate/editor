@@ -1,4 +1,5 @@
 import { mixColorsOklab } from '../animation/color.js';
+import { matchMotionNodes } from './match.js';
 import { behaviorProgress, motionSeedFromId, type MotionBehavior } from '../animation/behavior.js';
 import { evaluateEasing, resolveEasing, springSettleMs, type AnimationEasing } from '../animation/easing.js';
 import { bezierPathLength } from '../canvas/pathops/bezier.js';
@@ -20,13 +21,16 @@ import {
 	MOTION_DEFAULT_HOLD,
 	MOTION_DRAW_MS_PER_UNIT,
 	MOTION_DRAW_RANGE,
+	type MotionBeatGrid,
 	type MotionCamera,
 	type MotionCommand,
+	type MotionCue,
 	type MotionDirection,
 	type MotionIrisShape,
 	type MotionRect,
 	type MotionSplitOrientation,
-	type MotionScene
+	type MotionScene,
+	type MotionShot
 } from './types.js';
 
 /**
@@ -94,6 +98,12 @@ export interface MotionSegment {
 	steps?: number;
 	/** Numbers change by a steady factor (`from·(to/from)^u`); a camera zooms at a steady rate. */
 	geometric?: boolean;
+	/**
+	 * `add`: the segment is a layer over the node's pose rather than a change to it. It lives on
+	 * its own track (`motionAddTrackKey`), runs from 0 (offsets, turns) or 1 (scales), and what
+	 * it adds stays once it ends, on top of whatever the pose does.
+	 */
+	blend?: 'add';
 	/** For `follow`: the path node id, and whether to turn with it. */
 	path?: string;
 	rotate?: boolean;
@@ -109,6 +119,10 @@ export interface MotionShotTiming {
 	/** When the last command ends (the hold follows). */
 	commandsEnd: number;
 	end: number;
+	/** The time the shot is cued to start (`at`), when it has a cue that resolves. */
+	cue?: number;
+	/** How late the shot starts after its cue (ms), when the shot before ran past it. */
+	missedBy?: number;
 }
 
 export interface MotionCommandTiming {
@@ -372,6 +386,29 @@ export function trackValue(track: readonly MotionSegment[] | undefined, time: nu
 
 export const motionTrackKey = (node: string, property: MotionProperty) => `${node}\u0000${property}`;
 
+/** The track of a node property's additive layers (segments with `blend: 'add'`). */
+export const motionAddTrackKey = (node: string, property: MotionProperty) => `${node}\u0000${property}\u0000add`;
+
+/** Properties that take additive layers: offsets and turns add, scales multiply. */
+export const MOTION_ADDITIVE_PROPERTIES: readonly MotionProperty[] = ['x', 'y', 'rotation', 'scaleX', 'scaleY'];
+
+/**
+ * A property's value with its additive layers on top of `base` (its pose): every layer that has
+ * started adds its value (offsets, turns) or multiplies by it (scales). `raw` ignores behaviours.
+ */
+export function withMotionLayers(timeline: Pick<MotionTimeline, 'tracks'>, node: string, property: MotionProperty, base: number, time: number, raw = false): number {
+	const layers = timeline.tracks.get(motionAddTrackKey(node, property));
+	if (!layers) return base;
+	const scale = property === 'scaleX' || property === 'scaleY';
+	let v = base;
+	for (const layer of layers) {
+		if (layer.start > time) continue;
+		const x = Number(segmentValue(layer, time, raw));
+		if (Number.isFinite(x)) v = scale ? v * x : v + x;
+	}
+	return v;
+}
+
 /** Grows a rectangle to the artwork's aspect ratio (about its centre). */
 export function fitMotionRect(rect: MotionRect, aspect: number): MotionRect {
 	const cx = rect.x + rect.width / 2;
@@ -408,6 +445,33 @@ export function motionPathLength(node: VectorNode, parentWorld: AffineMatrix = I
 		}
 	}
 	return longest;
+}
+
+/** How much a shot's `speed` stretches its time (1 / speed; 1 when unset or not above 0). */
+export function motionShotTimeScale(shot: MotionShot): number {
+	return typeof shot.speed === 'number' && shot.speed > 0 && Number.isFinite(shot.speed) ? 1 / shot.speed : 1;
+}
+
+// Beat grid adapted from soundcraft-main/crates/time/src/{tempo,grid}.rs (MIT OR Apache-2.0, © ArtCraft Team and contributors).
+/** When beat `beat` falls on a grid, ms: `offset + beat · 60000 / bpm`. */
+export function motionBeatTime(grid: MotionBeatGrid, beat: number): number {
+	return (grid.offset ?? 0) + (beat * 60000) / grid.bpm;
+}
+
+/** The beat (fractional) at `ms` on a grid, and its bar and beat in the bar (both from 1). */
+export function motionBeatAt(grid: MotionBeatGrid, ms: number): { beat: number; bar: number; beatInBar: number } {
+	const beat = ((ms - (grid.offset ?? 0)) * grid.bpm) / 60000;
+	const meter = Math.max(1, Math.round(grid.meter ?? 4));
+	const whole = Math.floor(beat + 1e-9);
+	return { beat, bar: Math.floor(whole / meter) + 1, beatInBar: (((whole % meter) + meter) % meter) + 1 };
+}
+
+/** The time a cue names, ms, or undefined when it names a beat with no grid or a word the narration lacks. */
+export function motionCueTime(scene: Pick<MotionScene, 'beat' | 'narration'>, cue: MotionCue): number | undefined {
+	if (typeof cue.ms === 'number') return Math.max(0, cue.ms);
+	if (typeof cue.beat === 'number') return scene.beat && scene.beat.bpm > 0 ? Math.max(0, motionBeatTime(scene.beat, cue.beat)) : undefined;
+	if (typeof cue.word === 'number') return scene.narration?.words[cue.word]?.start;
+	return undefined;
 }
 
 /** How many times a command plays (1 for `enter`, `exit` and `wait`, which do not repeat). */
@@ -465,12 +529,21 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 	const cameraMoves: { shot: string; start: number; end: number; to: MotionRect; ease: AnimationEasing; geometric: boolean }[] = [];
 	let t = 0;
 	scene.shots.forEach((shot, index) => {
+		// A cue holds the shot before until it comes (or, for the first shot, waits from 0).
+		const cue = shot.at ? motionCueTime(scene, shot.at) : undefined;
+		if (cue !== undefined && cue > t) {
+			if (shots.length) shots[shots.length - 1].end = cue;
+			t = cue;
+		}
+		const missedBy = cue !== undefined && t - cue > 0.5 ? t - cue : undefined;
 		const start = t;
 		let cursor = start;
+		// A shot's speed scales all of its time: camera move, delays, durations, staggers and hold.
+		const f = motionShotTimeScale(shot);
 		if (shot.camera) {
 			const rect = resolveMotionCamera(shot.camera, scene);
 			if (rect && rect.width > 0 && rect.height > 0) {
-				const ms = index === 0 ? 0 : (shot.camera.ms ?? MOTION_CAMERA_MS);
+				const ms = index === 0 ? 0 : (shot.camera.ms ?? MOTION_CAMERA_MS) * f;
 				cameraMoves.push({ shot: shot.id, start, end: start + ms, to: rect, ease: shot.camera.ease ?? MOTION_EASE_IN_OUT, geometric: shot.camera.geometric === true });
 				cursor = start + ms;
 			}
@@ -480,17 +553,17 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 		let prevStart = cursor;
 		shot.run.forEach((command, i) => {
 			const base = command.with === 'previous' && i > 0 ? prevStart : runEnd;
-			const begin = base + (command.type === 'wait' ? 0 : (command.delay ?? 0));
+			const begin = base + (command.type === 'wait' ? 0 : (command.delay ?? 0) * f);
 			const targets = command.type === 'wait' ? [] : command.targets;
-			const durations = command.type === 'wait' ? [command.duration] : targets.map((id) => motionCommandDuration(command, scene, id));
-			const stagger = command.type === 'wait' ? 0 : (command.stagger ?? 0);
+			const durations = command.type === 'wait' ? [command.duration * f] : targets.map((id) => motionCommandDuration(command, scene, id) * f);
+			const stagger = command.type === 'wait' ? 0 : (command.stagger ?? 0) * f;
 			const end = durations.reduce((m, d, k) => Math.max(m, begin + k * stagger + d), begin);
 			commands.push({ shot: shot.id, shotIndex: index, command: i, type: command.type, start: begin, end, duration: durations[0] ?? 0 });
 			prevStart = begin;
 			runEnd = Math.max(runEnd, end);
 		});
-		const end = runEnd + (shot.hold ?? MOTION_DEFAULT_HOLD);
-		shots.push({ id: shot.id, index, ...(shot.label ? { label: shot.label } : {}), start, commandsStart, commandsEnd: runEnd, end });
+		const end = runEnd + (shot.hold ?? MOTION_DEFAULT_HOLD) * f;
+		shots.push({ id: shot.id, index, ...(shot.label ? { label: shot.label } : {}), start, commandsStart, commandsEnd: runEnd, end, ...(cue !== undefined ? { cue } : {}), ...(missedBy !== undefined ? { missedBy } : {}) });
 		t = end;
 	});
 
@@ -502,7 +575,7 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 		return v ?? motionRestValue(nodes.get(node), property, artwork);
 	};
 	const push = (segment: MotionSegment) => {
-		const key = motionTrackKey(segment.node, segment.property);
+		const key = segment.blend === 'add' ? motionAddTrackKey(segment.node, segment.property) : motionTrackKey(segment.node, segment.property);
 		let track = tracks.get(key);
 		if (!track) tracks.set(key, (track = []));
 		track.push(segment);
@@ -526,8 +599,9 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 		command.targets.forEach((target, k) => {
 			const entry = nodes.get(target);
 			if (!entry) return;
-			const start = timing.start + k * (command.stagger ?? 0);
-			const cycle = motionCycleDuration(command, scene, target);
+			const f = motionShotTimeScale(shot);
+			const start = timing.start + k * (command.stagger ?? 0) * f;
+			const cycle = motionCycleDuration(command, scene, target) * f;
 			jobs.push({ start, order: order++, run: () => compileRepeated(command, target, entry, start, cycle, timing) });
 		});
 	}
@@ -657,18 +731,26 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 					dx = target.x - (entry.center.x + num('x'));
 					dy = target.y - (entry.center.y + num('y'));
 				}
-				seg('x', num('x') + dx, e);
-				seg('y', num('y') + dy, e);
+				if (command.blend === 'add') {
+					seg('x', dx, e, start, end, { from: 0, blend: 'add' });
+					seg('y', dy, e, start, end, { from: 0, blend: 'add' });
+				} else {
+					seg('x', num('x') + dx, e);
+					seg('y', num('y') + dy, e);
+				}
 				break;
 			}
-			case 'rotate':
-				seg('rotation', command.to ?? num('rotation') + (command.by ?? 0), ease ?? MOTION_EASE_IN_OUT);
+			case 'rotate': {
+				const e = ease ?? MOTION_EASE_IN_OUT;
+				if (command.blend === 'add') seg('rotation', command.to !== undefined ? command.to - num('rotation') : (command.by ?? 0), e, start, end, { from: 0, blend: 'add' });
+				else seg('rotation', command.to ?? num('rotation') + (command.by ?? 0), e);
 				break;
+			}
 			case 'scale': {
 				const to = typeof command.to === 'number' ? { x: command.to, y: command.to } : command.to;
-				const geometric = command.geometric ? { geometric: true } : {};
-				seg('scaleX', to.x, ease ?? MOTION_EASE_IN_OUT, start, end, geometric);
-				seg('scaleY', to.y, ease ?? MOTION_EASE_IN_OUT, start, end, geometric);
+				const extra = { ...(command.geometric ? { geometric: true } : {}), ...(command.blend === 'add' ? { from: 1, blend: 'add' as const } : {}) };
+				seg('scaleX', to.x, ease ?? MOTION_EASE_IN_OUT, start, end, extra);
+				seg('scaleY', to.y, ease ?? MOTION_EASE_IN_OUT, start, end, extra);
 				break;
 			}
 			case 'fade':
@@ -682,34 +764,47 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 			case 'morph':
 				seg('shape', command.into, ease ?? MOTION_EASE_IN_OUT);
 				break;
+			case 'match': {
+				// Smart Animate: each part morphs into its partner in `into`; parts with no partner fade out.
+				const into = nodes.get(command.into);
+				if (!into || command.into === node) break;
+				const match = matchMotionNodes(entry.node, into.node);
+				const e = ease ?? MOTION_EASE_IN_OUT;
+				for (const [a, b] of match.pairs) push({ node: a, property: 'shape', start, end, from: valueAt(a, 'shape', start), to: b, ease: e, ...where });
+				for (const a of match.unpairedFrom) push({ node: a, property: 'opacity', start, end, from: valueAt(a, 'opacity', start), to: 0, ease: e, ...where });
+				break;
+			}
 			case 'follow':
 				seg('follow', command.to ?? 1, ease ?? MOTION_EASE_IN_OUT, start, end, { from: command.from ?? 0, path: command.path, rotate: command.rotate ?? false });
 				break;
 			// Emphasis: a change toward a peak that a behaviour swings round (as Flair's primitives do).
-			case 'pulse': {
-				const behavior: MotionBehavior = { type: 'pulse', count: command.count ?? 1 };
-				const k = 1 + (command.amount ?? 0.15);
-				seg('scaleX', num('scaleX') * k, ease ?? 'linear', start, end, { behavior });
-				seg('scaleY', num('scaleY') * k, ease ?? 'linear', start, end, { behavior });
-				break;
-			}
-			case 'shake': {
-				const p = command.axis === 'vertical' ? 'y' : 'x';
-				seg(p, num(p) + (command.amount ?? 8), ease ?? 'linear', start, end, { behavior: { type: 'oscillate', count: command.count ?? 3, decay: 1 } });
-				break;
-			}
+			case 'pulse':
+			case 'shake':
 			case 'teeter':
-				seg('rotation', num('rotation') + (command.angle ?? 8), ease ?? 'linear', start, end, { behavior: { type: 'oscillate', count: command.count ?? 3, decay: 1 } });
-				break;
 			case 'wave':
-				seg('y', num('y') - (command.amount ?? 6), ease ?? 'linear', start, end, { behavior: { type: 'oscillate', count: command.count ?? 2 } });
-				break;
 			case 'wiggle': {
-				const behavior: MotionBehavior = { type: 'wriggle', frequency: command.frequency ?? 3, octaves: command.octaves ?? 2, seed: command.seed || motionSeedFromId(node) };
-				const amount = command.amount ?? 6;
-				seg('x', num('x') + amount, ease ?? 'linear', start, end, { behavior, index: 0 });
-				seg('y', num('y') + amount, ease ?? 'linear', start, end, { behavior, index: 1 });
-				if (command.rotate) seg('rotation', num('rotation') + command.rotate, ease ?? 'linear', start, end, { behavior, index: 2 });
+				// Emphasis is a layer over the pose by default (blend "add"), so it rides on a move or turn under way.
+				const add = (command.blend ?? 'add') === 'add';
+				// A change of `by` (offsets, turns) or by a factor (scales), as a layer or on the pose.
+				const swing = (p: MotionProperty, by: number, extra: Partial<MotionSegment>) => {
+					const scale = p === 'scaleX' || p === 'scaleY';
+					if (add) seg(p, by, ease ?? 'linear', start, end, { from: scale ? 1 : 0, blend: 'add', ...extra });
+					else seg(p, scale ? num(p) * by : num(p) + by, ease ?? 'linear', start, end, extra);
+				};
+				if (command.type === 'pulse') {
+					const behavior: MotionBehavior = { type: 'pulse', count: command.count ?? 1 };
+					swing('scaleX', 1 + (command.amount ?? 0.15), { behavior });
+					swing('scaleY', 1 + (command.amount ?? 0.15), { behavior });
+				} else if (command.type === 'shake') swing(command.axis === 'vertical' ? 'y' : 'x', command.amount ?? 8, { behavior: { type: 'oscillate', count: command.count ?? 3, decay: 1 } });
+				else if (command.type === 'teeter') swing('rotation', command.angle ?? 8, { behavior: { type: 'oscillate', count: command.count ?? 3, decay: 1 } });
+				else if (command.type === 'wave') swing('y', -(command.amount ?? 6), { behavior: { type: 'oscillate', count: command.count ?? 2 } });
+				else {
+					const behavior: MotionBehavior = { type: 'wriggle', frequency: command.frequency ?? 3, octaves: command.octaves ?? 2, seed: command.seed || motionSeedFromId(node) };
+					const amount = command.amount ?? 6;
+					swing('x', amount, { behavior, index: 0 });
+					swing('y', amount, { behavior, index: 1 });
+					if (command.rotate) swing('rotation', command.rotate, { behavior, index: 2 });
+				}
 				break;
 			}
 			case 'color-pulse':

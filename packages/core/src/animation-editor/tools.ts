@@ -3,13 +3,15 @@ import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import type { JsonSchema } from '../tools/schema.js';
 import { parseVectorSvg } from '../vector/svg.js';
 import type { VectorNode } from '../vector/types.js';
-import { compileMotionScene, indexMotionNodes } from './compile.js';
+import { compileMotionScene, indexMotionNodes, motionBeatAt, motionBeatTime } from './compile.js';
+import { fitMotionScene } from './fit.js';
+import { toLottie } from './lottie.js';
 import { motionPath } from './onion.js';
 import { fromFlairSvgMotion, fromFlairVectorEffect, type FlairImportResult } from './flair-import.js';
 import type { AnimationEditorController } from './controller.js';
 import { MOTION_EDIT_OPS, type MotionEdit, type MotionEditResult } from './edit.js';
 import { motionIssueLine, namedWithSuggestion, type MotionIssue } from './issues.js';
-import { MOTION_COMMAND_TYPES, MOTION_DIRECTIONS, MOTION_ENTER_STYLES, MOTION_EXIT_STYLES, MOTION_IRIS_SHAPES, MOTION_REPEAT_MODES, MOTION_SPLIT_ORIENTATIONS, motionFlairPrimitive, type MotionScene } from './types.js';
+import { MOTION_COMMAND_TYPES, MOTION_DIRECTIONS, MOTION_ENTER_STYLES, MOTION_EXIT_STYLES, MOTION_IRIS_SHAPES, MOTION_REPEAT_MODES, MOTION_BLENDS, MOTION_SPLIT_ORIENTATIONS, motionFlairPrimitive, type MotionScene } from './types.js';
 
 export interface AnimationEditorToolProviderOptions {
 	/** Provider id (unique per registry). Default `animation`. */
@@ -79,6 +81,11 @@ const BASE: Record<string, JsonSchema> = {
 	repeatMode: { type: 'string', enum: [...MOTION_REPEAT_MODES], description: 'loop (default) restarts each cycle, mirror plays every other one backwards, offset carries on from where the last ended (rotate by 90 with repeat 4 makes a full turn).' },
 	steps: { type: 'number', exclusiveMinimum: 0, maximum: 120, description: 'Stepped time: hold on a grid of this many frames per second (12 = "on twos"). Default: the scene\'s steps, else smooth.' }
 };
+const BLEND = (fallback: 'replace' | 'add'): JsonSchema => ({
+	type: 'string',
+	enum: [...MOTION_BLENDS],
+	description: `"add" makes it a layer over the pose that stacks with other changes (a shake on a slide); "replace" makes it a change the next one takes over from (default ${fallback}).`
+});
 const command = (type: string, description: string, extra: Record<string, JsonSchema> = {}, required: string[] = []): JsonSchema =>
 	object({ type: { const: type, description }, ...BASE, ...extra }, ['type', 'targets', ...required], description);
 
@@ -105,15 +112,16 @@ export const MOTION_COMMAND_SCHEMA: JsonSchema = {
 			distance: { type: 'number', description: 'For slide: document units (default 40).' }
 		}),
 		command('draw', 'Draws strokes on (or off) to a fraction of their length.', { to: FRACTION('Fraction drawn at the end (default 1).'), from: FRACTION('Fraction drawn at the start (default: what is drawn now).') }),
-		command('move', 'Moves targets by an offset or so their centre lands on a point.', { by: POINT('Offset in document units.'), to: POINT('Point (document coordinates) for the centre.') }),
-		command('rotate', 'Turns targets about their centre (degrees, clockwise).', { by: { type: 'number', description: 'Degrees to turn by.' }, to: { type: 'number', description: 'Angle to turn to, in degrees from rest.' } }),
-		command('scale', 'Scales targets about their centre (1 = rest size).', { to: { description: 'A factor, or { x, y } factors.', anyOf: [{ type: 'number' }, POINT('Factors per axis.')] }, geometric: { type: 'boolean', description: 'Grow by a steady factor, which reads as an even zoom (default false).' } }, ['to']),
+		command('move', 'Moves targets by an offset or so their centre lands on a point.', { blend: BLEND('replace'), by: POINT('Offset in document units.'), to: POINT('Point (document coordinates) for the centre.') }),
+		command('rotate', 'Turns targets about their centre (degrees, clockwise).', { blend: BLEND('replace'), by: { type: 'number', description: 'Degrees to turn by.' }, to: { type: 'number', description: 'Angle to turn to, in degrees from rest.' } }),
+		command('scale', 'Scales targets about their centre (1 = rest size).', { blend: BLEND('replace'), to: { description: 'A factor, or { x, y } factors.', anyOf: [{ type: 'number' }, POINT('Factors per axis.')] }, geometric: { type: 'boolean', description: 'Grow by a steady factor, which reads as an even zoom (default false).' } }, ['to']),
 		command('fade', 'Changes opacity.', { to: FRACTION('Opacity at the end (0–1).') }, ['to']),
 		command('style', 'Blends solid fill / stroke colours (in OKLab) and stroke width. On a group it changes every path in it.', {
 			fill: { type: 'string', description: 'CSS colour (hex, rgb(), rgba()).' },
 			stroke: { type: 'string', description: 'CSS colour (hex, rgb(), rgba()).' },
 			strokeWidth: { type: 'number', minimum: 0, description: 'Document units.' }
 		}),
+		command('match', 'Smart Animate: tweens a group into another group (usually hidden), part by part. Parts pair by name, then by id with the group ids taken out (card-a-title ↔ card-b-title), then by kind in order; each takes its partner\'s shape, paint and place. Unpaired parts fade out; parts of "into" with no partner do not appear (check_animation lists them).', { into: { type: 'string', minLength: 1, description: 'Id of the group to become.' } }, ['into']),
 		command('morph', 'Morphs each target into the shape (and paint) of another node, which usually stays hidden.', { into: { type: 'string', minLength: 1, description: 'Id of the node whose shape to take.' } }, ['into']),
 		command('follow', 'Moves targets along a path node, centre on the path.', {
 			path: { type: 'string', minLength: 1, description: 'Id of a path node (it can be hidden).' },
@@ -121,15 +129,15 @@ export const MOTION_COMMAND_SCHEMA: JsonSchema = {
 			from: FRACTION('Where to start along the path (default 0).'),
 			to: FRACTION('Where to end along the path (default 1).')
 		}, ['path']),
-		command('pulse', 'Scales up and back to draw the eye.', { amount: { type: 'number', description: 'Extra scale at the peak (default 0.15).' }, count: { type: 'integer', minimum: 1, description: 'Pulses (default 1).' } }),
-		command('shake', 'Shakes side to side (or up and down), settling.', {
+		command('pulse', 'Scales up and back to draw the eye.', { blend: BLEND('add'), amount: { type: 'number', description: 'Extra scale at the peak (default 0.15).' }, count: { type: 'integer', minimum: 1, description: 'Pulses (default 1).' } }),
+		command('shake', 'Shakes side to side (or up and down), settling.', { blend: BLEND('add'),
 			amount: { type: 'number', description: 'Document units (default 8).' },
 			count: { type: 'integer', minimum: 1, description: 'Shakes (default 3).' },
 			axis: { type: 'string', enum: ['horizontal', 'vertical'], description: 'Default horizontal.' }
 		}),
-		command('teeter', 'Rocks about the centre either way, settling.', { angle: { type: 'number', description: 'Degrees either way (default 8).' }, count: { type: 'integer', minimum: 1, description: 'Rocks (default 3).' } }),
-		command('wave', 'Bobs up and down without settling, like something floating (default 1000 ms).', { amount: { type: 'number', description: 'Height in document units (default 6).' }, count: { type: 'integer', minimum: 1, description: 'Bobs (default 2).' } }),
-		command('wiggle', 'Wanders about its place as smooth seeded noise, easing out of and back to rest (default 1500 ms). The same seed always wanders the same way.', {
+		command('teeter', 'Rocks about the centre either way, settling.', { blend: BLEND('add'), angle: { type: 'number', description: 'Degrees either way (default 8).' }, count: { type: 'integer', minimum: 1, description: 'Rocks (default 3).' } }),
+		command('wave', 'Bobs up and down without settling, like something floating (default 1000 ms).', { blend: BLEND('add'), amount: { type: 'number', description: 'Height in document units (default 6).' }, count: { type: 'integer', minimum: 1, description: 'Bobs (default 2).' } }),
+		command('wiggle', 'Wanders about its place as smooth seeded noise, easing out of and back to rest (default 1500 ms). The same seed always wanders the same way.', { blend: BLEND('add'),
 			amount: { type: 'number', description: 'Up to about this far, in document units (default 6).' },
 			frequency: { type: 'number', exclusiveMinimum: 0, description: 'Wanders per second, in Hz (default 3).' },
 			octaves: { type: 'integer', minimum: 1, maximum: 8, description: 'Layers of finer detail (default 2).' },
@@ -167,7 +175,13 @@ const SHOT_FIELDS: Record<string, JsonSchema> = {
 	label: { type: 'string', description: 'What happens, in a few words.' },
 	camera: CAMERA,
 	run: { type: 'array', items: MOTION_COMMAND_SCHEMA, description: 'Commands, in order.' },
-	hold: MS('Hold after the commands (default 600)')
+	hold: MS('Hold after the commands (default 600)'),
+	speed: { type: 'number', minimum: 0.05, maximum: 20, description: 'Play the whole shot this many times as fast (default 1; 0.5 is half speed). fit_animation sets it.' },
+	at: object(
+		{ beat: { type: 'number', minimum: 0, description: 'Beat number on the scene\'s beat grid, from 0 (2.5 is the "and" of beat 3).' }, word: { type: 'integer', minimum: 0, description: 'Index of a narration word, from 0.' }, ms: { type: 'number', minimum: 0, description: 'A time in ms.' } },
+		[],
+		'Start this shot on a cue (give one of beat, word or ms); the shot before holds until then. get_timing_grid lists beats and words.'
+	)
 };
 const SHOT: JsonSchema = object({ id: { type: 'string', pattern: '^[A-Za-z0-9_][\\w.-]*$', description: 'Unique shot id, e.g. "intro".' }, ...SHOT_FIELDS }, ['id', 'run'], 'A shot.');
 const CONTROL: JsonSchema = object(
@@ -188,6 +202,20 @@ const SETTINGS: Record<string, JsonSchema> = {
 	loop: { type: 'string', enum: ['none', 'loop', 'ping-pong'], description: 'Playback past the end (default none).' },
 	fps: { type: 'number', minimum: 1, maximum: 120, description: 'Sampling rate for exports (default 30).' },
 	steps: { anyOf: [{ type: 'number', exclusiveMinimum: 0, maximum: 120 }, { type: 'null' }], description: 'Stepped time for every command without its own: changes hold on a grid of this many frames per second (12 = "on twos" at 24 fps) for a hand-drawn look; null makes it smooth again (default).' },
+	beat: {
+		anyOf: [
+			object({ bpm: { type: 'number', minimum: 1, maximum: 1000, description: 'Beats a minute.' }, offset: { type: 'number', description: 'When beat 0 falls, ms (default 0).' }, meter: { type: 'integer', minimum: 1, description: 'Beats a bar (default 4).' } }, ['bpm']),
+			{ type: 'null' }
+		],
+		description: 'A beat grid (music or a voiceover\'s rhythm) that shots can be cued to with "at": { "beat": n }; null clears.'
+	},
+	narration: {
+		anyOf: [
+			object({ words: { type: 'array', items: object({ text: { type: 'string', description: 'The word.' }, start: { type: 'number', minimum: 0, description: 'When it is said, ms.' }, end: { type: 'number', minimum: 0, description: 'When it ends, ms.' } }, ['text', 'start']), description: 'Words in time order, from a TTS or speech-to-text word timing.' } }, ['words']),
+			{ type: 'null' }
+		],
+		description: 'A voiceover\'s word timings that shots can be cued to with "at": { "word": index }; null clears.'
+	},
 	target: { anyOf: [{ type: 'array', items: { type: 'number', minimum: 0 }, minItems: 2, maxItems: 2 }, { type: 'null' }], description: 'Wanted length [min, max] in seconds; null clears.' }
 };
 
@@ -197,7 +225,7 @@ const EDIT_OP: JsonSchema = {
 	oneOf: [
 		object({ op: { const: 'set_settings', description: 'Like set_animation_settings.' }, ...SETTINGS }, ['op']),
 		object({ op: { const: 'insert_shots', description: 'Like insert_shots.' }, shots: { type: 'array', items: SHOT, minItems: 1, description: 'Shots to add.' }, at: { type: 'integer', minimum: 0, description: 'Position (default: the end).' } }, ['op', 'shots']),
-		object({ op: { const: 'update_shot', description: 'Like update_shot.' }, shot: SHOT_ID, set: object({ id: SHOT.properties!.id, ...SHOT_FIELDS }, [], 'Fields to replace.'), remove: { type: 'array', items: { type: 'string', enum: ['label', 'camera', 'hold'] }, description: 'Fields to clear.' } }, ['op', 'shot']),
+		object({ op: { const: 'update_shot', description: 'Like update_shot.' }, shot: SHOT_ID, set: object({ id: SHOT.properties!.id, ...SHOT_FIELDS }, [], 'Fields to replace.'), remove: { type: 'array', items: { type: 'string', enum: ['label', 'camera', 'hold', 'speed', 'at'] }, description: 'Fields to clear.' } }, ['op', 'shot']),
 		object({ op: { const: 'delete_shots', description: 'Like delete_shots.' }, shots: { type: 'array', items: SHOT_ID, minItems: 1, description: 'Shot ids.' } }, ['op', 'shots']),
 		object({ op: { const: 'move_shot', description: 'Like move_shot.' }, shot: SHOT_ID, to: { type: 'integer', minimum: 0, description: 'New position (0 = first).' } }, ['op', 'shot', 'to']),
 		object({ op: { const: 'add_commands', description: 'Like add_commands.' }, shot: SHOT_ID, commands: { type: 'array', items: MOTION_COMMAND_SCHEMA, minItems: 1, description: 'Commands to add.' }, at: { type: 'integer', minimum: 0, description: 'Index in the shot\'s run (default: the end).' } }, ['op', 'shot', 'commands']),
@@ -248,6 +276,8 @@ export function describeMotionShots(scene: MotionScene) {
 			end: t.end,
 			...(shot.camera ? { camera: shot.camera } : {}),
 			...(shot.hold !== undefined ? { hold: shot.hold } : {}),
+			...(t.cue !== undefined ? { cue: Math.round(t.cue) } : {}),
+			...(t.missedBy !== undefined ? { missedBy: Math.round(t.missedBy) } : {}),
 			commands: shot.run.map((c, index) => {
 				const ct = timeline.commands.find((x) => x.shotIndex === i && x.command === index)!;
 				const primitive = motionFlairPrimitive(c);
@@ -412,6 +442,47 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 	const BEHAVIORS_DESCRIPTION =
 		'Write pulses, shakes, teeters, waves, wiggles and colour pulses as one change with a Flair behavior, so they play exactly (default true; needs Flair 0.38 or later). False samples them into linear steps for older Flair.';
 
+	const getTimingGrid: AgentTool = {
+		name: 'get_timing_grid',
+		title: 'Read the beat grid and narration',
+		description:
+			'Returns the beats (number, time in ms, bar and beat in the bar) and narration words (index, text, start, end) between two times, to cue shots to with "at". Also says which shot plays at each. Without a beat grid or narration, that part is empty and says how to add one.',
+		inputSchema: object({
+			from: { type: 'number', minimum: 0, description: 'From this time, ms (default 0).' },
+			to: { type: 'number', minimum: 0, description: 'Up to this time, ms (default: the end of the animation, or of the narration if later).' },
+			limit: { type: 'integer', minimum: 1, maximum: 1000, description: 'At most this many beats and words each (default 200).' }
+		}),
+		annotations: { title: 'Read the beat grid and narration', ...READ },
+		handler: ({ from = 0, to, limit = 200 }) => {
+			const s = scene();
+			const timeline = compileMotionScene(s);
+			const words = s.narration?.words ?? [];
+			const end = to ?? Math.max(timeline.duration, words.length ? (words[words.length - 1].end ?? words[words.length - 1].start) : 0);
+			const shotAt = (ms: number) => timeline.shots.find((x) => ms >= x.start && ms < x.end)?.id;
+			const beats: { beat: number; ms: number; bar: number; beatInBar: number; shot?: string }[] = [];
+			if (s.beat && s.beat.bpm > 0) {
+				const first = Math.max(0, Math.ceil(motionBeatAt(s.beat, from).beat - 1e-9));
+				for (let b = first; beats.length < limit; b++) {
+					const ms = motionBeatTime(s.beat, b);
+					if (ms > end) break;
+					const at = motionBeatAt(s.beat, ms);
+					const shot = shotAt(ms);
+					beats.push({ beat: b, ms: Math.round(ms), bar: at.bar, beatInBar: at.beatInBar, ...(shot ? { shot } : {}) });
+				}
+			}
+			const listed = words
+				.map((w, index) => ({ index, text: w.text, start: w.start, ...(w.end !== undefined ? { end: w.end } : {}), ...(shotAt(w.start) ? { shot: shotAt(w.start) } : {}) }))
+				.filter((w) => w.start >= from && w.start <= end)
+				.slice(0, limit);
+			return {
+				from,
+				to: Math.round(end),
+				...(s.beat ? { grid: s.beat, beats } : { beats: [], hint: 'No beat grid: set_animation_settings with { "beat": { "bpm": 120 } }.' }),
+				...(words.length ? { words: listed } : { words: [], narrationHint: 'No narration: set_animation_settings with { "narration": { "words": [{ "text", "start" }, …] } }.' })
+			};
+		}
+	};
+
 	const getMotionPath: AgentTool = {
 		name: 'get_motion_path',
 		title: 'Read where a node travels',
@@ -445,6 +516,16 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 		}),
 		annotations: { title: 'Export as Flair vector motion', ...READ },
 		handler: ({ fps, curves, behaviors, flair }) => controller.toFlairMotion({ ...(fps ? { fps } : {}), ...(curves === undefined ? {} : { curves }), ...(behaviors === undefined ? {} : { behaviors }), ...(flair ? { flair } : {}) })
+	};
+
+	const exportLottie: AgentTool = {
+		name: 'export_lottie',
+		title: 'Export as Lottie',
+		description:
+			'Returns the animation as Lottie (Bodymovin JSON, v5) for lottie-web and the mobile Lottie players: one shape layer whose groups mirror the artwork, a marker per shot, eased changes as keyframes with bezier easing and the rest sampled. Also returns how many keyframes were sampled and notes on anything not carried over (gradients, dashes, reveal clips, morphs that change point counts).',
+		inputSchema: object({ fps: { type: 'number', minimum: 1, maximum: 120, description: 'Frame rate (default: the scene\'s fps, else 30).' } }),
+		annotations: { title: 'Export as Lottie', ...READ },
+		handler: ({ fps }) => toLottie(scene(), fps ? { fps } : {})
 	};
 
 	const exportFlairEffect: AgentTool = {
@@ -514,6 +595,29 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 		}
 	};
 
+	const fitAnimation: AgentTool = {
+		name: 'fit_animation',
+		title: 'Fit the animation to a length',
+		description:
+			'Makes the animation last a given time by setting its shots\' speed (one undo step): shots in "keep" play as they are and the others stretch or squeeze together, keeping their proportions. Returns the new length, each changed shot\'s speed and the timing. With dry_run it only reports them.',
+		inputSchema: object(
+			{
+				seconds: { type: 'number', exclusiveMinimum: 0, description: 'The length to fit, in seconds.' },
+				keep: { type: 'array', items: SHOT_ID, description: 'Shots that keep their pace, e.g. a logo hold (default none).' },
+				dry_run: { type: 'boolean', description: 'Report without changing anything (default false).' }
+			},
+			['seconds']
+		),
+		annotations: { title: 'Fit the animation to a length', ...WRITE_IDEMPOTENT },
+		handler: ({ seconds, keep, dry_run = false }) => {
+			const fit = fitMotionScene(controller.getState().scene, seconds * 1000, { keep: keep ?? [] });
+			const report = { duration: fit.duration, speeds: fit.speeds };
+			if (dry_run) return { dry_run: true, ...report, hint: 'Nothing was changed; call again without dry_run to fit.' };
+			const edits = Object.entries(fit.speeds).map(([shot, speed]) => (speed === 1 ? { op: 'update_shot' as const, shot, remove: ['speed' as const] } : { op: 'update_shot' as const, shot, set: { speed } }));
+			return apply(edits, 'Fit to length', () => report);
+		}
+	};
+
 	const insertShots: AgentTool = {
 		name: 'insert_shots',
 		title: 'Add shots',
@@ -531,7 +635,7 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 			{
 				shot: SHOT_ID,
 				set: object({ id: SHOT.properties!.id, ...SHOT_FIELDS }, [], 'Fields to replace.'),
-				remove: { type: 'array', items: { type: 'string', enum: ['label', 'camera', 'hold'] }, description: 'Fields to clear.' }
+				remove: { type: 'array', items: { type: 'string', enum: ['label', 'camera', 'hold', 'speed', 'at'] }, description: 'Fields to clear.' }
 			},
 			['shot']
 		),
@@ -604,7 +708,7 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 	const setSettings: AgentTool = {
 		name: 'set_animation_settings',
 		title: 'Change animation settings',
-		description: 'Sets the name, description, loop mode, export frame rate, stepped time or target length. Returns the timing.',
+		description: 'Sets the name, description, loop mode, export frame rate, stepped time, beat grid, narration word timings or target length. Returns the timing.',
 		inputSchema: object(SETTINGS),
 		annotations: { title: 'Change animation settings', ...WRITE_IDEMPOTENT },
 		handler: (args) => apply({ op: 'set_settings', ...args }, 'Change settings')
@@ -692,8 +796,8 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 		}
 	};
 
-	const reads = [getAnimation, getShot, findElements, getMotionPath, checkAnimation, renderFrame, exportFlairMotion, exportFlairEffect, seekAnimation];
-	const writes = [setArtworkSvg, importFlairEffect, insertShots, updateShot, deleteShots, moveShot, addCommands, updateCommand, deleteCommands, setSettings, setControls, editAnimation, writeAnimation, undo, redo];
+	const reads = [getAnimation, getShot, findElements, getMotionPath, getTimingGrid, checkAnimation, renderFrame, exportFlairMotion, exportFlairEffect, exportLottie, seekAnimation];
+	const writes = [setArtworkSvg, fitAnimation, importFlairEffect, insertShots, updateShot, deleteShots, moveShot, addCommands, updateCommand, deleteCommands, setSettings, setControls, editAnimation, writeAnimation, undo, redo];
 
 	return {
 		id: options.id ?? 'animation',

@@ -1,6 +1,6 @@
 import { isAnimationEasing } from '../animation/easing.js';
 import { namedWithSuggestion } from './issues.js';
-import { MOTION_COMMAND_TYPES, MOTION_DIRECTIONS, MOTION_ENTER_STYLES, MOTION_EXIT_STYLES, MOTION_REPEAT_MODES, MOTION_IRIS_SHAPES, MOTION_SPLIT_ORIENTATIONS, type MotionCommand, type MotionScene, type MotionShot } from './types.js';
+import { MOTION_COMMAND_TYPES, MOTION_DIRECTIONS, MOTION_ENTER_STYLES, MOTION_EXIT_STYLES, MOTION_REPEAT_MODES, MOTION_BLENDS, MOTION_IRIS_SHAPES, MOTION_SPLIT_ORIENTATIONS, type MotionCommand, type MotionScene, type MotionShot } from './types.js';
 
 /**
  * Shape checking: whether a value is a well-formed scene, listing every problem at once.
@@ -16,26 +16,27 @@ export class MotionSceneFormatError extends Error {
 	}
 }
 
-const SCENE_KEYS = ['version', 'name', 'description', 'artwork', 'shots', 'loop', 'fps', 'steps', 'target', 'controls', 'presets'];
-const SHOT_KEYS = ['id', 'label', 'camera', 'run', 'hold'];
+const SCENE_KEYS = ['version', 'name', 'description', 'artwork', 'shots', 'loop', 'fps', 'steps', 'beat', 'narration', 'target', 'controls', 'presets'];
+const SHOT_KEYS = ['id', 'label', 'camera', 'at', 'run', 'hold', 'speed'];
 const CAMERA_KEYS = ['x', 'y', 'width', 'height', 'frame', 'padding', 'ease', 'ms', 'geometric'];
 const BASE_KEYS = ['type', 'targets', 'duration', 'delay', 'stagger', 'with', 'ease', 'note', 'repeat', 'repeatMode', 'steps'];
 const COMMAND_KEYS: Record<string, string[]> = {
 	enter: [...BASE_KEYS, 'style', 'direction', 'distance', 'scale', 'shape', 'orientation'],
 	exit: [...BASE_KEYS, 'style', 'direction', 'distance'],
 	draw: [...BASE_KEYS, 'from', 'to'],
-	move: [...BASE_KEYS, 'by', 'to'],
-	rotate: [...BASE_KEYS, 'by', 'to'],
-	scale: [...BASE_KEYS, 'to', 'geometric'],
+	move: [...BASE_KEYS, 'by', 'to', 'blend'],
+	rotate: [...BASE_KEYS, 'by', 'to', 'blend'],
+	scale: [...BASE_KEYS, 'to', 'geometric', 'blend'],
 	fade: [...BASE_KEYS, 'to'],
 	style: [...BASE_KEYS, 'fill', 'stroke', 'strokeWidth'],
 	morph: [...BASE_KEYS, 'into'],
+	match: [...BASE_KEYS, 'into'],
 	follow: [...BASE_KEYS, 'path', 'rotate', 'from', 'to'],
-	pulse: [...BASE_KEYS, 'amount', 'count'],
-	shake: [...BASE_KEYS, 'amount', 'count', 'axis'],
-	teeter: [...BASE_KEYS, 'angle', 'count'],
-	wave: [...BASE_KEYS, 'amount', 'count'],
-	wiggle: [...BASE_KEYS, 'amount', 'frequency', 'octaves', 'rotate', 'seed'],
+	pulse: [...BASE_KEYS, 'amount', 'count', 'blend'],
+	shake: [...BASE_KEYS, 'amount', 'count', 'axis', 'blend'],
+	teeter: [...BASE_KEYS, 'angle', 'count', 'blend'],
+	wave: [...BASE_KEYS, 'amount', 'count', 'blend'],
+	wiggle: [...BASE_KEYS, 'amount', 'frequency', 'octaves', 'rotate', 'seed', 'blend'],
 	'color-pulse': [...BASE_KEYS, 'color', 'paint', 'count'],
 	effect: [...BASE_KEYS, 'effect', 'param', 'to'],
 	wait: ['type', 'duration', 'with', 'note']
@@ -83,6 +84,7 @@ export function commandShapeProblems(command: unknown, where: string): string[] 
 		if (type === 'enter' || type === 'exit') p(`"repeat" is not for ${type} (it brings things in or out once); repeat an emphasis or a move instead.`);
 		else if (!(Number.isInteger(command.repeat) && (command.repeat as number) >= 1 && (command.repeat as number) <= 1000)) p(`"repeat" must be a whole number from 1 to 1000.`);
 	}
+	if (command.blend !== undefined && !(MOTION_BLENDS as readonly unknown[]).includes(command.blend)) p(`"blend" must be "replace" (the change takes over) or "add" (a layer on top).`);
 	if (command.repeatMode !== undefined && !(MOTION_REPEAT_MODES as readonly unknown[]).includes(command.repeatMode)) p(`"repeatMode" must be one of ${MOTION_REPEAT_MODES.join(', ')}.`);
 	if (command.steps !== undefined && !(isNum(command.steps) && command.steps > 0 && command.steps <= 120)) p(`"steps" must be frames per second from above 0 to 120 (12 holds each pose for two frames at 24 fps).`);
 	switch (type) {
@@ -128,7 +130,8 @@ export function commandShapeProblems(command: unknown, where: string): string[] 
 			if (command.strokeWidth !== undefined && !(isNum(command.strokeWidth) && command.strokeWidth >= 0)) p(`"strokeWidth" must be a number ≥ 0.`);
 			break;
 		case 'morph':
-			if (typeof command.into !== 'string' || !command.into) p(`"into" must be the id of a node whose shape to take.`);
+		case 'match':
+			if (typeof command.into !== 'string' || !command.into) p(`"into" must be the id of a ${type === 'match' ? 'group to become' : 'node whose shape to take'}.`);
 			break;
 		case 'follow':
 			if (typeof command.path !== 'string' || !command.path) p(`"path" must be the id of a path node.`);
@@ -173,6 +176,17 @@ export function shotShapeProblems(shot: unknown, where: string): string[] {
 	const name = typeof shot.id === 'string' ? `Shot "${shot.id}"` : where;
 	if (shot.label !== undefined && typeof shot.label !== 'string') problems.push(`${name}: "label" must be a string.`);
 	if (shot.hold !== undefined && !(isNum(shot.hold) && shot.hold >= 0)) problems.push(`${name}: "hold" must be a number of milliseconds ≥ 0.`);
+	if (shot.speed !== undefined && !(isNum(shot.speed) && shot.speed >= 0.05 && shot.speed <= 20)) problems.push(`${name}: "speed" must be a number from 0.05 to 20 (2 plays it twice as fast).`);
+	if (shot.at !== undefined) {
+		const at = shot.at;
+		const given = isObject(at) ? (['beat', 'word', 'ms'] as const).filter((k) => at[k] !== undefined) : [];
+		if (!isObject(at) || given.length !== 1) problems.push(`${name}: "at" must give one of { "beat": number }, { "word": index } or { "ms": number }.`);
+		else {
+			unknownKeys(at, ['beat', 'word', 'ms'], `${name} at`, problems);
+			const k = given[0];
+			if (!isNum(at[k]) || (at[k] as number) < 0 || (k === 'word' && !Number.isInteger(at[k]))) problems.push(`${name}: "at.${k}" must be ${k === 'word' ? 'a word index ≥ 0' : 'a number ≥ 0'}.`);
+		}
+	}
 	if (shot.camera !== undefined) {
 		const c = shot.camera;
 		if (!isObject(c)) problems.push(`${name}: "camera" must be an object.`);
@@ -205,6 +219,16 @@ export function motionSceneShapeProblems(input: unknown): string[] {
 		problems.push('Scene: "artwork" must be a vector document { width, height, nodes }.');
 	if (input.loop !== undefined && !['none', 'loop', 'ping-pong'].includes(input.loop as string)) problems.push('Scene: "loop" must be "none", "loop" or "ping-pong".');
 	if (input.fps !== undefined && !(isNum(input.fps) && input.fps > 0 && input.fps <= 120)) problems.push('Scene: "fps" must be a number from 1 to 120.');
+	if (input.beat !== undefined) {
+		const b = input.beat;
+		if (!isObject(b) || !(isNum(b.bpm) && b.bpm >= 1 && b.bpm <= 1000) || (b.offset !== undefined && !isNum(b.offset)) || (b.meter !== undefined && !(Number.isInteger(b.meter) && (b.meter as number) >= 1)))
+			problems.push('Scene: "beat" must be { "bpm": 1–1000, "offset"?: ms, "meter"?: beats a bar }.');
+	}
+	if (input.narration !== undefined) {
+		const n = input.narration;
+		if (!isObject(n) || !Array.isArray(n.words) || !n.words.every((w, i, all) => isObject(w) && typeof w.text === 'string' && isNum(w.start) && w.start >= 0 && (w.end === undefined || (isNum(w.end) && w.end >= w.start)) && (i === 0 || w.start >= ((all[i - 1] as Record<string, number>).start ?? 0))))
+			problems.push('Scene: "narration" must be { "words": [{ "text", "start": ms, "end"?: ms }, …] } in time order.');
+	}
 	if (input.steps !== undefined && !(isNum(input.steps) && input.steps > 0 && input.steps <= 120)) problems.push('Scene: "steps" must be frames per second from above 0 to 120.');
 	if (input.target !== undefined && !(Array.isArray(input.target) && input.target.length === 2 && input.target.every(isNum) && input.target[0] <= input.target[1]))
 		problems.push('Scene: "target" must be [min, max] seconds.');

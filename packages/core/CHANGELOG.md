@@ -1,5 +1,55 @@
 # @pixerate/editor
 
+## 0.63.0
+
+### Minor Changes
+
+- 2da00e7: Animation shots can be cued to music or a voiceover.
+
+  - **Timing tracks:** a scene can carry a `beat` grid (`bpm`, `offset`, `meter`) and `narration` word timings, for example from TTS or speech-to-text.
+  - **Cues:** a shot's `at` cue (`{ beat }`, `{ word }` or `{ ms }`) starts it on that moment, and the shot before holds until then.
+  - **Checks:** `cue-missed` warns when the shot before runs past a cue, and `unknown-cue` flags a beat with no grid or a word the narration lacks.
+  - **Helpers:** `motionBeatTime`, `motionBeatAt` and `motionCueTime`. `MotionShotTiming` gains `cue` and `missedBy`.
+  - **Agents:** a new read tool, `get_timing_grid`, lists beats (with bar and beat) and words with their times. `set_animation_settings` sets the beat grid and narration, and shot tools take `at`.
+
+## 0.62.0
+
+### Minor Changes
+
+- 70ae8ed: Animation scenes can be fitted to a length.
+
+  - **Shot speed:** a shot's `speed` scales all of its time: camera move, delays, durations, staggers and hold.
+  - **Fitting:** `fitMotionScene(scene, ms, { keep })` and the `fit_animation` agent tool (one undo step, with a dry run) set the shots' speeds so the scene lasts `ms`. Kept shots play as they are, and the rest stretch or squeeze together. This follows After Effects' protected regions.
+  - **Refusals:** it refuses, with the reason, when the kept shots alone outlast the target or a speed would leave 0.05–20×.
+  - **Checks:** the length warnings now point to `fit_animation`.
+
+## 0.61.0
+
+### Minor Changes
+
+- 82031d8: The animation editor gains Smart Animate: the `match` command tweens a group into another group (usually hidden), part by part.
+
+  - **Pairing:** parts pair by name, then by id with the groups' own ids taken out (`card-a-title` ↔ `card-b-title`), then by kind in stacking order. Nested groups pair their own parts the same way.
+  - **Morphing:** each part morphs into its partner's shape, paint and place. Parts with no partner fade out.
+  - **Checks:** `match-unpaired` notes the parts of `into` that have no partner (they cannot appear), and `match-self` refuses a group matched into itself or into a group it holds.
+  - **Agents:** `matchMotionNodes` returns the pairing, and the command has an agent-tool schema.
+
+## 0.60.0
+
+### Minor Changes
+
+- 2feef94: The animation editor stacks motion. A command with `blend: "add"` becomes a layer over the target's pose instead of a change that the next one takes over from. It stacks with whatever else moves the target, and what it adds stays once it ends.
+
+  - **Emphasis:** pulse, shake, teeter, wave and wiggle are additive by default, so a shake during a slide shakes as it slides and lands where the slide ends. Pass `blend: "replace"` for the old take-over.
+  - **Move, rotate and scale:** they take `blend: "add"` too. Offsets and turns add; scales multiply.
+  - **Overlap check:** additive layers are no longer reported as overlapping.
+  - **Flair export:** a layer on its own is one exact change; layers that overlap the pose are sampled.
+  - **New exports:** `motionAddTrackKey`, `withMotionLayers`, `MOTION_ADDITIVE_PROPERTIES` and `MOTION_BLENDS`.
+
+- c3503c6: Agents now edit rich text inline, the way collaborators do in Google Docs. `createRichTextToolProvider` draws the agent's caret, with its name, where its tools read and write. `find_text` and `set_selection` highlight the agent's selection, and edits tint the new text for a moment. With `presence: { typing: true }`, inserted and replacement text is typed out a few characters at a time. It is still one undo step, and it rolls back if the call is cancelled.
+
+  `insert_text`, `replace_range` and `replace_selection` now return the new text's `range`. The caret is on by default; pass `presence: false` to turn it off. The new building blocks are `AgentCaret`, `setAgentCaret`, `clearAgentCaret`, `markAgentChanges` and `typeAgentText`.
+
 ## 0.59.0
 
 ### Minor Changes

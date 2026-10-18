@@ -29,6 +29,10 @@ export interface MotionScene {
 	 * per second ("on twos" at 12), for a hand-drawn look. Default: smooth.
 	 */
 	steps?: number;
+	/** A beat grid to cue shots to (`MotionShot.at.beat`): music or a voiceover's rhythm. */
+	beat?: MotionBeatGrid;
+	/** A voiceover's words with their times, to cue shots to (`MotionShot.at.word`). */
+	narration?: MotionNarration;
 	/** Wanted length in seconds `[min, max]`; `check` warns outside it. */
 	target?: [number, number];
 	/** Parameters a Flair effect made from this scene exposes (see `toFlairVectorEffect`). */
@@ -56,6 +60,30 @@ export type MotionCamera = (MotionRect | { frame: string; padding?: number }) & 
 	geometric?: boolean;
 };
 
+/** A steady beat: `bpm` beats a minute, the first at `offset` ms, `meter` beats a bar. */
+export interface MotionBeatGrid {
+	bpm: number;
+	/** When beat 0 falls, ms (default 0). */
+	offset?: number;
+	/** Beats in a bar (default 4), for reading beats as bar and beat. */
+	meter?: number;
+}
+
+/** A voiceover: its words in order, each with when it is said (ms), from a TTS or speech-to-text word timing. */
+export interface MotionNarration {
+	words: { text: string; start: number; end?: number }[];
+}
+
+/** When a shot is cued to start: on a beat, on a narration word, or at a time. */
+export interface MotionCue {
+	/** Beat number on the scene's beat grid, from 0 (fractions for off-beats: 2.5 is the "and" of beat 3). */
+	beat?: number;
+	/** Index of a word in the scene's narration, from 0. */
+	word?: number;
+	/** A time in ms. */
+	ms?: number;
+}
+
 /** One beat of the animation. */
 export interface MotionShot {
 	/** Stable id (unique in the scene), e.g. `intro`. */
@@ -64,10 +92,21 @@ export interface MotionShot {
 	label?: string;
 	/** Omit to keep the current framing. */
 	camera?: MotionCamera;
+	/**
+	 * Start on a cue: a beat, a narration word or a time. The shot before holds until then; a
+	 * cue that comes before the shot before has ended is missed (`check` says by how much).
+	 * Give one of `beat`, `word` or `ms`.
+	 */
+	at?: MotionCue;
 	/** Commands, played one after another (unless a command says `with: "previous"`). */
 	run: MotionCommand[];
 	/** Milliseconds to hold after the commands finish (default 600). */
 	hold?: number;
+	/**
+	 * Plays the whole shot this many times as fast (default 1): its camera move, delays,
+	 * durations, staggers and hold all scale by 1 / speed. `fit_animation` sets it to fit a length.
+	 */
+	speed?: number;
 }
 
 /** Fields every command takes. */
@@ -158,6 +197,13 @@ export interface MotionDrawCommand extends MotionCommandBase {
 
 /** Moves targets by an offset, or to a point (their centre lands there). */
 export interface MotionMoveCommand extends MotionCommandBase {
+	/**
+	 * `add` makes the change a layer over the pose instead of a change to it: it stacks on
+	 * whatever else moves the target (a shake on a slide), and what it adds stays once it ends.
+	 * Default `replace` for move, rotate and scale (the later change takes over), `add` for
+	 * pulse, shake, teeter, wave and wiggle.
+	 */
+	blend?: 'replace' | 'add';
 	type: 'move';
 	by?: { x: number; y: number };
 	to?: { x: number; y: number };
@@ -165,6 +211,13 @@ export interface MotionMoveCommand extends MotionCommandBase {
 
 /** Turns targets about their centre, by or to an angle in degrees (clockwise). */
 export interface MotionRotateCommand extends MotionCommandBase {
+	/**
+	 * `add` makes the change a layer over the pose instead of a change to it: it stacks on
+	 * whatever else moves the target (a shake on a slide), and what it adds stays once it ends.
+	 * Default `replace` for move, rotate and scale (the later change takes over), `add` for
+	 * pulse, shake, teeter, wave and wiggle.
+	 */
+	blend?: 'replace' | 'add';
 	type: 'rotate';
 	by?: number;
 	to?: number;
@@ -172,6 +225,13 @@ export interface MotionRotateCommand extends MotionCommandBase {
 
 /** Scales targets about their centre (1 = rest size). */
 export interface MotionScaleCommand extends MotionCommandBase {
+	/**
+	 * `add` makes the change a layer over the pose instead of a change to it: it stacks on
+	 * whatever else moves the target (a shake on a slide), and what it adds stays once it ends.
+	 * Default `replace` for move, rotate and scale (the later change takes over), `add` for
+	 * pulse, shake, teeter, wave and wiggle.
+	 */
+	blend?: 'replace' | 'add';
 	type: 'scale';
 	to: number | { x: number; y: number };
 	/** Grow at a steady rate (the same factor each moment), which reads as an even zoom. */
@@ -198,6 +258,18 @@ export interface MotionMorphCommand extends MotionCommandBase {
 	into: string;
 }
 
+/**
+ * Smart Animate: tweens a group into another group (`into`, usually hidden), part by part. Each
+ * part of the target takes the shape, paint and place of its partner in `into`, paired by name,
+ * then by id (`card-a-title` ↔ `card-b-title`), then by kind in order. Parts with no partner fade
+ * out; parts of `into` with no partner do not appear (`check` lists them).
+ */
+export interface MotionMatchCommand extends MotionCommandBase {
+	type: 'match';
+	/** Id of the group (or node) to become. */
+	into: string;
+}
+
 /** Moves targets along a path node, centre on the path. */
 export interface MotionFollowCommand extends MotionCommandBase {
 	type: 'follow';
@@ -215,6 +287,13 @@ export interface MotionFollowCommand extends MotionCommandBase {
 
 /** Scales up and back, `count` times (draws the eye). */
 export interface MotionPulseCommand extends MotionCommandBase {
+	/**
+	 * `add` makes the change a layer over the pose instead of a change to it: it stacks on
+	 * whatever else moves the target (a shake on a slide), and what it adds stays once it ends.
+	 * Default `replace` for move, rotate and scale (the later change takes over), `add` for
+	 * pulse, shake, teeter, wave and wiggle.
+	 */
+	blend?: 'replace' | 'add';
 	type: 'pulse';
 	/** Extra scale at the peak (default 0.15). */
 	amount?: number;
@@ -223,6 +302,13 @@ export interface MotionPulseCommand extends MotionCommandBase {
 
 /** Shakes side to side (or up and down), settling. */
 export interface MotionShakeCommand extends MotionCommandBase {
+	/**
+	 * `add` makes the change a layer over the pose instead of a change to it: it stacks on
+	 * whatever else moves the target (a shake on a slide), and what it adds stays once it ends.
+	 * Default `replace` for move, rotate and scale (the later change takes over), `add` for
+	 * pulse, shake, teeter, wave and wiggle.
+	 */
+	blend?: 'replace' | 'add';
 	type: 'shake';
 	/** Distance in document units (default 8). */
 	amount?: number;
@@ -233,6 +319,13 @@ export interface MotionShakeCommand extends MotionCommandBase {
 
 /** Rocks about the centre by `angle` either way, settling (Flair's `emphasis.teeter`). */
 export interface MotionTeeterCommand extends MotionCommandBase {
+	/**
+	 * `add` makes the change a layer over the pose instead of a change to it: it stacks on
+	 * whatever else moves the target (a shake on a slide), and what it adds stays once it ends.
+	 * Default `replace` for move, rotate and scale (the later change takes over), `add` for
+	 * pulse, shake, teeter, wave and wiggle.
+	 */
+	blend?: 'replace' | 'add';
 	type: 'teeter';
 	/** Degrees either way (default 8). */
 	angle?: number;
@@ -242,6 +335,13 @@ export interface MotionTeeterCommand extends MotionCommandBase {
 
 /** Bobs up and down without settling, like something floating (Flair's `emphasis.wave`). */
 export interface MotionWaveCommand extends MotionCommandBase {
+	/**
+	 * `add` makes the change a layer over the pose instead of a change to it: it stacks on
+	 * whatever else moves the target (a shake on a slide), and what it adds stays once it ends.
+	 * Default `replace` for move, rotate and scale (the later change takes over), `add` for
+	 * pulse, shake, teeter, wave and wiggle.
+	 */
+	blend?: 'replace' | 'add';
 	type: 'wave';
 	/** Height in document units (default 6). */
 	amount?: number;
@@ -254,6 +354,13 @@ export interface MotionWaveCommand extends MotionCommandBase {
  * `emphasis.wiggle`). The same seed always wanders the same way.
  */
 export interface MotionWiggleCommand extends MotionCommandBase {
+	/**
+	 * `add` makes the change a layer over the pose instead of a change to it: it stacks on
+	 * whatever else moves the target (a shake on a slide), and what it adds stays once it ends.
+	 * Default `replace` for move, rotate and scale (the later change takes over), `add` for
+	 * pulse, shake, teeter, wave and wiggle.
+	 */
+	blend?: 'replace' | 'add';
 	type: 'wiggle';
 	/** Up to about this far, in document units (default 6). */
 	amount?: number;
@@ -305,6 +412,7 @@ export type MotionCommand =
 	| MotionFadeCommand
 	| MotionStyleCommand
 	| MotionMorphCommand
+	| MotionMatchCommand
 	| MotionFollowCommand
 	| MotionPulseCommand
 	| MotionShakeCommand
@@ -327,6 +435,7 @@ export const MOTION_COMMAND_TYPES: readonly MotionCommandType[] = [
 	'fade',
 	'style',
 	'morph',
+	'match',
 	'follow',
 	'pulse',
 	'shake',
@@ -338,6 +447,7 @@ export const MOTION_COMMAND_TYPES: readonly MotionCommandType[] = [
 	'wait'
 ];
 export const MOTION_ENTER_STYLES: readonly MotionEnterStyle[] = ['fade', 'pop', 'grow', 'slide', 'draw', 'zoom', 'rise', 'wipe', 'iris', 'split'];
+export const MOTION_BLENDS = ['replace', 'add'] as const;
 export const MOTION_REPEAT_MODES = ['loop', 'mirror', 'offset'] as const;
 export const MOTION_EXIT_STYLES: readonly MotionExitStyle[] = ['fade', 'shrink', 'slide', 'undraw', 'wipe'];
 export const MOTION_IRIS_SHAPES: readonly MotionIrisShape[] = ['circle', 'box'];
@@ -372,6 +482,7 @@ export const MOTION_DEFAULT_DURATIONS: Readonly<Record<Exclude<MotionCommandType
 	fade: 400,
 	style: 500,
 	morph: 900,
+	match: 900,
 	follow: 1400,
 	pulse: 600,
 	shake: 500,

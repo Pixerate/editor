@@ -1,7 +1,7 @@
 import React, { useRef, useState } from "react";
 import { Clapperboard } from "lucide-react";
 import { createVectorEffect, ellipseSubpath, rectSubpath, starSubpath, type VectorDocument } from "@pixerate/editor/vector";
-import type { MotionScene } from "@pixerate/editor/animation-editor";
+import { toLottie, type MotionScene } from "@pixerate/editor/animation-editor";
 import { AnimationEditor, useAnimationEditorController, useAnimationEditorState, useAnimationEditorTools } from "@pixerate/editor-react/animation-editor";
 import { VectorEditor, useVectorEditorController } from "@pixerate/editor-react/vector";
 import { demoToolRegistry } from "../agentTools";
@@ -117,6 +117,9 @@ export function AnimationTab() {
         </button>
         <button type="button" className="rounded border border-slate-700 px-2 py-1 hover:bg-slate-800" onClick={() => setOutput(JSON.stringify(controller.toFlairEffect({ category: "icon", tags: ["badge", "success"] }), null, 2))}>
           Export Flair effect
+        </button>
+        <button type="button" className="rounded border border-slate-700 px-2 py-1 hover:bg-slate-800" onClick={() => setOutput(JSON.stringify(toLottie(state.scene).lottie, null, 2))}>
+          Export Lottie
         </button>
         <label className="flex items-center gap-1">
           <input type="checkbox" checked={onion} onChange={(e) => setOnion(e.target.checked)} /> Onion skin
