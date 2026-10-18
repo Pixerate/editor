@@ -68,6 +68,11 @@ export interface MotionShot {
 	run: MotionCommand[];
 	/** Milliseconds to hold after the commands finish (default 600). */
 	hold?: number;
+	/**
+	 * Plays the whole shot this many times as fast (default 1): its camera move, delays,
+	 * durations, staggers and hold all scale by 1 / speed. `fit_animation` sets it to fit a length.
+	 */
+	speed?: number;
 }
 
 /** Fields every command takes. */

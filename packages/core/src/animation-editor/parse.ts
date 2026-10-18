@@ -17,7 +17,7 @@ export class MotionSceneFormatError extends Error {
 }
 
 const SCENE_KEYS = ['version', 'name', 'description', 'artwork', 'shots', 'loop', 'fps', 'steps', 'target', 'controls', 'presets'];
-const SHOT_KEYS = ['id', 'label', 'camera', 'run', 'hold'];
+const SHOT_KEYS = ['id', 'label', 'camera', 'run', 'hold', 'speed'];
 const CAMERA_KEYS = ['x', 'y', 'width', 'height', 'frame', 'padding', 'ease', 'ms', 'geometric'];
 const BASE_KEYS = ['type', 'targets', 'duration', 'delay', 'stagger', 'with', 'ease', 'note', 'repeat', 'repeatMode', 'steps'];
 const COMMAND_KEYS: Record<string, string[]> = {
@@ -176,6 +176,7 @@ export function shotShapeProblems(shot: unknown, where: string): string[] {
 	const name = typeof shot.id === 'string' ? `Shot "${shot.id}"` : where;
 	if (shot.label !== undefined && typeof shot.label !== 'string') problems.push(`${name}: "label" must be a string.`);
 	if (shot.hold !== undefined && !(isNum(shot.hold) && shot.hold >= 0)) problems.push(`${name}: "hold" must be a number of milliseconds ≥ 0.`);
+	if (shot.speed !== undefined && !(isNum(shot.speed) && shot.speed >= 0.05 && shot.speed <= 20)) problems.push(`${name}: "speed" must be a number from 0.05 to 20 (2 plays it twice as fast).`);
 	if (shot.camera !== undefined) {
 		const c = shot.camera;
 		if (!isObject(c)) problems.push(`${name}: "camera" must be an object.`);

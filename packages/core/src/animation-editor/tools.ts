@@ -4,6 +4,7 @@ import type { JsonSchema } from '../tools/schema.js';
 import { parseVectorSvg } from '../vector/svg.js';
 import type { VectorNode } from '../vector/types.js';
 import { compileMotionScene, indexMotionNodes } from './compile.js';
+import { fitMotionScene } from './fit.js';
 import { fromFlairSvgMotion, fromFlairVectorEffect, type FlairImportResult } from './flair-import.js';
 import type { AnimationEditorController } from './controller.js';
 import { MOTION_EDIT_OPS, type MotionEdit, type MotionEditResult } from './edit.js';
@@ -172,7 +173,8 @@ const SHOT_FIELDS: Record<string, JsonSchema> = {
 	label: { type: 'string', description: 'What happens, in a few words.' },
 	camera: CAMERA,
 	run: { type: 'array', items: MOTION_COMMAND_SCHEMA, description: 'Commands, in order.' },
-	hold: MS('Hold after the commands (default 600)')
+	hold: MS('Hold after the commands (default 600)'),
+	speed: { type: 'number', minimum: 0.05, maximum: 20, description: 'Play the whole shot this many times as fast (default 1; 0.5 is half speed). fit_animation sets it.' }
 };
 const SHOT: JsonSchema = object({ id: { type: 'string', pattern: '^[A-Za-z0-9_][\\w.-]*$', description: 'Unique shot id, e.g. "intro".' }, ...SHOT_FIELDS }, ['id', 'run'], 'A shot.');
 const CONTROL: JsonSchema = object(
@@ -202,7 +204,7 @@ const EDIT_OP: JsonSchema = {
 	oneOf: [
 		object({ op: { const: 'set_settings', description: 'Like set_animation_settings.' }, ...SETTINGS }, ['op']),
 		object({ op: { const: 'insert_shots', description: 'Like insert_shots.' }, shots: { type: 'array', items: SHOT, minItems: 1, description: 'Shots to add.' }, at: { type: 'integer', minimum: 0, description: 'Position (default: the end).' } }, ['op', 'shots']),
-		object({ op: { const: 'update_shot', description: 'Like update_shot.' }, shot: SHOT_ID, set: object({ id: SHOT.properties!.id, ...SHOT_FIELDS }, [], 'Fields to replace.'), remove: { type: 'array', items: { type: 'string', enum: ['label', 'camera', 'hold'] }, description: 'Fields to clear.' } }, ['op', 'shot']),
+		object({ op: { const: 'update_shot', description: 'Like update_shot.' }, shot: SHOT_ID, set: object({ id: SHOT.properties!.id, ...SHOT_FIELDS }, [], 'Fields to replace.'), remove: { type: 'array', items: { type: 'string', enum: ['label', 'camera', 'hold', 'speed'] }, description: 'Fields to clear.' } }, ['op', 'shot']),
 		object({ op: { const: 'delete_shots', description: 'Like delete_shots.' }, shots: { type: 'array', items: SHOT_ID, minItems: 1, description: 'Shot ids.' } }, ['op', 'shots']),
 		object({ op: { const: 'move_shot', description: 'Like move_shot.' }, shot: SHOT_ID, to: { type: 'integer', minimum: 0, description: 'New position (0 = first).' } }, ['op', 'shot', 'to']),
 		object({ op: { const: 'add_commands', description: 'Like add_commands.' }, shot: SHOT_ID, commands: { type: 'array', items: MOTION_COMMAND_SCHEMA, minItems: 1, description: 'Commands to add.' }, at: { type: 'integer', minimum: 0, description: 'Index in the shot\'s run (default: the end).' } }, ['op', 'shot', 'commands']),
@@ -485,6 +487,29 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 		}
 	};
 
+	const fitAnimation: AgentTool = {
+		name: 'fit_animation',
+		title: 'Fit the animation to a length',
+		description:
+			'Makes the animation last a given time by setting its shots\' speed (one undo step): shots in "keep" play as they are and the others stretch or squeeze together, keeping their proportions. Returns the new length, each changed shot\'s speed and the timing. With dry_run it only reports them.',
+		inputSchema: object(
+			{
+				seconds: { type: 'number', exclusiveMinimum: 0, description: 'The length to fit, in seconds.' },
+				keep: { type: 'array', items: SHOT_ID, description: 'Shots that keep their pace, e.g. a logo hold (default none).' },
+				dry_run: { type: 'boolean', description: 'Report without changing anything (default false).' }
+			},
+			['seconds']
+		),
+		annotations: { title: 'Fit the animation to a length', ...WRITE_IDEMPOTENT },
+		handler: ({ seconds, keep, dry_run = false }) => {
+			const fit = fitMotionScene(controller.getState().scene, seconds * 1000, { keep: keep ?? [] });
+			const report = { duration: fit.duration, speeds: fit.speeds };
+			if (dry_run) return { dry_run: true, ...report, hint: 'Nothing was changed; call again without dry_run to fit.' };
+			const edits = Object.entries(fit.speeds).map(([shot, speed]) => (speed === 1 ? { op: 'update_shot' as const, shot, remove: ['speed' as const] } : { op: 'update_shot' as const, shot, set: { speed } }));
+			return apply(edits, 'Fit to length', () => report);
+		}
+	};
+
 	const insertShots: AgentTool = {
 		name: 'insert_shots',
 		title: 'Add shots',
@@ -502,7 +527,7 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 			{
 				shot: SHOT_ID,
 				set: object({ id: SHOT.properties!.id, ...SHOT_FIELDS }, [], 'Fields to replace.'),
-				remove: { type: 'array', items: { type: 'string', enum: ['label', 'camera', 'hold'] }, description: 'Fields to clear.' }
+				remove: { type: 'array', items: { type: 'string', enum: ['label', 'camera', 'hold', 'speed'] }, description: 'Fields to clear.' }
 			},
 			['shot']
 		),
@@ -664,7 +689,7 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 	};
 
 	const reads = [getAnimation, getShot, findElements, checkAnimation, renderFrame, exportFlairMotion, exportFlairEffect, seekAnimation];
-	const writes = [setArtworkSvg, importFlairEffect, insertShots, updateShot, deleteShots, moveShot, addCommands, updateCommand, deleteCommands, setSettings, setControls, editAnimation, writeAnimation, undo, redo];
+	const writes = [setArtworkSvg, fitAnimation, importFlairEffect, insertShots, updateShot, deleteShots, moveShot, addCommands, updateCommand, deleteCommands, setSettings, setControls, editAnimation, writeAnimation, undo, redo];
 
 	return {
 		id: options.id ?? 'animation',

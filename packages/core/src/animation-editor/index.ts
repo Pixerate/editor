@@ -15,6 +15,7 @@ export * from './match.js';
 export * from './evaluate.js';
 export * from './check.js';
 export * from './edit.js';
+export * from './fit.js';
 export * from './flair.js';
 export * from './flair-import.js';
 export * from './controller.js';

@@ -52,6 +52,8 @@ reproduced at the end of this file. Paths are relative to each source repository
 - `crates/render/src/shapes.rs` (`GradientRamp::new` / `t`: a radial gradient's focal point and t measured along the ray from it to the circle, the same as SVG `fx` / `fy`) → `vectorGradientFocalParam` in `packages/core/src/vector/gradient.ts`, generalised to SVG's focal circle (`fr`); test cases re-expressed → `packages/core/tests/vector-gradient.test.ts`
 - `crates/ui-egui/src/panels/graph.rs` and `graph_tools.rs` (value range frozen while a key is dragged, Shift locks to the axis moved most, `snap_px` nearest candidate within a few screen pixels) → `startChartPointDrag` and `snapChartDragValue` in `packages/core/src/chart/interaction.ts`
 
+- `crates/render/src/eval.rs` (`responsive_source_time` with `protected_regions`: when a composition is stretched, protected spans play at their own speed and the rest absorb the change at one shared rate) → `fitMotionScene` and the `fit_animation` tool in `packages/core/src/animation-editor/fit.ts`; whole shots are kept instead of marker spans, and the fit sets each shot's `speed`
+
 ## figcraft
 
 © 2026 ArtCraft Team and the FigCraft contributors.
