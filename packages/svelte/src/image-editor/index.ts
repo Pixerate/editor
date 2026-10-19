@@ -8,6 +8,7 @@ import type SelectionOptionsBarComponent from "./SelectionOptionsBar.svelte";
 import type RefineEdgePanelComponent from "./RefineEdgePanel.svelte";
 import type LayersPanelComponent from "./LayersPanel.svelte";
 import type LayerEffectsPanelComponent from "./LayerEffectsPanel.svelte";
+import type SmartObjectPanelComponent from "./SmartObjectPanel.svelte";
 import type BrushOptionsBarComponent from "./BrushOptionsBar.svelte";
 import type FreeTransformOptionsBarComponent from "./FreeTransformOptionsBar.svelte";
 
@@ -20,6 +21,7 @@ export { default as SelectionOptionsBar } from './SelectionOptionsBar.svelte';
 export { default as RefineEdgePanel } from './RefineEdgePanel.svelte';
 export { default as LayersPanel } from './LayersPanel.svelte';
 export { default as LayerEffectsPanel } from './LayerEffectsPanel.svelte';
+export { default as SmartObjectPanel } from './SmartObjectPanel.svelte';
 export { default as BrushOptionsBar } from './BrushOptionsBar.svelte';
 export { default as FreeTransformOptionsBar } from './FreeTransformOptionsBar.svelte';
 export * from './imageEditorState.svelte.js';
@@ -33,6 +35,7 @@ export type SelectionOptionsBarProps = ComponentProps<typeof SelectionOptionsBar
 export type RefineEdgePanelProps = ComponentProps<typeof RefineEdgePanelComponent>;
 export type LayersPanelProps = ComponentProps<typeof LayersPanelComponent>;
 export type LayerEffectsPanelProps = ComponentProps<typeof LayerEffectsPanelComponent>;
+export type SmartObjectPanelProps = ComponentProps<typeof SmartObjectPanelComponent>;
 export type BrushOptionsBarProps = ComponentProps<typeof BrushOptionsBarComponent>;
 export type FreeTransformOptionsBarProps = ComponentProps<typeof FreeTransformOptionsBarComponent>;
 

@@ -35,6 +35,7 @@ export * from './layers/smart';
 export * from './smart-tools';
 export * from './layers/panel';
 export * from './layers/effects-ui';
+export * from './layers/smart-ui';
 export * from '../paint';
 export * from './paint-tools';
 export * from './layers/paint-ui';

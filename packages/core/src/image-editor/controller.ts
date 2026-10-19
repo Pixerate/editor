@@ -2451,10 +2451,11 @@ export class ImageEditorController {
   private thumbCache = new WeakMap<object, Map<string, PixelBuffer>>();
 
   /**
-   * A small RGBA preview of a pixel layer over the canvas (or of its mask with `mask: true`),
+   * A small RGBA preview of a pixel layer or smart object over the canvas (or of its mask with
+   * `mask: true`, or a smart object's filter mask with `filterMask: true`),
    * longest side `maxSide` px, point-sampled; `null` for layers without pixels.
    */
-  public getLayerThumbnail(id: string, options: { maxSide?: number; mask?: boolean } = {}): PixelBuffer | null {
+  public getLayerThumbnail(id: string, options: { maxSide?: number; mask?: boolean; filterMask?: boolean } = {}): PixelBuffer | null {
     const layer = this.getLayer(id);
     if (!layer) return null;
     const { width, height } = this.naturalSize;
@@ -2462,7 +2463,17 @@ export class ImageEditorController {
     const k = Math.min(1, side / Math.max(width, height));
     const tw = Math.max(1, Math.round(width * k));
     const th = Math.max(1, Math.round(height * k));
-    const surface = options.mask ? (layer.mask && !layer.mask.source ? layer.mask.surface : null) : layer.type === 'pixel' || layer.type === 'smart' ? this.surfaceOf(layer) : null;
+    const surface = options.filterMask
+      ? layer.type === 'smart' && layer.smartFilters?.mask
+        ? layer.smartFilters.mask.surface
+        : null
+      : options.mask
+        ? layer.mask && !layer.mask.source
+          ? layer.mask.surface
+          : null
+        : layer.type === 'pixel' || layer.type === 'smart'
+          ? this.surfaceOf(layer)
+          : null;
     if (!surface) return null;
     const ox = layer.type === 'pixel' ? layer.offset.x : 0;
     const oy = layer.type === 'pixel' ? layer.offset.y : 0;
