@@ -421,7 +421,7 @@ Every feature is available from core and from both framework packages. "Via core
 </details>
 
 <details>
-<summary><strong>Image editor</strong> (16)</summary>
+<summary><strong>Image editor</strong> (17)</summary>
 
 | Feature | Core | React | Svelte |
 | :--- | :---: | :---: | :---: |
