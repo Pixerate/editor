@@ -406,6 +406,32 @@ describe("ClipInspector (React)", () => {
   });
 });
 
+describe("ClipInspector keyframes (React)", () => {
+  it("adds keys at the playhead, sets the key there by typing, and removes them", () => {
+    const controller = make();
+    act(() => root.render(<ClipInspector controller={controller} />));
+    act(() => controller.select(["c1"]));
+    expect([...container.querySelectorAll("[data-keyframe-row]")].map((r) => (r as HTMLElement).dataset.keyframeRow)).toEqual(["opacity", "volume", "x", "y", "scale", "rotation"]);
+    act(() => controller.seek(500));
+    act(() => $<HTMLButtonElement>('[data-keyframe-toggle="x"]').click());
+    expect((clip(controller, "c1")!.clip.transform as any).x).toEqual({ keys: [{ t: 500, v: 0 }] });
+    expect(controller.getState().undoLabel).toBe("Add x keyframe");
+    expect($('[data-keyframe-toggle="x"]').getAttribute("aria-pressed")).toBe("true");
+    act(() => controller.seek(1500));
+    commit($<HTMLInputElement>('input[aria-label="X"]'), "200");
+    expect((clip(controller, "c1")!.clip.transform as any).x.keys).toEqual([{ t: 500, v: 0 }, { t: 1500, v: 200 }]);
+    act(() => controller.seek(1000));
+    expect($<HTMLInputElement>('input[aria-label="X"]').value).toBe("100");
+    expect($('[data-keyframe-count="x"]').textContent).toBe("2");
+    act(() => controller.seek(1500));
+    act(() => $<HTMLButtonElement>('[data-keyframe-toggle="x"]').click());
+    act(() => controller.seek(500));
+    act(() => $<HTMLButtonElement>('[data-keyframe-toggle="x"]').click());
+    expect(clip(controller, "c1")!.clip.transform).toBeUndefined();
+    controller.destroy();
+  });
+});
+
 describe("MediaBin (React)", () => {
   it("lists assets and adds one to the end of its track", () => {
     const controller = make();
