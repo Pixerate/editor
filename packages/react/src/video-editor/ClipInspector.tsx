@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   findVideoClip,
   formatVideoSeconds,
@@ -7,7 +7,8 @@ import {
   normalizeVideoGrade,
   VIDEO_GRADE_CONTROLS,
   VIDEO_GRADE_PRESET_NAMES,
-  videoGradePreset,
+  videoGradeLook,
+  videoLutEdits,
   VIDEO_BLEND_MODE_LABELS,
   VIDEO_BLEND_MODES,
   VIDEO_FADE_CURVE_LABELS,
@@ -27,6 +28,7 @@ import {
   type VideoClipAnimationEffect,
   type VideoEditorController,
   type VideoFadeCurve,
+  type VideoGradeLut,
   type VideoGradePreset,
   type VideoTransitionType,
   type VideoWipeDirection,
@@ -65,6 +67,78 @@ function Commit({
       />
     );
   return <input key={value} className={field} {...rest} defaultValue={value} onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()} onBlur={(e) => commit(e.currentTarget.value)} />;
+}
+
+/**
+ * A grade's LUT: a `.cube` path or URL (checked by loading it), or a file read in place (its name
+ * becomes the `src`, so keep the file beside the export), its strength, and a button to remove it.
+ */
+function LutControls({ controller, clip, disabled }: { controller: VideoEditorController; clip: VideoClip; disabled: boolean }) {
+  const [message, setMessage] = useState<string | null>(null);
+  const lut = clip.grade?.lut;
+  const apply = (setting: VideoGradeLut | null, label: string) => {
+    const r = controller.apply(videoLutEdits(controller.getProject(), [clip.id], setting), label);
+    setMessage(r.ok ? null : r.error);
+  };
+  const choose = async (src: string) => {
+    if (!src) return lut && apply(null, 'Remove LUT');
+    try {
+      const table = await controller.luts.load(src);
+      apply({ src, ...(lut?.strength !== undefined ? { strength: lut.strength } : {}), ...(table.title ? { name: table.title } : {}) }, 'Apply LUT');
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : String(e));
+    }
+  };
+  const readFile = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      const table = controller.luts.set(file.name, await file.text());
+      apply({ src: file.name, ...(lut?.strength !== undefined ? { strength: lut.strength } : {}), ...(table.title ? { name: table.title } : {}) }, 'Apply LUT');
+    } catch (e) {
+      setMessage(`${file.name}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+  return (
+    <>
+      <Row label="LUT" name="grade.lut">
+        <div className="flex min-w-0 gap-1">
+          <Commit value={lut?.src ?? ''} placeholder="look.cube" aria-label="LUT file" disabled={disabled} onCommit={(raw) => void choose(raw.trim())} />
+          <label className={`${btn} cursor-pointer whitespace-nowrap`} title="Load a .cube file">
+            Load
+            <input type="file" accept=".cube" className="sr-only" disabled={disabled} aria-label="Load a .cube LUT" onChange={(e) => void readFile(e.currentTarget.files?.[0])} />
+          </label>
+          {lut && (
+            <button type="button" className={btn} disabled={disabled} aria-label="Remove LUT" onClick={() => apply(null, 'Remove LUT')}>
+              ✕
+            </button>
+          )}
+        </div>
+      </Row>
+      {lut && (
+        <Row label="LUT strength" name="grade.lut.strength">
+          <Commit
+            type="number"
+            min={0}
+            max={1}
+            step={0.05}
+            value={String(lut.strength ?? 1)}
+            aria-label="LUT strength"
+            disabled={disabled}
+            onCommit={(raw) => {
+              const n = Number(raw);
+              // A strength of 0 changes nothing, so it takes the LUT off.
+              if (raw.trim() && Number.isFinite(n)) apply(n > 0 ? { ...lut, strength: Math.min(1, n) } : null, n > 0 ? 'Change LUT strength' : 'Remove LUT');
+            }}
+          />
+        </Row>
+      )}
+      {message && (
+        <p className="text-xs text-red-500" role="alert" data-lut-error="">
+          {message}
+        </p>
+      )}
+    </>
+  );
 }
 
 function Row({ label, name, children }: { label: string; name: string; children: React.ReactNode }) {
@@ -197,7 +271,7 @@ export function ClipInspector({ controller, className = '' }: ClipInspectorProps
               disabled={disabled}
               aria-label="Apply a look"
               onChange={(e) => {
-                const grade = videoGradePreset(e.target.value as VideoGradePreset);
+                const grade = videoGradeLook(clip.grade, e.target.value as VideoGradePreset);
                 if (grade) controller.apply({ op: 'update_clip', clip: clip.id, set: { grade } }, `Apply ${e.target.value} look`);
               }}
             >
@@ -230,6 +304,7 @@ export function ClipInspector({ controller, className = '' }: ClipInspectorProps
               />
             </Row>
           ))}
+          <LutControls controller={controller} clip={clip} disabled={disabled} />
         </>
       )}
       {at.track.kind === 'video' &&

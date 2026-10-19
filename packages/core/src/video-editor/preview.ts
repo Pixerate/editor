@@ -1,5 +1,6 @@
 import { videoFrameAt, type VideoFrame, type VideoLayer } from './evaluate.js';
-import { drawVideoFrame, type VideoCanvasContext } from './render.js';
+import { drawVideoFrame, type VideoCanvasContext, type VideoScratchCanvas } from './render.js';
+import type { VideoLut, VideoLutCache } from './lut.js';
 import type { VideoPreviewPixels, VideoPreviewSnapshot } from './scopes.js';
 import type { VideoProject } from './types.js';
 
@@ -9,6 +10,8 @@ export interface VideoPreviewSource {
 	subscribe(listener: () => void): () => void;
 	/** Where to publish the drawn pixels (a controller has one), for scopes and agents. */
 	previewPixels?: VideoPreviewPixels;
+	/** Where grades' LUTs load from (a controller has one). */
+	luts?: VideoLutCache;
 }
 
 /** The parts of a media element the preview drives (so tests can pass fakes). */
@@ -59,6 +62,13 @@ export interface VideoPreviewOptions {
 	 * tool (default: the source's `previewPixels`). `null` publishes nothing.
 	 */
 	pixels?: VideoPreviewPixels | null;
+	/** Where grades' LUTs load from (default: the source's `luts`). Without one, LUTs are left out. */
+	luts?: VideoLutCache | null;
+	/**
+	 * Makes the offscreen canvas LUT-graded layers are drawn on (default: a `<canvas>` with
+	 * `willReadFrequently`). LUTs run on the CPU, so a lower `resolution` keeps playback smooth.
+	 */
+	createScratch?: (width: number, height: number) => VideoScratchCanvas | null;
 }
 
 interface Entry {
@@ -88,6 +98,9 @@ export class VideoPreviewEngine {
 	private readonly pixelsTarget: VideoPreviewPixels | null;
 	private drawn: { time: number; complete: boolean } | null = null;
 	private complete = true;
+	private readonly lutCache: VideoLutCache | null;
+	private readonly unsubscribeLuts: () => void;
+	private scratchCanvas: VideoScratchCanvas | null | undefined;
 
 	constructor(
 		private readonly source: VideoPreviewSource,
@@ -97,6 +110,8 @@ export class VideoPreviewEngine {
 		this.canvas = canvas;
 		this.ctx = options.context !== undefined ? options.context : ((canvas.getContext?.('2d') as VideoCanvasContext | null) ?? null);
 		this.unsubscribe = source.subscribe(() => this.update());
+		this.lutCache = options.luts !== undefined ? options.luts : (source.luts ?? null);
+		this.unsubscribeLuts = this.lutCache ? this.lutCache.subscribe(() => this.redraw()) : () => {};
 		const pixels = options.pixels !== undefined ? options.pixels : source.previewPixels;
 		this.detachPixels = pixels ? pixels.attach(() => this.readPixels()) : () => {};
 		this.pixelsTarget = pixels ?? null;
@@ -228,11 +243,35 @@ export class VideoPreviewEngine {
 			if (!source) this.complete = false;
 			return source;
 		};
-		drawVideoFrame(this.ctx, frame, sourceFor, resolution, { defineSvgFilter: this.defineSvgFilter });
+		drawVideoFrame(this.ctx, frame, sourceFor, resolution, { defineSvgFilter: this.defineSvgFilter, lutFor: this.lutFor, scratch: this.scratch });
 		this.drawn = { time: frame.time, complete: this.complete };
 		this.options.onFrame?.(frame);
 		this.pixelsTarget?.drawn(frame.time, this.complete);
 	}
+
+	/** A grade's LUT once loaded; while it loads (or if it fails) the frame is drawn without it and counts as incomplete. */
+	private readonly lutFor = (src: string): VideoLut | undefined => {
+		const lut = this.lutCache?.get(src);
+		if (!lut) this.complete = false;
+		return lut;
+	};
+
+	private readonly scratch = (width: number, height: number): VideoScratchCanvas | null => {
+		if (this.scratchCanvas === undefined) {
+			if (this.options.createScratch) this.scratchCanvas = this.options.createScratch(width, height);
+			else if (typeof document !== 'undefined') {
+				const canvas = document.createElement('canvas');
+				const ctx = canvas.getContext('2d', { willReadFrequently: true });
+				this.scratchCanvas = ctx ? { canvas, ctx: ctx as unknown as VideoScratchCanvas['ctx'] } : null;
+			} else this.scratchCanvas = null;
+		}
+		const s = this.scratchCanvas;
+		if (!s) return null;
+		const c = s.canvas as { width?: number; height?: number };
+		if (c.width !== width) c.width = width;
+		if (c.height !== height) c.height = height;
+		return s;
+	};
 
 	private readonly defineSvgFilter = (id: string, markup: string) => {
 		if (this.options.defineSvgFilter === null) return;
@@ -255,6 +294,7 @@ export class VideoPreviewEngine {
 	destroy(): void {
 		this.destroyed = true;
 		this.detachPixels();
+		this.unsubscribeLuts();
 		this.filterHost?.remove();
 		this.filterHost = null;
 		this.filters.clear();

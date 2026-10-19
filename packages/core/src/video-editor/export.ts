@@ -2,7 +2,7 @@ import { videoClipAnimated } from './clip-animation.js';
 import { placeVideoRect } from './evaluate.js';
 import { videoIrisRadius } from './render.js';
 import { videoTimeRemapBreakpoints, videoTimeRemapSpan } from './remap.js';
-import { videoGradeFfmpegFilters } from './grade.js';
+import { normalizeVideoGradeLut, videoGradeFfmpegFilters } from './grade.js';
 import { isVideoKeyframes, VIDEO_TRANSFORM_PROPERTIES, videoKeyframeFfmpegExpr, type VideoAnimatable, type VideoKeyframes } from './keyframes.js';
 import { formatVideoTimecode, formatVideoTimecodeFrames, isVideoDropFrameRate, videoHourFrames, videoTimecodeFrames, sortedVideoClips, videoAssetMap, videoClipBefore, videoClipEnd, videoClipOverhang, videoClipSpeed, videoProjectDuration, videoAssetHasSound } from './timeline.js';
 import { videoTransitionAudioCurve } from './types.js';
@@ -86,6 +86,8 @@ export interface VideoFfmpegOptions {
 	output?: string;
 	/** The path or URL ffmpeg should open for an asset (default its `src`). */
 	resolve?: (asset: VideoAsset) => string;
+	/** The path ffmpeg's `lut3d` should read for a grade's LUT `src` (default the `src`; it must be a local file). */
+	resolveLut?: (src: string) => string;
 	/** Default `libx264`. */
 	videoCodec?: string;
 	/** Default `aac`. */
@@ -423,7 +425,7 @@ function buildFfmpeg(project: VideoProject, options: VideoFfmpegOptions, measure
 					`enable='between(t,${sec(clip.start)},${sec(end)})'`
 				];
 				if (tf?.rotation) notes.push(`Title "${clip.id}" is drawn without its rotation (drawtext cannot rotate).`);
-				if (videoGradeFfmpegFilters(clip.grade).length) notes.push(`Title "${clip.id}" is drawn without its grade (drawtext draws straight onto the picture); pass titleImage to grade titles.`);
+				if (videoGradeFfmpegFilters(clip.grade).length || normalizeVideoGradeLut(clip.grade?.lut)) notes.push(`Title "${clip.id}" is drawn without its grade (drawtext draws straight onto the picture); pass titleImage to grade titles.`);
 				if (clip.blend && clip.blend !== 'normal') notes.push(`Title "${clip.id}" is drawn without its blend mode (drawtext draws straight onto the picture); pass titleImage to blend titles.`);
 				graph.push(`[${cur}]drawtext=${opts.join(':')}[${next}]`);
 				cur = next;
@@ -445,6 +447,22 @@ function buildFfmpeg(project: VideoProject, options: VideoFfmpegOptions, measure
 			}
 			const grade = videoGradeFfmpegFilters(clip.grade);
 			if (grade.length) chain.push('format=rgba', ...grade);
+			const lut = normalizeVideoGradeLut(clip.grade?.lut);
+			if (lut) {
+				// The LUT runs on planar RGB after the other steps; at part strength the graded picture is
+				// split and the LUT's result laid over it at that opacity (a straight mix).
+				chain.push('format=gbrap');
+				const path = options.resolveLut ? options.resolveLut(lut.src) : lut.src;
+				if (/^(blob|data|https?):/i.test(path)) notes.push(`ffmpeg's lut3d reads only local files, and clip "${clip.id}"'s LUT is "${path.slice(0, 80)}"; save it and pass resolveLut to give its path.`);
+				const file = ffmpegFilterValue(path);
+				const into = `q${next}`;
+				graph.push(`${source.startsWith('[') ? source : `${source},`}${chain.join(',')}[${into}]`);
+				const lut3d = `lut3d=file=${file}:interp=tetrahedral`;
+				if ((lut.strength ?? 1) >= 1) graph.push(`[${into}]${lut3d}[r${next}]`);
+				else graph.push(`[${into}]split[o${next}][p${next}]`, `[p${next}]${lut3d}[s${next}]`, `[s${next}][o${next}]blend=all_mode=normal:all_opacity=${lut.strength}[r${next}]`);
+				source = `[r${next}]`;
+				chain.length = 0;
+			}
 			chain.push('format=yuva420p');
 			if (isVideoKeyframes(clip.opacity)) chain.push(`geq=lum='lum(X,Y)':cb='cb(X,Y)':cr='cr(X,Y)':a='alpha(X,Y)*clip(${expr(clip.opacity, onChain('T'), 1, 'opacity')},0,1)'`);
 			else if (clip.opacity !== undefined && clip.opacity < 1) chain.push(`colorchannelmixer=aa=${clip.opacity}`);

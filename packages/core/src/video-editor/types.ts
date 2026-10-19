@@ -119,9 +119,19 @@ export const videoTransitionAudioCurve = (t: VideoTransition): VideoFadeCurve =>
 export type VideoBlendMode = 'normal' | 'multiply' | 'screen' | 'overlay' | 'darken' | 'lighten' | 'color-dodge' | 'color-burn' | 'hard-light' | 'soft-light' | 'difference' | 'exclusion' | 'add';
 export const VIDEO_BLEND_MODES = ['normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten', 'color-dodge', 'color-burn', 'hard-light', 'soft-light', 'difference', 'exclusion', 'add'] as const;
 
+/** A 3D LUT a grade applies after its other steps (see `VideoGrade.lut`). */
+export interface VideoGradeLut {
+	/** A `.cube` file: whatever the host can load (URL, path) and the exporter can open. */
+	src: string;
+	/** How much of the LUT's change to apply, 0–1 (default 1). */
+	strength?: number;
+	/** A label for the look (default the file's TITLE or name). */
+	name?: string;
+}
+
 /**
  * Colour correction for a clip's picture (see `VIDEO_GRADE_CONTROLS` for ranges). Applied in a fixed
- * order: exposure, contrast, saturation, hue, then white balance (temperature and tint).
+ * order: exposure, contrast, saturation, hue, white balance (temperature and tint), then the LUT.
  */
 export interface VideoGrade {
 	/** Stops: +1 doubles every channel (default 0). */
@@ -136,6 +146,8 @@ export interface VideoGrade {
 	temperature?: number;
 	/** -1 (green) to 1 (magenta); default 0. */
 	tint?: number;
+	/** A 3D LUT (a `.cube` file) applied last, mixed in at its `strength`. */
+	lut?: VideoGradeLut;
 }
 
 /**
