@@ -1,5 +1,5 @@
 import React from 'react';
-import { formatVideoTimecode, type VideoEditorController } from '@pixerate/editor/video-editor';
+import { formatVideoTimecode, parseVideoPreviewScale, VIDEO_PREVIEW_SCALE_OPTIONS, videoProjectHasProxies, type VideoEditorController } from '@pixerate/editor/video-editor';
 import { useVideoEditorState } from './useVideoEditor';
 
 export interface VideoTransportProps {
@@ -14,6 +14,7 @@ const btn = 'rounded border border-border px-2 py-0.5 text-xs disabled:opacity-4
 /**
  * Play / pause, a frame back and forward, the playhead and total length as timecode, and the
  * edits that work on the playhead and the selection: split, delete, ripple delete, undo and redo.
+ * When any asset has proxies, a preview-size control picks what the preview plays (a view setting).
  */
 export function VideoTransport({ controller, editable = true, className = '' }: VideoTransportProps) {
   const state = useVideoEditorState(controller);
@@ -33,6 +34,22 @@ export function VideoTransport({ controller, editable = true, className = '' }: 
       <span className="px-1 tabular-nums text-muted-foreground" data-timecode="">
         {formatVideoTimecode(time, project.fps)} / {formatVideoTimecode(duration, project.fps)}
       </span>
+      {videoProjectHasProxies(project) && (
+        <select
+          className="rounded border border-border bg-transparent px-1 py-0.5 text-xs"
+          value={String(state.previewScale)}
+          onChange={(e) => controller.setPreviewScale(parseVideoPreviewScale(e.target.value))}
+          aria-label="Preview size"
+          title="Play proxies in the preview (the export always uses the originals)"
+          data-preview-scale=""
+        >
+          {VIDEO_PREVIEW_SCALE_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      )}
       {editable && (
         <>
           <span className="mx-1 h-4 w-px bg-border" />

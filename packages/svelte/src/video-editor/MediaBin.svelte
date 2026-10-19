@@ -130,6 +130,7 @@
         <li class="flex items-center gap-1 rounded border border-border px-1 py-0.5" data-asset={asset.id}>
           <span class="rounded bg-muted px-1 text-[10px] text-muted-foreground">{asset.kind}</span>
           <span class="min-w-0 flex-1 truncate" title={asset.src}>{asset.name ?? asset.id}</span>
+          {#if asset.proxies?.length}<span class="rounded bg-muted px-1 text-[10px] text-muted-foreground" title="Proxies: {asset.proxies.map((p) => `${p.scale * 100}%`).join(', ')} (the preview can play these; exports use the original)" data-asset-proxies="">proxy</span>{/if}
           {#if asset.duration !== undefined}<span class="tabular-nums text-muted-foreground">{formatVideoSeconds(asset.duration)}</span>{/if}
           <button type="button" class={btn} disabled={editor.readOnly} onclick={() => addToTimeline(asset)} aria-label="Add {asset.name ?? asset.id} to timeline" data-add-to-timeline="">Add to timeline</button>
         </li>

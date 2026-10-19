@@ -17,6 +17,16 @@ export interface VideoTranscriptWord {
 	end: number;
 }
 
+/** A smaller copy of an asset's media for the preview (see `VideoAsset.proxies`). */
+export interface VideoAssetProxy {
+	/** Its size as a fraction of the original (0.5 = half width and height). */
+	scale: number;
+	/** What the preview loads instead of the original. */
+	src: string;
+	width?: number;
+	height?: number;
+}
+
 /** A piece of source media. The project refers to it by id; `src` is whatever the host can load. */
 export interface VideoAsset {
 	id: string;
@@ -35,6 +45,12 @@ export interface VideoAsset {
 	poster?: string;
 	/** What is said in it, word by word, timed in the source (see `parseVideoTranscript`). */
 	transcript?: VideoTranscriptWord[];
+	/**
+	 * Smaller copies of a video for smooth editing (see `videoProxyFfmpeg`). The preview plays the
+	 * one its preview scale picks; exports and EDLs always use `src`. A proxy must have the same
+	 * length and timing as the original.
+	 */
+	proxies?: VideoAssetProxy[];
 }
 
 export type VideoTrackKind = 'video' | 'audio';
@@ -252,7 +268,29 @@ export interface VideoColorClip extends VideoClipBase {
 	color: string;
 }
 
-export type VideoClip = VideoMediaClip | VideoTextClip | VideoColorClip;
+/**
+ * A compound clip: a nested sequence (see `VideoProject.sequences`) played as one picture and one
+ * sound. It plays the sequence's own time from `in`, at normal speed. Its opacity, transform, blend,
+ * grade, fades, transitions and animations apply to the sequence's composite, not to each of its
+ * clips; its volume and fades apply to the sequence's mixed sound.
+ */
+export interface VideoSequenceClip extends VideoClipBase {
+	type: 'sequence';
+	/** The id of the sequence it plays (in `project.sequences`). */
+	sequence: string;
+	/** Where in the sequence's time it starts (ms, default 0). */
+	in?: number;
+	/** Gain on the sequence's sound (1 = unchanged, default 1), or keyframes. */
+	volume?: VideoAnimatable;
+	/** Silences the sequence's sound. */
+	muted?: boolean;
+	/** Shape of the sound's fade in (default linear). */
+	fadeInCurve?: VideoFadeCurve;
+	/** Shape of the sound's fade out (default linear). */
+	fadeOutCurve?: VideoFadeCurve;
+}
+
+export type VideoClip = VideoMediaClip | VideoTextClip | VideoColorClip | VideoSequenceClip;
 export type VideoClipType = VideoClip['type'];
 
 /**
@@ -262,7 +300,7 @@ export type VideoClipType = VideoClip['type'];
  */
 export type VideoPlacementMode = 'refuse' | 'overwrite' | 'insert';
 export const VIDEO_PLACEMENT_MODES = ['refuse', 'overwrite', 'insert'] as const;
-export const VIDEO_CLIP_TYPES = ['media', 'text', 'color'] as const;
+export const VIDEO_CLIP_TYPES = ['media', 'text', 'color', 'sequence'] as const;
 
 export interface VideoMarker {
 	id: string;
@@ -270,6 +308,18 @@ export interface VideoMarker {
 	label?: string;
 	/** CSS colour. */
 	color?: string;
+}
+
+/**
+ * A nested sequence: tracks of clips with their own timeline from 0, played inside the project by
+ * compound clips (`type: 'sequence'`). Its frame is the project's frame size, transparent where no
+ * clip covers it. A sequence may hold compound clips of other sequences, but never itself (directly
+ * or through others).
+ */
+export interface VideoSequence {
+	id: string;
+	name?: string;
+	tracks: VideoTrack[];
 }
 
 export interface VideoProject {
@@ -284,5 +334,7 @@ export interface VideoProject {
 	background?: string;
 	assets: VideoAsset[];
 	tracks: VideoTrack[];
+	/** Nested sequences that compound clips play (see `VideoSequence`). */
+	sequences?: VideoSequence[];
 	markers?: VideoMarker[];
 }

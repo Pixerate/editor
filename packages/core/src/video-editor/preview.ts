@@ -1,17 +1,21 @@
-import { videoFrameAt, type VideoFrame, type VideoLayer } from './evaluate.js';
+import { videoFrameAt, videoFrameLeafLayers, type VideoFrame, type VideoLayer } from './evaluate.js';
 import { drawVideoFrame, type VideoCanvasContext, type VideoScratchCanvas } from './render.js';
+import type { VideoFrameCache } from './frame-cache.js';
 import type { VideoLut, VideoLutCache } from './lut.js';
 import type { VideoPreviewPixels, VideoPreviewSnapshot } from './scopes.js';
+import { resolveVideoPreviewScale, videoPreviewSrc, type VideoPreviewScale } from './proxy.js';
 import type { VideoProject } from './types.js';
 
 /** What a preview follows: a `VideoEditorController` fits. */
 export interface VideoPreviewSource {
-	getState(): { project: VideoProject; time: number; playing: boolean };
+	getState(): { project: VideoProject; time: number; playing: boolean; previewScale?: VideoPreviewScale };
 	subscribe(listener: () => void): () => void;
 	/** Where to publish the drawn pixels (a controller has one), for scopes and agents. */
 	previewPixels?: VideoPreviewPixels;
 	/** Where grades' LUTs load from (a controller has one). */
 	luts?: VideoLutCache;
+	/** Decoded source frames with prefetch (a controller has one when the host gives it). */
+	frameCache?: VideoFrameCache | null;
 }
 
 /** The parts of a media element the preview drives (so tests can pass fakes). */
@@ -43,6 +47,8 @@ export interface VideoPreviewImage {
 export interface VideoPreviewOptions {
 	/** Canvas pixels per frame pixel (default: fits the canvas's displayed width at the device pixel ratio, at most 1). */
 	resolution?: number;
+	/** How large a picture to play, overriding the source's `previewScale` (see `VideoPreviewScale`). */
+	previewScale?: VideoPreviewScale;
 	/** How far (ms) a playing element may drift from the timeline before it is re-seeked (default 200). */
 	tolerance?: number;
 	/** Makes media and image elements (default `document.createElement`). */
@@ -62,13 +68,19 @@ export interface VideoPreviewOptions {
 	 * tool (default: the source's `previewPixels`). `null` publishes nothing.
 	 */
 	pixels?: VideoPreviewPixels | null;
+	/**
+	 * Decoded source frames to draw while paused, scrubbing or waiting for a seek, prefetched ahead
+	 * of the playhead (default: the source's `frameCache`; `null` uses none).
+	 */
+	frameCache?: VideoFrameCache | null;
 	/** Where grades' LUTs load from (default: the source's `luts`). Without one, LUTs are left out. */
 	luts?: VideoLutCache | null;
 	/**
-	 * Makes the offscreen canvas LUT-graded layers are drawn on (default: a `<canvas>` with
-	 * `willReadFrequently`). LUTs run on the CPU, so a lower `resolution` keeps playback smooth.
+	 * Makes an offscreen canvas compound clips and LUT-graded layers are drawn on (default: a
+	 * `<canvas>` with `willReadFrequently`), once per `slot` (see `VideoDrawOptions.scratch`). LUTs
+	 * run on the CPU, so a lower `resolution` keeps playback smooth.
 	 */
-	createScratch?: (width: number, height: number) => VideoScratchCanvas | null;
+	createScratch?: (width: number, height: number, slot: number) => VideoScratchCanvas | null;
 }
 
 interface Entry {
@@ -99,8 +111,13 @@ export class VideoPreviewEngine {
 	private drawn: { time: number; complete: boolean } | null = null;
 	private complete = true;
 	private readonly lutCache: VideoLutCache | null;
+	private readonly frameCache: VideoFrameCache | null;
+	private readonly unsubscribeFrames: () => void;
+	private srcFor: (layer: VideoLayer) => string | undefined = (layer) => layer.src;
+	private playing = false;
+	private fps = 30;
 	private readonly unsubscribeLuts: () => void;
-	private scratchCanvas: VideoScratchCanvas | null | undefined;
+	private readonly scratchCanvases = new Map<number, VideoScratchCanvas | null>();
 
 	constructor(
 		private readonly source: VideoPreviewSource,
@@ -112,6 +129,8 @@ export class VideoPreviewEngine {
 		this.unsubscribe = source.subscribe(() => this.update());
 		this.lutCache = options.luts !== undefined ? options.luts : (source.luts ?? null);
 		this.unsubscribeLuts = this.lutCache ? this.lutCache.subscribe(() => this.redraw()) : () => {};
+		this.frameCache = options.frameCache !== undefined ? options.frameCache : (source.frameCache ?? null);
+		this.unsubscribeFrames = this.frameCache ? this.frameCache.subscribe(() => this.redraw()) : () => {};
 		const pixels = options.pixels !== undefined ? options.pixels : source.previewPixels;
 		this.detachPixels = pixels ? pixels.attach(() => this.readPixels()) : () => {};
 		this.pixelsTarget = pixels ?? null;
@@ -171,8 +190,16 @@ export class VideoPreviewEngine {
 	/** Brings the media elements in step with the editor and draws the frame. */
 	update(): void {
 		if (this.destroyed) return;
-		const { project, time, playing } = this.source.getState();
+		const state = this.source.getState();
+		const { project, time, playing } = state;
 		const frame = videoFrameAt(project, time);
+		// Video plays from the proxy the preview scale picks; sound-only clips use the original.
+		const scale = resolveVideoPreviewScale(this.options.previewScale ?? state.previewScale, this.resolutionFor(project.width));
+		const assets = new Map(project.assets.map((a) => [a.id, a]));
+		this.srcFor = (layer) => videoPreviewSrc(assets.get(layer.asset ?? ''), scale, layer.src);
+		this.playing = playing;
+		this.fps = project.fps;
+		this.frameCache?.update(project, time, { playing, srcFor: this.srcFor });
 		const tolerance = (this.options.tolerance ?? 200) / 1000;
 		const active = new Set<string>();
 		const sync = (clip: string, src: string, kind: 'video' | 'audio', sourceTime: number, speed: number, gain: number | null) => {
@@ -196,10 +223,10 @@ export class VideoPreviewEngine {
 			}
 		};
 		const sounding = new Map(frame.audio.map((a) => [a.clip, a]));
-		for (const layer of frame.layers) {
+		for (const layer of videoFrameLeafLayers(frame.layers)) {
 			if (layer.type !== 'media' || layer.assetKind !== 'video' || !layer.src) continue;
 			const sound = sounding.get(layer.clip);
-			sync(layer.clip, layer.src, 'video', layer.sourceTime ?? 0, sound?.speed ?? 1, sound ? sound.gain : null);
+			sync(layer.clip, this.srcFor(layer)!, 'video', layer.sourceTime ?? 0, sound?.speed ?? 1, sound ? sound.gain : null);
 			sounding.delete(layer.clip);
 		}
 		// Sound with no picture (audio tracks, hidden video tracks): an audio element is enough.
@@ -223,16 +250,32 @@ export class VideoPreviewEngine {
 			return img.complete ? (img as unknown as CanvasImageSource) : null;
 		}
 		const entry = this.media.get(layer.clip);
-		if (!entry || entry.media.readyState < 2) return null;
-		if (entry.media.seeking) this.complete = false;
-		return entry.media as unknown as CanvasImageSource;
+		const ready = !!entry && entry.media.readyState >= 2;
+		const cache = this.frameCache;
+		const src = entry?.src ?? this.srcFor(layer);
+		const sourceTime = layer.sourceTime ?? 0;
+		// Paused, scrubbing or mid-seek: a cached frame is the right picture now; a seeking element is not.
+		if (cache && src && (!this.playing || !ready || entry!.media.seeking)) {
+			const hit = cache.get(src, sourceTime, this.fps);
+			if (hit) return hit;
+		}
+		if (!ready) return null;
+		if (entry!.media.seeking) this.complete = false;
+		else if (cache && !this.playing) cache.capture(entry!.src, sourceTime, this.fps, this.source.getState().time, entry!.media as unknown as CanvasImageSource);
+		return entry!.media as unknown as CanvasImageSource;
 	};
+
+	/** Canvas pixels per frame pixel: the option, else the displayed width at the device pixel ratio (at most 1). */
+	private resolutionFor(frameWidth: number): number {
+		if (this.options.resolution !== undefined) return this.options.resolution;
+		const shown = this.canvas.clientWidth || frameWidth;
+		const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+		return Math.min(1, (shown * dpr) / frameWidth);
+	}
 
 	private draw(frame: VideoFrame) {
 		if (!this.ctx) return;
-		const shown = this.canvas.clientWidth || frame.width;
-		const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
-		const resolution = this.options.resolution ?? Math.min(1, (shown * dpr) / frame.width);
+		const resolution = this.resolutionFor(frame.width);
 		const w = Math.max(1, Math.round(frame.width * resolution));
 		const h = Math.max(1, Math.round(frame.height * resolution));
 		if (this.canvas.width !== w) this.canvas.width = w;
@@ -256,16 +299,18 @@ export class VideoPreviewEngine {
 		return lut;
 	};
 
-	private readonly scratch = (width: number, height: number): VideoScratchCanvas | null => {
-		if (this.scratchCanvas === undefined) {
-			if (this.options.createScratch) this.scratchCanvas = this.options.createScratch(width, height);
+	private readonly scratch = (width: number, height: number, slot: number): VideoScratchCanvas | null => {
+		if (!this.scratchCanvases.has(slot)) {
+			let made: VideoScratchCanvas | null = null;
+			if (this.options.createScratch) made = this.options.createScratch(width, height, slot);
 			else if (typeof document !== 'undefined') {
 				const canvas = document.createElement('canvas');
 				const ctx = canvas.getContext('2d', { willReadFrequently: true });
-				this.scratchCanvas = ctx ? { canvas, ctx: ctx as unknown as VideoScratchCanvas['ctx'] } : null;
-			} else this.scratchCanvas = null;
+				made = ctx ? { canvas, ctx: ctx as unknown as VideoScratchCanvas['ctx'] } : null;
+			}
+			this.scratchCanvases.set(slot, made);
 		}
-		const s = this.scratchCanvas;
+		const s = this.scratchCanvases.get(slot)!;
 		if (!s) return null;
 		const c = s.canvas as { width?: number; height?: number };
 		if (c.width !== width) c.width = width;
@@ -295,6 +340,7 @@ export class VideoPreviewEngine {
 		this.destroyed = true;
 		this.detachPixels();
 		this.unsubscribeLuts();
+		this.unsubscribeFrames();
 		this.filterHost?.remove();
 		this.filterHost = null;
 		this.filters.clear();

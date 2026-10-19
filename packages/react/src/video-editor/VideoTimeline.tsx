@@ -3,6 +3,7 @@ import {
   planVideoClipDrag,
   videoDragLabel,
   videoAssetMap,
+  videoSequenceMap,
   videoClipLabel,
   videoClipShowsWaveform,
   videoClipWaveformPath,
@@ -16,6 +17,7 @@ import {
   type VideoClipDragPlan,
   type VideoMediaClip,
   type VideoEditorController,
+  type VideoProject,
   type VideoTrack,
   type VideoWaveformMode,
 } from '@pixerate/editor/video-editor';
@@ -83,6 +85,32 @@ const isField = (el: EventTarget | null) => el instanceof HTMLElement && /^(INPU
  * Keyboard (when focused): Space plays, ←/→ step a frame, S splits at the playhead, Delete removes
  * the selection (Shift to ripple), Cmd/Ctrl+Z undoes, Shift+Cmd/Ctrl+Z redoes.
  */
+/**
+ * The stretches whose frames the controller's frame cache holds (none without a cache), sampled
+ * every two pixels at zoom `px`, re-read after edits and at most four times a second as frames arrive.
+ */
+function useCachedRanges(controller: VideoEditorController, project: VideoProject, px: number): { start: number; end: number }[] {
+  const [ranges, setRanges] = useState<{ start: number; end: number }[]>([]);
+  useEffect(() => {
+    const cache = controller.frameCache;
+    if (!cache) return setRanges([]);
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const read = () => {
+      timer = null;
+      setRanges(cache.cachedRanges(project, { step: 2000 / px }));
+    };
+    read();
+    const off = cache.subscribe(() => {
+      timer ??= setTimeout(read, 250);
+    });
+    return () => {
+      off();
+      if (timer) clearTimeout(timer);
+    };
+  }, [controller, project, px]);
+  return ranges;
+}
+
 export function VideoTimeline({ controller, pxPerSecond, onPxPerSecondChange, editable = true, waveforms = 'audio', className = '' }: VideoTimelineProps) {
   const state = useVideoEditorState(controller);
   const { project, duration, time, selection, readOnly, error } = state;
@@ -94,10 +122,12 @@ export function VideoTimeline({ controller, pxPerSecond, onPxPerSecondChange, ed
   const rows = useRef(new Map<string, HTMLDivElement>());
   const ruler = useRef<HTMLDivElement>(null);
   const assets = videoAssetMap(project);
+  const sequences = videoSequenceMap(project);
   const msToPx = (ms: number) => (ms * px) / 1000;
   const span = Math.max(duration + 5000, 10000);
   const width = msToPx(span);
   const ticks = videoRulerTicks(span, px, project.fps);
+  const cached = useCachedRanges(controller, project, px);
 
   const seekAt = (clientX: number) => {
     const box = ruler.current!.getBoundingClientRect();
@@ -281,6 +311,9 @@ export function VideoTimeline({ controller, pxPerSecond, onPxPerSecondChange, ed
                   {t.label && <span className="absolute -top-3.5 left-1 whitespace-nowrap tabular-nums">{t.label}</span>}
                 </div>
               ))}
+              {cached.map((r) => (
+                <div key={r.start} className="pointer-events-none absolute bottom-0 h-[3px] bg-emerald-500/70" style={{ left: msToPx(r.start), width: Math.max(1, msToPx(r.end - r.start)) }} title="Frames cached: plays and scrubs without waiting" data-cached-range="" />
+              ))}
               {(project.markers ?? []).map((m) => (
                 <div
                   key={m.id}
@@ -324,7 +357,7 @@ export function VideoTimeline({ controller, pxPerSecond, onPxPerSecondChange, ed
                 {clips.map(({ clip, home, start, duration: length, dragging }) => {
                   const asset = clip.type === 'media' ? assets.get(clip.asset) : undefined;
                   const selected = selection.includes(clip.id);
-                  const label = videoClipLabel(clip, asset);
+                  const label = videoClipLabel(clip, asset, clip.type === 'sequence' ? sequences.get(clip.sequence) : undefined);
                   return (
                     <div
                       key={clip.id}
@@ -339,6 +372,7 @@ export function VideoTimeline({ controller, pxPerSecond, onPxPerSecondChange, ed
                       }}
                       title={`${label} · ${formatVideoSeconds(start)}–${formatVideoSeconds(start + length)}`}
                       data-clip={clip.id}
+                      data-compound={clip.type === 'sequence' ? clip.sequence : undefined}
                       data-selected={selected ? '' : undefined}
                       data-dragging={dragging ? '' : undefined}
                       aria-selected={selected}

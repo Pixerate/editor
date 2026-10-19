@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ToolRegistry } from '../src/tools';
-import { applyVideoEdits, applyVideoGrade, createVideoEditorToolProvider, createVideoProject, videoLutFromFunction, videoLutToCube, VideoEditorController, videoSpeedRampKeys, parseVideoLoudnessMeasurement, toVideoFfmpeg, toVideoLoudnessMeasure, videoFrameAt, type VideoEdit, type VideoProject } from '../src/video-editor';
+import { applyVideoEdits, applyVideoGrade, createVideoEditorToolProvider, createVideoProject, videoLutFromFunction, videoProxyFfmpeg, videoLutToCube, VideoEditorController, videoSpeedRampKeys, parseVideoLoudnessMeasurement, toVideoFfmpeg, toVideoLoudnessMeasure, videoFrameAt, checkVideoProject, parseVideoProject, type VideoEdit, type VideoLayer, type VideoProject, type VideoSequence, type VideoClip, type VideoLut } from '../src/video-editor';
 
 // Renders projects with a real ffmpeg (skipped when it is not on PATH): the string assertions in
 // video-editor.test.ts cannot tell whether ffmpeg accepts the filter graph.
@@ -54,6 +54,51 @@ function render(p: VideoProject, name: string, options: { titleImages?: boolean 
 	const result = toVideoFfmpeg(p, { output: out, crf: 30, ...(titleImage ? { titleImage } : {}) });
 	ffmpeg(result.args);
 	return out;
+}
+
+
+/** CSS blend functions (0–1 channels) for the modes the compound tests use. */
+const BLEND: Record<string, (b: number, s: number) => number> = { normal: (_b, s) => s, multiply: (b, s) => b * s, screen: (b, s) => b + s - b * s, add: (b, s) => Math.min(1, b + s) };
+type Px = { c: number[]; a: number };
+/**
+ * The colour the preview's own evaluation gives at (x, y): flat-colour layers and compounds
+ * composited as the canvas does (straight alpha, CSS blending against the backdrop's alpha, a
+ * compound's layers on a transparent picture that is then graded and laid down as one).
+ */
+function expectedPixel(layers: readonly VideoLayer[], x: number, y: number, frame: { width: number; height: number }, backdrop: Px, lut?: VideoLut): Px {
+	let dst = backdrop;
+	for (const layer of layers) {
+		const r = layer.rect;
+		if (x < r.x || x >= r.x + r.width || y < r.y || y >= r.y + r.height) continue;
+		let src: Px;
+		if (layer.layers) {
+			// The compound's picture is its sequence's frame scaled into its rect.
+			src = expectedPixel(layer.layers, ((x - r.x) * frame.width) / r.width, ((y - r.y) * frame.height) / r.height, frame, { c: [0, 0, 0], a: 0 }, lut);
+		} else {
+			const hex = layer.color!.replace('#', '');
+			src = { c: [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255), a: 1 };
+		}
+		if (layer.grade && src.a > 0) src = { c: applyVideoGrade(layer.grade, src.c.map((v) => v * 255) as [number, number, number], lut).map((v) => v / 255), a: src.a };
+		const sa = src.a * layer.opacity;
+		if (sa <= 0) continue;
+		const f = BLEND[layer.blend ?? 'normal'];
+		const cs = src.c.map((v, i) => (1 - dst.a) * v + dst.a * f(dst.c[i], v));
+		const a = sa + dst.a * (1 - sa);
+		dst = { c: cs.map((v, i) => (v * sa + dst.c[i] * dst.a * (1 - sa)) / a), a };
+	}
+	return dst;
+}
+const expectedRgb = (p: VideoProject, time: number, x: number, y: number, lut?: VideoLut) => {
+	const frame = videoFrameAt(p, time);
+	const bg = frame.background.replace('#', '');
+	return expectedPixel(frame.layers, x, y, frame, { c: [0, 2, 4].map((i) => parseInt(bg.slice(i, i + 2), 16) / 255), a: 1 }, lut).c.map((v) => Math.round(v * 255));
+};
+/** A project with sequences added (and checked: no errors). */
+function withSequences(p: VideoProject, sequences: VideoSequence[], clips: { track: string; clip: VideoClip }[]): VideoProject {
+	const next = parseVideoProject({ ...p, sequences, tracks: p.tracks.map((t) => ({ ...t, clips: [...t.clips, ...clips.filter((c) => c.track === t.id).map((c) => c.clip)] })) });
+	const errors = checkVideoProject(next).filter((i) => i.severity === 'error');
+	if (errors.length) throw new Error(errors.map((e) => e.message).join('\n'));
+	return next;
 }
 
 describe.skipIf(!hasFfmpeg)('toVideoFfmpeg with a real ffmpeg', () => {
@@ -245,6 +290,30 @@ describe.skipIf(!hasFfmpeg)('toVideoFfmpeg with a real ffmpeg', () => {
 		});
 	}, 120000);
 
+	it('makes proxies that seek cheaply and keep the original\'s timing, while the export reads the original', () => {
+		const asset = { id: 'a', kind: 'video' as const, src: media('a.mp4'), duration: 6000, width: 640, height: 360 };
+		const made = videoProxyFfmpeg(asset, { scale: 0.5, gop: 10 });
+		ffmpeg(made.args);
+		const info = probe(made.proxy.src);
+		const v = info.streams.find((s) => s.codec_type === 'video')!;
+		expect([v.width, v.height]).toEqual([made.proxy.width, made.proxy.height]);
+		expect(info.streams.some((s) => s.codec_type === 'audio')).toBe(true);
+		expect(Math.abs(Number(info.format.duration) - 6)).toBeLessThan(0.1);
+		// A keyframe every 10 frames: 150 frames make 15 of them.
+		const keys = execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v', '-skip_frame', 'nokey', '-show_entries', 'frame=pts_time', '-of', 'csv=p=0', made.proxy.src], { encoding: 'utf8' }).trim().split('\n');
+		expect(keys.length).toBe(15);
+		// The same moment in the proxy and the original shows the same picture (scaled).
+		for (const t of [1.2, 4.6]) {
+			const a = pixel(media('a.mp4'), t, 300, 160);
+			const b = pixel(made.proxy.src, t, 150, 80);
+			expect(a.every((x, k) => Math.abs(x - b[k]) < 24), `at ${t}s: original ${a}, proxy ${b}`).toBe(true);
+		}
+		const p = project([{ op: 'update_asset', asset: 'a', set: { proxies: [made.proxy] } }, { op: 'add_clip', track: 'v1', clip: { type: 'media', id: 'c', asset: 'a', duration: 1000 } }]);
+		const exported = toVideoFfmpeg(p, { output: media('proxied.mp4') });
+		expect(exported.args).toContain(media('a.mp4'));
+		expect(exported.args).not.toContain(made.proxy.src);
+	}, 60000);
+
 	it('measures an exported frame with get_video_scopes on a host without a preview', async () => {
 		// A server host decodes the export's frame with ffmpeg and hands its pixels to the tool.
 		const grade = { exposure: 0.5, saturation: -0.3 };
@@ -282,6 +351,67 @@ describe.skipIf(!hasFfmpeg)('toVideoFfmpeg with a real ffmpeg', () => {
 		// CSS: dodge 200 / (1 - 30/255) = 227; burn 1 - (1 - 200/255) / (200/255) = 185.
 		expect(pixel(out, 0.5, 300, 170)).toSatisfy((rgb: number[]) => near(rgb, [227, 227, 227]));
 		expect(pixel(out, 1.5, 300, 170)).toSatisfy((rgb: number[]) => near(rgb, [185, 185, 185]));
+	}, 120000);
+
+	it('renders a compound clip as one picture, blended and graded as a group, as the preview does', () => {
+		const lut = videoLutFromFunction(17, ([r, g, b]) => [0.05 + 0.9 * g ** 0.8, (r + b) / 2, b ** 1.5], 'Swap');
+		writeFileSync(media('group.cube'), videoLutToCube(lut));
+		const inner: VideoSequence = {
+			id: 'inner',
+			name: 'Inner',
+			tracks: [
+				{ id: 'top', kind: 'video', clips: [{ type: 'color', id: 'blue', color: '#2060c0', start: 0, duration: 4000, transform: { scale: 0.25, x: 80 }, opacity: 0.6 }] },
+				// Screen over the transparent part of the sequence shows the colour itself; over orange it lightens.
+				{ id: 'mid', kind: 'video', clips: [{ type: 'color', id: 'cyan', color: '#20a0a0', start: 0, duration: 4000, transform: { scale: 0.3, x: -160 }, blend: 'screen' }] },
+				{ id: 'back', kind: 'video', clips: [{ type: 'color', id: 'orange', color: '#b45a3c', start: 0, duration: 4000, transform: { scale: 0.5 } }] }
+			]
+		};
+		const p = withSequences(
+			project([
+				{ op: 'add_clip', track: 'v1', clip: { type: 'color', id: 'grey', color: '#a0a0a0', duration: 3000 } },
+				{ op: 'add_track', track: { kind: 'video', id: 'over' } }
+			]),
+			[inner],
+			[
+				// Multiplied, graded and faded as one picture: where the sequence is clear the grey shows untouched.
+				{ track: 'over', clip: { type: 'sequence', id: 'g1', sequence: 'inner', in: 500, start: 0, duration: 1000, blend: 'multiply', grade: { exposure: 0.4, saturation: -0.5 }, opacity: 0.9 } },
+				// Moved and shrunk, with a LUT on the group.
+				{ track: 'over', clip: { type: 'sequence', id: 'g2', sequence: 'inner', in: 1500, start: 1000, duration: 1000, transform: { scale: 0.5, x: 100, y: 40 }, grade: { lut: { src: 'group.cube', strength: 0.5 } } } },
+				// Fading in.
+				{ track: 'over', clip: { type: 'sequence', id: 'g3', sequence: 'inner', start: 2000, duration: 1000, fadeIn: 800 } }
+			]
+		);
+		const result = toVideoFfmpeg(p, { output: media('compound.mp4'), crf: 18, resolveLut: (src) => media(src) });
+		ffmpeg(result.args);
+		const out = media('compound.mp4');
+		const points: [number, number, number][] = [
+			// [time s, x, y]: the orange, the blue over it, the screened cyan over orange and over clear, the clear edge.
+			[0.5, 300, 250], [0.5, 400, 180], [0.5, 220, 180], [0.5, 140, 180], [0.5, 30, 30],
+			[1.5, 420, 220], [1.5, 380, 220], [1.5, 200, 100],
+			[2.4, 300, 180], [2.9, 300, 180]
+		];
+		for (const [t, x, y] of points) {
+			const want = expectedRgb(p, t * 1000, x, y, lut);
+			const got = pixel(out, t, x - 2, y - 2);
+			expect(got.every((v, k) => Math.abs(v - want[k]) < 10), `at ${t} s (${x}, ${y}): got ${got}, want ${want}`).toBe(true);
+		}
+	}, 120000);
+
+	it('mixes a compound clip\'s sound with its volume, fades and a transition, as the preview does', () => {
+		const inner: VideoSequence = { id: 's', tracks: [{ id: 'sa', kind: 'audio', clips: [{ type: 'media', id: 'tone-in', asset: 'tone', start: 0, duration: 6000 }] }] };
+		const p = withSequences(
+			project([{ op: 'add_clip', track: 'v1', clip: { type: 'color', id: 'k', color: '#000000', duration: 1000 } }]),
+			[inner],
+			[{ track: 'v1', clip: { type: 'sequence', id: 'comp', sequence: 's', in: 1000, start: 1000, duration: 3000, volume: 0.5, fadeIn: 1000, fadeInCurve: 'equal-power', fadeOut: 1000, transition: { type: 'crossfade', duration: 600 } } }]
+		);
+		expect(videoFrameAt(p, 2500).audio).toEqual([expect.objectContaining({ clip: 'comp/tone-in', sourceTime: 2500, gain: 0.5 })]);
+		const out = render(p, 'compound-sound.mp4');
+		const ref = level(out, 2.5) / 0.5;
+		for (const t of [0.85, 1.3, 1.6, 3.4, 3.8]) {
+			const gain = videoFrameAt(p, t * 1000).audio.reduce((g, a) => g + a.gain, 0);
+			expect(Math.abs(level(out, t) / ref - gain), `gain at ${t} s`).toBeLessThan(0.06);
+		}
+		expect(Number(probe(out).format.duration)).toBeCloseTo(4, 0);
 	}, 120000);
 
 	it('overlays titles given as images, with their fades', () => {

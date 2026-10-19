@@ -2,9 +2,9 @@ import { videoClipAnimated } from './clip-animation.js';
 import { videoClipSourceTime, videoClipSpeedAt } from './remap.js';
 import { normalizeVideoGrade } from './grade.js';
 import { videoValueAt } from './keyframes.js';
-import { sortedVideoClips, videoAssetMap, videoClipAfter, videoClipBefore, videoClipEnd, videoClipSpeed, videoAssetHasSound } from './timeline.js';
+import { sortedVideoClips, videoAssetMap, videoClipAfter, videoClipBefore, videoClipEnd, videoClipSpeed, videoAssetHasSound, videoSequenceMap } from './timeline.js';
 import { videoTransitionAudioCurve } from './types.js';
-import type { VideoAsset, VideoBlendMode, VideoGrade, VideoClip, VideoFadeCurve, VideoFit, VideoProject, VideoTransition, VideoTextClip, VideoTrack, VideoWipeDirection } from './types.js';
+import type { VideoAsset, VideoBlendMode, VideoGrade, VideoClip, VideoFadeCurve, VideoFit, VideoProject, VideoSequence, VideoTransition, VideoTextClip, VideoTrack, VideoWipeDirection } from './types.js';
 
 /** A rectangle in frame pixels. */
 export interface VideoRect {
@@ -16,15 +16,29 @@ export interface VideoRect {
 
 /** One picture in a frame, in draw order (first is at the back). */
 export interface VideoLayer {
-	/** The clip it comes from, or `transition:<clip>` for a dip's colour. */
+	/**
+	 * The clip it comes from, or `transition:<clip>` for a dip's colour. Inside a compound clip it is
+	 * the path of clip ids from the project's own track (`compound/inner`), so the same sequence
+	 * played twice gives distinct layers.
+	 */
 	clip: string;
+	/** The track it is on (inside a compound: the sequence's track). */
 	track: string;
 	type: VideoClip['type'];
 	/** For media: the asset, its kind and `src`, and the moment of the source to show (ms). */
 	asset?: string;
 	assetKind?: VideoAsset['kind'];
 	src?: string;
+	/** For media: the moment of the source to show (ms); for a compound: the moment of its sequence. */
 	sourceTime?: number;
+	/** For a compound: the sequence it plays. */
+	sequence?: string;
+	/**
+	 * For a compound: the sequence's frame at `sourceTime`, back to front in the sequence's own frame
+	 * (the project's size, transparent where nothing covers it). They are drawn together as one
+	 * picture, which this layer's rect, rotation, opacity, blend, grade, wipe and iris then apply to.
+	 */
+	layers?: VideoLayer[];
 	/** 0–1, after fades and transitions. */
 	opacity: number;
 	/** Where the fitted picture sits before rotation (its centre is the rotation centre). */
@@ -47,13 +61,15 @@ export interface VideoLayer {
 
 /** One sound playing at a moment. */
 export interface VideoAudioSource {
+	/** The clip it comes from (inside a compound: the path of clip ids, `compound/inner`). */
 	clip: string;
+	/** The track it is on (inside a compound: the sequence's track). */
 	track: string;
 	asset: string;
 	src: string;
 	/** The moment of the source playing (ms). */
 	sourceTime: number;
-	/** Gain after clip and track volume, fades and transitions (0 = silent). */
+	/** Gain after clip and track volume, fades and transitions, and those of any compound it plays in (0 = silent). */
 	gain: number;
 	speed: number;
 }
@@ -134,18 +150,18 @@ export function videoFadeCurveGain(curve: VideoFadeCurve | undefined, x: number)
 /** Fade-in / fade-out multiplier for a clip at timeline `time`: linear for pictures, shaped for sound. */
 function fadeGain(clip: VideoClip, time: number, sound = false): number {
 	let g = 1;
-	const shape = sound && clip.type === 'media' ? clip : undefined;
+	const shape = sound && (clip.type === 'media' || clip.type === 'sequence') ? clip : undefined;
 	if (clip.fadeIn) g *= videoFadeCurveGain(shape?.fadeInCurve, (time - clip.start) / clip.fadeIn);
 	if (clip.fadeOut) g *= videoFadeCurveGain(shape?.fadeOutCurve, (videoClipEnd(clip) - time) / clip.fadeOut);
 	return g;
 }
 
 /**
- * A media clip's own gain at clip time `clipTime` (ms): its volume (or volume keyframes) times its
+ * A media or compound clip's own gain at clip time `clipTime` (ms): its volume (or volume keyframes) times its
  * shaped fades. Leaves out track volume and transitions, which depend on the timeline around it.
  */
 export function videoClipSoundGain(clip: VideoClip, clipTime: number): number {
-	const volume = clip.type === 'media' ? videoValueAt(clip.volume, clipTime, 1) : 1;
+	const volume = clip.type === 'media' || clip.type === 'sequence' ? videoValueAt(clip.volume, clipTime, 1) : 1;
 	return volume * fadeGain(clip, clip.start + Math.min(Math.max(clipTime, 0), clip.duration), true);
 }
 
@@ -178,15 +194,32 @@ const sourceTimeAt = (clip: VideoClip, time: number) => (clip.type === 'media' ?
 /**
  * What plays at `time` (ms): the pictures to draw, back to front, with their placement, opacity
  * and the moment of source each shows, and the sounds with their gain. A pure function of the
- * project and the time, so previews, exporters and agents all agree on every frame.
+ * project and the time, so previews, exporters and agents all agree on every frame. A compound
+ * clip is one layer holding its sequence's frame (`layers`), and its sounds are mixed in with the
+ * compound's volume, fades and transitions.
  */
 export function videoFrameAt(project: VideoProject, time: number): VideoFrame {
-	const assets = videoAssetMap(project);
+	const { layers, audio } = tracksAt(project, project.tracks, time, { assets: videoAssetMap(project), sequences: videoSequenceMap(project), within: [], prefix: '' });
+	return { time, width: project.width, height: project.height, background: project.background ?? '#000000', layers, audio };
+}
+
+interface Scope {
+	assets: Map<string, VideoAsset>;
+	sequences: Map<string, VideoSequence>;
+	/** The sequences being evaluated around this one, outermost first (a compound of one of them would loop). */
+	within: string[];
+	/** Prepended to clip ids: the compound clips around, `a/b/`. */
+	prefix: string;
+}
+
+/** The layers and sounds of `tracks` at `time` (in their own timeline). */
+function tracksAt(project: VideoProject, tracks: readonly VideoTrack[], time: number, scope: Scope): { layers: VideoLayer[]; audio: VideoAudioSource[] } {
+	const { assets, prefix } = scope;
 	const layers: VideoLayer[] = [];
 	const audio: VideoAudioSource[] = [];
 	// Later tracks are further back, so draw from the last track to the first.
-	for (let ti = project.tracks.length - 1; ti >= 0; ti--) {
-		const track = project.tracks[ti];
+	for (let ti = tracks.length - 1; ti >= 0; ti--) {
+		const track = tracks[ti];
 		for (const { clip, incoming, outgoing } of activeOnTrack(track, time)) {
 			// A dip plays the outgoing clip down into its colour and this one up out of it, so neither
 			// runs past the cut (and needs no handles).
@@ -199,16 +232,28 @@ export function videoFrameAt(project: VideoProject, time: number): VideoFrame {
 			// Sound crossfades through a crossfade or wipe (equal power by default), and dips with the picture.
 			const mix = (incoming ? level(incoming, incoming.transition, true) : 1) * (outgoing ? level(outgoing, outgoing.next.transition!, false) : 1);
 			const asset = clip.type === 'media' ? assets.get(clip.asset) : undefined;
-			const sourceTime = sourceTimeAt(clip, time);
+			const sourceTime = clip.type === 'sequence' ? (clip.in ?? 0) + time - clip.start : sourceTimeAt(clip, time);
 			// Keyframes are in clip time, held before the first key and after the last.
 			const clipTime = time - clip.start;
+			let nested: { layers: VideoLayer[]; audio: VideoAudioSource[] } | null = null;
+			if (clip.type === 'sequence') {
+				const seq = scope.sequences.get(clip.sequence);
+				// A missing sequence, or one that would contain itself, plays nothing (checkVideoProject reports both).
+				if (!seq || scope.within.includes(seq.id)) continue;
+				nested = tracksAt(project, seq.tracks, sourceTime, { ...scope, within: [...scope.within, seq.id], prefix: `${prefix}${clip.id}/` });
+			}
 			const audible = videoAssetHasSound(asset);
 			if (audible && clip.type === 'media' && !clip.muted && !track.muted) {
 				const gain = videoValueAt(clip.volume, clipTime, 1) * (track.volume ?? 1) * fadeGain(clip, inside, true) * mix;
-				audio.push({ clip: clip.id, track: track.id, asset: asset!.id, src: asset!.src, sourceTime, gain, speed: videoClipSpeedAt(clip, clipTime) });
+				audio.push({ clip: prefix + clip.id, track: track.id, asset: asset!.id, src: asset!.src, sourceTime, gain, speed: videoClipSpeedAt(clip, clipTime) });
+			}
+			if (nested && clip.type === 'sequence' && !clip.muted && !track.muted) {
+				const gain = videoValueAt(clip.volume, clipTime, 1) * (track.volume ?? 1) * fadeGain(clip, inside, true) * mix;
+				for (const a of nested.audio) audio.push({ ...a, gain: a.gain * gain });
 			}
 			if (track.kind !== 'video' || track.hidden) continue;
 			if (clip.type === 'media' && (!asset || asset.kind === 'audio')) continue;
+			if (nested && !nested.layers.length) continue;
 			// Entrance and exit animations are keyframes on the picture's opacity and transform.
 			const shown = videoClipAnimated(clip, project);
 			let opacity = videoValueAt(shown.opacity, clipTime, 1) * fade;
@@ -232,24 +277,34 @@ export function videoFrameAt(project: VideoProject, time: number): VideoFrame {
 				shiftDirection = outgoing.next.transition!.direction ?? 'right';
 				shift = videoTransitionEase(outgoing.progress);
 			}
+			// A compound's picture is its sequence's whole frame, the project's size.
 			const size = clip.type === 'media' ? { width: asset!.width ?? project.width, height: asset!.height ?? project.height } : { width: project.width, height: project.height };
-			const fit = clip.fit ?? (clip.type === 'media' ? 'contain' : 'fill');
+			const fit = clip.fit ?? (clip.type === 'media' || clip.type === 'sequence' ? 'contain' : 'fill');
 			const placed = placeVideoRect(project, size, clip.type === 'text' ? 'fill' : fit, shown.transform, clipTime);
 			const across = shiftDirection === 'left' || shiftDirection === 'right';
 			const sign = shiftDirection === 'left' || shiftDirection === 'up' ? -1 : 1;
 			const rect = shift ? { ...placed, ...(across ? { x: placed.x + sign * shift * project.width } : { y: placed.y + sign * shift * project.height }) } : placed;
-			const layer: VideoLayer = { clip: clip.id, track: track.id, type: clip.type, opacity: clamp01(opacity), rect, rotation: videoValueAt(shown.transform?.rotation, clipTime, 0) };
+			const layer: VideoLayer = { clip: prefix + clip.id, track: track.id, type: clip.type, opacity: clamp01(opacity), rect, rotation: videoValueAt(shown.transform?.rotation, clipTime, 0) };
 			if (wipe) layer.wipe = wipe;
 			if (iris) layer.iris = iris;
 			if (clip.blend && clip.blend !== 'normal') layer.blend = clip.blend;
 			const grade = normalizeVideoGrade(clip.grade);
 			if (grade) layer.grade = grade;
 			if (clip.type === 'media') Object.assign(layer, { asset: asset!.id, assetKind: asset!.kind, src: asset!.src, sourceTime });
+			if (clip.type === 'sequence') Object.assign(layer, { sequence: clip.sequence, sourceTime, layers: nested!.layers });
 			if (clip.type === 'text') layer.text = videoTextStyle(clip);
 			if (clip.type === 'color') layer.color = clip.color;
 			if (layer.opacity > 0) layers.push(layer);
-			if (dip && dip.opacity > 0) layers.push({ clip: `transition:${incoming ? clip.id : outgoing!.next.id}`, track: track.id, type: 'color', color: dip.color, opacity: clamp01(dip.opacity), rect: { x: 0, y: 0, width: project.width, height: project.height }, rotation: 0 });
+			if (dip && dip.opacity > 0) layers.push({ clip: `transition:${prefix}${incoming ? clip.id : outgoing!.next.id}`, track: track.id, type: 'color', color: dip.color, opacity: clamp01(dip.opacity), rect: { x: 0, y: 0, width: project.width, height: project.height }, rotation: 0 });
 		}
 	}
-	return { time, width: project.width, height: project.height, background: project.background ?? '#000000', layers, audio };
+	return { layers, audio };
+}
+
+/**
+ * Every layer of a frame that draws a picture of its own, compounds opened up (each compound's
+ * layers in place of it), back to front. Hosts use it to find the media a frame needs.
+ */
+export function videoFrameLeafLayers(layers: readonly VideoLayer[]): VideoLayer[] {
+	return layers.flatMap((l) => (l.layers ? videoFrameLeafLayers(l.layers) : [l]));
 }

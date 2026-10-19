@@ -21,6 +21,18 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/video-editor] A Frame Cache Keyed by Clip Is Thrown Away by Every Edit
+
+- **Issue / Symptom**: Keyed by clip and timeline frame, as a sequencer's final-frame cache is, every trim, slip or move invalidated frames whose pictures had not changed. Two clips cut from one shot each decoded it again.
+- **Root Cause**: Timeline keys describe where a picture shows, not what it is.
+- **Solution / Workaround**: `VideoFrameCache` keys raw source frames by the file the preview plays (the asset's `src`, or the proxy it picks) and the source frame on the project's fps grid. Grades, LUTs and compositing still happen at draw time. Each entry keeps the timeline time it is next needed at (refreshed in the prefetch window) for eviction only. Decode at the middle of a frame (`videoSourceFrameTime`) so rounding never lands on the frame before. While playing, the engine draws the `<video>` element; it uses cached frames only when paused, scrubbing or mid-seek, because a playing element is already current.
+
+### [core/video-editor] Proxies Must Match the Original Frame for Frame, and Camera Files Seek Slowly
+
+- **Issue / Symptom**: Scrubbing 4K camera footage in the preview lagged by seconds. A proxy made with a frame-rate change or a trimmed start played the wrong frames for every clip.
+- **Root Cause**: Camera and phone H.264/HEVC often has a keyframe only every one to several seconds, so each seek decodes from the previous keyframe at full size. The preview seeks a proxy to the clip's source time, so a proxy is only correct when its timeline is identical to the original's.
+- **Solution / Workaround**: `videoProxyFfmpeg` scales the video only. It keeps the frame rate and start, uses `-g`/`-keyint_min` 12 with `-sc_threshold 0 -bf 0` for cheap seeks, and keeps the sound so a video element can play both. The real-ffmpeg test checks size, keyframe count, duration and that the same moment shows the same picture. Proxies never reach `toVideoFfmpeg` or `toVideoEdl`.
+
 ### [core/video-editor] A LUT Cannot Be a Canvas or SVG Filter, and ffmpeg's `lut3d` Reads Only Files
 
 - **Issue / Symptom**: There is no CSS or canvas `filter` for a 3D LUT, SVG filters have only per-channel tables and a 4 × 5 matrix, and `lut3d=file=https://…` (or a blob URL) fails in ffmpeg.
@@ -1870,3 +1882,27 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: After the vitest 4 → 5 upgrade, Svelte tests that build their own JSDOM fail before running: `TypeError: Cannot set property document of [object Window] which has only a getter`.
 - **Root Cause**: Vitest 5's test environment defines `document` and `window` on the global as getter-only properties, so `globalThis.document = …` throws in strict mode.
 - **Solution / Workaround**: Use `vi.stubGlobal("document", dom.window.document)` and `vi.stubGlobal("window", dom.window)` (they redefine the property) instead of assigning. This also works on vitest 4.
+
+### [core/video-editor] A Blend Inside a Compound Clip Must Use the Backdrop's Alpha in ffmpeg
+
+- **Issue / Symptom**: Built the obvious way, a `multiply` (or any non-normal) clip inside a nested sequence comes out black in the export wherever nothing else in the sequence is beneath it, while the preview shows the clip's own colour there.
+- **Root Cause**: A sequence is built as a sub-graph on a transparent frame (`color=black@0,format=yuva420p`). ffmpeg's `blend` filter mixes the colour planes with no regard for alpha, so over a clear backdrop it blends with black. The canvas and CSS follow the compositing spec: the blended colour is `(1 − αb) × layer + αb × B(backdrop, layer)`, so where the backdrop is clear the layer shows unblended.
+- **Solution / Workaround**: Inside a sequence (`scope.within.length > 0` in `buildFfmpeg`), the blend result gets the backdrop's alpha (`alphaextract` + `alphamerge`) and is overlaid on an opaque copy of the layer before the layer's own alpha is applied. At the top level the backdrop is opaque, so the graph is unchanged there. `overlay` itself needs no help: on a main input with alpha it un-premultiplies, so laying layers on a transparent base gives straight-alpha "over", the same as the canvas.
+
+### [core/video-editor] SVG Groups for Compound Clips Need `isolation: isolate`
+
+- **Issue / Symptom**: Without it, a screened clip inside a compound clip lightens the picture beneath the compound in SVG frames, not just the compound's own layers.
+- **Root Cause**: `mix-blend-mode` blends with everything behind it up to the nearest isolated group. A plain `<g>` is not isolated unless something on it (opacity < 1, a filter, a blend mode) creates a stacking context, so a compound at full opacity with no grade let its children blend through.
+- **Solution / Workaround**: `videoFrameToSvg` always puts `isolation:isolate` on a compound's `<g>`. The canvas does the same by drawing the compound's layers on their own scratch canvas.
+
+### [core/video-editor] One Scratch Canvas Is Not Enough Once Groups Nest
+
+- **Issue / Symptom**: With one shared offscreen canvas, a LUT layer inside a compound (or a compound inside a compound) would clear the very canvas its parent compound is being drawn on.
+- **Root Cause**: `drawVideoFrame` needs an offscreen canvas for each compound level being drawn and one for a LUT layer at that level, all at the same time.
+- **Solution / Workaround**: `VideoDrawOptions.scratch(width, height, slot)` takes a slot: `2 × depth` for a compound's layers and `2 × depth + 1` for a LUT layer at that depth. Return one canvas per slot (`VideoPreviewEngine` keeps a map). A host scratch that ignores the slot still works for LUTs on projects without compounds.
+
+### [core/video-editor] Layers and Sounds Inside Compounds Are Keyed by Clip Path
+
+- **Issue / Symptom**: Keyed by the inner clip's own id, two compound clips playing the same sequence at once would fight over one `<video>` element in the preview (seeking it back and forth every frame).
+- **Root Cause**: The preview keeps one media element per `layer.clip` / `audio.clip`. A sequence's clip ids are unique, but the same sequence can play in two places at once.
+- **Solution / Workaround**: `videoFrameAt` names nested layers and sounds by the path of clip ids from the project's own track (`comp/inner`, `comp/mid/shot`). Use `videoFrameLeafLayers` to walk a frame's pictures with compounds opened up (the preview and `videoFrameRequestsAt` do).

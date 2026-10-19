@@ -4,7 +4,7 @@ import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { ToolRegistry } from "@pixerate/editor/tools";
 import { ManualClock } from "@pixerate/editor/animation";
-import { VideoEditorController, VideoPreviewEngine, buildVideoAudioPeaks, findVideoClip, type VideoProject } from "@pixerate/editor/video-editor";
+import { VideoEditorController, VideoFrameCache, VideoPreviewEngine, buildVideoAudioPeaks, findVideoClip, type VideoProject } from "@pixerate/editor/video-editor";
 import {
   ClipInspector,
   MediaBin,
@@ -421,6 +421,29 @@ describe("VideoTimeline (React)", () => {
   });
 });
 
+describe("compound clips (React)", () => {
+  it("shows a compound clip with its sequence on the timeline and in the inspector, and mutes it", () => {
+    const project: VideoProject = {
+      ...PROJECT,
+      sequences: [{ id: "seq", name: "Opening", tracks: [{ id: "sv", kind: "video", clips: [{ id: "inside", type: "color", color: "#ff0000", start: 0, duration: 3000 }] }] }],
+      tracks: [{ id: "v0", kind: "video", clips: [{ id: "comp", type: "sequence", sequence: "seq", in: 500, start: 0, duration: 2000 }] }, ...PROJECT.tracks],
+    };
+    const controller = new VideoEditorController({ project, clock: new ManualClock() });
+    act(() => root.render(<VideoTimeline controller={controller} />));
+    const block = $('[data-clip="comp"]');
+    expect(block.dataset.compound).toBe("seq");
+    expect(block.textContent).toContain("Compound: Opening");
+    act(() => root.render(<ClipInspector controller={controller} />));
+    act(() => controller.select(["comp"]));
+    expect(container.textContent).toContain("Compound clip");
+    expect($('[data-field="sequence"]').textContent).toContain("Opening · from 0.50 s");
+    expect(container.querySelector('input[aria-label="Speed"]')).toBeNull();
+    act(() => $<HTMLInputElement>('input[aria-label="Muted"]').click());
+    expect((clip(controller, "comp")!.clip as any).muted).toBe(true);
+    controller.destroy();
+  });
+});
+
 describe("ClipInspector (React)", () => {
   it("edits the selected clip, one undo step per change", () => {
     const controller = make();
@@ -832,6 +855,48 @@ describe("ClipInspector LUT (React)", () => {
     });
     expect(clip(controller, "c1")!.clip.grade!.lut).toEqual({ src: "local.cube", name: "Swap" });
     expect(controller.luts.peek("local.cube")!.size).toBe(2);
+    controller.destroy();
+  });
+});
+
+describe("proxies (React)", () => {
+  it("offers a preview size once an asset has proxies, and marks those assets in the media bin", () => {
+    const controller = make();
+    act(() => root.render(<><VideoTransport controller={controller} /><MediaBin controller={controller} /></>));
+    expect(container.querySelector("[data-preview-scale]")).toBeNull();
+    act(() => void controller.apply({ op: "update_asset", asset: "intro", set: { proxies: [{ scale: 0.5, src: "intro.proxy-50.mp4" }] } }, "Attach proxies"));
+    const select = $<HTMLSelectElement>("select[data-preview-scale]");
+    expect([...select.options].map((o) => o.textContent)).toEqual(["Auto", "Full", "½", "¼"]);
+    choose(select, "0.5");
+    expect(controller.getState().previewScale).toBe(0.5);
+    expect(select.value).toBe("0.5");
+    choose(select, "full");
+    expect(controller.getState().previewScale).toBe("full");
+    expect($('[data-asset="intro"] [data-asset-proxies]').title).toMatch(/Proxies: 50%/);
+    expect(container.querySelector('[data-asset="music"] [data-asset-proxies]')).toBeNull();
+    controller.destroy();
+  });
+});
+
+describe("frame cache strip (React)", () => {
+  it("marks the stretches whose frames are cached under the ruler, and follows the cache", async () => {
+    const frameCache = new VideoFrameCache({ decode: null, prefetch: 0 });
+    const controller = new VideoEditorController({ project: PROJECT, clock: new ManualClock(), frameCache });
+    act(() => root.render(<VideoTimeline controller={controller} pxPerSecond={100} />));
+    expect(container.querySelector("[data-cached-range]")).toBeNull();
+    // Cache c1's first half second (source frames 0–14 of intro at 30 fps).
+    for (let f = 0; f < 15; f++) frameCache.put({ key: `${f}@intro.mp4`, time: (f * 1000) / 30 }, { image: {} as any, width: 2, height: 2 });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 300));
+    });
+    const strip = $("[data-cached-range]");
+    expect(strip.style.left).toBe("0px");
+    expect(parseFloat(strip.style.width)).toBeCloseTo(50, -1);
+    frameCache.clear();
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 300));
+    });
+    expect(container.querySelector("[data-cached-range]")).toBeNull();
     controller.destroy();
   });
 });

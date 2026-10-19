@@ -1,6 +1,7 @@
 <script lang="ts">
   import {
     findVideoClip,
+    formatVideoSeconds,
     formatVideoTimecode,
     VIDEO_CLIP_ANIMATION_EFFECTS,
     VIDEO_CLIP_ANIMATION_LABELS,
@@ -311,6 +312,12 @@
         <input class={input} type="number" min="1" step="1" placeholder="64" aria-label="Font size" {disabled} value={clip.fontSize ?? ''} onchange={(e) => number('fontSize', e.currentTarget.value, 'Change font size', { above: 0, what: 'Font size must be a number of pixels above 0.' })} data-field="fontSize" />
         <span class="text-muted-foreground">Background</span>
         <input class={input} placeholder="none" aria-label="Text background" {disabled} value={clip.background ?? ''} onchange={(e) => text('background', e.currentTarget.value, 'Change text background')} data-field="background" />
+      {:else if clip.type === 'sequence'}
+        {@const sequence = editor.project.sequences?.find((q) => q.id === clip.sequence)}
+        <span class="text-muted-foreground">Sequence</span>
+        <span class="truncate" title="A compound clip plays its sequence as one picture and sound; its clips cannot be edited here yet" data-field="sequence">{sequence?.name ?? clip.sequence} · from {formatVideoSeconds(clip.in ?? 0)}</span>
+        <span class="text-muted-foreground">Muted</span>
+        <input type="checkbox" class="justify-self-start" aria-label="Muted" {disabled} checked={!!clip.muted} onchange={(e) => set('muted', e.currentTarget.checked || undefined, e.currentTarget.checked ? 'Mute clip' : 'Unmute clip')} data-field="muted" />
       {:else}
         <span class="text-muted-foreground">Colour</span>
         <input class={input} aria-label="Clip colour" {disabled} value={clip.color} onchange={(e) => text('color', e.currentTarget.value, 'Change colour', true)} data-field="color" />

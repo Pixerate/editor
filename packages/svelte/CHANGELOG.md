@@ -1,5 +1,31 @@
 # @pixerate/editor-svelte
 
+## 0.70.0
+
+### Minor Changes
+
+- 951daf7: Video editor: an optional frame cache with prefetch for the preview, after Blender's sequencer cache. `VideoFrameCache` holds decoded source frames keyed by the file the preview plays (asset or proxy) and the source frame, so clips of one asset share them and edits never invalidate them. It prefetches the window ahead of the playhead (behind when scrubbing back), nearest first, a few at a time, within a memory budget. Eviction drops the frames furthest from the playhead, counting frames behind it as further, and never touches the prefetch window. Pass it as the controller's `frameCache` (or the engine's). `VideoPreviewEngine` then draws cached frames while paused, scrubbing or mid-seek, and keeps the frames it shows. Also new: `createVideoElementDecoder` (a browser decoder on hidden `<video>` elements), and `planVideoPrefetch`, `videoCacheEvictions` and `videoFrameRequestsAt` as pure helpers. New agent tool `get_video_preview_cache` reports the cache and which stretches play without waiting. The React and Svelte `VideoTimeline` draw the cached stretches under the ruler.
+- 951daf7: Video editor: proxies. Video assets take `proxies` (`[{ scale, src, width?, height? }]`), smaller copies the preview plays instead of the original. The export, EDL and source times always use the original. The controller has a preview scale (`previewScale` option, `setPreviewScale`, `state.previewScale`): `auto` (by the canvas's shown size, the default), `full`, or a fraction that picks the smallest proxy at least that large. `VideoPreviewEngine` follows it and switches elements as it changes. `videoProxyFfmpeg` and `videoProxyPlan` build ffmpeg commands that make proxies: scaled to even sizes, H.264 with a short keyframe interval and no B-frames so seeks are cheap, sound kept, `faststart`. New agent tools `plan_video_proxies`, `set_video_proxies` and `set_video_preview_scale`; `get_video_project` reports the preview scale. The React and Svelte `VideoTransport` add a preview-size control when any asset has proxies, and `MediaBin` marks assets that have them. `videoShellQuote` is now exported.
+
+### Patch Changes
+
+- Updated dependencies [951daf7]
+- Updated dependencies [951daf7]
+  - @pixerate/editor@0.91.0
+
+## 0.69.0
+
+### Minor Changes
+
+- 4f981e2: Image editor layer integrations. In documents with more than one pixel layer or group (`isMultiLayer`), `applyInpaintedImage` adds the result as a new layer above the active layer (limited to the selection) and `applyBackgroundRemovedImage` masks the active pixel layer with the result's alpha; single-layer documents keep replacing the Background, and both take `{ target: 'new-layer' | 'replace' }`. `toAIInputDataURL` gives hooks the matching input (the composite in new-layer mode). New `rasterizeLayer` (annotation layers to pixels, layer filters baked) with the `rasterize_layer` agent tool and a Rasterize Layer menu item; selection tools take `sample: 'composite' | 'active-layer'` (also on `select_by_color`); `toJSON({ assets: 'external', store })` and `loadJSONAsync(data, { store })` keep v3 layer pixels in an `ImageEditorAssetStore`. React and Svelte: an AI result target selector and a sample selector in `<SelectionOptionsBar>`.
+- 4f981e2: Image editor: open and export Photoshop PSD / PSB files on top of the layer stack (a TypeScript port of a photocraft-psd subset). `loadPsd(bytes)` opens a file as the document (one undo step): pixel, group and adjustment layers (our ten kinds), user masks with density and feather, 26 blend modes, opacity, fill, clipping, visibility and locks map directly; type, smart-object, fill and shape layers come in as their stored pixels, and CMYK, Lab, grayscale, indexed, bitmap, 16- and 32-bit files are converted to 8-bit RGB, each loss reported as a warning naming the layers. `toPsd()` writes an 8-bit RGB PSD (PSB above 30 000 px) with real layers, groups, adjustment layers and masks, baking filters and depth masks. Documents without a source image (an opened PSD, a v3 document) now render. New agent tools `inspect_psd`, `import_psd` and `export_psd`; Open PSD… / Export PSD buttons in `<LayersPanel>` (React and Svelte, `psd` and `psdFileName` props); `readPsd`, `writePsd`, `importPsd`, `exportPsd`, `openPsdFile` and `downloadPsd` exports. `pnpm test:corpus` runs the reader and writer over 490 public PSDs.
+
+### Patch Changes
+
+- Updated dependencies [4f981e2]
+- Updated dependencies [4f981e2]
+  - @pixerate/editor@0.90.0
+
 ## 0.68.0
 
 ### Minor Changes

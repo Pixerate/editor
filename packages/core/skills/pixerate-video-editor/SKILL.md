@@ -13,6 +13,13 @@ timeline; a media clip also has an `in` point into its asset, `speed`, `volume`,
 every clip can have `fadeIn`, `fadeOut`, `opacity`, `fit` and `transform`, and a
 `transition` from the clip that ends where it starts on the same track.
 
+A project may also hold nested **sequences** (`{ id, name, tracks }`, their own timeline from 0).
+A **compound clip** (`type: "sequence"`, `sequence`, `in`) plays a stretch of one as a single
+picture and a single sound: its opacity, transform, blend, grade, LUT, fades, transitions and
+animations apply to the sequence's composite, and its `volume`, `muted` and fades to the
+sequence's mix. Compound clips play at normal speed (no `speed` or ramp), and the clips inside a
+sequence can be read (`list_video_sequences`) but not edited yet.
+
 All times are milliseconds on the timeline (or into the source for `in`). Ids: tracks look
 like `v1` / `a1`, clips like `c1`, markers `m1`; you may set your own ids when adding. Read
 them from `get_video_project`; never invent them.
@@ -22,7 +29,8 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
 ## Working method
 
 1. **Read.** `get_video_project` for settings, assets, tracks, clips (with end and source
-   range), markers and issues. Set frame size and `fps` first with `set_video_settings` if
+   range), a summary of each nested sequence, markers and issues. When there are compound
+   clips, `list_video_sequences` shows what they contain. Set frame size and `fps` first with `set_video_settings` if
    the project is new; changing them later shifts frame-based limits.
 2. **Bring in media.** `add_video_asset` for each file with `kind`, `src` and the source
    `duration` (without it trims cannot be checked and `check_video_project` warns
@@ -138,6 +146,15 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
   long as it takes to read twice, and use `background` for contrast over busy footage.
 - **Pacing.** Vary shot length with content; trim heads and tails of every clip to the
   essential action rather than using whole source files.
+- **Proxies for heavy footage.** When the preview stutters on 4K or long-GOP camera files, run
+  `plan_video_proxies` (half size; quarter for 6K and up), ask the host to run the commands,
+  attach each result with `set_video_proxies`, and leave `set_video_preview_scale` on `auto` (or
+  pick a fraction). Proxies change only what the preview plays: the export, the EDL and every
+  time you read stay on the originals.
+- **Let the cache fill before a review.** With a frame cache, `get_video_preview_cache` shows
+  which stretches play without waiting. Before asking the person to watch a passage, seek to its
+  start and let the prefetch window fill. Frames are keyed by the source, so trims and moves keep
+  them; switching the preview scale or relinking an asset starts afresh.
 - **Check before export.** Always run `check_video_project` and fix errors first: the ffmpeg
   command renders exactly what is on the timeline.
 
@@ -147,8 +164,9 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
 
 | Tool | Use it to |
 | --- | --- |
-| `get_video_project` | Start here. Returns frame size, fps, length (ms), assets (id, kind, src, duration), tracks top to bottom with each clip in time order (id, type, start, duration, end, source in/out, fades, transition), markers, playhead, selection, issues and whether it can be edited. |
-| `get_video_frame` | Inspect a `time` (ms) as data: pictures back to front (clip, track, asset, source time, opacity, placement rect, rotation, wipe) and sounds (clip, source time, gain after volumes, fades and transitions). Use to verify a cut, layer order or J/L cut without images. |
+| `get_video_project` | Start here. Returns frame size, fps, length (ms), assets (id, kind, src, duration), tracks top to bottom with each clip in time order (id, type, start, duration, end, source in/out, fades, transition), a summary of each nested sequence (`sequences`: id, length, clip count, `nests`, `usedBy`), markers, playhead, selection, issues and whether it can be edited. |
+| `list_video_sequences` | Read the nested sequences compound clips play (or one `sequence`): length, the sequences each nests, `usedBy` (the compound clips that play it, with timeline start / end and the stretch of the sequence as `source`), any `cycle`, and its tracks and clips in the `get_video_project` shape. Call it before trimming, slipping or grading a compound clip, to know what it holds. |
+| `get_video_frame` | Inspect a `time` (ms) as data: pictures back to front (clip, track, asset, source time, opacity, placement rect, rotation, wipe) and sounds (clip, source time, gain after volumes, fades and transitions). A compound clip is one picture whose `layers` are its sequence's, with `sourceTime` in sequence time; its sounds carry clip paths like `comp/inner`. Use to verify a cut, layer order or J/L cut without images. |
 | `get_video_transcript` | Read what the timeline says on one `track` (default: the first audio track with transcribed media): the text, and each word with its timeline `start` / `end` ms and `clip`. `from` / `to` narrow it; `limit` (default 1000) with `more`. Words cut out of the edit are not listed. |
 | `find_video_transcript_text` | Find every place a word or phrase (`query`, case and punctuation ignored) is said, as `{ from, to, text }` timeline ranges for `remove_video_ranges`, `split_video_at` or `seek_video`. |
 | `find_video_fillers` | Find filler words (um, uh, erm, you know, I mean…; or your own `fillers`) as timeline ranges, longest phrase first, with their `total` ms. Review before cutting. |
@@ -157,6 +175,8 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
 | `check_video_project` | After every batch and before export. Lists issues errors first with a code (`missing-asset`, `wrong-track`, `overlap`, `source-overrun`, `transition-without-cut`, `transition-too-long`, `transition-handles`, `fades-too-long`, `unknown-duration`, `unused-asset`, `marker-past-end`, `empty`), what it is about and how to fix it. |
 | `render_video_frame` | Look at the picture at `time`, or at 2-16 `times` as one labelled contact sheet (`columns` 1-8). SVG by default; `format: "png"` only when the host can rasterize. Video without a `poster` shows as a labelled box with its source timecode. |
 | `get_video_scopes` | Measure the rendered picture at `time` (default the playhead; another time is shown briefly and the playhead put back) as colour scopes do: luma `stats` (0-1 mean, median, min, max, p1, p99), the share `clipped` to black or white (and per channel), saturation, the `average` colour, a `histogram` of `bins` steps (default 16), the luma spread of `columns` strips left to right (`waveform`, default 8), the main `vectorscope` hue (red ≈ 103°, skin ≈ 123°) and `notes` on what to fix. Call it before and after grading. Fails with a reason when the host shows no preview (then use `render_video_frame`). |
+| `get_video_preview_cache` | Read the preview's frame cache when the host has one: frames and bytes against `maxBytes`, hits and misses, frames still decoding (`pending`), the prefetch window (ms), and `cachedRanges` between `from` and `to` (stretches that play and scrub without waiting). Says `enabled: false` without a cache. Changes nothing. |
+| `plan_video_proxies` | Get the ffmpeg commands that make proxies (default `scale` 0.5) of video assets lacking one at that scale (or of `assets`): scaled H.264 with a keyframe every `gop` frames (default 12) so scrubbing is quick, sound kept. Each has `{ asset, args, command, proxy }`; attach `proxy` with `set_video_proxies` once the host has run it. Changes nothing. |
 | `export_video_ffmpeg` | Get the ffmpeg command that renders the project: `args` (for spawn), `command` (one shell line), `filterComplex`, duration and notes on approximations. `output` default output.mp4, `crf` x264 quality 0-51 (default 18, lower is better). `loudness` normalises the mix (`integrated` LUFS default -14, `truePeak` dBTP default -1, `range`); with `loudness.measured` from `export_video_loudness_measure` it applies one fixed gain. Fails when there are no clips. |
 | `export_video_loudness_measure` | First pass of loudness normalisation: the ffmpeg command that mixes only the sound and prints its loudness as JSON at the end of stderr. Takes the same target (`integrated` LUFS, `truePeak`, `range`) as the export. Map `input_i`, `input_tp`, `input_lra`, `input_thresh`, `target_offset` to `loudness.measured` for `export_video_ffmpeg`. |
 | `export_video_edl` | Get one `track` (default the bottom video track) as a CMX 3600 EDL with source and record timecode, dissolves, speed changes and clip names, for conforming in another editor. `title` defaults to the project name. At 29.97 and 59.94 fps it writes drop-frame timecode (`HH:MM:SS;FF`, `FCM: DROP FRAME`), as other editors expect; `dropFrame: false` forces non-drop. |
@@ -167,6 +187,8 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
 | --- | --- |
 | `get_video_audio_levels` | Measure a media `clip`'s source sound (timeline times) or an `asset`'s (source times) between `from` and `to`: peak dBFS in each of `buckets` (default 50, up to 500) equal stretches, and the loudest peak. Levels are the recording before clip volume and fades. Use it to find where speech or a beat starts or to judge loudness. The first call for an asset decodes its file. |
 | `find_video_silences` | List stretches of a `clip` or `asset` that stay below `thresholdDb` (default -40) for at least `minDuration` ms (default 300). For a clip the `{ start, end }` are timeline times that go straight into `extract_video_range` (cut a pause, closing up) or `split_video_at`. |
+| `set_video_preview_scale` | Set what the preview plays (no undo step, allowed while read-only): `"full"` originals, a fraction (0.5, 0.25) for the smallest proxy at least that large, or `"auto"` (default, by the preview's shown size). Returns what each video asset plays at a fixed scale. |
+| `set_video_proxies` | Set a video `asset`'s `proxies` (`[{ scale, src, width?, height? }]`, one per scale; empty removes them) in one undo step. A proxy must match the original's length and timing; exports always use the original. |
 | `seek_video` | Show the person a moment: `time`, a `clip`'s start or a `marker`, with `play` true or false. Does not change the project. Returns the playhead and clips under it. |
 | `set_video_transcript` | Attach what is said in a video or audio `asset`: `text` (a Whisper JSON, .srt or .vtt file's contents) or `words` (`[{ word, start, end }]` ms of the source). Captions give approximate word timings. Returns the word count and first and last words. Clear it with `update_video_asset` `remove: ["transcript"]`. |
 | `remove_video_ranges` | Cut `ranges` (`[{ from, to }]` timeline ms, as the find tools return them) out and close them up on every sync-locked track, as one undo step: merged where they touch, extracted last first. Returns how many stretches and how much time went, and the new length. |
@@ -242,6 +264,16 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
   affect picture and sound together. Fade curves shape only the sound (media clips); the picture
   always fades linearly. Splitting keeps the fade-in curve on the left part and the fade-out
   curve on the right.
+- **Compound clips are one picture.** A grade, blend or opacity on a compound changes the
+  sequence's composite, not each clip in it, so a multiply on a compound multiplies the whole
+  nested frame over what is beneath (and leaves its transparent parts untouched). Trimming,
+  splitting and slipping a compound move its `in` through the sequence; it can never play past
+  the sequence's end (`source-overrun`), a transition into it needs sequence time either side of
+  the cut like media handles, and `speed` or a ramp on it is refused. A compound whose sequence
+  is missing (`missing-sequence`) or contains itself (`sequence-cycle`) plays nothing.
+- **Clips inside sequences are read-only for now.** Write tools refuse a clip id inside a
+  sequence with a message naming it; change the compound clip instead. The EDL lists a compound
+  as a black event with a `* COMPOUND CLIP` comment (CMX 3600 has no nesting).
 - **Locked tracks** refuse edits to their clips; unlock with `update_video_track` only if the user
   wants that track changed.
 - **Read-only**: when `get_video_project` says the project cannot be edited, write tools are

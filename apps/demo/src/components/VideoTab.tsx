@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Film } from "lucide-react";
 import { VideoEditor, useVideoEditorController, useVideoEditorState, useVideoEditorTools } from "@pixerate/editor-react/video-editor";
+import { VideoFrameCache } from "@pixerate/editor/video-editor";
 import { demoToolRegistry } from "../agentTools";
 import { VIDEO_SCRIPTS } from "../agentScripts";
 import { sampleProject } from "../videoSample";
@@ -59,7 +60,10 @@ function download(name: string, text: string, type: string) {
  */
 export function VideoTab() {
   const project = useMemo(sampleProject, []);
-  const controller = useVideoEditorController({ project });
+  // A frame cache with prefetch: scrubbing shows decoded frames at once (see the strip under the ruler).
+  const frameCache = useMemo(() => new VideoFrameCache({ maxBytes: 256 * 1024 * 1024 }), []);
+  useEffect(() => () => frameCache.clear(), [frameCache]);
+  const controller = useVideoEditorController({ project, frameCache });
   const state = useVideoEditorState(controller);
   useVideoEditorTools(demoToolRegistry, controller, { id: "video", namespace: "video" });
   const [output, setOutput] = useState<{ title: string; text: string } | null>(null);
