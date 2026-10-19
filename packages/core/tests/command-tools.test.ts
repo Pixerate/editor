@@ -21,6 +21,7 @@ import { VideoEditorController, createVideoEditorToolProvider } from '../src/vid
 import { createRichTextPreset, SpreadsheetController } from '../src';
 import { createCaptureToolProvider, createElementCaptureSurface } from '../src/tools';
 import { createCanvasCaptureToolProvider } from '../src/canvas';
+import { PaintEditorController, createPaintEditorToolProvider } from '../src/paint-editor';
 
 beforeAll(() => {
 	const dom = new JSDOM();
@@ -191,6 +192,7 @@ describe('built-in tool providers have complete MCP annotations', () => {
 		expect(tools.length).toBe(8 + 10 + 13 + 3 + 17);
 		// Hosts with their own tool sets: checked to the same standard.
 		registry.register(createImageEditorToolProvider(new ImageEditorController(), { id: 'img', namespace: 'img' }));
+		registry.register(createPaintEditorToolProvider(new PaintEditorController({ width: 64, height: 64 }), { id: 'paint', namespace: 'paint' }));
 		registry.register(createCanvasCaptureToolProvider({ id: 'capture', namespace: 'capture', element: null, getViewport: () => ({ x: 0, y: 0, zoom: 1 }), getNodes: () => [] }));
 		registry.register(createCaptureToolProvider(createElementCaptureSurface({ element: null }), { id: 'dom-capture', namespace: 'dom' }));
 		registry.register(createChartToolProvider(new ChartController(), { id: 'chart', namespace: 'chart' }));
@@ -225,7 +227,7 @@ describe('built-in tool providers have complete MCP annotations', () => {
 			}
 		}
 		expect(undescribed).toEqual([]);
-		expect(allTools.map((t) => t.name)).toEqual(expect.arrayContaining(['diagram__get_diagram', 'diagram__add_diagram_node', 'diagram__render_diagram', 'animation__get_animation', 'animation__add_commands', 'animation__export_flair_effect', 'video__get_video_project', 'video__list_video_sequences', 'video__add_video_clip', 'video__export_video_ffmpeg', 'video__get_video_scopes', 'video__set_video_lut', 'video__remove_video_lut', 'video__plan_video_proxies', 'video__set_video_proxies', 'video__set_video_preview_scale', 'video__get_video_preview_cache', 'video__set_video_keyframes', 'video__remove_video_keyframes', 'video__slip_video_clip', 'video__roll_video_edit', 'video__slide_video_clip', 'video__lift_video_range', 'video__extract_video_range', 'video__split_video_at', 'capture__capture_view', 'dom__capture_view', 'img__capture_view', 'chartdoc__insert_chart', 'chartdoc__update_chart_in_document', 'chartdoc__list_document_charts', 'chartdoc__insert_sparkline']));
+		expect(allTools.map((t) => t.name)).toEqual(expect.arrayContaining(['diagram__get_diagram', 'diagram__add_diagram_node', 'diagram__render_diagram', 'animation__get_animation', 'animation__add_commands', 'animation__export_flair_effect', 'video__get_video_project', 'video__list_video_sequences', 'video__add_video_clip', 'video__export_video_ffmpeg', 'video__get_video_scopes', 'video__set_video_lut', 'video__remove_video_lut', 'video__plan_video_proxies', 'video__set_video_proxies', 'video__set_video_preview_scale', 'video__get_video_preview_cache', 'video__set_video_keyframes', 'video__remove_video_keyframes', 'video__slip_video_clip', 'video__roll_video_edit', 'video__slide_video_clip', 'video__lift_video_range', 'video__extract_video_range', 'video__split_video_at', 'capture__capture_view', 'dom__capture_view', 'img__capture_view', 'paint__paint_stroke', 'paint__set_paper', 'paint__list_brushes', 'paint__render_preview', 'chartdoc__insert_chart', 'chartdoc__update_chart_in_document', 'chartdoc__list_document_charts', 'chartdoc__insert_sparkline']));
 		editor.destroy();
 		chartDoc.destroy();
 	});
