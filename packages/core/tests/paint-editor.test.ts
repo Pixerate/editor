@@ -464,6 +464,34 @@ describe('PaintEditorController', () => {
     expect(c.exportPsd().warnings.join(' ')).toMatch(/Pigment blending has no PSD equivalent/);
   });
 
+  it('writes painterly blend modes to PSD as their nearest standard mode, in groups too, with a warning', () => {
+    const c = new PaintEditorController({ width: 24, height: 16, paper: 'smooth' });
+    const base = c.document.activeLayerId!;
+    c.fillLayer({ color: '#f2c84b' });
+    const wash = c.addLayer({ name: 'Wash' });
+    c.fillLayer({ layerId: wash.id, color: '#2a4b8d' });
+    c.updateLayer(wash.id, { blend: 'watercolor', opacity: 0.7 });
+    const group = c.addLayer({ name: 'Light', type: 'group' });
+    const glow = c.addLayer({ name: 'Glow', parentId: group.id });
+    c.fillLayer({ layerId: glow.id, color: '#ffd080' });
+    c.updateLayer(glow.id, { blend: 'highlight', opacity: 0.3 });
+    const merged = c.compositePixels({ paper: true }).data;
+    const psd = c.exportPsd();
+    const back = importPsd(psd.bytes);
+    const flat = (ls: readonly any[]): any[] => ls.flatMap((l) => [l, ...(l.children ? flat(l.children) : [])]);
+    const byName = new Map(flat(back.layers).map((l) => [l.name, l]));
+    expect(byName.get('Wash')!.blend).toBe('multiply');
+    expect(byName.get('Glow')!.blend).toBe('screen');
+    expect(byName.get('Layer 1')!.blend).toBe('normal');
+    const text = psd.warnings.join(' ');
+    expect(text).toMatch(/Watercolor blending has no PSD equivalent; "Wash" was written as Multiply/);
+    expect(text).toMatch(/Highlight blending has no PSD equivalent; "Glow" was written as Screen/);
+    // The document itself is untouched, and the composite (the PSD's merged image) is the real one.
+    expect(c.getLayer(wash.id)!.blend).toBe('watercolor');
+    expect(Array.from(c.compositePixels({ paper: true }).data)).toEqual(Array.from(merged));
+    expect(c.getLayer(base)!.blend).toBe('normal');
+  });
+
   it('renders previews within maxSide and picks colours', () => {
     const c = new PaintEditorController({ width: 400, height: 200, paper: 'smooth' });
     c.fillLayer({ color: '#00ff00', opacity: 1 });
@@ -528,6 +556,17 @@ describe('paint editor agent tools', () => {
     const info = ok(await r.callTool('get_canvas_info', {}));
     expect(info).toMatchObject({ width: 128, height: 96, dpi: 300, brushId: 'pencil-6b' });
     expect(info.blendModes).toContain('pigment');
+    expect(info.blendModes).toEqual(expect.arrayContaining(['watercolor', 'tint', 'highlight', 'shadow']));
+    const modes = ok(await r.callTool('list_blend_modes', {}));
+    const wc = modes.modes.find((m: { id: string }) => m.id === 'watercolor');
+    expect(wc).toMatchObject({ label: 'Watercolor', group: 'painterly', psd: 'multiply' });
+    expect(wc.description).toMatch(/wash/);
+    expect(modes.modes.find((m: { id: string }) => m.id === 'multiply')).toEqual({ id: 'multiply', label: 'Multiply', group: 'standard', psd: 'multiply' });
+    expect(modes.modes.find((m: { id: string }) => m.id === 'pigment')).toMatchObject({ group: 'pigment', psd: 'normal' });
+    const layerId = info.activeLayerId;
+    const set = ok(await r.callTool('update_layer', { layerId, blend: 'shadow' }));
+    expect(set.blend).toBe('shadow');
+    expect((await r.callTool('update_layer', { layerId, blend: 'watercolour' })).isError).toBe(true);
     const papers = ok(await r.callTool('list_papers', {}));
     expect(papers.papers.map((p: { id: string }) => p.id)).toContain('sanded-pastel');
     const brushes = ok(await r.callTool('list_brushes', {}));

@@ -23,9 +23,9 @@ const E = 1e-6;
 const close = (a: number, b: number, e = 1e-5) => Math.abs(a - b) < e;
 
 describe('blend modes', () => {
-  it('has 26 Photoshop modes plus pigment, with unique ids', () => {
-    expect(BLEND_MODES).toHaveLength(27);
-    expect(new Set(BLEND_MODES.map((m) => m.id)).size).toBe(27);
+  it('has 26 Photoshop modes plus pigment and four painterly modes, with unique ids', () => {
+    expect(BLEND_MODES).toHaveLength(31);
+    expect(new Set(BLEND_MODES.map((m) => m.id)).size).toBe(31);
     expect(normalizeBlendMode('bogus')).toBe('normal');
     expect(normalizeBlendMode('pin-light')).toBe('pin-light');
   });

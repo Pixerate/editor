@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  BLEND_MENU_GROUPS,
+  BLEND_MODES,
   BRUSH_SLIDERS,
   PAPER_SLIDERS,
   PaintCanvasPresenter,
@@ -125,6 +127,14 @@ describe('PaintCanvasPresenter', () => {
 });
 
 describe('panel helpers', () => {
+  it('groups the blend menu into standard and paint modes, every mode once', () => {
+    expect(BLEND_MENU_GROUPS.map((g) => g.label)).toEqual(['Standard', 'Paint']);
+    expect(BLEND_MENU_GROUPS[0].modes).toHaveLength(26);
+    expect(BLEND_MENU_GROUPS[1].modes.map((m) => m.id)).toEqual(['pigment', 'watercolor', 'tint', 'highlight', 'shadow']);
+    expect(BLEND_MENU_GROUPS.flatMap((g) => g.modes.map((m) => m.id)).sort()).toEqual(BLEND_MODES.map((m) => m.id).sort());
+    for (const m of BLEND_MENU_GROUPS[1].modes) expect(m.description).toBeTruthy();
+  });
+
   it('reads and patches brush and paper settings by path', () => {
     const c = new PaintEditorController();
     const b = c.getState().brush;
