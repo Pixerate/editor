@@ -1,7 +1,0 @@
----
-"@pixerate/editor": minor
-"@pixerate/editor-react": minor
-"@pixerate/editor-svelte": minor
----
-
-Masks and clipping in the vector editor (`@pixerate/editor/vector`). A group with `mask: { type: 'clip' | 'alpha' | 'luminance', invert? }` uses its first (bottom) child as the mask: a clipping mask shows the other children inside the mask's outline, an opacity mask by its alpha or brightness, and `invert` swaps them. Hiding the mask turns it off. Hit-testing, bounds, snapping, outlines, booleans and the Pathfinder use the masked result, and open paths are cut where they cross the clip. The group's filters, opacity and blend mode apply to the masked result, and its path effects to the contents. SVG export writes `<clipPath>` / `<mask>` (with a lossless round-trip), and import now reads `clip-path` and `mask` references instead of skipping them. The controller adds `makeMask`, `releaseMask`, `setMaskOptions`, `editMask` and `editMaskContents` (Mod+7 and Mod+Alt+7), and agents get `vector.makeClippingMask`, `vector.makeOpacityMask`, `vector.setMaskOptions` and `vector.releaseMask`; `vector.list` reports each mask group's `mask`. Scene render data gives masked groups a `mask` (`VectorRenderMask`), and the overlay gives mask indicators (`masks`). React and Svelte draw masks in `VectorCanvas` (`VectorMaskedNodes`), add `VectorMaskPanel` to the style panel (make, release, type, invert, on / off, Edit Mask, Edit Contents), and add mask actions to `VectorToolbar`. `eraseFromOutline` takes `keep: 'inside'` to keep the parts inside a region.
