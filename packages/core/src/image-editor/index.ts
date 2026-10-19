@@ -72,3 +72,4 @@ export {
   resizeWarpMesh,
   WARP_STYLE_LABELS,
 } from '../geom';
+export * from './layers/transform-ui';

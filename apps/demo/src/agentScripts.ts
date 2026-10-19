@@ -382,6 +382,34 @@ export const IMAGE_SCRIPTS: AgentScript[] = [
       { say: "Rendering a preview.", tool: "image__render_preview", args: { maxSide: 360 } },
     ],
   },
+  {
+    id: "image-transform",
+    prompt: "Copy the centre onto its own layer and tilt it like a postcard",
+    steps: [
+      { say: "Selecting everything to read the image size.", tool: "image__select_region", args: { shape: "all" }, open: "Select & Mask" },
+      { tool: "image__get_selection", args: {}, as: "sel" },
+      {
+        say: "A rectangle over the centre.",
+        tool: "image__select_region",
+        args: (ctx) => {
+          const { width, height } = imageSize(ctx.results.sel);
+          return { shape: "rect", x: width * 0.3, y: height * 0.3, width: width * 0.4, height: height * 0.4 };
+        },
+      },
+      {
+        say: "Layer via Copy, then scale and rotate the copy in one resample (one undo step).",
+        tool: "image__transform_layer",
+        args: { content: "selection-copy", scaleX: 80, scaleY: 80, rotate: -8 },
+        as: "copy",
+      },
+      {
+        say: "A drop shadow on the copy follows its new shape.",
+        tool: "image__add_layer_effect",
+        args: (ctx) => ({ layerId: ctx.results.copy.layerId, kind: "drop-shadow", settings: { distance: 8, size: 12, opacity: 0.5 } }),
+      },
+      { say: "Rendering a preview.", tool: "image__render_preview", args: { maxSide: 360 } },
+    ],
+  },
 ];
 
 function imageSize(result: any): { width: number; height: number } {

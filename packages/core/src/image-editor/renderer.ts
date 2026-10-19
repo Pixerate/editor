@@ -40,6 +40,7 @@ import type { EffectPattern } from '../raster/effects/patterns';
 import { isLegacyShape as isLegacyStack } from './layers/migrate';
 import {
   applyImageProjectionToContext,
+  projectImagePoint,
   clampCropToImage,
   getAnnotationBounds,
   getRotatedSize,
@@ -75,6 +76,8 @@ export interface RenderOptions {
   checkpointLayerId?: string | null;
   /** The paint tools' cursor: a circle of `diameter` px at (`x`, `y`) in natural pixels. */
   brushCursor?: { x: number; y: number; diameter: number } | null;
+  /** Free Transform's frame, handles and reference point in natural pixels (`FreeTransformTool.overlay()`). */
+  freeTransform?: { outline: ImagePoint[]; handles: ImagePoint[]; reference: ImagePoint } | null;
 }
 
 /**
@@ -359,6 +362,47 @@ export class ImageEditorRenderer {
         ctx.strokeStyle = 'rgba(0,0,0,0.6)';
         ctx.stroke();
         ctx.lineWidth = px;
+        ctx.strokeStyle = '#ffffff';
+        ctx.stroke();
+      } catch {
+        // Best effort (headless / mocked contexts).
+      }
+      ctx.restore();
+    }
+
+    // Free Transform: the frame, square handles and the reference point, a fixed size on screen.
+    if (options.freeTransform) {
+      const t = options.freeTransform;
+      ctx.save();
+      try {
+        const scr = (p: ImagePoint) => projectImagePoint(p, projection);
+        const outline = t.outline.map(scr);
+        ctx.beginPath();
+        outline.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+        ctx.closePath();
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+        ctx.stroke();
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = '#ffffff';
+        ctx.stroke();
+        for (const h of t.handles.map(scr)) {
+          ctx.fillStyle = '#ffffff';
+          ctx.strokeStyle = '#1e293b';
+          ctx.fillRect(h.x - 4, h.y - 4, 8, 8);
+          ctx.strokeRect(h.x - 4, h.y - 4, 8, 8);
+        }
+        const r = scr(t.reference);
+        ctx.beginPath();
+        ctx.arc(r.x, r.y, 5, 0, Math.PI * 2);
+        ctx.moveTo(r.x - 8, r.y);
+        ctx.lineTo(r.x + 8, r.y);
+        ctx.moveTo(r.x, r.y - 8);
+        ctx.lineTo(r.x, r.y + 8);
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+        ctx.stroke();
+        ctx.lineWidth = 1;
         ctx.strokeStyle = '#ffffff';
         ctx.stroke();
       } catch {

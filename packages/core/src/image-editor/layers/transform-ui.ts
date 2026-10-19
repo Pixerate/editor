@@ -1,0 +1,554 @@
+/**
+ * Free Transform's view model, shared by the React and Svelte editors: the overlay (outline,
+ * eight handles, the reference point), what a pointer is over, Photoshop's drags and modifiers,
+ * the options bar's readout and fields, and the keyboard (Enter commits, Esc cancels, arrows
+ * nudge). It drives a `FreeTransformSession`; the bindings forward pointer and key events and draw
+ * `overlay()` through the renderer's `freeTransform` option.
+ *
+ * Drags (as Photoshop CC, where a corner scales proportionally by default):
+ * - corner: scale from the opposite corner (Alt: from the reference point); Shift toggles
+ *   proportional; side: scale one axis;
+ * - Mod (Ctrl / Cmd) + corner: distort that corner; Mod + side: skew along the side (Alt: about
+ *   the centre); Mod + Alt + Shift + corner: perspective;
+ * - outside the box: rotate about the reference point (Shift: 15° steps); inside: move (Shift:
+ *   along one axis); the reference point: move it;
+ * - the mode switch (rotate, skew, distort, perspective) makes every handle do that.
+ */
+
+import type { ImageEditorController } from '../controller';
+import type { FreeTransformInit, FreeTransformSession, FreeTransformResult } from '../free-transform';
+import {
+  cornersFromMatrix,
+  describeTransform,
+  matrixFromParams,
+  type FreeTransformMode,
+  type Quad,
+  type TransformAnchor,
+  type TransformReadout,
+} from '../transform';
+import { applyHomography, invertHomography, rectToQuad } from '../../geom/homography';
+import type { Vec2 } from '../../geom/types';
+import type { Interpolation } from '../../raster/transform';
+import type { ImagePoint } from '../types';
+import { flattenLayers } from './model';
+import type { ShortcutEvent } from './paint-ui';
+
+/** What a pointer is over. */
+export type TransformHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'reference' | 'inside' | 'outside';
+
+const CORNERS = ['nw', 'ne', 'se', 'sw'] as const;
+const SIDES = ['n', 'e', 's', 'w'] as const;
+const CORNER_INDEX: Record<string, number> = { nw: 0, ne: 1, se: 2, sw: 3 };
+const SIDE_CORNERS: Record<string, [number, number]> = { n: [0, 1], e: [1, 2], s: [2, 3], w: [3, 0] };
+/** Box fractions of each handle. */
+const HANDLE_FRACTION: Record<string, [number, number]> = { nw: [0, 0], n: [0.5, 0], ne: [1, 0], e: [1, 0.5], se: [1, 1], s: [0.5, 1], sw: [0, 1], w: [0, 0.5] };
+const ANCHOR_FRACTION: Record<TransformAnchor, [number, number]> = {
+  'top-left': [0, 0],
+  top: [0.5, 0],
+  'top-right': [1, 0],
+  left: [0, 0.5],
+  center: [0.5, 0.5],
+  right: [1, 0.5],
+  'bottom-left': [0, 1],
+  bottom: [0.5, 1],
+  'bottom-right': [1, 1],
+};
+
+export interface TransformModifiers {
+  shiftKey?: boolean;
+  altKey?: boolean;
+  /** Ctrl or Cmd. */
+  ctrlKey?: boolean;
+  metaKey?: boolean;
+}
+
+/** The modes of the options bar's switch (Warp comes with its own mesh UI). */
+export const FREE_TRANSFORM_MODE_OPTIONS: readonly { id: Exclude<FreeTransformMode, 'warp'>; label: string; title: string }[] = [
+  { id: 'scale', label: 'Free', title: 'Free Transform: corners scale, outside rotates, Ctrl/Cmd distorts' },
+  { id: 'rotate', label: 'Rotate', title: 'Every handle rotates about the reference point' },
+  { id: 'skew', label: 'Skew', title: 'Sides slide along themselves' },
+  { id: 'distort', label: 'Distort', title: 'Each corner moves freely' },
+  { id: 'perspective', label: 'Perspective', title: 'A corner and its partner move symmetrically' },
+];
+
+/** The options bar's numeric fields (Photoshop's X, Y, W, H, angle and skews). */
+export const FREE_TRANSFORM_FIELDS = [
+  { id: 'x', label: 'X', unit: 'px', title: 'Reference point X (document pixels)' },
+  { id: 'y', label: 'Y', unit: 'px', title: 'Reference point Y (document pixels)' },
+  { id: 'scaleX', label: 'W', unit: '%', title: 'Width in percent of the original' },
+  { id: 'scaleY', label: 'H', unit: '%', title: 'Height in percent of the original' },
+  { id: 'rotate', label: '∠', unit: '°', title: 'Rotation in degrees, clockwise' },
+  { id: 'skewX', label: 'H skew', unit: '°', title: 'Horizontal skew in degrees' },
+  { id: 'skewY', label: 'V skew', unit: '°', title: 'Vertical skew in degrees' },
+] as const;
+
+export type FreeTransformField = (typeof FREE_TRANSFORM_FIELDS)[number]['id'];
+
+/** What the options bar shows. */
+export interface FreeTransformBar extends Record<FreeTransformField, number> {
+  /** False after Distort or Perspective: the numbers no longer describe the shape. */
+  affine: boolean;
+}
+
+export interface TransformOverlay {
+  /** The transformed frame, corner to corner (document pixels). */
+  outline: ImagePoint[];
+  /** The eight handles. */
+  handles: Array<{ id: Exclude<TransformHandle, 'reference' | 'inside' | 'outside'>; x: number; y: number }>;
+  reference: ImagePoint;
+}
+
+const CURSOR: Record<TransformHandle, string> = {
+  nw: 'nwse-resize',
+  se: 'nwse-resize',
+  ne: 'nesw-resize',
+  sw: 'nesw-resize',
+  n: 'ns-resize',
+  s: 'ns-resize',
+  e: 'ew-resize',
+  w: 'ew-resize',
+  reference: 'move',
+  inside: 'move',
+  outside: 'alias',
+};
+
+const mod = (m: TransformModifiers) => Boolean(m.ctrlKey || m.metaKey);
+const add = (a: Vec2, b: Vec2): Vec2 => ({ x: a.x + b.x, y: a.y + b.y });
+const sub = (a: Vec2, b: Vec2): Vec2 => ({ x: a.x - b.x, y: a.y - b.y });
+
+function rotateAbout(p: Vec2, c: Vec2, rad: number): Vec2 {
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const d = sub(p, c);
+  return { x: c.x + d.x * cos - d.y * sin, y: c.y + d.x * sin + d.y * cos };
+}
+
+function insideQuad(q: readonly Vec2[], p: Vec2): boolean {
+  let sign = 0;
+  for (let i = 0; i < 4; i++) {
+    const a = q[i];
+    const b = q[(i + 1) % 4];
+    const c = (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
+    if (Math.abs(c) < 1e-12) continue;
+    const s = Math.sign(c);
+    if (sign && s !== sign) return false;
+    sign = s;
+  }
+  return true;
+}
+
+export interface FreeTransformToolOptions {
+  /** Defers preview resampling to the next frame (pass `requestAnimationFrame`; default: at once). */
+  schedule?: (run: () => void) => void;
+  /** Called whenever the overlay, readout or error changes. */
+  onChange?: () => void;
+}
+
+/**
+ * The interactive Free Transform (see the module comment). `begin` opens a session on the
+ * controller; pointer and key methods drive it; `commit` / `cancel` close it.
+ */
+export class FreeTransformTool {
+  private sessionRef: FreeTransformSession | null = null;
+  private modeValue: Exclude<FreeTransformMode, 'warp'> = 'scale';
+  /** The reference point in the untransformed frame's space (follows the transform). */
+  private refBox: Vec2 = { x: 0, y: 0 };
+  private corners: Quad | null = null;
+  private drag: { handle: TransformHandle; start: Vec2; corners: Quad; refBox: Vec2; ref: Vec2 } | null = null;
+  private pending = false;
+  private viewScale = 1;
+  private viewClip: { x: number; y: number; width: number; height: number } | undefined;
+  /** Values typed into the options bar since the last drag (V skew is not recovered from the shape). */
+  private typed: Partial<Record<FreeTransformField, number>> = {};
+  /** Width and height scale together when typed (the chain icon). */
+  proportional = true;
+  error: string | null = null;
+  lastResult: FreeTransformResult | null = null;
+
+  constructor(
+    private readonly controller: ImageEditorController,
+    private readonly options: FreeTransformToolOptions = {}
+  ) {}
+
+  get active(): boolean {
+    return Boolean(this.sessionRef?.isOpen);
+  }
+
+  get session(): FreeTransformSession | null {
+    return this.active ? this.sessionRef : null;
+  }
+
+  get mode(): Exclude<FreeTransformMode, 'warp'> {
+    return this.modeValue;
+  }
+
+  get interpolation(): Interpolation {
+    return this.sessionRef?.interpolation ?? 'bicubic';
+  }
+
+  private readonly listeners = new Set<() => void>();
+
+  /** Calls `listener` whenever the overlay, readout, mode or error changes. Returns the unsubscribe. */
+  subscribe(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  private changed(): void {
+    this.options.onChange?.();
+    for (const l of this.listeners) l();
+  }
+
+  /** Opens a Free Transform (default: the selected pixels of the active layer, or the whole layer). Returns an error message or `null`. */
+  begin(init: FreeTransformInit = {}): string | null {
+    if (this.active) return null;
+    try {
+      if (!init.layerId && init.content !== 'selection-outline' && !this.controller.getState().activeLayerId) {
+        // Photoshop always has a target layer: use the topmost visible pixel layer.
+        const top = [...flattenLayers(this.controller.getState().layers)].reverse().find((l) => l.type === 'pixel' && l.visible);
+        if (top) this.controller.setActiveLayer(top.id);
+      }
+      const s = this.controller.beginFreeTransform(init);
+      this.sessionRef = s;
+      this.corners = s.geometry.corners;
+      this.refBox = { x: s.box.x + s.box.width / 2, y: s.box.y + s.box.height / 2 };
+      this.modeValue = 'scale';
+      this.typed = {};
+      this.error = null;
+    } catch (e) {
+      this.error = e instanceof Error ? e.message : String(e);
+    }
+    this.changed();
+    return this.error;
+  }
+
+  setMode(mode: Exclude<FreeTransformMode, 'warp'>): void {
+    this.modeValue = mode;
+    this.changed();
+  }
+
+  /** Sets the reference point to an anchor of the frame (the options bar's locator). */
+  setReference(anchor: TransformAnchor): void {
+    const s = this.session;
+    if (!s) return;
+    const [fx, fy] = ANCHOR_FRACTION[anchor];
+    this.refBox = { x: s.box.x + fx * s.box.width, y: s.box.y + fy * s.box.height };
+    this.changed();
+  }
+
+  setInterpolation(interpolation: Interpolation): void {
+    const s = this.session;
+    if (!s) return;
+    this.run(() => s.update({ interpolation }, false));
+  }
+
+  /** Screen pixels per document pixel and the visible document area, for previews. */
+  setView(scale: number, clip?: { x: number; y: number; width: number; height: number }): void {
+    this.viewScale = scale > 0 ? scale : 1;
+    this.viewClip = clip;
+  }
+
+  private homography() {
+    const s = this.session;
+    return s && this.corners ? rectToQuad(s.box, this.corners) : null;
+  }
+
+  /** The reference point in document pixels. */
+  referencePoint(): Vec2 | null {
+    const h = this.homography();
+    return h ? applyHomography(h, this.refBox) : null;
+  }
+
+  /** The outline, handles and reference point to draw, or `null` when no transform is open. */
+  overlay(): TransformOverlay | null {
+    const s = this.session;
+    const h = this.homography();
+    if (!s || !h || !this.corners) return null;
+    const handles = [...CORNERS, ...SIDES].map((id) => {
+      const [fx, fy] = HANDLE_FRACTION[id];
+      const p = applyHomography(h, { x: s.box.x + fx * s.box.width, y: s.box.y + fy * s.box.height }) ?? { x: 0, y: 0 };
+      return { id, x: p.x, y: p.y };
+    });
+    return { outline: this.corners.map((p) => ({ x: p.x, y: p.y })), handles, reference: this.referencePoint() ?? { x: 0, y: 0 } };
+  }
+
+  /** What a document point is over (`tolerance` in document pixels: a few screen pixels / scale). */
+  hit(p: ImagePoint, tolerance: number): TransformHandle | null {
+    const o = this.overlay();
+    if (!o) return null;
+    // The nearest of the handles and the reference point within the tolerance (a small frame on
+    // screen puts several within reach); handles win ties.
+    let best: TransformHandle | null = null;
+    let bestD = tolerance;
+    for (const h of o.handles) {
+      const d = Math.hypot(h.x - p.x, h.y - p.y);
+      if (d <= bestD) {
+        best = h.id;
+        bestD = d;
+      }
+    }
+    if (Math.hypot(o.reference.x - p.x, o.reference.y - p.y) < bestD) best = 'reference';
+    if (best) return best;
+    return insideQuad(o.outline, p) ? 'inside' : 'outside';
+  }
+
+  /** The CSS cursor for a handle. */
+  cursor(handle: TransformHandle | null): string {
+    if (!handle) return 'default';
+    if (this.modeValue === 'rotate' && handle !== 'inside' && handle !== 'reference') return CURSOR.outside;
+    return CURSOR[handle];
+  }
+
+  /** Starts a drag on what `p` is over. */
+  down(p: ImagePoint, tolerance: number): TransformHandle | null {
+    if (!this.session || !this.corners) return null;
+    const handle = this.hit(p, tolerance);
+    if (!handle) return null;
+    this.drag = { handle, start: { x: p.x, y: p.y }, corners: this.corners, refBox: { ...this.refBox }, ref: this.referencePoint() ?? p };
+    return handle;
+  }
+
+  /** Continues the drag to `p` with the modifiers held now. */
+  move(p: ImagePoint, m: TransformModifiers = {}): void {
+    const d = this.drag;
+    const s = this.session;
+    if (!d || !s) return;
+    if (d.handle === 'reference') {
+      const h = rectToQuad(s.box, d.corners);
+      const inv = h && invertHomography(h);
+      const q = inv && applyHomography(inv, p);
+      if (q) this.refBox = q;
+      this.changed();
+      return;
+    }
+    const corners = this.dragCorners(d, p, m);
+    if (corners) this.setCorners(corners);
+  }
+
+  /** Ends the drag (the transform stays open). */
+  up(): void {
+    this.drag = null;
+  }
+
+  private dragCorners(d: NonNullable<FreeTransformTool['drag']>, p: Vec2, m: TransformModifiers): Quad | null {
+    const s = this.session!;
+    const c0 = d.corners;
+    let delta = sub(p, d.start);
+    const map = (f: (q: Vec2, i: number) => Vec2) => c0.map(f) as unknown as Quad;
+    const handle = d.handle;
+    const isCorner = handle in CORNER_INDEX;
+    const isSide = handle in SIDE_CORNERS;
+    const rotating = handle === 'outside' || (this.modeValue === 'rotate' && (isCorner || isSide));
+    if (handle === 'inside') {
+      if (m.shiftKey) delta = Math.abs(delta.x) >= Math.abs(delta.y) ? { x: delta.x, y: 0 } : { x: 0, y: delta.y };
+      return map((q) => add(q, delta));
+    }
+    if (rotating) {
+      const r = d.ref;
+      let a = Math.atan2(p.y - r.y, p.x - r.x) - Math.atan2(d.start.y - r.y, d.start.x - r.x);
+      if (m.shiftKey) a = Math.round(a / (Math.PI / 12)) * (Math.PI / 12);
+      return map((q) => rotateAbout(q, r, a));
+    }
+    const perspective = this.modeValue === 'perspective' || (mod(m) && m.altKey && m.shiftKey);
+    const distort = this.modeValue === 'distort' || (mod(m) && !perspective);
+    const skew = this.modeValue === 'skew' || (mod(m) && isSide);
+    if (isSide && (skew || perspective)) {
+      // Slide the side along its own direction (Alt: the opposite side the other way).
+      const [i, j] = SIDE_CORNERS[handle];
+      const dir = sub(c0[j], c0[i]);
+      const len = Math.hypot(dir.x, dir.y) || 1;
+      const t = (delta.x * dir.x + delta.y * dir.y) / len;
+      const v = { x: (dir.x / len) * t, y: (dir.y / len) * t };
+      const [oi, oj] = SIDE_CORNERS[{ n: 's', s: 'n', e: 'w', w: 'e' }[handle as 'n']];
+      return map((q, k) => (k === i || k === j ? add(q, v) : m.altKey && (k === oi || k === oj) ? sub(q, v) : q));
+    }
+    if (isCorner && perspective) {
+      const k = CORNER_INDEX[handle];
+      if (Math.abs(delta.x) >= Math.abs(delta.y)) {
+        const partner = [1, 0, 3, 2][k];
+        return map((q, i) => (i === k ? { x: q.x + delta.x, y: q.y } : i === partner ? { x: q.x - delta.x, y: q.y } : q));
+      }
+      const partner = [3, 2, 1, 0][k];
+      return map((q, i) => (i === k ? { x: q.x, y: q.y + delta.y } : i === partner ? { x: q.x, y: q.y - delta.y } : q));
+    }
+    if (distort || (isCorner && this.modeValue === 'skew')) {
+      if (isCorner) return map((q, i) => (i === CORNER_INDEX[handle] ? add(q, delta) : q));
+      const [i, j] = SIDE_CORNERS[handle];
+      return map((q, k) => (k === i || k === j ? add(q, delta) : q));
+    }
+    // Scale in the frame's own space, so a rotated or distorted frame scales along its sides.
+    const h = rectToQuad(s.box, c0);
+    const inv = h && invertHomography(h);
+    if (!h || !inv) return null;
+    const q = applyHomography(inv, p);
+    const q0 = applyHomography(inv, d.start);
+    if (!q || !q0) return null;
+    const b = s.box;
+    const [fx, fy] = HANDLE_FRACTION[handle];
+    const grab = { x: b.x + fx * b.width, y: b.y + fy * b.height };
+    const anchor = m.altKey ? d.refBox : { x: b.x + (1 - fx) * b.width, y: b.y + (1 - fy) * b.height };
+    const target = add(grab, sub(q, q0));
+    const ax = grab.x - anchor.x;
+    const ay = grab.y - anchor.y;
+    let sx = isCorner || handle === 'e' || handle === 'w' ? (Math.abs(ax) > 1e-9 ? (target.x - anchor.x) / ax : 1) : 1;
+    let sy = isCorner || handle === 'n' || handle === 's' ? (Math.abs(ay) > 1e-9 ? (target.y - anchor.y) / ay : 1) : 1;
+    // Corners scale proportionally by default; Shift frees them.
+    if (isCorner && !m.shiftKey) {
+      const k = Math.abs(sx) >= Math.abs(sy) ? sx : sy;
+      sx = k;
+      sy = k;
+    }
+    const scaled = [
+      { x: b.x, y: b.y },
+      { x: b.x + b.width, y: b.y },
+      { x: b.x + b.width, y: b.y + b.height },
+      { x: b.x, y: b.y + b.height },
+    ].map((c) => applyHomography(h, { x: anchor.x + (c.x - anchor.x) * sx, y: anchor.y + (c.y - anchor.y) * sy }));
+    return scaled.every(Boolean) ? (scaled as unknown as Quad) : null;
+  }
+
+  /** Sets new corners and refreshes the preview (scheduled). Invalid shapes keep the last good one. */
+  setCorners(corners: Quad): void {
+    const s = this.session;
+    if (!s) return;
+    const h = rectToQuad(s.box, corners);
+    if (!h) return;
+    this.corners = corners;
+    this.typed = {};
+    this.changed();
+    this.preview();
+  }
+
+  private preview(): void {
+    if (this.pending) return;
+    this.pending = true;
+    const run = () => {
+      this.pending = false;
+      const s = this.session;
+      if (!s || !this.corners) return;
+      this.run(() => s.update({ corners: this.corners! }, { scale: this.viewScale, clip: this.viewClip }));
+    };
+    if (this.options.schedule) this.options.schedule(run);
+    else run();
+  }
+
+  private run(fn: () => void): void {
+    try {
+      fn();
+      this.error = null;
+    } catch (e) {
+      this.error = e instanceof Error ? e.message : String(e);
+      if (this.sessionRef && !this.sessionRef.isOpen) this.sessionRef = null;
+    }
+    this.changed();
+  }
+
+  /** The options bar's numbers for the current shape. */
+  bar(): FreeTransformBar | null {
+    const s = this.session;
+    if (!s || !this.corners) return null;
+    const read: TransformReadout = describeTransform({ box: s.box, corners: this.corners }, this.refBox);
+    return {
+      affine: read.affine,
+      x: this.typed.x ?? read.x,
+      y: this.typed.y ?? read.y,
+      scaleX: this.typed.scaleX ?? read.scaleX,
+      scaleY: this.typed.scaleY ?? read.scaleY,
+      rotate: this.typed.rotate ?? read.rotate,
+      skewX: this.typed.skewX ?? read.skewX,
+      skewY: this.typed.skewY ?? 0,
+    };
+  }
+
+  /** Applies a typed options-bar value (W and H together while `proportional`). */
+  setField(field: FreeTransformField, value: number): void {
+    const s = this.session;
+    const cur = this.bar();
+    if (!s || !cur || !Number.isFinite(value)) return;
+    const next = { ...cur, [field]: value };
+    if (this.proportional && field === 'scaleX') next.scaleY = cur.scaleY === 0 ? value : (value / cur.scaleX) * cur.scaleY;
+    if (this.proportional && field === 'scaleY') next.scaleX = cur.scaleX === 0 ? value : (value / cur.scaleY) * cur.scaleX;
+    if (!next.scaleX || !next.scaleY) {
+      this.error = 'Width and height must not be 0 %.';
+      this.changed();
+      return;
+    }
+    const m = matrixFromParams(s.box, {
+      scaleX: next.scaleX,
+      scaleY: next.scaleY,
+      rotate: next.rotate,
+      skewX: next.skewX,
+      skewY: next.skewY,
+      reference: this.refBox,
+      dx: next.x - this.refBox.x,
+      dy: next.y - this.refBox.y,
+    });
+    this.setCorners(cornersFromMatrix(s.box, m));
+    this.typed = { scaleX: next.scaleX, scaleY: next.scaleY, rotate: next.rotate, skewX: next.skewX, skewY: next.skewY, x: next.x, y: next.y };
+    this.changed();
+  }
+
+  /** Finishes with full-quality resampling (one undo step). */
+  commit(): FreeTransformResult | null {
+    const s = this.session;
+    if (!s) return null;
+    let res: FreeTransformResult | null = null;
+    this.pending = false;
+    this.run(() => {
+      if (this.corners) s.update({ corners: this.corners }, false);
+      res = s.commit();
+    });
+    this.lastResult = res;
+    this.sessionRef = null;
+    this.corners = null;
+    this.drag = null;
+    this.changed();
+    return res;
+  }
+
+  /** Abandons the transform and restores everything. */
+  cancel(): void {
+    this.sessionRef?.cancel();
+    this.sessionRef = null;
+    this.corners = null;
+    this.drag = null;
+    this.pending = false;
+    this.error = null;
+    this.changed();
+  }
+
+  /**
+   * Keyboard: Enter commits, Escape cancels, arrows nudge by 1 px (Shift: 10). Ctrl/Cmd+T opens a
+   * Free Transform when none is open. Returns true when the key was used (prevent its default).
+   */
+  key(e: ShortcutEvent): boolean {
+    const t = e.target as { tagName?: string; isContentEditable?: boolean } | null;
+    const typing = Boolean(t && (t.isContentEditable || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT'));
+    if (!this.active) {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 't' && !typing) {
+        this.begin();
+        return true;
+      }
+      return false;
+    }
+    if (e.key === 'Enter') {
+      this.commit();
+      return true;
+    }
+    if (e.key === 'Escape') {
+      this.cancel();
+      return true;
+    }
+    if (typing) return false;
+    const step = e.shiftKey ? 10 : 1;
+    const nudge: Record<string, Vec2> = { ArrowLeft: { x: -step, y: 0 }, ArrowRight: { x: step, y: 0 }, ArrowUp: { x: 0, y: -step }, ArrowDown: { x: 0, y: step } };
+    const v = nudge[e.key];
+    if (v && this.corners) {
+      this.setCorners(this.corners.map((q) => add(q, v)) as unknown as Quad);
+      return true;
+    }
+    return false;
+  }
+}

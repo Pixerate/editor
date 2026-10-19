@@ -26,6 +26,8 @@
     PaintGesture,
     handlePaintShortcut,
     pointerPressure,
+    FreeTransformTool,
+    getViewportProjection,
     type SelectionToolOptions,
   } from '@pixerate/editor/image-editor';
   import ControlSlider from './ControlSlider.svelte';
@@ -35,6 +37,7 @@
   import BrushOptionsBar from './BrushOptionsBar.svelte';
   import SelectionOptionsBar from './SelectionOptionsBar.svelte';
   import RefineEdgePanel from './RefineEdgePanel.svelte';
+  import FreeTransformOptionsBar from './FreeTransformOptionsBar.svelte';
   import { onDestroy, untrack } from 'svelte';
   import { createReactiveImageEditor, type ReactiveImageEditor } from './imageEditorState.svelte.js';
 
@@ -81,6 +84,75 @@
   // Paint tools (Move, Brush, Eraser): the pointer gesture and the brush cursor.
   const paintGesture = $derived(new PaintGesture(editor.controller));
   let brushCursor: ImagePoint | null = null;
+
+  // Free Transform (Ctrl/Cmd+T): the shared tool drives a session; its overlay is drawn by the renderer.
+  const transformTool = $derived(
+    new FreeTransformTool(editor.controller, {
+      schedule: (run) => (typeof requestAnimationFrame !== 'undefined' ? requestAnimationFrame(run) : run()),
+    })
+  );
+  let transformTick = $state(0);
+  let transformCursor = $state('default');
+  const transformActive = $derived((void transformTick, transformTool.active));
+  const transformError = $derived((void transformTick, transformTool.error));
+  $effect(() => {
+    const tool = transformTool;
+    const off = tool.subscribe(() => {
+      transformTick++;
+      void renderCanvas();
+    });
+    return () => {
+      off();
+      tool.cancel();
+    };
+  });
+  $effect(() => {
+    if (typeof window === 'undefined') return;
+    const tool = transformTool;
+    const onKey = (e: KeyboardEvent) => {
+      if (tool.key(e)) e.preventDefault();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
+  /** The document point of a pointer event and the hit tolerance (6 screen px). */
+  function transformPoint(e: PointerEvent) {
+    const rect = canvasEl!.getBoundingClientRect();
+    const sx = rect.width > 0 ? canvasEl!.width / rect.width : 1;
+    const sy = rect.height > 0 ? canvasEl!.height / rect.height : 1;
+    const s = editor.controller.getState();
+    const cropping = activeTab === 'crop';
+    const projection = getViewportProjection(s, canvasEl!.width, canvasEl!.height, cropping);
+    const pt = canvasToImagePoint({ x: (e.clientX - rect.left) * sx, y: (e.clientY - rect.top) * sy }, s, canvasEl!.width, canvasEl!.height, cropping);
+    transformTool.setView(projection.scale);
+    return { pt, tolerance: 6 / (projection.scale || 1) };
+  }
+  function handleTransformPointerDown(e: PointerEvent): boolean {
+    if (!transformTool.active || !canvasEl) return false;
+    if (e.button !== 0) return true;
+    e.preventDefault();
+    try {
+      canvasEl.setPointerCapture?.(e.pointerId);
+    } catch {
+      // Synthetic events have no active pointer to capture.
+    }
+    const { pt, tolerance } = transformPoint(e);
+    transformTool.down(pt, tolerance);
+    return true;
+  }
+  function handleTransformPointerMove(e: PointerEvent): boolean {
+    if (!transformTool.active || !canvasEl) return false;
+    const { pt, tolerance } = transformPoint(e);
+    if (e.buttons & 1) transformTool.move(pt, e);
+    else transformCursor = transformTool.cursor(transformTool.hit(pt, tolerance));
+    return true;
+  }
+  function handleTransformPointerUp(): boolean {
+    if (!transformTool.active) return false;
+    transformTool.up();
+    return true;
+  }
   let paintError = $state<string | null>(null);
   let selectionDraft = $state.raw<ImagePoint[] | null>(null);
   let selectionError = $state<string | null>(null);
@@ -216,9 +288,10 @@
       draftCrop: overrideCrop !== undefined ? overrideCrop : draftCrop,
       draftSelectionPath: selectionDraft,
       brushCursor:
-        activeTab === 'paint' && brushCursor && editor.controller.getState().activeTool !== 'move'
+        activeTab === 'paint' && brushCursor && editor.controller.getState().activeTool !== 'move' && !transformTool.active
           ? { ...brushCursor, diameter: editor.controller.getState().paint.brush.size }
           : null,
+      freeTransform: transformTool.overlay(),
     });
   }
 
@@ -236,6 +309,7 @@
     }));
   }
   function handlePaintPointerDown(e: PointerEvent) {
+    if (handleTransformPointerDown(e)) return;
     if (activeTab !== 'paint' || e.button !== 0 || !canvasEl) return;
     e.preventDefault();
     try {
@@ -246,6 +320,7 @@
     paintError = paintGesture.down(paintSamples(e)[0]);
   }
   function handlePaintPointerMove(e: PointerEvent) {
+    if (handleTransformPointerMove(e)) return;
     if (activeTab !== 'paint' || !canvasEl) return;
     const samples = paintSamples(e);
     brushCursor = samples[samples.length - 1] ?? null;
@@ -253,6 +328,7 @@
     else void renderCanvas();
   }
   function handlePaintPointerUp() {
+    if (handleTransformPointerUp()) return;
     if (activeTab !== 'paint' || !paintGesture.active) return;
     paintGesture.up();
     if (paintGesture.error) paintError = paintGesture.error;
@@ -319,7 +395,7 @@
   }
 
   function handleMouseDown(e: MouseEvent) {
-    if (!canvasEl) return;
+    if (!canvasEl || transformTool.active) return;
     const canvasPt = getCanvasEventPoint(e);
 
     if (activeTab === 'select') {
@@ -398,7 +474,7 @@
   }
 
   function handleMouseMove(e: MouseEvent) {
-    if (!canvasEl) return;
+    if (!canvasEl || transformTool.active) return;
     const canvasPt = getCanvasEventPoint(e);
 
     if (activeTab === 'select') {
@@ -559,7 +635,7 @@
   }
 
   function handleMouseUp(e: MouseEvent) {
-    if (!canvasEl) return;
+    if (!canvasEl || transformTool.active) return;
     const canvasPt = getCanvasEventPoint(e);
 
     if (activeTab === 'select') {
@@ -876,6 +952,13 @@
   </div>
 
   <!-- Main Viewport + Sidebar Layout -->
+  <!-- Free Transform options bar (Ctrl/Cmd+T), above the viewport while a transform is open -->
+  {#if transformActive}
+    <FreeTransformOptionsBar tool={transformTool} class="border-b border-slate-800 bg-slate-900/95 px-4 py-2" />
+  {:else if transformError}
+    <div role="alert" class="border-b border-rose-900 bg-rose-950/80 px-4 py-1.5 text-xs text-rose-200">{transformError}</div>
+  {/if}
+
   <div class="flex flex-col md:flex-row flex-1 min-h-[520px] md:h-[560px]">
     <!-- Canvas Area -->
     <div
@@ -893,8 +976,10 @@
         onpointerup={handlePaintPointerUp}
         onpointercancel={() => paintGesture.cancel()}
         data-testid="image-editor-canvas"
-        class="absolute inset-0 w-full h-full block {activeTab === 'paint' ? 'touch-none cursor-crosshair' : ''}"
+        style={transformActive ? `cursor: ${transformCursor}` : undefined}
+        class="absolute inset-0 w-full h-full block {transformActive ? 'touch-none' : activeTab === 'paint' ? 'touch-none cursor-crosshair' : ''}"
       ></canvas>
+
     </div>
 
     <!-- Tab Controls Sidebar -->
@@ -1076,6 +1161,12 @@
       {#if activeTab === 'layers'}
         <div class="flex flex-col gap-3 text-xs">
           <span class="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">Layers</span>
+          <button
+            type="button"
+            title="Edit › Free Transform (Ctrl/Cmd+T): the selected pixels, or the whole active layer"
+            class="px-2 py-1 rounded text-[11px] bg-slate-800 text-slate-300 hover:text-white self-start disabled:opacity-40"
+            disabled={transformActive}
+            onclick={() => transformTool.begin()}>Free Transform</button>
           <LayersPanel controller={editor.controller} />
         </div>
       {/if}
@@ -1084,6 +1175,12 @@
         <div class="flex flex-col gap-3 text-xs">
           <span class="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">Paint</span>
           <BrushOptionsBar controller={editor.controller} />
+          <button
+            type="button"
+            title="Edit › Free Transform (Ctrl/Cmd+T): the selected pixels, or the whole active layer"
+            class="px-2 py-1 rounded text-[11px] bg-slate-800 text-slate-300 hover:text-white self-start disabled:opacity-40"
+            disabled={transformActive}
+            onclick={() => transformTool.begin()}>Free Transform</button>
           {#if paintError}
             <p role="alert" class="text-rose-400" data-testid="paint-error">{paintError}</p>
           {/if}
@@ -1331,6 +1428,20 @@
           {#if selectionError}
             <p role="alert" class="text-rose-400">{selectionError}</p>
           {/if}
+          <div class="flex gap-1">
+            <button
+            type="button"
+            title="Select › Transform Selection: the outline only"
+            class="px-2 py-1 rounded text-[11px] bg-slate-800 text-slate-300 hover:text-white self-start disabled:opacity-40"
+            disabled={transformActive}
+            onclick={() => transformTool.begin({ content: 'selection-outline' })}>Transform Selection</button>
+            <button
+            type="button"
+            title="Edit › Free Transform: the selected pixels of the active layer"
+            class="px-2 py-1 rounded text-[11px] bg-slate-800 text-slate-300 hover:text-white self-start disabled:opacity-40"
+            disabled={transformActive}
+            onclick={() => transformTool.begin({ content: 'selection' })}>Free Transform Pixels</button>
+          </div>
           <RefineEdgePanel
             controller={editor.controller}
             selection={editor.state.selection ?? null}

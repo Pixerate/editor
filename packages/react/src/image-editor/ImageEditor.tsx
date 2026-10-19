@@ -25,7 +25,10 @@ import {
   PaintGesture,
   handlePaintShortcut,
   pointerPressure,
+  FreeTransformTool,
+  getViewportProjection,
   type SelectionToolOptions,
+  type TransformHandle,
 } from '@pixerate/editor/image-editor';
 import { useImageEditor, type UseImageEditorReturn } from './useImageEditor';
 import { ControlSlider } from './ControlSlider';
@@ -35,6 +38,7 @@ import { LayersPanel } from './LayersPanel';
 import { BrushOptionsBar } from './BrushOptionsBar';
 import { SelectionOptionsBar } from './SelectionOptionsBar';
 import { RefineEdgePanel } from './RefineEdgePanel';
+import { FreeTransformOptionsBar } from './FreeTransformOptionsBar';
 
 export interface ImageEditorProps {
   editor?: UseImageEditorReturn;
@@ -91,6 +95,20 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
   }
   const brushCursorRef = useRef<ImagePoint | null>(null);
   const [paintError, setPaintError] = useState<string | null>(null);
+
+  // Free Transform (Ctrl/Cmd+T): the shared tool drives a session; its overlay is drawn by the renderer.
+  const transformToolRef = useRef<FreeTransformTool | null>(null);
+  const transformControllerRef = useRef(controller);
+  if (!transformToolRef.current || transformControllerRef.current !== controller) {
+    transformToolRef.current?.cancel();
+    transformToolRef.current = new FreeTransformTool(controller, {
+      schedule: (run) => (typeof requestAnimationFrame !== 'undefined' ? requestAnimationFrame(run) : run()),
+    });
+    transformControllerRef.current = controller;
+  }
+  const transformTool = transformToolRef.current;
+  const [, setTransformTick] = useState(0);
+  const [transformCursor, setTransformCursor] = useState('default');
 
   // AI Tools state
   const [inpaintPrompt, setInpaintPrompt] = useState('');
@@ -214,13 +232,71 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
         draftCrop: draftCrop !== undefined ? draftCrop : draftCropRef.current,
         draftSelectionPath: selectionDraftRef.current,
         brushCursor:
-          activeTab === 'paint' && brushCursorRef.current && controller.getState().activeTool !== 'move'
+          activeTab === 'paint' && brushCursorRef.current && controller.getState().activeTool !== 'move' && !transformTool.active
             ? { ...brushCursorRef.current, diameter: controller.getState().paint.brush.size }
             : null,
+        freeTransform: transformTool.overlay(),
       });
     },
-    [controller, activeTab]
+    [controller, activeTab, transformTool]
   );
+
+  useEffect(() => transformTool.subscribe(() => {
+    setTransformTick((n) => n + 1);
+    void renderCanvas();
+  }), [transformTool, renderCanvas]);
+
+  /** The canvas point of a pointer event, its document point, and the screen scale. */
+  const transformPoint = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current!;
+    const rect = canvas.getBoundingClientRect();
+    const sx = rect.width > 0 ? canvas.width / rect.width : 1;
+    const sy = rect.height > 0 ? canvas.height / rect.height : 1;
+    const s = controller.getState();
+    const cropping = activeTab === 'crop';
+    const projection = getViewportProjection(s, canvas.width, canvas.height, cropping);
+    const pt = canvasToImagePoint({ x: (e.clientX - rect.left) * sx, y: (e.clientY - rect.top) * sy }, s, canvas.width, canvas.height, cropping);
+    transformTool.setView(projection.scale);
+    return { pt, tolerance: 6 / (projection.scale || 1) };
+  };
+  const handleTransformPointerDown = (e: React.PointerEvent<HTMLCanvasElement>): boolean => {
+    if (!transformTool.active) return false;
+    if (e.button !== 0) return true;
+    e.preventDefault();
+    try {
+      e.currentTarget.setPointerCapture?.(e.pointerId);
+    } catch {
+      // Synthetic events have no active pointer to capture.
+    }
+    const { pt, tolerance } = transformPoint(e);
+    transformTool.down(pt, tolerance);
+    return true;
+  };
+  const handleTransformPointerMove = (e: React.PointerEvent<HTMLCanvasElement>): boolean => {
+    if (!transformTool.active) return false;
+    const { pt, tolerance } = transformPoint(e);
+    if (e.buttons & 1) transformTool.move(pt, e);
+    else {
+      const over: TransformHandle | null = transformTool.hit(pt, tolerance);
+      setTransformCursor(transformTool.cursor(over));
+    }
+    return true;
+  };
+  const handleTransformPointerUp = (): boolean => {
+    if (!transformTool.active) return false;
+    transformTool.up();
+    return true;
+  };
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onKey = (e: KeyboardEvent) => {
+      if (transformTool.key(e)) e.preventDefault();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [transformTool]);
+
 
   useEffect(() => {
     const raf =
@@ -292,6 +368,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
     }));
   };
   const handlePaintPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (handleTransformPointerDown(e)) return;
     if (activeTab !== 'paint' || e.button !== 0) return;
     e.preventDefault();
     try {
@@ -303,6 +380,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
     setPaintError(paintGestureRef.current!.down(first));
   };
   const handlePaintPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (handleTransformPointerMove(e)) return;
     if (activeTab !== 'paint') return;
     const samples = paintSamples(e);
     brushCursorRef.current = samples[samples.length - 1] ?? null;
@@ -310,6 +388,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
     else void renderCanvas();
   };
   const handlePaintPointerUp = () => {
+    if (handleTransformPointerUp()) return;
     if (activeTab !== 'paint') return;
     const g = paintGestureRef.current!;
     if (g.active) {
@@ -330,7 +409,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
   // Pointer event handlers for drawing and annotations
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || transformTool.active) return;
     const canvasPt = getCanvasEventPoint(e);
 
     if (activeTab === 'select') {
@@ -410,7 +489,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
 
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || transformTool.active) return;
     const canvasPt = getCanvasEventPoint(e);
 
     if (activeTab === 'select') {
@@ -577,7 +656,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
 
   const handleMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || transformTool.active) return;
     const canvasPt = getCanvasEventPoint(e);
 
     if (activeTab === 'select') {
@@ -899,6 +978,14 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
         </div>
       </div>
 
+      {/* Free Transform options bar (Ctrl/Cmd+T), above the viewport while a transform is open */}
+      {transformTool.active && <FreeTransformOptionsBar tool={transformTool} className="border-b border-slate-800 bg-slate-900/95 px-4 py-2" />}
+      {!transformTool.active && transformTool.error && (
+        <div role="alert" className="border-b border-rose-900 bg-rose-950/80 px-4 py-1.5 text-xs text-rose-200">
+          {transformTool.error}
+        </div>
+      )}
+
       {/* Main Viewport + Sidebar Layout */}
       <div className="flex flex-col md:flex-row flex-1 min-h-[520px] md:h-[560px]">
         {/* Canvas Area */}
@@ -917,8 +1004,10 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
             onPointerUp={handlePaintPointerUp}
             onPointerCancel={() => paintGestureRef.current?.cancel()}
             data-testid="image-editor-canvas"
-            className={`absolute inset-0 w-full h-full block ${activeTab === 'paint' ? 'touch-none cursor-crosshair' : ''}`}
+            style={transformTool.active ? { cursor: transformCursor } : undefined}
+            className={`absolute inset-0 w-full h-full block ${transformTool.active ? 'touch-none' : activeTab === 'paint' ? 'touch-none cursor-crosshair' : ''}`}
           />
+
         </div>
 
         {/* Tab Controls Sidebar */}
@@ -1116,6 +1205,15 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
           {activeTab === 'layers' && (
             <div className="flex flex-col gap-3 text-xs">
               <span className="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">Layers</span>
+              <button
+                type="button"
+                title="Edit › Free Transform (Ctrl/Cmd+T): the selected pixels, or the whole active layer"
+                className="px-2 py-1 rounded text-[11px] bg-slate-800 text-slate-300 hover:text-white self-start disabled:opacity-40"
+                disabled={transformTool.active}
+                onClick={() => transformTool.begin()}
+              >
+                Free Transform
+              </button>
               <LayersPanel controller={controller} />
             </div>
           )}
@@ -1125,6 +1223,15 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
             <div className="flex flex-col gap-3 text-xs">
               <span className="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">Paint</span>
               <BrushOptionsBar controller={controller} />
+              <button
+                type="button"
+                title="Edit › Free Transform (Ctrl/Cmd+T): the selected pixels, or the whole active layer"
+                className="px-2 py-1 rounded text-[11px] bg-slate-800 text-slate-300 hover:text-white self-start"
+                disabled={transformTool.active}
+                onClick={() => transformTool.begin()}
+              >
+                Free Transform
+              </button>
               {paintError && (
                 <p role="alert" className="text-rose-400" data-testid="paint-error">
                   {paintError}
@@ -1392,6 +1499,26 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                   {selectionError}
                 </p>
               )}
+              <div className="flex gap-1">
+                <button
+                type="button"
+                title="Select › Transform Selection: the outline only"
+                className="px-2 py-1 rounded text-[11px] bg-slate-800 text-slate-300 hover:text-white self-start disabled:opacity-40"
+                disabled={transformTool.active}
+                onClick={() => transformTool.begin({ content: 'selection-outline' })}
+              >
+                Transform Selection
+              </button>
+                <button
+                type="button"
+                title="Edit › Free Transform: the selected pixels of the active layer"
+                className="px-2 py-1 rounded text-[11px] bg-slate-800 text-slate-300 hover:text-white self-start disabled:opacity-40"
+                disabled={transformTool.active}
+                onClick={() => transformTool.begin({ content: 'selection' })}
+              >
+                Free Transform Pixels
+              </button>
+              </div>
               <RefineEdgePanel controller={controller} selection={state.selection ?? null} layers={state.adjustments.layers} />
             </div>
           )}
