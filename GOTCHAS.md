@@ -1906,3 +1906,27 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Keyed by the inner clip's own id, two compound clips playing the same sequence at once would fight over one `<video>` element in the preview (seeking it back and forth every frame).
 - **Root Cause**: The preview keeps one media element per `layer.clip` / `audio.clip`. A sequence's clip ids are unique, but the same sequence can play in two places at once.
 - **Solution / Workaround**: `videoFrameAt` names nested layers and sounds by the path of clip ids from the project's own track (`comp/inner`, `comp/mid/shot`). Use `videoFrameLeafLayers` to walk a frame's pictures with compounds opened up (the preview and `videoFrameRequestsAt` do).
+
+### [core/raster] A Running-Sum Blur Is Not Exactly Zero After It Passes a Shape
+
+- **Issue / Symptom**: A drop shadow with Noise speckled whole rows of the canvas far from the shape, and a tiled render differed from a whole-image render by up to 53 levels.
+- **Root Cause**: The effect blur is two box passes as running sums (`inner += next - leaving`). After the window leaves a shape the sum is about 1e-16, not 0. Noise adds speckle to any coverage above 0, so it lit up that residue. The residue runs to the end of the row, so how far it reaches depends on where the map's region ends.
+- **Solution / Workaround**: `tentLine` (`raster/effects/render.ts`) flushes values below `BLUR_EPS` (1e-7) to 0, and `noise` skips coverage at or below it. Keep both if you change the blur. Effects with noise also count as non-local in `effectsAreLocal`.
+
+### [core/raster] Chiselled Bevels Streak When Distances Go to Pixel Centres
+
+- **Issue / Symptom**: Chisel Hard and Soft bevels and embosses on round shapes showed radial streaks, worst on the outside half of an emboss.
+- **Root Cause**: The exact distance transform measures to the nearest covered pixel's centre. Its gradient jumps at the Voronoi cell borders of those centres, and the chisel lights the height map by its gradient, so every border shows as a streak. Placing the edge by coverage (`d - (a - 0.5)`) moves each cell but keeps the borders.
+- **Solution / Workaround**: `edgeDistances` measures to the straight edge through the nearest edge pixel: its normal is the coverage gradient (Sobel) there, and its position is the pixel's coverage. Smooth bevels blur the shape and do not need this. Photocraft solves it with a fuller sharp-edge refinement that was not ported.
+
+### [core/raster] Layer Effects Read Pixels Beyond the Tile, So Tile Signatures and Dirty Rects Must Grow
+
+- **Issue / Symptom**: A shadow cast into a neighbouring tile did not update after a stroke near the tile edge, and a tile with no layer pixels never showed the shadow at all.
+- **Root Cause**: The compositor caches a tile by the surface tiles it reads and recomposites only inside `dirty` rectangles. A layer with effects changes pixels up to its effects' reach (`effectsMargin`) away from its own pixels.
+- **Solution / Workaround**: Effect maps are built once over the layer's region (its bounds grown by the margin) and cropped per tile, so tiles always match a whole-image render. `effectSig` reads the layer's tiles within the margin around the tile, or the whole region when an effect is laid out over the layer's bounds (aligned gradients, gradient strokes, linked patterns, noise). `compositeTiles` grows every dirty rectangle by the stack's largest margin. Do not put the region rect into a local stack's signature: the region grows as you paint elsewhere, and every tile would recomposite.
+
+### [core/raster] The Raster Isolation Test Rejects the Word "document" in Strings
+
+- **Issue / Symptom**: `raster-module.test.ts` failed on `effects/model.ts` with "expected true to be false", and no import was wrong.
+- **Root Cause**: The test strips comments, then looks for `document`, `window` and canvas globals anywhere in the source, string literals included. An error message saying "a document pattern" matched.
+- **Solution / Workaround**: Word user-facing strings in `src/raster` without those words, or say "file" instead. Comments are fine.

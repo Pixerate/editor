@@ -285,7 +285,7 @@ export interface LegacyViewResult extends LegacyParts {
 }
 
 const isPlain = (l: ImageLayer) =>
-  l.visible && l.opacity === 1 && l.blend === 'normal' && !l.clipped && !l.mask && !l.locks;
+  l.visible && l.opacity === 1 && l.blend === 'normal' && !l.clipped && !l.mask && !l.locks && !l.effects;
 
 /** Reads the stack back as the old document-level parts (see `LegacyViewResult`). */
 export function legacyView(stack: LayerStack, width: number, height: number, activeLayerId: string | null = null): LegacyViewResult {
@@ -333,7 +333,7 @@ export function isLegacyShape(stack: LayerStack): boolean {
   const bg = layers[0];
   if (!bg || bg.type !== 'pixel' || bg.source !== 'document') return false;
   if (bg.id !== BACKGROUND_LAYER_ID || bg.name !== BACKGROUND_LAYER_NAME) return false;
-  if (!bg.visible || bg.opacity !== 1 || bg.blend !== 'normal' || bg.clipped || bg.locks) return false;
+  if (!bg.visible || bg.opacity !== 1 || bg.blend !== 'normal' || bg.clipped || bg.locks || bg.effects) return false;
   if ((bg.fillOpacity ?? 1) !== 1 || bg.offset.x !== 0 || bg.offset.y !== 0) return false;
   const filters = bg.filters ?? [];
   if (filters.length < 1 || filters.length > 2) return false;
@@ -349,7 +349,7 @@ export function isLegacyShape(stack: LayerStack): boolean {
   let adjustments = 0;
   for (; i < layers.length && layers[i].type === 'adjustment'; i++) {
     const l = layers[i] as AdjustmentLayerNode;
-    if (l.clipped || l.locks || l.mask?.source) return false;
+    if (l.clipped || l.locks || l.mask?.source || l.effects) return false;
     adjustments++;
   }
   for (; i < layers.length; i++) {

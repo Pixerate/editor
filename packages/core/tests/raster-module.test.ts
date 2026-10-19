@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   RasterCompositor,
@@ -74,10 +74,14 @@ describe('raster module', () => {
 
   it('imports nothing from the editors, the DOM or a framework', () => {
     const dir = join(__dirname, '../src/raster');
-    for (const f of readdirSync(dir)) {
+    const files = (readdirSync(dir, { recursive: true }) as string[]).filter((f) => f.endsWith('.ts'));
+    expect(files).toContain(join('effects', 'render.ts'));
+    for (const f of files) {
       const src = readFileSync(join(dir, f), 'utf8');
       const imports = [...src.matchAll(/from '([^']+)'/g)].map((m) => m[1]);
-      expect(imports.filter((i) => !i.startsWith('./')), f).toEqual([]);
+      // Relative imports that stay inside the raster module only.
+      const outside = imports.filter((i) => !i.startsWith('.') || !resolve(dirname(join(dir, f)), i).startsWith(dir));
+      expect(outside, f).toEqual([]);
       expect(/\b(document|window|HTMLCanvasElement|OffscreenCanvas)\b/.test(src.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '')), f).toBe(false);
     }
   });

@@ -24,7 +24,8 @@ import {
   type PixelLayer,
   type RasterMask,
 } from './model';
-import { bytesToBase64, decodePng, parseDataUrl, pngDataUrl } from '../../raster/png';
+import { base64ToBytes, bytesToBase64, decodePng, parseDataUrl, pngDataUrl } from '../../raster/png';
+import { normalizeLayerEffects, type GlobalLight, type LayerEffect, type LayerEffects } from '../../raster/effects/model';
 import { contentBounds, emptySurface, readRegion, surfaceFromPixels, type TiledSurface } from '../../raster/surface';
 
 export const LAYERED_SCHEMA_VERSION = 3 as const;
@@ -50,6 +51,15 @@ interface SerializedLayerBase {
   clipped?: boolean;
   mask?: SerializedRasterMask;
   locks?: LayerLocks;
+  effects?: SerializedLayerEffects;
+}
+
+/** A layer's effects: the effect list as JSON plus the PSD block they came from (base64). */
+export interface SerializedLayerEffects {
+  enabled: boolean;
+  scale?: number;
+  items: LayerEffect[];
+  psd?: { key: string; data: string };
 }
 
 export interface SerializedPixelLayer extends SerializedLayerBase {
@@ -102,6 +112,8 @@ export interface SerializedLayeredImageEditorState {
   /** Blur migrated from a v1 / v2 document with adjustment layers (runs after the layers). */
   legacyOutputBlur?: number;
   selection?: SerializedSelection;
+  /** Global light for layer effects (missing = 120°, 30°). */
+  globalLight?: GlobalLight;
 }
 
 // ---------------------------------------------------------------------------
@@ -145,7 +157,31 @@ function baseFields(layer: ImageLayer, ctx: SerializeContext): SerializedLayerBa
   if (layer.clipped) out.clipped = true;
   if (layer.mask) out.mask = serializeMask(layer.mask, `${layer.id}-mask`, ctx);
   if (layer.locks && Object.values(layer.locks).some(Boolean)) out.locks = { ...layer.locks };
+  if (layer.effects) out.effects = serializeEffects(layer.effects);
   return out;
+}
+
+export function serializeEffects(effects: LayerEffects): SerializedLayerEffects {
+  const out: SerializedLayerEffects = { enabled: effects.enabled, items: JSON.parse(JSON.stringify(effects.items)) };
+  if (effects.scale !== undefined && effects.scale !== 1) out.scale = effects.scale;
+  if (effects.psd) out.psd = { key: effects.psd.key, data: bytesToBase64(effects.psd.data) };
+  return out;
+}
+
+/** Reads stored effects (leniently: broken effects are dropped), or `undefined`. */
+export function deserializeEffects(raw: unknown): LayerEffects | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const r = raw as Record<string, unknown>;
+  let psd: { key: string; data: Uint8Array } | undefined;
+  const p = r.psd as Record<string, unknown> | undefined;
+  if (p && typeof p.key === 'string' && typeof p.data === 'string') {
+    try {
+      psd = { key: p.key, data: base64ToBytes(p.data) };
+    } catch {
+      psd = undefined;
+    }
+  }
+  return normalizeLayerEffects({ ...r, psd });
 }
 
 function serializeMask(mask: RasterMask, hint: string, ctx: SerializeContext): SerializedRasterMask {
@@ -407,6 +443,8 @@ export function deserializeLayer(raw: unknown, ctx: DeserializeContext): ImageLa
     for (const k of ['pixels', 'transparency', 'position', 'all'] as const) if (r.locks[k] === true) locks[k] = true;
     if (Object.keys(locks).length) base.locks = locks;
   }
+  const effects = deserializeEffects(r.effects);
+  if (effects && r.type !== 'adjustment') base.effects = effects;
   switch (r.type) {
     case 'pixel': {
       const layer: PixelLayer = {

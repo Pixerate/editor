@@ -17,10 +17,18 @@
  *   k, recomposites from step k upwards only; `dirty` rectangles limit that to where it changed.
  * - Spatial filters and feathered or parametric masks are computed once over the canvas and
  *   cached by the identity of their inputs.
+ * - Layer effects: a layer's effect maps (shadow, glow, bevel, stroke distance fields) are built
+ *   once over the layer's region (its bounds grown by the effects' margin, within the canvas grown
+ *   the same) and cached by the identity of every surface tile the shape reads; tiles crop them.
+ *   A tile's signature then reads the layer within the margin around it (or the whole region when
+ *   an effect is laid out over the layer's bounds), and `dirty` rectangles grow by the margin.
  */
 
 import { blendChannel, blendRgb, isSeparableBlendMode, type BlendMode } from './blend';
 import { gaussianBlur } from './blur';
+import { DEFAULT_GLOBAL_LIGHT, effectsFingerprint, effectsMargin, hasActiveEffects, type GlobalLight, type LayerEffects } from './effects/model';
+import { builtinPattern, PatternTile, type EffectPattern } from './effects/patterns';
+import { activeEffectItems, buildEffectMaps, compositeLayerEffects, effectsAreLocal, type EffectContext, type EffectMaps } from './effects/render';
 import type { RasterMask, RasterNode } from './layers';
 import {
   TILE,
@@ -47,6 +55,10 @@ export interface RasterSources {
   surfaceOf?(layer: CompositorLayer): PixelSurface;
   /** Changes whenever one of the host's callbacks would return something new for the same layers. */
   version?: number | string;
+  /** The document's global light for effects that use it (default angle 120°, altitude 30°). */
+  globalLight?: GlobalLight;
+  /** A document pattern by id for pattern effects (built-in patterns are found without it). */
+  pattern?(id: string): EffectPattern | null;
 }
 
 /** The fields the engine reads; editor layer types are wider. */
@@ -60,6 +72,8 @@ export interface CompositorLayer extends RasterNode {
   surface?: PixelSurface;
   offset?: { x: number; y: number };
   fillOpacity?: number;
+  /** Layer effects. */
+  effects?: LayerEffects;
   /** Groups. */
   children?: readonly CompositorLayer[];
 }
@@ -315,6 +329,13 @@ export class RasterCompositor<L extends CompositorLayer = CompositorLayer, S ext
   private contentCache = new WeakMap<object, Map<string, Uint8ClampedArray>>();
   private readonly stepsCache = new WeakMap<readonly L[], Step<L>[]>();
   private readonly propsKeyCache = new WeakMap<object, string>();
+  /** Effect maps by layer id (see the module comment), least recently used first. */
+  private effectCache = new Map<string, { key: string; refs: unknown[]; maps: EffectMaps }>();
+  /** Effect maps already validated in this call, by layer object. */
+  private effectMemo = new WeakMap<object, { stamp: number; maps: EffectMaps }>();
+  private readonly patternTiles = new WeakMap<EffectPattern, PatternTile>();
+  private readonly reachCache = new WeakMap<readonly L[], number>();
+  private fxContext: EffectContext | null = null;
   lastStats: CompositeStats = { tiles: 0, cached: 0, stepsRun: 0 };
   private hint = -1;
 
@@ -332,6 +353,8 @@ export class RasterCompositor<L extends CompositorLayer = CompositorLayer, S ext
     this.planeCache.clear();
     this.filteredCache = new WeakMap();
     this.contentCache = new WeakMap();
+    this.effectCache.clear();
+    this.effectMemo = new WeakMap();
   }
 
   private setSources(sources: S): void {
@@ -341,6 +364,7 @@ export class RasterCompositor<L extends CompositorLayer = CompositorLayer, S ext
       this.sourcesVersion = version;
     }
     this.sources = sources;
+    this.fxContext = null;
   }
 
   /** The composite of `layers` over `rect` as `rect.width × rect.height` RGBA (straight alpha). */
@@ -379,10 +403,13 @@ export class RasterCompositor<L extends CompositorLayer = CompositorLayer, S ext
     this.hint = options.checkpointLayerId ? this.stepIndexOf(steps, options.checkpointLayerId) : -1;
     this.stamp++;
     const stats: CompositeStats = { tiles: 0, cached: 0, stepsRun: 0 };
+    // A change reaches as far as the effects of any layer reach.
+    const grow = options.dirty ? this.effectsReach(layers) : 0;
+    const dirty = grow > 0 ? options.dirty!.map((d) => inflateRect(d, grow)) : options.dirty;
     for (const { tx, ty } of tilesInRect(rect)) {
       stats.tiles++;
       const before = this.tiles.get(tileKey(tx, ty))?.result;
-      const data = this.compositeTile(layers, steps, tx, ty, stats, options.dirty ? dirtyInTile(options.dirty, tx, ty) : null);
+      const data = this.compositeTile(layers, steps, tx, ty, stats, dirty ? dirtyInTile(dirty, tx, ty) : null);
       onTile(tx, ty, data, data !== before);
     }
     this.lastStats = stats;
@@ -458,6 +485,7 @@ export class RasterCompositor<L extends CompositorLayer = CompositorLayer, S ext
       : null;
     const base: unknown[] = [layer.type, layer.id, layer.visible, layer.opacity, layer.blend, Boolean(layer.clipped), mask];
     if (isPixel(layer)) base.push(layer.offset?.x ?? 0, layer.offset?.y ?? 0, layer.fillOpacity ?? 1);
+    if (this.hasEffects(layer)) base.push(effectsFingerprint(layer.effects));
     const extra = this.profile.layerKey?.(layer);
     if (extra !== undefined) base.push(extra);
     key = JSON.stringify(base);
@@ -594,6 +622,11 @@ export class RasterCompositor<L extends CompositorLayer = CompositorLayer, S ext
   }
 
   private groupSig(group: L, steps: Step<L>[], tx: number, ty: number): Sig {
+    if (group.visible && this.hasEffects(group)) return this.effectSig(group, tx, ty);
+    return this.plainGroupSig(group, steps, tx, ty);
+  }
+
+  private plainGroupSig(group: L, steps: Step<L>[], tx: number, ty: number): Sig {
     let key = 'G' + this.propsKey(group);
     const refs = this.maskRefs(group, tx, ty, 0, 0);
     if (!group.visible) return { key, refs };
@@ -606,6 +639,11 @@ export class RasterCompositor<L extends CompositorLayer = CompositorLayer, S ext
   }
 
   private contentSig(layer: L, tx: number, ty: number): Sig {
+    if (layer.visible && this.hasEffects(layer)) return this.effectSig(layer, tx, ty);
+    return this.plainContentSig(layer, tx, ty);
+  }
+
+  private plainContentSig(layer: L, tx: number, ty: number): Sig {
     const key = 'C' + this.propsKey(layer);
     if (!layer.visible) return { key, refs: [] };
     if (!isPixel(layer)) return { key, refs: this.maskRefs(layer, tx, ty, 0, 0) };
@@ -615,6 +653,198 @@ export class RasterCompositor<L extends CompositorLayer = CompositorLayer, S ext
     for (const t of tilesInRect(r)) refs.push(surface.getTile(t.tx, t.ty) ?? null);
     refs.push(...this.maskRefs(layer, tx, ty, layer.offset?.x ?? 0, layer.offset?.y ?? 0));
     return { key, refs };
+  }
+
+  // --- Layer effects ------------------------------------------------------------
+
+  private hasEffects(layer: L): boolean {
+    return hasActiveEffects(layer.effects) && !this.isFilter(layer);
+  }
+
+  /** The largest effects margin of any visible layer in the stack (memoised per root). */
+  private effectsReach(layers: readonly L[]): number {
+    let m = this.reachCache.get(layers);
+    if (m !== undefined) return m;
+    m = 0;
+    const walk = (list: readonly CompositorLayer[]) => {
+      for (const l of list) {
+        if (!l.visible) continue;
+        if (this.hasEffects(l as L)) m = Math.max(m!, effectsMargin(l.effects));
+        if (l.children) walk(l.children);
+      }
+    };
+    walk(layers);
+    this.reachCache.set(layers, m);
+    return m;
+  }
+
+  private effectContext(): EffectContext {
+    if (this.fxContext) return this.fxContext;
+    const sources = this.sources;
+    const tiles = this.patternTiles;
+    this.fxContext = {
+      light: sources.globalLight ?? DEFAULT_GLOBAL_LIGHT,
+      pattern: (id) => {
+        const p = sources.pattern?.(id) ?? builtinPattern(id);
+        if (!p || !(p.width > 0 && p.height > 0) || p.data.length < p.width * p.height * 4) return null;
+        let t = tiles.get(p);
+        if (!t) {
+          t = new PatternTile(p);
+          tiles.set(p, t);
+        }
+        return t;
+      },
+    };
+    return this.fxContext;
+  }
+
+  /**
+   * Where a layer's effect maps are built: its bounds (pixel layers; the canvas otherwise) grown by
+   * the effects' margin, within the canvas grown the same.
+   */
+  private effectRegion(layer: L): RasterRect {
+    const m = effectsMargin(layer.effects);
+    const canvas = { x: -m, y: -m, width: this.sources.width + 2 * m, height: this.sources.height + 2 * m };
+    if (!isPixel(layer)) return canvas;
+    const { surface, dx, dy } = this.layerPixels(layer);
+    if (surface.defaultValue !== 0) return canvas;
+    const b = surface.bounds;
+    if (!b) return { x: 0, y: 0, width: 0, height: 0 };
+    return intersectRect({ x: b.x + dx - m, y: b.y + dy - m, width: b.width + 2 * m, height: b.height + 2 * m }, canvas);
+  }
+
+  /** The surface tiles (and mask refs) a layer's shape reads over `region`. */
+  private shapeRefs(layer: L, region: RasterRect): unknown[] {
+    const refs: unknown[] = [];
+    if (region.width <= 0 || region.height <= 0) return refs;
+    for (const t of tilesInRect(region)) {
+      const sig = isGroup(layer) ? this.plainGroupSig(layer, this.buildSteps((layer.children ?? []) as L[]), t.tx, t.ty) : this.plainContentSig(layer, t.tx, t.ty);
+      for (const r of sig.refs) refs.push(r);
+    }
+    return refs;
+  }
+
+  private lightKey(): string {
+    const l = this.effectContext().light;
+    return `${l.angle},${l.altitude}`;
+  }
+
+  /**
+   * The signature of a layer with effects for tile (tx, ty): its properties and the tiles its shape
+   * reads within the effects' margin around the tile, or over its whole region when an effect is
+   * laid out over the layer's bounds.
+   */
+  private effectSig(layer: L, tx: number, ty: number): Sig {
+    const key = (isGroup(layer) ? 'Gfx' : 'Cfx') + this.propsKey(layer) + this.lightKey();
+    const region = this.effectRegion(layer);
+    const m = effectsMargin(layer.effects);
+    // Local maps over the tile do not depend on how far the region reaches (it is zero beyond the
+    // shape); maps laid out over the layer's bounds do.
+    if (effectsAreLocal(activeEffectItems(layer.effects))) {
+      return { key, refs: this.shapeRefs(layer, intersectRect({ x: tx * TILE - m, y: ty * TILE - m, width: TILE + 2 * m, height: TILE + 2 * m }, region)) };
+    }
+    return { key, refs: [`${region.x},${region.y},${region.width},${region.height}`, ...this.shapeRefs(layer, region)] };
+  }
+
+  /** A layer's effect maps over its region (cached; see the module comment). */
+  private effectMapsOf(layer: L): EffectMaps {
+    const memo = this.effectMemo.get(layer);
+    if (memo && memo.stamp === this.stamp) return memo.maps;
+    const region = this.effectRegion(layer);
+    const key = `${this.propsKey(layer)}${this.lightKey()}|${region.x},${region.y},${region.width},${region.height}`;
+    const refs = this.shapeRefs(layer, region);
+    const hit = this.effectCache.get(layer.id);
+    let maps: EffectMaps;
+    if (hit && hit.key === key && sameSig({ key, refs: hit.refs }, { key, refs })) {
+      this.effectCache.delete(layer.id);
+      this.effectCache.set(layer.id, hit);
+      maps = hit.maps;
+    } else {
+      maps = buildEffectMaps(activeEffectItems(layer.effects), this.layerShape(layer, region), region, this.effectContext());
+      this.effectCache.delete(layer.id);
+      this.effectCache.set(layer.id, { key, refs, maps });
+      let bytes = 0;
+      for (const e of this.effectCache.values()) bytes += e.maps.bytes;
+      while (this.effectCache.size > 1 && (this.effectCache.size > 32 || bytes > this.maxCacheBytes / 2)) {
+        const [oldest, e] = this.effectCache.entries().next().value as [string, { maps: EffectMaps }];
+        bytes -= e.maps.bytes;
+        this.effectCache.delete(oldest);
+      }
+    }
+    this.effectMemo.set(layer, { stamp: this.stamp, maps });
+    return maps;
+  }
+
+  /** A layer's alpha over `r` after its mask (0..1, quantised to bytes as tiles see it). */
+  private layerShape(layer: L, r: RasterRect): Float32Array {
+    const n = r.width * r.height;
+    const shape = new Float32Array(n);
+    if (n <= 0) return shape;
+    const rgba = this.ownPixels(layer, r);
+    if (!rgba) return shape;
+    for (let i = 0; i < n; i++) shape[i] = rgba[i * 4 + 3] / 255;
+    return shape;
+  }
+
+  /** A content or group layer's own pixels over `r` with its mask applied to alpha, or `null` when empty. */
+  private ownPixels(layer: L, r: RasterRect): Uint8ClampedArray | null {
+    let rgba: Uint8ClampedArray | null;
+    if (isGroup(layer)) {
+      const buf = new Uint8ClampedArray(r.width * r.height * 4);
+      rgba = this.runSteps(this.buildSteps((layer.children ?? []) as L[]), buf, true, r) ? null : buf;
+    } else {
+      const content = this.contentTile(layer, r);
+      rgba = content ? new Uint8ClampedArray(content) : null;
+    }
+    if (!rgba) return null;
+    const cov = this.maskTile(layer, r);
+    if (cov) for (let i = 0, p = 3; i < cov.length; i++, p += 4) rgba[p] = Math.round(rgba[p] * cov[i]);
+    return rgba;
+  }
+
+  /**
+   * The part of `r` a layer with effects can change: its shape's bounds grown by the effects'
+   * margin. Beyond it the layer and every effect are transparent, so the backdrop stays as it is.
+   */
+  private effectArea(layer: L, maps: EffectMaps, r: RasterRect): RasterRect | null {
+    if (!maps.bounds) return null;
+    const a = intersectRect(inflateRect(maps.bounds, effectsMargin(layer.effects)), r);
+    return a.width > 0 && a.height > 0 ? a : null;
+  }
+
+  /**
+   * Composites `layer`'s pixels (with `clipped` applied) and its effects onto `acc` (RGBA over `r`),
+   * only where they can reach. `keepAlpha`: clipped layers keep the base's alpha.
+   */
+  private compositeEffects(layer: L, clipped: L[], acc: Uint8ClampedArray, r: RasterRect, keepAlpha: boolean): boolean {
+    const maps = this.effectMapsOf(layer);
+    const a = this.effectArea(layer, maps, r);
+    if (!a) return false;
+    const whole = a.width === r.width && a.height === r.height;
+    const sub = whole ? acc : copyRect(acc, r, a);
+    const content = this.ownPixels(layer, a) ?? new Uint8ClampedArray(a.width * a.height * 4);
+    if (clipped.length) this.applyClipped(clipped, content, a);
+    const keep = keepAlpha ? sub.filter((_, i) => (i & 3) === 3) : null;
+    const blend = (isGroup(layer) ? (layer.blend === 'pass-through' ? 'normal' : layer.blend) : this.contentBlend(layer)) as BlendMode;
+    compositeLayerEffects({
+      backdrop: sub,
+      content,
+      rect: a,
+      maps,
+      blend,
+      opacity: layer.opacity,
+      fillOpacity: isPixel(layer) ? (layer.fillOpacity ?? 1) : 1,
+      canvas: { x: 0, y: 0, width: this.sources.width, height: this.sources.height },
+      ctx: this.effectContext(),
+    });
+    if (keep) for (let i = 0; i < keep.length; i++) sub[i * 4 + 3] = keep[i];
+    if (!whole) pasteRect(acc, r, sub, a);
+    return true;
+  }
+
+  /** Composites a layer with active effects onto `acc` over `r`; returns whether `acc` is still empty. */
+  private runEffectStep(layer: L, clipped: L[], acc: Uint8ClampedArray, empty: boolean, r: RasterRect): boolean {
+    return this.compositeEffects(layer, clipped, acc, r, false) ? false : empty;
   }
 
   private maskRefs(layer: L, tx: number, ty: number, ox: number, oy: number): unknown[] {
@@ -780,6 +1010,8 @@ export class RasterCompositor<L extends CompositorLayer = CompositorLayer, S ext
     const layer = step.layer;
     if (!layer.visible) return empty;
     const clipped = step.clipped.filter((l) => l.visible);
+    // Effects can reach into a tile the layer's mask hides.
+    if (this.hasEffects(layer)) return this.runEffectStep(layer, clipped, acc, empty, r);
     const coverage = this.maskTile(layer, r);
     if (coverage && coverage.every((v) => v <= 0)) return empty;
     if (step.kind === 'group') {
@@ -841,6 +1073,11 @@ export class RasterCompositor<L extends CompositorLayer = CompositorLayer, S ext
         continue;
       }
       flush();
+      if (this.hasEffects(c) && !isGroup(c)) {
+        // Clipped to the base: the layer and its effects composite, then the base's alpha is kept.
+        this.compositeEffects(c, [], buf, r, true);
+        continue;
+      }
       const coverage = this.maskTile(c, r);
       if (isGroup(c)) {
         const inner = new Uint8ClampedArray(buf.length);
@@ -882,6 +1119,33 @@ function filterOverCanvas(surface: PixelSurface, ox: number, oy: number, filters
   const data = readRegion(surface, { x: -ox, y: -oy, width, height });
   filters.apply(data, width, height);
   return surfaceFromPixels({ width, height, data }, 4, 0, 0);
+}
+
+/** The part `a` of RGBA `data` over `r`, as its own buffer. */
+function copyRect(data: Uint8ClampedArray, r: RasterRect, a: RasterRect): Uint8ClampedArray {
+  const out = new Uint8ClampedArray(a.width * a.height * 4);
+  for (let y = 0; y < a.height; y++) {
+    const s = ((a.y - r.y + y) * r.width + (a.x - r.x)) * 4;
+    out.set(data.subarray(s, s + a.width * 4), y * a.width * 4);
+  }
+  return out;
+}
+
+/** Writes `part` (RGBA over `a`) back into `data` (over `r`). */
+function pasteRect(data: Uint8ClampedArray, r: RasterRect, part: Uint8ClampedArray, a: RasterRect): void {
+  for (let y = 0; y < a.height; y++) data.set(part.subarray(y * a.width * 4, (y + 1) * a.width * 4), ((a.y - r.y + y) * r.width + (a.x - r.x)) * 4);
+}
+
+function inflateRect(r: RasterRect, m: number): RasterRect {
+  return { x: r.x - m, y: r.y - m, width: r.width + 2 * m, height: r.height + 2 * m };
+}
+
+function intersectRect(a: RasterRect, b: RasterRect): RasterRect {
+  const x0 = Math.max(a.x, b.x);
+  const y0 = Math.max(a.y, b.y);
+  const x1 = Math.min(a.x + a.width, b.x + b.width);
+  const y1 = Math.min(a.y + a.height, b.y + b.height);
+  return x1 <= x0 || y1 <= y0 ? { x: x0, y: y0, width: 0, height: 0 } : { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
 }
 
 /** Tiles that differ between two surfaces (by tile identity), as tile keys. */

@@ -35,6 +35,8 @@ import {
   sumHistograms,
 } from './layers/render';
 import { TILE, tileKey, type PixelSurface, type TileKey } from '../raster/surface';
+import type { GlobalLight } from '../raster/effects/model';
+import type { EffectPattern } from '../raster/effects/patterns';
 import { isLegacyShape as isLegacyStack } from './layers/migrate';
 import {
   applyImageProjectionToContext,
@@ -488,6 +490,8 @@ export class ImageEditorRenderer {
       },
       rasterizeAnnotation: (annotation, rect) => this.rasterizeAnnotation(annotation, rect),
       version: `${host?.version() ?? ''}:${this.assetVersion}`,
+      globalLight: host?.globalLight?.(),
+      pattern: host?.pattern ? (id) => host.pattern!(id) : undefined,
     };
   }
 
@@ -1277,6 +1281,10 @@ export interface LayerSourcesHost {
   surfaceOf(layer: PixelLayer): PixelSurface;
   sourceIsOpaque(): boolean;
   version(): string;
+  /** The document's global light for layer effects. */
+  globalLight?(): GlobalLight | undefined;
+  /** A document pattern for pattern effects (built-in patterns are found without it). */
+  pattern?(id: string): EffectPattern | null;
 }
 
 /** The viewport's composite canvas and what each of its tiles holds. */

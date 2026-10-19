@@ -1,3 +1,4 @@
+import type { GlobalLight } from '../raster/effects/model';
 import type { BlendMode } from './blend';
 import type { SelectionMask, SerializedSelection } from './selection/mask';
 import type { ImageLayer, LayerTarget } from './layers/model';
@@ -392,6 +393,11 @@ export interface ImageEditorState {
   legacyOutputBlur?: number;
   /** Brush settings and foreground / background colours of the paint tools (view state). */
   paint: PaintOptions;
+  /**
+   * The light layer effects use when they follow the global light (Photoshop's Global Light);
+   * missing = angle 120°, altitude 30°. Recorded in undo history and saved in `toJSON()`.
+   */
+  globalLight?: GlobalLight;
 }
 
 /**
