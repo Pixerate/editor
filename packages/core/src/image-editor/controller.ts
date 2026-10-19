@@ -116,7 +116,13 @@ import {
 } from '../raster/surface';
 import {
   LayerOperationError,
+  addLayerEffect as addLayerEffectOp,
   addLayerFilter as addLayerFilterOp,
+  layerEffectsOf,
+  removeLayerEffect as removeLayerEffectOp,
+  setLayerEffects as setLayerEffectsOp,
+  setLayerEffectsEnabled as setLayerEffectsEnabledOp,
+  updateLayerEffect as updateLayerEffectOp,
   duplicateLayer as duplicateLayerOp,
   groupLayers as groupLayersOp,
   moveLayer as moveLayerOp,
@@ -151,6 +157,7 @@ import { base64ToBytes, bytesToBase64, decodePng, isPng, parseDataUrl } from '..
 import { getAnnotationBounds } from './geometry';
 import { importPsd, type PsdImportResult } from './psd/import';
 import { exportPsd } from './psd/export';
+import { DEFAULT_GLOBAL_LIGHT, effectsMargin, type GlobalLight, type LayerEffect, type LayerEffectKind, type LayerEffects } from '../raster/effects/model';
 
 /** Latest serialized schema version (`3`: layers). Documents with the old shape still write 1 or 2. */
 export const IMAGE_EDITOR_SCHEMA_VERSION = LAYERED_SCHEMA_VERSION;
@@ -412,6 +419,7 @@ interface HistoryEntry {
   transform: ImageTransform;
   outputOpacity: number;
   legacyOutputBlur?: number;
+  globalLight?: GlobalLight;
   selection: SelectionMask | null;
   source: SourceSnapshot;
 }
@@ -553,6 +561,7 @@ export class ImageEditorController {
       surfaceOf: (layer) => this.surfaceOf(layer),
       sourceIsOpaque: () => this.sourceIsOpaque(),
       version: () => this.sourceVersion(),
+      globalLight: () => this.state.globalLight,
     };
 
     this.state = {
@@ -729,6 +738,7 @@ export class ImageEditorController {
       },
     };
     if (s.legacyOutputBlur !== undefined) entry.legacyOutputBlur = s.legacyOutputBlur;
+    if (s.globalLight) entry.globalLight = { ...s.globalLight };
     return entry;
   }
 
@@ -742,6 +752,8 @@ export class ImageEditorController {
     s.outputOpacity = entry.outputOpacity;
     if (entry.legacyOutputBlur !== undefined) s.legacyOutputBlur = entry.legacyOutputBlur;
     else delete s.legacyOutputBlur;
+    if (entry.globalLight) s.globalLight = { ...entry.globalLight };
+    else delete s.globalLight;
     s.selection = entry.selection;
     if (this.imageElement !== entry.source.element && !this.samplePixelsOverride) this.samplePixels = null;
     this.imageElement = entry.source.element;
@@ -999,7 +1011,7 @@ export class ImageEditorController {
 
   private compositorSources(): CompositorSources {
     const { width, height } = this.naturalSize;
-    return { width, height, surfaceOf: (l) => this.surfaceOf(l), version: this.sourceVersion() };
+    return { width, height, surfaceOf: (l) => this.surfaceOf(l), version: this.sourceVersion(), globalLight: this.state.globalLight };
   }
 
   private sourceIds = new WeakMap<object, number>();
@@ -1444,6 +1456,64 @@ export class ImageEditorController {
     return (findLayer(next, id)!.layer as PixelLayer).filters ?? [];
   }
 
+  // --- Layer effects ---
+
+  /** A layer's effects (an empty, enabled list when it has none). */
+  public getLayerEffects(id: string): LayerEffects {
+    return layerEffectsOf(requireLayer(this.state.layers, id).layer);
+  }
+
+  /**
+   * Adds an effect of `kind` with Photoshop's defaults and `params` applied (one undo step), at
+   * `index` in the layer's effect list (default the end). Returns the new effect and the effects.
+   */
+  public addLayerEffect(id: string, kind: LayerEffectKind, params: Record<string, unknown> = {}, index?: number): { effect: LayerEffect; effects: LayerEffects } {
+    const res = addLayerEffectOp(this.state.layers, id, kind, params, index);
+    this.commitLayers(res.layers);
+    return { effect: res.effect, effects: this.getLayerEffects(id) };
+  }
+
+  /** Changes one effect (one undo step, or none with `commitToHistory = false` during a drag). Returns the effects. */
+  public updateLayerEffect(id: string, effectId: string, changes: Record<string, unknown>, commitToHistory = true): LayerEffects {
+    this.commitLayers(updateLayerEffectOp(this.state.layers, id, effectId, changes), undefined, commitToHistory);
+    return this.getLayerEffects(id);
+  }
+
+  /** Removes one effect (one undo step). Returns the remaining effects. */
+  public removeLayerEffect(id: string, effectId: string): LayerEffects {
+    this.commitLayers(removeLayerEffectOp(this.state.layers, id, effectId));
+    return this.getLayerEffects(id);
+  }
+
+  /** Turns a layer's effects on or off as a whole and, when given, sets Scale Effects (one undo step). */
+  public setLayerEffectsEnabled(id: string, enabled: boolean, scale?: number, commitToHistory = true): LayerEffects {
+    this.commitLayers(setLayerEffectsEnabledOp(this.state.layers, id, enabled, scale), undefined, commitToHistory);
+    return this.getLayerEffects(id);
+  }
+
+  /** Replaces a layer's effects (one undo step; `null` removes them). Returns the effects. */
+  public setLayerEffects(id: string, effects: LayerEffects | null, commitToHistory = true): LayerEffects {
+    this.commitLayers(setLayerEffectsOp(this.state.layers, id, effects), undefined, commitToHistory);
+    return this.getLayerEffects(id);
+  }
+
+  /** The light effects with "use global light" follow. */
+  public getGlobalLight(): GlobalLight {
+    return { ...(this.state.globalLight ?? DEFAULT_GLOBAL_LIGHT) };
+  }
+
+  /** Sets the global light (one undo step). `angle` -360..360°, `altitude` 0..90°. Returns it. */
+  public setGlobalLight(light: Partial<GlobalLight>, commitToHistory = true): GlobalLight {
+    const next = { ...this.getGlobalLight(), ...light };
+    if (!(Number.isFinite(next.angle) && next.angle >= -360 && next.angle <= 360)) throw new LayerOperationError(`angle must be from -360 to 360 degrees, got ${next.angle}.`);
+    if (!(Number.isFinite(next.altitude) && next.altitude >= 0 && next.altitude <= 90)) throw new LayerOperationError(`altitude must be from 0 to 90 degrees, got ${next.altitude}.`);
+    if (commitToHistory) this.recordHistory();
+    if (next.angle === DEFAULT_GLOBAL_LIGHT.angle && next.altitude === DEFAULT_GLOBAL_LIGHT.altitude) delete this.state.globalLight;
+    else this.state.globalLight = next;
+    this.notify();
+    return this.getGlobalLight();
+  }
+
   /** Composites `layers` (in isolation) over `rect` into a surface, loading depth maps first. */
   private async compositeToSurface(layers: ImageLayer[], rect: CropBox): Promise<PixelSurface> {
     const { width, height } = this.naturalSize;
@@ -1475,7 +1545,8 @@ export class ImageEditorController {
 
   /**
    * Merge Down: composites a layer onto the pixel layer directly below it (which keeps its name,
-   * opacity and blend; masks, fill and filters are baked), as one undo step. Returns the merged id.
+   * opacity and blend; masks, fill, filters and both layers' effects are baked), as one undo step.
+   * Returns the merged id.
    */
   public async mergeDown(id: string): Promise<string> {
     const loc = requireLayer(this.state.layers, id);
@@ -1487,7 +1558,10 @@ export class ImageEditorController {
     if (!upper.visible) throw new LayerOperationError(`Layer "${upper.name || id}" is hidden; show it or delete it instead of merging.`);
     requireUnlocked(upper, 'all', 'merge it');
     requireUnlocked(lower, 'pixels', 'merge into it');
-    const rect = unionRect(this.paintBounds(lower), upper.type === 'adjustment' ? null : this.paintBounds(upper)) ?? { x: 0, y: 0, width: 1, height: 1 };
+    let rect = unionRect(this.paintBounds(lower), upper.type === 'adjustment' ? null : this.paintBounds(upper)) ?? { x: 0, y: 0, width: 1, height: 1 };
+    // Effects paint beyond the layers' pixels: merge as far as they reach.
+    const reach = Math.max(effectsMargin(lower.effects), upper.type === 'adjustment' ? 0 : effectsMargin(upper.effects));
+    if (reach) rect = { x: rect.x - reach, y: rect.y - reach, width: rect.width + 2 * reach, height: rect.height + 2 * reach };
     const base: PixelLayer = { ...lower, blend: 'normal', opacity: 1 };
     delete base.clipped;
     const surface = await this.compositeToSurface([base, upper], rect);
@@ -1496,6 +1570,7 @@ export class ImageEditorController {
     delete merged.fillOpacity;
     delete merged.filters;
     delete merged.source;
+    delete merged.effects;
     let next = mapLayer(this.state.layers, id, () => null);
     next = mapLayer(next, lower.id, () => merged);
     this.commitLayers(next, () => {
@@ -3037,6 +3112,9 @@ export class ImageEditorController {
       if (typeof data.legacyOutputBlur === 'number' && data.legacyOutputBlur >= 0) s.legacyOutputBlur = data.legacyOutputBlur;
       else delete s.legacyOutputBlur;
       s.activeLayerId = data.activeLayerId && findLayer(s.layers, data.activeLayerId) ? data.activeLayerId : null;
+      const light = data.globalLight;
+      if (light && Number.isFinite(light.angle) && Number.isFinite(light.altitude)) s.globalLight = { angle: light.angle, altitude: Math.min(90, Math.max(0, light.altitude)) };
+      else delete s.globalLight;
       if (!this.imageElement && typeof data.width === 'number' && typeof data.height === 'number' && data.width > 0 && data.height > 0) {
         s.imageDimensions = { width: data.width, height: data.height };
       }
@@ -3050,6 +3128,7 @@ export class ImageEditorController {
       s.crop = data.crop ? { ...data.crop } : null;
       s.transform = { ...data.transform };
       s.activeLayerId = null;
+      delete s.globalLight;
     }
     s.activeTarget = 'pixels';
     this.viewKey = [];
@@ -3060,7 +3139,8 @@ export class ImageEditorController {
   private serializeState(): SerializedImageEditorState {
     const { width, height } = this.naturalSize;
     const view = legacyView(this.stack(), width, height, null);
-    if (view.exact) {
+    // A global light is only stored in the layered schema.
+    if (view.exact && !this.state.globalLight) {
       return {
         // States without adjustment layers keep schema 1, so they round-trip unchanged.
         version: view.adjustments.layers?.length ? 2 : 1,
@@ -3087,6 +3167,7 @@ export class ImageEditorController {
       opacity: this.state.outputOpacity,
     };
     if (this.state.legacyOutputBlur !== undefined) out.legacyOutputBlur = this.state.legacyOutputBlur;
+    if (this.state.globalLight) out.globalLight = { ...this.state.globalLight };
     return out;
   }
 }

@@ -15,6 +15,7 @@ export * from './selection';
 export * from './selection-tools';
 export * from './edit-tools';
 export * from './layer-tools';
+export * from './effect-tools';
 export * from './mosaic-filter';
 export * from './capture';
 export * from './layers/model';

@@ -1,6 +1,6 @@
 ---
 name: pixerate-image-editor
-description: How to colour-correct, composite and retouch a photo in the Pixerate image editor through its agent tools - layers (pixel, adjustment, group and annotation layers with masks, clipping, blend modes, opacity and fill; merge, flatten, layer via copy, develop and blur filters), base adjustments (exposure, contrast, white balance temperature and tint, saturation, blur), non-destructive adjustment layers (curves, levels, hue/saturation, vibrance, color balance, black and white, photo filter, invert, posterize, threshold) with blend modes and opacity, selections (wand, color range, grow, shrink, feather, refine edge) and layer masks, crop, rotate and flip, undo, PSD open and save, the histogram, and PNG previews. Use when asked to edit, grade, correct, brighten, warm up, desaturate, crop, straighten or mask an image, or to open or save a PSD, or when get_adjustments, set_adjustments, add_adjustment_layer, list_layers, paint_stroke, select_by_color, import_psd or render_preview are available.
+description: How to colour-correct, composite and retouch a photo in the Pixerate image editor through its agent tools - layers (pixel, adjustment, group and annotation layers with masks, clipping, blend modes, opacity and fill; merge, flatten, layer via copy, filters), live layer effects (shadows, glows, bevel and emboss, satin, overlays, strokes), base adjustments (exposure, contrast, white balance, saturation, blur), adjustment layers (curves, levels, hue/saturation, vibrance, color balance, black and white, photo filter, invert, posterize, threshold), selections (wand, color range, grow, shrink, feather, refine edge) and layer masks, crop, rotate and flip, undo, PSD, histogram and PNG previews. Use when asked to edit, grade, correct, brighten, warm up, crop, straighten or mask an image, add a shadow, glow or outline, or open or save a PSD, or when get_adjustments, set_adjustments, add_adjustment_layer, list_layers, add_layer_effect, paint_stroke, select_by_color, import_psd or render_preview are available.
 ---
 
 # Image editor
@@ -12,7 +12,8 @@ its mask, opacity and blend mode) and every annotation is its own layer on top. 
 shows the whole stack. Edits never touch the source pixels. The base controls edit the develop
 filter of the active pixel layer (the Background unless another pixel layer is active); base
 `blur` blurs that layer (or, in documents saved before layers with blur and adjustment layers,
-the output after the layers), and base `opacity` is the output's alpha. Also an optional
+the output after the layers), and base `opacity` is the output's alpha. Pixel, annotation and
+group layers can carry live effects (shadows, glows, bevels, overlays, strokes). Also an optional
 selection and crop/rotate/flip. See `pixerate-agent-tools` for errors, namespacing and command
 batching.
 
@@ -65,6 +66,25 @@ batching.
    `offset_layer`.
 5. **Bake only when asked** (`merge_down`, `merge_visible`, `flatten_image`, `apply_layer_mask`):
    they are destructive. `render_preview` with `layerId` shows one layer alone.
+
+### Layer effects
+
+1. **Effects are live and per layer**: drop and inner shadows, outer and inner glows,
+   bevel & emboss, satin, colour / gradient / pattern overlays and strokes go on pixel,
+   annotation and group layers (not adjustment layers) and follow the layer's pixels as they
+   change. Add them with `add_layer_effect` (`kind` plus only the `settings` that differ from
+   Photoshop's defaults), tune them with `update_layer_effect` and read them back with
+   `list_layer_effects`. Each call is one undo step and returns the layer's effects.
+2. **Keep the ids**: `add_layer_effect` returns `effectId`; `update_layer_effect` and
+   `remove_layer_effect` need it. `list_layers` shows which layers have effects (ids and kinds
+   only).
+3. **Light consistently**: shadows and bevels follow the document's global light while
+   `useGlobalLight` is true (the default). Change the light for all of them with
+   `set_global_light`; give one effect its own `angle` only when it must differ.
+4. **Compare and size as a whole**: `set_layer_effects_enabled` with `enabled: false` hides
+   every effect of a layer (each keeps its own `enabled`); `scale` resizes them all (Scale
+   Effects), e.g. after resizing a layer's content.
+5. **Look after each change**: `render_preview` (with `layerId` for one layer alone).
 
 ### Painting
 
@@ -135,6 +155,15 @@ batching.
   levels layer without shifting hue or saturation; `color` applies a tint without changing
   brightness; `soft-light` / `overlay` for gentle contrast.
 - **Name layers** (`name`) by intent ("Sky darken", "Warm skin"), so the stack stays readable.
+- **Effects: subtle first.** A drop shadow reads as natural with a small `distance` (2..10 px),
+  a `size` a little larger than the distance, `opacity` 0.3..0.6 and the default multiply; a
+  hard, dark, far shadow looks pasted on. Glows want `screen` and a light colour; strokes on
+  text 1..4 px. Bevels: `depth` 1..2 and `size` a fraction of the shape's thickness.
+- **Outline-only looks** (an outlined title, a glass button): set the layer's `fillOpacity` to
+  0 with `set_layer_properties` and keep its effects; fill opacity hides the layer's own pixels,
+  layer `opacity` fades the effects too.
+- **Prefer an effect over painted pixels** for shadows, glows, outlines and colour fills of a
+  shape: it follows later edits and stays adjustable.
 - **Merge Down only onto an opaque, 100 % lower layer** when the result must look the same:
   the merged layer keeps the lower layer's opacity and blend, so a faded lower layer fades the
   merged content too, and a blend mode on the upper layer stops seeing what was below the lower
@@ -149,7 +178,8 @@ batching.
 | `get_adjustments` | Read the current state: `values` by control id, `process` version (1 or 2), and `layers` bottom to top with id, kind, params, opacity, blend, enabled and mask. Call first, and to find layer ids. |
 | `list_controls` | Get every base control (id, label, section, min, max, step, default, `requiresProcess`), each layer kind's settable controls (plus `opacity`), the blend mode ids and the `layers.<layerId>.<controlId>` path format. Call once per session before writing. |
 | `get_selection` | Read the active selection: `empty`, `bounds` (natural pixels), `area` in pixels, `percent` of the image and a description. Check it after every select or modify step and before masking: a wand that covered 90% of the image is the wrong selection. |
-| `list_layers` | Read the layer stack bottom to top as a tree: id, type (`pixel`, `adjustment`, `group`, `annotation`), name, document `bounds` of pixel layers, visibility, opacity, `fillOpacity`, blend, `clipped`, locks, a `mask` summary, pixel-layer `filters` (the Background's `develop` filter is the base adjustments), adjustment `kind` and `params`, group `children`, and which layer is `active`. Call it to understand a document with more than the Background before changing it; adjustment layer ids work with every adjustment-layer tool. |
+| `list_layers` | Read the layer stack bottom to top as a tree: id, type (`pixel`, `adjustment`, `group`, `annotation`), name, document `bounds` of pixel layers, visibility, opacity, `fillOpacity`, blend, `clipped`, locks, a `mask` summary, an `effects` summary (master switch, scale, effect ids and kinds), pixel-layer `filters` (the Background's `develop` filter is the base adjustments), adjustment `kind` and `params`, group `children`, and which layer is `active`. Call it to understand a document with more than the Background before changing it; adjustment layer ids work with every adjustment-layer tool. |
+| `list_layer_effects` | Read one layer's effects: `enabled` (master switch), `scale` (Scale Effects), `margin` (px they reach beyond the shape), `fromPsd`, and every effect with `id`, `kind`, `label` and all its settings. Also returns the `globalLight`, the `patterns` pattern effects can use and the effect `kinds`. Call before changing effects you did not add. |
 | `get_image_info` | Read the geometry: source `image` size, `crop` box (source pixels, or null), `rotation` degrees, `flipH` / `flipV`, the `output` size after crop and rotation, the layer count and `canUndo` / `canRedo`. Call before cropping or selecting so coordinates are right. |
 | `get_histogram` | Judge exposure numerically: per channel and luminance `mean`, `p1` and `p99` (0..255), and `clipping` percent at pure black and white per channel. Reads the last render, so call `render_preview` first. `bins` (16, 32, 64 or 256) adds the counts. Cheaper than another image for checking a tonal change. |
 | `render_preview` | See the edited image (crop, adjustments, layers, annotations) as a PNG, or with `layerId` one layer alone. `maxSide` 16..2048 px, default 512. Images cost tokens: render after a group of edits, use 512 for overall look and 1024+ to judge clipping, edges and masks. Fails in environments without rendering. |
@@ -198,6 +228,11 @@ batching.
 | `add_layer_filter` | Add a live `develop` (brightness … tint) or `blur` (`radius`) filter to a pixel layer; one of each kind. Returns the filters with ids. |
 | `update_layer_filter` | Change a filter's values (`filterId` from `list_layers`). Returns the filters. |
 | `remove_layer_filter` | Remove a filter. Returns the remaining filters. |
+| `add_layer_effect` | Add an effect to a pixel, annotation or group layer: `kind` (`drop-shadow`, `inner-shadow`, `outer-glow`, `inner-glow`, `bevel-emboss`, `satin`, `color-overlay`, `gradient-overlay`, `pattern-overlay`, `stroke`) and `settings` that differ from Photoshop's defaults (a setting the kind does not have is refused with its list of settings); optional `index` in the effect list. Returns `effectId` and the layer's effects. |
+| `update_layer_effect` | Change settings of one effect (`effectId`); nested `fill`, `gradient`, `contour` and `texture` objects replace whole, `null` removes an optional `contour`, `glossContour`, `contourElement` or `texture`. The kind cannot change. Returns the effects. |
+| `remove_layer_effect` | Delete one effect. To hide it and keep its settings, set `enabled: false` with `update_layer_effect` instead. Returns the remaining effects. |
+| `set_layer_effects_enabled` | Switch all of a layer's effects on or off (`enabled`) and optionally set Scale Effects (`scale`, 1 = 100 %, multiplies sizes, distances and pattern scales). Returns the effects. |
+| `set_global_light` | Set the document light (`angle`, `altitude` in degrees) that every shadow and bevel with `useGlobalLight` follows. Returns the light. |
 | `paint_stroke` | Paint (`tool` brush) or erase (`tool` eraser) along `points` in document px (optional `pressure` 0..1) on a pixel layer or its mask (`channel`); `color` #rrggbb (on a mask: black hides, white reveals); `brush` `{size, hardness, spacing, angle, roundness, opacity, flow, smoothing, pressureSize, pressureOpacity, blend}`. The selection limits the paint. One undo step per call. Returns the layer, channel, changed `bounds` and dab count. |
 | `fill_pixels` | Fill the selection (or the canvas without one / with `useSelection: false`) on pixels or a mask with `color`, `opacity`, `blend`. Returns the changed bounds. |
 | `mix_colors` | Read-only. Mix 1 to 16 `colors` (`{color: #rrggbb, weight, strength?}`) like paint (Kubelka-Munk over reflectance spectra). Returns `mixed` (#rrggbb), `rgbLerp` (the plain RGB average, for comparison) and the normalised `weights`. Call it before `paint_stroke` / `fill_pixels` to pick a paint colour. |
@@ -207,6 +242,14 @@ batching.
 
 ## Pitfalls
 
+- Effects need a shape: on an empty layer they draw nothing. They cannot go on adjustment
+  layers. A clipped layer's effects stay inside the layer it is clipped to.
+- `bevel-emboss` has no `blend` / `opacity`: it uses `highlightBlend`, `highlightOpacity`,
+  `shadowBlend` and `shadowOpacity`. Inner shadows and inner glows use `choke`, not `spread`.
+- Glows paint a colour or a gradient, never a pattern; strokes take all three. Pattern effects
+  need a pattern id from `list_layer_effects.patterns`; an unknown id paints nothing.
+- Effect angles are where the light comes *from*: 120° (top left) casts a shadow down and to
+  the right. With `useGlobalLight` true an effect's own `angle` is ignored.
 - A layer's `kind` cannot change; to switch kinds add a new layer and remove the old one.
   Curves points, `colorize` and colours are only set when the layer is added, so get them
   right in `add_adjustment_layer` (or replace the layer).

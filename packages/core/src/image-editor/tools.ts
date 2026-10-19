@@ -22,6 +22,7 @@ import { createImageCaptureSurface } from './capture';
 import { createCaptureTool } from '../tools/capture.js';
 import { createImageEditTools } from './edit-tools';
 import { createImageLayerTools } from './layer-tools';
+import { createImageEffectTools } from './effect-tools';
 import { createImagePaintTools } from './paint-tools';
 import { createPigmentTools } from '../paint/pigment-tools';
 import { createImagePsdTools } from './psd-tools';
@@ -292,6 +293,7 @@ export function createImageEditorToolProvider(
       ...createImageSelectionTools(controller),
       ...createImageEditTools(controller),
       ...createImageLayerTools(controller),
+      ...createImageEffectTools(controller),
       ...createImagePaintTools(controller),
       ...createPigmentTools(),
       ...createImagePsdTools(controller),
