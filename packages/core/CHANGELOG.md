@@ -1,5 +1,15 @@
 # @pixerate/editor
 
+## 0.97.0
+
+### Minor Changes
+
+- 4aff6d9: Paint faster on layers with effects. When only part of a layer changes, `RasterCompositor` now rebuilds its effect maps (shadows, glows, bevels, strokes, satin) only around the change and patches them into the cached maps. Before, it rebuilt them over the whole layer. The result is byte-identical to a full rebuild. On a 2000 × 2000 layer, a 64 px dab now takes about 4 ms per update with a drop shadow (was about 200 ms), and about 9 ms with a drop shadow, a stroke and a bevel (was about 700 ms). When a call passes `dirty` rectangles, tiles that only read the change through an effect's reach keep their pixels instead of being recomposited.
+
+  Effects laid out over the layer's bounds (aligned gradients, linked patterns, noise) still rebuild in full. The effect blur now sums in fixed point (to 2⁻³²), so a blurred value no longer depends on where its row starts. New: `patchEffectMaps` updates `EffectMaps` for a shape that changed within given rectangles. `CompositeStats` gains `effectsBuilt` and `effectsPatched`.
+
+- 348bdfe: Layer effects in the layers panel, in React and Svelte alike. `<LayersPanel>` shows an fx badge on every layer with effects (click it to switch them on or off) and an effects section for the active layer. A new `<LayerEffectsPanel>` holds that section and can also be used on its own. It has the master switch, Scale Effects, an "Add effect" menu, and each effect with its own toggle, remove button and every setting (sliders, colours, toggles, choices; a slider drag is one undo step). Core gains the shared view model: `layerEffectsPanel`, `layerEffectsBadge`, `LAYER_EFFECT_MENU`, `layerEffectControls` and `effectControlChange`.
+
 ## 0.96.0
 
 ### Minor Changes
