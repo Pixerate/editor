@@ -6,6 +6,7 @@
 
 import { normalizePaintBrush, type PaintBrushInput, type PaintBrush } from './brushes';
 import type { Linear2, PenPoint, StrokeCopy } from './engine';
+import type { MixerLoad } from '../paint/exchange';
 
 /** An affine map [a, b, c, d, e, f]: (x, y) → (a·x + b·y + e, c·x + d·y + f). */
 export type Affine = readonly [number, number, number, number, number, number];
@@ -23,6 +24,8 @@ export interface RecordedStroke {
   seed: number;
   /** Extra copies painted with the stroke (mirror / kaleidoscope), as affine maps of the points. */
   copies?: Affine[];
+  /** What the brush carried at the start (Mixer Brush and wet-capable brushes), so a replay mixes the same. */
+  load?: MixerLoad;
 }
 
 export function applyAffine(m: Affine, x: number, y: number): { x: number; y: number } {
@@ -78,6 +81,19 @@ function readAffine(raw: unknown): Affine | null {
   return Array.isArray(raw) && raw.length === 6 && raw.every(finite) ? (raw as unknown as Affine) : null;
 }
 
+function readRgb(raw: unknown): [number, number, number] | null {
+  return Array.isArray(raw) && raw.length === 3 && raw.every(finite) ? (raw.map((v) => Math.min(1, Math.max(0, v))) as [number, number, number]) : null;
+}
+
+function readLoad(raw: unknown): MixerLoad | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const reservoir = readRgb(r.reservoir);
+  const pickup = readRgb(r.pickup);
+  if (!reservoir && !pickup) return null;
+  return { reservoir, amount: reservoir && finite(r.amount) ? Math.min(1, Math.max(0, r.amount)) : 0, pickup };
+}
+
 /** A recorded stroke read from JSON, or `null` when it is not one. */
 export function normalizeBrushStroke(raw: unknown): RecordedStroke | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -95,6 +111,8 @@ export function normalizeBrushStroke(raw: unknown): RecordedStroke | null {
   };
   const copies = Array.isArray(r.copies) ? r.copies.map(readAffine).filter((m): m is Affine => m !== null) : [];
   if (copies.length) out.copies = copies;
+  const load = readLoad(r.load);
+  if (load) out.load = load;
   return out;
 }
 

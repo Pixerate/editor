@@ -1,5 +1,21 @@
 # @pixerate/editor
 
+## 0.110.0
+
+### Minor Changes
+
+- b15241c: Paint editor phase 2 blending and painterly mixing. `@pixerate/editor/paint` gains the shared pick-up / mix exchange (`PaintExchange`, `PaintMedium`, `TileMedium`, `exchangeRates`), which the Mixer Brush now runs on with identical output and which the wet layer will plug into as another medium; a blender (`blenderDab`) that mixes the colours under and near the tip through the pigment model, with strength and blend distance; and a patch-carrying smudge (`SmudgeTip`) with strength, length and an RGB or pigment mixing option. The paint editor adds `blender` and `smudge` brush engines and drives them, the Mixer Brush and wet-capable dab brushes through a new dab-by-dab engine (`PaintDabStroke`) with full pen input, paper grain and symmetry. Brushes gain `behavior`: pick-up and mix ratios, a dirty brush that carries the last colour it touched into the next stroke, and a multi-coloured brush (colours across the tip, or per dab in sequence or at random). New presets: Pigment smudge, Dirty round, Multi-colour flat and Palette dabber; Blender and Smudge use the new engines. Recorded strokes keep their starting load so pick-up strokes replay exactly. The mixing pad mixes measured parts (`mixOnPad`), and pads can be kept by name and are saved with the document. New agent tools `mix_on_pad`, `save_mixing_pad`, `list_mixing_pads`, `load_mixing_pad` and `remove_mixing_pad`; `set_brush` takes `behavior`, `blender` and `smudge`; `mix_colors` takes `model` (`pigment` or `rgb`).
+
+### Patch Changes
+
+- a48e5ce: Paint editor blending UI, in parity for React and Svelte. `BrushPanel` gains an engine section from the shared `brushEngineControls`: blender strength and blend distance, smudge strength and length, pick-up and mix ratios, Mixer Brush load, Pigment / RGB mixing, a dirty-brush toggle, multi-colour mode, colours, order, softness and dabs per colour, and a swatch of what the brush carries with Load / Clean. It also has a brush blend menu grouped into Standard and Paint modes. The `ColorPanel` mixing pad gains a pick sample size, a Mix button for the paint and second colours in parts, and Keep pad with a list of kept pads. Core adds the shared helpers `brushEngineControls`, `multiColorSliders`, `patchBrushValue`, `brushLoadColor`, `PAD_SAMPLE_SIZES` and `padSampleRadius`, and the palette knife becomes a pigment smudge that drags streaks of both paints.
+
+## 0.109.0
+
+### Minor Changes
+
+- 401f685: Add vector shape layers to the image editor. A `ShapeLayer` holds components (live rectangles with corner radii, ellipses, polygons, stars and lines with arrowheads, or free paths) combined with Photoshop's path operations (combine, subtract, intersect, exclude), a fill and a stroke (colour, gradient or pattern; width, alignment, caps, joins, miter limit, dashes). Shapes render without a canvas into the layer's tiles and re-render on every change, so moving and Free Transform map the paths and never degrade them; masks, clipping, blend modes, fill opacity and layer effects work as on pixel layers, and `rasterizeLayer` turns a shape into pixels. New controller methods: `addShapeLayer`, `getShapeLayer`, `setShapeStyle`, `setShapeComponent`, `addShapeComponent`, `removeShapeComponent`, `mergeShapeComponents`; new agent tools: `get_shape_layer`, `add_shape_layer`, `update_shape`, `set_shape_component`, `add_shape_component`, `remove_shape_component`, `merge_shape_components`. Pen, rectangle, ellipse, line and arrow annotations now load as shape layers that render as before; the `annotations` state, the annotation methods and `selectedAnnotationId` keep working on them, and v1 / v2 documents still save back unchanged. PSD export writes shape layers as pixel layers for now.
+
 ## 0.108.0
 
 ### Minor Changes

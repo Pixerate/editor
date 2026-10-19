@@ -581,4 +581,37 @@ export const PAINT_SCRIPTS: AgentScript[] = [
       { tool: "paint__render_preview", args: { maxSide: 420 } },
     ],
   },
+  {
+    id: "paint-blend-glaze",
+    prompt: "Blend a sky into a meadow, then glaze it",
+    steps: [
+      { say: "Mixing a meadow green on the pad from ultramarine and yellow, one part to two.", tool: "paint__mix_on_pad", args: { paints: [{ color: "#1e40af", parts: 1 }, { color: "#facc15", parts: 2 }] }, as: "green" },
+      { say: "Underpainting: a warm yellow ground.", tool: "paint__add_layer", args: { name: "Underpainting" }, as: "under" },
+      { tool: "paint__fill_layer", args: (ctx) => ({ layerId: ctx.results.under.id, color: "#f4d27a" }) },
+      {
+        say: "A broad band of sky blue across the top half.",
+        tool: "paint__paint_stroke",
+        args: (ctx) => ({ layerId: ctx.results.under.id, brushId: "oil-pastel", brush: { tip: { size: 260, blend: "normal" } }, color: "#3d6fd1", points: [{ x: 0, y: 200 }, { x: 1200, y: 200 }] }),
+      },
+      {
+        say: "The meadow, painted with a dirty brush so it drags some sky and ground along.",
+        tool: "paint__paint_stroke",
+        args: (ctx) => ({ layerId: ctx.results.under.id, brushId: "dirty-round", brush: { tip: { size: 160 } }, color: ctx.results.green.color, points: wave(620, 40) }),
+      },
+      {
+        say: "Blending the horizon: the blender mixes neighbouring colours like paint, so blue into yellow goes green, not grey.",
+        tool: "paint__paint_stroke",
+        args: (ctx) => ({ layerId: ctx.results.under.id, brushId: "blender", brush: { tip: { size: 120 }, blender: { strength: 0.6, distance: 0.4 } }, points: wave(330, 25) }),
+      },
+      {
+        say: "A two-colour ribbon of light along the hills with the multi-colour flat.",
+        tool: "paint__paint_stroke",
+        args: (ctx) => ({ layerId: ctx.results.under.id, brushId: "multicolor-flat", brush: { tip: { size: 70 }, behavior: { multicolor: { colors: ["#fff2b3", "#f29e4c"] } } }, points: wave(450, 30) }),
+      },
+      { say: "An evening glaze on its own layer, in watercolour mode: it darkens like a transparent wash.", tool: "paint__add_layer", args: { name: "Glaze" }, as: "glaze" },
+      { tool: "paint__fill_layer", args: (ctx) => ({ layerId: ctx.results.glaze.id, color: "#9a7fd1" }) },
+      { tool: "paint__update_layer", args: (ctx) => ({ layerId: ctx.results.glaze.id, blend: "watercolor", opacity: 0.45 }) },
+      { tool: "paint__render_preview", args: { maxSide: 420 } },
+    ],
+  },
 ];

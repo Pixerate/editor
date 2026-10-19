@@ -3,7 +3,9 @@
     HARMONY_KINDS,
     MIXING_PAD_HEIGHT,
     MIXING_PAD_WIDTH,
+    PAD_SAMPLE_SIZES,
     hsvToRgb,
+    padSampleRadius,
     hueToWheel,
     parseHexColor,
     renderColorWheel,
@@ -34,6 +36,9 @@
   let wheel = $state<ColorWheel>('ryb');
   let kind = $state<HarmonyKind>('complementary');
   let padTool = $state<'paint' | 'knife' | 'pick'>('paint');
+  let sample = $state(3);
+  let parts = $state<[number, number]>([1, 1]);
+  let padName = $state('');
   let padPoints: Array<{ x: number; y: number; pressure?: number }> | null = null;
   const run = (fn: () => unknown) => attempt(fn, (m) => (error = m));
   const ring = $derived(renderColorWheel(wheelSize, wheel));
@@ -54,7 +59,7 @@
   };
 </script>
 
-<!-- Hue wheel with harmonies, saturation and value, colours, harmony chips, swatches, mixing pad. -->
+<!-- Hue wheel with harmonies, saturation and value, colours, harmony chips, swatches, mixing pad (paint, knife, pick with a sample size, measured mixes, kept pads). -->
 <div class={`${panel} ${className}`} data-testid="color-panel">
   <div class="relative self-center" style={`width: ${wheelSize}px; height: ${wheelSize}px`}>
     <div
@@ -154,7 +159,7 @@
         onpointerdown={(e) => {
           const p = padPoint(e);
           if (padTool === 'pick') {
-            run(() => controller.mixingPadPick(p.x, p.y, { setColor: true }));
+            run(() => controller.mixingPadPick(p.x, p.y, { setColor: true, radius: padSampleRadius(sample) }));
             return;
           }
           padPoints = [p];
@@ -169,6 +174,60 @@
       >
         <PixelCanvas pixels={pad} label="Mixing pad pixels" class="w-full rounded" style={`aspect-ratio: ${MIXING_PAD_WIDTH} / ${MIXING_PAD_HEIGHT}`} />
       </div>
+      <div class="flex flex-wrap items-center gap-1">
+        <label class="flex items-center gap-1">
+          <span class="text-slate-400">Sample</span>
+          <select aria-label="Pick sample size" value={sample} onchange={(e) => (sample = Number(e.currentTarget.value))} class="rounded bg-slate-800 px-1 py-0.5">
+            {#each PAD_SAMPLE_SIZES as n (n)}
+              <option value={n}>{n === 1 ? '1 px' : `${n}×${n}`}</option>
+            {/each}
+          </select>
+        </label>
+      </div>
+      <div class="flex flex-wrap items-center gap-1">
+        <span class="h-4 w-4 rounded ring-1 ring-slate-700" style={`background: ${color}`}></span>
+        <input type="number" aria-label="Paint colour parts" min="0" max="20" value={parts[0]} oninput={(e) => (parts = [Number(e.currentTarget.value), parts[1]])} class="w-10 rounded bg-slate-800 px-1 py-0.5" />
+        <span class="text-slate-500">:</span>
+        <input type="number" aria-label="Second colour parts" min="0" max="20" value={parts[1]} oninput={(e) => (parts = [parts[0], Number(e.currentTarget.value)])} class="w-10 rounded bg-slate-800 px-1 py-0.5" />
+        <span class="h-4 w-4 rounded ring-1 ring-slate-700" style={`background: ${snap.secondaryColor}`}></span>
+        <button
+          type="button"
+          class={button}
+          title="Mix the paint and second colours in these parts on the pad, and use the mix"
+          onclick={() =>
+            run(() =>
+              controller.mixOnPad(
+                [
+                  { color, parts: parts[0] },
+                  { color: snap.secondaryColor, parts: parts[1] },
+                ],
+                { setColor: true }
+              )
+            )}>Mix</button
+        >
+      </div>
+      <div class="flex flex-wrap items-center gap-1">
+        <input bind:value={padName} placeholder="Pad name" aria-label="Pad name" class="w-24 rounded bg-slate-800 px-1.5 py-0.5" />
+        <button
+          type="button"
+          class={button}
+          onclick={() =>
+            run(() => {
+              controller.saveMixingPad(padName || undefined);
+              padName = '';
+            })}>Keep pad</button
+        >
+      </div>
+      {#if snap.savedMixingPads.length > 0}
+        <ul class="flex flex-col gap-0.5" aria-label="Kept pads">
+          {#each snap.savedMixingPads as p (p.id)}
+            <li class="flex items-center gap-1">
+              <button type="button" class={`${button} flex-1 text-left`} onclick={() => run(() => controller.loadMixingPad(p.id))}>{p.name}</button>
+              <button type="button" class={button} aria-label={`Remove ${p.name}`} onclick={() => run(() => controller.removeMixingPad(p.id))}>×</button>
+            </li>
+          {/each}
+        </ul>
+      {/if}
     </div>
   {/if}
   {#if error}<p role="alert" class="text-[11px] text-rose-400">{error}</p>{/if}
