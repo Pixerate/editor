@@ -85,6 +85,8 @@ import {
 import {
   LAYERED_SCHEMA_VERSION,
   deserializeLayers,
+  deserializePatterns,
+  serializePatterns,
   resolveExternalAssets,
   serializeLayers,
   serializeLayersExternal,
@@ -166,6 +168,7 @@ import { base64ToBytes, bytesToBase64, decodePng, isPng, parseDataUrl } from '..
 import { getAnnotationBounds } from './geometry';
 import { importPsd, type PsdImportResult } from './psd/import';
 import { exportPsd } from './psd/export';
+import type { EffectPattern } from '../raster/effects/patterns';
 import { DEFAULT_GLOBAL_LIGHT, effectsMargin, type GlobalLight, type LayerEffect, type LayerEffectKind, type LayerEffects } from '../raster/effects/model';
 
 /** Latest serialized schema version (`3`: layers). Documents with the old shape still write 1 or 2. */
@@ -498,6 +501,7 @@ interface HistoryEntry {
   outputOpacity: number;
   legacyOutputBlur?: number;
   globalLight?: GlobalLight;
+  patterns?: EffectPattern[];
   selection: SelectionMask | null;
   source: SourceSnapshot;
 }
@@ -638,8 +642,9 @@ export class ImageEditorController {
     this.renderer.layerSources = {
       surfaceOf: (layer) => this.surfaceOf(layer),
       sourceIsOpaque: () => this.sourceIsOpaque(),
-      version: () => this.sourceVersion(),
+      version: () => `${this.sourceVersion()}:${this.patternsVersion()}`,
       globalLight: () => this.state.globalLight,
+      pattern: (id) => this.state.patterns?.find((p) => p.id === id) ?? null,
     };
 
     this.state = {
@@ -817,6 +822,7 @@ export class ImageEditorController {
     };
     if (s.legacyOutputBlur !== undefined) entry.legacyOutputBlur = s.legacyOutputBlur;
     if (s.globalLight) entry.globalLight = { ...s.globalLight };
+    if (s.patterns) entry.patterns = s.patterns;
     return entry;
   }
 
@@ -832,6 +838,8 @@ export class ImageEditorController {
     else delete s.legacyOutputBlur;
     if (entry.globalLight) s.globalLight = { ...entry.globalLight };
     else delete s.globalLight;
+    if (entry.patterns) s.patterns = entry.patterns;
+    else delete s.patterns;
     s.selection = entry.selection;
     if (this.imageElement !== entry.source.element && !this.samplePixelsOverride) this.samplePixels = null;
     this.imageElement = entry.source.element;
@@ -1089,7 +1097,14 @@ export class ImageEditorController {
 
   private compositorSources(): CompositorSources {
     const { width, height } = this.naturalSize;
-    return { width, height, surfaceOf: (l) => this.surfaceOf(l), version: this.sourceVersion(), globalLight: this.state.globalLight };
+    return {
+      width,
+      height,
+      surfaceOf: (l) => this.surfaceOf(l),
+      version: `${this.sourceVersion()}:${this.patternsVersion()}`,
+      globalLight: this.state.globalLight,
+      pattern: (id) => this.state.patterns?.find((p) => p.id === id) ?? null,
+    };
   }
 
   private sourceIds = new WeakMap<object, number>();
@@ -1573,6 +1588,25 @@ export class ImageEditorController {
   public setLayerEffects(id: string, effects: LayerEffects | null, commitToHistory = true): LayerEffects {
     this.commitLayers(setLayerEffectsOp(this.state.layers, id, effects), undefined, commitToHistory);
     return this.getLayerEffects(id);
+  }
+
+  private patternIds = new WeakMap<object, number>();
+
+  /** Changes whenever the document's pattern list is replaced (the compositor then drops its caches). */
+  private patternsVersion(): number {
+    const list = this.state.patterns;
+    if (!list) return 0;
+    let id = this.patternIds.get(list);
+    if (id === undefined) {
+      id = this.nextSourceId++;
+      this.patternIds.set(list, id);
+    }
+    return id;
+  }
+
+  /** The document's patterns (from an opened PSD), besides the built-in ones. */
+  public getDocumentPatterns(): EffectPattern[] {
+    return this.state.patterns ?? [];
   }
 
   /** The light effects with "use global light" follow. */
@@ -2999,6 +3033,10 @@ export class ImageEditorController {
     s.activeLayerId = pixels.length ? pixels[pixels.length - 1].id : null;
     s.activeTarget = 'pixels';
     this.psdResolution = result.resolution;
+    if (result.patterns.length) s.patterns = result.patterns;
+    else delete s.patterns;
+    if (result.globalLight) s.globalLight = result.globalLight;
+    else delete s.globalLight;
     this.lastLoadProblems = result.warnings;
     this.notify();
     return {
@@ -3072,6 +3110,7 @@ export class ImageEditorController {
         const content = { ...layer, visible: true, opacity: 1, blend: 'normal', annotation: { ...layer.annotation, blend: undefined } } as AnnotationLayer;
         delete content.mask;
         delete content.clipped;
+        delete content.effects;
         const data = compositor.composite([content], canvas, sources);
         const out: PixelLayer = {
           type: 'pixel',
@@ -3085,6 +3124,7 @@ export class ImageEditorController {
         };
         if (layer.clipped) out.clipped = true;
         if (layer.locks) out.locks = layer.locks;
+        if (layer.effects) out.effects = layer.effects;
         const mask = bakeMask(layer);
         if (mask) out.mask = mask;
         return out;
@@ -3101,6 +3141,7 @@ export class ImageEditorController {
         delete content.mask;
         delete content.clipped;
         delete content.fillOpacity;
+        delete content.effects;
         const data = compositor.composite([content], canvas, sources);
         out = { ...out, surface: surfaceFromPixels({ width, height, data }, 4, -layer.offset.x, -layer.offset.y) };
       }
@@ -3125,7 +3166,8 @@ export class ImageEditorController {
     for (const [msg, names] of note) warnings.push(`${msg} (${names.length === 1 ? 'layer' : 'layers'} ${names.map((n) => `"${n}"`).join(', ')}).`);
 
     const merged = compositor.composite(prepared, canvas, { ...sources, version: `psd:${Date.now()}` });
-    const result = exportPsd({ width, height, layers: prepared, merged, resolution: this.psdResolution });
+    const result = exportPsd({ width, height, layers: prepared, merged, resolution: this.psdResolution, patterns: this.state.patterns, globalLight: this.state.globalLight });
+    warnings.push(...result.warnings);
     return { bytes: result.bytes, warnings, psb: result.psb, width, height };
   }
 
@@ -3254,6 +3296,9 @@ export class ImageEditorController {
       const light = data.globalLight;
       if (light && Number.isFinite(light.angle) && Number.isFinite(light.altitude)) s.globalLight = { angle: light.angle, altitude: Math.min(90, Math.max(0, light.altitude)) };
       else delete s.globalLight;
+      const patterns = deserializePatterns(data.patterns, problems);
+      if (patterns.length) s.patterns = patterns;
+      else delete s.patterns;
       if (!this.imageElement && typeof data.width === 'number' && typeof data.height === 'number' && data.width > 0 && data.height > 0) {
         s.imageDimensions = { width: data.width, height: data.height };
       }
@@ -3268,6 +3313,7 @@ export class ImageEditorController {
       s.transform = { ...data.transform };
       s.activeLayerId = null;
       delete s.globalLight;
+      delete s.patterns;
     }
     s.activeTarget = 'pixels';
     this.viewKey = [];
@@ -3279,7 +3325,7 @@ export class ImageEditorController {
     const { width, height } = this.naturalSize;
     const view = legacyView(this.stack(), width, height, null);
     // A global light is only stored in the layered schema.
-    if (view.exact && !this.state.globalLight) {
+    if (view.exact && !this.state.globalLight && !this.state.patterns?.length) {
       return {
         // States without adjustment layers keep schema 1, so they round-trip unchanged.
         version: view.adjustments.layers?.length ? 2 : 1,
@@ -3307,6 +3353,7 @@ export class ImageEditorController {
     };
     if (this.state.legacyOutputBlur !== undefined) out.legacyOutputBlur = this.state.legacyOutputBlur;
     if (this.state.globalLight) out.globalLight = { ...this.state.globalLight };
+    if (this.state.patterns?.length) out.patterns = serializePatterns(this.state.patterns);
     return out;
   }
 }

@@ -29,4 +29,6 @@ export { decodePlanes, encodeRle, type PlaneLayout } from './compression';
 export { parseAdjustmentBlock, writeAdjustmentBlock, ADJUSTMENT_KEYS, SUPPORTED_ADJUSTMENT_KEYS, type ParsedAdjustment } from './adjust';
 export { importPsd, psdToLayers, PSD_BLEND_KEYS, type PsdImportResult, type PsdImportOptions, type PsdLayerSummary } from './import';
 export { exportPsd, type PsdExportInput, type PsdExportResult } from './export';
+export { parseLfx2, parseLrfx, writeLfx2, type ParsedLayerEffects } from './effects';
+export { parsePatternBlock, writePatternBlock, psdPatternToEffectPattern, PATTERN_BLOCK_KEYS, type PsdPattern } from './patterns';
 export { openPsdFile, downloadPsd, psdFileName, PSD_FILE_ACCEPT } from './ui';

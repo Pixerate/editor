@@ -26,6 +26,7 @@ import {
 } from './model';
 import { base64ToBytes, bytesToBase64, decodePng, parseDataUrl, pngDataUrl } from '../../raster/png';
 import { normalizeLayerEffects, type GlobalLight, type LayerEffect, type LayerEffects } from '../../raster/effects/model';
+import type { EffectPattern } from '../../raster/effects/patterns';
 import { contentBounds, emptySurface, readRegion, surfaceFromPixels, type TiledSurface } from '../../raster/surface';
 
 export const LAYERED_SCHEMA_VERSION = 3 as const;
@@ -114,6 +115,34 @@ export interface SerializedLayeredImageEditorState {
   selection?: SerializedSelection;
   /** Global light for layer effects (missing = 120°, 30°). */
   globalLight?: GlobalLight;
+  /** The document's patterns for pattern effects, each an RGBA PNG data URL. */
+  patterns?: SerializedPattern[];
+}
+
+export interface SerializedPattern {
+  id: string;
+  name: string;
+  png: string;
+}
+
+export function serializePatterns(patterns: readonly EffectPattern[]): SerializedPattern[] {
+  return patterns.map((p) => ({ id: p.id, name: p.name, png: pngDataUrl(p.width, p.height, p.data) }));
+}
+
+/** Reads stored patterns, skipping (and reporting in `problems`) any that cannot be decoded. */
+export function deserializePatterns(raw: unknown, problems: string[] = []): EffectPattern[] {
+  if (!Array.isArray(raw)) return [];
+  const out: EffectPattern[] = [];
+  for (const p of raw) {
+    if (!p || typeof p !== 'object' || typeof p.id !== 'string' || typeof p.png !== 'string') continue;
+    try {
+      const png = decodePngDataUrl(p.png, 4);
+      out.push({ id: p.id, name: typeof p.name === 'string' ? p.name : p.id, width: png.width, height: png.height, data: png.data });
+    } catch (e) {
+      problems.push(`Pattern "${p.name ?? p.id}" could not be decoded (${e instanceof Error ? e.message : String(e)}).`);
+    }
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------

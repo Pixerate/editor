@@ -218,7 +218,7 @@ describe('PSD import of other formats', () => {
     const text = importPsd(singleLayerPsd({ mode: 3, depth: 8, width: 2, height: 2, channels: rgb, blocks: [{ key: 'TySh', data: new Uint8Array(4) }, { key: 'lfx2', data: new Uint8Array(4) }], blendKey: 'diss' }));
     const all = text.warnings.join(' ');
     expect(all).toMatch(/Type layers came in as pixel layers \(their stored pixels\) \(layer "Layer"\)/);
-    expect(all).toMatch(/Layer effects \(lfx2\) are not rendered/);
+    expect(all).toMatch(/Layer effects could not be read; they are kept for export but not drawn/);
     expect(all).toMatch(/Dissolve is not supported and became Normal/);
     expect(text.summary[0]).toMatchObject({ status: 'approximated', psdKind: 'type', type: 'pixel' });
     expect((text.layers[0] as PixelLayer).blend).toBe('normal');

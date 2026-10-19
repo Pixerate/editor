@@ -504,6 +504,8 @@ function oneOf(r: Rec, key: string, path: string, values: readonly string[]): vo
 
 function blend(r: Rec, key: string, path: string): void {
   if (!isBlendMode(r[key])) fail(`${path}.${key}`, `must be a blend mode such as normal, multiply or screen (got ${JSON.stringify(r[key])}).`);
+  // Pigment mixing is not a B(Cb, Cs) mode, and effects paint through one.
+  if (r[key] === 'pigment') fail(`${path}.${key}`, 'pigment is a layer blend mode only; effects cannot use it.');
 }
 
 function contour(v: unknown, path: string): void {

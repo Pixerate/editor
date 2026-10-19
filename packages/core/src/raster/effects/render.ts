@@ -24,7 +24,7 @@
  * Soft falloffs are two box blurs (a tent).
  */
 
-import { blendChannel, blendRgb, isSeparableBlendMode, type BlendMode } from '../blend';
+import { blendChannel, blendRgb, isSeparableBlendMode, mixPigmentRgb, type BlendMode } from '../blend';
 import { curveLut } from '../curve';
 import {
   effectsScale,
@@ -885,6 +885,7 @@ type FBuf = Float32Array;
 
 const rgbScratchB = [0, 0, 0];
 const rgbScratchS = [0, 0, 0];
+const rgbScratchM = [0, 0, 0];
 
 /** Composites straight `src` (alpha `sa`) onto `dst[i..i+3]` with `mode` (the formula `blendTile` uses). */
 function compositeAt(dst: FBuf, i: number, mode: BlendMode, separable: boolean, sr: number, sg: number, sb: number, sa: number): void {
@@ -898,6 +899,21 @@ function compositeAt(dst: FBuf, i: number, mode: BlendMode, separable: boolean, 
   const b0 = dst[i];
   const b1 = dst[i + 1];
   const b2 = dst[i + 2];
+  if (mode === 'pigment') {
+    // Not B(Cb, Cs): the colours mix like paint by amount, `sa / ao` of the source (as blendTile).
+    rgbScratchB[0] = b0;
+    rgbScratchB[1] = b1;
+    rgbScratchB[2] = b2;
+    rgbScratchS[0] = sr;
+    rgbScratchS[1] = sg;
+    rgbScratchS[2] = sb;
+    mixPigmentRgb(rgbScratchB, rgbScratchS, sa / ao, rgbScratchM);
+    dst[i] = rgbScratchM[0];
+    dst[i + 1] = rgbScratchM[1];
+    dst[i + 2] = rgbScratchM[2];
+    dst[i + 3] = ao;
+    return;
+  }
   let m0: number;
   let m1: number;
   let m2: number;
