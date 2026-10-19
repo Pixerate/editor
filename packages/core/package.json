@@ -181,6 +181,7 @@
     "@types/dagre": "^0.7.54",
     "@types/markdown-it": "^14.2.0",
     "@types/node": "^24.0.0",
+    "fast-check": "^3.23.2",
     "mermaid": "12.0.0",
     "tiptap-markdown": "^0.8.10",
     "tsup": "^8.4.0",

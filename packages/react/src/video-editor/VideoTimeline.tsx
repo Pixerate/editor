@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   planVideoClipDrag,
+  videoDragLabel,
   videoAssetMap,
   videoClipLabel,
   videoClipTint,
@@ -49,7 +50,8 @@ const isField = (el: EventTarget | null) => el instanceof HTMLElement && /^(INPU
  * The tracks of a `VideoEditorController` laid out in time: a ruler with markers (click or drag it
  * to scrub), a playhead, and one row per track with its toggles (mute, hide, lock) and its clips.
  * Click a clip to select it (Shift / Cmd to add or remove it), drag it to move it (onto another
- * track of the same kind too), drag an edge to trim it (Alt to ripple). Moves snap to clip edges,
+ * track of the same kind too; hold Alt to insert, pushing later material along on every sync-locked
+ * track, or Shift to overwrite what is underneath), drag an edge to trim it (Alt to ripple). Moves snap to clip edges,
  * markers, the playhead and frames. Every edit is one undo step; refused edits show why.
  *
  * Keyboard (when focused): Space plays, ←/→ step a frame, S splits at the playhead, Delete removes
@@ -85,13 +87,14 @@ export function VideoTimeline({ controller, pxPerSecond, onPxPerSecondChange, ed
     return undefined;
   };
 
-  const planFor = (d: Drag, e: { clientX: number; clientY: number; altKey: boolean }) =>
+  const planFor = (d: Drag, e: { clientX: number; clientY: number; altKey: boolean; shiftKey: boolean }) =>
     planVideoClipDrag(project, {
       clip: d.clip,
       mode: d.mode,
       delta: ((e.clientX - d.x) * 1000) / px,
       track: d.mode === 'move' ? trackAt(d.clip, e.clientY) : undefined,
       ripple: e.altKey,
+      placement: e.altKey ? 'insert' : e.shiftKey ? 'overwrite' : 'refuse',
       snap: (t) => controller.snap(t, { exclude: [d.clip] }).time,
     });
 
@@ -139,7 +142,7 @@ export function VideoTimeline({ controller, pxPerSecond, onPxPerSecondChange, ed
         return;
       }
       const plan = live.current.planFor(d, ev);
-      if (plan?.edit) controller.apply(plan.edit, d.mode === 'move' ? 'Move clip' : ev.altKey ? 'Ripple trim' : 'Trim clip');
+      if (plan?.edit) controller.apply(plan.edit, videoDragLabel(plan.edit));
     };
     const cancel = () => {
       stop();

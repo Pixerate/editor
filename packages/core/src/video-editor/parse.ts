@@ -157,6 +157,7 @@ export function parseVideoTrack(v: unknown, path = 'track'): VideoTrack {
 		muted: bool(v.muted, `${path}.muted`),
 		hidden: bool(v.hidden, `${path}.hidden`),
 		locked: bool(v.locked, `${path}.locked`),
+		syncLocked: bool(v.syncLocked, `${path}.syncLocked`),
 		volume: num(v.volume, `${path}.volume`, { optional: true, min: 0, max: 4 }),
 		clips: ((v.clips ?? []) as unknown[]).map((c, i) => parseVideoClip(c, `${path}.clips[${i}]`))
 	});

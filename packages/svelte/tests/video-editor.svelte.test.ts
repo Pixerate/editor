@@ -194,6 +194,26 @@ describe("VideoTimeline (Svelte)", () => {
     controller.destroy();
   });
 
+  it("drags a clip in with alt (insert) or over with shift (overwrite)", () => {
+    const controller = make();
+    render(VideoTimeline, { controller, pxPerSecond: 100 });
+    // Shift (held once the drag is going; at pointer-down it adds to the selection).
+    pointer(q('[data-clip="c2"]'), "pointerdown", { clientX: 250 });
+    pointer(window, "pointermove", { clientX: 150, shiftKey: true });
+    pointer(window, "pointerup", { clientX: 150, shiftKey: true });
+    expect(clipOf(controller, "c1")).toMatchObject({ start: 0, duration: 1000 });
+    expect(clipOf(controller, "c2")!.start).toBe(1000);
+    expect(controller.getState().undoLabel).toBe("Overwrite clip");
+    controller.undo();
+    pointer(q('[data-clip="c2"]'), "pointerdown", { clientX: 250 });
+    pointer(window, "pointermove", { clientX: 150, altKey: true });
+    pointer(window, "pointerup", { clientX: 150, altKey: true });
+    expect(controller.getState().undoLabel).toBe("Insert clip");
+    expect(ids(controller)).toEqual(["c1", "c2", "c1-1"]);
+    expect(clipOf(controller, "c1-1")).toMatchObject({ start: 3000, duration: 1000 });
+    controller.destroy();
+  });
+
   it("trims a clip by dragging an edge, and shows a refused edit", () => {
     const controller = make();
     render(VideoTimeline, { controller, pxPerSecond: 100 });

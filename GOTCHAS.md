@@ -21,6 +21,18 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/video-editor] A Ripple Is Refused Because of a Music Bed or Title on Another Track
+
+- **Issue / Symptom**: `delete_clips` / `trim_clip` with `ripple`, or `extract_range`, fails with "Rippling out … would pull track "a1" out of sync: clip "music" … is in that stretch", even though the edited track itself has room.
+- **Root Cause**: Tracks are sync-locked by default (`syncLocked` unset = true). A ripple moves every unlocked sync-locked track by the same spans (merged across tracks, closed right to left), so nothing drifts out of sync. Closing time where another sync-locked track still has a clip would have to delete part of that clip, so it is refused instead. Opening time (insert, ripple trims that lengthen) never refuses: it cuts the clips across the edit point on those tracks, which is why `insert` leaves `music-1` style right-hand parts behind.
+- **Solution / Workaround**: Turn `syncLocked` off on a track that should stay put (a music bed), lock it, put it in the range edit's `tracks`, or lift instead of rippling. Tests with a long music clip under a rippled cut must do one of these. A property test that inserts then extracts the same range compares tracks with continuing cuts joined up (the split parts stay split), and exactly only when nothing ran across the insert point.
+
+### [svelte/video-editor] Shift-Dragging a Clip Overwrites Only When Shift Is Pressed After the Drag Starts
+
+- **Issue / Symptom**: In the Svelte timeline, holding Shift before pressing on a clip adds it to the selection and the drag does nothing; overwrite only happens if Shift is pressed once the clip is moving.
+- **Root Cause**: Svelte's `onclipdown` treats Shift / Cmd / Ctrl at pointer-down as additive selection and turns editing off for that gesture. The placement mode (Alt = insert, Shift = overwrite) is read from each pointer-move, so a modifier held from the start never reaches a drag.
+- **Solution / Workaround**: Press Shift after the drag has started (tests send `shiftKey` on the move and up events only). React reads the modifiers on move and up too, so the same gesture works in both.
+
 ### [core/video-editor] Keyframed Clip Values Are Not Numbers, and ffmpeg's `t` Means Two Things
 
 - **Issue / Symptom**: Code that reads `clip.opacity ?? 1`, `clip.volume` or `clip.transform.x` and does arithmetic gets `NaN` or `[object Object]` once a property is keyframed. In the ffmpeg export, an animation lands early or late by the clip's start or by its transition lead.
