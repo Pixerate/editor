@@ -79,9 +79,11 @@ export {
 	createCanvasNodeSync,
 	preserveNodeMeasurements,
 	normalizeNodeHandles,
+	snapshotCanvasGraph,
 	type HandleConfig,
 	type NodeMeasurement,
-	type CreateCanvasNodeSyncOptions
+	type CreateCanvasNodeSyncOptions,
+	type CanvasGraphSnapshotInput
 } from './createCanvasNodeSync.svelte.js';
 
 // Multi-node drag coordination rune

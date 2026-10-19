@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BLEND_MODES, type BlendMode, type PaintEditorController, type PaintLayerInfo } from '@pixerate/editor/paint-editor';
+import { BLEND_MENU_GROUPS, type BlendMode, type PaintEditorController, type PaintLayerInfo } from '@pixerate/editor/paint-editor';
 import { usePaintEditorState } from './usePaintEditor';
 import { ErrorLine, button, chip, panel, useAttempt } from './shared';
 
@@ -123,10 +123,14 @@ export const PaintLayersPanel: React.FC<PaintLayersPanelProps> = ({ controller, 
             <span className="w-14 text-slate-400">Blend</span>
             <select aria-label="Layer blend" value={active.blend} onChange={(e) => attempt(() => controller.updateLayer(active.id, { blend: e.target.value as BlendMode }))} className="flex-1 rounded bg-slate-800 px-1 py-0.5">
               {active.type === 'group' && <option value="pass-through">Pass through</option>}
-              {BLEND_MODES.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.label}
-                </option>
+              {BLEND_MENU_GROUPS.map((g) => (
+                <optgroup key={g.label} label={g.label}>
+                  {g.modes.map((m) => (
+                    <option key={m.id} value={m.id} title={m.description}>
+                      {m.label}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
           </label>

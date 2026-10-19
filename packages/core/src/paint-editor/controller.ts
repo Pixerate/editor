@@ -15,7 +15,7 @@ import { exportPsd, type PsdExportResult } from '../image-editor/psd/export';
 import type { ImageLayer } from '../image-editor/layers/model';
 import { applyStrokeToTile, CoverageMap, type StrokeApply } from '../paint/brush';
 import { cleanMixer, EMPTY_MIXER_LOAD, loadMixer, type MixerLoad } from '../paint/mixer';
-import { isBlendMode, type BlendMode } from '../raster/blend';
+import { BLEND_MODES, isBlendMode, standardBlendMode, type BlendMode } from '../raster/blend';
 import { findLayer, flattenLayers, insertLayer, isLayerLocked, mapLayer, type LayerLocks } from '../raster/layers';
 import { bytesToBase64, decodePng, encodePng, parseDataUrl, pngDataUrl } from '../raster/png';
 import {
@@ -1251,9 +1251,24 @@ export class PaintEditorController {
       offset: { x: 0, y: 0 },
     };
     const merged = this.compositePixels({ paper: true }).data;
-    const result = exportPsd({ width, height, layers: [paperLayer, ...this.doc.layers] as unknown as ImageLayer[], merged, resolution: dpi });
-    const pigment = flattenLayers(this.doc.layers).filter((l) => l.blend === 'pigment');
-    if (pigment.length) result.warnings.push(`Pigment blending has no PSD equivalent; ${pigment.map((l) => `"${l.name}"`).join(', ')} ${pigment.length === 1 ? 'was' : 'were'} written as Normal, so ${pigment.length === 1 ? 'it looks' : 'they look'} different in Photoshop.`);
+    // PSD has no pigment or painterly modes: write each as its nearest standard mode and say so.
+    const changed = new Map<BlendMode, string[]>();
+    const toStandard = (layers: readonly PaintLayer[]): PaintLayer[] =>
+      layers.map((l) => {
+        const blend = l.blend === 'pass-through' ? l.blend : standardBlendMode(l.blend as BlendMode);
+        if (blend !== l.blend) changed.set(l.blend as BlendMode, [...(changed.get(l.blend as BlendMode) ?? []), l.name]);
+        const next = blend === l.blend ? l : ({ ...l, blend } as PaintLayer);
+        return next.type === 'group' ? { ...next, children: toStandard(next.children) } : next;
+      });
+    const layers = toStandard(this.doc.layers);
+    const result = exportPsd({ width, height, layers: [paperLayer, ...layers] as unknown as ImageLayer[], merged, resolution: dpi });
+    for (const [mode, names] of changed) {
+      const label = BLEND_MODES.find((m) => m.id === mode)?.label ?? mode;
+      const std = BLEND_MODES.find((m) => m.id === standardBlendMode(mode))?.label ?? standardBlendMode(mode);
+      const list = names.map((n) => `"${n}"`).join(', ');
+      const one = names.length === 1;
+      result.warnings.push(`${label} blending has no PSD equivalent; ${list} ${one ? 'was' : 'were'} written as ${std}, the nearest Photoshop mode, so ${one ? 'it looks' : 'they look'} different in Photoshop (the merged image is exact).`);
+    }
     return result;
   }
 

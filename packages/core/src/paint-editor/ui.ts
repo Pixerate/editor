@@ -9,6 +9,7 @@
  * - Guide overlays as line segments, and the slider tables of the brush and paper panels.
  */
 
+import { BLEND_MODES, type BlendModeInfo } from '../raster/blend';
 import { TILE, type RasterRect } from '../raster/surface';
 import type { PaintEditorController } from './controller';
 import type { PenPoint } from './engine';
@@ -371,3 +372,19 @@ export function wheelPick(dx: number, dy: number, wheel: ColorWheel, color: stri
   const [nr, ng, nb] = hsvToRgb(wheelToHue(wheelAngle(dx, dy), wheel), s || 1, v || 1);
   return rgbToHexColor(nr, ng, nb);
 }
+
+/** A group of the blend menu: the Photoshop modes, then pigment and the painterly modes. */
+export interface BlendMenuGroup {
+  label: string;
+  modes: readonly BlendModeInfo[];
+}
+
+/**
+ * The layer and brush blend menus as groups: the 26 standard modes, then the paint modes
+ * (`pigment` and the painterly `watercolor`, `tint`, `highlight`, `shadow`), each with its
+ * description as a tooltip. Both bindings render this as `<optgroup>`s.
+ */
+export const BLEND_MENU_GROUPS: readonly BlendMenuGroup[] = [
+  { label: 'Standard', modes: BLEND_MODES.filter((m) => !m.painterly && m.id !== 'pigment') },
+  { label: 'Paint', modes: BLEND_MODES.filter((m) => m.painterly || m.id === 'pigment') },
+];
