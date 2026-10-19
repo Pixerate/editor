@@ -10,7 +10,7 @@ import { createPigmentTools } from '../paint/pigment-tools';
 import { MIXING_MODELS, type MixerLoad } from '../paint/mixer';
 import { BLEND_MODES, standardBlendMode, type BlendMode } from '../raster/blend';
 import { bytesToBase64, encodePng } from '../raster/png';
-import { BRUSH_ROTATIONS, MAX_BRUSH_SIZE, PAINT_BRUSH_CATEGORIES, PAINT_BRUSH_ENGINES, brushToJSON, type PaintBrush } from './brushes';
+import { BRUSH_ROTATIONS, MAX_BRUSH_SIZE, MULTI_COLOR_MODES, PAINT_BRUSH_CATEGORIES, PAINT_BRUSH_ENGINES, brushToJSON, isWetCapable, type PaintBrush } from './brushes';
 import { MAX_CANVAS_SIDE } from './document';
 import type { PaintEditorController } from './controller';
 import type { PenPoint } from './engine';
@@ -78,11 +78,11 @@ const DYNAMICS = {
 
 const MIXER = {
   type: 'object',
-  description: 'Mixer engine settings (Mixer Brush, blender, smudge). Missing fields keep their current values.',
+  description: 'Mixer engine settings (the Mixer Brush). Missing fields keep their current values.',
   properties: {
-    wet: { type: 'number', minimum: 0, maximum: 1, description: 'How much canvas colour each dab picks up, 0 (dry) .. 1.' },
+    wet: { type: 'number', minimum: 0, maximum: 1, description: 'Pick-up ratio: how much canvas colour each dab picks up, 0 (dry) .. 1.' },
     load: { type: 'number', minimum: 0, maximum: 1, description: 'How much paint the reservoir holds; below 1 it drains per dab, so long strokes run dry.' },
-    mix: { type: 'number', minimum: 0, maximum: 1, description: "How far each dab's paint moves from the reservoir towards the picked-up colour." },
+    mix: { type: 'number', minimum: 0, maximum: 1, description: "Mix ratio: how far each dab's paint moves from the reservoir towards the picked-up colour." },
     loadEachStroke: { type: 'boolean', description: 'Refill the reservoir with the colour before each stroke.' },
     cleanEachStroke: { type: 'boolean', description: 'Empty the pickup well after each stroke.' },
     mixing: { type: 'string', enum: [...MIXING_MODELS], description: 'rgb: RGB averages. pigment: mixes like paint (Kubelka-Munk).' },
@@ -90,17 +90,73 @@ const MIXER = {
   additionalProperties: false,
 } as const;
 
+const MIXING = { type: 'string', enum: [...MIXING_MODELS], description: 'pigment: mixes like paint (Kubelka-Munk, blue and yellow make green); rgb: straight RGB averages.' } as const;
+
+const BEHAVIOR = {
+  type: 'object',
+  description:
+    'How the brush handles paint on the canvas (dab and mixer engines; on a mixer brush pickup, mix, dirty and mixing are its mixer wet, mix, !cleanEachStroke and mixing). Missing fields keep their current values.',
+  properties: {
+    pickup: { type: 'number', minimum: 0, maximum: 1, description: 'Pick-up ratio 0..1: how much of the paint under each dab the brush lifts and carries along (0: none, a dry brush).' },
+    mix: { type: 'number', minimum: 0, maximum: 1, description: "Mix ratio 0..1: how much of the carried paint goes into what the brush lays down, against the brush's own colour (scaled by pickup)." },
+    dirty: { type: 'boolean', description: 'Dirty brush: keep the carried paint after the stroke, so the next stroke starts with the last colour it touched (needs pickup above 0). clean_mixer_brush wipes it.' },
+    mixing: MIXING,
+    multicolor: {
+      type: 'object',
+      description: 'Multi-coloured brush. Missing fields keep their current values.',
+      properties: {
+        mode: { type: 'string', enum: [...MULTI_COLOR_MODES], description: 'off; tip: the colours lie side by side across the tip (stripes along the stroke, like a brush loaded with several paints); dab: the colour changes along the stroke.' },
+        colors: { type: 'array', maxItems: 8, items: { ...COLOR }, description: '2..8 colours #rrggbb; fewer than 2 uses the paint colour and the secondary colour.' },
+        order: { type: 'string', enum: ['sequence', 'random'], description: 'dab mode: sequence runs through the colours in order, blending between them; random picks one per run of dabs (seeded).' },
+        length: { type: 'integer', minimum: 1, maximum: 500, description: 'dab mode: dabs per colour (default 12).' },
+        softness: { type: 'number', minimum: 0, maximum: 1, description: 'How softly neighbouring colours blend: 0 hard stripes or steps, 1 a smooth gradient.' },
+      },
+      additionalProperties: false,
+    },
+  },
+  additionalProperties: false,
+} as const;
+
+const BLENDER = {
+  type: 'object',
+  description: 'Blender engine settings. Missing fields keep their current values.',
+  properties: {
+    strength: { type: 'number', minimum: 0, maximum: 1, description: 'How far each pixel under the tip moves towards the mix of the paint near it, per dab.' },
+    distance: { type: 'number', minimum: 0, maximum: 1, description: 'Blend distance: how far away colours are mixed in, as a fraction of the tip diameter (0.35 default; higher blends wider and softer).' },
+    mixing: MIXING,
+  },
+  additionalProperties: false,
+} as const;
+
+const SMUDGE = {
+  type: 'object',
+  description: 'Smudge engine settings. Missing fields keep their current values.',
+  properties: {
+    strength: { type: 'number', minimum: 0, maximum: 1, description: 'How strongly the dragged paint covers what is under the tip, per dab.' },
+    length: { type: 'number', minimum: 0, maximum: 1, description: 'How far paint is dragged: the share of the carried paint kept from dab to dab (0.85 default; 1 drags it the whole stroke).' },
+    mixing: { ...MIXING, description: 'rgb (default): smeared colours average; pigment: they mix like paint.' },
+  },
+  additionalProperties: false,
+} as const;
+
 const BRUSH_FIELDS = {
   name: { type: 'string', minLength: 1, maxLength: 80, description: 'Display name.' },
   category: { type: 'string', enum: [...PAINT_BRUSH_CATEGORIES], description: 'Library category.' },
-  engine: { type: 'string', enum: [...PAINT_BRUSH_ENGINES], description: 'dab: paints dabs; eraser: removes paint; mixer: picks up and moves paint (Mixer Brush, blender, smudge).' },
+  engine: {
+    type: 'string',
+    enum: [...PAINT_BRUSH_ENGINES],
+    description: 'dab: paints dabs (with behavior.pickup or multicolor it paints dab by dab, lifting and mixing paint); eraser: removes paint; mixer: the Mixer Brush (a reservoir plus picked-up paint); blender: mixes the colours under and near the tip; smudge: drags paint along the stroke.',
+  },
   tip: TIP,
   grain: { type: 'number', minimum: 0, maximum: 1, description: 'Paper grain response: 0 ignores the grain, 1 catches only its peaks at light pressure (pencil, pastel, charcoal). Multiplied by the paper depth.' },
   pressureSmoothing: { type: 'number', minimum: 0, maximum: 0.95, description: 'Pressure smoothing, separate from the tip position smoothing.' },
   rotation: { type: 'string', enum: [...BRUSH_ROTATIONS], description: 'What turns the tip: fixed (tip.angle), stroke (follows the direction of travel) or barrel (the pen barrel rotation, twist).' },
   dynamics: DYNAMICS,
   mixer: MIXER,
-  loadsColor: { type: 'boolean', description: 'Mixer engine: load the colour each stroke (false for blender and smudge, which only move paint).' },
+  loadsColor: { type: 'boolean', description: 'Mixer engine: load the colour each stroke (false for a mixer that only moves paint).' },
+  behavior: BEHAVIOR,
+  blender: BLENDER,
+  smudge: SMUDGE,
 } as const;
 
 const POINTS = {
@@ -132,7 +188,20 @@ function loadResult(load: MixerLoad) {
 }
 
 function brushSummary(b: PaintBrush) {
-  return { id: b.id, name: b.name, category: b.category, engine: b.engine, size: b.tip.size, grain: b.grain, rotation: b.rotation, builtin: Boolean(b.builtin) };
+  return {
+    id: b.id,
+    name: b.name,
+    category: b.category,
+    engine: b.engine,
+    size: b.tip.size,
+    grain: b.grain,
+    rotation: b.rotation,
+    wetCapable: isWetCapable(b),
+    pickup: b.behavior.pickup,
+    dirty: b.behavior.dirty,
+    multicolor: b.behavior.multicolor.mode,
+    builtin: Boolean(b.builtin),
+  };
 }
 
 /** Agent tools for one paint editor. */
@@ -453,7 +522,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
     name: 'list_brushes',
     title: 'List brushes',
     description:
-      'Lists the brush library: built-in dry media (pencils, pastels, charcoal, airbrush, marker, ink, erasers, blender, smudge, Mixer Brush) and saved user brushes, with id, name, category, engine, size, grain response and rotation mode, plus the active brush id.',
+      'Lists the brush library: built-in dry media (pencils, pastels, charcoal, airbrush, marker, ink, erasers), paint brushes (dirty round, multi-colour flat, palette dabber), blending tools (blender, smudge, pigment smudge, Mixer Brush) and saved user brushes, with id, name, category, engine, size, grain response, rotation mode, whether it can pick up paint (wetCapable), its pick-up ratio, dirty and multi-colour mode, plus the active brush id.',
     inputSchema: EMPTY,
     annotations: { title: 'List brushes', ...READ },
     handler: () => {
@@ -465,7 +534,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
   add({
     name: 'get_brush',
     title: 'Get a brush',
-    description: 'Reads every setting of a brush (tip, grain, pressure smoothing, rotation, dynamics, mixer). Without id, the active brush as edited.',
+    description: 'Reads every setting of a brush (tip, grain, pressure smoothing, rotation, dynamics, mixer, behavior: pick-up / mix / dirty / multi-colour, blender, smudge). Without id, the active brush as edited.',
     inputSchema: { type: 'object', properties: { id: { type: 'string', description: 'Brush id from list_brushes (default the active brush).' } }, additionalProperties: false },
     annotations: { title: 'Get a brush', ...READ },
     handler: ({ id }) => {
@@ -613,7 +682,8 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
   add({
     name: 'get_mixer_brush',
     title: 'Get the Mixer Brush load',
-    description: "Reads what the Mixer Brush carries between strokes: reservoir #rrggbb or null, amount 0..1 left, pickup #rrggbb or null. Call before painting with mixer-brush when its loadEachStroke is false.",
+    description:
+      "Reads what the brush carries between strokes: reservoir #rrggbb or null (the Mixer Brush's loaded paint), amount 0..1 left, pickup #rrggbb or null (paint picked up from the canvas, kept by dirty brushes and a Mixer Brush that does not clean each stroke). Call before painting with mixer-brush when its loadEachStroke is false, or with a dirty brush.",
     inputSchema: EMPTY,
     annotations: { title: 'Get the Mixer Brush load', ...READ },
     handler: () => loadResult(c.getState().mixerLoad),
@@ -631,7 +701,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
   add({
     name: 'clean_mixer_brush',
     title: 'Clean the Mixer Brush',
-    description: 'Empties the Mixer Brush pickup well (and with emptyReservoir its paint too). Editor state, not an undo step. Returns the load.',
+    description: 'Cleans the brush: empties the picked-up paint a dirty brush or the Mixer Brush carries (and with emptyReservoir the Mixer Brush paint too). Editor state, not an undo step. Returns the load.',
     inputSchema: { type: 'object', properties: { emptyReservoir: { type: 'boolean', description: 'Also drop the loaded paint (default false).' } }, additionalProperties: false },
     annotations: { title: 'Clean the Mixer Brush', ...SET },
     handler: ({ emptyReservoir }) => loadResult(c.cleanMixerBrush(emptyReservoir === true)),
@@ -643,7 +713,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
     name: 'paint_stroke',
     title: 'Paint a brush stroke',
     description:
-      'Paints one stroke through points (document pixels, with optional pressure, time, tilt and barrel rotation) on a pixel layer with a library brush or the active one, optionally changed for this stroke. Grain-responsive brushes follow the paper; the mixer engine (mixer-brush, blender, smudge) picks up and moves paint already on the layer. The symmetry guide adds its mirror copies; with a tracing image that samples colours, a stroke without color takes the image colour at its first point. One undo step. Returns the layer id, changed bounds, dab count, the recorded strokeId (for replay_strokes) and, for the mixer, its load after the stroke.',
+      'Paints one stroke through points (document pixels, with optional pressure, time, tilt and barrel rotation) on a pixel layer with a library brush or the active one, optionally changed for this stroke. Grain-responsive brushes follow the paper; the mixer engine (mixer-brush) picks up and mixes paint already on the layer, the blender mixes nearby colours, the smudge drags paint, and dab brushes with behavior.pickup lift and carry paint. The symmetry guide adds its mirror copies; with a tracing image that samples colours, a stroke without color takes the image colour at its first point. One undo step. Returns the layer id, changed bounds, dab count, the recorded strokeId (for replay_strokes) and, for brushes that pick up paint, mixerLoad: what the brush carries after the stroke.',
     inputSchema: {
       type: 'object',
       properties: {

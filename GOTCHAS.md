@@ -2098,3 +2098,21 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: (1) Those menus and enums are built from `BLEND_MODES` and filter out only `pigment`; `BLEND_TO_PSD` is `Partial`, so any mode without a PSD key falls back to `norm`. (2) Interpolating Oklab `a, b` from the backdrop's towards the source's passes through the neutral axis when the hues are opposite. (3) The spectral uplift round-trips a colour only to within about 3.5/255, so `R_b·R_white` is not exactly `R_b`.
 - **Solution / Workaround**: (1) The painterly modes are real `B(Cb, Cs)` functions (`blendRgb` / `blendChannel`), so they work wherever a mode is accepted (compositor, adjustment layers, effects, brushes, canvas fallback); there is nothing to filter. Writers of formats without them must call `standardBlendMode(mode)` (the paint editor's `exportPsd` does, with a warning); the image editor's `toPsd` does not yet. (2) Tint replaces the hue: `ab = ab_s·√(4·L_b·(1 − L_b))`, then cuts chroma (never lightness) into the gamut. (3) `watercolor` short-circuits a white source to the backdrop and a white backdrop to the source, so "white is clear" is exact; other colours are quantised to 8 bits and their spectra cached like `mixPigment8`'s.
 
+### [core/paint] Repeated Small Pigment Mixes Drift Towards the Lighter Paint
+
+- **Issue / Symptom**: Working blue and yellow together 1:1 on the mixing pad with the palette knife came out as a light olive (`#b2b52f`), far from the Kubelka-Munk mix of equal parts (`#5f9746`). Black and white 1:1 gave a light grey instead of a near black.
+- **Root Cause**: Two simplifications compound over hundreds of small mixes. (1) The Mixer Brush samples the footprint as an RGB average (`TileMedium.sample`), so a footprint across blue and yellow is already greyish before any pigment maths. (2) Pixels hold only RGB. A mixed colour's scattering is re-estimated from its luminance, not carried as the sum of its parts, so mixing mixtures is not linear in K and S. Dark mixtures are treated as weak, and the light paint wins over time.
+- **Solution / Workaround**: Treat brush and knife smearing as the look of mixing, not as a measurement. `MixingPad.mix` (`mix_on_pad`) lays blobs, works them with the knife, and then paints a fully mixed core of `mixPigments` of the parts, so the colour it returns is the true mix. Agents that need a number use `mix_colors`. A carrier that keeps K and S per pixel (the wet layer) can fix the drift for wet media. Don't try to fix it by changing the Mixer Brush's sampling, because that changes every existing Mixer Brush stroke.
+
+### [core/paint-editor] Dab-by-Dab Brushes Need the Opacity Ceiling Applied as Increments
+
+- **Issue / Symptom**: A dab brush given a pick-up ratio or multi-colour (so it paints dab by dab instead of through one coverage buffer) built up to full opacity wherever its dabs overlapped, ignoring the brush opacity. It looked very different from the same brush with pick-up 0.
+- **Root Cause**: The dry engine composites the stroke's accumulated coverage once, so overlapping dabs never pass `opacity`. Laying each dab's own coverage at `opacity` composites it again and again.
+- **Solution / Workaround**: `PaintDabStroke` keeps a stroke `CoverageMap` for dab brushes. It lays only what each dab adds: `k = (c₁ − c₀)·o / (1 − c₀·o)`. Successive source-over composites with these `k` multiply out to the single composite at `c·o`, so a one-colour Normal stroke matches the dry engine to within rounding (tested at ≤ 3 levels). Other blend modes are applied per increment, which is close to but not exactly the single composite. The Mixer Brush keeps photocraft's per-dab deposit with no ceiling.
+
+### [core/paint] A Smudge Must Pick Up What Was Under It, Not What It Just Laid
+
+- **Issue / Symptom**: Smudge strokes dragged paint across the whole canvas whatever `length` was set to.
+- **Root Cause**: The finger's patch was refreshed from the pixels after the dab had covered them with the patch itself, so the patch kept picking up its own paint and never faded.
+- **Solution / Workaround**: `SmudgeTip.dab` reads each pixel before writing it. It lays the patch over that pixel and refreshes the patch from that original pixel by `1 − length`. A short `length` now fades within a few dabs, and the test checks that reach grows with `length`.
+
