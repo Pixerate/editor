@@ -10,12 +10,14 @@
 import { writeFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
+  ImageEditorController,
   LayerCompositor,
   TILE,
   createAdjustmentLayer,
   surfaceFromPixels,
   writeRegion,
   type AdjustmentLayerNode,
+  type CropBox,
   type ImageLayer,
   type PixelLayer,
 } from '../src/image-editor';
@@ -122,6 +124,35 @@ describe.runIf(process.env.IMAGE_LAYERS_BENCH)('image layer compositor benchmark
     }
     report['slider drag on top layer (after first)'] = `${Math.min(...drag.slice(1)).toFixed(0)} ms per frame`;
     report['tile size'] = `${TILE}`;
+
+    // The real stroke engine: a 100 px soft brush on the same layer, one pointer event = three
+    // coalesced samples 4 px apart, then the viewport's recomposite of what the stroke touched.
+    const fake = { width: W, height: H, naturalWidth: W, naturalHeight: H } as unknown as HTMLImageElement;
+    const ctrl = new ImageEditorController({ image: fake });
+    (ctrl.getState() as { layers: ImageLayer[] }).layers = layers;
+    ctrl.setActiveLayer('paint3');
+    const viewport = new LayerCompositor({ maxCacheBytes: 2 * 1024 * 1024 * 1024 });
+    viewport.compositeTiles(ctrl.getLayers(), rect, sources, consume, hint);
+    const session = ctrl.beginStroke({ brush: { size: 100, hardness: 0.5, pressureSize: false } });
+    const events: number[] = [];
+    let x = 600;
+    for (let k = 0; k < 60; k++) {
+      const pts = [0, 1, 2].map(() => ({ x: (x += 4), y: 1200 + 300 * Math.sin(x / 300) }));
+      events.push(
+        time(() => {
+          const before = ctrl.getLayers();
+          session.push(pts);
+          const dirty = (ctrl as unknown as { pendingDirty: CropBox[] | 'all' }).pendingDirty;
+          viewport.compositeTiles(ctrl.getLayers(), rect, sources, consume, { ...hint, dirty: dirty === 'all' ? undefined : dirty });
+          (ctrl as unknown as { pendingDirty: CropBox[] | 'all' }).pendingDirty = [];
+          void before;
+        })
+      );
+    }
+    report['stroke end (commit)'] = `${time(() => session.end()).toFixed(1)} ms`;
+    events.sort((a, b) => a - b);
+    report['real stroke, per pointer event, median'] = `${events[events.length >> 1].toFixed(2)} ms`;
+    report['real stroke, per pointer event, p95'] = `${events[Math.floor(events.length * 0.95)].toFixed(2)} ms`;
 
     const text = Object.entries(report).map(([k, v]) => `${k.padEnd(42)} ${v}`).join('\n');
     if (process.env.IMAGE_LAYERS_BENCH_OUT) writeFileSync(process.env.IMAGE_LAYERS_BENCH_OUT, text + '\n\n', { flag: 'a' });

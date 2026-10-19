@@ -2,6 +2,7 @@ import type { BlendMode } from './blend';
 import type { SelectionMask, SerializedSelection } from './selection/mask';
 import type { ImageLayer, LayerTarget } from './layers/model';
 import type { SerializedLayeredImageEditorState } from './layers/serialize';
+import type { PaintOptions } from './controller';
 
 export interface ImageDimensions {
   width: number;
@@ -336,7 +337,10 @@ export type ImageEditorTool =
   | 'arrow'
   | 'line'
   | 'text'
-  | 'watermark';
+  | 'watermark'
+  | 'move'
+  | 'brush'
+  | 'eraser';
 
 export interface ImageEditorState {
   sourceUrl: string | null;
@@ -382,6 +386,8 @@ export interface ImageEditorState {
    * they render as before. New edits blur a layer instead (`blur` filter).
    */
   legacyOutputBlur?: number;
+  /** Brush settings and foreground / background colours of the paint tools (view state). */
+  paint: PaintOptions;
 }
 
 /**

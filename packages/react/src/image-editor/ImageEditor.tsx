@@ -22,6 +22,9 @@ import {
   readAdjustmentControls,
   DEFAULT_SELECTION_TOOL_OPTIONS,
   SelectionGesture,
+  PaintGesture,
+  handlePaintShortcut,
+  pointerPressure,
   type SelectionToolOptions,
 } from '@pixerate/editor/image-editor';
 import { useImageEditor, type UseImageEditorReturn } from './useImageEditor';
@@ -29,6 +32,7 @@ import { ControlSlider } from './ControlSlider';
 import { Histogram } from './Histogram';
 import { AdjustmentLayersPanel } from './AdjustmentLayersPanel';
 import { LayersPanel } from './LayersPanel';
+import { BrushOptionsBar } from './BrushOptionsBar';
 import { SelectionOptionsBar } from './SelectionOptionsBar';
 import { RefineEdgePanel } from './RefineEdgePanel';
 
@@ -44,7 +48,7 @@ export interface ImageEditorProps {
   aiHooks?: ImageEditorAIHooks;
 }
 
-type TabType = 'crop' | 'adjust' | 'layers' | 'select' | 'annotate' | 'depth' | 'ai';
+type TabType = 'crop' | 'adjust' | 'layers' | 'paint' | 'select' | 'annotate' | 'depth' | 'ai';
 
 export const ImageEditor: React.FC<ImageEditorProps> = ({
   editor: externalEditor,
@@ -77,6 +81,16 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
   }
   const selectionDraftRef = useRef<ImagePoint[] | null>(null);
   const [selectionError, setSelectionError] = useState<string | null>(null);
+
+  // Paint tools (Move, Brush, Eraser): the pointer gesture and the brush cursor.
+  const paintGestureRef = useRef<PaintGesture | null>(null);
+  const paintControllerRef = useRef(controller);
+  if (!paintGestureRef.current || paintControllerRef.current !== controller) {
+    paintGestureRef.current = new PaintGesture(controller);
+    paintControllerRef.current = controller;
+  }
+  const brushCursorRef = useRef<ImagePoint | null>(null);
+  const [paintError, setPaintError] = useState<string | null>(null);
 
   // AI Tools state
   const [inpaintPrompt, setInpaintPrompt] = useState('');
@@ -196,6 +210,10 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
         draftAnnotation: draftAnnotation !== undefined ? draftAnnotation : draftAnnotationRef.current,
         draftCrop: draftCrop !== undefined ? draftCrop : draftCropRef.current,
         draftSelectionPath: selectionDraftRef.current,
+        brushCursor:
+          activeTab === 'paint' && brushCursorRef.current && controller.getState().activeTool !== 'move'
+            ? { ...brushCursorRef.current, diameter: controller.getState().paint.brush.size }
+            : null,
       });
     },
     [controller, activeTab]
@@ -254,6 +272,57 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
       y: (e.clientY - rect.top) * scaleY,
     };
   };
+
+  // Paint tools: pointer events (coalesced samples, pointer capture) into strokes and moves.
+  const paintSamples = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current!;
+    const native = e.nativeEvent as PointerEvent;
+    const events = typeof native.getCoalescedEvents === 'function' ? native.getCoalescedEvents() : [];
+    const list = events.length ? events : [native];
+    const rect = canvas.getBoundingClientRect();
+    const sx = rect.width > 0 ? canvas.width / rect.width : 1;
+    const sy = rect.height > 0 ? canvas.height / rect.height : 1;
+    const s = controller.getState();
+    return list.map((ev) => ({
+      ...canvasToImagePoint({ x: (ev.clientX - rect.left) * sx, y: (ev.clientY - rect.top) * sy }, s, canvas.width, canvas.height, false),
+      pressure: pointerPressure(ev),
+    }));
+  };
+  const handlePaintPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (activeTab !== 'paint' || e.button !== 0) return;
+    e.preventDefault();
+    try {
+      e.currentTarget.setPointerCapture?.(e.pointerId);
+    } catch {
+      // Synthetic events have no active pointer to capture.
+    }
+    const [first] = paintSamples(e);
+    setPaintError(paintGestureRef.current!.down(first));
+  };
+  const handlePaintPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (activeTab !== 'paint') return;
+    const samples = paintSamples(e);
+    brushCursorRef.current = samples[samples.length - 1] ?? null;
+    if (paintGestureRef.current!.active) paintGestureRef.current!.moveTo(samples);
+    else void renderCanvas();
+  };
+  const handlePaintPointerUp = () => {
+    if (activeTab !== 'paint') return;
+    const g = paintGestureRef.current!;
+    if (g.active) {
+      g.up();
+      if (g.error) setPaintError(g.error);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab !== 'paint' || typeof window === 'undefined') return;
+    const onKey = (e: KeyboardEvent) => {
+      if (handlePaintShortcut(controller, e)) e.preventDefault();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [activeTab, controller]);
 
   // Pointer event handlers for drawing and annotations
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -692,6 +761,18 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
           <button
             type="button"
             onClick={() => {
+              setActiveTab('paint');
+              editor.setTool('brush');
+            }}
+            className={`px-3 py-1.5 rounded-md font-medium transition-colors ${
+              activeTab === 'paint' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Paint
+          </button>
+          <button
+            type="button"
+            onClick={() => {
               setActiveTab('select');
               editor.setTool('select');
             }}
@@ -828,7 +909,12 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
-            className="absolute inset-0 w-full h-full block"
+            onPointerDown={handlePaintPointerDown}
+            onPointerMove={handlePaintPointerMove}
+            onPointerUp={handlePaintPointerUp}
+            onPointerCancel={() => paintGestureRef.current?.cancel()}
+            data-testid="image-editor-canvas"
+            className={`absolute inset-0 w-full h-full block ${activeTab === 'paint' ? 'touch-none cursor-crosshair' : ''}`}
           />
         </div>
 
@@ -1028,6 +1114,22 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
             <div className="flex flex-col gap-3 text-xs">
               <span className="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">Layers</span>
               <LayersPanel controller={controller} />
+            </div>
+          )}
+
+          {/* TAB: PAINT */}
+          {activeTab === 'paint' && (
+            <div className="flex flex-col gap-3 text-xs">
+              <span className="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">Paint</span>
+              <BrushOptionsBar controller={controller} />
+              {paintError && (
+                <p role="alert" className="text-rose-400" data-testid="paint-error">
+                  {paintError}
+                </p>
+              )}
+              <div className="border-t border-slate-700/60 pt-3">
+                <LayersPanel controller={controller} />
+              </div>
             </div>
           )}
 

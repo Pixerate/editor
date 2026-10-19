@@ -7,3 +7,4 @@ export * from './AdjustmentLayersPanel';
 export * from './SelectionOptionsBar';
 export * from './RefineEdgePanel';
 export * from './LayersPanel';
+export * from './BrushOptionsBar';

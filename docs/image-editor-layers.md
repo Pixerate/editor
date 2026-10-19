@@ -332,6 +332,18 @@ Every other document, single-layer or not, renders through the tiled compositor.
 
 **Thumbnails** are point-sampled from the tiles (`getLayerThumbnail`) and cached per surface, not built from mip tiles, which do not exist yet.
 
+### Phase 3 (painting)
+
+**Ported subset.** The computed round tip (photocraft's measured Photoshop profile), spacing, pressure to size and opacity, simple exponential smoothing, and opacity-versus-flow build-up. Sampled tips, jitter, scattering, texture, dual brush, wet edges and 8-bit dithering are not ported. Strokes keep a `seed` field for replays, but v1 brushes have no jitter to seed.
+
+**Live strokes.** A `PaintStrokeSession` (from `beginStroke`) recomputes only the part of each tile that the new dabs touch, always from the tile as it was before the stroke, because coverage is cumulative. It hands the changed rectangles to the viewport through the controller's pending dirty list, which any other change resets to "everything". Exports and `compositePixels` therefore use their own compositors, so the viewport compositor's cache only ever holds the viewport's stack (the dirty-rectangle path relies on that).
+
+**Benchmarks with the real stroke engine** (same machine and document as phase 1, a 100 px brush at hardness 0.5, three coalesced samples 4 px apart per pointer event): 5.3 ms median (6.7 ms p95) per event with tone-curve adjustments above the painted layer, and 8.9 ms (10.8 ms p95) with Vibrance and Hue/Saturation above it. Committing the stroke takes 1 to 2 ms.
+
+**Eraser and masks.** On a mask, the brush paints the grey value of its colour, and the eraser paints the background colour (Photoshop's behaviour). On a transparency-locked layer, the eraser also paints the background colour. Fill and Clear follow the same rules. Painting the Background drops its `source: 'document'` flag, so the document is then saved as v3 with the Background as an asset.
+
+**Paint state.** The brush settings and foreground / background colours are view state on the editor state (`state.paint`, `setPaintOptions`). They are not recorded in history or saved, as in Photoshop.
+
 ## Decisions
 
 1. **Base sliders, blur and depth mask** are handled as photocraft handles them: as filters and masks on layers, not a document-level step. See [Document model](#document-model).

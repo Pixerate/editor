@@ -22,12 +22,16 @@
     readAdjustmentControls,
     DEFAULT_SELECTION_TOOL_OPTIONS,
     SelectionGesture,
+    PaintGesture,
+    handlePaintShortcut,
+    pointerPressure,
     type SelectionToolOptions,
   } from '@pixerate/editor/image-editor';
   import ControlSlider from './ControlSlider.svelte';
   import Histogram from './Histogram.svelte';
   import AdjustmentLayersPanel from './AdjustmentLayersPanel.svelte';
   import LayersPanel from './LayersPanel.svelte';
+  import BrushOptionsBar from './BrushOptionsBar.svelte';
   import SelectionOptionsBar from './SelectionOptionsBar.svelte';
   import RefineEdgePanel from './RefineEdgePanel.svelte';
   import { onDestroy, untrack } from 'svelte';
@@ -66,11 +70,15 @@
 
   let canvasEl = $state<HTMLCanvasElement | null>(null);
   let containerEl = $state<HTMLDivElement | null>(null);
-  let activeTab = $state<'crop' | 'adjust' | 'layers' | 'select' | 'annotate' | 'depth' | 'ai'>('crop');
+  let activeTab = $state<'crop' | 'adjust' | 'layers' | 'paint' | 'select' | 'annotate' | 'depth' | 'ai'>('crop');
 
   // Selection tools (magic wand, marquees, lasso): options bar state and the pointer gesture.
   let selectionOptions = $state<SelectionToolOptions>({ ...DEFAULT_SELECTION_TOOL_OPTIONS });
   const selectionGesture = $derived(new SelectionGesture(editor.controller, () => selectionOptions));
+  // Paint tools (Move, Brush, Eraser): the pointer gesture and the brush cursor.
+  const paintGesture = $derived(new PaintGesture(editor.controller));
+  let brushCursor: ImagePoint | null = null;
+  let paintError = $state<string | null>(null);
   let selectionDraft = $state.raw<ImagePoint[] | null>(null);
   let selectionError = $state<string | null>(null);
   let activeCropRatio = $state<number | null>(null);
@@ -200,8 +208,58 @@
       draftAnnotation: overrideAnnotation !== undefined ? overrideAnnotation : draftAnnotation,
       draftCrop: overrideCrop !== undefined ? overrideCrop : draftCrop,
       draftSelectionPath: selectionDraft,
+      brushCursor:
+        activeTab === 'paint' && brushCursor && editor.controller.getState().activeTool !== 'move'
+          ? { ...brushCursor, diameter: editor.controller.getState().paint.brush.size }
+          : null,
     });
   }
+
+  // Paint tools: pointer events (coalesced samples, pointer capture) into strokes and moves.
+  function paintSamples(e: PointerEvent) {
+    const events = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : [];
+    const list = events.length ? events : [e];
+    const rect = canvasEl!.getBoundingClientRect();
+    const sx = rect.width > 0 ? canvasEl!.width / rect.width : 1;
+    const sy = rect.height > 0 ? canvasEl!.height / rect.height : 1;
+    const s = editor.controller.getState();
+    return list.map((ev) => ({
+      ...canvasToImagePoint({ x: (ev.clientX - rect.left) * sx, y: (ev.clientY - rect.top) * sy }, s, canvasEl!.width, canvasEl!.height, false),
+      pressure: pointerPressure(ev),
+    }));
+  }
+  function handlePaintPointerDown(e: PointerEvent) {
+    if (activeTab !== 'paint' || e.button !== 0 || !canvasEl) return;
+    e.preventDefault();
+    try {
+      canvasEl.setPointerCapture?.(e.pointerId);
+    } catch {
+      // Synthetic events have no active pointer to capture.
+    }
+    paintError = paintGesture.down(paintSamples(e)[0]);
+  }
+  function handlePaintPointerMove(e: PointerEvent) {
+    if (activeTab !== 'paint' || !canvasEl) return;
+    const samples = paintSamples(e);
+    brushCursor = samples[samples.length - 1] ?? null;
+    if (paintGesture.active) paintGesture.moveTo(samples);
+    else void renderCanvas();
+  }
+  function handlePaintPointerUp() {
+    if (activeTab !== 'paint' || !paintGesture.active) return;
+    paintGesture.up();
+    if (paintGesture.error) paintError = paintGesture.error;
+  }
+
+  $effect(() => {
+    if (activeTab !== 'paint' || typeof window === 'undefined') return;
+    const c = editor.controller;
+    const onKey = (e: KeyboardEvent) => {
+      if (handlePaintShortcut(c, e)) e.preventDefault();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
 
   $effect(() => {
     // Re-render when editor state or activeTab changes
@@ -675,6 +733,18 @@
       <button
         type="button"
         onclick={() => {
+          activeTab = 'paint';
+          editor.setTool('brush');
+        }}
+        class="px-3 py-1.5 rounded-md font-medium transition-colors {activeTab === 'paint'
+          ? 'bg-indigo-600 text-white shadow'
+          : 'text-slate-400 hover:text-slate-200'}"
+      >
+        Paint
+      </button>
+      <button
+        type="button"
+        onclick={() => {
           activeTab = 'select';
           editor.setTool('select');
         }}
@@ -811,7 +881,12 @@
         onmousemove={handleMouseMove}
         onmouseup={handleMouseUp}
         onmouseleave={handleMouseUp}
-        class="absolute inset-0 w-full h-full block"
+        onpointerdown={handlePaintPointerDown}
+        onpointermove={handlePaintPointerMove}
+        onpointerup={handlePaintPointerUp}
+        onpointercancel={() => paintGesture.cancel()}
+        data-testid="image-editor-canvas"
+        class="absolute inset-0 w-full h-full block {activeTab === 'paint' ? 'touch-none cursor-crosshair' : ''}"
       ></canvas>
     </div>
 
@@ -995,6 +1070,19 @@
         <div class="flex flex-col gap-3 text-xs">
           <span class="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">Layers</span>
           <LayersPanel controller={editor.controller} />
+        </div>
+      {/if}
+
+      {#if activeTab === 'paint'}
+        <div class="flex flex-col gap-3 text-xs">
+          <span class="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">Paint</span>
+          <BrushOptionsBar controller={editor.controller} />
+          {#if paintError}
+            <p role="alert" class="text-rose-400" data-testid="paint-error">{paintError}</p>
+          {/if}
+          <div class="border-t border-slate-700/60 pt-3">
+            <LayersPanel controller={editor.controller} />
+          </div>
         </div>
       {/if}
 

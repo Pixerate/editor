@@ -21,6 +21,24 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/image-editor] Dirty Rectangles Are Only Safe on a Compositor That Sees One Stack
+
+- **Issue / Symptom**: A design to recomposite only the dabs' rectangles during a stroke could leave stale pixels when the same compositor had meanwhile composited a different layer list (an export of chosen layers, `compositePixels`, a merge).
+- **Root Cause**: The partial path copies the tile's previous result outside the dirty rectangle. That is only correct when the previous result was computed from the same stack, differing just inside the rectangle.
+- **Solution / Workaround**: The viewport has its own `LayerCompositor`, and exports, `compositePixels`, merges and sampling use others. The controller's `pendingDirty` collects stroke rectangles and resets to `'all'` on any other change, so a render after, say, an opacity change never takes the partial path.
+
+### [core/image-editor] A Stroke Must Recomposite From the Pre-Stroke Tile, Not the Last Live One
+
+- **Issue / Symptom**: Compositing each new batch of dabs over the stroke's previous live result would paint overlaps twice, so strokes would go darker than their opacity.
+- **Root Cause**: Stroke coverage is cumulative (build-up towards the opacity ceiling), and the stroke composites once at the stroke opacity. Compositing the coverage over pixels that already hold part of the stroke applies it again.
+- **Solution / Workaround**: `PaintStrokeSession` keeps the pre-stroke surface. For each touched region it copies the pre-stroke pixels back into the live tile and composites the whole coverage there (`applyStrokeToTile` with `into` and `region`).
+
+### [react|svelte/image-editor] Mice Report Pressure 0.5
+
+- **Issue / Symptom**: Strokes drawn with a mouse would come out at half size with "pressure controls size" on.
+- **Root Cause**: Pointer Events report `pressure` 0.5 for a pressed mouse button (and 0 for a pen on `pointerup`).
+- **Solution / Workaround**: `pointerPressure` uses the reported pressure only for `pointerType === 'pen'` with a value above 0, and 1 otherwise.
+
 ### [core/image-editor] Merge Down Only Looks the Same Over an Opaque, 100 % Normal Lower Layer
 
 - **Issue / Symptom**: Tests that expected Merge Down to leave the image unchanged failed: with a faded lower layer, or a Screen layer above a lower layer with transparent areas, the merged result looked different.

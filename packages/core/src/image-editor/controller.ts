@@ -103,6 +103,11 @@ import {
   writeRegion,
   type PixelSurface,
   type Tile,
+  type TiledSurface,
+  type TileKey,
+  TiledSurface as TiledSurfaceClass,
+  finishTile,
+  tileKey,
 } from './layers/surface';
 import {
   LayerOperationError,
@@ -127,6 +132,16 @@ import {
   type LayerProperties,
 } from './layers/ops';
 import { coveringRect } from './layers/render';
+import {
+  CoverageMap,
+  DEFAULT_BRUSH,
+  StrokeCoverage,
+  applyStrokeToTile,
+  normalizeBrush,
+  type BrushSettings,
+  type StrokeApply,
+  type StrokePoint,
+} from './layers/paint';
 import { base64ToBytes, bytesToBase64, decodePng, isPng, parseDataUrl } from './layers/png';
 import { getAnnotationBounds } from './geometry';
 
@@ -185,6 +200,173 @@ export interface PixelLayerInit extends LayerPlacement {
   opacity?: number;
   fillOpacity?: number;
   blend?: BlendMode;
+}
+
+/** The paint tools' options (view state). */
+export interface PaintOptions {
+  brush: BrushSettings;
+  /** `#rrggbb`: what the brush and Fill paint. */
+  foreground: string;
+  /** `#rrggbb`: what the eraser paints on transparency-locked layers and masks. */
+  background: string;
+}
+
+/** A stroke: tool, target (default the active layer and target) and brush / colour overrides. */
+export interface StrokeInit {
+  tool?: 'brush' | 'eraser';
+  layerId?: string;
+  channel?: LayerTarget;
+  /** Overrides of the paint options' brush. */
+  brush?: Partial<BrushSettings>;
+  /** Paint colour (default the foreground). Masks take its grey value. */
+  color?: string | number[];
+  /** Eraser colour on locked transparency / masks (default the background). */
+  background?: string | number[];
+  /** Kept with the stroke for replays (v1 brushes have no jitter). */
+  seed?: number;
+}
+
+export interface FillOptions {
+  layerId?: string;
+  channel?: LayerTarget;
+  /** Default the foreground colour. */
+  color?: string | number[];
+  /** 0..1 (default 1). */
+  opacity?: number;
+  blend?: BlendMode;
+  /** Limit to the selection when there is one (default true). */
+  useSelection?: boolean;
+}
+
+/** What a stroke, fill or clear changed. */
+export interface PaintStrokeResult {
+  layerId: string;
+  channel: LayerTarget;
+  /** Document rectangle that changed (null when nothing did). */
+  bounds: CropBox | null;
+  dabs: number;
+}
+
+/** An opaque pre-stroke history snapshot. */
+export type HistoryEntryHandle = { readonly __historyEntry: unique symbol };
+
+/** Composites `coverage` into the tiles of `base` under `rects` (document space), returning the new surface. */
+function paintCoverageInto(base: TiledSurface, coverage: CoverageMap, apply: StrokeApply, rects: CropBox[]): TiledSurface {
+  const tiles = new Map(base.tiles);
+  const done = new Set<TileKey>();
+  for (const r of rects) {
+    for (const t of tilesInRect({ x: r.x - apply.offset.x, y: r.y - apply.offset.y, width: r.width, height: r.height })) {
+      const key = tileKey(t.tx, t.ty);
+      if (done.has(key)) continue;
+      done.add(key);
+      const src = base.tiles.get(key)?.data ?? defaultTile(base);
+      const data = applyStrokeToTile(coverage, src, base.channels, t.tx, t.ty, apply);
+      const tile = finishTile(data, base.channels, base.defaultValue);
+      if (tile) tiles.set(key, tile);
+      else tiles.delete(key);
+    }
+  }
+  return new TiledSurfaceClass(base.channels, tiles, base.defaultValue);
+}
+
+function defaultTile(s: TiledSurface): Uint8ClampedArray {
+  const d = new Uint8ClampedArray(TILE * TILE * s.channels);
+  if (s.defaultValue) d.fill(s.defaultValue);
+  return d;
+}
+
+/**
+ * A stroke in progress (see `beginStroke`): `push` input points as they arrive, then `end` (one
+ * undo step) or `cancel`.
+ */
+export class PaintStrokeSession {
+  private readonly before: HistoryEntryHandle;
+  private readonly base: TiledSurface;
+  private readonly live: Map<TileKey, Tile>;
+  private readonly touched = new Set<TileKey>();
+  private last: StrokePoint | null = null;
+  private closed = false;
+
+  constructor(
+    private readonly controller: ImageEditorController,
+    readonly target: { id: string; channel: LayerTarget; surface: TiledSurface },
+    private readonly stroke: StrokeCoverage,
+    private readonly apply: StrokeApply
+  ) {
+    this.before = controller._captureForStroke();
+    this.base = target.surface;
+    this.live = new Map(this.base.tiles);
+  }
+
+  get layerId(): string {
+    return this.target.id;
+  }
+
+  /** Adds input points (document pixels); the stack shows the stroke so far. */
+  push(points: readonly StrokePoint[]): void {
+    if (this.closed || !points.length) return;
+    this.last = points[points.length - 1];
+    this.update(this.stroke.push(points));
+  }
+
+  private update(rects: CropBox[]): void {
+    if (!rects.length) return;
+    const ch = this.base.channels;
+    // Per target tile, the union of the new dabs inside it: only that part is recomputed.
+    const regions = new Map<TileKey, { tx: number; ty: number; r: CropBox }>();
+    for (const r of rects) {
+      for (const t of tilesInRect({ x: r.x - this.apply.offset.x, y: r.y - this.apply.offset.y, width: r.width, height: r.height })) {
+        const key = tileKey(t.tx, t.ty);
+        const cur = regions.get(key);
+        regions.set(key, { tx: t.tx, ty: t.ty, r: cur ? unionRect(cur.r, r)! : r });
+      }
+    }
+    for (const [key, { tx, ty, r }] of regions) {
+      const src = this.base.tiles.get(key)?.data ?? defaultTile(this.base);
+      const prev = this.touched.has(key) ? this.live.get(key)?.data : undefined;
+      this.touched.add(key);
+      const data = applyStrokeToTile(this.stroke.coverage, src, ch, tx, ty, this.apply, prev ? { into: prev, region: r } : {});
+      this.live.set(key, { data, uniform: null });
+    }
+    this.controller._strokeUpdate(this.target.id, this.target.channel, new TiledSurfaceClass(ch, new Map(this.live), this.base.defaultValue), rects);
+  }
+
+  /** Finishes the stroke (one undo step) and returns what changed. */
+  end(): PaintStrokeResult {
+    if (this.closed) throw new LayerOperationError('This stroke has already ended.');
+    this.update(this.stroke.finish(this.last ?? undefined));
+    this.closed = true;
+    const ch = this.base.channels;
+    const tiles = new Map(this.base.tiles);
+    let changed = false;
+    for (const key of this.touched) {
+      const live = this.live.get(key)!;
+      const tile = finishTile(live.data, ch, this.base.defaultValue);
+      const prev = this.base.tiles.get(key);
+      if (tile) tiles.set(key, tile);
+      else tiles.delete(key);
+      if (!sameTile(prev, tile)) changed = true;
+    }
+    const surface = changed ? new TiledSurfaceClass(ch, tiles, this.base.defaultValue) : null;
+    this.controller._strokeCommit(this.before, this.target.id, this.target.channel, surface);
+    const b = this.stroke.coverage.bounds;
+    return { layerId: this.target.id, channel: this.target.channel, bounds: changed ? b : null, dabs: this.stroke.dabCount };
+  }
+
+  /** Abandons the stroke and restores the layer. */
+  cancel(): void {
+    if (this.closed) return;
+    this.closed = true;
+    this.controller._strokeCommit(this.before, this.target.id, this.target.channel, null);
+  }
+}
+
+function sameTile(a: Tile | undefined, b: Tile | null): boolean {
+  if (!a || !b) return !a && !b;
+  if (a === b) return true;
+  if (a.uniform !== null || b.uniform !== null) return a.uniform === b.uniform;
+  for (let i = 0; i < a.data.length; i++) if (a.data[i] !== b.data[i]) return false;
+  return true;
 }
 
 /** Where a new annotation goes. */
@@ -338,6 +520,7 @@ export class ImageEditorController {
   /** Decoded source pixels (the Background's surface), by the buffer or element they came from. */
   private sourceSurfaces = new WeakMap<object, PixelSurface>();
   private viewKey: unknown[] = [];
+  /** For `compositePixels` and mask evaluation (the renderer keeps its own for the viewport). */
   private compositor = new LayerCompositor();
 
   constructor(options: ImageEditorOptions = {}) {
@@ -348,7 +531,6 @@ export class ImageEditorController {
     this.renderer.onPreviewHistogram = (histogram) => {
       this.histogramListeners.forEach((l) => l(histogram));
     };
-    this.renderer.compositor = this.compositor;
     this.renderer.layerSources = {
       surfaceOf: (layer) => this.surfaceOf(layer),
       sourceIsOpaque: () => this.sourceIsOpaque(),
@@ -374,6 +556,7 @@ export class ImageEditorController {
       activeLayerId: null,
       activeTarget: 'pixels',
       outputOpacity: 1,
+      paint: { brush: { ...DEFAULT_BRUSH }, foreground: '#000000', background: '#ffffff' },
     };
 
     if (options.image instanceof Object && 'width' in options.image) {
@@ -474,7 +657,15 @@ export class ImageEditorController {
     };
   }
 
-  private notify(): void {
+  /**
+   * Where layer pixels changed since the last viewport render, when only strokes changed them
+   * (the renderer then recomposites just those rectangles); `'all'` after any other change.
+   */
+  private pendingDirty: CropBox[] | 'all' = 'all';
+
+  private notify(strokeRects?: CropBox[]): void {
+    if (strokeRects && this.pendingDirty !== 'all') this.pendingDirty.push(...strokeRects);
+    else if (!strokeRects) this.pendingDirty = 'all';
     this.syncViews();
     const currentState = { ...this.state };
     this.onStateChange?.(currentState);
@@ -1391,6 +1582,185 @@ export class ImageEditorController {
     return thumb;
   }
 
+  // --- Painting ---
+
+  /** Brush settings, colours and tool options of the paint tools (view state, no undo). */
+  public setPaintOptions(options: Partial<Omit<PaintOptions, 'brush'>> & { brush?: Partial<BrushSettings> }): PaintOptions {
+    const cur = this.state.paint;
+    const next: PaintOptions = {
+      brush: options.brush ? normalizeBrush({ ...cur.brush, ...options.brush }) : cur.brush,
+      foreground: options.foreground !== undefined ? toHex(parseColor(options.foreground)) : cur.foreground,
+      background: options.background !== undefined ? toHex(parseColor(options.background)) : cur.background,
+    };
+    this.state.paint = next;
+    this.notify();
+    return next;
+  }
+
+  /** D: black foreground, white background. */
+  public resetPaintColors(): void {
+    this.setPaintOptions({ foreground: '#000000', background: '#ffffff' });
+  }
+
+  /** X: swaps the foreground and background colours. */
+  public swapPaintColors(): void {
+    const { foreground, background } = this.state.paint;
+    this.setPaintOptions({ foreground: background, background: foreground });
+  }
+
+  /** Resolves and validates what a stroke, fill or clear paints into. */
+  private paintTarget(layerId: string | undefined, channel: LayerTarget | undefined, action: string) {
+    const id = layerId ?? this.state.activeLayerId;
+    if (!id) throw new LayerOperationError(`No layer given and none is active; pass layerId (see list_layers) to ${action}.`);
+    const layer = requireLayer(this.state.layers, id).layer;
+    const ch: LayerTarget = channel ?? (id === this.state.activeLayerId ? this.state.activeTarget : 'pixels');
+    if (ch === 'mask') {
+      if (!layer.mask) throw new LayerOperationError(`Layer "${layer.name || id}" has no mask to ${action}; add one with add_layer_mask, or target pixels.`);
+      if (layer.mask.source) throw new LayerOperationError(`Layer "${layer.name || id}" has a depth mask, which is generated, not painted.`);
+      requireUnlocked(layer, 'all', action);
+    } else {
+      if (layer.type !== 'pixel') throw new LayerOperationError(`Layer "${layer.name || id}" is a ${layer.type} layer; ${action} on a pixel layer, or on this layer's mask (channel mask).`);
+      requireUnlocked(layer, 'pixels', action);
+    }
+    if (!layer.visible) throw new LayerOperationError(`Layer "${layer.name || id}" is hidden; show it before you ${action}.`);
+    const offset = layer.type === 'pixel' ? layer.offset : { x: 0, y: 0 };
+    const surface = ch === 'mask' ? layer.mask!.surface : this.surfaceOf(layer as PixelLayer);
+    const lockTransparency = ch === 'pixels' && Boolean(layer.locks?.transparency);
+    return { id, layer, channel: ch, offset, surface, lockTransparency };
+  }
+
+  /** The layer with its pixels (or mask) replaced by `surface`. */
+  private withSurface(layer: ImageLayer, channel: LayerTarget, surface: TiledSurface): ImageLayer {
+    if (channel === 'mask') return { ...layer, mask: { ...layer.mask!, surface } } as ImageLayer;
+    const next = { ...(layer as PixelLayer), surface };
+    delete next.source;
+    return next;
+  }
+
+  /**
+   * Starts a brush or eraser stroke on a layer's pixels or mask (default: the active layer and
+   * target, the paint options' brush and colours). Feed points with `push`, finish with `end()`
+   * (one undo step for the whole stroke) or `cancel()`. While it runs, the stack shows the stroke
+   * without recording history.
+   */
+  public beginStroke(init: StrokeInit = {}): PaintStrokeSession {
+    const tool = init.tool ?? 'brush';
+    const target = this.paintTarget(init.layerId, init.channel, tool === 'eraser' ? 'erase' : 'paint');
+    const brush = normalizeBrush({ ...this.state.paint.brush, ...(init.brush ?? {}) });
+    const color = parseColor(init.color ?? this.state.paint.foreground);
+    const background = parseColor(init.background ?? this.state.paint.background);
+    const toMaskGrey = (c: [number, number, number, number]) => {
+      const g = Math.round(0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]);
+      return [g, g, g, 255] as [number, number, number, number];
+    };
+    const apply: StrokeApply = {
+      mode: tool === 'eraser' ? 'erase' : 'paint',
+      color: target.channel === 'mask' ? toMaskGrey(color) : color,
+      background: target.channel === 'mask' ? toMaskGrey(background) : background,
+      opacity: brush.opacity,
+      blend: target.channel === 'mask' ? 'normal' : brush.blend,
+      lockTransparency: target.lockTransparency,
+      selection: this.state.selection?.bounds ? this.state.selection : null,
+      offset: target.offset,
+    };
+    return new PaintStrokeSession(this, target, new StrokeCoverage(brush), apply);
+  }
+
+  /** @internal Shows a stroke's live surface (no history). */
+  public _strokeUpdate(layerId: string, channel: LayerTarget, surface: TiledSurface, rects: CropBox[]): void {
+    this.state.layers = mapLayer(this.state.layers, layerId, (l) => this.withSurface(l, channel, surface));
+    this.notify(rects);
+  }
+
+  /** @internal Commits a finished stroke as one undo step (`before` is the pre-stroke state). */
+  public _strokeCommit(before: HistoryEntryHandle, layerId: string, channel: LayerTarget, surface: TiledSurface | null): void {
+    if (surface) this.state.layers = mapLayer(this.state.layers, layerId, (l) => this.withSurface(l, channel, surface));
+    else this.state.layers = (before as unknown as HistoryEntry).layers;
+    if (surface && !this.isApplyingHistory) {
+      this.undoStack.push(before as unknown as HistoryEntry);
+      if (this.undoStack.length > this.maxHistoryDepth) this.undoStack.shift();
+      this.redoStack = [];
+      this.trimHistoryBytes();
+    }
+    this.notify();
+  }
+
+  /** @internal The pre-stroke snapshot. */
+  public _captureForStroke(): HistoryEntryHandle {
+    return this.captureHistoryEntry() as unknown as HistoryEntryHandle;
+  }
+
+  /**
+   * Paints a whole stroke in one call (agents, replays): `points` in document pixels with optional
+   * pressure, through the brush or eraser. One undo step. Returns the layer, channel, the changed
+   * document bounds and the number of dabs.
+   */
+  public paintStroke(init: StrokeInit & { points: StrokePoint[] }): PaintStrokeResult {
+    if (!Array.isArray(init.points) || !init.points.length) throw new LayerOperationError('points must hold at least one { x, y } point.');
+    for (const p of init.points) {
+      if (!Number.isFinite(p?.x) || !Number.isFinite(p?.y)) throw new LayerOperationError('Every point needs finite x and y (document pixels).');
+    }
+    const session = this.beginStroke(init);
+    session.push(init.points);
+    return session.end();
+  }
+
+  /**
+   * Edit › Fill: fills the selection (or, without one or with `useSelection: false`, the whole
+   * canvas) on a layer's pixels or mask with a colour (default the foreground), at `opacity` with
+   * `blend`. One undo step. Returns the changed bounds.
+   */
+  public fillPixels(options: FillOptions = {}): PaintStrokeResult {
+    return this.fillOrClear(options, 'paint');
+  }
+
+  /**
+   * Edit › Clear: removes the selected pixels (alpha to 0; on a transparency-locked layer or a mask
+   * it fills with the background colour). Without a selection (or with `useSelection: false`) the
+   * whole canvas. One undo step. Returns the changed bounds.
+   */
+  public clearPixels(options: Omit<FillOptions, 'color' | 'blend'> = {}): PaintStrokeResult {
+    return this.fillOrClear(options, 'erase');
+  }
+
+  private fillOrClear(options: FillOptions, mode: 'paint' | 'erase'): PaintStrokeResult {
+    const target = this.paintTarget(options.layerId, options.channel, mode === 'paint' ? 'fill' : 'clear');
+    const { width, height } = this.naturalSize;
+    const opacity = options.opacity ?? 1;
+    if (!(opacity >= 0 && opacity <= 1)) throw new LayerOperationError('opacity must be from 0 to 1.');
+    const blend = (parseBlend(options.blend) as BlendMode | undefined) ?? 'normal';
+    const sel = options.useSelection !== false && this.state.selection?.bounds ? this.state.selection : null;
+    const region = sel?.bounds ?? { x: 0, y: 0, width, height };
+    const coverage = new CoverageMap();
+    const ones = new Float32Array(region.width * region.height);
+    if (sel) {
+      for (let y = 0; y < region.height; y++) {
+        for (let x = 0; x < region.width; x++) ones[y * region.width + x] = sel.data[(region.y + y) * sel.width + region.x + x] / 255;
+      }
+    } else ones.fill(1);
+    coverage.accumulate(region, ones, 1);
+    const color = parseColor(options.color ?? this.state.paint.foreground);
+    const background = parseColor(this.state.paint.background);
+    const grey = (c: [number, number, number, number]) => {
+      const g = Math.round(0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]);
+      return [g, g, g, 255] as [number, number, number, number];
+    };
+    const apply: StrokeApply = {
+      mode,
+      color: target.channel === 'mask' ? grey(color) : color,
+      background: target.channel === 'mask' ? grey(background) : background,
+      opacity,
+      blend: target.channel === 'mask' ? 'normal' : blend,
+      lockTransparency: target.lockTransparency,
+      selection: null,
+      offset: target.offset,
+    };
+    const surface = paintCoverageInto(target.surface, coverage, apply, [region]);
+    const next = mapLayer(this.state.layers, target.id, (l) => this.withSurface(l, target.channel, surface));
+    this.commitLayers(next);
+    return { layerId: target.id, channel: target.channel, bounds: region, dabs: 0 };
+  }
+
   // --- Adjustments ---
 
   /** The pixel layer the base sliders edit: the active pixel layer, else the Background. */
@@ -2093,8 +2463,14 @@ export class ImageEditorController {
     const source = this.imageElement || this.state.sourceUrl;
     if (!source) return;
     this.syncViews();
+    const dirty = this.pendingDirty;
+    this.pendingDirty = [];
     try {
-      await this.renderer.renderToCanvas(targetCanvas, source, this.state, options);
+      await this.renderer.renderToCanvas(targetCanvas, source, this.state, {
+        ...options,
+        dirty: dirty === 'all' ? undefined : dirty,
+        checkpointLayerId: this.state.activeLayerId,
+      });
     } catch {
       // In non-DOM or test mock environments without image loading, safely ignore
     }
@@ -2546,6 +2922,11 @@ export function parseColor(value: string | number[]): [number, number, number, n
   if (hex.length === 3) hex = hex.split('').map((c) => c + c).join('');
   const n = (i: number) => parseInt(hex.slice(i, i + 2), 16);
   return [n(0), n(2), n(4), hex.length === 8 ? n(6) : 255];
+}
+
+/** `#rrggbb` of RGBA bytes (alpha dropped). */
+export function toHex(c: readonly number[]): string {
+  return '#' + [c[0], c[1], c[2]].map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
 }
 
 /** `null` for an empty selection, so "nothing selected" has one representation. */

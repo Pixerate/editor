@@ -1,6 +1,6 @@
 ---
 name: pixerate-image-editor
-description: How to colour-correct, composite and retouch a photo in the Pixerate image editor through its agent tools - layers (pixel, adjustment, group and annotation layers with masks, clipping, blend modes, opacity and fill; merge, flatten, layer via copy, develop and blur filters), base adjustments (exposure, contrast, white balance temperature and tint, saturation, blur), non-destructive adjustment layers (curves, levels, hue/saturation, vibrance, color balance, black and white, photo filter, invert, posterize, threshold) with blend modes and opacity, selections (rectangle, ellipse, magic wand, color range, grow, shrink, feather, refine edge) and layer masks, crop, rotate and flip, undo, reading the histogram for clipping, and rendering a PNG preview to check the result. Use when asked to edit, grade, correct, brighten, warm up, desaturate, crop, straighten or mask an image, or when get_adjustments, set_adjustments, add_adjustment_layer, list_layers, add_pixel_layer, select_by_color or render_preview are available.
+description: How to colour-correct, composite and retouch a photo in the Pixerate image editor through its agent tools - layers (pixel, adjustment, group and annotation layers with masks, clipping, blend modes, opacity and fill; merge, flatten, layer via copy, develop and blur filters), base adjustments (exposure, contrast, white balance temperature and tint, saturation, blur), non-destructive adjustment layers (curves, levels, hue/saturation, vibrance, color balance, black and white, photo filter, invert, posterize, threshold) with blend modes and opacity, selections (rectangle, ellipse, magic wand, color range, grow, shrink, feather, refine edge) and layer masks, crop, rotate and flip, undo, reading the histogram for clipping, and rendering a PNG preview to check the result. Use when asked to edit, grade, correct, brighten, warm up, desaturate, crop, straighten or mask an image, or when get_adjustments, set_adjustments, add_adjustment_layer, list_layers, paint_stroke, select_by_color or render_preview are available.
 ---
 
 # Image editor
@@ -65,6 +65,20 @@ batching.
    `offset_layer`.
 5. **Bake only when asked** (`merge_down`, `merge_visible`, `flatten_image`, `apply_layer_mask`):
    they are destructive. `render_preview` with `layerId` shows one layer alone.
+
+### Painting
+
+1. **Paint on its own layer** (`add_pixel_layer`), never on the Background, unless asked: a
+   layer can be faded, masked, blended or deleted later. Painting the Background bakes it.
+2. **Retouch through masks**: to hide part of a layer, add a mask and paint black on it
+   (`paint_stroke` with `channel: "mask"`, `color: "#000000"`); paint white to bring it back.
+   A soft brush (`hardness` 0..0.3) gives soft transitions.
+3. **One stroke is one call and one undo step.** Send the path's points in order (a few points
+   per brush diameter is enough; dabs are spaced by `brush.spacing`). Use `opacity` for the
+   overall strength and `flow` for gradual build-up within the stroke.
+4. **Limit paint with a selection** (select first, then `paint_stroke` / `fill_pixels`), or lock
+   transparency (`set_layer_properties` `locks.transparency`) to paint only where the layer
+   already has pixels.
 
 ## Best practices
 
@@ -160,6 +174,9 @@ batching.
 | `add_layer_filter` | Add a live `develop` (brightness … tint) or `blur` (`radius`) filter to a pixel layer; one of each kind. Returns the filters with ids. |
 | `update_layer_filter` | Change a filter's values (`filterId` from `list_layers`). Returns the filters. |
 | `remove_layer_filter` | Remove a filter. Returns the remaining filters. |
+| `paint_stroke` | Paint (`tool` brush) or erase (`tool` eraser) along `points` in document px (optional `pressure` 0..1) on a pixel layer or its mask (`channel`); `color` #rrggbb (on a mask: black hides, white reveals); `brush` `{size, hardness, spacing, angle, roundness, opacity, flow, smoothing, pressureSize, pressureOpacity, blend}`. The selection limits the paint. One undo step per call. Returns the layer, channel, changed `bounds` and dab count. |
+| `fill_pixels` | Fill the selection (or the canvas without one / with `useSelection: false`) on pixels or a mask with `color`, `opacity`, `blend`. Returns the changed bounds. |
+| `clear_pixels` | Remove the selected pixels (alpha to 0; a transparency-locked layer or a mask gets the background colour). Returns the changed bounds. |
 | `apply_selection_as_mask` | Mask a layer with the current selection: pass `layerId` to mask an existing layer, or `kind` (plus optional `params`) to create a new masked layer in one step. `density` 0..1 and `feather` px soften the mask non-destructively. Returns `layerId`, kind, mask info and the selection summary. |
 
 ## Pitfalls
@@ -171,6 +188,9 @@ batching.
   `locks` only when the user wants that layer changed.
 - `merge_down`, `merge_visible` and `flatten_image` merge annotation layers only in a browser
   (they need a canvas); elsewhere they fail and say so.
+- `paint_stroke`, `fill_pixels` and `clear_pixels` need a visible pixel layer (or a layer with a
+  raster mask and `channel: "mask"`); adjustment, group and annotation layers can only be
+  painted through their masks. A layer with `locks.pixels` refuses paint.
 - `get_histogram` describes the last render, not the current state: render after edits, then
   read it.
 - Crop coordinates are always in the un-rotated source; after `set_rotation` the output size

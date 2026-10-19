@@ -64,6 +64,12 @@ export interface RenderOptions {
   antsOffset?: number;
   /** A selection being drawn (e.g. a lasso), shown as a dashed outline in natural pixels. */
   draftSelectionPath?: ImagePoint[] | null;
+  /** Document rectangles that are the only change since the last render (strokes); recomposites only there. */
+  dirty?: CropBox[];
+  /** The layer being edited: tiles keep a checkpoint below it so strokes and drags on it start there. */
+  checkpointLayerId?: string | null;
+  /** The paint tools' cursor: a circle of `diameter` px at (`x`, `y`) in natural pixels. */
+  brushCursor?: { x: number; y: number; diameter: number } | null;
 }
 
 /**
@@ -143,8 +149,12 @@ export class ImageEditorRenderer {
   public onPreviewHistogram?: (histogram: ImageHistogram | null) => void;
   private sourceIds = new WeakMap<object, number>();
   private nextSourceId = 0;
-  /** The layer compositor (shared with the controller so both use one tile cache). */
+  /**
+   * The viewport's compositor. It only ever composites the viewport's stack, so its tile cache can
+   * trust dirty rectangles; exports use `exportCompositor`.
+   */
   public compositor = new LayerCompositor();
+  private exportCompositor = new LayerCompositor({ maxCacheBytes: 64 * 1024 * 1024 });
   /** How the host resolves layer pixels (set by the controller). */
   public layerSources?: LayerSourcesHost;
   /**
@@ -268,7 +278,7 @@ export class ImageEditorRenderer {
       const split = splitOverlayAnnotations(state.layers);
       overlay = split.overlay.map((l) => l.annotation);
       await this.prepareLayerAssets(split.composite, naturalWidth, naturalHeight);
-      const comp = this.updateComposite(split.composite, region, naturalWidth, naturalHeight);
+      const comp = this.updateComposite(split.composite, region, naturalWidth, naturalHeight, options);
       const base = this.layeredBase(comp, state, region, transform);
       if (base) {
         // Drawn exactly as the legacy base canvas is, so both paths look the same at any zoom.
@@ -322,6 +332,27 @@ export class ImageEditorRenderer {
         if (options.draftSelectionPath?.length) this.drawDraftPath(ctx, options.draftSelectionPath, projection.scale);
       } catch {
         // Overlays are best effort (headless / mocked contexts).
+      }
+      ctx.restore();
+    }
+
+    // Brush cursor: the tip outline, one screen pixel wide, white over black.
+    if (options.brushCursor) {
+      const b = options.brushCursor;
+      ctx.save();
+      try {
+        applyImageProjectionToContext(ctx, projection);
+        const px = 1 / (projection.scale || 1);
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, Math.max(px, b.diameter / 2), 0, Math.PI * 2);
+        ctx.lineWidth = 2 * px;
+        ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+        ctx.stroke();
+        ctx.lineWidth = px;
+        ctx.strokeStyle = '#ffffff';
+        ctx.stroke();
+      } catch {
+        // Best effort (headless / mocked contexts).
       }
       ctx.restore();
     }
@@ -530,12 +561,20 @@ export class ImageEditorRenderer {
    * Brings the viewport's composite canvas (document space, covering `region`) up to date,
    * uploading only the tiles that changed since the last render.
    */
-  private updateComposite(layers: readonly ImageLayer[], region: CropBox, width: number, height: number): CompositeCanvas | null {
+  private updateComposite(
+    layers: readonly ImageLayer[],
+    region: CropBox,
+    width: number,
+    height: number,
+    options: Pick<RenderOptions, 'dirty' | 'checkpointLayerId'> = {}
+  ): CompositeCanvas | null {
     const rect = coveringRect(region);
     let comp = this.comp;
+    let fresh = false;
     if (!comp || comp.rect.x !== rect.x || comp.rect.y !== rect.y || comp.rect.width !== rect.width || comp.rect.height !== rect.height) {
       const canvas = this.createCanvas(rect.width, rect.height);
       comp = this.comp = new CompositeCanvas(canvas, rect);
+      fresh = true;
     }
     const ctx = comp.canvas.getContext('2d');
     if (!ctx || typeof ctx.createImageData !== 'function') return null;
@@ -547,7 +586,7 @@ export class ImageEditorRenderer {
       comp!.histograms.delete(key);
       this.putTile(ctx, data, tx, ty, rect);
       changed = true;
-    });
+    }, { checkpointLayerId: options.checkpointLayerId, dirty: fresh ? undefined : options.dirty });
     if (changed) comp.version++;
     comp.region = region;
     return comp;
@@ -1050,7 +1089,7 @@ export class ImageEditorRenderer {
       const comp = this.createCanvas(rect.width, rect.height);
       const cctx = comp.getContext('2d');
       if (cctx && typeof cctx.createImageData === 'function') {
-        this.compositor.compositeTiles(split.composite, rect, this.compositorSources(naturalWidth, naturalHeight), (tx, ty, data) => {
+        this.exportCompositor.compositeTiles(split.composite, rect, this.compositorSources(naturalWidth, naturalHeight), (tx, ty, data) => {
           this.putTile(cctx, data, tx, ty, rect);
         });
       }

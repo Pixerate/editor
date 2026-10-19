@@ -7,6 +7,7 @@ import type ControlSliderComponent from "./ControlSlider.svelte";
 import type SelectionOptionsBarComponent from "./SelectionOptionsBar.svelte";
 import type RefineEdgePanelComponent from "./RefineEdgePanel.svelte";
 import type LayersPanelComponent from "./LayersPanel.svelte";
+import type BrushOptionsBarComponent from "./BrushOptionsBar.svelte";
 
 export { default as ImageEditor } from './ImageEditor.svelte';
 export { default as Histogram } from './Histogram.svelte';
@@ -16,6 +17,7 @@ export { default as ControlSlider } from './ControlSlider.svelte';
 export { default as SelectionOptionsBar } from './SelectionOptionsBar.svelte';
 export { default as RefineEdgePanel } from './RefineEdgePanel.svelte';
 export { default as LayersPanel } from './LayersPanel.svelte';
+export { default as BrushOptionsBar } from './BrushOptionsBar.svelte';
 export * from './imageEditorState.svelte.js';
 
 export type ImageEditorProps = ComponentProps<typeof ImageEditorComponent>;
@@ -26,6 +28,7 @@ export type ControlSliderProps = ComponentProps<typeof ControlSliderComponent>;
 export type SelectionOptionsBarProps = ComponentProps<typeof SelectionOptionsBarComponent>;
 export type RefineEdgePanelProps = ComponentProps<typeof RefineEdgePanelComponent>;
 export type LayersPanelProps = ComponentProps<typeof LayersPanelComponent>;
+export type BrushOptionsBarProps = ComponentProps<typeof BrushOptionsBarComponent>;
 
 export {
 	applyRegionMosaic,
