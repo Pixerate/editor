@@ -12,3 +12,5 @@ export * from './registry.js';
 export * from './definitions.js';
 export * from './mcp-server.js';
 export * from './bridge-client.js';
+export * from './capture.js';
+export * from './dom-capture.js';

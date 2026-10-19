@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/tools] `capture_view` Screenshots Miss Web Fonts, Pseudo-Elements and Cross-Origin Images
+
+- **Issue / Symptom**: A canvas or DOM screenshot from `rasterizeElement` (used by `createCanvasCaptureToolProvider` and `createElementCaptureSurface`) shows text in a fallback font, leaves out `::before` / `::after` content, draws some images blank, or fails with "the canvas is tainted".
+- **Root Cause**: The element is cloned with its computed styles inlined and drawn as an SVG `<foreignObject>` image. An SVG used as an image cannot load anything external, so web fonts and `<img>` URLs are not fetched; same-origin images are copied in as data URLs, cross-origin ones cannot be read. Pseudo-elements are not part of the DOM, so they are not cloned. Safari has tainted canvases that drew a `foreignObject`.
+- **Solution / Workaround**: For pixel-exact output, pass `rasterize` to the surface options and use a library such as html-to-image (it embeds fonts) or a server-side renderer. Mark UI that should never show with `data-capture="exclude"` and transient overlays with `data-capture="overlay"`. Non-viewport canvas regions re-frame the xyflow viewport transform and remove everything outside it (the background pattern and screen-space layers follow the live viewport, so they would be misplaced).
+
 ### [core/video-editor] A Ripple Is Refused Because of a Music Bed or Title on Another Track
 
 - **Issue / Symptom**: `delete_clips` / `trim_clip` with `ripple`, or `extract_range`, fails with "Rippling out … would pull track "a1" out of sync: clip "music" … is in that stretch", even though the edited track itself has room.
