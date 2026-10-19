@@ -1,4 +1,4 @@
-import type { VideoAsset, VideoClip, VideoProject, VideoTrack } from './types.js';
+import type { VideoAsset, VideoClip, VideoProject, VideoSequence, VideoTrack } from './types.js';
 
 /** Clip edges closer than this (ms) count as touching: a cut, not a gap. */
 export const VIDEO_TIME_EPSILON = 0.5;
@@ -11,8 +11,12 @@ export const videoTrackSyncLocked = (track: VideoTrack): boolean => track.syncLo
 /** Playback speed of a clip (1 for titles and colours). */
 export const videoClipSpeed = (clip: VideoClip): number => (clip.type === 'media' ? (clip.speed ?? 1) : 1);
 
-/** The stretch of source a media clip plays (ms), or `null` for titles and colours. */
+/**
+ * The stretch of source a media clip plays (ms), or of its sequence's time a compound plays; `null`
+ * for titles and colours.
+ */
 export function videoClipSourceRange(clip: VideoClip): { in: number; out: number } | null {
+	if (clip.type === 'sequence') return { in: clip.in ?? 0, out: (clip.in ?? 0) + clip.duration };
 	if (clip.type !== 'media') return null;
 	const start = clip.in ?? 0;
 	// A ramp plays from its first key's source to its last's (holding before and after).
@@ -95,6 +99,46 @@ export function videoAssetMap(project: VideoProject): Map<string, VideoAsset> {
 	return new Map(project.assets.map((a) => [a.id, a]));
 }
 
+export function videoSequenceMap(project: VideoProject): Map<string, VideoSequence> {
+	return new Map((project.sequences ?? []).map((q) => [q.id, q]));
+}
+
+/** A sequence's length: the end of its last clip (ms). */
+export function videoSequenceDuration(sequence: Pick<VideoSequence, 'tracks'>): number {
+	let end = 0;
+	for (const track of sequence.tracks) for (const clip of track.clips) end = Math.max(end, videoClipEnd(clip));
+	return end;
+}
+
+/** The sequences a sequence's compound clips play directly (ids, in order, without repeats). */
+export const videoSequenceChildren = (sequence: Pick<VideoSequence, 'tracks'>): string[] => [...new Set(sequence.tracks.flatMap((t) => t.clips.flatMap((c) => (c.type === 'sequence' ? [c.sequence] : []))))];
+
+/**
+ * A path of sequence ids that leads from `id` back to itself through compound clips (`[a, b, a]`),
+ * or `null` when it contains no cycle. Evaluating and exporting skip a compound that would close
+ * one, and `checkVideoProject` reports it.
+ */
+export function findVideoSequenceCycle(project: VideoProject, id: string): string[] | null {
+	const sequences = videoSequenceMap(project);
+	const walk = (at: string, path: string[]): string[] | null => {
+		const seq = sequences.get(at);
+		if (!seq) return null;
+		for (const child of videoSequenceChildren(seq)) {
+			if (child === id) return [...path, child];
+			if (path.includes(child)) continue;
+			const found = walk(child, [...path, child]);
+			if (found) return found;
+		}
+		return null;
+	};
+	return walk(id, [id]);
+}
+
+/** Every track with its sequence (`undefined` for the project's own), the project's first. */
+export function allVideoTracks(project: VideoProject): { sequence?: string; track: VideoTrack }[] {
+	return [...project.tracks.map((track) => ({ track })), ...(project.sequences ?? []).flatMap((q) => q.tracks.map((track) => ({ sequence: q.id, track })))];
+}
+
 /** A track's clips in timeline order. */
 export function sortedVideoClips(track: VideoTrack): VideoClip[] {
 	return [...track.clips].sort((a, b) => a.start - b.start || a.duration - b.duration);
@@ -117,8 +161,19 @@ export function findVideoClip(project: VideoProject, id: string): VideoClipLocat
 	return null;
 }
 
+/** Every clip id in the project, its sequences' clips included (ids are unique across them). */
 export function allVideoClipIds(project: VideoProject): string[] {
-	return project.tracks.flatMap((t) => t.clips.map((c) => c.id));
+	return allVideoTracks(project).flatMap(({ track }) => track.clips.map((c) => c.id));
+}
+
+/** The sequence a clip inside a sequence belongs to, with its track; `null` for clips of the project's own tracks (or no clip). */
+export function findVideoSequenceClip(project: VideoProject, id: string): { sequence: VideoSequence; track: VideoTrack; clip: VideoClip } | null {
+	for (const sequence of project.sequences ?? [])
+		for (const track of sequence.tracks) {
+			const clip = track.clips.find((c) => c.id === id);
+			if (clip) return { sequence, track, clip };
+		}
+	return null;
 }
 
 /** Total length: the end of the last clip (ms). */
@@ -144,9 +199,15 @@ export function videoClipAfter(track: VideoTrack, clip: VideoClip): VideoClip | 
 /**
  * Timeline time (ms) a clip can run past its edges into source media: before its in point
  * (`before`) and after its out point (`after`). Unlimited for stills, titles, colours and media
- * whose length is unknown.
+ * whose length is unknown. A compound's handles are its sequence's time before `in` and after its
+ * out point (pass `sequences`; without them they count as unlimited).
  */
-export function videoClipHandles(clip: VideoClip, assets: Map<string, VideoAsset>): { before: number; after: number } {
+export function videoClipHandles(clip: VideoClip, assets: Map<string, VideoAsset>, sequences?: Map<string, VideoSequence>): { before: number; after: number } {
+	if (clip.type === 'sequence') {
+		const seq = sequences?.get(clip.sequence);
+		const range = videoClipSourceRange(clip)!;
+		return { before: range.in, after: seq ? Math.max(0, videoSequenceDuration(seq) - range.out) : Infinity };
+	}
 	if (clip.type !== 'media') return { before: Infinity, after: Infinity };
 	const asset = assets.get(clip.asset);
 	const speed = videoClipSpeed(clip);

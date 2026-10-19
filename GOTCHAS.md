@@ -1876,3 +1876,27 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: "Cannot read properties of undefined (reading '_buffer')" when the LayersPanel's Export PSD ran in a jsdom test.
 - **Root Cause**: Vitest's jsdom environment gives `Blob` from jsdom but `Uint8Array` from Node, and jsdom's Blob only accepts its own realm's buffers. `URL.createObjectURL` exists (it is Node's), so `downloadPsd` took the browser branch.
 - **Solution / Workaround**: In tests, set `URL.createObjectURL` to `undefined` around the click so `downloadPsd` skips the download and only returns the warnings, then restore it. Browsers are unaffected.
+
+### [core/video-editor] A Blend Inside a Compound Clip Must Use the Backdrop's Alpha in ffmpeg
+
+- **Issue / Symptom**: Built the obvious way, a `multiply` (or any non-normal) clip inside a nested sequence comes out black in the export wherever nothing else in the sequence is beneath it, while the preview shows the clip's own colour there.
+- **Root Cause**: A sequence is built as a sub-graph on a transparent frame (`color=black@0,format=yuva420p`). ffmpeg's `blend` filter mixes the colour planes with no regard for alpha, so over a clear backdrop it blends with black. The canvas and CSS follow the compositing spec: the blended colour is `(1 − αb) × layer + αb × B(backdrop, layer)`, so where the backdrop is clear the layer shows unblended.
+- **Solution / Workaround**: Inside a sequence (`scope.within.length > 0` in `buildFfmpeg`), the blend result gets the backdrop's alpha (`alphaextract` + `alphamerge`) and is overlaid on an opaque copy of the layer before the layer's own alpha is applied. At the top level the backdrop is opaque, so the graph is unchanged there. `overlay` itself needs no help: on a main input with alpha it un-premultiplies, so laying layers on a transparent base gives straight-alpha "over", the same as the canvas.
+
+### [core/video-editor] SVG Groups for Compound Clips Need `isolation: isolate`
+
+- **Issue / Symptom**: Without it, a screened clip inside a compound clip lightens the picture beneath the compound in SVG frames, not just the compound's own layers.
+- **Root Cause**: `mix-blend-mode` blends with everything behind it up to the nearest isolated group. A plain `<g>` is not isolated unless something on it (opacity < 1, a filter, a blend mode) creates a stacking context, so a compound at full opacity with no grade let its children blend through.
+- **Solution / Workaround**: `videoFrameToSvg` always puts `isolation:isolate` on a compound's `<g>`. The canvas does the same by drawing the compound's layers on their own scratch canvas.
+
+### [core/video-editor] One Scratch Canvas Is Not Enough Once Groups Nest
+
+- **Issue / Symptom**: With one shared offscreen canvas, a LUT layer inside a compound (or a compound inside a compound) would clear the very canvas its parent compound is being drawn on.
+- **Root Cause**: `drawVideoFrame` needs an offscreen canvas for each compound level being drawn and one for a LUT layer at that level, all at the same time.
+- **Solution / Workaround**: `VideoDrawOptions.scratch(width, height, slot)` takes a slot: `2 × depth` for a compound's layers and `2 × depth + 1` for a LUT layer at that depth. Return one canvas per slot (`VideoPreviewEngine` keeps a map). A host scratch that ignores the slot still works for LUTs on projects without compounds.
+
+### [core/video-editor] Layers and Sounds Inside Compounds Are Keyed by Clip Path
+
+- **Issue / Symptom**: Keyed by the inner clip's own id, two compound clips playing the same sequence at once would fight over one `<video>` element in the preview (seeking it back and forth every frame).
+- **Root Cause**: The preview keeps one media element per `layer.clip` / `audio.clip`. A sequence's clip ids are unique, but the same sequence can play in two places at once.
+- **Solution / Workaround**: `videoFrameAt` names nested layers and sounds by the path of clip ids from the project's own track (`comp/inner`, `comp/mid/shot`). Use `videoFrameLeafLayers` to walk a frame's pictures with compounds opened up (the preview and `videoFrameRequestsAt` do).

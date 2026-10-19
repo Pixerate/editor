@@ -5,6 +5,7 @@
     planVideoClipDrag,
     videoDragLabel,
     videoAssetMap,
+    videoSequenceMap,
     videoClipLabel,
     videoClipShowsWaveform,
     videoClipWaveformPath,
@@ -51,6 +52,7 @@
   const editor = $derived(view.current);
   const project = $derived(editor.project);
   const assets = $derived(videoAssetMap(project));
+  const sequences = $derived(videoSequenceMap(project));
   const px = $derived(Math.max(1, pxPerSecond));
   const x = (ms: number) => (ms * px) / 1000;
   /** Room after the last clip to drop and drag into. */
@@ -351,6 +353,7 @@
             {#each row.items as item (item.clip.id)}
               {@const clip = item.clip}
               {@const asset = clip.type === 'media' ? assets.get(clip.asset) : undefined}
+              {@const label = videoClipLabel(clip, asset, clip.type === 'sequence' ? sequences.get(clip.sequence) : undefined)}
               {@const selected = editor.selection.includes(clip.id)}
               <div
                 class="absolute inset-y-1 flex select-none touch-none items-center gap-1 overflow-hidden rounded px-1.5 text-[11px] text-white {selected ? 'outline outline-2 outline-offset-1 outline-rose-500' : ''} {item.dragging ? 'opacity-80 shadow-lg' : ''} {canEdit && !track.locked ? 'cursor-grab' : 'cursor-pointer'}"
@@ -358,8 +361,9 @@
                 role="button"
                 tabindex="-1"
                 aria-pressed={selected}
-                title="{videoClipLabel(clip, asset)} · {formatVideoTimecode(item.start, project.fps)}–{formatVideoTimecode(item.start + item.duration, project.fps)}"
+                title="{label} · {formatVideoTimecode(item.start, project.fps)}–{formatVideoTimecode(item.start + item.duration, project.fps)}"
                 data-clip={clip.id}
+                data-compound={clip.type === 'sequence' ? clip.sequence : undefined}
                 data-selected={selected ? '' : undefined}
                 data-dragging={item.dragging ? '' : undefined}
                 onpointerdown={(e) => onclipdown(e, clip, track)}
@@ -374,7 +378,7 @@
                 {#if clip.transition}
                   <span class="relative shrink-0 rounded bg-black/40 px-1 text-[9px]" title="{clip.transition.type} {clip.transition.duration} ms" data-transition={clip.transition.type}>⋈</span>
                 {/if}
-                <span class="relative truncate drop-shadow">{videoClipLabel(clip, asset)}</span>
+                <span class="relative truncate drop-shadow">{label}</span>
                 {#if canEdit && !track.locked}
                   <div class="absolute inset-y-0 left-0 w-1.5 cursor-ew-resize bg-white/0 hover:bg-white/40" data-edge="start" aria-hidden="true"></div>
                   <div class="absolute inset-y-0 right-0 w-1.5 cursor-ew-resize bg-white/0 hover:bg-white/40" data-edge="end" aria-hidden="true"></div>

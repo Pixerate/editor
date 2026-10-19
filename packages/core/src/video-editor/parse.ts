@@ -1,7 +1,7 @@
 import { VIDEO_GRADE_CONTROLS } from './grade.js';
 import { checkVideoTimeRemap } from './remap.js';
 import { VIDEO_EASE_NAMES, type VideoAnimatable, type VideoEase, type VideoKey, type VideoKeyframes } from './keyframes.js';
-import { VIDEO_BLEND_MODES, VIDEO_CLIP_ANIMATION_EFFECTS, VIDEO_CLIP_TYPES, VIDEO_FADE_CURVES, VIDEO_FITS, VIDEO_TRANSITION_TYPES, VIDEO_WIPE_DIRECTIONS, type VideoAsset, type VideoAssetProxy, type VideoClip, type VideoClipAnimation, type VideoGrade, type VideoGradeLut, type VideoMarker, type VideoProject, type VideoTrack, type VideoTranscriptWord, type VideoTransform, type VideoTransition } from './types.js';
+import { VIDEO_BLEND_MODES, VIDEO_CLIP_ANIMATION_EFFECTS, VIDEO_CLIP_TYPES, VIDEO_FADE_CURVES, VIDEO_FITS, VIDEO_TRANSITION_TYPES, VIDEO_WIPE_DIRECTIONS, type VideoAsset, type VideoAssetProxy, type VideoClip, type VideoClipAnimation, type VideoGrade, type VideoGradeLut, type VideoMarker, type VideoProject, type VideoSequence, type VideoTrack, type VideoTranscriptWord, type VideoTransform, type VideoTransition } from './types.js';
 
 const isObject = (v: unknown): v is Record<string, any> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const fail = (path: string, what: string): never => {
@@ -219,6 +219,21 @@ export function parseVideoClip(v: unknown, path = 'clip'): VideoClip {
 			fadeInCurve: oneOf(v.fadeInCurve, VIDEO_FADE_CURVES, `${path}.fadeInCurve`),
 			fadeOutCurve: oneOf(v.fadeOutCurve, VIDEO_FADE_CURVES, `${path}.fadeOutCurve`)
 		});
+	if (type === 'sequence') {
+		// The sound and pictures of a sequence are not re-timed yet, so a compound plays at normal speed.
+		for (const key of ['speed', 'timeRemap'])
+			if (v[key] !== undefined && !(key === 'speed' && v[key] === 1)) fail(`${path}.${key}`, 'is not supported on a compound clip (type "sequence"), which plays its sequence at normal speed; remove it, or change the speed of the clips inside the sequence');
+		return compact({
+			type,
+			...base,
+			sequence: str(v.sequence, `${path}.sequence`)!,
+			in: num(v.in, `${path}.in`, { optional: true, min: 0 }),
+			volume: parseVideoAnimatable(v.volume, `${path}.volume`, { optional: true, min: 0, max: 4 }),
+			muted: bool(v.muted, `${path}.muted`),
+			fadeInCurve: oneOf(v.fadeInCurve, VIDEO_FADE_CURVES, `${path}.fadeInCurve`),
+			fadeOutCurve: oneOf(v.fadeOutCurve, VIDEO_FADE_CURVES, `${path}.fadeOutCurve`)
+		});
+	}
 	if (type === 'text')
 		return compact({
 			type,
@@ -249,6 +264,23 @@ export function parseVideoTrack(v: unknown, path = 'track'): VideoTrack {
 	});
 }
 
+/** A nested sequence `{ id, name, tracks }` (see `VideoSequence`). */
+export function parseVideoSequence(v: unknown, path = 'sequence'): VideoSequence {
+	if (!isObject(v)) return fail(path, 'must be an object { id, name, tracks }');
+	if (v.tracks !== undefined && !Array.isArray(v.tracks)) fail(`${path}.tracks`, 'must be an array');
+	const sequence: VideoSequence = compact({
+		id: str(v.id, `${path}.id`)!,
+		name: str(v.name, `${path}.name`, true),
+		tracks: ((v.tracks ?? []) as unknown[]).map((t, i) => parseVideoTrack(t, `${path}.tracks[${i}]`))
+	});
+	const seen = new Set<string>();
+	for (const t of sequence.tracks) {
+		if (seen.has(t.id)) throw new Error(`Two tracks in sequence "${sequence.id}" share the id "${t.id}"; ids must be unique.`);
+		seen.add(t.id);
+	}
+	return sequence;
+}
+
 export function parseVideoMarker(v: unknown, path = 'marker'): VideoMarker {
 	if (!isObject(v)) return fail(path, 'must be an object');
 	return compact({ id: str(v.id, `${path}.id`)!, time: num(v.time, `${path}.time`, { min: 0 })!, label: str(v.label, `${path}.label`, true), color: str(v.color, `${path}.color`, true) });
@@ -257,7 +289,8 @@ export function parseVideoMarker(v: unknown, path = 'marker'): VideoMarker {
 /**
  * Reads a project from JSON text or an object, checking every field. Throws an error naming the
  * first bad field (`tracks[0].clips[2].duration must be greater than 0.`). Ids must be unique
- * within assets, tracks, clips and markers. Overlaps and missing media are left to
+ * within assets, tracks, sequences, clips (across the project and its sequences) and markers.
+ * Overlaps, missing media and sequences, and sequences that contain themselves are left to
  * `checkVideoProject`, so a project with problems can still be opened and fixed.
  */
 export function parseVideoProject(input: unknown): VideoProject {
@@ -271,7 +304,7 @@ export function parseVideoProject(input: unknown): VideoProject {
 	}
 	if (!isObject(v)) return fail('The project', 'must be an object');
 	if (v.version !== undefined && v.version !== 1) fail('version', 'must be 1');
-	for (const key of ['assets', 'tracks', 'markers']) if (v[key] !== undefined && !Array.isArray(v[key])) fail(key, 'must be an array');
+	for (const key of ['assets', 'tracks', 'sequences', 'markers']) if (v[key] !== undefined && !Array.isArray(v[key])) fail(key, 'must be an array');
 	const project: VideoProject = compact({
 		version: 1 as const,
 		name: str(v.name, 'name', true),
@@ -281,6 +314,7 @@ export function parseVideoProject(input: unknown): VideoProject {
 		background: str(v.background, 'background', true),
 		assets: ((v.assets ?? []) as unknown[]).map((a, i) => parseVideoAsset(a, `assets[${i}]`)),
 		tracks: ((v.tracks ?? []) as unknown[]).map((t, i) => parseVideoTrack(t, `tracks[${i}]`)),
+		sequences: v.sequences === undefined ? undefined : (v.sequences as unknown[]).map((q, i) => parseVideoSequence(q, `sequences[${i}]`)),
 		markers: v.markers === undefined ? undefined : (v.markers as unknown[]).map((m, i) => parseVideoMarker(m, `markers[${i}]`))
 	});
 	const unique = (ids: string[], what: string) => {
@@ -292,7 +326,9 @@ export function parseVideoProject(input: unknown): VideoProject {
 	};
 	unique(project.assets.map((a) => a.id), 'assets');
 	unique(project.tracks.map((t) => t.id), 'tracks');
-	unique(project.tracks.flatMap((t) => t.clips.map((c) => c.id)), 'clips');
+	unique((project.sequences ?? []).map((q) => q.id), 'sequences');
+	// Clip ids are unique across the project and every sequence, so an id names one clip.
+	unique([...project.tracks, ...(project.sequences ?? []).flatMap((q) => q.tracks)].flatMap((t) => t.clips.map((c) => c.id)), 'clips');
 	unique((project.markers ?? []).map((m) => m.id), 'markers');
 	return project;
 }

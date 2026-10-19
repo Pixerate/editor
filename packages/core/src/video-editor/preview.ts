@@ -1,4 +1,4 @@
-import { videoFrameAt, type VideoFrame, type VideoLayer } from './evaluate.js';
+import { videoFrameAt, videoFrameLeafLayers, type VideoFrame, type VideoLayer } from './evaluate.js';
 import { drawVideoFrame, type VideoCanvasContext, type VideoScratchCanvas } from './render.js';
 import type { VideoFrameCache } from './frame-cache.js';
 import type { VideoLut, VideoLutCache } from './lut.js';
@@ -76,10 +76,11 @@ export interface VideoPreviewOptions {
 	/** Where grades' LUTs load from (default: the source's `luts`). Without one, LUTs are left out. */
 	luts?: VideoLutCache | null;
 	/**
-	 * Makes the offscreen canvas LUT-graded layers are drawn on (default: a `<canvas>` with
-	 * `willReadFrequently`). LUTs run on the CPU, so a lower `resolution` keeps playback smooth.
+	 * Makes an offscreen canvas compound clips and LUT-graded layers are drawn on (default: a
+	 * `<canvas>` with `willReadFrequently`), once per `slot` (see `VideoDrawOptions.scratch`). LUTs
+	 * run on the CPU, so a lower `resolution` keeps playback smooth.
 	 */
-	createScratch?: (width: number, height: number) => VideoScratchCanvas | null;
+	createScratch?: (width: number, height: number, slot: number) => VideoScratchCanvas | null;
 }
 
 interface Entry {
@@ -116,7 +117,7 @@ export class VideoPreviewEngine {
 	private playing = false;
 	private fps = 30;
 	private readonly unsubscribeLuts: () => void;
-	private scratchCanvas: VideoScratchCanvas | null | undefined;
+	private readonly scratchCanvases = new Map<number, VideoScratchCanvas | null>();
 
 	constructor(
 		private readonly source: VideoPreviewSource,
@@ -222,7 +223,7 @@ export class VideoPreviewEngine {
 			}
 		};
 		const sounding = new Map(frame.audio.map((a) => [a.clip, a]));
-		for (const layer of frame.layers) {
+		for (const layer of videoFrameLeafLayers(frame.layers)) {
 			if (layer.type !== 'media' || layer.assetKind !== 'video' || !layer.src) continue;
 			const sound = sounding.get(layer.clip);
 			sync(layer.clip, this.srcFor(layer)!, 'video', layer.sourceTime ?? 0, sound?.speed ?? 1, sound ? sound.gain : null);
@@ -298,16 +299,18 @@ export class VideoPreviewEngine {
 		return lut;
 	};
 
-	private readonly scratch = (width: number, height: number): VideoScratchCanvas | null => {
-		if (this.scratchCanvas === undefined) {
-			if (this.options.createScratch) this.scratchCanvas = this.options.createScratch(width, height);
+	private readonly scratch = (width: number, height: number, slot: number): VideoScratchCanvas | null => {
+		if (!this.scratchCanvases.has(slot)) {
+			let made: VideoScratchCanvas | null = null;
+			if (this.options.createScratch) made = this.options.createScratch(width, height, slot);
 			else if (typeof document !== 'undefined') {
 				const canvas = document.createElement('canvas');
 				const ctx = canvas.getContext('2d', { willReadFrequently: true });
-				this.scratchCanvas = ctx ? { canvas, ctx: ctx as unknown as VideoScratchCanvas['ctx'] } : null;
-			} else this.scratchCanvas = null;
+				made = ctx ? { canvas, ctx: ctx as unknown as VideoScratchCanvas['ctx'] } : null;
+			}
+			this.scratchCanvases.set(slot, made);
 		}
-		const s = this.scratchCanvas;
+		const s = this.scratchCanvases.get(slot)!;
 		if (!s) return null;
 		const c = s.canvas as { width?: number; height?: number };
 		if (c.width !== width) c.width = width;

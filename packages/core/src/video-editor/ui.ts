@@ -2,7 +2,7 @@ import type { VideoEdit } from './edit.js';
 import { normalizeVideoGrade } from './grade.js';
 import { isVideoKeyframes, removeVideoKey, setVideoKey, VIDEO_KEYFRAME_LIMITS, VIDEO_TRANSFORM_PROPERTIES, videoValueAt, type VideoAnimatable, type VideoKeyframeProperty } from './keyframes.js';
 import { findVideoClip, formatVideoTimecode, videoClipEnd, videoClipSpeed, videoAssetMap, videoAssetHasSound } from './timeline.js';
-import type { VideoClipAnimationEffect, VideoTransitionType, VideoAsset, VideoAssetKind, VideoBlendMode, VideoClip, VideoFadeCurve, VideoGradeLut, VideoPlacementMode, VideoProject } from './types.js';
+import type { VideoClipAnimationEffect, VideoTransitionType, VideoAsset, VideoAssetKind, VideoBlendMode, VideoClip, VideoFadeCurve, VideoGradeLut, VideoPlacementMode, VideoProject, VideoSequence } from './types.js';
 
 // Framework-free helpers the React and Svelte timelines share, so both draw and drag alike.
 
@@ -95,16 +95,18 @@ export const VIDEO_FADE_CURVE_LABELS: Readonly<Record<VideoFadeCurve, string>> =
 
 export function videoClipTint(clip: VideoClip, asset?: VideoAsset): string {
 	if (clip.type === 'text') return '#a855f7';
+	if (clip.type === 'sequence') return '#0d9488';
 	if (clip.type === 'color') return clip.color;
 	if (!asset) return '#ef4444';
 	return asset.kind === 'audio' ? '#10b981' : asset.kind === 'image' ? '#f59e0b' : '#3b82f6';
 }
 
-/** A short label for a clip on the timeline. */
-export function videoClipLabel(clip: VideoClip, asset?: VideoAsset): string {
+/** A short label for a clip on the timeline (pass the sequence a compound clip plays, for its name). */
+export function videoClipLabel(clip: VideoClip, asset?: VideoAsset, sequence?: VideoSequence): string {
 	if (clip.name) return clip.name;
 	if (clip.type === 'text') return clip.text.split('\n')[0];
 	if (clip.type === 'color') return clip.color;
+	if (clip.type === 'sequence') return `Compound: ${sequence?.name ?? clip.sequence}`;
 	const base = asset?.name ?? asset?.src.replace(/^.*[\\/]/, '') ?? clip.asset;
 	const speed = videoClipSpeed(clip);
 	return speed !== 1 ? `${base} (${Math.round(speed * 100)}%)` : base;
@@ -283,7 +285,7 @@ export interface VideoKeyframeRow {
 }
 
 const animatableOf = (clip: VideoClip, property: VideoKeyframeProperty): VideoAnimatable | undefined =>
-	(VIDEO_TRANSFORM_PROPERTIES as readonly string[]).includes(property) ? clip.transform?.[property as 'x'] : property === 'volume' ? (clip.type === 'media' ? clip.volume : undefined) : clip.opacity;
+	(VIDEO_TRANSFORM_PROPERTIES as readonly string[]).includes(property) ? clip.transform?.[property as 'x'] : property === 'volume' ? (clip.type === 'media' || clip.type === 'sequence' ? clip.volume : undefined) : clip.opacity;
 
 const playheadInClip = (clip: VideoClip, time: number) => Math.round(Math.min(clip.duration, Math.max(0, time - clip.start)));
 
@@ -297,7 +299,7 @@ export function videoKeyframeRows(project: VideoProject, clipId: string, time: n
 	const { clip } = at;
 	const asset = clip.type === 'media' ? videoAssetMap(project).get(clip.asset) : undefined;
 	const visual = !(asset?.kind === 'audio' || at.track.kind === 'audio');
-	const audible = clip.type === 'media' && videoAssetHasSound(asset);
+	const audible = (clip.type === 'media' && videoAssetHasSound(asset)) || clip.type === 'sequence';
 	const properties: VideoKeyframeProperty[] = [...(visual ? (['opacity'] as const) : []), ...(audible ? (['volume'] as const) : []), ...(visual ? VIDEO_TRANSFORM_PROPERTIES : [])];
 	const clipTime = playheadInClip(clip, time);
 	return properties.map((property) => {
