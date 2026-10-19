@@ -146,10 +146,19 @@ import { coveringRect } from './layers/render';
 import {
   CoverageMap,
   DEFAULT_BRUSH,
+  DEFAULT_MIXER,
+  EMPTY_MIXER_LOAD,
+  MixerStroke,
   StrokeCoverage,
   applyStrokeToTile,
+  cleanMixer,
+  loadMixer,
   normalizeBrush,
+  normalizeMixer,
   type BrushSettings,
+  type MixerLoad,
+  type MixerSettings,
+  type MixerTarget,
   type StrokeApply,
   type StrokePoint,
 } from '../paint';
@@ -234,17 +243,29 @@ export interface PaintOptions {
   foreground: string;
   /** `#rrggbb`: what the eraser paints on transparency-locked layers and masks. */
   background: string;
+  /** Mixer Brush options (wet, load, mix, load / clean each stroke, RGB or pigment mixing). */
+  mixer: MixerSettings;
+  /** What the Mixer Brush carries now: its reservoir, how much is left and the picked-up colour. */
+  mixerLoad: MixerLoad;
 }
+
+/** Paint tools a stroke can use. */
+export type StrokeTool = 'brush' | 'eraser' | 'mixer';
 
 /** A stroke: tool, target (default the active layer and target) and brush / colour overrides. */
 export interface StrokeInit {
-  tool?: 'brush' | 'eraser';
+  tool?: StrokeTool;
   layerId?: string;
   channel?: LayerTarget;
   /** Overrides of the paint options' brush. */
   brush?: Partial<BrushSettings>;
-  /** Paint colour (default the foreground). Masks take its grey value. */
+  /**
+   * Paint colour (default the foreground). Masks take its grey value. For the mixer, the colour
+   * the reservoir is loaded with: given, it loads the brush whatever `loadEachStroke` says.
+   */
   color?: string | number[];
+  /** Overrides of the paint options' Mixer Brush settings (tool `mixer`). */
+  mixer?: Partial<MixerSettings>;
   /** Eraser colour on locked transparency / masks (default the background). */
   background?: string | number[];
   /** Kept with the stroke for replays (v1 brushes have no jitter). */
@@ -270,6 +291,8 @@ export interface PaintStrokeResult {
   /** Document rectangle that changed (null when nothing did). */
   bounds: CropBox | null;
   dabs: number;
+  /** The Mixer Brush's load after the stroke (tool `mixer` only). */
+  mixerLoad?: MixerLoad;
 }
 
 /** An opaque pre-stroke history snapshot. */
@@ -300,27 +323,71 @@ function defaultTile(s: TiledSurface): Uint8ClampedArray {
   return d;
 }
 
+/** How a Mixer Brush stroke starts (see `PaintStrokeSession`). */
+export interface MixerStrokeInit {
+  /** Makes the stroke over the session's live pixels. */
+  create(pixels: MixerTarget): MixerStroke;
+  /** Stores the brush load when the stroke ends and returns it (after any clean). */
+  end(load: MixerLoad): MixerLoad;
+}
+
 /**
  * A stroke in progress (see `beginStroke`): `push` input points as they arrive, then `end` (one
- * undo step) or `cancel`.
+ * undo step) or `cancel`. Brush and eraser strokes build up a coverage map composited over the
+ * pre-stroke pixels; Mixer Brush strokes paint dab by dab into the live pixels, so each dab picks
+ * up what the dabs before it laid down.
  */
 export class PaintStrokeSession {
   private readonly before: HistoryEntryHandle;
   private readonly base: TiledSurface;
   private readonly live: Map<TileKey, Tile>;
   private readonly touched = new Set<TileKey>();
+  private readonly stroke: StrokeCoverage | null;
+  private readonly mixer: MixerStroke | null;
+  private readonly mixerInit: MixerStrokeInit | null = null;
+  /** Mixer tiles written since the last update: they get new tile objects so the compositor sees them change. */
+  private readonly fresh = new Set<TileKey>();
   private last: StrokePoint | null = null;
   private closed = false;
 
   constructor(
     private readonly controller: ImageEditorController,
     readonly target: { id: string; channel: LayerTarget; surface: TiledSurface },
-    private readonly stroke: StrokeCoverage,
+    stroke: StrokeCoverage | MixerStrokeInit,
     private readonly apply: StrokeApply
   ) {
     this.before = controller._captureForStroke();
     this.base = target.surface;
     this.live = new Map(this.base.tiles);
+    if (stroke instanceof StrokeCoverage) {
+      this.stroke = stroke;
+      this.mixer = null;
+    } else {
+      this.stroke = null;
+      this.mixer = stroke.create(this.mixerPixels());
+      this.mixerInit = stroke;
+    }
+  }
+
+  /** The live pixels a mixer stroke reads and writes; base tiles are copied on first write. */
+  private mixerPixels(): MixerTarget {
+    const a = this.apply;
+    return {
+      offset: a.offset,
+      lockTransparency: a.lockTransparency,
+      selection: a.selection,
+      readTile: (tx, ty) => this.live.get(tileKey(tx, ty))?.data ?? (this.base.defaultValue ? defaultTile(this.base) : null),
+      writeTile: (tx, ty) => {
+        const key = tileKey(tx, ty);
+        if (!this.touched.has(key)) {
+          const src = this.base.tiles.get(key)?.data ?? defaultTile(this.base);
+          this.live.set(key, { data: new Uint8ClampedArray(src), uniform: null });
+          this.touched.add(key);
+        }
+        this.fresh.add(key);
+        return this.live.get(key)!.data;
+      },
+    };
   }
 
   get layerId(): string {
@@ -331,12 +398,19 @@ export class PaintStrokeSession {
   push(points: readonly StrokePoint[]): void {
     if (this.closed || !points.length) return;
     this.last = points[points.length - 1];
-    this.update(this.stroke.push(points));
+    this.update(this.mixer ? this.mixer.push(points) : this.stroke!.push(points));
   }
 
   private update(rects: CropBox[]): void {
     if (!rects.length) return;
     const ch = this.base.channels;
+    if (this.mixer) {
+      for (const key of this.fresh) this.live.set(key, { data: this.live.get(key)!.data, uniform: null });
+      this.fresh.clear();
+      this.controller._strokeUpdate(this.target.id, this.target.channel, new TiledSurfaceClass(ch, new Map(this.live), this.base.defaultValue), rects);
+      return;
+    }
+    const stroke = this.stroke!;
     // Per target tile, the union of the new dabs inside it: only that part is recomputed.
     const regions = new Map<TileKey, { tx: number; ty: number; r: CropBox }>();
     for (const r of rects) {
@@ -350,7 +424,7 @@ export class PaintStrokeSession {
       const src = this.base.tiles.get(key)?.data ?? defaultTile(this.base);
       const prev = this.touched.has(key) ? this.live.get(key)?.data : undefined;
       this.touched.add(key);
-      const data = applyStrokeToTile(this.stroke.coverage, src, ch, tx, ty, this.apply, prev ? { into: prev, region: r } : {});
+      const data = applyStrokeToTile(stroke.coverage, src, ch, tx, ty, this.apply, prev ? { into: prev, region: r } : {});
       this.live.set(key, { data, uniform: null });
     }
     this.controller._strokeUpdate(this.target.id, this.target.channel, new TiledSurfaceClass(ch, new Map(this.live), this.base.defaultValue), rects);
@@ -359,7 +433,8 @@ export class PaintStrokeSession {
   /** Finishes the stroke (one undo step) and returns what changed. */
   end(): PaintStrokeResult {
     if (this.closed) throw new LayerOperationError('This stroke has already ended.');
-    this.update(this.stroke.finish(this.last ?? undefined));
+    const last = this.last ?? undefined;
+    this.update(this.mixer ? this.mixer.finish(last) : this.stroke!.finish(last));
     this.closed = true;
     const ch = this.base.channels;
     const tiles = new Map(this.base.tiles);
@@ -373,9 +448,12 @@ export class PaintStrokeSession {
       if (!sameTile(prev, tile)) changed = true;
     }
     const surface = changed ? new TiledSurfaceClass(ch, tiles, this.base.defaultValue) : null;
+    const mixerLoad = this.mixer ? this.mixerInit!.end(this.mixer.load) : undefined;
     this.controller._strokeCommit(this.before, this.target.id, this.target.channel, surface);
-    const b = this.stroke.coverage.bounds;
-    return { layerId: this.target.id, channel: this.target.channel, bounds: changed ? b : null, dabs: this.stroke.dabCount };
+    const b = this.mixer ? this.mixer.bounds : this.stroke!.coverage.bounds;
+    const result: PaintStrokeResult = { layerId: this.target.id, channel: this.target.channel, bounds: changed ? b : null, dabs: (this.mixer ?? this.stroke!).dabCount };
+    if (mixerLoad) result.mixerLoad = mixerLoad;
+    return result;
   }
 
   /** Abandons the stroke and restores the layer. */
@@ -583,7 +661,7 @@ export class ImageEditorController {
       activeLayerId: null,
       activeTarget: 'pixels',
       outputOpacity: 1,
-      paint: { brush: { ...DEFAULT_BRUSH }, foreground: '#000000', background: '#ffffff' },
+      paint: { brush: { ...DEFAULT_BRUSH }, foreground: '#000000', background: '#ffffff', mixer: { ...DEFAULT_MIXER }, mixerLoad: EMPTY_MIXER_LOAD },
       fit: options.fit ?? 'margin',
     };
 
@@ -1679,16 +1757,47 @@ export class ImageEditorController {
   // --- Painting ---
 
   /** Brush settings, colours and tool options of the paint tools (view state, no undo). */
-  public setPaintOptions(options: Partial<Omit<PaintOptions, 'brush'>> & { brush?: Partial<BrushSettings> }): PaintOptions {
+  public setPaintOptions(
+    options: Partial<Omit<PaintOptions, 'brush' | 'mixer' | 'mixerLoad'>> & { brush?: Partial<BrushSettings>; mixer?: Partial<MixerSettings> }
+  ): PaintOptions {
     const cur = this.state.paint;
     const next: PaintOptions = {
       brush: options.brush ? normalizeBrush({ ...cur.brush, ...options.brush }) : cur.brush,
       foreground: options.foreground !== undefined ? toHex(parseColor(options.foreground)) : cur.foreground,
       background: options.background !== undefined ? toHex(parseColor(options.background)) : cur.background,
+      mixer: options.mixer ? normalizeMixer({ ...cur.mixer, ...options.mixer }) : cur.mixer,
+      mixerLoad: cur.mixerLoad,
     };
     this.state.paint = next;
     this.notify();
     return next;
+  }
+
+  /**
+   * Loads the Mixer Brush's reservoir full with `color` (default the foreground); the picked-up
+   * colour is kept. View state, no undo. Returns the brush load.
+   */
+  public loadMixerBrush(color?: string | number[]): MixerLoad {
+    const c = parseColor(color ?? this.state.paint.foreground);
+    const load = loadMixer(this.state.paint.mixerLoad, [c[0] / 255, c[1] / 255, c[2] / 255]);
+    this.state.paint = { ...this.state.paint, mixerLoad: load };
+    this.notify();
+    return load;
+  }
+
+  /** Cleans the Mixer Brush: empties the pickup well (the reservoir is kept). Returns the brush load. */
+  public cleanMixerBrush(): MixerLoad {
+    const load = cleanMixer(this.state.paint.mixerLoad);
+    this.state.paint = { ...this.state.paint, mixerLoad: load };
+    this.notify();
+    return load;
+  }
+
+  /** Empties the Mixer Brush entirely (no reservoir, nothing picked up). Returns the brush load. */
+  public emptyMixerBrush(): MixerLoad {
+    this.state.paint = { ...this.state.paint, mixerLoad: EMPTY_MIXER_LOAD };
+    this.notify();
+    return EMPTY_MIXER_LOAD;
   }
 
   /** D: black foreground, white background. */
@@ -1739,7 +1848,11 @@ export class ImageEditorController {
    */
   public beginStroke(init: StrokeInit = {}): PaintStrokeSession {
     const tool = init.tool ?? 'brush';
+    if (tool !== 'brush' && tool !== 'eraser' && tool !== 'mixer') throw new LayerOperationError(`Unknown paint tool "${String(tool)}"; use brush, eraser or mixer.`);
     const target = this.paintTarget(init.layerId, init.channel, tool === 'eraser' ? 'erase' : 'paint');
+    if (tool === 'mixer' && target.channel === 'mask') {
+      throw new LayerOperationError('The Mixer Brush paints colour on pixels, not on masks; target pixels (channel pixels), or paint the mask with the brush.');
+    }
     const brush = normalizeBrush({ ...this.state.paint.brush, ...(init.brush ?? {}) });
     const color = parseColor(init.color ?? this.state.paint.foreground);
     const background = parseColor(init.background ?? this.state.paint.background);
@@ -1757,7 +1870,26 @@ export class ImageEditorController {
       selection: this.state.selection?.bounds ? this.state.selection : null,
       offset: target.offset,
     };
+    if (tool === 'mixer') return new PaintStrokeSession(this, target, this.mixerStroke(init, brush), apply);
     return new PaintStrokeSession(this, target, new StrokeCoverage(brush), apply);
+  }
+
+  /** A Mixer Brush stroke's start: the settings, and the load (refilled when asked or set to). */
+  private mixerStroke(init: StrokeInit, brush: BrushSettings): MixerStrokeInit {
+    const settings = normalizeMixer({ ...this.state.paint.mixer, ...(init.mixer ?? {}) });
+    let load = this.state.paint.mixerLoad;
+    if (init.color !== undefined || settings.loadEachStroke) {
+      const c = parseColor(init.color ?? this.state.paint.foreground);
+      load = loadMixer(load, [c[0] / 255, c[1] / 255, c[2] / 255]);
+    }
+    return {
+      create: (pixels) => new MixerStroke(brush, settings, load, pixels),
+      end: (after) => {
+        const next = settings.cleanEachStroke ? cleanMixer(after) : after;
+        this.state.paint = { ...this.state.paint, mixerLoad: next };
+        return next;
+      },
+    };
   }
 
   /** @internal Shows a stroke's live surface (no history). */
@@ -1786,7 +1918,7 @@ export class ImageEditorController {
 
   /**
    * Paints a whole stroke in one call (agents, replays): `points` in document pixels with optional
-   * pressure, through the brush or eraser. One undo step. Returns the layer, channel, the changed
+   * pressure, through the brush, eraser or Mixer Brush. One undo step. Returns the layer, channel, the changed
    * document bounds and the number of dabs.
    */
   public paintStroke(init: StrokeInit & { points: StrokePoint[] }): PaintStrokeResult {

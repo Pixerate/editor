@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { ImageEditorController } from '@pixerate/editor/image-editor';
-  import { BRUSH_OPTION_CONTROLS, PAINT_TOOLS } from '@pixerate/editor/image-editor';
+  import { BRUSH_OPTION_CONTROLS, MIXER_MIXING_OPTIONS, MIXER_OPTION_CONTROLS, PAINT_TOOLS, rgbUnitToHex } from '@pixerate/editor/image-editor';
   import { untrack } from 'svelte';
   import ControlSlider from './ControlSlider.svelte';
 
@@ -76,6 +76,57 @@
   {#each BRUSH_OPTION_CONTROLS as spec (spec.id)}
     <ControlSlider {spec} value={view.brush[spec.id]} onchange={(v) => controller.setPaintOptions({ brush: { [spec.id]: v } })} />
   {/each}
+
+  {#if view.tool === 'mixer'}
+    {@const load = view.mixerLoad}
+    <div class="flex flex-col gap-2 border-t border-slate-800 pt-2" role="group" aria-label="Mixer Brush" data-testid="mixer-options">
+      <div class="flex items-center gap-2">
+        <span
+          aria-label="Brush load"
+          title={load.reservoir ? `Loaded ${rgbUnitToHex(load.reservoir)}, ${Math.round(load.amount * 100)}% left` : 'Unloaded'}
+          class="h-6 w-6 rounded border border-slate-700"
+          style:background={load.reservoir ? rgbUnitToHex(load.reservoir) : 'transparent'}
+        ></span>
+        <button type="button" title="Fill the reservoir with the foreground colour" class={chip(false)} onclick={() => controller.loadMixerBrush()}>Load brush</button>
+        <button type="button" title="Empty the picked-up colour" class={chip(false)} onclick={() => controller.cleanMixerBrush()}>Clean brush</button>
+      </div>
+      <div class="flex gap-1" role="group" aria-label="Mixing">
+        {#each MIXER_MIXING_OPTIONS as m (m.id)}
+          <button
+            type="button"
+            aria-pressed={view.mixer.mixing === m.id}
+            title={m.title}
+            class={chip(view.mixer.mixing === m.id)}
+            onclick={() => controller.setPaintOptions({ mixer: { mixing: m.id } })}>{m.label}</button>
+        {/each}
+      </div>
+      {#each MIXER_OPTION_CONTROLS as spec (spec.id)}
+        <ControlSlider {spec} value={view.mixer[spec.id]} onchange={(v) => controller.setPaintOptions({ mixer: { [spec.id]: v } })} />
+      {/each}
+      <div class="flex flex-wrap gap-3 text-slate-300">
+        <label class="flex items-center gap-1.5">
+          <input
+            type="checkbox"
+            aria-label="Load the brush after each stroke"
+            checked={view.mixer.loadEachStroke}
+            onchange={(e) => controller.setPaintOptions({ mixer: { loadEachStroke: (e.target as HTMLInputElement).checked } })}
+            class="accent-indigo-500"
+          />
+          Load each stroke
+        </label>
+        <label class="flex items-center gap-1.5">
+          <input
+            type="checkbox"
+            aria-label="Clean the brush after each stroke"
+            checked={view.mixer.cleanEachStroke}
+            onchange={(e) => controller.setPaintOptions({ mixer: { cleanEachStroke: (e.target as HTMLInputElement).checked } })}
+            class="accent-indigo-500"
+          />
+          Clean each stroke
+        </label>
+      </div>
+    </div>
+  {/if}
 
   <div class="flex flex-wrap gap-3 text-slate-300" role="group" aria-label="Pressure">
     <label class="flex items-center gap-1.5">

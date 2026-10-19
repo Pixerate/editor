@@ -63,6 +63,34 @@ describe('React paint tools', () => {
     expect(c.getLayerBounds(c.getState().activeLayerId!)).toEqual({ x: 0, y: 0, width: 300, height: 150 });
   });
 
+  it('BrushOptionsBar shows the Mixer Brush with its options and RGB / Pigment toggle', async () => {
+    const c = controller();
+    await act(async () => root.render(<BrushOptionsBar controller={c} />));
+    expect(container.querySelector('[data-testid="mixer-options"]')).toBeNull();
+    await act(async () => button('Mixer').click());
+    expect(c.getState().activeTool).toBe('mixer');
+    expect(container.querySelector('[data-testid="mixer-options"]')).not.toBeNull();
+    await act(async () => button('Pigment').click());
+    expect(c.getState().paint.mixer.mixing).toBe('pigment');
+    expect(button('Pigment').getAttribute('aria-pressed')).toBe('true');
+    expect(button('RGB').getAttribute('aria-pressed')).toBe('false');
+    await act(async () => setValue(container.querySelector('input[aria-label="Wet"]')!, '0.8'));
+    await act(async () => setValue(container.querySelector('input[aria-label="Load"]')!, '0.25'));
+    await act(async () => setValue(container.querySelector('input[aria-label="Mix"]')!, '0.7'));
+    expect(c.getState().paint.mixer).toMatchObject({ wet: 0.8, load: 0.25, mix: 0.7 });
+    await act(async () => (container.querySelector('input[aria-label="Clean the brush after each stroke"]') as HTMLInputElement).click());
+    await act(async () => (container.querySelector('input[aria-label="Load the brush after each stroke"]') as HTMLInputElement).click());
+    expect(c.getState().paint.mixer).toMatchObject({ cleanEachStroke: false, loadEachStroke: false });
+    c.setPaintOptions({ foreground: '#0000ff' });
+    await act(async () => button('Load brush').click());
+    expect(c.getState().paint.mixerLoad).toMatchObject({ reservoir: [0, 0, 1], amount: 1 });
+    expect((container.querySelector('[aria-label="Brush load"]') as HTMLElement).title).toMatch(/#0000ff, 100% left/);
+    await act(async () => button('Clean brush').click());
+    expect(c.getState().paint.mixerLoad.pickup).toBeNull();
+    await act(async () => button('RGB').click());
+    expect(c.getState().paint.mixer.mixing).toBe('rgb');
+  });
+
   it('paints on the canvas in the Paint tab and handles shortcuts', async () => {
     let c!: ImageEditorController;
     function Host() {
@@ -87,6 +115,19 @@ describe('React paint tools', () => {
       canvas.dispatchEvent(pointer('pointerup', 150, 75));
     });
     expect(c.getLayerBounds(id)).not.toBeNull();
+    // The Mixer Brush smears what is there as one undo step.
+    await act(async () => window.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'B', shiftKey: true })));
+    expect(c.getState().activeTool).toBe('mixer');
+    const before = c.getLayer(id);
+    await act(async () => {
+      canvas.dispatchEvent(pointer('pointerdown', 110, 70));
+      canvas.dispatchEvent(pointer('pointermove', 160, 72));
+      canvas.dispatchEvent(pointer('pointerup', 160, 72));
+    });
+    expect(c.getLayer(id)).not.toBe(before);
+    await act(async () => c.undo());
+    expect(c.getLayer(id)).toEqual(before);
+    await act(async () => window.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'b' })));
     await act(async () => window.dispatchEvent(new win.KeyboardEvent('keydown', { key: ']' })));
     expect(c.getState().paint.brush.size).toBe(25);
     await act(async () => window.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'v' })));
