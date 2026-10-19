@@ -710,7 +710,17 @@ export interface SpreadsheetCommandOptions {
 	scope?: string | null;
 }
 
-/** Palette / agent commands for common spreadsheet table actions (no default shortcuts). */
+/** Turns a controller's `false` (nothing changed) into a failure the palette and agents see. */
+function orFail(changed: boolean, message: string): true {
+	if (!changed) throw new Error(message);
+	return true;
+}
+
+/**
+ * Palette / agent commands for common spreadsheet table actions (no default shortcuts).
+ * Merge, unmerge and transpose act on the user's selection; agents should use the
+ * `merge_cells` / `unmerge_cells` / `transpose_range` tools, which take a range.
+ */
 export function createSpreadsheetCommands(
 	controller: SpreadsheetCommandTarget,
 	options: SpreadsheetCommandOptions = {}
@@ -730,8 +740,31 @@ export function createSpreadsheetCommands(
 			run: () => controller.clearFilters()
 		},
 		{ ...base, id: `${prefix}unhideAll`, label: 'Unhide All Rows and Columns', keywords: ['show', 'hidden'], run: () => controller.unhideAll() },
-		{ ...base, id: `${prefix}mergeCells`, label: 'Merge Cells', keywords: ['combine'], enabled: hasRange, run: () => controller.mergeCells() },
-		{ ...base, id: `${prefix}unmergeCells`, label: 'Unmerge Cells', keywords: ['split'], enabled: hasRange, run: () => controller.unmergeCells() },
-		{ ...base, id: `${prefix}transposeRange`, label: 'Transpose Range', keywords: ['rotate', 'swap rows columns'], enabled: hasRange, run: () => controller.transposeRange() }
+		{
+			...base,
+			id: `${prefix}mergeCells`,
+			label: 'Merge Cells',
+			keywords: ['combine'],
+			enabled: hasRange,
+			run: () =>
+				orFail(controller.mergeCells(), 'Cannot merge the selection: it is a single cell, or it partly overlaps a merge or a spill range.')
+		},
+		{
+			...base,
+			id: `${prefix}unmergeCells`,
+			label: 'Unmerge Cells',
+			keywords: ['split'],
+			enabled: hasRange,
+			run: () => orFail(controller.unmergeCells(), 'There are no merged cells in the selection.')
+		},
+		{
+			...base,
+			id: `${prefix}transposeRange`,
+			label: 'Transpose Range',
+			keywords: ['rotate', 'swap rows columns'],
+			enabled: hasRange,
+			run: () =>
+				orFail(controller.transposeRange(), 'Cannot transpose the selection: it is a single cell, or a merge or a spill range is in the way.')
+		}
 	];
 }

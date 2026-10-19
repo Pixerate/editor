@@ -18,6 +18,7 @@ import {
   setControlPath,
 } from './controls';
 import { createImageSelectionTools } from './selection-tools';
+import { createImageEditTools } from './edit-tools';
 
 export interface ImageEditorToolProviderOptions {
   /** Provider id (unique per registry). Default `image-editor`. */
@@ -48,6 +49,9 @@ function adjustmentsSummary(adjustments: ImageAdjustments) {
  * - `render_preview {maxSide}`: the rendered image as a PNG, longest side at most `maxSide`.
  * - Selections and masks: `get_selection`, `select_region`, `select_by_color`, `modify_selection`,
  *   `refine_selection`, `apply_selection_as_mask` (see `createImageSelectionTools`).
+ * - Layers, geometry and history: `get_image_info`, `get_histogram`, `update_adjustment_layer`,
+ *   `remove_adjustment_layer`, `move_adjustment_layer`, `set_crop`, `reset_crop`, `set_rotation`,
+ *   `flip_image`, `undo_image`, `redo_image` (see `createImageEditTools`).
  */
 export function createImageEditorToolProvider(
   controller: ImageEditorController,
@@ -259,7 +263,15 @@ export function createImageEditorToolProvider(
   return {
     id: options.id ?? 'image-editor',
     namespace: options.namespace,
-    tools: [getAdjustments, listControls, setAdjustments, addLayer, renderPreview, ...createImageSelectionTools(controller)],
+    tools: [
+      getAdjustments,
+      listControls,
+      setAdjustments,
+      addLayer,
+      renderPreview,
+      ...createImageSelectionTools(controller),
+      ...createImageEditTools(controller),
+    ],
   };
 }
 

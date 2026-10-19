@@ -140,6 +140,7 @@
   },
   "files": [
     "dist",
+    "skills",
     "THIRD_PARTY_NOTICES.md"
   ],
   "sideEffects": false,

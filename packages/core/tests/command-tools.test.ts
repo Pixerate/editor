@@ -12,7 +12,8 @@ import {
 import { CommandRegistry, createCommandToolProvider, createHistoryCommands } from '../src/commands';
 import { HistoryManager } from '../src/history';
 import { ImageEditorController, createImageEditorToolProvider } from '../src/image-editor';
-import { createGenerationToolProvider } from '../src/generation';
+import { createGenerationToolProvider, createGenerationHistoryToolProvider, createGenerationRecordStore } from '../src/generation';
+import { createMemoryStorage } from '../src/persistence';
 import { ChartController, createChartToolProvider, createOfficeChartToolProvider } from '../src/chart';
 import { DiagramController, createDiagramToolProvider } from '../src/diagram';
 import { AnimationEditorController, createAnimationEditorToolProvider } from '../src/animation-editor';
@@ -184,8 +185,8 @@ describe('built-in tool providers have complete MCP annotations', () => {
 		const registry = new ToolRegistry();
 		providers.forEach((p) => registry.register(p));
 		const tools = registry.listTools().tools;
-		// rich text 8, spreadsheet 7, editor (state + 7 canvas + 4 prompt + view) 13, commands 3, components 17
-		expect(tools.length).toBe(8 + 7 + 13 + 3 + 17);
+		// rich text 8, spreadsheet 10, editor (state + 7 canvas + 4 prompt + view) 13, commands 3, components 17
+		expect(tools.length).toBe(8 + 10 + 13 + 3 + 17);
 		// Hosts with their own tool sets: checked to the same standard.
 		registry.register(createImageEditorToolProvider(new ImageEditorController(), { id: 'img', namespace: 'img' }));
 		registry.register(createChartToolProvider(new ChartController(), { id: 'chart', namespace: 'chart' }));
@@ -198,6 +199,9 @@ describe('built-in tool providers have complete MCP annotations', () => {
 		registry.register(createRichTextToolProvider(chartDoc, { id: 'chart-doc', namespace: 'chartdoc' }));
 		registry.register(
 			createGenerationToolProvider({ namespace: 'gen', models: [], generate: () => ({}), estimate: () => ({}) })
+		);
+		registry.register(
+			createGenerationHistoryToolProvider({ namespace: 'genhistory', store: createGenerationRecordStore({ storage: createMemoryStorage() }) })
 		);
 		const allTools = registry.listTools().tools;
 		expect(allTools.length).toBeGreaterThan(tools.length);
