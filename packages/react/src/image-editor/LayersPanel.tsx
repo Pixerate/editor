@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { ImageEditorController, ImageLayer, LayerMenuAction, LayerPanelRow, PixelBuffer } from '@pixerate/editor/image-editor';
+import { LayerEffectsPanel } from './LayerEffectsPanel';
 import {
   BLEND_MODES,
   PSD_FILE_ACCEPT,
@@ -8,6 +9,7 @@ import {
   dropZone,
   openPsdFile,
   layerBadge,
+  layerEffectsBadge,
   layerMenu,
   layerPanelRows,
   runLayerMenuAction,
@@ -21,6 +23,8 @@ export interface LayersPanelProps {
   psd?: boolean;
   /** Base name of exported PSD files (default `image`). */
   psdFileName?: string;
+  /** Show the active layer's effects section (default true). */
+  effects?: boolean;
   className?: string;
 }
 
@@ -65,9 +69,10 @@ const Thumbnail: React.FC<{ pixels: PixelBuffer | null; size: number; label: str
  * The layer stack, top first: visibility, thumbnails, names (double-click to rename), locks,
  * mask thumbnails (click to paint the mask, Shift-click to disable it), drag to reorder or drop
  * into a group, opacity / fill / blend / clipping for the active layer, and the layer menu
- * (right-click a row, or the ⋯ button). Every action is one undo step on the controller.
+ * (right-click a row, or the ⋯ button), an fx badge on rows with effects (click to switch them
+ * on or off) and the active layer's effects. Every action is one undo step on the controller.
  */
-export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailSize = 32, psd = true, psdFileName = 'image', className }) => {
+export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailSize = 32, psd = true, psdFileName = 'image', effects = true, className }) => {
   const [, setTick] = useState(0);
   useEffect(() => controller.subscribe(() => setTick((n) => n + 1)), [controller]);
   const [error, setError] = useState<string | null>(null);
@@ -250,6 +255,8 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
         </div>
       )}
 
+      {effects && active && active.type !== 'adjustment' && <LayerEffectsPanel controller={controller} className="border-t border-slate-800 pt-1.5" />}
+
       <ul className="flex flex-col gap-0.5" role="tree" aria-label="Layers">
         {rows.map((row) => {
           const { layer } = row;
@@ -364,6 +371,21 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
                 >
                   {row.label}
                 </span>
+              )}
+              {layerEffectsBadge(layer) && (
+                <button
+                  type="button"
+                  data-testid="layer-fx-badge"
+                  aria-label={layerEffectsBadge(layer) === 'on' ? `Turn effects off for ${row.label}` : `Turn effects on for ${row.label}`}
+                  aria-pressed={layerEffectsBadge(layer) === 'on'}
+                  className={`text-[9px] italic font-semibold ${layerEffectsBadge(layer) === 'on' ? 'text-indigo-300' : 'text-slate-600 line-through'}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    attempt(() => controller.setLayerEffectsEnabled(layer.id, layerEffectsBadge(layer) !== 'on'));
+                  }}
+                >
+                  fx
+                </button>
               )}
               {locked(layer) && <span aria-label="Locked" className="text-slate-400">🔒</span>}
               {layer.blend !== 'normal' && layer.blend !== 'pass-through' && <span className="text-[9px] text-slate-500">{layer.blend}</span>}

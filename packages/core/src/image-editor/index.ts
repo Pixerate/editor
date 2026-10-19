@@ -31,6 +31,7 @@ export { encodePng, decodePng, isPng, bytesToBase64, base64ToBytes, parseDataUrl
 export { inflate, inflateRaw, deflate, deflateRaw, adler32, ZlibError } from '../raster/zlib';
 export * from './layers/ops';
 export * from './layers/panel';
+export * from './layers/effects-ui';
 export * from '../paint';
 export * from './paint-tools';
 export * from './layers/paint-ui';

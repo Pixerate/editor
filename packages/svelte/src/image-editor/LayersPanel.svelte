@@ -7,12 +7,14 @@
     dropPlacement,
     dropZone,
     layerBadge,
+    layerEffectsBadge,
     layerMenu,
     layerPanelRows,
     openPsdFile,
     runLayerMenuAction,
   } from '@pixerate/editor/image-editor';
   import { untrack } from 'svelte';
+  import LayerEffectsPanel from './LayerEffectsPanel.svelte';
 
   interface Props {
     controller: ImageEditorController;
@@ -22,10 +24,12 @@
     psd?: boolean;
     /** Base name of exported PSD files (default `image`). */
     psdFileName?: string;
+    /** Show the active layer's effects section (default true). */
+    effects?: boolean;
     class?: string;
   }
 
-  let { controller, thumbnailSize = 32, psd = true, psdFileName = 'image', class: className = '' }: Props = $props();
+  let { controller, thumbnailSize = 32, psd = true, psdFileName = 'image', effects = true, class: className = '' }: Props = $props();
 
   let tick = $state(0);
   $effect(() => {
@@ -255,6 +259,10 @@
     </div>
   {/if}
 
+  {#if effects && snapshot.active && snapshot.active.type !== 'adjustment'}
+    <LayerEffectsPanel {controller} class="border-t border-slate-800 pt-1.5" />
+  {/if}
+
   <ul class="flex flex-col gap-0.5" role="tree" aria-label="Layers">
     {#each snapshot.rows as row (row.layer.id)}
       {@const layer = row.layer}
@@ -360,6 +368,20 @@
               e.stopPropagation();
               renaming = layer.id;
             }}>{row.label}</span>
+        {/if}
+        {#if layerEffectsBadge(layer)}
+          {@const fxOn = layerEffectsBadge(layer) === 'on'}
+          <button
+            type="button"
+            data-testid="layer-fx-badge"
+            aria-label={fxOn ? `Turn effects off for ${row.label}` : `Turn effects on for ${row.label}`}
+            aria-pressed={fxOn}
+            class="text-[9px] italic font-semibold {fxOn ? 'text-indigo-300' : 'text-slate-600 line-through'}"
+            onclick={(e) => {
+              e.stopPropagation();
+              attempt(() => controller.setLayerEffectsEnabled(layer.id, !fxOn));
+            }}>fx</button
+          >
         {/if}
         {#if locked(layer)}<span aria-label="Locked" class="text-slate-400">🔒</span>{/if}
         {#if layer.blend !== 'normal' && layer.blend !== 'pass-through'}<span class="text-[9px] text-slate-500">{layer.blend}</span>{/if}
