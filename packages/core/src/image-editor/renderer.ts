@@ -33,7 +33,7 @@ import {
   splitOverlayAnnotations,
   sumHistograms,
 } from './layers/render';
-import { TILE, tileKey, type PixelSurface, type TileKey } from './layers/surface';
+import { TILE, tileKey, type PixelSurface, type TileKey } from '../raster/surface';
 import { isLegacyShape as isLegacyStack } from './layers/migrate';
 import {
   applyImageProjectionToContext,

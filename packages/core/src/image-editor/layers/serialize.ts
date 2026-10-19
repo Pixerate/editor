@@ -24,8 +24,8 @@ import {
   type PixelLayer,
   type RasterMask,
 } from './model';
-import { bytesToBase64, decodePng, parseDataUrl, pngDataUrl } from './png';
-import { contentBounds, emptySurface, readRegion, surfaceFromPixels, type TiledSurface } from './surface';
+import { bytesToBase64, decodePng, parseDataUrl, pngDataUrl } from '../../raster/png';
+import { contentBounds, emptySurface, readRegion, surfaceFromPixels, type TiledSurface } from '../../raster/surface';
 
 export const LAYERED_SCHEMA_VERSION = 3 as const;
 

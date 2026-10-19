@@ -1,7 +1,7 @@
 import type { AgentTool } from '../tools/registry.js';
 import type { ImageEditorController } from './controller';
 import { BLEND_MODES, type BlendMode } from './blend';
-import { MAX_BRUSH_SIZE, type BrushSettings, type StrokePoint } from './layers/paint';
+import { MAX_BRUSH_SIZE, type BrushSettings, type StrokePoint } from '../paint';
 import type { LayerTarget } from './layers/model';
 
 const WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } as const;
