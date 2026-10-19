@@ -34,6 +34,11 @@
       "import": "./dist/image-editor/index.js",
       "require": "./dist/image-editor/index.cjs"
     },
+    "./paint-editor": {
+      "types": "./dist/paint-editor/index.d.ts",
+      "import": "./dist/paint-editor/index.js",
+      "require": "./dist/paint-editor/index.cjs"
+    },
     "./commands": {
       "types": "./dist/commands/index.d.ts",
       "import": "./dist/commands/index.js",
@@ -90,6 +95,9 @@
       ],
       "image-editor": [
         "./dist/image-editor/index.d.ts"
+      ],
+      "paint-editor": [
+        "./dist/paint-editor/index.d.ts"
       ],
       "commands": [
         "./dist/commands/index.d.ts"

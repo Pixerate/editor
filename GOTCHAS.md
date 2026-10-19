@@ -2062,6 +2062,12 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Replaying a stroke painted with perspective snapping wobbled off the guide line, or snapped to a different vanishing point after the guide moved.
 - **Root Cause**: A replay feeds the recorded points back in. If the raw pointer samples were recorded, the replay either had to re-snap (to whatever the guide is now) or painted the unsnapped path.
 - **Solution / Workaround**: The snapper runs as the session's `inputFilter`, before the samples are painted and pushed to `session.points`, so recordings hold the snapped path and replays never snap. Symmetry is the opposite: the stroke records its raw path plus the copies as affine maps (`copies`), so a varied replay can conjugate them and stay symmetric about the moved centre.
+
+### [react|svelte/paint-editor] Paper Controls Are Undo Steps, So Commit on Release, Not on Every Input
+
+- **Issue / Symptom**: Dragging the paper's grain-depth slider, or the colour picker, in the React paint editor left dozens of "Paper" entries in the undo history.
+- **Root Cause**: `setPaper` is one undo step per call. React's `onChange` on a range or colour input fires on every `input` event, not on release. Brush settings are editor state, so updating them live is fine, but paper settings are document state.
+- **Solution / Workaround**: `PaintSlider` takes `onCommit`, which runs on the native `change` event (attached with `addEventListener` in React, `onchange` in Svelte), and keeps a local draft value while dragging. `CommitColorInput` does the same for the React colour input. Tests dispatch `input` then `change` and check for exactly one undo step.
 ### [core/image-editor] A Smart Object's Pixels Are a Cache the Compositor Draws Like a Pixel Layer
 
 - **Issue / Symptom**: A smart object's `surface` looks like a pixel layer's, but painting into it, or changing `placement` / `smartFilters` / `contents` with a plain object spread, leaves the layer showing stale pixels (and the next transform throws the paint away).

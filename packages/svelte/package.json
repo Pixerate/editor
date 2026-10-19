@@ -33,6 +33,11 @@
       "svelte": "./dist/image-editor/index.js",
       "default": "./dist/image-editor/index.js"
     },
+    "./paint-editor": {
+      "types": "./dist/paint-editor/index.d.ts",
+      "svelte": "./dist/paint-editor/index.js",
+      "default": "./dist/paint-editor/index.js"
+    },
     "./commands": {
       "types": "./dist/commands/index.d.ts",
       "svelte": "./dist/commands/index.js",
@@ -90,6 +95,9 @@
       ],
       "image-editor": [
         "./dist/image-editor/index.d.ts"
+      ],
+      "paint-editor": [
+        "./dist/paint-editor/index.d.ts"
       ],
       "commands": [
         "./dist/commands/index.d.ts"

@@ -347,6 +347,13 @@ const FEATURES: ParityRow[] = [
     svelte: true,
     note: "Magic wand, colour range, marquees, lasso, selection modes, grow/shrink/feather/border/smooth, guided-filter Refine Edge, Quick Mask, adjustment layer masks",
   },
+  row("Paint Editor (canvas, layers, one undo step per stroke)", "PaintEditorController", "<PaintEditor>, <PaintCanvas> & usePaintEditor", "<PaintEditor>, <PaintCanvas> & createReactivePaintEditor", "Shared raster stack and compositor; the paper is the compositor's bottom layer; view rotation and mirroring never resample"),
+  row("Paper & Grain-Responsive Dry Media", "PAPER_LIBRARY, grainCatch", "<PaperPanel>", "<PaperPanel>", "Twelve generated papers in six families; pencils, pastels and charcoal catch the peaks at light pressure"),
+  row("Brushes, Pen Input & Brush Library", "BUILTIN_BRUSHES, PenDabWalker, PaintGesture", "<BrushPanel> & <PaintCanvas>", "<BrushPanel> & <PaintCanvas>", "Pressure, tilt, barrel rotation and velocity, separate pressure smoothing, rotation modes, coalesced and predicted events, palm rejection, JSON library, thumbnails"),
+  row("Painting Guides (symmetry, perspective, tracing, references)", "setSymmetry, PerspectiveSnapper, setTracingImage", "<PaintToolbar> & <PaintCanvas>", "<PaintToolbar> & <PaintCanvas>", "Mirror and kaleidoscope as one stroke; 1–3 vanishing points; tracing in the view only with colour sampling; floating references to pick from"),
+  row("Paint Colour (wheel, harmonies, swatches, mixing pad)", "colorHarmony, MixingPad", "<ColorPanel>", "<ColorPanel>", "RYB or RGB wheel; a mixing pad with a pigment Mixer Brush and palette knife"),
+  row("Paint Layers", "addLayer, updateLayer, mergeDown", "<PaintLayersPanel>", "<PaintLayersPanel>", "Pixel layers and groups, opacity, blend, clipping, locks"),
+  row("Strokes as Data & Paint Agent Tools", "replayStrokes, createPaintEditorToolProvider", "useAgentToolProvider", "useAgentToolProvider", "61 tools; strokes replay exactly or varied; pixerate-paint-editor skill"),
   ...PRODUCTIVITY_FEATURES,
 ];
 

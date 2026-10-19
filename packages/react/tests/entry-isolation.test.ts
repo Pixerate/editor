@@ -36,6 +36,7 @@ describe("subpath entry isolation", () => {
   it.each([
     ["spreadsheet/index.js", "spreadsheet"],
     ["image-editor/index.js", "image-editor"],
+    ["paint-editor/index.js", "paint-editor"],
     ["commands/index.js", "commands"],
     ["persistence/index.js", "persistence"],
     ["generation/index.js", "generation"],
