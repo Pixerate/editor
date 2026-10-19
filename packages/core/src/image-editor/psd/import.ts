@@ -1,14 +1,35 @@
 // Portions ported from photocraft/crates/io/src/psd_import.rs (MIT OR Apache-2.0, © ArtCraft Team and contributors). See THIRD_PARTY_NOTICES.md.
 
 /**
- * PSD / PSB → our layer tree. Everything the model holds maps directly; everything else comes in
- * as close as it can (type, smart-object, fill and shape layers as their stored pixels) with a
- * warning naming the layers.
+ * PSD / PSB → our layer tree. Everything the model holds maps directly (smart objects with their
+ * embedded contents, placement, warp, smart filters and filter mask); everything else comes in as
+ * close as it can (type, fill and shape layers as their stored pixels) with a warning naming the
+ * layers.
  */
 
 import type { BlendMode } from '../blend';
-import { emptySurface, surfaceFromPixels } from '../../raster/surface';
-import type { GroupLayer, ImageLayer, LayerBlendMode, LayerLocks, PixelLayer, RasterMask } from '../layers/model';
+import { emptySurface, surfaceFromPixels, translateSurface } from '../../raster/surface';
+import { decodePng } from '../../raster/png';
+import type { GroupLayer, ImageLayer, LayerBlendMode, LayerLocks, PixelLayer, RasterMask, SmartContents, SmartObjectLayer, SmartPlacement } from '../layers/model';
+import { mapWarpMeshPoints } from '../../geom/warp';
+import { boxQuad } from '../../geom/homography';
+import {
+  FILTER_EFFECTS_KEYS,
+  LINKED_FILE_KEYS,
+  PLACED_KEYS,
+  fileTypeOf,
+  filterMaskFromItem,
+  parseFilterEffects,
+  parseLinkedFiles,
+  parsePlaced,
+  placementFromPlaced,
+  smartFiltersFromPsd,
+  BROWSER_IMAGE_TYPES,
+  type FilterEffectsItem,
+  type PsdLinkedFile,
+  type PsdPlaced,
+} from './smart';
+import { descBool } from './descriptor';
 import { ADJUSTMENT_KEYS, adjustmentLabel, parseAdjustmentBlock } from './adjust';
 import { PsdError } from './binary';
 import {
@@ -89,7 +110,7 @@ const VECTOR_KEYS = ['vmsk', 'vsms'];
 export interface PsdLayerSummary {
   name: string;
   /** Our layer type, or `null` when the layer was dropped. */
-  type: 'pixel' | 'adjustment' | 'group' | null;
+  type: 'pixel' | 'adjustment' | 'group' | 'smart' | null;
   /** `mapped`: held exactly; `approximated`: imported with losses; `dropped`: left out. */
   status: 'mapped' | 'approximated' | 'dropped';
   /** What Photoshop calls it (`pixel`, `type`, `smart-object`, `fill`, `shape`, `Levels` …). */
@@ -124,7 +145,12 @@ export interface PsdImportOptions {
   newId?: (hint: string) => string;
   /** Skip decoding pixels (inspection only). */
   skipPixels?: boolean;
+  /** @internal How deep inside smart object contents this file is (nested PSB files). */
+  depth?: number;
 }
+
+/** Smart object contents nest at most this deep (a PSB inside a PSB inside …). */
+const MAX_CONTENTS_DEPTH = 6;
 
 /** A PSD byte (0..255) as the whole percent Photoshop shows, 0..1. */
 const percent = (v: number) => Math.round((v / 255) * 100) / 100;
@@ -183,6 +209,13 @@ interface Ctx {
   colorCount: number;
   palette?: Uint8Array;
   patterns: Map<string, EffectPattern>;
+  /** Embedded and linked files by uuid (`lnk2` / `lnk3` / `lnkD`). */
+  linked: Map<string, PsdLinkedFile>;
+  /** Filter-effects items (smart filter masks) by instance id. */
+  filterItems: Map<string, FilterEffectsItem>;
+  /** Contents read so far by uuid (`null`: could not be read). */
+  contents: Map<string, SmartContents | null>;
+  depth: number;
 }
 
 function decodeOr(ctx: Ctx, rec: PsdLayerRecord, id: number, name: string): Uint8Array | undefined {
@@ -382,6 +415,27 @@ function importNode(ctx: Ctx, node: PsdTreeNode, depth: number): ImageLayer | nu
   }
 
   const props = baseProps(ctx, rec, name, notes);
+  if (kind === 'smart-object' && ctx.skipPixels) {
+    // Inspection: say what it would become without reading the contents.
+    const block = PLACED_KEYS.map((k) => rec.blocks.find((b) => b.key === k)).find(Boolean);
+    const placed = block ? parsePlaced(block.key, block.data) : null;
+    if (placed) {
+      const file = ctx.linked.get(placed.idnt);
+      if (!file || file.kind !== 'liFD') notes.push('linked contents come in as the stored pixels');
+      entry.type = 'smart';
+      entry.status = notes.length ? 'approximated' : 'mapped';
+      return { type: 'pixel', id: ctx.newId(name), ...props, surface: emptySurface(4), offset: { x: 0, y: 0 } };
+    }
+  }
+  if (kind === 'smart-object' && !ctx.skipPixels) {
+    const smart = importSmart(ctx, rec, name, notes, props);
+    if (smart) {
+      entry.type = 'smart';
+      entry.id = smart.id;
+      entry.status = notes.length ? 'approximated' : 'mapped';
+      return smart;
+    }
+  }
   if (kind !== 'pixel') {
     const what = kind === 'smart-object' ? 'Smart objects' : kind === 'type' ? 'Type layers' : kind === 'shape' ? 'Shape layers' : 'Fill layers';
     ctx.warn.add(`${what} came in as pixel layers (their stored pixels)`, name);
@@ -397,6 +451,138 @@ function importNode(ctx: Ctx, node: PsdTreeNode, depth: number): ImageLayer | nu
   entry.type = 'pixel';
   entry.id = layer.id;
   entry.status = notes.length ? 'approximated' : 'mapped';
+  return layer;
+}
+
+/** The contents a placed layer points at (memoised by uuid), or `null` when they are not embedded or cannot be read. */
+function contentsFor(ctx: Ctx, placed: PsdPlaced, name: string, notes: string[]): SmartContents | null {
+  const memo = ctx.contents.get(placed.idnt);
+  if (memo !== undefined) return memo;
+  const file = ctx.linked.get(placed.idnt);
+  let out: SmartContents | null = null;
+  if (file && file.kind === 'liFD' && file.bytes.length) {
+    const t = fileTypeOf(file.bytes);
+    const base = { id: placed.idnt, name: file.name || `${name}.${t.ext}`, file: { bytes: file.bytes.slice(), type: t.ext } };
+    try {
+      if (t.ext === 'psd' || t.ext === 'psb') {
+        if (ctx.depth + 1 > MAX_CONTENTS_DEPTH) throw new PsdError('the contents nest too deep');
+        const nested = psdToLayers(readPsd(file.bytes), { newId: ctx.newId, depth: ctx.depth + 1 });
+        for (const w of nested.warnings) ctx.warn.add(`In its contents: ${w.replace(/\.$/, '')}`, name);
+        out = {
+          ...base,
+          kind: 'document',
+          width: nested.width,
+          height: nested.height,
+          document: { layers: nested.layers, globalLight: nested.globalLight, patterns: nested.patterns.length ? nested.patterns : undefined },
+        };
+      } else if (t.ext === 'png') {
+        const png = decodePng(file.bytes);
+        out = { ...base, kind: 'raster', width: png.width, height: png.height, raster: surfaceFromPixels(png, 4, 0, 0) };
+      } else {
+        const size = placed.size ?? { width: 0, height: 0 };
+        if (!(size.width > 0 && size.height > 0)) throw new PsdError('the contents have no stored size');
+        out = { ...base, kind: 'raster', width: Math.round(size.width), height: Math.round(size.height) };
+        if (BROWSER_IMAGE_TYPES[t.ext]) {
+          ctx.warn.add(`Smart object contents in ${t.ext.toUpperCase()} format are decoded only in a browser (prepareSmartObjects); until then the layer shows its stored pixels and cannot be re-rendered`, name);
+        } else {
+          ctx.warn.add(`Smart object contents of an unsupported type (${t.ext === 'bin' ? 'unknown' : t.ext.toUpperCase()}) are kept for export, but the layer shows its stored pixels and cannot be re-rendered`, name);
+        }
+        notes.push(`${t.ext} contents not decoded here`);
+      }
+    } catch (e) {
+      ctx.warn.add(`Smart object contents could not be read (${e instanceof Error ? e.message : String(e)}); the layer came in as its stored pixels`, name);
+      notes.push('contents could not be read');
+      out = null;
+    }
+  }
+  ctx.contents.set(placed.idnt, out);
+  return out;
+}
+
+/**
+ * A placed layer (`SoLd` / `SoLE` / `PlLd`) as a smart object: its embedded contents, placement,
+ * smart filters and filter mask, with the layer's stored pixels as the rendered result (exactly
+ * what Photoshop drew). Linked (external) contents come in as the stored pixels, placed 1:1.
+ * Returns `null` when the block cannot be read (the layer then comes in as pixels).
+ */
+function importSmart(ctx: Ctx, rec: PsdLayerRecord, name: string, notes: string[], props: ReturnType<typeof baseProps>): SmartObjectLayer | null {
+  const block = PLACED_KEYS.map((k) => rec.blocks.find((b) => b.key === k)).find(Boolean);
+  if (!block) return null;
+  const placed = parsePlaced(block.key, block.data);
+  if (!placed) return null;
+  const surface = recordPixels(ctx, rec, name);
+  let contents = placed.idnt ? contentsFor(ctx, placed, name, notes) : null;
+  let placement: SmartPlacement | null = null;
+  let preview = false;
+  if (contents) {
+    const size = placed.size ?? { width: contents.width, height: contents.height };
+    const pnotes: string[] = [];
+    placement = placementFromPlaced(placed, size, pnotes);
+    for (const n of pnotes) {
+      ctx.warn.add(`A smart object's placement was approximated: ${n}`, name);
+      notes.push(n);
+    }
+    if (placement && (size.width !== contents.width || size.height !== contents.height)) {
+      // The stored size is in the document's units; the warp is in them too.
+      const kx = contents.width / size.width;
+      const ky = contents.height / size.height;
+      if (placement.warp) placement = { ...placement, warp: mapWarpMeshPoints(placement.warp, (p) => ({ x: p.x * kx, y: p.y * ky })) };
+    }
+  }
+  if (!contents || !placement) {
+    // Linked to an external file, or contents we cannot read: the stored pixels, placed 1:1.
+    const b = surface.bounds;
+    const { width, height } = rectSize(rec.rect);
+    if (!b || !(width > 0 && height > 0)) return null;
+    const file = ctx.linked.get(placed.idnt);
+    contents = {
+      id: placed.idnt || ctx.newId(`${name}-contents`),
+      name: file?.name || `${name}.png`,
+      width,
+      height,
+      kind: 'raster',
+      raster: translateSurface(surface, -rec.rect.left, -rec.rect.top),
+    };
+    if (file && file.kind !== 'liFD') {
+      contents.linked = { path: file.path ?? file.name };
+      ctx.warn.add(`Linked smart objects came in as their embedded preview; the linked file is not read`, name);
+      notes.push(`linked to "${file.path ?? file.name}"`);
+    } else if (!notes.includes('contents could not be read')) {
+      ctx.warn.add('A smart object without readable contents came in with its stored pixels as contents', name);
+      notes.push('contents missing');
+    }
+    placement = { corners: boxQuad({ x: rec.rect.left, y: rec.rect.top, width, height }) };
+    preview = true;
+  }
+  const layer: SmartObjectLayer = { type: 'smart', id: ctx.newId(name), ...props, contents, placement, surface, offset: { x: 0, y: 0 } };
+  const fill = u8Block(rec, 'iOpa');
+  if (fill !== undefined && fill < 255) layer.fillOpacity = percent(fill);
+  const effects = recordEffects(ctx, rec, name, notes, false);
+  if (effects) layer.effects = effects;
+  const mask = recordMask(ctx, rec, name);
+  if (mask) layer.mask = mask;
+  if (placed.filterFX) {
+    const fnotes: string[] = [];
+    let n = 0;
+    const stack = smartFiltersFromPsd(placed.filterFX, () => `${layer.id}-flt-${++n}`, fnotes);
+    if (preview) {
+      // The stored pixels already show the filters: keep them listed, never applied twice.
+      stack.filters = stack.filters.map((f) => (f.kind === 'psd' ? f : { ...f, enabled: false }));
+    }
+    for (const note of fnotes) {
+      ctx.warn.add(`Smart filters were approximated: ${note}`, name);
+      notes.push(note);
+    }
+    const item = ctx.filterItems.get(placed.placed);
+    const fm = item ? filterMaskFromItem(item) : null;
+    if (fm) {
+      if (descBool(placed.filterFX, 'filterMaskEnable') === false) fm.enabled = false;
+      if (descBool(placed.filterFX, 'filterMaskLinked') === false) fm.linked = false;
+      stack.mask = fm;
+    }
+    if (stack.filters.length || stack.mask || !stack.enabled) layer.smartFilters = stack;
+  }
+  layer.psd = { key: block.key, data: block.data.slice(), placed: placed.placed || undefined };
   return layer;
 }
 
@@ -450,7 +636,21 @@ export function psdToLayers(file: PsdFile, options: PsdImportOptions = {}): PsdI
     colorCount: colorChannelCount(header.colorMode, header.channels),
     palette: header.colorMode === MODE_INDEXED ? file.colorModeData : undefined,
     patterns: new Map(),
+    linked: new Map(),
+    filterItems: new Map(),
+    contents: new Map(),
+    depth: options.depth ?? 0,
   };
+  for (const block of file.globalBlocks) {
+    if (LINKED_FILE_KEYS.includes(block.key)) for (const f of parseLinkedFiles(block.data)) if (!ctx.linked.has(f.uuid)) ctx.linked.set(f.uuid, f);
+    if (FILTER_EFFECTS_KEYS.includes(block.key)) {
+      try {
+        for (const it of parseFilterEffects(block.data).items) ctx.filterItems.set(it.id, it);
+      } catch (e) {
+        warn.extra.push(`The smart filter masks could not be read (${e instanceof Error ? e.message : String(e)}); they reveal everything.`);
+      }
+    }
+  }
   for (const block of file.globalBlocks) {
     if (!PATTERN_BLOCK_KEYS.includes(block.key)) continue;
     try {

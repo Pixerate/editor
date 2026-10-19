@@ -172,8 +172,9 @@ batching.
 ### Photoshop files
 
 1. **Inspect before opening.** `inspect_psd` lists every layer with the type it would become and
-   a status: `mapped` (held exactly), `approximated` (type, smart-object, fill and shape layers
-   come in as their stored pixels; Dissolve becomes Normal; effects with gradient midpoints or
+   a status: `mapped` (held exactly), `approximated` (type, fill and shape layers come in as their
+   stored pixels; linked smart objects as their stored pixels; Photoshop smart filters other than
+   Box Blur are kept but not drawn; Dissolve becomes Normal; effects with gradient midpoints or
    smoothness, noise gradients, glow jitter, legacy bevels or patterns missing from the file are
    drawn approximately) or
    `dropped` (Brightness/Contrast, Exposure, Channel Mixer, Gradient Map, Selective Color and
@@ -187,12 +188,20 @@ batching.
    and 32-bit files are converted to 8-bit RGB, and ICC profiles are ignored; the warnings say
    so. Afterwards work with `list_layers` as usual: there is no Background source image, every
    pixel comes from the layers.
-4. **`export_psd` writes the stack as it is**, in the source frame: crop and rotation are not
+4. **Smart objects come in live**: embedded contents (a PSB opens as a nested document you can
+   edit with `edit_smart_object_contents`, a PNG as raster contents), the placement and warp, the
+   smart filters and the filter mask; the layer shows Photoshop's own pixels until you change it.
+   JPEG, TIFF and SVG contents are decoded only in a browser, so elsewhere such a smart object
+   cannot be transformed (the error says so). Photoshop filters we do not model stay in the list
+   (kind `psd`): hide, reorder, re-blend or remove them, and `export_psd` writes them back.
+5. **`export_psd` writes the stack as it is**, in the source frame: crop and rotation are not
    applied, layer filters and depth masks are baked, annotation layers are rasterized (only in
    a browser). Effects are written as Photoshop layer styles: an effects block opened from a PSD
    goes back byte for byte while its effects are unchanged, and the patterns effects use (the
    built-in ones too) are embedded. Only the first outer glow, inner glow, bevel, satin and
-   pattern overlay of a layer fit in a PSD. Read its `warnings` and pass them on. The file comes back as base64 (`data`).
+   pattern overlay of a layer fit in a PSD. Smart objects are written as smart objects (an
+   unchanged one byte for byte); a Develop smart filter has no Photoshop filter and is left out of
+   the list (the pixels still show it). Read its `warnings` and pass them on. The file comes back as base64 (`data`).
 
 ## Best practices
 
@@ -277,7 +286,7 @@ batching.
 | `get_image_info` | Read the geometry: source `image` size, `crop` box (source pixels, or null), `rotation` degrees, `flipH` / `flipV`, the `output` size after crop and rotation, the layer count and `canUndo` / `canRedo`. Call before cropping or selecting so coordinates are right. |
 | `get_histogram` | Judge exposure numerically: per channel and luminance `mean`, `p1` and `p99` (0..255), and `clipping` percent at pure black and white per channel. Reads the last render, so call `render_preview` first. `bins` (16, 32, 64 or 256) adds the counts. Cheaper than another image for checking a tonal change. |
 | `render_preview` | See the edited image (crop, adjustments, layers, annotations) as a PNG, or with `layerId` one layer alone. `maxSide` 16..2048 px, default 512. Images cost tokens: render after a group of edits, use 512 for overall look and 1024+ to judge clipping, edges and masks. Fails in environments without rendering. |
-| `inspect_psd` | Read a PSD / PSB (`data` base64) without opening it: size, `depth`, `colorMode`, `resolution`, every layer bottom first with `psdKind`, the `type` it would become and `status` (`mapped`, `approximated`, `dropped`) with `notes`, and the import `warnings`. Call before `import_psd`. |
+| `inspect_psd` | Read a PSD / PSB (`data` base64) without opening it: size, `depth`, `colorMode`, `resolution`, every layer bottom first with `psdKind`, the `type` it would become (`smart` for smart objects) and `status` (`mapped`, `approximated`, `dropped`) with `notes`, and the import `warnings`. Call before `import_psd`. |
 | `export_psd` | Save the document as an 8-bit RGB PSD (PSB above 30000 px) with layers, groups, adjustment layers and masks. Returns `data` (base64), `size` in bytes, `psb` and `warnings` (crop or rotation not applied, filters and depth masks baked, annotations rasterized or left out, Pigment blends written as Normal). Changes nothing. |
 | `get_transform_frame` | Before a transform: what it would move (`content`, `moved`: pixels, mask, selection), its `frame` (document bounds of the content), `corners` (top-left, top-right, bottom-right, bottom-left) and `center`. `meshColumns` / `meshRows` also return an identity warp `mesh` over the frame to edit for `warp_layer`. Changes nothing. |
 | `get_smart_object` | Read a smart object: `contents` (`id` shared by linked instances, `name`, `kind` raster or document, `width` / `height`, `decoded`, `fileType`, `linkedPath`, `instances`), `placement` (`corners`, `warp` in contents px, `interpolation`, and when `affine` the `scaleX` / `scaleY` in percent of the contents, `rotate`, `skewX`, `center`, `bounds`) and `smartFilters` (`enabled`, `filters` bottom to top with ids, settings, `blend`, `opacity`; kind `psd` is a Photoshop filter kept but not drawn; the filter `mask`). Call before changing a smart object. |

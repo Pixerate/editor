@@ -9,8 +9,26 @@
  */
 
 import { adjustmentKindLabel } from '../adjustment-layers';
-import { contentBounds, readRegion } from '../../raster/surface';
-import { isActiveFilter, type ImageLayer, type RasterMask } from '../layers/model';
+import { contentBounds, readRegion, surfaceFromPixels } from '../../raster/surface';
+import { encodePng } from '../../raster/png';
+import { isActiveFilter, type ImageLayer, type PixelLayer, type RasterMask, type SmartContents, type SmartObjectLayer } from '../layers/model';
+import { LayerCompositor } from '../layers/compositor';
+import { contentsSurface, placementGeometry } from '../layers/smart';
+import {
+  encodeLinkedFile,
+  filterFXDescriptor,
+  filterMaskItem,
+  filterStackKey,
+  parsePlaced,
+  placementFromPlaced,
+  plldBytes,
+  psdUuid,
+  writeFilterEffects,
+  smartFiltersFromPsd,
+  soldBytes,
+  type FilterEffectsItem,
+} from './smart';
+import { descBool } from './descriptor';
 import type { CropBox } from '../types';
 import { PsdError, PsdWriter, encodeLegacyName } from './binary';
 import { writeAdjustmentBlock } from './adjust';
@@ -134,6 +152,86 @@ function lockBits(layer: ImageLayer): number {
   return (l.all ? 0x80000000 : 0) | (l.transparency ? 1 : 0) | (l.pixels ? 2 : 0) | (l.position ? 4 : 0);
 }
 
+/**
+ * A nested document's layers as `exportPsd` takes them: annotation layers left out (they need a
+ * canvas), pixel-layer filters baked, parametric masks dropped. Smart objects stay smart objects.
+ */
+export function prepareNestedLayers(layers: readonly ImageLayer[]): ImageLayer[] {
+  const out: ImageLayer[] = [];
+  for (const l of layers) {
+    if (l.type === 'annotation') continue;
+    let next: ImageLayer = l;
+    if (l.type === 'group') next = { ...l, children: prepareNestedLayers(l.children) };
+    else if (l.type === 'pixel' && (l.filters?.length || l.source === 'document')) {
+      const p: PixelLayer = { ...l };
+      if (l.filters?.some(isActiveFilter)) {
+        const b = l.surface.bounds;
+        if (b) {
+          const r = { x: b.x + l.offset.x - 64, y: b.y + l.offset.y - 64, width: b.width + 128, height: b.height + 128 };
+          const plain: PixelLayer = { ...l, visible: true, opacity: 1, blend: 'normal' };
+          delete plain.mask;
+          delete plain.clipped;
+          delete plain.effects;
+          delete plain.fillOpacity;
+          const data = new LayerCompositor().composite([plain], r, { width: r.x + r.width, height: r.y + r.height });
+          p.surface = surfaceFromPixels({ width: r.width, height: r.height, data }, 4, r.x - l.offset.x, r.y - l.offset.y);
+        }
+      }
+      delete p.filters;
+      delete p.source;
+      next = p;
+    }
+    if (next.mask?.source) {
+      next = { ...next } as ImageLayer;
+      delete next.mask;
+    }
+    out.push(next);
+  }
+  return out;
+}
+
+/** The file a smart object's contents are written as: the file they came from while unedited, else a PNG or a PSD / PSB. */
+export function smartContentsFile(c: SmartContents): { name: string; bytes: Uint8Array } {
+  const base = c.name.replace(/\.\w+$/, '') || 'Contents';
+  if (c.file) return { name: c.name, bytes: c.file.bytes };
+  if (c.kind === 'raster') {
+    const data = readRegion(contentsSurface(c), { x: 0, y: 0, width: c.width, height: c.height });
+    return { name: `${base}.png`, bytes: encodePng(c.width, c.height, data) };
+  }
+  const doc = c.document!;
+  const merged = readRegion(contentsSurface(c), { x: 0, y: 0, width: c.width, height: c.height });
+  const res = exportPsd({ width: c.width, height: c.height, layers: prepareNestedLayers(doc.layers), merged, patterns: doc.patterns, globalLight: doc.globalLight });
+  return { name: `${base}.${res.psb ? 'psb' : 'psd'}`, bytes: res.bytes };
+}
+
+const near = (a: number, b: number) => Math.abs(a - b) <= 1e-6 * (1 + Math.abs(a));
+
+/** Whether a stored placed block still says what the layer holds (then it is written back unchanged). */
+function placedUnchanged(layer: SmartObjectLayer, idnt: string, placedId: string): boolean {
+  const raw = layer.psd;
+  if (!raw || raw.key === 'PlLd') return false;
+  const p = parsePlaced(raw.key, raw.data);
+  if (!p || p.idnt !== idnt || p.placed !== placedId) return false;
+  const size = p.size ?? { width: layer.contents.width, height: layer.contents.height };
+  if (size.width !== layer.contents.width || size.height !== layer.contents.height) return false;
+  const was = placementFromPlaced(p, size, []);
+  if (!was) return false;
+  const now = placementGeometry(layer);
+  if (!was.corners.every((c, i) => near(c.x, now.corners[i].x) && near(c.y, now.corners[i].y))) return false;
+  const meshKey = (m: typeof now.warp) => (m ? m.points.map((q) => `${q.x.toFixed(5)},${q.y.toFixed(5)}`).join(';') + `|${m.us.length}x${m.vs.length}` : '');
+  if (meshKey(was.warp) !== meshKey(now.warp)) return false;
+  if ((layer.placement.interpolation ?? 'bicubic') !== 'bicubic') return false;
+  const stored = p.filterFX ? smartFiltersFromPsd(p.filterFX, () => '', []) : undefined;
+  if (stored && p.filterFX) {
+    if (descBool(p.filterFX, 'filterMaskEnable') === false || descBool(p.filterFX, 'filterMaskLinked') === false) {
+      stored.mask = { surface: layer.surface, defaultValue: 255, enabled: descBool(p.filterFX, 'filterMaskEnable') !== false, linked: descBool(p.filterFX, 'filterMaskLinked') !== false };
+    }
+  }
+  const current = layer.smartFilters;
+  const norm = (st: typeof current) => (st && (st.filters.length || !st.enabled) ? filterStackKey({ ...st, mask: st.mask && (st.mask.enabled === false || st.mask.linked === false) ? st.mask : undefined }) : '');
+  return norm(stored) === norm(current);
+}
+
 /** Writes the prepared stack as PSD (or PSB) bytes. */
 export function exportPsd(input: PsdExportInput): PsdExportResult {
   const { width, height } = input;
@@ -144,6 +242,10 @@ export function exportPsd(input: PsdExportInput): PsdExportResult {
   const notes = new Map<string, string[]>();
   const note = (msg: string, name: string) => notes.set(msg, [...(notes.get(msg) ?? []), name]);
   const patternIds = new Set<string>();
+  /** Embedded files by uuid (one per contents, shared by linked instances). */
+  const linkedFiles = new Map<string, { name: string; bytes: Uint8Array }>();
+  const filterItems: FilterEffectsItem[] = [];
+  const placedIds = new Set<string>();
 
   /**
    * A layer's effects block: the block it was read from while the effects still map to the same
@@ -260,6 +362,57 @@ export function exportPsd(input: PsdExportInput): PsdExportResult {
         records.push(rec);
         return;
       }
+      case 'smart': {
+        const extra: PsdTaggedBlock[] = [];
+        if (layer.fillOpacity !== undefined && layer.fillOpacity < 1) {
+          extra.push({ key: 'iOpa', data: Uint8Array.from([Math.round(Math.max(0, layer.fillOpacity) * 255), 0, 0, 0]) });
+        }
+        const c = layer.contents;
+        const idnt = psdUuid(c.id);
+        if (!linkedFiles.has(idnt)) {
+          if (c.linked) note('Linked smart objects were embedded (their preview is written as the contents)', layer.name);
+          linkedFiles.set(idnt, smartContentsFile(c));
+        }
+        let placedId = layer.psd?.placed ?? psdUuid(`${layer.id}:placed`);
+        if (placedIds.has(placedId)) placedId = psdUuid(`${layer.id}:placed:${placedIds.size}`);
+        placedIds.add(placedId);
+        if (placedUnchanged(layer, idnt, placedId)) {
+          extra.push({ key: layer.psd!.key, data: padEven(layer.psd!.data) });
+        } else {
+          const dropped: string[] = [];
+          const filterFX = layer.smartFilters ? filterFXDescriptor(layer.smartFilters, dropped) : undefined;
+          if (dropped.length) note('Develop smart filters have no Photoshop filter and were left out of the filter list (the layer’s pixels still show them)', layer.name);
+          const raw = layer.psd && layer.psd.key !== 'PlLd' ? parsePlaced(layer.psd.key, layer.psd.data) : null;
+          const spec = { idnt, placed: placedId, placement: layer.placement, size: { width: c.width, height: c.height }, filterFX, template: raw?.descriptor };
+          const wnotes: string[] = [];
+          extra.push({ key: 'PlLd', data: plldBytes(spec) }, { key: 'SoLd', data: soldBytes(spec, wnotes) });
+          for (const n of wnotes) note(`A smart object: ${n}`, layer.name);
+        }
+        const fm = layer.smartFilters?.mask;
+        if (fm && !fm.source) filterItems.push(filterMaskItem(placedId, fm, { x: 0, y: 0, width, height }));
+        const rec: PsdLayerRecord = { ...common(layer, extra), rect: EMPTY_RECT, channels: [], blendKey: BLEND_TO_PSD[layer.blend] ?? 'norm' };
+        const bounds = contentBounds(layer.surface);
+        if (bounds) {
+          const n = bounds.width * bounds.height;
+          const [r, g, b, a] = rgbaToPlanes(readRegion(layer.surface, bounds), n);
+          rec.rect = toRect(bounds);
+          rec.channels = [
+            rleChannel(CHANNEL_ALPHA, a, bounds.width, bounds.height, psb),
+            rleChannel(0, r, bounds.width, bounds.height, psb),
+            rleChannel(1, g, bounds.width, bounds.height, psb),
+            rleChannel(2, b, bounds.width, bounds.height, psb),
+          ];
+        } else {
+          rec.channels = [CHANNEL_ALPHA, 0, 1, 2].map(emptyChannel);
+        }
+        if (layer.mask) {
+          const m = maskChannel(layer.mask, 0, 0, psb);
+          rec.channels.push(m.channel);
+          rec.mask = m.mask;
+        }
+        records.push(rec);
+        return;
+      }
       case 'annotation':
         throw new PsdError(`Annotation layer "${layer.name}" must be rasterized before export.`);
     }
@@ -314,6 +467,18 @@ export function exportPsd(input: PsdExportInput): PsdExportResult {
     }
     if (embed.length) globalBlocks.push({ key: 'Patt', data: writePatternBlock(embed) });
   }
+  // Smart object contents, each embedded once, and the smart filter masks.
+  if (linkedFiles.size) {
+    const parts = [...linkedFiles].map(([uuid, f]) => encodeLinkedFile({ uuid, name: f.name, bytes: f.bytes }));
+    const data = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+    let at = 0;
+    for (const p of parts) {
+      data.set(p, at);
+      at += p.length;
+    }
+    globalBlocks.push({ key: 'lnk2', data });
+  }
+  if (filterItems.length) globalBlocks.push({ key: 'FEid', data: writeFilterEffects(filterItems) });
 
   const bytes = writePsd(
     {
