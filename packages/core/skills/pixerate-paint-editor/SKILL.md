@@ -81,6 +81,19 @@ is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y do
 - **Pigment for paint, multiply for markers**: tip `blend: "pigment"` mixes subtractively on the
   canvas; `multiply` darkens where marker strokes overlap. Pigment layers are written as Normal
   to PSD (the export warns).
+- **Painterly layer modes do the glazing for you** (`update_layer` `blend`, or a brush tip):
+  - `watercolor`: the layer is a transparent wash. Washes multiply wavelength by wavelength, so
+    each glaze darkens and blue over yellow makes green. White is clear: paint glazes on a
+    layer over the underpainting, at opacity 0.4..0.8.
+  - `tint`: recolours what is below (its hue and chroma) and keeps its lightness, gently near
+    white and black. Use it to warm or cool a whole passage.
+  - `highlight`: adds coloured light that rolls off towards white instead of clipping. Use it
+    for glints and glow; black does nothing.
+  - `shadow`: shades as if light were blocked, coloured by the layer (paint shadows in a cool
+    blue-violet), never crushing to black. White does nothing.
+
+  PSD has none of them: `export_psd` writes the nearest standard mode (watercolor and shadow
+  as Multiply, tint as Color, highlight as Screen) and warns; the merged image stays exact.
 - **Save brushes you build** (`set_brush` then `save_brush`), and share them with
   `export_brushes` / `import_brushes`.
 
@@ -104,6 +117,7 @@ is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y do
 | `list_layers` | Read the layers top first: id, name, type (`pixel` / `group`), visible, opacity, blend, clipped, locks, `active`, painted `bounds` (null when empty), parent and depth. |
 | `add_layer` | Add an empty pixel layer (or `type: "group"`) above the active layer, above `aboveId`, or at the top of group `parentId`; it becomes active. Returns the layer. Put each pass of a painting on its own layer. |
 | `update_layer` | Change `name`, `visible`, `opacity` (0..1), `blend`, `clipped` (clip to the layer below) or `locks` (`pixels`, `transparency`: paint only where there is paint, `position`, `all`). Returns the layer. |
+| `list_blend_modes` | Read every blend mode: id, label, group (`standard`, `pigment`, `painterly`), what the pigment and painterly modes do, and the `psd` mode export writes instead. Read before choosing a painterly mode. Changes nothing. |
 | `set_active_layer` | Make a layer the default target of strokes, fills and clears. Editor state. |
 | `remove_layer` | Delete a layer (a group with its children). Prefer hiding it when the user may want it back. |
 | `duplicate_layer` | Copy a layer directly above it (the copy becomes active): try a risky change on a copy. |
@@ -178,7 +192,7 @@ is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y do
 | `set_hand` | Say which hand holds the pen (`right` / `left`) for palm rejection. |
 | `render_preview` | See the painting (or `layerIds`) as a PNG, longest side `maxSide` (16..2048, default 512), with or without the `paper`. Render after each block of work. |
 | `export_image` | Export PNG (default), JPEG or WebP as base64, at `quality` and `scale` (≤ 1); `paper: false` gives a transparent PNG. JPEG / WebP need a browser canvas. |
-| `export_psd` | Export a PSD with every layer, the paper as a locked bottom layer, and the composite. Returns base64, size, `psb` and `warnings`. |
+| `export_psd` | Export a PSD with every layer, the paper as a locked bottom layer, and the composite. Pigment and painterly modes are written as their nearest standard mode (`list_blend_modes` `psd`). Returns base64, size, `psb` and `warnings`. |
 | `save_document` | Get the document JSON (canvas, paper, layers as PNG data URLs, strokes unless `strokes: false`). |
 | `open_document` | Open a saved document JSON, replacing the painting and clearing the undo history. Returns the canvas, layers and any `problems`. |
 

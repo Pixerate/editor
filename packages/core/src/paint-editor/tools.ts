@@ -8,7 +8,7 @@
 import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import { createPigmentTools } from '../paint/pigment-tools';
 import { MIXING_MODELS, type MixerLoad } from '../paint/mixer';
-import { BLEND_MODES, type BlendMode } from '../raster/blend';
+import { BLEND_MODES, standardBlendMode, type BlendMode } from '../raster/blend';
 import { bytesToBase64, encodePng } from '../raster/png';
 import { BRUSH_ROTATIONS, MAX_BRUSH_SIZE, PAINT_BRUSH_CATEGORIES, PAINT_BRUSH_ENGINES, brushToJSON, type PaintBrush } from './brushes';
 import { MAX_CANVAS_SIDE } from './document';
@@ -57,7 +57,11 @@ const TIP = {
     smoothing: { type: 'number', minimum: 0, maximum: 0.95, description: 'Position smoothing of the input, 0..0.95.' },
     pressureSize: { type: 'boolean', description: 'Pressure scales the size (down to dynamics.minSize).' },
     pressureOpacity: { type: 'boolean', description: 'Pressure scales the opacity.' },
-    blend: { type: 'string', enum: BLEND_MODES.map((m) => m.id), description: 'How paint combines with the layer. pigment mixes it in like real paint (blue into yellow gives green); multiply darkens like marker ink.' },
+    blend: {
+      type: 'string',
+      enum: BLEND_MODES.map((m) => m.id),
+      description: 'How paint combines with the layer. pigment mixes it in like real paint (blue into yellow gives green); multiply darkens like marker ink; watercolor glazes like a transparent wash; tint, highlight and shadow recolour, light and shade (see list_blend_modes).',
+    },
   },
   additionalProperties: false,
 } as const;
@@ -329,7 +333,11 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
         name: { type: 'string', minLength: 1, description: 'New name.' },
         visible: { type: 'boolean', description: 'Show or hide.' },
         opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Layer opacity 0..1.' },
-        blend: { type: 'string', enum: [...BLEND_MODES.map((m) => m.id), 'pass-through'], description: 'Blend mode (pass-through for groups only).' },
+        blend: {
+          type: 'string',
+          enum: [...BLEND_MODES.map((m) => m.id), 'pass-through'],
+          description: 'Blend mode (pass-through for groups only). Painterly modes: watercolor (the layer glazes like a transparent wash), tint (recolours keeping lightness), highlight (adds soft coloured light), shadow (shades with ambient fill); see list_blend_modes.',
+        },
         clipped: { type: 'boolean', description: 'Clip to the layer below (paint only shows where it has paint).' },
         locks: {
           type: 'object',
@@ -348,6 +356,24 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
     },
     annotations: { title: 'Change a layer', ...SET },
     handler: ({ layerId, ...u }) => c.updateLayer(layerId, u as { blend?: BlendMode }),
+  });
+
+  add({
+    name: 'list_blend_modes',
+    title: 'List blend modes',
+    description:
+      'Lists every layer and brush blend mode: id, label, group (standard Photoshop modes, pigment, or painterly), what the pigment and painterly modes do, and the standard mode PSD export writes in their place. Changes nothing. Read it before choosing a painterly mode for update_layer or a brush tip.',
+    inputSchema: EMPTY,
+    annotations: { title: 'List blend modes', ...READ },
+    handler: () => ({
+      modes: BLEND_MODES.map((m) => ({
+        id: m.id,
+        label: m.label,
+        group: m.painterly ? 'painterly' : m.id === 'pigment' ? 'pigment' : 'standard',
+        ...(m.description ? { description: m.description } : {}),
+        psd: standardBlendMode(m.id),
+      })),
+    }),
   });
 
   add({
@@ -420,7 +446,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
         opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Opacity 0..1 (default 1).' },
         grain: { type: 'number', minimum: 0, maximum: 1, description: 'Paper grain response 0..1 (default 0: flat).' },
         pressure: { type: 'number', minimum: 0, maximum: 1, description: 'With grain: how far into the valleys, 0..1 (default 0.5).' },
-        blend: { type: 'string', enum: BLEND_MODES.map((m) => m.id), description: 'Blend mode (default normal; pigment mixes like paint).' },
+        blend: { type: 'string', enum: BLEND_MODES.map((m) => m.id), description: 'Blend mode (default normal; pigment mixes like paint, watercolor glazes; see list_blend_modes).' },
       },
       additionalProperties: false,
     },
@@ -839,7 +865,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
     name: 'export_psd',
     title: 'Export as PSD',
     description:
-      'Writes the painting as an 8-bit RGB PSD (PSB above 30000 px) through the shared PSD writer: every layer and group with its opacity, blend, mask and locks, the paper as a locked "Paper" pixel layer at the bottom, and the composite as the merged image. Changes nothing. Returns the file as base64, its size, whether it is a PSB, and warnings (pigment blending has no PSD equivalent).',
+      'Writes the painting as an 8-bit RGB PSD (PSB above 30000 px) through the shared PSD writer: every layer and group with its opacity, blend, mask and locks, the paper as a locked "Paper" pixel layer at the bottom, and the composite as the merged image. Changes nothing. Returns the file as base64, its size, whether it is a PSB, and warnings (pigment and painterly blend modes have no PSD equivalent: they are written as the nearest standard mode, see list_blend_modes).',
     inputSchema: EMPTY,
     annotations: { title: 'Export as PSD', ...READ },
     handler: () => {

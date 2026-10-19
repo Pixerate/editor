@@ -27,4 +27,4 @@ export * from './controller';
 export * from './presence';
 export * from './tools';
 export * from './ui';
-export { BLEND_MODES, isBlendMode, type BlendMode } from '../raster/blend';
+export { BLEND_MODES, PAINTERLY_BLEND_MODES, isBlendMode, isPainterlyBlendMode, standardBlendMode, type BlendMode, type BlendModeInfo } from '../raster/blend';

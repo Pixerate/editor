@@ -5,6 +5,7 @@ import {
 	preserveNodeMeasurements,
 	normalizeNodeHandles,
 	createCanvasNodeSync,
+	snapshotCanvasGraph,
 	type HandleConfig
 } from '../../src/canvas/createCanvasNodeSync.svelte.js';
 import type { CanvasNode } from '../../src/canvas/types.js';
@@ -101,4 +102,16 @@ describe('createCanvasNodeSync & Node Measurement Caching', () => {
 
 		cleanup();
 	});
+
+	it('snapshots canvas graph using $state.snapshot without throwing DataCloneError', () => {
+		const snap = snapshotCanvasGraph({
+			nodes: [{ id: 'n1', position: { x: 5, y: 10 }, data: { label: 'Hello' } }],
+			edges: [{ id: 'e1', source: 'n1', target: 'n2' }],
+			viewport: { x: 10, y: 20, zoom: 1.5 }
+		});
+		expect(snap.nodes).toEqual([{ id: 'n1', position: { x: 5, y: 10 }, data: { label: 'Hello' } }]);
+		expect(snap.edges).toEqual([{ id: 'e1', source: 'n1', target: 'n2' }]);
+		expect(snap.viewport).toEqual({ x: 10, y: 20, zoom: 1.5 });
+	});
 });
+
