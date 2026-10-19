@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.111.0
+
+### Minor Changes
+
+- 890d424: Add live type layers to the image editor. A `TypeLayer` holds text with character runs (font family, weight, italic, size, colour, opacity, tracking, leading, baseline shift, underline, strike-through) and paragraph runs (alignment including justify, auto leading, indents, spacing), set as point text or wrapped paragraph text and placed by an affine transform. Layout is built in; fonts come through a pluggable `TextShaper`: `createCanvasTextShaper` (the browser's fonts through Canvas 2D, the default) or `createOutlineTextShaper` (glyph outlines from opentype.js-style font objects, pure, and what Convert to Shape needs). Missing fonts fall back with a warning (`missingFonts`); without a shaper, type layers keep their stored pixels. New controller methods: `addTextLayer`, `getTextLayer`, `setText`, `setTextStyle`, `setParagraphStyle`, `setTextFrame`, `convertTextToShape`, `getTextLayout`, `textIndexAt`, `textCaret`, `listFonts`, `setTextShaper` (and the `textShaper` option); new agent tools: `list_fonts`, `get_text_layer`, `add_text_layer`, `set_text`, `set_text_style`, `set_paragraph_style`, `set_text_frame`, `convert_text_to_shape`. Text annotations now load as type layers that draw the same and keep the annotation API working. Free Transform, moves, masks, effects, blend modes and `rasterizeLayer` work on type layers.
+
 ## 0.110.0
 
 ### Minor Changes
