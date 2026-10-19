@@ -48,7 +48,7 @@ export function applyAdjustments(
  * Process 1: the original 8-bit gamma-space rendering, clamping after every step. Frozen so
  * that edits saved without a `process` look exactly as they always have. `tint` is ignored.
  */
-export function applyLegacyAdjustments(imageData: ImageData, adjustments: ImageAdjustments): void {
+export function applyLegacyAdjustments(imageData: { data: Uint8ClampedArray }, adjustments: ImageAdjustments): void {
   const { brightness, contrast, saturation, exposure, temperature, opacity } = adjustments;
   const data = imageData.data;
   const len = data.length;
@@ -203,7 +203,7 @@ function getProcess2Plan(adjustments: ImageAdjustments): Process2Plan {
  * then encode back to sRGB through a LUT. Nothing is clamped between stages, only at the final
  * encode. Neutral settings are the identity.
  */
-export function applyProcess2Adjustments(imageData: ImageData, adjustments: ImageAdjustments): void {
+export function applyProcess2Adjustments(imageData: { data: Uint8ClampedArray }, adjustments: ImageAdjustments): void {
   const data = imageData.data;
   const len = data.length;
   const opacity = adjustments.opacity ?? 1;
@@ -274,9 +274,14 @@ export function applyProcess2Adjustments(imageData: ImageData, adjustments: Imag
 }
 
 /**
- * Fast separable box blur running horizontally and vertically.
+ * Fast separable box blur running horizontally and vertically (`adjustments.blur` and the `blur`
+ * layer filter): `radius` pixels each side, edges clamped, rounded after each pass.
  */
-function applyFastBoxBlur(imageData: ImageData, radius: number): void {
+export function applyBoxBlur(imageData: { width: number; height: number; data: Uint8ClampedArray }, radius: number): void {
+  applyFastBoxBlur(imageData, radius);
+}
+
+function applyFastBoxBlur(imageData: { width: number; height: number; data: Uint8ClampedArray }, radius: number): void {
   if (radius < 1) return;
   const w = imageData.width;
   const h = imageData.height;

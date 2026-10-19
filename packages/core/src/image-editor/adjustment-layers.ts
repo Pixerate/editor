@@ -897,7 +897,7 @@ function applyLayer(c: Rgb, layer: AdjustmentLayer, op: PixelOp | null, coverage
  * made it, 1 applies the layer fully.
  */
 export function applyAdjustmentLayers(
-  imageData: Pick<ImageData, 'data'>,
+  imageData: { data: Uint8ClampedArray },
   layers: readonly AdjustmentLayer[] | undefined,
   masks?: ReadonlyMap<string, ArrayLike<number>>
 ): void {

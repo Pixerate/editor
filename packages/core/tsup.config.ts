@@ -14,6 +14,8 @@ export default defineConfig({
     "canvas/index": "src/canvas/index.ts",
     "agent/index": "src/agent/index.ts",
     "tools/index": "src/tools/index.ts",
+    "raster/index": "src/raster/index.ts",
+    "paint/index": "src/paint/index.ts",
     "image-editor/index": "src/image-editor/index.ts",
     "commands/index": "src/commands/index.ts",
     "persistence/index": "src/persistence/index.ts",

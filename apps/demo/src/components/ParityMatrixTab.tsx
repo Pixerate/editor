@@ -296,6 +296,27 @@ const FEATURES: ParityRow[] = [
     note: "Threshold and brightness depth alpha blending with softness, invert, and removeAlpha",
   },
   {
+    feature: "Image Layer Stack (tiled surfaces, compositor, schema v3)",
+    core: true,
+    react: true,
+    svelte: true,
+    note: "Pixel, adjustment, group and annotation layers on copy-on-write 256 px tiles; per-tile compositor with prefix caches; v1 / v2 documents unchanged; list_layers agent tool",
+  },
+  {
+    feature: "Image Layers Panel & Layer Operations",
+    core: true,
+    react: true,
+    svelte: true,
+    note: "New, duplicate, delete, drag to reorder and nest, groups, merge down / visible, flatten, layer via copy / cut, masks, clipping, locks, opacity, fill, blend, layer filters; 22 agent tools",
+  },
+  {
+    feature: "Image Painting (Brush, Eraser, Fill, Move)",
+    core: true,
+    react: true,
+    svelte: true,
+    note: "Round brush with hardness, spacing, opacity vs flow, smoothing and pressure; mask painting; selection-limited; one undo step per stroke; paint_stroke / fill_pixels / clear_pixels agent tools",
+  },
+  {
     feature: "Image Selections, Refine Edge & Layer Masks",
     core: true,
     react: true,
