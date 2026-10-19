@@ -76,6 +76,11 @@ export interface RenderOptions {
   checkpointLayerId?: string | null;
   /** The paint tools' cursor: a circle of `diameter` px at (`x`, `y`) in natural pixels. */
   brushCursor?: { x: number; y: number; diameter: number } | null;
+  /**
+   * On-canvas text editing (`TextEditSession.overlay()`): the caret as a segment, the selected
+   * ranges as quads and the text's frame, in natural pixels.
+   */
+  textEdit?: { caret: [ImagePoint, ImagePoint] | null; selection: ImagePoint[][]; frame: ImagePoint[] | null } | null;
   /** Free Transform's frame, handles and reference point in natural pixels (`FreeTransformTool.overlay()`). */
   freeTransform?: {
     outline: ImagePoint[];
@@ -370,6 +375,48 @@ export class ImageEditorRenderer {
         ctx.lineWidth = px;
         ctx.strokeStyle = '#ffffff';
         ctx.stroke();
+      } catch {
+        // Best effort (headless / mocked contexts).
+      }
+      ctx.restore();
+    }
+
+    // Text editing: the frame (dashed), the selection (tinted) and the caret, a fixed width on screen.
+    if (options.textEdit) {
+      const t = options.textEdit;
+      ctx.save();
+      try {
+        const scr = (p: ImagePoint) => projectImagePoint(p, projection);
+        const poly = (pts: ImagePoint[]) => {
+          ctx.beginPath();
+          pts.map(scr).forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+          ctx.closePath();
+        };
+        if (t.frame) {
+          poly(t.frame);
+          ctx.setLineDash([4, 3]);
+          ctx.lineWidth = 1;
+          ctx.strokeStyle = 'rgba(99,102,241,0.9)';
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+        ctx.fillStyle = 'rgba(99,102,241,0.35)';
+        for (const q of t.selection) {
+          poly(q);
+          ctx.fill();
+        }
+        if (t.caret) {
+          const [a, b] = t.caret.map(scr);
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+          ctx.lineWidth = 3;
+          ctx.strokeStyle = '#ffffff';
+          ctx.stroke();
+          ctx.lineWidth = 1.5;
+          ctx.strokeStyle = '#111827';
+          ctx.stroke();
+        }
       } catch {
         // Best effort (headless / mocked contexts).
       }

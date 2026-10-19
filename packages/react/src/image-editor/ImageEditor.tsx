@@ -27,7 +27,13 @@ import {
   pointerPressure,
   FreeTransformTool,
   getViewportProjection,
+  ShapeDrawGesture,
+  TypeToolGesture,
+  DEFAULT_SHAPE_TOOL_OPTIONS,
+  DEFAULT_TYPE_TOOL_OPTIONS,
   type SelectionToolOptions,
+  type ShapeToolOptions,
+  type TypeToolOptions,
   type TransformHandle,
 } from '@pixerate/editor/image-editor';
 import { useImageEditor, type UseImageEditorReturn } from './useImageEditor';
@@ -39,6 +45,8 @@ import { BrushOptionsBar } from './BrushOptionsBar';
 import { SelectionOptionsBar } from './SelectionOptionsBar';
 import { RefineEdgePanel } from './RefineEdgePanel';
 import { FreeTransformOptionsBar } from './FreeTransformOptionsBar';
+import { ShapeOptionsBar } from './ShapeOptionsBar';
+import { TypeOptionsBar } from './TypeOptionsBar';
 
 export interface ImageEditorProps {
   editor?: UseImageEditorReturn;
@@ -109,6 +117,26 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
   const transformTool = transformToolRef.current;
   const [, setTransformTick] = useState(0);
   const [transformCursor, setTransformCursor] = useState('default');
+
+  // Shape and type tools: their options and gestures; type is edited on the canvas through a hidden textarea.
+  const [shapeOptions, setShapeOptions] = useState<ShapeToolOptions>(DEFAULT_SHAPE_TOOL_OPTIONS);
+  const shapeOptionsRef = useRef(shapeOptions);
+  shapeOptionsRef.current = shapeOptions;
+  const [typeOptions, setTypeOptions] = useState<TypeToolOptions>(DEFAULT_TYPE_TOOL_OPTIONS);
+  const typeOptionsRef = useRef(typeOptions);
+  typeOptionsRef.current = typeOptions;
+  const shapeGestureRef = useRef<ShapeDrawGesture | null>(null);
+  const typeToolRef = useRef<TypeToolGesture | null>(null);
+  const shapeTypeControllerRef = useRef(controller);
+  if (!shapeGestureRef.current || !typeToolRef.current || shapeTypeControllerRef.current !== controller) {
+    typeToolRef.current?.finish();
+    shapeGestureRef.current = new ShapeDrawGesture(controller, () => shapeOptionsRef.current);
+    typeToolRef.current = new TypeToolGesture(controller, () => typeOptionsRef.current);
+    shapeTypeControllerRef.current = controller;
+  }
+  const typeInputRef = useRef<HTMLTextAreaElement>(null);
+  const [typeSession, setTypeSession] = useState(typeToolRef.current.session);
+  const [shapeTypeError, setShapeTypeError] = useState<string | null>(null);
 
   // AI Tools state
   const [inpaintPrompt, setInpaintPrompt] = useState('');
@@ -236,10 +264,50 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
             ? { ...brushCursorRef.current, diameter: controller.getState().paint.brush.size }
             : null,
         freeTransform: transformTool.overlay(),
+        textEdit: typeToolRef.current?.session?.alive ? typeToolRef.current.session.overlay() : null,
       });
     },
     [controller, activeTab, transformTool]
   );
+
+  // The text being edited: re-render on every change, and end it when the tool or tab changes.
+  useEffect(() => typeSession?.subscribe(() => void renderCanvas()), [typeSession, renderCanvas]);
+  useEffect(() => {
+    if (activeTab === 'annotate' && state.activeTool === 'type') return;
+    if (typeToolRef.current?.session) {
+      typeToolRef.current.finish();
+      setTypeSession(null);
+      void renderCanvas();
+    }
+  }, [activeTab, state.activeTool, renderCanvas]);
+  const finishTyping = () => {
+    typeToolRef.current?.finish();
+    setTypeSession(null);
+    void renderCanvas();
+  };
+  const handleTypeKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    const session = typeToolRef.current?.session;
+    if (!session || e.nativeEvent.isComposing) return;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      finishTyping();
+      return;
+    }
+    if ((e.metaKey || e.ctrlKey) && ['z', 'y', 'c', 'x', 'v'].includes(e.key.toLowerCase())) return;
+    if (session.handleKey(e)) {
+      e.preventDefault();
+      setShapeTypeError(session.error);
+    }
+  };
+  const handleTypeInput = (e: React.FormEvent<HTMLTextAreaElement>) => {
+    // Composed (IME) and pasted text arrives here; plain keys were handled on keydown.
+    const el = e.currentTarget;
+    const session = typeToolRef.current?.session;
+    if (session && el.value && !(e.nativeEvent as InputEvent).isComposing) {
+      session.insert(el.value);
+      el.value = '';
+    }
+  };
 
   useEffect(() => transformTool.subscribe(() => {
     setTransformTick((n) => n + 1);
@@ -448,6 +516,18 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
       return;
     }
 
+    if (activeTab === 'annotate' && (state.activeTool === 'shape' || state.activeTool === 'type')) {
+      const imgPt = canvasToImagePoint(canvasPt, state, canvas.width, canvas.height, false);
+      setShapeTypeError(null);
+      if (state.activeTool === 'shape') shapeGestureRef.current!.down(imgPt);
+      else {
+        typeToolRef.current!.down(imgPt, { shift: e.shiftKey });
+        setTypeSession(typeToolRef.current!.session);
+        void renderCanvas();
+      }
+      return;
+    }
+
     if (activeTab === 'annotate') {
       const imgPt = canvasToImagePoint(canvasPt, state, canvas.width, canvas.height, false);
       dragStartPointRef.current = imgPt;
@@ -542,6 +622,15 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
         };
         const handle = hitTestCrop(canvasPt, state, canvas.width, canvas.height, 14, activeCrop);
         canvas.style.cursor = getCropCursor(handle, state.transform);
+      }
+      return;
+    }
+
+    if (activeTab === 'annotate' && state.activeTool === 'shape') {
+      const g = shapeGestureRef.current!;
+      if (g.active) {
+        g.move(canvasToImagePoint(canvasPt, state, canvas.width, canvas.height, false), { shift: e.shiftKey, alt: e.altKey });
+        if (g.error) setShapeTypeError(g.error);
       }
       return;
     }
@@ -682,6 +771,21 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
         draftCropRef.current = null;
         renderCanvas();
       }
+      return;
+    }
+
+    if (activeTab === 'annotate' && state.activeTool === 'shape') {
+      shapeGestureRef.current!.up();
+      return;
+    }
+    if (activeTab === 'annotate' && state.activeTool === 'type') {
+      const tool = typeToolRef.current!;
+      tool.up(canvasToImagePoint(canvasPt, state, canvas.width, canvas.height, false));
+      setTypeSession(tool.session);
+      if (tool.error) setShapeTypeError(tool.error);
+      void renderCanvas();
+      // Keystrokes go to the hidden textarea while text is being edited.
+      if (tool.session) setTimeout(() => typeInputRef.current?.focus(), 0);
       return;
     }
 
@@ -1005,8 +1109,26 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
             onPointerCancel={() => paintGestureRef.current?.cancel()}
             data-testid="image-editor-canvas"
             style={transformTool.active ? { cursor: transformCursor } : undefined}
-            className={`absolute inset-0 w-full h-full block ${transformTool.active ? 'touch-none' : activeTab === 'paint' ? 'touch-none cursor-crosshair' : ''}`}
+            className={`absolute inset-0 w-full h-full block ${transformTool.active ? 'touch-none' : activeTab === 'paint' ? 'touch-none cursor-crosshair' : activeTab === 'annotate' && state.activeTool === 'type' ? 'cursor-text' : activeTab === 'annotate' && state.activeTool === 'shape' ? 'cursor-crosshair' : ''}`}
           />
+          {typeSession && (
+            <textarea
+              ref={typeInputRef}
+              aria-label="Edit text"
+              data-testid="type-input"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+              onKeyDown={handleTypeKeyDown}
+              onInput={handleTypeInput}
+              onCompositionEnd={(e) => {
+                const session = typeToolRef.current?.session;
+                if (session && e.data) session.insert(e.data);
+                e.currentTarget.value = '';
+              }}
+              className="absolute left-0 top-0 h-px w-px opacity-0"
+            />
+          )}
 
         </div>
 
@@ -1246,6 +1368,38 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
           {/* TAB 3: ANNOTATIONS */}
           {activeTab === 'annotate' && (
             <div className="flex flex-col gap-3 text-xs">
+              <span className="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">Shape & Type Layers</span>
+              <div className="grid grid-cols-2 gap-1.5">
+                {(['shape', 'type'] as ImageEditorTool[]).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    aria-pressed={state.activeTool === t}
+                    onClick={() => editor.setTool(t)}
+                    className={`py-1.5 px-2 rounded-lg font-medium border transition-colors ${
+                      state.activeTool === t ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
+                    }`}
+                  >
+                    {t === 'shape' ? 'Shape' : 'Type'}
+                  </button>
+                ))}
+              </div>
+              {state.activeTool === 'shape' && <ShapeOptionsBar controller={controller} options={shapeOptions} onChange={setShapeOptions} />}
+              {state.activeTool === 'type' && (
+                <TypeOptionsBar controller={controller} options={typeOptions} onChange={setTypeOptions} session={typeSession} />
+              )}
+              {state.activeTool === 'type' && typeSession && (
+                <button type="button" onClick={finishTyping} className="self-start rounded bg-slate-800 px-2 py-1 text-[11px] text-slate-200 hover:bg-slate-700">
+                  Done editing text
+                </button>
+              )}
+              {shapeTypeError && (
+                <p role="alert" className="text-rose-400" data-testid="shape-type-error">
+                  {shapeTypeError}
+                </p>
+              )}
+              <div className="h-px bg-slate-800 my-1" />
+
               <span className="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">
                 Draw & Annotate
               </span>

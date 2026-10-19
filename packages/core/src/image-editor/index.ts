@@ -38,6 +38,7 @@ export * from './shape-tools';
 export * from './layers/text';
 export * from './layers/text-shapers';
 export * from './type-tools';
+export * from './layers/shape-type-ui';
 export { rasterizeCoverage, flattenPath, type CoverageFillRule, type FlatPath } from './layers/vector-raster';
 export { parseCssColor } from './layers/css-color';
 export * from './layers/panel';

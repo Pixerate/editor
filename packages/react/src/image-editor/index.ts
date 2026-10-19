@@ -10,3 +10,5 @@ export * from './LayersPanel';
 export * from './LayerEffectsPanel';
 export * from './BrushOptionsBar';
 export * from './FreeTransformOptionsBar';
+export * from './ShapeOptionsBar';
+export * from './TypeOptionsBar';

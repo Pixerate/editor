@@ -437,6 +437,9 @@ export interface ShapeGeometryInput {
   op?: ShapeOperation;
 }
 
+/** A stroke as tools and UIs give it: any `ShapeStroke` fields, the paint as a colour string or a paint (or `color`). */
+export type ShapeStrokeInput = Omit<Partial<ShapeStroke>, 'paint'> & { paint?: ShapePaint | string; color?: string };
+
 /** A new shape layer: its geometry (one component, or `components`), fill and stroke. */
 export interface ShapeLayerInit extends ShapeGeometryInput, LayerPlacement {
   /** Several components instead of `shape` / `subpaths`, bottom first. */
@@ -445,7 +448,7 @@ export interface ShapeLayerInit extends ShapeGeometryInput, LayerPlacement {
   /** A colour string or a paint; `null` for none. Default the foreground colour (none for a stroke-only open path). */
   fill?: ShapePaint | string | null;
   /** `{ width, paint, align?, cap?, join?, miterLimit?, dashes?, dashOffset? }`, or `null` / missing for none. */
-  stroke?: (Partial<ShapeStroke> & { paint?: ShapePaint | string; color?: string }) | null;
+  stroke?: ShapeStrokeInput | null;
   fillRule?: ShapeFillRule;
   opacity?: number;
   blend?: BlendMode;
@@ -4221,7 +4224,7 @@ export class ImageEditorController {
    */
   public setShapeStyle(
     id: string,
-    changes: { fill?: ShapePaint | string | null; stroke?: (Partial<ShapeStroke> & { paint?: ShapePaint | string; color?: string }) | null; fillRule?: ShapeFillRule },
+    changes: { fill?: ShapePaint | string | null; stroke?: ShapeStrokeInput | null; fillRule?: ShapeFillRule },
     commitToHistory = true
   ): ShapeLayerInfo {
     const layer = requireShapeLayer(this.state.layers, id);

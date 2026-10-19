@@ -9,6 +9,8 @@ import {
   dropZone,
   openPsdFile,
   layerBadge,
+  layerHasThumbnail,
+  layerWarning,
   layerEffectsBadge,
   layerMenu,
   layerPanelRows,
@@ -131,7 +133,7 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
     if (placement) attempt(() => controller.moveLayer(id, placement));
   };
 
-  const thumb = (layer: ImageLayer) => (layer.type === 'pixel' ? controller.getLayerThumbnail(layer.id, { maxSide: 64 }) : null);
+  const thumb = (layer: ImageLayer) => (layerHasThumbnail(layer) ? controller.getLayerThumbnail(layer.id, { maxSide: 64 }) : null);
   const maskThumb = (layer: ImageLayer) => (layer.mask && !layer.mask.source ? controller.getLayerThumbnail(layer.id, { maxSide: 64, mask: true }) : null);
 
   const locked = (layer: ImageLayer) => Boolean(layer.locks?.all || layer.locks?.pixels || layer.locks?.position || layer.locks?.transparency);
@@ -316,13 +318,23 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
                 </button>
               )}
               {row.clipped && <span className="text-slate-500" aria-label="Clipped">↳</span>}
-              {layer.type === 'pixel' ? (
-                <Thumbnail
-                  pixels={thumb(layer)}
-                  size={thumbnailSize}
-                  label={`${row.label} pixels`}
-                  selected={row.active && state.activeTarget === 'pixels' && Boolean(layer.mask)}
-                />
+              {layerHasThumbnail(layer) ? (
+                <span className="relative shrink-0">
+                  <Thumbnail
+                    pixels={thumb(layer)}
+                    size={thumbnailSize}
+                    label={`${row.label} pixels`}
+                    selected={row.active && state.activeTarget === 'pixels' && Boolean(layer.mask)}
+                  />
+                  {layer.type !== 'pixel' && (
+                    <span
+                      data-testid="layer-kind-badge"
+                      className="absolute -bottom-1 -right-1 rounded bg-slate-700 px-0.5 text-[8px] font-bold leading-tight text-slate-100 ring-1 ring-slate-900"
+                    >
+                      {layerBadge(layer)}
+                    </span>
+                  )}
+                </span>
               ) : (
                 <span
                   className="shrink-0 grid place-items-center rounded bg-slate-800 text-[9px] text-slate-400 ring-1 ring-slate-700"
@@ -386,6 +398,11 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
                   }}
                 >
                   {row.label}
+                </span>
+              )}
+              {layerWarning(layer) && (
+                <span role="img" data-testid="layer-warning" aria-label={layerWarning(layer)!} title={layerWarning(layer)!} className="text-[10px] text-amber-400">
+                  ⚠
                 </span>
               )}
               {layerEffectsBadge(layer) && (
