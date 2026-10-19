@@ -256,3 +256,78 @@ export function smartFilterRows(layer: ImageLayer): SmartFilterRow[] {
   }));
   return rows.reverse();
 }
+
+export interface NormalizedLayerItem {
+  id: string;
+  name: string;
+  imageUrl: string;
+  thumbnailUrl?: string;
+  visible: boolean;
+  opacity: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Extracts a flat list of normalized layer metadata (0..1 bounds relative to document dimensions
+ * and resolved PNG data-URL thumbnails) from the controller's current V3 layer state.
+ */
+export function extractNormalizedLayerItems(
+  controller: ImageEditorController,
+  fallbackImageUrl = ''
+): NormalizedLayerItem[] {
+  const state = controller.getState();
+  const ctrlLayers = controller.getLayers();
+  if (!ctrlLayers || ctrlLayers.length === 0) return [];
+
+  const serialized = controller.toJSON() as {
+    assets?: Record<string, string>;
+    layers?: Array<{ id: string; asset?: string; source?: string; children?: unknown[] }>;
+  };
+  const assets = serialized.assets ?? {};
+  const allSerializedLayers: Array<{ id: string; asset?: string; source?: string; children?: unknown[] }> = [];
+
+  const collectSerialized = (list: Array<{ id: string; asset?: string; source?: string; children?: unknown[] }>) => {
+    for (const sl of list) {
+      allSerializedLayers.push(sl);
+      if (sl.children && Array.isArray(sl.children)) {
+        collectSerialized(sl.children as Array<{ id: string; asset?: string; source?: string; children?: unknown[] }>);
+      }
+    }
+  };
+  collectSerialized(serialized.layers ?? []);
+
+  const sLayerMap = new Map(allSerializedLayers.map((sl) => [sl.id, sl]));
+  const imgW = state.imageDimensions?.width || 1;
+  const imgH = state.imageDimensions?.height || 1;
+
+  return ctrlLayers.map((l) => {
+    const bounds = controller.getLayerBounds(l.id) || {
+      x: 0,
+      y: 0,
+      width: imgW,
+      height: imgH,
+    };
+    const sLayer = sLayerMap.get(l.id);
+    const assetKey = sLayer?.asset;
+    const layerDataUrl =
+      (assetKey && assets[assetKey]) ||
+      assets[l.id] ||
+      (sLayer?.source === 'document' ? fallbackImageUrl : '');
+    return {
+      id: l.id,
+      name: l.name || 'Untitled Layer',
+      imageUrl: layerDataUrl || fallbackImageUrl,
+      thumbnailUrl: layerDataUrl || undefined,
+      visible: l.visible !== false,
+      opacity: l.opacity ?? 1,
+      x: imgW ? bounds.x / imgW : 0,
+      y: imgH ? bounds.y / imgH : 0,
+      width: imgW ? bounds.width / imgW : 1,
+      height: imgH ? bounds.height / imgH : 1,
+    };
+  });
+}
+
