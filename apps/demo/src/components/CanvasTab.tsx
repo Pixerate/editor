@@ -76,10 +76,13 @@ import {
 } from "@pixerate/editor-react/canvas";
 import { demoCommandRegistry, demoToolRegistry } from "../agentTools";
 import { AutoLayoutDemo } from "./AutoLayoutDemo";
+import { MermaidDiagramDemo } from "./MermaidDiagramDemo";
 import { TokensDemo } from "./TokensDemo";
 import { ShapeOpsDemo } from "./ShapeOpsDemo";
 import { AnimationDemo } from "./AnimationDemo";
 import { ComponentsDemo } from "./ComponentsDemo";
+import { AgentScriptPanel } from "./AgentScriptPanel";
+import { CANVAS_SCRIPTS } from "../agentScripts";
 
 type BoxData = { label: string; color: string; locked?: boolean; shape?: any };
 type BoxNode = Node<BoxData, string>;
@@ -401,6 +404,7 @@ const CanvasDemo: React.FC = () => {
   }, [arrange, flow]);
   useAgentToolProvider(demoToolRegistry, provider);
 
+  const agentStage = useRef<HTMLDivElement>(null);
   const btn =
     "p-2 rounded hover:bg-slate-800 transition-colors text-slate-300 disabled:opacity-40 disabled:hover:bg-transparent";
   const needs = (min: number) => selectedCount < min;
@@ -586,7 +590,7 @@ const CanvasDemo: React.FC = () => {
         </button>
       </div>
 
-      <div className="h-[520px] rounded-xl overflow-hidden border border-slate-800 bg-slate-950 relative" data-testid="canvas-pane">
+      <div className="h-[520px] rounded-xl overflow-hidden border border-slate-800 bg-slate-950 relative" data-testid="canvas-pane" ref={agentStage}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -605,6 +609,7 @@ const CanvasDemo: React.FC = () => {
           <CanvasDrawLayer draw={draw} viewport={viewport} />
         </ReactFlow>
       </div>
+      <AgentScriptPanel scripts={CANVAS_SCRIPTS} stage={agentStage} hint="Plays a scripted agent turn with the canvas__* tools: list_nodes returns the ids that align_nodes takes." />
 
       {/* Scene strip */}
       <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-3 flex flex-wrap items-center gap-2" aria-label="Scenes">
@@ -651,6 +656,8 @@ const CanvasDemo: React.FC = () => {
         (Rectangle, Circle, Star) or a sample drawing, or pick Pen (P), Highlighter (H), or Eraser (E) to sketch directly onto the canvas.
         Shortcuts: Alt+A/H/D/W/V/S align, Alt+Shift+H/V distribute, Mod+L lock, Mod+]/[ layer order, PageDown/PageUp scenes, Mod+Z undo.
       </p>
+
+      <MermaidDiagramDemo />
 
       <AutoLayoutDemo />
 

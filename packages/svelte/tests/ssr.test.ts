@@ -9,6 +9,8 @@ import { VectorEditor } from "../src/vector";
 import { VectorEditorController, rectSubpath } from "@pixerate/editor/vector";
 import { ChartEditor } from "../src/chart";
 import { ChartController } from "@pixerate/editor/chart";
+import { VideoEditor } from "../src/video-editor";
+import { VideoEditorController } from "@pixerate/editor/video-editor";
 
 describe("SSR", () => {
   it("renders components on the server without touching the DOM", () => {
@@ -45,5 +47,11 @@ describe("SSR", () => {
     const chartBody = render(ChartEditor, { props: { controller: chart } }).body;
     expect(chartBody).toContain('data-chart-key="bar-n-0"');
     expect(chartBody).toContain('data-cell="n:0"');
+    const video = new VideoEditorController({
+      project: { version: 1, width: 640, height: 360, fps: 30, assets: [], tracks: [{ id: "v1", kind: "video", clips: [{ id: "t", type: "text", text: "Hi", start: 0, duration: 1000 }] }] },
+    });
+    const videoBody = render(VideoEditor, { props: { controller: video } }).body;
+    expect(videoBody).toContain('data-clip="t"');
+    expect(videoBody).toContain("aspect-ratio:640 / 360");
   });
 });

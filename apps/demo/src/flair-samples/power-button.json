@@ -1,0 +1,274 @@
+{
+ "kind": "vector",
+ "id": "power-button",
+ "name": "Power button",
+ "description": "A power button that lights up with a glow ring and its on colour when clicked, and dims again on the next click.",
+ "category": "electric",
+ "tags": [
+  "electric",
+  "interactive",
+  "ui",
+  "click",
+  "power",
+  "toggle",
+  "button",
+  "icon"
+ ],
+ "trigger": "click",
+ "hold": 900,
+ "presets": [
+  {
+   "name": "Green",
+   "values": {
+    "on": [
+     0.29,
+     0.87,
+     0.5
+    ]
+   }
+  },
+  {
+   "name": "Light",
+   "values": {
+    "background": [
+     0.96,
+     0.97,
+     0.98
+    ],
+    "button": [
+     1,
+     1,
+     1
+    ],
+    "off": [
+     0.6,
+     0.64,
+     0.7
+    ],
+    "on": [
+     0.39,
+     0.4,
+     0.95
+    ]
+   }
+  }
+ ],
+ "motion": {
+  "svg": "<svg viewBox=\"0 0 160 160\"><!-- {{background: color default=#0B0F19 label='Background'}} {{button: color default=#1A2030 label='Button'}} {{off: color default=#5B6475 label='Off'}} {{on: color default=#22D3EE label='On'}} --><defs><filter id=\"pbGlow\" x=\"-50%\" y=\"-50%\" width=\"200%\" height=\"200%\"><feGaussianBlur stdDeviation=\"5\"/></filter></defs><rect width=\"160\" height=\"160\" fill=\"{{background}}\"/><circle id=\"halo\" cx=\"80\" cy=\"80\" r=\"52\" fill=\"none\" stroke=\"{{on}}\" stroke-width=\"8\" opacity=\"0\" filter=\"url(#pbGlow)\"/><circle id=\"pulse\" cx=\"80\" cy=\"80\" r=\"50\" fill=\"none\" stroke=\"{{on}}\" stroke-width=\"3\" opacity=\"0\"/><g id=\"press\" transform=\"translate(80 80) scale(1) translate(-80 -80)\"><circle id=\"disc\" cx=\"80\" cy=\"80\" r=\"48\" fill=\"{{button}}\" stroke=\"{{off}}\" stroke-width=\"2.5\"/><g id=\"symGlow\" opacity=\"0\" filter=\"url(#pbGlow)\"><path id=\"glowArc\" d=\"M63.3 62.1 A26 26 0 1 0 96.7 62.1\" fill=\"none\" stroke=\"{{on}}\" stroke-width=\"7\" stroke-linecap=\"round\"/><path id=\"glowBar\" d=\"M80 48 L80 78\" fill=\"none\" stroke=\"{{on}}\" stroke-width=\"7\" stroke-linecap=\"round\"/></g><path id=\"symArc\" d=\"M63.3 62.1 A26 26 0 1 0 96.7 62.1\" fill=\"none\" stroke=\"{{off}}\" stroke-width=\"7\" stroke-linecap=\"round\"/><path id=\"symBar\" d=\"M80 48 L80 78\" fill=\"none\" stroke=\"{{off}}\" stroke-width=\"7\" stroke-linecap=\"round\"/></g></svg>",
+  "animate": [
+   {
+    "id": "press",
+    "step": 1,
+    "attrs": {
+     "transform": [
+      "translate(80 80) scale(1) translate(-80 -80)",
+      "translate(80 80) scale(0.93) translate(-80 -80)"
+     ]
+    },
+    "ms": 90,
+    "ease": "out"
+   },
+   {
+    "id": "press",
+    "step": 1,
+    "attrs": {
+     "transform": [
+      "translate(80 80) scale(0.93) translate(-80 -80)",
+      "translate(80 80) scale(1) translate(-80 -80)"
+     ]
+    },
+    "delay": 90,
+    "ms": 260,
+    "ease": "in-out"
+   },
+   {
+    "id": "symArc",
+    "step": 1,
+    "attrs": {
+     "stroke": [
+      "{{off}}",
+      "{{on}}"
+     ]
+    },
+    "delay": 60,
+    "ms": 220
+   },
+   {
+    "id": "symBar",
+    "step": 1,
+    "attrs": {
+     "stroke": [
+      "{{off}}",
+      "{{on}}"
+     ]
+    },
+    "delay": 60,
+    "ms": 220
+   },
+   {
+    "id": "disc",
+    "step": 1,
+    "attrs": {
+     "stroke": [
+      "{{off}}",
+      "{{on}}"
+     ]
+    },
+    "delay": 60,
+    "ms": 220
+   },
+   {
+    "id": "symGlow",
+    "step": 1,
+    "attrs": {
+     "opacity": [
+      0,
+      1
+     ]
+    },
+    "delay": 60,
+    "ms": 260
+   },
+   {
+    "id": "halo",
+    "step": 1,
+    "attrs": {
+     "opacity": [
+      0,
+      0.75
+     ]
+    },
+    "delay": 80,
+    "ms": 360,
+    "ease": "out"
+   },
+   {
+    "id": "pulse",
+    "step": 1,
+    "attrs": {
+     "opacity": [
+      0,
+      0
+     ]
+    },
+    "delay": 0,
+    "ms": 0
+   },
+   {
+    "id": "pulse",
+    "step": 1,
+    "attrs": {
+     "r": [
+      50,
+      76
+     ],
+     "opacity": [
+      0.9,
+      0
+     ]
+    },
+    "delay": 80,
+    "ms": 560,
+    "ease": "out"
+   },
+   {
+    "id": "pulse",
+    "step": 1,
+    "attrs": {
+     "r": [
+      50,
+      50
+     ]
+    },
+    "delay": 700,
+    "ms": 0
+   },
+   {
+    "id": "press",
+    "step": 2,
+    "attrs": {
+     "transform": [
+      "translate(80 80) scale(1) translate(-80 -80)",
+      "translate(80 80) scale(0.95) translate(-80 -80)"
+     ]
+    },
+    "ms": 90,
+    "ease": "out"
+   },
+   {
+    "id": "press",
+    "step": 2,
+    "attrs": {
+     "transform": [
+      "translate(80 80) scale(0.95) translate(-80 -80)",
+      "translate(80 80) scale(1) translate(-80 -80)"
+     ]
+    },
+    "delay": 90,
+    "ms": 260,
+    "ease": "in-out"
+   },
+   {
+    "id": "symArc",
+    "step": 2,
+    "attrs": {
+     "stroke": [
+      "{{on}}",
+      "{{off}}"
+     ]
+    },
+    "delay": 40,
+    "ms": 220
+   },
+   {
+    "id": "symBar",
+    "step": 2,
+    "attrs": {
+     "stroke": [
+      "{{on}}",
+      "{{off}}"
+     ]
+    },
+    "delay": 40,
+    "ms": 220
+   },
+   {
+    "id": "disc",
+    "step": 2,
+    "attrs": {
+     "stroke": [
+      "{{on}}",
+      "{{off}}"
+     ]
+    },
+    "delay": 40,
+    "ms": 220
+   },
+   {
+    "id": "symGlow",
+    "step": 2,
+    "attrs": {
+     "opacity": [
+      1,
+      0
+     ]
+    },
+    "delay": 40,
+    "ms": 220
+   },
+   {
+    "id": "halo",
+    "step": 2,
+    "attrs": {
+     "opacity": [
+      0.75,
+      0
+     ]
+    },
+    "delay": 40,
+    "ms": 300,
+    "ease": "out"
+   }
+  ]
+ }
+}

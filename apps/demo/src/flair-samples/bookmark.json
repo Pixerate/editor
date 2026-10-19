@@ -1,0 +1,182 @@
+{
+ "kind": "vector",
+ "id": "bookmark",
+ "name": "Bookmark",
+ "description": "A bookmark that hops and fills from top to bottom when saved, then drains and dips when unsaved.",
+ "category": "interaction",
+ "tags": [
+  "interactive",
+  "ui",
+  "click",
+  "bookmark",
+  "save",
+  "toggle",
+  "micro-interaction"
+ ],
+ "trigger": "click",
+ "hold": 900,
+ "presets": [
+  {
+   "name": "Gold",
+   "values": {
+    "fill": [
+     0.98,
+     0.72,
+     0.1
+    ]
+   }
+  },
+  {
+   "name": "Dark",
+   "values": {
+    "background": [
+     0.06,
+     0.07,
+     0.1
+    ],
+    "outline": [
+     0.6,
+     0.63,
+     0.7
+    ],
+    "fill": [
+     0.4,
+     0.8,
+     1
+    ]
+   }
+  }
+ ],
+ "motion": {
+  "svg": "<svg viewBox=\"0 0 120 120\"><!-- {{background: color default=#FFFFFF label='Background'}} {{outline: color default=#6B7280 label='Outline'}} {{fill: color default=#6366F1 label='Saved'}} --><defs><clipPath id=\"fillClip\"><rect id=\"level\" x=\"30\" y=\"18\" width=\"60\" height=\"0\"/></clipPath></defs><rect width=\"120\" height=\"120\" fill=\"{{background}}\"/><g id=\"mark\" transform=\"translate(0 0)\"><path d=\"M41 22 H79 Q84 22 84 27 V98 L60 81 L36 98 V27 Q36 22 41 22 Z\" fill=\"{{fill}}\" clip-path=\"url(#fillClip)\"/><path id=\"edge\" d=\"M41 22 H79 Q84 22 84 27 V98 L60 81 L36 98 V27 Q36 22 41 22 Z\" fill=\"none\" stroke=\"{{outline}}\" stroke-width=\"4\" stroke-linejoin=\"round\"/></g></svg>",
+  "animate": [
+   {
+    "id": "mark",
+    "step": 1,
+    "attrs": {
+     "transform": [
+      "translate(0 0)",
+      "translate(0 -7)"
+     ]
+    },
+    "ms": 130,
+    "ease": "out"
+   },
+   {
+    "id": "mark",
+    "step": 1,
+    "attrs": {
+     "transform": [
+      "translate(0 -7)",
+      "translate(0 4)"
+     ]
+    },
+    "delay": 130,
+    "ms": 170,
+    "ease": "in-out"
+   },
+   {
+    "id": "mark",
+    "step": 1,
+    "attrs": {
+     "transform": [
+      "translate(0 4)",
+      "translate(0 0)"
+     ]
+    },
+    "delay": 300,
+    "ms": 200,
+    "ease": "in-out"
+   },
+   {
+    "id": "level",
+    "step": 1,
+    "attrs": {
+     "height": [
+      0,
+      84
+     ]
+    },
+    "delay": 60,
+    "ms": 380,
+    "ease": "in-out"
+   },
+   {
+    "id": "edge",
+    "step": 1,
+    "attrs": {
+     "stroke": [
+      "{{outline}}",
+      "{{fill}}"
+     ]
+    },
+    "ms": 200
+   },
+   {
+    "id": "level",
+    "step": 2,
+    "attrs": {
+     "y": [
+      18,
+      102
+     ],
+     "height": [
+      84,
+      0
+     ]
+    },
+    "ms": 320,
+    "ease": "in-out"
+   },
+   {
+    "id": "level",
+    "step": 2,
+    "attrs": {
+     "y": [
+      18,
+      18
+     ]
+    },
+    "delay": 320,
+    "ms": 0
+   },
+   {
+    "id": "mark",
+    "step": 2,
+    "attrs": {
+     "transform": [
+      "translate(0 0)",
+      "translate(0 3)"
+     ]
+    },
+    "ms": 120,
+    "ease": "out"
+   },
+   {
+    "id": "mark",
+    "step": 2,
+    "attrs": {
+     "transform": [
+      "translate(0 3)",
+      "translate(0 0)"
+     ]
+    },
+    "delay": 120,
+    "ms": 180,
+    "ease": "in-out"
+   },
+   {
+    "id": "edge",
+    "step": 2,
+    "attrs": {
+     "stroke": [
+      "{{fill}}",
+      "{{outline}}"
+     ]
+    },
+    "delay": 100,
+    "ms": 200
+   }
+  ]
+ }
+}

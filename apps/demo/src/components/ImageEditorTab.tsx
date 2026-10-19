@@ -1,5 +1,9 @@
-import React, { useEffect, useState } from 'react';
-import { ImageEditor, useImageEditor } from '@pixerate/editor-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ImageEditor, useAgentToolProvider, useImageEditor } from '@pixerate/editor-react';
+import { createImageEditorToolProvider } from '@pixerate/editor/image-editor';
+import { demoToolRegistry } from '../agentTools';
+import { AgentScriptPanel } from './AgentScriptPanel';
+import { IMAGE_SCRIPTS } from '../agentScripts';
 import { Image as ImageIcon, Download, Sparkles, Upload, Wand2 } from 'lucide-react';
 
 /**
@@ -41,6 +45,10 @@ export function ImageEditorTab() {
   const [exportedUrl, setExportedUrl] = useState<string | null>(null);
   const editor = useImageEditor();
   const [maskNote, setMaskNote] = useState<string | null>(null);
+  const agentStage = useRef<HTMLDivElement>(null);
+  // Agents get the image__* tools (adjustments, layers, selections, previews).
+  const provider = useMemo(() => createImageEditorToolProvider(editor.controller, { id: 'image', namespace: 'image' }), [editor.controller]);
+  useAgentToolProvider(demoToolRegistry, provider);
 
   useEffect(() => {
     void editor.controller.loadImage(selectedImage);
@@ -134,8 +142,9 @@ export function ImageEditorTab() {
         {maskNote && <span className="text-slate-400">{maskNote}</span>}
       </div>
 
+
       {/* Editor Component */}
-      <div className="w-full">
+      <div className="relative w-full" ref={agentStage}>
         <ImageEditor
           editor={editor}
           onSave={(dataUrl) => {
@@ -143,6 +152,7 @@ export function ImageEditorTab() {
           }}
         />
       </div>
+      <AgentScriptPanel scripts={IMAGE_SCRIPTS} stage={agentStage} hint="Plays a scripted agent turn with the image__* tools: adjustments and layers as single undo steps, selections, masks, and a rendered preview." />
 
       {/* Export Preview */}
       {exportedUrl && (

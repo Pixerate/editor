@@ -73,6 +73,36 @@ jobs:
         if: steps.changeset_check.outputs.should_release == 'true'
         run: pnpm test
 
+      - name: Refuse versions that are already on npm
+        if: steps.changeset_check.outputs.should_release == 'true'
+        run: |
+          # A version main has not recorded but npm already has means an earlier release
+          # published without pushing its version commit. Publishing would fail part-way.
+          for dir in packages/core packages/react packages/svelte; do
+            name=$(node -p "require('./$dir/package.json').name")
+            version=$(node -p "require('./$dir/package.json').version")
+            before=$(git show "HEAD:$dir/package.json" | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).version")
+            if [ "$version" != "$before" ] && npm view "$name@$version" version > /dev/null 2>&1; then
+              echo "::error::$name@$version is already on npm but main is still at $before. Commit that release's version bump to main (see GOTCHAS.md, 'A Release That Fails Part-Way')."
+              exit 1
+            fi
+          done
+
+      - name: Commit version bumps & changelogs and push them to main
+        if: steps.changeset_check.outputs.should_release == 'true'
+        run: |
+          git add .
+          git commit -m "chore(release): version packages and update changelogs [skip ci]" || echo "No changes to commit"
+          # Push before publishing, so main always records what npm has. Another merge may have
+          # landed meanwhile: rebase onto it (its changesets stay pending for the next release).
+          for attempt in 1 2 3; do
+            if git pull --rebase origin main && git push origin HEAD:main; then exit 0; fi
+            git rebase --abort 2> /dev/null || true
+            sleep $((attempt * 5))
+          done
+          echo "::error::Could not push the version commit to main; nothing was published."
+          exit 1
+
       - name: Publish changed packages to npm (OIDC)
         if: steps.changeset_check.outputs.should_release == 'true'
         run: pnpm release
@@ -81,9 +111,6 @@ jobs:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: "true"
 
-      - name: Commit version bumps & changelogs, push git tags
+      - name: Push release tags
         if: steps.changeset_check.outputs.should_release == 'true'
-        run: |
-          git add .
-          git commit -m "chore(release): version packages and update changelogs [skip ci]" || echo "No changes to commit"
-          git push origin HEAD --tags || echo "Failed to push tags"
+        run: git push origin --tags

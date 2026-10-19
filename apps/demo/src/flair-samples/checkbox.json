@@ -1,0 +1,190 @@
+{
+ "kind": "vector",
+ "id": "checkbox",
+ "name": "Checkbox",
+ "description": "A labelled checkbox that fills with a press and draws its tick on, then undraws it and empties on the next click.",
+ "category": "interaction",
+ "tags": [
+  "interactive",
+  "ui",
+  "click",
+  "checkbox",
+  "form",
+  "toggle",
+  "todo",
+  "micro-interaction"
+ ],
+ "trigger": "click",
+ "hold": 900,
+ "presets": [
+  {
+   "name": "Green",
+   "values": {
+    "accent": [
+     0.13,
+     0.7,
+     0.4
+    ]
+   }
+  },
+  {
+   "name": "Dark",
+   "values": {
+    "background": [
+     0.06,
+     0.07,
+     0.1
+    ],
+    "border": [
+     0.4,
+     0.43,
+     0.5
+    ],
+    "ink": [
+     0.92,
+     0.93,
+     0.96
+    ],
+    "accent": [
+     0.95,
+     0.6,
+     0.15
+    ],
+    "tick": [
+     0.06,
+     0.07,
+     0.1
+    ]
+   }
+  }
+ ],
+ "motion": {
+  "svg": "<svg viewBox=\"0 0 320 120\"><!-- {{label: text default='Remember me' label='Label'}} {{background: color default=#FFFFFF label='Background'}} {{border: color default=#9CA3AF label='Border'}} {{accent: color default=#6366F1 label='Checked'}} {{tick: color default=#FFFFFF label='Tick'}} {{ink: color default=#111827 label='Label colour'}} --><rect width=\"320\" height=\"120\" fill=\"{{background}}\"/><g id=\"boxg\" transform=\"translate(48 60) scale(1) translate(-48 -60)\"><rect id=\"box\" x=\"30\" y=\"42\" width=\"36\" height=\"36\" rx=\"9\" fill=\"{{accent}}\" fill-opacity=\"0\" stroke=\"{{border}}\" stroke-width=\"3\"/><path id=\"tick\" d=\"M39 60.5 L45.5 67 L58 53.5\" fill=\"none\" stroke=\"{{tick}}\" stroke-width=\"4.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\" opacity=\"0\"/></g><text x=\"84\" y=\"{{base}}\" textLength=\"{{length}}\" lengthAdjust=\"spacingAndGlyphs\" font-family=\"system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif\" font-size=\"{{size}}\" font-weight=\"500\" fill=\"{{ink}}\">{{label}}</text></svg>",
+  "animate": [
+   {
+    "id": "boxg",
+    "step": 1,
+    "attrs": {
+     "transform": [
+      "translate(48 60) scale(1) translate(-48 -60)",
+      "translate(48 60) scale(0.86) translate(-48 -60)"
+     ]
+    },
+    "ms": 100,
+    "ease": "out"
+   },
+   {
+    "id": "boxg",
+    "step": 1,
+    "attrs": {
+     "transform": [
+      "translate(48 60) scale(0.86) translate(-48 -60)",
+      "translate(48 60) scale(1) translate(-48 -60)"
+     ]
+    },
+    "delay": 100,
+    "ms": 220,
+    "ease": "in-out"
+   },
+   {
+    "id": "box",
+    "step": 1,
+    "attrs": {
+     "fill-opacity": [
+      0,
+      1
+     ],
+     "stroke": [
+      "{{border}}",
+      "{{accent}}"
+     ]
+    },
+    "ms": 160
+   },
+   {
+    "id": "tick",
+    "step": 1,
+    "attrs": {
+     "opacity": [
+      0,
+      1
+     ]
+    },
+    "delay": 120,
+    "ms": 40
+   },
+   {
+    "id": "tick",
+    "step": 1,
+    "draw": true,
+    "delay": 120,
+    "ms": 260,
+    "ease": "out"
+   },
+   {
+    "id": "tick",
+    "step": 2,
+    "draw": [
+     1,
+     0
+    ],
+    "ms": 160,
+    "ease": "in-out"
+   },
+   {
+    "id": "tick",
+    "step": 2,
+    "attrs": {
+     "opacity": [
+      1,
+      0
+     ]
+    },
+    "delay": 140,
+    "ms": 30
+   },
+   {
+    "id": "box",
+    "step": 2,
+    "attrs": {
+     "fill-opacity": [
+      1,
+      0
+     ],
+     "stroke": [
+      "{{accent}}",
+      "{{border}}"
+     ]
+    },
+    "delay": 100,
+    "ms": 180
+   },
+   {
+    "id": "boxg",
+    "step": 2,
+    "attrs": {
+     "transform": [
+      "translate(48 60) scale(1) translate(-48 -60)",
+      "translate(48 60) scale(0.92) translate(-48 -60)"
+     ]
+    },
+    "delay": 100,
+    "ms": 90,
+    "ease": "out"
+   },
+   {
+    "id": "boxg",
+    "step": 2,
+    "attrs": {
+     "transform": [
+      "translate(48 60) scale(0.92) translate(-48 -60)",
+      "translate(48 60) scale(1) translate(-48 -60)"
+     ]
+    },
+    "delay": 190,
+    "ms": 160,
+    "ease": "in-out"
+   }
+  ]
+ }
+}

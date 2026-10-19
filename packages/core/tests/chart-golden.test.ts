@@ -31,6 +31,17 @@ const GOLDENS: Record<string, Partial<ChartSpec>> = {
   treemap: { type: "treemap", categories: ["North", "South", "East", "West", "Online"], series: [{ name: "Sales", values: [40, 25, 18, 12, 30] }] },
   donut: { type: "donut", dataLabels: true, categories: ["A", "B", "C"], series: [{ name: "S", values: [5, 3, 2] }] },
   bubble: { type: "bubble", categories: ["a", "b", "c"], series: [{ name: "M", values: [10, 20, 15], x: [1, 2, 3], sizes: [5, 40, 10] }] },
+  "error-bars": {
+    title: "Trial results",
+    categories: ["Control", "Low dose", "High dose"],
+    series: [
+      { name: "Week 4", values: [4.2, 6.8, 9.1], errorBars: { type: "custom", plus: [0.6, 1.1, 0.9], minus: [0.5, 0.8, 1.4] } },
+      { name: "Target", type: "line", values: [5, 7, 8], errorBars: { type: "percent", value: 10, direction: "plus" } },
+    ],
+  },
+  "log-line": { type: "line", title: "Users", categories: ["2019", "2020", "2021", "2022", "2023"], yAxis: { scale: "log" } as ChartSpec["yAxis"], series: [{ name: "Users", values: [12, 140, 2100, 18000, 0] }] },
+  "reversed-bars": { type: "bar", orientation: "horizontal", dataLabels: true, xAxis: { reverse: true } as ChartSpec["xAxis"], yAxis: { reverse: true } as ChartSpec["yAxis"], categories: ["First", "Second", "Third"], series: [{ name: "Rank", values: [3, 5, 8] }] },
+  "scatter-log-errors": { type: "scatter", categories: ["a", "b", "c", "d"], xAxis: { scale: "log", title: "Dose" } as ChartSpec["xAxis"], series: [{ name: "Response", values: [12, 20, 31, 38], x: [1, 10, 100, 1000], errorBars: { type: "stderr" }, xErrorBars: { type: "percent", value: 25 } }] },
 };
 
 describe("golden chart renders", () => {

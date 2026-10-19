@@ -1,0 +1,1661 @@
+import { describe, it, expect } from 'vitest';
+import {
+	AnimationEditorController,
+	MOTION_DRAW_EFFECT_ID,
+	MOTION_ISSUE_CODES,
+	MotionSceneFormatError,
+	applyMotionEdits,
+	checkMotionScene,
+	compileMotionScene,
+	createAnimationEditorToolProvider,
+	createMotionScene,
+	flairCurveFor,
+	flairEaseFor,
+	motionFrameAt,
+	motionFrameToSvg,
+	parseMotionScene,
+	toFlairEffectDocument,
+	toFlairSvgMotion,
+	toFlairVectorEffect,
+	MOTION_EASE_OUT,
+	motionCascade,
+	motionTextLayout,
+	motionBlurTimes,
+	motionGhosts,
+	motionMovingIds,
+	motionPath,
+	motionStageSvg,
+	motionFlairPrimitive,
+	motionPropertyValue,
+	motionClipLayout,
+	smoothMotionLegs,
+	matchMotionNodes,
+	fitMotionScene,
+	motionBeatAt,
+	motionBeatTime,
+	motionCueTime,
+	toLottie,
+	indexMotionNodes,
+	type LottieValue,
+	fromFlairSvgMotion,
+	fromFlairVectorEffect,
+	type FlairSvgAnimation,
+	type MotionCommand,
+	type MotionIssueCode,
+	type MotionScene
+} from '../src/animation-editor';
+import { ManualClock, SPRING_PRESETS, cubicBezierAt, springSettleMs } from '../src/animation';
+import { ToolRegistry } from '../src/tools';
+import { createVectorEffect, ellipseSubpath, findVectorNode, rectSubpath, starSubpath, type VectorDocument, type VectorNode, type VectorPathNode } from '../src/vector';
+
+const ARTWORK: VectorDocument = {
+	width: 400,
+	height: 200,
+	background: '#ffffff',
+	nodes: [
+		{ id: 'box', type: 'path', name: 'Box', fill: '#ef4444', stroke: '#111111', strokeWidth: 2, subpaths: [rectSubpath({ x: 20, y: 20, width: 60, height: 60 })] },
+		{ id: 'dot', type: 'path', fill: '#0ea5e9', subpaths: [ellipseSubpath({ x: 300, y: 120, width: 40, height: 40 })] },
+		{ id: 'line', type: 'path', fill: null, stroke: '#111111', strokeWidth: 3, subpaths: [{ closed: false, anchors: [{ x: 20, y: 150 }, { x: 380, y: 150 }] }] },
+		{ id: 'track', type: 'path', visible: false, fill: null, stroke: '#999999', subpaths: [{ closed: false, anchors: [{ x: 0, y: 100 }, { x: 400, y: 100 }] }] },
+		{ id: 'circle', type: 'path', visible: false, fill: '#22c55e', subpaths: [ellipseSubpath({ x: 20, y: 20, width: 60, height: 60 })] },
+		{ id: 'spin', type: 'path', fill: '#a855f7', subpaths: [rectSubpath({ x: 160, y: 40, width: 40, height: 40 })], effects: [createVectorEffect('twist', 'tw', { angle: 0, center: { x: 0.5, y: 0.5 } })!] },
+		{ id: 'pair', type: 'group', children: [
+			{ id: 'a', type: 'path', fill: '#f59e0b', subpaths: [rectSubpath({ x: 220, y: 20, width: 20, height: 20 })] },
+			{ id: 'b', type: 'path', fill: '#f59e0b', subpaths: [rectSubpath({ x: 250, y: 20, width: 20, height: 20 })] }
+		] }
+	]
+};
+
+const scene = (shots: MotionScene['shots'], extra: Partial<MotionScene> = {}): MotionScene => ({ version: 1, name: 'test', artwork: ARTWORK, shots, ...extra });
+const path = (doc: VectorDocument, id: string) => findVectorNode(doc.nodes, id) as VectorPathNode;
+
+describe('parseMotionScene', () => {
+	it('lists every shape problem at once, with suggestions', () => {
+		const bad = { version: 1, name: 'x', artwork: ARTWORK, shots: [{ id: 'one', run: [{ type: 'entr', targets: ['box'] }, { type: 'move', targets: ['box'] }], hodl: 5 }] };
+		try {
+			parseMotionScene(bad);
+			throw new Error('expected a format error');
+		} catch (error) {
+			expect(error).toBeInstanceOf(MotionSceneFormatError);
+			const problems = (error as MotionSceneFormatError).problems.join('\n');
+			expect(problems).toContain('"hodl" (did you mean "hold"?)');
+			expect(problems).toContain('"entr" (did you mean "enter"?)');
+			expect(problems).toContain('give "by" (an offset) or "to" (a point)');
+		}
+	});
+
+	it('reads JSON text and rejects invalid JSON', () => {
+		const text = JSON.stringify(scene([{ id: 'one', run: [] }]));
+		expect(parseMotionScene(text).shots[0].id).toBe('one');
+		expect(() => parseMotionScene('{')).toThrow(/not valid JSON/);
+	});
+});
+
+describe('compileMotionScene', () => {
+	it('times commands one after another, together with "previous", with delays and stagger', () => {
+		const s = scene([
+			{ id: 'one', run: [{ type: 'enter', targets: ['box'], duration: 500 }, { type: 'enter', targets: ['dot'], duration: 300, with: 'previous' }, { type: 'move', targets: ['a', 'b'], by: { x: 10, y: 0 }, duration: 200, stagger: 100, delay: 50 }], hold: 400 },
+			{ id: 'two', run: [{ type: 'wait', duration: 250 }] }
+		]);
+		const t = compileMotionScene(s);
+		expect(t.commands.map((c) => [c.start, c.end])).toEqual([[0, 500], [0, 300], [550, 850], [1250, 1500]]);
+		expect(t.shots.map((x) => [x.start, x.end])).toEqual([[0, 1250], [1250, 2100]]);
+		expect(t.duration).toBe(2100);
+	});
+
+	it('cuts the camera on the first shot and eases it later', () => {
+		const s = scene([
+			{ id: 'one', camera: { x: 0, y: 0, width: 200, height: 100 }, run: [] },
+			{ id: 'two', camera: { frame: 'dot', padding: 10 }, run: [{ type: 'pulse', targets: ['dot'] }] }
+		]);
+		const t = compileMotionScene(s);
+		expect(t.shots[0].commandsStart).toBe(0);
+		expect(t.shots[1].commandsStart - t.shots[1].start).toBe(1000);
+		const end = motionFrameAt(s, t.duration).camera;
+		// Framing a node fits the artwork's 2:1 shape around it.
+		expect(end.width / end.height).toBeCloseTo(2);
+		expect(end.x + end.width / 2).toBeCloseTo(320);
+	});
+
+	it('lets a draw take as long as its line is long', () => {
+		const t = compileMotionScene(scene([{ id: 'one', run: [{ type: 'draw', targets: ['line'] }] }]));
+		expect(t.commands[0].duration).toBe(540); // 360 units × 1.5 ms
+	});
+});
+
+describe('motionFrameAt', () => {
+	const s = scene([
+		{ id: 'in', run: [{ type: 'enter', targets: ['box'], duration: 400 }], hold: 0 },
+		{ id: 'go', run: [{ type: 'move', targets: ['box'], by: { x: 100, y: 0 }, duration: 400, ease: 'linear' }, { type: 'style', targets: ['box'], fill: '#0000ff', duration: 200, ease: 'linear' }], hold: 0 }
+	]);
+
+	it('hides what enters later and fades it in', () => {
+		expect(path(motionFrameAt(s, 0).document, 'box').opacity).toBe(0);
+		expect(path(motionFrameAt(s, 200).document, 'box').opacity).toBeCloseTo(1 - 0.5 ** 3, 3);
+		expect(path(motionFrameAt(s, 400).document, 'box').opacity).toBeUndefined();
+		// Things that never enter show from the start.
+		expect(path(motionFrameAt(s, 0).document, 'dot').opacity).toBeUndefined();
+	});
+
+	it('moves with a transform and blends colours, frame by frame', () => {
+		expect(path(motionFrameAt(s, 600).document, 'box').transform).toEqual([1, 0, 0, 1, 50, 0]);
+		expect(path(motionFrameAt(s, 800).document, 'box').transform).toEqual([1, 0, 0, 1, 100, 0]);
+		expect(path(motionFrameAt(s, 1000).document, 'box').fill).toBe('#0000ff');
+		const mid = path(motionFrameAt(s, 900).document, 'box').fill as string;
+		expect(mid).not.toBe('#ef4444');
+		expect(mid).not.toBe('#0000ff');
+	});
+
+	it('draws strokes on with a trim effect and turns about the centre', () => {
+		const d = scene([{ id: 'one', run: [{ type: 'draw', targets: ['line'], duration: 1000, ease: 'linear' }, { type: 'rotate', targets: ['box'], by: 90, ease: 'linear', duration: 100 }] }]);
+		const line = path(motionFrameAt(d, 500).document, 'line');
+		expect(line.effects?.[0]).toMatchObject({ id: MOTION_DRAW_EFFECT_ID, type: 'trim', params: { start: 0, end: 50 } });
+		expect(path(motionFrameAt(d, 2000).document, 'line').effects ?? []).toEqual([]);
+		const m = path(motionFrameAt(d, 2000).document, 'box').transform!;
+		// 90° about (50, 50): (x, y) → (100 − y, x).
+		expect(m.map((v) => Math.round(v))).toEqual([0, 1, -1, 0, 100, 0]);
+	});
+
+	it('morphs into another shape, follows a path and tweens live effects', () => {
+		const d = scene([
+			{ id: 'one', run: [
+				{ type: 'morph', targets: ['box'], into: 'circle', duration: 400 },
+				{ type: 'follow', targets: ['dot'], path: 'track', duration: 400, ease: 'linear', with: 'previous' },
+				{ type: 'effect', targets: ['spin'], effect: 'tw', param: 'angle', to: 90, duration: 400, with: 'previous' }
+			] }
+		]);
+		const end = motionFrameAt(d, 400).document;
+		const box = path(end, 'box');
+		expect(box.visible).not.toBe(false);
+		expect(box.fill).toBe('#22c55e');
+		expect(box.subpaths[0].anchors[0].out).toBeTruthy(); // the circle's curves
+		const mid = path(motionFrameAt(d, 200).document, 'box');
+		expect(mid.subpaths[0].anchors.length).toBeGreaterThan(4); // an in-between
+		// The dot's centre (320, 140) rides the track from (0, 100) to (400, 100).
+		expect(path(motionFrameAt(d, 200).document, 'dot').transform).toEqual([1, 0, 0, 1, -120, -40]);
+		expect((path(end, 'spin').effects![0].params as { angle: number }).angle).toBe(90);
+	});
+
+	it('returns to rest after a pulse and recolours through control values', () => {
+		const d = scene([{ id: 'one', run: [{ type: 'pulse', targets: ['dot'], duration: 400 }] }], { controls: [{ name: 'accent', type: 'color', default: '#0ea5e9' }] });
+		const peak = path(motionFrameAt(d, 200).document, 'dot').transform!;
+		expect(peak[0]).toBeCloseTo(1.15);
+		expect(path(motionFrameAt(d, 400).document, 'dot').transform).toBeUndefined();
+		expect(path(motionFrameAt(d, 0, { values: { accent: '#ff00ff' } }).document, 'dot').fill).toBe('#ff00ff');
+	});
+
+	it('renders SVG with the camera as the viewBox', () => {
+		const d = scene([{ id: 'one', camera: { x: 10, y: 20, width: 200, height: 100 }, run: [] }]);
+		const svg = motionFrameToSvg(d, 0);
+		expect(svg).toMatch(/viewBox="10 20 200 100"/);
+		expect(svg).toContain('id="box"');
+	});
+});
+
+describe('checkMotionScene', () => {
+	it('reports every issue code', () => {
+		const reported = new Set<MotionIssueCode>();
+		const collect = (s: MotionScene) => checkMotionScene(s).forEach((i) => reported.add(i.code));
+		collect(scene([]));
+		collect(
+			scene(
+				[
+					{ id: 'x', camera: { x: 0, y: 0, width: 100, height: 100 }, run: [
+						{ type: 'enter', targets: ['bx'] },
+						{ type: 'follow', targets: ['dot'], path: 'nope' },
+						{ type: 'follow', targets: ['dot'], path: 'pair' },
+						{ type: 'morph', targets: ['box'], into: 'nothing' },
+						{ type: 'effect', targets: ['spin'], effect: 'tww', param: 'angle', to: 1 },
+						{ type: 'effect', targets: ['spin'], effect: 'tw', param: 'angel', to: 1 },
+						{ type: 'style', targets: ['box'], fill: 'not-a-colour' },
+						{ type: 'fade', targets: ['box'], to: 0.5, duration: 50 },
+						{ type: 'enter', targets: ['line'], style: 'wipe' },
+						{ type: 'scale', targets: ['box'], to: 1.2, ease: 'spring-gentle', duration: 300 }
+					] },
+					{ id: 'x', run: [] },
+					{ id: 'y', camera: { frame: 'ghost' }, run: [] },
+					{ id: 'z', camera: { x: 0, y: 0, width: 0, height: 10 }, run: [{ type: 'enter', targets: ['dot'] }] },
+					{ id: 'w', run: [{ type: 'enter', targets: ['dot'] }, { type: 'move', targets: ['box'], by: { x: 900, y: 0 } }, { type: 'move', targets: ['box'], by: { x: 1, y: 0 }, with: 'previous', delay: 100 }] },
+					{ id: 'v', run: [{ type: 'exit', targets: ['dot'] }, { type: 'pulse', targets: ['dot'] }] }
+				],
+				{ target: [100, 200], controls: [{ name: 'accent', type: 'color', default: '#123456' }] }
+			)
+		);
+		collect(scene([{ id: 'g', run: [{ type: 'style', targets: ['box'], fill: '#000000' }] }], { artwork: { ...ARTWORK, nodes: [{ ...ARTWORK.nodes[0], fill: { type: 'linear', stops: [{ offset: 0, color: '#000' }, { offset: 1, color: '#fff' }] } } as VectorPathNode] }, target: [0, 0.5] }));
+		const twin = { id: 'twin', type: 'group', visible: false, children: [{ id: 'twin-a', type: 'path', fill: '#000000', subpaths: [rectSubpath({ x: 0, y: 0, width: 5, height: 5 })] }, { id: 'twin-b', type: 'path', fill: '#000000', subpaths: [rectSubpath({ x: 9, y: 0, width: 5, height: 5 })] }, { id: 'twin-c', type: 'group', children: [] }] } as VectorNode;
+		collect(scene([{ id: 'm', run: [{ type: 'match', targets: ['pair'], into: 'twin' }, { type: 'match', targets: ['pair'], into: 'a' }] }], { artwork: { ...ARTWORK, nodes: [...ARTWORK.nodes, twin] } }));
+		collect(scene([{ id: 'long', run: [{ type: 'wait', duration: 2000 }] }, { id: 'hit', at: { beat: 1 }, run: [] }, { id: 'say', at: { word: 3 }, run: [] }], { beat: { bpm: 120 } }));
+		collect(scene([{ id: 'only', run: [] }], { trigger: 'click', loop: 'loop' }));
+		collect(scene([{ id: 'a', run: [] }, { id: 'b', at: { ms: 5000 }, run: [] }], { trigger: 'click' }));
+		collect(scene([{ id: 'p', run: [{ type: 'play', targets: ['box'], clip: 'nope' }] }]));
+		collect(scene([], { drivers: [{ target: 'box', property: 'x', source: { node: 'dot', property: 'x' } }, { target: 'dot', property: 'x', source: { node: 'box', property: 'x' } }] }));
+		collect(scene([{ id: 's', run: [{ type: 'enter', targets: ['box'], split: 'letter' }] }]));
+		expect([...reported].sort()).toEqual(Object.keys(MOTION_ISSUE_CODES).sort());
+	});
+
+	it('suggests the id that was meant', () => {
+		const issues = checkMotionScene(scene([{ id: 'one', run: [{ type: 'enter', targets: ['bx'] }] }]));
+		expect(issues[0]).toMatchObject({ code: 'unknown-target', severity: 'error', shot: 'one', command: 0, ids: ['bx'] });
+		expect(issues[0].message).toContain('"bx" (did you mean "box"?)');
+	});
+});
+
+describe('applyMotionEdits', () => {
+	const base = scene([{ id: 'one', run: [{ type: 'enter', targets: ['box'] }] }]);
+
+	it('is all or nothing, naming the op that failed', () => {
+		const result = applyMotionEdits(base, [
+			{ op: 'insert_shots', shots: [{ id: 'two', run: [] }] },
+			{ op: 'add_commands', shot: 'tow', commands: [{ type: 'fade', targets: ['box'], to: 0 }] }
+		]);
+		expect(result.ok).toBe(false);
+		expect(!result.ok && result.error).toContain('op 2 (add_commands): There is no shot "tow" (did you mean "two"?)');
+	});
+
+	it('refuses edits that add an error but not unrelated edits to a broken scene', () => {
+		const refused = applyMotionEdits(base, { op: 'add_commands', shot: 'one', commands: [{ type: 'fade', targets: ['bxo'], to: 0 }] });
+		expect(!refused.ok && refused.error).toMatch(/did you mean "box"/);
+		const broken: MotionScene = { ...base, shots: [{ id: 'one', run: [{ type: 'enter', targets: ['gone'] }] }] };
+		expect(applyMotionEdits(broken, { op: 'set_settings', name: 'renamed' }).ok).toBe(true);
+	});
+
+	it('updates, moves and deletes shots and commands', () => {
+		const r = applyMotionEdits(base, [
+			{ op: 'insert_shots', shots: [{ id: 'zero', run: [] }], at: 0 },
+			{ op: 'move_shot', shot: 'zero', to: 1 },
+			{ op: 'add_commands', shot: 'one', commands: [{ type: 'pulse', targets: ['box'] }, { type: 'shake', targets: ['box'] }] },
+			{ op: 'update_command', shot: 'one', command: 1, set: { count: 2 } },
+			{ op: 'delete_commands', shot: 'one', commands: [2] },
+			{ op: 'update_shot', shot: 'one', set: { label: 'Hello', hold: 100 } },
+			{ op: 'delete_shots', shots: ['zero'] }
+		]);
+		expect(r.ok).toBe(true);
+		if (!r.ok) return;
+		expect(r.scene.shots).toEqual([{ id: 'one', label: 'Hello', hold: 100, run: [{ type: 'enter', targets: ['box'] }, { type: 'pulse', targets: ['box'], count: 2 }] }]);
+	});
+});
+
+describe('AnimationEditorController', () => {
+	it('edits with undo, plays on a manual clock and refuses edits while read-only', async () => {
+		const clock = new ManualClock();
+		const changes: MotionScene[] = [];
+		const c = new AnimationEditorController({ scene: createMotionScene(ARTWORK), clock, onChange: (s) => changes.push(s) });
+		expect(c.apply({ op: 'insert_shots', shots: [{ id: 'one', run: [{ type: 'enter', targets: ['box'], duration: 400 }], hold: 0 }] }).ok).toBe(true);
+		expect(c.getState().duration).toBe(400);
+		expect(changes).toHaveLength(1);
+		c.play();
+		await clock.advance(200);
+		expect(c.getState().time).toBe(200);
+		expect(c.getState().currentShot).toBe('one');
+		expect(path(c.frame().document, 'box').opacity).toBeGreaterThan(0);
+		c.pause();
+		expect(c.undo()).toBe(true);
+		expect(c.getState().scene.shots).toEqual([]);
+		c.setReadOnly(true);
+		const refused = c.apply({ op: 'set_settings', name: 'x' });
+		expect(refused).toEqual({ ok: false, error: 'The animation is read-only.' });
+		expect(c.getState().error).toBe('The animation is read-only.');
+		c.destroy();
+	});
+
+	it('reconnects after destroy when subscribed again (React StrictMode remounts)', () => {
+		const c = new AnimationEditorController({ scene: scene([{ id: 'one', run: [{ type: 'enter', targets: ['box'], duration: 400 }] }]) });
+		c.destroy();
+		const seen: number[] = [];
+		c.subscribe((s) => seen.push(s.time));
+		c.seek(200);
+		expect(c.getState().time).toBe(200);
+		expect(seen).toContain(200);
+		c.destroy();
+	});
+
+	it('loads JSON, clearing history, and selects shots', () => {
+		const c = new AnimationEditorController();
+		c.apply({ op: 'set_settings', name: 'first' });
+		expect(c.load(JSON.stringify(scene([{ id: 'one', run: [] }])), { clearHistory: true }).ok).toBe(true);
+		expect(c.getState().canUndo).toBe(false);
+		c.select({ shot: 'one', command: 3 });
+		expect(c.getState().selection).toEqual({ shot: 'one' });
+		expect(c.load('{').ok).toBe(false);
+		c.destroy();
+	});
+});
+
+// The scene of the demo's Animation tab (apps/demo/src/components/AnimationTab.tsx).
+const animateOf = (out: { motion: { animate?: FlairSvgAnimation[] } }) => out.motion.animate ?? [];
+
+const DEMO_SCENE: MotionScene = {
+	version: 1,
+	name: 'Badge reveal',
+	artwork: {
+		width: 640,
+		height: 360,
+		background: '#0f172a',
+		nodes: [
+			{ id: 'ring', type: 'path', fill: null, stroke: '#38bdf8', strokeWidth: 6, subpaths: [ellipseSubpath({ x: 220, y: 80, width: 200, height: 200 })], effects: [createVectorEffect('wiggle', 'wobble', { size: 4, detail: 8, time: 0 })!] },
+			{ id: 'badge', type: 'path', fill: '#f43f5e', stroke: null, subpaths: [ellipseSubpath({ x: 250, y: 110, width: 140, height: 140 })] },
+			{ id: 'check', type: 'path', fill: null, stroke: '#ffffff', strokeWidth: 12, strokeLinecap: 'round', strokeLinejoin: 'round', subpaths: [{ closed: false, anchors: [{ x: 285, y: 182 }, { x: 310, y: 208 }, { x: 356, y: 156 }] }] },
+			{ id: 'arc', type: 'path', visible: false, fill: null, stroke: '#94a3b8', subpaths: [{ closed: false, anchors: [{ x: 60, y: 300, out: { x: 160, y: 20 } }, { x: 580, y: 60, in: { x: 420, y: 0 } }] }] },
+			{ id: 'spark', type: 'path', fill: '#fde047', stroke: null, subpaths: [starSubpath({ x: 48, y: 288, width: 24, height: 24 }, 4, 0.35)] },
+			{ id: 'tile', type: 'path', fill: '#a78bfa', stroke: null, subpaths: [rectSubpath({ x: 500, y: 250, width: 70, height: 70 }, 10)] },
+			{ id: 'star', type: 'path', visible: false, fill: '#facc15', stroke: null, subpaths: [starSubpath({ x: 495, y: 245, width: 80, height: 80 }, 5, 0.45)] }
+		]
+	},
+	loop: 'loop',
+	shots: [
+		{ id: 'badge', run: [{ type: 'enter', targets: ['ring'], style: 'draw', duration: 900 }, { type: 'enter', targets: ['badge'], style: 'pop', with: 'previous', delay: 300 }, { type: 'enter', targets: ['check'], style: 'draw', duration: 500 }] },
+		{ id: 'spark', run: [{ type: 'enter', targets: ['spark'], duration: 200 }, { type: 'follow', targets: ['spark'], path: 'arc', rotate: true, duration: 1200 }, { type: 'exit', targets: ['spark'], style: 'shrink' }], hold: 200 },
+		{ id: 'star', run: [{ type: 'enter', targets: ['tile'], style: 'grow' }, { type: 'morph', targets: ['tile'], into: 'star' }, { type: 'effect', targets: ['ring'], effect: 'wobble', param: 'time', to: 2, duration: 900, with: 'previous' }] },
+		{ id: 'focus', camera: { frame: 'ring', padding: 40 }, run: [{ type: 'pulse', targets: ['badge'], count: 2, duration: 800 }], hold: 800 }
+	]
+};
+
+describe('Flair export', () => {
+	const s = scene(
+		[
+			{ id: 'one', run: [{ type: 'enter', targets: ['box'], duration: 500 }, { type: 'draw', targets: ['line'], duration: 600 }], hold: 300 },
+			{ id: 'two', camera: { frame: 'dot' }, run: [{ type: 'move', targets: ['box'], by: { x: 50, y: 0 }, duration: 400 }, { type: 'pulse', targets: ['dot'], duration: 300 }, { type: 'style', targets: ['pair'], fill: '#000000', duration: 200 }] }
+		],
+		{ name: 'Logo Reveal', controls: [{ name: 'accent', type: 'color', default: '#ef4444', label: 'Accent' }], presets: [{ name: 'Sea', values: { accent: '#0ea5e9' } }], loop: 'loop' }
+	);
+
+	it('matches eases to Flair curves', () => {
+		expect(flairEaseFor('linear')).toBe('linear');
+		expect(flairEaseFor(MOTION_EASE_OUT)).toBe('out');
+		expect(flairEaseFor('ease-in-back')).toBeUndefined();
+	});
+
+	it('writes cubic-bezier eases as curves, keeping Flair names where they match', () => {
+		expect(flairCurveFor(MOTION_EASE_OUT)).toBe('out');
+		expect(flairCurveFor('ease-in-back')).toEqual([0.36, 0, 0.66, -0.56]);
+		expect(flairCurveFor({ type: 'cubic-bezier', x1: 0.2, y1: 0.8, x2: 0.4, y2: 1 })).toEqual([0.2, 0.8, 0.4, 1]);
+		expect(flairCurveFor('ease-in-back', false)).toBeUndefined();
+		for (const ease of ['spring', 'elastic', 'ease-out-elastic', 'hold', { type: 'spring', stiffness: 300 }] as const) expect(flairCurveFor(ease)).toBeUndefined();
+	});
+
+	it('exports a back-eased move as one change, and samples it with curves off', () => {
+		const back = scene([{ id: 'one', run: [{ type: 'move', targets: ['box'], by: { x: 100, y: 0 }, duration: 500, ease: 'ease-in-back' }] }]);
+		const out = toFlairSvgMotion(back);
+		const moves = (out.motion.animate ?? []).filter((a) => a.id === 'box' && a.attrs?.transform);
+		expect(moves).toHaveLength(1);
+		expect(moves[0]).toMatchObject({ ms: 500, ease: [0.36, 0, 0.66, -0.56] });
+		expect(moves[0].attrs?.transform?.[1]).toMatch(/^translate\(100 0\)/);
+		expect(out.sampled).toBe(0);
+		const old = toFlairSvgMotion(back, { curves: false });
+		expect(old.sampled).toBe(15);
+		expect(old.motion.animate?.every((a) => typeof a.ease === 'string')).toBe(true);
+	});
+
+	it('samples overshooting curves on colours and opacity, which cannot pass their ends', () => {
+		const pop = scene([{ id: 'one', run: [{ type: 'style', targets: ['box'], fill: '#000000', duration: 300, ease: 'ease-out-back' }, { type: 'style', targets: ['dot'], fill: '#000000', duration: 300, ease: 'ease-in' }] }]);
+		const animate = toFlairSvgMotion(pop).motion.animate ?? [];
+		expect(animate.filter((a) => a.id === 'box').length).toBeGreaterThan(1);
+		expect(animate.filter((a) => a.id === 'dot')).toEqual([expect.objectContaining({ ms: 300, ease: [0.42, 0, 1, 1], attrs: { fill: ['#0ea5e9', '#000000'] } })]);
+	});
+
+	it('samples only the demo scene\'s shape changes', () => {
+		const out = toFlairSvgMotion(DEMO_SCENE);
+		const old = toFlairSvgMotion(DEMO_SCENE, { curves: false, behaviors: false });
+		expect(old.sampled).toBe(116);
+		// The badge's back-eased pop, the spark's ease-in exit and the badge's pulse are now one change each.
+		expect(out.sampled).toBe(54);
+		// The spark's follow is one `along` on a wrapper, turning with a copy of the arc.
+		expect(animateOf(out).filter((a) => a.along)).toEqual([{ id: 'spark--follow', along: 'spark--follow-route', orient: true, delay: 2200, ms: 1200, ease: 'in-out', at: [0, 1] }]);
+		expect(out.motion.svg).toContain('<defs><path id="spark--follow-route" d="M60 300C160 20 420 0 580 60" fill="none"/></defs>');
+		expect(out.motion.svg).toMatch(/<g id="spark--follow" transform="translate\(60 300\) rotate\(-70\.\d+\)"><g id="spark--follow-centre" transform="translate\(-60 -300\)"><path id="spark"/);
+		expect(animateOf(out).filter((a) => a.behavior)).toEqual([expect.objectContaining({ id: 'badge', ease: 'linear', behavior: { type: 'pulse', count: 2 } })]);
+		const animate = out.motion.animate ?? [];
+		expect(animate).toContainEqual(expect.objectContaining({ id: 'badge', delay: 300, ms: 600, ease: [0.34, 1.56, 0.64, 1] }));
+		expect(animate.filter((a) => a.id === 'spark' && Array.isArray(a.ease)).map((a) => Object.keys(a.attrs ?? {})[0]).sort()).toEqual(['opacity', 'transform']);
+		// What is left: the morph and wobble (each path's d).
+		const steps = animate.filter((a) => a.ease === 'linear' && !a.behavior).map((a) => `${a.id} ${Object.keys(a.attrs ?? {})[0]}`);
+		expect(new Set(steps)).toEqual(new Set(['ring d', 'tile d']));
+		expect(out.duration).toBe(old.duration);
+	});
+
+	it('writes one exact change where Flair can, and samples the rest', () => {
+		const out = toFlairSvgMotion(s);
+		const { svg, animate = [] } = out.motion;
+		expect(svg).toMatch(/^<svg[^>]*viewBox="0 0 400 200"/);
+		expect(svg).not.toMatch(/<animate|<set\b|<script/);
+		for (const a of animate) if (a.id) expect(svg).toContain(`id="${a.id}"`);
+		expect(animate).toContainEqual({ id: 'box', ms: 500, ease: 'out', attrs: { opacity: [0, 1] } });
+		expect(animate).toContainEqual(expect.objectContaining({ id: 'line', delay: 500, ms: 600, ease: 'in-out', draw: [0, 1] }));
+		const move = animate.find((a) => a.id === 'box' && a.attrs?.transform);
+		expect(move?.attrs?.transform?.[1]).toMatch(/^translate\(50 0\)/);
+		expect(animate.some((a) => a.view)).toBe(true);
+		// Group paint goes to each path in it.
+		expect(animate.filter((a) => a.attrs?.fill?.[1] === '#000000').map((a) => a.id).sort()).toEqual(['a', 'b']);
+		// The pulse is one change with a behaviour (sampled into linear steps for Flair before 0.38).
+		expect(animate.filter((a) => a.id === 'dot' && a.attrs?.transform)).toEqual([expect.objectContaining({ ease: 'linear', behavior: { type: 'pulse', count: 1 } })]);
+		expect(out.sampled).toBe(0);
+		expect(toFlairSvgMotion(s, { behaviors: false }).sampled).toBeGreaterThan(3);
+		expect(out.hold).toBe(600);
+		expect(out.duration).toBe(compileMotionScene(s).duration);
+	});
+
+	it('makes a catalog effect with colour controls and an editor document', () => {
+		const effect = toFlairVectorEffect(s, { category: 'loader', tags: ['logo'] });
+		expect(effect).toMatchObject({ kind: 'vector', id: 'logo-reveal', name: 'Logo Reveal', category: 'loader', tags: ['logo'], presets: s.presets });
+		expect(effect.motion.svg).toContain("<!-- {{accent: color default=#EF4444 label='Accent'}} -->");
+		expect(effect.motion.svg).toContain('fill="{{accent}}"');
+		expect(effect.motion.svg.replace(/<!--.*?-->/, '')).not.toMatch(/#ef4444/i);
+		const doc = toFlairEffectDocument(s);
+		expect(doc).toMatchObject({ version: 1, name: 'Logo Reveal', values: { accent: '#ef4444' }, loop: true, effect: { kind: 'vector' } });
+	});
+});
+
+describe('animation editor tools', () => {
+	const setup = (options: Parameters<typeof createAnimationEditorToolProvider>[1] = {}) => {
+		const controller = new AnimationEditorController({ scene: createMotionScene(ARTWORK, { name: 'demo' }) });
+		const registry = new ToolRegistry();
+		registry.register(createAnimationEditorToolProvider(controller, options));
+		return { controller, registry };
+	};
+	const json = (result: { structuredContent?: Record<string, unknown> }) => result.structuredContent as any;
+
+	it('reads the artwork and adds shots and commands, returning their timing', async () => {
+		const { registry, controller } = setup();
+		const read = json(await registry.callTool('get_animation', {}));
+		expect(read.elements.map((e: { id: string }) => e.id)).toEqual(expect.arrayContaining(['box', 'pair', 'a']));
+		expect(read.elements.find((e: { id: string }) => e.id === 'spin').effects[0]).toMatchObject({ id: 'tw', type: 'twist', numericParams: { angle: 0 } });
+		const added = await registry.callTool('insert_shots', { shots: [{ id: 'intro', label: 'Box arrives', run: [{ type: 'enter', targets: ['box'], style: 'pop' }] }] });
+		expect(added.isError).toBeFalsy();
+		expect(json(added)).toMatchObject({ added: ['intro'], duration: 1200, shots: [{ id: 'intro', start: 0, end: 1200 }] });
+		const cmds = json(await registry.callTool('add_commands', { shot: 'intro', commands: [{ type: 'pulse', targets: ['box'] }] }));
+		expect(cmds.added).toEqual([{ index: 1, type: 'pulse', start: 600, end: 1200 }]);
+		expect(controller.getState().scene.shots[0].run).toHaveLength(2);
+		const updated = json(await registry.callTool('update_command', { shot: 'intro', command: 1, set: { count: 2 } }));
+		expect(updated.command).toMatchObject({ index: 1, type: 'pulse', count: 2 });
+		const frame = json(await registry.callTool('render_animation_frame', { shot: 'intro', at: 'end' }));
+		expect(frame.svg).toContain('<svg');
+		const undone = json(await registry.callTool('undo_animation', {}));
+		expect(undone).toEqual({ undone: true, label: 'Change command' });
+	});
+
+	it('fails usefully without changing anything', async () => {
+		const { registry, controller } = setup();
+		const badSchema = await registry.callTool('add_commands', { shot: 'x', commands: [{ type: 'enter', targets: ['box'], speed: 2 }] });
+		expect(badSchema.isError).toBe(true);
+		await registry.callTool('insert_shots', { shots: [{ id: 'intro', run: [] }] });
+		const unknown = await registry.callTool('add_commands', { shot: 'intro', commands: [{ type: 'enter', targets: ['boxx'] }] });
+		expect(unknown.isError).toBe(true);
+		expect((unknown.content[0] as { text: string }).text).toContain('did you mean "box"');
+		const noShot = await registry.callTool('delete_shots', { shots: ['intr'] });
+		expect((noShot.content[0] as { text: string }).text).toContain('did you mean "intro"');
+		expect(controller.getState().scene.shots).toEqual([{ id: 'intro', run: [] }]);
+	});
+
+	it('batches edits with a dry run, exports to Flair and replaces the artwork from SVG', async () => {
+		const { registry, controller } = setup();
+		const ops = [
+			{ op: 'insert_shots', shots: [{ id: 'one', run: [{ type: 'enter', targets: ['dot'] }] }] },
+			{ op: 'add_commands', shot: 'one', commands: [{ type: 'move', targets: ['dot'], by: { x: -100, y: 0 } }] }
+		];
+		const dry = json(await registry.callTool('edit_animation', { ops, dry_run: true }));
+		expect(dry).toMatchObject({ dry_run: true, duration: 1900 });
+		expect(controller.getState().scene.shots).toEqual([]);
+		expect(json(await registry.callTool('edit_animation', { ops })).duration).toBe(1900);
+		expect(controller.getState().canUndo).toBe(true);
+		const effect = json(await registry.callTool('export_flair_effect', { category: 'icon' }));
+		expect(effect).toMatchObject({ kind: 'vector', id: 'demo', category: 'icon' });
+		expect((await registry.callTool('export_flair_effect', { curves: 'no' })).isError).toBe(true);
+		await registry.callTool('add_commands', { shot: 'one', commands: [{ type: 'move', targets: ['dot'], by: { x: 50, y: 0 }, duration: 400, ease: 'ease-out-back' }] });
+		const curved = json(await registry.callTool('export_flair_motion', {}));
+		expect(curved.motion.animate).toContainEqual(expect.objectContaining({ id: 'dot', ms: 400, ease: [0.34, 1.56, 0.64, 1] }));
+		expect(json(await registry.callTool('export_flair_motion', { curves: false })).sampled).toBe(curved.sampled + 12);
+		const replaced = await registry.callTool('set_animation_artwork_svg', { svg: '<svg viewBox="0 0 100 100"><circle id="dot" cx="50" cy="50" r="10" fill="#000"/></svg>' });
+		expect(replaced.isError).toBeFalsy();
+		expect(json(replaced).elements.map((e: { id: string }) => e.id)).toEqual(['dot']);
+		const refused = await registry.callTool('set_animation_artwork_svg', { svg: '<svg viewBox="0 0 10 10"><rect id="other" width="5" height="5"/></svg>' });
+		expect(refused.isError).toBe(true);
+	});
+
+	it('hides write tools while read-only', () => {
+		const { registry } = setup({ readOnly: 'Locked for review' });
+		const names = registry.listTools().tools.map((t) => t.name);
+		expect(names).toContain('get_animation');
+		expect(names).not.toContain('add_commands');
+	});
+});
+
+describe('Flair motion primitives', () => {
+	const transformOf = (doc: VectorDocument, id: string) => path(doc, id).transform;
+	const offsetX = (doc: VectorDocument, id: string) => transformOf(doc, id)?.[4] ?? 0;
+
+	it('names the Flair primitive each command plays', () => {
+		expect(motionFlairPrimitive({ type: 'enter', targets: ['box'] })).toBe('entrance.fade');
+		expect(motionFlairPrimitive({ type: 'enter', targets: ['box'], style: 'zoom' })).toBe('entrance.zoom');
+		expect(motionFlairPrimitive({ type: 'exit', targets: ['box'], style: 'undraw' })).toBe('exit.undraw');
+		expect(motionFlairPrimitive({ type: 'color-pulse', targets: ['box'] })).toBe('emphasis.color-pulse');
+		expect(motionFlairPrimitive({ type: 'rotate', targets: ['box'], by: 360 })).toBe('emphasis.spin');
+		expect(motionFlairPrimitive({ type: 'follow', targets: ['box'], path: 'track' })).toBe('path.follow');
+		expect(motionFlairPrimitive({ type: 'move', targets: ['box'], by: { x: 1, y: 0 } })).toBeUndefined();
+	});
+
+	it('times new commands by their Flair defaults and zooms and rises in', () => {
+		const s = scene([{ id: 'one', run: [{ type: 'enter', targets: ['box'], style: 'zoom' }, { type: 'enter', targets: ['dot'], style: 'rise' }, { type: 'teeter', targets: ['box'] }, { type: 'wave', targets: ['dot'] }, { type: 'wiggle', targets: ['box'] }, { type: 'color-pulse', targets: ['dot'] }] }]);
+		expect(compileMotionScene(s).commands.map((c) => c.duration)).toEqual([600, 600, 600, 1000, 1500, 600]);
+		const start = motionFrameAt(s, 0).document;
+		expect(path(start, 'box').opacity).toBe(0);
+		expect(transformOf(start, 'box')?.[0]).toBeCloseTo(1.6, 6);
+		// The rise starts when the zoom ends, 20 units low.
+		expect(transformOf(motionFrameAt(s, 600).document, 'dot')?.[5]).toBeCloseTo(20, 6);
+		expect(transformOf(motionFrameAt(s, 600).document, 'box')).toBeUndefined();
+		const risen = motionFrameAt(s, 1200).document;
+		expect(transformOf(risen, 'dot')).toBeUndefined();
+		expect(path(risen, 'dot').opacity).toBeUndefined();
+	});
+
+	it('swings emphasis round the pose and comes back to rest', () => {
+		const s = scene([{ id: 'one', run: [{ type: 'teeter', targets: ['box'] }, { type: 'wave', targets: ['dot'], with: 'previous' }, { type: 'color-pulse', targets: ['a'], color: '#000000', with: 'previous' }, { type: 'shake', targets: ['b'], axis: 'vertical', with: 'previous' }] }]);
+		const mid = motionFrameAt(s, 125).document;
+		expect(transformOf(mid, 'box')).toBeDefined();
+		expect(transformOf(mid, 'dot')?.[5]).toBeLessThan(0);
+		expect(path(mid, 'a').fill).not.toBe('#f59e0b');
+		expect(transformOf(mid, 'b')?.[5]).not.toBe(0);
+		const end = motionFrameAt(s, 1000).document;
+		for (const id of ['box', 'dot', 'b']) (transformOf(end, id) ?? [1, 0, 0, 1, 0, 0]).forEach((v, i) => expect(v).toBeCloseTo([1, 0, 0, 1, 0, 0][i], 6));
+		expect(path(end, 'a').fill).toBe('#f59e0b');
+	});
+
+	it('wiggles the same way every time, each target on its own seed', () => {
+		const s = scene([{ id: 'one', run: [{ type: 'wiggle', targets: ['box', 'dot'], amount: 10, rotate: 15 }] }]);
+		const at = (t: number) => motionFrameAt(s, t).document;
+		expect(offsetX(at(700), 'box')).toBe(offsetX(at(700), 'box'));
+		expect(offsetX(at(700), 'box')).not.toBe(offsetX(at(700), 'dot'));
+		expect(offsetX(at(0), 'box')).toBe(0);
+		expect(transformOf(at(1500), 'box')).toBeUndefined();
+		const seeded = scene([{ id: 'one', run: [{ type: 'wiggle', targets: ['box', 'dot'], amount: 10, seed: 5 }] }]);
+		const a = path(motionFrameAt(seeded, 700).document, 'box').transform!;
+		const b = path(motionFrameAt(seeded, 700).document, 'dot').transform!;
+		expect([a[4], a[5]]).toEqual([b[4], b[5]]);
+	});
+
+	it('exports emphasis as one change with a Flair behaviour, x and y on their own wriggle channels', () => {
+		const s = scene([{ id: 'one', run: [{ type: 'wiggle', targets: ['box'], amount: 10, seed: 3 }, { type: 'teeter', targets: ['dot'] }, { type: 'color-pulse', targets: ['line'], paint: 'stroke', color: '#ff0000' }] }]);
+		const out = toFlairSvgMotion(s);
+		expect(out.sampled).toBe(0);
+		const animate = animateOf(out);
+		const wiggle = animate.find((a) => a.id === 'box')!;
+		expect(wiggle).toMatchObject({ ms: 1500, ease: 'linear', behavior: { type: 'wriggle', frequency: 3, octaves: 2, seed: 3 } });
+		expect(wiggle.attrs!.transform![0]).toMatch(/^translate\(0 0\) rotate\(0 /);
+		expect(wiggle.attrs!.transform![1]).toMatch(/^translate\(10 10\) rotate\(0 /);
+		expect(animate.find((a) => a.id === 'dot')).toMatchObject({ behavior: { type: 'oscillate', count: 3, decay: 1 } });
+		expect(animate.find((a) => a.id === 'line')).toMatchObject({ attrs: { stroke: ['#111111', '#ff0000'] }, behavior: { type: 'pulse', count: 1 } });
+		const old = toFlairSvgMotion(s, { behaviors: false });
+		expect(old.sampled).toBeGreaterThan(30);
+		expect(animateOf(old).some((a) => a.behavior)).toBe(false);
+	});
+
+	it('checks new commands: shapes, defaults and paint', () => {
+		expect(() => parseMotionScene(scene([{ id: 'one', run: [{ type: 'wiggle', targets: ['box'], octaves: 9, seed: -1 } as never, { type: 'shake', targets: ['box'], axis: 'diagonal' } as never, { type: 'color-pulse', targets: ['box'], paint: 'both' } as never, { type: 'enter', targets: ['box'], style: 'zom' } as never] }]))).toThrow(
+			/"octaves" must be a whole number from 1 to 8[\s\S]*"seed" must be a whole number ≥ 0[\s\S]*"axis" must be "horizontal" or "vertical"[\s\S]*"paint" must be "fill" or "stroke"[\s\S]*"zom" \(did you mean "zoom"\?\)/
+		);
+		const issues = checkMotionScene(scene([{ id: 'one', run: [{ type: 'color-pulse', targets: ['line'] }, { type: 'color-pulse', targets: ['box'], color: 'nope' }] }]));
+		expect(issues.map((i) => i.code)).toEqual(['paint-not-color', 'invalid-color']);
+		expect(issues[0].message).toContain('"line" has a gradient or no fill');
+	});
+
+	it('are reachable through the agent tools, with useful errors', async () => {
+		const controller = new AnimationEditorController({ scene: createMotionScene(ARTWORK, { name: 'demo' }) });
+		const registry = new ToolRegistry();
+		registry.register(createAnimationEditorToolProvider(controller));
+		const ok = await registry.callTool('insert_shots', { shots: [{ id: 'hey', run: [{ type: 'enter', targets: ['box'], style: 'rise', distance: 30 }, { type: 'wave', targets: ['box'], count: 3 }] }] });
+		expect(ok.isError).toBeFalsy();
+		const read = (await registry.callTool('get_animation', {})).structuredContent as any;
+		expect(read.shots[0].commands.map((c: { flairPrimitive?: string }) => c.flairPrimitive)).toEqual(['entrance.rise', 'emphasis.wave']);
+		const bad = await registry.callTool('add_commands', { shot: 'hey', commands: [{ type: 'wiggle', targets: ['box'], octaves: 0 }] });
+		expect(bad.isError).toBe(true);
+		expect(JSON.stringify(bad.content)).toMatch(/octaves/);
+		expect(controller.getState().scene.shots[0].run).toHaveLength(2);
+		const flair = (await registry.callTool('export_flair_motion', { behaviors: false })).structuredContent as any;
+		expect(flair.sampled).toBeGreaterThan(0);
+		expect((await registry.callTool('export_flair_motion', {})).structuredContent).toMatchObject({ sampled: 0 });
+	});
+});
+
+describe('Flair clip reveals and follows', () => {
+	// The box is 60 × 60 with a 2-unit stroke: Flair pads its clip by 1/60 + 0.02 of the box.
+	const P = Math.round((1 / 60 + 0.02) * 1e4) / 1e4;
+	const W = Math.round((1 + 2 * (1 / 60 + 0.02)) * 1e4) / 1e4;
+	const R = Math.round(Math.hypot(0.5 + 1 / 60 + 0.02, 0.5 + 1 / 60 + 0.02) * 1e4) / 1e4;
+	const clipsOf = (s: MotionScene, t: number) => motionFrameAt(s, t).clips;
+
+	it('names the Flair primitives', () => {
+		for (const style of ['wipe', 'iris', 'split'] as const) expect(motionFlairPrimitive({ type: 'enter', targets: ['box'], style })).toBe(`entrance.${style}`);
+		expect(motionFlairPrimitive({ type: 'exit', targets: ['box'], style: 'wipe' })).toBe('exit.wipe');
+	});
+
+	it("reveals through Flair's clips in the node's box units, padded for the stroke", () => {
+		const reveal = (extra: Record<string, unknown>) => scene([{ id: 'one', run: [{ type: 'enter', targets: ['box'], ...extra } as never] }]);
+		// wipe (default right): the width opens from the left edge.
+		expect(clipsOf(reveal({ style: 'wipe' }), 0).box).toEqual([{ shape: 'rect', x: -P, y: -P, width: 0, height: W }]);
+		expect(clipsOf(reveal({ style: 'wipe' }), 600).box).toEqual([{ shape: 'rect', x: -P, y: -P, width: W, height: W }]);
+		expect(clipsOf(reveal({ style: 'wipe' }), 300).box[0]).toMatchObject({ width: Math.round(W * (1 - 0.5 ** 3) * 1e6) / 1e6 });
+		expect(clipsOf(reveal({ style: 'wipe', direction: 'left' }), 0).box).toEqual([{ shape: 'rect', x: 1 + P, y: -P, width: 0, height: W }]);
+		expect(clipsOf(reveal({ style: 'wipe', direction: 'up' }), 0).box).toEqual([{ shape: 'rect', x: -P, y: 1 + P, width: W, height: 0 }]);
+		// iris: a circle (an ellipse on a box that is not square) from the centre, or a box.
+		expect(clipsOf(reveal({ style: 'iris' }), 0).box).toEqual([{ shape: 'circle', cx: 0.5, cy: 0.5, r: 0 }]);
+		expect(clipsOf(reveal({ style: 'iris' }), 600).box).toEqual([{ shape: 'circle', cx: 0.5, cy: 0.5, r: R }]);
+		expect(clipsOf(reveal({ style: 'iris', shape: 'box' }), 0).box).toEqual([{ shape: 'rect', x: 0.5, y: 0.5, width: 0, height: 0 }]);
+		// split: from a line through the middle.
+		expect(clipsOf(reveal({ style: 'split' }), 0).box).toEqual([{ shape: 'rect', x: -P, y: 0.5, width: W, height: 0 }]);
+		expect(clipsOf(reveal({ style: 'split', orientation: 'vertical' }), 0).box).toEqual([{ shape: 'rect', x: 0.5, y: -P, width: 0, height: W }]);
+		// No stroke: just Flair's 0.02.
+		expect(clipsOf(scene([{ id: 'one', run: [{ type: 'enter', targets: ['dot'], style: 'wipe' }] }]), 0).dot).toEqual([{ shape: 'rect', x: -0.02, y: -0.02, width: 0, height: 1.04 }]);
+	});
+
+	it('wipes out the other way, and opens the clip again on the next enter', () => {
+		const s = scene([{ id: 'one', run: [{ type: 'enter', targets: ['box'], style: 'iris' }, { type: 'exit', targets: ['box'], style: 'wipe' }, { type: 'enter', targets: ['box'], delay: 100 }] }]);
+		expect(compileMotionScene(s).commands[1].duration).toBe(450);
+		expect(clipsOf(s, 600).box).toEqual([{ shape: 'rect', x: -P, y: -P, width: W, height: W }, { shape: 'circle', cx: 0.5, cy: 0.5, r: R }]);
+		// The edge travels right: the left of the box goes first.
+		expect(clipsOf(s, 1050).box[0]).toEqual({ shape: 'rect', x: 1 + P, y: -P, width: 0, height: W });
+		// The fade in opens the clip at once.
+		expect(clipsOf(s, 1151).box[0]).toEqual({ shape: 'rect', x: -P, y: -P, width: W, height: W });
+		expect(path(motionFrameAt(s, 1151).document, 'box').opacity).toBeLessThan(0.1);
+		expect(checkMotionScene(s).map((i) => i.code)).toEqual([]);
+		const late = scene([{ id: 'one', run: [{ type: 'enter', targets: ['box'], style: 'wipe' }, { type: 'exit', targets: ['box'], style: 'wipe' }, { type: 'pulse', targets: ['box'] }] }]);
+		expect(checkMotionScene(late).map((i) => i.code)).toEqual(['exit-hidden']);
+	});
+
+	it('draws the frame inside a group clipped in objectBoundingBox units', () => {
+		const s = scene([{ id: 'one', run: [{ type: 'enter', targets: ['box'], style: 'iris' }] }]);
+		const svg = motionFrameToSvg(s, 300, { idPrefix: 'ae-', pretty: false });
+		expect(svg).toContain(`<clipPath id="ae-reveal-box-0" clipPathUnits="objectBoundingBox"><circle cx="0.5" cy="0.5" r="`);
+		expect(svg).toMatch(/<g clip-path="url\(#ae-reveal-box-0\)"><path id="box"[^>]*\/><\/g>/);
+		expect(motionFrameToSvg(scene([]), 0)).not.toContain('clip-path');
+	});
+
+	it('fades a straight line it cannot clip, with a warning', () => {
+		const s = scene([{ id: 'one', run: [{ type: 'enter', targets: ['line'], style: 'split' }] }]);
+		expect(path(motionFrameAt(s, 0).document, 'line').opacity).toBe(0);
+		expect(motionFrameAt(s, 0).clips).toEqual({});
+		const issue = checkMotionScene(s).find((i) => i.code === 'reveal-no-box');
+		expect(issue).toMatchObject({ severity: 'warning', ids: ['line'] });
+		expect(issue?.message).toContain('use style "draw"');
+	});
+
+	it('exports a wrapper group and its animated clip shape exactly, as Flair writes them', () => {
+		const s = scene([{ id: 'one', run: [{ type: 'enter', targets: ['box'], style: 'wipe' }, { type: 'enter', targets: ['dot'], style: 'iris', with: 'previous' }, { type: 'exit', targets: ['box'], style: 'wipe', direction: 'down' }] }]);
+		const out = toFlairSvgMotion(s);
+		const { svg, animate = [] } = out.motion;
+		expect(out.sampled).toBe(0);
+		expect(svg).toContain(`<clipPath id="box--reveal-clip" clipPathUnits="objectBoundingBox"><rect id="box--reveal-clip-shape" x="${-P}" y="${-P}" width="0" height="${W}"/></clipPath>`);
+		expect(svg).toMatch(/<g id="box--reveal" clip-path="url\(#box--reveal-clip\)"><path id="box"/);
+		expect(svg).toContain('<clipPath id="dot--iris-clip" clipPathUnits="objectBoundingBox"><circle id="dot--iris-clip-shape" cx="0.5" cy="0.5" r="0"/>');
+		expect(animate).toContainEqual({ id: 'box--reveal-clip-shape', ms: 600, ease: 'out', attrs: { width: [0, W] } });
+		expect(animate).toContainEqual({ id: 'dot--iris-clip-shape', ms: 600, ease: 'out', attrs: { r: [0, 0.7354] } });
+		// exit.wipe down: the reveal upwards, reversed; Flair's exit ease.
+		expect(animate).toContainEqual({ id: 'box--reveal-clip-shape', delay: 600, ms: 450, ease: [0.42, 0, 1, 1], attrs: { y: [-P, 1 + P], height: [W, 0] } });
+		for (const a of animate) expect(svg).toContain(`id="${a.id}"`);
+	});
+
+	it('follows in the parent\'s units, with moves turning with the path, and exports it as along + orient', () => {
+		const art: VectorDocument = {
+			width: 400,
+			height: 400,
+			nodes: [
+				{ id: 'route', type: 'path', visible: false, fill: null, stroke: '#999999', subpaths: [{ closed: false, anchors: [{ x: 0, y: 0 }, { x: 100, y: 100 }] }] },
+				{ id: 'shrunk', type: 'group', transform: [0.5, 0, 0, 0.5, 0, 0], children: [{ id: 'dart', type: 'path', fill: '#000000', subpaths: [rectSubpath({ x: 300, y: 100, width: 40, height: 40 })] }] }
+			]
+		};
+		const s: MotionScene = { version: 1, name: 'f', artwork: art, shots: [{ id: 'one', run: [{ type: 'follow', targets: ['dart'], path: 'route', rotate: true, ease: 'linear', duration: 1000 }, { type: 'move', targets: ['dart'], by: { x: 10, y: 0 }, ease: 'linear', duration: 1000, with: 'previous' }] }] };
+		// The route is (0, 0) → (200, 200) in the group's units, at 45°; the move turns with it.
+		const m = path(motionFrameAt(s, 1000).document, 'dart').transform!;
+		const centre = { x: m[0] * 320 + m[2] * 120 + m[4], y: m[1] * 320 + m[3] * 120 + m[5] };
+		expect(centre.x).toBeCloseTo(200 + 10 * Math.SQRT1_2, 3);
+		expect(centre.y).toBeCloseTo(200 + 10 * Math.SQRT1_2, 3);
+		expect(Math.atan2(m[1], m[0]) * (180 / Math.PI)).toBeCloseTo(45, 4);
+		const out = toFlairSvgMotion(s);
+		const { svg, animate = [] } = out.motion;
+		expect(out.sampled).toBe(0);
+		expect(svg).toContain('<path id="dart--follow-route" d="M0 0L200 200" fill="none"/>');
+		expect(svg).toContain('<g id="dart--follow" transform="translate(0 0) rotate(45)"><g id="dart--follow-centre" transform="translate(-320 -120)"><path id="dart"');
+		expect(animate).toContainEqual({ id: 'dart--follow', along: 'dart--follow-route', orient: true, ms: 1000, ease: 'linear', at: [0, 1] });
+		// The node's own transform leaves the follow to the wrapper.
+		expect(animate.find((a) => a.id === 'dart')?.attrs?.transform).toEqual(['translate(0 0) rotate(0 320 120) translate(320 120) scale(1 1) translate(-320 -120)', 'translate(10 0) rotate(0 320 120) translate(320 120) scale(1 1) translate(-320 -120)']);
+		// A spring is one change for Flair 0.39; older Flair gets it sampled into linear steps along the path.
+		const springScene: MotionScene = { ...s, shots: [{ id: 'one', run: [{ type: 'follow', targets: ['dart'], path: 'route', ease: 'spring', duration: 500 }] }] };
+		expect(animateOf(toFlairSvgMotion(springScene))).toEqual([expect.objectContaining({ along: 'dart--follow-route', ms: 500, ease: { spring: { mass: 1, stiffness: 170, damping: 26, velocity: 0 } } })]);
+		const sprung = toFlairSvgMotion(springScene, { flair: '0.38' });
+		expect(sprung.sampled).toBe(15);
+		expect(animateOf(sprung).every((a) => a.along === 'dart--follow-route' && a.ease === 'linear')).toBe(true);
+	});
+
+	it('are reachable through the agent tools, with useful errors', async () => {
+		const controller = new AnimationEditorController({ scene: createMotionScene(ARTWORK, { name: 'demo' }) });
+		const registry = new ToolRegistry();
+		registry.register(createAnimationEditorToolProvider(controller));
+		const ok = await registry.callTool('insert_shots', {
+			shots: [{ id: 'in', run: [{ type: 'enter', targets: ['box'], style: 'wipe', direction: 'left' }, { type: 'enter', targets: ['dot'], style: 'iris', shape: 'box' }, { type: 'enter', targets: ['pair'], style: 'split', orientation: 'vertical' }, { type: 'exit', targets: ['box'], style: 'wipe' }] }]
+		});
+		expect(ok.isError).toBeFalsy();
+		const read = (await registry.callTool('get_animation', {})).structuredContent as any;
+		expect(read.shots[0].commands.map((c: { flairPrimitive?: string }) => c.flairPrimitive)).toEqual(['entrance.wipe', 'entrance.iris', 'entrance.split', 'exit.wipe']);
+		const frame = (await registry.callTool('render_animation_frame', { shot: 'in', at: 'start' })).structuredContent as any;
+		expect(frame.svg).toContain('clipPathUnits="objectBoundingBox"');
+		const flair = (await registry.callTool('export_flair_motion', {})).structuredContent as any;
+		expect(flair.sampled).toBe(0);
+		expect(flair.motion.animate.map((a: FlairSvgAnimation) => a.id)).toEqual(expect.arrayContaining(['box--reveal-clip-shape', 'dot--reveal-clip-shape', 'pair--reveal-clip-shape']));
+		for (const [cmd, field] of [[{ type: 'enter', targets: ['box'], style: 'iris', shape: 'star' }, 'shape'], [{ type: 'enter', targets: ['box'], style: 'split', orientation: 'diagonal' }, 'orientation'], [{ type: 'exit', targets: ['box'], style: 'iris' }, '']] as const) {
+			const bad = await registry.callTool('add_commands', { shot: 'in', commands: [cmd] });
+			expect(bad.isError).toBe(true);
+			expect(JSON.stringify(bad.content)).toContain(field);
+		}
+		expect(controller.getState().scene.shots[0].run).toHaveLength(4);
+		await registry.callTool('add_commands', { shot: 'in', commands: [{ type: 'enter', targets: ['line'], style: 'wipe' }] });
+		const check = (await registry.callTool('check_animation', {})).structuredContent as any;
+		expect(JSON.stringify(check)).toContain('reveal-no-box');
+		expect(() => parseMotionScene(scene([{ id: 'one', run: [{ type: 'enter', targets: ['box'], style: 'iris', shape: 'star' } as never] }]))).toThrow(/"shape" must be one of circle, box/);
+	});
+});
+
+describe('timing: springs, repeats, stepped time and geometric zoom', () => {
+	const rotationAt = (s: MotionScene, t: number, id = 'box') => {
+		const m = path(motionFrameAt(s, t).document, id).transform;
+		return m ? (Math.atan2(m[1], m[0]) * 180) / Math.PI : 0;
+	};
+
+	it('lets a spring set its own length, and warns when one is cut short', () => {
+		expect(springSettleMs(SPRING_PRESETS['spring-quick'])).toBe(Math.round(6.9 / ((20 / (2 * Math.sqrt(300))) * Math.sqrt(300)) * 1000));
+		const s = scene([{ id: 'one', run: [{ type: 'scale', targets: ['box'], to: 1.5, ease: 'spring-bouncy' }, { type: 'move', targets: ['dot'], by: { x: 10, y: 0 }, ease: { type: 'spring', stiffness: 100, damping: 15 } }] }]);
+		expect(compileMotionScene(s).commands.map((c) => c.duration)).toEqual([springSettleMs(SPRING_PRESETS['spring-bouncy']), springSettleMs({ stiffness: 100, damping: 15 })]);
+		// A bouncy spring overshoots before it settles.
+		const peak = Math.max(...Array.from({ length: 40 }, (_, i) => path(motionFrameAt(s, i * 20).document, 'box').transform?.[0] ?? 1));
+		expect(peak).toBeGreaterThan(1.5);
+		const cut = checkMotionScene(scene([{ id: 'one', run: [{ type: 'scale', targets: ['box'], to: 1.5, ease: 'spring-slow', duration: 200 }] }]));
+		expect(cut.find((i) => i.code === 'spring-cut-short')).toMatchObject({ measured: 200, needed: springSettleMs(SPRING_PRESETS['spring-slow']) });
+	});
+
+	it('repeats in loop, mirror and offset modes', () => {
+		const make = (repeatMode: 'loop' | 'mirror' | 'offset') => scene([{ id: 'one', run: [{ type: 'rotate', targets: ['box'], by: 90, ease: 'linear', duration: 100, repeat: 4, repeatMode }] }]);
+		expect(compileMotionScene(make('loop')).commands[0]).toMatchObject({ start: 0, end: 400, duration: 400 });
+		expect(rotationAt(make('loop'), 150)).toBeCloseTo(45, 6);
+		expect(rotationAt(make('mirror'), 150)).toBeCloseTo(45, 6);
+		expect(rotationAt(make('mirror'), 125)).toBeCloseTo(67.5, 3);
+		expect(rotationAt(make('mirror'), 400)).toBeCloseTo(0, 6);
+		expect(rotationAt(make('offset'), 250)).toBeCloseTo(-135, 6); // 225°
+		expect(rotationAt(make('offset'), 400)).toBeCloseTo(0, 6); // 360°
+		expect(() => parseMotionScene(scene([{ id: 'one', run: [{ type: 'enter', targets: ['box'], repeat: 2 } as never, { type: 'fade', targets: ['box'], to: 0, repeat: 1.5, repeatMode: 'bounce' } as never] }]))).toThrow(/"repeat" is not for enter[\s\S]*"repeat" must be a whole number[\s\S]*"repeatMode" must be one of loop, mirror, offset/);
+	});
+
+	it('exports mirrored repeats as one change each with the curve run backwards', () => {
+		const s = scene([{ id: 'one', run: [{ type: 'move', targets: ['box'], by: { x: 40, y: 0 }, ease: 'ease-in', duration: 200, repeat: 2, repeatMode: 'mirror' }] }]);
+		const out = toFlairSvgMotion(s);
+		expect(out.sampled).toBe(0);
+		const moves = animateOf(out).filter((a) => a.id === 'box');
+		expect(moves.map((a) => [a.delay ?? 0, a.ease])).toEqual([[0, [0.42, 0, 1, 1]], [200, [0, 0, 0.58, 1]]]);
+		expect(moves[1].attrs!.transform![0]).toMatch(/^translate\(40 0\)/);
+	});
+
+	it('holds poses on stepped time and exports it as a Flair strobe', () => {
+		const s = scene([{ id: 'one', run: [{ type: 'move', targets: ['box'], by: { x: 100, y: 0 }, ease: 'linear', duration: 1000 }] }], { steps: 12 });
+		const x = (t: number) => path(motionFrameAt(s, t).document, 'box').transform?.[4] ?? 0;
+		expect(x(90)).toBeCloseTo(8.333, 2);
+		expect(x(160)).toBeCloseTo(8.333, 2);
+		expect(x(170)).toBeCloseTo(16.667, 2);
+		expect(x(1000)).toBe(100);
+		const out = toFlairSvgMotion(s);
+		expect(animateOf(out)).toEqual([expect.objectContaining({ id: 'box', ms: 1000, ease: 'linear', strobe: 12 })]);
+		expect(toFlairSvgMotion(s, { flair: '0.38' }).sampled).toBeGreaterThan(10);
+	});
+
+	it('zooms at a steady rate with geometric scale and cameras', () => {
+		const s = scene([{ id: 'one', run: [{ type: 'scale', targets: ['box'], to: 4, ease: 'linear', duration: 1000, geometric: true }] }]);
+		expect(path(motionFrameAt(s, 500).document, 'box').transform?.[0]).toBeCloseTo(2, 6);
+		const cam = scene([{ id: 'a', run: [{ type: 'wait', duration: 10 }] }, { id: 'b', camera: { x: 150, y: 50, width: 100, height: 50, ms: 1000, ease: 'linear', geometric: true }, run: [] }]);
+		const start = compileMotionScene(cam).shots[1].start;
+		const mid = motionFrameAt(cam, start + 500).camera;
+		expect(mid.width).toBeCloseTo(200, 6);
+		// The centre (200, 100) → (200, 75) keeps pace with the size: two thirds of the way when the width has gone 400 → 200 of 400 → 100.
+		expect(mid.y + mid.height / 2).toBeCloseTo(100 - 25 * (2 / 3), 3);
+		expect(toFlairSvgMotion(s).sampled).toBeGreaterThan(0);
+	});
+
+	it('takes the new options through the agent tools', async () => {
+		const controller = new AnimationEditorController({ scene: createMotionScene(ARTWORK, { name: 'demo' }) });
+		const registry = new ToolRegistry();
+		registry.register(createAnimationEditorToolProvider(controller));
+		const ok = await registry.callTool('insert_shots', { shots: [{ id: 'spin', run: [{ type: 'rotate', targets: ['box'], by: 90, repeat: 4, repeatMode: 'offset', ease: 'spring-quick', steps: 12 }] }] });
+		expect(ok.isError).toBeFalsy();
+		expect((ok.structuredContent as any).duration).toBe(springSettleMs(SPRING_PRESETS['spring-quick']) * 4 + 600);
+		expect((await registry.callTool('set_animation_settings', { steps: 8 })).isError).toBeFalsy();
+		expect(controller.getState().scene.steps).toBe(8);
+		const bad = await registry.callTool('set_animation_settings', { steps: 0 });
+		expect(bad.isError).toBe(true);
+		const flair = (await registry.callTool('export_flair_motion', { flair: '0.36' })).structuredContent as any;
+		expect(flair.sampled).toBeGreaterThan(0);
+	});
+});
+
+describe('importing from Flair', () => {
+	const ART_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="200" height="100"><path id="dot" d="M40 40h20v20h-20z" fill="{{accent: color default=#0EA5E9 label=\'Accent\'}}"/><path id="line" d="M10 90L190 90" fill="none" stroke="#111111" stroke-width="2"/><path id="route" d="M0 50L200 50" fill="none" stroke="none"/></svg>';
+
+	it('round-trips an exported scene to the same frames', () => {
+		const s = scene([
+			{ id: 'one', run: [{ type: 'enter', targets: ['box'] }, { type: 'move', targets: ['box'], by: { x: 40, y: 10 }, ease: 'ease-in' }, { type: 'rotate', targets: ['dot'], by: 30, with: 'previous' }, { type: 'draw', targets: ['line'], from: 0 }] },
+			{ id: 'two', run: [{ type: 'pulse', targets: ['box'], count: 2 }, { type: 'teeter', targets: ['dot'], with: 'previous' }, { type: 'wiggle', targets: ['a'], amount: 5, seed: 9, with: 'previous' }, { type: 'color-pulse', targets: ['b'], color: '#000000', with: 'previous' }] }
+		]);
+		const exported = toFlairSvgMotion(s);
+		expect(exported.sampled).toBe(0);
+		// One Flair step: the import has one shot holding every command at the times they had.
+		const { scene: back, notes } = fromFlairSvgMotion(exported.motion, { hold: exported.hold });
+		expect(notes).toEqual([]);
+		expect(back.shots).toHaveLength(1);
+		const types = back.shots[0].run.map((c) => c.type);
+		expect(types).toEqual(expect.arrayContaining(['enter', 'move', 'rotate', 'draw', 'pulse', 'teeter', 'wiggle', 'color-pulse']));
+		expect(compileMotionScene(back).duration).toBe(compileMotionScene(s).duration);
+		for (const t of [0, 300, 700, 1000, 1500, 2100, 2500, 2900]) {
+			const a = motionFrameAt(s, t).document;
+			const b = motionFrameAt(back, t).document;
+			for (const id of ['box', 'dot', 'line', 'a', 'b']) {
+				const pa = path(a, id);
+				const pb = path(b, id);
+				(pa.transform ?? [1, 0, 0, 1, 0, 0]).forEach((v, i) => expect((pb.transform ?? [1, 0, 0, 1, 0, 0])[i]).toBeCloseTo(v, 2));
+				expect(pb.opacity ?? 1).toBeCloseTo(pa.opacity ?? 1, 3);
+				expect(pb.fill).toEqual(pa.fill);
+			}
+		}
+	});
+
+	it('reads placeholders as colour controls, steps as shots, and follows and views', () => {
+		const effect = {
+			kind: 'vector' as const,
+			id: 'dot-run',
+			name: 'Dot run',
+			description: 'A dot runs along.',
+			category: 'icon',
+			tags: [],
+			hold: 300,
+			trigger: 'hover' as const,
+			presets: [{ name: 'Rose', values: { accent: '#f43f5e', size: '3' } }],
+			motion: {
+				svg: ART_SVG,
+				animate: [
+					{ id: 'dot', ms: 400, ease: 'out' as const, attrs: { opacity: [0, 1] as const } },
+					{ id: 'line', delay: 200, ms: 500, draw: true },
+					{ step: 1, view: [0, 0, 100, 50] as const, ms: 300 },
+					{ step: 1, id: 'dot', delay: 300, ms: 1000, along: 'route', at: [0, 1] as const, orient: true, ease: { spring: { stiffness: 200, damping: 20 } } },
+					{ step: 1, id: 'line', delay: 300, ms: 600, count: [0, 10] as const },
+					{ step: 1, id: 'ghost', ms: 200, attrs: { opacity: [1, 0] as const } }
+				]
+			}
+		};
+		const { scene: s, notes } = fromFlairVectorEffect(effect);
+		expect(s).toMatchObject({ name: 'dot-run', description: 'A dot runs along.', controls: [{ name: 'accent', type: 'color', default: '#0ea5e9', label: 'Accent' }], presets: [{ name: 'Rose', values: { accent: '#f43f5e' } }] });
+		expect(path(s.artwork, 'dot').fill).toBe('#0ea5e9');
+		expect(s.shots.map((x) => x.id)).toEqual(['step-0', 'step-1']);
+		expect(s.shots[0].run).toEqual([
+			{ type: 'enter', targets: ['dot'], style: 'fade', duration: 400, ease: MOTION_EASE_OUT },
+			{ type: 'draw', targets: ['line'], from: 0, to: 1, duration: 500, ease: expect.anything(), with: 'previous', delay: 200 }
+		]);
+		expect(s.shots[1]).toMatchObject({ camera: { x: 0, y: 0, width: 100, height: 50, ms: 300 }, hold: 300, run: [{ type: 'follow', path: 'route', rotate: true, ease: { type: 'spring', stiffness: 200, damping: 20 } }] });
+		for (const said of [/Each Flair step became a shot/, /"line": count is not part of scenes/, /"ghost" was skipped: the artwork has no element with that id/]) expect(notes.join('\n')).toMatch(said);
+		expect(s.trigger).toBe('hover');
+	});
+
+	it('imports through the agent tool, with a dry run and useful errors', async () => {
+		const controller = new AnimationEditorController({ scene: createMotionScene(ARTWORK, { name: 'demo' }) });
+		const registry = new ToolRegistry();
+		registry.register(createAnimationEditorToolProvider(controller));
+		const motion = { svg: ART_SVG, animate: [{ id: 'dot', ms: 600, behavior: { type: 'oscillate', count: 3, decay: 1 }, attrs: { transform: ['translate(0 0)', 'translate(8 0)'] } }] };
+		const dry = (await registry.callTool('import_flair_effect', { motion, dry_run: true })).structuredContent as any;
+		expect(dry).toMatchObject({ dry_run: true, notes: [], shots: [{ id: 'step-0', commands: 1 }] });
+		expect(controller.getState().scene.name).toBe('demo');
+		const done = await registry.callTool('import_flair_effect', { motion, name: 'shaker' });
+		expect(done.isError).toBeFalsy();
+		expect(controller.getState().scene).toMatchObject({ name: 'shaker', shots: [{ run: [{ type: 'shake', targets: ['dot'], amount: 8, count: 3 }] }] });
+		expect((await registry.callTool('undo_animation', {})).structuredContent).toMatchObject({ undone: true, label: 'Import Flair effect' });
+		const both = await registry.callTool('import_flair_effect', { motion, effect: { kind: 'vector', motion } });
+		expect(both.isError).toBe(true);
+		expect(JSON.stringify(both.content)).toMatch(/exactly one of/);
+		const broken = await registry.callTool('import_flair_effect', { motion: { svg: '<nope/>' } });
+		expect(broken.isError).toBe(true);
+		expect(JSON.stringify(broken.content)).toMatch(/could not be imported[\s\S]*Nothing was changed/);
+	});
+});
+
+describe('additive layers', () => {
+	const xAt = (s: MotionScene, t: number, id = 'box') => path(motionFrameAt(s, t).document, id).transform?.[4] ?? 0;
+
+	it('stacks emphasis on a move under way instead of cutting it off', () => {
+		const slide = (shake: Partial<MotionCommand>) => scene([{ id: 'one', run: [{ type: 'move', targets: ['box'], by: { x: 100, y: 0 }, ease: 'linear', duration: 1000 }, { type: 'shake', targets: ['box'], amount: 10, count: 2, duration: 400, delay: 300, with: 'previous', ...shake } as MotionCommand] }]);
+		const stacked = slide({});
+		const plainMove = scene([{ id: 'one', run: [{ type: 'move', targets: ['box'], by: { x: 100, y: 0 }, ease: 'linear', duration: 1000 }] }]);
+		// The move carries on under the shake and lands where it would have.
+		expect(xAt(stacked, 1000)).toBeCloseTo(100, 6);
+		expect(xAt(stacked, 350) - xAt(plainMove, 350)).toBeCloseTo(10 * (1 - 0.125), 3);
+		expect(xAt(stacked, 800)).toBeCloseTo(80, 6);
+		expect(checkMotionScene(stacked).some((i) => i.code === 'overlap')).toBe(false);
+		// blend "replace" brings back the old behaviour: the shake takes over x, with a warning.
+		const replaced = slide({ blend: 'replace' });
+		expect(xAt(replaced, 800)).toBeCloseTo(30, 6);
+		expect(checkMotionScene(replaced).some((i) => i.code === 'overlap')).toBe(true);
+	});
+
+	it('keeps what an additive move, turn or scale adds, on top of later changes', () => {
+		const moves = scene([{ id: 'one', run: [{ type: 'move', targets: ['box'], by: { x: 20, y: 0 }, blend: 'add', duration: 200 }, { type: 'move', targets: ['box'], by: { x: 50, y: 0 }, duration: 200 }] }]);
+		expect(xAt(moves, 400)).toBeCloseTo(70, 6);
+		const scales = scene([{ id: 'one', run: [{ type: 'scale', targets: ['box'], to: 2, blend: 'add', duration: 200 }, { type: 'scale', targets: ['box'], to: 1.5, duration: 200 }] }]);
+		expect(path(motionFrameAt(scales, 400).document, 'box').transform?.[0]).toBeCloseTo(3, 6);
+		const turns = scene([{ id: 'one', run: [{ type: 'rotate', targets: ['box'], to: 30, blend: 'add', duration: 200 }, { type: 'rotate', targets: ['box'], by: 15, duration: 200 }] }]);
+		const m = path(motionFrameAt(turns, 400).document, 'box').transform!;
+		expect((Math.atan2(m[1], m[0]) * 180) / Math.PI).toBeCloseTo(45, 4);
+	});
+
+	it('exports a layer alone exactly and samples layers that overlap the pose', () => {
+		const alone = scene([{ id: 'one', run: [{ type: 'move', targets: ['box'], by: { x: 40, y: 0 }, duration: 400 }, { type: 'pulse', targets: ['box'] }] }]);
+		expect(toFlairSvgMotion(alone).sampled).toBe(0);
+		const overlapping = scene([{ id: 'one', run: [{ type: 'move', targets: ['box'], by: { x: 40, y: 0 }, duration: 800 }, { type: 'pulse', targets: ['box'], with: 'previous', delay: 200 }] }]);
+		const out = toFlairSvgMotion(overlapping);
+		expect(out.sampled).toBeGreaterThan(0);
+		// Sampled frames still land on the editor's.
+		const last = animateOf(out).filter((a) => a.id === 'box').at(-1)!;
+		expect(last.attrs!.transform![1]).toMatch(/^translate\(40 0\)/);
+	});
+
+	it('checks and exposes "blend"', async () => {
+		expect(() => parseMotionScene(scene([{ id: 'one', run: [{ type: 'move', targets: ['box'], by: { x: 1, y: 0 }, blend: 'multiply' } as never, { type: 'fade', targets: ['box'], to: 0, blend: 'add' } as never] }]))).toThrow(/"blend" must be "replace"[\s\S]*unknown field "blend"/);
+		const controller = new AnimationEditorController({ scene: createMotionScene(ARTWORK, { name: 'demo' }) });
+		const registry = new ToolRegistry();
+		registry.register(createAnimationEditorToolProvider(controller));
+		const ok = await registry.callTool('insert_shots', { shots: [{ id: 'one', run: [{ type: 'rotate', targets: ['box'], by: 90, duration: 800 }, { type: 'teeter', targets: ['box'], with: 'previous', delay: 200 }] }] });
+		expect(ok.isError).toBeFalsy();
+		expect((ok.structuredContent as any).issues.warnings).toBe(0);
+		const bad = await registry.callTool('add_commands', { shot: 'one', commands: [{ type: 'pulse', targets: ['box'], blend: 'stack' }] });
+		expect(bad.isError).toBe(true);
+	});
+});
+
+describe('Smart Animate (match)', () => {
+	const STATES: VectorDocument = {
+		width: 400,
+		height: 200,
+		nodes: [
+			{ id: 'card-a', type: 'group', children: [
+				{ id: 'card-a-bg', type: 'path', fill: '#ffffff', subpaths: [rectSubpath({ x: 20, y: 20, width: 100, height: 60 })] },
+				{ id: 'card-a-title', type: 'path', name: 'Title', fill: '#111111', subpaths: [rectSubpath({ x: 30, y: 30, width: 50, height: 10 })] },
+				{ id: 'card-a-badge', type: 'path', fill: '#ef4444', subpaths: [ellipseSubpath({ x: 100, y: 25, width: 10, height: 10 })] }
+			] },
+			{ id: 'card-b', type: 'group', visible: false, children: [
+				{ id: 'heading', type: 'path', name: 'Title', fill: '#2563eb', subpaths: [rectSubpath({ x: 200, y: 40, width: 120, height: 20 })] },
+				{ id: 'card-b-bg', type: 'path', fill: '#f1f5f9', subpaths: [rectSubpath({ x: 180, y: 20, width: 200, height: 160 })] },
+				{ id: 'card-b-avatar', type: 'path', fill: '#22c55e', subpaths: [ellipseSubpath({ x: 190, y: 120, width: 40, height: 40 })] },
+				{ id: 'card-b-extra', type: 'group', children: [] }
+			] }
+		]
+	};
+	const s: MotionScene = { version: 1, name: 'states', artwork: STATES, shots: [{ id: 'one', run: [{ type: 'match', targets: ['card-a'], into: 'card-b', ease: 'linear' }] }] };
+
+	it('pairs parts by name, then by id without the group ids, then by kind', () => {
+		const m = matchMotionNodes(STATES.nodes[0], STATES.nodes[1]);
+		expect(m.pairs).toEqual([['card-a-title', 'heading'], ['card-a-bg', 'card-b-bg'], ['card-a-badge', 'card-b-avatar']]);
+		expect(m.unpairedFrom).toEqual([]);
+		expect(m.unpairedInto).toEqual(['card-b-extra']);
+	});
+
+	it('morphs each part into its partner, shape, paint and place', () => {
+		const end = motionFrameAt(s, 900).document;
+		expect(path(end, 'card-a-title').fill).toBe('#2563eb');
+		const title = path(end, 'card-a-title').subpaths[0].anchors;
+		expect(Math.min(...title.map((a) => a.x))).toBeCloseTo(200, 3);
+		const mid = motionFrameAt(s, 450).document;
+		const bgX = Math.min(...path(mid, 'card-a-bg').subpaths[0].anchors.map((a) => a.x));
+		expect(bgX).toBeGreaterThan(20);
+		expect(bgX).toBeLessThan(180);
+		expect(compileMotionScene(s).commands[0].duration).toBe(900);
+	});
+
+	it('fades out parts with no partner and reports parts that cannot appear', () => {
+		const fewer: MotionScene = { ...s, artwork: { ...STATES, nodes: [STATES.nodes[0], { ...(STATES.nodes[1] as any), children: (STATES.nodes[1] as any).children.slice(0, 2) }] } };
+		expect(path(motionFrameAt(fewer, 900).document, 'card-a-badge').opacity).toBe(0);
+		const issues = checkMotionScene(s);
+		expect(issues.find((i) => i.code === 'match-unpaired')).toMatchObject({ severity: 'note', ids: ['card-b-extra'] });
+		const self = checkMotionScene({ ...s, shots: [{ id: 'one', run: [{ type: 'match', targets: ['card-a'], into: 'card-a-bg' }] }] });
+		expect(self.find((i) => i.code === 'match-self')).toBeDefined();
+		const unknown = checkMotionScene({ ...s, shots: [{ id: 'one', run: [{ type: 'match', targets: ['card-a'], into: 'card-c' }] }] });
+		expect(unknown.find((i) => i.code === 'unknown-shape')?.message).toContain('card-a');
+	});
+
+	it('is reachable through the agent tools', async () => {
+		const controller = new AnimationEditorController({ scene: { ...s, shots: [] } });
+		const registry = new ToolRegistry();
+		registry.register(createAnimationEditorToolProvider(controller));
+		const ok = await registry.callTool('insert_shots', { shots: [{ id: 'flip', run: [{ type: 'match', targets: ['card-a'], into: 'card-b' }] }] });
+		expect(ok.isError).toBeFalsy();
+		expect((ok.structuredContent as any).issues.notes).toBe(1);
+		const bad = await registry.callTool('add_commands', { shot: 'flip', commands: [{ type: 'match', targets: ['card-a'] }] });
+		expect(bad.isError).toBe(true);
+	});
+});
+
+describe('fitting a scene to a length', () => {
+	const s = scene([
+		{ id: 'logo', run: [{ type: 'enter', targets: ['box'], duration: 400 }], hold: 600 },
+		{ id: 'body', run: [{ type: 'move', targets: ['box'], by: { x: 50, y: 0 }, duration: 1000 }, { type: 'pulse', targets: ['dot'], delay: 200, with: 'previous' }], hold: 400 },
+		{ id: 'end', camera: { frame: 'dot', ms: 600 }, run: [{ type: 'fade', targets: ['box'], to: 0, duration: 400 }] }
+	]);
+
+	it('plays a shot faster or slower with speed, scaling every part of it', () => {
+		const fast: MotionScene = { ...s, shots: s.shots.map((x) => (x.id === 'body' ? { ...x, speed: 2 } : x)) };
+		const before = compileMotionScene(s).shots[1];
+		const after = compileMotionScene(fast).shots[1];
+		expect(after.end - after.start).toBeCloseTo((before.end - before.start) / 2, 6);
+		expect(compileMotionScene(fast).commands.find((c) => c.shot === 'body' && c.type === 'pulse')).toMatchObject({ start: after.start + 100, duration: 300 });
+	});
+
+	it('fits the length, keeping kept shots as they are and the rest in proportion', () => {
+		const total = compileMotionScene(s).duration;
+		const logo = compileMotionScene(s).shots[0];
+		const fit = fitMotionScene(s, total + 2000, { keep: ['logo'] });
+		expect(fit.duration).toBeCloseTo(total + 2000, -1);
+		const t = compileMotionScene(fit.scene);
+		expect(t.shots[0].end - t.shots[0].start).toBe(logo.end - logo.start);
+		expect(Object.keys(fit.speeds)).toEqual(['body', 'end']);
+		expect(fit.speeds.body).toBeCloseTo(fit.speeds.end, 6);
+		expect(fit.speeds.body).toBeLessThan(1);
+		// Refitting composes with the speeds already set.
+		expect(fitMotionScene(fit.scene, total).duration).toBeCloseTo(total, -1);
+	});
+
+	it('refuses fits it cannot make, saying why', () => {
+		expect(() => fitMotionScene(s, 500, { keep: ['logo'] })).toThrow(/kept shots alone last 1000 ms/);
+		expect(() => fitMotionScene(s, 5000, { keep: ['lgo'] })).toThrow(/"lgo" \(did you mean "logo"\?\)/);
+		expect(() => fitMotionScene(s, 5000, { keep: ['logo', 'body', 'end'] })).toThrow(/Every shot is kept/);
+		expect(() => fitMotionScene(s, 10)).toThrow(/speeds run 0.05–20/);
+		expect(() => parseMotionScene({ ...s, shots: [{ ...s.shots[0], speed: 0 }] })).toThrow(/"speed" must be a number from 0.05 to 20/);
+	});
+
+	it('fits through the agent tool as one undo step, with a dry run', async () => {
+		const controller = new AnimationEditorController({ scene: s });
+		const registry = new ToolRegistry();
+		registry.register(createAnimationEditorToolProvider(controller));
+		const total = compileMotionScene(s).duration;
+		const dry = (await registry.callTool('fit_animation', { seconds: (total + 1000) / 1000, keep: ['logo'], dry_run: true })).structuredContent as any;
+		expect(dry).toMatchObject({ dry_run: true });
+		expect(controller.getState().scene).toBe(s);
+		const done = (await registry.callTool('fit_animation', { seconds: (total + 1000) / 1000, keep: ['logo'] })).structuredContent as any;
+		expect(done.duration).toBeCloseTo(total + 1000, -1);
+		expect(controller.getState().scene.shots[0].speed).toBeUndefined();
+		expect((await registry.callTool('undo_animation', {})).structuredContent).toMatchObject({ undone: true, label: 'Fit to length' });
+		const bad = await registry.callTool('fit_animation', { seconds: 0.2, keep: ['logo'] });
+		expect(bad.isError).toBe(true);
+		expect(controller.getState().scene).toBe(s);
+	});
+});
+
+describe('cueing shots to a beat or a voiceover', () => {
+	const words = [{ text: 'Meet', start: 0, end: 300 }, { text: 'the', start: 320, end: 400 }, { text: 'new', start: 420, end: 700 }, { text: 'badge', start: 2600, end: 3100 }];
+	const s = scene(
+		[
+			{ id: 'intro', run: [{ type: 'enter', targets: ['box'], duration: 400 }], hold: 100 },
+			{ id: 'drop', at: { beat: 4 }, run: [{ type: 'pulse', targets: ['box'], duration: 400 }], hold: 0 },
+			{ id: 'name', at: { word: 3 }, run: [{ type: 'enter', targets: ['dot'] }] }
+		],
+		{ beat: { bpm: 120, offset: 100 }, narration: { words } }
+	);
+
+	it('reads beats and cue times', () => {
+		expect(motionBeatTime({ bpm: 120, offset: 100 }, 4)).toBe(2100);
+		expect(motionBeatAt({ bpm: 120, offset: 100, meter: 4 }, 2100)).toEqual({ beat: 4, bar: 2, beatInBar: 1 });
+		expect(motionBeatAt({ bpm: 120 }, 1250)).toMatchObject({ bar: 1, beatInBar: 3 });
+		expect(motionCueTime(s, { word: 3 })).toBe(2600);
+		expect(motionCueTime(s, { ms: 50 })).toBe(50);
+		expect(motionCueTime({}, { beat: 2 })).toBeUndefined();
+	});
+
+	it('holds the shot before until each cue', () => {
+		const t = compileMotionScene(s);
+		// intro ends at 500 but holds to beat 4 (2100); drop's pulse ends at 2500 and it holds to the word "badge" (2600).
+		expect(t.shots.map((x) => [x.start, x.end, x.cue ?? null])).toEqual([[0, 2100, null], [2100, 2600, 2100], [2600, 3800, 2600]]);
+		expect(checkMotionScene(s).filter((i) => i.code === 'cue-missed' || i.code === 'unknown-cue')).toEqual([]);
+	});
+
+	it('reports missed and unknown cues', () => {
+		const late = scene([{ id: 'long', run: [{ type: 'move', targets: ['box'], by: { x: 10, y: 0 }, duration: 3000 }] }, { id: 'hit', at: { beat: 2 }, run: [] }, { id: 'say', at: { word: 9 }, run: [] }], { beat: { bpm: 120 }, narration: { words } });
+		const issues = checkMotionScene(late);
+		expect(issues.find((i) => i.code === 'cue-missed')).toMatchObject({ shot: 'hit', measured: 2600 });
+		expect(issues.find((i) => i.code === 'unknown-cue')?.message).toContain('word 9, but the narration has 4 words');
+		const noGrid = checkMotionScene(scene([{ id: 'a', at: { beat: 1 }, run: [] }]));
+		expect(noGrid.find((i) => i.code === 'unknown-cue')?.message).toContain('no beat grid');
+		const bad = () => parseMotionScene(scene([{ id: 'a', at: { beat: 1, word: 2 } as never, run: [] }], { beat: { bpm: 0 } as never, narration: { words: [{ text: 'a', start: 5 }, { text: 'b', start: 1 }] } }));
+		for (const said of [/"at" must give one of/, /"beat" must be/, /"narration" must be/]) expect(bad).toThrow(said);
+	});
+
+	it('works through the agent tools', async () => {
+		const controller = new AnimationEditorController({ scene: createMotionScene(ARTWORK, { name: 'demo' }) });
+		const registry = new ToolRegistry();
+		registry.register(createAnimationEditorToolProvider(controller));
+		const empty = (await registry.callTool('get_timing_grid', {})).structuredContent as any;
+		expect(empty).toMatchObject({ beats: [], words: [] });
+		expect(empty.hint).toContain('bpm');
+		expect((await registry.callTool('set_animation_settings', { beat: { bpm: 90, meter: 3 }, narration: { words } })).isError).toBeFalsy();
+		const grid = (await registry.callTool('get_timing_grid', { to: 2000 })).structuredContent as any;
+		expect(grid.beats.slice(0, 4).map((b: any) => [b.ms, b.bar, b.beatInBar])).toEqual([[0, 1, 1], [667, 1, 2], [1333, 1, 3], [2000, 2, 1]]);
+		expect(grid.words.map((w: any) => w.text)).toEqual(['Meet', 'the', 'new']);
+		const added = await registry.callTool('insert_shots', { shots: [{ id: 'a', run: [{ type: 'enter', targets: ['box'] }] }, { id: 'b', at: { word: 3 }, run: [] }] });
+		expect((added.structuredContent as any).shots[1]).toMatchObject({ id: 'b', start: 2600 });
+		const read = (await registry.callTool('get_shot', { shot: 'b' })).structuredContent as any;
+		expect(JSON.stringify(read)).toContain('"cue":2600');
+		const bad = await registry.callTool('set_animation_settings', { narration: { words: [{ text: 'x', start: 10 }, { text: 'y', start: 5 }] } });
+		expect(bad.isError).toBe(true);
+		expect((await registry.callTool('set_animation_settings', { beat: null })).isError).toBeFalsy();
+		expect(controller.getState().scene.beat).toBeUndefined();
+	});
+});
+
+describe('Lottie export', () => {
+	// A small Lottie evaluator: a property at a frame, keys eased by their bezier (as lottie-web does).
+	const at = (prop: LottieValue, f: number): number[] => {
+		if (prop.a === 0) return Array.isArray(prop.k) ? prop.k : [prop.k];
+		const keys = prop.k;
+		if (f <= keys[0].t) return keys[0].s;
+		for (let n = 0; n + 1 < keys.length; n++) {
+			const a = keys[n];
+			const b = keys[n + 1];
+			if (f >= b.t) continue;
+			if (a.h) return a.s;
+			const u = (f - a.t) / (b.t - a.t);
+			const e = cubicBezierAt(a.o!.x[0], a.o!.y[0], a.i!.x[0], a.i!.y[0], u);
+			return a.s.map((v, i) => v + (b.s[i] - v) * e);
+		}
+		return keys[keys.length - 1].s;
+	};
+	const groupOf = (lottie: any, id: string) => {
+		const find = (items: any[]): any => {
+			for (const it of items) {
+				if (it.ty !== 'gr') continue;
+				if (it.it?.[0]?.nm === `${id} (own)`) return it;
+				const deeper = find(it.it ?? []);
+				if (deeper) return deeper;
+			}
+		};
+		return find(lottie.layers[0].shapes);
+	};
+	const trOf = (lottie: any, id: string) => groupOf(lottie, id).it.at(-1);
+
+	const s = scene([
+		{ id: 'one', run: [{ type: 'enter', targets: ['box'] }, { type: 'move', targets: ['box'], by: { x: 60, y: 20 }, ease: 'ease-in' }, { type: 'rotate', targets: ['dot'], by: 90, with: 'previous' }, { type: 'draw', targets: ['line'], from: 0 }] },
+		{ id: 'two', label: 'Spring', run: [{ type: 'scale', targets: ['box'], to: 1.5, ease: 'spring-bouncy' }, { type: 'style', targets: ['dot'], fill: '#000000', with: 'previous' }] }
+	]);
+
+	it('writes a Bodymovin animation with a marker per shot', () => {
+		const { lottie } = toLottie(s);
+		expect(lottie).toMatchObject({ v: '5.7.4', fr: 30, ip: 0, w: 400, h: 200, nm: 'test' });
+		expect(lottie.op).toBe(Math.ceil((compileMotionScene(s).duration * 30) / 1000));
+		expect(lottie.markers.map((m) => m.cm)).toEqual(['one', 'Spring']);
+		expect(lottie.layers[0]).toMatchObject({ ty: 4, ip: 0, op: lottie.op });
+		const box = groupOf(lottie, 'box').it[0].it;
+		expect(box.map((x: any) => x.ty)).toEqual(['sh', 'st', 'fl', 'tr']);
+		expect(box[0].ks.k).toMatchObject({ c: true, v: [[20, 20], [80, 20], [80, 80], [20, 80]] });
+		expect(box[2].c.k).toEqual([0.937, 0.267, 0.267, 1]);
+		// The trim that draws the line on.
+		expect(groupOf(lottie, 'line').it[0].it.map((x: any) => x.ty)).toEqual(['sh', 'tm', 'st', 'tr']);
+	});
+
+	it('keys eased changes exactly, and samples springs, matching the editor frame by frame', () => {
+		const { lottie, sampled } = toLottie(s);
+		const box = trOf(lottie, 'box');
+		// The move is one eased key pair; the bouncy spring is sampled.
+		expect(box.p.k.filter((k: any) => k.o?.x[0] === 0.42)).toHaveLength(1);
+		expect(sampled).toBeGreaterThan(10);
+		for (const t of [0, 300, 600, 900, 1100, 1400, 1700, 2100, 2500]) {
+			const f = (t * 30) / 1000;
+			for (const id of ['box', 'dot']) {
+				const entry = indexMotionNodes(ARTWORK.nodes).get(id)!;
+				const m = path(motionFrameAt(s, t).document, id).transform ?? [1, 0, 0, 1, 0, 0];
+				const tr = trOf(lottie, id);
+				const c = [entry.center.x, entry.center.y];
+				const p = at(tr.p, f);
+				// Where the editor puts the centre, and where Lottie does.
+				expect(p[0]).toBeCloseTo(m[0] * c[0] + m[2] * c[1] + m[4], 1);
+				expect(p[1]).toBeCloseTo(m[1] * c[0] + m[3] * c[1] + m[5], 1);
+				expect(at(tr.s, f)[0] / 100).toBeCloseTo(Math.hypot(m[0], m[1]), 2);
+				expect(at(tr.o, f)[0] / 100).toBeCloseTo(path(motionFrameAt(s, t).document, id).opacity ?? 1, 2);
+			}
+		}
+	});
+
+	it('leaves hidden nodes out, even when they are a follow route or morph target', () => {
+		const hidden: VectorDocument = { ...ARTWORK, nodes: [...ARTWORK.nodes, { id: 'ghost', type: 'group', visible: false, children: [{ id: 'inside', type: 'path', fill: '#000000', subpaths: [rectSubpath({ x: 0, y: 0, width: 10, height: 10 })] }] }] };
+		const s = scene([{ id: 'one', run: [{ type: 'follow', targets: ['dot'], path: 'track', duration: 400, ease: 'linear' }, { type: 'morph', targets: ['box'], into: 'circle', duration: 400, with: 'previous' }] }], { artwork: hidden });
+		const { lottie } = toLottie(s);
+		// lottie-web ignores `hd` on groups, so a hidden node must not be in the file at all.
+		for (const id of ['track', 'circle', 'ghost', 'inside']) expect(groupOf(lottie, id)).toBeUndefined();
+		expect(JSON.stringify(lottie)).not.toMatch(/"hd"/);
+		// The route and target still drive what they are used by.
+		const entry = indexMotionNodes(ARTWORK.nodes).get('dot')!;
+		const m = path(motionFrameAt(s, 200).document, 'dot').transform!;
+		const c = [entry.center.x, entry.center.y];
+		expect(at(trOf(lottie, 'dot').p, 6)[1]).toBeCloseTo(m[1] * c[0] + m[3] * c[1] + m[5], 1);
+		expect(groupOf(lottie, 'box')).toBeDefined();
+	});
+
+	it('notes what Lottie cannot take', () => {
+		const art: VectorDocument = { ...ARTWORK, nodes: [...ARTWORK.nodes.slice(0, 1).map((n) => ({ ...n, strokeDasharray: [4, 2], fill: { type: 'linear', stops: [{ offset: 0, color: '#000' }, { offset: 1, color: '#fff' }] } }) as VectorNode)] };
+		const { notes } = toLottie({ ...scene([{ id: 'one', run: [{ type: 'enter', targets: ['box'] }] }]), artwork: art });
+		for (const said of [/fill is a gradient/, /dashes are not exported/]) expect(notes.join('\n')).toMatch(said);
+	});
+
+	it('exports through the agent tool', async () => {
+		const controller = new AnimationEditorController({ scene: s });
+		const registry = new ToolRegistry();
+		registry.register(createAnimationEditorToolProvider(controller));
+		const out = (await registry.callTool('export_lottie', { fps: 24 })).structuredContent as any;
+		expect(out.lottie).toMatchObject({ fr: 24, v: '5.7.4' });
+		expect(out.sampled).toBeGreaterThan(0);
+		const bad = await registry.callTool('export_lottie', { fps: 0 });
+		expect(bad.isError).toBe(true);
+	});
+});
+
+describe('onion skin and motion paths', () => {
+	const s = scene([{ id: 'one', run: [{ type: 'enter', targets: ['dot'], duration: 200 }, { type: 'move', targets: ['box'], by: { x: 100, y: 0 }, ease: 'linear', duration: 1000 }, { type: 'move', targets: ['box'], by: { x: 0, y: 50 }, ease: 'linear', duration: 500 }] }]);
+
+	it('places ghosts either side of the playhead, fading with distance', () => {
+		expect(motionGhosts(s, 500, { before: 2, after: 1, spacing: 100 })).toEqual([
+			{ time: 400, offset: -1, opacity: 0.35 },
+			{ time: 300, offset: -2, opacity: 0.175 },
+			{ time: 600, offset: 1, opacity: 0.35 }
+		]);
+		expect(motionGhosts(s, 50, { before: 3, spacing: 100 })).toEqual([]);
+		expect(motionGhosts(s, 900, { before: 2, after: 1, spacing: 'commands' }).map((g) => g.time)).toEqual([200, 0, 1200]);
+	});
+
+	it('traces where a node travels, with a dot at each change', () => {
+		expect(motionMovingIds(s)).toEqual(['box']);
+		const p = motionPath(s, 'box', { step: 250 });
+		expect(p.points[0]).toEqual({ t: 0, x: 50, y: 50 });
+		expect(p.points.find((q) => q.t === 500)).toEqual({ t: 500, x: 80, y: 50 }); // the move starts at 200 ms
+		expect(p.keys.map((k) => [k.x, k.y])).toEqual([[50, 50], [150, 50], [150, 100]]);
+		expect(() => motionPath(s, 'nope')).toThrow(/no element "nope"/);
+	});
+
+	it('draws ghosts under the frame and paths over it, keeping ids unique', () => {
+		const svg = motionStageSvg(s, 600, { onionSkin: { before: 2, spacing: 200 }, motionPaths: true, pretty: false });
+		expect(svg.match(/data-onion="before"/g)).toHaveLength(2);
+		expect(svg.match(/ id="box"/g)).toHaveLength(1);
+		expect(svg.indexOf('data-onion')).toBeLessThan(svg.indexOf(' id="box"'));
+		expect(svg.indexOf('data-motion-path="box"')).toBeGreaterThan(svg.indexOf(' id="box"'));
+		expect(svg).toMatch(/^<svg[^>]*><rect width="400" height="200" fill="#ffffff"\/><g data-onion/);
+		expect(motionStageSvg(s, 600, { pretty: false })).toBe(motionFrameToSvg(s, 600, { pretty: false }));
+	});
+
+	it('shows motion to agents in pictures and in numbers', async () => {
+		const controller = new AnimationEditorController({ scene: s });
+		const registry = new ToolRegistry();
+		registry.register(createAnimationEditorToolProvider(controller));
+		const frame = (await registry.callTool('render_animation_frame', { time: 600, onion_skin: { before: 1 }, motion_paths: ['box'] })).structuredContent as any;
+		expect(frame.svg).toContain('data-onion="before"');
+		expect(frame.svg).toContain('data-motion-path="box"');
+		const bad = await registry.callTool('render_animation_frame', { time: 600, motion_paths: ['bx'] });
+		expect(bad.isError).toBe(true);
+		expect(JSON.stringify(bad.content)).toContain('did you mean');
+		const path = (await registry.callTool('get_motion_path', { node: 'box', step: 500 })).structuredContent as any;
+		expect(path.keys).toHaveLength(3);
+		expect((await registry.callTool('get_motion_path', { node: 'ghost' })).isError).toBe(true);
+	});
+});
+
+describe('playing on a trigger', () => {
+	const s = scene(
+		[
+			{ id: 'open', run: [{ type: 'enter', targets: ['box'], duration: 400 }], hold: 200 },
+			{ id: 'grow', camera: { frame: 'box', ms: 500 }, run: [{ type: 'scale', targets: ['box'], to: 1.5, duration: 300, delay: 100 }] },
+			{ id: 'close', run: [{ type: 'scale', targets: ['box'], to: 1, duration: 300 }] }
+		],
+		{ trigger: 'click' }
+	);
+
+	it('exports a click scene shot by shot as Flair steps timed from each shot', () => {
+		const out = toFlairSvgMotion(s);
+		expect(out.trigger).toBe('click');
+		const steps = animateOf(out).map((a) => [a.step ?? 0, a.delay ?? 0, a.view ? 'view' : Object.keys(a.attrs ?? {})[0]]);
+		// Flair's player waits for the first click and plays step 0 with step 1, so shot n is step n + 1.
+		expect(steps).toEqual([[1, 0, 'opacity'], [2, 0, 'view'], [2, 600, 'transform'], [3, 0, 'transform']]);
+		expect(toFlairVectorEffect(s)).toMatchObject({ trigger: 'click' });
+		// Without the trigger (or for hover, press and scroll) everything stays on step 0, timed from the start.
+		expect(animateOf(toFlairSvgMotion(s, { trigger: null })).every((a) => a.step === undefined)).toBe(true);
+		expect(animateOf(toFlairSvgMotion({ ...s, trigger: 'hover' })).every((a) => a.step === undefined)).toBe(true);
+		expect(toFlairEffectDocument({ ...s, loop: 'loop' }).loop).toBe(false);
+	});
+
+	it('round-trips the trigger through Flair import, and notes it for Lottie', () => {
+		const effect = toFlairVectorEffect(s);
+		const back = fromFlairVectorEffect(effect);
+		expect(back.scene.trigger).toBe('click');
+		expect(back.scene.shots.map((x) => x.id)).toEqual(['step-1', 'step-2', 'step-3']);
+		// And back out again, unchanged.
+		expect(toFlairSvgMotion(back.scene).motion.animate!.map((a) => a.step)).toEqual(toFlairSvgMotion(s).motion.animate!.map((a) => a.step));
+		// A Flair-made click effect's step 0 plays with its first click, so it joins the first shot.
+		const made = fromFlairVectorEffect({ ...effect, motion: { ...effect.motion, animate: [{ id: 'box', ms: 200, attrs: { opacity: [0, 1] } }, ...effect.motion.animate!.filter((a) => (a.step ?? 0) > 1)] } });
+		expect(made.scene.shots.map((x) => [x.id, x.run.length])).toEqual([['step-1', 1], ['step-2', 1], ['step-3', 1]]); // step 2's view is its camera
+		expect(toLottie(s).notes.join(' ')).toContain('plays on click');
+	});
+
+	it('checks loops, cues and single shots against the trigger', () => {
+		const codes = (x: MotionScene) => checkMotionScene(x).map((i) => i.code);
+		expect(codes({ ...s, loop: 'loop' })).toContain('trigger-loop');
+		expect(codes({ ...s, shots: [s.shots[0]] })).toContain('click-one-shot');
+		expect(codes({ ...s, shots: [s.shots[0], { ...s.shots[1], at: { ms: 4000 } }] })).toContain('click-cue');
+		expect(codes({ ...s, trigger: 'hover', shots: [s.shots[0], { ...s.shots[1], at: { ms: 4000 } }] })).not.toContain('click-cue');
+		expect(() => parseMotionScene({ ...s, trigger: 'tap' })).toThrow(/"trigger" must be one of click, hover, press, scroll/);
+	});
+
+	it('sets and clears the trigger through the agent tools', async () => {
+		const controller = new AnimationEditorController({ scene: { ...s, trigger: undefined } });
+		const registry = new ToolRegistry();
+		registry.register(createAnimationEditorToolProvider(controller));
+		expect((await registry.callTool('set_animation_settings', { trigger: 'click' })).isError).toBeFalsy();
+		expect(((await registry.callTool('get_animation', {})).structuredContent as any).trigger).toBe('click');
+		const exported = (await registry.callTool('export_flair_effect', {})).structuredContent as any;
+		expect(exported.trigger).toBe('click');
+		expect((await registry.callTool('set_animation_settings', { trigger: 'tap' })).isError).toBe(true);
+		expect((await registry.callTool('set_animation_settings', { trigger: null })).isError).toBeFalsy();
+		expect(controller.getState().scene.trigger).toBeUndefined();
+	});
+});
+
+describe('smooth moves through waypoints', () => {
+	const at = (s: MotionScene, t: number) => {
+		const m = path(motionFrameAt(s, t).document, 'box').transform ?? [1, 0, 0, 1, 0, 0];
+		return { x: 50 + m[4], y: 50 + m[5] };
+	};
+	// box's centre is (50, 50).
+	const s = scene([{ id: 'one', run: [{ type: 'move', targets: ['box'], via: [{ x: 150, y: 20 }, { x: 250, y: 120 }], to: { x: 350, y: 60 }, duration: 1200 }] }]);
+
+	it('passes exactly through each waypoint and lands on the end', () => {
+		const t = compileMotionScene(s);
+		const xs = t.tracks.get('box\u0000x')!;
+		expect(xs.map((g) => [Math.round(g.start), Math.round(g.end)])).toEqual(xs.map((_, i) => [Math.round(xs[i].start), Math.round(xs[i].end)]));
+		expect(xs).toHaveLength(3);
+		for (const [i, p] of [[1, { x: 150, y: 20 }], [2, { x: 250, y: 120 }]] as const) {
+			const q = at(s, xs[i].start);
+			expect(q.x).toBeCloseTo(p.x, 6);
+			expect(q.y).toBeCloseTo(p.y, 6);
+		}
+		expect(at(s, 1200)).toEqual({ x: 350, y: 60 });
+	});
+
+	it('keeps velocity through waypoints and never overshoots them', () => {
+		const xs = compileMotionScene(s).tracks.get('box\u0000y')!;
+		const k = xs[1].start;
+		const v = (a: number, b: number) => (at(s, b).y - at(s, a).y) / (b - a);
+		expect(v(k - 1, k)).toBeCloseTo(v(k, k + 1), 1);
+		const ys = Array.from({ length: 121 }, (_, i) => at(s, i * 10).y);
+		expect(Math.min(...ys)).toBeGreaterThanOrEqual(20 - 1e-6);
+		expect(Math.max(...ys)).toBeLessThanOrEqual(120 + 1e-6);
+		// Monotone legs: a flat stretch stays flat.
+		expect(smoothMotionLegs([0, 100, 200], [0, 0, 10])[0]).toMatchObject({ ease: 'linear', from: 0, to: 0 });
+	});
+
+	it('paces by distance or equally, and samples paths for Flair (x and y ease differently)', () => {
+		const even = compileMotionScene(s).tracks.get('box\u0000x')!.map((g) => g.end - g.start);
+		const equal = compileMotionScene(scene([{ id: 'one', run: [{ type: 'move', targets: ['box'], via: [{ x: 150, y: 20 }, { x: 250, y: 120 }], to: { x: 350, y: 60 }, duration: 1200, pacing: 'equal' }] }])).tracks.get('box\u0000x')!.map((g) => g.end - g.start);
+		expect(equal.map(Math.round)).toEqual([400, 400, 400]);
+		expect(even[1]).toBeGreaterThan(even[0]);
+		const flair = toFlairSvgMotion(s);
+		expect(flair.sampled).toBeGreaterThan(0);
+		expect(animateOf(flair).at(-1)!.attrs!.transform![1]).toMatch(/^translate\(300 10\)/);
+		expect(compileMotionScene(scene([{ id: 'one', run: [{ type: 'move', targets: ['box'], via: [{ x: 60, y: 60 }, { x: 70, y: 70 }], by: { x: 50, y: 0 } }] }])).duration).toBe(700 + 800 + 600);
+	});
+
+	it('checks waypoints and takes them through the agent tools', async () => {
+		expect(() => parseMotionScene(scene([{ id: 'one', run: [{ type: 'move', targets: ['box'], by: { x: 1, y: 0 }, via: [] } as never, { type: 'move', targets: ['box'], by: { x: 1, y: 0 }, pacing: 'even' } as never] }]))).toThrow(/"via" must be a list[\s\S]*"pacing" goes with "via"/);
+		const controller = new AnimationEditorController({ scene: createMotionScene(ARTWORK, { name: 'demo' }) });
+		const registry = new ToolRegistry();
+		registry.register(createAnimationEditorToolProvider(controller));
+		const ok = await registry.callTool('insert_shots', { shots: [{ id: 'arc', run: [{ type: 'move', targets: ['box'], via: [{ x: 120, y: 20 }], to: { x: 200, y: 50 } }] }] });
+		expect(ok.isError).toBeFalsy();
+		expect((ok.structuredContent as any).duration).toBe(1100 + 600);
+		const bad = await registry.callTool('add_commands', { shot: 'arc', commands: [{ type: 'move', targets: ['box'], to: { x: 1, y: 1 }, via: [{ x: 'a' }] }] });
+		expect(bad.isError).toBe(true);
+	});
+});
+
+describe('reusable clips', () => {
+	const CLIPS = {
+		'pop-settle': { description: 'Pops, then settles', run: [{ type: 'scale', targets: ['$'], to: 1.3, duration: 200 }, { type: 'scale', targets: ['$'], to: 1, duration: 300 }, { type: 'fade', targets: ['$', 'dot'], to: 0.5, duration: 200, with: 'previous' }] }
+	} as MotionScene['clips'];
+	const s = scene([{ id: 'one', run: [{ type: 'play', targets: ['box', 'line'], clip: 'pop-settle', stagger: 100 }] }], { clips: CLIPS });
+
+	it('lays a clip out as in a shot and plays it on each target', () => {
+		const layout = motionClipLayout(s, 'pop-settle', 'box');
+		expect(layout.length).toBe(500);
+		expect(layout.items.map((i) => [i.command.type, i.target, i.start])).toEqual([['scale', 'box', 0], ['scale', 'box', 200], ['fade', 'box', 200], ['fade', 'dot', 200]]);
+		const t = compileMotionScene(s);
+		expect(t.commands[0]).toMatchObject({ type: 'play', start: 0, end: 600, duration: 500 });
+		expect(path(motionFrameAt(s, 200).document, 'box').transform?.[0]).toBeCloseTo(1.3, 6);
+		expect(path(motionFrameAt(s, 300).document, 'line').transform?.[0]).toBeCloseTo(1.3, 6);
+		expect(path(motionFrameAt(s, 600).document, 'line').transform?.[0] ?? 1).toBeCloseTo(1, 6);
+		// Faster, and with the shot's speed too.
+		expect(compileMotionScene(scene([{ id: 'one', run: [{ type: 'play', targets: ['box'], clip: 'pop-settle', speed: 2 }] }], { clips: CLIPS })).commands[0].duration).toBe(250);
+	});
+
+	it('checks clips and plays', () => {
+		const codes = checkMotionScene(scene([{ id: 'one', run: [{ type: 'play', targets: ['box'], clip: 'pop-setle' }] }], { clips: { ...CLIPS, bad: { run: [{ type: 'fade', targets: ['ghost'], to: 0 }] } } as MotionScene['clips'] }));
+		expect(codes.find((i) => i.code === 'unknown-clip')?.message).toContain('did you mean "pop-settle"');
+		expect(codes.find((i) => i.code === 'unknown-target' && i.message.includes('Clip "bad"'))).toBeDefined();
+		expect(() => parseMotionScene(scene([], { clips: { 'no good': { run: [{ type: 'play', targets: ['$'], clip: 'x' }] } } as never }))).toThrow(/a clip name is letters[\s\S]*cannot play another clip/);
+	});
+
+	it('defines, plays, copies and deletes clips through the agent tools', async () => {
+		const controller = new AnimationEditorController({ scene: createMotionScene(ARTWORK, { name: 'demo' }) });
+		const registry = new ToolRegistry();
+		registry.register(createAnimationEditorToolProvider(controller));
+		const set = await registry.callTool('set_animation_clip', { name: 'pop-settle', clip: CLIPS!['pop-settle'] });
+		expect(set.structuredContent).toMatchObject({ clip: 'pop-settle', length: 500 });
+		expect(((await registry.callTool('get_animation', {})).structuredContent as any).clips).toEqual({ 'pop-settle': { description: 'Pops, then settles', commands: 3, length: 500 } });
+		await registry.callTool('insert_shots', { shots: [{ id: 'one', run: [{ type: 'play', targets: ['box'], clip: 'pop-settle' }, { type: 'move', targets: ['box'], by: { x: 10, y: 0 } }] }] });
+		const copy = await registry.callTool('copy_animation', { from: 'box', to: ['a', 'b'], stagger: 50 });
+		expect(copy.structuredContent).toMatchObject({ copied: { one: 2 } });
+		expect(controller.getState().scene.shots[0].run.map((c) => (c.type === 'wait' ? 'wait' : `${c.type}:${c.targets.join('+')}`))).toEqual(['play:box', 'play:a+b', 'move:box', 'move:a+b']);
+		expect((await registry.callTool('undo_animation', {})).structuredContent).toMatchObject({ label: 'Copy animation' });
+		const busy = await registry.callTool('set_animation_clip', { name: 'pop-settle', clip: null });
+		expect(busy.isError).toBe(true);
+		expect(JSON.stringify(busy.content)).toContain('remove those play commands first');
+		const nothing = await registry.callTool('copy_animation', { from: 'dot', to: ['a'] });
+		expect(nothing.isError).toBe(true);
+		expect((await registry.callTool('copy_animation', { from: 'box', to: ['bx'] })).isError).toBe(true);
+	});
+});
+
+describe('drawing order, pace and comets', () => {
+	const LINES: VectorDocument = {
+		width: 400,
+		height: 200,
+		nodes: [
+			{ id: 'sig', type: 'group', children: [
+				{ id: 'far', type: 'path', fill: null, stroke: '#000000', strokeWidth: 2, subpaths: [{ closed: false, anchors: [{ x: 300, y: 100 }, { x: 390, y: 100 }] }] },
+				{ id: 'long', type: 'path', fill: null, stroke: '#000000', strokeWidth: 2, subpaths: [{ closed: false, anchors: [{ x: 10, y: 50 }, { x: 310, y: 50 }] }] },
+				{ id: 'near', type: 'path', fill: null, stroke: '#000000', strokeWidth: 2, subpaths: [{ closed: false, anchors: [{ x: 200, y: 110 }, { x: 260, y: 110 }] }] }
+			] }
+		]
+	};
+	const make = (command: Record<string, unknown>) => ({ version: 1, name: 'lines', artwork: LINES, shots: [{ id: 'one', run: [{ targets: ['sig'], duration: 900, ease: 'linear', ...command } as MotionCommand] }] }) as MotionScene;
+	const windows = (s: MotionScene) => compileMotionScene(s).segments.filter((g) => g.property === 'drawEnd').map((g) => [g.node, Math.round(g.start), Math.round(g.end)]);
+
+	it('draws strokes one after another, by length, in stacking order or out from a point', () => {
+		expect(windows(make({ type: 'draw', order: 'sequence' }))).toEqual([['far', 0, 180], ['long', 180, 780], ['near', 780, 900]]);
+		expect(windows(make({ type: 'draw', order: 'sequence', sortBy: 'distance', origin: { x: 200, y: 100 } })).map((w) => w[0])).toEqual(['near', 'far', 'long']);
+		const s = make({ type: 'draw', order: 'sequence' });
+		const doc = motionFrameAt(s, 400).document;
+		expect(path(doc, 'far').effects ?? []).toEqual([]);
+		expect(path(doc, 'near').effects?.[0]).toMatchObject({ params: { start: 0, end: 0 } });
+	});
+
+	it('draws at one speed, starting or finishing together', () => {
+		expect(windows(make({ type: 'draw', pace: 'speed' })).sort()).toEqual([['far', 0, 270], ['long', 0, 900], ['near', 0, 180]]);
+		expect(windows(make({ type: 'draw', pace: 'speed', align: 'end' })).sort()).toEqual([['far', 630, 900], ['long', 0, 900], ['near', 720, 900]]);
+		// Entering by drawing in sequence keeps the group hidden until its first stroke starts, without a warning.
+		const enter = make({ type: 'enter', style: 'draw', order: 'sequence' });
+		expect(windows(enter)[0]).toEqual(['far', 0, 135]); // 90 of 450 units, over the first 75% of 900 ms
+		expect(checkMotionScene(enter).some((i) => i.code === 'enter-visible')).toBe(false);
+	});
+
+	it('runs a comet along each stroke and off the end, and exports its tail to Lottie', () => {
+		const s = make({ type: 'draw', comet: 0.25 });
+		const trim = (t: number) => path(motionFrameAt(s, t).document, 'long').effects?.[0]?.params as { start: number; end: number } | undefined;
+		expect(trim(450)).toMatchObject({ start: 37.5, end: 62.5 });
+		expect(trim(900)).toMatchObject({ start: 100, end: 100 });
+		const lottie = toLottie(s).lottie as any;
+		const tm = JSON.stringify(lottie).includes('"ty":"tm"');
+		expect(tm).toBe(true);
+		expect(JSON.stringify(lottie)).toMatch(/"nm":"Draw on","s":\{"a":1/);
+	});
+
+	it('checks the options', async () => {
+		expect(() => parseMotionScene(make({ type: 'enter', style: 'fade', order: 'sequence' }))).toThrow(/go with drawing: style "draw"/);
+		expect(() => parseMotionScene(make({ type: 'draw', order: 'zigzag', comet: 2, from: 0 }))).toThrow(/"order" must be[\s\S]*"comet" must be a fraction[\s\S]*leave out "from" and "to"/);
+		const controller = new AnimationEditorController({ scene: { ...make({ type: 'wait', duration: 100 }), shots: [] } });
+		const registry = new ToolRegistry();
+		registry.register(createAnimationEditorToolProvider(controller));
+		const ok = await registry.callTool('insert_shots', { shots: [{ id: 'sign', run: [{ type: 'draw', targets: ['sig'], order: 'sequence', sortBy: 'distance', origin: { x: 0, y: 0 } }] }] });
+		expect(ok.isError).toBeFalsy();
+		expect((await registry.callTool('add_commands', { shot: 'sign', commands: [{ type: 'draw', targets: ['sig'], pace: 'fast' }] })).isError).toBe(true);
+	});
+});
+
+describe('drivers', () => {
+	const xOf = (s: MotionScene, t: number, id: string) => path(motionFrameAt(s, t).document, id).transform?.[4] ?? 0;
+	const s = scene([{ id: 'one', run: [{ type: 'move', targets: ['box'], by: { x: 100, y: 0 }, ease: 'linear', duration: 1000 }] }], {
+		drivers: [
+			{ target: 'dot', property: 'x', source: { node: 'box', property: 'x' }, factor: 0.5 },
+			{ target: 'line', property: 'opacity', source: { node: 'box', property: 'x' }, factor: -0.01, clamp: [-0.8, 0] },
+			{ target: 'a', property: 'x', source: { node: 'dot', property: 'x' }, factor: 2 }
+		]
+	});
+
+	it('makes a property follow another, through chains, on top of its own commands', () => {
+		expect(xOf(s, 500, 'dot')).toBeCloseTo(25, 6);
+		expect(xOf(s, 1000, 'dot')).toBeCloseTo(50, 6);
+		expect(xOf(s, 1000, 'a')).toBeCloseTo(100, 6);
+		expect(path(motionFrameAt(s, 500).document, 'line').opacity).toBeCloseTo(0.5, 6);
+		expect(path(motionFrameAt(s, 1000).document, 'line').opacity).toBeCloseTo(0.2, 6);
+		const t = compileMotionScene(s);
+		expect(motionPropertyValue(t, 'dot', 'x', 1000)).toBeCloseTo(50, 6);
+		const own = { ...s, shots: [{ ...s.shots[0], run: [...s.shots[0].run, { type: 'move', targets: ['dot'], by: { x: 0, y: 30 }, duration: 1000, with: 'previous' } as MotionCommand] }] };
+		expect(path(motionFrameAt(own, 1000).document, 'dot').transform?.slice(4)).toEqual([50, 30]);
+	});
+
+	it('exports driven properties sampled wherever their sources change', () => {
+		const flair = toFlairSvgMotion(s);
+		expect(animateOf(flair).filter((a) => a.id === 'dot').length).toBeGreaterThan(5);
+		expect(animateOf(flair).filter((a) => a.id === 'line' && a.attrs?.opacity).length).toBeGreaterThan(5);
+		expect(animateOf(flair).filter((a) => a.id === 'dot').at(-1)!.attrs!.transform![1]).toMatch(/^translate\(50 0\)/);
+		const lottie = JSON.stringify(toLottie(s).lottie);
+		expect(lottie).toContain('"nm":"dot (own)"');
+	});
+
+	it('checks drivers: unknown nodes, loops and shapes', async () => {
+		const issues = checkMotionScene(scene([], { drivers: [{ target: 'bx', property: 'x', source: { node: 'box', property: 'y' } }, { target: 'box', property: 'y', source: { node: 'dot', property: 'x' } }, { target: 'dot', property: 'x', source: { node: 'box', property: 'y' } }] }));
+		expect(issues.find((i) => i.code === 'unknown-target')?.message).toContain('"bx" (did you mean "box"?)');
+		expect(issues.find((i) => i.code === 'driver-cycle')?.message).toMatch(/box\.y ← dot\.x ← box\.y/);
+		expect(() => parseMotionScene(scene([], { drivers: [{ target: 'box', property: 'skew', source: { node: 'dot' }, clamp: [1, 0] }] as never }))).toThrow(/"property" must be one of[\s\S]*"source" must be[\s\S]*"clamp" must be \[min, max\]/);
+		const controller = new AnimationEditorController({ scene: createMotionScene(ARTWORK, { name: 'demo' }) });
+		const registry = new ToolRegistry();
+		registry.register(createAnimationEditorToolProvider(controller));
+		expect((await registry.callTool('set_animation_drivers', { drivers: s.drivers })).isError).toBeFalsy();
+		expect(((await registry.callTool('get_animation', {})).structuredContent as any).drivers).toHaveLength(3);
+		const loop = await registry.callTool('set_animation_drivers', { drivers: [{ target: 'box', property: 'x', source: { node: 'dot', property: 'x' } }, { target: 'dot', property: 'x', source: { node: 'box', property: 'x' } }] });
+		expect(loop.isError).toBe(true);
+		expect(JSON.stringify(loop.content)).toContain('loop');
+		expect((await registry.callTool('set_animation_drivers', { drivers: [] })).isError).toBeFalsy();
+		expect(controller.getState().scene.drivers).toBeUndefined();
+	});
+});
+
+describe('motion blur', () => {
+	const fast = scene([{ id: 'one', run: [{ type: 'move', targets: ['box'], by: { x: 300, y: 0 }, ease: 'linear', duration: 500 }] }], { motionBlur: { shutter: 180, samples: 8 } });
+
+	it('averages more moments the faster things move, and none when still', () => {
+		// 300 units in 500 ms is 10 units across half a 30 fps frame: 7 moments.
+		const times = motionBlurTimes(fast, 250, fast.motionBlur);
+		expect(times).toHaveLength(7);
+		expect(times[0]).toBeCloseTo(250 - 1000 / 30 / 4 + 1000 / 30 / 2 / 14, 6);
+		expect(motionBlurTimes(fast, 900, fast.motionBlur)).toEqual([900]);
+		expect(motionBlurTimes(fast, 250, { shutter: 180, samples: 3 })).toHaveLength(3);
+		const slow = scene([{ id: 'one', run: [{ type: 'move', targets: ['box'], by: { x: 10, y: 0 }, duration: 2000 }] }]);
+		expect(motionBlurTimes(slow, 1000, {})).toEqual([1000]);
+	});
+
+	it('draws the moments as an exact average on the stage, keeping each id once', () => {
+		const svg = motionStageSvg(fast, 250, { pretty: false });
+		expect(svg).toMatch(/^<svg[^>]*><rect width="400" height="200" fill="#ffffff"\/><g data-motion-blur="7" style="isolation:isolate">/);
+		expect(svg.match(/mix-blend-mode:plus-lighter/g)).toHaveLength(7);
+		expect(svg.match(/ id="box"/g)).toHaveLength(1);
+		expect(motionStageSvg(fast, 250, { pretty: false, motionBlur: false })).toBe(motionFrameToSvg(fast, 250, { pretty: false }));
+		expect(motionFrameToSvg(fast, 250, { pretty: false })).not.toContain('data-motion-blur');
+		expect(toFlairSvgMotion(fast).notes.join(' ')).toContain('Motion blur is drawn on the stage only');
+		expect(toLottie(fast).notes.join(' ')).toContain('Motion blur');
+	});
+
+	it('is set and cleared through the agent tools, and checked', async () => {
+		expect(() => parseMotionScene({ ...fast, motionBlur: { shutter: 0, samples: 99 } })).toThrow(/"motionBlur" must be/);
+		const controller = new AnimationEditorController({ scene: { ...fast, motionBlur: undefined } });
+		const registry = new ToolRegistry();
+		registry.register(createAnimationEditorToolProvider(controller));
+		expect((await registry.callTool('set_animation_settings', { motionBlur: { shutter: 360 } })).isError).toBeFalsy();
+		const frame = (await registry.callTool('render_animation_frame', { time: 250 })).structuredContent as any;
+		expect(frame.svg).toContain('data-motion-blur');
+		expect((await registry.callTool('set_animation_settings', { motionBlur: { samples: 1 } })).isError).toBe(true);
+		expect((await registry.callTool('set_animation_settings', { motionBlur: null })).isError).toBeFalsy();
+		expect(controller.getState().scene.motionBlur).toBeUndefined();
+	});
+});
+
+describe('text by letter, word and line', () => {
+	// "HI YO" over "GO": letters as rectangles, a wider gap between words.
+	const letter = (id: string, x: number, y: number) => ({ id, type: 'path', fill: '#111111', subpaths: [rectSubpath({ x, y, width: 10, height: 20 })] }) as VectorNode;
+	const TEXT: VectorDocument = {
+		width: 400,
+		height: 200,
+		nodes: [{ id: 'title', type: 'group', children: [letter('o2', 70, 10), letter('h', 10, 12), letter('i', 22, 10), letter('y', 58, 11), letter('g', 10, 50), letter('o', 22, 52)] }]
+	};
+	const make = (command: Record<string, unknown>) => ({ version: 1, name: 't', artwork: TEXT, shots: [{ id: 'one', run: [{ type: 'enter', targets: ['title'], duration: 200, ...command } as MotionCommand] }] }) as MotionScene;
+	const starts = (s: MotionScene) => Object.fromEntries(compileMotionScene(s).segments.filter((g) => g.property === 'opacity').map((g) => [g.node, g.start]));
+
+	it('reads outlined text as lines of words of letters', () => {
+		const layout = motionTextLayout(indexMotionNodes(TEXT.nodes), 'title');
+		expect(layout).toEqual({ lines: [{ words: [{ letters: ['h', 'i'] }, { letters: ['y', 'o2'] }] }, { words: [{ letters: ['g', 'o'] }] }] });
+		expect(motionTextLayout(indexMotionNodes(TEXT.nodes), 'h')).toBeNull();
+	});
+
+	it('staggers letters, words or lines in reading order', () => {
+		expect(starts(make({ split: 'letter' }))).toEqual({ h: 0, i: 40, y: 80, o2: 120, g: 160, o: 200 });
+		expect(starts(make({ split: 'word', stagger: 100 }))).toEqual({ h: 0, i: 0, y: 100, o2: 100, g: 200, o: 200 });
+		expect(starts(make({ split: 'line' }))).toEqual({ h: 0, i: 0, y: 0, o2: 0, g: 300, o: 300 });
+		expect(compileMotionScene(make({ split: 'letter' })).commands[0]).toMatchObject({ start: 0, end: 400 });
+		// Each letter is hidden until its turn.
+		const doc = motionFrameAt(make({ split: 'letter' }), 100).document;
+		const op = (id: string) => indexMotionNodes(doc.nodes).get(id)!.node.opacity ?? 1;
+		expect(op('h')).toBeGreaterThan(op('y'));
+		expect(op('o')).toBe(0);
+	});
+
+	it('cascades forward, backward, from the centre, from the edges or at random', () => {
+		const xs = [0, 1, 2, 3, 4];
+		expect(motionCascade(xs, 'backward')).toEqual([4, 3, 2, 1, 0]);
+		expect(motionCascade(xs, 'center')).toEqual([2, 1, 3, 0, 4]);
+		expect(motionCascade(xs, 'edges')).toEqual([0, 4, 1, 3, 2]);
+		expect(motionCascade(xs, 'random', 7)).toEqual(motionCascade(xs, 'random', 7));
+		expect([...motionCascade(xs, 'random', 7)].sort()).toEqual(xs);
+		expect(starts(make({ split: 'word', cascade: 'backward' }))).toEqual({ g: 0, o: 0, y: 120, o2: 120, h: 240, i: 240 });
+	});
+
+	it('checks split targets and shows the layout to agents', async () => {
+		const issues = checkMotionScene(make({ targets: ['title'], split: 'letter' }));
+		expect(issues.some((i) => i.code === 'split-not-text')).toBe(false);
+		expect(() => parseMotionScene(make({ split: 'glyph', cascade: 'sideways' }))).toThrow(/"split" must be letter, word or line[\s\S]*"cascade" must be one of/);
+		expect(() => parseMotionScene(make({ cascade: 'backward' }))).toThrow(/"cascade" goes with "split"/);
+		const controller = new AnimationEditorController({ scene: make({}) });
+		const registry = new ToolRegistry();
+		registry.register(createAnimationEditorToolProvider(controller));
+		const layout = (await registry.callTool('get_text_layout', { group: 'title' })).structuredContent as any;
+		expect(layout).toMatchObject({ group: 'title', letters: 6, lines: [{ words: [{ letters: ['h', 'i'] }, { letters: ['y', 'o2'] }] }, { words: [{ letters: ['g', 'o'] }] }] });
+		expect((await registry.callTool('get_text_layout', { group: 'h' })).isError).toBe(true);
+		expect((await registry.callTool('add_commands', { shot: 'one', commands: [{ type: 'wave', targets: ['title'], split: 'letter', cascade: 'center' }] })).isError).toBeFalsy();
+	});
+});

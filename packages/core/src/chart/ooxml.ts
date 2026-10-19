@@ -5,7 +5,7 @@
 // See THIRD_PARTY_NOTICES.md.
 import { parseChartColor, chartRgbToHex } from './color.js';
 import { chartFamily, chartSeriesType, defaultChartAxis, isCartesianChart, normalizeChartSpec } from './spec.js';
-import type { ChartAxis, ChartIssue, ChartLegendPosition, ChartMarker, ChartNumberFormat, ChartSeries, ChartSpec, ChartTrendline, ChartTrendlineType, ChartType, ChartValue } from './types.js';
+import type { ChartAxis, ChartErrorBars, ChartErrorBarType, ChartIssue, ChartLegendPosition, ChartMarker, ChartNumberFormat, ChartSeries, ChartSpec, ChartTrendline, ChartTrendlineType, ChartType, ChartValue } from './types.js';
 
 export const CHART_OOXML_NS = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
 export const CHART_OOXML_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.drawingml.chart+xml';
@@ -108,6 +108,30 @@ const MARKERS: Record<string, ChartMarker> = { circle: 'circle', dot: 'circle', 
 const TREND_IN: Record<string, ChartTrendlineType> = { linear: 'linear', exp: 'exponential', log: 'logarithmic', poly: 'polynomial', power: 'power', movingAvg: 'moving-average' };
 const TREND_OUT: Record<ChartTrendlineType, string> = { linear: 'linear', exponential: 'exp', logarithmic: 'log', polynomial: 'poly', power: 'power', 'moving-average': 'movingAvg' };
 const LEGEND_IN: Record<string, ChartLegendPosition> = { b: 'bottom', t: 'top', l: 'left', r: 'right', tr: 'right' };
+const ERR_IN: Record<string, ChartErrorBarType> = { fixedVal: 'fixed', percentage: 'percent', stdDev: 'stddev', stdErr: 'stderr', cust: 'custom' };
+const ERR_OUT: Record<ChartErrorBarType, string> = { fixed: 'fixedVal', percent: 'percentage', stddev: 'stdDev', stderr: 'stdErr', custom: 'cust' };
+
+/** Reads one `c:errBars` (Excel's error amount types map one to one); `null` for an unknown type. */
+function readErrorBars(e: Element): ChartErrorBars | null {
+	const type = ERR_IN[val(e, 'errValType') ?? 'fixedVal'];
+	if (!type) return null;
+	const bars: ChartErrorBars = { type };
+	const value = numberOf(val(e, 'val'));
+	if (value !== null && type !== 'custom' && type !== 'stderr') bars.value = Math.abs(value);
+	if (type === 'custom') {
+		const plus = kid(e, 'plus');
+		const minus = kid(e, 'minus');
+		const p = plus ? numbers(plus).map((v) => (v === null ? null : Math.abs(v))) : [];
+		const m = minus ? numbers(minus).map((v) => (v === null ? null : Math.abs(v))) : [];
+		// Minus amounts default to the plus ones; an empty side is left out.
+		if (p.some((v) => v !== null)) bars.plus = p;
+		if (m.some((v) => v !== null) && JSON.stringify(m) !== JSON.stringify(p)) bars.minus = m;
+	}
+	const direction = val(e, 'errBarType');
+	if (direction === 'plus' || direction === 'minus') bars.direction = direction;
+	if (bool(val(e, 'noEndCap'))) bars.cap = false;
+	return bars;
+}
 
 /**
  * Reads a DrawingML chart part (`c:chartSpace`, e.g. `word/charts/chart1.xml`) or an Office
@@ -280,7 +304,19 @@ export function chartFromOoxml(xml: string, options: ChartOoxmlReadOptions = {})
 				trends.push(line);
 			}
 			if (trends.length) out.trendlines = trends;
-			if (kids(s, 'errBars').length) unsupported.push('error bars');
+			for (const e of kids(s, 'errBars')) {
+				const bars = readErrorBars(e);
+				if (!bars) {
+					unsupported.push(`error bars of type "${val(e, 'errValType')}"`);
+					continue;
+				}
+				// x error bars only exist on scatter and bubble series.
+				if (val(e, 'errDir') === 'x') {
+					if (type === 'scatter' || type === 'bubble') out.xErrorBars = bars;
+					else unsupported.push('x error bars on a category chart');
+				} else if (type === 'pie' || type === 'donut' || type === 'radar') unsupported.push(`error bars on a ${type} chart`);
+				else out.errorBars = bars;
+			}
 			series.push(out);
 		}
 	}
@@ -313,8 +349,15 @@ export function chartFromOoxml(xml: string, options: ChartOoxmlReadOptions = {})
 		const scaling = kid(a, 'scaling');
 		axis.min = numberOf(val(scaling, 'min'));
 		axis.max = numberOf(val(scaling, 'max'));
-		if (val(scaling, 'orientation') === 'maxMin') unsupported.push('a reversed axis');
-		if (kid(scaling, 'logBase')) unsupported.push('a logarithmic axis');
+		if (val(scaling, 'orientation') === 'maxMin') axis.reverse = true;
+		if (kid(scaling, 'logBase')) {
+			if (a.localName !== 'valAx') unsupported.push('a logarithmic category axis');
+			else {
+				axis.scale = 'log';
+				const base = numberOf(val(scaling, 'logBase')) ?? 10;
+				if (base !== 10) axis.logBase = base;
+			}
+		}
 		axis.step = numberOf(val(a, 'majorUnit'));
 		const fmt = kid(a, 'numFmt');
 		const code = fmt?.getAttribute('formatCode');
@@ -435,6 +478,16 @@ export function chartFormatToCode(format: ChartNumberFormat): string {
 	}
 }
 
+/** One `c:errBars` (CT_ErrBars order: errDir, errBarType, errValType, noEndCap, plus, minus, val). */
+function errBarsXml(bars: ChartErrorBars, dir: 'x' | 'y' | null): string {
+	let x = `<c:errBars>${dir ? `<c:errDir val="${dir}"/>` : ''}<c:errBarType val="${bars.direction ?? 'both'}"/><c:errValType val="${ERR_OUT[bars.type]}"/><c:noEndCap val="${bars.cap === false ? 1 : 0}"/>`;
+	if (bars.type === 'custom') {
+		const plus = bars.plus ?? (bars.minus ?? []).map(() => null);
+		x += `<c:plus>${numLit(plus)}</c:plus><c:minus>${numLit(bars.minus ?? plus)}</c:minus>`;
+	} else if (bars.type !== 'stderr') x += `<c:val val="${bars.value ?? (bars.type === 'percent' ? 5 : 1)}"/>`;
+	return `${x}</c:errBars>`;
+}
+
 const MARKER_OUT: Record<ChartMarker, string> = { circle: 'circle', square: 'square', diamond: 'diamond', triangle: 'triangle', cross: 'x', none: 'none' };
 
 export interface ChartOoxmlWriteResult {
@@ -508,6 +561,14 @@ export function chartToOoxml(spec: ChartSpec): ChartOoxmlWriteResult {
 				x += `<c:dispRSqr val="${t.showR2 ? 1 : 0}"/><c:dispEq val="${t.showEquation ? 1 : 0}"/></c:trendline>`;
 				parts.push(x);
 			}
+		if (!pieLike && kind !== 'radar') {
+			const xyKind = kind === 'scatter' || kind === 'bubble';
+			if (s.errorBars) parts.push(errBarsXml(s.errorBars, xyKind ? 'y' : null));
+			if (s.xErrorBars) {
+				if (xyKind) parts.push(errBarsXml(s.xErrorBars, 'x'));
+				else issues.push(`"${s.name}" has x error bars, which only scatter and bubble charts can hold; they are left out.`);
+			}
+		} else if (s.errorBars || s.xErrorBars) issues.push(`Error bars on "${s.name}" are left out: ${kind} charts cannot show them.`);
 		const valCode = chartFormatToCode(s.format ?? (s.axis === 'secondary' ? spec.yAxis2.format : spec.yAxis.format));
 		if (kind === 'scatter' || kind === 'bubble') {
 			const xs = s.x ?? spec.categories.map((_, i) => i + 1);
@@ -550,7 +611,9 @@ export function chartToOoxml(spec: ChartSpec): ChartOoxmlWriteResult {
 				return `<c:pieChart><c:varyColors val="1"/>${sers}${dLbls}<c:firstSliceAng val="0"/></c:pieChart>`;
 		}
 	});
-	const scaling = (a: ChartAxis) => `<c:scaling><c:orientation val="minMax"/>${a.max !== null ? `<c:max val="${a.max}"/>` : ''}${a.min !== null ? `<c:min val="${a.min}"/>` : ''}</c:scaling>`;
+	// CT_Scaling order: logBase, orientation, max, min.
+	const scaling = (a: ChartAxis) =>
+		`<c:scaling>${a.scale === 'log' ? `<c:logBase val="${a.logBase ?? 10}"/>` : ''}<c:orientation val="${a.reverse ? 'maxMin' : 'minMax'}"/>${a.max !== null ? `<c:max val="${a.max}"/>` : ''}${a.min !== null ? `<c:min val="${a.min}"/>` : ''}</c:scaling>`;
 	const title = (a: ChartAxis) => (a.title ? `<c:title>${rich(a.title)}</c:title>` : '');
 	const fmt = (a: ChartAxis) => {
 		const code = chartFormatToCode(a.format);
@@ -562,11 +625,14 @@ export function chartToOoxml(spec: ChartSpec): ChartOoxmlWriteResult {
 	const valAx = (id: number, cross: number, a: ChartAxis, pos: string, crosses: string, catKind = false) =>
 		`<c:valAx><c:axId val="${id}"/>${scaling(a)}<c:delete val="${a.show ? 0 : 1}"/><c:axPos val="${pos}"/>${a.gridlines ? '<c:majorGridlines/>' : ''}${title(a)}${fmt(a)}<c:majorTickMark val="out"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/><c:crossAx val="${cross}"/><c:crosses val="${crosses}"/><c:crossBetween val="${catKind ? 'midCat' : 'between'}"/>${a.step ? `<c:majorUnit val="${a.step}"/>` : ''}</c:valAx>`;
 	const catAx = (id: number, cross: number, a: ChartAxis, pos: string, hidden = false) =>
-		`<c:${a.kind === 'date' ? 'dateAx' : 'catAx'}><c:axId val="${id}"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="${a.show && !hidden ? 0 : 1}"/><c:axPos val="${pos}"/>${a.gridlines ? '<c:majorGridlines/>' : ''}${title(a)}<c:numFmt formatCode="General" sourceLinked="1"/><c:majorTickMark val="out"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/><c:crossAx val="${cross}"/><c:crosses val="autoZero"/><c:auto val="1"/>${a.kind === 'date' ? '<c:lblOffset val="100"/><c:baseTimeUnit val="days"/>' : '<c:lblAlgn val="ctr"/><c:lblOffset val="100"/><c:noMultiLvlLbl val="0"/>'}</c:${a.kind === 'date' ? 'dateAx' : 'catAx'}>`;
+		`<c:${a.kind === 'date' ? 'dateAx' : 'catAx'}><c:axId val="${id}"/><c:scaling><c:orientation val="${a.reverse ? 'maxMin' : 'minMax'}"/></c:scaling><c:delete val="${a.show && !hidden ? 0 : 1}"/><c:axPos val="${pos}"/>${a.gridlines ? '<c:majorGridlines/>' : ''}${title(a)}<c:numFmt formatCode="General" sourceLinked="1"/><c:majorTickMark val="out"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/><c:crossAx val="${cross}"/><c:crosses val="autoZero"/><c:auto val="1"/>${a.kind === 'date' ? '<c:lblOffset val="100"/><c:baseTimeUnit val="days"/>' : '<c:lblAlgn val="ctr"/><c:lblOffset val="100"/><c:noMultiLvlLbl val="0"/>'}</c:${a.kind === 'date' ? 'dateAx' : 'catAx'}>`;
 	let axes = '';
 	if (!pieLike) {
 		if (xy) axes = valAx(ids.cat, ids.val, spec.xAxis, 'b', 'autoZero', true) + valAx(ids.val, ids.cat, spec.yAxis, 'l', 'autoZero', true);
-		else axes = catAx(ids.cat, ids.val, spec.xAxis, catPos) + valAx(ids.val, ids.cat, spec.yAxis, valPos, 'autoZero');
+		else {
+			if (spec.xAxis.scale === 'log') issues.push('The category axis cannot be logarithmic; its log scale is left out.');
+			axes = catAx(ids.cat, ids.val, spec.xAxis, catPos) + valAx(ids.val, ids.cat, spec.yAxis, valPos, 'autoZero');
+		}
 		if (groups.some((g) => g.secondary)) axes += catAx(ids.cat2, ids.val2, spec.xAxis, catPos, true) + valAx(ids.val2, ids.cat2, spec.yAxis2, horizontal ? 't' : 'r', 'max');
 	}
 	const legendPos = { bottom: 'b', top: 't', left: 'l', right: 'r' }[spec.legend.position];

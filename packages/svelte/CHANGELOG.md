@@ -1,5 +1,334 @@
 # @pixerate/editor-svelte
 
+## 0.57.1
+
+### Patch Changes
+
+- Updated dependencies [ac38891]
+  - @pixerate/editor@0.77.0
+
+## 0.57.0
+
+### Minor Changes
+
+- 9e22068: Add a UI-agnostic video editor (`@pixerate/editor/video-editor`). Projects are plain JSON: video, audio and image assets on video and audio tracks, with media clips (in point, speed, volume, fades, opacity, fit, transform), titles, colour clips and markers. `applyVideoEdits` adds, moves, trims (with ripple), splits, deletes (with ripple) and closes gaps all or nothing, and never adds an error; crossfade, dip and wipe transitions play over the cut, with handle checks that say the longest transition that fits. `videoFrameAt` gives the layers and sounds at any moment, `VideoPreviewEngine` plays a project on a canvas in the browser, `VideoEditorController` adds undo, playback, selection and snapping, and projects export to an ffmpeg command or a CMX 3600 EDL. `createVideoEditorToolProvider` exposes 29 agent tools. React (`@pixerate/editor-react/video-editor`) and Svelte (`@pixerate/editor-svelte/video-editor`) add `<VideoEditor>`, `<VideoPreview>`, `<VideoTimeline>`, `<VideoTransport>`, `<ClipInspector>`, `<MediaBin>` and `useVideoEditor` / `createVideoEditor` with `useVideoEditorTools`.
+
+### Patch Changes
+
+- Updated dependencies [9e22068]
+  - @pixerate/editor@0.76.0
+
+## 0.56.2
+
+### Patch Changes
+
+- Updated dependencies [27c66fe]
+  - @pixerate/editor@0.75.0
+
+## 0.56.1
+
+### Patch Changes
+
+- Updated dependencies [b8500f6]
+  - @pixerate/editor@0.74.0
+
+## 0.56.0
+
+### Minor Changes
+
+- 015ef78: Animation scenes can have motion blur.
+
+  - **Setting:** `scene.motionBlur` takes `shutter` (degrees, default 180) and `samples` (default 8, at most 32).
+  - **Sampling:** each frame on the stage, in `render_animation_frame` and in contact sheets averages moments across the shutter (`motionBlurTimes`). There are more moments for faster motion and none when nothing moves, added exactly with `plus-lighter`.
+  - **Unchanged:** `motionFrameToSvg` and the Flair and Lottie exports stay sharp, and the exports say so.
+  - **Agents:** `set_animation_settings` sets or clears `motionBlur`.
+  - **React and Svelte:** `SceneSettings` has a Motion blur select.
+
+### Patch Changes
+
+- Updated dependencies [015ef78]
+  - @pixerate/editor@0.73.0
+
+## 0.55.0
+
+### Minor Changes
+
+- c3f10fd: Animation scenes get drivers: properties that follow other nodes' properties.
+
+  - **What they're for:** parallax, a wheel turning as it rolls, a shadow fading as something rises.
+  - **How they work:** `scene.drivers` maps a source's change from rest, times `factor` plus `offset` and clamped, onto the target's x, y, rotation, scale or opacity, on top of its own commands. Chains are followed.
+  - **Checks:** a loop between drivers is a `driver-cycle` error, and unknown nodes are named with "did you mean".
+  - **Export:** Flair and Lottie sample driven properties wherever their sources change.
+  - **Core:** `motionPropertyValue`, `applyMotionDrivers` and `motionDriverSources`. `formatMotionDrivers` and `parseMotionDrivers` read and write drivers one a line (`dot.x <- box.x * 0.5`).
+  - **Agents:** a new `set_animation_drivers` tool, and `get_animation` lists drivers.
+  - **React and Svelte:** `SceneSettings` has a Drivers box.
+
+### Patch Changes
+
+- Updated dependencies [c3f10fd]
+  - @pixerate/editor@0.72.0
+
+## 0.54.5
+
+### Patch Changes
+
+- Updated dependencies [2f6469d]
+  - @pixerate/editor@0.71.0
+
+## 0.54.4
+
+### Patch Changes
+
+- Updated dependencies [9728f84]
+  - @pixerate/editor@0.70.0
+
+## 0.54.3
+
+### Patch Changes
+
+- Updated dependencies [ea2b6d9]
+  - @pixerate/editor@0.69.0
+
+## 0.54.2
+
+### Patch Changes
+
+- Updated dependencies [97b6868]
+  - @pixerate/editor@0.68.0
+
+## 0.54.1
+
+### Patch Changes
+
+- Updated dependencies [21866a8]
+  - @pixerate/editor@0.67.1
+
+## 0.54.0
+
+### Minor Changes
+
+- 3c7b434: Animation scenes can play on a trigger: `trigger` is `click`, `hover`, `press` or `scroll`.
+
+  - **Click export:** the Flair export turns each shot into a Flair step timed from the shot's start. The first shot plays on load, and each click plays the next.
+  - **Hover, press and scroll:** these play, rewind or scrub the whole scene.
+  - **Effects:** `toFlairVectorEffect` and the export tools carry the trigger, `FlairMotionExport.trigger` says what to pass to `SvgPlayer`, and `export*` options take `trigger` (null for none).
+  - **Import:** Flair imports keep an effect's trigger.
+  - **Lottie:** the Lottie export notes that it plays through.
+  - **Checks:** `trigger-loop`, `click-one-shot` and `click-cue`.
+  - **Agents:** `set_animation_settings` and `get_animation` handle `trigger`.
+  - **React and Svelte:** the scene settings panel has a "Plays on" select.
+
+### Patch Changes
+
+- Updated dependencies [3c7b434]
+  - @pixerate/editor@0.67.0
+
+## 0.53.1
+
+### Patch Changes
+
+- Updated dependencies [aeeac37]
+  - @pixerate/editor@0.66.1
+
+## 0.53.0
+
+### Minor Changes
+
+- 28493c5: The animation editor can now be used by hand, not just played.
+
+  - **`<AnimationEditor>`** (React and Svelte) brings together the stage, a playhead scrubber and panels for editing commands, shots and scene settings, with undo and redo (⌘Z / ⇧⌘Z). Pass `editable={false}` to get a player with no editing.
+  - **`<PlayheadScrubber>`**: a time ruler with shot bands, beat-grid and narration marks, drag or arrow keys to scrub, play / pause, and a loop mode.
+  - **`<CommandList>`**: a shot's commands in order. Add, reorder, duplicate and delete commands, and change `with` and `delay` inline.
+  - **`<CommandInspector>`**: a form generated from `MOTION_COMMAND_SCHEMA`, the schema the agent tools take. Enums appear as selects, numbers show their units and limits, and nodes and targets have pickers. It shows the Flair primitive each command plays.
+  - **`<EasePicker>`**: easing presets, including the springs, with a curve preview sampled from `evaluateEasing`. A spring is drawn over the time it takes to settle.
+  - **Stage picking**: click an element in `<AnimationStage>` (`onPick` / `onpick`) to pick it, or shift-click to add it to or remove it from the selected command's targets. Picked elements and targets are outlined (`highlight`).
+  - **`<ShotInspector>`**: a shot's label, hold, speed and camera framing, a cue picker for `at` (a beat or a narration word), and buttons to add, move and delete shots.
+  - **`<SceneSettings>`**: loop, frame rate, stepped time, target length with a Fit button (`fitMotionScene`), a beat grid, and narration words.
+  - Every change is one `controller.apply` edit, so it is one undo step. When an edit is refused, the reason is shown.
+  - **Core:** the components share helpers: `motionCommandFields`, `parseMotionFieldInput`, `motionFieldEdit`, `defaultMotionCommand`, `motionCommandRows`, `duplicateMotionCommandEdit`, `motionEasingCurve` / `motionEasingPath`, `motionNodeAtElement`, `highlightMotionSvg`, `motionRulerTicks`, `fitMotionSceneEdits`, `motionCueChoices`, `parseMotionNarration` and `formatMotionNarration`.
+  - **New edit and agent tool:** `move_command` reorders a command within its shot as one undo step.
+  - **Flair import:** preset colours written as `[r, g, b]` channel arrays, as Flair's catalog writes them, are now read as hex.
+
+### Patch Changes
+
+- Updated dependencies [28493c5]
+  - @pixerate/editor@0.66.0
+
+## 0.52.0
+
+### Minor Changes
+
+- 2751617: The animation stage shows motion on a still.
+
+  - **Onion skin:** faded ghost frames either side of the playhead. Ghosts are a set time apart, or fall on the moments commands start and end, and fade with distance.
+  - **Motion paths:** a dashed line where each node's centre travels, with a dot where each change starts or ends.
+  - **Core:** `motionGhosts`, `motionPath`, `motionMovingIds`, `motionPathsSvg` and `motionStageSvg`. `controller.toSvg` takes `onionSkin`, `motionPaths` and `motionPathColor`.
+  - **React and Svelte:** `<AnimationStage>` and `<AnimationEditor>` take `onionSkin` and `motionPaths`.
+  - **Agents:** `render_animation_frame` takes `onion_skin` and `motion_paths`, and a new read tool, `get_motion_path`, returns the path as numbers.
+  - **Demo:** the animation tab has toggles for both.
+
+### Patch Changes
+
+- Updated dependencies [2751617]
+  - @pixerate/editor@0.65.0
+
+## 0.51.9
+
+### Patch Changes
+
+- Updated dependencies [333ad75]
+  - @pixerate/editor@0.64.0
+
+## 0.51.8
+
+### Patch Changes
+
+- Updated dependencies [2da00e7]
+  - @pixerate/editor@0.63.0
+
+## 0.51.7
+
+### Patch Changes
+
+- Updated dependencies [70ae8ed]
+  - @pixerate/editor@0.62.0
+
+## 0.51.6
+
+### Patch Changes
+
+- Updated dependencies [82031d8]
+  - @pixerate/editor@0.61.0
+
+## 0.51.5
+
+### Patch Changes
+
+- Updated dependencies [2feef94]
+- Updated dependencies [c3503c6]
+  - @pixerate/editor@0.60.0
+
+## 0.51.4
+
+### Patch Changes
+
+- Updated dependencies [24703a8]
+  - @pixerate/editor@0.59.0
+
+## 0.51.3
+
+### Patch Changes
+
+- 49ce811: `ChartEditor`: beside the canvas, the inspector now scrolls within the canvas's height instead of stretching the editor to fit every section.
+
+## 0.51.2
+
+### Patch Changes
+
+- Updated dependencies [5af1e38]
+- Updated dependencies [5af1e38]
+  - @pixerate/editor@0.58.0
+
+## 0.51.1
+
+### Patch Changes
+
+- Updated dependencies [f362946]
+  - @pixerate/editor@0.57.0
+
+## 0.51.0
+
+### Minor Changes
+
+- 391d3d0: Mermaid diagrams reach parity with Ursula: pie, mindmap, quadrant, C4, architecture, sequence, gitGraph, Gantt, timeline, journey, XY and radar diagrams are now editable statement by statement (lossless, like flowcharts), with family layouts and their own pictures (`mermaidToScene`, also used by `mermaidToSvg`, thumbnails and PNG export). `parseSankey` and `parseTreemap` read sankey and treemap data. `familyUI` describes each family's shapes, defaults and data fields, and `checkFieldData` validates them. Agents get `set_diagram_node_data`, `set_diagram_edge_data`, `set_diagram_settings` and `set_diagram_title`, and `get_diagram` lists the fields and values. React and Svelte add `<MermaidFamilyScene>`, plus `scene` and `renameTarget` on `useMermaidDiagram` / `createMermaidDiagram` (which also take `{ sceneTheme, layoutOptions }` as a second argument).
+
+### Patch Changes
+
+- Updated dependencies [391d3d0]
+  - @pixerate/editor@0.56.0
+
+## 0.50.0
+
+### Minor Changes
+
+- f945529: Publish the vector animation editor (`@pixerate/editor/animation-editor`, `@pixerate/editor-react/animation-editor`, `@pixerate/editor-svelte/animation-editor`) and Mermaid diagram export. The 0.54.0 / 0.41.0 / 0.49.0 packages on npm were built before these landed (a release that failed part-way had already published those versions), so they do not contain them even though their changelogs list them.
+
+### Patch Changes
+
+- Updated dependencies [f945529]
+  - @pixerate/editor@0.55.0
+
+## 0.49.0
+
+### Minor Changes
+
+- ea93937: Mermaid diagrams can now be exported and previewed (ported from Ursula's thumbnails and PNG export). `mermaidToSvg` draws a standalone SVG that matches the canvas layout, with Mermaid styles, arrow heads and labels. `mermaidThumbnailSvg` fits it to a box. `rasterizeSvg` and `downloadDiagramPng` make PNGs in the browser. `createDiagramToolProvider({ renderSvg, rasterize })` adds a `render_diagram` agent tool. React and Svelte add `<MermaidThumbnail>`.
+- 14bd63e: Add an MCP bridge (ported from Ursula): `@pixerate/editor/bridge` (Node only, no dependencies) runs one MCP server over stdio that drives editors open in a browser over a localhost WebSocket. It has an origin allowlist, an optional token, `list_editors`, an `editor` argument for picking an editor, cancellation, timeouts and port retry. The `pixerate-mcp-bridge` CLI starts it. Pages connect their `ToolRegistry` with `connectToolBridge` (`@pixerate/editor/tools`), which re-sends the tool list on change and reconnects after the bridge restarts. React and Svelte add `useToolBridge`.
+- e4a0275: Add a UI-agnostic animation editor for vector artwork (`@pixerate/editor/animation-editor`), modelled on Lingo's scenes. A `MotionScene` is the vector editor's artwork plus shots of commands (enter, exit, draw, move, rotate, scale, fade, style, morph, follow a path, pulse, shake, live path-effect tweens) and camera moves, with timing taken from the content. `motionFrameAt` / `motionFrameToSvg` draw any frame, `checkMotionScene` reports coded issues with "did you mean" suggestions, `AnimationEditorController` edits all-or-nothing with undo and plays on an injectable clock, and `createAnimationEditorToolProvider` gives agents 22 tools. `toFlairSvgMotion`, `toFlairVectorEffect` and `toFlairEffectDocument` export to Flair's vector motion, catalog effects (with colour controls and presets) and effect editor. React adds `useAnimationEditor`, `useAnimationEditorTools`, `<AnimationEditor>`, `<AnimationStage>` and `<ShotTimeline>` (`@pixerate/editor-react/animation-editor`); Svelte adds `createAnimationEditor`, `useAnimationEditorTools` and the same components (`@pixerate/editor-svelte/animation-editor`).
+
+### Patch Changes
+
+- Updated dependencies [ea93937]
+- Updated dependencies [14bd63e]
+- Updated dependencies [e4a0275]
+  - @pixerate/editor@0.54.0
+
+## 0.48.0
+
+### Minor Changes
+
+- 883d9d7: Charts: error bars, logarithmic axes and reversed axes.
+
+  - Series take `errorBars` (bar, line, area, scatter) and `xErrorBars` (scatter / bubble x): `fixed`, `percent`, `stddev` (around the series mean, as Excel), `stderr` or `custom` plus / minus amounts, with `direction` and `cap`. Drawn as `error-bar` marks, on stack tops when stacked, and included in the axis range. `chartErrorAmounts`, `describeChartErrorBars`, `chartErrorBarsOfType`.
+  - Value axes and the scatter x axis take `scale: "log"` with `logBase` (2–1000, default 10): power or 1-2-5 ticks (`niceLogScale`), values of 0 or less skipped with a `values-skipped` warning, refused with percent stacking. `ChartValueScale.logBase`, `chartScaleToPixel` / `chartScaleFromPixel`; drags move by ratio and ↑ ↓ step by a tenth of a power.
+  - Every axis takes `reverse: true`.
+  - Office import / export reads and writes `c:errBars`, `c:logBase` and `c:orientation maxMin` (no longer reported as unsupported); Mermaid keeps them in the `%% @pixerate` comment.
+  - `update_chart` / `update_chart_series` (tools and commands) describe the new fields; summaries and descriptions mention log and reversed axes and error bars.
+  - `<ChartInspector>` (React and Svelte): Reverse and Log scale toggles with a log base on axes, and error bar type, amount, custom amounts, direction and caps on the selected series.
+
+- 3acb651: Agent edits to Mermaid diagrams can now be acted out by a cursor (ported from Ursula's remote control): `DiagramDirector` moves, clicks, drags, connects and types on the canvas, draws a whole-diagram write statement by statement (`draftFrames`), and commits each call as one undo step (rolled back if the diagram changed underneath). Pass it to `createDiagramToolProvider({ director })`. The presence store, clock, cursor tween and per-actor queue (`PresenceStore`, `PerformanceQueue`, `createInstantPresenceClock`) move to `@pixerate/editor/animation` and are shared with `ChartDirector`, which now hides cursors after `linger` as documented. React adds `useDiagramDirector` and `<DiagramPresenceLayer>`; Svelte adds `createDiagramDirector` and `<DiagramPresenceLayer>`.
+- d01edac: Add Mermaid diagrams (ported from Ursula): `@pixerate/editor/diagram` parses and writes flowchart, state, class and ER diagrams losslessly (untouched statements round-trip byte for byte, edits rewrite only what they touch, positions in a `%% @pixerate` comment; Ursula's `@ursula` comment is still read), with `DiagramController` (validated, undoable edits), `findMermaidSources` and 19 agent tools (`createDiagramToolProvider`). `@pixerate/editor/canvas` adds `mermaidToCanvas` (dagre layout with nested groups, stored positions blended with new nodes), `mermaidMovesFromCanvas`, `DiagramStream` for diagrams that are still being written, and Mermaid shape geometry. React adds `useMermaidDiagram`, `useMermaidStream`, `<MermaidDiagramNode>` and `<MermaidDiagramGroup>`; Svelte adds `createMermaidDiagram`, `createMermaidStream` and the same components.
+
+### Patch Changes
+
+- Updated dependencies [883d9d7]
+- Updated dependencies [3acb651]
+- Updated dependencies [d01edac]
+  - @pixerate/editor@0.53.0
+
+## 0.47.0
+
+### Minor Changes
+
+- 52ae1ba: Read charts from Excel, PowerPoint and Word files. `extractOfficeCharts` (and `extractXlsxCharts`, `extractPptxCharts`, `extractDocxCharts`) in `@pixerate/editor/chart` return every chart in a file as a `ChartSpec` with where it sits: the sheet and anchor cell in a workbook, the slide number in a deck. DrawingML and Office 2016 chartex charts are both read. `createOfficeChartToolProvider` gives agents `list_open_files`, `list_file_charts`, `get_file_chart` and `load_file_chart`, and React and Svelte register it with `useOfficeChartToolProvider`.
+
+### Patch Changes
+
+- Updated dependencies [52ae1ba]
+  - @pixerate/editor@0.52.0
+
+## 0.46.0
+
+### Minor Changes
+
+- e3c9c3e: Chart PNG previews. Core adds `rasterizeChartSvg` (resolves CSS-variable paints with `resolveChartSvgPaints`, so charts no longer draw black, then draws through a canvas at 2× with the longest side ≤ 1024 px), `createChartRasterizer`, `downloadChartPng` and `chartFileName`. `render_chart` now says when an image is worth its tokens, returns the layout warnings with SVG and PNG results, and the React and Svelte `useChartToolProvider` pass a browser rasterizer by default so `render_chart { format: "png" }` works out of the box (`rasterize: false` turns it off). `<ChartEditor>` gains a Download PNG toolbar button (`pngOptions`).
+
+### Patch Changes
+
+- Updated dependencies [e3c9c3e]
+  - @pixerate/editor@0.51.0
+
+## 0.45.0
+
+### Minor Changes
+
+- 39d5cba: feat(canvas,image-editor,vector): add `PIXERATE_BRAND_GRADIENT`, UI-agnostic agent presence trajectory/rotation math and `AgentCursorPresence`, region mosaic/blur image filters (`applyRegionMosaic`, `applyRegionBlur`), and CSS transform scale compensation in `VectorCanvas`
+
+### Patch Changes
+
+- Updated dependencies [39d5cba]
+  - @pixerate/editor@0.50.0
+
 ## 0.44.1
 
 ### Patch Changes

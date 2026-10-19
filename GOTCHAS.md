@@ -21,6 +21,72 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/video-editor] Homebrew's ffmpeg Has No `drawtext`
+
+- **Issue / Symptom**: Rendering a project with titles fails at once with `Filter not found`, although every other filter in the graph exists.
+- **Root Cause**: `drawtext` needs ffmpeg built with libfreetype. Homebrew's `ffmpeg` formula (9.x) is built without it, and so are other slim builds.
+- **Solution / Workaround**: Pass `titleImage` to `toVideoFfmpeg`. Each title then goes in as a transparent full-frame PNG, overlaid like a still with its opacity and fades. In a browser, draw `videoTitleFrame(project, clip)` with `drawVideoFrame` and save the canvas. The export's notes mention `drawtext` whenever it is used. `tests/video-editor-ffmpeg.test.ts` checks `ffmpeg -filters` and falls back to a title image.
+
+### [react|svelte/video-editor] A Clip Dragged to Another Track Loses Its Pointer Capture
+
+- **Issue / Symptom**: Dragging a clip into another track's row stopped following the pointer, and releasing it did nothing.
+- **Root Cause**: The clip block is rendered inside its track's row. Once the drag preview moves it to another row, the framework remounts the block under a new parent, so the element that called `setPointerCapture` is gone and its `pointermove` / `pointerup` handlers never fire again.
+- **Solution / Workaround**: Follow the drag with `pointermove`, `pointerup` and `pointercancel` listeners on `window`, added at pointer down and removed on release, instead of handlers on the clip element.
+
+### [react|svelte/video-editor] Testing `<VideoPreview>` in jsdom
+
+- **Issue / Symptom**: Preview tests log "Not implemented: HTMLCanvasElement.prototype.getContext" and "Not implemented: HTMLMediaElement's pause()" / "load()", and nothing can be asserted about drawing.
+- **Root Cause**: jsdom implements neither canvas drawing nor media playback.
+- **Solution / Workaround**: `VideoPreviewEngine` accepts a null context and injectable `createMedia` / `context`. In component tests, stub `HTMLCanvasElement.prototype.getContext` (null, or a recording Proxy to assert draws) and `HTMLMediaElement.prototype.pause` / `load`. In Svelte, don't put `role="img"` on the `<canvas>` (svelte-check treats canvas as interactive); an `aria-label` is enough.
+
+### [core/video-editor] ffmpeg `drawtext` Text Needs Escaping Twice
+
+- **Issue / Symptom**: A title with a colon, apostrophe or comma (`It's 10:30, live`) breaks the ffmpeg render with "No option name near…" or a truncated title, even though the args are passed without a shell.
+- **Root Cause**: A filtergraph is parsed at two levels: the graph splits on `,` `;` `[` `]` and quotes, then each filter splits its options on `:` and drawtext expands `%`. Each level consumes one layer of backslashes.
+- **Solution / Workaround**: Escape option-level characters (`\ ' : %`) first, then graph-level characters (`\ ' [ ] , ;`) — `ffmpegFilterValue` does both in that order. Do not add shell quoting on top when passing `args` to `spawn`; only `command` (the one-line string) is shell-quoted.
+
+### [core/video-editor] A Dip Must Not Use Handles, or Valid Cuts Are Refused
+
+- **Issue / Symptom**: Setting a dip-to-black between two clips trimmed to the very ends of their media was refused for lack of handles, and the preview played a moment of the next clip's audio before the cut.
+- **Root Cause**: Crossfades and wipes play both clips past the cut (half the transition each side), so they need media beyond the out and in points. A dip only shows the outgoing clip before the cut and the incoming one after it, under the colour, but the shared overhang code treated it like a crossfade.
+- **Solution / Workaround**: `videoClipOverhang`, `checkVideoProject` and the ffmpeg export treat a dip as needing no handles, and `videoFrameAt` skips the hidden half of each clip for pictures and sound. Any new transition type must decide which side of the cut each clip plays on and update all of these together.
+
+### [core/video-editor] Snapping a Moved Clip Must Ignore the Edge That Did Not Snap
+
+- **Issue / Symptom**: Dragging a clip so its end lands near another clip's start did not snap; the clip stayed exactly where the pointer left it.
+- **Root Cause**: `planVideoClipDrag` snaps both the head and the tail and keeps whichever moved the clip less. An edge with no snap point nearby "moves" it by 0, so it always won.
+- **Solution / Workaround**: Only edges that actually snapped (a non-zero shift) compete; with none, the raw position is kept.
+
+### [svelte] A Local Named `state` Breaks `$state` Runes in the Same Component
+
+- **Issue / Symptom**: `svelte-check` reports "Cannot use 'state' as a store. 'state' needs to be an object with a subscribe method" on every `$state(...)` call in a component, although the runes work at runtime and in tests.
+- **Root Cause**: In a component with a top-level variable `state`, Svelte reads `$state` as a store auto-subscription to that variable instead of as the rune.
+- **Solution / Workaround**: Don't name a component-level variable `state` in a component that uses `$state`. The animation-editor panels call the controller snapshot `editor` (`const editor = $derived(view.current)`). Older components that never use the rune, such as `ShotTimeline.svelte`, can keep `state`.
+
+### [react|svelte/animation-editor] A Panel's Own Error Hides the Controller's Newer One
+
+- **Issue / Symptom**: A panel showed "Effect needs a target…" (its own validation message) after a later edit was refused by the controller, so the newer, real reason never appeared.
+- **Root Cause**: The panels show `localError ?? state.error`. A local message set before the refusal is never cleared, so it keeps winning.
+- **Solution / Workaround**: Store the local message with the controller's `revision` at the time and show it only while `state.revision` is unchanged. Any change to the editor, including a refusal (which bumps the revision), hands the line back to `state.error`.
+
+### [core/animation-editor] Flair Catalog Presets Hold Colours as `[r, g, b]` Arrays
+
+- **Issue / Symptom**: Scenes imported from real Flair catalog effects (`checkbox`, `bookmark`…) had presets whose values were arrays like `[0.13, 0.7, 0.4]`, although `MotionPreset.values` expects colour strings.
+- **Root Cause**: Flair's `EffectPreset.values` are `ControlValue`s. For colour controls these are channel arrays from 0 to 1, which Flair turns into hex with `rgbToHex`. The editor's mirror type assumed hex strings.
+- **Solution / Workaround**: `fromFlairVectorEffect` converts arrays the same way Flair does: each channel is clamped to 0–1, multiplied by 255, rounded and written as hex. `FlairVectorEffect.presets` now types both forms.
+
+### [core/agent-caret] Typing an Agent Edit Out Frame by Frame Breaks Undo Unless the Frames Stay Out of History
+
+- **Issue / Symptom**: Dispatching an agent's text a few characters at a time left one undo step per frame, or merged the frames with whatever the user typed in the same half-second.
+- **Root Cause**: `prosemirror-history` records every transaction unless it has `addToHistory: false`, and it groups adjacent ones by time (`newGroupDelay`, 500 ms). It has no way to group a set of transactions by their source.
+- **Solution / Workaround**: `typeAgentText` dispatches frames with `addToHistory: false` (and `TRACK_CHANGES_SKIP_META`). At the end it rolls them back by applying the frames' inverted steps, then dispatches the whole edit once with history. Both dispatches happen in the same tick, so the screen never shows the rollback. If someone else edited while the agent typed (the plugin marks its span `foreign`), it replaces the typed span with the original slice instead. Also, a transaction holds only one meta per plugin key, so the typed span and the caret are set in separate transactions.
+
+### [demo] An Agent Cursor Animated With `requestAnimationFrame` Hangs in a Hidden Tab
+
+- **Issue / Symptom**: A scripted agent run (the demo's "Ask the agent" panel) stopped partway with its buttons disabled when the page was in a background tab or a hidden preview pane.
+- **Root Cause**: The cursor glide awaited a promise resolved from a `requestAnimationFrame` loop, and browsers do not run animation frames for hidden documents, so the promise never settled and the next tool call never ran.
+- **Solution / Workaround**: Jump straight to the target when `document.hidden`, and also resolve the glide from a `setTimeout` a little after its duration (as Ursula's director skips animation in hidden tabs). Never make agent tool calls wait on animation frames alone.
+
 ### [react|svelte/chart] Inline SVG Colours Must Use `var(--x, fallback)`, Not shadcn's `hsl(var(--x))`
 
 - **Issue / Symptom**: A chart theme written as `hsl(var(--foreground))` drew black text and invisible grid lines in the demo.
@@ -1430,3 +1496,213 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: A chart exported with `exportDocx` and imported again has the same data, colours and options, but its series ids are `series-1`, `series-2`, … instead of the originals, and colours come back lower-case.
 - **Root Cause**: `chartToOoxml` writes a DrawingML `c:chartSpace`, which has no place for a series id; `chartFromOoxml` numbers series on read and writes colours as lower-case hex. The import also does not read the drawing's `wp:extent`, so the node's `width` / `height` fall back to the defaults.
 - **Solution / Workaround**: Compare round-tripped specs without series ids (as `tests/docx-export.test.ts` does), and do not key anything that must survive a Word round trip on series ids. Sparklines have no Word equivalent here and are exported as text (label, or `▁▅█` bars).
+
+### [react|svelte/canvas] Streamed Nodes Lose Their Edges in React Flow
+
+- **Issue / Symptom**: In the Mermaid streaming view, only the last edges to arrive were drawn; earlier ones vanished while nodes glided between layouts.
+- **Root Cause**: Every tween frame passes new node objects. Without `measured`, React Flow treats a changed node object as unmeasured and drops its handle bounds, and edges whose handles have no bounds are not rendered.
+- **Solution / Workaround**: Keep the sizes React Flow reports (`dimensions` changes in `onNodesChange`) and pass them back as `node.measured` (see `MermaidDiagramDemo.tsx`). Controlled editors that already apply `applyNodeChanges` are not affected.
+
+### [core/canvas] Moving One Node of an Auto-Laid Mermaid Diagram Shifted the Others
+
+- **Issue / Symptom**: Dragging one node of a diagram without a `%% @pixerate` layout moved every other node by the same offset.
+- **Root Cause**: `ensureDiagramLayout` keeps stored positions and aligns the auto layout of the rest on them (Ursula's blend). With one stored node, the whole auto layout is shifted to match it.
+- **Solution / Workaround**: Pin the current positions on the first move: `mermaidMovesFromCanvas(..., { stored: doc.meta.layout })` (the React / Svelte bindings do) and `createDiagramToolProvider(controller, { getPositions })` for agent moves.
+
+### [core/bridge] `http.close()` Hangs While a WebSocket Peer Stays Open
+
+- **Issue / Symptom**: Closing the tool bridge in tests hung until the test timed out.
+- **Root Cause**: Upgraded sockets are no longer HTTP connections, so `server.closeAllConnections()` does not touch them, but `server.close()` still waits for them. A peer that never answers a close frame keeps the server open.
+- **Solution / Workaround**: The bridge tracks every upgraded socket and destroys them on `close()`. A closed WebSocket is also destroyed one second after its close frame if the peer stays silent.
+
+### [svelte/tests] Node's WebSocket Fails Under jsdom ("event" must be an instance of Event)
+
+- **Issue / Symptom**: A Svelte test that opened a real WebSocket under the jsdom environment threw `The "event" argument must be an instance of Event`.
+- **Root Cause**: jsdom replaces the global `Event`, and Node's built-in WebSocket (undici) rejects events that are not its own. Under the `node` environment, the Svelte tests resolve the server build, where `$effect.root` does not run.
+- **Solution / Workaround**: Test the network path in core under the `node` environment (`tests/tool-bridge.test.ts`). Test runes with a fake socket passed as `options.WebSocket`.
+### [core/chart] Agent Cursors Never Disappeared After `linger`
+
+- **Issue / Symptom**: A `ChartDirector` cursor stayed on the chart after its command finished, although `linger` should hide it.
+- **Root Cause**: The queue stored `run.catch(...)` but the linger check compared the stored promise with `run`, which never matched, so the cursor was never removed.
+- **Solution / Workaround**: The per-actor queue now lives in `PerformanceQueue` (`animation/presence.ts`), shared by the chart and diagram directors, and compares against the promise it stored.
+
+### [core/tests] Undestroyed TipTap Editors Crash Later Test Files ("document is not defined")
+
+- **Issue / Symptom**: The full test run reported an unhandled `ReferenceError: document is not defined` from `prosemirror-view`'s `DOMObserver.flush`, attributed to `chart-node.test.ts`, while that file passed on its own.
+- **Root Cause**: Editors created in a test and never destroyed keep ProseMirror's DOM observer timers. Under load, a timer fires after the file's jsdom environment is torn down.
+- **Solution / Workaround**: Destroy every editor a test creates. `chart-node.test.ts` tracks them in an `afterEach`.
+
+### [core/chart] Don't Recover a Category Index From a Pixel
+
+- **Issue / Symptom**: With `xAxis.reverse`, stacked areas filled down to the wrong series' baseline.
+- **Root Cause**: The area layout turned each point's x pixel back into a category index (`(c - catStart) / band - 0.5`), which assumes categories run left to right.
+- **Solution / Workaround**: Points carry their index (`Pt.i`) and everything maps index → pixel through `catCenter(i)` (which handles reversing, and fractional indexes for trendlines). Never invert pixels to find data.
+
+### [core/chart] Straight Trendlines Need Sampling on a Log Axis
+
+- **Issue / Symptom**: A linear trendline vanished on a logarithmic value axis whenever one end of it went to 0 or below.
+- **Root Cause**: Linear fits were drawn from two samples (the ends). On a log axis the line is a curve, and an end with no pixel (value ≤ 0 → NaN) was dropped, leaving one point and no path.
+- **Solution / Workaround**: `drawTrendlines` samples linear fits like the others (200 steps) when either axis is logarithmic and drops samples with non-finite pixels. Value → pixel on log axes goes through `chartScaleToPixel`, which returns NaN for values ≤ 0; `ScaleInfo.px` clamps those to the lower end instead, so bars and area baselines still start at the bottom.
+
+### [core/chart] Property Tests: Series Names Can Be the Text "NaN"
+
+- **Issue / Symptom**: Adding new random steps to `chart-property.test.ts` made a seed fail with `NaN` in the SVG, although every mark was finite.
+- **Root Cause**: The extra steps shifted the random sequence; a paste then named a series `NaN` (junk cell text), which the SVG legend and `<desc>` write verbatim. The test searched the whole SVG for `NaN|Infinity`.
+- **Solution / Workaround**: Check geometry attributes only (`x=`, `y=`, `d=`, `cx=`, `width=`, …). When adding steps to the property test, expect other seeds to explore new paths and read the failure before assuming the new feature is at fault.
+
+### [core/chart] A Chart SVG Drawn to a Canvas Comes Out Black
+
+- **Issue / Symptom**: A PNG made from a live chart's SVG (or `chartToSvg` with `CSS_VARIABLE_CHART_THEME`) had black text, axes and grid lines, and a serif font, although the chart looked right on the page.
+- **Root Cause**: An SVG loaded through an `<img>` (which is how it reaches a canvas) is a separate document: the page's stylesheets and custom properties do not apply. `fill="var(--foreground, #0f172a)"` then has no `--foreground`, and some browsers treat `var()` in a presentation attribute as invalid outright, falling back to the initial paint (black). `currentColor` and `font-family="inherit"` have nothing to inherit either.
+- **Solution / Workaround**: Run `resolveChartSvgPaints(svg, { scope })` before drawing (`rasterizeChartSvg` does): it replaces `var()` with the custom property's computed value on `scope` (or the fallback), `currentColor` with the scope's colour and `inherit` fonts with its font, and drops attributes left empty. Pass the chart's container as `scope` when the theme is scoped to a wrapper (e.g. `.dark`). Agent tools render with `DEFAULT_CHART_THEME` (concrete colours), so their PNGs do not depend on the page. jsdom has no canvas: tests stub `getContext`, `toDataURL` and `Image`.
+
+### [core/chart] PowerPoint Slide Order Is Not Part-Name Order, and Excel Chartex Hides in `mc:AlternateContent`
+
+- **Issue / Symptom**: Reading `ppt/slides/slideN.xml` by name numbers charts on the wrong slide after slides were reordered; looking for `c:chart` only in an Excel drawing misses waterfall, funnel, treemap, histogram and box charts.
+- **Root Cause**: PowerPoint keeps part names when slides move; the order lives in `p:sldIdLst` in `presentation.xml`. Office 2016 charts are `cx:chart` references (chartex namespace, `chartEx` relationship) inside `mc:AlternateContent/mc:Choice`, with a picture or empty `mc:Fallback`.
+- **Solution / Workaround**: `extractPptxCharts` walks `p:sldId r:id` in order and numbers slides by position. `extractOfficeCharts` matches any `chart` element in the DrawingML chart, strict chart or chartex namespace (wherever it is nested) and dedupes by target part, so a fallback that also points at a chart is not read twice.
+
+### [core/animation-editor] A Segment's Value Is the Latest One *Started*, Not a Keyframe Track
+
+- **Issue / Symptom**: Treating an animation scene's compiled segments like keyframes (sorting by end, or blending overlapping segments) made entering nodes visible before they entered, and made the Flair export disagree with the editor's own frames.
+- **Root Cause**: The animation editor (and Flair's `svgFrame`) give a property the value of the latest segment to have started, holding its `from` before the first one. That is what hides a node until its `enter`. Segments of one command can start later than segments of a command compiled after it (an `enter: "draw"` fades its fill in at 60%), so tracks are not in start order while compiling.
+- **Solution / Workaround**: `activeSegment` scans the whole track for the latest start (ties go to the later segment) instead of breaking early, and `compileMotionScene` sorts each track by start once it is done. A `draw` on a stroke with no draw-on yet starts from 0, like an enter.
+
+### [core/animation-editor] Flair's Easings Are Cubic Polynomials, Not CSS Curves
+
+- **Issue / Symptom**: Exported Flair motion was sampled into dozens of 33 ms linear steps for plain moves.
+- **Root Cause**: Flair's `out` is `1 − (1 − t)³` and `in-out` the piecewise cubic, which differ from CSS `ease-out` / `ease-in-out` by up to ~7%. Separately, a move animates `x` and `y` as two segments, so an interval had two active segments and fell back to sampling.
+- **Solution / Workaround**: The editor's defaults are `MOTION_EASE_OUT` (`cubic-bezier(1/3, 1, 2/3, 1)`, exactly Flair's `out`) and `MOTION_EASE_IN_OUT` (within 1% of Flair's `in-out`). `flairEaseFor` matches a curve to a Flair name within 1%, and the exporter writes one change when every active segment spans the same interval with the same curve.
+
+### [core/animation-editor] Additive Layers Live on Their Own Tracks, Not on the Pose's
+
+- **Issue / Symptom**: A shake that started during a slide cut the slide off: the box jumped back and shook in place. Putting additive deltas on the same track as the pose counted them twice once a later move started from the composed value.
+- **Root Cause**: A track's value is its latest *started* segment, and every `from` is read from the track. An offset added in the same place leaks into the next segment's `from`.
+- **Solution / Workaround**:
+  - Segments with `blend: 'add'` go on `motionAddTrackKey(node, property)` and run from 0 (offsets, turns) or 1 (scales). `withMotionLayers` adds or multiplies every started layer onto the pose.
+  - Commands read `from` from the pose track only (`valueAt`), so layers never feed back into it.
+  - The overlap check skips add tracks. The Flair export puts layers on the node's transform channel: alone in a stretch they are one exact change, and overlapping the pose they are sampled (Flair has no layers).
+  - Emphasis defaults to `add`; `blend: 'replace'` gives the old take-over.
+
+### [core] The Entry-Isolation Test Reads `-import"` in a String as an Import
+
+- **Issue / Symptom**: `tests/entry-isolation.test.ts` reported a third-party package named `, artwork, shots, …` for `/animation-editor` after a default scene name `'flair-import'` was added.
+- **Root Cause**: The test scans the built files with a regex for `import … "x"`. Its lookbehind does not exclude `-`, so `"flair-import"` followed by a quote matches as an import of whatever text runs to the next quote.
+- **Solution / Workaround**: Don't end string literals in shipped code with `-import` or `-export` (`'from-flair'` is used instead). If such a name is needed, tighten the test's lookbehind to exclude `-`.
+
+### [core/animation-editor] Repeats Are Laid Out as Segments, and a Mirrored Cycle Runs Its Curve Backwards
+
+- **Issue / Symptom**: A mirrored repeat that swapped `from` and `to` played a different curve on the way back (an ease-in came back as an ease-in, not an ease-out). After a repeat, the next command started from the wrong value.
+- **Root Cause**: Swapping the ends keeps the ease running forward. Real time reversal shows at `u` what the forward run showed at `1 − u`.
+- **Solution / Workaround**:
+  - `compileRepeated` compiles one cycle, then copies its segments for each further cycle. Later commands read values through the same tracks, so they start where the repeat ended.
+  - A mirrored copy keeps its ends and sets `reverse`: `segmentProgress` evaluates the ease at `1 − u`.
+  - The Flair export writes such a copy from its value at the start to its value at the end, with `reverseCubicBezier` (`[1 − x2, 1 − y2, 1 − x1, 1 − y1]`). A reversed spring has no curve, so it is sampled.
+  - `offset` adds the cycle's change once per cycle, and only to numbers. Colours and shapes repeat like `loop`.
+  - `duration` is one cycle. `motionCommandDuration` includes every repeat, and `motionCycleDuration` is one.
+
+### [core/animation-editor] `match` Morphs Parts, So the `into` Group Stays Hidden and Its Extra Parts Never Show
+
+- **Issue / Symptom**: After a `match`, parts that only the end state has (a new avatar, say) were missing. The `into` group, if visible, sat on top of the target the whole time.
+- **Root Cause**: `match` morphs each part of the target into its partner (shape, paint and place, as `morph` does) and fades out parts with no partner. Nothing of `into` is drawn: it is a description of the end state.
+- **Solution / Workaround**: Keep `into` hidden (`visible: false`). For every part the end state adds, put a partner in the target with the same name or id, which can start tiny or with no fill. `check` reports `match-unpaired` (a note) for parts of `into` with no partner, and `match-self` when one group holds the other.
+
+### [core/animation-editor] Flair's Click Trigger Plays Nothing Until the First Click, Then Steps 0 and 1 Together
+
+- **Issue / Symptom**: The first click-trigger export put shot 0 on step 0, expecting it to play on load. In Flair's player (checked in a browser with 0.40) nothing played on load, and the first click played shots 0 and 1 together. A hover-triggered scene with several steps would play only its first.
+- **Root Cause**: A triggered `SvgPlayer` does not autoplay. It draws time 0 and waits. Each click (`advance`) records a step start at the current time and plays. Step 0 starts at time 0, which the first click is also at, so steps 0 and 1 start together. After the last step a click goes back to step 1. Hover, press and scroll ignore steps altogether.
+- **Solution / Workaround**:
+  - For `click`, `toFlairSvgMotion` puts shot n on step n + 1 (each change's `delay` measured from its shot's start) and leaves step 0 empty. Each click plays one shot, and after the last the first plays again. Other triggers keep everything on step 0.
+  - For a toggle, make the last shot put things back the way the scene starts.
+  - Importing a click effect (`clickSteps`) folds step 0 into the first shot, the way Flair plays it.
+  - The checks note a looped triggered scene (`trigger-loop`), a one-shot click scene (`click-one-shot`) and cues on click (`click-cue`, since clicks decide when shots start).
+  - Flair's `EffectDocument` has no trigger, so `toFlairEffectDocument` keeps the steps but plays through.
+
+### [core/animation-editor] Stroke Order Puts `drawEnd` on Each Path, and a Group's Own `drawEnd` Overrides It
+
+- **Issue / Symptom**: A group drawn on in sequence, then drawn again with a plain `draw` on the group, ignored the per-stroke timing. Checks warned "enters while it is already showing" for a group whose strokes were each still undrawn.
+- **Root Cause**: With `order`, `pace` or `comet`, `drawEnd` (and `drawStart`) segments go on each path, not on the group. Frames visit children first, then apply the group's own `drawEnd` to every path in it, replacing a child's trim.
+- **Solution / Workaround**:
+  - Draw a group either per stroke (with an order) or as a whole; don't mix them in one scene.
+  - `visibleAt` counts a group as drawn when its own `drawEnd` and at least one stroke's are above zero.
+  - The Flair export finds the owning node per path, so per-stroke windows export as exact `draw` changes. A comet's tail (`drawStart`) does not export, because Flair draws from the start of the path. Lottie writes it as the trim's start.
+
+### [core/animation-editor] Averaging Frames in SVG Needs `plus-lighter`, Not Stacked Opacity
+
+- **Issue / Symptom**: Motion blur made by stacking N frames at opacity 1/N came out too faint and tinted towards the first frame. A running average (layer k at 1/(k+1)) was right on an opaque background, but wrong wherever frames are transparent: a shape in only the first layer stayed fully opaque.
+- **Root Cause**: The normal "over" composite is not a sum, so N layers at 1/N do not average.
+- **Solution / Workaround**:
+  - `motionStageSvg` adds the moments with `mix-blend-mode: plus-lighter`, each at opacity 1/N, inside an `isolation: isolate` group. That is an exact average of premultiplied colour, transparency included.
+  - The background is drawn once underneath. Compositing is linear, so this equals the average of whole frames.
+  - Element ids stay on the last moment only.
+  - Exports (Flair, Lottie) and `motionFrameToSvg` stay sharp; the exporters note it.
+
+### [core/animation-editor] Emphasis Behaviours Must Match Flair Number for Number
+
+- **Issue / Symptom**: An exported wiggle or shake would play differently in Flair from the editor's preview, even though both "wiggle with seed 3".
+- **Root Cause**: Flair plays an `SvgAnimation.behavior` (Flair ≥ 0.38) by swinging every number in the value from `from` towards `to` by `behaviorProgress`. A wriggle wanders each number on its own noise channel, keyed by that number's position in the value. The editor can't import Flair (Flair depends on the editor), so it carries its own copy of the maths (`animation/behavior.ts`: SplitMix64 hashing, quintic value noise, FNV-1a seeds from ids).
+- **Solution / Workaround**:
+  - Keep `animation/behavior.ts` identical to Flair's `vector/motion.ts`, `scene/behavior.ts` and `time/noise.ts`. `tests/animation-behavior.test.ts` pins values computed by Flair's own code; recompute them when Flair changes.
+  - Emphasis segments store the peak in `to` (a pulse's swollen scale, a shake's far point) and a `behavior`. The exporter sends `to` with behaviours ignored (`trackValue(…, raw)`).
+  - `MotionSegment.index` must match the number's position in the exported transform `translate(dx dy) rotate(r cx cy) …`: x is 0, y is 1 and the angle is 2. If the transform string's order changes, change the indices too.
+  - A behaviour exports as one change only when every segment active over that interval shares the same span, ease and behaviour. Otherwise it is sampled.
+
+### [core/animation-editor] Reveal Clips Live on the Frame, Not in the Vector Model
+
+- **Issue / Symptom**: `wipe`, `iris` and `split` (Flair's `entrance.wipe` / `iris` / `split` and `exit.wipe`) need a clip path, but a frame is a `VectorDocument`, which has no clips. Clipping in document units would also disagree with Flair as soon as the node moves or scales.
+- **Root Cause**: Flair reveals through a `<clipPath clipPathUnits="objectBoundingBox">` on a wrapper group, so the clip is in the units of the wrapped element's current box (0–1 across it) and follows the element. Its padding (`stroke reach / box + 0.02`, at most 1) is a share of the box, and a box with no width or height (a lone straight line) cannot be clipped.
+- **Solution / Workaround**:
+  - The clip rides beside the document: `clipRect` (`[x, y, width, height]`) and `clipCircle` (`[cx, cy, r]`) tracks in unit-box space, rounded to 4 places like Flair's `clipParts`, and `MotionFrame.clips` by node id. `motionFrameToSvg` (and so both `<AnimationStage>`s) writes the wrapper through `vectorDocumentToSvg`'s `wrap` option. Anything that draws a `MotionFrame` without `motionFrameToSvg` must apply `clips` itself.
+  - The Flair export writes the same wrappers (`<id>--reveal`, `<id>--iris`, clip `…-clip`, shape `…-clip-shape`) and animates only the shape attributes that change. Clip wrappers sit outside the follow wrappers, so the box they measure is the node as it moves, as in the editor.
+  - A clip stays after its reveal (open, or shut after a wipe out). Every `enter` opens leftover clips at once, and a reveal sets opacity at its start, or a later fade in (whose `from` holds back to time 0) would hide it all along.
+  - A reveal of a node with no box fades instead, and `checkMotionScene` warns `reveal-no-box`.
+
+### [core/animation-editor] Follows Are Measured in the Parent's Units, and Offsets Turn With Them
+
+- **Issue / Symptom**: A follow was sampled into dozens of transform steps for Flair, and a follow inside a rotated or scaled group turned to the wrong angle.
+- **Root Cause**: Flair's `along` moves a wrapper by `translate(point) rotate(angle)` measured on the path's own `d` (`getPointAtLength`), in the units of the wrapper's parent. The editor measured length and angle in document space and added the follow to the node's own offset, so an offset made during an oriented follow did not turn with the path as it does under Flair's wrapper.
+- **Solution / Workaround**: `motionFollowRoute` maps the path into the node's parent's units and the follow is measured there. `motionNodeOffset` composes scale, turn and offset about the centre, then `translate(−centre)`, the path's turn and the point, the same as Flair's `<id>--follow` / `<id>--follow-centre` wrappers. The export writes the route as a `<defs>` path in those units (so a hidden path, or one in another group, still works) and one `along` per follow. Overshooting eases on an oriented follow are sampled: past the path's ends Flair measures no direction and stops turning.
+
+### [core/animation-editor] Back Eases Cannot Go to Flair on Colours or Opacity
+
+- **Issue / Symptom**: Writing an overshooting cubic-bezier (`ease-out-back`, `ease-in-back`, any curve with `y1` or `y2` outside 0–1) as a Flair `ease` tuple on a `fill` / `stroke` change would make Flair produce invalid hex colours, and on opacity or draw-on it would disagree with the editor.
+- **Root Cause**: Flair's `lerpAttr` blends hex channels with the eased progress unclamped, so a progress past 1 or below 0 gives channel values outside 0–255. The editor clamps opacity and draw-on to 0–1 when it evaluates them.
+- **Solution / Workaround**: `toFlairSvgMotion` only writes an overshooting curve on channels that extrapolate the same in both (transforms and the camera `view`); elsewhere it samples. Curves that stay in 0–1 (`ease-in`, `ease`, …) are written as tuples on every channel.
+
+### [svelte] `role="listitem"` on a `<button>` Is an a11y Warning
+
+- **Issue / Symptom**: `svelte-check` / vite-plugin-svelte warns `a11y_no_interactive_element_to_noninteractive_role` for a list of shot buttons.
+- **Root Cause**: Svelte refuses non-interactive roles on interactive elements.
+- **Solution / Workaround**: Wrap the buttons in `role="group"` with an `aria-label` and leave the buttons' own role alone (React matches it for parity).
+
+### [monorepo/release] A Release That Fails Part-Way Can Publish Versions Whose Changelog Lands Later
+
+- **Issue / Symptom**: After #152 merged, the Release run succeeded but printed "No unpublished projects to publish". npm's `@pixerate/editor@0.54.0` lacked `/animation-editor`, although `main`'s CHANGELOG for 0.54.0 lists it.
+- **Root Cause**: The Release run for #151 versioned and published the packages, then failed ("Some packages failed to publish") before it pushed its `chore(release)` commit. `main` kept the pending changesets, so the next run computed the same versions from them, folded in #152's changeset, and found 0.54.0 / 0.41.0 / 0.49.0 already on npm.
+- **Solution / Workaround**: After a failed Release, compare `npm view @pixerate/editor version` with `main`'s `packages/core/package.json`. If npm has a version that `main` has not committed yet, merge a new changeset so the next release bumps past it. Check what was published with `npm view @pixerate/editor@<version> exports`.
+- **It also happened from a race (#154 / #155)**: #154's release published 0.56.0, but #155 merged while that release was running, so pushing its version commit was rejected (non-fast-forward). The push step ended in `|| echo "Failed to push tags"`, so the run still showed green. #155's release then recomputed 0.56.0 and failed with `E409 Cannot publish over previously staged version`. An extra changeset doesn't help here: changesets merges every pending minor into one bump, giving the same version again. The fix was to commit #154's version bump on its own, keeping #155's changeset pending.
+- **Since then**: the release workflow pushes the version commit to `main` *before* publishing, rebasing onto merges that landed meanwhile and failing loudly if it can't. It also refuses to publish when a version `main` hasn't recorded is already on npm.
+
+### [core/canvas] Self-Registering Modules Are Dropped Because the Package Is `sideEffects: false`
+
+- **Issue / Symptom**: A module that only calls `registerFamilyScene(...)` at import time (and exports nothing anyone uses) works in tests but draws nothing in an app build: the family falls back to plain boxes.
+- **Root Cause**: `packages/core/package.json` declares `"sideEffects": false`, so consumers' bundlers may drop any module whose exports are unused, together with its top-level registration call. Family *layouts* are safe only because `diagram/registry.ts` imports each adapter module for its exported adapter, which keeps the module (and its `registerFamilyLayout` call).
+- **Solution / Workaround**: Family scenes export a function each (`pieScene`, `ganttScene`, …) and `canvas/mermaid/families/index.ts` collects them in `BUILTIN_FAMILY_SCENES`, which `scene.ts` imports to seed its registry. Keep new built-in registries static like this; reserve `register*` for hosts adding their own.
+
+### [core/diagram] Tests That Parse Mermaid With Titles Need the jsdom Environment
+
+- **Issue / Symptom**: Ported Ursula tests failed with `TypeError: DOMPurify.sanitize is not a function` inside Mermaid's `setDiagramTitle` (pie, quadrant, C4, gitGraph…), while flowchart tests passed.
+- **Root Cause**: Mermaid sanitises titles and labels with DOMPurify, which needs a `window`. Ursula ran every test under jsdom from its vitest config; core's config uses the Node environment, and flowchart parsing happens to skip the sanitiser.
+- **Solution / Workaround**: Start any test that calls Mermaid (`expectValidMermaid`, `mermaidDb`, `mermaidSummary`) with `// @vitest-environment jsdom`.
+
+### [core/diagram] `pie` Is No Longer a Text-Only Example
+
+- **Issue / Symptom**: Tests and examples that used `pie` to show "this family is kept as text" (validation refusals, `render_diagram` refusals, `<MermaidThumbnail fallback>`) started failing once the statement adapters were ported.
+- **Root Cause**: Pie, mindmap, quadrant, C4, architecture, sequence, gitGraph, Gantt, timeline, journey, XY and radar are now `editable` and drawn as scenes.
+- **Solution / Workaround**: Use `sankey-beta` (or block, packet, kanban, treemap) as the render-only example.
+
+### [core/animation-editor] lottie-web Ignores `hd: true` on Shape Groups
+
+- **Issue / Symptom**: A hidden node (`visible: false`, such as the demo's "arc" follow route) showed up in the Export Lottie preview, though the editor's own stage never draws it.
+- **Root Cause**: `toLottie` wrote each node as a `gr` group and marked hidden ones `hd: true`. lottie-web 5.12 honours `hd` only on paths, fills and strokes; for a `gr` it builds and draws the children anyway.
+- **Solution / Workaround**: Leave hidden nodes out of the file. Nothing in a Lottie file refers to another shape by id: follows and morphs are sampled into keyframes from the scene, so a hidden route or morph target is not needed in the output. To hide a shape you must keep, set its transform opacity to 0 instead of relying on `hd`.

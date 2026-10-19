@@ -15,6 +15,7 @@ import {
   usePromptEditor,
   useFileImport,
   useAgentToolProvider,
+  EditorContent,
   type UseFileImportResult,
 } from "../src";
 import { buildDocx, p as docxParagraph, r as docxRun } from "../../core/tests/helpers/zip-writer";
@@ -250,5 +251,33 @@ describe("useAgentToolProvider", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("agent caret in a mounted editor", () => {
+  it("draws the agent's caret where the rich-text tools write, as one undo step", async () => {
+    const registry = new ToolRegistry();
+    let mounted: Editor | null = null;
+    function DocEditor() {
+      const editor = useEditor({ immediatelyRender: true, content: "<p>Hello brave world</p>" });
+      mounted = editor;
+      const provider = useMemo(
+        () =>
+          editor
+            ? createRichTextToolProvider(editor, { id: "doc", presence: { name: "Claude", typing: { charsPerSecond: Infinity } } })
+            : null,
+        [editor]
+      );
+      useAgentToolProvider(registry, provider);
+      return <EditorContent editor={editor} />;
+    }
+    await act(async () => root.render(<DocEditor />));
+    const result = await act(async () => registry.callTool("replace_range", { from: 7, to: 12, text: "bold" }));
+    expect(result.structuredContent).toMatchObject({ range: { from: 7, to: 11 } });
+    const caret = container.querySelector(".ProseMirror .pe-agent-caret");
+    expect(caret?.querySelector(".pe-agent-caret-label")?.textContent).toBe("Claude");
+    expect(container.querySelector(".pe-agent-changed")?.textContent).toBe("bold");
+    mounted!.commands.undo();
+    expect(mounted!.getText()).toBe("Hello brave world");
   });
 });

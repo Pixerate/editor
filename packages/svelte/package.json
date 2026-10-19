@@ -1,6 +1,6 @@
 {
   "name": "@pixerate/editor-svelte",
-  "version": "0.44.1",
+  "version": "0.57.1",
   "description": "Svelte bindings and prompt/rich-text components for @pixerate/editor",
   "author": "Pixerate",
   "license": "MIT",
@@ -63,10 +63,20 @@
       "svelte": "./dist/vector/index.js",
       "default": "./dist/vector/index.js"
     },
+    "./animation-editor": {
+      "types": "./dist/animation-editor/index.d.ts",
+      "svelte": "./dist/animation-editor/index.js",
+      "default": "./dist/animation-editor/index.js"
+    },
     "./chart": {
       "types": "./dist/chart/index.d.ts",
       "svelte": "./dist/chart/index.js",
       "default": "./dist/chart/index.js"
+    },
+    "./video-editor": {
+      "types": "./dist/video-editor/index.d.ts",
+      "svelte": "./dist/video-editor/index.js",
+      "default": "./dist/video-editor/index.js"
     },
     "./package.json": "./package.json"
   },
@@ -99,8 +109,14 @@
       "vector": [
         "./dist/vector/index.d.ts"
       ],
+      "animation-editor": [
+        "./dist/animation-editor/index.d.ts"
+      ],
       "chart": [
         "./dist/chart/index.d.ts"
+      ],
+      "video-editor": [
+        "./dist/video-editor/index.d.ts"
       ]
     }
   },
