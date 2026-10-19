@@ -9,5 +9,7 @@
 
 export * from './brush';
 export * from './mixer';
+export * from './exchange';
+export * from './blending';
 export * from './pigment';
 export * from './pigment-tools';

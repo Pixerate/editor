@@ -54,7 +54,7 @@ export interface SerializedPaintDocument {
   [extension: string]: unknown;
 }
 
-const KNOWN = new Set(['format', 'version', 'width', 'height', 'dpi', 'paper', 'layers', 'assets', 'activeLayerId', 'strokes', 'guides', 'swatches']);
+const KNOWN = new Set(['format', 'version', 'width', 'height', 'dpi', 'paper', 'layers', 'assets', 'activeLayerId', 'strokes', 'guides', 'swatches', 'mixingPad']);
 
 /** Fields of a saved document this version does not read, kept for writing back. */
 export function documentExtensions(raw: Record<string, unknown>): PaintDocumentExtensions {
@@ -71,6 +71,8 @@ export interface SerializeOptions {
   /** Painting guides (symmetry, perspective, tracing and reference images as PNG data URLs). */
   guides?: unknown;
   swatches?: unknown;
+  /** The mixing pad: `{ current?: png data URL, saved: [{ id, name, png }] }`. */
+  mixingPad?: unknown;
 }
 
 function header(state: PaintDocumentState, options: SerializeOptions): Omit<SerializedPaintDocument, 'layers' | 'assets'> {
@@ -87,6 +89,7 @@ function header(state: PaintDocumentState, options: SerializeOptions): Omit<Seri
   if (options.strokes !== false && state.strokes.length) out.strokes = JSON.parse(JSON.stringify(state.strokes));
   if (options.guides !== undefined) out.guides = JSON.parse(JSON.stringify(options.guides));
   if (options.swatches !== undefined) out.swatches = JSON.parse(JSON.stringify(options.swatches));
+  if (options.mixingPad !== undefined) (out as Record<string, unknown>).mixingPad = JSON.parse(JSON.stringify(options.mixingPad));
   return out;
 }
 
@@ -108,6 +111,8 @@ export interface LoadedPaintDocument {
   /** The saved guides and swatches, as stored (the controller validates them). */
   guides?: unknown;
   swatches?: unknown;
+  /** The saved mixing pad, as stored (the controller validates it). */
+  mixingPad?: unknown;
   /** What could not be read (the rest still loads). */
   problems: string[];
 }
@@ -153,7 +158,7 @@ export function deserializePaintDocument(raw: unknown): LoadedPaintDocument {
   const layers = paintLayersOnly(deserializeLayers(r.layers, { assets, problems }), problems);
   const wanted = typeof r.activeLayerId === 'string' ? r.activeLayerId : null;
   const activeLayerId = wanted && findLayer(layers, wanted) ? wanted : (flattenLayers(layers).filter((l) => l.type === 'pixel').pop()?.id ?? null);
-  return { state: { canvas, paper, layers, activeLayerId, strokes: readStrokes(r.strokes, problems) }, extensions: documentExtensions(r), guides: r.guides, swatches: r.swatches, problems };
+  return { state: { canvas, paper, layers, activeLayerId, strokes: readStrokes(r.strokes, problems) }, extensions: documentExtensions(r), guides: r.guides, swatches: r.swatches, mixingPad: r.mixingPad, problems };
 }
 
 /** Reads a saved document whose assets may be external references in `store`. */

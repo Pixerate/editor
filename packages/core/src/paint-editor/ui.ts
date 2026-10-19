@@ -9,7 +9,9 @@
  * - Guide overlays as line segments, and the slider tables of the brush and paper panels.
  */
 
+import type { MixerLoad } from '../paint/exchange';
 import { BLEND_MODES, type BlendModeInfo } from '../raster/blend';
+import type { PaintBrush, PaintBrushInput } from './brushes';
 import { TILE, type RasterRect } from '../raster/surface';
 import type { PaintEditorController } from './controller';
 import type { PenPoint } from './engine';
@@ -388,3 +390,98 @@ export const BLEND_MENU_GROUPS: readonly BlendMenuGroup[] = [
   { label: 'Standard', modes: BLEND_MODES.filter((m) => !m.painterly && m.id !== 'pigment') },
   { label: 'Paint', modes: BLEND_MODES.filter((m) => m.painterly || m.id === 'pigment') },
 ];
+
+/** The engine-specific part of the brush panel: which sliders and toggles the active brush has. */
+export interface BrushEngineControls {
+  /** Section heading. */
+  title: string;
+  sliders: readonly SliderControl[];
+  /** Where the RGB / pigment choice is stored, or `null` when the engine has none. */
+  mixingPath: 'behavior.mixing' | 'blender.mixing' | 'smudge.mixing' | null;
+  /** The dirty-brush toggle (`behavior.dirty`). */
+  dirty: boolean;
+  /** The multi-colour controls (`behavior.multicolor`). */
+  multicolor: boolean;
+  /** Load / Clean buttons and a swatch of what the brush carries. */
+  load: boolean;
+}
+
+const PICKUP_SLIDERS: readonly SliderControl[] = [
+  { path: 'behavior.pickup', label: 'Pick-up', min: 0, max: 1, step: 0.01 },
+  { path: 'behavior.mix', label: 'Mix', min: 0, max: 1, step: 0.01 },
+];
+
+/**
+ * The controls the active brush's engine adds to the brush panel (`null` for the eraser):
+ * blender strength and blend distance; smudge strength and length; the Mixer Brush's pick-up,
+ * mix and load; a dab brush's pick-up and mix ratios. Every engine but the eraser has an RGB /
+ * pigment choice; dab and mixer brushes also have the dirty and multi-colour controls. Pick-up
+ * and mix always go through `behavior`, which keeps a Mixer Brush's `mixer` block in sync.
+ */
+export function brushEngineControls(brush: Pick<PaintBrush, 'engine'>): BrushEngineControls | null {
+  switch (brush.engine) {
+    case 'blender':
+      return {
+        title: 'Blender',
+        sliders: [
+          { path: 'blender.strength', label: 'Strength', min: 0, max: 1, step: 0.01 },
+          { path: 'blender.distance', label: 'Blend distance', min: 0, max: 1, step: 0.01 },
+        ],
+        mixingPath: 'blender.mixing',
+        dirty: false,
+        multicolor: false,
+        load: false,
+      };
+    case 'smudge':
+      return {
+        title: 'Smudge',
+        sliders: [
+          { path: 'smudge.strength', label: 'Strength', min: 0, max: 1, step: 0.01 },
+          { path: 'smudge.length', label: 'Length', min: 0, max: 1, step: 0.01 },
+        ],
+        mixingPath: 'smudge.mixing',
+        dirty: false,
+        multicolor: false,
+        load: false,
+      };
+    case 'mixer':
+      return { title: 'Mixer Brush', sliders: [...PICKUP_SLIDERS, { path: 'mixer.load', label: 'Load', min: 0, max: 1, step: 0.01 }], mixingPath: 'behavior.mixing', dirty: true, multicolor: true, load: true };
+    case 'dab':
+      return { title: 'Paint behaviour', sliders: PICKUP_SLIDERS, mixingPath: 'behavior.mixing', dirty: true, multicolor: true, load: true };
+    default:
+      return null;
+  }
+}
+
+/** The multi-colour sliders for a mode: softness, and dabs per colour in `dab` mode. */
+export function multiColorSliders(mode: string): readonly SliderControl[] {
+  if (mode === 'off') return [];
+  const soft: SliderControl = { path: 'behavior.multicolor.softness', label: 'Colour softness', min: 0, max: 1, step: 0.01 };
+  return mode === 'dab' ? [soft, { path: 'behavior.multicolor.length', label: 'Dabs per colour', min: 1, max: 100, step: 1 }] : [soft];
+}
+
+/** A brush change setting `path` (e.g. `smudge.mixing`, `behavior.dirty`) to any value, keeping the rest of its block. */
+export function patchBrushValue(brush: PaintBrush, path: string, value: unknown): PaintBrushInput {
+  const set = (obj: Record<string, unknown>, keys: string[]): Record<string, unknown> => {
+    const [head, ...rest] = keys;
+    if (!rest.length) return { ...obj, [head]: value };
+    return { ...obj, [head]: set((obj[head] as Record<string, unknown>) ?? {}, rest) };
+  };
+  const [head, ...rest] = path.split('.');
+  if (!rest.length) return { [head]: value } as PaintBrushInput;
+  return { [head]: set({ ...((brush as unknown as Record<string, Record<string, unknown>>)[head] ?? {}) }, rest) } as PaintBrushInput;
+}
+
+/** What the brush carries (picked-up paint, else loaded paint) as #rrggbb, or `null` when it is clean and empty. */
+export function brushLoadColor(load: MixerLoad): string | null {
+  const c = load.pickup ?? load.reservoir;
+  return c ? rgbToHexColor(Math.round(c[0] * 255), Math.round(c[1] * 255), Math.round(c[2] * 255)) : null;
+}
+
+/** Sample sizes (square, in pad pixels) for picking from the mixing pad. */
+export const PAD_SAMPLE_SIZES: readonly number[] = [1, 3, 5, 9, 15];
+
+/** The averaging radius `mixingPadPick` takes for a sample size: 1 → 0, 3 → 1, 5 → 2 … */
+export function padSampleRadius(size: number): number {
+  return Math.max(0, Math.floor((size - 1) / 2));
+}

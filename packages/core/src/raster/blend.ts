@@ -555,6 +555,14 @@ const pigmentCache = new Map<number, Pigment>();
 /** About 3 MB of spectra; the cache starts over when it fills (a photo can hold millions of colours). */
 const PIGMENT_CACHE_MAX = 16384;
 
+/**
+ * The prepared pigment (K/S spectrum) of an 8-bit colour, from the cache every 8-bit pigment
+ * composite shares. Read-only: do not retarget it with `setPigmentColor`.
+ */
+export function pigment8(r: number, g: number, b: number): Pigment {
+  return cachedPigment(r, g, b);
+}
+
 function cachedPigment(r: number, g: number, b: number): Pigment {
   const key = (r << 16) | (g << 8) | b;
   let p = pigmentCache.get(key);
