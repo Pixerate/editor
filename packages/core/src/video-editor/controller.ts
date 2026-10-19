@@ -8,6 +8,7 @@ import { checkVideoProject, type VideoIssue } from './check.js';
 import { applyVideoEdits, type VideoEdit, type VideoEditResult } from './edit.js';
 import { videoFrameAt, type VideoFrame } from './evaluate.js';
 import { toVideoEdl, toVideoFfmpeg, toVideoLoudnessMeasure, type VideoEdlOptions, type VideoFfmpegExport, type VideoFfmpegOptions } from './export.js';
+import { VideoLutCache, type VideoLutLoader } from './lut.js';
 import { createVideoProject, parseVideoProject } from './parse.js';
 import { VideoPreviewPixels } from './scopes.js';
 import { videoProjectSvg, type VideoSvgOptions } from './render.js';
@@ -29,6 +30,8 @@ export interface VideoEditorOptions {
 	 * loader for one (default: fetch and decode each asset's `src` with Web Audio, in a browser).
 	 */
 	audioPeaks?: VideoAudioPeaksCache | VideoAudioPeaksLoader;
+	/** Where grades' LUT files (`.cube`) come from: a shared cache, or a loader (default: `fetch` each `src`). */
+	luts?: VideoLutCache | VideoLutLoader;
 }
 
 /** A snapshot of the editor. The same object is returned until something changes. */
@@ -72,6 +75,8 @@ export class VideoEditorController {
 	readonly audioPeaks: VideoAudioPeaksCache;
 	/** The pixels the preview last drew, for scopes and `get_video_scopes` (a `VideoPreviewEngine` fills it). */
 	readonly previewPixels = new VideoPreviewPixels();
+	/** Grades' LUTs, loaded on demand for the preview, SVG frames and agents. */
+	readonly luts: VideoLutCache;
 	private project: VideoProject;
 	private issues: VideoIssue[];
 	private selection: string[] = [];
@@ -87,6 +92,7 @@ export class VideoEditorController {
 	constructor(options: VideoEditorOptions = {}) {
 		this.history = options.history ?? new HistoryManager();
 		this.audioPeaks = options.audioPeaks instanceof VideoAudioPeaksCache ? options.audioPeaks : new VideoAudioPeaksCache(options.audioPeaks);
+		this.luts = options.luts instanceof VideoLutCache ? options.luts : new VideoLutCache(options.luts);
 		this.project = options.project ? parseVideoProject(options.project) : createVideoProject();
 		this.issues = checkVideoProject(this.project);
 		this.readOnly = options.readOnly ?? false;
@@ -325,7 +331,7 @@ export class VideoEditorController {
 
 	/** The frame at `time` (default: the playhead) as SVG. */
 	toSvg(time = this.player.currentTime, options: VideoSvgOptions = {}): string {
-		return videoProjectSvg(this.project, time, options);
+		return videoProjectSvg(this.project, time, { lutFor: (src) => this.luts.peek(src), ...options });
 	}
 
 	/** The project as an ffmpeg command. */

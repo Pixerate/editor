@@ -17,6 +17,7 @@ export * from './edit.js';
 export * from './evaluate.js';
 export * from './audio.js';
 export * from './grade.js';
+export * from './lut.js';
 export * from './scopes.js';
 export * from './clip-animation.js';
 export * from './transcript.js';

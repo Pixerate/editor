@@ -338,6 +338,8 @@ export type ImageEditorTool =
   | 'text'
   | 'watermark';
 
+export type ImageEditorFit = 'contain' | 'margin';
+
 export interface ImageEditorState {
   sourceUrl: string | null;
   /** Canvas (document) size in pixels: the source image's natural size. */
@@ -359,6 +361,8 @@ export interface ImageEditorState {
   zoom: number;
   pan: ImagePoint;
   isOriginalCompared: boolean;
+  /** Viewport fit mode: 'contain' scales to full viewport bounds; 'margin' scales to 85% with 1.0 cap (default). */
+  fit?: ImageEditorFit;
   /**
    * The active selection (8-bit coverage over the source image), or null/missing when nothing is
    * selected. Recorded in undo history and saved as `selection` in `toJSON()`.
@@ -430,6 +434,8 @@ export interface ImageEditorOptions {
    * current state are free). The oldest steps are dropped first. Default 512 MiB.
    */
   maxHistoryBytes?: number;
+  /** Viewport fit mode: 'contain' scales to full viewport bounds; 'margin' scales to 85% with 1.0 cap (default). */
+  fit?: ImageEditorFit;
 }
 
 export interface InpaintOptions {
