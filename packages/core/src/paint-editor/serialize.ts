@@ -54,7 +54,7 @@ export interface SerializedPaintDocument {
   [extension: string]: unknown;
 }
 
-const KNOWN = new Set(['format', 'version', 'width', 'height', 'dpi', 'paper', 'layers', 'assets', 'activeLayerId', 'strokes']);
+const KNOWN = new Set(['format', 'version', 'width', 'height', 'dpi', 'paper', 'layers', 'assets', 'activeLayerId', 'strokes', 'guides', 'swatches']);
 
 /** Fields of a saved document this version does not read, kept for writing back. */
 export function documentExtensions(raw: Record<string, unknown>): PaintDocumentExtensions {
@@ -68,6 +68,9 @@ export interface SerializeOptions {
   strokes?: boolean;
   /** Later-phase fields to write as they were read. */
   extensions?: PaintDocumentExtensions;
+  /** Painting guides (symmetry, perspective, tracing and reference images as PNG data URLs). */
+  guides?: unknown;
+  swatches?: unknown;
 }
 
 function header(state: PaintDocumentState, options: SerializeOptions): Omit<SerializedPaintDocument, 'layers' | 'assets'> {
@@ -82,6 +85,8 @@ function header(state: PaintDocumentState, options: SerializeOptions): Omit<Seri
     activeLayerId: state.activeLayerId,
   };
   if (options.strokes !== false && state.strokes.length) out.strokes = JSON.parse(JSON.stringify(state.strokes));
+  if (options.guides !== undefined) out.guides = JSON.parse(JSON.stringify(options.guides));
+  if (options.swatches !== undefined) out.swatches = JSON.parse(JSON.stringify(options.swatches));
   return out;
 }
 
@@ -100,6 +105,9 @@ export async function serializePaintDocumentExternal(state: PaintDocumentState, 
 export interface LoadedPaintDocument {
   state: PaintDocumentState;
   extensions: PaintDocumentExtensions;
+  /** The saved guides and swatches, as stored (the controller validates them). */
+  guides?: unknown;
+  swatches?: unknown;
   /** What could not be read (the rest still loads). */
   problems: string[];
 }
@@ -145,7 +153,7 @@ export function deserializePaintDocument(raw: unknown): LoadedPaintDocument {
   const layers = paintLayersOnly(deserializeLayers(r.layers, { assets, problems }), problems);
   const wanted = typeof r.activeLayerId === 'string' ? r.activeLayerId : null;
   const activeLayerId = wanted && findLayer(layers, wanted) ? wanted : (flattenLayers(layers).filter((l) => l.type === 'pixel').pop()?.id ?? null);
-  return { state: { canvas, paper, layers, activeLayerId, strokes: readStrokes(r.strokes, problems) }, extensions: documentExtensions(r), problems };
+  return { state: { canvas, paper, layers, activeLayerId, strokes: readStrokes(r.strokes, problems) }, extensions: documentExtensions(r), guides: r.guides, swatches: r.swatches, problems };
 }
 
 /** Reads a saved document whose assets may be external references in `store`. */

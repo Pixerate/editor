@@ -1,6 +1,6 @@
 ---
 name: pixerate-paint-editor
-description: How to make a picture in the Pixerate paint editor (natural media in the spirit of Painter and Rebelle) through its agent tools - canvas and paper (generated grain, depth, colour, families from cold pressed watercolour to canvas and gesso), layers, dry-media brushes (pencil, pastel, charcoal, airbrush, marker, ink, erasers, blender, smudge, Mixer Brush) with pressure, tilt, barrel rotation and velocity, the brush library, strokes as data that replay and vary, pigment colour mixing, previews and PNG, JPEG, WebP, PSD and JSON output. Use when asked to paint, sketch, draw, shade, block in, texture a layer with paper grain, mix paint colours, vary or repeat strokes, or when paint_stroke, set_paper, list_brushes, replay_strokes, fill_layer or mix_colors are available.
+description: How to make a picture in the Pixerate paint editor (natural media in the spirit of Painter and Rebelle) through its agent tools - canvas and paper (generated grain, depth, colour, families from cold pressed watercolour to canvas and gesso), layers, dry-media brushes (pencil, pastel, charcoal, airbrush, marker, ink, erasers, blender, smudge, Mixer Brush) with pressure, tilt, barrel rotation and velocity, the brush library, strokes as data that replay and vary, mirror and kaleidoscope painting, perspective guides, tracing and reference images, colour harmonies, swatches, a mixing pad and pigment mixing, previews and PNG, JPEG, WebP, PSD and JSON output. Use when asked to paint, sketch, draw, shade, block in, texture with paper grain, mix colours, paint symmetric or in perspective, trace an image, or when paint_stroke, set_paper, replay_strokes, set_symmetry or mix_colors are available.
 ---
 
 # Paint editor
@@ -21,6 +21,10 @@ is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y do
 - **Strokes are data.** Every stroke is recorded (brush, colour, raw points, seed, symmetry
   copies) and gets a `strokeId`. `replay_strokes` paints recorded strokes again, exactly or
   varied. That is the main way an agent should make many similar marks.
+- **Guides** are editor state saved with the document: a symmetry guide makes every stroke paint
+  its mirror or kaleidoscope copies (one stroke), a perspective guide snaps strokes to lines
+  towards one to three vanishing points, a tracing image sits under the paint (never exported)
+  and can supply stroke colours, and reference images float beside the canvas to pick from.
 - **Undo**: one tool call that changes the painting is one undo step (`undo_paint`). Brush,
   colour, view, hand and the Mixer Brush load are editor state, not undo steps.
 
@@ -36,17 +40,25 @@ is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y do
    `fill_layer` gives a ground colour (flat) or a tonal layer that catches the grain
    (`grain` 0.6..1, `pressure` 0.2..0.6). Paint large masses with a big soft pastel or airbrush
    in a few long `paint_stroke`s rather than many small ones.
-4. **Mix colours before painting.** `mix_colors` predicts what paints mixed in given parts look
-   like (Kubelka-Munk: blue and yellow make green, white tints rather than greys). Use the result
-   as the stroke `color`. `set_color` makes it the default.
+4. **Plan and mix colours before painting.** `color_harmony` gives a palette around a key colour
+   (on the painter's red-yellow-blue wheel by default). `mix_colors` predicts what paints mixed
+   in given parts look like (Kubelka-Munk: blue and yellow make green, white tints rather than
+   greys); the mixing pad (`mixing_pad_stroke`, `pick_mixing_pad_color`) mixes by hand with a
+   palette knife. Keep chosen colours as swatches (`add_swatch`). Use the result as the stroke
+   `color`; `set_color` makes it the default.
 5. **Refine** with smaller brushes on new layers: pencil and ink for line, charcoal for value,
    blender or smudge to soften edges, the Mixer Brush to blend wet into wet.
-6. **Repeat and vary instead of drawing every mark.** Paint one good stroke, then
+6. **Let the guides multiply your marks.** `set_symmetry` (mirror for faces and vases,
+   kaleidoscope for mandalas and ornaments) paints every copy from one stroke;
+   `set_perspective_guide` plus `paint_stroke` with `snapToPerspective` lays converging lines for
+   buildings and roads. To copy an image's composition and colours, `set_tracing_image` with
+   `sampleColors` and paint over it.
+7. **Repeat and vary instead of drawing every mark.** Paint one good stroke, then
    `replay_strokes` it with `dx` / `dy`, `rotate`, `scale`, `flipX`, `color`, `brushId` and
    `repeat` for hatching, grass, foliage, rows, fans or spirals, in one undo step.
-7. **Check** with `render_preview` after each block of work, not after each stroke.
+8. **Check** with `render_preview` after each block of work, not after each stroke.
    `pick_color` reads exact values. Undo what made it worse.
-8. **Deliver**: `export_image` (PNG, or JPEG / WebP in a browser), `export_psd` for Photoshop,
+9. **Deliver**: `export_image` (PNG, or JPEG / WebP in a browser), `export_psd` for Photoshop,
    `save_document` to keep the painting with its strokes.
 
 ## Best practices
@@ -123,16 +135,40 @@ is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y do
 | `get_mixer_brush` | Read what the Mixer Brush carries: `reservoir`, `amount` left, `pickup`. |
 | `load_mixer_brush` | Fill the Mixer Brush reservoir with a colour (keeps its pickup). |
 | `clean_mixer_brush` | Empty the pickup well (and with `emptyReservoir` the paint). |
+| `color_harmony` | Get a harmony (`kind`: complementary, split-complementary, analogous, triadic, tetradic, square, monochromatic) around `color` (default the paint colour), on the `ryb` painter's wheel (default; red ↔ green) or the `rgb` wheel (red ↔ cyan), `spread` degrees for analogous and split. Changes nothing. |
+| `list_swatches` | Read the swatches (index, colour, name). |
+| `add_swatch` | Keep a colour as a swatch (saved with the document). |
+| `remove_swatch` | Remove a swatch by `index`. |
+| `mixing_pad_stroke` | Paint on the 360 × 220 mixing pad (pad px): `tool` paint lays `color` with a pigment Mixer Brush, `knife` smears what is there and mixes it as paint. Scratch space, not the painting, no undo. |
+| `pick_mixing_pad_color` | Read the mix on the pad at `x`, `y` (averaged over `radius`, default 3); `setColor` makes it the paint colour. Null where the pad is bare. |
+| `clear_mixing_pad` | Wipe the pad. |
+| `render_mixing_pad` | See the pad as a PNG. |
 
 ### Painting and strokes
 
 | Tool | Use |
 | --- | --- |
-| `paint_stroke` | Paint one stroke through `points` (document px; `pressure` 0..1, `t` ms, `tiltX` / `tiltY` or `altitude` / `azimuth`, `twist`) with `brushId` (default the active brush), optional per-stroke `brush` changes, `color`, `layerId`, `seed`. Returns `layerId`, `bounds`, `dabs`, `strokeId` and for the mixer engine its `mixerLoad`. Refused on locked, hidden or group layers, with the fix in the message. |
+| `paint_stroke` | Paint one stroke through `points` (document px; `pressure` 0..1, `t` ms, `tiltX` / `tiltY` or `altitude` / `azimuth`, `twist`) with `brushId` (default the active brush), optional per-stroke `brush` changes, `color`, `layerId`, `seed`, `snapToPerspective`. The symmetry guide adds its copies; a sampling tracing image supplies the colour when `color` is missing. Returns `layerId`, `bounds`, `dabs`, `strokeId` and for the mixer engine its `mixerLoad`. Refused on locked, hidden or group layers, with the fix in the message. |
 | `list_strokes` | Read the recorded strokes, oldest first (default the last 100): id, layer, brush, colour, point count, seed, bounds. With `ids`, their points too. |
 | `replay_strokes` | Paint recorded `strokeIds` again: exactly, or varied by `dx` / `dy` (px), `rotate` (degrees clockwise), `scale` (brush size follows), `flipX`, `origin`, `pressureScale`, `color`, `brushId`, `layerId`, `repeat` (each copy applies the variation again). One undo step. Returns the new stroke ids, bounds and layers. |
 | `undo_paint` | Undo the last step. Returns what was undone and what is next. |
 | `redo_paint` | Redo the step just undone. |
+
+### Guides
+
+| Tool | Use |
+| --- | --- |
+| `get_guides` | Read the symmetry guide (with how many copies a stroke paints), the perspective guide, the tracing image and the reference images. |
+| `set_symmetry` | `mode` off, vertical, horizontal, dual, diagonal or kaleidoscope (`segments` 2..32, `mirror`), `center` (document px, default the canvas centre), `rotation`. Every stroke after it paints its copies as one stroke; recorded strokes keep their copies when replayed. |
+| `set_perspective_guide` | One to three vanishing `points` (document px, may be off the canvas), `enabled`, `snap`. Pen strokes snap to the guide line through their start that best matches their direction (one-point also keeps horizontals and verticals, two-point verticals); `paint_stroke` snaps only with `snapToPerspective`. |
+| `set_tracing_image` | Put a PNG (`png` base64 or data URL) under the paint, fitted to the canvas or at `rect`, at `opacity` (default 0.35), with `sampleColors` to take stroke colours from it. View only: never exported. |
+| `update_tracing_image` | Change the tracing image's `opacity`, `visible`, `sampleColors` or `rect`. |
+| `clear_tracing_image` | Remove the tracing image. |
+| `add_reference_image` | Add a floating reference PNG (`name`, panel `x`, `y`, `displayWidth`). Returns its id and size. |
+| `list_reference_images` | Read the reference images: id, name, size, placement, visibility. |
+| `update_reference_image` | Move, resize, rename, show or hide a reference panel. |
+| `remove_reference_image` | Remove a reference image. |
+| `pick_reference_color` | Read a reference image's colour at its own pixel `x`, `y`; `setColor` makes it the paint colour. |
 
 ### View, input and output
 
@@ -158,5 +194,10 @@ is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y do
   and two strokes on the same spot catch the same peaks.
 - **Big soft brushes at full flow look flat.** Lower `flow` (airbrush 0.05..0.15) and build up.
 - **JPEG and WebP need a browser**; in Node use PNG. Exports never upscale (`scale` ≤ 1).
+- **Symmetry stays on until you turn it off.** Set `mode: "off"` after the symmetric part, or
+  every later stroke is mirrored too.
+- **The tracing image is not in exports or previews of the painting alone**; paint over it on a
+  layer. Turn `sampleColors` off before painting your own colours, or strokes without `color`
+  keep taking its colours.
 - **Recorded strokes are kept in saved documents**; `save_document` with `strokes: false` when
   only the pixels matter (smaller JSON).

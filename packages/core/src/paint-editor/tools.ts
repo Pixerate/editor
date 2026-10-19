@@ -16,6 +16,7 @@ import type { PaintEditorController } from './controller';
 import type { PenPoint } from './engine';
 import { GRAIN_PATTERNS, PAPER_FAMILIES, PAPER_LIBRARY } from './paper';
 import { MAX_ZOOM, MIN_ZOOM } from './view';
+import { createPaintGuideTools } from './guide-tools';
 
 const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
 const WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } as const;
@@ -616,7 +617,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
     name: 'paint_stroke',
     title: 'Paint a brush stroke',
     description:
-      'Paints one stroke through points (document pixels, with optional pressure, time, tilt and barrel rotation) on a pixel layer with a library brush or the active one, optionally changed for this stroke. Grain-responsive brushes follow the paper; the mixer engine (mixer-brush, blender, smudge) picks up and moves paint already on the layer. The painting guides add their mirror copies. One undo step. Returns the layer id, changed bounds, dab count, the recorded strokeId (for replay_strokes) and, for the mixer, its load after the stroke.',
+      'Paints one stroke through points (document pixels, with optional pressure, time, tilt and barrel rotation) on a pixel layer with a library brush or the active one, optionally changed for this stroke. Grain-responsive brushes follow the paper; the mixer engine (mixer-brush, blender, smudge) picks up and moves paint already on the layer. The symmetry guide adds its mirror copies; with a tracing image that samples colours, a stroke without color takes the image colour at its first point. One undo step. Returns the layer id, changed bounds, dab count, the recorded strokeId (for replay_strokes) and, for the mixer, its load after the stroke.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -626,13 +627,14 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
         brush: { type: 'object', description: 'Brush changes for this stroke only.', properties: BRUSH_FIELDS, additionalProperties: false },
         color: { ...COLOR, description: 'Paint colour #rrggbb (default the paint colour).' },
         seed: { type: 'integer', minimum: 0, description: 'Jitter seed (default a new one); the same seed and points give the same marks.' },
+        snapToPerspective: { type: 'boolean', description: 'Snap the points to the perspective guide, as a pen stroke would (default false).' },
       },
       required: ['points'],
       additionalProperties: false,
     },
     annotations: { title: 'Paint a brush stroke', ...WRITE },
     handler: (a) => {
-      const r = c.paintStroke({ points: a.points as PenPoint[], layerId: a.layerId, brushId: a.brushId, brush: a.brush, color: a.color, seed: a.seed });
+      const r = c.paintStroke({ points: a.points as PenPoint[], layerId: a.layerId, brushId: a.brushId, brush: a.brush, color: a.color, seed: a.seed, snapToPerspective: a.snapToPerspective });
       return r.mixerLoad ? { ...r, mixerLoad: loadResult(r.mixerLoad) } : r;
     },
   });
@@ -848,6 +850,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
     },
   });
 
+  tools.push(...createPaintGuideTools(c));
   tools.push(...createPigmentTools());
 
   return { id: options.id ?? 'paint-editor', namespace: options.namespace, tools };

@@ -20,5 +20,8 @@ export * from './view';
 export * from './input';
 export * from './encode';
 export * from './thumbnails';
+export * from './guides';
+export * from './color';
+export * from './mixing-pad';
 export * from './controller';
 export * from './tools';

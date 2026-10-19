@@ -17,7 +17,7 @@ import { applyStrokeToTile, CoverageMap, type StrokeApply } from '../paint/brush
 import { cleanMixer, EMPTY_MIXER_LOAD, loadMixer, type MixerLoad } from '../paint/mixer';
 import { isBlendMode, type BlendMode } from '../raster/blend';
 import { findLayer, flattenLayers, insertLayer, isLayerLocked, mapLayer, type LayerLocks } from '../raster/layers';
-import { bytesToBase64, encodePng } from '../raster/png';
+import { bytesToBase64, decodePng, encodePng, parseDataUrl, pngDataUrl } from '../raster/png';
 import {
   contentBounds,
   emptySurface,
@@ -47,7 +47,7 @@ import type { PenPoint } from './engine';
 import type { Hand } from './input';
 import { mix32 } from './noise';
 import { clonePaper, grainCatch, hexToRgb8, normalizePaper, paperPreset, type PaperSettings } from './paper';
-import { createPaintCompositor, downsampleRgba, paperGrain, paperNode, type ViewLayer } from './render';
+import { createPaintCompositor, downsampleRgba, paperGrain, paperNode, TRACING_NODE_ID, type ImageNode, type ViewLayer } from './render';
 import {
   deserializePaintDocument,
   deserializePaintDocumentAsync,
@@ -60,6 +60,20 @@ import {
 import { mixerLoadForStroke, PaintStrokeSession, type PaintStrokeResult, type StrokeSessionHost } from './stroke';
 import { affineCopy, strokeBounds, variationAffine, varyStroke, IDENTITY_AFFINE, type Affine, type RecordedStroke, type StrokeVariation } from './strokes';
 import { renderBrushThumbnail, type BrushThumbnail } from './thumbnails';
+import { colorHarmony, DEFAULT_SWATCHES, type ColorWheel, type HarmonyColor, type HarmonyKind, type Swatch } from './color';
+import {
+  defaultGuides,
+  normalizePerspective,
+  normalizeSymmetry,
+  PerspectiveSnapper,
+  symmetryCopies,
+  type PaintGuides,
+  type PerspectiveGuide,
+  type ReferenceImage,
+  type SymmetryGuide,
+  type TracingImage,
+} from './guides';
+import { MixingPad, type MixingPadTool } from './mixing-pad';
 import { DEFAULT_VIEW, normalizeView, type PaintView } from './view';
 
 /** A refusal with a message that says what is wrong and how to fix it. */
@@ -104,6 +118,12 @@ export interface PaintEditorState {
   canRedo: boolean;
   undoLabel: string | null;
   redoLabel: string | null;
+  /** Mirror / kaleidoscope, perspective, tracing image and reference images (saved with the document, not undo steps). */
+  guides: PaintGuides;
+  /** The colour swatches (saved with the document, not undo steps). */
+  swatches: readonly Swatch[];
+  /** Changes whenever the mixing pad does. */
+  mixingPadVersion: number;
   /** A stroke is in progress. */
   stroking: boolean;
   /** Increments on every change. */
@@ -138,8 +158,12 @@ export interface PaintStrokeInit {
   brush?: Parameters<typeof normalizePaintBrush>[0];
   /** Jitter seed (default: a new one per stroke). */
   seed?: number;
-  /** Extra copies of the stroke as affine maps (mirror / kaleidoscope). */
+  /** Extra copies of the stroke as affine maps (default: the symmetry guide's). */
   copies?: readonly Affine[];
+  /** Snap the samples to the perspective guide (default true for `beginStroke`, false for `paintStroke`). */
+  snapToPerspective?: boolean;
+  /** Where the stroke starts, for taking its colour from the tracing image before the first sample (`beginStroke`). */
+  start?: { x: number; y: number };
 }
 
 export interface LayerUpdate {
@@ -245,6 +269,13 @@ export class PaintEditorController {
   private dirty: RasterRect[] | 'all' = 'all';
   private seedCounter = 1;
   private strokeCounter = 1;
+  private guides: PaintGuides;
+  private swatches: Swatch[] = DEFAULT_SWATCHES.map((s) => ({ ...s }));
+  private readonly pad = new MixingPad();
+  private tracingVersion = 1;
+  private tracingCache: { key: number; node: ImageNode } | null = null;
+  private readonly imagePixels = new Map<string, PixelImage>();
+  private nextReferenceId = 1;
   private readonly viewCompositor = createPaintCompositor();
   private readonly exportCompositor = createPaintCompositor();
 
@@ -257,6 +288,7 @@ export class PaintEditorController {
     this.color = options.color ? parseColor(options.color) : '#1f2937';
     this.hand = options.hand === 'left' ? 'left' : 'right';
     this.encodeImage = options.encodeImage;
+    this.guides = defaultGuides(this.doc.canvas);
   }
 
   // --- State and events ----------------------------------------------------------
@@ -292,6 +324,9 @@ export class PaintEditorController {
       canRedo: this.redoStack.length > 0 && !this.session,
       undoLabel: last?.label ?? null,
       redoLabel: next?.label ?? null,
+      guides: this.guides,
+      swatches: this.swatches,
+      mixingPadVersion: this.pad.version,
       stroking: Boolean(this.session),
       version: this.version,
     };
@@ -372,6 +407,8 @@ export class PaintEditorController {
       paper: options.paper === undefined ? this.doc.paper : this.resolvePaper(options.paper),
     });
     this.extensions = {};
+    this.guides = { ...this.guides, symmetry: { ...this.guides.symmetry, center: { x: next.canvas.width / 2, y: next.canvas.height / 2 } }, tracing: null };
+    this.tracingVersion++;
     this.commit('New canvas', next);
     return next;
   }
@@ -842,7 +879,7 @@ export class PaintEditorController {
 
   /** Extra copies every new stroke paints (the painting guides add mirror and kaleidoscope copies). */
   protected strokeCopies(): Affine[] {
-    return [];
+    return symmetryCopies(this.guides.symmetry);
   }
 
   private sessionFor(doc: PaintDocumentState, init: PaintStrokeInit, host: StrokeSessionHost): PaintStrokeSession {
@@ -858,7 +895,11 @@ export class PaintEditorController {
       return l;
     })();
     const brush = this.strokeBrush(init);
-    const color = init.color === undefined ? this.color : parseColor(init.color);
+    let color = init.color === undefined ? this.color : parseColor(init.color);
+    const tracing = this.guides.tracing;
+    if (init.color === undefined && init.start && tracing?.visible && tracing.sampleColors) color = this.sampleTracingColor(init.start.x, init.start.y) ?? color;
+    const perspective = this.guides.perspective;
+    const snapper = init.snapToPerspective && perspective.enabled && perspective.snap ? new PerspectiveSnapper(perspective) : null;
     const rgba = rgbaOf(color);
     const seed = init.seed ?? mix32((this.seedCounter++ * 0x9e3779b1) >>> 0) & 0x7fffffff;
     const copies = (init.copies ?? this.strokeCopies()).filter((m) => m.some((v, i) => v !== IDENTITY_AFFINE[i]));
@@ -876,6 +917,7 @@ export class PaintEditorController {
       colorHex: color,
       affineCopies: copies,
       copies: [IDENTITY_AFFINE, ...copies].map(affineCopy),
+      inputFilter: snapper ? (p) => snapper.snap(p) : undefined,
       mixerLoad: brush.engine === 'mixer' ? mixerLoadForStroke(brush, this.mixerLoad, [rgba[0] / 255, rgba[1] / 255, rgba[2] / 255]) : EMPTY_MIXER_LOAD,
     });
     return session;
@@ -922,7 +964,7 @@ export class PaintEditorController {
         this.commit(`${brush.name} stroke`, { ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface })), strokes: [...this.doc.strokes, stroke] });
       },
     };
-    const session = this.sessionFor(this.doc, init, host);
+    const session = this.sessionFor(this.doc, { snapToPerspective: true, ...init }, host);
     this.session = session;
     this.emit([]);
     return session;
@@ -956,7 +998,7 @@ export class PaintEditorController {
   paintStroke(init: PaintStrokeInit & { points: readonly PenPoint[] }): PaintStrokeResult {
     this.requireIdle('painting');
     const points = this.checkPoints(init.points);
-    const { doc, result, brush } = this.runStroke(this.doc, init, points);
+    const { doc, result, brush } = this.runStroke(this.doc, { ...init, start: init.start ?? points[0] }, points);
     if (result.mixerLoad && brush.loadsColor) this.mixerLoad = result.mixerLoad;
     if (doc !== this.doc) this.commit(`${brush.name} stroke`, doc);
     else this.emit([]);
@@ -1048,7 +1090,21 @@ export class PaintEditorController {
 
   /** View-only layers between the paper and the paint (the painting guides add the tracing image). */
   protected underlayLayers(): ViewLayer[] {
-    return [];
+    const t = this.guides.tracing;
+    if (!t || !t.visible) return [];
+    return [this.tracingNode(t)];
+  }
+
+  /** The tracing image resampled onto the canvas (cached until it or the canvas changes). */
+  private tracingNode(t: TracingImage): ImageNode {
+    const { width, height } = this.doc.canvas;
+    const key = this.tracingVersion * 100003 + width * 7 + height;
+    if (this.tracingCache?.key === key && this.tracingCache.node.opacity === t.opacity) return this.tracingCache.node;
+    const src = this.imagePixels.get(t.src) ?? this.decodeImage(t.src);
+    const image = resampleInto(src, t.rect, width, height);
+    const node: ImageNode = { type: 'image', id: TRACING_NODE_ID, name: 'Tracing', visible: true, opacity: t.opacity, blend: 'normal', image, version: key + Math.round(t.opacity * 1000) / 1e4 };
+    this.tracingCache = { key, node };
+    return node;
   }
 
   private renderLayers(options: RenderOptions, view = false): ViewLayer[] {
@@ -1095,16 +1151,22 @@ export class PaintEditorController {
 
   /** The document as JSON with inline PNG assets. */
   toJSON(options: { strokes?: boolean } = {}): SerializedPaintDocument {
-    return serializePaintDocument(this.doc, { strokes: options.strokes, extensions: this.extensions });
+    return serializePaintDocument(this.doc, { strokes: options.strokes, extensions: this.extensions, guides: this.guides, swatches: this.swatches });
   }
 
   /** The document as JSON with each PNG stored in `store`. */
   toJSONExternal(store: PaintAssetStore, options: { strokes?: boolean } = {}): Promise<SerializedPaintDocument> {
-    return serializePaintDocumentExternal(this.doc, store, { strokes: options.strokes, extensions: this.extensions });
+    return serializePaintDocumentExternal(this.doc, store, { strokes: options.strokes, extensions: this.extensions, guides: this.guides, swatches: this.swatches });
   }
 
-  private adopt(loaded: { state: PaintDocumentState; extensions: PaintDocumentExtensions; problems: string[] }): string[] {
+  private adopt(loaded: { state: PaintDocumentState; extensions: PaintDocumentExtensions; problems: string[]; guides?: unknown; swatches?: unknown }): string[] {
     this.extensions = loaded.extensions;
+    this.readGuides(loaded.guides, loaded.state, loaded.problems);
+    if (Array.isArray(loaded.swatches)) {
+      this.swatches = loaded.swatches
+        .filter((x): x is Swatch => Boolean(x) && typeof (x as Swatch).color === 'string' && /^#[0-9a-f]{6}$/i.test((x as Swatch).color))
+        .map((x) => (typeof x.name === 'string' ? { color: x.color.toLowerCase(), name: x.name } : { color: x.color.toLowerCase() }));
+    }
     for (const s of loaded.state.strokes) {
       const n = Number(/^s(\d+)$/.exec(s.id)?.[1] ?? 0);
       if (n >= this.strokeCounter) this.strokeCounter = n + 1;
@@ -1201,6 +1263,282 @@ export class PaintEditorController {
     return { data: bytesToBase64(encodePng(img.width, img.height, img.data)), width: img.width, height: img.height };
   }
 
+  // --- Guides --------------------------------------------------------------------
+
+  private setGuides(next: PaintGuides): PaintGuides {
+    this.guides = next;
+    this.emit('all');
+    return next;
+  }
+
+  /** Mirror and kaleidoscope painting: every new stroke paints its copies too (one stroke, one undo step). */
+  setSymmetry(update: Partial<SymmetryGuide>): SymmetryGuide {
+    const symmetry = normalizeSymmetry(update, this.guides.symmetry);
+    this.setGuides({ ...this.guides, symmetry });
+    return symmetry;
+  }
+
+  /** Perspective guides with one to three vanishing points that pointer strokes snap to. */
+  setPerspective(update: Partial<PerspectiveGuide>): PerspectiveGuide {
+    let perspective: PerspectiveGuide;
+    try {
+      perspective = normalizePerspective(update, this.guides.perspective);
+    } catch (e) {
+      throw new PaintEditorError((e as Error).message);
+    }
+    this.setGuides({ ...this.guides, perspective });
+    return perspective;
+  }
+
+  /** An image from a PNG (base64 or data URL) or from RGBA pixels, stored as a PNG data URL. */
+  private importImage(input: { png?: string; pixels?: PixelImage }, what: string): { src: string; pixels: PixelImage } {
+    let pixels: PixelImage;
+    if (input.pixels) {
+      const { width, height, data } = input.pixels;
+      if (!(width > 0 && height > 0 && Number.isInteger(width) && Number.isInteger(height)) || data.length !== width * height * 4) {
+        throw new PaintEditorError(`${what}: pixels must be width × height × 4 bytes of RGBA.`);
+      }
+      pixels = { width, height, data: new Uint8ClampedArray(data) };
+    } else if (typeof input.png === 'string' && input.png.trim()) {
+      pixels = this.decodeImage(input.png.trim().startsWith('data:') ? input.png.trim() : `data:image/png;base64,${input.png.trim()}`, what);
+    } else throw new PaintEditorError(`${what}: pass png (a PNG as base64 or a data URL) or pixels.`);
+    if (pixels.width > MAX_IMAGE_SIDE || pixels.height > MAX_IMAGE_SIDE) throw new PaintEditorError(`${what} is ${pixels.width}×${pixels.height}; the limit is ${MAX_IMAGE_SIDE} px per side.`);
+    const src = pngDataUrl(pixels.width, pixels.height, pixels.data);
+    this.imagePixels.set(src, pixels);
+    return { src, pixels };
+  }
+
+  private decodeImage(src: string, what = 'Image'): PixelImage {
+    const cached = this.imagePixels.get(src);
+    if (cached) return cached;
+    const parsed = parseDataUrl(src);
+    if (!parsed) throw new PaintEditorError(`${what} is not a data URL or base64 PNG.`);
+    try {
+      const png = decodePng(parsed.bytes);
+      const px = { width: png.width, height: png.height, data: png.data };
+      this.imagePixels.set(src, px);
+      return px;
+    } catch (e) {
+      throw new PaintEditorError(`${what} could not be decoded as a PNG (${(e as Error).message}); decode other formats in the browser and pass pixels.`);
+    }
+  }
+
+  /**
+   * Puts an image under the paint to trace over: view only, never in exports. Placed to fit the
+   * canvas unless `rect` is given; `sampleColors` makes strokes take their colour from it.
+   */
+  setTracingImage(options: { png?: string; pixels?: PixelImage; rect?: TracingImage['rect']; opacity?: number; sampleColors?: boolean }): TracingImage {
+    const { src, pixels } = this.importImage(options, 'The tracing image');
+    const { width, height } = this.doc.canvas;
+    const k = Math.min(width / pixels.width, height / pixels.height);
+    const fit = { x: (width - pixels.width * k) / 2, y: (height - pixels.height * k) / 2, width: pixels.width * k, height: pixels.height * k };
+    const tracing: TracingImage = { src, width: pixels.width, height: pixels.height, rect: fit, opacity: 0.35, visible: true, sampleColors: false };
+    return this.updateTracing({ ...options, rect: options.rect ?? fit }, tracing);
+  }
+
+  /** Changes the tracing image's opacity, visibility, placement or colour sampling. */
+  updateTracing(update: Partial<Pick<TracingImage, 'opacity' | 'visible' | 'sampleColors' | 'rect'>>, base = this.guides.tracing): TracingImage {
+    if (!base) throw new PaintEditorError('There is no tracing image; set one with set_tracing_image first.');
+    if (update.opacity !== undefined && !(update.opacity >= 0 && update.opacity <= 1)) throw new PaintEditorError(`opacity ${update.opacity} is out of range; use 0..1.`);
+    if (update.rect && !(update.rect.width > 0 && update.rect.height > 0)) throw new PaintEditorError('rect needs a width and height above 0.');
+    const tracing: TracingImage = {
+      ...base,
+      ...(update.opacity !== undefined ? { opacity: update.opacity } : {}),
+      ...(update.visible !== undefined ? { visible: update.visible } : {}),
+      ...(update.sampleColors !== undefined ? { sampleColors: update.sampleColors } : {}),
+      ...(update.rect ? { rect: { ...update.rect } } : {}),
+    };
+    if (tracing.src !== base.src || update.rect) this.tracingVersion++;
+    if (base !== this.guides.tracing) this.tracingVersion++;
+    this.setGuides({ ...this.guides, tracing });
+    return tracing;
+  }
+
+  clearTracingImage(): void {
+    this.tracingVersion++;
+    this.setGuides({ ...this.guides, tracing: null });
+  }
+
+  /** The tracing image's colour at a document pixel, or `null` outside it or where it is clear. */
+  sampleTracingColor(x: number, y: number): string | null {
+    const t = this.guides.tracing;
+    if (!t) return null;
+    const src = this.decodeImage(t.src);
+    const u = Math.floor(((x - t.rect.x) / t.rect.width) * src.width);
+    const v = Math.floor(((y - t.rect.y) / t.rect.height) * src.height);
+    if (u < 0 || v < 0 || u >= src.width || v >= src.height) return null;
+    const i = (v * src.width + u) * 4;
+    if (src.data[i + 3] === 0) return null;
+    return rgbToHex(src.data[i], src.data[i + 1], src.data[i + 2]);
+  }
+
+  /** Adds a floating reference image to look at and pick colours from. */
+  addReferenceImage(options: { png?: string; pixels?: PixelImage; name?: string; x?: number; y?: number; displayWidth?: number }): ReferenceImage {
+    const { src, pixels } = this.importImage(options, 'The reference image');
+    const ref: ReferenceImage = {
+      id: `ref${this.nextReferenceId++}`,
+      name: options.name?.trim() || `Reference ${this.guides.references.length + 1}`,
+      src,
+      width: pixels.width,
+      height: pixels.height,
+      x: options.x ?? 16 + this.guides.references.length * 24,
+      y: options.y ?? 16 + this.guides.references.length * 24,
+      displayWidth: options.displayWidth ?? Math.min(240, pixels.width),
+      visible: true,
+    };
+    this.setGuides({ ...this.guides, references: [...this.guides.references, ref] });
+    return ref;
+  }
+
+  private requireReference(id: string): ReferenceImage {
+    const r = this.guides.references.find((x) => x.id === id);
+    if (!r) throw new PaintEditorError(`Unknown reference image "${id}". Call list_reference_images for the ids.`);
+    return r;
+  }
+
+  /** Moves, resizes, renames, shows or hides a reference image. */
+  updateReferenceImage(id: string, update: Partial<Pick<ReferenceImage, 'name' | 'x' | 'y' | 'displayWidth' | 'visible'>>): ReferenceImage {
+    const r = this.requireReference(id);
+    if (update.displayWidth !== undefined && !(update.displayWidth >= 16 && update.displayWidth <= 4096)) throw new PaintEditorError(`displayWidth ${update.displayWidth} is out of range; use 16..4096.`);
+    const next: ReferenceImage = { ...r, ...Object.fromEntries(Object.entries(update).filter(([, v]) => v !== undefined)) };
+    this.setGuides({ ...this.guides, references: this.guides.references.map((x) => (x.id === id ? next : x)) });
+    return next;
+  }
+
+  removeReferenceImage(id: string): void {
+    this.requireReference(id);
+    this.setGuides({ ...this.guides, references: this.guides.references.filter((x) => x.id !== id) });
+  }
+
+  /** A reference image's pixels (decoded once). */
+  referencePixels(id: string): PixelImage {
+    return this.decodeImage(this.requireReference(id).src);
+  }
+
+  /** The colour of a reference image at its pixel (x, y). */
+  pickReferenceColor(id: string, x: number, y: number): string {
+    const r = this.requireReference(id);
+    const px = this.decodeImage(r.src);
+    const u = Math.floor(x);
+    const v = Math.floor(y);
+    if (!(u >= 0 && v >= 0 && u < px.width && v < px.height)) throw new PaintEditorError(`(${x}, ${y}) is outside reference "${r.name}" (${px.width}×${px.height}); use its own pixel coordinates.`);
+    const i = (v * px.width + u) * 4;
+    return rgbToHex(px.data[i], px.data[i + 1], px.data[i + 2]);
+  }
+
+  private readGuides(raw: unknown, state: PaintDocumentState, problems: string[]): void {
+    const base = defaultGuides(state.canvas);
+    this.guides = base;
+    this.tracingVersion++;
+    if (!raw || typeof raw !== 'object') return;
+    const r = raw as Record<string, unknown>;
+    const guides: PaintGuides = { ...base };
+    guides.symmetry = normalizeSymmetry((r.symmetry as Record<string, unknown>) ?? {}, base.symmetry);
+    try {
+      guides.perspective = normalizePerspective((r.perspective as Record<string, unknown>) ?? {}, base.perspective);
+    } catch (e) {
+      problems.push(`Perspective guide: ${(e as Error).message}`);
+    }
+    const t = r.tracing as TracingImage | null | undefined;
+    if (t && typeof t.src === 'string') {
+      try {
+        const px = this.decodeImage(t.src, 'The tracing image');
+        guides.tracing = {
+          src: t.src,
+          width: px.width,
+          height: px.height,
+          rect: t.rect && t.rect.width > 0 && t.rect.height > 0 ? { ...t.rect } : { x: 0, y: 0, width: state.canvas.width, height: state.canvas.height },
+          opacity: typeof t.opacity === 'number' ? Math.min(1, Math.max(0, t.opacity)) : 0.35,
+          visible: t.visible !== false,
+          sampleColors: t.sampleColors === true,
+        };
+      } catch (e) {
+        problems.push((e as Error).message);
+      }
+    }
+    if (Array.isArray(r.references)) {
+      for (const ref of r.references as ReferenceImage[]) {
+        if (!ref || typeof ref.src !== 'string' || typeof ref.id !== 'string') continue;
+        try {
+          const px = this.decodeImage(ref.src, `Reference "${ref.name}"`);
+          guides.references.push({ id: ref.id, name: String(ref.name ?? ref.id), src: ref.src, width: px.width, height: px.height, x: Number(ref.x) || 0, y: Number(ref.y) || 0, displayWidth: Number(ref.displayWidth) || 240, visible: ref.visible !== false });
+          const n = Number(/^ref(\d+)$/.exec(ref.id)?.[1] ?? 0);
+          if (n >= this.nextReferenceId) this.nextReferenceId = n + 1;
+        } catch (e) {
+          problems.push((e as Error).message);
+        }
+      }
+    }
+    this.guides = guides;
+  }
+
+  // --- Swatches and harmonies ------------------------------------------------------
+
+  /** Colour harmonies around a colour (default the paint colour) on the painter's RYB wheel or the RGB wheel. */
+  harmony(kind: HarmonyKind, options: { color?: string; wheel?: ColorWheel; spread?: number } = {}): HarmonyColor[] {
+    try {
+      return colorHarmony(options.color === undefined ? this.color : parseColor(options.color), kind, options);
+    } catch (e) {
+      throw new PaintEditorError((e as Error).message);
+    }
+  }
+
+  addSwatch(color: string, name?: string): Swatch[] {
+    const c = parseColor(color);
+    this.swatches = [...this.swatches, name?.trim() ? { color: c, name: name.trim() } : { color: c }];
+    this.emit([]);
+    return this.swatches;
+  }
+
+  removeSwatch(index: number): Swatch[] {
+    if (!Number.isInteger(index) || index < 0 || index >= this.swatches.length) throw new PaintEditorError(`index ${index} is out of range; there are ${this.swatches.length} swatches (0-based).`);
+    this.swatches = this.swatches.filter((_, i) => i !== index);
+    this.emit([]);
+    return this.swatches;
+  }
+
+  setSwatches(swatches: readonly Swatch[]): Swatch[] {
+    this.swatches = swatches.map((x) => (x.name ? { color: parseColor(x.color), name: x.name } : { color: parseColor(x.color) }));
+    this.emit([]);
+    return this.swatches;
+  }
+
+  // --- Mixing pad ------------------------------------------------------------------
+
+  get mixingPad(): MixingPad {
+    return this.pad;
+  }
+
+  /** Paints (`paint`) or smears with the palette knife (`knife`) on the mixing pad, in pad pixels. */
+  mixingPadStroke(points: readonly PenPoint[], options: { tool?: MixingPadTool; color?: string; size?: number } = {}): { bounds: RasterRect | null } {
+    const color = options.color === undefined ? this.color : parseColor(options.color);
+    if (options.size !== undefined && !(options.size >= 1 && options.size <= 200)) throw new PaintEditorError(`size ${options.size} is out of range; use 1..200 px.`);
+    try {
+      const r = this.pad.stroke(points, { tool: options.tool ?? 'paint', color, size: options.size });
+      this.emit([]);
+      return r;
+    } catch (e) {
+      throw new PaintEditorError((e as Error).message);
+    }
+  }
+
+  /** Picks the mixed colour on the pad (averaged over `radius` px); with `setColor` it becomes the paint colour. */
+  mixingPadPick(x: number, y: number, options: { radius?: number; setColor?: boolean } = {}): string | null {
+    let c: string | null;
+    try {
+      c = this.pad.pick(x, y, options.radius);
+    } catch (e) {
+      throw new PaintEditorError((e as Error).message);
+    }
+    if (c && options.setColor) this.setColor(c);
+    return c;
+  }
+
+  clearMixingPad(): void {
+    this.pad.clear();
+    this.emit([]);
+  }
+
   /** A layer's tile surface (live while stroking), for thumbnails. */
   layerSurface(id: string): TiledSurface | null {
     const l = findLayer(this.currentLayers(), id)?.layer;
@@ -1209,3 +1547,39 @@ export class PaintEditorController {
 }
 
 export type { Tile };
+
+/** Largest tracing or reference image side, in pixels. */
+export const MAX_IMAGE_SIDE = 8192;
+
+/** `src` drawn into `rect` of a `width × height` canvas (bilinear), canvas-sized RGBA. */
+function resampleInto(src: PixelImage, rect: { x: number; y: number; width: number; height: number }, width: number, height: number): PixelImage {
+  const out = new Uint8ClampedArray(width * height * 4);
+  const x0 = Math.max(0, Math.floor(rect.x));
+  const y0 = Math.max(0, Math.floor(rect.y));
+  const x1 = Math.min(width, Math.ceil(rect.x + rect.width));
+  const y1 = Math.min(height, Math.ceil(rect.y + rect.height));
+  const sx = src.width / rect.width;
+  const sy = src.height / rect.height;
+  const d = src.data;
+  for (let y = y0; y < y1; y++) {
+    const v = Math.min(src.height - 1, Math.max(0, (y + 0.5 - rect.y) * sy - 0.5));
+    const j0 = Math.floor(v);
+    const j1 = Math.min(src.height - 1, j0 + 1);
+    const fy = v - j0;
+    for (let x = x0; x < x1; x++) {
+      const u = (x + 0.5 - rect.x) * sx - 0.5;
+      if (u < -0.5 || u > src.width - 0.5 || (y + 0.5 - rect.y) * sy < 0 || (y + 0.5 - rect.y) * sy > src.height) continue;
+      const uc = Math.min(src.width - 1, Math.max(0, u));
+      const i0 = Math.floor(uc);
+      const i1 = Math.min(src.width - 1, i0 + 1);
+      const fx = uc - i0;
+      const o = (y * width + x) * 4;
+      for (let c = 0; c < 4; c++) {
+        const a = d[(j0 * src.width + i0) * 4 + c] + (d[(j0 * src.width + i1) * 4 + c] - d[(j0 * src.width + i0) * 4 + c]) * fx;
+        const b = d[(j1 * src.width + i0) * 4 + c] + (d[(j1 * src.width + i1) * 4 + c] - d[(j1 * src.width + i0) * 4 + c]) * fx;
+        out[o + c] = a + (b - a) * fy;
+      }
+    }
+  }
+  return { width, height, data: out };
+}
