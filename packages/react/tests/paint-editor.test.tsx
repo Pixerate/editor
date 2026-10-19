@@ -180,6 +180,11 @@ describe('React paint editor', () => {
     expect(c.listLayers()[1].name).toBe('Ink');
     setValue(container.querySelector('select[aria-label="Layer blend"]')!, 'multiply');
     expect(c.listLayers().find((l) => l.name === 'Ink')?.blend).toBe('multiply');
+    const blendSelect = container.querySelector('select[aria-label="Layer blend"]')!;
+    expect(Array.from(blendSelect.querySelectorAll('optgroup')).map((g) => g.getAttribute('label'))).toEqual(['Standard', 'Paint']);
+    expect(Array.from(blendSelect.querySelectorAll('optgroup[label="Paint"] option')).map((o) => o.getAttribute('value'))).toEqual(['pigment', 'watercolor', 'tint', 'highlight', 'shadow']);
+    setValue(blendSelect, 'watercolor');
+    expect(c.listLayers().find((l) => l.name === 'Ink')?.blend).toBe('watercolor');
     click(byText('Lock pixels'));
     expect(c.listLayers().find((l) => l.name === 'Ink')?.locks.pixels).toBe(true);
     click(container.querySelector('button[aria-label="Hide Ink"]')!);
