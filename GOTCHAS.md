@@ -1864,3 +1864,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: "Cannot read properties of undefined (reading '_buffer')" when the LayersPanel's Export PSD ran in a jsdom test.
 - **Root Cause**: Vitest's jsdom environment gives `Blob` from jsdom but `Uint8Array` from Node, and jsdom's Blob only accepts its own realm's buffers. `URL.createObjectURL` exists (it is Node's), so `downloadPsd` took the browser branch.
 - **Solution / Workaround**: In tests, set `URL.createObjectURL` to `undefined` around the click so `downloadPsd` skips the download and only returns the warnings, then restore it. Browsers are unaffected.
+
+### [svelte/tests] Vitest 5 Makes `globalThis.document` Read-Only
+
+- **Issue / Symptom**: After the vitest 4 → 5 upgrade, Svelte tests that build their own JSDOM fail before running: `TypeError: Cannot set property document of [object Window] which has only a getter`.
+- **Root Cause**: Vitest 5's test environment defines `document` and `window` on the global as getter-only properties, so `globalThis.document = …` throws in strict mode.
+- **Solution / Workaround**: Use `vi.stubGlobal("document", dom.window.document)` and `vi.stubGlobal("window", dom.window)` (they redefine the property) instead of assigning. This also works on vitest 4.

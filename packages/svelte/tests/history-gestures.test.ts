@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, vi } from "vitest";
 import { JSDOM } from "jsdom";
 import { createHistory, createHistoryDirty } from "../src/history";
 import { createNavigationGuard } from "../src";
@@ -9,8 +9,9 @@ beforeAll(() => {
     '<!DOCTYPE html><html><body><div id="root"></div></body></html>',
     { url: "https://example.com/editor" },
   );
-  globalThis.document = dom.window.document as any;
-  globalThis.window = dom.window as any;
+  // Vitest 5 environments expose `document` / `window` as getters, so stub them instead of assigning.
+  vi.stubGlobal("document", dom.window.document);
+  vi.stubGlobal("window", dom.window);
   (globalThis as any).Event = dom.window.Event;
 });
 
