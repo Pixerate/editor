@@ -2952,6 +2952,13 @@ export class ImageEditorController {
     };
 
     const prepare = async (layer: ImageLayer): Promise<ImageLayer | null> => {
+      const p = await prepareLayer(layer);
+      // `exportPsd` writes it as Normal; the merged image keeps the paint mix.
+      if (p?.blend === 'pigment') add('The Pigment blend mode has no PSD equivalent and was written as Normal', layer.name);
+      return p;
+    };
+
+    const prepareLayer = async (layer: ImageLayer): Promise<ImageLayer | null> => {
       if (layer.type === 'group') {
         const children: ImageLayer[] = [];
         for (const c of layer.children) {

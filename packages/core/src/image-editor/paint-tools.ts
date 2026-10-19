@@ -26,7 +26,7 @@ const BRUSH = {
     smoothing: { type: 'number', minimum: 0, maximum: 0.95, description: 'Point smoothing 0..0.95 (default 0).' },
     pressureSize: { type: 'boolean', description: 'Point pressure scales the size (default true).' },
     pressureOpacity: { type: 'boolean', description: 'Point pressure scales the opacity (default false).' },
-    blend: { type: 'string', enum: BLEND_MODES.map((m) => m.id), description: 'How paint combines with the layer (default normal).' },
+    blend: { type: 'string', enum: BLEND_MODES.map((m) => m.id), description: 'How paint combines with the layer (default normal). pigment mixes it in like real paint (blue into yellow gives green) instead of laying it over.' },
   },
   additionalProperties: false,
 } as const;
@@ -94,7 +94,7 @@ export function createImagePaintTools(controller: ImageEditorController): AgentT
       properties: {
         color: { type: 'string', description: 'Fill colour #rrggbb or #rrggbbaa (default the foreground).' },
         opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Fill opacity 0..1 (default 1).' },
-        blend: { type: 'string', enum: BLEND_MODES.map((m) => m.id), description: 'Blend mode (default normal).' },
+        blend: { type: 'string', enum: BLEND_MODES.map((m) => m.id), description: 'Blend mode (default normal). pigment mixes the colour into the pixels like paint, opacity being the share of new paint.' },
         useSelection: { type: 'boolean', description: 'Limit to the selection when there is one (default true).' },
         ...TARGET,
       },

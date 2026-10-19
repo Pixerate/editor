@@ -19,7 +19,7 @@ const DESTRUCTIVE = { readOnlyHint: false, destructiveHint: true, idempotentHint
 
 const LAYER_ID = { type: 'string', description: 'Layer id from list_layers (a pixel, annotation or group layer).' } as const;
 const EFFECT_ID = { type: 'string', description: 'Effect id from list_layer_effects or add_layer_effect.' } as const;
-const BLEND_IDS = BLEND_MODES.map((m) => m.id);
+const BLEND_IDS = BLEND_MODES.map((m) => m.id).filter((id) => id !== 'pigment');
 
 /** Shared shapes, referenced as `#/$defs/...`. */
 const DEFS = {

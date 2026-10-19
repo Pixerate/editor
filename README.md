@@ -429,7 +429,7 @@ Every feature is available from core and from both framework packages. "Via core
 | Image Filters & Adjustments | ✅ | ✅ | ✅ |
 | Image White Balance (Temperature / Tint, eyedropper) & Process Versions | ✅ | ✅ | ✅ |
 | Image Adjustment Layers (Curves, Levels, Hue/Saturation, Vibrance, Color Balance, B&W, Photo Filter, …) | ✅ | `<AdjustmentLayersPanel>` & `<CurvesEditor>` | `<AdjustmentLayersPanel>` & `<CurvesEditor>` |
-| Photoshop Blend Modes (layers & annotations) | `blendPixel` & `BLEND_MODES` | ✅ | ✅ |
+| Photoshop Blend Modes (layers & annotations), plus a `pigment` mode that mixes like paint (Kubelka-Munk, blue + yellow = green; layers, groups, adjustment layers, brush and fill; written to PSD as Normal with a warning) | `blendPixel`, `mixPigmentRgb` & `BLEND_MODES` | ✅ (layer blend menus) | ✅ (layer blend menus) |
 | Image Histogram | `computeHistogram` | `<Histogram>` & `useImageHistogram` | `<Histogram>` & `createImageHistogram` |
 | Image Adjustment Control Table & Agent Tools (adjustments, layers: add / change / reorder / remove, crop, rotation, flip, histogram, undo / redo, selections and masks) | `IMAGE_ADJUSTMENT_CONTROLS` & `createImageEditorToolProvider` | `<ControlSlider>` | `<ControlSlider>` |
 | Image Layer Stack (tiled copy-on-write surfaces; pixel, adjustment, group and annotation layers with masks, clipping, blend modes, opacity and fill; per-tile compositor with prefix caches and dirty rectangles; immutable undo history with `maxHistoryBytes`; schema v3 with PNG layer assets, v1 / v2 documents rendered and written exactly as before; `list_layers` agent tool) | `LayerCompositor`, `TiledSurface`, `migrateToLayeredState`, `getLayers` | Via core (`useImageEditor` state) | Via core (`createReactiveImageEditor` state) |
