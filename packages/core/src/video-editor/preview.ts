@@ -44,6 +44,11 @@ export interface VideoPreviewOptions {
 	context?: VideoCanvasContext | null;
 	/** Called after each frame is drawn. */
 	onFrame?: (frame: VideoFrame) => void;
+	/**
+	 * Puts an SVG filter (white balance in a grade) where the canvas's `filter: url(#id)` can find
+	 * it. Default: a hidden `<svg>` added to `document.body`. `null` leaves white balance out.
+	 */
+	defineSvgFilter?: ((id: string, markup: string) => void) | null;
 }
 
 interface Entry {
@@ -67,6 +72,8 @@ export class VideoPreviewEngine {
 	private readonly unsubscribe: () => void;
 	private scheduled = false;
 	private destroyed = false;
+	private filterHost: Element | null = null;
+	private readonly filters = new Set<string>();
 
 	constructor(
 		private readonly source: VideoPreviewSource,
@@ -187,13 +194,33 @@ export class VideoPreviewEngine {
 		const h = Math.max(1, Math.round(frame.height * resolution));
 		if (this.canvas.width !== w) this.canvas.width = w;
 		if (this.canvas.height !== h) this.canvas.height = h;
-		drawVideoFrame(this.ctx, frame, this.sourceFor, resolution);
+		drawVideoFrame(this.ctx, frame, this.sourceFor, resolution, { defineSvgFilter: this.defineSvgFilter });
 		this.options.onFrame?.(frame);
 	}
+
+	private readonly defineSvgFilter = (id: string, markup: string) => {
+		if (this.options.defineSvgFilter === null) return;
+		if (this.options.defineSvgFilter) return this.options.defineSvgFilter(id, markup);
+		if (this.filters.has(id) || typeof document === 'undefined') return;
+		if (!this.filterHost) {
+			const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+			svg.setAttribute('width', '0');
+			svg.setAttribute('height', '0');
+			svg.setAttribute('aria-hidden', 'true');
+			svg.setAttribute('style', 'position:absolute;width:0;height:0;overflow:hidden');
+			document.body.appendChild(svg);
+			this.filterHost = svg;
+		}
+		this.filterHost.insertAdjacentHTML('beforeend', markup);
+		this.filters.add(id);
+	};
 
 	/** Stops following the editor and releases every media element. */
 	destroy(): void {
 		this.destroyed = true;
+		this.filterHost?.remove();
+		this.filterHost = null;
+		this.filters.clear();
 		this.unsubscribe();
 		for (const entry of [...this.media.values()]) this.release(entry);
 		this.images.clear();

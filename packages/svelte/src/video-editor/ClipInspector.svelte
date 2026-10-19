@@ -2,16 +2,32 @@
   import {
     findVideoClip,
     formatVideoTimecode,
+    VIDEO_CLIP_ANIMATION_EFFECTS,
+    VIDEO_CLIP_ANIMATION_LABELS,
+    normalizeVideoGrade,
+    VIDEO_GRADE_CONTROLS,
+    VIDEO_GRADE_PRESET_NAMES,
+    videoGradePreset,
+    VIDEO_BLEND_MODE_LABELS,
+    VIDEO_BLEND_MODES,
     VIDEO_FADE_CURVE_LABELS,
     VIDEO_FADE_CURVES,
+    VIDEO_TRANSITION_LABELS,
     VIDEO_TRANSITION_TYPES,
+    VIDEO_WIPE_DIRECTIONS,
+    videoTransitionHasDirection,
     videoKeyframeRows,
+    videoTransitionAudioCurve,
     videoKeyframeToggleEdit,
     videoKeyframeValueEdit,
     type VideoEdit,
     type VideoEditorController,
+    type VideoFadeCurve,
+    type VideoGradeControl,
+    type VideoGradePreset,
     type VideoKeyframeRow,
-    type VideoTransitionType
+    type VideoTransitionType,
+    type VideoWipeDirection
   } from '@pixerate/editor/video-editor';
   import { videoEditorStateOf } from './createVideoEditor.svelte.js';
 
@@ -88,6 +104,27 @@
     if (!type) apply({ op: 'set_transition', clip: clip.id, transition: null }, 'Remove transition');
     else apply({ op: 'set_transition', clip: clip.id, transition: { ...clip.transition, type: type as VideoTransitionType, duration: clip.transition?.duration ?? 500 } }, 'Set transition');
   }
+  function gradeValue(c: VideoGradeControl, raw: string) {
+    if (!clip) return;
+    const n = raw.trim() ? Number(raw) : 0;
+    if (!Number.isFinite(n)) {
+      localError = { text: `${c.label} must be a number from ${c.min} to ${c.max}.`, revision: editor.revision };
+      return;
+    }
+    // Out-of-range values are clamped to the control's range.
+    set('grade', normalizeVideoGrade({ ...clip.grade, [c.key]: n }), `Change ${c.label.toLowerCase()}`);
+  }
+  function gradePreset(name: string) {
+    const grade = clip && name ? videoGradePreset(name as VideoGradePreset) : undefined;
+    if (clip && grade) apply({ op: 'update_clip', clip: clip.id, set: { grade } }, `Apply ${name} look`);
+  }
+  function transitionAudioCurve(curve: string) {
+    if (!clip?.transition) return;
+    const { audioCurve: _, ...rest } = clip.transition;
+    // The type's own default is stored as no curve, so it follows the type if that changes.
+    const next = curve === videoTransitionAudioCurve(rest) ? rest : { ...rest, audioCurve: curve as VideoFadeCurve };
+    apply({ op: 'set_transition', clip: clip.id, transition: next }, 'Change transition sound');
+  }
   function transitionDuration(raw: string) {
     if (!clip?.transition) return;
     const n = Number(raw);
@@ -125,6 +162,38 @@
       <span class="tabular-nums" data-field="start">{formatVideoTimecode(clip.start, fps)}</span>
       <span class="text-muted-foreground">Duration</span>
       <span class="tabular-nums" data-field="duration">{formatVideoTimecode(clip.duration, fps)} ({(clip.duration / 1000).toFixed(2)} s)</span>
+      {#if at?.track.kind === 'video'}
+        <span class="text-muted-foreground">Blend</span>
+        <select class={input} aria-label="Blend mode" {disabled} value={clip.blend ?? 'normal'} onchange={(e) => set('blend', e.currentTarget.value === 'normal' ? undefined : e.currentTarget.value, 'Change blend mode')} data-field="blend">
+          {#each VIDEO_BLEND_MODES as m (m)}
+            <option value={m}>{VIDEO_BLEND_MODE_LABELS[m]}</option>
+          {/each}
+        </select>
+      {/if}
+      {#if at?.track.kind === 'video'}
+        <span class="text-muted-foreground">Look</span>
+        <select class={input} aria-label="Apply a look" {disabled} value="" onchange={(e) => gradePreset(e.currentTarget.value)} data-field="gradePreset">
+          <option value="">{clip.grade ? 'graded' : 'none'}</option>
+          {#each VIDEO_GRADE_PRESET_NAMES as name (name)}
+            <option value={name}>{name.replace(/-/g, ' ')}</option>
+          {/each}
+        </select>
+        {#each VIDEO_GRADE_CONTROLS as c (c.key)}
+          <span class="text-muted-foreground">{c.label}</span>
+          <input class={input} type="number" min={c.min} max={c.max} step={c.step} placeholder="0" aria-label={c.label} {disabled} value={clip.grade?.[c.key] ?? ''} onchange={(e) => gradeValue(c, e.currentTarget.value)} data-field="grade.{c.key}" />
+        {/each}
+      {/if}
+      {#if at?.track.kind === 'video'}
+        {#each [{ key: 'animateIn', label: 'Animate in', change: 'Change entrance' }, { key: 'animateOut', label: 'Animate out', change: 'Change exit' }] as const as row (row.key)}
+          <span class="text-muted-foreground">{row.label}</span>
+          <select class={input} aria-label={row.label} {disabled} value={clip[row.key]?.effect ?? ''} onchange={(e) => set(row.key, e.currentTarget.value ? { ...clip?.[row.key], effect: e.currentTarget.value } : undefined, row.change)} data-field={row.key}>
+            <option value="">none</option>
+            {#each VIDEO_CLIP_ANIMATION_EFFECTS as effect (effect)}
+              <option value={effect}>{VIDEO_CLIP_ANIMATION_LABELS[effect]}</option>
+            {/each}
+          </select>
+        {/each}
+      {/if}
       <span class="text-muted-foreground">Fade in</span>
       <input class={input} type="number" min="0" step="100" placeholder="0 ms" aria-label="Fade in" {disabled} value={clip.fadeIn ?? ''} onchange={(e) => number('fadeIn', e.currentTarget.value, 'Change fade in', { min: 0, what: 'Fade in must be a number of ms, 0 or more.' })} data-field="fadeIn" />
       <span class="text-muted-foreground">Fade out</span>
@@ -179,7 +248,7 @@
         <select class={input} aria-label="Transition" {disabled} value={clip.transition?.type ?? ''} onchange={(e) => setTransition(e.currentTarget.value)} data-field="transition">
           <option value="">none</option>
           {#each VIDEO_TRANSITION_TYPES as t (t)}
-            <option value={t}>{t}</option>
+            <option value={t}>{VIDEO_TRANSITION_LABELS[t]}</option>
           {/each}
         </select>
         {#if clip.transition}
@@ -187,6 +256,22 @@
           <span class="text-[10px] text-muted-foreground">ms</span>
         {/if}
       </div>
+      {#if clip.transition && videoTransitionHasDirection(clip.transition.type)}
+        <span class="text-muted-foreground">Direction</span>
+        <select class={input} aria-label="Transition direction" {disabled} value={clip.transition.direction ?? 'right'} onchange={(e) => clip?.transition && apply({ op: 'set_transition', clip: clip.id, transition: { ...clip.transition, direction: e.currentTarget.value as VideoWipeDirection } }, 'Change transition direction')} data-field="transitionDirection">
+          {#each VIDEO_WIPE_DIRECTIONS as d (d)}
+            <option value={d}>{d}</option>
+          {/each}
+        </select>
+      {/if}
+      {#if clip.transition}
+        <span class="text-muted-foreground">Transition sound</span>
+        <select class={input} aria-label="Transition sound curve" {disabled} value={videoTransitionAudioCurve(clip.transition)} onchange={(e) => transitionAudioCurve(e.currentTarget.value)} data-field="transitionAudioCurve">
+          {#each VIDEO_FADE_CURVES as c (c)}
+            <option value={c}>{VIDEO_FADE_CURVE_LABELS[c]}</option>
+          {/each}
+        </select>
+      {/if}
     </div>
   {/if}
   {#if message}

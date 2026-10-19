@@ -65,8 +65,16 @@ export interface VideoTransform {
 export type VideoFit = 'contain' | 'cover' | 'fill' | 'none';
 export const VIDEO_FITS = ['contain', 'cover', 'fill', 'none'] as const;
 
-export type VideoTransitionType = 'crossfade' | 'dip' | 'wipe';
-export const VIDEO_TRANSITION_TYPES = ['crossfade', 'dip', 'wipe'] as const;
+/**
+ * - `crossfade`: this clip fades up over the one before.
+ * - `dip`: down into a colour and up out of it.
+ * - `wipe`: an edge travels across, revealing this clip.
+ * - `push`: this clip slides in, pushing the one before out.
+ * - `slide`: this clip slides in over the one before, which stays put.
+ * - `iris`: a circle opens from the centre, revealing this clip.
+ */
+export type VideoTransitionType = 'crossfade' | 'dip' | 'wipe' | 'push' | 'slide' | 'iris';
+export const VIDEO_TRANSITION_TYPES = ['crossfade', 'dip', 'wipe', 'push', 'slide', 'iris'] as const;
 export type VideoWipeDirection = 'left' | 'right' | 'up' | 'down';
 export const VIDEO_WIPE_DIRECTIONS = ['left', 'right', 'up', 'down'] as const;
 
@@ -81,8 +89,59 @@ export interface VideoTransition {
 	duration: number;
 	/** For dip: the colour passed through (default black). */
 	color?: string;
-	/** For wipe: the way the edge travels (default right, revealing from the left). */
+	/** For wipe, push and slide: the way the edge or picture travels (default right: in from the left). */
 	direction?: VideoWipeDirection;
+	/**
+	 * Shape of the sound's fades through the transition (see `VideoFadeCurve`). Default
+	 * `equal-power` for crossfades and wipes, where two sounds overlap and a linear mix dips in
+	 * loudness halfway; `linear` for dips, where one sound fades out before the other fades in.
+	 */
+	audioCurve?: VideoFadeCurve;
+}
+
+/** The curve a transition's sound fades follow (its `audioCurve`, else the default for its type). */
+export const videoTransitionAudioCurve = (t: VideoTransition): VideoFadeCurve => t.audioCurve ?? (t.type === 'dip' ? 'linear' : 'equal-power');
+
+/**
+ * How a clip's picture mixes with what is beneath it, as in CSS `mix-blend-mode` (`add` sums the
+ * colours, `plus-lighter` in CSS). These are the modes the canvas preview, SVG frames and ffmpeg's
+ * `blend` filter all share.
+ */
+export type VideoBlendMode = 'normal' | 'multiply' | 'screen' | 'overlay' | 'darken' | 'lighten' | 'color-dodge' | 'color-burn' | 'hard-light' | 'soft-light' | 'difference' | 'exclusion' | 'add';
+export const VIDEO_BLEND_MODES = ['normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten', 'color-dodge', 'color-burn', 'hard-light', 'soft-light', 'difference', 'exclusion', 'add'] as const;
+
+/**
+ * Colour correction for a clip's picture (see `VIDEO_GRADE_CONTROLS` for ranges). Applied in a fixed
+ * order: exposure, contrast, saturation, hue, then white balance (temperature and tint).
+ */
+export interface VideoGrade {
+	/** Stops: +1 doubles every channel (default 0). */
+	exposure?: number;
+	/** -1 (flat grey) to 1 (twice as steep), around mid grey (default 0). */
+	contrast?: number;
+	/** -1 (black and white) to 1 (twice as saturated); default 0. */
+	saturation?: number;
+	/** Hue rotation in degrees (default 0). */
+	hue?: number;
+	/** -1 (cool) to 1 (warm); default 0. */
+	temperature?: number;
+	/** -1 (green) to 1 (magenta); default 0. */
+	tint?: number;
+}
+
+/**
+ * How a clip enters or leaves: `fade`; `rise` (up into place) or `drop` (down into place);
+ * `slide-left` / `slide-right` (in moving that way); `zoom` (grows into place); `pop` (grows past its
+ * size and settles). Each also fades. An exit plays the same movement backwards.
+ */
+export type VideoClipAnimationEffect = 'fade' | 'rise' | 'drop' | 'slide-left' | 'slide-right' | 'zoom' | 'pop';
+export const VIDEO_CLIP_ANIMATION_EFFECTS = ['fade', 'rise', 'drop', 'slide-left', 'slide-right', 'zoom', 'pop'] as const;
+
+/** An entrance or exit animation (see `VideoClipAnimationEffect`). */
+export interface VideoClipAnimation {
+	effect: VideoClipAnimationEffect;
+	/** Length (ms, default 500). */
+	duration?: number;
 }
 
 interface VideoClipBase {
@@ -97,6 +156,14 @@ interface VideoClipBase {
 	transform?: VideoTransform;
 	/** Default contain. */
 	fit?: VideoFit;
+	/** How the picture mixes with what is beneath it (default normal). */
+	blend?: VideoBlendMode;
+	/** Colour correction of the picture. */
+	grade?: VideoGrade;
+	/** How the picture enters, from the clip's start (on top of any fade in). */
+	animateIn?: VideoClipAnimation;
+	/** How the picture leaves, up to the clip's end. */
+	animateOut?: VideoClipAnimation;
 	/** Fade in from nothing over this long (ms), pictures and sound. */
 	fadeIn?: number;
 	/** Fade out over this long (ms). */

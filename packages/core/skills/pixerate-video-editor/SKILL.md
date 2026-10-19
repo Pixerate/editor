@@ -62,8 +62,9 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
   dialogue and scene changes.
 - **Transitions sparingly.** A straight cut is the default. Use `crossfade` for passage of time
   or a soft scene change, `dip` (to black, or a `color`) for a section break, `wipe` rarely.
-  Keep them short (300-1000 ms). Crossfades and wipes need handles: half the duration of
-  unused media past the cut on both clips; `dip` needs none.
+  Keep them short (300-1000 ms). `push` and `slide` suit graphics, montages and social edits
+  more than drama; `iris` is a stylised period or comic effect. Every type but `dip` needs
+  handles: half the duration of unused media past the cut on both clips; `dip` needs none.
 - **Insert vs overwrite.** `add_video_clip` and `move_video_clip` take `mode`: `refuse`
   (default; the error names the next free place), `overwrite` (replace what is underneath, like
   an overwrite edit) or `insert` (push later material along). Use `ripple: true` on trim and
@@ -92,12 +93,24 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
   `volume` multiply. Give every audio clip that starts or ends mid-sound a short `fadeIn` /
   `fadeOut` (10-50 ms) to avoid clicks; fade music beds over 1-3 s. Shape sound fades with
   `fadeInCurve` / `fadeOutCurve`: `equal-power` where two sounds overlap (it keeps loudness
-  steady, where linear dips in the middle), `exponential` to fade music out to silence
+  steady, where linear dips in the middle; transitions' `audioCurve` already defaults to it for
+  crossfades and wipes), `exponential` to fade music out to silence
   naturally, `s-curve` for a gentle start and finish. Linear is the default.
 - **Delivery loudness.** Normalise the final mix rather than pushing clip volumes: -14 LUFS for
   web and streaming, -16 for podcasts, -23 (EBU R128) or -24 (ATSC) for broadcast, with true
   peaks at or under -1 dBTP. Two passes keep the dynamics; one pass rides the level.
-- **Titles.** Keep text inside the title-safe area (about 90% of the frame), hold it at least as
+- **Grade in two passes: correct, then look.** First balance each shot so a scene matches
+  (`update_video_clip` `grade`: fix exposure and white balance against the best shot, then
+  `copy_video_grade` from it to the rest of the scene), then add a look with
+  `apply_video_grade_preset` at a modest `amount` (0.3-0.6). Check with `render_video_frame` at a
+  few times side by side. Skin tones are the reference: avoid strong `hue` or `tint` on people.
+- **Blend overlays, don't key them.** Light leaks, flares, film burns and glows shot on black go on
+  a higher video track with `blend: "screen"` (or `add` for a hotter look), so the black drops
+  out; textures, paper and dust on white use `multiply`. Lower the clip's `opacity` to taste.
+  A blend affects everything beneath the clip on lower tracks.
+- **Titles.** Bring titles in and out with `animateIn` / `animateOut` rather than hand-made
+  keyframes: `rise` or `fade` for lower thirds, `pop` for a playful callout, `zoom` for a slow
+  reveal; 300-600 ms in, a little quicker out. Keep text inside the title-safe area (about 90% of the frame), hold it at least as
   long as it takes to read twice, and use `background` for contrast over busy footage.
 - **Pacing.** Vary shot length with content; trim heads and tails of every clip to the
   essential action rather than using whole source files.
@@ -145,10 +158,12 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
 | `lift_video_range` | Empty `from`..`to` ms on all unlocked tracks or the given `tracks`, leaving a gap: clips inside are deleted, clips across an edge trimmed, a clip across both cut in two. Returns what was removed, trimmed and created. |
 | `extract_video_range` | Remove `from`..`to` ms and close it up: as lift, then later material moves earlier on those and every sync-locked track. Refused (naming the clip) when a sync-locked track outside `tracks` has material there. Use to cut a section out of a finished sequence. |
 | `delete_video_clips` | Remove `clips`; `ripple: true` pulls later clips up to close the gaps (a ripple delete). |
-| `update_video_clip` | Change properties via `set`: opacity, transform (`x`, `y` px from centre, `scale`, `rotation`), `fit` (contain default for media, cover, fill, none), `fadeIn` / `fadeOut`, name; media `volume` (0-4), `muted`, `fadeInCurve` / `fadeOutCurve` (the sound's fade shape: linear, equal-power, s-curve, exponential, logarithmic), `speed` (0.05-20, keeps the source range so the length changes), `asset`; title text and style; colour. `remove` resets to defaults. Not for timing. |
+| `update_video_clip` | Change properties via `set`: opacity, transform (`x`, `y` px from centre, `scale`, `rotation`), `fit` (contain default for media, cover, fill, none), `animateIn` / `animateOut` (`{ effect: fade, rise, drop, slide-left, slide-right, zoom or pop, duration ms default 500 }`), `grade` (`exposure` stops -3-3, `contrast`, `saturation`, `temperature`, `tint` -1-1, `hue` degrees; replaces the whole grade), `blend` (normal, multiply, screen, overlay, darken, lighten, color-dodge, color-burn, hard-light, soft-light, difference, exclusion, add), `fadeIn` / `fadeOut`, name; media `volume` (0-4), `muted`, `fadeInCurve` / `fadeOutCurve` (the sound's fade shape: linear, equal-power, s-curve, exponential, logarithmic), `speed` (0.05-20, keeps the source range so the length changes), `asset`; title text and style; colour. `remove` resets to defaults. Not for timing. |
+| `apply_video_grade_preset` | Give `clips` (on video tracks) a named look at an `amount` 0-1 (default 1), replacing their grades: warm, cool, punchy, faded, black-and-white, bleach-bypass, day-for-night. One undo step; returns each clip's grade to fine-tune with `update_video_clip`. |
+| `copy_video_grade` | Match shots: give the `to` clips the grade of the `from` clip (one undo step; a source with no grade clears theirs). Returns the grade copied. |
 | `set_video_keyframes` | Animate one `property` of a `clip` (`opacity` 0-1, `volume` 0-4 for media, `x` / `y` px from centre, `scale`, `rotation` degrees) with `keys` `[{ t, v, ease? }]`, replacing its keys. `t` is clip time (ms from the clip's start), so keys travel with the clip. `ease`: linear (default), hold, ease-in, ease-out, ease-in-out or cubic-bezier points. Returns the sorted keys. |
 | `remove_video_keyframes` | Remove all keys of a clip `property`, leaving the value it had at the clip's start. |
-| `set_video_transition` | Set the transition into a `clip` from the clip ending where it starts on the same track: `{ type: crossfade, dip or wipe, duration ms centred on the cut, color (dip, default black), direction (wipe, default right) }`, or `null` to remove. When handles are short the error gives the longest that fits. |
+| `set_video_transition` | Set the transition into a `clip` from the clip ending where it starts on the same track: `{ type: crossfade, dip, wipe, push, slide or iris, duration ms centred on the cut, color (dip, default black), direction (wipe, push, slide; default right), audioCurve (the sound's fades: equal-power by default for crossfade and wipe, linear for dip) }`, or `null` to remove. When handles are short the error gives the longest that fits. |
 | `close_video_gaps` | Slide clips on a `track` earlier so no gaps remain, from time `from` (default the start). Returns the clips that moved. |
 | `add_video_marker` | Add a marker at `time` with `label`, `color` and optional `id`, for beats, sections or review notes. Returns its id. |
 | `remove_video_marker` | Remove a `marker` by id. |
@@ -162,6 +177,9 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
   impossible transition is refused whole (unless you asked for `mode: "overwrite"` or
   `"insert"`); read the message (it names the next free place or the longest trim /
   transition that fits) and retry with those numbers.
+- **Animations write keyframes for you.** `animateIn` / `animateOut` move opacity, x, y and scale;
+  if the clip keys one of those itself, the animation leaves it alone (`animation-keyed`), and
+  entrance plus exit longer than the clip are shortened (`animations-too-long`).
 - **Numbers replace keyframes.** Setting `opacity` or `volume` as a plain
   number (in `add_video_clip` or `update_video_clip`) drops that property's keys; animate with
   `set_video_keyframes` after the static settings, not before.

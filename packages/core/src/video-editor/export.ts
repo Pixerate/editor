@@ -1,7 +1,11 @@
+import { videoClipAnimated } from './clip-animation.js';
 import { placeVideoRect } from './evaluate.js';
+import { videoIrisRadius } from './render.js';
+import { videoGradeFfmpegFilters } from './grade.js';
 import { isVideoKeyframes, VIDEO_TRANSFORM_PROPERTIES, videoKeyframeFfmpegExpr, type VideoAnimatable } from './keyframes.js';
 import { formatVideoTimecode, formatVideoTimecodeFrames, isVideoDropFrameRate, videoHourFrames, videoTimecodeFrames, sortedVideoClips, videoAssetMap, videoClipBefore, videoClipEnd, videoClipOverhang, videoClipSpeed, videoProjectDuration, videoAssetHasSound } from './timeline.js';
-import type { VideoAsset, VideoClip, VideoFadeCurve, VideoProject, VideoTextClip, VideoTrack } from './types.js';
+import { videoTransitionAudioCurve } from './types.js';
+import type { VideoWipeDirection, VideoAsset, VideoBlendMode, VideoClip, VideoFadeCurve, VideoProject, VideoTextClip, VideoTrack } from './types.js';
 
 // ---------------------------------------------------------------------------------------------
 // CMX 3600 EDL
@@ -61,7 +65,7 @@ export function toVideoEdl(project: VideoProject, options: VideoEdlOptions = {})
 			const outReel = before.type === 'media' ? reelName(assets.get(before.asset)) : 'BL';
 			const at = sourceAt(before, recIn);
 			lines.push(row(n, outReel, 'C', at, at, recIn, recIn));
-			lines.push(row(n, reel, `${t.type === 'wipe' ? 'W001' : 'D'}    ${frames}`, sourceAt(clip, recIn), sourceAt(clip, recOut), recIn, recOut));
+			lines.push(row(n, reel, `${t.type === 'crossfade' || t.type === 'dip' ? 'D' : 'W001'}    ${frames}`, sourceAt(clip, recIn), sourceAt(clip, recOut), recIn, recOut));
 		} else lines.push(row(n, reel, 'C', sourceAt(clip, recIn), sourceAt(clip, recOut), recIn, recOut));
 		if (clip.type === 'media' && videoClipSpeed(clip) !== 1) lines.push(`M2   ${reel.padEnd(8)} ${(videoClipSpeed(clip) * fps).toFixed(1).padStart(6)}      ${tc(sourceAt(clip, recIn))}`);
 		if (clip.type === 'media') lines.push(`* FROM CLIP NAME: ${asset?.name ?? asset?.src ?? clip.asset}`);
@@ -176,6 +180,21 @@ export interface VideoFfmpegExport {
 }
 
 const sec = (ms: number) => String(Math.round(ms) / 1000);
+/** ffmpeg `blend` modes for the blend modes. */
+const FFMPEG_BLEND: Record<Exclude<VideoBlendMode, 'normal'>, string> = {
+	multiply: 'multiply',
+	screen: 'screen',
+	overlay: 'overlay',
+	darken: 'darken',
+	lighten: 'lighten',
+	'color-dodge': 'dodge',
+	'color-burn': 'burn',
+	'hard-light': 'hardlight',
+	'soft-light': 'softlight',
+	difference: 'difference',
+	exclusion: 'exclusion',
+	add: 'addition'
+};
 /** `afade`'s curve for a fade shape (the same formulas as `videoFadeCurveGain`); nothing for linear, its default. */
 const AFADE_CURVES: Record<VideoFadeCurve, string> = { linear: 'tri', 'equal-power': 'qsin', 's-curve': 'hsin', exponential: 'cub', logarithmic: 'ipar' };
 const afadeCurve = (curve: VideoFadeCurve | undefined) => (curve && curve !== 'linear' ? `:curve=${AFADE_CURVES[curve]}` : '');
@@ -243,6 +262,7 @@ function buildFfmpeg(project: VideoProject, options: VideoFfmpegOptions, measure
 	let cur = 'base';
 	let usesDrawtext = false;
 	const animated = new Set<string>();
+	const blended = new Set<VideoBlendMode>();
 	let k = 0;
 	// Keyframes become piecewise-linear expressions; eased segments get a breakpoint every two frames.
 	const step = 2000 / fps;
@@ -260,7 +280,9 @@ function buildFfmpeg(project: VideoProject, options: VideoFfmpegOptions, measure
 	};
 	// Back to front: later tracks are further back.
 	for (const track of [...project.tracks].reverse()) {
-		for (const clip of sortedVideoClips(track)) {
+		for (const raw of sortedVideoClips(track)) {
+			// Entrance and exit animations go out as keyframes on opacity and the transform.
+			const clip = videoClipAnimated(raw, project);
 			const { lead, tail } = videoClipOverhang(track, clip);
 			const t0 = clip.start - lead;
 			const span = clip.duration + lead + tail;
@@ -279,11 +301,13 @@ function buildFfmpeg(project: VideoProject, options: VideoFfmpegOptions, measure
 				const volume = isVideoKeyframes(clip.volume) ? `volume='${trackGain}*(${expr(clip.volume, `(t*1000${lead ? `-${Math.round(lead)}` : ''})`, 1, 'volume')})':eval=frame` : `volume=${(clip.volume ?? 1) * trackGain}`;
 				const chain = ['asetpts=PTS-STARTPTS', ...atempo(videoClipSpeed(clip)), volume];
 				const before = clip.transition ? videoClipBefore(track, clip) : null;
-				if (lead) chain.push(`afade=t=in:st=0:d=${sec(2 * lead)}`);
-				if (tail) chain.push(`afade=t=out:st=${sec(span - 2 * tail)}:d=${sec(2 * tail)}`);
-				if (before && clip.transition!.type === 'dip') chain.push(`afade=t=in:st=0:d=${sec(clip.transition!.duration / 2)}`);
-				const after = sortedVideoClips(track).find((c) => c !== clip && Math.abs(c.start - end) < 0.5 && c.transition?.type === 'dip');
-				if (after) chain.push(`afade=t=out:st=${sec(span - after.transition!.duration / 2)}:d=${sec(after.transition!.duration / 2)}`);
+				const next = sortedVideoClips(track).find((c) => c !== clip && Math.abs(c.start - end) < 0.5 && c.transition);
+				const inCurve = clip.transition ? afadeCurve(videoTransitionAudioCurve(clip.transition)) : '';
+				const outCurve = next ? afadeCurve(videoTransitionAudioCurve(next.transition!)) : '';
+				if (lead) chain.push(`afade=t=in:st=0:d=${sec(2 * lead)}${inCurve}`);
+				if (tail) chain.push(`afade=t=out:st=${sec(span - 2 * tail)}:d=${sec(2 * tail)}${outCurve}`);
+				if (before && clip.transition!.type === 'dip') chain.push(`afade=t=in:st=0:d=${sec(clip.transition!.duration / 2)}${inCurve}`);
+				if (next?.transition!.type === 'dip') chain.push(`afade=t=out:st=${sec(span - next.transition!.duration / 2)}:d=${sec(next.transition!.duration / 2)}${outCurve}`);
 				if (clip.fadeIn) chain.push(`afade=t=in:st=${sec(lead)}:d=${sec(clip.fadeIn)}${afadeCurve(clip.fadeInCurve)}`);
 				if (clip.fadeOut) chain.push(`afade=t=out:st=${sec(lead + clip.duration - clip.fadeOut)}:d=${sec(clip.fadeOut)}${afadeCurve(clip.fadeOutCurve)}`);
 				chain.push(`adelay=${Math.round(t0)}:all=1`);
@@ -324,6 +348,8 @@ function buildFfmpeg(project: VideoProject, options: VideoFfmpegOptions, measure
 					`enable='between(t,${sec(clip.start)},${sec(end)})'`
 				];
 				if (tf?.rotation) notes.push(`Title "${clip.id}" is drawn without its rotation (drawtext cannot rotate).`);
+				if (videoGradeFfmpegFilters(clip.grade).length) notes.push(`Title "${clip.id}" is drawn without its grade (drawtext draws straight onto the picture); pass titleImage to grade titles.`);
+				if (clip.blend && clip.blend !== 'normal') notes.push(`Title "${clip.id}" is drawn without its blend mode (drawtext draws straight onto the picture); pass titleImage to blend titles.`);
 				graph.push(`[${cur}]drawtext=${opts.join(':')}[${next}]`);
 				cur = next;
 				continue;
@@ -341,10 +367,8 @@ function buildFfmpeg(project: VideoProject, options: VideoFfmpegOptions, measure
 				source = `[${index}:v]`;
 				chain.push(`setpts=${videoClipSpeed(clip) !== 1 ? `(PTS-STARTPTS)/${videoClipSpeed(clip)}` : 'PTS-STARTPTS'}`, `fps=${fps}`, `scale=${even(rect.width)}:${even(rect.height)}`);
 			}
-			if (isVideoKeyframes(placed?.scale)) {
-				const s = expr(placed.scale, onChain('t'), 1, 'scale');
-				chain.push(`scale=w='max(2,trunc(${even(rect.width)}*(${s})/2)*2)':h='max(2,trunc(${even(rect.height)}*(${s})/2)*2)':eval=frame`);
-			}
+			const grade = videoGradeFfmpegFilters(clip.grade);
+			if (grade.length) chain.push('format=rgba', ...grade);
 			chain.push('format=yuva420p');
 			if (isVideoKeyframes(clip.opacity)) chain.push(`geq=lum='lum(X,Y)':cb='cb(X,Y)':cr='cr(X,Y)':a='alpha(X,Y)*clip(${expr(clip.opacity, onChain('T'), 1, 'opacity')},0,1)'`);
 			else if (clip.opacity !== undefined && clip.opacity < 1) chain.push(`colorchannelmixer=aa=${clip.opacity}`);
@@ -358,18 +382,58 @@ function buildFfmpeg(project: VideoProject, options: VideoFfmpegOptions, measure
 				const test = dir === 'right' ? `lt(X,W*${p})` : dir === 'left' ? `gt(X,W*(1-${p}))` : dir === 'down' ? `lt(Y,H*${p})` : `gt(Y,H*(1-${p}))`;
 				chain.push(`geq=lum='lum(X,Y)':cb='cb(X,Y)':cr='cr(X,Y)':a='if(${test},alpha(X,Y),0)'`);
 			}
+			if (lead && clip.transition!.type === 'iris') {
+				// The circle is on the frame's centre: in the picture's own pixels, offset by where it sits.
+				const r = videoIrisRadius({ width: W, height: H }, 1);
+				chain.push(`geq=lum='lum(X,Y)':cb='cb(X,Y)':cr='cr(X,Y)':a='if(lte(hypot(X+${Math.round(rect.x)}-${W / 2},Y+${Math.round(rect.y)}-${H / 2}),${Math.round(r)}*min(1,T/${sec(2 * lead)})),alpha(X,Y),0)'`);
+			}
 			const rotation = placed?.rotation;
-			if (isVideoKeyframes(rotation)) chain.push(`rotate=a='(${expr(rotation, onChain('t'), 0, 'rotation')})*PI/180':c=none:ow='hypot(iw,ih)':oh=ow`);
-			else if (rotation) chain.push(`rotate=${rotation}*PI/180:c=none:ow=rotw(${rotation}*PI/180):oh=roth(${rotation}*PI/180)`);
+			if (isVideoKeyframes(rotation)) chain.push(`rotate=a='(${expr(rotation, onChain('t'), 0, 'rotation')})*PI/180':c=black@0:ow='hypot(iw,ih)':oh=ow`);
+			else if (rotation) chain.push(`rotate=${rotation}*PI/180:c=black@0:ow=rotw(${rotation}*PI/180):oh=roth(${rotation}*PI/180)`);
+			// Animated scale goes last: geq and rotate keep the frame size they first see, so a size that
+			// changes before them is frozen. Scaling the turned picture by iw / ih gives the same result.
+			if (isVideoKeyframes(placed?.scale)) {
+				const s = expr(placed.scale, onChain('t'), 1, 'scale');
+				chain.push(`scale=w='max(2,trunc(iw*(${s})/2)*2)':h='max(2,trunc(ih*(${s})/2)*2)':eval=frame`);
+			}
 			chain.push(`setpts=PTS+${sec(t0)}/TB`);
 			const cx = rect.x + rect.width / 2;
 			const cy = rect.y + rect.height / 2;
+			// Push and slide move the whole picture by a frame, eased as videoTransitionEase does.
+			const shifts: Record<'x' | 'y', string[]> = { x: [], y: [] };
+			const shiftBy = (direction: VideoWipeDirection | undefined, from: number, d: number, entering: boolean) => {
+				const dir = direction ?? 'right';
+				const axis = dir === 'left' || dir === 'right' ? 'x' : 'y';
+				const size = axis === 'x' ? W : H;
+				const sign = dir === 'left' || dir === 'up' ? -1 : 1;
+				const ease = `(1-cos(PI*clip((t-${sec(from)})/${sec(d)},0,1)))/2`;
+				shifts[axis].push(`${sign * size}*(${ease}${entering ? '-1' : ''})`);
+			};
+			const into = lead ? clip.transition!.type : undefined;
+			if (into === 'push' || into === 'slide') shiftBy(clip.transition!.direction, clip.start - lead, 2 * lead, true);
+			const after = tail ? sortedVideoClips(track).find((c) => c !== clip && Math.abs(c.start - end) < 0.5 && c.transition) : undefined;
+			if (after?.transition!.type === 'push') shiftBy(after.transition!.direction, end - tail, 2 * tail, false);
 			const at = (axis: 'x' | 'y', c: number) => {
 				const v = placed?.[axis];
-				return isVideoKeyframes(v) ? `${axis}='${Math.round(axis === 'x' ? project.width / 2 : project.height / 2)}+(${expr(v, onTimeline, 0, 'position')})-${axis === 'x' ? 'w' : 'h'}/2'` : `${axis}='${Math.round(c)}-${axis === 'x' ? 'w' : 'h'}/2'`;
+				const extra = shifts[axis].map((s) => `+${s}`).join('');
+				return isVideoKeyframes(v) ? `${axis}='${Math.round(axis === 'x' ? project.width / 2 : project.height / 2)}+(${expr(v, onTimeline, 0, 'position')})-${axis === 'x' ? 'w' : 'h'}/2${extra}'` : `${axis}='${Math.round(c)}-${axis === 'x' ? 'w' : 'h'}/2${extra}'`;
 			};
 			graph.push(`${source.startsWith('[') ? source : `${source},`}${chain.join(',')}[l${next}]`);
-			graph.push(`[${cur}][l${next}]overlay=${at('x', cx)}:${at('y', cy)}:eof_action=pass:${enable}[${next}]`);
+			if (clip.blend && clip.blend !== 'normal') {
+				// Place the layer on a transparent full frame, blend that with the composite in RGB, then
+				// lay the blend over the composite through the layer's own alpha (its opacity and fades).
+				graph.push(`color=c=black@0:s=${W}x${H}:r=${fps}:d=${sec(D)},format=yuva420p[t${next}]`);
+				graph.push(`[t${next}][l${next}]overlay=${at('x', cx)}:${at('y', cy)}:eof_action=pass:${enable},format=gbrap,split[f${next}][g${next}]`);
+				graph.push(`[${cur}]format=gbrap,split[c${next}][d${next}]`);
+				// ffmpeg's dodge and burn divide by the first ("top") input, the others test it: measured against
+				// the CSS formulas, dodge and burn match with the layer first, the rest with the composite first.
+				const layerFirst = clip.blend === 'color-dodge' || clip.blend === 'color-burn';
+				graph.push(`${layerFirst ? `[f${next}][c${next}]` : `[c${next}][f${next}]`}blend=all_mode=${FFMPEG_BLEND[clip.blend]}[b${next}]`);
+				graph.push(`[g${next}]alphaextract[m${next}]`);
+				graph.push(`[b${next}][m${next}]alphamerge[x${next}]`);
+				graph.push(`[d${next}][x${next}]overlay=format=gbrp,format=yuva420p[${next}]`);
+				blended.add(clip.blend);
+			} else graph.push(`[${cur}][l${next}]overlay=${at('x', cx)}:${at('y', cy)}:eof_action=pass:${enable}[${next}]`);
 			cur = next;
 			const before = clip.transition ? videoClipBefore(track, clip) : null;
 			if (before && clip.transition!.type === 'dip') {
@@ -392,6 +456,7 @@ function buildFfmpeg(project: VideoProject, options: VideoFfmpegOptions, measure
 		notes.push('Video assets are assumed to have sound; set "hasAudio": false on any that do not, or ffmpeg will stop at a missing audio stream.');
 	if (animated.size)
 		notes.push(`Keyframed ${[...animated].sort().join(', ')} ${animated.size > 1 ? 'are' : 'is'} rendered as straight lines between keys, with eased segments sampled every two frames${animated.has('scale') ? '; animated scale needs ffmpeg 5 or later (scale with eval=frame)' : ''}.`);
+	if (blended.has('soft-light')) notes.push("ffmpeg's soft-light blend uses a slightly different formula from the browser's, so the render can differ a little from the preview.");
 	if (usesDrawtext) notes.push('Titles use drawtext, which needs an ffmpeg built with libfreetype (Homebrew\'s is not: check `ffmpeg -filters | grep drawtext`); pass titleImage to render them as images instead.');
 	const filterComplex = graph.join(';');
 	if (measure) {

@@ -4,11 +4,12 @@ import type { VideoIssue } from './check.js';
 import type { VideoEditorController } from './controller.js';
 import { VIDEO_EDIT_OPS, type VideoEdit, type VideoEditOutcome, type VideoEditResult } from './edit.js';
 import { findVideoAudioSilences, videoAudioLevels } from './audio.js';
+import { VIDEO_GRADE_CONTROLS, VIDEO_GRADE_PRESET_NAMES, videoGradePreset } from './grade.js';
 import { videoFrameAt } from './evaluate.js';
 import { VIDEO_EASE_NAMES, VIDEO_KEYFRAME_PROPERTIES, VIDEO_TRANSFORM_PROPERTIES, type VideoAnimatable, type VideoKeyframeProperty } from './keyframes.js';
 import { videoContactSheetSvg, videoProjectSvg } from './render.js';
 import { findVideoClip, findVideoGaps, formatVideoTimecode, sortedVideoClips, videoClipEnd, videoClipSourceRange, videoProjectDuration } from './timeline.js';
-import { VIDEO_FADE_CURVES, VIDEO_FITS, VIDEO_PLACEMENT_MODES, VIDEO_TRANSITION_TYPES, VIDEO_WIPE_DIRECTIONS, type VideoAsset, type VideoProject } from './types.js';
+import { VIDEO_BLEND_MODES, VIDEO_CLIP_ANIMATION_EFFECTS, VIDEO_FADE_CURVES, VIDEO_FITS, VIDEO_PLACEMENT_MODES, VIDEO_TRANSITION_TYPES, VIDEO_WIPE_DIRECTIONS, type VideoAsset, type VideoProject } from './types.js';
 
 /** Times in results, to a tenth of a millisecond. */
 const round = (ms: number) => Math.round(ms * 10) / 10;
@@ -68,19 +69,38 @@ const TRANSFORM = object(
 );
 const TRANSITION = object(
 	{
-		type: { type: 'string', enum: [...VIDEO_TRANSITION_TYPES], description: 'crossfade (this clip fades up over the one before), dip (down into a colour and up out of it) or wipe (an edge travels across revealing this clip).' },
-		duration: { type: 'number', exclusiveMinimum: 0, description: 'Length in ms, centred on the cut. A crossfade or wipe needs half of it in media past the cut on both sides (handles); a dip needs none.' },
+		type: { type: 'string', enum: [...VIDEO_TRANSITION_TYPES], description: 'crossfade (this clip fades up over the one before), dip (down into a colour and up out of it), wipe (an edge travels across revealing this clip), push (this clip slides in and pushes the one before out), slide (this clip slides in over the one before) or iris (a circle opens from the centre).' },
+		duration: { type: 'number', exclusiveMinimum: 0, description: 'Length in ms, centred on the cut. Every type but dip needs half of it in media past the cut on both sides (handles); a dip needs none.' },
 		color: COLOR('For dip: the colour passed through (default black)'),
-		direction: { type: 'string', enum: [...VIDEO_WIPE_DIRECTIONS], description: 'For wipe: the way the edge travels (default right).' }
+		direction: { type: 'string', enum: [...VIDEO_WIPE_DIRECTIONS], description: 'For wipe, push and slide: the way the edge or picture travels (default right, coming in from the left).' },
+		audioCurve: { type: 'string', enum: [...VIDEO_FADE_CURVES], description: 'Shape of the sound\'s fades through it: default equal-power for every type but dip (steady loudness while the two sounds overlap), linear for dip; or s-curve, exponential, logarithmic.' }
 	},
 	['type', 'duration'],
 	'A transition from the clip that ends where this one starts on the same track.'
 );
+const GRADE = object(
+	Object.fromEntries(VIDEO_GRADE_CONTROLS.map((c) => [c.key, { type: 'number', minimum: c.min, maximum: c.max, description: c.description }])),
+	[],
+	'Colour correction of the picture, applied in order: exposure, contrast, saturation, hue, white balance (temperature, tint). Leave a setting out for no change; the object replaces the clip\'s whole grade.'
+);
+const ANIMATION = (when: string) =>
+	object(
+		{
+			effect: { type: 'string', enum: [...VIDEO_CLIP_ANIMATION_EFFECTS], description: 'fade; rise (up into place) or drop (down into place); slide-left / slide-right (moving that way); zoom (grows into place); pop (grows past its size and settles). Each also fades; an exit plays the movement backwards.' },
+			duration: { type: 'number', exclusiveMinimum: 0, description: 'Length in ms (default 500).' }
+		},
+		['effect'],
+		when
+	);
 const CLIP_COMMON: Record<string, JsonSchema> = {
 	name: { type: 'string', description: 'A label for the clip.' },
 	opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Opacity 0–1 (default 1). A number replaces any keyframes; set_video_keyframes animates it.' },
 	transform: TRANSFORM,
 	fit: { type: 'string', enum: [...VIDEO_FITS], description: 'How the picture fits the frame before the transform, as CSS object-fit (default contain for media, fill for colours).' },
+	grade: GRADE,
+	animateIn: ANIMATION('How the picture enters, from the clip\'s start (on top of any fade in). Titles usually rise, pop or fade in.'),
+	animateOut: ANIMATION('How the picture leaves, ending at the clip\'s end.'),
+	blend: { type: 'string', enum: [...VIDEO_BLEND_MODES], description: 'How the picture mixes with what is beneath it, as CSS mix-blend-mode (default normal): multiply darkens (shadows, textures), screen and add lighten (light leaks, flares, glows), overlay and soft-light add contrast, difference and exclusion invert.' },
 	fadeIn: MS('Fade up from nothing (picture and sound) over this long'),
 	fadeOut: MS('Fade down to nothing over this long')
 };
@@ -260,7 +280,7 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 	const getFrame: AgentTool = {
 		name: 'get_video_frame',
 		title: 'What plays at a moment',
-		description: 'Returns what plays at a time without changing anything: the pictures back to front (clip, track, asset, source time in ms, opacity, placement rect, rotation, any wipe) and the sounds (clip, source time, gain after volumes, fades and transitions).',
+		description: 'Returns what plays at a time without changing anything: the pictures back to front (clip, track, asset, source time in ms, opacity, placement rect, rotation, any wipe or iris) and the sounds (clip, source time, gain after volumes, fades and transitions).',
 		inputSchema: object({ time: MS('Time from the start (default: the playhead)') }),
 		annotations: { title: 'What plays at a moment', ...READ },
 		handler: ({ time }) => {
@@ -284,7 +304,7 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 	const checkProject: AgentTool = {
 		name: 'check_video_project',
 		title: 'Check the video project',
-		description: 'Lists the project\'s problems, errors first, each with a code, the clip / track / asset it is about and how to fix it: missing assets, overlaps, clips past the end of their source, transitions without a cut or handles, fades longer than the clip, keyframes outside their clip, assets with no duration, unused assets.',
+		description: 'Lists the project\'s problems, errors first, each with a code, the clip / track / asset it is about and how to fix it: missing assets, overlaps, clips past the end of their source, transitions without a cut or handles, fades or animations longer than the clip, animations a clip\'s own keyframes override, keyframes outside their clip, assets with no duration, unused assets.',
 		inputSchema: object({}),
 		annotations: { title: 'Check the video project', ...READ },
 		handler: () => {
@@ -544,12 +564,12 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 		name: 'update_video_clip',
 		title: 'Change a clip',
 		description:
-			'Changes a clip\'s properties (one undo step): opacity, transform, fit, fades, name; for media volume, mute, the sound\'s fade curves, speed (keeps the stretch of source, so the length changes) or asset; for titles text and style; for colours the colour. Fields in "remove" go back to their defaults. Use move / trim for timing. Returns the clip.',
+			'Changes a clip\'s properties (one undo step): opacity, transform, fit, blend mode, colour grade, entrance and exit animations, fades, name; for media volume, mute, the sound\'s fade curves, speed (keeps the stretch of source, so the length changes) or asset; for titles text and style; for colours the colour. Fields in "remove" go back to their defaults. Use move / trim for timing. Returns the clip.',
 		inputSchema: object(
 			{
 				clip: CLIP_ID,
 				set: object({ ...CLIP_COMMON, ...MEDIA_FIELDS, asset: { ...ASSET_ID, description: 'For media: play another asset (same in point).' }, ...TEXT_FIELDS, color: COLOR('Text colour, or a colour clip\'s fill') }, [], 'Fields to replace (only those that fit the clip\'s type).'),
-				remove: { type: 'array', items: { type: 'string', enum: ['name', 'opacity', 'transform', 'fit', 'fadeIn', 'fadeOut', 'fadeInCurve', 'fadeOutCurve', 'in', 'speed', 'volume', 'muted', 'fontSize', 'fontFamily', 'fontWeight', 'background'] }, description: 'Fields to reset to their defaults.' }
+				remove: { type: 'array', items: { type: 'string', enum: ['name', 'opacity', 'transform', 'fit', 'blend', 'grade', 'animateIn', 'animateOut', 'fadeIn', 'fadeOut', 'fadeInCurve', 'fadeOutCurve', 'in', 'speed', 'volume', 'muted', 'fontSize', 'fontFamily', 'fontWeight', 'background'] }, description: 'Fields to reset to their defaults.' }
 			},
 			['clip']
 		),
@@ -557,7 +577,7 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 		handler: ({ clip, set, remove }) => {
 			const current = clipOut(project(), clip);
 			if (current && set) {
-				const allowed = new Set(['name', 'opacity', 'transform', 'fit', 'fadeIn', 'fadeOut', ...(current.type === 'media' ? ['in', 'speed', 'volume', 'muted', 'asset', 'fadeInCurve', 'fadeOutCurve'] : current.type === 'text' ? Object.keys(TEXT_FIELDS) : ['color'])]);
+				const allowed = new Set(['name', 'opacity', 'transform', 'fit', 'blend', 'grade', 'animateIn', 'animateOut', 'fadeIn', 'fadeOut', ...(current.type === 'media' ? ['in', 'speed', 'volume', 'muted', 'asset', 'fadeInCurve', 'fadeOutCurve'] : current.type === 'text' ? Object.keys(TEXT_FIELDS) : ['color'])]);
 				const wrong = Object.keys(set).filter((k) => !allowed.has(k));
 				if (wrong.length) throw new Error(`${wrong.map((k) => `"${k}"`).join(', ')} cannot be set on a ${current.type} clip; it takes ${[...allowed].join(', ')}.`);
 			}
@@ -565,11 +585,60 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 		}
 	};
 
+	/** Clips a grade can change: pictures, on video tracks. */
+	const gradeTargets = (ids: string[]) => {
+		const p = project();
+		for (const id of ids) {
+			const at = findVideoClip(p, id);
+			if (!at) throw new Error(`There is no clip "${id}"; get_video_project lists the clips.`);
+			const { clip } = at;
+			if (at.track.kind !== 'video' || (clip.type === 'media' && p.assets.find((a) => a.id === clip.asset)?.kind === 'audio'))
+				throw new Error(`Clip "${id}" is sound only; grades change pictures. Pass clips on video tracks.`);
+		}
+	};
+
+	const applyGradePreset: AgentTool = {
+		name: 'apply_video_grade_preset',
+		title: 'Apply a colour look',
+		description:
+			'Gives clips a named colour look at a strength (one undo step), replacing their grades: warm, cool, punchy (more contrast and colour), faded (lifted and muted), black-and-white, bleach-bypass (desaturated, contrasty), day-for-night (dark and blue). Returns each clip\'s resulting grade; tweak it with update_video_clip set.grade.',
+		inputSchema: object(
+			{
+				clips: { type: 'array', items: CLIP_ID, minItems: 1, description: 'Clips on video tracks to grade.' },
+				preset: { type: 'string', enum: [...VIDEO_GRADE_PRESET_NAMES], description: 'The look.' },
+				amount: { type: 'number', minimum: 0, maximum: 1, description: 'Strength, 0 (none) to 1 (full, the default); 0.5 is a subtler version.' }
+			},
+			['clips', 'preset']
+		),
+		annotations: { title: 'Apply a colour look', ...WRITE_IDEMPOTENT },
+		handler: ({ clips, preset, amount }) => {
+			gradeTargets(clips);
+			const grade = videoGradePreset(preset, amount ?? 1);
+			const edits: VideoEdit[] = clips.map((clip: string) => (grade ? { op: 'update_clip', clip, set: { grade } } : { op: 'update_clip', clip, remove: ['grade'] }));
+			return apply(edits, `Apply ${preset} look`, (r) => ({ clips: clips.map((id: string) => ({ id, grade: findVideoClip(r.project, id)?.clip.grade ?? null })) }));
+		}
+	};
+
+	const copyGrade: AgentTool = {
+		name: 'copy_video_grade',
+		title: 'Copy a colour grade',
+		description:
+			'Gives clips the same colour grade as another clip (one undo step), to match shots in a scene; a source with no grade clears theirs. Returns the grade copied and the clips changed.',
+		inputSchema: object({ from: { ...CLIP_ID, description: 'The clip whose grade to copy.' }, to: { type: 'array', items: CLIP_ID, minItems: 1, description: 'Clips on video tracks to give it to.' } }, ['from', 'to']),
+		annotations: { title: 'Copy a colour grade', ...WRITE_IDEMPOTENT },
+		handler: ({ from, to }) => {
+			gradeTargets([from, ...to]);
+			const grade = findVideoClip(project(), from)!.clip.grade;
+			const edits: VideoEdit[] = to.map((clip: string) => (grade ? { op: 'update_clip', clip, set: { grade: { ...grade } } } : { op: 'update_clip', clip, remove: ['grade'] }));
+			return apply(edits, 'Copy grade', () => ({ grade: grade ?? null, clips: to }));
+		}
+	};
+
 	const setTransition: AgentTool = {
 		name: 'set_video_transition',
 		title: 'Set a transition',
 		description:
-			'Sets (or with null removes) the transition into a clip from the clip that ends where it starts on the same track (one undo step). A crossfade or wipe plays half before and half after the cut, so both clips need that much media past the cut; when they do not, the error says the longest that fits. Returns the clip.',
+			'Sets (or with null removes) the transition into a clip from the clip that ends where it starts on the same track (one undo step). Every type but dip plays half before and half after the cut, so both clips need that much media past the cut; when they do not, the error says the longest that fits. Returns the clip.',
 		inputSchema: object({ clip: { ...CLIP_ID, description: 'The incoming clip (the one after the cut).' }, transition: { anyOf: [TRANSITION, { type: 'null' }], description: 'The transition, or null to remove it.' } }, ['clip', 'transition']),
 		annotations: { title: 'Set a transition', ...WRITE_IDEMPOTENT },
 		handler: ({ clip, transition }) => apply({ op: 'set_transition', clip, transition }, transition ? 'Set transition' : 'Remove transition', (r) => ({ clip: clipOut(r.project, clip) }))
@@ -819,7 +888,7 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 	};
 
 	const reads = [getProject, getFrame, findGaps, checkProject, renderFrame, exportFfmpeg, exportLoudnessMeasure, exportEdl, audioLevels, findSilences, seek];
-	const writes = [setSettings, addAsset, updateAsset, removeAsset, addTrack, updateTrack, removeTrack, moveTrack, addClip, moveClip, trimClip, splitClip, deleteClips, updateClip, setTransition, setKeyframes, removeKeyframes, slipClip, rollEdit, slideClip, liftRange, extractRange, splitAt, closeGaps, addMarker, removeMarker, editVideo, undo, redo];
+	const writes = [setSettings, addAsset, updateAsset, removeAsset, addTrack, updateTrack, removeTrack, moveTrack, addClip, moveClip, trimClip, splitClip, deleteClips, updateClip, setTransition, applyGradePreset, copyGrade, setKeyframes, removeKeyframes, slipClip, rollEdit, slideClip, liftRange, extractRange, splitAt, closeGaps, addMarker, removeMarker, editVideo, undo, redo];
 
 	return {
 		id: options.id ?? 'video',

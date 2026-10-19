@@ -341,6 +341,65 @@ describe("ClipInspector (Svelte)", () => {
     controller.destroy();
   });
 
+  it("grades a picture: a look, then single settings", () => {
+    const controller = make();
+    render(ClipInspector, { controller });
+    act(() => controller.select(["c1"]));
+    change(q<HTMLSelectElement>('[data-field="gradePreset"]'), "cool");
+    expect(clipOf(controller, "c1")!.grade).toEqual({ temperature: -0.4, tint: -0.05 });
+    change(q<HTMLInputElement>('[data-field="grade.hue"]'), "-500");
+    expect(clipOf(controller, "c1")!.grade).toEqual({ hue: -180, temperature: -0.4, tint: -0.05 });
+    // Clearing a setting removes it.
+    change(q<HTMLInputElement>('[data-field="grade.hue"]'), "");
+    expect(clipOf(controller, "c1")!.grade).toEqual({ temperature: -0.4, tint: -0.05 });
+    controller.destroy();
+  });
+
+  it("sets a picture's blend mode", () => {
+    const controller = make();
+    render(ClipInspector, { controller });
+    act(() => controller.select(["c1"]));
+    change(q<HTMLSelectElement>('[data-field="blend"]'), "multiply");
+    expect(clipOf(controller, "c1")!.blend).toBe("multiply");
+    change(q<HTMLSelectElement>('[data-field="blend"]'), "normal");
+    expect(clipOf(controller, "c1")!.blend).toBeUndefined();
+    controller.destroy();
+  });
+
+  it("animates a title in and out", () => {
+    const controller = make();
+    render(ClipInspector, { controller });
+    act(() => controller.select(["c2"]));
+    change(q<HTMLSelectElement>('[data-field="animateOut"]'), "drop");
+    expect(clipOf(controller, "c2")!.animateOut).toEqual({ effect: "drop" });
+    change(q<HTMLSelectElement>('[data-field="animateOut"]'), "");
+    expect(clipOf(controller, "c2")!.animateOut).toBeUndefined();
+    controller.destroy();
+  });
+
+  it("offers a direction for push, slide and wipe only", () => {
+    const controller = make();
+    render(ClipInspector, { controller });
+    act(() => controller.select(["c2"]));
+    expect(document.querySelector('[data-field="transitionDirection"]')).toBeNull();
+    change(q<HTMLSelectElement>('[data-field="transition"]'), "slide");
+    change(q<HTMLSelectElement>('[data-field="transitionDirection"]'), "left");
+    expect(clipOf(controller, "c2")!.transition).toEqual({ type: "slide", duration: 400, direction: "left" });
+    controller.destroy();
+  });
+
+  it("shapes a transition's sound, storing only a change from the type's default", () => {
+    const controller = make();
+    render(ClipInspector, { controller });
+    act(() => controller.select(["c2"]));
+    expect(q<HTMLSelectElement>('[data-field="transitionAudioCurve"]').value).toBe("linear");
+    change(q<HTMLSelectElement>('[data-field="transitionAudioCurve"]'), "s-curve");
+    expect(clipOf(controller, "c2")!.transition).toEqual({ type: "dip", duration: 400, audioCurve: "s-curve" });
+    change(q<HTMLSelectElement>('[data-field="transitionAudioCurve"]'), "linear");
+    expect(clipOf(controller, "c2")!.transition).toEqual({ type: "dip", duration: 400 });
+    controller.destroy();
+  });
+
   it("shapes a media clip's sound fades once it has them", () => {
     const controller = make();
     render(ClipInspector, { controller });

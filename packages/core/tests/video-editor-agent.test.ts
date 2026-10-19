@@ -85,6 +85,58 @@ describe('video agent tasks, through the tools only', () => {
 		expect(await fail('export_video_ffmpeg', { loudness: { measured: { integrated: -30 } } })).toContain('truePeak');
 	});
 
+	it('blends a light leak over the footage and takes it back to normal', async () => {
+		const { call, fail } = tools();
+		await call('add_video_asset', { id: 'leak', kind: 'video', src: 'leak.mp4', duration: 5000, hasAudio: false });
+		await call('add_video_track', { kind: 'video', id: 'fx', at: 0 });
+		await call('add_video_clip', { track: 'fx', clip: { type: 'media', id: 'l', asset: 'leak', blend: 'screen' } });
+		expect((await call('get_video_frame', { time: 100 })).layers[0].blend).toBe('screen');
+		const set = await call('update_video_clip', { clip: 'l', set: { blend: 'add' } });
+		expect(set.clip.blend).toBe('add');
+		expect(await fail('update_video_clip', { clip: 'l', set: { blend: 'dodge' } })).toContain('blend');
+		const reset = await call('update_video_clip', { clip: 'l', remove: ['blend'] });
+		expect(reset.clip.blend).toBeUndefined();
+	});
+
+	it('animates a title in and out', async () => {
+		const { call, fail } = tools();
+		await call('add_video_clip', { track: 'v1', clip: { type: 'text', id: 't', text: 'Hello', duration: 3000, animateIn: { effect: 'pop' } } });
+		expect((await call('get_video_frame', { time: 0 })).layers).toEqual([]);
+		const set = await call('update_video_clip', { clip: 't', set: { animateOut: { effect: 'drop', duration: 800 } } });
+		expect(set.clip.animateOut).toEqual({ effect: 'drop', duration: 800 });
+		expect((await call('get_video_frame', { time: 1500 })).layers[0].opacity).toBe(1);
+		expect(await fail('update_video_clip', { clip: 't', set: { animateIn: { effect: 'spin' } } })).toContain('effect');
+		expect(await fail('update_video_clip', { clip: 't', set: { animateIn: { duration: 300 } } })).toContain('effect');
+		const cleared = await call('update_video_clip', { clip: 't', remove: ['animateIn', 'animateOut'] });
+		expect(cleared.clip.animateIn).toBeUndefined();
+	});
+
+	it('pushes one shot into the next and reads where both pictures are', async () => {
+		const { call, fail } = tools();
+		await call('add_video_clip', { track: 'v1', clip: { type: 'color', id: 'a', color: '#f00', duration: 2000 } });
+		await call('add_video_clip', { track: 'v1', clip: { type: 'color', id: 'b', color: '#00f', duration: 2000 } });
+		const set = await call('set_video_transition', { clip: 'b', transition: { type: 'push', duration: 800, direction: 'left' } });
+		expect(set.clip.transition).toEqual({ type: 'push', duration: 800, direction: 'left' });
+		const mid = await call('get_video_frame', { time: 2000 });
+		expect(mid.layers.map((l: { clip: string; rect: { x: number } }) => [l.clip, Math.round(l.rect.x)])).toEqual([['a', -960], ['b', 960]]);
+		expect(await fail('set_video_transition', { clip: 'b', transition: { type: 'spin', duration: 800 } })).toContain('type');
+		expect(await fail('set_video_transition', { clip: 'b', transition: { type: 'push', duration: 800, direction: 'sideways' } })).toContain('direction');
+	});
+
+	it('crossfades sound at equal power unless told otherwise', async () => {
+		const { call, fail } = tools();
+		await call('add_video_asset', { id: 'm', kind: 'audio', src: 'm.wav', duration: 20000 });
+		await call('add_video_clip', { track: 'a1', clip: { type: 'media', id: 'x', asset: 'm', in: 1000, duration: 4000 } });
+		await call('add_video_clip', { track: 'a1', clip: { type: 'media', id: 'y', asset: 'm', in: 8000, duration: 4000 } });
+		await call('set_video_transition', { clip: 'y', transition: { type: 'crossfade', duration: 1000 } });
+		const atCut = await call('get_video_frame', { time: 4000 });
+		expect(atCut.audio.map((a: { gain: number }) => a.gain)).toEqual([expect.closeTo(Math.SQRT1_2, 6), expect.closeTo(Math.SQRT1_2, 6)]);
+		const set = await call('set_video_transition', { clip: 'y', transition: { type: 'crossfade', duration: 1000, audioCurve: 'linear' } });
+		expect(set.clip.transition.audioCurve).toBe('linear');
+		expect((await call('get_video_frame', { time: 4000 })).audio[0].gain).toBeCloseTo(0.5, 6);
+		expect(await fail('set_video_transition', { clip: 'y', transition: { type: 'crossfade', duration: 1000, audioCurve: 'loud' } })).toContain('audioCurve');
+	});
+
 	it('shapes a sound fade and reads the gain back', async () => {
 		const { call, fail } = tools();
 		await call('add_video_asset', { id: 'music', kind: 'audio', src: 'music.mp3', duration: 30000 });

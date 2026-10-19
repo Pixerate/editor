@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { applyVideoEdits, createVideoProject, parseVideoLoudnessMeasurement, toVideoFfmpeg, toVideoLoudnessMeasure, videoFrameAt, type VideoEdit, type VideoProject } from '../src/video-editor';
+import { applyVideoEdits, applyVideoGrade, createVideoProject, parseVideoLoudnessMeasurement, toVideoFfmpeg, toVideoLoudnessMeasure, videoFrameAt, type VideoEdit, type VideoProject } from '../src/video-editor';
 
 // Renders projects with a real ffmpeg (skipped when it is not on PATH): the string assertions in
 // video-editor.test.ts cannot tell whether ffmpeg accepts the filter graph.
@@ -132,6 +132,92 @@ describe.skipIf(!hasFfmpeg)('toVideoFfmpeg with a real ffmpeg', () => {
 		const after = measure(['-hide_banner', '-nostats', '-i', out, '-af', 'loudnorm=print_format=json', '-f', 'null', '-']);
 		expect(Math.abs(after.integrated - -16)).toBeLessThan(1);
 		expect(after.truePeak).toBeLessThanOrEqual(-0.5);
+	}, 120000);
+
+	it('blends layers with what is beneath, through their opacity, only where they cover', () => {
+		const p = project([
+			{ op: 'add_clip', track: 'v1', clip: { type: 'color', id: 'grey', color: '#808080', duration: 3000 } },
+			{ op: 'add_track', track: { kind: 'video', id: 'top' } },
+			{ op: 'add_clip', track: 'top', clip: { type: 'media', id: 'm', asset: 'still', duration: 1000, fit: 'none', blend: 'multiply' } },
+			{ op: 'add_clip', track: 'top', clip: { type: 'media', id: 's', asset: 'still', start: 1000, duration: 1000, fit: 'none', blend: 'screen', opacity: 0.5 } },
+			{ op: 'add_clip', track: 'top', clip: { type: 'color', id: 'a', color: '#404040', start: 2000, duration: 1000, blend: 'add' } }
+		]);
+		const out = render(p, 'blend.mp4');
+		const near = (rgb: number[], want: number[]) => rgb.every((v, i) => Math.abs(v - want[i]) < 24);
+		// Multiply red over grey: (128, 0, 0) inside the 200 px still, grey outside it.
+		expect(pixel(out, 0.5, 316, 176)).toSatisfy((rgb: number[]) => near(rgb, [128, 0, 0]));
+		expect(pixel(out, 0.5, 40, 40)).toSatisfy((rgb: number[]) => near(rgb, [128, 128, 128]));
+		// Screen red at half opacity: halfway between grey and (255, 128, 128).
+		expect(pixel(out, 1.5, 316, 176)).toSatisfy((rgb: number[]) => near(rgb, [191, 128, 128]));
+		// Add: 0x80 + 0x40.
+		expect(pixel(out, 2.5, 316, 176)).toSatisfy((rgb: number[]) => near(rgb, [192, 192, 192]));
+	}, 120000);
+
+	it('pushes, slides and opens an iris as the preview does', () => {
+		const cut = (transition: Record<string, unknown>) =>
+			project([
+				{ op: 'add_clip', track: 'v1', clip: { type: 'color', id: 'r', color: '#ff0000', duration: 2000 } },
+				{ op: 'add_clip', track: 'v1', clip: { type: 'color', id: 'b', color: '#0000ff', duration: 2000, transition: transition as any } }
+			]);
+		const near = (rgb: number[], want: number[]) => rgb.every((v, i) => Math.abs(v - want[i]) < 40);
+		const red = [255, 0, 0];
+		const blue = [0, 0, 255];
+		// Halfway through a push to the right, blue fills the left half and red the right.
+		const push = render(cut({ type: 'push', duration: 1000 }), 'push.mp4');
+		expect(pixel(push, 2, 100, 170)).toSatisfy((rgb: number[]) => near(rgb, blue));
+		expect(pixel(push, 2, 540, 170)).toSatisfy((rgb: number[]) => near(rgb, red));
+		// A slide up: blue comes up over the bottom half, red stays.
+		const slide = render(cut({ type: 'slide', duration: 1000, direction: 'up' }), 'slide.mp4');
+		expect(pixel(slide, 2, 300, 300)).toSatisfy((rgb: number[]) => near(rgb, blue));
+		expect(pixel(slide, 2, 300, 40)).toSatisfy((rgb: number[]) => near(rgb, red));
+		// Halfway through an iris, the centre is blue and the corners still red.
+		const iris = render(cut({ type: 'iris', duration: 1000 }), 'iris.mp4');
+		expect(pixel(iris, 2, 316, 176)).toSatisfy((rgb: number[]) => near(rgb, blue));
+		expect(pixel(iris, 2, 10, 10)).toSatisfy((rgb: number[]) => near(rgb, red));
+		for (const file of [push, slide, iris]) expect(Number(probe(file).format.duration)).toBeCloseTo(4, 0);
+	}, 120000);
+
+	it('animates a picture in as the preview does', () => {
+		const p = project([
+			{ op: 'add_clip', track: 'v1', clip: { type: 'color', id: 'bg', color: '#000000', duration: 2000 } },
+			{ op: 'add_track', track: { kind: 'video', id: 'top' } },
+			{ op: 'add_clip', track: 'top', clip: { type: 'color', id: 'z', color: '#00ff00', duration: 2000, animateIn: { effect: 'zoom', duration: 1000 } } }
+		]);
+		const out = render(p, 'zoom.mp4');
+		const near = (rgb: number[], want: number[]) => rgb.every((v, i) => Math.abs(v - want[i]) < 40);
+		// Early in the zoom the green box is small and faint: the corners are still black.
+		expect(pixel(out, 0.12, 10, 10)).toSatisfy((rgb: number[]) => near(rgb, [0, 0, 0]));
+		const early = videoFrameAt(p, 120).layers.find((l) => l.clip === 'z')!;
+		const centre = pixel(out, 0.12, 316, 176);
+		expect(Math.abs(centre[1] - 255 * early.opacity)).toBeLessThan(40);
+		// Once in, it fills the frame.
+		expect(pixel(out, 1.5, 10, 10)).toSatisfy((rgb: number[]) => near(rgb, [0, 255, 0]));
+	}, 120000);
+
+	it('grades colours as the preview does', () => {
+		const grades = [{ exposure: 0.5, contrast: 0.3 }, { saturation: -0.6, hue: 40 }, { temperature: 0.8, tint: -0.5 }, { exposure: -1, saturation: 0.8, temperature: -0.5 }];
+		const base: [number, number, number] = [180, 90, 60];
+		const p = project(grades.map((grade, i) => ({ op: 'add_clip' as const, track: 'v1', clip: { type: 'color' as const, id: `g${i}`, color: '#b45a3c', start: i * 1000, duration: 1000, grade } })));
+		const out = render(p, 'grade.mp4');
+		grades.forEach((grade, i) => {
+			const want = applyVideoGrade(grade, base);
+			const got = pixel(out, i + 0.5, 300, 170);
+			expect(got.every((v, k) => Math.abs(v - want[k]) < 10), `grade ${JSON.stringify(grade)}: got ${got}, want ${want}`).toBe(true);
+		});
+	}, 120000);
+
+	it('dodges and burns as the browser does', () => {
+		const p = project([
+			{ op: 'add_clip', track: 'v1', clip: { type: 'color', id: 'base', color: '#c8c8c8', duration: 2000 } },
+			{ op: 'add_track', track: { kind: 'video', id: 'top' } },
+			{ op: 'add_clip', track: 'top', clip: { type: 'color', id: 'd', color: '#1e1e1e', duration: 1000, blend: 'color-dodge' } },
+			{ op: 'add_clip', track: 'top', clip: { type: 'color', id: 'b', color: '#c8c8c8', start: 1000, duration: 1000, blend: 'color-burn' } }
+		]);
+		const out = render(p, 'dodge.mp4');
+		const near = (rgb: number[], want: number[]) => rgb.every((v, i) => Math.abs(v - want[i]) < 12);
+		// CSS: dodge 200 / (1 - 30/255) = 227; burn 1 - (1 - 200/255) / (200/255) = 185.
+		expect(pixel(out, 0.5, 300, 170)).toSatisfy((rgb: number[]) => near(rgb, [227, 227, 227]));
+		expect(pixel(out, 1.5, 300, 170)).toSatisfy((rgb: number[]) => near(rgb, [185, 185, 185]));
 	}, 120000);
 
 	it('overlays titles given as images, with their fades', () => {

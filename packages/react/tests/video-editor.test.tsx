@@ -446,6 +446,79 @@ describe("ClipInspector (React)", () => {
     controller.destroy();
   });
 
+  it("grades a picture: a look, then single settings, clamped and removable", () => {
+    const controller = make();
+    act(() => root.render(<ClipInspector controller={controller} />));
+    act(() => controller.select(["c1"]));
+    choose($<HTMLSelectElement>('select[aria-label="Apply a look"]'), "warm");
+    expect(clip(controller, "c1")!.clip.grade).toEqual({ temperature: 0.4, saturation: 0.1 });
+    expect(controller.getState().undoLabel).toBe("Apply warm look");
+    commit($<HTMLInputElement>('input[aria-label="Exposure"]'), "9");
+    expect(clip(controller, "c1")!.clip.grade).toEqual({ exposure: 3, temperature: 0.4, saturation: 0.1 });
+    commit($<HTMLInputElement>('input[aria-label="Exposure"]'), "");
+    commit($<HTMLInputElement>('input[aria-label="Temperature"]'), "0");
+    commit($<HTMLInputElement>('input[aria-label="Saturation"]'), "0");
+    expect(clip(controller, "c1")!.clip.grade).toBeUndefined();
+    act(() => controller.select(["m1"]));
+    expect(container.querySelector('input[aria-label="Exposure"]')).toBeNull();
+    controller.destroy();
+  });
+
+  it("sets a picture's blend mode, and offers none for sound", () => {
+    const controller = make();
+    act(() => root.render(<ClipInspector controller={controller} />));
+    act(() => controller.select(["t1"]));
+    choose($<HTMLSelectElement>('select[aria-label="Blend mode"]'), "screen");
+    expect(clip(controller, "t1")!.clip.blend).toBe("screen");
+    expect(controller.getState().undoLabel).toBe("Change blend mode");
+    choose($<HTMLSelectElement>('select[aria-label="Blend mode"]'), "normal");
+    expect(clip(controller, "t1")!.clip.blend).toBeUndefined();
+    act(() => controller.select(["m1"]));
+    expect(container.querySelector('select[aria-label="Blend mode"]')).toBeNull();
+    controller.destroy();
+  });
+
+  it("animates a title in and out, keeping a duration it already has", () => {
+    const controller = make();
+    act(() => root.render(<ClipInspector controller={controller} />));
+    act(() => controller.select(["t1"]));
+    choose($<HTMLSelectElement>('select[aria-label="Animate in"]'), "pop");
+    expect(clip(controller, "t1")!.clip.animateIn).toEqual({ effect: "pop" });
+    act(() => void controller.apply({ op: "update_clip", clip: "t1", set: { animateIn: { effect: "pop", duration: 800 } } }, "Set"));
+    choose($<HTMLSelectElement>('select[aria-label="Animate in"]'), "rise");
+    expect(clip(controller, "t1")!.clip.animateIn).toEqual({ effect: "rise", duration: 800 });
+    choose($<HTMLSelectElement>('select[aria-label="Animate in"]'), "");
+    expect(clip(controller, "t1")!.clip.animateIn).toBeUndefined();
+    controller.destroy();
+  });
+
+  it("offers a direction for push, slide and wipe only", () => {
+    const controller = make();
+    act(() => root.render(<ClipInspector controller={controller} />));
+    act(() => controller.select(["c2"]));
+    expect(container.querySelector('select[aria-label="Transition direction"]')).toBeNull();
+    choose($<HTMLSelectElement>('select[aria-label="Transition"]'), "push");
+    choose($<HTMLSelectElement>('select[aria-label="Transition direction"]'), "up");
+    expect(clip(controller, "c2")!.clip.transition).toEqual({ type: "push", duration: 400, direction: "up" });
+    choose($<HTMLSelectElement>('select[aria-label="Transition"]'), "iris");
+    expect(container.querySelector('select[aria-label="Transition direction"]')).toBeNull();
+    controller.destroy();
+  });
+
+  it("shapes a transition's sound, storing only a change from the type's default", () => {
+    const controller = make();
+    act(() => root.render(<ClipInspector controller={controller} />));
+    act(() => controller.select(["c2"]));
+    const curve = () => $<HTMLSelectElement>('select[aria-label="Transition sound curve"]');
+    expect(curve().value).toBe("equal-power");
+    choose(curve(), "linear");
+    expect(clip(controller, "c2")!.clip.transition).toEqual({ type: "crossfade", duration: 400, audioCurve: "linear" });
+    expect(controller.getState().undoLabel).toBe("Change transition sound");
+    choose(curve(), "equal-power");
+    expect(clip(controller, "c2")!.clip.transition).toEqual({ type: "crossfade", duration: 400 });
+    controller.destroy();
+  });
+
   it("shapes a media clip's sound fades once it has them", () => {
     const controller = make();
     act(() => root.render(<ClipInspector controller={controller} />));

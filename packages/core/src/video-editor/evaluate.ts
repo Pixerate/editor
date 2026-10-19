@@ -1,6 +1,9 @@
+import { videoClipAnimated } from './clip-animation.js';
+import { normalizeVideoGrade } from './grade.js';
 import { videoValueAt } from './keyframes.js';
 import { sortedVideoClips, videoAssetMap, videoClipAfter, videoClipBefore, videoClipEnd, videoClipSpeed, videoAssetHasSound } from './timeline.js';
-import type { VideoAsset, VideoClip, VideoFadeCurve, VideoFit, VideoProject, VideoTextClip, VideoTrack, VideoWipeDirection } from './types.js';
+import { videoTransitionAudioCurve } from './types.js';
+import type { VideoAsset, VideoBlendMode, VideoGrade, VideoClip, VideoFadeCurve, VideoFit, VideoProject, VideoTransition, VideoTextClip, VideoTrack, VideoWipeDirection } from './types.js';
 
 /** A rectangle in frame pixels. */
 export interface VideoRect {
@@ -29,10 +32,16 @@ export interface VideoLayer {
 	rotation: number;
 	/** For a wipe: the part shown is the `progress` (0–1) of the rect from the edge opposite `direction`. */
 	wipe?: { direction: VideoWipeDirection; progress: number };
+	/** For an iris: only a circle on the frame's centre shows, its radius `progress` (0–1) of the way to the frame's corners. */
+	iris?: { progress: number };
 	/** For text: what to draw. */
 	text?: { text: string; color: string; fontSize: number; fontFamily: string; fontWeight: number; background?: string };
 	/** For colour clips and dips. */
 	color?: string;
+	/** How it mixes with the layers beneath (absent = normal). */
+	blend?: VideoBlendMode;
+	/** Colour correction (absent = none). */
+	grade?: VideoGrade;
 }
 
 /** One sound playing at a moment. */
@@ -100,6 +109,9 @@ export function videoTitleFrame(project: VideoProject, clip: VideoTextClip, clip
 }
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
+
+/** How far a push or slide has moved at `progress` (0–1): eased in and out, (1 − cos πp) / 2. */
+export const videoTransitionEase = (progress: number): number => (1 - Math.cos(Math.PI * clamp01(progress))) / 2;
 
 /** Gain of a fade shape `x` of the way up (0–1); a fade out uses the time left, so it mirrors the fade in. */
 export function videoFadeCurveGain(curve: VideoFadeCurve | undefined, x: number): number {
@@ -181,9 +193,10 @@ export function videoFrameAt(project: VideoProject, time: number): VideoFrame {
 			if (outgoing?.type === 'dip' && outgoing.progress >= 0.5) continue;
 			const inside = Math.min(Math.max(time, clip.start), videoClipEnd(clip));
 			const fade = fadeGain(clip, inside);
-			const level = (t: { type: string; progress: number }, into: boolean) => (t.type === 'dip' ? Math.abs(1 - 2 * t.progress) : into ? t.progress : 1 - t.progress);
-			// Sound crossfades through a crossfade or wipe, and dips with the picture.
-			const mix = (incoming ? level(incoming, true) : 1) * (outgoing ? level(outgoing, false) : 1);
+			const level = (t: { type: string; progress: number }, transition: VideoTransition, into: boolean) =>
+				videoFadeCurveGain(videoTransitionAudioCurve(transition), t.type === 'dip' ? Math.abs(1 - 2 * t.progress) : into ? t.progress : 1 - t.progress);
+			// Sound crossfades through a crossfade or wipe (equal power by default), and dips with the picture.
+			const mix = (incoming ? level(incoming, incoming.transition, true) : 1) * (outgoing ? level(outgoing, outgoing.next.transition!, false) : 1);
 			const asset = clip.type === 'media' ? assets.get(clip.asset) : undefined;
 			const sourceTime = sourceTimeAt(clip, time);
 			// Keyframes are in clip time, held before the first key and after the last.
@@ -195,20 +208,41 @@ export function videoFrameAt(project: VideoProject, time: number): VideoFrame {
 			}
 			if (track.kind !== 'video' || track.hidden) continue;
 			if (clip.type === 'media' && (!asset || asset.kind === 'audio')) continue;
-			let opacity = videoValueAt(clip.opacity, clipTime, 1) * fade;
+			// Entrance and exit animations are keyframes on the picture's opacity and transform.
+			const shown = videoClipAnimated(clip, project);
+			let opacity = videoValueAt(shown.opacity, clipTime, 1) * fade;
 			let wipe: VideoLayer['wipe'];
 			let dip: { color: string; opacity: number } | null = null;
+			let iris: VideoLayer['iris'];
+			// Push and slide move whole pictures by a frame, eased in and out.
+			let shift = 0;
+			let shiftDirection: VideoWipeDirection = 'right';
 			if (incoming) {
 				if (incoming.type === 'crossfade') opacity *= incoming.progress;
 				else if (incoming.type === 'wipe') wipe = { direction: incoming.transition.direction ?? 'right', progress: incoming.progress };
-				else dip = { color: incoming.transition.color ?? '#000000', opacity: (1 - incoming.progress) * 2 };
+				else if (incoming.type === 'iris') iris = { progress: incoming.progress };
+				else if (incoming.type === 'push' || incoming.type === 'slide') {
+					shiftDirection = incoming.transition.direction ?? 'right';
+					shift = videoTransitionEase(incoming.progress) - 1;
+				} else dip = { color: incoming.transition.color ?? '#000000', opacity: (1 - incoming.progress) * 2 };
 			}
 			if (outgoing?.type === 'dip') dip = { color: outgoing.next.transition!.color ?? '#000000', opacity: outgoing.progress * 2 };
+			if (outgoing?.type === 'push') {
+				shiftDirection = outgoing.next.transition!.direction ?? 'right';
+				shift = videoTransitionEase(outgoing.progress);
+			}
 			const size = clip.type === 'media' ? { width: asset!.width ?? project.width, height: asset!.height ?? project.height } : { width: project.width, height: project.height };
 			const fit = clip.fit ?? (clip.type === 'media' ? 'contain' : 'fill');
-			const rect = placeVideoRect(project, size, clip.type === 'text' ? 'fill' : fit, clip.transform, clipTime);
-			const layer: VideoLayer = { clip: clip.id, track: track.id, type: clip.type, opacity: clamp01(opacity), rect, rotation: videoValueAt(clip.transform?.rotation, clipTime, 0) };
+			const placed = placeVideoRect(project, size, clip.type === 'text' ? 'fill' : fit, shown.transform, clipTime);
+			const across = shiftDirection === 'left' || shiftDirection === 'right';
+			const sign = shiftDirection === 'left' || shiftDirection === 'up' ? -1 : 1;
+			const rect = shift ? { ...placed, ...(across ? { x: placed.x + sign * shift * project.width } : { y: placed.y + sign * shift * project.height }) } : placed;
+			const layer: VideoLayer = { clip: clip.id, track: track.id, type: clip.type, opacity: clamp01(opacity), rect, rotation: videoValueAt(shown.transform?.rotation, clipTime, 0) };
 			if (wipe) layer.wipe = wipe;
+			if (iris) layer.iris = iris;
+			if (clip.blend && clip.blend !== 'normal') layer.blend = clip.blend;
+			const grade = normalizeVideoGrade(clip.grade);
+			if (grade) layer.grade = grade;
 			if (clip.type === 'media') Object.assign(layer, { asset: asset!.id, assetKind: asset!.kind, src: asset!.src, sourceTime });
 			if (clip.type === 'text') layer.text = videoTextStyle(clip);
 			if (clip.type === 'color') layer.color = clip.color;

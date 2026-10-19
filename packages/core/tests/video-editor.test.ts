@@ -20,6 +20,7 @@ import {
 	parseVideoLoudnessMeasurement,
 	videoContactSheetSvg,
 	videoFadeCurveGain,
+	videoClipAnimated,
 	videoFrameAt,
 	videoProjectSvg,
 	VideoEditorController,
@@ -235,7 +236,13 @@ describe('videoFrameAt', () => {
 		const early = videoFrameAt(p, 3600);
 		expect(early.layers.map((l) => l.clip)).toEqual(['a', 'b']);
 		expect(early.layers[1].sourceTime).toBe(600);
-		expect(early.audio.find((a) => a.clip === 'a')!.gain).toBeCloseTo(0.9);
+		// The sound crossfades at equal power by default: 10% into it, "a" is at cos(0.1·π/2).
+		expect(early.audio.find((a) => a.clip === 'a')!.gain).toBeCloseTo(Math.cos(0.05 * Math.PI), 6);
+		// At the cut both sounds are at 1/√2, so the total power holds steady.
+		const cut = ok(applyVideoEdits(p, [{ op: 'update_clip', clip: 'b', set: { asset: 'beach' } }]));
+		expect(videoFrameAt(cut, 4000).audio.filter((a) => a.clip !== 's').map((a) => a.gain)).toEqual([expect.closeTo(Math.SQRT1_2, 6), expect.closeTo(Math.SQRT1_2, 6)]);
+		const linear = ok(applyVideoEdits(p, [{ op: 'set_transition', clip: 'b', transition: { type: 'crossfade', duration: 1000, audioCurve: 'linear' } }]));
+		expect(videoFrameAt(linear, 3600).audio.find((a) => a.clip === 'a')!.gain).toBeCloseTo(0.9);
 	});
 
 	it('dips through a colour without running past the cut', () => {
@@ -389,7 +396,7 @@ describe('exports', () => {
 		expect(ff.filterComplex).toContain("drawtext=text=It\\\\\\'s 10\\\\:30");
 		expect(ff.filterComplex).toContain("alpha='1*min(1,(t-0)/0.5)'");
 		expect(ff.filterComplex).toContain('[0:a]asetpts=PTS-STARTPTS,volume=0.5,adelay=0:all=1[a0]');
-		expect(ff.filterComplex).toContain('[1:a]asetpts=PTS-STARTPTS,volume=1,afade=t=out:st=3.5:d=1,adelay=0:all=1[a1]');
+		expect(ff.filterComplex).toContain('[1:a]asetpts=PTS-STARTPTS,volume=1,afade=t=out:st=3.5:d=1:curve=qsin,adelay=0:all=1[a1]');
 		expect(ff.filterComplex).toMatch(/amix=inputs=2:normalize=0:duration=longest,apad,atrim=0:7\[aout\]/);
 		expect(ff.args.slice(-3)).toEqual(['-t', '7', 'out.mp4']);
 		expect(ff.command).toMatch(/^ffmpeg -y -ss 0 -t 7 -i song\.mp3 -ss 2 /);
@@ -668,5 +675,147 @@ describe('loudness normalisation', () => {
 		expect(() => toVideoFfmpeg(project(), { loudness: { integrated: 3 } })).toThrow('between -70 and -5 LUFS');
 		expect(() => toVideoFfmpeg(project(), { loudness: { truePeak: 2 } })).toThrow('between -9 and 0 dBTP');
 		expect(() => toVideoFfmpeg(project(), { loudness: { measured: { ...measured, integrated: NaN } } })).toThrow('measured integrated is not a number');
+	});
+});
+
+describe('blend modes', () => {
+	const blended = () => ok(applyVideoEdits(project(), [
+		{ op: 'add_track', track: { kind: 'video', id: 'fx' }, at: 0 },
+		{ op: 'add_clip', track: 'fx', clip: { type: 'color', id: 'leak', color: '#ff8800', duration: 2000, blend: 'screen', opacity: 0.6 } },
+		{ op: 'add_clip', track: 'fx', clip: { type: 'color', id: 'glow', color: '#202020', start: 2000, duration: 1000, blend: 'add' } }
+	]));
+
+	it('travel with the layer into SVG and canvas', () => {
+		const p = blended();
+		const frame = videoFrameAt(p, 500);
+		expect(frame.layers.map((l) => [l.clip, l.blend])).toEqual([['a', undefined], ['leak', 'screen']]);
+		expect(videoProjectSvg(p, 500)).toContain('style="mix-blend-mode:screen"');
+		expect(videoProjectSvg(p, 2500)).toContain('mix-blend-mode:plus-lighter');
+		const ops: string[] = [];
+		const ctx: any = new Proxy({ globalAlpha: 1, globalCompositeOperation: 'source-over', measureText: () => ({ width: 1 }) }, {
+			get: (t, k) => (k in t ? t[k] : () => {}),
+			set: (t, k, v) => {
+				t[k] = v;
+				if (k === 'globalCompositeOperation') ops.push(v);
+				return true;
+			}
+		});
+		drawVideoFrame(ctx, videoFrameAt(p, 2500), () => null);
+		expect(ops).toEqual(['lighter']);
+	});
+
+	it('export as ffmpeg blends composited through the layer alpha, normal as a plain overlay', () => {
+		const p = blended();
+		const { filterComplex, notes } = toVideoFfmpeg(p);
+		expect(filterComplex).toContain('blend=all_mode=screen');
+		expect(filterComplex).toContain('blend=all_mode=addition');
+		expect(filterComplex).toMatch(/alphamerge/);
+		// The composite goes first, except for dodge and burn, which ffmpeg divides by its first input.
+		expect(filterComplex).toMatch(/\[c\w+\]\[f\w+\]blend=all_mode=screen/);
+		const dodge = ok(applyVideoEdits(p, [{ op: 'update_clip', clip: 'leak', set: { blend: 'color-dodge' } }]));
+		expect(toVideoFfmpeg(dodge).filterComplex).toMatch(/\[f\w+\]\[c\w+\]blend=all_mode=dodge/);
+		expect(notes.join(' ')).not.toMatch(/blend/);
+		const soft = ok(applyVideoEdits(p, [{ op: 'update_clip', clip: 'leak', set: { blend: 'soft-light' } }]));
+		expect(toVideoFfmpeg(soft).notes.join(' ')).toMatch(/soft-light blend uses a slightly different formula/);
+		const normal = ok(applyVideoEdits(p, [{ op: 'update_clip', clip: 'leak', set: { blend: 'normal' } }, { op: 'update_clip', clip: 'glow', remove: ['blend'] }]));
+		expect(toVideoFfmpeg(normal).filterComplex).not.toContain('blend=');
+		expect(() => parseVideoProject({ width: 640, height: 360, tracks: [{ id: 'v1', kind: 'video', clips: [{ id: 'x', type: 'color', color: '#fff', start: 0, duration: 1000, blend: 'burn' }] }] })).toThrow(/blend must be one of "normal", "multiply"/);
+	});
+});
+
+describe('push, slide and iris transitions', () => {
+	const cut = (transition: Record<string, unknown>) =>
+		ok(applyVideoEdits(createVideoProject({ width: 640, height: 360, fps: 25 }), [
+			{ op: 'add_clip', track: 'v1', clip: { type: 'color', id: 'a', color: '#ff0000', duration: 2000 } },
+			{ op: 'add_clip', track: 'v1', clip: { type: 'color', id: 'b', color: '#0000ff', duration: 2000, transition: transition as any } }
+		]));
+	const r3 = (v: number) => Math.round(v * 1000) / 1000 + 0;
+	const rects = (p: VideoProject, t: number) => Object.fromEntries(videoFrameAt(p, t).layers.map((l) => [l.clip, [r3(l.rect.x), r3(l.rect.y), l.opacity]]));
+
+	it('push moves both pictures a frame, eased; slide moves only the incoming one', () => {
+		const push = cut({ type: 'push', duration: 1000 });
+		expect(rects(push, 1500)).toEqual({ a: [0, 0, 1], b: [-640, 0, 1] });
+		expect(rects(push, 2000)).toEqual({ a: [320, 0, 1], b: [-320, 0, 1] });
+		// A quarter of the way in, the eased move has gone (1 − cos(π/4)) / 2 of the frame.
+		const q = (1 - Math.cos(Math.PI / 4)) / 2;
+		expect(rects(push, 1750).b[0]).toBeCloseTo(-640 * (1 - q), 2);
+		expect(rects(cut({ type: 'push', duration: 1000, direction: 'up' }), 2000)).toEqual({ a: [0, -180, 1], b: [0, 180, 1] });
+		expect(rects(cut({ type: 'slide', duration: 1000, direction: 'left' }), 2000)).toEqual({ a: [0, 0, 1], b: [320, 0, 1] });
+	});
+
+	it('iris opens a circle on the frame centre in SVG, canvas and ffmpeg', () => {
+		const p = cut({ type: 'iris', duration: 1000 });
+		expect(videoFrameAt(p, 2000).layers[1].iris).toEqual({ progress: 0.5 });
+		const svg = videoProjectSvg(p, 2000);
+		expect(svg).toContain(`<clipPath id="i1"><circle cx="320" cy="180" r="${Math.round(Math.hypot(320, 180) * 50) / 100}"/></clipPath>`);
+		expect(svg).toContain('<g clip-path="url(#i1)">');
+		const arcs: number[][] = [];
+		const ctx: any = new Proxy({ globalAlpha: 1, measureText: () => ({ width: 1 }) }, { get: (t, k) => (k in t ? t[k] : k === 'arc' ? (...a: number[]) => arcs.push(a) : () => {}), set: (t, k, v) => ((t[k] = v), true) });
+		drawVideoFrame(ctx, videoFrameAt(p, 2000), () => null);
+		expect(arcs[0].slice(0, 3)).toEqual([320, 180, Math.hypot(320, 180) / 2]);
+		expect(toVideoFfmpeg(p).filterComplex).toMatch(/a='if\(lte\(hypot\(X\+0-320,Y\+0-180\),367\*min\(1,T\/1\)\)/);
+	});
+
+	it('export push and slide as eased overlay moves, and EDL them as wipes', () => {
+		const push = toVideoFfmpeg(cut({ type: 'push', duration: 1000 })).filterComplex;
+		expect(push).toContain("x='320-w/2+640*((1-cos(PI*clip((t-1.5)/1,0,1)))/2-1)'");
+		expect(push).toContain("x='320-w/2+640*((1-cos(PI*clip((t-1.5)/1,0,1)))/2)'");
+		const slide = toVideoFfmpeg(cut({ type: 'slide', duration: 1000, direction: 'down' })).filterComplex;
+		expect(slide).toContain("y='180-h/2+360*((1-cos(PI*clip((t-1.5)/1,0,1)))/2-1)'");
+		expect(slide.match(/cos\(PI/g)).toHaveLength(1);
+		expect(toVideoEdl(cut({ type: 'push', duration: 1000 }))).toMatch(/W001 {4}025/);
+		expect(toVideoEdl(cut({ type: 'crossfade', duration: 1000 }))).toMatch(/ D {4}025/);
+	});
+});
+
+describe('entrance and exit animations', () => {
+	const titled = (clip: Record<string, unknown>) =>
+		ok(applyVideoEdits(createVideoProject({ width: 1000, height: 500, fps: 25 }), [{ op: 'add_clip', track: 'v1', clip: { type: 'text', id: 't', text: 'Hi', duration: 3000, ...clip } as any }]));
+	const layer = (p: VideoProject, t: number) => videoFrameAt(p, t).layers.find((l) => l.clip === 't');
+
+	it('become keyframes on opacity and the transform, an exit mirroring an entrance', () => {
+		const p = titled({ animateIn: { effect: 'rise' }, animateOut: { effect: 'slide-left', duration: 1000 }, transform: { y: 20 } });
+		const c = videoClipAnimated(clip(p, 't'), p);
+		// Opacity follows the effect's own easing.
+		expect(c.opacity).toEqual({ keys: [{ t: 0, v: 0, ease: 'ease-out' }, { t: 500, v: 1 }, { t: 2000, v: 1, ease: 'ease-in' }, { t: 3000, v: 0 }] });
+		expect(c.transform!.y).toEqual({ keys: [{ t: 0, v: 50, ease: 'ease-out' }, { t: 500, v: 20 }] });
+		expect(c.transform!.x).toEqual({ keys: [{ t: 2000, v: 0, ease: 'ease-in' }, { t: 3000, v: 150 }] });
+		expect(layer(p, 0)).toBeUndefined(); // fully transparent
+		// Halfway in, an ease-out fade is past halfway.
+		expect(layer(p, 250)!.opacity).toBeGreaterThan(0.6);
+		expect(layer(p, 1000)!.rect.y).toBe(20);
+		expect(layer(p, 2500)!.rect.x).toBeGreaterThan(0);
+		const plain = clip(titled({}), 't');
+		expect(videoClipAnimated(plain, p)).toBe(plain);
+	});
+
+	it('pop overshoots its size before settling', () => {
+		const p = titled({ animateIn: { effect: 'pop', duration: 1000 } });
+		const width = (t: number) => layer(p, t)!.rect.width;
+		expect(width(100)).toBeLessThan(1000);
+		expect(Math.max(...[500, 600, 700, 800].map(width))).toBeGreaterThan(1000);
+		expect(width(1500)).toBe(1000);
+	});
+
+	it('are shortened to fit, leave keyed properties alone, and say so', () => {
+		const p = titled({ duration: 600, animateIn: { effect: 'zoom', duration: 600 }, animateOut: { effect: 'fade', duration: 600 }, opacity: { keys: [{ t: 0, v: 0.5 }, { t: 600, v: 1 }] } });
+		const c = videoClipAnimated(clip(p, 't'), p);
+		expect(c.transform!.scale).toEqual({ keys: [{ t: 0, v: 0.6, ease: 'ease-out' }, { t: 300, v: 1 }] });
+		expect(c.opacity).toEqual({ keys: [{ t: 0, v: 0.5 }, { t: 600, v: 1 }] });
+		const codes = checkVideoProject(p).map((i) => i.code);
+		expect(codes).toContain('animations-too-long');
+		expect(checkVideoProject(p).find((i) => i.code === 'animation-keyed')!.message).toMatch(/zoom entrance leaves opacity alone/);
+	});
+
+	it('go with their ends when a clip is split, and export as keyed expressions', () => {
+		const p = ok(applyVideoEdits(titled({ animateIn: { effect: 'drop' }, animateOut: { effect: 'fade' } }), [{ op: 'split_clip', clip: 't', at: 1500, id: 't2' }]));
+		expect(clip(p, 't')).toMatchObject({ animateIn: { effect: 'drop' } });
+		expect(clip(p, 't')).not.toHaveProperty('animateOut');
+		expect(clip(p, 't2')).toMatchObject({ animateOut: { effect: 'fade' } });
+		expect(clip(p, 't2')).not.toHaveProperty('animateIn');
+		const ff = toVideoFfmpeg(p);
+		expect(ff.filterComplex).toMatch(/drawtext=[^;]*y='\(h-text_h\)\/2\+\(/);
+		expect(ff.notes.join(' ')).toMatch(/Keyframed .*opacity/);
+		expect(() => parseVideoProject({ width: 640, height: 360, tracks: [{ id: 'v1', kind: 'video', clips: [{ id: 'x', type: 'text', text: 'a', start: 0, duration: 1000, animateIn: { effect: 'spin' } }] }] })).toThrow(/animateIn\.effect must be one of "fade", "rise"/);
 	});
 });
