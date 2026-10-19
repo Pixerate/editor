@@ -1,9 +1,12 @@
 import type { AgentTool } from '../tools/registry.js';
 import type { ImageEditorController } from './controller';
 import { BLEND_MODES, type BlendMode } from './blend';
-import { MAX_BRUSH_SIZE, type BrushSettings, type StrokePoint } from '../paint';
+import { MAX_BRUSH_SIZE, MIXING_MODELS, type BrushSettings, type MixerLoad, type MixerSettings, type StrokePoint } from '../paint';
 import type { LayerTarget } from './layers/model';
+import { rgbUnitToHex } from './layers/paint-ui';
+import { LayerOperationError } from './layers/ops';
 
+const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
 const WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } as const;
 const DESTRUCTIVE = { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false } as const;
 
@@ -31,25 +34,50 @@ const BRUSH = {
   additionalProperties: false,
 } as const;
 
+const MIXER = {
+  type: 'object',
+  description:
+    'Mixer Brush settings (tool mixer only); missing fields use the current mixer options (wet 0.5, load 0.5, mix 0.5, loadEachStroke true, cleanEachStroke true, mixing rgb).',
+  properties: {
+    wet: { type: 'number', minimum: 0, maximum: 1, description: 'How much canvas colour each dab picks up, 0 (dry: paints only the reservoir) .. 1 (default 0.5).' },
+    load: { type: 'number', minimum: 0, maximum: 1, description: 'How much paint the reservoir holds, 0 .. 1 (default 0.5); below 1 it drains per dab, so long strokes run dry.' },
+    mix: { type: 'number', minimum: 0, maximum: 1, description: "How far each dab's paint moves from the reservoir towards the picked-up colour, 0 .. 1 (default 0.5)." },
+    loadEachStroke: { type: 'boolean', description: 'Refill the reservoir with `color` (or the foreground) before the stroke (default true). Off, the brush keeps what is left of its last load.' },
+    cleanEachStroke: { type: 'boolean', description: 'Empty the pickup well after the stroke (default true). Off, the next stroke starts with the colour this one picked up.' },
+    mixing: { type: 'string', enum: [...MIXING_MODELS], description: 'rgb (default): RGB averages. pigment: mixes like paint (Kubelka-Munk), so blue dragged through yellow makes green.' },
+  },
+  additionalProperties: false,
+} as const;
+
+/** A Mixer Brush load as tool output: hex colours and the amount left. */
+export function mixerLoadResult(load: MixerLoad): { reservoir: string | null; amount: number; pickup: string | null } {
+  return {
+    reservoir: load.reservoir ? rgbUnitToHex(load.reservoir) : null,
+    amount: Math.round(load.amount * 1000) / 1000,
+    pickup: load.pickup ? rgbUnitToHex(load.pickup) : null,
+  };
+}
+
 function readTarget(args: Record<string, unknown>): { layerId?: string; channel?: LayerTarget } {
   return { layerId: args.layerId as string | undefined, channel: args.channel as LayerTarget | undefined };
 }
 
 /**
- * Agent tools for painting: `paint_stroke` (brush or eraser along points, on pixels or a mask),
- * `fill_pixels` and `clear_pixels` (Edit › Fill / Clear inside the selection). Each is one undo
- * step and returns the layer, channel and changed bounds.
+ * Agent tools for painting: `paint_stroke` (brush, Mixer Brush or eraser along points, on pixels
+ * or a mask), `fill_pixels` and `clear_pixels` (Edit › Fill / Clear inside the selection), each
+ * one undo step returning the layer, channel and changed bounds; and the Mixer Brush's load:
+ * `get_mixer_brush`, `load_mixer_brush` and `clean_mixer_brush` (view state, no undo).
  */
 export function createImagePaintTools(controller: ImageEditorController): AgentTool[] {
   const paintStroke: AgentTool = {
     name: 'paint_stroke',
     title: 'Paint a brush stroke',
     description:
-      'Paints one stroke with the brush (or removes pixels with the eraser) through points in document pixels (optional pressure 0..1 each) on a pixel layer or a layer mask. The selection limits the paint; a transparency-locked layer keeps its alpha (the eraser then paints the background colour). One undo step. Returns the layerId, channel, changed bounds and dab count.',
+      'Paints one stroke with the brush, smears and blends paint with the Mixer Brush (tool mixer: its reservoir mixes with colour picked up from the layer under each dab, in RGB or pigment mixing), or removes pixels with the eraser, through points in document pixels (optional pressure 0..1 each) on a pixel layer or a layer mask (the mixer paints pixels only). The selection limits the paint; a transparency-locked layer keeps its alpha (the eraser then paints the background colour). One undo step. Returns the layerId, channel, changed bounds and dab count, and for the mixer its mixerLoad after the stroke ({reservoir, amount, pickup}).',
     inputSchema: {
       type: 'object',
       properties: {
-        tool: { type: 'string', enum: ['brush', 'eraser'], description: 'brush (default) or eraser.' },
+        tool: { type: 'string', enum: ['brush', 'eraser', 'mixer'], description: 'brush (default), eraser, or mixer (the Mixer Brush: picks up and blends the layer colour under each dab).' },
         points: {
           type: 'array',
           minItems: 1,
@@ -66,22 +94,73 @@ export function createImagePaintTools(controller: ImageEditorController): AgentT
             additionalProperties: false,
           },
         },
-        color: { type: 'string', description: 'Paint colour #rrggbb (default the foreground). On a mask its grey value: #000000 hides, #ffffff reveals.' },
+        color: {
+          type: 'string',
+          description:
+            'Paint colour #rrggbb (default the foreground). On a mask its grey value: #000000 hides, #ffffff reveals. For the mixer, the colour its reservoir is loaded with before the stroke (given, it loads even with loadEachStroke false).',
+        },
         brush: BRUSH,
+        mixer: MIXER,
         ...TARGET,
       },
       required: ['points'],
       additionalProperties: false,
     },
     annotations: { title: 'Paint a brush stroke', ...WRITE },
-    handler: (args) =>
-      controller.paintStroke({
-        tool: args.tool as 'brush' | 'eraser' | undefined,
+    handler: (args) => {
+      const tool = args.tool as 'brush' | 'eraser' | 'mixer' | undefined;
+      if (args.mixer !== undefined && tool !== 'mixer') throw new LayerOperationError('mixer settings apply to the Mixer Brush only; pass tool "mixer", or drop mixer.');
+      const result = controller.paintStroke({
+        tool,
         points: args.points as StrokePoint[],
         color: args.color as string | undefined,
         brush: args.brush as Partial<BrushSettings> | undefined,
+        mixer: args.mixer as Partial<MixerSettings> | undefined,
         ...readTarget(args),
-      }),
+      });
+      return result.mixerLoad ? { ...result, mixerLoad: mixerLoadResult(result.mixerLoad) } : result;
+    },
+  };
+
+  const getMixer: AgentTool = {
+    name: 'get_mixer_brush',
+    title: 'Get the Mixer Brush',
+    description:
+      "Reads the Mixer Brush: its settings (wet, load, mix, loadEachStroke, cleanEachStroke, mixing) and what it carries now (reservoir #rrggbb or null, amount 0..1 left, pickup #rrggbb or null). Call it before a paint_stroke with tool mixer and loadEachStroke false, to know the brush's starting paint.",
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    annotations: { title: 'Get the Mixer Brush', ...READ },
+    handler: () => {
+      const { mixer, mixerLoad } = controller.getState().paint;
+      return { settings: { ...mixer }, load: mixerLoadResult(mixerLoad) };
+    },
+  };
+
+  const loadMixerTool: AgentTool = {
+    name: 'load_mixer_brush',
+    title: 'Load the Mixer Brush',
+    description:
+      'Fills the Mixer Brush reservoir with a colour (amount 1); the picked-up colour is kept. View state, not an undo step. Use it with loadEachStroke false to carry one load across several paint_stroke calls. Returns the load {reservoir, amount, pickup}.',
+    inputSchema: {
+      type: 'object',
+      properties: { color: { type: 'string', description: 'Paint colour #rrggbb (default the foreground).' } },
+      additionalProperties: false,
+    },
+    annotations: { title: 'Load the Mixer Brush', ...WRITE, idempotentHint: true },
+    handler: (args) => mixerLoadResult(controller.loadMixerBrush(args.color as string | undefined)),
+  };
+
+  const cleanMixerTool: AgentTool = {
+    name: 'clean_mixer_brush',
+    title: 'Clean the Mixer Brush',
+    description:
+      'Cleans the Mixer Brush: empties the pickup well so the next stroke starts without canvas colour; with emptyReservoir also drops the loaded paint (the brush then only smears). View state, not an undo step. Returns the load {reservoir, amount, pickup}.',
+    inputSchema: {
+      type: 'object',
+      properties: { emptyReservoir: { type: 'boolean', description: 'Also drop the reservoir (default false).' } },
+      additionalProperties: false,
+    },
+    annotations: { title: 'Clean the Mixer Brush', ...WRITE, idempotentHint: true },
+    handler: (args) => mixerLoadResult(args.emptyReservoir === true ? controller.emptyMixerBrush() : controller.cleanMixerBrush()),
   };
 
   const fill: AgentTool = {
@@ -130,5 +209,5 @@ export function createImagePaintTools(controller: ImageEditorController): AgentT
       controller.clearPixels({ opacity: args.opacity as number | undefined, useSelection: args.useSelection as boolean | undefined, ...readTarget(args) }),
   };
 
-  return [paintStroke, fill, clear];
+  return [paintStroke, fill, clear, getMixer, loadMixerTool, cleanMixerTool];
 }

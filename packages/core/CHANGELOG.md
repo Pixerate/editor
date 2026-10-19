@@ -1,5 +1,12 @@
 # @pixerate/editor
 
+## 0.95.0
+
+### Minor Changes
+
+- 48866a3: Add a Mixer Brush. `@pixerate/editor/paint` gains `MixerStroke`: a reservoir loaded with paint plus a pickup well that takes up the canvas colour under each dab, with `wet`, `load`, `mix`, `loadEachStroke`, `cleanEachStroke` and `mixing: 'rgb' | 'pigment'` (Kubelka-Munk, so blue dragged through yellow goes green). The image editor adds the `mixer` paint tool (Shift+B) to `beginStroke` / `paintStroke` and `PaintGesture`, with `setPaintOptions({ mixer })`, `loadMixerBrush`, `cleanMixerBrush` and `emptyMixerBrush`; strokes respect the selection and locks and are one undo step. Agents get `tool: "mixer"` and `mixer` settings on `paint_stroke`, plus `get_mixer_brush`, `load_mixer_brush` and `clean_mixer_brush`. React and Svelte `<BrushOptionsBar>` show the Mixer tool with Wet / Load / Mix sliders, Load / Clean buttons, load and clean each stroke toggles and an RGB / Pigment toggle.
+- dd3d255: Add a `pigment` blend mode to the shared raster blend set: the layer's colour mixes into what is below like paint (Kubelka-Munk, so blue over yellow at 50 % gives green), with opacity as the share of new paint. Unlike the other modes it is not a `B(Cb, Cs)` function; it replaces the alpha interpolation, `Co = lerpPigment(Cb, Cs, αs / αo)`, and alpha composites as normal. It works on pixel, group, adjustment and annotation layers, in `paint_stroke` (brush `blend`) and `fill_pixels`, and in the canvas fallback (`blendImageData`); the compositor caches each 8-bit colour's spectrum. New helpers `mixPigmentRgb` and `mixPigment8`. PSD export writes pigment layers as Normal and adds a warning naming them. `BLEND_MODES` now has 27 entries, so the React and Svelte layer blend menus list Pigment.
+
 ## 0.94.0
 
 ### Minor Changes
