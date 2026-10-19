@@ -109,6 +109,18 @@ activeTarget: 'pixels' | 'mask';
 - The `annotations` state array, the annotation methods and `selectedAnnotationId` keep working as a view over annotation layers. New annotations go to the top of the stack unless an `aboveId` is given.
 - "Rasterize layer" turns an annotation layer into a pixel layer.
 
+## Module layout
+
+The surfaces, the generic layer stack and the compositor are shared with the planned paint editor (`docs/paint-editor.md`), so they live outside the image editor, in modules with no DOM or framework imports (typed arrays only, so they run in Node and Workers):
+
+| Module | Subpath | Holds |
+|---|---|---|
+| `packages/core/src/raster` | `@pixerate/editor/raster` | Tiled copy-on-write surfaces, the PNG / zlib codec, blend modes, Gaussian blur of coverage planes, the generic layer stack (pixel layers, groups, raster masks, clipping, locks, tree helpers) and the per-tile compositor engine with its caches |
+| `packages/core/src/paint` | `@pixerate/editor/paint` | The brush engine (phase 3): brush model, dab walking and spacing, tip rendering, flow build-up and the stroke coverage buffer |
+| `packages/core/src/image-editor` | `@pixerate/editor/image-editor` | The photo-specific parts on top: develop and blur filters, adjustment and annotation layers, depth masks, selections, AI hooks, PSD mapping, the controller, its agent tools and the UI glue |
+
+The compositor engine knows pixel layers and groups. An editor plugs its own layer kinds in through a `CompositorProfile`: layers that filter what is below them (adjustment layers), content layers it draws itself (annotations), per-layer pixel filters, and parametric mask sources (depth masks). The image editor's `LayerCompositor` is the engine with the photo profile. The image editor subpath still re-exports the surface and codec names it exported before.
+
 ## Tiled surfaces
 
 The design follows photocraft's `photocraft_raster::Surface`: a sparse `BTreeMap<TileCoord, Arc<Tile>>`, 256 px tiles, a default pixel and shared tiles.
@@ -289,6 +301,8 @@ What the implementation does differently from the proposal above, and why. Each 
 
 ### Phase 1 (surfaces, model, compositor, history, schema v3)
 
+**Shared modules.** Phase 1 places the surfaces, codec, blend modes, generic layer types and the compositor engine in `src/raster` (see Module layout), so the paint editor can reuse them without importing the image editor. The compositor was split into the engine and the image editor's profile; the equivalence tests ran unchanged against the split.
+
 **Exact legacy equivalence needs a compatibility route for some old documents.** Compositing in document space and projecting afterwards cannot reproduce the old order of operations in a few cases, so documents that still have the exact v1 / v2 shape (`isLegacyShape`) render through the old base path when one of these holds (`needsLegacyBase` in `layers/render.ts`):
 
 | Case | Why document space can't match it |
@@ -314,7 +328,7 @@ Every other document, single-layer or not, renders through the tiled compositor.
 
 **Migration API.** `migrateSerializedImageEditorState` keeps its contract (it cleans v1 / v2 states without changing their shape, and existing callers rely on that). The lift into v3 is the new `migrateToLayeredState(data, size)`; `loadJSON` and `initialState` lift any version. `loadImageEditorDocument` reads v3 section by section and treats v2 as current instead of newer.
 
-**PNG and zlib in TypeScript.** Layer assets use a synchronous TypeScript PNG codec (`layers/png.ts`, `layers/zlib.ts`) instead of canvas `toDataURL`: the canvas premultiplies alpha, so partly transparent painted pixels would not round-trip, and `toJSON()` must stay synchronous. Encodings are memoised per surface. The PSD phase can use the same inflate instead of `DecompressionStream`.
+**PNG and zlib in TypeScript.** Layer assets use a synchronous TypeScript PNG codec (`raster/png.ts`, `raster/zlib.ts`) instead of canvas `toDataURL`: the canvas premultiplies alpha, so partly transparent painted pixels would not round-trip, and `toJSON()` must stay synchronous. Encodings are memoised per surface. The PSD phase can use the same inflate instead of `DecompressionStream`.
 
 **The Background's pixels.** The Background layer of an opened image carries `source: 'document'` and resolves its pixels from the decoded source image (or, without a canvas, from `setSamplePixels`). It writes no asset, so a v3 document with an unpainted Background stays as small as v1.
 

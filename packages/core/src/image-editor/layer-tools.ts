@@ -1,6 +1,6 @@
 import type { AgentTool } from '../tools/registry.js';
 import type { ImageEditorController } from './controller';
-import { contentBounds } from './layers/surface';
+import { contentBounds } from '../raster/surface';
 import type { CropBox } from './types';
 import type { ImageLayer, RasterMask } from './layers/model';
 import { adjustmentKindLabel } from './adjustment-layers';

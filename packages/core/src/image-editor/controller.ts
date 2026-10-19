@@ -90,7 +90,7 @@ import {
   surfaceFromPixels,
   type PixelSurface,
   type Tile,
-} from './layers/surface';
+} from '../raster/surface';
 
 /** Latest serialized schema version (`3`: layers). Documents with the old shape still write 1 or 2. */
 export const IMAGE_EDITOR_SCHEMA_VERSION = LAYERED_SCHEMA_VERSION;

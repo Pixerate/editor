@@ -49,7 +49,7 @@ All contributors and AI assistants should check this file before starting work a
 
 - **Issue / Symptom**: Painted pixels with alpha below 255 came back with slightly different colours after saving layers as PNG through a canvas and loading them again.
 - **Root Cause**: Canvas 2D stores premultiplied alpha, so `putImageData` / `toDataURL` / `getImageData` round colours of partly transparent pixels (and drop the colour of transparent ones). `toDataURL` is also the only synchronous canvas encoder, and there is none in Node or workers.
-- **Solution / Workaround**: Layer assets use the TypeScript PNG codec in `layers/png.ts` (with `layers/zlib.ts`), which is exact, synchronous and DOM-free. Encodings are memoised per surface, so saving unchanged layers costs nothing.
+- **Solution / Workaround**: Layer assets use the TypeScript PNG codec in `raster/png.ts` (with `raster/zlib.ts`), which is exact, synchronous and DOM-free. Encodings are memoised per surface, so saving unchanged layers costs nothing.
 
 ### [core/tests] Failing `toEqual` on Large Typed Arrays Hangs Vitest
 
