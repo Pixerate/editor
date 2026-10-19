@@ -36,10 +36,11 @@ const PAD_KNIFE: PaintBrush = normalizePaintBrush({
   id: 'pad-knife',
   name: 'Palette knife',
   category: 'smudge',
-  engine: 'mixer',
+  engine: 'smudge',
   loadsColor: false,
-  tip: { size: 34, hardness: 0.9, spacing: 0.08, roundness: 0.35, angle: 90, opacity: 1, flow: 0.85, pressureSize: false, pressureOpacity: false },
-  mixer: { wet: 1, load: 0, mix: 1, loadEachStroke: false, cleanEachStroke: true, mixing: 'pigment' },
+  tip: { size: 34, hardness: 0.9, spacing: 0.08, roundness: 0.35, angle: 90, opacity: 1, flow: 1, pressureSize: false, pressureOpacity: false },
+  // A knife drags streaks of paint and folds them into each other, mixing them as pigment.
+  smudge: { strength: 0.6, length: 0.8, mixing: 'pigment' },
 });
 
 /** A solid round blob of paint (one dab). */
@@ -153,8 +154,7 @@ export class MixingPad {
 
   /**
    * Mixes paints the way a painter does on a palette: blobs whose areas are in proportion to
-   * their parts, side by side around (x, y), knife passes across the pile in alternating
-   * directions and a stir, and then the centre worked until it is fully mixed: a soft-edged core
+   * their parts, side by side around (x, y), spiral knife passes that fold them together, and then the centre worked until it is fully mixed: a soft-edged core
    * of the Kubelka-Munk mix of the parts (`mixPigments`), with partly mixed streaks around it.
    * Returns that colour (picked back from the centre) and the pile's bounds.
    *
@@ -192,22 +192,14 @@ export class MixingPad {
       const blob = normalizePaintBrush({ tip: { ...PAD_BLOB.tip, size: Math.max(2, 2 * r) } }, PAD_BLOB);
       this.run(blob, [{ x, y }], p.color.toLowerCase());
     });
-    // Knife passes: zig-zags across the pile, alternating horizontal and vertical, then a stir.
-    const knife = normalizePaintBrush({ tip: { ...PAD_KNIFE.tip, size: Math.max(12, R * 0.6) } }, PAD_KNIFE);
-    const step = Math.max(4, R * 0.25);
+    // Knife passes: spiral stirs through the pile, each turned a little, folding the blobs together.
+    const knife = normalizePaintBrush({ tip: { ...PAD_KNIFE.tip, size: Math.max(12, R * 0.5) } }, PAD_KNIFE);
     for (let k = 0; k < passes; k++) {
-      const pts: PenPoint[] = [];
-      for (let o = -R * 0.8, row = 0; o <= R * 0.8 + 1e-9; o += step, row++) {
-        const a = row % 2 ? R * 0.8 : -R * 0.8;
-        const b = -a;
-        if (k % 2 === 0) pts.push({ x: cx + a, y: cy + o }, { x: cx + b, y: cy + o });
-        else pts.push({ x: cx + o, y: cy + a }, { x: cx + o, y: cy + b });
-      }
-      this.run(knife, pts, '#000000');
       const stir: PenPoint[] = [];
-      for (let t = 0; t <= 24; t++) {
-        const a = (t / 24) * Math.PI * 2 + k;
-        const rr = R * (0.15 + 0.5 * (t / 24));
+      const turns = 1.6;
+      for (let t = 0; t <= 48; t++) {
+        const a = (t / 48) * Math.PI * 2 * turns + k * 1.3;
+        const rr = R * (0.85 - 0.6 * (t / 48));
         stir.push({ x: cx + Math.cos(a) * rr, y: cy + Math.sin(a) * rr });
       }
       this.run(knife, stir, '#000000');

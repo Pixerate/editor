@@ -2116,3 +2116,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: The finger's patch was refreshed from the pixels after the dab had covered them with the patch itself, so the patch kept picking up its own paint and never faded.
 - **Solution / Workaround**: `SmudgeTip.dab` reads each pixel before writing it. It lays the patch over that pixel and refreshes the patch from that original pixel by `1 − length`. A short `length` now fades within a few dabs, and the test checks that reach grows with `length`.
 
+### [core|react|svelte/paint-editor] Brush Thumbnails Redrew on Every State Change
+
+- **Issue / Symptom**: Dragging any brush slider in the paint editor's brush panel was slow, and the new engine-section UI tests timed out (over 5 s) once the library had a blender.
+- **Root Cause**: `getState()` built `brushes: [...BUILTIN_BRUSHES, ...userBrushes]` fresh for every snapshot. React's `useMemo` and Svelte's `$derived.by` both saw a new array, so every brush thumbnail was repainted after every change. In Svelte, a `$derived.by` that reads `snap.brushes` also reruns whenever the snapshot object changes, even if the array is the same.
+- **Solution / Workaround**: The controller caches the library list (`library`) and drops the cache only when the user brushes change (save, remove, import), so `state.brushes` keeps its identity. Svelte reads it through its own `$derived(snap.brushes)` (and `$derived(snap.document.paper)`), which only fires when the value changes. A core test checks that the list stays the same object across `setBrush` and `setColor`.
+

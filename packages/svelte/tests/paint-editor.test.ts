@@ -108,6 +108,73 @@ describe('Svelte paint editor', () => {
     expect(c.getUserBrushes().map((b) => b.id)).toEqual(['my-charcoal']);
   });
 
+  it("the brush panel shows each engine's controls: blender, smudge, behaviour, multi-colour and load", () => {
+    const c = new PaintEditorController({ width: 32, height: 32 });
+    show(BrushPanel, { controller: c });
+    const pick = (name: string) => click(Array.from(target.querySelectorAll('[role="option"]')).find((o) => o.getAttribute('title')?.startsWith(name))!);
+    const q = <T extends Element>(sel: string) => target.querySelector(sel) as unknown as T;
+    setValue(q('select[aria-label="Brush blend"]'), 'watercolor');
+    expect(c.getState().brush.tip.blend).toBe('watercolor');
+    setValue(q('input[aria-label="Pick-up"]'), '0.4');
+    expect(c.getState().brush.behavior.pickup).toBe(0.4);
+    click(q('input[aria-label="Dirty brush"]'));
+    expect(c.getState().brush.behavior.dirty).toBe(true);
+    setValue(q('select[aria-label="Multi-colour"]'), 'dab');
+    expect(c.getState().brush.behavior.multicolor.mode).toBe('dab');
+    click(q('button[aria-label="Add multi-colour"]'));
+    expect(c.getState().brush.behavior.multicolor.colors).toHaveLength(3);
+    setValue(q('select[aria-label="Colour order"]'), 'random');
+    expect(c.getState().brush.behavior.multicolor.order).toBe('random');
+    setValue(q('input[aria-label="Dabs per colour"]'), '7');
+    expect(c.getState().brush.behavior.multicolor.length).toBe(7);
+    click(q('button[aria-label="Remove multi-colour 1"]'));
+    expect(c.getState().brush.behavior.multicolor.colors).toHaveLength(2);
+    pick('Blender');
+    expect(q('[data-testid="brush-engine"]')!.textContent).toContain('Blender');
+    setValue(q('input[aria-label="Blend distance"]'), '0.6');
+    expect(c.getState().brush.blender.distance).toBe(0.6);
+    setValue(q('select[aria-label="Brush mixing"]'), 'rgb');
+    expect(c.getState().brush.blender.mixing).toBe('rgb');
+    expect(q('select[aria-label="Multi-colour"]')).toBeNull();
+    pick('Smudge');
+    setValue(q('select[aria-label="Brush mixing"]'), 'pigment');
+    expect(c.getState().brush.smudge.mixing).toBe('pigment');
+    setValue(q('input[aria-label="Length"]'), '0.95');
+    expect(c.getState().brush.smudge.length).toBe(0.95);
+    pick('Mixer Brush');
+    setValue(q('input[aria-label="Pick-up"]'), '0.8');
+    expect(c.getState().brush.mixer.wet).toBe(0.8);
+    click(byText('Load'));
+    expect(c.getState().mixerLoad.reservoir).not.toBeNull();
+    expect(q<HTMLElement>('[aria-label="Brush load"]').getAttribute('title')).toMatch(/^#/);
+    click(byText('Clean'));
+    expect(c.getState().mixerLoad.reservoir).toBeNull();
+    pick('Soft eraser');
+    expect(q('[data-testid="brush-engine"]')).toBeNull();
+  });
+
+  it('the mixing pad picks with a sample size, mixes measured parts and keeps pads', () => {
+    const c = new PaintEditorController({ width: 32, height: 32 });
+    c.setColor('#1e40af');
+    c.setSecondaryColor('#facc15');
+    show(ColorPanel, { controller: c });
+    setValue(target.querySelector('input[aria-label="Second colour parts"]')!, '3');
+    click(byText('Mix'));
+    const mixed = c.getState().color;
+    expect(mixed).not.toBe('#1e40af');
+    expect(c.mixingPad.pick(180, 110, 0)).toBe(mixed);
+    setValue(target.querySelector('select[aria-label="Pick sample size"]')!, '9');
+    setValue(target.querySelector('input[aria-label="Pad name"]')!, 'Greens');
+    click(byText('Keep pad'));
+    expect(c.listMixingPads()).toEqual([{ id: 'pad1', name: 'Greens' }]);
+    c.clearMixingPad();
+    flushSync();
+    click(byText('Greens'));
+    expect(c.mixingPad.pick(180, 110, 0)).toBe(mixed);
+    click(target.querySelector('button[aria-label="Remove Greens"]'));
+    expect(c.listMixingPads()).toEqual([]);
+  });
+
   it('the paper panel sets presets and commits sliders on release (one undo step)', () => {
     const c = new PaintEditorController({ width: 32, height: 32 });
     show(PaperPanel, { controller: c });

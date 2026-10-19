@@ -3,7 +3,9 @@ import {
   HARMONY_KINDS,
   MIXING_PAD_HEIGHT,
   MIXING_PAD_WIDTH,
+  PAD_SAMPLE_SIZES,
   hsvToRgb,
+  padSampleRadius,
   hueToWheel,
   parseHexColor,
   renderColorWheel,
@@ -32,7 +34,8 @@ type PadTool = 'paint' | 'knife' | 'pick';
 /**
  * Colour: a hue wheel (painter's RYB or RGB) with the chosen harmony marked on it, saturation and
  * value, the paint and second colours, harmony chips, swatches, and a mixing pad to paint on,
- * smear with a palette knife (pigment mixing) and pick from.
+ * smear with a palette knife (pigment mixing) and pick from (with a sample size), mix the paint
+ * and second colours in measured parts on, and keep by name.
  */
 export const ColorPanel: React.FC<ColorPanelProps> = ({ controller, wheelSize = 168, mixingPad = true, className }) => {
   const state = usePaintEditorState(controller);
@@ -40,6 +43,9 @@ export const ColorPanel: React.FC<ColorPanelProps> = ({ controller, wheelSize = 
   const [wheel, setWheel] = useState<ColorWheel>('ryb');
   const [kind, setKind] = useState<HarmonyKind>('complementary');
   const [padTool, setPadTool] = useState<PadTool>('paint');
+  const [sample, setSample] = useState(3);
+  const [parts, setParts] = useState<[number, number]>([1, 1]);
+  const [padName, setPadName] = useState('');
   const padPoints = useRef<Array<{ x: number; y: number; pressure?: number }> | null>(null);
   const ring = useMemo(() => renderColorWheel(wheelSize, wheel), [wheelSize, wheel]);
   const color = state.color;
@@ -173,7 +179,7 @@ export const ColorPanel: React.FC<ColorPanelProps> = ({ controller, wheelSize = 
             onPointerDown={(e) => {
               const p = padPoint(e);
               if (padTool === 'pick') {
-                attempt(() => controller.mixingPadPick(p.x, p.y, { setColor: true }));
+                attempt(() => controller.mixingPadPick(p.x, p.y, { setColor: true, radius: padSampleRadius(sample) }));
                 return;
               }
               padPoints.current = [p];
@@ -188,6 +194,63 @@ export const ColorPanel: React.FC<ColorPanelProps> = ({ controller, wheelSize = 
           >
             <PixelCanvas pixels={pad} label="Mixing pad pixels" className="w-full rounded" style={{ aspectRatio: `${MIXING_PAD_WIDTH} / ${MIXING_PAD_HEIGHT}` }} />
           </div>
+          <div className="flex flex-wrap items-center gap-1">
+            <label className="flex items-center gap-1">
+              <span className="text-slate-400">Sample</span>
+              <select aria-label="Pick sample size" value={sample} onChange={(e) => setSample(Number(e.target.value))} className="rounded bg-slate-800 px-1 py-0.5">
+                {PAD_SAMPLE_SIZES.map((n) => (
+                  <option key={n} value={n}>
+                    {n === 1 ? '1 px' : `${n}×${n}`}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="flex flex-wrap items-center gap-1">
+            <span className="h-4 w-4 rounded ring-1 ring-slate-700" style={{ background: color }} />
+            <input type="number" aria-label="Paint colour parts" min={0} max={20} value={parts[0]} onChange={(e) => setParts([Number(e.target.value), parts[1]])} className="w-10 rounded bg-slate-800 px-1 py-0.5" />
+            <span className="text-slate-500">:</span>
+            <input type="number" aria-label="Second colour parts" min={0} max={20} value={parts[1]} onChange={(e) => setParts([parts[0], Number(e.target.value)])} className="w-10 rounded bg-slate-800 px-1 py-0.5" />
+            <span className="h-4 w-4 rounded ring-1 ring-slate-700" style={{ background: state.secondaryColor }} />
+            <button
+              type="button"
+              className={button}
+              title="Mix the paint and second colours in these parts on the pad, and use the mix"
+              onClick={() =>
+                attempt(() =>
+                  controller.mixOnPad(
+                    [
+                      { color, parts: parts[0] },
+                      { color: state.secondaryColor, parts: parts[1] },
+                    ],
+                    { setColor: true }
+                  )
+                )
+              }
+            >
+              Mix
+            </button>
+          </div>
+          <div className="flex flex-wrap items-center gap-1">
+            <input value={padName} placeholder="Pad name" aria-label="Pad name" onChange={(e) => setPadName(e.target.value)} className="w-24 rounded bg-slate-800 px-1.5 py-0.5" />
+            <button type="button" className={button} onClick={() => attempt(() => (controller.saveMixingPad(padName || undefined), setPadName('')))}>
+              Keep pad
+            </button>
+          </div>
+          {state.savedMixingPads.length > 0 && (
+            <ul className="flex flex-col gap-0.5" aria-label="Kept pads">
+              {state.savedMixingPads.map((p) => (
+                <li key={p.id} className="flex items-center gap-1">
+                  <button type="button" className={`${button} flex-1 text-left`} onClick={() => attempt(() => controller.loadMixingPad(p.id))}>
+                    {p.name}
+                  </button>
+                  <button type="button" className={button} aria-label={`Remove ${p.name}`} onClick={() => attempt(() => controller.removeMixingPad(p.id))}>
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
       <ErrorLine error={error} />

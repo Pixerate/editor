@@ -375,11 +375,25 @@ describe('paint editor brushes', () => {
     expect(back.getStrokes().find((x) => x.id === s.strokeId)!.load).toEqual(stroke.load);
   });
 
-  it('renders thumbnails for every built-in brush', () => {
+  it('renders thumbnails for every built-in brush, quickly', () => {
+    const paper = new PaintEditorController().document.paper;
     for (const b of BUILTIN_BRUSHES) {
-      const t = renderBrushThumbnail(b, { paper: new PaintEditorController().document.paper, width: 64, height: 24, color: '#26324a' });
-      expect(t.data.length).toBe(64 * 24 * 4);
+      const t0 = performance.now();
+      const t = renderBrushThumbnail(b, { paper, width: 112, height: 32, color: '#26324a' });
+      expect(t.data.length).toBe(112 * 32 * 4);
+      expect(performance.now() - t0, b.id).toBeLessThan(1500);
     }
+  });
+
+  it('keeps the library list stable while the active brush changes, so panels do not redraw thumbnails', () => {
+    const c = new PaintEditorController();
+    const list = c.getState().brushes;
+    c.setBrush({ id: 'blender', blender: { strength: 0.9 } });
+    c.setColor('#123456');
+    expect(c.getState().brushes).toBe(list);
+    c.saveBrush({ id: 'mine', name: 'Mine' });
+    expect(c.getState().brushes).not.toBe(list);
+    expect(c.getState().brushes.map((b) => b.id)).toContain('mine');
   });
 });
 

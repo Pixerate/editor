@@ -269,6 +269,8 @@ export class PaintEditorController {
   private readonly historyLimit: number;
   private brush: PaintBrush;
   private userBrushes: PaintBrush[];
+  /** The library list in the state (the same array until the user brushes change, so thumbnails are not redrawn). */
+  private library: readonly PaintBrush[] | null = null;
   private color: string;
   private secondaryColor = '#ffffff';
   private mixerLoad: MixerLoad = EMPTY_MIXER_LOAD;
@@ -331,7 +333,7 @@ export class PaintEditorController {
     this.cached = {
       document: this.doc,
       brush: this.brush,
-      brushes: [...BUILTIN_BRUSHES, ...this.userBrushes],
+      brushes: (this.library ??= [...BUILTIN_BRUSHES, ...this.userBrushes]),
       color: this.color,
       secondaryColor: this.secondaryColor,
       mixerLoad: this.mixerLoad,
@@ -753,6 +755,7 @@ export class PaintEditorController {
     const i = this.userBrushes.findIndex((b) => b.id === options.id);
     if (i >= 0) this.userBrushes[i] = saved;
     else this.userBrushes.push(saved);
+    this.library = null;
     this.emit([]);
     return saved;
   }
@@ -762,6 +765,7 @@ export class PaintEditorController {
     const i = this.userBrushes.findIndex((b) => b.id === id);
     if (i < 0) throw new PaintEditorError(`Unknown brush "${id}". Call list_brushes for the ids.`);
     this.userBrushes.splice(i, 1);
+    this.library = null;
     this.emit([]);
   }
 
@@ -805,7 +809,10 @@ export class PaintEditorController {
       else this.userBrushes.push(b);
       added.push(b.id);
     }
-    if (added.length) this.emit([]);
+    if (added.length) {
+      this.library = null;
+      this.emit([]);
+    }
     return { added, skipped, problems };
   }
 
