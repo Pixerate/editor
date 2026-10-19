@@ -11,7 +11,7 @@ import type { PenPoint } from './engine';
 import { IDENTITY_COPY } from './engine';
 import { hexToRgb8, type PaperSettings } from './paper';
 import { createPaintCompositor, paperGrain, paperNode, type ViewLayer } from './render';
-import { mixerLoadForStroke, PaintStrokeSession } from './stroke';
+import { brushLoadForStroke, PaintStrokeSession } from './stroke';
 
 export interface BrushThumbnail {
   width: number;
@@ -54,7 +54,7 @@ function paintTestStroke(surface: TiledSurface, brush: PaintBrush, paper: PaperS
       colorHex: color,
       affineCopies: [],
       copies: [IDENTITY_COPY],
-      mixerLoad: brush.engine === 'mixer' ? mixerLoadForStroke(brush, EMPTY_MIXER_LOAD, [r / 255, g / 255, b / 255]) : EMPTY_MIXER_LOAD,
+      mixerLoad: brushLoadForStroke(brush, EMPTY_MIXER_LOAD, [r / 255, g / 255, b / 255]),
     }
   );
   session.push(thumbnailStroke(width, height));
@@ -73,7 +73,7 @@ export function renderBrushThumbnail(brush: PaintBrush, options: { paper: PaperS
   if (b.engine === 'eraser') {
     // Something to erase: a band of the colour.
     surface = fillRect(surface, { x: 0, y: 0, width, height }, rgba);
-  } else if (b.engine === 'mixer' && !b.loadsColor) {
+  } else if (b.engine === 'blender' || b.engine === 'smudge' || (b.engine === 'mixer' && !b.loadsColor) || b.behavior.pickup > 0) {
     // Something to move: two bands, the colour over ochre.
     const half = Math.ceil(height / 2);
     surface = fillRect(surface, { x: 0, y: 0, width, height: half }, rgba);

@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   BLEND_MENU_GROUPS,
+  BUILTIN_BRUSHES,
+  PAD_SAMPLE_SIZES,
+  brushEngineControls,
+  brushLoadColor,
+  multiColorSliders,
+  padSampleRadius,
+  patchBrushValue,
   BLEND_MODES,
   BRUSH_SLIDERS,
   PAPER_SLIDERS,
@@ -127,6 +134,28 @@ describe('PaintCanvasPresenter', () => {
 });
 
 describe('panel helpers', () => {
+  it('describes each engine\'s controls, patches any brush value and reads the load', () => {
+    const by = (id: string) => BUILTIN_BRUSHES.find((b) => b.id === id)!;
+    expect(brushEngineControls(by('blender'))!.sliders.map((s) => s.path)).toEqual(['blender.strength', 'blender.distance']);
+    expect(brushEngineControls(by('smudge'))).toMatchObject({ mixingPath: 'smudge.mixing', dirty: false, multicolor: false });
+    expect(brushEngineControls(by('mixer-brush'))!.sliders.map((s) => s.path)).toEqual(['behavior.pickup', 'behavior.mix', 'mixer.load']);
+    expect(brushEngineControls(by('pencil-6b'))).toMatchObject({ mixingPath: 'behavior.mixing', dirty: true, multicolor: true, load: true });
+    expect(brushEngineControls(by('eraser-soft'))).toBeNull();
+    expect(multiColorSliders('off')).toEqual([]);
+    expect(multiColorSliders('dab').map((s) => s.path)).toEqual(['behavior.multicolor.softness', 'behavior.multicolor.length']);
+    const c = new PaintEditorController();
+    const b = c.setBrush({ id: 'dirty-round' });
+    c.setBrush(patchBrushValue(b, 'behavior.multicolor.mode', 'tip'));
+    expect(c.getState().brush.behavior.multicolor.mode).toBe('tip');
+    expect(c.getState().brush.behavior.pickup).toBe(b.behavior.pickup);
+    c.setBrush(patchBrushValue(c.getState().brush, 'behavior.mixing', 'rgb'));
+    expect(c.getState().brush.behavior.mixing).toBe('rgb');
+    expect(brushLoadColor({ reservoir: [1, 0, 0], amount: 1, pickup: null })).toBe('#ff0000');
+    expect(brushLoadColor({ reservoir: [1, 0, 0], amount: 1, pickup: [0, 0, 1] })).toBe('#0000ff');
+    expect(brushLoadColor({ reservoir: null, amount: 0, pickup: null })).toBeNull();
+    expect(PAD_SAMPLE_SIZES.map(padSampleRadius)).toEqual([0, 1, 2, 4, 7]);
+  });
+
   it('groups the blend menu into standard and paint modes, every mode once', () => {
     expect(BLEND_MENU_GROUPS.map((g) => g.label)).toEqual(['Standard', 'Paint']);
     expect(BLEND_MENU_GROUPS[0].modes).toHaveLength(26);

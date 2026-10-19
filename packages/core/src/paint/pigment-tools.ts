@@ -23,7 +23,7 @@ export function createPigmentTools(): AgentTool[] {
     name: 'mix_colors',
     title: 'Mix colours like paint',
     description:
-      'Mixes colours as paint would (Kubelka-Munk pigment mixing over reflectance spectra), so blue and yellow make green and white lightens a colour into a tint instead of greying it. Changes nothing. Returns the mixed colour as #rrggbb, the plain RGB average (rgbLerp) for comparison, and the normalised weights.',
+      'Mixes colours as paint would (model pigment, the default: Kubelka-Munk mixing over reflectance spectra, so blue and yellow make green and white lightens a colour into a tint instead of greying it), or as light on screen (model rgb: the weighted RGB average). Changes nothing. Returns mixed (#rrggbb, by the chosen model), the other model\'s result for comparison (rgbLerp and pigment), the normalised weights and the model.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -48,6 +48,11 @@ export function createPigmentTools(): AgentTool[] {
             additionalProperties: false,
           },
         },
+        model: {
+          type: 'string',
+          enum: ['pigment', 'rgb'],
+          description: 'pigment (default): mix like paint (Kubelka-Munk), as the pigment blend mode, Mixer Brush and mixing pad do; rgb: average the RGB values, as normal blending and rgb mixing brushes do (strength is ignored).',
+        },
       },
       required: ['colors'],
       additionalProperties: false,
@@ -61,11 +66,13 @@ export function createPigmentTools(): AgentTool[] {
       const pigments: Pigment[] = rgbs.map((rgb, i) => createPigment(rgb, { strength: items[i].strength }));
       const mixed = mixPigments(pigments, items.map((item) => item.weight));
       const lerp = [0, 1, 2].map((c) => rgbs.reduce((sum, rgb, i) => sum + rgb[c] * items[i].weight, 0) / total);
+      const rgb = args.model === 'rgb';
       return {
-        mixed: toHex(mixed),
+        mixed: toHex(rgb ? lerp : mixed),
         rgbLerp: toHex(lerp),
+        pigment: toHex(mixed),
         weights: items.map((item) => item.weight / total),
-        model: 'kubelka-munk',
+        model: rgb ? 'rgb' : 'kubelka-munk',
       };
     },
   };

@@ -12,6 +12,7 @@ export * from './paper';
 export * from './document';
 export * from './brushes';
 export * from './engine';
+export * from './dab-stroke';
 export * from './stroke';
 export * from './strokes';
 export * from './render';

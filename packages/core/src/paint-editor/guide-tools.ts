@@ -272,7 +272,7 @@ export function createPaintGuideTools(c: PaintEditorController): AgentTool[] {
       name: 'mixing_pad_stroke',
       title: 'Paint on the mixing pad',
       description:
-        'Paints on the mixing pad (a 360 × 220 scratch canvas, not the painting): tool paint lays down a colour with a pigment Mixer Brush; tool knife smears what is there like a palette knife, mixing it as paint. Points are pad pixels. Not an undo step. Returns the changed bounds; then pick_mixing_pad_color.',
+        'Paints on the mixing pad (a 360 × 220 scratch canvas, not the painting): tool paint lays down a colour with a pigment Mixer Brush; tool knife smears what is there like a palette knife, mixing it as paint. Points are pad pixels. Not an undo step. Returns the changed bounds; then pick_mixing_pad_color. For a measured mix in one call use mix_on_pad.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -326,6 +326,74 @@ export function createPaintGuideTools(c: PaintEditorController): AgentTool[] {
         c.clearMixingPad();
         return { cleared: true };
       },
+    },
+    {
+      name: 'mix_on_pad',
+      title: 'Mix paints on the pad',
+      description:
+        'Mixes paints on the mixing pad as a painter would: blobs whose areas follow their parts, worked with the palette knife, and a fully mixed core of the Kubelka-Munk (pigment) mix, so blue and yellow make green and white tints. One call per mix. Not an undo step (the pad is scratch space). Returns the mixed colour #rrggbb and the pile bounds in pad pixels; with setColor it becomes the paint colour. pick_mixing_pad_color reads the streaks around it.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          paints: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 8,
+            description: 'The paints, 1 to 8.',
+            items: {
+              type: 'object',
+              properties: {
+                color: { ...COLOR, description: 'Paint colour #rrggbb.' },
+                parts: { type: 'number', minimum: 0, description: 'Parts of this paint, any scale (1 and 3 for a 1:3 mix); at least one above 0.' },
+              },
+              required: ['color', 'parts'],
+              additionalProperties: false,
+            },
+          },
+          x: { type: 'number', minimum: 0, maximum: 360, description: 'Centre of the pile, pad x (default 180).' },
+          y: { type: 'number', minimum: 0, maximum: 220, description: 'Centre of the pile, pad y (default 110).' },
+          radius: { type: 'number', minimum: 12, maximum: 100, description: 'Radius of the pile in pad pixels (default 40); it must fit on the pad.' },
+          passes: { type: 'integer', minimum: 1, maximum: 20, description: 'Palette-knife passes (default 3; more gives finer streaks around the core).' },
+          clear: { type: 'boolean', description: "Wipe the pile's area first (default true); false mixes into the paint already there." },
+          setColor: { type: 'boolean', description: 'Also make the mix the paint colour (default false).' },
+        },
+        required: ['paints'],
+        additionalProperties: false,
+      },
+      annotations: { title: 'Mix paints on the pad', ...WRITE },
+      handler: ({ paints, x, y, radius, passes, clear, setColor }) => c.mixOnPad(paints, { x, y, radius, passes, clear, setColor }),
+    },
+    {
+      name: 'save_mixing_pad',
+      title: 'Keep the mixing pad',
+      description: 'Keeps the mixing pad as it is now under a name, saved with the document, to come back to with load_mixing_pad. Refused while the pad is empty. Returns the kept pad id and name.',
+      inputSchema: { type: 'object', properties: { name: { type: 'string', minLength: 1, maxLength: 80, description: 'Name (default "Pad n").' } }, additionalProperties: false },
+      annotations: { title: 'Keep the mixing pad', ...WRITE },
+      handler: ({ name }) => c.saveMixingPad(name),
+    },
+    {
+      name: 'list_mixing_pads',
+      title: 'List kept mixing pads',
+      description: 'Lists the mixing pads kept with save_mixing_pad (id, name). Changes nothing.',
+      inputSchema: EMPTY,
+      annotations: { title: 'List kept mixing pads', ...READ },
+      handler: () => ({ pads: c.listMixingPads() }),
+    },
+    {
+      name: 'load_mixing_pad',
+      title: 'Load a kept mixing pad',
+      description: 'Puts a kept pad (id from list_mixing_pads) back on the mixing pad, replacing what is on it. Returns the pad id and name.',
+      inputSchema: { type: 'object', properties: { id: { type: 'string', description: 'Kept pad id from list_mixing_pads.' } }, required: ['id'], additionalProperties: false },
+      annotations: { title: 'Load a kept mixing pad', ...DESTRUCTIVE },
+      handler: ({ id }) => c.loadMixingPad(id),
+    },
+    {
+      name: 'remove_mixing_pad',
+      title: 'Remove a kept mixing pad',
+      description: 'Forgets a kept pad (id from list_mixing_pads); the pad on screen is untouched. Returns the removed id and name.',
+      inputSchema: { type: 'object', properties: { id: { type: 'string', description: 'Kept pad id from list_mixing_pads.' } }, required: ['id'], additionalProperties: false },
+      annotations: { title: 'Remove a kept mixing pad', ...DESTRUCTIVE },
+      handler: ({ id }) => c.removeMixingPad(id),
     },
     {
       name: 'render_mixing_pad',

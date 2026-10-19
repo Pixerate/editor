@@ -1,6 +1,6 @@
 ---
 name: pixerate-paint-editor
-description: How to make a picture in the Pixerate paint editor (natural media in the spirit of Painter and Rebelle) through its agent tools - canvas and paper (generated grain, depth, colour, families from cold pressed watercolour to canvas and gesso), layers, dry-media brushes (pencil, pastel, charcoal, airbrush, marker, ink, erasers, blender, smudge, Mixer Brush) with pressure, tilt, barrel rotation and velocity, the brush library, strokes as data that replay and vary, mirror and kaleidoscope painting, perspective guides, tracing and reference images, colour harmonies, swatches, a mixing pad and pigment mixing, previews and PNG, JPEG, WebP, PSD and JSON output. Use when asked to paint, sketch, draw, shade, block in, texture with paper grain, mix colours, paint symmetric or in perspective, trace an image, or when paint_stroke, set_paper, replay_strokes, set_symmetry or mix_colors are available.
+description: How to make a picture in the Pixerate paint editor (natural media in the spirit of Painter, Rebelle and ArtRage) through its agent tools - canvas and paper (generated grain, depth, families from cold pressed watercolour to canvas), layers with painterly blend modes (watercolor, tint, highlight, shadow), dry-media brushes (pencil, pastel, charcoal, airbrush, marker, ink, erasers) with pressure, tilt, barrel rotation and velocity, blending tools (blender, smudge, Mixer Brush), brush behaviours (pick-up and mix ratios, dirty and multi-coloured brushes), the brush library, strokes that replay and vary, symmetry and perspective guides, tracing and reference images, harmonies, swatches, a mixing pad and pigment mixing, and PNG, JPEG, WebP, PSD and JSON output. Use when asked to paint, sketch, shade, blend, smudge, glaze, mix colours, paint symmetric or in perspective, trace an image, or when paint_stroke, set_paper, replay_strokes or mix_colors are available.
 ---
 
 # Paint editor
@@ -14,8 +14,15 @@ is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y do
 - **Brushes** are library presets (`list_brushes`): a tip from the shared engine (size,
   hardness, spacing, angle, roundness, opacity, flow, blend), a **grain** response, pen dynamics
   (pressure, tilt, velocity, jitter), a **rotation** mode (`fixed`, `stroke`, `barrel`) and an
-  engine: `dab` (most media), `eraser`, or `mixer` (Mixer Brush, blender, smudge: they pick up and
-  move paint already on the layer).
+  engine: `dab` (most media), `eraser`, `mixer` (the Mixer Brush: a reservoir of paint plus paint
+  it picks up), `blender` (mixes the colours under and near the tip) or `smudge` (drags paint
+  along the stroke).
+- **Behaviour** (`behavior`, dab and mixer brushes) is how a brush treats paint already on the
+  canvas: a **pick-up ratio** (how much paint each dab lifts and carries), a **mix ratio** (how
+  much of the carried paint goes into what it lays down), **dirty** (keep the carried colour into
+  the next stroke) and **multi-colour** (`tip`: several colours side by side across the tip;
+  `dab`: the colour changes along the stroke). A Mixer Brush's `mixer.wet` / `mixer.mix` are the
+  same two ratios. `get_mixer_brush` reads what the brush carries; `clean_mixer_brush` wipes it.
 - **Grain**: a brush's grain response times the paper's `depth` decides how much light pressure
   skips the valleys. Pencil, pastel and charcoal are grainy; airbrush, marker and ink are not.
 - **Strokes are data.** Every stroke is recorded (brush, colour, raw points, seed, symmetry
@@ -46,8 +53,13 @@ is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y do
    greys); the mixing pad (`mixing_pad_stroke`, `pick_mixing_pad_color`) mixes by hand with a
    palette knife. Keep chosen colours as swatches (`add_swatch`). Use the result as the stroke
    `color`; `set_color` makes it the default.
-5. **Refine** with smaller brushes on new layers: pencil and ink for line, charcoal for value,
-   blender or smudge to soften edges, the Mixer Brush to blend wet into wet.
+5. **Refine** with smaller brushes on new layers: pencil and ink for line, charcoal for value.
+   **Blend** on the layer that holds the paint: `blender` to melt neighbouring colours together
+   (pigment mixing, so blue next to yellow goes green), `smudge` / `wet-smudge` to drag paint
+   into soft edges and streaks, `mixer-brush` to paint wet into wet, `dirty-round` to paint with
+   a brush that picks up and carries colour, `multicolor-flat` for strokes loaded with several
+   colours. Glaze with a `watercolor` layer, warm or cool with `tint`, light with `highlight`,
+   shade with `shadow`.
 6. **Let the guides multiply your marks.** `set_symmetry` (mirror for faces and vases,
    kaleidoscope for mandalas and ornaments) paints every copy from one stroke;
    `set_perspective_guide` plus `paint_stroke` with `snapToPerspective` lays converging lines for
@@ -76,8 +88,21 @@ is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y do
   between them. Long smooth curves need more points than straight lines.
 - **Use `rotation: "stroke"`** for flat tips (pastel, charcoal, chisel marker) so the mark turns
   with the path; `fixed` for calligraphic nibs.
-- **Blend with flow, not opacity**: blender and smudge work best at flow 0.3..0.6; at full flow
-  the Mixer Brush paints only its own colour.
+- **Blending tools**:
+  - `blender`: `strength` 0.3..0.6 for soft transitions, `distance` 0.2..0.5 (fraction of the
+    tip) for how far colours travel. Keep `mixing: "pigment"` for painterly blends; `rgb`
+    blends like a soft blur. Work along an edge in short strokes rather than over everything.
+  - `smudge`: `length` near 0.9 drags paint far (long streaks), 0.5 short pushes; `strength`
+    0.5..0.8. `mixing: "pigment"` (the `wet-smudge` preset) smears colours into each other like
+    wet paint.
+  - Mixer Brush: blend with flow 0.3..0.6; at full flow it paints only its own colour.
+- **Pick-up and mix ratios**: `pickup` 0.3..0.7 with `mix` 0.4..0.7 gives a brush that drags
+  the colours it crosses into its own; `dirty: true` keeps them for the next stroke (wipe with
+  `clean_mixer_brush`). Keep `pickup` 0 for clean, predictable colour.
+- **Multi-colour**: give 2..8 `colors` (or none for the paint and secondary colours). `tip` mode
+  with a flat tip and `rotation: "stroke"` paints ribbons; `softness` 0.3..0.7 keeps the stripes
+  readable. `dab` mode with `order: "sequence"` and `length` 5..20 walks through a palette;
+  `random` for foliage and confetti.
 - **Pigment for paint, multiply for markers**: tip `blend: "pigment"` mixes subtractively on the
   canvas; `multiply` darkens where marker strokes overlap. Pigment layers are written as Normal
   to PSD (the export warns).
@@ -130,9 +155,9 @@ is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y do
 
 | Tool | Use |
 | --- | --- |
-| `list_brushes` | Read the library (built-in and saved): id, name, category, engine, size, grain response, rotation, `builtin`; plus the active brush id and whether it is edited. |
+| `list_brushes` | Read the library (built-in and saved): id, name, category, engine, size, grain response, rotation, `wetCapable`, `pickup`, `dirty`, `multicolor` mode, `builtin`; plus the active brush id and whether it is edited. |
 | `get_brush` | Read every setting of a brush, or of the active brush as edited (no `id`). Read before changing a brush you did not build. |
-| `set_brush` | Choose the active brush (`id`) and / or change it: `tip` (size px, hardness, spacing, angle, roundness, opacity, flow, smoothing, pressureSize, pressureOpacity, blend), `grain`, `pressureSmoothing`, `rotation`, `dynamics` (minSize, pressureFlow, tiltSize, tiltRoundness, tiltOpacity, velocitySize, velocityOpacity, jitters, scatter), `mixer`, `loadsColor`. Editor state. Returns the brush. |
+| `set_brush` | Choose the active brush (`id`) and / or change it: `tip` (size px, hardness, spacing, angle, roundness, opacity, flow, smoothing, pressureSize, pressureOpacity, blend), `grain`, `pressureSmoothing`, `rotation`, `dynamics` (minSize, pressureFlow, tiltSize, tiltRoundness, tiltOpacity, velocitySize, velocityOpacity, jitters, scatter), `engine`, `mixer`, `loadsColor`, `behavior` (pickup, mix, dirty, mixing, multicolor: mode, colors, order, length, softness), `blender` (strength, distance, mixing), `smudge` (strength, length, mixing). Editor state. Returns the brush. |
 | `save_brush` | Store the active brush in the user library under `id` (lowercase, digits, dashes) and `name`. Built-in ids are refused. |
 | `remove_brush` | Delete a user brush. Built-in brushes cannot be removed. |
 | `export_brushes` | Get a brush library file (JSON) of `ids`, or of every user brush. |
@@ -143,12 +168,12 @@ is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y do
 
 | Tool | Use |
 | --- | --- |
-| `mix_colors` | Predict a paint mix: `colors` with `weight` parts (and optional tinting `strength`). Returns `mixed` (#rrggbb, Kubelka-Munk) and the plain RGB average for comparison. Changes nothing. Use it to choose stroke colours. |
+| `mix_colors` | Predict a mix: `colors` with `weight` parts (and optional tinting `strength`), `model` `pigment` (default, Kubelka-Munk: what pigment blends, the Mixer Brush, pigment blending tools and the pad do) or `rgb` (what normal blending and rgb mixing do). Returns `mixed` by the model plus `pigment` and `rgbLerp` for comparison. Changes nothing. Use it to choose stroke colours. |
 | `set_color` | Set the default paint `color` (and `secondaryColor`). |
 | `pick_color` | Read the colour at `x`, `y`: of the painting with its paper, or of one layer (with alpha). |
-| `get_mixer_brush` | Read what the Mixer Brush carries: `reservoir`, `amount` left, `pickup`. |
+| `get_mixer_brush` | Read what the brush carries: the Mixer Brush `reservoir` and `amount` left, and `pickup` (paint picked up, kept by dirty brushes). |
 | `load_mixer_brush` | Fill the Mixer Brush reservoir with a colour (keeps its pickup). |
-| `clean_mixer_brush` | Empty the pickup well (and with `emptyReservoir` the paint). |
+| `clean_mixer_brush` | Wipe the brush: drop the picked-up paint a dirty brush or the Mixer Brush carries (and with `emptyReservoir` the Mixer Brush paint). |
 | `color_harmony` | Get a harmony (`kind`: complementary, split-complementary, analogous, triadic, tetradic, square, monochromatic) around `color` (default the paint colour), on the `ryb` painter's wheel (default; red ↔ green) or the `rgb` wheel (red ↔ cyan), `spread` degrees for analogous and split. Changes nothing. |
 | `list_swatches` | Read the swatches (index, colour, name). |
 | `add_swatch` | Keep a colour as a swatch (saved with the document). |
@@ -156,13 +181,18 @@ is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y do
 | `mixing_pad_stroke` | Paint on the 360 × 220 mixing pad (pad px): `tool` paint lays `color` with a pigment Mixer Brush, `knife` smears what is there and mixes it as paint. Scratch space, not the painting, no undo. |
 | `pick_mixing_pad_color` | Read the mix on the pad at `x`, `y` (averaged over `radius`, default 3); `setColor` makes it the paint colour. Null where the pad is bare. |
 | `clear_mixing_pad` | Wipe the pad. |
+| `mix_on_pad` | Mix `paints` (`color`, `parts`) on the pad in one call: blobs by parts, knife passes, and a fully mixed Kubelka-Munk core. Optional pile `x`, `y`, `radius`, `passes`, `clear`; `setColor` makes the mix the paint colour. Returns `color` and the pile `bounds`. The quickest way to get a paint colour from named paints. |
+| `save_mixing_pad` | Keep the pad as it is under a `name` (saved with the document). Refused when the pad is empty. Returns the id. |
+| `list_mixing_pads` | Read the kept pads (`id`, `name`). |
+| `load_mixing_pad` | Put a kept pad back (replaces what is on the pad). |
+| `remove_mixing_pad` | Forget a kept pad. |
 | `render_mixing_pad` | See the pad as a PNG. |
 
 ### Painting and strokes
 
 | Tool | Use |
 | --- | --- |
-| `paint_stroke` | Paint one stroke through `points` (document px; `pressure` 0..1, `t` ms, `tiltX` / `tiltY` or `altitude` / `azimuth`, `twist`) with `brushId` (default the active brush), optional per-stroke `brush` changes, `color`, `layerId`, `seed`, `snapToPerspective`. The symmetry guide adds its copies; a sampling tracing image supplies the colour when `color` is missing. Returns `layerId`, `bounds`, `dabs`, `strokeId` and for the mixer engine its `mixerLoad`. Refused on locked, hidden or group layers, with the fix in the message. |
+| `paint_stroke` | Paint one stroke through `points` (document px; `pressure` 0..1, `t` ms, `tiltX` / `tiltY` or `altitude` / `azimuth`, `twist`) with `brushId` (default the active brush), optional per-stroke `brush` changes, `color`, `layerId`, `seed`, `snapToPerspective`. The symmetry guide adds its copies; a sampling tracing image supplies the colour when `color` is missing. Returns `layerId`, `bounds`, `dabs`, `strokeId` and, for brushes that pick up paint, `mixerLoad` (what the brush carries now). Refused on locked, hidden or group layers, with the fix in the message. |
 | `list_strokes` | Read the recorded strokes, oldest first (default the last 100): id, layer, brush, colour, point count, seed, bounds. With `ids`, their points too. |
 | `replay_strokes` | Paint recorded `strokeIds` again: exactly, or varied by `dx` / `dy` (px), `rotate` (degrees clockwise), `scale` (brush size follows), `flipX`, `origin`, `pressureScale`, `color`, `brushId`, `layerId`, `repeat` (each copy applies the variation again). One undo step. Returns the new stroke ids, bounds and layers. |
 | `undo_paint` | Undo the last step. Returns what was undone and what is next. |
@@ -206,6 +236,12 @@ is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y do
   has depth 0.
 - **Grain is fixed to the document**, not to the layer: moving content does not move the grain,
   and two strokes on the same spot catch the same peaks.
+- **Blending tools need paint to blend.** Blender and smudge only move what is on the target
+  layer: blend on the layer you painted, not on an empty one above it.
+- **A dirty brush stays dirty** across strokes and colour changes until `clean_mixer_brush`.
+  Pick-up lifts only paint on the target layer: the paper and other layers lift nothing.
+- **Replays use the recorded load**: a replayed pick-up stroke starts with what the brush carried
+  when it was painted, not with the current load.
 - **Big soft brushes at full flow look flat.** Lower `flow` (airbrush 0.05..0.15) and build up.
 - **JPEG and WebP need a browser**; in Node use PNG. Exports never upscale (`scale` ≤ 1).
 - **Symmetry stays on until you turn it off.** Set `mode: "off"` after the symmetric part, or
