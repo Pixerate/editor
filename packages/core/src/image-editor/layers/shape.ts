@@ -322,7 +322,8 @@ function shapeGeometry(layer: ShapeLayer): ShapeGeometry {
       bounds = { x: x0, y: y0, width: Math.max(bounds.x + bounds.width, b.x + b.width) - x0, height: Math.max(bounds.y + bounds.height, b.y + b.height) - y0 };
     }
   };
-  if (layer.fill) for (const f of fills) add(flatBounds(f.flat));
+  if (layer.fill && layer.inverted) add({ x: -1e7, y: -1e7, width: 2e7, height: 2e7 });
+  else if (layer.fill) for (const f of fills) add(flatBounds(f.flat));
   if (stroke) add(flatBounds(stroke));
   const g = shapeGeometryBounds(layer) ?? { x: 0, y: 0, width: 0, height: 0 };
   const frame = { x: Math.floor(g.x), y: Math.floor(g.y), width: Math.max(1, Math.ceil(g.x + g.width) - Math.floor(g.x)), height: Math.max(1, Math.ceil(g.y + g.height) - Math.floor(g.y)) };
@@ -332,8 +333,14 @@ function shapeGeometry(layer: ShapeLayer): ShapeGeometry {
 }
 
 /** Coverage of the combined fill area over `rect` (nothing but the geometry: paints are ignored). */
-function fillCoverage(geo: ShapeGeometry, rect: CropBox, rule: ShapeFillRule): Float32Array | null {
+function fillCoverage(geo: ShapeGeometry, rect: CropBox, rule: ShapeFillRule, inverted = false): Float32Array | null {
   const n = rect.width * rect.height;
+  if (inverted) {
+    const area = fillCoverage(geo, rect, rule);
+    const out = new Float32Array(n);
+    for (let i = 0; i < n; i++) out[i] = 1 - (area ? area[i] : 0);
+    return out;
+  }
   let acc: Float32Array | null = null;
   geo.fills.forEach((f, i) => {
     // One contour fills exactly; several may overlap each other (a line's bar and arrowhead).
@@ -385,7 +392,7 @@ export function renderShapeRect(layer: ShapeLayer, rect: CropBox, env: ShapeEnv,
   const n = rect.width * rect.height;
   const rule = layer.fillRule ?? 'nonzero';
   const needArea = Boolean(layer.fill) || (geo.stroke !== null && geo.align !== 'center');
-  const area = needArea ? fillCoverage(geo, rect, rule) : null;
+  const area = needArea ? fillCoverage(geo, rect, rule, Boolean(layer.inverted && layer.fill)) : null;
   // Stroke outlines overlap themselves at joins and crossings.
   let sCov = geo.stroke ? rasterizeCoverageSampled(geo.stroke, rect, 'nonzero') : null;
   if (sCov && geo.align === 'inside') sCov = area ? combineCoverage(sCov, area, 'intersect', n) : null;
@@ -703,6 +710,7 @@ export interface ShapeLayerData {
   fill?: ShapePaint | null;
   stroke?: ShapeStroke | null;
   fillRule?: ShapeFillRule;
+  inverted?: boolean;
   visible?: boolean;
   opacity?: number;
   blend?: BlendMode;
@@ -725,6 +733,7 @@ export function createShapeLayer(init: ShapeLayerData, env: ShapeEnv, id = newLa
     offset: { x: 0, y: 0 },
   };
   if (init.fillRule && init.fillRule !== 'nonzero') layer.fillRule = init.fillRule;
+  if (init.inverted) layer.inverted = true;
   return rerenderShape(layer, env);
 }
 
@@ -789,7 +798,7 @@ export function mergeShapeComponents(components: readonly ShapeComponent[], fill
 
 /** A shape layer as a pixel layer with what it shows now (same id, name, mask, effects, blend). */
 export function shapeAsPixelLayer(layer: ShapeLayer): PixelLayer {
-  const { components: _c, fillRule: _r, fill: _f, stroke: _s, annotation: _a, psd: _p, type: _t, ...rest } = layer;
+  const { components: _c, fillRule: _r, inverted: _i, fill: _f, stroke: _s, annotation: _a, psd: _p, type: _t, ...rest } = layer;
   return { ...rest, type: 'pixel', surface: layer.surface, offset: { x: 0, y: 0 } };
 }
 

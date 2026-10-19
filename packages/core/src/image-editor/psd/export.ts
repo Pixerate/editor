@@ -56,6 +56,8 @@ import { BLEND_TO_PSD } from './import';
 import { matteWhite, rgbaToPlanes } from './pixels';
 import { parseLfx2, writeLfx2 } from './effects';
 import { writePatternBlock } from './patterns';
+import { shapeBlocks } from './shapes';
+import { tyShForLayer } from './type';
 import { effectsFingerprint, type GlobalLight, type LayerEffect } from '../../raster/effects/model';
 import { builtinPattern, type EffectPattern } from '../../raster/effects/patterns';
 
@@ -390,6 +392,44 @@ export function exportPsd(input: PsdExportInput): PsdExportResult {
         }
         const fm = layer.smartFilters?.mask;
         if (fm && !fm.source) filterItems.push(filterMaskItem(placedId, fm, { x: 0, y: 0, width, height }));
+        const rec: PsdLayerRecord = { ...common(layer, extra), rect: EMPTY_RECT, channels: [], blendKey: BLEND_TO_PSD[layer.blend] ?? 'norm' };
+        const bounds = contentBounds(layer.surface);
+        if (bounds) {
+          const n = bounds.width * bounds.height;
+          const [r, g, b, a] = rgbaToPlanes(readRegion(layer.surface, bounds), n);
+          rec.rect = toRect(bounds);
+          rec.channels = [
+            rleChannel(CHANNEL_ALPHA, a, bounds.width, bounds.height, psb),
+            rleChannel(0, r, bounds.width, bounds.height, psb),
+            rleChannel(1, g, bounds.width, bounds.height, psb),
+            rleChannel(2, b, bounds.width, bounds.height, psb),
+          ];
+        } else {
+          rec.channels = [CHANNEL_ALPHA, 0, 1, 2].map(emptyChannel);
+        }
+        if (layer.mask) {
+          const m = maskChannel(layer.mask, 0, 0, psb);
+          rec.channels.push(m.channel);
+          rec.mask = m.mask;
+        }
+        records.push(rec);
+        return;
+      }
+      case 'shape':
+      case 'type': {
+        const extra: PsdTaggedBlock[] = [];
+        if (layer.fillOpacity !== undefined && layer.fillOpacity < 1) {
+          extra.push({ key: 'iOpa', data: Uint8Array.from([Math.round(Math.max(0, layer.fillOpacity) * 255), 0, 0, 0]) });
+        }
+        if (layer.type === 'shape') {
+          const losses = new Set<string>();
+          for (const b of shapeBlocks(layer, width, height, input.resolution ?? 72, losses)) extra.push({ key: b.key, data: padEven(b.data) });
+          for (const n of losses) note(n, layer.name);
+          if (layer.fill?.type === 'pattern') patternIds.add(layer.fill.patternId);
+          if (layer.stroke?.paint.type === 'pattern') patternIds.add(layer.stroke.paint.patternId);
+        } else {
+          extra.push({ key: 'TySh', data: padEven(tyShForLayer(layer)) });
+        }
         const rec: PsdLayerRecord = { ...common(layer, extra), rect: EMPTY_RECT, channels: [], blendKey: BLEND_TO_PSD[layer.blend] ?? 'norm' };
         const bounds = contentBounds(layer.surface);
         if (bounds) {

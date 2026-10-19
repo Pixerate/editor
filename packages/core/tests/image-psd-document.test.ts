@@ -111,7 +111,8 @@ describe('PSD export and import through the controller', () => {
     c.addAnnotation({ type: 'rect', x: 1, y: 1, width: 5, height: 5, strokeColor: '#000', strokeWidth: 1 });
     const { warnings } = await c.toPsd();
     expect(warnings.join(' ')).toMatch(/crop is not applied/);
-    expect(warnings.join(' ')).toMatch(/Shape layers were written as pixel layers/);
+    // The rectangle annotation is a shape layer, written as a Photoshop shape layer.
+    expect(warnings.join(' ')).not.toMatch(/annotation|pixel layers/i);
   });
 
   it('undo restores the document that was open before', async () => {

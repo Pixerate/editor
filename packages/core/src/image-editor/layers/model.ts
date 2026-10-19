@@ -218,8 +218,10 @@ export interface ShapeComponent {
 
 /** PSD data of a shape layer kept for round trips (see the PSD module). */
 export interface ShapePsdData {
-  /** Additional-info blocks we do not model, by key, as read. */
+  /** The vector blocks as read (`vsms` / `vmsk`, `vscg`, `vstk`, `vogk`, fill blocks), by key. */
   blocks?: Array<{ key: string; data: Uint8Array }>;
+  /** The shape as it was read (`shapeSignature`): while unchanged, export writes `blocks` back as they were. */
+  signature?: string;
 }
 
 /**
@@ -235,6 +237,8 @@ export interface ShapeLayer extends LayerBase {
   components: ShapeComponent[];
   /** Default `nonzero`. */
   fillRule?: ShapeFillRule;
+  /** The fill covers everything except the combined area (Photoshop shapes whose first component subtracts). */
+  inverted?: boolean;
   /** `null`: no fill. */
   fill: ShapePaint | null;
   /** `null`: no stroke. */
@@ -317,8 +321,10 @@ export interface ParagraphRun {
 
 /** PSD data of a type layer kept for round trips (see the PSD module). */
 export interface TypePsdData {
-  /** The `TySh` block as read, written back while the text and styles are unchanged. */
+  /** The `TySh` block as read: written back while the layer is unchanged, else patched. */
   tySh?: Uint8Array;
+  /** The layer's text, styles, frame and transform as read (`typeSignature`). */
+  signature?: string;
   /** Additional-info blocks we do not model, by key. */
   blocks?: Array<{ key: string; data: Uint8Array }>;
 }

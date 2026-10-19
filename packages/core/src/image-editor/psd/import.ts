@@ -2,15 +2,19 @@
 
 /**
  * PSD / PSB → our layer tree. Everything the model holds maps directly (smart objects with their
- * embedded contents, placement, warp, smart filters and filter mask); everything else comes in as
- * close as it can (type, fill and shape layers as their stored pixels) with a warning naming the
- * layers.
+ * embedded contents, placement, warp, smart filters and filter mask; shape layers with their
+ * paths, fill, stroke and live shapes; type layers with their text, styles and Photoshop's pixels
+ * until edited); everything else comes in as close as it can (fill layers as their stored pixels)
+ * with a warning naming the layers.
  */
 
 import type { BlendMode } from '../blend';
 import { emptySurface, surfaceFromPixels, translateSurface } from '../../raster/surface';
 import { decodePng } from '../../raster/png';
-import type { GroupLayer, ImageLayer, LayerBlendMode, LayerLocks, PixelLayer, RasterMask, SmartContents, SmartObjectLayer, SmartPlacement } from '../layers/model';
+import type { GroupLayer, ImageLayer, LayerBlendMode, LayerLocks, PixelLayer, RasterMask, ShapeLayer, SmartContents, SmartObjectLayer, SmartPlacement, TypeLayer } from '../layers/model';
+import { renderShape } from '../layers/shape';
+import { SHAPE_PSD_KEYS, shapeFromBlocks, shapeSignature } from './shapes';
+import { typeFromTySh, typeSignature } from './type';
 import { mapWarpMeshPoints } from '../../geom/warp';
 import { boxQuad } from '../../geom/homography';
 import {
@@ -101,7 +105,7 @@ export const BLEND_TO_PSD: Partial<Record<LayerBlendMode, string>> = Object.from
   Object.entries(PSD_BLEND_KEYS).map(([k, v]) => [v, k])
 ) as Partial<Record<LayerBlendMode, string>>;
 
-const FILL_KEYS = ['SoCo', 'GdFl', 'PtFl'];
+const FILL_KEYS = ['SoCo', 'GdFl', 'PtFl', 'vscg'];
 const TYPE_KEYS = ['TySh', 'tySh'];
 const SMART_KEYS = ['SoLd', 'SoLE', 'PlLd'];
 const VECTOR_KEYS = ['vmsk', 'vsms'];
@@ -110,7 +114,7 @@ const VECTOR_KEYS = ['vmsk', 'vsms'];
 export interface PsdLayerSummary {
   name: string;
   /** Our layer type, or `null` when the layer was dropped. */
-  type: 'pixel' | 'adjustment' | 'group' | 'smart' | null;
+  type: 'pixel' | 'adjustment' | 'group' | 'smart' | 'shape' | 'type' | null;
   /** `mapped`: held exactly; `approximated`: imported with losses; `dropped`: left out. */
   status: 'mapped' | 'approximated' | 'dropped';
   /** What Photoshop calls it (`pixel`, `type`, `smart-object`, `fill`, `shape`, `Levels` …). */
@@ -216,6 +220,8 @@ interface Ctx {
   /** Contents read so far by uuid (`null`: could not be read). */
   contents: Map<string, SmartContents | null>;
   depth: number;
+  /** Pixels per inch (for lengths stored in points). */
+  dpi: number;
 }
 
 function decodeOr(ctx: Ctx, rec: PsdLayerRecord, id: number, name: string): Uint8Array | undefined {
@@ -436,6 +442,24 @@ function importNode(ctx: Ctx, node: PsdTreeNode, depth: number): ImageLayer | nu
       return smart;
     }
   }
+  if (kind === 'shape') {
+    const shape = importShape(ctx, rec, name, notes, props);
+    if (shape) {
+      entry.type = 'shape';
+      entry.id = shape.id;
+      entry.status = notes.length ? 'approximated' : 'mapped';
+      return shape;
+    }
+  }
+  if (kind === 'type') {
+    const type = importType(ctx, rec, name, notes, props);
+    if (type) {
+      entry.type = 'type';
+      entry.id = type.id;
+      entry.status = notes.length ? 'approximated' : 'mapped';
+      return type;
+    }
+  }
   if (kind !== 'pixel') {
     const what = kind === 'smart-object' ? 'Smart objects' : kind === 'type' ? 'Type layers' : kind === 'shape' ? 'Shape layers' : 'Fill layers';
     ctx.warn.add(`${what} came in as pixel layers (their stored pixels)`, name);
@@ -451,6 +475,77 @@ function importNode(ctx: Ctx, node: PsdTreeNode, depth: number): ImageLayer | nu
   entry.type = 'pixel';
   entry.id = layer.id;
   entry.status = notes.length ? 'approximated' : 'mapped';
+  return layer;
+}
+
+/** A shape layer from its vector blocks, drawn from the paths (`null`: no readable path; it comes in as pixels). */
+function importShape(ctx: Ctx, rec: PsdLayerRecord, name: string, notes: string[], props: ReturnType<typeof baseProps>): ShapeLayer | null {
+  const approx = new Set<string>();
+  const { width, height } = ctx.file.header;
+  const data = shapeFromBlocks(rec.blocks, width, height, ctx.dpi, approx);
+  if (!data) return null;
+  for (const n of approx) {
+    ctx.warn.add(`A shape layer was approximated: ${n}`, name);
+    notes.push(n);
+  }
+  const layer: ShapeLayer = {
+    type: 'shape',
+    id: ctx.newId(name),
+    ...props,
+    components: data.components,
+    fill: data.fill,
+    stroke: data.stroke,
+    surface: emptySurface(4),
+    offset: { x: 0, y: 0 },
+  };
+  if (data.inverted) layer.inverted = true;
+  if (!ctx.skipPixels) layer.surface = renderShape(layer, { width, height, pattern: (id) => ctx.patterns.get(id) ?? null });
+  layer.psd = { blocks: rec.blocks.filter((b) => SHAPE_PSD_KEYS.includes(b.key)).map((b) => ({ key: b.key, data: b.data.slice() })), signature: shapeSignature(layer) };
+  const fill = u8Block(rec, 'iOpa');
+  if (fill !== undefined && fill < 255) layer.fillOpacity = percent(fill);
+  const effects = recordEffects(ctx, rec, name, notes, false);
+  if (effects) layer.effects = effects;
+  const mask = recordMask(ctx, rec, name);
+  if (mask) layer.mask = mask;
+  return layer;
+}
+
+/**
+ * A type layer from its `TySh` block, showing Photoshop's pixels until it is edited (then our
+ * shaper draws it, with any missing fonts replaced). `null`: the block can't be read.
+ */
+function importType(ctx: Ctx, rec: PsdLayerRecord, name: string, notes: string[], props: ReturnType<typeof baseProps>): TypeLayer | null {
+  const block = rec.blocks.find((b) => b.key === 'TySh' || b.key === 'tySh');
+  if (!block || block.key !== 'TySh') return null;
+  const approx = new Set<string>();
+  const data = typeFromTySh(block.data, approx);
+  if (!data) return null;
+  for (const n of approx) {
+    ctx.warn.add(`A type layer was approximated: ${n}`, name);
+    notes.push(n);
+  }
+  const layer: TypeLayer = {
+    type: 'type',
+    id: ctx.newId(name),
+    ...props,
+    text: data.text,
+    runs: data.runs,
+    paragraphs: data.paragraphs,
+    frame: data.frame,
+    transform: data.transform,
+    surface: recordPixels(ctx, rec, name),
+    offset: { x: 0, y: 0 },
+    rendering: 'stored',
+  };
+  if (!data.antiAlias) layer.antiAlias = false;
+  // The pixels are in layer space: `recordPixels` placed them at the record's rectangle already.
+  layer.psd = { tySh: block.data.slice(), signature: typeSignature(layer) };
+  const fill = u8Block(rec, 'iOpa');
+  if (fill !== undefined && fill < 255) layer.fillOpacity = percent(fill);
+  const effects = recordEffects(ctx, rec, name, notes, false);
+  if (effects) layer.effects = effects;
+  const mask = recordMask(ctx, rec, name);
+  if (mask) layer.mask = mask;
   return layer;
 }
 
@@ -640,6 +735,7 @@ export function psdToLayers(file: PsdFile, options: PsdImportOptions = {}): PsdI
     filterItems: new Map(),
     contents: new Map(),
     depth: options.depth ?? 0,
+    dpi: resolution(file) ?? 72,
   };
   for (const block of file.globalBlocks) {
     if (LINKED_FILE_KEYS.includes(block.key)) for (const f of parseLinkedFiles(block.data)) if (!ctx.linked.has(f.uuid)) ctx.linked.set(f.uuid, f);
