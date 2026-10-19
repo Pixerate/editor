@@ -1,5 +1,16 @@
 # @pixerate/editor-react
 
+## 0.62.0
+
+### Minor Changes
+
+- 2111e79: Video editor: nested sequences (compound clips), phase 1. A project can hold `sequences` of `{ id, name, tracks }`, and a compound clip (`type: 'sequence'`, `sequence`, `in`) plays a stretch of one as a single picture and a single sound. `parseVideoProject` reads them (clip ids are unique across the project and its sequences; `speed` and `timeRemap` on a compound are refused for now), and `checkVideoProject` checks sequences' tracks like the project's own and reports `missing-sequence`, `sequence-cycle`, `unused-sequence` and a compound that plays past its sequence's end (`source-overrun`); transitions into a compound need sequence time either side of the cut. `videoFrameAt` makes a compound one layer (`type: 'sequence'`, `sequence`, `sourceTime`, `layers`) to which its opacity, transform, blend, grade, LUT, fades, transitions and animations apply, and mixes its sequence's sound in through its volume and fades; nested layers and sounds are named by clip path (`comp/inner`). The canvas preview draws a compound's layers on an offscreen canvas (`VideoDrawOptions.scratch` now takes a slot per nesting level), SVG frames as an isolated `<g>` with the group filter, and `toVideoFfmpeg` builds each compound's sequence as a sub-graph on a transparent frame placed with the usual per-clip chain, checked against the preview's evaluation on a real ffmpeg. Trims, splits and slips of a compound move its `in`; clips inside sequences are read-only until phase 2, and EDLs mark compounds with a comment. New: `VideoSequence`, `VideoSequenceClip`, `videoSequenceDuration`, `videoSequenceMap`, `findVideoSequenceCycle`, `allVideoTracks`, `findVideoSequenceClip`, `videoFrameLeafLayers`, `describeVideoSequence`, and the agent tool `list_video_sequences`; `get_video_project` summarises sequences. The React and Svelte `VideoTimeline` label compound clips with their sequence, and `ClipInspector` shows the sequence and a mute switch for them.
+
+### Patch Changes
+
+- Updated dependencies [2111e79]
+  - @pixerate/editor@0.92.0
+
 ## 0.61.0
 
 ### Minor Changes
