@@ -246,6 +246,15 @@ describe('layer effects in the tiled compositor', () => {
     expect(px(out, 260, 130)).toEqual([0xf0, 0xf0, 0xf0, 255]);
   });
 
+  it('composites a pigment-blended layer with effects like paint, and refuses pigment on an effect', () => {
+    const effects = one(fx('stroke', { size: 3 }));
+    const out = new RasterCompositor().composite(stack(effects, { blend: 'pigment' } as never), canvas, sources);
+    const plain = new RasterCompositor().composite(stack({ enabled: true, items: [] }, { blend: 'pigment' } as never), canvas, sources);
+    // Inside the shape the layer mixes as it does without effects.
+    expect(px(out, 260, 130)).toEqual(px(plain, 260, 130));
+    expect(() => mergeLayerEffect(defaultLayerEffect('satin', 's'), { blend: 'pigment' })).toThrow(/layer blend mode only/);
+  });
+
   describe('incremental effect maps while painting', () => {
     const BIG = { x: 0, y: 0, width: 900, height: 700 };
     const big: RasterSources = { width: 900, height: 700 };

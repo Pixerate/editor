@@ -20,6 +20,9 @@ export * from './mosaic-filter';
 export * from './capture';
 export * from './layers/model';
 export * from '../raster/surface';
+export * from '../raster/effects/model';
+export * from '../raster/effects/patterns';
+export { renderLayerEffects, type EffectRect } from '../raster/effects/render';
 export * from './layers/compositor';
 export * from './layers/migrate';
 export * from './layers/serialize';
@@ -28,6 +31,7 @@ export { encodePng, decodePng, isPng, bytesToBase64, base64ToBytes, parseDataUrl
 export { inflate, inflateRaw, deflate, deflateRaw, adler32, ZlibError } from '../raster/zlib';
 export * from './layers/ops';
 export * from './layers/panel';
+export * from './layers/effects-ui';
 export * from '../paint';
 export * from './paint-tools';
 export * from './layers/paint-ui';
