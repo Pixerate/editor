@@ -118,6 +118,13 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
   `copy_video_grade` from it to the rest of the scene), then add a look with
   `apply_video_grade_preset` at a modest `amount` (0.3-0.6). Check with `render_video_frame` at a
   few times side by side. Skin tones are the reference: avoid strong `hue` or `tint` on people.
+- **Measure, don't eyeball.** Where the host shows a preview, `get_video_scopes` reads the real
+  picture: keep `clipped.highlights` under about 1% and `clipped.shadows` under about 2% unless
+  the look calls for it, and aim for a mean luma of roughly 0.35-0.55 for ordinary scenes. A
+  balanced shot's `average` colour is close to grey, so a strong tint there is a cast to fix
+  with `temperature` and `tint`. Measure before and after each grade, and compare shots in a
+  scene by their `stats` rather than by eye. The figures are of the rendered frame, after
+  grades, blends and titles.
 - **Blend overlays, don't key them.** Light leaks, flares, film burns and glows shot on black go on
   a higher video track with `blend: "screen"` (or `add` for a hotter look), so the black drops
   out; textures, paper and dust on white use `multiply`. Lower the clip's `opacity` to taste.
@@ -146,6 +153,7 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
 | `find_video_gaps` | List empty stretches between clips (and before the first) as `{ track, start, end }` ms, on every track or one `track`. Then `close_video_gaps` or ripple. |
 | `check_video_project` | After every batch and before export. Lists issues errors first with a code (`missing-asset`, `wrong-track`, `overlap`, `source-overrun`, `transition-without-cut`, `transition-too-long`, `transition-handles`, `fades-too-long`, `unknown-duration`, `unused-asset`, `marker-past-end`, `empty`), what it is about and how to fix it. |
 | `render_video_frame` | Look at the picture at `time`, or at 2-16 `times` as one labelled contact sheet (`columns` 1-8). SVG by default; `format: "png"` only when the host can rasterize. Video without a `poster` shows as a labelled box with its source timecode. |
+| `get_video_scopes` | Measure the rendered picture at `time` (default the playhead; another time is shown briefly and the playhead put back) as colour scopes do: luma `stats` (0-1 mean, median, min, max, p1, p99), the share `clipped` to black or white (and per channel), saturation, the `average` colour, a `histogram` of `bins` steps (default 16), the luma spread of `columns` strips left to right (`waveform`, default 8), the main `vectorscope` hue (red ≈ 103°, skin ≈ 123°) and `notes` on what to fix. Call it before and after grading. Fails with a reason when the host shows no preview (then use `render_video_frame`). |
 | `export_video_ffmpeg` | Get the ffmpeg command that renders the project: `args` (for spawn), `command` (one shell line), `filterComplex`, duration and notes on approximations. `output` default output.mp4, `crf` x264 quality 0-51 (default 18, lower is better). `loudness` normalises the mix (`integrated` LUFS default -14, `truePeak` dBTP default -1, `range`); with `loudness.measured` from `export_video_loudness_measure` it applies one fixed gain. Fails when there are no clips. |
 | `export_video_loudness_measure` | First pass of loudness normalisation: the ffmpeg command that mixes only the sound and prints its loudness as JSON at the end of stderr. Takes the same target (`integrated` LUFS, `truePeak`, `range`) as the export. Map `input_i`, `input_tp`, `input_lra`, `input_thresh`, `target_offset` to `loudness.measured` for `export_video_ffmpeg`. |
 | `export_video_edl` | Get one `track` (default the bottom video track) as a CMX 3600 EDL with source and record timecode, dissolves, speed changes and clip names, for conforming in another editor. `title` defaults to the project name. At 29.97 and 59.94 fps it writes drop-frame timecode (`HH:MM:SS;FF`, `FCM: DROP FRAME`), as other editors expect; `dropFrame: false` forces non-drop. |
@@ -233,5 +241,9 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
   wants that track changed.
 - **Read-only**: when `get_video_project` says the project cannot be edited, write tools are
   hidden; read, render and export still work. Tell the user rather than working around it.
+- **Scopes need real pixels.** `get_video_scopes` reads what the host's preview draws, so it
+  fails when nothing is showing the project or the media cannot load in time, and a canvas
+  with media from another origin served without CORS cannot be read. Video drawn as a
+  placeholder box is never measured: the tool waits for every picture to load.
 - **Exports are commands, not files.** `export_video_ffmpeg` returns a command for the host to
   run; the EDL covers one track only. Report the notes on anything approximated.

@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/video-editor] Scopes Read a Stale Picture While a `<video>` Seeks, and Nothing From a Cross-Origin One
+
+- **Issue / Symptom**: `get_video_scopes` at another time measured the frame the preview showed before the seek. With media from another origin, reading the preview canvas threw "The operation is insecure".
+- **Root Cause**: After `currentTime` is set, a `<video>` keeps `readyState >= 2` and draws its old frame until `seeked` fires. A canvas that has drawn cross-origin media without CORS is tainted, and `getImageData` throws a `SecurityError`.
+- **Solution / Workaround**: `VideoPreviewEngine` marks a frame incomplete while any media layer is missing or `seeking`, and `VideoPreviewPixels.next(time)` waits for a complete drawing of that time (or times out with a reason). Serve media with `Access-Control-Allow-Origin` (the engine sets `crossOrigin = "anonymous"`); `VideoPreviewPixels.read()` turns the `SecurityError` into a message that says so. Luma computed from equal channels can come out a hair under the value (39.99999…), so scope bins are nudged before flooring.
+
 ### [core/video-editor] Speed Ramps: Browsers Refuse Very Slow Rates, and ffmpeg Freezes Come From `fps`
 
 - **Issue / Symptom**: The preview threw or ignored a freeze frame when it set a `<video>`'s `playbackRate` to 0. In the ffmpeg export, there was no obvious way to make one source frame last a second.
