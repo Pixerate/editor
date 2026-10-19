@@ -134,6 +134,11 @@ batching.
 - **Blend modes for tone-only or colour-only changes:** `luminosity` applies a curves or
   levels layer without shifting hue or saturation; `color` applies a tint without changing
   brightness; `soft-light` / `overlay` for gentle contrast.
+- **`pigment` mixes like paint.** On a layer, a fill or a brush, `pigment` mixes the colour into
+  what is below as real paint would (Kubelka-Munk): blue into yellow gives green, white gives
+  tints, and opacity is the share of new paint (0.5 is half and half). Use it for glazes,
+  natural colour mixing and painterly strokes; it is not a Photoshop mode, so keep it off
+  layers that must survive a PSD round trip. It costs about ten times a normal blend.
 - **Name layers** (`name`) by intent ("Sky darken", "Warm skin"), so the stack stays readable.
 - **Merge Down only onto an opaque, 100 % lower layer** when the result must look the same:
   the merged layer keeps the lower layer's opacity and blend, so a faded lower layer fades the
@@ -154,7 +159,7 @@ batching.
 | `get_histogram` | Judge exposure numerically: per channel and luminance `mean`, `p1` and `p99` (0..255), and `clipping` percent at pure black and white per channel. Reads the last render, so call `render_preview` first. `bins` (16, 32, 64 or 256) adds the counts. Cheaper than another image for checking a tonal change. |
 | `render_preview` | See the edited image (crop, adjustments, layers, annotations) as a PNG, or with `layerId` one layer alone. `maxSide` 16..2048 px, default 512. Images cost tokens: render after a group of edits, use 512 for overall look and 1024+ to judge clipping, edges and masks. Fails in environments without rendering. |
 | `inspect_psd` | Read a PSD / PSB (`data` base64) without opening it: size, `depth`, `colorMode`, `resolution`, every layer bottom first with `psdKind`, the `type` it would become and `status` (`mapped`, `approximated`, `dropped`) with `notes`, and the import `warnings`. Call before `import_psd`. |
-| `export_psd` | Save the document as an 8-bit RGB PSD (PSB above 30000 px) with layers, groups, adjustment layers and masks. Returns `data` (base64), `size` in bytes, `psb` and `warnings` (crop or rotation not applied, filters and depth masks baked, annotations rasterized or left out). Changes nothing. |
+| `export_psd` | Save the document as an 8-bit RGB PSD (PSB above 30000 px) with layers, groups, adjustment layers and masks. Returns `data` (base64), `size` in bytes, `psb` and `warnings` (crop or rotation not applied, filters and depth masks baked, annotations rasterized or left out, Pigment blends written as Normal). Changes nothing. |
 | `capture_view` | Inspect detail in natural image pixels (the space of `get_selection` and `select_region`, before crop and rotation): `region` `content` (whole image, default), `selection` or `rect`; small regions are enlarged up to 8× with hard pixel edges, so a 64 px rect shows real pixels. `includeOverlays: true` shades unselected pixels and outlines the crop: use it to check a mask's edge before `apply_selection_as_mask`. Returns the `rect` and `scale`. Use `render_preview` for the final framed result. |
 
 ### Write
@@ -217,8 +222,11 @@ batching.
 - `paint_stroke`, `fill_pixels` and `clear_pixels` need a visible pixel layer (or a layer with a
   raster mask and `channel: "mask"`); adjustment, group and annotation layers can only be
   painted through their masks. A layer with `locks.pixels` refuses paint.
-- `mix_colors` predicts a mix; it does not paint, and strokes still lay paint down with normal
-  blending (there is no pigment blend mode or mixer brush yet).
+- `mix_colors` predicts a mix; it does not paint. To paint the mix, pass `blend: "pigment"` to
+  `paint_stroke` (in `brush`) or `fill_pixels`, or set it on a layer.
+- `pigment` has no PSD equivalent: `export_psd` writes those layers as Normal (the merged image
+  keeps the look) and says so in `warnings`, naming the layers. `import_psd` never produces it.
+  Over transparent pixels there is nothing to mix with, so it lays the colour down as Normal.
 - `export_psd` is in the source frame: a crop or rotation is not in the file (the warnings say
   so). Crop with `set_crop` only for PNG / JPEG output, or flatten the look you need first.
 - PSD opacity, fill and mask density come in as whole percents (Photoshop stores bytes), so a

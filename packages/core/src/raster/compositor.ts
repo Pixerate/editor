@@ -19,7 +19,7 @@
  *   cached by the identity of their inputs.
  */
 
-import { blendChannel, blendRgb, isSeparableBlendMode, type BlendMode } from './blend';
+import { blendChannel, blendRgb, isSeparableBlendMode, mixPigment8, type BlendMode } from './blend';
 import { gaussianBlur } from './blur';
 import type { RasterMask, RasterNode } from './layers';
 import {
@@ -159,7 +159,8 @@ function dirtyInTile(rects: RasterRect[], tx: number, ty: number): RasterRect | 
 
 /**
  * Blends straight-alpha `src` over `dst` (both RGBA) in place with `mode`, scaling the source
- * alpha by `alpha` and, per pixel, by `coverage`. Same maths as `blendPixel`.
+ * alpha by `alpha` and, per pixel, by `coverage`. Same maths as `blendPixel` (including the
+ * `pigment` paint mix, which caches each 8-bit colour's spectrum).
  */
 export function blendTile(
   dst: Uint8ClampedArray,
@@ -170,6 +171,7 @@ export function blendTile(
 ): void {
   if (!(alpha > 0)) return;
   const normal = mode === 'normal';
+  const pigment = mode === 'pigment';
   const lut = !normal && isSeparableBlendMode(mode) ? separableLut(mode) : null;
   const cb = [0, 0, 0];
   const cs = [0, 0, 0];
@@ -197,6 +199,15 @@ export function blendTile(
     const d0 = dst[i];
     const d1 = dst[i + 1];
     const d2 = dst[i + 2];
+    if (pigment) {
+      // Not B(Cb, Cs): the colours mix like paint by amount, `as / ao` of the source.
+      mixPigment8(d0, d1, d2, src[i], src[i + 1], src[i + 2], as / ao, cb);
+      dst[i] = Math.round(cb[0] * 255);
+      dst[i + 1] = Math.round(cb[1] * 255);
+      dst[i + 2] = Math.round(cb[2] * 255);
+      dst[i + 3] = Math.round(ao * 255);
+      continue;
+    }
     const b0 = d0 / 255;
     const b1 = d1 / 255;
     const b2 = d2 / 255;

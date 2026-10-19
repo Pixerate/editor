@@ -13,7 +13,7 @@
  *   so overlapping dabs never exceed the opacity.
  */
 
-import { blendPixel, type BlendMode } from '../raster/blend';
+import { blendPixel, mixPigment8, type BlendMode } from '../raster/blend';
 import type { RasterRect as CropBox } from '../raster/surface';
 import { TILE, tileKey, tileCoord, type TileKey } from '../raster/surface';
 
@@ -529,6 +529,19 @@ export function applyStrokeToTile(
       }
       if (s.lockTransparency && out[i + 3] === 0) continue;
       const src = s.mode === 'erase' ? bg : cs;
+      if (s.blend === 'pigment') {
+        // `blendPixel`'s paint mix on the 8-bit colours, with their spectra cached.
+        const bytes = s.mode === 'erase' ? s.background : s.color;
+        const as = src[3] * k;
+        if (!(as > 0)) continue;
+        const ao = as + (out[i + 3] / 255) * (1 - as);
+        mixPigment8(out[i], out[i + 1], out[i + 2], bytes[0], bytes[1], bytes[2], as / ao, cb);
+        out[i] = Math.round(cb[0] * 255);
+        out[i + 1] = Math.round(cb[1] * 255);
+        out[i + 2] = Math.round(cb[2] * 255);
+        if (!s.lockTransparency) out[i + 3] = Math.round(ao * 255);
+        continue;
+      }
       for (let ch = 0; ch < 4; ch++) cb[ch] = out[i + ch] / 255;
       const o = blendPixel(s.blend, cb, src, k);
       out[i] = Math.round(o[0] * 255);

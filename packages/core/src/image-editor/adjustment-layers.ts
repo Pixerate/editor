@@ -16,7 +16,7 @@ import type {
   PhotoFilterParams,
   VibranceParams,
 } from './types';
-import { type BlendMode, blendRgb, normalizeBlendMode, setLum } from './blend';
+import { type BlendMode, blendRgb, mixPigmentRgb, normalizeBlendMode, setLum } from './blend';
 import { linearToSrgb, srgbToLinear } from './color';
 import { layerMaskKey, normalizeLayerMask } from './selection/layer-mask';
 
@@ -881,6 +881,11 @@ function applyLayer(c: Rgb, layer: AdjustmentLayer, op: PixelOp | null, coverage
   }
   const cb0 = c[0], cb1 = c[1], cb2 = c[2];
   op(c);
+  if (blend === 'pigment') {
+    // Mixes the adjusted colour into the original like paint, `alpha` of the way.
+    mixPigmentRgb([clamp01(cb0), clamp01(cb1), clamp01(cb2)], [clamp01(c[0]), clamp01(c[1]), clamp01(c[2])], alpha, c);
+    return;
+  }
   const b = blend === 'normal' ? c : blendRgb(blend, [cb0, cb1, cb2], c);
   c[0] = (1 - alpha) * cb0 + alpha * b[0];
   c[1] = (1 - alpha) * cb1 + alpha * b[1];
