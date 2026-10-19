@@ -53,6 +53,8 @@ export {
 	type UseCanvasScenesOptions
 } from './useCanvasScenes.js';
 
+export { useCanvasCapture, type UseCanvasCaptureOptions } from './useCanvasCapture.js';
+
 export {
 	CanvasGuidesLayer,
 	type CanvasGuidesLayerProps

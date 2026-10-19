@@ -126,6 +126,7 @@ export {
 	type CanvasScenes,
 	type CreateCanvasScenesOptions
 } from './createCanvasScenes.svelte.js';
+export { createCanvasCapture, type CreateCanvasCaptureOptions } from './createCanvasCapture.js';
 export { default as CanvasGuidesLayer } from './CanvasGuidesLayer.svelte';
 
 // Freehand drawing tools (pen, highlighter, eraser)

@@ -446,7 +446,7 @@ Every feature is available from core and from both framework packages. "Via core
 </details>
 
 <details>
-<summary><strong>Commands and agent tools</strong> (12)</summary>
+<summary><strong>Commands and agent tools</strong> (13)</summary>
 
 | Feature | Core | React | Svelte |
 | :--- | :---: | :---: | :---: |
@@ -461,6 +461,7 @@ Every feature is available from core and from both framework packages. "Via core
 | Inline Agent Carets in Text (a named caret, selection and changed-text tint drawn as decorations where the rich-text tools read and write, as collaborators' carets look in Google Docs; optional typing playback that stays one undo step and rolls back if cancelled; `presence` option, on by default) | `AgentCaret`, `setAgentCaret`, `typeAgentText` & `createRichTextToolProvider({ presence })` | Via core & `useAgentToolProvider` | Via core & `useAgentToolProvider` |
 | Canvas & Prompt Agent Tools (one strict tool per operation, created ids returned, ids checked against the snapshot) | `createEditorMcpToolProvider` & `validateAgentCommand` | Via core & `useAgentToolProvider` | Via core & `useAgentToolProvider` |
 | Spreadsheet Agent Tools (`get_range`, `set_cell`, `set_range`, insert/delete rows and columns) | `createSpreadsheetToolProvider` | Via core & `useAgentToolProvider` | Via core & `useAgentToolProvider` |
+| Screenshot Capture for Agents (`capture_view`: viewport, content, selection, canvas nodes by id or a rect, PNG or JPEG, with the rect and scale to map image pixels back; overlays such as selection boxes and agent cursors left out unless asked; canvas, image editor and any DOM element) | `createCaptureTool`, `createElementCaptureSurface` (`/tools`), `createCanvasCaptureToolProvider` (`/canvas`), `capture_view` in `createImageEditorToolProvider` | `useCanvasCapture` | `createCanvasCapture` |
 | Built-in Commands (history undo/redo, canvas arrange, spreadsheet table) | `createHistoryCommands`, `createArrangeCommands`, `createSpreadsheetCommands` | Via core | Via core |
 
 </details>
