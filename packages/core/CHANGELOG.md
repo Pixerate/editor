@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.102.0
+
+### Minor Changes
+
+- 8e64a1d: Smart objects and smart filters in the image editor. A new `smart` layer type places contents (raster pixels, or a nested layer document) through a non-destructive placement (the Free Transform geometry: corners plus an optional warp mesh) and re-renders from the contents on every change, so repeated transforms never degrade. Convert to Smart Object (one or more layers), Rasterize, Edit Contents (open the contents as a document of their own, with their own undo, then save back), Replace Contents, Export Contents, and linked instances that share one contents (or New Smart Object via Copy for independent ones). Smart filters are an ordered stack of the existing `develop` and `blur` filters, each with enabled, blend mode and opacity, plus one shared filter mask (paintable through the new `filter-mask` paint channel). Pixel layers keep their own filters unchanged, so existing documents render identically; converting a pixel layer turns its filters into smart filters and renders byte for byte the same. Free Transform, `transform_layer`, `flip_layer`, `rotate_layer_90` and `offset_layer` work on smart objects by editing the placement. Smart objects round-trip through `toJSON` / `loadJSON` (contents stored once in `smartContents`). New agent tools: `get_smart_object`, `convert_to_smart_object`, `rasterize_smart_object`, `set_smart_object_transform`, `replace_smart_object_contents`, `export_smart_object_contents`, `copy_smart_object`, `edit_smart_object_contents`, `close_smart_object_contents`, `add_smart_filter`, `update_smart_filter`, `remove_smart_filter`, `move_smart_filter`, `set_smart_filters_enabled` and `set_smart_filter_mask`. The raster compositor gains an `isPixelLike` profile hook for layer kinds that draw a rendered surface like a pixel layer.
+
 ## 0.101.0
 
 ### Minor Changes
