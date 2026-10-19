@@ -193,6 +193,19 @@ describe('layer operations', () => {
     expect([t.width, t.height]).toEqual([8, 6]);
     expect(Array.from(t.data.slice(0, 4))).toEqual([100, 150, 200, 255]);
     expect(c.getLayerThumbnail('background', { maxSide: 8 })).toBe(t);
+
+    const thumbUrl = c.getLayerThumbnailDataURL('background', { maxSide: 8 });
+    expect(thumbUrl).toMatch(/^data:image\/png;base64,/);
+
+    const fullUrl = c.getLayerDataURL('background');
+    expect(fullUrl).toMatch(/^data:image\/png;base64,/);
+
+    const grp = c.addGroup({ name: 'Folder' });
+    expect(c.getLayerThumbnailDataURL(grp)).toBeNull();
+    expect(c.getLayerDataURL(grp)).toBeNull();
+
+    expect(c.getLayerThumbnailDataURL('non-existent')).toBeNull();
+    expect(c.getLayerDataURL('non-existent')).toBeNull();
   });
 });
 

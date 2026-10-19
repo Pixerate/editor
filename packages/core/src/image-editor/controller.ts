@@ -113,6 +113,7 @@ import {
   LAYERED_SCHEMA_VERSION,
   deserializeLayers,
   deserializePatterns,
+  encodeSurface,
   serializePatterns,
   resolveExternalAssets,
   serializeLayers,
@@ -191,7 +192,7 @@ import {
   type StrokeApply,
   type StrokePoint,
 } from '../paint';
-import { base64ToBytes, bytesToBase64, decodePng, encodePng, isPng, parseDataUrl } from '../raster/png';
+import { base64ToBytes, bytesToBase64, decodePng, encodePng, isPng, parseDataUrl, pngDataUrl } from '../raster/png';
 import type { Interpolation } from '../raster/transform';
 import { getAnnotationBounds } from './geometry';
 import { importPsd, type PsdImportResult } from './psd/import';
@@ -1222,6 +1223,18 @@ export class ImageEditorController {
       this.boundsCache.set(surface, b);
     }
     return b ? { x: b.x + layer.offset.x, y: b.y + layer.offset.y, width: b.width, height: b.height } : null;
+  }
+
+  /**
+   * A tight base64 PNG data URL of a pixel or smart layer's content, or `null` for an unknown or
+   * non-pixel layer, or when the layer is completely transparent.
+   */
+  public getLayerDataURL(id: string): string | null {
+    const layer = this.getLayer(id);
+    if (!layer || (layer.type !== 'pixel' && layer.type !== 'smart')) return null;
+    const surface = this.surfaceOf(layer);
+    const enc = encodeSurface(surface);
+    return enc ? enc.url : null;
   }
 
   /**
@@ -2529,6 +2542,16 @@ export class ImageEditorController {
     }
     byKey.set(key, thumb);
     return thumb;
+  }
+
+  /**
+   * A small PNG data URL preview of a pixel or smart layer over the canvas (or of its mask with `mask: true`),
+   * longest side `maxSide` px; `null` for layers without pixels.
+   */
+  public getLayerThumbnailDataURL(id: string, options: { maxSide?: number; mask?: boolean } = {}): string | null {
+    const thumb = this.getLayerThumbnail(id, options);
+    if (!thumb) return null;
+    return pngDataUrl(thumb.width, thumb.height, thumb.data, 4);
   }
 
   // --- Painting ---
