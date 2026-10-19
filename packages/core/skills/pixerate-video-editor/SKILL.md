@@ -143,6 +143,10 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
   attach each result with `set_video_proxies`, and leave `set_video_preview_scale` on `auto` (or
   pick a fraction). Proxies change only what the preview plays: the export, the EDL and every
   time you read stay on the originals.
+- **Let the cache fill before a review.** With a frame cache, `get_video_preview_cache` shows
+  which stretches play without waiting. Before asking the person to watch a passage, seek to its
+  start and let the prefetch window fill. Frames are keyed by the source, so trims and moves keep
+  them; switching the preview scale or relinking an asset starts afresh.
 - **Check before export.** Always run `check_video_project` and fix errors first: the ffmpeg
   command renders exactly what is on the timeline.
 
@@ -162,6 +166,7 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
 | `check_video_project` | After every batch and before export. Lists issues errors first with a code (`missing-asset`, `wrong-track`, `overlap`, `source-overrun`, `transition-without-cut`, `transition-too-long`, `transition-handles`, `fades-too-long`, `unknown-duration`, `unused-asset`, `marker-past-end`, `empty`), what it is about and how to fix it. |
 | `render_video_frame` | Look at the picture at `time`, or at 2-16 `times` as one labelled contact sheet (`columns` 1-8). SVG by default; `format: "png"` only when the host can rasterize. Video without a `poster` shows as a labelled box with its source timecode. |
 | `get_video_scopes` | Measure the rendered picture at `time` (default the playhead; another time is shown briefly and the playhead put back) as colour scopes do: luma `stats` (0-1 mean, median, min, max, p1, p99), the share `clipped` to black or white (and per channel), saturation, the `average` colour, a `histogram` of `bins` steps (default 16), the luma spread of `columns` strips left to right (`waveform`, default 8), the main `vectorscope` hue (red ≈ 103°, skin ≈ 123°) and `notes` on what to fix. Call it before and after grading. Fails with a reason when the host shows no preview (then use `render_video_frame`). |
+| `get_video_preview_cache` | Read the preview's frame cache when the host has one: frames and bytes against `maxBytes`, hits and misses, frames still decoding (`pending`), the prefetch window (ms), and `cachedRanges` between `from` and `to` (stretches that play and scrub without waiting). Says `enabled: false` without a cache. Changes nothing. |
 | `plan_video_proxies` | Get the ffmpeg commands that make proxies (default `scale` 0.5) of video assets lacking one at that scale (or of `assets`): scaled H.264 with a keyframe every `gop` frames (default 12) so scrubbing is quick, sound kept. Each has `{ asset, args, command, proxy }`; attach `proxy` with `set_video_proxies` once the host has run it. Changes nothing. |
 | `export_video_ffmpeg` | Get the ffmpeg command that renders the project: `args` (for spawn), `command` (one shell line), `filterComplex`, duration and notes on approximations. `output` default output.mp4, `crf` x264 quality 0-51 (default 18, lower is better). `loudness` normalises the mix (`integrated` LUFS default -14, `truePeak` dBTP default -1, `range`); with `loudness.measured` from `export_video_loudness_measure` it applies one fixed gain. Fails when there are no clips. |
 | `export_video_loudness_measure` | First pass of loudness normalisation: the ffmpeg command that mixes only the sound and prints its loudness as JSON at the end of stderr. Takes the same target (`integrated` LUFS, `truePeak`, `range`) as the export. Map `input_i`, `input_tp`, `input_lra`, `input_thresh`, `target_offset` to `loudness.measured` for `export_video_ffmpeg`. |

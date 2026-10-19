@@ -12,6 +12,7 @@ import { VideoLutCache, type VideoLutLoader } from './lut.js';
 import { createVideoProject, parseVideoProject } from './parse.js';
 import { VideoPreviewPixels } from './scopes.js';
 import type { VideoPreviewScale } from './proxy.js';
+import type { VideoFrameCache } from './frame-cache.js';
 import { videoProjectSvg, type VideoSvgOptions } from './render.js';
 import { snapToVideoFrame, snapVideoTime, videoClipEnd, videoClipsAt, videoProjectDuration, videoSnapPoints, findVideoClip } from './timeline.js';
 import type { VideoProject } from './types.js';
@@ -35,6 +36,11 @@ export interface VideoEditorOptions {
 	luts?: VideoLutCache | VideoLutLoader;
 	/** How large a picture the preview plays (default `auto`: a proxy as large as the canvas shows, if the asset has one). */
 	previewScale?: VideoPreviewScale;
+	/**
+	 * Decoded source frames with prefetch for the preview (see `VideoFrameCache`): scrubbing and
+	 * stepping then show cached frames at once. Host-side and optional (default none).
+	 */
+	frameCache?: VideoFrameCache;
 }
 
 /** A snapshot of the editor. The same object is returned until something changes. */
@@ -82,6 +88,8 @@ export class VideoEditorController {
 	readonly previewPixels = new VideoPreviewPixels();
 	/** Grades' LUTs, loaded on demand for the preview, SVG frames and agents. */
 	readonly luts: VideoLutCache;
+	/** The host's frame cache, if it gave one (the preview fills and reads it). */
+	readonly frameCache: VideoFrameCache | null;
 	private project: VideoProject;
 	private issues: VideoIssue[];
 	private selection: string[] = [];
@@ -99,6 +107,7 @@ export class VideoEditorController {
 		this.history = options.history ?? new HistoryManager();
 		this.audioPeaks = options.audioPeaks instanceof VideoAudioPeaksCache ? options.audioPeaks : new VideoAudioPeaksCache(options.audioPeaks);
 		this.luts = options.luts instanceof VideoLutCache ? options.luts : new VideoLutCache(options.luts);
+		this.frameCache = options.frameCache ?? null;
 		this.project = options.project ? parseVideoProject(options.project) : createVideoProject();
 		this.issues = checkVideoProject(this.project);
 		this.readOnly = options.readOnly ?? false;

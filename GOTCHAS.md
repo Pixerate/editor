@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/video-editor] A Frame Cache Keyed by Clip Is Thrown Away by Every Edit
+
+- **Issue / Symptom**: Keyed by clip and timeline frame, as a sequencer's final-frame cache is, every trim, slip or move invalidated frames whose pictures had not changed. Two clips cut from one shot each decoded it again.
+- **Root Cause**: Timeline keys describe where a picture shows, not what it is.
+- **Solution / Workaround**: `VideoFrameCache` keys raw source frames by the file the preview plays (the asset's `src`, or the proxy it picks) and the source frame on the project's fps grid. Grades, LUTs and compositing still happen at draw time. Each entry keeps the timeline time it is next needed at (refreshed in the prefetch window) for eviction only. Decode at the middle of a frame (`videoSourceFrameTime`) so rounding never lands on the frame before. While playing, the engine draws the `<video>` element; it uses cached frames only when paused, scrubbing or mid-seek, because a playing element is already current.
+
 ### [core/video-editor] Proxies Must Match the Original Frame for Frame, and Camera Files Seek Slowly
 
 - **Issue / Symptom**: Scrubbing 4K camera footage in the preview lagged by seconds. A proxy made with a frame-rate change or a trimmed start played the wrong frames for every clip.
