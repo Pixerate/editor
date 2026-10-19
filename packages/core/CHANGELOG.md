@@ -1,5 +1,14 @@
 # @pixerate/editor
 
+## 0.83.0
+
+### Minor Changes
+
+- 658832b: Video editor: drop-frame timecode at 29.97 and 59.94 fps. `formatVideoTimecode` now writes `HH:MM:SS;FF` drop-frame at those rates by default (pass `false` for non-drop), and new helpers `isVideoDropFrameRate`, `formatVideoTimecodeFrames`, `videoTimecodeFrames` and `videoHourFrames` are exported. EDLs at NTSC rates now declare `FCM: DROP FRAME`, with a `dropFrame` option on `toVideoEdl` and the `export_video_edl` tool to force non-drop. EDL record timecode now starts at timecode 01:00:00:00 counted in frames, so non-drop EDLs at 29.97 no longer start at 00:59:56:12.
+- 658832b: Video editor: shaped sound fades. Media clips take `fadeInCurve` / `fadeOutCurve` (`linear`, `equal-power`, `s-curve`, `exponential`, `logarithmic`), the same curves ffmpeg's `afade` draws, so `videoFrameAt`, playback and the ffmpeg export agree (checked against a real ffmpeg render). Pictures still fade linearly. `videoFadeCurveGain`, `VIDEO_FADE_CURVES` and `VIDEO_FADE_CURVE_LABELS` are exported; `update_video_clip` sets and removes the curves; splits keep the fade-in curve on the left part and the fade-out curve on the right. The React and Svelte `ClipInspector` show a curve menu for each fade a media clip has.
+- 658832b: Video editor: loudness normalisation on export. `toVideoFfmpeg` takes `loudness: { integrated, truePeak, range, measured }` and adds EBU R128 `loudnorm` to the mix (back to 48 kHz after it). Without `measured` it normalises in one pass; `toVideoLoudnessMeasure` builds a sound-only measuring pass whose stderr `parseVideoLoudnessMeasurement` reads, for an exact linear second pass (checked against a real ffmpeg: within 1 LU of the target). New agent tool `export_video_loudness_measure`, and `export_video_ffmpeg` takes `loudness`.
+- 658832b: Video editor: waveforms, sound levels and silence detection. `buildVideoAudioPeaks` turns decoded audio into a min / max peak pyramid that answers any stretch exactly at any zoom (`videoAudioPeakRange`, `videoAudioPeakSpans`); `videoClipWaveform` / `videoClipWaveformPath` draw what a clip plays through its in point, speed, volume and fades; `videoAudioLevels` and `findVideoAudioSilences` measure it. `VideoEditorController` gets an `audioPeaks` cache (`VideoAudioPeaksCache`, decoding each asset once with Web Audio by default, or with the `audioPeaks` loader you pass). New agent tools `get_video_audio_levels` and `find_video_silences` read a clip (timeline times, ready for `extract_video_range`) or an asset. The React and Svelte `VideoTimeline` draw waveforms in audio clips, with a `waveforms` prop (`audio`, `all` or `none`). `videoAssetHasSound` and `videoClipShowsWaveform` are exported.
+
 ## 0.82.0
 
 ### Minor Changes
