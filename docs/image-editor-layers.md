@@ -358,6 +358,37 @@ Every other document, single-layer or not, renders through the tiled compositor.
 
 **Paint state.** The brush settings and foreground / background colours are view state on the editor state (`state.paint`, `setPaintOptions`). They are not recorded in history or saved, as in Photoshop.
 
+### Phase 4 (integrations)
+
+**What counts as multi-layer.** The AI hooks use the new-layer behaviour when the document has more than one pixel layer or group (`isMultiLayer`). Adjustment and annotation layers don't count: they are edits of the image, and old documents with adjustment layers or annotation scribbles keep the replace behaviour they always had.
+
+**What the hooks see.** In new-layer mode the editor sends the composite of the layers (without annotations, in the source frame) instead of the source image. Otherwise a result built from the original pixels would ignore what was painted on top (`toAIInputDataURL`). In replace mode it still sends the source. Inpainting into a new layer keeps annotation layers (they may be real labels now); the replace mode still clears them, as before.
+
+**Background removal mask.** The result's alpha replaces the target layer's mask, and the target is the active pixel layer or the Background. A result of another size is resampled bilinearly to the canvas, which the old replace path did implicitly by loading a new source.
+
+**Selection sampling.** `composite` (the default) keeps the old behaviour for old-shape documents: the source, or with `sampleMerged` the adjusted image. In layered documents it is the composite of the pixel layers without adjustment layers and filters, or with `sampleMerged` the full composite. `active-layer` reads the active pixel layer alone.
+
+**Rasterize Layer** keeps the layer's id, name, opacity, mask and locks. An annotation's own blend mode becomes the layer's blend when the layer was Normal. Baking a blur filter keeps only the pixels inside the canvas, because the filter clamps there.
+
+**External assets.** `toJSON({ assets: 'external', store })` returns a promise; `store.put` receives each PNG once per store (memoised by content). Loading uses the new `loadJSONAsync(data, { store })`; the synchronous `loadJSON` and `initialState` take inline (data URL) assets only. Old-shape documents have no assets, so they are unaffected.
+
+### Phase 5 (PSD read and write)
+
+**Opening a PSD replaces the document.** `loadPsd(bytes)` / `import_psd` replace the layers, crop and rotation in one undo step, and the document has no source image afterwards: every pixel comes from the layers. Where the renderer needs a source (viewport, export, `renderSourceView`), it draws from a transparent canvas of the document size, so PSDs and v3 documents loaded without an image render. AI hooks default to the new-layer behaviour in such documents. The tool returns the created layer ids as planned, and also the tree.
+
+**The export is in the source frame.** Crop, rotation and flips are not applied to the PSD (a layered PSD has nowhere to keep them), and neither are the document opacity or an old document's output blur. `toPsd` says so in its warnings. Filters are baked with the compositor, parametric masks become pixel masks that keep their density and feather, annotation layers are rasterized in a browser and left out (with a warning) elsewhere, and the merged image is our composite. The resolution of an opened PSD is written back.
+
+**The merged image is matted over white.** Photoshop stores the colour of transparent merged pixels blended over white, which neither the spec nor the plan mentioned. The export mattes, and reading a flat file with alpha (and the corpus comparison) un-mattes.
+
+**Smaller differences from the plan.**
+- Inflating uses the synchronous `raster/zlib.ts` from phase 1, not `DecompressionStream`, so import stays synchronous.
+- Opacity, fill and mask density come in as whole percents (`round(byte / 255 × 100) / 100`), as Photoshop shows them, so values round-trip.
+- When every layer of a file is left out (a file with only unsupported adjustments), the merged image opens as the Background, with a warning, instead of an empty document.
+- Artboards and vector masks on pixel layers get warnings of their own. `clbl` (blend clipped layers as a group) is not read; clipped layers always blend one by one.
+- A malformed layer rectangle leaves that layer empty, with a warning, instead of failing the file.
+
+**Corpus.** `pnpm test:corpus` fetches 490 files (psd-tools at `b1b454b`, without `third-party-psds/`, and ag-psd at `04d927d`; sha256 per file in `tests/psd-corpus.manifest.json`) into the git-ignored `packages/core/corpus/psd/`. Every file opens. After the matte fix, the median difference between our composite and Photoshop's merged image is 0.09 levels (mean absolute, alpha-weighted), and 298 of the 465 files with layers are within 3 levels. The rest are files with effects, type, unsupported adjustments, artboards and similar. Every file exports and reopens with the same tree and the same pixels. The opt-in test asserts no read errors, the round trip and the median.
+
 ## Decisions
 
 1. **Base sliders, blur and depth mask** are handled as photocraft handles them: as filters and masks on layers, not a document-level step. See [Document model](#document-model).

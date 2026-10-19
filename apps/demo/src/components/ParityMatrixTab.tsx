@@ -317,6 +317,20 @@ const FEATURES: ParityRow[] = [
     note: "Round brush with hardness, spacing, opacity vs flow, smoothing and pressure; mask painting; selection-limited; one undo step per stroke; paint_stroke / fill_pixels / clear_pixels agent tools",
   },
   {
+    feature: "Image Layer Integrations (AI to layers, rasterize, sampling, asset store)",
+    core: true,
+    react: true,
+    svelte: true,
+    note: "Inpainting into a new layer and background removal as a mask in multi-layer documents; Rasterize Layer; sample all layers or the active layer; external asset store for v3 pixels",
+  },
+  {
+    feature: "Photoshop PSD / PSB Open & Export",
+    core: true,
+    react: true,
+    svelte: true,
+    note: "Pixel, group and adjustment layers, masks, blend, opacity, fill, clipping and locks both ways; type, smart-object, fill and shape layers as pixels with warnings; CMYK / Lab / 16- and 32-bit converted; inspect_psd / import_psd / export_psd agent tools",
+  },
+  {
     feature: "Image Selections, Refine Edge & Layer Masks",
     core: true,
     react: true,

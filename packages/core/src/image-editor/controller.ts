@@ -51,6 +51,7 @@ import {
   findLayer,
   flattenLayers,
   insertLayer,
+  isActiveFilter,
   mapLayer,
   newLayerId,
   type AdjustmentLayerNode,
@@ -84,7 +85,10 @@ import {
 import {
   LAYERED_SCHEMA_VERSION,
   deserializeLayers,
+  resolveExternalAssets,
   serializeLayers,
+  serializeLayersExternal,
+  type ImageEditorAssetStore,
   type SerializedLayeredImageEditorState,
 } from './layers/serialize';
 import { LayerCompositor, type CompositorSources } from './layers/compositor';
@@ -145,6 +149,8 @@ import {
 } from '../paint';
 import { base64ToBytes, bytesToBase64, decodePng, isPng, parseDataUrl } from '../raster/png';
 import { getAnnotationBounds } from './geometry';
+import { importPsd, type PsdImportResult } from './psd/import';
+import { exportPsd } from './psd/export';
 
 /** Latest serialized schema version (`3`: layers). Documents with the old shape still write 1 or 2. */
 export const IMAGE_EDITOR_SCHEMA_VERSION = LAYERED_SCHEMA_VERSION;
@@ -168,8 +174,19 @@ export interface SelectionCommandOptions {
   feather?: number;
 }
 
+/** Where an AI result goes (see `applyInpaintedImage`, `applyBackgroundRemovedImage`). */
+export interface AIResultOptions {
+  /** `new-layer`: a new layer (inpainting) or a mask (background removal); `replace`: the Background's pixels. Default: by `isMultiLayer`. */
+  target?: 'new-layer' | 'replace';
+}
+
 /** Where the selection tools read colours from. */
 export interface SampleOptions {
+  /**
+   * `composite` (default): the image, as before (with several layers: the composite of the pixel
+   * layers, or with `sampleMerged` of every layer); `active-layer`: only the active pixel layer.
+   */
+  sample?: 'composite' | 'active-layer';
   /** Sample the adjusted image (base adjustments and layers) instead of the source pixels. */
   sampleMerged?: boolean;
   /** Pixels to use instead of reading the source image (natural size, RGBA). */
@@ -2156,9 +2173,18 @@ export class ImageEditorController {
       if (!this.samplePixelsOverride && !options.pixels) this.samplePixels = null;
       return null;
     }
-    if (!options.sampleMerged) return base;
+    const legacy = legacyView(this.stack(), width, height, null).exact;
+    if (options.sample === 'active-layer') {
+      const layer = this.getActiveLayer();
+      if (!layer || layer.type !== 'pixel') {
+        throw new LayerOperationError('Sampling the active layer needs an active pixel layer; select one, or sample the composite.');
+      }
+      const surface = layer.source === 'document' && options.pixels ? surfaceFromPixels(options.pixels, 4) : this.surfaceOf(layer);
+      return { width, height, data: readRegion(surface, { x: -layer.offset.x, y: -layer.offset.y, width, height }) };
+    }
+    if (legacy && !options.sampleMerged) return base;
     this.syncViews();
-    if (legacyView(this.stack(), width, height, null).exact) {
+    if (legacy && !options.pixels) {
       // The old shape: the source through the base adjustments and adjustment layers.
       const copy = { width: base.width, height: base.height, data: new Uint8ClampedArray(base.data as ArrayLike<number>) };
       applyAdjustments(copy as unknown as ImageData, legacyView(this.stack(), width, height, null).adjustments);
@@ -2171,7 +2197,10 @@ export class ImageEditorController {
       surfaceOf: (l) => (l.source === 'document' && pixels ? surfaceFromPixels(pixels, 4) : this.surfaceOf(l)),
       version: pixels ? 'pixels' : this.sourceVersion(),
     };
-    const data = new LayerCompositor().composite(withoutAnnotations(this.state.layers), { x: 0, y: 0, width, height }, sources);
+    // Without `sampleMerged`, the pixels as painted: adjustment layers and filters left out.
+    const stack = withoutAnnotations(this.state.layers);
+    const layers = options.sampleMerged ? stack : pixelsOnly(stack);
+    const data = new LayerCompositor().composite(layers, { x: 0, y: 0, width, height }, sources);
     return { width, height, data };
   }
 
@@ -2467,8 +2496,26 @@ export class ImageEditorController {
 
   // --- Rendering & Export ---
 
-  public async render(targetCanvas: HTMLCanvasElement, options?: RenderOptions): Promise<void> {
+  private blankSource: HTMLCanvasElement | null = null;
+
+  /**
+   * What the renderer draws from: the source image, or, for a document without one (an opened
+   * PSD, a v3 document loaded on its own), a transparent canvas of the document size, since every
+   * pixel then comes from the layers. `null` when there is nothing to draw.
+   */
+  private drawSource(): CanvasImageSource | string | null {
     const source = this.imageElement || this.state.sourceUrl;
+    if (source) return source;
+    if (!this.isSourceless()) return null;
+    const { width, height } = this.naturalSize;
+    if (!this.blankSource || this.blankSource.width !== width || this.blankSource.height !== height) {
+      this.blankSource = this.renderer.createCanvas(width, height);
+    }
+    return this.blankSource;
+  }
+
+  public async render(targetCanvas: HTMLCanvasElement, options?: RenderOptions): Promise<void> {
+    const source = this.drawSource();
     if (!source) return;
     this.syncViews();
     const dirty = this.pendingDirty;
@@ -2485,7 +2532,7 @@ export class ImageEditorController {
   }
 
   public async renderExport(options?: ExportOptions): Promise<HTMLCanvasElement> {
-    const source = this.imageElement || this.state.sourceUrl;
+    const source = this.drawSource();
     if (!source) {
       return this.renderer.createCanvas(1, 1);
     }
@@ -2505,7 +2552,7 @@ export class ImageEditorController {
    * Returns `null` when no image is loaded.
    */
   public async renderSourceView(options: { scale?: number; includeAnnotations?: boolean } = {}): Promise<HTMLCanvasElement | null> {
-    const source = this.imageElement || this.state.sourceUrl;
+    const source = this.drawSource();
     if (!source) return null;
     this.syncViews();
     const { width, height } = this.state.imageDimensions;
@@ -2586,25 +2633,286 @@ export class ImageEditorController {
     return canvas;
   }
 
+  /**
+   * The image an AI hook should edit: the source (`toSourceDataURL`) when results replace the
+   * Background, or the composite of the layers without annotations, in the source frame, when
+   * they go to a new layer or mask (see `applyInpaintedImage`).
+   */
+  public async toAIInputDataURL(options: AIResultOptions = {}): Promise<string> {
+    const target = options.target ?? this.defaultAITarget();
+    if (target === 'replace') return this.toSourceDataURL();
+    const canvas = await this.renderSourceView({ includeAnnotations: false });
+    return canvas ? canvas.toDataURL('image/png') : this.toSourceDataURL();
+  }
+
   public async toSourceDataURL(options: Pick<ExportOptions, 'format' | 'quality'> = {}): Promise<string> {
     const canvas = await this.renderSource();
     return canvas.toDataURL(options.format || 'image/png', options.quality ?? 0.92);
   }
 
   /**
-   * Replaces the source image with an inpainted result (natural image space, see
-   * `toSourceDataURL`) and clears the mask annotations, as ONE undoable step.
+   * Whether AI results go to layers: the document has more than one pixel layer or group (adjustment
+   * and annotation layers are edits of the image, not images of their own).
    */
-  public async applyInpaintedImage(newDataUrl: string): Promise<void> {
-    await this.replaceSource(newDataUrl, true);
+  /** `new-layer` in multi-layer documents and documents without a source image, else `replace`. */
+  private defaultAITarget(): 'new-layer' | 'replace' {
+    return this.isMultiLayer || this.isSourceless() ? 'new-layer' : 'replace';
+  }
+
+  /** No source image, and no layer reading one (an opened PSD): the layers are the whole document. */
+  private isSourceless(): boolean {
+    if (this.imageElement || this.state.sourceUrl || !this.state.layers.length) return false;
+    return !flattenLayers(this.state.layers).some((l) => l.type === 'pixel' && l.source === 'document');
+  }
+
+  public get isMultiLayer(): boolean {
+    return flattenLayers(this.state.layers).filter((l) => l.type === 'pixel' || l.type === 'group').length > 1;
   }
 
   /**
-   * Replaces the source image with a background-removed result as ONE undoable step.
-   * Crop and annotations are kept (rescaled if the new image has different dimensions).
+   * Applies an inpainted result (natural image space, see `toSourceDataURL`) as ONE undoable step.
+   * In a document with several layers (see `isMultiLayer`), or with `target: 'new-layer'`, the
+   * result goes to a new pixel layer above the active layer, limited to the selection. Otherwise
+   * (`target: 'replace'`, the single-layer default) it replaces the Background's pixels and clears
+   * the mask annotations, as before. Resolves to the new layer's id in new-layer mode.
    */
-  public async applyBackgroundRemovedImage(newDataUrl: string): Promise<void> {
-    await this.replaceSource(newDataUrl, false);
+  public async applyInpaintedImage(newDataUrl: string, options: AIResultOptions = {}): Promise<string | void> {
+    if ((options.target ?? this.defaultAITarget()) === 'replace') {
+      await this.replaceSource(newDataUrl, true);
+      return;
+    }
+    const { width, height } = this.naturalSize;
+    let px = await this.decodeImage(newDataUrl);
+    if (px.width !== width || px.height !== height) px = resizePixels(px, width, height);
+    const data = new Uint8ClampedArray(px.data as ArrayLike<number>);
+    const sel = this.state.selection?.bounds ? this.state.selection : null;
+    if (sel) for (let p = 0, i = 3; p < width * height; p++, i += 4) data[i] = Math.round((data[i] * sel.data[p]) / 255);
+    return this.addPixelLayer({ name: 'Inpaint', pixels: { width, height, data } });
+  }
+
+  /**
+   * Applies a background-removed result as ONE undoable step. In a document with several layers
+   * (or with `target: 'new-layer'`) the result's alpha becomes the mask of the active pixel layer
+   * (or the Background), replacing its mask. Otherwise (`target: 'replace'`, the single-layer
+   * default) it replaces the Background's pixels; crop and annotations are kept (rescaled if the
+   * new image has different dimensions). Resolves to the masked layer's id in mask mode.
+   */
+  public async applyBackgroundRemovedImage(newDataUrl: string, options: AIResultOptions = {}): Promise<string | void> {
+    if ((options.target ?? this.defaultAITarget()) === 'replace') {
+      await this.replaceSource(newDataUrl, false);
+      return;
+    }
+    const target = this.developLayer();
+    if (!target) throw new LayerOperationError('There is no pixel layer to mask.');
+    requireUnlocked(target, 'all', 'mask it');
+    const { width, height } = this.naturalSize;
+    let px = await this.decodeImage(newDataUrl);
+    if (px.width !== width || px.height !== height) px = resizePixels(px, width, height);
+    const alpha = new Uint8ClampedArray(width * height);
+    for (let p = 0; p < alpha.length; p++) alpha[p] = (px.data as ArrayLike<number>)[p * 4 + 3];
+    let surface = surfaceFromPixels({ width, height, data: alpha }, 1, 0, 0, 0);
+    if (target.offset.x || target.offset.y) surface = translateSurface(surface, -target.offset.x, -target.offset.y);
+    this.commitLayers(setLayerMaskOp(this.state.layers, target.id, { surface, defaultValue: 0 }));
+    return target.id;
+  }
+
+  /**
+   * Rasterize Layer: an annotation layer becomes a pixel layer with the same id, name and
+   * properties (needs a canvas), and a pixel layer's filters are baked into its pixels. One undo
+   * step. Returns the layer id.
+   */
+  public async rasterizeLayer(id: string): Promise<string> {
+    const layer = requireLayer(this.state.layers, id).layer;
+    requireUnlocked(layer, 'all', 'rasterize it');
+    const { width, height } = this.naturalSize;
+    const canvas = { x: 0, y: 0, width, height };
+    let next: PixelLayer;
+    if (layer.type === 'annotation') {
+      const blend = layer.blend === 'normal' && layer.annotation.blend ? layer.annotation.blend : layer.blend;
+      const content = { ...layer, visible: true, opacity: 1, blend: 'normal', annotation: { ...layer.annotation, blend: undefined } } as AnnotationLayer;
+      delete content.mask;
+      delete content.clipped;
+      const surface = await this.compositeToSurface([content], this.paintBounds(layer));
+      next = { type: 'pixel', id: layer.id, name: layer.name, visible: layer.visible, opacity: layer.opacity, blend, surface, offset: { x: 0, y: 0 } };
+      if (layer.clipped) next.clipped = true;
+      if (layer.mask) next.mask = layer.mask;
+      if (layer.locks) next.locks = layer.locks;
+      if (this.state.selectedAnnotationId === layer.annotation.id) this.state.selectedAnnotationId = null;
+    } else if (layer.type === 'pixel') {
+      if (!layer.filters?.length) throw new LayerOperationError(`Layer "${layer.name || id}" is already pixels with no filters to bake.`);
+      requireUnlocked(layer, 'pixels', 'rasterize it');
+      const spatial = layer.filters.some((f) => f.enabled && f.kind === 'blur');
+      const content: PixelLayer = { ...layer, visible: true, opacity: 1, blend: 'normal' };
+      delete content.mask;
+      delete content.clipped;
+      delete content.fillOpacity;
+      const rect = spatial ? canvas : this.getLayerBounds(id) ?? canvas;
+      const surface = await this.compositeToSurface([content], rect);
+      next = { ...layer, surface, offset: { x: 0, y: 0 } };
+      delete next.filters;
+      delete next.source;
+      if (layer.mask && (layer.offset.x || layer.offset.y)) {
+        // The mask lives in layer space: keep it where it was in the document.
+        next.mask = { ...layer.mask, surface: translateSurface(layer.mask.surface, layer.offset.x, layer.offset.y) };
+      }
+    } else {
+      throw new LayerOperationError(`Only annotation layers and pixel layers with filters rasterize; "${layer.name || id}" is a ${layer.type} layer. Merge it down or flatten instead.`);
+    }
+    this.commitLayers(mapLayer(this.state.layers, id, () => next));
+    return id;
+  }
+
+  // --- PSD ---
+
+  /** Pixels per inch of the last opened PSD (written back by `toPsd`). */
+  private psdResolution: number | undefined;
+
+  /**
+   * Opens PSD / PSB bytes as the document (one undo step): the layers replace the stack and the
+   * document has no source image afterwards (every pixel comes from the layers). What the model
+   * cannot hold is approximated or left out; `warnings` says what, naming the layers.
+   * Throws `PsdError` for files that cannot be read at all.
+   */
+  public loadPsd(bytes: Uint8Array): { layerIds: string[]; warnings: string[]; width: number; height: number; summary: PsdImportResult['summary'] } {
+    const result = importPsd(bytes, { newId: () => newLayerId() });
+    this.recordHistory();
+    const s = this.state;
+    this.imageElement = null;
+    s.sourceUrl = null;
+    s.imageDimensions = { width: result.width, height: result.height };
+    if (!this.samplePixelsOverride) this.samplePixels = null;
+    s.layers = result.layers;
+    s.crop = null;
+    s.transform = { ...DEFAULT_TRANSFORM_VALUES };
+    s.outputOpacity = 1;
+    delete s.legacyOutputBlur;
+    s.selection = null;
+    s.selectedAnnotationId = null;
+    const pixels = flattenLayers(result.layers).filter((l) => l.type === 'pixel');
+    s.activeLayerId = pixels.length ? pixels[pixels.length - 1].id : null;
+    s.activeTarget = 'pixels';
+    this.psdResolution = result.resolution;
+    this.lastLoadProblems = result.warnings;
+    this.notify();
+    return {
+      layerIds: flattenLayers(result.layers).map((l) => l.id),
+      warnings: result.warnings,
+      width: result.width,
+      height: result.height,
+      summary: result.summary,
+    };
+  }
+
+  /**
+   * The document as an 8-bit RGB PSD (PSB above 30 000 px) with real layers, groups, adjustment
+   * layers and masks, in the source frame. Layer filters and parametric (depth) masks are baked
+   * into pixels and masks, annotation layers are rasterized (in a browser; elsewhere they are left
+   * out), and the merged image is our composite. `warnings` lists every such change.
+   */
+  public async toPsd(): Promise<{ bytes: Uint8Array; warnings: string[]; psb: boolean; width: number; height: number }> {
+    const { width, height } = this.naturalSize;
+    const canvas = { x: 0, y: 0, width, height };
+    const warnings: string[] = [];
+    const note = new Map<string, string[]>();
+    const add = (msg: string, name: string) => note.set(msg, [...(note.get(msg) ?? []), name]);
+    const canRasterize = this.renderer.canRasterize();
+    await this.renderer.prepareLayerAssets(this.state.layers, width, height);
+    const sources = this.renderer.compositorSources(width, height);
+    const compositor = new LayerCompositor();
+
+    const bakeMask = (layer: ImageLayer): RasterMask | undefined => {
+      const mask = layer.mask;
+      if (!mask?.source) return mask;
+      add('Parametric (depth) masks were baked into pixel masks', layer.name);
+      const plain = { ...layer, mask: { ...mask, density: 1, feather: 0, enabled: true } } as ImageLayer;
+      const ox = layer.type === 'pixel' ? layer.offset.x : 0;
+      const oy = layer.type === 'pixel' ? layer.offset.y : 0;
+      const coverage = compositor.maskCoverage(plain, canvas, sources);
+      const bytes = new Uint8ClampedArray(width * height);
+      if (coverage) for (let i = 0; i < bytes.length; i++) bytes[i] = Math.round(coverage[i] * 255);
+      else bytes.fill(255);
+      const baked: RasterMask = { surface: surfaceFromPixels({ width, height, data: bytes }, 1, -ox, -oy), defaultValue: 0 };
+      if (mask.density !== undefined && mask.density < 1) baked.density = mask.density;
+      if (mask.feather) baked.feather = mask.feather;
+      if (mask.enabled === false) baked.enabled = false;
+      return baked;
+    };
+
+    const prepare = async (layer: ImageLayer): Promise<ImageLayer | null> => {
+      if (layer.type === 'group') {
+        const children: ImageLayer[] = [];
+        for (const c of layer.children) {
+          const p = await prepare(c);
+          if (p) children.push(p);
+        }
+        return { ...layer, children, mask: bakeMask(layer) } as ImageLayer;
+      }
+      if (layer.type === 'adjustment') return { ...layer, mask: bakeMask(layer) } as ImageLayer;
+      if (layer.type === 'annotation') {
+        if (!canRasterize) {
+          add('Annotation layers need a canvas (a browser) to rasterize and were left out', layer.name);
+          return null;
+        }
+        add('Annotation layers were written as pixel layers', layer.name);
+        const blend = layer.blend === 'normal' && layer.annotation.blend ? layer.annotation.blend : layer.blend;
+        const content = { ...layer, visible: true, opacity: 1, blend: 'normal', annotation: { ...layer.annotation, blend: undefined } } as AnnotationLayer;
+        delete content.mask;
+        delete content.clipped;
+        const data = compositor.composite([content], canvas, sources);
+        const out: PixelLayer = {
+          type: 'pixel',
+          id: layer.id,
+          name: layer.name,
+          visible: layer.visible,
+          opacity: layer.opacity,
+          blend,
+          surface: surfaceFromPixels({ width, height, data }, 4),
+          offset: { x: 0, y: 0 },
+        };
+        if (layer.clipped) out.clipped = true;
+        if (layer.locks) out.locks = layer.locks;
+        const mask = bakeMask(layer);
+        if (mask) out.mask = mask;
+        return out;
+      }
+      let out: PixelLayer = { ...layer };
+      if (layer.source === 'document') {
+        out.surface = this.surfaceOf(layer);
+        delete out.source;
+      }
+      const active = layer.filters?.filter(isActiveFilter) ?? [];
+      if (active.length) {
+        add('Layer filters (develop, blur) were baked into the pixels', layer.name);
+        const content: PixelLayer = { ...out, visible: true, opacity: 1, blend: 'normal' };
+        delete content.mask;
+        delete content.clipped;
+        delete content.fillOpacity;
+        const data = compositor.composite([content], canvas, sources);
+        out = { ...out, surface: surfaceFromPixels({ width, height, data }, 4, -layer.offset.x, -layer.offset.y) };
+      }
+      if (layer.filters?.some((f) => !f.enabled)) add('Disabled layer filters were left out', layer.name);
+      delete out.filters;
+      const mask = bakeMask(layer);
+      if (mask) out.mask = mask;
+      else delete out.mask;
+      return out;
+    };
+
+    const prepared: ImageLayer[] = [];
+    for (const l of this.state.layers) {
+      const p = await prepare(l);
+      if (p) prepared.push(p);
+    }
+    const s = this.state;
+    if (s.crop) warnings.push('The crop is not applied; the PSD is the uncropped document.');
+    if (s.transform.rotate || s.transform.flipH || s.transform.flipV) warnings.push('Rotation and flips are not applied; the PSD is in the source orientation.');
+    if (s.outputOpacity < 1) warnings.push('The document opacity is not written; layers keep their own opacity.');
+    if (s.legacyOutputBlur) warnings.push('The document-level blur of an old document is not written.');
+    for (const [msg, names] of note) warnings.push(`${msg} (${names.length === 1 ? 'layer' : 'layers'} ${names.map((n) => `"${n}"`).join(', ')}).`);
+
+    const merged = compositor.composite(prepared, canvas, { ...sources, version: `psd:${Date.now()}` });
+    const result = exportPsd({ width, height, layers: prepared, merged, resolution: this.psdResolution });
+    return { bytes: result.bytes, warnings, psb: result.psb, width, height };
   }
 
   private async replaceSource(src: string, clearAnnotations: boolean): Promise<void> {
@@ -2666,10 +2974,33 @@ export class ImageEditorController {
    * v1 / v2 exactly as before; anything else is written as v3 with the layer pixels as PNG
    * assets. `selection` is included (run-length encoded) only when something is selected.
    */
-  public toJSON(): SerializedImageEditorState {
+  public toJSON(): SerializedImageEditorState;
+  /**
+   * With `assets: 'external'`, layer pixels go to `store` (each PNG uploaded once per store) and
+   * the v3 document holds the store's references. Old-shape documents have no assets either way.
+   */
+  public toJSON(options: { assets: 'external'; store: ImageEditorAssetStore }): Promise<SerializedImageEditorState>;
+  public toJSON(options?: { assets: 'external'; store: ImageEditorAssetStore }): SerializedImageEditorState | Promise<SerializedImageEditorState> {
     const out = this.serializeState();
     if (this.state.selection?.bounds) out.selection = serializeSelection(this.state.selection);
-    return out;
+    if (!options || out.version !== LAYERED_SCHEMA_VERSION) return options ? Promise.resolve(out) : out;
+    return serializeLayersExternal(this.state.layers, options.store).then(({ layers, assets }) => ({ ...out, layers, assets }));
+  }
+
+  /**
+   * Loads a stored state whose v3 assets may live in an asset store (references other than data
+   * URLs are fetched with `store.get`), as one undo step. Assets that cannot be fetched are left
+   * out and listed in `lastLoadProblems`.
+   */
+  public async loadJSONAsync(data: SerializedImageEditorState, options: { store?: ImageEditorAssetStore } = {}): Promise<void> {
+    if (data.version !== LAYERED_SCHEMA_VERSION || !data.assets) {
+      this.loadJSON(data);
+      return;
+    }
+    const problems: string[] = [];
+    const assets = await resolveExternalAssets(data.assets, options.store, problems);
+    this.loadJSON({ ...data, assets });
+    this.lastLoadProblems = [...problems, ...this.lastLoadProblems];
   }
 
   /** Loads a stored state of any version (one undo step). */
@@ -2905,6 +3236,47 @@ function collectStateTiles(layers: readonly ImageLayer[], into: Set<Tile>): void
     if (l.type === 'pixel' && l.source !== 'document') collectTiles(l.surface, into);
     if (l.mask && !l.mask.source) collectTiles(l.mask.surface, into);
   }
+}
+
+/** The stack without adjustment layers and layer filters (the pixels as painted). */
+function pixelsOnly(layers: readonly ImageLayer[]): ImageLayer[] {
+  const out: ImageLayer[] = [];
+  for (const l of layers) {
+    if (l.type === 'adjustment') continue;
+    if (l.type === 'group') out.push({ ...l, children: pixelsOnly(l.children) });
+    else if (l.type === 'pixel' && l.filters?.length) {
+      const p = { ...l };
+      delete p.filters;
+      out.push(p);
+    } else out.push(l);
+  }
+  return out;
+}
+
+/** Bilinear resample of RGBA pixels to `width × height`. */
+export function resizePixels(px: PixelBuffer, width: number, height: number): PixelBuffer {
+  const src = px.data as ArrayLike<number>;
+  const out = new Uint8ClampedArray(width * height * 4);
+  const kx = px.width / width;
+  const ky = px.height / height;
+  for (let y = 0; y < height; y++) {
+    const fy = Math.min(px.height - 1, Math.max(0, (y + 0.5) * ky - 0.5));
+    const y0 = Math.floor(fy);
+    const y1 = Math.min(px.height - 1, y0 + 1);
+    const ty = fy - y0;
+    for (let x = 0; x < width; x++) {
+      const fx = Math.min(px.width - 1, Math.max(0, (x + 0.5) * kx - 0.5));
+      const x0 = Math.floor(fx);
+      const x1 = Math.min(px.width - 1, x0 + 1);
+      const tx = fx - x0;
+      for (let c = 0; c < 4; c++) {
+        const a = src[(y0 * px.width + x0) * 4 + c] * (1 - tx) + src[(y0 * px.width + x1) * 4 + c] * tx;
+        const b = src[(y1 * px.width + x0) * 4 + c] * (1 - tx) + src[(y1 * px.width + x1) * 4 + c] * tx;
+        out[(y * width + x) * 4 + c] = a * (1 - ty) + b * ty;
+      }
+    }
+  }
+  return { width, height, data: out };
 }
 
 function withoutAnnotations(layers: readonly ImageLayer[]): ImageLayer[] {

@@ -90,6 +90,18 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
             <input type="checkbox" checked={options.sampleMerged} onChange={(e) => set({ sampleMerged: e.target.checked })} />
             Sample adjusted image
           </label>
+          <label className="flex items-center gap-2 text-slate-300">
+            Sample
+            <select
+              aria-label="Sample from"
+              value={options.sample ?? 'composite'}
+              onChange={(e) => set({ sample: e.target.value as 'composite' | 'active-layer' })}
+              className="bg-slate-800 border border-slate-700 rounded px-1 py-0.5"
+            >
+              <option value="composite">All layers</option>
+              <option value="active-layer">Active layer</option>
+            </select>
+          </label>
         </div>
       )}
       <label className="flex items-center gap-2 text-slate-300">

@@ -99,6 +99,9 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
   const [isInpainting, setIsInpainting] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiSuccess, setAiSuccess] = useState<string | null>(null);
+  /** Where AI results go: by layer count (auto), a new layer / mask, or replacing the Background. */
+  const [aiTarget, setAiTarget] = useState<'auto' | 'new-layer' | 'replace'>('auto');
+  const aiOptions = aiTarget === 'auto' ? {} : { target: aiTarget };
 
   const effectiveOnInpaint = onInpaint || aiHooks?.onInpaint;
   const effectiveOnRemoveBg = onRemoveBackground || aiHooks?.onRemoveBackground;
@@ -112,12 +115,12 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
     setAiSuccess(null);
     setIsRemovingBg(true);
     try {
-      // AI hooks work on the untransformed source image (natural pixels); crop, rotation,
-      // adjustments and annotations stay non-destructive and are re-applied on top.
-      const imageDataUrl = await editor.toSourceDataURL();
+      // AI hooks work in natural pixels (no crop or rotation): the source when the result replaces
+      // it, the composite of the layers when the result becomes a layer or mask.
+      const imageDataUrl = await controller.toAIInputDataURL(aiOptions);
       const result = await effectiveOnRemoveBg({ imageDataUrl });
       if (typeof result === 'string') {
-        await editor.applyBackgroundRemovedImage(result);
+        await editor.applyBackgroundRemovedImage(result, aiOptions);
         setAiSuccess('Background removed successfully!');
       } else {
         setAiSuccess('Background removal complete.');
@@ -143,7 +146,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
     setIsInpainting(true);
     try {
       // Source image and mask share natural image space so they line up exactly.
-      const imageDataUrl = await editor.toSourceDataURL();
+      const imageDataUrl = await controller.toAIInputDataURL(aiOptions);
       const maskDataUrl = await editor.toMaskDataURL({
         useAnnotations: inpaintMaskMode === 'annotations',
         useCrop: inpaintMaskMode === 'crop',
@@ -155,7 +158,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
         cropBox: inpaintMaskMode === 'crop' ? editor.state.crop : null,
       });
       if (typeof result === 'string') {
-        await editor.applyInpaintedImage(result);
+        await editor.applyInpaintedImage(result, aiOptions);
         setAiSuccess('Inpainting applied successfully!');
       } else {
         setAiSuccess('Inpainting complete.');
@@ -1396,6 +1399,19 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
           {/* TAB 5: AI TOOLS / INPAINTING & BACKGROUND REMOVAL */}
           {activeTab === 'ai' && (
             <div className="flex flex-col gap-4 text-xs">
+              <label className="flex items-center justify-between gap-2 text-slate-300">
+                <span>Results go to</span>
+                <select
+                  aria-label="AI result target"
+                  value={aiTarget}
+                  onChange={(e) => setAiTarget(e.target.value as typeof aiTarget)}
+                  className="bg-slate-800 border border-slate-700 rounded px-1.5 py-1"
+                >
+                  <option value="auto">{controller.isMultiLayer ? 'Auto (new layer)' : 'Auto (replace image)'}</option>
+                  <option value="new-layer">New layer / mask</option>
+                  <option value="replace">Replace image</option>
+                </select>
+              </label>
               {/* Background Removal Section */}
               <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800 flex flex-col gap-2.5">
                 <div className="flex items-center justify-between">

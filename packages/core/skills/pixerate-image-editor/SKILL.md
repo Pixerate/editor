@@ -1,6 +1,6 @@
 ---
 name: pixerate-image-editor
-description: How to colour-correct, composite and retouch a photo in the Pixerate image editor through its agent tools - layers (pixel, adjustment, group and annotation layers with masks, clipping, blend modes, opacity and fill; merge, flatten, layer via copy, develop and blur filters), base adjustments (exposure, contrast, white balance temperature and tint, saturation, blur), non-destructive adjustment layers (curves, levels, hue/saturation, vibrance, color balance, black and white, photo filter, invert, posterize, threshold) with blend modes and opacity, selections (rectangle, ellipse, magic wand, color range, grow, shrink, feather, refine edge) and layer masks, crop, rotate and flip, undo, reading the histogram for clipping, and rendering a PNG preview to check the result. Use when asked to edit, grade, correct, brighten, warm up, desaturate, crop, straighten or mask an image, or when get_adjustments, set_adjustments, add_adjustment_layer, list_layers, paint_stroke, select_by_color or render_preview are available.
+description: How to colour-correct, composite and retouch a photo in the Pixerate image editor through its agent tools - layers (pixel, adjustment, group and annotation layers with masks, clipping, blend modes, opacity and fill; merge, flatten, layer via copy, develop and blur filters), base adjustments (exposure, contrast, white balance temperature and tint, saturation, blur), non-destructive adjustment layers (curves, levels, hue/saturation, vibrance, color balance, black and white, photo filter, invert, posterize, threshold) with blend modes and opacity, selections (wand, color range, grow, shrink, feather, refine edge) and layer masks, crop, rotate and flip, undo, PSD open and save, the histogram, and PNG previews. Use when asked to edit, grade, correct, brighten, warm up, desaturate, crop, straighten or mask an image, or to open or save a PSD, or when get_adjustments, set_adjustments, add_adjustment_layer, list_layers, paint_stroke, select_by_color, import_psd or render_preview are available.
 ---
 
 # Image editor
@@ -80,6 +80,22 @@ batching.
    transparency (`set_layer_properties` `locks.transparency`) to paint only where the layer
    already has pixels.
 
+### Photoshop files
+
+1. **Inspect before opening.** `inspect_psd` lists every layer with the type it would become and
+   a status: `mapped` (held exactly), `approximated` (type, smart-object, fill and shape layers
+   come in as their stored pixels; layer effects are not rendered; Dissolve becomes Normal) or
+   `dropped` (Brightness/Contrast, Exposure, Channel Mixer, Gradient Map, Selective Color and
+   Color Lookup adjustments). Tell the user what would be lost before `import_psd` when anything
+   is not `mapped`.
+2. **`import_psd` replaces the document** (one undo step). CMYK, Lab, grayscale, indexed, 16-bit
+   and 32-bit files are converted to 8-bit RGB, and ICC profiles are ignored; the warnings say
+   so. Afterwards work with `list_layers` as usual: there is no Background source image, every
+   pixel comes from the layers.
+3. **`export_psd` writes the stack as it is**, in the source frame: crop and rotation are not
+   applied, layer filters and depth masks are baked, annotation layers are rasterized (only in
+   a browser). Read its `warnings` and pass them on. The file comes back as base64 (`data`).
+
 ## Best practices
 
 - **Non-destructive first.** Prefer an adjustment layer over pushing a base slider to its
@@ -132,6 +148,8 @@ batching.
 | `get_image_info` | Read the geometry: source `image` size, `crop` box (source pixels, or null), `rotation` degrees, `flipH` / `flipV`, the `output` size after crop and rotation, the layer count and `canUndo` / `canRedo`. Call before cropping or selecting so coordinates are right. |
 | `get_histogram` | Judge exposure numerically: per channel and luminance `mean`, `p1` and `p99` (0..255), and `clipping` percent at pure black and white per channel. Reads the last render, so call `render_preview` first. `bins` (16, 32, 64 or 256) adds the counts. Cheaper than another image for checking a tonal change. |
 | `render_preview` | See the edited image (crop, adjustments, layers, annotations) as a PNG, or with `layerId` one layer alone. `maxSide` 16..2048 px, default 512. Images cost tokens: render after a group of edits, use 512 for overall look and 1024+ to judge clipping, edges and masks. Fails in environments without rendering. |
+| `inspect_psd` | Read a PSD / PSB (`data` base64) without opening it: size, `depth`, `colorMode`, `resolution`, every layer bottom first with `psdKind`, the `type` it would become and `status` (`mapped`, `approximated`, `dropped`) with `notes`, and the import `warnings`. Call before `import_psd`. |
+| `export_psd` | Save the document as an 8-bit RGB PSD (PSB above 30000 px) with layers, groups, adjustment layers and masks. Returns `data` (base64), `size` in bytes, `psb` and `warnings` (crop or rotation not applied, filters and depth masks baked, annotations rasterized or left out). Changes nothing. |
 | `capture_view` | Inspect detail in natural image pixels (the space of `get_selection` and `select_region`, before crop and rotation): `region` `content` (whole image, default), `selection` or `rect`; small regions are enlarged up to 8× with hard pixel edges, so a 64 px rect shows real pixels. `includeOverlays: true` shades unselected pixels and outlines the crop: use it to check a mask's edge before `apply_selection_as_mask`. Returns the `rect` and `scale`. Use `render_preview` for the final framed result. |
 
 ### Write
@@ -141,7 +159,7 @@ batching.
 | `set_adjustments` | Set base controls and existing layer parameters in one undo step: `values` is a map of control id or `layers.<layerId>.<controlId>` path to number; `label` is echoed. Values are clamped to range; returns `applied` and `clamped` (and a note when `tint` is set on a process 1 edit). Unknown ids fail and change nothing. Cannot set curves points, booleans or colours. |
 | `add_adjustment_layer` | Add a layer above the other adjustment layers and below annotations (or directly above `aboveId`, or at the top of group `parentId`): `kind` (curves, levels, hueSaturation, vibrance, colorBalance, blackWhite, photoFilter, invert, posterize, threshold), optional `params` merged with neutral defaults, `opacity` 0..1 (default 1), `blend` (default normal), `name`. Returns the layer (with its new id) and its stack index. The only tool that sets curves points, `colorize`, `preserveLuminosity`, a black and white `tint` or a photo filter `color`. |
 | `select_region` | Select by `shape`: `rect` or `ellipse` (with `x`, `y`, `width`, `height` in natural pixels), `all`, `none` or `invert`. `mode` replace (default), add, subtract or intersect; `feather` px (default 0). Returns the selection summary. |
-| `select_by_color` | Magic wand from a seed (`x`, `y`, `tolerance` 0..255 default 32, `contiguous` default true) or Color Range for every similar pixel (`color` "#rrggbb", `fuzziness` 0..200 default 40). `sampleMerged: true` samples the adjusted image instead of the source. `mode` as above. Use it for skies, backdrops and flat-coloured objects. |
+| `select_by_color` | Magic wand from a seed (`x`, `y`, `tolerance` 0..255 default 32, `contiguous` default true) or Color Range for every similar pixel (`color` "#rrggbb", `fuzziness` 0..200 default 40). `sampleMerged: true` samples the adjusted image instead of the source; `sample: "active-layer"` samples only the active pixel layer (pick it with `set_active_layer`) instead of the whole image. `mode` as above. Use it for skies, backdrops and flat-coloured objects. |
 | `modify_selection` | Grow, shrink, feather, border or smooth the selection (`op`) by `radius` px (0..500). Use shrink then feather to keep an adjustment from bleeding over an edge; smooth to remove wand speckle. Fails when nothing is selected. |
 | `refine_selection` | Refine Edge: snap the selection edge to image edges within `radius` px (0..64, default 8), with `smartRadius`, `smooth` 0..100, `feather` px, `contrast` 0..100 and `shiftEdge` -100..100 %. Use on hair, fur, foliage or after loading a coarse AI mask. |
 | `update_adjustment_layer` | Change a layer's `enabled` (false hides it without deleting), `blend`, `opacity` (0..1) or `name` in one undo step. Returns the layer. Its parameters change with `set_adjustments`. Toggle `enabled` to compare a layer's effect before and after. |
@@ -171,12 +189,14 @@ batching.
 | `apply_layer_mask` | Bake a pixel layer's mask into its alpha and remove it. Destructive. |
 | `remove_layer_mask` | Delete a mask without applying it; disable it instead to keep it. |
 | `layer_via_copy` | Copy the selected pixels of a pixel layer (default the active one) to a new layer above it; `cut: true` removes them from the source. Needs a selection. Returns the new layer. |
+| `rasterize_layer` | Turn an annotation layer into pixels (same id and properties; browser only) or bake a pixel layer's develop / blur filters into its pixels. Do it before painting over an annotation, or when the user wants the filters fixed. Destructive. |
 | `add_layer_filter` | Add a live `develop` (brightness … tint) or `blur` (`radius`) filter to a pixel layer; one of each kind. Returns the filters with ids. |
 | `update_layer_filter` | Change a filter's values (`filterId` from `list_layers`). Returns the filters. |
 | `remove_layer_filter` | Remove a filter. Returns the remaining filters. |
 | `paint_stroke` | Paint (`tool` brush) or erase (`tool` eraser) along `points` in document px (optional `pressure` 0..1) on a pixel layer or its mask (`channel`); `color` #rrggbb (on a mask: black hides, white reveals); `brush` `{size, hardness, spacing, angle, roundness, opacity, flow, smoothing, pressureSize, pressureOpacity, blend}`. The selection limits the paint. One undo step per call. Returns the layer, channel, changed `bounds` and dab count. |
 | `fill_pixels` | Fill the selection (or the canvas without one / with `useSelection: false`) on pixels or a mask with `color`, `opacity`, `blend`. Returns the changed bounds. |
 | `clear_pixels` | Remove the selected pixels (alpha to 0; a transparency-locked layer or a mask gets the background colour). Returns the changed bounds. |
+| `import_psd` | Open a PSD / PSB (`data` base64, a `data:` URL is fine) as the document, replacing the layers, crop and rotation (one undo step). Returns the new `layers` tree with ids, `layerIds`, size and `warnings` naming the affected layers. Call `inspect_psd` first when losses matter. |
 | `apply_selection_as_mask` | Mask a layer with the current selection: pass `layerId` to mask an existing layer, or `kind` (plus optional `params`) to create a new masked layer in one step. `density` 0..1 and `feather` px soften the mask non-destructively. Returns `layerId`, kind, mask info and the selection summary. |
 
 ## Pitfalls
@@ -191,6 +211,10 @@ batching.
 - `paint_stroke`, `fill_pixels` and `clear_pixels` need a visible pixel layer (or a layer with a
   raster mask and `channel: "mask"`); adjustment, group and annotation layers can only be
   painted through their masks. A layer with `locks.pixels` refuses paint.
+- `export_psd` is in the source frame: a crop or rotation is not in the file (the warnings say
+  so). Crop with `set_crop` only for PNG / JPEG output, or flatten the look you need first.
+- PSD opacity, fill and mask density come in as whole percents (Photoshop stores bytes), so a
+  layer at 0.8 exported and reopened is 0.8, but 0.333 becomes 0.33.
 - `get_histogram` describes the last render, not the current state: render after edits, then
   read it.
 - Crop coordinates are always in the un-rotated source; after `set_rotation` the output size

@@ -71,6 +71,7 @@ export class SelectionGesture {
           antiAlias: options.antiAlias,
           distance: options.distance,
           sampleMerged: options.sampleMerged,
+          sample: options.sample,
           mode: selectionModeFromModifiers(modifiers, options.mode),
         });
       } catch (err) {

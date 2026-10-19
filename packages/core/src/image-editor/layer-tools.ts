@@ -491,6 +491,16 @@ export function createImageLayerTools(controller: ImageEditorController): AgentT
     },
   };
 
+  const rasterize: AgentTool = {
+    name: 'rasterize_layer',
+    title: 'Rasterize a layer',
+    description:
+      'Rasterize Layer: turns an annotation layer into a pixel layer (same id, name, opacity, blend and mask; needs a browser) or bakes a pixel layer\'s filters (develop, blur) into its pixels. One undo step. Returns the layer.',
+    inputSchema: { type: 'object', properties: { layerId: LAYER_ID }, required: ['layerId'], additionalProperties: false },
+    annotations: { title: 'Rasterize a layer', ...DESTRUCTIVE },
+    handler: async ({ layerId }) => ({ layer: describe(await controller.rasterizeLayer(exists(layerId))) }),
+  };
+
   const filterArgs = {
     enabled: { type: 'boolean', description: 'false keeps the filter but skips it.' },
     radius: { type: 'number', minimum: 0, maximum: 50, description: 'blur: box radius in px (default 2).' },
@@ -582,6 +592,7 @@ export function createImageLayerTools(controller: ImageEditorController): AgentT
     removeMask,
     maskProps,
     viaCopy,
+    rasterize,
     addFilter,
     updateFilter,
     removeFilter,

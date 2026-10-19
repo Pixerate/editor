@@ -1,16 +1,31 @@
 <script lang="ts">
   import type { ImageEditorController, ImageLayer, LayerMenuAction, LayerPanelRow, PixelBuffer } from '@pixerate/editor/image-editor';
-  import { BLEND_MODES, dropPlacement, dropZone, layerBadge, layerMenu, layerPanelRows, runLayerMenuAction } from '@pixerate/editor/image-editor';
+  import {
+    BLEND_MODES,
+    PSD_FILE_ACCEPT,
+    downloadPsd,
+    dropPlacement,
+    dropZone,
+    layerBadge,
+    layerMenu,
+    layerPanelRows,
+    openPsdFile,
+    runLayerMenuAction,
+  } from '@pixerate/editor/image-editor';
   import { untrack } from 'svelte';
 
   interface Props {
     controller: ImageEditorController;
     /** Thumbnail size in px (default 32). */
     thumbnailSize?: number;
+    /** Show Open PSD / Export PSD (default true). */
+    psd?: boolean;
+    /** Base name of exported PSD files (default `image`). */
+    psdFileName?: string;
     class?: string;
   }
 
-  let { controller, thumbnailSize = 32, class: className = '' }: Props = $props();
+  let { controller, thumbnailSize = 32, psd = true, psdFileName = 'image', class: className = '' }: Props = $props();
 
   let tick = $state(0);
   $effect(() => {
@@ -36,6 +51,25 @@
   let renaming = $state<string | null>(null);
   let menu = $state<{ x: number; y: number } | null>(null);
   let dragId = $state<string | null>(null);
+  /** Warnings of the last PSD open or export. */
+  let psdNotes = $state<string[]>([]);
+  let fileInput = $state<HTMLInputElement | null>(null);
+
+  async function psdTask(fn: () => Promise<string[]>) {
+    try {
+      error = null;
+      psdNotes = await fn();
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+    }
+  }
+
+  function onPsdFile(e: Event) {
+    const input = e.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (file) psdTask(() => openPsdFile(controller, file));
+  }
   /** Whether the next slider change records an undo step (the first of a drag does, the rest replace it). */
   let commitNext = true;
 
@@ -127,7 +161,27 @@
         const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
         menu = menu ? null : { x: r.left, y: r.bottom };
       }}>⋯</button>
+    {#if psd}
+      <button type="button" class={iconButton} onclick={() => fileInput?.click()}>Open PSD…</button>
+      <button type="button" class={iconButton} onclick={() => psdTask(async () => (await downloadPsd(controller, psdFileName)).warnings)}>Export PSD</button>
+      <input
+        bind:this={fileInput}
+        type="file"
+        accept={PSD_FILE_ACCEPT}
+        class="hidden"
+        data-testid="psd-file-input"
+        aria-label="Open a PSD file"
+        onchange={onPsdFile} />
+    {/if}
   </div>
+  {#if psdNotes.length > 0}
+    <ul class="rounded bg-amber-900/30 text-amber-200 px-2 py-1 space-y-0.5" data-testid="psd-warnings" aria-label="PSD warnings">
+      {#each psdNotes as n (n)}
+        <li>{n}</li>
+      {/each}
+      <li><button type="button" class="underline" onclick={() => (psdNotes = [])}>Dismiss</button></li>
+    </ul>
+  {/if}
 
   {#if snapshot.active}
     {@const active = snapshot.active}

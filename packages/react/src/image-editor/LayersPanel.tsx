@@ -2,8 +2,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { ImageEditorController, ImageLayer, LayerMenuAction, LayerPanelRow, PixelBuffer } from '@pixerate/editor/image-editor';
 import {
   BLEND_MODES,
+  PSD_FILE_ACCEPT,
+  downloadPsd,
   dropPlacement,
   dropZone,
+  openPsdFile,
   layerBadge,
   layerMenu,
   layerPanelRows,
@@ -14,6 +17,10 @@ export interface LayersPanelProps {
   controller: ImageEditorController;
   /** Thumbnail size in px (default 32). */
   thumbnailSize?: number;
+  /** Show Open PSD / Export PSD (default true). */
+  psd?: boolean;
+  /** Base name of exported PSD files (default `image`). */
+  psdFileName?: string;
   className?: string;
 }
 
@@ -60,13 +67,24 @@ const Thumbnail: React.FC<{ pixels: PixelBuffer | null; size: number; label: str
  * into a group, opacity / fill / blend / clipping for the active layer, and the layer menu
  * (right-click a row, or the ⋯ button). Every action is one undo step on the controller.
  */
-export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailSize = 32, className }) => {
+export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailSize = 32, psd = true, psdFileName = 'image', className }) => {
   const [, setTick] = useState(0);
   useEffect(() => controller.subscribe(() => setTick((n) => n + 1)), [controller]);
   const [error, setError] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [drag, setDrag] = useState<string | null>(null);
+  /** Warnings of the last PSD open or export. */
+  const [psdNotes, setPsdNotes] = useState<string[]>([]);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const psdTask = async (fn: () => Promise<string[]>) => {
+    try {
+      setError(null);
+      setPsdNotes(await fn());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
   /** Whether the next slider change records an undo step (the first of a drag does, the rest replace it). */
   const commitNext = useRef(true);
 
@@ -134,7 +152,36 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
         >
           ⋯
         </button>
+        {psd && (
+          <>
+            <button type="button" className={iconButton} onClick={() => fileInput.current?.click()}>Open PSD…</button>
+            <button type="button" className={iconButton} onClick={() => psdTask(async () => (await downloadPsd(controller, psdFileName)).warnings)}>Export PSD</button>
+            <input
+              ref={fileInput}
+              type="file"
+              accept={PSD_FILE_ACCEPT}
+              className="hidden"
+              data-testid="psd-file-input"
+              aria-label="Open a PSD file"
+              onChange={(e) => {
+                const file = e.currentTarget.files?.[0];
+                e.currentTarget.value = '';
+                if (file) psdTask(() => openPsdFile(controller, file));
+              }}
+            />
+          </>
+        )}
       </div>
+      {psdNotes.length > 0 && (
+        <ul className="rounded bg-amber-900/30 text-amber-200 px-2 py-1 space-y-0.5" data-testid="psd-warnings" aria-label="PSD warnings">
+          {psdNotes.map((n) => (
+            <li key={n}>{n}</li>
+          ))}
+          <li>
+            <button type="button" className="underline" onClick={() => setPsdNotes([])}>Dismiss</button>
+          </li>
+        </ul>
+      )}
 
       {active && (
         <div className="grid grid-cols-2 gap-x-2 gap-y-1 items-center" data-testid="layer-properties">

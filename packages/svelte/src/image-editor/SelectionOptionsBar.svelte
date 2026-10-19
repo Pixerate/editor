@@ -101,6 +101,18 @@
         <input type="checkbox" checked={options.sampleMerged} onchange={(e) => set({ sampleMerged: (e.currentTarget as HTMLInputElement).checked })} />
         Sample adjusted image
       </label>
+      <label class="flex items-center gap-2 text-slate-300">
+        Sample
+        <select
+          aria-label="Sample from"
+          value={options.sample ?? 'composite'}
+          onchange={(e) => set({ sample: (e.currentTarget as HTMLSelectElement).value as 'composite' | 'active-layer' })}
+          class="bg-slate-800 border border-slate-700 rounded px-1 py-0.5"
+        >
+          <option value="composite">All layers</option>
+          <option value="active-layer">Active layer</option>
+        </select>
+      </label>
     </div>
   {/if}
   <label class="flex items-center gap-2 text-slate-300">

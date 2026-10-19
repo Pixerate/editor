@@ -118,13 +118,22 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
         contiguous: { type: 'boolean', description: 'Only the connected region around (x, y) (default true).' },
         fuzziness: { type: 'number', minimum: 0, maximum: 200, description: 'Color Range fuzziness (default 40).' },
         sampleMerged: { type: 'boolean', description: 'Sample the adjusted image rather than the source.' },
+        sample: {
+          type: 'string',
+          enum: ['composite', 'active-layer'],
+          description: 'composite (default): the whole image; active-layer: only the active pixel layer (see set_active_layer).',
+        },
         mode: modeSchema,
       },
       additionalProperties: false,
     },
     annotations: writeAnnotations('Select by colour', true),
-    handler: async ({ x, y, color, tolerance, contiguous, fuzziness, sampleMerged, mode }) => {
-      const common = { mode: parseSelectionMode(mode), sampleMerged: sampleMerged === true };
+    handler: async ({ x, y, color, tolerance, contiguous, fuzziness, sampleMerged, sample, mode }) => {
+      const common = {
+        mode: parseSelectionMode(mode),
+        sampleMerged: sampleMerged === true,
+        sample: (sample as 'composite' | 'active-layer' | undefined) ?? 'composite',
+      };
       if (typeof color === 'string') {
         await controller.selectColorRange([{ color }], { ...common, fuzziness: num(fuzziness, 40) });
       } else if (typeof x === 'number' && typeof y === 'number') {
