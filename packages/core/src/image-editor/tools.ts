@@ -24,6 +24,7 @@ import { createImageEditTools } from './edit-tools';
 import { createImageLayerTools } from './layer-tools';
 import { createImageEffectTools } from './effect-tools';
 import { createImagePaintTools } from './paint-tools';
+import { createPigmentTools } from '../paint/pigment-tools';
 import { createImagePsdTools } from './psd-tools';
 
 export interface ImageEditorToolProviderOptions {
@@ -294,6 +295,7 @@ export function createImageEditorToolProvider(
       ...createImageLayerTools(controller),
       ...createImageEffectTools(controller),
       ...createImagePaintTools(controller),
+      ...createPigmentTools(),
       ...createImagePsdTools(controller),
     ],
   };

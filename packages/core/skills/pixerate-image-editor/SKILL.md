@@ -99,6 +99,11 @@ batching.
 4. **Limit paint with a selection** (select first, then `paint_stroke` / `fill_pixels`), or lock
    transparency (`set_layer_properties` `locks.transparency`) to paint only where the layer
    already has pixels.
+5. **Mix paint colours with `mix_colors`** when the user names paints and amounts ("two parts
+   ultramarine to one part yellow", "a tint of red"). It mixes like pigment, so blue and yellow
+   make green and white makes a tint, where averaging RGB gives grey or a dull pastel. Pass its
+   `mixed` hex as the `color` of `paint_stroke` or `fill_pixels`. Give a strong dark paint a
+   `strength` above 1 when a little of it should tint a lot of white.
 
 ### Photoshop files
 
@@ -230,6 +235,7 @@ batching.
 | `set_global_light` | Set the document light (`angle`, `altitude` in degrees) that every shadow and bevel with `useGlobalLight` follows. Returns the light. |
 | `paint_stroke` | Paint (`tool` brush) or erase (`tool` eraser) along `points` in document px (optional `pressure` 0..1) on a pixel layer or its mask (`channel`); `color` #rrggbb (on a mask: black hides, white reveals); `brush` `{size, hardness, spacing, angle, roundness, opacity, flow, smoothing, pressureSize, pressureOpacity, blend}`. The selection limits the paint. One undo step per call. Returns the layer, channel, changed `bounds` and dab count. |
 | `fill_pixels` | Fill the selection (or the canvas without one / with `useSelection: false`) on pixels or a mask with `color`, `opacity`, `blend`. Returns the changed bounds. |
+| `mix_colors` | Read-only. Mix 1 to 16 `colors` (`{color: #rrggbb, weight, strength?}`) like paint (Kubelka-Munk over reflectance spectra). Returns `mixed` (#rrggbb), `rgbLerp` (the plain RGB average, for comparison) and the normalised `weights`. Call it before `paint_stroke` / `fill_pixels` to pick a paint colour. |
 | `clear_pixels` | Remove the selected pixels (alpha to 0; a transparency-locked layer or a mask gets the background colour). Returns the changed bounds. |
 | `import_psd` | Open a PSD / PSB (`data` base64, a `data:` URL is fine) as the document, replacing the layers, crop and rotation (one undo step). Returns the new `layers` tree with ids, `layerIds`, size and `warnings` naming the affected layers. Call `inspect_psd` first when losses matter. |
 | `apply_selection_as_mask` | Mask a layer with the current selection: pass `layerId` to mask an existing layer, or `kind` (plus optional `params`) to create a new masked layer in one step. `density` 0..1 and `feather` px soften the mask non-destructively. Returns `layerId`, kind, mask info and the selection summary. |
@@ -254,6 +260,8 @@ batching.
 - `paint_stroke`, `fill_pixels` and `clear_pixels` need a visible pixel layer (or a layer with a
   raster mask and `channel: "mask"`); adjustment, group and annotation layers can only be
   painted through their masks. A layer with `locks.pixels` refuses paint.
+- `mix_colors` predicts a mix; it does not paint, and strokes still lay paint down with normal
+  blending (there is no pigment blend mode or mixer brush yet).
 - `export_psd` is in the source frame: a crop or rotation is not in the file (the warnings say
   so). Crop with `set_crop` only for PNG / JPEG output, or flatten the look you need first.
 - PSD opacity, fill and mask density come in as whole percents (Photoshop stores bytes), so a
