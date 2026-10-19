@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { applyVideoEdits, applyVideoGrade, createVideoProject, parseVideoLoudnessMeasurement, toVideoFfmpeg, toVideoLoudnessMeasure, videoFrameAt, type VideoEdit, type VideoProject } from '../src/video-editor';
+import { applyVideoEdits, applyVideoGrade, createVideoProject, videoSpeedRampKeys, parseVideoLoudnessMeasurement, toVideoFfmpeg, toVideoLoudnessMeasure, videoFrameAt, type VideoEdit, type VideoProject } from '../src/video-editor';
 
 // Renders projects with a real ffmpeg (skipped when it is not on PATH): the string assertions in
 // video-editor.test.ts cannot tell whether ffmpeg accepts the filter graph.
@@ -192,6 +192,26 @@ describe.skipIf(!hasFfmpeg)('toVideoFfmpeg with a real ffmpeg', () => {
 		expect(Math.abs(centre[1] - 255 * early.opacity)).toBeLessThan(40);
 		// Once in, it fills the frame.
 		expect(pixel(out, 1.5, 10, 10)).toSatisfy((rgb: number[]) => near(rgb, [0, 255, 0]));
+	}, 120000);
+
+	it('plays a speed ramp with a freeze frame as the preview does', () => {
+		// A clock: the picture's brightness is 25 × its time in seconds.
+		ffmpeg(['-f', 'lavfi', '-i', "color=c=black:s=320x180:r=25:d=6,format=gray,geq=lum='25*T'", '-f', 'lavfi', '-i', 'sine=frequency=330:duration=6', '-c:v', 'libx264', '-qp', '0', '-pix_fmt', 'yuv444p', '-c:a', 'aac', '-shortest', media('clock.mp4')]);
+		const ramp = videoSpeedRampKeys([{ duration: 1000, speed: 1 }, { duration: 1000, speed: 0 }, { duration: 1000, speed: 2 }, { duration: 1000, speed: 2, toSpeed: 0.5 }]);
+		const p = project([
+			{ op: 'add_asset', asset: { id: 'clock', kind: 'video', src: media('clock.mp4'), duration: 6000, width: 320, height: 180 } },
+			{ op: 'add_clip', track: 'v1', clip: { type: 'media', id: 'c', asset: 'clock', in: 500, duration: 1000 } },
+			{ op: 'set_time_remap', clip: 'c', keys: ramp.keys, duration: ramp.duration }
+		]);
+		const out = render(p, 'ramp.mp4');
+		const luma = (t: number) => pixel(out, t, 300, 170)[0];
+		for (const t of [0.5, 1.2, 1.8, 2.5, 3.5]) {
+			const want = (25 * videoFrameAt(p, t * 1000).layers[0].sourceTime!) / 1000;
+			expect(Math.abs(luma(t) - want), `at ${t} s: source ${videoFrameAt(p, t * 1000).layers[0].sourceTime}`).toBeLessThan(6);
+		}
+		const info = probe(out);
+		expect(Number(info.format.duration)).toBeCloseTo(4, 0);
+		expect(info.streams.some((s) => s.codec_type === 'audio')).toBe(true);
 	}, 120000);
 
 	it('grades colours as the preview does', () => {

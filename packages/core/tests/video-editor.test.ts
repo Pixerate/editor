@@ -521,6 +521,26 @@ describe('VideoPreviewEngine', () => {
 		return { made, createMedia };
 	};
 
+	it('shows a freeze frame by holding a paused element on its frame, while the rest play', () => {
+		const clock = new ManualClock();
+		const c = new VideoEditorController({ project: project(), clock });
+		c.apply({ op: 'set_time_remap', clip: 'a', keys: [{ t: 0, v: 0 }, { t: 1000, v: 1000 }, { t: 3000, v: 1000 }, { t: 4000, v: 2000 }] }, 'Ramp');
+		const { made, createMedia } = fakeMedia();
+		const engine = new VideoPreviewEngine(c, { width: 0, height: 0 }, { createMedia, context: null });
+		c.seek(2000);
+		c.play();
+		clock.tick(16);
+		const video = made.find((m) => m.src === 'beach.mp4')!;
+		// In the freeze: held on source 3 s (in point 2 s + 1 s), not set to an impossible rate.
+		expect(video.paused).toBe(true);
+		expect(video.currentTime).toBeCloseTo(3, 2);
+		expect(video.playbackRate).toBe(1);
+		expect(made.find((m) => m.src === 'song.mp3')!.paused).toBe(false);
+		c.pause();
+		engine.destroy();
+		c.destroy();
+	});
+
 	it('keeps an element per playing clip in step with the editor and releases the rest', () => {
 		const clock = new ManualClock();
 		const c = new VideoEditorController({ project: project(), clock });

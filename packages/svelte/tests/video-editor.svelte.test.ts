@@ -377,6 +377,21 @@ describe("ClipInspector (Svelte)", () => {
     controller.destroy();
   });
 
+  it("freezes a frame at the playhead and takes the ramp off", () => {
+    const controller = make();
+    render(ClipInspector, { controller });
+    act(() => controller.select(["c1"]));
+    act(() => controller.seek(1000));
+    act(() => q<HTMLButtonElement>('[data-action="freeze"]').click());
+    expect(clipOf(controller, "c1")!.duration).toBe(3000);
+    expect(q("[data-ramped]")).not.toBeNull();
+    act(() => qa("button").find((b) => b.textContent === "Remove ramp")!.click());
+    expect((clipOf(controller, "c1") as any).timeRemap).toBeUndefined();
+    act(() => q<HTMLButtonElement>('[data-action="slow-mo"]').click());
+    expect((clipOf(controller, "c1") as any).timeRemap).toBeDefined();
+    controller.destroy();
+  });
+
   it("offers a direction for push, slide and wipe only", () => {
     const controller = make();
     render(ClipInspector, { controller });

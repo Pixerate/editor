@@ -1,4 +1,5 @@
 import { videoClipAnimated } from './clip-animation.js';
+import { videoClipSourceTime, videoClipSpeedAt } from './remap.js';
 import { normalizeVideoGrade } from './grade.js';
 import { videoValueAt } from './keyframes.js';
 import { sortedVideoClips, videoAssetMap, videoClipAfter, videoClipBefore, videoClipEnd, videoClipSpeed, videoAssetHasSound } from './timeline.js';
@@ -172,7 +173,7 @@ function activeOnTrack(track: VideoTrack, time: number): Active[] {
 	return out;
 }
 
-const sourceTimeAt = (clip: VideoClip, time: number) => (clip.type === 'media' ? (clip.in ?? 0) + (time - clip.start) * videoClipSpeed(clip) : 0);
+const sourceTimeAt = (clip: VideoClip, time: number) => (clip.type === 'media' ? videoClipSourceTime(clip, time - clip.start) : 0);
 
 /**
  * What plays at `time` (ms): the pictures to draw, back to front, with their placement, opacity
@@ -204,7 +205,7 @@ export function videoFrameAt(project: VideoProject, time: number): VideoFrame {
 			const audible = videoAssetHasSound(asset);
 			if (audible && clip.type === 'media' && !clip.muted && !track.muted) {
 				const gain = videoValueAt(clip.volume, clipTime, 1) * (track.volume ?? 1) * fadeGain(clip, inside, true) * mix;
-				audio.push({ clip: clip.id, track: track.id, asset: asset!.id, src: asset!.src, sourceTime, gain, speed: videoClipSpeed(clip) });
+				audio.push({ clip: clip.id, track: track.id, asset: asset!.id, src: asset!.src, sourceTime, gain, speed: videoClipSpeedAt(clip, clipTime) });
 			}
 			if (track.kind !== 'video' || track.hidden) continue;
 			if (clip.type === 'media' && (!asset || asset.kind === 'audio')) continue;

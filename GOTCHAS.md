@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/video-editor] Speed Ramps: Browsers Refuse Very Slow Rates, and ffmpeg Freezes Come From `fps`
+
+- **Issue / Symptom**: The preview threw or ignored a freeze frame when it set a `<video>`'s `playbackRate` to 0. In the ffmpeg export, there was no obvious way to make one source frame last a second.
+- **Root Cause**: Browsers only accept playback rates from about 1/16 up (Chrome throws below 0.0625). In ffmpeg, `setpts` can only move each source frame to a new time; it cannot repeat a frame.
+- **Solution / Workaround**: `VideoPreviewEngine` treats any speed under 1/16 as frozen: it pauses the element and seeks it every tick, as when paused. The export uses `setpts` to move each source frame to the clip time the ramp first shows it (the ramp's inverse; frames inside a freeze are skipped), then `fps` repeats frames to fill slow stretches and freezes, and `tpad` holds the ends. Sound cannot be re-timed continuously, so it is cut into straight stretches, each with its own `atempo` (silence for freezes), and joined with `concat`.
+
 ### [core/video-editor] ffmpeg `geq` and `rotate` Freeze an Animated Size, and `rotate` Loses Transparency When Its Angle Moves
 
 - **Issue / Symptom**: A clip with keyframed scale stayed at its first size in the ffmpeg export whenever it also had keyframed opacity, a wipe, an iris or a rotation. A clip with keyframed rotation rendered with an opaque box around it.

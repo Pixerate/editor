@@ -93,6 +93,11 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
   does not sound clipped: shrink each range before `extract_video_range`, and extract from the
   last pause back to the first, or re-read, because each extract moves what follows). Use
   `get_video_audio_levels` to find where a line starts before trimming or splitting at it.
+- **Speed ramps for emphasis.** Ramp into slow motion just before the moment that matters (a
+  jump, a reveal) and back out after it: `set_video_speed_ramp` with a 300-600 ms glide (`toSpeed`)
+  rather than a hard change, and slow motion around 0.25-0.5. A freeze frame (1-2 s) suits a
+  title or a "that's me" moment; add it with `add_video_freeze_frame`. Ramped sound is stepped
+  and silent in freezes, so lay music or effects under ramped shots instead of their own sound.
 - **Close gaps.** Unintended gaps play as background colour and silence. `find_video_gaps`, then
   `close_video_gaps` or ripple deletes. Leave gaps only where you want black.
 - **Cut on frames.** Put starts, trims and splits on frame boundaries (multiples of 1000 / fps
@@ -176,13 +181,16 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
 | `update_video_clip` | Change properties via `set`: opacity, transform (`x`, `y` px from centre, `scale`, `rotation`), `fit` (contain default for media, cover, fill, none), `animateIn` / `animateOut` (`{ effect: fade, rise, drop, slide-left, slide-right, zoom or pop, duration ms default 500 }`), `grade` (`exposure` stops -3-3, `contrast`, `saturation`, `temperature`, `tint` -1-1, `hue` degrees; replaces the whole grade), `blend` (normal, multiply, screen, overlay, darken, lighten, color-dodge, color-burn, hard-light, soft-light, difference, exclusion, add), `fadeIn` / `fadeOut`, name; media `volume` (0-4), `muted`, `fadeInCurve` / `fadeOutCurve` (the sound's fade shape: linear, equal-power, s-curve, exponential, logarithmic), `speed` (0.05-20, keeps the source range so the length changes), `asset`; title text and style; colour. `remove` resets to defaults. Not for timing. |
 | `apply_video_grade_preset` | Give `clips` (on video tracks) a named look at an `amount` 0-1 (default 1), replacing their grades: warm, cool, punchy, faded, black-and-white, bleach-bypass, day-for-night. One undo step; returns each clip's grade to fine-tune with `update_video_clip`. |
 | `copy_video_grade` | Match shots: give the `to` clips the grade of the `from` clip (one undo step; a source with no grade clears theirs). Returns the grade copied. |
+| `set_video_speed_ramp` | Play a video or audio `clip` through `segments` of speed from its first frame: `[{ duration ms, speed, toSpeed? }]`; `toSpeed` glides evenly to a new speed over the stretch, speed 0 is a freeze. The clip's length becomes the segments' total; `ripple` (default true) moves later material. Returns the clip with its `timeRemap` and source range. |
+| `add_video_freeze_frame` | Hold the frame a clip shows at timeline time `at` for `duration` ms, then play on; the clip gets longer and (with `ripple`, default) later material moves along. Works with or without a ramp. |
+| `remove_video_speed_ramp` | Put a ramped clip back to normal speed from where its ramp started, keeping its length (or a new `duration`). |
 | `set_video_keyframes` | Animate one `property` of a `clip` (`opacity` 0-1, `volume` 0-4 for media, `x` / `y` px from centre, `scale`, `rotation` degrees) with `keys` `[{ t, v, ease? }]`, replacing its keys. `t` is clip time (ms from the clip's start), so keys travel with the clip. `ease`: linear (default), hold, ease-in, ease-out, ease-in-out or cubic-bezier points. Returns the sorted keys. |
 | `remove_video_keyframes` | Remove all keys of a clip `property`, leaving the value it had at the clip's start. |
 | `set_video_transition` | Set the transition into a `clip` from the clip ending where it starts on the same track: `{ type: crossfade, dip, wipe, push, slide or iris, duration ms centred on the cut, color (dip, default black), direction (wipe, push, slide; default right), audioCurve (the sound's fades: equal-power by default for crossfade and wipe, linear for dip) }`, or `null` to remove. When handles are short the error gives the longest that fits. |
 | `close_video_gaps` | Slide clips on a `track` earlier so no gaps remain, from time `from` (default the start). Returns the clips that moved. |
 | `add_video_marker` | Add a marker at `time` with `label`, `color` and optional `id`, for beats, sections or review notes. Returns its id. |
 | `remove_video_marker` | Remove a `marker` by id. |
-| `edit_video` | Apply up to 200 ops in order as one all-or-nothing undo step: `set_settings`, `add_asset { asset }`, `update_asset`, `remove_asset`, `add_track { track: { kind, id }, at }`, `update_track`, `remove_track`, `move_track`, `add_clip { track, clip, mode }`, `move_clip { clip, start, track, mode }`, `trim_clip`, `split_clip`, `delete_clips`, `update_clip`, `set_transition`, `slip_clip`, `roll_edit`, `slide_clip`, `lift_range`, `extract_range`, `split_at`, `set_keyframes { clip, property, keys }` (null keys remove), `close_gaps`, `add_marker { marker: { time, label } }`, `update_marker`, `remove_marker`; other fields match the single tools. `dry_run: true` validates only. The default for a rough cut. |
+| `edit_video` | Apply up to 200 ops in order as one all-or-nothing undo step: `set_settings`, `add_asset { asset }`, `update_asset`, `remove_asset`, `add_track { track: { kind, id }, at }`, `update_track`, `remove_track`, `move_track`, `add_clip { track, clip, mode }`, `move_clip { clip, start, track, mode }`, `trim_clip`, `split_clip`, `delete_clips`, `update_clip`, `set_transition`, `slip_clip`, `roll_edit`, `slide_clip`, `lift_range`, `extract_range`, `split_at`, `set_keyframes { clip, property, keys }` (null keys remove), `set_time_remap { clip, keys (clip ms to source ms after the in point; null removes), duration, ripple }`, `close_gaps`, `add_marker { marker: { time, label } }`, `update_marker`, `remove_marker`; other fields match the single tools. `dry_run: true` validates only. The default for a rough cut. |
 | `undo_video` | Undo your last edit (one tool call or one `edit_video` batch). |
 | `redo_video` | Redo the edit you just undid. |
 
@@ -209,6 +217,9 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
   `add_marker` as `{ marker: { time, label } }`.
 - **Same kind of track.** A clip moves only between tracks of its kind; images, titles and colours
   never go on audio tracks, audio files never on video tracks (`wrong-track`).
+- **A ramp replaces `speed`.** Setting `speed` on a ramped clip is refused; change the ramp or
+  `remove_video_speed_ramp` first. Trims and splits keep a ramp on the same frames of source;
+  lengthening a ramped clip past its ramp holds the end frame.
 - **Speed changes length.** Setting `speed` keeps the source stretch, so the clip gets shorter or
   longer and can collide with the next one; ripple or move clips after.
 - **Transitions need a butt cut.** The incoming clip must start exactly where the previous one ends

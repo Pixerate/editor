@@ -1,4 +1,5 @@
 import { VIDEO_GRADE_CONTROLS } from './grade.js';
+import { checkVideoTimeRemap } from './remap.js';
 import { VIDEO_EASE_NAMES, type VideoAnimatable, type VideoEase, type VideoKey, type VideoKeyframes } from './keyframes.js';
 import { VIDEO_BLEND_MODES, VIDEO_CLIP_ANIMATION_EFFECTS, VIDEO_CLIP_TYPES, VIDEO_FADE_CURVES, VIDEO_FITS, VIDEO_TRANSITION_TYPES, VIDEO_WIPE_DIRECTIONS, type VideoAsset, type VideoClip, type VideoClipAnimation, type VideoGrade, type VideoMarker, type VideoProject, type VideoTrack, type VideoTranscriptWord, type VideoTransform, type VideoTransition } from './types.js';
 
@@ -78,6 +79,19 @@ export function parseVideoTransform(v: unknown, path: string): VideoTransform | 
 		scale: parseVideoAnimatable(v.scale, `${path}.scale`, { optional: true, min: 0 }),
 		rotation: parseVideoAnimatable(v.rotation, `${path}.rotation`, { optional: true })
 	});
+}
+
+export function parseVideoTimeRemap(v: unknown, speed: unknown, path: string): VideoKeyframes | undefined {
+	if (v === undefined) return undefined;
+	const remap = parseVideoAnimatable(v, path, { optional: true, min: 0 });
+	if (typeof remap === 'number' || remap === undefined) return fail(path, 'must be keyframes { keys: [{ t, v, ease }] } (v: ms of source after the in point)');
+	if (speed !== undefined && speed !== 1) fail(path, 'cannot be used with a speed; a ramp sets the speed itself (remove "speed")');
+	try {
+		checkVideoTimeRemap(remap, path);
+	} catch (e) {
+		throw new Error((e as Error).message.replace(/\.?$/, '.'));
+	}
+	return remap;
 }
 
 export function parseVideoClipAnimation(v: unknown, path: string): VideoClipAnimation | undefined {
@@ -171,6 +185,7 @@ export function parseVideoClip(v: unknown, path = 'clip'): VideoClip {
 			speed: num(v.speed, `${path}.speed`, { optional: true, min: 0.05, max: 20 }),
 			volume: parseVideoAnimatable(v.volume, `${path}.volume`, { optional: true, min: 0, max: 4 }),
 			muted: bool(v.muted, `${path}.muted`),
+			timeRemap: parseVideoTimeRemap(v.timeRemap, v.speed, `${path}.timeRemap`),
 			fadeInCurve: oneOf(v.fadeInCurve, VIDEO_FADE_CURVES, `${path}.fadeInCurve`),
 			fadeOutCurve: oneOf(v.fadeOutCurve, VIDEO_FADE_CURVES, `${path}.fadeOutCurve`)
 		});

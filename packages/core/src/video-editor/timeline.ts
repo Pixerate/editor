@@ -15,6 +15,8 @@ export const videoClipSpeed = (clip: VideoClip): number => (clip.type === 'media
 export function videoClipSourceRange(clip: VideoClip): { in: number; out: number } | null {
 	if (clip.type !== 'media') return null;
 	const start = clip.in ?? 0;
+	// A ramp plays from its first key's source to its last's (holding before and after).
+	if (clip.timeRemap?.keys.length) return { in: start + clip.timeRemap.keys[0].v, out: start + clip.timeRemap.keys[clip.timeRemap.keys.length - 1].v };
 	return { in: start, out: start + clip.duration * videoClipSpeed(clip) };
 }
 
