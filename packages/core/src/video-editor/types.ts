@@ -38,6 +38,11 @@ export interface VideoTrack {
 	hidden?: boolean;
 	/** Refuses edits to the track's clips. */
 	locked?: boolean;
+	/**
+	 * Moves with ripple edits made on other sync-locked tracks, so it stays in sync (default true).
+	 * Turn it off for a track that should stay put while the others ripple (e.g. a music bed).
+	 */
+	syncLocked?: boolean;
 	/** Gain applied to every clip on the track (1 = unchanged, default 1). */
 	volume?: number;
 	clips: VideoClip[];
@@ -136,6 +141,14 @@ export interface VideoColorClip extends VideoClipBase {
 
 export type VideoClip = VideoMediaClip | VideoTextClip | VideoColorClip;
 export type VideoClipType = VideoClip['type'];
+
+/**
+ * How a clip is placed where others already are: `refuse` an overlap (the default), `overwrite`
+ * what is underneath (cutting, trimming or removing it), or `insert` (cut everything across the
+ * point and push later material along on every sync-locked track).
+ */
+export type VideoPlacementMode = 'refuse' | 'overwrite' | 'insert';
+export const VIDEO_PLACEMENT_MODES = ['refuse', 'overwrite', 'insert'] as const;
 export const VIDEO_CLIP_TYPES = ['media', 'text', 'color'] as const;
 
 export interface VideoMarker {

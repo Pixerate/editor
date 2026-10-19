@@ -2,11 +2,11 @@ import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import type { JsonSchema } from '../tools/schema.js';
 import type { VideoIssue } from './check.js';
 import type { VideoEditorController } from './controller.js';
-import { VIDEO_EDIT_OPS, type VideoEdit, type VideoEditResult } from './edit.js';
+import { VIDEO_EDIT_OPS, type VideoEdit, type VideoEditOutcome, type VideoEditResult } from './edit.js';
 import { videoFrameAt } from './evaluate.js';
 import { videoContactSheetSvg, videoProjectSvg } from './render.js';
 import { findVideoGaps, formatVideoTimecode, sortedVideoClips, videoClipEnd, videoClipSourceRange, videoProjectDuration } from './timeline.js';
-import { VIDEO_FITS, VIDEO_TRANSITION_TYPES, VIDEO_WIPE_DIRECTIONS, type VideoProject } from './types.js';
+import { VIDEO_FITS, VIDEO_PLACEMENT_MODES, VIDEO_TRANSITION_TYPES, VIDEO_WIPE_DIRECTIONS, type VideoProject } from './types.js';
 
 export interface VideoEditorToolProviderOptions {
 	/** Provider id (unique per registry). Default `video`. */
@@ -37,7 +37,19 @@ const CLIP_ID = { type: 'string', minLength: 1, description: 'A clip id from get
 const TRACK_ID = { type: 'string', minLength: 1, description: 'A track id from get_video_project (e.g. "v1" or "a1").' } as const;
 const ASSET_ID = { type: 'string', minLength: 1, description: 'An asset id from get_video_project.' } as const;
 const COLOR = (what: string) => ({ type: 'string', minLength: 1, description: `${what}: a CSS colour such as "#ffcc00".` }) as const;
-const RIPPLE = { type: 'boolean', description: 'Push (or pull) the later clips on the same track along by the change, keeping the cuts after it in sync (default false: refuse if it would overlap).' } as const;
+const RIPPLE = {
+	type: 'boolean',
+	description:
+		'Push (or pull) later material along by the change, keeping the cuts after it in sync (default false: refuse if it would overlap). When the track is sync-locked (the default), every other unlocked sync-locked track moves too: clips across the edit point are cut when time opens, and closing time is refused if another sync-locked track has a clip in that stretch.'
+} as const;
+const MODE = {
+	type: 'string',
+	enum: [...VIDEO_PLACEMENT_MODES],
+	description:
+		'What to do with clips already where it lands: "refuse" (default) fails with the next free place; "overwrite" cuts, trims or removes what is underneath on that track; "insert" cuts everything across the start and pushes later material along by its length on this track and every sync-locked track.'
+} as const;
+const DELTA = (what: string) => ({ type: 'number', description: `${what}, in milliseconds of timeline time: positive is later, negative earlier. It is clamped to what the media and neighbours allow; the result says how far it went.` }) as const;
+const RANGE_TRACKS = { type: 'array', items: TRACK_ID, minItems: 1, uniqueItems: true, description: 'Tracks to work on (default: every unlocked track). Locked tracks are refused.' } as const;
 
 const TRANSFORM = object(
 	{
@@ -106,6 +118,7 @@ const TRACK_FIELDS: Record<string, JsonSchema> = {
 	muted: { type: 'boolean', description: 'Silence every clip on it.' },
 	hidden: { type: 'boolean', description: 'Leave its pictures out of the frame.' },
 	locked: { type: 'boolean', description: 'Refuse edits to its clips.' },
+	syncLocked: { type: 'boolean', description: 'Move with ripple edits on other sync-locked tracks so it stays in sync (default true). Turn off for a track that should stay put, e.g. a music bed.' },
 	volume: { type: 'number', minimum: 0, maximum: 4, description: 'Gain for every clip on it (1 = unchanged).' }
 };
 const ASSET_FIELDS: Record<string, JsonSchema> = {
@@ -143,6 +156,7 @@ export function describeVideoProject(project: VideoProject) {
 			...(t.muted ? { muted: true } : {}),
 			...(t.hidden ? { hidden: true } : {}),
 			...(t.locked ? { locked: true } : {}),
+			...(t.syncLocked === false ? { syncLocked: false } : {}),
 			...(t.volume !== undefined ? { volume: t.volume } : {}),
 			clips: sortedVideoClips(t).map((c) => ({ ...c, end: videoClipEnd(c), ...(c.type === 'media' ? { source: videoClipSourceRange(c) } : {}) }))
 		})),
@@ -153,8 +167,9 @@ export function describeVideoProject(project: VideoProject) {
 /**
  * Agent tools for a `VideoEditorController`: read the project (assets, tracks with clips and their
  * times, gaps, what plays at a moment), check it, render frames, export to ffmpeg or an EDL, and
- * edit it a step at a time (add assets and tracks, add / move / trim / split / delete clips, ripple,
- * transitions, markers). Every write is checked first (unknown ids with "did you mean", overlaps,
+ * edit it a step at a time (add assets and tracks, add / move / trim / split / delete clips with
+ * overwrite, insert and sync-locked ripple, slip / roll / slide, lift / extract a range, cut across
+ * tracks, transitions, markers). Every write is checked first (unknown ids with "did you mean", overlaps,
  * trims past the source, locked tracks), applies as one undo step, and returns what it made and
  * the resulting length and issues. Write tools are hidden while the project is read-only.
  */
@@ -180,6 +195,14 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 		}
 		return null;
 	};
+
+	/** What a placement or ripple did besides the clip itself. */
+	const placed = (o: VideoEditOutcome) => ({
+		...(o.created?.length ? { created: o.created } : {}),
+		...(o.trimmed?.length ? { trimmed: o.trimmed } : {}),
+		...(o.removed?.length ? { removed: o.removed } : {}),
+		...(o.rippled ? { rippled: o.rippled } : {})
+	});
 
 	const getProject: AgentTool = {
 		name: 'get_video_project',
@@ -360,8 +383,8 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 	const updateTrack: AgentTool = {
 		name: 'update_video_track',
 		title: 'Change a track',
-		description: 'Renames, mutes, hides, locks or sets the volume of a track (one undo step). Returns the track\'s settings.',
-		inputSchema: object({ track: TRACK_ID, set: object(TRACK_FIELDS, [], 'Fields to replace.'), remove: { type: 'array', items: { type: 'string', enum: ['name', 'muted', 'hidden', 'locked', 'volume'] }, description: 'Fields to clear.' } }, ['track']),
+		description: 'Renames, mutes, hides, locks, sync-locks or sets the volume of a track (one undo step). Returns the track\'s settings.',
+		inputSchema: object({ track: TRACK_ID, set: object(TRACK_FIELDS, [], 'Fields to replace.'), remove: { type: 'array', items: { type: 'string', enum: ['name', 'muted', 'hidden', 'locked', 'syncLocked', 'volume'] }, description: 'Fields to clear.' } }, ['track']),
 		annotations: { title: 'Change a track', ...WRITE_IDEMPOTENT },
 		handler: ({ track, set, remove }) =>
 			apply({ op: 'update_track', track, set, remove }, 'Change track', (r) => {
@@ -392,21 +415,22 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 		name: 'add_video_clip',
 		title: 'Add a clip',
 		description:
-			'Puts a clip on a track (one undo step): media (a stretch of an asset from its "in" point), a title or a colour. With no start it goes at the end of the track; with ripple it is inserted at "start", pushing later clips along; otherwise an overlap is refused with the next free place. Returns the clip with its end and source range.',
-		inputSchema: object({ track: TRACK_ID, clip: NEW_CLIP, ripple: RIPPLE }, ['track', 'clip']),
+			'Puts a clip on a track (one undo step): media (a stretch of an asset from its "in" point), a title or a colour. With no start it goes at the end of the track. Where it lands on other clips, mode decides: refuse (default, with the next free place), overwrite (replace what is underneath) or insert (push later material along on every sync-locked track). Returns the clip with its end and source range, plus any clips it cut (created), trimmed or removed and the tracks it rippled.',
+		inputSchema: object({ track: TRACK_ID, clip: NEW_CLIP, mode: MODE, ripple: { type: 'boolean', description: 'Same as mode "insert" (kept for older callers; default false).' } }, ['track', 'clip']),
 		annotations: { title: 'Add a clip', ...WRITE },
-		handler: ({ track, clip, ripple }) => apply({ op: 'add_clip', track, clip, ripple }, 'Add clip', (r) => ({ clip: clipOut(r.project, r.outcomes[0].clip!) }))
+		handler: ({ track, clip, mode, ripple }) => apply({ op: 'add_clip', track, clip, mode, ripple }, mode === 'overwrite' ? 'Overwrite clip' : mode === 'insert' || ripple ? 'Insert clip' : 'Add clip', (r) => ({ clip: clipOut(r.project, r.outcomes[0].clip!), ...placed(r.outcomes[0]) }))
 	};
 
 	const moveClip: AgentTool = {
 		name: 'move_video_clip',
 		title: 'Move a clip',
-		description: 'Moves a clip to a new start and/or another track of the same kind (one undo step). Refused if it would overlap another clip, naming it and the next free place. Returns the clip.',
-		inputSchema: object({ clip: CLIP_ID, start: MS('New start on the timeline (default: unchanged)'), track: { ...TRACK_ID, description: 'Track to move it to (default: its own).' } }, ['clip']),
-		annotations: { title: 'Move a clip', ...WRITE_IDEMPOTENT },
-		handler: ({ clip, start, track }) => {
+		description:
+			'Moves a clip to a new start and/or another track of the same kind (one undo step), leaving a gap where it was. Where it lands on other clips, mode decides: refuse (default, naming the clip and the next free place), overwrite or insert. Returns the clip, plus any clips it cut (created), trimmed or removed and the tracks it rippled.',
+		inputSchema: object({ clip: CLIP_ID, start: MS('New start on the timeline (default: unchanged)'), track: { ...TRACK_ID, description: 'Track to move it to (default: its own).' }, mode: MODE }, ['clip']),
+		annotations: { title: 'Move a clip', ...WRITE },
+		handler: ({ clip, start, track, mode }) => {
 			if (start === undefined && track === undefined) throw new Error('Give "start", "track" or both.');
-			return apply({ op: 'move_clip', clip, start, track }, 'Move clip', (r) => ({ clip: clipOut(r.project, clip) }));
+			return apply({ op: 'move_clip', clip, start, track, mode }, mode === 'overwrite' ? 'Overwrite clip' : mode === 'insert' ? 'Insert clip' : 'Move clip', (r) => ({ clip: clipOut(r.project, clip), ...placed(r.outcomes[0]) }));
 		}
 	};
 
@@ -417,7 +441,7 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 			'Moves one edge of a clip to a timeline time (one undo step): "start" also moves its source in point, "end" its out point. Refused past the ends of the source (the error says how far it can go) or below one frame. With ripple the clip keeps its start and the later clips on the track move by the change, so no gap or overlap opens. Returns the clip.',
 		inputSchema: object({ clip: CLIP_ID, edge: { type: 'string', enum: ['start', 'end'], description: 'Which edge to move.' }, to: MS('Where that edge goes on the timeline'), ripple: RIPPLE }, ['clip', 'edge', 'to']),
 		annotations: { title: 'Trim a clip', ...WRITE_IDEMPOTENT },
-		handler: ({ clip, edge, to, ripple }) => apply({ op: 'trim_clip', clip, edge, to, ripple }, 'Trim clip', (r) => ({ clip: clipOut(r.project, clip) }))
+		handler: ({ clip, edge, to, ripple }) => apply({ op: 'trim_clip', clip, edge, to, ripple }, ripple ? 'Ripple trim' : 'Trim clip', (r) => ({ clip: clipOut(r.project, clip), ...placed(r.outcomes[0]) }))
 	};
 
 	const splitClip: AgentTool = {
@@ -432,10 +456,14 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 	const deleteClips: AgentTool = {
 		name: 'delete_video_clips',
 		title: 'Delete clips',
-		description: 'Removes clips (one undo step). With ripple the later clips on each track move up to close the gaps. Returns the ids removed.',
-		inputSchema: object({ clips: { type: 'array', items: CLIP_ID, minItems: 1, description: 'Clip ids.' }, ripple: { type: 'boolean', description: 'Close the gaps they leave (default false).' } }, ['clips']),
+		description:
+			'Removes clips (one undo step). With ripple the later material moves up to close the gaps they leave: on every sync-locked track when they were on one (refused, naming the clip, if another sync-locked track has something in a gap), else on their own track. Returns the ids removed and the tracks rippled.',
+		inputSchema: object(
+			{ clips: { type: 'array', items: CLIP_ID, minItems: 1, description: 'Clip ids.' }, ripple: { type: 'boolean', description: 'Close the gaps they leave, on every sync-locked track (default false).' } },
+			['clips']
+		),
 		annotations: { title: 'Delete clips', ...DESTRUCTIVE },
-		handler: ({ clips, ripple }) => apply({ op: 'delete_clips', clips, ripple }, ripple ? 'Ripple delete' : 'Delete clips', () => ({ removed: clips }))
+		handler: ({ clips, ripple }) => apply({ op: 'delete_clips', clips, ripple }, ripple ? 'Ripple delete' : 'Delete clips', (r) => ({ removed: clips, ...(r.outcomes[0].rippled ? { rippled: r.outcomes[0].rippled } : {}) }))
 	};
 
 	const updateClip: AgentTool = {
@@ -473,6 +501,82 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 		handler: ({ clip, transition }) => apply({ op: 'set_transition', clip, transition }, transition ? 'Set transition' : 'Remove transition', (r) => ({ clip: clipOut(r.project, clip) }))
 	};
 
+	const slipClip: AgentTool = {
+		name: 'slip_video_clip',
+		title: 'Slip a clip',
+		description:
+			'Shows a different stretch of a video or audio clip\'s source without moving it on the timeline: its in and out points both move by delta (one undo step). Clamped to the media past either end, keeping what its transitions need. Returns the clip (with its new source range) and the delta applied.',
+		inputSchema: object({ clip: CLIP_ID, delta: DELTA('How far to move the source (positive shows later media)') }, ['clip', 'delta']),
+		annotations: { title: 'Slip a clip', ...WRITE },
+		handler: ({ clip, delta }) => apply({ op: 'slip_clip', clip, delta }, 'Slip clip', (r) => ({ clip: clipOut(r.project, clip), delta: r.outcomes[0].delta }))
+	};
+
+	const rollEdit: AgentTool = {
+		name: 'roll_video_edit',
+		title: 'Roll a cut',
+		description:
+			'Moves the cut between two clips that meet on one track (one undo step): the left one\'s out point and the right one\'s in point move together, so nothing else moves and no gap opens. Clamped to each clip\'s media and at least a frame of each. Returns both clips, the new cut time and the delta applied.',
+		inputSchema: object({ left: { ...CLIP_ID, description: 'The clip before the cut (from get_video_project).' }, right: { ...CLIP_ID, description: 'The clip after the cut, starting where "left" ends.' }, delta: DELTA('How far to move the cut') }, ['left', 'right', 'delta']),
+		annotations: { title: 'Roll a cut', ...WRITE },
+		handler: ({ left, right, delta }) =>
+			apply({ op: 'roll_edit', left, right, delta }, 'Roll edit', (r) => {
+				const after = clipOut(r.project, right)!;
+				return { left: clipOut(r.project, left), right: after, cut: after.start, delta: r.outcomes[0].delta };
+			})
+	};
+
+	const slideClip: AgentTool = {
+		name: 'slide_video_clip',
+		title: 'Slide a clip',
+		description:
+			'Moves a clip along its track keeping its content, trimming the clips either side so the stretch stays gapless (one undo step): the one before gets longer as the one after gets shorter, or the other way. Without a neighbour on one side it moves through the gap there. Clamped to the neighbours\' media and at least a frame of each. Returns the clip, its neighbours and the delta applied.',
+		inputSchema: object({ clip: CLIP_ID, delta: DELTA('How far to move it') }, ['clip', 'delta']),
+		annotations: { title: 'Slide a clip', ...WRITE },
+		handler: ({ clip, delta }) =>
+			apply({ op: 'slide_clip', clip, delta }, 'Slide clip', (r) => {
+				const ids = r.outcomes[0].clips!;
+				const i = ids.indexOf(clip);
+				return { clip: clipOut(r.project, clip), ...(i > 0 ? { before: clipOut(r.project, ids[0]) } : {}), ...(i < ids.length - 1 ? { after: clipOut(r.project, ids[ids.length - 1]) } : {}), delta: r.outcomes[0].delta };
+			})
+	};
+
+	const rangeArgs = object({ from: MS('Start of the range on the timeline'), to: MS('End of the range on the timeline (after "from")'), tracks: RANGE_TRACKS }, ['from', 'to']);
+	const rangeOut = (o: VideoEditOutcome) => ({ removed: o.removed ?? [], trimmed: o.trimmed ?? [], created: o.created ?? [], ...(o.rippled ? { rippled: o.rippled } : {}) });
+
+	const liftRange: AgentTool = {
+		name: 'lift_video_range',
+		title: 'Lift a range',
+		description:
+			'Empties a stretch of time on some or all tracks, leaving a gap (one undo step): clips inside are deleted, clips across an edge are trimmed to it, and a clip across both is cut in two. Returns the clips removed, trimmed and created (right-hand parts of cuts).',
+		inputSchema: rangeArgs,
+		annotations: { title: 'Lift a range', ...DESTRUCTIVE },
+		handler: ({ from, to, tracks }) => apply({ op: 'lift_range', from, to, tracks }, 'Lift', (r) => rangeOut(r.outcomes[0]))
+	};
+
+	const extractRange: AgentTool = {
+		name: 'extract_video_range',
+		title: 'Extract a range',
+		description:
+			'Removes a stretch of time and closes it up (one undo step): like lift, then everything after it moves earlier by its length on those tracks and every sync-locked track. Refused, naming the clip, when a sync-locked track left out of "tracks" has something in the range. Returns the clips removed, trimmed and created and the tracks that moved.',
+		inputSchema: rangeArgs,
+		annotations: { title: 'Extract a range', ...DESTRUCTIVE },
+		handler: ({ from, to, tracks }) => apply({ op: 'extract_range', from, to, tracks }, 'Extract', (r) => rangeOut(r.outcomes[0]))
+	};
+
+	const splitAt: AgentTool = {
+		name: 'split_video_at',
+		title: 'Cut across tracks',
+		description:
+			'Cuts every clip that runs across a time on some or all tracks (a razor through the timeline), as one undo step. Each left part keeps its id, fade in and transition; each right part gets a new id and the fade out. Refused when no clip runs across that time. Returns the pairs { left, right }.',
+		inputSchema: object({ at: MS('Where to cut, on the timeline'), tracks: RANGE_TRACKS }, ['at']),
+		annotations: { title: 'Cut across tracks', ...WRITE },
+		handler: ({ at, tracks }) =>
+			apply({ op: 'split_at', at, tracks }, 'Split', (r) => {
+				const o = r.outcomes[0];
+				return { cuts: o.clips!.map((left, i) => ({ left: clipOut(r.project, left), right: clipOut(r.project, o.created![i]) })) };
+			})
+	};
+
 	const closeGaps: AgentTool = {
 		name: 'close_video_gaps',
 		title: 'Close gaps',
@@ -502,7 +606,7 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 
 	const EDIT_OP: JsonSchema = {
 		type: 'object',
-		description: `One edit: { "op": one of ${VIDEO_EDIT_OPS.filter((o) => o !== 'replace_project').join(', ')}, …its fields }. Fields match the single tools: add_clip { track, clip, ripple }, move_clip { clip, start, track }, trim_clip { clip, edge, to, ripple }, split_clip { clip, at, id }, delete_clips { clips, ripple }, update_clip { clip, set, remove }, set_transition { clip, transition }, close_gaps { track, from }, add_asset { asset }, update_asset { asset, set, remove }, remove_asset { asset }, add_track { track: { kind, id, … }, at }, update_track { track, set, remove }, remove_track { track }, move_track { track, to }, add_marker { marker: { time, label } }, update_marker { marker, set }, remove_marker { marker }, set_settings { name, width, height, fps, background }.`,
+		description: `One edit: { "op": one of ${VIDEO_EDIT_OPS.filter((o) => o !== 'replace_project').join(', ')}, …its fields }. Fields match the single tools: add_clip { track, clip, mode, ripple }, move_clip { clip, start, track, mode }, trim_clip { clip, edge, to, ripple }, split_clip { clip, at, id }, delete_clips { clips, ripple }, update_clip { clip, set, remove }, set_transition { clip, transition }, slip_clip { clip, delta }, roll_edit { left, right, delta }, slide_clip { clip, delta }, lift_range { from, to, tracks }, extract_range { from, to, tracks }, split_at { at, tracks }, close_gaps { track, from }, add_asset { asset }, update_asset { asset, set, remove }, remove_asset { asset }, add_track { track: { kind, id, … }, at }, update_track { track, set, remove }, remove_track { track }, move_track { track, to }, add_marker { marker: { time, label } }, update_marker { marker, set }, remove_marker { marker }, set_settings { name, width, height, fps, background }.`,
 		properties: { op: { type: 'string', enum: VIDEO_EDIT_OPS.filter((o) => o !== 'replace_project'), description: 'Which edit.' } },
 		required: ['op']
 	};
@@ -548,7 +652,7 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 	};
 
 	const reads = [getProject, getFrame, findGaps, checkProject, renderFrame, exportFfmpeg, exportEdl, seek];
-	const writes = [setSettings, addAsset, updateAsset, removeAsset, addTrack, updateTrack, removeTrack, moveTrack, addClip, moveClip, trimClip, splitClip, deleteClips, updateClip, setTransition, closeGaps, addMarker, removeMarker, editVideo, undo, redo];
+	const writes = [setSettings, addAsset, updateAsset, removeAsset, addTrack, updateTrack, removeTrack, moveTrack, addClip, moveClip, trimClip, splitClip, deleteClips, updateClip, setTransition, slipClip, rollEdit, slideClip, liftRange, extractRange, splitAt, closeGaps, addMarker, removeMarker, editVideo, undo, redo];
 
 	return {
 		id: options.id ?? 'video',
