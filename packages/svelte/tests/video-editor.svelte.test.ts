@@ -341,6 +341,20 @@ describe("ClipInspector (Svelte)", () => {
     controller.destroy();
   });
 
+  it("grades a picture: a look, then single settings", () => {
+    const controller = make();
+    render(ClipInspector, { controller });
+    act(() => controller.select(["c1"]));
+    change(q<HTMLSelectElement>('[data-field="gradePreset"]'), "cool");
+    expect(clipOf(controller, "c1")!.grade).toEqual({ temperature: -0.4, tint: -0.05 });
+    change(q<HTMLInputElement>('[data-field="grade.hue"]'), "-500");
+    expect(clipOf(controller, "c1")!.grade).toEqual({ hue: -180, temperature: -0.4, tint: -0.05 });
+    // Clearing a setting removes it.
+    change(q<HTMLInputElement>('[data-field="grade.hue"]'), "");
+    expect(clipOf(controller, "c1")!.grade).toEqual({ temperature: -0.4, tint: -0.05 });
+    controller.destroy();
+  });
+
   it("sets a picture's blend mode", () => {
     const controller = make();
     render(ClipInspector, { controller });

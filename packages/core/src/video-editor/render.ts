@@ -1,4 +1,5 @@
 import { videoFrameAt, type VideoFrame, type VideoLayer, type VideoRect } from './evaluate.js';
+import { videoGradeCssFilter, videoGradeSvgDefs, videoGradeSvgFilter } from './grade.js';
 import { formatVideoTimecode } from './timeline.js';
 import type { VideoProject } from './types.js';
 
@@ -36,6 +37,10 @@ export function videoFrameToSvg(frame: VideoFrame, options: VideoSvgOptions = {}
 		const attrs: string[] = [];
 		if (layer.opacity < 1) attrs.push(`opacity="${n(layer.opacity)}"`);
 		if (layer.blend) attrs.push(`style="mix-blend-mode:${layer.blend === 'add' ? 'plus-lighter' : layer.blend}"`);
+		if (layer.grade) {
+			defs.push(videoGradeSvgFilter(`g${i}`, layer.grade));
+			attrs.push(`filter="url(#g${i})"`);
+		}
 		if (layer.rotation) attrs.push(`transform="rotate(${n(layer.rotation)} ${n(rect.x + rect.width / 2)} ${n(rect.y + rect.height / 2)})"`);
 		if (layer.wipe) {
 			const r = videoWipeRect(rect, layer.wipe);
@@ -100,14 +105,22 @@ export function videoContactSheetSvg(project: VideoProject, times: readonly numb
 export type VideoCanvasContext = Pick<
 	CanvasRenderingContext2D,
 	'save' | 'restore' | 'fillRect' | 'drawImage' | 'translate' | 'rotate' | 'beginPath' | 'rect' | 'clip' | 'fillText' | 'measureText' | 'setTransform'
-> & { globalAlpha: number; globalCompositeOperation: GlobalCompositeOperation; fillStyle: string | CanvasGradient | CanvasPattern; font: string; textAlign: CanvasTextAlign; textBaseline: CanvasTextBaseline; strokeStyle: string | CanvasGradient | CanvasPattern; lineWidth: number; strokeRect(x: number, y: number, w: number, h: number): void };
+> & { globalAlpha: number; globalCompositeOperation: GlobalCompositeOperation; filter?: string; fillStyle: string | CanvasGradient | CanvasPattern; font: string; textAlign: CanvasTextAlign; textBaseline: CanvasTextBaseline; strokeStyle: string | CanvasGradient | CanvasPattern; lineWidth: number; strokeRect(x: number, y: number, w: number, h: number): void };
 
 /**
  * Draws a frame on a 2D canvas scaled by `scale` (canvas pixels per frame pixel). `sourceFor`
  * returns what to draw for a media layer (a `<video>` seeked to `layer.sourceTime`, an `<img>`,
- * an `ImageBitmap`…) or `null` for a placeholder box.
+ * an `ImageBitmap`…) or `null` for a placeholder box. Grades become the context's `filter`; white
+ * balance there refers to an SVG filter, which `options.defineSvgFilter` is given to put in the page
+ * (without it, white balance is left out of the canvas).
  */
-export function drawVideoFrame(ctx: VideoCanvasContext, frame: VideoFrame, sourceFor: (layer: VideoLayer) => CanvasImageSource | null, scale = 1): void {
+export function drawVideoFrame(
+	ctx: VideoCanvasContext,
+	frame: VideoFrame,
+	sourceFor: (layer: VideoLayer) => CanvasImageSource | null,
+	scale = 1,
+	options: { defineSvgFilter?: (id: string, markup: string) => void } = {}
+): void {
 	ctx.save();
 	ctx.setTransform(scale, 0, 0, scale, 0, 0);
 	ctx.globalAlpha = 1;
@@ -118,6 +131,12 @@ export function drawVideoFrame(ctx: VideoCanvasContext, frame: VideoFrame, sourc
 		ctx.save();
 		ctx.globalAlpha = layer.opacity;
 		if (layer.blend && layer.blend !== 'normal') ctx.globalCompositeOperation = layer.blend === 'add' ? 'lighter' : layer.blend;
+		if (layer.grade) {
+			const defs = videoGradeSvgDefs(layer.grade);
+			if (options.defineSvgFilter) for (const d of defs) options.defineSvgFilter(d.id, d.markup);
+			const css = videoGradeCssFilter(layer.grade);
+			ctx.filter = options.defineSvgFilter ? css : css.replace(/\s*url\([^)]*\)/g, '').trim() || 'none';
+		}
 		if (layer.rotation) {
 			ctx.translate(rect.x + rect.width / 2, rect.y + rect.height / 2);
 			ctx.rotate((layer.rotation * Math.PI) / 180);

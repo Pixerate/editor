@@ -2,6 +2,10 @@ import React from 'react';
 import {
   findVideoClip,
   formatVideoSeconds,
+  normalizeVideoGrade,
+  VIDEO_GRADE_CONTROLS,
+  VIDEO_GRADE_PRESET_NAMES,
+  videoGradePreset,
   VIDEO_BLEND_MODE_LABELS,
   VIDEO_BLEND_MODES,
   VIDEO_FADE_CURVE_LABELS,
@@ -14,6 +18,7 @@ import {
   type VideoClip,
   type VideoEditorController,
   type VideoFadeCurve,
+  type VideoGradePreset,
   type VideoTransitionType,
 } from '@pixerate/editor/video-editor';
 import { useVideoEditorState } from './useVideoEditor';
@@ -171,6 +176,50 @@ export function ClipInspector({ controller, className = '' }: ClipInspectorProps
             ))}
           </select>
         </Row>
+      )}
+      {at.track.kind === 'video' && (
+        <>
+          <Row label="Look" name="gradePreset">
+            <select
+              className={field}
+              value=""
+              disabled={disabled}
+              aria-label="Apply a look"
+              onChange={(e) => {
+                const grade = videoGradePreset(e.target.value as VideoGradePreset);
+                if (grade) controller.apply({ op: 'update_clip', clip: clip.id, set: { grade } }, `Apply ${e.target.value} look`);
+              }}
+            >
+              <option value="">{clip.grade ? 'Graded' : 'None'}</option>
+              {VIDEO_GRADE_PRESET_NAMES.map((name) => (
+                <option key={name} value={name}>
+                  {name.replace(/-/g, ' ')}
+                </option>
+              ))}
+            </select>
+          </Row>
+          {VIDEO_GRADE_CONTROLS.map((c) => (
+            <Row key={c.key} label={c.label} name={`grade.${c.key}`}>
+              <Commit
+                type="number"
+                min={c.min}
+                max={c.max}
+                step={c.step}
+                value={clip.grade?.[c.key] === undefined ? '' : String(clip.grade[c.key])}
+                placeholder="0"
+                aria-label={c.label}
+                disabled={disabled}
+                onCommit={(raw) => {
+                  const n = raw.trim() ? Number(raw) : 0;
+                  if (!Number.isFinite(n)) return;
+                  // Out-of-range values are clamped to the control's range.
+                  const grade = normalizeVideoGrade({ ...clip.grade, [c.key]: n });
+                  set('grade', grade, `Change ${c.label.toLowerCase()}`);
+                }}
+              />
+            </Row>
+          ))}
+        </>
       )}
       <Row label="Fade in (ms)" name="fadeIn">
         {number('fadeIn', 'Fade in', { min: 0, step: 100 })}

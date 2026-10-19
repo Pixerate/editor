@@ -1,4 +1,5 @@
 import { placeVideoRect } from './evaluate.js';
+import { videoGradeFfmpegFilters } from './grade.js';
 import { isVideoKeyframes, VIDEO_TRANSFORM_PROPERTIES, videoKeyframeFfmpegExpr, type VideoAnimatable } from './keyframes.js';
 import { formatVideoTimecode, formatVideoTimecodeFrames, isVideoDropFrameRate, videoHourFrames, videoTimecodeFrames, sortedVideoClips, videoAssetMap, videoClipBefore, videoClipEnd, videoClipOverhang, videoClipSpeed, videoProjectDuration, videoAssetHasSound } from './timeline.js';
 import { videoTransitionAudioCurve } from './types.js';
@@ -343,6 +344,8 @@ function buildFfmpeg(project: VideoProject, options: VideoFfmpegOptions, measure
 					`enable='between(t,${sec(clip.start)},${sec(end)})'`
 				];
 				if (tf?.rotation) notes.push(`Title "${clip.id}" is drawn without its rotation (drawtext cannot rotate).`);
+				if (videoGradeFfmpegFilters(clip.grade).length) notes.push(`Title "${clip.id}" is drawn without its grade (drawtext draws straight onto the picture); pass titleImage to grade titles.`);
+				if (clip.blend && clip.blend !== 'normal') notes.push(`Title "${clip.id}" is drawn without its blend mode (drawtext draws straight onto the picture); pass titleImage to blend titles.`);
 				graph.push(`[${cur}]drawtext=${opts.join(':')}[${next}]`);
 				cur = next;
 				continue;
@@ -364,6 +367,8 @@ function buildFfmpeg(project: VideoProject, options: VideoFfmpegOptions, measure
 				const s = expr(placed.scale, onChain('t'), 1, 'scale');
 				chain.push(`scale=w='max(2,trunc(${even(rect.width)}*(${s})/2)*2)':h='max(2,trunc(${even(rect.height)}*(${s})/2)*2)':eval=frame`);
 			}
+			const grade = videoGradeFfmpegFilters(clip.grade);
+			if (grade.length) chain.push('format=rgba', ...grade);
 			chain.push('format=yuva420p');
 			if (isVideoKeyframes(clip.opacity)) chain.push(`geq=lum='lum(X,Y)':cb='cb(X,Y)':cr='cr(X,Y)':a='alpha(X,Y)*clip(${expr(clip.opacity, onChain('T'), 1, 'opacity')},0,1)'`);
 			else if (clip.opacity !== undefined && clip.opacity < 1) chain.push(`colorchannelmixer=aa=${clip.opacity}`);

@@ -446,6 +446,24 @@ describe("ClipInspector (React)", () => {
     controller.destroy();
   });
 
+  it("grades a picture: a look, then single settings, clamped and removable", () => {
+    const controller = make();
+    act(() => root.render(<ClipInspector controller={controller} />));
+    act(() => controller.select(["c1"]));
+    choose($<HTMLSelectElement>('select[aria-label="Apply a look"]'), "warm");
+    expect(clip(controller, "c1")!.clip.grade).toEqual({ temperature: 0.4, saturation: 0.1 });
+    expect(controller.getState().undoLabel).toBe("Apply warm look");
+    commit($<HTMLInputElement>('input[aria-label="Exposure"]'), "9");
+    expect(clip(controller, "c1")!.clip.grade).toEqual({ exposure: 3, temperature: 0.4, saturation: 0.1 });
+    commit($<HTMLInputElement>('input[aria-label="Exposure"]'), "");
+    commit($<HTMLInputElement>('input[aria-label="Temperature"]'), "0");
+    commit($<HTMLInputElement>('input[aria-label="Saturation"]'), "0");
+    expect(clip(controller, "c1")!.clip.grade).toBeUndefined();
+    act(() => controller.select(["m1"]));
+    expect(container.querySelector('input[aria-label="Exposure"]')).toBeNull();
+    controller.destroy();
+  });
+
   it("sets a picture's blend mode, and offers none for sound", () => {
     const controller = make();
     act(() => root.render(<ClipInspector controller={controller} />));

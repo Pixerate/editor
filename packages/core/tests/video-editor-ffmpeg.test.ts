@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { applyVideoEdits, createVideoProject, parseVideoLoudnessMeasurement, toVideoFfmpeg, toVideoLoudnessMeasure, videoFrameAt, type VideoEdit, type VideoProject } from '../src/video-editor';
+import { applyVideoEdits, applyVideoGrade, createVideoProject, parseVideoLoudnessMeasurement, toVideoFfmpeg, toVideoLoudnessMeasure, videoFrameAt, type VideoEdit, type VideoProject } from '../src/video-editor';
 
 // Renders projects with a real ffmpeg (skipped when it is not on PATH): the string assertions in
 // video-editor.test.ts cannot tell whether ffmpeg accepts the filter graph.
@@ -151,6 +151,18 @@ describe.skipIf(!hasFfmpeg)('toVideoFfmpeg with a real ffmpeg', () => {
 		expect(pixel(out, 1.5, 316, 176)).toSatisfy((rgb: number[]) => near(rgb, [191, 128, 128]));
 		// Add: 0x80 + 0x40.
 		expect(pixel(out, 2.5, 316, 176)).toSatisfy((rgb: number[]) => near(rgb, [192, 192, 192]));
+	}, 120000);
+
+	it('grades colours as the preview does', () => {
+		const grades = [{ exposure: 0.5, contrast: 0.3 }, { saturation: -0.6, hue: 40 }, { temperature: 0.8, tint: -0.5 }, { exposure: -1, saturation: 0.8, temperature: -0.5 }];
+		const base: [number, number, number] = [180, 90, 60];
+		const p = project(grades.map((grade, i) => ({ op: 'add_clip' as const, track: 'v1', clip: { type: 'color' as const, id: `g${i}`, color: '#b45a3c', start: i * 1000, duration: 1000, grade } })));
+		const out = render(p, 'grade.mp4');
+		grades.forEach((grade, i) => {
+			const want = applyVideoGrade(grade, base);
+			const got = pixel(out, i + 0.5, 300, 170);
+			expect(got.every((v, k) => Math.abs(v - want[k]) < 10), `grade ${JSON.stringify(grade)}: got ${got}, want ${want}`).toBe(true);
+		});
 	}, 120000);
 
 	it('dodges and burns as the browser does', () => {

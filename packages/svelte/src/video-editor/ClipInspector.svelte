@@ -2,6 +2,10 @@
   import {
     findVideoClip,
     formatVideoTimecode,
+    normalizeVideoGrade,
+    VIDEO_GRADE_CONTROLS,
+    VIDEO_GRADE_PRESET_NAMES,
+    videoGradePreset,
     VIDEO_BLEND_MODE_LABELS,
     VIDEO_BLEND_MODES,
     VIDEO_FADE_CURVE_LABELS,
@@ -14,6 +18,8 @@
     type VideoEdit,
     type VideoEditorController,
     type VideoFadeCurve,
+    type VideoGradeControl,
+    type VideoGradePreset,
     type VideoKeyframeRow,
     type VideoTransitionType
   } from '@pixerate/editor/video-editor';
@@ -92,6 +98,20 @@
     if (!type) apply({ op: 'set_transition', clip: clip.id, transition: null }, 'Remove transition');
     else apply({ op: 'set_transition', clip: clip.id, transition: { ...clip.transition, type: type as VideoTransitionType, duration: clip.transition?.duration ?? 500 } }, 'Set transition');
   }
+  function gradeValue(c: VideoGradeControl, raw: string) {
+    if (!clip) return;
+    const n = raw.trim() ? Number(raw) : 0;
+    if (!Number.isFinite(n)) {
+      localError = { text: `${c.label} must be a number from ${c.min} to ${c.max}.`, revision: editor.revision };
+      return;
+    }
+    // Out-of-range values are clamped to the control's range.
+    set('grade', normalizeVideoGrade({ ...clip.grade, [c.key]: n }), `Change ${c.label.toLowerCase()}`);
+  }
+  function gradePreset(name: string) {
+    const grade = clip && name ? videoGradePreset(name as VideoGradePreset) : undefined;
+    if (clip && grade) apply({ op: 'update_clip', clip: clip.id, set: { grade } }, `Apply ${name} look`);
+  }
   function transitionAudioCurve(curve: string) {
     if (!clip?.transition) return;
     const { audioCurve: _, ...rest } = clip.transition;
@@ -143,6 +163,19 @@
             <option value={m}>{VIDEO_BLEND_MODE_LABELS[m]}</option>
           {/each}
         </select>
+      {/if}
+      {#if at?.track.kind === 'video'}
+        <span class="text-muted-foreground">Look</span>
+        <select class={input} aria-label="Apply a look" {disabled} value="" onchange={(e) => gradePreset(e.currentTarget.value)} data-field="gradePreset">
+          <option value="">{clip.grade ? 'graded' : 'none'}</option>
+          {#each VIDEO_GRADE_PRESET_NAMES as name (name)}
+            <option value={name}>{name.replace(/-/g, ' ')}</option>
+          {/each}
+        </select>
+        {#each VIDEO_GRADE_CONTROLS as c (c.key)}
+          <span class="text-muted-foreground">{c.label}</span>
+          <input class={input} type="number" min={c.min} max={c.max} step={c.step} placeholder="0" aria-label={c.label} {disabled} value={clip.grade?.[c.key] ?? ''} onchange={(e) => gradeValue(c, e.currentTarget.value)} data-field="grade.{c.key}" />
+        {/each}
       {/if}
       <span class="text-muted-foreground">Fade in</span>
       <input class={input} type="number" min="0" step="100" placeholder="0 ms" aria-label="Fade in" {disabled} value={clip.fadeIn ?? ''} onchange={(e) => number('fadeIn', e.currentTarget.value, 'Change fade in', { min: 0, what: 'Fade in must be a number of ms, 0 or more.' })} data-field="fadeIn" />

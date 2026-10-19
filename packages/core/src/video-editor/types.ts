@@ -102,6 +102,25 @@ export const videoTransitionAudioCurve = (t: VideoTransition): VideoFadeCurve =>
 export type VideoBlendMode = 'normal' | 'multiply' | 'screen' | 'overlay' | 'darken' | 'lighten' | 'color-dodge' | 'color-burn' | 'hard-light' | 'soft-light' | 'difference' | 'exclusion' | 'add';
 export const VIDEO_BLEND_MODES = ['normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten', 'color-dodge', 'color-burn', 'hard-light', 'soft-light', 'difference', 'exclusion', 'add'] as const;
 
+/**
+ * Colour correction for a clip's picture (see `VIDEO_GRADE_CONTROLS` for ranges). Applied in a fixed
+ * order: exposure, contrast, saturation, hue, then white balance (temperature and tint).
+ */
+export interface VideoGrade {
+	/** Stops: +1 doubles every channel (default 0). */
+	exposure?: number;
+	/** -1 (flat grey) to 1 (twice as steep), around mid grey (default 0). */
+	contrast?: number;
+	/** -1 (black and white) to 1 (twice as saturated); default 0. */
+	saturation?: number;
+	/** Hue rotation in degrees (default 0). */
+	hue?: number;
+	/** -1 (cool) to 1 (warm); default 0. */
+	temperature?: number;
+	/** -1 (green) to 1 (magenta); default 0. */
+	tint?: number;
+}
+
 interface VideoClipBase {
 	id: string;
 	name?: string;
@@ -116,6 +135,8 @@ interface VideoClipBase {
 	fit?: VideoFit;
 	/** How the picture mixes with what is beneath it (default normal). */
 	blend?: VideoBlendMode;
+	/** Colour correction of the picture. */
+	grade?: VideoGrade;
 	/** Fade in from nothing over this long (ms), pictures and sound. */
 	fadeIn?: number;
 	/** Fade out over this long (ms). */

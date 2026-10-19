@@ -1,5 +1,6 @@
+import { VIDEO_GRADE_CONTROLS } from './grade.js';
 import { VIDEO_EASE_NAMES, type VideoAnimatable, type VideoEase, type VideoKey, type VideoKeyframes } from './keyframes.js';
-import { VIDEO_BLEND_MODES, VIDEO_CLIP_TYPES, VIDEO_FADE_CURVES, VIDEO_FITS, VIDEO_TRANSITION_TYPES, VIDEO_WIPE_DIRECTIONS, type VideoAsset, type VideoClip, type VideoMarker, type VideoProject, type VideoTrack, type VideoTransform, type VideoTransition } from './types.js';
+import { VIDEO_BLEND_MODES, VIDEO_CLIP_TYPES, VIDEO_FADE_CURVES, VIDEO_FITS, VIDEO_TRANSITION_TYPES, VIDEO_WIPE_DIRECTIONS, type VideoAsset, type VideoClip, type VideoGrade, type VideoMarker, type VideoProject, type VideoTrack, type VideoTransform, type VideoTransition } from './types.js';
 
 const isObject = (v: unknown): v is Record<string, any> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const fail = (path: string, what: string): never => {
@@ -79,6 +80,15 @@ export function parseVideoTransform(v: unknown, path: string): VideoTransform | 
 	});
 }
 
+export function parseVideoGrade(v: unknown, path: string): VideoGrade | undefined {
+	if (v === undefined) return undefined;
+	if (!isObject(v)) return fail(path, 'must be an object such as { exposure, contrast, saturation }');
+	const known = new Set(VIDEO_GRADE_CONTROLS.map((c) => c.key as string));
+	const unknown = Object.keys(v).find((k) => !known.has(k));
+	if (unknown) fail(`${path}.${unknown}`, `is not a grade setting; use ${[...known].join(', ')}`);
+	return compact(Object.fromEntries(VIDEO_GRADE_CONTROLS.map((c) => [c.key, num(v[c.key], `${path}.${c.key}`, { optional: true, min: c.min, max: c.max })]))) as VideoGrade;
+}
+
 export function parseVideoTransition(v: unknown, path: string): VideoTransition | undefined {
 	if (v === undefined) return undefined;
 	if (!isObject(v)) return fail(path, 'must be an object { type, duration }');
@@ -121,6 +131,7 @@ export function parseVideoClip(v: unknown, path = 'clip'): VideoClip {
 		transform: parseVideoTransform(v.transform, `${path}.transform`),
 		fit: oneOf(v.fit, VIDEO_FITS, `${path}.fit`),
 		blend: oneOf(v.blend, VIDEO_BLEND_MODES, `${path}.blend`),
+		grade: parseVideoGrade(v.grade, `${path}.grade`),
 		fadeIn: num(v.fadeIn, `${path}.fadeIn`, { optional: true, min: 0 }),
 		fadeOut: num(v.fadeOut, `${path}.fadeOut`, { optional: true, min: 0 }),
 		transition: parseVideoTransition(v.transition, `${path}.transition`)

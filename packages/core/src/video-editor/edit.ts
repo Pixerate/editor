@@ -165,7 +165,7 @@ function retimeClipKeys(clip: VideoClip, fn: (v: VideoAnimatable) => VideoAnimat
 	}
 }
 
-const OPTIONAL_CLIP_FIELDS = ['name', 'opacity', 'transform', 'fit', 'blend', 'fadeIn', 'fadeOut', 'fadeInCurve', 'fadeOutCurve', 'transition', 'in', 'speed', 'volume', 'muted', 'color', 'fontSize', 'fontFamily', 'fontWeight', 'background'];
+const OPTIONAL_CLIP_FIELDS = ['name', 'opacity', 'transform', 'fit', 'blend', 'grade', 'fadeIn', 'fadeOut', 'fadeInCurve', 'fadeOutCurve', 'transition', 'in', 'speed', 'volume', 'muted', 'color', 'fontSize', 'fontFamily', 'fontWeight', 'background'];
 
 /** Times the new range and nudge ops require, checked before anything changes. */
 const TIME_FIELDS: Partial<Record<VideoEditOp, string[]>> = { slip_clip: ['delta'], roll_edit: ['delta'], slide_clip: ['delta'], lift_range: ['from', 'to'], extract_range: ['from', 'to'], split_at: ['at'] };
