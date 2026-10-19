@@ -9,8 +9,9 @@ beforeAll(() => {
       url: "https://example.com/editor",
     },
   );
-  globalThis.document = dom.window.document as any;
-  globalThis.window = dom.window as any;
+  // Vitest 5 environments expose `document` / `window` as getters, so stub them instead of assigning.
+  vi.stubGlobal("document", dom.window.document);
+  vi.stubGlobal("window", dom.window);
   (globalThis as any).Node = dom.window.Node;
   (globalThis as any).MouseEvent = dom.window.MouseEvent;
   (globalThis as any).BeforeUnloadEvent =

@@ -1877,6 +1877,12 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: Vitest's jsdom environment gives `Blob` from jsdom but `Uint8Array` from Node, and jsdom's Blob only accepts its own realm's buffers. `URL.createObjectURL` exists (it is Node's), so `downloadPsd` took the browser branch.
 - **Solution / Workaround**: In tests, set `URL.createObjectURL` to `undefined` around the click so `downloadPsd` skips the download and only returns the warnings, then restore it. Browsers are unaffected.
 
+### [svelte/tests] Vitest 5 Makes `globalThis.document` Read-Only
+
+- **Issue / Symptom**: After the vitest 4 → 5 upgrade, Svelte tests that build their own JSDOM fail before running: `TypeError: Cannot set property document of [object Window] which has only a getter`.
+- **Root Cause**: Vitest 5's test environment defines `document` and `window` on the global as getter-only properties, so `globalThis.document = …` throws in strict mode.
+- **Solution / Workaround**: Use `vi.stubGlobal("document", dom.window.document)` and `vi.stubGlobal("window", dom.window)` (they redefine the property) instead of assigning. This also works on vitest 4.
+
 ### [core/video-editor] A Blend Inside a Compound Clip Must Use the Backdrop's Alpha in ffmpeg
 
 - **Issue / Symptom**: Built the obvious way, a `multiply` (or any non-normal) clip inside a nested sequence comes out black in the export wherever nothing else in the sequence is beneath it, while the preview shows the clip's own colour there.
