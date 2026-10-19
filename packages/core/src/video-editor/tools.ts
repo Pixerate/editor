@@ -8,7 +8,7 @@ import { videoFrameAt } from './evaluate.js';
 import { VIDEO_EASE_NAMES, VIDEO_KEYFRAME_PROPERTIES, VIDEO_TRANSFORM_PROPERTIES, type VideoAnimatable, type VideoKeyframeProperty } from './keyframes.js';
 import { videoContactSheetSvg, videoProjectSvg } from './render.js';
 import { findVideoClip, findVideoGaps, formatVideoTimecode, sortedVideoClips, videoClipEnd, videoClipSourceRange, videoProjectDuration } from './timeline.js';
-import { VIDEO_FADE_CURVES, VIDEO_FITS, VIDEO_PLACEMENT_MODES, VIDEO_TRANSITION_TYPES, VIDEO_WIPE_DIRECTIONS, type VideoAsset, type VideoProject } from './types.js';
+import { VIDEO_BLEND_MODES, VIDEO_FADE_CURVES, VIDEO_FITS, VIDEO_PLACEMENT_MODES, VIDEO_TRANSITION_TYPES, VIDEO_WIPE_DIRECTIONS, type VideoAsset, type VideoProject } from './types.js';
 
 /** Times in results, to a tenth of a millisecond. */
 const round = (ms: number) => Math.round(ms * 10) / 10;
@@ -82,6 +82,7 @@ const CLIP_COMMON: Record<string, JsonSchema> = {
 	opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Opacity 0–1 (default 1). A number replaces any keyframes; set_video_keyframes animates it.' },
 	transform: TRANSFORM,
 	fit: { type: 'string', enum: [...VIDEO_FITS], description: 'How the picture fits the frame before the transform, as CSS object-fit (default contain for media, fill for colours).' },
+	blend: { type: 'string', enum: [...VIDEO_BLEND_MODES], description: 'How the picture mixes with what is beneath it, as CSS mix-blend-mode (default normal): multiply darkens (shadows, textures), screen and add lighten (light leaks, flares, glows), overlay and soft-light add contrast, difference and exclusion invert.' },
 	fadeIn: MS('Fade up from nothing (picture and sound) over this long'),
 	fadeOut: MS('Fade down to nothing over this long')
 };
@@ -545,12 +546,12 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 		name: 'update_video_clip',
 		title: 'Change a clip',
 		description:
-			'Changes a clip\'s properties (one undo step): opacity, transform, fit, fades, name; for media volume, mute, the sound\'s fade curves, speed (keeps the stretch of source, so the length changes) or asset; for titles text and style; for colours the colour. Fields in "remove" go back to their defaults. Use move / trim for timing. Returns the clip.',
+			'Changes a clip\'s properties (one undo step): opacity, transform, fit, blend mode, fades, name; for media volume, mute, the sound\'s fade curves, speed (keeps the stretch of source, so the length changes) or asset; for titles text and style; for colours the colour. Fields in "remove" go back to their defaults. Use move / trim for timing. Returns the clip.',
 		inputSchema: object(
 			{
 				clip: CLIP_ID,
 				set: object({ ...CLIP_COMMON, ...MEDIA_FIELDS, asset: { ...ASSET_ID, description: 'For media: play another asset (same in point).' }, ...TEXT_FIELDS, color: COLOR('Text colour, or a colour clip\'s fill') }, [], 'Fields to replace (only those that fit the clip\'s type).'),
-				remove: { type: 'array', items: { type: 'string', enum: ['name', 'opacity', 'transform', 'fit', 'fadeIn', 'fadeOut', 'fadeInCurve', 'fadeOutCurve', 'in', 'speed', 'volume', 'muted', 'fontSize', 'fontFamily', 'fontWeight', 'background'] }, description: 'Fields to reset to their defaults.' }
+				remove: { type: 'array', items: { type: 'string', enum: ['name', 'opacity', 'transform', 'fit', 'blend', 'fadeIn', 'fadeOut', 'fadeInCurve', 'fadeOutCurve', 'in', 'speed', 'volume', 'muted', 'fontSize', 'fontFamily', 'fontWeight', 'background'] }, description: 'Fields to reset to their defaults.' }
 			},
 			['clip']
 		),
@@ -558,7 +559,7 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 		handler: ({ clip, set, remove }) => {
 			const current = clipOut(project(), clip);
 			if (current && set) {
-				const allowed = new Set(['name', 'opacity', 'transform', 'fit', 'fadeIn', 'fadeOut', ...(current.type === 'media' ? ['in', 'speed', 'volume', 'muted', 'asset', 'fadeInCurve', 'fadeOutCurve'] : current.type === 'text' ? Object.keys(TEXT_FIELDS) : ['color'])]);
+				const allowed = new Set(['name', 'opacity', 'transform', 'fit', 'blend', 'fadeIn', 'fadeOut', ...(current.type === 'media' ? ['in', 'speed', 'volume', 'muted', 'asset', 'fadeInCurve', 'fadeOutCurve'] : current.type === 'text' ? Object.keys(TEXT_FIELDS) : ['color'])]);
 				const wrong = Object.keys(set).filter((k) => !allowed.has(k));
 				if (wrong.length) throw new Error(`${wrong.map((k) => `"${k}"`).join(', ')} cannot be set on a ${current.type} clip; it takes ${[...allowed].join(', ')}.`);
 			}

@@ -35,6 +35,7 @@ export function videoFrameToSvg(frame: VideoFrame, options: VideoSvgOptions = {}
 		const { rect } = layer;
 		const attrs: string[] = [];
 		if (layer.opacity < 1) attrs.push(`opacity="${n(layer.opacity)}"`);
+		if (layer.blend) attrs.push(`style="mix-blend-mode:${layer.blend === 'add' ? 'plus-lighter' : layer.blend}"`);
 		if (layer.rotation) attrs.push(`transform="rotate(${n(layer.rotation)} ${n(rect.x + rect.width / 2)} ${n(rect.y + rect.height / 2)})"`);
 		if (layer.wipe) {
 			const r = videoWipeRect(rect, layer.wipe);
@@ -99,7 +100,7 @@ export function videoContactSheetSvg(project: VideoProject, times: readonly numb
 export type VideoCanvasContext = Pick<
 	CanvasRenderingContext2D,
 	'save' | 'restore' | 'fillRect' | 'drawImage' | 'translate' | 'rotate' | 'beginPath' | 'rect' | 'clip' | 'fillText' | 'measureText' | 'setTransform'
-> & { globalAlpha: number; fillStyle: string | CanvasGradient | CanvasPattern; font: string; textAlign: CanvasTextAlign; textBaseline: CanvasTextBaseline; strokeStyle: string | CanvasGradient | CanvasPattern; lineWidth: number; strokeRect(x: number, y: number, w: number, h: number): void };
+> & { globalAlpha: number; globalCompositeOperation: GlobalCompositeOperation; fillStyle: string | CanvasGradient | CanvasPattern; font: string; textAlign: CanvasTextAlign; textBaseline: CanvasTextBaseline; strokeStyle: string | CanvasGradient | CanvasPattern; lineWidth: number; strokeRect(x: number, y: number, w: number, h: number): void };
 
 /**
  * Draws a frame on a 2D canvas scaled by `scale` (canvas pixels per frame pixel). `sourceFor`
@@ -116,6 +117,7 @@ export function drawVideoFrame(ctx: VideoCanvasContext, frame: VideoFrame, sourc
 		const { rect } = layer;
 		ctx.save();
 		ctx.globalAlpha = layer.opacity;
+		if (layer.blend && layer.blend !== 'normal') ctx.globalCompositeOperation = layer.blend === 'add' ? 'lighter' : layer.blend;
 		if (layer.rotation) {
 			ctx.translate(rect.x + rect.width / 2, rect.y + rect.height / 2);
 			ctx.rotate((layer.rotation * Math.PI) / 180);

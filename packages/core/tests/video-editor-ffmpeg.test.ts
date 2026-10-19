@@ -134,6 +134,39 @@ describe.skipIf(!hasFfmpeg)('toVideoFfmpeg with a real ffmpeg', () => {
 		expect(after.truePeak).toBeLessThanOrEqual(-0.5);
 	}, 120000);
 
+	it('blends layers with what is beneath, through their opacity, only where they cover', () => {
+		const p = project([
+			{ op: 'add_clip', track: 'v1', clip: { type: 'color', id: 'grey', color: '#808080', duration: 3000 } },
+			{ op: 'add_track', track: { kind: 'video', id: 'top' } },
+			{ op: 'add_clip', track: 'top', clip: { type: 'media', id: 'm', asset: 'still', duration: 1000, fit: 'none', blend: 'multiply' } },
+			{ op: 'add_clip', track: 'top', clip: { type: 'media', id: 's', asset: 'still', start: 1000, duration: 1000, fit: 'none', blend: 'screen', opacity: 0.5 } },
+			{ op: 'add_clip', track: 'top', clip: { type: 'color', id: 'a', color: '#404040', start: 2000, duration: 1000, blend: 'add' } }
+		]);
+		const out = render(p, 'blend.mp4');
+		const near = (rgb: number[], want: number[]) => rgb.every((v, i) => Math.abs(v - want[i]) < 24);
+		// Multiply red over grey: (128, 0, 0) inside the 200 px still, grey outside it.
+		expect(pixel(out, 0.5, 316, 176)).toSatisfy((rgb: number[]) => near(rgb, [128, 0, 0]));
+		expect(pixel(out, 0.5, 40, 40)).toSatisfy((rgb: number[]) => near(rgb, [128, 128, 128]));
+		// Screen red at half opacity: halfway between grey and (255, 128, 128).
+		expect(pixel(out, 1.5, 316, 176)).toSatisfy((rgb: number[]) => near(rgb, [191, 128, 128]));
+		// Add: 0x80 + 0x40.
+		expect(pixel(out, 2.5, 316, 176)).toSatisfy((rgb: number[]) => near(rgb, [192, 192, 192]));
+	}, 120000);
+
+	it('dodges and burns as the browser does', () => {
+		const p = project([
+			{ op: 'add_clip', track: 'v1', clip: { type: 'color', id: 'base', color: '#c8c8c8', duration: 2000 } },
+			{ op: 'add_track', track: { kind: 'video', id: 'top' } },
+			{ op: 'add_clip', track: 'top', clip: { type: 'color', id: 'd', color: '#1e1e1e', duration: 1000, blend: 'color-dodge' } },
+			{ op: 'add_clip', track: 'top', clip: { type: 'color', id: 'b', color: '#c8c8c8', start: 1000, duration: 1000, blend: 'color-burn' } }
+		]);
+		const out = render(p, 'dodge.mp4');
+		const near = (rgb: number[], want: number[]) => rgb.every((v, i) => Math.abs(v - want[i]) < 12);
+		// CSS: dodge 200 / (1 - 30/255) = 227; burn 1 - (1 - 200/255) / (200/255) = 185.
+		expect(pixel(out, 0.5, 300, 170)).toSatisfy((rgb: number[]) => near(rgb, [227, 227, 227]));
+		expect(pixel(out, 1.5, 300, 170)).toSatisfy((rgb: number[]) => near(rgb, [185, 185, 185]));
+	}, 120000);
+
 	it('overlays titles given as images, with their fades', () => {
 		const p = project([
 			{ op: 'add_clip', track: 'v1', clip: { type: 'color', id: 'k', color: '#0000ff', duration: 2000 } },

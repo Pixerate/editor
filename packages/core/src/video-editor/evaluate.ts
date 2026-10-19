@@ -1,7 +1,7 @@
 import { videoValueAt } from './keyframes.js';
 import { sortedVideoClips, videoAssetMap, videoClipAfter, videoClipBefore, videoClipEnd, videoClipSpeed, videoAssetHasSound } from './timeline.js';
 import { videoTransitionAudioCurve } from './types.js';
-import type { VideoAsset, VideoClip, VideoFadeCurve, VideoFit, VideoProject, VideoTransition, VideoTextClip, VideoTrack, VideoWipeDirection } from './types.js';
+import type { VideoAsset, VideoBlendMode, VideoClip, VideoFadeCurve, VideoFit, VideoProject, VideoTransition, VideoTextClip, VideoTrack, VideoWipeDirection } from './types.js';
 
 /** A rectangle in frame pixels. */
 export interface VideoRect {
@@ -34,6 +34,8 @@ export interface VideoLayer {
 	text?: { text: string; color: string; fontSize: number; fontFamily: string; fontWeight: number; background?: string };
 	/** For colour clips and dips. */
 	color?: string;
+	/** How it mixes with the layers beneath (absent = normal). */
+	blend?: VideoBlendMode;
 }
 
 /** One sound playing at a moment. */
@@ -211,6 +213,7 @@ export function videoFrameAt(project: VideoProject, time: number): VideoFrame {
 			const rect = placeVideoRect(project, size, clip.type === 'text' ? 'fill' : fit, clip.transform, clipTime);
 			const layer: VideoLayer = { clip: clip.id, track: track.id, type: clip.type, opacity: clamp01(opacity), rect, rotation: videoValueAt(clip.transform?.rotation, clipTime, 0) };
 			if (wipe) layer.wipe = wipe;
+			if (clip.blend && clip.blend !== 'normal') layer.blend = clip.blend;
 			if (clip.type === 'media') Object.assign(layer, { asset: asset!.id, assetKind: asset!.kind, src: asset!.src, sourceTime });
 			if (clip.type === 'text') layer.text = videoTextStyle(clip);
 			if (clip.type === 'color') layer.color = clip.color;

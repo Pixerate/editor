@@ -2,6 +2,8 @@
   import {
     findVideoClip,
     formatVideoTimecode,
+    VIDEO_BLEND_MODE_LABELS,
+    VIDEO_BLEND_MODES,
     VIDEO_FADE_CURVE_LABELS,
     VIDEO_FADE_CURVES,
     VIDEO_TRANSITION_TYPES,
@@ -134,6 +136,14 @@
       <span class="tabular-nums" data-field="start">{formatVideoTimecode(clip.start, fps)}</span>
       <span class="text-muted-foreground">Duration</span>
       <span class="tabular-nums" data-field="duration">{formatVideoTimecode(clip.duration, fps)} ({(clip.duration / 1000).toFixed(2)} s)</span>
+      {#if at?.track.kind === 'video'}
+        <span class="text-muted-foreground">Blend</span>
+        <select class={input} aria-label="Blend mode" {disabled} value={clip.blend ?? 'normal'} onchange={(e) => set('blend', e.currentTarget.value === 'normal' ? undefined : e.currentTarget.value, 'Change blend mode')} data-field="blend">
+          {#each VIDEO_BLEND_MODES as m (m)}
+            <option value={m}>{VIDEO_BLEND_MODE_LABELS[m]}</option>
+          {/each}
+        </select>
+      {/if}
       <span class="text-muted-foreground">Fade in</span>
       <input class={input} type="number" min="0" step="100" placeholder="0 ms" aria-label="Fade in" {disabled} value={clip.fadeIn ?? ''} onchange={(e) => number('fadeIn', e.currentTarget.value, 'Change fade in', { min: 0, what: 'Fade in must be a number of ms, 0 or more.' })} data-field="fadeIn" />
       <span class="text-muted-foreground">Fade out</span>

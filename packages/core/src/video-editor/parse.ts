@@ -1,5 +1,5 @@
 import { VIDEO_EASE_NAMES, type VideoAnimatable, type VideoEase, type VideoKey, type VideoKeyframes } from './keyframes.js';
-import { VIDEO_CLIP_TYPES, VIDEO_FADE_CURVES, VIDEO_FITS, VIDEO_TRANSITION_TYPES, VIDEO_WIPE_DIRECTIONS, type VideoAsset, type VideoClip, type VideoMarker, type VideoProject, type VideoTrack, type VideoTransform, type VideoTransition } from './types.js';
+import { VIDEO_BLEND_MODES, VIDEO_CLIP_TYPES, VIDEO_FADE_CURVES, VIDEO_FITS, VIDEO_TRANSITION_TYPES, VIDEO_WIPE_DIRECTIONS, type VideoAsset, type VideoClip, type VideoMarker, type VideoProject, type VideoTrack, type VideoTransform, type VideoTransition } from './types.js';
 
 const isObject = (v: unknown): v is Record<string, any> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const fail = (path: string, what: string): never => {
@@ -120,6 +120,7 @@ export function parseVideoClip(v: unknown, path = 'clip'): VideoClip {
 		opacity: parseVideoAnimatable(v.opacity, `${path}.opacity`, { optional: true, min: 0, max: 1 }),
 		transform: parseVideoTransform(v.transform, `${path}.transform`),
 		fit: oneOf(v.fit, VIDEO_FITS, `${path}.fit`),
+		blend: oneOf(v.blend, VIDEO_BLEND_MODES, `${path}.blend`),
 		fadeIn: num(v.fadeIn, `${path}.fadeIn`, { optional: true, min: 0 }),
 		fadeOut: num(v.fadeOut, `${path}.fadeOut`, { optional: true, min: 0 }),
 		transition: parseVideoTransition(v.transition, `${path}.transition`)

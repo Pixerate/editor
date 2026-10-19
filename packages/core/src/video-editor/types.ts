@@ -94,6 +94,14 @@ export interface VideoTransition {
 /** The curve a transition's sound fades follow (its `audioCurve`, else the default for its type). */
 export const videoTransitionAudioCurve = (t: VideoTransition): VideoFadeCurve => t.audioCurve ?? (t.type === 'dip' ? 'linear' : 'equal-power');
 
+/**
+ * How a clip's picture mixes with what is beneath it, as in CSS `mix-blend-mode` (`add` sums the
+ * colours, `plus-lighter` in CSS). These are the modes the canvas preview, SVG frames and ffmpeg's
+ * `blend` filter all share.
+ */
+export type VideoBlendMode = 'normal' | 'multiply' | 'screen' | 'overlay' | 'darken' | 'lighten' | 'color-dodge' | 'color-burn' | 'hard-light' | 'soft-light' | 'difference' | 'exclusion' | 'add';
+export const VIDEO_BLEND_MODES = ['normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten', 'color-dodge', 'color-burn', 'hard-light', 'soft-light', 'difference', 'exclusion', 'add'] as const;
+
 interface VideoClipBase {
 	id: string;
 	name?: string;
@@ -106,6 +114,8 @@ interface VideoClipBase {
 	transform?: VideoTransform;
 	/** Default contain. */
 	fit?: VideoFit;
+	/** How the picture mixes with what is beneath it (default normal). */
+	blend?: VideoBlendMode;
 	/** Fade in from nothing over this long (ms), pictures and sound. */
 	fadeIn?: number;
 	/** Fade out over this long (ms). */

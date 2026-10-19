@@ -1,7 +1,7 @@
 import type { VideoEdit } from './edit.js';
 import { isVideoKeyframes, removeVideoKey, setVideoKey, VIDEO_KEYFRAME_LIMITS, VIDEO_TRANSFORM_PROPERTIES, videoValueAt, type VideoAnimatable, type VideoKeyframeProperty } from './keyframes.js';
 import { findVideoClip, formatVideoTimecode, videoClipEnd, videoClipSpeed, videoAssetMap, videoAssetHasSound } from './timeline.js';
-import type { VideoAsset, VideoAssetKind, VideoClip, VideoFadeCurve, VideoPlacementMode, VideoProject } from './types.js';
+import type { VideoAsset, VideoAssetKind, VideoBlendMode, VideoClip, VideoFadeCurve, VideoPlacementMode, VideoProject } from './types.js';
 
 // Framework-free helpers the React and Svelte timelines share, so both draw and drag alike.
 
@@ -41,6 +41,23 @@ export function videoClipShowsWaveform(clip: VideoClip, asset: VideoAsset | unde
 	if (clip.type !== 'media' || mode === 'none' || !videoAssetHasSound(asset)) return false;
 	return mode === 'all' || asset!.kind === 'audio';
 }
+
+/** Names for the blend modes, for menus. */
+export const VIDEO_BLEND_MODE_LABELS: Readonly<Record<VideoBlendMode, string>> = {
+	normal: 'Normal',
+	multiply: 'Multiply',
+	screen: 'Screen',
+	overlay: 'Overlay',
+	darken: 'Darken',
+	lighten: 'Lighten',
+	'color-dodge': 'Colour dodge',
+	'color-burn': 'Colour burn',
+	'hard-light': 'Hard light',
+	'soft-light': 'Soft light',
+	difference: 'Difference',
+	exclusion: 'Exclusion',
+	add: 'Add'
+};
 
 /** Names for the sound fade curves, for menus. */
 export const VIDEO_FADE_CURVE_LABELS: Readonly<Record<VideoFadeCurve, string>> = {

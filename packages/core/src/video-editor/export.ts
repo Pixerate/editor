@@ -2,7 +2,7 @@ import { placeVideoRect } from './evaluate.js';
 import { isVideoKeyframes, VIDEO_TRANSFORM_PROPERTIES, videoKeyframeFfmpegExpr, type VideoAnimatable } from './keyframes.js';
 import { formatVideoTimecode, formatVideoTimecodeFrames, isVideoDropFrameRate, videoHourFrames, videoTimecodeFrames, sortedVideoClips, videoAssetMap, videoClipBefore, videoClipEnd, videoClipOverhang, videoClipSpeed, videoProjectDuration, videoAssetHasSound } from './timeline.js';
 import { videoTransitionAudioCurve } from './types.js';
-import type { VideoAsset, VideoClip, VideoFadeCurve, VideoProject, VideoTextClip, VideoTrack } from './types.js';
+import type { VideoAsset, VideoBlendMode, VideoClip, VideoFadeCurve, VideoProject, VideoTextClip, VideoTrack } from './types.js';
 
 // ---------------------------------------------------------------------------------------------
 // CMX 3600 EDL
@@ -177,6 +177,21 @@ export interface VideoFfmpegExport {
 }
 
 const sec = (ms: number) => String(Math.round(ms) / 1000);
+/** ffmpeg `blend` modes for the blend modes. */
+const FFMPEG_BLEND: Record<Exclude<VideoBlendMode, 'normal'>, string> = {
+	multiply: 'multiply',
+	screen: 'screen',
+	overlay: 'overlay',
+	darken: 'darken',
+	lighten: 'lighten',
+	'color-dodge': 'dodge',
+	'color-burn': 'burn',
+	'hard-light': 'hardlight',
+	'soft-light': 'softlight',
+	difference: 'difference',
+	exclusion: 'exclusion',
+	add: 'addition'
+};
 /** `afade`'s curve for a fade shape (the same formulas as `videoFadeCurveGain`); nothing for linear, its default. */
 const AFADE_CURVES: Record<VideoFadeCurve, string> = { linear: 'tri', 'equal-power': 'qsin', 's-curve': 'hsin', exponential: 'cub', logarithmic: 'ipar' };
 const afadeCurve = (curve: VideoFadeCurve | undefined) => (curve && curve !== 'linear' ? `:curve=${AFADE_CURVES[curve]}` : '');
@@ -244,6 +259,7 @@ function buildFfmpeg(project: VideoProject, options: VideoFfmpegOptions, measure
 	let cur = 'base';
 	let usesDrawtext = false;
 	const animated = new Set<string>();
+	const blended = new Set<VideoBlendMode>();
 	let k = 0;
 	// Keyframes become piecewise-linear expressions; eased segments get a breakpoint every two frames.
 	const step = 2000 / fps;
@@ -372,7 +388,21 @@ function buildFfmpeg(project: VideoProject, options: VideoFfmpegOptions, measure
 				return isVideoKeyframes(v) ? `${axis}='${Math.round(axis === 'x' ? project.width / 2 : project.height / 2)}+(${expr(v, onTimeline, 0, 'position')})-${axis === 'x' ? 'w' : 'h'}/2'` : `${axis}='${Math.round(c)}-${axis === 'x' ? 'w' : 'h'}/2'`;
 			};
 			graph.push(`${source.startsWith('[') ? source : `${source},`}${chain.join(',')}[l${next}]`);
-			graph.push(`[${cur}][l${next}]overlay=${at('x', cx)}:${at('y', cy)}:eof_action=pass:${enable}[${next}]`);
+			if (clip.blend && clip.blend !== 'normal') {
+				// Place the layer on a transparent full frame, blend that with the composite in RGB, then
+				// lay the blend over the composite through the layer's own alpha (its opacity and fades).
+				graph.push(`color=c=black@0:s=${W}x${H}:r=${fps}:d=${sec(D)},format=yuva420p[t${next}]`);
+				graph.push(`[t${next}][l${next}]overlay=${at('x', cx)}:${at('y', cy)}:eof_action=pass:${enable},format=gbrap,split[f${next}][g${next}]`);
+				graph.push(`[${cur}]format=gbrap,split[c${next}][d${next}]`);
+				// ffmpeg's dodge and burn divide by the first ("top") input, the others test it: measured against
+				// the CSS formulas, dodge and burn match with the layer first, the rest with the composite first.
+				const layerFirst = clip.blend === 'color-dodge' || clip.blend === 'color-burn';
+				graph.push(`${layerFirst ? `[f${next}][c${next}]` : `[c${next}][f${next}]`}blend=all_mode=${FFMPEG_BLEND[clip.blend]}[b${next}]`);
+				graph.push(`[g${next}]alphaextract[m${next}]`);
+				graph.push(`[b${next}][m${next}]alphamerge[x${next}]`);
+				graph.push(`[d${next}][x${next}]overlay=format=gbrp,format=yuva420p[${next}]`);
+				blended.add(clip.blend);
+			} else graph.push(`[${cur}][l${next}]overlay=${at('x', cx)}:${at('y', cy)}:eof_action=pass:${enable}[${next}]`);
 			cur = next;
 			const before = clip.transition ? videoClipBefore(track, clip) : null;
 			if (before && clip.transition!.type === 'dip') {
@@ -395,6 +425,7 @@ function buildFfmpeg(project: VideoProject, options: VideoFfmpegOptions, measure
 		notes.push('Video assets are assumed to have sound; set "hasAudio": false on any that do not, or ffmpeg will stop at a missing audio stream.');
 	if (animated.size)
 		notes.push(`Keyframed ${[...animated].sort().join(', ')} ${animated.size > 1 ? 'are' : 'is'} rendered as straight lines between keys, with eased segments sampled every two frames${animated.has('scale') ? '; animated scale needs ffmpeg 5 or later (scale with eval=frame)' : ''}.`);
+	if (blended.has('soft-light')) notes.push("ffmpeg's soft-light blend uses a slightly different formula from the browser's, so the render can differ a little from the preview.");
 	if (usesDrawtext) notes.push('Titles use drawtext, which needs an ffmpeg built with libfreetype (Homebrew\'s is not: check `ffmpeg -filters | grep drawtext`); pass titleImage to render them as images instead.');
 	const filterComplex = graph.join(';');
 	if (measure) {

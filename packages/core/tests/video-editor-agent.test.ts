@@ -85,6 +85,19 @@ describe('video agent tasks, through the tools only', () => {
 		expect(await fail('export_video_ffmpeg', { loudness: { measured: { integrated: -30 } } })).toContain('truePeak');
 	});
 
+	it('blends a light leak over the footage and takes it back to normal', async () => {
+		const { call, fail } = tools();
+		await call('add_video_asset', { id: 'leak', kind: 'video', src: 'leak.mp4', duration: 5000, hasAudio: false });
+		await call('add_video_track', { kind: 'video', id: 'fx', at: 0 });
+		await call('add_video_clip', { track: 'fx', clip: { type: 'media', id: 'l', asset: 'leak', blend: 'screen' } });
+		expect((await call('get_video_frame', { time: 100 })).layers[0].blend).toBe('screen');
+		const set = await call('update_video_clip', { clip: 'l', set: { blend: 'add' } });
+		expect(set.clip.blend).toBe('add');
+		expect(await fail('update_video_clip', { clip: 'l', set: { blend: 'dodge' } })).toContain('blend');
+		const reset = await call('update_video_clip', { clip: 'l', remove: ['blend'] });
+		expect(reset.clip.blend).toBeUndefined();
+	});
+
 	it('crossfades sound at equal power unless told otherwise', async () => {
 		const { call, fail } = tools();
 		await call('add_video_asset', { id: 'm', kind: 'audio', src: 'm.wav', duration: 20000 });

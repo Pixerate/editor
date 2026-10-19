@@ -2,6 +2,8 @@ import React from 'react';
 import {
   findVideoClip,
   formatVideoSeconds,
+  VIDEO_BLEND_MODE_LABELS,
+  VIDEO_BLEND_MODES,
   VIDEO_FADE_CURVE_LABELS,
   VIDEO_FADE_CURVES,
   VIDEO_TRANSITION_TYPES,
@@ -159,6 +161,17 @@ export function ClipInspector({ controller, className = '' }: ClipInspectorProps
           </span>
         </Row>
       ))}
+      {at.track.kind === 'video' && (
+        <Row label="Blend" name="blend">
+          <select className={field} value={clip.blend ?? 'normal'} disabled={disabled} aria-label="Blend mode" onChange={(e) => set('blend', e.target.value === 'normal' ? undefined : e.target.value, 'Change blend mode')}>
+            {VIDEO_BLEND_MODES.map((m) => (
+              <option key={m} value={m}>
+                {VIDEO_BLEND_MODE_LABELS[m]}
+              </option>
+            ))}
+          </select>
+        </Row>
+      )}
       <Row label="Fade in (ms)" name="fadeIn">
         {number('fadeIn', 'Fade in', { min: 0, step: 100 })}
       </Row>

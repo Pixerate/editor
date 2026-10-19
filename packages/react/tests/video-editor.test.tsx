@@ -446,6 +446,20 @@ describe("ClipInspector (React)", () => {
     controller.destroy();
   });
 
+  it("sets a picture's blend mode, and offers none for sound", () => {
+    const controller = make();
+    act(() => root.render(<ClipInspector controller={controller} />));
+    act(() => controller.select(["t1"]));
+    choose($<HTMLSelectElement>('select[aria-label="Blend mode"]'), "screen");
+    expect(clip(controller, "t1")!.clip.blend).toBe("screen");
+    expect(controller.getState().undoLabel).toBe("Change blend mode");
+    choose($<HTMLSelectElement>('select[aria-label="Blend mode"]'), "normal");
+    expect(clip(controller, "t1")!.clip.blend).toBeUndefined();
+    act(() => controller.select(["m1"]));
+    expect(container.querySelector('select[aria-label="Blend mode"]')).toBeNull();
+    controller.destroy();
+  });
+
   it("shapes a transition's sound, storing only a change from the type's default", () => {
     const controller = make();
     act(() => root.render(<ClipInspector controller={controller} />));

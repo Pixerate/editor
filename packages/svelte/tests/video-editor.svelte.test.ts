@@ -341,6 +341,17 @@ describe("ClipInspector (Svelte)", () => {
     controller.destroy();
   });
 
+  it("sets a picture's blend mode", () => {
+    const controller = make();
+    render(ClipInspector, { controller });
+    act(() => controller.select(["c1"]));
+    change(q<HTMLSelectElement>('[data-field="blend"]'), "multiply");
+    expect(clipOf(controller, "c1")!.blend).toBe("multiply");
+    change(q<HTMLSelectElement>('[data-field="blend"]'), "normal");
+    expect(clipOf(controller, "c1")!.blend).toBeUndefined();
+    controller.destroy();
+  });
+
   it("shapes a transition's sound, storing only a change from the type's default", () => {
     const controller = make();
     render(ClipInspector, { controller });

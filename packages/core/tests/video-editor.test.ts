@@ -676,3 +676,48 @@ describe('loudness normalisation', () => {
 		expect(() => toVideoFfmpeg(project(), { loudness: { measured: { ...measured, integrated: NaN } } })).toThrow('measured integrated is not a number');
 	});
 });
+
+describe('blend modes', () => {
+	const blended = () => ok(applyVideoEdits(project(), [
+		{ op: 'add_track', track: { kind: 'video', id: 'fx' }, at: 0 },
+		{ op: 'add_clip', track: 'fx', clip: { type: 'color', id: 'leak', color: '#ff8800', duration: 2000, blend: 'screen', opacity: 0.6 } },
+		{ op: 'add_clip', track: 'fx', clip: { type: 'color', id: 'glow', color: '#202020', start: 2000, duration: 1000, blend: 'add' } }
+	]));
+
+	it('travel with the layer into SVG and canvas', () => {
+		const p = blended();
+		const frame = videoFrameAt(p, 500);
+		expect(frame.layers.map((l) => [l.clip, l.blend])).toEqual([['a', undefined], ['leak', 'screen']]);
+		expect(videoProjectSvg(p, 500)).toContain('style="mix-blend-mode:screen"');
+		expect(videoProjectSvg(p, 2500)).toContain('mix-blend-mode:plus-lighter');
+		const ops: string[] = [];
+		const ctx: any = new Proxy({ globalAlpha: 1, globalCompositeOperation: 'source-over', measureText: () => ({ width: 1 }) }, {
+			get: (t, k) => (k in t ? t[k] : () => {}),
+			set: (t, k, v) => {
+				t[k] = v;
+				if (k === 'globalCompositeOperation') ops.push(v);
+				return true;
+			}
+		});
+		drawVideoFrame(ctx, videoFrameAt(p, 2500), () => null);
+		expect(ops).toEqual(['lighter']);
+	});
+
+	it('export as ffmpeg blends composited through the layer alpha, normal as a plain overlay', () => {
+		const p = blended();
+		const { filterComplex, notes } = toVideoFfmpeg(p);
+		expect(filterComplex).toContain('blend=all_mode=screen');
+		expect(filterComplex).toContain('blend=all_mode=addition');
+		expect(filterComplex).toMatch(/alphamerge/);
+		// The composite goes first, except for dodge and burn, which ffmpeg divides by its first input.
+		expect(filterComplex).toMatch(/\[c\w+\]\[f\w+\]blend=all_mode=screen/);
+		const dodge = ok(applyVideoEdits(p, [{ op: 'update_clip', clip: 'leak', set: { blend: 'color-dodge' } }]));
+		expect(toVideoFfmpeg(dodge).filterComplex).toMatch(/\[f\w+\]\[c\w+\]blend=all_mode=dodge/);
+		expect(notes.join(' ')).not.toMatch(/blend/);
+		const soft = ok(applyVideoEdits(p, [{ op: 'update_clip', clip: 'leak', set: { blend: 'soft-light' } }]));
+		expect(toVideoFfmpeg(soft).notes.join(' ')).toMatch(/soft-light blend uses a slightly different formula/);
+		const normal = ok(applyVideoEdits(p, [{ op: 'update_clip', clip: 'leak', set: { blend: 'normal' } }, { op: 'update_clip', clip: 'glow', remove: ['blend'] }]));
+		expect(toVideoFfmpeg(normal).filterComplex).not.toContain('blend=');
+		expect(() => parseVideoProject({ width: 640, height: 360, tracks: [{ id: 'v1', kind: 'video', clips: [{ id: 'x', type: 'color', color: '#fff', start: 0, duration: 1000, blend: 'burn' }] }] })).toThrow(/blend must be one of "normal", "multiply"/);
+	});
+});

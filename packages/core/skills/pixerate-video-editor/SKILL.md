@@ -98,6 +98,10 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
 - **Delivery loudness.** Normalise the final mix rather than pushing clip volumes: -14 LUFS for
   web and streaming, -16 for podcasts, -23 (EBU R128) or -24 (ATSC) for broadcast, with true
   peaks at or under -1 dBTP. Two passes keep the dynamics; one pass rides the level.
+- **Blend overlays, don't key them.** Light leaks, flares, film burns and glows shot on black go on
+  a higher video track with `blend: "screen"` (or `add` for a hotter look), so the black drops
+  out; textures, paper and dust on white use `multiply`. Lower the clip's `opacity` to taste.
+  A blend affects everything beneath the clip on lower tracks.
 - **Titles.** Keep text inside the title-safe area (about 90% of the frame), hold it at least as
   long as it takes to read twice, and use `background` for contrast over busy footage.
 - **Pacing.** Vary shot length with content; trim heads and tails of every clip to the
@@ -146,7 +150,7 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
 | `lift_video_range` | Empty `from`..`to` ms on all unlocked tracks or the given `tracks`, leaving a gap: clips inside are deleted, clips across an edge trimmed, a clip across both cut in two. Returns what was removed, trimmed and created. |
 | `extract_video_range` | Remove `from`..`to` ms and close it up: as lift, then later material moves earlier on those and every sync-locked track. Refused (naming the clip) when a sync-locked track outside `tracks` has material there. Use to cut a section out of a finished sequence. |
 | `delete_video_clips` | Remove `clips`; `ripple: true` pulls later clips up to close the gaps (a ripple delete). |
-| `update_video_clip` | Change properties via `set`: opacity, transform (`x`, `y` px from centre, `scale`, `rotation`), `fit` (contain default for media, cover, fill, none), `fadeIn` / `fadeOut`, name; media `volume` (0-4), `muted`, `fadeInCurve` / `fadeOutCurve` (the sound's fade shape: linear, equal-power, s-curve, exponential, logarithmic), `speed` (0.05-20, keeps the source range so the length changes), `asset`; title text and style; colour. `remove` resets to defaults. Not for timing. |
+| `update_video_clip` | Change properties via `set`: opacity, transform (`x`, `y` px from centre, `scale`, `rotation`), `fit` (contain default for media, cover, fill, none), `blend` (normal, multiply, screen, overlay, darken, lighten, color-dodge, color-burn, hard-light, soft-light, difference, exclusion, add), `fadeIn` / `fadeOut`, name; media `volume` (0-4), `muted`, `fadeInCurve` / `fadeOutCurve` (the sound's fade shape: linear, equal-power, s-curve, exponential, logarithmic), `speed` (0.05-20, keeps the source range so the length changes), `asset`; title text and style; colour. `remove` resets to defaults. Not for timing. |
 | `set_video_keyframes` | Animate one `property` of a `clip` (`opacity` 0-1, `volume` 0-4 for media, `x` / `y` px from centre, `scale`, `rotation` degrees) with `keys` `[{ t, v, ease? }]`, replacing its keys. `t` is clip time (ms from the clip's start), so keys travel with the clip. `ease`: linear (default), hold, ease-in, ease-out, ease-in-out or cubic-bezier points. Returns the sorted keys. |
 | `remove_video_keyframes` | Remove all keys of a clip `property`, leaving the value it had at the clip's start. |
 | `set_video_transition` | Set the transition into a `clip` from the clip ending where it starts on the same track: `{ type: crossfade, dip or wipe, duration ms centred on the cut, color (dip, default black), direction (wipe, default right), audioCurve (the sound's fades: equal-power by default for crossfade and wipe, linear for dip) }`, or `null` to remove. When handles are short the error gives the longest that fits. |

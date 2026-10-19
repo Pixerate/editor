@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/video-editor] ffmpeg `blend` Is Not Symmetric, and the Input Order Differs by Mode
+
+- **Issue / Symptom**: Overlay, hard-light, dodge, burn and soft-light layers rendered differently in the ffmpeg export from the browser preview, even though the mode names matched.
+- **Root Cause**: `blend` takes a first ("top") and a second ("bottom") input, and the non-symmetric modes use them differently from CSS. Measured against the W3C compositing formulas: `overlay`, `hardlight` and `softlight` match when the backdrop (the composite) is the first input, but `dodge` and `burn` divide by their first input, so they match only when the layer comes first. ffmpeg's `softlight` uses a different formula in any order (up to about 10/255 off). `blend` also works per plane, so blending in YUV gives wrong colours.
+- **Solution / Workaround**: `toVideoFfmpeg` converts both inputs to `gbrap`, puts the composite first except for color-dodge and color-burn, and adds a note for soft-light. To add a mode, measure it against the CSS formula in both orders before choosing (`tests/video-editor-ffmpeg.test.ts` has pixel checks).
+
 ### [core/video-editor] ffmpeg `loudnorm` Outputs 192 kHz Audio
 
 - **Issue / Symptom**: A normalised export came out with 192 kHz sound, much larger than it should be, and some players or encoders refuse that rate.
