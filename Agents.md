@@ -98,6 +98,11 @@ AI agents are users of this library in the same way that people at a keyboard ar
 3. **Keep the tool layer dependency-free**: `ToolRegistry`, `validateJsonSchema`, the static tool definitions and `createMcpServer` live in `packages/core/src/tools` and must not import TipTap, ProseMirror, dagre or any framework (`tests/entry-isolation.test.ts` enforces this). Providers that need those live next to their feature or in `src/agent`.
 4. **Parity applies to agents too**: React and Svelte expose providers through `useAgentToolProvider`. The demo tab for a feature must register its providers so they show in its agent-tools panel.
 5. **Test it like a user would**: Every new tool needs tests that call it through `ToolRegistry.callTool` with valid and invalid arguments and check the result shape and error messages. Add new providers to the conformance test in `packages/core/tests/command-tools.test.ts`. It fails when a tool is missing a title, an annotation, or an argument description.
+6. **Keep the domain's agent skill current**: Each editor domain ships a skill at `packages/core/skills/<skill>/SKILL.md` (see [`packages/core/skills/README.md`](./packages/core/skills/README.md)) that tells a model when and how to use each of its tools and the best practice of the domain. A tool or workflow is not done until its skill is updated in the same change:
+   - **New, renamed or removed tool or command**: add, rename or remove its row in the skill's tool table (first cell is the backticked name), saying when to use it, what it returns, and what to call before or after.
+   - **New workflow or changed best practice** (a new batch or check tool, a better default, a new import / export path): update the skill's working method, best practices and pitfalls, not only the table.
+   - **New tool provider, command factory or editor domain**: map it in `expectedBySkill()` and `FACTORIES` in `packages/core/tests/agent-skills.test.ts`, and add a new skill directory (and a row in `skills/README.md`) for a new domain.
+   - `tests/agent-skills.test.ts` fails when a skill misses a tool, lists one that no longer exists, or a factory is unmapped. It cannot check advice, so reread the skill's prose whenever behaviour changes.
 
 ---
 
@@ -127,7 +132,8 @@ pnpm test
 # 3. Verify demo app compiles and runs
 pnpm --filter demo build
 
-# 4. Check that new capabilities have agent tools (section 4), with tests
+# 4. Check that new capabilities have agent tools (section 4), with tests,
+#    and that the domain's packages/core/skills/<skill>/SKILL.md describes them
 
 # 5. Record any newly discovered pitfalls or workarounds in GOTCHAS.md
 ```

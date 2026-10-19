@@ -411,7 +411,10 @@ describe('Built-in tool providers', () => {
 			'sheet__insert_rows',
 			'sheet__delete_rows',
 			'sheet__insert_columns',
-			'sheet__delete_columns'
+			'sheet__delete_columns',
+			'sheet__merge_cells',
+			'sheet__unmerge_cells',
+			'sheet__transpose_range'
 		]);
 
 		await registry.callTool('sheet__set_cell', { cell: 'A1', value: 2 });

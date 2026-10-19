@@ -4,9 +4,11 @@ import {
   GenerationHistory,
   GenerationSettings,
   JobProgress,
+  useAgentToolProvider,
   useGenerationRecords,
 } from "@pixerate/editor-react";
 import {
+  createGenerationHistoryToolProvider,
   createGenerationRecord,
   createGenerationRecordStore,
   describeAssetMentions,
@@ -20,6 +22,7 @@ import {
 import { createMemoryStorage } from "@pixerate/editor/persistence";
 import type { PromptValues, Template } from "@pixerate/editor";
 import { History, ImagePlus, Wand2 } from "lucide-react";
+import { demoToolRegistry } from "../agentTools";
 
 /** Fake asset library for the demo. */
 export const DEMO_ASSETS: AssetInfo[] = [
@@ -75,6 +78,21 @@ export const GenerationHistoryDemo: React.FC<Props> = ({
   // "4k" isn't offered by the demo model: the settings form shows how the plan snaps it.
   const [request, setRequest] = useState<GenerationRequest>({ aspectRatio: "16:9", resolution: "4k" });
   const [job, setJob] = useState<{ startedAt: number; done: boolean } | null>(null);
+
+  // Agents read the same history: list, inspect, and rebuild a recreate or variation request.
+  const historyTools = useMemo(
+    () =>
+      createGenerationHistoryToolProvider({
+        id: "generation-history",
+        namespace: "history",
+        store,
+        models: [DEMO_MODEL],
+        templates,
+        assets,
+      }),
+    [templates, assets],
+  );
+  useAgentToolProvider(demoToolRegistry, historyTools);
 
   const mentions: PlanAssetMention[] = useMemo(
     () =>

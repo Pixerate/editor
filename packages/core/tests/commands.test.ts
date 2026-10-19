@@ -613,6 +613,11 @@ describe('built-in commands', () => {
 		ctrl.selectRange({ startRow: 0, startCol: 0, endRow: 1, endCol: 1 });
 		expect(registry.execute('spreadsheet.mergeCells')).toEqual({ ok: true, id: 'spreadsheet.mergeCells', result: true });
 		expect(ctrl.getMerges()).toHaveLength(1);
+		// Nothing to do is a failure, not a silent `false`.
+		ctrl.selectRange({ startRow: 0, startCol: 0, endRow: 0, endCol: 0 });
+		expect(registry.execute('spreadsheet.mergeCells')).toMatchObject({ ok: false, message: expect.stringMatching(/Cannot merge the selection/) });
+		ctrl.selectRange({ startRow: 5, startCol: 5, endRow: 6, endCol: 6 });
+		expect(registry.execute('spreadsheet.unmergeCells')).toMatchObject({ ok: false, message: 'There are no merged cells in the selection.' });
 	});
 });
 
