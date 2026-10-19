@@ -1,0 +1,5 @@
+node_modules/
+dist/
+public/step.wasm
+public/step.wat
+results/manual.jsonl

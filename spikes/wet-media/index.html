@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Wet media spike</title>
+    <style>
+      body { font: 13px/1.4 system-ui, sans-serif; margin: 16px; background: #f4f2ee; color: #222; }
+      canvas.sim, canvas#c { width: min(90vw, 768px); height: auto; aspect-ratio: 1; background: #fff; display: block; margin: 8px 0; touch-action: none; }
+      pre#out { white-space: pre-wrap; max-height: 40vh; overflow: auto; background: #fff; padding: 8px; }
+      a { margin-right: 12px; }
+    </style>
+  </head>
+  <body>
+    <h1>Wet media spike: watercolour LBM</h1>
+    <nav>
+      Paint:
+      <a href="?impl=gpu">WebGPU</a><a href="?impl=wasm">wasm SIMD</a><a href="?impl=ts">TypeScript</a>
+      · Run:
+      <a href="?mode=bench&impl=gpu&size=2048&wet=0.5">bench</a>
+      <a href="?mode=latency&impl=gpu&size=2048">latency</a>
+      <a href="?mode=diverge">divergence</a>
+      <a href="?mode=scaling&size=2048">worker scaling</a>
+    </nav>
+    <canvas id="c" width="16" height="16"></canvas>
+    <pre id="out"></pre>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

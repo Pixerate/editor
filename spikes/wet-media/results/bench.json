@@ -1,0 +1,1123 @@
+{
+ "chrome": "156.0.8078.4",
+ "date": "2026-10-19T19:41:09.175Z",
+ "runs": [
+  {
+   "query": "?mode=bench&impl=gpu&size=1024&wet=0.1",
+   "result": {
+    "impl": "webgpu",
+    "size": 1024,
+    "wetTarget": 0.1,
+    "blockTiles": 2,
+    "activeTiles": 2,
+    "totalTiles": 16,
+    "steps": 103681,
+    "totalMs": 4005.1699999570847,
+    "msPerStep": 0.03855468751862645,
+    "stepsPerSec": 25937.183371461182,
+    "warmMs": 8.340000033378601,
+    "memory": {
+     "distributions": 75497472,
+     "macro": 33554432,
+     "depositAndPaperWater": 8388608,
+     "paperAndFlow": 4194304,
+     "displayTexture": 4194304
+    },
+    "jsHeapMB": 6.932119369506836,
+    "gpu": {
+     "adapter": "apple metal-3",
+     "limits": {
+      "maxStorageBufferBindingSize": 4294967292,
+      "maxBufferSize": 4294967292,
+      "maxStorageBuffersPerShaderStage": 10
+     }
+    }
+   },
+   "load": {
+    "samples": 9,
+    "gpuUtilAvg": 97.77777777777777,
+    "gpuUtilMax": 98,
+    "rendererCpuAvg": 6.566666666666666,
+    "gpuProcCpuAvg": 21.388888888888886,
+    "rendererRssMaxMB": 459.953125,
+    "gpuProcRssMaxMB": 165.09375
+   },
+   "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "device lost Device was destroyed."
+   ]
+  },
+  {
+   "query": "?mode=bench&impl=gpu&size=1024&wet=0.5",
+   "result": {
+    "impl": "webgpu",
+    "size": 1024,
+    "wetTarget": 0.5,
+    "blockTiles": 8,
+    "activeTiles": 8,
+    "totalTiles": 16,
+    "steps": 13273,
+    "totalMs": 4037.3450000286102,
+    "msPerStep": 0.30443359399214387,
+    "stepsPerSec": 3284.7886032768306,
+    "warmMs": 28.75,
+    "memory": {
+     "distributions": 75497472,
+     "macro": 33554432,
+     "depositAndPaperWater": 8388608,
+     "paperAndFlow": 4194304,
+     "displayTexture": 4194304
+    },
+    "jsHeapMB": 7.121198654174805,
+    "gpu": {
+     "adapter": "apple metal-3",
+     "limits": {
+      "maxStorageBufferBindingSize": 4294967292,
+      "maxBufferSize": 4294967292,
+      "maxStorageBuffersPerShaderStage": 10
+     }
+    }
+   },
+   "load": {
+    "samples": 10,
+    "gpuUtilAvg": 98.9,
+    "gpuUtilMax": 99,
+    "rendererCpuAvg": 6.37,
+    "gpuProcCpuAvg": 12.98,
+    "rendererRssMaxMB": 450.53125,
+    "gpuProcRssMaxMB": 157.671875
+   },
+   "consoleErrors": [
+    "device lost Device was destroyed."
+   ]
+  },
+  {
+   "query": "?mode=bench&impl=gpu&size=1024&wet=1",
+   "result": {
+    "impl": "webgpu",
+    "size": 1024,
+    "wetTarget": 1,
+    "blockTiles": 16,
+    "activeTiles": 16,
+    "totalTiles": 16,
+    "steps": 6541,
+    "totalMs": 4040.804999947548,
+    "msPerStep": 0.6149218748323619,
+    "stepsPerSec": 1626.2228437923384,
+    "warmMs": 32.83999991416931,
+    "memory": {
+     "distributions": 75497472,
+     "macro": 33554432,
+     "depositAndPaperWater": 8388608,
+     "paperAndFlow": 4194304,
+     "displayTexture": 4194304
+    },
+    "jsHeapMB": 6.913782119750977,
+    "gpu": {
+     "adapter": "apple metal-3",
+     "limits": {
+      "maxStorageBufferBindingSize": 4294967292,
+      "maxBufferSize": 4294967292,
+      "maxStorageBuffersPerShaderStage": 10
+     }
+    }
+   },
+   "load": {
+    "samples": 10,
+    "gpuUtilAvg": 98.6,
+    "gpuUtilMax": 99,
+    "rendererCpuAvg": 4.959999999999999,
+    "gpuProcCpuAvg": 9.010000000000002,
+    "rendererRssMaxMB": 451.859375,
+    "gpuProcRssMaxMB": 154.671875
+   },
+   "consoleErrors": [
+    "device lost Device was destroyed."
+   ]
+  },
+  {
+   "query": "?mode=bench&impl=gpu&size=2048&wet=0.1",
+   "result": {
+    "impl": "webgpu",
+    "size": 2048,
+    "wetTarget": 0.1,
+    "blockTiles": 6,
+    "activeTiles": 6,
+    "totalTiles": 64,
+    "steps": 18945,
+    "totalMs": 4044.2450000047684,
+    "msPerStep": 0.21361328149214387,
+    "stepsPerSec": 4681.356856721371,
+    "warmMs": 16.83999991416931,
+    "memory": {
+     "distributions": 301989888,
+     "macro": 134217728,
+     "depositAndPaperWater": 33554432,
+     "paperAndFlow": 16777216,
+     "displayTexture": 16777216
+    },
+    "jsHeapMB": 18.79677391052246,
+    "gpu": {
+     "adapter": "apple metal-3",
+     "limits": {
+      "maxStorageBufferBindingSize": 4294967292,
+      "maxBufferSize": 4294967292,
+      "maxStorageBuffersPerShaderStage": 10
+     }
+    }
+   },
+   "load": {
+    "samples": 10,
+    "gpuUtilAvg": 97.9,
+    "gpuUtilMax": 99,
+    "rendererCpuAvg": 6.3,
+    "gpuProcCpuAvg": 12.349999999999998,
+    "rendererRssMaxMB": 475.453125,
+    "gpuProcRssMaxMB": 168.09375
+   },
+   "consoleErrors": [
+    "device lost Device was destroyed."
+   ]
+  },
+  {
+   "query": "?mode=bench&impl=gpu&size=2048&wet=0.5",
+   "result": {
+    "impl": "webgpu",
+    "size": 2048,
+    "wetTarget": 0.5,
+    "blockTiles": 32,
+    "activeTiles": 32,
+    "totalTiles": 64,
+    "steps": 3348,
+    "totalMs": 4166.574999928474,
+    "msPerStep": 1.239527559655858,
+    "stepsPerSec": 806.7589883016717,
+    "warmMs": 33.389999985694885,
+    "memory": {
+     "distributions": 301989888,
+     "macro": 134217728,
+     "depositAndPaperWater": 33554432,
+     "paperAndFlow": 16777216,
+     "displayTexture": 16777216
+    },
+    "jsHeapMB": 18.859106063842773,
+    "gpu": {
+     "adapter": "apple metal-3",
+     "limits": {
+      "maxStorageBufferBindingSize": 4294967292,
+      "maxBufferSize": 4294967292,
+      "maxStorageBuffersPerShaderStage": 10
+     }
+    }
+   },
+   "load": {
+    "samples": 10,
+    "gpuUtilAvg": 98.9,
+    "gpuUtilMax": 99,
+    "rendererCpuAvg": 2.5700000000000003,
+    "gpuProcCpuAvg": 6.0600000000000005,
+    "rendererRssMaxMB": 475.171875,
+    "gpuProcRssMaxMB": 172.5
+   },
+   "consoleErrors": [
+    "device lost Device was destroyed."
+   ]
+  },
+  {
+   "query": "?mode=bench&impl=gpu&size=2048&wet=1",
+   "result": {
+    "impl": "webgpu",
+    "size": 2048,
+    "wetTarget": 1,
+    "blockTiles": 64,
+    "activeTiles": 64,
+    "totalTiles": 64,
+    "steps": 1662,
+    "totalMs": 4182.070000052452,
+    "msPerStep": 2.4876999998092653,
+    "stepsPerSec": 401.97773046455404,
+    "warmMs": 45.544999957084656,
+    "memory": {
+     "distributions": 301989888,
+     "macro": 134217728,
+     "depositAndPaperWater": 33554432,
+     "paperAndFlow": 16777216,
+     "displayTexture": 16777216
+    },
+    "jsHeapMB": 18.9144344329834,
+    "gpu": {
+     "adapter": "apple metal-3",
+     "limits": {
+      "maxStorageBufferBindingSize": 4294967292,
+      "maxBufferSize": 4294967292,
+      "maxStorageBuffersPerShaderStage": 10
+     }
+    }
+   },
+   "load": {
+    "samples": 10,
+    "gpuUtilAvg": 99.1,
+    "gpuUtilMax": 100,
+    "rendererCpuAvg": 1.9100000000000001,
+    "gpuProcCpuAvg": 4.88,
+    "rendererRssMaxMB": 475.9375,
+    "gpuProcRssMaxMB": 164.859375
+   },
+   "consoleErrors": [
+    "device lost Device was destroyed."
+   ]
+  },
+  {
+   "query": "?mode=bench&impl=gpu&size=4096&wet=0.1",
+   "result": {
+    "impl": "webgpu",
+    "size": 4096,
+    "wetTarget": 0.1,
+    "blockTiles": 25,
+    "activeTiles": 25,
+    "totalTiles": 256,
+    "steps": 4146,
+    "totalMs": 4130.775000095367,
+    "msPerStep": 0.993960000038147,
+    "stepsPerSec": 1006.0767032492466,
+    "warmMs": 295.7350000143051,
+    "memory": {
+     "distributions": 1207959552,
+     "macro": 536870912,
+     "depositAndPaperWater": 134217728,
+     "paperAndFlow": 67108864,
+     "displayTexture": 67108864
+    },
+    "jsHeapMB": 66.63548755645752,
+    "gpu": {
+     "adapter": "apple metal-3",
+     "limits": {
+      "maxStorageBufferBindingSize": 4294967292,
+      "maxBufferSize": 4294967292,
+      "maxStorageBuffersPerShaderStage": 10
+     }
+    }
+   },
+   "load": {
+    "samples": 10,
+    "gpuUtilAvg": 98.9,
+    "gpuUtilMax": 99,
+    "rendererCpuAvg": 2.5599999999999996,
+    "gpuProcCpuAvg": 6.67,
+    "rendererRssMaxMB": 352.265625,
+    "gpuProcRssMaxMB": 138.125
+   },
+   "consoleErrors": [
+    "device lost Device was destroyed."
+   ]
+  },
+  {
+   "query": "?mode=bench&impl=gpu&size=4096&wet=0.5",
+   "result": {
+    "impl": "webgpu",
+    "size": 4096,
+    "wetTarget": 0.5,
+    "blockTiles": 128,
+    "activeTiles": 128,
+    "totalTiles": 256,
+    "steps": 832,
+    "totalMs": 4223.495000004768,
+    "msPerStep": 5.049523810545604,
+    "stepsPerSec": 198.03847600670082,
+    "warmMs": 174.47000002861023,
+    "memory": {
+     "distributions": 1207959552,
+     "macro": 536870912,
+     "depositAndPaperWater": 134217728,
+     "paperAndFlow": 67108864,
+     "displayTexture": 67108864
+    },
+    "jsHeapMB": 66.43677234649658,
+    "gpu": {
+     "adapter": "apple metal-3",
+     "limits": {
+      "maxStorageBufferBindingSize": 4294967292,
+      "maxBufferSize": 4294967292,
+      "maxStorageBuffersPerShaderStage": 10
+     }
+    }
+   },
+   "load": {
+    "samples": 10,
+    "gpuUtilAvg": 98.9,
+    "gpuUtilMax": 99,
+    "rendererCpuAvg": 1.43,
+    "gpuProcCpuAvg": 4.16,
+    "rendererRssMaxMB": 572.109375,
+    "gpuProcRssMaxMB": 210.046875
+   },
+   "consoleErrors": [
+    "device lost Device was destroyed."
+   ]
+  },
+  {
+   "query": "?mode=bench&impl=gpu&size=4096&wet=1",
+   "result": {
+    "impl": "webgpu",
+    "size": 4096,
+    "wetTarget": 1,
+    "blockTiles": 256,
+    "activeTiles": 256,
+    "totalTiles": 256,
+    "steps": 426,
+    "totalMs": 4219.125,
+    "msPerStep": 9.854000000953674,
+    "stepsPerSec": 101.48163181481831,
+    "warmMs": 165.76499998569489,
+    "memory": {
+     "distributions": 1207959552,
+     "macro": 536870912,
+     "depositAndPaperWater": 134217728,
+     "paperAndFlow": 67108864,
+     "displayTexture": 67108864
+    },
+    "jsHeapMB": 66.38417911529541,
+    "gpu": {
+     "adapter": "apple metal-3",
+     "limits": {
+      "maxStorageBufferBindingSize": 4294967292,
+      "maxBufferSize": 4294967292,
+      "maxStorageBuffersPerShaderStage": 10
+     }
+    }
+   },
+   "load": {
+    "samples": 10,
+    "gpuUtilAvg": 98.9,
+    "gpuUtilMax": 99,
+    "rendererCpuAvg": 1.1699999999999997,
+    "gpuProcCpuAvg": 3.689999999999999,
+    "rendererRssMaxMB": 573.390625,
+    "gpuProcRssMaxMB": 207.71875
+   },
+   "consoleErrors": [
+    "device lost Device was destroyed."
+   ]
+  },
+  {
+   "query": "?mode=bench&impl=wasm&size=1024&wet=0.1",
+   "result": {
+    "impl": "wasm×14",
+    "size": 1024,
+    "wetTarget": 0.1,
+    "blockTiles": 2,
+    "activeTiles": 2,
+    "totalTiles": 16,
+    "steps": 6095,
+    "totalMs": 4072.5599999427795,
+    "msPerStep": 0.6554492185823619,
+    "stepsPerSec": 1525.671206326021,
+    "warmMs": 9.299999952316284,
+    "memory": {
+     "tileSlots": 16507872,
+     "paperAndFlow": 4194304,
+     "wasmMemoryTotal": 54788096
+    },
+    "jsHeapMB": 6.698712348937988,
+    "workerBusyMs": [
+     22.519999504089355,
+     19.024999976158142,
+     17.459999442100525,
+     21.12000012397766,
+     21.84000039100647,
+     29.28499972820282,
+     17.894999980926514,
+     15.12000036239624,
+     25.770000219345093,
+     23.169999599456787,
+     18.985000371932983,
+     21.260000109672546,
+     20.81499981880188,
+     20.68500006198883
+    ]
+   },
+   "load": {
+    "samples": 10,
+    "gpuUtilAvg": 12.6,
+    "gpuUtilMax": 15,
+    "rendererCpuAvg": 229.70999999999998,
+    "gpuProcCpuAvg": 1.27,
+    "rendererRssMaxMB": 529.140625,
+    "gpuProcRssMaxMB": 135.4375
+   },
+   "consoleErrors": []
+  },
+  {
+   "query": "?mode=bench&impl=wasm&size=1024&wet=0.5",
+   "result": {
+    "impl": "wasm×14",
+    "size": 1024,
+    "wetTarget": 0.5,
+    "blockTiles": 8,
+    "activeTiles": 8,
+    "totalTiles": 16,
+    "steps": 4780,
+    "totalMs": 4008.7799999713898,
+    "msPerStep": 0.8360546873882413,
+    "stepsPerSec": 1196.0940056731324,
+    "warmMs": 15.859999895095825,
+    "memory": {
+     "tileSlots": 66031488,
+     "paperAndFlow": 4194304,
+     "wasmMemoryTotal": 104333312
+    },
+    "jsHeapMB": 6.733684539794922,
+    "workerBusyMs": [
+     98.12499976158142,
+     103.77499973773956,
+     91.5749990940094,
+     103.64499998092651,
+     87.33999979496002,
+     98.61500072479248,
+     90.32499980926514,
+     91.16999924182892,
+     99.51499879360199,
+     102.3299993276596,
+     90.31499993801117,
+     94.29999935626984,
+     96.42500078678131,
+     102.53500032424927
+    ]
+   },
+   "load": {
+    "samples": 9,
+    "gpuUtilAvg": 12.555555555555555,
+    "gpuUtilMax": 16,
+    "rendererCpuAvg": 665.0999999999999,
+    "gpuProcCpuAvg": 1.2333333333333334,
+    "rendererRssMaxMB": 576.875,
+    "gpuProcRssMaxMB": 136.4375
+   },
+   "consoleErrors": []
+  },
+  {
+   "query": "?mode=bench&impl=wasm&size=1024&wet=1",
+   "result": {
+    "impl": "wasm×14",
+    "size": 1024,
+    "wetTarget": 1,
+    "blockTiles": 16,
+    "activeTiles": 16,
+    "totalTiles": 16,
+    "steps": 2711,
+    "totalMs": 4223.074999928474,
+    "msPerStep": 1.5166566264198487,
+    "stepsPerSec": 659.3450241671082,
+    "warmMs": 18.455000042915344,
+    "memory": {
+     "tileSlots": 132062976,
+     "paperAndFlow": 4194304,
+     "wasmMemoryTotal": 170328064
+    },
+    "jsHeapMB": 6.44647216796875,
+    "workerBusyMs": [
+     144.76500129699707,
+     147.41500055789948,
+     156.93500125408173,
+     149.65500128269196,
+     152.06500017642975,
+     157.66000020503998,
+     142.88500010967255,
+     155.9450011253357,
+     157.9500002861023,
+     140.7150001525879,
+     152.64000129699707,
+     158.94499945640564,
+     143.55000114440918,
+     144.08500003814697
+    ]
+   },
+   "load": {
+    "samples": 10,
+    "gpuUtilAvg": 12.6,
+    "gpuUtilMax": 17,
+    "rendererCpuAvg": 815.8900000000001,
+    "gpuProcCpuAvg": 0.9899999999999999,
+    "rendererRssMaxMB": 633.71875,
+    "gpuProcRssMaxMB": 136.71875
+   },
+   "consoleErrors": []
+  },
+  {
+   "query": "?mode=bench&impl=wasm&size=2048&wet=0.1",
+   "result": {
+    "impl": "wasm×14",
+    "size": 2048,
+    "wetTarget": 0.1,
+    "blockTiles": 6,
+    "activeTiles": 6,
+    "totalTiles": 64,
+    "steps": 5298,
+    "totalMs": 4185.035000085831,
+    "msPerStep": 0.7688476559706032,
+    "stepsPerSec": 1300.647784036731,
+    "warmMs": 11.620000004768372,
+    "memory": {
+     "tileSlots": 49523616,
+     "paperAndFlow": 16777216,
+     "wasmMemoryTotal": 116916224
+    },
+    "jsHeapMB": 18.456233978271484,
+    "workerBusyMs": [
+     73.76499903202057,
+     67.12999963760376,
+     68.0799994468689,
+     69.82999956607819,
+     69.53499960899353,
+     68.9399995803833,
+     70.57499885559082,
+     68.88499963283539,
+     71.09999895095825,
+     72.40499830245972,
+     73.12999820709229,
+     72.92499947547913,
+     68.64499866962433,
+     63.21500015258789
+    ]
+   },
+   "load": {
+    "samples": 10,
+    "gpuUtilAvg": 12.3,
+    "gpuUtilMax": 14,
+    "rendererCpuAvg": 528.93,
+    "gpuProcCpuAvg": 1.2300000000000002,
+    "rendererRssMaxMB": 587.328125,
+    "gpuProcRssMaxMB": 137.3125
+   },
+   "consoleErrors": []
+  },
+  {
+   "query": "?mode=bench&impl=wasm&size=2048&wet=0.5",
+   "result": {
+    "impl": "wasm×14",
+    "size": 2048,
+    "wetTarget": 0.5,
+    "blockTiles": 32,
+    "activeTiles": 32,
+    "totalTiles": 64,
+    "steps": 1468,
+    "totalMs": 4245.375,
+    "msPerStep": 2.907962962433144,
+    "stepsPerSec": 343.88333445735583,
+    "warmMs": 50.18499994277954,
+    "memory": {
+     "tileSlots": 264125952,
+     "paperAndFlow": 16777216,
+     "wasmMemoryTotal": 347996160
+    },
+    "jsHeapMB": 18.46033477783203,
+    "workerBusyMs": [
+     197.60000026226044,
+     193.8150008916855,
+     177.18999993801117,
+     189.94000101089478,
+     194.06499981880188,
+     192.91999995708466,
+     197.90499985218048,
+     196.87000024318695,
+     195.90000021457672,
+     193.61500012874603,
+     195.6650012731552,
+     189.3550000190735,
+     191.37499976158142,
+     193.17000079154968
+    ]
+   },
+   "load": {
+    "samples": 8,
+    "gpuUtilAvg": 12.625,
+    "gpuUtilMax": 15,
+    "rendererCpuAvg": 946.55,
+    "gpuProcCpuAvg": 1.9375,
+    "rendererRssMaxMB": 780.375,
+    "gpuProcRssMaxMB": 135.15625
+   },
+   "consoleErrors": []
+  },
+  {
+   "query": "?mode=bench&impl=wasm&size=2048&wet=1",
+   "result": {
+    "impl": "wasm×14",
+    "size": 2048,
+    "wetTarget": 1,
+    "blockTiles": 64,
+    "activeTiles": 64,
+    "totalTiles": 64,
+    "steps": 744,
+    "totalMs": 4013.649999976158,
+    "msPerStep": 5.412446808307729,
+    "stepsPerSec": 184.75932150780116,
+    "warmMs": 67.56000006198883,
+    "memory": {
+     "tileSlots": 528251904,
+     "paperAndFlow": 16777216,
+     "wasmMemoryTotal": 579141632
+    },
+    "jsHeapMB": 18.832679748535156,
+    "workerBusyMs": [
+     180.1750007867813,
+     186.72999966144562,
+     185.5499997138977,
+     194.03000009059906,
+     182.6850004196167,
+     191.81000006198883,
+     182.61499965190887,
+     182.61000037193298,
+     188.12999963760376,
+     179.9250009059906,
+     178.81499993801117,
+     173.16000056266785,
+     182.83500039577484,
+     171.01000046730042
+    ]
+   },
+   "load": {
+    "samples": 5,
+    "gpuUtilAvg": 12.6,
+    "gpuUtilMax": 14,
+    "rendererCpuAvg": 963.72,
+    "gpuProcCpuAvg": 1.5,
+    "rendererRssMaxMB": 1022.875,
+    "gpuProcRssMaxMB": 132.5
+   },
+   "consoleErrors": []
+  },
+  {
+   "query": "?mode=bench&impl=wasm&size=4096&wet=0.1",
+   "result": {
+    "impl": "wasm×14",
+    "size": 4096,
+    "wetTarget": 0.1,
+    "blockTiles": 25,
+    "activeTiles": 25,
+    "totalTiles": 256,
+    "steps": 1811,
+    "totalMs": 4214.334999918938,
+    "msPerStep": 2.316847825827806,
+    "stepsPerSec": 431.6209242800406,
+    "warmMs": 25.72000002861023,
+    "memory": {
+     "tileSlots": 206348400,
+     "paperAndFlow": 67108864,
+     "wasmMemoryTotal": 365363200
+    },
+    "jsHeapMB": 66.44116592407227,
+    "workerBusyMs": [
+     163.38000011444092,
+     163.44499969482422,
+     167.03500032424927,
+     172.02500200271606,
+     167.98999977111816,
+     170.37499952316284,
+     163.5200001001358,
+     170.96499919891357,
+     168.23500072956085,
+     166.76500022411346,
+     172.03499948978424,
+     170.92499995231628,
+     171.59000027179718,
+     163.31999957561493
+    ]
+   },
+   "load": {
+    "samples": 10,
+    "gpuUtilAvg": 12.3,
+    "gpuUtilMax": 13,
+    "rendererCpuAvg": 902.3699999999999,
+    "gpuProcCpuAvg": 1.19,
+    "rendererRssMaxMB": 863,
+    "gpuProcRssMaxMB": 133.03125
+   },
+   "consoleErrors": []
+  },
+  {
+   "query": "?mode=bench&impl=wasm&size=4096&wet=0.5",
+   "result": {
+    "impl": "wasm×14",
+    "size": 4096,
+    "wetTarget": 0.5,
+    "blockTiles": 128,
+    "activeTiles": 128,
+    "totalTiles": 256,
+    "steps": 408,
+    "totalMs": 4227.275000095367,
+    "msPerStep": 10.150499999523163,
+    "stepsPerSec": 98.51731442263699,
+    "warmMs": 112.63999998569489,
+    "memory": {
+     "tileSlots": 1056503808,
+     "paperAndFlow": 67108864,
+     "wasmMemoryTotal": 1256783872
+    },
+    "jsHeapMB": 66.43875885009766,
+    "workerBusyMs": [
+     214.3050000667572,
+     219.32999992370605,
+     218.19000017642975,
+     216.28500056266785,
+     209.64000010490417,
+     212.82500040531158,
+     214.6949998140335,
+     220.23500049114227,
+     212.36500024795532,
+     205.4249997138977,
+     212.80499982833862,
+     212.56500005722046,
+     210.00000023841858,
+     202.32999980449677
+    ]
+   },
+   "load": {
+    "samples": 4,
+    "gpuUtilAvg": 12.25,
+    "gpuUtilMax": 13,
+    "rendererCpuAvg": 1048.325,
+    "gpuProcCpuAvg": 0.55,
+    "rendererRssMaxMB": 1626.0625,
+    "gpuProcRssMaxMB": 126.3125
+   },
+   "consoleErrors": []
+  },
+  {
+   "query": "?mode=bench&impl=wasm&size=4096&wet=1",
+   "result": {
+    "impl": "wasm×14",
+    "size": 4096,
+    "wetTarget": 1,
+    "blockTiles": 256,
+    "activeTiles": 256,
+    "totalTiles": 256,
+    "steps": 131,
+    "totalMs": 4247.054999947548,
+    "msPerStep": 27.008500003814696,
+    "stepsPerSec": 37.02538089337651,
+    "warmMs": 403.72500002384186,
+    "memory": {
+     "tileSlots": 2113007616,
+     "paperAndFlow": 67108864,
+     "wasmMemoryTotal": 2214199296
+    },
+    "jsHeapMB": 69.22644424438477,
+    "workerBusyMs": [
+     214.22500026226044,
+     234.60000002384186,
+     236.7649998664856,
+     236.43999993801117,
+     241.05999994277954,
+     207.6450001001358,
+     237.14499986171722,
+     218.93499958515167,
+     228.81000006198883,
+     234.02500021457672,
+     244.37999999523163,
+     235.95500016212463,
+     220.8400000333786,
+     216.66000020503998
+    ]
+   },
+   "load": {
+    "samples": 2,
+    "gpuUtilAvg": 34.5,
+    "gpuUtilMax": 42,
+    "rendererCpuAvg": 743.25,
+    "gpuProcCpuAvg": 0.35,
+    "rendererRssMaxMB": 2241.46875,
+    "gpuProcRssMaxMB": 90.96875
+   },
+   "consoleErrors": []
+  },
+  {
+   "query": "?mode=bench&impl=ts&size=1024&wet=0.1",
+   "result": {
+    "impl": "ts",
+    "size": 1024,
+    "wetTarget": 0.1,
+    "blockTiles": 2,
+    "activeTiles": 2,
+    "totalTiles": 16,
+    "steps": 369,
+    "totalMs": 4227.320000052452,
+    "msPerStep": 11.432272726839239,
+    "stepsPerSec": 87.47167110983338,
+    "warmMs": 135.6950000524521,
+    "memory": {
+     "distributions": 75497472,
+     "macro": 33554432,
+     "paperAndDeposit": 12582912
+    },
+    "jsHeapMB": 118.80801486968994
+   },
+   "load": {
+    "samples": 10,
+    "gpuUtilAvg": 20.4,
+    "gpuUtilMax": 23,
+    "rendererCpuAvg": 99.72999999999999,
+    "gpuProcCpuAvg": 1.89,
+    "rendererRssMaxMB": 482.34375,
+    "gpuProcRssMaxMB": 112.375
+   },
+   "consoleErrors": []
+  },
+  {
+   "query": "?mode=bench&impl=ts&size=1024&wet=0.5",
+   "result": {
+    "impl": "ts",
+    "size": 1024,
+    "wetTarget": 0.5,
+    "blockTiles": 8,
+    "activeTiles": 8,
+    "totalTiles": 16,
+    "steps": 86,
+    "totalMs": 4047.039999961853,
+    "msPerStep": 46.94299998283386,
+    "stepsPerSec": 21.30243061512218,
+    "warmMs": 446.7699999809265,
+    "memory": {
+     "distributions": 75497472,
+     "macro": 33554432,
+     "paperAndDeposit": 12582912
+    },
+    "jsHeapMB": 118.9606409072876
+   },
+   "load": {
+    "samples": 10,
+    "gpuUtilAvg": 16.9,
+    "gpuUtilMax": 21,
+    "rendererCpuAvg": 99.07999999999998,
+    "gpuProcCpuAvg": 1.56,
+    "rendererRssMaxMB": 514.296875,
+    "gpuProcRssMaxMB": 115.703125
+   },
+   "consoleErrors": []
+  },
+  {
+   "query": "?mode=bench&impl=ts&size=1024&wet=1",
+   "result": {
+    "impl": "ts",
+    "size": 1024,
+    "wetTarget": 1,
+    "blockTiles": 16,
+    "activeTiles": 16,
+    "totalTiles": 16,
+    "steps": 46,
+    "totalMs": 4214.65499997139,
+    "msPerStep": 91.20000000794728,
+    "stepsPerSec": 10.964912279746258,
+    "warmMs": 841.8349999189377,
+    "memory": {
+     "distributions": 75497472,
+     "macro": 33554432,
+     "paperAndDeposit": 12582912
+    },
+    "jsHeapMB": 118.89677143096924
+   },
+   "load": {
+    "samples": 10,
+    "gpuUtilAvg": 15.6,
+    "gpuUtilMax": 19,
+    "rendererCpuAvg": 98.89000000000001,
+    "gpuProcCpuAvg": 1.7,
+    "rendererRssMaxMB": 565.4375,
+    "gpuProcRssMaxMB": 113.421875
+   },
+   "consoleErrors": []
+  },
+  {
+   "query": "?mode=bench&impl=ts&size=2048&wet=0.1",
+   "result": {
+    "impl": "ts",
+    "size": 2048,
+    "wetTarget": 0.1,
+    "blockTiles": 6,
+    "activeTiles": 6,
+    "totalTiles": 64,
+    "steps": 110,
+    "totalMs": 4013.0599999427795,
+    "msPerStep": 36.2985714333398,
+    "stepsPerSec": 27.5492935537819,
+    "warmMs": 362.4249999523163,
+    "memory": {
+     "distributions": 301989888,
+     "macro": 134217728,
+     "paperAndDeposit": 50331648
+    },
+    "jsHeapMB": 467.04894733428955
+   },
+   "load": {
+    "samples": 10,
+    "gpuUtilAvg": 18.2,
+    "gpuUtilMax": 24,
+    "rendererCpuAvg": 98.25999999999999,
+    "gpuProcCpuAvg": 1.7200000000000002,
+    "rendererRssMaxMB": 636.484375,
+    "gpuProcRssMaxMB": 111.515625
+   },
+   "consoleErrors": []
+  },
+  {
+   "query": "?mode=bench&impl=ts&size=2048&wet=0.5",
+   "result": {
+    "impl": "ts",
+    "size": 2048,
+    "wetTarget": 0.5,
+    "blockTiles": 32,
+    "activeTiles": 32,
+    "totalTiles": 64,
+    "steps": 21,
+    "totalMs": 4196.275000095367,
+    "msPerStep": 198.37000000476837,
+    "stepsPerSec": 5.041084841336706,
+    "warmMs": 1701.5249999761581,
+    "memory": {
+     "distributions": 301989888,
+     "macro": 134217728,
+     "paperAndDeposit": 50331648
+    },
+    "jsHeapMB": 467.23300647735596
+   },
+   "load": {
+    "samples": 10,
+    "gpuUtilAvg": 19.4,
+    "gpuUtilMax": 41,
+    "rendererCpuAvg": 98.05999999999999,
+    "gpuProcCpuAvg": 0.62,
+    "rendererRssMaxMB": 690.484375,
+    "gpuProcRssMaxMB": 115.09375
+   },
+   "consoleErrors": []
+  },
+  {
+   "query": "?mode=bench&impl=ts&size=2048&wet=1",
+   "result": {
+    "impl": "ts",
+    "size": 2048,
+    "wetTarget": 1,
+    "blockTiles": 64,
+    "activeTiles": 64,
+    "totalTiles": 64,
+    "steps": 11,
+    "totalMs": 4212.804999947548,
+    "msPerStep": 377.4950000047684,
+    "stepsPerSec": 2.649041709128249,
+    "warmMs": 3203.554999947548,
+    "memory": {
+     "distributions": 301989888,
+     "macro": 134217728,
+     "paperAndDeposit": 50331648
+    },
+    "jsHeapMB": 466.37486362457275
+   },
+   "load": {
+    "samples": 10,
+    "gpuUtilAvg": 20.1,
+    "gpuUtilMax": 22,
+    "rendererCpuAvg": 99.6,
+    "gpuProcCpuAvg": 1.15,
+    "rendererRssMaxMB": 917.5,
+    "gpuProcRssMaxMB": 114.96875
+   },
+   "consoleErrors": []
+  },
+  {
+   "query": "?mode=bench&impl=ts&size=4096&wet=0.1",
+   "result": {
+    "impl": "ts",
+    "size": 4096,
+    "wetTarget": 0.1,
+    "blockTiles": 25,
+    "activeTiles": 25,
+    "totalTiles": 256,
+    "steps": 18,
+    "totalMs": 4132.9400000572205,
+    "msPerStep": 226.36000001430511,
+    "stepsPerSec": 4.417741650189096,
+    "warmMs": 278.75999999046326,
+    "memory": {
+     "distributions": 1207959552,
+     "macro": 536870912,
+     "paperAndDeposit": 201326592
+    },
+    "jsHeapMB": 1858.9501886367798
+   },
+   "load": {
+    "samples": 10,
+    "gpuUtilAvg": 16.6,
+    "gpuUtilMax": 18,
+    "rendererCpuAvg": 99.78999999999999,
+    "gpuProcCpuAvg": 1.73,
+    "rendererRssMaxMB": 1077.71875,
+    "gpuProcRssMaxMB": 115.328125
+   },
+   "consoleErrors": []
+  },
+  {
+   "query": "?mode=bench&impl=ts&size=4096&wet=0.5",
+   "result": {
+    "impl": "ts",
+    "size": 4096,
+    "wetTarget": 0.5,
+    "blockTiles": 128,
+    "activeTiles": 128,
+    "totalTiles": 256,
+    "steps": 4,
+    "totalMs": 4919.794999957085,
+    "msPerStep": 1208.795000076294,
+    "stepsPerSec": 0.827270132600552,
+    "warmMs": 1288.1299999952316,
+    "memory": {
+     "distributions": 1207959552,
+     "macro": 536870912,
+     "paperAndDeposit": 201326592
+    },
+    "jsHeapMB": 1859.387936592102
+   },
+   "load": {
+    "samples": 12,
+    "gpuUtilAvg": 19,
+    "gpuUtilMax": 28,
+    "rendererCpuAvg": 98.85000000000001,
+    "gpuProcCpuAvg": 0.5833333333333334,
+    "rendererRssMaxMB": 1278.015625,
+    "gpuProcRssMaxMB": 106.859375
+   },
+   "consoleErrors": []
+  },
+  {
+   "query": "?mode=bench&impl=ts&size=4096&wet=1",
+   "result": {
+    "impl": "ts",
+    "size": 4096,
+    "wetTarget": 1,
+    "blockTiles": 256,
+    "activeTiles": 256,
+    "totalTiles": 256,
+    "steps": 3,
+    "totalMs": 7366.625,
+    "msPerStep": 2502.164999961853,
+    "stepsPerSec": 0.399653899728933,
+    "warmMs": 2552.2799999713898,
+    "memory": {
+     "distributions": 1207959552,
+     "macro": 536870912,
+     "paperAndDeposit": 201326592
+    },
+    "jsHeapMB": 1858.396985054016
+   },
+   "load": {
+    "samples": 18,
+    "gpuUtilAvg": 16.11111111111111,
+    "gpuUtilMax": 18,
+    "rendererCpuAvg": 98.66111111111111,
+    "gpuProcCpuAvg": 0.2111111111111111,
+    "rendererRssMaxMB": 2192.328125,
+    "gpuProcRssMaxMB": 101.6875
+   },
+   "consoleErrors": []
+  }
+ ]
+}

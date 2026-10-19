@@ -1,0 +1,67 @@
+{
+ "chrome": "156.0.8078.4",
+ "date": "2026-10-19T19:44:58.185Z",
+ "runs": [
+  {
+   "query": "?mode=readback&size=2048",
+   "result": {
+    "size": 2048,
+    "res": [
+     {
+      "impl": "webgpu",
+      "tiles": 1,
+      "medianMs": 1.0550000667572021,
+      "mbPerFrame": 0.25
+     },
+     {
+      "impl": "webgpu",
+      "tiles": 4,
+      "medianMs": 1.0549999475479126,
+      "mbPerFrame": 1
+     },
+     {
+      "impl": "webgpu",
+      "tiles": 16,
+      "medianMs": 1.7799999713897705,
+      "mbPerFrame": 4
+     },
+     {
+      "impl": "webgpu",
+      "tiles": 64,
+      "medianMs": 4.370000004768372,
+      "mbPerFrame": 16
+     },
+     {
+      "impl": "wasm×14",
+      "tiles": 1,
+      "medianMs": 1.0950000286102295,
+      "mbPerFrame": 0.25
+     },
+     {
+      "impl": "wasm×14",
+      "tiles": 4,
+      "medianMs": 4.330000042915344,
+      "mbPerFrame": 1
+     },
+     {
+      "impl": "wasm×14",
+      "tiles": 16,
+      "medianMs": 17.50499999523163,
+      "mbPerFrame": 4
+     },
+     {
+      "impl": "wasm×14",
+      "tiles": 64,
+      "medianMs": 70.3199999332428,
+      "mbPerFrame": 16
+     }
+    ]
+   },
+   "load": null,
+   "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "device lost Device was destroyed."
+   ]
+  }
+ ]
+}

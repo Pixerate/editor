@@ -1,0 +1,63 @@
+{
+ "chrome": "156.0.8078.4",
+ "date": "2026-10-19T19:42:28.729Z",
+ "runs": [
+  {
+   "query": "?mode=scaling&size=2048&wet=1",
+   "result": {
+    "size": 2048,
+    "wet": 1,
+    "hardwareConcurrency": 14,
+    "res": [
+     {
+      "workers": 1,
+      "msPerStep": 41.464230771248154,
+      "stepsPerSec": 24.117172353126428
+     },
+     {
+      "workers": 2,
+      "msPerStep": 21.18567708383004,
+      "stepsPerSec": 47.201701226875095
+     },
+     {
+      "workers": 4,
+      "msPerStep": 11.038179347696511,
+      "stepsPerSec": 90.59465048542482
+     },
+     {
+      "workers": 6,
+      "msPerStep": 7.837441406212747,
+      "stepsPerSec": 127.59266043217868
+     },
+     {
+      "workers": 8,
+      "msPerStep": 6.111661585365853,
+      "stepsPerSec": 163.62162499220554
+     },
+     {
+      "workers": 10,
+      "msPerStep": 5.470108695652174,
+      "stepsPerSec": 182.81172379533035
+     },
+     {
+      "workers": 12,
+      "msPerStep": 5.6339466293876095,
+      "stepsPerSec": 177.49546912351502
+     },
+     {
+      "workers": 14,
+      "msPerStep": 5.458899456521739,
+      "stepsPerSec": 183.18710721174787
+     },
+     {
+      "workers": "ts",
+      "msPerStep": 378.2900000015895,
+      "stepsPerSec": 2.6434512900153364
+     }
+    ]
+   },
+   "load": null,
+   "consoleErrors": []
+  }
+ ]
+}

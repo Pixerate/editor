@@ -1,0 +1,21 @@
+{
+  "name": "wet-media-spike",
+  "private": true,
+  "type": "module",
+  "description": "Throwaway spike: watercolour LBM in WebGPU vs WebAssembly SIMD vs TypeScript. Not part of the pnpm workspace; never published.",
+  "scripts": {
+    "asbuild": "asc assembly/step.ts -o public/step.wasm -t public/step.wat -O3 --runtime stub --enable simd --enable threads --importMemory --sharedMemory --initialMemory 32 --maximumMemory 65536 --noAssert --memoryBase 65536",
+    "dev": "pnpm asbuild && vite",
+    "build": "pnpm asbuild && vite build",
+    "bench": "pnpm asbuild && node scripts/run-bench.mjs",
+    "summarize": "node scripts/summarize.mjs > results/tables.md",
+    "typecheck": "tsc -p ."
+  },
+  "devDependencies": {
+    "assemblyscript": "0.28.20",
+    "playwright-core": "1.64.1",
+    "typescript": "^5.7.3",
+    "vite": "^6.4.3",
+    "@webgpu/types": "^0.1.60"
+  }
+}
