@@ -114,7 +114,7 @@ describe('image editor agent tools', () => {
       'get_adjustments', 'list_controls', 'set_adjustments', 'add_adjustment_layer', 'render_preview', 'capture_view',
       'get_selection', 'select_region', 'select_by_color', 'modify_selection', 'refine_selection', 'apply_selection_as_mask',
       'get_image_info', 'get_histogram', 'update_adjustment_layer', 'remove_adjustment_layer', 'move_adjustment_layer',
-      'set_crop', 'reset_crop', 'set_rotation', 'flip_image', 'undo_image', 'redo_image',
+      'set_crop', 'reset_crop', 'set_rotation', 'flip_image', 'undo_image', 'redo_image', 'list_layers',
     ]);
     for (const t of tools) {
       expect(t.title).toBeTruthy();
@@ -124,7 +124,7 @@ describe('image editor agent tools', () => {
       }
     }
     const readOnly = tools.filter((t) => t.annotations!.readOnlyHint).map((t) => t.name);
-    expect(readOnly).toEqual(['get_adjustments', 'list_controls', 'render_preview', 'capture_view', 'get_selection', 'get_image_info', 'get_histogram']);
+    expect(readOnly).toEqual(['get_adjustments', 'list_controls', 'render_preview', 'capture_view', 'get_selection', 'get_image_info', 'get_histogram', 'list_layers']);
   });
 
   it('get_adjustments and list_controls describe the state', async () => {

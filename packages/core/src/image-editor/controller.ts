@@ -15,6 +15,7 @@ import {
   ImageEditorTool,
   ImageTransform,
   ImagePoint,
+  LegacySerializedImageEditorState,
   SerializedImageEditorState,
 } from './types';
 import { ImageEditorRenderer, RenderOptions } from './renderer';
@@ -42,16 +43,57 @@ import { ellipseSelection, polygonSelection, rectSelection, type ShapeSelectionO
 import { colorRange, magicWand, type ColorRangeOptions, type ColorRangeSample, type MagicWandOptions } from './selection/wand';
 import { modifySelection as modifySelectionMask, type SelectionModifyOp } from './selection/modify';
 import { refineSelection as refineSelectionMask, type RefineEdgeParams } from './selection/refine';
-import {
-  decodeLayerMask,
-  layerMaskFromSelection,
-  updateLayerMaskProps,
-  type LayerMaskProps,
-} from './selection/layer-mask';
+import type { LayerMaskProps } from './selection/layer-mask';
 import type { AdjustmentLayerMask } from './types';
+import { DEFAULT_ADJUSTMENTS_VALUES, DEFAULT_DEPTH_MASK_VALUES, DEFAULT_TRANSFORM_VALUES } from './layers/defaults';
+import {
+  findLayer,
+  flattenLayers,
+  insertLayer,
+  mapLayer,
+  newLayerId,
+  type AdjustmentLayerNode,
+  type AnnotationLayer,
+  type DevelopFilter,
+  type ImageLayer,
+  type LayerFilter,
+  type LayerTarget,
+  type PixelLayer,
+  type RasterMask,
+} from './layers/model';
+import {
+  BLUR_FILTER_ID,
+  DEVELOP_FILTER_ID,
+  adjustmentNodeFromLegacy,
+  annotationLayerFor,
+  annotationLayerName,
+  depthRasterMask,
+  developTarget,
+  isDefaultDepthMask,
+  layersFromLegacy,
+  legacyMaskOf,
+  legacyView,
+  rasterMaskFromLegacy,
+  type LayerStack,
+} from './layers/migrate';
+import {
+  LAYERED_SCHEMA_VERSION,
+  deserializeLayers,
+  serializeLayers,
+  type SerializedLayeredImageEditorState,
+} from './layers/serialize';
+import { LayerCompositor, type CompositorSources } from './layers/compositor';
+import {
+  collectTiles,
+  contentBounds,
+  readRegion,
+  surfaceFromPixels,
+  type PixelSurface,
+  type Tile,
+} from './layers/surface';
 
-/** Latest serialized schema version (`2`: adjustment layers). */
-export const IMAGE_EDITOR_SCHEMA_VERSION = 2 as const;
+/** Latest serialized schema version (`3`: layers). Documents with the old shape still write 1 or 2. */
+export const IMAGE_EDITOR_SCHEMA_VERSION = LAYERED_SCHEMA_VERSION;
 
 /** Changes to an adjustment layer; `params` is merged into the current parameters. */
 export interface AdjustmentLayerUpdate<K extends AdjustmentKind = AdjustmentKind> {
@@ -80,10 +122,20 @@ export interface SampleOptions {
   pixels?: PixelBuffer;
 }
 
-/** A new adjustment layer: its kind plus optional initial values. */
+/** A new adjustment layer: its kind plus optional initial values and position. */
 export interface AdjustmentLayerInit<K extends AdjustmentKind = AdjustmentKind> extends AdjustmentLayerUpdate<K> {
   kind: K;
   id?: string;
+  /** Put the new layer directly above this layer (in its group). */
+  aboveId?: string;
+  /** Put the new layer at the top of this group. */
+  parentId?: string;
+}
+
+/** Where a new annotation goes. */
+export interface AnnotationPlacement {
+  /** Put the annotation layer directly above this layer (default: the top of the stack). */
+  aboveId?: string;
 }
 
 /** The image a history entry was recorded against. */
@@ -94,27 +146,22 @@ interface SourceSnapshot {
 }
 
 /**
- * Undo/redo entry: the serializable edit state plus the source image it applies to, so
- * AI edits that replace the image are restorable.
+ * Undo/redo entry: the document as immutable objects. Layers, surfaces, tiles and selections are
+ * shared with the other entries and the current state, so an entry costs about the tiles it changed.
  */
 interface HistoryEntry {
-  state: SerializedImageEditorState;
-  source: SourceSnapshot;
-  /** Selections are immutable, so entries share them instead of encoding them. */
+  layers: ImageLayer[];
+  activeLayerId: string | null;
+  activeTarget: LayerTarget;
+  crop: CropBox | null;
+  transform: ImageTransform;
+  outputOpacity: number;
+  legacyOutputBlur?: number;
   selection: SelectionMask | null;
+  source: SourceSnapshot;
 }
 
-export const DEFAULT_ADJUSTMENTS: ImageAdjustments = {
-  brightness: 0,
-  contrast: 0,
-  saturation: 0,
-  exposure: 0,
-  temperature: 0,
-  tint: 0,
-  blur: 0,
-  opacity: 1,
-  process: LATEST_PROCESS_VERSION,
-};
+export const DEFAULT_ADJUSTMENTS: ImageAdjustments = DEFAULT_ADJUSTMENTS_VALUES;
 
 /**
  * Fills in defaults for stored adjustments. A stored object without `process` was saved before
@@ -134,44 +181,82 @@ export function normalizeStoredAdjustments(stored: Partial<ImageAdjustments> | u
   return out;
 }
 
+const isLayered = (data: { version?: unknown } | null | undefined): data is SerializedLayeredImageEditorState =>
+  Boolean(data && data.version === LAYERED_SCHEMA_VERSION && Array.isArray((data as { layers?: unknown }).layers));
+
 /**
- * Brings a stored editor state of any schema version to the current shape. Version 1 (and a
- * missing version) has no adjustment layers; everything else is unchanged, so old states load
- * and render exactly as before.
+ * Brings a stored editor state of any schema version to a clean state of the same family:
+ * version 1 (and a missing version) has no adjustment layers, version 2 has them, and both stay
+ * in the document-level schema so old states load and render exactly as before. Version 3
+ * (layers) is returned with its document fields cleaned. To lift a v1 / v2 state into layers,
+ * use {@link migrateToLayeredState}.
  */
 export function migrateSerializedImageEditorState(
   data: Partial<SerializedImageEditorState> & { version?: number }
 ): SerializedImageEditorState {
-  const adjustments = normalizeStoredAdjustments(data.adjustments);
+  if (isLayered(data)) {
+    const out: SerializedLayeredImageEditorState = {
+      ...data,
+      crop: data.crop ? { ...data.crop } : null,
+      transform: { ...DEFAULT_TRANSFORM, ...data.transform },
+      opacity: typeof data.opacity === 'number' ? Math.min(1, Math.max(0, data.opacity)) : 1,
+      assets: { ...(data.assets ?? {}) },
+      activeLayerId: typeof data.activeLayerId === 'string' ? data.activeLayerId : null,
+    };
+    return out;
+  }
+  const legacy = data as Partial<LegacySerializedImageEditorState>;
+  const adjustments = normalizeStoredAdjustments(legacy.adjustments);
   return {
-    version: adjustments.layers?.length ? IMAGE_EDITOR_SCHEMA_VERSION : 1,
-    crop: data.crop ? { ...data.crop } : null,
-    transform: { ...DEFAULT_TRANSFORM, ...data.transform },
+    version: adjustments.layers?.length ? 2 : 1,
+    crop: legacy.crop ? { ...legacy.crop } : null,
+    transform: { ...DEFAULT_TRANSFORM, ...legacy.transform },
     adjustments: serializeAdjustments(adjustments),
     depthMask: {
       ...DEFAULT_DEPTH_MASK,
-      ...data.depthMask,
-      depthRange: [...(data.depthMask?.depthRange ?? DEFAULT_DEPTH_MASK.depthRange)] as [number, number],
+      ...legacy.depthMask,
+      depthRange: [...(legacy.depthMask?.depthRange ?? DEFAULT_DEPTH_MASK.depthRange)] as [number, number],
     },
-    annotations: JSON.parse(JSON.stringify(data.annotations ?? [])),
-    ...(data.selection ? { selection: { ...data.selection } } : {}),
+    annotations: JSON.parse(JSON.stringify(legacy.annotations ?? [])),
+    ...(legacy.selection ? { selection: { ...legacy.selection } } : {}),
   };
 }
 
-export const DEFAULT_TRANSFORM: ImageTransform = {
-  rotate: 0,
-  flipH: false,
-  flipV: false,
-};
+/**
+ * Lifts a stored state of any version into the layered schema (v3) for a canvas of
+ * `width × height`: the source becomes the Background layer with the base sliders as its
+ * `develop` filter and the depth mask as its parametric mask, adjustment layers go above it and
+ * annotations on top (see `layersFromLegacy`).
+ */
+export function migrateToLayeredState(
+  data: Partial<SerializedImageEditorState> & { version?: number },
+  size: ImageDimensions
+): SerializedLayeredImageEditorState {
+  const clean = migrateSerializedImageEditorState(data);
+  if (isLayered(clean)) return clean;
+  const stack = layersFromLegacy(clean, Math.round(size.width), Math.round(size.height));
+  const { layers, assets } = serializeLayers(stack.layers);
+  const out: SerializedLayeredImageEditorState = {
+    version: LAYERED_SCHEMA_VERSION,
+    width: Math.round(size.width),
+    height: Math.round(size.height),
+    layers,
+    assets,
+    activeLayerId: null,
+    crop: clean.crop,
+    transform: clean.transform,
+    opacity: stack.outputOpacity,
+  };
+  if (stack.legacyOutputBlur !== undefined) out.legacyOutputBlur = stack.legacyOutputBlur;
+  if (clean.selection) out.selection = clean.selection;
+  return out;
+}
 
-export const DEFAULT_DEPTH_MASK: DepthMaskOptions = {
-  enabled: false,
-  maskSource: null,
-  mode: 'threshold',
-  depthRange: [0, 255],
-  softness: 10,
-  invert: false,
-};
+export const DEFAULT_TRANSFORM: ImageTransform = DEFAULT_TRANSFORM_VALUES;
+
+export const DEFAULT_DEPTH_MASK: DepthMaskOptions = DEFAULT_DEPTH_MASK_VALUES;
+
+const DEVELOP_KEYS = ['brightness', 'contrast', 'saturation', 'exposure', 'temperature', 'tint'] as const;
 
 /**
  * ImageEditorController manages the complete lifecycle, canvas rendering pipeline,
@@ -189,40 +274,40 @@ export class ImageEditorController {
   private undoStack: HistoryEntry[] = [];
   private redoStack: HistoryEntry[] = [];
   private maxHistoryDepth: number;
+  private maxHistoryBytes: number;
   private isApplyingHistory = false;
   private initialSnapshot: HistoryEntry;
   /** Pixels the selection tools sample (host-provided or read back from the source). */
   private samplePixels: PixelBuffer | null = null;
   private samplePixelsOverride = false;
+  /** Decoded source pixels (the Background's surface), by the buffer or element they came from. */
+  private sourceSurfaces = new WeakMap<object, PixelSurface>();
+  private viewKey: unknown[] = [];
+  private compositor = new LayerCompositor();
 
   constructor(options: ImageEditorOptions = {}) {
     this.maxHistoryDepth = options.maxHistoryDepth ?? 50;
+    this.maxHistoryBytes = options.maxHistoryBytes ?? 512 * 1024 * 1024;
     this.onStateChange = options.onStateChange;
     this.renderer = new ImageEditorRenderer();
     this.renderer.onPreviewHistogram = (histogram) => {
       this.histogramListeners.forEach((l) => l(histogram));
     };
-
-    const initialAdjustments = normalizeStoredAdjustments(options.initialState?.adjustments);
-
-    const initialTransform: ImageTransform = {
-      ...DEFAULT_TRANSFORM,
-      ...options.initialState?.transform,
-    };
-
-    const initialDepthMask: DepthMaskOptions = {
-      ...DEFAULT_DEPTH_MASK,
-      ...options.initialState?.depthMask,
+    this.renderer.compositor = this.compositor;
+    this.renderer.layerSources = {
+      surfaceOf: (layer) => this.surfaceOf(layer),
+      sourceIsOpaque: () => this.sourceIsOpaque(),
+      version: () => this.sourceVersion(),
     };
 
     this.state = {
       sourceUrl: typeof options.image === 'string' ? options.image : null,
       imageDimensions: { width: 800, height: 600 },
-      crop: options.initialState?.crop ?? null,
-      transform: initialTransform,
-      adjustments: initialAdjustments,
-      depthMask: initialDepthMask,
-      annotations: options.initialState?.annotations ?? [],
+      crop: null,
+      transform: { ...DEFAULT_TRANSFORM },
+      adjustments: { ...DEFAULT_ADJUSTMENTS },
+      depthMask: { ...DEFAULT_DEPTH_MASK },
+      annotations: [],
       selectedAnnotationId: null,
       activeTool: 'select',
       zoom: 1,
@@ -230,14 +315,11 @@ export class ImageEditorController {
       isOriginalCompared: false,
       selection: null,
       quickMask: false,
+      layers: [],
+      activeLayerId: null,
+      activeTarget: 'pixels',
+      outputOpacity: 1,
     };
-    if (options.initialState?.selection) {
-      try {
-        this.state.selection = normalizeSelection(deserializeSelection(options.initialState.selection));
-      } catch {
-        // A damaged selection is dropped; the rest of the state still loads.
-      }
-    }
 
     if (options.image instanceof Object && 'width' in options.image) {
       this.imageElement = options.image as CanvasImageSource;
@@ -246,6 +328,15 @@ export class ImageEditorController {
         width: (options.image as any).naturalWidth || (options.image as any).width || 800,
         height: (options.image as any).naturalHeight || (options.image as any).height || 600,
       };
+    }
+
+    this.applyStored(options.initialState ?? {});
+    if (options.initialState?.selection) {
+      try {
+        this.state.selection = normalizeSelection(deserializeSelection(options.initialState.selection));
+      } catch {
+        // A damaged selection is dropped; the rest of the state still loads.
+      }
     }
 
     this.initialSnapshot = this.captureHistoryEntry();
@@ -266,10 +357,15 @@ export class ImageEditorController {
     // Keep the URL visible synchronously (UI bindings compare against it while loading).
     if (typeof src === 'string') this.state.sourceUrl = src;
     const source = await this.resolveSource(src);
+    const prev = this.state.imageDimensions;
     this.imageElement = source.element;
     this.state.sourceUrl = source.sourceUrl;
     this.state.imageDimensions = source.dimensions;
-    this.samplePixels = null;
+    if (!this.samplePixelsOverride) this.samplePixels = null;
+    if (prev.width !== source.dimensions.width || prev.height !== source.dimensions.height) {
+      // Masks lifted from v1 / v2 documents follow the image, as they did when they were resampled at render.
+      this.state.layers = resizeLegacyMasks(this.state.layers, prev, source.dimensions);
+    }
     this.dropMismatchedSelection();
 
     this.initialSnapshot = this.captureHistoryEntry();
@@ -310,10 +406,12 @@ export class ImageEditorController {
   // --- State & Subscription ---
 
   public getState(): ImageEditorState {
+    this.syncViews();
     return this.state;
   }
 
   public subscribe(listener: (state: ImageEditorState) => void): () => void {
+    this.syncViews();
     this.listeners.add(listener);
     listener(this.state);
     return () => {
@@ -322,37 +420,71 @@ export class ImageEditorController {
   }
 
   private notify(): void {
+    this.syncViews();
     const currentState = { ...this.state };
     this.onStateChange?.(currentState);
     this.listeners.forEach((l) => l(currentState));
   }
 
+  /** Recomputes the compatibility views (`adjustments`, `depthMask`, `annotations`) when the stack changed. */
+  private syncViews(): void {
+    const s = this.state;
+    const key = [s.layers, s.outputOpacity, s.legacyOutputBlur, s.activeLayerId, s.imageDimensions.width, s.imageDimensions.height];
+    if (key.length === this.viewKey.length && key.every((v, i) => v === this.viewKey[i])) return;
+    this.viewKey = key;
+    const { width, height } = this.naturalSize;
+    const view = legacyView(this.stack(), width, height, s.activeLayerId);
+    s.adjustments = view.adjustments;
+    s.depthMask = view.depthMask;
+    s.annotations = view.annotations;
+  }
+
+  private stack(): LayerStack {
+    const out: LayerStack = { layers: this.state.layers, outputOpacity: this.state.outputOpacity };
+    if (this.state.legacyOutputBlur !== undefined) out.legacyOutputBlur = this.state.legacyOutputBlur;
+    return out;
+  }
+
   // --- History (Undo / Redo / Reset) ---
 
   private captureHistoryEntry(): HistoryEntry {
-    return {
-      state: this.serializeState(),
+    const s = this.state;
+    const entry: HistoryEntry = {
+      layers: s.layers,
+      activeLayerId: s.activeLayerId,
+      activeTarget: s.activeTarget,
+      crop: s.crop ? { ...s.crop } : null,
+      transform: { ...s.transform },
+      outputOpacity: s.outputOpacity,
+      selection: s.selection ?? null,
       source: {
-        sourceUrl: this.state.sourceUrl,
+        sourceUrl: s.sourceUrl,
         element: this.imageElement,
-        dimensions: { ...this.state.imageDimensions },
+        dimensions: { ...s.imageDimensions },
       },
-      selection: this.state.selection ?? null,
     };
+    if (s.legacyOutputBlur !== undefined) entry.legacyOutputBlur = s.legacyOutputBlur;
+    return entry;
   }
 
   private restoreHistoryEntry(entry: HistoryEntry): void {
-    this.applySerializedState(entry.state);
-    this.state.selection = entry.selection;
-    if (this.imageElement !== entry.source.element) this.samplePixels = null;
+    const s = this.state;
+    s.layers = entry.layers;
+    s.activeLayerId = entry.activeLayerId;
+    s.activeTarget = entry.activeTarget;
+    s.crop = entry.crop ? { ...entry.crop } : null;
+    s.transform = { ...entry.transform };
+    s.outputOpacity = entry.outputOpacity;
+    if (entry.legacyOutputBlur !== undefined) s.legacyOutputBlur = entry.legacyOutputBlur;
+    else delete s.legacyOutputBlur;
+    s.selection = entry.selection;
+    if (this.imageElement !== entry.source.element && !this.samplePixelsOverride) this.samplePixels = null;
     this.imageElement = entry.source.element;
-    this.state.sourceUrl = entry.source.sourceUrl;
-    this.state.imageDimensions = { ...entry.source.dimensions };
-    if (
-      this.state.selectedAnnotationId &&
-      !this.state.annotations.some((a) => a.id === this.state.selectedAnnotationId)
-    ) {
-      this.state.selectedAnnotationId = null;
+    s.sourceUrl = entry.source.sourceUrl;
+    s.imageDimensions = { ...entry.source.dimensions };
+    this.syncViews();
+    if (s.selectedAnnotationId && !s.annotations.some((a) => a.id === s.selectedAnnotationId)) {
+      s.selectedAnnotationId = null;
     }
   }
 
@@ -363,6 +495,26 @@ export class ImageEditorController {
       this.undoStack.shift();
     }
     this.redoStack = [];
+    this.trimHistoryBytes();
+  }
+
+  /**
+   * Bytes of pixel tiles held only by undo / redo steps (not by the current state). The oldest
+   * undo steps are dropped while it exceeds `maxHistoryBytes`.
+   */
+  public get historyBytes(): number {
+    const live = new Set<Tile>();
+    collectStateTiles(this.state.layers, live);
+    const held = new Set<Tile>();
+    for (const e of [...this.undoStack, ...this.redoStack]) collectStateTiles(e.layers, held);
+    let n = 0;
+    for (const t of held) if (!live.has(t)) n += t.data.byteLength;
+    return n;
+  }
+
+  private trimHistoryBytes(): void {
+    if (!(this.maxHistoryBytes > 0) || this.undoStack.length <= 1) return;
+    while (this.undoStack.length > 1 && this.historyBytes > this.maxHistoryBytes) this.undoStack.shift();
   }
 
   public get canUndo(): boolean {
@@ -501,27 +653,217 @@ export class ImageEditorController {
     this.notify();
   }
 
+  // --- Layers (read) ---
+
+  /** The layer stack, bottom to top (immutable objects). */
+  public getLayers(): ImageLayer[] {
+    return this.state.layers;
+  }
+
+  public getLayer(id: string): ImageLayer | undefined {
+    return findLayer(this.state.layers, id)?.layer;
+  }
+
+  /** The active layer, or `undefined`. */
+  public getActiveLayer(): ImageLayer | undefined {
+    return this.state.activeLayerId ? this.getLayer(this.state.activeLayerId) : undefined;
+  }
+
+  /**
+   * Makes a layer the active one (or none) and chooses whether painting targets its pixels or
+   * its mask. View state: no undo step. Returns false for an unknown id.
+   */
+  public setActiveLayer(id: string | null, target: LayerTarget = 'pixels'): boolean {
+    if (id !== null && !this.getLayer(id)) return false;
+    const layer = id ? this.getLayer(id) : undefined;
+    const t: LayerTarget = target === 'mask' && layer?.mask ? 'mask' : 'pixels';
+    if (this.state.activeLayerId === id && this.state.activeTarget === t) return true;
+    this.state.activeLayerId = id;
+    this.state.activeTarget = t;
+    this.notify();
+    return true;
+  }
+
+  /**
+   * The pixels of a pixel layer, in document space (`x`, `y` is the top-left of the returned
+   * buffer), or `null` for an unknown or empty layer. Resolves the Background's source pixels.
+   */
+  public getLayerPixels(id: string): (PixelBuffer & { x: number; y: number }) | null {
+    const layer = this.getLayer(id);
+    if (!layer || layer.type !== 'pixel') return null;
+    const surface = this.surfaceOf(layer);
+    const b = contentBounds(surface);
+    if (!b) return null;
+    return { x: b.x + layer.offset.x, y: b.y + layer.offset.y, width: b.width, height: b.height, data: readRegion(surface, b) };
+  }
+
+  private boundsCache = new WeakMap<object, CropBox | null>();
+
+  /**
+   * Document bounds of a layer's non-transparent pixels (pixel layers; the Background's source
+   * included), or `null` for an empty or non-pixel layer.
+   */
+  public getLayerBounds(id: string): CropBox | null {
+    const layer = this.getLayer(id);
+    if (!layer || layer.type !== 'pixel') return null;
+    const surface = this.surfaceOf(layer);
+    let b = this.boundsCache.get(surface);
+    if (b === undefined) {
+      b = contentBounds(surface);
+      this.boundsCache.set(surface, b);
+    }
+    return b ? { x: b.x + layer.offset.x, y: b.y + layer.offset.y, width: b.width, height: b.height } : null;
+  }
+
+  /**
+   * Composites the layer stack in document space without a canvas (annotation layers need one
+   * and are left out): `rect` (default: the canvas) as RGBA, straight alpha. Crop, rotation and
+   * output opacity are not applied. With `layerIds`, only those layers are composited.
+   */
+  public compositePixels(rect?: CropBox, options: { layerIds?: string[] } = {}): PixelBuffer {
+    const { width, height } = this.naturalSize;
+    const r = rect ?? { x: 0, y: 0, width, height };
+    let layers = this.state.layers;
+    if (options.layerIds) {
+      const keep = new Set(options.layerIds);
+      layers = flattenLayers(layers).filter((l) => keep.has(l.id) && l.type !== 'group');
+    }
+    const data = this.compositor.composite(layers, r, this.compositorSources());
+    return { width: r.width, height: r.height, data };
+  }
+
+  private compositorSources(): CompositorSources {
+    const { width, height } = this.naturalSize;
+    return { width, height, surfaceOf: (l) => this.surfaceOf(l), version: this.sourceVersion() };
+  }
+
+  private sourceIds = new WeakMap<object, number>();
+  private nextSourceId = 1;
+
+  /** Changes whenever the Background's source pixels can have changed. */
+  private sourceVersion(): string {
+    const key = (this.samplePixelsOverride ? this.samplePixels : this.imageElement ?? this.samplePixels) as object | null;
+    if (!key) return '0';
+    let id = this.sourceIds.get(key);
+    if (!id) {
+      id = this.nextSourceId++;
+      this.sourceIds.set(key, id);
+    }
+    return String(id);
+  }
+
+  /** The pixels a pixel layer composites (the decoded source for the Background). */
+  private surfaceOf(layer: PixelLayer): PixelSurface {
+    if (layer.source !== 'document') return layer.surface;
+    return this.sourceSurface() ?? layer.surface;
+  }
+
+  /**
+   * The source image as a surface (cached): host-supplied sample pixels first, then the decoded
+   * element, then pixels read back for the selection tools.
+   */
+  private sourceSurface(): PixelSurface | null {
+    const { width, height } = this.naturalSize;
+    const fromPixels = (px: PixelBuffer) => {
+      let s = this.sourceSurfaces.get(px as object);
+      if (!s) {
+        s = surfaceFromPixels(px, 4);
+        this.sourceSurfaces.set(px as object, s);
+      }
+      return s;
+    };
+    const px = this.samplePixels;
+    const fits = Boolean(px && px.width === width && px.height === height);
+    if (this.samplePixelsOverride && fits) return fromPixels(px!);
+    const el = this.imageElement as unknown as object | null;
+    if (el) {
+      const cached = this.sourceSurfaces.get(el);
+      if (cached) return cached;
+      const decoded = this.decodeSource();
+      if (decoded) {
+        if (!this.samplePixelsOverride) this.samplePixels = decoded;
+        const s = surfaceFromPixels(decoded, 4);
+        this.sourceSurfaces.set(el, s);
+        this.sourceSurfaces.set(decoded as object, s);
+        return s;
+      }
+    }
+    return fits ? fromPixels(px!) : null;
+  }
+
+  private opaqueCache = new WeakMap<object, boolean>();
+
+  /** Whether every source pixel is opaque (some legacy renders depend on it). */
+  private sourceIsOpaque(): boolean {
+    const s = this.sourceSurface();
+    if (!s) return true;
+    let v = this.opaqueCache.get(s);
+    if (v === undefined) {
+      const { width, height } = this.naturalSize;
+      v = isOpaqueInside(s, width, height);
+      this.opaqueCache.set(s, v);
+    }
+    return v;
+  }
+
+  /** Synchronously reads the source element's pixels through a canvas, or `null`. */
+  private decodeSource(): PixelBuffer | null {
+    const el = this.imageElement;
+    if (!el) return null;
+    const { width, height } = this.naturalSize;
+    try {
+      const canvas = this.renderer.createCanvas(width, height);
+      const ctx = canvas.getContext('2d');
+      if (!ctx || typeof ctx.getImageData !== 'function') return null;
+      ctx.drawImage(el, 0, 0, width, height);
+      const data = ctx.getImageData(0, 0, width, height);
+      if (!data?.data || data.data.length < width * height * 4) return null;
+      return { width, height, data: data.data };
+    } catch {
+      return null;
+    }
+  }
+
   // --- Adjustments ---
 
+  /** The pixel layer the base sliders edit: the active pixel layer, else the Background. */
+  private developLayer(): PixelLayer | null {
+    return developTarget(this.state.layers, this.state.activeLayerId);
+  }
+
+  /**
+   * Sets base adjustment values as one undo step (unless `commitToHistory` is false). The base
+   * sliders edit the `develop` filter of the active pixel layer (or the Background), `blur` its
+   * blur filter (or `legacyOutputBlur` in migrated documents), `opacity` the output opacity, and
+   * `layers` replaces the adjustment layers.
+   */
   public setAdjustments(partial: Partial<ImageAdjustments>, commitToHistory = true): void {
     if (commitToHistory) {
       this.recordHistory();
     }
-    const next: ImageAdjustments = {
-      ...this.state.adjustments,
-      ...partial,
-    };
-    if ('layers' in partial) {
-      const layers = normalizeAdjustmentLayers(partial.layers);
-      if (layers.length) next.layers = layers;
-      else delete next.layers;
+    const target = this.developLayer();
+    let layers = this.state.layers;
+    if (target && (DEVELOP_KEYS.some((k) => k in partial) || 'process' in partial)) {
+      layers = mapLayer(layers, target.id, (l) => withDevelop(l as PixelLayer, partial));
     }
-    this.state.adjustments = next;
+    if ('blur' in partial && typeof partial.blur === 'number') {
+      const blur = Math.max(0, partial.blur);
+      if (this.state.legacyOutputBlur !== undefined) this.state.legacyOutputBlur = blur;
+      else if (target) layers = mapLayer(layers, target.id, (l) => withBlur(l as PixelLayer, blur));
+    }
+    if ('opacity' in partial && typeof partial.opacity === 'number') {
+      this.state.outputOpacity = Math.min(1, Math.max(0, partial.opacity));
+    }
+    if ('layers' in partial) {
+      layers = this.replaceAdjustmentNodes(layers, normalizeAdjustmentLayers(partial.layers));
+    }
+    this.state.layers = layers;
     this.notify();
   }
 
   /** True when the adjustments use an older rendering process than {@link LATEST_PROCESS_VERSION}. */
   public get isProcessOutdated(): boolean {
+    this.syncViews();
     return normalizeProcessVersion(this.state.adjustments.process) < LATEST_PROCESS_VERSION;
   }
 
@@ -538,16 +880,22 @@ export class ImageEditorController {
   /** Resets the base sliders (latest process). Adjustment layers are kept; see `clearAdjustmentLayers`. */
   public resetAdjustments(): void {
     this.recordHistory();
-    const layers = this.state.adjustments.layers;
-    this.state.adjustments = { ...DEFAULT_ADJUSTMENTS };
-    if (layers?.length) this.state.adjustments.layers = layers;
+    const target = this.developLayer();
+    if (target) {
+      this.state.layers = mapLayer(this.state.layers, target.id, (l) =>
+        withBlur(withDevelop(l as PixelLayer, { ...DEFAULT_ADJUSTMENTS, process: LATEST_PROCESS_VERSION }), 0)
+      );
+    }
+    delete this.state.legacyOutputBlur;
+    this.state.outputOpacity = 1;
     this.notify();
   }
 
   // --- Adjustment layers ---
 
-  /** The adjustment layers, bottom (first) to top (last). */
+  /** The adjustment layers in stack order, bottom (first) to top (last). */
   public getAdjustmentLayers(): AdjustmentLayer[] {
+    this.syncViews();
     return this.state.adjustments.layers ?? [];
   }
 
@@ -555,22 +903,80 @@ export class ImageEditorController {
     return this.getAdjustmentLayers().find((l) => l.id === id);
   }
 
-  private setLayers(layers: AdjustmentLayer[]): void {
-    const next: ImageAdjustments = { ...this.state.adjustments };
-    if (layers.length) next.layers = layers;
-    else delete next.layers;
-    this.state.adjustments = next;
+  private adjustmentNodes(layers: readonly ImageLayer[] = this.state.layers): AdjustmentLayerNode[] {
+    return flattenLayers(layers).filter((l): l is AdjustmentLayerNode => l.type === 'adjustment');
   }
 
   /**
-   * Adds an adjustment layer on top (or at `index`, 0 = bottom) as one undo step and returns
-   * its id. `kind` alone gives neutral parameters.
+   * Where a new layer goes when no position is given: directly above the topmost layer that is
+   * not an annotation, so it adjusts what adjustment layers always adjusted (annotations stay on top).
+   */
+  private defaultInsertIndex(layers: readonly ImageLayer[] = this.state.layers): number {
+    let i = layers.length;
+    while (i > 0 && layers[i - 1].type === 'annotation') i--;
+    return i;
+  }
+
+  /** Inserts `node` by `aboveId` / `parentId` / adjustment index / default position. */
+  private placeLayer(
+    layers: ImageLayer[],
+    node: ImageLayer,
+    where: { aboveId?: string; parentId?: string; adjustmentIndex?: number }
+  ): ImageLayer[] {
+    if (where.aboveId) {
+      const loc = findLayer(layers, where.aboveId);
+      if (loc) return insertLayer(layers, node, loc.parent?.id ?? null, loc.index + 1);
+    }
+    if (where.parentId) {
+      const loc = findLayer(layers, where.parentId);
+      if (loc && loc.layer.type === 'group') return insertLayer(layers, node, loc.layer.id);
+    }
+    if (where.adjustmentIndex !== undefined) {
+      const nodes = this.adjustmentNodes(layers);
+      const at = Math.max(0, Math.min(nodes.length, Math.round(where.adjustmentIndex)));
+      if (at < nodes.length) {
+        const loc = findLayer(layers, nodes[at].id)!;
+        return insertLayer(layers, node, loc.parent?.id ?? null, loc.index);
+      }
+      if (nodes.length) {
+        const loc = findLayer(layers, nodes[nodes.length - 1].id)!;
+        return insertLayer(layers, node, loc.parent?.id ?? null, loc.index + 1);
+      }
+    }
+    return insertLayer(layers, node, null, this.defaultInsertIndex(layers));
+  }
+
+  /** `setAdjustments({ layers })`: updates nodes by id in place, removes missing ones, adds new ones. */
+  private replaceAdjustmentNodes(layers: ImageLayer[], next: AdjustmentLayer[]): ImageLayer[] {
+    const { width, height } = this.naturalSize;
+    const byId = new Map(next.map((l) => [l.id, l]));
+    let out = layers;
+    for (const node of this.adjustmentNodes(layers)) {
+      const update = byId.get(node.id);
+      out = mapLayer(out, node.id, () => (update ? mergeAdjustmentNode(node, update, width, height) : null));
+    }
+    const existing = new Set(this.adjustmentNodes(out).map((n) => n.id));
+    for (const l of next) {
+      if (existing.has(l.id)) continue;
+      out = this.placeLayer(out, adjustmentNodeFromLegacy(l, width, height), { adjustmentIndex: Infinity });
+    }
+    // Keep the given order among the adjustment layers.
+    const order = next.map((l) => l.id);
+    for (let to = 0; to < order.length; to++) out = this.moveAdjustmentNode(out, order[to], to);
+    return out;
+  }
+
+  /**
+   * Adds an adjustment layer and returns its id, as one undo step. With no position it goes
+   * above the other adjustment layers (or, without any, above the topmost non-annotation layer,
+   * so annotations stay on top); `index` counts adjustment layers (0 = below the others);
+   * `aboveId` / `parentId` place it anywhere in the stack. `kind` alone gives neutral parameters.
    */
   public addAdjustmentLayer<K extends AdjustmentKind>(init: K | AdjustmentLayerInit<K>, index?: number): string {
     const spec: AdjustmentLayerInit<K> = typeof init === 'string' ? { kind: init } : init;
-    const layers = [...this.getAdjustmentLayers()];
+    const ids = new Set(flattenLayers(this.state.layers).map((l) => l.id));
     const layer = createAdjustmentLayer(spec.kind, {
-      id: spec.id && !layers.some((l) => l.id === spec.id) ? spec.id : undefined,
+      id: spec.id && !ids.has(spec.id) ? spec.id : undefined,
       name: spec.name,
       params: spec.params,
       enabled: spec.enabled,
@@ -578,10 +984,16 @@ export class ImageEditorController {
       blend: spec.blend,
       mask: spec.mask ?? undefined,
     });
+    while (ids.has(layer.id)) layer.id = newLayerId('adj');
+    const { width, height } = this.naturalSize;
     this.recordHistory();
-    const at = index === undefined ? layers.length : Math.max(0, Math.min(layers.length, Math.round(index)));
-    layers.splice(at, 0, layer);
-    this.setLayers(layers);
+    const node = adjustmentNodeFromLegacy(layer, width, height);
+    const positioned = Boolean(spec.aboveId || spec.parentId);
+    this.state.layers = this.placeLayer(this.state.layers, node, {
+      aboveId: spec.aboveId,
+      parentId: spec.parentId,
+      adjustmentIndex: index !== undefined ? index : positioned ? undefined : Infinity,
+    });
     this.notify();
     return layer.id;
   }
@@ -592,49 +1004,69 @@ export class ImageEditorController {
    * Returns false for an unknown id.
    */
   public updateAdjustmentLayer(id: string, update: AdjustmentLayerUpdate, commitToHistory = true): boolean {
-    const layers = this.getAdjustmentLayers();
-    const index = layers.findIndex((l) => l.id === id);
-    if (index === -1) return false;
-    const current = layers[index];
+    const loc = findLayer(this.state.layers, id);
+    if (!loc || loc.layer.type !== 'adjustment') return false;
+    const { width, height } = this.naturalSize;
+    const node = loc.layer;
     const merged = normalizeAdjustmentLayer({
-      ...current,
-      ...(update.enabled !== undefined ? { enabled: update.enabled } : {}),
-      ...(update.opacity !== undefined ? { opacity: update.opacity } : {}),
-      ...(update.blend !== undefined ? { blend: update.blend } : {}),
-      ...(update.name !== undefined ? { name: update.name } : {}),
-      ...(update.mask !== undefined ? { mask: update.mask ?? undefined } : {}),
-      params: { ...current.params, ...(update.params ?? {}) },
+      id: node.id,
+      kind: node.kind,
+      enabled: update.enabled ?? node.visible,
+      opacity: update.opacity ?? node.opacity,
+      blend: update.blend ?? node.blend,
+      name: update.name ?? node.name,
+      params: { ...node.params, ...(update.params ?? {}) },
     });
     if (!merged) return false;
     if (commitToHistory) this.recordHistory();
-    const next = [...layers];
-    next[index] = merged;
-    this.setLayers(next);
+    const next = {
+      ...node,
+      visible: merged.enabled,
+      opacity: merged.opacity,
+      blend: merged.blend,
+      name: merged.name ?? '',
+      params: merged.params,
+    } as AdjustmentLayerNode;
+    if (update.mask !== undefined) {
+      const mask = update.mask ? rasterMaskFromLegacy(update.mask, width, height) : null;
+      if (mask) next.mask = mask;
+      else delete next.mask;
+    }
+    this.state.layers = mapLayer(this.state.layers, id, () => next);
     this.notify();
     return true;
   }
 
   /** Removes a layer as one undo step. Returns false for an unknown id. */
   public removeAdjustmentLayer(id: string): boolean {
-    const layers = this.getAdjustmentLayers();
-    if (!layers.some((l) => l.id === id)) return false;
+    const loc = findLayer(this.state.layers, id);
+    if (!loc || loc.layer.type !== 'adjustment') return false;
     this.recordHistory();
-    this.setLayers(layers.filter((l) => l.id !== id));
+    this.state.layers = mapLayer(this.state.layers, id, () => null);
+    if (this.state.activeLayerId === id) this.state.activeLayerId = null;
     this.notify();
     return true;
   }
 
-  /** Moves a layer to `toIndex` (0 = bottom) as one undo step. Returns false if nothing moved. */
+  private moveAdjustmentNode(layers: ImageLayer[], id: string, toIndex: number): ImageLayer[] {
+    const nodes = this.adjustmentNodes(layers);
+    const from = nodes.findIndex((n) => n.id === id);
+    if (from === -1) return layers;
+    const to = Math.max(0, Math.min(nodes.length - 1, Math.round(toIndex)));
+    if (to === from) return layers;
+    const node = nodes[from];
+    const anchor = nodes[to];
+    const without = mapLayer(layers, id, () => null);
+    const loc = findLayer(without, anchor.id)!;
+    return insertLayer(without, node, loc.parent?.id ?? null, to > from ? loc.index + 1 : loc.index);
+  }
+
+  /** Moves a layer to `toIndex` among the adjustment layers (0 = bottom) as one undo step. Returns false if nothing moved. */
   public moveAdjustmentLayer(id: string, toIndex: number): boolean {
-    const layers = [...this.getAdjustmentLayers()];
-    const from = layers.findIndex((l) => l.id === id);
-    if (from === -1) return false;
-    const to = Math.max(0, Math.min(layers.length - 1, Math.round(toIndex)));
-    if (to === from) return false;
+    const next = this.moveAdjustmentNode(this.state.layers, id, toIndex);
+    if (next === this.state.layers) return false;
     this.recordHistory();
-    const [layer] = layers.splice(from, 1);
-    layers.splice(to, 0, layer);
-    this.setLayers(layers);
+    this.state.layers = next;
     this.notify();
     return true;
   }
@@ -650,9 +1082,13 @@ export class ImageEditorController {
 
   /** Removes every adjustment layer as one undo step. */
   public clearAdjustmentLayers(): void {
-    if (!this.getAdjustmentLayers().length) return;
+    const nodes = this.adjustmentNodes();
+    if (!nodes.length) return;
     this.recordHistory();
-    this.setLayers([]);
+    let layers = this.state.layers;
+    for (const n of nodes) layers = mapLayer(layers, n.id, () => null);
+    this.state.layers = layers;
+    if (nodes.some((n) => n.id === this.state.activeLayerId)) this.state.activeLayerId = null;
     this.notify();
   }
 
@@ -746,7 +1182,8 @@ export class ImageEditorController {
 
   /**
    * Supplies the pixels the selection tools sample (natural size RGBA), e.g. decoded in a worker
-   * or in a test; `null` goes back to reading the source image. A new source image clears it.
+   * or in a test; `null` goes back to reading the source image. Without a canvas (Node, workers)
+   * these are also the Background layer's pixels.
    */
   public setSamplePixels(pixels: PixelBuffer | null): void {
     this.samplePixels = pixels;
@@ -755,8 +1192,8 @@ export class ImageEditorController {
 
   /**
    * The pixels the selection tools sample: the source image at natural size, or with
-   * `sampleMerged` the source after the base adjustments and adjustment layers (no crop,
-   * rotation or annotations). `null` without pixel access (no DOM, tainted canvas).
+   * `sampleMerged` the composite of the layers (no crop, rotation or annotations). `null`
+   * without pixel access (no DOM, tainted canvas).
    */
   public async getSamplePixels(options: SampleOptions = {}): Promise<PixelBuffer | null> {
     const { width, height } = this.naturalSize;
@@ -781,9 +1218,22 @@ export class ImageEditorController {
       return null;
     }
     if (!options.sampleMerged) return base;
-    const copy = { width: base.width, height: base.height, data: new Uint8ClampedArray(base.data as ArrayLike<number>) };
-    applyAdjustments(copy as unknown as ImageData, this.state.adjustments);
-    return copy;
+    this.syncViews();
+    if (legacyView(this.stack(), width, height, null).exact) {
+      // The old shape: the source through the base adjustments and adjustment layers.
+      const copy = { width: base.width, height: base.height, data: new Uint8ClampedArray(base.data as ArrayLike<number>) };
+      applyAdjustments(copy as unknown as ImageData, legacyView(this.stack(), width, height, null).adjustments);
+      return copy;
+    }
+    const pixels = options.pixels;
+    const sources: CompositorSources = {
+      width,
+      height,
+      surfaceOf: (l) => (l.source === 'document' && pixels ? surfaceFromPixels(pixels, 4) : this.surfaceOf(l)),
+      version: pixels ? 'pixels' : this.sourceVersion(),
+    };
+    const data = new LayerCompositor().composite(withoutAnnotations(this.state.layers), { x: 0, y: 0, width, height }, sources);
+    return { width, height, data };
   }
 
   private async requirePixels(options: SampleOptions): Promise<PixelBuffer> {
@@ -868,6 +1318,13 @@ export class ImageEditorController {
 
   // --- Layer masks ---
 
+  private maskFromSelection(sel: SelectionMask, props: LayerMaskProps = {}): RasterMask {
+    const { width, height } = this.naturalSize;
+    const sized = sel.width === width && sel.height === height ? sel : resizeSelection(sel, width, height);
+    const mask: RasterMask = { surface: surfaceFromPixels({ width, height, data: sized.data }, 1, 0, 0, 0), defaultValue: 0 };
+    return withMaskProps(mask, props);
+  }
+
   /**
    * Adds the selection as the layer's mask (Reveal Selection), replacing any mask, as one undo
    * step. Without a selection, returns false.
@@ -875,26 +1332,46 @@ export class ImageEditorController {
   public applySelectionAsLayerMask(layerId: string, props: LayerMaskProps = {}): boolean {
     const sel = this.state.selection;
     if (!sel?.bounds || !this.getAdjustmentLayer(layerId)) return false;
-    return this.updateAdjustmentLayer(layerId, { mask: layerMaskFromSelection(sel, props) });
+    return this.setLayerMask(layerId, this.maskFromSelection(sel, props));
+  }
+
+  private setLayerMask(layerId: string, mask: RasterMask | null, commitToHistory = true): boolean {
+    const loc = findLayer(this.state.layers, layerId);
+    if (!loc) return false;
+    if (commitToHistory) this.recordHistory();
+    this.state.layers = mapLayer(this.state.layers, layerId, (l) => {
+      const next = { ...l } as ImageLayer;
+      if (mask) next.mask = mask;
+      else delete next.mask;
+      return next;
+    });
+    if (!mask && this.state.activeLayerId === layerId) this.state.activeTarget = 'pixels';
+    this.notify();
+    return true;
   }
 
   /** Sets (from a selection-shaped mask) or removes (`null`) a layer's mask as one undo step. */
   public setAdjustmentLayerMask(layerId: string, mask: SelectionMask | null, props: LayerMaskProps = {}): boolean {
-    return this.updateAdjustmentLayer(layerId, { mask: mask ? layerMaskFromSelection(mask, props) : null });
+    if (!this.getAdjustmentLayer(layerId)) return false;
+    return this.setLayerMask(layerId, mask ? this.maskFromSelection(mask, props) : null);
   }
 
   /** Changes a layer mask's density (0..1), feather (px) or enabled flag; the mask pixels are kept. */
   public setAdjustmentLayerMaskProps(layerId: string, props: LayerMaskProps, commitToHistory = true): boolean {
-    const layer = this.getAdjustmentLayer(layerId);
-    if (!layer?.mask) return false;
-    return this.updateAdjustmentLayer(layerId, { mask: updateLayerMaskProps(layer.mask, props) }, commitToHistory);
+    const layer = this.getLayer(layerId);
+    if (!layer || layer.type !== 'adjustment' || !layer.mask) return false;
+    return this.setLayerMask(layerId, withMaskProps(layer.mask, props), commitToHistory);
   }
 
   /** Load Selection from a layer mask (its pixels; density and feather are not applied). */
   public selectionFromLayerMask(layerId: string, mode: SelectionMode = 'replace'): boolean {
-    const layer = this.getAdjustmentLayer(layerId);
-    const sel = layer?.mask ? decodeLayerMask(layer.mask) : null;
-    if (!sel) return false;
+    const layer = this.getLayer(layerId);
+    if (!layer?.mask || layer.mask.source) return false;
+    const { width, height } = this.naturalSize;
+    const ox = layer.type === 'pixel' ? layer.offset.x : 0;
+    const oy = layer.type === 'pixel' ? layer.offset.y : 0;
+    const data = readRegion(layer.mask.surface, { x: -ox, y: -oy, width, height });
+    const sel = createSelectionMask(width, height, new Uint8Array(data.buffer, data.byteOffset, data.length));
     return this.setSelection(sel, mode);
   }
 
@@ -919,28 +1396,56 @@ export class ImageEditorController {
 
   // --- Depth Masking (Gleamforge) ---
 
+  /** Sets the depth mask (a parametric mask on the active pixel layer, or the Background) as one undo step. */
   public setDepthMask(partial: Partial<DepthMaskOptions>): void {
     this.recordHistory();
-    this.state.depthMask = {
-      ...this.state.depthMask,
-      ...partial,
-    };
+    this.syncViews();
+    const target = this.developLayer();
+    if (target) {
+      const merged: DepthMaskOptions = { ...this.state.depthMask, ...partial };
+      merged.depthRange = [...merged.depthRange] as [number, number];
+      this.state.layers = mapLayer(this.state.layers, target.id, (l) => {
+        const next = { ...l } as PixelLayer;
+        if (isDefaultDepthMask(merged)) {
+          if (next.mask?.source) delete next.mask;
+        } else next.mask = depthRasterMask(merged);
+        return next;
+      });
+    }
     this.notify();
   }
 
   public resetDepthMask(): void {
     this.recordHistory();
-    this.state.depthMask = { ...DEFAULT_DEPTH_MASK };
+    const target = this.developLayer();
+    if (target?.mask?.source) {
+      this.state.layers = mapLayer(this.state.layers, target.id, (l) => {
+        const next = { ...l } as PixelLayer;
+        delete next.mask;
+        return next;
+      });
+    }
     this.notify();
   }
 
   // --- Annotations & Layers ---
 
-  public addAnnotation(annotation: CreateAnnotationPayload): string {
+  private annotationLayer(id: string): AnnotationLayer | undefined {
+    return flattenLayers(this.state.layers).find(
+      (l): l is AnnotationLayer => l.type === 'annotation' && l.annotation.id === id
+    );
+  }
+
+  /** Adds an annotation as its own layer (top of the stack unless `aboveId` is given). */
+  public addAnnotation(annotation: CreateAnnotationPayload, placement: AnnotationPlacement = {}): string {
     this.recordHistory();
     const id = `ann_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const fullAnnotation = { ...annotation, id } as Annotation;
-    this.state.annotations = [...this.state.annotations, fullAnnotation];
+    const layer = annotationLayerFor(fullAnnotation);
+    const loc = placement.aboveId ? findLayer(this.state.layers, placement.aboveId) : null;
+    this.state.layers = loc
+      ? insertLayer(this.state.layers, layer, loc.parent?.id ?? null, loc.index + 1)
+      : insertLayer(this.state.layers, layer, null);
     this.state.selectedAnnotationId = id;
     this.notify();
     return id;
@@ -950,18 +1455,19 @@ export class ImageEditorController {
     if (commitToHistory) {
       this.recordHistory();
     }
-    this.state.annotations = this.state.annotations.map((ann) => {
-      if (ann.id === id) {
-        return { ...ann, ...partial } as Annotation;
-      }
-      return ann;
-    });
+    const layer = this.annotationLayer(id);
+    if (layer) {
+      const annotation = { ...layer.annotation, ...partial, id } as Annotation;
+      const name = layer.name === annotationLayerName(layer.annotation) ? annotationLayerName(annotation) : layer.name;
+      this.state.layers = mapLayer(this.state.layers, layer.id, () => ({ ...layer, annotation, name }));
+    }
     this.notify();
   }
 
   public removeAnnotation(id: string): void {
     this.recordHistory();
-    this.state.annotations = this.state.annotations.filter((ann) => ann.id !== id);
+    const layer = this.annotationLayer(id);
+    if (layer) this.state.layers = mapLayer(this.state.layers, layer.id, () => null);
     if (this.state.selectedAnnotationId === id) {
       this.state.selectedAnnotationId = null;
     }
@@ -970,7 +1476,9 @@ export class ImageEditorController {
 
   public clearAnnotations(): void {
     this.recordHistory();
-    this.state.annotations = [];
+    let layers = this.state.layers;
+    for (const l of flattenLayers(layers)) if (l.type === 'annotation') layers = mapLayer(layers, l.id, () => null);
+    this.state.layers = layers;
     this.state.selectedAnnotationId = null;
     this.notify();
   }
@@ -1017,6 +1525,7 @@ export class ImageEditorController {
   public async render(targetCanvas: HTMLCanvasElement, options?: RenderOptions): Promise<void> {
     const source = this.imageElement || this.state.sourceUrl;
     if (!source) return;
+    this.syncViews();
     try {
       await this.renderer.renderToCanvas(targetCanvas, source, this.state, options);
     } catch {
@@ -1029,6 +1538,7 @@ export class ImageEditorController {
     if (!source) {
       return this.renderer.createCanvas(1, 1);
     }
+    this.syncViews();
     return this.renderer.renderExport(source, this.state, options);
   }
 
@@ -1041,6 +1551,7 @@ export class ImageEditorController {
   public async renderSourceView(options: { scale?: number; includeAnnotations?: boolean } = {}): Promise<HTMLCanvasElement | null> {
     const source = this.imageElement || this.state.sourceUrl;
     if (!source) return null;
+    this.syncViews();
     const { width, height } = this.state.imageDimensions;
     const k = Math.min(1, Math.max(0, options.scale ?? 1));
     return this.renderer.renderExport(
@@ -1094,6 +1605,7 @@ export class ImageEditorController {
   // --- AI Masking & Transformation Helpers ---
 
   public async renderMask(options?: { useAnnotations?: boolean; useCrop?: boolean; useSelection?: boolean }): Promise<HTMLCanvasElement> {
+    this.syncViews();
     return this.renderer.renderMask(this.state, options);
   }
 
@@ -1150,13 +1662,14 @@ export class ImageEditorController {
     this.imageElement = next.element;
     this.state.sourceUrl = next.sourceUrl;
     this.state.imageDimensions = next.dimensions;
-    this.samplePixels = null;
+    if (!this.samplePixelsOverride) this.samplePixels = null;
     if (this.state.selection && (sx !== 1 || sy !== 1)) {
       this.state.selection = normalizeSelection(
         resizeSelection(this.state.selection, Math.round(next.dimensions.width), Math.round(next.dimensions.height))
       );
     }
 
+    let layers = this.state.layers;
     if (sx !== 1 || sy !== 1) {
       if (this.state.crop) {
         this.state.crop = clampCropToImage(
@@ -1170,28 +1683,43 @@ export class ImageEditorController {
           next.dimensions.height
         );
       }
-      this.state.annotations = this.state.annotations.map((ann) => scaleAnnotation(ann, sx, sy));
+      layers = resizeLegacyMasks(layers, prev, next.dimensions);
+      for (const l of flattenLayers(layers)) {
+        if (l.type === 'annotation') {
+          layers = mapLayer(layers, l.id, () => ({ ...l, annotation: scaleAnnotation(l.annotation, sx, sy) }));
+        }
+      }
     }
+    // The Background now shows the new source.
+    const bg = developTarget(layers, null);
+    if (bg && bg.source !== 'document') layers = mapLayer(layers, bg.id, () => ({ ...bg, source: 'document' }));
 
     if (clearAnnotations) {
-      this.state.annotations = [];
+      for (const l of flattenLayers(layers)) if (l.type === 'annotation') layers = mapLayer(layers, l.id, () => null);
       this.state.selectedAnnotationId = null;
     }
+    this.state.layers = layers;
     this.notify();
   }
 
   // --- Serialization ---
 
-  /** The serializable state; `selection` is included (run-length encoded) only when something is selected. */
+  /**
+   * The serializable state. A document whose layers still have the v1 / v2 shape (the
+   * Background with its sliders and depth mask, adjustment layers, annotations) is written as
+   * v1 / v2 exactly as before; anything else is written as v3 with the layer pixels as PNG
+   * assets. `selection` is included (run-length encoded) only when something is selected.
+   */
   public toJSON(): SerializedImageEditorState {
     const out = this.serializeState();
     if (this.state.selection?.bounds) out.selection = serializeSelection(this.state.selection);
     return out;
   }
 
+  /** Loads a stored state of any version (one undo step). */
   public loadJSON(data: SerializedImageEditorState): void {
     this.recordHistory();
-    this.applySerializedState(migrateSerializedImageEditorState(data));
+    this.applyStored(data);
     let selection: SelectionMask | null = null;
     if (data.selection) {
       try {
@@ -1205,30 +1733,74 @@ export class ImageEditorController {
     this.notify();
   }
 
-  private serializeState(): SerializedImageEditorState {
-    return {
-      // States without adjustment layers keep schema 1, so they round-trip unchanged.
-      version: this.state.adjustments.layers?.length ? IMAGE_EDITOR_SCHEMA_VERSION : 1,
-      crop: this.state.crop ? { ...this.state.crop } : null,
-      transform: { ...this.state.transform },
-      adjustments: serializeAdjustments(this.state.adjustments),
-      depthMask: {
-        ...this.state.depthMask,
-        depthRange: [...this.state.depthMask.depthRange] as [number, number],
-      },
-      annotations: JSON.parse(JSON.stringify(this.state.annotations)),
-    };
+  /** Problems found by the last `loadJSON` / `initialState` of a v3 document (unreadable layers or assets). */
+  public lastLoadProblems: string[] = [];
+
+  private applyStored(raw: Partial<SerializedImageEditorState>): void {
+    const s = this.state;
+    const data = migrateSerializedImageEditorState(raw as SerializedImageEditorState);
+    this.lastLoadProblems = [];
+    if (isLayered(data)) {
+      const problems: string[] = [];
+      s.layers = deserializeLayers(data.layers, { assets: data.assets ?? {}, problems });
+      this.lastLoadProblems = problems;
+      s.crop = data.crop ? { ...data.crop } : null;
+      s.transform = { ...data.transform };
+      s.outputOpacity = data.opacity;
+      if (typeof data.legacyOutputBlur === 'number' && data.legacyOutputBlur >= 0) s.legacyOutputBlur = data.legacyOutputBlur;
+      else delete s.legacyOutputBlur;
+      s.activeLayerId = data.activeLayerId && findLayer(s.layers, data.activeLayerId) ? data.activeLayerId : null;
+      if (!this.imageElement && typeof data.width === 'number' && typeof data.height === 'number' && data.width > 0 && data.height > 0) {
+        s.imageDimensions = { width: data.width, height: data.height };
+      }
+    } else {
+      const { width, height } = this.naturalSize;
+      const stack = layersFromLegacy(data, width, height);
+      s.layers = stack.layers;
+      s.outputOpacity = stack.outputOpacity;
+      if (stack.legacyOutputBlur !== undefined) s.legacyOutputBlur = stack.legacyOutputBlur;
+      else delete s.legacyOutputBlur;
+      s.crop = data.crop ? { ...data.crop } : null;
+      s.transform = { ...data.transform };
+      s.activeLayerId = null;
+    }
+    s.activeTarget = 'pixels';
+    this.viewKey = [];
+    this.syncViews();
+    if (s.selectedAnnotationId && !s.annotations.some((a) => a.id === s.selectedAnnotationId)) s.selectedAnnotationId = null;
   }
 
-  private applySerializedState(data: SerializedImageEditorState): void {
-    this.state.crop = data.crop ? { ...data.crop } : null;
-    this.state.transform = { ...data.transform };
-    this.state.adjustments = normalizeStoredAdjustments(data.adjustments);
-    this.state.depthMask = {
-      ...data.depthMask,
-      depthRange: [...data.depthMask.depthRange] as [number, number],
+  private serializeState(): SerializedImageEditorState {
+    const { width, height } = this.naturalSize;
+    const view = legacyView(this.stack(), width, height, null);
+    if (view.exact) {
+      return {
+        // States without adjustment layers keep schema 1, so they round-trip unchanged.
+        version: view.adjustments.layers?.length ? 2 : 1,
+        crop: this.state.crop ? { ...this.state.crop } : null,
+        transform: { ...this.state.transform },
+        adjustments: serializeAdjustments(view.adjustments),
+        depthMask: {
+          ...view.depthMask,
+          depthRange: [...view.depthMask.depthRange] as [number, number],
+        },
+        annotations: JSON.parse(JSON.stringify(view.annotations)),
+      };
+    }
+    const { layers, assets } = serializeLayers(this.state.layers);
+    const out: SerializedLayeredImageEditorState = {
+      version: LAYERED_SCHEMA_VERSION,
+      width,
+      height,
+      layers,
+      assets,
+      activeLayerId: this.state.activeLayerId,
+      crop: this.state.crop ? { ...this.state.crop } : null,
+      transform: { ...this.state.transform },
+      opacity: this.state.outputOpacity,
     };
-    this.state.annotations = JSON.parse(JSON.stringify(data.annotations || []));
+    if (this.state.legacyOutputBlur !== undefined) out.legacyOutputBlur = this.state.legacyOutputBlur;
+    return out;
   }
 }
 
@@ -1243,6 +1815,147 @@ function serializeAdjustments(adjustments: ImageAdjustments): ImageAdjustments {
   if (normalizeProcessVersion(out.process) === LEGACY_PROCESS_VERSION) {
     delete out.process;
     if (!out.tint) delete out.tint;
+  }
+  return out;
+}
+
+/** A pixel layer with its develop filter updated from base-slider values (created if missing). */
+function withDevelop(layer: PixelLayer, partial: Partial<ImageAdjustments>): PixelLayer {
+  const filters = [...(layer.filters ?? [])];
+  let i = filters.findIndex((f) => f.kind === 'develop');
+  if (i === -1) {
+    filters.unshift({
+      id: layer.source === 'document' ? DEVELOP_FILTER_ID : newLayerId('flt'),
+      kind: 'develop',
+      enabled: true,
+      brightness: 0,
+      contrast: 0,
+      saturation: 0,
+      exposure: 0,
+      temperature: 0,
+      tint: 0,
+      process: LATEST_PROCESS_VERSION,
+    });
+    i = 0;
+  }
+  const next = { ...(filters[i] as DevelopFilter) };
+  for (const k of DEVELOP_KEYS) {
+    const v = partial[k];
+    if (typeof v === 'number' && Number.isFinite(v)) next[k] = v;
+  }
+  if ('process' in partial) next.process = normalizeProcessVersion(partial.process);
+  filters[i] = next;
+  return { ...layer, filters };
+}
+
+/** A pixel layer with its blur filter set to `radius` (removed at 0). */
+function withBlur(layer: PixelLayer, radius: number): PixelLayer {
+  const existing = layer.filters?.find((f) => f.kind === 'blur');
+  const filters: LayerFilter[] = (layer.filters ?? []).filter((f) => f.kind !== 'blur');
+  if (radius > 0) {
+    filters.push({
+      id: existing?.id ?? (layer.source === 'document' ? BLUR_FILTER_ID : newLayerId('flt')),
+      kind: 'blur',
+      enabled: true,
+      radius,
+    });
+  }
+  const next = { ...layer };
+  if (filters.length) next.filters = filters;
+  else delete next.filters;
+  return next;
+}
+
+/** Updates a node from an old-shape layer (`setAdjustments({ layers })`), keeping a raster mask whose pixels did not change. */
+function mergeAdjustmentNode(node: AdjustmentLayerNode, update: AdjustmentLayer, width: number, height: number): AdjustmentLayerNode {
+  const next = {
+    ...node,
+    kind: update.kind,
+    params: JSON.parse(JSON.stringify(update.params)),
+    visible: update.enabled !== false,
+    opacity: update.opacity,
+    blend: update.blend,
+    name: update.name ?? '',
+  } as AdjustmentLayerNode;
+  if (!update.mask) delete next.mask;
+  else {
+    const current = node.mask && !node.mask.source ? node.mask : null;
+    const memo = current ? legacyMaskOf(current, width, height) : null;
+    if (current && memo && memo.width === update.mask.width && memo.height === update.mask.height && memo.rle === update.mask.rle) {
+      next.mask = withMaskProps(current, {
+        density: update.mask.density ?? 1,
+        feather: update.mask.feather ?? 0,
+        enabled: update.mask.enabled !== false,
+      });
+    } else {
+      const m = rasterMaskFromLegacy(update.mask, width, height);
+      if (m) next.mask = m;
+      else delete next.mask;
+    }
+  }
+  return next;
+}
+
+/** Applies mask property changes; `undefined` fields keep their value, defaults are left out. */
+function withMaskProps(mask: RasterMask, props: LayerMaskProps): RasterMask {
+  const next: RasterMask = { ...mask };
+  if (props.density !== undefined) {
+    const d = Math.min(1, Math.max(0, props.density));
+    if (d !== 1) next.density = d;
+    else delete next.density;
+  }
+  if (props.feather !== undefined) {
+    const f = Math.min(1000, Math.max(0, props.feather));
+    if (f) next.feather = f;
+    else delete next.feather;
+  }
+  if (props.enabled !== undefined) {
+    if (props.enabled) delete next.enabled;
+    else next.enabled = false;
+  }
+  return next;
+}
+
+/** Rescales adjustment-layer masks (canvas-sized) when the canvas size changes. */
+function resizeLegacyMasks(layers: ImageLayer[], from: ImageDimensions, to: ImageDimensions): ImageLayer[] {
+  const fw = Math.max(1, Math.round(from.width));
+  const fh = Math.max(1, Math.round(from.height));
+  const tw = Math.max(1, Math.round(to.width));
+  const th = Math.max(1, Math.round(to.height));
+  if (fw === tw && fh === th) return layers;
+  let out = layers;
+  for (const l of flattenLayers(layers)) {
+    if (l.type !== 'adjustment' || !l.mask || l.mask.source) continue;
+    const old = l.mask;
+    const mask = rasterMaskFromLegacy(legacyMaskOf(old, fw, fh), tw, th);
+    if (!mask) continue;
+    out = mapLayer(out, l.id, (n) => ({ ...n, mask: { ...mask, density: old.density, feather: old.feather, enabled: old.enabled } }));
+  }
+  return out;
+}
+
+/** Whether every pixel of `surface` inside the canvas is opaque. */
+function isOpaqueInside(surface: PixelSurface, width: number, height: number): boolean {
+  const row = new Uint8ClampedArray(width * 4);
+  for (let y = 0; y < height; y++) {
+    readRegion(surface, { x: 0, y, width, height: 1 }, row);
+    for (let i = 3; i < row.length; i += 4) if (row[i] !== 255) return false;
+  }
+  return true;
+}
+
+function collectStateTiles(layers: readonly ImageLayer[], into: Set<Tile>): void {
+  for (const l of flattenLayers(layers)) {
+    if (l.type === 'pixel' && l.source !== 'document') collectTiles(l.surface, into);
+    if (l.mask && !l.mask.source) collectTiles(l.mask.surface, into);
+  }
+}
+
+function withoutAnnotations(layers: readonly ImageLayer[]): ImageLayer[] {
+  const out: ImageLayer[] = [];
+  for (const l of layers) {
+    if (l.type === 'annotation') continue;
+    out.push(l.type === 'group' ? { ...l, children: withoutAnnotations(l.children) } : l);
   }
   return out;
 }

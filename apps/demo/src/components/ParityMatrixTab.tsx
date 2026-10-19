@@ -294,6 +294,13 @@ const FEATURES: ParityRow[] = [
     note: "Threshold and brightness depth alpha blending with softness, invert, and removeAlpha",
   },
   {
+    feature: "Image Layer Stack (tiled surfaces, compositor, schema v3)",
+    core: true,
+    react: true,
+    svelte: true,
+    note: "Pixel, adjustment, group and annotation layers on copy-on-write 256 px tiles; per-tile compositor with prefix caches; v1 / v2 documents unchanged; list_layers agent tool",
+  },
+  {
     feature: "Image Selections, Refine Edge & Layer Masks",
     core: true,
     react: true,

@@ -5,11 +5,16 @@ description: How to colour-correct and retouch a photo in the Pixerate image edi
 
 # Image editor
 
-The image editor holds one source image plus a stack of edits that never touch the source
-pixels: base adjustments (one value per control id), adjustment layers applied bottom to top
-on top of the base, an optional selection, crop/rotate/flip and annotations. Rendering order:
-base adjustments, then layers bottom to top (each through its mask, opacity and blend mode),
-then blur. See `pixerate-agent-tools` for errors, namespacing and command batching.
+The image editor holds a layer stack over a canvas the size of the source image. Opening an
+image gives one pixel layer, **Background**, whose pixels are the source and whose `develop`
+filter holds the base adjustments; adjustment layers sit above it (bottom to top, each through
+its mask, opacity and blend mode) and every annotation is its own layer on top. `list_layers`
+shows the whole stack. Edits never touch the source pixels. The base controls edit the develop
+filter of the active pixel layer (the Background unless another pixel layer is active); base
+`blur` blurs that layer (or, in documents saved before layers with blur and adjustment layers,
+the output after the layers), and base `opacity` is the output's alpha. Also an optional
+selection and crop/rotate/flip. See `pixerate-agent-tools` for errors, namespacing and command
+batching.
 
 - **Control ids** for base adjustments: `brightness`, `contrast`, `exposure`, `temperature`,
   `tint`, `saturation` (all -100..100, default 0), `blur` (0..30 px) and `opacity` (0..1).
@@ -87,6 +92,7 @@ then blur. See `pixerate-agent-tools` for errors, namespacing and command batchi
 | `get_adjustments` | Read the current state: `values` by control id, `process` version (1 or 2), and `layers` bottom to top with id, kind, params, opacity, blend, enabled and mask. Call first, and to find layer ids. |
 | `list_controls` | Get every base control (id, label, section, min, max, step, default, `requiresProcess`), each layer kind's settable controls (plus `opacity`), the blend mode ids and the `layers.<layerId>.<controlId>` path format. Call once per session before writing. |
 | `get_selection` | Read the active selection: `empty`, `bounds` (natural pixels), `area` in pixels, `percent` of the image and a description. Check it after every select or modify step and before masking: a wand that covered 90% of the image is the wrong selection. |
+| `list_layers` | Read the layer stack bottom to top as a tree: id, type (`pixel`, `adjustment`, `group`, `annotation`), name, document `bounds` of pixel layers, visibility, opacity, `fillOpacity`, blend, `clipped`, locks, a `mask` summary, pixel-layer `filters` (the Background's `develop` filter is the base adjustments), adjustment `kind` and `params`, group `children`, and which layer is `active`. Call it to understand a document with more than the Background before changing it; adjustment layer ids work with every adjustment-layer tool. |
 | `get_image_info` | Read the geometry: source `image` size, `crop` box (source pixels, or null), `rotation` degrees, `flipH` / `flipV`, the `output` size after crop and rotation, the layer count and `canUndo` / `canRedo`. Call before cropping or selecting so coordinates are right. |
 | `get_histogram` | Judge exposure numerically: per channel and luminance `mean`, `p1` and `p99` (0..255), and `clipping` percent at pure black and white per channel. Reads the last render, so call `render_preview` first. `bins` (16, 32, 64 or 256) adds the counts. Cheaper than another image for checking a tonal change. |
 | `render_preview` | See the edited image (crop, adjustments, layers, annotations) as a PNG. `maxSide` 16..2048 px, default 512. Images cost tokens: render after a group of edits, use 512 for overall look and 1024+ to judge clipping, edges and masks. Fails in environments without rendering. |
@@ -126,8 +132,11 @@ then blur. See `pixerate-agent-tools` for errors, namespacing and command batchi
   the correction needs a layer (e.g. levels or curves), not a bigger number.
 - `tint` has no effect on process 1 edits (older saved documents); the result carries a note.
   Do not keep raising it; correct the green-magenta cast with a `colorBalance` layer instead.
-- Base `opacity` fades the whole image, not an adjustment. Base `blur` blurs the whole output
-  after all layers; it is not a local softening tool.
+- Base `opacity` fades the whole image, not an adjustment. Base `blur` blurs a whole layer (the
+  Background by default, before the adjustment layers; in older documents with blur and
+  adjustment layers, the output after them). It is not a local softening tool.
+- New adjustment layers go above the other adjustment layers and below annotations, so they
+  never tint arrows, labels or watermarks. `list_layers` shows where each one went.
 - `invert` and `threshold` are destructive-looking creative effects; never use them for a
   correction the user did not ask for. Posterize `levels` below ~8 bands visibly.
 - Selection coordinates ignore crop and rotation: they are source-image pixels. A rectangle in

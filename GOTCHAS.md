@@ -21,6 +21,42 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/image-editor] Compositing in Document Space Cannot Reproduce Every Old Render
+
+- **Issue / Symptom**: Moving the image editor to a layer compositor that works in document space and projects afterwards changed some old documents by a level here and there: rotated by a non-quarter angle, cropped at fractional coordinates, depth-masked, faded with output opacity, or blurred with a crop or a 90° turn.
+- **Root Cause**: The old renderer drew the cropped, rotated source first and adjusted the projected pixels; blur ran on that buffer (clamping at the crop edge, with its two passes swapped by a quarter turn) and the depth mask and opacity rounded alpha in a fixed order. Per-pixel operations commute with crops, flips and quarter turns, but not with resampling, and box blurs and repeated alpha rounding do not commute with each other.
+- **Solution / Workaround**: Documents that still have the exact v1 / v2 shape (`isLegacyShape`) take the old base path in exactly those cases (`needsLegacyBase` in `layers/render.ts`; the list is in `docs/image-editor-layers.md`). Everything else uses the compositor. `tests/image-layers-equivalence.test.ts` requires byte equality for every random old document the compositor renders; when you change either path, keep that test green and add a routing case rather than accepting a difference.
+
+### [core/image-editor] Consecutive Adjustment Layers Must Composite as One Float Pass
+
+- **Issue / Symptom**: Rounding to 8 bits after every adjustment layer made migrated documents with several adjustment layers differ by one level in places.
+- **Root Cause**: `applyAdjustmentLayers` evaluates the whole stack in float per pixel and rounds once at the end.
+- **Solution / Workaround**: The compositor groups adjacent, unclipped adjustment layers into one step and calls `applyAdjustmentLayers` with all of them (masks as per-layer coverage planes). The prefix cache works per step, so its checkpoints sit at run boundaries.
+
+### [core/image-editor] The Viewport Must Draw a Layered Document the Same Two-Step Way
+
+- **Issue / Symptom**: At zooms other than 1, a few viewport pixels of a layered document differed by one level from the old render of the same pixels.
+- **Root Cause**: The old path drew the rotated base canvas at scale 1, then scaled it into the viewport. Drawing the composite straight through rotation and scale in one `drawImage` samples differently on the GPU.
+- **Solution / Workaround**: `layeredBase` in `renderer.ts` draws the composite into a cached base canvas through `baseProjection` (crop, rotation, flips at scale 1), then the viewport draws it with the same call the legacy path uses. Both paths are then identical at every zoom.
+
+### [core/image-editor] Canvas PNG Round Trips Lose Partly Transparent Colours
+
+- **Issue / Symptom**: Painted pixels with alpha below 255 came back with slightly different colours after saving layers as PNG through a canvas and loading them again.
+- **Root Cause**: Canvas 2D stores premultiplied alpha, so `putImageData` / `toDataURL` / `getImageData` round colours of partly transparent pixels (and drop the colour of transparent ones). `toDataURL` is also the only synchronous canvas encoder, and there is none in Node or workers.
+- **Solution / Workaround**: Layer assets use the TypeScript PNG codec in `layers/png.ts` (with `layers/zlib.ts`), which is exact, synchronous and DOM-free. Encodings are memoised per surface, so saving unchanged layers costs nothing.
+
+### [core/tests] Failing `toEqual` on Large Typed Arrays Hangs Vitest
+
+- **Issue / Symptom**: A deliberately broken compositor made an equivalence test run for minutes instead of failing.
+- **Root Cause**: When `expect(a).toEqual(b)` fails on arrays of hundreds of thousands of elements, Vitest builds a full diff of them, which is very slow.
+- **Solution / Workaround**: Compare large pixel buffers with a loop that throws at the first differing byte (`expectSameBytes` in `tests/image-layers-equivalence.test.ts`). Keep `toEqual` for small buffers.
+
+### [core/image-editor] Lifting Stored Adjustments Must Keep a Missing `process` Legacy
+
+- **Issue / Symptom**: Old documents without `process` loaded on process 2 after the move to layers, so they looked different and were re-saved with `process: 2`.
+- **Root Cause**: `{ ...DEFAULT_ADJUSTMENTS, ...stored }` fills a missing `process` with the new default (the same trap as the process-version entry below).
+- **Solution / Workaround**: `layersFromLegacy` normalises stored adjustments the way `normalizeStoredAdjustments` does: defaults only when nothing is stored, otherwise `process: normalizeProcessVersion(stored.process)`.
+
 ### [core/video-editor] Speed Ramps: Browsers Refuse Very Slow Rates, and ffmpeg Freezes Come From `fps`
 
 - **Issue / Symptom**: The preview threw or ignored a freeze frame when it set a `<video>`'s `playbackRate` to 0. In the ffmpeg export, there was no obvious way to make one source frame last a second.

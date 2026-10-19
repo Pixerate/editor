@@ -21,6 +21,7 @@ import { createImageSelectionTools } from './selection-tools';
 import { createImageCaptureSurface } from './capture';
 import { createCaptureTool } from '../tools/capture.js';
 import { createImageEditTools } from './edit-tools';
+import { createImageLayerTools } from './layer-tools';
 
 export interface ImageEditorToolProviderOptions {
   /** Provider id (unique per registry). Default `image-editor`. */
@@ -276,6 +277,7 @@ export function createImageEditorToolProvider(
       createCaptureTool(createImageCaptureSurface(controller), { subject: 'the image (source orientation, before crop and rotation)', defaultPadding: 0 }),
       ...createImageSelectionTools(controller),
       ...createImageEditTools(controller),
+      ...createImageLayerTools(controller),
     ],
   };
 }

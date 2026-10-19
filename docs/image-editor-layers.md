@@ -1,6 +1,6 @@
 # Image editor layers (design proposal)
 
-**Status:** proposal with decisions recorded (see [Decisions](#decisions)), not implemented. The PSD work depends on it.
+**Status:** decisions recorded (see [Decisions](#decisions)). Phase 1 is implemented; where it differs from this proposal, [Implementation notes](#implementation-notes) says how and why. The PSD work depends on it.
 
 Today `@pixerate/editor/image-editor` edits one image. This proposal adds a real layer stack (pixel, adjustment and group layers with masks, blend modes, clipping and opacity) and painting on tiled, copy-on-write pixel storage. Once that exists, Photoshop PSD read and write maps almost one to one.
 
@@ -282,6 +282,43 @@ The plan is to port the needed subset to TypeScript, as earlier photocraft ports
 - **Memory** of full-resolution layers in a browser tab. Mitigations: sparse and uniform tiles, `maxHistoryBytes`.
 - **The history refactor** touches every controller method that records history today, so it needs careful tests.
 - **8-bit only:** heavy adjustment stacks over painted layers can band. 16-bit tiles are a later format option.
+
+## Implementation notes
+
+What the implementation does differently from the proposal above, and why. Each phase adds its notes here.
+
+### Phase 1 (surfaces, model, compositor, history, schema v3)
+
+**Exact legacy equivalence needs a compatibility route for some old documents.** Compositing in document space and projecting afterwards cannot reproduce the old order of operations in a few cases, so documents that still have the exact v1 / v2 shape (`isLegacyShape`) render through the old base path when one of these holds (`needsLegacyBase` in `layers/render.ts`):
+
+| Case | Why document space can't match it |
+|---|---|
+| A rotation that is not a quarter turn, or a crop with fractional coordinates | The old path resampled the source first and adjusted the resampled pixels. |
+| An enabled depth mask | It was applied after the blur, with the depth map resampled by the canvas through the projection. |
+| Output opacity below 1 | Alpha was rounded once by opacity and again by the depth mask, in that order. |
+| A Background blur filter with a crop or a 90° / 270° turn | The old box blur clamped at the crop edge and ran on the rotated buffer (its two passes round in a different order after a quarter turn). |
+| A migrated `legacyOutputBlur` over a source with transparency | The canvas would premultiply the composite before the blur. |
+| An adjustment-layer mask stored at another size than the canvas | It was resampled through the projection on every render; the stack holds a canvas-sized copy. |
+
+Every other document, single-layer or not, renders through the tiled compositor. The equivalence tests (`tests/image-layers-equivalence.test.ts`) compare the old pipeline with the new one on 60 random documents (process 1 and 2 develop settings, up to three random adjustment layers of every kind with random masks, feather, density, blend modes and opacity, blur, crops, quarter turns and flips, sources with and without transparency) and require byte equality for every one the renderer sends to the compositor. A browser check in Chromium compared the two routes' viewport and export canvases (including annotations, rotations, flips, crops and zoom 0.4 to 3.7) and found no differing byte.
+
+**Consecutive adjustment layers are one compositing step.** `applyAdjustmentLayers` runs a stack in float and rounds once, so the compositor groups a run of adjacent adjustment layers into one step. The prefix cache works per step, so a slider drag on one of them restarts at the start of its run.
+
+**Prefix cache and dirty rectangles.** Each tile keeps a checkpoint below the step that changed last and, when the caller names it, below the active layer (`checkpointLayerId`). Callers that know where pixels changed (a stroke's dabs) pass `dirty` rectangles, and changed tiles are then recomposited only there. Neither was spelled out above.
+
+**Benchmarks** (`IMAGE_LAYERS_BENCH=1`, Node 25 on an Apple-silicon (arm64) Mac, 4000 × 3000, 10 layers): a 100 px dab costs 1.5 ms median (2.1 ms p95) with tone-curve adjustments above the painted layer, and 3.7 ms median (4.9 ms p95) with Vibrance and Hue/Saturation above it, so the 16 ms budget holds without a Worker. A first full composite takes 2.9 s / 6.1 s, an unchanged re-render 1 ms, and a slider drag on the top adjustment layer 350 to 400 ms per frame, because it recomposites every tile of the 12 MP canvas. Viewport-only compositing and mip tiles were not needed for the brush budget and are not implemented yet. Slider drags on very large canvases are the place to add them.
+
+**Annotations.** Annotation layers at the top of the stack (plain: visible, opacity 1, normal blend, no mask, not clipped) are still drawn as vectors over the result at screen resolution, exactly as before, so they stay sharp when zoomed. Any other annotation layer is rasterized into the tiles at document resolution with the annotation renderer. An annotation layer with the Normal blend uses its annotation's own `blend`.
+
+**New adjustment layers go below the annotations.** `addAdjustmentLayer` without a position puts the layer above the other adjustment layers (or, without any, above the topmost layer that is not an annotation), so adjustments never tint annotations, as before. `aboveId` / `parentId` place it anywhere.
+
+**Migration API.** `migrateSerializedImageEditorState` keeps its contract (it cleans v1 / v2 states without changing their shape, and existing callers rely on that). The lift into v3 is the new `migrateToLayeredState(data, size)`; `loadJSON` and `initialState` lift any version. `loadImageEditorDocument` reads v3 section by section and treats v2 as current instead of newer.
+
+**PNG and zlib in TypeScript.** Layer assets use a synchronous TypeScript PNG codec (`layers/png.ts`, `layers/zlib.ts`) instead of canvas `toDataURL`: the canvas premultiplies alpha, so partly transparent painted pixels would not round-trip, and `toJSON()` must stay synchronous. Encodings are memoised per surface. The PSD phase can use the same inflate instead of `DecompressionStream`.
+
+**The Background's pixels.** The Background layer of an opened image carries `source: 'document'` and resolves its pixels from the decoded source image (or, without a canvas, from `setSamplePixels`). It writes no asset, so a v3 document with an unpainted Background stays as small as v1.
+
+**Smaller points.** A pixel layer's mask moves with its `offset`. In a clipping group, the base layer's fill opacity also limits the clip shape (Photoshop clips to the base pixels before fill). `list_layers` arrived in phase 1, so the new model had an agent path from the start; the write tools follow in phase 2. `ImageEditorOptions.maxHistoryBytes` (default 512 MiB) bounds the tiles held only by undo steps.
 
 ## Decisions
 

@@ -1,5 +1,7 @@
 import type { BlendMode } from './blend';
 import type { SelectionMask, SerializedSelection } from './selection/mask';
+import type { ImageLayer, LayerTarget } from './layers/model';
+import type { SerializedLayeredImageEditorState } from './layers/serialize';
 
 export interface ImageDimensions {
   width: number;
@@ -338,11 +340,19 @@ export type ImageEditorTool =
 
 export interface ImageEditorState {
   sourceUrl: string | null;
+  /** Canvas (document) size in pixels: the source image's natural size. */
   imageDimensions: ImageDimensions;
   crop: CropBox | null;
   transform: ImageTransform;
+  /**
+   * Compatibility view of the layer stack: the develop filter of the active pixel layer (or the
+   * Background), its blur (or `legacyOutputBlur`), the output opacity and every adjustment layer
+   * in stack order. Edit it with `setAdjustments` and the adjustment-layer methods.
+   */
   adjustments: ImageAdjustments;
+  /** Compatibility view: the parametric depth mask of the active pixel layer (or the Background). */
   depthMask: DepthMaskOptions;
+  /** Compatibility view: the annotation of every annotation layer, bottom to top. */
   annotations: Annotation[];
   selectedAnnotationId: string | null;
   activeTool: ImageEditorTool;
@@ -356,9 +366,29 @@ export interface ImageEditorState {
   selection?: SelectionMask | null;
   /** Quick Mask view: tint the unselected area instead of drawing marching ants (view state). */
   quickMask?: boolean;
+  /**
+   * The layer stack, bottom to top. Opening an image gives one pixel layer, "Background", whose
+   * pixels are the source image. Layers are immutable: compare them by identity.
+   */
+  layers: ImageLayer[];
+  /** The layer that layer commands, painting and `setAdjustments` act on, or `null`. */
+  activeLayerId: string | null;
+  /** Whether painting targets the active layer's pixels or its mask. */
+  activeTarget: LayerTarget;
+  /** Export alpha (0..1), applied after compositing; `adjustments.opacity` mirrors it. */
+  outputOpacity: number;
+  /**
+   * Blur that runs after the adjustment layers, kept from v1 / v2 documents that had both so
+   * they render as before. New edits blur a layer instead (`blur` filter).
+   */
+  legacyOutputBlur?: number;
 }
 
-export interface SerializedImageEditorState {
+/**
+ * A stored editor state in the document-level schema (versions 1 and 2). Documents whose layer
+ * stack has exactly this shape are still written this way, byte for byte.
+ */
+export interface LegacySerializedImageEditorState {
   /**
    * Schema version. `2` adds `adjustments.layers`; states without layers are still written as
    * `1` so they round-trip unchanged. See `migrateSerializedImageEditorState`.
@@ -373,6 +403,13 @@ export interface SerializedImageEditorState {
   selection?: SerializedSelection;
 }
 
+/**
+ * A stored editor state: the document-level schema (v1 / v2) or the layered schema (v3, see
+ * `SerializedLayeredImageEditorState`). `toJSON()` writes v1 / v2 while the layer stack still
+ * has the shape those versions describe.
+ */
+export type SerializedImageEditorState = LegacySerializedImageEditorState | SerializedLayeredImageEditorState;
+
 export interface ExportOptions {
   format?: 'image/png' | 'image/jpeg' | 'image/webp';
   quality?: number; // 0 to 1
@@ -386,6 +423,11 @@ export interface ImageEditorOptions {
   initialState?: Partial<SerializedImageEditorState>;
   onStateChange?: (state: ImageEditorState) => void;
   maxHistoryDepth?: number;
+  /**
+   * Upper bound for the pixel data held only by undo / redo steps (tiles shared with the
+   * current state are free). The oldest steps are dropped first. Default 512 MiB.
+   */
+  maxHistoryBytes?: number;
 }
 
 export interface InpaintOptions {
