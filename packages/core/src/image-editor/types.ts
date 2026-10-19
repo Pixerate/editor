@@ -1,4 +1,5 @@
 import type { GlobalLight } from '../raster/effects/model';
+import type { EffectPattern } from '../raster/effects/patterns';
 import type { BlendMode } from './blend';
 import type { SelectionMask, SerializedSelection } from './selection/mask';
 import type { ImageLayer, LayerTarget } from './layers/model';
@@ -398,6 +399,11 @@ export interface ImageEditorState {
    * missing = angle 120°, altitude 30°. Recorded in undo history and saved in `toJSON()`.
    */
   globalLight?: GlobalLight;
+  /**
+   * The document's patterns (from an opened PSD), which pattern effects use by id besides the
+   * built-in ones. Recorded in undo history and saved in `toJSON()`.
+   */
+  patterns?: EffectPattern[];
 }
 
 /**

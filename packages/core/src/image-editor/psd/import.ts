@@ -25,6 +25,7 @@ import {
   type PsdTreeNode,
   decodeLayerChannel,
   decodeMergedImage,
+  layerBlock,
   layerName,
   layerTree,
   readPsd,
@@ -37,6 +38,10 @@ import {
   u8Block,
 } from './file';
 import { MODE_INDEXED, colorChannelCount, toMask8, toRgba8, unmatteWhite } from './pixels';
+import { parseLfx2, parseLrfx } from './effects';
+import { PATTERN_BLOCK_KEYS, parsePatternBlock, psdPatternToEffectPattern } from './patterns';
+import { builtinPattern, type EffectPattern } from '../../raster/effects/patterns';
+import type { GlobalLight, LayerEffect, LayerEffects } from '../../raster/effects/model';
 
 /** PSD blend keys → our blend modes (`diss` is the one we lack). */
 export const PSD_BLEND_KEYS: Record<string, LayerBlendMode> = {
@@ -77,7 +82,6 @@ const FILL_KEYS = ['SoCo', 'GdFl', 'PtFl'];
 const TYPE_KEYS = ['TySh', 'tySh'];
 const SMART_KEYS = ['SoLd', 'SoLE', 'PlLd'];
 const VECTOR_KEYS = ['vmsk', 'vsms'];
-const EFFECT_KEYS = ['lfx2', 'lfxs', 'lmfx'];
 
 /** What happened to one PSD layer on import. */
 export interface PsdLayerSummary {
@@ -106,6 +110,10 @@ export interface PsdImportResult {
   summary: PsdLayerSummary[];
   /** Pixels per inch, when the file says. */
   resolution?: number;
+  /** The patterns embedded in the file (`Patt` / `Pat2` / `Pat3`), which pattern effects use. */
+  patterns: EffectPattern[];
+  /** The global light (image resources 1037 and 1049), when the file has one. */
+  globalLight?: GlobalLight;
   info: { psb: boolean; depth: number; colorMode: string; channels: number };
 }
 
@@ -172,6 +180,7 @@ interface Ctx {
   summary: PsdLayerSummary[];
   colorCount: number;
   palette?: Uint8Array;
+  patterns: Map<string, EffectPattern>;
 }
 
 function decodeOr(ctx: Ctx, rec: PsdLayerRecord, id: number, name: string): Uint8Array | undefined {
@@ -254,10 +263,6 @@ function baseProps(ctx: Ctx, rec: PsdLayerRecord, name: string, notes: string[])
   if (rec.clipping) props.clipped = true;
   const locks = locksOf(rec);
   if (locks) props.locks = locks;
-  if (rec.blocks.some((b) => EFFECT_KEYS.includes(b.key))) {
-    ctx.warn.add('Layer effects (lfx2) are not rendered', name);
-    notes.push('layer effects are not rendered');
-  }
   if (rec.blocks.some((b) => b.key === 'artb' || b.key === 'artd' || b.key === 'abdd')) {
     ctx.warn.add('Artboards are not supported; they came in as plain groups, without their background colour and clipping', name);
     notes.push('artboard imported as a group');
@@ -267,6 +272,56 @@ function baseProps(ctx: Ctx, rec: PsdLayerRecord, name: string, notes: string[])
     notes.push('vector mask ignored');
   }
   return props;
+}
+
+/** Pattern ids an effect paints with. */
+function patternIds(e: LayerEffect): string[] {
+  if (e.kind === 'pattern-overlay') return [e.patternId];
+  if (e.kind === 'stroke' && e.fill.type === 'pattern') return [e.fill.patternId];
+  if (e.kind === 'bevel-emboss' && e.texture) return [e.texture.patternId];
+  return [];
+}
+
+/**
+ * A layer's effects: `lmfx` (several instances per kind) over `lfx2` (`lfxs` on groups), else
+ * the legacy `lrFX`. The block read is kept so export writes it back while the effects are
+ * unchanged; warnings name only what is not drawn exactly.
+ */
+function recordEffects(ctx: Ctx, rec: PsdLayerRecord, name: string, notes: string[], group: boolean): LayerEffects | undefined {
+  const key = ['lmfx', 'lfx2', 'lfxs'].find((k) => layerBlock(rec, k));
+  if (key) {
+    const data = layerBlock(rec, key)!;
+    const parsed = parseLfx2(data);
+    if (!parsed) {
+      ctx.warn.add('Layer effects could not be read; they are kept for export but not drawn', name);
+      notes.push('layer effects could not be read');
+      return { enabled: true, items: [], psd: { key, data: data.slice() } };
+    }
+    for (const n of parsed.notes) {
+      ctx.warn.add(`Layer effects were approximated: ${n}`, name);
+      notes.push(`effects: ${n}`);
+    }
+    for (const e of parsed.effects.items) {
+      for (const id of patternIds(e)) {
+        if (ctx.patterns.has(id) || builtinPattern(id)) continue;
+        ctx.warn.add('A pattern effect uses a pattern the file does not contain, and paints nothing', name);
+        notes.push(`pattern "${id}" is not in the file`);
+      }
+    }
+    return { ...parsed.effects, psd: { key, data: data.slice() } };
+  }
+  const legacy = layerBlock(rec, 'lrFX');
+  if (legacy && !group) {
+    // Photoshop ignores legacy effects on groups.
+    const parsed = parseLrfx(legacy);
+    if (!parsed) return undefined;
+    for (const n of parsed.notes) {
+      ctx.warn.add(`Layer effects were approximated: ${n}`, name);
+      notes.push(`effects: ${n}`);
+    }
+    return parsed.effects.items.length ? parsed.effects : undefined;
+  }
+  return undefined;
 }
 
 function importNode(ctx: Ctx, node: PsdTreeNode, depth: number): ImageLayer | null {
@@ -288,6 +343,8 @@ function importNode(ctx: Ctx, node: PsdTreeNode, depth: number): ImageLayer | nu
       if (layer) children.push(layer);
     }
     const group: GroupLayer = { type: 'group', id: ctx.newId(name), ...props, blend: groupBlend, children };
+    const effects = recordEffects(ctx, rec, name, notes, true);
+    if (effects) group.effects = effects;
     if (divider?.kind === SECTION_CLOSED) group.collapsed = true;
     const mask = recordMask(ctx, rec, name);
     if (mask) group.mask = mask;
@@ -330,6 +387,8 @@ function importNode(ctx: Ctx, node: PsdTreeNode, depth: number): ImageLayer | nu
   const layer: PixelLayer = { type: 'pixel', id: ctx.newId(name), ...props, surface: recordPixels(ctx, rec, name), offset: { x: 0, y: 0 } };
   const fill = u8Block(rec, 'iOpa');
   if (fill !== undefined && fill < 255) layer.fillOpacity = percent(fill);
+  const effects = recordEffects(ctx, rec, name, notes, false);
+  if (effects) layer.effects = effects;
   const mask = recordMask(ctx, rec, name);
   if (mask) layer.mask = mask;
   entry.type = 'pixel';
@@ -387,7 +446,16 @@ export function psdToLayers(file: PsdFile, options: PsdImportOptions = {}): PsdI
     summary: [],
     colorCount: colorChannelCount(header.colorMode, header.channels),
     palette: header.colorMode === MODE_INDEXED ? file.colorModeData : undefined,
+    patterns: new Map(),
   };
+  for (const block of file.globalBlocks) {
+    if (!PATTERN_BLOCK_KEYS.includes(block.key)) continue;
+    try {
+      for (const p of parsePatternBlock(block.data)) ctx.patterns.set(p.id, psdPatternToEffectPattern(p));
+    } catch (e) {
+      warn.extra.push(`The file's patterns could not be read (${e instanceof Error ? e.message : String(e)}); pattern effects paint nothing.`);
+    }
+  }
   const mode = COLOR_MODES[header.colorMode] ?? `mode ${header.colorMode}`;
   if (mode !== 'rgb' || header.depth !== 8) {
     warn.extra.push(`The file is ${header.depth}-bit ${mode}; it was converted to 8-bit RGB.`);
@@ -415,6 +483,9 @@ export function psdToLayers(file: PsdFile, options: PsdImportOptions = {}): PsdI
     const bg = mergedLayer(ctx);
     if (bg) layers = [bg];
   }
+  const i32 = (b: Uint8Array | undefined) => (b && b.length >= 4 ? new DataView(b.buffer, b.byteOffset, 4).getInt32(0) : undefined);
+  const angle = i32(resource(file, 1037));
+  const altitude = i32(resource(file, 1049));
   return {
     width: header.width,
     height: header.height,
@@ -422,6 +493,10 @@ export function psdToLayers(file: PsdFile, options: PsdImportOptions = {}): PsdI
     warnings: warn.list(),
     summary: ctx.summary,
     resolution: resolution(file),
+    patterns: [...ctx.patterns.values()],
+    ...(angle !== undefined || altitude !== undefined
+      ? { globalLight: { angle: Math.max(-360, Math.min(360, angle ?? 120)), altitude: Math.max(0, Math.min(90, altitude ?? 30)) } }
+      : {}),
     info: { psb: header.psb, depth: header.depth, colorMode: mode, channels: header.channels },
   };
 }

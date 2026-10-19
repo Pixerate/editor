@@ -109,17 +109,26 @@ batching.
 
 1. **Inspect before opening.** `inspect_psd` lists every layer with the type it would become and
    a status: `mapped` (held exactly), `approximated` (type, smart-object, fill and shape layers
-   come in as their stored pixels; layer effects are not rendered; Dissolve becomes Normal) or
+   come in as their stored pixels; Dissolve becomes Normal; effects with gradient midpoints or
+   smoothness, noise gradients, glow jitter, legacy bevels or patterns missing from the file are
+   drawn approximately) or
    `dropped` (Brightness/Contrast, Exposure, Channel Mixer, Gradient Map, Selective Color and
    Color Lookup adjustments). Tell the user what would be lost before `import_psd` when anything
    is not `mapped`.
-2. **`import_psd` replaces the document** (one undo step). CMYK, Lab, grayscale, indexed, 16-bit
+2. **Layer effects come in live**: every Photoshop layer style maps to an effect you can read
+   with `list_layer_effects` and change as usual, with the file's patterns (listed in
+   `list_layer_effects.patterns`) and its global light. An effects block the editor cannot read
+   is kept and written back by `export_psd`, but not drawn; the warnings say so.
+3. **`import_psd` replaces the document** (one undo step). CMYK, Lab, grayscale, indexed, 16-bit
    and 32-bit files are converted to 8-bit RGB, and ICC profiles are ignored; the warnings say
    so. Afterwards work with `list_layers` as usual: there is no Background source image, every
    pixel comes from the layers.
-3. **`export_psd` writes the stack as it is**, in the source frame: crop and rotation are not
+4. **`export_psd` writes the stack as it is**, in the source frame: crop and rotation are not
    applied, layer filters and depth masks are baked, annotation layers are rasterized (only in
-   a browser). Read its `warnings` and pass them on. The file comes back as base64 (`data`).
+   a browser). Effects are written as Photoshop layer styles: an effects block opened from a PSD
+   goes back byte for byte while its effects are unchanged, and the patterns effects use (the
+   built-in ones too) are embedded. Only the first outer glow, inner glow, bevel, satin and
+   pattern overlay of a layer fit in a PSD. Read its `warnings` and pass them on. The file comes back as base64 (`data`).
 
 ## Best practices
 

@@ -1936,3 +1936,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: `raster-module.test.ts` failed on `effects/model.ts` with "expected true to be false", and no import was wrong.
 - **Root Cause**: The test strips comments, then looks for `document`, `window` and canvas globals anywhere in the source, string literals included. An error message saying "a document pattern" matched.
 - **Solution / Workaround**: Word user-facing strings in `src/raster` without those words, or say "file" instead. Comments are fine.
+
+### [core/image-editor] Compare PSD Effects by What They Render, Not by Bytes or Ids
+
+- **Issue / Symptom**: An effects block opened from a PSD and saved again unchanged was regenerated, which dropped descriptor keys we do not model. Or an edited effect was written back as the stale original.
+- **Root Cause**: Export decides between the original block and a regenerated one by comparing the effects. Parsing gives every effect a fresh id. JSON round trips drop `undefined` fields. Object key order depends on who built the object.
+- **Solution / Workaround**: `exportPsd` re-parses the stored block and compares `effectsFingerprint` of both sides. The fingerprint ignores ids and `psd`, sorts keys and skips `undefined`. Anything else that can differ without changing the render must be normalised the same way on both sides. Photoshop's `lmfx` (several instances per kind) wins over `lfx2` on read. We always write `lfx2` (`lfxs` on groups) with the `…Multi` keys, and pad odd-length blocks inside their length.

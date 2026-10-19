@@ -337,7 +337,7 @@ const FEATURES: ParityRow[] = [
     core: true,
     react: true,
     svelte: true,
-    note: "Pixel, group and adjustment layers, masks, blend, opacity, fill, clipping and locks both ways; type, smart-object, fill and shape layers as pixels with warnings; CMYK / Lab / 16- and 32-bit converted; inspect_psd / import_psd / export_psd agent tools",
+    note: "Pixel, group and adjustment layers, masks, blend, opacity, fill, clipping, locks and layer effects (with patterns and global light) both ways; type, smart-object, fill and shape layers as pixels with warnings; CMYK / Lab / 16- and 32-bit converted; inspect_psd / import_psd / export_psd agent tools",
   },
   {
     feature: "Image Selections, Refine Edge & Layer Masks",

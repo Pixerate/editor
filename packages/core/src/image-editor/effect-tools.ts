@@ -218,12 +218,14 @@ function settingsSchema(forUpdate: boolean): Record<string, unknown> {
   };
 }
 
-/** The patterns pattern effects can use. */
-function patternList(): Array<{ id: string; name: string; width: number; height: number; builtin: boolean }> {
-  return builtinPatternIds().map((id) => {
+/** The patterns pattern effects can use: the document's (from a PSD), then the built-in ones. */
+function patternList(controller: ImageEditorController): Array<{ id: string; name: string; width: number; height: number; builtin: boolean }> {
+  const doc = controller.getDocumentPatterns().map((p) => ({ id: p.id, name: p.name, width: p.width, height: p.height, builtin: false }));
+  const builtins = builtinPatternIds().map((id) => {
     const p = builtinPattern(id)!;
     return { id, name: p.name, width: p.width, height: p.height, builtin: true };
   });
+  return [...doc, ...builtins];
 }
 
 /** A layer's effects for agents: the master switch, scale, reach and every effect with its settings. */
@@ -257,7 +259,7 @@ export function createImageEffectTools(controller: ImageEditorController): Agent
       "Returns a layer's effects: the master switch (enabled), Scale Effects (scale, 1 = 100 %), margin (px the effects reach beyond the shape), whether they came from a PSD, and every effect with its id, kind, label and all settings. Also returns the document global light and the pattern ids pattern effects can use.",
     inputSchema: { type: 'object', properties: { layerId: LAYER_ID }, required: ['layerId'], additionalProperties: false },
     annotations: { title: 'List layer effects', ...READ },
-    handler: ({ layerId }) => result(layerArg(layerId), { globalLight: controller.getGlobalLight(), patterns: patternList(), kinds: [...LAYER_EFFECT_KINDS] }),
+    handler: ({ layerId }) => result(layerArg(layerId), { globalLight: controller.getGlobalLight(), patterns: patternList(controller), kinds: [...LAYER_EFFECT_KINDS] }),
   };
 
   const add: AgentTool = {

@@ -35,6 +35,10 @@ import {
 } from './file';
 import { BLEND_TO_PSD } from './import';
 import { matteWhite, rgbaToPlanes } from './pixels';
+import { parseLfx2, writeLfx2 } from './effects';
+import { writePatternBlock } from './patterns';
+import { effectsFingerprint, type GlobalLight, type LayerEffect } from '../../raster/effects/model';
+import { builtinPattern, type EffectPattern } from '../../raster/effects/patterns';
 
 export interface PsdExportInput {
   width: number;
@@ -45,6 +49,10 @@ export interface PsdExportInput {
   merged: ArrayLike<number>;
   /** Pixels per inch (default 72). */
   resolution?: number;
+  /** The document's patterns; those the effects use are embedded (built-in ones too). */
+  patterns?: readonly EffectPattern[];
+  /** Written as image resources 1037 and 1049. */
+  globalLight?: GlobalLight;
 }
 
 export interface PsdExportResult {
@@ -52,7 +60,24 @@ export interface PsdExportResult {
   psb: boolean;
   /** Layer records written (group folders and dividers included). */
   records: number;
+  /** One sentence per loss, naming the layers. */
+  warnings: string[];
 }
+
+/** Pattern ids an effect paints with. */
+function usedPatterns(e: LayerEffect): string[] {
+  if (e.kind === 'pattern-overlay') return [e.patternId];
+  if (e.kind === 'stroke' && e.fill.type === 'pattern') return [e.fill.patternId];
+  if (e.kind === 'bevel-emboss' && e.texture) return [e.texture.patternId];
+  return [];
+}
+
+const padEven = (d: Uint8Array) => {
+  if (d.length % 2 === 0) return d;
+  const out = new Uint8Array(d.length + 1);
+  out.set(d);
+  return out;
+};
 
 /** Layer flag bits 3 and 4: "bit 4 is useful" and "pixel data irrelevant" (group records). */
 const FLAG_PIXELS_IRRELEVANT = 8 | 16;
@@ -114,10 +139,34 @@ export function exportPsd(input: PsdExportInput): PsdExportResult {
   const psb = width > PSD_MAX_DIMENSION || height > PSD_MAX_DIMENSION;
   const records: PsdLayerRecord[] = [];
   let nextId = 0;
+  const notes = new Map<string, string[]>();
+  const note = (msg: string, name: string) => notes.set(msg, [...(notes.get(msg) ?? []), name]);
+  const patternIds = new Set<string>();
+
+  /**
+   * A layer's effects block: the block it was read from while the effects still map to the same
+   * values (or could not be read and were not changed), else regenerated.
+   */
+  const effectsBlock = (layer: ImageLayer): PsdTaggedBlock | null => {
+    const fx = layer.effects;
+    if (!fx) return null;
+    for (const e of fx.items) for (const id of usedPatterns(e)) patternIds.add(id);
+    const key = layer.type === 'group' ? 'lfxs' : 'lfx2';
+    if (fx.psd) {
+      const original = parseLfx2(fx.psd.data);
+      if (original ? effectsFingerprint(original.effects) === effectsFingerprint(fx) : !fx.items.length) return { key, data: padEven(fx.psd.data) };
+    }
+    if (!fx.items.length && fx.enabled && (fx.scale ?? 1) === 1) return null;
+    const { data, dropped } = writeLfx2(fx);
+    if (dropped) note('Only the first outer glow, inner glow, bevel, satin and pattern overlay of a layer can be written; the others were left out', layer.name);
+    return { key, data };
+  };
 
   const common = (layer: ImageLayer, extra: PsdTaggedBlock[] = []): Pick<PsdLayerRecord, 'opacity' | 'clipping' | 'flags' | 'legacyName' | 'blocks'> => {
     const name = layer.name || (layer.type === 'adjustment' ? adjustmentKindLabel(layer.kind) : '');
     const blocks: PsdTaggedBlock[] = [{ key: 'luni', data: unicodeBlock(name) }, { key: 'lyid', data: u32Bytes(++nextId) }, ...extra];
+    const fx = effectsBlock(layer);
+    if (fx) blocks.push(fx);
     const locks = lockBits(layer);
     if (locks) blocks.push({ key: 'lspf', data: u32Bytes(locks >>> 0) });
     return {
@@ -243,6 +292,26 @@ export function exportPsd(input: PsdExportInput): PsdExportResult {
     { id: 1005, name: '', data: rw.result() },
     { id: 1057, name: '', data: version.result() },
   ];
+  if (input.globalLight) {
+    const i32 = (v: number) => {
+      const w = new PsdWriter();
+      w.i32(Math.round(v));
+      return w.result();
+    };
+    resources.push({ id: 1037, name: '', data: i32(input.globalLight.angle) }, { id: 1049, name: '', data: i32(input.globalLight.altitude) });
+  }
+  // The patterns the effects use, so Photoshop can draw them.
+  const globalBlocks: PsdTaggedBlock[] = [];
+  if (patternIds.size) {
+    const byId = new Map((input.patterns ?? []).map((p) => [p.id, p]));
+    const embed: EffectPattern[] = [];
+    for (const id of patternIds) {
+      const p = byId.get(id) ?? builtinPattern(id);
+      if (p) embed.push(p);
+      else note(`Pattern "${id}" is not in the document and was not embedded`, id);
+    }
+    if (embed.length) globalBlocks.push({ key: 'Patt', data: writePatternBlock(embed) });
+  }
 
   const bytes = writePsd(
     {
@@ -251,11 +320,12 @@ export function exportPsd(input: PsdExportInput): PsdExportResult {
       resources,
       layers: records,
       mergedAlpha: transparent && records.length > 0,
-      globalBlocks: [],
+      globalBlocks,
       imageCompression: 1,
       imageData: encodeRle(merged, { planes: planes.length, width, height, depth: 8, psb }),
     },
     encodeLegacyName
   );
-  return { bytes, psb, records: records.length };
+  const warnings = [...notes].map(([msg, names]) => `${msg} (${names.map((n) => `"${n}"`).join(', ')}).`);
+  return { bytes, psb, records: records.length, warnings };
 }
