@@ -9,6 +9,7 @@ import {
   vectorDiamondPath,
   type VectorEditorController,
   type VectorRenderNode,
+  type VectorRenderMask,
   type VectorRenderPath,
   type VectorRenderPaintLayer,
   type VectorRenderFilter,
@@ -121,8 +122,10 @@ export function VectorGradientAnnotator({ annotator: g, accentColor = THEME.acce
 /** SVG `<filter>` elements for `getVectorSceneRenderData(...).filters` (shadows, glows, blurs, feather). */
 export function VectorFilterDefs({ filters }: { filters: readonly VectorRenderFilter[] }) {
   if (!filters.length) return null;
+  // React wants presentation attributes camel-cased (`flood-color` → `floodColor`).
+  const props = (attrs: VectorFilterPrimitive['attrs']) => Object.fromEntries(Object.entries(attrs).map(([k, v]) => [k.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase()), v]));
   const primitive = (p: VectorFilterPrimitive, key: number): React.ReactNode =>
-    React.createElement(p.tag, { key, ...p.attrs }, p.children?.map(primitive));
+    React.createElement(p.tag, { key, ...props(p.attrs) }, p.children?.map(primitive));
   return (
     <defs>
       {filters.map((f) => (
@@ -145,12 +148,13 @@ export function VectorSceneNodes({ nodes }: { nodes: readonly VectorRenderNode[]
           <g
             key={node.id}
             data-vector-id={node.id}
+            data-vector-mask={node.mask?.type}
             transform={node.transform}
             opacity={node.opacity < 1 ? node.opacity : undefined}
             filter={node.filter}
             style={blendStyle(node.blendMode)}
           >
-            <VectorSceneNodes nodes={node.children} />
+            {node.mask ? <VectorMaskedNodes mask={node.mask} nodes={node.children} /> : <VectorSceneNodes nodes={node.children} />}
           </g>
         ) : node.layers ? (
           // Fill and stroke stacks: each layer in order, bottom to top.
@@ -179,6 +183,43 @@ export function VectorSceneNodes({ nodes }: { nodes: readonly VectorRenderNode[]
           />
         ),
       )}
+    </>
+  );
+}
+
+/**
+ * A mask group's contents under its mask: the `<clipPath>` (clip) or `<mask>` (alpha, luminance;
+ * the mask drawn inside, through the inverting filter when inverted), and an inner `<g>` that
+ * references it. The group's own transform, opacity, blend mode and filter are on the outer `<g>`.
+ */
+export function VectorMaskedNodes({ mask, nodes }: { mask: VectorRenderMask; nodes: readonly VectorRenderNode[] }) {
+  const b = mask.bounds;
+  return (
+    <>
+      <defs>
+        {mask.clip ? (
+          <clipPath id={mask.id}>
+            {mask.clip.map((c, i) => (
+              <path key={i} d={c.d} clipRule={c.clipRule} />
+            ))}
+          </clipPath>
+        ) : (
+          b && (
+            <mask id={mask.id} maskUnits="userSpaceOnUse" x={b.x} y={b.y} width={b.width} height={b.height} style={mask.type === 'alpha' ? { maskType: 'alpha' } : undefined}>
+              {mask.filter ? (
+                <g filter={mask.filter}>
+                  <VectorSceneNodes nodes={mask.nodes ?? []} />
+                </g>
+              ) : (
+                <VectorSceneNodes nodes={mask.nodes ?? []} />
+              )}
+            </mask>
+          )
+        )}
+      </defs>
+      <g data-vector-masked="" clipPath={mask.clip ? `url(#${mask.id})` : undefined} mask={mask.clip ? undefined : `url(#${mask.id})`}>
+        <VectorSceneNodes nodes={nodes} />
+      </g>
     </>
   );
 }
@@ -471,6 +512,20 @@ export function VectorCanvas({
             <circle cx={w.x} cy={w.y} r={THEME.cornerWidgetRadius + (w.hovered ? 1 : 0)} fill={THEME.handleFill} stroke={accentColor} />
             <circle cx={w.x} cy={w.y} r={1.5} fill={accentColor} />
           </g>
+        ))}
+        {overlay.masks.map((m) => (
+          <path
+            key={`mask:${m.id}`}
+            data-vector-mask-indicator={m.id}
+            data-mask-type={m.type}
+            data-inverted={m.invert || undefined}
+            d={m.d}
+            fill="none"
+            stroke={THEME.mask}
+            strokeWidth={m.editing ? 1.5 : 1}
+            strokeDasharray={m.editing ? undefined : THEME.maskDash}
+            opacity={m.enabled ? 1 : 0.5}
+          />
         ))}
         {overlay.blend.spines.map((sp) => (
           <g key={`blend:${sp.id}`} data-vector-blend-spine={sp.id} data-replaced={sp.replaced || undefined}>

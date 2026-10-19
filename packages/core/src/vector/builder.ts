@@ -42,6 +42,7 @@ import {
 import { PlanarMap, cutOutPiece, type PlanarChain } from '../canvas/pathops/planar.js';
 import type { PathfinderOperation, PathfinderShape } from '../canvas/pathops/pathfinder.js';
 import { hasPaint, multiplyMatrices, nodeMatrix, subpathsToBezier, vectorPathWorldBezier, vectorStrokeOutline, IDENTITY_MATRIX, type AffineMatrix } from './geometry.js';
+import { vectorMaskedGeometry } from './mask.js';
 import { expandVectorAppearance } from './appearance.js';
 import type { Vec2, VectorDocument, VectorNode, VectorPaint, VectorPathNode, VectorSubpath } from './types.js';
 
@@ -61,7 +62,8 @@ export function vectorPathEntries(doc: VectorDocument, roots: readonly string[] 
 	const out: VectorPathEntry[] = [];
 	const visit = (stored: VectorNode, parent: AffineMatrix, inside: boolean) => {
 		if (stored.visible === false || (stored.locked && !options.locked)) return;
-		const node = options.expand === false ? stored : expandVectorAppearance(stored);
+		// As drawn: effects and live booleans evaluated, mask groups as their masked shapes.
+		const node = options.expand === false ? stored : expandVectorAppearance(vectorMaskedGeometry(stored));
 		const picked = inside || roots === null || roots.includes(node.id);
 		if (node.type === 'group') {
 			const m = multiplyMatrices(nodeMatrix(node), parent);

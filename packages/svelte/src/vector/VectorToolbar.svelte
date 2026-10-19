@@ -8,6 +8,7 @@
     VECTOR_PATHFINDER_ACTIONS,
     VECTOR_FILL_GAP,
     vectorToolLabel,
+    isVectorMaskGroup,
     type VectorEditorController,
     type VectorTool
   } from '@pixerate/editor/vector';
@@ -61,6 +62,7 @@
   const count = $derived(view.selection.length);
   const points = $derived(view.tool === 'direct' ? view.selectedAnchors.length : 0);
   const groupSelected = $derived(view.selection.some((id) => controller.getNode(id)?.type === 'group'));
+  const maskSelected = $derived(view.selection.some((id) => isVectorMaskGroup(controller.getNode(id))));
 
   // Live booleans keep the operands editable; a lone live group or its operands take the operation too.
   let live = $state(false);
@@ -71,7 +73,9 @@
     { label: '∩', title: 'Intersect', run: () => controller.booleanOp('intersect', { live }), disabled: booleanDisabled },
     { label: '⊻', title: 'Exclude', run: () => controller.booleanOp('exclude', { live }), disabled: booleanDisabled },
     { label: 'G', title: 'Group', run: () => controller.group(), disabled: count < 1 },
-    { label: 'U', title: 'Ungroup', run: () => controller.ungroup(), disabled: !groupSelected }
+    { label: 'U', title: 'Ungroup', run: () => controller.ungroup(), disabled: !groupSelected },
+    { label: '◐', title: `Make Clipping Mask (${modKey}+7)`, run: () => controller.makeMask('clip'), disabled: count < 2 },
+    { label: '◑', title: `Release Mask (${modKey}+Alt+7)`, run: () => controller.releaseMask(), disabled: !maskSelected }
   ]);
   const arrange = $derived([
     { label: '⇈', title: 'Bring to Front', run: () => controller.arrange('front'), disabled: count < 1 },

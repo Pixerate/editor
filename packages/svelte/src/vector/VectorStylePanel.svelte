@@ -20,6 +20,7 @@
   import VectorEffectsPanel from './VectorEffectsPanel.svelte';
   import VectorAppearancePanel from './VectorAppearancePanel.svelte';
   import VectorEnvelopePanel from './VectorEnvelopePanel.svelte';
+  import VectorMaskPanel from './VectorMaskPanel.svelte';
   import VectorGradientEditor from './VectorGradientEditor.svelte';
 
   interface Props {
@@ -225,5 +226,6 @@
     <VectorAppearancePanel {controller} />
     <VectorEffectsPanel {controller} />
     <VectorEnvelopePanel {controller} />
+    <VectorMaskPanel {controller} />
   {/if}
 </div>
