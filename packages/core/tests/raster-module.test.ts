@@ -92,12 +92,13 @@ describe('paint module', () => {
     expect(dabs.length).toBe(9);
   });
 
-  it('imports only from itself and the raster module', () => {
+  it('imports only from itself, the raster module and the dependency-free tool types', () => {
     const dir = join(__dirname, '../src/paint');
     for (const f of readdirSync(dir)) {
       const src = readFileSync(join(dir, f), 'utf8');
       const imports = [...src.matchAll(/from '([^']+)'/g)].map((m) => m[1]);
-      expect(imports.filter((i) => !i.startsWith('./') && !i.startsWith('../raster/')), f).toEqual([]);
+      // `../tools/registry` is dependency-free (entry-isolation enforces it); the agent tools use its types.
+      expect(imports.filter((i) => !i.startsWith('./') && !i.startsWith('../raster/') && i !== '../tools/registry.js'), f).toEqual([]);
     }
   });
 });
