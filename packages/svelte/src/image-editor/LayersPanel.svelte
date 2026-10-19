@@ -20,11 +20,14 @@
     layerPanelRows,
     openPsdFile,
     runLayerMenuAction,
+    smartFilterRows,
+    smartObjectBadge,
   } from '@pixerate/editor/image-editor';
   import { untrack } from 'svelte';
   import LayerEffectsPanel from './LayerEffectsPanel.svelte';
   import EdgeColorPanel from './EdgeColorPanel.svelte';
   import VectorMaskEdgesPanel from './VectorMaskEdgesPanel.svelte';
+  import SmartObjectPanel from './SmartObjectPanel.svelte';
 
   interface Props {
     controller: ImageEditorController;
@@ -36,10 +39,12 @@
     psdFileName?: string;
     /** Show the active layer's effects section (default true). */
     effects?: boolean;
+    /** Show the active smart object's contents and smart filters section (default true). */
+    smartObjects?: boolean;
     class?: string;
   }
 
-  let { controller, thumbnailSize = 32, psd = true, psdFileName = 'image', effects = true, class: className = '' }: Props = $props();
+  let { controller, thumbnailSize = 32, psd = true, psdFileName = 'image', effects = true, smartObjects = true, class: className = '' }: Props = $props();
 
   let tick = $state(0);
   $effect(() => {
@@ -60,6 +65,7 @@
       active: controller.getActiveLayer() ?? null,
       menu: layerMenu(controller),
       bitDepth: controller.bitDepth,
+      editing: s.editingContents ?? [],
     };
   });
 
@@ -128,7 +134,7 @@
   }
 
   const locked = (layer: ImageLayer) => Boolean(layer.locks?.all || layer.locks?.pixels || layer.locks?.position || layer.locks?.transparency);
-  const fillOf = (layer: ImageLayer) => (layer.type === 'pixel' ? layer.fillOpacity ?? 1 : 1);
+  const fillOf = (layer: ImageLayer) => (layer.type === 'pixel' || layer.type === 'smart' ? layer.fillOpacity ?? 1 : 1);
 
   /** Draws RGBA pixels into a canvas (nothing without a 2D context). */
   function paint(canvas: HTMLCanvasElement, pixels: PixelBuffer | null) {
@@ -147,12 +153,16 @@
 
   function thumb(layer: ImageLayer): PixelBuffer | null {
     void tick;
-    return layerHasThumbnail(layer) ? controller.getLayerThumbnail(layer.id, { maxSide: 64 }) : null;
+    return layerHasThumbnail(layer) || layer.type === 'smart' ? controller.getLayerThumbnail(layer.id, { maxSide: 64 }) : null;
   }
   function vectorThumb(layer: ImageLayer): PixelBuffer | null {
     void tick;
     const { width, height } = controller.getState().imageDimensions;
     return layer.vectorMask ? vectorMaskThumbnail(layer.vectorMask, width, height, 64) : null;
+  }
+  function filterMaskThumb(layer: ImageLayer): PixelBuffer | null {
+    void tick;
+    return controller.getLayerThumbnail(layer.id, { maxSide: 64, filterMask: true });
   }
   function maskThumb(layer: ImageLayer): PixelBuffer | null {
     void tick;
@@ -165,6 +175,13 @@
 <svelte:window onclick={() => menu && (menu = null)} />
 
 <div class="flex flex-col gap-2 text-xs text-foreground {className}" data-testid="layers-panel">
+  {#if snapshot.editing.length > 0}
+    <div class="flex flex-wrap items-center gap-1.5 rounded bg-primary/15 px-2 py-1 text-foreground ring-1 ring-primary/40" role="status" data-testid="smart-editing">
+      <span class="flex-1 min-w-0 truncate">Editing contents: {snapshot.editing.map((e) => e.name).join(' › ')}</span>
+      <button type="button" class={imageIconButtonClass} onclick={() => attempt(() => controller.closeSmartObjectContents(true))}>Save &amp; Close</button>
+      <button type="button" class={imageIconButtonClass} onclick={() => attempt(() => controller.closeSmartObjectContents(false))}>Discard</button>
+    </div>
+  {/if}
   <div class="flex flex-wrap items-center gap-1" role="toolbar" aria-label="Layer actions">
     <button type="button" class={imageIconButtonClass} onclick={() => run('new-layer')}>New Layer</button>
     <button type="button" class={imageIconButtonClass} onclick={() => run('new-group')}>New Group</button>
@@ -238,7 +255,7 @@
           min="0"
           max="100"
           aria-label="Layer fill"
-          disabled={active.type !== 'pixel'}
+          disabled={active.type !== 'pixel' && active.type !== 'smart'}
           value={Math.round(fillOf(active) * 100)}
           onpointerdown={() => (commitNext = true)}
           onpointerup={() => (commitNext = true)}
@@ -294,6 +311,10 @@
     <VectorMaskEdgesPanel {controller} layer={snapshot.active} class="border-t border-border pt-1.5" />
   {/if}
 
+  {#if smartObjects && snapshot.active?.type === 'smart'}
+    <SmartObjectPanel {controller} class="border-t border-border pt-1.5" />
+  {/if}
+
   {#if effects && snapshot.active && snapshot.active.type !== 'adjustment'}
     <LayerEffectsPanel {controller} class="border-t border-border pt-1.5" />
   {/if}
@@ -301,6 +322,8 @@
   <ul class="flex flex-col gap-0.5" role="tree" aria-label="Layers">
     {#each snapshot.rows as row (row.layer.id)}
       {@const layer = row.layer}
+      {@const badge = smartObjectBadge(snapshot.layers, layer)}
+      {@const filterRows = smartFilterRows(layer)}
       <li
         role="treeitem"
         aria-selected={row.active}
@@ -370,12 +393,40 @@
                 class="absolute -bottom-1 -right-1 rounded bg-accent px-0.5 text-[8px] font-bold leading-tight text-foreground ring-1 ring-background">{layerBadge(layer)}</span>
             {/if}
           </span>
+        {:else if badge}
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <span
+            class="relative shrink-0"
+            title={`${badge.label}. Double-click to edit its contents.`}
+            ondblclick={(e) => {
+              e.stopPropagation();
+              attempt(() => controller.editSmartObjectContents(layer.id));
+            }}>
+            <canvas
+              use:paint={thumb(layer)}
+              aria-label={`${row.label} pixels`}
+              data-testid="layer-thumbnail"
+              onclick={(e) => {
+                if (e.ctrlKey || e.metaKey) {
+                  e.stopPropagation();
+                  attempt(() => layerThumbnailClick(controller, layer, e));
+                }
+              }}
+              style="width: {thumbnailSize}px; height: {thumbnailSize}px"
+              class={thumbClass(row.active && snapshot.activeTarget === 'pixels' && Boolean(layer.mask))}
+            ></canvas>
+            <span
+              class="absolute -bottom-1 -right-1 rounded bg-accent px-0.5 text-[8px] font-bold leading-tight text-foreground ring-1 ring-background"
+              role="img"
+              aria-label={badge.label}
+              data-testid="smart-object-badge">{badge.instances > 1 ? '⧉' : '▣'}</span>
+          </span>
         {:else}
           <span
             class="shrink-0 grid place-items-center rounded bg-muted text-[9px] text-muted-foreground ring-1 ring-border"
             style="width: {thumbnailSize}px; height: {thumbnailSize}px">{layerBadge(layer)}</span>
         {/if}
-        {#if layer.mask && !layer.mask.source && layer.type === 'pixel'}
+        {#if layer.mask && !layer.mask.source && (layer.type === 'pixel' || layer.type === 'smart')}
           <button
             type="button"
             aria-label={`${layer.mask.linked === false ? 'Link' : 'Unlink'} ${row.label} mask`}
@@ -467,6 +518,60 @@
         {#if locked(layer)}<span aria-label="Locked" class="text-muted-foreground">🔒</span>{/if}
         {#if layer.blend !== 'normal' && layer.blend !== 'pass-through'}<span class="text-[9px] text-muted-foreground">{layer.blend}</span>{/if}
       </li>
+      {#if layer.type === 'smart' && (filterRows.length > 0 || layer.smartFilters?.mask)}
+        {@const stackOn = layer.smartFilters?.enabled !== false}
+        <li
+          role="treeitem"
+          aria-level={row.depth + 2}
+          aria-selected={false}
+          class="flex items-center gap-1.5 px-1.5 py-0.5 text-muted-foreground"
+          style="padding-left: {26 + row.depth * 14}px"
+          data-testid="smart-filters-row">
+          <button
+            type="button"
+            aria-label={stackOn ? `Hide smart filters of ${row.label}` : `Show smart filters of ${row.label}`}
+            aria-pressed={stackOn}
+            class="w-4 text-center"
+            onclick={() => attempt(() => controller.setSmartFiltersEnabled(layer.id, !stackOn))}>{stackOn ? '●' : '○'}</button>
+          {#if layer.smartFilters?.mask}
+            {@const fm = layer.smartFilters.mask}
+            <canvas
+              use:paint={filterMaskThumb(layer)}
+              role="button"
+              tabindex="0"
+              aria-label={`${row.label} filter mask${fm.enabled === false ? ' (disabled)' : ''}`}
+              data-testid="smart-filter-mask-thumbnail"
+              style="width: {Math.round(thumbnailSize * 0.75)}px; height: {Math.round(thumbnailSize * 0.75)}px"
+              class={thumbClass(row.active && snapshot.activeTarget === 'filter-mask')}
+              onclick={(e) => {
+                e.stopPropagation();
+                if (e.shiftKey) attempt(() => controller.setSmartFilterMask(layer.id, 'keep', { enabled: fm.enabled === false }));
+                else attempt(() => controller.setActiveLayer(layer.id, 'filter-mask'));
+              }}
+            ></canvas>
+          {/if}
+          <span>Smart Filters</span>
+        </li>
+      {/if}
+      {#each filterRows as f (f.filter.id)}
+        {@const shown = f.filter.enabled && layer.type === 'smart' && layer.smartFilters?.enabled !== false}
+        <li
+          role="treeitem"
+          aria-level={row.depth + 2}
+          aria-selected={false}
+          class="flex items-center gap-1.5 px-1.5 py-0.5 {shown ? 'text-foreground' : 'text-muted-foreground'}"
+          style="padding-left: {40 + row.depth * 14}px"
+          data-filter-id={f.filter.id}>
+          <button
+            type="button"
+            aria-label={f.filter.enabled ? `Hide ${f.label}` : `Show ${f.label}`}
+            aria-pressed={f.filter.enabled}
+            class="w-4 text-center"
+            onclick={() => attempt(() => controller.updateSmartFilter(layer.id, f.filter.id, { enabled: !f.filter.enabled }))}>{f.filter.enabled ? '●' : '○'}</button>
+          <span class="flex-1 min-w-0 truncate">{f.label}</span>
+          {#if f.filter.blend !== 'normal'}<span class="text-[9px] text-muted-foreground">{f.filter.blend}</span>{/if}
+        </li>
+      {/each}
     {/each}
   </ul>
 

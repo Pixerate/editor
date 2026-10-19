@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ToolRegistry } from "@pixerate/editor/agent";
 import { createFakeEffectProvider } from "@pixerate/editor/effects";
-import { ImageEditorController, createImageEditorToolProvider, createImageEffectsToolProvider, createImageStickerHost, type PixelLayer, type SmartObjectLayer, createOutlineTextShaper, type OutlineFontFace, type TypeLayer } from "@pixerate/editor/image-editor";
+import { ImageEditorController, createImageEditorToolProvider, createImageEffectsToolProvider, createImageStickerHost, placementBounds, type PixelLayer, type SmartObjectLayer, createOutlineTextShaper, type OutlineFontFace, type TypeLayer } from "@pixerate/editor/image-editor";
 import { createStickerToolProvider } from "@pixerate/editor/stickers";
 import { demoStickers } from "./demoStickers";
 import { runAgentScript } from "./agentScript";
@@ -66,6 +66,25 @@ describe("image agent scripts", () => {
     const headline = c.getLayers()[3] as TypeLayer;
     expect(headline.text).toBe("Summer Sale");
     expect(headline.runs.map((r) => r.style.color)).toEqual(["#ffffff", "#f59e0b"]);
+  });
+
+  it("the smart object script converts the centre, transforms it, filters it and sets it back", async () => {
+    const fake = { width: 40, height: 20, naturalWidth: 40, naturalHeight: 20, src: "data:fake" } as unknown as HTMLImageElement;
+    const c = new ImageEditorController({ image: fake });
+    c.setSamplePixels({ width: 40, height: 20, data: new Uint8ClampedArray(40 * 20 * 4).fill(180) });
+    const reg = new ToolRegistry();
+    reg.register(createImageEditorToolProvider(c, { id: "image", namespace: "image" }));
+    const script = IMAGE_SCRIPTS.find((s) => s.id === "image-smart-object")!;
+    // The preview needs a browser canvas.
+    const steps = script.steps.filter((s) => s.tool !== "image__render_preview");
+    const { ok } = await runAgentScript(reg, { ...script, steps }, { wait: () => Promise.resolve() });
+    expect(ok).toBe(true);
+    const smart = c.getLayers().find((l) => l.type === "smart") as SmartObjectLayer;
+    expect(smart.name).toBe("Postcard");
+    expect([smart.contents.width, smart.contents.height]).toEqual([16, 8]);
+    expect(smart.smartFilters!.filters.map((f) => [f.kind, f.opacity])).toEqual([["blur", 0.6]]);
+    // Back at 100 %, unrotated: the contents land where they were copied from.
+    expect(placementBounds(smart)).toMatchObject({ x: 12, y: 6, width: 16, height: 8 });
   });
 
   it("the colour script proofs through CMYK and converts colours", async () => {

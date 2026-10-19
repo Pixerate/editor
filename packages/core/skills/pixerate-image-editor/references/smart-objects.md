@@ -19,6 +19,8 @@ How to work with smart objects in the image editor (see the main skill for the t
    `blend` and `opacity`; kinds can repeat), then `update_smart_filter`, `move_smart_filter`,
    `remove_smart_filter` and `set_smart_filters_enabled`. `set_smart_filter_mask` limits where the
    filters show; paint it with `paint_stroke` / `fill_pixels` `channel: "filter-mask"`.
+   `set_active_layer` with `target: "filter-mask"` makes it the paint target for the person at
+   the editor too (the panel's Paint button does the same); it is refused without a filter mask.
 5. **Contents**: `copy_smart_object` with `linked: true` shares the contents (edit once, both
    change), `linked: false` makes them independent. `edit_smart_object_contents` opens the
    contents as their own document: every tool then works inside them until

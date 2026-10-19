@@ -21,6 +21,18 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [monorepo] A Stacked PR Merged After Its Base Never Reaches `main`
+
+- **Issue / Symptom**: The smart object UI (`<SmartObjectPanel>`, the layer badges and the Edit Contents bar) was reviewed and merged as PR 3 of a stack (#225), but none of it was on `main`: the files had never existed there, while the core model and tools from PR 2 had.
+- **Root Cause**: #225 targeted the stack's branch, not `main`. That branch's own PR (#223) had already merged, so the squash commit landed on a branch nothing would merge again. GitHub shows such a PR as "Merged" all the same.
+- **Solution / Workaround**: Before merging a stacked PR, check its base: once the base branch's PR has merged, retarget the next PR to `main` first. To recover, cherry-pick the stranded commit onto a branch from today's `main` and treat it as the specification, not as text: here the panels had since moved to theme tokens (`styles.ts`), host controls (`ImageCheckbox` / `ImageRange` / `ImageSelect`), `layerHasThumbnail` and a generated parity section, and the demo script's tool names had changed. `git branch -r --contains <commit>` tells whether a merged commit is on `main`.
+
+### [core/image-editor] `set_active_layer` Refused `filter-mask` Although the Skill Listed It
+
+- **Issue / Symptom**: The image editor skill said `set_active_layer` takes `target: "filter-mask"`, but the tool's schema only allowed `pixels` and `mask`, so the call failed validation. The smart object panel's Paint button had no agent path.
+- **Root Cause**: The controller's `setActiveLayer` learned the `filter-mask` target with smart objects; the tool's `enum` was not widened with it. `tests/agent-skills.test.ts` checks tool names, not argument values, so the skill and the schema drifted apart unnoticed.
+- **Solution / Workaround**: The enum now has `filter-mask`, and the tool refuses it with a reason when the layer is not a smart object or has no smart filter mask (the controller alone falls back to `pixels` silently). When a controller method gains a value, widen the tool's `enum` and add a `ToolRegistry.callTool` test for it in the same change.
+
 ### [swift/vector-ui] The Swift Vector Controller Has No Pointer State Machine, So Canvas Drags Replay From a History Mark
 
 - **Issue / Symptom**: The TS `VectorEditorController` handles `pointerDown` / `pointerMove` / `pointerUp` itself (live previews, one undo step per drag). The Swift port has no pointer input, and calling `translate` / `addShape` / `moveAnchor` on every pointer move would leave one undo step per move.
