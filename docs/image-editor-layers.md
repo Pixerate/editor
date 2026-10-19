@@ -344,6 +344,20 @@ Every other document, single-layer or not, renders through the tiled compositor.
 
 **Paint state.** The brush settings and foreground / background colours are view state on the editor state (`state.paint`, `setPaintOptions`). They are not recorded in history or saved, as in Photoshop.
 
+### Phase 4 (integrations)
+
+**What counts as multi-layer.** The AI hooks use the new-layer behaviour when the document has more than one pixel layer or group (`isMultiLayer`). Adjustment and annotation layers don't count: they are edits of the image, and old documents with adjustment layers or annotation scribbles keep the replace behaviour they always had.
+
+**What the hooks see.** In new-layer mode the editor sends the composite of the layers (without annotations, in the source frame) instead of the source image. Otherwise a result built from the original pixels would ignore what was painted on top (`toAIInputDataURL`). In replace mode it still sends the source. Inpainting into a new layer keeps annotation layers (they may be real labels now); the replace mode still clears them, as before.
+
+**Background removal mask.** The result's alpha replaces the target layer's mask, and the target is the active pixel layer or the Background. A result of another size is resampled bilinearly to the canvas, which the old replace path did implicitly by loading a new source.
+
+**Selection sampling.** `composite` (the default) keeps the old behaviour for old-shape documents: the source, or with `sampleMerged` the adjusted image. In layered documents it is the composite of the pixel layers without adjustment layers and filters, or with `sampleMerged` the full composite. `active-layer` reads the active pixel layer alone.
+
+**Rasterize Layer** keeps the layer's id, name, opacity, mask and locks. An annotation's own blend mode becomes the layer's blend when the layer was Normal. Baking a blur filter keeps only the pixels inside the canvas, because the filter clamps there.
+
+**External assets.** `toJSON({ assets: 'external', store })` returns a promise; `store.put` receives each PNG once per store (memoised by content). Loading uses the new `loadJSONAsync(data, { store })`; the synchronous `loadJSON` and `initialState` take inline (data URL) assets only. Old-shape documents have no assets, so they are unaffected.
+
 ## Decisions
 
 1. **Base sliders, blur and depth mask** are handled as photocraft handles them: as filters and masks on layers, not a document-level step. See [Document model](#document-model).

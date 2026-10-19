@@ -117,7 +117,7 @@ describe('image editor agent tools', () => {
       'set_crop', 'reset_crop', 'set_rotation', 'flip_image', 'undo_image', 'redo_image',
       'list_layers', 'set_active_layer', 'add_pixel_layer', 'duplicate_layer', 'remove_layer', 'move_layer', 'set_layer_properties',
       'group_layers', 'add_group', 'ungroup_layer', 'merge_down', 'merge_visible', 'flatten_image', 'offset_layer', 'add_layer_mask',
-      'apply_layer_mask', 'remove_layer_mask', 'set_layer_mask_properties', 'layer_via_copy', 'add_layer_filter',
+      'apply_layer_mask', 'remove_layer_mask', 'set_layer_mask_properties', 'layer_via_copy', 'rasterize_layer', 'add_layer_filter',
       'update_layer_filter', 'remove_layer_filter', 'paint_stroke', 'fill_pixels', 'clear_pixels',
     ]);
     for (const t of tools) {

@@ -12,6 +12,7 @@ import {
   type CreateAnnotationPayload,
   type ExportOptions,
   type SerializedImageEditorState,
+  type AIResultOptions,
   type ImagePoint,
   type AdjustmentKind,
   type AdjustmentLayerInit,
@@ -68,8 +69,10 @@ export interface UseImageEditorReturn {
   renderMask: (options?: { useAnnotations?: boolean; useCrop?: boolean }) => Promise<HTMLCanvasElement>;
   toMaskDataURL: (options?: { useAnnotations?: boolean; useCrop?: boolean }) => Promise<string>;
   toSourceDataURL: (options?: Pick<ExportOptions, 'format' | 'quality'>) => Promise<string>;
-  applyInpaintedImage: (newDataUrl: string) => Promise<void>;
-  applyBackgroundRemovedImage: (newDataUrl: string) => Promise<void>;
+  /** In documents with several layers (or `target: 'new-layer'`) the result goes to a new layer. */
+  applyInpaintedImage: (newDataUrl: string, options?: AIResultOptions) => Promise<string | void>;
+  /** In documents with several layers (or `target: 'new-layer'`) the result's alpha masks the active layer. */
+  applyBackgroundRemovedImage: (newDataUrl: string, options?: AIResultOptions) => Promise<string | void>;
 }
 
 export function useImageEditor(options: ImageEditorOptions = {}): UseImageEditorReturn {
@@ -177,11 +180,11 @@ export function useImageEditor(options: ImageEditorOptions = {}): UseImageEditor
     [controller]
   );
   const applyInpaintedImage = useCallback(
-    (newDataUrl: string) => controller.applyInpaintedImage(newDataUrl),
+    (newDataUrl: string, options?: AIResultOptions) => controller.applyInpaintedImage(newDataUrl, options),
     [controller]
   );
   const applyBackgroundRemovedImage = useCallback(
-    (newDataUrl: string) => controller.applyBackgroundRemovedImage(newDataUrl),
+    (newDataUrl: string, options?: AIResultOptions) => controller.applyBackgroundRemovedImage(newDataUrl, options),
     [controller]
   );
 

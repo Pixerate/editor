@@ -90,6 +90,9 @@
   let isInpainting = $state(false);
   let aiError = $state<string | null>(null);
   let aiSuccess = $state<string | null>(null);
+  /** Where AI results go: by layer count (auto), a new layer / mask, or replacing the Background. */
+  let aiTarget = $state<'auto' | 'new-layer' | 'replace'>('auto');
+  const aiOptions = $derived(aiTarget === 'auto' ? {} : { target: aiTarget });
 
   const effectiveOnInpaint = $derived(onInpaint || aiHooks?.onInpaint);
   const effectiveOnRemoveBg = $derived(onRemoveBackground || aiHooks?.onRemoveBackground);
@@ -103,12 +106,12 @@
     aiSuccess = null;
     isRemovingBg = true;
     try {
-      // AI hooks work on the untransformed source image (natural pixels); crop, rotation,
-      // adjustments and annotations stay non-destructive and are re-applied on top.
-      const imageDataUrl = await editor.toSourceDataURL();
+      // AI hooks work in natural pixels (no crop or rotation): the source when the result replaces
+      // it, the composite of the layers when the result becomes a layer or mask.
+      const imageDataUrl = await editor.controller.toAIInputDataURL(aiOptions);
       const result = await effectiveOnRemoveBg({ imageDataUrl });
       if (typeof result === 'string') {
-        await editor.applyBackgroundRemovedImage(result);
+        await editor.applyBackgroundRemovedImage(result, aiOptions);
         aiSuccess = 'Background removed successfully!';
       } else {
         aiSuccess = 'Background removal complete.';
@@ -134,7 +137,7 @@
     isInpainting = true;
     try {
       // Source image and mask share natural image space so they line up exactly.
-      const imageDataUrl = await editor.toSourceDataURL();
+      const imageDataUrl = await editor.controller.toAIInputDataURL(aiOptions);
       const maskDataUrl = await editor.toMaskDataURL({
         useAnnotations: inpaintMaskMode === 'annotations',
         useCrop: inpaintMaskMode === 'crop',
@@ -146,7 +149,7 @@
         cropBox: inpaintMaskMode === 'crop' ? editor.state.crop : null,
       });
       if (typeof result === 'string') {
-        await editor.applyInpaintedImage(result);
+        await editor.applyInpaintedImage(result, aiOptions);
         aiSuccess = 'Inpainting applied successfully!';
       } else {
         aiSuccess = 'Inpainting complete.';
@@ -1335,6 +1338,18 @@
       <!-- TAB 5: AI TOOLS / INPAINTING & BACKGROUND REMOVAL -->
       {#if activeTab === 'ai'}
         <div class="flex flex-col gap-4 text-xs">
+          <label class="flex items-center justify-between gap-2 text-slate-300">
+            <span>Results go to</span>
+            <select
+              aria-label="AI result target"
+              bind:value={aiTarget}
+              class="bg-slate-800 border border-slate-700 rounded px-1.5 py-1"
+            >
+              <option value="auto">{editor.controller.isMultiLayer ? 'Auto (new layer)' : 'Auto (replace image)'}</option>
+              <option value="new-layer">New layer / mask</option>
+              <option value="replace">Replace image</option>
+            </select>
+          </label>
           <!-- Background Removal Section -->
           <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800 flex flex-col gap-2.5">
             <div class="flex items-center justify-between">

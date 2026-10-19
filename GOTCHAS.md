@@ -21,6 +21,18 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/image-editor] AI Results Must Be Computed From the Composite When They Become Layers
+
+- **Issue / Symptom**: Sending the original source image to an inpainting hook in a layered document would give a result that ignores everything painted on the layers above. Added as a new layer on top, it would then hide those edits inside the selection.
+- **Root Cause**: `toSourceDataURL()` is the Background's source, which the old replace flow needed because the result replaced that source.
+- **Solution / Workaround**: `toAIInputDataURL(options)` returns the source in replace mode and the composite without annotations (`renderSourceView({ includeAnnotations: false })`) in new-layer mode. The editors call it with the same target they pass to `applyInpaintedImage` / `applyBackgroundRemovedImage`.
+
+### [core/image-editor] "Multi-Layer" for the AI Hooks Counts Pixel Layers and Groups Only
+
+- **Issue / Symptom**: Counting every layer would switch old documents with adjustment layers or annotation scribbles to the new-layer behaviour, changing how inpainting worked for them.
+- **Root Cause**: Since phase 1, adjustment layers and annotations are layers, but they were never separate images.
+- **Solution / Workaround**: `isMultiLayer` counts pixel layers and groups. The UI shows which behaviour "Auto" will use, and `target` overrides it.
+
 ### [core/image-editor] Dirty Rectangles Are Only Safe on a Compositor That Sees One Stack
 
 - **Issue / Symptom**: A design to recomposite only the dabs' rectangles during a stroke could leave stale pixels when the same compositor had meanwhile composited a different layer list (an export of chosen layers, `compositePixels`, a merge).

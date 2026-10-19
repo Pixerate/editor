@@ -101,7 +101,8 @@ export type LayerMenuAction =
   | 'apply-mask'
   | 'delete-mask'
   | 'toggle-mask'
-  | 'toggle-clip';
+  | 'toggle-clip'
+  | 'rasterize';
 
 export interface LayerMenuItem {
   action: LayerMenuAction;
@@ -135,6 +136,7 @@ export function layerMenu(controller: ImageEditorController): LayerMenuItem[] {
     { action: 'apply-mask', label: 'Apply Layer Mask', enabled: isPixel && Boolean(active?.mask) },
     { action: 'delete-mask', label: 'Delete Layer Mask', enabled: Boolean(active?.mask) },
     { action: 'toggle-mask', label: active?.mask?.enabled === false ? 'Enable Layer Mask' : 'Disable Layer Mask', enabled: Boolean(active?.mask) },
+    { action: 'rasterize', label: 'Rasterize Layer', enabled: active?.type === 'annotation' || (isPixel && Boolean(active?.type === 'pixel' && active.filters?.length)) },
     { action: 'toggle-clip', label: active?.clipped ? 'Release Clipping Mask' : 'Create Clipping Mask', enabled: Boolean(loc && loc.index > 0) },
   ];
 }
@@ -190,6 +192,9 @@ export async function runLayerMenuAction(controller: ImageEditorController, acti
         break;
       case 'toggle-mask':
         if (id && active?.mask) controller.setLayerMaskProps(id, { enabled: active.mask.enabled === false });
+        break;
+      case 'rasterize':
+        if (id) await controller.rasterizeLayer(id);
         break;
       case 'toggle-clip':
         if (id) controller.setLayerProperties(id, { clipped: !active?.clipped });

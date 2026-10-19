@@ -29,6 +29,8 @@ export interface SelectionToolOptions {
   antiAlias: boolean;
   /** Sample the adjusted image instead of the source. */
   sampleMerged: boolean;
+  /** Sample the whole image (`composite`, default) or only the active pixel layer. */
+  sample?: 'composite' | 'active-layer';
   distance: ColorDistance;
 }
 

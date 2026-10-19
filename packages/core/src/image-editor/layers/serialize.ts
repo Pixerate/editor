@@ -24,7 +24,7 @@ import {
   type PixelLayer,
   type RasterMask,
 } from './model';
-import { decodePng, parseDataUrl, pngDataUrl } from './png';
+import { bytesToBase64, decodePng, parseDataUrl, pngDataUrl } from './png';
 import { contentBounds, emptySurface, readRegion, surfaceFromPixels, type TiledSurface } from './surface';
 
 export const LAYERED_SCHEMA_VERSION = 3 as const;
@@ -208,6 +208,86 @@ export function serializeLayers(layers: readonly ImageLayer[]): { layers: Serial
     },
   };
   return { layers: layers.map((l) => serializeLayer(l, ctx)), assets };
+}
+
+// ---------------------------------------------------------------------------
+// External assets
+// ---------------------------------------------------------------------------
+
+/**
+ * Where a host keeps layer pixels outside the JSON (`toJSON({ assets: 'external', store })`):
+ * `put` stores a PNG and returns a reference (a URL, a key) that `get` resolves later.
+ */
+export interface ImageEditorAssetStore {
+  put(blob: Blob, info: { id: string; width: number; height: number }): Promise<string>;
+  get(ref: string): Promise<Blob>;
+}
+
+const externalRefs = new WeakMap<ImageEditorAssetStore, Map<string, string>>();
+
+/**
+ * Serializes a layer tree with its assets in `store`: each PNG is uploaded once per store (by
+ * content), and `assets` maps asset ids to the store's references.
+ */
+export async function serializeLayersExternal(
+  layers: readonly ImageLayer[],
+  store: ImageEditorAssetStore
+): Promise<{ layers: SerializedLayer[]; assets: Record<string, string> }> {
+  const inline = serializeLayers(layers);
+  let refs = externalRefs.get(store);
+  if (!refs) {
+    refs = new Map();
+    externalRefs.set(store, refs);
+  }
+  const assets: Record<string, string> = {};
+  for (const [id, url] of Object.entries(inline.assets)) {
+    let ref = refs.get(url);
+    if (!ref) {
+      const parsed = parseDataUrl(url)!;
+      const png = decodePngHeader(parsed.bytes);
+      ref = await store.put(new Blob([parsed.bytes as BlobPart], { type: 'image/png' }), { id, width: png.width, height: png.height });
+      if (typeof ref !== 'string' || !ref) throw new Error(`The asset store returned no reference for "${id}".`);
+      refs.set(url, ref);
+    }
+    assets[id] = ref;
+  }
+  return { layers: inline.layers, assets };
+}
+
+/** Width and height from a PNG's header. */
+function decodePngHeader(bytes: Uint8Array): { width: number; height: number } {
+  const u32 = (o: number) => ((bytes[o] << 24) | (bytes[o + 1] << 16) | (bytes[o + 2] << 8) | bytes[o + 3]) >>> 0;
+  return { width: u32(16), height: u32(20) };
+}
+
+/**
+ * Turns external asset references back into data URLs through `store.get` (data URLs pass through),
+ * so the document loads like an inline one. References that fail are reported and left out.
+ */
+export async function resolveExternalAssets(
+  assets: Record<string, string>,
+  store: ImageEditorAssetStore | undefined,
+  problems: string[]
+): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+  for (const [id, ref] of Object.entries(assets)) {
+    if (ref.startsWith('data:')) {
+      out[id] = ref;
+      continue;
+    }
+    if (!store) {
+      problems.push(`Asset "${id}" is external (${ref}) and no asset store was given.`);
+      continue;
+    }
+    try {
+      const blob = await store.get(ref);
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      out[id] = `data:image/png;base64,${bytesToBase64(bytes)}`;
+    } catch (err) {
+      problems.push(`Asset "${id}" (${ref}) could not be fetched: ${(err as Error).message}`);
+    }
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
