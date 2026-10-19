@@ -114,7 +114,11 @@ describe('image editor agent tools', () => {
       'get_adjustments', 'list_controls', 'set_adjustments', 'add_adjustment_layer', 'render_preview', 'capture_view',
       'get_selection', 'select_region', 'select_by_color', 'modify_selection', 'refine_selection', 'apply_selection_as_mask',
       'get_image_info', 'get_histogram', 'update_adjustment_layer', 'remove_adjustment_layer', 'move_adjustment_layer',
-      'set_crop', 'reset_crop', 'set_rotation', 'flip_image', 'undo_image', 'redo_image', 'list_layers',
+      'set_crop', 'reset_crop', 'set_rotation', 'flip_image', 'undo_image', 'redo_image',
+      'list_layers', 'set_active_layer', 'add_pixel_layer', 'duplicate_layer', 'remove_layer', 'move_layer', 'set_layer_properties',
+      'group_layers', 'add_group', 'ungroup_layer', 'merge_down', 'merge_visible', 'flatten_image', 'offset_layer', 'add_layer_mask',
+      'apply_layer_mask', 'remove_layer_mask', 'set_layer_mask_properties', 'layer_via_copy', 'add_layer_filter',
+      'update_layer_filter', 'remove_layer_filter',
     ]);
     for (const t of tools) {
       expect(t.title).toBeTruthy();

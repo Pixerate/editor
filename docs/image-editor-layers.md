@@ -320,6 +320,18 @@ Every other document, single-layer or not, renders through the tiled compositor.
 
 **Smaller points.** A pixel layer's mask moves with its `offset`. In a clipping group, the base layer's fill opacity also limits the clip shape (Photoshop clips to the base pixels before fill). `list_layers` arrived in phase 1, so the new model had an agent path from the start; the write tools follow in phase 2. `ImageEditorOptions.maxHistoryBytes` (default 512 MiB) bounds the tiles held only by undo steps.
 
+### Phase 2 (layer operations, tools, panel)
+
+**Extra tools.** Besides the tools in the table above, phase 2 adds `set_active_layer` (agents need to pick the layer the base sliders edit), `add_group` (the panel's New Group), `merge_visible` and `set_layer_mask_properties` (any layer's mask density, feather and enabled flag). Each is one operation with its own strict schema.
+
+**Merge Down.** The merged layer keeps the lower layer's name, opacity and blend; the lower layer's mask, fill and filters are baked. As in Photoshop, the result looks the same only when the lower layer is opaque at 100 % normal: a faded lower layer fades the merged content, and an upper blend mode stops seeing what is below the lower layer where that one is transparent. Merges that include annotation layers need a canvas, so outside a browser they refuse and say so.
+
+**Default positions.** New pixel layers and groups go above the active layer (Photoshop's behaviour), or on top when no layer is active. New adjustment layers keep the phase 1 rule (above the others, below annotations).
+
+**Panel model in core.** The row list, drop placement and the layer menu (`layers/panel.ts`) live in core, so the React and Svelte panels share one implementation of the rules.
+
+**Thumbnails** are point-sampled from the tiles (`getLayerThumbnail`) and cached per surface, not built from mip tiles, which do not exist yet.
+
 ## Decisions
 
 1. **Base sliders, blur and depth mask** are handled as photocraft handles them: as filters and masks on layers, not a document-level step. See [Document model](#document-model).

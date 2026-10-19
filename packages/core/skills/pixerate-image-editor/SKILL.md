@@ -1,6 +1,6 @@
 ---
 name: pixerate-image-editor
-description: How to colour-correct and retouch a photo in the Pixerate image editor through its agent tools - base adjustments (exposure, contrast, white balance temperature and tint, saturation, blur), non-destructive adjustment layers (curves, levels, hue/saturation, vibrance, color balance, black and white, photo filter, invert, posterize, threshold) with blend modes and opacity, selections (rectangle, ellipse, magic wand, color range, grow, shrink, feather, refine edge) and layer masks, crop, rotate and flip, undo, reading the histogram for clipping, and rendering a PNG preview to check the result. Use when asked to edit, grade, correct, brighten, warm up, desaturate, crop, straighten or mask an image, or when get_adjustments, set_adjustments, add_adjustment_layer, select_by_color or render_preview are available.
+description: How to colour-correct, composite and retouch a photo in the Pixerate image editor through its agent tools - layers (pixel, adjustment, group and annotation layers with masks, clipping, blend modes, opacity and fill; merge, flatten, layer via copy, develop and blur filters), base adjustments (exposure, contrast, white balance temperature and tint, saturation, blur), non-destructive adjustment layers (curves, levels, hue/saturation, vibrance, color balance, black and white, photo filter, invert, posterize, threshold) with blend modes and opacity, selections (rectangle, ellipse, magic wand, color range, grow, shrink, feather, refine edge) and layer masks, crop, rotate and flip, undo, reading the histogram for clipping, and rendering a PNG preview to check the result. Use when asked to edit, grade, correct, brighten, warm up, desaturate, crop, straighten or mask an image, or when get_adjustments, set_adjustments, add_adjustment_layer, list_layers, add_pixel_layer, select_by_color or render_preview are available.
 ---
 
 # Image editor
@@ -48,6 +48,24 @@ batching.
    preview; read the `applied` and `clamped` lists that writes return. `undo_image` takes back a
    step that made things worse.
 
+### Working with layers
+
+1. **Read the stack** with `list_layers`. A photo opened in the editor has only the Background;
+   documents made elsewhere may have pixel layers, groups and masks. Note which layer is
+   `active`: `set_adjustments` base controls edit the active pixel layer's `develop` filter.
+2. **New content goes on its own layer**: `add_pixel_layer` (empty, a colour fill or a PNG at
+   `x`, `y`), `layer_via_copy` to lift a selection onto a layer, `duplicate_layer` before a
+   risky change. Name layers by intent.
+3. **Shape layers non-destructively**: masks (`add_layer_mask` from the selection, or
+   reveal-all / hide-all, softened with `density` / `feather`) instead of deleting pixels;
+   `clipped: true` (via `set_layer_properties`) to limit a layer or adjustment to the layer below;
+   `blend`, `opacity` and `fillOpacity` instead of baking.
+4. **Organise** with `group_layers` (pass-through by default: blend modes inside still see the
+   layers below; give the group a blend mode to isolate them), `move_layer` and
+   `offset_layer`.
+5. **Bake only when asked** (`merge_down`, `merge_visible`, `flatten_image`, `apply_layer_mask`):
+   they are destructive. `render_preview` with `layerId` shows one layer alone.
+
 ## Best practices
 
 - **Non-destructive first.** Prefer an adjustment layer over pushing a base slider to its
@@ -82,6 +100,10 @@ batching.
   levels layer without shifting hue or saturation; `color` applies a tint without changing
   brightness; `soft-light` / `overlay` for gentle contrast.
 - **Name layers** (`name`) by intent ("Sky darken", "Warm skin"), so the stack stays readable.
+- **Merge Down only onto an opaque, 100 % lower layer** when the result must look the same:
+  the merged layer keeps the lower layer's opacity and blend, so a faded lower layer fades the
+  merged content too, and a blend mode on the upper layer stops seeing what was below the lower
+  layer where the lower one is transparent. Check with `render_preview` after merging.
 
 ## Tool reference
 
@@ -95,7 +117,7 @@ batching.
 | `list_layers` | Read the layer stack bottom to top as a tree: id, type (`pixel`, `adjustment`, `group`, `annotation`), name, document `bounds` of pixel layers, visibility, opacity, `fillOpacity`, blend, `clipped`, locks, a `mask` summary, pixel-layer `filters` (the Background's `develop` filter is the base adjustments), adjustment `kind` and `params`, group `children`, and which layer is `active`. Call it to understand a document with more than the Background before changing it; adjustment layer ids work with every adjustment-layer tool. |
 | `get_image_info` | Read the geometry: source `image` size, `crop` box (source pixels, or null), `rotation` degrees, `flipH` / `flipV`, the `output` size after crop and rotation, the layer count and `canUndo` / `canRedo`. Call before cropping or selecting so coordinates are right. |
 | `get_histogram` | Judge exposure numerically: per channel and luminance `mean`, `p1` and `p99` (0..255), and `clipping` percent at pure black and white per channel. Reads the last render, so call `render_preview` first. `bins` (16, 32, 64 or 256) adds the counts. Cheaper than another image for checking a tonal change. |
-| `render_preview` | See the edited image (crop, adjustments, layers, annotations) as a PNG. `maxSide` 16..2048 px, default 512. Images cost tokens: render after a group of edits, use 512 for overall look and 1024+ to judge clipping, edges and masks. Fails in environments without rendering. |
+| `render_preview` | See the edited image (crop, adjustments, layers, annotations) as a PNG, or with `layerId` one layer alone. `maxSide` 16..2048 px, default 512. Images cost tokens: render after a group of edits, use 512 for overall look and 1024+ to judge clipping, edges and masks. Fails in environments without rendering. |
 | `capture_view` | Inspect detail in natural image pixels (the space of `get_selection` and `select_region`, before crop and rotation): `region` `content` (whole image, default), `selection` or `rect`; small regions are enlarged up to 8× with hard pixel edges, so a 64 px rect shows real pixels. `includeOverlays: true` shades unselected pixels and outlines the crop: use it to check a mask's edge before `apply_selection_as_mask`. Returns the `rect` and `scale`. Use `render_preview` for the final framed result. |
 
 ### Write
@@ -103,7 +125,7 @@ batching.
 | Tool | Use it to |
 | --- | --- |
 | `set_adjustments` | Set base controls and existing layer parameters in one undo step: `values` is a map of control id or `layers.<layerId>.<controlId>` path to number; `label` is echoed. Values are clamped to range; returns `applied` and `clamped` (and a note when `tint` is set on a process 1 edit). Unknown ids fail and change nothing. Cannot set curves points, booleans or colours. |
-| `add_adjustment_layer` | Add a layer on top of the stack: `kind` (curves, levels, hueSaturation, vibrance, colorBalance, blackWhite, photoFilter, invert, posterize, threshold), optional `params` merged with neutral defaults, `opacity` 0..1 (default 1), `blend` (default normal), `name`. Returns the layer (with its new id) and its stack index. The only tool that sets curves points, `colorize`, `preserveLuminosity`, a black and white `tint` or a photo filter `color`. |
+| `add_adjustment_layer` | Add a layer above the other adjustment layers and below annotations (or directly above `aboveId`, or at the top of group `parentId`): `kind` (curves, levels, hueSaturation, vibrance, colorBalance, blackWhite, photoFilter, invert, posterize, threshold), optional `params` merged with neutral defaults, `opacity` 0..1 (default 1), `blend` (default normal), `name`. Returns the layer (with its new id) and its stack index. The only tool that sets curves points, `colorize`, `preserveLuminosity`, a black and white `tint` or a photo filter `color`. |
 | `select_region` | Select by `shape`: `rect` or `ellipse` (with `x`, `y`, `width`, `height` in natural pixels), `all`, `none` or `invert`. `mode` replace (default), add, subtract or intersect; `feather` px (default 0). Returns the selection summary. |
 | `select_by_color` | Magic wand from a seed (`x`, `y`, `tolerance` 0..255 default 32, `contiguous` default true) or Color Range for every similar pixel (`color` "#rrggbb", `fuzziness` 0..200 default 40). `sampleMerged: true` samples the adjusted image instead of the source. `mode` as above. Use it for skies, backdrops and flat-coloured objects. |
 | `modify_selection` | Grow, shrink, feather, border or smooth the selection (`op`) by `radius` px (0..500). Use shrink then feather to keep an adjustment from bleeding over an edge; smooth to remove wand speckle. Fails when nothing is selected. |
@@ -117,6 +139,27 @@ batching.
 | `flip_image` | Mirror the image `horizontal` (left-right) or `vertical`. Avoid flipping images with text, logos or recognisable places. |
 | `undo_image` | Undo the last edit (one tool call is one step). Returns `canUndo` / `canRedo`. |
 | `redo_image` | Redo the edit you just undid. |
+| `set_active_layer` | Make a layer active (`layerId`) and choose the paint `target` (`pixels` or `mask`). Base sliders then edit that pixel layer's develop filter. Not an undo step. Returns the layer. |
+| `add_pixel_layer` | Add a pixel layer above the active layer (or at `aboveId` / `belowId` / `parentId` / `index`): empty, `color` `#rrggbb[aa]` over the canvas, or `image` (PNG data URL or base64; other formats only in a browser) at `x`, `y`; with `name`, `opacity`, `blend`. Returns the layer with its id and bounds. |
+| `duplicate_layer` | Copy a layer (groups with their children) directly above it, e.g. before a destructive change. Returns the copy. |
+| `remove_layer` | Delete a layer or group (refused when locked). Prefer hiding with `set_layer_properties`. Returns the remaining top-level ids. |
+| `move_layer` | Reorder: give exactly one of `aboveId`, `belowId`, `parentId` (into a group, optional `index`) or `index` alone. Returns the new `parentId` and `index`. |
+| `set_layer_properties` | Change `name`, `visible`, `opacity`, `fillOpacity`, `blend` (`pass-through` for groups), `clipped`, `locks` or `collapsed`. Only given fields change. Returns the layer. |
+| `group_layers` | Put sibling layers (`layerIds`) into a new pass-through group at the topmost one's position. Returns the group and its children. |
+| `add_group` | Add an empty group (pass-through unless `blend` is given) above the active layer or at a placement, then move layers into it with `move_layer` `parentId`. Returns the group. |
+| `ungroup_layer` | Replace a group by its children (its own opacity, blend and mask are dropped). Returns the child ids. |
+| `merge_down` | Composite a layer onto the pixel layer below it (masks, fill and filters baked). Destructive; see Best practices. Returns the merged layer. |
+| `merge_visible` | Composite all visible top-level layers into one layer; hidden ones stay. Destructive. |
+| `flatten_image` | Composite everything visible into one Background; hidden layers are discarded. Destructive; do it only when asked. |
+| `offset_layer` | Move a pixel layer and its mask to `x`, `y` or by `dx`, `dy` (integers, document px). Refused when its position is locked. Returns the offset and bounds. |
+| `add_layer_mask` | Mask any layer `from` `reveal-all`, `hide-all` or `selection`, with optional `density` / `feather`. Replaces an existing mask. Returns the mask summary. |
+| `set_layer_mask_properties` | Change any layer mask's `density`, `feather` or `enabled` without touching its pixels. |
+| `apply_layer_mask` | Bake a pixel layer's mask into its alpha and remove it. Destructive. |
+| `remove_layer_mask` | Delete a mask without applying it; disable it instead to keep it. |
+| `layer_via_copy` | Copy the selected pixels of a pixel layer (default the active one) to a new layer above it; `cut: true` removes them from the source. Needs a selection. Returns the new layer. |
+| `add_layer_filter` | Add a live `develop` (brightness … tint) or `blur` (`radius`) filter to a pixel layer; one of each kind. Returns the filters with ids. |
+| `update_layer_filter` | Change a filter's values (`filterId` from `list_layers`). Returns the filters. |
+| `remove_layer_filter` | Remove a filter. Returns the remaining filters. |
 | `apply_selection_as_mask` | Mask a layer with the current selection: pass `layerId` to mask an existing layer, or `kind` (plus optional `params`) to create a new masked layer in one step. `density` 0..1 and `feather` px soften the mask non-destructively. Returns `layerId`, kind, mask info and the selection summary. |
 
 ## Pitfalls
@@ -124,6 +167,10 @@ batching.
 - A layer's `kind` cannot change; to switch kinds add a new layer and remove the old one.
   Curves points, `colorize` and colours are only set when the layer is added, so get them
   right in `add_adjustment_layer` (or replace the layer).
+- Layer write tools refuse locked layers with the reason: unlock with `set_layer_properties`
+  `locks` only when the user wants that layer changed.
+- `merge_down`, `merge_visible` and `flatten_image` merge annotation layers only in a browser
+  (they need a canvas); elsewhere they fail and say so.
 - `get_histogram` describes the last render, not the current state: render after edits, then
   read it.
 - Crop coordinates are always in the un-rotated source; after `set_rotation` the output size

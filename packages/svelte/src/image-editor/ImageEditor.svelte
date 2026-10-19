@@ -27,6 +27,7 @@
   import ControlSlider from './ControlSlider.svelte';
   import Histogram from './Histogram.svelte';
   import AdjustmentLayersPanel from './AdjustmentLayersPanel.svelte';
+  import LayersPanel from './LayersPanel.svelte';
   import SelectionOptionsBar from './SelectionOptionsBar.svelte';
   import RefineEdgePanel from './RefineEdgePanel.svelte';
   import { onDestroy, untrack } from 'svelte';
@@ -65,7 +66,7 @@
 
   let canvasEl = $state<HTMLCanvasElement | null>(null);
   let containerEl = $state<HTMLDivElement | null>(null);
-  let activeTab = $state<'crop' | 'adjust' | 'select' | 'annotate' | 'depth' | 'ai'>('crop');
+  let activeTab = $state<'crop' | 'adjust' | 'layers' | 'select' | 'annotate' | 'depth' | 'ai'>('crop');
 
   // Selection tools (magic wand, marquees, lasso): options bar state and the pointer gesture.
   let selectionOptions = $state<SelectionToolOptions>({ ...DEFAULT_SELECTION_TOOL_OPTIONS });
@@ -662,6 +663,18 @@
       <button
         type="button"
         onclick={() => {
+          activeTab = 'layers';
+          editor.setTool('select');
+        }}
+        class="px-3 py-1.5 rounded-md font-medium transition-colors {activeTab === 'layers'
+          ? 'bg-indigo-600 text-white shadow'
+          : 'text-slate-400 hover:text-slate-200'}"
+      >
+        Layers
+      </button>
+      <button
+        type="button"
+        onclick={() => {
           activeTab = 'select';
           editor.setTool('select');
         }}
@@ -978,6 +991,13 @@
       {/if}
 
       <!-- TAB 3: ANNOTATIONS -->
+      {#if activeTab === 'layers'}
+        <div class="flex flex-col gap-3 text-xs">
+          <span class="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">Layers</span>
+          <LayersPanel controller={editor.controller} />
+        </div>
+      {/if}
+
       {#if activeTab === 'annotate'}
         <div class="flex flex-col gap-3 text-xs">
           <span class="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">

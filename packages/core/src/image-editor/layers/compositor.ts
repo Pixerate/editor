@@ -768,6 +768,15 @@ export class LayerCompositor {
    * Per-pixel coverage (0..1) of a layer's mask over `r`, or `null` when the mask is missing,
    * disabled or reveals all of `r`.
    */
+  /**
+   * A layer's effective mask coverage (0..1, after density, feather or depth evaluation) over
+   * `r` in document space, or `null` when it reveals all of `r`.
+   */
+  maskCoverage(layer: ImageLayer, r: CropBox, sources: CompositorSources): Float32Array | null {
+    this.setSources(sources);
+    return this.maskTile(layer, r);
+  }
+
   private maskTile(layer: ImageLayer, r: CropBox): Float32Array | null {
     const mask = layer.mask;
     if (!mask || mask.enabled === false) return null;

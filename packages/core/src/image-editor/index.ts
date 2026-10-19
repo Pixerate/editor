@@ -25,3 +25,5 @@ export * from './layers/serialize';
 export * from './layers/render';
 export { encodePng, decodePng, isPng, bytesToBase64, base64ToBytes, parseDataUrl, pngDataUrl, type DecodedPng } from './layers/png';
 export { inflate, inflateRaw, deflate, deflateRaw, adler32, ZlibError } from './layers/zlib';
+export * from './layers/ops';
+export * from './layers/panel';

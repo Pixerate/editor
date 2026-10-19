@@ -28,6 +28,7 @@ import { useImageEditor, type UseImageEditorReturn } from './useImageEditor';
 import { ControlSlider } from './ControlSlider';
 import { Histogram } from './Histogram';
 import { AdjustmentLayersPanel } from './AdjustmentLayersPanel';
+import { LayersPanel } from './LayersPanel';
 import { SelectionOptionsBar } from './SelectionOptionsBar';
 import { RefineEdgePanel } from './RefineEdgePanel';
 
@@ -43,7 +44,7 @@ export interface ImageEditorProps {
   aiHooks?: ImageEditorAIHooks;
 }
 
-type TabType = 'crop' | 'adjust' | 'select' | 'annotate' | 'depth' | 'ai';
+type TabType = 'crop' | 'adjust' | 'layers' | 'select' | 'annotate' | 'depth' | 'ai';
 
 export const ImageEditor: React.FC<ImageEditorProps> = ({
   editor: externalEditor,
@@ -679,6 +680,18 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
           <button
             type="button"
             onClick={() => {
+              setActiveTab('layers');
+              editor.setTool('select');
+            }}
+            className={`px-3 py-1.5 rounded-md font-medium transition-colors ${
+              activeTab === 'layers' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Layers
+          </button>
+          <button
+            type="button"
+            onClick={() => {
               setActiveTab('select');
               editor.setTool('select');
             }}
@@ -1007,6 +1020,14 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                   histogram={editor.histogram}
                 />
               </div>
+            </div>
+          )}
+
+          {/* TAB: LAYERS */}
+          {activeTab === 'layers' && (
+            <div className="flex flex-col gap-3 text-xs">
+              <span className="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">Layers</span>
+              <LayersPanel controller={controller} />
             </div>
           )}
 

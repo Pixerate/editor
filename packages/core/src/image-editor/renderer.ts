@@ -436,7 +436,8 @@ export class ImageEditorRenderer {
     return route;
   }
 
-  private compositorSources(width: number, height: number): CompositorSources {
+  /** Compositor sources for a `width × height` canvas: layer pixels, depth maps and annotation rasterizing. */
+  public compositorSources(width: number, height: number): CompositorSources {
     const host = this.layerSources;
     return {
       width,
@@ -452,7 +453,8 @@ export class ImageEditorRenderer {
   }
 
   /** Loads what the compositor reads synchronously: depth maps (at canvas size) and annotation images. */
-  private async prepareLayerAssets(layers: readonly ImageLayer[], width: number, height: number): Promise<void> {
+  /** Loads depth maps and annotation images the compositor reads synchronously. */
+  public async prepareLayerAssets(layers: readonly ImageLayer[], width: number, height: number): Promise<void> {
     for (const l of flattenLayers(layers)) {
       const source = l.mask?.source;
       if (source?.enabled && source.maskSource) {
@@ -480,6 +482,12 @@ export class ImageEditorRenderer {
         }
       }
     }
+  }
+
+  /** Whether annotation layers can be rasterized here (a 2D canvas with pixel access). */
+  public canRasterize(): boolean {
+    const ctx = this.createCanvas(1, 1).getContext('2d');
+    return Boolean(ctx && typeof ctx.getImageData === 'function');
   }
 
   /** One annotation drawn into a tile-sized RGBA buffer at `rect` (document space), or `null` without a canvas. */
@@ -1030,7 +1038,8 @@ export class ImageEditorRenderer {
 
     let overlay: Annotation[] = annotations;
     let baseCanvas: HTMLCanvasElement;
-    if (this.chooseRoute(state, region, naturalWidth, naturalHeight) === 'legacy') {
+    // A render of chosen layers (`layerIds`) always composites them; the legacy views describe the whole stack.
+    if (!options.layerIds && this.chooseRoute(state, region, naturalWidth, naturalHeight) === 'legacy') {
       baseCanvas = await this.renderBaseImage(img, naturalWidth, naturalHeight, region, transform, state);
     } else {
       const layers = options.includeAnnotations === false ? removeAnnotationLayers(state.layers) : state.layers;

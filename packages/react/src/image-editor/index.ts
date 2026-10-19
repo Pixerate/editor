@@ -6,3 +6,4 @@ export * from './CurvesEditor';
 export * from './AdjustmentLayersPanel';
 export * from './SelectionOptionsBar';
 export * from './RefineEdgePanel';
+export * from './LayersPanel';

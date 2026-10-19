@@ -416,6 +416,8 @@ export interface ExportOptions {
   width?: number;
   height?: number;
   includeAnnotations?: boolean;
+  /** Render only these layers (groups with their children). */
+  layerIds?: string[];
 }
 
 export interface ImageEditorOptions {

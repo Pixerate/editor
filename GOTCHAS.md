@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/image-editor] Merge Down Only Looks the Same Over an Opaque, 100 % Normal Lower Layer
+
+- **Issue / Symptom**: Tests that expected Merge Down to leave the image unchanged failed: with a faded lower layer, or a Screen layer above a lower layer with transparent areas, the merged result looked different.
+- **Root Cause**: Merging composites the upper layer onto the lower one in isolation and keeps the lower layer's opacity and blend. A faded lower layer then fades the merged content too, and the upper blend mode no longer sees the layers below the lower one where the lower one is transparent. Photoshop behaves the same way.
+- **Solution / Workaround**: This is the intended behaviour. Test merges over an opaque, 100 % normal lower layer when you expect identical pixels, and check the other cases against the isolated composite. The image-editor skill tells agents the same.
+
 ### [core/image-editor] Compositing in Document Space Cannot Reproduce Every Old Render
 
 - **Issue / Symptom**: Moving the image editor to a layer compositor that works in document space and projects afterwards changed some old documents by a level here and there: rotated by a non-quarter angle, cropped at fractional coordinates, depth-masked, faded with output opacity, or blurred with a crop or a 90° turn.

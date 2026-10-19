@@ -301,6 +301,13 @@ const FEATURES: ParityRow[] = [
     note: "Pixel, adjustment, group and annotation layers on copy-on-write 256 px tiles; per-tile compositor with prefix caches; v1 / v2 documents unchanged; list_layers agent tool",
   },
   {
+    feature: "Image Layers Panel & Layer Operations",
+    core: true,
+    react: true,
+    svelte: true,
+    note: "New, duplicate, delete, drag to reorder and nest, groups, merge down / visible, flatten, layer via copy / cut, masks, clipping, locks, opacity, fill, blend, layer filters; 22 agent tools",
+  },
+  {
     feature: "Image Selections, Refine Edge & Layer Masks",
     core: true,
     react: true,

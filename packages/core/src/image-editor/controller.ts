@@ -55,6 +55,8 @@ import {
   type AdjustmentLayerNode,
   type AnnotationLayer,
   type DevelopFilter,
+  type GroupLayer,
+  type LayerBlendMode,
   type ImageLayer,
   type LayerFilter,
   type LayerTarget,
@@ -62,6 +64,8 @@ import {
   type RasterMask,
 } from './layers/model';
 import {
+  BACKGROUND_LAYER_ID,
+  BACKGROUND_LAYER_NAME,
   BLUR_FILTER_ID,
   DEVELOP_FILTER_ID,
   adjustmentNodeFromLegacy,
@@ -84,13 +88,47 @@ import {
 } from './layers/serialize';
 import { LayerCompositor, type CompositorSources } from './layers/compositor';
 import {
+  SurfaceDraft,
+  TILE,
   collectTiles,
   contentBounds,
+  emptySurface,
+  packRgba,
+  readPixel,
   readRegion,
+  solidSurface,
   surfaceFromPixels,
+  tilesInRect,
+  translateSurface,
+  writeRegion,
   type PixelSurface,
   type Tile,
 } from './layers/surface';
+import {
+  LayerOperationError,
+  addLayerFilter as addLayerFilterOp,
+  duplicateLayer as duplicateLayerOp,
+  groupLayers as groupLayersOp,
+  moveLayer as moveLayerOp,
+  normalizeFilter,
+  offsetLayer as offsetLayerOp,
+  parseBlend,
+  placeLayer,
+  removeLayer as removeLayerOp,
+  removeLayerFilter as removeLayerFilterOp,
+  requireLayer,
+  requireUnlocked,
+  setLayerMask as setLayerMaskOp,
+  setLayerProperties as setLayerPropertiesOp,
+  ungroupLayer as ungroupLayerOp,
+  unionRect,
+  updateLayerFilter as updateLayerFilterOp,
+  type LayerPlacement,
+  type LayerProperties,
+} from './layers/ops';
+import { coveringRect } from './layers/render';
+import { base64ToBytes, bytesToBase64, decodePng, isPng, parseDataUrl } from './layers/png';
+import { getAnnotationBounds } from './geometry';
 
 /** Latest serialized schema version (`3`: layers). Documents with the old shape still write 1 or 2. */
 export const IMAGE_EDITOR_SCHEMA_VERSION = LAYERED_SCHEMA_VERSION;
@@ -130,6 +168,23 @@ export interface AdjustmentLayerInit<K extends AdjustmentKind = AdjustmentKind> 
   aboveId?: string;
   /** Put the new layer at the top of this group. */
   parentId?: string;
+}
+
+/** A new pixel layer: empty, a solid colour over the canvas, or given pixels, plus its properties and position. */
+export interface PixelLayerInit extends LayerPlacement {
+  id?: string;
+  name?: string;
+  /** Fill the canvas with this colour (`#rgb`, `#rrggbb`, `#rrggbbaa` or `[r, g, b, a?]` 0..255). */
+  color?: string | number[];
+  /** RGBA pixels placed at `x`, `y` (document pixels). */
+  pixels?: PixelBuffer;
+  x?: number;
+  y?: number;
+  visible?: boolean;
+  /** 0..1 (default 1). */
+  opacity?: number;
+  fillOpacity?: number;
+  blend?: BlendMode;
 }
 
 /** Where a new annotation goes. */
@@ -822,6 +877,518 @@ export class ImageEditorController {
     } catch {
       return null;
     }
+  }
+
+  // --- Layer operations ---
+
+  /** Records one undo step and applies a new stack (and any other state change in `extra`). */
+  private commitLayers(next: ImageLayer[], extra?: () => void, commitToHistory = true): void {
+    if (commitToHistory) this.recordHistory();
+    this.state.layers = next;
+    extra?.();
+    if (this.state.activeLayerId && !findLayer(next, this.state.activeLayerId)) {
+      this.state.activeLayerId = null;
+      this.state.activeTarget = 'pixels';
+    }
+    this.notify();
+  }
+
+  /** The default position of a new layer: above the active layer, else the top of the stack. */
+  private newLayerPlacement(placement: LayerPlacement): LayerPlacement {
+    if (placement.aboveId || placement.belowId || placement.parentId || placement.index !== undefined) return placement;
+    const active = this.state.activeLayerId ? findLayer(this.state.layers, this.state.activeLayerId) : null;
+    return active ? { aboveId: active.layer.id } : {};
+  }
+
+  /**
+   * Adds a pixel layer (one undo step) and makes it active: empty, filled with `color` over the
+   * canvas, or holding `pixels` placed at `x`, `y`. Goes above the active layer unless placed.
+   * Returns its id.
+   */
+  public addPixelLayer(init: PixelLayerInit = {}): string {
+    const { width, height } = this.naturalSize;
+    let surface = emptySurface(4);
+    if (init.pixels) {
+      const px = init.pixels;
+      if (!(px.width > 0 && px.height > 0) || px.data.length < px.width * px.height * 4) {
+        throw new LayerOperationError('pixels must be RGBA with width × height × 4 bytes.');
+      }
+      surface = surfaceFromPixels(px, 4);
+    } else if (init.color !== undefined) {
+      const c = parseColor(init.color);
+      surface = solidSurface(4, { x: 0, y: 0, width, height }, packRgba(c[0], c[1], c[2], c[3]));
+    }
+    const blend = parseBlend(init.blend) as BlendMode | undefined;
+    if (init.opacity !== undefined && !(init.opacity >= 0 && init.opacity <= 1)) throw new LayerOperationError('opacity must be from 0 to 1.');
+    const ids = new Set(flattenLayers(this.state.layers).map((l) => l.id));
+    const layer: PixelLayer = {
+      type: 'pixel',
+      id: init.id && !ids.has(init.id) ? init.id : newLayerId(),
+      name: init.name?.trim() || this.nextLayerName(),
+      visible: init.visible ?? true,
+      opacity: init.opacity ?? 1,
+      blend: blend ?? 'normal',
+      surface,
+      offset: { x: Math.round(init.x ?? 0), y: Math.round(init.y ?? 0) },
+    };
+    if (init.fillOpacity !== undefined && init.fillOpacity !== 1) layer.fillOpacity = init.fillOpacity;
+    const next = placeLayer(this.state.layers, layer, this.newLayerPlacement(init));
+    this.commitLayers(next, () => {
+      this.state.activeLayerId = layer.id;
+      this.state.activeTarget = 'pixels';
+    });
+    return layer.id;
+  }
+
+  /**
+   * `addPixelLayer` from an image: a PNG data URL or base64 PNG is decoded without a canvas;
+   * other formats and URLs need a browser. Returns the new layer id.
+   */
+  public async addPixelLayerFromImage(image: string, init: Omit<PixelLayerInit, 'pixels' | 'color'> = {}): Promise<string> {
+    const pixels = await this.decodeImage(image);
+    return this.addPixelLayer({ ...init, pixels });
+  }
+
+  /** RGBA pixels of an image given as a data URL, base64 PNG or URL. */
+  public async decodeImage(image: string): Promise<PixelBuffer> {
+    const trimmed = image.trim();
+    let png: Uint8Array | null = null;
+    if (/^data:image\/png/i.test(trimmed)) png = parseDataUrl(trimmed)?.bytes ?? null;
+    else if (/^[A-Za-z0-9+/=\s]+$/.test(trimmed) && trimmed.length > 16) {
+      try {
+        const bytes = base64ToBytes(trimmed);
+        if (isPng(bytes)) png = bytes;
+      } catch {
+        png = null;
+      }
+    }
+    if (png) {
+      try {
+        const d = decodePng(png);
+        return { width: d.width, height: d.height, data: d.data };
+      } catch {
+        // Fall back to the browser decoder below (interlaced PNGs).
+      }
+    }
+    const src = png ? `data:image/png;base64,${bytesToBase64(png)}` : trimmed;
+    let img: HTMLImageElement;
+    try {
+      img = await this.renderer.imageCache.get(src);
+    } catch {
+      throw new LayerOperationError('The image could not be decoded here. Pass a PNG (data URL or base64), or run in a browser for other formats and URLs.');
+    }
+    const w = img.naturalWidth || img.width;
+    const h = img.naturalHeight || img.height;
+    const ctx = this.renderer.createCanvas(w, h).getContext('2d');
+    if (!ctx || typeof ctx.getImageData !== 'function') throw new LayerOperationError('Decoding this image needs a canvas; pass a PNG instead.');
+    ctx.drawImage(img, 0, 0, w, h);
+    const data = ctx.getImageData(0, 0, w, h);
+    return { width: w, height: h, data: data.data };
+  }
+
+  private nextLayerName(): string {
+    const names = new Set(flattenLayers(this.state.layers).map((l) => l.name));
+    let n = 1;
+    while (names.has(`Layer ${n}`)) n++;
+    return `Layer ${n}`;
+  }
+
+  /** Duplicates a layer (with its children) directly above it, as one undo step. Returns the copy's id. */
+  public duplicateLayer(id: string, name?: string): string {
+    const res = duplicateLayerOp(this.state.layers, id, name);
+    this.commitLayers(res.layers, () => {
+      this.state.activeLayerId = res.id;
+    });
+    return res.id;
+  }
+
+  /** Deletes a layer (refused when locked), as one undo step. */
+  public removeLayer(id: string): void {
+    const next = removeLayerOp(this.state.layers, id);
+    this.commitLayers(next, () => {
+      if (this.state.selectedAnnotationId && !flattenLayers(next).some((l) => l.type === 'annotation' && l.annotation.id === this.state.selectedAnnotationId)) {
+        this.state.selectedAnnotationId = null;
+      }
+    });
+  }
+
+  /** Moves a layer above / below another, or into a group, as one undo step. Returns its new parent and index. */
+  public moveLayer(id: string, placement: LayerPlacement): { parentId: string | null; index: number } {
+    const next = moveLayerOp(this.state.layers, id, placement);
+    const loc = findLayer(next, id)!;
+    if (next === this.state.layers) return { parentId: loc.parent?.id ?? null, index: loc.index };
+    this.commitLayers(next);
+    return { parentId: loc.parent?.id ?? null, index: loc.index };
+  }
+
+  /**
+   * Changes name, visibility, opacity, fill, blend, clipping, locks or (groups) collapsed state, as
+   * one undo step (`commitToHistory = false` for the moves of a slider drag). Returns the layer.
+   */
+  public setLayerProperties(id: string, props: LayerProperties, commitToHistory = true): ImageLayer {
+    const next = setLayerPropertiesOp(this.state.layers, id, props);
+    this.commitLayers(next, undefined, commitToHistory);
+    return findLayer(next, id)!.layer;
+  }
+
+  /** Adds an empty pass-through group above the active layer (or at `placement`) and makes it active. Returns its id. */
+  public addGroup(init: LayerPlacement & { name?: string; blend?: LayerBlendMode } = {}): string {
+    const blend = init.blend === undefined ? 'pass-through' : (parseBlend(init.blend, true) as LayerBlendMode);
+    const group: GroupLayer = {
+      type: 'group',
+      id: newLayerId('group'),
+      name: init.name?.trim() || 'Group',
+      visible: true,
+      opacity: 1,
+      blend,
+      children: [],
+    };
+    const next = placeLayer(this.state.layers, group, this.newLayerPlacement(init));
+    this.commitLayers(next, () => {
+      this.state.activeLayerId = group.id;
+      this.state.activeTarget = 'pixels';
+    });
+    return group.id;
+  }
+
+  /** Puts sibling layers into a new group (one undo step). Returns the group id. */
+  public groupLayers(ids: string[], name?: string): string {
+    const res = groupLayersOp(this.state.layers, ids, name);
+    this.commitLayers(res.layers, () => {
+      this.state.activeLayerId = res.id;
+    });
+    return res.id;
+  }
+
+  /** Replaces a group by its children (one undo step). Returns the child ids, bottom to top. */
+  public ungroupLayer(id: string): string[] {
+    const res = ungroupLayerOp(this.state.layers, id);
+    this.commitLayers(res.layers);
+    return res.ids;
+  }
+
+  /**
+   * Moves a pixel layer to an absolute offset (`x`, `y`) or by `dx`, `dy`, as one undo step
+   * (`commitToHistory = false` for the moves of a drag). Returns the offset and document bounds.
+   */
+  public offsetLayer(id: string, move: { x?: number; y?: number; dx?: number; dy?: number }, commitToHistory = true): { offset: { x: number; y: number }; bounds: CropBox | null } {
+    const layer = requireLayer(this.state.layers, id).layer;
+    const current = layer.type === 'pixel' ? layer.offset : { x: 0, y: 0 };
+    const x = move.x ?? current.x + (move.dx ?? 0);
+    const y = move.y ?? current.y + (move.dy ?? 0);
+    const next = offsetLayerOp(this.state.layers, id, { x, y });
+    this.commitLayers(next, undefined, commitToHistory);
+    return { offset: { x: Math.round(x), y: Math.round(y) }, bounds: this.getLayerBounds(id) };
+  }
+
+  /**
+   * Adds a mask to a layer (one undo step): `reveal-all` (white), `hide-all` (black) or
+   * `selection` (the selection's coverage). Replaces an existing mask. Makes the mask the paint
+   * target when the layer is active.
+   */
+  public addLayerMask(id: string, from: 'reveal-all' | 'hide-all' | 'selection' = 'reveal-all', props: LayerMaskProps = {}): RasterMask {
+    const layer = requireLayer(this.state.layers, id).layer;
+    let mask: RasterMask;
+    if (from === 'selection') {
+      const sel = this.state.selection;
+      if (!sel?.bounds) throw new LayerOperationError('Nothing is selected; select first, or use reveal-all / hide-all.');
+      mask = this.maskFromSelection(sel, props);
+      if (layer.type === 'pixel' && (layer.offset.x || layer.offset.y)) {
+        // Masks live in the layer's space (they move with it).
+        mask = { ...mask, surface: translateSurface(mask.surface, -layer.offset.x, -layer.offset.y) };
+      }
+    } else {
+      const v = from === 'reveal-all' ? 255 : 0;
+      mask = withMaskProps({ surface: emptySurface(1, v), defaultValue: v }, props);
+    }
+    const next = setLayerMaskOp(this.state.layers, id, mask);
+    this.commitLayers(next, () => {
+      if (this.state.activeLayerId === id) this.state.activeTarget = 'mask';
+    });
+    return mask;
+  }
+
+  /** Removes a layer's mask (one undo step). */
+  public removeLayerMask(id: string): void {
+    const layer = requireLayer(this.state.layers, id).layer;
+    if (!layer.mask) throw new LayerOperationError(`Layer "${layer.name || id}" has no mask.`);
+    this.commitLayers(setLayerMaskOp(this.state.layers, id, null), () => {
+      if (this.state.activeLayerId === id) this.state.activeTarget = 'pixels';
+    });
+  }
+
+  /** Changes any layer mask's density, feather or enabled flag (pixels kept). Returns the mask. */
+  public setLayerMaskProps(id: string, props: LayerMaskProps, commitToHistory = true): RasterMask {
+    const layer = requireLayer(this.state.layers, id).layer;
+    if (!layer.mask) throw new LayerOperationError(`Layer "${layer.name || id}" has no mask; add one with add_layer_mask.`);
+    const mask = withMaskProps(layer.mask, props);
+    this.commitLayers(setLayerMaskOp(this.state.layers, id, mask), undefined, commitToHistory);
+    return mask;
+  }
+
+  /**
+   * Bakes a pixel layer's mask into its pixels (alpha × coverage, including density, feather or
+   * the depth map) and removes the mask, as one undo step.
+   */
+  public async applyLayerMask(id: string): Promise<void> {
+    const loc = requireLayer(this.state.layers, id);
+    const layer = loc.layer;
+    if (layer.type !== 'pixel') throw new LayerOperationError(`Only a pixel layer's mask can be applied to its pixels; "${id}" is a ${layer.type} layer. Remove the mask or keep it.`);
+    if (!layer.mask) throw new LayerOperationError(`Layer "${layer.name || id}" has no mask.`);
+    requireUnlocked(layer, 'pixels', 'apply its mask');
+    const { width, height } = this.naturalSize;
+    await this.renderer.prepareLayerAssets([layer], width, height);
+    const sources = this.renderer.compositorSources(width, height);
+    const surface = this.surfaceOf(layer);
+    let out = surface;
+    const b = surface.bounds;
+    if (b) {
+      const draft = new SurfaceDraft(surface);
+      for (const t of tilesInRect(b)) {
+        const data = draft.peek(t.tx, t.ty);
+        if (!data) continue;
+        const r = { x: t.tx * TILE + layer.offset.x, y: t.ty * TILE + layer.offset.y, width: TILE, height: TILE };
+        const cov = this.compositor.maskCoverage(layer, r, sources);
+        if (!cov) continue;
+        const d = draft.tile(t.tx, t.ty);
+        for (let p = 0, i = 3; p < cov.length; p++, i += 4) d[i] = Math.round(d[i] * cov[p]);
+      }
+      out = draft.commit();
+    }
+    const next: PixelLayer = { ...layer, surface: out };
+    delete next.mask;
+    delete next.source;
+    this.commitLayers(mapLayer(this.state.layers, id, () => next), () => {
+      if (this.state.activeLayerId === id) this.state.activeTarget = 'pixels';
+    });
+  }
+
+  /**
+   * Layer via Copy (or via Cut): a new pixel layer with the selected pixels of a pixel layer (the
+   * active one by default), directly above it, as one undo step. Returns the new id.
+   */
+  public layerViaCopy(options: { layerId?: string; cut?: boolean; name?: string } = {}): string {
+    const id = options.layerId ?? this.state.activeLayerId;
+    if (!id) throw new LayerOperationError('No layer given and none is active; pass layerId (see list_layers).');
+    const loc = requireLayer(this.state.layers, id);
+    const layer = loc.layer;
+    if (layer.type !== 'pixel') throw new LayerOperationError(`Layer via copy needs a pixel layer; "${id}" is a ${layer.type} layer.`);
+    const sel = this.state.selection;
+    if (!sel?.bounds) throw new LayerOperationError('Nothing is selected; select the pixels to copy first.');
+    if (options.cut) requireUnlocked(layer, 'pixels', 'cut from it');
+    const surface = this.surfaceOf(layer);
+    const sb = sel.bounds;
+    const src = { x: sb.x - layer.offset.x, y: sb.y - layer.offset.y, width: sb.width, height: sb.height };
+    const px = readRegion(surface, src);
+    const kept = options.cut ? new Uint8ClampedArray(px) : null;
+    for (let y = 0; y < sb.height; y++) {
+      for (let x = 0; x < sb.width; x++) {
+        const c = sel.data[(sb.y + y) * sel.width + sb.x + x];
+        const i = (y * sb.width + x) * 4 + 3;
+        if (kept) kept[i] = Math.round(kept[i] * (1 - c / 255));
+        px[i] = Math.round(px[i] * (c / 255));
+      }
+    }
+    const copy: PixelLayer = {
+      type: 'pixel',
+      id: newLayerId(),
+      name: options.name?.trim() || `${layer.name || 'Layer'} ${options.cut ? 'cut' : 'copy'}`,
+      visible: true,
+      opacity: 1,
+      blend: 'normal',
+      surface: surfaceFromPixels({ width: src.width, height: src.height, data: px }, 4, src.x, src.y),
+      offset: { ...layer.offset },
+    };
+    let next = insertLayer(this.state.layers, copy, loc.parent?.id ?? null, loc.index + 1);
+    if (kept) {
+      const cutLayer: PixelLayer = { ...layer, surface: writeRegion(surface, src, kept) };
+      delete cutLayer.source;
+      next = mapLayer(next, id, () => cutLayer);
+    }
+    this.commitLayers(next, () => {
+      this.state.activeLayerId = copy.id;
+      this.state.activeTarget = 'pixels';
+    });
+    return copy.id;
+  }
+
+  /** Adds a `develop` or `blur` filter to a pixel layer (one undo step). Returns the layer's filters. */
+  public addLayerFilter(id: string, filter: Partial<LayerFilter> & { kind: LayerFilter['kind'] }): LayerFilter[] {
+    const f = normalizeFilter(filter);
+    const next = addLayerFilterOp(this.state.layers, id, f);
+    this.commitLayers(next);
+    return (findLayer(next, id)!.layer as PixelLayer).filters ?? [];
+  }
+
+  /** Changes one filter (one undo step, or none with `commitToHistory = false` during a drag). Returns the filters. */
+  public updateLayerFilter(id: string, filterId: string, changes: Record<string, unknown>, commitToHistory = true): LayerFilter[] {
+    const next = updateLayerFilterOp(this.state.layers, id, filterId, changes);
+    this.commitLayers(next, undefined, commitToHistory);
+    return (findLayer(next, id)!.layer as PixelLayer).filters ?? [];
+  }
+
+  /** Removes one filter (one undo step). Returns the remaining filters. */
+  public removeLayerFilter(id: string, filterId: string): LayerFilter[] {
+    const next = removeLayerFilterOp(this.state.layers, id, filterId);
+    this.commitLayers(next);
+    return (findLayer(next, id)!.layer as PixelLayer).filters ?? [];
+  }
+
+  /** Composites `layers` (in isolation) over `rect` into a surface, loading depth maps first. */
+  private async compositeToSurface(layers: ImageLayer[], rect: CropBox): Promise<PixelSurface> {
+    const { width, height } = this.naturalSize;
+    if (flattenLayers(layers).some((l) => l.type === 'annotation' && l.visible) && !this.renderer.canRasterize()) {
+      throw new LayerOperationError('Merging annotation layers needs a canvas (a browser); hide or delete them first, or merge in the browser.');
+    }
+    await this.renderer.prepareLayerAssets(layers, width, height);
+    const data = new LayerCompositor().composite(layers, rect, this.renderer.compositorSources(width, height));
+    return surfaceFromPixels({ width: rect.width, height: rect.height, data }, 4, rect.x, rect.y);
+  }
+
+  /** Document bounds a layer can paint into (pixel content, annotations, or the canvas for the rest). */
+  private paintBounds(layer: ImageLayer): CropBox {
+    const { width, height } = this.naturalSize;
+    const canvas = { x: 0, y: 0, width, height };
+    if (layer.type === 'pixel') return this.getLayerBounds(layer.id) ?? { x: 0, y: 0, width: 0, height: 0 };
+    if (layer.type === 'annotation') {
+      const b = getAnnotationBounds(layer.annotation);
+      const pad = 4 + ('strokeWidth' in layer.annotation ? (layer.annotation as { strokeWidth: number }).strokeWidth : 0);
+      return coveringRect({ x: b.x - pad, y: b.y - pad, width: b.width + 2 * pad, height: b.height + 2 * pad });
+    }
+    if (layer.type === 'group') {
+      let r: CropBox | null = null;
+      for (const c of layer.children) r = unionRect(r, this.paintBounds(c));
+      return r ?? canvas;
+    }
+    return canvas;
+  }
+
+  /**
+   * Merge Down: composites a layer onto the pixel layer directly below it (which keeps its name,
+   * opacity and blend; masks, fill and filters are baked), as one undo step. Returns the merged id.
+   */
+  public async mergeDown(id: string): Promise<string> {
+    const loc = requireLayer(this.state.layers, id);
+    const upper = loc.layer;
+    const siblings = loc.parent ? loc.parent.children : this.state.layers;
+    const lower = siblings[loc.index - 1];
+    if (!lower) throw new LayerOperationError(`Layer "${upper.name || id}" is the bottom of its group; there is nothing below to merge into.`);
+    if (lower.type !== 'pixel') throw new LayerOperationError(`Merge Down needs a pixel layer below; "${lower.name || lower.id}" is a ${lower.type} layer. Move the layer or merge into another one.`);
+    if (!upper.visible) throw new LayerOperationError(`Layer "${upper.name || id}" is hidden; show it or delete it instead of merging.`);
+    requireUnlocked(upper, 'all', 'merge it');
+    requireUnlocked(lower, 'pixels', 'merge into it');
+    const rect = unionRect(this.paintBounds(lower), upper.type === 'adjustment' ? null : this.paintBounds(upper)) ?? { x: 0, y: 0, width: 1, height: 1 };
+    const base: PixelLayer = { ...lower, blend: 'normal', opacity: 1 };
+    delete base.clipped;
+    const surface = await this.compositeToSurface([base, upper], rect);
+    const merged: PixelLayer = { ...lower, surface, offset: { x: 0, y: 0 } };
+    delete merged.mask;
+    delete merged.fillOpacity;
+    delete merged.filters;
+    delete merged.source;
+    let next = mapLayer(this.state.layers, id, () => null);
+    next = mapLayer(next, lower.id, () => merged);
+    this.commitLayers(next, () => {
+      this.state.activeLayerId = merged.id;
+      this.state.activeTarget = 'pixels';
+    });
+    return merged.id;
+  }
+
+  /**
+   * Merge Visible: the visible top-level layers become one normal pixel layer (at the position of
+   * the lowest of them); hidden layers stay. One undo step. Returns the merged id.
+   */
+  public async mergeVisible(): Promise<string> {
+    const visible = this.state.layers.filter((l) => l.visible);
+    if (!visible.length) throw new LayerOperationError('No layer is visible.');
+    const { width, height } = this.naturalSize;
+    const surface = await this.compositeToSurface(visible, { x: 0, y: 0, width, height });
+    const merged: PixelLayer = {
+      type: 'pixel',
+      id: newLayerId(),
+      name: 'Merged',
+      visible: true,
+      opacity: 1,
+      blend: 'normal',
+      surface,
+      offset: { x: 0, y: 0 },
+    };
+    const at = this.state.layers.indexOf(visible[0]);
+    const next = this.state.layers.filter((l) => !l.visible);
+    next.splice(this.state.layers.slice(0, at).filter((l) => !l.visible).length, 0, merged);
+    this.commitLayers(next, () => {
+      this.state.activeLayerId = merged.id;
+      this.state.activeTarget = 'pixels';
+      this.state.selectedAnnotationId = null;
+    });
+    return merged.id;
+  }
+
+  /** Flatten Image: every visible layer composited into one Background layer; hidden layers are discarded. One undo step. */
+  public async flattenImage(): Promise<string> {
+    const { width, height } = this.naturalSize;
+    const surface = await this.compositeToSurface(this.state.layers, { x: 0, y: 0, width, height });
+    const bg: PixelLayer = {
+      type: 'pixel',
+      id: BACKGROUND_LAYER_ID,
+      name: BACKGROUND_LAYER_NAME,
+      visible: true,
+      opacity: 1,
+      blend: 'normal',
+      surface,
+      offset: { x: 0, y: 0 },
+    };
+    this.commitLayers([bg], () => {
+      this.state.activeLayerId = bg.id;
+      this.state.activeTarget = 'pixels';
+      this.state.selectedAnnotationId = null;
+    });
+    return bg.id;
+  }
+
+  private thumbCache = new WeakMap<object, Map<string, PixelBuffer>>();
+
+  /**
+   * A small RGBA preview of a pixel layer over the canvas (or of its mask with `mask: true`),
+   * longest side `maxSide` px, point-sampled; `null` for layers without pixels.
+   */
+  public getLayerThumbnail(id: string, options: { maxSide?: number; mask?: boolean } = {}): PixelBuffer | null {
+    const layer = this.getLayer(id);
+    if (!layer) return null;
+    const { width, height } = this.naturalSize;
+    const side = Math.max(4, Math.min(256, Math.round(options.maxSide ?? 48)));
+    const k = Math.min(1, side / Math.max(width, height));
+    const tw = Math.max(1, Math.round(width * k));
+    const th = Math.max(1, Math.round(height * k));
+    const surface = options.mask ? (layer.mask && !layer.mask.source ? layer.mask.surface : null) : layer.type === 'pixel' ? this.surfaceOf(layer) : null;
+    if (!surface) return null;
+    const ox = layer.type === 'pixel' ? layer.offset.x : 0;
+    const oy = layer.type === 'pixel' ? layer.offset.y : 0;
+    const key = `${tw}x${th}:${ox},${oy}`;
+    let byKey = this.thumbCache.get(surface);
+    const hit = byKey?.get(key);
+    if (hit) return hit;
+    const out = new Uint8ClampedArray(tw * th * 4);
+    for (let y = 0; y < th; y++) {
+      const dy = Math.min(height - 1, Math.floor(((y + 0.5) * height) / th)) - oy;
+      for (let x = 0; x < tw; x++) {
+        const dx = Math.min(width - 1, Math.floor(((x + 0.5) * width) / tw)) - ox;
+        const v = readPixel(surface, dx, dy);
+        const i = (y * tw + x) * 4;
+        if (surface.channels === 1) {
+          out[i] = out[i + 1] = out[i + 2] = v[0];
+          out[i + 3] = 255;
+        } else out.set(v, i);
+      }
+    }
+    const thumb = { width: tw, height: th, data: out };
+    if (!byKey) {
+      byKey = new Map();
+      this.thumbCache.set(surface, byKey);
+    }
+    byKey.set(key, thumb);
+    return thumb;
   }
 
   // --- Adjustments ---
@@ -1539,6 +2106,11 @@ export class ImageEditorController {
       return this.renderer.createCanvas(1, 1);
     }
     this.syncViews();
+    if (options?.layerIds) {
+      const keep = new Set(options.layerIds);
+      const layers = flattenLayers(this.state.layers).filter((l) => keep.has(l.id));
+      return this.renderer.renderExport(source, { ...this.state, layers }, options);
+    }
     return this.renderer.renderExport(source, this.state, options);
   }
 
@@ -1958,6 +2530,22 @@ function withoutAnnotations(layers: readonly ImageLayer[]): ImageLayer[] {
     out.push(l.type === 'group' ? { ...l, children: withoutAnnotations(l.children) } : l);
   }
   return out;
+}
+
+/** A colour as RGBA bytes: `#rgb`, `#rrggbb`, `#rrggbbaa` or `[r, g, b, a?]` (0..255). */
+export function parseColor(value: string | number[]): [number, number, number, number] {
+  if (Array.isArray(value)) {
+    if (value.length < 3 || value.length > 4 || !value.every((v) => typeof v === 'number' && v >= 0 && v <= 255)) {
+      throw new LayerOperationError('A colour array is [r, g, b] or [r, g, b, a] with values 0..255.');
+    }
+    return [Math.round(value[0]), Math.round(value[1]), Math.round(value[2]), Math.round(value[3] ?? 255)];
+  }
+  const m = /^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.exec(String(value).trim());
+  if (!m) throw new LayerOperationError(`Invalid colour "${value}"; use #rrggbb or #rrggbbaa.`);
+  let hex = m[1];
+  if (hex.length === 3) hex = hex.split('').map((c) => c + c).join('');
+  const n = (i: number) => parseInt(hex.slice(i, i + 2), 16);
+  return [n(0), n(2), n(4), hex.length === 8 ? n(6) : 255];
 }
 
 /** `null` for an empty selection, so "nothing selected" has one representation. */

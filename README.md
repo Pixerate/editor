@@ -414,7 +414,7 @@ Every feature is available from core and from both framework packages. "Via core
 </details>
 
 <details>
-<summary><strong>Image editor</strong> (11)</summary>
+<summary><strong>Image editor</strong> (12)</summary>
 
 | Feature | Core | React | Svelte |
 | :--- | :---: | :---: | :---: |
@@ -426,6 +426,7 @@ Every feature is available from core and from both framework packages. "Via core
 | Image Histogram | `computeHistogram` | `<Histogram>` & `useImageHistogram` | `<Histogram>` & `createImageHistogram` |
 | Image Adjustment Control Table & Agent Tools (adjustments, layers: add / change / reorder / remove, crop, rotation, flip, histogram, undo / redo, selections and masks) | `IMAGE_ADJUSTMENT_CONTROLS` & `createImageEditorToolProvider` | `<ControlSlider>` | `<ControlSlider>` |
 | Image Layer Stack (tiled copy-on-write surfaces; pixel, adjustment, group and annotation layers with masks, clipping, blend modes, opacity and fill; per-tile compositor with prefix caches and dirty rectangles; immutable undo history with `maxHistoryBytes`; schema v3 with PNG layer assets, v1 / v2 documents rendered and written exactly as before; `list_layers` agent tool) | `LayerCompositor`, `TiledSurface`, `migrateToLayeredState`, `getLayers` | Via core (`useImageEditor` state) | Via core (`createReactiveImageEditor` state) |
+| Image Layers Panel & Layer Operations (new / duplicate / delete / reorder and nest by drag, groups with pass-through, merge down / visible, flatten, layer via copy / cut, masks from reveal-all / hide-all / selection with apply, delete and disable, clipping, locks, opacity, fill, blend, develop and blur layer filters, offsets, thumbnails; 22 layer agent tools) | `addPixelLayer`, `mergeDown`, `layerPanelRows`, `runLayerMenuAction` & layer tools in `createImageEditorToolProvider` | `<LayersPanel>` (Layers tab in `<ImageEditor>`) | `<LayersPanel>` (Layers tab in `<ImageEditor>`) |
 | Image Selections & Masks (magic wand, colour range, marquees, lasso, modes, grow/shrink/feather/border/smooth, guided-filter Refine Edge, Quick Mask, adjustment layer masks, RLE in the document, agent tools) | `SelectionGesture`, `magicWand`, `refineSelection`, `layerMaskFromSelection` | `<SelectionOptionsBar>` & `<RefineEdgePanel>` | `<SelectionOptionsBar>` & `<RefineEdgePanel>` |
 | Vector Annotations (Pen, Rect, Circle, Arrow, Line, Text) | ✅ | ✅ | ✅ |
 | Gleamforge Depth & Alpha Masking | ✅ | ✅ | ✅ |
