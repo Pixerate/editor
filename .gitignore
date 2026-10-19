@@ -7,3 +7,6 @@ coverage/
 .DS_Store
 .svelte-kit/
 build/
+
+# Downloaded PSD test corpus (pnpm test:corpus)
+corpus/

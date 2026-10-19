@@ -113,3 +113,53 @@ describe('Svelte LayersPanel', () => {
     expect(target.querySelector('[data-testid="layers-panel"]')).not.toBeNull();
   });
 });
+
+describe('Svelte LayersPanel PSD buttons', () => {
+  const wait = () => new Promise((r) => setTimeout(r, 20)).then(() => flushSync());
+
+  it('exports and opens PSD files, showing the warnings', async () => {
+    const source = controller();
+    source.addPixelLayer({ name: 'Painted', color: '#ff0000' });
+    const { bytes } = await source.toPsd();
+
+    const c = controller();
+    component = mount(LayersPanel, { target, props: { controller: c, psdFileName: 'shot.jpg' } });
+    flushSync();
+    const input = target.querySelector('[data-testid="psd-file-input"]') as HTMLInputElement;
+    expect(input.accept).toContain('.psd');
+    Object.defineProperty(input, 'files', { value: [new File([bytes as BlobPart], 'shot.psd')], configurable: true });
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    await wait();
+    expect(rowNames()).toEqual(['Painted', 'Background']);
+    expect(c.getState().sourceUrl).toBeNull();
+
+    // Export: a crop cannot be written, and the panel says so (the download is skipped in jsdom).
+    c.setCrop({ x: 0, y: 0, width: 5, height: 5 });
+    const createObjectURL = URL.createObjectURL;
+    (URL as any).createObjectURL = undefined;
+    click(button('Export PSD'));
+    await wait();
+    (URL as any).createObjectURL = createObjectURL;
+    expect(target.textContent).toMatch(/crop is not applied/);
+    click(button('Dismiss'));
+    expect(target.querySelector('[data-testid="psd-warnings"]')).toBeNull();
+  });
+
+  it('shows why a file cannot be opened', async () => {
+    const c = controller();
+    component = mount(LayersPanel, { target, props: { controller: c } });
+    flushSync();
+    const input = target.querySelector('[data-testid="psd-file-input"]') as HTMLInputElement;
+    Object.defineProperty(input, 'files', { value: [new File([new Uint8Array(40)], 'x.psd')], configurable: true });
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    await wait();
+    expect(target.textContent).toMatch(/8BPS/);
+    expect(rowNames()).toEqual(['Background']);
+  });
+
+  it('hides the PSD buttons with psd={false}', () => {
+    component = mount(LayersPanel, { target, props: { controller: controller(), psd: false } });
+    flushSync();
+    expect(button('Export PSD')).toBeUndefined();
+  });
+});

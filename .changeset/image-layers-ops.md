@@ -1,7 +1,0 @@
----
-"@pixerate/editor": minor
-"@pixerate/editor-react": minor
-"@pixerate/editor-svelte": minor
----
-
-Image editor layers: operations, agent tools and a layers panel. The controller gains `addPixelLayer` (empty, colour or image), `addGroup`, `duplicateLayer`, `removeLayer`, `moveLayer`, `setLayerProperties` (name, visibility, opacity, fill, blend, clipping, locks), `groupLayers` / `ungroupLayer`, `mergeDown`, `mergeVisible`, `flattenImage`, `offsetLayer`, `addLayerMask` / `applyLayerMask` / `removeLayerMask` / `setLayerMaskProps`, `layerViaCopy` (copy or cut), layer filters (`addLayerFilter`, `updateLayerFilter`, `removeLayerFilter`) and `getLayerThumbnail`; each validates first, throws a `LayerOperationError` with the reason, and is one undo step. New agent tools: `set_active_layer`, `add_pixel_layer`, `duplicate_layer`, `remove_layer`, `move_layer`, `set_layer_properties`, `group_layers`, `add_group`, `ungroup_layer`, `merge_down`, `merge_visible`, `flatten_image`, `offset_layer`, `add_layer_mask`, `apply_layer_mask`, `remove_layer_mask`, `set_layer_mask_properties`, `layer_via_copy`, `add_layer_filter`, `update_layer_filter` and `remove_layer_filter`; `add_adjustment_layer` takes `aboveId` / `parentId` and `render_preview` takes `layerId`. React and Svelte get `<LayersPanel>` (thumbnails, drag to reorder and nest, visibility, locks, opacity, fill, blend, clipping, mask thumbnails, layer menu), also as a Layers tab in `<ImageEditor>`.

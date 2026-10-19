@@ -1,6 +1,6 @@
 {
   "name": "@pixerate/editor",
-  "version": "0.88.0",
+  "version": "0.89.0",
   "description": "UI-agnostic rich text and media editing core library",
   "author": "Pixerate",
   "license": "MIT",
@@ -157,7 +157,8 @@
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:corpus": "node scripts/fetch-psd-corpus.mjs && PSD_CORPUS=1 vitest run tests/psd-corpus.test.ts"
   },
   "dependencies": {
     "@tiptap/extension-character-count": "^2.11.5",

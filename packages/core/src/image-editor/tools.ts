@@ -23,6 +23,7 @@ import { createCaptureTool } from '../tools/capture.js';
 import { createImageEditTools } from './edit-tools';
 import { createImageLayerTools } from './layer-tools';
 import { createImagePaintTools } from './paint-tools';
+import { createImagePsdTools } from './psd-tools';
 
 export interface ImageEditorToolProviderOptions {
   /** Provider id (unique per registry). Default `image-editor`. */
@@ -291,6 +292,7 @@ export function createImageEditorToolProvider(
       ...createImageEditTools(controller),
       ...createImageLayerTools(controller),
       ...createImagePaintTools(controller),
+      ...createImagePsdTools(controller),
     ],
   };
 }
