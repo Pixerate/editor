@@ -1954,3 +1954,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: An effects block opened from a PSD and saved again unchanged was regenerated, which dropped descriptor keys we do not model. Or an edited effect was written back as the stale original.
 - **Root Cause**: Export decides between the original block and a regenerated one by comparing the effects. Parsing gives every effect a fresh id. JSON round trips drop `undefined` fields. Object key order depends on who built the object.
 - **Solution / Workaround**: `exportPsd` re-parses the stored block and compares `effectsFingerprint` of both sides. The fingerprint ignores ids and `psd`, sorts keys and skips `undefined`. Anything else that can differ without changing the render must be normalised the same way on both sides. Photoshop's `lmfx` (several instances per kind) wins over `lfx2` on read. We always write `lfx2` (`lfxs` on groups) with the `…Multi` keys, and pad odd-length blocks inside their length.
+
+### [demo/image-editor] The Demo Shows a Crop by Default, So Edge Effects Look Missing
+
+- **Issue / Symptom**: In the demo's Image tab, an inner glow or inner stroke on the Background showed on the top and left edges only. The new effects section was also missing until the packages were rebuilt.
+- **Root Cause**: The sample photo opens with a freeform crop over part of the image, so the right and bottom edges in view are the crop's, not the layer's, and effects are drawn at the layer's edges. Separately, the demo imports `@pixerate/editor-react` and `@pixerate/editor` from their `dist`, so a running dev server shows the last build.
+- **Solution / Workaround**: Clear the crop (Transform & Crop › Clear Crop) before judging effects at the image edges. Run `pnpm --filter @pixerate/editor --filter @pixerate/editor-react build` and reload after changing the packages.

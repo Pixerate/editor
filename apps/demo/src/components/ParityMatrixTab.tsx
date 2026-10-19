@@ -330,7 +330,7 @@ const FEATURES: ParityRow[] = [
     core: true,
     react: true,
     svelte: true,
-    note: "Shadows, glows, bevel & emboss, satin, colour / gradient / pattern overlays and strokes, live in the tiled compositor; master switch, Scale Effects, global light; six agent tools",
+    note: "Shadows, glows, bevel & emboss, satin, colour / gradient / pattern overlays and strokes, live in the tiled compositor; master switch, Scale Effects, global light; fx badges and an effects section in <LayersPanel>; six agent tools",
   },
   {
     feature: "Photoshop PSD / PSB Open & Export",

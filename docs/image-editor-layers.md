@@ -28,7 +28,7 @@ Two limits rule out "just add pixel layers on top". First, adjustments run as on
 - Old documents (schema v1 / v2) open and render exactly as before. Existing APIs, components and agent tools keep working.
 - Every capability is reachable by agents (AGENTS.md §4), with parity across core, React and Svelte (§3).
 
-**Not in v1:** layer effects (drop shadow, stroke …), type, shape and smart-object layers, free transform of layers (moving is in), clone / heal / smudge / mixer tools, 16-bit or float layers, colour management. Each is planned as a follow-up under [Follow-ups after v1](#follow-ups-after-v1).
+**Not in v1:** layer effects (drop shadow, stroke …; since added as a follow-up, see `raster/effects` and the README's Image Layer Effects row), type, shape and smart-object layers, free transform of layers (moving is in), clone / heal / smudge / mixer tools, 16-bit or float layers, colour management. Each is planned as a follow-up under [Follow-ups after v1](#follow-ups-after-v1).
 
 ## Document model
 
