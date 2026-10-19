@@ -1,5 +1,18 @@
 # @pixerate/editor-react
 
+## 0.61.0
+
+### Minor Changes
+
+- 951daf7: Video editor: an optional frame cache with prefetch for the preview, after Blender's sequencer cache. `VideoFrameCache` holds decoded source frames keyed by the file the preview plays (asset or proxy) and the source frame, so clips of one asset share them and edits never invalidate them. It prefetches the window ahead of the playhead (behind when scrubbing back), nearest first, a few at a time, within a memory budget. Eviction drops the frames furthest from the playhead, counting frames behind it as further, and never touches the prefetch window. Pass it as the controller's `frameCache` (or the engine's). `VideoPreviewEngine` then draws cached frames while paused, scrubbing or mid-seek, and keeps the frames it shows. Also new: `createVideoElementDecoder` (a browser decoder on hidden `<video>` elements), and `planVideoPrefetch`, `videoCacheEvictions` and `videoFrameRequestsAt` as pure helpers. New agent tool `get_video_preview_cache` reports the cache and which stretches play without waiting. The React and Svelte `VideoTimeline` draw the cached stretches under the ruler.
+- 951daf7: Video editor: proxies. Video assets take `proxies` (`[{ scale, src, width?, height? }]`), smaller copies the preview plays instead of the original. The export, EDL and source times always use the original. The controller has a preview scale (`previewScale` option, `setPreviewScale`, `state.previewScale`): `auto` (by the canvas's shown size, the default), `full`, or a fraction that picks the smallest proxy at least that large. `VideoPreviewEngine` follows it and switches elements as it changes. `videoProxyFfmpeg` and `videoProxyPlan` build ffmpeg commands that make proxies: scaled to even sizes, H.264 with a short keyframe interval and no B-frames so seeks are cheap, sound kept, `faststart`. New agent tools `plan_video_proxies`, `set_video_proxies` and `set_video_preview_scale`; `get_video_project` reports the preview scale. The React and Svelte `VideoTransport` add a preview-size control when any asset has proxies, and `MediaBin` marks assets that have them. `videoShellQuote` is now exported.
+
+### Patch Changes
+
+- Updated dependencies [951daf7]
+- Updated dependencies [951daf7]
+  - @pixerate/editor@0.91.0
+
 ## 0.60.0
 
 ### Minor Changes
