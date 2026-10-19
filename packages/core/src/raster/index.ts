@@ -22,6 +22,7 @@ export {
   buildEffectMaps,
   compositeLayerEffects,
   contourLut,
+  effectFillColors,
   effectsAreLocal,
   gradientT,
   patchEffectMaps,

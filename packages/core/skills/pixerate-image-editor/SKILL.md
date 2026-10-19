@@ -1,6 +1,6 @@
 ---
 name: pixerate-image-editor
-description: description: How to colour-correct, composite and retouch a photo in the Pixerate image editor through its agent tools - layers (pixel, adjustment, group, annotation and smart object layers with masks, clipping, blend modes, opacity and fill; merge, flatten, filters), smart objects (non-destructive transforms, smart filters, linked contents, edit contents), live layer effects (shadows, glows, bevels, overlays, strokes), base adjustments, adjustment layers (curves, levels, hue/saturation and more), selections and masks, Free Transform (scale, rotate, skew, distort, warp), crop, rotate, flip, Mixer Brush, undo, PSD, histogram and previews. Use when asked to edit, grade, correct, crop, straighten or mask an image, add a shadow, glow or outline, transform or warp a layer, make a smart object, or open or save a PSD, or when get_adjustments, set_adjustments, list_layers, add_layer_effect, transform_layer, convert_to_smart_object, paint_stroke, select_by_color, import_psd or render_preview are available.
+description: How to colour-correct, composite and retouch a photo in the Pixerate image editor through its agent tools - layers (pixel, adjustment, group, shape, annotation and smart object layers with masks, clipping, blend modes, opacity and fill; merge, flatten, filters), smart objects (non-destructive transforms, smart filters, linked contents), vector shape layers (live rectangles, ellipses, polygons, stars, lines and arrows, paths, path operations, fills and strokes), live layer effects, base adjustments, adjustment layers, selections and masks, Free Transform, crop, rotate, flip, Mixer Brush, undo, PSD, histogram and previews. Use when asked to edit, grade, correct, crop, straighten or mask an image, add a shadow, glow or outline, transform or warp a layer, draw a shape or arrow, make a smart object, or open or save a PSD, or when list_layers, set_adjustments, add_layer_effect, transform_layer, add_shape_layer, convert_to_smart_object, paint_stroke, import_psd or render_preview are available.
 ---
 
 # Image editor
@@ -8,14 +8,17 @@ description: description: How to colour-correct, composite and retouch a photo i
 The image editor holds a layer stack over a canvas the size of the source image. Opening an
 image gives one pixel layer, **Background**, whose pixels are the source and whose `develop`
 filter holds the base adjustments; adjustment layers sit above it (bottom to top, each through
-its mask, opacity and blend mode) and every annotation is its own layer on top. `list_layers`
+its mask, opacity and blend mode) and every annotation is its own layer on top (pen, rectangle,
+ellipse, line and arrow annotations are shape layers that remember them). `list_layers`
 shows the whole stack. Edits never touch the source pixels. The base controls edit the develop
 filter of the active pixel layer (the Background unless another pixel layer is active); base
 `blur` blurs that layer (or, in documents saved before layers with blur and adjustment layers,
 the output after the layers), and base `opacity` is the output's alpha. Pixel, annotation, group
 and smart object layers can carry live effects (shadows, glows, bevels, overlays, strokes). A smart
 object places contents (pixels or a nested layer document) through a transform and smart filters,
-re-rendered from the contents on every change. Also an optional selection and crop/rotate/flip. See `pixerate-agent-tools` for errors, namespacing and command
+re-rendered from the contents on every change. A shape layer holds vector paths with a fill and a
+stroke, rendered again from the paths on every change, so it stays sharp through any transform.
+Also an optional selection and crop/rotate/flip. See `pixerate-agent-tools` for errors, namespacing and command
 batching.
 
 - **Control ids** for base adjustments: `brightness`, `contrast`, `exposure`, `temperature`,
@@ -115,6 +118,32 @@ batching.
    in a new image for every linked instance; `export_smart_object_contents` returns the file.
 6. **Finish**: `rasterize_smart_object` only when the user wants plain pixels to paint on; the
    placement and filters are then gone.
+
+### Shape layers
+
+1. **Draw it as a live shape**: `add_shape_layer` with `shape` `{ kind: 'rect', x, y, width,
+   height, radius | radii }`, `ellipse`, `polygon` (`sides`), `star` (`points`, `innerRatio`) or
+   `line` (`x1`…`y2`, `weight`, `startArrow` / `endArrow` `{ width, length, concavity }`), all in
+   document pixels. A free path takes `subpaths` (SVG path data, or anchors with absolute `in` /
+   `out` handles). `fill` is a colour string or `{ type: 'gradient' | 'pattern', … }` (default the
+   foreground colour; `null` for none); `stroke` is `{ width, paint, align, cap, join, dashes }`
+   (dashes in multiples of the width). It returns the layer id and `shape` (components with
+   index, op and live parameters, bounds).
+2. **Combine paths**: `add_shape_component` with `op` `combine`, `subtract`, `intersect` or
+   `exclude` (Photoshop's path operations; the bottom component always combines). The stroke
+   follows the outline of the combined area. `merge_shape_components` turns the result into one
+   plain path (same look).
+3. **Edit, don't redraw**: `set_shape_component` changes a live shape's fields (only `radii`, only
+   `x2` / `y2`, …; the rest stay), replaces a component's `subpaths` (ending its live shape) or
+   changes its `op`. `update_shape` restyles the fill, the stroke (only the settings given) or the
+   fill rule. Read `get_shape_layer` first for the component indices.
+4. **Place it**: `offset_layer`, `transform_layer`, `flip_layer`, `rotate_layer_90` and `warp_layer`
+   map the paths, never resample pixels; live shapes stay live under moves, scales, rotations and
+   skews (perspective and warps turn them into plain paths). Stroke widths do not scale.
+5. **Style it like any layer**: masks, clipping, blend modes, opacity, fill opacity and layer
+   effects (`add_layer_effect`) all work on shape layers.
+6. **Pixels only when needed**: painting a shape's pixels is refused; `rasterize_layer` turns it
+   into a pixel layer (paths gone) when the user wants to paint on it.
 
 ### Layer effects
 
@@ -281,15 +310,16 @@ batching.
 | `get_adjustments` | Read the current state: `values` by control id, `process` version (1 or 2), and `layers` bottom to top with id, kind, params, opacity, blend, enabled and mask. Call first, and to find layer ids. |
 | `list_controls` | Get every base control (id, label, section, min, max, step, default, `requiresProcess`), each layer kind's settable controls (plus `opacity`), the blend mode ids and the `layers.<layerId>.<controlId>` path format. Call once per session before writing. |
 | `get_selection` | Read the active selection: `empty`, `bounds` (natural pixels), `area` in pixels, `percent` of the image and a description. Check it after every select or modify step and before masking: a wand that covered 90% of the image is the wrong selection. |
-| `list_layers` | Read the layer stack bottom to top as a tree: id, type (`pixel`, `adjustment`, `group`, `annotation`, `smart`; smart objects add their `contents`, `smartFilters` and `filterMask`), name, document `bounds` of pixel layers, visibility, opacity, `fillOpacity`, blend, `clipped`, locks, a `mask` summary, an `effects` summary (master switch, scale, effect ids and kinds), pixel-layer `filters` (the Background's `develop` filter is the base adjustments), adjustment `kind` and `params`, group `children`, and which layer is `active`. Call it to understand a document with more than the Background before changing it; adjustment layer ids work with every adjustment-layer tool. |
+| `list_layers` | Read the layer stack bottom to top as a tree: id, type (`pixel`, `adjustment`, `group`, `shape`, `annotation`, `smart`; smart objects add their `contents`, `smartFilters` and `filterMask`; shapes a `shape` summary of component ops and kinds and paint types, and `annotation` when migrated from one), name, document `bounds` of pixel layers, visibility, opacity, `fillOpacity`, blend, `clipped`, locks, a `mask` summary, an `effects` summary (master switch, scale, effect ids and kinds), pixel-layer `filters` (the Background's `develop` filter is the base adjustments), adjustment `kind` and `params`, group `children`, and which layer is `active`. Call it to understand a document with more than the Background before changing it; adjustment layer ids work with every adjustment-layer tool. |
 | `list_layer_effects` | Read one layer's effects: `enabled` (master switch), `scale` (Scale Effects), `margin` (px they reach beyond the shape), `fromPsd`, and every effect with `id`, `kind`, `label` and all its settings. Also returns the `globalLight`, the `patterns` pattern effects can use and the effect `kinds`. Call before changing effects you did not add. |
 | `get_image_info` | Read the geometry: source `image` size, `crop` box (source pixels, or null), `rotation` degrees, `flipH` / `flipV`, the `output` size after crop and rotation, the layer count and `canUndo` / `canRedo`. Call before cropping or selecting so coordinates are right. |
 | `get_histogram` | Judge exposure numerically: per channel and luminance `mean`, `p1` and `p99` (0..255), and `clipping` percent at pure black and white per channel. Reads the last render, so call `render_preview` first. `bins` (16, 32, 64 or 256) adds the counts. Cheaper than another image for checking a tonal change. |
 | `render_preview` | See the edited image (crop, adjustments, layers, annotations) as a PNG, or with `layerId` one layer alone. `maxSide` 16..2048 px, default 512. Images cost tokens: render after a group of edits, use 512 for overall look and 1024+ to judge clipping, edges and masks. Fails in environments without rendering. |
 | `inspect_psd` | Read a PSD / PSB (`data` base64) without opening it: size, `depth`, `colorMode`, `resolution`, every layer bottom first with `psdKind`, the `type` it would become (`smart` for smart objects) and `status` (`mapped`, `approximated`, `dropped`) with `notes`, and the import `warnings`. Call before `import_psd`. |
-| `export_psd` | Save the document as an 8-bit RGB PSD (PSB above 30000 px) with layers, groups, adjustment layers and masks. Returns `data` (base64), `size` in bytes, `psb` and `warnings` (crop or rotation not applied, filters and depth masks baked, annotations rasterized or left out, Pigment blends written as Normal). Changes nothing. |
+| `export_psd` | Save the document as an 8-bit RGB PSD (PSB above 30000 px) with layers, groups, adjustment layers and masks. Returns `data` (base64), `size` in bytes, `psb` and `warnings` (crop or rotation not applied, filters and depth masks baked, shape layers written as pixel layers, annotations rasterized or left out, Pigment blends written as Normal). Changes nothing. |
 | `get_transform_frame` | Before a transform: what it would move (`content`, `moved`: pixels, mask, selection), its `frame` (document bounds of the content), `corners` (top-left, top-right, bottom-right, bottom-left) and `center`. `meshColumns` / `meshRows` also return an identity warp `mesh` over the frame to edit for `warp_layer`. Changes nothing. |
 | `get_smart_object` | Read a smart object: `contents` (`id` shared by linked instances, `name`, `kind` raster or document, `width` / `height`, `decoded`, `fileType`, `linkedPath`, `instances`), `placement` (`corners`, `warp` in contents px, `interpolation`, and when `affine` the `scaleX` / `scaleY` in percent of the contents, `rotate`, `skewX`, `center`, `bounds`) and `smartFilters` (`enabled`, `filters` bottom to top with ids, settings, `blend`, `opacity`; kind `psd` is a Photoshop filter kept but not drawn; the filter `mask`). Call before changing a smart object. |
+| `get_shape_layer` | Read a shape layer: `components` bottom to top (`index`, `op`, `live` shape parameters or null, `subpaths` with absolute anchors and handles, `bounds`), `fillRule`, `fill` and `stroke` (paint and settings), `geometryBounds` (the paths) and `bounds` (rendered pixels, stroke included), and `annotationId` while it is still a migrated annotation. Call before editing a shape you did not draw. |
 | `export_smart_object_contents` | Export Contents: the contents as a file (`name`, `mimeType`, `byteLength`, `base64`): the file they came from while unedited, else a PNG (raster) or PSD / PSB (nested document). Changes nothing. |
 | `capture_view` | Inspect detail in natural image pixels (the space of `get_selection` and `select_region`, before crop and rotation): `region` `content` (whole image, default), `selection` or `rect`; small regions are enlarged up to 8× with hard pixel edges, so a 64 px rect shows real pixels. `includeOverlays: true` shades unselected pixels and outlines the crop: use it to check a mask's edge before `apply_selection_as_mask`. Returns the `rect` and `scale`. Use `render_preview` for the final framed result. |
 
@@ -335,7 +365,13 @@ batching.
 | `apply_layer_mask` | Bake a pixel layer's mask into its alpha and remove it. Destructive. |
 | `remove_layer_mask` | Delete a mask without applying it; disable it instead to keep it. |
 | `layer_via_copy` | Copy the selected pixels of a pixel layer (default the active one) to a new layer above it; `cut: true` removes them from the source. Needs a selection. Returns the new layer. |
-| `rasterize_layer` | Turn an annotation layer into pixels (same id and properties; browser only), a smart object into a pixel layer (as `rasterize_smart_object`), or bake a pixel layer's develop / blur filters into its pixels. Do it before painting over an annotation, or when the user wants the filters fixed. Destructive. |
+| `rasterize_layer` | Turn a shape layer into a pixel layer showing the same pixels (same id, mask, effects, opacity, blend; the paths are gone), an annotation layer into pixels (browser only), a smart object into a pixel layer (as `rasterize_smart_object`), or bake a pixel layer's develop / blur filters into its pixels. Do it before painting over a shape or annotation, or when the user wants the filters fixed. Destructive. |
+| `add_shape_layer` | Add a vector shape layer above the active layer (or placed with `aboveId` / `belowId` / `parentId` / `index`) and make it active: `shape` (live rect, ellipse, polygon, star or line, document px), `subpaths` (SVG path data or anchors) or several `components` with path ops; `fill` (colour, gradient or pattern, default the foreground colour; `null` none), `stroke` (`width`, `paint`, `align`, `cap`, `join`, `miterLimit`, `dashes` in widths), `fillRule`, `name`, `opacity`, `blend`. Returns the `layer` and the `shape`. One undo step. |
+| `update_shape` | Restyle a shape: `fill` (replace, `null` removes), `stroke` (only the settings given change; `null` removes; a new stroke needs `width` and `paint`), `fillRule`. Geometry is unchanged. Returns the shape. |
+| `set_shape_component` | Change component `componentIndex` (from `get_shape_layer`): `shape` fields (without `kind`, or with the same kind, unset fields keep their values), new `subpaths` (ends the live shape), or `op`. Returns the shape. |
+| `add_shape_component` | Add a live shape or path to a shape layer with `op` (`combine`, `subtract`, `intersect`, `exclude`), on top unless `index`. Use it for cut-outs, rings, badges. Returns the shape. |
+| `remove_shape_component` | Delete one component (not the last: delete the layer instead). Returns the shape. |
+| `merge_shape_components` | Merge Shape Components: the combined area becomes one plain component (live shapes become paths); the look does not change. Returns the shape. |
 | `convert_to_smart_object` | Convert sibling `layerIds` (default the active layer) to one smart object at the top one's position, optional `name`. One pixel layer keeps its id, look and properties (filters become smart filters); several layers, groups or adjustments nest as a layer document. Returns the `layer` and the `smartObject` summary. |
 | `rasterize_smart_object` | Turn a smart object into a pixel layer holding what it shows now (smart filters baked; same id, mask, effects, opacity, blend). Destructive: the contents and filters are gone. Returns the layer. |
 | `set_smart_object_transform` | Set a smart object's transform absolutely: `corners`, `matrix` (contents → document), or `scaleX` / `scaleY` (percent of the contents), `rotate`, `skewX`, `skewY`, `x`, `y` (where the contents' centre goes; unset numbers keep their values); `warp` preset or mesh in contents px, `null` removes it; `interpolation`. Re-renders from the contents. Returns `placement`, `masksMoved` and `bounds`. |
@@ -385,10 +421,17 @@ batching.
 - `merge_down`, `merge_visible` and `flatten_image` merge annotation layers only in a browser
   (they need a canvas); elsewhere they fail and say so.
 - `paint_stroke`, `fill_pixels` and `clear_pixels` need a visible pixel layer (or a layer with a
-  raster mask and `channel: "mask"`); adjustment, group, annotation and smart object layers can
+  raster mask and `channel: "mask"`); adjustment, group, shape, annotation and smart object layers can
   only be painted through their masks (and a smart object through `channel: "filter-mask"`).
   To paint a smart object's pixels, `edit_smart_object_contents` or rasterize it. A layer with
   `locks.pixels` refuses paint.
+- Shape strokes are not layer-effect strokes: `stroke` on `add_shape_layer` / `update_shape`
+  follows the path (and its dashes and caps); `add_layer_effect` `stroke` outlines the rendered
+  pixels. Arrowheads belong to `line` live shapes (their `width` and `length` are pixels), not to
+  strokes. A shape drawn over an annotation migrated from an old document (a shape layer with an
+  `annotation` in `list_layers`) stops being that annotation once you edit it as a shape.
+- Shapes render up to 512 px beyond the canvas; moving one in from far outside draws it again
+  from its paths, so nothing is lost.
 - While contents are open (`edit_smart_object_contents`), `list_layers` and every tool see the
   contents, not the document, and `export_psd` / saving write the document without the open
   edits. Close with `close_smart_object_contents` before anything else.

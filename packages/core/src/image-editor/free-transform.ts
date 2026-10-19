@@ -25,8 +25,9 @@ import {
   type Interpolation,
   type ResampleOptions,
 } from '../raster/transform';
-import { multiplyHomographies, type Homography } from '../geom/homography';
-import { findLayer, insertLayer, mapLayer, newLayerId, type ImageLayer, type LayerTarget, type PixelLayer, type RasterMask, type SmartObjectLayer } from './layers/model';
+import { applyHomography, multiplyHomographies, type Homography } from '../geom/homography';
+import { findLayer, insertLayer, mapLayer, newLayerId, type ImageLayer, type LayerTarget, type PixelLayer, type RasterMask, type ShapeLayer, type SmartObjectLayer } from './layers/model';
+import { renderShape, shapeGeometryBounds, transformShapeComponents, type ShapeEnv } from './layers/shape';
 import { LayerOperationError, requireLayer, requireUnlocked } from './layers/ops';
 import { contentsBox, isContentsDecoded, placementGeometry, renderSmartObject, setSmartPlacement } from './layers/smart';
 import { createSelectionMask, type SelectionMask } from './selection/mask';
@@ -101,6 +102,8 @@ export interface FreeTransformHost {
   canvas(): { width: number; height: number };
   /** The pixels a pixel layer or smart object composites (the decoded source for the Background). */
   pixelsOf(layer: PixelLayer | SmartObjectLayer): TiledSurface;
+  /** What shape layers render with (canvas size, document patterns). */
+  shapeEnv(): ShapeEnv;
   /** Opaque pre-transform snapshot. */
   capture(): unknown;
   /** Shows a live state (no history). */
@@ -219,6 +222,9 @@ export class FreeTransformSession {
   readonly startGeometry: FreeTransformGeometry;
   /** True when the layer is a smart object (the transform sets its placement). */
   readonly smartObject: boolean = false;
+  /** True when the layer is a shape layer (the transform maps its paths and renders them again). */
+  readonly shapeLayer: boolean = false;
+  private readonly shape: ShapeLayer | null = null;
   private geometryValue: FreeTransformGeometry;
   private readonly smart: SmartObjectLayer | null = null;
   private readonly smartReduced = new Map<number, TiledSurface>();
@@ -248,8 +254,8 @@ export class FreeTransformSession {
     }
     const targetId = init.layerId ?? host.activeLayerId();
     const target = targetId && content !== 'selection-outline' ? findLayer(host.layers(), targetId)?.layer : undefined;
-    const smartTarget = target?.type === 'smart' && (init.channel ?? (target.id === host.activeLayerId() ? host.activeTarget() : 'pixels')) !== 'mask';
-    // A smart object transforms as a whole, selection or not (as in Photoshop).
+    const smartTarget = (target?.type === 'smart' || target?.type === 'shape') && (init.channel ?? (target.id === host.activeLayerId() ? host.activeTarget() : 'pixels')) !== 'mask';
+    // A smart object or a shape transforms as a whole, selection or not (as in Photoshop).
     if (content === 'auto') content = selected && !smartTarget ? 'selection' : 'layer';
     this.content = content;
     if (content !== 'layer' && !selected) fail(`Nothing is selected; ${content} needs a selection. Select first, or use content layer.`);
@@ -277,7 +283,7 @@ export class FreeTransformSession {
       const linked = mask?.linked !== false;
       const maskAlone = channel === 'mask' && (!linked || layer.type !== 'pixel');
       if (channel === 'mask' && !mask) fail(layer.mask?.source ? `Layer "${layer.name || id}" has a depth mask, which is generated, not transformed.` : `Layer "${layer.name || id}" has no mask to transform; add one with add_layer_mask, or transform its pixels.`);
-      if (!maskAlone && layer.type !== 'pixel' && layer.type !== 'smart') fail(`Layer "${layer.name || id}" is a ${layer.type} layer; Free Transform works on pixel layers, smart objects, layer masks (channel mask) and selections.`);
+      if (!maskAlone && layer.type !== 'pixel' && layer.type !== 'smart' && layer.type !== 'shape') fail(`Layer "${layer.name || id}" is a ${layer.type} layer; Free Transform works on pixel, shape and smart object layers, layer masks (channel mask) and selections.`);
       if (!layer.visible && content !== 'selection-copy') fail(`Layer "${layer.name || id}" is hidden; show it before you transform it.`);
       if (content !== 'selection-copy') {
         requireUnlocked(layer, 'position', 'transform it');
@@ -299,7 +305,22 @@ export class FreeTransformSession {
         this.shown = this.startLayers;
         return;
       }
-      if (maskAlone) {
+      if (layer.type === 'shape' && !maskAlone) {
+        if (content !== 'layer') fail(`Layer "${layer.name || id}" is a shape layer, which transforms as a whole; use content layer (or rasterize it to transform part of it).`);
+        const g = shapeGeometryBounds(layer);
+        if (!g) fail(`Shape layer "${layer.name || id}" has no path to transform.`);
+        // A straight line has no height (or width): give the frame one pixel so it can turn.
+        const w = Math.max(g!.width, 1);
+        const h = Math.max(g!.height, 1);
+        box = { x: g!.x + (g!.width - w) / 2, y: g!.y + (g!.height - h) / 2, width: w, height: h };
+        this.shape = layer;
+        this.shapeLayer = true;
+        moves.push('pixels');
+        if (mask && linked) {
+          this.parts.push({ what: 'mask', offset: o, moving: mask.surface, base: null, reduced: new Map() });
+          moves.push('mask');
+        }
+      } else if (maskAlone) {
         if (content === 'selection-copy') fail('Layer via Copy copies pixels; transform a mask with content layer or selection.');
         if (content === 'selection') {
           const { lifted, rest } = liftMask(mask!.surface, sel!, o);
@@ -424,6 +445,7 @@ export class FreeTransformSession {
     let layers = this.startLayers;
     let selection = this.startSelection;
     const targetId = this.copyId ?? this.layerId;
+    if (this.shape) layers = this.resampleShape(final, preview, warp ? f : null, h);
     for (const part of this.parts) {
       const o = part.offset;
       let moved: TiledSurface;
@@ -475,6 +497,25 @@ export class FreeTransformSession {
       }
     }
     return { layers, selection };
+  }
+
+  /**
+   * A shape with its paths mapped through the current geometry and rendered again (live shapes
+   * stay live under an affine map; perspective and warps turn them into plain paths). Previews
+   * render only the visible part.
+   */
+  private resampleShape(final: boolean, preview: FreeTransformPreview, warpMap: ((p: { x: number; y: number }) => { x: number; y: number } | null) | null, h: Homography | null): ImageLayer[] {
+    const layer = this.shape!;
+    let components = layer.components;
+    if (!isIdentityTransform(this.geometryValue)) {
+      const affine = !warpMap && h && Math.abs(h[6]) < 1e-12 && Math.abs(h[7]) < 1e-12 && Math.abs(h[8] - 1) < 1e-12 ? ([h[0], h[3], h[1], h[4], h[2], h[5]] as const) : undefined;
+      const map = warpMap ?? ((p: { x: number; y: number }) => (h ? applyHomography(h, p) : p));
+      components = transformShapeComponents(layer.components, (p) => map(p) ?? p, affine);
+    }
+    const moved: ShapeLayer = { ...layer, components };
+    delete moved.annotation;
+    const surface = renderShape(moved, this.host.shapeEnv(), final ? {} : { clip: preview.clip });
+    return mapLayer(this.startLayers, layer.id, () => ({ ...moved, surface }));
   }
 
   /** A smart object re-rendered from its contents for the current geometry (previews leave the smart filters out). */
@@ -542,7 +583,7 @@ export class FreeTransformSession {
     const id = this.copyId ?? this.layerId;
     const layer = id ? findLayer(layers, id)?.layer : undefined;
     if (this.moves.includes('pixels') && layer?.type === 'pixel') bounds = toDoc(contentBounds(this.host.pixelsOf(layer)), layer.offset);
-    else if (this.moves.includes('pixels') && layer?.type === 'smart') bounds = contentBounds(layer.surface);
+    else if (this.moves.includes('pixels') && (layer?.type === 'smart' || layer?.type === 'shape')) bounds = contentBounds(layer.surface);
     else if (this.moves.includes('mask') && layer?.mask) bounds = toDoc(contentBounds(layer.mask.surface), layer.type === 'pixel' ? layer.offset : { x: 0, y: 0 });
     else if (this.moves.includes('selection')) bounds = selection?.bounds ? { ...selection.bounds } : null;
     return {

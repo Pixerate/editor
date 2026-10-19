@@ -2091,3 +2091,21 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: A smart filter mask made from a selection (black outside it) came back from a PSD revealing the filter everywhere outside the selected area.
 - **Root Cause**: The filter mask lives in the `FEid` / `FXid` block as a rectangle and a plane; outside the rectangle Photoshop treats it as white (`filterMaskExtendWithWhite`). Writing only the painted bounds of a mask whose default is black loses the black.
 - **Solution / Workaround**: `filterMaskItem` writes a mask whose default is not white over the whole canvas (plus anything painted outside it); reading uses default 255. The filter mask's enabled / linked flags are in `filterFX` (`filterMaskEnable`, `filterMaskLinked`), not in the block.
+
+### [core/image-editor] A Shape Layer's Pixels Are a Render of Its Paths
+
+- **Issue / Symptom**: Changing a shape layer's `components`, `fill` or `stroke` with a plain object spread left it showing the old pixels; painting into its `surface` was thrown away by the next edit.
+- **Root Cause**: `ShapeLayer.surface` is a cache rendered from the paths (document space, offset 0, clipped to the canvas grown by 512 px), so the compositor, effects, masks, thumbnails and PSD export treat it like a pixel layer (`isPixelLike`). Nothing re-renders it implicitly.
+- **Solution / Workaround**: Change shapes through `updateShapeLayer`, `rerenderShape`, `offsetShape` or `transformShapeComponents` + `renderShape` (`layers/shape.ts`), which render again. Painting `pixels` on a shape is refused; `rasterize_layer` makes it a pixel layer. Moves and Free Transform map the paths, never the pixels.
+
+### [core/image-editor] The Accumulation Rasterizer Over-Counts Where Overlapping Parts Share an Edge Pixel
+
+- **Issue / Symptom**: A rotated rectangle's stroke, an arrow's bar under its head and pen strokes came out up to 47 levels too opaque along some edges compared with what the canvas drew.
+- **Root Cause**: The signed-area (font-rs) rasterizer is exact only for paths that do not overlap themselves. Stroke outlines from `strokeOutlineRings` overlap at joins, and a line shape's bar and arrowhead are separate overlapping subpaths. Where two overlapping parts' edges both cross a pixel, their areas add before the fill rule clamps them. Cleaning the outline with `outlineStroke` or `polygonBoolean` fixes the geometry but takes seconds for a few hundred pen points.
+- **Solution / Workaround**: `rasterizeCoverage` (exact area) is used only for single-contour fills. Strokes and multi-contour components go through `rasterizeCoverageSampled`: 16 sub-rows per pixel row with exact horizontal coverage of the spans the fill rule keeps, so overlaps count once (edges within 1/32 px vertically). Curved strokes of up to 64 commands still get a clean `outlineStroke`, because raw rings of a curve tighter than half the width turn inside out. `tests/image-shape-migration.test.ts` compares every annotation kind with a 16 × 16 point-sampled reference of the old canvas drawing.
+
+### [core/image-editor] Migrated Annotations Keep Their Annotation So v1 / v2 Documents Write Back Byte for Byte
+
+- **Issue / Symptom**: Rebuilding an annotation from a shape (for the `annotations` view or a v1 / v2 save) changed numbers (an ellipse's box `x − rx` back to `x` is not exact in floating point) and broke byte-identical round trips.
+- **Root Cause**: Pen, rectangle, ellipse, line and arrow annotations now load as shape layers, but old documents and the `annotations` / `updateAnnotation` API still speak annotations.
+- **Solution / Workaround**: A migrated `ShapeLayer` keeps the source `annotation` while it is still exactly that annotation (`legacyView` and `isLegacyShape` read it; its blend mode moves to the layer). `updateAnnotation` rebuilds the layer from the merged annotation (back to an annotation layer when a colour can't be read). Any shape edit, a duplicate or a transform drops the field, and the layer leaves the `annotations` view. Plain migrated layers at the top of the stack still draw through the renderer's crisp annotation overlay, as before. Text and image annotations stay annotation layers.

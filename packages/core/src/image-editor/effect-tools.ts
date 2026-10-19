@@ -17,7 +17,7 @@ const WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: fal
 const WRITE_IDEMPOTENT = { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
 const DESTRUCTIVE = { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false } as const;
 
-const LAYER_ID = { type: 'string', description: 'Layer id from list_layers (a pixel, annotation or group layer).' } as const;
+const LAYER_ID = { type: 'string', description: 'Layer id from list_layers (a pixel, shape, smart object, annotation or group layer).' } as const;
 const EFFECT_ID = { type: 'string', description: 'Effect id from list_layer_effects or add_layer_effect.' } as const;
 const BLEND_IDS = BLEND_MODES.map((m) => m.id).filter((id) => id !== 'pigment');
 

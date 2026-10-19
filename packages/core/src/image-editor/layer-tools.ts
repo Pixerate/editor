@@ -76,6 +76,16 @@ export function describeLayer(
       out.collapsed = Boolean(layer.collapsed);
       out.children = layer.children.map((c) => describeLayer(c, activeId, boundsOf));
       break;
+    case 'shape':
+      out.bounds = boundsOf(layer);
+      out.fillOpacity = round(layer.fillOpacity ?? 1);
+      out.shape = {
+        components: layer.components.map((c) => ({ op: c.op, kind: c.live?.kind ?? 'path' })),
+        fill: layer.fill ? layer.fill.type : null,
+        stroke: layer.stroke ? { width: layer.stroke.width, paint: layer.stroke.paint.type } : null,
+      };
+      if (layer.annotation) out.annotation = { id: layer.annotation.id, type: layer.annotation.type };
+      break;
     case 'smart':
       out.bounds = boundsOf(layer);
       out.fillOpacity = round(layer.fillOpacity ?? 1);
@@ -134,7 +144,7 @@ export function createImageLayerTools(controller: ImageEditorController): AgentT
     name: 'list_layers',
     title: 'List image layers',
     description:
-      'Returns the layer stack bottom to top as a tree: id, type (pixel, adjustment, group, annotation), name, document bounds (pixel layers), visible, opacity, fillOpacity, blend, clipped, locks, a mask summary, an effects summary (master switch, scale, effect ids and kinds; details from list_layer_effects), filters (pixel layers), kind and params (adjustment layers), children (groups) and which layer is active. Also returns the active layer id and target (pixels or mask) and the canvas size.',
+      'Returns the layer stack bottom to top as a tree: id, type (pixel, adjustment, group, shape, smart, annotation), name, document bounds (pixel, shape and smart layers), visible, opacity, fillOpacity, blend, clipped, locks, a mask summary, an effects summary (master switch, scale, effect ids and kinds; details from list_layer_effects), filters (pixel layers), kind and params (adjustment layers), a shape summary (component operations and kinds, fill and stroke paint types; details from get_shape_layer), children (groups) and which layer is active. Also returns the active layer id and target (pixels or mask) and the canvas size.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     annotations: { title: 'List image layers', ...READ },
     handler: () => {
@@ -513,7 +523,7 @@ export function createImageLayerTools(controller: ImageEditorController): AgentT
     name: 'rasterize_layer',
     title: 'Rasterize a layer',
     description:
-      'Rasterize Layer: turns an annotation layer into a pixel layer (same id, name, opacity, blend and mask; needs a browser) or bakes a pixel layer\'s filters (develop, blur) into its pixels. One undo step. Returns the layer.',
+      'Rasterize Layer: turns a shape layer into a pixel layer holding what it shows now (same id, name, opacity, blend, fill, mask and effects; its paths are gone, so later transforms resample pixels), turns an annotation layer into a pixel layer (needs a browser), rasterizes a smart object, or bakes a pixel layer\'s filters (develop, blur) into its pixels. One undo step. Returns the layer.',
     inputSchema: { type: 'object', properties: { layerId: LAYER_ID }, required: ['layerId'], additionalProperties: false },
     annotations: { title: 'Rasterize a layer', ...DESTRUCTIVE },
     handler: async ({ layerId }) => ({ layer: describe(await controller.rasterizeLayer(exists(layerId))) }),

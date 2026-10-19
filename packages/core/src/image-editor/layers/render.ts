@@ -9,7 +9,7 @@ import { applyBoxBlur } from '../filters';
 import { normalizeAngle, unprojectCanvasPoint, getRotatedSize, type ImageProjection } from '../geometry';
 import { HISTOGRAM_BINS, type ImageHistogram } from '../histogram';
 import type { CropBox, ImageTransform } from '../types';
-import { blurFilter, type AnnotationLayer, type ImageLayer, type PixelLayer } from './model';
+import { blurFilter, type AnnotationLayer, type ImageLayer, type PixelLayer, type ShapeLayer } from './model';
 import { hasResampledLegacyMask, isLegacyShape, type LayerStack } from './migrate';
 import { LayerCompositor, type CompositorSources } from './compositor';
 
@@ -130,24 +130,41 @@ export function needsLegacyBase(input: RouteInput): boolean {
   return false;
 }
 
-const isPlainAnnotation = (l: ImageLayer): l is AnnotationLayer =>
-  l.type === 'annotation' && l.opacity === 1 && l.blend === 'normal' && !l.clipped && !l.mask;
+const isPlainAnnotation = (l: ImageLayer): boolean =>
+  l.type === 'annotation'
+    ? l.opacity === 1 && l.blend === 'normal' && !l.clipped && !l.mask
+    : l.type === 'shape' && Boolean(l.annotation) && l.opacity === 1 && l.blend === (l.annotation!.blend ?? 'normal') && !l.clipped && !l.mask && !l.effects && (l.fillOpacity ?? 1) === 1;
+
+const overlayViews = new WeakMap<ImageLayer, AnnotationLayer>();
+
+/** An annotation layer, or the annotation view of a shape layer migrated from one (memoised). */
+function overlayView(l: ImageLayer): AnnotationLayer {
+  if (l.type === 'annotation') return l;
+  let view = overlayViews.get(l);
+  if (!view) {
+    const shape = l as ShapeLayer;
+    view = { type: 'annotation', id: shape.id, name: shape.name, visible: shape.visible, opacity: 1, blend: 'normal', annotation: shape.annotation! };
+    overlayViews.set(l, view);
+  }
+  return view;
+}
 
 /**
  * Splits the stack into what the compositor rasterizes and the annotation layers at the top that
  * draw as crisp vectors over the result (as annotations always did): the trailing run of plain
- * top-level annotation layers (hidden ones are skipped).
+ * top-level annotation layers and shape layers that still are the annotation they were migrated
+ * from (given as annotation views; hidden ones are skipped).
  */
 export function splitOverlayAnnotations(layers: readonly ImageLayer[]): { composite: ImageLayer[]; overlay: AnnotationLayer[] } {
   let i = layers.length;
   while (i > 0) {
     const l = layers[i - 1];
-    if (l.type === 'annotation' && (!l.visible || isPlainAnnotation(l))) i--;
+    if ((l.type === 'annotation' || (l.type === 'shape' && l.annotation)) && (!l.visible || isPlainAnnotation(l))) i--;
     else break;
   }
   return {
     composite: layers.slice(0, i) as ImageLayer[],
-    overlay: (layers.slice(i) as AnnotationLayer[]).filter((l) => l.visible),
+    overlay: layers.slice(i).filter((l) => l.visible).map(overlayView),
   };
 }
 

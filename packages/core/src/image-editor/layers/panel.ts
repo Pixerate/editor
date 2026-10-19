@@ -64,6 +64,8 @@ export function layerBadge(layer: ImageLayer): string {
       return layer.annotation.type === 'text' ? 'T' : 'ann';
     case 'smart':
       return 'so';
+    case 'shape':
+      return 'shp';
   }
 }
 
@@ -144,7 +146,7 @@ export function layerMenu(controller: ImageEditorController): LayerMenuItem[] {
     { action: 'delete-mask', label: 'Delete Layer Mask', enabled: Boolean(active?.mask) },
     { action: 'toggle-mask', label: active?.mask?.enabled === false ? 'Enable Layer Mask' : 'Disable Layer Mask', enabled: Boolean(active?.mask) },
     { action: 'toggle-mask-link', label: active?.mask?.linked === false ? 'Link Layer Mask' : 'Unlink Layer Mask', enabled: Boolean(active?.mask && !active.mask.source) },
-    { action: 'rasterize', label: 'Rasterize Layer', enabled: active?.type === 'annotation' || active?.type === 'smart' || (isPixel && Boolean(active?.type === 'pixel' && active.filters?.length)) },
+    { action: 'rasterize', label: 'Rasterize Layer', enabled: active?.type === 'annotation' || active?.type === 'smart' || active?.type === 'shape' || (isPixel && Boolean(active?.type === 'pixel' && active.filters?.length)) },
     { action: 'convert-smart', label: 'Convert to Smart Object', enabled: Boolean(active && active.type !== 'annotation') },
     { action: 'edit-contents', label: 'Edit Contents', enabled: active?.type === 'smart' },
     { action: 'smart-via-copy', label: 'New Smart Object via Copy', enabled: active?.type === 'smart' },

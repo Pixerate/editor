@@ -28,6 +28,7 @@ import { createPigmentTools } from '../paint/pigment-tools';
 import { createImagePsdTools } from './psd-tools';
 import { createImageTransformTools } from './transform-tools';
 import { createImageSmartObjectTools } from './smart-tools';
+import { createImageShapeTools } from './shape-tools';
 
 export interface ImageEditorToolProviderOptions {
   /** Provider id (unique per registry). Default `image-editor`. */
@@ -71,6 +72,9 @@ function adjustmentsSummary(adjustments: ImageAdjustments) {
  *   `close_smart_object_contents`, `add_smart_filter`, `update_smart_filter`, `remove_smart_filter`,
  *   `move_smart_filter`, `set_smart_filters_enabled`, `set_smart_filter_mask` (see
  *   `createImageSmartObjectTools`).
+ * - Shape layers: `get_shape_layer`, `add_shape_layer`, `update_shape`, `set_shape_component`,
+ *   `add_shape_component`, `remove_shape_component`, `merge_shape_components` (see
+ *   `createImageShapeTools`); `rasterize_layer` turns one into pixels.
  */
 export function createImageEditorToolProvider(
   controller: ImageEditorController,
@@ -305,6 +309,7 @@ export function createImageEditorToolProvider(
       ...createImageLayerTools(controller),
       ...createImageTransformTools(controller),
       ...createImageSmartObjectTools(controller),
+      ...createImageShapeTools(controller),
       ...createImageEffectTools(controller),
       ...createImagePaintTools(controller),
       ...createPigmentTools(),

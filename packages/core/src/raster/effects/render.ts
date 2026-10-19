@@ -1292,6 +1292,57 @@ function paintFill(dst: FBuf, m: ArrayLike<number>, f: EffectFill, frame: Effect
   else paintPattern(dst, m, f, env, mode, opacity);
 }
 
+/**
+ * The colours an effect fill paints over `rect`, as straight float RGBA (0..1, `width × height`
+ * pixels, row by row): a solid colour, a gradient laid out in `frame` (when aligned with the layer)
+ * or `canvas`, or a pattern tiled from `anchor` (when linked). Shape layers paint with it, so their
+ * fills and strokes match the overlays of layer effects.
+ */
+export function effectFillColors(
+  fill: EffectFill,
+  rect: EffectRect,
+  frame: EffectRect,
+  canvas: EffectRect,
+  anchor: { x: number; y: number },
+  ctx: EffectContext
+): Float32Array {
+  const n = rect.width * rect.height;
+  const out = new Float32Array(n * 4);
+  const c = [0, 0, 0, 1];
+  const { x: rx, y: ry, width: w } = rect;
+  if (fill.type === 'color') {
+    const [r, g, b] = rgbOf(fill.color);
+    for (let i = 0; i < n * 4; i += 4) {
+      out[i] = r;
+      out[i + 1] = g;
+      out[i + 2] = b;
+      out[i + 3] = 1;
+    }
+    return out;
+  }
+  if (fill.type === 'gradient') {
+    const gr = fill.gradient;
+    const f = gr.align ? frame : canvas;
+    const prepared = new PreparedGradient(gr);
+    const [angle, scale, offset] = gradientLayout(gr.style, gr.angle, gr.scale, gr.offset, f);
+    for (let i = 0; i < n; i++) {
+      prepared.sample(gradientT(gr.style, angle, scale, gr.reverse, offset, f, rx + (i % w) + 0.5, ry + Math.floor(i / w) + 0.5), c);
+      out.set(c, i * 4);
+    }
+    return out;
+  }
+  const tile = ctx.pattern(fill.patternId);
+  if (!tile) return out;
+  const place = new PatternPlacement(anchor, fill.link ?? true, fill.phase ?? { x: 0, y: 0 }, fill.scale, fill.angle ?? 0);
+  const uv = [0, 0];
+  for (let i = 0; i < n; i++) {
+    place.map(rx + (i % w) + 0.5, ry + Math.floor(i / w) + 0.5, uv);
+    tile.sample(uv[0], uv[1], c);
+    out.set(c, i * 4);
+  }
+  return out;
+}
+
 /** A glow's paint: a gradient runs along the glow (colour at `1 − v`), opaque from strength `range²`. */
 function paintGlow(dst: FBuf, m: ArrayLike<number>, g: OuterGlowEffect | InnerGlowEffect, env: PaintEnv): void {
   if (g.fill.type === 'color') return paintColor(dst, m, g.fill.color, g.blend, g.opacity);

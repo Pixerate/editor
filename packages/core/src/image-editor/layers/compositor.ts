@@ -142,8 +142,11 @@ const PHOTO_PROFILE: CompositorProfile<ImageLayer, CompositorSources> = {
   layerKey: (l) =>
     l.type === 'pixel' ? [l.filters ?? null, l.source ?? null] : l.type === 'adjustment' ? [l.kind, l.params] : l.type === 'annotation' ? l.annotation : undefined,
   pixelFilters: (l) => (l.type === 'pixel' ? pixelFilterSpec(l) : null),
-  /** A smart object draws its rendered pixels (contents → placement → smart filters) like a pixel layer. */
-  isPixelLike: (l) => l.type === 'smart',
+  /**
+   * A smart object draws its rendered pixels (contents → placement → smart filters) like a pixel
+   * layer, and a shape layer the pixels rendered from its paths.
+   */
+  isPixelLike: (l) => l.type === 'smart' || l.type === 'shape',
   maskSourcePlane: (source, W, H, sources) => {
     const opts = source as DepthMaskOptions;
     const depth = sources.depthMap?.(opts) ?? null;

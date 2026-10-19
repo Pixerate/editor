@@ -1,5 +1,6 @@
 /**
- * The image editor's layer stack: pixel, adjustment, group and annotation layers in one ordered
+ * The image editor's layer stack: pixel, adjustment, group, shape, smart object and annotation
+ * layers in one ordered
  * tree (bottom to top), all in document space (natural pixels of the document).
  *
  * Layer objects are immutable. Every change builds new objects along the path from the root to
@@ -17,9 +18,10 @@ import type {
 import type { PixelSurface } from '../../raster/surface';
 import type { BlendMode } from '../../raster/blend';
 import type { Interpolation } from '../../raster/transform';
-import type { GlobalLight } from '../../raster/effects/model';
+import type { EffectFill, GlobalLight } from '../../raster/effects/model';
 import type { EffectPattern } from '../../raster/effects/patterns';
-import type { Quad, WarpMesh } from '../../geom/types';
+import type { AffineMatrix, Quad, WarpMesh } from '../../geom/types';
+import type { VectorSubpath } from '../../vector/types';
 import {
   findLayer,
   flattenLayers,
@@ -100,6 +102,156 @@ export interface GroupLayer extends Omit<LayerBase, 'blend'> {
 export interface AnnotationLayer extends LayerBase {
   type: 'annotation';
   annotation: Annotation;
+}
+
+// ---------------------------------------------------------------------------
+// Shape layers
+// ---------------------------------------------------------------------------
+
+/**
+ * How a shape component combines with the result of the components below it (Photoshop's path
+ * operations): `combine` (union), `subtract` (front minus), `intersect` and `exclude` (xor). The
+ * first component always combines, whatever it says.
+ */
+export type ShapeOperation = 'combine' | 'subtract' | 'intersect' | 'exclude';
+export const SHAPE_OPERATIONS: readonly ShapeOperation[] = ['combine', 'subtract', 'intersect', 'exclude'];
+
+/** Winding rule a component's subpaths are filled with. */
+export type ShapeFillRule = 'nonzero' | 'evenodd';
+
+/**
+ * What a shape's fill or stroke paints with: a solid colour, a gradient or a pattern (the fills of
+ * layer effects; gradients aligned with the layer use the shape's bounds), at `opacity` (0..1,
+ * missing = 1).
+ */
+export type ShapePaint = EffectFill & { opacity?: number };
+
+export type ShapeStrokeAlign = 'inside' | 'center' | 'outside';
+export type ShapeLineCap = 'butt' | 'round' | 'square';
+export type ShapeLineJoin = 'miter' | 'round' | 'bevel';
+
+/** A shape's stroke (Photoshop's shape Stroke options, not the layer-style stroke). */
+export interface ShapeStroke {
+  /** Width in document pixels. */
+  width: number;
+  paint: ShapePaint;
+  /** Where the stroke sits on the outline (default `center`; open paths always stroke centred). */
+  align?: ShapeStrokeAlign;
+  /** Default `butt`. */
+  cap?: ShapeLineCap;
+  /** Default `miter`. */
+  join?: ShapeLineJoin;
+  /** Miter length over width above which a miter is bevelled (default 100, as Photoshop). */
+  miterLimit?: number;
+  /** Dash and gap lengths in multiples of the width (Photoshop's convention); missing or empty = solid. */
+  dashes?: number[];
+  /** Distance into the dash pattern at the start, in multiples of the width. */
+  dashOffset?: number;
+}
+
+/** An arrowhead of a live line: a triangle (notched by `concavity`) whose tip is the line's end. */
+export interface ShapeArrowhead {
+  /** Width across the base, document pixels. */
+  width: number;
+  /** Length from the base to the tip, document pixels. */
+  length: number;
+  /** Notch of the base towards the tip as a fraction of `length` (-0.5..0.5, default 0). */
+  concavity?: number;
+}
+
+interface LiveShapeBase {
+  /**
+   * Where the shape's own frame lands in the document (an affine map, missing = identity): live
+   * shapes keep their parameters through moves, rotations and scales.
+   */
+  transform?: AffineMatrix;
+}
+
+/**
+ * A parametric ("live") shape a component was drawn as, kept so it stays editable as that shape
+ * (Photoshop's live shape properties). The component's subpaths are always the shape it
+ * describes; editing the subpaths directly drops it.
+ */
+export type LiveShape =
+  | (LiveShapeBase & {
+      kind: 'rect';
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      /** Corner radii in pixels: top-left, top-right, bottom-right, bottom-left (missing = square). */
+      radii?: [number, number, number, number];
+    })
+  | (LiveShapeBase & { kind: 'ellipse'; x: number; y: number; width: number; height: number })
+  | (LiveShapeBase & { kind: 'polygon'; x: number; y: number; width: number; height: number; sides: number })
+  | (LiveShapeBase & {
+      kind: 'star';
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      points: number;
+      /** Inner radius over outer radius, 0..1. */
+      innerRatio: number;
+    })
+  | (LiveShapeBase & {
+      kind: 'line';
+      x1: number;
+      y1: number;
+      x2: number;
+      y2: number;
+      /** Thickness of the bar in pixels (a line shape is a filled bar, as in Photoshop). */
+      weight: number;
+      startArrow?: ShapeArrowhead | null;
+      endArrow?: ShapeArrowhead | null;
+    });
+export type LiveShapeKind = LiveShape['kind'];
+export const LIVE_SHAPE_KINDS: readonly LiveShapeKind[] = ['rect', 'ellipse', 'polygon', 'star', 'line'];
+
+/** One shape component: subpaths filled together (with the layer's fill rule), combined by `op`. */
+export interface ShapeComponent {
+  op: ShapeOperation;
+  /** Document pixels; handles are absolute positions (the vector editor's anchors). */
+  subpaths: VectorSubpath[];
+  live?: LiveShape;
+}
+
+/** PSD data of a shape layer kept for round trips (see the PSD module). */
+export interface ShapePsdData {
+  /** Additional-info blocks we do not model, by key, as read. */
+  blocks?: Array<{ key: string; data: Uint8Array }>;
+}
+
+/**
+ * A shape layer: vector components with a fill and a stroke. `surface` is the rendered result in
+ * document space (offset 0), rebuilt from the components by every change, so it never degrades
+ * however often the shape is moved or transformed; the compositor draws it like a pixel layer's
+ * pixels, and masks, effects, clipping and blend apply on top. Never paint into it: rasterize the
+ * layer first.
+ */
+export interface ShapeLayer extends LayerBase {
+  type: 'shape';
+  /** Bottom (first) to top. */
+  components: ShapeComponent[];
+  /** Default `nonzero`. */
+  fillRule?: ShapeFillRule;
+  /** `null`: no fill. */
+  fill: ShapePaint | null;
+  /** `null`: no stroke. */
+  stroke: ShapeStroke | null;
+  /** The rendered pixels (a cache of the components, fill and stroke), document space. */
+  surface: PixelSurface;
+  /** Always (0, 0): a shape moves through its geometry. */
+  offset: { x: number; y: number };
+  /** 0..1, PSD "Fill" (missing = 1). */
+  fillOpacity?: number;
+  /**
+   * The annotation this layer was migrated from (pen, rectangle, ellipse, line, arrow), while the
+   * shape is still exactly that annotation: the `annotations` compatibility view and
+   * `updateAnnotation` read and edit it. Shape edits drop it.
+   */
+  annotation?: Annotation;
+  psd?: ShapePsdData;
 }
 
 // ---------------------------------------------------------------------------
@@ -221,7 +373,7 @@ export interface SmartObjectLayer extends LayerBase {
   psd?: SmartPsdData;
 }
 
-export type ImageLayer = PixelLayer | AdjustmentLayerNode | GroupLayer | AnnotationLayer | SmartObjectLayer;
+export type ImageLayer = PixelLayer | AdjustmentLayerNode | GroupLayer | AnnotationLayer | SmartObjectLayer | ShapeLayer;
 export type ImageLayerType = ImageLayer['type'];
 
 /** Which part of the active layer painting targets (`filter-mask`: a smart object's filter mask). */
@@ -281,12 +433,32 @@ export function pixelLayerBounds(layer: PixelLayer, surface: PixelSurface = laye
 
 /** Human label of a layer kind. */
 export function layerTypeLabel(type: ImageLayerType): string {
-  return type === 'pixel' ? 'Pixel layer' : type === 'adjustment' ? 'Adjustment layer' : type === 'group' ? 'Group' : type === 'smart' ? 'Smart object' : 'Annotation';
+  return type === 'pixel'
+    ? 'Pixel layer'
+    : type === 'adjustment'
+      ? 'Adjustment layer'
+      : type === 'group'
+        ? 'Group'
+        : type === 'smart'
+          ? 'Smart object'
+          : type === 'shape'
+            ? 'Shape layer'
+            : 'Annotation';
 }
 
-/** Layers whose pixels are a surface the compositor draws (pixel layers and smart objects). */
-export function hasSurface(layer: ImageLayer): layer is PixelLayer | SmartObjectLayer {
-  return layer.type === 'pixel' || layer.type === 'smart';
+/** Layers whose pixels are a surface the compositor draws (pixel layers, smart objects, shapes). */
+export function hasSurface(layer: ImageLayer): layer is PixelLayer | SmartObjectLayer | ShapeLayer {
+  return layer.type === 'pixel' || layer.type === 'smart' || layer.type === 'shape';
+}
+
+/** Layers whose `surface` is a render cache of their own data (smart objects, shapes): never paint into it. */
+export function isRenderedLayer(layer: ImageLayer): layer is SmartObjectLayer | ShapeLayer {
+  return layer.type === 'smart' || layer.type === 'shape';
+}
+
+/** Every shape layer in the stack. */
+export function shapeLayers(layers: readonly ImageLayer[]): ShapeLayer[] {
+  return flattenLayers(layers).filter((l): l is ShapeLayer => l.type === 'shape');
 }
 
 /** Every smart object in the stack (nested contents not included). */
