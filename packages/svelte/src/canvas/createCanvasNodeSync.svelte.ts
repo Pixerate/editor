@@ -148,3 +148,32 @@ export function createCanvasNodeSync<
 		}
 	};
 }
+
+export interface CanvasGraphSnapshotInput<TNode = CanvasNode, TEdge = CanvasEdge, TViewport = { x: number; y: number; zoom: number }> {
+	nodes: TNode[];
+	edges: TEdge[];
+	viewport: TViewport;
+}
+
+/**
+ * Produces a plain, serializable snapshot of `{ nodes, edges, viewport }` using Svelte 5's
+ * `$state.snapshot` (or a custom `unwrap` function) instead of `@xyflow/svelte`'s `toObject()`,
+ * avoiding `structuredClone` `DataCloneError` when nodes hold reactive proxies or non-cloneable
+ * references.
+ */
+export function snapshotCanvasGraph<
+	TNode = CanvasNode,
+	TEdge = CanvasEdge,
+	TViewport = { x: number; y: number; zoom: number }
+>(
+	graph: CanvasGraphSnapshotInput<TNode, TEdge, TViewport>,
+	unwrap?: <T>(value: T) => T
+): CanvasGraphSnapshotInput<TNode, TEdge, TViewport> {
+	const snap = unwrap ?? (<T>(v: T): T => $state.snapshot(v) as T);
+	return {
+		nodes: snap(graph.nodes),
+		edges: snap(graph.edges),
+		viewport: snap(graph.viewport)
+	};
+}
+
