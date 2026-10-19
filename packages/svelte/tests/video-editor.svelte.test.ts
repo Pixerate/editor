@@ -341,6 +341,18 @@ describe("ClipInspector (Svelte)", () => {
     controller.destroy();
   });
 
+  it("shapes a transition's sound, storing only a change from the type's default", () => {
+    const controller = make();
+    render(ClipInspector, { controller });
+    act(() => controller.select(["c2"]));
+    expect(q<HTMLSelectElement>('[data-field="transitionAudioCurve"]').value).toBe("linear");
+    change(q<HTMLSelectElement>('[data-field="transitionAudioCurve"]'), "s-curve");
+    expect(clipOf(controller, "c2")!.transition).toEqual({ type: "dip", duration: 400, audioCurve: "s-curve" });
+    change(q<HTMLSelectElement>('[data-field="transitionAudioCurve"]'), "linear");
+    expect(clipOf(controller, "c2")!.transition).toEqual({ type: "dip", duration: 400 });
+    controller.destroy();
+  });
+
   it("shapes a media clip's sound fades once it has them", () => {
     const controller = make();
     render(ClipInspector, { controller });

@@ -83,7 +83,16 @@ export interface VideoTransition {
 	color?: string;
 	/** For wipe: the way the edge travels (default right, revealing from the left). */
 	direction?: VideoWipeDirection;
+	/**
+	 * Shape of the sound's fades through the transition (see `VideoFadeCurve`). Default
+	 * `equal-power` for crossfades and wipes, where two sounds overlap and a linear mix dips in
+	 * loudness halfway; `linear` for dips, where one sound fades out before the other fades in.
+	 */
+	audioCurve?: VideoFadeCurve;
 }
+
+/** The curve a transition's sound fades follow (its `audioCurve`, else the default for its type). */
+export const videoTransitionAudioCurve = (t: VideoTransition): VideoFadeCurve => t.audioCurve ?? (t.type === 'dip' ? 'linear' : 'equal-power');
 
 interface VideoClipBase {
 	id: string;

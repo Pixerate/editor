@@ -1,6 +1,7 @@
 import { videoValueAt } from './keyframes.js';
 import { sortedVideoClips, videoAssetMap, videoClipAfter, videoClipBefore, videoClipEnd, videoClipSpeed, videoAssetHasSound } from './timeline.js';
-import type { VideoAsset, VideoClip, VideoFadeCurve, VideoFit, VideoProject, VideoTextClip, VideoTrack, VideoWipeDirection } from './types.js';
+import { videoTransitionAudioCurve } from './types.js';
+import type { VideoAsset, VideoClip, VideoFadeCurve, VideoFit, VideoProject, VideoTransition, VideoTextClip, VideoTrack, VideoWipeDirection } from './types.js';
 
 /** A rectangle in frame pixels. */
 export interface VideoRect {
@@ -181,9 +182,10 @@ export function videoFrameAt(project: VideoProject, time: number): VideoFrame {
 			if (outgoing?.type === 'dip' && outgoing.progress >= 0.5) continue;
 			const inside = Math.min(Math.max(time, clip.start), videoClipEnd(clip));
 			const fade = fadeGain(clip, inside);
-			const level = (t: { type: string; progress: number }, into: boolean) => (t.type === 'dip' ? Math.abs(1 - 2 * t.progress) : into ? t.progress : 1 - t.progress);
-			// Sound crossfades through a crossfade or wipe, and dips with the picture.
-			const mix = (incoming ? level(incoming, true) : 1) * (outgoing ? level(outgoing, false) : 1);
+			const level = (t: { type: string; progress: number }, transition: VideoTransition, into: boolean) =>
+				videoFadeCurveGain(videoTransitionAudioCurve(transition), t.type === 'dip' ? Math.abs(1 - 2 * t.progress) : into ? t.progress : 1 - t.progress);
+			// Sound crossfades through a crossfade or wipe (equal power by default), and dips with the picture.
+			const mix = (incoming ? level(incoming, incoming.transition, true) : 1) * (outgoing ? level(outgoing, outgoing.next.transition!, false) : 1);
 			const asset = clip.type === 'media' ? assets.get(clip.asset) : undefined;
 			const sourceTime = sourceTimeAt(clip, time);
 			// Keyframes are in clip time, held before the first key and after the last.

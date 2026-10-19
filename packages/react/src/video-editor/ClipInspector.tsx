@@ -6,6 +6,7 @@ import {
   VIDEO_FADE_CURVES,
   VIDEO_TRANSITION_TYPES,
   videoKeyframeRows,
+  videoTransitionAudioCurve,
   videoKeyframeToggleEdit,
   videoKeyframeValueEdit,
   type VideoClip,
@@ -253,6 +254,29 @@ export function ClipInspector({ controller, className = '' }: ClipInspectorProps
               if (raw.trim() && Number.isFinite(n) && n > 0) controller.apply({ op: 'set_transition', clip: clip.id, transition: { ...transition, duration: n } }, 'Change transition length');
             }}
           />
+        </Row>
+      )}
+      {transition && (
+        <Row label="Transition sound" name="transitionAudioCurve">
+          <select
+            className={field}
+            value={videoTransitionAudioCurve(transition)}
+            disabled={disabled}
+            aria-label="Transition sound curve"
+            onChange={(e) => {
+              const { audioCurve: _, ...rest } = transition;
+              const curve = e.target.value as VideoFadeCurve;
+              // The type's own default is stored as no curve, so it follows the type if that changes.
+              const next = curve === videoTransitionAudioCurve(rest) ? rest : { ...rest, audioCurve: curve };
+              controller.apply({ op: 'set_transition', clip: clip.id, transition: next }, 'Change transition sound');
+            }}
+          >
+            {VIDEO_FADE_CURVES.map((c) => (
+              <option key={c} value={c}>
+                {VIDEO_FADE_CURVE_LABELS[c]}
+              </option>
+            ))}
+          </select>
         </Row>
       )}
     </div>

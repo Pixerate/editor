@@ -92,7 +92,8 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
   `volume` multiply. Give every audio clip that starts or ends mid-sound a short `fadeIn` /
   `fadeOut` (10-50 ms) to avoid clicks; fade music beds over 1-3 s. Shape sound fades with
   `fadeInCurve` / `fadeOutCurve`: `equal-power` where two sounds overlap (it keeps loudness
-  steady, where linear dips in the middle), `exponential` to fade music out to silence
+  steady, where linear dips in the middle; transitions' `audioCurve` already defaults to it for
+  crossfades and wipes), `exponential` to fade music out to silence
   naturally, `s-curve` for a gentle start and finish. Linear is the default.
 - **Delivery loudness.** Normalise the final mix rather than pushing clip volumes: -14 LUFS for
   web and streaming, -16 for podcasts, -23 (EBU R128) or -24 (ATSC) for broadcast, with true
@@ -148,7 +149,7 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
 | `update_video_clip` | Change properties via `set`: opacity, transform (`x`, `y` px from centre, `scale`, `rotation`), `fit` (contain default for media, cover, fill, none), `fadeIn` / `fadeOut`, name; media `volume` (0-4), `muted`, `fadeInCurve` / `fadeOutCurve` (the sound's fade shape: linear, equal-power, s-curve, exponential, logarithmic), `speed` (0.05-20, keeps the source range so the length changes), `asset`; title text and style; colour. `remove` resets to defaults. Not for timing. |
 | `set_video_keyframes` | Animate one `property` of a `clip` (`opacity` 0-1, `volume` 0-4 for media, `x` / `y` px from centre, `scale`, `rotation` degrees) with `keys` `[{ t, v, ease? }]`, replacing its keys. `t` is clip time (ms from the clip's start), so keys travel with the clip. `ease`: linear (default), hold, ease-in, ease-out, ease-in-out or cubic-bezier points. Returns the sorted keys. |
 | `remove_video_keyframes` | Remove all keys of a clip `property`, leaving the value it had at the clip's start. |
-| `set_video_transition` | Set the transition into a `clip` from the clip ending where it starts on the same track: `{ type: crossfade, dip or wipe, duration ms centred on the cut, color (dip, default black), direction (wipe, default right) }`, or `null` to remove. When handles are short the error gives the longest that fits. |
+| `set_video_transition` | Set the transition into a `clip` from the clip ending where it starts on the same track: `{ type: crossfade, dip or wipe, duration ms centred on the cut, color (dip, default black), direction (wipe, default right), audioCurve (the sound's fades: equal-power by default for crossfade and wipe, linear for dip) }`, or `null` to remove. When handles are short the error gives the longest that fits. |
 | `close_video_gaps` | Slide clips on a `track` earlier so no gaps remain, from time `from` (default the start). Returns the clips that moved. |
 | `add_video_marker` | Add a marker at `time` with `label`, `color` and optional `id`, for beats, sections or review notes. Returns its id. |
 | `remove_video_marker` | Remove a `marker` by id. |

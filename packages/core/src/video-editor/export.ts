@@ -1,6 +1,7 @@
 import { placeVideoRect } from './evaluate.js';
 import { isVideoKeyframes, VIDEO_TRANSFORM_PROPERTIES, videoKeyframeFfmpegExpr, type VideoAnimatable } from './keyframes.js';
 import { formatVideoTimecode, formatVideoTimecodeFrames, isVideoDropFrameRate, videoHourFrames, videoTimecodeFrames, sortedVideoClips, videoAssetMap, videoClipBefore, videoClipEnd, videoClipOverhang, videoClipSpeed, videoProjectDuration, videoAssetHasSound } from './timeline.js';
+import { videoTransitionAudioCurve } from './types.js';
 import type { VideoAsset, VideoClip, VideoFadeCurve, VideoProject, VideoTextClip, VideoTrack } from './types.js';
 
 // ---------------------------------------------------------------------------------------------
@@ -279,11 +280,13 @@ function buildFfmpeg(project: VideoProject, options: VideoFfmpegOptions, measure
 				const volume = isVideoKeyframes(clip.volume) ? `volume='${trackGain}*(${expr(clip.volume, `(t*1000${lead ? `-${Math.round(lead)}` : ''})`, 1, 'volume')})':eval=frame` : `volume=${(clip.volume ?? 1) * trackGain}`;
 				const chain = ['asetpts=PTS-STARTPTS', ...atempo(videoClipSpeed(clip)), volume];
 				const before = clip.transition ? videoClipBefore(track, clip) : null;
-				if (lead) chain.push(`afade=t=in:st=0:d=${sec(2 * lead)}`);
-				if (tail) chain.push(`afade=t=out:st=${sec(span - 2 * tail)}:d=${sec(2 * tail)}`);
-				if (before && clip.transition!.type === 'dip') chain.push(`afade=t=in:st=0:d=${sec(clip.transition!.duration / 2)}`);
-				const after = sortedVideoClips(track).find((c) => c !== clip && Math.abs(c.start - end) < 0.5 && c.transition?.type === 'dip');
-				if (after) chain.push(`afade=t=out:st=${sec(span - after.transition!.duration / 2)}:d=${sec(after.transition!.duration / 2)}`);
+				const next = sortedVideoClips(track).find((c) => c !== clip && Math.abs(c.start - end) < 0.5 && c.transition);
+				const inCurve = clip.transition ? afadeCurve(videoTransitionAudioCurve(clip.transition)) : '';
+				const outCurve = next ? afadeCurve(videoTransitionAudioCurve(next.transition!)) : '';
+				if (lead) chain.push(`afade=t=in:st=0:d=${sec(2 * lead)}${inCurve}`);
+				if (tail) chain.push(`afade=t=out:st=${sec(span - 2 * tail)}:d=${sec(2 * tail)}${outCurve}`);
+				if (before && clip.transition!.type === 'dip') chain.push(`afade=t=in:st=0:d=${sec(clip.transition!.duration / 2)}${inCurve}`);
+				if (next?.transition!.type === 'dip') chain.push(`afade=t=out:st=${sec(span - next.transition!.duration / 2)}:d=${sec(next.transition!.duration / 2)}${outCurve}`);
 				if (clip.fadeIn) chain.push(`afade=t=in:st=${sec(lead)}:d=${sec(clip.fadeIn)}${afadeCurve(clip.fadeInCurve)}`);
 				if (clip.fadeOut) chain.push(`afade=t=out:st=${sec(lead + clip.duration - clip.fadeOut)}:d=${sec(clip.fadeOut)}${afadeCurve(clip.fadeOutCurve)}`);
 				chain.push(`adelay=${Math.round(t0)}:all=1`);

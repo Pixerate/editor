@@ -86,7 +86,8 @@ export function parseVideoTransition(v: unknown, path: string): VideoTransition 
 		type: oneOf(v.type, VIDEO_TRANSITION_TYPES, `${path}.type`, false)!,
 		duration: num(v.duration, `${path}.duration`, { positive: true })!,
 		color: str(v.color, `${path}.color`, true),
-		direction: oneOf(v.direction, VIDEO_WIPE_DIRECTIONS, `${path}.direction`)
+		direction: oneOf(v.direction, VIDEO_WIPE_DIRECTIONS, `${path}.direction`),
+		audioCurve: oneOf(v.audioCurve, VIDEO_FADE_CURVES, `${path}.audioCurve`)
 	});
 }
 

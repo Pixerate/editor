@@ -446,6 +446,20 @@ describe("ClipInspector (React)", () => {
     controller.destroy();
   });
 
+  it("shapes a transition's sound, storing only a change from the type's default", () => {
+    const controller = make();
+    act(() => root.render(<ClipInspector controller={controller} />));
+    act(() => controller.select(["c2"]));
+    const curve = () => $<HTMLSelectElement>('select[aria-label="Transition sound curve"]');
+    expect(curve().value).toBe("equal-power");
+    choose(curve(), "linear");
+    expect(clip(controller, "c2")!.clip.transition).toEqual({ type: "crossfade", duration: 400, audioCurve: "linear" });
+    expect(controller.getState().undoLabel).toBe("Change transition sound");
+    choose(curve(), "equal-power");
+    expect(clip(controller, "c2")!.clip.transition).toEqual({ type: "crossfade", duration: 400 });
+    controller.destroy();
+  });
+
   it("shapes a media clip's sound fades once it has them", () => {
     const controller = make();
     act(() => root.render(<ClipInspector controller={controller} />));

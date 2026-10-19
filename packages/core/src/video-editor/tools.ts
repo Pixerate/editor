@@ -71,7 +71,8 @@ const TRANSITION = object(
 		type: { type: 'string', enum: [...VIDEO_TRANSITION_TYPES], description: 'crossfade (this clip fades up over the one before), dip (down into a colour and up out of it) or wipe (an edge travels across revealing this clip).' },
 		duration: { type: 'number', exclusiveMinimum: 0, description: 'Length in ms, centred on the cut. A crossfade or wipe needs half of it in media past the cut on both sides (handles); a dip needs none.' },
 		color: COLOR('For dip: the colour passed through (default black)'),
-		direction: { type: 'string', enum: [...VIDEO_WIPE_DIRECTIONS], description: 'For wipe: the way the edge travels (default right).' }
+		direction: { type: 'string', enum: [...VIDEO_WIPE_DIRECTIONS], description: 'For wipe: the way the edge travels (default right).' },
+		audioCurve: { type: 'string', enum: [...VIDEO_FADE_CURVES], description: 'Shape of the sound\'s fades through it: default equal-power for crossfade and wipe (steady loudness while the two sounds overlap), linear for dip; or s-curve, exponential, logarithmic.' }
 	},
 	['type', 'duration'],
 	'A transition from the clip that ends where this one starts on the same track.'

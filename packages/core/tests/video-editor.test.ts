@@ -235,7 +235,13 @@ describe('videoFrameAt', () => {
 		const early = videoFrameAt(p, 3600);
 		expect(early.layers.map((l) => l.clip)).toEqual(['a', 'b']);
 		expect(early.layers[1].sourceTime).toBe(600);
-		expect(early.audio.find((a) => a.clip === 'a')!.gain).toBeCloseTo(0.9);
+		// The sound crossfades at equal power by default: 10% into it, "a" is at cos(0.1·π/2).
+		expect(early.audio.find((a) => a.clip === 'a')!.gain).toBeCloseTo(Math.cos(0.05 * Math.PI), 6);
+		// At the cut both sounds are at 1/√2, so the total power holds steady.
+		const cut = ok(applyVideoEdits(p, [{ op: 'update_clip', clip: 'b', set: { asset: 'beach' } }]));
+		expect(videoFrameAt(cut, 4000).audio.filter((a) => a.clip !== 's').map((a) => a.gain)).toEqual([expect.closeTo(Math.SQRT1_2, 6), expect.closeTo(Math.SQRT1_2, 6)]);
+		const linear = ok(applyVideoEdits(p, [{ op: 'set_transition', clip: 'b', transition: { type: 'crossfade', duration: 1000, audioCurve: 'linear' } }]));
+		expect(videoFrameAt(linear, 3600).audio.find((a) => a.clip === 'a')!.gain).toBeCloseTo(0.9);
 	});
 
 	it('dips through a colour without running past the cut', () => {
@@ -389,7 +395,7 @@ describe('exports', () => {
 		expect(ff.filterComplex).toContain("drawtext=text=It\\\\\\'s 10\\\\:30");
 		expect(ff.filterComplex).toContain("alpha='1*min(1,(t-0)/0.5)'");
 		expect(ff.filterComplex).toContain('[0:a]asetpts=PTS-STARTPTS,volume=0.5,adelay=0:all=1[a0]');
-		expect(ff.filterComplex).toContain('[1:a]asetpts=PTS-STARTPTS,volume=1,afade=t=out:st=3.5:d=1,adelay=0:all=1[a1]');
+		expect(ff.filterComplex).toContain('[1:a]asetpts=PTS-STARTPTS,volume=1,afade=t=out:st=3.5:d=1:curve=qsin,adelay=0:all=1[a1]');
 		expect(ff.filterComplex).toMatch(/amix=inputs=2:normalize=0:duration=longest,apad,atrim=0:7\[aout\]/);
 		expect(ff.args.slice(-3)).toEqual(['-t', '7', 'out.mp4']);
 		expect(ff.command).toMatch(/^ffmpeg -y -ss 0 -t 7 -i song\.mp3 -ss 2 /);

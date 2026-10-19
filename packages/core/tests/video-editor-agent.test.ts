@@ -85,6 +85,20 @@ describe('video agent tasks, through the tools only', () => {
 		expect(await fail('export_video_ffmpeg', { loudness: { measured: { integrated: -30 } } })).toContain('truePeak');
 	});
 
+	it('crossfades sound at equal power unless told otherwise', async () => {
+		const { call, fail } = tools();
+		await call('add_video_asset', { id: 'm', kind: 'audio', src: 'm.wav', duration: 20000 });
+		await call('add_video_clip', { track: 'a1', clip: { type: 'media', id: 'x', asset: 'm', in: 1000, duration: 4000 } });
+		await call('add_video_clip', { track: 'a1', clip: { type: 'media', id: 'y', asset: 'm', in: 8000, duration: 4000 } });
+		await call('set_video_transition', { clip: 'y', transition: { type: 'crossfade', duration: 1000 } });
+		const atCut = await call('get_video_frame', { time: 4000 });
+		expect(atCut.audio.map((a: { gain: number }) => a.gain)).toEqual([expect.closeTo(Math.SQRT1_2, 6), expect.closeTo(Math.SQRT1_2, 6)]);
+		const set = await call('set_video_transition', { clip: 'y', transition: { type: 'crossfade', duration: 1000, audioCurve: 'linear' } });
+		expect(set.clip.transition.audioCurve).toBe('linear');
+		expect((await call('get_video_frame', { time: 4000 })).audio[0].gain).toBeCloseTo(0.5, 6);
+		expect(await fail('set_video_transition', { clip: 'y', transition: { type: 'crossfade', duration: 1000, audioCurve: 'loud' } })).toContain('audioCurve');
+	});
+
 	it('shapes a sound fade and reads the gain back', async () => {
 		const { call, fail } = tools();
 		await call('add_video_asset', { id: 'music', kind: 'audio', src: 'music.mp3', duration: 30000 });

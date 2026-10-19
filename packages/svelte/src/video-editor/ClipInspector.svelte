@@ -6,10 +6,12 @@
     VIDEO_FADE_CURVES,
     VIDEO_TRANSITION_TYPES,
     videoKeyframeRows,
+    videoTransitionAudioCurve,
     videoKeyframeToggleEdit,
     videoKeyframeValueEdit,
     type VideoEdit,
     type VideoEditorController,
+    type VideoFadeCurve,
     type VideoKeyframeRow,
     type VideoTransitionType
   } from '@pixerate/editor/video-editor';
@@ -87,6 +89,13 @@
     if (!clip) return;
     if (!type) apply({ op: 'set_transition', clip: clip.id, transition: null }, 'Remove transition');
     else apply({ op: 'set_transition', clip: clip.id, transition: { ...clip.transition, type: type as VideoTransitionType, duration: clip.transition?.duration ?? 500 } }, 'Set transition');
+  }
+  function transitionAudioCurve(curve: string) {
+    if (!clip?.transition) return;
+    const { audioCurve: _, ...rest } = clip.transition;
+    // The type's own default is stored as no curve, so it follows the type if that changes.
+    const next = curve === videoTransitionAudioCurve(rest) ? rest : { ...rest, audioCurve: curve as VideoFadeCurve };
+    apply({ op: 'set_transition', clip: clip.id, transition: next }, 'Change transition sound');
   }
   function transitionDuration(raw: string) {
     if (!clip?.transition) return;
@@ -187,6 +196,14 @@
           <span class="text-[10px] text-muted-foreground">ms</span>
         {/if}
       </div>
+      {#if clip.transition}
+        <span class="text-muted-foreground">Transition sound</span>
+        <select class={input} aria-label="Transition sound curve" {disabled} value={videoTransitionAudioCurve(clip.transition)} onchange={(e) => transitionAudioCurve(e.currentTarget.value)} data-field="transitionAudioCurve">
+          {#each VIDEO_FADE_CURVES as c (c)}
+            <option value={c}>{VIDEO_FADE_CURVE_LABELS[c]}</option>
+          {/each}
+        </select>
+      {/if}
     </div>
   {/if}
   {#if message}
