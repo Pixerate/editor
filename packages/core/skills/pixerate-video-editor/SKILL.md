@@ -116,7 +116,10 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
 - **Grade in two passes: correct, then look.** First balance each shot so a scene matches
   (`update_video_clip` `grade`: fix exposure and white balance against the best shot, then
   `copy_video_grade` from it to the rest of the scene), then add a look with
-  `apply_video_grade_preset` at a modest `amount` (0.3-0.6). Check with `render_video_frame` at a
+  `apply_video_grade_preset` at a modest `amount` (0.3-0.6), or a `.cube` look the user has with
+  `set_video_lut` (often at `strength` 0.5-0.8: film emulation and creative LUTs are strong at
+  full strength). A LUT runs after the grade's settings, so correct exposure and white balance
+  first; LUTs built for log footage expect a flat picture and look crushed on normal video. Check with `render_video_frame` at a
   few times side by side. Skin tones are the reference: avoid strong `hue` or `tint` on people.
 - **Measure, don't eyeball.** Where the host shows a preview, `get_video_scopes` reads the real
   picture: keep `clipped.highlights` under about 1% and `clipped.shadows` under about 2% unless
@@ -187,7 +190,9 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
 | `extract_video_range` | Remove `from`..`to` ms and close it up: as lift, then later material moves earlier on those and every sync-locked track. Refused (naming the clip) when a sync-locked track outside `tracks` has material there. Use to cut a section out of a finished sequence. |
 | `delete_video_clips` | Remove `clips`; `ripple: true` pulls later clips up to close the gaps (a ripple delete). |
 | `update_video_clip` | Change properties via `set`: opacity, transform (`x`, `y` px from centre, `scale`, `rotation`), `fit` (contain default for media, cover, fill, none), `animateIn` / `animateOut` (`{ effect: fade, rise, drop, slide-left, slide-right, zoom or pop, duration ms default 500 }`), `grade` (`exposure` stops -3-3, `contrast`, `saturation`, `temperature`, `tint` -1-1, `hue` degrees; replaces the whole grade), `blend` (normal, multiply, screen, overlay, darken, lighten, color-dodge, color-burn, hard-light, soft-light, difference, exclusion, add), `fadeIn` / `fadeOut`, name; media `volume` (0-4), `muted`, `fadeInCurve` / `fadeOutCurve` (the sound's fade shape: linear, equal-power, s-curve, exponential, logarithmic), `speed` (0.05-20, keeps the source range so the length changes), `asset`; title text and style; colour. `remove` resets to defaults. Not for timing. |
-| `apply_video_grade_preset` | Give `clips` (on video tracks) a named look at an `amount` 0-1 (default 1), replacing their grades: warm, cool, punchy, faded, black-and-white, bleach-bypass, day-for-night. One undo step; returns each clip's grade to fine-tune with `update_video_clip`. |
+| `set_video_lut` | Give `clips` (on video tracks) a 3D LUT: `src` a `.cube` file the host can load and ffmpeg can read, `strength` 0-1 (default 1). Reads the file first and fails without changing anything if it cannot be loaded or is not a 3D `.cube`. Keeps the clips' other grade settings; the LUT runs after them. One undo step; returns the LUT's `title` and `size` and each clip's grade. Copies with `copy_video_grade`. |
+| `remove_video_lut` | Take the LUT off `clips`' grades, keeping their other settings (one undo step). Fails if none has one. |
+| `apply_video_grade_preset` | Give `clips` (on video tracks) a named look at an `amount` 0-1 (default 1), replacing their grade settings (a LUT stays): warm, cool, punchy, faded, black-and-white, bleach-bypass, day-for-night. One undo step; returns each clip's grade to fine-tune with `update_video_clip`. |
 | `copy_video_grade` | Match shots: give the `to` clips the grade of the `from` clip (one undo step; a source with no grade clears theirs). Returns the grade copied. |
 | `set_video_speed_ramp` | Play a video or audio `clip` through `segments` of speed from its first frame: `[{ duration ms, speed, toSpeed? }]`; `toSpeed` glides evenly to a new speed over the stretch, speed 0 is a freeze. The clip's length becomes the segments' total; `ripple` (default true) moves later material. Returns the clip with its `timeRemap` and source range. |
 | `add_video_freeze_frame` | Hold the frame a clip shows at timeline time `at` for `duration` ms, then play on; the clip gets longer and (with `ripple`, default) later material moves along. Works with or without a ramp. |
@@ -241,6 +246,10 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
   wants that track changed.
 - **Read-only**: when `get_video_project` says the project cannot be edited, write tools are
   hidden; read, render and export still work. Tell the user rather than working around it.
+- **LUTs are files.** `set_video_lut` needs a `src` both the preview (a URL it can fetch) and
+  ffmpeg (a local path; the host maps it with `resolveLut`) can read; the export notes a URL it
+  cannot. SVG frames from `render_video_frame` draw a LUT approximately (curves and a colour
+  matrix), so judge a LUT's exact colours with `get_video_scopes` or the preview.
 - **Scopes need real pixels.** `get_video_scopes` reads what the host's preview draws, so it
   fails when nothing is showing the project or the media cannot load in time, and a canvas
   with media from another origin served without CORS cannot be read. Video drawn as a

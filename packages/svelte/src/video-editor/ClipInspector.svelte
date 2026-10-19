@@ -7,7 +7,8 @@
     normalizeVideoGrade,
     VIDEO_GRADE_CONTROLS,
     VIDEO_GRADE_PRESET_NAMES,
-    videoGradePreset,
+    videoGradeLook,
+    videoLutEdits,
     VIDEO_BLEND_MODE_LABELS,
     VIDEO_BLEND_MODES,
     VIDEO_FADE_CURVE_LABELS,
@@ -27,6 +28,7 @@
     type VideoEditorController,
     type VideoFadeCurve,
     type VideoGradeControl,
+    type VideoGradeLut,
     type VideoGradePreset,
     type VideoKeyframeRow,
     type VideoTransitionType,
@@ -119,8 +121,45 @@
     set('grade', normalizeVideoGrade({ ...clip.grade, [c.key]: n }), `Change ${c.label.toLowerCase()}`);
   }
   function gradePreset(name: string) {
-    const grade = clip && name ? videoGradePreset(name as VideoGradePreset) : undefined;
+    const grade = clip && name ? videoGradeLook(clip.grade, name as VideoGradePreset) : undefined;
     if (clip && grade) apply({ op: 'update_clip', clip: clip.id, set: { grade } }, `Apply ${name} look`);
+  }
+  /** Gives the clip a LUT (keeping its other grade settings), or takes it off with `null`. */
+  function setLut(setting: VideoGradeLut | null, label: string) {
+    if (!clip) return;
+    localError = null;
+    const r = controller.apply(videoLutEdits(editor.project, [clip.id], setting), label);
+    if (!r.ok) localError = { text: r.error, revision: editor.revision };
+  }
+  /** A `.cube` path or URL, checked by loading it; empty removes the LUT. */
+  async function chooseLut(src: string) {
+    if (!clip) return;
+    const strength = clip.grade?.lut?.strength;
+    if (!src) return clip.grade?.lut && setLut(null, 'Remove LUT');
+    try {
+      const table = await controller.luts.load(src);
+      setLut({ src, ...(strength !== undefined ? { strength } : {}), ...(table.title ? { name: table.title } : {}) }, 'Apply LUT');
+    } catch (e) {
+      localError = { text: e instanceof Error ? e.message : String(e), revision: editor.revision };
+    }
+  }
+  /** A `.cube` file read in place: its name becomes the `src`, so keep the file beside the export. */
+  async function loadLutFile(file: File | undefined) {
+    if (!file || !clip) return;
+    const strength = clip.grade?.lut?.strength;
+    try {
+      const table = controller.luts.set(file.name, await file.text());
+      setLut({ src: file.name, ...(strength !== undefined ? { strength } : {}), ...(table.title ? { name: table.title } : {}) }, 'Apply LUT');
+    } catch (e) {
+      localError = { text: `${file.name}: ${e instanceof Error ? e.message : String(e)}`, revision: editor.revision };
+    }
+  }
+  function lutStrength(raw: string) {
+    const lut = clip?.grade?.lut;
+    const n = Number(raw);
+    if (!lut || !raw.trim() || !Number.isFinite(n)) return;
+    // A strength of 0 changes nothing, so it takes the LUT off.
+    setLut(n > 0 ? { ...lut, strength: Math.min(1, n) } : null, n > 0 ? 'Change LUT strength' : 'Remove LUT');
   }
   function transitionAudioCurve(curve: string) {
     if (!clip?.transition) return;
@@ -186,6 +225,21 @@
           <span class="text-muted-foreground">{c.label}</span>
           <input class={input} type="number" min={c.min} max={c.max} step={c.step} placeholder="0" aria-label={c.label} {disabled} value={clip.grade?.[c.key] ?? ''} onchange={(e) => gradeValue(c, e.currentTarget.value)} data-field="grade.{c.key}" />
         {/each}
+        <span class="text-muted-foreground">LUT</span>
+        <div class="flex min-w-0 gap-1" data-field="grade.lut">
+          <input class={input} placeholder="look.cube" aria-label="LUT file" {disabled} value={clip.grade?.lut?.src ?? ''} onchange={(e) => chooseLut(e.currentTarget.value.trim())} />
+          <label class="{btn} cursor-pointer whitespace-nowrap" title="Load a .cube file">
+            Load
+            <input type="file" accept=".cube" class="sr-only" {disabled} aria-label="Load a .cube LUT" onchange={(e) => loadLutFile(e.currentTarget.files?.[0])} />
+          </label>
+          {#if clip.grade?.lut}
+            <button type="button" class={btn} {disabled} aria-label="Remove LUT" onclick={() => setLut(null, 'Remove LUT')}>✕</button>
+          {/if}
+        </div>
+        {#if clip.grade?.lut}
+          <span class="text-muted-foreground">LUT strength</span>
+          <input class={input} type="number" min="0" max="1" step="0.05" aria-label="LUT strength" {disabled} value={clip.grade.lut.strength ?? 1} onchange={(e) => lutStrength(e.currentTarget.value)} data-field="grade.lut.strength" />
+        {/if}
       {/if}
       {#if at?.track.kind === 'video'}
         {#each [{ key: 'animateIn', label: 'Animate in', change: 'Change entrance' }, { key: 'animateOut', label: 'Animate out', change: 'Change exit' }] as const as row (row.key)}

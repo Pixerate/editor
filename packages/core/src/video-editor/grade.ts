@@ -1,4 +1,5 @@
-import type { VideoGrade } from './types.js';
+import { applyVideoLut, videoLutSvgApproximation, type VideoLut } from './lut.js';
+import type { VideoGrade, VideoGradeLut } from './types.js';
 
 /**
  * Colour correction as a fixed series of colour-matrix steps on gamma-encoded sRGB, each clamped
@@ -9,8 +10,11 @@ import type { VideoGrade } from './types.js';
  */
 
 /** One slider of a grade: its range, default and step, for schemas, inspectors and clamping. */
+/** The numeric settings of a grade (everything but its LUT). */
+export type VideoGradeSetting = Exclude<keyof VideoGrade, 'lut'>;
+
 export interface VideoGradeControl {
-	key: keyof VideoGrade;
+	key: VideoGradeSetting;
 	label: string;
 	min: number;
 	max: number;
@@ -43,6 +47,14 @@ export const VIDEO_GRADE_PRESET_NAMES = Object.keys(VIDEO_GRADE_PRESETS) as Vide
 
 const clampTo = (c: VideoGradeControl, v: number) => Math.min(c.max, Math.max(c.min, v));
 
+/** A LUT setting with its strength clamped to 0–1 (and 1 left out); `undefined` without a `src` or at strength 0. */
+export function normalizeVideoGradeLut(lut: VideoGradeLut | undefined): VideoGradeLut | undefined {
+	if (!lut || typeof lut.src !== 'string' || !lut.src) return undefined;
+	const strength = typeof lut.strength === 'number' && Number.isFinite(lut.strength) ? Math.round(Math.min(1, Math.max(0, lut.strength)) * 1000) / 1000 : 1;
+	if (!strength) return undefined;
+	return { src: lut.src, ...(strength !== 1 ? { strength } : {}), ...(lut.name ? { name: lut.name } : {}) };
+}
+
 /** A grade with every value clamped to its range and zero values left out; `undefined` when nothing is left. */
 export function normalizeVideoGrade(grade: VideoGrade | undefined): VideoGrade | undefined {
 	if (!grade) return undefined;
@@ -51,15 +63,22 @@ export function normalizeVideoGrade(grade: VideoGrade | undefined): VideoGrade |
 		const v = grade[c.key];
 		if (typeof v === 'number' && Number.isFinite(v) && v !== 0) out[c.key] = Math.round(clampTo(c, v) * 1000) / 1000;
 	}
+	const lut = normalizeVideoGradeLut(grade.lut);
+	if (lut) out.lut = lut;
 	return Object.keys(out).length ? out : undefined;
 }
 
 /** A preset at `amount` (0–1, default 1) of its strength. */
 export function videoGradePreset(name: VideoGradePreset, amount = 1): VideoGrade | undefined {
-	const preset: VideoGrade = VIDEO_GRADE_PRESETS[name];
+	const preset: Omit<VideoGrade, 'lut'> = VIDEO_GRADE_PRESETS[name];
 	if (!preset) throw new Error(`There is no grade preset "${name}"; the presets are ${VIDEO_GRADE_PRESET_NAMES.join(', ')}.`);
 	const k = Math.min(1, Math.max(0, amount));
 	return normalizeVideoGrade(Object.fromEntries(Object.entries(preset).map(([key, v]) => [key, (v as number) * k])));
+}
+
+/** A preset look on a grade, keeping the grade's LUT (a look replaces only the settings). */
+export function videoGradeLook(current: VideoGrade | undefined, name: VideoGradePreset, amount = 1): VideoGrade | undefined {
+	return normalizeVideoGrade({ ...videoGradePreset(name, amount), ...(current?.lut ? { lut: current.lut } : {}) });
 }
 
 /** One step of a grade. */
@@ -134,12 +153,21 @@ export function videoGradeStepMatrix(step: VideoGradeStep): number[][] {
 	}
 }
 
-/** An RGB colour (0–255 each) through a grade, as the preview and export draw it. */
-export function applyVideoGrade(grade: VideoGrade | undefined, rgb: readonly [number, number, number]): [number, number, number] {
+/**
+ * An RGB colour (0–255 each) through a grade, as the preview and export draw it. A grade's LUT is
+ * applied when its table is passed as `lut` (else it is left out).
+ */
+export function applyVideoGrade(grade: VideoGrade | undefined, rgb: readonly [number, number, number], lut?: VideoLut | null): [number, number, number] {
 	let v = rgb.map((x) => x / 255);
 	for (const step of videoGradeSteps(grade)) {
 		const m = videoGradeStepMatrix(step);
 		v = m.map((row) => Math.min(1, Math.max(0, row[0] * v[0] + row[1] * v[1] + row[2] * v[2] + row[3])));
+	}
+	const setting = normalizeVideoGradeLut(grade?.lut);
+	if (setting && lut) {
+		const out = applyVideoLut(lut, v as [number, number, number]);
+		const s = setting.strength ?? 1;
+		v = v.map((x, k) => x + (out[k] - x) * s);
 	}
 	return v.map((x) => Math.round(x * 255)) as [number, number, number];
 }
@@ -154,10 +182,31 @@ export function videoGradeStepSvgValues(step: VideoGradeStep): string {
 		.join(' ');
 }
 
-/** An SVG `<filter>` applying a grade, steps in order (each clamps, as CSS filters do). */
-export function videoGradeSvgFilter(id: string, grade: VideoGrade | undefined): string {
+/**
+ * SVG filter primitives approximating a LUT (see `videoLutSvgApproximation`) on the result of the
+ * primitives before them, mixed with it by `strength`.
+ */
+export function videoLutSvgPrimitives(lut: VideoLut, strength = 1): string {
+	const { tables, matrix } = videoLutSvgApproximation(lut);
+	const table = (k: number) => tables[k].map(fmt).join(' ');
+	const values = matrix.map((row) => [row[0], row[1], row[2], 0, row[3]].map(fmt).join(' ')).concat('0 0 0 1 0').join(' ');
+	const s = Math.min(1, Math.max(0, strength));
+	return (
+		'<feComponentTransfer result="lutIn"><feFuncA type="identity"/></feComponentTransfer>' +
+		`<feComponentTransfer><feFuncR type="table" tableValues="${table(0)}"/><feFuncG type="table" tableValues="${table(1)}"/><feFuncB type="table" tableValues="${table(2)}"/></feComponentTransfer>` +
+		`<feColorMatrix type="matrix" values="${values}"/>` +
+		(s < 1 ? `<feComposite in2="lutIn" operator="arithmetic" k1="0" k2="${fmt(s)}" k3="${fmt(1 - s)}" k4="0"/>` : '')
+	);
+}
+
+/**
+ * An SVG `<filter>` applying a grade, steps in order (each clamps, as CSS filters do). With the
+ * grade's LUT table (`lut`), an approximation of it follows (SVG has no 3D tables).
+ */
+export function videoGradeSvgFilter(id: string, grade: VideoGrade | undefined, lut?: VideoLut | null): string {
 	const steps = videoGradeSteps(grade);
-	return `<filter id="${id}" color-interpolation-filters="sRGB" x="0" y="0" width="100%" height="100%">${steps.map((s) => `<feColorMatrix type="matrix" values="${videoGradeStepSvgValues(s)}"/>`).join('')}</filter>`;
+	const setting = normalizeVideoGradeLut(grade?.lut);
+	return `<filter id="${id}" color-interpolation-filters="sRGB" x="0" y="0" width="100%" height="100%">${steps.map((s) => `<feColorMatrix type="matrix" values="${videoGradeStepSvgValues(s)}"/>`).join('')}${setting && lut ? videoLutSvgPrimitives(lut, setting.strength) : ''}</filter>`;
 }
 
 /** Id of the SVG filter for a white-balance step: the same gains always get the same id. */

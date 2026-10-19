@@ -1,7 +1,8 @@
 import type { VideoEdit } from './edit.js';
+import { normalizeVideoGrade } from './grade.js';
 import { isVideoKeyframes, removeVideoKey, setVideoKey, VIDEO_KEYFRAME_LIMITS, VIDEO_TRANSFORM_PROPERTIES, videoValueAt, type VideoAnimatable, type VideoKeyframeProperty } from './keyframes.js';
 import { findVideoClip, formatVideoTimecode, videoClipEnd, videoClipSpeed, videoAssetMap, videoAssetHasSound } from './timeline.js';
-import type { VideoClipAnimationEffect, VideoTransitionType, VideoAsset, VideoAssetKind, VideoBlendMode, VideoClip, VideoFadeCurve, VideoPlacementMode, VideoProject } from './types.js';
+import type { VideoClipAnimationEffect, VideoTransitionType, VideoAsset, VideoAssetKind, VideoBlendMode, VideoClip, VideoFadeCurve, VideoGradeLut, VideoPlacementMode, VideoProject } from './types.js';
 
 // Framework-free helpers the React and Svelte timelines share, so both draw and drag alike.
 
@@ -358,4 +359,21 @@ export function videoKeyframeToggleEdit(project: VideoProject, clipId: string, p
 	}
 	const v = videoValueAt(prop, t, fallback);
 	return { op: 'set_keyframes', clip: clipId, property, keys: isVideoKeyframes(prop) ? setVideoKey(prop, { t, v }, fallback).keys : [{ t, v }] };
+}
+
+/**
+ * Edits giving clips a grade LUT (keeping their other grade settings), or taking it off with
+ * `null`. Clips without a grade change are left out; one `controller.apply` makes it one undo step.
+ */
+export function videoLutEdits(project: VideoProject, clips: readonly string[], lut: VideoGradeLut | null): VideoEdit[] {
+	const edits: VideoEdit[] = [];
+	for (const id of clips) {
+		const at = findVideoClip(project, id);
+		if (!at) continue;
+		const { lut: current, ...rest } = at.clip.grade ?? {};
+		if (!lut && !current) continue;
+		const grade = normalizeVideoGrade(lut ? { ...rest, lut } : rest);
+		edits.push(grade ? { op: 'update_clip', clip: id, set: { grade } } : { op: 'update_clip', clip: id, remove: ['grade'] });
+	}
+	return edits;
 }
