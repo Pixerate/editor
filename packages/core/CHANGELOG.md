@@ -1,5 +1,12 @@
 # @pixerate/editor
 
+## 0.112.0
+
+### Minor Changes
+
+- 84adf61: Open and save Photoshop shape and type layers as live layers. PSD import reads shape layers' paths (`vsms` / `vmsk`, with Photoshop's path operations and inverted shapes), fills (`vscg` or `SoCo` / `GdFl` / `PtFl`), strokes (`vstk`) and live rectangles, rounded rectangles, ellipses and lines (`vogk`), and type layers' `TySh` (text, character and paragraph runs from the EngineData, point or box frame, transform); type keeps Photoshop's pixels until it is edited, and `loadPsd` warns about fonts the text shaper lacks. PSD export writes shape and type layers as Photoshop shape and type layers, writing the blocks read from a file back byte for byte while a layer is unchanged and patching the file's EngineData when text changes.
+- 1069f21: Shape and type tools in the React and Svelte image editors. `<ImageEditor>` gains a Shape tool (drag to draw live rectangles, ellipses, polygons, stars and lines; Shift for squares, circles and 45° lines, Alt from the centre) and a Type tool (click for point text, drag for a paragraph box, click existing text to edit it on the canvas with a caret, selection, arrow keys, Backspace / Delete, Enter, Cmd/Ctrl+A and IME input; Esc finishes). New `<ShapeOptionsBar>` (kind, fill, stroke, width, radius, sides, points, line weight and arrowhead; edits the active shape too) and `<TypeOptionsBar>` (font from the editor's fonts, size, bold, italic, colour, alignment; styles the selection while editing). `<LayersPanel>` shows thumbnails with a badge for shape and type layers and warns about missing fonts. Core adds the shared logic (`ShapeDrawGesture`, `applyShapeOptions`, `TypeToolGesture`, `TextEditSession`, `typeLayerAt`, `layerHasThumbnail`, `layerWarning`), the `shape` and `type` tools and the renderer's `textEdit` overlay. The demo's Image tab adds a poster agent script.
+
 ## 0.111.0
 
 ### Minor Changes
