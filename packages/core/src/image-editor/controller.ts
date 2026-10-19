@@ -168,6 +168,21 @@ import { base64ToBytes, bytesToBase64, decodePng, isPng, parseDataUrl } from '..
 import { getAnnotationBounds } from './geometry';
 import { importPsd, type PsdImportResult } from './psd/import';
 import { exportPsd } from './psd/export';
+import { FreeTransformSession, type FreeTransformHost, type FreeTransformInit, type FreeTransformResult } from './free-transform';
+import {
+  applyParams,
+  cornersFromMatrix,
+  flipCorners,
+  identityTransform,
+  isValidWarp,
+  presetWarp,
+  type AffineMatrix,
+  type Quad,
+  type TransformParams,
+  type WarpMesh,
+  type WarpPreset,
+} from './transform';
+import { WARP_STYLES } from '../geom/warp';
 import type { EffectPattern } from '../raster/effects/patterns';
 import { DEFAULT_GLOBAL_LIGHT, effectsMargin, type GlobalLight, type LayerEffect, type LayerEffectKind, type LayerEffects } from '../raster/effects/model';
 
@@ -1432,7 +1447,7 @@ export class ImageEditorController {
     });
   }
 
-  /** Changes any layer mask's density, feather or enabled flag (pixels kept). Returns the mask. */
+  /** Changes any layer mask's density, feather, enabled or linked flag (pixels kept). Returns the mask. */
   public setLayerMaskProps(id: string, props: LayerMaskProps, commitToHistory = true): RasterMask {
     const layer = requireLayer(this.state.layers, id).layer;
     if (!layer.mask) throw new LayerOperationError(`Layer "${layer.name || id}" has no mask; add one with add_layer_mask.`);
@@ -1525,6 +1540,144 @@ export class ImageEditorController {
       this.state.activeTarget = 'pixels';
     });
     return copy.id;
+  }
+
+  // --- Free Transform ---
+
+  private openTransform: FreeTransformSession | null = null;
+
+  /** The Free Transform in progress (see `beginFreeTransform`), or `null`. */
+  public getFreeTransform(): FreeTransformSession | null {
+    if (this.openTransform && !this.openTransform.isOpen) this.openTransform = null;
+    return this.openTransform;
+  }
+
+  private transformHost(): FreeTransformHost {
+    return {
+      layers: () => this.state.layers,
+      activeLayerId: () => this.state.activeLayerId,
+      activeTarget: () => this.state.activeTarget,
+      selection: () => (this.state.selection?.bounds ? this.state.selection : null),
+      canvas: () => this.naturalSize,
+      pixelsOf: (layer) => this.surfaceOf(layer),
+      capture: () => this.captureHistoryEntry(),
+      show: (layers, selection, active) => {
+        this.state.layers = layers;
+        this.state.selection = selection;
+        if (active !== this.state.activeLayerId) {
+          this.state.activeLayerId = active;
+          this.state.activeTarget = 'pixels';
+        }
+        this.notify();
+      },
+      record: (before) => {
+        if (this.isApplyingHistory) return;
+        this.undoStack.push(before as HistoryEntry);
+        if (this.undoStack.length > this.maxHistoryDepth) this.undoStack.shift();
+        this.redoStack = [];
+        this.trimHistoryBytes();
+        this.notify();
+      },
+      restore: (before) => {
+        const e = before as HistoryEntry;
+        this.state.layers = e.layers;
+        this.state.selection = e.selection;
+        this.state.activeLayerId = e.activeLayerId;
+        this.state.activeTarget = e.activeTarget;
+        this.notify();
+      },
+    };
+  }
+
+  /**
+   * Starts a Free Transform (Edit › Free Transform, Transform Selection, or a transform of a Layer
+   * via Copy): of the layer's pixels with its linked mask, an unlinked mask alone, the selected
+   * pixels or just the selection outline (see `FreeTransformInit`). Change the geometry with
+   * `session.update` (live preview, no history), then `commit()` (one undo step) or `cancel()`.
+   * Refused while another transform is open.
+   */
+  public beginFreeTransform(init: FreeTransformInit = {}): FreeTransformSession {
+    if (this.getFreeTransform()) throw new LayerOperationError('A Free Transform is already open; commit or cancel it first.');
+    const session = new FreeTransformSession(this.transformHost(), init);
+    this.openTransform = session;
+    this.notify();
+    return session;
+  }
+
+  /**
+   * Transforms in one step (agents, scripts): begins a Free Transform for `spec`, sets its corners
+   * from exactly one of `matrix` (document-space affine), `corners` (where the frame's corners go:
+   * distort / perspective) or `params` (scale, rotate, skew and move about a reference point), and
+   * commits it as one undo step. Returns what changed and the new bounds.
+   */
+  public transformLayer(spec: FreeTransformInit & { matrix?: AffineMatrix; corners?: Quad; params?: TransformParams; warp?: WarpMesh | WarpPreset | null }): FreeTransformResult {
+    const given = [spec.matrix, spec.corners, spec.params].filter((v) => v !== undefined).length;
+    if (given > 1) throw new LayerOperationError('Give only one of matrix, corners and params.');
+    if (!given && spec.warp === undefined) throw new LayerOperationError('Give matrix, corners or params (or a warp).');
+    if (spec.matrix && !(Array.isArray(spec.matrix) && spec.matrix.length === 6 && spec.matrix.every(Number.isFinite))) {
+      throw new LayerOperationError('matrix must be six finite numbers [a, b, c, d, e, f] (x\' = a·x + c·y + e, y\' = b·x + d·y + f).');
+    }
+    if (spec.matrix) {
+      const [a, b, c, d] = spec.matrix;
+      if (Math.abs(a * d - b * c) < 1e-9) throw new LayerOperationError('matrix is singular (it collapses the layer to a line); its determinant a·d − b·c must not be 0.');
+    }
+    const session = this.beginFreeTransform(spec);
+    try {
+      const g = identityTransform(session.box);
+      const corners = spec.matrix ? cornersFromMatrix(session.box, spec.matrix) : spec.corners ? spec.corners : spec.params ? applyParams(g, spec.params) : g.corners;
+      let warp: WarpMesh | null = null;
+      if (spec.warp) {
+        if ('style' in spec.warp) {
+          if (!WARP_STYLES.includes(spec.warp.style)) throw new LayerOperationError(`Unknown warp style "${String(spec.warp.style)}". Styles: ${WARP_STYLES.join(', ')}.`);
+          warp = presetWarp(session.box, spec.warp);
+        } else {
+          if (!isValidWarp(spec.warp)) throw new LayerOperationError('mesh must have us and vs (knots from 0 to 1, increasing) and (3·columns + 1) × (3·rows + 1) finite points, row by row.');
+          warp = spec.warp;
+        }
+      }
+      session.update({ corners, warp }, false);
+      return session.commit();
+    } catch (e) {
+      session.cancel();
+      throw e;
+    }
+  }
+
+  /** Flips the layer (or its selected pixels, or the outline) about the frame's centre, exactly (one undo step). */
+  public flipLayer(axis: 'horizontal' | 'vertical', init: FreeTransformInit = {}): FreeTransformResult {
+    if (axis !== 'horizontal' && axis !== 'vertical') throw new LayerOperationError(`axis must be horizontal or vertical, got "${String(axis)}".`);
+    const session = this.beginFreeTransform({ interpolation: 'nearest', ...init });
+    try {
+      session.update({ corners: flipCorners(identityTransform(session.box), axis) }, false);
+      return session.commit();
+    } catch (e) {
+      session.cancel();
+      throw e;
+    }
+  }
+
+  /**
+   * Rotates by a quarter turn (90 clockwise, −90 counter-clockwise) or 180 about the frame's
+   * centre, snapped so pixels land on whole pixels: exact, no resampling (one undo step).
+   */
+  public rotateLayer90(turn: 90 | -90 | 180, init: FreeTransformInit = {}): FreeTransformResult {
+    if (turn !== 90 && turn !== -90 && turn !== 180) throw new LayerOperationError(`turn must be 90, -90 or 180, got ${String(turn)}.`);
+    const session = this.beginFreeTransform({ interpolation: 'nearest', ...init });
+    try {
+      const b = session.box;
+      // About the centre, rounded so an odd-by-even box still lands on the pixel grid.
+      const cx = b.x + b.width / 2;
+      const cy = b.y + b.height / 2;
+      const ox = turn === 180 ? 0 : Math.round(cx - b.height / 2) - (cx - b.height / 2);
+      const oy = turn === 180 ? 0 : Math.round(cy - b.width / 2) - (cy - b.width / 2);
+      const m: AffineMatrix =
+        turn === 90 ? [0, 1, -1, 0, cx + cy + ox, cy - cx + oy] : turn === -90 ? [0, -1, 1, 0, cx - cy + ox, cy + cx + oy] : [-1, 0, 0, -1, 2 * cx, 2 * cy];
+      session.update({ corners: cornersFromMatrix(b, m) }, false);
+      return session.commit();
+    } catch (e) {
+      session.cancel();
+      throw e;
+    }
   }
 
   /** Adds a `develop` or `blur` filter to a pixel layer (one undo step). Returns the layer's filters. */
@@ -3466,6 +3619,10 @@ function withMaskProps(mask: RasterMask, props: LayerMaskProps): RasterMask {
   if (props.enabled !== undefined) {
     if (props.enabled) delete next.enabled;
     else next.enabled = false;
+  }
+  if (props.linked !== undefined) {
+    if (props.linked) delete next.linked;
+    else next.linked = false;
   }
   return next;
 }

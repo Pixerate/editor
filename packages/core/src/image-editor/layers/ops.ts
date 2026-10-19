@@ -7,6 +7,7 @@
 import type { BlendMode } from '../blend';
 import { isBlendMode } from '../blend';
 import type { CropBox } from '../types';
+import { translateSurface } from '../../raster/surface';
 import {
   defaultLayerEffect,
   isLayerEffectKind,
@@ -243,14 +244,20 @@ export function ungroupLayer(layers: readonly ImageLayer[], id: string): { layer
   return { layers: out, ids: group.children.map((c) => c.id) };
 }
 
-/** Sets a pixel layer's offset (refused when its position is locked). */
+/** Sets a pixel layer's offset (refused when its position is locked). An unlinked mask stays in place. */
 export function offsetLayer(layers: readonly ImageLayer[], id: string, offset: { x: number; y: number }): ImageLayer[] {
   const loc = requireLayer(layers, id);
   if (loc.layer.type !== 'pixel') fail(`Only pixel layers move; "${id}" is a ${loc.layer.type} layer.`);
   requireUnlocked(loc.layer, 'position', 'move it');
   if (!Number.isFinite(offset.x) || !Number.isFinite(offset.y)) fail('x and y must be numbers.');
   const layer = loc.layer as PixelLayer;
-  return mapLayer(layers, id, () => ({ ...layer, offset: { x: Math.round(offset.x), y: Math.round(offset.y) } }));
+  const next: PixelLayer = { ...layer, offset: { x: Math.round(offset.x), y: Math.round(offset.y) } };
+  const mask = layer.mask;
+  if (mask && mask.linked === false && !mask.source) {
+    // An unlinked mask stays where it is in the document, so it moves the other way in layer space.
+    next.mask = { ...mask, surface: translateSurface(mask.surface, layer.offset.x - next.offset.x, layer.offset.y - next.offset.y) };
+  }
+  return mapLayer(layers, id, () => next);
 }
 
 /** Sets or removes (`null`) a layer's mask. */

@@ -21,6 +21,7 @@ export function maskSummary(mask: RasterMask | undefined): Record<string, unknow
   const out: Record<string, unknown> = {
     kind: mask.source ? 'depth' : 'raster',
     enabled: mask.enabled !== false,
+    linked: mask.linked !== false,
     density: mask.density ?? 1,
     feather: mask.feather ?? 0,
   };
@@ -452,7 +453,8 @@ export function createImageLayerTools(controller: ImageEditorController): AgentT
   const maskProps: AgentTool = {
     name: 'set_layer_mask_properties',
     title: 'Set layer mask properties',
-    description: "Changes a layer mask's density (0..1), feather (px) or enabled flag; its pixels are kept. One undo step. Returns the mask summary.",
+    description:
+      "Changes a layer mask's density (0..1), feather (px), enabled flag or linked flag; its pixels are kept. An unlinked mask (linked false) stays in place when the layer is moved, transformed or warped; transform it alone with transform_layer target mask. One undo step. Returns the mask summary.",
     inputSchema: {
       type: 'object',
       properties: {
@@ -460,15 +462,21 @@ export function createImageLayerTools(controller: ImageEditorController): AgentT
         density: { type: 'number', minimum: 0, maximum: 1, description: 'Density 0..1.' },
         feather: { type: 'number', minimum: 0, maximum: 1000, description: 'Feather σ in px.' },
         enabled: { type: 'boolean', description: 'false ignores the mask but keeps it.' },
+        linked: { type: 'boolean', description: 'false unlinks the mask from the layer pixels (it stays put when they move or transform); true links it again.' },
       },
       required: ['layerId'],
       additionalProperties: false,
     },
     annotations: { title: 'Set layer mask properties', ...WRITE_IDEMPOTENT },
-    handler: ({ layerId, density, feather, enabled }) => {
+    handler: ({ layerId, density, feather, enabled, linked }) => {
       const id = exists(layerId);
-      if ([density, feather, enabled].every((v) => v === undefined)) throw new LayerOperationError('Give density, feather or enabled.');
-      const mask = controller.setLayerMaskProps(id, { density: density as number | undefined, feather: feather as number | undefined, enabled: enabled as boolean | undefined });
+      if ([density, feather, enabled, linked].every((v) => v === undefined)) throw new LayerOperationError('Give density, feather, enabled or linked.');
+      const mask = controller.setLayerMaskProps(id, {
+        density: density as number | undefined,
+        feather: feather as number | undefined,
+        enabled: enabled as boolean | undefined,
+        linked: linked as boolean | undefined,
+      });
       return { layerId: id, mask: maskSummary(mask) };
     },
   };

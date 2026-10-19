@@ -40,6 +40,8 @@ export interface SerializedRasterMask {
   density?: number;
   feather?: number;
   enabled?: boolean;
+  /** `false`: unlinked from the layer's pixels. */
+  linked?: boolean;
   source?: DepthMaskOptions;
 }
 
@@ -228,6 +230,7 @@ function serializeMask(mask: RasterMask, hint: string, ctx: SerializeContext): S
   if (mask.density !== undefined && mask.density !== 1) out.density = mask.density;
   if (mask.feather) out.feather = mask.feather;
   if (mask.enabled === false) out.enabled = false;
+  if (mask.linked === false) out.linked = false;
   return out;
 }
 
@@ -419,6 +422,7 @@ function readMask(raw: unknown, ctx: DeserializeContext, what: string): RasterMa
   if (typeof r.density === 'number' && r.density !== 1) mask.density = num(r.density, 0, 1, 1);
   if (typeof r.feather === 'number' && r.feather > 0) mask.feather = num(r.feather, 0, 1000, 0);
   if (r.enabled === false) mask.enabled = false;
+  if (r.linked === false) mask.linked = false;
   if (r.source && typeof r.source === 'object') {
     const s = { ...DEFAULT_DEPTH_MASK_VALUES, ...(r.source as Partial<DepthMaskOptions>) };
     mask.source = { ...s, depthRange: [...s.depthRange] as [number, number] };

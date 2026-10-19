@@ -37,6 +37,8 @@ export const CHANNEL_REAL_USER_MASK = -3;
 
 export const LAYER_FLAG_TRANSPARENCY_PROTECTED = 1;
 export const LAYER_FLAG_HIDDEN = 2;
+/** Mask flag bit 0, "position relative to layer": Photoshop sets it when the mask is unlinked (photocraft reads it so). */
+export const MASK_FLAG_UNLINKED = 1;
 export const MASK_FLAG_DISABLED = 2;
 export const MASK_FLAG_PARAMETERS = 16;
 

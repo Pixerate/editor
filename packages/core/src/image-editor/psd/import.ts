@@ -18,6 +18,7 @@ import {
   COLOR_MODES,
   LAYER_FLAG_HIDDEN,
   MASK_FLAG_DISABLED,
+  MASK_FLAG_UNLINKED,
   SECTION_CLOSED,
   type PsdFile,
   type PsdLayerRecord,
@@ -242,6 +243,7 @@ function recordMask(ctx: Ctx, rec: PsdLayerRecord, name: string): RasterMask | u
   if (m.userDensity !== undefined && m.userDensity < 255) mask.density = percent(m.userDensity);
   if (m.userFeather !== undefined && m.userFeather > 0) mask.feather = Math.min(1000, m.userFeather);
   if (flags & MASK_FLAG_DISABLED) mask.enabled = false;
+  if (flags & MASK_FLAG_UNLINKED) mask.linked = false;
   return mask;
 }
 

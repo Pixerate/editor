@@ -1966,3 +1966,33 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: In the demo's Image tab, an inner glow or inner stroke on the Background showed on the top and left edges only. The new effects section was also missing until the packages were rebuilt.
 - **Root Cause**: The sample photo opens with a freeform crop over part of the image, so the right and bottom edges in view are the crop's, not the layer's, and effects are drawn at the layer's edges. Separately, the demo imports `@pixerate/editor-react` and `@pixerate/editor` from their `dist`, so a running dev server shows the last build.
 - **Solution / Workaround**: Clear the crop (Transform & Crop › Clear Crop) before judging effects at the image edges. Run `pnpm --filter @pixerate/editor --filter @pixerate/editor-react build` and reload after changing the packages.
+
+### [core/raster] Free Transform Previews Are Bound by Writing Pixels, Not by Sampling
+
+- **Issue / Symptom**: Dragging a Free Transform handle on a 4000 × 3000 layer took 200–700 ms per update even with one sample per 4 × 4 block, so the preview lagged far behind the pointer.
+- **Root Cause**: Each update read the full-resolution source into float windows for every destination tile, and then copied each block sample into the output with small `TypedArray.fill` calls (about three million per update). Sampling itself was a small part of the cost.
+- **Solution / Workaround**: A `FreeTransformSession` keeps a box-reduced copy of each moving surface per preview factor (`reduceSurface`) and transforms that through the map composed with the scale, so a preview at 25 % reads a sixteenth of the pixels. `transformSurface` with `step` samples one block row first, then writes packed 32-bit pixels down the block rows. The mesh warp rasterizes only each block's first pixel when previewing. Commit always resamples the full source at full quality. Measure with `RASTER_TRANSFORM_BENCH=1` (`tests/raster-transform.bench.test.ts`).
+
+### [core/raster] The Raster Module May Import Only Itself and `src/geom`
+
+- **Issue / Symptom**: `raster-module.test.ts` rejected `raster/transform.ts` for importing the homography maths.
+- **Root Cause**: The isolation test allowed only relative imports inside `src/raster`. The projective maps and warp meshes live in `src/geom`, shared by the vector editor, the image editor and the raster resampler.
+- **Solution / Workaround**: The test also accepts imports that resolve into `src/geom`, and checks that `src/geom` imports nothing but itself. Keep `src/geom` free of DOM and editor imports. The vector modules re-export the moved functions under their old `vector…` names, so their API is unchanged.
+
+### [core/image-editor] Layer Pixels and Masks Are in Layer Space, So a Transform Must Be Conjugated by the Offset
+
+- **Issue / Symptom**: A layer moved with `offset_layer` jumped when it was transformed, and an unlinked mask moved with its layer.
+- **Root Cause**: A pixel layer's surface and its mask are stored in layer space (document = layer + `offset`). The transform's frame and corners are in document pixels.
+- **Solution / Workaround**: `FreeTransformSession` resamples each part through `T(offset) · H · T(−offset)` and keeps the offset. `offsetLayer` translates an unlinked mask (`linked: false`) by the opposite move, so it stays where it is in the document. Tests reading pixels must subtract the layer's offset (`pixelAt` in `tests/image-free-transform.test.ts`).
+
+### [core/raster] A Mesh Warp Has No Anti-Aliased Fringe at the Source Edge
+
+- **Issue / Symptom**: The same affine map through `warpSurface` and `transformSurface` differed by up to 255 at the result's border.
+- **Root Cause**: `transformSurface` samples up to a pixel past the source rectangle, so the edge pixels are partly covered. `warpSurface` (ported from photocraft) rasterizes triangles of the forward-mapped grid and only fills pixels whose centres fall inside them.
+- **Solution / Workaround**: Expected: compare the two only where both are opaque. A warp's edge is a little harder than a transform's.
+
+### [core/image-editor] PSD Mask Flag Bit 0 Means "Unlinked"
+
+- **Issue / Symptom**: Photoshop's mask link (the chain icon) had no field in our model, so an unlinked mask came back linked after a round trip.
+- **Root Cause**: The PSD layer-mask flags document bit 0 as "position relative to layer". Photoshop sets it when the mask is unlinked; photocraft reads `linked = flags & 1 == 0`.
+- **Solution / Workaround**: `RasterMask.linked === false` maps to `MASK_FLAG_UNLINKED` on import and export, and to `linked: false` in saved documents. Missing means linked.

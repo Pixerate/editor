@@ -41,6 +41,11 @@ export interface RasterMask<Source = unknown> {
   feather?: number;
   /** `false` keeps the mask but ignores it. */
   enabled?: boolean;
+  /**
+   * `false` unlinks the mask from its layer (Photoshop's chain icon): moving or transforming the
+   * layer's pixels leaves the mask where it is. Missing = linked.
+   */
+  linked?: boolean;
   source?: Source;
 }
 
@@ -61,7 +66,7 @@ export interface RasterLayerBase {
 
 export interface RasterPixelLayer extends RasterLayerBase {
   type: 'pixel';
-  /** Pixels in layer space; document position = layer position + `offset`. A mask moves with it. */
+  /** Pixels in layer space; document position = layer position + `offset`. A linked mask moves with it. */
   surface: PixelSurface;
   /** Integer move without re-tiling. */
   offset: { x: number; y: number };

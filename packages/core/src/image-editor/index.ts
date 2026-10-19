@@ -15,6 +15,7 @@ export * from './selection';
 export * from './selection-tools';
 export * from './edit-tools';
 export * from './layer-tools';
+export * from './transform-tools';
 export * from './effect-tools';
 export * from './mosaic-filter';
 export * from './capture';
@@ -37,3 +38,37 @@ export * from './paint-tools';
 export * from './layers/paint-ui';
 export * from './psd';
 export * from './psd-tools';
+export * from './transform';
+export * from './free-transform';
+export {
+  transformSurface,
+  warpSurface,
+  reduceSurface,
+  compositeSurfaceOver,
+  transformedBounds,
+  keysWeight,
+  INTERPOLATIONS,
+  isInterpolation,
+  MAX_TRANSFORM_PIXELS,
+  TransformTooLargeError,
+  type Interpolation,
+  type ResampleOptions,
+} from '../raster/transform';
+export {
+  rectToQuad,
+  homographyFromPoints,
+  applyHomography,
+  invertHomography,
+  homographyFromAffine,
+  boxQuad,
+  identityWarpMesh,
+  evalWarpMesh,
+  warpPresetMesh,
+  warpMeshEditPoints,
+  warpMeshGridCurves,
+  dragWarpMeshPoint,
+  pullWarpMesh,
+  warpMeshParamAt,
+  resizeWarpMesh,
+  WARP_STYLE_LABELS,
+} from '../geom';

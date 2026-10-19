@@ -1,6 +1,6 @@
 ---
 name: pixerate-image-editor
-description: How to colour-correct, composite and retouch a photo in the Pixerate image editor through its agent tools - layers (pixel, adjustment, group and annotation layers with masks, clipping, blend modes, opacity and fill; merge, flatten, layer via copy, filters), live layer effects (shadows, glows, bevel and emboss, satin, overlays, strokes), base adjustments (exposure, contrast, white balance, saturation, blur), adjustment layers (curves, levels, hue/saturation, vibrance, color balance, black and white, photo filter, invert, posterize, threshold), selections (wand, color range, grow, shrink, feather, refine edge) and layer masks, crop, rotate, flip, Mixer Brush, undo, PSD, histogram and PNG previews. Use when asked to edit, grade, correct, brighten, warm up, crop, straighten or mask an image, add a shadow, glow or outline, or open or save a PSD, or when get_adjustments, set_adjustments, add_adjustment_layer, list_layers, add_layer_effect, paint_stroke, select_by_color, import_psd or render_preview are available.
+description: How to colour-correct, composite and retouch a photo in the Pixerate image editor through its agent tools - layers (pixel, adjustment, group and annotation layers with masks, clipping, blend modes, opacity and fill; merge, flatten, layer via copy, filters), live layer effects (shadows, glows, bevels, satin, overlays, strokes), base adjustments (exposure, contrast, white balance, saturation, blur), adjustment layers (curves, levels, hue/saturation, vibrance, color balance, black and white and more), selections (wand, color range, modify, refine edge) and masks, Free Transform (scale, rotate, skew, distort, warp), crop, rotate, flip, Mixer Brush, undo, PSD, histogram and previews. Use when asked to edit, grade, correct, brighten, crop, straighten or mask an image, add a shadow, glow or outline, transform or warp a layer, or open or save a PSD, or when get_adjustments, set_adjustments, list_layers, add_layer_effect, transform_layer, paint_stroke, select_by_color, import_psd or render_preview are available.
 ---
 
 # Image editor
@@ -66,6 +66,27 @@ batching.
    `offset_layer`.
 5. **Bake only when asked** (`merge_down`, `merge_visible`, `flatten_image`, `apply_layer_mask`):
    they are destructive. `render_preview` with `layerId` shows one layer alone.
+
+### Free Transform
+
+1. **Read the frame first**: `get_transform_frame` says what a transform would move (`content`,
+   `moved`) and its `frame` (document bounds of the content) with its corners. Every transform
+   works on that frame: the numeric fields are percent of it and turn about one of its anchors.
+2. **Pick what moves** with `content`: `layer` (all its pixels and a linked mask), `selection`
+   (only the selected pixels, committed back into the same layer; the hole they leave is
+   transparent and the outline moves with them), `selection-copy` (Layer via Copy, then the copy
+   is transformed on a new layer; the original stays) or `auto` (selection when something is
+   selected). `channel: "mask"` moves an unlinked mask alone; `transform_selection` moves only
+   the outline.
+3. **Choose the tool by the change**: `transform_layer` with `scaleX` / `scaleY` (percent),
+   `rotate`, `skewX` / `skewY` (degrees), `dx` / `dy` and a `reference` anchor for scale, rotate
+   and skew; `corners` for Distort (each corner free) and Perspective (move two corners
+   symmetrically: the top pair in by the same amount narrows the top); `matrix` when you have one;
+   `warp_layer` for a preset bend (`style`, `bend`, `horizontal`, `vertical`) or a custom `mesh`;
+   `flip_layer` and `rotate_layer_90` for exact flips and quarter turns.
+4. **Transform once.** Every call resamples the pixels, so chained calls soften them: put scale,
+   rotation and move into one `transform_layer` call (or one matrix) instead of several.
+5. **Look**: `render_preview`, or `capture_view` at the edges; each call is one undo step.
 
 ### Layer effects
 
@@ -193,6 +214,16 @@ batching.
   layer `opacity` fades the effects too.
 - **Prefer an effect over painted pixels** for shadows, glows, outlines and colour fills of a
   shape: it follows later edits and stays adjustable.
+- **Transforms: one resample, bicubic, whole pixels when you can.** Combine a scale, rotation and
+  move into one `transform_layer` call; use `rotate_layer_90` / `flip_layer` (exact) instead of
+  `rotate: 90` or `scaleX: -100`. `interpolation: "nearest"` keeps hard pixel art crisp; bicubic
+  (default) is right for photos, bilinear is a little softer. Enlarging past about 200 % shows
+  softness: prefer a larger source.
+- **Scale proportionally** unless asked to stretch: give `scaleX` and `scaleY` the same value.
+  Keep the subject in frame: after a scale about `center` the layer can run past the canvas,
+  which `bounds` in the result shows.
+- **Unlink a mask** (`set_layer_mask_properties` `linked: false`) when the pixels should move
+  under a fixed mask (a picture inside a frame); link it again afterwards.
 - **Merge Down only onto an opaque, 100 % lower layer** when the result must look the same:
   the merged layer keeps the lower layer's opacity and blend, so a faded lower layer fades the
   merged content too, and a blend mode on the upper layer stops seeing what was below the lower
@@ -214,6 +245,7 @@ batching.
 | `render_preview` | See the edited image (crop, adjustments, layers, annotations) as a PNG, or with `layerId` one layer alone. `maxSide` 16..2048 px, default 512. Images cost tokens: render after a group of edits, use 512 for overall look and 1024+ to judge clipping, edges and masks. Fails in environments without rendering. |
 | `inspect_psd` | Read a PSD / PSB (`data` base64) without opening it: size, `depth`, `colorMode`, `resolution`, every layer bottom first with `psdKind`, the `type` it would become and `status` (`mapped`, `approximated`, `dropped`) with `notes`, and the import `warnings`. Call before `import_psd`. |
 | `export_psd` | Save the document as an 8-bit RGB PSD (PSB above 30000 px) with layers, groups, adjustment layers and masks. Returns `data` (base64), `size` in bytes, `psb` and `warnings` (crop or rotation not applied, filters and depth masks baked, annotations rasterized or left out, Pigment blends written as Normal). Changes nothing. |
+| `get_transform_frame` | Before a transform: what it would move (`content`, `moved`: pixels, mask, selection), its `frame` (document bounds of the content), `corners` (top-left, top-right, bottom-right, bottom-left) and `center`. `meshColumns` / `meshRows` also return an identity warp `mesh` over the frame to edit for `warp_layer`. Changes nothing. |
 | `capture_view` | Inspect detail in natural image pixels (the space of `get_selection` and `select_region`, before crop and rotation): `region` `content` (whole image, default), `selection` or `rect`; small regions are enlarged up to 8× with hard pixel edges, so a 64 px rect shows real pixels. `includeOverlays: true` shades unselected pixels and outlines the crop: use it to check a mask's edge before `apply_selection_as_mask`. Returns the `rect` and `scale`. Use `render_preview` for the final framed result. |
 
 ### Write
@@ -247,9 +279,14 @@ batching.
 | `merge_down` | Composite a layer onto the pixel layer below it (masks, fill and filters baked). Destructive; see Best practices. Returns the merged layer. |
 | `merge_visible` | Composite all visible top-level layers into one layer; hidden ones stay. Destructive. |
 | `flatten_image` | Composite everything visible into one Background; hidden layers are discarded. Destructive; do it only when asked. |
-| `offset_layer` | Move a pixel layer and its mask to `x`, `y` or by `dx`, `dy` (integers, document px). Refused when its position is locked. Returns the offset and bounds. |
+| `offset_layer` | Move a pixel layer and its linked mask to `x`, `y` or by `dx`, `dy` (integers, document px; an unlinked mask stays put). Refused when its position is locked. Returns the offset and bounds. |
+| `transform_layer` | Free Transform a pixel layer (with its linked mask), the selected pixels (`content` `selection`), a copy of them on a new layer (`selection-copy`) or an unlinked mask (`channel` `mask`). Give the transform one way: `scaleX` / `scaleY` (percent), `rotate`, `skewX` / `skewY` (degrees), `dx` / `dy` (px) about `reference` (an anchor or `{x, y}`, default `center`); or `matrix` `[a, b, c, d, e, f]`; or `corners` (the frame's new corners: distort / perspective, kept convex). `interpolation` nearest, bilinear or bicubic (default). One undo step. Returns `layerId` (the new layer for a copy), `moved`, `frame`, `corners` and the new `bounds`. |
+| `warp_layer` | Warp the same targets as `transform_layer` through a preset (`style` arc … twist, `bend` −100..100 default 50, `horizontal` / `vertical` distortion, `orientation`) or a `mesh` (`columns`, `rows`, (3·columns + 1) × (3·rows + 1) `points` in document px; start from `get_transform_frame`'s identity mesh). One undo step. Returns the new `bounds`. |
+| `transform_selection` | Transform only the selection outline (Transform Selection): the same numeric fields, `matrix` or `corners` as `transform_layer`, over the selection's bounds. Pixels do not change. Needs a selection. Returns the new selection `bounds`. |
+| `flip_layer` | Mirror a pixel layer, its selected pixels or a copy (`content`) `horizontal` or `vertical` about the frame's centre, exactly. For the whole image use `flip_image`. Returns the new `bounds`. |
+| `rotate_layer_90` | Turn a pixel layer, its selected pixels or a copy by `turn` 90 (clockwise), -90 or 180 about the frame's centre, landing on whole pixels (no resampling). For the whole image use `set_rotation`. Returns the new `bounds`. |
 | `add_layer_mask` | Mask any layer `from` `reveal-all`, `hide-all` or `selection`, with optional `density` / `feather`. Replaces an existing mask. Returns the mask summary. |
-| `set_layer_mask_properties` | Change any layer mask's `density`, `feather` or `enabled` without touching its pixels. |
+| `set_layer_mask_properties` | Change any layer mask's `density`, `feather`, `enabled` or `linked` (false: the mask stays put when the layer moves or transforms) without touching its pixels. |
 | `apply_layer_mask` | Bake a pixel layer's mask into its alpha and remove it. Destructive. |
 | `remove_layer_mask` | Delete a mask without applying it; disable it instead to keep it. |
 | `layer_via_copy` | Copy the selected pixels of a pixel layer (default the active one) to a new layer above it; `cut: true` removes them from the source. Needs a selection. Returns the new layer. |
@@ -328,5 +365,14 @@ batching.
   selection: start low (wand 20..40, range 30..60), check `percent`, and add with `mode: add`.
 - `modify_selection`, `refine_selection` and `apply_selection_as_mask` fail with "Nothing is
   selected." when the selection is empty; select first.
+- Transforms refuse hidden layers, layers with `locks.position` or `locks.pixels`, and adjustment,
+  annotation and group layers (transform a layer's mask with `channel: "mask"` after unlinking
+  it). A result larger than about 11 600 × 11 600 px is refused.
+- `transform_layer` scale fields are percent (100 = unchanged), not factors; `rotate` is degrees
+  clockwise. `corners` that cross or fold through the horizon are refused: keep the quad convex.
+- With a selection, `content: "auto"` (the default) moves only the selected pixels, not the
+  whole layer. Pass `content: "layer"` to move everything regardless of the selection.
+- A Background transformed smaller leaves transparent canvas around it; fill it with a layer
+  below or crop afterwards.
 - Opacity values are 0..1, not percent. Curves and levels points are 0..255 levels; levels
   `gamma` is 0.1..9.99 (1 = neutral); hue is degrees -180..180.

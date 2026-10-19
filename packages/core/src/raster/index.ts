@@ -2,7 +2,8 @@
  * `@pixerate/editor/raster`: the shared raster layer stack. Tiled copy-on-write surfaces, a
  * synchronous PNG / zlib codec, blend modes, Gaussian blur of coverage planes, the generic layer
  * stack (pixel layers, groups, masks, clipping, locks), layer effects (shadows, glows, bevels,
- * overlays, strokes) and the per-tile compositor engine with its caches. No DOM and no framework
+ * overlays, strokes), resampling through transforms and warps, and the per-tile compositor engine
+ * with its caches. No DOM and no framework
  * imports: it runs in Node and in Workers. The image editor and the paint editor build their own
  * layer kinds on top.
  */
@@ -13,6 +14,7 @@ export * from './blur';
 export * from './layers';
 export * from './compositor';
 export * from './curve';
+export * from './transform';
 export * from './effects/model';
 export * from './effects/patterns';
 export {

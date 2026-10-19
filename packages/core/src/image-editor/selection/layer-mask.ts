@@ -19,6 +19,11 @@ export interface LayerMaskProps {
   feather?: number;
   /** Disabled masks are kept but ignored (the layer applies everywhere). Default true. */
   enabled?: boolean;
+  /**
+   * Layer masks only: `false` unlinks the mask, so moving or transforming the layer's pixels leaves
+   * it in place. Default true. Adjustment-layer masks in canvas space ignore it.
+   */
+  linked?: boolean;
 }
 
 const MAX_SIDE = 1 << 15;
