@@ -721,3 +721,48 @@ describe('blend modes', () => {
 		expect(() => parseVideoProject({ width: 640, height: 360, tracks: [{ id: 'v1', kind: 'video', clips: [{ id: 'x', type: 'color', color: '#fff', start: 0, duration: 1000, blend: 'burn' }] }] })).toThrow(/blend must be one of "normal", "multiply"/);
 	});
 });
+
+describe('push, slide and iris transitions', () => {
+	const cut = (transition: Record<string, unknown>) =>
+		ok(applyVideoEdits(createVideoProject({ width: 640, height: 360, fps: 25 }), [
+			{ op: 'add_clip', track: 'v1', clip: { type: 'color', id: 'a', color: '#ff0000', duration: 2000 } },
+			{ op: 'add_clip', track: 'v1', clip: { type: 'color', id: 'b', color: '#0000ff', duration: 2000, transition: transition as any } }
+		]));
+	const r3 = (v: number) => Math.round(v * 1000) / 1000 + 0;
+	const rects = (p: VideoProject, t: number) => Object.fromEntries(videoFrameAt(p, t).layers.map((l) => [l.clip, [r3(l.rect.x), r3(l.rect.y), l.opacity]]));
+
+	it('push moves both pictures a frame, eased; slide moves only the incoming one', () => {
+		const push = cut({ type: 'push', duration: 1000 });
+		expect(rects(push, 1500)).toEqual({ a: [0, 0, 1], b: [-640, 0, 1] });
+		expect(rects(push, 2000)).toEqual({ a: [320, 0, 1], b: [-320, 0, 1] });
+		// A quarter of the way in, the eased move has gone (1 − cos(π/4)) / 2 of the frame.
+		const q = (1 - Math.cos(Math.PI / 4)) / 2;
+		expect(rects(push, 1750).b[0]).toBeCloseTo(-640 * (1 - q), 2);
+		expect(rects(cut({ type: 'push', duration: 1000, direction: 'up' }), 2000)).toEqual({ a: [0, -180, 1], b: [0, 180, 1] });
+		expect(rects(cut({ type: 'slide', duration: 1000, direction: 'left' }), 2000)).toEqual({ a: [0, 0, 1], b: [320, 0, 1] });
+	});
+
+	it('iris opens a circle on the frame centre in SVG, canvas and ffmpeg', () => {
+		const p = cut({ type: 'iris', duration: 1000 });
+		expect(videoFrameAt(p, 2000).layers[1].iris).toEqual({ progress: 0.5 });
+		const svg = videoProjectSvg(p, 2000);
+		expect(svg).toContain(`<clipPath id="i1"><circle cx="320" cy="180" r="${Math.round(Math.hypot(320, 180) * 50) / 100}"/></clipPath>`);
+		expect(svg).toContain('<g clip-path="url(#i1)">');
+		const arcs: number[][] = [];
+		const ctx: any = new Proxy({ globalAlpha: 1, measureText: () => ({ width: 1 }) }, { get: (t, k) => (k in t ? t[k] : k === 'arc' ? (...a: number[]) => arcs.push(a) : () => {}), set: (t, k, v) => ((t[k] = v), true) });
+		drawVideoFrame(ctx, videoFrameAt(p, 2000), () => null);
+		expect(arcs[0].slice(0, 3)).toEqual([320, 180, Math.hypot(320, 180) / 2]);
+		expect(toVideoFfmpeg(p).filterComplex).toMatch(/a='if\(lte\(hypot\(X\+0-320,Y\+0-180\),367\*min\(1,T\/1\)\)/);
+	});
+
+	it('export push and slide as eased overlay moves, and EDL them as wipes', () => {
+		const push = toVideoFfmpeg(cut({ type: 'push', duration: 1000 })).filterComplex;
+		expect(push).toContain("x='320-w/2+640*((1-cos(PI*clip((t-1.5)/1,0,1)))/2-1)'");
+		expect(push).toContain("x='320-w/2+640*((1-cos(PI*clip((t-1.5)/1,0,1)))/2)'");
+		const slide = toVideoFfmpeg(cut({ type: 'slide', duration: 1000, direction: 'down' })).filterComplex;
+		expect(slide).toContain("y='180-h/2+360*((1-cos(PI*clip((t-1.5)/1,0,1)))/2-1)'");
+		expect(slide.match(/cos\(PI/g)).toHaveLength(1);
+		expect(toVideoEdl(cut({ type: 'push', duration: 1000 }))).toMatch(/W001 {4}025/);
+		expect(toVideoEdl(cut({ type: 'crossfade', duration: 1000 }))).toMatch(/ D {4}025/);
+	});
+});

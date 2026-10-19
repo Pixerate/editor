@@ -478,6 +478,19 @@ describe("ClipInspector (React)", () => {
     controller.destroy();
   });
 
+  it("offers a direction for push, slide and wipe only", () => {
+    const controller = make();
+    act(() => root.render(<ClipInspector controller={controller} />));
+    act(() => controller.select(["c2"]));
+    expect(container.querySelector('select[aria-label="Transition direction"]')).toBeNull();
+    choose($<HTMLSelectElement>('select[aria-label="Transition"]'), "push");
+    choose($<HTMLSelectElement>('select[aria-label="Transition direction"]'), "up");
+    expect(clip(controller, "c2")!.clip.transition).toEqual({ type: "push", duration: 400, direction: "up" });
+    choose($<HTMLSelectElement>('select[aria-label="Transition"]'), "iris");
+    expect(container.querySelector('select[aria-label="Transition direction"]')).toBeNull();
+    controller.destroy();
+  });
+
   it("shapes a transition's sound, storing only a change from the type's default", () => {
     const controller = make();
     act(() => root.render(<ClipInspector controller={controller} />));

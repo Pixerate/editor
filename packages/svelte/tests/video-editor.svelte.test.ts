@@ -366,6 +366,17 @@ describe("ClipInspector (Svelte)", () => {
     controller.destroy();
   });
 
+  it("offers a direction for push, slide and wipe only", () => {
+    const controller = make();
+    render(ClipInspector, { controller });
+    act(() => controller.select(["c2"]));
+    expect(document.querySelector('[data-field="transitionDirection"]')).toBeNull();
+    change(q<HTMLSelectElement>('[data-field="transition"]'), "slide");
+    change(q<HTMLSelectElement>('[data-field="transitionDirection"]'), "left");
+    expect(clipOf(controller, "c2")!.transition).toEqual({ type: "slide", duration: 400, direction: "left" });
+    controller.destroy();
+  });
+
   it("shapes a transition's sound, storing only a change from the type's default", () => {
     const controller = make();
     render(ClipInspector, { controller });

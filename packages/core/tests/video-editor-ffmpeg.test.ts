@@ -153,6 +153,30 @@ describe.skipIf(!hasFfmpeg)('toVideoFfmpeg with a real ffmpeg', () => {
 		expect(pixel(out, 2.5, 316, 176)).toSatisfy((rgb: number[]) => near(rgb, [192, 192, 192]));
 	}, 120000);
 
+	it('pushes, slides and opens an iris as the preview does', () => {
+		const cut = (transition: Record<string, unknown>) =>
+			project([
+				{ op: 'add_clip', track: 'v1', clip: { type: 'color', id: 'r', color: '#ff0000', duration: 2000 } },
+				{ op: 'add_clip', track: 'v1', clip: { type: 'color', id: 'b', color: '#0000ff', duration: 2000, transition: transition as any } }
+			]);
+		const near = (rgb: number[], want: number[]) => rgb.every((v, i) => Math.abs(v - want[i]) < 40);
+		const red = [255, 0, 0];
+		const blue = [0, 0, 255];
+		// Halfway through a push to the right, blue fills the left half and red the right.
+		const push = render(cut({ type: 'push', duration: 1000 }), 'push.mp4');
+		expect(pixel(push, 2, 100, 170)).toSatisfy((rgb: number[]) => near(rgb, blue));
+		expect(pixel(push, 2, 540, 170)).toSatisfy((rgb: number[]) => near(rgb, red));
+		// A slide up: blue comes up over the bottom half, red stays.
+		const slide = render(cut({ type: 'slide', duration: 1000, direction: 'up' }), 'slide.mp4');
+		expect(pixel(slide, 2, 300, 300)).toSatisfy((rgb: number[]) => near(rgb, blue));
+		expect(pixel(slide, 2, 300, 40)).toSatisfy((rgb: number[]) => near(rgb, red));
+		// Halfway through an iris, the centre is blue and the corners still red.
+		const iris = render(cut({ type: 'iris', duration: 1000 }), 'iris.mp4');
+		expect(pixel(iris, 2, 316, 176)).toSatisfy((rgb: number[]) => near(rgb, blue));
+		expect(pixel(iris, 2, 10, 10)).toSatisfy((rgb: number[]) => near(rgb, red));
+		for (const file of [push, slide, iris]) expect(Number(probe(file).format.duration)).toBeCloseTo(4, 0);
+	}, 120000);
+
 	it('grades colours as the preview does', () => {
 		const grades = [{ exposure: 0.5, contrast: 0.3 }, { saturation: -0.6, hue: 40 }, { temperature: 0.8, tint: -0.5 }, { exposure: -1, saturation: 0.8, temperature: -0.5 }];
 		const base: [number, number, number] = [180, 90, 60];

@@ -98,6 +98,18 @@ describe('video agent tasks, through the tools only', () => {
 		expect(reset.clip.blend).toBeUndefined();
 	});
 
+	it('pushes one shot into the next and reads where both pictures are', async () => {
+		const { call, fail } = tools();
+		await call('add_video_clip', { track: 'v1', clip: { type: 'color', id: 'a', color: '#f00', duration: 2000 } });
+		await call('add_video_clip', { track: 'v1', clip: { type: 'color', id: 'b', color: '#00f', duration: 2000 } });
+		const set = await call('set_video_transition', { clip: 'b', transition: { type: 'push', duration: 800, direction: 'left' } });
+		expect(set.clip.transition).toEqual({ type: 'push', duration: 800, direction: 'left' });
+		const mid = await call('get_video_frame', { time: 2000 });
+		expect(mid.layers.map((l: { clip: string; rect: { x: number } }) => [l.clip, Math.round(l.rect.x)])).toEqual([['a', -960], ['b', 960]]);
+		expect(await fail('set_video_transition', { clip: 'b', transition: { type: 'spin', duration: 800 } })).toContain('type');
+		expect(await fail('set_video_transition', { clip: 'b', transition: { type: 'push', duration: 800, direction: 'sideways' } })).toContain('direction');
+	});
+
 	it('crossfades sound at equal power unless told otherwise', async () => {
 		const { call, fail } = tools();
 		await call('add_video_asset', { id: 'm', kind: 'audio', src: 'm.wav', duration: 20000 });

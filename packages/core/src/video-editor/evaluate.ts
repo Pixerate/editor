@@ -31,6 +31,8 @@ export interface VideoLayer {
 	rotation: number;
 	/** For a wipe: the part shown is the `progress` (0–1) of the rect from the edge opposite `direction`. */
 	wipe?: { direction: VideoWipeDirection; progress: number };
+	/** For an iris: only a circle on the frame's centre shows, its radius `progress` (0–1) of the way to the frame's corners. */
+	iris?: { progress: number };
 	/** For text: what to draw. */
 	text?: { text: string; color: string; fontSize: number; fontFamily: string; fontWeight: number; background?: string };
 	/** For colour clips and dips. */
@@ -106,6 +108,9 @@ export function videoTitleFrame(project: VideoProject, clip: VideoTextClip, clip
 }
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
+
+/** How far a push or slide has moved at `progress` (0–1): eased in and out, (1 − cos πp) / 2. */
+export const videoTransitionEase = (progress: number): number => (1 - Math.cos(Math.PI * clamp01(progress))) / 2;
 
 /** Gain of a fade shape `x` of the way up (0–1); a fade out uses the time left, so it mirrors the fade in. */
 export function videoFadeCurveGain(curve: VideoFadeCurve | undefined, x: number): number {
@@ -205,17 +210,33 @@ export function videoFrameAt(project: VideoProject, time: number): VideoFrame {
 			let opacity = videoValueAt(clip.opacity, clipTime, 1) * fade;
 			let wipe: VideoLayer['wipe'];
 			let dip: { color: string; opacity: number } | null = null;
+			let iris: VideoLayer['iris'];
+			// Push and slide move whole pictures by a frame, eased in and out.
+			let shift = 0;
+			let shiftDirection: VideoWipeDirection = 'right';
 			if (incoming) {
 				if (incoming.type === 'crossfade') opacity *= incoming.progress;
 				else if (incoming.type === 'wipe') wipe = { direction: incoming.transition.direction ?? 'right', progress: incoming.progress };
-				else dip = { color: incoming.transition.color ?? '#000000', opacity: (1 - incoming.progress) * 2 };
+				else if (incoming.type === 'iris') iris = { progress: incoming.progress };
+				else if (incoming.type === 'push' || incoming.type === 'slide') {
+					shiftDirection = incoming.transition.direction ?? 'right';
+					shift = videoTransitionEase(incoming.progress) - 1;
+				} else dip = { color: incoming.transition.color ?? '#000000', opacity: (1 - incoming.progress) * 2 };
 			}
 			if (outgoing?.type === 'dip') dip = { color: outgoing.next.transition!.color ?? '#000000', opacity: outgoing.progress * 2 };
+			if (outgoing?.type === 'push') {
+				shiftDirection = outgoing.next.transition!.direction ?? 'right';
+				shift = videoTransitionEase(outgoing.progress);
+			}
 			const size = clip.type === 'media' ? { width: asset!.width ?? project.width, height: asset!.height ?? project.height } : { width: project.width, height: project.height };
 			const fit = clip.fit ?? (clip.type === 'media' ? 'contain' : 'fill');
-			const rect = placeVideoRect(project, size, clip.type === 'text' ? 'fill' : fit, clip.transform, clipTime);
+			const placed = placeVideoRect(project, size, clip.type === 'text' ? 'fill' : fit, clip.transform, clipTime);
+			const across = shiftDirection === 'left' || shiftDirection === 'right';
+			const sign = shiftDirection === 'left' || shiftDirection === 'up' ? -1 : 1;
+			const rect = shift ? { ...placed, ...(across ? { x: placed.x + sign * shift * project.width } : { y: placed.y + sign * shift * project.height }) } : placed;
 			const layer: VideoLayer = { clip: clip.id, track: track.id, type: clip.type, opacity: clamp01(opacity), rect, rotation: videoValueAt(clip.transform?.rotation, clipTime, 0) };
 			if (wipe) layer.wipe = wipe;
+			if (iris) layer.iris = iris;
 			if (clip.blend && clip.blend !== 'normal') layer.blend = clip.blend;
 			const grade = normalizeVideoGrade(clip.grade);
 			if (grade) layer.grade = grade;

@@ -65,8 +65,16 @@ export interface VideoTransform {
 export type VideoFit = 'contain' | 'cover' | 'fill' | 'none';
 export const VIDEO_FITS = ['contain', 'cover', 'fill', 'none'] as const;
 
-export type VideoTransitionType = 'crossfade' | 'dip' | 'wipe';
-export const VIDEO_TRANSITION_TYPES = ['crossfade', 'dip', 'wipe'] as const;
+/**
+ * - `crossfade`: this clip fades up over the one before.
+ * - `dip`: down into a colour and up out of it.
+ * - `wipe`: an edge travels across, revealing this clip.
+ * - `push`: this clip slides in, pushing the one before out.
+ * - `slide`: this clip slides in over the one before, which stays put.
+ * - `iris`: a circle opens from the centre, revealing this clip.
+ */
+export type VideoTransitionType = 'crossfade' | 'dip' | 'wipe' | 'push' | 'slide' | 'iris';
+export const VIDEO_TRANSITION_TYPES = ['crossfade', 'dip', 'wipe', 'push', 'slide', 'iris'] as const;
 export type VideoWipeDirection = 'left' | 'right' | 'up' | 'down';
 export const VIDEO_WIPE_DIRECTIONS = ['left', 'right', 'up', 'down'] as const;
 
@@ -81,7 +89,7 @@ export interface VideoTransition {
 	duration: number;
 	/** For dip: the colour passed through (default black). */
 	color?: string;
-	/** For wipe: the way the edge travels (default right, revealing from the left). */
+	/** For wipe, push and slide: the way the edge or picture travels (default right: in from the left). */
 	direction?: VideoWipeDirection;
 	/**
 	 * Shape of the sound's fades through the transition (see `VideoFadeCurve`). Default

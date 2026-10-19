@@ -1,9 +1,10 @@
 import { placeVideoRect } from './evaluate.js';
+import { videoIrisRadius } from './render.js';
 import { videoGradeFfmpegFilters } from './grade.js';
 import { isVideoKeyframes, VIDEO_TRANSFORM_PROPERTIES, videoKeyframeFfmpegExpr, type VideoAnimatable } from './keyframes.js';
 import { formatVideoTimecode, formatVideoTimecodeFrames, isVideoDropFrameRate, videoHourFrames, videoTimecodeFrames, sortedVideoClips, videoAssetMap, videoClipBefore, videoClipEnd, videoClipOverhang, videoClipSpeed, videoProjectDuration, videoAssetHasSound } from './timeline.js';
 import { videoTransitionAudioCurve } from './types.js';
-import type { VideoAsset, VideoBlendMode, VideoClip, VideoFadeCurve, VideoProject, VideoTextClip, VideoTrack } from './types.js';
+import type { VideoWipeDirection, VideoAsset, VideoBlendMode, VideoClip, VideoFadeCurve, VideoProject, VideoTextClip, VideoTrack } from './types.js';
 
 // ---------------------------------------------------------------------------------------------
 // CMX 3600 EDL
@@ -63,7 +64,7 @@ export function toVideoEdl(project: VideoProject, options: VideoEdlOptions = {})
 			const outReel = before.type === 'media' ? reelName(assets.get(before.asset)) : 'BL';
 			const at = sourceAt(before, recIn);
 			lines.push(row(n, outReel, 'C', at, at, recIn, recIn));
-			lines.push(row(n, reel, `${t.type === 'wipe' ? 'W001' : 'D'}    ${frames}`, sourceAt(clip, recIn), sourceAt(clip, recOut), recIn, recOut));
+			lines.push(row(n, reel, `${t.type === 'crossfade' || t.type === 'dip' ? 'D' : 'W001'}    ${frames}`, sourceAt(clip, recIn), sourceAt(clip, recOut), recIn, recOut));
 		} else lines.push(row(n, reel, 'C', sourceAt(clip, recIn), sourceAt(clip, recOut), recIn, recOut));
 		if (clip.type === 'media' && videoClipSpeed(clip) !== 1) lines.push(`M2   ${reel.padEnd(8)} ${(videoClipSpeed(clip) * fps).toFixed(1).padStart(6)}      ${tc(sourceAt(clip, recIn))}`);
 		if (clip.type === 'media') lines.push(`* FROM CLIP NAME: ${asset?.name ?? asset?.src ?? clip.asset}`);
@@ -382,15 +383,35 @@ function buildFfmpeg(project: VideoProject, options: VideoFfmpegOptions, measure
 				const test = dir === 'right' ? `lt(X,W*${p})` : dir === 'left' ? `gt(X,W*(1-${p}))` : dir === 'down' ? `lt(Y,H*${p})` : `gt(Y,H*(1-${p}))`;
 				chain.push(`geq=lum='lum(X,Y)':cb='cb(X,Y)':cr='cr(X,Y)':a='if(${test},alpha(X,Y),0)'`);
 			}
+			if (lead && clip.transition!.type === 'iris') {
+				// The circle is on the frame's centre: in the picture's own pixels, offset by where it sits.
+				const r = videoIrisRadius({ width: W, height: H }, 1);
+				chain.push(`geq=lum='lum(X,Y)':cb='cb(X,Y)':cr='cr(X,Y)':a='if(lte(hypot(X+${Math.round(rect.x)}-${W / 2},Y+${Math.round(rect.y)}-${H / 2}),${Math.round(r)}*min(1,T/${sec(2 * lead)})),alpha(X,Y),0)'`);
+			}
 			const rotation = placed?.rotation;
 			if (isVideoKeyframes(rotation)) chain.push(`rotate=a='(${expr(rotation, onChain('t'), 0, 'rotation')})*PI/180':c=none:ow='hypot(iw,ih)':oh=ow`);
 			else if (rotation) chain.push(`rotate=${rotation}*PI/180:c=none:ow=rotw(${rotation}*PI/180):oh=roth(${rotation}*PI/180)`);
 			chain.push(`setpts=PTS+${sec(t0)}/TB`);
 			const cx = rect.x + rect.width / 2;
 			const cy = rect.y + rect.height / 2;
+			// Push and slide move the whole picture by a frame, eased as videoTransitionEase does.
+			const shifts: Record<'x' | 'y', string[]> = { x: [], y: [] };
+			const shiftBy = (direction: VideoWipeDirection | undefined, from: number, d: number, entering: boolean) => {
+				const dir = direction ?? 'right';
+				const axis = dir === 'left' || dir === 'right' ? 'x' : 'y';
+				const size = axis === 'x' ? W : H;
+				const sign = dir === 'left' || dir === 'up' ? -1 : 1;
+				const ease = `(1-cos(PI*clip((t-${sec(from)})/${sec(d)},0,1)))/2`;
+				shifts[axis].push(`${sign * size}*(${ease}${entering ? '-1' : ''})`);
+			};
+			const into = lead ? clip.transition!.type : undefined;
+			if (into === 'push' || into === 'slide') shiftBy(clip.transition!.direction, clip.start - lead, 2 * lead, true);
+			const after = tail ? sortedVideoClips(track).find((c) => c !== clip && Math.abs(c.start - end) < 0.5 && c.transition) : undefined;
+			if (after?.transition!.type === 'push') shiftBy(after.transition!.direction, end - tail, 2 * tail, false);
 			const at = (axis: 'x' | 'y', c: number) => {
 				const v = placed?.[axis];
-				return isVideoKeyframes(v) ? `${axis}='${Math.round(axis === 'x' ? project.width / 2 : project.height / 2)}+(${expr(v, onTimeline, 0, 'position')})-${axis === 'x' ? 'w' : 'h'}/2'` : `${axis}='${Math.round(c)}-${axis === 'x' ? 'w' : 'h'}/2'`;
+				const extra = shifts[axis].map((s) => `+${s}`).join('');
+				return isVideoKeyframes(v) ? `${axis}='${Math.round(axis === 'x' ? project.width / 2 : project.height / 2)}+(${expr(v, onTimeline, 0, 'position')})-${axis === 'x' ? 'w' : 'h'}/2${extra}'` : `${axis}='${Math.round(c)}-${axis === 'x' ? 'w' : 'h'}/2${extra}'`;
 			};
 			graph.push(`${source.startsWith('[') ? source : `${source},`}${chain.join(',')}[l${next}]`);
 			if (clip.blend && clip.blend !== 'normal') {

@@ -6,6 +6,9 @@ import type { VideoProject } from './types.js';
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const n = (v: number) => String(Math.round(v * 100) / 100);
 
+/** Radius of an iris `progress` (0–1) open: from nothing to the frame's corners. */
+export const videoIrisRadius = (frame: { width: number; height: number }, progress: number): number => progress * Math.hypot(frame.width / 2, frame.height / 2);
+
 /** The part of a rect a wipe shows. */
 export function videoWipeRect(rect: VideoRect, wipe: NonNullable<VideoLayer['wipe']>): VideoRect {
 	const { direction, progress } = wipe;
@@ -72,7 +75,13 @@ export function videoFrameToSvg(frame: VideoFrame, options: VideoSvgOptions = {}
 				inner = `<rect ${box} fill="#334155" stroke="#94a3b8" stroke-width="2"/><text x="${n(rect.x + rect.width / 2)}" y="${n(rect.y + rect.height / 2)}" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="${n(size)}" fill="#e2e8f0">${esc(label)}</text>`;
 			}
 		}
-		body.push(attrs.length ? `<g ${attrs.join(' ')}>${inner}</g>` : inner);
+		let item = attrs.length ? `<g ${attrs.join(' ')}>${inner}</g>` : inner;
+		if (layer.iris) {
+			// Outside the layer's own transform, so the circle stays on the frame's centre.
+			defs.push(`<clipPath id="i${i}"><circle cx="${n(frame.width / 2)}" cy="${n(frame.height / 2)}" r="${n(videoIrisRadius(frame, layer.iris.progress))}"/></clipPath>`);
+			item = `<g clip-path="url(#i${i})">${item}</g>`;
+		}
+		body.push(item);
 	});
 	return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${n(frame.width)} ${n(frame.height)}" width="${n(frame.width)}" height="${n(frame.height)}">${defs.length ? `<defs>${defs.join('')}</defs>` : ''}<rect width="100%" height="100%" fill="${esc(frame.background)}"/>${body.join('')}</svg>`;
 }
@@ -104,7 +113,7 @@ export function videoContactSheetSvg(project: VideoProject, times: readonly numb
 /** The subset of `CanvasRenderingContext2D` `drawVideoFrame` uses (so tests and workers can pass their own). */
 export type VideoCanvasContext = Pick<
 	CanvasRenderingContext2D,
-	'save' | 'restore' | 'fillRect' | 'drawImage' | 'translate' | 'rotate' | 'beginPath' | 'rect' | 'clip' | 'fillText' | 'measureText' | 'setTransform'
+	'save' | 'restore' | 'fillRect' | 'drawImage' | 'translate' | 'rotate' | 'beginPath' | 'rect' | 'arc' | 'clip' | 'fillText' | 'measureText' | 'setTransform'
 > & { globalAlpha: number; globalCompositeOperation: GlobalCompositeOperation; filter?: string; fillStyle: string | CanvasGradient | CanvasPattern; font: string; textAlign: CanvasTextAlign; textBaseline: CanvasTextBaseline; strokeStyle: string | CanvasGradient | CanvasPattern; lineWidth: number; strokeRect(x: number, y: number, w: number, h: number): void };
 
 /**
@@ -130,6 +139,11 @@ export function drawVideoFrame(
 		const { rect } = layer;
 		ctx.save();
 		ctx.globalAlpha = layer.opacity;
+		if (layer.iris) {
+			ctx.beginPath();
+			ctx.arc(frame.width / 2, frame.height / 2, videoIrisRadius(frame, layer.iris.progress), 0, 2 * Math.PI);
+			ctx.clip();
+		}
 		if (layer.blend && layer.blend !== 'normal') ctx.globalCompositeOperation = layer.blend === 'add' ? 'lighter' : layer.blend;
 		if (layer.grade) {
 			const defs = videoGradeSvgDefs(layer.grade);

@@ -69,11 +69,11 @@ const TRANSFORM = object(
 );
 const TRANSITION = object(
 	{
-		type: { type: 'string', enum: [...VIDEO_TRANSITION_TYPES], description: 'crossfade (this clip fades up over the one before), dip (down into a colour and up out of it) or wipe (an edge travels across revealing this clip).' },
-		duration: { type: 'number', exclusiveMinimum: 0, description: 'Length in ms, centred on the cut. A crossfade or wipe needs half of it in media past the cut on both sides (handles); a dip needs none.' },
+		type: { type: 'string', enum: [...VIDEO_TRANSITION_TYPES], description: 'crossfade (this clip fades up over the one before), dip (down into a colour and up out of it), wipe (an edge travels across revealing this clip), push (this clip slides in and pushes the one before out), slide (this clip slides in over the one before) or iris (a circle opens from the centre).' },
+		duration: { type: 'number', exclusiveMinimum: 0, description: 'Length in ms, centred on the cut. Every type but dip needs half of it in media past the cut on both sides (handles); a dip needs none.' },
 		color: COLOR('For dip: the colour passed through (default black)'),
-		direction: { type: 'string', enum: [...VIDEO_WIPE_DIRECTIONS], description: 'For wipe: the way the edge travels (default right).' },
-		audioCurve: { type: 'string', enum: [...VIDEO_FADE_CURVES], description: 'Shape of the sound\'s fades through it: default equal-power for crossfade and wipe (steady loudness while the two sounds overlap), linear for dip; or s-curve, exponential, logarithmic.' }
+		direction: { type: 'string', enum: [...VIDEO_WIPE_DIRECTIONS], description: 'For wipe, push and slide: the way the edge or picture travels (default right, coming in from the left).' },
+		audioCurve: { type: 'string', enum: [...VIDEO_FADE_CURVES], description: 'Shape of the sound\'s fades through it: default equal-power for every type but dip (steady loudness while the two sounds overlap), linear for dip; or s-curve, exponential, logarithmic.' }
 	},
 	['type', 'duration'],
 	'A transition from the clip that ends where this one starts on the same track.'
@@ -269,7 +269,7 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 	const getFrame: AgentTool = {
 		name: 'get_video_frame',
 		title: 'What plays at a moment',
-		description: 'Returns what plays at a time without changing anything: the pictures back to front (clip, track, asset, source time in ms, opacity, placement rect, rotation, any wipe) and the sounds (clip, source time, gain after volumes, fades and transitions).',
+		description: 'Returns what plays at a time without changing anything: the pictures back to front (clip, track, asset, source time in ms, opacity, placement rect, rotation, any wipe or iris) and the sounds (clip, source time, gain after volumes, fades and transitions).',
 		inputSchema: object({ time: MS('Time from the start (default: the playhead)') }),
 		annotations: { title: 'What plays at a moment', ...READ },
 		handler: ({ time }) => {
@@ -627,7 +627,7 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 		name: 'set_video_transition',
 		title: 'Set a transition',
 		description:
-			'Sets (or with null removes) the transition into a clip from the clip that ends where it starts on the same track (one undo step). A crossfade or wipe plays half before and half after the cut, so both clips need that much media past the cut; when they do not, the error says the longest that fits. Returns the clip.',
+			'Sets (or with null removes) the transition into a clip from the clip that ends where it starts on the same track (one undo step). Every type but dip plays half before and half after the cut, so both clips need that much media past the cut; when they do not, the error says the longest that fits. Returns the clip.',
 		inputSchema: object({ clip: { ...CLIP_ID, description: 'The incoming clip (the one after the cut).' }, transition: { anyOf: [TRANSITION, { type: 'null' }], description: 'The transition, or null to remove it.' } }, ['clip', 'transition']),
 		annotations: { title: 'Set a transition', ...WRITE_IDEMPOTENT },
 		handler: ({ clip, transition }) => apply({ op: 'set_transition', clip, transition }, transition ? 'Set transition' : 'Remove transition', (r) => ({ clip: clipOut(r.project, clip) }))

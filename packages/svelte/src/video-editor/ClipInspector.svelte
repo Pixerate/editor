@@ -10,7 +10,10 @@
     VIDEO_BLEND_MODES,
     VIDEO_FADE_CURVE_LABELS,
     VIDEO_FADE_CURVES,
+    VIDEO_TRANSITION_LABELS,
     VIDEO_TRANSITION_TYPES,
+    VIDEO_WIPE_DIRECTIONS,
+    videoTransitionHasDirection,
     videoKeyframeRows,
     videoTransitionAudioCurve,
     videoKeyframeToggleEdit,
@@ -21,7 +24,8 @@
     type VideoGradeControl,
     type VideoGradePreset,
     type VideoKeyframeRow,
-    type VideoTransitionType
+    type VideoTransitionType,
+    type VideoWipeDirection
   } from '@pixerate/editor/video-editor';
   import { videoEditorStateOf } from './createVideoEditor.svelte.js';
 
@@ -231,7 +235,7 @@
         <select class={input} aria-label="Transition" {disabled} value={clip.transition?.type ?? ''} onchange={(e) => setTransition(e.currentTarget.value)} data-field="transition">
           <option value="">none</option>
           {#each VIDEO_TRANSITION_TYPES as t (t)}
-            <option value={t}>{t}</option>
+            <option value={t}>{VIDEO_TRANSITION_LABELS[t]}</option>
           {/each}
         </select>
         {#if clip.transition}
@@ -239,6 +243,14 @@
           <span class="text-[10px] text-muted-foreground">ms</span>
         {/if}
       </div>
+      {#if clip.transition && videoTransitionHasDirection(clip.transition.type)}
+        <span class="text-muted-foreground">Direction</span>
+        <select class={input} aria-label="Transition direction" {disabled} value={clip.transition.direction ?? 'right'} onchange={(e) => clip?.transition && apply({ op: 'set_transition', clip: clip.id, transition: { ...clip.transition, direction: e.currentTarget.value as VideoWipeDirection } }, 'Change transition direction')} data-field="transitionDirection">
+          {#each VIDEO_WIPE_DIRECTIONS as d (d)}
+            <option value={d}>{d}</option>
+          {/each}
+        </select>
+      {/if}
       {#if clip.transition}
         <span class="text-muted-foreground">Transition sound</span>
         <select class={input} aria-label="Transition sound curve" {disabled} value={videoTransitionAudioCurve(clip.transition)} onchange={(e) => transitionAudioCurve(e.currentTarget.value)} data-field="transitionAudioCurve">

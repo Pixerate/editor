@@ -62,8 +62,9 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
   dialogue and scene changes.
 - **Transitions sparingly.** A straight cut is the default. Use `crossfade` for passage of time
   or a soft scene change, `dip` (to black, or a `color`) for a section break, `wipe` rarely.
-  Keep them short (300-1000 ms). Crossfades and wipes need handles: half the duration of
-  unused media past the cut on both clips; `dip` needs none.
+  Keep them short (300-1000 ms). `push` and `slide` suit graphics, montages and social edits
+  more than drama; `iris` is a stylised period or comic effect. Every type but `dip` needs
+  handles: half the duration of unused media past the cut on both clips; `dip` needs none.
 - **Insert vs overwrite.** `add_video_clip` and `move_video_clip` take `mode`: `refuse`
   (default; the error names the next free place), `overwrite` (replace what is underneath, like
   an overwrite edit) or `insert` (push later material along). Use `ripple: true` on trim and
@@ -160,7 +161,7 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
 | `copy_video_grade` | Match shots: give the `to` clips the grade of the `from` clip (one undo step; a source with no grade clears theirs). Returns the grade copied. |
 | `set_video_keyframes` | Animate one `property` of a `clip` (`opacity` 0-1, `volume` 0-4 for media, `x` / `y` px from centre, `scale`, `rotation` degrees) with `keys` `[{ t, v, ease? }]`, replacing its keys. `t` is clip time (ms from the clip's start), so keys travel with the clip. `ease`: linear (default), hold, ease-in, ease-out, ease-in-out or cubic-bezier points. Returns the sorted keys. |
 | `remove_video_keyframes` | Remove all keys of a clip `property`, leaving the value it had at the clip's start. |
-| `set_video_transition` | Set the transition into a `clip` from the clip ending where it starts on the same track: `{ type: crossfade, dip or wipe, duration ms centred on the cut, color (dip, default black), direction (wipe, default right), audioCurve (the sound's fades: equal-power by default for crossfade and wipe, linear for dip) }`, or `null` to remove. When handles are short the error gives the longest that fits. |
+| `set_video_transition` | Set the transition into a `clip` from the clip ending where it starts on the same track: `{ type: crossfade, dip, wipe, push, slide or iris, duration ms centred on the cut, color (dip, default black), direction (wipe, push, slide; default right), audioCurve (the sound's fades: equal-power by default for crossfade and wipe, linear for dip) }`, or `null` to remove. When handles are short the error gives the longest that fits. |
 | `close_video_gaps` | Slide clips on a `track` earlier so no gaps remain, from time `from` (default the start). Returns the clips that moved. |
 | `add_video_marker` | Add a marker at `time` with `label`, `color` and optional `id`, for beats, sections or review notes. Returns its id. |
 | `remove_video_marker` | Remove a `marker` by id. |

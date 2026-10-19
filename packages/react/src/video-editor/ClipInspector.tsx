@@ -10,7 +10,10 @@ import {
   VIDEO_BLEND_MODES,
   VIDEO_FADE_CURVE_LABELS,
   VIDEO_FADE_CURVES,
+  VIDEO_TRANSITION_LABELS,
   VIDEO_TRANSITION_TYPES,
+  VIDEO_WIPE_DIRECTIONS,
+  videoTransitionHasDirection,
   videoKeyframeRows,
   videoTransitionAudioCurve,
   videoKeyframeToggleEdit,
@@ -20,6 +23,7 @@ import {
   type VideoFadeCurve,
   type VideoGradePreset,
   type VideoTransitionType,
+  type VideoWipeDirection,
 } from '@pixerate/editor/video-editor';
 import { useVideoEditorState } from './useVideoEditor';
 
@@ -297,7 +301,7 @@ export function ClipInspector({ controller, className = '' }: ClipInspectorProps
           <option value="">None</option>
           {VIDEO_TRANSITION_TYPES.map((t) => (
             <option key={t} value={t}>
-              {t === 'crossfade' ? 'Crossfade' : t === 'dip' ? 'Dip to colour' : 'Wipe'}
+              {VIDEO_TRANSITION_LABELS[t]}
             </option>
           ))}
         </select>
@@ -316,6 +320,23 @@ export function ClipInspector({ controller, className = '' }: ClipInspectorProps
               if (raw.trim() && Number.isFinite(n) && n > 0) controller.apply({ op: 'set_transition', clip: clip.id, transition: { ...transition, duration: n } }, 'Change transition length');
             }}
           />
+        </Row>
+      )}
+      {transition && videoTransitionHasDirection(transition.type) && (
+        <Row label="Direction" name="transitionDirection">
+          <select
+            className={field}
+            value={transition.direction ?? 'right'}
+            disabled={disabled}
+            aria-label="Transition direction"
+            onChange={(e) => controller.apply({ op: 'set_transition', clip: clip.id, transition: { ...transition, direction: e.target.value as VideoWipeDirection } }, 'Change transition direction')}
+          >
+            {VIDEO_WIPE_DIRECTIONS.map((d) => (
+              <option key={d} value={d}>
+                {d}
+              </option>
+            ))}
+          </select>
         </Row>
       )}
       {transition && (
