@@ -199,5 +199,11 @@ is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y do
 - **The tracing image is not in exports or previews of the painting alone**; paint over it on a
   layer. Turn `sampleColors` off before painting your own colours, or strokes without `color`
   keep taking its colours.
+- **Strokes take real time when the host shows your cursor.** With a director (the demo and
+  editors that set `createPaintEditorToolProvider({ director })`), `paint_stroke` paints live at
+  the pace of the points' `t` (else about 1.5 px per ms, at most ~1.8 s), and `fill_layer` /
+  `replay_strokes` move the cursor first. Results and undo are the same; it is one more reason to
+  paint a few long strokes and replay them rather than many short ones. A stroke fails with "A
+  stroke is in progress" while the user is painting; try it again afterwards.
 - **Recorded strokes are kept in saved documents**; `save_document` with `strokes: false` when
   only the pixels matter (smaller JSON).

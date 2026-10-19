@@ -1,5 +1,5 @@
 import { untrack } from 'svelte';
-import { PaintEditorController, type PaintEditorOptions, type PaintEditorState } from '@pixerate/editor/paint-editor';
+import { PaintDirector, PaintEditorController, PaintPresence, type PaintDirectorOptions, type PaintEditorOptions, type PaintEditorState } from '@pixerate/editor/paint-editor';
 
 /**
  * A `PaintEditorController` (created from `options`, or the one given) with its state as a
@@ -45,6 +45,16 @@ export function paintEditorState(controller: () => PaintEditorController): { rea
       return snapshot;
     },
   };
+}
+
+/**
+ * A `PaintPresence` and `PaintDirector` for a paint editor: pass `presence` to `PaintEditor` (or
+ * `PaintCanvas`) and `director` to `createPaintEditorToolProvider`, so agent strokes are painted
+ * live by a cursor on the canvas.
+ */
+export function createPaintDirector(controller: PaintEditorController, options: Omit<PaintDirectorOptions, 'clock'> = {}): { presence: PaintPresence; director: PaintDirector } {
+  const presence = new PaintPresence();
+  return { presence, director: new PaintDirector(controller, presence, options) };
 }
 
 export const chip = (on: boolean) => `px-2 py-1 rounded text-[11px] ${on ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-300 hover:text-white'}`;

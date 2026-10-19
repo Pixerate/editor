@@ -2091,3 +2091,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: A smart filter mask made from a selection (black outside it) came back from a PSD revealing the filter everywhere outside the selected area.
 - **Root Cause**: The filter mask lives in the `FEid` / `FXid` block as a rectangle and a plane; outside the rectangle Photoshop treats it as white (`filterMaskExtendWithWhite`). Writing only the painted bounds of a mask whose default is black loses the black.
 - **Solution / Workaround**: `filterMaskItem` writes a mask whose default is not white over the whole canvas (plus anything painted outside it); reading uses default 255. The filter mask's enabled / linked flags are in `filterFX` (`filterMaskEnable`, `filterMaskLinked`), not in the block.
+
+### [core/paint-editor] Live Agent Strokes Run Slower Than Their Point Times With Big Brushes
+
+- **Issue / Symptom**: In the demo, the landscape script's 672 ms soft-pastel stroke (90 px tip on a 1200 × 800 canvas) took about 4 s to paint through `PaintDirector`.
+- **Root Cause**: The director pushes the points due in each 16 ms frame and then waits a frame. Each push lays the dabs and re-composites the touched tiles, and React then uploads those tiles. With a big tip this takes longer than a frame, so the wall-clock time adds up beyond the schedule.
+- **Solution / Workaround**: Accepted. The result is the same as `paintStroke` with the same seed (tested), and only the pacing differs. Hosts that want strokes to land faster can pass a higher `speed` or a lower `maxStrokeMs`, or leave out the director so strokes apply at once.

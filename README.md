@@ -450,7 +450,7 @@ Every feature is available from core and from both framework packages. "Via core
 </details>
 
 <details>
-<summary><strong>Paint editor</strong> (11)</summary>
+<summary><strong>Paint editor</strong> (12)</summary>
 
 | Feature | Core | React | Svelte |
 | :--- | :---: | :---: | :---: |
@@ -465,6 +465,7 @@ Every feature is available from core and from both framework packages. "Via core
 | Perspective Guides (one to three vanishing points; pen strokes pick the guide line through their start that best fits their direction and snap to it, one-point keeping horizontals and verticals and two-point verticals; guide fans for drawing; `set_perspective_guide`, `paint_stroke` `snapToPerspective` agent tools) | `setPerspective`, `PerspectiveSnapper`, `perspectiveGuideLines` | `<PaintToolbar>` & guide overlay in `<PaintCanvas>` | `<PaintToolbar>` & guide overlay in `<PaintCanvas>` |
 | Tracing & Reference Images, Colour Harmonies, Swatches & Mixing Pad (a tracing image under the paint in the view only, at an opacity, optionally the source of stroke colours; floating reference images to pick from; harmonies on the painter's RYB wheel or the RGB wheel; swatches saved with the document; a mixing pad painted with a pigment Mixer Brush and smeared with a palette knife; `set_tracing_image`, `update_tracing_image`, `clear_tracing_image`, `add_reference_image`, `list_reference_images`, `update_reference_image`, `remove_reference_image`, `pick_reference_color`, `color_harmony`, `list_swatches`, `add_swatch`, `remove_swatch`, `mixing_pad_stroke`, `pick_mixing_pad_color`, `clear_mixing_pad`, `render_mixing_pad` agent tools) | `setTracingImage`, `addReferenceImage`, `colorHarmony`, `MixingPad` | `<ColorPanel>`, `<PaintToolbar>` (tracing, references) & floating references in `<PaintCanvas>` | `<ColorPanel>`, `<PaintToolbar>` (tracing, references) & floating references in `<PaintCanvas>` |
 | Paint Documents & Export (JSON with PNG layer assets through the image editor's layer serializer, external asset stores, unknown fields kept for later phases; PNG in pure TypeScript, JPEG / WebP through a canvas or a host encoder, PSD through the shared PSD writer with the paper as a locked layer; `render_preview`, `export_image`, `export_psd`, `save_document`, `open_document`, `new_canvas`, `set_canvas`, `undo_paint`, `redo_paint` agent tools) | `toJSON`, `loadJSON`, `exportPng`, `exportImage`, `exportPsd` | `<PaintToolbar>` Save / Open / PNG / JPEG / PSD | `<PaintToolbar>` Save / Open / PNG / JPEG / PSD |
+| Paint Agent Cursors (an agent's strokes painted live by its cursor on the canvas, paced by the points' times, as one undo step; fills rubbed across the sheet, replays starting from the strokes they copy; cursors placed through the view's zoom, rotation and mirroring; `paint_stroke`, `fill_layer` and `replay_strokes` act out through a `director`) | `PaintDirector`, `PaintPresence` & `createPaintEditorToolProvider({ director })` | `usePaintDirector` & `<PaintEditor presence>` / `<PaintCanvas presence>` | `createPaintDirector` & `<PaintEditor presence>` / `<PaintCanvas presence>` |
 
 </details>
 
