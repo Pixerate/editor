@@ -1,5 +1,16 @@
 import { formatVideoSeconds, sortedVideoClips, VIDEO_TIME_EPSILON, videoAssetMap, videoClipBefore, videoClipEnd, videoClipHandles, videoClipSourceRange, videoProjectDuration } from './timeline.js';
-import type { VideoProject } from './types.js';
+import { VIDEO_TRANSFORM_PROPERTIES, videoKeysOf } from './keyframes.js';
+import type { VideoClip, VideoProject } from './types.js';
+
+/** A clip's keyframed properties (`opacity`, `volume`, `x`…) with their keys. */
+export function videoClipKeyframes(clip: VideoClip): { property: string; keys: ReturnType<typeof videoKeysOf> }[] {
+	const out = [
+		{ property: 'opacity', keys: videoKeysOf(clip.opacity) },
+		{ property: 'volume', keys: clip.type === 'media' ? videoKeysOf(clip.volume) : [] },
+		...VIDEO_TRANSFORM_PROPERTIES.map((p) => ({ property: p as string, keys: videoKeysOf(clip.transform?.[p]) }))
+	];
+	return out.filter((o) => o.keys.length);
+}
 
 export type VideoIssueSeverity = 'error' | 'warning' | 'note';
 
@@ -12,6 +23,7 @@ export const VIDEO_ISSUE_CODES = [
 	'transition-too-long',
 	'transition-handles',
 	'fades-too-long',
+	'keyframes-outside-clip',
 	'unknown-duration',
 	'unused-asset',
 	'marker-past-end',
@@ -68,6 +80,16 @@ export function checkVideoProject(project: VideoProject): VideoIssue[] {
 				issues.push({ code: 'overlap', severity: 'error', ...at, message: `Clips "${clip.id}" and "${next.id}" overlap on track "${track.id}" from ${formatVideoSeconds(next.start)}; move one of them.` });
 			if ((clip.fadeIn ?? 0) + (clip.fadeOut ?? 0) > clip.duration + VIDEO_TIME_EPSILON)
 				issues.push({ code: 'fades-too-long', severity: 'warning', ...at, message: `Clip "${clip.id}"'s fades (${clip.fadeIn ?? 0} + ${clip.fadeOut ?? 0} ms) are longer than the clip (${clip.duration} ms); shorten them.` });
+			for (const { property, keys } of videoClipKeyframes(clip)) {
+				const outside = keys.filter((k) => k.t < -VIDEO_TIME_EPSILON || k.t > clip.duration + VIDEO_TIME_EPSILON);
+				if (outside.length)
+					issues.push({
+						code: 'keyframes-outside-clip',
+						severity: 'warning',
+						...at,
+						message: `Clip "${clip.id}" has ${property} key${outside.length > 1 ? 's' : ''} at ${outside.map((k) => `${Math.round(k.t)} ms`).join(', ')}, outside the clip (0–${Math.round(clip.duration)} ms in clip time), so ${outside.length > 1 ? 'they never play' : 'it never plays'} directly; move ${outside.length > 1 ? 'them' : 'it'} inside or remove ${outside.length > 1 ? 'them' : 'it'} (set_video_keyframes).`
+					});
+			}
 			if (clip.transition) {
 				const d = clip.transition.duration;
 				const before = videoClipBefore(track, clip);

@@ -3,6 +3,7 @@
     findVideoClip,
     formatVideoTimecode,
     planVideoClipDrag,
+    videoDragLabel,
     videoAssetMap,
     videoClipLabel,
     videoClipTint,
@@ -119,6 +120,7 @@
       delta: (dx * 1000) / px,
       track: d.mode === 'move' ? trackAt(e.clientY, clip) : undefined,
       ripple: e.altKey,
+      placement: e.altKey ? 'insert' : e.shiftKey ? 'overwrite' : 'refuse',
       snap: (t) => controller.snap(t, { exclude: [clip] }).time,
     });
     drag = { ...d, moved: true, plan };
@@ -131,7 +133,7 @@
     if (!d) return;
     if (d.moved) {
       const edit = d.plan?.edit;
-      if (edit) controller.apply(edit, edit.op === 'move_clip' ? 'Move clip' : edit.op === 'trim_clip' && edit.ripple ? 'Ripple trim' : 'Trim clip');
+      if (edit) controller.apply(edit, videoDragLabel(edit));
     } else if (!d.additive) controller.select([d.clip]);
   }
 
@@ -210,7 +212,8 @@
 <!--
   The timeline: a ruler to scrub (with markers), the playhead, and a row per track with its
   toggles and clips. Click a clip to select it (shift / ⌘ to add), drag it to move it (onto
-  another track of its kind), drag an edge to trim (alt: ripple). Keys: Space plays, ←/→ step a
+  another track of its kind; alt: insert, pushing later material along on every sync-locked track;
+  shift: overwrite what is underneath), drag an edge to trim (alt: ripple). Keys: Space plays, ←/→ step a
   frame, S splits, Delete deletes (shift: ripple), ⌘Z / ⇧⌘Z undo and redo. Every edit is one undo step.
 -->
 <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->

@@ -3,6 +3,9 @@ import {
   findVideoClip,
   formatVideoSeconds,
   VIDEO_TRANSITION_TYPES,
+  videoKeyframeRows,
+  videoKeyframeToggleEdit,
+  videoKeyframeValueEdit,
   type VideoClip,
   type VideoEditorController,
   type VideoTransitionType,
@@ -52,13 +55,15 @@ function Row({ label, name, children }: { label: string; name: string; children:
 }
 
 /**
- * Edits the one selected clip: its name, opacity and fades; volume, speed and mute for media;
+ * Edits the one selected clip: its name, fades, opacity, volume and transform (each with a keyframe
+ * toggle at the playhead: ◆ adds a key holding the value there or removes the one there; typing a
+ * value on a keyed property sets the key at the playhead); volume, speed and mute for media;
  * text, colour, size and background for titles; colour for colour clips; and the transition into
  * it. Each change is one undo step (`update_clip` / `set_transition`), committed on blur or change.
  */
 export function ClipInspector({ controller, className = '' }: ClipInspectorProps) {
   const state = useVideoEditorState(controller);
-  const { project, selection, readOnly } = state;
+  const { project, selection, readOnly, time } = state;
   if (selection.length !== 1)
     return (
       <p className={`text-xs text-muted-foreground ${className}`} data-clip-inspector="">
@@ -108,11 +113,48 @@ export function ClipInspector({ controller, className = '' }: ClipInspectorProps
       <Row label="Duration" name="duration">
         <span className="tabular-nums text-xs">{formatVideoSeconds(clip.duration)}</span>
       </Row>
-      {clip.type !== 'media' || project.assets.find((a) => a.id === clip.asset)?.kind !== 'audio' ? (
-        <Row label="Opacity" name="opacity">
-          {number('opacity', 'Opacity', { min: 0, max: 1, step: 0.05 })}
+      {videoKeyframeRows(project, clip.id, time).map((row) => (
+        <Row key={row.property} label={row.label} name={row.property}>
+          <span className="flex min-w-0 items-center gap-1" data-keyframe-row={row.property}>
+            <Commit
+              type="number"
+              value={row.keyed || (row.property === 'opacity' ? clip.opacity : row.property === 'volume' ? (clip as { volume?: unknown }).volume : clip.transform?.[row.property]) !== undefined ? String(row.value) : ''}
+              placeholder={String(row.value)}
+              aria-label={row.label}
+              disabled={disabled}
+              min={row.min}
+              max={row.max}
+              step={row.step}
+              onCommit={(raw) => {
+                const n = Number(raw);
+                if (raw.trim() && !Number.isFinite(n)) return;
+                const edit = videoKeyframeValueEdit(project, clip.id, row.property, time, raw.trim() ? n : undefined);
+                if (edit) controller.apply(edit, row.keyed ? `Keyframe ${row.label.toLowerCase()}` : `Change ${row.label.toLowerCase()}`);
+              }}
+            />
+            <button
+              type="button"
+              className={`shrink-0 rounded px-1 text-xs disabled:opacity-50 ${row.onKey ? 'text-amber-500' : row.keyed ? 'text-foreground' : 'text-muted-foreground'}`}
+              aria-label={`${row.onKey ? 'Remove' : 'Add'} ${row.label.toLowerCase()} keyframe at playhead`}
+              aria-pressed={row.onKey}
+              title={row.keyed ? `${row.keys} key${row.keys === 1 ? '' : 's'}; ${row.onKey ? 'remove the one' : 'add one'} at the playhead` : 'Animate: add a key at the playhead'}
+              disabled={disabled}
+              data-keyframe-toggle={row.property}
+              onClick={() => {
+                const edit = videoKeyframeToggleEdit(project, clip.id, row.property, time);
+                if (edit) controller.apply(edit, `${row.onKey ? 'Remove' : 'Add'} ${row.label.toLowerCase()} keyframe`);
+              }}
+            >
+              {row.onKey ? '◆' : '◇'}
+            </button>
+            {row.keyed && (
+              <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground" data-keyframe-count={row.property}>
+                {row.keys}
+              </span>
+            )}
+          </span>
         </Row>
-      ) : null}
+      ))}
       <Row label="Fade in (ms)" name="fadeIn">
         {number('fadeIn', 'Fade in', { min: 0, step: 100 })}
       </Row>
@@ -121,9 +163,6 @@ export function ClipInspector({ controller, className = '' }: ClipInspectorProps
       </Row>
       {clip.type === 'media' && (
         <>
-          <Row label="Volume" name="volume">
-            {number('volume', 'Volume', { min: 0, step: 0.1 })}
-          </Row>
           <Row label="Speed" name="speed">
             {number('speed', 'Speed', { min: 0.1, step: 0.25 })}
           </Row>

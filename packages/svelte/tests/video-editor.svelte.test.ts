@@ -194,6 +194,26 @@ describe("VideoTimeline (Svelte)", () => {
     controller.destroy();
   });
 
+  it("drags a clip in with alt (insert) or over with shift (overwrite)", () => {
+    const controller = make();
+    render(VideoTimeline, { controller, pxPerSecond: 100 });
+    // Shift (held once the drag is going; at pointer-down it adds to the selection).
+    pointer(q('[data-clip="c2"]'), "pointerdown", { clientX: 250 });
+    pointer(window, "pointermove", { clientX: 150, shiftKey: true });
+    pointer(window, "pointerup", { clientX: 150, shiftKey: true });
+    expect(clipOf(controller, "c1")).toMatchObject({ start: 0, duration: 1000 });
+    expect(clipOf(controller, "c2")!.start).toBe(1000);
+    expect(controller.getState().undoLabel).toBe("Overwrite clip");
+    controller.undo();
+    pointer(q('[data-clip="c2"]'), "pointerdown", { clientX: 250 });
+    pointer(window, "pointermove", { clientX: 150, altKey: true });
+    pointer(window, "pointerup", { clientX: 150, altKey: true });
+    expect(controller.getState().undoLabel).toBe("Insert clip");
+    expect(ids(controller)).toEqual(["c1", "c2", "c1-1"]);
+    expect(clipOf(controller, "c1-1")).toMatchObject({ start: 3000, duration: 1000 });
+    controller.destroy();
+  });
+
   it("trims a clip by dragging an edge, and shows a refused edit", () => {
     const controller = make();
     render(VideoTimeline, { controller, pxPerSecond: 100 });
@@ -281,6 +301,32 @@ describe("ClipInspector (Svelte)", () => {
     expect(clipOf(controller, "c2")!.transition).toEqual({ type: "crossfade", duration: 400 });
     change(q<HTMLSelectElement>('[data-field="transition"]'), "");
     expect(clipOf(controller, "c2")!.transition).toBeUndefined();
+    controller.destroy();
+  });
+});
+
+describe("ClipInspector keyframes (Svelte)", () => {
+  it("adds keys at the playhead, sets the key there by typing, and removes them", () => {
+    const controller = make();
+    render(ClipInspector, { controller });
+    act(() => controller.select(["c2"]));
+    expect(qa("[data-keyframe-row]").map((r) => r.dataset.keyframeRow)).toEqual(["opacity", "x", "y", "scale", "rotation"]);
+    act(() => controller.seek(2500));
+    act(() => q<HTMLButtonElement>('[data-keyframe-toggle="opacity"]').click());
+    expect(clipOf(controller, "c2")!.opacity).toEqual({ keys: [{ t: 500, v: 1 }] });
+    expect(controller.getState().undoLabel).toBe("Add opacity keyframe");
+    act(() => controller.seek(3500));
+    change(q<HTMLInputElement>('[data-field="opacity"]'), "0");
+    expect(clipOf(controller, "c2")!.opacity).toEqual({ keys: [{ t: 500, v: 1 }, { t: 1500, v: 0 }] });
+    expect(controller.getState().undoLabel).toBe("Keyframe opacity");
+    act(() => controller.seek(3000));
+    expect(q<HTMLInputElement>('[data-field="opacity"]').value).toBe("0.5");
+    expect(q('[data-keyframe-toggle="opacity"]').getAttribute("aria-pressed")).toBe("false");
+    change(q<HTMLInputElement>('[data-field="opacity"]'), "2");
+    expect(q("[data-edit-error]").textContent).toMatch(/between 0 and 1/);
+    act(() => controller.seek(2500));
+    act(() => q<HTMLButtonElement>('[data-keyframe-toggle="opacity"]').click());
+    expect(clipOf(controller, "c2")!.opacity).toEqual({ keys: [{ t: 1500, v: 0 }] });
     controller.destroy();
   });
 });

@@ -47,6 +47,9 @@ let container: HTMLDivElement;
 let root: any;
 
 const make = (extra: { readOnly?: boolean } = {}) => new VideoEditorController({ project: PROJECT, clock: new ManualClock(), ...extra });
+/** Takes the title and music tracks out of sync lock, so ripples on v1 leave them where they are. */
+const unsync = (c: VideoEditorController) =>
+  act(() => void c.apply(["v2", "a1"].map((track) => ({ op: "update_track" as const, track, set: { syncLocked: false } })), "Unsync"));
 const $ = <T extends Element = HTMLElement>(sel: string) => {
   const el = container.querySelector<T>(sel);
   if (!el) throw new Error(`No element for ${sel}`);
@@ -136,6 +139,12 @@ describe("VideoTransport (React)", () => {
     });
     act(() => $<HTMLButtonElement>("[data-split]").click());
     expect(controller.getProject().tracks[0].clips.map((c) => [c.start, c.duration])).toEqual([[0, 1000], [1000, 1000], [2000, 2000]]);
+    act(() => controller.select(["c2"]));
+    // The title and the music run under the gap and are sync-locked, so the ripple is refused...
+    act(() => $<HTMLButtonElement>("[data-ripple-delete]").click());
+    expect(clip(controller, "c2")).not.toBeNull();
+    // ...until they are let go.
+    unsync(controller);
     act(() => controller.select(["c2"]));
     act(() => $<HTMLButtonElement>("[data-ripple-delete]").click());
     expect(clip(controller, "c2")).toBeNull();
@@ -274,8 +283,32 @@ describe("VideoTimeline (React)", () => {
     controller.destroy();
   });
 
+  it("drags a clip in with Alt (insert) or over with Shift (overwrite)", () => {
+    const controller = make();
+    act(() => root.render(<VideoTimeline controller={controller} pxPerSecond={100} />));
+    // Shift: c2 lands on the back half of c1, which is trimmed away.
+    pointer($('[data-clip="c2"]'), "pointerdown", 0);
+    pointer(window, "pointermove", -100, { shiftKey: true });
+    pointer(window, "pointerup", -100, { shiftKey: true });
+    expect(clip(controller, "c1")!.clip).toMatchObject({ start: 0, duration: 1000 });
+    expect(clip(controller, "c2")!.clip.start).toBe(1000);
+    expect(controller.getState().undoLabel).toBe("Overwrite clip");
+    act(() => void controller.undo());
+    // Alt: c1 is cut at the drop point and its rest, the title and the music move along with it.
+    pointer($('[data-clip="c2"]'), "pointerdown", 0);
+    pointer(window, "pointermove", -100, { altKey: true });
+    pointer(window, "pointerup", -100, { altKey: true });
+    expect(controller.getState().undoLabel).toBe("Insert clip");
+    expect(clip(controller, "c2")!.clip.start).toBe(1000);
+    expect(clip(controller, "c1-1")!.clip).toMatchObject({ start: 3000, duration: 1000 });
+    expect(clip(controller, "t1-1")!.clip.start).toBe(3000);
+    expect(clip(controller, "m1-1")!.clip.start).toBe(3000);
+    controller.destroy();
+  });
+
   it("trims a clip by dragging an edge, and ripples with Alt", () => {
     const controller = make();
+    unsync(controller);
     act(() => root.render(<VideoTimeline controller={controller} pxPerSecond={100} />));
     const end = $('[data-clip="c1"] [data-handle="end"]');
     const c1 = $('[data-clip="c1"]');
@@ -315,6 +348,7 @@ describe("VideoTimeline (React)", () => {
 
   it("handles the keyboard shortcuts", () => {
     const controller = make();
+    unsync(controller);
     act(() => root.render(<VideoTimeline controller={controller} pxPerSecond={100} />));
     const tl = $("[data-video-timeline]");
     key(tl, "ArrowRight");
@@ -402,6 +436,32 @@ describe("ClipInspector (React)", () => {
     choose($<HTMLSelectElement>('select[aria-label="Transition"]'), "");
     expect(clip(controller, "c2")!.clip.transition).toBeUndefined();
     expect(container.querySelector('input[aria-label="Transition length"]')).toBeNull();
+    controller.destroy();
+  });
+});
+
+describe("ClipInspector keyframes (React)", () => {
+  it("adds keys at the playhead, sets the key there by typing, and removes them", () => {
+    const controller = make();
+    act(() => root.render(<ClipInspector controller={controller} />));
+    act(() => controller.select(["c1"]));
+    expect([...container.querySelectorAll("[data-keyframe-row]")].map((r) => (r as HTMLElement).dataset.keyframeRow)).toEqual(["opacity", "volume", "x", "y", "scale", "rotation"]);
+    act(() => controller.seek(500));
+    act(() => $<HTMLButtonElement>('[data-keyframe-toggle="x"]').click());
+    expect((clip(controller, "c1")!.clip.transform as any).x).toEqual({ keys: [{ t: 500, v: 0 }] });
+    expect(controller.getState().undoLabel).toBe("Add x keyframe");
+    expect($('[data-keyframe-toggle="x"]').getAttribute("aria-pressed")).toBe("true");
+    act(() => controller.seek(1500));
+    commit($<HTMLInputElement>('input[aria-label="X"]'), "200");
+    expect((clip(controller, "c1")!.clip.transform as any).x.keys).toEqual([{ t: 500, v: 0 }, { t: 1500, v: 200 }]);
+    act(() => controller.seek(1000));
+    expect($<HTMLInputElement>('input[aria-label="X"]').value).toBe("100");
+    expect($('[data-keyframe-count="x"]').textContent).toBe("2");
+    act(() => controller.seek(1500));
+    act(() => $<HTMLButtonElement>('[data-keyframe-toggle="x"]').click());
+    act(() => controller.seek(500));
+    act(() => $<HTMLButtonElement>('[data-keyframe-toggle="x"]').click());
+    expect(clip(controller, "c1")!.clip.transform).toBeUndefined();
     controller.destroy();
   });
 });

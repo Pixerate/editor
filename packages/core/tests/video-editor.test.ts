@@ -82,9 +82,11 @@ describe('applyVideoEdits', () => {
 		const p = ok(applyVideoEdits(project(), { op: 'add_clip', track: 'v1', clip: { type: 'color', color: '#ff0000', start: 4000, duration: 1000 }, ripple: true }));
 		expect(clip(p, 'c1')).toMatchObject({ start: 4000 });
 		expect(clip(p, 'b').start).toBe(5000);
-		expect(clip(p, 's').start).toBe(0);
-		const inside = applyVideoEdits(project(), { op: 'add_clip', track: 'v1', clip: { type: 'color', color: '#f00', start: 2000 }, ripple: true });
-		expect(!inside.ok && inside.error).toMatch(/inside clip "a"; split it there first/);
+		// The song is sync-locked: it is cut at the insert point and its rest pushed along too.
+		expect(clip(p, 's')).toMatchObject({ start: 0, duration: 4000 });
+		expect(clip(p, 's-1')).toMatchObject({ start: 5000, duration: 3000, in: 4000 });
+		const inside = ok(applyVideoEdits(project(), { op: 'add_clip', track: 'v1', clip: { type: 'color', color: '#f00', start: 2000 }, ripple: true }));
+		expect(inside.tracks[0].clips.map((c) => [c.id, c.start, c.duration])).toEqual([['a', 0, 2000], ['c1', 2000, 3000], ['a-1', 5000, 2000], ['b', 7000, 3000]]);
 	});
 
 	it('refuses the wrong kind of media for a track', () => {
@@ -108,10 +110,14 @@ describe('applyVideoEdits', () => {
 	});
 
 	it('ripple trims keep the cut after it in sync', () => {
-		const p = ok(applyVideoEdits(project(), { op: 'trim_clip', clip: 'a', edge: 'end', to: 3000, ripple: true }));
+		const refused = applyVideoEdits(project(), { op: 'trim_clip', clip: 'a', edge: 'end', to: 3000, ripple: true });
+		expect(!refused.ok && refused.error).toMatch(/would pull track "a1" out of sync: clip "s" \(0\.00 s–7\.00 s\) is in that stretch.*syncLocked false/);
+		const free = ok(applyVideoEdits(project(), { op: 'update_track', track: 'a1', set: { syncLocked: false } }));
+		const p = ok(applyVideoEdits(free, { op: 'trim_clip', clip: 'a', edge: 'end', to: 3000, ripple: true }));
 		expect(clip(p, 'a').duration).toBe(3000);
 		expect(clip(p, 'b').start).toBe(3000);
-		const q = ok(applyVideoEdits(project(), { op: 'trim_clip', clip: 'a', edge: 'start', to: 1000, ripple: true }));
+		expect(clip(p, 's').start).toBe(0);
+		const q = ok(applyVideoEdits(free, { op: 'trim_clip', clip: 'a', edge: 'start', to: 1000, ripple: true }));
 		expect(clip(q, 'a')).toMatchObject({ start: 0, duration: 3000, in: 3000 });
 		expect(clip(q, 'b').start).toBe(3000);
 	});
@@ -129,7 +135,8 @@ describe('applyVideoEdits', () => {
 	});
 
 	it('deletes with ripple and closes gaps', () => {
-		const p = ok(applyVideoEdits(project(), { op: 'delete_clips', clips: ['a'], ripple: true }));
+		const free = ok(applyVideoEdits(project(), { op: 'update_track', track: 'a1', set: { syncLocked: false } }));
+		const p = ok(applyVideoEdits(free, { op: 'delete_clips', clips: ['a'], ripple: true }));
 		expect(clip(p, 'b').start).toBe(0);
 		const lifted = ok(applyVideoEdits(project(), { op: 'delete_clips', clips: ['a'] }));
 		expect(findVideoGaps(lifted, 'v1')).toEqual([{ track: 'v1', start: 0, end: 4000 }]);
@@ -410,6 +417,9 @@ describe('VideoEditorController', () => {
 		c.seek(1000);
 		expect(c.splitAtPlayhead().ok).toBe(true);
 		expect(c.getProject().tracks[0].clips.map((x) => x.id)).toEqual(['a', 'a-1', 'b']);
+		// The song under it is sync-locked, so the ripple is refused until it is let go.
+		expect(c.deleteSelection({ ripple: true }).ok).toBe(false);
+		expect(c.apply({ op: 'update_track', track: 'a1', set: { syncLocked: false } }).ok).toBe(true);
 		expect(c.deleteSelection({ ripple: true }).ok).toBe(true);
 		expect(clip(c.getProject(), 'a-1').start).toBe(0);
 		expect(c.getState().selection).toEqual([]);

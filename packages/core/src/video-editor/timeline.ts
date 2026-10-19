@@ -5,6 +5,9 @@ export const VIDEO_TIME_EPSILON = 0.5;
 
 export const videoClipEnd = (clip: VideoClip): number => clip.start + clip.duration;
 
+/** Whether a track moves with ripple edits on other tracks (`syncLocked`, default true). */
+export const videoTrackSyncLocked = (track: VideoTrack): boolean => track.syncLocked !== false;
+
 /** Playback speed of a clip (1 for titles and colours). */
 export const videoClipSpeed = (clip: VideoClip): number => (clip.type === 'media' ? (clip.speed ?? 1) : 1);
 

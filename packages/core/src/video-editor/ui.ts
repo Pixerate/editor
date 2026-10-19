@@ -1,6 +1,7 @@
 import type { VideoEdit } from './edit.js';
+import { isVideoKeyframes, removeVideoKey, setVideoKey, VIDEO_KEYFRAME_LIMITS, VIDEO_TRANSFORM_PROPERTIES, videoValueAt, type VideoAnimatable, type VideoKeyframeProperty } from './keyframes.js';
 import { findVideoClip, formatVideoTimecode, videoClipEnd, videoClipSpeed, videoAssetMap } from './timeline.js';
-import type { VideoAsset, VideoAssetKind, VideoClip, VideoProject } from './types.js';
+import type { VideoAsset, VideoAssetKind, VideoClip, VideoPlacementMode, VideoProject } from './types.js';
 
 // Framework-free helpers the React and Svelte timelines share, so both draw and drag alike.
 
@@ -60,6 +61,11 @@ export interface VideoClipDragInput {
 	track?: string;
 	/** Push later clips along instead of refusing overlaps (trims) — hold a modifier for it. */
 	ripple?: boolean;
+	/**
+	 * For move: what to do with clips where it lands (default refuse). The timelines use Alt for
+	 * insert and Shift for overwrite.
+	 */
+	placement?: VideoPlacementMode;
 	/** Snaps a time (e.g. `controller.snap(t, { exclude: [clip] }).time`); default: none. */
 	snap?: (time: number) => number;
 }
@@ -93,7 +99,8 @@ export function planVideoClipDrag(project: VideoProject, input: VideoClipDragInp
 		const start = Math.max(0, raw + (shifts.length ? shifts.reduce((a, b) => (Math.abs(b) < Math.abs(a) ? b : a)) : 0));
 		const target = input.track ?? track.id;
 		const moved = Math.abs(start - clip.start) > 1e-6 || target !== track.id;
-		return { start, duration: clip.duration, track: target, edit: moved ? { op: 'move_clip', clip: clip.id, start, ...(target !== track.id ? { track: target } : {}) } : null };
+		const mode = input.placement && input.placement !== 'refuse' ? { mode: input.placement } : {};
+		return { start, duration: clip.duration, track: target, edit: moved ? { op: 'move_clip', clip: clip.id, start, ...(target !== track.id ? { track: target } : {}), ...mode } : null };
 	}
 	const minimum = 1000 / project.fps;
 	if (input.mode === 'trim-start') {
@@ -114,14 +121,20 @@ export function videoDropTracks(project: VideoProject, clipId: string): string[]
 	return project.tracks.filter((t) => t.kind === at.track.kind && !t.locked).map((t) => t.id);
 }
 
+/** The label for the undo step a drag makes. */
+export function videoDragLabel(edit: VideoEdit): string {
+	if (edit.op === 'move_clip') return edit.mode === 'insert' ? 'Insert clip' : edit.mode === 'overwrite' ? 'Overwrite clip' : 'Move clip';
+	return edit.op === 'trim_clip' && edit.ripple ? 'Ripple trim' : 'Trim clip';
+}
+
 /** The edit that adds an asset as a clip where the person dropped it (or at the end of the first fitting track). */
-export function videoAssetDropEdit(project: VideoProject, assetId: string, options: { track?: string; start?: number; ripple?: boolean } = {}): VideoEdit | null {
+export function videoAssetDropEdit(project: VideoProject, assetId: string, options: { track?: string; start?: number; ripple?: boolean; mode?: VideoPlacementMode } = {}): VideoEdit | null {
 	const asset = videoAssetMap(project).get(assetId);
 	if (!asset) return null;
 	const kind = asset.kind === 'audio' ? 'audio' : 'video';
 	const track = options.track ?? project.tracks.find((t) => t.kind === kind && !t.locked)?.id;
 	if (!track) return null;
-	return { op: 'add_clip', track, clip: { type: 'media', asset: asset.id, ...(options.start !== undefined ? { start: options.start } : {}) }, ...(options.ripple ? { ripple: true } : {}) };
+	return { op: 'add_clip', track, clip: { type: 'media', asset: asset.id, ...(options.start !== undefined ? { start: options.start } : {}) }, ...(options.ripple ? { ripple: true } : {}), ...(options.mode && options.mode !== 'refuse' ? { mode: options.mode } : {}) };
 }
 
 /** What `probeVideoMedia` found out about a file. */
@@ -175,4 +188,115 @@ export function probeVideoMedia(src: string, kind: VideoAssetKind, timeout = 150
 		el.onerror = failed;
 		el.src = src;
 	});
+}
+
+// ---------------------------------------------------------------------------------------------
+// Keyframes in an inspector
+// ---------------------------------------------------------------------------------------------
+
+const KEY_LABELS: Record<VideoKeyframeProperty, { label: string; step: number }> = {
+	opacity: { label: 'Opacity', step: 0.05 },
+	volume: { label: 'Volume', step: 0.05 },
+	x: { label: 'X', step: 1 },
+	y: { label: 'Y', step: 1 },
+	scale: { label: 'Scale', step: 0.05 },
+	rotation: { label: 'Rotation', step: 1 }
+};
+
+/** One animatable property of a clip as an inspector shows it at the playhead. */
+export interface VideoKeyframeRow {
+	property: VideoKeyframeProperty;
+	label: string;
+	/** Its value at the playhead (the playhead held inside the clip). */
+	value: number;
+	/** Whether it has keyframes. */
+	keyed: boolean;
+	/** How many keys it has. */
+	keys: number;
+	/** Whether a key sits at the playhead. */
+	onKey: boolean;
+	/** The playhead in clip time (ms), where new keys go. */
+	clipTime: number;
+	step: number;
+	min?: number;
+	max?: number;
+}
+
+const animatableOf = (clip: VideoClip, property: VideoKeyframeProperty): VideoAnimatable | undefined =>
+	(VIDEO_TRANSFORM_PROPERTIES as readonly string[]).includes(property) ? clip.transform?.[property as 'x'] : property === 'volume' ? (clip.type === 'media' ? clip.volume : undefined) : clip.opacity;
+
+const playheadInClip = (clip: VideoClip, time: number) => Math.round(Math.min(clip.duration, Math.max(0, time - clip.start)));
+
+/**
+ * The clip's animatable properties for an inspector at timeline `time`: opacity and the transform
+ * for pictures, volume for sound, each with its value there and whether it is keyed.
+ */
+export function videoKeyframeRows(project: VideoProject, clipId: string, time: number): VideoKeyframeRow[] {
+	const at = findVideoClip(project, clipId);
+	if (!at) return [];
+	const { clip } = at;
+	const asset = clip.type === 'media' ? videoAssetMap(project).get(clip.asset) : undefined;
+	const visual = !(asset?.kind === 'audio' || at.track.kind === 'audio');
+	const audible = clip.type === 'media' && (asset?.kind === 'audio' || (asset?.kind === 'video' && asset.hasAudio !== false));
+	const properties: VideoKeyframeProperty[] = [...(visual ? (['opacity'] as const) : []), ...(audible ? (['volume'] as const) : []), ...(visual ? VIDEO_TRANSFORM_PROPERTIES : [])];
+	const clipTime = playheadInClip(clip, time);
+	return properties.map((property) => {
+		const prop = animatableOf(clip, property);
+		const keys = isVideoKeyframes(prop) ? prop.keys : [];
+		const limits = VIDEO_KEYFRAME_LIMITS[property];
+		return {
+			property,
+			...KEY_LABELS[property],
+			value: Math.round(videoValueAt(prop, clipTime, limits.default) * 1000) / 1000,
+			keyed: keys.length > 0,
+			keys: keys.length,
+			onKey: keys.some((k) => Math.abs(k.t - clipTime) < 0.5),
+			clipTime,
+			...(limits.min !== undefined ? { min: limits.min } : {}),
+			...(limits.max !== undefined ? { max: limits.max } : {})
+		};
+	});
+}
+
+/** A plain (unkeyed) value as an edit: `undefined` puts it back to its default. */
+function plainValueEdit(clip: VideoClip, property: VideoKeyframeProperty, value: number | undefined): VideoEdit {
+	if (!(VIDEO_TRANSFORM_PROPERTIES as readonly string[]).includes(property))
+		return value === undefined ? { op: 'update_clip', clip: clip.id, remove: [property] } : { op: 'update_clip', clip: clip.id, set: { [property]: value } };
+	const transform: Record<string, unknown> = { ...clip.transform, [property]: value };
+	if (value === undefined) delete transform[property];
+	return Object.keys(transform).length ? { op: 'update_clip', clip: clip.id, set: { transform } } : { op: 'update_clip', clip: clip.id, remove: ['transform'] };
+}
+
+/**
+ * Typing a value in an inspector: on a keyed property it sets (or moves) the key at the playhead;
+ * otherwise it sets the plain value (`undefined` resets it).
+ */
+export function videoKeyframeValueEdit(project: VideoProject, clipId: string, property: VideoKeyframeProperty, time: number, value: number | undefined): VideoEdit | null {
+	const at = findVideoClip(project, clipId);
+	if (!at) return null;
+	const prop = animatableOf(at.clip, property);
+	if (!isVideoKeyframes(prop)) return plainValueEdit(at.clip, property, value);
+	if (value === undefined) return null;
+	return { op: 'set_keyframes', clip: clipId, property, keys: setVideoKey(prop, { t: playheadInClip(at.clip, time), v: value }, VIDEO_KEYFRAME_LIMITS[property].default).keys };
+}
+
+/**
+ * The keyframe toggle: adds a key at the playhead holding the current value (the first key turns
+ * the plain value into keys), or removes the key there (the last one leaves its value plain).
+ */
+export function videoKeyframeToggleEdit(project: VideoProject, clipId: string, property: VideoKeyframeProperty, time: number): VideoEdit | null {
+	const at = findVideoClip(project, clipId);
+	if (!at) return null;
+	const prop = animatableOf(at.clip, property);
+	const t = playheadInClip(at.clip, time);
+	const fallback = VIDEO_KEYFRAME_LIMITS[property].default;
+	if (isVideoKeyframes(prop)) {
+		const key = prop.keys.find((k) => Math.abs(k.t - t) < 0.5);
+		if (key) {
+			const rest = removeVideoKey(prop, key.t);
+			return isVideoKeyframes(rest) ? { op: 'set_keyframes', clip: clipId, property, keys: rest.keys } : plainValueEdit(at.clip, property, rest === fallback ? undefined : rest);
+		}
+	}
+	const v = videoValueAt(prop, t, fallback);
+	return { op: 'set_keyframes', clip: clipId, property, keys: isVideoKeyframes(prop) ? setVideoKey(prop, { t, v }, fallback).keys : [{ t, v }] };
 }
