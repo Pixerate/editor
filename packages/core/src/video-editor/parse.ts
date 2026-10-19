@@ -1,6 +1,6 @@
 import { VIDEO_GRADE_CONTROLS } from './grade.js';
 import { VIDEO_EASE_NAMES, type VideoAnimatable, type VideoEase, type VideoKey, type VideoKeyframes } from './keyframes.js';
-import { VIDEO_BLEND_MODES, VIDEO_CLIP_ANIMATION_EFFECTS, VIDEO_CLIP_TYPES, VIDEO_FADE_CURVES, VIDEO_FITS, VIDEO_TRANSITION_TYPES, VIDEO_WIPE_DIRECTIONS, type VideoAsset, type VideoClip, type VideoClipAnimation, type VideoGrade, type VideoMarker, type VideoProject, type VideoTrack, type VideoTransform, type VideoTransition } from './types.js';
+import { VIDEO_BLEND_MODES, VIDEO_CLIP_ANIMATION_EFFECTS, VIDEO_CLIP_TYPES, VIDEO_FADE_CURVES, VIDEO_FITS, VIDEO_TRANSITION_TYPES, VIDEO_WIPE_DIRECTIONS, type VideoAsset, type VideoClip, type VideoClipAnimation, type VideoGrade, type VideoMarker, type VideoProject, type VideoTrack, type VideoTranscriptWord, type VideoTransform, type VideoTransition } from './types.js';
 
 const isObject = (v: unknown): v is Record<string, any> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const fail = (path: string, what: string): never => {
@@ -110,6 +110,19 @@ export function parseVideoTransition(v: unknown, path: string): VideoTransition 
 	});
 }
 
+export function parseVideoTranscriptWords(v: unknown, path: string): VideoTranscriptWord[] | undefined {
+	if (v === undefined) return undefined;
+	if (!Array.isArray(v)) return fail(path, 'must be an array of { word, start, end } (ms in the source)');
+	const words = v.map((w, i) => {
+		if (!isObject(w)) return fail(`${path}[${i}]`, 'must be an object { word, start, end }');
+		const word = str(w.word, `${path}[${i}].word`)!;
+		const start = num(w.start, `${path}[${i}].start`, { min: 0 })!;
+		const end = num(w.end, `${path}[${i}].end`, { min: start })!;
+		return { word, start, end };
+	});
+	return words.sort((a, b) => a.start - b.start);
+}
+
 export function parseVideoAsset(v: unknown, path = 'asset'): VideoAsset {
 	if (!isObject(v)) return fail(path, 'must be an object');
 	const kind = oneOf(v.kind, ['video', 'audio', 'image'] as const, `${path}.kind`, false)!;
@@ -122,8 +135,10 @@ export function parseVideoAsset(v: unknown, path = 'asset'): VideoAsset {
 		width: num(v.width, `${path}.width`, { optional: true, positive: true }),
 		height: num(v.height, `${path}.height`, { optional: true, positive: true }),
 		hasAudio: bool(v.hasAudio, `${path}.hasAudio`),
-		poster: str(v.poster, `${path}.poster`, true)
+		poster: str(v.poster, `${path}.poster`, true),
+		transcript: parseVideoTranscriptWords(v.transcript, `${path}.transcript`)
 	});
+	if (kind === 'image' && asset.transcript) fail(`${path}.transcript`, 'is only for video and audio assets');
 	if (kind === 'image' && asset.duration !== undefined) fail(`${path}.duration`, 'is only for video and audio assets');
 	return asset;
 }

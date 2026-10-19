@@ -3,7 +3,7 @@ import { flushSync, mount, unmount } from "svelte";
 import { ToolRegistry } from "@pixerate/editor/tools";
 import { ManualClock } from "@pixerate/editor/animation";
 import { VideoEditorController, buildVideoAudioPeaks, findVideoClip, type VideoProject } from "@pixerate/editor/video-editor";
-import { ClipInspector, MediaBin, VideoEditor, VideoPreview, VideoTimeline, VideoTransport, createVideoEditor } from "../src/video-editor";
+import { ClipInspector, MediaBin, TranscriptPanel, VideoEditor, VideoPreview, VideoTimeline, VideoTransport, createVideoEditor } from "../src/video-editor";
 import ToolsProbe from "./fixtures/VideoToolsProbe.svelte";
 
 let cleanups: (() => void)[] = [];
@@ -506,5 +506,37 @@ describe("VideoEditor (Svelte)", () => {
     } finally {
       HTMLCanvasElement.prototype.getContext = original;
     }
+  });
+});
+
+describe("TranscriptPanel (Svelte)", () => {
+  it("seeks to a word and cuts a shift-selected run and the fillers", () => {
+    const controller = new VideoEditorController({
+      clock: new ManualClock(),
+      project: {
+        version: 1, width: 640, height: 360, fps: 25,
+        assets: [{ id: "talk", kind: "audio", src: "talk.wav", duration: 4000, transcript: [
+  { word: "So", start: 0, end: 300 },
+  { word: "um", start: 400, end: 700 },
+  { word: "I", start: 800, end: 900 },
+  { word: "think", start: 900, end: 1200 },
+  { word: "we", start: 2500, end: 2700 },
+  { word: "ship", start: 2700, end: 3000 },
+] }],
+        tracks: [{ id: "a1", kind: "audio", clips: [{ id: "t", type: "media", asset: "talk", start: 0, duration: 4000 }] }],
+      },
+    });
+    render(TranscriptPanel, { controller });
+    const words = () => qa("[data-word]").map((w) => w.textContent);
+    expect(words()).toEqual(["So", "um", "I", "think", "we", "ship"]);
+    act(() => q<HTMLElement>('[data-word="2"]').click());
+    expect(controller.getState().time).toBe(800);
+    act(() => void q<HTMLElement>('[data-word="3"]').dispatchEvent(new MouseEvent("click", { bubbles: true, shiftKey: true })));
+    act(() => qa("button").find((b) => b.textContent === "Delete selected words")!.click());
+    expect(words()).toEqual(["So", "um", "we", "ship"]);
+    act(() => qa("button").find((b) => b.textContent === "Remove fillers")!.click());
+    expect(words()).toEqual(["So", "we", "ship"]);
+    expect(controller.getState().undoLabel).toBe("Remove fillers");
+    controller.destroy();
   });
 });

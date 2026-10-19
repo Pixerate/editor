@@ -3,6 +3,7 @@
   import { VideoEditorController, type VideoEditorOptions } from '@pixerate/editor/video-editor';
   import ClipInspector from './ClipInspector.svelte';
   import MediaBin from './MediaBin.svelte';
+  import TranscriptPanel from './TranscriptPanel.svelte';
   import VideoPreview from './VideoPreview.svelte';
   import VideoTimeline from './VideoTimeline.svelte';
   import VideoTransport from './VideoTransport.svelte';
@@ -22,10 +23,12 @@
     pxPerSecond?: number;
     /** List the project's issues under the timeline (default true). */
     showIssues?: boolean;
+    /** Show the transcript panel for editing by text (default true). */
+    showTranscript?: boolean;
     class?: string;
   }
 
-  let { controller, options, editable = true, pxPerSecond = $bindable(100), showIssues = true, class: className = '' }: Props = $props();
+  let { controller, options, editable = true, pxPerSecond = $bindable(100), showIssues = true, showTranscript = true, class: className = '' }: Props = $props();
   let owned: VideoEditorController | null = null;
   // A controller is made only when none is passed, and kept for the component's lifetime.
   const ctl = $derived(controller ?? (owned ??= new VideoEditorController(options)));
@@ -54,6 +57,7 @@
     <VideoPreview controller={ctl} class="rounded-md" />
     <VideoTransport controller={ctl} editable={false} />
     <VideoTimeline controller={ctl} bind:pxPerSecond editable={false} />
+    {#if showTranscript}<TranscriptPanel controller={ctl} editable={false} />{/if}
     {@render issueList()}
   </div>
 {:else}
@@ -66,6 +70,7 @@
     <ClipInspector controller={ctl} class="min-w-0" />
     <div class="flex min-w-0 flex-col gap-2 lg:col-span-3">
       <VideoTimeline controller={ctl} bind:pxPerSecond />
+      {#if showTranscript}<TranscriptPanel controller={ctl} />{/if}
       {@render issueList()}
     </div>
   </div>

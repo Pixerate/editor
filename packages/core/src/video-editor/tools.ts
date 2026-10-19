@@ -4,11 +4,12 @@ import type { VideoIssue } from './check.js';
 import type { VideoEditorController } from './controller.js';
 import { VIDEO_EDIT_OPS, type VideoEdit, type VideoEditOutcome, type VideoEditResult } from './edit.js';
 import { findVideoAudioSilences, videoAudioLevels } from './audio.js';
+import { findVideoFillers, findVideoTranscriptPauses, findVideoTranscriptText, mergeVideoRanges, parseVideoTranscript, VIDEO_DEFAULT_FILLERS, videoRemoveRangesEdits, videoTimelineTranscript, videoTranscriptTrack, type VideoTranscriptRange } from './transcript.js';
 import { VIDEO_GRADE_CONTROLS, VIDEO_GRADE_PRESET_NAMES, videoGradePreset } from './grade.js';
 import { videoFrameAt } from './evaluate.js';
 import { VIDEO_EASE_NAMES, VIDEO_KEYFRAME_PROPERTIES, VIDEO_TRANSFORM_PROPERTIES, type VideoAnimatable, type VideoKeyframeProperty } from './keyframes.js';
 import { videoContactSheetSvg, videoProjectSvg } from './render.js';
-import { findVideoClip, findVideoGaps, formatVideoTimecode, sortedVideoClips, videoClipEnd, videoClipSourceRange, videoProjectDuration } from './timeline.js';
+import { findVideoClip, findVideoGaps, formatVideoTimecode, sortedVideoClips, VIDEO_TIME_EPSILON, videoClipEnd, videoClipSourceRange, videoProjectDuration } from './timeline.js';
 import { VIDEO_BLEND_MODES, VIDEO_CLIP_ANIMATION_EFFECTS, VIDEO_FADE_CURVES, VIDEO_FITS, VIDEO_PLACEMENT_MODES, VIDEO_TRANSITION_TYPES, VIDEO_WIPE_DIRECTIONS, type VideoAsset, type VideoProject } from './types.js';
 
 /** Times in results, to a tenth of a millisecond. */
@@ -192,6 +193,12 @@ const issueSummary = (issues: readonly VideoIssue[]) => ({
 	lines: issues.map((i) => `${i.severity}: ${i.message}`)
 });
 
+/** An asset as agents see it: a transcript is summarised as its word count (get_video_transcript reads it). */
+const videoAssetOut = (a: VideoAsset) => {
+	const { transcript, ...rest } = a;
+	return transcript ? { ...rest, transcriptWords: transcript.length } : rest;
+};
+
 /** A project as agents see it: settings, assets, and each track's clips in order with their times. */
 export function describeVideoProject(project: VideoProject) {
 	return {
@@ -201,7 +208,7 @@ export function describeVideoProject(project: VideoProject) {
 		fps: project.fps,
 		duration: videoProjectDuration(project),
 		...(project.background ? { background: project.background } : {}),
-		assets: project.assets,
+		assets: project.assets.map(videoAssetOut),
 		tracks: project.tracks.map((t, index) => ({
 			id: t.id,
 			kind: t.kind,
@@ -451,9 +458,9 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 		name: 'update_video_asset',
 		title: 'Change media details',
 		description: 'Changes an asset\'s src, name, duration, size, sound or poster (e.g. relinking moved media). Clips that now run past its end are refused. Returns the asset.',
-		inputSchema: object({ asset: ASSET_ID, set: object(ASSET_FIELDS, [], 'Fields to replace.'), remove: { type: 'array', items: { type: 'string', enum: ['name', 'duration', 'width', 'height', 'hasAudio', 'poster'] }, description: 'Fields to clear.' } }, ['asset']),
+		inputSchema: object({ asset: ASSET_ID, set: object(ASSET_FIELDS, [], 'Fields to replace.'), remove: { type: 'array', items: { type: 'string', enum: ['name', 'duration', 'width', 'height', 'hasAudio', 'poster', 'transcript'] }, description: 'Fields to clear (transcript removes its words).' } }, ['asset']),
 		annotations: { title: 'Change media details', ...WRITE_IDEMPOTENT },
-		handler: ({ asset, set, remove }) => apply({ op: 'update_asset', asset, set, remove }, 'Change media', (r) => ({ asset: r.project.assets.find((a) => a.id === asset) }))
+		handler: ({ asset, set, remove }) => apply({ op: 'update_asset', asset, set, remove }, 'Change media', (r) => ({ asset: videoAssetOut(r.project.assets.find((a) => a.id === asset)!) }))
 	};
 
 	const removeAsset: AgentTool = {
@@ -631,6 +638,129 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 			const grade = findVideoClip(project(), from)!.clip.grade;
 			const edits: VideoEdit[] = to.map((clip: string) => (grade ? { op: 'update_clip', clip, set: { grade: { ...grade } } } : { op: 'update_clip', clip, remove: ['grade'] }));
 			return apply(edits, 'Copy grade', () => ({ grade: grade ?? null, clips: to }));
+		}
+	};
+
+	// -----------------------------------------------------------------------------------------
+	// Text-based editing
+	// -----------------------------------------------------------------------------------------
+
+	const TRANSCRIPT_TRACK = { ...TRACK_ID, description: 'Track whose words to read (default: the first audio track with a transcribed clip, else the first video track with one).' };
+	const RANGE_OUT = (r: VideoTranscriptRange) => ({ from: round(r.from), to: round(r.to), text: r.text });
+	const timelineWords = (track?: string) => {
+		const words = videoTimelineTranscript(project(), { track });
+		if (!words.length) throw new Error(track ? `No clip on track "${track}" plays a transcribed asset; attach one with set_video_transcript.` : 'No clip plays a transcribed asset; attach a transcript to the media with set_video_transcript first.');
+		return words;
+	};
+
+	const setTranscript: AgentTool = {
+		name: 'set_video_transcript',
+		title: 'Attach a transcript',
+		description:
+			'Attaches what is said in a video or audio asset, word by word, so the edit can be cut by text (one undo step). Pass "text" (Whisper-style JSON with word timings, SubRip or WebVTT, as the file says it) or "words" ([{ word, start, end }] in ms of the source). Captions have no word timings, so their words are spread across each cue (approximate). Replaces any transcript the asset had. Returns the word count, whether timings are approximate, and the first and last words.',
+		inputSchema: object(
+			{
+				asset: { ...ASSET_ID, description: 'A video or audio asset.' },
+				text: { type: 'string', minLength: 1, description: 'The transcript file\'s contents: Whisper-style JSON (times in seconds), .srt or .vtt. Pass this or words.' },
+				words: { type: 'array', minItems: 1, items: object({ word: { type: 'string', minLength: 1, description: 'The word as said.' }, start: { type: 'number', minimum: 0, description: 'Start in ms of the source.' }, end: { type: 'number', minimum: 0, description: 'End in ms of the source.' } }, ['word', 'start', 'end'], 'One word.'), description: 'Words with source times in ms. Pass this or text.' }
+			},
+			['asset']
+		),
+		annotations: { title: 'Attach a transcript', ...WRITE_IDEMPOTENT },
+		handler: ({ asset, text, words }) => {
+			if ((text === undefined) === (words === undefined)) throw new Error('Pass either "text" (a transcript file\'s contents) or "words", not both.');
+			const a = project().assets.find((x) => x.id === asset);
+			if (!a) throw new Error(`There is no asset "${asset}"; the assets are ${project().assets.map((x) => `"${x.id}"`).join(', ') || 'none'}.`);
+			if (a.kind === 'image') throw new Error(`Asset "${asset}" is an image and has no sound to transcribe.`);
+			const parsed = text !== undefined ? parseVideoTranscript(text) : { words, approximate: false };
+			const list = parsed.words as { word: string; start: number; end: number }[];
+			return apply({ op: 'update_asset', asset, set: { transcript: list } }, 'Attach transcript', () => ({
+				asset,
+				words: list.length,
+				approximate: parsed.approximate,
+				first: list[0],
+				last: list[list.length - 1],
+				...(a.duration !== undefined && list[list.length - 1].end > a.duration + VIDEO_TIME_EPSILON ? { warning: `The transcript runs to ${list[list.length - 1].end} ms, past the asset's ${a.duration} ms: is it for this asset?` } : {})
+			}));
+		}
+	};
+
+	const getTranscript: AgentTool = {
+		name: 'get_video_transcript',
+		title: 'Read the transcript',
+		description:
+			'Returns what the timeline says, in order, from the transcripts of the media its clips play on one track: the text, and each word with its timeline start and end (ms) and the clip that plays it, so ranges can go straight to remove_video_ranges or split_video_at. Words cut out of the edit are not included.',
+		inputSchema: object({
+			track: TRANSCRIPT_TRACK,
+			from: MS('Only words from this timeline time (default 0)'),
+			to: MS('Only words up to this timeline time (default the end)'),
+			limit: { type: 'integer', minimum: 1, maximum: 5000, description: 'Most words to return (default 1000); "more" says if there are others.' }
+		}),
+		annotations: { title: 'Read the transcript', ...READ },
+		handler: ({ track, from, to, limit }) => {
+			const all = timelineWords(track).filter((w) => w.end > (from ?? 0) && w.start < (to ?? Infinity));
+			const words = all.slice(0, limit ?? 1000);
+			return { track: words[0]?.track ?? videoTranscriptTrack(project(), track), text: words.map((w) => w.word).join(' '), words: words.map((w) => ({ word: w.word, start: round(w.start), end: round(w.end), clip: w.clip })), more: all.length > words.length };
+		}
+	};
+
+	const findText: AgentTool = {
+		name: 'find_video_transcript_text',
+		title: 'Find words in the transcript',
+		description: 'Lists every place a word or phrase is said on the timeline (case and punctuation ignored) as { from, to, text } ranges in timeline ms, ready for remove_video_ranges, split_video_at or seek_video.',
+		inputSchema: object({ query: { type: 'string', minLength: 1, description: 'The word or phrase.' }, track: TRANSCRIPT_TRACK }, ['query']),
+		annotations: { title: 'Find words in the transcript', ...READ },
+		handler: ({ query, track }) => ({ matches: findVideoTranscriptText(timelineWords(track), query).map(RANGE_OUT) })
+	};
+
+	const findFillers: AgentTool = {
+		name: 'find_video_fillers',
+		title: 'Find filler words',
+		description: `Lists filler words and phrases on the timeline as { from, to, text } ranges in timeline ms, longest phrase first so "you know" is found whole. Default fillers: ${VIDEO_DEFAULT_FILLERS.join(', ')} ("like" and "so" are left out as too often meant). Check them, then pass the ones to cut to remove_video_ranges.`,
+		inputSchema: object({ track: TRANSCRIPT_TRACK, fillers: { type: 'array', minItems: 1, items: { type: 'string', minLength: 1 }, description: 'Words or phrases to treat as fillers instead of the defaults.' } }),
+		annotations: { title: 'Find filler words', ...READ },
+		handler: ({ track, fillers }) => {
+			const found = findVideoFillers(timelineWords(track), fillers);
+			return { fillers: found.map(RANGE_OUT), total: round(found.reduce((n, r) => n + r.to - r.from, 0)) };
+		}
+	};
+
+	const findPauses: AgentTool = {
+		name: 'find_video_pauses',
+		title: 'Find pauses between words',
+		description:
+			'Lists the gaps between consecutive words on the timeline (within one clip) longer than "min", less "keep" next to each word so speech is not clipped, snapped inward to frames, as { from, to } ranges in timeline ms ready for remove_video_ranges. Uses word timings; find_video_silences measures the sound instead.',
+		inputSchema: object({
+			track: TRANSCRIPT_TRACK,
+			min: { type: 'number', exclusiveMinimum: 0, description: 'Shortest gap that counts, in ms (default 700).' },
+			keep: { type: 'number', minimum: 0, description: 'Silence to keep after the word before and before the word after, in ms (default 150).' }
+		}),
+		annotations: { title: 'Find pauses between words', ...READ },
+		handler: ({ track, min, keep }) => {
+			const found = findVideoTranscriptPauses(timelineWords(track), { min, keep, fps: project().fps });
+			return { pauses: found.map(RANGE_OUT), total: round(found.reduce((n, r) => n + r.to - r.from, 0)) };
+		}
+	};
+
+	const removeRanges: AgentTool = {
+		name: 'remove_video_ranges',
+		title: 'Cut out stretches',
+		description:
+			'Cuts stretches of the timeline out and closes them up, as one undo step: the ranges are merged where they touch and extracted from the last to the first, so the times from find_video_fillers, find_video_pauses, find_video_transcript_text or find_video_silences can be passed as they are. Like extract_video_range, every sync-locked track moves with the cut. Returns how many stretches and how much time were removed and the new length.',
+		inputSchema: object(
+			{
+				ranges: { type: 'array', minItems: 1, maxItems: 500, items: object({ from: MS('Start, on the timeline'), to: MS('End, on the timeline'), text: { type: 'string', description: 'Ignored: the words in the stretch, as the find tools return them.' } }, ['from', 'to'], 'A stretch to remove.'), description: 'The stretches, in any order (timeline ms).' },
+				tracks: { type: 'array', items: TRACK_ID, minItems: 1, description: 'Tracks to cut (default every unlocked track).' }
+			},
+			['ranges']
+		),
+		annotations: { title: 'Cut out stretches', ...DESTRUCTIVE },
+		handler: ({ ranges, tracks }) => {
+			const bad = (ranges as { from: number; to: number }[]).findIndex((r) => !(r.to > r.from));
+			if (bad >= 0) throw new Error(`Range ${bad + 1} is empty or backwards (${ranges[bad].from}–${ranges[bad].to} ms); "to" must be after "from".`);
+			const merged = mergeVideoRanges(ranges);
+			const before = videoProjectDuration(project());
+			return apply(videoRemoveRangesEdits(merged, tracks), merged.length > 1 ? `Cut ${merged.length} stretches` : 'Cut stretch', (r) => ({ removed: merged.length, time: round(before - videoProjectDuration(r.project)), duration: videoProjectDuration(r.project) }));
 		}
 	};
 
@@ -887,8 +1017,8 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 		}
 	};
 
-	const reads = [getProject, getFrame, findGaps, checkProject, renderFrame, exportFfmpeg, exportLoudnessMeasure, exportEdl, audioLevels, findSilences, seek];
-	const writes = [setSettings, addAsset, updateAsset, removeAsset, addTrack, updateTrack, removeTrack, moveTrack, addClip, moveClip, trimClip, splitClip, deleteClips, updateClip, setTransition, applyGradePreset, copyGrade, setKeyframes, removeKeyframes, slipClip, rollEdit, slideClip, liftRange, extractRange, splitAt, closeGaps, addMarker, removeMarker, editVideo, undo, redo];
+	const reads = [getProject, getFrame, getTranscript, findText, findFillers, findPauses, findGaps, checkProject, renderFrame, exportFfmpeg, exportLoudnessMeasure, exportEdl, audioLevels, findSilences, seek];
+	const writes = [setSettings, addAsset, updateAsset, removeAsset, addTrack, updateTrack, removeTrack, moveTrack, addClip, moveClip, trimClip, splitClip, deleteClips, updateClip, setTransition, setTranscript, removeRanges, applyGradePreset, copyGrade, setKeyframes, removeKeyframes, slipClip, rollEdit, slideClip, liftRange, extractRange, splitAt, closeGaps, addMarker, removeMarker, editVideo, undo, redo];
 
 	return {
 		id: options.id ?? 'video',

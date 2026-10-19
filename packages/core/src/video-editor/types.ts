@@ -10,6 +10,13 @@ import type { VideoAnimatable } from './keyframes.js';
 
 export type VideoAssetKind = 'video' | 'audio' | 'image';
 
+/** A spoken word in an asset's transcript, timed in the source (ms). */
+export interface VideoTranscriptWord {
+	word: string;
+	start: number;
+	end: number;
+}
+
 /** A piece of source media. The project refers to it by id; `src` is whatever the host can load. */
 export interface VideoAsset {
 	id: string;
@@ -26,6 +33,8 @@ export interface VideoAsset {
 	hasAudio?: boolean;
 	/** A still to show for a video where its frames cannot be drawn (SVG renders, thumbnails). */
 	poster?: string;
+	/** What is said in it, word by word, timed in the source (see `parseVideoTranscript`). */
+	transcript?: VideoTranscriptWord[];
 }
 
 export type VideoTrackKind = 'video' | 'audio';

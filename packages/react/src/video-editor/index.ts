@@ -4,4 +4,5 @@ export * from './VideoTransport';
 export * from './VideoTimeline';
 export * from './ClipInspector';
 export * from './MediaBin';
+export * from './TranscriptPanel';
 export * from './VideoEditor';

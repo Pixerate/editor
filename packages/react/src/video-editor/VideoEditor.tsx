@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import type { VideoEditorController, VideoEditorOptions } from '@pixerate/editor/video-editor';
 import { ClipInspector } from './ClipInspector';
 import { MediaBin } from './MediaBin';
+import { TranscriptPanel } from './TranscriptPanel';
 import { useVideoEditor } from './useVideoEditor';
 import { VideoPreview } from './VideoPreview';
 import { VideoTimeline } from './VideoTimeline';
@@ -25,6 +26,8 @@ export interface VideoEditorProps {
   resolution?: number;
   /** List the project's issues under the timeline (default true). */
   showIssues?: boolean;
+  /** Show the transcript panel for editing by text (default true). */
+  showTranscript?: boolean;
   className?: string;
 }
 
@@ -33,7 +36,7 @@ export interface VideoEditorProps {
  * transport, the timeline and the clip inspector, with the project's issues listed under the
  * timeline. Every edit is one undo step; the controller's agent tools edit the same project.
  */
-export function VideoEditor({ controller: given, options, editable = true, pxPerSecond, onPxPerSecondChange, resolution, showIssues = true, className = '' }: VideoEditorProps) {
+export function VideoEditor({ controller: given, options, editable = true, pxPerSecond, onPxPerSecondChange, resolution, showIssues = true, showTranscript = true, className = '' }: VideoEditorProps) {
   const { controller, state } = useVideoEditor(given ?? options ?? {});
   useEffect(() => {
     if (editable) return;
@@ -62,6 +65,7 @@ export function VideoEditor({ controller: given, options, editable = true, pxPer
         {editable && <ClipInspector controller={controller} className="min-w-0" />}
       </div>
       <VideoTimeline controller={controller} editable={editable} pxPerSecond={pxPerSecond} onPxPerSecondChange={onPxPerSecondChange} />
+      {showTranscript && <TranscriptPanel controller={controller} editable={editable} />}
       {issueList}
     </div>
   );
