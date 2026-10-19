@@ -1,5 +1,16 @@
 # @pixerate/editor-svelte
 
+## 0.78.0
+
+### Minor Changes
+
+- 251520e: Add UI-agnostic image editor filter/crop presets (`IMAGE_FILTER_PRESETS`, `IMAGE_CROP_PRESETS`), depth mask controls (`DEPTH_MASK_CONTROLS`), normalized layer extraction (`extractNormalizedLayerItems`), and Svelte 5 safe canvas graph snapshotting (`snapshotCanvasGraph`).
+
+### Patch Changes
+
+- Updated dependencies [251520e]
+  - @pixerate/editor@0.106.0
+
 ## 0.77.0
 
 ### Minor Changes
