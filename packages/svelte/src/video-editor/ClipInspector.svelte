@@ -1,5 +1,16 @@
 <script lang="ts">
-  import { findVideoClip, formatVideoTimecode, VIDEO_TRANSITION_TYPES, type VideoEdit, type VideoEditorController, type VideoTransitionType } from '@pixerate/editor/video-editor';
+  import {
+    findVideoClip,
+    formatVideoTimecode,
+    VIDEO_TRANSITION_TYPES,
+    videoKeyframeRows,
+    videoKeyframeToggleEdit,
+    videoKeyframeValueEdit,
+    type VideoEdit,
+    type VideoEditorController,
+    type VideoKeyframeRow,
+    type VideoTransitionType
+  } from '@pixerate/editor/video-editor';
   import { videoEditorStateOf } from './createVideoEditor.svelte.js';
 
   interface Props {
@@ -17,6 +28,7 @@
   let localError = $state<{ text: string; revision: number } | null>(null);
   // A local error shows until the editor changes; then the editor's own error (if any) shows.
   const message = $derived((localError && localError.revision === editor.revision ? localError.text : null) ?? editor.error);
+  const rows = $derived(clip ? videoKeyframeRows(editor.project, clip.id, editor.time) : []);
   const input = 'w-full min-w-0 rounded border border-border bg-transparent px-1 py-0.5 text-xs disabled:opacity-50';
 
   function apply(edit: VideoEdit, label: string) {
@@ -47,6 +59,28 @@
     }
     set(key, key === 'text' ? raw : raw.trim(), label);
   }
+  /** The value shown in a property's field: blank when it is plain and at its default. */
+  function shown(row: VideoKeyframeRow): string | number {
+    if (!clip || row.keyed) return row.value;
+    const plain = row.property === 'opacity' ? clip.opacity : row.property === 'volume' ? (clip as { volume?: unknown }).volume : clip.transform?.[row.property];
+    return plain === undefined ? '' : row.value;
+  }
+  /** Typing a value: sets the key at the playhead when the property is keyed, else the plain value (empty resets it). */
+  function animatable(row: VideoKeyframeRow, raw: string) {
+    if (!clip) return;
+    const n = Number(raw);
+    if (raw.trim() !== '' && (!Number.isFinite(n) || (row.min !== undefined && n < row.min) || (row.max !== undefined && n > row.max))) {
+      localError = { text: `${row.label} must be ${row.max !== undefined ? `between ${row.min} and ${row.max}` : row.min !== undefined ? `${row.min} or more` : 'a number'}.`, revision: editor.revision };
+      return;
+    }
+    const edit = videoKeyframeValueEdit(editor.project, clip.id, row.property, editor.time, raw.trim() === '' ? undefined : n);
+    if (edit) apply(edit, row.keyed ? `Keyframe ${row.label.toLowerCase()}` : `Change ${row.label.toLowerCase()}`);
+  }
+  function toggleKey(row: VideoKeyframeRow) {
+    if (!clip) return;
+    const edit = videoKeyframeToggleEdit(editor.project, clip.id, row.property, editor.time);
+    if (edit) apply(edit, `${row.onKey ? 'Remove' : 'Add'} ${row.label.toLowerCase()} keyframe`);
+  }
   function setTransition(type: string) {
     if (!clip) return;
     if (!type) apply({ op: 'set_transition', clip: clip.id, transition: null }, 'Remove transition');
@@ -64,7 +98,9 @@
 </script>
 
 <!--
-  The selected clip: its name, timing, opacity and fades; volume, speed and mute for media; text,
+  The selected clip: its name, timing and fades; opacity, volume and transform, each with a keyframe
+  toggle at the playhead (◆ adds a key holding the value there or removes the one there; typing a
+  value on a keyed property sets the key at the playhead); speed and mute for media; text,
   colours and size for titles; the colour of a colour clip; and the transition into it. Every
   committed change is one undo step.
 -->
@@ -87,15 +123,28 @@
       <span class="tabular-nums" data-field="start">{formatVideoTimecode(clip.start, fps)}</span>
       <span class="text-muted-foreground">Duration</span>
       <span class="tabular-nums" data-field="duration">{formatVideoTimecode(clip.duration, fps)} ({(clip.duration / 1000).toFixed(2)} s)</span>
-      <span class="text-muted-foreground">Opacity</span>
-      <input class={input} type="number" min="0" max="1" step="0.05" placeholder="1" aria-label="Opacity" {disabled} value={clip.opacity ?? ''} onchange={(e) => number('opacity', e.currentTarget.value, 'Change opacity', { min: 0, max: 1, what: 'Opacity must be between 0 and 1.' })} data-field="opacity" />
       <span class="text-muted-foreground">Fade in</span>
       <input class={input} type="number" min="0" step="100" placeholder="0 ms" aria-label="Fade in" {disabled} value={clip.fadeIn ?? ''} onchange={(e) => number('fadeIn', e.currentTarget.value, 'Change fade in', { min: 0, what: 'Fade in must be a number of ms, 0 or more.' })} data-field="fadeIn" />
       <span class="text-muted-foreground">Fade out</span>
       <input class={input} type="number" min="0" step="100" placeholder="0 ms" aria-label="Fade out" {disabled} value={clip.fadeOut ?? ''} onchange={(e) => number('fadeOut', e.currentTarget.value, 'Change fade out', { min: 0, what: 'Fade out must be a number of ms, 0 or more.' })} data-field="fadeOut" />
+      {#each rows as row (row.property)}
+        <span class="text-muted-foreground">{row.label}</span>
+        <div class="flex min-w-0 items-center gap-1" data-keyframe-row={row.property}>
+          <input class={input} type="number" min={row.min} max={row.max} step={row.step} placeholder={String(row.value)} aria-label={row.label} {disabled} value={shown(row)} onchange={(e) => animatable(row, e.currentTarget.value)} data-field={row.property} />
+          <button
+            type="button"
+            class="shrink-0 rounded px-1 disabled:opacity-50 {row.onKey ? 'text-amber-500' : row.keyed ? 'text-foreground' : 'text-muted-foreground'}"
+            aria-label="{row.onKey ? 'Remove' : 'Add'} {row.label.toLowerCase()} keyframe at playhead"
+            aria-pressed={row.onKey}
+            title={row.keyed ? `${row.keys} key${row.keys === 1 ? '' : 's'}; ${row.onKey ? 'remove the one' : 'add one'} at the playhead` : 'Animate: add a key at the playhead'}
+            {disabled}
+            onclick={() => toggleKey(row)}
+            data-keyframe-toggle={row.property}>{row.onKey ? '◆' : '◇'}</button
+          >
+          {#if row.keyed}<span class="shrink-0 text-[10px] tabular-nums text-muted-foreground" data-keyframe-count={row.property}>{row.keys}</span>{/if}
+        </div>
+      {/each}
       {#if clip.type === 'media'}
-        <span class="text-muted-foreground">Volume</span>
-        <input class={input} type="number" min="0" step="0.05" placeholder="1" aria-label="Volume" {disabled} value={clip.volume ?? ''} onchange={(e) => number('volume', e.currentTarget.value, 'Change volume', { min: 0, what: 'Volume must be 0 or more (1 = unchanged).' })} data-field="volume" />
         <span class="text-muted-foreground">Speed</span>
         <input class={input} type="number" min="0.05" step="0.05" placeholder="1" aria-label="Speed" {disabled} value={clip.speed ?? ''} onchange={(e) => number('speed', e.currentTarget.value, 'Change speed', { above: 0, what: 'Speed must be a number above 0 (1 = normal speed).' })} data-field="speed" />
         <span class="text-muted-foreground">Muted</span>

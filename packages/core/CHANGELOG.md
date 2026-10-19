@@ -1,5 +1,15 @@
 # @pixerate/editor
 
+## 0.78.0
+
+### Minor Changes
+
+- 3b6da42: feat(canvas,image-editor,vector): add `PIXERATE_BRAND_GRADIENT`, `isolateCanvasGestures`, UI-agnostic agent presence trajectory/rotation math and `AgentCursorPresence`, region mosaic/blur image filters (`applyRegionMosaic`, `applyRegionBlur`), and CSS transform scale compensation in `VectorCanvas`
+
+### Patch Changes
+
+- b15c054: Add computeDragBounds and computeDragBoundsFromPoints with modifier key options (Shift to constrain 1:1, Alt/Option to draw from center)
+
 ## 0.77.0
 
 ### Minor Changes

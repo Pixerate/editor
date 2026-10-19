@@ -33,6 +33,12 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: Svelte's `onclipdown` treats Shift / Cmd / Ctrl at pointer-down as additive selection and turns editing off for that gesture. The placement mode (Alt = insert, Shift = overwrite) is read from each pointer-move, so a modifier held from the start never reaches a drag.
 - **Solution / Workaround**: Press Shift after the drag has started (tests send `shiftKey` on the move and up events only). React reads the modifiers on move and up too, so the same gesture works in both.
 
+### [core/video-editor] Keyframed Clip Values Are Not Numbers, and ffmpeg's `t` Means Two Things
+
+- **Issue / Symptom**: Code that reads `clip.opacity ?? 1`, `clip.volume` or `clip.transform.x` and does arithmetic gets `NaN` or `[object Object]` once a property is keyframed. In the ffmpeg export, an animation lands early or late by the clip's start or by its transition lead.
+- **Root Cause**: `opacity`, `volume` and the transform's fields are `number | { keys }` (`VideoAnimatable`), with key times in clip time (ms from the clip's start). In the filter graph, `t` / `T` on a clip's own chain (`scale`, `geq`, `rotate`, the audio `volume`) counts from the clip's first rendered frame, which is `start − lead` when a transition plays before the cut; on `overlay` and `drawtext`, which run on the composite, it is timeline time.
+- **Solution / Workaround**: Always read these through `videoValueAt(prop, clipTime, default)` (or `videoTransformAt`). In the export, convert with `(t*1000-lead)` on the clip chain and `(t*1000-start)` on the composite (`onChain` / `onTimeline` in `toVideoFfmpeg`). Do not use `st()` / `ld()` in `geq` expressions: slice threads share the variables. A title drawn as an image (`titleImage`) gets the clip without its transform when the transform is keyframed, and the export moves the full-frame image instead.
+
 ### [core/video-editor] Homebrew's ffmpeg Has No `drawtext`
 
 - **Issue / Symptom**: Rendering a project with titles fails at once with `Filter not found`, although every other filter in the graph exists.

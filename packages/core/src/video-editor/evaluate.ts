@@ -1,3 +1,4 @@
+import { videoValueAt } from './keyframes.js';
 import { sortedVideoClips, videoAssetMap, videoClipAfter, videoClipBefore, videoClipEnd, videoClipSpeed } from './timeline.js';
 import type { VideoAsset, VideoClip, VideoFit, VideoProject, VideoTextClip, VideoTrack, VideoWipeDirection } from './types.js';
 
@@ -56,8 +57,13 @@ export interface VideoFrame {
 	audio: VideoAudioSource[];
 }
 
-/** Places a picture of `size` in the frame by `fit`, then the clip's transform. */
-export function placeVideoRect(frame: { width: number; height: number }, size: { width: number; height: number }, fit: VideoFit = 'contain', transform: VideoClip['transform'] = {}): VideoRect {
+/** A transform's values at clip-relative time `clipTime` (ms), keyframes resolved and defaults filled in. */
+export function videoTransformAt(transform: VideoClip['transform'], clipTime = 0): { x: number; y: number; scale: number; rotation: number } {
+	return { x: videoValueAt(transform?.x, clipTime, 0), y: videoValueAt(transform?.y, clipTime, 0), scale: videoValueAt(transform?.scale, clipTime, 1), rotation: videoValueAt(transform?.rotation, clipTime, 0) };
+}
+
+/** Places a picture of `size` in the frame by `fit`, then the clip's transform at clip-relative `clipTime` (ms). */
+export function placeVideoRect(frame: { width: number; height: number }, size: { width: number; height: number }, fit: VideoFit = 'contain', transform: VideoClip['transform'] = {}, clipTime = 0): VideoRect {
 	let w = size.width;
 	let h = size.height;
 	if (fit === 'fill') {
@@ -68,11 +74,11 @@ export function placeVideoRect(frame: { width: number; height: number }, size: {
 		w *= k;
 		h *= k;
 	}
-	const scale = transform?.scale ?? 1;
-	w *= scale;
-	h *= scale;
-	const cx = frame.width / 2 + (transform?.x ?? 0);
-	const cy = frame.height / 2 + (transform?.y ?? 0);
+	const t = videoTransformAt(transform, clipTime);
+	w *= t.scale;
+	h *= t.scale;
+	const cx = frame.width / 2 + t.x;
+	const cy = frame.height / 2 + t.y;
 	return { x: cx - w / 2, y: cy - h / 2, width: w, height: h };
 }
 
@@ -85,9 +91,11 @@ export function videoTextStyle(clip: VideoTextClip): NonNullable<VideoLayer['tex
  * A frame holding only one title, fully opaque on a transparent background, placed as the preview
  * places it: draw it with `drawVideoFrame` and save the canvas as a PNG to give the ffmpeg export
  * titles without `drawtext` (`VideoFfmpegOptions.titleImage`). Fades and opacity are left to the export.
+ * A keyframed transform is placed as it is at `clipTime` (the export passes titles with keyframed
+ * transforms without them, and moves the image itself).
  */
-export function videoTitleFrame(project: VideoProject, clip: VideoTextClip): VideoFrame {
-	const layer: VideoLayer = { clip: clip.id, track: '', type: 'text', opacity: 1, rect: placeVideoRect(project, project, 'fill', clip.transform), rotation: clip.transform?.rotation ?? 0, text: videoTextStyle(clip) };
+export function videoTitleFrame(project: VideoProject, clip: VideoTextClip, clipTime = 0): VideoFrame {
+	const layer: VideoLayer = { clip: clip.id, track: '', type: 'text', opacity: 1, rect: placeVideoRect(project, project, 'fill', clip.transform, clipTime), rotation: videoTransformAt(clip.transform, clipTime).rotation, text: videoTextStyle(clip) };
 	return { time: clip.start, width: project.width, height: project.height, background: 'rgba(0,0,0,0)', layers: [layer], audio: [] };
 }
 
@@ -150,14 +158,16 @@ export function videoFrameAt(project: VideoProject, time: number): VideoFrame {
 			const mix = (incoming ? level(incoming, true) : 1) * (outgoing ? level(outgoing, false) : 1);
 			const asset = clip.type === 'media' ? assets.get(clip.asset) : undefined;
 			const sourceTime = sourceTimeAt(clip, time);
+			// Keyframes are in clip time, held before the first key and after the last.
+			const clipTime = time - clip.start;
 			const audible = asset && (asset.kind === 'audio' || (asset.kind === 'video' && asset.hasAudio !== false));
 			if (audible && clip.type === 'media' && !clip.muted && !track.muted) {
-				const gain = (clip.volume ?? 1) * (track.volume ?? 1) * fade * mix;
+				const gain = videoValueAt(clip.volume, clipTime, 1) * (track.volume ?? 1) * fade * mix;
 				audio.push({ clip: clip.id, track: track.id, asset: asset!.id, src: asset!.src, sourceTime, gain, speed: videoClipSpeed(clip) });
 			}
 			if (track.kind !== 'video' || track.hidden) continue;
 			if (clip.type === 'media' && (!asset || asset.kind === 'audio')) continue;
-			let opacity = (clip.opacity ?? 1) * fade;
+			let opacity = videoValueAt(clip.opacity, clipTime, 1) * fade;
 			let wipe: VideoLayer['wipe'];
 			let dip: { color: string; opacity: number } | null = null;
 			if (incoming) {
@@ -168,8 +178,8 @@ export function videoFrameAt(project: VideoProject, time: number): VideoFrame {
 			if (outgoing?.type === 'dip') dip = { color: outgoing.next.transition!.color ?? '#000000', opacity: outgoing.progress * 2 };
 			const size = clip.type === 'media' ? { width: asset!.width ?? project.width, height: asset!.height ?? project.height } : { width: project.width, height: project.height };
 			const fit = clip.fit ?? (clip.type === 'media' ? 'contain' : 'fill');
-			const rect = clip.type === 'text' ? placeVideoRect(project, size, 'fill', clip.transform) : placeVideoRect(project, size, fit, clip.transform);
-			const layer: VideoLayer = { clip: clip.id, track: track.id, type: clip.type, opacity: clamp01(opacity), rect, rotation: clip.transform?.rotation ?? 0 };
+			const rect = placeVideoRect(project, size, clip.type === 'text' ? 'fill' : fit, clip.transform, clipTime);
+			const layer: VideoLayer = { clip: clip.id, track: track.id, type: clip.type, opacity: clamp01(opacity), rect, rotation: videoValueAt(clip.transform?.rotation, clipTime, 0) };
 			if (wipe) layer.wipe = wipe;
 			if (clip.type === 'media') Object.assign(layer, { asset: asset!.id, assetKind: asset!.kind, src: asset!.src, sourceTime });
 			if (clip.type === 'text') layer.text = videoTextStyle(clip);

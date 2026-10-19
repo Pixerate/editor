@@ -1,5 +1,6 @@
 import { checkVideoProject, videoIssueKey, type VideoIssue } from './check.js';
-import { parseVideoAsset, parseVideoClip, parseVideoMarker, parseVideoProject, parseVideoTransition } from './parse.js';
+import { isVideoKeyframes, retimeVideoAnimatable, sortVideoKeys, splitVideoAnimatable, VIDEO_KEYFRAME_LIMITS, VIDEO_KEYFRAME_PROPERTIES, VIDEO_TRANSFORM_PROPERTIES, videoValueAt, type VideoAnimatable, type VideoKey, type VideoKeyframeProperty } from './keyframes.js';
+import { parseVideoAnimatable, parseVideoAsset, parseVideoClip, parseVideoMarker, parseVideoProject, parseVideoTransition } from './parse.js';
 import {
 	findVideoClip,
 	formatVideoSeconds,
@@ -48,6 +49,8 @@ export type VideoEdit =
 	| { op: 'lift_range'; from: number; to: number; tracks?: string[] }
 	| { op: 'extract_range'; from: number; to: number; tracks?: string[] }
 	| { op: 'split_at'; at: number; tracks?: string[] }
+	/** Keys for one property (in any order; clip-relative ms), or null to stop animating it and keep its value at the clip's start. */
+	| { op: 'set_keyframes'; clip: string; property: VideoKeyframeProperty; keys: VideoKey[] | null }
 	| { op: 'close_gaps'; track: string; from?: number }
 	| { op: 'add_marker'; marker: Omit<VideoMarker, 'id'> & { id?: string } }
 	| { op: 'update_marker'; marker: string; set?: Partial<Omit<VideoMarker, 'id'>>; remove?: string[] }
@@ -77,6 +80,7 @@ export const VIDEO_EDIT_OPS: readonly VideoEditOp[] = [
 	'lift_range',
 	'extract_range',
 	'split_at',
+	'set_keyframes',
 	'close_gaps',
 	'add_marker',
 	'update_marker',
@@ -140,6 +144,25 @@ function mergeSpans(spans: [number, number][]): [number, number][] {
 		else out.push([from, to]);
 	}
 	return out;
+}
+
+/** Every keyframeable value of a clip, with a way to read and replace it. */
+function clipAnimatables(clip: VideoClip): { get: () => VideoAnimatable | undefined; set: (v: VideoAnimatable | undefined) => void }[] {
+	const c = clip as VideoClip & { volume?: VideoAnimatable };
+	const out = [
+		{ get: () => c.opacity, set: (v: VideoAnimatable | undefined) => (c.opacity = v) },
+		{ get: () => c.volume, set: (v: VideoAnimatable | undefined) => (c.volume = v) }
+	];
+	for (const p of VIDEO_TRANSFORM_PROPERTIES) out.push({ get: () => c.transform?.[p], set: (v) => c.transform && (c.transform[p] = v) });
+	return out;
+}
+
+/** Applies `fn` to every keyframed value of a clip (plain numbers are left alone). */
+function retimeClipKeys(clip: VideoClip, fn: (v: VideoAnimatable) => VideoAnimatable) {
+	for (const a of clipAnimatables(clip)) {
+		const v = a.get();
+		if (isVideoKeyframes(v)) a.set(fn(v));
+	}
 }
 
 const OPTIONAL_CLIP_FIELDS = ['name', 'opacity', 'transform', 'fit', 'fadeIn', 'fadeOut', 'transition', 'in', 'speed', 'volume', 'muted', 'color', 'fontSize', 'fontFamily', 'fontWeight', 'background'];
@@ -240,12 +263,26 @@ class Editor {
 		if (clip.in < 1e-9) delete clip.in;
 	}
 
+	/** Moves a clip's head `delta` later in time (start, in point and keys); the caller sets start and duration. */
+	trimHead(clip: VideoClip, delta: number) {
+		this.moveIn(clip, delta);
+		// Keys stay on the picture they were set on, so they move by the trim.
+		retimeClipKeys(clip, (v) => retimeVideoAnimatable(v, -delta));
+	}
+
 	/** Cuts `clip` at `at` (inside it): the left part keeps the id, the right part is returned. */
 	cut(track: VideoTrack, clip: VideoClip, at: number, id?: string): VideoClip {
 		const end = videoClipEnd(clip);
 		const right: any = { ...structuredClone(clip), id: id ?? freshId(`${clip.id}-`, this.ids()), start: at, duration: end - at };
 		delete right.transition;
 		delete right.fadeIn;
+		// Each part keeps the keys on its side, with a key at the cut so both play as the whole did.
+		const leftValues = clipAnimatables(clip);
+		clipAnimatables(right).forEach((r, i) => {
+			const [l, rr] = splitVideoAnimatable(leftValues[i].get(), at - clip.start);
+			if (isVideoKeyframes(l)) leftValues[i].set(l);
+			if (isVideoKeyframes(rr)) r.set(rr);
+		});
 		this.moveIn(right, at - clip.start);
 		clip.duration = at - clip.start;
 		delete clip.fadeOut;
@@ -305,7 +342,7 @@ class Editor {
 			if (!coversHead && !coversTail) report.created.push(this.cut(track, c, to).id);
 			else if (coversHead) {
 				// The head goes: start later in the source; a transition in has no cut left to play over.
-				this.moveIn(c, to - start);
+				this.trimHead(c, to - start);
 				c.start = to;
 				c.duration = end - to;
 				delete c.transition;
@@ -473,6 +510,8 @@ class Editor {
 						clip.in = Math.max(0, sourceIn);
 						if (clip.in === 0) delete clip.in;
 					}
+					// Keys stay on the picture they were set on, so they move by the trim.
+					retimeClipKeys(clip, (v) => retimeVideoAnimatable(v, -delta));
 					if (e.ripple) {
 						// Ripple at the edit point: the head comes out (or goes in) there, on every sync-locked track.
 						const tracks = this.rippleTracks([track]);
@@ -554,12 +593,18 @@ class Editor {
 				for (const k of e.remove ?? []) if (!OPTIONAL_CLIP_FIELDS.includes(k)) refuse(`"${k}" cannot be removed; removable fields are ${OPTIONAL_CLIP_FIELDS.join(', ')}.`);
 				// A new speed keeps the stretch of source and changes the length, as in an NLE's rate stretch.
 				if ('speed' in set && (typeof set.speed !== 'number' || !(set.speed > 0))) refuse('"speed" must be a number greater than 0 (1 = normal speed).');
+				let stretch = 1;
 				if (at.clip.type === 'media' && !('duration' in set)) {
 					const was = videoClipSpeed(at.clip);
 					const now = 'speed' in set ? (set.speed as number) : e.remove?.includes('speed') ? 1 : was;
-					if (now !== was) set.duration = (at.clip.duration * was) / now;
+					if (now !== was) {
+						set.duration = (at.clip.duration * was) / now;
+						stretch = was / now;
+					}
 				}
-				const next: any = { ...at.clip, ...set };
+				const next: any = { ...structuredClone(at.clip), ...set };
+				// A rate stretch keeps keys on the same frames of source.
+				if (stretch !== 1) retimeClipKeys(next, (v) => retimeVideoAnimatable(v, 0, stretch));
 				for (const k of e.remove ?? []) delete next[k];
 				const clip = parseVideoClip(next, 'set');
 				if (clip.type === 'media' && clip.asset !== (at.clip as any).asset) this.kindFits(at.track, clip);
@@ -615,7 +660,7 @@ class Editor {
 				L.duration += delta;
 				R.start += delta;
 				R.duration -= delta;
-				this.moveIn(R, delta);
+				this.trimHead(R, delta);
 				return this.outcomes.push({ op: e.op, clip: R.id, clips: [L.id, R.id], track: track.id, delta });
 			}
 			case 'slide_clip': {
@@ -644,7 +689,7 @@ class Editor {
 				if (after) {
 					after.start += delta;
 					after.duration -= delta;
-					this.moveIn(after, delta);
+					this.trimHead(after, delta);
 				}
 				track.clips.sort((a, b) => a.start - b.start);
 				return this.outcomes.push({ op: e.op, clip: clip.id, clips: [before?.id, clip.id, after?.id].filter((x): x is string => !!x), track: track.id, delta });
@@ -669,6 +714,38 @@ class Editor {
 				if (!lefts.length) refuse(`No clip runs across ${formatVideoSeconds(e.at)} on ${e.tracks ? `track${tracks.length > 1 ? 's' : ''} ${tracks.map((t) => `"${t.id}"`).join(', ')}` : 'the unlocked tracks'}, so there is nothing to split there.`);
 				const created = this.cutAcross(tracks, e.at).map((c) => c.id);
 				return this.outcomes.push({ op: e.op, clips: lefts, created });
+			}
+			case 'set_keyframes': {
+				const { track, clip } = this.clip(e.clip);
+				this.unlocked(track);
+				if (!VIDEO_KEYFRAME_PROPERTIES.includes(e.property)) refuse(`"${e.property}" cannot be keyframed; use one of ${VIDEO_KEYFRAME_PROPERTIES.join(', ')}.`);
+				if (e.property === 'volume' && clip.type !== 'media') refuse(`Clip "${clip.id}" is a ${clip.type} clip and has no volume; volume keys go on media clips.`);
+				const limits = VIDEO_KEYFRAME_LIMITS[e.property];
+				const transform = (VIDEO_TRANSFORM_PROPERTIES as readonly string[]).includes(e.property);
+				const c = clip as any;
+				const current: VideoAnimatable | undefined = transform ? c.transform?.[e.property] : c[e.property];
+				let value: VideoAnimatable | undefined;
+				if (e.keys === null) {
+					// Stop animating: keep what it shows at the clip's start.
+					const v = videoValueAt(current, 0, limits.default);
+					value = isVideoKeyframes(current) ? (v === limits.default ? undefined : v) : current;
+				} else {
+					if (!Array.isArray(e.keys) || !e.keys.length) refuse('"keys" must list at least one key { t, v }; pass null to remove the keyframes.');
+					let sorted: VideoKey[] = [];
+					try {
+						sorted = sortVideoKeys(e.keys);
+					} catch (error) {
+						refuse((error as Error).message);
+					}
+					value = parseVideoAnimatable({ keys: sorted }, e.property, limits);
+				}
+				if (transform) {
+					c.transform = { ...c.transform, [e.property]: value };
+					if (value === undefined) delete c.transform[e.property];
+					if (!Object.keys(c.transform).length) delete c.transform;
+				} else if (value === undefined) delete c[e.property];
+				else c[e.property] = value;
+				return this.outcomes.push({ op: e.op, clip: clip.id, track: track.id });
 			}
 			case 'close_gaps': {
 				const track = this.track(e.track);

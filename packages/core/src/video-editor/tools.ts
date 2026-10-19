@@ -4,6 +4,7 @@ import type { VideoIssue } from './check.js';
 import type { VideoEditorController } from './controller.js';
 import { VIDEO_EDIT_OPS, type VideoEdit, type VideoEditOutcome, type VideoEditResult } from './edit.js';
 import { videoFrameAt } from './evaluate.js';
+import { VIDEO_EASE_NAMES, VIDEO_KEYFRAME_PROPERTIES, VIDEO_TRANSFORM_PROPERTIES, type VideoAnimatable, type VideoKeyframeProperty } from './keyframes.js';
 import { videoContactSheetSvg, videoProjectSvg } from './render.js';
 import { findVideoGaps, formatVideoTimecode, sortedVideoClips, videoClipEnd, videoClipSourceRange, videoProjectDuration } from './timeline.js';
 import { VIDEO_FITS, VIDEO_PLACEMENT_MODES, VIDEO_TRANSITION_TYPES, VIDEO_WIPE_DIRECTIONS, type VideoProject } from './types.js';
@@ -73,7 +74,7 @@ const TRANSITION = object(
 );
 const CLIP_COMMON: Record<string, JsonSchema> = {
 	name: { type: 'string', description: 'A label for the clip.' },
-	opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Opacity 0–1 (default 1).' },
+	opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Opacity 0–1 (default 1). A number replaces any keyframes; set_video_keyframes animates it.' },
 	transform: TRANSFORM,
 	fit: { type: 'string', enum: [...VIDEO_FITS], description: 'How the picture fits the frame before the transform, as CSS object-fit (default contain for media, fill for colours).' },
 	fadeIn: MS('Fade up from nothing (picture and sound) over this long'),
@@ -82,7 +83,7 @@ const CLIP_COMMON: Record<string, JsonSchema> = {
 const MEDIA_FIELDS: Record<string, JsonSchema> = {
 	in: MS('Where in the source it starts (default 0)'),
 	speed: { type: 'number', minimum: 0.05, maximum: 20, description: 'Playback speed (default 1). Changing it keeps the stretch of source, so the clip gets shorter or longer.' },
-	volume: { type: 'number', minimum: 0, maximum: 4, description: 'Gain (1 = unchanged, default 1).' },
+	volume: { type: 'number', minimum: 0, maximum: 4, description: 'Gain (1 = unchanged, default 1). A number replaces any keyframes; set_video_keyframes animates it.' },
 	muted: { type: 'boolean', description: 'Silence this clip (default false).' }
 };
 const TEXT_FIELDS: Record<string, JsonSchema> = {
@@ -129,6 +130,33 @@ const ASSET_FIELDS: Record<string, JsonSchema> = {
 	height: { type: 'number', exclusiveMinimum: 0, description: 'Pixel height.' },
 	hasAudio: { type: 'boolean', description: 'For video: whether it has sound (default true).' },
 	poster: { type: 'string', description: 'For video: a still (URL) to show in rendered frames.' }
+};
+
+const KEY_PROPERTY = {
+	type: 'string',
+	enum: [...VIDEO_KEYFRAME_PROPERTIES],
+	description: 'Which property: opacity (0–1), volume (media only, 0–4 gain), x / y (pixels from the frame\'s centre, right / down), scale (1 = fitted size) or rotation (degrees clockwise).'
+} as const;
+const KEYS: JsonSchema = {
+	type: 'array',
+	minItems: 1,
+	maxItems: 500,
+	description: 'The keys, replacing any the property had (any order, one per time). Before the first key the property holds the first value, after the last the last value.',
+	items: object(
+		{
+			t: { type: 'number', description: 'Time in ms from the clip\'s start (clip time, not timeline time: 0 is the clip\'s first frame, its duration the end). Keys stay with the clip when it moves, is trimmed or split.' },
+			v: { type: 'number', description: 'The value at that time, in the property\'s units.' },
+			ease: {
+				description: 'How the value moves from this key to the next (default linear): linear, hold (stays, then jumps at the next key), ease-in, ease-out, ease-in-out, or CSS cubic-bezier points [x1, y1, x2, y2] with x1 and x2 in 0–1.',
+				anyOf: [
+					{ type: 'string', enum: [...VIDEO_EASE_NAMES] },
+					{ type: 'array', items: { type: 'number' }, minItems: 4, maxItems: 4 }
+				]
+			}
+		},
+		['t', 'v'],
+		'One keyframe.'
+	)
 };
 
 const issueSummary = (issues: readonly VideoIssue[]) => ({
@@ -203,6 +231,11 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 		...(o.removed?.length ? { removed: o.removed } : {}),
 		...(o.rippled ? { rippled: o.rippled } : {})
 	});
+	const keysOut = (p: VideoProject, clip: string, property: VideoKeyframeProperty) => {
+		const c = clipOut(p, clip) as any;
+		const value: VideoAnimatable | undefined = (VIDEO_TRANSFORM_PROPERTIES as readonly string[]).includes(property) ? c?.transform?.[property] : c?.[property];
+		return typeof value === 'object' ? { keys: value.keys } : { keys: [], value: value ?? null };
+	};
 
 	const getProject: AgentTool = {
 		name: 'get_video_project',
@@ -245,7 +278,7 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 	const checkProject: AgentTool = {
 		name: 'check_video_project',
 		title: 'Check the video project',
-		description: 'Lists the project\'s problems, errors first, each with a code, the clip / track / asset it is about and how to fix it: missing assets, overlaps, clips past the end of their source, transitions without a cut or handles, fades longer than the clip, assets with no duration, unused assets.',
+		description: 'Lists the project\'s problems, errors first, each with a code, the clip / track / asset it is about and how to fix it: missing assets, overlaps, clips past the end of their source, transitions without a cut or handles, fades longer than the clip, keyframes outside their clip, assets with no duration, unused assets.',
 		inputSchema: object({}),
 		annotations: { title: 'Check the video project', ...READ },
 		handler: () => {
@@ -577,6 +610,26 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 			})
 	};
 
+	const setKeyframes: AgentTool = {
+		name: 'set_video_keyframes',
+		title: 'Animate a clip property',
+		description:
+			'Animates one property of a clip with keyframes (one undo step), replacing any keys it had: opacity, volume, or the transform\'s x, y, scale and rotation. Times are clip time (ms from the clip\'s start), so a key at 0 is the clip\'s first frame; get_video_project gives each clip\'s duration. Plays in the preview, renders and the ffmpeg export. Returns the property\'s keys, sorted.',
+		inputSchema: object({ clip: CLIP_ID, property: KEY_PROPERTY, keys: KEYS }, ['clip', 'property', 'keys']),
+		annotations: { title: 'Animate a clip property', ...WRITE_IDEMPOTENT },
+		handler: ({ clip, property, keys }) => apply({ op: 'set_keyframes', clip, property, keys }, `Keyframe ${property}`, (r) => ({ clip, property, ...keysOut(r.project, clip, property) }))
+	};
+
+	const removeKeyframes: AgentTool = {
+		name: 'remove_video_keyframes',
+		title: 'Stop animating a clip property',
+		description:
+			'Removes all of a property\'s keyframes (one undo step), leaving it at the value it had at the clip\'s start. Returns the remaining keys (none) and that value (null for the default).',
+		inputSchema: object({ clip: CLIP_ID, property: KEY_PROPERTY }, ['clip', 'property']),
+		annotations: { title: 'Stop animating a clip property', ...WRITE_IDEMPOTENT },
+		handler: ({ clip, property }) => apply({ op: 'set_keyframes', clip, property, keys: null }, `Remove ${property} keyframes`, (r) => ({ clip, property, ...keysOut(r.project, clip, property) }))
+	};
+
 	const closeGaps: AgentTool = {
 		name: 'close_video_gaps',
 		title: 'Close gaps',
@@ -606,7 +659,7 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 
 	const EDIT_OP: JsonSchema = {
 		type: 'object',
-		description: `One edit: { "op": one of ${VIDEO_EDIT_OPS.filter((o) => o !== 'replace_project').join(', ')}, …its fields }. Fields match the single tools: add_clip { track, clip, mode, ripple }, move_clip { clip, start, track, mode }, trim_clip { clip, edge, to, ripple }, split_clip { clip, at, id }, delete_clips { clips, ripple }, update_clip { clip, set, remove }, set_transition { clip, transition }, slip_clip { clip, delta }, roll_edit { left, right, delta }, slide_clip { clip, delta }, lift_range { from, to, tracks }, extract_range { from, to, tracks }, split_at { at, tracks }, close_gaps { track, from }, add_asset { asset }, update_asset { asset, set, remove }, remove_asset { asset }, add_track { track: { kind, id, … }, at }, update_track { track, set, remove }, remove_track { track }, move_track { track, to }, add_marker { marker: { time, label } }, update_marker { marker, set }, remove_marker { marker }, set_settings { name, width, height, fps, background }.`,
+		description: `One edit: { "op": one of ${VIDEO_EDIT_OPS.filter((o) => o !== 'replace_project').join(', ')}, …its fields }. Fields match the single tools: add_clip { track, clip, mode, ripple }, move_clip { clip, start, track, mode }, trim_clip { clip, edge, to, ripple }, split_clip { clip, at, id }, delete_clips { clips, ripple }, update_clip { clip, set, remove }, set_transition { clip, transition }, set_keyframes { clip, property, keys (null removes) }, slip_clip { clip, delta }, roll_edit { left, right, delta }, slide_clip { clip, delta }, lift_range { from, to, tracks }, extract_range { from, to, tracks }, split_at { at, tracks }, close_gaps { track, from }, add_asset { asset }, update_asset { asset, set, remove }, remove_asset { asset }, add_track { track: { kind, id, … }, at }, update_track { track, set, remove }, remove_track { track }, move_track { track, to }, add_marker { marker: { time, label } }, update_marker { marker, set }, remove_marker { marker }, set_settings { name, width, height, fps, background }.`,
 		properties: { op: { type: 'string', enum: VIDEO_EDIT_OPS.filter((o) => o !== 'replace_project'), description: 'Which edit.' } },
 		required: ['op']
 	};
@@ -652,7 +705,7 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 	};
 
 	const reads = [getProject, getFrame, findGaps, checkProject, renderFrame, exportFfmpeg, exportEdl, seek];
-	const writes = [setSettings, addAsset, updateAsset, removeAsset, addTrack, updateTrack, removeTrack, moveTrack, addClip, moveClip, trimClip, splitClip, deleteClips, updateClip, setTransition, slipClip, rollEdit, slideClip, liftRange, extractRange, splitAt, closeGaps, addMarker, removeMarker, editVideo, undo, redo];
+	const writes = [setSettings, addAsset, updateAsset, removeAsset, addTrack, updateTrack, removeTrack, moveTrack, addClip, moveClip, trimClip, splitClip, deleteClips, updateClip, setTransition, setKeyframes, removeKeyframes, slipClip, rollEdit, slideClip, liftRange, extractRange, splitAt, closeGaps, addMarker, removeMarker, editVideo, undo, redo];
 
 	return {
 		id: options.id ?? 'video',

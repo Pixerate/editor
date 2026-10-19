@@ -6,6 +6,8 @@
  * track draws over one on a later track. Clips on one track never overlap.
  */
 
+import type { VideoAnimatable } from './keyframes.js';
+
 export type VideoAssetKind = 'video' | 'audio' | 'image';
 
 /** A piece of source media. The project refers to it by id; `src` is whatever the host can load. */
@@ -48,15 +50,15 @@ export interface VideoTrack {
 	clips: VideoClip[];
 }
 
-/** Where a picture sits in the frame, after it has been fitted. */
+/** Where a picture sits in the frame, after it has been fitted. Each field may be keyframed. */
 export interface VideoTransform {
 	/** Offset of the centre from the frame's centre, in pixels (default 0). */
-	x?: number;
-	y?: number;
+	x?: VideoAnimatable;
+	y?: VideoAnimatable;
 	/** 1 = fitted size (default 1). */
-	scale?: number;
+	scale?: VideoAnimatable;
 	/** Degrees clockwise (default 0). */
-	rotation?: number;
+	rotation?: VideoAnimatable;
 }
 
 /** How a picture is fitted to the frame before its transform: like CSS `object-fit`. */
@@ -90,8 +92,8 @@ interface VideoClipBase {
 	start: number;
 	/** How long it lasts on the timeline (ms). */
 	duration: number;
-	/** 0–1 (default 1). */
-	opacity?: number;
+	/** 0–1 (default 1), or keyframes (`{ keys: [{ t, v, ease }] }`, `t` in ms from the clip's start). */
+	opacity?: VideoAnimatable;
 	transform?: VideoTransform;
 	/** Default contain. */
 	fit?: VideoFit;
@@ -111,8 +113,8 @@ export interface VideoMediaClip extends VideoClipBase {
 	in?: number;
 	/** Playback speed (default 1): it uses `duration × speed` of the source. */
 	speed?: number;
-	/** Gain (1 = unchanged, default 1). */
-	volume?: number;
+	/** Gain (1 = unchanged, default 1), or keyframes. */
+	volume?: VideoAnimatable;
 	/** Silences this clip. */
 	muted?: boolean;
 }
