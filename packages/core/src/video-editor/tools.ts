@@ -776,6 +776,22 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 		}
 	};
 
+	const previewCache: AgentTool = {
+		name: 'get_video_preview_cache',
+		title: 'Read the preview\'s frame cache',
+		description:
+			'Reports the preview\'s cache of decoded frames, without changing anything: whether the host has one, how many frames and bytes it holds against its budget, hits and misses, frames still decoding, how far ahead it prefetches (ms), and the stretches of the timeline between "from" and "to" whose frames are all cached (these play and scrub without waiting). Use it to tell whether stuttering is the cache filling, and before asking the person to review a passage. With no cache, says so.',
+		inputSchema: object({ from: MS('Start of the stretch to report cached ranges for (default 0)'), to: MS('End of it (default: the end of the project)') }),
+		annotations: { title: 'Read the preview\'s frame cache', ...READ },
+		handler: ({ from, to }) => {
+			const cache = controller.frameCache;
+			if (!cache) return { enabled: false, reason: 'The host has not given this editor a frame cache (VideoEditorController frameCache), so the preview decodes each frame as it plays.' };
+			if (from !== undefined && to !== undefined && !(to > from)) throw new Error(`"to" (${to} ms) must be after "from" (${from} ms).`);
+			const ranges = cache.cachedRanges(project(), { from, to });
+			return { enabled: true, ...cache.stats(), cachedRanges: ranges };
+		}
+	};
+
 	// -----------------------------------------------------------------------------------------
 	// Text-based editing
 	// -----------------------------------------------------------------------------------------
@@ -1285,7 +1301,7 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 		}
 	};
 
-	const reads = [getProject, getFrame, getTranscript, findText, findFillers, findPauses, findGaps, checkProject, renderFrame, getScopes, planProxies, exportFfmpeg, exportLoudnessMeasure, exportEdl, audioLevels, findSilences, seek, setPreviewScale];
+	const reads = [getProject, getFrame, getTranscript, findText, findFillers, findPauses, findGaps, checkProject, renderFrame, getScopes, previewCache, planProxies, exportFfmpeg, exportLoudnessMeasure, exportEdl, audioLevels, findSilences, seek, setPreviewScale];
 	const writes = [setSettings, addAsset, updateAsset, removeAsset, setProxies, addTrack, updateTrack, removeTrack, moveTrack, addClip, moveClip, trimClip, splitClip, deleteClips, updateClip, setTransition, setSpeedRamp, addFreeze, removeRamp, setTranscript, removeRanges, applyGradePreset, copyGrade, setLut, removeLut, setKeyframes, removeKeyframes, slipClip, rollEdit, slideClip, liftRange, extractRange, splitAt, closeGaps, addMarker, removeMarker, editVideo, undo, redo];
 
 	return {

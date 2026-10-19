@@ -4,7 +4,7 @@ import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { ToolRegistry } from "@pixerate/editor/tools";
 import { ManualClock } from "@pixerate/editor/animation";
-import { VideoEditorController, VideoPreviewEngine, buildVideoAudioPeaks, findVideoClip, type VideoProject } from "@pixerate/editor/video-editor";
+import { VideoEditorController, VideoFrameCache, VideoPreviewEngine, buildVideoAudioPeaks, findVideoClip, type VideoProject } from "@pixerate/editor/video-editor";
 import {
   ClipInspector,
   MediaBin,
@@ -851,6 +851,29 @@ describe("proxies (React)", () => {
     expect(controller.getState().previewScale).toBe("full");
     expect($('[data-asset="intro"] [data-asset-proxies]').title).toMatch(/Proxies: 50%/);
     expect(container.querySelector('[data-asset="music"] [data-asset-proxies]')).toBeNull();
+    controller.destroy();
+  });
+});
+
+describe("frame cache strip (React)", () => {
+  it("marks the stretches whose frames are cached under the ruler, and follows the cache", async () => {
+    const frameCache = new VideoFrameCache({ decode: null, prefetch: 0 });
+    const controller = new VideoEditorController({ project: PROJECT, clock: new ManualClock(), frameCache });
+    act(() => root.render(<VideoTimeline controller={controller} pxPerSecond={100} />));
+    expect(container.querySelector("[data-cached-range]")).toBeNull();
+    // Cache c1's first half second (source frames 0–14 of intro at 30 fps).
+    for (let f = 0; f < 15; f++) frameCache.put({ key: `${f}@intro.mp4`, time: (f * 1000) / 30 }, { image: {} as any, width: 2, height: 2 });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 300));
+    });
+    const strip = $("[data-cached-range]");
+    expect(strip.style.left).toBe("0px");
+    expect(parseFloat(strip.style.width)).toBeCloseTo(50, -1);
+    frameCache.clear();
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 300));
+    });
+    expect(container.querySelector("[data-cached-range]")).toBeNull();
     controller.destroy();
   });
 });

@@ -20,7 +20,7 @@
     type VideoTrack,
     type VideoWaveformMode,
   } from '@pixerate/editor/video-editor';
-  import { onDestroy } from 'svelte';
+  import { onDestroy, untrack } from 'svelte';
   import { videoEditorStateOf } from './createVideoEditor.svelte.js';
 
   interface Props {
@@ -57,6 +57,30 @@
   const span = $derived(Math.max(editor.duration + 5000, 10000));
   const width = $derived(x(span));
   const ticks = $derived(videoRulerTicks(span, px, project.fps));
+  /** The stretches the controller's frame cache holds, every two pixels, re-read after edits and at most four times a second as frames arrive. */
+  let cached: { start: number; end: number }[] = $state.raw([]);
+  $effect(() => {
+    const cache = controller.frameCache;
+    const step = 2000 / px;
+    const p = project;
+    if (!cache) {
+      cached = [];
+      return;
+    }
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const read = () => {
+      timer = null;
+      cached = cache.cachedRanges(p, { step });
+    };
+    untrack(read);
+    const off = cache.subscribe(() => {
+      timer ??= setTimeout(read, 250);
+    });
+    return () => {
+      off();
+      if (timer) clearTimeout(timer);
+    };
+  });
   const canEdit = $derived(editable && !editor.readOnly);
   const HEADER = 144;
   const ZOOM_MIN = 10;
@@ -278,6 +302,9 @@
             <div class="absolute bottom-0 w-px {t.major ? 'h-2.5 bg-muted-foreground/70' : 'h-1 bg-muted-foreground/40'}" style="left:{t.x}px">
               {#if t.label}<span class="absolute -top-0.5 left-1 whitespace-nowrap tabular-nums">{t.label}</span>{/if}
             </div>
+          {/each}
+          {#each cached as r (r.start)}
+            <div class="pointer-events-none absolute bottom-0 h-[3px] bg-emerald-500/70" style="left:{x(r.start)}px;width:{Math.max(1, x(r.end - r.start))}px" title="Frames cached: plays and scrubs without waiting" data-cached-range=""></div>
           {/each}
           {#each project.markers ?? [] as m (m.id)}
             <div
