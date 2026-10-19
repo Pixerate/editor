@@ -1,9 +1,9 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { flushSync, mount, unmount } from "svelte";
 import { ToolRegistry } from "@pixerate/editor/tools";
 import { ManualClock } from "@pixerate/editor/animation";
 import { VideoEditorController, buildVideoAudioPeaks, findVideoClip, type VideoProject } from "@pixerate/editor/video-editor";
-import { ClipInspector, MediaBin, TranscriptPanel, VideoEditor, VideoPreview, VideoTimeline, VideoTransport, createVideoEditor } from "../src/video-editor";
+import { ClipInspector, MediaBin, TranscriptPanel, VideoEditor, VideoPreview, VideoScopes, VideoTimeline, VideoTransport, createVideoEditor } from "../src/video-editor";
 import ToolsProbe from "./fixtures/VideoToolsProbe.svelte";
 
 let cleanups: (() => void)[] = [];
@@ -552,6 +552,64 @@ describe("TranscriptPanel (Svelte)", () => {
     act(() => qa("button").find((b) => b.textContent === "Remove fillers")!.click());
     expect(words()).toEqual(["So", "we", "ship"]);
     expect(controller.getState().undoLabel).toBe("Remove fillers");
+    controller.destroy();
+  });
+});
+
+describe("VideoScopes (Svelte)", () => {
+  const pixels = (rgb: [number, number, number], w = 8, h = 8) => {
+    const data = new Uint8ClampedArray(w * h * 4);
+    for (let i = 0; i < data.length; i += 4) data.set([...rgb, 255], i);
+    return { width: w, height: h, data };
+  };
+  const tick = async () => {
+    await new Promise((r) => setTimeout(r, 40));
+    flushSync();
+  };
+
+  it("says to show the preview until one draws, then shows scopes and figures for each frame", async () => {
+    const controller = make();
+    const put = vi.fn();
+    const original = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = (() => ({ putImageData: put })) as any;
+    (globalThis as any).ImageData ??= class {
+      constructor(
+        public data: Uint8ClampedArray,
+        public width: number,
+        public height: number,
+      ) {}
+    };
+    try {
+      render(VideoScopes, { controller, scopes: ["waveform", "vectorscope"], width: 64, height: 32 });
+      await tick();
+      expect(q("[data-scope-message]").textContent).toBe("Show the preview to see its scopes.");
+      expect(qa("canvas").map((c) => [c.dataset.scope, (c as HTMLCanvasElement).width, (c as HTMLCanvasElement).height])).toEqual([
+        ["waveform", 64, 32],
+        ["vectorscope", 32, 32],
+      ]);
+      let colour: [number, number, number] = [0, 0, 0];
+      const detach = controller.previewPixels.attach(() => ({ time: 0, complete: true, pixels: pixels(colour) }));
+      controller.previewPixels.drawn(0, true);
+      await tick();
+      expect(q("[data-scope-stats]").textContent).toMatch(/crushed 100%/);
+      expect(put).toHaveBeenCalledTimes(2);
+      colour = [255, 255, 255];
+      controller.previewPixels.drawn(0, true);
+      await tick();
+      expect(q("[data-scope-stats]").textContent).toMatch(/blown 100%/);
+      detach();
+      await tick();
+      expect(q("[data-scope-message]").textContent).toBe("Show the preview to see its scopes.");
+    } finally {
+      HTMLCanvasElement.prototype.getContext = original;
+    }
+    controller.destroy();
+  });
+
+  it("shows under the preview in <VideoEditor showScopes>", () => {
+    const controller = make();
+    render(VideoEditor, { controller, showScopes: true });
+    expect(qa("[data-video-scopes] canvas[data-scope]").length).toBe(3);
     controller.destroy();
   });
 });

@@ -1,5 +1,6 @@
 export * from './useVideoEditor';
 export * from './VideoPreview';
+export * from './VideoScopes';
 export * from './VideoTransport';
 export * from './VideoTimeline';
 export * from './ClipInspector';

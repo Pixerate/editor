@@ -3,7 +3,8 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { applyVideoEdits, applyVideoGrade, createVideoProject, videoSpeedRampKeys, parseVideoLoudnessMeasurement, toVideoFfmpeg, toVideoLoudnessMeasure, videoFrameAt, type VideoEdit, type VideoProject } from '../src/video-editor';
+import { ToolRegistry } from '../src/tools';
+import { applyVideoEdits, applyVideoGrade, createVideoEditorToolProvider, createVideoProject, VideoEditorController, videoSpeedRampKeys, parseVideoLoudnessMeasurement, toVideoFfmpeg, toVideoLoudnessMeasure, videoFrameAt, type VideoEdit, type VideoProject } from '../src/video-editor';
 
 // Renders projects with a real ffmpeg (skipped when it is not on PATH): the string assertions in
 // video-editor.test.ts cannot tell whether ffmpeg accepts the filter graph.
@@ -225,6 +226,31 @@ describe.skipIf(!hasFfmpeg)('toVideoFfmpeg with a real ffmpeg', () => {
 			expect(got.every((v, k) => Math.abs(v - want[k]) < 10), `grade ${JSON.stringify(grade)}: got ${got}, want ${want}`).toBe(true);
 		});
 	}, 120000);
+
+	it('measures an exported frame with get_video_scopes on a host without a preview', async () => {
+		// A server host decodes the export's frame with ffmpeg and hands its pixels to the tool.
+		const grade = { exposure: 0.5, saturation: -0.3 };
+		const p = project([
+			{ op: 'add_clip', track: 'v1', clip: { type: 'color', id: 'k', color: '#b45a3c', duration: 1000, grade } },
+			{ op: 'add_clip', track: 'v1', clip: { type: 'color', id: 'w', color: '#ffffff', duration: 1000 } }
+		]);
+		const out = render(p, 'scopes.mp4');
+		const framePixels = (time: number) => {
+			const data = execFileSync('ffmpeg', ['-v', 'error', '-ss', String(time / 1000), '-i', out, '-frames:v', '1', '-f', 'rawvideo', '-pix_fmt', 'rgba', '-']);
+			return { width: 640, height: 360, data };
+		};
+		const registry = new ToolRegistry();
+		registry.register(createVideoEditorToolProvider(new VideoEditorController({ project: p }), { framePixels }));
+		const read = async (time: number) => (await registry.callTool('get_video_scopes', { time })).structuredContent as any;
+		const graded = await read(500);
+		const want = applyVideoGrade(grade, [180, 90, 60]);
+		const got = [1, 3, 5].map((i) => parseInt(graded.stats.average.slice(i, i + 2), 16));
+		expect(got.every((v, k) => Math.abs(v - want[k]) < 10), `average ${graded.stats.average}, want ${want}`).toBe(true);
+		expect(graded.stats.clipped.highlights).toBe(0);
+		const white = await read(1500);
+		expect(white.stats.clipped.highlights).toBeGreaterThan(0.99);
+		expect(white.notes.join(' ')).toMatch(/blown to white/);
+	}, 60000);
 
 	it('dodges and burns as the browser does', () => {
 		const p = project([
