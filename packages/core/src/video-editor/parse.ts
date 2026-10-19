@@ -1,3 +1,4 @@
+import { VIDEO_EASE_NAMES, type VideoAnimatable, type VideoEase, type VideoKey, type VideoKeyframes } from './keyframes.js';
 import { VIDEO_CLIP_TYPES, VIDEO_FITS, VIDEO_TRANSITION_TYPES, VIDEO_WIPE_DIRECTIONS, type VideoAsset, type VideoClip, type VideoMarker, type VideoProject, type VideoTrack, type VideoTransform, type VideoTransition } from './types.js';
 
 const isObject = (v: unknown): v is Record<string, any> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -30,11 +31,52 @@ const oneOf = <T extends string>(v: unknown, options: readonly T[], path: string
 /** Copies only the defined keys, so parsed objects carry no `undefined` fields. */
 const compact = <T extends object>(o: T): T => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as T;
 
+function parseVideoEase(v: unknown, path: string): VideoEase | undefined {
+	if (v === undefined) return undefined;
+	if (Array.isArray(v)) {
+		if (v.length !== 4 || !v.every((n) => typeof n === 'number' && Number.isFinite(n))) fail(path, 'must be four numbers [x1, y1, x2, y2] (CSS cubic-bezier)');
+		if (v[0] < 0 || v[0] > 1 || v[2] < 0 || v[2] > 1) fail(path, 'must have x1 and x2 between 0 and 1');
+		return [v[0], v[1], v[2], v[3]];
+	}
+	return oneOf(v, VIDEO_EASE_NAMES, path)! as VideoEase;
+}
+
+/**
+ * Keyframes `{ keys: [{ t, v, ease }] }`: at least one key, in strictly increasing time (clip-relative
+ * ms), each value within `range`.
+ */
+export function parseVideoKeyframes(v: unknown, path: string, { min, max }: { min?: number; max?: number } = {}): VideoKeyframes {
+	if (!isObject(v)) return fail(path, 'must be a number or keyframes { keys: [{ t, v, ease }] }');
+	for (const key of Object.keys(v)) if (key !== 'keys') fail(`${path}.${key}`, 'is not a keyframes field (keys)');
+	if (!Array.isArray(v.keys) || !v.keys.length) fail(`${path}.keys`, 'must be an array of at least one key { t, v, ease }');
+	const keys = (v.keys as unknown[]).map((k, i): VideoKey => {
+		const at = `${path}.keys[${i}]`;
+		if (!isObject(k)) return fail(at, 'must be an object { t, v, ease }');
+		for (const key of Object.keys(k)) if (!['t', 'v', 'ease'].includes(key)) fail(`${at}.${key}`, 'is not a key field (t, v, ease)');
+		return compact({ t: num(k.t, `${at}.t`)!, v: num(k.v, `${at}.v`, { min, max })!, ease: parseVideoEase(k.ease, `${at}.ease`) });
+	});
+	for (let i = 1; i < keys.length; i++) if (!(keys[i].t > keys[i - 1].t)) fail(`${path}.keys[${i}].t`, `must be later than the key before (${keys[i - 1].t} ms); keys go in time order, one per time`);
+	return { keys };
+}
+
+/** A number within `range`, or keyframes for one. */
+export function parseVideoAnimatable(v: unknown, path: string, range: { min?: number; max?: number; optional?: boolean } = {}): VideoAnimatable | undefined {
+	if (v === undefined && range.optional) return undefined;
+	const { min, max } = range;
+	if (isObject(v)) return parseVideoKeyframes(v, path, { min, max });
+	return num(v, path, { min, max });
+}
+
 export function parseVideoTransform(v: unknown, path: string): VideoTransform | undefined {
 	if (v === undefined) return undefined;
 	if (!isObject(v)) return fail(path, 'must be an object { x, y, scale, rotation }');
 	for (const key of Object.keys(v)) if (!['x', 'y', 'scale', 'rotation'].includes(key)) fail(`${path}.${key}`, 'is not a transform field (x, y, scale, rotation)');
-	return compact({ x: num(v.x, `${path}.x`, { optional: true }), y: num(v.y, `${path}.y`, { optional: true }), scale: num(v.scale, `${path}.scale`, { optional: true, min: 0 }), rotation: num(v.rotation, `${path}.rotation`, { optional: true }) });
+	return compact({
+		x: parseVideoAnimatable(v.x, `${path}.x`, { optional: true }),
+		y: parseVideoAnimatable(v.y, `${path}.y`, { optional: true }),
+		scale: parseVideoAnimatable(v.scale, `${path}.scale`, { optional: true, min: 0 }),
+		rotation: parseVideoAnimatable(v.rotation, `${path}.rotation`, { optional: true })
+	});
 }
 
 export function parseVideoTransition(v: unknown, path: string): VideoTransition | undefined {
@@ -74,7 +116,7 @@ export function parseVideoClip(v: unknown, path = 'clip'): VideoClip {
 		name: str(v.name, `${path}.name`, true),
 		start: num(v.start, `${path}.start`, { min: 0 })!,
 		duration: num(v.duration, `${path}.duration`, { positive: true })!,
-		opacity: num(v.opacity, `${path}.opacity`, { optional: true, min: 0, max: 1 }),
+		opacity: parseVideoAnimatable(v.opacity, `${path}.opacity`, { optional: true, min: 0, max: 1 }),
 		transform: parseVideoTransform(v.transform, `${path}.transform`),
 		fit: oneOf(v.fit, VIDEO_FITS, `${path}.fit`),
 		fadeIn: num(v.fadeIn, `${path}.fadeIn`, { optional: true, min: 0 }),
@@ -88,7 +130,7 @@ export function parseVideoClip(v: unknown, path = 'clip'): VideoClip {
 			asset: str(v.asset, `${path}.asset`)!,
 			in: num(v.in, `${path}.in`, { optional: true, min: 0 }),
 			speed: num(v.speed, `${path}.speed`, { optional: true, min: 0.05, max: 20 }),
-			volume: num(v.volume, `${path}.volume`, { optional: true, min: 0, max: 4 }),
+			volume: parseVideoAnimatable(v.volume, `${path}.volume`, { optional: true, min: 0, max: 4 }),
 			muted: bool(v.muted, `${path}.muted`)
 		});
 	if (type === 'text')

@@ -9,6 +9,7 @@
  * or a CMX 3600 EDL, and exposes agent tools.
  */
 export * from './types.js';
+export * from './keyframes.js';
 export * from './parse.js';
 export * from './timeline.js';
 export * from './check.js';

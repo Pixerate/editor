@@ -285,6 +285,32 @@ describe("ClipInspector (Svelte)", () => {
   });
 });
 
+describe("ClipInspector keyframes (Svelte)", () => {
+  it("adds keys at the playhead, sets the key there by typing, and removes them", () => {
+    const controller = make();
+    render(ClipInspector, { controller });
+    act(() => controller.select(["c2"]));
+    expect(qa("[data-keyframe-row]").map((r) => r.dataset.keyframeRow)).toEqual(["opacity", "x", "y", "scale", "rotation"]);
+    act(() => controller.seek(2500));
+    act(() => q<HTMLButtonElement>('[data-keyframe-toggle="opacity"]').click());
+    expect(clipOf(controller, "c2")!.opacity).toEqual({ keys: [{ t: 500, v: 1 }] });
+    expect(controller.getState().undoLabel).toBe("Add opacity keyframe");
+    act(() => controller.seek(3500));
+    change(q<HTMLInputElement>('[data-field="opacity"]'), "0");
+    expect(clipOf(controller, "c2")!.opacity).toEqual({ keys: [{ t: 500, v: 1 }, { t: 1500, v: 0 }] });
+    expect(controller.getState().undoLabel).toBe("Keyframe opacity");
+    act(() => controller.seek(3000));
+    expect(q<HTMLInputElement>('[data-field="opacity"]').value).toBe("0.5");
+    expect(q('[data-keyframe-toggle="opacity"]').getAttribute("aria-pressed")).toBe("false");
+    change(q<HTMLInputElement>('[data-field="opacity"]'), "2");
+    expect(q("[data-edit-error]").textContent).toMatch(/between 0 and 1/);
+    act(() => controller.seek(2500));
+    act(() => q<HTMLButtonElement>('[data-keyframe-toggle="opacity"]').click());
+    expect(clipOf(controller, "c2")!.opacity).toEqual({ keys: [{ t: 1500, v: 0 }] });
+    controller.destroy();
+  });
+});
+
 describe("MediaBin (Svelte)", () => {
   it("adds an asset to the timeline and selects the new clip", () => {
     const controller = make();
