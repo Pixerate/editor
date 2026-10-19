@@ -15,7 +15,8 @@ export { default as PaperPanel } from './PaperPanel.svelte';
 export { default as ColorPanel } from './ColorPanel.svelte';
 export { default as PaintLayersPanel } from './PaintLayersPanel.svelte';
 export { default as PaintSlider } from './PaintSlider.svelte';
-export { createReactivePaintEditor, paintEditorState } from './paintEditorRune.svelte.js';
+export { default as PaintPresenceLayer } from './PaintPresenceLayer.svelte';
+export { createPaintDirector, createReactivePaintEditor, paintEditorState } from './paintEditorRune.svelte.js';
 
 export type PaintEditorProps = ComponentProps<typeof PaintEditorComponent>;
 export type PaintCanvasProps = ComponentProps<typeof PaintCanvasComponent>;

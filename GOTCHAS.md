@@ -2092,6 +2092,11 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: The filter mask lives in the `FEid` / `FXid` block as a rectangle and a plane; outside the rectangle Photoshop treats it as white (`filterMaskExtendWithWhite`). Writing only the painted bounds of a mask whose default is black loses the black.
 - **Solution / Workaround**: `filterMaskItem` writes a mask whose default is not white over the whole canvas (plus anything painted outside it); reading uses default 255. The filter mask's enabled / linked flags are in `filterFX` (`filterMaskEnable`, `filterMaskLinked`), not in the block.
 
+### [core/paint-editor] Live Agent Strokes Run Slower Than Their Point Times With Big Brushes
+
+- **Issue / Symptom**: In the demo, the landscape script's 672 ms soft-pastel stroke (90 px tip on a 1200 × 800 canvas) took about 4 s to paint through `PaintDirector`.
+- **Root Cause**: The director pushes the points due in each 16 ms frame and then waits a frame. Each push lays the dabs and re-composites the touched tiles, and React then uploads those tiles. With a big tip this takes longer than a frame, so the wall-clock time adds up beyond the schedule.
+- **Solution / Workaround**: Accepted. The result is the same as `paintStroke` with the same seed (tested), and only the pacing differs. Hosts that want strokes to land faster can pass a higher `speed` or a lower `maxStrokeMs`, or leave out the director so strokes apply at once.
 ### [core/raster] Painterly Blend Modes Reach Every `BLEND_MODES` Consumer, and Tint Must Replace Hue, Not Average It
 
 - **Issue / Symptom**: (1) After adding `watercolor`, `tint`, `highlight` and `shadow` to `BLEND_MODES`, they showed up in the image editor's layer, effect and smart-filter menus and agent enums, and its PSD export silently wrote them as Normal. (2) The first `tint` turned yellow under a blue tint into grey instead of light blue. (3) `watercolor` with a white source changed the backdrop by a level or two.

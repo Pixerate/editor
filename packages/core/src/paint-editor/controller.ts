@@ -1005,7 +1005,8 @@ export class PaintEditorController {
     return result;
   }
 
-  private checkPoints(points: readonly PenPoint[]): PenPoint[] {
+  /** Checks stroke samples (finite x and y, pressure 0..1) and returns them; throws a sentence naming the bad point. */
+  checkPoints(points: readonly PenPoint[]): PenPoint[] {
     if (!Array.isArray(points) || !points.length) throw new PaintEditorError('points is empty; give at least one {x, y} in document pixels.');
     const out: PenPoint[] = [];
     points.forEach((p, i) => {
