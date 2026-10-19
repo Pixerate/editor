@@ -42,6 +42,7 @@ import {
 	zigzagPaths
 } from './pathEffects.js';
 import { mapBezierPath } from './pathMap.js';
+import { isVectorMaskGroup, vectorMaskedShapes } from './mask.js';
 import {
 	VECTOR_WARP_STYLES,
 	VECTOR_WARP_STYLE_LABELS,
@@ -573,8 +574,8 @@ export function applyVectorEffects(shapes: readonly VectorAppearanceShape[], eff
 	return list;
 }
 
-/** The shapes of a child in its parent's space (hidden children have none). */
-function childShapes(child: VectorNode, index: number): VectorAppearanceShape[] {
+/** The shapes of a child in its parent's space (hidden children have none), ordered by its index. */
+export function vectorChildAppearanceShapes(child: VectorNode, index: number): VectorAppearanceShape[] {
 	if (child.visible === false) return [];
 	const m = child.transform;
 	const k = child.opacity ?? 1;
@@ -591,7 +592,7 @@ function liveBooleanShapes(group: VectorGroupNode): VectorAppearanceShape[] {
 	const operands: VectorBooleanOperand[] = [];
 	let source: VectorPathNode | null = null;
 	group.children.forEach((child, i) => {
-		const shapes = childShapes(child, i);
+		const shapes = vectorChildAppearanceShapes(child, i);
 		if (!shapes.length) return;
 		source ??= shapes[0].source;
 		const path =
@@ -609,7 +610,9 @@ const shapeCache = new WeakMap<VectorNode, VectorAppearanceShape[]>();
 function baseShapes(node: VectorNode): VectorAppearanceShape[] {
 	if (node.type === 'path') return [{ source: node, path: subpathsToBezier(node.subpaths), opacity: 1, order: [] }];
 	if (node.liveBoolean) return liveBooleanShapes(node);
-	return node.children.flatMap((c, i) => childShapes(c, i));
+	// A mask group's effects act on its contents (the mask stays as it is).
+	if (isVectorMaskGroup(node)) return node.children.flatMap((c, i) => (i === 0 ? [] : vectorChildAppearanceShapes(c, i)));
+	return node.children.flatMap((c, i) => vectorChildAppearanceShapes(c, i));
 }
 
 /** The paths entering effect `effectId` of the node's stack (those above it applied), in the node's own space. */
@@ -651,7 +654,8 @@ export function vectorEnvelopeFrame(node: VectorNode, effectId?: string): { effe
 export function vectorAppearanceShapes(node: VectorNode): VectorAppearanceShape[] {
 	const hit = shapeCache.get(node);
 	if (hit) return hit;
-	const out = applyVectorEffects(baseShapes(node), node.effects).sort((a, b) => compareOrder(a.order, b.order));
+	// A mask group draws its contents (effects applied) clipped by its mask.
+	const out = (isVectorMaskGroup(node) ? vectorMaskedShapes(node) : applyVectorEffects(baseShapes(node), node.effects)).sort((a, b) => compareOrder(a.order, b.order));
 	shapeCache.set(node, out);
 	return out;
 }
@@ -728,6 +732,12 @@ export function expandVectorAppearance(node: VectorNode): VectorNode {
 	if (!hasOwnVectorAppearance(node)) {
 		const group = node as VectorGroupNode;
 		out = { ...group, children: group.children.map(expandVectorAppearance) };
+	} else if (isVectorMaskGroup(node)) {
+		// A mask group keeps its mask; its effects act on the contents, wrapped in a group of their own.
+		const { effects, ...group } = node;
+		const [mask, ...contents] = node.children;
+		const wrapper: VectorGroupNode = { id: `${node.id}~content`, type: 'group', effects, children: contents };
+		out = { ...group, children: [expandVectorAppearance(mask), ...(contents.length ? [expandVectorAppearance(wrapper)] : [])] };
 	} else {
 		const shapes = vectorAppearanceShapes(node);
 		if (node.type === 'path' && shapes.length === 1) {
@@ -811,7 +821,7 @@ export function transformVectorEffects(effects: readonly VectorEffect[], m: Affi
 
 /**
  * The live groups (live booleans and groups with effects) being edited: those in `ids` and those
- * holding a node in `ids`. Their children are hit and outlined as stored instead of as drawn, so
+ * holding a node in `ids`; mask groups only when they hold one. Their children are hit and outlined as stored instead of as drawn, so
  * each operand can be picked (figcraft `crates/engine/src/booleans.rs`, `result_outline`).
  */
 export function vectorEnteredGroups(nodes: readonly VectorNode[], ids: readonly string[]): Set<string> {
@@ -820,10 +830,11 @@ export function vectorEnteredGroups(nodes: readonly VectorNode[], ids: readonly 
 	const want = new Set(ids);
 	const visit = (list: readonly VectorNode[], live: readonly string[]) => {
 		for (const n of list) {
-			const own = n.type === 'group' && hasOwnVectorAppearance(n);
+			const own = n.type === 'group' && (hasOwnVectorAppearance(n) || isVectorMaskGroup(n));
 			if (want.has(n.id)) {
 				for (const id of live) out.add(id);
-				if (own) out.add(n.id);
+				// A selected mask group stays clipped; selecting inside it opens it.
+				if (own && hasOwnVectorAppearance(n)) out.add(n.id);
 			}
 			if (n.type === 'group') visit(n.children, own ? [...live, n.id] : live);
 		}

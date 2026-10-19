@@ -18,6 +18,7 @@ import {
   applyVectorBlendOptions,
   getVectorBlendControls,
   getVectorSelectionStyle,
+  isVectorMaskGroup,
   widthProfilePreset,
   widthProfilePresetId,
   vectorPaintToHex,
@@ -34,6 +35,7 @@ import { useVectorEditorState } from './useVectorEditor';
 import { VectorEffectsPanel } from './VectorEffectsPanel';
 import { VectorAppearancePanel } from './VectorAppearancePanel';
 import { VectorEnvelopePanel } from './VectorEnvelopePanel';
+import { VectorMaskPanel } from './VectorMaskPanel';
 import { VectorGradientEditor } from './VectorGradientEditor';
 
 const VECTOR_SNAP_TITLE = 'Snap to objects';
@@ -85,6 +87,7 @@ export function VectorToolbar({
   const points = state.tool === 'direct' ? state.selectedAnchors.length : 0;
   const editing = state.editing;
   const groupSelected = state.selection.some((id) => controller.getNode(id)?.type === 'group');
+  const maskSelected = state.selection.some((id) => isVectorMaskGroup(controller.getNode(id)));
   // Live booleans keep the operands editable; a lone live group or its operands take the operation too.
   const [live, setLive] = React.useState(false);
   const booleanDisabled = live ? count < 1 : count < 2;
@@ -245,6 +248,8 @@ export function VectorToolbar({
             {act('⊻', 'Exclude', () => controller.booleanOp('exclude', { live }), booleanDisabled)}
             {act('G', 'Group', () => controller.group(), count < 1)}
             {act('U', 'Ungroup', () => controller.ungroup(), !groupSelected)}
+            {act('◐', `Make Clipping Mask (${modKeyLabel()}+7)`, () => controller.makeMask('clip'), count < 2)}
+            {act('◑', `Release Mask (${modKeyLabel()}+Alt+7)`, () => controller.releaseMask(), !maskSelected)}
           </div>
           <div className="ml-1 flex items-center gap-1" role="group" aria-label="Pathfinder">
             {VECTOR_PATHFINDER_ACTIONS.map((a) => (
@@ -572,6 +577,7 @@ export function VectorStylePanel({ controller, className }: VectorStylePanelProp
       {style && <VectorAppearancePanel controller={controller} />}
       {style && <VectorEffectsPanel controller={controller} />}
       {style && <VectorEnvelopePanel controller={controller} />}
+      {style && <VectorMaskPanel controller={controller} />}
     </div>
   );
 }

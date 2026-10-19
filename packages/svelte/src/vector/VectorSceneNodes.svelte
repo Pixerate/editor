@@ -2,6 +2,7 @@
   import type { VectorRenderNode } from '@pixerate/editor/vector';
   import Self from './VectorSceneNodes.svelte';
   import VectorPaintPath from './VectorPaintPath.svelte';
+  import VectorMaskedNodes from './VectorMaskedNodes.svelte';
 
   interface Props {
     nodes: readonly VectorRenderNode[];
@@ -13,8 +14,19 @@
 
 {#each nodes as node (node.id)}
   {#if node.kind === 'group'}
-    <g data-vector-id={node.id} transform={node.transform} opacity={node.opacity < 1 ? node.opacity : undefined} filter={node.filter} style={blend(node.blendMode)}>
-      <Self nodes={node.children} />
+    <g
+      data-vector-id={node.id}
+      data-vector-mask={node.mask?.type}
+      transform={node.transform}
+      opacity={node.opacity < 1 ? node.opacity : undefined}
+      filter={node.filter}
+      style={blend(node.blendMode)}
+    >
+      {#if node.mask}
+        <VectorMaskedNodes mask={node.mask} nodes={node.children} />
+      {:else}
+        <Self nodes={node.children} />
+      {/if}
     </g>
   {:else if node.layers}
     <!-- Fill and stroke stacks: each layer in order, bottom to top. -->

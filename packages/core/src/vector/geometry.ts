@@ -35,7 +35,8 @@ import { expandVectorCorners, setSubpathCorners } from './corners.js';
 import { hitTestVectorStroke, vectorStrokeOutlinePath } from './stroke.js';
 import { mirrorWidthProfile } from './width.js';
 import { hitTestVectorPaintStack } from './paintLayers.js';
-import { expandVectorAppearance, hasOwnVectorAppearance, transformVectorEffects, vectorAppearanceOutline } from './appearance.js';
+import { expandVectorAppearance, hasOwnVectorAppearance, transformVectorEffects, vectorAppearanceOutline, vectorAppearanceShapes } from './appearance.js';
+import { isVectorMaskActive, isVectorMaskGroup, vectorMaskContains } from './mask.js';
 import type {
 	VectorAnchor,
 	VectorAnchorType,
@@ -293,9 +294,14 @@ export function vectorPathWorldBezier(node: VectorPathNode, parent: AffineMatrix
 /**
  * Geometric bounds of a node (stroke width not included) in the space `parent` maps to —
  * by default the node's parent space, which for top-level nodes is the document. Null when
- * the node has no points.
+ * the node has no points. A mask group is bounded by its masked result.
  */
 export function vectorNodeBounds(node: VectorNode, parent: AffineMatrix = IDENTITY_MATRIX): VectorBounds | null {
+	if (isVectorMaskActive(node)) {
+		const m = multiplyMatrices(nodeMatrix(node), parent);
+		const b = bezierPathBounds(vectorAppearanceShapes(node).flatMap((s) => (isIdentityMatrix(m) ? s.path : transformBezierPath(s.path, m))));
+		return b ? { x: b.minX, y: b.minY, width: b.maxX - b.minX, height: b.maxY - b.minY } : null;
+	}
 	node = expandVectorAppearance(node);
 	if (node.type === 'group') {
 		const m = multiplyMatrices(nodeMatrix(node), parent);
@@ -349,10 +355,21 @@ export interface VectorHitTestOptions {
 /**
  * Whether `p` hits a node as drawn (path effects and live booleans applied): inside its fill
  * (when it has one), on its stroke (its alignment and arrowheads respected) or within
- * `tolerance` of either. A group is hit when any visible child is.
+ * `tolerance` of either. A group is hit when any visible child is; a mask group when a child
+ * above the mask is, where the mask lets it through. An entered mask group is hit by its children
+ * as stored, the mask by its outline when it clips.
  */
 export function hitTestVectorNode(node: VectorNode, p: Vec2, tolerance = 0, parent: AffineMatrix = IDENTITY_MATRIX, options: VectorHitTestOptions = {}): boolean {
 	if (node.visible === false) return false;
+	if (isVectorMaskGroup(node)) {
+		const m = multiplyMatrices(nodeMatrix(node), parent);
+		const entered = !!options.entered?.has(node.id);
+		if (!entered && isVectorMaskActive(node) && !vectorMaskContains(node, applyMatrix(invertMatrix(m), p), tolerance)) return false;
+		// With effects, the contents hit as drawn (unless entered).
+		const shown = !entered && hasOwnVectorAppearance(node) ? (expandVectorAppearance(node) as VectorGroupNode).children : node.children;
+		for (let i = shown.length - 1; i >= 1; i--) if (hitTestVectorNode(shown[i], p, tolerance, m, options)) return true;
+		return entered && hitTestVectorMaskSource(node, p, tolerance, m, options);
+	}
 	// Plain groups recurse as stored, so an entered live group deeper down still hits by its children.
 	if (!(node.type === 'group' && (!hasOwnVectorAppearance(node) || options.entered?.has(node.id)))) node = expandVectorAppearance(node);
 	if (node.type === 'group') {
@@ -363,6 +380,20 @@ export function hitTestVectorNode(node: VectorNode, p: Vec2, tolerance = 0, pare
 	if (path.length === 0) return false;
 	// Every drawn fill and stroke layer counts (hidden layers don't).
 	return hitTestVectorPaintStack(node, path, p, tolerance);
+}
+
+/** Whether `p` hits an entered mask group's mask: as drawn for an opacity mask, by its outline (any paint) for a clip. */
+function hitTestVectorMaskSource(group: VectorGroupNode, p: Vec2, tolerance: number, m: AffineMatrix, options: VectorHitTestOptions): boolean {
+	const source = group.children[0];
+	if (source.visible === false) return false;
+	if (group.mask?.type !== 'clip') return hitTestVectorNode(source, p, tolerance, m, options);
+	const paths = collectPathNodes(source).filter((n) => n.visible !== false);
+	const pt: [number, number] = [p.x, p.y];
+	return paths.some((n) => {
+		const world = vectorParentMatrix([source], n.id);
+		const path = vectorPathWorldBezier(n, multiplyMatrices(world ?? IDENTITY_MATRIX, m));
+		return pointInBezierPath(path, pt, n.fillRule ?? 'nonzero') || distanceToBezierPath(path, pt) <= tolerance;
+	});
 }
 
 /**

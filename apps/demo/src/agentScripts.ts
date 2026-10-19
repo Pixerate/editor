@@ -18,6 +18,12 @@ const command = (id: string, params?: Record<string, unknown>) => ({
   args: params ? { id, params } : { id },
 });
 
+/** A command whose params use an earlier step's result (`ctx.results[as].result`). */
+const commandWith = (id: string, params: (result: (key: string) => any) => Record<string, unknown>) => ({
+  tool: "commands__run_command",
+  args: (ctx: AgentScriptContext) => ({ id, params: params((key) => ctx.results[key]?.result) }),
+});
+
 export const PROMPT_SCRIPTS: AgentScript[] = [
   {
     id: "prompt-noir",
@@ -307,6 +313,16 @@ export const VECTOR_SCRIPTS: AgentScript[] = [
       { say: "A dark outline outside the shape…", ...command("vector.addStroke", { ids: ["star"], paint: "#78350f", strokeWidth: 4, strokeAlign: "outside", strokeLinejoin: "round" }), target: { selector: '[data-vector-id="star"]' } },
       { say: "…and a thin white one inside it.", ...command("vector.addStroke", { ids: ["star"], paint: "#ffffff", strokeWidth: 1.5, strokeAlign: "inside" }), target: { selector: '[data-vector-id="star"]' } },
       { say: "A soft drop shadow, lit from above.", ...command("vector.addFilter", { ids: ["star"], type: "dropShadow", params: { opacity: 0.35, offsetY: 3, blur: 6 } }), target: { selector: '[data-vector-id="star"]' } },
+    ],
+  },
+  {
+    id: "vector-mask",
+    prompt: "Frame the colour wheel in a rounded window",
+    steps: [
+      { say: "Drawing the window over the wheel: it becomes the mask, so its colour won't show.", ...command("vector.addShape", { kind: "rect", x: 724, y: 314, width: 44, height: 44, cornerRadius: 10, name: "Window" }), as: "win", target: artboardBox(724, 314, 44, 44) },
+      { say: "Clipping the wheel to it: the topmost object masks the ones below.", ...commandWith("vector.makeClippingMask", (r) => ({ ids: ["wheel", r("win").id] })), as: "clip", target: { selector: '[data-vector-id="wheel"]' } },
+      { say: "Turning it into a soft opacity mask instead: a radial fade from white to black.", ...commandWith("vector.setGradient", (r) => ({ ids: [r("win").id], target: "fill", type: "radial", stops: [{ offset: 0.5, color: "#ffffff" }, { offset: 1, color: "#000000" }] })), target: artboardBox(724, 314, 44, 44) },
+      { ...commandWith("vector.setMaskOptions", (r) => ({ ids: [r("clip").id], type: "luminance" })), target: artboardBox(716, 306, 60, 60) },
     ],
   },
 ];

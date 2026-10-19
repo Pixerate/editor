@@ -192,6 +192,45 @@ const STARTER: VectorDocument = {
       subpaths: [rectSubpath({ x: 14, y: 430, width: 56, height: 50 }, 10)],
     },
     {
+      // A clipping mask: the circle (the bottom child) clips the stripes above it. The group's drop
+      // shadow follows the clipped silhouette. Select it and use the Mask panel: Edit mask opens
+      // the circle for anchor editing, Contents selects the stripes (drag them inside the frame).
+      id: "porthole",
+      type: "group",
+      name: "Clip group",
+      mask: { type: "clip" },
+      filters: [{ id: "porthole-shadow", type: "dropShadow", params: { color: "#000000", opacity: 0.3, offsetX: 0, offsetY: 3, blur: 6, spread: 0 } }],
+      children: [
+        { id: "porthole-mask", type: "path", name: "Clip", fill: null, stroke: null, subpaths: [ellipseSubpath({ x: 475, y: 250, width: 60, height: 60 })] },
+        ...["#1d4ed8", "#38bdf8", "#e0f2fe", "#fbbf24"].map((fill, i) => ({
+          id: `porthole-stripe-${i}`,
+          type: "path" as const,
+          name: "Stripe",
+          fill,
+          stroke: null,
+          subpaths: [rectSubpath({ x: 460, y: 240 + i * 20, width: 90, height: 20 })],
+        })),
+      ],
+    },
+    {
+      // An opacity mask: a white-to-black gradient (luminance) fades the panel out towards the bottom.
+      id: "fade",
+      type: "group",
+      name: "Opacity mask",
+      mask: { type: "luminance" },
+      children: [
+        {
+          id: "fade-mask",
+          type: "path",
+          name: "Fade",
+          fill: { type: "linear", angle: 180, stops: [{ offset: 0, color: "#ffffff" }, { offset: 1, color: "#000000" }] },
+          stroke: null,
+          subpaths: [rectSubpath({ x: 14, y: 220, width: 56, height: 90 })],
+        },
+        { id: "fade-panel", type: "path", name: "Panel", fill: "#0ea5e9", stroke: "#0c4a6e", strokeWidth: 2, subpaths: [rectSubpath({ x: 14, y: 220, width: 56, height: 90 }, 8)] },
+      ],
+    },
+    {
       id: "brush",
       type: "path",
       name: "Tapered stroke",
@@ -235,6 +274,7 @@ export function VectorTab() {
             Headless <code>VectorEditorController</code> (<code>@pixerate/editor/vector</code>) with React bindings. Pen (P): click for corners, drag for curves,
             click the first point to close. Direct select (A): drag points and handles, Alt-drag a point for smooth handles, Alt-click a segment to add a point. Width (W): drag a stroke to taper it (Alt: one side); pen pressure shapes pencil strokes.
             Distort (toolbar): drag a corner of the selection box in perspective (Shift+Alt+Cmd/Ctrl: symmetric, Cmd/Ctrl-drag a side: skew). Envelope tool (U): drag the mesh of a warped object.
+            Masks: select two or more objects and press Cmd/Ctrl+7 (or Clip / Opacity in the Mask panel); the topmost masks the others. Cmd/Ctrl+Alt+7 releases.
             Drags snap to other shapes with labelled smart guides (hold Cmd/Ctrl to bypass, or switch Snap off in the toolbar). Space-drag pans, Cmd/Ctrl+wheel zooms.
           </p>
         </div>

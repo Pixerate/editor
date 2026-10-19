@@ -2,8 +2,8 @@
  * SVG export and import for vector documents. Import is DOM-free (works in Node and
  * workers): it reads `<svg>`, `<g>`, `<path>`, `<rect>`, `<circle>`, `<ellipse>`, `<line>`,
  * `<polyline>`, `<polygon>`, linear / radial gradients, presentation attributes, `style`
- * declarations and `transform`s. Text, images, clip paths, masks, filters and `<use>` are
- * skipped.
+ * declarations, `transform`s, `clip-path` and `mask` references (each becomes a mask group, the
+ * clip or mask its first child). Text, images, foreign filters and `<use>` are skipped.
  *
  * Live corners export as their cut outline plus `data-vector-d` (the sharp path) and
  * `data-vector-corners` (the radii), so the editor's own SVG imports with editable corners.
@@ -13,12 +13,19 @@
  * arrowheads as filled outlines; import merges such a group back into one path. A variable-width
  * stroke exports as its filled outline (`data-vector-part="stroke-outline"`) with the profile
  * and line style kept in `data-vector-width-profile` / `data-vector-stroke-*` attributes.
+ *
+ * A mask group exports as a `<g data-vector-mask>` (the settings as JSON) carrying the group's
+ * transform, opacity, blend mode and filter, around a `<g data-vector-part="masked">` with the
+ * contents and `clip-path` / `mask`, so the group's appearance applies to the masked result. A
+ * clip's `<clipPath>` holds the mask's outlines; for import, the mask itself is kept in a hidden
+ * `<g data-vector-part="mask-source">`. An opacity mask's `<mask>` holds the mask as drawn.
  */
 import { bezierPathToSvg } from '../canvas/pathops/bezier.js';
 import { bezierPathBounds } from '../canvas/pathops/bezier.js';
 import { hasStrokeExtras, strokeWidthProfileOf, vectorStrokeLineArea, vectorStrokeOutlinePath, vectorStrokeParts, vectorStrokeReach } from './stroke.js';
 import { sanitizeWidthProfile } from './width.js';
 import { expandVectorAppearance, hasOwnVectorAppearance, sanitizeVectorEffects, transformVectorEffects, vectorAppearanceNodes } from './appearance.js';
+import { isVectorMaskGroup, sanitizeVectorMask, vectorMaskRenderData } from './mask.js';
 import { activeVectorFilters, sanitizeVectorFilters, vectorFilterMarkup, vectorFilterSvg, type VectorRenderFilter } from './filters.js';
 import {
 	needsVectorPaintLayers,
@@ -71,6 +78,7 @@ import {
 	type VectorGradient,
 	type VectorGradientStop,
 	type VectorGroupNode,
+	type VectorEffect,
 	type VectorLineCap,
 	type VectorLineJoin,
 	type VectorWidthPoint,
@@ -504,7 +512,54 @@ export function vectorDocumentToSvg(doc: VectorDocument, options: VectorSvgExpor
 		for (let i = wrappers.length - 1; i >= 0; i--) lines.push(`${indent(depth + i)}</g>`);
 	};
 
+	/** The lines `fn` emits, taken out of the document (for markup that goes into `defs`). */
+	const capture = (fn: () => void): string => {
+		const at = lines.length;
+		fn();
+		return lines.splice(at).map((l) => l.trim()).join('');
+	};
+
+	/**
+	 * A mask group: its appearance on the outer `<g data-vector-mask>`, the contents in an inner
+	 * `<g data-vector-part="masked">` that references the `<clipPath>` or `<mask>`. Effects of the
+	 * group act on the contents, exported as a live group `<id>~content` around them.
+	 */
+	const emitMaskGroup = (node: VectorGroupNode & { mask: NonNullable<VectorGroupNode['mask']> }, depth: number) => {
+		const [source, ...contents] = node.children;
+		const body: VectorNode[] = node.effects?.length && contents.length ? [{ id: `${node.id}~content`, type: 'group', effects: node.effects, children: contents }] : contents;
+		const settings = { type: node.mask.type, ...(node.mask.invert ? { invert: true } : {}) };
+		lines.push(`${indent(depth)}<g${common(node)} data-vector-mask="${escapeAttr(JSON.stringify(settings))}">`);
+		const mask = vectorMaskRenderData(node, `${prefix}mask-${node.id}`, `${prefix}mask-filter-${node.id}`, precision);
+		let ref = '';
+		if (mask && mask.type !== 'clip') {
+			const b = mask.bounds!;
+			const box = `x="${num(b.x)}" y="${num(b.y)}" width="${num(b.width)}" height="${num(b.height)}"`;
+			if (mask.invertFilter) defs.push(vectorFilterMarkup(mask.invertFilter));
+			const inner = capture(() => emitNode(source, depth + 1));
+			const drawn = mask.filter ? `<g data-vector-part="mask-invert" filter="${escapeAttr(mask.filter)}">${inner}</g>` : inner;
+			defs.push(`<mask id="${escapeAttr(mask.id)}" data-vector-part="mask-source" maskUnits="userSpaceOnUse" ${box}${mask.type === 'alpha' ? ' mask-type="alpha"' : ''}>${drawn}</mask>`);
+			ref = ` mask="url(#${escapeAttr(mask.id)})"`;
+		} else {
+			// The mask itself, hidden, for import (a clip's paint is not drawn; a mask turned off is hidden).
+			lines.push(`${indent(depth + 1)}<g data-vector-part="mask-source" display="none">`);
+			emitNode(source, depth + 2);
+			lines.push(`${indent(depth + 1)}</g>`);
+			if (mask?.clip) {
+				defs.push(`<clipPath id="${escapeAttr(mask.id)}">${mask.clip.map((c) => `<path d="${c.d}" clip-rule="${c.clipRule}"/>`).join('')}</clipPath>`);
+				ref = ` clip-path="url(#${escapeAttr(mask.id)})"`;
+			}
+		}
+		lines.push(`${indent(depth + 1)}<g data-vector-part="masked"${ref}>`);
+		for (const child of body) emit(child, depth + 2);
+		lines.push(`${indent(depth + 1)}</g>`);
+		lines.push(`${indent(depth)}</g>`);
+	};
+
 	const emitNode = (node: VectorNode, depth: number) => {
+		if (isVectorMaskGroup(node)) {
+			emitMaskGroup(node, depth);
+			return;
+		}
 		if (hasOwnVectorAppearance(node)) {
 			// Live: what it draws, then the editable source (hidden) for import.
 			const live = {
@@ -787,6 +842,34 @@ function collectGradients(el: Element, raw: Map<string, Element>) {
 	for (const c of el.children) collectGradients(c, raw);
 }
 
+/** Every `<clipPath>` and `<mask>` with an id. */
+function collectMasks(el: Element, raw: Map<string, Element>) {
+	if ((el.name === 'clipPath' || el.name === 'mask') && el.attrs.id) raw.set(el.attrs.id, el);
+	for (const c of el.children) collectMasks(c, raw);
+}
+
+/** An attribute, or the same property in the element's `style`. */
+function attrOrStyle(el: Element, name: string): string | undefined {
+	for (const decl of (el.attrs.style ?? '').split(';')) {
+		const i = decl.indexOf(':');
+		if (i >= 0 && decl.slice(0, i).trim() === name) return decl.slice(i + 1).replace(/!important/, '').trim();
+	}
+	return el.attrs[name];
+}
+
+/** The id an `url(#id)` reference names, or null. */
+function urlId(value: string | undefined): string | null {
+	return /^url\(\s*['"]?#([^'")\s]+)['"]?\s*\)/.exec((value ?? '').trim())?.[1] ?? null;
+}
+
+/** A `<clipPath>`'s content with each `clip-rule` read as the `fill-rule` import knows. */
+function clipRulesAsFillRules(el: Element): Element {
+	const attrs = { ...el.attrs };
+	const rule = attrOrStyle(el, 'clip-rule');
+	if (rule) attrs['fill-rule'] = rule;
+	return { ...el, attrs, children: el.children.map(clipRulesAsFillRules) };
+}
+
 function collectFilters(el: Element, raw: Map<string, Element>) {
 	if (el.name === 'filter' && el.attrs.id) raw.set(el.attrs.id, el);
 	for (const c of el.children) collectFilters(c, raw);
@@ -952,6 +1035,10 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 	collectGradients(root, rawGradients);
 	const rawFilters = new Map<string, Element>();
 	collectFilters(root, rawFilters);
+	const rawMasks = new Map<string, Element>();
+	collectMasks(root, rawMasks);
+	/** Masks being read (a mask that refers back to itself is ignored there). */
+	const resolving = new Set<string>();
 	const filtersOf = (value: string | undefined): VectorFilter[] => {
 		const url = /^url\(\s*['"]?#([^'")\s]+)['"]?\s*\)/.exec((value ?? '').trim());
 		const el = url ? rawFilters.get(url[1]) : undefined;
@@ -1184,69 +1271,169 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 		const out: VectorNode[] = [];
 		for (const child of el.children) {
 			if (SKIP.has(child.name)) continue;
-			const m = multiplyMatrices(parseSvgTransform(child.attrs.transform), matrix);
-			const s = readStyle(child, style);
-			const opacity = child.attrs.opacity !== undefined ? parseFloat(child.attrs.opacity) : undefined;
-			const hidden = child.attrs.display === 'none' || child.attrs.visibility === 'hidden';
-			const blendMode = vectorBlendModeFromCss(s.mixBlendMode);
-			const filters = filtersOf(s.filter);
-			const meta = {
-				...(child.attrs['inkscape:label'] || child.attrs['data-name'] ? { name: child.attrs['inkscape:label'] ?? child.attrs['data-name'] } : {}),
-				...(opacity !== undefined && Number.isFinite(opacity) && opacity < 1 ? { opacity } : {}),
-				...(hidden ? { visible: false } : {}),
-				...(blendMode && blendMode !== 'normal' ? { blendMode } : {}),
-				...(filters.length ? { filters } : {})
-			};
-			// A blend's in-betweens are regenerated from its keys.
-			if (child.attrs['data-vector-blend-step'] !== undefined) continue;
-			const operation = child.attrs['data-vector-boolean-operation'];
-			if (BOOLEAN_OPERATIONS.includes(operation as VectorBooleanOperation)) (meta as { booleanOperation?: VectorBooleanOperation }).booleanOperation = operation as VectorBooleanOperation;
-			if (child.name === 'g' && child.attrs['data-vector-live'] !== undefined) {
-				const node = liveNode(child, s, m, meta);
-				if (node) out.push(node);
-				continue;
-			}
-			if (child.name === 'g' && child.attrs['data-vector-path'] !== undefined && child.attrs['data-vector-fills'] !== undefined) {
-				const node = stackedPath(child, s, m, meta);
-				if (node) out.push(node);
-				continue;
-			}
-			if (child.name === 'g' && child.attrs['data-vector-path'] !== undefined) {
-				const node = mergedPath(child, s, m, meta);
-				if (node) out.push(node);
-				continue;
-			}
-			if (child.name === 'g' || child.name === 'svg' || child.name === 'a' || child.name === 'switch') {
-				const children = visit(child, s, m);
-				if (!children.length) continue;
-				const group: VectorGroupNode = { id: idFor(child), type: 'group', ...meta, children };
-				const blend = child.name === 'g' ? blendFromAttribute(child.attrs['data-vector-blend'], m) : null;
-				if (blend) group.blend = blend;
-				out.push(group);
-				continue;
-			}
-			const subpaths = shapeOf(child);
-			if (!subpaths || !subpaths.length) continue;
-			const node = placed(
-				withOpacities(
-					{
-						id: idFor(child),
-						type: 'path',
-						...meta,
-						subpaths,
-						fill: child.name === 'line' ? null : paint(s.fill),
-						stroke: paint(s.stroke),
-						...strokeStyle(s)
-					},
-					s
-				),
-				m
-			);
-			out.push(node);
+			const nodes = visitOne(child, style, matrix);
+			out.push(...(nodes.length ? masked(child, nodes, multiplyMatrices(parseSvgTransform(child.attrs.transform), matrix)) : nodes));
 		}
 		return options.mergeStackedShapes ? mergeStacked(out) : out;
 	};
 
-	const nodes = visit(root, readStyle(root, { fill: '#000', stroke: 'none', strokeWidth: '' }), rootMatrix);
+	/** The base style mask and clip content inherits (the document's, not the referencing element's). */
+	let rootStyle: InheritedStyle = { fill: '#000', stroke: 'none', strokeWidth: '' };
+
+	/** Maps a unit box onto the bounds of `nodes` (`objectBoundingBox` units), or null without bounds. */
+	const bboxMatrix = (nodes: readonly VectorNode[]): AffineMatrix | null => {
+		const b = unionBounds(nodes.map((n) => vectorNodeBounds(n)));
+		return b && b.width > 0 && b.height > 0 ? [b.width, 0, 0, b.height, b.x, b.y] : null;
+	};
+
+	/** The nodes a `<clipPath>` or `<mask>` holds as one mask node (several are grouped), or null. */
+	const maskNode = (el: Element, m: AffineMatrix, nodes: readonly VectorNode[], units: string | undefined): VectorNode | null => {
+		const id = el.attrs.id;
+		if (!id || resolving.has(id)) return null;
+		let space = m;
+		if (units === 'objectBoundingBox') {
+			const box = bboxMatrix(nodes);
+			if (!box) return null;
+			space = box;
+		}
+		resolving.add(id);
+		const isClip = el.name === 'clipPath';
+		const content = isClip ? clipRulesAsFillRules(el) : el;
+		const inner = visit(content, readStyle(content, rootStyle), multiplyMatrices(parseSvgTransform(el.attrs.transform), space));
+		resolving.delete(id);
+		// A clip's paint is not drawn: imported clips are unpainted outlines.
+		const strip = (n: VectorNode): VectorNode => (n.type === 'path' ? withVectorStrokes(withVectorFills({ ...n, fill: null, stroke: null }, []), []) : { ...n, children: n.children.map(strip) });
+		const list = isClip ? inner.map(strip) : inner;
+		if (!list.length) return null;
+		return list.length === 1 ? list[0] : { id: idFor({ name: 'g', attrs: {}, children: [] }), type: 'group', name: isClip ? 'Clip' : 'Mask', children: list };
+	};
+
+	/**
+	 * Nodes made from an element that has `clip-path` and / or `mask`: wrapped in a mask group (the
+	 * clip or mask first), the clip inside the mask as SVG applies them. References to unknown or
+	 * unusable masks are dropped.
+	 */
+	const masked = (el: Element, nodes: VectorNode[], m: AffineMatrix): VectorNode[] => {
+		let out = nodes;
+		const clipEl = rawMasks.get(urlId(attrOrStyle(el, 'clip-path')) ?? '');
+		if (clipEl?.name === 'clipPath') {
+			const source = maskNode(clipEl, m, out, clipEl.attrs.clipPathUnits);
+			if (source) out = [{ id: idFor({ name: 'g', attrs: {}, children: [] }), type: 'group', name: 'Clip Group', mask: { type: 'clip' }, children: [source, ...out] }];
+		}
+		const maskEl = rawMasks.get(urlId(attrOrStyle(el, 'mask')) ?? '');
+		if (maskEl?.name === 'mask') {
+			const source = maskNode(maskEl, m, out, maskEl.attrs.maskContentUnits);
+			const type = attrOrStyle(maskEl, 'mask-type') === 'alpha' ? 'alpha' : 'luminance';
+			if (source) out = [{ id: idFor({ name: 'g', attrs: {}, children: [] }), type: 'group', name: 'Opacity Mask', mask: { type }, children: [source, ...out] }];
+		}
+		return out;
+	};
+
+	/**
+	 * A `<g data-vector-mask>` from our own export as the mask group it came from: the mask from its
+	 * hidden source part or its `<mask>`, the contents from the masked part (a `<id>~content` live
+	 * group there gives back the group's effects).
+	 */
+	const maskGroup = (g: Element, style: InheritedStyle, m: AffineMatrix, meta: Partial<VectorGroupNode>): VectorNode | null => {
+		let raw: unknown = null;
+		try {
+			raw = JSON.parse(g.attrs['data-vector-mask']);
+		} catch {
+			raw = null;
+		}
+		const mask = sanitizeVectorMask(raw);
+		const part = (name: string) => g.children.find((c) => c.name === 'g' && c.attrs['data-vector-part'] === name);
+		const maskedEl = part('masked');
+		if (!mask || !maskedEl) return null;
+		const id = idFor(g);
+		let sourceEl = part('mask-source');
+		if (!sourceEl) {
+			const el = rawMasks.get(urlId(maskedEl.attrs.mask) ?? '');
+			const invert = el?.children.find((c) => c.name === 'g' && c.attrs['data-vector-part'] === 'mask-invert');
+			sourceEl = invert ?? el;
+		}
+		const source = sourceEl ? visit(sourceEl, style, m)[0] : undefined;
+		let contents = visit(maskedEl, style, m);
+		let effects: VectorEffect[] | undefined;
+		const wrapper = contents.length === 1 && contents[0].type === 'group' && contents[0].id === `${id}~content` ? contents[0] : null;
+		if (wrapper?.type === 'group') {
+			effects = wrapper.effects ?? undefined;
+			contents = wrapper.children;
+		}
+		if (!source) return contents.length ? { id, type: 'group', ...meta, children: contents } : null;
+		return { id, type: 'group', ...meta, mask, ...(effects?.length ? { effects } : {}), children: [source, ...contents] };
+	};
+
+	const visitOne = (child: Element, style: InheritedStyle, matrix: AffineMatrix): VectorNode[] => {
+		const out: VectorNode[] = [];
+		const m = multiplyMatrices(parseSvgTransform(child.attrs.transform), matrix);
+		const s = readStyle(child, style);
+		const opacity = child.attrs.opacity !== undefined ? parseFloat(child.attrs.opacity) : undefined;
+		const hidden = child.attrs.display === 'none' || child.attrs.visibility === 'hidden';
+		const blendMode = vectorBlendModeFromCss(s.mixBlendMode);
+		const filters = filtersOf(s.filter);
+		const meta = {
+			...(child.attrs['inkscape:label'] || child.attrs['data-name'] ? { name: child.attrs['inkscape:label'] ?? child.attrs['data-name'] } : {}),
+			...(opacity !== undefined && Number.isFinite(opacity) && opacity < 1 ? { opacity } : {}),
+			...(hidden ? { visible: false } : {}),
+			...(blendMode && blendMode !== 'normal' ? { blendMode } : {}),
+			...(filters.length ? { filters } : {})
+		};
+		// A blend's in-betweens are regenerated from its keys.
+		if (child.attrs['data-vector-blend-step'] !== undefined) return out;
+		const operation = child.attrs['data-vector-boolean-operation'];
+		if (BOOLEAN_OPERATIONS.includes(operation as VectorBooleanOperation)) (meta as { booleanOperation?: VectorBooleanOperation }).booleanOperation = operation as VectorBooleanOperation;
+		if (child.name === 'g' && child.attrs['data-vector-mask'] !== undefined) {
+			const node = maskGroup(child, s, m, meta);
+			if (node) out.push(node);
+			return out;
+		}
+		if (child.name === 'g' && child.attrs['data-vector-live'] !== undefined) {
+			const node = liveNode(child, s, m, meta);
+			if (node) out.push(node);
+			return out;
+		}
+		if (child.name === 'g' && child.attrs['data-vector-path'] !== undefined && child.attrs['data-vector-fills'] !== undefined) {
+			const node = stackedPath(child, s, m, meta);
+			if (node) out.push(node);
+			return out;
+		}
+		if (child.name === 'g' && child.attrs['data-vector-path'] !== undefined) {
+			const node = mergedPath(child, s, m, meta);
+			if (node) out.push(node);
+			return out;
+		}
+		if (child.name === 'g' || child.name === 'svg' || child.name === 'a' || child.name === 'switch') {
+			const children = visit(child, s, m);
+			if (!children.length) return out;
+			const group: VectorGroupNode = { id: idFor(child), type: 'group', ...meta, children };
+			const blend = child.name === 'g' ? blendFromAttribute(child.attrs['data-vector-blend'], m) : null;
+			if (blend) group.blend = blend;
+			out.push(group);
+			return out;
+		}
+		const subpaths = shapeOf(child);
+		if (!subpaths || !subpaths.length) return out;
+		const node = placed(
+			withOpacities(
+				{
+					id: idFor(child),
+					type: 'path',
+					...meta,
+					subpaths,
+					fill: child.name === 'line' ? null : paint(s.fill),
+					stroke: paint(s.stroke),
+					...strokeStyle(s)
+				},
+				s
+			),
+			m
+		);
+		out.push(node);
+		return out;
+	};
+
+	rootStyle = readStyle(root, rootStyle);
+	const nodes = visit(root, rootStyle, rootMatrix);
 	return { width, height, nodes };
 }

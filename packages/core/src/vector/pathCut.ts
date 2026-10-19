@@ -346,15 +346,17 @@ export function eraseFromFill(path: BezierPathInput, fillRule: FillRule, region:
 /**
  * The parts of a subpath's outline outside `region`, as open subpaths that keep the original
  * curves exactly; null when the outline does not enter the region. A closed subpath's last
- * and first parts join at its first anchor.
+ * and first parts join at its first anchor. With `keep: 'inside'` the parts inside the region are
+ * kept instead (null when the outline never leaves it), as a clipping mask clips an open path.
  */
-export function eraseFromOutline(sp: VectorSubpath, region: BezierPathInput): VectorSubpath[] | null {
+export function eraseFromOutline(sp: VectorSubpath, region: BezierPathInput, options: { keep?: 'outside' | 'inside'; fillRule?: FillRule } = {}): VectorSubpath[] | null {
 	const regionSegs = pathToContours(region).flatMap((c) => closeContour(c, true));
 	if (!regionSegs.length) return null;
 	const rb = bezierPathBounds(region);
 	const count = subpathSegmentCount(sp);
 	if (!rb || count === 0) return null;
-	const removed = (p: Point) => pointInBezierPath(region, p, 'nonzero');
+	const inside = options.keep === 'inside';
+	const removed = (p: Point) => pointInBezierPath(region, p, options.fillRule ?? 'nonzero') !== inside;
 	type Piece = { seg: number; t0: number; t1: number };
 	const runs: Piece[][] = [];
 	let cur: Piece[] = [];
