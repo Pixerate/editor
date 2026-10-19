@@ -119,6 +119,7 @@ describe('image editor agent tools', () => {
       'group_layers', 'add_group', 'ungroup_layer', 'merge_down', 'merge_visible', 'flatten_image', 'offset_layer', 'add_layer_mask',
       'apply_layer_mask', 'remove_layer_mask', 'set_layer_mask_properties', 'layer_via_copy', 'rasterize_layer', 'add_layer_filter',
       'update_layer_filter', 'remove_layer_filter',
+      'get_transform_frame', 'transform_layer', 'warp_layer', 'transform_selection', 'flip_layer', 'rotate_layer_90',
       'list_layer_effects', 'add_layer_effect', 'update_layer_effect', 'remove_layer_effect', 'set_layer_effects_enabled', 'set_global_light',
       'paint_stroke', 'fill_pixels', 'clear_pixels', 'get_mixer_brush', 'load_mixer_brush', 'clean_mixer_brush', 'mix_colors', 'inspect_psd', 'import_psd', 'export_psd',
     ]);
@@ -130,7 +131,7 @@ describe('image editor agent tools', () => {
       }
     }
     const readOnly = tools.filter((t) => t.annotations!.readOnlyHint).map((t) => t.name);
-    expect(readOnly).toEqual(['get_adjustments', 'list_controls', 'render_preview', 'capture_view', 'get_selection', 'get_image_info', 'get_histogram', 'list_layers', 'list_layer_effects', 'get_mixer_brush', 'mix_colors', 'inspect_psd', 'export_psd']);
+    expect(readOnly).toEqual(['get_adjustments', 'list_controls', 'render_preview', 'capture_view', 'get_selection', 'get_image_info', 'get_histogram', 'list_layers', 'get_transform_frame', 'list_layer_effects', 'get_mixer_brush', 'mix_colors', 'inspect_psd', 'export_psd']);
   });
 
   it('get_adjustments and list_controls describe the state', async () => {

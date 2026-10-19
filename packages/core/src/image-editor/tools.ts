@@ -26,6 +26,7 @@ import { createImageEffectTools } from './effect-tools';
 import { createImagePaintTools } from './paint-tools';
 import { createPigmentTools } from '../paint/pigment-tools';
 import { createImagePsdTools } from './psd-tools';
+import { createImageTransformTools } from './transform-tools';
 
 export interface ImageEditorToolProviderOptions {
   /** Provider id (unique per registry). Default `image-editor`. */
@@ -61,6 +62,8 @@ function adjustmentsSummary(adjustments: ImageAdjustments) {
  * - Layers, geometry and history: `get_image_info`, `get_histogram`, `update_adjustment_layer`,
  *   `remove_adjustment_layer`, `move_adjustment_layer`, `set_crop`, `reset_crop`, `set_rotation`,
  *   `flip_image`, `undo_image`, `redo_image` (see `createImageEditTools`).
+ * - Free Transform: `get_transform_frame`, `transform_layer`, `warp_layer`, `transform_selection`,
+ *   `flip_layer`, `rotate_layer_90` (see `createImageTransformTools`).
  */
 export function createImageEditorToolProvider(
   controller: ImageEditorController,
@@ -293,6 +296,7 @@ export function createImageEditorToolProvider(
       ...createImageSelectionTools(controller),
       ...createImageEditTools(controller),
       ...createImageLayerTools(controller),
+      ...createImageTransformTools(controller),
       ...createImageEffectTools(controller),
       ...createImagePaintTools(controller),
       ...createPigmentTools(),

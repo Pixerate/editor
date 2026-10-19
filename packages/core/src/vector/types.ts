@@ -1,4 +1,5 @@
 import type { CanvasGradientDef } from '../canvas/gradient.js';
+import type { WarpMesh, WarpStyle } from '../geom/types.js';
 
 /** An affine matrix `[a, b, c, d, e, f]`: `x' = a·x + c·y + e`, `y' = b·x + d·y + f` (SVG order). */
 export type VectorMatrix = readonly [number, number, number, number, number, number];
@@ -445,36 +446,17 @@ export type VectorAverageAxis = 'horizontal' | 'vertical' | 'both';
 export type VectorEffectType = 'trim' | 'roundCorners' | 'puckerBloat' | 'twist' | 'zigzag' | 'wiggle' | 'offset' | 'merge' | 'repeater' | 'envelope';
 export const VECTOR_EFFECT_TYPES: readonly VectorEffectType[] = ['trim', 'roundCorners', 'puckerBloat', 'twist', 'zigzag', 'wiggle', 'offset', 'merge', 'repeater', 'envelope'];
 
-/** Warp presets (Photoshop's fifteen, in menu order). */
-export type VectorWarpStyle =
-	| 'arc'
-	| 'arcLower'
-	| 'arcUpper'
-	| 'arch'
-	| 'bulge'
-	| 'shellLower'
-	| 'shellUpper'
-	| 'flag'
-	| 'wave'
-	| 'fish'
-	| 'rise'
-	| 'fisheye'
-	| 'inflate'
-	| 'squeeze'
-	| 'twist';
+/** Warp presets (Photoshop's fifteen, in menu order); shared with the image editor (`src/geom`). */
+export type VectorWarpStyle = WarpStyle;
 
 /**
  * A grid of bicubic Bézier patches mapping a source box onto the plane. `us` / `vs` are the patch
  * boundaries as fractions of the box (increasing, first 0, last 1); `points` is the
  * `(3·(us.length − 1) + 1) × (3·(vs.length − 1) + 1)` control grid, row by row, in the node's own
  * space. Neighbouring patches share their edge row: anchors sit where both indices are multiples
- * of 3, handles where one is.
+ * of 3, handles where one is. Shared with the image editor (`src/geom`).
  */
-export interface VectorWarpMesh {
-	us: number[];
-	vs: number[];
-	points: Vec2[];
-}
+export type VectorWarpMesh = WarpMesh;
 
 /** Merge Paths modes: a compound path (no boolean), union, the first minus the others, intersection or exclusion. */
 export type VectorMergeMode = 'merge' | 'add' | 'subtract' | 'intersect' | 'exclude';

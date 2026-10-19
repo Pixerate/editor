@@ -21,6 +21,7 @@ import {
   LAYER_FLAG_HIDDEN,
   LAYER_FLAG_TRANSPARENCY_PROTECTED,
   MASK_FLAG_DISABLED,
+  MASK_FLAG_UNLINKED,
   PSD_MAX_DIMENSION,
   SECTION_CLOSED,
   SECTION_DIVIDER,
@@ -117,7 +118,8 @@ function maskChannel(mask: RasterMask, ox: number, oy: number, psb: boolean): { 
   if (mask.source) throw new PsdError('A parametric mask must be baked before export.');
   const bounds = contentBounds(mask.surface);
   const def = mask.defaultValue;
-  const m: PsdLayerMask = { rect: EMPTY_RECT, defaultColor: def, flags: mask.enabled === false ? MASK_FLAG_DISABLED : 0 };
+  const flags = (mask.enabled === false ? MASK_FLAG_DISABLED : 0) | (mask.linked === false ? MASK_FLAG_UNLINKED : 0);
+  const m: PsdLayerMask = { rect: EMPTY_RECT, defaultColor: def, flags };
   if ((mask.density ?? 1) < 1) m.userDensity = Math.round(Math.max(0, mask.density ?? 1) * 255);
   if ((mask.feather ?? 0) > 0) m.userFeather = mask.feather;
   if (!bounds) return { channel: emptyChannel(CHANNEL_USER_MASK), mask: m };

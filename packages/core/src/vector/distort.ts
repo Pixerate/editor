@@ -13,6 +13,7 @@ import { mapVectorPaint } from './gradient.js';
 import { applyMatrix, invertMatrix, multiplyMatrices, nodeMatrix, type AffineMatrix } from './geometry.js';
 import { vectorEffectInputBounds, vectorEnvelopeMap, vectorEnvelopeMesh } from './appearance.js';
 import { mapVectorMeshPoints } from './warp.js';
+import { matrixAbout, skewMatrix } from '../geom/affine.js';
 import type { Vec2, VectorBounds, VectorEffect, VectorGroupNode, VectorNode, VectorPathNode, VectorTransformHandle } from './types.js';
 
 /** Default tolerance (document units) of Free Distort's adaptive path mapping. */
@@ -62,7 +63,7 @@ export function vectorDistortQuad(b: VectorBounds, handle: VectorTransformHandle
 	return q;
 }
 
-const about = (o: Vec2, m: AffineMatrix): AffineMatrix => multiplyMatrices(multiplyMatrices([1, 0, 0, 1, -o.x, -o.y], m), [1, 0, 0, 1, o.x, o.y]);
+const about = (o: Vec2, m: AffineMatrix): AffineMatrix => matrixAbout(m, o);
 
 /**
  * The skew for dragging side `handle` of box `b` by `d`: along that side, about the opposite side
@@ -88,9 +89,7 @@ export function vectorShearForSide(b: VectorBounds, handle: VectorTransformHandl
  * and `ay` degrees vertically (y' = y + tan(ay)·x), about `origin`.
  */
 export function vectorSkewMatrix(ax: number, ay: number, origin: Vec2 = { x: 0, y: 0 }): AffineMatrix {
-	const tx = Math.tan((ax * Math.PI) / 180);
-	const ty = Math.tan((ay * Math.PI) / 180);
-	return about(origin, [1, ty, tx, 1, 0, 0]);
+	return skewMatrix(ax, ay, origin);
 }
 
 /** Effects after their node's geometry went through a non-affine map: envelope meshes follow it (a preset becomes the mesh it stood for). */
