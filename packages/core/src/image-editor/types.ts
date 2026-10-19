@@ -405,6 +405,12 @@ export interface ImageEditorState {
    * built-in ones. Recorded in undo history and saved in `toJSON()`.
    */
   patterns?: EffectPattern[];
+  /**
+   * While a smart object's contents are open for editing (Edit Contents), the smart objects
+   * being edited, outermost first: the state shows the contents as a document of their own until
+   * `closeSmartObjectContents`. Missing when the document itself is shown.
+   */
+  editingContents?: Array<{ layerId: string; name: string }>;
 }
 
 /**

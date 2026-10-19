@@ -6,3 +6,4 @@ export * from './VectorEffectsPanel';
 export * from './VectorEnvelopePanel';
 export * from './VectorEditor';
 export * from './VectorGradientEditor';
+export * from './VectorAppearancePanel';

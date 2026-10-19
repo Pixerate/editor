@@ -298,6 +298,17 @@ export const VECTOR_SCRIPTS: AgentScript[] = [
       { ...command("vector.addShape", { kind: "star", x: 520, y: 30, width: 14, height: 14, points: 5, innerRatio: 0.45, fill: "#fef9c3", name: "Star" }), target: artboardBox(520, 30, 14, 14) },
     ],
   },
+  {
+    id: "vector-appearance",
+    prompt: "Make the yellow star pop",
+    steps: [
+      { say: "Reading the star's appearance.", ...command("vector.getAppearance", { id: "star" }), target: { selector: '[data-vector-id="star"]' } },
+      { say: "A warm glow fill multiplied over the yellow.", ...command("vector.addFill", { ids: ["star"], paint: "#fb923c", opacity: 0.6, blendMode: "multiply" }), target: { selector: '[data-vector-id="star"]' } },
+      { say: "A dark outline outside the shape…", ...command("vector.addStroke", { ids: ["star"], paint: "#78350f", strokeWidth: 4, strokeAlign: "outside", strokeLinejoin: "round" }), target: { selector: '[data-vector-id="star"]' } },
+      { say: "…and a thin white one inside it.", ...command("vector.addStroke", { ids: ["star"], paint: "#ffffff", strokeWidth: 1.5, strokeAlign: "inside" }), target: { selector: '[data-vector-id="star"]' } },
+      { say: "A soft drop shadow, lit from above.", ...command("vector.addFilter", { ids: ["star"], type: "dropShadow", params: { opacity: 0.35, offsetY: 3, blur: 6 } }), target: { selector: '[data-vector-id="star"]' } },
+    ],
+  },
 ];
 
 export const ANIMATION_SCRIPTS: AgentScript[] = [

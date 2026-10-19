@@ -12,7 +12,11 @@ const DESTRUCTIVE = { readOnlyHint: false, destructiveHint: true, idempotentHint
 
 const TARGET = {
   layerId: { type: 'string', description: 'Layer to paint (default the active layer; see list_layers).' },
-  channel: { type: 'string', enum: ['pixels', 'mask'], description: "pixels (default for a pixel layer) or the layer's mask: black hides, white reveals." },
+  channel: {
+    type: 'string',
+    enum: ['pixels', 'mask', 'filter-mask'],
+    description: "pixels (default for a pixel layer), the layer's mask, or a smart object's smart filter mask (filter-mask): black hides, white reveals.",
+  },
 } as const;
 
 const BRUSH = {

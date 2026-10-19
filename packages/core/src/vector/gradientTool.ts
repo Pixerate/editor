@@ -8,6 +8,7 @@
  * midpoints above it, a stop dragged off the bar is removed, a click on the bar adds one), ArtCraft,
  * MIT OR Apache-2.0 — see THIRD_PARTY_NOTICES.md.
  */
+import { vectorTargetPaint } from './paintLayers.js';
 import { collectPathNodes, findVectorNode, vectorWorldMatrix, IDENTITY_MATRIX, multiplyMatrices, type AffineMatrix } from './geometry.js';
 import { vectorPathLocalBounds } from './svg.js';
 import {
@@ -71,11 +72,11 @@ const fmt = (n: number) => Math.round(n * 100) / 100;
 const apply = (m: AffineMatrix, p: Vec2): Vec2 => ({ x: m[0] * p.x + m[2] * p.y + m[4], y: m[1] * p.x + m[3] * p.y + m[5] });
 
 /** The path whose `target` paint the annotator shows: the first path of the selection with a gradient there. */
-export function vectorGradientTargetPath(doc: VectorDocument, selection: readonly string[], target: VectorGradientTarget): VectorPathNode | null {
+export function vectorGradientTargetPath(doc: VectorDocument, selection: readonly string[], target: VectorGradientTarget, layer: number | null = null): VectorPathNode | null {
 	for (const id of selection) {
 		const node = findVectorNode(doc.nodes, id);
 		if (!node) continue;
-		const path = collectPathNodes(node).find((p) => isVectorGradient(p[target]));
+		const path = collectPathNodes(node).find((p) => isVectorGradient(vectorTargetPaint(p, target, layer)));
 		if (path) return path;
 	}
 	return null;
@@ -86,11 +87,12 @@ export function getVectorGradientAnnotator(
 	doc: VectorDocument,
 	selection: readonly string[],
 	viewport: VectorViewport,
-	target: VectorGradientTarget
+	target: VectorGradientTarget,
+	layer: number | null = null
 ): VectorGradientAnnotator | null {
-	const path = vectorGradientTargetPath(doc, selection, target);
+	const path = vectorGradientTargetPath(doc, selection, target, layer);
 	if (!path) return null;
-	const gradient = path[target] as VectorGradient;
+	const gradient = vectorTargetPaint(path, target, layer) as VectorGradient;
 	const world = vectorWorldMatrix(doc.nodes, path.id) ?? IDENTITY_MATRIX;
 	const screen = multiplyMatrices(world, [viewport.zoom, 0, 0, viewport.zoom, viewport.x, viewport.y]);
 	const bounds = vectorPathLocalBounds(path);

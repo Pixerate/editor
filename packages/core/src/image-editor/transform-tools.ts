@@ -5,7 +5,7 @@ import { FREE_TRANSFORM_CONTENTS, type FreeTransformContent, type FreeTransformI
 import {
   TRANSFORM_ANCHORS,
   WARP_STYLES,
-  identityTransform,
+  anchorPoint,
   isTransformAnchor,
   type AffineMatrix,
   type Quad,
@@ -124,7 +124,7 @@ export function createImageTransformTools(controller: ImageEditorController): Ag
     name: 'get_transform_frame',
     title: 'Get the Free Transform frame',
     description:
-      'Returns what a transform would move and its frame: content (layer, selection, selection-copy or selection-outline), moved (pixels, mask, selection), the frame (document bounds of the content), its corners [top-left, top-right, bottom-right, bottom-left] and centre. Pass meshColumns / meshRows to also get the identity warp mesh over the frame to edit for warp_layer. Changes nothing.',
+      'Returns what a transform would move and its frame: content (layer, selection, selection-copy or selection-outline), moved (pixels, mask, selection), the frame (document bounds of the content), its corners [top-left, top-right, bottom-right, bottom-left] and centre. For a smart object (smartObject true) the frame is the contents’ rectangle in contents pixels and the corners are where they land now. Pass meshColumns / meshRows to also get the identity warp mesh over the frame to edit for warp_layer. Changes nothing.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -147,9 +147,10 @@ export function createImageTransformTools(controller: ImageEditorController): Ag
         content: args.content === 'selection-copy' ? 'selection-copy' : s.content,
         moved: [...s.moves],
         frame: { ...s.box },
-        corners: identityTransform(s.box).corners.map(roundPoint),
-        center: roundPoint({ x: s.box.x + s.box.width / 2, y: s.box.y + s.box.height / 2 }),
+        corners: s.startGeometry.corners.map(roundPoint),
+        center: roundPoint(anchorPoint(s.startGeometry, 'center')),
       };
+      if (s.smartObject) out.smartObject = true;
       s.cancel();
       if (args.meshColumns !== undefined) {
         const cols = args.meshColumns as number;

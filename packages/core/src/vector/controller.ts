@@ -85,6 +85,7 @@ import {
 	defaultVectorGradient,
 	insertVectorGradientStop,
 	isVectorGradient,
+	sanitizeVectorGradient,
 	moveVectorGradientHandle,
 	moveVectorGradientStop,
 	removeVectorGradientStop,
@@ -163,7 +164,24 @@ import {
 	type VectorBuilderTouched,
 	type VectorShapeBuilderMap
 } from './builder.js';
-import type { VectorGradient, VectorWarpMesh } from './types.js';
+import { VECTOR_BLEND_MODES, type VectorBlendMode, type VectorFilter, type VectorFilterType, type VectorGradient, type VectorPaintLayer, type VectorStrokeLayer, type VectorWarpMesh } from './types.js';
+import {
+	isVectorBlendMode,
+	newVectorStrokeLayer,
+	normalizeVectorPaintStacks,
+	VECTOR_STROKE_SETTING_KEYS,
+	sanitizeVectorFills,
+	sanitizeVectorStrokeSettings,
+	sanitizeVectorStrokes,
+	vectorFills,
+	vectorPaintLayerNodes,
+	vectorStrokes,
+	vectorTargetPaint,
+	withVectorFills,
+	withVectorStrokes,
+	withVectorTargetPaint
+} from './paintLayers.js';
+import { createVectorFilter, isVectorFilterType, normalizeVectorFilterParams, VECTOR_FILTER_LABELS } from './filters.js';
 import type {
 	Vec2,
 	VectorEffect,
@@ -422,7 +440,8 @@ export interface VectorEditorState {
 	/** Options new blends get. */
 	blendDefaults: VectorBlendOptions;
 	/** The paint the gradient tool and gradient editor work on, and the selected stop (index into the sorted stops). */
-	gradientEdit: { target: VectorGradientTarget; stop: number | null };
+	/** The paint the gradient tool and editor work on: `target`, and `layer` of its stack (null: the top layer, through the shorthand). */
+	gradientEdit: { target: VectorGradientTarget; stop: number | null; layer: number | null };
 	/**
 	 * Free Distort mode of the selection box: dragging a corner distorts in perspective (each corner
 	 * on its own; Shift+Alt+Mod: symmetric perspective), a side moves its two corners, and Mod-dragging
@@ -548,7 +567,9 @@ export const VECTOR_STYLE_KEYS = [
 	'arrowAlign',
 	'startArrowScale',
 	'endArrowScale',
-	'strokeWidthProfile'
+	'strokeWidthProfile',
+	'fills',
+	'strokes'
 ] as const satisfies readonly (keyof VectorStyle)[];
 
 /** Clipboard payload type written by `copy()`. */
@@ -1014,6 +1035,31 @@ export const VECTOR_PATHFINDER_LABELS: Readonly<Record<VectorPathfinderOperation
 };
 
 /** Replaces nodes by id anywhere in the tree (structural sharing for untouched branches). */
+/**
+ * Every path with its fill and stroke stacks reconciled (see `normalizeVectorPaintStacks`): the
+ * same array, and the same node objects, where nothing changes.
+ */
+function normalizeVectorTree(nodes: readonly VectorNode[], prefer: 'stack' | 'shorthand'): VectorNode[] {
+	let changed = false;
+	const out = nodes.map((n) => {
+		let next: VectorNode = n.type === 'path' ? normalizeVectorPaintStacks(n, prefer) : n;
+		if (next.type === 'group') {
+			const children = normalizeVectorTree(next.children, prefer);
+			if (children !== next.children) next = { ...next, children };
+		}
+		if (next !== n) changed = true;
+		return next;
+	});
+	return changed ? out : (nodes as VectorNode[]);
+}
+
+/** A document as loaded: a copy, stacks preferred over stale shorthands. */
+function loadedDocument(doc: VectorDocument): VectorDocument {
+	const copy = cloneVectorDocument(doc);
+	const nodes = normalizeVectorTree(copy.nodes, 'stack');
+	return nodes === copy.nodes ? copy : { ...copy, nodes };
+}
+
 function mapTree(nodes: readonly VectorNode[], fn: (node: VectorNode) => VectorNode | null): VectorNode[] {
 	let changed = false;
 	const out: VectorNode[] = [];
@@ -1194,7 +1240,7 @@ export class VectorEditorController {
 	private blendStart: VectorBlendStart | null = null;
 	/** Options new blends get (the toolbars edit them along with the selected blend's). */
 	private blendDefaults: VectorBlendOptions = {};
-	private gradientEdit: VectorEditorState['gradientEdit'] = { target: 'fill', stop: null };
+	private gradientEdit: VectorEditorState['gradientEdit'] = { target: 'fill', stop: null, layer: null };
 	private freeDistort = false;
 	/** What the highlight shows, to skip notifying when the pointer stays over the same face. */
 	private builderHoverKey: string | null = null;
@@ -1210,7 +1256,7 @@ export class VectorEditorController {
 
 	constructor(options: VectorEditorOptions = {}) {
 		this.history = options.history ?? new HistoryManager();
-		this.doc = options.document ? cloneVectorDocument(options.document) : { width: 800, height: 600, nodes: [] };
+		this.doc = options.document ? loadedDocument(options.document) : { width: 800, height: 600, nodes: [] };
 		this.doc = this.refreshed(this.doc);
 		this.tool = options.tool ?? 'select';
 		this.defaults = { ...DEFAULT_DEFAULTS, ...(options.defaults ?? {}) } as VectorEditorState['defaults'];
@@ -1313,7 +1359,8 @@ export class VectorEditorController {
 
 	/** `doc` with its blends' steps brought up to date (the same object when they already are). */
 	private refreshed(doc: VectorDocument): VectorDocument {
-		const nodes = refreshVectorBlends(doc.nodes);
+		// Shorthand fills and strokes written by any edit go to the top layer of their stack.
+		const nodes = refreshVectorBlends(normalizeVectorTree(doc.nodes, 'shorthand'));
 		return nodes === doc.nodes ? doc : { ...doc, nodes };
 	}
 
@@ -1674,7 +1721,7 @@ export class VectorEditorController {
 	/** Replaces the document. Undoable unless `{ history: false }` (then history is cleared). */
 	setDocument(doc: VectorDocument, options: { history?: boolean; label?: string } = {}): void {
 		this.cancelDrag();
-		const next = cloneVectorDocument(doc);
+		const next = loadedDocument(doc);
 		if (options.history === false) {
 			this.doc = next;
 			this.selection = [];
@@ -1796,7 +1843,8 @@ export class VectorEditorController {
 		for (const key of VECTOR_STYLE_KEYS) {
 			if (input[key] !== undefined) (own as any)[key] = input[key];
 		}
-		return { id: this.newId(), type: 'path', name: input.name ?? names[input.kind], ...style, ...own, subpaths: [subpath] };
+		// Given style edits the defaults' top layers; given stacks replace theirs.
+		return withStyle({ id: this.newId(), type: 'path', name: input.name ?? names[input.kind], ...style, subpaths: [subpath] }, own) as VectorPathNode;
 	}
 
 	/** Adds a shape drawn with the current defaults. Returns its id. */
@@ -1808,7 +1856,8 @@ export class VectorEditorController {
 	/** Adds a path from SVG path data. Returns its id. */
 	addPath(d: string, style: VectorStyle & { name?: string } = {}, options: AddVectorNodeOptions = {}): string {
 		const subpaths = bezierToSubpaths(d);
-		const node: VectorPathNode = { id: this.newId(), type: 'path', name: style.name ?? 'Path', ...this.styleFor(false), ...style, subpaths };
+		const { name, ...own } = style;
+		const node = withStyle({ id: this.newId(), type: 'path', name: name ?? 'Path', ...this.styleFor(false), subpaths }, own) as VectorPathNode;
 		return this.addNode(node, { label: 'Add Path', ...options });
 	}
 
@@ -1822,7 +1871,11 @@ export class VectorEditorController {
 		if (d.strokeAlign && d.strokeAlign !== 'center') out.strokeAlign = d.strokeAlign;
 		for (const key of ['startArrow', 'endArrow', 'arrowAlign', 'startArrowScale', 'endArrowScale'] as const) if (d[key]) (out as any)[key] = d[key];
 		if (d.strokeWidthProfile?.length) out.strokeWidthProfile = d.strokeWidthProfile.map((p) => ({ ...p }));
-		return out;
+		// Default stacks: new shapes get every layer (open paths no fills).
+		let styled: VectorStyle = out;
+		if (Array.isArray(d.fills)) styled = withVectorFills(styled, open ? [] : d.fills);
+		if (Array.isArray(d.strokes)) styled = withVectorStrokes(styled, d.strokes);
+		return styled;
 	}
 
 	/** Merges `patch` into a node (paths take style and geometry; groups name / visibility / opacity). */
@@ -1879,9 +1932,9 @@ export class VectorEditorController {
 	// -------------------------------------------------------------------------
 
 	/** Which paint (fill or stroke) the gradient tool and editor work on. */
-	setGradientTarget(target: VectorGradientTarget): void {
-		if (target === this.gradientEdit.target) return;
-		this.gradientEdit = { target, stop: null };
+	setGradientTarget(target: VectorGradientTarget, layer: number | null = null): void {
+		if (target === this.gradientEdit.target && layer === this.gradientEdit.layer) return;
+		this.gradientEdit = { target, stop: null, layer };
 		this.notify();
 	}
 
@@ -1894,7 +1947,7 @@ export class VectorEditorController {
 
 	/** The gradient tool's annotator for the selection (screen pixels), or null when its paint is not a gradient. */
 	getGradientAnnotator(): VectorGradientAnnotator | null {
-		return getVectorGradientAnnotator(this.doc, this.selection, this.viewport, this.gradientEdit.target);
+		return getVectorGradientAnnotator(this.doc, this.selection, this.viewport, this.gradientEdit.target, this.gradientEdit.layer);
 	}
 
 	/** Unlocked paths of `ids` (default: the selection). */
@@ -1912,35 +1965,38 @@ export class VectorEditorController {
 	 * paths with `patch`: a colour or no paint becomes a gradient (`patch.type`, default linear,
 	 * from the colour to white). Consecutive edits with the same `merge` key are one undo step.
 	 */
-	setGradient(patch: VectorGradientPatch, options: { ids?: readonly string[]; target?: VectorGradientTarget; label?: string; merge?: string } = {}): VectorActionResult {
+	setGradient(patch: VectorGradientPatch, options: { ids?: readonly string[]; target?: VectorGradientTarget; layer?: number | null; label?: string; merge?: string } = {}): VectorActionResult {
 		const target = options.target ?? this.gradientEdit.target;
+		const layer = options.layer !== undefined ? options.layer : options.target === undefined ? this.gradientEdit.layer : null;
 		const paths = this.gradientPaths(options.ids ?? this.selection);
 		if (!paths.length) return { ok: false, message: 'Nothing is selected.' };
 		const next = new Map<string, VectorPathNode>();
+		let first: VectorGradient | null = null;
 		for (const path of paths) {
-			const paint = path[target];
+			const paint = vectorTargetPaint(path, target, layer);
 			const base = isVectorGradient(paint) ? paint : defaultVectorGradient(patch.type ?? 'linear', paint);
 			const g = applyVectorGradientPatch(base, patch);
 			if (!g) return { ok: false, message: 'That is not a valid gradient: it needs at least one stop with an offset and a colour.' };
-			next.set(path.id, { ...path, [target]: g });
+			first ??= g;
+			next.set(path.id, withVectorTargetPaint(path, target, layer, g));
 		}
 		this.change(options.label ?? 'Gradient', () => this.setDoc(mapTree(this.doc.nodes, (n) => next.get(n.id) ?? n)), options.merge);
-		const stops = (next.values().next().value?.[target] as { stops: unknown[] } | undefined)?.stops.length ?? 0;
+		const stops = (first as VectorGradient | null)?.stops.length ?? 0;
 		if (this.gradientEdit.stop !== null && this.gradientEdit.stop >= stops) this.gradientEdit = { ...this.gradientEdit, stop: null };
 		return { ok: true };
 	}
 
 	/** Applies `fn` to every target gradient of the selection (paths whose paint is not a gradient are skipped). */
 	private editGradients(label: string, fn: (stops: VectorGradient['stops']) => VectorGradient['stops'] | null, merge?: string): VectorActionResult {
-		const target = this.gradientEdit.target;
-		const paths = this.gradientPaths().filter((p) => isVectorGradient(p[target]));
+		const { target, layer } = this.gradientEdit;
+		const paths = this.gradientPaths().filter((p) => isVectorGradient(vectorTargetPaint(p, target, layer)));
 		if (!paths.length) return { ok: false, message: 'The selection has no gradient.' };
 		const next = new Map<string, VectorPathNode>();
 		for (const path of paths) {
-			const g = path[target] as VectorGradient;
+			const g = vectorTargetPaint(path, target, layer) as VectorGradient;
 			const stops = fn(sortedVectorGradientStops(g));
 			if (!stops) return { ok: false, message: 'A gradient keeps at least two stops.' };
-			next.set(path.id, { ...path, [target]: { ...g, stops } });
+			next.set(path.id, withVectorTargetPaint(path, target, layer, { ...g, stops }));
 		}
 		this.change(label, () => this.setDoc(mapTree(this.doc.nodes, (n) => next.get(n.id) ?? n)), merge);
 		return { ok: true };
@@ -1981,10 +2037,10 @@ export class VectorEditorController {
 	/** Adds a stop at `offset` (painting what the gradient paints there) to the selection's gradients and selects it. */
 	addGradientStop(offset: number): VectorActionResult {
 		let index = 0;
-		const target = this.gradientEdit.target;
+		const { target, layer } = this.gradientEdit;
 		const result = this.editGradients('Add Gradient Stop', (stops) => {
-			const path = this.gradientPaths().find((p) => isVectorGradient(p[target]));
-			const r = insertVectorGradientStop({ ...(path![target] as VectorGradient), stops }, offset);
+			const path = this.gradientPaths().find((p) => isVectorGradient(vectorTargetPaint(p, target, layer)));
+			const r = insertVectorGradientStop({ ...(vectorTargetPaint(path!, target, layer) as VectorGradient), stops }, offset);
 			index = r.index;
 			return r.stops;
 		});
@@ -2006,7 +2062,8 @@ export class VectorEditorController {
 
 	/** `doc` with path `id`'s `target` paint replaced. */
 	private withGradient(doc: VectorDocument, id: string, target: VectorGradientTarget, g: VectorGradient): VectorDocument {
-		return { ...doc, nodes: mapTree(doc.nodes, (n) => (n.id === id ? ({ ...n, [target]: g } as VectorNode) : n)) };
+		const layer = this.gradientEdit.layer;
+		return { ...doc, nodes: mapTree(doc.nodes, (n) => (n.id === id && n.type === 'path' ? withVectorTargetPaint(n, target, layer, g) : n)) };
 	}
 
 	private downGradient(screen: Vec2, p: Vec2, input: VectorPointerInput) {
@@ -2055,7 +2112,7 @@ export class VectorEditorController {
 			for (const id of drag.targets) {
 				const node = findVectorNode(base.nodes, id) as VectorPathNode | undefined;
 				if (!node) continue;
-				const paint = node[target];
+				const paint = vectorTargetPaint(node, target, this.gradientEdit.layer);
 				const g = isVectorGradient(paint) ? paint : defaultVectorGradient('linear', paint);
 				doc = this.withGradient(doc, id, target, setVectorGradientVector(g, vectorPathLocalBounds(node), this.toLocal(id, drag.startDoc, base), this.toLocal(id, end, base)));
 			}
@@ -2065,7 +2122,7 @@ export class VectorEditorController {
 		}
 		const id = drag.nodeId!;
 		const node = findVectorNode(base.nodes, id) as VectorPathNode;
-		const g = node[target] as VectorGradient;
+		const g = vectorTargetPaint(node, target, this.gradientEdit.layer) as VectorGradient;
 		const bounds = vectorPathLocalBounds(node);
 		const local = (q: Vec2) => this.toLocal(id, q, base);
 		const part = drag.part;
@@ -2317,39 +2374,36 @@ export class VectorEditorController {
 	 */
 	outlineStroke(options: { ids?: readonly string[] } = {}): string[] {
 		const roots = options.ids ?? this.selectedRoots();
+		const strokesOf = (p: VectorPathNode) => vectorPaintLayerNodes(p).filter((l) => l.kind === 'stroke' && l.drawn && (l.node.strokeWidth ?? 1) > 0);
 		const paths: VectorPathNode[] = [];
 		for (const id of roots) {
 			const node = this.getNode(id);
-			if (node) for (const p of collectPathNodes(node)) if (!p.locked && hasPaint(p.stroke) && (p.strokeWidth ?? 1) > 0) paths.push(p);
+			if (node) for (const p of collectPathNodes(node)) if (!p.locked && strokesOf(p).length) paths.push(p);
 		}
 		if (!paths.length) return [];
 		const created: string[] = [];
 		const replace = new Map<string, VectorNode[]>();
 		for (const p of paths) {
-			// In the node's own space: the new paths keep its transform.
-			// As drawn: path effects applied (the outline itself carries none).
-			const outline = bezierToSubpaths(vectorStrokeOutlinePath(vectorAppearanceOutline(p), p));
-			if (!outline.length) continue;
-			const {
-				stroke,
-				strokeWidth: _w,
-				strokeLinecap: _c,
-				strokeLinejoin: _j,
-				strokeDasharray: _d,
-				strokeAlign: _a,
-				startArrow: _s,
-				endArrow: _e,
-				arrowAlign: _al,
-				startArrowScale: _ss,
-				endArrowScale: _es,
-				strokeWidthProfile: _wp,
-				effects,
-				...rest
-			} = cloneVectorNode(p);
-			const id = this.newId();
-			const strokeNode: VectorPathNode = { ...rest, id, name: `${p.name ?? 'Path'} Stroke`, subpaths: outline, fill: stroke ?? null, stroke: null, fillRule: 'nonzero' };
-			const list: VectorNode[] = hasPaint(p.fill) ? [{ ...rest, ...(effects ? { effects } : {}), stroke: null }, strokeNode] : [strokeNode];
-			created.push(id);
+			const { effects, ...rest } = cloneVectorNode(p);
+			const unstroked = withVectorStrokes(rest as VectorPathNode, []);
+			for (const key of VECTOR_STROKE_SETTING_KEYS) delete unstroked[key];
+			const list: VectorNode[] = vectorFills(p).length ? [{ ...unstroked, ...(effects ? { effects } : {}) }] : [];
+			// One filled path per stroke layer, bottom to top, painted (and blended) like it.
+			const layers = strokesOf(p);
+			for (const l of layers) {
+				// In the node's own space: the new paths keep its transform.
+				// As drawn: path effects applied (the outline itself carries none).
+				const outline = bezierToSubpaths(vectorStrokeOutlinePath(vectorAppearanceOutline(p), l.node));
+				if (!outline.length) continue;
+				const id = this.newId();
+				const { strokes: _s, fills: _f, ...plain } = unstroked;
+				const name = layers.length > 1 ? `${p.name ?? 'Path'} Stroke ${l.index + 1}` : `${p.name ?? 'Path'} Stroke`;
+				const fill: VectorPaintLayer = { paint: l.layer.paint };
+				if (l.layer.opacity !== undefined) fill.opacity = l.layer.opacity;
+				if (l.layer.blendMode) fill.blendMode = l.layer.blendMode;
+				list.push(withVectorFills({ ...plain, id, name, subpaths: outline, stroke: null, fillRule: 'nonzero' } as VectorPathNode, [fill]));
+				created.push(id);
+			}
 			replace.set(p.id, list);
 		}
 		if (!created.length) return [];
@@ -2362,6 +2416,246 @@ export class VectorEditorController {
 			this.editingId = null;
 		});
 		return created;
+	}
+
+	// -------------------------------------------------------------------------
+	// Fill and stroke stacks, blend modes, filters
+	// -------------------------------------------------------------------------
+
+	/** Paths of the selected (or given) nodes whose stacks can be edited (groups give every path inside; blend steps are left out). */
+	private stackTargets(ids: readonly string[] | undefined): VectorPathNode[] | string {
+		const list = ids ?? this.selection;
+		if (!list.length) return 'Nothing is selected.';
+		const out = new Map<string, VectorPathNode>();
+		for (const id of list) {
+			const node = this.getNode(id);
+			if (!node) return `There is no node "${id}".`;
+			for (const p of collectPathNodes(node)) if (!p.blendStep) out.set(p.id, p);
+		}
+		if (!out.size) return 'The selection has no paths (fills and strokes belong to paths).';
+		return [...out.values()];
+	}
+
+	/** Applies `fn` to the `kind` stack of every target path as one undo step (an error string from any path cancels it). */
+	private editStacks(
+		kind: 'fill' | 'stroke',
+		ids: readonly string[] | undefined,
+		label: string,
+		fn: (stack: VectorStrokeLayer[], path: VectorPathNode) => VectorStrokeLayer[] | string,
+		merge?: string
+	): VectorActionResult {
+		const targets = this.stackTargets(ids);
+		if (typeof targets === 'string') return { ok: false, message: targets };
+		const next = new Map<string, VectorNode>();
+		for (const path of targets) {
+			const stack = kind === 'fill' ? vectorFills(path) : vectorStrokes(path);
+			const result = fn(stack.map((l) => ({ ...l })), path);
+			if (typeof result === 'string') return { ok: false, message: result };
+			next.set(path.id, kind === 'fill' ? withVectorFills(path, result) : withVectorStrokes(path, result));
+		}
+		this.change(label, () => this.setDoc(mapTree(this.doc.nodes, (n) => next.get(n.id) ?? n)), merge);
+		return { ok: true };
+	}
+
+	/**
+	 * Reads a layer patch from untrusted input: paint, opacity, blend mode, visibility and (strokes)
+	 * the stroke settings, where `null` removes a setting. Returns an error string for invalid values.
+	 */
+	private layerPatch(kind: 'fill' | 'stroke', patch: Record<string, unknown>): { set: Partial<VectorStrokeLayer>; unset: string[] } | string {
+		const set: Record<string, unknown> = {};
+		const unset: string[] = [];
+		if ('paint' in patch) {
+			const paint = patch.paint;
+			if (paint === null || (typeof paint === 'string' && paint.trim())) set.paint = paint === null ? null : (paint as string).trim();
+			else {
+				const g = sanitizeVectorGradient(paint);
+				if (!g) return 'paint must be a CSS colour, a gradient { type, stops: [{ offset, color }] } or null.';
+				set.paint = g;
+			}
+		}
+		if (patch.opacity !== undefined) {
+			if (typeof patch.opacity !== 'number' || !Number.isFinite(patch.opacity)) return 'opacity must be a number from 0 to 1.';
+			const o = Math.min(1, Math.max(0, patch.opacity));
+			if (o < 1) set.opacity = o;
+			else unset.push('opacity');
+		}
+		if (patch.blendMode !== undefined) {
+			if (!isVectorBlendMode(patch.blendMode)) return `Unknown blend mode "${String(patch.blendMode)}". Use one of: ${VECTOR_BLEND_MODES.join(', ')}.`;
+			if (patch.blendMode !== 'normal') set.blendMode = patch.blendMode;
+			else unset.push('blendMode');
+		}
+		if (patch.visible !== undefined) {
+			if (typeof patch.visible !== 'boolean') return 'visible must be true or false.';
+			if (patch.visible) unset.push('visible');
+			else set.visible = false;
+		}
+		if (kind === 'stroke') {
+			const settings = sanitizeVectorStrokeSettings(patch);
+			for (const key of VECTOR_STROKE_SETTING_KEYS) {
+				if (!(key in patch) || patch[key] === undefined) continue;
+				if (patch[key] === null || (key === 'strokeDasharray' && Array.isArray(patch[key]) && !(patch[key] as unknown[]).length)) unset.push(key);
+				else if (settings[key] === undefined) return `Invalid ${key}: ${JSON.stringify(patch[key])}.`;
+				else set[key] = settings[key];
+			}
+		}
+		return { set: set as Partial<VectorStrokeLayer>, unset };
+	}
+
+	/**
+	 * Adds a fill or stroke layer to the selected (or given) paths (groups: every path inside), at
+	 * the top of the stack or at `index` (0 is the bottom). A new stroke takes the settings of the
+	 * stack's top stroke unless `layer` gives them. One undo step.
+	 */
+	addPaintLayer(kind: 'fill' | 'stroke', layer: Record<string, unknown> = {}, options: { ids?: readonly string[]; index?: number } = {}): VectorActionResult {
+		const patch = this.layerPatch(kind, layer);
+		if (typeof patch === 'string') return { ok: false, message: patch };
+		return this.editStacks(kind, options.ids, kind === 'fill' ? 'Add Fill' : 'Add Stroke', (stack, path) => {
+			const base: VectorStrokeLayer = kind === 'fill' ? { paint: '#808080' } : newVectorStrokeLayer(path, {});
+			const added = { ...base, ...patch.set } as VectorStrokeLayer;
+			for (const key of patch.unset) delete (added as unknown as Record<string, unknown>)[key];
+			const at = options.index === undefined ? stack.length : Math.min(stack.length, Math.max(0, Math.round(options.index)));
+			return [...stack.slice(0, at), added, ...stack.slice(at)];
+		});
+	}
+
+	/**
+	 * Changes layer `index` (0 is the bottom) of the fill or stroke stack of the selected (or given)
+	 * paths: paint, opacity, blend mode, visibility and, for strokes, any stroke setting (`null`
+	 * removes it). Fails, changing nothing, when a path has no layer `index`. With `merge` (true, or
+	 * a key), consecutive edits of the layer fold into one undo step (a slider drag).
+	 */
+	updatePaintLayer(kind: 'fill' | 'stroke', index: number, patch: Record<string, unknown>, options: { ids?: readonly string[]; merge?: boolean | string } = {}): VectorActionResult {
+		const parsed = this.layerPatch(kind, patch);
+		if (typeof parsed === 'string') return { ok: false, message: parsed };
+		const merge = options.merge === true ? `paint-layer:${kind}:${index}` : options.merge || undefined;
+		return this.editStacks(
+			kind,
+			options.ids,
+			kind === 'fill' ? 'Edit Fill' : 'Edit Stroke',
+			(stack, path) => {
+				if (!stack[index]) return `Path "${path.id}" has no ${kind} ${index} (it has ${stack.length}; 0 is the bottom).`;
+				const layer = { ...stack[index], ...parsed.set } as VectorStrokeLayer;
+				for (const key of parsed.unset) delete (layer as unknown as Record<string, unknown>)[key];
+				return stack.map((l, i) => (i === index ? layer : l));
+			},
+			merge
+		);
+	}
+
+	/** Removes layer `index` of the fill or stroke stack of the selected (or given) paths. */
+	removePaintLayer(kind: 'fill' | 'stroke', index: number, options: { ids?: readonly string[] } = {}): VectorActionResult {
+		return this.editStacks(kind, options.ids, kind === 'fill' ? 'Remove Fill' : 'Remove Stroke', (stack, path) =>
+			stack[index] ? stack.filter((_, i) => i !== index) : `Path "${path.id}" has no ${kind} ${index} (it has ${stack.length}; 0 is the bottom).`
+		);
+	}
+
+	/** Moves layer `from` of the fill or stroke stack to position `to` (0 is the bottom) on the selected (or given) paths. */
+	movePaintLayer(kind: 'fill' | 'stroke', from: number, to: number, options: { ids?: readonly string[] } = {}): VectorActionResult {
+		return this.editStacks(kind, options.ids, kind === 'fill' ? 'Reorder Fills' : 'Reorder Strokes', (stack, path) => {
+			if (!stack[from]) return `Path "${path.id}" has no ${kind} ${from} (it has ${stack.length}; 0 is the bottom).`;
+			const out = stack.slice();
+			const [layer] = out.splice(from, 1);
+			out.splice(Math.min(out.length, Math.max(0, Math.round(to))), 0, layer);
+			return out;
+		});
+	}
+
+	/** Replaces the whole fill or stroke stack of the selected (or given) paths (malformed layers are dropped). */
+	setPaintLayers(kind: 'fill' | 'stroke', layers: readonly unknown[], options: { ids?: readonly string[] } = {}): VectorActionResult {
+		const clean = kind === 'fill' ? sanitizeVectorFills(layers) : sanitizeVectorStrokes(layers);
+		return this.editStacks(kind, options.ids, kind === 'fill' ? 'Set Fills' : 'Set Strokes', () => clean as VectorStrokeLayer[]);
+	}
+
+	/** Sets the blend mode of the selected (or given) nodes (paths or groups); `normal` removes it. */
+	setBlendMode(mode: VectorBlendMode, options: { ids?: readonly string[] } = {}): VectorActionResult {
+		if (!isVectorBlendMode(mode)) return { ok: false, message: `Unknown blend mode "${String(mode)}". Use one of: ${VECTOR_BLEND_MODES.join(', ')}.` };
+		const ids = options.ids ?? this.selectedRoots();
+		if (!ids.length) return { ok: false, message: 'Nothing is selected.' };
+		for (const id of ids) if (!this.getNode(id)) return { ok: false, message: `There is no node "${id}".` };
+		const set = new Set(ids);
+		this.change('Blend Mode', () =>
+			this.setDoc(
+				mapTree(this.doc.nodes, (n) => {
+					if (!set.has(n.id) || (n.blendMode ?? 'normal') === mode) return n;
+					const { blendMode: _b, ...rest } = n;
+					return (mode === 'normal' ? rest : { ...rest, blendMode: mode }) as VectorNode;
+				})
+			)
+		);
+		return { ok: true };
+	}
+
+	/**
+	 * Adds a filter of `type` to the selected (or given) nodes, at the end of each stack (or at
+	 * `index`), with default parameters merged with `params`. One undo step; returns the new filter
+	 * ids (one per node, in order), empty for an unknown type or nothing selected.
+	 */
+	addFilter(type: VectorFilterType, options: { ids?: readonly string[]; params?: Record<string, unknown>; index?: number } = {}): string[] {
+		if (!isVectorFilterType(type)) return [];
+		const targets = this.effectTargets(options.ids);
+		if (!targets.length) return [];
+		const created: string[] = [];
+		const next = new Map<string, VectorNode>();
+		for (const node of targets) {
+			const list = node.filters ?? [];
+			let k = list.length + 1;
+			while (list.some((f) => f.id === `filter${k}`)) k++;
+			const filter = createVectorFilter(type, `filter${k}`, options.params)!;
+			const at = options.index === undefined ? list.length : Math.min(list.length, Math.max(0, Math.round(options.index)));
+			next.set(node.id, { ...node, filters: [...list.slice(0, at), filter, ...list.slice(at)] } as VectorNode);
+			created.push(filter.id);
+		}
+		this.change(`Add ${VECTOR_FILTER_LABELS[type]}`, () => this.setDoc(mapTree(this.doc.nodes, (n) => next.get(n.id) ?? n)));
+		return created;
+	}
+
+	private editFilters(nodeId: string, label: string, fn: (filters: VectorFilter[]) => VectorFilter[] | string, merge?: string): VectorActionResult {
+		const node = this.getNode(nodeId);
+		if (!node) return { ok: false, message: `There is no node "${nodeId}".` };
+		const result = fn(node.filters ?? []);
+		if (typeof result === 'string') return { ok: false, message: result };
+		this.change(label, () => this.replaceNode(nodeId, (result.length ? { ...node, filters: result } : (({ filters: _f, ...rest }) => rest)(node)) as VectorNode), merge);
+		return { ok: true };
+	}
+
+	/**
+	 * Turns a filter on or off and changes its parameters (invalid values are ignored). With
+	 * `merge`, consecutive updates of the same filter fold into one undo step.
+	 */
+	updateFilter(nodeId: string, filterId: string, patch: { enabled?: boolean; params?: Record<string, unknown> }, options: { merge?: boolean | string } = {}): VectorActionResult {
+		const merge = options.merge === true ? `filter:${nodeId}:${filterId}` : options.merge || undefined;
+		const current = this.getNode(nodeId)?.filters?.find((f) => f.id === filterId);
+		return this.editFilters(
+			nodeId,
+			`Edit ${current ? VECTOR_FILTER_LABELS[current.type] : 'Filter'}`,
+			(list) => {
+				const i = list.findIndex((f) => f.id === filterId);
+				if (i < 0) return `Node "${nodeId}" has no filter "${filterId}".`;
+				const f = list[i];
+				const params = patch.params ? normalizeVectorFilterParams(f.type, patch.params, f.params as never) : f.params;
+				const next = { ...f, params, ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}) } as VectorFilter;
+				if (next.enabled !== false) delete (next as { enabled?: boolean }).enabled;
+				return list.map((x, j) => (j === i ? next : x));
+			},
+			merge
+		);
+	}
+
+	/** Removes a filter from a node's stack. */
+	removeFilter(nodeId: string, filterId: string): VectorActionResult {
+		return this.editFilters(nodeId, 'Remove Filter', (list) => (list.some((f) => f.id === filterId) ? list.filter((f) => f.id !== filterId) : `Node "${nodeId}" has no filter "${filterId}".`));
+	}
+
+	/** Moves a filter to position `index` of its node's stack. */
+	moveFilter(nodeId: string, filterId: string, index: number): VectorActionResult {
+		return this.editFilters(nodeId, 'Reorder Filters', (list) => {
+			const i = list.findIndex((f) => f.id === filterId);
+			if (i < 0) return `Node "${nodeId}" has no filter "${filterId}".`;
+			const out = list.slice();
+			const [f] = out.splice(i, 1);
+			out.splice(Math.min(out.length, Math.max(0, Math.round(index))), 0, f);
+			return out;
+		});
 	}
 
 	// -------------------------------------------------------------------------
@@ -5780,12 +6074,17 @@ export function scaleFor(handle: VectorTransformHandle, b: VectorBounds, p: Vec2
 
 /** A style applied to a path; a `null` (or empty) width profile removes it. */
 function withStyle(node: VectorPathNode, style: VectorStyle & { opacity?: number }): VectorNode {
-	const next = { ...node, ...style } as VectorPathNode;
+	const { fills, strokes, ...shorthand } = style;
+	let next = { ...node, ...shorthand } as VectorPathNode;
 	if ('strokeWidthProfile' in style) {
 		const p = style.strokeWidthProfile ? sanitizeWidthProfile(style.strokeWidthProfile) : [];
 		if (p.length) next.strokeWidthProfile = p;
 		else delete next.strokeWidthProfile;
 	}
+	// Shorthands edit the top layer of a stack; whole stacks given replace them.
+	next = normalizeVectorPaintStacks(next, 'shorthand');
+	if (fills !== undefined) next = withVectorFills(next, sanitizeVectorFills(fills ?? []));
+	if (strokes !== undefined) next = withVectorStrokes(next, sanitizeVectorStrokes(strokes ?? []));
 	return next;
 }
 

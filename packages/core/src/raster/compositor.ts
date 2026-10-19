@@ -106,6 +106,12 @@ export interface CompositorProfile<L extends CompositorLayer, S extends RasterSo
   pixelFilters?(layer: L): PixelFilterSpec | null;
   /** Canvas coverage (0..1, `width × height`) of a parametric mask source, or `null` to reveal all. */
   maskSourcePlane?(source: unknown, width: number, height: number, sources: S): Float32Array | null;
+  /**
+   * Layer kinds besides `pixel` that composite exactly like pixel layers, from their `surface`,
+   * `offset` and `fillOpacity` (a smart object's rendered pixels). Their tile signatures, effect
+   * regions and `dirty` handling are a pixel layer's.
+   */
+  isPixelLike?(layer: L): boolean;
 }
 
 export interface CompositorOptions {
@@ -341,7 +347,6 @@ export interface CompositeStats {
 }
 
 const isGroup = (l: CompositorLayer) => l.type === 'group';
-const isPixel = (l: CompositorLayer) => l.type === 'pixel';
 
 export class RasterCompositor<L extends CompositorLayer = CompositorLayer, S extends RasterSources = RasterSources> {
   private readonly tiles = new Map<TileKey, TileEntry<L>>();
@@ -474,6 +479,11 @@ export class RasterCompositor<L extends CompositorLayer = CompositorLayer, S ext
 
   // --- Steps -------------------------------------------------------------------
 
+  /** Pixel layers, and the layer kinds the profile composites like them. */
+  private isPixel(l: CompositorLayer): boolean {
+    return l.type === 'pixel' || (this.profile.isPixelLike?.(l as L) ?? false);
+  }
+
   private isFilter(l: L): boolean {
     return this.profile.isFilterLayer?.(l) ?? false;
   }
@@ -519,7 +529,7 @@ export class RasterCompositor<L extends CompositorLayer = CompositorLayer, S ext
       ? [layer.mask.enabled !== false, layer.mask.density ?? 1, layer.mask.feather ?? 0, layer.mask.defaultValue, layer.mask.source ?? null]
       : null;
     const base: unknown[] = [layer.type, layer.id, layer.visible, layer.opacity, layer.blend, Boolean(layer.clipped), mask];
-    if (isPixel(layer)) base.push(layer.offset?.x ?? 0, layer.offset?.y ?? 0, layer.fillOpacity ?? 1);
+    if (this.isPixel(layer)) base.push(layer.offset?.x ?? 0, layer.offset?.y ?? 0, layer.fillOpacity ?? 1);
     if (this.hasEffects(layer)) base.push(effectsFingerprint(layer.effects));
     const extra = this.profile.layerKey?.(layer);
     if (extra !== undefined) base.push(extra);
@@ -697,7 +707,7 @@ export class RasterCompositor<L extends CompositorLayer = CompositorLayer, S ext
   private plainContentSig(layer: L, tx: number, ty: number): Sig {
     const key = 'C' + this.propsKey(layer);
     if (!layer.visible) return { key, refs: [] };
-    if (!isPixel(layer)) return { key, refs: this.maskRefs(layer, tx, ty, 0, 0) };
+    if (!this.isPixel(layer)) return { key, refs: this.maskRefs(layer, tx, ty, 0, 0) };
     const { surface, dx, dy } = this.layerPixels(layer);
     const refs: unknown[] = [surface.defaultValue];
     const r = { x: tx * TILE - dx, y: ty * TILE - dy, width: TILE, height: TILE };
@@ -756,7 +766,7 @@ export class RasterCompositor<L extends CompositorLayer = CompositorLayer, S ext
   private effectRegion(layer: L): RasterRect {
     const m = effectsMargin(layer.effects);
     const canvas = { x: -m, y: -m, width: this.sources.width + 2 * m, height: this.sources.height + 2 * m };
-    if (!isPixel(layer)) return canvas;
+    if (!this.isPixel(layer)) return canvas;
     const { surface, dx, dy } = this.layerPixels(layer);
     if (surface.defaultValue !== 0) return canvas;
     const b = surface.bounds;
@@ -874,7 +884,7 @@ export class RasterCompositor<L extends CompositorLayer = CompositorLayer, S ext
    * without filters or a feathered or parametric mask (those spread a change beyond it).
    */
   private dirtyCoversShape(layer: L): boolean {
-    if (!isPixel(layer) || this.profile.pixelFilters?.(layer)) return false;
+    if (!this.isPixel(layer) || this.profile.pixelFilters?.(layer)) return false;
     const mask = layer.mask;
     return !mask || mask.enabled === false || (!mask.source && !((mask.feather ?? 0) > 0));
   }
@@ -937,7 +947,7 @@ export class RasterCompositor<L extends CompositorLayer = CompositorLayer, S ext
       maps,
       blend,
       opacity: layer.opacity,
-      fillOpacity: isPixel(layer) ? (layer.fillOpacity ?? 1) : 1,
+      fillOpacity: this.isPixel(layer) ? (layer.fillOpacity ?? 1) : 1,
       canvas: { x: 0, y: 0, width: this.sources.width, height: this.sources.height },
       ctx: this.effectContext(),
     });
@@ -991,7 +1001,7 @@ export class RasterCompositor<L extends CompositorLayer = CompositorLayer, S ext
 
   /** RGBA of a content layer over `r` (document space, inside one tile), or `null` when it has nothing there. */
   private contentTile(layer: L, r: RasterRect): Uint8ClampedArray | null {
-    if (!isPixel(layer)) return this.profile.contentTile?.(layer, r, this.sources) ?? null;
+    if (!this.isPixel(layer)) return this.profile.contentTile?.(layer, r, this.sources) ?? null;
     const { surface, dx, dy, perPixel } = this.layerPixels(layer);
     const src = { x: r.x - dx, y: r.y - dy, width: r.width, height: r.height };
     const covered = tilesInRect(src).map((t) => surface.getTile(t.tx, t.ty));
@@ -1068,8 +1078,8 @@ export class RasterCompositor<L extends CompositorLayer = CompositorLayer, S ext
   private maskTile(layer: L, r: RasterRect): Float32Array | null {
     const mask = layer.mask;
     if (!mask || mask.enabled === false) return null;
-    const ox = isPixel(layer) ? (layer.offset?.x ?? 0) : 0;
-    const oy = isPixel(layer) ? (layer.offset?.y ?? 0) : 0;
+    const ox = this.isPixel(layer) ? (layer.offset?.x ?? 0) : 0;
+    const oy = this.isPixel(layer) ? (layer.offset?.y ?? 0) : 0;
     const n = r.width * r.height;
     const out = new Float32Array(n);
     const density = mask.density ?? 1;
@@ -1134,7 +1144,7 @@ export class RasterCompositor<L extends CompositorLayer = CompositorLayer, S ext
     }
     const content = this.contentTile(step.layer, r);
     if (!content) return empty;
-    const fill = isPixel(step.layer) ? (step.layer.fillOpacity ?? 1) : 1;
+    const fill = this.isPixel(step.layer) ? (step.layer.fillOpacity ?? 1) : 1;
     const blend = this.contentBlend(step.layer);
     if (!clipped.length) return this.blendOnto(acc, content, empty, blend, layer.opacity * fill, coverage);
     // Clipping group: the base (with its mask and fill) is the shape the clipped layers paint in.
@@ -1192,7 +1202,7 @@ export class RasterCompositor<L extends CompositorLayer = CompositorLayer, S ext
       }
       const content = this.contentTile(c, r);
       if (!content) continue;
-      const fill = isPixel(c) ? (c.fillOpacity ?? 1) : 1;
+      const fill = this.isPixel(c) ? (c.fillOpacity ?? 1) : 1;
       blendAtop(buf, content, this.contentBlend(c), c.opacity * fill, coverage);
     }
     flush();
