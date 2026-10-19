@@ -11,6 +11,7 @@ import { toVideoEdl, toVideoFfmpeg, toVideoLoudnessMeasure, type VideoEdlOptions
 import { VideoLutCache, type VideoLutLoader } from './lut.js';
 import { createVideoProject, parseVideoProject } from './parse.js';
 import { VideoPreviewPixels } from './scopes.js';
+import type { VideoPreviewScale } from './proxy.js';
 import { videoProjectSvg, type VideoSvgOptions } from './render.js';
 import { snapToVideoFrame, snapVideoTime, videoClipEnd, videoClipsAt, videoProjectDuration, videoSnapPoints, findVideoClip } from './timeline.js';
 import type { VideoProject } from './types.js';
@@ -32,6 +33,8 @@ export interface VideoEditorOptions {
 	audioPeaks?: VideoAudioPeaksCache | VideoAudioPeaksLoader;
 	/** Where grades' LUT files (`.cube`) come from: a shared cache, or a loader (default: `fetch` each `src`). */
 	luts?: VideoLutCache | VideoLutLoader;
+	/** How large a picture the preview plays (default `auto`: a proxy as large as the canvas shows, if the asset has one). */
+	previewScale?: VideoPreviewScale;
 }
 
 /** A snapshot of the editor. The same object is returned until something changes. */
@@ -56,6 +59,8 @@ export interface VideoEditorState {
 	canRedo: boolean;
 	undoLabel: string;
 	redoLabel: string;
+	/** How large a picture the preview plays: `auto`, `full` or a fraction that picks a proxy. */
+	previewScale: VideoPreviewScale;
 	/** Bumped on every change. */
 	revision: number;
 }
@@ -81,6 +86,7 @@ export class VideoEditorController {
 	private issues: VideoIssue[];
 	private selection: string[] = [];
 	private readOnly: boolean;
+	private previewScale: VideoPreviewScale;
 	private error: string | null = null;
 	private revision = 0;
 	private applying = false;
@@ -96,6 +102,7 @@ export class VideoEditorController {
 		this.project = options.project ? parseVideoProject(options.project) : createVideoProject();
 		this.issues = checkVideoProject(this.project);
 		this.readOnly = options.readOnly ?? false;
+		this.previewScale = checkPreviewScale(options.previewScale ?? 'auto');
 		this.onChange = options.onChange;
 		this.player = new AnimationPlayer({ clock: options.clock, duration: () => videoProjectDuration(this.project), loop: 'none' });
 		this.state = this.computeState();
@@ -151,6 +158,7 @@ export class VideoEditorController {
 			canRedo: h.canRedo,
 			undoLabel: h.undoName,
 			redoLabel: h.redoName,
+			previewScale: this.previewScale,
 			revision: this.revision
 		};
 	}
@@ -246,6 +254,18 @@ export class VideoEditorController {
 	setReadOnly(readOnly: boolean): void {
 		if (this.readOnly === readOnly) return;
 		this.readOnly = readOnly;
+		this.notify();
+	}
+
+	/**
+	 * Sets how large a picture the preview plays: `full` (the originals), a fraction such as 0.5
+	 * (the smallest proxy at least that large, else the original) or `auto` (as large as the canvas
+	 * shows). A view setting, not part of the project: no undo step.
+	 */
+	setPreviewScale(scale: VideoPreviewScale): void {
+		const next = checkPreviewScale(scale);
+		if (next === this.previewScale) return;
+		this.previewScale = next;
 		this.notify();
 	}
 
@@ -348,4 +368,10 @@ export class VideoEditorController {
 	toEdl(options: VideoEdlOptions = {}): string {
 		return toVideoEdl(this.project, options);
 	}
+}
+
+function checkPreviewScale(scale: VideoPreviewScale): VideoPreviewScale {
+	if (scale === 'auto' || scale === 'full') return scale;
+	if (typeof scale !== 'number' || !(scale > 0 && scale <= 1)) throw new Error(`A preview scale is "auto", "full" or a fraction above 0 up to 1 (0.5 is half size), not ${JSON.stringify(scale)}.`);
+	return scale === 1 ? 'full' : scale;
 }

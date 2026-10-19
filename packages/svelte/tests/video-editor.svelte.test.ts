@@ -649,3 +649,19 @@ describe("ClipInspector LUT (Svelte)", () => {
     controller.destroy();
   });
 });
+
+describe("proxies (Svelte)", () => {
+  it("offers a preview size once an asset has proxies, and marks those assets in the media bin", () => {
+    const controller = make();
+    render(VideoTransport, { controller });
+    expect(q("[data-preview-scale]")).toBeNull();
+    act(() => void controller.apply({ op: "update_asset", asset: "clip", set: { proxies: [{ scale: 0.5, src: "clip.proxy-50.mp4" }] } }, "Attach proxies"));
+    const select = q<HTMLSelectElement>("select[data-preview-scale]");
+    expect([...select.options].map((o) => o.textContent)).toEqual(["Auto", "Full", "½", "¼"]);
+    change(select, "0.25");
+    expect(controller.getState().previewScale).toBe(0.25);
+    render(MediaBin, { controller });
+    expect(q('[data-asset="clip"] [data-asset-proxies]').title).toMatch(/Proxies: 50%/);
+    controller.destroy();
+  });
+});

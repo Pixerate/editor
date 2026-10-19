@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ToolRegistry } from '../src/tools';
-import { applyVideoEdits, applyVideoGrade, createVideoEditorToolProvider, createVideoProject, videoLutFromFunction, videoLutToCube, VideoEditorController, videoSpeedRampKeys, parseVideoLoudnessMeasurement, toVideoFfmpeg, toVideoLoudnessMeasure, videoFrameAt, type VideoEdit, type VideoProject } from '../src/video-editor';
+import { applyVideoEdits, applyVideoGrade, createVideoEditorToolProvider, createVideoProject, videoLutFromFunction, videoProxyFfmpeg, videoLutToCube, VideoEditorController, videoSpeedRampKeys, parseVideoLoudnessMeasurement, toVideoFfmpeg, toVideoLoudnessMeasure, videoFrameAt, type VideoEdit, type VideoProject } from '../src/video-editor';
 
 // Renders projects with a real ffmpeg (skipped when it is not on PATH): the string assertions in
 // video-editor.test.ts cannot tell whether ffmpeg accepts the filter graph.
@@ -244,6 +244,30 @@ describe.skipIf(!hasFfmpeg)('toVideoFfmpeg with a real ffmpeg', () => {
 			expect(got.every((v, k) => Math.abs(v - want[k]) < 10), `grade ${JSON.stringify(grade)}: got ${got}, want ${want}`).toBe(true);
 		});
 	}, 120000);
+
+	it('makes proxies that seek cheaply and keep the original\'s timing, while the export reads the original', () => {
+		const asset = { id: 'a', kind: 'video' as const, src: media('a.mp4'), duration: 6000, width: 640, height: 360 };
+		const made = videoProxyFfmpeg(asset, { scale: 0.5, gop: 10 });
+		ffmpeg(made.args);
+		const info = probe(made.proxy.src);
+		const v = info.streams.find((s) => s.codec_type === 'video')!;
+		expect([v.width, v.height]).toEqual([made.proxy.width, made.proxy.height]);
+		expect(info.streams.some((s) => s.codec_type === 'audio')).toBe(true);
+		expect(Math.abs(Number(info.format.duration) - 6)).toBeLessThan(0.1);
+		// A keyframe every 10 frames: 150 frames make 15 of them.
+		const keys = execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v', '-skip_frame', 'nokey', '-show_entries', 'frame=pts_time', '-of', 'csv=p=0', made.proxy.src], { encoding: 'utf8' }).trim().split('\n');
+		expect(keys.length).toBe(15);
+		// The same moment in the proxy and the original shows the same picture (scaled).
+		for (const t of [1.2, 4.6]) {
+			const a = pixel(media('a.mp4'), t, 300, 160);
+			const b = pixel(made.proxy.src, t, 150, 80);
+			expect(a.every((x, k) => Math.abs(x - b[k]) < 24), `at ${t}s: original ${a}, proxy ${b}`).toBe(true);
+		}
+		const p = project([{ op: 'update_asset', asset: 'a', set: { proxies: [made.proxy] } }, { op: 'add_clip', track: 'v1', clip: { type: 'media', id: 'c', asset: 'a', duration: 1000 } }]);
+		const exported = toVideoFfmpeg(p, { output: media('proxied.mp4') });
+		expect(exported.args).toContain(media('a.mp4'));
+		expect(exported.args).not.toContain(made.proxy.src);
+	}, 60000);
 
 	it('measures an exported frame with get_video_scopes on a host without a preview', async () => {
 		// A server host decodes the export's frame with ffmpeg and hands its pixels to the tool.
