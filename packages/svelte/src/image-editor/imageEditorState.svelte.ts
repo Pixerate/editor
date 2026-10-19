@@ -1,5 +1,6 @@
 import {
   ImageEditorController,
+  type ImageEditorFit,
   type ImageEditorOptions,
   type ImageEditorState,
   type ImageEditorTool,
@@ -151,6 +152,9 @@ export function createReactiveImageEditor(options: ImageEditorOptions = {}) {
     },
     setComparing(comparing: boolean) {
       controller.setComparing(comparing);
+    },
+    setFit(fit: ImageEditorFit) {
+      controller.setFit(fit);
     },
     loadImage(src: string | HTMLImageElement) {
       return controller.loadImage(src);

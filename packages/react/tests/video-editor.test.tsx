@@ -798,3 +798,40 @@ describe("VideoScopes (React)", () => {
     controller.destroy();
   });
 });
+
+describe("ClipInspector LUT (React)", () => {
+  it("loads a .cube by path or file, sets its strength and removes it, one undo step each", async () => {
+    const controller = new VideoEditorController({ project: PROJECT, clock: new ManualClock(), luts: async (src) => {
+      if (src !== "swap.cube") throw new Error("404 Not Found");
+      return 'TITLE "Swap"\nLUT_3D_SIZE 2\n0 0 0\n0 1 0\n1 0 0\n1 1 0\n0 0 1\n0 1 1\n1 0 1\n1 1 1\n';
+    } });
+    act(() => root.render(<ClipInspector controller={controller} />));
+    act(() => controller.select(["c1"]));
+    commit($<HTMLInputElement>('input[aria-label="Exposure"]'), "0.5");
+    commit($<HTMLInputElement>('input[aria-label="LUT file"]'), "missing.cube");
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    expect($("[data-lut-error]").textContent).toBe('The LUT "missing.cube" could not be read: 404 Not Found');
+    commit($<HTMLInputElement>('input[aria-label="LUT file"]'), "swap.cube");
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    expect(clip(controller, "c1")!.clip.grade).toEqual({ exposure: 0.5, lut: { src: "swap.cube", name: "Swap" } });
+    expect(controller.getState().undoLabel).toBe("Apply LUT");
+    commit($<HTMLInputElement>('input[aria-label="LUT strength"]'), "0.4");
+    expect(clip(controller, "c1")!.clip.grade!.lut).toEqual({ src: "swap.cube", name: "Swap", strength: 0.4 });
+    // A look replaces the settings but keeps the LUT.
+    choose($<HTMLSelectElement>('select[aria-label="Apply a look"]'), "warm");
+    expect(clip(controller, "c1")!.clip.grade).toEqual({ temperature: 0.4, saturation: 0.1, lut: { src: "swap.cube", name: "Swap", strength: 0.4 } });
+    act(() => $<HTMLButtonElement>('button[aria-label="Remove LUT"]').click());
+    expect(clip(controller, "c1")!.clip.grade).toEqual({ temperature: 0.4, saturation: 0.1 });
+    // A file read in place goes in the cache under its name.
+    const file = new File(['TITLE "Swap"\nLUT_3D_SIZE 2\n0 0 0\n0 1 0\n1 0 0\n1 1 0\n0 0 1\n0 1 1\n1 0 1\n1 1 1\n'], "local.cube");
+    const input = $<HTMLInputElement>('input[aria-label="Load a .cube LUT"]');
+    Object.defineProperty(input, "files", { value: [file] });
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(clip(controller, "c1")!.clip.grade!.lut).toEqual({ src: "local.cube", name: "Swap" });
+    expect(controller.luts.peek("local.cube")!.size).toBe(2);
+    controller.destroy();
+  });
+});
