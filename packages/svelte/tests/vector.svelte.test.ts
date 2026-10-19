@@ -944,3 +944,69 @@ describe("distort and envelopes (svelte)", () => {
     expect(c.getState().undoLabel).toBe("Distort");
   });
 });
+
+describe("appearance stacks (svelte)", () => {
+  const stackedDoc = (): VectorDocument => ({
+    width: 400,
+    height: 300,
+    nodes: [
+      {
+        id: "a",
+        type: "path",
+        subpaths: [rectSubpath({ x: 0, y: 0, width: 100, height: 100 })],
+        fill: "#00ff00",
+        fills: [{ paint: "#ff0000" }, { paint: "#00ff00", opacity: 0.5, blendMode: "multiply" }],
+        stroke: "#000000",
+        strokeWidth: 2,
+        strokes: [{ paint: "#0000ff", strokeWidth: 8, strokeAlign: "outside" }, { paint: "#000000", strokeWidth: 2 }],
+        blendMode: "screen",
+        filters: [{ id: "f1", type: "dropShadow", params: { color: "#000000", opacity: 0.25, offsetX: 0, offsetY: 4, blur: 4, spread: 0 } }],
+      } as VectorPathNode,
+    ],
+  });
+
+  it("draws each layer, the blend modes and the filter", () => {
+    const c = new VectorEditorController({ document: stackedDoc() });
+    const target = render(VectorCanvas, { controller: c, fitOnMount: false });
+    const g = target.querySelector('g[data-vector-id="a"]') as SVGGElement;
+    const filterId = /^url\(#(.+-filter-a)\)$/.exec(g.getAttribute("filter") ?? "")![1];
+    expect(g.getAttribute("style")).toContain("mix-blend-mode: screen");
+    expect(Array.from(target.querySelectorAll('g[data-vector-id="a"] > [data-vector-layer]')).map((el) => el.getAttribute("data-vector-layer"))).toEqual(["fill-0", "fill-1", "stroke-0", "stroke-1"]);
+    const fill1 = target.querySelector('[data-vector-layer="fill-1"]')!;
+    expect(fill1.getAttribute("opacity")).toBe("0.5");
+    expect(fill1.getAttribute("style")).toContain("mix-blend-mode: multiply");
+    expect(target.querySelector('[data-vector-layer="stroke-0"]')!.getAttribute("data-vector-stroke-align")).toBe("outside");
+    expect(target.querySelector(`filter[id="${filterId}"]`)?.querySelector("feGaussianBlur, fegaussianblur")).toBeTruthy();
+  });
+
+  it("edits the stacks, blend mode and filters from the style panel", () => {
+    const c = new VectorEditorController({ document: stackedDoc() });
+    c.select(["a"]);
+    const target = render(VectorStylePanel, { controller: c });
+    const q = (sel: string) => target.querySelector(sel) as HTMLElement;
+    const path = () => c.getNode("a") as VectorPathNode;
+    expect(Array.from(target.querySelectorAll('[data-vector-stack="fill"] [data-vector-layer]')).map((el) => el.getAttribute("data-vector-layer"))).toEqual(["fill-1", "fill-0"]);
+    click(q('button[aria-label="Add fill"]'));
+    expect(path().fills).toHaveLength(3);
+    click(q('button[aria-label="Move Fill 1 up"]'));
+    expect(path().fills!.map((l) => l.paint)).toEqual(["#00ff00", "#ff0000", "#808080"]);
+    click(q('button[aria-label="Remove Fill 3"]'));
+    expect(path().fills).toHaveLength(2);
+    click(q('input[aria-label="Stroke 1 visible"]'));
+    expect(path().strokes![0].visible).toBe(false);
+    const blend = q('select[aria-label="Blend mode"]') as HTMLSelectElement;
+    blend.value = "difference";
+    blend.dispatchEvent(new Event("change", { bubbles: true }));
+    flushSync();
+    expect(path().blendMode).toBe("difference");
+    const add = q('select[aria-label="Add filter"]') as HTMLSelectElement;
+    add.value = "layerBlur";
+    add.dispatchEvent(new Event("change", { bubbles: true }));
+    flushSync();
+    expect(path().filters!.map((f) => f.type)).toEqual(["dropShadow", "layerBlur"]);
+    click(q('button[aria-label="Remove Drop Shadow"]'));
+    expect(path().filters!.map((f) => f.type)).toEqual(["layerBlur"]);
+    click(q('button[aria-label="Edit Stroke 1 gradient"]'));
+    expect(c.getState().gradientEdit).toMatchObject({ target: "stroke", layer: 0 });
+  });
+});

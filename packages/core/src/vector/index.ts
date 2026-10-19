@@ -24,3 +24,5 @@ export * from './perspective.js';
 export * from './pathMap.js';
 export * from './warp.js';
 export * from './distort.js';
+export * from './paintLayers.js';
+export * from './filters.js';
