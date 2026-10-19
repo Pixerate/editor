@@ -22,6 +22,7 @@ import {
   useCanvasArrange,
   useCanvasArrangeShortcuts,
   useCanvasScenes,
+  useCanvasCapture,
   useCanvasMeasure,
   useCanvasDraw,
   CanvasDrawLayer,
@@ -405,6 +406,15 @@ const CanvasDemo: React.FC = () => {
   useAgentToolProvider(demoToolRegistry, provider);
 
   const agentStage = useRef<HTMLDivElement>(null);
+  // canvas__capture_view: screenshots of the viewport, all nodes, the selection, nodes by id or a rect.
+  const capture = useCanvasCapture<BoxNode>({
+    id: "canvas-capture",
+    namespace: "canvas",
+    element: () => agentStage.current?.querySelector<HTMLElement>(".react-flow"),
+    getViewport: flow.getViewport,
+    getNodes: flow.getNodes,
+  });
+  useAgentToolProvider(demoToolRegistry, capture);
   const btn =
     "p-2 rounded hover:bg-slate-800 transition-colors text-slate-300 disabled:opacity-40 disabled:hover:bg-transparent";
   const needs = (min: number) => selectedCount < min;

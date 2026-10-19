@@ -18,6 +18,8 @@ import {
   setControlPath,
 } from './controls';
 import { createImageSelectionTools } from './selection-tools';
+import { createImageCaptureSurface } from './capture';
+import { createCaptureTool } from '../tools/capture.js';
 import { createImageEditTools } from './edit-tools';
 
 export interface ImageEditorToolProviderOptions {
@@ -47,6 +49,8 @@ function adjustmentsSummary(adjustments: ImageAdjustments) {
  *   control ranges and the applied values are echoed.
  * - `add_adjustment_layer {kind, params?, opacity?, blend?, name?}`.
  * - `render_preview {maxSide}`: the rendered image as a PNG, longest side at most `maxSide`.
+ * - `capture_view {region, rect?, ...}`: a screenshot of the whole image, the selection or a rect in
+ *   natural pixels (up to 8× for close inspection), optionally with the selection shaded.
  * - Selections and masks: `get_selection`, `select_region`, `select_by_color`, `modify_selection`,
  *   `refine_selection`, `apply_selection_as_mask` (see `createImageSelectionTools`).
  * - Layers, geometry and history: `get_image_info`, `get_histogram`, `update_adjustment_layer`,
@@ -269,6 +273,7 @@ export function createImageEditorToolProvider(
       setAdjustments,
       addLayer,
       renderPreview,
+      createCaptureTool(createImageCaptureSurface(controller), { subject: 'the image (source orientation, before crop and rotation)', defaultPadding: 0 }),
       ...createImageSelectionTools(controller),
       ...createImageEditTools(controller),
     ],

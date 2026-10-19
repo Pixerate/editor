@@ -1032,6 +1032,28 @@ export class ImageEditorController {
     return this.renderer.renderExport(source, this.state, options);
   }
 
+  /**
+   * Renders the edited image (adjustments, layers and, by default, annotations) in the
+   * source image's own orientation and frame, ignoring crop, rotation and flips, so it lines
+   * up with natural-pixel coordinates (selections, `select_region`). `scale` ≤ 1 shrinks it.
+   * Returns `null` when no image is loaded.
+   */
+  public async renderSourceView(options: { scale?: number; includeAnnotations?: boolean } = {}): Promise<HTMLCanvasElement | null> {
+    const source = this.imageElement || this.state.sourceUrl;
+    if (!source) return null;
+    const { width, height } = this.state.imageDimensions;
+    const k = Math.min(1, Math.max(0, options.scale ?? 1));
+    return this.renderer.renderExport(
+      source,
+      { ...this.state, crop: null, transform: { rotate: 0, flipH: false, flipV: false } },
+      {
+        width: Math.max(1, Math.round(width * k)),
+        height: Math.max(1, Math.round(height * k)),
+        includeAnnotations: options.includeAnnotations,
+      }
+    );
+  }
+
   public async toDataURL(options: ExportOptions = {}): Promise<string> {
     const canvas = await this.renderExport(options);
     const format = options.format || 'image/png';

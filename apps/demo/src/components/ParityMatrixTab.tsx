@@ -112,6 +112,7 @@ const PRODUCTIVITY_FEATURES: ParityRow[] = [
   row("PDF Structure Detection (columns, headings, lists, tables, running headers)", "analyzePdfLayout + createPdfImportAdapter", "useFileImport().structureSummary", "createFileImport().structureSummary", "adapterOptions: { pdf: { structure: false } } falls back to plain paragraphs"),
   row("Rich Clipboard MIME (application/x.pixerate.document+json)", "RichClipboard", "richClipboard", "richClipboard prop", "Lossless copy/paste between editors"),
   row("Dynamic Agent Tool Registry (MCP tools/list / tools/call, listChanged)", "ToolRegistry", "useAgentToolProvider", "useAgentToolProvider", "Providers register as editors mount"),
+  row("Screenshot Capture for Agents (capture_view)", "createCaptureTool, createCanvasCaptureToolProvider & image capture_view", "useCanvasCapture", "createCanvasCapture", "Viewport, content, selection, nodes or a rect; returns the rect and scale"),
   row("MCP Bridge to Live Editors", "createToolBridge (/bridge) & connectToolBridge", "useToolBridge", "useToolBridge", "One stdio MCP server drives tabs over localhost; token, origins, cancellation"),
   row("Spreadsheet Sort (multi-column, range) & Transpose", true, true, true, "Header and footer rows stay put"),
   row("Spreadsheet Filters (per-column rules, toggle)", true, true, true, "Filters live in the view model"),
