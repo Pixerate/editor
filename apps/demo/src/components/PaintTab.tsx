@@ -39,6 +39,7 @@ export function PaintTab() {
       <AgentScriptPanel
         scripts={PAINT_SCRIPTS}
         stage={stage}
+        presence={presence}
         hint="Plays a scripted agent turn with the paint__* tools. Strokes go through the paint director, so its cursor paints each one live on the canvas: paper, fills that follow the grain, pigment mixing, replayed and varied strokes, and kaleidoscope symmetry."
       />
     </div>
