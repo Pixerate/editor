@@ -232,3 +232,70 @@ export function createCanvasDrawController<TNode extends CanvasNode = CanvasNode
 }
 
 export type CanvasDrawController = ReturnType<typeof createCanvasDrawController>;
+
+/** Modifier options when computing bounds while dragging/drawing. */
+export interface CanvasDragBoundsModifiers {
+	/** If true (e.g. Shift key held), constrain the bounding box to 1:1 aspect ratio. */
+	constrain?: boolean;
+	/** If true (e.g. Alt/Option key held), draw/expand outward from the initial start point as center. */
+	fromCenter?: boolean;
+}
+
+export interface CanvasDragBounds {
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+}
+
+/**
+ * Computes bounding rectangle from start and current points, supporting
+ * `constrain` (aspect ratio 1:1, Shift key) and `fromCenter` (origin as center, Alt/Option key).
+ */
+export function computeDragBounds(
+	start: { x: number; y: number },
+	current: { x: number; y: number },
+	modifiers: CanvasDragBoundsModifiers = {}
+): CanvasDragBounds {
+	let dx = current.x - start.x;
+	let dy = current.y - start.y;
+
+	if (modifiers.constrain) {
+		const absDx = Math.abs(dx);
+		const absDy = Math.abs(dy);
+		const maxDim = Math.max(absDx, absDy);
+		dx = (dx < 0 ? -1 : 1) * maxDim;
+		dy = (dy < 0 ? -1 : 1) * maxDim;
+	}
+
+	if (modifiers.fromCenter) {
+		const halfW = Math.abs(dx);
+		const halfH = Math.abs(dy);
+		return {
+			x: start.x - halfW,
+			y: start.y - halfH,
+			width: halfW * 2,
+			height: halfH * 2
+		};
+	}
+
+	return {
+		x: Math.min(start.x, start.x + dx),
+		y: Math.min(start.y, start.y + dy),
+		width: Math.abs(dx),
+		height: Math.abs(dy)
+	};
+}
+
+/**
+ * Computes bounding rectangle from start point and raw dimensions (dx, dy).
+ */
+export function computeDragBoundsFromPoints(
+	startX: number,
+	startY: number,
+	currentX: number,
+	currentY: number,
+	modifiers: CanvasDragBoundsModifiers = {}
+): CanvasDragBounds {
+	return computeDragBounds({ x: startX, y: startY }, { x: currentX, y: currentY }, modifiers);
+}
