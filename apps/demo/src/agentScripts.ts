@@ -437,6 +437,55 @@ export const IMAGE_SCRIPTS: AgentScript[] = [
       { say: "Rendering a preview.", tool: "image__render_preview", args: { maxSide: 360 } },
     ],
   },
+  {
+    id: "image-poster",
+    prompt: "Turn the photo into a sale poster with a badge and a headline",
+    steps: [
+      { say: "Selecting everything to read the image size.", tool: "image__select_region", args: { shape: "all" } },
+      { tool: "image__get_selection", args: {}, as: "sel" },
+      { tool: "image__select_region", args: { shape: "none" } },
+      {
+        say: "A rounded banner along the bottom, as a live shape layer.",
+        tool: "image__add_shape_layer",
+        args: (ctx) => {
+          const { width, height } = imageSize(ctx.results.sel);
+          return { shape: { kind: "rect", x: width * 0.08, y: height * 0.7, width: width * 0.84, height: height * 0.2, radius: height * 0.04 }, fill: "#111827cc", name: "Banner" };
+        },
+        open: "Annotations",
+        as: "banner",
+      },
+      {
+        say: "A star badge in the top corner, filled and outlined.",
+        tool: "image__add_shape_layer",
+        args: (ctx) => {
+          const { width, height } = imageSize(ctx.results.sel);
+          const r = Math.min(width, height) * 0.16;
+          return { shape: { kind: "star", x: width - r * 2.3, y: r * 0.3, width: r * 2, height: r * 2, points: 12, innerRatio: 0.78 }, fill: "#f59e0b", stroke: { width: 4, paint: "#ffffff" }, name: "Badge" };
+        },
+        as: "badge",
+      },
+      {
+        say: "The headline as live text, centred in the banner.",
+        tool: "image__add_text_layer",
+        args: (ctx) => {
+          const { width, height } = imageSize(ctx.results.sel);
+          return { text: "Summer Sale", x: width / 2, y: height * 0.835, style: { fontFamily: "sans-serif", fontWeight: 700, fontSize: Math.round(height * 0.09), color: "#ffffff" }, paragraph: { align: "center" } };
+        },
+        as: "headline",
+      },
+      {
+        say: "The second word in amber, by range.",
+        tool: "image__set_text_style",
+        args: (ctx) => ({ layerId: ctx.results.headline.layer.id, start: 7, end: 11, color: "#f59e0b" }),
+      },
+      {
+        say: "A soft shadow under the badge.",
+        tool: "image__add_layer_effect",
+        args: (ctx) => ({ layerId: ctx.results.badge.layer.id, kind: "drop-shadow", settings: { distance: 6, size: 10, opacity: 0.45 } }),
+      },
+      { say: "Rendering a preview.", tool: "image__render_preview", args: { maxSide: 360 } },
+    ],
+  },
 ];
 
 function imageSize(result: any): { width: number; height: number } {

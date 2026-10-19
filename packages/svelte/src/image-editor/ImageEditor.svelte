@@ -28,7 +28,14 @@
     pointerPressure,
     FreeTransformTool,
     getViewportProjection,
+    ShapeDrawGesture,
+    TypeToolGesture,
+    DEFAULT_SHAPE_TOOL_OPTIONS,
+    DEFAULT_TYPE_TOOL_OPTIONS,
     type SelectionToolOptions,
+    type ShapeToolOptions,
+    type TextEditSession,
+    type TypeToolOptions,
   } from '@pixerate/editor/image-editor';
   import ControlSlider from './ControlSlider.svelte';
   import Histogram from './Histogram.svelte';
@@ -38,6 +45,8 @@
   import SelectionOptionsBar from './SelectionOptionsBar.svelte';
   import RefineEdgePanel from './RefineEdgePanel.svelte';
   import FreeTransformOptionsBar from './FreeTransformOptionsBar.svelte';
+  import ShapeOptionsBar from './ShapeOptionsBar.svelte';
+  import TypeOptionsBar from './TypeOptionsBar.svelte';
   import { onDestroy, untrack } from 'svelte';
   import { createReactiveImageEditor, type ReactiveImageEditor } from './imageEditorState.svelte.js';
 
@@ -84,6 +93,60 @@
   // Paint tools (Move, Brush, Eraser): the pointer gesture and the brush cursor.
   const paintGesture = $derived(new PaintGesture(editor.controller));
   let brushCursor: ImagePoint | null = null;
+
+  // Shape and type tools: their options and gestures; type is edited on the canvas through a hidden textarea.
+  let shapeOptions = $state<ShapeToolOptions>({ ...DEFAULT_SHAPE_TOOL_OPTIONS });
+  let typeOptions = $state<TypeToolOptions>({ ...DEFAULT_TYPE_TOOL_OPTIONS });
+  const shapeGesture = $derived(new ShapeDrawGesture(editor.controller, () => shapeOptions));
+  const typeTool = $derived(new TypeToolGesture(editor.controller, () => typeOptions));
+  let typeSession = $state<TextEditSession | null>(null);
+  let typeInputEl = $state<HTMLTextAreaElement | null>(null);
+  let shapeTypeError = $state<string | null>(null);
+  $effect(() => {
+    const s = typeSession;
+    if (!s) return;
+    return untrack(() => s.subscribe(() => void renderCanvas()));
+  });
+  $effect(() => {
+    // End the edit when the tool or tab changes.
+    const keep = activeTab === 'annotate' && editor.state.activeTool === 'type';
+    untrack(() => {
+      if (!keep && typeTool.session) finishTyping();
+    });
+  });
+  function finishTyping() {
+    typeTool.finish();
+    typeSession = null;
+    void renderCanvas();
+  }
+  function handleTypeKeyDown(e: KeyboardEvent) {
+    const session = typeTool.session;
+    if (!session || e.isComposing) return;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      finishTyping();
+      return;
+    }
+    if ((e.metaKey || e.ctrlKey) && ['z', 'y', 'c', 'x', 'v'].includes(e.key.toLowerCase())) return;
+    if (session.handleKey(e)) {
+      e.preventDefault();
+      shapeTypeError = session.error;
+    }
+  }
+  function handleTypeInput(e: Event) {
+    // Composed (IME) and pasted text arrives here; plain keys were handled on keydown.
+    const el = e.currentTarget as HTMLTextAreaElement;
+    const session = typeTool.session;
+    if (session && el.value && !(e as InputEvent).isComposing) {
+      session.insert(el.value);
+      el.value = '';
+    }
+  }
+  function handleTypeComposition(e: CompositionEvent) {
+    const session = typeTool.session;
+    if (session && e.data) session.insert(e.data);
+    (e.currentTarget as HTMLTextAreaElement).value = '';
+  }
 
   // Free Transform (Ctrl/Cmd+T): the shared tool drives a session; its overlay is drawn by the renderer.
   const transformTool = $derived(
@@ -292,6 +355,7 @@
           ? { ...brushCursor, diameter: editor.controller.getState().paint.brush.size }
           : null,
       freeTransform: transformTool.overlay(),
+      textEdit: typeTool.session?.alive ? typeTool.session.overlay() : null,
     });
   }
 
@@ -434,6 +498,18 @@
       return;
     }
 
+    if (activeTab === 'annotate' && (editor.state.activeTool === 'shape' || editor.state.activeTool === 'type')) {
+      const imgPt = canvasToImagePoint(canvasPt, editor.state, canvasEl.width, canvasEl.height, false);
+      shapeTypeError = null;
+      if (editor.state.activeTool === 'shape') shapeGesture.down(imgPt);
+      else {
+        typeTool.down(imgPt, { shift: e.shiftKey });
+        typeSession = typeTool.session;
+        void renderCanvas();
+      }
+      return;
+    }
+
     if (activeTab === 'annotate') {
       const imgPt = canvasToImagePoint(canvasPt, editor.state, canvasEl.width, canvasEl.height, false);
       dragStartPoint = imgPt;
@@ -526,6 +602,14 @@
         };
         const handle = hitTestCrop(canvasPt, editor.state, canvasEl.width, canvasEl.height, 14, activeCrop);
         canvasEl.style.cursor = getCropCursor(handle, editor.state.transform);
+      }
+      return;
+    }
+
+    if (activeTab === 'annotate' && editor.state.activeTool === 'shape') {
+      if (shapeGesture.active) {
+        shapeGesture.move(canvasToImagePoint(canvasPt, editor.state, canvasEl.width, canvasEl.height, false), { shift: e.shiftKey, alt: e.altKey });
+        if (shapeGesture.error) shapeTypeError = shapeGesture.error;
       }
       return;
     }
@@ -657,6 +741,20 @@
         draftCrop = null;
         renderCanvas();
       }
+      return;
+    }
+
+    if (activeTab === 'annotate' && editor.state.activeTool === 'shape') {
+      shapeGesture.up();
+      return;
+    }
+    if (activeTab === 'annotate' && editor.state.activeTool === 'type') {
+      typeTool.up(canvasToImagePoint(canvasPt, editor.state, canvasEl.width, canvasEl.height, false));
+      typeSession = typeTool.session;
+      if (typeTool.error) shapeTypeError = typeTool.error;
+      void renderCanvas();
+      // Keystrokes go to the hidden textarea while text is being edited.
+      if (typeTool.session) setTimeout(() => typeInputEl?.focus(), 0);
       return;
     }
 
@@ -977,8 +1075,21 @@
         onpointercancel={() => paintGesture.cancel()}
         data-testid="image-editor-canvas"
         style={transformActive ? `cursor: ${transformCursor}` : undefined}
-        class="absolute inset-0 w-full h-full block {transformActive ? 'touch-none' : activeTab === 'paint' ? 'touch-none cursor-crosshair' : ''}"
+        class="absolute inset-0 w-full h-full block {transformActive ? 'touch-none' : activeTab === 'paint' ? 'touch-none cursor-crosshair' : activeTab === 'annotate' && editor.state.activeTool === 'type' ? 'cursor-text' : activeTab === 'annotate' && editor.state.activeTool === 'shape' ? 'cursor-crosshair' : ''}"
       ></canvas>
+      {#if typeSession}
+        <textarea
+          bind:this={typeInputEl}
+          aria-label="Edit text"
+          data-testid="type-input"
+          autocapitalize="off"
+          spellcheck={false}
+          onkeydown={handleTypeKeyDown}
+          oninput={handleTypeInput}
+          oncompositionend={handleTypeComposition}
+          class="absolute left-0 top-0 h-px w-px opacity-0"
+        ></textarea>
+      {/if}
 
     </div>
 
@@ -1192,6 +1303,32 @@
 
       {#if activeTab === 'annotate'}
         <div class="flex flex-col gap-3 text-xs">
+          <span class="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">Shape & Type Layers</span>
+          <div class="grid grid-cols-2 gap-1.5">
+            {#each ['shape', 'type'] as const as t (t)}
+              <button
+                type="button"
+                aria-pressed={editor.state.activeTool === t}
+                onclick={() => editor.setTool(t)}
+                class="py-1.5 px-2 rounded-lg font-medium border transition-colors {editor.state.activeTool === t
+                  ? 'bg-indigo-600 border-indigo-500 text-white'
+                  : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'}">{t === 'shape' ? 'Shape' : 'Type'}</button>
+            {/each}
+          </div>
+          {#if editor.state.activeTool === 'shape'}
+            <ShapeOptionsBar controller={editor.controller} options={shapeOptions} onchange={(o) => (shapeOptions = o)} />
+          {/if}
+          {#if editor.state.activeTool === 'type'}
+            <TypeOptionsBar controller={editor.controller} options={typeOptions} onchange={(o) => (typeOptions = o)} session={typeSession} />
+            {#if typeSession}
+              <button type="button" onclick={finishTyping} class="self-start rounded bg-slate-800 px-2 py-1 text-[11px] text-slate-200 hover:bg-slate-700">Done editing text</button>
+            {/if}
+          {/if}
+          {#if shapeTypeError}
+            <p role="alert" class="text-rose-400" data-testid="shape-type-error">{shapeTypeError}</p>
+          {/if}
+          <div class="h-px bg-slate-800 my-1"></div>
+
           <span class="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">
             Draw & Annotate
           </span>

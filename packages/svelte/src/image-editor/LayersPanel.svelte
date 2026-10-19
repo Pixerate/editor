@@ -8,6 +8,8 @@
     dropZone,
     layerBadge,
     layerEffectsBadge,
+    layerHasThumbnail,
+    layerWarning,
     layerMenu,
     layerPanelRows,
     openPsdFile,
@@ -136,7 +138,7 @@
 
   function thumb(layer: ImageLayer): PixelBuffer | null {
     void tick;
-    return layer.type === 'pixel' ? controller.getLayerThumbnail(layer.id, { maxSide: 64 }) : null;
+    return layerHasThumbnail(layer) ? controller.getLayerThumbnail(layer.id, { maxSide: 64 }) : null;
   }
   function maskThumb(layer: ImageLayer): PixelBuffer | null {
     void tick;
@@ -314,13 +316,20 @@
             }}>{layer.collapsed ? '▸' : '▾'}</button>
         {/if}
         {#if row.clipped}<span class="text-slate-500" aria-label="Clipped">↳</span>{/if}
-        {#if layer.type === 'pixel'}
-          <canvas
-            use:paint={thumb(layer)}
-            aria-label={`${row.label} pixels`}
-            style="width: {thumbnailSize}px; height: {thumbnailSize}px"
-            class={thumbClass(row.active && snapshot.activeTarget === 'pixels' && Boolean(layer.mask))}
-          ></canvas>
+        {#if layerHasThumbnail(layer)}
+          <span class="relative shrink-0">
+            <canvas
+              use:paint={thumb(layer)}
+              aria-label={`${row.label} pixels`}
+              style="width: {thumbnailSize}px; height: {thumbnailSize}px"
+              class={thumbClass(row.active && snapshot.activeTarget === 'pixels' && Boolean(layer.mask))}
+            ></canvas>
+            {#if layer.type !== 'pixel'}
+              <span
+                data-testid="layer-kind-badge"
+                class="absolute -bottom-1 -right-1 rounded bg-slate-700 px-0.5 text-[8px] font-bold leading-tight text-slate-100 ring-1 ring-slate-900">{layerBadge(layer)}</span>
+            {/if}
+          </span>
         {:else}
           <span
             class="shrink-0 grid place-items-center rounded bg-slate-800 text-[9px] text-slate-400 ring-1 ring-slate-700"
@@ -381,6 +390,9 @@
               e.stopPropagation();
               renaming = layer.id;
             }}>{row.label}</span>
+        {/if}
+        {#if layerWarning(layer)}
+          <span role="img" data-testid="layer-warning" aria-label={layerWarning(layer)} title={layerWarning(layer)} class="text-[10px] text-amber-400">⚠</span>
         {/if}
         {#if layerEffectsBadge(layer)}
           {@const fxOn = layerEffectsBadge(layer) === 'on'}

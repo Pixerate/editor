@@ -71,6 +71,19 @@ export function layerBadge(layer: ImageLayer): string {
   }
 }
 
+/** Whether the layer's row shows a pixel thumbnail (pixel, shape and type layers; shapes and type with a badge on it). */
+export function layerHasThumbnail(layer: ImageLayer): boolean {
+  return layer.type === 'pixel' || layer.type === 'shape' || layer.type === 'type';
+}
+
+/** A warning to show on a layer's row (a type layer drawn with fallback fonts), or `null`. */
+export function layerWarning(layer: ImageLayer): string | null {
+  if (layer.type === 'type' && layer.missingFonts?.length) {
+    return `Missing ${layer.missingFonts.length === 1 ? 'font' : 'fonts'}: ${layer.missingFonts.join(', ')}. ${layer.rendering === 'stored' ? 'Showing the saved pixels until the text is edited.' : 'Drawn with a fallback font.'}`;
+  }
+  return null;
+}
+
 /** Where a row was dropped on: the top or bottom part of the row, or the middle of a group row. */
 export type DropZone = 'above' | 'below' | 'inside';
 

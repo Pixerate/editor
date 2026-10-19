@@ -266,7 +266,7 @@ export function createImageEffectTools(controller: ImageEditorController): Agent
     name: 'add_layer_effect',
     title: 'Add a layer effect',
     description:
-      "Adds a live effect to a pixel, annotation or group layer with Photoshop's defaults, changed by settings: drop-shadow, inner-shadow, outer-glow, inner-glow, bevel-emboss, satin, color-overlay, gradient-overlay, pattern-overlay or stroke. Several of one kind are allowed (the first listed is on top). One undo step. Returns the new effect's id and the layer's effects.",
+      "Adds a live effect to a pixel, shape, type, smart object, annotation or group layer with Photoshop's defaults, changed by settings: drop-shadow, inner-shadow, outer-glow, inner-glow, bevel-emboss, satin, color-overlay, gradient-overlay, pattern-overlay or stroke. Several of one kind are allowed (the first listed is on top). One undo step. Returns the new effect's id and the layer's effects.",
     inputSchema: {
       type: 'object',
       $defs: DEFS,

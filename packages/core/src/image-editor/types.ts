@@ -344,7 +344,11 @@ export type ImageEditorTool =
   | 'move'
   | 'brush'
   | 'eraser'
-  | 'mixer';
+  | 'mixer'
+  /** Live shape layers (see `ShapeDrawGesture`). */
+  | 'shape'
+  /** Live type layers, edited on the canvas (see `TypeToolGesture`). */
+  | 'type';
 
 export type ImageEditorFit = 'contain' | 'margin';
 
