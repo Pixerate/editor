@@ -109,3 +109,57 @@ describe('React LayersPanel', () => {
     expect(container.querySelector('[data-testid="layers-panel"]')).not.toBeNull();
   });
 });
+
+describe('React LayersPanel PSD buttons', () => {
+  it('exports and opens PSD files, showing the warnings', async () => {
+    const source = controller();
+    source.addPixelLayer({ name: 'Painted', color: '#ff0000' });
+    source.setCrop({ x: 0, y: 0, width: 10, height: 10 });
+    const { bytes } = await source.toPsd();
+
+    const c = controller();
+    await act(async () => root.render(<LayersPanel controller={c} psdFileName="shot.jpg" />));
+    const input = container.querySelector('[data-testid="psd-file-input"]') as HTMLInputElement;
+    expect(input.accept).toContain('.psd');
+    const file = new win.File([bytes], 'shot.psd');
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    await act(async () => {
+      input.dispatchEvent(new win.Event('change', { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(rowNames()).toEqual(['Painted', 'Background']);
+    expect(c.getState().sourceUrl).toBeNull();
+
+    // Export: a crop cannot be written, and the panel says so. (jsdom cannot build a Blob from
+    // Node's typed arrays, so the download itself is skipped here.)
+    c.setCrop({ x: 0, y: 0, width: 5, height: 5 });
+    const createObjectURL = URL.createObjectURL;
+    (URL as any).createObjectURL = undefined;
+    await act(async () => {
+      button('Export PSD').click();
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    (URL as any).createObjectURL = createObjectURL;
+    expect(container.textContent).toMatch(/crop is not applied/);
+    await act(async () => button('Dismiss').click());
+    expect(container.querySelector('[data-testid="psd-warnings"]')).toBeNull();
+  });
+
+  it('shows why a file cannot be opened', async () => {
+    const c = controller();
+    await act(async () => root.render(<LayersPanel controller={c} />));
+    const input = container.querySelector('[data-testid="psd-file-input"]') as HTMLInputElement;
+    Object.defineProperty(input, 'files', { value: [new win.File([new Uint8Array(40)], 'x.psd')], configurable: true });
+    await act(async () => {
+      input.dispatchEvent(new win.Event('change', { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(container.textContent).toMatch(/8BPS/);
+    expect(rowNames()).toEqual(['Background']);
+  });
+
+  it('hides the PSD buttons with psd={false}', async () => {
+    await act(async () => root.render(<LayersPanel controller={controller()} psd={false} />));
+    expect(button('Export PSD')).toBeUndefined();
+  });
+});

@@ -30,3 +30,5 @@ export * from './layers/panel';
 export * from './layers/paint';
 export * from './paint-tools';
 export * from './layers/paint-ui';
+export * from './psd';
+export * from './psd-tools';

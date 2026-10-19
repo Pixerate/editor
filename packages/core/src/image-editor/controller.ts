@@ -50,6 +50,7 @@ import {
   findLayer,
   flattenLayers,
   insertLayer,
+  isActiveFilter,
   mapLayer,
   newLayerId,
   type AdjustmentLayerNode,
@@ -147,6 +148,8 @@ import {
 } from './layers/paint';
 import { base64ToBytes, bytesToBase64, decodePng, isPng, parseDataUrl } from './layers/png';
 import { getAnnotationBounds } from './geometry';
+import { importPsd, type PsdImportResult } from './psd/import';
+import { exportPsd } from './psd/export';
 
 /** Latest serialized schema version (`3`: layers). Documents with the old shape still write 1 or 2. */
 export const IMAGE_EDITOR_SCHEMA_VERSION = LAYERED_SCHEMA_VERSION;
@@ -2485,8 +2488,26 @@ export class ImageEditorController {
 
   // --- Rendering & Export ---
 
-  public async render(targetCanvas: HTMLCanvasElement, options?: RenderOptions): Promise<void> {
+  private blankSource: HTMLCanvasElement | null = null;
+
+  /**
+   * What the renderer draws from: the source image, or, for a document without one (an opened
+   * PSD, a v3 document loaded on its own), a transparent canvas of the document size, since every
+   * pixel then comes from the layers. `null` when there is nothing to draw.
+   */
+  private drawSource(): CanvasImageSource | string | null {
     const source = this.imageElement || this.state.sourceUrl;
+    if (source) return source;
+    if (!this.isSourceless()) return null;
+    const { width, height } = this.naturalSize;
+    if (!this.blankSource || this.blankSource.width !== width || this.blankSource.height !== height) {
+      this.blankSource = this.renderer.createCanvas(width, height);
+    }
+    return this.blankSource;
+  }
+
+  public async render(targetCanvas: HTMLCanvasElement, options?: RenderOptions): Promise<void> {
+    const source = this.drawSource();
     if (!source) return;
     this.syncViews();
     const dirty = this.pendingDirty;
@@ -2503,7 +2524,7 @@ export class ImageEditorController {
   }
 
   public async renderExport(options?: ExportOptions): Promise<HTMLCanvasElement> {
-    const source = this.imageElement || this.state.sourceUrl;
+    const source = this.drawSource();
     if (!source) {
       return this.renderer.createCanvas(1, 1);
     }
@@ -2523,7 +2544,7 @@ export class ImageEditorController {
    * Returns `null` when no image is loaded.
    */
   public async renderSourceView(options: { scale?: number; includeAnnotations?: boolean } = {}): Promise<HTMLCanvasElement | null> {
-    const source = this.imageElement || this.state.sourceUrl;
+    const source = this.drawSource();
     if (!source) return null;
     this.syncViews();
     const { width, height } = this.state.imageDimensions;
@@ -2610,7 +2631,7 @@ export class ImageEditorController {
    * they go to a new layer or mask (see `applyInpaintedImage`).
    */
   public async toAIInputDataURL(options: AIResultOptions = {}): Promise<string> {
-    const target = options.target ?? (this.isMultiLayer ? 'new-layer' : 'replace');
+    const target = options.target ?? this.defaultAITarget();
     if (target === 'replace') return this.toSourceDataURL();
     const canvas = await this.renderSourceView({ includeAnnotations: false });
     return canvas ? canvas.toDataURL('image/png') : this.toSourceDataURL();
@@ -2625,6 +2646,17 @@ export class ImageEditorController {
    * Whether AI results go to layers: the document has more than one pixel layer or group (adjustment
    * and annotation layers are edits of the image, not images of their own).
    */
+  /** `new-layer` in multi-layer documents and documents without a source image, else `replace`. */
+  private defaultAITarget(): 'new-layer' | 'replace' {
+    return this.isMultiLayer || this.isSourceless() ? 'new-layer' : 'replace';
+  }
+
+  /** No source image, and no layer reading one (an opened PSD): the layers are the whole document. */
+  private isSourceless(): boolean {
+    if (this.imageElement || this.state.sourceUrl || !this.state.layers.length) return false;
+    return !flattenLayers(this.state.layers).some((l) => l.type === 'pixel' && l.source === 'document');
+  }
+
   public get isMultiLayer(): boolean {
     return flattenLayers(this.state.layers).filter((l) => l.type === 'pixel' || l.type === 'group').length > 1;
   }
@@ -2637,7 +2669,7 @@ export class ImageEditorController {
    * the mask annotations, as before. Resolves to the new layer's id in new-layer mode.
    */
   public async applyInpaintedImage(newDataUrl: string, options: AIResultOptions = {}): Promise<string | void> {
-    if ((options.target ?? (this.isMultiLayer ? 'new-layer' : 'replace')) === 'replace') {
+    if ((options.target ?? this.defaultAITarget()) === 'replace') {
       await this.replaceSource(newDataUrl, true);
       return;
     }
@@ -2658,7 +2690,7 @@ export class ImageEditorController {
    * new image has different dimensions). Resolves to the masked layer's id in mask mode.
    */
   public async applyBackgroundRemovedImage(newDataUrl: string, options: AIResultOptions = {}): Promise<string | void> {
-    if ((options.target ?? (this.isMultiLayer ? 'new-layer' : 'replace')) === 'replace') {
+    if ((options.target ?? this.defaultAITarget()) === 'replace') {
       await this.replaceSource(newDataUrl, false);
       return;
     }
@@ -2720,6 +2752,159 @@ export class ImageEditorController {
     }
     this.commitLayers(mapLayer(this.state.layers, id, () => next));
     return id;
+  }
+
+  // --- PSD ---
+
+  /** Pixels per inch of the last opened PSD (written back by `toPsd`). */
+  private psdResolution: number | undefined;
+
+  /**
+   * Opens PSD / PSB bytes as the document (one undo step): the layers replace the stack and the
+   * document has no source image afterwards (every pixel comes from the layers). What the model
+   * cannot hold is approximated or left out; `warnings` says what, naming the layers.
+   * Throws `PsdError` for files that cannot be read at all.
+   */
+  public loadPsd(bytes: Uint8Array): { layerIds: string[]; warnings: string[]; width: number; height: number; summary: PsdImportResult['summary'] } {
+    const result = importPsd(bytes, { newId: () => newLayerId() });
+    this.recordHistory();
+    const s = this.state;
+    this.imageElement = null;
+    s.sourceUrl = null;
+    s.imageDimensions = { width: result.width, height: result.height };
+    if (!this.samplePixelsOverride) this.samplePixels = null;
+    s.layers = result.layers;
+    s.crop = null;
+    s.transform = { ...DEFAULT_TRANSFORM_VALUES };
+    s.outputOpacity = 1;
+    delete s.legacyOutputBlur;
+    s.selection = null;
+    s.selectedAnnotationId = null;
+    const pixels = flattenLayers(result.layers).filter((l) => l.type === 'pixel');
+    s.activeLayerId = pixels.length ? pixels[pixels.length - 1].id : null;
+    s.activeTarget = 'pixels';
+    this.psdResolution = result.resolution;
+    this.lastLoadProblems = result.warnings;
+    this.notify();
+    return {
+      layerIds: flattenLayers(result.layers).map((l) => l.id),
+      warnings: result.warnings,
+      width: result.width,
+      height: result.height,
+      summary: result.summary,
+    };
+  }
+
+  /**
+   * The document as an 8-bit RGB PSD (PSB above 30 000 px) with real layers, groups, adjustment
+   * layers and masks, in the source frame. Layer filters and parametric (depth) masks are baked
+   * into pixels and masks, annotation layers are rasterized (in a browser; elsewhere they are left
+   * out), and the merged image is our composite. `warnings` lists every such change.
+   */
+  public async toPsd(): Promise<{ bytes: Uint8Array; warnings: string[]; psb: boolean; width: number; height: number }> {
+    const { width, height } = this.naturalSize;
+    const canvas = { x: 0, y: 0, width, height };
+    const warnings: string[] = [];
+    const note = new Map<string, string[]>();
+    const add = (msg: string, name: string) => note.set(msg, [...(note.get(msg) ?? []), name]);
+    const canRasterize = this.renderer.canRasterize();
+    await this.renderer.prepareLayerAssets(this.state.layers, width, height);
+    const sources = this.renderer.compositorSources(width, height);
+    const compositor = new LayerCompositor();
+
+    const bakeMask = (layer: ImageLayer): RasterMask | undefined => {
+      const mask = layer.mask;
+      if (!mask?.source) return mask;
+      add('Parametric (depth) masks were baked into pixel masks', layer.name);
+      const plain = { ...layer, mask: { ...mask, density: 1, feather: 0, enabled: true } } as ImageLayer;
+      const ox = layer.type === 'pixel' ? layer.offset.x : 0;
+      const oy = layer.type === 'pixel' ? layer.offset.y : 0;
+      const coverage = compositor.maskCoverage(plain, canvas, sources);
+      const bytes = new Uint8ClampedArray(width * height);
+      if (coverage) for (let i = 0; i < bytes.length; i++) bytes[i] = Math.round(coverage[i] * 255);
+      else bytes.fill(255);
+      const baked: RasterMask = { surface: surfaceFromPixels({ width, height, data: bytes }, 1, -ox, -oy), defaultValue: 0 };
+      if (mask.density !== undefined && mask.density < 1) baked.density = mask.density;
+      if (mask.feather) baked.feather = mask.feather;
+      if (mask.enabled === false) baked.enabled = false;
+      return baked;
+    };
+
+    const prepare = async (layer: ImageLayer): Promise<ImageLayer | null> => {
+      if (layer.type === 'group') {
+        const children: ImageLayer[] = [];
+        for (const c of layer.children) {
+          const p = await prepare(c);
+          if (p) children.push(p);
+        }
+        return { ...layer, children, mask: bakeMask(layer) } as ImageLayer;
+      }
+      if (layer.type === 'adjustment') return { ...layer, mask: bakeMask(layer) } as ImageLayer;
+      if (layer.type === 'annotation') {
+        if (!canRasterize) {
+          add('Annotation layers need a canvas (a browser) to rasterize and were left out', layer.name);
+          return null;
+        }
+        add('Annotation layers were written as pixel layers', layer.name);
+        const blend = layer.blend === 'normal' && layer.annotation.blend ? layer.annotation.blend : layer.blend;
+        const content = { ...layer, visible: true, opacity: 1, blend: 'normal', annotation: { ...layer.annotation, blend: undefined } } as AnnotationLayer;
+        delete content.mask;
+        delete content.clipped;
+        const data = compositor.composite([content], canvas, sources);
+        const out: PixelLayer = {
+          type: 'pixel',
+          id: layer.id,
+          name: layer.name,
+          visible: layer.visible,
+          opacity: layer.opacity,
+          blend,
+          surface: surfaceFromPixels({ width, height, data }, 4),
+          offset: { x: 0, y: 0 },
+        };
+        if (layer.clipped) out.clipped = true;
+        if (layer.locks) out.locks = layer.locks;
+        const mask = bakeMask(layer);
+        if (mask) out.mask = mask;
+        return out;
+      }
+      let out: PixelLayer = { ...layer };
+      if (layer.source === 'document') {
+        out.surface = this.surfaceOf(layer);
+        delete out.source;
+      }
+      const active = layer.filters?.filter(isActiveFilter) ?? [];
+      if (active.length) {
+        add('Layer filters (develop, blur) were baked into the pixels', layer.name);
+        const content: PixelLayer = { ...out, visible: true, opacity: 1, blend: 'normal' };
+        delete content.mask;
+        delete content.clipped;
+        delete content.fillOpacity;
+        const data = compositor.composite([content], canvas, sources);
+        out = { ...out, surface: surfaceFromPixels({ width, height, data }, 4, -layer.offset.x, -layer.offset.y) };
+      }
+      if (layer.filters?.some((f) => !f.enabled)) add('Disabled layer filters were left out', layer.name);
+      delete out.filters;
+      const mask = bakeMask(layer);
+      if (mask) out.mask = mask;
+      else delete out.mask;
+      return out;
+    };
+
+    const prepared: ImageLayer[] = [];
+    for (const l of this.state.layers) {
+      const p = await prepare(l);
+      if (p) prepared.push(p);
+    }
+    const s = this.state;
+    if (s.crop) warnings.push('The crop is not applied; the PSD is the uncropped document.');
+    if (s.transform.rotate || s.transform.flipH || s.transform.flipV) warnings.push('Rotation and flips are not applied; the PSD is in the source orientation.');
+    if (s.outputOpacity < 1) warnings.push('The document opacity is not written; layers keep their own opacity.');
+    if (s.legacyOutputBlur) warnings.push('The document-level blur of an old document is not written.');
+    for (const [msg, names] of note) warnings.push(`${msg} (${names.length === 1 ? 'layer' : 'layers'} ${names.map((n) => `"${n}"`).join(', ')}).`);
+
+    const merged = compositor.composite(prepared, canvas, { ...sources, version: `psd:${Date.now()}` });
+    const result = exportPsd({ width, height, layers: prepared, merged, resolution: this.psdResolution });
+    return { bytes: result.bytes, warnings, psb: result.psb, width, height };
   }
 
   private async replaceSource(src: string, clearAnnotations: boolean): Promise<void> {

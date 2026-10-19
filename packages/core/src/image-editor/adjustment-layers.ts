@@ -615,7 +615,7 @@ export function blackWhiteGray(c: readonly number[], weights: readonly number[])
 }
 
 /** D50 white (ICC PCS). */
-const D50 = [0.96422, 1.0, 0.82521] as const;
+export const D50 = [0.96422, 1.0, 0.82521] as const;
 /** Linear sRGB → D50 XYZ (Bradford-adapted, as in the ICC sRGB profile). */
 const SRGB_TO_XYZ_D50 = [
   [0.436074, 0.385064, 0.14308],
@@ -623,7 +623,7 @@ const SRGB_TO_XYZ_D50 = [
   [0.013932, 0.097104, 0.714173],
 ] as const;
 /** D50 XYZ → linear sRGB. */
-const XYZ_D50_TO_SRGB = [
+export const XYZ_D50_TO_SRGB = [
   [3.133856, -1.616867, -0.490615],
   [-0.978768, 1.916142, 0.033454],
   [0.071945, -0.228991, 1.405243],
