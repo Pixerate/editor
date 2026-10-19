@@ -2050,6 +2050,18 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: With the canvas view rotated, a tilted pencil shaded in a different direction on screen than with the view upright, and barrel-rotation brushes turned the wrong way when the view was mirrored.
 - **Root Cause**: Pointer Events report tilt, azimuth and twist in screen space. The view maps positions to document space, but nothing mapped the pen's orientation.
 - **Solution / Workaround**: `pointerToPenPoint(event, x, y, view)` converts tilt to altitude / azimuth and then `viewPenToDocument` subtracts the view rotation (and reflects for mirroring) from the azimuth and twist. Bindings must pass the view; recorded strokes store document-space values, so replays do not depend on the view.
+
+### [core/paint-editor] View-Only Layers Must Stay Out of Exports and the Export Compositor
+
+- **Issue / Symptom**: A tracing image could end up in an exported PNG or PSD, or a preview after a stroke could show stale tracing pixels.
+- **Root Cause**: The tracing image is drawn by the shared compositor as a content layer (`ImageNode`) between the paper and the paint. Exports, `pickColor` and `render_preview` use the same stack builder, and a compositor caches tiles by each step's signature, so a stack with the underlay and one without must not share a compositor (see "Dirty Rectangles Are Only Safe on a Compositor That Sees One Stack").
+- **Solution / Workaround**: `renderLayers(options, view)` adds `underlayLayers()` only for the viewport (`compositeTiles`, on `viewCompositor`); exports and picks use `exportCompositor` without it. The tracing node's `version` changes whenever its image, placement or the canvas size changes, so its tiles recomposite; its opacity is a normal layer property. Tests check that `compositePixels` never shows the tracing image.
+
+### [core/paint-editor] Perspective Snapping Must Be Applied Before a Stroke Is Recorded
+
+- **Issue / Symptom**: Replaying a stroke painted with perspective snapping wobbled off the guide line, or snapped to a different vanishing point after the guide moved.
+- **Root Cause**: A replay feeds the recorded points back in. If the raw pointer samples were recorded, the replay either had to re-snap (to whatever the guide is now) or painted the unsnapped path.
+- **Solution / Workaround**: The snapper runs as the session's `inputFilter`, before the samples are painted and pushed to `session.points`, so recordings hold the snapped path and replays never snap. Symmetry is the opposite: the stroke records its raw path plus the copies as affine maps (`copies`), so a varied replay can conjugate them and stay symmetric about the moved centre.
 ### [core/image-editor] A Smart Object's Pixels Are a Cache the Compositor Draws Like a Pixel Layer
 
 - **Issue / Symptom**: A smart object's `surface` looks like a pixel layer's, but painting into it, or changing `placement` / `smartFilters` / `contents` with a plain object spread, leaves the layer showing stale pixels (and the next transform throws the paint away).

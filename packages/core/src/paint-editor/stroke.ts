@@ -42,6 +42,8 @@ export interface StrokeSessionInit {
   /** The stroke's extra copies as affine maps (recorded with the stroke); `copies` holds all of them as engine copies. */
   affineCopies: readonly Affine[];
   copies: readonly StrokeCopy[];
+  /** Applied to each raw sample before it is painted and recorded (perspective snapping). */
+  inputFilter?: (p: PenPoint) => PenPoint;
   /** Mixer engine: the brush load at the start of the stroke. */
   mixerLoad: MixerLoad;
 }
@@ -147,6 +149,8 @@ export class PaintStrokeSession {
   /** Adds raw pen samples (document pixels). */
   push(points: readonly PenPoint[]): void {
     if (this.closed || !points.length) return;
+    const filter = this.init.inputFilter;
+    if (filter) points = points.map(filter);
     for (const p of points) this.points.push(p);
     this.lastRaw = points[points.length - 1];
     if (this.dry) this.update(this.dry.push(points));
