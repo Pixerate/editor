@@ -17,6 +17,8 @@ import type { PenPoint } from './engine';
 import { GRAIN_PATTERNS, PAPER_FAMILIES, PAPER_LIBRARY } from './paper';
 import { MAX_ZOOM, MIN_ZOOM } from './view';
 import { createPaintGuideTools } from './guide-tools';
+import type { PaintAgentCommand, PaintDirector } from './presence';
+import type { PresenceActorInfo } from '../animation/presence';
 
 const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
 const WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } as const;
@@ -32,6 +34,13 @@ export interface PaintEditorToolProviderOptions {
   id?: string;
   /** Always prefix tool names with `<namespace>__`. */
   namespace?: string;
+  /**
+   * Acts out strokes, fills and replays with an agent cursor on the canvas (see `PaintDirector`):
+   * strokes paint live along their points. Each call is still one undo step. Without it, they apply at once.
+   */
+  director?: PaintDirector;
+  /** The agent's cursor (default `{ id: 'agent', name: 'Agent' }`). */
+  actor?: PresenceActorInfo;
 }
 
 const TIP = {
@@ -209,6 +218,13 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
   const c = controller;
   const tools: AgentTool[] = [];
   const add = (t: AgentTool) => tools.push(t);
+  /** Runs `command` through the director when there is one (its error becomes the tool error), else `direct`. */
+  const act = async <T>(command: PaintAgentCommand, direct: () => T): Promise<T> => {
+    if (!options.director) return direct();
+    const [r] = await options.director.perform(options.actor ?? { id: 'agent', name: 'Agent' }, [command]);
+    if (!r || !r.ok) throw new Error(r && !r.ok ? r.message : 'The director did not run the command.');
+    return r.result as T;
+  };
 
   // --- Canvas ------------------------------------------------------------------
 
@@ -504,7 +520,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
       additionalProperties: false,
     },
     annotations: { title: 'Fill a layer', ...WRITE },
-    handler: (a) => c.fillLayer(a),
+    handler: (a) => act({ kind: 'fill', fill: a }, () => c.fillLayer(a)),
   });
 
   add({
@@ -713,7 +729,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
     name: 'paint_stroke',
     title: 'Paint a brush stroke',
     description:
-      'Paints one stroke through points (document pixels, with optional pressure, time, tilt and barrel rotation) on a pixel layer with a library brush or the active one, optionally changed for this stroke. Grain-responsive brushes follow the paper; the mixer engine (mixer-brush) picks up and mixes paint already on the layer, the blender mixes nearby colours, the smudge drags paint, and dab brushes with behavior.pickup lift and carry paint. The symmetry guide adds its mirror copies; with a tracing image that samples colours, a stroke without color takes the image colour at its first point. One undo step. Returns the layer id, changed bounds, dab count, the recorded strokeId (for replay_strokes) and, for brushes that pick up paint, mixerLoad: what the brush carries after the stroke.',
+      'Paints one stroke through points (document pixels, with optional pressure, time, tilt and barrel rotation) on a pixel layer with a library brush or the active one, optionally changed for this stroke. Grain-responsive brushes follow the paper; the mixer engine (mixer-brush) picks up and mixes paint already on the layer, the blender mixes nearby colours, the smudge drags paint, and dab brushes with behavior.pickup lift and carry paint. The symmetry guide adds its mirror copies; with a tracing image that samples colours, a stroke without color takes the image colour at its first point. With an agent cursor (a director), the stroke is painted live along the points at the pace of their times. One undo step. Returns the layer id, changed bounds, dab count, the recorded strokeId (for replay_strokes) and, for brushes that pick up paint, mixerLoad: what the brush carries after the stroke.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -729,8 +745,9 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
       additionalProperties: false,
     },
     annotations: { title: 'Paint a brush stroke', ...WRITE },
-    handler: (a) => {
-      const r = c.paintStroke({ points: a.points as PenPoint[], layerId: a.layerId, brushId: a.brushId, brush: a.brush, color: a.color, seed: a.seed, snapToPerspective: a.snapToPerspective });
+    handler: async (a) => {
+      const stroke = { points: a.points as PenPoint[], layerId: a.layerId, brushId: a.brushId, brush: a.brush, color: a.color, seed: a.seed, snapToPerspective: a.snapToPerspective };
+      const r = await act({ kind: 'stroke', stroke }, () => c.paintStroke(stroke));
       return r.mixerLoad ? { ...r, mixerLoad: loadResult(r.mixerLoad) } : r;
     },
   });
@@ -806,7 +823,10 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
       additionalProperties: false,
     },
     annotations: { title: 'Replay strokes, varied', ...WRITE },
-    handler: (a) => c.replayStrokes(a as Parameters<PaintEditorController['replayStrokes']>[0]),
+    handler: (a) => {
+      const replay = a as Parameters<PaintEditorController['replayStrokes']>[0];
+      return act({ kind: 'replay', replay }, () => c.replayStrokes(replay));
+    },
   });
 
   // --- View, hand, history -------------------------------------------------------

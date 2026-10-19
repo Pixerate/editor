@@ -3,8 +3,8 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { PaintEditorController } from '@pixerate/editor/paint-editor';
-import { BrushPanel, ColorPanel, PaintCanvas, PaintEditor, PaintLayersPanel, PaperPanel, PaintToolbar, usePaintEditor } from '../src/paint-editor';
+import { PaintEditorController, documentToScreen } from '@pixerate/editor/paint-editor';
+import { BrushPanel, ColorPanel, PaintCanvas, PaintEditor, PaintLayersPanel, PaperPanel, PaintToolbar, usePaintDirector, usePaintEditor } from '../src/paint-editor';
 
 let container: HTMLDivElement;
 let root: any;
@@ -272,5 +272,32 @@ describe('React paint editor', () => {
     expect(container.querySelector('[data-testid="paper-panel"]')).not.toBeNull();
     click(byText('Layers'));
     expect(container.querySelector('[data-testid="paint-layers-panel"]')).not.toBeNull();
+  });
+
+  it('usePaintDirector paints agent strokes live with a cursor drawn through the view', async () => {
+    const controller = new PaintEditorController({ width: 200, height: 100 });
+    let made: ReturnType<typeof usePaintDirector> | null = null;
+    const Host = () => {
+      made = usePaintDirector(controller, { speed: Infinity, linger: 0 });
+      return <PaintEditor controller={controller} presence={made.presence} />;
+    };
+    render(<Host />);
+    const { presence, director } = made!;
+    act(() => presence.set({ id: 'agent', name: 'Agent', x: 50, y: 25, message: 'Sky first' }));
+    const cursor = container.querySelector('[data-paint-presence] [data-actor="agent"]') as HTMLElement;
+    expect(cursor.textContent).toBe('Sky first');
+    const s = controller.getState();
+    const at = documentToScreen(s.view, s.document.canvas, { width: 800, height: 600 }, 50, 25);
+    expect(parseFloat(cursor.style.left)).toBeCloseTo(at.x, 3);
+    expect(parseFloat(cursor.style.top)).toBeCloseTo(at.y, 3);
+    act(() => presence.remove('agent'));
+    let results: Awaited<ReturnType<typeof director.perform>> = [];
+    await act(async () => {
+      results = await director.perform({ id: 'agent' }, [{ kind: 'stroke', stroke: { points: [{ x: 10, y: 10 }, { x: 150, y: 80 }] } }]);
+    });
+    expect(results[0]).toMatchObject({ ok: true, result: { strokeId: 's1' } });
+    expect(controller.getStrokes()).toHaveLength(1);
+    // linger 0 keeps the cursor where the stroke ended.
+    expect(container.querySelector('[data-paint-presence] [data-actor="agent"]')).not.toBeNull();
   });
 });

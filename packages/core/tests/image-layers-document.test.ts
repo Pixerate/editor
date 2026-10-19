@@ -247,7 +247,8 @@ describe('compatibility API over layers', () => {
     const a = c.addAdjustmentLayer('invert');
     const b = c.addAdjustmentLayer('posterize');
     const types = c.getLayers().map((l) => l.type);
-    expect(types.slice(-c.getState().annotations.length).every((t) => t === 'annotation')).toBe(true);
+    // Annotations stay on top: line, rectangle, … annotations are now shape layers that remember them.
+    expect(types.slice(-c.getState().annotations.length).every((t) => t === 'annotation' || t === 'shape')).toBe(true);
     const ids = () => c.getAdjustmentLayers().map((l) => l.id);
     expect(ids().slice(-2)).toEqual([a, b]);
     const first = c.addAdjustmentLayer('threshold', 0);

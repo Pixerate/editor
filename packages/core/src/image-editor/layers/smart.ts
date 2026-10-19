@@ -47,9 +47,12 @@ import {
   type SmartFilter,
   type SmartFilterStack,
   type SmartObjectLayer,
+  type ShapeLayer,
   type SmartPlacement,
 } from './model';
 import { LayerOperationError, normalizeFilter, requireLayer, requireUnlocked } from './ops';
+import { transformShapeComponents } from './shape';
+import { translateMatrix } from '../../geom/affine';
 
 const fail = (message: string): never => {
   throw new LayerOperationError(message);
@@ -492,6 +495,17 @@ function translateLayer(layer: ImageLayer, dx: number, dy: number): ImageLayer {
       if (!next.mask) delete next.mask;
       return next;
     }
+    case 'shape': {
+      const next: ShapeLayer = {
+        ...layer,
+        components: transformShapeComponents(layer.components, (p) => ({ x: p.x + dx, y: p.y + dy }), translateMatrix(dx, dy)),
+        surface: translateSurface(layer.surface, dx, dy),
+        mask: moveMask(layer.mask),
+      };
+      if (!next.mask) delete next.mask;
+      delete next.annotation;
+      return next;
+    }
     case 'annotation':
       return fail(`Annotation layer "${layer.name || layer.id}" cannot go into a smart object; rasterize it first.`);
   }
@@ -501,7 +515,7 @@ function translateLayer(layer: ImageLayer, dx: number, dy: number): ImageLayer {
 function layerExtent(layer: ImageLayer, surfaceOf: (l: PixelLayer) => PixelSurface, canvas: SmartCanvas): CropBox | null {
   const full = { x: 0, y: 0, width: canvas.width, height: canvas.height };
   let b: CropBox | null = null;
-  if (layer.type === 'pixel' || layer.type === 'smart') {
+  if (layer.type === 'pixel' || layer.type === 'smart' || layer.type === 'shape') {
     const s = layer.type === 'pixel' ? surfaceOf(layer) : layer.surface;
     if (s.defaultValue !== 0) b = full;
     else {

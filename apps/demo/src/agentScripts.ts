@@ -18,6 +18,12 @@ const command = (id: string, params?: Record<string, unknown>) => ({
   args: params ? { id, params } : { id },
 });
 
+/** A command whose params use an earlier step's result (`ctx.results[as].result`). */
+const commandWith = (id: string, params: (result: (key: string) => any) => Record<string, unknown>) => ({
+  tool: "commands__run_command",
+  args: (ctx: AgentScriptContext) => ({ id, params: params((key) => ctx.results[key]?.result) }),
+});
+
 export const PROMPT_SCRIPTS: AgentScript[] = [
   {
     id: "prompt-noir",
@@ -309,6 +315,16 @@ export const VECTOR_SCRIPTS: AgentScript[] = [
       { say: "A soft drop shadow, lit from above.", ...command("vector.addFilter", { ids: ["star"], type: "dropShadow", params: { opacity: 0.35, offsetY: 3, blur: 6 } }), target: { selector: '[data-vector-id="star"]' } },
     ],
   },
+  {
+    id: "vector-mask",
+    prompt: "Frame the colour wheel in a rounded window",
+    steps: [
+      { say: "Drawing the window over the wheel: it becomes the mask, so its colour won't show.", ...command("vector.addShape", { kind: "rect", x: 724, y: 314, width: 44, height: 44, cornerRadius: 10, name: "Window" }), as: "win", target: artboardBox(724, 314, 44, 44) },
+      { say: "Clipping the wheel to it: the topmost object masks the ones below.", ...commandWith("vector.makeClippingMask", (r) => ({ ids: ["wheel", r("win").id] })), as: "clip", target: { selector: '[data-vector-id="wheel"]' } },
+      { say: "Turning it into a soft opacity mask instead: a radial fade from white to black.", ...commandWith("vector.setGradient", (r) => ({ ids: [r("win").id], target: "fill", type: "radial", stops: [{ offset: 0.5, color: "#ffffff" }, { offset: 1, color: "#000000" }] })), target: artboardBox(724, 314, 44, 44) },
+      { ...commandWith("vector.setMaskOptions", (r) => ({ ids: [r("clip").id], type: "luminance" })), target: artboardBox(716, 306, 60, 60) },
+    ],
+  },
 ];
 
 export const ANIMATION_SCRIPTS: AgentScript[] = [
@@ -515,16 +531,20 @@ const wave = (y: number, amp: number, n = 48, x0 = 40, x1 = 1160) =>
     return { x: Math.round(x0 + (x1 - x0) * t), y: Math.round(y + Math.sin(t * Math.PI * 2.4) * amp), pressure: Math.round((0.35 + 0.6 * Math.sin(t * Math.PI)) * 100) / 100, t: i * 14 };
   });
 
+/**
+ * Strokes, fills and replays have no target: the paint director's cursor paints them on the canvas
+ * itself. Panel steps open the panel the change shows in.
+ */
 export const PAINT_SCRIPTS: AgentScript[] = [
   {
     id: "paint-landscape",
     prompt: "Block in a sunset landscape in pastel",
     steps: [
-      { say: "Rough watercolour paper with plenty of tooth for pastel.", tool: "paint__set_paper", args: { preset: "cold-pressed", depth: 0.7 } },
-      { say: "A warm sky first, rubbed into the grain.", tool: "paint__add_layer", args: { name: "Sky" }, as: "sky" },
+      { say: "Rough watercolour paper with plenty of tooth for pastel.", tool: "paint__set_paper", args: { preset: "cold-pressed", depth: 0.7 }, open: "Paper", target: { selector: '[data-testid="paper-panel"] [aria-selected="true"]' } },
+      { say: "A warm sky first, rubbed into the grain.", tool: "paint__add_layer", args: { name: "Sky" }, as: "sky", open: "Layers", target: { selector: '[aria-label="Layers"]' } },
       { tool: "paint__fill_layer", args: (ctx) => ({ layerId: ctx.results.sky.id, color: "#f2a65a", grain: 0.5, pressure: 0.7 }) },
-      { say: "Mixing a muted blue-grey for the far hills, as paint would mix.", tool: "paint__mix_colors", args: { colors: [{ color: "#2f3f9e", weight: 2 }, { color: "#d23a2a", weight: 1 }, { color: "#f7f5ee", weight: 1 }] }, as: "mix" },
-      { say: "The first range of hills with a soft pastel.", tool: "paint__add_layer", args: { name: "Hills" }, as: "hills" },
+      { say: "Mixing a muted blue-grey for the far hills, as paint would mix.", tool: "paint__mix_colors", args: { colors: [{ color: "#2f3f9e", weight: 2 }, { color: "#d23a2a", weight: 1 }, { color: "#f7f5ee", weight: 1 }] }, as: "mix", open: "Colour", target: { selector: '[data-testid="mixing-pad"]' } },
+      { say: "The first range of hills with a soft pastel.", tool: "paint__add_layer", args: { name: "Hills" }, as: "hills", open: "Layers", target: { selector: '[aria-label="Layers"]' } },
       {
         tool: "paint__paint_stroke",
         args: (ctx) => ({ layerId: ctx.results.hills.id, brushId: "soft-pastel", brush: { tip: { size: 90 } }, color: ctx.results.mix.mixed, points: wave(520, 50) }),
@@ -542,8 +562,8 @@ export const PAINT_SCRIPTS: AgentScript[] = [
     id: "paint-kaleidoscope",
     prompt: "Draw a kaleidoscope ornament",
     steps: [
-      { say: "Eight mirrored segments about the centre: one stroke paints all sixteen copies.", tool: "paint__set_symmetry", args: { mode: "kaleidoscope", segments: 8, center: { x: 600, y: 400 } } },
-      { tool: "paint__add_layer", args: { name: "Ornament" } },
+      { say: "Eight mirrored segments about the centre: one stroke paints all sixteen copies.", tool: "paint__set_symmetry", args: { mode: "kaleidoscope", segments: 8, center: { x: 600, y: 400 } }, target: { selector: '[aria-label="Symmetry"]' } },
+      { tool: "paint__add_layer", args: { name: "Ornament" }, open: "Layers", target: { selector: '[aria-label="Layers"]' } },
       {
         say: "One petal with the ink pen.",
         tool: "paint__paint_stroke",
@@ -557,7 +577,7 @@ export const PAINT_SCRIPTS: AgentScript[] = [
           }),
         },
       },
-      { say: "Symmetry off again, so later strokes are single.", tool: "paint__set_symmetry", args: { mode: "off" } },
+      { say: "Symmetry off again, so later strokes are single.", tool: "paint__set_symmetry", args: { mode: "off" }, target: { selector: '[aria-label="Symmetry"]' } },
       { tool: "paint__render_preview", args: { maxSide: 420 } },
     ],
   },

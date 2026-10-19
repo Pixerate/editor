@@ -29,6 +29,10 @@ import {
   type LayerLocks,
   type PixelLayer,
   type RasterMask,
+  type ShapeComponent,
+  type ShapeLayer,
+  type ShapePaint,
+  type ShapeStroke,
 } from './model';
 import { base64ToBytes, bytesToBase64, decodePng, parseDataUrl, pngDataUrl } from '../../raster/png';
 import { normalizeLayerEffects, type GlobalLight, type LayerEffect, type LayerEffects } from '../../raster/effects/model';
@@ -38,6 +42,8 @@ import { isInterpolation } from '../../raster/transform';
 import { isValidWarpMesh } from '../../geom/warp';
 import type { Quad, WarpMesh } from '../../geom/types';
 import { normalizePlacement, renderSmartObject } from './smart';
+import { annotationLayerFor } from './migrate';
+import { createShapeLayer, liveShapeSubpaths, normalizeLiveShape, normalizeShapePaint, normalizeShapeStroke, normalizeSubpaths, requireOperation, shapeFromAnnotation } from './shape';
 
 export const LAYERED_SCHEMA_VERSION = 3 as const;
 
@@ -141,7 +147,21 @@ export interface SerializedSmartContents {
   linked?: { path: string };
 }
 
-export type SerializedLayer = SerializedPixelLayer | SerializedAdjustmentLayer | SerializedGroupLayer | SerializedAnnotationLayer | SerializedSmartObjectLayer;
+/** A shape layer: its vector data (the pixels are rendered again on load). */
+export interface SerializedShapeLayer extends SerializedLayerBase {
+  type: 'shape';
+  components: ShapeComponent[];
+  fillRule?: 'evenodd';
+  fill: ShapePaint | null;
+  stroke: ShapeStroke | null;
+  fillOpacity?: number;
+  /** The annotation the layer was migrated from, while it still is that annotation. */
+  annotation?: Annotation;
+  /** PSD blocks kept for round trips (base64). */
+  psd?: { blocks: Array<{ key: string; data: string }> };
+}
+
+export type SerializedLayer = SerializedPixelLayer | SerializedAdjustmentLayer | SerializedGroupLayer | SerializedAnnotationLayer | SerializedSmartObjectLayer | SerializedShapeLayer;
 
 /** A version 3 document (layers). */
 export interface SerializedLayeredImageEditorState {
@@ -313,6 +333,63 @@ export function serializeLayer(layer: ImageLayer, ctx: SerializeContext): Serial
       return { ...base, type: 'annotation', annotation: JSON.parse(JSON.stringify(layer.annotation)) };
     case 'smart':
       return serializeSmartObject(layer, base, ctx);
+    case 'shape':
+      return serializeShape(layer, base);
+  }
+}
+
+function serializeShape(layer: ShapeLayer, base: SerializedLayerBase): SerializedShapeLayer {
+  const out: SerializedShapeLayer = {
+    ...base,
+    type: 'shape',
+    components: JSON.parse(JSON.stringify(layer.components)),
+    fill: layer.fill ? JSON.parse(JSON.stringify(layer.fill)) : null,
+    stroke: layer.stroke ? JSON.parse(JSON.stringify(layer.stroke)) : null,
+  };
+  if (layer.fillRule === 'evenodd') out.fillRule = 'evenodd';
+  if (layer.fillOpacity !== undefined && layer.fillOpacity !== 1) out.fillOpacity = layer.fillOpacity;
+  if (layer.annotation) out.annotation = JSON.parse(JSON.stringify(layer.annotation));
+  if (layer.psd?.blocks?.length) out.psd = { blocks: layer.psd.blocks.map((b) => ({ key: b.key, data: bytesToBase64(b.data) })) };
+  return out;
+}
+
+/** Reads a stored shape layer, validating every part (a broken shape is dropped and reported). */
+function readShape(r: Record<string, any>, base: LayerBase, ctx: DeserializeContext): ImageLayer | null {
+  const label = `Layer "${base.name || base.id}"`;
+  const canvas = ctx.canvas ?? { width: 1, height: 1 };
+  const env = { ...canvas, pattern: ctx.pattern };
+  try {
+    let data: Pick<ShapeLayer, 'components' | 'fill' | 'stroke'> | null = null;
+    const a = r.annotation && typeof r.annotation === 'object' && typeof r.annotation.type === 'string' ? (JSON.parse(JSON.stringify({ ...r.annotation, id: r.annotation.id ?? base.id })) as Annotation) : undefined;
+    if (a) data = shapeFromAnnotation(a);
+    if (!data) {
+      if (!Array.isArray(r.components) || !r.components.length) throw new Error('it has no components');
+      const components: ShapeComponent[] = r.components.map((c: Record<string, unknown>, i: number) => {
+        const op = requireOperation(c?.op, `components[${i}].op`);
+        if (c?.live) {
+          const live = normalizeLiveShape(c.live, `components[${i}].live`);
+          return { op, subpaths: liveShapeSubpaths(live), live };
+        }
+        return { op, subpaths: Array.isArray(c?.subpaths) && !c.subpaths.length ? [] : normalizeSubpaths(c?.subpaths, `components[${i}].subpaths`) };
+      });
+      data = {
+        components,
+        fill: r.fill === null || r.fill === undefined ? null : normalizeShapePaint(r.fill, 'fill'),
+        stroke: r.stroke === null || r.stroke === undefined ? null : normalizeShapeStroke(r.stroke, 'stroke'),
+      };
+    }
+    const layer = createShapeLayer({ ...data, fillRule: r.fillRule === 'evenodd' ? 'evenodd' : 'nonzero' }, env, base.id);
+    const out: ShapeLayer = { ...layer, ...base, type: 'shape', components: layer.components, fill: layer.fill, stroke: layer.stroke, surface: layer.surface, offset: { x: 0, y: 0 } };
+    if (typeof r.fillOpacity === 'number' && r.fillOpacity !== 1) out.fillOpacity = num(r.fillOpacity, 0, 1, 1);
+    if (a && shapeFromAnnotation(a)) out.annotation = a;
+    if (r.psd && Array.isArray(r.psd.blocks)) {
+      const blocks = r.psd.blocks.filter((b: any) => b && typeof b.key === 'string' && typeof b.data === 'string').map((b: any) => ({ key: b.key, data: base64ToBytes(b.data) }));
+      if (blocks.length) out.psd = { blocks };
+    }
+    return out;
+  } catch (e) {
+    ctx.problems.push(`${label}: the shape could not be read (${e instanceof Error ? e.message : String(e)})`);
+    return null;
   }
 }
 
@@ -497,6 +574,8 @@ export interface DeserializeContext {
   decodeAsset?(ref: string, channels: 1 | 4): { width: number; height: number; data: ArrayLike<number> };
   /** Problems found while reading (unknown kinds, broken assets); the rest still loads. */
   problems: string[];
+  /** The document's patterns by id, for shapes painted with one. */
+  pattern?(id: string): EffectPattern | null;
 }
 
 /** Decodes a PNG data URL into pixels of `channels` bytes each. */
@@ -642,8 +721,17 @@ export function deserializeLayer(raw: unknown, ctx: DeserializeContext): ImageLa
         ctx.problems.push(`Layer "${base.name || id}": annotation is missing`);
         return null;
       }
-      return { ...base, type: 'annotation', annotation: JSON.parse(JSON.stringify({ ...a, id: typeof a.id === 'string' ? a.id : id })) };
+      const annotation = JSON.parse(JSON.stringify({ ...a, id: typeof a.id === 'string' ? a.id : id })) as Annotation;
+      // Pen, rectangle, ellipse, line and arrow annotations load as shape layers that remember them.
+      const migrated = annotationLayerFor(annotation, ctx.canvas ?? { width: 1, height: 1 });
+      if (migrated.type === 'shape') {
+        const blend = base.blend === 'normal' ? migrated.blend : base.blend;
+        return { ...migrated, ...base, blend, type: 'shape', id, name: base.name } as ShapeLayer;
+      }
+      return { ...base, type: 'annotation', annotation };
     }
+    case 'shape':
+      return readShape(r, base, ctx);
     case 'smart':
       return readSmartObject(r, base, ctx);
     default:

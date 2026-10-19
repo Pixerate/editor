@@ -21,7 +21,8 @@
  * and contributors). See THIRD_PARTY_NOTICES.md.
  */
 import type { Point } from '../canvas/types.js';
-import { expandVectorAppearance } from './appearance.js';
+import { expandVectorAppearance, vectorAppearanceNodes } from './appearance.js';
+import { isVectorMaskActive } from './mask.js';
 import { segmentDerivative, segmentNearest, segmentPoint, type BezierSegment } from '../canvas/pathops/bezier.js';
 import { segmentIntersections } from '../canvas/pathops/boolean.js';
 import {
@@ -395,6 +396,11 @@ export class VectorSnapTargets {
 		const visit = (list: readonly VectorNode[], parent: AffineMatrix) => {
 			for (const stored of list) {
 				if (exclude.has(stored.id) || stored.visible === false) continue;
+				// A mask group snaps to its masked result: its contents' shapes, clipped.
+				if (isVectorMaskActive(stored) && !contains(stored, exclude)) {
+					visit(vectorAppearanceNodes(stored), multiplyMatrices(nodeMatrix(stored), parent));
+					continue;
+				}
 				// Other art snaps where it draws (path effects and live booleans applied).
 				const n = contains(stored, exclude) ? stored : expandVectorAppearance(stored);
 				const m = multiplyMatrices(nodeMatrix(n), parent);

@@ -1,6 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
-import { IMAGE_ADJUSTMENT_CONTROLS, ImageEditorController, computeHistogram } from '@pixerate/editor/image-editor';
+import {
+  IMAGE_ADJUSTMENT_CONTROLS,
+  IMAGE_FILTER_PRESETS,
+  IMAGE_CROP_PRESETS,
+  DEPTH_MASK_CONTROLS,
+  extractNormalizedLayerItems,
+  ImageEditorController,
+  computeHistogram,
+} from '@pixerate/editor/image-editor';
 import { AdjustmentLayersPanel, Histogram, ImageEditor, createImageHistogram, createReactiveImageEditor } from '../src/image-editor';
 
 let target: HTMLDivElement;
@@ -169,4 +177,19 @@ describe('Svelte ImageEditor adjustments tab', () => {
     expect(editor.histogram).toBeNull();
     editor.destroy();
   });
+
+  it('exposes filter presets, crop presets, depth mask controls, and normalized layer items', () => {
+    expect(IMAGE_FILTER_PRESETS.map((p) => p.id)).toContain('cyberpunk');
+    expect(IMAGE_CROP_PRESETS.map((p) => p.label)).toContain('16:9');
+    expect(DEPTH_MASK_CONTROLS.map((c) => c.id)).toEqual(['near', 'far']);
+
+    const controller = new ImageEditorController();
+    controller.addPixelLayer({ name: 'Overlay' });
+    const items = extractNormalizedLayerItems(controller, 'https://example.com/fallback.png');
+    expect(items).toHaveLength(2);
+    expect(items.map((i) => i.name)).toEqual(['Background', 'Overlay']);
+    expect(items[0].width).toBe(1);
+    expect(items[0].height).toBe(1);
+  });
 });
+

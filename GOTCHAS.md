@@ -285,6 +285,36 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: Renderers differ in filter support: `feMorphology` (spread, feather) and `color-interpolation-filters` are commonly ignored or approximated, and `mix-blend-mode: plus-lighter` (linear dodge) is newer than the other modes. A background blur needs the pixels behind the node; SVG's `BackgroundImage` input was never implemented by browsers, and CSS `backdrop-filter` does not apply to SVG elements.
 - **Solution / Workaround**: Export writes the filter as drawn plus `data-vector-filters` (the stack as JSON) on the `<filter>`, so our own import is lossless; foreign imports read `feDropShadow` and a lone source `feGaussianBlur` back as filters and skip anything else. Background blur is left to the planned lens objects. Tell users (the skill does) to rasterize when a design must look identical everywhere.
 
+### [core|react|svelte/vector] A Filter and a Clip on One SVG Element Clip the Shadow Away
+
+- **Issue / Symptom**: A clip group with a drop shadow showed no shadow outside the clip, and an opacity-masked group's glow was cut to the mask.
+- **Root Cause**: SVG applies an element's `filter` first, then `clip-path` / `mask`, then `opacity`. With the filter and the clip on the same `<g>`, the shadow is drawn and then clipped by the same shape that made it.
+- **Solution / Workaround**: A mask group draws as two groups: the outer `<g>` carries the transform, opacity, blend mode and filter, and an inner `<g data-vector-masked>` carries `clip-path` / `mask` around the contents (`VectorRenderGroup.mask`, `VectorMaskedNodes`, `emitMaskGroup` in `svg.ts`). The filter region comes from the group's paint bounds, which include the unclipped contents, so it is big enough. Import of foreign SVG keeps the element's own filter on the inner node, which matches SVG's order.
+
+### [core/vector] `<clipPath>` Holds Only Shapes, and an Inverted Clip Needs the Union of the Mask
+
+- **Issue / Symptom**: A clip whose mask was a group (or had path effects) clipped everything away; an inverted clip of two overlapping circles left their overlap visible.
+- **Root Cause**: A `<clipPath>` may contain shapes, text and `<use>`, not `<g>`; browsers ignore the group and the clip becomes empty. An even-odd "rectangle with the mask cut out" counts overlapping areas twice, so they flip back to shown, and a nonzero shape read even-odd loses its self-overlaps.
+- **Solution / Workaround**: `vectorMaskRegionShapes` flattens the mask into one path per drawn shape in the group's space (each with its own `clip-rule`). The inverted clip (pdfcraft's `clip_out`) is one even-odd path: a rectangle round the contents plus the boolean union of those shapes (`vectorMaskRegionPath`), whose contours never overlap. For import, the mask itself is kept in a hidden `<g data-vector-part="mask-source">`, because the flattened `<clipPath>` loses its paint, effects and structure.
+
+### [core/vector] Masks Render Differently Outside Browsers: `mask-type`, Luminance Space and Inverted Masks
+
+- **Issue / Symptom**: An exported alpha mask hid everything (or showed a dark mask as transparent) in some SVG tools, gradient opacity masks faded at a different rate, and inverted opacity masks were missing.
+- **Root Cause**: `mask-type="alpha"` is newer than `<mask>`; renderers that ignore it treat every mask as luminance, and a white-filled alpha mask is then fine but a dark one hides. Browsers compute luminance in sRGB but some renderers honour `color-interpolation="linearRGB"`, which changes how a gradient mask ramps. SVG has no inverted mask, so it is drawn through an `feColorMatrix` filter (`1 − alpha`, or brightness over black, inverted), and renderers with weak filter support drop it. A `<mask>` without `maskUnits="userSpaceOnUse"` only covers the masked element's bounding box plus 10 %, and an inverting filter only inverts inside its own region.
+- **Solution / Workaround**: Masks and inverting filters use `userSpaceOnUse` regions over the contents' paint bounds plus a margin (`vectorMaskContentBounds`). Clipping masks are the portable choice; prefer luminance masks with white-to-black fills when an SVG must look right everywhere, and rasterize when it must be identical. Our own import is lossless either way (`data-vector-mask` carries the settings).
+
+### [react/vector] Filter Primitives Built with `createElement` Need Camel-Cased Presentation Attributes
+
+- **Issue / Symptom**: The console showed "Invalid DOM property `flood-color`. Did you mean `floodColor`?" for every drop shadow and inverted luminance mask, although they drew correctly.
+- **Root Cause**: `VectorRenderFilter` primitives carry SVG attribute names (`flood-color`, `flood-opacity`) so Svelte and the SVG export can write them as they are. React maps SVG presentation attributes from camel-cased props and warns on the hyphenated spelling.
+- **Solution / Workaround**: React's `VectorFilterDefs` camel-cases hyphenated keys before `createElement` (`flood-color` → `floodColor`); the core data keeps SVG names. A React test spies on `console.error` while rendering a filter. React reports each such warning once per page, so check with a fresh render, not by reloading a page whose console already showed it.
+
+### [core/vector] The First Child Is the Mask, So Deleting or Reordering It Changes What Masks
+
+- **Issue / Symptom**: Deleting a clip group's mask turned the bottom content shape into the new clip, and Send to Back inside a mask group swapped the mask.
+- **Root Cause**: The model has no mask flag on the child: a mask group's first child is its mask (figcraft's `is_mask` masks the siblings above it instead).
+- **Solution / Workaround**: `removeNodes` (delete, cut) clears `mask` on a group whose mask it removes, so the contents draw whole. Reordering inside a mask group is allowed and documented (it is how a different object becomes the mask); Make Clipping Mask moves the chosen mask to the bottom, and Release puts it back on top.
+
 ### [core/vector] Merging Faces by a Boolean Union of Their Outlines Leaves Seams
 
 - **Issue / Symptom**: Shape Builder merges built by uniting the faces' own outlines can leave a hairline gap or a spur along the edge two faces shared, and a merged shape whose faces only touched at a corner could come out with a sliver.
@@ -2092,6 +2122,12 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: The filter mask lives in the `FEid` / `FXid` block as a rectangle and a plane; outside the rectangle Photoshop treats it as white (`filterMaskExtendWithWhite`). Writing only the painted bounds of a mask whose default is black loses the black.
 - **Solution / Workaround**: `filterMaskItem` writes a mask whose default is not white over the whole canvas (plus anything painted outside it); reading uses default 255. The filter mask's enabled / linked flags are in `filterFX` (`filterMaskEnable`, `filterMaskLinked`), not in the block.
 
+### [core/paint-editor] Live Agent Strokes Run Slower Than Their Point Times With Big Brushes
+
+- **Issue / Symptom**: In the demo, the landscape script's 672 ms soft-pastel stroke (90 px tip on a 1200 × 800 canvas) took about 4 s to paint through `PaintDirector`.
+- **Root Cause**: The director pushes the points due in each 16 ms frame and then waits a frame. Each push lays the dabs and re-composites the touched tiles, and React then uploads those tiles. With a big tip this takes longer than a frame, so the wall-clock time adds up beyond the schedule.
+- **Solution / Workaround**: Accepted. The result is the same as `paintStroke` with the same seed (tested), and only the pacing differs. Hosts that want strokes to land faster can pass a higher `speed` or a lower `maxStrokeMs`, or leave out the director so strokes apply at once.
+
 ### [core/raster] Painterly Blend Modes Reach Every `BLEND_MODES` Consumer, and Tint Must Replace Hue, Not Average It
 
 - **Issue / Symptom**: (1) After adding `watercolor`, `tint`, `highlight` and `shadow` to `BLEND_MODES`, they showed up in the image editor's layer, effect and smart-filter menus and agent enums, and its PSD export silently wrote them as Normal. (2) The first `tint` turned yellow under a blue tint into grey instead of light blue. (3) `watercolor` with a white source changed the backdrop by a level or two.
@@ -2122,3 +2158,20 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: `getState()` built `brushes: [...BUILTIN_BRUSHES, ...userBrushes]` fresh for every snapshot. React's `useMemo` and Svelte's `$derived.by` both saw a new array, so every brush thumbnail was repainted after every change. In Svelte, a `$derived.by` that reads `snap.brushes` also reruns whenever the snapshot object changes, even if the array is the same.
 - **Solution / Workaround**: The controller caches the library list (`library`) and drops the cache only when the user brushes change (save, remove, import), so `state.brushes` keeps its identity. Svelte reads it through its own `$derived(snap.brushes)` (and `$derived(snap.document.paper)`), which only fires when the value changes. A core test checks that the list stays the same object across `setBrush` and `setColor`.
 
+### [core/image-editor] A Shape Layer's Pixels Are a Render of Its Paths
+
+- **Issue / Symptom**: Changing a shape layer's `components`, `fill` or `stroke` with a plain object spread left it showing the old pixels; painting into its `surface` was thrown away by the next edit.
+- **Root Cause**: `ShapeLayer.surface` is a cache rendered from the paths (document space, offset 0, clipped to the canvas grown by 512 px), so the compositor, effects, masks, thumbnails and PSD export treat it like a pixel layer (`isPixelLike`). Nothing re-renders it implicitly.
+- **Solution / Workaround**: Change shapes through `updateShapeLayer`, `rerenderShape`, `offsetShape` or `transformShapeComponents` + `renderShape` (`layers/shape.ts`), which render again. Painting `pixels` on a shape is refused; `rasterize_layer` makes it a pixel layer. Moves and Free Transform map the paths, never the pixels.
+
+### [core/image-editor] The Accumulation Rasterizer Over-Counts Where Overlapping Parts Share an Edge Pixel
+
+- **Issue / Symptom**: A rotated rectangle's stroke, an arrow's bar under its head and pen strokes came out up to 47 levels too opaque along some edges compared with what the canvas drew.
+- **Root Cause**: The signed-area (font-rs) rasterizer is exact only for paths that do not overlap themselves. Stroke outlines from `strokeOutlineRings` overlap at joins, and a line shape's bar and arrowhead are separate overlapping subpaths. Where two overlapping parts' edges both cross a pixel, their areas add before the fill rule clamps them. Cleaning the outline with `outlineStroke` or `polygonBoolean` fixes the geometry but takes seconds for a few hundred pen points.
+- **Solution / Workaround**: `rasterizeCoverage` (exact area) is used only for single-contour fills. Strokes and multi-contour components go through `rasterizeCoverageSampled`: 16 sub-rows per pixel row with exact horizontal coverage of the spans the fill rule keeps, so overlaps count once (edges within 1/32 px vertically). Curved strokes of up to 64 commands still get a clean `outlineStroke`, because raw rings of a curve tighter than half the width turn inside out. `tests/image-shape-migration.test.ts` compares every annotation kind with a 16 × 16 point-sampled reference of the old canvas drawing.
+
+### [core/image-editor] Migrated Annotations Keep Their Annotation So v1 / v2 Documents Write Back Byte for Byte
+
+- **Issue / Symptom**: Rebuilding an annotation from a shape (for the `annotations` view or a v1 / v2 save) changed numbers (an ellipse's box `x − rx` back to `x` is not exact in floating point) and broke byte-identical round trips.
+- **Root Cause**: Pen, rectangle, ellipse, line and arrow annotations now load as shape layers, but old documents and the `annotations` / `updateAnnotation` API still speak annotations.
+- **Solution / Workaround**: A migrated `ShapeLayer` keeps the source `annotation` while it is still exactly that annotation (`legacyView` and `isLegacyShape` read it; its blend mode moves to the layer). `updateAnnotation` rebuilds the layer from the merged annotation (back to an annotation layer when a colour can't be read). Any shape edit, a duplicate or a transform drops the field, and the layer leaves the `annotations` view. Plain migrated layers at the top of the stack still draw through the renderer's crisp annotation overlay, as before. Text and image annotations stay annotation layers.

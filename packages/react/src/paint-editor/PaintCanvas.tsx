@@ -1,13 +1,16 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
   PaintCanvasPresenter,
   PaintGesture,
+  documentToScreen,
   fitZoom,
   guideOverlay,
   handlePaintShortcut,
   viewCssTransform,
   type PaintEditorController,
+  type PaintPresence,
   type PaintTool,
+  type PaintView,
 } from '@pixerate/editor/paint-editor';
 import { usePaintEditorState } from './usePaintEditor';
 
@@ -21,6 +24,8 @@ export interface PaintCanvasProps {
   fitOnMount?: boolean;
   /** Called with a refusal (hidden or locked layer). */
   onError?: (message: string | null) => void;
+  /** Agent cursors to draw over the canvas (see `PaintDirector` and `usePaintDirector`). */
+  presence?: PaintPresence;
   className?: string;
 }
 
@@ -31,7 +36,7 @@ export interface PaintCanvasProps {
  * tail drawn as a thin preview, palm rejection, middle-button pan, wheel zoom and Shift+wheel
  * rotation. Guides and floating reference images are drawn on top.
  */
-export const PaintCanvas: React.FC<PaintCanvasProps> = ({ controller, tool = 'brush', showGuides = true, fitOnMount = true, onError, className }) => {
+export const PaintCanvas: React.FC<PaintCanvasProps> = ({ controller, tool = 'brush', showGuides = true, fitOnMount = true, onError, presence, className }) => {
   const state = usePaintEditorState(controller);
   const viewport = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -157,9 +162,35 @@ export const PaintCanvas: React.FC<PaintCanvasProps> = ({ controller, tool = 'br
         .map((r) => (
           <ReferencePanel key={r.id} controller={controller} id={r.id} />
         ))}
+      {presence && <PaintPresenceLayer presence={presence} view={state.view} canvas={doc} viewport={size} />}
       <div className="absolute bottom-1 right-2 text-[10px] text-slate-500 pointer-events-none" data-testid="paint-view-status">
         {Math.round(state.view.zoom * 100)}% · {Math.round(state.view.rotation)}°{state.view.mirror ? ' · mirrored' : ''}
       </div>
+    </div>
+  );
+};
+
+/**
+ * Agent cursors and notes over the canvas. Positions are document pixels, placed through the view
+ * (zoom, pan, rotation, mirroring), while the cursors themselves stay upright and unscaled.
+ */
+export const PaintPresenceLayer: React.FC<{ presence: PaintPresence; view: PaintView; canvas: { width: number; height: number }; viewport: { width: number; height: number } }> = ({ presence, view, canvas, viewport }) => {
+  const { actors } = useSyncExternalStore(presence.subscribe, presence.getState, presence.getState);
+  return (
+    <div className="pointer-events-none absolute inset-0 overflow-hidden" data-paint-presence="" aria-hidden="true">
+      {actors.map((a) => {
+        const p = documentToScreen(view, canvas, viewport, a.x, a.y);
+        return (
+          <div key={a.id} className="absolute" style={{ left: p.x, top: p.y }} data-actor={a.id}>
+            <svg width="18" height="20" viewBox="0 0 18 20" className="drop-shadow-md" style={{ transform: a.pressed ? 'scale(0.85)' : undefined, transformOrigin: '0 0' }}>
+              <path d="M0 0 L0 15 L4.5 10.8 L7.6 17 L10.2 15.8 L7.2 9.7 L13.5 9.4 Z" fill={a.color} stroke="white" strokeWidth="1.4" strokeLinejoin="round" />
+            </svg>
+            <span className="absolute left-4 top-4 w-max max-w-[240px] rounded-md px-2 py-0.5 text-[11px] font-semibold text-white shadow" style={{ background: a.color }}>
+              {a.message ?? a.name}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 };
