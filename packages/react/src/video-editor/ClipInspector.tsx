@@ -2,6 +2,8 @@ import React from 'react';
 import {
   findVideoClip,
   formatVideoSeconds,
+  VIDEO_CLIP_ANIMATION_EFFECTS,
+  VIDEO_CLIP_ANIMATION_LABELS,
   normalizeVideoGrade,
   VIDEO_GRADE_CONTROLS,
   VIDEO_GRADE_PRESET_NAMES,
@@ -19,6 +21,7 @@ import {
   videoKeyframeToggleEdit,
   videoKeyframeValueEdit,
   type VideoClip,
+  type VideoClipAnimationEffect,
   type VideoEditorController,
   type VideoFadeCurve,
   type VideoGradePreset,
@@ -225,6 +228,28 @@ export function ClipInspector({ controller, className = '' }: ClipInspectorProps
           ))}
         </>
       )}
+      {at.track.kind === 'video' &&
+        (['animateIn', 'animateOut'] as const).map((key) => (
+          <Row key={key} label={key === 'animateIn' ? 'Animate in' : 'Animate out'} name={key}>
+            <select
+              className={field}
+              value={clip[key]?.effect ?? ''}
+              disabled={disabled}
+              aria-label={key === 'animateIn' ? 'Animate in' : 'Animate out'}
+              onChange={(e) => {
+                const effect = e.target.value as VideoClipAnimationEffect | '';
+                set(key, effect ? { ...clip[key], effect } : undefined, key === 'animateIn' ? 'Change entrance' : 'Change exit');
+              }}
+            >
+              <option value="">None</option>
+              {VIDEO_CLIP_ANIMATION_EFFECTS.map((effect) => (
+                <option key={effect} value={effect}>
+                  {VIDEO_CLIP_ANIMATION_LABELS[effect]}
+                </option>
+              ))}
+            </select>
+          </Row>
+        ))}
       <Row label="Fade in (ms)" name="fadeIn">
         {number('fadeIn', 'Fade in', { min: 0, step: 100 })}
       </Row>

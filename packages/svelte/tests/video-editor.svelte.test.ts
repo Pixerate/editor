@@ -366,6 +366,17 @@ describe("ClipInspector (Svelte)", () => {
     controller.destroy();
   });
 
+  it("animates a title in and out", () => {
+    const controller = make();
+    render(ClipInspector, { controller });
+    act(() => controller.select(["c2"]));
+    change(q<HTMLSelectElement>('[data-field="animateOut"]'), "drop");
+    expect(clipOf(controller, "c2")!.animateOut).toEqual({ effect: "drop" });
+    change(q<HTMLSelectElement>('[data-field="animateOut"]'), "");
+    expect(clipOf(controller, "c2")!.animateOut).toBeUndefined();
+    controller.destroy();
+  });
+
   it("offers a direction for push, slide and wipe only", () => {
     const controller = make();
     render(ClipInspector, { controller });

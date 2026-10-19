@@ -20,6 +20,7 @@ import {
 	parseVideoLoudnessMeasurement,
 	videoContactSheetSvg,
 	videoFadeCurveGain,
+	videoClipAnimated,
 	videoFrameAt,
 	videoProjectSvg,
 	VideoEditorController,
@@ -764,5 +765,57 @@ describe('push, slide and iris transitions', () => {
 		expect(slide.match(/cos\(PI/g)).toHaveLength(1);
 		expect(toVideoEdl(cut({ type: 'push', duration: 1000 }))).toMatch(/W001 {4}025/);
 		expect(toVideoEdl(cut({ type: 'crossfade', duration: 1000 }))).toMatch(/ D {4}025/);
+	});
+});
+
+describe('entrance and exit animations', () => {
+	const titled = (clip: Record<string, unknown>) =>
+		ok(applyVideoEdits(createVideoProject({ width: 1000, height: 500, fps: 25 }), [{ op: 'add_clip', track: 'v1', clip: { type: 'text', id: 't', text: 'Hi', duration: 3000, ...clip } as any }]));
+	const layer = (p: VideoProject, t: number) => videoFrameAt(p, t).layers.find((l) => l.clip === 't');
+
+	it('become keyframes on opacity and the transform, an exit mirroring an entrance', () => {
+		const p = titled({ animateIn: { effect: 'rise' }, animateOut: { effect: 'slide-left', duration: 1000 }, transform: { y: 20 } });
+		const c = videoClipAnimated(clip(p, 't'), p);
+		// Opacity follows the effect's own easing.
+		expect(c.opacity).toEqual({ keys: [{ t: 0, v: 0, ease: 'ease-out' }, { t: 500, v: 1 }, { t: 2000, v: 1, ease: 'ease-in' }, { t: 3000, v: 0 }] });
+		expect(c.transform!.y).toEqual({ keys: [{ t: 0, v: 50, ease: 'ease-out' }, { t: 500, v: 20 }] });
+		expect(c.transform!.x).toEqual({ keys: [{ t: 2000, v: 0, ease: 'ease-in' }, { t: 3000, v: 150 }] });
+		expect(layer(p, 0)).toBeUndefined(); // fully transparent
+		// Halfway in, an ease-out fade is past halfway.
+		expect(layer(p, 250)!.opacity).toBeGreaterThan(0.6);
+		expect(layer(p, 1000)!.rect.y).toBe(20);
+		expect(layer(p, 2500)!.rect.x).toBeGreaterThan(0);
+		const plain = clip(titled({}), 't');
+		expect(videoClipAnimated(plain, p)).toBe(plain);
+	});
+
+	it('pop overshoots its size before settling', () => {
+		const p = titled({ animateIn: { effect: 'pop', duration: 1000 } });
+		const width = (t: number) => layer(p, t)!.rect.width;
+		expect(width(100)).toBeLessThan(1000);
+		expect(Math.max(...[500, 600, 700, 800].map(width))).toBeGreaterThan(1000);
+		expect(width(1500)).toBe(1000);
+	});
+
+	it('are shortened to fit, leave keyed properties alone, and say so', () => {
+		const p = titled({ duration: 600, animateIn: { effect: 'zoom', duration: 600 }, animateOut: { effect: 'fade', duration: 600 }, opacity: { keys: [{ t: 0, v: 0.5 }, { t: 600, v: 1 }] } });
+		const c = videoClipAnimated(clip(p, 't'), p);
+		expect(c.transform!.scale).toEqual({ keys: [{ t: 0, v: 0.6, ease: 'ease-out' }, { t: 300, v: 1 }] });
+		expect(c.opacity).toEqual({ keys: [{ t: 0, v: 0.5 }, { t: 600, v: 1 }] });
+		const codes = checkVideoProject(p).map((i) => i.code);
+		expect(codes).toContain('animations-too-long');
+		expect(checkVideoProject(p).find((i) => i.code === 'animation-keyed')!.message).toMatch(/zoom entrance leaves opacity alone/);
+	});
+
+	it('go with their ends when a clip is split, and export as keyed expressions', () => {
+		const p = ok(applyVideoEdits(titled({ animateIn: { effect: 'drop' }, animateOut: { effect: 'fade' } }), [{ op: 'split_clip', clip: 't', at: 1500, id: 't2' }]));
+		expect(clip(p, 't')).toMatchObject({ animateIn: { effect: 'drop' } });
+		expect(clip(p, 't')).not.toHaveProperty('animateOut');
+		expect(clip(p, 't2')).toMatchObject({ animateOut: { effect: 'fade' } });
+		expect(clip(p, 't2')).not.toHaveProperty('animateIn');
+		const ff = toVideoFfmpeg(p);
+		expect(ff.filterComplex).toMatch(/drawtext=[^;]*y='\(h-text_h\)\/2\+\(/);
+		expect(ff.notes.join(' ')).toMatch(/Keyframed .*opacity/);
+		expect(() => parseVideoProject({ width: 640, height: 360, tracks: [{ id: 'v1', kind: 'video', clips: [{ id: 'x', type: 'text', text: 'a', start: 0, duration: 1000, animateIn: { effect: 'spin' } }] }] })).toThrow(/animateIn\.effect must be one of "fade", "rise"/);
 	});
 });

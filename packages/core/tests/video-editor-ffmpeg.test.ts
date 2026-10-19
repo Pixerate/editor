@@ -177,6 +177,23 @@ describe.skipIf(!hasFfmpeg)('toVideoFfmpeg with a real ffmpeg', () => {
 		for (const file of [push, slide, iris]) expect(Number(probe(file).format.duration)).toBeCloseTo(4, 0);
 	}, 120000);
 
+	it('animates a picture in as the preview does', () => {
+		const p = project([
+			{ op: 'add_clip', track: 'v1', clip: { type: 'color', id: 'bg', color: '#000000', duration: 2000 } },
+			{ op: 'add_track', track: { kind: 'video', id: 'top' } },
+			{ op: 'add_clip', track: 'top', clip: { type: 'color', id: 'z', color: '#00ff00', duration: 2000, animateIn: { effect: 'zoom', duration: 1000 } } }
+		]);
+		const out = render(p, 'zoom.mp4');
+		const near = (rgb: number[], want: number[]) => rgb.every((v, i) => Math.abs(v - want[i]) < 40);
+		// Early in the zoom the green box is small and faint: the corners are still black.
+		expect(pixel(out, 0.12, 10, 10)).toSatisfy((rgb: number[]) => near(rgb, [0, 0, 0]));
+		const early = videoFrameAt(p, 120).layers.find((l) => l.clip === 'z')!;
+		const centre = pixel(out, 0.12, 316, 176);
+		expect(Math.abs(centre[1] - 255 * early.opacity)).toBeLessThan(40);
+		// Once in, it fills the frame.
+		expect(pixel(out, 1.5, 10, 10)).toSatisfy((rgb: number[]) => near(rgb, [0, 255, 0]));
+	}, 120000);
+
 	it('grades colours as the preview does', () => {
 		const grades = [{ exposure: 0.5, contrast: 0.3 }, { saturation: -0.6, hue: 40 }, { temperature: 0.8, tint: -0.5 }, { exposure: -1, saturation: 0.8, temperature: -0.5 }];
 		const base: [number, number, number] = [180, 90, 60];

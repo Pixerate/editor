@@ -1,3 +1,4 @@
+import { videoClipAnimated } from './clip-animation.js';
 import { placeVideoRect } from './evaluate.js';
 import { videoIrisRadius } from './render.js';
 import { videoGradeFfmpegFilters } from './grade.js';
@@ -279,7 +280,9 @@ function buildFfmpeg(project: VideoProject, options: VideoFfmpegOptions, measure
 	};
 	// Back to front: later tracks are further back.
 	for (const track of [...project.tracks].reverse()) {
-		for (const clip of sortedVideoClips(track)) {
+		for (const raw of sortedVideoClips(track)) {
+			// Entrance and exit animations go out as keyframes on opacity and the transform.
+			const clip = videoClipAnimated(raw, project);
 			const { lead, tail } = videoClipOverhang(track, clip);
 			const t0 = clip.start - lead;
 			const span = clip.duration + lead + tail;
@@ -364,10 +367,6 @@ function buildFfmpeg(project: VideoProject, options: VideoFfmpegOptions, measure
 				source = `[${index}:v]`;
 				chain.push(`setpts=${videoClipSpeed(clip) !== 1 ? `(PTS-STARTPTS)/${videoClipSpeed(clip)}` : 'PTS-STARTPTS'}`, `fps=${fps}`, `scale=${even(rect.width)}:${even(rect.height)}`);
 			}
-			if (isVideoKeyframes(placed?.scale)) {
-				const s = expr(placed.scale, onChain('t'), 1, 'scale');
-				chain.push(`scale=w='max(2,trunc(${even(rect.width)}*(${s})/2)*2)':h='max(2,trunc(${even(rect.height)}*(${s})/2)*2)':eval=frame`);
-			}
 			const grade = videoGradeFfmpegFilters(clip.grade);
 			if (grade.length) chain.push('format=rgba', ...grade);
 			chain.push('format=yuva420p');
@@ -389,8 +388,14 @@ function buildFfmpeg(project: VideoProject, options: VideoFfmpegOptions, measure
 				chain.push(`geq=lum='lum(X,Y)':cb='cb(X,Y)':cr='cr(X,Y)':a='if(lte(hypot(X+${Math.round(rect.x)}-${W / 2},Y+${Math.round(rect.y)}-${H / 2}),${Math.round(r)}*min(1,T/${sec(2 * lead)})),alpha(X,Y),0)'`);
 			}
 			const rotation = placed?.rotation;
-			if (isVideoKeyframes(rotation)) chain.push(`rotate=a='(${expr(rotation, onChain('t'), 0, 'rotation')})*PI/180':c=none:ow='hypot(iw,ih)':oh=ow`);
-			else if (rotation) chain.push(`rotate=${rotation}*PI/180:c=none:ow=rotw(${rotation}*PI/180):oh=roth(${rotation}*PI/180)`);
+			if (isVideoKeyframes(rotation)) chain.push(`rotate=a='(${expr(rotation, onChain('t'), 0, 'rotation')})*PI/180':c=black@0:ow='hypot(iw,ih)':oh=ow`);
+			else if (rotation) chain.push(`rotate=${rotation}*PI/180:c=black@0:ow=rotw(${rotation}*PI/180):oh=roth(${rotation}*PI/180)`);
+			// Animated scale goes last: geq and rotate keep the frame size they first see, so a size that
+			// changes before them is frozen. Scaling the turned picture by iw / ih gives the same result.
+			if (isVideoKeyframes(placed?.scale)) {
+				const s = expr(placed.scale, onChain('t'), 1, 'scale');
+				chain.push(`scale=w='max(2,trunc(iw*(${s})/2)*2)':h='max(2,trunc(ih*(${s})/2)*2)':eval=frame`);
+			}
 			chain.push(`setpts=PTS+${sec(t0)}/TB`);
 			const cx = rect.x + rect.width / 2;
 			const cy = rect.y + rect.height / 2;

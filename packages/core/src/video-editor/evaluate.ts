@@ -1,3 +1,4 @@
+import { videoClipAnimated } from './clip-animation.js';
 import { normalizeVideoGrade } from './grade.js';
 import { videoValueAt } from './keyframes.js';
 import { sortedVideoClips, videoAssetMap, videoClipAfter, videoClipBefore, videoClipEnd, videoClipSpeed, videoAssetHasSound } from './timeline.js';
@@ -207,7 +208,9 @@ export function videoFrameAt(project: VideoProject, time: number): VideoFrame {
 			}
 			if (track.kind !== 'video' || track.hidden) continue;
 			if (clip.type === 'media' && (!asset || asset.kind === 'audio')) continue;
-			let opacity = videoValueAt(clip.opacity, clipTime, 1) * fade;
+			// Entrance and exit animations are keyframes on the picture's opacity and transform.
+			const shown = videoClipAnimated(clip, project);
+			let opacity = videoValueAt(shown.opacity, clipTime, 1) * fade;
 			let wipe: VideoLayer['wipe'];
 			let dip: { color: string; opacity: number } | null = null;
 			let iris: VideoLayer['iris'];
@@ -230,11 +233,11 @@ export function videoFrameAt(project: VideoProject, time: number): VideoFrame {
 			}
 			const size = clip.type === 'media' ? { width: asset!.width ?? project.width, height: asset!.height ?? project.height } : { width: project.width, height: project.height };
 			const fit = clip.fit ?? (clip.type === 'media' ? 'contain' : 'fill');
-			const placed = placeVideoRect(project, size, clip.type === 'text' ? 'fill' : fit, clip.transform, clipTime);
+			const placed = placeVideoRect(project, size, clip.type === 'text' ? 'fill' : fit, shown.transform, clipTime);
 			const across = shiftDirection === 'left' || shiftDirection === 'right';
 			const sign = shiftDirection === 'left' || shiftDirection === 'up' ? -1 : 1;
 			const rect = shift ? { ...placed, ...(across ? { x: placed.x + sign * shift * project.width } : { y: placed.y + sign * shift * project.height }) } : placed;
-			const layer: VideoLayer = { clip: clip.id, track: track.id, type: clip.type, opacity: clamp01(opacity), rect, rotation: videoValueAt(clip.transform?.rotation, clipTime, 0) };
+			const layer: VideoLayer = { clip: clip.id, track: track.id, type: clip.type, opacity: clamp01(opacity), rect, rotation: videoValueAt(shown.transform?.rotation, clipTime, 0) };
 			if (wipe) layer.wipe = wipe;
 			if (iris) layer.iris = iris;
 			if (clip.blend && clip.blend !== 'normal') layer.blend = clip.blend;

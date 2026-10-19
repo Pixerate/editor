@@ -1,7 +1,7 @@
 import type { VideoEdit } from './edit.js';
 import { isVideoKeyframes, removeVideoKey, setVideoKey, VIDEO_KEYFRAME_LIMITS, VIDEO_TRANSFORM_PROPERTIES, videoValueAt, type VideoAnimatable, type VideoKeyframeProperty } from './keyframes.js';
 import { findVideoClip, formatVideoTimecode, videoClipEnd, videoClipSpeed, videoAssetMap, videoAssetHasSound } from './timeline.js';
-import type { VideoTransitionType, VideoAsset, VideoAssetKind, VideoBlendMode, VideoClip, VideoFadeCurve, VideoPlacementMode, VideoProject } from './types.js';
+import type { VideoClipAnimationEffect, VideoTransitionType, VideoAsset, VideoAssetKind, VideoBlendMode, VideoClip, VideoFadeCurve, VideoPlacementMode, VideoProject } from './types.js';
 
 // Framework-free helpers the React and Svelte timelines share, so both draw and drag alike.
 
@@ -41,6 +41,17 @@ export function videoClipShowsWaveform(clip: VideoClip, asset: VideoAsset | unde
 	if (clip.type !== 'media' || mode === 'none' || !videoAssetHasSound(asset)) return false;
 	return mode === 'all' || asset!.kind === 'audio';
 }
+
+/** Names for the entrance and exit animations, for menus. */
+export const VIDEO_CLIP_ANIMATION_LABELS: Readonly<Record<VideoClipAnimationEffect, string>> = {
+	fade: 'Fade',
+	rise: 'Rise',
+	drop: 'Drop',
+	'slide-left': 'Slide left',
+	'slide-right': 'Slide right',
+	zoom: 'Zoom',
+	pop: 'Pop'
+};
 
 /** Names for the transitions, for menus. */
 export const VIDEO_TRANSITION_LABELS: Readonly<Record<VideoTransitionType, string>> = {

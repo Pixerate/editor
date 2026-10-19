@@ -2,6 +2,8 @@
   import {
     findVideoClip,
     formatVideoTimecode,
+    VIDEO_CLIP_ANIMATION_EFFECTS,
+    VIDEO_CLIP_ANIMATION_LABELS,
     normalizeVideoGrade,
     VIDEO_GRADE_CONTROLS,
     VIDEO_GRADE_PRESET_NAMES,
@@ -179,6 +181,17 @@
         {#each VIDEO_GRADE_CONTROLS as c (c.key)}
           <span class="text-muted-foreground">{c.label}</span>
           <input class={input} type="number" min={c.min} max={c.max} step={c.step} placeholder="0" aria-label={c.label} {disabled} value={clip.grade?.[c.key] ?? ''} onchange={(e) => gradeValue(c, e.currentTarget.value)} data-field="grade.{c.key}" />
+        {/each}
+      {/if}
+      {#if at?.track.kind === 'video'}
+        {#each [{ key: 'animateIn', label: 'Animate in', change: 'Change entrance' }, { key: 'animateOut', label: 'Animate out', change: 'Change exit' }] as const as row (row.key)}
+          <span class="text-muted-foreground">{row.label}</span>
+          <select class={input} aria-label={row.label} {disabled} value={clip[row.key]?.effect ?? ''} onchange={(e) => set(row.key, e.currentTarget.value ? { ...clip?.[row.key], effect: e.currentTarget.value } : undefined, row.change)} data-field={row.key}>
+            <option value="">none</option>
+            {#each VIDEO_CLIP_ANIMATION_EFFECTS as effect (effect)}
+              <option value={effect}>{VIDEO_CLIP_ANIMATION_LABELS[effect]}</option>
+            {/each}
+          </select>
         {/each}
       {/if}
       <span class="text-muted-foreground">Fade in</span>

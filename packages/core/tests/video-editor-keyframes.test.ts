@@ -284,7 +284,8 @@ describe('keyframes in the ffmpeg export', () => {
 		expect(filterComplex).toContain("overlay=x='320+(if(lt((t*1000-1000),0),-100,");
 		expect(filterComplex).toContain("geq=lum='lum(X,Y)':cb='cb(X,Y)':cr='cr(X,Y)':a='alpha(X,Y)*clip(if(lt((T*1000),0),0,");
 		expect(filterComplex).toContain("rotate=a='(if(lt((t*1000),0),0,");
-		expect(filterComplex).toMatch(/scale=w='max\(2,trunc\(640\*\(if\(.*\)\/2\)\*2\)':h=.*:eval=frame/);
+		// Scaled last, by the input size: geq and rotate keep the size they first see.
+		expect(filterComplex).toMatch(/scale=w='max\(2,trunc\(iw\*\(if\(.*\)\/2\)\*2\)':h=.*:eval=frame/);
 		expect(filterComplex).toContain("volume='1*(if(lt((t*1000),0),0,");
 		expect(notes.join(' ')).toContain('Keyframed opacity, position, rotation, scale, volume are rendered as straight lines');
 	});

@@ -129,6 +129,21 @@ export interface VideoGrade {
 	tint?: number;
 }
 
+/**
+ * How a clip enters or leaves: `fade`; `rise` (up into place) or `drop` (down into place);
+ * `slide-left` / `slide-right` (in moving that way); `zoom` (grows into place); `pop` (grows past its
+ * size and settles). Each also fades. An exit plays the same movement backwards.
+ */
+export type VideoClipAnimationEffect = 'fade' | 'rise' | 'drop' | 'slide-left' | 'slide-right' | 'zoom' | 'pop';
+export const VIDEO_CLIP_ANIMATION_EFFECTS = ['fade', 'rise', 'drop', 'slide-left', 'slide-right', 'zoom', 'pop'] as const;
+
+/** An entrance or exit animation (see `VideoClipAnimationEffect`). */
+export interface VideoClipAnimation {
+	effect: VideoClipAnimationEffect;
+	/** Length (ms, default 500). */
+	duration?: number;
+}
+
 interface VideoClipBase {
 	id: string;
 	name?: string;
@@ -145,6 +160,10 @@ interface VideoClipBase {
 	blend?: VideoBlendMode;
 	/** Colour correction of the picture. */
 	grade?: VideoGrade;
+	/** How the picture enters, from the clip's start (on top of any fade in). */
+	animateIn?: VideoClipAnimation;
+	/** How the picture leaves, up to the clip's end. */
+	animateOut?: VideoClipAnimation;
 	/** Fade in from nothing over this long (ms), pictures and sound. */
 	fadeIn?: number;
 	/** Fade out over this long (ms). */

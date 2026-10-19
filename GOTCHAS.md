@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/video-editor] ffmpeg `geq` and `rotate` Freeze an Animated Size, and `rotate` Loses Transparency When Its Angle Moves
+
+- **Issue / Symptom**: A clip with keyframed scale stayed at its first size in the ffmpeg export whenever it also had keyframed opacity, a wipe, an iris or a rotation. A clip with keyframed rotation rendered with an opaque box around it.
+- **Root Cause**: `geq` and `rotate` set their frame size from the first frame, so a `scale=...:eval=frame` before them has its later sizes frozen. And with a time-varying angle, `rotate=...:c=none` fills the uncovered corners with opaque pixels (only a constant angle gets transparent ones). Both were hidden in tests by the frozen size: a smaller picture passed the same pixel checks.
+- **Solution / Workaround**: The animated `scale` goes last in a clip's chain, after every `geq` and `rotate`, scaling by `iw` / `ih` (uniform scale and rotation about the centre commute, so the picture is the same). `rotate` uses `c=black@0`, which keeps the corners transparent for any angle. When a pixel test checks an animated size, also check it at a time when the size has changed.
+
 ### [core/video-editor] ffmpeg `blend` Is Not Symmetric, and the Input Order Differs by Mode
 
 - **Issue / Symptom**: Overlay, hard-light, dodge, burn and soft-light layers rendered differently in the ffmpeg export from the browser preview, even though the mode names matched.

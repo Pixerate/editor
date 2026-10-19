@@ -98,6 +98,19 @@ describe('video agent tasks, through the tools only', () => {
 		expect(reset.clip.blend).toBeUndefined();
 	});
 
+	it('animates a title in and out', async () => {
+		const { call, fail } = tools();
+		await call('add_video_clip', { track: 'v1', clip: { type: 'text', id: 't', text: 'Hello', duration: 3000, animateIn: { effect: 'pop' } } });
+		expect((await call('get_video_frame', { time: 0 })).layers).toEqual([]);
+		const set = await call('update_video_clip', { clip: 't', set: { animateOut: { effect: 'drop', duration: 800 } } });
+		expect(set.clip.animateOut).toEqual({ effect: 'drop', duration: 800 });
+		expect((await call('get_video_frame', { time: 1500 })).layers[0].opacity).toBe(1);
+		expect(await fail('update_video_clip', { clip: 't', set: { animateIn: { effect: 'spin' } } })).toContain('effect');
+		expect(await fail('update_video_clip', { clip: 't', set: { animateIn: { duration: 300 } } })).toContain('effect');
+		const cleared = await call('update_video_clip', { clip: 't', remove: ['animateIn', 'animateOut'] });
+		expect(cleared.clip.animateIn).toBeUndefined();
+	});
+
 	it('pushes one shot into the next and reads where both pictures are', async () => {
 		const { call, fail } = tools();
 		await call('add_video_clip', { track: 'v1', clip: { type: 'color', id: 'a', color: '#f00', duration: 2000 } });

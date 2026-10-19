@@ -478,6 +478,20 @@ describe("ClipInspector (React)", () => {
     controller.destroy();
   });
 
+  it("animates a title in and out, keeping a duration it already has", () => {
+    const controller = make();
+    act(() => root.render(<ClipInspector controller={controller} />));
+    act(() => controller.select(["t1"]));
+    choose($<HTMLSelectElement>('select[aria-label="Animate in"]'), "pop");
+    expect(clip(controller, "t1")!.clip.animateIn).toEqual({ effect: "pop" });
+    act(() => void controller.apply({ op: "update_clip", clip: "t1", set: { animateIn: { effect: "pop", duration: 800 } } }, "Set"));
+    choose($<HTMLSelectElement>('select[aria-label="Animate in"]'), "rise");
+    expect(clip(controller, "t1")!.clip.animateIn).toEqual({ effect: "rise", duration: 800 });
+    choose($<HTMLSelectElement>('select[aria-label="Animate in"]'), "");
+    expect(clip(controller, "t1")!.clip.animateIn).toBeUndefined();
+    controller.destroy();
+  });
+
   it("offers a direction for push, slide and wipe only", () => {
     const controller = make();
     act(() => root.render(<ClipInspector controller={controller} />));

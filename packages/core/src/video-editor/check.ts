@@ -1,4 +1,5 @@
 import { formatVideoSeconds, sortedVideoClips, VIDEO_TIME_EPSILON, videoAssetMap, videoClipBefore, videoClipEnd, videoClipHandles, videoClipSourceRange, videoProjectDuration } from './timeline.js';
+import { VIDEO_CLIP_ANIMATION_DURATION, videoClipAnimationProperties } from './clip-animation.js';
 import { VIDEO_TRANSFORM_PROPERTIES, videoKeysOf } from './keyframes.js';
 import type { VideoClip, VideoProject } from './types.js';
 
@@ -23,6 +24,8 @@ export const VIDEO_ISSUE_CODES = [
 	'transition-too-long',
 	'transition-handles',
 	'fades-too-long',
+	'animations-too-long',
+	'animation-keyed',
 	'keyframes-outside-clip',
 	'unknown-duration',
 	'unused-asset',
@@ -80,6 +83,16 @@ export function checkVideoProject(project: VideoProject): VideoIssue[] {
 				issues.push({ code: 'overlap', severity: 'error', ...at, message: `Clips "${clip.id}" and "${next.id}" overlap on track "${track.id}" from ${formatVideoSeconds(next.start)}; move one of them.` });
 			if ((clip.fadeIn ?? 0) + (clip.fadeOut ?? 0) > clip.duration + VIDEO_TIME_EPSILON)
 				issues.push({ code: 'fades-too-long', severity: 'warning', ...at, message: `Clip "${clip.id}"'s fades (${clip.fadeIn ?? 0} + ${clip.fadeOut ?? 0} ms) are longer than the clip (${clip.duration} ms); shorten them.` });
+			const anim = (clip.animateIn ? (clip.animateIn.duration ?? VIDEO_CLIP_ANIMATION_DURATION) : 0) + (clip.animateOut ? (clip.animateOut.duration ?? VIDEO_CLIP_ANIMATION_DURATION) : 0);
+			if (anim > clip.duration + VIDEO_TIME_EPSILON)
+				issues.push({ code: 'animations-too-long', severity: 'warning', ...at, message: `Clip "${clip.id}"'s entrance and exit (${anim} ms together) are longer than the clip (${clip.duration} ms), so both are shortened; give them shorter durations.` });
+			for (const which of ['animateIn', 'animateOut'] as const) {
+				const a = clip[which];
+				if (!a) continue;
+				const keyed = videoClipAnimationProperties(a).filter((p) => videoKeysOf(p === 'opacity' ? clip.opacity : clip.transform?.[p]).length);
+				if (keyed.length)
+					issues.push({ code: 'animation-keyed', severity: 'note', ...at, message: `Clip "${clip.id}"'s ${a.effect} ${which === 'animateIn' ? 'entrance' : 'exit'} leaves ${keyed.join(', ')} alone, because the clip keys ${keyed.length > 1 ? 'them' : 'it'} itself; remove those keyframes or the animation.` });
+			}
 			for (const { property, keys } of videoClipKeyframes(clip)) {
 				const outside = keys.filter((k) => k.t < -VIDEO_TIME_EPSILON || k.t > clip.duration + VIDEO_TIME_EPSILON);
 				if (outside.length)
