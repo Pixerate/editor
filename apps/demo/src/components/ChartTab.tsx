@@ -265,7 +265,7 @@ export function ChartTab() {
       <div className="relative rounded-xl border border-slate-800 bg-slate-900 p-3" ref={agentStage}>
         <ChartEditor controller={controller} height={400} canvasProps={{ presence, sceneRef }} />
       </div>
-      <AgentScriptPanel scripts={CHART_SCRIPTS} stage={agentStage} hint="Plays a scripted agent turn with the chart__* tools. Value changes go through the chart's director, so its cursor drags each bar into place." />
+      <AgentScriptPanel scripts={CHART_SCRIPTS} stage={agentStage} presence={presence} hint="Plays a scripted agent turn with the chart__* tools. Value changes go through the chart's director, so its cursor drags each bar into place." />
 
       <div className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-xs text-slate-300 space-y-1" data-chart-summary="">
         <p>{summary.description}</p>

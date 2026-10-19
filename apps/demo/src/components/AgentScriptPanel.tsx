@@ -108,6 +108,16 @@ const AgentCursor: React.FC<{ cursor: CursorState; name: string }> = ({ cursor, 
   </div>
 );
 
+/**
+ * An editor's own agent cursors (a director's presence store, e.g. `PaintPresence` or
+ * `ChartPresence`), drawn inside the stage with `[data-actor]` elements.
+ */
+export interface AgentPresenceSource {
+  getState(): { actors: readonly { id: string }[] };
+  subscribe(listener: () => void): () => void;
+  remove(id: string): void;
+}
+
 export interface AgentScriptPanelProps {
   /** The requests the user can pick; each plays as a scripted agent turn. */
   scripts: AgentScript[];
@@ -117,6 +127,12 @@ export interface AgentScriptPanelProps {
    * draw an inline caret (`createRichTextToolProvider`'s `presence`), so their text steps have no target.
    */
   stage?: React.RefObject<HTMLElement | null>;
+  /**
+   * The editor's own agent cursor (its director's presence). The panel shows one cursor: its own
+   * hides while the editor's is on screen, and the next panel step takes over from where the
+   * editor's cursor is, removing it.
+   */
+  presence?: AgentPresenceSource;
   /** The agent's name on its cursor. */
   actor?: string;
   /** One line about what the agent does here. */
@@ -128,7 +144,7 @@ export interface AgentScriptPanelProps {
  * tool call with its result, while a cursor glides to what the agent works on. Calls go through the
  * demo's `ToolRegistry`, exactly as an agent connected over MCP would make them.
  */
-export const AgentScriptPanel: React.FC<AgentScriptPanelProps> = ({ scripts, stage, actor = "Agent", hint }) => {
+export const AgentScriptPanel: React.FC<AgentScriptPanelProps> = ({ scripts, stage, presence, actor = "Agent", hint }) => {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [running, setRunning] = useState<string | null>(null);
   const [cursor, setCursor] = useState<CursorState>({ x: 0, y: 0, visible: false, pressed: false });
@@ -140,6 +156,30 @@ export const AgentScriptPanel: React.FC<AgentScriptPanelProps> = ({ scripts, sta
   const idleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const patchCursor = (patch: Partial<CursorState>) => setCursor((c) => ({ ...c, ...patch }));
+
+  // While the editor's own cursor is on screen, it is the agent's cursor: hide the panel's.
+  const [handedOff, setHandedOff] = useState(false);
+  useEffect(() => {
+    if (!presence) return;
+    const sync = () => setHandedOff(presence.getState().actors.length > 0);
+    sync();
+    return presence.subscribe(sync);
+  }, [presence]);
+
+  /** Takes the cursor back from the editor: starts from where its cursor is, then removes it. */
+  const takeBack = () => {
+    const host = stage?.current;
+    const actors = presence?.getState().actors ?? [];
+    if (!host || !actors.length) return;
+    const el = host.querySelector(`[data-actor="${actors[0]!.id}"]`);
+    if (el) {
+      const r = el.getBoundingClientRect();
+      const box = host.getBoundingClientRect();
+      patchCursor({ x: r.left - box.left, y: r.top - box.top, focus: undefined });
+      placed.current = true;
+    }
+    for (const a of actors) presence!.remove(a.id);
+  };
 
   useEffect(() => {
     const el = log.current;
@@ -156,6 +196,7 @@ export const AgentScriptPanel: React.FC<AgentScriptPanelProps> = ({ scripts, sta
   const glideTo = async (rect: DOMRect, run: AgentRunControl) => {
     const host = stage?.current;
     if (!host) return;
+    takeBack();
     const box = host.getBoundingClientRect();
     const focus = { x: rect.left - box.left, y: rect.top - box.top, width: rect.width, height: rect.height };
     const to = { x: focus.x + Math.min(rect.width / 2, 40), y: focus.y + rect.height / 2 };
@@ -316,7 +357,7 @@ export const AgentScriptPanel: React.FC<AgentScriptPanelProps> = ({ scripts, sta
           ))}
         </ol>
       )}
-      {host && createPortal(<AgentCursor cursor={cursor} name={actor} />, host)}
+      {host && createPortal(<AgentCursor cursor={handedOff ? { ...cursor, visible: false, focus: undefined } : cursor} name={actor} />, host)}
     </section>
   );
 };
