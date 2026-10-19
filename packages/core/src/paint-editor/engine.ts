@@ -114,6 +114,10 @@ export const IDENTITY_COPY: StrokeCopy = { map: (p) => p, linear: [1, 0, 0, 1] }
 /** A dab with the pen state it was made at (the shared `Dab` plus pressure for the grain). */
 export interface PenDab extends Dab {
   pressure: number;
+  /** Direction of travel at the dab, radians counter-clockwise with y up (as `angle`). */
+  direction: number;
+  /** The dab's index within its copy of the stroke (0, 1, 2 …). */
+  index: number;
 }
 
 const enum Stream {
@@ -234,6 +238,8 @@ export class PenDabWalker {
       angle,
       roundness: Math.min(1, Math.max(0.01, tip.roundness * (1 - dyn.tiltRoundness * s.lean * 0.8))),
       pressure: s.pressure,
+      direction: this.dir,
+      index: i,
     };
   }
 

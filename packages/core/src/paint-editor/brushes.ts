@@ -6,16 +6,62 @@
  */
 
 import { DEFAULT_BRUSH, MAX_BRUSH_SIZE, normalizeBrush, type BrushSettings } from '../paint/brush';
+import { DEFAULT_BLENDER, DEFAULT_SMUDGE, normalizeBlender, normalizeSmudge, type BlenderSettings, type SmudgeSettings } from '../paint/blending';
+import type { MixingModel } from '../paint/exchange';
 import { DEFAULT_MIXER, normalizeMixer, type MixerSettings } from '../paint/mixer';
 
-/** How a brush makes marks: dabs into a stroke buffer, removing alpha, or the Mixer Brush engine. */
-export type PaintBrushEngine = 'dab' | 'eraser' | 'mixer';
+/**
+ * How a brush makes marks: `dab` (dabs into a stroke buffer, or dab by dab through the pick-up /
+ * mix exchange when its behaviour asks for it), `eraser` (removes alpha), `mixer` (the Mixer
+ * Brush), `blender` (mixes the colours under and near the tip) or `smudge` (drags paint along).
+ */
+export type PaintBrushEngine = 'dab' | 'eraser' | 'mixer' | 'blender' | 'smudge';
 
-export const PAINT_BRUSH_ENGINES: readonly PaintBrushEngine[] = ['dab', 'eraser', 'mixer'];
+export const PAINT_BRUSH_ENGINES: readonly PaintBrushEngine[] = ['dab', 'eraser', 'mixer', 'blender', 'smudge'];
 
-export type PaintBrushCategory = 'pencil' | 'pastel' | 'charcoal' | 'airbrush' | 'marker' | 'ink' | 'eraser' | 'blender' | 'smudge' | 'mixer' | 'custom';
+export type PaintBrushCategory = 'pencil' | 'pastel' | 'charcoal' | 'airbrush' | 'marker' | 'ink' | 'paint' | 'eraser' | 'blender' | 'smudge' | 'mixer' | 'custom';
 
-export const PAINT_BRUSH_CATEGORIES: readonly PaintBrushCategory[] = ['pencil', 'pastel', 'charcoal', 'airbrush', 'marker', 'ink', 'eraser', 'blender', 'smudge', 'mixer', 'custom'];
+export const PAINT_BRUSH_CATEGORIES: readonly PaintBrushCategory[] = ['pencil', 'pastel', 'charcoal', 'airbrush', 'marker', 'ink', 'paint', 'eraser', 'blender', 'smudge', 'mixer', 'custom'];
+
+/** Multi-coloured brush: `tip` lays the colours across the tip, `dab` changes colour from dab to dab. */
+export type MultiColorMode = 'off' | 'tip' | 'dab';
+
+export const MULTI_COLOR_MODES: readonly MultiColorMode[] = ['off', 'tip', 'dab'];
+
+export interface MultiColorSettings {
+  /** `off` (default), `tip` (the colours side by side across the tip, like a brush loaded with several paints; the stripes follow the stroke) or `dab` (the colour changes along the stroke). */
+  mode: MultiColorMode;
+  /** 2..8 colours #rrggbb. Fewer than 2: the paint colour and the secondary colour. */
+  colors: string[];
+  /** `dab` mode: `sequence` (default) runs through the colours in order, blending between them; `random` picks one per run of dabs (seeded, so replays match). */
+  order: 'sequence' | 'random';
+  /** `dab` mode: dabs per colour, 1..500 (default 12). */
+  length: number;
+  /** How softly neighbouring colours blend, 0 (hard stripes or steps) .. 1 (smooth gradient, default). */
+  softness: number;
+}
+
+export const DEFAULT_MULTI_COLOR: Readonly<MultiColorSettings> = { mode: 'off', colors: [], order: 'sequence', length: 12, softness: 1 };
+
+/**
+ * How a brush handles paint on the canvas. The pick-up / mix ratios are the shared exchange's
+ * (`@pixerate/editor/paint` `PaintExchange`); wet media will use the same ones. On a Mixer Brush
+ * they are its `mixer.wet`, `mixer.mix`, `!mixer.cleanEachStroke` and `mixer.mixing`, kept in sync.
+ */
+export interface BrushBehavior {
+  /** Pick-up ratio, 0..1: how much of the paint under each dab the brush lifts and carries (0: none, default). */
+  pickup: number;
+  /** Mix ratio, 0..1: how much of the carried paint goes into what the brush lays down, against its own colour (default 0.5). */
+  mix: number;
+  /** Dirty brush: keep the carried paint after the stroke, so the next stroke starts with the last colour the brush touched (default false). */
+  dirty: boolean;
+  /** How picked-up paint, multi-colour gradients and the deposit mix: `pigment` (default, Kubelka-Munk) or `rgb`. */
+  mixing: MixingModel;
+  /** Multi-coloured brush. */
+  multicolor: MultiColorSettings;
+}
+
+export const DEFAULT_BEHAVIOR: Readonly<BrushBehavior> = { pickup: 0, mix: 0.5, dirty: false, mixing: 'pigment', multicolor: DEFAULT_MULTI_COLOR };
 
 /** What turns the tip: a fixed angle, the direction of the stroke, or the pen's barrel rotation. */
 export type BrushRotation = 'fixed' | 'stroke' | 'barrel';
@@ -80,6 +126,12 @@ export interface PaintBrush {
   mixer: MixerSettings;
   /** Mixer engine only: load the current colour each stroke (false: a smudge or blender that only moves paint). */
   loadsColor: boolean;
+  /** Pick-up and mix ratios, dirty brush and multi-colour (dab and mixer engines). */
+  behavior: BrushBehavior;
+  /** Blender engine only: strength, blend distance and mixing. */
+  blender: BlenderSettings;
+  /** Smudge engine only: strength, length and mixing. */
+  smudge: SmudgeSettings;
   /** True for the built-in presets (they cannot be removed or overwritten). */
   builtin?: boolean;
 }
@@ -105,25 +157,88 @@ export function normalizeDynamics(raw: Partial<BrushDynamics> = {}, base: BrushD
 
 export const BRUSH_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
-/** Brush settings to change or read: any subset of a brush, its tip, dynamics and mixer. */
-export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mixer'>> & { tip?: Partial<BrushSettings>; dynamics?: Partial<BrushDynamics>; mixer?: Partial<MixerSettings> };
+const HEX = /^#[0-9a-f]{6}$/i;
+
+export function normalizeMultiColor(raw: Partial<MultiColorSettings> = {}, base: MultiColorSettings = DEFAULT_MULTI_COLOR): MultiColorSettings {
+  const colors = Array.isArray(raw.colors) ? raw.colors.filter((c): c is string => typeof c === 'string' && HEX.test(c.trim())).map((c) => c.trim().toLowerCase()).slice(0, 8) : base.colors;
+  return {
+    mode: MULTI_COLOR_MODES.includes(raw.mode as MultiColorMode) ? (raw.mode as MultiColorMode) : base.mode,
+    colors: [...colors],
+    order: raw.order === 'random' || raw.order === 'sequence' ? raw.order : base.order,
+    length: typeof raw.length === 'number' && Number.isFinite(raw.length) ? Math.min(500, Math.max(1, Math.round(raw.length))) : base.length,
+    softness: unit(raw.softness, base.softness),
+  };
+}
+
+/** Behaviour input: any subset, with a partial multi-colour block. */
+export type BrushBehaviorInput = Partial<Omit<BrushBehavior, 'multicolor'>> & { multicolor?: Partial<MultiColorSettings> };
+
+export function normalizeBehavior(raw: BrushBehaviorInput = {}, base: BrushBehavior = DEFAULT_BEHAVIOR): BrushBehavior {
+  return {
+    pickup: unit(raw.pickup, base.pickup),
+    mix: unit(raw.mix, base.mix),
+    dirty: typeof raw.dirty === 'boolean' ? raw.dirty : base.dirty,
+    mixing: raw.mixing === 'rgb' || raw.mixing === 'pigment' ? raw.mixing : base.mixing,
+    multicolor: normalizeMultiColor(raw.multicolor ?? {}, base.multicolor),
+  };
+}
+
+/** Brush settings to change or read: any subset of a brush and of its blocks. */
+export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mixer' | 'behavior' | 'blender' | 'smudge'>> & {
+  tip?: Partial<BrushSettings>;
+  dynamics?: Partial<BrushDynamics>;
+  mixer?: Partial<MixerSettings>;
+  behavior?: BrushBehaviorInput;
+  blender?: Partial<BlenderSettings>;
+  smudge?: Partial<SmudgeSettings>;
+};
+
+/** Whether a brush can pick paint up from the canvas (the pick-up / mix ratios apply): dab and mixer brushes. */
+export function isWetCapable(brush: Pick<PaintBrush, 'engine'>): boolean {
+  return brush.engine === 'dab' || brush.engine === 'mixer';
+}
+
+/**
+ * Whether a dab brush paints dab by dab through the exchange (it picks up paint or is
+ * multi-coloured) instead of building one coverage buffer of one colour.
+ */
+export function usesPaintExchange(brush: PaintBrush): boolean {
+  return brush.engine === 'dab' && (brush.behavior.pickup > 0 || brush.behavior.multicolor.mode !== 'off');
+}
 
 /** A brush with every field in range; missing fields come from `base` (default: a plain round dab brush). */
 export function normalizePaintBrush(raw: PaintBrushInput = {}, base?: PaintBrush): PaintBrush {
   const b = base ?? BASE_BRUSH;
   const id = typeof raw.id === 'string' && BRUSH_ID.test(raw.id) ? raw.id : b.id;
+  const engine = PAINT_BRUSH_ENGINES.includes(raw.engine as PaintBrushEngine) ? (raw.engine as PaintBrushEngine) : b.engine;
+  // A Mixer Brush's pick-up / mix ratios, dirtiness and mixing are its mixer settings: behaviour
+  // changes are written into the mixer, then the behaviour is read back from it.
+  const rb = raw.behavior ?? {};
+  const mixerIn: Partial<MixerSettings> = { ...b.mixer, ...(raw.mixer ?? {}) };
+  if (engine === 'mixer') {
+    if (rb.pickup !== undefined) mixerIn.wet = rb.pickup;
+    if (rb.mix !== undefined) mixerIn.mix = rb.mix;
+    if (rb.dirty !== undefined) mixerIn.cleanEachStroke = !rb.dirty;
+    if (rb.mixing !== undefined) mixerIn.mixing = rb.mixing;
+  }
+  const mixer = normalizeMixer(mixerIn);
+  let behavior = normalizeBehavior(rb, b.behavior);
+  if (engine === 'mixer') behavior = { ...behavior, pickup: mixer.wet, mix: mixer.mix, dirty: !mixer.cleanEachStroke, mixing: mixer.mixing };
   return {
     id,
     name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim().slice(0, 80) : b.name,
     category: PAINT_BRUSH_CATEGORIES.includes(raw.category as PaintBrushCategory) ? (raw.category as PaintBrushCategory) : b.category,
-    engine: PAINT_BRUSH_ENGINES.includes(raw.engine as PaintBrushEngine) ? (raw.engine as PaintBrushEngine) : b.engine,
+    engine,
     tip: normalizeBrush({ ...b.tip, ...(raw.tip ?? {}) }),
     grain: unit(raw.grain, b.grain),
     pressureSmoothing: range(raw.pressureSmoothing, 0, 0.95, b.pressureSmoothing),
     rotation: BRUSH_ROTATIONS.includes(raw.rotation as BrushRotation) ? (raw.rotation as BrushRotation) : b.rotation,
     dynamics: normalizeDynamics(raw.dynamics ?? {}, b.dynamics),
-    mixer: normalizeMixer({ ...b.mixer, ...(raw.mixer ?? {}) }),
+    mixer,
     loadsColor: typeof raw.loadsColor === 'boolean' ? raw.loadsColor : b.loadsColor,
+    behavior,
+    blender: normalizeBlender(raw.blender ?? {}, b.blender),
+    smudge: normalizeSmudge(raw.smudge ?? {}, b.smudge),
     ...(raw.builtin ? { builtin: true } : {}),
   };
 }
@@ -140,6 +255,9 @@ const BASE_BRUSH: PaintBrush = {
   dynamics: { ...DEFAULT_DYNAMICS },
   mixer: { ...DEFAULT_MIXER },
   loadsColor: true,
+  behavior: { ...DEFAULT_BEHAVIOR, multicolor: { ...DEFAULT_MULTI_COLOR, colors: [] } },
+  blender: { ...DEFAULT_BLENDER },
+  smudge: { ...DEFAULT_SMUDGE },
 };
 
 type BrushInit = PaintBrushInput & { id: string; name: string; category: PaintBrushCategory };
@@ -218,14 +336,38 @@ export const BUILTIN_BRUSHES: readonly PaintBrush[] = [
     dynamics: { minSize: 0.5 },
   }),
   builtin({
-    id: 'blender', name: 'Blender', category: 'blender', engine: 'mixer', loadsColor: false,
-    tip: { size: 34, hardness: 0.4, spacing: 0.08, opacity: 1, flow: 0.35, smoothing: 0.2, pressureSize: false, pressureOpacity: true },
-    mixer: { wet: 0.7, load: 0, mix: 1, loadEachStroke: false, cleanEachStroke: true, mixing: 'pigment' },
+    id: 'blender', name: 'Blender', category: 'blender', engine: 'blender', loadsColor: false,
+    tip: { size: 34, hardness: 0.4, spacing: 0.1, opacity: 1, flow: 1, smoothing: 0.2, pressureSize: false, pressureOpacity: true },
+    blender: { strength: 0.5, distance: 0.35, mixing: 'pigment' },
   }),
   builtin({
-    id: 'smudge', name: 'Smudge', category: 'smudge', engine: 'mixer', loadsColor: false,
-    tip: { size: 26, hardness: 0.6, spacing: 0.06, opacity: 1, flow: 0.8, smoothing: 0.2, pressureSize: false, pressureOpacity: true },
-    mixer: { wet: 1, load: 0, mix: 1, loadEachStroke: false, cleanEachStroke: true, mixing: 'rgb' },
+    id: 'smudge', name: 'Smudge', category: 'smudge', engine: 'smudge', loadsColor: false,
+    tip: { size: 26, hardness: 0.6, spacing: 0.06, opacity: 1, flow: 1, smoothing: 0.2, pressureSize: false, pressureOpacity: true },
+    smudge: { strength: 0.75, length: 0.85, mixing: 'rgb' },
+  }),
+  builtin({
+    id: 'wet-smudge', name: 'Pigment smudge', category: 'smudge', engine: 'smudge', loadsColor: false,
+    tip: { size: 30, hardness: 0.5, spacing: 0.06, opacity: 1, flow: 1, smoothing: 0.2, pressureSize: true, pressureOpacity: true },
+    smudge: { strength: 0.7, length: 0.9, mixing: 'pigment' },
+    dynamics: { minSize: 0.6 },
+  }),
+  builtin({
+    id: 'dirty-round', name: 'Dirty round', category: 'paint',
+    tip: { size: 22, hardness: 0.65, spacing: 0.06, opacity: 1, flow: 0.7, smoothing: 0.2, pressureSize: true, pressureOpacity: false },
+    behavior: { pickup: 0.55, mix: 0.6, dirty: true, mixing: 'pigment' },
+    dynamics: { minSize: 0.5 },
+  }),
+  builtin({
+    id: 'multicolor-flat', name: 'Multi-colour flat', category: 'paint', rotation: 'stroke',
+    tip: { size: 30, hardness: 0.75, spacing: 0.05, angle: 90, roundness: 0.3, opacity: 1, flow: 0.85, smoothing: 0.2, pressureSize: true, pressureOpacity: false },
+    behavior: { pickup: 0.15, mix: 0.4, mixing: 'pigment', multicolor: { mode: 'tip', softness: 0.7 } },
+    dynamics: { minSize: 0.6 },
+  }),
+  builtin({
+    id: 'palette-dabber', name: 'Palette dabber', category: 'paint',
+    tip: { size: 18, hardness: 0.7, spacing: 0.35, opacity: 1, flow: 0.9, smoothing: 0.1, pressureSize: true, pressureOpacity: false },
+    behavior: { multicolor: { mode: 'dab', order: 'sequence', length: 6, softness: 0.4 } },
+    dynamics: { minSize: 0.5, sizeJitter: 0.15, scatter: 0.3 },
   }),
   builtin({
     id: 'mixer-brush', name: 'Mixer Brush', category: 'mixer', engine: 'mixer',

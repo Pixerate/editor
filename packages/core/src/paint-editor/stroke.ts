@@ -4,16 +4,19 @@
  *
  * - Dab and eraser brushes: the coverage is cumulative, so each update recomposites the touched
  *   region from the pre-stroke tile (`applyStrokeToTile` with `into` and `region`).
- * - Mixer engine brushes (Mixer Brush, blender, smudge): dabs read what earlier dabs laid down, so
- *   they paint into live tile copies; every tile written since the last update gets a new `Tile`
- *   object, because the compositor caches by tile identity.
+ * - Dab-by-dab brushes (`PaintDabStroke`: the Mixer Brush, blender, smudge, and dab brushes that
+ *   pick up paint or are multi-coloured): dabs read what earlier dabs laid down, so they paint
+ *   into live tile copies; every tile written since the last update gets a new `Tile` object,
+ *   because the compositor caches by tile identity.
  */
 
 import { applyStrokeToTile, type StrokeApply } from '../paint/brush';
-import { MixerStroke, cleanMixer, loadMixer, type MixerLoad, type MixerTarget } from '../paint/mixer';
+import { EMPTY_MIXER_LOAD, type PaintTileTarget } from '../paint/exchange';
+import { cleanMixer, loadMixer, type MixerLoad } from '../paint/mixer';
 import { TILE, TiledSurface, finishTile, tileKey, tilesInRect, type RasterRect, type Tile, type TileKey } from '../raster/surface';
-import type { PaintBrush } from './brushes';
-import { DryStroke, IDENTITY_COPY, PenSmoother, mixerTip, toStrokePoint, type PenPoint, type StrokeCopy } from './engine';
+import { usesPaintExchange, type PaintBrush } from './brushes';
+import { PaintDabStroke } from './dab-stroke';
+import { DryStroke, IDENTITY_COPY, type PenPoint, type StrokeCopy } from './engine';
 import type { PaperGrain } from './paper';
 import type { Affine } from './strokes';
 
@@ -44,8 +47,10 @@ export interface StrokeSessionInit {
   copies: readonly StrokeCopy[];
   /** Applied to each raw sample before it is painted and recorded (perspective snapping). */
   inputFilter?: (p: PenPoint) => PenPoint;
-  /** Mixer engine: the brush load at the start of the stroke. */
+  /** Mixer and wet-capable dab brushes: what the brush carries at the start of the stroke. */
   mixerLoad: MixerLoad;
+  /** The secondary colour 0..255 RGBA (a multi-colour brush without its own colours uses it). */
+  secondary?: readonly [number, number, number, number];
 }
 
 export interface PaintStrokeResult {
@@ -55,7 +60,7 @@ export interface PaintStrokeResult {
   dabs: number;
   /** Id of the recorded stroke (see `list_strokes` / `replay_strokes`), or `null` when nothing changed. */
   strokeId: string | null;
-  /** Mixer engine brushes: what the brush carries after the stroke. */
+  /** Mixer and wet-capable dab brushes: what the brush carries after the stroke (cleaned unless it is dirty). */
   mixerLoad?: MixerLoad;
 }
 
@@ -89,8 +94,7 @@ export class PaintStrokeSession {
   private readonly touched = new Set<TileKey>();
   private readonly fresh = new Set<TileKey>();
   private readonly dry: DryStroke | null = null;
-  private readonly mixers: MixerStroke[] = [];
-  private readonly mixerSmoother: PenSmoother | null = null;
+  private readonly wet: PaintDabStroke | null = null;
   private readonly apply: StrokeApply;
   private readonly copies: readonly StrokeCopy[];
   private bounds: RasterRect | null = null;
@@ -114,16 +118,24 @@ export class PaintStrokeSession {
       selection: null,
       offset: init.offset,
     };
-    if (brush.engine === 'mixer') {
-      this.mixerSmoother = new PenSmoother(brush.tip.smoothing, brush.pressureSmoothing);
-      const load = init.mixerLoad;
-      for (let i = 0; i < this.copies.length; i++) this.mixers.push(new MixerStroke(mixerTip(brush), brush.mixer, load, this.mixerTarget()));
+    if (brush.engine === 'mixer' || brush.engine === 'blender' || brush.engine === 'smudge' || usesPaintExchange(brush)) {
+      const rgb = (c: readonly number[]): [number, number, number] => [c[0] / 255, c[1] / 255, c[2] / 255];
+      this.wet = new PaintDabStroke(brush, {
+        target: this.tileTarget(),
+        color: rgb(init.color),
+        secondary: rgb(init.secondary ?? init.background),
+        load: init.mixerLoad,
+        grain: init.grain,
+        paperDepth: init.paperDepth,
+        seed: init.seed,
+        copies: this.copies,
+      });
     } else {
       this.dry = new DryStroke(brush, { grain: init.grain, paperDepth: init.paperDepth, seed: init.seed, copies: this.copies });
     }
   }
 
-  private mixerTarget(): MixerTarget {
+  private tileTarget(): PaintTileTarget {
     return {
       offset: this.init.offset,
       lockTransparency: this.init.lockTransparency,
@@ -153,15 +165,7 @@ export class PaintStrokeSession {
     if (filter) points = points.map(filter);
     for (const p of points) this.points.push(p);
     this.lastRaw = points[points.length - 1];
-    if (this.dry) this.update(this.dry.push(points));
-    else {
-      const rects: RasterRect[] = [];
-      for (const raw of points) {
-        const p = toStrokePoint(this.mixerSmoother!.push(raw));
-        this.copies.forEach((c, i) => rects.push(...this.mixers[i].push([toStrokePoint(c.map(p))])));
-      }
-      this.update(rects);
-    }
+    this.update(this.dry ? this.dry.push(points) : this.wet!.push(points));
   }
 
   private update(rects: RasterRect[]): void {
@@ -196,13 +200,7 @@ export class PaintStrokeSession {
   /** Ends the stroke (one undo step) and returns what changed. */
   end(): PaintStrokeResult {
     if (this.closed) throw new Error('This stroke has already ended.');
-    if (this.dry) this.update(this.dry.finish());
-    else {
-      const rects: RasterRect[] = [];
-      const last = this.lastRaw ? toStrokePoint(this.lastRaw) : undefined;
-      this.copies.forEach((c, i) => rects.push(...this.mixers[i].finish(last ? toStrokePoint(c.map(last)) : undefined)));
-      this.update(rects);
-    }
+    this.update(this.dry ? this.dry.finish() : this.wet!.finish());
     this.closed = true;
     const ch = this.base.channels;
     const tiles = new Map(this.base.tiles);
@@ -215,14 +213,10 @@ export class PaintStrokeSession {
       if (!sameTile(prev, tile)) changed = true;
     }
     const surface = changed ? new TiledSurface(ch, tiles, this.base.defaultValue) : null;
-    const dabs = this.dry ? this.dry.dabCount : this.mixers.reduce((n, m) => n + m.dabCount, 0);
+    const dabs = this.dry ? this.dry.dabCount : this.wet!.dabCount;
     this.result = { layerId: this.layerId, bounds: changed ? this.bounds : null, dabs, strokeId: null };
-    if (this.mixers.length) {
-      const brush = this.init.brush;
-      let load = this.mixers[0].load;
-      if (brush.mixer.cleanEachStroke) load = cleanMixer(load);
-      this.result.mixerLoad = load;
-    }
+    const carried = this.wet?.load;
+    if (carried) this.result.mixerLoad = this.init.brush.behavior.dirty ? carried : cleanMixer(carried);
     this.host.commit(this, surface, false);
     return this.result;
   }
@@ -240,4 +234,15 @@ export function mixerLoadForStroke(brush: PaintBrush, current: MixerLoad, color:
   if (!brush.loadsColor) return { reservoir: null, amount: 0, pickup: brush.mixer.cleanEachStroke ? null : current.pickup };
   if (brush.mixer.loadEachStroke || !current.reservoir) return loadMixer(current, color);
   return current;
+}
+
+/**
+ * What any brush carries at the start of a stroke: the Mixer Brush as `mixerLoadForStroke`; a
+ * wet-capable dab brush the paint colour, full, plus the carried paint when it is dirty; other
+ * brushes nothing.
+ */
+export function brushLoadForStroke(brush: PaintBrush, current: MixerLoad, color: readonly [number, number, number]): MixerLoad {
+  if (brush.engine === 'mixer') return mixerLoadForStroke(brush, current, color);
+  if (usesPaintExchange(brush)) return { reservoir: [color[0], color[1], color[2]], amount: 1, pickup: brush.behavior.dirty ? current.pickup : null };
+  return EMPTY_MIXER_LOAD;
 }

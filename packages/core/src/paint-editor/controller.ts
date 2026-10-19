@@ -57,7 +57,7 @@ import {
   type PaintDocumentExtensions,
   type SerializedPaintDocument,
 } from './serialize';
-import { mixerLoadForStroke, PaintStrokeSession, type PaintStrokeResult, type StrokeSessionHost } from './stroke';
+import { brushLoadForStroke, PaintStrokeSession, type PaintStrokeResult, type StrokeSessionHost } from './stroke';
 import { affineCopy, strokeBounds, variationAffine, varyStroke, IDENTITY_AFFINE, type Affine, type RecordedStroke, type StrokeVariation } from './strokes';
 import { renderBrushThumbnail, type BrushThumbnail } from './thumbnails';
 import { colorHarmony, DEFAULT_SWATCHES, type ColorWheel, type HarmonyColor, type HarmonyKind, type Swatch } from './color';
@@ -73,7 +73,7 @@ import {
   type SymmetryGuide,
   type TracingImage,
 } from './guides';
-import { MixingPad, type MixingPadTool } from './mixing-pad';
+import { MixingPad, type MixingPadTool, type PadMixOptions } from './mixing-pad';
 import { DEFAULT_VIEW, normalizeView, type PaintView } from './view';
 
 /** A refusal with a message that says what is wrong and how to fix it. */
@@ -124,6 +124,8 @@ export interface PaintEditorState {
   swatches: readonly Swatch[];
   /** Changes whenever the mixing pad does. */
   mixingPadVersion: number;
+  /** Mixing pads kept by name (saved with the document). */
+  savedMixingPads: readonly SavedMixingPadInfo[];
   /** A stroke is in progress. */
   stroking: boolean;
   /** Increments on every change. */
@@ -164,6 +166,8 @@ export interface PaintStrokeInit {
   snapToPerspective?: boolean;
   /** Where the stroke starts, for taking its colour from the tracing image before the first sample (`beginStroke`). */
   start?: { x: number; y: number };
+  /** What the brush carries at the start (default: from the editor's brush load); replays pass the recorded one. */
+  load?: MixerLoad;
 }
 
 export interface LayerUpdate {
@@ -214,6 +218,17 @@ export interface PixelImage {
   data: Uint8ClampedArray;
 }
 
+/** A mixing pad kept by name. */
+export interface SavedMixingPadInfo {
+  id: string;
+  name: string;
+}
+
+interface SavedMixingPad extends SavedMixingPadInfo {
+  /** The pad as a PNG data URL. */
+  png: string;
+}
+
 interface HistoryEntry {
   label: string;
   before: PaintDocumentState;
@@ -254,6 +269,8 @@ export class PaintEditorController {
   private readonly historyLimit: number;
   private brush: PaintBrush;
   private userBrushes: PaintBrush[];
+  /** The library list in the state (the same array until the user brushes change, so thumbnails are not redrawn). */
+  private library: readonly PaintBrush[] | null = null;
   private color: string;
   private secondaryColor = '#ffffff';
   private mixerLoad: MixerLoad = EMPTY_MIXER_LOAD;
@@ -272,6 +289,8 @@ export class PaintEditorController {
   private guides: PaintGuides;
   private swatches: Swatch[] = DEFAULT_SWATCHES.map((s) => ({ ...s }));
   private readonly pad = new MixingPad();
+  private savedPads: SavedMixingPad[] = [];
+  private nextPadId = 1;
   private tracingVersion = 1;
   private tracingCache: { key: number; node: ImageNode } | null = null;
   private readonly imagePixels = new Map<string, PixelImage>();
@@ -314,7 +333,7 @@ export class PaintEditorController {
     this.cached = {
       document: this.doc,
       brush: this.brush,
-      brushes: [...BUILTIN_BRUSHES, ...this.userBrushes],
+      brushes: (this.library ??= [...BUILTIN_BRUSHES, ...this.userBrushes]),
       color: this.color,
       secondaryColor: this.secondaryColor,
       mixerLoad: this.mixerLoad,
@@ -327,6 +346,7 @@ export class PaintEditorController {
       guides: this.guides,
       swatches: this.swatches,
       mixingPadVersion: this.pad.version,
+      savedMixingPads: this.savedPads.map(({ id, name }) => ({ id, name })),
       stroking: Boolean(this.session),
       version: this.version,
     };
@@ -735,6 +755,7 @@ export class PaintEditorController {
     const i = this.userBrushes.findIndex((b) => b.id === options.id);
     if (i >= 0) this.userBrushes[i] = saved;
     else this.userBrushes.push(saved);
+    this.library = null;
     this.emit([]);
     return saved;
   }
@@ -744,6 +765,7 @@ export class PaintEditorController {
     const i = this.userBrushes.findIndex((b) => b.id === id);
     if (i < 0) throw new PaintEditorError(`Unknown brush "${id}". Call list_brushes for the ids.`);
     this.userBrushes.splice(i, 1);
+    this.library = null;
     this.emit([]);
   }
 
@@ -787,7 +809,10 @@ export class PaintEditorController {
       else this.userBrushes.push(b);
       added.push(b.id);
     }
-    if (added.length) this.emit([]);
+    if (added.length) {
+      this.library = null;
+      this.emit([]);
+    }
     return { added, skipped, problems };
   }
 
@@ -877,6 +902,15 @@ export class PaintEditorController {
     return brush;
   }
 
+  /**
+   * After a stroke: a Mixer Brush that loads colour keeps its whole load; any other dirty brush
+   * keeps only the paint it carries (the reservoir stays the Mixer Brush's).
+   */
+  private keepLoad(brush: PaintBrush, load: MixerLoad): void {
+    if (brush.engine === 'mixer' && brush.loadsColor) this.mixerLoad = load;
+    else if (brush.behavior.dirty) this.mixerLoad = { ...this.mixerLoad, pickup: load.pickup };
+  }
+
   /** Extra copies every new stroke paints (the painting guides add mirror and kaleidoscope copies). */
   protected strokeCopies(): Affine[] {
     return symmetryCopies(this.guides.symmetry);
@@ -918,7 +952,8 @@ export class PaintEditorController {
       affineCopies: copies,
       copies: [IDENTITY_AFFINE, ...copies].map(affineCopy),
       inputFilter: snapper ? (p) => snapper.snap(p) : undefined,
-      mixerLoad: brush.engine === 'mixer' ? mixerLoadForStroke(brush, this.mixerLoad, [rgba[0] / 255, rgba[1] / 255, rgba[2] / 255]) : EMPTY_MIXER_LOAD,
+      mixerLoad: init.load ?? brushLoadForStroke(brush, this.mixerLoad, [rgba[0] / 255, rgba[1] / 255, rgba[2] / 255]),
+      secondary: rgbaOf(this.secondaryColor),
     });
     return session;
   }
@@ -934,6 +969,7 @@ export class PaintEditorController {
       seed: init.seed,
     };
     if (init.affineCopies.length) stroke.copies = init.affineCopies.map((m) => [...m] as unknown as Affine);
+    if (init.mixerLoad.reservoir || init.mixerLoad.pickup) stroke.load = JSON.parse(JSON.stringify(init.mixerLoad));
     return stroke;
   }
 
@@ -953,7 +989,7 @@ export class PaintEditorController {
         this.live = null;
         this.liveLayers = null;
         const brush = s.init.brush;
-        if (!cancelled && s.result?.mixerLoad && brush.loadsColor) this.mixerLoad = s.result.mixerLoad;
+        if (!cancelled && s.result?.mixerLoad) this.keepLoad(brush, s.result.mixerLoad);
         if (cancelled || !surface) {
           this.emit();
           return;
@@ -999,7 +1035,7 @@ export class PaintEditorController {
     this.requireIdle('painting');
     const points = this.checkPoints(init.points);
     const { doc, result, brush } = this.runStroke(this.doc, { ...init, start: init.start ?? points[0] }, points);
-    if (result.mixerLoad && brush.loadsColor) this.mixerLoad = result.mixerLoad;
+    if (result.mixerLoad) this.keepLoad(brush, result.mixerLoad);
     if (doc !== this.doc) this.commit(`${brush.name} stroke`, doc);
     else this.emit([]);
     return result;
@@ -1062,7 +1098,13 @@ export class PaintEditorController {
         }
         const layerId = options.layerId ?? s.layerId;
         if (!findLayer(doc.layers, layerId)) throw new PaintEditorError(`Stroke "${s.id}" was painted on layer "${layerId}", which no longer exists; pass layerId to replay it elsewhere.`);
-        const run = this.runStroke(doc, { layerId, color: options.color ?? s.color, brush, seed: s.seed, copies: v.copies ?? [] }, v.points);
+        // The recorded load replays the stroke exactly; a recolour reloads the reservoir with the new colour.
+        let load = s.load;
+        if (load && options.color !== undefined && load.reservoir) {
+          const [r, g, b] = hexToRgb8(options.color);
+          load = { ...load, reservoir: [r / 255, g / 255, b / 255] };
+        }
+        const run = this.runStroke(doc, { layerId, color: options.color ?? s.color, brush, seed: s.seed, copies: v.copies ?? [], ...(load && options.brushId === undefined ? { load } : {}) }, v.points);
         doc = run.doc;
         bounds = unionRect(bounds, run.result.bounds);
         if (run.result.strokeId) ids.push(run.result.strokeId);
@@ -1152,16 +1194,17 @@ export class PaintEditorController {
 
   /** The document as JSON with inline PNG assets. */
   toJSON(options: { strokes?: boolean } = {}): SerializedPaintDocument {
-    return serializePaintDocument(this.doc, { strokes: options.strokes, extensions: this.extensions, guides: this.guides, swatches: this.swatches });
+    return serializePaintDocument(this.doc, { strokes: options.strokes, extensions: this.extensions, guides: this.guides, swatches: this.swatches, mixingPad: this.mixingPadJSON() });
   }
 
   /** The document as JSON with each PNG stored in `store`. */
   toJSONExternal(store: PaintAssetStore, options: { strokes?: boolean } = {}): Promise<SerializedPaintDocument> {
-    return serializePaintDocumentExternal(this.doc, store, { strokes: options.strokes, extensions: this.extensions, guides: this.guides, swatches: this.swatches });
+    return serializePaintDocumentExternal(this.doc, store, { strokes: options.strokes, extensions: this.extensions, guides: this.guides, swatches: this.swatches, mixingPad: this.mixingPadJSON() });
   }
 
-  private adopt(loaded: { state: PaintDocumentState; extensions: PaintDocumentExtensions; problems: string[]; guides?: unknown; swatches?: unknown }): string[] {
+  private adopt(loaded: { state: PaintDocumentState; extensions: PaintDocumentExtensions; problems: string[]; guides?: unknown; swatches?: unknown; mixingPad?: unknown }): string[] {
     this.extensions = loaded.extensions;
+    this.readMixingPad(loaded.mixingPad, loaded.problems);
     this.readGuides(loaded.guides, loaded.state, loaded.problems);
     if (Array.isArray(loaded.swatches)) {
       this.swatches = loaded.swatches
@@ -1553,6 +1596,109 @@ export class PaintEditorController {
   clearMixingPad(): void {
     this.pad.clear();
     this.emit([]);
+  }
+
+  /**
+   * Mixes paints on the pad like a painter: blobs in proportion to their `parts`, knife passes,
+   * and a fully mixed core of the Kubelka-Munk mix (see `MixingPad.mix`). With `setColor` the
+   * mix becomes the paint colour. Returns the mixed colour and the pile's bounds.
+   */
+  mixOnPad(paints: readonly { color: string; parts: number }[], options: PadMixOptions & { setColor?: boolean } = {}): { color: string; bounds: RasterRect } {
+    const parsed = (paints ?? []).map((p, i) => ({ color: parseColor(p?.color, `paints[${i}].color`), parts: p?.parts }));
+    let r: { color: string | null; bounds: RasterRect };
+    try {
+      r = this.pad.mix(parsed, options);
+    } catch (e) {
+      throw new PaintEditorError((e as Error).message);
+    }
+    const color = r.color ?? parsed[0].color;
+    this.emit([]);
+    if (options.setColor) this.setColor(color);
+    return { color, bounds: r.bounds };
+  }
+
+  /** The mixing pad as a PNG data URL (with alpha). */
+  mixingPadPng(): string {
+    return this.pad.toPng();
+  }
+
+  /** Replaces the mixing pad with a PNG (data URL or base64, 360 × 220). */
+  setMixingPadPng(png: string): void {
+    try {
+      this.pad.fromPng(png);
+    } catch (e) {
+      throw new PaintEditorError((e as Error).message);
+    }
+    this.emit([]);
+  }
+
+  /** The mixing pads kept by name. */
+  listMixingPads(): SavedMixingPadInfo[] {
+    return this.savedPads.map(({ id, name }) => ({ id, name }));
+  }
+
+  /** Keeps the mixing pad as it is now under `name` (saved with the document). Returns its id. */
+  saveMixingPad(name?: string): SavedMixingPadInfo {
+    if (this.pad.empty) throw new PaintEditorError('The mixing pad is empty; put paint on it (mixing_pad_stroke or mix_on_pad) before saving it.');
+    const label = (typeof name === 'string' && name.trim() ? name.trim() : `Pad ${this.nextPadId}`).slice(0, 80);
+    const pad: SavedMixingPad = { id: `pad${this.nextPadId++}`, name: label, png: this.pad.toPng() };
+    this.savedPads.push(pad);
+    this.emit([]);
+    return { id: pad.id, name: pad.name };
+  }
+
+  private requirePad(id: string): SavedMixingPad {
+    const p = this.savedPads.find((x) => x.id === id);
+    if (!p) throw new PaintEditorError(`Unknown mixing pad "${id}". Call list_mixing_pads for the ids.`);
+    return p;
+  }
+
+  /** Puts a kept pad back on the mixing pad (replacing what is there). */
+  loadMixingPad(id: string): SavedMixingPadInfo {
+    const p = this.requirePad(id);
+    this.setMixingPadPng(p.png);
+    return { id: p.id, name: p.name };
+  }
+
+  /** Forgets a kept pad. */
+  removeMixingPad(id: string): SavedMixingPadInfo {
+    const p = this.requirePad(id);
+    this.savedPads = this.savedPads.filter((x) => x !== p);
+    this.emit([]);
+    return { id: p.id, name: p.name };
+  }
+
+  private mixingPadJSON(): { current?: string; saved: SavedMixingPad[] } | undefined {
+    if (this.pad.empty && !this.savedPads.length) return undefined;
+    return { ...(this.pad.empty ? {} : { current: this.pad.toPng() }), saved: this.savedPads.map((p) => ({ ...p })) };
+  }
+
+  private readMixingPad(raw: unknown, problems: string[]): void {
+    this.savedPads = [];
+    this.nextPadId = 1;
+    this.pad.clear();
+    if (raw === undefined || raw === null) return;
+    const r = raw as { current?: unknown; saved?: unknown };
+    if (typeof r.current === 'string') {
+      try {
+        this.pad.fromPng(r.current);
+      } catch (e) {
+        problems.push(`The mixing pad could not be read (${(e as Error).message}); it starts empty.`);
+      }
+    }
+    if (Array.isArray(r.saved)) {
+      r.saved.forEach((p, i) => {
+        const x = p as Partial<SavedMixingPad>;
+        if (!x || typeof x.png !== 'string' || typeof x.name !== 'string') {
+          problems.push(`mixingPad.saved[${i}] is not a saved pad; skipped.`);
+          return;
+        }
+        const id = typeof x.id === 'string' && /^pad\d+$/.test(x.id) ? x.id : `pad${this.nextPadId}`;
+        const n = Number(id.slice(3));
+        if (n >= this.nextPadId) this.nextPadId = n + 1;
+        this.savedPads.push({ id, name: x.name, png: x.png });
+      });
+    }
   }
 
   /** A layer's tile surface (live while stroking), for thumbnails. */

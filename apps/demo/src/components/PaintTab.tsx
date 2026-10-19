@@ -28,8 +28,9 @@ export function PaintTab() {
           Paint
         </h2>
         <p className="text-xs text-slate-400 mt-1">
-          Natural media on generated paper: pencils, pastels and charcoal catch the paper's grain (press harder to fill it), plus airbrush, marker, ink, blender,
-          smudge and the Mixer Brush with pigment mixing. Pens use pressure, tilt and barrel rotation. Rotate (R, Shift+wheel) and mirror (M) the view, paint
+          Natural media on generated paper: pencils, pastels and charcoal catch the paper's grain (press harder to fill it), plus airbrush, marker and ink. Blend
+          with a blender that mixes nearby colours like paint, a smudge (with pigment mixing) and the Mixer Brush; give any brush pick-up and mix ratios, make it
+          dirty or multi-coloured, and glaze layers in watercolour, tint, highlight or shadow mode. Pens use pressure, tilt and barrel rotation. Rotate (R, Shift+wheel) and mirror (M) the view, paint
           mirrored or as a kaleidoscope, snap to perspective guides, trace an image, and mix colours on the pad. Every stroke is kept as data and can be replayed.
         </p>
       </div>
@@ -40,7 +41,7 @@ export function PaintTab() {
         scripts={PAINT_SCRIPTS}
         stage={stage}
         presence={presence}
-        hint="Plays a scripted agent turn with the paint__* tools. Strokes go through the paint director, so its cursor paints each one live on the canvas: paper, fills that follow the grain, pigment mixing, replayed and varied strokes, and kaleidoscope symmetry."
+        hint="Plays a scripted agent turn with the paint__* tools. Strokes go through the paint director, so its cursor paints each one live on the canvas: paper, fills that follow the grain, pigment mixing on the pad, blending, dirty and multi-colour brushes, watercolour glazes, replayed and varied strokes, and kaleidoscope symmetry."
       />
     </div>
   );
