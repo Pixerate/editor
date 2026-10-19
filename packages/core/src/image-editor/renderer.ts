@@ -77,7 +77,13 @@ export interface RenderOptions {
   /** The paint tools' cursor: a circle of `diameter` px at (`x`, `y`) in natural pixels. */
   brushCursor?: { x: number; y: number; diameter: number } | null;
   /** Free Transform's frame, handles and reference point in natural pixels (`FreeTransformTool.overlay()`). */
-  freeTransform?: { outline: ImagePoint[]; handles: ImagePoint[]; reference: ImagePoint } | null;
+  freeTransform?: {
+    outline: ImagePoint[];
+    handles: ImagePoint[];
+    reference: ImagePoint;
+    /** Warp mode: the mesh's grid lines as cubics, its anchors, and handles with their anchors. */
+    warp?: { curves: ImagePoint[][]; anchors: ImagePoint[]; handles: Array<{ point: ImagePoint; anchor: ImagePoint }> };
+  } | null;
 }
 
 /**
@@ -376,21 +382,43 @@ export class ImageEditorRenderer {
       ctx.save();
       try {
         const scr = (p: ImagePoint) => projectImagePoint(p, projection);
-        const outline = t.outline.map(scr);
         ctx.beginPath();
-        outline.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
-        ctx.closePath();
+        if (t.warp) {
+          for (const c of t.warp.curves) {
+            const [a, b, d, e] = c.map(scr);
+            ctx.moveTo(a.x, a.y);
+            ctx.bezierCurveTo(b.x, b.y, d.x, d.y, e.x, e.y);
+          }
+          for (const h of t.warp.handles) {
+            const a = scr(h.anchor);
+            const q = scr(h.point);
+            ctx.moveTo(a.x, a.y);
+            ctx.lineTo(q.x, q.y);
+          }
+        } else {
+          const outline = t.outline.map(scr);
+          outline.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+          ctx.closePath();
+        }
         ctx.lineWidth = 3;
         ctx.strokeStyle = 'rgba(0,0,0,0.5)';
         ctx.stroke();
         ctx.lineWidth = 1;
         ctx.strokeStyle = '#ffffff';
         ctx.stroke();
-        for (const h of t.handles.map(scr)) {
+        for (const h of [...t.handles, ...(t.warp?.anchors ?? [])].map(scr)) {
           ctx.fillStyle = '#ffffff';
           ctx.strokeStyle = '#1e293b';
           ctx.fillRect(h.x - 4, h.y - 4, 8, 8);
           ctx.strokeRect(h.x - 4, h.y - 4, 8, 8);
+        }
+        for (const h of (t.warp?.handles ?? []).map((w) => scr(w.point))) {
+          ctx.beginPath();
+          ctx.arc(h.x, h.y, 3, 0, Math.PI * 2);
+          ctx.fillStyle = '#ffffff';
+          ctx.fill();
+          ctx.strokeStyle = '#1e293b';
+          ctx.stroke();
         }
         const r = scr(t.reference);
         ctx.beginPath();

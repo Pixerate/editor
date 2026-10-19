@@ -64,6 +64,32 @@ describe('React Free Transform', () => {
     expect(b.width).toBeLessThanOrEqual(21);
   });
 
+  it('FreeTransformOptionsBar shows Warp: style, bend, grid, and commits the warp', async () => {
+    const { c, id } = setup();
+    const tool = new FreeTransformTool(c);
+    tool.begin();
+    await act(async () => root.render(<FreeTransformOptionsBar tool={tool} />));
+    await act(async () => button('Warp').click());
+    expect(tool.mode).toBe('warp');
+    expect(container.querySelector('input[aria-label="Width in percent of the original"]')).toBeNull();
+    const style = container.querySelector('select[aria-label="Warp style"]') as HTMLSelectElement;
+    await act(async () => {
+      style.value = 'arc';
+      style.dispatchEvent(new win.Event('change', { bubbles: true }));
+    });
+    expect(tool.warpBar().style).toBe('arc');
+    await act(async () => typeInto('Warp bend in percent', '-40'));
+    expect(tool.warpBar().bend).toBe(-40);
+    const grid = container.querySelector('select[aria-label="Warp grid"]') as HTMLSelectElement;
+    await act(async () => {
+      grid.value = '3x3';
+      grid.dispatchEvent(new win.Event('change', { bubbles: true }));
+    });
+    expect(tool.overlay()!.warp!.anchors).toHaveLength(16);
+    await act(async () => button('Commit').click());
+    expect(c.getLayerBounds(id)).not.toEqual({ x: 20, y: 20, width: 40, height: 20 });
+  });
+
   it('opens from the Layers tab, drags a handle on the canvas and commits with Enter', async () => {
     let c!: ImageEditorController;
     let id!: string;
