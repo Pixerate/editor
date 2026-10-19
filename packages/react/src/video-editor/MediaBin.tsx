@@ -116,6 +116,11 @@ export function MediaBin({ controller, editable = true, fileToUrl, probe = probe
               <span className="min-w-0 flex-1 truncate" title={asset.src}>
                 {asset.name ?? asset.id}
               </span>
+              {asset.proxies?.length ? (
+                <span className="rounded bg-muted px-1 text-[10px] text-muted-foreground" title={`Proxies: ${asset.proxies.map((p) => `${p.scale * 100}%`).join(', ')} (the preview can play these; exports use the original)`} data-asset-proxies="">
+                  proxy
+                </span>
+              ) : null}
               {asset.duration !== undefined && <span className="tabular-nums text-muted-foreground">{formatVideoSeconds(asset.duration)}</span>}
               {editable && (
                 <button type="button" className={btn} disabled={!canEdit} onClick={() => addToTimeline(asset)} data-add-to-timeline="">

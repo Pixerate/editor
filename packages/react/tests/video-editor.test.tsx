@@ -835,3 +835,22 @@ describe("ClipInspector LUT (React)", () => {
     controller.destroy();
   });
 });
+
+describe("proxies (React)", () => {
+  it("offers a preview size once an asset has proxies, and marks those assets in the media bin", () => {
+    const controller = make();
+    act(() => root.render(<><VideoTransport controller={controller} /><MediaBin controller={controller} /></>));
+    expect(container.querySelector("[data-preview-scale]")).toBeNull();
+    act(() => void controller.apply({ op: "update_asset", asset: "intro", set: { proxies: [{ scale: 0.5, src: "intro.proxy-50.mp4" }] } }, "Attach proxies"));
+    const select = $<HTMLSelectElement>("select[data-preview-scale]");
+    expect([...select.options].map((o) => o.textContent)).toEqual(["Auto", "Full", "½", "¼"]);
+    choose(select, "0.5");
+    expect(controller.getState().previewScale).toBe(0.5);
+    expect(select.value).toBe("0.5");
+    choose(select, "full");
+    expect(controller.getState().previewScale).toBe("full");
+    expect($('[data-asset="intro"] [data-asset-proxies]').title).toMatch(/Proxies: 50%/);
+    expect(container.querySelector('[data-asset="music"] [data-asset-proxies]')).toBeNull();
+    controller.destroy();
+  });
+});

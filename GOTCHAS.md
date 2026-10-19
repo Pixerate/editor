@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/video-editor] Proxies Must Match the Original Frame for Frame, and Camera Files Seek Slowly
+
+- **Issue / Symptom**: Scrubbing 4K camera footage in the preview lagged by seconds. A proxy made with a frame-rate change or a trimmed start played the wrong frames for every clip.
+- **Root Cause**: Camera and phone H.264/HEVC often has a keyframe only every one to several seconds, so each seek decodes from the previous keyframe at full size. The preview seeks a proxy to the clip's source time, so a proxy is only correct when its timeline is identical to the original's.
+- **Solution / Workaround**: `videoProxyFfmpeg` scales the video only. It keeps the frame rate and start, uses `-g`/`-keyint_min` 12 with `-sc_threshold 0 -bf 0` for cheap seeks, and keeps the sound so a video element can play both. The real-ffmpeg test checks size, keyframe count, duration and that the same moment shows the same picture. Proxies never reach `toVideoFfmpeg` or `toVideoEdl`.
+
 ### [core/video-editor] A LUT Cannot Be a Canvas or SVG Filter, and ffmpeg's `lut3d` Reads Only Files
 
 - **Issue / Symptom**: There is no CSS or canvas `filter` for a 3D LUT, SVG filters have only per-channel tables and a 4 × 5 matrix, and `lut3d=file=https://…` (or a blob URL) fails in ffmpeg.
