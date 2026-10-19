@@ -165,7 +165,7 @@ function retimeClipKeys(clip: VideoClip, fn: (v: VideoAnimatable) => VideoAnimat
 	}
 }
 
-const OPTIONAL_CLIP_FIELDS = ['name', 'opacity', 'transform', 'fit', 'fadeIn', 'fadeOut', 'transition', 'in', 'speed', 'volume', 'muted', 'color', 'fontSize', 'fontFamily', 'fontWeight', 'background'];
+const OPTIONAL_CLIP_FIELDS = ['name', 'opacity', 'transform', 'fit', 'fadeIn', 'fadeOut', 'fadeInCurve', 'fadeOutCurve', 'transition', 'in', 'speed', 'volume', 'muted', 'color', 'fontSize', 'fontFamily', 'fontWeight', 'background'];
 
 /** Times the new range and nudge ops require, checked before anything changes. */
 const TIME_FIELDS: Partial<Record<VideoEditOp, string[]>> = { slip_clip: ['delta'], roll_edit: ['delta'], slide_clip: ['delta'], lift_range: ['from', 'to'], extract_range: ['from', 'to'], split_at: ['at'] };
@@ -276,6 +276,7 @@ class Editor {
 		const right: any = { ...structuredClone(clip), id: id ?? freshId(`${clip.id}-`, this.ids()), start: at, duration: end - at };
 		delete right.transition;
 		delete right.fadeIn;
+		delete right.fadeInCurve;
 		// Each part keeps the keys on its side, with a key at the cut so both play as the whole did.
 		const leftValues = clipAnimatables(clip);
 		clipAnimatables(right).forEach((r, i) => {
@@ -286,6 +287,7 @@ class Editor {
 		this.moveIn(right, at - clip.start);
 		clip.duration = at - clip.start;
 		delete clip.fadeOut;
+		if (clip.type === 'media') delete clip.fadeOutCurve;
 		track.clips.push(right);
 		track.clips.sort((a, b) => a.start - b.start);
 		return right;

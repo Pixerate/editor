@@ -303,6 +303,21 @@ describe("ClipInspector (Svelte)", () => {
     expect(clipOf(controller, "c2")!.transition).toBeUndefined();
     controller.destroy();
   });
+
+  it("shapes a media clip's sound fades once it has them", () => {
+    const controller = make();
+    render(ClipInspector, { controller });
+    act(() => controller.select(["c1"]));
+    expect(document.querySelector('[data-field="fadeOutCurve"]')).toBeNull();
+    change(q<HTMLInputElement>('[data-field="fadeOut"]'), "800");
+    expect(q<HTMLSelectElement>('[data-field="fadeOutCurve"]').value).toBe("linear");
+    change(q<HTMLSelectElement>('[data-field="fadeOutCurve"]'), "exponential");
+    expect((clipOf(controller, "c1") as any).fadeOutCurve).toBe("exponential");
+    expect(controller.getState().undoLabel).toBe("Change fade out curve");
+    change(q<HTMLSelectElement>('[data-field="fadeOutCurve"]'), "linear");
+    expect((clipOf(controller, "c1") as any).fadeOutCurve).toBeUndefined();
+    controller.destroy();
+  });
 });
 
 describe("ClipInspector keyframes (Svelte)", () => {

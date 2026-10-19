@@ -2,6 +2,8 @@
   import {
     findVideoClip,
     formatVideoTimecode,
+    VIDEO_FADE_CURVE_LABELS,
+    VIDEO_FADE_CURVES,
     VIDEO_TRANSITION_TYPES,
     videoKeyframeRows,
     videoKeyframeToggleEdit,
@@ -149,6 +151,16 @@
         <input class={input} type="number" min="0.05" step="0.05" placeholder="1" aria-label="Speed" {disabled} value={clip.speed ?? ''} onchange={(e) => number('speed', e.currentTarget.value, 'Change speed', { above: 0, what: 'Speed must be a number above 0 (1 = normal speed).' })} data-field="speed" />
         <span class="text-muted-foreground">Muted</span>
         <input type="checkbox" class="justify-self-start" aria-label="Muted" {disabled} checked={!!clip.muted} onchange={(e) => set('muted', e.currentTarget.checked || undefined, e.currentTarget.checked ? 'Mute clip' : 'Unmute clip')} data-field="muted" />
+        {#each [{ key: 'fadeInCurve', on: clip.fadeIn, label: 'Fade in sound', aria: 'Fade in curve', change: 'Change fade in curve' }, { key: 'fadeOutCurve', on: clip.fadeOut, label: 'Fade out sound', aria: 'Fade out curve', change: 'Change fade out curve' }] as const as row (row.key)}
+          {#if row.on}
+            <span class="text-muted-foreground">{row.label}</span>
+            <select class={input} aria-label={row.aria} {disabled} value={clip[row.key] ?? 'linear'} onchange={(e) => set(row.key, e.currentTarget.value === 'linear' ? undefined : e.currentTarget.value, row.change)} data-field={row.key}>
+              {#each VIDEO_FADE_CURVES as c (c)}
+                <option value={c}>{VIDEO_FADE_CURVE_LABELS[c]}</option>
+              {/each}
+            </select>
+          {/if}
+        {/each}
       {:else if clip.type === 'text'}
         <span class="text-muted-foreground">Text</span>
         <textarea class={input} rows="2" aria-label="Text" {disabled} value={clip.text} onchange={(e) => text('text', e.currentTarget.value, 'Change text', true)} data-field="text"></textarea>

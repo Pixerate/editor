@@ -17,6 +17,7 @@ import {
 	toVideoEdl,
 	toVideoFfmpeg,
 	videoContactSheetSvg,
+	videoFadeCurveGain,
 	videoFrameAt,
 	videoProjectSvg,
 	VideoEditorController,
@@ -575,5 +576,60 @@ describe('timeline helpers', () => {
 		expect(videoAssetDropEdit(p, 'song', { start: 7000 })).toEqual({ op: 'add_clip', track: 'a1', clip: { type: 'media', asset: 'song', start: 7000 } });
 		expect(videoClipLabel(ok(applyVideoEdits(p, [{ op: 'delete_clips', clips: ['b'] }, { op: 'update_clip', clip: 'a', set: { speed: 2 } }])).tracks[0].clips[0], p.assets[0])).toBe('beach.mp4 (200%)');
 		expect([videoAssetKindOf('clip.MOV'), videoAssetKindOf('audio/mpeg'), videoAssetKindOf('x.txt'), videoAssetKindOf('https://x/song.mp3?x=1#t')]).toEqual(['video', 'audio', null, 'audio']);
+	});
+});
+
+describe('sound fade curves', () => {
+	it('match the gains ffmpeg afade draws for each curve (measured)', () => {
+		// Gains ffmpeg's afade gave a constant signal at 25%, 50% and 75% of a fade in.
+		const measured: Record<string, [number, number, number]> = {
+			linear: [0.25, 0.5, 0.75],
+			'equal-power': [0.3827, 0.7071, 0.9239],
+			's-curve': [0.1464, 0.5, 0.8536],
+			exponential: [0.0156, 0.125, 0.4219],
+			logarithmic: [0.4375, 0.75, 0.9375]
+		};
+		for (const [curve, gains] of Object.entries(measured)) {
+			[0.25, 0.5, 0.75].forEach((x, i) => expect(videoFadeCurveGain(curve as any, x)).toBeCloseTo(gains[i], 3));
+			expect(videoFadeCurveGain(curve as any, 0)).toBe(0);
+			expect(videoFadeCurveGain(curve as any, 1)).toBeCloseTo(1, 10);
+			expect(videoFadeCurveGain(curve as any, 2)).toBeCloseTo(1, 10);
+		}
+		expect(videoFadeCurveGain(undefined, 0.3)).toBe(0.3);
+	});
+
+	it('shape the sound but leave the picture fading linearly', () => {
+		const p = ok(applyVideoEdits(project(), [{ op: 'update_clip', clip: 'a', set: { fadeIn: 1000, fadeOut: 1000, fadeInCurve: 'equal-power', fadeOutCurve: 'exponential' } }]));
+		const f = videoFrameAt(p, 500);
+		expect(f.layers.find((l) => l.clip === 'a')!.opacity).toBeCloseTo(0.5, 6);
+		expect(f.audio.find((s) => s.clip === 'a')!.gain).toBeCloseTo(Math.SQRT1_2, 6);
+		// 250 ms left of a 1 s exponential fade out: 0.25³.
+		expect(videoFrameAt(p, 3750).audio.find((s) => s.clip === 'a')!.gain).toBeCloseTo(0.015625, 6);
+		expect(videoFrameAt(p, 3750).layers.find((l) => l.clip === 'a')!.opacity).toBeCloseTo(0.25, 6);
+	});
+
+	it('export as afade curves, linear staying the default', () => {
+		const p = ok(applyVideoEdits(project(), [
+			{ op: 'update_clip', clip: 's', set: { fadeIn: 1000, fadeOut: 2000, fadeInCurve: 's-curve', fadeOutCurve: 'logarithmic' } },
+			{ op: 'update_clip', clip: 'a', set: { fadeIn: 500, fadeInCurve: 'linear' } }
+		]));
+		const { filterComplex } = toVideoFfmpeg(p);
+		expect(filterComplex).toContain('afade=t=in:st=0:d=1:curve=hsin');
+		expect(filterComplex).toContain('afade=t=out:st=5:d=2:curve=ipar');
+		expect(filterComplex).toContain('afade=t=in:st=0:d=0.5,');
+	});
+
+	it('go with the fade they belong to when a clip is split, and are checked when read', () => {
+		const p = ok(applyVideoEdits(project(), [
+			{ op: 'update_clip', clip: 'a', set: { fadeIn: 500, fadeOut: 500, fadeInCurve: 'equal-power', fadeOutCurve: 's-curve' } },
+			{ op: 'split_clip', clip: 'a', at: 2000, id: 'a2' }
+		]));
+		expect(clip(p, 'a')).toMatchObject({ fadeIn: 500, fadeInCurve: 'equal-power' });
+		expect(clip(p, 'a')).not.toHaveProperty('fadeOutCurve');
+		expect(clip(p, 'a2')).toMatchObject({ fadeOut: 500, fadeOutCurve: 's-curve' });
+		expect(clip(p, 'a2')).not.toHaveProperty('fadeInCurve');
+		const back = ok(applyVideoEdits(p, [{ op: 'update_clip', clip: 'a', remove: ['fadeInCurve'] }]));
+		expect(clip(back, 'a')).not.toHaveProperty('fadeInCurve');
+		expect(() => parseVideoProject({ width: 640, height: 360, tracks: [{ id: 'v1', kind: 'video', clips: [{ id: 'x', type: 'media', asset: 'a', start: 0, duration: 1000, fadeInCurve: 'wobbly' }] }] })).toThrow(/fadeInCurve must be one of "linear", "equal-power"/);
 	});
 });

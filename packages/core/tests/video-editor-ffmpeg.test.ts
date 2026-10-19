@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { applyVideoEdits, createVideoProject, toVideoFfmpeg, type VideoEdit, type VideoProject } from '../src/video-editor';
+import { applyVideoEdits, createVideoProject, toVideoFfmpeg, videoFrameAt, type VideoEdit, type VideoProject } from '../src/video-editor';
 
 // Renders projects with a real ffmpeg (skipped when it is not on PATH): the string assertions in
 // video-editor.test.ts cannot tell whether ffmpeg accepts the filter graph.
@@ -20,6 +20,13 @@ const ffmpeg = (args: string[]) => {
 const probe = (file: string) => JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', file], { encoding: 'utf8' })) as {
 	format: { duration: string };
 	streams: { codec_type: string; width?: number; height?: number }[];
+};
+/** Peak level of the sound in the 20 ms around `seconds` (mono, 0–1). */
+const level = (file: string, seconds: number): number => {
+	const out = execFileSync('ffmpeg', ['-v', 'error', '-ss', String(seconds - 0.01), '-t', '0.02', '-i', file, '-vn', '-ac', '1', '-f', 'f32le', '-']);
+	let peak = 0;
+	for (let i = 0; i + 4 <= out.length; i += 4) peak = Math.max(peak, Math.abs(out.readFloatLE(i)));
+	return peak;
 };
 /** Mean RGB of the frame at `seconds`. */
 const pixel = (file: string, seconds: number, x: number, y: number): [number, number, number] => {
@@ -97,6 +104,18 @@ describe.skipIf(!hasFfmpeg)('toVideoFfmpeg with a real ffmpeg', () => {
 		// The dip is black at the cut, and the white clip shows after it.
 		expect(near(pixel(out, 2.0, 300, 170), [0, 0, 0])).toBe(true);
 		expect(near(pixel(out, 2.7, 300, 170), [255, 255, 255])).toBe(true);
+	}, 120000);
+
+	it('shapes sound fades as the preview does', () => {
+		const p = project([
+			{ op: 'add_clip', track: 'a1', clip: { type: 'media', id: 's', asset: 'tone', duration: 6000, fadeIn: 2000, fadeInCurve: 'equal-power', fadeOut: 2000, fadeOutCurve: 'exponential' } }
+		]);
+		const out = render(p, 'curves.mp4');
+		const full = level(out, 3);
+		for (const t of [0.5, 1, 1.5, 4.5, 5]) {
+			const gain = videoFrameAt(p, t * 1000).audio[0].gain;
+			expect(Math.abs(level(out, t) / full - gain), `gain at ${t} s`).toBeLessThan(0.05);
+		}
 	}, 120000);
 
 	it('overlays titles given as images, with their fades', () => {

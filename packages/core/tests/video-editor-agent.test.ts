@@ -71,6 +71,22 @@ describe('video agent tasks, through the tools only', () => {
 		expect(await fail('export_video_edl', { dropFrame: 'yes' })).toContain('dropFrame');
 	});
 
+	it('shapes a sound fade and reads the gain back', async () => {
+		const { call, fail } = tools();
+		await call('add_video_asset', { id: 'music', kind: 'audio', src: 'music.mp3', duration: 30000 });
+		await call('add_video_clip', { track: 'a1', clip: { type: 'media', id: 'm', asset: 'music', duration: 10000 } });
+		const set = await call('update_video_clip', { clip: 'm', set: { fadeOut: 4000, fadeOutCurve: 'exponential' } });
+		expect(set.clip).toMatchObject({ fadeOut: 4000, fadeOutCurve: 'exponential' });
+		// Halfway through the fade out: 0.5³.
+		const frame = await call('get_video_frame', { time: 8000 });
+		expect(frame.audio[0].gain).toBeCloseTo(0.125, 6);
+		expect(await fail('update_video_clip', { clip: 'm', set: { fadeOutCurve: 'bendy' } })).toContain('fadeOutCurve');
+		await call('add_video_clip', { track: 'v1', clip: { type: 'text', id: 't', text: 'Hi' } });
+		expect(await fail('update_video_clip', { clip: 't', set: { fadeInCurve: 'linear' } })).toContain('cannot be set on a text clip');
+		const reset = await call('update_video_clip', { clip: 'm', remove: ['fadeOutCurve'] });
+		expect(reset.clip.fadeOutCurve).toBeUndefined();
+	});
+
 	it('tightens an edit: split, ripple delete, trim, close gaps, undo', async () => {
 		const { call, controller } = tools();
 		await call('add_video_asset', { kind: 'video', id: 'take', src: 'take.mp4', duration: 20000 });

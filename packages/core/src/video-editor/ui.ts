@@ -1,7 +1,7 @@
 import type { VideoEdit } from './edit.js';
 import { isVideoKeyframes, removeVideoKey, setVideoKey, VIDEO_KEYFRAME_LIMITS, VIDEO_TRANSFORM_PROPERTIES, videoValueAt, type VideoAnimatable, type VideoKeyframeProperty } from './keyframes.js';
 import { findVideoClip, formatVideoTimecode, videoClipEnd, videoClipSpeed, videoAssetMap } from './timeline.js';
-import type { VideoAsset, VideoAssetKind, VideoClip, VideoPlacementMode, VideoProject } from './types.js';
+import type { VideoAsset, VideoAssetKind, VideoClip, VideoFadeCurve, VideoPlacementMode, VideoProject } from './types.js';
 
 // Framework-free helpers the React and Svelte timelines share, so both draw and drag alike.
 
@@ -33,6 +33,15 @@ export function videoRulerTicks(duration: number, pxPerSecond: number, fps: numb
 }
 
 /** Fill colour a timeline uses for a clip, by what it is. */
+/** Names for the sound fade curves, for menus. */
+export const VIDEO_FADE_CURVE_LABELS: Readonly<Record<VideoFadeCurve, string>> = {
+	linear: 'Linear',
+	'equal-power': 'Equal power',
+	's-curve': 'S-curve',
+	exponential: 'Exponential',
+	logarithmic: 'Logarithmic'
+};
+
 export function videoClipTint(clip: VideoClip, asset?: VideoAsset): string {
 	if (clip.type === 'text') return '#a855f7';
 	if (clip.type === 'color') return clip.color;

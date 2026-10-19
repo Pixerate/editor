@@ -1,7 +1,7 @@
 import { placeVideoRect } from './evaluate.js';
 import { isVideoKeyframes, VIDEO_TRANSFORM_PROPERTIES, videoKeyframeFfmpegExpr, type VideoAnimatable } from './keyframes.js';
 import { formatVideoTimecode, formatVideoTimecodeFrames, isVideoDropFrameRate, videoHourFrames, videoTimecodeFrames, sortedVideoClips, videoAssetMap, videoClipBefore, videoClipEnd, videoClipOverhang, videoClipSpeed, videoProjectDuration } from './timeline.js';
-import type { VideoAsset, VideoClip, VideoProject, VideoTextClip, VideoTrack } from './types.js';
+import type { VideoAsset, VideoClip, VideoFadeCurve, VideoProject, VideoTextClip, VideoTrack } from './types.js';
 
 // ---------------------------------------------------------------------------------------------
 // CMX 3600 EDL
@@ -112,6 +112,9 @@ export interface VideoFfmpegExport {
 }
 
 const sec = (ms: number) => String(Math.round(ms) / 1000);
+/** `afade`'s curve for a fade shape (the same formulas as `videoFadeCurveGain`); nothing for linear, its default. */
+const AFADE_CURVES: Record<VideoFadeCurve, string> = { linear: 'tri', 'equal-power': 'qsin', 's-curve': 'hsin', exponential: 'cub', logarithmic: 'ipar' };
+const afadeCurve = (curve: VideoFadeCurve | undefined) => (curve && curve !== 'linear' ? `:curve=${AFADE_CURVES[curve]}` : '');
 const even = (v: number) => Math.max(2, 2 * Math.round(v / 2));
 /** Escapes a value for a filter option inside a filtergraph (option level, then graph level). */
 export const ffmpegFilterValue = (s: string): string =>
@@ -203,8 +206,8 @@ export function toVideoFfmpeg(project: VideoProject, options: VideoFfmpegOptions
 				if (before && clip.transition!.type === 'dip') chain.push(`afade=t=in:st=0:d=${sec(clip.transition!.duration / 2)}`);
 				const after = sortedVideoClips(track).find((c) => c !== clip && Math.abs(c.start - end) < 0.5 && c.transition?.type === 'dip');
 				if (after) chain.push(`afade=t=out:st=${sec(span - after.transition!.duration / 2)}:d=${sec(after.transition!.duration / 2)}`);
-				if (clip.fadeIn) chain.push(`afade=t=in:st=${sec(lead)}:d=${sec(clip.fadeIn)}`);
-				if (clip.fadeOut) chain.push(`afade=t=out:st=${sec(lead + clip.duration - clip.fadeOut)}:d=${sec(clip.fadeOut)}`);
+				if (clip.fadeIn) chain.push(`afade=t=in:st=${sec(lead)}:d=${sec(clip.fadeIn)}${afadeCurve(clip.fadeInCurve)}`);
+				if (clip.fadeOut) chain.push(`afade=t=out:st=${sec(lead + clip.duration - clip.fadeOut)}:d=${sec(clip.fadeOut)}${afadeCurve(clip.fadeOutCurve)}`);
 				chain.push(`adelay=${Math.round(t0)}:all=1`);
 				graph.push(`[${ai}:a]${chain.join(',')}[a${audio.length}]`);
 				audio.push(`[a${audio.length}]`);

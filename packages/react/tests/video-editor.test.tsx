@@ -420,6 +420,22 @@ describe("ClipInspector (React)", () => {
     controller.destroy();
   });
 
+  it("shapes a media clip's sound fades once it has them", () => {
+    const controller = make();
+    act(() => root.render(<ClipInspector controller={controller} />));
+    act(() => controller.select(["c1"]));
+    expect(container.querySelector('select[aria-label="Fade in curve"]')).toBeNull();
+    commit($<HTMLInputElement>('input[aria-label="Fade in"]'), "500");
+    expect($<HTMLSelectElement>('select[aria-label="Fade in curve"]').value).toBe("linear");
+    expect(container.querySelector('select[aria-label="Fade out curve"]')).toBeNull();
+    choose($<HTMLSelectElement>('select[aria-label="Fade in curve"]'), "equal-power");
+    expect((clip(controller, "c1")!.clip as any).fadeInCurve).toBe("equal-power");
+    expect(controller.getState().undoLabel).toBe("Change fade in curve");
+    choose($<HTMLSelectElement>('select[aria-label="Fade in curve"]'), "linear");
+    expect((clip(controller, "c1")!.clip as any).fadeInCurve).toBeUndefined();
+    controller.destroy();
+  });
+
   it("edits titles and transitions", () => {
     const controller = make();
     act(() => root.render(<ClipInspector controller={controller} />));

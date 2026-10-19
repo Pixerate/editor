@@ -2,12 +2,15 @@ import React from 'react';
 import {
   findVideoClip,
   formatVideoSeconds,
+  VIDEO_FADE_CURVE_LABELS,
+  VIDEO_FADE_CURVES,
   VIDEO_TRANSITION_TYPES,
   videoKeyframeRows,
   videoKeyframeToggleEdit,
   videoKeyframeValueEdit,
   type VideoClip,
   type VideoEditorController,
+  type VideoFadeCurve,
   type VideoTransitionType,
 } from '@pixerate/editor/video-editor';
 import { useVideoEditorState } from './useVideoEditor';
@@ -169,6 +172,28 @@ export function ClipInspector({ controller, className = '' }: ClipInspectorProps
           <Row label="Muted" name="muted">
             <input type="checkbox" className="justify-self-start" checked={!!clip.muted} disabled={disabled} aria-label="Muted" onChange={(e) => set('muted', e.target.checked || undefined, e.target.checked ? 'Mute clip' : 'Unmute clip')} />
           </Row>
+          {(['fadeInCurve', 'fadeOutCurve'] as const).map((key) =>
+            (key === 'fadeInCurve' ? clip.fadeIn : clip.fadeOut) ? (
+              <Row key={key} label={key === 'fadeInCurve' ? 'Fade in sound' : 'Fade out sound'} name={key}>
+                <select
+                  className={field}
+                  value={clip[key] ?? 'linear'}
+                  disabled={disabled}
+                  aria-label={key === 'fadeInCurve' ? 'Fade in curve' : 'Fade out curve'}
+                  onChange={(e) => {
+                    const curve = e.target.value as VideoFadeCurve;
+                    set(key, curve === 'linear' ? undefined : curve, key === 'fadeInCurve' ? 'Change fade in curve' : 'Change fade out curve');
+                  }}
+                >
+                  {VIDEO_FADE_CURVES.map((c) => (
+                    <option key={c} value={c}>
+                      {VIDEO_FADE_CURVE_LABELS[c]}
+                    </option>
+                  ))}
+                </select>
+              </Row>
+            ) : null,
+          )}
         </>
       )}
       {clip.type === 'text' && (

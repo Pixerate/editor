@@ -7,7 +7,7 @@ import { videoFrameAt } from './evaluate.js';
 import { VIDEO_EASE_NAMES, VIDEO_KEYFRAME_PROPERTIES, VIDEO_TRANSFORM_PROPERTIES, type VideoAnimatable, type VideoKeyframeProperty } from './keyframes.js';
 import { videoContactSheetSvg, videoProjectSvg } from './render.js';
 import { findVideoGaps, formatVideoTimecode, sortedVideoClips, videoClipEnd, videoClipSourceRange, videoProjectDuration } from './timeline.js';
-import { VIDEO_FITS, VIDEO_PLACEMENT_MODES, VIDEO_TRANSITION_TYPES, VIDEO_WIPE_DIRECTIONS, type VideoProject } from './types.js';
+import { VIDEO_FADE_CURVES, VIDEO_FITS, VIDEO_PLACEMENT_MODES, VIDEO_TRANSITION_TYPES, VIDEO_WIPE_DIRECTIONS, type VideoProject } from './types.js';
 
 export interface VideoEditorToolProviderOptions {
 	/** Provider id (unique per registry). Default `video`. */
@@ -84,7 +84,9 @@ const MEDIA_FIELDS: Record<string, JsonSchema> = {
 	in: MS('Where in the source it starts (default 0)'),
 	speed: { type: 'number', minimum: 0.05, maximum: 20, description: 'Playback speed (default 1). Changing it keeps the stretch of source, so the clip gets shorter or longer.' },
 	volume: { type: 'number', minimum: 0, maximum: 4, description: 'Gain (1 = unchanged, default 1). A number replaces any keyframes; set_video_keyframes animates it.' },
-	muted: { type: 'boolean', description: 'Silence this clip (default false).' }
+	muted: { type: 'boolean', description: 'Silence this clip (default false).' },
+	fadeInCurve: { type: 'string', enum: [...VIDEO_FADE_CURVES], description: 'Shape of the sound\'s fade in (default linear; the picture always fades linearly): linear, equal-power (steady loudness, best for crossfades), s-curve (gentle at both ends), exponential (slow start, natural from silence) or logarithmic (fast start).' },
+	fadeOutCurve: { type: 'string', enum: [...VIDEO_FADE_CURVES], description: 'Shape of the sound\'s fade out (default linear), the same choices as fadeInCurve; exponential sounds natural fading to silence.' }
 };
 const TEXT_FIELDS: Record<string, JsonSchema> = {
 	text: { type: 'string', minLength: 1, description: 'The title\'s text ("\\n" breaks lines).' },
@@ -504,12 +506,12 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 		name: 'update_video_clip',
 		title: 'Change a clip',
 		description:
-			'Changes a clip\'s properties (one undo step): opacity, transform, fit, fades, name; for media volume, mute, speed (keeps the stretch of source, so the length changes) or asset; for titles text and style; for colours the colour. Fields in "remove" go back to their defaults. Use move / trim for timing. Returns the clip.',
+			'Changes a clip\'s properties (one undo step): opacity, transform, fit, fades, name; for media volume, mute, the sound\'s fade curves, speed (keeps the stretch of source, so the length changes) or asset; for titles text and style; for colours the colour. Fields in "remove" go back to their defaults. Use move / trim for timing. Returns the clip.',
 		inputSchema: object(
 			{
 				clip: CLIP_ID,
 				set: object({ ...CLIP_COMMON, ...MEDIA_FIELDS, asset: { ...ASSET_ID, description: 'For media: play another asset (same in point).' }, ...TEXT_FIELDS, color: COLOR('Text colour, or a colour clip\'s fill') }, [], 'Fields to replace (only those that fit the clip\'s type).'),
-				remove: { type: 'array', items: { type: 'string', enum: ['name', 'opacity', 'transform', 'fit', 'fadeIn', 'fadeOut', 'in', 'speed', 'volume', 'muted', 'fontSize', 'fontFamily', 'fontWeight', 'background'] }, description: 'Fields to reset to their defaults.' }
+				remove: { type: 'array', items: { type: 'string', enum: ['name', 'opacity', 'transform', 'fit', 'fadeIn', 'fadeOut', 'fadeInCurve', 'fadeOutCurve', 'in', 'speed', 'volume', 'muted', 'fontSize', 'fontFamily', 'fontWeight', 'background'] }, description: 'Fields to reset to their defaults.' }
 			},
 			['clip']
 		),
@@ -517,7 +519,7 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 		handler: ({ clip, set, remove }) => {
 			const current = clipOut(project(), clip);
 			if (current && set) {
-				const allowed = new Set(['name', 'opacity', 'transform', 'fit', 'fadeIn', 'fadeOut', ...(current.type === 'media' ? ['in', 'speed', 'volume', 'muted', 'asset'] : current.type === 'text' ? Object.keys(TEXT_FIELDS) : ['color'])]);
+				const allowed = new Set(['name', 'opacity', 'transform', 'fit', 'fadeIn', 'fadeOut', ...(current.type === 'media' ? ['in', 'speed', 'volume', 'muted', 'asset', 'fadeInCurve', 'fadeOutCurve'] : current.type === 'text' ? Object.keys(TEXT_FIELDS) : ['color'])]);
 				const wrong = Object.keys(set).filter((k) => !allowed.has(k));
 				if (wrong.length) throw new Error(`${wrong.map((k) => `"${k}"`).join(', ')} cannot be set on a ${current.type} clip; it takes ${[...allowed].join(', ')}.`);
 			}

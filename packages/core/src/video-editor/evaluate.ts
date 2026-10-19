@@ -1,6 +1,6 @@
 import { videoValueAt } from './keyframes.js';
 import { sortedVideoClips, videoAssetMap, videoClipAfter, videoClipBefore, videoClipEnd, videoClipSpeed } from './timeline.js';
-import type { VideoAsset, VideoClip, VideoFit, VideoProject, VideoTextClip, VideoTrack, VideoWipeDirection } from './types.js';
+import type { VideoAsset, VideoClip, VideoFadeCurve, VideoFit, VideoProject, VideoTextClip, VideoTrack, VideoWipeDirection } from './types.js';
 
 /** A rectangle in frame pixels. */
 export interface VideoRect {
@@ -101,11 +101,29 @@ export function videoTitleFrame(project: VideoProject, clip: VideoTextClip, clip
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
-/** Fade-in / fade-out multiplier for a clip at timeline `time`. */
-function fadeGain(clip: VideoClip, time: number): number {
+/** Gain of a fade shape `x` of the way up (0–1); a fade out uses the time left, so it mirrors the fade in. */
+export function videoFadeCurveGain(curve: VideoFadeCurve | undefined, x: number): number {
+	const t = clamp01(x);
+	switch (curve) {
+		case 'equal-power':
+			return Math.sin((t * Math.PI) / 2);
+		case 's-curve':
+			return (1 - Math.cos(t * Math.PI)) / 2;
+		case 'exponential':
+			return t * t * t;
+		case 'logarithmic':
+			return 1 - (1 - t) * (1 - t);
+		default:
+			return t;
+	}
+}
+
+/** Fade-in / fade-out multiplier for a clip at timeline `time`: linear for pictures, shaped for sound. */
+function fadeGain(clip: VideoClip, time: number, sound = false): number {
 	let g = 1;
-	if (clip.fadeIn) g *= clamp01((time - clip.start) / clip.fadeIn);
-	if (clip.fadeOut) g *= clamp01((videoClipEnd(clip) - time) / clip.fadeOut);
+	const shape = sound && clip.type === 'media' ? clip : undefined;
+	if (clip.fadeIn) g *= videoFadeCurveGain(shape?.fadeInCurve, (time - clip.start) / clip.fadeIn);
+	if (clip.fadeOut) g *= videoFadeCurveGain(shape?.fadeOutCurve, (videoClipEnd(clip) - time) / clip.fadeOut);
 	return g;
 }
 
@@ -152,7 +170,8 @@ export function videoFrameAt(project: VideoProject, time: number): VideoFrame {
 			// runs past the cut (and needs no handles).
 			if (incoming?.type === 'dip' && incoming.progress < 0.5) continue;
 			if (outgoing?.type === 'dip' && outgoing.progress >= 0.5) continue;
-			const fade = fadeGain(clip, Math.min(Math.max(time, clip.start), videoClipEnd(clip)));
+			const inside = Math.min(Math.max(time, clip.start), videoClipEnd(clip));
+			const fade = fadeGain(clip, inside);
 			const level = (t: { type: string; progress: number }, into: boolean) => (t.type === 'dip' ? Math.abs(1 - 2 * t.progress) : into ? t.progress : 1 - t.progress);
 			// Sound crossfades through a crossfade or wipe, and dips with the picture.
 			const mix = (incoming ? level(incoming, true) : 1) * (outgoing ? level(outgoing, false) : 1);
@@ -162,7 +181,7 @@ export function videoFrameAt(project: VideoProject, time: number): VideoFrame {
 			const clipTime = time - clip.start;
 			const audible = asset && (asset.kind === 'audio' || (asset.kind === 'video' && asset.hasAudio !== false));
 			if (audible && clip.type === 'media' && !clip.muted && !track.muted) {
-				const gain = videoValueAt(clip.volume, clipTime, 1) * (track.volume ?? 1) * fade * mix;
+				const gain = videoValueAt(clip.volume, clipTime, 1) * (track.volume ?? 1) * fadeGain(clip, inside, true) * mix;
 				audio.push({ clip: clip.id, track: track.id, asset: asset!.id, src: asset!.src, sourceTime, gain, speed: videoClipSpeed(clip) });
 			}
 			if (track.kind !== 'video' || track.hidden) continue;
