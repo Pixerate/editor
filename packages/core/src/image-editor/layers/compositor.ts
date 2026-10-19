@@ -21,15 +21,15 @@ import {
   type RasterSources,
 } from '../../raster/compositor';
 import type { PixelSurface } from '../../raster/surface';
-import { isActiveFilter, isSpatialFilter, type AdjustmentLayerNode, type ImageLayer, type LayerFilter, type PixelLayer } from './model';
+import { isActiveFilter, isSpatialFilter, type AdjustmentLayerNode, type ImageLayer, type LayerFilter, type PixelLayer, type SmartObjectLayer } from './model';
 
 export { blendTile, changedTiles } from '../../raster/compositor';
 export type { CompositeCallOptions, CompositeStats, CompositorOptions };
 
 /** What the compositor needs from its host besides the layers. */
 export interface CompositorSources extends RasterSources {
-  /** The pixels of a pixel layer (resolves layers whose pixels are the document source). */
-  surfaceOf?(layer: PixelLayer): PixelSurface;
+  /** The pixels of a pixel layer or smart object (resolves layers whose pixels are the document source). */
+  surfaceOf?(layer: PixelLayer | SmartObjectLayer): PixelSurface;
   /**
    * A parametric mask's depth map as RGBA at canvas size (the red channel is the depth), or
    * `null` while it is unavailable (the mask then reveals everything).
@@ -100,6 +100,15 @@ export function depthMaskAlpha(depth: number, options: DepthMaskOptions): number
   return v < 0 ? 0 : v > 255 ? 255 : v;
 }
 
+/** Runs layer filters (develop, blur) over RGBA `data` (`width × height`) in place, bottom first. */
+export function runLayerFilters(data: Uint8ClampedArray, width: number, height: number, filters: readonly LayerFilter[]): void {
+  for (const f of filters) {
+    if (!isActiveFilter(f)) continue;
+    if (f.kind === 'develop') applyPixelFilters(data, [f]);
+    else if (f.kind === 'blur') applyBoxBlur({ width, height, data }, Math.min(Math.round(f.radius), 40));
+  }
+}
+
 const filterSpecCache = new WeakMap<object, PixelFilterSpec | null>();
 
 /** A pixel layer's active filters for the engine (memoised per filter list). */
@@ -114,12 +123,7 @@ function pixelFilterSpec(layer: PixelLayer): PixelFilterSpec | null {
     spec = {
       key: JSON.stringify(filters),
       spatial,
-      apply: (data, width, height) => {
-        for (const f of filters) {
-          if (f.kind === 'develop') applyPixelFilters(data, [f]);
-          else if (f.kind === 'blur') applyBoxBlur({ width, height, data }, Math.min(Math.round(f.radius), 40));
-        }
-      },
+      apply: (data, width, height) => runLayerFilters(data, width, height, filters),
     };
   }
   filterSpecCache.set(list, spec);
@@ -138,6 +142,8 @@ const PHOTO_PROFILE: CompositorProfile<ImageLayer, CompositorSources> = {
   layerKey: (l) =>
     l.type === 'pixel' ? [l.filters ?? null, l.source ?? null] : l.type === 'adjustment' ? [l.kind, l.params] : l.type === 'annotation' ? l.annotation : undefined,
   pixelFilters: (l) => (l.type === 'pixel' ? pixelFilterSpec(l) : null),
+  /** A smart object draws its rendered pixels (contents → placement → smart filters) like a pixel layer. */
+  isPixelLike: (l) => l.type === 'smart',
   maskSourcePlane: (source, W, H, sources) => {
     const opts = source as DepthMaskOptions;
     const depth = sources.depthMap?.(opts) ?? null;

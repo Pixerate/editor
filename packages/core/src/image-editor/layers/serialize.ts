@@ -15,6 +15,12 @@ import type { SerializedSelection } from '../selection/mask';
 import { DEFAULT_DEPTH_MASK_VALUES } from './defaults';
 import {
   newLayerId,
+  type PsdSmartFilter,
+  type SmartContents,
+  type SmartFilter,
+  type SmartFilterStack,
+  type SmartObjectLayer,
+  type SmartPlacement,
   type AdjustmentLayerNode,
   type GroupLayer,
   type ImageLayer,
@@ -28,6 +34,10 @@ import { base64ToBytes, bytesToBase64, decodePng, parseDataUrl, pngDataUrl } fro
 import { normalizeLayerEffects, type GlobalLight, type LayerEffect, type LayerEffects } from '../../raster/effects/model';
 import type { EffectPattern } from '../../raster/effects/patterns';
 import { contentBounds, emptySurface, readRegion, surfaceFromPixels, type TiledSurface } from '../../raster/surface';
+import { isInterpolation } from '../../raster/transform';
+import { isValidWarpMesh } from '../../geom/warp';
+import type { Quad, WarpMesh } from '../../geom/types';
+import { normalizePlacement, renderSmartObject } from './smart';
 
 export const LAYERED_SCHEMA_VERSION = 3 as const;
 
@@ -95,7 +105,43 @@ export interface SerializedAnnotationLayer extends SerializedLayerBase {
   annotation: Annotation;
 }
 
-export type SerializedLayer = SerializedPixelLayer | SerializedAdjustmentLayer | SerializedGroupLayer | SerializedAnnotationLayer;
+/** A smart filter as stored (a Photoshop filter keeps its descriptor as base64). */
+export type SerializedSmartFilter = (LayerFilter | (Omit<PsdSmartFilter, 'data'> & { data: string })) & { blend: string; opacity: number };
+
+export interface SerializedSmartObjectLayer extends SerializedLayerBase {
+  type: 'smart';
+  /** Id of its entry in the document's `smartContents` (shared by linked instances). */
+  contents: string;
+  placement: { corners: Array<{ x: number; y: number }>; warp?: WarpMesh; interpolation?: string };
+  smartFilters?: { enabled: boolean; filters: SerializedSmartFilter[]; mask?: SerializedRasterMask };
+  /** The rendered pixels (RGBA PNG) at `x`, `y` in document space, so a load does not re-render. */
+  asset?: string;
+  x?: number;
+  y?: number;
+  fillOpacity?: number;
+  /** The PSD placed-layer block kept for round trips (base64). */
+  psd?: { key: string; data: string; placed?: string };
+}
+
+/** Smart object contents as stored once per document, referenced by id from every instance. */
+export interface SerializedSmartContents {
+  id: string;
+  name: string;
+  width: number;
+  height: number;
+  kind: 'raster' | 'document';
+  /** Raster contents: RGBA PNG asset at (0, 0). */
+  asset?: string;
+  /** Document contents: the nested layers (their assets are in the document's `assets`). */
+  layers?: SerializedLayer[];
+  globalLight?: GlobalLight;
+  patterns?: SerializedPattern[];
+  /** The file the contents came from (base64), written back while unedited. */
+  file?: { type: string; data: string };
+  linked?: { path: string };
+}
+
+export type SerializedLayer = SerializedPixelLayer | SerializedAdjustmentLayer | SerializedGroupLayer | SerializedAnnotationLayer | SerializedSmartObjectLayer;
 
 /** A version 3 document (layers). */
 export interface SerializedLayeredImageEditorState {
@@ -119,6 +165,8 @@ export interface SerializedLayeredImageEditorState {
   globalLight?: GlobalLight;
   /** The document's patterns for pattern effects, each an RGBA PNG data URL. */
   patterns?: SerializedPattern[];
+  /** Contents of the smart objects (nested ones included), each stored once. */
+  smartContents?: SerializedSmartContents[];
 }
 
 export interface SerializedPattern {
@@ -175,6 +223,8 @@ export function encodeSurface(surface: TiledSurface): EncodedSurface | null {
 export interface SerializeContext {
   /** Adds an asset and returns its id. */
   addAsset(url: string, hint: string): string;
+  /** Stores a smart object's contents (once per id). Without it, smart objects cannot be written. */
+  addContents?(contents: SmartContents): void;
 }
 
 function baseFields(layer: ImageLayer, ctx: SerializeContext): SerializedLayerBase {
@@ -261,12 +311,77 @@ export function serializeLayer(layer: ImageLayer, ctx: SerializeContext): Serial
     }
     case 'annotation':
       return { ...base, type: 'annotation', annotation: JSON.parse(JSON.stringify(layer.annotation)) };
+    case 'smart':
+      return serializeSmartObject(layer, base, ctx);
   }
 }
 
-/** Serializes a layer tree with inline assets (asset ids are derived from layer ids). */
-export function serializeLayers(layers: readonly ImageLayer[]): { layers: SerializedLayer[]; assets: Record<string, string> } {
+function serializeSmartFilters(stack: SmartFilterStack, layerId: string, ctx: SerializeContext): NonNullable<SerializedSmartObjectLayer['smartFilters']> {
+  const out: NonNullable<SerializedSmartObjectLayer['smartFilters']> = {
+    enabled: stack.enabled,
+    filters: stack.filters.map((f) => (f.kind === 'psd' ? { ...f, data: bytesToBase64(f.data) } : JSON.parse(JSON.stringify(f)))),
+  };
+  if (stack.mask) out.mask = serializeMask(stack.mask, `${layerId}-filter-mask`, ctx);
+  return out;
+}
+
+function serializeSmartObject(layer: SmartObjectLayer, base: SerializedLayerBase, ctx: SerializeContext): SerializedSmartObjectLayer {
+  if (!ctx.addContents) throw new Error('Smart objects need a contents table to be written.');
+  ctx.addContents(layer.contents);
+  const p = layer.placement;
+  const out: SerializedSmartObjectLayer = {
+    ...base,
+    type: 'smart',
+    contents: layer.contents.id,
+    placement: { corners: p.corners.map((c) => ({ x: c.x, y: c.y })) },
+  };
+  if (p.warp) out.placement.warp = JSON.parse(JSON.stringify(p.warp));
+  if (p.interpolation && p.interpolation !== 'bicubic') out.placement.interpolation = p.interpolation;
+  if (layer.smartFilters) out.smartFilters = serializeSmartFilters(layer.smartFilters, layer.id, ctx);
+  const enc = encodeSurface(layer.surface);
+  if (enc) {
+    out.asset = ctx.addAsset(enc.url, layer.id);
+    out.x = enc.x;
+    out.y = enc.y;
+  }
+  if (layer.fillOpacity !== undefined && layer.fillOpacity !== 1) out.fillOpacity = layer.fillOpacity;
+  if (layer.psd) {
+    out.psd = { key: layer.psd.key, data: bytesToBase64(layer.psd.data) };
+    if (layer.psd.placed) out.psd.placed = layer.psd.placed;
+  }
+  return out;
+}
+
+/** Writes one contents entry (nested layers add their own assets and contents to `ctx`). */
+export function serializeContents(c: SmartContents, ctx: SerializeContext): SerializedSmartContents {
+  const out: SerializedSmartContents = { id: c.id, name: c.name, width: c.width, height: c.height, kind: c.kind };
+  if (c.kind === 'raster' && c.raster) {
+    const enc = encodeSurface(c.raster);
+    if (enc) {
+      if (enc.x !== 0 || enc.y !== 0) {
+        // Contents always start at (0, 0): store the full rectangle.
+        const data = readRegion(c.raster, { x: 0, y: 0, width: c.width, height: c.height });
+        out.asset = ctx.addAsset(pngDataUrl(c.width, c.height, data, 4), `contents-${c.id}`);
+      } else out.asset = ctx.addAsset(enc.url, `contents-${c.id}`);
+    }
+  }
+  if (c.kind === 'document' && c.document) {
+    out.layers = c.document.layers.map((l) => serializeLayer(l, ctx));
+    if (c.document.globalLight) out.globalLight = { ...c.document.globalLight };
+    if (c.document.patterns?.length) out.patterns = serializePatterns(c.document.patterns);
+  }
+  if (c.file) out.file = { type: c.file.type, data: bytesToBase64(c.file.bytes) };
+  if (c.linked) out.linked = { path: c.linked.path };
+  return out;
+}
+
+/**
+ * Serializes a layer tree with inline assets (asset ids are derived from layer ids). Smart object
+ * contents go to `smartContents`, once each (present only when there are smart objects).
+ */
+export function serializeLayers(layers: readonly ImageLayer[]): { layers: SerializedLayer[]; assets: Record<string, string>; smartContents?: SerializedSmartContents[] } {
   const assets: Record<string, string> = {};
+  const contents = new Map<string, SerializedSmartContents | null>();
   const ctx: SerializeContext = {
     addAsset(url, hint) {
       let id = hint;
@@ -274,8 +389,16 @@ export function serializeLayers(layers: readonly ImageLayer[]): { layers: Serial
       assets[id] = url;
       return id;
     },
+    addContents(c) {
+      if (contents.has(c.id)) return;
+      // Reserve the id first: contents can hold instances of themselves only through a cycle, which is cut.
+      contents.set(c.id, null);
+      contents.set(c.id, serializeContents(c, ctx));
+    },
   };
-  return { layers: layers.map((l) => serializeLayer(l, ctx)), assets };
+  const out = layers.map((l) => serializeLayer(l, ctx));
+  const list = [...contents.values()].filter(Boolean) as SerializedSmartContents[];
+  return list.length ? { layers: out, assets, smartContents: list } : { layers: out, assets };
 }
 
 // ---------------------------------------------------------------------------
@@ -300,7 +423,7 @@ const externalRefs = new WeakMap<ImageEditorAssetStore, Map<string, string>>();
 export async function serializeLayersExternal(
   layers: readonly ImageLayer[],
   store: ImageEditorAssetStore
-): Promise<{ layers: SerializedLayer[]; assets: Record<string, string> }> {
+): Promise<{ layers: SerializedLayer[]; assets: Record<string, string>; smartContents?: SerializedSmartContents[] }> {
   const inline = serializeLayers(layers);
   let refs = externalRefs.get(store);
   if (!refs) {
@@ -319,7 +442,7 @@ export async function serializeLayersExternal(
     }
     assets[id] = ref;
   }
-  return { layers: inline.layers, assets };
+  return inline.smartContents ? { layers: inline.layers, assets, smartContents: inline.smartContents } : { layers: inline.layers, assets };
 }
 
 /** Width and height from a PNG's header. */
@@ -364,6 +487,12 @@ export async function resolveExternalAssets(
 
 export interface DeserializeContext {
   assets: Record<string, string>;
+  /** The stored `smartContents` table (smart objects reference it by id). */
+  smartContents?: unknown[];
+  /** Canvas size, for re-rendering a smart object stored without its pixels (default 1 × 1). */
+  canvas?: { width: number; height: number };
+  /** @internal Contents read so far by id (`null` while being read). */
+  contentsMemo?: Map<string, SmartContents | null>;
   /** Decodes an asset (PNG data URL by default). Throw for an unusable asset. */
   decodeAsset?(ref: string, channels: 1 | 4): { width: number; height: number; data: ArrayLike<number> };
   /** Problems found while reading (unknown kinds, broken assets); the rest still loads. */
@@ -515,10 +644,121 @@ export function deserializeLayer(raw: unknown, ctx: DeserializeContext): ImageLa
       }
       return { ...base, type: 'annotation', annotation: JSON.parse(JSON.stringify({ ...a, id: typeof a.id === 'string' ? a.id : id })) };
     }
+    case 'smart':
+      return readSmartObject(r, base, ctx);
     default:
       ctx.problems.push(`Layer "${base.name || id}": unknown layer type "${r.type}"`);
       return null;
   }
+}
+
+/** Reads contents `id` from the table (memoised; a contents that contains itself is refused). */
+function readContents(id: string, ctx: DeserializeContext): SmartContents | null {
+  const memo = (ctx.contentsMemo ??= new Map());
+  if (memo.has(id)) {
+    const c = memo.get(id);
+    if (c === null) ctx.problems.push(`Smart object contents "${id}" contain themselves; the inner instance was dropped`);
+    return c ?? null;
+  }
+  const raw = (ctx.smartContents ?? []).find((c) => c && typeof c === 'object' && (c as { id?: unknown }).id === id) as Record<string, any> | undefined;
+  if (!raw) {
+    ctx.problems.push(`Smart object contents "${id}" are missing`);
+    return null;
+  }
+  const width = Math.round(num(raw.width, 0, 300000, 0));
+  const height = Math.round(num(raw.height, 0, 300000, 0));
+  if (!(width > 0 && height > 0)) {
+    ctx.problems.push(`Smart object contents "${id}" have no size`);
+    return null;
+  }
+  memo.set(id, null);
+  const c: SmartContents = { id, name: typeof raw.name === 'string' ? raw.name : 'Contents', width, height, kind: raw.kind === 'document' ? 'document' : 'raster' };
+  if (raw.file && typeof raw.file.type === 'string' && typeof raw.file.data === 'string') {
+    try {
+      c.file = { type: raw.file.type, bytes: base64ToBytes(raw.file.data) };
+    } catch {
+      ctx.problems.push(`Smart object contents "${c.name}": the embedded file could not be read`);
+    }
+  }
+  if (raw.linked && typeof raw.linked.path === 'string') c.linked = { path: raw.linked.path };
+  if (c.kind === 'raster') {
+    if (typeof raw.asset === 'string') c.raster = readSurface(raw.asset, 0, 0, 4, 0, ctx, `Smart object contents "${c.name}"`);
+    else if (!c.file) c.raster = emptySurface(4);
+  } else {
+    const outer = ctx.canvas;
+    ctx.canvas = { width, height };
+    const layers = deserializeLayers(raw.layers, ctx);
+    ctx.canvas = outer;
+    c.document = { layers };
+    if (raw.globalLight && typeof raw.globalLight === 'object') c.document.globalLight = { angle: num(raw.globalLight.angle, -360, 360, 120), altitude: num(raw.globalLight.altitude, 0, 90, 30) };
+    const patterns = deserializePatterns(raw.patterns, ctx.problems);
+    if (patterns.length) c.document.patterns = patterns;
+  }
+  memo.set(id, c);
+  return c;
+}
+
+function readSmartFilters(raw: unknown, ctx: DeserializeContext, what: string): SmartFilterStack | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const r = raw as Record<string, any>;
+  const filters: SmartFilter[] = [];
+  const list = Array.isArray(r.filters) ? r.filters : [];
+  const plain = readFilters(list.filter((f: any) => f && f.kind !== 'psd')) ?? [];
+  let k = 0;
+  for (const f of list) {
+    if (!f || typeof f !== 'object') continue;
+    const blend = isBlendMode(f.blend) && f.blend !== 'pigment' ? f.blend : 'normal';
+    const opacity = num(f.opacity, 0, 1, 1);
+    if (f.kind === 'psd') {
+      try {
+        filters.push({ id: typeof f.id === 'string' ? f.id : newLayerId('flt'), kind: 'psd', enabled: f.enabled !== false, name: typeof f.name === 'string' ? f.name : 'Filter', data: base64ToBytes(String(f.data ?? '')), blend, opacity });
+      } catch {
+        ctx.problems.push(`${what}: a Photoshop smart filter could not be read`);
+      }
+    } else if (f.kind === 'develop' || f.kind === 'blur') {
+      const base = plain[k++];
+      if (base) filters.push({ ...base, blend, opacity });
+    }
+  }
+  const stack: SmartFilterStack = { enabled: r.enabled !== false, filters };
+  const mask = readMask(r.mask, ctx, `${what} filter`);
+  if (mask) stack.mask = mask;
+  return stack;
+}
+
+function readSmartObject(r: Record<string, any>, base: LayerBase, ctx: DeserializeContext): SmartObjectLayer | null {
+  const what = `Layer "${base.name || base.id}"`;
+  const contents = typeof r.contents === 'string' ? readContents(r.contents, ctx) : null;
+  if (!contents) {
+    ctx.problems.push(`${what}: its smart object contents are missing; the layer was dropped`);
+    return null;
+  }
+  const p = r.placement ?? {};
+  let placement: SmartPlacement;
+  try {
+    const raw: SmartPlacement = { corners: p.corners as Quad };
+    if (p.warp && isValidWarpMesh(p.warp)) raw.warp = p.warp;
+    if (isInterpolation(p.interpolation)) raw.interpolation = p.interpolation;
+    placement = normalizePlacement(raw, contents);
+  } catch (e) {
+    ctx.problems.push(`${what}: its placement is invalid (${e instanceof Error ? e.message : String(e)}); it was placed at the top left`);
+    placement = { corners: [{ x: 0, y: 0 }, { x: contents.width, y: 0 }, { x: contents.width, y: contents.height }, { x: 0, y: contents.height }] };
+  }
+  const layer: SmartObjectLayer = { ...base, type: 'smart', contents, placement, surface: emptySurface(4), offset: { x: 0, y: 0 } };
+  const filters = readSmartFilters(r.smartFilters, ctx, what);
+  if (filters) layer.smartFilters = filters;
+  if (typeof r.fillOpacity === 'number' && r.fillOpacity !== 1) layer.fillOpacity = num(r.fillOpacity, 0, 1, 1);
+  if (r.psd && typeof r.psd.key === 'string' && typeof r.psd.data === 'string') {
+    try {
+      layer.psd = { key: r.psd.key, data: base64ToBytes(r.psd.data) };
+      if (typeof r.psd.placed === 'string') layer.psd.placed = r.psd.placed;
+    } catch {
+      // A damaged PSD block is regenerated on export.
+    }
+  }
+  if (typeof r.asset === 'string') layer.surface = readSurface(r.asset, r.x, r.y, 4, 0, ctx, what);
+  else if (contents.raster || contents.document) layer.surface = renderSmartObject(layer, ctx.canvas ?? { width: 1, height: 1 });
+  return layer;
 }
 
 /** Reads a stored layer tree (layers that cannot be read are dropped and reported). */

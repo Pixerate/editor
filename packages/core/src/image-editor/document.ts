@@ -212,7 +212,7 @@ export function loadImageEditorDocument(input: unknown): ImageEditorDocumentLoad
   return { state, report: result.report, unknown: result.unknown };
 }
 
-const LAYER_TYPES = new Set(['pixel', 'adjustment', 'group', 'annotation']);
+const LAYER_TYPES = new Set(['pixel', 'adjustment', 'group', 'annotation', 'smart']);
 
 /** Keeps layers that have an id-like shape and a known type (children checked too); counts the rest. */
 function cleanLayers(value: unknown[], dropped: { count: number }): SerializedLayer[] {
@@ -279,6 +279,14 @@ function loadLayeredDocument(doc: Record<string, unknown>): ImageEditorDocumentL
         },
         defaults: undefined,
       },
+      smartContents: {
+        parse: (value) => {
+          if (!Array.isArray(value)) throw new Error('smartContents must be an array');
+          // Entries are checked one by one when the layers load; keep the ones with an id.
+          return value.filter((c) => isObject(c) && typeof c.id === 'string').map((c) => JSON.parse(JSON.stringify(c)));
+        },
+        defaults: undefined,
+      },
     },
     { currentVersion: 3, steps: {} },
   );
@@ -291,5 +299,6 @@ function loadLayeredDocument(doc: Record<string, unknown>): ImageEditorDocumentL
   const state = { version: 3, ...result.value } as SerializedLayeredImageEditorState;
   if (state.selection === undefined) delete state.selection;
   if (state.legacyOutputBlur === undefined) delete state.legacyOutputBlur;
+  if (state.smartContents === undefined) delete state.smartContents;
   return { state, report: result.report, unknown: result.unknown };
 }

@@ -34,6 +34,7 @@ import {
 import { expandVectorCorners, setSubpathCorners } from './corners.js';
 import { hitTestVectorStroke, vectorStrokeOutlinePath } from './stroke.js';
 import { mirrorWidthProfile } from './width.js';
+import { hitTestVectorPaintStack } from './paintLayers.js';
 import { expandVectorAppearance, hasOwnVectorAppearance, transformVectorEffects, vectorAppearanceOutline } from './appearance.js';
 import type {
 	VectorAnchor,
@@ -46,6 +47,7 @@ import type {
 	VectorPaint,
 	VectorPathNode,
 	VectorSubpath,
+	VectorWidthPoint,
 	Vec2
 } from './types.js';
 
@@ -359,10 +361,8 @@ export function hitTestVectorNode(node: VectorNode, p: Vec2, tolerance = 0, pare
 	}
 	const path = vectorPathWorldBezier(node, parent);
 	if (path.length === 0) return false;
-	const point: Point = [p.x, p.y];
-	if (hasPaint(node.fill) && pointInBezierPath(path, point, node.fillRule ?? 'nonzero')) return true;
-	if (hasPaint(node.stroke)) return hitTestVectorStroke(path, p, node, tolerance);
-	return distanceToBezierPath(path, point) <= tolerance;
+	// Every drawn fill and stroke layer counts (hidden layers don't).
+	return hitTestVectorPaintStack(node, path, p, tolerance);
 }
 
 /**
@@ -454,13 +454,22 @@ function bakeIntoGeometry<T extends VectorNode>(node: T, m: AffineMatrix): T {
 	}
 	const path = node as VectorPathNode;
 	// A mirror swaps the sides of a variable-width stroke (the path still runs the same way).
-	const mirrored = m[0] * m[3] - m[1] * m[2] < 0 && path.strokeWidthProfile?.length;
+	const flips = m[0] * m[3] - m[1] * m[2] < 0;
+	const mirrored = flips && path.strokeWidthProfile?.length;
+	// Each layer of a stack: its gradient moves with the geometry, its profile mirrors.
+	const layer = <L extends { paint: VectorPaint; strokeWidthProfile?: VectorWidthPoint[] | null }>(l: L): L => ({
+		...l,
+		...(isVectorGradient(l.paint) ? { paint: transformVectorPaint(l.paint, m) } : {}),
+		...(flips && l.strokeWidthProfile?.length ? { strokeWidthProfile: mirrorWidthProfile(l.strokeWidthProfile) } : {})
+	});
 	return {
 		...path,
 		...(mirrored ? { strokeWidthProfile: mirrorWidthProfile(path.strokeWidthProfile!) } : {}),
 		// Gradients in the node's own space move with its geometry.
 		...(isVectorGradient(path.fill) ? { fill: transformVectorPaint(path.fill, m) } : {}),
 		...(isVectorGradient(path.stroke) ? { stroke: transformVectorPaint(path.stroke, m) } : {}),
+		...(Array.isArray(path.fills) ? { fills: path.fills.map(layer) } : {}),
+		...(Array.isArray(path.strokes) ? { strokes: path.strokes.map(layer) } : {}),
 		subpaths: path.subpaths.map((sp) => ({
 			closed: sp.closed,
 			anchors: sp.anchors.map((a) => mapAnchor(a, m))

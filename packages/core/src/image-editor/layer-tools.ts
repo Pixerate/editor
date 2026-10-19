@@ -76,6 +76,13 @@ export function describeLayer(
       out.collapsed = Boolean(layer.collapsed);
       out.children = layer.children.map((c) => describeLayer(c, activeId, boundsOf));
       break;
+    case 'smart':
+      out.bounds = boundsOf(layer);
+      out.fillOpacity = round(layer.fillOpacity ?? 1);
+      out.contents = { id: layer.contents.id, name: layer.contents.name, kind: layer.contents.kind, width: layer.contents.width, height: layer.contents.height };
+      out.smartFilters = (layer.smartFilters?.filters ?? []).map((f) => ({ id: f.id, kind: f.kind, enabled: f.enabled }));
+      out.filterMask = maskSummary(layer.smartFilters?.mask);
+      break;
   }
   return out;
 }

@@ -64,7 +64,34 @@ import {
   type LayerTarget,
   type PixelLayer,
   type RasterMask,
+  type SmartContents,
+  type SmartFilter,
+  type SmartObjectLayer,
+  type SmartPlacement,
 } from './layers/model';
+import {
+  addSmartFilter as addSmartFilterOp,
+  contentsSurface,
+  convertToSmartObject as convertToSmartObjectOp,
+  copySmartObject as copySmartObjectOp,
+  documentContents,
+  instancesOf,
+  isContentsDecoded,
+  moveSmartFilter as moveSmartFilterOp,
+  normalizeSmartFilter,
+  offsetSmartObject,
+  placementGeometry,
+  rasterContents,
+  rasterizeSmartObject as rasterizeSmartObjectOp,
+  removeSmartFilter as removeSmartFilterOp,
+  replaceContents as replaceContentsOp,
+  requireSmartObject,
+  setSmartFilterMask as setSmartFilterMaskOp,
+  setSmartFiltersEnabled as setSmartFiltersEnabledOp,
+  setSmartPlacement,
+  updateSmartFilter as updateSmartFilterOp,
+  withFilterMaskSurface,
+} from './layers/smart';
 import {
   BACKGROUND_LAYER_ID,
   BACKGROUND_LAYER_NAME,
@@ -164,16 +191,21 @@ import {
   type StrokeApply,
   type StrokePoint,
 } from '../paint';
-import { base64ToBytes, bytesToBase64, decodePng, isPng, parseDataUrl } from '../raster/png';
+import { base64ToBytes, bytesToBase64, decodePng, encodePng, isPng, parseDataUrl } from '../raster/png';
+import type { Interpolation } from '../raster/transform';
 import { getAnnotationBounds } from './geometry';
 import { importPsd, type PsdImportResult } from './psd/import';
 import { exportPsd } from './psd/export';
 import { FreeTransformSession, type FreeTransformHost, type FreeTransformInit, type FreeTransformResult } from './free-transform';
 import {
+  anchorPoint,
   applyParams,
   cornersFromMatrix,
+  describeTransform,
   flipCorners,
   identityTransform,
+  matrixFromParams,
+  transformedBox,
   isValidWarp,
   presetWarp,
   type AffineMatrix,
@@ -183,8 +215,106 @@ import {
   type WarpPreset,
 } from './transform';
 import { WARP_STYLES } from '../geom/warp';
+import { applyMatrix, multiplyMatrices, translateMatrix } from '../geom/affine';
 import type { EffectPattern } from '../raster/effects/patterns';
 import { DEFAULT_GLOBAL_LIGHT, effectsMargin, type GlobalLight, type LayerEffect, type LayerEffectKind, type LayerEffects } from '../raster/effects/model';
+
+/** What `getSmartObject` reports. */
+export interface SmartObjectInfo {
+  layerId: string;
+  contents: {
+    /** Shared by linked instances. */
+    id: string;
+    name: string;
+    kind: 'raster' | 'document';
+    /** Pixel size of the contents. */
+    width: number;
+    height: number;
+    /** False for a file that could not be decoded here (the layer shows its stored pixels). */
+    decoded: boolean;
+    /** The type of the file the contents came from (`psb`, `png`, `jpg`, …), or `null`. */
+    fileType: string | null;
+    /** The external file of linked contents, or `null` for embedded ones. */
+    linkedPath: string | null;
+    /** Every smart object placed from these contents (this one included), bottom first. */
+    instances: string[];
+    /** Layers in a nested document (0 for raster contents). */
+    layerCount: number;
+  };
+  placement: {
+    /** Where the contents' corners land: top-left, top-right, bottom-right, bottom-left (document pixels). */
+    corners: Quad;
+    /** The warp mesh in contents pixels, or `null`. */
+    warp: WarpMesh | null;
+    interpolation: Interpolation;
+    /** False for distort, perspective and warp (then only corners and bounds describe it). */
+    affine: boolean;
+    /** Percent of the contents' own size. */
+    scaleX: number;
+    scaleY: number;
+    rotate: number;
+    skewX: number;
+    /** Where the contents' centre is (document pixels). */
+    center: { x: number; y: number };
+    /** Bounds of the placed outline. */
+    bounds: CropBox | null;
+  };
+  smartFilters: {
+    enabled: boolean;
+    /** Bottom (applied first) to top. Photoshop filters we keep but do not draw have kind `psd`. */
+    filters: Array<Record<string, unknown>>;
+    mask: { enabled: boolean; linked: boolean; density: number; feather: number; bounds: CropBox | null; defaultValue: number } | null;
+  };
+  /** Document bounds of the rendered pixels. */
+  bounds: CropBox | null;
+}
+
+/** The document set aside while smart object contents are open. */
+interface SavedDocument {
+  state: ImageEditorState;
+  undo: HistoryEntry[];
+  redo: HistoryEntry[];
+  initial: HistoryEntry;
+  element: CanvasImageSource | null;
+  samplePixels: PixelBuffer | null;
+  samplePixelsOverride: boolean;
+  psdResolution: number | undefined;
+}
+
+/** A nested document's layers as `exportPsd` takes them (filters baked, smart objects and annotations as their pixels). */
+function prepareNestedForPsd(layers: readonly ImageLayer[]): ImageLayer[] {
+  const out: ImageLayer[] = [];
+  for (const l of layers) {
+    if (l.type === 'annotation') continue;
+    let next: ImageLayer = l;
+    if (l.type === 'group') next = { ...l, children: prepareNestedForPsd(l.children) };
+    else if (l.type === 'smart') next = rasterizeSmartObjectOp([l], l.id).layer;
+    else if (l.type === 'pixel' && l.filters?.length) {
+      const p: PixelLayer = { ...l };
+      if (l.filters.some(isActiveFilter)) {
+        const b = l.surface.bounds;
+        if (b) {
+          const r = { x: b.x + l.offset.x - 64, y: b.y + l.offset.y - 64, width: b.width + 128, height: b.height + 128 };
+          const plain: PixelLayer = { ...l, visible: true, opacity: 1, blend: 'normal' };
+          delete plain.mask;
+          delete plain.clipped;
+          delete plain.effects;
+          delete plain.fillOpacity;
+          const data = new LayerCompositor().composite([plain], r, { width: r.x + r.width, height: r.y + r.height });
+          p.surface = surfaceFromPixels({ width: r.width, height: r.height, data }, 4, r.x - l.offset.x, r.y - l.offset.y);
+        }
+      }
+      delete p.filters;
+      next = p;
+    }
+    if (next.mask?.source) {
+      next = { ...next } as ImageLayer;
+      delete next.mask;
+    }
+    out.push(next);
+  }
+  return out;
+}
 
 /** Latest serialized schema version (`3`: layers). Documents with the old shape still write 1 or 2. */
 export const IMAGE_EDITOR_SCHEMA_VERSION = LAYERED_SCHEMA_VERSION;
@@ -719,6 +849,7 @@ export class ImageEditorController {
    */
   public async loadImage(src: string | HTMLImageElement): Promise<void> {
     // Keep the URL visible synchronously (UI bindings compare against it while loading).
+    this.abandonContents();
     if (typeof src === 'string') this.state.sourceUrl = src;
     const source = await this.resolveSource(src);
     const prev = this.state.imageDimensions;
@@ -1054,7 +1185,7 @@ export class ImageEditorController {
   public setActiveLayer(id: string | null, target: LayerTarget = 'pixels'): boolean {
     if (id !== null && !this.getLayer(id)) return false;
     const layer = id ? this.getLayer(id) : undefined;
-    const t: LayerTarget = target === 'mask' && layer?.mask ? 'mask' : 'pixels';
+    const t: LayerTarget = target === 'mask' && layer?.mask ? 'mask' : target === 'filter-mask' && layer?.type === 'smart' && layer.smartFilters?.mask ? 'filter-mask' : 'pixels';
     if (this.state.activeLayerId === id && this.state.activeTarget === t) return true;
     this.state.activeLayerId = id;
     this.state.activeTarget = t;
@@ -1068,7 +1199,7 @@ export class ImageEditorController {
    */
   public getLayerPixels(id: string): (PixelBuffer & { x: number; y: number }) | null {
     const layer = this.getLayer(id);
-    if (!layer || layer.type !== 'pixel') return null;
+    if (!layer || (layer.type !== 'pixel' && layer.type !== 'smart')) return null;
     const surface = this.surfaceOf(layer);
     const b = contentBounds(surface);
     if (!b) return null;
@@ -1083,7 +1214,7 @@ export class ImageEditorController {
    */
   public getLayerBounds(id: string): CropBox | null {
     const layer = this.getLayer(id);
-    if (!layer || layer.type !== 'pixel') return null;
+    if (!layer || (layer.type !== 'pixel' && layer.type !== 'smart')) return null;
     const surface = this.surfaceOf(layer);
     let b = this.boundsCache.get(surface);
     if (b === undefined) {
@@ -1137,9 +1268,9 @@ export class ImageEditorController {
     return String(id);
   }
 
-  /** The pixels a pixel layer composites (the decoded source for the Background). */
-  private surfaceOf(layer: PixelLayer): PixelSurface {
-    if (layer.source !== 'document') return layer.surface;
+  /** The pixels a pixel layer or smart object composites (the decoded source for the Background). */
+  private surfaceOf(layer: PixelLayer | SmartObjectLayer): PixelSurface {
+    if (layer.type === 'smart' || layer.source !== 'document') return layer.surface;
     return this.sourceSurface() ?? layer.surface;
   }
 
@@ -1403,6 +1534,16 @@ export class ImageEditorController {
    */
   public offsetLayer(id: string, move: { x?: number; y?: number; dx?: number; dy?: number }, commitToHistory = true): { offset: { x: number; y: number }; bounds: CropBox | null } {
     const layer = requireLayer(this.state.layers, id).layer;
+    if (layer.type === 'smart') {
+      // A smart object moves through its placement: x, y is where its top-left corner goes.
+      const tl = layer.placement.corners[0];
+      const dx = move.x !== undefined ? move.x - tl.x : (move.dx ?? 0);
+      const dy = move.y !== undefined ? move.y - tl.y : (move.dy ?? 0);
+      if (!Number.isFinite(dx) || !Number.isFinite(dy)) throw new LayerOperationError('x and y must be numbers.');
+      this.commitLayers(offsetSmartObject(this.state.layers, id, dx, dy, this.canvasSize), undefined, commitToHistory);
+      const moved = findLayer(this.state.layers, id)!.layer as SmartObjectLayer;
+      return { offset: { x: Math.round(moved.placement.corners[0].x), y: Math.round(moved.placement.corners[0].y) }, bounds: this.getLayerBounds(id) };
+    }
     const current = layer.type === 'pixel' ? layer.offset : { x: 0, y: 0 };
     const x = move.x ?? current.x + (move.dx ?? 0);
     const y = move.y ?? current.y + (move.dy ?? 0);
@@ -1623,9 +1764,10 @@ export class ImageEditorController {
     }
     const session = this.beginFreeTransform(spec);
     try {
-      const g = identityTransform(session.box);
-      const corners = spec.matrix ? cornersFromMatrix(session.box, spec.matrix) : spec.corners ? spec.corners : spec.params ? applyParams(g, spec.params) : g.corners;
-      let warp: WarpMesh | null = null;
+      // Relative to where the content is now (a smart object's current placement).
+      const g = session.startGeometry;
+      const corners = spec.matrix ? (g.corners.map((p) => applyMatrix(spec.matrix!, p)) as unknown as Quad) : spec.corners ? spec.corners : spec.params ? applyParams(g, spec.params) : g.corners;
+      let warp: WarpMesh | null = spec.warp === undefined ? (g.warp ?? null) : null;
       if (spec.warp) {
         if ('style' in spec.warp) {
           if (!WARP_STYLES.includes(spec.warp.style)) throw new LayerOperationError(`Unknown warp style "${String(spec.warp.style)}". Styles: ${WARP_STYLES.join(', ')}.`);
@@ -1648,7 +1790,7 @@ export class ImageEditorController {
     if (axis !== 'horizontal' && axis !== 'vertical') throw new LayerOperationError(`axis must be horizontal or vertical, got "${String(axis)}".`);
     const session = this.beginFreeTransform({ interpolation: 'nearest', ...init });
     try {
-      session.update({ corners: flipCorners(identityTransform(session.box), axis) }, false);
+      session.update({ corners: flipCorners(session.startGeometry, axis) }, false);
       return session.commit();
     } catch (e) {
       session.cancel();
@@ -1664,7 +1806,8 @@ export class ImageEditorController {
     if (turn !== 90 && turn !== -90 && turn !== 180) throw new LayerOperationError(`turn must be 90, -90 or 180, got ${String(turn)}.`);
     const session = this.beginFreeTransform({ interpolation: 'nearest', ...init });
     try {
-      const b = session.box;
+      // The frame in the document (a smart object's placed outline).
+      const b = session.smartObject ? (transformedBox(session.startGeometry) ?? session.box) : session.box;
       // About the centre, rounded so an odd-by-even box still lands on the pixel grid.
       const cx = b.x + b.width / 2;
       const cy = b.y + b.height / 2;
@@ -1672,7 +1815,7 @@ export class ImageEditorController {
       const oy = turn === 180 ? 0 : Math.round(cy - b.width / 2) - (cy - b.width / 2);
       const m: AffineMatrix =
         turn === 90 ? [0, 1, -1, 0, cx + cy + ox, cy - cx + oy] : turn === -90 ? [0, -1, 1, 0, cx - cy + ox, cy + cx + oy] : [-1, 0, 0, -1, 2 * cx, 2 * cy];
-      session.update({ corners: cornersFromMatrix(b, m) }, false);
+      session.update({ corners: session.startGeometry.corners.map((p) => applyMatrix(m, p)) as unknown as Quad }, false);
       return session.commit();
     } catch (e) {
       session.cancel();
@@ -1700,6 +1843,453 @@ export class ImageEditorController {
     const next = removeLayerFilterOp(this.state.layers, id, filterId);
     this.commitLayers(next);
     return (findLayer(next, id)!.layer as PixelLayer).filters ?? [];
+  }
+
+  // --- Smart objects ---
+
+  private get canvasSize(): { width: number; height: number } {
+    return this.naturalSize;
+  }
+
+  /**
+   * Layer › Smart Objects › Convert to Smart Object (one undo step): sibling layers (default the
+   * active one) become one smart object at the topmost one's position. A single pixel layer keeps
+   * its id and properties and its filters become smart filters (it renders exactly as before);
+   * anything else nests as a layer document. Returns the smart object's id.
+   */
+  public convertToSmartObject(ids?: string[], options: { name?: string } = {}): string {
+    const list = ids?.length ? ids : this.state.activeLayerId ? [this.state.activeLayerId] : [];
+    if (!list.length) throw new LayerOperationError('No layers given and none is active; pass layerIds (see list_layers).');
+    const res = convertToSmartObjectOp(this.state.layers, list, this.canvasSize, { surfaceOf: (l) => this.surfaceOf(l), name: options.name });
+    this.commitLayers(res.layers, () => {
+      this.state.activeLayerId = res.layer.id;
+      this.state.activeTarget = 'pixels';
+    });
+    return res.layer.id;
+  }
+
+  /** Layer › Smart Objects › Rasterize (one undo step): the smart object becomes a pixel layer holding what it renders. */
+  public rasterizeSmartObject(id: string): string {
+    const res = rasterizeSmartObjectOp(this.state.layers, id);
+    this.commitLayers(res.layers, () => {
+      if (this.state.activeLayerId === id && this.state.activeTarget === 'filter-mask') this.state.activeTarget = 'pixels';
+    });
+    return id;
+  }
+
+  /** A smart object's contents, placement and smart filters as plain data (see `SmartObjectInfo`). */
+  public getSmartObject(id: string): SmartObjectInfo {
+    const layer = requireSmartObject(this.state.layers, id);
+    const c = layer.contents;
+    const g = placementGeometry(layer);
+    const readout = describeTransform(g);
+    const stack = layer.smartFilters;
+    return {
+      layerId: layer.id,
+      contents: {
+        id: c.id,
+        name: c.name,
+        kind: c.kind,
+        width: c.width,
+        height: c.height,
+        decoded: isContentsDecoded(c),
+        fileType: c.file?.type ?? null,
+        linkedPath: c.linked?.path ?? null,
+        instances: instancesOf(this.state.layers, c.id),
+        layerCount: c.document ? flattenLayers(c.document.layers).length : 0,
+      },
+      placement: {
+        corners: g.corners.map((p) => ({ x: p.x, y: p.y })) as unknown as Quad,
+        warp: layer.placement.warp ?? null,
+        interpolation: layer.placement.interpolation ?? 'bicubic',
+        affine: readout.affine,
+        scaleX: readout.scaleX,
+        scaleY: readout.scaleY,
+        rotate: readout.rotate,
+        skewX: readout.skewX,
+        center: anchorPoint(g, 'center'),
+        bounds: transformedBox(g),
+      },
+      smartFilters: {
+        enabled: stack?.enabled ?? true,
+        filters: (stack?.filters ?? []).map((f) => (f.kind === 'psd' ? { id: f.id, kind: 'psd', name: f.name, enabled: f.enabled, blend: f.blend, opacity: f.opacity } : { ...f })),
+        mask: stack?.mask
+          ? { enabled: stack.mask.enabled !== false, linked: stack.mask.linked !== false, density: stack.mask.density ?? 1, feather: stack.mask.feather ?? 0, bounds: contentBounds(stack.mask.surface), defaultValue: stack.mask.defaultValue }
+          : null,
+      },
+      bounds: this.getLayerBounds(id),
+    };
+  }
+
+  /**
+   * Sets a smart object's placement (one undo step, or none with `commitToHistory = false` during a
+   * drag): where the contents' corners land, an optional warp in contents pixels and the
+   * interpolation. The contents render again from the source; a linked mask follows a warp-free
+   * change. Returns the new placement summary.
+   */
+  public setSmartObjectPlacement(id: string, placement: SmartPlacement, commitToHistory = true): SmartObjectInfo['placement'] & { masksMoved: boolean } {
+    const res = setSmartPlacement(this.state.layers, id, placement, this.canvasSize);
+    this.commitLayers(res.layers, undefined, commitToHistory);
+    return { ...this.getSmartObject(id).placement, masksMoved: res.masksMoved };
+  }
+
+  /**
+   * Sets a smart object's transform absolutely (one undo step): exactly one of `corners` (where the
+   * contents' corners land), `matrix` (contents pixels → document) or the numbers (`scaleX`,
+   * `scaleY` in percent of the contents' own size, `rotate`, `skewX`, `skewY`, and `x`, `y` where
+   * the contents' centre goes, default where it is now); plus, optionally, a warp (a preset, a mesh
+   * in contents pixels, or `null` to remove it) and the interpolation. Unlike `transformLayer`,
+   * nothing is relative to the current transform.
+   */
+  public setSmartObjectTransform(
+    id: string,
+    spec: {
+      corners?: Quad;
+      matrix?: AffineMatrix;
+      scaleX?: number;
+      scaleY?: number;
+      rotate?: number;
+      skewX?: number;
+      skewY?: number;
+      x?: number;
+      y?: number;
+      warp?: WarpMesh | WarpPreset | null;
+      interpolation?: Interpolation;
+    }
+  ): SmartObjectInfo['placement'] & { masksMoved: boolean } {
+    const layer = requireSmartObject(this.state.layers, id);
+    const g = placementGeometry(layer);
+    const numeric = (['scaleX', 'scaleY', 'rotate', 'skewX', 'skewY', 'x', 'y'] as const).filter((k) => spec[k] !== undefined);
+    const ways = [spec.corners !== undefined, spec.matrix !== undefined, numeric.length > 0].filter(Boolean).length;
+    if (ways > 1) throw new LayerOperationError('Give the transform only one way: corners, matrix, or the numbers (scaleX, scaleY, rotate, skewX, skewY, x, y).');
+    let corners: Quad = g.corners;
+    if (spec.corners) corners = spec.corners;
+    else if (spec.matrix) {
+      if (!(Array.isArray(spec.matrix) && spec.matrix.length === 6 && spec.matrix.every(Number.isFinite))) throw new LayerOperationError("matrix must be six finite numbers [a, b, c, d, e, f] (x' = a·x + c·y + e, y' = b·x + d·y + f).");
+      const [a, b, c, d] = spec.matrix;
+      if (Math.abs(a * d - b * c) < 1e-9) throw new LayerOperationError('matrix is singular (it collapses the contents to a line); a·d − b·c must not be 0.');
+      corners = cornersFromMatrix(g.box, spec.matrix);
+    } else if (numeric.length) {
+      if (spec.scaleX === 0 || spec.scaleY === 0) throw new LayerOperationError('scaleX and scaleY must not be 0 (that collapses the contents to a line).');
+      for (const k of numeric) if (!Number.isFinite(spec[k] as number)) throw new LayerOperationError(`${k} must be a finite number.`);
+      const now = describeTransform(g);
+      const centre = anchorPoint(g, 'center');
+      const params = {
+        scaleX: spec.scaleX ?? (now.affine ? now.scaleX : 100),
+        scaleY: spec.scaleY ?? (now.affine ? now.scaleY : 100),
+        rotate: spec.rotate ?? (now.affine ? now.rotate : 0),
+        skewX: spec.skewX ?? (now.affine ? now.skewX : 0),
+        skewY: spec.skewY ?? 0,
+      };
+      const m = matrixFromParams(g.box, { ...params, reference: 'center' });
+      const cx = g.box.width / 2;
+      const cy = g.box.height / 2;
+      const to = { x: spec.x ?? centre.x, y: spec.y ?? centre.y };
+      corners = cornersFromMatrix(g.box, multiplyMatrices(m, translateMatrix(to.x - cx, to.y - cy)));
+    }
+    let warp: WarpMesh | null | undefined = layer.placement.warp ?? null;
+    if (spec.warp === null) warp = null;
+    else if (spec.warp) {
+      if ('style' in spec.warp) {
+        if (!WARP_STYLES.includes(spec.warp.style)) throw new LayerOperationError(`Unknown warp style "${String(spec.warp.style)}". Styles: ${WARP_STYLES.join(', ')}.`);
+        warp = presetWarp(g.box, spec.warp);
+      } else {
+        if (!isValidWarp(spec.warp)) throw new LayerOperationError('mesh must have us and vs (knots from 0 to 1, increasing) and (3·columns + 1) × (3·rows + 1) finite points in contents pixels, row by row.');
+        warp = spec.warp;
+      }
+    }
+    const next: SmartPlacement = { corners, warp, interpolation: spec.interpolation ?? layer.placement.interpolation };
+    return this.setSmartObjectPlacement(id, next);
+  }
+
+  /**
+   * Layer › Smart Objects › Replace Contents (one undo step): new contents for the smart object and
+   * every instance linked to it, from RGBA pixels, PSD bytes (a layer document) or contents. Each
+   * instance keeps its scale and rotation about the contents' centre. Returns the contents id and
+   * the layers that changed.
+   */
+  public replaceSmartObjectContents(
+    id: string,
+    source: { pixels: PixelBuffer; name?: string } | { psd: Uint8Array; name?: string } | { contents: SmartContents }
+  ): { contentsId: string; width: number; height: number; layerIds: string[] } {
+    const layer = requireSmartObject(this.state.layers, id);
+    let contents: SmartContents;
+    if ('contents' in source) contents = source.contents;
+    else if ('pixels' in source) contents = rasterContents(source.pixels, source.name ?? layer.contents.name.replace(/\.\w+$/, '.png'));
+    else {
+      const psd = importPsd(source.psd, { newId: () => newLayerId() });
+      contents = documentContents({ layers: psd.layers, globalLight: psd.globalLight, patterns: psd.patterns.length ? psd.patterns : undefined }, psd.width, psd.height, source.name ?? `${layer.name || 'Contents'}.psb`);
+      contents.file = { bytes: source.psd.slice(), type: psd.info.psb ? 'psb' : 'psd' };
+    }
+    const res = replaceContentsOp(this.state.layers, layer.contents.id, contents, this.canvasSize);
+    this.commitLayers(res.layers);
+    return { contentsId: layer.contents.id, width: contents.width, height: contents.height, layerIds: res.ids };
+  }
+
+  /** `replaceSmartObjectContents` from an image (PNG data URL or base64 decodes anywhere; other formats need a browser). */
+  public async replaceSmartObjectContentsFromImage(id: string, image: string, name?: string): Promise<{ contentsId: string; width: number; height: number; layerIds: string[] }> {
+    const pixels = await this.decodeImage(image);
+    return this.replaceSmartObjectContents(id, { pixels, name });
+  }
+
+  /**
+   * Layer › Smart Objects › Export Contents: the file the contents came from while unedited, else a
+   * PNG (raster contents) or a PSD / PSB of the nested document. Returns the file name, MIME type
+   * and bytes.
+   */
+  public exportSmartObjectContents(id: string): { name: string; mimeType: string; bytes: Uint8Array } {
+    const layer = requireSmartObject(this.state.layers, id);
+    const c = layer.contents;
+    const base = c.name.replace(/\.\w+$/, '') || 'Contents';
+    if (c.file) {
+      const mime: Record<string, string> = { psd: 'image/vnd.adobe.photoshop', psb: 'image/vnd.adobe.photoshop', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', tif: 'image/tiff', tiff: 'image/tiff', gif: 'image/gif' };
+      const ext = c.file.type.toLowerCase();
+      return { name: /\.\w+$/.test(c.name) ? c.name : `${base}.${ext}`, mimeType: mime[ext] ?? 'application/octet-stream', bytes: c.file.bytes };
+    }
+    if (!isContentsDecoded(c)) throw new LayerOperationError(`The contents of "${layer.name || id}" are not available here.`);
+    if (c.kind === 'raster') {
+      const data = readRegion(contentsSurface(c), { x: 0, y: 0, width: c.width, height: c.height });
+      return { name: `${base}.png`, mimeType: 'image/png', bytes: encodePng(c.width, c.height, data) };
+    }
+    const doc = c.document!;
+    const merged = readRegion(contentsSurface(c), { x: 0, y: 0, width: c.width, height: c.height });
+    const prepared = prepareNestedForPsd(doc.layers);
+    const res = exportPsd({ width: c.width, height: c.height, layers: prepared, merged, patterns: doc.patterns, globalLight: doc.globalLight });
+    return { name: `${base}.${res.psb ? 'psb' : 'psd'}`, mimeType: 'image/vnd.adobe.photoshop', bytes: res.bytes };
+  }
+
+  /**
+   * Layer › Smart Objects › New Smart Object via Copy (`linked: false`: independent contents) or a
+   * linked duplicate (`linked: true`: edits to the contents show in both), directly above, as one
+   * undo step. Returns the copy's id.
+   */
+  public copySmartObject(id: string, linked = false, name?: string): string {
+    const res = copySmartObjectOp(this.state.layers, id, linked, name);
+    this.commitLayers(res.layers, () => {
+      this.state.activeLayerId = res.layer.id;
+      this.state.activeTarget = 'pixels';
+    });
+    return res.layer.id;
+  }
+
+  /** Adds a smart filter (`develop` or `blur`, with `blend` and `opacity`) at `index` (default the top), as one undo step. */
+  public addSmartFilter(id: string, filter: Record<string, unknown> & { kind: string }, index?: number): SmartFilter {
+    const res = addSmartFilterOp(this.state.layers, id, normalizeSmartFilter(filter), this.canvasSize, index);
+    this.commitLayers(res.layers);
+    return res.filter;
+  }
+
+  /** Changes one smart filter (one undo step, or none with `commitToHistory = false` during a drag). */
+  public updateSmartFilter(id: string, filterId: string, changes: Record<string, unknown>, commitToHistory = true): SmartFilter {
+    const res = updateSmartFilterOp(this.state.layers, id, filterId, changes, this.canvasSize);
+    this.commitLayers(res.layers, undefined, commitToHistory);
+    return res.filter;
+  }
+
+  /** Removes one smart filter (one undo step). Returns the remaining filters. */
+  public removeSmartFilter(id: string, filterId: string): SmartFilter[] {
+    const res = removeSmartFilterOp(this.state.layers, id, filterId, this.canvasSize);
+    this.commitLayers(res.layers);
+    return res.layer.smartFilters?.filters ?? [];
+  }
+
+  /** Moves one smart filter to `index` (0 = bottom, applied first), as one undo step. Returns the filters. */
+  public moveSmartFilter(id: string, filterId: string, index: number): SmartFilter[] {
+    const res = moveSmartFilterOp(this.state.layers, id, filterId, index, this.canvasSize);
+    this.commitLayers(res.layers);
+    return res.layer.smartFilters?.filters ?? [];
+  }
+
+  /** Turns a smart object's whole filter stack on or off (one undo step). */
+  public setSmartFiltersEnabled(id: string, enabled: boolean): boolean {
+    const res = setSmartFiltersEnabledOp(this.state.layers, id, enabled, this.canvasSize);
+    this.commitLayers(res.layers);
+    return res.layer.smartFilters?.enabled ?? true;
+  }
+
+  /**
+   * Sets the smart filter mask (one undo step): `reveal-all`, `hide-all`, `selection` (the
+   * selection's coverage), or `none` to remove it; `props` sets density, feather, enabled and linked.
+   * Painting it targets channel `filter-mask`. Returns the mask, or `null` when removed.
+   */
+  public setSmartFilterMask(id: string, from: 'reveal-all' | 'hide-all' | 'selection' | 'none' | 'keep', props: LayerMaskProps = {}, commitToHistory = true): RasterMask | null {
+    const layer = requireSmartObject(this.state.layers, id);
+    let mask: RasterMask | null;
+    if (from === 'none') mask = null;
+    else if (from === 'keep') {
+      if (!layer.smartFilters?.mask) throw new LayerOperationError(`Smart object "${layer.name || id}" has no filter mask; add one with from reveal-all, hide-all or selection.`);
+      mask = withMaskProps(layer.smartFilters.mask, props);
+    } else if (from === 'selection') {
+      const sel = this.state.selection;
+      if (!sel?.bounds) throw new LayerOperationError('Nothing is selected; select first, or use reveal-all / hide-all.');
+      mask = this.maskFromSelection(sel, props);
+    } else {
+      const v = from === 'reveal-all' ? 255 : 0;
+      mask = withMaskProps({ surface: emptySurface(1, v), defaultValue: v }, props);
+    }
+    const res = setSmartFilterMaskOp(this.state.layers, id, mask, this.canvasSize);
+    this.commitLayers(res.layers, () => {
+      if (this.state.activeLayerId !== id) return;
+      if (mask && from !== 'keep') this.state.activeTarget = 'filter-mask';
+      else if (!mask && this.state.activeTarget === 'filter-mask') this.state.activeTarget = 'pixels';
+    }, commitToHistory);
+    return res.layer.smartFilters?.mask ?? null;
+  }
+
+  /**
+   * Decodes smart object contents that came as files the synchronous decoders cannot read (a JPEG
+   * or TIFF embedded in a PSD), through the browser's image decoder. No undo step: the pixels on
+   * screen do not change. Returns the contents ids still undecoded.
+   */
+  public async prepareSmartObjects(): Promise<string[]> {
+    const pending = new Map<string, SmartContents>();
+    for (const l of flattenLayers(this.state.layers)) if (l.type === 'smart' && !isContentsDecoded(l.contents) && l.contents.file) pending.set(l.contents.id, l.contents);
+    const left: string[] = [];
+    for (const [cid, c] of pending) {
+      try {
+        const url = `data:${c.file!.type === 'png' ? 'image/png' : c.file!.type === 'gif' ? 'image/gif' : c.file!.type === 'tif' || c.file!.type === 'tiff' ? 'image/tiff' : 'image/jpeg'};base64,${bytesToBase64(c.file!.bytes)}`;
+        const px = await this.decodeImage(url);
+        const decoded: SmartContents = { ...c, kind: 'raster', raster: rasterContents(px, c.name, cid).raster, width: px.width, height: px.height };
+        const swap = (layers: ImageLayer[]) => {
+          let out = layers;
+          for (const l of flattenLayers(layers)) if (l.type === 'smart' && l.contents.id === cid) out = mapLayer(out, l.id, (x) => ({ ...(x as SmartObjectLayer), contents: decoded }));
+          return out;
+        };
+        this.state.layers = swap(this.state.layers);
+        for (const e of [...this.undoStack, ...this.redoStack]) e.layers = swap(e.layers);
+      } catch {
+        left.push(cid);
+      }
+    }
+    if (pending.size) this.notify();
+    return left;
+  }
+
+  // --- Smart object contents (Edit Contents) ---
+
+  private contentsStack: Array<{ layerId: string; contentsId: string; name: string; saved: SavedDocument }> = [];
+
+  /** The smart objects whose contents are open (outermost first); empty when the document itself is shown. */
+  public getEditingContents(): Array<{ layerId: string; name: string }> {
+    return this.contentsStack.map((e) => ({ layerId: e.layerId, name: e.name }));
+  }
+
+  /**
+   * Layer › Smart Objects › Edit Contents: shows the smart object's contents as a document of their
+   * own (a layer document, or raster contents as one pixel layer), with their own undo history.
+   * Every editor operation and tool then works on the contents until `closeSmartObjectContents`.
+   * Contents can nest. Returns the contents' size and layer ids.
+   */
+  public editSmartObjectContents(id: string): { layerId: string; depth: number; width: number; height: number; layerIds: string[] } {
+    if (this.getFreeTransform()) throw new LayerOperationError('A Free Transform is open; commit or cancel it first.');
+    const layer = requireSmartObject(this.state.layers, id);
+    const c = layer.contents;
+    if (!isContentsDecoded(c)) throw new LayerOperationError(`The contents of "${layer.name || id}" are a ${c.file?.type ?? 'file'} that could not be decoded here; run prepareSmartObjects() in a browser first.`);
+    const saved: SavedDocument = {
+      state: { ...this.state },
+      undo: this.undoStack,
+      redo: this.redoStack,
+      initial: this.initialSnapshot,
+      element: this.imageElement,
+      samplePixels: this.samplePixels,
+      samplePixelsOverride: this.samplePixelsOverride,
+      psdResolution: this.psdResolution,
+    };
+    const layers: ImageLayer[] =
+      c.kind === 'document'
+        ? c.document!.layers
+        : [{ type: 'pixel', id: newLayerId(), name: 'Layer 0', visible: true, opacity: 1, blend: 'normal', surface: c.raster!, offset: { x: 0, y: 0 } }];
+    this.contentsStack.push({ layerId: layer.id, contentsId: c.id, name: layer.name || c.name, saved });
+    const s = this.state;
+    this.state = {
+      ...s,
+      sourceUrl: null,
+      imageDimensions: { width: c.width, height: c.height },
+      crop: null,
+      transform: { ...DEFAULT_TRANSFORM_VALUES },
+      layers,
+      activeLayerId: layers.length ? layers[layers.length - 1].id : null,
+      activeTarget: 'pixels',
+      selection: null,
+      selectedAnnotationId: null,
+      outputOpacity: 1,
+      zoom: 1,
+      pan: { x: 0, y: 0 },
+      editingContents: this.getEditingContents(),
+    };
+    delete this.state.legacyOutputBlur;
+    if (c.document?.globalLight) this.state.globalLight = c.document.globalLight;
+    else delete this.state.globalLight;
+    if (c.document?.patterns?.length) this.state.patterns = c.document.patterns;
+    else delete this.state.patterns;
+    this.imageElement = null;
+    this.samplePixels = null;
+    this.samplePixelsOverride = false;
+    this.undoStack = [];
+    this.redoStack = [];
+    this.viewKey = [];
+    this.initialSnapshot = this.captureHistoryEntry();
+    this.notify();
+    return { layerId: layer.id, depth: this.contentsStack.length, width: c.width, height: c.height, layerIds: flattenLayers(layers).map((l) => l.id) };
+  }
+
+  /**
+   * Closes the innermost open contents: with `save` (default) the edited layers become the smart
+   * object's contents, and it and every linked instance render again (one undo step in the
+   * document); without, the edits are dropped. Returns the smart object and the layers that changed.
+   */
+  public closeSmartObjectContents(save = true): { layerId: string; changed: boolean; layerIds: string[] } {
+    const top = this.contentsStack.pop();
+    if (!top) throw new LayerOperationError('No smart object contents are open; open them with edit_smart_object_contents.');
+    if (this.openTransform?.isOpen) this.openTransform.cancel();
+    this.openTransform = null;
+    const edited = this.state;
+    const changed = save && this.undoStack.length > 0;
+    let next: SmartContents | null = null;
+    if (changed) {
+      const layer = findLayer(top.saved.state.layers, top.layerId)?.layer as SmartObjectLayer | undefined;
+      const old = layer?.contents;
+      const { width, height } = edited.imageDimensions;
+      const only = edited.layers.length === 1 ? edited.layers[0] : null;
+      const plain =
+        only?.type === 'pixel' && only.visible && only.opacity === 1 && only.blend === 'normal' && !only.mask && !only.effects && !only.filters?.length && !only.clipped && (only.fillOpacity ?? 1) === 1 && only.source !== 'document';
+      if (old?.kind === 'raster' && plain) {
+        const px = readRegion(only.surface, { x: -only.offset.x, y: -only.offset.y, width, height });
+        next = rasterContents({ width, height, data: px }, old.name, old.id);
+      } else {
+        const doc = { layers: edited.layers, globalLight: edited.globalLight, patterns: edited.patterns };
+        next = documentContents(doc, width, height, old?.kind === 'document' ? old.name : `${(old?.name ?? 'Contents').replace(/\.\w+$/, '')}.psb`, top.contentsId);
+      }
+    }
+    const saved = top.saved;
+    this.state = saved.state;
+    this.undoStack = saved.undo;
+    this.redoStack = saved.redo;
+    this.initialSnapshot = saved.initial;
+    this.imageElement = saved.element;
+    this.samplePixels = saved.samplePixels;
+    this.samplePixelsOverride = saved.samplePixelsOverride;
+    this.psdResolution = saved.psdResolution;
+    this.viewKey = [];
+    if (this.contentsStack.length) this.state.editingContents = this.getEditingContents();
+    else delete this.state.editingContents;
+    if (!next) {
+      this.notify();
+      return { layerId: top.layerId, changed: false, layerIds: [] };
+    }
+    const res = replaceContentsOp(this.state.layers, top.contentsId, next, this.canvasSize);
+    this.commitLayers(res.layers);
+    return { layerId: top.layerId, changed: true, layerIds: res.ids };
+  }
+
+  /** The document's own layers (not the contents open for editing). */
+  private rootLayers(): ImageLayer[] {
+    return this.contentsStack[0]?.saved.state.layers ?? this.state.layers;
+  }
+
+  /** Drops every open contents edit (loading another document). */
+  private abandonContents(): void {
+    while (this.contentsStack.length) this.closeSmartObjectContents(false);
   }
 
   // --- Layer effects ---
@@ -1911,7 +2501,7 @@ export class ImageEditorController {
     const k = Math.min(1, side / Math.max(width, height));
     const tw = Math.max(1, Math.round(width * k));
     const th = Math.max(1, Math.round(height * k));
-    const surface = options.mask ? (layer.mask && !layer.mask.source ? layer.mask.surface : null) : layer.type === 'pixel' ? this.surfaceOf(layer) : null;
+    const surface = options.mask ? (layer.mask && !layer.mask.source ? layer.mask.surface : null) : layer.type === 'pixel' || layer.type === 'smart' ? this.surfaceOf(layer) : null;
     if (!surface) return null;
     const ox = layer.type === 'pixel' ? layer.offset.x : 0;
     const oy = layer.type === 'pixel' ? layer.offset.y : 0;
@@ -2008,13 +2598,20 @@ export class ImageEditorController {
       if (!layer.mask) throw new LayerOperationError(`Layer "${layer.name || id}" has no mask to ${action}; add one with add_layer_mask, or target pixels.`);
       if (layer.mask.source) throw new LayerOperationError(`Layer "${layer.name || id}" has a depth mask, which is generated, not painted.`);
       requireUnlocked(layer, 'all', action);
+    } else if (ch === 'filter-mask') {
+      if (layer.type !== 'smart' || !layer.smartFilters?.mask) {
+        throw new LayerOperationError(`Layer "${layer.name || id}" has no smart filter mask to ${action}; add one with set_smart_filter_mask, or target pixels or mask.`);
+      }
+      if (!isContentsDecoded(layer.contents)) throw new LayerOperationError(`The contents of "${layer.name || id}" are not decoded here, so its filter mask cannot be painted; run prepareSmartObjects() first.`);
+      requireUnlocked(layer, 'all', action);
     } else {
+      if (layer.type === 'smart') throw new LayerOperationError(`Layer "${layer.name || id}" is a smart object; its pixels come from its contents. Rasterize it (rasterize_smart_object), edit its contents (edit_smart_object_contents), or ${action} on its mask or filter mask.`);
       if (layer.type !== 'pixel') throw new LayerOperationError(`Layer "${layer.name || id}" is a ${layer.type} layer; ${action} on a pixel layer, or on this layer's mask (channel mask).`);
       requireUnlocked(layer, 'pixels', action);
     }
     if (!layer.visible) throw new LayerOperationError(`Layer "${layer.name || id}" is hidden; show it before you ${action}.`);
     const offset = layer.type === 'pixel' ? layer.offset : { x: 0, y: 0 };
-    const surface = ch === 'mask' ? layer.mask!.surface : this.surfaceOf(layer as PixelLayer);
+    const surface = ch === 'mask' ? layer.mask!.surface : ch === 'filter-mask' ? (layer as SmartObjectLayer).smartFilters!.mask!.surface : this.surfaceOf(layer as PixelLayer);
     const lockTransparency = ch === 'pixels' && Boolean(layer.locks?.transparency);
     return { id, layer, channel: ch, offset, surface, lockTransparency };
   }
@@ -2022,6 +2619,7 @@ export class ImageEditorController {
   /** The layer with its pixels (or mask) replaced by `surface`. */
   private withSurface(layer: ImageLayer, channel: LayerTarget, surface: TiledSurface): ImageLayer {
     if (channel === 'mask') return { ...layer, mask: { ...layer.mask!, surface } } as ImageLayer;
+    if (channel === 'filter-mask') return withFilterMaskSurface(layer as SmartObjectLayer, surface, this.canvasSize);
     const next = { ...(layer as PixelLayer), surface };
     delete next.source;
     return next;
@@ -2037,7 +2635,7 @@ export class ImageEditorController {
     const tool = init.tool ?? 'brush';
     if (tool !== 'brush' && tool !== 'eraser' && tool !== 'mixer') throw new LayerOperationError(`Unknown paint tool "${String(tool)}"; use brush, eraser or mixer.`);
     const target = this.paintTarget(init.layerId, init.channel, tool === 'eraser' ? 'erase' : 'paint');
-    if (tool === 'mixer' && target.channel === 'mask') {
+    if (tool === 'mixer' && target.channel !== 'pixels') {
       throw new LayerOperationError('The Mixer Brush paints colour on pixels, not on masks; target pixels (channel pixels), or paint the mask with the brush.');
     }
     const brush = normalizeBrush({ ...this.state.paint.brush, ...(init.brush ?? {}) });
@@ -2049,10 +2647,10 @@ export class ImageEditorController {
     };
     const apply: StrokeApply = {
       mode: tool === 'eraser' ? 'erase' : 'paint',
-      color: target.channel === 'mask' ? toMaskGrey(color) : color,
-      background: target.channel === 'mask' ? toMaskGrey(background) : background,
+      color: target.channel !== 'pixels' ? toMaskGrey(color) : color,
+      background: target.channel !== 'pixels' ? toMaskGrey(background) : background,
       opacity: brush.opacity,
-      blend: target.channel === 'mask' ? 'normal' : brush.blend,
+      blend: target.channel !== 'pixels' ? 'normal' : brush.blend,
       lockTransparency: target.lockTransparency,
       selection: this.state.selection?.bounds ? this.state.selection : null,
       offset: target.offset,
@@ -2082,7 +2680,8 @@ export class ImageEditorController {
   /** @internal Shows a stroke's live surface (no history). */
   public _strokeUpdate(layerId: string, channel: LayerTarget, surface: TiledSurface, rects: CropBox[]): void {
     this.state.layers = mapLayer(this.state.layers, layerId, (l) => this.withSurface(l, channel, surface));
-    this.notify(rects);
+    // A filter mask re-renders the smart object (and feathering spreads the change): redraw it all.
+    this.notify(channel === 'filter-mask' ? undefined : rects);
   }
 
   /** @internal Commits a finished stroke as one undo step (`before` is the pre-stroke state). */
@@ -2160,10 +2759,10 @@ export class ImageEditorController {
     };
     const apply: StrokeApply = {
       mode,
-      color: target.channel === 'mask' ? grey(color) : color,
-      background: target.channel === 'mask' ? grey(background) : background,
+      color: target.channel !== 'pixels' ? grey(color) : color,
+      background: target.channel !== 'pixels' ? grey(background) : background,
       opacity,
-      blend: target.channel === 'mask' ? 'normal' : blend,
+      blend: target.channel !== 'pixels' ? 'normal' : blend,
       lockTransparency: target.lockTransparency,
       selection: null,
       offset: target.offset,
@@ -2588,7 +3187,7 @@ export class ImageEditorController {
     const sources: CompositorSources = {
       width,
       height,
-      surfaceOf: (l) => (l.source === 'document' && pixels ? surfaceFromPixels(pixels, 4) : this.surfaceOf(l)),
+      surfaceOf: (l) => (l.type === 'pixel' && l.source === 'document' && pixels ? surfaceFromPixels(pixels, 4) : this.surfaceOf(l)),
       version: pixels ? 'pixels' : this.sourceVersion(),
     };
     // Without `sampleMerged`, the pixels as painted: adjustment layers and filters left out.
@@ -3149,8 +3748,10 @@ export class ImageEditorController {
         // The mask lives in layer space: keep it where it was in the document.
         next.mask = { ...layer.mask, surface: translateSurface(layer.mask.surface, layer.offset.x, layer.offset.y) };
       }
+    } else if (layer.type === 'smart') {
+      return this.rasterizeSmartObject(id);
     } else {
-      throw new LayerOperationError(`Only annotation layers and pixel layers with filters rasterize; "${layer.name || id}" is a ${layer.type} layer. Merge it down or flatten instead.`);
+      throw new LayerOperationError(`Only annotation layers, smart objects and pixel layers with filters rasterize; "${layer.name || id}" is a ${layer.type} layer. Merge it down or flatten instead.`);
     }
     this.commitLayers(mapLayer(this.state.layers, id, () => next));
     return id;
@@ -3169,6 +3770,7 @@ export class ImageEditorController {
    */
   public loadPsd(bytes: Uint8Array): { layerIds: string[]; warnings: string[]; width: number; height: number; summary: PsdImportResult['summary'] } {
     const result = importPsd(bytes, { newId: () => newLayerId() });
+    this.abandonContents();
     this.recordHistory();
     const s = this.state;
     this.imageElement = null;
@@ -3282,6 +3884,13 @@ export class ImageEditorController {
         if (mask) out.mask = mask;
         return out;
       }
+      if (layer.type === 'smart') {
+        add('Smart objects were written as pixel layers (their rendered pixels)', layer.name);
+        const px = rasterizeSmartObjectOp([layer], layer.id).layer;
+        const mask = bakeMask(px);
+        if (mask) px.mask = mask;
+        return px;
+      }
       let out: PixelLayer = { ...layer };
       if (layer.source === 'document') {
         out.surface = this.surfaceOf(layer);
@@ -3390,10 +3999,28 @@ export class ImageEditorController {
    */
   public toJSON(options: { assets: 'external'; store: ImageEditorAssetStore }): Promise<SerializedImageEditorState>;
   public toJSON(options?: { assets: 'external'; store: ImageEditorAssetStore }): SerializedImageEditorState | Promise<SerializedImageEditorState> {
-    const out = this.serializeState();
-    if (this.state.selection?.bounds) out.selection = serializeSelection(this.state.selection);
+    // While contents are open, the document is the one set aside (without the open edits).
+    const root = this.contentsStack[0]?.saved;
+    const current = this.state;
+    const element = this.imageElement;
+    if (root) {
+      this.state = root.state;
+      this.imageElement = root.element;
+      this.viewKey = [];
+    }
+    let out: SerializedImageEditorState;
+    try {
+      out = this.serializeState();
+      if (this.state.selection?.bounds) out.selection = serializeSelection(this.state.selection);
+    } finally {
+      if (root) {
+        this.state = current;
+        this.imageElement = element;
+        this.viewKey = [];
+      }
+    }
     if (!options || out.version !== LAYERED_SCHEMA_VERSION) return options ? Promise.resolve(out) : out;
-    return serializeLayersExternal(this.state.layers, options.store).then(({ layers, assets }) => ({ ...out, layers, assets }));
+    return serializeLayersExternal(this.rootLayers(), options.store).then(({ layers, assets, smartContents }) => (smartContents ? { ...out, layers, assets, smartContents } : { ...out, layers, assets }));
   }
 
   /**
@@ -3414,6 +4041,7 @@ export class ImageEditorController {
 
   /** Loads a stored state of any version (one undo step). */
   public loadJSON(data: SerializedImageEditorState): void {
+    this.abandonContents();
     this.recordHistory();
     this.applyStored(data);
     let selection: SelectionMask | null = null;
@@ -3438,7 +4066,8 @@ export class ImageEditorController {
     this.lastLoadProblems = [];
     if (isLayered(data)) {
       const problems: string[] = [];
-      s.layers = deserializeLayers(data.layers, { assets: data.assets ?? {}, problems });
+      const canvas = typeof data.width === 'number' && data.width > 0 && typeof data.height === 'number' && data.height > 0 ? { width: data.width, height: data.height } : this.naturalSize;
+      s.layers = deserializeLayers(data.layers, { assets: data.assets ?? {}, problems, smartContents: Array.isArray(data.smartContents) ? data.smartContents : [], canvas });
       this.lastLoadProblems = problems;
       s.crop = data.crop ? { ...data.crop } : null;
       s.transform = { ...data.transform };
@@ -3492,7 +4121,7 @@ export class ImageEditorController {
         annotations: JSON.parse(JSON.stringify(view.annotations)),
       };
     }
-    const { layers, assets } = serializeLayers(this.state.layers);
+    const { layers, assets, smartContents } = serializeLayers(this.state.layers);
     const out: SerializedLayeredImageEditorState = {
       version: LAYERED_SCHEMA_VERSION,
       width,
@@ -3507,6 +4136,7 @@ export class ImageEditorController {
     if (this.state.legacyOutputBlur !== undefined) out.legacyOutputBlur = this.state.legacyOutputBlur;
     if (this.state.globalLight) out.globalLight = { ...this.state.globalLight };
     if (this.state.patterns?.length) out.patterns = serializePatterns(this.state.patterns);
+    if (smartContents) out.smartContents = smartContents;
     return out;
   }
 }
@@ -3659,6 +4289,12 @@ function collectStateTiles(layers: readonly ImageLayer[], into: Set<Tile>): void
   for (const l of flattenLayers(layers)) {
     if (l.type === 'pixel' && l.source !== 'document') collectTiles(l.surface, into);
     if (l.mask && !l.mask.source) collectTiles(l.mask.surface, into);
+    if (l.type === 'smart') {
+      collectTiles(l.surface, into);
+      if (l.smartFilters?.mask) collectTiles(l.smartFilters.mask.surface, into);
+      if (l.contents.raster) collectTiles(l.contents.raster, into);
+      if (l.contents.document) collectStateTiles(l.contents.document.layers, into);
+    }
   }
 }
 

@@ -7,6 +7,9 @@ import { VECTOR_WIDTH_PRESET_IDS, type VectorTaperOptions, type VectorWaveOption
 import { resolveVectorBlendOptions, vectorBlendKeys } from './blendGroup.js';
 import { VECTOR_BLEND_SPACINGS, VECTOR_GRADIENT_INTERPOLATIONS, VECTOR_GRADIENT_SPREADS, VECTOR_GRADIENT_TYPES, VECTOR_STROKE_GRADIENT_MODES, type VectorBlendOptions } from './types.js';
 import { sanitizeVectorGradient, type VectorGradientPatch } from './gradient.js';
+import { isVectorBlendMode, vectorFills, vectorStrokes } from './paintLayers.js';
+import { vectorFilterParamKeys } from './filters.js';
+import { VECTOR_BLEND_MODES, VECTOR_FILTER_TYPES, type VectorBlendMode, type VectorFilter, type VectorFilterType, type VectorPaint, type VectorPaintLayer, type VectorStrokeLayer } from './types.js';
 import { isValidVectorMesh, VECTOR_WARP_STYLES } from './warp.js';
 import type { VectorEnvelopeParams } from './appearance.js';
 
@@ -48,6 +51,14 @@ export interface VectorNodeListing {
 	liveBoolean?: VectorBooleanOperation;
 	/** An operand's own operation in a live boolean group. */
 	booleanOperation?: VectorBooleanOperation;
+	/** The fill stack, bottom to top, when the path has more than its `fill` says. */
+	fills?: VectorPaintLayer[];
+	/** The stroke stack, bottom to top, when the path has more than its `stroke` says. */
+	strokes?: VectorStrokeLayer[];
+	/** The node's blend mode, when not normal. */
+	blendMode?: VectorBlendMode;
+	/** The node's visual filters (shadows, glows, blurs, feather). */
+	filters?: VectorFilter[];
 }
 
 const EFFECT_PARAMS_DESCRIPTION =
@@ -145,15 +156,27 @@ const PAINT = {
 	anyOf: [{ type: 'string' }, { type: 'null' }, { type: 'object', properties: GRADIENT_PROPS, required: ['type', 'stops'] }]
 } as const;
 
-const STYLE_PROPS = {
-	fill: PAINT,
-	stroke: PAINT,
-	strokeWidth: { type: 'number', minimum: 0 },
-	strokeLinecap: { type: 'string', enum: ['butt', 'round', 'square'] },
-	strokeLinejoin: { type: 'string', enum: ['miter', 'round', 'bevel'] },
-	strokeDasharray: { type: 'array', items: { type: 'number' } },
-	fillRule: { type: 'string', enum: ['nonzero', 'evenodd'] },
-	strokeAlign: { type: 'string', enum: ['center', 'inside', 'outside'], description: 'Where the stroke sits on the outline (closed shapes only; open paths stroke centred).' },
+const BLEND_MODE = {
+	type: 'string',
+	enum: VECTOR_BLEND_MODES,
+	description: 'How it mixes with what is under it (CSS mix-blend-mode names; linear-dodge draws as plus-lighter). Default normal.'
+} as const;
+
+/** A fill layer's own fields. */
+const FILL_LAYER_PROPS = {
+	paint: PAINT,
+	opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Layer opacity 0 to 1 (default 1), multiplying the paint\'s own alpha.' },
+	blendMode: BLEND_MODE,
+	visible: { type: 'boolean', description: 'false hides the layer (kept, not drawn or hit). Default true.' }
+} as const;
+
+/** Stroke settings, each stroke layer's own (and the stroke shorthand's). */
+const STROKE_SETTING_PROPS = {
+	strokeWidth: { type: 'number', minimum: 0, description: 'Stroke width in document units (default 1).' },
+	strokeLinecap: { type: 'string', enum: ['butt', 'round', 'square'], description: 'Line cap (default butt).' },
+	strokeLinejoin: { type: 'string', enum: ['miter', 'round', 'bevel'], description: 'Line join (default miter).' },
+	strokeDasharray: { type: ['array', 'null'], items: { type: 'number', minimum: 0 }, description: 'Dash and gap lengths in document units; null or [] for a solid line.' },
+	strokeAlign: { type: 'string', enum: ['center', 'inside', 'outside'], description: 'Where the stroke sits on the outline (closed shapes only; open paths stroke centred). Default center.' },
 	startArrow: { type: ['string', 'null'], enum: [...VECTOR_ARROWHEADS, null], description: 'Head at the start of an open path, or null for none.' },
 	endArrow: { type: ['string', 'null'], enum: [...VECTOR_ARROWHEADS, null], description: 'Head at the end of an open path, or null for none.' },
 	arrowAlign: { type: 'string', enum: ['extend', 'tip'], description: '`extend`: the tip sits past the end point; `tip`: on it, the stroke shortened under the head.' },
@@ -162,12 +185,36 @@ const STYLE_PROPS = {
 	strokeWidthProfile: WIDTH_POINTS
 } as const;
 
+const FILL_LAYER = { type: 'object', properties: FILL_LAYER_PROPS, required: ['paint'], additionalProperties: false } as const;
+const STROKE_LAYER = { type: 'object', properties: { ...FILL_LAYER_PROPS, ...STROKE_SETTING_PROPS }, required: ['paint'], additionalProperties: false } as const;
+
+const STYLE_PROPS = {
+	fills: { type: 'array', items: FILL_LAYER, description: 'Replace the fill stack, bottom to top (fills draw under strokes). `fill` alone edits the top fill.' },
+	strokes: { type: 'array', items: STROKE_LAYER, description: 'Replace the stroke stack, bottom to top, each stroke with its own settings. `stroke` and the stroke settings alone edit the top stroke.' },
+	fill: PAINT,
+	stroke: PAINT,
+	...STROKE_SETTING_PROPS,
+	fillRule: { type: 'string', enum: ['nonzero', 'evenodd'], description: 'Which areas count as inside (default nonzero).' }
+} as const;
+
+const checkPaint = (paint: unknown, where: string): VectorPaint => {
+	if (paint && typeof paint === 'object') return sanitizeVectorGradient(paint) ?? fail(`${where} is not a valid gradient: give a type and at least one stop { offset, color }.`);
+	return paint as VectorPaint;
+};
+
 const pickStyle = (params: Record<string, unknown>): VectorStyle => {
 	const out: Record<string, unknown> = {};
 	for (const key of Object.keys(STYLE_PROPS)) if (params[key] !== undefined) out[key] = params[key];
-	for (const key of ['fill', 'stroke'] as const) {
-		const paint = out[key];
-		if (paint && typeof paint === 'object') out[key] = sanitizeVectorGradient(paint) ?? fail(`${key} is not a valid gradient: give a type and at least one stop { offset, color }.`);
+	for (const key of ['fill', 'stroke'] as const) if (out[key] !== undefined) out[key] = checkPaint(out[key], key);
+	for (const key of ['fills', 'strokes'] as const) {
+		const stack = out[key];
+		if (!Array.isArray(stack)) continue;
+		stack.forEach((l, i) => {
+			if (!l || typeof l !== 'object') fail(`${key}[${i}] must be a layer object { paint, … }.`);
+			const layer = l as Record<string, unknown>;
+			checkPaint(layer.paint, `${key}[${i}].paint`);
+			if (layer.blendMode !== undefined && !isVectorBlendMode(layer.blendMode)) fail(`${key}[${i}].blendMode "${String(layer.blendMode)}" is not one of: ${VECTOR_BLEND_MODES.join(', ')}.`);
+		});
 	}
 	return out as VectorStyle;
 };
@@ -229,7 +276,11 @@ export function createVectorCommands(controller: VectorEditorController, options
 					...(n.blendStep ? { blendStep: true } : {}),
 					...(n.effects?.length ? { effects: n.effects } : {}),
 					...(n.type === 'group' && n.liveBoolean ? { liveBoolean: n.liveBoolean } : {}),
-					...(n.booleanOperation ? { booleanOperation: n.booleanOperation } : {})
+					...(n.booleanOperation ? { booleanOperation: n.booleanOperation } : {}),
+					...(n.type === 'path' && Array.isArray(n.fills) ? { fills: n.fills } : {}),
+					...(n.type === 'path' && Array.isArray(n.strokes) ? { strokes: n.strokes } : {}),
+					...(n.blendMode && n.blendMode !== 'normal' ? { blendMode: n.blendMode } : {}),
+					...(n.filters?.length ? { filters: n.filters } : {})
 				});
 				if (n.type === 'group') visit(n.children, depth + 1);
 			}
@@ -237,6 +288,284 @@ export function createVectorCommands(controller: VectorEditorController, options
 		visit(state.document.nodes, 0);
 		return { width: state.document.width, height: state.document.height, nodes: out, selection: state.selection, tool: state.tool };
 	};
+
+	/** A node's appearance as agents read it: stacks (paths), blend mode, opacity and filters. */
+	const appearanceOf = (id: string) => {
+		const n = controller.getNode(id) ?? fail(`There is no node "${id}".`);
+		return {
+			id: n.id,
+			type: n.type,
+			...(n.type === 'path' ? { fills: vectorFills(n), strokes: vectorStrokes(n), fillRule: n.fillRule ?? 'nonzero' } : {}),
+			blendMode: n.blendMode ?? 'normal',
+			opacity: n.opacity ?? 1,
+			filters: n.filters ?? []
+		};
+	};
+	const pathOf = (id: string) => {
+		const n = controller.getNode(id) ?? fail(`There is no node "${id}". Call vector.list for ids.`);
+		if (n.type !== 'path') fail(`"${id}" is a group; fills and strokes belong to paths (pass a path id, or use ids on vector.addFill / vector.addStroke for every path inside).`);
+		return n as Extract<VectorNode, { type: 'path' }>;
+	};
+	const layerIndex = (id: string, kind: 'fill' | 'stroke', index: number, key = 'index') => {
+		const stack = kind === 'fill' ? vectorFills(pathOf(id)) : vectorStrokes(pathOf(id));
+		if (!Number.isInteger(index) || !stack[index]) fail(`${key} ${index} is out of range: "${id}" has ${stack.length} ${kind}${stack.length === 1 ? '' : 's'} (0 is the bottom). Read them with vector.getAppearance.`);
+	};
+	const stackResult = (id: string, kind: 'fill' | 'stroke') => (kind === 'fill' ? { id, fills: vectorFills(pathOf(id)) } : { id, strokes: vectorStrokes(pathOf(id)) });
+	const layerPatchOf = (params: Record<string, unknown>, keys: readonly string[]) => {
+		const out: Record<string, unknown> = {};
+		for (const key of keys) if (params[key] !== undefined) out[key] = key === 'paint' ? checkPaint(params[key], 'paint') : params[key];
+		return out;
+	};
+	const pathsUnder = (list: readonly string[]) => {
+		const out: string[] = [];
+		const walk = (n: VectorNode) => (n.type === 'path' ? out.push(n.id) : n.children.forEach(walk));
+		for (const id of list) walk(controller.getNode(id)!);
+		return out;
+	};
+	const FILL_KEYS = Object.keys(FILL_LAYER_PROPS);
+	const STROKE_KEYS = [...FILL_KEYS, ...Object.keys(STROKE_SETTING_PROPS)];
+	const layerCommands = (kind: 'fill' | 'stroke'): CommandSpec[] => {
+		const Kind = kind === 'fill' ? 'Fill' : 'Stroke';
+		const props = kind === 'fill' ? FILL_LAYER_PROPS : { ...FILL_LAYER_PROPS, ...STROKE_SETTING_PROPS };
+		const keys = kind === 'fill' ? FILL_KEYS : STROKE_KEYS;
+		const NODE = { type: 'string', description: 'Id of the path (from vector.list).' } as const;
+		const INDEX = { type: 'integer', minimum: 0, description: `Position of the ${kind} in the path's ${kind} stack, 0 at the bottom (from vector.getAppearance).` } as const;
+		const listKey = `${kind}s`;
+		return [
+			{
+				...base,
+				id: `${prefix}add${Kind}`,
+				label: `Add ${Kind}`,
+				keywords: ['appearance', 'layer', kind, 'stack', 'multiple', 'paint'],
+				description:
+					kind === 'fill'
+						? 'Adds a fill layer to paths (groups: every path inside), on top of the fill stack or at `index`. Fills draw bottom to top, all under the strokes. Returns each path\'s new fill stack.'
+						: 'Adds a stroke layer to paths (groups: every path inside), on top of the stroke stack or at `index`, with its own width, alignment, dashes, caps, joins, arrowheads and profile (unset settings come from the stack\'s current top stroke). Strokes draw bottom to top, over every fill. Returns each path\'s new stroke stack.',
+				params: {
+					type: 'object',
+					properties: {
+						ids: { ...IDS, description: 'Paths or groups to add it to (default: the selection; groups give every path inside).' },
+						...props,
+						paint: { ...PAINT, description: `${PAINT.description} Default ${kind === 'fill' ? '#808080' : '#000000'}.` },
+						index: { type: 'integer', minimum: 0, description: `Where in the stack to put it, 0 at the bottom (default: on top).` }
+					},
+					additionalProperties: false
+				},
+				undoable: true,
+				enabled: enabledFor,
+				run: (_ctx: unknown, params: ({ ids?: string[]; index?: number } & Record<string, unknown>) | undefined) => {
+					const targets = ids(params);
+					check(controller.addPaintLayer(kind, layerPatchOf(params ?? {}, keys), { ids: targets, index: params?.index }));
+					return { nodes: pathsUnder(targets).map((id) => stackResult(id, kind)) };
+				}
+			},
+			{
+				...base,
+				id: `${prefix}update${Kind}`,
+				label: `Edit ${Kind}`,
+				keywords: ['appearance', 'layer', kind, 'opacity', 'blend', 'hide', 'show'],
+				description: `Changes ${kind} \`index\` of path \`nodeId\`: ${kind === 'fill' ? 'paint, opacity, blend mode, visibility' : 'paint, opacity, blend mode, visibility and any stroke setting (null removes an arrowhead, dashes or a profile)'}. Missing fields keep their value. Returns the path's ${kind} stack.`,
+				params: { type: 'object', properties: { nodeId: NODE, index: INDEX, ...props }, required: ['nodeId', 'index'], additionalProperties: false },
+				undoable: true,
+				run: (_ctx: unknown, params: { nodeId: string; index: number } & Record<string, unknown>) => {
+					layerIndex(params.nodeId, kind, params.index);
+					const patch = layerPatchOf(params, keys);
+					if (!Object.keys(patch).length) fail(`Pass at least one of: ${keys.join(', ')}.`);
+					check(controller.updatePaintLayer(kind, params.index, patch, { ids: [params.nodeId] }));
+					return stackResult(params.nodeId, kind);
+				}
+			},
+			{
+				...base,
+				id: `${prefix}remove${Kind}`,
+				label: `Remove ${Kind}`,
+				keywords: ['appearance', 'layer', kind, 'delete'],
+				description: `Removes ${kind} \`index\` from path \`nodeId\`. Returns the path's remaining ${kind} stack.`,
+				params: { type: 'object', properties: { nodeId: NODE, index: INDEX }, required: ['nodeId', 'index'], additionalProperties: false },
+				undoable: true,
+				run: (_ctx: unknown, params: { nodeId: string; index: number }) => {
+					layerIndex(params.nodeId, kind, params.index);
+					check(controller.removePaintLayer(kind, params.index, { ids: [params.nodeId] }));
+					return stackResult(params.nodeId, kind);
+				}
+			},
+			{
+				...base,
+				id: `${prefix}move${Kind}`,
+				label: `Reorder ${Kind}s`,
+				keywords: ['appearance', 'layer', kind, 'order', 'reorder', 'stack'],
+				description: `Moves ${kind} \`index\` of path \`nodeId\` to position \`to\` in its ${kind} stack (0 is the bottom). Returns the reordered ${listKey}.`,
+				params: {
+					type: 'object',
+					properties: { nodeId: NODE, index: INDEX, to: { type: 'integer', minimum: 0, description: `New position, 0 at the bottom (clamped to the stack).` } },
+					required: ['nodeId', 'index', 'to'],
+					additionalProperties: false
+				},
+				undoable: true,
+				run: (_ctx: unknown, params: { nodeId: string; index: number; to: number }) => {
+					layerIndex(params.nodeId, kind, params.index);
+					check(controller.movePaintLayer(kind, params.index, params.to, { ids: [params.nodeId] }));
+					return stackResult(params.nodeId, kind);
+				}
+			}
+		];
+	};
+	const FILTER_PARAMS = {
+		type: 'object',
+		description:
+			'Filter parameters (missing ones keep their value or default; lengths in document units). dropShadow / innerShadow: color (CSS), opacity (0 to 1), offsetX, offsetY, blur (radius; reaches about 1.5 times it), spread (inner: choke). outerGlow / innerGlow: color, opacity, blur, spread. layerBlur: radius. feather: radius (edge fade width).',
+		properties: {
+			color: { type: 'string', description: 'Shadow or glow colour (CSS).' },
+			opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Shadow or glow opacity, 0 to 1.' },
+			offsetX: { type: 'number', description: 'Shadow offset to the right, document units.' },
+			offsetY: { type: 'number', description: 'Shadow offset downwards, document units.' },
+			blur: { type: 'number', minimum: 0, description: 'Shadow or glow blur radius, document units.' },
+			spread: { type: 'number', minimum: 0, description: 'Grows the silhouette before blurring (inner shadow and glow: chokes inwards).' },
+			radius: { type: 'number', minimum: 0, description: 'Layer blur radius, or feather width, document units.' }
+		},
+		additionalProperties: false
+	} as const;
+	const checkFilterParams = (type: VectorFilterType, params: Record<string, unknown> | undefined) => {
+		const allowed = vectorFilterParamKeys(type);
+		for (const key of Object.keys(params ?? {})) if (!allowed.includes(key)) fail(`${type} has no parameter "${key}"; it takes ${allowed.join(', ')}.`);
+	};
+	const filtersResult = (id: string) => ({ id, filters: controller.getNode(id)?.filters ?? [] });
+	const filterOf = (nodeId: string, filterId: string) => {
+		const node = controller.getNode(nodeId) ?? fail(`There is no node "${nodeId}".`);
+		return node.filters?.find((f) => f.id === filterId) ?? fail(`Node "${nodeId}" has no filter "${filterId}"; it has ${(node.filters ?? []).map((f) => `"${f.id}" (${f.type})`).join(', ') || 'none'}.`);
+	};
+	const appearanceCommands = (): CommandSpec[] => [
+		{
+			...base,
+			id: `${prefix}getAppearance`,
+			label: 'Get Appearance',
+			readOnly: true,
+			keywords: ['appearance', 'fills', 'strokes', 'blend mode', 'filters', 'shadow'],
+			description:
+				'Reads a node\'s appearance: for paths the fill and stroke stacks (bottom to top, each with paint, opacity, blendMode, visible and, for strokes, their settings) and fill rule; for any node its blend mode, opacity and filters (with ids). Use the indexes and ids with the fill, stroke and filter commands.',
+			params: { type: 'object', properties: { id: { type: 'string', description: 'Node id (from vector.list).' } }, required: ['id'], additionalProperties: false },
+			run: (_ctx: unknown, params: { id: string }) => appearanceOf(params.id)
+		},
+		...layerCommands('fill'),
+		...layerCommands('stroke'),
+		{
+			...base,
+			id: `${prefix}setBlendMode`,
+			label: 'Blend Mode…',
+			keywords: ['blend', 'multiply', 'screen', 'overlay', 'mix-blend-mode', 'composite'],
+			description: 'Sets how whole nodes (paths or groups, with everything they draw) mix with what is under them. `normal` removes it. Returns each node\'s blend mode.',
+			params: {
+				type: 'object',
+				properties: { ids: IDS, blendMode: { ...BLEND_MODE, description: 'The blend mode (CSS mix-blend-mode names; linear-dodge draws as plus-lighter).' } },
+				required: ['blendMode'],
+				additionalProperties: false
+			},
+			undoable: true,
+			enabled: enabledFor,
+			run: (_ctx: unknown, params: { ids?: string[]; blendMode: VectorBlendMode }) => {
+				const targets = ids(params);
+				check(controller.setBlendMode(params.blendMode, { ids: targets }));
+				return { nodes: targets.map((id) => ({ id, blendMode: controller.getNode(id)?.blendMode ?? 'normal' })) };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}addFilter`,
+			label: 'Add Filter…',
+			keywords: ['filter', 'drop shadow', 'inner shadow', 'glow', 'blur', 'feather', 'effect', 'appearance'],
+			description:
+				'Adds a visual filter `type` (dropShadow, innerShadow, outerGlow, innerGlow, layerBlur, feather) to nodes (paths or groups), at the end of each filter stack or at `index`. Filters never change geometry (bounds and hit-testing ignore them) and export as SVG filters. Returns each node\'s new filter id and its filter stack.',
+			params: {
+				type: 'object',
+				properties: {
+					type: { type: 'string', enum: VECTOR_FILTER_TYPES, description: 'The filter type.' },
+					params: FILTER_PARAMS,
+					index: { type: 'integer', minimum: 0, description: 'Position in the stack (default: last).' },
+					ids: IDS
+				},
+				required: ['type'],
+				additionalProperties: false
+			},
+			undoable: true,
+			enabled: enabledFor,
+			run: (_ctx: unknown, params: { type: VectorFilterType; params?: Record<string, unknown>; index?: number; ids?: string[] }) => {
+				if (!VECTOR_FILTER_TYPES.includes(params.type)) fail(`Unknown filter type "${params.type}"; use one of ${VECTOR_FILTER_TYPES.join(', ')}.`);
+				checkFilterParams(params.type, params.params);
+				const targets = ids(params);
+				const created = controller.addFilter(params.type, { ids: targets, params: params.params, index: params.index });
+				if (!created.length) fail('Nothing to add the filter to (blend steps take no filters).');
+				return { nodes: targets.map((id, i) => ({ filterId: created[i], ...filtersResult(id) })) };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}updateFilter`,
+			label: 'Edit Filter…',
+			keywords: ['filter', 'shadow', 'glow', 'blur', 'feather', 'enable', 'disable'],
+			description: 'Changes filter `filterId` of node `nodeId`: its `params` (merged; only the keys its type takes) and whether it is `enabled`. Returns the node\'s filter stack.',
+			params: {
+				type: 'object',
+				properties: {
+					nodeId: { type: 'string', description: 'Node id.' },
+					filterId: { type: 'string', description: 'Filter id (from vector.addFilter or vector.getAppearance).' },
+					params: FILTER_PARAMS,
+					enabled: { type: 'boolean', description: 'false turns the filter off (kept in the stack).' }
+				},
+				required: ['nodeId', 'filterId'],
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: { nodeId: string; filterId: string; params?: Record<string, unknown>; enabled?: boolean }) => {
+				const filter = filterOf(params.nodeId, params.filterId);
+				checkFilterParams(filter.type, params.params);
+				if (params.params === undefined && params.enabled === undefined) fail('Pass params or enabled.');
+				check(controller.updateFilter(params.nodeId, params.filterId, { params: params.params, enabled: params.enabled }));
+				return filtersResult(params.nodeId);
+			}
+		},
+		{
+			...base,
+			id: `${prefix}removeFilter`,
+			label: 'Remove Filter',
+			keywords: ['filter', 'delete', 'shadow', 'blur'],
+			description: 'Removes filter `filterId` from node `nodeId`. Returns the node\'s remaining filters.',
+			params: {
+				type: 'object',
+				properties: { nodeId: { type: 'string', description: 'Node id.' }, filterId: { type: 'string', description: 'Filter id.' } },
+				required: ['nodeId', 'filterId'],
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: { nodeId: string; filterId: string }) => {
+				filterOf(params.nodeId, params.filterId);
+				check(controller.removeFilter(params.nodeId, params.filterId));
+				return filtersResult(params.nodeId);
+			}
+		},
+		{
+			...base,
+			id: `${prefix}moveFilter`,
+			label: 'Reorder Filters',
+			keywords: ['filter', 'order', 'reorder'],
+			description: 'Moves filter `filterId` of node `nodeId` to position `index` of its stack. Order matters within a kind: later drop shadows draw over earlier ones, later inner effects over earlier ones. Returns the reordered filters.',
+			params: {
+				type: 'object',
+				properties: {
+					nodeId: { type: 'string', description: 'Node id.' },
+					filterId: { type: 'string', description: 'Filter id.' },
+					index: { type: 'integer', minimum: 0, description: 'New position, 0 first (clamped to the stack).' }
+				},
+				required: ['nodeId', 'filterId', 'index'],
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: { nodeId: string; filterId: string; index: number }) => {
+				filterOf(params.nodeId, params.filterId);
+				check(controller.moveFilter(params.nodeId, params.filterId, params.index));
+				return filtersResult(params.nodeId);
+			}
+		}
+	];
 
 	return [
 		{
@@ -344,6 +673,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 				return { ok: true, ...(path ? { gradient: path[target ?? 'fill'] } : {}) };
 			}
 		},
+		...appearanceCommands(),
 		{
 			...base,
 			id: `${prefix}setCorners`,

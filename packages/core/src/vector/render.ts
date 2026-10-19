@@ -40,7 +40,9 @@ import {
 	vectorPathWorldBezier,
 	type AffineMatrix
 } from './geometry.js';
-import { vectorPaintToSvg, vectorStrokeSvgParts, type VectorRenderStrokeParts } from './svg.js';
+import { vectorNodeFilterSvg, vectorPaintToSvg, vectorStrokeSvgParts, type VectorRenderStrokeParts } from './svg.js';
+import { needsVectorPaintLayers, vectorBlendModeCss, vectorFills, vectorPaintLayerNodes, vectorStrokes, vectorTargetPaint, VECTOR_BLEND_MODE_LABELS } from './paintLayers.js';
+import { VECTOR_FILTER_LABELS, VECTOR_FILTER_PARAM_SPECS, type VectorFilterParamSpec, type VectorRenderFilter } from './filters.js';
 import { vectorCorners } from './corners.js';
 import {
 	expandVectorAppearance,
@@ -57,8 +59,12 @@ import { vectorMeshEditPoints, vectorMeshGridCurves, VECTOR_WARP_STYLES, VECTOR_
 import { VECTOR_EFFECT_TYPES, type VectorEffectType } from './types.js';
 import { isVectorBlendGroup, resolveVectorBlendOptions, vectorBlendRailAt, vectorBlendSpine } from './blendGroup.js';
 import type { VectorGuideKind, VectorSnapKind } from './snap.js';
+import { VECTOR_BLEND_MODES } from './types.js';
 import type {
 	VectorAnchorRef,
+	VectorBlendMode,
+	VectorFilterType,
+	VectorStrokeLayer,
 	VectorAnchorType,
 	VectorArrowAlign,
 	VectorArrowhead,
@@ -106,6 +112,38 @@ export interface VectorRenderPath {
 	 * `stroke`; group them under `id`, `transform` and `opacity`.
 	 */
 	strokeParts?: VectorRenderStrokeParts;
+	/**
+	 * Set when the path paints through its fill and stroke stacks (several layers, or a layer with
+	 * its own opacity, blend mode or visibility): draw a `<g>` with `id`, `transform`, `opacity`,
+	 * `blendMode` and `filter`, holding each layer in order, bottom to top, as a path of `d` (see
+	 * `VectorRenderPaintLayer`). `fill`, `stroke` and `strokeParts` above then describe the top
+	 * drawn layers only, for readers that draw one paint.
+	 */
+	layers?: VectorRenderPaintLayer[];
+	/** CSS `mix-blend-mode` of the whole node (absent: normal). */
+	blendMode?: string;
+	/** `url(#id)` of the node's filter in `filters` (shadows, glows, blurs, feather). */
+	filter?: string;
+}
+
+/**
+ * One drawn layer of a path's paint stack: a fill (`fill` set, `stroke` none) or a stroke with its
+ * own settings and parts (`strokeParts` as on `VectorRenderPath`). Draw it with `opacity` and
+ * `mix-blend-mode: blendMode` on its element (or on the group of its parts).
+ */
+export interface VectorRenderPaintLayer {
+	kind: 'fill' | 'stroke';
+	/** Index in its stack (bottom to top). */
+	index: number;
+	fill: string;
+	stroke: string;
+	strokeWidth: number;
+	strokeLinecap?: string;
+	strokeLinejoin?: string;
+	strokeDasharray?: string;
+	opacity: number;
+	blendMode?: string;
+	strokeParts?: VectorRenderStrokeParts;
 }
 
 export interface VectorRenderGroup {
@@ -114,6 +152,10 @@ export interface VectorRenderGroup {
 	/** SVG `transform` (`matrix(…)`) for a rotated group. */
 	transform?: string;
 	opacity: number;
+	/** CSS `mix-blend-mode` of the group (absent: normal). */
+	blendMode?: string;
+	/** `url(#id)` of the group's filter in `filters`. */
+	filter?: string;
 	children: VectorRenderNode[];
 }
 
@@ -131,6 +173,8 @@ export interface VectorSceneRenderData {
 	 * draw each of `gradients`, then each tile filled, inside a `<pattern>`).
 	 */
 	defs: VectorPaintDef[];
+	/** Filters referenced by nodes' `filter` (draw each as an SVG `<filter>`, see `VectorRenderFilter`). */
+	filters: VectorRenderFilter[];
 	/** Visible nodes, bottom to top. */
 	nodes: VectorRenderNode[];
 }
@@ -313,32 +357,99 @@ const fmtMatrix = (m: AffineMatrix) => `matrix(${m.map((n) => Math.round(n * 1e6
 /** Distance between the Shape Builder's hatch lines over a face (screen pixels). */
 export const VECTOR_BUILDER_HATCH_GAP = 6;
 
-function renderNode(stored: VectorNode, defs: VectorPaintDef[], idPrefix: string): VectorRenderNode | null {
+/** The blend mode and filter of a node, as render data (its filter pushed to `filters`). */
+function nodeFinish(node: VectorNode, filters: VectorRenderFilter[], idPrefix: string): { blendMode?: string; filter?: string } {
+	const out: { blendMode?: string; filter?: string } = {};
+	const blend = vectorBlendModeCss(node.blendMode);
+	if (blend) out.blendMode = blend;
+	const filter = vectorNodeFilterSvg(node, `${idPrefix}filter-${node.id}`);
+	if (filter) {
+		filters.push(filter);
+		out.filter = `url(#${filter.id})`;
+	}
+	return out;
+}
+
+/** The SVG line attributes of a (layer) node's stroke. */
+function lineStyle(node: VectorPathNode) {
+	return {
+		strokeWidth: node.strokeWidth ?? 1,
+		...(node.strokeLinecap ? { strokeLinecap: node.strokeLinecap } : {}),
+		...(node.strokeLinejoin ? { strokeLinejoin: node.strokeLinejoin } : {}),
+		...(node.strokeDasharray?.length ? { strokeDasharray: node.strokeDasharray.join(' ') } : {})
+	};
+}
+
+/** The drawn layers of a path's stacks as render data (paint servers pushed to `defs`). */
+function renderLayers(node: VectorPathNode, defs: VectorPaintDef[], idPrefix: string): VectorRenderPaintLayer[] {
+	const out: VectorRenderPaintLayer[] = [];
+	for (const l of vectorPaintLayerNodes(node)) {
+		if (!l.drawn) continue;
+		const role = l.kind;
+		const paint = vectorPaintToSvg(l.layer.paint, `${idPrefix}${role}-${node.id}-${l.index}`, { node: l.node, ...(role === 'stroke' ? { role } : {}) });
+		defs.push(...paint.defs);
+		const blend = vectorBlendModeCss(l.layer.blendMode);
+		const base = { kind: role, index: l.index, opacity: l.layer.opacity ?? 1, ...(blend ? { blendMode: blend } : {}) };
+		if (role === 'fill') out.push({ ...base, fill: paint.value, stroke: 'none', strokeWidth: 0 });
+		else {
+			const strokeParts = vectorStrokeSvgParts(l.node, `${idPrefix}clip-${node.id}-${l.index}`);
+			out.push({ ...base, fill: 'none', stroke: paint.value, ...lineStyle(l.node), ...(strokeParts ? { strokeParts } : {}) });
+		}
+	}
+	return out;
+}
+
+function renderNode(stored: VectorNode, defs: VectorPaintDef[], filters: VectorRenderFilter[], idPrefix: string): VectorRenderNode | null {
 	if (stored.visible === false) return null;
 	// Path effects and live booleans draw as their expanded shapes.
 	const node = expandVectorAppearance(stored);
 	if (node.type === 'group') {
-		const children = node.children.map((c) => renderNode(c, defs, idPrefix)).filter((c): c is VectorRenderNode => !!c);
-		return { kind: 'group', id: node.id, ...(node.transform ? { transform: fmtMatrix(node.transform) } : {}), opacity: node.opacity ?? 1, children };
+		const children = node.children.map((c) => renderNode(c, defs, filters, idPrefix)).filter((c): c is VectorRenderNode => !!c);
+		return {
+			kind: 'group',
+			id: node.id,
+			...(node.transform ? { transform: fmtMatrix(node.transform) } : {}),
+			opacity: node.opacity ?? 1,
+			...nodeFinish(node, filters, idPrefix),
+			children
+		};
+	}
+	const finish = nodeFinish(node, filters, idPrefix);
+	const common = {
+		kind: 'path' as const,
+		id: node.id,
+		...(node.transform ? { transform: fmtMatrix(node.transform) } : {}),
+		d: vectorPathData(node),
+		fillRule: node.fillRule ?? ('nonzero' as const),
+		opacity: node.opacity ?? 1,
+		...finish
+	};
+	if (needsVectorPaintLayers(node)) {
+		const layers = renderLayers(node, defs, idPrefix);
+		const fill = layers.filter((l) => l.kind === 'fill').at(-1);
+		const stroke = layers.filter((l) => l.kind === 'stroke').at(-1);
+		return {
+			...common,
+			fill: fill?.fill ?? 'none',
+			stroke: stroke?.stroke ?? 'none',
+			strokeWidth: stroke?.strokeWidth ?? node.strokeWidth ?? 1,
+			...(stroke?.strokeLinecap ? { strokeLinecap: stroke.strokeLinecap } : {}),
+			...(stroke?.strokeLinejoin ? { strokeLinejoin: stroke.strokeLinejoin } : {}),
+			...(stroke?.strokeDasharray ? { strokeDasharray: stroke.strokeDasharray } : {}),
+			...(stroke?.strokeParts ? { strokeParts: stroke.strokeParts } : {}),
+			layers
+		};
 	}
 	const fill = vectorPaintToSvg(node.fill, `${idPrefix}fill-${node.id}`, { node });
 	const stroke = vectorPaintToSvg(node.stroke, `${idPrefix}stroke-${node.id}`, { node, role: 'stroke' });
 	defs.push(...fill.defs, ...stroke.defs);
 	const strokeParts = stroke.value !== 'none' ? vectorStrokeSvgParts(node, `${idPrefix}clip-${node.id}`) : undefined;
 	return {
-		kind: 'path',
-		id: node.id,
-		...(node.transform ? { transform: fmtMatrix(node.transform) } : {}),
+		...common,
 		...(strokeParts ? { strokeParts } : {}),
-		d: vectorPathData(node),
 		fill: fill.value,
 		stroke: stroke.value,
-		strokeWidth: node.strokeWidth ?? 1,
-		...(node.strokeLinecap ? { strokeLinecap: node.strokeLinecap } : {}),
-		...(node.strokeLinejoin ? { strokeLinejoin: node.strokeLinejoin } : {}),
-		...(node.strokeDasharray?.length ? { strokeDasharray: node.strokeDasharray.join(' ') } : {}),
-		fillRule: node.fillRule ?? 'nonzero',
-		opacity: node.opacity ?? 1
+		...lineStyle(node)
 	};
 }
 
@@ -348,8 +459,9 @@ function renderNode(stored: VectorNode, defs: VectorPaintDef[], idPrefix: string
  */
 export function getVectorSceneRenderData(state: Pick<VectorEditorState, 'document' | 'viewport'>, options: { idPrefix?: string } = {}): VectorSceneRenderData {
 	const defs: VectorPaintDef[] = [];
+	const filters: VectorRenderFilter[] = [];
 	const prefix = options.idPrefix ?? 've-';
-	const nodes = state.document.nodes.map((n) => renderNode(n, defs, prefix)).filter((n): n is VectorRenderNode => !!n);
+	const nodes = state.document.nodes.map((n) => renderNode(n, defs, filters, prefix)).filter((n): n is VectorRenderNode => !!n);
 	const v = state.viewport;
 	return {
 		transform: `translate(${fmt(v.x)} ${fmt(v.y)}) scale(${v.zoom})`,
@@ -357,6 +469,7 @@ export function getVectorSceneRenderData(state: Pick<VectorEditorState, 'documen
 		height: state.document.height,
 		...(state.document.background ? { background: state.document.background } : {}),
 		defs,
+		filters,
 		nodes
 	};
 }
@@ -637,7 +750,7 @@ export function getVectorEnvelopePanel(state: Pick<VectorEditorState, 'document'
 }
 
 function gradientOverlay(state: VectorEditorState): VectorRenderGradientAnnotator | null {
-	const a = getVectorGradientAnnotator(state.document, state.selection, state.viewport, state.gradientEdit.target);
+	const a = getVectorGradientAnnotator(state.document, state.selection, state.viewport, state.gradientEdit.target, state.gradientEdit.layer ?? null);
 	if (!a) return null;
 	const hover = state.interaction ? null : state.hover?.gradient;
 	const handleHovered = (h: VectorGradientHandle) => hover?.kind === 'handle' && hover.handle === h;
@@ -985,6 +1098,8 @@ export const VECTOR_STROKE_GRADIENT_MODE_LABELS: Readonly<Record<VectorStrokeGra
 /** What a gradient editor shows for the selection's `target` paint (see `getVectorGradientEditor`). */
 export interface VectorGradientEditorData {
 	target: 'fill' | 'stroke';
+	/** The layer of the `target` stack edited (null: the top one). */
+	layer: number | null;
 	/** The first selected path's paint is a gradient. */
 	gradient: VectorGradient | null;
 	/** The paint as a `#rrggbb` colour when it is one (what a new gradient starts from). */
@@ -1011,8 +1126,8 @@ export function getVectorGradientEditor(state: Pick<VectorEditorState, 'document
 		if (node) paths.push(...collect(node));
 	}
 	if (!paths.length) return null;
-	const target = state.gradientEdit.target;
-	const paint = paths[0][target];
+	const { target, layer } = state.gradientEdit;
+	const paint = vectorTargetPaint(paths[0], target, layer ?? null);
 	const gradient = isVectorGradient(paint) ? paint : null;
 	const sorted = gradient ? sortedVectorGradientStops(gradient) : [];
 	const stopIndex = state.gradientEdit.stop;
@@ -1030,6 +1145,7 @@ export function getVectorGradientEditor(state: Pick<VectorEditorState, 'document
 		: null;
 	return {
 		target,
+		layer: layer ?? null,
 		gradient,
 		color: vectorPaintToHex(paint),
 		stops,
@@ -1040,7 +1156,7 @@ export function getVectorGradientEditor(state: Pick<VectorEditorState, 'document
 		interpolation: gradient?.interpolation ?? 'srgb',
 		smoothness: gradient?.smoothness ?? 0,
 		strokeMode: gradient?.strokeMode ?? 'within',
-		mixed: paths.some((p) => JSON.stringify(p[target] ?? null) !== JSON.stringify(paint ?? null))
+		mixed: paths.some((p) => JSON.stringify(vectorTargetPaint(p, target, layer ?? null) ?? null) !== JSON.stringify(paint ?? null))
 	};
 }
 
@@ -1147,3 +1263,124 @@ export function getVectorEffectsPanel(state: Pick<VectorEditorState, 'document' 
 		expandable: nodes.some(hasVectorAppearance)
 	};
 }
+
+// ---------------------------------------------------------------------------
+// Appearance panel: fill and stroke stacks, blend mode, filters
+// ---------------------------------------------------------------------------
+
+/** One fill or stroke layer as an appearance panel lists it. */
+export interface VectorAppearancePanelLayer {
+	kind: 'fill' | 'stroke';
+	/** Index in its stack (0 is the bottom); what `updatePaintLayer` and friends take. */
+	index: number;
+	paint: VectorPaint;
+	/** The paint as `#rrggbb` when it is one (for a colour input). */
+	color: string | null;
+	/** A CSS `background` showing the paint (a colour, or the gradient's ramp). */
+	swatch: string;
+	gradient: boolean;
+	opacity: number;
+	blendMode: VectorBlendMode;
+	visible: boolean;
+	/** Stroke layers: width and alignment (for the compact row). */
+	strokeWidth?: number;
+	strokeAlign?: VectorStrokeAlign;
+	/** A stroke of a kind this version cannot draw (kept, shown read-only). */
+	unknownKind?: string;
+	/** The gradient editor and tool work on this layer. */
+	editing: boolean;
+}
+
+/** What an appearance panel shows for the selection. */
+export interface VectorAppearancePanelData {
+	/** Selected nodes (blend mode and filters apply to them). */
+	nodeIds: string[];
+	/** Paths the stacks belong to (groups give every path inside); the first one's stacks are listed. */
+	pathIds: string[];
+	fills: VectorAppearancePanelLayer[];
+	strokes: VectorAppearancePanelLayer[];
+	/** The first selected node's blend mode. */
+	blendMode: VectorBlendMode;
+	mixed: { fills: boolean; strokes: boolean; blendMode: boolean };
+	/** The filter stack, listed when one node is selected (`filterNodeId`). */
+	filterNodeId: string | null;
+	filters: VectorFiltersPanelItem[];
+}
+
+/** One filter of the listed stack, with what a panel needs to edit it. */
+export interface VectorFiltersPanelItem {
+	id: string;
+	type: VectorFilterType;
+	label: string;
+	enabled: boolean;
+	params: Record<string, unknown>;
+	specs: readonly VectorFilterParamSpec[];
+}
+
+/** A CSS background for a paint: the colour, or a left-to-right ramp of a gradient's stops. */
+export function vectorPaintSwatch(paint: VectorPaint | undefined): string {
+	if (typeof paint === 'string') return paint;
+	if (isVectorGradient(paint)) {
+		return `linear-gradient(to right, ${expandVectorGradientStops(paint)
+			.map((s) => {
+				const c = parseVectorColor(s.color);
+				const a = (c?.[3] ?? 1) * (s.opacity ?? 1);
+				const color = c ? `rgba(${Math.round(c[0] * 255)}, ${Math.round(c[1] * 255)}, ${Math.round(c[2] * 255)}, ${Math.round(a * 1000) / 1000})` : s.color;
+				return `${color} ${Math.round(s.offset * 10000) / 100}%`;
+			})
+			.join(', ')})`;
+	}
+	return 'transparent';
+}
+
+/** The appearance panel of the selection, or null with nothing selected. */
+export function getVectorAppearancePanel(state: Pick<VectorEditorState, 'document' | 'selection' | 'gradientEdit'>): VectorAppearancePanelData | null {
+	const nodes = state.selection.map((id) => findVectorNode(state.document.nodes, id)).filter((n): n is VectorNode => !!n && !n.blendStep);
+	if (!nodes.length) return null;
+	const paths: VectorPathNode[] = [];
+	for (const n of nodes) for (const p of collect(n)) if (!p.blendStep && !paths.some((q) => q.id === p.id)) paths.push(p);
+	const first = paths[0];
+	const edit = state.gradientEdit;
+	const layer = (kind: 'fill' | 'stroke', l: VectorStrokeLayer, index: number, count: number): VectorAppearancePanelLayer => ({
+		kind,
+		index,
+		paint: l.paint,
+		color: vectorPaintToHex(l.paint),
+		swatch: vectorPaintSwatch(l.paint),
+		gradient: isVectorGradient(l.paint),
+		opacity: l.opacity ?? 1,
+		blendMode: l.blendMode ?? 'normal',
+		visible: l.visible !== false,
+		...(kind === 'stroke' ? { strokeWidth: l.strokeWidth ?? 1, strokeAlign: l.strokeAlign ?? 'center' } : {}),
+		...((l.kind ?? 'paint') !== 'paint' ? { unknownKind: String(l.kind) } : {}),
+		editing: edit.target === kind && (edit.layer === null ? index === count - 1 : edit.layer === index)
+	});
+	const fills = first ? vectorFills(first) : [];
+	const strokes = first ? vectorStrokes(first) : [];
+	const same = (get: (p: VectorPathNode) => unknown) => paths.every((p) => JSON.stringify(get(p)) === JSON.stringify(get(first)));
+	const one = nodes.length === 1 ? nodes[0] : null;
+	return {
+		nodeIds: nodes.map((n) => n.id),
+		pathIds: paths.map((p) => p.id),
+		fills: fills.map((l, i) => layer('fill', l, i, fills.length)),
+		strokes: strokes.map((l, i) => layer('stroke', l, i, strokes.length)),
+		blendMode: nodes[0].blendMode ?? 'normal',
+		mixed: {
+			fills: !!first && !same(vectorFills),
+			strokes: !!first && !same(vectorStrokes),
+			blendMode: nodes.some((n) => (n.blendMode ?? 'normal') !== (nodes[0].blendMode ?? 'normal'))
+		},
+		filterNodeId: one?.id ?? null,
+		filters: (one?.filters ?? []).map((f) => ({
+			id: f.id,
+			type: f.type,
+			label: VECTOR_FILTER_LABELS[f.type] ?? f.type,
+			enabled: f.enabled !== false,
+			params: f.params as unknown as Record<string, unknown>,
+			specs: VECTOR_FILTER_PARAM_SPECS[f.type] ?? []
+		}))
+	};
+}
+
+/** Blend modes in menu order, with their names. */
+export const VECTOR_BLEND_MODE_MENU: readonly { mode: VectorBlendMode; label: string }[] = VECTOR_BLEND_MODES.map((mode) => ({ mode, label: VECTOR_BLEND_MODE_LABELS[mode] }));

@@ -26,8 +26,9 @@ import {
   type ResampleOptions,
 } from '../raster/transform';
 import { multiplyHomographies, type Homography } from '../geom/homography';
-import { findLayer, insertLayer, mapLayer, newLayerId, type ImageLayer, type LayerTarget, type PixelLayer, type RasterMask } from './layers/model';
+import { findLayer, insertLayer, mapLayer, newLayerId, type ImageLayer, type LayerTarget, type PixelLayer, type RasterMask, type SmartObjectLayer } from './layers/model';
 import { LayerOperationError, requireLayer, requireUnlocked } from './layers/ops';
+import { contentsBox, isContentsDecoded, placementGeometry, renderSmartObject, setSmartPlacement } from './layers/smart';
 import { createSelectionMask, type SelectionMask } from './selection/mask';
 import {
   geometryHomography,
@@ -98,8 +99,8 @@ export interface FreeTransformHost {
   activeTarget(): LayerTarget;
   selection(): SelectionMask | null;
   canvas(): { width: number; height: number };
-  /** The pixels a pixel layer composites (the decoded source for the Background). */
-  pixelsOf(layer: PixelLayer): TiledSurface;
+  /** The pixels a pixel layer or smart object composites (the decoded source for the Background). */
+  pixelsOf(layer: PixelLayer | SmartObjectLayer): TiledSurface;
   /** Opaque pre-transform snapshot. */
   capture(): unknown;
   /** Shows a live state (no history). */
@@ -210,7 +211,19 @@ export class FreeTransformSession {
   readonly box: CropBox;
   /** What moves. */
   readonly moves: ReadonlyArray<'pixels' | 'mask' | 'selection'>;
+  /**
+   * The geometry the transform starts from: the identity over `box`, or for a smart object its
+   * placement (`box` is then the contents' rectangle in contents pixels, and the transform edits
+   * the placement without resampling anything twice).
+   */
+  readonly startGeometry: FreeTransformGeometry;
+  /** True when the layer is a smart object (the transform sets its placement). */
+  readonly smartObject: boolean = false;
   private geometryValue: FreeTransformGeometry;
+  private readonly smart: SmartObjectLayer | null = null;
+  private readonly smartReduced = new Map<number, TiledSurface>();
+  private readonly startInterp: Interpolation;
+  private smartMasksMoved = false;
   private interp: Interpolation;
   private readonly parts: Part[] = [];
   private readonly before: unknown;
@@ -233,7 +246,11 @@ export class FreeTransformSession {
     if (!(['auto', 'layer', 'selection', 'selection-copy', 'selection-outline'] as const).includes(content)) {
       fail(`Unknown content "${String(content)}"; use auto, layer, selection, selection-copy or selection-outline.`);
     }
-    if (content === 'auto') content = selected ? 'selection' : 'layer';
+    const targetId = init.layerId ?? host.activeLayerId();
+    const target = targetId && content !== 'selection-outline' ? findLayer(host.layers(), targetId)?.layer : undefined;
+    const smartTarget = target?.type === 'smart' && (init.channel ?? (target.id === host.activeLayerId() ? host.activeTarget() : 'pixels')) !== 'mask';
+    // A smart object transforms as a whole, selection or not (as in Photoshop).
+    if (content === 'auto') content = selected && !smartTarget ? 'selection' : 'layer';
     this.content = content;
     if (content !== 'layer' && !selected) fail(`Nothing is selected; ${content} needs a selection. Select first, or use content layer.`);
     const layers = host.layers();
@@ -260,7 +277,7 @@ export class FreeTransformSession {
       const linked = mask?.linked !== false;
       const maskAlone = channel === 'mask' && (!linked || layer.type !== 'pixel');
       if (channel === 'mask' && !mask) fail(layer.mask?.source ? `Layer "${layer.name || id}" has a depth mask, which is generated, not transformed.` : `Layer "${layer.name || id}" has no mask to transform; add one with add_layer_mask, or transform its pixels.`);
-      if (!maskAlone && layer.type !== 'pixel') fail(`Layer "${layer.name || id}" is a ${layer.type} layer; Free Transform works on pixel layers, layer masks (channel mask) and selections.`);
+      if (!maskAlone && layer.type !== 'pixel' && layer.type !== 'smart') fail(`Layer "${layer.name || id}" is a ${layer.type} layer; Free Transform works on pixel layers, smart objects, layer masks (channel mask) and selections.`);
       if (!layer.visible && content !== 'selection-copy') fail(`Layer "${layer.name || id}" is hidden; show it before you transform it.`);
       if (content !== 'selection-copy') {
         requireUnlocked(layer, 'position', 'transform it');
@@ -268,6 +285,20 @@ export class FreeTransformSession {
       }
       const o = layer.type === 'pixel' ? layer.offset : { x: 0, y: 0 };
       const pixels = layer.type === 'pixel' ? host.pixelsOf(layer) : null;
+      if (layer.type === 'smart' && !maskAlone) {
+        if (content !== 'layer') fail(`Layer "${layer.name || id}" is a smart object, which transforms as a whole; use content layer (or rasterize it to transform part of it).`);
+        if (!isContentsDecoded(layer.contents)) fail(`The contents of "${layer.name || id}" are not decoded here, so it cannot be transformed; run prepareSmartObjects() first.`);
+        this.smart = layer;
+        this.smartObject = true;
+        this.startGeometry = placementGeometry(layer);
+        if (init.interpolation === undefined && layer.placement.interpolation) this.interp = layer.placement.interpolation;
+        this.startInterp = this.interp;
+        this.box = contentsBox(layer.contents);
+        this.moves = mask && linked ? ['pixels', 'mask'] : ['pixels'];
+        this.geometryValue = this.startGeometry;
+        this.shown = this.startLayers;
+        return;
+      }
       if (maskAlone) {
         if (content === 'selection-copy') fail('Layer via Copy copies pixels; transform a mask with content layer or selection.');
         if (content === 'selection') {
@@ -329,7 +360,9 @@ export class FreeTransformSession {
     if (!box) fail(content === 'layer' ? 'The layer has no pixels to transform.' : 'The selection holds no pixels of this layer; select some, or transform the outline (content selection-outline).');
     this.box = box!;
     this.moves = moves;
-    this.geometryValue = identityTransform(box!);
+    this.startGeometry = identityTransform(box!);
+    this.startInterp = this.interp;
+    this.geometryValue = this.startGeometry;
     this.shown = this.startLayers;
     if (this.copyId) host.show(this.startLayers, sel, this.copyId);
     this.shown = host.layers();
@@ -380,6 +413,7 @@ export class FreeTransformSession {
 
   /** Resamples every part for the current geometry and shows it (or returns it, for commit). */
   private resample(final: boolean, preview: FreeTransformPreview = {}): { layers: ImageLayer[]; selection: SelectionMask | null } {
+    if (this.smart) return { layers: this.resampleSmart(final, preview), selection: this.startSelection };
     const g = this.geometryValue;
     const identity = isIdentityTransform(g);
     const warp = hasWarp(g);
@@ -443,6 +477,37 @@ export class FreeTransformSession {
     return { layers, selection };
   }
 
+  /** A smart object re-rendered from its contents for the current geometry (previews leave the smart filters out). */
+  private resampleSmart(final: boolean, preview: FreeTransformPreview): ImageLayer[] {
+    const layer = this.smart!;
+    const g = this.geometryValue;
+    const placement = { corners: g.corners, warp: g.warp ?? null, interpolation: this.interp };
+    const canvas = this.host.canvas();
+    try {
+      if (final) {
+        const res = setSmartPlacement(this.startLayers, layer.id, placement, canvas);
+        this.smartMasksMoved = res.masksMoved;
+        return res.layers;
+      }
+      const step = previewStep(preview.scale);
+      const surface = renderSmartObject({ ...layer, placement }, canvas, { step, clip: preview.clip, skipFilters: true, reduced: this.smartReduced });
+      return mapLayer(this.startLayers, layer.id, (l) => ({ ...(l as SmartObjectLayer), placement, surface }));
+    } catch (e) {
+      if (e instanceof TransformTooLargeError) fail(e.message);
+      throw e;
+    }
+  }
+
+  /** Whether the geometry (or the interpolation of a smart object) differs from where it started. */
+  private isChanged(): boolean {
+    const g = this.geometryValue;
+    if (!this.smart) return !isIdentityTransform(g);
+    const a = this.startGeometry;
+    const same = g.corners.every((c, i) => Math.abs(c.x - a.corners[i].x) < 1e-9 && Math.abs(c.y - a.corners[i].y) < 1e-9);
+    const warp = (w: FreeTransformGeometry['warp'], box: CropBox) => (w && hasWarp({ box, corners: a.corners, warp: w }) ? JSON.stringify(w) : '');
+    return !same || warp(g.warp, g.box) !== warp(a.warp, a.box) || this.interp !== this.startInterp;
+  }
+
   private render(preview: FreeTransformPreview): void {
     const { layers, selection } = this.resample(false, preview);
     this.host.show(layers, selection, this.copyId ?? this.startActive);
@@ -452,8 +517,7 @@ export class FreeTransformSession {
   /** Finishes the transform with full-quality resampling, as one undo step. */
   commit(): FreeTransformResult {
     this.check();
-    const g = this.geometryValue;
-    const changed = !isIdentityTransform(g) || Boolean(this.copyId);
+    const changed = this.isChanged() || Boolean(this.copyId);
     if (!changed) {
       this.closed = true;
       this.host.restore(this.before);
@@ -478,12 +542,13 @@ export class FreeTransformSession {
     const id = this.copyId ?? this.layerId;
     const layer = id ? findLayer(layers, id)?.layer : undefined;
     if (this.moves.includes('pixels') && layer?.type === 'pixel') bounds = toDoc(contentBounds(this.host.pixelsOf(layer)), layer.offset);
+    else if (this.moves.includes('pixels') && layer?.type === 'smart') bounds = contentBounds(layer.surface);
     else if (this.moves.includes('mask') && layer?.mask) bounds = toDoc(contentBounds(layer.mask.surface), layer.type === 'pixel' ? layer.offset : { x: 0, y: 0 });
     else if (this.moves.includes('selection')) bounds = selection?.bounds ? { ...selection.bounds } : null;
     return {
       layerId: this.copyId ?? this.layerId,
       content: this.content,
-      moved: [...this.moves],
+      moved: this.smart ? this.moves.filter((m) => m !== 'mask' || this.smartMasksMoved) : [...this.moves],
       box: { ...this.box },
       corners: this.geometryValue.corners,
       bounds,

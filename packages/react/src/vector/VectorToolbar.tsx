@@ -32,6 +32,7 @@ import {
 } from '@pixerate/editor/vector';
 import { useVectorEditorState } from './useVectorEditor';
 import { VectorEffectsPanel } from './VectorEffectsPanel';
+import { VectorAppearancePanel } from './VectorAppearancePanel';
 import { VectorEnvelopePanel } from './VectorEnvelopePanel';
 import { VectorGradientEditor } from './VectorGradientEditor';
 
@@ -568,6 +569,7 @@ export function VectorStylePanel({ controller, className }: VectorStylePanelProp
           />
         </label>
       )}
+      {style && <VectorAppearancePanel controller={controller} />}
       {style && <VectorEffectsPanel controller={controller} />}
       {style && <VectorEnvelopePanel controller={controller} />}
     </div>
