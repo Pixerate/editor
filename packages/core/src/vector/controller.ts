@@ -126,6 +126,7 @@ import {
 	type VectorEnvelopeParams,
 	VECTOR_EFFECT_LABELS
 } from './appearance.js';
+import { isVectorMaskActive, isVectorMaskGroup, isVectorMaskType, vectorMaskedGeometry } from './mask.js';
 import { applyVectorHomography, vectorHomography, vectorHomographyKeepsQuad } from './perspective.js';
 import { distortVectorNode, vectorBoxCorners, vectorDistortQuad, vectorShearForSide, vectorSkewMatrix, VECTOR_DISTORT_TOLERANCE, type VectorDistortMode } from './distort.js';
 import {
@@ -202,6 +203,8 @@ import type {
 	VectorDocument,
 	VectorGroupNode,
 	VectorHandleRef,
+	VectorMask,
+	VectorMaskType,
 	VectorModifiers,
 	VectorNode,
 	VectorPathfinderOperation,
@@ -457,6 +460,9 @@ export interface VectorEditorState {
 }
 
 export type VectorActionResult = { ok: true } | { ok: false; message: string };
+
+/** What Make Clipping Mask / Make Opacity Mask return: the new group's id, or why not. */
+export type VectorMaskResult = { ok: true; id: string } | { ok: false; message: string };
 
 /** The shape the Blend tool blends from (its first click). */
 export interface VectorBlendStart {
@@ -2805,7 +2811,8 @@ export class VectorEditorController {
 		const drop = new Set(ids.filter((id) => this.getNode(id)));
 		if (!drop.size) return { ok: false, message: 'Nothing to delete.' };
 		this.change(options.label ?? 'Delete', () => {
-			this.setDoc(mapTree(this.doc.nodes, (n) => (drop.has(n.id) ? null : n)));
+			// Deleting a mask releases its group (the next child must not become the mask).
+			this.setDoc(mapTree(this.doc.nodes, (n) => (drop.has(n.id) ? null : isVectorMaskGroup(n) && drop.has(n.children[0].id) ? { ...n, mask: null } : n)));
 			this.selection = this.selection.filter((id) => !drop.has(id) && this.getNode(id));
 			this.anchors = this.anchors.filter((r) => getAnchor(this.doc, r));
 			if (this.editingId && !this.getNode(this.editingId)) this.editingId = null;
@@ -3518,7 +3525,7 @@ export class VectorEditorController {
 	/** Whether stored node `rootId` holds `id` as drawn (`id` may be an expanded path inside it). */
 	private holds(rootId: string, id: string): boolean {
 		const n = this.getNode(rootId);
-		return !!n && (!!findVectorNode([n], id) || !!findVectorNode([expandVectorAppearance(n)], id));
+		return !!n && (!!findVectorNode([n], id) || !!findVectorNode([expandVectorAppearance(n)], id) || !!findVectorNode([vectorMaskedGeometry(n)], id));
 	}
 
 	private liveBooleanOp(op: VectorBooleanOperation, roots: readonly string[]): string | null {
@@ -3723,6 +3730,156 @@ export class VectorEditorController {
 			this.editingId = null;
 		});
 		return id;
+	}
+
+	// -------------------------------------------------------------------------
+	// Masks
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Make Clipping Mask (`clip`) / Make Opacity Mask (`alpha`, `luminance`): groups the selected (or
+	 * given) objects into a mask group whose mask is the topmost of them (or `maskId`), moved to the
+	 * bottom of the group. They must be two or more, unlocked, with one parent. One undo step.
+	 * Returns the group's id, or why it could not.
+	 */
+	makeMask(type: VectorMaskType, options: { ids?: readonly string[]; maskId?: string; invert?: boolean; name?: string } = {}): VectorMaskResult {
+		if (!isVectorMaskType(type)) return { ok: false, message: `Unknown mask type "${type}": use clip, alpha or luminance.` };
+		const ids = [...new Set(options.ids ?? this.selectedRoots())];
+		if (ids.length < 2) return { ok: false, message: 'Select at least two objects: the topmost becomes the mask, the ones below show through it.' };
+		for (const id of ids) {
+			const n = this.getNode(id);
+			if (!n) return { ok: false, message: `There is no node "${id}".` };
+			if (n.locked) return { ok: false, message: `"${id}" is locked; unlock it first.` };
+			if (n.blendStep) return { ok: false, message: `"${id}" is a blend step; select its blend instead.` };
+		}
+		const locs = ids.map((id) => locateVectorNode(this.doc.nodes, id)!);
+		const parent = locs[0].parent?.id ?? null;
+		if (locs.some((l) => (l.parent?.id ?? null) !== parent)) return { ok: false, message: 'The objects must share a parent (group them, or pick objects at one level).' };
+		const order = ids.slice().sort((a, b) => locs[ids.indexOf(a)].index - locs[ids.indexOf(b)].index);
+		const maskId = options.maskId ?? order[order.length - 1];
+		if (!order.includes(maskId)) return { ok: false, message: `The mask "${maskId}" must be one of the objects (${order.map((id) => `"${id}"`).join(', ')}).` };
+		const id = this.newId();
+		const mask: VectorMask = options.invert ? { type, invert: true } : { type };
+		this.change(type === 'clip' ? 'Make Clipping Mask' : 'Make Opacity Mask', () => {
+			const set = new Set(order);
+			const regroup = (list: readonly VectorNode[]): VectorNode[] => {
+				const members = order.map((m) => list.find((n) => n.id === m)!);
+				const top = Math.max(...members.map((m) => list.indexOf(m)));
+				const children = [members.find((m) => m.id === maskId)!, ...members.filter((m) => m.id !== maskId)];
+				const out: VectorNode[] = [];
+				list.forEach((n, i) => {
+					if (i === top) out.push({ id, type: 'group', name: options.name ?? (type === 'clip' ? 'Clip Group' : 'Opacity Mask'), mask, children });
+					if (!set.has(n.id)) out.push(n);
+				});
+				return out;
+			};
+			if (parent === null) this.setDoc(regroup(this.doc.nodes));
+			else this.setDoc(mapTree(this.doc.nodes, (n) => (n.id === parent && n.type === 'group' ? { ...n, children: regroup(n.children) } : n)));
+			this.selection = [id];
+			this.anchors = [];
+			this.editingId = null;
+		});
+		return { ok: true, id };
+	}
+
+	/** Mask groups among `ids` (default: the selection), or holding one of them directly. */
+	private maskTargets(ids?: readonly string[]): VectorGroupNode[] {
+		const out = new Map<string, VectorGroupNode>();
+		for (const id of ids ?? this.selection) {
+			const n = this.getNode(id);
+			if (isVectorMaskGroup(n)) out.set(n.id, n);
+			else {
+				const parent = locateVectorNode(this.doc.nodes, id)?.parent;
+				if (isVectorMaskGroup(parent)) out.set(parent.id, parent);
+			}
+		}
+		return [...out.values()];
+	}
+
+	/**
+	 * Release: the selected (or given) mask groups stop masking. The mask goes back on top of the
+	 * contents, drawn as itself again. A group with appearance of its own (filters, a blend mode,
+	 * path effects) stays a plain group; otherwise it is replaced by its children. One undo step.
+	 * Returns the released nodes' ids (the mask last).
+	 */
+	releaseMask(options: { ids?: readonly string[] } = {}): string[] {
+		const groups = this.maskTargets(options.ids);
+		if (!groups.length) return [];
+		const released: string[] = [];
+		this.change('Release Mask', () => {
+			for (const g of groups) {
+				const [mask, ...contents] = g.children;
+				const children = [...contents, mask];
+				released.push(...children.map((c) => c.id));
+				const { mask: _m, ...rest } = g;
+				const keep = !!(g.filters?.length || (g.blendMode && g.blendMode !== 'normal') || g.effects?.length);
+				if (keep) {
+					this.replaceNode(g.id, { ...rest, children });
+					continue;
+				}
+				const m = nodeMatrix(g);
+				const opacity = g.opacity;
+				const flat = children
+					.map((c) => (g.transform ? transformVectorNode(c, m) : c))
+					.map((c) => (opacity !== undefined && opacity < 1 ? { ...c, opacity: (c.opacity ?? 1) * opacity } : c));
+				this.setDoc(spliceTree(this.doc.nodes, g.id, flat));
+			}
+			this.selection = released;
+			this.anchors = [];
+			this.editingId = null;
+		});
+		return released;
+	}
+
+	/** Changes the type or inversion of the selected (or given) mask groups. One undo step. */
+	setMaskOptions(patch: Partial<VectorMask>, options: { ids?: readonly string[] } = {}): VectorActionResult {
+		if (patch.type !== undefined && !isVectorMaskType(patch.type)) return { ok: false, message: `Unknown mask type "${patch.type}": use clip, alpha or luminance.` };
+		if (patch.invert !== undefined && typeof patch.invert !== 'boolean') return { ok: false, message: 'invert must be true or false.' };
+		const groups = this.maskTargets(options.ids);
+		if (!groups.length) return { ok: false, message: 'Select a mask group (made with Make Clipping Mask or Make Opacity Mask).' };
+		const set = new Set(groups.map((g) => g.id));
+		this.change('Mask Options', () => {
+			this.setDoc(
+				mapTree(this.doc.nodes, (n) => {
+					if (!set.has(n.id) || !isVectorMaskGroup(n)) return n;
+					const type = patch.type ?? n.mask.type;
+					const invert = patch.invert ?? !!n.mask.invert;
+					return { ...n, mask: invert ? { type, invert } : { type } };
+				})
+			);
+		});
+		return { ok: true };
+	}
+
+	/**
+	 * Edit Mask: selects the mask of the selected (or given) mask group, or of the group holding the
+	 * selection. A path mask opens in the direct tool for anchor editing (`editPath: false` keeps the
+	 * tool). Returns the mask's id, or null.
+	 */
+	editMask(options: { id?: string; editPath?: boolean } = {}): string | null {
+		const group = this.maskTargets(options.id ? [options.id] : undefined)[0];
+		if (!group) return null;
+		const mask = group.children[0];
+		this.selection = [mask.id];
+		this.anchors = [];
+		this.editingId = null;
+		if (mask.type === 'path' && options.editPath !== false && !mask.locked) {
+			this.tool = 'direct';
+			this.editingId = mask.id;
+		}
+		this.notify();
+		return mask.id;
+	}
+
+	/** Edit Contents: selects what the selected (or given) mask group masks. Returns their ids. */
+	editMaskContents(options: { id?: string } = {}): string[] {
+		const group = this.maskTargets(options.id ? [options.id] : undefined)[0];
+		if (!group) return [];
+		this.selection = group.children.slice(1).map((c) => c.id);
+		this.anchors = [];
+		this.editingId = null;
+		this.notify();
+		return [...this.selection];
 	}
 
 	/** Sets the options new blends get (spacing, steps, distance, orientation, morph). */
@@ -4720,7 +4877,8 @@ export class VectorEditorController {
 				if (n.type === 'group') {
 					// A live group not being edited is hit where it draws (a click in a subtracted
 					// hole goes through), then picks the child under the pointer.
-					if (hasOwnVectorAppearance(n) && !entered.has(n.id) && !hitTestVectorNode(n, p, tol, parent, { entered })) continue;
+					// A mask group likewise, where its mask lets the contents through.
+					if ((hasOwnVectorAppearance(n) || isVectorMaskActive(n)) && !entered.has(n.id) && !hitTestVectorNode(n, p, tol, parent, { entered })) continue;
 					const found = search(n.children, multiplyMatrices(nodeMatrix(n), parent));
 					if (found) return found;
 				} else if (hitTestVectorNode(n, p, tol, parent, { entered })) return n;
@@ -5928,6 +6086,10 @@ export class VectorEditorController {
 					return true;
 				case 'j':
 					return input.alt ? this.averageAnchors('both').ok : this.joinPaths().ok;
+				// Make Clipping Mask; with Alt, Release (Option-7 types ¶ on a Mac).
+				case '7':
+				case '¶':
+					return input.alt || key === '¶' ? this.releaseMask().length > 0 : this.makeMask('clip').ok;
 				case ']':
 					this.arrange(input.alt ? 'front' : 'forward');
 					return true;

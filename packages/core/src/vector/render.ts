@@ -55,12 +55,14 @@ import {
 	type VectorEffectParamSpec,
 	type VectorEnvelopeParams
 } from './appearance.js';
+import { isVectorMaskActive, isVectorMaskGroup, vectorMaskRenderData, vectorMaskSummary, type VectorMaskRenderData, type VectorMaskSummary } from './mask.js';
 import { vectorMeshEditPoints, vectorMeshGridCurves, VECTOR_WARP_STYLES, VECTOR_WARP_STYLE_LABELS } from './warp.js';
 import { VECTOR_EFFECT_TYPES, type VectorEffectType } from './types.js';
 import { isVectorBlendGroup, resolveVectorBlendOptions, vectorBlendRailAt, vectorBlendSpine } from './blendGroup.js';
 import type { VectorGuideKind, VectorSnapKind } from './snap.js';
 import { VECTOR_BLEND_MODES } from './types.js';
 import type {
+	VectorMaskType,
 	VectorAnchorRef,
 	VectorBlendMode,
 	VectorFilterType,
@@ -156,7 +158,20 @@ export interface VectorRenderGroup {
 	blendMode?: string;
 	/** `url(#id)` of the group's filter in `filters`. */
 	filter?: string;
+	/**
+	 * Set on a mask group whose mask is on: `children` are then the masked contents only. Draw them
+	 * in an inner `<g>` with `clip-path` / `mask` referencing the `<clipPath>` / `<mask>` that
+	 * `mask` describes (`mask.nodes`: the mask drawn into a `<mask>`). The group's own transform,
+	 * opacity, blend mode and filter stay on the outer `<g>`, so they apply to the masked result.
+	 */
+	mask?: VectorRenderMask;
 	children: VectorRenderNode[];
+}
+
+/** A mask group's mask as render data (see `VectorMaskRenderData`), with the mask drawn as nodes for opacity masks. */
+export interface VectorRenderMask extends Omit<VectorMaskRenderData, 'invertFilter'> {
+	/** The mask as drawn, for the `<mask>` of an opacity mask (in the group's own space). */
+	nodes?: VectorRenderNode[];
 }
 
 export type VectorRenderNode = VectorRenderPath | VectorRenderGroup;
@@ -328,6 +343,12 @@ export interface VectorOverlayRenderData {
 	};
 	/** The gradient tool's annotator over the selection's gradient (screen space), or null. */
 	gradient: VectorRenderGradientAnnotator | null;
+	/**
+	 * Mask indicators (screen space): the outline of the mask of each mask group that is selected
+	 * or holds the selection (`d`, draw it dashed), with its type, whether it is inverted, and
+	 * whether the mask itself is selected (`editing`).
+	 */
+	masks: { id: string; maskId: string; d: string; type: VectorMaskType; invert: boolean; enabled: boolean; editing: boolean }[];
 	/** A short status, e.g. "W 120 × H 80" or "45°". */
 	status: string | null;
 }
@@ -404,13 +425,18 @@ function renderNode(stored: VectorNode, defs: VectorPaintDef[], filters: VectorR
 	// Path effects and live booleans draw as their expanded shapes.
 	const node = expandVectorAppearance(stored);
 	if (node.type === 'group') {
-		const children = node.children.map((c) => renderNode(c, defs, filters, idPrefix)).filter((c): c is VectorRenderNode => !!c);
+		const finish = nodeFinish(node, filters, idPrefix);
+		const masked = isVectorMaskGroup(node) ? renderMask(node, defs, filters, idPrefix) : null;
+		// A mask group without a working mask draws its contents whole (a hidden mask child stays hidden).
+		const list = isVectorMaskGroup(node) ? node.children.slice(1) : node.children;
+		const children = list.map((c) => renderNode(c, defs, filters, idPrefix)).filter((c): c is VectorRenderNode => !!c);
 		return {
 			kind: 'group',
 			id: node.id,
 			...(node.transform ? { transform: fmtMatrix(node.transform) } : {}),
 			opacity: node.opacity ?? 1,
-			...nodeFinish(node, filters, idPrefix),
+			...finish,
+			...(masked ? { mask: masked } : {}),
 			children
 		};
 	}
@@ -453,6 +479,19 @@ function renderNode(stored: VectorNode, defs: VectorPaintDef[], filters: VectorR
 	};
 }
 
+/** A mask group's mask as render data (its inverting filter pushed to `filters`), or null while it is off. */
+function renderMask(group: VectorGroupNode, defs: VectorPaintDef[], filters: VectorRenderFilter[], idPrefix: string): VectorRenderMask | null {
+	if (!isVectorMaskActive(group)) return null;
+	const data = vectorMaskRenderData(group, `${idPrefix}mask-${group.id}`, `${idPrefix}mask-filter-${group.id}`);
+	if (!data) return null;
+	const { invertFilter, ...mask } = data;
+	if (invertFilter) filters.push(invertFilter);
+	if (mask.type === 'clip') return mask;
+	// The mask draws as itself (shown even when stored hidden would have turned the mask off: it is on here).
+	const source = renderNode(group.children[0], defs, filters, idPrefix);
+	return { ...mask, nodes: source ? [source] : [] };
+}
+
 /**
  * The document layer. Render the nodes inside `<g transform={transform}>` and `defs` in a
  * `<defs>` block. Pass a unique `idPrefix` when several editors share a page.
@@ -493,7 +532,8 @@ function screenOutline(state: VectorEditorState, node: VectorNode, entered: Read
 function outlinePaths(node: VectorNode, parent: AffineMatrix, entered: ReadonlySet<string>): BezierPath[] {
 	if (node.type === 'path') return [vectorPathWorldBezier(node, parent, { effects: false })];
 	const m = multiplyMatrices(nodeMatrix(node), parent);
-	if (hasOwnVectorAppearance(node) && !entered.has(node.id)) return [transformBezierPath(vectorAppearanceOutline(node), m)];
+	// Live and mask groups outline as drawn (masked) unless they are being edited.
+	if ((hasOwnVectorAppearance(node) || isVectorMaskActive(node)) && !entered.has(node.id)) return [transformBezierPath(vectorAppearanceOutline(node), m)];
 	return node.children.filter((c) => c.visible !== false).flatMap((c) => outlinePaths(c, m, entered));
 }
 
@@ -678,7 +718,39 @@ export function getVectorOverlayRenderData(state: VectorEditorState): VectorOver
 	const envelope = state.tool === 'envelope' ? envelopeOverlay(state) : null;
 	if (state.tool === 'envelope' && !envelope && !it) status = 'Select an object with an envelope to edit its mesh';
 
-	return { outlines, selectionBox, distort, anchors, handles, marquee, penPreview, artboard, guides, status, toolStroke, pencilString, cutPoint, cornerWidgets, widthPoints, widthSpot, builder, blend, gradient, envelope };
+	return { outlines, selectionBox, distort, anchors, handles, marquee, penPreview, artboard, guides, status, toolStroke, pencilString, cutPoint, cornerWidgets, widthPoints, widthSpot, builder, blend, gradient, envelope, masks: maskOverlay(state) };
+}
+
+/** Mask indicators of the mask groups that are selected or hold the selection (see `VectorOverlayRenderData.masks`). */
+function maskOverlay(state: VectorEditorState): VectorOverlayRenderData['masks'] {
+	const ids = state.editingId ? [...state.selection, state.editingId] : state.selection;
+	if (!ids.length) return [];
+	const want = new Set(ids);
+	const v = state.viewport;
+	const view: AffineMatrix = [v.zoom, 0, 0, v.zoom, v.x, v.y];
+	const out: VectorOverlayRenderData['masks'] = [];
+	const visit = (list: readonly VectorNode[], parent: AffineMatrix): boolean => {
+		let any = false;
+		for (const n of list) {
+			if (n.type !== 'group') {
+				if (want.has(n.id)) any = true;
+				continue;
+			}
+			const m = multiplyMatrices(nodeMatrix(n), parent);
+			const inside = visit(n.children, m);
+			const hit = want.has(n.id) || inside;
+			if (hit) any = true;
+			if (!hit || !isVectorMaskGroup(n)) continue;
+			const summary = vectorMaskSummary(n)!;
+			const d = outlinePaths(n.children[0], m, new Set())
+				.map((path) => bezierPathToSvg(transformBezierPath(path, view), { precision: 2 }))
+				.join(' ');
+			out.push({ id: n.id, maskId: summary.maskId, d, type: summary.type, invert: summary.invert, enabled: summary.enabled, editing: want.has(summary.maskId) });
+		}
+		return any;
+	};
+	visit(state.document.nodes, IDENTITY_MATRIX);
+	return out;
 }
 
 function envelopeOverlay(state: VectorEditorState): VectorOverlayRenderData['envelope'] {

@@ -398,6 +398,22 @@ export interface VectorBlend extends VectorBlendOptions {
 	starts?: Record<string, number>;
 }
 
+/**
+ * How a mask group's mask (its first, bottom child) hides the rest: `clip` (a clipping mask: the
+ * mask's outline, fully opaque; its paint is not drawn), `alpha` (an opacity mask by the mask's
+ * drawn alpha: soft edges, gradients and opacity count) or `luminance` (by its brightness times
+ * its alpha: white shows, black hides).
+ */
+export type VectorMaskType = 'clip' | 'alpha' | 'luminance';
+export const VECTOR_MASK_TYPES: readonly VectorMaskType[] = ['clip', 'alpha', 'luminance'];
+
+/** A group's mask settings (`VectorGroupNode.mask`). */
+export interface VectorMask {
+	type: VectorMaskType;
+	/** Show the contents where the mask hides them and hide them where it shows them. Default false. */
+	invert?: boolean;
+}
+
 /** A group of nodes that select and transform together. */
 export interface VectorGroupNode extends VectorNodeBase {
 	type: 'group';
@@ -413,6 +429,14 @@ export interface VectorGroupNode extends VectorNodeBase {
 	 * bottom operand's style.
 	 */
 	liveBoolean?: VectorBooleanOperation | null;
+	/**
+	 * Makes the group a mask group: its first (bottom) child is the mask and the children above it
+	 * show only where the mask lets them (see `VectorMaskType`). Hit-testing, bounds, snapping and
+	 * booleans use the masked result. A hidden mask child turns the mask off (the contents draw
+	 * whole). The group's own opacity, blend mode and filters apply to the masked result, and its
+	 * path effects to the contents (not the mask). Ignored on blends and live booleans.
+	 */
+	mask?: VectorMask | null;
 }
 
 export type VectorNode = VectorPathNode | VectorGroupNode;

@@ -26,3 +26,4 @@ export * from './warp.js';
 export * from './distort.js';
 export * from './paintLayers.js';
 export * from './filters.js';
+export * from './mask.js';

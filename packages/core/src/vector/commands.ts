@@ -11,6 +11,8 @@ import { isVectorBlendMode, vectorFills, vectorStrokes } from './paintLayers.js'
 import { vectorFilterParamKeys } from './filters.js';
 import { VECTOR_BLEND_MODES, VECTOR_FILTER_TYPES, type VectorBlendMode, type VectorFilter, type VectorFilterType, type VectorPaint, type VectorPaintLayer, type VectorStrokeLayer } from './types.js';
 import { isValidVectorMesh, VECTOR_WARP_STYLES } from './warp.js';
+import { isVectorMaskGroup, vectorMaskSummary, type VectorMaskSummary } from './mask.js';
+import type { VectorMaskType } from './types.js';
 import type { VectorEnvelopeParams } from './appearance.js';
 
 export interface VectorCommandOptions {
@@ -59,6 +61,8 @@ export interface VectorNodeListing {
 	blendMode?: VectorBlendMode;
 	/** The node's visual filters (shadows, glows, blurs, feather). */
 	filters?: VectorFilter[];
+	/** A mask group's mask: type, inversion, the mask's id (its first child) and the masked contents. */
+	mask?: VectorMaskSummary;
 }
 
 const EFFECT_PARAMS_DESCRIPTION =
@@ -280,7 +284,8 @@ export function createVectorCommands(controller: VectorEditorController, options
 					...(n.type === 'path' && Array.isArray(n.fills) ? { fills: n.fills } : {}),
 					...(n.type === 'path' && Array.isArray(n.strokes) ? { strokes: n.strokes } : {}),
 					...(n.blendMode && n.blendMode !== 'normal' ? { blendMode: n.blendMode } : {}),
-					...(n.filters?.length ? { filters: n.filters } : {})
+					...(n.filters?.length ? { filters: n.filters } : {}),
+					...(isVectorMaskGroup(n) ? { mask: vectorMaskSummary(n)! } : {})
 				});
 				if (n.type === 'group') visit(n.children, depth + 1);
 			}
@@ -434,6 +439,108 @@ export function createVectorCommands(controller: VectorEditorController, options
 		const node = controller.getNode(nodeId) ?? fail(`There is no node "${nodeId}".`);
 		return node.filters?.find((f) => f.id === filterId) ?? fail(`Node "${nodeId}" has no filter "${filterId}"; it has ${(node.filters ?? []).map((f) => `"${f.id}" (${f.type})`).join(', ') || 'none'}.`);
 	};
+	const maskResult = (id: string) => ({ id, mask: vectorMaskSummary(controller.getNode(id)) ?? fail(`"${id}" is not a mask group.`) });
+	/** Checks the objects a mask is made of before anything changes. */
+	const maskInputs = (params: { ids?: string[]; maskId?: string } | undefined) => {
+		const list = [...new Set(ids(params))];
+		if (list.length < 2) fail(`Masking needs at least two objects (the mask and what it masks); got ${list.length}. Pass ids, or select more.`);
+		for (const id of list) if (controller.getNode(id)!.locked) fail(`"${id}" is locked; unlock it (vector.setLocked) or leave it out.`);
+		if (params?.maskId !== undefined && !list.includes(params.maskId)) fail(`maskId "${params.maskId}" must be one of ids (${list.map((id) => `"${id}"`).join(', ')}).`);
+		return list;
+	};
+	const maskTargets = (params: { ids?: string[] } | undefined) => {
+		const list = ids(params);
+		const groups = list.map((id) => controller.getNode(id)).filter((n) => isVectorMaskGroup(n));
+		if (!groups.length) fail(`None of ${list.map((id) => `"${id}"`).join(', ')} is a mask group. Mask groups have a \`mask\` in vector.list; make one with vector.makeClippingMask or vector.makeOpacityMask.`);
+		return groups.map((g) => g!.id);
+	};
+	const MASK_INPUT = {
+		ids: { ...IDS, description: 'The objects to mask with, two or more sharing a parent (default: the selection). The topmost becomes the mask unless maskId says otherwise.' },
+		maskId: { type: 'string', description: 'Which of ids is the mask (default: the topmost).' },
+		invert: { type: 'boolean', description: 'Show the contents only where the mask hides them (default false).' }
+	} as const;
+	const maskCommands = (): CommandSpec[] => [
+		{
+			...base,
+			id: `${prefix}makeClippingMask`,
+			label: 'Make Clipping Mask',
+			keywords: ['mask', 'clip', 'clipping', 'clip path', 'crop', 'inside'],
+			shortcut: 'Mod+7',
+			description:
+				'Groups objects into a clipping mask group: the mask (the topmost object, or maskId) moves to the bottom of the new group and the others show only inside its outline (its paint is not drawn; every path in it counts, by its fill rule). Hit-testing, bounds, snapping and booleans use the clipped result. One undo step. Returns { id, mask: { type, invert, maskId, contents, enabled } }.',
+			params: { type: 'object', properties: MASK_INPUT, additionalProperties: false },
+			undoable: true,
+			enabled: enabledFor,
+			run: (_ctx: unknown, params: { ids?: string[]; maskId?: string; invert?: boolean } | undefined) => {
+				const list = maskInputs(params);
+				const r = controller.makeMask('clip', { ids: list, ...(params?.maskId ? { maskId: params.maskId } : {}), invert: params?.invert });
+				if (!r.ok) fail(r.message);
+				return maskResult((r as { id: string }).id);
+			}
+		},
+		{
+			...base,
+			id: `${prefix}makeOpacityMask`,
+			label: 'Make Opacity Mask',
+			keywords: ['mask', 'opacity mask', 'alpha', 'luminance', 'fade', 'gradient mask', 'soft mask'],
+			description:
+				'Groups objects into an opacity mask group: the mask (the topmost object, or maskId) moves to the bottom of the new group and hides the others where it is dark (luminance: white shows, black hides) or transparent (alpha). A gradient mask fades the contents. One undo step. Returns { id, mask: { type, invert, maskId, contents, enabled } }.',
+			params: {
+				type: 'object',
+				properties: { ...MASK_INPUT, type: { type: 'string', enum: ['luminance', 'alpha'], description: 'luminance (by brightness, the default) or alpha (by opacity).' } },
+				additionalProperties: false
+			},
+			undoable: true,
+			enabled: enabledFor,
+			run: (_ctx: unknown, params: { ids?: string[]; maskId?: string; invert?: boolean; type?: 'alpha' | 'luminance' } | undefined) => {
+				const list = maskInputs(params);
+				const r = controller.makeMask(params?.type ?? 'luminance', { ids: list, ...(params?.maskId ? { maskId: params.maskId } : {}), invert: params?.invert });
+				if (!r.ok) fail(r.message);
+				return maskResult((r as { id: string }).id);
+			}
+		},
+		{
+			...base,
+			id: `${prefix}setMaskOptions`,
+			label: 'Mask Options…',
+			keywords: ['mask', 'clip', 'invert', 'alpha', 'luminance', 'opacity mask'],
+			description:
+				'Changes how mask groups mask: `type` clip (by outline), alpha or luminance, and `invert`. Pass at least one. One undo step. Returns { groups: [{ id, mask }] }.',
+			params: {
+				type: 'object',
+				properties: {
+					ids: { ...IDS, description: 'Mask group ids (default: the selection).' },
+					type: { type: 'string', enum: ['clip', 'alpha', 'luminance'], description: 'clip (the mask\'s outline), alpha (its opacity) or luminance (its brightness).' },
+					invert: { type: 'boolean', description: 'true: show the contents where the mask hides them.' }
+				},
+				additionalProperties: false
+			},
+			undoable: true,
+			enabled: enabledFor,
+			run: (_ctx: unknown, params: { ids?: string[]; type?: VectorMaskType; invert?: boolean } | undefined) => {
+				if (params?.type === undefined && params?.invert === undefined) fail('Pass type and / or invert.');
+				const groups = maskTargets(params);
+				check(controller.setMaskOptions({ ...(params?.type ? { type: params.type } : {}), ...(params?.invert !== undefined ? { invert: params.invert } : {}) }, { ids: groups }));
+				return { groups: groups.map(maskResult) };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}releaseMask`,
+			label: 'Release Mask',
+			keywords: ['mask', 'clip', 'release', 'unmask', 'remove mask'],
+			shortcut: 'Mod+Alt+7',
+			description:
+				'Releases mask groups: the mask goes back on top of the contents and draws as itself again; the group is replaced by its children unless it has filters, a blend mode or path effects (then it stays a plain group). One undo step. Returns { ids } of the released objects (the mask last).',
+			params: { type: 'object', properties: { ids: { ...IDS, description: 'Mask group ids (default: the selection).' } }, additionalProperties: false },
+			undoable: true,
+			enabled: enabledFor,
+			run: (_ctx: unknown, params: { ids?: string[] } | undefined) => {
+				const groups = maskTargets(params);
+				return { ids: controller.releaseMask({ ids: groups }) };
+			}
+		}
+	];
 	const appearanceCommands = (): CommandSpec[] => [
 		{
 			...base,
@@ -674,6 +781,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 			}
 		},
 		...appearanceCommands(),
+		...maskCommands(),
 		{
 			...base,
 			id: `${prefix}setCorners`,
