@@ -1,5 +1,27 @@
 # @pixerate/editor-svelte
 
+## 0.67.0
+
+### Minor Changes
+
+- c78c7cc: Video editor: 3D LUTs on grades. `VideoGrade.lut` (`{ src, strength, name }`) applies a `.cube` file after the grade's other steps, mixed in at its strength. New `parseVideoCubeLut` (title, domain, input range; errors give the line), tetrahedral `applyVideoLut` and `applyVideoLutToPixels`, `videoLutFromFunction`, `videoLutToCube`, `videoLutSvgApproximation`, `videoGradeLook` (a preset that keeps the LUT), `videoLutEdits`, and `VideoLutCache` (`controller.luts`, with a `luts` loader option). The canvas preview draws LUT layers on a scratch canvas and runs them through the table (frames count as incomplete until the LUT loads). SVG frames approximate a LUT with curves and a colour matrix. The ffmpeg export uses `lut3d` (with `split` + `blend` at part strength, and `resolveLut` for file paths), checked against a real ffmpeg. New agent tools `set_video_lut` (reads the file first) and `remove_video_lut`; `apply_video_grade_preset` keeps a clip's LUT, and `render_video_frame` draws LUTs and says when one is approximate or missing. The React and Svelte `ClipInspector` add a LUT row (path or file, strength, remove).
+
+### Patch Changes
+
+- Updated dependencies [c78c7cc]
+  - @pixerate/editor@0.88.0
+
+## 0.66.0
+
+### Minor Changes
+
+- ed6d944: Video editor: colour scopes. Pure functions on RGBA pixels give a histogram (`videoHistogram`), a Rec. 709 luma waveform (`videoLumaWaveform`) and a vectorscope (`videoVectorscope`), sampled to a fixed cost, plus exposure figures (`videoExposureStats`: luma mean, median and percentiles, the share crushed or blown and per channel, saturation, average colour) with notes on what to fix (`videoExposureNotes`, `summarizeVideoScopes`), and drawn scope images (`videoScopeImage`). `VideoPreviewEngine` publishes the pixels it draws to `controller.previewPixels` (`VideoPreviewPixels`), marking frames whose media is still loading or seeking as incomplete. New agent tool `get_video_scopes` measures the rendered frame at any time, waiting for every picture to load; hosts without a preview pass `framePixels` (e.g. a frame decoded by ffmpeg). React and Svelte add `<VideoScopes>` and `<VideoEditor showScopes>`.
+
+### Patch Changes
+
+- Updated dependencies [ed6d944]
+  - @pixerate/editor@0.87.0
+
 ## 0.65.0
 
 ### Minor Changes

@@ -3,6 +3,7 @@ import type {
   CropBox,
   ImagePoint,
   ExportOptions,
+  ImageEditorFit,
   ImageEditorState,
   ImageTransform,
   PenAnnotation,
@@ -55,6 +56,8 @@ export interface RenderOptions {
   interactive?: boolean;
   draftAnnotation?: Annotation | null;
   draftCrop?: CropBox | null;
+  /** Viewport fit mode: 'contain' scales to full viewport bounds; 'margin' scales to 85% with 1.0 cap (default). */
+  fit?: ImageEditorFit;
   /**
    * How the active selection is shown: marching ants (default when there is a selection),
    * a Quick Mask tint over the unselected area (default when `state.quickMask`), or not at all.
@@ -202,12 +205,17 @@ export class ImageEditorRenderer {
     }
 
     const { width: naturalWidth, height: naturalHeight } = getSourceSize(img);
+    const fit = options.fit ?? state.fit ?? 'margin';
     // Geometry helpers read `imageDimensions`; make sure they see the real source size so the
     // viewport drawn here and the hit-testing done by the UI share one projection.
-    const geoState: ImageEditorState =
-      state.imageDimensions.width === naturalWidth && state.imageDimensions.height === naturalHeight
-        ? state
-        : { ...state, imageDimensions: { width: naturalWidth, height: naturalHeight } };
+    const geoState: ImageEditorState = {
+      ...state,
+      fit,
+      imageDimensions:
+        state.imageDimensions.width === naturalWidth && state.imageDimensions.height === naturalHeight
+          ? state.imageDimensions
+          : { width: naturalWidth, height: naturalHeight },
+    };
 
     const { crop, transform, adjustments, depthMask, annotations, selectedAnnotationId, zoom, pan, isOriginalCompared } = state;
 
@@ -222,7 +230,7 @@ export class ImageEditorRenderer {
 
     // If in compare mode, render original image directly and exit
     if (isOriginalCompared) {
-      this.drawFittedImage(ctx, img, naturalWidth, naturalHeight, vpWidth, vpHeight, zoom, pan);
+      this.drawFittedImage(ctx, img, naturalWidth, naturalHeight, vpWidth, vpHeight, zoom, pan, fit);
       return;
     }
 
@@ -984,12 +992,16 @@ export class ImageEditorRenderer {
     vpW: number,
     vpH: number,
     zoom: number,
-    pan: { x: number; y: number }
+    pan: { x: number; y: number },
+    fit: ImageEditorFit = 'margin'
   ): void {
     ctx.save();
     ctx.translate(vpW / 2 + pan.x, vpH / 2 + pan.y);
     ctx.scale(zoom, zoom);
-    const fitScale = Math.min((vpW * 0.85) / imgW, (vpH * 0.85) / imgH, 1);
+    const fitScale =
+      fit === 'contain'
+        ? Math.min(vpW / imgW, vpH / imgH)
+        : Math.min((vpW * 0.85) / imgW, (vpH * 0.85) / imgH, 1);
     const renderW = imgW * fitScale;
     const renderH = imgH * fitScale;
     ctx.drawImage(img, -renderW / 2, -renderH / 2, renderW, renderH);
