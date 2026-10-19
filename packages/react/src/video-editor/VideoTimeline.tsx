@@ -1,18 +1,23 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
   planVideoClipDrag,
   videoDragLabel,
   videoAssetMap,
   videoClipLabel,
+  videoClipShowsWaveform,
+  videoClipWaveformPath,
   videoClipTint,
   videoDropTracks,
   videoRulerTicks,
   formatVideoSeconds,
   type VideoClip,
   type VideoClipDragMode,
+  type VideoAsset,
   type VideoClipDragPlan,
+  type VideoMediaClip,
   type VideoEditorController,
   type VideoTrack,
+  type VideoWaveformMode,
 } from '@pixerate/editor/video-editor';
 import { useVideoEditorState } from './useVideoEditor';
 
@@ -24,6 +29,8 @@ export interface VideoTimelineProps {
   onPxPerSecondChange?: (pxPerSecond: number) => void;
   /** Allow selecting, dragging, trimming and the track toggles (default true). */
   editable?: boolean;
+  /** Draw waveforms in audio clips (default), in every clip with sound (`all`), or not at all. Sound is decoded once per asset through `controller.audioPeaks`. */
+  waveforms?: VideoWaveformMode;
   className?: string;
 }
 
@@ -44,6 +51,25 @@ interface Drag {
   plan: VideoClipDragPlan | null;
 }
 
+/** A clip's sound drawn behind its label, once its asset's peaks have loaded. */
+function ClipWaveform({ controller, clip, asset, width, height }: { controller: VideoEditorController; clip: VideoMediaClip; asset: VideoAsset; width: number; height: number }) {
+  const peaks = useSyncExternalStore(
+    (notify) => controller.audioPeaks.subscribe(notify),
+    () => controller.audioPeaks.peek(asset),
+    () => undefined,
+  );
+  useEffect(() => {
+    controller.audioPeaks.load(asset).catch(() => {});
+  }, [controller, asset]);
+  const d = useMemo(() => (peaks ? videoClipWaveformPath(clip, peaks, width, height) : ''), [peaks, clip, width, height]);
+  if (!d) return null;
+  return (
+    <svg className="pointer-events-none absolute inset-0" width={width} height={height} aria-hidden="true" data-waveform={clip.id}>
+      <path d={d} fill="currentColor" fillOpacity={0.45} />
+    </svg>
+  );
+}
+
 const isField = (el: EventTarget | null) => el instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName);
 
 /**
@@ -57,7 +83,7 @@ const isField = (el: EventTarget | null) => el instanceof HTMLElement && /^(INPU
  * Keyboard (when focused): Space plays, ←/→ step a frame, S splits at the playhead, Delete removes
  * the selection (Shift to ripple), Cmd/Ctrl+Z undoes, Shift+Cmd/Ctrl+Z redoes.
  */
-export function VideoTimeline({ controller, pxPerSecond, onPxPerSecondChange, editable = true, className = '' }: VideoTimelineProps) {
+export function VideoTimeline({ controller, pxPerSecond, onPxPerSecondChange, editable = true, waveforms = 'audio', className = '' }: VideoTimelineProps) {
   const state = useVideoEditorState(controller);
   const { project, duration, time, selection, readOnly, error } = state;
   const [ownZoom, setOwnZoom] = useState(pxPerSecond ?? 100);
@@ -318,7 +344,8 @@ export function VideoTimeline({ controller, pxPerSecond, onPxPerSecondChange, ed
                       aria-selected={selected}
                       onPointerDown={(e) => onClipPointerDown(e, clip, home)}
                     >
-                      <span className="pointer-events-none block truncate px-1.5 py-0.5 leading-4">{label}</span>
+                      {videoClipShowsWaveform(clip, asset, waveforms) && <ClipWaveform controller={controller} clip={clip as VideoMediaClip} asset={asset} width={Math.max(2, msToPx(clip.duration))} height={ROW - 8} />}
+                      <span className="pointer-events-none relative block truncate px-1.5 py-0.5 leading-4">{label}</span>
                       {clip.transition && (
                         <span className="pointer-events-none absolute left-1 bottom-0.5 rounded bg-black/40 px-1 text-[9px] leading-3" title={`${clip.transition.type} ${clip.transition.duration} ms`} data-transition={clip.transition.type}>
                           ⧓ {clip.transition.type}

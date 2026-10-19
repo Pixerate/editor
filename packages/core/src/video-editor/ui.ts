@@ -1,6 +1,6 @@
 import type { VideoEdit } from './edit.js';
 import { isVideoKeyframes, removeVideoKey, setVideoKey, VIDEO_KEYFRAME_LIMITS, VIDEO_TRANSFORM_PROPERTIES, videoValueAt, type VideoAnimatable, type VideoKeyframeProperty } from './keyframes.js';
-import { findVideoClip, formatVideoTimecode, videoClipEnd, videoClipSpeed, videoAssetMap } from './timeline.js';
+import { findVideoClip, formatVideoTimecode, videoClipEnd, videoClipSpeed, videoAssetMap, videoAssetHasSound } from './timeline.js';
 import type { VideoAsset, VideoAssetKind, VideoClip, VideoFadeCurve, VideoPlacementMode, VideoProject } from './types.js';
 
 // Framework-free helpers the React and Svelte timelines share, so both draw and drag alike.
@@ -33,6 +33,15 @@ export function videoRulerTicks(duration: number, pxPerSecond: number, fps: numb
 }
 
 /** Fill colour a timeline uses for a clip, by what it is. */
+/** Which clips a timeline draws waveforms in: audio files only (default), anything with sound, or none. */
+export type VideoWaveformMode = 'audio' | 'all' | 'none';
+
+/** Whether a timeline in `mode` draws a waveform in this clip. */
+export function videoClipShowsWaveform(clip: VideoClip, asset: VideoAsset | undefined, mode: VideoWaveformMode = 'audio'): asset is VideoAsset {
+	if (clip.type !== 'media' || mode === 'none' || !videoAssetHasSound(asset)) return false;
+	return mode === 'all' || asset!.kind === 'audio';
+}
+
 /** Names for the sound fade curves, for menus. */
 export const VIDEO_FADE_CURVE_LABELS: Readonly<Record<VideoFadeCurve, string>> = {
 	linear: 'Linear',
@@ -246,7 +255,7 @@ export function videoKeyframeRows(project: VideoProject, clipId: string, time: n
 	const { clip } = at;
 	const asset = clip.type === 'media' ? videoAssetMap(project).get(clip.asset) : undefined;
 	const visual = !(asset?.kind === 'audio' || at.track.kind === 'audio');
-	const audible = clip.type === 'media' && (asset?.kind === 'audio' || (asset?.kind === 'video' && asset.hasAudio !== false));
+	const audible = clip.type === 'media' && videoAssetHasSound(asset);
 	const properties: VideoKeyframeProperty[] = [...(visual ? (['opacity'] as const) : []), ...(audible ? (['volume'] as const) : []), ...(visual ? VIDEO_TRANSFORM_PROPERTIES : [])];
 	const clipTime = playheadInClip(clip, time);
 	return properties.map((property) => {

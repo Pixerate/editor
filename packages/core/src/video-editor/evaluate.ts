@@ -1,5 +1,5 @@
 import { videoValueAt } from './keyframes.js';
-import { sortedVideoClips, videoAssetMap, videoClipAfter, videoClipBefore, videoClipEnd, videoClipSpeed } from './timeline.js';
+import { sortedVideoClips, videoAssetMap, videoClipAfter, videoClipBefore, videoClipEnd, videoClipSpeed, videoAssetHasSound } from './timeline.js';
 import type { VideoAsset, VideoClip, VideoFadeCurve, VideoFit, VideoProject, VideoTextClip, VideoTrack, VideoWipeDirection } from './types.js';
 
 /** A rectangle in frame pixels. */
@@ -127,6 +127,15 @@ function fadeGain(clip: VideoClip, time: number, sound = false): number {
 	return g;
 }
 
+/**
+ * A media clip's own gain at clip time `clipTime` (ms): its volume (or volume keyframes) times its
+ * shaped fades. Leaves out track volume and transitions, which depend on the timeline around it.
+ */
+export function videoClipSoundGain(clip: VideoClip, clipTime: number): number {
+	const volume = clip.type === 'media' ? videoValueAt(clip.volume, clipTime, 1) : 1;
+	return volume * fadeGain(clip, clip.start + Math.min(Math.max(clipTime, 0), clip.duration), true);
+}
+
 interface Active {
 	clip: VideoClip;
 	/** 0–1 mix through a transition (1 = fully this clip); undefined outside one. */
@@ -179,7 +188,7 @@ export function videoFrameAt(project: VideoProject, time: number): VideoFrame {
 			const sourceTime = sourceTimeAt(clip, time);
 			// Keyframes are in clip time, held before the first key and after the last.
 			const clipTime = time - clip.start;
-			const audible = asset && (asset.kind === 'audio' || (asset.kind === 'video' && asset.hasAudio !== false));
+			const audible = videoAssetHasSound(asset);
 			if (audible && clip.type === 'media' && !clip.muted && !track.muted) {
 				const gain = videoValueAt(clip.volume, clipTime, 1) * (track.volume ?? 1) * fadeGain(clip, inside, true) * mix;
 				audio.push({ clip: clip.id, track: track.id, asset: asset!.id, src: asset!.src, sourceTime, gain, speed: videoClipSpeed(clip) });

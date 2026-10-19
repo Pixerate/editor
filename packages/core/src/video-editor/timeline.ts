@@ -86,6 +86,9 @@ export const videoHourFrames = (fps: number, dropFrame = isVideoDropFrameRate(fp
 /** Readable time for messages: `2.50 s`. */
 export const formatVideoSeconds = (time: number): string => `${(time / 1000).toFixed(2)} s`;
 
+/** Whether an asset carries sound: audio, or video not marked `hasAudio: false`. */
+export const videoAssetHasSound = (asset: VideoAsset | undefined): boolean => !!asset && (asset.kind === 'audio' || (asset.kind === 'video' && asset.hasAudio !== false));
+
 export function videoAssetMap(project: VideoProject): Map<string, VideoAsset> {
 	return new Map(project.assets.map((a) => [a.id, a]));
 }

@@ -3,11 +3,15 @@ import type { JsonSchema } from '../tools/schema.js';
 import type { VideoIssue } from './check.js';
 import type { VideoEditorController } from './controller.js';
 import { VIDEO_EDIT_OPS, type VideoEdit, type VideoEditOutcome, type VideoEditResult } from './edit.js';
+import { findVideoAudioSilences, videoAudioLevels } from './audio.js';
 import { videoFrameAt } from './evaluate.js';
 import { VIDEO_EASE_NAMES, VIDEO_KEYFRAME_PROPERTIES, VIDEO_TRANSFORM_PROPERTIES, type VideoAnimatable, type VideoKeyframeProperty } from './keyframes.js';
 import { videoContactSheetSvg, videoProjectSvg } from './render.js';
-import { findVideoGaps, formatVideoTimecode, sortedVideoClips, videoClipEnd, videoClipSourceRange, videoProjectDuration } from './timeline.js';
-import { VIDEO_FADE_CURVES, VIDEO_FITS, VIDEO_PLACEMENT_MODES, VIDEO_TRANSITION_TYPES, VIDEO_WIPE_DIRECTIONS, type VideoProject } from './types.js';
+import { findVideoClip, findVideoGaps, formatVideoTimecode, sortedVideoClips, videoClipEnd, videoClipSourceRange, videoProjectDuration } from './timeline.js';
+import { VIDEO_FADE_CURVES, VIDEO_FITS, VIDEO_PLACEMENT_MODES, VIDEO_TRANSITION_TYPES, VIDEO_WIPE_DIRECTIONS, type VideoAsset, type VideoProject } from './types.js';
+
+/** Times in results, to a tenth of a millisecond. */
+const round = (ms: number) => Math.round(ms * 10) / 10;
 
 export interface VideoEditorToolProviderOptions {
 	/** Provider id (unique per registry). Default `video`. */
@@ -707,7 +711,80 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 		}
 	};
 
-	const reads = [getProject, getFrame, findGaps, checkProject, renderFrame, exportFfmpeg, exportEdl, seek];
+	/** The source stretch a level or silence query reads, and how to map its times back. */
+	const soundRange = (args: { clip?: string; asset?: string; from?: number; to?: number }) => {
+		const p = project();
+		if ((args.clip === undefined) === (args.asset === undefined)) throw new Error('Pass either "clip" (a media clip, times on the timeline) or "asset" (times in the source), not both.');
+		let asset: VideoAsset | undefined;
+		let toSource = (t: number) => t;
+		let toOut = (t: number) => t;
+		let from: number;
+		let to: number;
+		if (args.clip !== undefined) {
+			const found = findVideoClip(p, args.clip);
+			if (!found) throw new Error(`There is no clip "${args.clip}"; get_video_project lists the clips.`);
+			const c = found.clip;
+			if (c.type !== 'media') throw new Error(`Clip "${c.id}" is a ${c.type} clip and has no sound; pass a media clip.`);
+			asset = p.assets.find((a) => a.id === c.asset);
+			const speed = c.speed ?? 1;
+			toSource = (t: number) => (c.in ?? 0) + (t - c.start) * speed;
+			toOut = (s: number) => c.start + (s - (c.in ?? 0)) / speed;
+			from = Math.max(c.start, args.from ?? c.start);
+			to = Math.min(videoClipEnd(c), args.to ?? videoClipEnd(c));
+		} else {
+			asset = p.assets.find((a) => a.id === args.asset);
+			if (!asset) throw new Error(`There is no asset "${args.asset}"; the assets are ${p.assets.map((a) => `"${a.id}"`).join(', ') || 'none'}.`);
+			from = args.from ?? 0;
+			to = args.to ?? asset.duration ?? 0;
+		}
+		if (!asset) throw new Error(`Clip "${args.clip}" uses a missing asset.`);
+		if (asset.kind === 'image' || asset.hasAudio === false) throw new Error(`Asset "${asset.id}" has no sound.`);
+		if (!(to > from)) throw new Error(`The stretch to read is empty (${from}–${to} ms); "to" must be after "from"${args.clip !== undefined ? ' and both inside the clip' : asset.duration === undefined ? ', and the asset has no duration, so pass "to"' : ''}.`);
+		return { asset, from, to, toSource, toOut };
+	};
+	const SOUND_TARGET = {
+		clip: { ...CLIP_ID, description: 'A media clip: read the stretch of source it plays, with times on the timeline. Pass this or asset.' },
+		asset: { ...ASSET_ID, description: 'A video or audio asset: read its source, with times in the source. Pass this or clip.' },
+		from: MS('Start of the stretch (default: the clip\'s start, or 0 for an asset)'),
+		to: MS('End of the stretch (default: the clip\'s end, or the asset\'s duration)')
+	};
+	const SOUND_ANNOTATIONS = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true } as const;
+
+	const audioLevels: AgentTool = {
+		name: 'get_video_audio_levels',
+		title: 'Read sound levels',
+		description:
+			'Measures how loud the source sound is over a clip or an asset, without changing anything: the peak level in dBFS (0 = full scale, -100 = silence) for each of "buckets" equal stretches, plus the loudest peak. Levels are the recording as it is, before clip volume and fades. Use it to find where speech or a beat starts, or to judge whether a clip is too loud. The first call for an asset decodes its file, which can take a moment.',
+		inputSchema: object({ ...SOUND_TARGET, buckets: { type: 'integer', minimum: 1, maximum: 500, description: 'How many equal stretches to measure (default 50).' } }),
+		annotations: { title: 'Read sound levels', ...SOUND_ANNOTATIONS },
+		handler: async (args) => {
+			const r = soundRange(args);
+			const peaks = await controller.audioPeaks.load(r.asset);
+			const levels = videoAudioLevels(peaks, r.toSource(r.from), r.toSource(r.to), args.buckets ?? 50).map((l) => ({ start: round(r.toOut(l.start)), end: round(r.toOut(l.end)), peakDb: l.peakDb }));
+			return { asset: r.asset.id, from: r.from, to: r.to, peakDb: Math.max(...levels.map((l) => l.peakDb)), levels };
+		}
+	};
+
+	const findSilences: AgentTool = {
+		name: 'find_video_silences',
+		title: 'Find silences',
+		description:
+			'Lists the stretches of a clip or an asset whose source sound stays below a level for at least a minimum length, as { start, end } ms (timeline times for a clip, so they can go straight to extract_video_range or split_video_at; source times for an asset). Use it to cut pauses, dead air or the gaps between takes. The first call for an asset decodes its file.',
+		inputSchema: object({
+			...SOUND_TARGET,
+			thresholdDb: { type: 'number', minimum: -100, maximum: 0, description: 'Quieter than this peak level counts as silence, in dBFS (default -40; -50 for a quiet room, -30 over background noise).' },
+			minDuration: { type: 'number', exclusiveMinimum: 0, description: 'Shortest silence to report, in ms (default 300).' }
+		}),
+		annotations: { title: 'Find silences', ...SOUND_ANNOTATIONS },
+		handler: async (args) => {
+			const r = soundRange(args);
+			const peaks = await controller.audioPeaks.load(r.asset);
+			const silences = findVideoAudioSilences(peaks, r.toSource(r.from), r.toSource(r.to), { thresholdDb: args.thresholdDb, minDuration: args.minDuration }).map((x) => ({ start: round(r.toOut(x.start)), end: round(r.toOut(x.end)) }));
+			return { asset: r.asset.id, from: r.from, to: r.to, silences, total: round(silences.reduce((n, x) => n + x.end - x.start, 0)) };
+		}
+	};
+
+	const reads = [getProject, getFrame, findGaps, checkProject, renderFrame, exportFfmpeg, exportEdl, audioLevels, findSilences, seek];
 	const writes = [setSettings, addAsset, updateAsset, removeAsset, addTrack, updateTrack, removeTrack, moveTrack, addClip, moveClip, trimClip, splitClip, deleteClips, updateClip, setTransition, setKeyframes, removeKeyframes, slipClip, rollEdit, slideClip, liftRange, extractRange, splitAt, closeGaps, addMarker, removeMarker, editVideo, undo, redo];
 
 	return {

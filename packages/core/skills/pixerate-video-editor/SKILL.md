@@ -76,6 +76,11 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
 - **Keyframes sparingly.** Use `set_video_keyframes` for a push-in (`scale` 1 to 1.1 over the
   shot), a duck under dialogue (`volume`), or a fade that is not at an edge; ease (`ease-in-out`)
   rather than linear for motion. Simple fades at the clip edges are `fadeIn` / `fadeOut`.
+- **Tighten dialogue by ear, in numbers.** `find_video_silences` on an interview or voiceover clip
+  lists the pauses in timeline time; extract the long ones (keep 150-300 ms either side so speech
+  does not sound clipped: shrink each range before `extract_video_range`, and extract from the
+  last pause back to the first, or re-read, because each extract moves what follows). Use
+  `get_video_audio_levels` to find where a line starts before trimming or splitting at it.
 - **Close gaps.** Unintended gaps play as background colour and silence. `find_video_gaps`, then
   `close_video_gaps` or ripple deletes. Leave gaps only where you want black.
 - **Cut on frames.** Put starts, trims and splits on frame boundaries (multiples of 1000 / fps
@@ -112,6 +117,8 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
 
 | Tool | Use it to |
 | --- | --- |
+| `get_video_audio_levels` | Measure a media `clip`'s source sound (timeline times) or an `asset`'s (source times) between `from` and `to`: peak dBFS in each of `buckets` (default 50, up to 500) equal stretches, and the loudest peak. Levels are the recording before clip volume and fades. Use it to find where speech or a beat starts or to judge loudness. The first call for an asset decodes its file. |
+| `find_video_silences` | List stretches of a `clip` or `asset` that stay below `thresholdDb` (default -40) for at least `minDuration` ms (default 300). For a clip the `{ start, end }` are timeline times that go straight into `extract_video_range` (cut a pause, closing up) or `split_video_at`. |
 | `seek_video` | Show the person a moment: `time`, a `clip`'s start or a `marker`, with `play` true or false. Does not change the project. Returns the playhead and clips under it. |
 | `set_video_settings` | Set `name`, `width` / `height` (pixels, 16-8192), `fps` (e.g. 24, 25, 30, 60) or `background` colour. One undo step. |
 | `add_video_asset` | Register a file: `kind` (video, audio, image), `src` (URL, path or data URL), `duration` ms (required in practice for video and audio), optional `id`, `name`, `width`, `height`, `hasAudio` (default true for video), `poster`. Returns the asset id. |

@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { flushSync, mount, unmount } from "svelte";
 import { ToolRegistry } from "@pixerate/editor/tools";
 import { ManualClock } from "@pixerate/editor/animation";
-import { VideoEditorController, findVideoClip, type VideoProject } from "@pixerate/editor/video-editor";
+import { VideoEditorController, buildVideoAudioPeaks, findVideoClip, type VideoProject } from "@pixerate/editor/video-editor";
 import { ClipInspector, MediaBin, VideoEditor, VideoPreview, VideoTimeline, VideoTransport, createVideoEditor } from "../src/video-editor";
 import ToolsProbe from "./fixtures/VideoToolsProbe.svelte";
 
@@ -139,6 +139,43 @@ describe("VideoTransport (Svelte)", () => {
 });
 
 describe("VideoTimeline (Svelte)", () => {
+  it("draws waveforms in audio clips once their sound has loaded", async () => {
+    const loads: string[] = [];
+    const controller = new VideoEditorController({
+      project: {
+        ...PROJECT,
+        assets: [...PROJECT.assets, { id: "music", kind: "audio", src: "music.mp3", duration: 20000 }],
+        tracks: [PROJECT.tracks[0], { id: "a1", kind: "audio", clips: [{ id: "m1", type: "media", asset: "music", start: 0, duration: 4000 }] }],
+      },
+      clock: new ManualClock(),
+      audioPeaks: async (asset) => {
+        loads.push(asset.id);
+        return buildVideoAudioPeaks([Float32Array.from({ length: 8000 * 20 }, (_, i) => 0.5 * Math.sin(i / 3))], 8000);
+      },
+    });
+    render(VideoTimeline, { controller, pxPerSecond: 100 });
+    await new Promise((r) => setTimeout(r, 0));
+    flushSync();
+    expect(q('[data-waveform="m1"] path').getAttribute("d")).toMatch(/^M1\.0 /);
+    expect(q('[data-waveform="c1"]')).toBeNull();
+    expect(loads).toEqual(["music"]);
+    controller.destroy();
+  });
+
+  it("draws no waveforms when asked not to", async () => {
+    const controller = new VideoEditorController({
+      project: { ...PROJECT, assets: [...PROJECT.assets, { id: "music", kind: "audio", src: "music.mp3", duration: 20000 }], tracks: [PROJECT.tracks[0], { id: "a1", kind: "audio", clips: [{ id: "m1", type: "media", asset: "music", start: 0, duration: 4000 }] }] },
+      clock: new ManualClock(),
+      audioPeaks: async () => buildVideoAudioPeaks([new Float32Array(8000).fill(0.5)], 8000),
+    });
+    render(VideoTimeline, { controller, pxPerSecond: 100, waveforms: "none" });
+    await new Promise((r) => setTimeout(r, 0));
+    flushSync();
+    expect(q("[data-waveform]")).toBeNull();
+    controller.destroy();
+  });
+
+
   it("draws a block per clip at its place, markers and the playhead", () => {
     const controller = make();
     render(VideoTimeline, { controller, pxPerSecond: 100 });

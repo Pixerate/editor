@@ -1,6 +1,6 @@
 import { placeVideoRect } from './evaluate.js';
 import { isVideoKeyframes, VIDEO_TRANSFORM_PROPERTIES, videoKeyframeFfmpegExpr, type VideoAnimatable } from './keyframes.js';
-import { formatVideoTimecode, formatVideoTimecodeFrames, isVideoDropFrameRate, videoHourFrames, videoTimecodeFrames, sortedVideoClips, videoAssetMap, videoClipBefore, videoClipEnd, videoClipOverhang, videoClipSpeed, videoProjectDuration } from './timeline.js';
+import { formatVideoTimecode, formatVideoTimecodeFrames, isVideoDropFrameRate, videoHourFrames, videoTimecodeFrames, sortedVideoClips, videoAssetMap, videoClipBefore, videoClipEnd, videoClipOverhang, videoClipSpeed, videoProjectDuration, videoAssetHasSound } from './timeline.js';
 import type { VideoAsset, VideoClip, VideoFadeCurve, VideoProject, VideoTextClip, VideoTrack } from './types.js';
 
 // ---------------------------------------------------------------------------------------------
@@ -194,7 +194,7 @@ export function toVideoFfmpeg(project: VideoProject, options: VideoFfmpegOptions
 			}
 			let index: number | undefined;
 			if (asset && asset.kind !== 'audio' && track.kind === 'video' && !track.hidden) index = input(clip as VideoClip & { type: 'media' }, asset, lead, tail);
-			const audible = asset && (asset.kind === 'audio' || (asset.kind === 'video' && asset.hasAudio !== false));
+			const audible = videoAssetHasSound(asset);
 			if (audible && clip.type === 'media' && !clip.muted && !track.muted) {
 				const ai = index ?? input(clip, asset!, lead, tail);
 				const trackGain = track.volume ?? 1;

@@ -4,7 +4,7 @@ import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { ToolRegistry } from "@pixerate/editor/tools";
 import { ManualClock } from "@pixerate/editor/animation";
-import { VideoEditorController, VideoPreviewEngine, findVideoClip, type VideoProject } from "@pixerate/editor/video-editor";
+import { VideoEditorController, VideoPreviewEngine, buildVideoAudioPeaks, findVideoClip, type VideoProject } from "@pixerate/editor/video-editor";
 import {
   ClipInspector,
   MediaBin,
@@ -166,6 +166,32 @@ describe("VideoTransport (React)", () => {
 });
 
 describe("VideoTimeline (React)", () => {
+  it("draws waveforms in audio clips once their sound has loaded", async () => {
+    const loads: string[] = [];
+    const controller = new VideoEditorController({
+      project: PROJECT,
+      clock: new ManualClock(),
+      audioPeaks: async (asset) => {
+        loads.push(asset.id);
+        return buildVideoAudioPeaks([Float32Array.from({ length: 8000 * 20 }, (_, i) => 0.5 * Math.sin(i / 3))], 8000);
+      },
+    });
+    act(() => root.render(<VideoTimeline controller={controller} pxPerSecond={100} />));
+    await act(async () => {});
+    const wave = $('[data-waveform="m1"] path');
+    expect(wave.getAttribute("d")).toMatch(/^M1\.0 /);
+    // Only audio clips by default; video clips with sound only with waveforms="all".
+    expect(container.querySelector('[data-waveform="c1"]')).toBeNull();
+    expect(loads).toEqual(["music"]);
+    act(() => root.render(<VideoTimeline controller={controller} pxPerSecond={100} waveforms="all" />));
+    await act(async () => {});
+    expect(container.querySelector('[data-waveform="c1"]')).not.toBeNull();
+    act(() => root.render(<VideoTimeline controller={controller} pxPerSecond={100} waveforms="none" />));
+    expect(container.querySelector("[data-waveform]")).toBeNull();
+    controller.destroy();
+  });
+
+
   it("draws a block per clip at its time, with markers, transitions and the playhead", () => {
     const controller = make();
     act(() => root.render(<VideoTimeline controller={controller} pxPerSecond={100} />));
