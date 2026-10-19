@@ -5,7 +5,8 @@ import type { ImageEditorController } from '../controller';
 /** Types the file pickers accept. */
 export const PSD_FILE_ACCEPT = '.psd,.psb,image/vnd.adobe.photoshop,application/x-photoshop';
 
-function blobBytes(file: Blob): Promise<Uint8Array> {
+/** A picked file's bytes. */
+export function blobBytes(file: Blob): Promise<Uint8Array> {
   if (typeof file.arrayBuffer === 'function') return file.arrayBuffer().then((b) => new Uint8Array(b));
   return new Promise((resolve, reject) => {
     const reader = new FileReader();

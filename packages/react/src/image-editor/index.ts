@@ -8,5 +8,6 @@ export * from './SelectionOptionsBar';
 export * from './RefineEdgePanel';
 export * from './LayersPanel';
 export * from './LayerEffectsPanel';
+export * from './SmartObjectPanel';
 export * from './BrushOptionsBar';
 export * from './FreeTransformOptionsBar';

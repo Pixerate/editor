@@ -134,7 +134,7 @@ export function createImageLayerTools(controller: ImageEditorController): AgentT
     name: 'list_layers',
     title: 'List image layers',
     description:
-      'Returns the layer stack bottom to top as a tree: id, type (pixel, adjustment, group, annotation), name, document bounds (pixel layers), visible, opacity, fillOpacity, blend, clipped, locks, a mask summary, an effects summary (master switch, scale, effect ids and kinds; details from list_layer_effects), filters (pixel layers), kind and params (adjustment layers), children (groups) and which layer is active. Also returns the active layer id and target (pixels or mask) and the canvas size.',
+      'Returns the layer stack bottom to top as a tree: id, type (pixel, adjustment, group, annotation, smart: smart objects also give their contents, smart filters and filter mask), name, document bounds (pixel layers), visible, opacity, fillOpacity, blend, clipped, locks, a mask summary, an effects summary (master switch, scale, effect ids and kinds; details from list_layer_effects), filters (pixel layers), kind and params (adjustment layers), children (groups) and which layer is active. Also returns the active layer id and target (pixels, mask or filter-mask) and the canvas size.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     annotations: { title: 'List image layers', ...READ },
     handler: () => {
