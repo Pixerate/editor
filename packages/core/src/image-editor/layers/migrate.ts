@@ -35,7 +35,7 @@ import {
   type PixelLayer,
   type RasterMask,
 } from './model';
-import { emptySurface, readRegion, surfaceFromPixels, type MaskSurface } from './surface';
+import { emptySurface, readRegion, surfaceFromPixels, type MaskSurface } from '../../raster/surface';
 
 export const BACKGROUND_LAYER_ID = 'background';
 export const BACKGROUND_LAYER_NAME = 'Background';

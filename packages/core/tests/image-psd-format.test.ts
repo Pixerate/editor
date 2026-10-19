@@ -10,7 +10,7 @@ import {
 import { decodePlanes, encodeRle, encodeZip, packbitsBound, packbitsDecodeInto, packbitsEncode } from '../src/image-editor/psd/compression';
 import { canonicalBounds, parseAdjustmentBlock, writeAdjustmentBlock } from '../src/image-editor/psd/adjust';
 import { defaultAdjustmentParams } from '../src/image-editor/adjustment-layers';
-import { deflate } from '../src/image-editor/layers/zlib';
+import { deflate } from '../src/raster/zlib';
 import { layerName, layerTree, readPsd, writePsd, type PsdFile, type PsdLayerRecord } from '../src/image-editor/psd/file';
 import type { AdjustmentKind } from '../src/image-editor/types';
 

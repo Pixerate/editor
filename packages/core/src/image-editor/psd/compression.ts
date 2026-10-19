@@ -2,7 +2,7 @@
 
 /** Channel and image data compression: raw, RLE (PackBits), ZIP and ZIP with prediction. */
 
-import { ZlibError, deflate, inflate } from '../layers/zlib';
+import { ZlibError, deflate, inflate } from '../../raster/zlib';
 import { PsdError, PsdReader } from './binary';
 
 export type PsdCompression = 0 | 1 | 2 | 3;

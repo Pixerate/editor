@@ -7,7 +7,7 @@
  */
 
 import type { BlendMode } from '../blend';
-import { emptySurface, surfaceFromPixels } from '../layers/surface';
+import { emptySurface, surfaceFromPixels } from '../../raster/surface';
 import type { GroupLayer, ImageLayer, LayerBlendMode, LayerLocks, PixelLayer, RasterMask } from '../layers/model';
 import { ADJUSTMENT_KEYS, adjustmentLabel, parseAdjustmentBlock } from './adjust';
 import { PsdError } from './binary';

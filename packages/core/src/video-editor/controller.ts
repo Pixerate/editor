@@ -9,6 +9,7 @@ import { applyVideoEdits, type VideoEdit, type VideoEditResult } from './edit.js
 import { videoFrameAt, type VideoFrame } from './evaluate.js';
 import { toVideoEdl, toVideoFfmpeg, toVideoLoudnessMeasure, type VideoEdlOptions, type VideoFfmpegExport, type VideoFfmpegOptions } from './export.js';
 import { createVideoProject, parseVideoProject } from './parse.js';
+import { VideoPreviewPixels } from './scopes.js';
 import { videoProjectSvg, type VideoSvgOptions } from './render.js';
 import { snapToVideoFrame, snapVideoTime, videoClipEnd, videoClipsAt, videoProjectDuration, videoSnapPoints, findVideoClip } from './timeline.js';
 import type { VideoProject } from './types.js';
@@ -69,6 +70,8 @@ export class VideoEditorController {
 	readonly player: AnimationPlayer;
 	/** Sound levels per asset, loaded on demand for waveforms and agents. */
 	readonly audioPeaks: VideoAudioPeaksCache;
+	/** The pixels the preview last drew, for scopes and `get_video_scopes` (a `VideoPreviewEngine` fills it). */
+	readonly previewPixels = new VideoPreviewPixels();
 	private project: VideoProject;
 	private issues: VideoIssue[];
 	private selection: string[] = [];

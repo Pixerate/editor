@@ -81,9 +81,9 @@ export function useVideoEditorTools(
   controller: VideoEditorController,
   options: VideoEditorToolProviderOptions = {},
 ): void {
-  const { id, namespace, readOnly, rasterize } = options;
+  const { id, namespace, readOnly, rasterize, framePixels, framePixelsTimeout } = options;
   useEffect(() => {
     if (!registry) return;
-    return registry.register(createVideoEditorToolProvider(controller, { id, namespace, readOnly, rasterize }));
-  }, [registry, controller, id, namespace, readOnly, rasterize]);
+    return registry.register(createVideoEditorToolProvider(controller, { id, namespace, readOnly, rasterize, framePixels, framePixelsTimeout }));
+  }, [registry, controller, id, namespace, readOnly, rasterize, framePixels, framePixelsTimeout]);
 }

@@ -1,6 +1,6 @@
 import type { AgentTool } from '../tools/registry.js';
 import type { ImageEditorController } from './controller';
-import { contentBounds } from './layers/surface';
+import { contentBounds } from '../raster/surface';
 import { findLayer, type ImageLayer, type LayerFilter, type RasterMask } from './layers/model';
 import { LayerOperationError, requireLayer, type LayerPlacement } from './layers/ops';
 import { adjustmentKindLabel } from './adjustment-layers';

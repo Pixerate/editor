@@ -1,7 +1,7 @@
 import type { AgentTool } from '../tools/registry.js';
 import type { ImageEditorController } from './controller';
 import { describeLayer } from './layer-tools';
-import { base64ToBytes, bytesToBase64 } from './layers/png';
+import { base64ToBytes, bytesToBase64 } from '../raster/png';
 import { PsdError } from './psd/binary';
 import { importPsd } from './psd/import';
 

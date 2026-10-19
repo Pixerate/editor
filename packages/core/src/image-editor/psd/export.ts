@@ -9,7 +9,7 @@
  */
 
 import { adjustmentKindLabel } from '../adjustment-layers';
-import { contentBounds, readRegion } from '../layers/surface';
+import { contentBounds, readRegion } from '../../raster/surface';
 import { isActiveFilter, type ImageLayer, type RasterMask } from '../layers/model';
 import type { CropBox } from '../types';
 import { PsdError, PsdWriter, encodeLegacyName } from './binary';
