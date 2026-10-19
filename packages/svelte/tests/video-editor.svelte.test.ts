@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import { flushSync, mount, unmount } from "svelte";
 import { ToolRegistry } from "@pixerate/editor/tools";
 import { ManualClock } from "@pixerate/editor/animation";
-import { VideoEditorController, buildVideoAudioPeaks, findVideoClip, type VideoProject } from "@pixerate/editor/video-editor";
+import { VideoEditorController, VideoFrameCache, buildVideoAudioPeaks, findVideoClip, type VideoProject } from "@pixerate/editor/video-editor";
 import { ClipInspector, MediaBin, TranscriptPanel, VideoEditor, VideoPreview, VideoScopes, VideoTimeline, VideoTransport, createVideoEditor } from "../src/video-editor";
 import ToolsProbe from "./fixtures/VideoToolsProbe.svelte";
 
@@ -646,6 +646,38 @@ describe("ClipInspector LUT (Svelte)", () => {
     input.dispatchEvent(new Event("change", { bubbles: true }));
     await settle();
     expect(clipOf(controller, "c1")!.grade!.lut).toEqual({ src: "local.cube", name: "Swap" });
+    controller.destroy();
+  });
+});
+
+describe("proxies (Svelte)", () => {
+  it("offers a preview size once an asset has proxies, and marks those assets in the media bin", () => {
+    const controller = make();
+    render(VideoTransport, { controller });
+    expect(q("[data-preview-scale]")).toBeNull();
+    act(() => void controller.apply({ op: "update_asset", asset: "clip", set: { proxies: [{ scale: 0.5, src: "clip.proxy-50.mp4" }] } }, "Attach proxies"));
+    const select = q<HTMLSelectElement>("select[data-preview-scale]");
+    expect([...select.options].map((o) => o.textContent)).toEqual(["Auto", "Full", "½", "¼"]);
+    change(select, "0.25");
+    expect(controller.getState().previewScale).toBe(0.25);
+    render(MediaBin, { controller });
+    expect(q('[data-asset="clip"] [data-asset-proxies]').title).toMatch(/Proxies: 50%/);
+    controller.destroy();
+  });
+});
+
+describe("frame cache strip (Svelte)", () => {
+  it("marks the stretches whose frames are cached under the ruler, and follows the cache", async () => {
+    const frameCache = new VideoFrameCache({ decode: null, prefetch: 0 });
+    const controller = new VideoEditorController({ project: PROJECT, clock: new ManualClock(), frameCache });
+    render(VideoTimeline, { controller, pxPerSecond: 100 });
+    expect(q("[data-cached-range]")).toBeNull();
+    for (let f = 0; f < 15; f++) frameCache.put({ key: `${f}@clip.mp4`, time: (f * 1000) / 30 }, { image: {} as any, width: 2, height: 2 });
+    await new Promise((r) => setTimeout(r, 300));
+    flushSync();
+    const strip = q("[data-cached-range]");
+    expect(strip.style.left).toBe("0px");
+    expect(parseFloat(strip.style.width)).toBeCloseTo(50, -1);
     controller.destroy();
   });
 });

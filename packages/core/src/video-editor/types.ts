@@ -17,6 +17,16 @@ export interface VideoTranscriptWord {
 	end: number;
 }
 
+/** A smaller copy of an asset's media for the preview (see `VideoAsset.proxies`). */
+export interface VideoAssetProxy {
+	/** Its size as a fraction of the original (0.5 = half width and height). */
+	scale: number;
+	/** What the preview loads instead of the original. */
+	src: string;
+	width?: number;
+	height?: number;
+}
+
 /** A piece of source media. The project refers to it by id; `src` is whatever the host can load. */
 export interface VideoAsset {
 	id: string;
@@ -35,6 +45,12 @@ export interface VideoAsset {
 	poster?: string;
 	/** What is said in it, word by word, timed in the source (see `parseVideoTranscript`). */
 	transcript?: VideoTranscriptWord[];
+	/**
+	 * Smaller copies of a video for smooth editing (see `videoProxyFfmpeg`). The preview plays the
+	 * one its preview scale picks; exports and EDLs always use `src`. A proxy must have the same
+	 * length and timing as the original.
+	 */
+	proxies?: VideoAssetProxy[];
 }
 
 export type VideoTrackKind = 'video' | 'audio';

@@ -10,6 +10,7 @@ import { VIDEO_GRADE_CONTROLS, VIDEO_GRADE_PRESET_NAMES, videoGradeLook } from '
 import { videoLutEdits } from './ui.js';
 import { videoFrameAt } from './evaluate.js';
 import { summarizeVideoScopes, type VideoPixels } from './scopes.js';
+import { videoAssetProxy, videoProxyPlan } from './proxy.js';
 import { VIDEO_EASE_NAMES, VIDEO_KEYFRAME_PROPERTIES, VIDEO_TRANSFORM_PROPERTIES, type VideoAnimatable, type VideoKeyframeProperty } from './keyframes.js';
 import { videoContactSheetSvg, videoProjectSvg } from './render.js';
 import { findVideoClip, findVideoGaps, formatVideoSeconds, formatVideoTimecode, sortedVideoClips, VIDEO_TIME_EPSILON, videoClipEnd, videoClipSourceRange, videoProjectDuration } from './timeline.js';
@@ -296,7 +297,7 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 		handler: () => {
 			const state = controller.getState();
 			const reason = readOnlyReason();
-			return { ...describeVideoProject(state.project), playhead: state.time, selection: state.selection, issues: issueSummary(state.issues), editable: !reason, ...(reason ? { readOnlyReason: reason } : {}) };
+			return { ...describeVideoProject(state.project), playhead: state.time, previewScale: state.previewScale, selection: state.selection, issues: issueSummary(state.issues), editable: !reason, ...(reason ? { readOnlyReason: reason } : {}) };
 		}
 	};
 
@@ -479,7 +480,7 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 		name: 'update_video_asset',
 		title: 'Change media details',
 		description: 'Changes an asset\'s src, name, duration, size, sound or poster (e.g. relinking moved media). Clips that now run past its end are refused. Returns the asset.',
-		inputSchema: object({ asset: ASSET_ID, set: object(ASSET_FIELDS, [], 'Fields to replace.'), remove: { type: 'array', items: { type: 'string', enum: ['name', 'duration', 'width', 'height', 'hasAudio', 'poster', 'transcript'] }, description: 'Fields to clear (transcript removes its words).' } }, ['asset']),
+		inputSchema: object({ asset: ASSET_ID, set: object(ASSET_FIELDS, [], 'Fields to replace.'), remove: { type: 'array', items: { type: 'string', enum: ['name', 'duration', 'width', 'height', 'hasAudio', 'poster', 'transcript', 'proxies'] }, description: 'Fields to clear (transcript removes its words, proxies its proxies).' } }, ['asset']),
 		annotations: { title: 'Change media details', ...WRITE_IDEMPOTENT },
 		handler: ({ asset, set, remove }) => apply({ op: 'update_asset', asset, set, remove }, 'Change media', (r) => ({ asset: videoAssetOut(r.project.assets.find((a) => a.id === asset)!) }))
 	};
@@ -703,6 +704,91 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 			const withLut = clips.filter((id: string) => findVideoClip(p, id)!.clip.grade?.lut);
 			if (!withLut.length) throw new Error(`None of ${clips.map((c: string) => `"${c}"`).join(', ')} has a LUT; get_video_project shows each clip's grade.`);
 			return apply(videoLutEdits(p, withLut, null), 'Remove LUT', (r) => ({ clips: clips.map((id: string) => ({ id, grade: findVideoClip(r.project, id)?.clip.grade ?? null })) }));
+		}
+	};
+
+	// -----------------------------------------------------------------------------------------
+	// Proxies
+	// -----------------------------------------------------------------------------------------
+
+	const PROXY_SCALE = { type: 'number', exclusiveMinimum: 0, exclusiveMaximum: 1, description: 'Proxy size as a fraction of the original: 0.5 (half width and height, the default) or 0.25 for very large footage.' } as const;
+	const planProxies: AgentTool = {
+		name: 'plan_video_proxies',
+		title: 'Plan proxy files',
+		description:
+			'Returns the ffmpeg commands that make smaller proxy copies of video assets for smooth preview playback, without changing anything: one per video asset (or each of "assets") that has no proxy at that scale yet, each with { asset, args, command, proxy }. Proxies are scaled, H.264 with a keyframe every few frames so scrubbing is quick, and keep the sound. After the host runs a command, attach its "proxy" with set_video_proxies. The export always uses the originals.',
+		inputSchema: object({
+			scale: PROXY_SCALE,
+			assets: { type: 'array', items: ASSET_ID, minItems: 1, uniqueItems: true, description: 'Only these video assets (default: every video asset without a proxy at this scale).' },
+			gop: { type: 'integer', minimum: 1, maximum: 300, description: 'Frames between keyframes (default 12): fewer makes seeking cheaper and files larger.' },
+			crf: { type: 'integer', minimum: 0, maximum: 51, description: 'x264 quality, lower is better (default 28: proxies are for editing).' }
+		}),
+		annotations: { title: 'Plan proxy files', ...READ },
+		handler: ({ scale, assets, gop, crf }) => {
+			const commands = videoProxyPlan(project(), { scale, assets, gop, crf });
+			return { scale: scale ?? 0.5, commands, ...(commands.length ? {} : { note: 'Every video asset already has a proxy at this scale.' }) };
+		}
+	};
+
+	const setProxies: AgentTool = {
+		name: 'set_video_proxies',
+		title: 'Attach proxies',
+		description:
+			'Sets a video asset\'s proxies, the smaller copies the preview plays instead of the original (one undo step); an empty list removes them. Each proxy must match the original\'s length and timing (plan_video_proxies makes such files). The export, EDL and source times always use the original. Returns the asset.',
+		inputSchema: object(
+			{
+				asset: { ...ASSET_ID, description: 'A video asset id from get_video_project.' },
+				proxies: {
+					type: 'array',
+					maxItems: 8,
+					description: 'Its proxies, one per scale (empty removes them all).',
+					items: object({ scale: PROXY_SCALE, src: { type: 'string', minLength: 1, description: 'Where the preview loads the proxy from (URL or path).' }, width: { type: 'number', exclusiveMinimum: 0, description: 'Its width in pixels.' }, height: { type: 'number', exclusiveMinimum: 0, description: 'Its height in pixels.' } }, ['scale', 'src'], 'One proxy.')
+				}
+			},
+			['asset', 'proxies']
+		),
+		annotations: { title: 'Attach proxies', ...WRITE_IDEMPOTENT },
+		handler: ({ asset, proxies }) => {
+			const a = project().assets.find((x) => x.id === asset);
+			if (!a) throw new Error(`There is no asset "${asset}"; the assets are ${project().assets.map((x) => `"${x.id}"`).join(', ') || 'none'}.`);
+			if (a.kind !== 'video') throw new Error(`Asset "${asset}" is ${a.kind === 'image' ? 'an image' : 'audio'}; only video assets have proxies.`);
+			const edit: VideoEdit = proxies.length ? { op: 'update_asset', asset, set: { proxies } } : { op: 'update_asset', asset, remove: ['proxies'] };
+			return apply(edit, proxies.length ? 'Attach proxies' : 'Remove proxies', (r) => ({ asset: videoAssetOut(r.project.assets.find((x) => x.id === asset)!) }));
+		}
+	};
+
+	const setPreviewScale: AgentTool = {
+		name: 'set_video_preview_scale',
+		title: 'Set the preview size',
+		description:
+			'Sets how large a picture the preview plays, without changing the project (no undo step): "full" plays the originals, a fraction (0.5, 0.25) plays the smallest proxy at least that large (or the original where there is none), "auto" (the default) picks by the size the preview is shown at. Use a proxy scale when playback stutters on large footage. Returns the setting and, for each video asset, what the preview plays at a fixed scale.',
+		inputSchema: object(
+			{ scale: { anyOf: [{ type: 'string', enum: ['auto', 'full'] }, { type: 'number', exclusiveMinimum: 0, maximum: 1 }], description: '"auto", "full", or a fraction above 0 up to 1 (0.5 is half size).' } },
+			['scale']
+		),
+		annotations: { title: 'Set the preview size', ...WRITE_IDEMPOTENT },
+		handler: ({ scale }) => {
+			controller.setPreviewScale(scale);
+			const s = controller.getState().previewScale;
+			const fixed = s === 'full' ? 1 : typeof s === 'number' ? s : null;
+			const plays = fixed === null ? undefined : project().assets.filter((a) => a.kind === 'video').map((a) => ({ asset: a.id, src: videoAssetProxy(a, fixed)?.src ?? a.src, proxy: !!videoAssetProxy(a, fixed) }));
+			return { previewScale: s, ...(plays ? { plays } : { note: 'auto picks the smallest proxy at least as large as the preview canvas shows, so it depends on the preview\'s size.' }) };
+		}
+	};
+
+	const previewCache: AgentTool = {
+		name: 'get_video_preview_cache',
+		title: 'Read the preview\'s frame cache',
+		description:
+			'Reports the preview\'s cache of decoded frames, without changing anything: whether the host has one, how many frames and bytes it holds against its budget, hits and misses, frames still decoding, how far ahead it prefetches (ms), and the stretches of the timeline between "from" and "to" whose frames are all cached (these play and scrub without waiting). Use it to tell whether stuttering is the cache filling, and before asking the person to review a passage. With no cache, says so.',
+		inputSchema: object({ from: MS('Start of the stretch to report cached ranges for (default 0)'), to: MS('End of it (default: the end of the project)') }),
+		annotations: { title: 'Read the preview\'s frame cache', ...READ },
+		handler: ({ from, to }) => {
+			const cache = controller.frameCache;
+			if (!cache) return { enabled: false, reason: 'The host has not given this editor a frame cache (VideoEditorController frameCache), so the preview decodes each frame as it plays.' };
+			if (from !== undefined && to !== undefined && !(to > from)) throw new Error(`"to" (${to} ms) must be after "from" (${from} ms).`);
+			const ranges = cache.cachedRanges(project(), { from, to });
+			return { enabled: true, ...cache.stats(), cachedRanges: ranges };
 		}
 	};
 
@@ -1215,8 +1301,8 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 		}
 	};
 
-	const reads = [getProject, getFrame, getTranscript, findText, findFillers, findPauses, findGaps, checkProject, renderFrame, getScopes, exportFfmpeg, exportLoudnessMeasure, exportEdl, audioLevels, findSilences, seek];
-	const writes = [setSettings, addAsset, updateAsset, removeAsset, addTrack, updateTrack, removeTrack, moveTrack, addClip, moveClip, trimClip, splitClip, deleteClips, updateClip, setTransition, setSpeedRamp, addFreeze, removeRamp, setTranscript, removeRanges, applyGradePreset, copyGrade, setLut, removeLut, setKeyframes, removeKeyframes, slipClip, rollEdit, slideClip, liftRange, extractRange, splitAt, closeGaps, addMarker, removeMarker, editVideo, undo, redo];
+	const reads = [getProject, getFrame, getTranscript, findText, findFillers, findPauses, findGaps, checkProject, renderFrame, getScopes, previewCache, planProxies, exportFfmpeg, exportLoudnessMeasure, exportEdl, audioLevels, findSilences, seek, setPreviewScale];
+	const writes = [setSettings, addAsset, updateAsset, removeAsset, setProxies, addTrack, updateTrack, removeTrack, moveTrack, addClip, moveClip, trimClip, splitClip, deleteClips, updateClip, setTransition, setSpeedRamp, addFreeze, removeRamp, setTranscript, removeRanges, applyGradePreset, copyGrade, setLut, removeLut, setKeyframes, removeKeyframes, slipClip, rollEdit, slideClip, liftRange, extractRange, splitAt, closeGaps, addMarker, removeMarker, editVideo, undo, redo];
 
 	return {
 		id: options.id ?? 'video',

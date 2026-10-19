@@ -215,7 +215,8 @@ const color = (c: string) => {
 	const h = hex[1].length === 3 ? [...hex[1]].map((x) => x + x).join('') : hex[1];
 	return `0x${h.slice(0, 6)}${h.length === 8 ? `@${(parseInt(h.slice(6), 16) / 255).toFixed(3)}` : ''}`;
 };
-const shellQuote = (s: string) => (/^[\w@%+=:,./-]+$/.test(s) ? s : `'${s.replace(/'/g, `'\\''`)}'`);
+/** Quotes an argument for a POSIX shell when it needs it. */
+export const videoShellQuote = (s: string) => (/^[\w@%+=:,./-]+$/.test(s) ? s : `'${s.replace(/'/g, `'\\''`)}'`);
 
 /** `atempo` only takes 0.5–2 (100 in newer builds), so larger changes chain several. */
 function atempo(speed: number): string[] {
@@ -556,7 +557,7 @@ function buildFfmpeg(project: VideoProject, options: VideoFfmpegOptions, measure
 	const filterComplex = graph.join(';');
 	if (measure) {
 		const args = ['-hide_banner', '-nostats', ...inputs.flat(), '-filter_complex', filterComplex, '-map', '[aout]', '-f', 'null', '-'];
-		return { args, command: ['ffmpeg', ...args].map(shellQuote).join(' '), filterComplex, duration: D, notes };
+		return { args, command: ['ffmpeg', ...args].map(videoShellQuote).join(' '), filterComplex, duration: D, notes };
 	}
 	const args = [
 		'-y',
@@ -577,5 +578,5 @@ function buildFfmpeg(project: VideoProject, options: VideoFfmpegOptions, measure
 		sec(D),
 		options.output ?? 'output.mp4'
 	];
-	return { args, command: ['ffmpeg', ...args].map(shellQuote).join(' '), filterComplex, duration: D, notes };
+	return { args, command: ['ffmpeg', ...args].map(videoShellQuote).join(' '), filterComplex, duration: D, notes };
 }

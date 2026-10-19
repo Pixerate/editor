@@ -24,6 +24,8 @@ export * from './transcript.js';
 export * from './remap.js';
 export * from './render.js';
 export * from './export.js';
+export * from './proxy.js';
+export * from './frame-cache.js';
 export * from './preview.js';
 export * from './controller.js';
 export * from './tools.js';

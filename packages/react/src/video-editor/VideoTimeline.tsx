@@ -16,6 +16,7 @@ import {
   type VideoClipDragPlan,
   type VideoMediaClip,
   type VideoEditorController,
+  type VideoProject,
   type VideoTrack,
   type VideoWaveformMode,
 } from '@pixerate/editor/video-editor';
@@ -83,6 +84,32 @@ const isField = (el: EventTarget | null) => el instanceof HTMLElement && /^(INPU
  * Keyboard (when focused): Space plays, ←/→ step a frame, S splits at the playhead, Delete removes
  * the selection (Shift to ripple), Cmd/Ctrl+Z undoes, Shift+Cmd/Ctrl+Z redoes.
  */
+/**
+ * The stretches whose frames the controller's frame cache holds (none without a cache), sampled
+ * every two pixels at zoom `px`, re-read after edits and at most four times a second as frames arrive.
+ */
+function useCachedRanges(controller: VideoEditorController, project: VideoProject, px: number): { start: number; end: number }[] {
+  const [ranges, setRanges] = useState<{ start: number; end: number }[]>([]);
+  useEffect(() => {
+    const cache = controller.frameCache;
+    if (!cache) return setRanges([]);
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const read = () => {
+      timer = null;
+      setRanges(cache.cachedRanges(project, { step: 2000 / px }));
+    };
+    read();
+    const off = cache.subscribe(() => {
+      timer ??= setTimeout(read, 250);
+    });
+    return () => {
+      off();
+      if (timer) clearTimeout(timer);
+    };
+  }, [controller, project, px]);
+  return ranges;
+}
+
 export function VideoTimeline({ controller, pxPerSecond, onPxPerSecondChange, editable = true, waveforms = 'audio', className = '' }: VideoTimelineProps) {
   const state = useVideoEditorState(controller);
   const { project, duration, time, selection, readOnly, error } = state;
@@ -98,6 +125,7 @@ export function VideoTimeline({ controller, pxPerSecond, onPxPerSecondChange, ed
   const span = Math.max(duration + 5000, 10000);
   const width = msToPx(span);
   const ticks = videoRulerTicks(span, px, project.fps);
+  const cached = useCachedRanges(controller, project, px);
 
   const seekAt = (clientX: number) => {
     const box = ruler.current!.getBoundingClientRect();
@@ -280,6 +308,9 @@ export function VideoTimeline({ controller, pxPerSecond, onPxPerSecondChange, ed
                 <div key={t.time} className={`absolute bottom-0 w-px ${t.major ? 'h-2.5 bg-muted-foreground/70' : 'h-1 bg-muted-foreground/40'}`} style={{ left: t.x }} data-tick={t.time}>
                   {t.label && <span className="absolute -top-3.5 left-1 whitespace-nowrap tabular-nums">{t.label}</span>}
                 </div>
+              ))}
+              {cached.map((r) => (
+                <div key={r.start} className="pointer-events-none absolute bottom-0 h-[3px] bg-emerald-500/70" style={{ left: msToPx(r.start), width: Math.max(1, msToPx(r.end - r.start)) }} title="Frames cached: plays and scrubs without waiting" data-cached-range="" />
               ))}
               {(project.markers ?? []).map((m) => (
                 <div

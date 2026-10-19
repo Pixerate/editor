@@ -1,7 +1,7 @@
 import { VIDEO_GRADE_CONTROLS } from './grade.js';
 import { checkVideoTimeRemap } from './remap.js';
 import { VIDEO_EASE_NAMES, type VideoAnimatable, type VideoEase, type VideoKey, type VideoKeyframes } from './keyframes.js';
-import { VIDEO_BLEND_MODES, VIDEO_CLIP_ANIMATION_EFFECTS, VIDEO_CLIP_TYPES, VIDEO_FADE_CURVES, VIDEO_FITS, VIDEO_TRANSITION_TYPES, VIDEO_WIPE_DIRECTIONS, type VideoAsset, type VideoClip, type VideoClipAnimation, type VideoGrade, type VideoGradeLut, type VideoMarker, type VideoProject, type VideoTrack, type VideoTranscriptWord, type VideoTransform, type VideoTransition } from './types.js';
+import { VIDEO_BLEND_MODES, VIDEO_CLIP_ANIMATION_EFFECTS, VIDEO_CLIP_TYPES, VIDEO_FADE_CURVES, VIDEO_FITS, VIDEO_TRANSITION_TYPES, VIDEO_WIPE_DIRECTIONS, type VideoAsset, type VideoAssetProxy, type VideoClip, type VideoClipAnimation, type VideoGrade, type VideoGradeLut, type VideoMarker, type VideoProject, type VideoTrack, type VideoTranscriptWord, type VideoTransform, type VideoTransition } from './types.js';
 
 const isObject = (v: unknown): v is Record<string, any> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const fail = (path: string, what: string): never => {
@@ -158,11 +158,33 @@ export function parseVideoAsset(v: unknown, path = 'asset'): VideoAsset {
 		height: num(v.height, `${path}.height`, { optional: true, positive: true }),
 		hasAudio: bool(v.hasAudio, `${path}.hasAudio`),
 		poster: str(v.poster, `${path}.poster`, true),
-		transcript: parseVideoTranscriptWords(v.transcript, `${path}.transcript`)
+		transcript: parseVideoTranscriptWords(v.transcript, `${path}.transcript`),
+		proxies: parseVideoAssetProxies(v.proxies, `${path}.proxies`)
 	});
+	if (kind !== 'video' && asset.proxies) fail(`${path}.proxies`, 'are only for video assets');
 	if (kind === 'image' && asset.transcript) fail(`${path}.transcript`, 'is only for video and audio assets');
 	if (kind === 'image' && asset.duration !== undefined) fail(`${path}.duration`, 'is only for video and audio assets');
 	return asset;
+}
+
+export function parseVideoAssetProxies(v: unknown, path: string): VideoAssetProxy[] | undefined {
+	if (v === undefined) return undefined;
+	if (!Array.isArray(v)) return fail(path, 'must be a list of { scale, src }');
+	const out = v.map((p, i) => {
+		const at = `${path}[${i}]`;
+		if (!isObject(p)) return fail(at, 'must be an object { scale, src }');
+		const unknown = Object.keys(p).find((k) => !['scale', 'src', 'width', 'height'].includes(k));
+		if (unknown) fail(`${at}.${unknown}`, 'is not a proxy setting; use scale, src, width, height');
+		const scale = num(p.scale, `${at}.scale`, { positive: true })!;
+		if (scale >= 1) fail(`${at}.scale`, 'must be less than 1 (0.5 is half size)');
+		return compact({ scale, src: str(p.src, `${at}.src`)!, width: num(p.width, `${at}.width`, { optional: true, positive: true }), height: num(p.height, `${at}.height`, { optional: true, positive: true }) });
+	});
+	const scales = new Set<number>();
+	for (const [i, p] of out.entries()) {
+		if (scales.has(p.scale)) fail(`${path}[${i}].scale`, `repeats ${p.scale}; give each proxy its own scale`);
+		scales.add(p.scale);
+	}
+	return out.length ? out : undefined;
 }
 
 export function parseVideoClip(v: unknown, path = 'clip'): VideoClip {
