@@ -69,9 +69,10 @@ export const PSD_BLEND_KEYS: Record<string, LayerBlendMode> = {
   'lum ': 'luminosity',
 };
 
-export const BLEND_TO_PSD: Record<LayerBlendMode, string> = Object.fromEntries(
+/** Our blend modes → PSD keys. `pigment` has none (export writes `norm`, see `toPsd`). */
+export const BLEND_TO_PSD: Partial<Record<LayerBlendMode, string>> = Object.fromEntries(
   Object.entries(PSD_BLEND_KEYS).map(([k, v]) => [v, k])
-) as Record<LayerBlendMode, string>;
+) as Partial<Record<LayerBlendMode, string>>;
 
 const FILL_KEYS = ['SoCo', 'GdFl', 'PtFl'];
 const TYPE_KEYS = ['TySh', 'tySh'];

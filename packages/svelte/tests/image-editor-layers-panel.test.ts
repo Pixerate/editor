@@ -52,6 +52,11 @@ describe('Svelte LayersPanel', () => {
     expect(rowNames()).toEqual(['Group', 'Layer 1', 'Background']);
     expect(target.querySelector('[aria-selected="true"]')!.getAttribute('data-layer-id')).toBe(c.getState().activeLayerId);
     click(target.querySelector(`[data-layer-id="${c.getLayers()[1].id}"]`));
+    const blendMenu = target.querySelector('select[aria-label="Layer blend mode"]') as HTMLSelectElement;
+    expect(Array.from(blendMenu.options).find((o) => o.value === 'pigment')?.textContent?.trim()).toBe('Pigment');
+    setValue(blendMenu, 'pigment');
+    flushSync();
+    expect(c.getLayers()[1].blend).toBe('pigment');
     setValue(target.querySelector('select[aria-label="Layer blend mode"]')!, 'multiply');
     expect(c.getLayers()[1].blend).toBe('multiply');
     setValue(target.querySelector('input[aria-label="Layer opacity"]')!, '40');

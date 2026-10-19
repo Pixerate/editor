@@ -50,6 +50,10 @@ describe('React LayersPanel', () => {
     // Select a row, change its properties.
     const layerRow = container.querySelector(`[data-layer-id="${c.getLayers()[1].id}"]`) as HTMLElement;
     await act(async () => layerRow.click());
+    const blendMenu = container.querySelector('select[aria-label="Layer blend mode"]') as HTMLSelectElement;
+    expect(Array.from(blendMenu.options).find((o) => o.value === 'pigment')?.textContent).toBe('Pigment');
+    await act(async () => setValue(blendMenu, 'pigment'));
+    expect(c.getLayers()[1].blend).toBe('pigment');
     await act(async () => setValue(container.querySelector('select[aria-label="Layer blend mode"]')!, 'multiply'));
     expect(c.getLayers()[1].blend).toBe('multiply');
     await act(async () => setValue(container.querySelector('input[aria-label="Layer opacity"]')!, '40'));

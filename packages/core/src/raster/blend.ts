@@ -6,7 +6,12 @@
  * Formulas follow the W3C Compositing / ISO 32000 definitions, with Photoshop's variants where
  * they differ (Soft Light, Vivid / Linear / Pin Light, Hard Mix, Linear Burn / Dodge, Subtract,
  * Divide, Darker / Lighter Color), and the hardened `ClipColor` for the non-separable modes.
+ *
+ * Plus `pigment`, which is not a `B(Cb, Cs)` mode: it replaces the alpha interpolation
+ * `(1 − α)·Cb + α·B` with a Kubelka-Munk paint mix of the two colours (see `lerpPigment`).
  */
+
+import { createPigment, lerpPigmentInto, setPigmentColor, type Pigment } from './pigment';
 
 export type BlendMode =
   | 'normal'
@@ -34,7 +39,8 @@ export type BlendMode =
   | 'hue'
   | 'saturation'
   | 'color'
-  | 'luminosity';
+  | 'luminosity'
+  | 'pigment';
 
 export interface BlendModeInfo {
   id: BlendMode;
@@ -72,6 +78,8 @@ export const BLEND_MODES: readonly BlendModeInfo[] = [
   { id: 'saturation', label: 'Saturation', canvas: 'saturation' },
   { id: 'color', label: 'Color', canvas: 'color' },
   { id: 'luminosity', label: 'Luminosity', canvas: 'luminosity' },
+  // Not in Photoshop: mixes like paint (blue + yellow = green). No canvas or PSD equivalent.
+  { id: 'pigment', label: 'Pigment', canvas: null },
 ];
 
 const BLEND_INFO = new Map<string, BlendModeInfo>(BLEND_MODES.map((m) => [m.id, m]));
@@ -93,9 +101,13 @@ export function canvasCompositeOperation(mode: BlendMode | undefined): GlobalCom
   return BLEND_INFO.get(mode ?? 'normal')?.canvas ?? null;
 }
 
-/** Whether a mode works on whole colours (hue, saturation, colour, luminosity, darker / lighter colour). */
+/**
+ * Whether a mode works channel by channel. The non-separable ones work on whole colours (hue,
+ * saturation, colour, luminosity, darker / lighter colour, pigment).
+ */
 export function isSeparableBlendMode(mode: BlendMode): boolean {
   return !(
+    mode === 'pigment' ||
     mode === 'hue' ||
     mode === 'saturation' ||
     mode === 'color' ||
@@ -244,7 +256,10 @@ function setSat(c: readonly number[], s: number): Rgb {
   return out;
 }
 
-/** `B(Cb, Cs)` of a whole colour, including the non-separable modes. */
+/**
+ * `B(Cb, Cs)` of a whole colour, including the non-separable modes. `pigment` has no `B` and
+ * returns `Cs`; composite it with {@link blendPixel} or {@link mixPigmentRgb}.
+ */
 export function blendRgb(mode: BlendMode, cb: readonly number[], cs: readonly number[]): Rgb {
   switch (mode) {
     case 'hue':
@@ -264,19 +279,88 @@ export function blendRgb(mode: BlendMode, cb: readonly number[], cs: readonly nu
   }
 }
 
+// ---------------------------------------------------------------------------
+// Pigment
+// ---------------------------------------------------------------------------
+
+/** Scratch pigments, made on first use (building one solves the spectrum table). */
+let scratch: [Pigment, Pigment] | null = null;
+
+/**
+ * The `pigment` mode's colour: `t` of `cs` mixed into `cb` like paint (`lerpPigment`), written to
+ * `out[0..2]`. `t ≥ 1` (or equal colours) is `cs` exactly. Colours are 0..1.
+ */
+export function mixPigmentRgb(cb: readonly number[], cs: readonly number[], t: number, out: number[] = [0, 0, 0]): number[] {
+  if (t >= 1 || (cb[0] === cs[0] && cb[1] === cs[1] && cb[2] === cs[2])) {
+    out[0] = cs[0];
+    out[1] = cs[1];
+    out[2] = cs[2];
+    return out;
+  }
+  if (!(t > 0)) {
+    out[0] = cb[0];
+    out[1] = cb[1];
+    out[2] = cb[2];
+    return out;
+  }
+  scratch ??= [createPigment([0, 0, 0]), createPigment([0, 0, 0])];
+  const [a, b] = scratch;
+  setPigmentColor(a, cb[0], cb[1], cb[2], 1);
+  setPigmentColor(b, cs[0], cs[1], cs[2], 1);
+  lerpPigmentInto(a, b, t, out, 0);
+  return out;
+}
+
+/** K/S of 8-bit colours (key `r << 16 | g << 8 | b`), shared by every 8-bit pigment composite. */
+const pigmentCache = new Map<number, Pigment>();
+/** About 3 MB of spectra; the cache starts over when it fills (a photo can hold millions of colours). */
+const PIGMENT_CACHE_MAX = 16384;
+
+function cachedPigment(r: number, g: number, b: number): Pigment {
+  const key = (r << 16) | (g << 8) | b;
+  let p = pigmentCache.get(key);
+  if (!p) {
+    if (pigmentCache.size >= PIGMENT_CACHE_MAX) pigmentCache.clear();
+    p = createPigment([r / 255, g / 255, b / 255]);
+    pigmentCache.set(key, p);
+  }
+  return p;
+}
+
+/**
+ * {@link mixPigmentRgb} on 8-bit channels, with each colour's spectrum cached: writes the 0..1
+ * result to `out[0..2]`. The compositor's and {@link blendImageData}'s per-pixel path.
+ */
+export function mixPigment8(b0: number, b1: number, b2: number, s0: number, s1: number, s2: number, t: number, out: number[]): void {
+  if (t >= 1 || (b0 === s0 && b1 === s1 && b2 === s2)) {
+    out[0] = s0 / 255;
+    out[1] = s1 / 255;
+    out[2] = s2 / 255;
+    return;
+  }
+  lerpPigmentInto(cachedPigment(b0, b1, b2), cachedPigment(s0, s1, s2), t, out, 0);
+}
+
 /**
  * Composites a straight-alpha `source` over a straight-alpha `backdrop` (both RGBA in 0..1) with a
  * blend mode and an extra `alpha` (opacity), using the W3C general formula:
  * `αo = αs + αb(1 − αs)`, `αo·Co = (1 − αs)·αb·Cb + (1 − αb)·αs·Cs + αs·αb·B(Cb, Cs)`.
+ *
+ * `pigment` mixes the colours like paint instead, by amount: `Co = lerpPigment(Cb, Cs, αs / αo)`
+ * (over an opaque backdrop that is `lerpPigment(Cb, Cs, αs)`), with the same `αo`.
  */
 export function blendPixel(mode: BlendMode, backdrop: readonly number[], source: readonly number[], alpha = 1): Rgba {
   const ab = backdrop[3] ?? 1;
   const as = (source[3] ?? 1) * alpha;
   if (!(as > 0)) return [backdrop[0], backdrop[1], backdrop[2], ab];
-  const b = blendRgb(mode, backdrop, source);
   const ao = as + ab * (1 - as);
   if (ao <= 0) return [0, 0, 0, 0];
   const out: Rgba = [0, 0, 0, ao];
+  if (mode === 'pigment') {
+    mixPigmentRgb(backdrop, source, as / ao, out);
+    return out;
+  }
+  const b = blendRgb(mode, backdrop, source);
   for (let i = 0; i < 3; i++) {
     out[i] = ((1 - as) * ab * backdrop[i] + (1 - ab) * as * source[i] + as * ab * b[i]) / ao;
   }
@@ -293,8 +377,20 @@ export function blendImageData(backdrop: ImageData, source: ImageData, mode: Ble
   const len = Math.min(d.length, s.length);
   const cb = [0, 0, 0, 0];
   const cs = [0, 0, 0, 0];
+  const pigment = mode === 'pigment';
   for (let i = 0; i < len; i += 4) {
     if (s[i + 3] === 0) continue;
+    if (pigment) {
+      const as = (s[i + 3] / 255) * alpha;
+      if (!(as > 0)) continue;
+      const ao = as + (d[i + 3] / 255) * (1 - as);
+      mixPigment8(d[i], d[i + 1], d[i + 2], s[i], s[i + 1], s[i + 2], as / ao, cb);
+      d[i] = Math.round(cb[0] * 255);
+      d[i + 1] = Math.round(cb[1] * 255);
+      d[i + 2] = Math.round(cb[2] * 255);
+      d[i + 3] = Math.round(ao * 255);
+      continue;
+    }
     for (let k = 0; k < 4; k++) {
       cb[k] = d[i + k] / 255;
       cs[k] = s[i + k] / 255;
