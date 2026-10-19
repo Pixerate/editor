@@ -7,6 +7,8 @@ import {
 	strokeToShapeNode,
 	findStrokesAtPoint,
 	createCanvasDrawController,
+	computeDragBounds,
+	computeDragBoundsFromPoints,
 	type CanvasNode,
 	type FreehandStroke,
 	type Point
@@ -292,5 +294,82 @@ describe('createCanvasDrawController', () => {
 		expect(history.getState().canRedo).toBe(true);
 		history.redo();
 		expect(nodes.length).toBe(0);
+	});
+
+	describe('computeDragBounds modifier keys', () => {
+		it('computes standard bounding box correctly in all 4 quadrants', () => {
+			// Bottom-right drag
+			expect(computeDragBounds({ x: 10, y: 20 }, { x: 50, y: 80 })).toEqual({
+				x: 10,
+				y: 20,
+				width: 40,
+				height: 60
+			});
+
+			// Top-left drag
+			expect(computeDragBounds({ x: 50, y: 80 }, { x: 10, y: 20 })).toEqual({
+				x: 10,
+				y: 20,
+				width: 40,
+				height: 60
+			});
+		});
+
+		it('constrains aspect ratio to 1:1 when constrain is true (Shift key)', () => {
+			// dx = 40, dy = 60 -> max is 60 -> width: 60, height: 60
+			const bounds = computeDragBounds({ x: 100, y: 100 }, { x: 140, y: 160 }, { constrain: true });
+			expect(bounds).toEqual({
+				x: 100,
+				y: 100,
+				width: 60,
+				height: 60
+			});
+
+			// Negative quadrant
+			const boundsNeg = computeDragBounds({ x: 100, y: 100 }, { x: 70, y: 50 }, { constrain: true });
+			// dx = -30, dy = -50 -> max is 50 -> dx = -50, dy = -50 -> min is 50, min y is 50
+			expect(boundsNeg).toEqual({
+				x: 50,
+				y: 50,
+				width: 50,
+				height: 50
+			});
+		});
+
+		it('draws from center when fromCenter is true (Alt/Option key)', () => {
+			const bounds = computeDragBounds({ x: 100, y: 100 }, { x: 150, y: 130 }, { fromCenter: true });
+			expect(bounds).toEqual({
+				x: 50,
+				y: 70,
+				width: 100,
+				height: 60
+			});
+		});
+
+		it('combines constrain and fromCenter (Shift + Alt)', () => {
+			const bounds = computeDragBounds(
+				{ x: 100, y: 100 },
+				{ x: 140, y: 180 },
+				{ constrain: true, fromCenter: true }
+			);
+			// max(|dx|, |dy|) = max(40, 80) = 80
+			// halfW = 80, halfH = 80 -> x = 100 - 80 = 20, y = 100 - 80 = 20, width = 160, height = 160
+			expect(bounds).toEqual({
+				x: 20,
+				y: 20,
+				width: 160,
+				height: 160
+			});
+		});
+
+		it('supports computeDragBoundsFromPoints helper', () => {
+			const bounds = computeDragBoundsFromPoints(50, 50, 70, 70);
+			expect(bounds).toEqual({
+				x: 50,
+				y: 50,
+				width: 20,
+				height: 20
+			});
+		});
 	});
 });
