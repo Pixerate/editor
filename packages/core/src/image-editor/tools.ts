@@ -20,6 +20,7 @@ import {
 import { createImageSelectionTools } from './selection-tools';
 import { createImageCaptureSurface } from './capture';
 import { createCaptureTool } from '../tools/capture.js';
+import { createImageEditTools } from './edit-tools';
 
 export interface ImageEditorToolProviderOptions {
   /** Provider id (unique per registry). Default `image-editor`. */
@@ -52,6 +53,9 @@ function adjustmentsSummary(adjustments: ImageAdjustments) {
  *   natural pixels (up to 8× for close inspection), optionally with the selection shaded.
  * - Selections and masks: `get_selection`, `select_region`, `select_by_color`, `modify_selection`,
  *   `refine_selection`, `apply_selection_as_mask` (see `createImageSelectionTools`).
+ * - Layers, geometry and history: `get_image_info`, `get_histogram`, `update_adjustment_layer`,
+ *   `remove_adjustment_layer`, `move_adjustment_layer`, `set_crop`, `reset_crop`, `set_rotation`,
+ *   `flip_image`, `undo_image`, `redo_image` (see `createImageEditTools`).
  */
 export function createImageEditorToolProvider(
   controller: ImageEditorController,
@@ -271,6 +275,7 @@ export function createImageEditorToolProvider(
       renderPreview,
       createCaptureTool(createImageCaptureSurface(controller), { subject: 'the image (source orientation, before crop and rotation)', defaultPadding: 0 }),
       ...createImageSelectionTools(controller),
+      ...createImageEditTools(controller),
     ],
   };
 }

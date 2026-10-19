@@ -298,6 +298,68 @@ describe('spreadsheet bulk and structural tools', () => {
 		expect(structured(await registry.callTool('delete_rows', { start: 50 })).error.message).toMatch(/not all in the sheet/);
 		expect(structured(await registry.callTool('insert_columns', { before: '1' })).error.message).toMatch(/Invalid column/);
 	});
+
+	it('merges, reports and unmerges a range without a selection', async () => {
+		const sheet = new SpreadsheetController();
+		const registry = new ToolRegistry();
+		registry.register(createSpreadsheetToolProvider(sheet, { id: 'sheet' }));
+		await registry.callTool('set_range', { start: 'A1', values: [['Title', 'x', '']] });
+
+		const merged = structured(await registry.callTool('merge_cells', { range: 'A1:C1' }));
+		expect(merged).toEqual({ merged: 'A1:C1', cleared: ['B1'] });
+		expect(structured(await registry.callTool('get_range', { range: 'B1:D2' })).merges).toEqual(['A1:C1']);
+		expect(structured(await registry.callTool('get_range', { range: 'A1' })).raw).toEqual([['Title']]);
+
+		sheet.undo();
+		expect(sheet.getMerges()).toEqual([]);
+		expect(structured(await registry.callTool('get_range', { range: 'B1' })).raw).toEqual([['x']]);
+		await registry.callTool('merge_cells', { range: 'A1:C1' });
+
+		const partial = structured(await registry.callTool('merge_cells', { range: 'B1:D2' }));
+		expect(partial.error.message).toBe('B1:D2 partly overlaps the merged range A1:C1; include all of it or unmerge it first.');
+		expect(structured(await registry.callTool('merge_cells', { range: 'B5' })).error.message).toMatch(/single cell/);
+		expect(structured(await registry.callTool('merge_cells', { range: 'A1:ZZ1' })).error.message).toMatch(/outside the sheet/);
+
+		expect(structured(await registry.callTool('unmerge_cells', { range: 'B1' }))).toEqual({ unmerged: ['A1:C1'] });
+		expect(sheet.getMerges()).toEqual([]);
+		expect(structured(await registry.callTool('unmerge_cells', { range: 'A1' })).error.message).toMatch(/No merged cells in A1/);
+	});
+
+	it('refuses to merge read-only cells', async () => {
+		const sheet = new SpreadsheetController({
+			document: {
+				columns: [
+					{ id: 'c0', key: 'A', title: 'A', type: 'freeform' as const },
+					{ id: 'c1', key: 'B', title: 'B', type: 'freeform' as const, readOnly: true }
+				],
+				rows: [{ id: 'r0', index: 0, type: 'freeform' as const }]
+			}
+		});
+		const registry = new ToolRegistry();
+		registry.register(createSpreadsheetToolProvider(sheet, { id: 'sheet' }));
+		const blocked = structured(await registry.callTool('merge_cells', { range: 'A1:B1' }));
+		expect(blocked.error.message).toBe('Read-only cells: B1. Nothing was merged.');
+		expect(sheet.getMerges()).toEqual([]);
+	});
+
+	it('transposes a range in place and moves formulas with their cells', async () => {
+		const sheet = new SpreadsheetController();
+		const registry = new ToolRegistry();
+		registry.register(createSpreadsheetToolProvider(sheet, { id: 'sheet' }));
+		await registry.callTool('set_range', { start: 'A1', values: [[1, 2, 3], [4, 5, '=A1+B1']] });
+
+		const result = structured(await registry.callTool('transpose_range', { range: 'A1:C2' }));
+		expect(result.range).toBe('A1:B3');
+		const read = structured(await registry.callTool('get_range', { range: 'A1:B3' }));
+		expect(read.raw).toEqual([['1', '4'], ['2', '5'], ['3', '=A1+A2']]);
+		expect(Number(read.values[2][1])).toBe(3);
+
+		// Transposing A1:B3 back would cover C1, which is now in a merge.
+		expect(structured(await registry.callTool('merge_cells', { range: 'C1:D1' }))).toMatchObject({ merged: 'C1:D1' });
+		const blocked = structured(await registry.callTool('transpose_range', { range: 'A1:B3' }));
+		expect(blocked.error.message).toBe('Cannot transpose A1:B3: the merged range C1:D1 is in the way; unmerge it first.');
+		expect(structured(await registry.callTool('transpose_range', { range: 'A1:C2:D4' })).error.message).toMatch(/Invalid range/);
+	});
 });
 
 describe('createMcpServer', () => {

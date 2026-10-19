@@ -422,7 +422,7 @@ Every feature is available from core and from both framework packages. "Via core
 | Image Adjustment Layers (Curves, Levels, Hue/Saturation, Vibrance, Color Balance, B&W, Photo Filter, …) | ✅ | `<AdjustmentLayersPanel>` & `<CurvesEditor>` | `<AdjustmentLayersPanel>` & `<CurvesEditor>` |
 | Photoshop Blend Modes (layers & annotations) | `blendPixel` & `BLEND_MODES` | ✅ | ✅ |
 | Image Histogram | `computeHistogram` | `<Histogram>` & `useImageHistogram` | `<Histogram>` & `createImageHistogram` |
-| Image Adjustment Control Table & Agent Tools | `IMAGE_ADJUSTMENT_CONTROLS` & `createImageEditorToolProvider` | `<ControlSlider>` | `<ControlSlider>` |
+| Image Adjustment Control Table & Agent Tools (adjustments, layers: add / change / reorder / remove, crop, rotation, flip, histogram, undo / redo, selections and masks) | `IMAGE_ADJUSTMENT_CONTROLS` & `createImageEditorToolProvider` | `<ControlSlider>` | `<ControlSlider>` |
 | Image Selections & Masks (magic wand, colour range, marquees, lasso, modes, grow/shrink/feather/border/smooth, guided-filter Refine Edge, Quick Mask, adjustment layer masks, RLE in the document, agent tools) | `SelectionGesture`, `magicWand`, `refineSelection`, `layerMaskFromSelection` | `<SelectionOptionsBar>` & `<RefineEdgePanel>` | `<SelectionOptionsBar>` & `<RefineEdgePanel>` |
 | Vector Annotations (Pen, Rect, Circle, Arrow, Line, Text) | ✅ | ✅ | ✅ |
 | Gleamforge Depth & Alpha Masking | ✅ | ✅ | ✅ |
@@ -460,7 +460,7 @@ Every feature is available from core and from both framework packages. "Via core
 | Rich-Text Agent Tools (`find_text`, `replace_text`, `replace_range`, `set_selection`, positions via `get_text {blocks}`) | `createRichTextToolProvider` | Via core & `useAgentToolProvider` | Via core & `useAgentToolProvider` |
 | Inline Agent Carets in Text (a named caret, selection and changed-text tint drawn as decorations where the rich-text tools read and write, as collaborators' carets look in Google Docs; optional typing playback that stays one undo step and rolls back if cancelled; `presence` option, on by default) | `AgentCaret`, `setAgentCaret`, `typeAgentText` & `createRichTextToolProvider({ presence })` | Via core & `useAgentToolProvider` | Via core & `useAgentToolProvider` |
 | Canvas & Prompt Agent Tools (one strict tool per operation, created ids returned, ids checked against the snapshot) | `createEditorMcpToolProvider` & `validateAgentCommand` | Via core & `useAgentToolProvider` | Via core & `useAgentToolProvider` |
-| Spreadsheet Agent Tools (`get_range`, `set_cell`, `set_range`, insert/delete rows and columns) | `createSpreadsheetToolProvider` | Via core & `useAgentToolProvider` | Via core & `useAgentToolProvider` |
+| Spreadsheet Agent Tools (`get_range` with merges, `set_cell`, `set_range`, insert/delete rows and columns, `merge_cells`, `unmerge_cells`, `transpose_range` on a range) | `createSpreadsheetToolProvider` | Via core & `useAgentToolProvider` | Via core & `useAgentToolProvider` |
 | Screenshot Capture for Agents (`capture_view`: viewport, content, selection, canvas nodes by id or a rect, PNG or JPEG, with the rect and scale to map image pixels back; overlays such as selection boxes and agent cursors left out unless asked; canvas, image editor and any DOM element) | `createCaptureTool`, `createElementCaptureSurface` (`/tools`), `createCanvasCaptureToolProvider` (`/canvas`), `capture_view` in `createImageEditorToolProvider` | `useCanvasCapture` | `createCanvasCapture` |
 | Built-in Commands (history undo/redo, canvas arrange, spreadsheet table) | `createHistoryCommands`, `createArrangeCommands`, `createSpreadsheetCommands` | Via core | Via core |
 
@@ -492,7 +492,7 @@ Every feature is available from core and from both framework packages. "Via core
 | Generation Provenance (pinned template versions, sourcemap, `recreateRequest`) & Batch Resolver | `createProvenance` & `createBatchResolver` | Via core | Via core |
 | Generation Job Progress (time-based, ≤95% until done, "~2m left") | `estimateJobProgress` | `<JobProgress>` & `useJobProgress` | `<JobProgress>` & `createJobProgress` |
 | Asset Mentions with Roles (`@fox:style`, `data-role`, per-role limits & media types from capabilities) | `findTextMentions`, `extractMentions({ details })`, `validateAssetMentions`, `PlanOptions.mentions` | `<AssetMentionChips>` (role picker popover) | `<AssetMentionChips>` (role picker popover) |
-| Generation Records & Recreate (template/model/asset hashes, `exact` / `latest`, drift report, variations, record store with filter / prune) | `createGenerationRecord`, `recreateRequest`, `variationRequest`, `createGenerationRecordStore` | `<GenerationHistory>` & `useGenerationRecords` | `<GenerationHistory>` & `createGenerationRecords` |
+| Generation Records & Recreate (template/model/asset hashes, `exact` / `latest`, drift report, variations, record store with filter / prune; agent tools `list_generations`, `get_generation`, `recreate_generation`, `vary_generation`) | `createGenerationRecord`, `recreateRequest`, `variationRequest`, `createGenerationRecordStore`, `createGenerationHistoryToolProvider` | `<GenerationHistory>` & `useGenerationRecords` | `<GenerationHistory>` & `createGenerationRecords` |
 
 </details>
 

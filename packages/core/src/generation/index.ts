@@ -5,6 +5,7 @@ export * from './capabilities.js';
 export * from './plan.js';
 export * from './schema.js';
 export * from './tools.js';
+export * from './history-tools.js';
 export * from './provenance.js';
 export * from './batch.js';
 export * from './progress.js';

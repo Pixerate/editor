@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ToolRegistry } from '../src/agent';
 import {
   ADJUSTMENT_KINDS,
@@ -113,6 +113,8 @@ describe('image editor agent tools', () => {
     expect(tools.map((t) => t.name)).toEqual([
       'get_adjustments', 'list_controls', 'set_adjustments', 'add_adjustment_layer', 'render_preview', 'capture_view',
       'get_selection', 'select_region', 'select_by_color', 'modify_selection', 'refine_selection', 'apply_selection_as_mask',
+      'get_image_info', 'get_histogram', 'update_adjustment_layer', 'remove_adjustment_layer', 'move_adjustment_layer',
+      'set_crop', 'reset_crop', 'set_rotation', 'flip_image', 'undo_image', 'redo_image',
     ]);
     for (const t of tools) {
       expect(t.title).toBeTruthy();
@@ -122,7 +124,7 @@ describe('image editor agent tools', () => {
       }
     }
     const readOnly = tools.filter((t) => t.annotations!.readOnlyHint).map((t) => t.name);
-    expect(readOnly).toEqual(['get_adjustments', 'list_controls', 'render_preview', 'capture_view', 'get_selection']);
+    expect(readOnly).toEqual(['get_adjustments', 'list_controls', 'render_preview', 'capture_view', 'get_selection', 'get_image_info', 'get_histogram']);
   });
 
   it('get_adjustments and list_controls describe the state', async () => {
@@ -167,6 +169,75 @@ describe('image editor agent tools', () => {
 
     const badKind = await registry.callTool('add_adjustment_layer', { kind: 'sharpen' });
     expect(badKind.isError).toBe(true);
+  });
+
+  it('changes, reorders and removes adjustment layers as single undo steps', async () => {
+    const { controller, registry } = setup();
+    const a = controller.addAdjustmentLayer('vibrance');
+    const b = controller.addAdjustmentLayer('hueSaturation');
+
+    const updated = await registry.callTool('update_adjustment_layer', { layer: a, blend: 'multiply', enabled: false, name: 'Pop' });
+    expect((updated.structuredContent as any).layer).toMatchObject({ id: a, blend: 'multiply', enabled: false, name: 'Pop' });
+    controller.undo();
+    expect(controller.getAdjustmentLayer(a)).toMatchObject({ blend: 'normal', enabled: true });
+
+    const moved = await registry.callTool('move_adjustment_layer', { layer: a, to: 9 });
+    expect(moved.structuredContent).toEqual({ layer: a, index: 1, layers: [b, a] });
+    const same = await registry.callTool('move_adjustment_layer', { layer: a, to: 1 });
+    expect((same.content[0] as any).text).toBe(`Layer "${a}" is already at index 1 (0 = bottom, 1 = top).`);
+
+    const removed = await registry.callTool('remove_adjustment_layer', { layer: b });
+    expect(removed.structuredContent).toEqual({ removed: b, layers: [a] });
+    const unknown = await registry.callTool('update_adjustment_layer', { layer: 'nope', enabled: true });
+    expect((unknown.content[0] as any).text).toBe(`Unknown adjustment layer "nope". Layers: ${a}.`);
+    const empty = await registry.callTool('update_adjustment_layer', { layer: a });
+    expect((empty.content[0] as any).text).toMatch(/Nothing to change/);
+  });
+
+  it('crops, rotates, flips, undoes and redoes with the geometry echoed', async () => {
+    const { controller, registry } = setup();
+    const info = await registry.callTool('get_image_info', {});
+    expect(info.structuredContent).toMatchObject({
+      image: { width: 800, height: 600 }, crop: null, rotation: 0, output: { width: 800, height: 600 }, canUndo: false,
+    });
+
+    const cropped = await registry.callTool('set_crop', { x: 100, y: 50, width: 400, height: 300 });
+    expect(cropped.structuredContent).toMatchObject({ crop: { x: 100, y: 50, width: 400, height: 300 }, output: { width: 400, height: 300 } });
+    const outside = await registry.callTool('set_crop', { x: 500, y: 0, width: 400, height: 300 });
+    expect((outside.content[0] as any).text).toMatch(/outside the 800 × 600 image/);
+
+    const rotated = await registry.callTool('set_rotation', { degrees: 90 });
+    expect(rotated.structuredContent).toMatchObject({ rotation: 90, output: { width: 300, height: 400 } });
+    const flipped = await registry.callTool('flip_image', { axis: 'horizontal' });
+    expect(flipped.structuredContent).toMatchObject({ flipH: true, flipV: false });
+
+    expect((await registry.callTool('undo_image', {})).structuredContent).toEqual({ canUndo: true, canRedo: true });
+    expect(controller.getState().transform.flipH).toBe(false);
+    await registry.callTool('redo_image', {});
+    expect(controller.getState().transform.flipH).toBe(true);
+
+    await registry.callTool('reset_crop', {});
+    expect(controller.getState().crop).toBeNull();
+    expect((await registry.callTool('reset_crop', {})).isError).toBe(true);
+    expect((await registry.callTool('redo_image', {})).isError).toBe(true);
+  });
+
+  it('get_histogram summarises clipping and levels, and asks for a render first', async () => {
+    const { controller, registry } = setup();
+    expect(((await registry.callTool('get_histogram', {})).content[0] as any).text).toMatch(/Call render_preview/);
+    const bins = () => new Uint32Array(256);
+    const red = bins(); red[0] = 10; red[255] = 90;
+    const lum = bins(); lum[128] = 100;
+    vi.spyOn(controller, 'getHistogram').mockReturnValue({
+      red, green: bins(), blue: bins(), luminance: lum, samples: 100, transparent: 0,
+      shadows: [10, 0, 0], highlights: [90, 0, 0], max: 100,
+    });
+    const res = (await registry.callTool('get_histogram', { bins: 16 })).structuredContent as any;
+    expect(res.clipping.shadowsPercent.red).toBe(10);
+    expect(res.clipping.highlightsPercent.red).toBe(90);
+    expect(res.stats.luminance).toEqual({ mean: 128, p1: 128, p99: 128 });
+    expect(res.bins.red).toHaveLength(16);
+    expect(res.bins.red[15]).toBe(90);
   });
 
   it('render_preview reports an error where canvases are unavailable', async () => {

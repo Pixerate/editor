@@ -13,5 +13,6 @@ export * from './tools';
 export * from './curve-editing';
 export * from './selection';
 export * from './selection-tools';
+export * from './edit-tools';
 export * from './mosaic-filter';
 export * from './capture';

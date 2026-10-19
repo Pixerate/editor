@@ -14,6 +14,8 @@ import { applyReplacements, searchDocument, type FindMatch } from '../extensions
 import type { FindOptions } from '../extensions/find-replace/pattern.js';
 import type { SpreadsheetController } from '../spreadsheet/controller.js';
 import { colNameToIndex, indexToColName, isFormulaError } from '../spreadsheet/formula/evaluator.js';
+import { isSingleCellRange, normalizeRange, rangeContainsRange, rangesIntersect } from '../spreadsheet/table.js';
+import type { CellRange } from '../spreadsheet/types.js';
 import { planAgentCommand, toolCallToAgentCommand, validateAgentCommand, type planToolCall } from './planner.js';
 import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import {
@@ -582,6 +584,17 @@ function parseColumn(name: string): number {
 	return colNameToIndex(name.trim().toUpperCase());
 }
 
+function parseRange(ref: string): CellRange {
+	const [startRef, endRef = startRef, extra] = String(ref).split(':');
+	if (extra !== undefined) throw new Error(`Invalid range "${ref}". Use A1 notation, e.g. "A1:C5".`);
+	const start = parseCell(startRef);
+	const end = parseCell(endRef);
+	return normalizeRange({ startRow: start.row, startCol: start.col, endRow: end.row, endCol: end.col });
+}
+
+const formatRange = (r: CellRange) =>
+	`${indexToColName(r.startCol)}${r.startRow + 1}:${indexToColName(r.endCol)}${r.endRow + 1}`;
+
 const CELL_INPUT = { type: ['string', 'number', 'boolean', 'null'] } as const;
 
 /**
@@ -589,7 +602,9 @@ const CELL_INPUT = { type: ['string', 'number', 'boolean', 'null'] } as const;
  * input), `set_cell` and `set_range` (raw input; values starting with `=` are
  * formulas; `set_range` writes a whole block as one undo step), and
  * `insert_rows` / `delete_rows` / `insert_columns` / `delete_columns`
- * (formula references shift like a user edit).
+ * (formula references shift like a user edit), and `merge_cells` /
+ * `unmerge_cells` / `transpose_range` on an A1 range (not the user's
+ * selection), checked against merges and read-only cells first.
  */
 export function createSpreadsheetToolProvider(
 	controller: SpreadsheetController,
@@ -605,7 +620,7 @@ export function createSpreadsheetToolProvider(
 		name: 'get_range',
 		title: 'Read cells',
 		description:
-			'Reads a cell range in A1 notation (e.g. "A1:C5" or "B2") and returns computed values, raw input and errors.',
+			'Reads a cell range in A1 notation (e.g. "A1:C5" or "B2") and returns computed values, raw input, errors and the merged ranges that touch it (a merged range shows its value in its top-left cell).',
 		inputSchema: {
 			type: 'object',
 			properties: {
@@ -648,11 +663,13 @@ export function createSpreadsheetToolProvider(
 				values.push(valueRow);
 				raw.push(rawRow);
 			}
+			const read: CellRange = { startRow: r0, startCol: c0, endRow: r1, endCol: c1 };
 			return {
-				range: values.length && values[0].length ? `${indexToColName(c0)}${r0 + 1}:${indexToColName(c1)}${r1 + 1}` : null,
+				range: values.length && values[0].length ? formatRange(read) : null,
 				values,
 				raw,
 				errors,
+				merges: controller.getMerges().filter((m) => rangesIntersect(m, read)).map(formatRange),
 				sheet: { rows: rowCount, columns: colCount }
 			};
 		}
@@ -840,10 +857,95 @@ export function createSpreadsheetToolProvider(
 		}
 	);
 
+	const RANGE = { type: 'string', description: 'A1-notation range of at least two cells, e.g. "A1:C1".' } as const;
+	const inSheet = (r: CellRange, ref: string) => {
+		if (r.endRow >= controller.document.rows.length || r.endCol >= controller.document.columns.length) {
+			throw new Error(`Range ${ref} is outside the sheet (${controller.document.rows.length} rows, ${controller.document.columns.length} columns).`);
+		}
+	};
+	const readOnlyIn = (r: CellRange) => {
+		const cells: string[] = [];
+		for (let row = r.startRow; row <= r.endRow; row++) {
+			for (let col = r.startCol; col <= r.endCol; col++) if (isReadOnly(row, col)) cells.push(`${indexToColName(col)}${row + 1}`);
+		}
+		return cells;
+	};
+	const SPILL = 'it overlaps the spill range of a dynamic array formula; move or clear that formula first';
+
+	const mergeCells = structural(
+		'merge_cells',
+		'Merge cells',
+		'Merges a range into one cell showing the top-left cell\'s value. The other cells in the range are cleared, so move their contents first. ' +
+			'Merges fully inside the range are absorbed. One undo step. Returns the merged range and the cells that were cleared. Use merges only for titles outside data regions: they break sorting, filtering and transposing.',
+		{ range: RANGE },
+		['range'],
+		true,
+		({ range }) => {
+			const r = parseRange(range);
+			inSheet(r, range);
+			if (isSingleCellRange(r)) throw new Error(`${range} is a single cell; give a range of at least two cells.`);
+			const partial = controller.getMerges().find((m) => rangesIntersect(m, r) && !rangeContainsRange(r, m));
+			if (partial) throw new Error(`${range} partly overlaps the merged range ${formatRange(partial)}; include all of it or unmerge it first.`);
+			const readOnly = readOnlyIn(r);
+			if (readOnly.length) throw new Error(`Read-only cells: ${readOnly.slice(0, 20).join(', ')}. Nothing was merged.`);
+			const cleared: string[] = [];
+			for (let row = r.startRow; row <= r.endRow; row++) {
+				for (let col = r.startCol; col <= r.endCol; col++) {
+					if (row === r.startRow && col === r.startCol) continue;
+					const { rowDef, colDef } = lookup(row, col)!;
+					if (controller.getCell(rowDef.id, colDef.id).raw !== '') cleared.push(`${indexToColName(col)}${row + 1}`);
+				}
+			}
+			if (!controller.mergeCells(r)) throw new Error(`Cannot merge ${range}: ${SPILL}.`);
+			return { merged: formatRange(r), cleared };
+		}
+	);
+	const unmergeCells = structural(
+		'unmerge_cells',
+		'Unmerge cells',
+		'Splits every merged range that touches a range back into separate cells (the value stays in the top-left cell; the others are empty). One undo step. Returns the ranges that were unmerged.',
+		{ range: { type: 'string', description: 'A1-notation cell or range; every merge touching it is split, e.g. "A1".' } },
+		['range'],
+		false,
+		({ range }) => {
+			const r = parseRange(range);
+			const touched = controller.getMerges().filter((m) => rangesIntersect(m, r));
+			if (!touched.length) throw new Error(`No merged cells in ${range}. get_range lists the merges in a range.`);
+			controller.unmergeCells(r);
+			return { unmerged: touched.map(formatRange) };
+		}
+	);
+	const transposeRange = structural(
+		'transpose_range',
+		'Transpose a range',
+		'Swaps the rows and columns of a range in place, anchored on its top-left cell (A1:C2 becomes A1:B3), moving values, formulas, formats and rules; ' +
+			'formulas that point into the range follow their cells. The sheet grows to fit. One undo step. Returns the new range. Cells the result covers outside the original range are overwritten.',
+		{ range: RANGE },
+		['range'],
+		true,
+		({ range }) => {
+			const s = parseRange(range);
+			inSheet(s, range);
+			if (isSingleCellRange(s)) throw new Error(`${range} is a single cell; give a range of at least two cells.`);
+			const t: CellRange = {
+				startRow: s.startRow,
+				startCol: s.startCol,
+				endRow: s.startRow + (s.endCol - s.startCol),
+				endCol: s.startCol + (s.endRow - s.startRow)
+			};
+			const merge = controller.getMerges().find((m) => rangesIntersect(m, s) || rangesIntersect(m, t));
+			if (merge) throw new Error(`Cannot transpose ${range}: the merged range ${formatRange(merge)} is in the way; unmerge it first.`);
+			const readOnly = [...new Set([...readOnlyIn(s), ...readOnlyIn(t)])];
+			if (readOnly.length) throw new Error(`Read-only cells: ${readOnly.slice(0, 20).join(', ')}. Nothing was transposed.`);
+			if (!controller.transposeRange(s)) throw new Error(`Cannot transpose ${range}: ${SPILL}.`);
+			return { range: formatRange(t), sheet: sheetSize() };
+		}
+	);
+
 	return {
 		id: options.id,
 		namespace: options.namespace,
-		tools: [getRange, setCell, setRange, insertRows, deleteRows, insertColumns, deleteColumns]
+		tools: [getRange, setCell, setRange, insertRows, deleteRows, insertColumns, deleteColumns, mergeCells, unmergeCells, transposeRange]
 	};
 }
 

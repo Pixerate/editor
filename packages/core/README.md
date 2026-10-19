@@ -211,7 +211,7 @@ Built-in providers:
 | Provider | Tools |
 | :--- | :--- |
 | `createRichTextToolProvider(editor, { id })` | `get_text` (`format`, `blocks: true` for every paragraph's positions), `find_text`, `insert_text`, `replace_text` (all matches or the n-th, one undo step), `replace_range`, `replace_selection`, `set_selection`, `edit_table` (when tables are on). Read-only editors get `get_text` and `find_text`. |
-| `createSpreadsheetToolProvider(controller, { id })` | `get_range`, `set_cell`, `set_range` (2D block, one undo step, refuses read-only targets), `insert_rows`, `delete_rows`, `insert_columns`, `delete_columns` |
+| `createSpreadsheetToolProvider(controller, { id })` | `get_range`, `set_cell`, `set_range` (2D block, one undo step, refuses read-only targets), `insert_rows`, `delete_rows`, `insert_columns`, `delete_columns`, `merge_cells`, `unmerge_cells`, `transpose_range` (on an A1 range, not the user's selection) |
 | `createEditorMcpToolProvider({ id, getSnapshot, applySteps })` | `get_editor_state`, `canvas_add_node`, `canvas_remove_nodes`, `canvas_connect`, `canvas_update_node`, `canvas_layout`, `canvas_select`, `canvas_highlight`, `prompt_insert_text`, `prompt_replace_range`, `prompt_set_variable`, `prompt_select`, `view_editor` (with `captureView`) |
 | `createCanvasComponentToolProvider`, `createCommandToolProvider`, `createImageEditorToolProvider`, `createGenerationToolProvider` | See the canvas, commands, image editor and generation docs |
 
@@ -249,6 +249,16 @@ const result = await registry.callTool(name, args); // MCP tools/call result
 ```
 
 It exports `ToolRegistry`, `createToolRegistry`, `ToolRegistryError`, the tool types (`AgentTool`, `AgentToolProvider`, `AgentToolHandler`, `ToolCallContext`, `McpToolDefinition`, `McpToolResult`, `McpListToolsResult`, `ToolCallError`), `validateJsonSchema` / `SchemaValidationError`, the static tool definitions (`EDITOR_MCP_TOOLS`, `EDITOR_CANVAS_TOOLS`, `EDITOR_PROMPT_TOOLS`) and `createMcpServer`. `/agent` re-exports all of it, so existing imports keep working. `createEditorMcpToolProvider` stays in `/agent` because its `layout` operation runs dagre.
+
+### Agent skills
+
+The package ships an [Agent Skill](https://agentskills.io) per editor domain in `skills/` (`pixerate-chart`, `pixerate-video-editor`, ...) plus `pixerate-agent-tools` for what they share. Each tells a model when and how to use every tool and command of its domain and the practice an expert would follow. Copy them into your agent's skills folder:
+
+```bash
+cp -R node_modules/@pixerate/editor/skills/* .claude/skills/
+```
+
+See [`skills/README.md`](./skills/README.md) for the list.
 
 ## Commands, shortcuts and the command palette
 
@@ -323,7 +333,7 @@ const plan = planGenerationRequest({ aspectRatio: "21:9", count: 3 }, model, { s
 ```
 
 - **Strategies**: `nearest` (default) snaps enum values to the closest option, clamps and rounds ranges, truncates text and reference lists, and drops unsupported fields and references, reporting each change. Ties go to the higher value, or to the lower one with `downgrade`. `upgrade` also breaks ties upwards but does not drop references the model cannot use: that is an error, as is a text-only model given image references. `error` changes nothing and reports every mismatch. Missing required references, unsupported modes (`edit` / `inpaint`) and a model mismatch are always errors. Planning is pure and deterministic.
-- **Schema and agents**: `capabilitiesToJsonSchema(model)` builds a strict request schema (enums, `minimum` / `maximum`, `maxItems`, and descriptions for per-role limits) that `validateJsonSchema` checks. `createGenerationToolProvider({ models, generate, estimate? })` adds `list_models`, `plan_generation` and `estimate_generation` (read-only) and `generate` (destructive) to a `ToolRegistry`. `generate` requires an `idempotencyKey`: a retry with the same key and arguments returns the first result (or joins it while it is still running) instead of generating again. `mergeCapabilities(remote, overlay)` keeps server capability values and takes only presentation fields (`name`, `description`, `badges`, `icon`, `group`) and overlay-only models from the overlay.
+- **Schema and agents**: `capabilitiesToJsonSchema(model)` builds a strict request schema (enums, `minimum` / `maximum`, `maxItems`, and descriptions for per-role limits) that `validateJsonSchema` checks. `createGenerationToolProvider({ models, generate, estimate? })` adds `list_models`, `plan_generation` and `estimate_generation` (read-only) and `generate` (destructive) to a `ToolRegistry`. `generate` requires an `idempotencyKey`: a retry with the same key and arguments returns the first result (or joins it while it is still running) instead of generating again. `createGenerationHistoryToolProvider({ store, models?, templates?, assets? })` lets an agent use the generation history: `list_generations`, `get_generation`, and `recreate_generation` / `vary_generation`, which return a request (with drift) to pass to `generate` rather than spending themselves. `mergeCapabilities(remote, overlay)` keeps server capability values and takes only presentation fields (`name`, `description`, `badges`, `icon`, `group`) and overlay-only models from the overlay.
 - **Provenance**: `createProvenance({ rawPrompt, templates, bindings, values, model, plan })` pins the exact bodies and versions of every template the prompt reached, and records the variable values, the resolved prompt with its source map, the planned settings, adjustments and references. `serializeProvenance` / `parseProvenance` are versioned. `recreateRequest(provenance)` returns the request that was sent, and `replayProvenancePrompt` re-resolves the prompt from the pinned bodies.
 - **Lookups and progress**: `createBatchResolver({ fetch, maxBatch, delayMs })` batches and dedupes lookups; a failed batch resolves its keys as empty instead of retrying. `estimateJobProgress({ startedAt, now, expectedMs })` returns a time-based percent that stays at or below 95 until `done`, and a label such as `~2m left` or `Almost done…`. `expectedDurationFor(model, request)` uses the model's `timing`.
 - **Forms**: `getGenerationControls(model)` and `getReferenceSlots(model, request)` describe the controls that the React and Svelte `<GenerationSettings>` render.
@@ -372,7 +382,7 @@ editor.setAdjustmentLayerMaskProps(id, { density: 0.6 });
 - **Layer masks**: `AdjustmentLayer.mask` (`{ width, height, rle, density?, feather?, enabled? }`) scales the layer's opacity per pixel; it is resampled through the crop / rotation / flips like the image. `selectionFromLayerMask` loads it back.
 - **Document**: `toJSON()` adds `selection` (run-length encoded, `r1:` + base64) only when something is selected, and layers only carry `mask` when they have one, so selection- and mask-free documents serialize exactly as before. Selections are part of undo history. `renderMask()` / `toMaskDataURL()` include the selection for inpainting.
 - **Viewport**: marching ants by default, `quickMask` tints the unselected area; `RenderOptions.selectionDisplay` overrides, `draftSelectionPath` shows a shape being drawn. `SelectionGesture` turns pointer events into selections for UIs.
-- **Agent tools**: `createImageEditorToolProvider` adds `get_selection`, `select_region`, `select_by_color`, `modify_selection`, `refine_selection` and `apply_selection_as_mask`.
+- **Agent tools**: `createImageEditorToolProvider` adds `get_selection`, `select_region`, `select_by_color`, `modify_selection`, `refine_selection` and `apply_selection_as_mask`, plus `get_image_info`, `get_histogram`, `update_adjustment_layer`, `move_adjustment_layer`, `remove_adjustment_layer`, `set_crop`, `reset_crop`, `set_rotation`, `flip_image`, `undo_image` and `redo_image`.
 - **Pixels**: the tools read the source image through a canvas; pass `setSamplePixels(imageData)` (or `{ pixels }` per call) where there is no canvas or the image is cross-origin.
 
 ## Spreadsheet sheets, defined names and LAMBDA
