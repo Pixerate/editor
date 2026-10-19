@@ -36,8 +36,10 @@ import {
   type PixelLayer,
   type RasterMask,
   type ShapeLayer,
+  type TypeLayer,
 } from './model';
 import { annotationOfShape, createShapeLayer, shapeFromAnnotation } from './shape';
+import { annotationOfType, createTypeLayer, typeFromAnnotation, type TextEnv } from './text';
 import { emptySurface, readRegion, surfaceFromPixels, type MaskSurface } from '../../raster/surface';
 
 export const BACKGROUND_LAYER_ID = 'background';
@@ -159,11 +161,18 @@ export function annotationLayerName(annotation: Annotation): string {
 }
 
 /**
- * The layer an annotation becomes: a shape layer that remembers it (pen, rectangle, ellipse,
- * line, arrow; rendered for a `canvas` of that size), else an annotation layer (text, image, or
- * a colour a shape can't hold).
+ * The layer an annotation becomes, for a `canvas` of that size: a shape layer (pen, rectangle,
+ * ellipse, line, arrow) or a type layer (text; drawn with `canvas.shaper`, or kept undrawn until
+ * one can) that remembers it, else an annotation layer (image, or a colour we can't read). Without
+ * a canvas nothing is migrated.
  */
-export function annotationLayerFor(annotation: Annotation, canvas?: { width: number; height: number }): AnnotationLayer | ShapeLayer {
+export function annotationLayerFor(annotation: Annotation, canvas?: { width: number; height: number } & Partial<TextEnv>): AnnotationLayer | ShapeLayer | TypeLayer {
+  const blend = annotation.blend && annotation.blend !== 'normal' ? annotation.blend : 'normal';
+  const type = canvas ? typeFromAnnotation(annotation) : null;
+  if (type) {
+    const layer = createTypeLayer({ ...type, name: annotationLayerName(annotation) }, { shaper: null, ...canvas! }, annotation.id, true);
+    return { ...layer, blend, annotation };
+  }
   const shape = canvas ? shapeFromAnnotation(annotation) : null;
   if (shape) {
     const layer = createShapeLayer(
@@ -188,6 +197,7 @@ export function annotationLayerFor(annotation: Annotation, canvas?: { width: num
 export function annotationOfLayer(layer: ImageLayer): Annotation | null {
   if (layer.type === 'annotation') return layer.annotation;
   if (layer.type === 'shape') return annotationOfShape(layer);
+  if (layer.type === 'type') return annotationOfType(layer);
   return null;
 }
 
@@ -381,8 +391,8 @@ export function isLegacyShape(stack: LayerStack): boolean {
   }
   for (; i < layers.length; i++) {
     const l = layers[i];
-    if (l.type === 'shape') {
-      // A migrated shape draws with its annotation's blend mode.
+    if (l.type === 'shape' || l.type === 'type') {
+      // A migrated shape or type layer draws with its annotation's blend mode.
       const a = l.annotation;
       if (!a || (a.blend ?? 'normal') !== l.blend || !isPlain({ ...l, blend: 'normal' }) || l.fillOpacity !== undefined) return false;
       if (l.id !== a.id || l.name !== annotationLayerName(a)) return false;

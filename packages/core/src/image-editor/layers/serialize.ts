@@ -33,6 +33,9 @@ import {
   type ShapeLayer,
   type ShapePaint,
   type ShapeStroke,
+  type ParagraphRun,
+  type TextRun,
+  type TypeLayer,
 } from './model';
 import { base64ToBytes, bytesToBase64, decodePng, parseDataUrl, pngDataUrl } from '../../raster/png';
 import { normalizeLayerEffects, type GlobalLight, type LayerEffect, type LayerEffects } from '../../raster/effects/model';
@@ -43,6 +46,7 @@ import { isValidWarpMesh } from '../../geom/warp';
 import type { Quad, WarpMesh } from '../../geom/types';
 import { normalizePlacement, renderSmartObject } from './smart';
 import { annotationLayerFor } from './migrate';
+import { DEFAULT_TEXT_STYLE, createTypeLayer, fitParagraphRuns, fitRuns, normalizeText, patchParagraphStyle, patchTextStyle, rerenderText, type TextEnv } from './text';
 import { createShapeLayer, liveShapeSubpaths, normalizeLiveShape, normalizeShapePaint, normalizeShapeStroke, normalizeSubpaths, requireOperation, shapeFromAnnotation } from './shape';
 
 export const LAYERED_SCHEMA_VERSION = 3 as const;
@@ -161,7 +165,28 @@ export interface SerializedShapeLayer extends SerializedLayerBase {
   psd?: { blocks: Array<{ key: string; data: string }> };
 }
 
-export type SerializedLayer = SerializedPixelLayer | SerializedAdjustmentLayer | SerializedGroupLayer | SerializedAnnotationLayer | SerializedSmartObjectLayer | SerializedShapeLayer;
+/** A type layer: its text and styles, plus the pixels it showed (PNG) for loads without its fonts. */
+export interface SerializedTypeLayer extends SerializedLayerBase {
+  type: 'type';
+  text: string;
+  runs: TextRun[];
+  paragraphs: ParagraphRun[];
+  frame: TypeLayer['frame'];
+  transform?: number[];
+  antiAlias?: false;
+  fillOpacity?: number;
+  /** The rendered pixels (RGBA PNG) at `x`, `y` in document space. */
+  asset?: string;
+  x?: number;
+  y?: number;
+  missingFonts?: string[];
+  /** The text annotation the layer was migrated from, while it still is that annotation. */
+  annotation?: Annotation;
+  /** PSD blocks kept for round trips (base64). */
+  psd?: { tySh?: string; blocks?: Array<{ key: string; data: string }> };
+}
+
+export type SerializedLayer = SerializedPixelLayer | SerializedAdjustmentLayer | SerializedGroupLayer | SerializedAnnotationLayer | SerializedSmartObjectLayer | SerializedShapeLayer | SerializedTypeLayer;
 
 /** A version 3 document (layers). */
 export interface SerializedLayeredImageEditorState {
@@ -335,6 +360,92 @@ export function serializeLayer(layer: ImageLayer, ctx: SerializeContext): Serial
       return serializeSmartObject(layer, base, ctx);
     case 'shape':
       return serializeShape(layer, base);
+    case 'type':
+      return serializeType(layer, base, ctx);
+  }
+}
+
+function serializeType(layer: TypeLayer, base: SerializedLayerBase, ctx: SerializeContext): SerializedTypeLayer {
+  const out: SerializedTypeLayer = {
+    ...base,
+    type: 'type',
+    text: layer.text,
+    runs: JSON.parse(JSON.stringify(layer.runs)),
+    paragraphs: JSON.parse(JSON.stringify(layer.paragraphs)),
+    frame: { ...layer.frame },
+  };
+  if (layer.transform) out.transform = [...layer.transform];
+  if (layer.antiAlias === false) out.antiAlias = false;
+  if (layer.fillOpacity !== undefined && layer.fillOpacity !== 1) out.fillOpacity = layer.fillOpacity;
+  const enc = encodeSurface(layer.surface);
+  if (enc) {
+    out.asset = ctx.addAsset(enc.url, layer.id);
+    out.x = enc.x;
+    out.y = enc.y;
+  }
+  if (layer.missingFonts?.length) out.missingFonts = [...layer.missingFonts];
+  if (layer.annotation) out.annotation = JSON.parse(JSON.stringify(layer.annotation));
+  if (layer.psd?.tySh || layer.psd?.blocks?.length) {
+    out.psd = {};
+    if (layer.psd.tySh) out.psd.tySh = bytesToBase64(layer.psd.tySh);
+    if (layer.psd.blocks?.length) out.psd.blocks = layer.psd.blocks.map((b) => ({ key: b.key, data: bytesToBase64(b.data) }));
+  }
+  return out;
+}
+
+/** Reads a stored type layer: its stored pixels when there are any, else drawn with the shaper (if any). */
+function readType(r: Record<string, any>, base: LayerBase, ctx: DeserializeContext): ImageLayer | null {
+  const label = `Layer "${base.name || base.id}"`;
+  try {
+    const text = normalizeText(r.text ?? '');
+    const runs: TextRun[] = (Array.isArray(r.runs) ? r.runs : []).map((run: any, i: number) => ({
+      length: Math.max(0, Math.floor(num(run?.length, 0, 1e9, 0))),
+      style: patchTextStyle(DEFAULT_TEXT_STYLE, run?.style && typeof run.style === 'object' ? run.style : {}, `runs[${i}].style`),
+    }));
+    const paragraphs: ParagraphRun[] = (Array.isArray(r.paragraphs) ? r.paragraphs : []).map((p: any, i: number) => ({
+      length: Math.max(0, Math.floor(num(p?.length, 0, 1e9, 0))),
+      style: patchParagraphStyle({}, p?.style && typeof p.style === 'object' ? p.style : {}, `paragraphs[${i}].style`),
+    }));
+    const f = r.frame;
+    const frame: TypeLayer['frame'] =
+      f?.kind === 'box'
+        ? { kind: 'box', width: num(f.width, 1, 1e6, 100), height: num(f.height, 1, 1e6, 100) }
+        : f?.origin === 'top'
+          ? { kind: 'point', origin: 'top' }
+          : { kind: 'point' };
+    const m = Array.isArray(r.transform) && r.transform.length === 6 && r.transform.every((v: unknown) => typeof v === 'number' && Number.isFinite(v)) ? (r.transform as unknown as TypeLayer['transform']) : undefined;
+    const layer: TypeLayer = {
+      ...base,
+      type: 'type',
+      text,
+      runs: fitRuns(runs, text.length, DEFAULT_TEXT_STYLE),
+      paragraphs: fitParagraphRuns(paragraphs.length ? paragraphs : [{ length: text.length, style: {} }], text),
+      frame,
+      surface: emptySurface(4),
+      offset: { x: 0, y: 0 },
+    };
+    if (!layer.runs.length) layer.runs = [{ length: 0, style: runs[0]?.style ?? DEFAULT_TEXT_STYLE }];
+    if (m) layer.transform = m;
+    if (r.antiAlias === false) layer.antiAlias = false;
+    if (typeof r.fillOpacity === 'number' && r.fillOpacity !== 1) layer.fillOpacity = num(r.fillOpacity, 0, 1, 1);
+    if (Array.isArray(r.missingFonts)) layer.missingFonts = r.missingFonts.filter((x: unknown) => typeof x === 'string');
+    if (r.annotation && typeof r.annotation === 'object' && r.annotation.type === 'text') layer.annotation = JSON.parse(JSON.stringify({ ...r.annotation, id: r.annotation.id ?? base.id }));
+    if (r.psd && typeof r.psd === 'object') {
+      const psd: NonNullable<TypeLayer['psd']> = {};
+      if (typeof r.psd.tySh === 'string') psd.tySh = base64ToBytes(r.psd.tySh);
+      if (Array.isArray(r.psd.blocks)) psd.blocks = r.psd.blocks.filter((b: any) => b && typeof b.key === 'string' && typeof b.data === 'string').map((b: any) => ({ key: b.key, data: base64ToBytes(b.data) }));
+      if (psd.tySh || psd.blocks?.length) layer.psd = psd;
+    }
+    if (typeof r.asset === 'string') return { ...layer, surface: readSurface(r.asset, r.x, r.y, 4, 0, ctx, label), rendering: 'stored' };
+    const env: TextEnv = { ...(ctx.canvas ?? { width: 1, height: 1 }), shaper: ctx.text?.shaper ?? null, createCanvas: ctx.text?.createCanvas };
+    try {
+      return rerenderText(layer, env);
+    } catch {
+      return { ...layer, rendering: 'stored' };
+    }
+  } catch (e) {
+    ctx.problems.push(`${label}: the text could not be read (${e instanceof Error ? e.message : String(e)})`);
+    return null;
   }
 }
 
@@ -576,6 +687,8 @@ export interface DeserializeContext {
   problems: string[];
   /** The document's patterns by id, for shapes painted with one. */
   pattern?(id: string): EffectPattern | null;
+  /** What draws type layers stored without pixels (and migrated text annotations). */
+  text?: Pick<TextEnv, 'shaper' | 'createCanvas'>;
 }
 
 /** Decodes a PNG data URL into pixels of `channels` bytes each. */
@@ -722,16 +835,18 @@ export function deserializeLayer(raw: unknown, ctx: DeserializeContext): ImageLa
         return null;
       }
       const annotation = JSON.parse(JSON.stringify({ ...a, id: typeof a.id === 'string' ? a.id : id })) as Annotation;
-      // Pen, rectangle, ellipse, line and arrow annotations load as shape layers that remember them.
-      const migrated = annotationLayerFor(annotation, ctx.canvas ?? { width: 1, height: 1 });
-      if (migrated.type === 'shape') {
+      // Pen, rectangle, ellipse, line, arrow and text annotations load as shape and type layers that remember them.
+      const migrated = annotationLayerFor(annotation, { ...(ctx.canvas ?? { width: 1, height: 1 }), shaper: ctx.text?.shaper ?? null, createCanvas: ctx.text?.createCanvas });
+      if (migrated.type === 'shape' || migrated.type === 'type') {
         const blend = base.blend === 'normal' ? migrated.blend : base.blend;
-        return { ...migrated, ...base, blend, type: 'shape', id, name: base.name } as ShapeLayer;
+        return { ...migrated, ...base, blend, id, name: base.name } as ShapeLayer | TypeLayer;
       }
       return { ...base, type: 'annotation', annotation };
     }
     case 'shape':
       return readShape(r, base, ctx);
+    case 'type':
+      return readType(r, base, ctx);
     case 'smart':
       return readSmartObject(r, base, ctx);
     default:

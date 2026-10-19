@@ -255,6 +255,116 @@ export interface ShapeLayer extends LayerBase {
 }
 
 // ---------------------------------------------------------------------------
+// Type layers
+// ---------------------------------------------------------------------------
+
+/**
+ * The character style of a run of text (Photoshop's Character panel). Sizes are document pixels;
+ * tracking is in 1/1000 em.
+ */
+export interface TextStyle {
+  /** Family name ("Inter"); fonts the system lacks fall back to a generic family, with a warning. */
+  fontFamily: string;
+  /** CSS weight, 100..900 (default 400). */
+  fontWeight: number;
+  /** Default false. */
+  italic?: boolean;
+  /** Font size in pixels. */
+  fontSize: number;
+  /** `#rrggbb`. */
+  color: string;
+  /** 0..1 (missing = 1). */
+  opacity?: number;
+  /** Letter spacing in 1/1000 em (missing = 0). */
+  tracking?: number;
+  /** Baseline-to-baseline distance in pixels; missing = auto (the paragraph's `autoLeading` × size). */
+  leading?: number;
+  /** Pixels; positive raises the text (missing = 0). */
+  baselineShift?: number;
+  underline?: boolean;
+  strikethrough?: boolean;
+  /** PostScript name from a PSD (`ArialMT`), kept so the exact face can be found and written back. */
+  postScriptName?: string;
+}
+
+/** A character style over `length` UTF-16 code units of the text, in order. */
+export interface TextRun {
+  length: number;
+  style: TextStyle;
+}
+
+export type TextAlign = 'left' | 'center' | 'right' | 'justify';
+export const TEXT_ALIGNS: readonly TextAlign[] = ['left', 'center', 'right', 'justify'];
+
+/** Paragraph style (Photoshop's Paragraph panel); lengths in pixels. */
+export interface ParagraphStyle {
+  /** Default `left`. `justify` stretches every line of a paragraph box but the last. */
+  align?: TextAlign;
+  /** Auto leading as a multiple of the font size (default 1.2). */
+  autoLeading?: number;
+  firstLineIndent?: number;
+  startIndent?: number;
+  endIndent?: number;
+  spaceBefore?: number;
+  spaceAfter?: number;
+}
+
+/** A paragraph style over `length` UTF-16 code units (whole paragraphs, line break included). */
+export interface ParagraphRun {
+  length: number;
+  style: ParagraphStyle;
+}
+
+/** PSD data of a type layer kept for round trips (see the PSD module). */
+export interface TypePsdData {
+  /** The `TySh` block as read, written back while the text and styles are unchanged. */
+  tySh?: Uint8Array;
+  /** Additional-info blocks we do not model, by key. */
+  blocks?: Array<{ key: string; data: Uint8Array }>;
+}
+
+/**
+ * A type layer: styled text laid out as point text (one line per paragraph, growing from its
+ * origin) or paragraph text (wrapped in a box), placed in the document by `transform`. `surface` is
+ * the rendered text in document space (offset 0), drawn by the editor's text shaper on every change;
+ * the compositor draws it like a pixel layer's pixels. Never paint into it: rasterize the layer.
+ */
+export interface TypeLayer extends LayerBase {
+  type: 'type';
+  text: string;
+  /** Character runs covering the text in order (lengths add up to `text.length`). */
+  runs: TextRun[];
+  /** Paragraph runs covering the text in order. */
+  paragraphs: ParagraphRun[];
+  /**
+   * `point`: text space (0, 0) is the first line's baseline at its alignment edge (`origin: 'top'`:
+   * the top of the first line instead, as text annotations were drawn). `box`: text wraps inside
+   * `width × height` with its top-left at (0, 0).
+   */
+  frame: { kind: 'point'; origin?: 'baseline' | 'top' } | { kind: 'box'; width: number; height: number };
+  /** Text space → document (missing = identity). */
+  transform?: AffineMatrix;
+  /** Default true. */
+  antiAlias?: boolean;
+  /** The rendered pixels, document space. */
+  surface: PixelSurface;
+  /** Always (0, 0): a type layer moves through its transform. */
+  offset: { x: number; y: number };
+  /** 0..1, PSD "Fill" (missing = 1). */
+  fillOpacity?: number;
+  /**
+   * How `surface` was made: missing when the shaper laid it out; `'stored'` for pixels kept from a
+   * PSD or a save made where no shaper could draw it (the first edit draws it again).
+   */
+  rendering?: 'stored';
+  /** Families the last render had to replace with a fallback. */
+  missingFonts?: string[];
+  /** The text annotation this layer was migrated from, while it still is that annotation. */
+  annotation?: Annotation;
+  psd?: TypePsdData;
+}
+
+// ---------------------------------------------------------------------------
 // Smart objects
 // ---------------------------------------------------------------------------
 
@@ -373,7 +483,7 @@ export interface SmartObjectLayer extends LayerBase {
   psd?: SmartPsdData;
 }
 
-export type ImageLayer = PixelLayer | AdjustmentLayerNode | GroupLayer | AnnotationLayer | SmartObjectLayer | ShapeLayer;
+export type ImageLayer = PixelLayer | AdjustmentLayerNode | GroupLayer | AnnotationLayer | SmartObjectLayer | ShapeLayer | TypeLayer;
 export type ImageLayerType = ImageLayer['type'];
 
 /** Which part of the active layer painting targets (`filter-mask`: a smart object's filter mask). */
@@ -443,17 +553,19 @@ export function layerTypeLabel(type: ImageLayerType): string {
           ? 'Smart object'
           : type === 'shape'
             ? 'Shape layer'
-            : 'Annotation';
+            : type === 'type'
+              ? 'Type layer'
+              : 'Annotation';
 }
 
-/** Layers whose pixels are a surface the compositor draws (pixel layers, smart objects, shapes). */
-export function hasSurface(layer: ImageLayer): layer is PixelLayer | SmartObjectLayer | ShapeLayer {
-  return layer.type === 'pixel' || layer.type === 'smart' || layer.type === 'shape';
+/** Layers whose pixels are a surface the compositor draws (pixel layers, smart objects, shapes, type). */
+export function hasSurface(layer: ImageLayer): layer is PixelLayer | SmartObjectLayer | ShapeLayer | TypeLayer {
+  return layer.type === 'pixel' || layer.type === 'smart' || layer.type === 'shape' || layer.type === 'type';
 }
 
-/** Layers whose `surface` is a render cache of their own data (smart objects, shapes): never paint into it. */
-export function isRenderedLayer(layer: ImageLayer): layer is SmartObjectLayer | ShapeLayer {
-  return layer.type === 'smart' || layer.type === 'shape';
+/** Layers whose `surface` is a render cache of their own data (smart objects, shapes, type): never paint into it. */
+export function isRenderedLayer(layer: ImageLayer): layer is SmartObjectLayer | ShapeLayer | TypeLayer {
+  return layer.type === 'smart' || layer.type === 'shape' || layer.type === 'type';
 }
 
 /** Every shape layer in the stack. */

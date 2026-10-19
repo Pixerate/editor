@@ -101,7 +101,8 @@ describe('schema v3 and migration', () => {
     expect(layers[0]).toMatchObject({ type: 'pixel', id: BACKGROUND_LAYER_ID, name: 'Background', source: 'document' });
     expect((layers[0] as PixelLayer).filters?.[0]).toMatchObject({ kind: 'develop', brightness: doc.adjustments.brightness });
     const kinds = layers.map((l) => l.type);
-    expect(kinds.indexOf('annotation')).toBeGreaterThan(kinds.lastIndexOf('adjustment'));
+    // Rectangle and text annotations are now shape and type layers that remember them.
+    expect(kinds.findIndex((k) => k === 'shape' || k === 'type')).toBeGreaterThan(kinds.lastIndexOf('adjustment'));
     // The compatibility views read the same values back.
     const s = c.getState();
     expect(s.adjustments.brightness).toBe(doc.adjustments.brightness);
@@ -248,7 +249,7 @@ describe('compatibility API over layers', () => {
     const b = c.addAdjustmentLayer('posterize');
     const types = c.getLayers().map((l) => l.type);
     // Annotations stay on top: line, rectangle, … annotations are now shape layers that remember them.
-    expect(types.slice(-c.getState().annotations.length).every((t) => t === 'annotation' || t === 'shape')).toBe(true);
+    expect(types.slice(-c.getState().annotations.length).every((t) => t === 'annotation' || t === 'shape' || t === 'type')).toBe(true);
     const ids = () => c.getAdjustmentLayers().map((l) => l.id);
     expect(ids().slice(-2)).toEqual([a, b]);
     const first = c.addAdjustmentLayer('threshold', 0);
@@ -264,7 +265,8 @@ describe('compatibility API over layers', () => {
   it('annotations are layers; the annotation API keeps working', () => {
     const c = controllerFor();
     const id = c.addAnnotation({ type: 'text', x: 1, y: 1, text: 'Hello', fontSize: 10, color: '#000' });
-    expect(c.getLayers().at(-1)).toMatchObject({ type: 'annotation', id, name: 'Hello' });
+    // A text annotation is a type layer that remembers it (undrawn here: there is no text shaper).
+    expect(c.getLayers().at(-1)).toMatchObject({ type: 'type', id, name: 'Hello', text: 'Hello', rendering: 'stored' });
     c.updateAnnotation(id, { text: 'Bye' } as never);
     expect((c.getLayer(id) as AnnotationLayer).name).toBe('Bye');
     expect(c.getState().annotations[0]).toMatchObject({ text: 'Bye' });
