@@ -973,7 +973,10 @@ export const VECTOR_OVERLAY_THEME = {
 	builderErase: '#ef4444',
 	builderEraseFill: 'rgba(239, 68, 68, 0.22)',
 	/** Opacity of the hatch lines over Shape Builder faces (drawn in the face's outline colour). */
-	builderHatchOpacity: 0.6
+	builderHatchOpacity: 0.6,
+	/** Mask indicators: the outline of a selected mask group's mask (dashed; solid while the mask is selected). */
+	mask: '#8b5cf6',
+	maskDash: '5 3'
 } as const;
 
 /** SVG path data of the diamond a width point is drawn with (screen pixels). */
@@ -1456,3 +1459,50 @@ export function getVectorAppearancePanel(state: Pick<VectorEditorState, 'documen
 
 /** Blend modes in menu order, with their names. */
 export const VECTOR_BLEND_MODE_MENU: readonly { mode: VectorBlendMode; label: string }[] = VECTOR_BLEND_MODES.map((mode) => ({ mode, label: VECTOR_BLEND_MODE_LABELS[mode] }));
+
+// ---------------------------------------------------------------------------
+// Masks panel
+// ---------------------------------------------------------------------------
+
+export const VECTOR_MASK_TYPE_LABELS: Readonly<Record<VectorMaskType, string>> = { clip: 'Clip', alpha: 'Alpha', luminance: 'Luminance' };
+/** Mask types for a menu, with a hint each. */
+export const VECTOR_MASK_TYPE_OPTIONS: readonly { value: VectorMaskType; label: string; title: string }[] = [
+	{ value: 'clip', label: 'Clip', title: 'Clipping mask: the contents show inside the mask\'s outline' },
+	{ value: 'luminance', label: 'Luminance', title: 'Opacity mask by brightness: white shows, black hides' },
+	{ value: 'alpha', label: 'Alpha', title: 'Opacity mask by opacity: opaque shows, transparent hides' }
+];
+
+/** What the mask panel shows for the selection. */
+export interface VectorMaskPanelData {
+	/** Make Clipping Mask / Make Opacity Mask would work: two or more unlocked objects sharing a parent. */
+	canMake: boolean;
+	/** Why the make actions are off, for a tooltip (null when they are on). */
+	makeHint: string | null;
+	/**
+	 * The mask group the selection is or is directly inside, with its settings and what of it is
+	 * selected (`group` itself, its `mask` or its `contents`); null otherwise.
+	 */
+	group: (VectorMaskSummary & { id: string; name?: string; editing: 'group' | 'mask' | 'contents' }) | null;
+}
+
+/** The mask panel's data for the selection, or null with nothing selected. */
+export function getVectorMaskPanel(state: Pick<VectorEditorState, 'document' | 'selection'>): VectorMaskPanelData | null {
+	const doc = state.document;
+	if (!state.selection.length) return null;
+	const locs = state.selection.map((id) => locateVectorNode(doc.nodes, id));
+	let makeHint: string | null = null;
+	if (state.selection.length < 2) makeHint = 'Select two or more objects: the topmost becomes the mask.';
+	else if (locs.some((l) => !l)) makeHint = 'Select objects in the document.';
+	else if (locs.some((l) => l!.list[l!.index].locked || l!.list[l!.index].blendStep)) makeHint = 'Unlock the selected objects first.';
+	else if (locs.some((l) => (l!.parent?.id ?? null) !== (locs[0]!.parent?.id ?? null))) makeHint = 'Select objects at one level (sharing a parent).';
+	let group: VectorMaskPanelData['group'] = null;
+	const first = locs[0];
+	const node = first ? first.list[first.index] : null;
+	const owner = isVectorMaskGroup(node) ? node : isVectorMaskGroup(first?.parent) ? first!.parent : null;
+	if (owner && state.selection.every((id) => id === owner.id || owner.children.some((c) => c.id === id))) {
+		const summary = vectorMaskSummary(owner)!;
+		const editing = state.selection.includes(owner.id) ? 'group' : state.selection.includes(summary.maskId) ? 'mask' : 'contents';
+		group = { ...summary, id: owner.id, ...(owner.name ? { name: owner.name } : {}), editing };
+	}
+	return { canMake: makeHint === null, makeHint, group };
+}

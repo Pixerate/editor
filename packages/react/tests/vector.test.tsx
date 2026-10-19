@@ -1056,3 +1056,89 @@ describe("appearance stacks (react)", () => {
     expect(c.getState().gradientEdit).toMatchObject({ target: "stroke", layer: 0 });
   });
 });
+
+describe("masks (react)", () => {
+  const maskDoc = (): VectorDocument => ({
+    width: 400,
+    height: 300,
+    nodes: [
+      { id: "a", type: "path", fill: "#ff0000", stroke: null, subpaths: [rectSubpath({ x: 0, y: 0, width: 100, height: 100 })] },
+      { id: "m", type: "path", fill: "#ffffff", stroke: null, subpaths: [rectSubpath({ x: 20, y: 20, width: 40, height: 40 })] },
+      { id: "b", type: "path", fill: "#0000ff", stroke: null, subpaths: [rectSubpath({ x: 200, y: 0, width: 50, height: 50 })] },
+    ],
+  });
+
+  it("draws a clip group's contents under a clipPath, with the group's filter outside it, and the mask indicator", async () => {
+    const c = new VectorEditorController({ document: maskDoc(), createId: () => "g" });
+    c.makeMask("clip", { ids: ["a", "m"] });
+    c.addFilter("dropShadow", { ids: ["g"] });
+    c.select(["g"]);
+    await act(async () => root.render(<VectorCanvas controller={c} fitOnMount={false} />));
+    const g = q('[data-vector-scene] g[data-vector-id="g"]');
+    expect(g.getAttribute("data-vector-mask")).toBe("clip");
+    expect(g.getAttribute("filter")).toMatch(/filter-g\)$/);
+    const inner = g.querySelector("g[data-vector-masked]")!;
+    const clipId = /^url\(#(.+)\)$/.exec(inner.getAttribute("clip-path")!)![1];
+    expect(container.querySelector(`clipPath[id="${clipId}"] path`)).toBeTruthy();
+    // The clip's own paint is not drawn: only the contents are.
+    expect(Array.from(inner.querySelectorAll("[data-vector-id]")).map((el) => el.getAttribute("data-vector-id"))).toEqual(["a"]);
+    expect(q('[data-vector-overlay] [data-vector-mask-indicator="g"]').getAttribute("stroke-dasharray")).toBeTruthy();
+  });
+
+  it("writes filter presentation attributes the way React accepts them", async () => {
+    const c = new VectorEditorController({ document: maskDoc(), createId: () => "g" });
+    c.makeMask("luminance", { ids: ["a", "m"], invert: true });
+    const errors: unknown[][] = [];
+    const original = console.error;
+    console.error = (...args: unknown[]) => errors.push(args);
+    try {
+      await act(async () => root.render(<VectorCanvas controller={c} fitOnMount={false} />));
+    } finally {
+      console.error = original;
+    }
+    expect(errors.filter((e) => String(e.join(" ")).includes("flood"))).toEqual([]);
+    expect(container.querySelector("feFlood, feflood")!.getAttribute("flood-color")).toBe("#000000");
+  });
+
+  it("draws an inverted opacity mask through its filter", async () => {
+    const c = new VectorEditorController({ document: maskDoc(), createId: () => "g" });
+    c.makeMask("alpha", { ids: ["a", "m"], invert: true });
+    await act(async () => root.render(<VectorCanvas controller={c} fitOnMount={false} />));
+    const inner = q('g[data-vector-id="g"] g[data-vector-masked]');
+    const maskId = /^url\(#(.+)\)$/.exec(inner.getAttribute("mask")!)![1];
+    const mask = container.querySelector(`mask[id="${maskId}"]`) as SVGElement;
+    expect(mask.getAttribute("maskUnits")).toBe("userSpaceOnUse");
+    expect((mask as unknown as HTMLElement).style.maskType).toBe("alpha");
+    const filterId = /^url\(#(.+)\)$/.exec(mask.querySelector("g[filter]")!.getAttribute("filter")!)![1];
+    expect(container.querySelector(`filter[id="${filterId}"] feColorMatrix, filter[id="${filterId}"] fecolormatrix`)).toBeTruthy();
+    expect(mask.querySelector('[data-vector-id="m"]')).toBeTruthy();
+  });
+
+  it("makes, edits and releases masks from the panel and the toolbar", async () => {
+    const c = new VectorEditorController({ document: maskDoc(), createId: () => "g" });
+    c.select(["a", "m"]);
+    await act(async () => root.render(<><VectorToolbar controller={c} /><VectorStylePanel controller={c} /></>));
+    await act(async () => q<HTMLButtonElement>('[data-vector-mask-panel] button[aria-label="Make Clipping Mask"]').click());
+    const group = () => c.getNode("g") as any;
+    expect(group().mask).toEqual({ type: "clip" });
+    const type = q<HTMLSelectElement>('select[aria-label="Mask type"]');
+    await act(async () => {
+      type.value = "luminance";
+      type.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(group().mask).toEqual({ type: "luminance" });
+    await act(async () => q<HTMLInputElement>('input[aria-label="Invert mask"]').click());
+    expect(group().mask).toEqual({ type: "luminance", invert: true });
+    await act(async () => q<HTMLButtonElement>('button[aria-label="Mask on"]').click());
+    expect(c.getNode("m")!.visible).toBe(false);
+    await act(async () => q<HTMLButtonElement>('button[aria-label="Edit Contents"]').click());
+    expect(c.getState().selection).toEqual(["a"]);
+    await act(async () => q<HTMLButtonElement>('button[aria-label="Edit Mask"]').click());
+    expect(c.getState().selection).toEqual(["m"]);
+    expect(q('button[aria-label="Edit Mask"]').getAttribute("aria-pressed")).toBe("true");
+    await act(async () => c.select(["g"]));
+    await act(async () => q<HTMLButtonElement>('[role="toolbar"] button[aria-label^="Release Mask"]').click());
+    expect(c.getNode("g")).toBeUndefined();
+    expect(c.getState().document.nodes.map((n) => n.id)).toEqual(["a", "m", "b"]);
+  });
+});

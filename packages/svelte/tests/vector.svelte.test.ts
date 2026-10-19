@@ -1010,3 +1010,75 @@ describe("appearance stacks (svelte)", () => {
     expect(c.getState().gradientEdit).toMatchObject({ target: "stroke", layer: 0 });
   });
 });
+
+describe("masks (svelte)", () => {
+  const maskDoc = (): VectorDocument => ({
+    width: 400,
+    height: 300,
+    nodes: [
+      { id: "a", type: "path", fill: "#ff0000", stroke: null, subpaths: [rectSubpath({ x: 0, y: 0, width: 100, height: 100 })] },
+      { id: "m", type: "path", fill: "#ffffff", stroke: null, subpaths: [rectSubpath({ x: 20, y: 20, width: 40, height: 40 })] },
+      { id: "b", type: "path", fill: "#0000ff", stroke: null, subpaths: [rectSubpath({ x: 200, y: 0, width: 50, height: 50 })] },
+    ],
+  });
+
+  it("draws a clip group's contents under a clipPath, with the group's filter outside it, and the mask indicator", () => {
+    const c = new VectorEditorController({ document: maskDoc(), createId: () => "g" });
+    c.makeMask("clip", { ids: ["a", "m"] });
+    c.addFilter("dropShadow", { ids: ["g"] });
+    c.select(["g"]);
+    const t = render(VectorCanvas, { controller: c, fitOnMount: false });
+    const g = t.querySelector('[data-vector-scene] g[data-vector-id="g"]')!;
+    expect(g.getAttribute("data-vector-mask")).toBe("clip");
+    expect(g.getAttribute("filter")).toMatch(/filter-g\)$/);
+    const inner = g.querySelector("g[data-vector-masked]")!;
+    const clipId = /^url\(#(.+)\)$/.exec(inner.getAttribute("clip-path")!)![1];
+    expect(t.querySelector(`clipPath[id="${clipId}"] path`)).toBeTruthy();
+    expect(Array.from(inner.querySelectorAll("[data-vector-id]")).map((el) => el.getAttribute("data-vector-id"))).toEqual(["a"]);
+    expect(t.querySelector('[data-vector-overlay] [data-vector-mask-indicator="g"]')!.getAttribute("stroke-dasharray")).toBeTruthy();
+  });
+
+  it("draws an inverted opacity mask through its filter", () => {
+    const c = new VectorEditorController({ document: maskDoc(), createId: () => "g" });
+    c.makeMask("alpha", { ids: ["a", "m"], invert: true });
+    const t = render(VectorCanvas, { controller: c, fitOnMount: false });
+    const inner = t.querySelector('g[data-vector-id="g"] g[data-vector-masked]')!;
+    const maskId = /^url\(#(.+)\)$/.exec(inner.getAttribute("mask")!)![1];
+    const mask = t.querySelector(`mask[id="${maskId}"]`)!;
+    expect(mask.getAttribute("maskUnits")).toBe("userSpaceOnUse");
+    expect(mask.getAttribute("style")).toContain("mask-type: alpha");
+    const filterId = /^url\(#(.+)\)$/.exec(mask.querySelector("g[filter]")!.getAttribute("filter")!)![1];
+    expect(t.querySelector(`filter[id="${filterId}"] feColorMatrix, filter[id="${filterId}"] fecolormatrix`)).toBeTruthy();
+    expect(mask.querySelector('[data-vector-id="m"]')).toBeTruthy();
+  });
+
+  it("makes, edits and releases masks from the panel and the toolbar", () => {
+    const c = new VectorEditorController({ document: maskDoc(), createId: () => "g" });
+    c.select(["a", "m"]);
+    const bar = render(VectorToolbar, { controller: c });
+    const t = render(VectorStylePanel, { controller: c });
+    const q = (sel: string) => t.querySelector(sel) as HTMLElement;
+    click(q('[data-vector-mask-panel] button[aria-label="Make Clipping Mask"]'));
+    const group = () => c.getNode("g") as any;
+    expect(group().mask).toEqual({ type: "clip" });
+    const type = q('select[aria-label="Mask type"]') as HTMLSelectElement;
+    type.value = "luminance";
+    type.dispatchEvent(new Event("change", { bubbles: true }));
+    flushSync();
+    expect(group().mask).toEqual({ type: "luminance" });
+    click(q('input[aria-label="Invert mask"]'));
+    expect(group().mask).toEqual({ type: "luminance", invert: true });
+    click(q('button[aria-label="Mask on"]'));
+    expect(c.getNode("m")!.visible).toBe(false);
+    click(q('button[aria-label="Edit Contents"]'));
+    expect(c.getState().selection).toEqual(["a"]);
+    click(q('button[aria-label="Edit Mask"]'));
+    expect(c.getState().selection).toEqual(["m"]);
+    expect(q('button[aria-label="Edit Mask"]').getAttribute("aria-pressed")).toBe("true");
+    c.select(["g"]);
+    flushSync();
+    click(bar.querySelector('button[aria-label^="Release Mask"]'));
+    expect(c.getNode("g")).toBeUndefined();
+    expect(c.getState().document.nodes.map((n) => n.id)).toEqual(["a", "m", "b"]);
+  });
+});

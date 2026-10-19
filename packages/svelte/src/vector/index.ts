@@ -9,6 +9,8 @@ export { default as VectorToolbar } from "./VectorToolbar.svelte";
 export { default as VectorStylePanel } from "./VectorStylePanel.svelte";
 export { default as VectorEffectsPanel } from "./VectorEffectsPanel.svelte";
 export { default as VectorEnvelopePanel } from "./VectorEnvelopePanel.svelte";
+export { default as VectorMaskPanel } from "./VectorMaskPanel.svelte";
+export { default as VectorMaskedNodes } from "./VectorMaskedNodes.svelte";
 export { default as VectorSceneNodes } from "./VectorSceneNodes.svelte";
 export { default as VectorGradientDefs } from "./VectorGradientDefs.svelte";
 export { default as VectorFilterDefs } from "./VectorFilterDefs.svelte";

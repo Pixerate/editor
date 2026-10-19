@@ -1,14 +1,14 @@
 ---
 name: pixerate-vector
-description: How to draw and edit vector artwork in the Pixerate vector editor through its vector.* commands - adding shapes and SVG paths, fills, strokes, stacked fills and strokes with blend modes, drop shadows, glows and blurs, gradients (linear, radial, conic, Oklab interpolation), stroke alignment, arrowheads, variable-width and tapered strokes, live corner radii, boolean operations and Pathfinder (unite, subtract, divide, trim), Shape Builder, paint bucket, live path effects (trim paths, repeater, zig zag, offset), envelope warps and free distort, blends and morphing, anchor editing (join, smooth, simplify, scissors, knife, eraser), align, distribute, group, stacking order, and SVG import and export. Use when creating an icon, logo, illustration, glyph, badge or any Bezier path artwork, or editing an SVG in a Pixerate vector editor.
+description: How to draw and edit vector artwork in the Pixerate vector editor through its vector.* commands - adding shapes and SVG paths, fills, strokes, stacked fills and strokes with blend modes, drop shadows, glows and blurs, clipping masks and opacity masks, gradients (linear, radial, conic, Oklab interpolation), stroke alignment, arrowheads, variable-width and tapered strokes, live corner radii, boolean operations and Pathfinder (unite, subtract, divide, trim), Shape Builder, paint bucket, live path effects (trim paths, repeater, zig zag, offset), envelope warps and free distort, blends and morphing, anchor editing (join, smooth, simplify, scissors, knife, eraser), align, distribute, group, stacking order, and SVG import and export. Use when creating an icon, logo, illustration, glyph, badge or any Bezier path artwork, or editing an SVG in a Pixerate vector editor.
 ---
 
 # Pixerate vector editor
 
 The vector document is an artboard (`width` x `height` in document units, y down) holding a tree
 of **nodes**: `path` nodes (one or more subpaths of Bezier anchors, with fill, stroke and stroke
-settings) and `group` nodes. Groups can also be live booleans, live blends, or carry a live
-effect stack. Every command is a `vector.*` command run with `run_command` / `run_commands` (see
+settings) and `group` nodes. Groups can also be live booleans, live blends, mask groups, or
+carry a live effect stack. Every command is a `vector.*` command run with `run_command` / `run_commands` (see
 `pixerate-agent-tools` for batching with `"$0.id"` references, `atomic: true` and error codes).
 
 - **Node ids** come from `vector.list` and from what writes return (`{ id }`, `{ ids }`).
@@ -24,6 +24,10 @@ effect stack. Every command is a `vector.*` command run with `run_command` / `ru
   settings of `vector.setStyle` are shorthands for the **top** layer; `null` clears the stack.
   Any node can also have a `blendMode` and `filters` (drop / inner shadow, outer / inner glow,
   layer blur, feather), which never change geometry.
+- **Masks**: a mask group's first (bottom) child is its mask; the children above it show only
+  inside the mask's outline (`clip`), or where it is bright (`luminance`) or opaque (`alpha`).
+  `invert` swaps shown and hidden. `vector.list` gives a mask group a `mask`
+  `{ type, invert, maskId, contents, enabled }`; a hidden mask (`enabled: false`) masks nothing.
 - Coordinates are document units. A rotated node stores its geometry in its own space: the
   `bounds` that `vector.list` reports are document-space, its `d` is the node's own.
 
@@ -82,6 +86,13 @@ Parameter details (gradient fields, effect parameters, width profiles, envelopes
   top) and widths that step down towards the top. Use per-layer `opacity` and `blendMode`
   (multiply to darken, screen to lighten, overlay for texture) rather than node opacity when only
   one paint should fade.
+- **Masks over cut-outs.** To show artwork inside a shape (a photo-like fill in a circle, a
+  pattern inside text-like outlines, a scene seen through a window), use
+  `vector.makeClippingMask` rather than a destructive intersect: the contents stay editable and
+  movable inside the frame. Draw the mask last (on top) and make the mask from it; edit the mask
+  later by its `maskId`. Use `vector.makeOpacityMask` with a white-to-black gradient for fades
+  and reflections (luminance: white shows). A clip's own paint is never drawn, so its fill
+  colour does not matter. Effects and shadows on the mask group follow the masked silhouette.
 - **Shadows and glows.** Keep drop shadows subtle: black at 0.15 to 0.3 opacity, `offsetY` 2 to 8,
   `blur` about twice the offset. Use one light direction for every shadow in a design. Filters
   export as SVG filters, which some tools (and older renderers) draw slightly differently or not
@@ -99,7 +110,7 @@ Parameter details (gradient fields, effect parameters, width profiles, envelopes
 
 | Command | Use it to |
 | --- | --- |
-| `vector.list` | Read the document: `{ width, height, nodes, selection, tool }`. Each node has id, type, name, depth, document-space `bounds`, `rotation` (degrees clockwise), visible, locked, selected, and for paths fill, stroke, strokeWidth and `d`; groups list `children`, `blend`, `liveBoolean`, `effects`. Call it first and after any batch. |
+| `vector.list` | Read the document: `{ width, height, nodes, selection, tool }`. Each node has id, type, name, depth, document-space `bounds`, `rotation` (degrees clockwise), visible, locked, selected, and for paths fill, stroke, strokeWidth and `d`; groups list `children`, `blend`, `liveBoolean`, `effects`, `mask`. A mask group's `bounds` are its masked result. Call it first and after any batch. |
 | `vector.shapeBuilderFaces` | List the regions the given paths divide the plane into: path data, area, a point inside each and the ids of paths filling it. Use the points with `vector.shapeBuilder`. |
 | `vector.exportSvg` | Get the document as standalone SVG markup (`{ svg }`); `precision` 0 to 8 decimals (default 3). |
 
@@ -109,7 +120,7 @@ Parameter details (gradient fields, effect parameters, width profiles, envelopes
 | --- | --- |
 | `vector.addShape` | Add a `kind` `rect`, `ellipse`, `polygon` (`sides`, at least 3), `star` (`points`, `innerRatio` 0 to 1) or `line` at `x`, `y`, `width`, `height` (all required; for a line, width and height are the end's offset). `cornerRadius` and `cornerKind` give live corners; any style field and `name` apply. Uses the editor's default style for anything not given. Returns `{ id }`. |
 | `vector.addPath` | Add a path from SVG path data `d` (absolute or relative M, L, H, V, C, S, Q, T, A, Z; arcs and quadratics become cubics) in document units, with `name` and style fields; unset style comes from the editor defaults. Fails when `d` has no points. Returns `{ id }`. |
-| `vector.importSvg` | Add the shapes of SVG markup `svg` on top of the document, or replace the document with `replace: true`. Reads paths, basic shapes, groups, transforms and linear and radial gradients; skips text, images, masks, filters and `use`. |
+| `vector.importSvg` | Add the shapes of SVG markup `svg` on top of the document, or replace the document with `replace: true`. Reads paths, basic shapes, groups, transforms, linear and radial gradients, and `clip-path` / `mask` references (as mask groups); skips text, images, foreign filters and `use`. |
 | `vector.delete` | Delete nodes (`ids`). |
 
 ### Style
@@ -167,6 +178,20 @@ arrays, to build or replace a stack in one call.
 | `vector.shapeBuilder` | Merge the faces a pointer path touches into one shape, or delete them (and touched line pieces and edges) with `erase: true`. `points` is `[[x, y], ...]` in document units (one point is a click; use points from `vector.shapeBuilderFaces`), `tolerance` for edge picks. Returns counts. |
 | `vector.fillRegion` | Paint bucket: fill the area visible outlines enclose around `point` `[x, y]` with a new path in the current fill (islands stay holes). `gap` closes gaps up to that size between loose ends. Returns `{ id }`. |
 | `vector.outlineStroke` | Turn strokes into filled shapes of exactly the painted area (alignment, caps, joins, dashes, arrowheads, width profiles included), above a copy keeping the fill. Returns the new ids. |
+
+### Masks and clipping
+
+| Command | Use it to |
+| --- | --- |
+| `vector.makeClippingMask` | Group two or more objects sharing a parent (`ids`, default the selection) into a clip group: the topmost (or `maskId`) becomes the mask, moved to the bottom, and the rest show only inside its outline; `invert: true` shows them outside it. Fails, changing nothing, on fewer than two objects, a locked one or mixed parents. Returns `{ id, mask: { type, invert, maskId, contents, enabled } }`. |
+| `vector.makeOpacityMask` | Like `vector.makeClippingMask`, but the mask fades the contents by its brightness (`type` luminance, default: white shows, black hides) or opacity (`alpha`). Use a gradient-filled mask for fades. Returns `{ id, mask }`. |
+| `vector.setMaskOptions` | Change mask groups `ids`: `type` clip, alpha or luminance, `invert`, and `enabled` (false turns the mask off by hiding it; true on). Pass at least one. Returns `{ groups: [{ id, mask }] }`. |
+| `vector.releaseMask` | Undo masking of groups `ids`: the mask goes back on top and draws as itself; the group goes unless it has filters, a blend mode or effects. Returns `{ ids }` (the mask last). |
+
+To edit the mask's shape, use its `maskId` from `vector.list` (or the `mask` a write returns)
+with the path-editing, style and transform commands; to move the contents inside the frame,
+transform the ids in `contents`. `vector.setMaskOptions` with `enabled: false` shows the
+contents whole while you work, without losing the mask.
 
 ### Live effects and envelopes
 
@@ -234,6 +259,11 @@ arrays, to build or replace a stack in one call.
 - Layer indexes shift after a remove or a move: use the stack each write returns.
 - Path effects apply to the whole node, every layer alike. Blend in-betweens mix the top fill and
   stroke only.
+- In a mask group the order matters: the bottom child is always the mask. `vector.arrange` inside
+  the group can change which object masks; deleting the mask releases the group instead.
+- A mask group's path effects act on its contents, not on the mask. Hit-testing, bounds,
+  snapping and booleans use the masked result; an opacity mask counts wherever it paints, even
+  where it is dark.
 - Filters and blend modes are drawn, not geometry: bounds, snapping, booleans and Outline Stroke
   ignore them. A node's blend mode and filter isolate its layers, so layer blend modes inside a
   node with a filter mix only with the node's own layers. Background blur is not available.

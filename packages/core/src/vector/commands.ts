@@ -444,7 +444,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 	const maskInputs = (params: { ids?: string[]; maskId?: string } | undefined) => {
 		const list = [...new Set(ids(params))];
 		if (list.length < 2) fail(`Masking needs at least two objects (the mask and what it masks); got ${list.length}. Pass ids, or select more.`);
-		for (const id of list) if (controller.getNode(id)!.locked) fail(`"${id}" is locked; unlock it (vector.setLocked) or leave it out.`);
+		for (const id of list) if (controller.getNode(id)!.locked) fail(`"${id}" is locked; ask the user to unlock it, or leave it out of ids.`);
 		if (params?.maskId !== undefined && !list.includes(params.maskId)) fail(`maskId "${params.maskId}" must be one of ids (${list.map((id) => `"${id}"`).join(', ')}).`);
 		return list;
 	};
@@ -505,22 +505,24 @@ export function createVectorCommands(controller: VectorEditorController, options
 			label: 'Mask Options…',
 			keywords: ['mask', 'clip', 'invert', 'alpha', 'luminance', 'opacity mask'],
 			description:
-				'Changes how mask groups mask: `type` clip (by outline), alpha or luminance, and `invert`. Pass at least one. One undo step. Returns { groups: [{ id, mask }] }.',
+				'Changes how mask groups mask: `type` clip (by outline), alpha or luminance, `invert`, and `enabled` (false hides the mask so the contents draw whole; true shows it again). Pass at least one. One undo step. Returns { groups: [{ id, mask }] }.',
 			params: {
 				type: 'object',
 				properties: {
 					ids: { ...IDS, description: 'Mask group ids (default: the selection).' },
 					type: { type: 'string', enum: ['clip', 'alpha', 'luminance'], description: 'clip (the mask\'s outline), alpha (its opacity) or luminance (its brightness).' },
-					invert: { type: 'boolean', description: 'true: show the contents where the mask hides them.' }
+					invert: { type: 'boolean', description: 'true: show the contents where the mask hides them.' },
+					enabled: { type: 'boolean', description: 'false: turn the mask off (it is hidden and the contents draw whole); true: on again.' }
 				},
 				additionalProperties: false
 			},
 			undoable: true,
 			enabled: enabledFor,
-			run: (_ctx: unknown, params: { ids?: string[]; type?: VectorMaskType; invert?: boolean } | undefined) => {
-				if (params?.type === undefined && params?.invert === undefined) fail('Pass type and / or invert.');
+			run: (_ctx: unknown, params: { ids?: string[]; type?: VectorMaskType; invert?: boolean; enabled?: boolean } | undefined) => {
+				if (params?.type === undefined && params?.invert === undefined && params?.enabled === undefined) fail('Pass at least one of type, invert, enabled.');
 				const groups = maskTargets(params);
-				check(controller.setMaskOptions({ ...(params?.type ? { type: params.type } : {}), ...(params?.invert !== undefined ? { invert: params.invert } : {}) }, { ids: groups }));
+				const patch = { ...(params?.type ? { type: params.type } : {}), ...(params?.invert !== undefined ? { invert: params.invert } : {}), ...(params?.enabled !== undefined ? { enabled: params.enabled } : {}) };
+				check(controller.setMaskOptions(patch, { ids: groups }));
 				return { groups: groups.map(maskResult) };
 			}
 		},

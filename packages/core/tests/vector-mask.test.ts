@@ -412,6 +412,11 @@ describe('mask commands through the tool registry', () => {
 		expect(listed.result.nodes.find((n: any) => n.id === id).mask).toEqual(made.result.mask);
 		const set = await run('vector.setMaskOptions', { ids: [id], type: 'luminance', invert: true });
 		expect(set.result).toEqual({ groups: [{ id, mask: { type: 'luminance', invert: true, maskId: 'c', contents: ['a'], enabled: true } }] });
+		const off = await run('vector.setMaskOptions', { ids: [id], enabled: false });
+		expect(off.result.groups[0].mask.enabled).toBe(false);
+		expect(c.getNode('c')!.visible).toBe(false);
+		expect((await run('vector.setMaskOptions', { ids: [id], enabled: true })).result.groups[0].mask.enabled).toBe(true);
+		expect(c.getNode('c')!.visible).toBeUndefined();
 		const released = await run('vector.releaseMask', { ids: [id] });
 		expect(released.result).toEqual({ ids: ['a', 'c'] });
 		const opacity = await run('vector.makeOpacityMask', { ids: ['a', 'c'], maskId: 'a', type: 'alpha' });
@@ -430,7 +435,7 @@ describe('mask commands through the tool registry', () => {
 		expect((await run('vector.makeClippingMask', { ids: ['a', 'c'], maskId: 'b' })).error.message).toMatch(/maskId "b" must be one of ids/);
 		expect((await run('vector.makeOpacityMask', { ids: ['a', 'c'], type: 'clip' })).error.code).toBe('invalid_params');
 		expect((await run('vector.makeClippingMask', { ids: ['a', 'c'], extra: 1 })).error.code).toBe('invalid_params');
-		expect((await run('vector.setMaskOptions', { ids: ['a'] })).error.message).toMatch(/Pass type and \/ or invert/);
+		expect((await run('vector.setMaskOptions', { ids: ['a'] })).error.message).toMatch(/Pass at least one of type, invert, enabled/);
 		expect((await run('vector.setMaskOptions', { ids: ['a'], invert: true })).error.message).toMatch(/is a mask group/);
 		expect((await run('vector.releaseMask', { ids: ['a'] })).error.message).toMatch(/make one with vector.makeClippingMask/);
 		expect(c.getState().document.nodes.map((n) => n.id)).toEqual(['a', 'b', 'c']);

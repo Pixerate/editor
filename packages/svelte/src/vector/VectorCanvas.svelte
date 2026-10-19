@@ -260,6 +260,19 @@
         <circle cx={w.x} cy={w.y} r={1.5} fill={accentColor} />
       </g>
     {/each}
+    {#each overlay.masks as m (m.id)}
+      <path
+        data-vector-mask-indicator={m.id}
+        data-mask-type={m.type}
+        data-inverted={m.invert || undefined}
+        d={m.d}
+        fill="none"
+        stroke={THEME.mask}
+        stroke-width={m.editing ? 1.5 : 1}
+        stroke-dasharray={m.editing ? undefined : THEME.maskDash}
+        opacity={m.enabled ? 1 : 0.5}
+      />
+    {/each}
     {#each overlay.blend.spines as sp (sp.id)}
       <g data-vector-blend-spine={sp.id} data-replaced={sp.replaced || undefined}>
         <path d={sp.d} fill="none" stroke={accentColor} stroke-dasharray="4 3" />

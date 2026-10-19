@@ -3831,10 +3831,14 @@ export class VectorEditorController {
 		return released;
 	}
 
-	/** Changes the type or inversion of the selected (or given) mask groups. One undo step. */
-	setMaskOptions(patch: Partial<VectorMask>, options: { ids?: readonly string[] } = {}): VectorActionResult {
+	/**
+	 * Changes the type or inversion of the selected (or given) mask groups, or turns their masks off
+	 * (`enabled: false` hides the mask, so the contents draw whole) and on. One undo step.
+	 */
+	setMaskOptions(patch: Partial<VectorMask> & { enabled?: boolean }, options: { ids?: readonly string[] } = {}): VectorActionResult {
 		if (patch.type !== undefined && !isVectorMaskType(patch.type)) return { ok: false, message: `Unknown mask type "${patch.type}": use clip, alpha or luminance.` };
 		if (patch.invert !== undefined && typeof patch.invert !== 'boolean') return { ok: false, message: 'invert must be true or false.' };
+		if (patch.enabled !== undefined && typeof patch.enabled !== 'boolean') return { ok: false, message: 'enabled must be true or false.' };
 		const groups = this.maskTargets(options.ids);
 		if (!groups.length) return { ok: false, message: 'Select a mask group (made with Make Clipping Mask or Make Opacity Mask).' };
 		const set = new Set(groups.map((g) => g.id));
@@ -3844,7 +3848,9 @@ export class VectorEditorController {
 					if (!set.has(n.id) || !isVectorMaskGroup(n)) return n;
 					const type = patch.type ?? n.mask.type;
 					const invert = patch.invert ?? !!n.mask.invert;
-					return { ...n, mask: invert ? { type, invert } : { type } };
+					const [source, ...rest] = n.children;
+					const shown = patch.enabled === undefined || patch.enabled === (source.visible !== false) ? source : patch.enabled ? (({ visible: _v, ...r }) => r as VectorNode)(source) : { ...source, visible: false };
+					return { ...n, mask: invert ? { type, invert } : { type }, ...(shown !== source ? { children: [shown, ...rest] } : {}) };
 				})
 			);
 		});

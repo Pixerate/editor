@@ -285,6 +285,36 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: Renderers differ in filter support: `feMorphology` (spread, feather) and `color-interpolation-filters` are commonly ignored or approximated, and `mix-blend-mode: plus-lighter` (linear dodge) is newer than the other modes. A background blur needs the pixels behind the node; SVG's `BackgroundImage` input was never implemented by browsers, and CSS `backdrop-filter` does not apply to SVG elements.
 - **Solution / Workaround**: Export writes the filter as drawn plus `data-vector-filters` (the stack as JSON) on the `<filter>`, so our own import is lossless; foreign imports read `feDropShadow` and a lone source `feGaussianBlur` back as filters and skip anything else. Background blur is left to the planned lens objects. Tell users (the skill does) to rasterize when a design must look identical everywhere.
 
+### [core|react|svelte/vector] A Filter and a Clip on One SVG Element Clip the Shadow Away
+
+- **Issue / Symptom**: A clip group with a drop shadow showed no shadow outside the clip, and an opacity-masked group's glow was cut to the mask.
+- **Root Cause**: SVG applies an element's `filter` first, then `clip-path` / `mask`, then `opacity`. With the filter and the clip on the same `<g>`, the shadow is drawn and then clipped by the same shape that made it.
+- **Solution / Workaround**: A mask group draws as two groups: the outer `<g>` carries the transform, opacity, blend mode and filter, and an inner `<g data-vector-masked>` carries `clip-path` / `mask` around the contents (`VectorRenderGroup.mask`, `VectorMaskedNodes`, `emitMaskGroup` in `svg.ts`). The filter region comes from the group's paint bounds, which include the unclipped contents, so it is big enough. Import of foreign SVG keeps the element's own filter on the inner node, which matches SVG's order.
+
+### [core/vector] `<clipPath>` Holds Only Shapes, and an Inverted Clip Needs the Union of the Mask
+
+- **Issue / Symptom**: A clip whose mask was a group (or had path effects) clipped everything away; an inverted clip of two overlapping circles left their overlap visible.
+- **Root Cause**: A `<clipPath>` may contain shapes, text and `<use>`, not `<g>`; browsers ignore the group and the clip becomes empty. An even-odd "rectangle with the mask cut out" counts overlapping areas twice, so they flip back to shown, and a nonzero shape read even-odd loses its self-overlaps.
+- **Solution / Workaround**: `vectorMaskRegionShapes` flattens the mask into one path per drawn shape in the group's space (each with its own `clip-rule`). The inverted clip (pdfcraft's `clip_out`) is one even-odd path: a rectangle round the contents plus the boolean union of those shapes (`vectorMaskRegionPath`), whose contours never overlap. For import, the mask itself is kept in a hidden `<g data-vector-part="mask-source">`, because the flattened `<clipPath>` loses its paint, effects and structure.
+
+### [core/vector] Masks Render Differently Outside Browsers: `mask-type`, Luminance Space and Inverted Masks
+
+- **Issue / Symptom**: An exported alpha mask hid everything (or showed a dark mask as transparent) in some SVG tools, gradient opacity masks faded at a different rate, and inverted opacity masks were missing.
+- **Root Cause**: `mask-type="alpha"` is newer than `<mask>`; renderers that ignore it treat every mask as luminance, and a white-filled alpha mask is then fine but a dark one hides. Browsers compute luminance in sRGB but some renderers honour `color-interpolation="linearRGB"`, which changes how a gradient mask ramps. SVG has no inverted mask, so it is drawn through an `feColorMatrix` filter (`1 − alpha`, or brightness over black, inverted), and renderers with weak filter support drop it. A `<mask>` without `maskUnits="userSpaceOnUse"` only covers the masked element's bounding box plus 10 %, and an inverting filter only inverts inside its own region.
+- **Solution / Workaround**: Masks and inverting filters use `userSpaceOnUse` regions over the contents' paint bounds plus a margin (`vectorMaskContentBounds`). Clipping masks are the portable choice; prefer luminance masks with white-to-black fills when an SVG must look right everywhere, and rasterize when it must be identical. Our own import is lossless either way (`data-vector-mask` carries the settings).
+
+### [react/vector] Filter Primitives Built with `createElement` Need Camel-Cased Presentation Attributes
+
+- **Issue / Symptom**: The console showed "Invalid DOM property `flood-color`. Did you mean `floodColor`?" for every drop shadow and inverted luminance mask, although they drew correctly.
+- **Root Cause**: `VectorRenderFilter` primitives carry SVG attribute names (`flood-color`, `flood-opacity`) so Svelte and the SVG export can write them as they are. React maps SVG presentation attributes from camel-cased props and warns on the hyphenated spelling.
+- **Solution / Workaround**: React's `VectorFilterDefs` camel-cases hyphenated keys before `createElement` (`flood-color` → `floodColor`); the core data keeps SVG names. A React test spies on `console.error` while rendering a filter. React reports each such warning once per page, so check with a fresh render, not by reloading a page whose console already showed it.
+
+### [core/vector] The First Child Is the Mask, So Deleting or Reordering It Changes What Masks
+
+- **Issue / Symptom**: Deleting a clip group's mask turned the bottom content shape into the new clip, and Send to Back inside a mask group swapped the mask.
+- **Root Cause**: The model has no mask flag on the child: a mask group's first child is its mask (figcraft's `is_mask` masks the siblings above it instead).
+- **Solution / Workaround**: `removeNodes` (delete, cut) clears `mask` on a group whose mask it removes, so the contents draw whole. Reordering inside a mask group is allowed and documented (it is how a different object becomes the mask); Make Clipping Mask moves the chosen mask to the bottom, and Release puts it back on top.
+
 ### [core/vector] Merging Faces by a Boolean Union of Their Outlines Leaves Seams
 
 - **Issue / Symptom**: Shape Builder merges built by uniting the faces' own outlines can leave a hairline gap or a spur along the edge two faces shared, and a merged shape whose faces only touched at a corner could come out with a sliver.

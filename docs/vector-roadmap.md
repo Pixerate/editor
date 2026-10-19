@@ -19,6 +19,7 @@ This plan covers the work still open on `@pixerate/editor/vector` after the craf
 | #128 | Gradient upgrades: styles, midpoints, colour spaces, Gradient tool |
 | #129 | Free Distort, skew, envelope warps and meshes |
 | #221 | Appearance stack: multiple fills and strokes, blend modes, filters (item 1) |
+| #TBD | Masks and clipping: clip, alpha and luminance mask groups, SVG `clipPath` / `mask` (item 2) |
 
 ## How each item is run
 
