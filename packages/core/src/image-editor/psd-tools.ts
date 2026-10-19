@@ -53,7 +53,7 @@ export function createImagePsdTools(controller: ImageEditorController): AgentToo
     name: 'import_psd',
     title: 'Open a PSD as the document',
     description:
-      'Opens a PSD / PSB as the document, replacing the current layers, crop and rotation (one undo step; undo brings the previous document back). Pixel, group and adjustment layers, masks, blend modes, opacity, fill, clipping, visibility, locks, layer effects (with the patterns and global light of the file) map directly; type, smart-object, fill and shape layers come in as their pixels; unsupported adjustments are left out. Returns the new layer tree with ids, the size and the warnings (each names the affected layers).',
+      'Opens a PSD / PSB as the document, replacing the current layers, crop and rotation (one undo step; undo brings the previous document back). Pixel, group and adjustment layers, masks, blend modes, opacity, fill, clipping, visibility, locks, layer effects (with the patterns and global light of the file) map directly; smart objects come in as smart objects (embedded contents, placement and warp, smart filters: Box Blur is drawn, other Photoshop filters are kept but not drawn, filter mask; linked contents as their stored pixels); type, fill and shape layers come in as their pixels; unsupported adjustments are left out. Returns the new layer tree with ids, the size and the warnings (each names the affected layers).',
     inputSchema: { type: 'object', properties: { data: DATA }, required: ['data'], additionalProperties: false },
     annotations: { title: 'Open a PSD as the document', ...DESTRUCTIVE },
     handler: ({ data }) => {
@@ -74,7 +74,7 @@ export function createImagePsdTools(controller: ImageEditorController): AgentToo
     name: 'export_psd',
     title: 'Export the document as a PSD',
     description:
-      'Writes the document as an 8-bit RGB PSD (a PSB above 30000 px) with real layers, groups, adjustment layers, masks and layer effects (an effects block opened from a PSD is written back unchanged while its effects are; the patterns effects use are embedded), in the source frame (crop and rotation are not applied). Layer filters and depth masks are baked, annotation layers are rasterized (in a browser; elsewhere left out), and the merged image is the editor\'s composite. Changes nothing. Returns the file as base64, its size in bytes, whether it is a PSB, and warnings for everything that was changed or left out.',
+      'Writes the document as an 8-bit RGB PSD (a PSB above 30000 px) with real layers, groups, adjustment layers, masks and layer effects (an effects block opened from a PSD is written back unchanged while its effects are; the patterns effects use are embedded), in the source frame (crop and rotation are not applied). Smart objects are written as Photoshop smart objects (contents embedded once per linked set, placement, warp, smart filters and filter mask; a Develop smart filter has no Photoshop filter and is left out of the list). Layer filters and depth masks are baked, annotation layers are rasterized (in a browser; elsewhere left out), and the merged image is the editor\'s composite. Changes nothing. Returns the file as base64, its size in bytes, whether it is a PSB, and warnings for everything that was changed or left out.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     annotations: { title: 'Export the document as a PSD', ...READ },
     handler: async () => {

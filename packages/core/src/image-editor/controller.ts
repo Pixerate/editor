@@ -195,7 +195,8 @@ import { base64ToBytes, bytesToBase64, decodePng, encodePng, isPng, parseDataUrl
 import type { Interpolation } from '../raster/transform';
 import { getAnnotationBounds } from './geometry';
 import { importPsd, type PsdImportResult } from './psd/import';
-import { exportPsd } from './psd/export';
+import { exportPsd, prepareNestedLayers, smartContentsFile } from './psd/export';
+import { BROWSER_IMAGE_TYPES } from './psd/smart';
 import { FreeTransformSession, type FreeTransformHost, type FreeTransformInit, type FreeTransformResult } from './free-transform';
 import {
   anchorPoint,
@@ -279,41 +280,6 @@ interface SavedDocument {
   samplePixels: PixelBuffer | null;
   samplePixelsOverride: boolean;
   psdResolution: number | undefined;
-}
-
-/** A nested document's layers as `exportPsd` takes them (filters baked, smart objects and annotations as their pixels). */
-function prepareNestedForPsd(layers: readonly ImageLayer[]): ImageLayer[] {
-  const out: ImageLayer[] = [];
-  for (const l of layers) {
-    if (l.type === 'annotation') continue;
-    let next: ImageLayer = l;
-    if (l.type === 'group') next = { ...l, children: prepareNestedForPsd(l.children) };
-    else if (l.type === 'smart') next = rasterizeSmartObjectOp([l], l.id).layer;
-    else if (l.type === 'pixel' && l.filters?.length) {
-      const p: PixelLayer = { ...l };
-      if (l.filters.some(isActiveFilter)) {
-        const b = l.surface.bounds;
-        if (b) {
-          const r = { x: b.x + l.offset.x - 64, y: b.y + l.offset.y - 64, width: b.width + 128, height: b.height + 128 };
-          const plain: PixelLayer = { ...l, visible: true, opacity: 1, blend: 'normal' };
-          delete plain.mask;
-          delete plain.clipped;
-          delete plain.effects;
-          delete plain.fillOpacity;
-          const data = new LayerCompositor().composite([plain], r, { width: r.x + r.width, height: r.y + r.height });
-          p.surface = surfaceFromPixels({ width: r.width, height: r.height, data }, 4, r.x - l.offset.x, r.y - l.offset.y);
-        }
-      }
-      delete p.filters;
-      next = p;
-    }
-    if (next.mask?.source) {
-      next = { ...next } as ImageLayer;
-      delete next.mask;
-    }
-    out.push(next);
-  }
-  return out;
 }
 
 /** Latest serialized schema version (`3`: layers). Documents with the old shape still write 1 or 2. */
@@ -2042,20 +2008,13 @@ export class ImageEditorController {
     const c = layer.contents;
     const base = c.name.replace(/\.\w+$/, '') || 'Contents';
     if (c.file) {
-      const mime: Record<string, string> = { psd: 'image/vnd.adobe.photoshop', psb: 'image/vnd.adobe.photoshop', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', tif: 'image/tiff', tiff: 'image/tiff', gif: 'image/gif' };
+      const mime: Record<string, string> = { psd: 'image/vnd.adobe.photoshop', psb: 'image/vnd.adobe.photoshop', pdf: 'application/pdf', ...BROWSER_IMAGE_TYPES };
       const ext = c.file.type.toLowerCase();
       return { name: /\.\w+$/.test(c.name) ? c.name : `${base}.${ext}`, mimeType: mime[ext] ?? 'application/octet-stream', bytes: c.file.bytes };
     }
     if (!isContentsDecoded(c)) throw new LayerOperationError(`The contents of "${layer.name || id}" are not available here.`);
-    if (c.kind === 'raster') {
-      const data = readRegion(contentsSurface(c), { x: 0, y: 0, width: c.width, height: c.height });
-      return { name: `${base}.png`, mimeType: 'image/png', bytes: encodePng(c.width, c.height, data) };
-    }
-    const doc = c.document!;
-    const merged = readRegion(contentsSurface(c), { x: 0, y: 0, width: c.width, height: c.height });
-    const prepared = prepareNestedForPsd(doc.layers);
-    const res = exportPsd({ width: c.width, height: c.height, layers: prepared, merged, patterns: doc.patterns, globalLight: doc.globalLight });
-    return { name: `${base}.${res.psb ? 'psb' : 'psd'}`, mimeType: 'image/vnd.adobe.photoshop', bytes: res.bytes };
+    const f = smartContentsFile(c);
+    return { name: f.name, mimeType: f.name.endsWith('.png') ? 'image/png' : 'image/vnd.adobe.photoshop', bytes: f.bytes };
   }
 
   /**
@@ -2143,11 +2102,13 @@ export class ImageEditorController {
    */
   public async prepareSmartObjects(): Promise<string[]> {
     const pending = new Map<string, SmartContents>();
-    for (const l of flattenLayers(this.state.layers)) if (l.type === 'smart' && !isContentsDecoded(l.contents) && l.contents.file) pending.set(l.contents.id, l.contents);
+    for (const l of flattenLayers(this.state.layers)) {
+      if (l.type === 'smart' && !isContentsDecoded(l.contents) && l.contents.file && BROWSER_IMAGE_TYPES[l.contents.file.type]) pending.set(l.contents.id, l.contents);
+    }
     const left: string[] = [];
     for (const [cid, c] of pending) {
       try {
-        const url = `data:${c.file!.type === 'png' ? 'image/png' : c.file!.type === 'gif' ? 'image/gif' : c.file!.type === 'tif' || c.file!.type === 'tiff' ? 'image/tiff' : 'image/jpeg'};base64,${bytesToBase64(c.file!.bytes)}`;
+        const url = `data:${BROWSER_IMAGE_TYPES[c.file!.type]};base64,${bytesToBase64(c.file!.bytes)}`;
         const px = await this.decodeImage(url);
         const decoded: SmartContents = { ...c, kind: 'raster', raster: rasterContents(px, c.name, cid).raster, width: px.width, height: px.height };
         const swap = (layers: ImageLayer[]) => {
@@ -3885,11 +3846,11 @@ export class ImageEditorController {
         return out;
       }
       if (layer.type === 'smart') {
-        add('Smart objects were written as pixel layers (their rendered pixels)', layer.name);
-        const px = rasterizeSmartObjectOp([layer], layer.id).layer;
-        const mask = bakeMask(px);
-        if (mask) px.mask = mask;
-        return px;
+        const out = { ...layer };
+        const mask = bakeMask(layer);
+        if (mask) out.mask = mask;
+        else delete out.mask;
+        return out;
       }
       let out: PixelLayer = { ...layer };
       if (layer.source === 'document') {
