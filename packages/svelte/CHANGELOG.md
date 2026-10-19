@@ -1,5 +1,37 @@
 # @pixerate/editor-svelte
 
+## 0.76.3
+
+### Patch Changes
+
+- Updated dependencies [d7c732e]
+  - @pixerate/editor@0.104.0
+
+## 0.76.2
+
+### Patch Changes
+
+- Updated dependencies [cc1964d]
+  - @pixerate/editor@0.103.0
+
+## 0.76.1
+
+### Patch Changes
+
+- Updated dependencies [8e64a1d]
+  - @pixerate/editor@0.102.0
+
+## 0.76.0
+
+### Minor Changes
+
+- 6893ce8: Vector appearance stack: paths can stack several fills and strokes (`fills` / `strokes`, bottom to top, fills under strokes), each with its own paint, opacity, blend mode and visibility, and each stroke with its own width, alignment, dashes, caps, joins, arrowheads and profile. `fill` / `stroke` stay as shorthands for the top layer, so existing documents and commands keep working. Nodes get a `blendMode` (the CSS `mix-blend-mode` set, named as in the image editor) and `filters`: drop shadow, inner shadow, outer and inner glow, layer blur and feather, drawn as one SVG filter per node in both canvases and in SVG export (with lossless round-trip; `fill-opacity`, `mix-blend-mode`, `feDropShadow` and blur filters are read from other SVGs, and `mergeStackedShapes` merges same-outline shapes into a stack). Hit-testing uses the topmost visible paint; Outline Stroke outlines each stroke layer; the gradient editor and tool can work on any layer. New controller methods (`addPaintLayer`, `updatePaintLayer`, `removePaintLayer`, `movePaintLayer`, `setPaintLayers`, `setBlendMode`, `addFilter`, `updateFilter`, `removeFilter`, `moveFilter`), agent commands (`vector.getAppearance`, `vector.addFill` / `updateFill` / `removeFill` / `moveFill`, the same for strokes, `vector.setBlendMode`, `vector.addFilter` / `updateFilter` / `removeFilter` / `moveFilter`, and `fills` / `strokes` on `setStyle`, `addShape` and `addPath`), and a `VectorAppearancePanel` in the React and Svelte style panels.
+
+### Patch Changes
+
+- Updated dependencies [6893ce8]
+  - @pixerate/editor@0.101.0
+
 ## 0.75.0
 
 ### Minor Changes

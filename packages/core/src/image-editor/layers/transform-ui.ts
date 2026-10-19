@@ -274,7 +274,8 @@ export class FreeTransformTool {
       this.corners = s.geometry.corners;
       this.refBox = { x: s.box.x + s.box.width / 2, y: s.box.y + s.box.height / 2 };
       this.modeValue = 'scale';
-      this.mesh = null;
+      // A smart object's warp is part of its placement: keep editing it.
+      this.mesh = s.geometry.warp ?? null;
       this.warpSettings = { style: 'custom', bend: 50, horizontal: 0, vertical: 0, orientation: 'horizontal', columns: 1, rows: 1 };
       this.typed = {};
       this.error = null;

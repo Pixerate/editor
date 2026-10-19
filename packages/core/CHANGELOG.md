@@ -1,5 +1,29 @@
 # @pixerate/editor
 
+## 0.104.0
+
+### Minor Changes
+
+- d7c732e: Paint editor painting guides and colour tools. Mirror and kaleidoscope painting (vertical, horizontal, diagonal and dual mirrors, kaleidoscopes of 2 to 32 segments) paints every copy as one stroke and one undo step. Perspective guides with one to three vanishing points snap pen strokes to their lines. A tracing image sits under the paint in the view only and can supply stroke colours, and floating reference images let you pick colours. Colour harmonies work on the painter's red-yellow-blue wheel or the RGB wheel, swatches are saved with the document, and a mixing pad is painted with a pigment Mixer Brush and smeared with a palette knife. Adds 19 agent tools (`set_symmetry`, `set_perspective_guide`, `set_tracing_image`, `add_reference_image`, `color_harmony`, `mixing_pad_stroke`, …) and `snapToPerspective` on `paint_stroke`.
+
+## 0.103.0
+
+### Minor Changes
+
+- cc1964d: Add `@pixerate/editor/paint-editor`, a natural-media paint editor domain built on the shared raster stack and brush engine. `PaintEditorController` holds a canvas (size, dpi), a paper and the shared layer stack, with one undo step per stroke. Papers are generated grain height maps in a library of families (cold and hot pressed, rough, cartridge, laid, charcoal, sanded pastel, canvas, linen, gesso, smooth) with grain depth, scale, tiling and the absorption / permeability / roughness that wet media will use. Built-in dry media (pencils, pastels, charcoal, airbrush, marker, ink and brush pens, erasers, blender, smudge, Mixer Brush) catch the paper's peaks at light pressure and respond to pressure, tilt, barrel rotation and velocity, with separate position and pressure smoothing and fixed / follow-stroke / barrel rotation. The brush library has JSON import / export and thumbnails. Every stroke is recorded as data and can be replayed exactly or varied. Documents save as JSON with PNG assets; exports are PNG, JPEG, WebP and PSD. `createPaintEditorToolProvider` exposes 42 agent tools, and the new `pixerate-paint-editor` skill documents them.
+
+## 0.102.0
+
+### Minor Changes
+
+- 8e64a1d: Smart objects and smart filters in the image editor. A new `smart` layer type places contents (raster pixels, or a nested layer document) through a non-destructive placement (the Free Transform geometry: corners plus an optional warp mesh) and re-renders from the contents on every change, so repeated transforms never degrade. Convert to Smart Object (one or more layers), Rasterize, Edit Contents (open the contents as a document of their own, with their own undo, then save back), Replace Contents, Export Contents, and linked instances that share one contents (or New Smart Object via Copy for independent ones). Smart filters are an ordered stack of the existing `develop` and `blur` filters, each with enabled, blend mode and opacity, plus one shared filter mask (paintable through the new `filter-mask` paint channel). Pixel layers keep their own filters unchanged, so existing documents render identically; converting a pixel layer turns its filters into smart filters and renders byte for byte the same. Free Transform, `transform_layer`, `flip_layer`, `rotate_layer_90` and `offset_layer` work on smart objects by editing the placement. Smart objects round-trip through `toJSON` / `loadJSON` (contents stored once in `smartContents`). New agent tools: `get_smart_object`, `convert_to_smart_object`, `rasterize_smart_object`, `set_smart_object_transform`, `replace_smart_object_contents`, `export_smart_object_contents`, `copy_smart_object`, `edit_smart_object_contents`, `close_smart_object_contents`, `add_smart_filter`, `update_smart_filter`, `remove_smart_filter`, `move_smart_filter`, `set_smart_filters_enabled` and `set_smart_filter_mask`. The raster compositor gains an `isPixelLike` profile hook for layer kinds that draw a rendered surface like a pixel layer.
+
+## 0.101.0
+
+### Minor Changes
+
+- 6893ce8: Vector appearance stack: paths can stack several fills and strokes (`fills` / `strokes`, bottom to top, fills under strokes), each with its own paint, opacity, blend mode and visibility, and each stroke with its own width, alignment, dashes, caps, joins, arrowheads and profile. `fill` / `stroke` stay as shorthands for the top layer, so existing documents and commands keep working. Nodes get a `blendMode` (the CSS `mix-blend-mode` set, named as in the image editor) and `filters`: drop shadow, inner shadow, outer and inner glow, layer blur and feather, drawn as one SVG filter per node in both canvases and in SVG export (with lossless round-trip; `fill-opacity`, `mix-blend-mode`, `feDropShadow` and blur filters are read from other SVGs, and `mergeStackedShapes` merges same-outline shapes into a stack). Hit-testing uses the topmost visible paint; Outline Stroke outlines each stroke layer; the gradient editor and tool can work on any layer. New controller methods (`addPaintLayer`, `updatePaintLayer`, `removePaintLayer`, `movePaintLayer`, `setPaintLayers`, `setBlendMode`, `addFilter`, `updateFilter`, `removeFilter`, `moveFilter`), agent commands (`vector.getAppearance`, `vector.addFill` / `updateFill` / `removeFill` / `moveFill`, the same for strokes, `vector.setBlendMode`, `vector.addFilter` / `updateFilter` / `removeFilter` / `moveFilter`, and `fills` / `strokes` on `setStyle`, `addShape` and `addPath`), and a `VectorAppearancePanel` in the React and Svelte style panels.
+
 ## 0.100.0
 
 ### Minor Changes

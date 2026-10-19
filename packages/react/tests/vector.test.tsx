@@ -987,3 +987,72 @@ describe("distort and envelopes (React)", () => {
     expect(c.getState().undoLabel).toBe("Distort");
   });
 });
+
+describe("appearance stacks (react)", () => {
+  const stackedDoc = (): VectorDocument => ({
+    width: 400,
+    height: 300,
+    nodes: [
+      {
+        id: "a",
+        type: "path",
+        subpaths: [rectSubpath({ x: 0, y: 0, width: 100, height: 100 })],
+        fill: "#00ff00",
+        fills: [{ paint: "#ff0000" }, { paint: "#00ff00", opacity: 0.5, blendMode: "multiply" }],
+        stroke: "#000000",
+        strokeWidth: 2,
+        strokes: [{ paint: "#0000ff", strokeWidth: 8, strokeAlign: "outside" }, { paint: "#000000", strokeWidth: 2 }],
+        blendMode: "screen",
+        filters: [{ id: "f1", type: "dropShadow", params: { color: "#000000", opacity: 0.25, offsetX: 0, offsetY: 4, blur: 4, spread: 0 } }],
+      } as VectorPathNode,
+    ],
+  });
+
+  it("draws each layer, the blend modes and the filter", async () => {
+    const c = new VectorEditorController({ document: stackedDoc() });
+    await act(async () => root.render(<VectorCanvas controller={c} fitOnMount={false} />));
+    const g = q('g[data-vector-id="a"]');
+    const filterId = /^url\(#(.+-filter-a)\)$/.exec(g.getAttribute("filter") ?? "")![1];
+    expect(g.style.mixBlendMode).toBe("screen");
+    expect(qa('g[data-vector-id="a"] > [data-vector-layer]').map((el) => el.getAttribute("data-vector-layer"))).toEqual(["fill-0", "fill-1", "stroke-0", "stroke-1"]);
+    const fill1 = q('[data-vector-layer="fill-1"]');
+    expect(fill1.getAttribute("opacity")).toBe("0.5");
+    expect((fill1 as HTMLElement).style.mixBlendMode).toBe("multiply");
+    expect(q('[data-vector-layer="stroke-0"]').getAttribute("data-vector-stroke-align")).toBe("outside");
+    expect(container.querySelector(`filter[id="${filterId}"]`)?.querySelector("feGaussianBlur, fegaussianblur")).toBeTruthy();
+  });
+
+  it("edits the stacks, blend mode and filters from the style panel", async () => {
+    const c = new VectorEditorController({ document: stackedDoc() });
+    c.select(["a"]);
+    await act(async () => root.render(<VectorStylePanel controller={c} />));
+    const path = () => c.getNode("a") as VectorPathNode;
+    // Top layer first.
+    expect(qa('[data-vector-stack="fill"] [data-vector-layer]').map((el) => el.getAttribute("data-vector-layer"))).toEqual(["fill-1", "fill-0"]);
+    await act(async () => q<HTMLButtonElement>('button[aria-label="Add fill"]').click());
+    expect(path().fills).toHaveLength(3);
+    await act(async () => q<HTMLButtonElement>('button[aria-label="Move Fill 1 up"]').click());
+    expect(path().fills!.map((l) => l.paint)).toEqual(["#00ff00", "#ff0000", "#808080"]);
+    await act(async () => q<HTMLButtonElement>('button[aria-label="Remove Fill 3"]').click());
+    expect(path().fills).toHaveLength(2);
+    const hide = q<HTMLInputElement>('input[aria-label="Stroke 1 visible"]');
+    await act(async () => hide.click());
+    expect(path().strokes![0].visible).toBe(false);
+    const blend = q<HTMLSelectElement>('select[aria-label="Blend mode"]');
+    await act(async () => {
+      blend.value = "difference";
+      blend.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(path().blendMode).toBe("difference");
+    const add = q<HTMLSelectElement>('select[aria-label="Add filter"]');
+    await act(async () => {
+      add.value = "layerBlur";
+      add.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(path().filters!.map((f) => f.type)).toEqual(["dropShadow", "layerBlur"]);
+    await act(async () => q<HTMLButtonElement>('button[aria-label="Remove Drop Shadow"]').click());
+    expect(path().filters!.map((f) => f.type)).toEqual(["layerBlur"]);
+    await act(async () => q<HTMLButtonElement>('button[aria-label="Edit Stroke 1 gradient"]').click());
+    expect(c.getState().gradientEdit).toMatchObject({ target: "stroke", layer: 0 });
+  });
+});

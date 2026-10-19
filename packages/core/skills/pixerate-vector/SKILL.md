@@ -1,6 +1,6 @@
 ---
 name: pixerate-vector
-description: How to draw and edit vector artwork in the Pixerate vector editor through its vector.* commands - adding shapes and SVG paths, fills, strokes, gradients (linear, radial, conic, Oklab interpolation), stroke alignment, arrowheads, variable-width and tapered strokes, live corner radii, boolean operations and Pathfinder (unite, subtract, divide, trim), Shape Builder, paint bucket, live path effects (trim paths, repeater, zig zag, offset), envelope warps and free distort, blends and morphing, anchor editing (join, smooth, simplify, scissors, knife, eraser), align, distribute, group, stacking order, and SVG import and export. Use when creating an icon, logo, illustration, glyph, badge or any Bezier path artwork, or editing an SVG in a Pixerate vector editor.
+description: How to draw and edit vector artwork in the Pixerate vector editor through its vector.* commands - adding shapes and SVG paths, fills, strokes, stacked fills and strokes with blend modes, drop shadows, glows and blurs, gradients (linear, radial, conic, Oklab interpolation), stroke alignment, arrowheads, variable-width and tapered strokes, live corner radii, boolean operations and Pathfinder (unite, subtract, divide, trim), Shape Builder, paint bucket, live path effects (trim paths, repeater, zig zag, offset), envelope warps and free distort, blends and morphing, anchor editing (join, smooth, simplify, scissors, knife, eraser), align, distribute, group, stacking order, and SVG import and export. Use when creating an icon, logo, illustration, glyph, badge or any Bezier path artwork, or editing an SVG in a Pixerate vector editor.
 ---
 
 # Pixerate vector editor
@@ -17,6 +17,13 @@ effect stack. Every command is a `vector.*` command run with `run_command` / `ru
   selected with the direct tool; those that take `ids` default to the selection.
 - **Paint** is a CSS colour, `null` for none, or a gradient object
   `{ type, stops: [{ offset, color, opacity?, midpoint? }], ... }`.
+- **Appearance**: a path can stack several fills and several strokes (bottom to top; all fills
+  draw under all strokes), each with its own paint, `opacity`, `blendMode` and `visible`, and
+  each stroke with its own width, alignment, dashes, caps, joins, arrowheads and profile. Layers
+  are addressed by `index` in their stack, 0 at the bottom. `fill` / `stroke` and the stroke
+  settings of `vector.setStyle` are shorthands for the **top** layer; `null` clears the stack.
+  Any node can also have a `blendMode` and `filters` (drop / inner shadow, outer / inner glow,
+  layer blur, feather), which never change geometry.
 - Coordinates are document units. A rotated node stores its geometry in its own space: the
   `bounds` that `vector.list` reports are document-space, its `d` is the node's own.
 
@@ -26,7 +33,8 @@ Parameter details (gradient fields, effect parameters, width profiles, envelopes
 ## Working method
 
 1. **Read.** `vector.list` gives the artboard size, every node depth first (id, type, name,
-   bounds, rotation, fill, stroke, `d`, effects, blend and boolean info) and the selection.
+   bounds, rotation, fill, stroke, `d`, effects, blend and boolean info, stacks, blend mode and
+   filters) and the selection. `vector.getAppearance` gives one node's full stacks and filters.
 2. **Plan in layers.** Decide the shapes, their stacking (bottom to top) and their grouping
    before drawing. Start from primitives (`vector.addShape`) and combine them; write raw `d`
    only for curves primitives cannot make.
@@ -67,6 +75,17 @@ Parameter details (gradient fields, effect parameters, width profiles, envelopes
   perceptually even blends without the grey or muddy midpoint sRGB gives between saturated hues;
   `midpoint` to shift the half-way point instead of adding stops. Prefer linear or radial for
   portability; conic and diamond export as SVG patterns.
+- **Appearance stacks over duplicate shapes.** For a gradient over a texture, a tinted overlay,
+  an outline around an outline or a stroke inside and another outside, stack layers on one path
+  (`vector.addFill`, `vector.addStroke`) instead of copying the shape: the copies would drift
+  apart when edited. Give each stroke its own `strokeAlign` (outside under, inside or center on
+  top) and widths that step down towards the top. Use per-layer `opacity` and `blendMode`
+  (multiply to darken, screen to lighten, overlay for texture) rather than node opacity when only
+  one paint should fade.
+- **Shadows and glows.** Keep drop shadows subtle: black at 0.15 to 0.3 opacity, `offsetY` 2 to 8,
+  `blur` about twice the offset. Use one light direction for every shadow in a design. Filters
+  export as SVG filters, which some tools (and older renderers) draw slightly differently or not
+  at all; a design that must look identical everywhere should avoid them or rasterize.
 - **Grouping and naming.** Group the parts of one object (`vector.group` with a `name`), name
   paths that matter (`name` on add), and keep the tree shallow.
 - **SVG hygiene.** Export with `precision` 2 or 3 (default 3); higher only for tiny artboards.
@@ -102,6 +121,28 @@ Parameter details (gradient fields, effect parameters, width profiles, envelopes
 | `vector.setCorners` | Set live corner `radius` (0 makes them sharp) and / or `kind` (round, inverted, chamfer) on `anchors`, else the selected points, else every corner of `ids`. |
 | `vector.setWidthProfile` | Give strokes a variable width: a `preset` (uniform, taperStart, taperEnd, taperBoth, bulge, pinch, teardrop, wave, pressure; `uniform` removes it), explicit `points`, or a parametric `taper` and / or `wave`. Returns the profile points. |
 | `vector.setWidthPoint` | Set one width point of path `id`: `index` of an existing point (from the profile `vector.setWidthProfile` returns) or none to add one at `t` (0 to 1); `left` / `right` are side widths in document units. Returns the profile. |
+
+### Appearance: fill and stroke stacks, blend modes, filters
+
+| Command | Use it to |
+| --- | --- |
+| `vector.getAppearance` | Read node `id`'s appearance: for paths `fills` and `strokes` (bottom to top, each with `paint`, `opacity`, `blendMode`, `visible`; strokes with their settings) and `fillRule`; for any node `blendMode`, `opacity` and `filters` (with ids). Call it before editing a layer by index. |
+| `vector.addFill` | Add a fill layer (`paint`, default #808080; `opacity`, `blendMode`, `visible`) to `ids` (groups: every path inside), on top or at `index` (0 is the bottom). Returns each path's fill stack. |
+| `vector.updateFill` | Change fill `index` of path `nodeId`: `paint`, `opacity`, `blendMode`, `visible`. Fails, changing nothing, on an index the path doesn't have. Returns the fill stack. |
+| `vector.removeFill` | Remove fill `index` from path `nodeId`. Returns the remaining fills. |
+| `vector.moveFill` | Move fill `index` of path `nodeId` to position `to` (0 is the bottom). Returns the fills. |
+| `vector.addStroke` | Add a stroke layer to `ids`, on top or at `index`, with `paint` (default black), `opacity`, `blendMode`, `visible` and any stroke setting (`strokeWidth`, `strokeAlign`, `strokeLinecap`, `strokeLinejoin`, `strokeDasharray`, arrowheads, `strokeWidthProfile`); unset settings copy the current top stroke. Returns each path's stroke stack. |
+| `vector.updateStroke` | Change stroke `index` of path `nodeId`: paint, opacity, blend mode, visibility, any stroke setting (`null` removes an arrowhead, dashes or a profile). Returns the stroke stack. |
+| `vector.removeStroke` | Remove stroke `index` from path `nodeId`. Returns the remaining strokes. |
+| `vector.moveStroke` | Move stroke `index` of path `nodeId` to position `to` (0 is the bottom, drawn first). Returns the strokes. |
+| `vector.setBlendMode` | Set how whole nodes `ids` (paths or groups) mix with what is under them: `blendMode` normal, darken, multiply, color-burn, lighten, screen, color-dodge, linear-dodge, overlay, soft-light, hard-light, difference, exclusion, hue, saturation, color, luminosity. Returns each node's mode. |
+| `vector.addFilter` | Add a filter `type` (dropShadow, innerShadow, outerGlow, innerGlow, layerBlur, feather) with `params` to `ids`, at `index` (default last). Returns `{ nodes: [{ id, filterId, filters }] }`. |
+| `vector.updateFilter` | Change filter `filterId` of `nodeId`: `params` (merged; only the keys its type takes) and `enabled`. Returns the node's filters. |
+| `vector.removeFilter` | Remove filter `filterId` from `nodeId`. Returns the remaining filters. |
+| `vector.moveFilter` | Move filter `filterId` of `nodeId` to `index`; later shadows draw over earlier ones. Returns the filters. |
+
+`vector.setStyle`, `vector.addShape` and `vector.addPath` also take whole `fills` / `strokes`
+arrays, to build or replace a stack in one call.
 
 ### Transform and arrange
 
@@ -187,5 +228,14 @@ Parameter details (gradient fields, effect parameters, width profiles, envelopes
   design should grow proportionally.
 - `vector.importSvg` without `replace` adds on top; with `replace: true` it discards the current
   document (undoable, but confirm with the user first).
+- With a stack, `vector.setStyle` `fill` / `stroke` and the stroke settings edit only the top
+  layer, and `fill: null` / `stroke: null` remove every layer. Edit other layers with
+  `vector.updateFill` / `vector.updateStroke`, by the index `vector.getAppearance` reports.
+- Layer indexes shift after a remove or a move: use the stack each write returns.
+- Path effects apply to the whole node, every layer alike. Blend in-betweens mix the top fill and
+  stroke only.
+- Filters and blend modes are drawn, not geometry: bounds, snapping, booleans and Outline Stroke
+  ignore them. A node's blend mode and filter isolate its layers, so layer blend modes inside a
+  node with a filter mix only with the node's own layers. Background blur is not available.
 - A command that fails changes nothing; read its message (for example "Nothing is selected; pass
   ids.") and retry with the missing input.

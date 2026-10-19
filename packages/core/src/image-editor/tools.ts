@@ -27,6 +27,7 @@ import { createImagePaintTools } from './paint-tools';
 import { createPigmentTools } from '../paint/pigment-tools';
 import { createImagePsdTools } from './psd-tools';
 import { createImageTransformTools } from './transform-tools';
+import { createImageSmartObjectTools } from './smart-tools';
 
 export interface ImageEditorToolProviderOptions {
   /** Provider id (unique per registry). Default `image-editor`. */
@@ -64,6 +65,12 @@ function adjustmentsSummary(adjustments: ImageAdjustments) {
  *   `flip_image`, `undo_image`, `redo_image` (see `createImageEditTools`).
  * - Free Transform: `get_transform_frame`, `transform_layer`, `warp_layer`, `transform_selection`,
  *   `flip_layer`, `rotate_layer_90` (see `createImageTransformTools`).
+ * - Smart objects and smart filters: `get_smart_object`, `convert_to_smart_object`,
+ *   `rasterize_smart_object`, `set_smart_object_transform`, `replace_smart_object_contents`,
+ *   `export_smart_object_contents`, `copy_smart_object`, `edit_smart_object_contents`,
+ *   `close_smart_object_contents`, `add_smart_filter`, `update_smart_filter`, `remove_smart_filter`,
+ *   `move_smart_filter`, `set_smart_filters_enabled`, `set_smart_filter_mask` (see
+ *   `createImageSmartObjectTools`).
  */
 export function createImageEditorToolProvider(
   controller: ImageEditorController,
@@ -297,6 +304,7 @@ export function createImageEditorToolProvider(
       ...createImageEditTools(controller),
       ...createImageLayerTools(controller),
       ...createImageTransformTools(controller),
+      ...createImageSmartObjectTools(controller),
       ...createImageEffectTools(controller),
       ...createImagePaintTools(controller),
       ...createPigmentTools(),

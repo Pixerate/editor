@@ -1,6 +1,6 @@
 ---
 name: pixerate-image-editor
-description: How to colour-correct, composite and retouch a photo in the Pixerate image editor through its agent tools - layers (pixel, adjustment, group and annotation layers with masks, clipping, blend modes, opacity and fill; merge, flatten, layer via copy, filters), live layer effects (shadows, glows, bevels, satin, overlays, strokes), base adjustments (exposure, contrast, white balance, saturation, blur), adjustment layers (curves, levels, hue/saturation, vibrance, color balance, black and white and more), selections (wand, color range, modify, refine edge) and masks, Free Transform (scale, rotate, skew, distort, warp), crop, rotate, flip, Mixer Brush, undo, PSD, histogram and previews. Use when asked to edit, grade, correct, brighten, crop, straighten or mask an image, add a shadow, glow or outline, transform or warp a layer, or open or save a PSD, or when get_adjustments, set_adjustments, list_layers, add_layer_effect, transform_layer, paint_stroke, select_by_color, import_psd or render_preview are available.
+description: description: How to colour-correct, composite and retouch a photo in the Pixerate image editor through its agent tools - layers (pixel, adjustment, group, annotation and smart object layers with masks, clipping, blend modes, opacity and fill; merge, flatten, filters), smart objects (non-destructive transforms, smart filters, linked contents, edit contents), live layer effects (shadows, glows, bevels, overlays, strokes), base adjustments, adjustment layers (curves, levels, hue/saturation and more), selections and masks, Free Transform (scale, rotate, skew, distort, warp), crop, rotate, flip, Mixer Brush, undo, PSD, histogram and previews. Use when asked to edit, grade, correct, crop, straighten or mask an image, add a shadow, glow or outline, transform or warp a layer, make a smart object, or open or save a PSD, or when get_adjustments, set_adjustments, list_layers, add_layer_effect, transform_layer, convert_to_smart_object, paint_stroke, select_by_color, import_psd or render_preview are available.
 ---
 
 # Image editor
@@ -12,9 +12,10 @@ its mask, opacity and blend mode) and every annotation is its own layer on top. 
 shows the whole stack. Edits never touch the source pixels. The base controls edit the develop
 filter of the active pixel layer (the Background unless another pixel layer is active); base
 `blur` blurs that layer (or, in documents saved before layers with blur and adjustment layers,
-the output after the layers), and base `opacity` is the output's alpha. Pixel, annotation and
-group layers can carry live effects (shadows, glows, bevels, overlays, strokes). Also an optional
-selection and crop/rotate/flip. See `pixerate-agent-tools` for errors, namespacing and command
+the output after the layers), and base `opacity` is the output's alpha. Pixel, annotation, group
+and smart object layers can carry live effects (shadows, glows, bevels, overlays, strokes). A smart
+object places contents (pixels or a nested layer document) through a transform and smart filters,
+re-rendered from the contents on every change. Also an optional selection and crop/rotate/flip. See `pixerate-agent-tools` for errors, namespacing and command
 batching.
 
 - **Control ids** for base adjustments: `brightness`, `contrast`, `exposure`, `temperature`,
@@ -88,6 +89,33 @@ batching.
    rotation and move into one `transform_layer` call (or one matrix) instead of several.
 5. **Look**: `render_preview`, or `capture_view` at the edges; each call is one undo step.
 
+### Smart objects
+
+1. **Convert before repeated or uncertain changes**: `convert_to_smart_object` (one pixel layer, or
+   several siblings that nest as a layer document). A converted pixel layer looks exactly the same
+   and keeps its id; its filters become smart filters. From then on every transform and filter is
+   re-rendered from the contents, so scaling down and back up, or rotating twelve times, loses
+   nothing.
+2. **Read it**: `get_smart_object` gives the contents (size, kind, instances), the placement
+   (corners, warp, and scale / rotate in percent and degrees of the contents' own size) and the
+   smart filters with their ids.
+3. **Transform**: `set_smart_object_transform` sets the transform absolutely (scale 100 = the
+   contents' own size, `x`, `y` = where its centre goes; or `corners`, `matrix`, and a `warp` in
+   contents pixels, `null` to remove). `transform_layer`, `warp_layer`, `flip_layer` and
+   `rotate_layer_90` also work on a smart object, relative to its current placement, and never
+   degrade it. `offset_layer` moves it by whole pixels.
+4. **Filter non-destructively**: `add_smart_filter` (`develop` or `blur`, each with its own
+   `blend` and `opacity`; kinds can repeat), then `update_smart_filter`, `move_smart_filter`,
+   `remove_smart_filter` and `set_smart_filters_enabled`. `set_smart_filter_mask` limits where the
+   filters show; paint it with `paint_stroke` / `fill_pixels` `channel: "filter-mask"`.
+5. **Contents**: `copy_smart_object` with `linked: true` shares the contents (edit once, both
+   change), `linked: false` makes them independent. `edit_smart_object_contents` opens the
+   contents as their own document: every tool then works inside them until
+   `close_smart_object_contents` (`save: false` discards). `replace_smart_object_contents` swaps
+   in a new image for every linked instance; `export_smart_object_contents` returns the file.
+6. **Finish**: `rasterize_smart_object` only when the user wants plain pixels to paint on; the
+   placement and filters are then gone.
+
 ### Layer effects
 
 1. **Effects are live and per layer**: drop and inner shadows, outer and inner glows,
@@ -144,8 +172,9 @@ batching.
 ### Photoshop files
 
 1. **Inspect before opening.** `inspect_psd` lists every layer with the type it would become and
-   a status: `mapped` (held exactly), `approximated` (type, smart-object, fill and shape layers
-   come in as their stored pixels; Dissolve becomes Normal; effects with gradient midpoints or
+   a status: `mapped` (held exactly), `approximated` (type, fill and shape layers come in as their
+   stored pixels; linked smart objects as their stored pixels; Photoshop smart filters other than
+   Box Blur are kept but not drawn; Dissolve becomes Normal; effects with gradient midpoints or
    smoothness, noise gradients, glow jitter, legacy bevels or patterns missing from the file are
    drawn approximately) or
    `dropped` (Brightness/Contrast, Exposure, Channel Mixer, Gradient Map, Selective Color and
@@ -159,12 +188,20 @@ batching.
    and 32-bit files are converted to 8-bit RGB, and ICC profiles are ignored; the warnings say
    so. Afterwards work with `list_layers` as usual: there is no Background source image, every
    pixel comes from the layers.
-4. **`export_psd` writes the stack as it is**, in the source frame: crop and rotation are not
+4. **Smart objects come in live**: embedded contents (a PSB opens as a nested document you can
+   edit with `edit_smart_object_contents`, a PNG as raster contents), the placement and warp, the
+   smart filters and the filter mask; the layer shows Photoshop's own pixels until you change it.
+   JPEG, TIFF and SVG contents are decoded only in a browser, so elsewhere such a smart object
+   cannot be transformed (the error says so). Photoshop filters we do not model stay in the list
+   (kind `psd`): hide, reorder, re-blend or remove them, and `export_psd` writes them back.
+5. **`export_psd` writes the stack as it is**, in the source frame: crop and rotation are not
    applied, layer filters and depth masks are baked, annotation layers are rasterized (only in
    a browser). Effects are written as Photoshop layer styles: an effects block opened from a PSD
    goes back byte for byte while its effects are unchanged, and the patterns effects use (the
    built-in ones too) are embedded. Only the first outer glow, inner glow, bevel, satin and
-   pattern overlay of a layer fit in a PSD. Read its `warnings` and pass them on. The file comes back as base64 (`data`).
+   pattern overlay of a layer fit in a PSD. Smart objects are written as smart objects (an
+   unchanged one byte for byte); a Develop smart filter has no Photoshop filter and is left out of
+   the list (the pixels still show it). Read its `warnings` and pass them on. The file comes back as base64 (`data`).
 
 ## Best practices
 
@@ -224,6 +261,12 @@ batching.
   which `bounds` in the result shows.
 - **Unlink a mask** (`set_layer_mask_properties` `linked: false`) when the pixels should move
   under a fixed mask (a picture inside a frame); link it again afterwards.
+- **Smart objects for anything you may scale again.** Convert first, then transform as often as
+  needed; set exact sizes with `set_smart_object_transform` `scaleX` / `scaleY` (percent of the
+  contents) rather than chaining relative scales. Prefer smart filters over layer filters when
+  the user may want to mask, blend or reorder them later.
+- **Linked or not**: duplicate a smart object `linked: true` for repeated elements that must stay
+  identical (a logo placed twice); use `linked: false` when the copies will be edited apart.
 - **Merge Down only onto an opaque, 100 % lower layer** when the result must look the same:
   the merged layer keeps the lower layer's opacity and blend, so a faded lower layer fades the
   merged content too, and a blend mode on the upper layer stops seeing what was below the lower
@@ -238,14 +281,16 @@ batching.
 | `get_adjustments` | Read the current state: `values` by control id, `process` version (1 or 2), and `layers` bottom to top with id, kind, params, opacity, blend, enabled and mask. Call first, and to find layer ids. |
 | `list_controls` | Get every base control (id, label, section, min, max, step, default, `requiresProcess`), each layer kind's settable controls (plus `opacity`), the blend mode ids and the `layers.<layerId>.<controlId>` path format. Call once per session before writing. |
 | `get_selection` | Read the active selection: `empty`, `bounds` (natural pixels), `area` in pixels, `percent` of the image and a description. Check it after every select or modify step and before masking: a wand that covered 90% of the image is the wrong selection. |
-| `list_layers` | Read the layer stack bottom to top as a tree: id, type (`pixel`, `adjustment`, `group`, `annotation`), name, document `bounds` of pixel layers, visibility, opacity, `fillOpacity`, blend, `clipped`, locks, a `mask` summary, an `effects` summary (master switch, scale, effect ids and kinds), pixel-layer `filters` (the Background's `develop` filter is the base adjustments), adjustment `kind` and `params`, group `children`, and which layer is `active`. Call it to understand a document with more than the Background before changing it; adjustment layer ids work with every adjustment-layer tool. |
+| `list_layers` | Read the layer stack bottom to top as a tree: id, type (`pixel`, `adjustment`, `group`, `annotation`, `smart`; smart objects add their `contents`, `smartFilters` and `filterMask`), name, document `bounds` of pixel layers, visibility, opacity, `fillOpacity`, blend, `clipped`, locks, a `mask` summary, an `effects` summary (master switch, scale, effect ids and kinds), pixel-layer `filters` (the Background's `develop` filter is the base adjustments), adjustment `kind` and `params`, group `children`, and which layer is `active`. Call it to understand a document with more than the Background before changing it; adjustment layer ids work with every adjustment-layer tool. |
 | `list_layer_effects` | Read one layer's effects: `enabled` (master switch), `scale` (Scale Effects), `margin` (px they reach beyond the shape), `fromPsd`, and every effect with `id`, `kind`, `label` and all its settings. Also returns the `globalLight`, the `patterns` pattern effects can use and the effect `kinds`. Call before changing effects you did not add. |
 | `get_image_info` | Read the geometry: source `image` size, `crop` box (source pixels, or null), `rotation` degrees, `flipH` / `flipV`, the `output` size after crop and rotation, the layer count and `canUndo` / `canRedo`. Call before cropping or selecting so coordinates are right. |
 | `get_histogram` | Judge exposure numerically: per channel and luminance `mean`, `p1` and `p99` (0..255), and `clipping` percent at pure black and white per channel. Reads the last render, so call `render_preview` first. `bins` (16, 32, 64 or 256) adds the counts. Cheaper than another image for checking a tonal change. |
 | `render_preview` | See the edited image (crop, adjustments, layers, annotations) as a PNG, or with `layerId` one layer alone. `maxSide` 16..2048 px, default 512. Images cost tokens: render after a group of edits, use 512 for overall look and 1024+ to judge clipping, edges and masks. Fails in environments without rendering. |
-| `inspect_psd` | Read a PSD / PSB (`data` base64) without opening it: size, `depth`, `colorMode`, `resolution`, every layer bottom first with `psdKind`, the `type` it would become and `status` (`mapped`, `approximated`, `dropped`) with `notes`, and the import `warnings`. Call before `import_psd`. |
+| `inspect_psd` | Read a PSD / PSB (`data` base64) without opening it: size, `depth`, `colorMode`, `resolution`, every layer bottom first with `psdKind`, the `type` it would become (`smart` for smart objects) and `status` (`mapped`, `approximated`, `dropped`) with `notes`, and the import `warnings`. Call before `import_psd`. |
 | `export_psd` | Save the document as an 8-bit RGB PSD (PSB above 30000 px) with layers, groups, adjustment layers and masks. Returns `data` (base64), `size` in bytes, `psb` and `warnings` (crop or rotation not applied, filters and depth masks baked, annotations rasterized or left out, Pigment blends written as Normal). Changes nothing. |
 | `get_transform_frame` | Before a transform: what it would move (`content`, `moved`: pixels, mask, selection), its `frame` (document bounds of the content), `corners` (top-left, top-right, bottom-right, bottom-left) and `center`. `meshColumns` / `meshRows` also return an identity warp `mesh` over the frame to edit for `warp_layer`. Changes nothing. |
+| `get_smart_object` | Read a smart object: `contents` (`id` shared by linked instances, `name`, `kind` raster or document, `width` / `height`, `decoded`, `fileType`, `linkedPath`, `instances`), `placement` (`corners`, `warp` in contents px, `interpolation`, and when `affine` the `scaleX` / `scaleY` in percent of the contents, `rotate`, `skewX`, `center`, `bounds`) and `smartFilters` (`enabled`, `filters` bottom to top with ids, settings, `blend`, `opacity`; kind `psd` is a Photoshop filter kept but not drawn; the filter `mask`). Call before changing a smart object. |
+| `export_smart_object_contents` | Export Contents: the contents as a file (`name`, `mimeType`, `byteLength`, `base64`): the file they came from while unedited, else a PNG (raster) or PSD / PSB (nested document). Changes nothing. |
 | `capture_view` | Inspect detail in natural image pixels (the space of `get_selection` and `select_region`, before crop and rotation): `region` `content` (whole image, default), `selection` or `rect`; small regions are enlarged up to 8× with hard pixel edges, so a 64 px rect shows real pixels. `includeOverlays: true` shades unselected pixels and outlines the crop: use it to check a mask's edge before `apply_selection_as_mask`. Returns the `rect` and `scale`. Use `render_preview` for the final framed result. |
 
 ### Write
@@ -267,7 +312,7 @@ batching.
 | `flip_image` | Mirror the image `horizontal` (left-right) or `vertical`. Avoid flipping images with text, logos or recognisable places. |
 | `undo_image` | Undo the last edit (one tool call is one step). Returns `canUndo` / `canRedo`. |
 | `redo_image` | Redo the edit you just undid. |
-| `set_active_layer` | Make a layer active (`layerId`) and choose the paint `target` (`pixels` or `mask`). Base sliders then edit that pixel layer's develop filter. Not an undo step. Returns the layer. |
+| `set_active_layer` | Make a layer active (`layerId`) and choose the paint `target` (`pixels`, `mask`, or a smart object's `filter-mask`). Base sliders then edit that pixel layer's develop filter. Not an undo step. Returns the layer. |
 | `add_pixel_layer` | Add a pixel layer above the active layer (or at `aboveId` / `belowId` / `parentId` / `index`): empty, `color` `#rrggbb[aa]` over the canvas, or `image` (PNG data URL or base64; other formats only in a browser) at `x`, `y`; with `name`, `opacity`, `blend`. Returns the layer with its id and bounds. |
 | `duplicate_layer` | Copy a layer (groups with their children) directly above it, e.g. before a destructive change. Returns the copy. |
 | `remove_layer` | Delete a layer or group (refused when locked). Prefer hiding with `set_layer_properties`. Returns the remaining top-level ids. |
@@ -279,8 +324,8 @@ batching.
 | `merge_down` | Composite a layer onto the pixel layer below it (masks, fill and filters baked). Destructive; see Best practices. Returns the merged layer. |
 | `merge_visible` | Composite all visible top-level layers into one layer; hidden ones stay. Destructive. |
 | `flatten_image` | Composite everything visible into one Background; hidden layers are discarded. Destructive; do it only when asked. |
-| `offset_layer` | Move a pixel layer and its linked mask to `x`, `y` or by `dx`, `dy` (integers, document px; an unlinked mask stays put). Refused when its position is locked. Returns the offset and bounds. |
-| `transform_layer` | Free Transform a pixel layer (with its linked mask), the selected pixels (`content` `selection`), a copy of them on a new layer (`selection-copy`) or an unlinked mask (`channel` `mask`). Give the transform one way: `scaleX` / `scaleY` (percent), `rotate`, `skewX` / `skewY` (degrees), `dx` / `dy` (px) about `reference` (an anchor or `{x, y}`, default `center`); or `matrix` `[a, b, c, d, e, f]`; or `corners` (the frame's new corners: distort / perspective, kept convex). `interpolation` nearest, bilinear or bicubic (default). One undo step. Returns `layerId` (the new layer for a copy), `moved`, `frame`, `corners` and the new `bounds`. |
+| `offset_layer` | Move a pixel layer or smart object and its linked mask to `x`, `y` (a smart object's top-left corner) or by `dx`, `dy` (integers, document px; an unlinked mask stays put). Refused when its position is locked. Returns the offset and bounds. |
+| `transform_layer` | Free Transform a pixel layer or smart object (with its linked mask; a smart object re-renders from its contents and always moves whole), the selected pixels (`content` `selection`), a copy of them on a new layer (`selection-copy`) or an unlinked mask (`channel` `mask`). Give the transform one way: `scaleX` / `scaleY` (percent), `rotate`, `skewX` / `skewY` (degrees), `dx` / `dy` (px) about `reference` (an anchor or `{x, y}`, default `center`); or `matrix` `[a, b, c, d, e, f]`; or `corners` (the frame's new corners: distort / perspective, kept convex). `interpolation` nearest, bilinear or bicubic (default). One undo step. Returns `layerId` (the new layer for a copy), `moved`, `frame`, `corners` and the new `bounds`. |
 | `warp_layer` | Warp the same targets as `transform_layer` through a preset (`style` arc … twist, `bend` −100..100 default 50, `horizontal` / `vertical` distortion, `orientation`) or a `mesh` (`columns`, `rows`, (3·columns + 1) × (3·rows + 1) `points` in document px; start from `get_transform_frame`'s identity mesh). One undo step. Returns the new `bounds`. |
 | `transform_selection` | Transform only the selection outline (Transform Selection): the same numeric fields, `matrix` or `corners` as `transform_layer`, over the selection's bounds. Pixels do not change. Needs a selection. Returns the new selection `bounds`. |
 | `flip_layer` | Mirror a pixel layer, its selected pixels or a copy (`content`) `horizontal` or `vertical` about the frame's centre, exactly. For the whole image use `flip_image`. Returns the new `bounds`. |
@@ -290,7 +335,20 @@ batching.
 | `apply_layer_mask` | Bake a pixel layer's mask into its alpha and remove it. Destructive. |
 | `remove_layer_mask` | Delete a mask without applying it; disable it instead to keep it. |
 | `layer_via_copy` | Copy the selected pixels of a pixel layer (default the active one) to a new layer above it; `cut: true` removes them from the source. Needs a selection. Returns the new layer. |
-| `rasterize_layer` | Turn an annotation layer into pixels (same id and properties; browser only) or bake a pixel layer's develop / blur filters into its pixels. Do it before painting over an annotation, or when the user wants the filters fixed. Destructive. |
+| `rasterize_layer` | Turn an annotation layer into pixels (same id and properties; browser only), a smart object into a pixel layer (as `rasterize_smart_object`), or bake a pixel layer's develop / blur filters into its pixels. Do it before painting over an annotation, or when the user wants the filters fixed. Destructive. |
+| `convert_to_smart_object` | Convert sibling `layerIds` (default the active layer) to one smart object at the top one's position, optional `name`. One pixel layer keeps its id, look and properties (filters become smart filters); several layers, groups or adjustments nest as a layer document. Returns the `layer` and the `smartObject` summary. |
+| `rasterize_smart_object` | Turn a smart object into a pixel layer holding what it shows now (smart filters baked; same id, mask, effects, opacity, blend). Destructive: the contents and filters are gone. Returns the layer. |
+| `set_smart_object_transform` | Set a smart object's transform absolutely: `corners`, `matrix` (contents → document), or `scaleX` / `scaleY` (percent of the contents), `rotate`, `skewX`, `skewY`, `x`, `y` (where the contents' centre goes; unset numbers keep their values); `warp` preset or mesh in contents px, `null` removes it; `interpolation`. Re-renders from the contents. Returns `placement`, `masksMoved` and `bounds`. |
+| `replace_smart_object_contents` | Replace Contents with `image` (PNG data URL or base64; other formats in a browser) for the smart object and every linked instance; each keeps its scale and rotation about the centre. Returns `contentsId`, the new size and `layerIds` changed. |
+| `copy_smart_object` | Duplicate a smart object above it: `linked: true` shares the contents (edits show in both), `linked: false` (default, New Smart Object via Copy) gives independent contents. Returns the copy and its `contentsId`. |
+| `edit_smart_object_contents` | Open a smart object's contents as their own document (raster contents as one pixel layer, "Layer 0") with their own undo; all tools then act inside them. Returns the size, `layerIds`, `layers` and `editing` (the open path). Always close it. |
+| `close_smart_object_contents` | Close the innermost open contents: `save` true (default) writes them back and re-renders every linked instance (one undo step), false discards. Returns `layerId`, `changed`, `layerIds` and what is still `editing`. |
+| `add_smart_filter` | Add a `develop` (brightness … tint) or `blur` (`radius`) smart filter with its own `blend` and `opacity`, at `index` (default top); kinds may repeat. Returns the `filter` (with id) and the stack. |
+| `update_smart_filter` | Change one smart filter's settings, `enabled`, `blend` or `opacity` (`filterId` from `get_smart_object`); kind `psd` filters take only the last three. Returns the filter and the stack. |
+| `remove_smart_filter` | Remove one smart filter (the filter mask goes with the last one). Returns the stack. |
+| `move_smart_filter` | Move a smart filter to `index` (0 = bottom, applied first). Returns the stack. |
+| `set_smart_filters_enabled` | Switch the whole smart filter stack off or on (`enabled`); each filter keeps its own flag. Returns the stack. |
+| `set_smart_filter_mask` | Set the smart filter mask `from` `reveal-all`, `hide-all`, `selection`, `none` (remove) or `keep` (properties only), with `density`, `feather`, `enabled`, `linked`. Paint it with `channel: "filter-mask"`. Returns the mask summary. |
 | `add_layer_filter` | Add a live `develop` (brightness … tint) or `blur` (`radius`) filter to a pixel layer; one of each kind. Returns the filters with ids. |
 | `update_layer_filter` | Change a filter's values (`filterId` from `list_layers`). Returns the filters. |
 | `remove_layer_filter` | Remove a filter. Returns the remaining filters. |
@@ -327,8 +385,17 @@ batching.
 - `merge_down`, `merge_visible` and `flatten_image` merge annotation layers only in a browser
   (they need a canvas); elsewhere they fail and say so.
 - `paint_stroke`, `fill_pixels` and `clear_pixels` need a visible pixel layer (or a layer with a
-  raster mask and `channel: "mask"`); adjustment, group and annotation layers can only be
-  painted through their masks. A layer with `locks.pixels` refuses paint.
+  raster mask and `channel: "mask"`); adjustment, group, annotation and smart object layers can
+  only be painted through their masks (and a smart object through `channel: "filter-mask"`).
+  To paint a smart object's pixels, `edit_smart_object_contents` or rasterize it. A layer with
+  `locks.pixels` refuses paint.
+- While contents are open (`edit_smart_object_contents`), `list_layers` and every tool see the
+  contents, not the document, and `export_psd` / saving write the document without the open
+  edits. Close with `close_smart_object_contents` before anything else.
+- Smart filters run over the canvas, like layer filters: a blur clamps at the canvas edge, and a
+  smart object is drawn only up to 512 px beyond the canvas. `get_transform_frame` on a smart
+  object returns the contents' rectangle (contents px) as the `frame`, and a warp `mesh` in
+  contents px.
 - `mix_colors` predicts a mix; it does not paint. To paint the mix, pass `blend: "pigment"` to
   `paint_stroke` (in `brush`) or `fill_pixels`, or set it on a layer.
 - `pigment` has no PSD equivalent: `export_psd` writes those layers as Normal (the merged image

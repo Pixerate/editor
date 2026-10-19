@@ -685,6 +685,9 @@ function shapeNode(shape: VectorAppearanceShape, id: string): VectorPathNode {
 		locked: _l,
 		visible: _v,
 		opacity: _o,
+		// The node's own blend mode and filters stay on the node, not on each shape it draws.
+		blendMode: _bm,
+		filters: _fl,
 		...style
 	} = shape.source;
 	return { ...style, id, type: 'path', subpaths: bezierToSubpaths(shape.path), ...(shape.opacity < 1 ? { opacity: shape.opacity } : {}) };
@@ -698,7 +701,9 @@ function placement(node: VectorNode) {
 		...(node.visible === false ? { visible: false } : {}),
 		...(node.locked ? { locked: true } : {}),
 		...(node.blendStep ? { blendStep: true } : {}),
-		...(node.booleanOperation ? { booleanOperation: node.booleanOperation } : {})
+		...(node.booleanOperation ? { booleanOperation: node.booleanOperation } : {}),
+		...(node.blendMode ? { blendMode: node.blendMode } : {}),
+		...(node.filters?.length ? { filters: node.filters } : {})
 	};
 }
 

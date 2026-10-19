@@ -6,7 +6,7 @@
 
 import { adjustmentKindLabel } from '../adjustment-layers';
 import type { ImageEditorController } from '../controller';
-import { findLayer, type ImageLayer } from './model';
+import { findLayer, type ImageLayer, type SmartFilter, type SmartObjectLayer } from './model';
 import type { LayerPlacement } from './ops';
 
 export interface LayerPanelRow {
@@ -62,6 +62,8 @@ export function layerBadge(layer: ImageLayer): string {
       return 'grp';
     case 'annotation':
       return layer.annotation.type === 'text' ? 'T' : 'ann';
+    case 'smart':
+      return 'so';
   }
 }
 
@@ -103,7 +105,11 @@ export type LayerMenuAction =
   | 'toggle-mask'
   | 'toggle-mask-link'
   | 'toggle-clip'
-  | 'rasterize';
+  | 'rasterize'
+  | 'convert-smart'
+  | 'edit-contents'
+  | 'smart-via-copy'
+  | 'add-filter-mask';
 
 export interface LayerMenuItem {
   action: LayerMenuAction;
@@ -138,7 +144,11 @@ export function layerMenu(controller: ImageEditorController): LayerMenuItem[] {
     { action: 'delete-mask', label: 'Delete Layer Mask', enabled: Boolean(active?.mask) },
     { action: 'toggle-mask', label: active?.mask?.enabled === false ? 'Enable Layer Mask' : 'Disable Layer Mask', enabled: Boolean(active?.mask) },
     { action: 'toggle-mask-link', label: active?.mask?.linked === false ? 'Link Layer Mask' : 'Unlink Layer Mask', enabled: Boolean(active?.mask && !active.mask.source) },
-    { action: 'rasterize', label: 'Rasterize Layer', enabled: active?.type === 'annotation' || (isPixel && Boolean(active?.type === 'pixel' && active.filters?.length)) },
+    { action: 'rasterize', label: 'Rasterize Layer', enabled: active?.type === 'annotation' || active?.type === 'smart' || (isPixel && Boolean(active?.type === 'pixel' && active.filters?.length)) },
+    { action: 'convert-smart', label: 'Convert to Smart Object', enabled: Boolean(active && active.type !== 'annotation') },
+    { action: 'edit-contents', label: 'Edit Contents', enabled: active?.type === 'smart' },
+    { action: 'smart-via-copy', label: 'New Smart Object via Copy', enabled: active?.type === 'smart' },
+    { action: 'add-filter-mask', label: 'Add Smart Filter Mask', enabled: active?.type === 'smart' && !active.smartFilters?.mask },
     { action: 'toggle-clip', label: active?.clipped ? 'Release Clipping Mask' : 'Create Clipping Mask', enabled: Boolean(loc && loc.index > 0) },
   ];
 }
@@ -201,6 +211,18 @@ export async function runLayerMenuAction(controller: ImageEditorController, acti
       case 'rasterize':
         if (id) await controller.rasterizeLayer(id);
         break;
+      case 'convert-smart':
+        if (id) controller.convertToSmartObject([id]);
+        break;
+      case 'edit-contents':
+        if (id) controller.editSmartObjectContents(id);
+        break;
+      case 'smart-via-copy':
+        if (id) controller.copySmartObject(id, false);
+        break;
+      case 'add-filter-mask':
+        if (id) controller.setSmartFilterMask(id, 'reveal-all');
+        break;
       case 'toggle-clip':
         if (id) controller.setLayerProperties(id, { clipped: !active?.clipped });
         break;
@@ -209,4 +231,28 @@ export async function runLayerMenuAction(controller: ImageEditorController, acti
   } catch (err) {
     return err instanceof Error ? err.message : String(err);
   }
+}
+
+/** One row of a smart object's filter list (Photoshop shows them under the layer, top filter first). */
+export interface SmartFilterRow {
+  filter: SmartFilter;
+  /** Display name: Develop, Blur (radius), or the Photoshop filter's name. */
+  label: string;
+  /** Index in the stack, 0 = bottom (applied first). */
+  index: number;
+  /** False for Photoshop filters we keep but do not draw. */
+  drawn: boolean;
+}
+
+/** The filter rows of a smart object, top filter first (empty when it has none). */
+export function smartFilterRows(layer: ImageLayer): SmartFilterRow[] {
+  if (layer.type !== 'smart') return [];
+  const list = (layer as SmartObjectLayer).smartFilters?.filters ?? [];
+  const rows: SmartFilterRow[] = list.map((f, index) => ({
+    filter: f,
+    index,
+    drawn: f.kind !== 'psd',
+    label: f.kind === 'psd' ? f.name.replace(/&/g, '').replace(/\.\.\.$/, '') : f.kind === 'blur' ? `Blur (${f.radius} px)` : 'Develop',
+  }));
+  return rows.reverse();
 }

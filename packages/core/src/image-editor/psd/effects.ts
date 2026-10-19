@@ -83,6 +83,16 @@ const BLEND_LONG: Array<[BlendMode, string]> = [
 const BLEND_OF = new Map<string, BlendMode>([...BLEND_CODES, ...BLEND_LONG].map(([m, id]) => [id, m]));
 const BLEND_ID = new Map<BlendMode, string>(BLEND_CODES);
 
+/** A descriptor blend id (`Mltp`, or a long id like `linearBurn`) as our blend mode, or `undefined`. */
+export function blendFromPsdId(id: string): BlendMode | undefined {
+  return BLEND_OF.get(id);
+}
+
+/** Our blend mode as the descriptor's four-character id (`Nrml` for modes without one). */
+export function psdBlendId(mode: BlendMode): string {
+  return BLEND_ID.get(mode) ?? 'Nrml';
+}
+
 /** What reading met that our model cannot hold exactly (one short phrase each). */
 type Notes = Set<string>;
 

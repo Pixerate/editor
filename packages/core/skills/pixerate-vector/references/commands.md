@@ -45,6 +45,27 @@ length over main axis length), `reverse: true` (flip stops and midpoints), and `
 | startArrowScale, endArrowScale | Head weight as a multiple of the stroke width (default 1). |
 | fillRule | `nonzero`, `evenodd`. |
 
+## Fill and stroke stacks, blend modes and filters
+
+- **Layers.** A fill layer is `{ paint, opacity?, blendMode?, visible? }` (opacity 0 to 1,
+  default 1; blend mode default normal; visible default true). A stroke layer adds the stroke
+  settings above (`strokeWidth`, `strokeAlign`, …). Stacks list bottom to top; fills draw under
+  strokes. A path with one plain layer of each stores them as `fill` / `stroke`, so
+  `vector.getAppearance` is the way to read a stack as layers.
+- **Blend modes** (CSS `mix-blend-mode` names): normal, darken, multiply, color-burn, lighten,
+  screen, color-dodge, linear-dodge (drawn as plus-lighter), overlay, soft-light, hard-light,
+  difference, exclusion, hue, saturation, color, luminosity. The image editor's linear burn,
+  vivid light, pigment and the like have no SVG equivalent.
+- **Filters** (lengths in document units, colours CSS):
+  - `dropShadow`: `color` (#000000), `opacity` (0.25), `offsetX` (0), `offsetY` (4), `blur` (4),
+    `spread` (0).
+  - `innerShadow`: the same; `spread` chokes inwards.
+  - `outerGlow` / `innerGlow`: `color` (#ffffbe), `opacity` (0.75), `blur` (10), `spread` (0).
+  - `layerBlur`: `radius` (4), blurring everything the node draws, shadows included.
+  - `feather`: `radius` (8), fading the edges inwards over that width.
+  Blur radii follow CSS: they reach about 1.5 times the radius. Inner effects draw over the body,
+  then feather, then shadows and glows under it, then layer blurs over everything.
+
 ## Variable-width strokes
 
 A width profile is a list of `{ t, left, right }`: `t` is the position along each subpath by
