@@ -1,13 +1,14 @@
 /**
  * The paint tools' view model, shared by the React and Svelte editors: the brush options bar's
- * controls, Photoshop's shortcuts (B, E, V, [ ], Shift+[ ], number keys, D, X) and a pointer
- * gesture that turns pointer events into strokes (Brush, Eraser) or layer moves (Move).
+ * controls, Photoshop's shortcuts (B, Shift+B, E, V, [ ], Shift+[ ], number keys, D, X) and a
+ * pointer gesture that turns pointer events into strokes (Brush, Mixer Brush, Eraser) or layer
+ * moves (Move).
  */
 
 import type { ControlSpec } from '../controls';
 import type { ImageEditorController, PaintStrokeSession } from '../controller';
 import type { ImagePoint } from '../types';
-import { MAX_BRUSH_SIZE, type BrushSettings } from '../../paint';
+import { MAX_BRUSH_SIZE, type BrushSettings, type MixerSettings } from '../../paint';
 
 const plain = { kind: 'plain' } as const;
 
@@ -20,16 +21,35 @@ export const BRUSH_OPTION_CONTROLS: readonly (ControlSpec & { id: 'size' | 'hard
   { id: 'smoothing', label: 'Smoothing', section: 'layer', min: 0, max: 0.95, step: 0.01, default: 0, decimals: 0, track: plain, displayScale: 100, unit: '%' },
 ];
 
+/** Controls of the Mixer Brush (shown in %, with the brush controls, while the mixer is active). */
+export const MIXER_OPTION_CONTROLS: readonly (ControlSpec & { id: 'wet' | 'load' | 'mix' })[] = [
+  { id: 'wet', label: 'Wet', section: 'layer', min: 0, max: 1, step: 0.01, default: 0.5, decimals: 0, track: plain, displayScale: 100, unit: '%' },
+  { id: 'load', label: 'Load', section: 'layer', min: 0, max: 1, step: 0.01, default: 0.5, decimals: 0, track: plain, displayScale: 100, unit: '%' },
+  { id: 'mix', label: 'Mix', section: 'layer', min: 0, max: 1, step: 0.01, default: 0.5, decimals: 0, track: plain, displayScale: 100, unit: '%' },
+];
+
+/** The Mixer Brush's mixing models, for its RGB / Pigment toggle. */
+export const MIXER_MIXING_OPTIONS: readonly { id: MixerSettings['mixing']; label: string; title: string }[] = [
+  { id: 'rgb', label: 'RGB', title: 'Mix colours as RGB averages' },
+  { id: 'pigment', label: 'Pigment', title: 'Mix colours like paint: blue and yellow make green' },
+];
+
 /** The paint tools in the toolbar. */
 export const PAINT_TOOLS = [
   { id: 'move', label: 'Move', shortcut: 'V' },
   { id: 'brush', label: 'Brush', shortcut: 'B' },
+  { id: 'mixer', label: 'Mixer', shortcut: 'Shift+B' },
   { id: 'eraser', label: 'Eraser', shortcut: 'E' },
 ] as const;
 
 export type PaintTool = (typeof PAINT_TOOLS)[number]['id'];
 
-export const isPaintTool = (tool: string): tool is PaintTool => tool === 'move' || tool === 'brush' || tool === 'eraser';
+export const isPaintTool = (tool: string): tool is PaintTool => tool === 'move' || tool === 'brush' || tool === 'mixer' || tool === 'eraser';
+
+/** `#rrggbb` of an sRGB triple (0..1), e.g. the Mixer Brush's reservoir. */
+export function rgbUnitToHex(c: readonly [number, number, number]): string {
+  return `#${c.map((v) => Math.round(Math.min(1, Math.max(0, v)) * 255).toString(16).padStart(2, '0')).join('')}`;
+}
 
 /** Photoshop's bracket step for a brush size. */
 function sizeStep(size: number): number {
@@ -53,7 +73,7 @@ const isTyping = (t: unknown) => {
 
 /**
  * Applies a paint shortcut. Returns true when it was one (the caller then prevents the default).
- * B / E / V choose the tool; [ and ] change the size, with Shift the hardness by 25 %; 1..9 set the
+ * B / Shift+B (Mixer Brush) / E / V choose the tool; [ and ] change the size, with Shift the hardness by 25 %; 1..9 set the
  * opacity to 10..90 % and 0 to 100 %; D resets the colours to black and white; X swaps them.
  */
 export function handlePaintShortcut(controller: ImageEditorController, e: ShortcutEvent): boolean {
@@ -63,7 +83,7 @@ export function handlePaintShortcut(controller: ImageEditorController, e: Shortc
   const key = e.key;
   switch (key.toLowerCase()) {
     case 'b':
-      controller.setTool('brush');
+      controller.setTool(e.shiftKey || key === 'B' ? 'mixer' : 'brush');
       return true;
     case 'e':
       controller.setTool('eraser');
@@ -108,7 +128,7 @@ export function pointerPressure(e: { pointerType?: string; pressure?: number }):
 }
 
 /**
- * Turns pointer events into strokes (Brush, Eraser on the active layer's target) or layer moves
+ * Turns pointer events into strokes (Brush, Mixer Brush, Eraser on the active layer's target) or layer moves
  * (Move on the active pixel layer). `down` returns an error message when the tool cannot act.
  */
 export class PaintGesture {
@@ -135,7 +155,7 @@ export class PaintGesture {
         this.move = { id: layer.id, start: { x: sample.x, y: sample.y }, origin: { ...layer.offset }, moved: false };
         return null;
       }
-      if (tool === 'brush' || tool === 'eraser') {
+      if (tool === 'brush' || tool === 'eraser' || tool === 'mixer') {
         this.stroke = this.controller.beginStroke({ tool });
         this.stroke.push([sample]);
         return null;
