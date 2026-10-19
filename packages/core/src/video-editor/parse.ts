@@ -1,7 +1,7 @@
 import { VIDEO_GRADE_CONTROLS } from './grade.js';
 import { checkVideoTimeRemap } from './remap.js';
 import { VIDEO_EASE_NAMES, type VideoAnimatable, type VideoEase, type VideoKey, type VideoKeyframes } from './keyframes.js';
-import { VIDEO_BLEND_MODES, VIDEO_CLIP_ANIMATION_EFFECTS, VIDEO_CLIP_TYPES, VIDEO_FADE_CURVES, VIDEO_FITS, VIDEO_TRANSITION_TYPES, VIDEO_WIPE_DIRECTIONS, type VideoAsset, type VideoClip, type VideoClipAnimation, type VideoGrade, type VideoMarker, type VideoProject, type VideoTrack, type VideoTranscriptWord, type VideoTransform, type VideoTransition } from './types.js';
+import { VIDEO_BLEND_MODES, VIDEO_CLIP_ANIMATION_EFFECTS, VIDEO_CLIP_TYPES, VIDEO_FADE_CURVES, VIDEO_FITS, VIDEO_TRANSITION_TYPES, VIDEO_WIPE_DIRECTIONS, type VideoAsset, type VideoClip, type VideoClipAnimation, type VideoGrade, type VideoGradeLut, type VideoMarker, type VideoProject, type VideoTrack, type VideoTranscriptWord, type VideoTransform, type VideoTransition } from './types.js';
 
 const isObject = (v: unknown): v is Record<string, any> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const fail = (path: string, what: string): never => {
@@ -106,10 +106,18 @@ export function parseVideoClipAnimation(v: unknown, path: string): VideoClipAnim
 export function parseVideoGrade(v: unknown, path: string): VideoGrade | undefined {
 	if (v === undefined) return undefined;
 	if (!isObject(v)) return fail(path, 'must be an object such as { exposure, contrast, saturation }');
-	const known = new Set(VIDEO_GRADE_CONTROLS.map((c) => c.key as string));
+	const known = new Set([...VIDEO_GRADE_CONTROLS.map((c) => c.key as string), 'lut']);
 	const unknown = Object.keys(v).find((k) => !known.has(k));
 	if (unknown) fail(`${path}.${unknown}`, `is not a grade setting; use ${[...known].join(', ')}`);
-	return compact(Object.fromEntries(VIDEO_GRADE_CONTROLS.map((c) => [c.key, num(v[c.key], `${path}.${c.key}`, { optional: true, min: c.min, max: c.max })]))) as VideoGrade;
+	return compact({ ...Object.fromEntries(VIDEO_GRADE_CONTROLS.map((c) => [c.key, num(v[c.key], `${path}.${c.key}`, { optional: true, min: c.min, max: c.max })])), lut: parseVideoGradeLut(v.lut, `${path}.lut`) }) as VideoGrade;
+}
+
+export function parseVideoGradeLut(v: unknown, path: string): VideoGradeLut | undefined {
+	if (v === undefined) return undefined;
+	if (!isObject(v)) return fail(path, 'must be an object { src, strength } naming a .cube file');
+	const unknown = Object.keys(v).find((k) => !['src', 'strength', 'name'].includes(k));
+	if (unknown) fail(`${path}.${unknown}`, 'is not a LUT setting; use src, strength, name');
+	return compact({ src: str(v.src, `${path}.src`)!, strength: num(v.strength, `${path}.strength`, { optional: true, min: 0, max: 1 }), name: str(v.name, `${path}.name`, true) });
 }
 
 export function parseVideoTransition(v: unknown, path: string): VideoTransition | undefined {

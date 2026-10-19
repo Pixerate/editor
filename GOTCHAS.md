@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/video-editor] A LUT Cannot Be a Canvas or SVG Filter, and ffmpeg's `lut3d` Reads Only Files
+
+- **Issue / Symptom**: There is no CSS or canvas `filter` for a 3D LUT, SVG filters have only per-channel tables and a 4 × 5 matrix, and `lut3d=file=https://…` (or a blob URL) fails in ffmpeg.
+- **Root Cause**: A 3D LUT mixes all three channels non-linearly, which neither `feComponentTransfer` nor `feColorMatrix` can express. `lut3d` opens its `file` with the local file system, not ffmpeg's protocol layer.
+- **Solution / Workaround**: The preview draws a LUT layer on a scratch canvas (`willReadFrequently`), runs `getImageData` through `applyVideoLutToPixels` (tetrahedral, like `lut3d=interp=tetrahedral`), then lays it on with the layer's opacity and blend. SVG frames use `videoLutSvgApproximation`: curves along the grey axis, then a least-squares matrix, exact for LUTs that are only curves or only a matrix. The `feComposite` that mixes by strength needs the pre-LUT picture as a named `result`. The export maps `src` to a path with `resolveLut` and notes URLs. A grade with only a LUT has an empty CSS filter: set `ctx.filter = 'none'`, since `''` is ignored and the last filter stays.
+
 ### [core/video-editor] Scopes Read a Stale Picture While a `<video>` Seeks, and Nothing From a Cross-Origin One
 
 - **Issue / Symptom**: `get_video_scopes` at another time measured the frame the preview showed before the seek. With media from another origin, reading the preview canvas threw "The operation is insecure".

@@ -6,7 +6,8 @@ import { VIDEO_EDIT_OPS, type VideoEdit, type VideoEditOutcome, type VideoEditRe
 import { findVideoAudioSilences, videoAudioLevels } from './audio.js';
 import { findVideoFillers, findVideoTranscriptPauses, findVideoTranscriptText, mergeVideoRanges, parseVideoTranscript, VIDEO_DEFAULT_FILLERS, videoRemoveRangesEdits, videoTimelineTranscript, videoTranscriptTrack, type VideoTranscriptRange } from './transcript.js';
 import { videoFreezeFrameEdit, videoSpeedRampEdit, videoSpeedRampKeys } from './remap.js';
-import { VIDEO_GRADE_CONTROLS, VIDEO_GRADE_PRESET_NAMES, videoGradePreset } from './grade.js';
+import { VIDEO_GRADE_CONTROLS, VIDEO_GRADE_PRESET_NAMES, videoGradeLook } from './grade.js';
+import { videoLutEdits } from './ui.js';
 import { videoFrameAt } from './evaluate.js';
 import { summarizeVideoScopes, type VideoPixels } from './scopes.js';
 import { VIDEO_EASE_NAMES, VIDEO_KEYFRAME_PROPERTIES, VIDEO_TRANSFORM_PROPERTIES, type VideoAnimatable, type VideoKeyframeProperty } from './keyframes.js';
@@ -89,10 +90,15 @@ const TRANSITION = object(
 	['type', 'duration'],
 	'A transition from the clip that ends where this one starts on the same track.'
 );
+const LUT_SRC = { type: 'string', minLength: 1, description: 'A .cube 3D LUT file the host can load and ffmpeg can read: a URL or path, often from the user (e.g. "luts/teal-orange.cube").' } as const;
+const LUT_STRENGTH = { type: 'number', minimum: 0, maximum: 1, description: 'How much of the LUT\'s change to apply, 0 (none) to 1 (full, the default); 0.3-0.7 for a subtler look.' } as const;
 const GRADE = object(
-	Object.fromEntries(VIDEO_GRADE_CONTROLS.map((c) => [c.key, { type: 'number', minimum: c.min, maximum: c.max, description: c.description }])),
+	{
+		...Object.fromEntries(VIDEO_GRADE_CONTROLS.map((c) => [c.key, { type: 'number', minimum: c.min, maximum: c.max, description: c.description }])),
+		lut: object({ src: LUT_SRC, strength: LUT_STRENGTH, name: { type: 'string', minLength: 1, description: 'A label for the look.' } }, ['src'], 'A 3D LUT applied after the other settings (set_video_lut checks the file first).')
+	},
 	[],
-	'Colour correction of the picture, applied in order: exposure, contrast, saturation, hue, white balance (temperature, tint). Leave a setting out for no change; the object replaces the clip\'s whole grade.'
+	'Colour correction of the picture, applied in order: exposure, contrast, saturation, hue, white balance (temperature, tint), then a LUT. Leave a setting out for no change; the object replaces the clip\'s whole grade.'
 );
 const ANIMATION = (when: string) =>
 	object(
@@ -344,14 +350,19 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 		annotations: { title: 'Render a frame', ...READ },
 		handler: async ({ time, times, columns, format = 'svg' }) => {
 			const p = project();
-			const svg = times ? videoContactSheetSvg(p, times, columns ? { columns } : {}) : videoProjectSvg(p, time ?? controller.getState().time);
+			// LUTs are drawn from their tables (approximated in SVG), so load the ones in use first.
+			const lutSrcs = [...new Set(p.tracks.flatMap((t) => t.clips.map((c) => c.grade?.lut?.src).filter((x): x is string => !!x)))];
+			const missing = (await Promise.all(lutSrcs.map((src) => controller.luts.load(src).then(() => null, (e: Error) => e.message)))).filter((m): m is string => !!m);
+			const svgOptions = { lutFor: (src: string) => controller.luts.peek(src), ...(columns ? { columns } : {}) };
+			const svg = times ? videoContactSheetSvg(p, times, svgOptions) : videoProjectSvg(p, time ?? controller.getState().time, svgOptions);
+			const notes = [...missing.map((m) => `${m}; that LUT is left out of the picture.`), ...(lutSrcs.length > missing.length ? ['LUTs are drawn approximately in SVG (curves and a colour matrix); the preview and export apply them exactly.'] : [])];
 			if (format === 'png') {
 				if (!options.rasterize) throw new Error('This host cannot make PNG images; call render_video_frame with format "svg".');
 				const size = /viewBox="0 0 ([\d.]+) ([\d.]+)"/.exec(svg)!;
 				const image = await options.rasterize(svg, { width: Number(size[1]), height: Number(size[2]) });
-				return { content: [{ type: 'image', data: image.data, mimeType: image.mimeType }] };
+				return { content: [{ type: 'image', data: image.data, mimeType: image.mimeType }, ...(notes.length ? [{ type: 'text' as const, text: notes.join(' ') }] : [])] };
 			}
-			return { svg };
+			return { svg, ...(notes.length ? { notes } : {}) };
 		}
 	};
 
@@ -618,7 +629,7 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 		name: 'apply_video_grade_preset',
 		title: 'Apply a colour look',
 		description:
-			'Gives clips a named colour look at a strength (one undo step), replacing their grades: warm, cool, punchy (more contrast and colour), faded (lifted and muted), black-and-white, bleach-bypass (desaturated, contrasty), day-for-night (dark and blue). Returns each clip\'s resulting grade; tweak it with update_video_clip set.grade.',
+			'Gives clips a named colour look at a strength (one undo step), replacing their grade settings (a LUT stays): warm, cool, punchy (more contrast and colour), faded (lifted and muted), black-and-white, bleach-bypass (desaturated, contrasty), day-for-night (dark and blue). Returns each clip\'s resulting grade; tweak it with update_video_clip set.grade.',
 		inputSchema: object(
 			{
 				clips: { type: 'array', items: CLIP_ID, minItems: 1, description: 'Clips on video tracks to grade.' },
@@ -630,8 +641,11 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 		annotations: { title: 'Apply a colour look', ...WRITE_IDEMPOTENT },
 		handler: ({ clips, preset, amount }) => {
 			gradeTargets(clips);
-			const grade = videoGradePreset(preset, amount ?? 1);
-			const edits: VideoEdit[] = clips.map((clip: string) => (grade ? { op: 'update_clip', clip, set: { grade } } : { op: 'update_clip', clip, remove: ['grade'] }));
+			// A clip's LUT stays: the look replaces only the grade's settings.
+			const edits: VideoEdit[] = clips.map((clip: string) => {
+				const grade = videoGradeLook(findVideoClip(project(), clip)!.clip.grade, preset, amount ?? 1);
+				return grade ? { op: 'update_clip', clip, set: { grade } } : { op: 'update_clip', clip, remove: ['grade'] };
+			});
 			return apply(edits, `Apply ${preset} look`, (r) => ({ clips: clips.map((id: string) => ({ id, grade: findVideoClip(r.project, id)?.clip.grade ?? null })) }));
 		}
 	};
@@ -648,6 +662,47 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 			const grade = findVideoClip(project(), from)!.clip.grade;
 			const edits: VideoEdit[] = to.map((clip: string) => (grade ? { op: 'update_clip', clip, set: { grade: { ...grade } } } : { op: 'update_clip', clip, remove: ['grade'] }));
 			return apply(edits, 'Copy grade', () => ({ grade: grade ?? null, clips: to }));
+		}
+	};
+
+
+	const setLut: AgentTool = {
+		name: 'set_video_lut',
+		title: 'Apply a LUT',
+		description:
+			'Gives clips a 3D LUT (a .cube file) at a strength, applied after the rest of their grade (one undo step); their other grade settings stay. Reads the file first and fails, changing nothing, if it cannot be loaded or is not a 3D .cube. Returns the LUT\'s title and size and each clip\'s resulting grade. Remove it with remove_video_lut.',
+		inputSchema: object(
+			{
+				clips: { type: 'array', items: CLIP_ID, minItems: 1, uniqueItems: true, description: 'Clips on video tracks to grade.' },
+				src: LUT_SRC,
+				strength: LUT_STRENGTH,
+				name: { type: 'string', minLength: 1, description: 'A label for the look (default the file\'s TITLE).' }
+			},
+			['clips', 'src']
+		),
+		annotations: { title: 'Apply a LUT', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+		handler: async ({ clips, src, strength, name }) => {
+			if (strength === 0) throw new Error('A strength of 0 changes nothing; pass a strength above 0, or remove the LUT with remove_video_lut.');
+			gradeTargets(clips);
+			const lut = await controller.luts.load(src);
+			const label = name ?? lut.title;
+			const setting = { src, ...(strength !== undefined && strength !== 1 ? { strength } : {}), ...(label ? { name: label } : {}) };
+			return apply(videoLutEdits(project(), clips, setting), 'Apply LUT', (r) => ({ lut: { src, ...(lut.title ? { title: lut.title } : {}), size: lut.size }, clips: clips.map((id: string) => ({ id, grade: findVideoClip(r.project, id)?.clip.grade ?? null })) }));
+		}
+	};
+
+	const removeLut: AgentTool = {
+		name: 'remove_video_lut',
+		title: 'Remove a LUT',
+		description: 'Takes the LUT off clips\' grades (one undo step), keeping their other grade settings. Fails if none of them has one. Returns each clip\'s resulting grade.',
+		inputSchema: object({ clips: { type: 'array', items: CLIP_ID, minItems: 1, uniqueItems: true, description: 'Clips whose LUT to remove.' } }, ['clips']),
+		annotations: { title: 'Remove a LUT', ...WRITE_IDEMPOTENT },
+		handler: ({ clips }) => {
+			gradeTargets(clips);
+			const p = project();
+			const withLut = clips.filter((id: string) => findVideoClip(p, id)!.clip.grade?.lut);
+			if (!withLut.length) throw new Error(`None of ${clips.map((c: string) => `"${c}"`).join(', ')} has a LUT; get_video_project shows each clip's grade.`);
+			return apply(videoLutEdits(p, withLut, null), 'Remove LUT', (r) => ({ clips: clips.map((id: string) => ({ id, grade: findVideoClip(r.project, id)?.clip.grade ?? null })) }));
 		}
 	};
 
@@ -1161,7 +1216,7 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 	};
 
 	const reads = [getProject, getFrame, getTranscript, findText, findFillers, findPauses, findGaps, checkProject, renderFrame, getScopes, exportFfmpeg, exportLoudnessMeasure, exportEdl, audioLevels, findSilences, seek];
-	const writes = [setSettings, addAsset, updateAsset, removeAsset, addTrack, updateTrack, removeTrack, moveTrack, addClip, moveClip, trimClip, splitClip, deleteClips, updateClip, setTransition, setSpeedRamp, addFreeze, removeRamp, setTranscript, removeRanges, applyGradePreset, copyGrade, setKeyframes, removeKeyframes, slipClip, rollEdit, slideClip, liftRange, extractRange, splitAt, closeGaps, addMarker, removeMarker, editVideo, undo, redo];
+	const writes = [setSettings, addAsset, updateAsset, removeAsset, addTrack, updateTrack, removeTrack, moveTrack, addClip, moveClip, trimClip, splitClip, deleteClips, updateClip, setTransition, setSpeedRamp, addFreeze, removeRamp, setTranscript, removeRanges, applyGradePreset, copyGrade, setLut, removeLut, setKeyframes, removeKeyframes, slipClip, rollEdit, slideClip, liftRange, extractRange, splitAt, closeGaps, addMarker, removeMarker, editVideo, undo, redo];
 
 	return {
 		id: options.id ?? 'video',

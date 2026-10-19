@@ -613,3 +613,39 @@ describe("VideoScopes (Svelte)", () => {
     controller.destroy();
   });
 });
+
+describe("ClipInspector LUT (Svelte)", () => {
+  it("loads a .cube by path or file, sets its strength and removes it, one undo step each", async () => {
+    const controller = new VideoEditorController({ project: PROJECT, clock: new ManualClock(), luts: async (src) => {
+      if (src !== "swap.cube") throw new Error("404 Not Found");
+      return 'TITLE "Swap"\nLUT_3D_SIZE 2\n0 0 0\n0 1 0\n1 0 0\n1 1 0\n0 0 1\n0 1 1\n1 0 1\n1 1 1\n';
+    } });
+    render(ClipInspector, { controller });
+    act(() => controller.select(["c1"]));
+    const lutInput = () => q<HTMLInputElement>('input[aria-label="LUT file"]');
+    const settle = async () => {
+      await new Promise((r) => setTimeout(r, 0));
+      flushSync();
+    };
+    change(lutInput(), "missing.cube");
+    await settle();
+    expect(q("[data-edit-error]").textContent).toBe('The LUT "missing.cube" could not be read: 404 Not Found');
+    change(lutInput(), "swap.cube");
+    await settle();
+    expect(clipOf(controller, "c1")!.grade).toEqual({ lut: { src: "swap.cube", name: "Swap" } });
+    expect(controller.getState().undoLabel).toBe("Apply LUT");
+    change(q<HTMLInputElement>('[data-field="grade.lut.strength"]'), "0.4");
+    expect(clipOf(controller, "c1")!.grade!.lut).toEqual({ src: "swap.cube", name: "Swap", strength: 0.4 });
+    change(q<HTMLSelectElement>('[data-field="gradePreset"]'), "cool");
+    expect(clipOf(controller, "c1")!.grade!.lut).toEqual({ src: "swap.cube", name: "Swap", strength: 0.4 });
+    act(() => q<HTMLButtonElement>('button[aria-label="Remove LUT"]').click());
+    expect(clipOf(controller, "c1")!.grade!.lut).toBeUndefined();
+    const file = new File(['TITLE "Swap"\nLUT_3D_SIZE 2\n0 0 0\n0 1 0\n1 0 0\n1 1 0\n0 0 1\n0 1 1\n1 0 1\n1 1 1\n'], "local.cube");
+    const input = q<HTMLInputElement>('input[aria-label="Load a .cube LUT"]');
+    Object.defineProperty(input, "files", { value: [file] });
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    await settle();
+    expect(clipOf(controller, "c1")!.grade!.lut).toEqual({ src: "local.cube", name: "Swap" });
+    controller.destroy();
+  });
+});
