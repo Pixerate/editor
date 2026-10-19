@@ -1,11 +1,14 @@
 import { videoFrameAt, type VideoFrame, type VideoLayer } from './evaluate.js';
 import { drawVideoFrame, type VideoCanvasContext } from './render.js';
+import type { VideoPreviewPixels, VideoPreviewSnapshot } from './scopes.js';
 import type { VideoProject } from './types.js';
 
 /** What a preview follows: a `VideoEditorController` fits. */
 export interface VideoPreviewSource {
 	getState(): { project: VideoProject; time: number; playing: boolean };
 	subscribe(listener: () => void): () => void;
+	/** Where to publish the drawn pixels (a controller has one), for scopes and agents. */
+	previewPixels?: VideoPreviewPixels;
 }
 
 /** The parts of a media element the preview drives (so tests can pass fakes). */
@@ -16,6 +19,8 @@ export interface VideoPreviewMedia {
 	volume: number;
 	muted: boolean;
 	paused: boolean;
+	/** True while a seek is under way (the element still shows the old frame). */
+	seeking?: boolean;
 	readyState: number;
 	preload: string;
 	play(): Promise<void> | void;
@@ -49,6 +54,11 @@ export interface VideoPreviewOptions {
 	 * it. Default: a hidden `<svg>` added to `document.body`. `null` leaves white balance out.
 	 */
 	defineSvgFilter?: ((id: string, markup: string) => void) | null;
+	/**
+	 * Where to publish the canvas's pixels after each frame, for scopes and the `get_video_scopes`
+	 * tool (default: the source's `previewPixels`). `null` publishes nothing.
+	 */
+	pixels?: VideoPreviewPixels | null;
 }
 
 interface Entry {
@@ -74,6 +84,10 @@ export class VideoPreviewEngine {
 	private destroyed = false;
 	private filterHost: Element | null = null;
 	private readonly filters = new Set<string>();
+	private readonly detachPixels: () => void;
+	private readonly pixelsTarget: VideoPreviewPixels | null;
+	private drawn: { time: number; complete: boolean } | null = null;
+	private complete = true;
 
 	constructor(
 		private readonly source: VideoPreviewSource,
@@ -83,7 +97,17 @@ export class VideoPreviewEngine {
 		this.canvas = canvas;
 		this.ctx = options.context !== undefined ? options.context : ((canvas.getContext?.('2d') as VideoCanvasContext | null) ?? null);
 		this.unsubscribe = source.subscribe(() => this.update());
+		const pixels = options.pixels !== undefined ? options.pixels : source.previewPixels;
+		this.detachPixels = pixels ? pixels.attach(() => this.readPixels()) : () => {};
+		this.pixelsTarget = pixels ?? null;
 		this.update();
+	}
+
+	/** The canvas's pixels and the frame they show, or `null` when its context cannot be read. */
+	readPixels(): VideoPreviewSnapshot | null {
+		const ctx = this.ctx as (VideoCanvasContext & { getImageData?: (x: number, y: number, w: number, h: number) => ImageData }) | null;
+		if (!ctx?.getImageData || !this.drawn) return null;
+		return { ...this.drawn, pixels: ctx.getImageData(0, 0, this.canvas.width, this.canvas.height) };
 	}
 
 	private createMedia(kind: 'video' | 'audio'): VideoPreviewMedia {
@@ -184,7 +208,9 @@ export class VideoPreviewEngine {
 			return img.complete ? (img as unknown as CanvasImageSource) : null;
 		}
 		const entry = this.media.get(layer.clip);
-		return entry && entry.media.readyState >= 2 ? (entry.media as unknown as CanvasImageSource) : null;
+		if (!entry || entry.media.readyState < 2) return null;
+		if (entry.media.seeking) this.complete = false;
+		return entry.media as unknown as CanvasImageSource;
 	};
 
 	private draw(frame: VideoFrame) {
@@ -196,8 +222,16 @@ export class VideoPreviewEngine {
 		const h = Math.max(1, Math.round(frame.height * resolution));
 		if (this.canvas.width !== w) this.canvas.width = w;
 		if (this.canvas.height !== h) this.canvas.height = h;
-		drawVideoFrame(this.ctx, frame, this.sourceFor, resolution, { defineSvgFilter: this.defineSvgFilter });
+		this.complete = true;
+		const sourceFor = (layer: VideoLayer) => {
+			const source = this.sourceFor(layer);
+			if (!source) this.complete = false;
+			return source;
+		};
+		drawVideoFrame(this.ctx, frame, sourceFor, resolution, { defineSvgFilter: this.defineSvgFilter });
+		this.drawn = { time: frame.time, complete: this.complete };
 		this.options.onFrame?.(frame);
+		this.pixelsTarget?.drawn(frame.time, this.complete);
 	}
 
 	private readonly defineSvgFilter = (id: string, markup: string) => {
@@ -220,6 +254,7 @@ export class VideoPreviewEngine {
 	/** Stops following the editor and releases every media element. */
 	destroy(): void {
 		this.destroyed = true;
+		this.detachPixels();
 		this.filterHost?.remove();
 		this.filterHost = null;
 		this.filters.clear();
