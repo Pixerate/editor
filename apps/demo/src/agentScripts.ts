@@ -496,3 +496,58 @@ export const VIDEO_SCRIPTS: AgentScript[] = [
     ],
   },
 ];
+
+/** A wavy line across the paint canvas, `n` samples with a pressure swell and times for velocity. */
+const wave = (y: number, amp: number, n = 48, x0 = 40, x1 = 1160) =>
+  Array.from({ length: n + 1 }, (_, i) => {
+    const t = i / n;
+    return { x: Math.round(x0 + (x1 - x0) * t), y: Math.round(y + Math.sin(t * Math.PI * 2.4) * amp), pressure: Math.round((0.35 + 0.6 * Math.sin(t * Math.PI)) * 100) / 100, t: i * 14 };
+  });
+
+export const PAINT_SCRIPTS: AgentScript[] = [
+  {
+    id: "paint-landscape",
+    prompt: "Block in a sunset landscape in pastel",
+    steps: [
+      { say: "Rough watercolour paper with plenty of tooth for pastel.", tool: "paint__set_paper", args: { preset: "cold-pressed", depth: 0.7 } },
+      { say: "A warm sky first, rubbed into the grain.", tool: "paint__add_layer", args: { name: "Sky" }, as: "sky" },
+      { tool: "paint__fill_layer", args: (ctx) => ({ layerId: ctx.results.sky.id, color: "#f2a65a", grain: 0.5, pressure: 0.7 }) },
+      { say: "Mixing a muted blue-grey for the far hills, as paint would mix.", tool: "paint__mix_colors", args: { colors: [{ color: "#2f3f9e", weight: 2 }, { color: "#d23a2a", weight: 1 }, { color: "#f7f5ee", weight: 1 }] }, as: "mix" },
+      { say: "The first range of hills with a soft pastel.", tool: "paint__add_layer", args: { name: "Hills" }, as: "hills" },
+      {
+        tool: "paint__paint_stroke",
+        args: (ctx) => ({ layerId: ctx.results.hills.id, brushId: "soft-pastel", brush: { tip: { size: 90 } }, color: ctx.results.mix.mixed, points: wave(520, 50) }),
+        as: "stroke",
+      },
+      {
+        say: "Repeating that stroke lower and darker instead of drawing each range.",
+        tool: "paint__replay_strokes",
+        args: (ctx) => ({ strokeIds: [ctx.results.stroke.strokeId], dy: 70, repeat: 3, color: "#3b2f5c", pressureScale: 1.2 }),
+      },
+      { say: "Checking the result.", tool: "paint__render_preview", args: { maxSide: 420 } },
+    ],
+  },
+  {
+    id: "paint-kaleidoscope",
+    prompt: "Draw a kaleidoscope ornament",
+    steps: [
+      { say: "Eight mirrored segments about the centre: one stroke paints all sixteen copies.", tool: "paint__set_symmetry", args: { mode: "kaleidoscope", segments: 8, center: { x: 600, y: 400 } } },
+      { tool: "paint__add_layer", args: { name: "Ornament" } },
+      {
+        say: "One petal with the ink pen.",
+        tool: "paint__paint_stroke",
+        args: {
+          brushId: "ink-pen",
+          brush: { tip: { size: 7 } },
+          color: "#1d3b8f",
+          points: Array.from({ length: 41 }, (_, i) => {
+            const t = i / 40;
+            return { x: Math.round(600 + 300 * t), y: Math.round(400 - Math.sin(t * Math.PI) * 70), pressure: Math.round((0.3 + 0.7 * Math.sin(t * Math.PI)) * 100) / 100, t: i * 16 };
+          }),
+        },
+      },
+      { say: "Symmetry off again, so later strokes are single.", tool: "paint__set_symmetry", args: { mode: "off" } },
+      { tool: "paint__render_preview", args: { maxSide: 420 } },
+    ],
+  },
+];

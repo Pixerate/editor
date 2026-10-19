@@ -9,6 +9,7 @@ const ReviewDemoSection = lazy(() => import("./components/ReviewDemoSection").th
 const SpreadsheetTab = lazy(() => import("./components/SpreadsheetTab").then((m) => ({ default: m.SpreadsheetTab })));
 const CanvasTab = lazy(() => import("./components/CanvasTab").then((m) => ({ default: m.CanvasTab })));
 const ImageEditorTab = lazy(() => import("./components/ImageEditorTab").then((m) => ({ default: m.ImageEditorTab })));
+const PaintTab = lazy(() => import("./components/PaintTab").then((m) => ({ default: m.PaintTab })));
 const ParametersTab = lazy(() => import("./components/ParametersTab").then((m) => ({ default: m.ParametersTab })));
 const VectorTab = lazy(() => import("./components/VectorTab").then((m) => ({ default: m.VectorTab })));
 const AnimationTab = lazy(() => import("./components/AnimationTab").then((m) => ({ default: m.AnimationTab })));
@@ -28,9 +29,10 @@ import {
   BarChart3,
   Clapperboard,
   Film,
+  Brush,
 } from "lucide-react";
 
-type TabId = "prompt" | "rich" | "sheet" | "canvas" | "vector" | "animation" | "video" | "chart" | "image" | "params" | "parity";
+type TabId = "prompt" | "rich" | "sheet" | "canvas" | "vector" | "animation" | "video" | "chart" | "image" | "paint" | "params" | "parity";
 
 interface TabInfo {
   id: TabId;
@@ -64,6 +66,7 @@ const GROUPS: Array<{ label: string; tabs: TabInfo[] }> = [
       { id: "animation", label: "Animation", icon: Clapperboard, hint: "Shots over vector art, Flair export" },
       { id: "video", label: "Video", icon: Film, hint: "Tracks, trims, transitions, ffmpeg" },
       { id: "image", label: "Image", icon: ImageIcon, hint: "Adjustments, layers, masks" },
+      { id: "paint", label: "Paint", icon: Brush, hint: "Natural media, paper, pigment" },
     ],
   },
   {
@@ -217,6 +220,7 @@ export default function App() {
           {activeTab === "sheet" && <SpreadsheetTab />}
           {activeTab === "canvas" && <CanvasTab />}
           {activeTab === "image" && <ImageEditorTab />}
+          {activeTab === "paint" && <PaintTab />}
           {activeTab === "params" && <ParametersTab />}
           {activeTab === "vector" && <VectorTab />}
           {activeTab === "animation" && <AnimationTab />}

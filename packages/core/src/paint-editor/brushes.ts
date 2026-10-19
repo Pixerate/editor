@@ -105,8 +105,11 @@ export function normalizeDynamics(raw: Partial<BrushDynamics> = {}, base: BrushD
 
 export const BRUSH_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
+/** Brush settings to change or read: any subset of a brush, its tip, dynamics and mixer. */
+export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mixer'>> & { tip?: Partial<BrushSettings>; dynamics?: Partial<BrushDynamics>; mixer?: Partial<MixerSettings> };
+
 /** A brush with every field in range; missing fields come from `base` (default: a plain round dab brush). */
-export function normalizePaintBrush(raw: Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mixer'>> & { tip?: Partial<BrushSettings>; dynamics?: Partial<BrushDynamics>; mixer?: Partial<MixerSettings> } = {}, base?: PaintBrush): PaintBrush {
+export function normalizePaintBrush(raw: PaintBrushInput = {}, base?: PaintBrush): PaintBrush {
   const b = base ?? BASE_BRUSH;
   const id = typeof raw.id === 'string' && BRUSH_ID.test(raw.id) ? raw.id : b.id;
   return {
@@ -139,7 +142,7 @@ const BASE_BRUSH: PaintBrush = {
   loadsColor: true,
 };
 
-type BrushInit = Parameters<typeof normalizePaintBrush>[0] & { id: string; name: string; category: PaintBrushCategory };
+type BrushInit = PaintBrushInput & { id: string; name: string; category: PaintBrushCategory };
 
 const builtin = (init: BrushInit): PaintBrush => ({ ...normalizePaintBrush(init), builtin: true });
 
@@ -272,7 +275,7 @@ export function parseBrushLibrary(raw: unknown, problems: string[] = []): PaintB
       return;
     }
     const { builtin: _b, ...rest } = r;
-    out.push(normalizePaintBrush(rest as Parameters<typeof normalizePaintBrush>[0]));
+    out.push(normalizePaintBrush(rest as PaintBrushInput));
   });
   return out;
 }

@@ -25,3 +25,5 @@ export * from './color';
 export * from './mixing-pad';
 export * from './controller';
 export * from './tools';
+export * from './ui';
+export { BLEND_MODES, isBlendMode, type BlendMode } from '../raster/blend';

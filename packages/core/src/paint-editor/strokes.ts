@@ -4,7 +4,7 @@
  * be replayed moved, scaled, rotated, recoloured or with another brush (`replay_strokes`).
  */
 
-import { normalizePaintBrush, type PaintBrush } from './brushes';
+import { normalizePaintBrush, type PaintBrushInput, type PaintBrush } from './brushes';
 import type { Linear2, PenPoint, StrokeCopy } from './engine';
 
 /** An affine map [a, b, c, d, e, f]: (x, y) → (a·x + b·y + e, c·x + d·y + f). */
@@ -88,7 +88,7 @@ export function normalizeBrushStroke(raw: unknown): RecordedStroke | null {
   const out: RecordedStroke = {
     id: r.id,
     layerId: r.layerId,
-    brush: normalizePaintBrush((r.brush as Parameters<typeof normalizePaintBrush>[0]) ?? {}),
+    brush: normalizePaintBrush((r.brush as PaintBrushInput) ?? {}),
     color: typeof r.color === 'string' && /^#[0-9a-f]{6}$/i.test(r.color) ? r.color.toLowerCase() : '#000000',
     points,
     seed: finite(r.seed) ? r.seed | 0 : 0,

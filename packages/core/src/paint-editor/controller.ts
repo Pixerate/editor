@@ -31,7 +31,7 @@ import {
   type RasterRect,
   type Tile,
 } from '../raster/surface';
-import { brushToJSON, BUILTIN_BRUSHES, DEFAULT_BRUSH_ID, normalizePaintBrush, parseBrushLibrary, BRUSH_ID, type BrushLibraryFile, type PaintBrush } from './brushes';
+import { brushToJSON, BUILTIN_BRUSHES, DEFAULT_BRUSH_ID, normalizePaintBrush, type PaintBrushInput, parseBrushLibrary, BRUSH_ID, type BrushLibraryFile, type PaintBrush } from './brushes';
 import {
   createPaintDocument,
   createPaintLayer,
@@ -155,7 +155,7 @@ export interface PaintStrokeInit {
   /** Default the active brush. */
   brushId?: string;
   /** Changes to the brush for this stroke only. */
-  brush?: Parameters<typeof normalizePaintBrush>[0];
+  brush?: PaintBrushInput;
   /** Jitter seed (default: a new one per stroke). */
   seed?: number;
   /** Extra copies of the stroke as affine maps (default: the symmetry guide's). */
@@ -713,7 +713,7 @@ export class PaintEditorController {
    * Chooses the active brush (`id`: a library brush) and / or changes its settings. Editor state,
    * not an undo step. Returns the active brush.
    */
-  setBrush(update: { id?: string } & Omit<Parameters<typeof normalizePaintBrush>[0], 'id'> = {}): PaintBrush {
+  setBrush(update: { id?: string } & Omit<PaintBrushInput, 'id'> = {}): PaintBrush {
     const { id, ...changes } = update;
     const base = id !== undefined ? this.requireBrush(id) : this.brush;
     const next = normalizePaintBrush({ ...changes, id: base.id }, base);
@@ -726,7 +726,7 @@ export class PaintEditorController {
   }
 
   /** Saves the active brush (or `brush`) into the user library under `id` / `name`. */
-  saveBrush(options: { id: string; name?: string; brush?: Parameters<typeof normalizePaintBrush>[0] }): PaintBrush {
+  saveBrush(options: { id: string; name?: string; brush?: PaintBrushInput }): PaintBrush {
     if (!BRUSH_ID.test(options.id)) throw new PaintEditorError(`Brush id "${options.id}" is invalid; use lowercase letters, digits and dashes (e.g. "my-pencil").`);
     if (BUILTIN_BRUSHES.some((b) => b.id === options.id)) throw new PaintEditorError(`"${options.id}" is a built-in brush; save under another id.`);
     const source = options.brush ? normalizePaintBrush(options.brush, this.brush) : this.brush;
