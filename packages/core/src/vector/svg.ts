@@ -18,7 +18,22 @@ import { bezierPathToSvg } from '../canvas/pathops/bezier.js';
 import { bezierPathBounds } from '../canvas/pathops/bezier.js';
 import { hasStrokeExtras, strokeWidthProfileOf, vectorStrokeLineArea, vectorStrokeOutlinePath, vectorStrokeParts, vectorStrokeReach } from './stroke.js';
 import { sanitizeWidthProfile } from './width.js';
-import { hasOwnVectorAppearance, sanitizeVectorEffects, transformVectorEffects, vectorAppearanceNodes } from './appearance.js';
+import { expandVectorAppearance, hasOwnVectorAppearance, sanitizeVectorEffects, transformVectorEffects, vectorAppearanceNodes } from './appearance.js';
+import { activeVectorFilters, sanitizeVectorFilters, vectorFilterMarkup, vectorFilterSvg, type VectorRenderFilter } from './filters.js';
+import {
+	needsVectorPaintLayers,
+	vectorFills,
+	vectorStrokes,
+	sanitizeVectorFills,
+	sanitizeVectorStrokes,
+	vectorBlendModeCss,
+	vectorBlendModeFromCss,
+	vectorPaintLayerNodes,
+	vectorStrokeStackReach,
+	normalizeVectorPaintStacks,
+	withVectorFills,
+	withVectorStrokes
+} from './paintLayers.js';
 import { angleToSvgLinearCoords, type SvgGradientDef } from '../canvas/gradient.js';
 import { bezierPathBounds as pathBounds } from '../canvas/pathops/bezier.js';
 import { isVectorGradient, sanitizeVectorGradient, vectorGradientSvgDefs, type VectorPaintDef } from './gradient.js';
@@ -39,6 +54,8 @@ import {
 	transformVectorNode,
 	translateMatrix,
 	vectorPathData,
+	unionBounds,
+	vectorNodeBounds,
 	type AffineMatrix
 } from './geometry.js';
 import {
@@ -49,6 +66,7 @@ import {
 	type VectorBooleanOperation,
 	type VectorCornerKind,
 	type VectorDocument,
+	type VectorFilter,
 	type VectorFillRule,
 	type VectorGradient,
 	type VectorGradientStop,
@@ -60,6 +78,7 @@ import {
 	type VectorPaint,
 	type VectorBounds,
 	type VectorPathNode,
+	type VectorPaintLayer,
 	type VectorStrokeAlign,
 	type VectorSubpath
 } from './types.js';
@@ -234,6 +253,34 @@ function computeStrokeSvgParts(node: VectorPathNode, clipId: string, precision: 
 	};
 }
 
+/**
+ * The box a node draws over in its own space (its `transform` not applied): its geometry as drawn
+ * (effects applied), padded by how far its strokes reach. Null when it draws nothing.
+ */
+export function vectorNodeLocalPaintBounds(node: VectorNode): VectorBounds | null {
+	const drawn = expandVectorAppearance(node);
+	const reach = (n: VectorNode): number => (n.type === 'path' ? vectorStrokeStackReach(n) : Math.max(0, ...n.children.map(reach)));
+	let b: VectorBounds | null;
+	if (drawn.type === 'path') b = vectorPathLocalBounds(drawn);
+	else b = unionBounds(drawn.children.filter((c) => c.visible !== false).map((c) => vectorNodeBounds(c, IDENTITY_MATRIX)));
+	if (!b) return null;
+	const pad = reach(drawn);
+	return { x: b.x - pad, y: b.y - pad, width: b.width + 2 * pad, height: b.height + 2 * pad };
+}
+
+const filterCache = new WeakMap<VectorNode, { id: string; filter: VectorRenderFilter | null }>();
+
+/** A node's filter (`node.filters`) as render data with id `id`, or null when none draws. Cached per node. */
+export function vectorNodeFilterSvg(node: VectorNode, id: string): VectorRenderFilter | null {
+	if (!node.filters?.length) return null;
+	const hit = filterCache.get(node);
+	if (hit && hit.id === id) return hit.filter;
+	const active = activeVectorFilters(node);
+	const filter = active.length ? vectorFilterSvg(active, id, vectorNodeLocalPaintBounds(node)) : null;
+	filterCache.set(node, { id, filter });
+	return filter;
+}
+
 /** A width profile as a data attribute: `t,left,right` points separated by `;`. */
 export function widthProfileToAttribute(points: readonly VectorWidthPoint[], precision = 4): string {
 	return points.map((p) => [p.t, p.left, p.right].map((n) => formatNumber(n, precision)).join(',')).join(';');
@@ -331,7 +378,113 @@ export function vectorDocumentToSvg(doc: VectorDocument, options: VectorSvgExpor
 		if (node.blendStep) out += ` data-vector-blend-step=""`;
 		if (node.type === 'group' && node.blend) out += ` data-vector-blend="${escapeAttr(JSON.stringify(node.blend))}"`;
 		if (node.booleanOperation) out += ` data-vector-boolean-operation="${node.booleanOperation}"`;
+		const blend = vectorBlendModeCss(node.blendMode);
+		if (blend) out += ` style="mix-blend-mode:${blend}"`;
+		if (node.filters?.length) {
+			// The filter as drawn, carrying the filter stack (JSON) for import.
+			const filter = vectorNodeFilterSvg(node, `${prefix}filter-${node.id}`);
+			const data = ` data-vector-filters="${escapeAttr(JSON.stringify(node.filters))}"`;
+			if (filter) {
+				defs.push(vectorFilterMarkup(filter, data));
+				out += ` filter="url(#${escapeAttr(filter.id)})"`;
+			} else out += data;
+		}
 		return out;
+	};
+
+	/** Opacity and blend mode of one paint layer, as attributes. */
+	const layerAttrs = (layer: { opacity?: number; blendMode?: VectorPaintLayer['blendMode'] }) => {
+		let out = '';
+		if (layer.opacity !== undefined && layer.opacity < 1) out += ` opacity="${num(layer.opacity)}"`;
+		const blend = vectorBlendModeCss(layer.blendMode);
+		if (blend) out += ` style="mix-blend-mode:${blend}"`;
+		return out;
+	};
+
+	/**
+	 * The elements of a stroke drawn in parts (aligned, arrowed or profiled): the stroke (or its
+	 * outline) clipped or masked by the shape, then the heads. `d` is the shape's path data.
+	 */
+	const strokePartLines = (node: VectorPathNode, parts: VectorRenderStrokeParts, strokeValue: string, d: string, lineAttrs: (width: number) => string, depth: number): string[] => {
+		const out: string[] = [];
+		if (options.strokes === 'outline') {
+			const area = bezierPathToSvg(vectorStrokeOutlinePath(subpathsToBezier(node.subpaths), node), { precision });
+			out.push(`${indent(depth)}<path data-vector-part="stroke-outline" d="${area}" fill="${escapeAttr(strokeValue)}"/>`);
+			return out;
+		}
+		let clip = '';
+		if (parts.clip) {
+			const rule = node.fillRule === 'evenodd' ? 'evenodd' : 'nonzero';
+			const id = escapeAttr(parts.clip.id);
+			if (parts.clip.kind === 'clip') {
+				defs.push(`<clipPath id="${id}"><path d="${d}" clip-rule="${rule}"/></clipPath>`);
+				clip = ` clip-path="url(#${id})"`;
+			} else {
+				const b = parts.clip.bounds;
+				const box = `x="${num(b.x)}" y="${num(b.y)}" width="${num(b.width)}" height="${num(b.height)}"`;
+				defs.push(`<mask id="${id}" maskUnits="userSpaceOnUse" ${box}><rect ${box} fill="#fff"/><path d="${d}" fill="#000" fill-rule="${rule}"/></mask>`);
+				clip = ` mask="url(#${id})"`;
+			}
+		}
+		if (parts.outline !== undefined) out.push(`${indent(depth)}<path data-vector-part="stroke-outline" d="${parts.outline}" fill="${escapeAttr(strokeValue)}"${clip}/>`);
+		else out.push(`${indent(depth)}<path data-vector-part="stroke" d="${parts.d}" fill="none"${lineAttrs(parts.width)}${clip}/>`);
+		for (const h of parts.heads) out.push(`${indent(depth)}<path data-vector-part="head" d="${h}" fill="${escapeAttr(strokeValue)}"/>`);
+		return out;
+	};
+
+	/** SVG line attributes of a (layer) node's stroke. */
+	const lineAttrsOf = (node: VectorPathNode, strokeValue: string) => (width: number) => {
+		let out = ` stroke="${escapeAttr(strokeValue)}" stroke-width="${num(width)}"`;
+		if (node.strokeLinecap && node.strokeLinecap !== 'butt') out += ` stroke-linecap="${node.strokeLinecap}"`;
+		if (node.strokeLinejoin && node.strokeLinejoin !== 'miter') out += ` stroke-linejoin="${node.strokeLinejoin}"`;
+		if (node.strokeDasharray?.length) out += ` stroke-dasharray="${node.strokeDasharray.map(num).join(' ')}"`;
+		return out;
+	};
+
+	/** `data-vector-d` / `data-vector-corners` of a path with live corners ('' without). */
+	const liveCorners = (node: VectorPathNode) => {
+		const corners = vectorCornersAttribute(node.subpaths, precision);
+		return corners ? ` data-vector-d="${bezierPathToSvg(subpathsToBezier(node.subpaths, { corners: false }), { precision })}" data-vector-corners="${corners}"` : '';
+	};
+
+	/**
+	 * A path painted through its stacks: a `<g data-vector-path>` carrying the stacks (JSON, for
+	 * import), holding each drawn layer bottom to top. The first part is a fill part with the
+	 * geometry (unpainted when no fill is drawn).
+	 */
+	const emitStacked = (node: VectorPathNode, depth: number) => {
+		const d = vectorPathData(node, precision);
+		const rule = node.fillRule === 'evenodd' ? ` fill-rule="evenodd"` : '';
+		let data = ` data-vector-path="" data-vector-fills="${escapeAttr(JSON.stringify(vectorFills(node)))}" data-vector-strokes="${escapeAttr(JSON.stringify(vectorStrokes(node)))}"`;
+		if (node.fillRule === 'evenodd') data += ` data-vector-fill-rule="evenodd"`;
+		lines.push(`${indent(depth)}<g${common(node)}${data}>`);
+		const layers = vectorPaintLayerNodes(node).filter((l) => l.drawn);
+		let geometry = liveCorners(node);
+		if (!layers.some((l) => l.kind === 'fill')) {
+			lines.push(`${indent(depth + 1)}<path data-vector-part="fill" d="${d}" fill="none"${rule}${geometry}/>`);
+			geometry = '';
+		}
+		for (const l of layers) {
+			const id = `${prefix}${l.kind}-${node.id}-${l.index}`;
+			const paint = vectorPaintToSvg(l.layer.paint, id, { node: l.node, precision, ...(l.kind === 'stroke' ? { role: 'stroke' as const } : {}) });
+			defs.push(...paintMarkup(l.layer.paint, paint.defs));
+			const attrs = ` data-vector-layer="${l.index}"${layerAttrs(l.layer)}`;
+			if (l.kind === 'fill') {
+				lines.push(`${indent(depth + 1)}<path data-vector-part="fill"${attrs} d="${d}" fill="${escapeAttr(paint.value)}"${rule}${geometry}/>`);
+				geometry = '';
+				continue;
+			}
+			const lineAttrs = lineAttrsOf(l.node, paint.value);
+			const parts = vectorStrokeSvgParts(l.node, `${prefix}clip-${node.id}-${l.index}`, precision);
+			if (!parts) {
+				lines.push(`${indent(depth + 1)}<path data-vector-part="stroke"${attrs} d="${d}" fill="none"${lineAttrs(l.node.strokeWidth ?? 1)}/>`);
+				continue;
+			}
+			lines.push(`${indent(depth + 1)}<g data-vector-part="stroke-layer"${attrs}>`);
+			lines.push(...strokePartLines(l.node, parts, paint.value, d, lineAttrs, depth + 2));
+			lines.push(`${indent(depth + 1)}</g>`);
+		}
+		lines.push(`${indent(depth)}</g>`);
 	};
 
 	const emit = (node: VectorNode, depth: number) => {
@@ -365,7 +518,7 @@ export function vectorDocumentToSvg(doc: VectorDocument, options: VectorSvgExpor
 			lines.push(`${indent(depth + 1)}</g>`);
 			lines.push(`${indent(depth + 1)}<g data-vector-part="source" display="none">`);
 			if (node.type === 'path') {
-				const { effects: _e, transform: _t, opacity: _o, visible: _v, booleanOperation: _b, blendStep: _s, ...source } = node;
+				const { effects: _e, transform: _t, opacity: _o, visible: _v, booleanOperation: _b, blendStep: _s, blendMode: _bm, filters: _f, ...source } = node;
 				emit({ ...source, id: `${node.id}~src` }, depth + 2);
 			} else for (const child of node.children) emit(child, depth + 2);
 			lines.push(`${indent(depth + 1)}</g>`);
@@ -378,20 +531,17 @@ export function vectorDocumentToSvg(doc: VectorDocument, options: VectorSvgExpor
 			lines.push(`${indent(depth)}</g>`);
 			return;
 		}
+		if (needsVectorPaintLayers(node)) {
+			emitStacked(node, depth);
+			return;
+		}
 		const fill = vectorPaintToSvg(node.fill, `${prefix}fill-${node.id}`, { node, precision });
 		const stroke = vectorPaintToSvg(node.stroke, `${prefix}stroke-${node.id}`, { node, role: 'stroke', precision });
 		defs.push(...paintMarkup(node.fill, fill.defs), ...paintMarkup(node.stroke, stroke.defs));
 		const d = vectorPathData(node, precision);
-		const corners = vectorCornersAttribute(node.subpaths, precision);
-		const live = corners ? ` data-vector-d="${bezierPathToSvg(subpathsToBezier(node.subpaths, { corners: false }), { precision })}" data-vector-corners="${corners}"` : '';
+		const live = liveCorners(node);
 		const fillAttrs = ` fill="${escapeAttr(fill.value)}"${node.fillRule === 'evenodd' ? ` fill-rule="evenodd"` : ''}`;
-		const lineAttrs = (width: number) => {
-			let out = ` stroke="${escapeAttr(stroke.value)}" stroke-width="${num(width)}"`;
-			if (node.strokeLinecap && node.strokeLinecap !== 'butt') out += ` stroke-linecap="${node.strokeLinecap}"`;
-			if (node.strokeLinejoin && node.strokeLinejoin !== 'miter') out += ` stroke-linejoin="${node.strokeLinejoin}"`;
-			if (node.strokeDasharray?.length) out += ` stroke-dasharray="${node.strokeDasharray.map(num).join(' ')}"`;
-			return out;
-		};
+		const lineAttrs = lineAttrsOf(node, stroke.value);
 		const parts = stroke.value !== 'none' ? vectorStrokeSvgParts(node, `${prefix}clip-${node.id}`, precision) : undefined;
 		if (!parts) {
 			lines.push(`${indent(depth)}<path${common(node)} d="${d}"${fillAttrs}${stroke.value !== 'none' ? lineAttrs(node.strokeWidth ?? 1) : ''}${live}/>`);
@@ -415,28 +565,7 @@ export function vectorDocumentToSvg(doc: VectorDocument, options: VectorSvgExpor
 		}
 		lines.push(`${indent(depth)}<g${common(node)}${data}>`);
 		lines.push(`${indent(depth + 1)}<path data-vector-part="fill" d="${d}"${fillAttrs}${live}/>`);
-		if (options.strokes === 'outline') {
-			const area = bezierPathToSvg(vectorStrokeOutlinePath(subpathsToBezier(node.subpaths), node), { precision });
-			lines.push(`${indent(depth + 1)}<path data-vector-part="stroke-outline" d="${area}" fill="${escapeAttr(stroke.value)}"/>`);
-		} else {
-			let clip = '';
-			if (parts.clip) {
-				const rule = node.fillRule === 'evenodd' ? 'evenodd' : 'nonzero';
-				const id = escapeAttr(parts.clip.id);
-				if (parts.clip.kind === 'clip') {
-					defs.push(`<clipPath id="${id}"><path d="${d}" clip-rule="${rule}"/></clipPath>`);
-					clip = ` clip-path="url(#${id})"`;
-				} else {
-					const b = parts.clip.bounds;
-					const box = `x="${num(b.x)}" y="${num(b.y)}" width="${num(b.width)}" height="${num(b.height)}"`;
-					defs.push(`<mask id="${id}" maskUnits="userSpaceOnUse" ${box}><rect ${box} fill="#fff"/><path d="${d}" fill="#000" fill-rule="${rule}"/></mask>`);
-					clip = ` mask="url(#${id})"`;
-				}
-			}
-			if (parts.outline !== undefined) lines.push(`${indent(depth + 1)}<path data-vector-part="stroke-outline" d="${parts.outline}" fill="${escapeAttr(stroke.value)}"${clip}/>`);
-			else lines.push(`${indent(depth + 1)}<path data-vector-part="stroke" d="${parts.d}" fill="none"${lineAttrs(parts.width)}${clip}/>`);
-			for (const h of parts.heads) lines.push(`${indent(depth + 1)}<path data-vector-part="head" d="${h}" fill="${escapeAttr(stroke.value)}"/>`);
-		}
+		lines.push(...strokePartLines(node, parts, stroke.value, d, lineAttrs, depth + 1));
 		lines.push(`${indent(depth)}</g>`);
 	};
 
@@ -462,6 +591,13 @@ const BOOLEAN_OPERATIONS: readonly VectorBooleanOperation[] = ['union', 'subtrac
 export interface VectorSvgImportOptions {
 	/** Makes ids for elements without a usable `id` (default `node-1`, `node-2`, …). */
 	createId?: () => string;
+	/**
+	 * Merge neighbouring shapes with the same outline into one path with stacked fills and strokes,
+	 * as design tools export several paints on one layer (default false: an SVG may hold identical
+	 * shapes on purpose). Shapes merge only when the paint order stays the same (no stroke under a
+	 * later fill) and they share opacity, visibility, filters and blend mode.
+	 */
+	mergeStackedShapes?: boolean;
 }
 
 interface Element {
@@ -581,6 +717,12 @@ interface InheritedStyle {
 	strokeLinejoin?: string;
 	strokeDasharray?: string;
 	fillRule?: string;
+	fillOpacity?: string;
+	strokeOpacity?: string;
+	/** Not inherited: the element's own `mix-blend-mode` (reset for each element). */
+	mixBlendMode?: string;
+	/** Not inherited: the element's own `filter` (reset for each element). */
+	filter?: string;
 }
 
 const STYLE_KEYS: Record<string, keyof InheritedStyle> = {
@@ -590,11 +732,16 @@ const STYLE_KEYS: Record<string, keyof InheritedStyle> = {
 	'stroke-linecap': 'strokeLinecap',
 	'stroke-linejoin': 'strokeLinejoin',
 	'stroke-dasharray': 'strokeDasharray',
-	'fill-rule': 'fillRule'
+	'fill-rule': 'fillRule',
+	'fill-opacity': 'fillOpacity',
+	'stroke-opacity': 'strokeOpacity',
+	'mix-blend-mode': 'mixBlendMode',
+	filter: 'filter'
 };
 
 function readStyle(el: Element, parent: InheritedStyle): InheritedStyle {
-	const out = { ...parent };
+	const { mixBlendMode: _m, filter: _f, ...inherited } = parent;
+	const out: InheritedStyle = { ...inherited };
 	for (const [attr, key] of Object.entries(STYLE_KEYS)) if (el.attrs[attr] !== undefined) out[key] = el.attrs[attr].trim();
 	for (const decl of (el.attrs.style ?? '').split(';')) {
 		const i = decl.indexOf(':');
@@ -638,6 +785,55 @@ const PAINT_SERVERS = new Set(['linearGradient', 'radialGradient', 'pattern']);
 function collectGradients(el: Element, raw: Map<string, Element>) {
 	if (PAINT_SERVERS.has(el.name) && el.attrs.id) raw.set(el.attrs.id, el);
 	for (const c of el.children) collectGradients(c, raw);
+}
+
+function collectFilters(el: Element, raw: Map<string, Element>) {
+	if (el.name === 'filter' && el.attrs.id) raw.set(el.attrs.id, el);
+	for (const c of el.children) collectFilters(c, raw);
+}
+
+/**
+ * A `<filter>` as vector filters: our own export's `data-vector-filters`, or the simple filters
+ * other tools write — `feDropShadow`, or a lone `feGaussianBlur` of the source (a layer blur).
+ * Anything else is skipped (empty list).
+ */
+function filtersFromElement(el: Element): VectorFilter[] {
+	const own = el.attrs['data-vector-filters'];
+	if (own !== undefined) {
+		try {
+			return sanitizeVectorFilters(JSON.parse(own));
+		} catch {
+			return [];
+		}
+	}
+	const prims = el.children.filter((c) => c.name.startsWith('fe'));
+	const out: unknown[] = [];
+	for (const p of prims) {
+		const std = numberList(p.attrs.stdDeviation)[0] ?? 0;
+		if (p.name === 'feDropShadow') {
+			const style = Object.fromEntries(
+				(p.attrs.style ?? '')
+					.split(';')
+					.map((d) => d.split(':').map((x) => x.trim()))
+					.filter((d) => d.length === 2)
+			);
+			const opacity = parseFloat(style['flood-opacity'] ?? p.attrs['flood-opacity'] ?? '1');
+			out.push({
+				type: 'dropShadow',
+				params: {
+					color: style['flood-color'] ?? p.attrs['flood-color'] ?? '#000000',
+					opacity: Number.isFinite(opacity) ? opacity : 1,
+					offsetX: length(p.attrs.dx, 2),
+					offsetY: length(p.attrs.dy, 2),
+					blur: std * 2,
+					spread: 0
+				}
+			});
+		} else if (p.name === 'feGaussianBlur' && prims.length === 1 && (p.attrs.in === undefined || p.attrs.in === 'SourceGraphic')) {
+			out.push({ type: 'layerBlur', params: { radius: std * 2 } });
+		} else return [];
+	}
+	return sanitizeVectorFilters(out);
 }
 
 /** The gradient a `data-vector-gradient` attribute (our own export) holds, or null. */
@@ -754,6 +950,13 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 
 	const rawGradients = new Map<string, Element>();
 	collectGradients(root, rawGradients);
+	const rawFilters = new Map<string, Element>();
+	collectFilters(root, rawFilters);
+	const filtersOf = (value: string | undefined): VectorFilter[] => {
+		const url = /^url\(\s*['"]?#([^'")\s]+)['"]?\s*\)/.exec((value ?? '').trim());
+		const el = url ? rawFilters.get(url[1]) : undefined;
+		return el ? filtersFromElement(el) : [];
+	};
 	const paint = (value: string): VectorPaint => {
 		const v = value.trim();
 		const url = /^url\(\s*['"]?#([^'")\s]+)['"]?\s*\)/.exec(v);
@@ -827,8 +1030,69 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 		if (m === IDENTITY_MATRIX) return node;
 		const next = transformVectorNode(node, m);
 		const strokeScale = Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2]));
-		if (hasPaint(next.stroke) && strokeScale > 0 && Math.abs(strokeScale - 1) > 1e-9) next.strokeWidth = (next.strokeWidth ?? 1) * strokeScale;
-		return next;
+		if (strokeScale > 0 && Math.abs(strokeScale - 1) > 1e-9) {
+			if (hasPaint(next.stroke)) next.strokeWidth = (next.strokeWidth ?? 1) * strokeScale;
+			if (Array.isArray(next.strokes)) next.strokes = next.strokes.map((l) => ((l.kind ?? 'paint') === 'paint' ? { ...l, strokeWidth: (l.strokeWidth ?? 1) * strokeScale } : l));
+		}
+		return normalizeVectorPaintStacks(next, 'stack');
+	};
+
+	/** Paint with an element's `fill-opacity` / `stroke-opacity`: a one-layer stack when it is below 1. */
+	const withOpacities = (node: VectorPathNode, s: InheritedStyle): VectorPathNode => {
+		let out = node;
+		const fo = s.fillOpacity !== undefined ? fraction(s.fillOpacity, 1) : 1;
+		const so = s.strokeOpacity !== undefined ? fraction(s.strokeOpacity, 1) : 1;
+		if (fo < 1 && hasPaint(out.fill)) out = withVectorFills(out, [{ paint: out.fill!, opacity: Math.max(0, fo) }]);
+		if (so < 1 && hasPaint(out.stroke)) out = withVectorStrokes(out, vectorStrokes(out).map((l) => ({ ...l, opacity: Math.max(0, so) })));
+		return out;
+	};
+
+	/**
+	 * A `<g data-vector-path data-vector-fills>` from our own export (a path painted through its
+	 * stacks) as the path it came from: the geometry of its first fill part, the stacks from JSON.
+	 */
+	const stackedPath = (g: Element, _style: InheritedStyle, m: AffineMatrix, meta: Partial<VectorPathNode>): VectorPathNode | null => {
+		const fillEl = g.children.find((c) => c.name === 'path' && c.attrs['data-vector-part'] === 'fill');
+		const subpaths = fillEl ? shapeOf(fillEl) : null;
+		if (!subpaths?.length) return null;
+		const parse = (v: string | undefined) => {
+			try {
+				return v ? JSON.parse(v) : [];
+			} catch {
+				return [];
+			}
+		};
+		let node: VectorPathNode = { id: idFor(g), type: 'path', ...meta, subpaths, fill: null, stroke: null };
+		if (g.attrs['data-vector-fill-rule'] === 'evenodd') node.fillRule = 'evenodd';
+		node = withVectorFills(node, sanitizeVectorFills(parse(g.attrs['data-vector-fills'])));
+		node = withVectorStrokes(node, sanitizeVectorStrokes(parse(g.attrs['data-vector-strokes'])));
+		return placed(node, m);
+	};
+
+	/**
+	 * Neighbouring paths with the same outline merged into one with stacked paints (see
+	 * `mergeStackedShapes`).
+	 */
+	const mergeStacked = (nodes: VectorNode[]): VectorNode[] => {
+		const out: VectorNode[] = [];
+		const key = (n: VectorPathNode) =>
+			JSON.stringify([n.subpaths, n.transform ?? null, n.opacity ?? 1, n.visible !== false, n.filters ?? null, n.blendMode ?? 'normal', n.fillRule ?? 'nonzero', n.booleanOperation ?? null]);
+		for (const n of nodes) {
+			const prev = out[out.length - 1];
+			if (prev?.type === 'path' && n.type === 'path' && key(prev) === key(n)) {
+				const fills = vectorFills(n);
+				const strokesBefore = vectorStrokes(prev);
+				// A later fill would land under an earlier stroke: keep them apart.
+				if (!(fills.length && strokesBefore.length)) {
+					let merged = withVectorFills(prev, [...vectorFills(prev), ...fills]);
+					merged = withVectorStrokes(merged, [...strokesBefore, ...vectorStrokes(n)]);
+					out[out.length - 1] = merged;
+					continue;
+				}
+			}
+			out.push(n);
+		}
+		return out;
 	};
 
 	/**
@@ -887,7 +1151,7 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 	 * came from: its hidden source part with the effects put back (their offsets carried through
 	 * what import bakes into the geometry). The drawn appearance part is regenerated.
 	 */
-	const liveNode = (g: Element, style: InheritedStyle, m: AffineMatrix, meta: Pick<VectorNode, "name" | "opacity" | "visible" | "booleanOperation">): VectorNode | null => {
+	const liveNode = (g: Element, style: InheritedStyle, m: AffineMatrix, meta: Pick<VectorNode, 'name' | 'opacity' | 'visible' | 'booleanOperation' | 'blendMode' | 'filters'>): VectorNode | null => {
 		let raw: Record<string, unknown> = {};
 		try {
 			raw = JSON.parse(g.attrs['data-vector-live']) ?? {};
@@ -924,10 +1188,14 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 			const s = readStyle(child, style);
 			const opacity = child.attrs.opacity !== undefined ? parseFloat(child.attrs.opacity) : undefined;
 			const hidden = child.attrs.display === 'none' || child.attrs.visibility === 'hidden';
+			const blendMode = vectorBlendModeFromCss(s.mixBlendMode);
+			const filters = filtersOf(s.filter);
 			const meta = {
 				...(child.attrs['inkscape:label'] || child.attrs['data-name'] ? { name: child.attrs['inkscape:label'] ?? child.attrs['data-name'] } : {}),
 				...(opacity !== undefined && Number.isFinite(opacity) && opacity < 1 ? { opacity } : {}),
-				...(hidden ? { visible: false } : {})
+				...(hidden ? { visible: false } : {}),
+				...(blendMode && blendMode !== 'normal' ? { blendMode } : {}),
+				...(filters.length ? { filters } : {})
 			};
 			// A blend's in-betweens are regenerated from its keys.
 			if (child.attrs['data-vector-blend-step'] !== undefined) continue;
@@ -935,6 +1203,11 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 			if (BOOLEAN_OPERATIONS.includes(operation as VectorBooleanOperation)) (meta as { booleanOperation?: VectorBooleanOperation }).booleanOperation = operation as VectorBooleanOperation;
 			if (child.name === 'g' && child.attrs['data-vector-live'] !== undefined) {
 				const node = liveNode(child, s, m, meta);
+				if (node) out.push(node);
+				continue;
+			}
+			if (child.name === 'g' && child.attrs['data-vector-path'] !== undefined && child.attrs['data-vector-fills'] !== undefined) {
+				const node = stackedPath(child, s, m, meta);
 				if (node) out.push(node);
 				continue;
 			}
@@ -955,20 +1228,23 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 			const subpaths = shapeOf(child);
 			if (!subpaths || !subpaths.length) continue;
 			const node = placed(
-				{
-					id: idFor(child),
-					type: 'path',
-					...meta,
-					subpaths,
-					fill: child.name === 'line' ? null : paint(s.fill),
-					stroke: paint(s.stroke),
-					...strokeStyle(s)
-				},
+				withOpacities(
+					{
+						id: idFor(child),
+						type: 'path',
+						...meta,
+						subpaths,
+						fill: child.name === 'line' ? null : paint(s.fill),
+						stroke: paint(s.stroke),
+						...strokeStyle(s)
+					},
+					s
+				),
 				m
 			);
 			out.push(node);
 		}
-		return out;
+		return options.mergeStackedShapes ? mergeStacked(out) : out;
 	};
 
 	const nodes = visit(root, readStyle(root, { fill: '#000', stroke: 'none', strokeWidth: '' }), rootMatrix);

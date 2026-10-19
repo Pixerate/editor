@@ -18,6 +18,7 @@
   import { vectorStateOf } from './subscribe.svelte.js';
   import { vectorButtonClass } from './styles.js';
   import VectorEffectsPanel from './VectorEffectsPanel.svelte';
+  import VectorAppearancePanel from './VectorAppearancePanel.svelte';
   import VectorEnvelopePanel from './VectorEnvelopePanel.svelte';
   import VectorGradientEditor from './VectorGradientEditor.svelte';
 
@@ -221,6 +222,7 @@
         oninput={(e) => apply({ opacity: parseFloat(e.currentTarget.value) })}
       />
     </label>
+    <VectorAppearancePanel {controller} />
     <VectorEffectsPanel {controller} />
     <VectorEnvelopePanel {controller} />
   {/if}

@@ -10,6 +10,9 @@ import {
   type VectorEditorController,
   type VectorRenderNode,
   type VectorRenderPath,
+  type VectorRenderPaintLayer,
+  type VectorRenderFilter,
+  type VectorFilterPrimitive,
   type SvgGradientDef,
   type VectorPaintDef,
   type VectorRenderGradientAnnotator,
@@ -115,31 +118,64 @@ export function VectorGradientAnnotator({ annotator: g, accentColor = THEME.acce
   );
 }
 
+/** SVG `<filter>` elements for `getVectorSceneRenderData(...).filters` (shadows, glows, blurs, feather). */
+export function VectorFilterDefs({ filters }: { filters: readonly VectorRenderFilter[] }) {
+  if (!filters.length) return null;
+  const primitive = (p: VectorFilterPrimitive, key: number): React.ReactNode =>
+    React.createElement(p.tag, { key, ...p.attrs }, p.children?.map(primitive));
+  return (
+    <defs>
+      {filters.map((f) => (
+        <filter key={f.id} id={f.id} filterUnits="userSpaceOnUse" x={f.x} y={f.y} width={f.width} height={f.height} colorInterpolationFilters="sRGB">
+          {f.primitives.map(primitive)}
+        </filter>
+      ))}
+    </defs>
+  );
+}
+
+const blendStyle = (blendMode: string | undefined): React.CSSProperties | undefined => (blendMode ? { mixBlendMode: blendMode as React.CSSProperties['mixBlendMode'] } : undefined);
+
 /** Renders scene nodes (paths and groups) from `getVectorSceneRenderData`. */
 export function VectorSceneNodes({ nodes }: { nodes: readonly VectorRenderNode[] }) {
   return (
     <>
       {nodes.map((node) =>
         node.kind === 'group' ? (
-          <g key={node.id} data-vector-id={node.id} transform={node.transform} opacity={node.opacity < 1 ? node.opacity : undefined}>
-            <VectorSceneNodes nodes={node.children} />
-          </g>
-        ) : node.strokeParts ? (
-          <VectorPartedPath key={node.id} node={node} />
-        ) : (
-          <path
+          <g
             key={node.id}
             data-vector-id={node.id}
             transform={node.transform}
-            d={node.d}
-            fill={node.fill}
-            fillRule={node.fillRule}
-            stroke={node.stroke}
-            strokeWidth={node.stroke === 'none' ? undefined : node.strokeWidth}
-            strokeLinecap={node.strokeLinecap as any}
-            strokeLinejoin={node.strokeLinejoin as any}
-            strokeDasharray={node.strokeDasharray}
             opacity={node.opacity < 1 ? node.opacity : undefined}
+            filter={node.filter}
+            style={blendStyle(node.blendMode)}
+          >
+            <VectorSceneNodes nodes={node.children} />
+          </g>
+        ) : node.layers ? (
+          // Fill and stroke stacks: each layer in order, bottom to top.
+          <g
+            key={node.id}
+            data-vector-id={node.id}
+            transform={node.transform}
+            opacity={node.opacity < 1 ? node.opacity : undefined}
+            filter={node.filter}
+            style={blendStyle(node.blendMode)}
+          >
+            {node.layers.map((layer) => (
+              <VectorPaintPath key={`${layer.kind}-${layer.index}`} paint={layer} d={node.d} fillRule={node.fillRule} layer={`${layer.kind}-${layer.index}`} />
+            ))}
+          </g>
+        ) : (
+          <VectorPaintPath
+            key={node.id}
+            paint={node}
+            d={node.d}
+            fillRule={node.fillRule}
+            id={node.id}
+            transform={node.transform}
+            filter={node.filter}
+            blendMode={node.blendMode}
           />
         ),
       )}
@@ -147,34 +183,78 @@ export function VectorSceneNodes({ nodes }: { nodes: readonly VectorRenderNode[]
   );
 }
 
-/** A path whose stroke is aligned inside / outside (double width, clipped or masked by the shape) or has arrowheads. */
-function VectorPartedPath({ node }: { node: VectorRenderPath }) {
-  const sp = node.strokeParts!;
+/**
+ * One paint of a path: a node's fill and stroke, or one layer of its stacks. A stroke aligned
+ * inside / outside (double width, clipped or masked by the shape) or with arrowheads draws in
+ * parts inside a group.
+ */
+function VectorPaintPath({
+  paint,
+  d,
+  fillRule,
+  id,
+  transform,
+  filter,
+  blendMode,
+  layer,
+}: {
+  paint: VectorRenderPaintLayer | VectorRenderPath;
+  d: string;
+  fillRule: 'nonzero' | 'evenodd';
+  id?: string;
+  transform?: string;
+  filter?: string;
+  blendMode?: string;
+  layer?: string;
+}) {
+  const opacity = paint.opacity < 1 ? paint.opacity : undefined;
+  // A node's blend mode is passed in; a layer carries its own.
+  const style = blendStyle(blendMode ?? (layer ? paint.blendMode : undefined));
+  const sp = paint.strokeParts;
+  if (!sp)
+    return (
+      <path
+        data-vector-id={id}
+        data-vector-layer={layer}
+        transform={transform}
+        d={d}
+        fill={paint.fill}
+        fillRule={fillRule}
+        stroke={paint.stroke}
+        strokeWidth={paint.stroke === 'none' ? undefined : paint.strokeWidth}
+        strokeLinecap={paint.strokeLinecap as any}
+        strokeLinejoin={paint.strokeLinejoin as any}
+        strokeDasharray={paint.strokeDasharray}
+        opacity={opacity}
+        filter={filter}
+        style={style}
+      />
+    );
   const clip = sp.clip;
   const b = clip?.bounds;
   return (
-    <g data-vector-id={node.id} data-vector-stroke-align={sp.align} transform={node.transform} opacity={node.opacity < 1 ? node.opacity : undefined}>
+    <g data-vector-id={id} data-vector-layer={layer} data-vector-stroke-align={sp.align} transform={transform} opacity={opacity} filter={filter} style={style}>
       {clip && b && (
         <defs>
           {clip.kind === 'clip' ? (
             <clipPath id={clip.id}>
-              <path d={node.d} clipRule={node.fillRule} />
+              <path d={d} clipRule={fillRule} />
             </clipPath>
           ) : (
             <mask id={clip.id} maskUnits="userSpaceOnUse" x={b.x} y={b.y} width={b.width} height={b.height}>
               <rect x={b.x} y={b.y} width={b.width} height={b.height} fill="#fff" />
-              <path d={node.d} fill="#000" fillRule={node.fillRule} />
+              <path d={d} fill="#000" fillRule={fillRule} />
             </mask>
           )}
         </defs>
       )}
-      <path data-vector-part="fill" d={node.d} fill={node.fill} fillRule={node.fillRule} stroke="none" />
+      <path data-vector-part="fill" d={d} fill={paint.fill} fillRule={fillRule} stroke="none" />
       {sp.outline !== undefined ? (
         // A variable-width stroke: its outline, filled.
         <path
           data-vector-part="stroke-outline"
           d={sp.outline}
-          fill={node.stroke}
+          fill={paint.stroke}
           clipPath={clip?.kind === 'clip' ? `url(#${clip.id})` : undefined}
           mask={clip?.kind === 'mask' ? `url(#${clip.id})` : undefined}
         />
@@ -183,17 +263,17 @@ function VectorPartedPath({ node }: { node: VectorRenderPath }) {
           data-vector-part="stroke"
           d={sp.d}
           fill="none"
-          stroke={node.stroke}
+          stroke={paint.stroke}
           strokeWidth={sp.width}
-          strokeLinecap={node.strokeLinecap as any}
-          strokeLinejoin={node.strokeLinejoin as any}
-          strokeDasharray={node.strokeDasharray}
+          strokeLinecap={paint.strokeLinecap as any}
+          strokeLinejoin={paint.strokeLinejoin as any}
+          strokeDasharray={paint.strokeDasharray}
           clipPath={clip?.kind === 'clip' ? `url(#${clip.id})` : undefined}
           mask={clip?.kind === 'mask' ? `url(#${clip.id})` : undefined}
         />
       )}
       {sp.heads.map((head, i) => (
-        <path key={i} data-vector-part="head" d={head} fill={node.stroke} />
+        <path key={i} data-vector-part="head" d={head} fill={paint.stroke} />
       ))}
     </g>
   );
@@ -316,6 +396,7 @@ export function VectorCanvas({
         </defs>
       )}
       <VectorGradientDefs defs={scene.defs} />
+      <VectorFilterDefs filters={scene.filters} />
       <rect
         data-vector-artboard=""
         x={overlay.artboard.x}

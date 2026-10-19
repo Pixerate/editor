@@ -171,6 +171,27 @@ const STARTER: VectorDocument = {
       effects: [effect("envelope", "warp", { style: "flag", bend: 25 })],
     },
     {
+      // An appearance stack: two fills (a gradient multiplied over a colour), an outer and an
+      // inner stroke, and a drop shadow. Edit the layers in the style panel's Fills / Strokes.
+      id: "sticker",
+      type: "path",
+      name: "Sticker",
+      fill: { type: "linear", angle: 135, stops: [{ offset: 0, color: "#ffffff" }, { offset: 1, color: "#f97316" }] },
+      fills: [
+        { paint: "#fde047" },
+        { paint: { type: "linear", angle: 135, stops: [{ offset: 0, color: "#ffffff" }, { offset: 1, color: "#f97316" }] }, blendMode: "multiply" },
+      ],
+      stroke: "#ffffff",
+      strokeWidth: 2,
+      strokeAlign: "inside",
+      strokes: [
+        { paint: "#7c2d12", strokeWidth: 6, strokeAlign: "outside" },
+        { paint: "#ffffff", strokeWidth: 2, strokeAlign: "inside" },
+      ],
+      filters: [{ id: "shadow", type: "dropShadow", params: { color: "#000000", opacity: 0.3, offsetX: 0, offsetY: 4, blur: 6, spread: 0 } }],
+      subpaths: [rectSubpath({ x: 14, y: 430, width: 56, height: 50 }, 10)],
+    },
+    {
       id: "brush",
       type: "path",
       name: "Tapered stroke",

@@ -185,6 +185,94 @@ export interface VectorWidthPoint {
 	right: number;
 }
 
+/**
+ * Blend modes of paint layers and nodes: the set SVG and CSS `mix-blend-mode` draw, named as the
+ * image editor names them (`@pixerate/editor/image-editor` `BlendMode`). `linear-dodge` draws as
+ * CSS `plus-lighter`. The image editor's other modes (linear burn, vivid light, pigment, …) have
+ * no SVG equivalent and are not offered.
+ */
+export type VectorBlendMode =
+	| 'normal'
+	| 'darken'
+	| 'multiply'
+	| 'color-burn'
+	| 'lighten'
+	| 'screen'
+	| 'color-dodge'
+	| 'linear-dodge'
+	| 'overlay'
+	| 'soft-light'
+	| 'hard-light'
+	| 'difference'
+	| 'exclusion'
+	| 'hue'
+	| 'saturation'
+	| 'color'
+	| 'luminosity';
+/** Every vector blend mode, in the image editor's (Photoshop's) menu order. */
+export const VECTOR_BLEND_MODES: readonly VectorBlendMode[] = [
+	'normal',
+	'darken',
+	'multiply',
+	'color-burn',
+	'lighten',
+	'screen',
+	'color-dodge',
+	'linear-dodge',
+	'overlay',
+	'soft-light',
+	'hard-light',
+	'difference',
+	'exclusion',
+	'hue',
+	'saturation',
+	'color',
+	'luminosity'
+];
+
+/** One fill of a path's fill stack (`VectorStyle.fills`). */
+export interface VectorPaintLayer {
+	/** A colour, a gradient, or `null` for none. */
+	paint: VectorPaint;
+	/** 0–1, default 1. Multiplies the paint's own alpha. */
+	opacity?: number;
+	/** How the layer mixes with what is under it (the layers below, then the backdrop). Default `normal`. */
+	blendMode?: VectorBlendMode;
+	/** Hidden layers are kept but not drawn or hit. Default true. */
+	visible?: boolean;
+}
+
+/** The settings each stroke layer has of its own (the stroke shorthand fields of `VectorStyle`). */
+export type VectorStrokeSettings = Pick<
+	VectorStyle,
+	| 'strokeWidth'
+	| 'strokeLinecap'
+	| 'strokeLinejoin'
+	| 'strokeDasharray'
+	| 'strokeAlign'
+	| 'startArrow'
+	| 'endArrow'
+	| 'arrowAlign'
+	| 'startArrowScale'
+	| 'endArrowScale'
+	| 'strokeWidthProfile'
+>;
+
+/**
+ * What a stroke layer draws. Only `paint` (a paint along the outline, the default) exists today.
+ * Other kinds are the extension point for strokes drawn some other way, such as a raster
+ * brushstroke from `@pixerate/editor/paint` laid along the path: a layer with an unknown kind is
+ * kept through edits, load and SVG round trips, listed to agents, and skipped when drawing and
+ * hit-testing.
+ */
+export type VectorStrokeLayerKind = 'paint';
+
+/** One stroke of a path's stroke stack (`VectorStyle.strokes`): a paint plus its own stroke settings. */
+export interface VectorStrokeLayer extends VectorPaintLayer, VectorStrokeSettings {
+	/** Default `paint`. See `VectorStrokeLayerKind`. */
+	kind?: VectorStrokeLayerKind;
+}
+
 /** Paint and stroke settings of a path. */
 export interface VectorStyle {
 	fill?: VectorPaint;
@@ -214,6 +302,19 @@ export interface VectorStyle {
 	 * drawn as its filled outline.
 	 */
 	strokeWidthProfile?: VectorWidthPoint[] | null;
+	/**
+	 * The fill stack, bottom to top. Absent: `fill` alone is the stack (one layer, or none without
+	 * a paint). Present: it is the truth, and `fill` mirrors its top layer's paint. The shorthand
+	 * stays writable: setting `fill` to a paint repaints the top layer, `null` clears the stack.
+	 * Stacks of one plain layer (full opacity, `normal`, visible) are stored as the shorthand.
+	 */
+	fills?: VectorPaintLayer[] | null;
+	/**
+	 * The stroke stack, bottom to top, drawn over every fill. Like `fills`: absent, `stroke` and the
+	 * stroke settings above are the one stroke; present, they mirror its top layer, and writing them
+	 * edits that layer (`stroke: null` clears the stack).
+	 */
+	strokes?: VectorStrokeLayer[] | null;
 }
 
 interface VectorNodeBase {
@@ -248,6 +349,14 @@ interface VectorNodeBase {
 	 * it. Absent: the group's `liveBoolean` operation.
 	 */
 	booleanOperation?: VectorBooleanOperation | null;
+	/** How the whole node (all its paint, filters included) mixes with what is under it. Default `normal`. */
+	blendMode?: VectorBlendMode;
+	/**
+	 * Visual filters (drop and inner shadows, glows, blurs, feather), applied to everything the
+	 * node draws. Unlike path `effects` they never change geometry: bounds, hit-testing and
+	 * booleans ignore them.
+	 */
+	filters?: VectorFilter[] | null;
 }
 
 /** A shape made of one or more subpaths (holes and compound shapes included). */
@@ -574,3 +683,46 @@ export interface VectorSegmentRef {
 	subpath: number;
 	segment: number;
 }
+
+/**
+ * Visual filters: `dropShadow` (the node's silhouette, offset and blurred, under it),
+ * `innerShadow` (a shadow cast inside the edges), `outerGlow` / `innerGlow` (an unoffset glow
+ * outside or inside the edges), `layerBlur` (the whole node blurred) and `feather` (edges faded
+ * to transparent).
+ */
+export type VectorFilterType = 'dropShadow' | 'innerShadow' | 'outerGlow' | 'innerGlow' | 'layerBlur' | 'feather';
+export const VECTOR_FILTER_TYPES: readonly VectorFilterType[] = ['dropShadow', 'innerShadow', 'outerGlow', 'innerGlow', 'layerBlur', 'feather'];
+
+/** A shadow or glow: colour, offset, blur and spread in the node's own units. */
+interface VectorShadowParams {
+	color: string;
+	/** 0–1: multiplies the colour's own alpha. */
+	opacity: number;
+	/** Blur radius (the SVG / CSS standard deviation is half of it). */
+	blur: number;
+	/** Grows the silhouette before blurring (inner effects: chokes it inwards). */
+	spread: number;
+}
+
+/** Parameters of each filter type. Lengths are in the node's own units. */
+export interface VectorFilterParamsMap {
+	dropShadow: VectorShadowParams & { offsetX: number; offsetY: number };
+	innerShadow: VectorShadowParams & { offsetX: number; offsetY: number };
+	outerGlow: VectorShadowParams;
+	innerGlow: VectorShadowParams;
+	layerBlur: { radius: number };
+	/** Fades the edges over `radius` inwards. */
+	feather: { radius: number };
+}
+
+/** One entry of a node's filter stack. */
+export type VectorFilter = {
+	[K in VectorFilterType]: {
+		/** Unique within the node. */
+		id: string;
+		type: K;
+		/** Disabled filters are skipped. Default true. */
+		enabled?: boolean;
+		params: VectorFilterParamsMap[K];
+	};
+}[VectorFilterType];

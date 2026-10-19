@@ -261,6 +261,30 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: Edits record before / after snapshots of the whole spec; `load` swaps the spec without an undo step, so the next undo applies an older snapshot.
 - **Solution / Workaround**: Call `load(spec, { clearHistory: true })` when it replaces the whole document (opening a file, switching samples). Without `clearHistory`, use it only to refresh the chart with equivalent data.
 
+### [core/vector] `fill` / `stroke` Mirror the Top Layer of a Stack, and Code That Spreads a Node Edits That Layer
+
+- **Issue / Symptom**: After paint stacks (`fills` / `strokes`) landed, a node copied with `{ ...node, fill: x }` or `{ ...rest, stroke: null }` either lost the change (the stack won and put the old paint back) or kept stale layers (Outline Stroke's outline node inherited every fill of the source).
+- **Root Cause**: A stacked node stores its paint twice: the stacks are the truth and `fill`, `stroke` and the stroke settings mirror their top layers, so the dozens of places written for one fill and one stroke (booleans, blends, the gradient tool, the width tool, agent commands) keep reading and writing something sensible. A spread copies both, and only one side gets changed.
+- **Solution / Workaround**: `normalizeVectorPaintStacks` reconciles the two. The controller runs it in `refreshed()` (every `notify` and `commit`) with `prefer: 'shorthand'`: a shorthand that no longer matches its top layer is an edit of that layer, and `null` clears the stack. Loading (`new VectorEditorController({ document })`, `setDocument`, SVG import) uses `prefer: 'stack'` instead. New code that rebuilds a node for a different purpose (an outline, a copy without strokes) must set the stacks explicitly with `withVectorFills` / `withVectorStrokes` rather than spreading, and code that edits a layer other than the top goes through `withVectorTargetPaint` or the `*PaintLayer` methods. Stacks of one plain layer are stored as the shorthand, so old documents stay byte-identical.
+
+### [core|react|svelte/vector] Layer Blend Modes Only Mix Inside a Node That Has a Filter, Opacity or Blend Mode
+
+- **Issue / Symptom**: A fill layer set to `multiply` darkened the artwork below the shape, until the shape got a drop shadow (or node opacity below 1, or its own blend mode); then it only darkened the shape's own lower fills.
+- **Root Cause**: `mix-blend-mode` blends with everything painted before it inside the nearest isolated group. SVG `filter`, `opacity < 1` and `mix-blend-mode` on the node's `<g>` each make that group isolated, so the backdrop is no longer visible to the layers inside.
+- **Solution / Workaround**: This matches how Figma and Illustrator treat layer blending inside an object with effects, so it is kept and documented (skill pitfalls). Don't wrap every node in a `<g>` "to be safe": the canvases and export only emit the group (`VectorRenderPath.layers`) when the node needs layers, and put a node's blend mode and filter on that element.
+
+### [core/vector] Inner Shadows Need the Inverted Alpha Padded by the Filter Region, and Blur Radius Is Twice the Deviation
+
+- **Issue / Symptom**: An inner shadow showed a hard line along one side of the shape, and a "4 px" blur looked twice as soft as in CSS or Figma.
+- **Root Cause**: The inner shadow is the inverse of the silhouette (`feComponentTransfer` alpha `1 0`), offset, blurred and clipped back to the shape. The inverse only exists inside the filter region, so when the region ends close to the shape the offset pulls the region's transparent edge in. CSS `blur()` / `box-shadow` and Figma take a radius whose standard deviation is half of it; `feGaussianBlur` takes the deviation.
+- **Solution / Workaround**: `vectorFilterSvg` uses `filterUnits="userSpaceOnUse"` with the region padded by `vectorFilterReach` (offset + 1.5 × blur + spread for every shadow and glow, inner ones included, plus layer blurs) around the node's paint bounds (`vectorNodeLocalPaintBounds`: geometry plus stroke reach), and writes `stdDeviation = blur / 2`. The region is in the node's own space, so it follows rigid transforms and zoom.
+
+### [core/vector] SVG Filters Are Approximate Outside Browsers, and Background Blur Cannot Be Exported
+
+- **Issue / Symptom**: Exported shadows look slightly different (or are missing) in some SVG tools, and there is no background blur filter.
+- **Root Cause**: Renderers differ in filter support: `feMorphology` (spread, feather) and `color-interpolation-filters` are commonly ignored or approximated, and `mix-blend-mode: plus-lighter` (linear dodge) is newer than the other modes. A background blur needs the pixels behind the node; SVG's `BackgroundImage` input was never implemented by browsers, and CSS `backdrop-filter` does not apply to SVG elements.
+- **Solution / Workaround**: Export writes the filter as drawn plus `data-vector-filters` (the stack as JSON) on the `<filter>`, so our own import is lossless; foreign imports read `feDropShadow` and a lone source `feGaussianBlur` back as filters and skip anything else. Background blur is left to the planned lens objects. Tell users (the skill does) to rasterize when a design must look identical everywhere.
+
 ### [core/vector] Merging Faces by a Boolean Union of Their Outlines Leaves Seams
 
 - **Issue / Symptom**: Shape Builder merges built by uniting the faces' own outlines can leave a hairline gap or a spur along the edge two faces shared, and a merged shape whose faces only touched at a corner could come out with a sliver.

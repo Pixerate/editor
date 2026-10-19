@@ -16,6 +16,7 @@
     type VectorEditorController
   } from '@pixerate/editor/vector';
   import VectorGradientDefs from './VectorGradientDefs.svelte';
+  import VectorFilterDefs from './VectorFilterDefs.svelte';
   import VectorGradientAnnotator from './VectorGradientAnnotator.svelte';
   import VectorSceneNodes from './VectorSceneNodes.svelte';
   import VectorWidthPointEditor from './VectorWidthPointEditor.svelte';
@@ -175,6 +176,7 @@
     </defs>
   {/if}
   <VectorGradientDefs defs={scene.defs} />
+  <VectorFilterDefs filters={scene.filters} />
   <rect
     data-vector-artboard=""
     x={overlay.artboard.x}
