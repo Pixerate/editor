@@ -8,6 +8,7 @@ import { VideoEditorController, VideoPreviewEngine, buildVideoAudioPeaks, findVi
 import {
   ClipInspector,
   MediaBin,
+  TranscriptPanel,
   VideoEditor,
   VideoPreview,
   VideoTimeline,
@@ -661,5 +662,66 @@ describe("VideoEditor (React)", () => {
     act(() => root.render(<VideoEditor options={{ project: PROJECT, clock: new ManualClock() }} pxPerSecond={100} />));
     expect(container.querySelectorAll("[data-clip]")).toHaveLength(4);
     expect($("[data-timecode]").textContent).toBe("00:00:00:00 / 00:00:04:00");
+  });
+});
+
+describe("TranscriptPanel (React)", () => {
+  const talk = (): VideoEditorController =>
+    new VideoEditorController({
+      clock: new ManualClock(),
+      project: {
+        version: 1, width: 640, height: 360, fps: 25,
+        assets: [{ id: "talk", kind: "audio", src: "talk.wav", name: "Talk", duration: 4000, transcript: [
+  { word: "So", start: 0, end: 300 },
+  { word: "um", start: 400, end: 700 },
+  { word: "I", start: 800, end: 900 },
+  { word: "think", start: 900, end: 1200 },
+  { word: "we", start: 2500, end: 2700 },
+  { word: "ship", start: 2700, end: 3000 },
+] }],
+        tracks: [{ id: "a1", kind: "audio", clips: [{ id: "t", type: "media", asset: "talk", start: 0, duration: 4000 }] }],
+      },
+    });
+  const words = () => [...container.querySelectorAll<HTMLElement>("[data-word]")].map((w) => w.textContent);
+
+  it("seeks to a word, cuts a shift-selected run, fillers and pauses, one undo step each", () => {
+    const controller = talk();
+    act(() => root.render(<TranscriptPanel controller={controller} />));
+    expect(words()).toEqual(["So", "um", "I", "think", "we", "ship"]);
+    act(() => $<HTMLElement>('[data-word="3"]').click());
+    expect(controller.getState().time).toBe(900);
+    expect($('[data-word="3"]').hasAttribute("data-current")).toBe(true);
+    act(() => void $<HTMLElement>('[data-word="5"]').dispatchEvent(new MouseEvent("click", { bubbles: true, shiftKey: true })));
+    expect(container.querySelectorAll("[data-selected]")).toHaveLength(3);
+    act(() => [...container.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "Delete selected words")!.click());
+    expect(words()).toEqual(["So", "um", "I"]);
+    expect(controller.getState().undoLabel).toBe("Cut words");
+    act(() => void controller.undo());
+    act(() => [...container.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "Remove fillers")!.click());
+    expect(words()).toEqual(["So", "I", "think", "we", "ship"]);
+    act(() => [...container.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "Tighten pauses")!.click());
+    expect(controller.getProject().tracks[0].clips.reduce((n, c) => n + c.duration, 0)).toBeLessThan(3000);
+    expect(controller.getState().undoLabel).toBe("Tighten pauses");
+    controller.destroy();
+  });
+
+  it("loads a transcript file for an asset, and says what is wrong with a bad one", async () => {
+    const controller = new VideoEditorController({ clock: new ManualClock(), project: PROJECT });
+    act(() => root.render(<TranscriptPanel controller={controller} />));
+    expect(container.querySelector("[data-transcript-empty]")).not.toBeNull();
+    const input = $<HTMLInputElement>('input[aria-label="Load a transcript for Music"]');
+    const pick = async (text: string) => {
+      Object.defineProperty(input, "files", { value: [new File([text], "t.srt")], configurable: true });
+      await act(async () => {
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        await new Promise((r) => setTimeout(r, 0));
+      });
+    };
+    await pick("nonsense");
+    expect($("[data-transcript-error]").textContent).toMatch(/No words found/);
+    await pick("1\n00:00:00,000 --> 00:00:01,000\nHello there\n");
+    expect(words()).toEqual(["Hello", "there"]);
+    expect(controller.getState().undoLabel).toBe("Attach transcript");
+    controller.destroy();
   });
 });

@@ -38,12 +38,17 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
    `slip_video_clip` (change what a shot shows), `slide_video_clip` (move a shot between its
    neighbours); for a whole stretch, `split_video_at`, `lift_video_range` or
    `extract_video_range`. Animate opacity, volume or position with `set_video_keyframes`.
-6. **Check.** `check_video_project` and fix every error and warning; `find_video_gaps` for
+6. **Cut by text** when the media has speech: `set_video_transcript` for each spoken asset (or
+   check `transcriptWords` in `get_video_project`), `get_video_transcript` to read the edit, then
+   `find_video_fillers`, `find_video_pauses` or `find_video_transcript_text` and pass the ranges
+   you want gone to `remove_video_ranges` in one call. Re-read the transcript afterwards: every
+   time after a cut has moved.
+7. **Check.** `check_video_project` and fix every error and warning; `find_video_gaps` for
    unintended black or silence.
-7. **Look and listen.** `get_video_frame` at cuts and transitions for layers and audio gains as
+8. **Look and listen.** `get_video_frame` at cuts and transitions for layers and audio gains as
    numbers; `render_video_frame` with `times` for a contact sheet of the sequence. Render
    after a batch, not after every edit.
-8. **Export** when asked: `export_video_ffmpeg` (a command to run, not a render) or
+9. **Export** when asked: `export_video_ffmpeg` (a command to run, not a render) or
    `export_video_edl` (one track) for finishing elsewhere. Read the returned notes. For a
    delivery loudness, have the host run `export_video_loudness_measure` first and pass what it
    prints as `loudness.measured`; one pass (`loudness` without `measured`) is fine for a draft.
@@ -79,6 +84,10 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
 - **Keyframes sparingly.** Use `set_video_keyframes` for a push-in (`scale` 1 to 1.1 over the
   shot), a duck under dialogue (`volume`), or a fade that is not at an edge; ease (`ease-in-out`)
   rather than linear for motion. Simple fades at the clip edges are `fadeIn` / `fadeOut`.
+- **Tighten dialogue by text first.** With a transcript, remove fillers and pauses with the find
+  tools and one `remove_video_ranges`; review the fillers list first (a "you know" can be
+  meant). Keep 150-300 ms around words (`keep`) so speech breathes. Without a transcript, use the
+  sound itself, below.
 - **Tighten dialogue by ear, in numbers.** `find_video_silences` on an interview or voiceover clip
   lists the pauses in timeline time; extract the long ones (keep 150-300 ms either side so speech
   does not sound clipped: shrink each range before `extract_video_range`, and extract from the
@@ -125,6 +134,10 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
 | --- | --- |
 | `get_video_project` | Start here. Returns frame size, fps, length (ms), assets (id, kind, src, duration), tracks top to bottom with each clip in time order (id, type, start, duration, end, source in/out, fades, transition), markers, playhead, selection, issues and whether it can be edited. |
 | `get_video_frame` | Inspect a `time` (ms) as data: pictures back to front (clip, track, asset, source time, opacity, placement rect, rotation, wipe) and sounds (clip, source time, gain after volumes, fades and transitions). Use to verify a cut, layer order or J/L cut without images. |
+| `get_video_transcript` | Read what the timeline says on one `track` (default: the first audio track with transcribed media): the text, and each word with its timeline `start` / `end` ms and `clip`. `from` / `to` narrow it; `limit` (default 1000) with `more`. Words cut out of the edit are not listed. |
+| `find_video_transcript_text` | Find every place a word or phrase (`query`, case and punctuation ignored) is said, as `{ from, to, text }` timeline ranges for `remove_video_ranges`, `split_video_at` or `seek_video`. |
+| `find_video_fillers` | Find filler words (um, uh, erm, you know, I mean…; or your own `fillers`) as timeline ranges, longest phrase first, with their `total` ms. Review before cutting. |
+| `find_video_pauses` | Find gaps between words longer than `min` (default 700 ms), less `keep` (default 150 ms) next to each word, snapped inward to frames, as timeline ranges with their `total`. |
 | `find_video_gaps` | List empty stretches between clips (and before the first) as `{ track, start, end }` ms, on every track or one `track`. Then `close_video_gaps` or ripple. |
 | `check_video_project` | After every batch and before export. Lists issues errors first with a code (`missing-asset`, `wrong-track`, `overlap`, `source-overrun`, `transition-without-cut`, `transition-too-long`, `transition-handles`, `fades-too-long`, `unknown-duration`, `unused-asset`, `marker-past-end`, `empty`), what it is about and how to fix it. |
 | `render_video_frame` | Look at the picture at `time`, or at 2-16 `times` as one labelled contact sheet (`columns` 1-8). SVG by default; `format: "png"` only when the host can rasterize. Video without a `poster` shows as a labelled box with its source timecode. |
@@ -139,6 +152,8 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
 | `get_video_audio_levels` | Measure a media `clip`'s source sound (timeline times) or an `asset`'s (source times) between `from` and `to`: peak dBFS in each of `buckets` (default 50, up to 500) equal stretches, and the loudest peak. Levels are the recording before clip volume and fades. Use it to find where speech or a beat starts or to judge loudness. The first call for an asset decodes its file. |
 | `find_video_silences` | List stretches of a `clip` or `asset` that stay below `thresholdDb` (default -40) for at least `minDuration` ms (default 300). For a clip the `{ start, end }` are timeline times that go straight into `extract_video_range` (cut a pause, closing up) or `split_video_at`. |
 | `seek_video` | Show the person a moment: `time`, a `clip`'s start or a `marker`, with `play` true or false. Does not change the project. Returns the playhead and clips under it. |
+| `set_video_transcript` | Attach what is said in a video or audio `asset`: `text` (a Whisper JSON, .srt or .vtt file's contents) or `words` (`[{ word, start, end }]` ms of the source). Captions give approximate word timings. Returns the word count and first and last words. Clear it with `update_video_asset` `remove: ["transcript"]`. |
+| `remove_video_ranges` | Cut `ranges` (`[{ from, to }]` timeline ms, as the find tools return them) out and close them up on every sync-locked track, as one undo step: merged where they touch, extracted last first. Returns how many stretches and how much time went, and the new length. |
 | `set_video_settings` | Set `name`, `width` / `height` (pixels, 16-8192), `fps` (e.g. 24, 25, 30, 60) or `background` colour. One undo step. |
 | `add_video_asset` | Register a file: `kind` (video, audio, image), `src` (URL, path or data URL), `duration` ms (required in practice for video and audio), optional `id`, `name`, `width`, `height`, `hasAudio` (default true for video), `poster`. Returns the asset id. |
 | `update_video_asset` | Relink or correct an asset via `set` (src, name, duration, size, hasAudio, poster) and `remove`. Refused if clips would then run past its end. |
@@ -185,6 +200,8 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
   `set_video_keyframes` after the static settings, not before.
 - **Slip, slide and roll clamp.** They move as far as the media allows and say how far in
   `delta`; check it instead of assuming the full amount was applied.
+- **Times move after a cut.** Ranges from the find tools are valid for the timeline as it was;
+  pass them all to one `remove_video_ranges` (it cuts last first), or find again after each cut.
 - **`edit_video` has no result references.** Unlike `edit_animation`, ops cannot say `$0.id`;
   set clip, track and marker ids yourself when later ops in the batch need them.
 - **`edit_video` op shapes differ slightly** from the single tools: `add_asset` wraps the asset
