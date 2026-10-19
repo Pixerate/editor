@@ -1,13 +1,13 @@
-import { formatVideoSeconds, sortedVideoClips, VIDEO_TIME_EPSILON, videoAssetMap, videoClipBefore, videoClipEnd, videoClipHandles, videoClipSourceRange, videoProjectDuration } from './timeline.js';
+import { findVideoSequenceCycle, formatVideoSeconds, sortedVideoClips, VIDEO_TIME_EPSILON, videoAssetMap, videoClipBefore, videoClipEnd, videoClipHandles, videoClipSourceRange, videoProjectDuration, videoSequenceDuration, videoSequenceMap } from './timeline.js';
 import { VIDEO_CLIP_ANIMATION_DURATION, videoClipAnimationProperties } from './clip-animation.js';
 import { VIDEO_TRANSFORM_PROPERTIES, videoKeysOf } from './keyframes.js';
-import type { VideoClip, VideoProject } from './types.js';
+import type { VideoClip, VideoProject, VideoTrack } from './types.js';
 
 /** A clip's keyframed properties (`opacity`, `volume`, `x`…) with their keys. */
 export function videoClipKeyframes(clip: VideoClip): { property: string; keys: ReturnType<typeof videoKeysOf> }[] {
 	const out = [
 		{ property: 'opacity', keys: videoKeysOf(clip.opacity) },
-		{ property: 'volume', keys: clip.type === 'media' ? videoKeysOf(clip.volume) : [] },
+		{ property: 'volume', keys: clip.type === 'media' || clip.type === 'sequence' ? videoKeysOf(clip.volume) : [] },
 		...VIDEO_TRANSFORM_PROPERTIES.map((p) => ({ property: p as string, keys: videoKeysOf(clip.transform?.[p]) }))
 	];
 	return out.filter((o) => o.keys.length);
@@ -17,6 +17,8 @@ export type VideoIssueSeverity = 'error' | 'warning' | 'note';
 
 export const VIDEO_ISSUE_CODES = [
 	'missing-asset',
+	'missing-sequence',
+	'sequence-cycle',
 	'wrong-track',
 	'overlap',
 	'source-overrun',
@@ -29,6 +31,7 @@ export const VIDEO_ISSUE_CODES = [
 	'keyframes-outside-clip',
 	'unknown-duration',
 	'unused-asset',
+	'unused-sequence',
 	'marker-past-end',
 	'empty'
 ] as const;
@@ -39,6 +42,8 @@ export interface VideoIssue {
 	severity: VideoIssueSeverity;
 	/** One sentence saying what is wrong and how to fix it. */
 	message: string;
+	/** The sequence whose track it is about (absent for the project's own tracks). */
+	sequence?: string;
 	track?: string;
 	clip?: string;
 	asset?: string;
@@ -46,27 +51,45 @@ export interface VideoIssue {
 }
 
 /** A stable key for an issue (code and what it is about), to tell new problems from old ones. */
-export const videoIssueKey = (i: VideoIssue): string => [i.code, i.track ?? '', i.clip ?? '', i.asset ?? '', i.marker ?? ''].join('|');
+export const videoIssueKey = (i: VideoIssue): string => [i.code, i.sequence ?? '', i.track ?? '', i.clip ?? '', i.asset ?? '', i.marker ?? ''].join('|');
 
 /**
  * Everything wrong with a project, errors first: clips pointing at missing media or sitting on the
  * wrong kind of track, overlaps, clips running past the end of their source, transitions with no
  * cut to play over or not enough media either side of it, and softer notes (unused assets, markers
- * past the end). Edits never add errors (see `applyVideoEdits`), so errors only come from a loaded file.
+ * past the end). Sequences' tracks are checked the same way, and compound clips must play a
+ * sequence that exists, does not contain itself and is long enough. Edits never add errors (see `applyVideoEdits`), so errors only come from a loaded file.
  */
 export function checkVideoProject(project: VideoProject): VideoIssue[] {
 	const issues: VideoIssue[] = [];
 	const assets = videoAssetMap(project);
+	const sequences = videoSequenceMap(project);
 	const used = new Set<string>();
+	const usedSequences = new Set<string>();
+	const cycles = new Map<string, string[] | null>();
 	for (const asset of project.assets)
 		if ((asset.kind === 'video' || asset.kind === 'audio') && asset.duration === undefined)
 			issues.push({ code: 'unknown-duration', severity: 'warning', asset: asset.id, message: `Asset "${asset.id}" has no duration, so clips of it cannot be checked against its length; set "duration" in ms.` });
-	for (const track of project.tracks) {
+	const checkTrack = (track: VideoTrack, sequence?: string) => {
 		const clips = sortedVideoClips(track);
+		const where = sequence ? ` in sequence "${sequence}"` : '';
 		for (let i = 0; i < clips.length; i++) {
 			const clip = clips[i];
-			const at = { track: track.id, clip: clip.id };
-			if (clip.type === 'media') {
+			const at = { ...(sequence ? { sequence } : {}), track: track.id, clip: clip.id };
+			if (clip.type === 'sequence') {
+				usedSequences.add(clip.sequence);
+				const seq = sequences.get(clip.sequence);
+				if (!seq) issues.push({ code: 'missing-sequence', severity: 'error', ...at, message: `Compound clip "${clip.id}" plays sequence "${clip.sequence}", which is not in the project; add the sequence or delete the clip.` });
+				else {
+					if (!cycles.has(seq.id)) cycles.set(seq.id, findVideoSequenceCycle(project, seq.id));
+					const cycle = cycles.get(seq.id);
+					if (cycle) issues.push({ code: 'sequence-cycle', severity: 'error', ...at, message: `Compound clip "${clip.id}" plays sequence "${seq.id}", which contains itself (${cycle.join(' → ')}), so it is left out of the picture and sound; remove the compound clip that closes the loop.` });
+					const length = videoSequenceDuration(seq);
+					const range = videoClipSourceRange(clip)!;
+					if (range.out > length + VIDEO_TIME_EPSILON)
+						issues.push({ code: 'source-overrun', severity: 'error', ...at, message: `Compound clip "${clip.id}" plays to ${formatVideoSeconds(range.out)} of sequence "${seq.id}", which is only ${formatVideoSeconds(length)} long; shorten the clip or move its in point.` });
+				}
+			} else if (clip.type === 'media') {
 				used.add(clip.asset);
 				const asset = assets.get(clip.asset);
 				if (!asset) issues.push({ code: 'missing-asset', severity: 'error', ...at, asset: clip.asset, message: `Clip "${clip.id}" plays asset "${clip.asset}", which is not in the project; add the asset or delete the clip.` });
@@ -80,7 +103,7 @@ export function checkVideoProject(project: VideoProject): VideoIssue[] {
 			} else if (track.kind === 'audio') issues.push({ code: 'wrong-track', severity: 'error', ...at, message: `Clip "${clip.id}" is a ${clip.type} clip on audio track "${track.id}"; move it to a video track.` });
 			const next = clips[i + 1];
 			if (next && next.start < videoClipEnd(clip) - VIDEO_TIME_EPSILON)
-				issues.push({ code: 'overlap', severity: 'error', ...at, message: `Clips "${clip.id}" and "${next.id}" overlap on track "${track.id}" from ${formatVideoSeconds(next.start)}; move one of them.` });
+				issues.push({ code: 'overlap', severity: 'error', ...at, message: `Clips "${clip.id}" and "${next.id}" overlap on track "${track.id}"${where} from ${formatVideoSeconds(next.start)}; move one of them.` });
 			if ((clip.fadeIn ?? 0) + (clip.fadeOut ?? 0) > clip.duration + VIDEO_TIME_EPSILON)
 				issues.push({ code: 'fades-too-long', severity: 'warning', ...at, message: `Clip "${clip.id}"'s fades (${clip.fadeIn ?? 0} + ${clip.fadeOut ?? 0} ms) are longer than the clip (${clip.duration} ms); shorten them.` });
 			const anim = (clip.animateIn ? (clip.animateIn.duration ?? VIDEO_CLIP_ANIMATION_DURATION) : 0) + (clip.animateOut ? (clip.animateOut.duration ?? VIDEO_CLIP_ANIMATION_DURATION) : 0);
@@ -116,8 +139,8 @@ export function checkVideoProject(project: VideoProject): VideoIssue[] {
 				}
 				// A dip cuts under its colour, so it plays no media past the cut.
 				if (clip.transition.type === 'dip') continue;
-				const outgoing = videoClipHandles(before, assets).after;
-				const incoming = videoClipHandles(clip, assets).before;
+				const outgoing = videoClipHandles(before, assets, sequences).after;
+				const incoming = videoClipHandles(clip, assets, sequences).before;
 				const half = d / 2;
 				if (outgoing < half - VIDEO_TIME_EPSILON || incoming < half - VIDEO_TIME_EPSILON) {
 					const fits = 2 * Math.min(outgoing, incoming);
@@ -130,7 +153,11 @@ export function checkVideoProject(project: VideoProject): VideoIssue[] {
 				}
 			}
 		}
-	}
+	};
+	for (const track of project.tracks) checkTrack(track);
+	for (const sequence of project.sequences ?? []) for (const track of sequence.tracks) checkTrack(track, sequence.id);
+	for (const sequence of project.sequences ?? [])
+		if (!usedSequences.has(sequence.id)) issues.push({ code: 'unused-sequence', severity: 'note', sequence: sequence.id, message: `Sequence "${sequence.id}" is not played by any compound clip.` });
 	for (const asset of project.assets) if (!used.has(asset.id)) issues.push({ code: 'unused-asset', severity: 'note', asset: asset.id, message: `Asset "${asset.id}" is not used by any clip.` });
 	const end = videoProjectDuration(project);
 	for (const marker of project.markers ?? [])

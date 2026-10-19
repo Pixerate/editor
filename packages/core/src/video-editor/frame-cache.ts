@@ -9,7 +9,7 @@
  * Eviction removes the frames furthest from the playhead, counting frames behind it (against the
  * play direction) as further, and never touches the prefetch window.
  */
-import { videoFrameAt, type VideoLayer } from './evaluate.js';
+import { videoFrameAt, videoFrameLeafLayers, type VideoLayer } from './evaluate.js';
 import type { VideoProject } from './types.js';
 
 /** The source frame showing at a source time (ms) on an `fps` grid: a frame shows from its start. */
@@ -35,7 +35,8 @@ export interface VideoFrameRequest {
 /** The video layers' source frames at timeline `time`, as the preview would play them. */
 export function videoFrameRequestsAt(project: VideoProject, time: number, srcFor: (layer: VideoLayer) => string | undefined = (l) => l.src): VideoFrameRequest[] {
 	const out: VideoFrameRequest[] = [];
-	for (const layer of videoFrameAt(project, time).layers) {
+	// Media inside compound clips is decoded like any other.
+	for (const layer of videoFrameLeafLayers(videoFrameAt(project, time).layers)) {
 		if (layer.type !== 'media' || layer.assetKind !== 'video') continue;
 		const src = srcFor(layer);
 		if (!src) continue;

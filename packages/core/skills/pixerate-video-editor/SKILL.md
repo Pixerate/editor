@@ -13,6 +13,13 @@ timeline; a media clip also has an `in` point into its asset, `speed`, `volume`,
 every clip can have `fadeIn`, `fadeOut`, `opacity`, `fit` and `transform`, and a
 `transition` from the clip that ends where it starts on the same track.
 
+A project may also hold nested **sequences** (`{ id, name, tracks }`, their own timeline from 0).
+A **compound clip** (`type: "sequence"`, `sequence`, `in`) plays a stretch of one as a single
+picture and a single sound: its opacity, transform, blend, grade, LUT, fades, transitions and
+animations apply to the sequence's composite, and its `volume`, `muted` and fades to the
+sequence's mix. Compound clips play at normal speed (no `speed` or ramp), and the clips inside a
+sequence can be read (`list_video_sequences`) but not edited yet.
+
 All times are milliseconds on the timeline (or into the source for `in`). Ids: tracks look
 like `v1` / `a1`, clips like `c1`, markers `m1`; you may set your own ids when adding. Read
 them from `get_video_project`; never invent them.
@@ -22,7 +29,8 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
 ## Working method
 
 1. **Read.** `get_video_project` for settings, assets, tracks, clips (with end and source
-   range), markers and issues. Set frame size and `fps` first with `set_video_settings` if
+   range), a summary of each nested sequence, markers and issues. When there are compound
+   clips, `list_video_sequences` shows what they contain. Set frame size and `fps` first with `set_video_settings` if
    the project is new; changing them later shifts frame-based limits.
 2. **Bring in media.** `add_video_asset` for each file with `kind`, `src` and the source
    `duration` (without it trims cannot be checked and `check_video_project` warns
@@ -156,8 +164,9 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
 
 | Tool | Use it to |
 | --- | --- |
-| `get_video_project` | Start here. Returns frame size, fps, length (ms), assets (id, kind, src, duration), tracks top to bottom with each clip in time order (id, type, start, duration, end, source in/out, fades, transition), markers, playhead, selection, issues and whether it can be edited. |
-| `get_video_frame` | Inspect a `time` (ms) as data: pictures back to front (clip, track, asset, source time, opacity, placement rect, rotation, wipe) and sounds (clip, source time, gain after volumes, fades and transitions). Use to verify a cut, layer order or J/L cut without images. |
+| `get_video_project` | Start here. Returns frame size, fps, length (ms), assets (id, kind, src, duration), tracks top to bottom with each clip in time order (id, type, start, duration, end, source in/out, fades, transition), a summary of each nested sequence (`sequences`: id, length, clip count, `nests`, `usedBy`), markers, playhead, selection, issues and whether it can be edited. |
+| `list_video_sequences` | Read the nested sequences compound clips play (or one `sequence`): length, the sequences each nests, `usedBy` (the compound clips that play it, with timeline start / end and the stretch of the sequence as `source`), any `cycle`, and its tracks and clips in the `get_video_project` shape. Call it before trimming, slipping or grading a compound clip, to know what it holds. |
+| `get_video_frame` | Inspect a `time` (ms) as data: pictures back to front (clip, track, asset, source time, opacity, placement rect, rotation, wipe) and sounds (clip, source time, gain after volumes, fades and transitions). A compound clip is one picture whose `layers` are its sequence's, with `sourceTime` in sequence time; its sounds carry clip paths like `comp/inner`. Use to verify a cut, layer order or J/L cut without images. |
 | `get_video_transcript` | Read what the timeline says on one `track` (default: the first audio track with transcribed media): the text, and each word with its timeline `start` / `end` ms and `clip`. `from` / `to` narrow it; `limit` (default 1000) with `more`. Words cut out of the edit are not listed. |
 | `find_video_transcript_text` | Find every place a word or phrase (`query`, case and punctuation ignored) is said, as `{ from, to, text }` timeline ranges for `remove_video_ranges`, `split_video_at` or `seek_video`. |
 | `find_video_fillers` | Find filler words (um, uh, erm, you know, I mean…; or your own `fillers`) as timeline ranges, longest phrase first, with their `total` ms. Review before cutting. |
@@ -255,6 +264,16 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
   affect picture and sound together. Fade curves shape only the sound (media clips); the picture
   always fades linearly. Splitting keeps the fade-in curve on the left part and the fade-out
   curve on the right.
+- **Compound clips are one picture.** A grade, blend or opacity on a compound changes the
+  sequence's composite, not each clip in it, so a multiply on a compound multiplies the whole
+  nested frame over what is beneath (and leaves its transparent parts untouched). Trimming,
+  splitting and slipping a compound move its `in` through the sequence; it can never play past
+  the sequence's end (`source-overrun`), a transition into it needs sequence time either side of
+  the cut like media handles, and `speed` or a ramp on it is refused. A compound whose sequence
+  is missing (`missing-sequence`) or contains itself (`sequence-cycle`) plays nothing.
+- **Clips inside sequences are read-only for now.** Write tools refuse a clip id inside a
+  sequence with a message naming it; change the compound clip instead. The EDL lists a compound
+  as a black event with a `* COMPOUND CLIP` comment (CMX 3600 has no nesting).
 - **Locked tracks** refuse edits to their clips; unlock with `update_video_track` only if the user
   wants that track changed.
 - **Read-only**: when `get_video_project` says the project cannot be edited, write tools are

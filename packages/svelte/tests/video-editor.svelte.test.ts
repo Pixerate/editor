@@ -314,6 +314,28 @@ describe("VideoTimeline (Svelte)", () => {
   });
 });
 
+describe("compound clips (Svelte)", () => {
+  it("shows a compound clip with its sequence on the timeline and in the inspector, and mutes it", () => {
+    const project: VideoProject = {
+      ...PROJECT,
+      sequences: [{ id: "seq", name: "Opening", tracks: [{ id: "sv", kind: "video", clips: [{ id: "inside", type: "color", color: "#ff0000", start: 0, duration: 3000 }] }] }],
+      tracks: [{ id: "v0", kind: "video", clips: [{ id: "comp", type: "sequence", sequence: "seq", in: 500, start: 0, duration: 2000 }] }, ...PROJECT.tracks],
+    };
+    const controller = new VideoEditorController({ project, clock: new ManualClock() });
+    render(VideoTimeline, { controller });
+    const block = q('[data-clip="comp"]');
+    expect(block.dataset.compound).toBe("seq");
+    expect(block.textContent).toContain("Compound: Opening");
+    render(ClipInspector, { controller });
+    act(() => controller.select(["comp"]));
+    expect(q('[data-field="sequence"]').textContent).toContain("Opening · from 0.50 s");
+    expect(q('input[aria-label="Speed"]')).toBeNull();
+    act(() => q<HTMLInputElement>('input[aria-label="Muted"]').click());
+    expect((clipOf(controller, "comp") as any).muted).toBe(true);
+    controller.destroy();
+  });
+});
+
 describe("ClipInspector (Svelte)", () => {
   it("edits the selected clip, one undo step per change", () => {
     const controller = make();

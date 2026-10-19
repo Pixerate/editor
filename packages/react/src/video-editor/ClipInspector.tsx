@@ -196,7 +196,7 @@ export function ClipInspector({ controller, className = '' }: ClipInspectorProps
   return (
     <div className={`flex flex-col gap-1.5 ${className}`} data-clip-inspector="" data-clip-id={clip.id}>
       <div className="flex items-center gap-2 text-xs">
-        <span className="font-medium">{clip.type === 'media' ? 'Media clip' : clip.type === 'text' ? 'Title' : 'Colour clip'}</span>
+        <span className="font-medium">{clip.type === 'media' ? 'Media clip' : clip.type === 'text' ? 'Title' : clip.type === 'sequence' ? 'Compound clip' : 'Colour clip'}</span>
         <code className="text-muted-foreground">{clip.id}</code>
         {at.track.locked && <span className="text-amber-500">locked track</span>}
       </div>
@@ -407,6 +407,18 @@ export function ClipInspector({ controller, className = '' }: ClipInspectorProps
           </Row>
           <Row label="Background" name="background">
             {text('background', 'Background')}
+          </Row>
+        </>
+      )}
+      {clip.type === 'sequence' && (
+        <>
+          <Row label="Sequence" name="sequence">
+            <span className="truncate" title="A compound clip plays its sequence as one picture and sound; its clips cannot be edited here yet">
+              {project.sequences?.find((q) => q.id === clip.sequence)?.name ?? clip.sequence} · from {formatVideoSeconds(clip.in ?? 0)}
+            </span>
+          </Row>
+          <Row label="Muted" name="muted">
+            <input type="checkbox" className="justify-self-start" checked={!!clip.muted} disabled={disabled} aria-label="Muted" onChange={(e) => set('muted', e.target.checked || undefined, e.target.checked ? 'Mute clip' : 'Unmute clip')} />
           </Row>
         </>
       )}

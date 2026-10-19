@@ -3,7 +3,10 @@ import { isVideoKeyframes, retimeVideoAnimatable, sortVideoKeys, splitVideoAnima
 import { parseVideoAnimatable, parseVideoAsset, parseVideoClip, parseVideoMarker, parseVideoProject, parseVideoTimeRemap, parseVideoTransition } from './parse.js';
 import { checkVideoTimeRemap, videoTimeRemapSpan } from './remap.js';
 import {
+	allVideoClipIds,
+	allVideoTracks,
 	findVideoClip,
+	findVideoSequenceClip,
 	formatVideoSeconds,
 	nextFreeVideoSlot,
 	sortedVideoClips,
@@ -16,6 +19,8 @@ import {
 	videoClipOverhang,
 	videoClipSpeed,
 	videoOverlap,
+	videoSequenceDuration,
+	videoSequenceMap,
 	videoTrackSyncLocked
 } from './timeline.js';
 import { VIDEO_PLACEMENT_MODES, type VideoAsset, type VideoClip, type VideoMarker, type VideoMediaClip, type VideoPlacementMode, type VideoProject, type VideoTrack, type VideoTrackKind, type VideoTransition } from './types.js';
@@ -196,6 +201,8 @@ class Editor {
 
 	clip(id: string) {
 		const at = findVideoClip(this.p, id);
+		const nested = at ? null : findVideoSequenceClip(this.p, id);
+		if (nested) refuse(`Clip "${id}" is inside sequence "${nested.sequence.id}", and clips inside sequences cannot be edited yet; edit the compound clip that plays the sequence instead (list_video_sequences shows which).`);
 		if (!at) {
 			const ids = this.p.tracks.flatMap((t) => t.clips.map((c) => c.id));
 			refuse(`There is no clip ${namedWithSuggestion(id, ids)}${ids.length ? '' : '; the project has no clips yet'}.`);
@@ -221,8 +228,14 @@ class Editor {
 		}
 	}
 
-	kindFits(track: VideoTrack, clip: { type: string; asset?: string }) {
+	kindFits(track: VideoTrack, clip: { type: string; asset?: string; sequence?: string }) {
 		const asset = clip.type === 'media' ? this.asset(clip.asset!) : null;
+		if (clip.type === 'sequence') {
+			const ids = (this.p.sequences ?? []).map((q) => q.id);
+			if (typeof clip.sequence !== 'string' || !ids.includes(clip.sequence)) refuse(`There is no sequence ${namedWithSuggestion(String(clip.sequence), ids)}; the sequences are ${ids.map((q) => `"${q}"`).join(', ') || 'none'}.`);
+			// On an audio track a compound plays only its sound.
+			return;
+		}
 		if (track.kind === 'audio' && (clip.type !== 'media' || asset!.kind === 'image')) refuse(`Track "${track.id}" is an audio track; ${clip.type === 'media' ? 'images' : `${clip.type} clips`} go on a video track.`);
 		if (track.kind === 'video' && asset?.kind === 'audio') refuse(`Track "${track.id}" is a video track; audio asset "${asset.id}" goes on an audio track.`);
 	}
@@ -239,7 +252,7 @@ class Editor {
 	}
 
 	ids() {
-		return this.p.tracks.flatMap((t) => t.clips.map((c) => c.id));
+		return allVideoClipIds(this.p);
 	}
 
 	/**
@@ -269,8 +282,13 @@ class Editor {
 		if (!(to - from > VIDEO_TIME_EPSILON)) refuse(`"to" (${formatVideoSeconds(to)}) must be after "from" (${formatVideoSeconds(from)}).`);
 	}
 
-	/** Moves a media clip's in point by `delta` of timeline time (stills, titles and colours have none). */
+	/** Moves a media or compound clip's in point by `delta` of timeline time (stills, titles and colours have none). */
 	moveIn(clip: VideoClip, delta: number) {
+		if (clip.type === 'sequence') {
+			clip.in = Math.max(0, (clip.in ?? 0) + delta);
+			if (clip.in < 1e-9) delete clip.in;
+			return;
+		}
 		if (clip.type !== 'media' || videoAssetMap(this.p).get(clip.asset)?.kind === 'image') return;
 		clip.in = Math.max(0, (clip.in ?? 0) + delta * videoClipSpeed(clip));
 		if (clip.in < 1e-9) delete clip.in;
@@ -302,7 +320,7 @@ class Editor {
 		clip.duration = at - clip.start;
 		delete clip.fadeOut;
 		delete clip.animateOut;
-		if (clip.type === 'media') delete clip.fadeOutCurve;
+		if (clip.type === 'media' || clip.type === 'sequence') delete clip.fadeOutCurve;
 		track.clips.push(right);
 		track.clips.sort((a, b) => a.start - b.start);
 		return right;
@@ -433,7 +451,7 @@ class Editor {
 			}
 			case 'remove_asset': {
 				const asset = this.asset(e.asset);
-				const users = this.p.tracks.flatMap((t) => t.clips.filter((c) => c.type === 'media' && c.asset === asset.id).map((c) => c.id));
+				const users = allVideoTracks(this.p).flatMap(({ track: t }) => t.clips.filter((c) => c.type === 'media' && c.asset === asset.id).map((c) => c.id));
 				if (users.length) refuse(`Asset "${asset.id}" is used by clip${users.length > 1 ? 's' : ''} ${users.map((u) => `"${u}"`).join(', ')}; delete ${users.length > 1 ? 'them' : 'it'} first.`);
 				this.p.assets = this.p.assets.filter((a) => a !== asset);
 				return this.outcomes.push({ op: e.op, asset: asset.id });
@@ -476,7 +494,7 @@ class Editor {
 				const mode = this.placement(e.mode, e.ripple);
 				const draft: any = { ...e.clip, type: e.clip.type ?? 'media' };
 				this.kindFits(track, draft);
-				const ids = this.p.tracks.flatMap((t) => t.clips.map((c) => c.id));
+				const ids = this.ids();
 				if (draft.id !== undefined && ids.includes(draft.id)) refuse(`There is already a clip "${draft.id}".`);
 				draft.id ??= freshId('c', ids);
 				if (draft.duration === undefined) {
@@ -486,6 +504,10 @@ class Editor {
 						else if (asset.duration === undefined) refuse(`Asset "${asset.id}" has no duration, so give the clip a "duration".`);
 						else draft.duration = (asset.duration - (draft.in ?? 0)) / (draft.speed ?? 1);
 						if (!(draft.duration > 0)) refuse(`"in" (${draft.in} ms) is at or past the end of "${asset.id}" (${asset.duration} ms).`);
+					} else if (draft.type === 'sequence') {
+						const length = videoSequenceDuration(videoSequenceMap(this.p).get(draft.sequence)!) - (draft.in ?? 0);
+						if (!(length > 0)) refuse(`"in" (${draft.in ?? 0} ms) is at or past the end of sequence "${draft.sequence}".`);
+						draft.duration = length;
 					} else draft.duration = VIDEO_DEFAULT_TITLE_DURATION;
 				}
 				const end = sortedVideoClips(track).reduce((m, c) => Math.max(m, videoClipEnd(c)), 0);
@@ -522,7 +544,7 @@ class Editor {
 					const delta = e.to - clip.start;
 					if (clip.duration - delta < minimum - VIDEO_TIME_EPSILON) refuse(`Trimming the start to ${formatVideoSeconds(e.to)} would leave "${clip.id}" shorter than a frame; it ends at ${formatVideoSeconds(end)}.`);
 					// A ramp's keys carry its source: trimming moves them (and holds the first frame past them).
-					if (clip.type === 'media' && !isRamped(clip)) {
+					if ((clip.type === 'media' && !isRamped(clip)) || clip.type === 'sequence') {
 						const sourceIn = (clip.in ?? 0) + delta * speed;
 						if (sourceIn < -VIDEO_TIME_EPSILON) refuse(`"${clip.id}" starts ${Math.round((clip.in ?? 0) / speed)} ms into its source, so its start can move at most that far earlier (to ${formatVideoSeconds(clip.start - (clip.in ?? 0) / speed)}).`);
 						clip.in = Math.max(0, sourceIn);
@@ -557,6 +579,11 @@ class Editor {
 						const out = (clip.in ?? 0) + duration * speed;
 						if (asset?.duration !== undefined && out > asset.duration + VIDEO_TIME_EPSILON)
 							refuse(`"${clip.id}" can end at most at ${formatVideoSeconds(clip.start + (asset.duration - (clip.in ?? 0)) / speed)}, where "${asset.id}" runs out.`);
+					}
+					if (clip.type === 'sequence') {
+						const seq = videoSequenceMap(this.p).get(clip.sequence);
+						const length = seq ? videoSequenceDuration(seq) : Infinity;
+						if ((clip.in ?? 0) + duration > length + VIDEO_TIME_EPSILON) refuse(`"${clip.id}" can end at most at ${formatVideoSeconds(clip.start + length - (clip.in ?? 0))}, where sequence "${clip.sequence}" ends.`);
 					}
 					if (e.ripple) {
 						const tracks = this.rippleTracks([track]);
@@ -636,6 +663,7 @@ class Editor {
 			case 'set_time_remap': {
 				const { track, clip } = this.clip(e.clip);
 				this.unlocked(track);
+				if (clip.type === 'sequence') refuse(`Clip "${clip.id}" is a compound clip, which plays its sequence at normal speed; ramp the clips inside the sequence instead.`);
 				if (clip.type !== 'media') refuse(`Clip "${clip.id}" is a ${clip.type === 'text' ? 'title' : 'colour'}, so it has no source to ramp; only video and audio clips change speed.`);
 				const asset = this.asset((clip as VideoMediaClip).asset);
 				if (asset.kind === 'image') refuse(`Clip "${clip.id}" is a still ("${asset.id}"), so it has no motion to ramp.`);
@@ -694,16 +722,16 @@ class Editor {
 			case 'slip_clip': {
 				const { track, clip } = this.clip(e.clip);
 				this.unlocked(track);
-				if (clip.type !== 'media') refuse(`Clip "${clip.id}" is a ${clip.type === 'text' ? 'title' : 'colour'}, so it has no source to slip; only video and audio clips slip.`);
-				const asset = this.asset((clip as { asset: string }).asset);
-				if (asset.kind === 'image') refuse(`Clip "${clip.id}" is a still ("${asset.id}"), so it has no source to slip; only video and audio clips slip.`);
+				if (clip.type !== 'media' && clip.type !== 'sequence') refuse(`Clip "${clip.id}" is a ${clip.type === 'text' ? 'title' : 'colour'}, so it has no source to slip; only video, audio and compound clips slip.`);
+				const source = clip.type === 'sequence' ? `sequence "${clip.sequence}"` : `"${this.asset((clip as { asset: string }).asset).id}"`;
+				if (clip.type === 'media' && this.asset(clip.asset).kind === 'image') refuse(`Clip "${clip.id}" is a still ("${clip.asset}"), so it has no source to slip; only video and audio clips slip.`);
 				// Keep the media a transition at either edge plays past the cut.
-				const handles = videoClipHandles(clip, videoAssetMap(this.p));
+				const handles = videoClipHandles(clip, videoAssetMap(this.p), videoSequenceMap(this.p));
 				const { lead, tail } = videoClipOverhang(track, clip);
 				const delta = this.clamp(e.delta, lead - handles.before, handles.after - tail, () =>
 					e.delta > 0
-						? `"${clip.id}" already plays to the end of "${asset.id}"${tail ? ` (less the ${tail} ms the transition after it needs)` : ''}, so it cannot slip later; slip it earlier (a negative delta).`
-						: `"${clip.id}" already starts at the beginning of "${asset.id}"${lead ? ` (plus the ${lead} ms its transition needs)` : ''}, so it cannot slip earlier; slip it later (a positive delta).`
+						? `"${clip.id}" already plays to the end of ${source}${tail ? ` (less the ${tail} ms the transition after it needs)` : ''}, so it cannot slip later; slip it earlier (a negative delta).`
+						: `"${clip.id}" already starts at the beginning of ${source}${lead ? ` (plus the ${lead} ms its transition needs)` : ''}, so it cannot slip earlier; slip it later (a positive delta).`
 				);
 				this.moveIn(clip, delta);
 				return this.outcomes.push({ op: e.op, clip: clip.id, track: track.id, delta });
@@ -721,8 +749,8 @@ class Editor {
 					refuse(`"${L.id}" ends at ${formatVideoSeconds(videoClipEnd(L))} but "${R.id}" starts at ${formatVideoSeconds(R.start)}; a roll needs two clips that meet at a cut (use trim_clip to move one edge).`);
 				}
 				const assets = videoAssetMap(this.p);
-				const lo = Math.max(-(L.duration - this.frame), -(videoClipHandles(R, assets).before - videoClipOverhang(track, R).lead));
-				const hi = Math.min(R.duration - this.frame, videoClipHandles(L, assets).after - videoClipOverhang(track, L).tail);
+				const lo = Math.max(-(L.duration - this.frame), -(videoClipHandles(R, assets, videoSequenceMap(this.p)).before - videoClipOverhang(track, R).lead));
+				const hi = Math.min(R.duration - this.frame, videoClipHandles(L, assets, videoSequenceMap(this.p)).after - videoClipOverhang(track, L).tail);
 				const delta = this.clamp(e.delta, lo, hi, () =>
 					e.delta > 0
 						? `The cut cannot move later: ${R.duration - this.frame < 1 ? `"${R.id}" is already a frame long` : `"${L.id}" has no media after its out point`}. Roll it earlier (a negative delta).`
@@ -748,8 +776,8 @@ class Editor {
 					earlier: before ? before.duration - this.frame : clip.start - others.filter((c) => videoClipEnd(c) <= clip.start + VIDEO_TIME_EPSILON).reduce((m, c) => Math.max(m, videoClipEnd(c)), 0),
 					later: after ? after.duration - this.frame : others.filter((c) => c.start >= end - VIDEO_TIME_EPSILON).reduce((m, c) => Math.min(m, c.start - end), Infinity)
 				};
-				const lo = -Math.min(room.earlier, after ? videoClipHandles(after, assets).before - videoClipOverhang(track, after).lead : Infinity);
-				const hi = Math.min(room.later, before ? videoClipHandles(before, assets).after - videoClipOverhang(track, before).tail : Infinity);
+				const lo = -Math.min(room.earlier, after ? videoClipHandles(after, assets, videoSequenceMap(this.p)).before - videoClipOverhang(track, after).lead : Infinity);
+				const hi = Math.min(room.later, before ? videoClipHandles(before, assets, videoSequenceMap(this.p)).after - videoClipOverhang(track, before).tail : Infinity);
 				const delta = this.clamp(e.delta, lo, hi, () =>
 					e.delta > 0
 						? `"${clip.id}" cannot slide later: ${room.later < 1 ? (after ? `"${after.id}" is already a frame long` : 'the next clip is right after it') : `"${before!.id}" has no media after its out point to fill in behind it`}. Slide it earlier (a negative delta).`
@@ -790,7 +818,7 @@ class Editor {
 				const { track, clip } = this.clip(e.clip);
 				this.unlocked(track);
 				if (!VIDEO_KEYFRAME_PROPERTIES.includes(e.property)) refuse(`"${e.property}" cannot be keyframed; use one of ${VIDEO_KEYFRAME_PROPERTIES.join(', ')}.`);
-				if (e.property === 'volume' && clip.type !== 'media') refuse(`Clip "${clip.id}" is a ${clip.type} clip and has no volume; volume keys go on media clips.`);
+				if (e.property === 'volume' && clip.type !== 'media' && clip.type !== 'sequence') refuse(`Clip "${clip.id}" is a ${clip.type} clip and has no volume; volume keys go on media and compound clips.`);
 				const limits = VIDEO_KEYFRAME_LIMITS[e.property];
 				const transform = (VIDEO_TRANSFORM_PROPERTIES as readonly string[]).includes(e.property);
 				const c = clip as any;

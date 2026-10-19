@@ -13,8 +13,8 @@ import { summarizeVideoScopes, type VideoPixels } from './scopes.js';
 import { videoAssetProxy, videoProxyPlan } from './proxy.js';
 import { VIDEO_EASE_NAMES, VIDEO_KEYFRAME_PROPERTIES, VIDEO_TRANSFORM_PROPERTIES, type VideoAnimatable, type VideoKeyframeProperty } from './keyframes.js';
 import { videoContactSheetSvg, videoProjectSvg } from './render.js';
-import { findVideoClip, findVideoGaps, formatVideoSeconds, formatVideoTimecode, sortedVideoClips, VIDEO_TIME_EPSILON, videoClipEnd, videoClipSourceRange, videoProjectDuration } from './timeline.js';
-import { VIDEO_BLEND_MODES, VIDEO_CLIP_ANIMATION_EFFECTS, VIDEO_FADE_CURVES, VIDEO_FITS, VIDEO_PLACEMENT_MODES, VIDEO_TRANSITION_TYPES, VIDEO_WIPE_DIRECTIONS, type VideoAsset, type VideoProject } from './types.js';
+import { allVideoTracks, findVideoClip, findVideoGaps, findVideoSequenceCycle, formatVideoSeconds, formatVideoTimecode, sortedVideoClips, VIDEO_TIME_EPSILON, videoClipEnd, videoClipSourceRange, videoProjectDuration, videoSequenceChildren, videoSequenceDuration } from './timeline.js';
+import { VIDEO_BLEND_MODES, VIDEO_CLIP_ANIMATION_EFFECTS, VIDEO_FADE_CURVES, VIDEO_FITS, VIDEO_PLACEMENT_MODES, VIDEO_TRANSITION_TYPES, VIDEO_WIPE_DIRECTIONS, type VideoAsset, type VideoProject, type VideoSequence, type VideoTrack } from './types.js';
 
 /** Times in results, to a tenth of a millisecond. */
 const round = (ms: number) => Math.round(ms * 10) / 10;
@@ -216,7 +216,43 @@ const videoAssetOut = (a: VideoAsset) => {
 	return transcript ? { ...rest, transcriptWords: transcript.length } : rest;
 };
 
-/** A project as agents see it: settings, assets, and each track's clips in order with their times. */
+/** Tracks as agents see them: each with its clips in time order, their ends and (media and compounds) the source they play. */
+const describeVideoTracks = (tracks: readonly VideoTrack[]) =>
+	tracks.map((t, index) => ({
+		id: t.id,
+		kind: t.kind,
+		index,
+		...(t.name ? { name: t.name } : {}),
+		...(t.muted ? { muted: true } : {}),
+		...(t.hidden ? { hidden: true } : {}),
+		...(t.locked ? { locked: true } : {}),
+		...(t.syncLocked === false ? { syncLocked: false } : {}),
+		...(t.volume !== undefined ? { volume: t.volume } : {}),
+		clips: sortedVideoClips(t).map((c) => ({ ...c, end: videoClipEnd(c), ...(c.type === 'media' || c.type === 'sequence' ? { source: videoClipSourceRange(c) } : {}) }))
+	}));
+
+/** The compound clips that play a sequence, wherever they are (the project's tracks or other sequences). */
+const videoSequenceUsers = (project: VideoProject, id: string) =>
+	allVideoTracks(project).flatMap(({ sequence, track }) =>
+		track.clips.flatMap((c) => (c.type === 'sequence' && c.sequence === id ? [{ clip: c.id, ...(sequence ? { inSequence: sequence } : {}), track: track.id, start: c.start, end: videoClipEnd(c), source: videoClipSourceRange(c)! }] : []))
+	);
+
+/** A sequence as agents see it: its length, the sequences it nests, who plays it, and (with `tracks`) its tracks and clips. */
+export function describeVideoSequence(project: VideoProject, sequence: VideoSequence, tracks = true) {
+	const cycle = findVideoSequenceCycle(project, sequence.id);
+	return {
+		id: sequence.id,
+		...(sequence.name ? { name: sequence.name } : {}),
+		duration: videoSequenceDuration(sequence),
+		clipCount: sequence.tracks.reduce((n, t) => n + t.clips.length, 0),
+		nests: videoSequenceChildren(sequence),
+		usedBy: videoSequenceUsers(project, sequence.id),
+		...(cycle ? { cycle } : {}),
+		...(tracks ? { tracks: describeVideoTracks(sequence.tracks) } : { trackCount: sequence.tracks.length })
+	};
+}
+
+/** A project as agents see it: settings, assets, each track's clips in order with their times, and a summary of each sequence. */
 export function describeVideoProject(project: VideoProject) {
 	return {
 		...(project.name ? { name: project.name } : {}),
@@ -226,18 +262,8 @@ export function describeVideoProject(project: VideoProject) {
 		duration: videoProjectDuration(project),
 		...(project.background ? { background: project.background } : {}),
 		assets: project.assets.map(videoAssetOut),
-		tracks: project.tracks.map((t, index) => ({
-			id: t.id,
-			kind: t.kind,
-			index,
-			...(t.name ? { name: t.name } : {}),
-			...(t.muted ? { muted: true } : {}),
-			...(t.hidden ? { hidden: true } : {}),
-			...(t.locked ? { locked: true } : {}),
-			...(t.syncLocked === false ? { syncLocked: false } : {}),
-			...(t.volume !== undefined ? { volume: t.volume } : {}),
-			clips: sortedVideoClips(t).map((c) => ({ ...c, end: videoClipEnd(c), ...(c.type === 'media' ? { source: videoClipSourceRange(c) } : {}) }))
-		})),
+		tracks: describeVideoTracks(project.tracks),
+		...(project.sequences?.length ? { sequences: project.sequences.map((q) => describeVideoSequence(project, q, false)) } : {}),
 		markers: project.markers ?? []
 	};
 }
@@ -269,7 +295,7 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 	const clipOut = (p: VideoProject, id: string) => {
 		for (const t of p.tracks) {
 			const c = t.clips.find((x) => x.id === id);
-			if (c) return { track: t.id, ...c, end: videoClipEnd(c), ...(c.type === 'media' ? { source: videoClipSourceRange(c) } : {}) };
+			if (c) return { track: t.id, ...c, end: videoClipEnd(c), ...(c.type === 'media' || c.type === 'sequence' ? { source: videoClipSourceRange(c) } : {}) };
 		}
 		return null;
 	};
@@ -291,7 +317,7 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 		name: 'get_video_project',
 		title: 'Read the video project',
 		description:
-			'Returns the whole project: frame size, fps, length (ms), assets (id, kind, src, duration), tracks top to bottom (an earlier video track draws over a later one) with each clip in time order (id, type, start, duration, end, source in/out for media, fades, transition) and markers, plus the playhead, selection, issues and whether it can be edited.',
+			'Returns the whole project: frame size, fps, length (ms), assets (id, kind, src, duration), tracks top to bottom (an earlier video track draws over a later one) with each clip in time order (id, type, start, duration, end, source in/out for media and compound clips, fades, transition), a summary of each nested sequence (id, name, length, clip count, the sequences it nests, the compound clips that play it) and markers, plus the playhead, selection, issues and whether it can be edited. Compound clips (type "sequence") play a sequence\'s tracks as one picture and sound; list_video_sequences reads what is inside them.',
 		inputSchema: object({}),
 		annotations: { title: 'Read the video project', ...READ },
 		handler: () => {
@@ -304,12 +330,31 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 	const getFrame: AgentTool = {
 		name: 'get_video_frame',
 		title: 'What plays at a moment',
-		description: 'Returns what plays at a time without changing anything: the pictures back to front (clip, track, asset, source time in ms, opacity, placement rect, rotation, any wipe or iris) and the sounds (clip, source time, gain after volumes, fades and transitions).',
+		description: 'Returns what plays at a time without changing anything: the pictures back to front (clip, track, asset, source time in ms, opacity, placement rect, rotation, any wipe or iris) and the sounds (clip, source time, gain after volumes, fades and transitions). A compound clip is one picture with its sequence, the moment of the sequence it shows (sourceTime) and the sequence\'s own pictures as "layers"; its sounds are listed with clip paths such as "compound/inner".',
 		inputSchema: object({ time: MS('Time from the start (default: the playhead)') }),
 		annotations: { title: 'What plays at a moment', ...READ },
 		handler: ({ time }) => {
 			const frame = videoFrameAt(project(), time ?? controller.getState().time);
 			return { ...frame, timecode: formatVideoTimecode(frame.time, project().fps) };
+		}
+	};
+
+	const listSequences: AgentTool = {
+		name: 'list_video_sequences',
+		title: 'List nested sequences',
+		description:
+			'Lists the project\'s nested sequences, the tracks that compound clips (type "sequence") play as one picture and sound, without changing anything. For each: id, name, length (ms), the sequences it nests, the compound clips that play it (clip id, the track and sequence they sit on, timeline start and end, and the stretch of the sequence they play as source in / out) and its tracks with their clips, in the same shape as get_video_project. A sequence that contains itself lists the loop as "cycle". Clips inside sequences can be read here but not edited yet; edit the compound clip instead (move, trim, its opacity, blend, grade, volume).',
+		inputSchema: object({ sequence: { type: 'string', minLength: 1, description: 'Only this sequence id (default: every sequence).' } }),
+		annotations: { title: 'List nested sequences', ...READ },
+		handler: ({ sequence }) => {
+			const p = project();
+			const all = p.sequences ?? [];
+			if (sequence !== undefined) {
+				const found = all.find((q) => q.id === sequence);
+				if (!found) throw new Error(`There is no sequence "${sequence}"; ${all.length ? `the sequences are ${all.map((q) => `"${q.id}"`).join(', ')}` : 'the project has no sequences'}.`);
+				return { sequences: [describeVideoSequence(p, found)] };
+			}
+			return { sequences: all.map((q) => describeVideoSequence(p, q)) };
 		}
 	};
 
@@ -593,7 +638,7 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 		name: 'update_video_clip',
 		title: 'Change a clip',
 		description:
-			'Changes a clip\'s properties (one undo step): opacity, transform, fit, blend mode, colour grade, entrance and exit animations, fades, name; for media volume, mute, the sound\'s fade curves, speed (keeps the stretch of source, so the length changes) or asset; for titles text and style; for colours the colour. Fields in "remove" go back to their defaults. Use move / trim for timing. Returns the clip.',
+			'Changes a clip\'s properties (one undo step): opacity, transform, fit, blend mode, colour grade, entrance and exit animations, fades, name; for media volume, mute, the sound\'s fade curves, speed (keeps the stretch of source, so the length changes) or asset; for compound clips in point, volume, mute and fade curves (no speed); for titles text and style; for colours the colour. Fields in "remove" go back to their defaults. Use move / trim for timing. Returns the clip.',
 		inputSchema: object(
 			{
 				clip: CLIP_ID,
@@ -606,7 +651,7 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 		handler: ({ clip, set, remove }) => {
 			const current = clipOut(project(), clip);
 			if (current && set) {
-				const allowed = new Set(['name', 'opacity', 'transform', 'fit', 'blend', 'grade', 'animateIn', 'animateOut', 'fadeIn', 'fadeOut', ...(current.type === 'media' ? ['in', 'speed', 'volume', 'muted', 'asset', 'fadeInCurve', 'fadeOutCurve'] : current.type === 'text' ? Object.keys(TEXT_FIELDS) : ['color'])]);
+				const allowed = new Set(['name', 'opacity', 'transform', 'fit', 'blend', 'grade', 'animateIn', 'animateOut', 'fadeIn', 'fadeOut', ...(current.type === 'media' ? ['in', 'speed', 'volume', 'muted', 'asset', 'fadeInCurve', 'fadeOutCurve'] : current.type === 'sequence' ? ['in', 'volume', 'muted', 'fadeInCurve', 'fadeOutCurve'] : current.type === 'text' ? Object.keys(TEXT_FIELDS) : ['color'])]);
 				const wrong = Object.keys(set).filter((k) => !allowed.has(k));
 				if (wrong.length) throw new Error(`${wrong.map((k) => `"${k}"`).join(', ')} cannot be set on a ${current.type} clip; it takes ${[...allowed].join(', ')}.`);
 			}
@@ -924,6 +969,7 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 		const at = findVideoClip(project(), id);
 		if (!at) throw new Error(`There is no clip "${id}"; get_video_project lists the clips.`);
 		const { clip } = at;
+		if (clip.type === 'sequence') throw new Error(`Clip "${id}" is a compound clip, which plays its sequence at normal speed; change the speed of the clips inside the sequence instead.`);
 		if (clip.type !== 'media') throw new Error(`Clip "${id}" is a ${clip.type === 'text' ? 'title' : 'colour'}, so it has no source to change the speed of; use a video or audio clip.`);
 		if (project().assets.find((a) => a.id === clip.asset)?.kind === 'image') throw new Error(`Clip "${id}" is a still, so it has no motion to change the speed of.`);
 		return clip;
@@ -1197,6 +1243,7 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 			const found = findVideoClip(p, args.clip);
 			if (!found) throw new Error(`There is no clip "${args.clip}"; get_video_project lists the clips.`);
 			const c = found.clip;
+			if (c.type === 'sequence') throw new Error(`Clip "${c.id}" is a compound clip; its sound is the mix of its sequence "${c.sequence}", so read the levels of the media in it (list_video_sequences lists its clips and assets).`);
 			if (c.type !== 'media') throw new Error(`Clip "${c.id}" is a ${c.type} clip and has no sound; pass a media clip.`);
 			asset = p.assets.find((a) => a.id === c.asset);
 			const speed = c.speed ?? 1;
@@ -1301,7 +1348,7 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 		}
 	};
 
-	const reads = [getProject, getFrame, getTranscript, findText, findFillers, findPauses, findGaps, checkProject, renderFrame, getScopes, previewCache, planProxies, exportFfmpeg, exportLoudnessMeasure, exportEdl, audioLevels, findSilences, seek, setPreviewScale];
+	const reads = [getProject, listSequences, getFrame, getTranscript, findText, findFillers, findPauses, findGaps, checkProject, renderFrame, getScopes, previewCache, planProxies, exportFfmpeg, exportLoudnessMeasure, exportEdl, audioLevels, findSilences, seek, setPreviewScale];
 	const writes = [setSettings, addAsset, updateAsset, removeAsset, setProxies, addTrack, updateTrack, removeTrack, moveTrack, addClip, moveClip, trimClip, splitClip, deleteClips, updateClip, setTransition, setSpeedRamp, addFreeze, removeRamp, setTranscript, removeRanges, applyGradePreset, copyGrade, setLut, removeLut, setKeyframes, removeKeyframes, slipClip, rollEdit, slideClip, liftRange, extractRange, splitAt, closeGaps, addMarker, removeMarker, editVideo, undo, redo];
 
 	return {

@@ -3,6 +3,7 @@ import {
   planVideoClipDrag,
   videoDragLabel,
   videoAssetMap,
+  videoSequenceMap,
   videoClipLabel,
   videoClipShowsWaveform,
   videoClipWaveformPath,
@@ -121,6 +122,7 @@ export function VideoTimeline({ controller, pxPerSecond, onPxPerSecondChange, ed
   const rows = useRef(new Map<string, HTMLDivElement>());
   const ruler = useRef<HTMLDivElement>(null);
   const assets = videoAssetMap(project);
+  const sequences = videoSequenceMap(project);
   const msToPx = (ms: number) => (ms * px) / 1000;
   const span = Math.max(duration + 5000, 10000);
   const width = msToPx(span);
@@ -355,7 +357,7 @@ export function VideoTimeline({ controller, pxPerSecond, onPxPerSecondChange, ed
                 {clips.map(({ clip, home, start, duration: length, dragging }) => {
                   const asset = clip.type === 'media' ? assets.get(clip.asset) : undefined;
                   const selected = selection.includes(clip.id);
-                  const label = videoClipLabel(clip, asset);
+                  const label = videoClipLabel(clip, asset, clip.type === 'sequence' ? sequences.get(clip.sequence) : undefined);
                   return (
                     <div
                       key={clip.id}
@@ -370,6 +372,7 @@ export function VideoTimeline({ controller, pxPerSecond, onPxPerSecondChange, ed
                       }}
                       title={`${label} · ${formatVideoSeconds(start)}–${formatVideoSeconds(start + length)}`}
                       data-clip={clip.id}
+                      data-compound={clip.type === 'sequence' ? clip.sequence : undefined}
                       data-selected={selected ? '' : undefined}
                       data-dragging={dragging ? '' : undefined}
                       aria-selected={selected}
