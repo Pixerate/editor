@@ -1,5 +1,12 @@
 # @pixerate/editor
 
+## 0.96.0
+
+### Minor Changes
+
+- 282d096: Add live, non-destructive layer effects to the image editor's layer stack: drop and inner shadow, outer and inner glow, bevel & emboss (five styles, three techniques, gloss contour, Contour and Texture elements), satin, colour / gradient / pattern overlay and stroke (outside, inside, centre; colour, gradient or pattern). Each effect has its own enabled flag, blend mode, opacity and settings; layers get a master switch, Scale Effects and a document global light, and fill opacity leaves effects alone. Effects render in the per-tile compositor of `@pixerate/editor/raster` between a layer's content and its blend, from maps built once per layer region, so tiled renders equal a whole-image render; tile signatures and dirty rectangles grow by each effect's reach. Effects are saved in the v3 document, baked by Merge Down, and reachable by agents through `list_layer_effects`, `add_layer_effect`, `update_layer_effect`, `remove_layer_effect`, `set_layer_effects_enabled` and `set_global_light`. `curveLut` moved to `@pixerate/editor/raster` (still exported from the image editor).
+- 282d096: PSD files keep their layer effects. Import maps `lfx2` / `lfxs` / `lmfx` (and legacy `lrFX`) to live effects. It also reads the embedded patterns (`Patt` / `Pat2` / `Pat3`) and the global light (resources 1037 and 1049), and warns only for what it draws approximately: gradient midpoints and smoothness, noise gradients, glow jitter, Dissolve, legacy bevels, and patterns the file lacks. Export writes effects as `lfx2` (`lfxs` on groups). A block opened from a PSD is written back byte for byte while its effects are unchanged, and the patterns the effects use are embedded. Document patterns are saved in the v3 document and listed by `list_layer_effects`. The image editor entry re-exports the effects model.
+
 ## 0.95.0
 
 ### Minor Changes
