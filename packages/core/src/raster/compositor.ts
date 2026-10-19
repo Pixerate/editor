@@ -20,15 +20,17 @@
  * - Layer effects: a layer's effect maps (shadow, glow, bevel, stroke distance fields) are built
  *   once over the layer's region (its bounds grown by the effects' margin, within the canvas grown
  *   the same) and cached by the identity of every surface tile the shape reads; tiles crop them.
+ *   When only some of those tiles changed and every effect is local, the maps are rebuilt only
+ *   within the margin of the change (narrowed by `dirty` when it covers the change) and patched in.
  *   A tile's signature then reads the layer within the margin around it (or the whole region when
  *   an effect is laid out over the layer's bounds), and `dirty` rectangles grow by the margin.
  */
 
 import { blendChannel, blendRgb, isSeparableBlendMode, mixPigment8, type BlendMode } from './blend';
 import { gaussianBlur } from './blur';
-import { DEFAULT_GLOBAL_LIGHT, effectsFingerprint, effectsMargin, hasActiveEffects, type GlobalLight, type LayerEffects } from './effects/model';
+import { DEFAULT_GLOBAL_LIGHT, effectReach, effectsFingerprint, effectsMargin, hasActiveEffects, MAX_EFFECT_REACH, type GlobalLight, type LayerEffects } from './effects/model';
 import { builtinPattern, PatternTile, type EffectPattern } from './effects/patterns';
-import { activeEffectItems, buildEffectMaps, compositeLayerEffects, effectsAreLocal, type EffectContext, type EffectMaps } from './effects/render';
+import { activeEffectItems, buildEffectMaps, compositeLayerEffects, effectsAreLocal, patchEffectMaps, type EffectContext, type EffectMaps } from './effects/render';
 import type { RasterMask, RasterNode } from './layers';
 import {
   TILE,
@@ -119,8 +121,9 @@ export interface CompositeCallOptions {
   checkpointLayerId?: string | null;
   /**
    * Where the layers changed since the previous call, when the caller knows (a stroke's dabs).
-   * Changed tiles are then recomposited only inside these rectangles. Changes outside them would
-   * be missed, so pass nothing when unsure.
+   * Changed tiles are then recomposited only inside these rectangles (grown by the effects' reach),
+   * tiles they miss keep their pixels, and effect maps are rebuilt only around them. Changes outside
+   * them would be missed, so pass nothing when unsure.
    */
   dirty?: RasterRect[];
 }
@@ -295,6 +298,16 @@ function lerpTile(dst: Uint8ClampedArray, before: Uint8ClampedArray, alpha: numb
 // The compositor
 // ---------------------------------------------------------------------------
 
+/** A layer's cached effect maps: built for `key` over `region` from the shape tiles `tiles`. */
+interface EffectEntry {
+  key: string;
+  region: RasterRect;
+  tiles: Map<TileKey, Sig>;
+  maps: EffectMaps;
+  /** The call that last validated it. */
+  stamp: number;
+}
+
 interface TileEntry<L> {
   sigs: Sig[];
   /** Accumulator before step `index` (index 0 is the empty accumulator and is never stored). */
@@ -321,6 +334,10 @@ export interface CompositeStats {
   cached: number;
   /** Steps actually run, summed over tiles. */
   stepsRun: number;
+  /** Layers whose effect maps were built over their whole region. */
+  effectsBuilt: number;
+  /** Layers whose effect maps were rebuilt only around a change and patched in. */
+  effectsPatched: number;
 }
 
 const isGroup = (l: CompositorLayer) => l.type === 'group';
@@ -341,14 +358,17 @@ export class RasterCompositor<L extends CompositorLayer = CompositorLayer, S ext
   private readonly stepsCache = new WeakMap<readonly L[], Step<L>[]>();
   private readonly propsKeyCache = new WeakMap<object, string>();
   /** Effect maps by layer id (see the module comment), least recently used first. */
-  private effectCache = new Map<string, { key: string; refs: unknown[]; maps: EffectMaps }>();
+  private effectCache = new Map<string, EffectEntry>();
   /** Effect maps already validated in this call, by layer object. */
   private effectMemo = new WeakMap<object, { stamp: number; maps: EffectMaps }>();
   private readonly patternTiles = new WeakMap<EffectPattern, PatternTile>();
   private readonly reachCache = new WeakMap<readonly L[], number>();
   private fxContext: EffectContext | null = null;
-  lastStats: CompositeStats = { tiles: 0, cached: 0, stepsRun: 0 };
+  lastStats: CompositeStats = { tiles: 0, cached: 0, stepsRun: 0, effectsBuilt: 0, effectsPatched: 0 };
   private hint = -1;
+  /** The `dirty` rectangles of the current call, as passed. */
+  private callDirty: RasterRect[] | null = null;
+  private callStats: CompositeStats = this.lastStats;
 
   constructor(
     private readonly profile: CompositorProfile<L, S> = {},
@@ -413,7 +433,9 @@ export class RasterCompositor<L extends CompositorLayer = CompositorLayer, S ext
     const steps = this.buildSteps(layers);
     this.hint = options.checkpointLayerId ? this.stepIndexOf(steps, options.checkpointLayerId) : -1;
     this.stamp++;
-    const stats: CompositeStats = { tiles: 0, cached: 0, stepsRun: 0 };
+    this.callDirty = options.dirty ?? null;
+    const stats: CompositeStats = { tiles: 0, cached: 0, stepsRun: 0, effectsBuilt: 0, effectsPatched: 0 };
+    this.callStats = stats;
     // A change reaches as far as the effects of any layer reach.
     const grow = options.dirty ? this.effectsReach(layers) : 0;
     const dirty = grow > 0 ? options.dirty!.map((d) => inflateRect(d, grow)) : options.dirty;
@@ -431,8 +453,10 @@ export class RasterCompositor<L extends CompositorLayer = CompositorLayer, S ext
   tile(layers: readonly L[], tx: number, ty: number, sources: S): Uint8ClampedArray {
     this.setSources(sources);
     this.stamp++;
-    const stats: CompositeStats = { tiles: 1, cached: 0, stepsRun: 0 };
+    const stats: CompositeStats = { tiles: 1, cached: 0, stepsRun: 0, effectsBuilt: 0, effectsPatched: 0 };
+    this.callStats = stats;
     this.hint = -1;
+    this.callDirty = null;
     const data = this.compositeTile(layers, this.buildSteps(layers), tx, ty, stats);
     this.lastStats = stats;
     this.evict();
@@ -511,7 +535,8 @@ export class RasterCompositor<L extends CompositorLayer = CompositorLayer, S ext
     let first = 0;
     if (entry) {
       while (first < sigs.length && first < entry.sigs.length && sameSig(entry.sigs[first], sigs[first])) first++;
-      if (first === sigs.length && first === entry.sigs.length) {
+      if ((first === sigs.length && first === entry.sigs.length) || this.changedOnlyNearby(steps, sigs, entry, dirty)) {
+        entry.sigs = sigs;
         entry.stamp = this.stamp;
         stats.cached++;
         return entry.result;
@@ -577,6 +602,21 @@ export class RasterCompositor<L extends CompositorLayer = CompositorLayer, S ext
     this.tiles.set(key, next);
     this.cacheBytes += this.entryBytes(next) - prevBytes;
     return result;
+  }
+
+  /**
+   * Whether a tile with no part in this call's (grown) `dirty` rectangles changed only in what local
+   * effects read beyond it: every changed step is a pixel layer with local effects whose changes stay
+   * inside `dirty` (and so are farther than its margin), which leaves the tile's pixels as they were.
+   */
+  private changedOnlyNearby(steps: Step<L>[], sigs: Sig[], entry: TileEntry<L>, dirty: RasterRect | null): boolean {
+    if (this.callDirty === null || dirty || entry.stamp !== this.stamp - 1 || sigs.length !== entry.sigs.length) return false;
+    return steps.every((step, i) => {
+      if (sameSig(entry.sigs[i], sigs[i])) return true;
+      if (step.kind !== 'content' || entry.sigs[i].key !== sigs[i].key) return false;
+      const { layer, clipped } = step;
+      return this.hasEffects(layer) && effectsAreLocal(activeEffectItems(layer.effects)) && this.dirtyCoversShape(layer) && clipped.every((c) => this.dirtyCoversShape(c));
+    });
   }
 
   private entryBytes(e: TileEntry<L>): number {
@@ -724,14 +764,21 @@ export class RasterCompositor<L extends CompositorLayer = CompositorLayer, S ext
     return intersectRect({ x: b.x + dx - m, y: b.y + dy - m, width: b.width + 2 * m, height: b.height + 2 * m }, canvas);
   }
 
+  /** The signature of a layer's shape (its surface tiles and mask refs) per tile of `region`. */
+  private shapeSigs(layer: L, region: RasterRect): Map<TileKey, Sig> {
+    const sigs = new Map<TileKey, Sig>();
+    if (region.width <= 0 || region.height <= 0) return sigs;
+    const steps = isGroup(layer) ? this.buildSteps((layer.children ?? []) as L[]) : null;
+    for (const t of tilesInRect(region)) {
+      sigs.set(tileKey(t.tx, t.ty), steps ? this.plainGroupSig(layer, steps, t.tx, t.ty) : this.plainContentSig(layer, t.tx, t.ty));
+    }
+    return sigs;
+  }
+
   /** The surface tiles (and mask refs) a layer's shape reads over `region`. */
   private shapeRefs(layer: L, region: RasterRect): unknown[] {
     const refs: unknown[] = [];
-    if (region.width <= 0 || region.height <= 0) return refs;
-    for (const t of tilesInRect(region)) {
-      const sig = isGroup(layer) ? this.plainGroupSig(layer, this.buildSteps((layer.children ?? []) as L[]), t.tx, t.ty) : this.plainContentSig(layer, t.tx, t.ty);
-      for (const r of sig.refs) refs.push(r);
-    }
+    for (const sig of this.shapeSigs(layer, region).values()) for (const r of sig.refs) refs.push(r);
     return refs;
   }
 
@@ -762,28 +809,74 @@ export class RasterCompositor<L extends CompositorLayer = CompositorLayer, S ext
     const memo = this.effectMemo.get(layer);
     if (memo && memo.stamp === this.stamp) return memo.maps;
     const region = this.effectRegion(layer);
-    const key = `${this.propsKey(layer)}${this.lightKey()}|${region.x},${region.y},${region.width},${region.height}`;
-    const refs = this.shapeRefs(layer, region);
+    const key = this.propsKey(layer) + this.lightKey();
+    const tiles = this.shapeSigs(layer, region);
     const hit = this.effectCache.get(layer.id);
-    let maps: EffectMaps;
-    if (hit && hit.key === key && sameSig({ key, refs: hit.refs }, { key, refs })) {
-      this.effectCache.delete(layer.id);
-      this.effectCache.set(layer.id, hit);
-      maps = hit.maps;
+    this.effectCache.delete(layer.id);
+    let entry: EffectEntry;
+    if (hit && hit.key === key && sameRect(hit.region, region) && [...tiles].every(([k, sig]) => sameSig(hit.tiles.get(k), sig))) {
+      entry = hit;
     } else {
-      maps = buildEffectMaps(activeEffectItems(layer.effects), this.layerShape(layer, region), region, this.effectContext());
-      this.effectCache.delete(layer.id);
-      this.effectCache.set(layer.id, { key, refs, maps });
+      const items = activeEffectItems(layer.effects);
+      const ctx = this.effectContext();
+      let maps: EffectMaps | null = null;
+      if (hit && hit.key === key && items.every((e) => effectReach(e) <= MAX_EFFECT_REACH)) {
+        const changed = this.shapeChanges(layer, hit, tiles, region);
+        maps = patchEffectMaps(hit.maps, items, region, changed, effectsMargin(layer.effects), (r) => this.layerShape(layer, r), ctx);
+      }
+      if (maps) this.callStats.effectsPatched++;
+      else this.callStats.effectsBuilt++;
+      entry = { key, region, tiles, maps: maps ?? buildEffectMaps(items, this.layerShape(layer, region), region, ctx), stamp: 0 };
+    }
+    entry.stamp = this.stamp;
+    this.effectCache.set(layer.id, entry);
+    if (entry !== hit) {
       let bytes = 0;
       for (const e of this.effectCache.values()) bytes += e.maps.bytes;
       while (this.effectCache.size > 1 && (this.effectCache.size > 32 || bytes > this.maxCacheBytes / 2)) {
-        const [oldest, e] = this.effectCache.entries().next().value as [string, { maps: EffectMaps }];
+        const [oldest, e] = this.effectCache.entries().next().value as [string, EffectEntry];
         bytes -= e.maps.bytes;
         this.effectCache.delete(oldest);
       }
     }
-    this.effectMemo.set(layer, { stamp: this.stamp, maps });
-    return maps;
+    this.effectMemo.set(layer, { stamp: this.stamp, maps: entry.maps });
+    return entry.maps;
+  }
+
+  /**
+   * Where a layer's shape may differ from the one `prev` was built from: the tiles whose signature
+   * changed (a tile new to the region that reads nothing did not), narrowed to this call's `dirty`
+   * rectangles when `prev` is from the previous call and they cover every change of the shape.
+   */
+  private shapeChanges(layer: L, prev: EffectEntry, tiles: Map<TileKey, Sig>, region: RasterRect): RasterRect[] {
+    const out: RasterRect[] = [];
+    for (const { tx, ty } of tilesInRect(region)) {
+      const sig = tiles.get(tileKey(tx, ty))!;
+      const old = prev.tiles.get(tileKey(tx, ty));
+      if (old ? sameSig(old, sig) : sig.refs.every((r) => r === null || r === 0)) continue;
+      const r = intersectRect({ x: tx * TILE, y: ty * TILE, width: TILE, height: TILE }, region);
+      if (r.width > 0 && r.height > 0) out.push(r);
+    }
+    const dirty = this.callDirty;
+    if (!dirty || prev.stamp !== this.stamp - 1 || !this.dirtyCoversShape(layer)) return out;
+    const narrowed: RasterRect[] = [];
+    for (const r of out) {
+      for (const d of dirty) {
+        const a = intersectRect(r, { x: Math.floor(d.x), y: Math.floor(d.y), width: Math.ceil(d.x + d.width) - Math.floor(d.x), height: Math.ceil(d.y + d.height) - Math.floor(d.y) });
+        if (a.width > 0 && a.height > 0) narrowed.push(a);
+      }
+    }
+    return narrowed;
+  }
+
+  /**
+   * Whether a change to a layer stays inside the `dirty` rectangles that name it: a pixel layer
+   * without filters or a feathered or parametric mask (those spread a change beyond it).
+   */
+  private dirtyCoversShape(layer: L): boolean {
+    if (!isPixel(layer) || this.profile.pixelFilters?.(layer)) return false;
+    const mask = layer.mask;
+    return !mask || mask.enabled === false || (!mask.source && !((mask.feather ?? 0) > 0));
   }
 
   /** A layer's alpha over `r` after its mask (0..1, quantised to bytes as tiles see it). */
@@ -1145,6 +1238,10 @@ function copyRect(data: Uint8ClampedArray, r: RasterRect, a: RasterRect): Uint8C
 /** Writes `part` (RGBA over `a`) back into `data` (over `r`). */
 function pasteRect(data: Uint8ClampedArray, r: RasterRect, part: Uint8ClampedArray, a: RasterRect): void {
   for (let y = 0; y < a.height; y++) data.set(part.subarray(y * a.width * 4, (y + 1) * a.width * 4), ((a.y - r.y + y) * r.width + (a.x - r.x)) * 4);
+}
+
+function sameRect(a: RasterRect, b: RasterRect): boolean {
+  return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
 }
 
 function inflateRect(r: RasterRect, m: number): RasterRect {
