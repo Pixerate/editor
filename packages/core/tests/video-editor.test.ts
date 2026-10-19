@@ -16,6 +16,8 @@ import {
 	snapToVideoFrame,
 	toVideoEdl,
 	toVideoFfmpeg,
+	toVideoLoudnessMeasure,
+	parseVideoLoudnessMeasurement,
 	videoContactSheetSvg,
 	videoFadeCurveGain,
 	videoFrameAt,
@@ -631,5 +633,40 @@ describe('sound fade curves', () => {
 		const back = ok(applyVideoEdits(p, [{ op: 'update_clip', clip: 'a', remove: ['fadeInCurve'] }]));
 		expect(clip(back, 'a')).not.toHaveProperty('fadeInCurve');
 		expect(() => parseVideoProject({ width: 640, height: 360, tracks: [{ id: 'v1', kind: 'video', clips: [{ id: 'x', type: 'media', asset: 'a', start: 0, duration: 1000, fadeInCurve: 'wobbly' }] }] })).toThrow(/fadeInCurve must be one of "linear", "equal-power"/);
+	});
+});
+
+describe('loudness normalisation', () => {
+	const measured = { integrated: -27.61, truePeak: -9.4, range: 2.3, threshold: -37.9, offset: 0.4 };
+
+	it('adds loudnorm to the mix, in one pass or linear with a measurement', () => {
+		const one = toVideoFfmpeg(project(), { loudness: {} });
+		expect(one.filterComplex).toMatch(/amix=[^;]*,loudnorm=I=-14:TP=-1:LRA=11,aresample=48000\[aout\]/);
+		expect(one.notes.join(' ')).toMatch(/one pass/);
+		const two = toVideoFfmpeg(project(), { loudness: { integrated: -16, measured } });
+		expect(two.filterComplex).toContain('loudnorm=I=-16:TP=-1:LRA=11:measured_I=-27.61:measured_TP=-9.4:measured_LRA=2.3:measured_thresh=-37.9:offset=0.4:linear=true,aresample=48000[aout]');
+		expect(two.notes.join(' ')).not.toMatch(/one pass/);
+		expect(toVideoFfmpeg(project()).filterComplex).not.toContain('loudnorm');
+	});
+
+	it('measures with a sound-only pass that prints JSON', () => {
+		const m = toVideoLoudnessMeasure(project(), { loudness: { integrated: -23 } });
+		expect(m.filterComplex).toContain('loudnorm=I=-23:TP=-1:LRA=11:print_format=json,aresample=48000[aout]');
+		expect(m.filterComplex).not.toContain('[vout]');
+		expect(m.args.slice(-5)).toEqual(['-map', '[aout]', '-f', 'null', '-']);
+		// Only inputs with sound: the beach video (it has audio) and the song, not the silent city clip.
+		expect(m.args.filter((a) => a === '-i')).toHaveLength(2);
+		const silent = ok(applyVideoEdits(project(), [{ op: 'delete_clips', clips: ['a', 's'] }]));
+		expect(() => toVideoLoudnessMeasure(silent)).toThrow('Nothing on the timeline makes a sound');
+	});
+
+	it('reads what loudnorm printed, and refuses silence and bad targets', () => {
+		const stderr = '[Parsed_loudnorm_3 @ 0x1]\n{\n\t"input_i" : "-27.61",\n\t"input_tp" : "-9.40",\n\t"input_lra" : "2.30",\n\t"input_thresh" : "-37.90",\n\t"output_i" : "-14.0",\n\t"target_offset" : "0.40"\n}\n';
+		expect(parseVideoLoudnessMeasurement(stderr)).toEqual(measured);
+		expect(() => parseVideoLoudnessMeasurement('nothing here')).toThrow('No loudness measurement found');
+		expect(() => parseVideoLoudnessMeasurement(stderr.replace('"-27.61"', '"-inf"'))).toThrow('silent');
+		expect(() => toVideoFfmpeg(project(), { loudness: { integrated: 3 } })).toThrow('between -70 and -5 LUFS');
+		expect(() => toVideoFfmpeg(project(), { loudness: { truePeak: 2 } })).toThrow('between -9 and 0 dBTP');
+		expect(() => toVideoFfmpeg(project(), { loudness: { measured: { ...measured, integrated: NaN } } })).toThrow('measured integrated is not a number');
 	});
 });

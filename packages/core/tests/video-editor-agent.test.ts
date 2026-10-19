@@ -71,6 +71,20 @@ describe('video agent tasks, through the tools only', () => {
 		expect(await fail('export_video_edl', { dropFrame: 'yes' })).toContain('dropFrame');
 	});
 
+	it('normalises loudness in two passes through the tools', async () => {
+		const { call, fail } = tools();
+		await call('add_video_asset', { id: 'vo', kind: 'audio', src: 'vo.wav', duration: 5000 });
+		expect(await fail('export_video_loudness_measure')).toContain('no clips');
+		await call('add_video_clip', { track: 'a1', clip: { type: 'media', asset: 'vo' } });
+		const pass1 = await call('export_video_loudness_measure', { integrated: -16 });
+		expect(pass1.args).toContain('null');
+		expect(pass1.filterComplex).toContain('print_format=json');
+		const pass2 = await call('export_video_ffmpeg', { loudness: { integrated: -16, measured: { integrated: -30, truePeak: -12, range: 3, threshold: -40, offset: 0.2 } } });
+		expect(pass2.filterComplex).toContain('measured_I=-30');
+		expect(await fail('export_video_ffmpeg', { loudness: { integrated: 0 } })).toContain('integrated');
+		expect(await fail('export_video_ffmpeg', { loudness: { measured: { integrated: -30 } } })).toContain('truePeak');
+	});
+
 	it('shapes a sound fade and reads the gain back', async () => {
 		const { call, fail } = tools();
 		await call('add_video_asset', { id: 'music', kind: 'audio', src: 'music.mp3', duration: 30000 });

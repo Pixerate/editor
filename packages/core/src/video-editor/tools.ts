@@ -318,16 +318,50 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 		}
 	};
 
+	const LOUDNESS_TARGET: Record<string, JsonSchema> = {
+		integrated: { type: 'number', minimum: -70, maximum: -5, description: 'Integrated loudness to reach, in LUFS (default -14, what streaming services play at; -16 for podcasts, -23 for EBU R128 broadcast).' },
+		truePeak: { type: 'number', minimum: -9, maximum: 0, description: 'Highest true peak, in dBTP (default -1).' },
+		range: { type: 'number', minimum: 1, maximum: 50, description: 'Loudness range, in LU (default 11).' }
+	};
 	const exportFfmpeg: AgentTool = {
 		name: 'export_video_ffmpeg',
 		title: 'Export an ffmpeg command',
-		description: 'Returns the ffmpeg command that renders the project to a file: { args (for spawn), command (one shell line), filterComplex, duration, notes on anything approximated }. Fails when the project has no clips.',
+		description:
+			'Returns the ffmpeg command that renders the project to a file: { args (for spawn), command (one shell line), filterComplex, duration, notes on anything approximated }. With loudness, the mix is normalised to a target loudness (EBU R128); add loudness.measured from a measuring pass (export_video_loudness_measure) for an exact fixed gain. Fails when the project has no clips.',
 		inputSchema: object({
 			output: { type: 'string', minLength: 1, description: 'Output file name (default output.mp4).' },
-			crf: { type: 'integer', minimum: 0, maximum: 51, description: 'x264 quality, lower is better (default 18).' }
+			crf: { type: 'integer', minimum: 0, maximum: 51, description: 'x264 quality, lower is better (default 18).' },
+			loudness: object(
+				{
+					...LOUDNESS_TARGET,
+					measured: object(
+						{
+							integrated: { type: 'number', description: 'Measured integrated loudness, LUFS (loudnorm\'s "input_i").' },
+							truePeak: { type: 'number', description: 'Measured true peak, dBTP ("input_tp").' },
+							range: { type: 'number', description: 'Measured loudness range, LU ("input_lra").' },
+							threshold: { type: 'number', description: 'Measured gating threshold, LUFS ("input_thresh").' },
+							offset: { type: 'number', description: 'Offset for the second pass, LU ("target_offset").' }
+						},
+						['integrated', 'truePeak', 'range', 'threshold', 'offset'],
+						'What the measuring pass printed (the JSON at the end of its stderr), for a linear second pass that keeps the dynamics. Leave out for one-pass normalisation.'
+					)
+				},
+				[],
+				'Normalise the mix\'s loudness (default: not normalised). An empty object uses -14 LUFS, -1 dBTP.'
+			)
 		}),
 		annotations: { title: 'Export an ffmpeg command', ...READ },
-		handler: ({ output, crf }) => controller.toFfmpeg({ ...(output ? { output } : {}), ...(crf !== undefined ? { crf } : {}) })
+		handler: ({ output, crf, loudness }) => controller.toFfmpeg({ ...(output ? { output } : {}), ...(crf !== undefined ? { crf } : {}), ...(loudness ? { loudness } : {}) })
+	};
+
+	const exportLoudnessMeasure: AgentTool = {
+		name: 'export_video_loudness_measure',
+		title: 'Export a loudness measuring command',
+		description:
+			'Returns the ffmpeg command for the first pass of a loudness normalisation: it mixes only the sound and prints its loudness as JSON at the end of stderr (input_i, input_tp, input_lra, input_thresh, target_offset) instead of writing a file. Pass those numbers as loudness.measured (integrated, truePeak, range, threshold, offset) to export_video_ffmpeg, with the same target. Fails when nothing makes a sound.',
+		inputSchema: object(LOUDNESS_TARGET),
+		annotations: { title: 'Export a loudness measuring command', ...READ },
+		handler: (target) => controller.toLoudnessMeasure({ loudness: target })
 	};
 
 	const exportEdl: AgentTool = {
@@ -784,7 +818,7 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 		}
 	};
 
-	const reads = [getProject, getFrame, findGaps, checkProject, renderFrame, exportFfmpeg, exportEdl, audioLevels, findSilences, seek];
+	const reads = [getProject, getFrame, findGaps, checkProject, renderFrame, exportFfmpeg, exportLoudnessMeasure, exportEdl, audioLevels, findSilences, seek];
 	const writes = [setSettings, addAsset, updateAsset, removeAsset, addTrack, updateTrack, removeTrack, moveTrack, addClip, moveClip, trimClip, splitClip, deleteClips, updateClip, setTransition, setKeyframes, removeKeyframes, slipClip, rollEdit, slideClip, liftRange, extractRange, splitAt, closeGaps, addMarker, removeMarker, editVideo, undo, redo];
 
 	return {

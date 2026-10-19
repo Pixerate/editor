@@ -44,7 +44,9 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
    numbers; `render_video_frame` with `times` for a contact sheet of the sequence. Render
    after a batch, not after every edit.
 8. **Export** when asked: `export_video_ffmpeg` (a command to run, not a render) or
-   `export_video_edl` (one track) for finishing elsewhere. Read the returned notes.
+   `export_video_edl` (one track) for finishing elsewhere. Read the returned notes. For a
+   delivery loudness, have the host run `export_video_loudness_measure` first and pass what it
+   prints as `loudness.measured`; one pass (`loudness` without `measured`) is fine for a draft.
 
 ## Best practices
 
@@ -92,6 +94,9 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
   `fadeInCurve` / `fadeOutCurve`: `equal-power` where two sounds overlap (it keeps loudness
   steady, where linear dips in the middle), `exponential` to fade music out to silence
   naturally, `s-curve` for a gentle start and finish. Linear is the default.
+- **Delivery loudness.** Normalise the final mix rather than pushing clip volumes: -14 LUFS for
+  web and streaming, -16 for podcasts, -23 (EBU R128) or -24 (ATSC) for broadcast, with true
+  peaks at or under -1 dBTP. Two passes keep the dynamics; one pass rides the level.
 - **Titles.** Keep text inside the title-safe area (about 90% of the frame), hold it at least as
   long as it takes to read twice, and use `background` for contrast over busy footage.
 - **Pacing.** Vary shot length with content; trim heads and tails of every clip to the
@@ -110,7 +115,8 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
 | `find_video_gaps` | List empty stretches between clips (and before the first) as `{ track, start, end }` ms, on every track or one `track`. Then `close_video_gaps` or ripple. |
 | `check_video_project` | After every batch and before export. Lists issues errors first with a code (`missing-asset`, `wrong-track`, `overlap`, `source-overrun`, `transition-without-cut`, `transition-too-long`, `transition-handles`, `fades-too-long`, `unknown-duration`, `unused-asset`, `marker-past-end`, `empty`), what it is about and how to fix it. |
 | `render_video_frame` | Look at the picture at `time`, or at 2-16 `times` as one labelled contact sheet (`columns` 1-8). SVG by default; `format: "png"` only when the host can rasterize. Video without a `poster` shows as a labelled box with its source timecode. |
-| `export_video_ffmpeg` | Get the ffmpeg command that renders the project: `args` (for spawn), `command` (one shell line), `filterComplex`, duration and notes on approximations. `output` default output.mp4, `crf` x264 quality 0-51 (default 18, lower is better). Fails when there are no clips. |
+| `export_video_ffmpeg` | Get the ffmpeg command that renders the project: `args` (for spawn), `command` (one shell line), `filterComplex`, duration and notes on approximations. `output` default output.mp4, `crf` x264 quality 0-51 (default 18, lower is better). `loudness` normalises the mix (`integrated` LUFS default -14, `truePeak` dBTP default -1, `range`); with `loudness.measured` from `export_video_loudness_measure` it applies one fixed gain. Fails when there are no clips. |
+| `export_video_loudness_measure` | First pass of loudness normalisation: the ffmpeg command that mixes only the sound and prints its loudness as JSON at the end of stderr. Takes the same target (`integrated` LUFS, `truePeak`, `range`) as the export. Map `input_i`, `input_tp`, `input_lra`, `input_thresh`, `target_offset` to `loudness.measured` for `export_video_ffmpeg`. |
 | `export_video_edl` | Get one `track` (default the bottom video track) as a CMX 3600 EDL with source and record timecode, dissolves, speed changes and clip names, for conforming in another editor. `title` defaults to the project name. At 29.97 and 59.94 fps it writes drop-frame timecode (`HH:MM:SS;FF`, `FCM: DROP FRAME`), as other editors expect; `dropFrame: false` forces non-drop. |
 
 ### Write

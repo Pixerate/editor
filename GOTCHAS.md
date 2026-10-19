@@ -21,6 +21,24 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/video-editor] ffmpeg `loudnorm` Outputs 192 kHz Audio
+
+- **Issue / Symptom**: A normalised export came out with 192 kHz sound, much larger than it should be, and some players or encoders refuse that rate.
+- **Root Cause**: `loudnorm` upsamples to 192 kHz internally so it can measure true peaks, and it passes that rate on to whatever follows it in the graph.
+- **Solution / Workaround**: Always follow it with `aresample=48000`, as `loudnormFilter` in `export.ts` does. Two-pass normalisation also needs the measuring pass to use the same target (`I`, `TP`, `LRA`) as the second pass; `toVideoLoudnessMeasure` takes the same `loudness` option for that reason.
+
+### [core/video-editor] An Hour of 29.97 fps Is Not `01:00:00:00` in Non-Drop Timecode
+
+- **Issue / Symptom**: With drop-frame turned off at 29.97 fps, an EDL's record timecode started at `00:59:56:12` instead of `01:00:00:00`.
+- **Root Cause**: The record start was a clock time (3,600,000 ms). Non-drop timecode counts 30 labels a second while only 29.97 frames pass, so an hour of real time is 107,892 frames, which non-drop labels `00:59:56:12`. Drop-frame skips labels so that it matches the clock.
+- **Solution / Workaround**: Count timecode positions in frames, not milliseconds: `videoHourFrames(fps, dropFrame)` gives the frame count of `01:00:00:00` (107,892 in drop-frame, 108,000 in non-drop), and `formatVideoTimecodeFrames` formats a frame count. Count frames at the exact NTSC rate (30000/1001), not a rounded 29.97.
+
+### [core/video-editor] ffmpeg `afade` Curves Are Mirrored for Fade-Outs
+
+- **Issue / Symptom**: Exponential fade-outs sounded different in the browser preview and in the ffmpeg export.
+- **Root Cause**: `afade=t=out` applies the curve to the time *remaining*, gain = f(1 − progress); it does not flip the curve upside down to 1 − f(progress). For `cub`, a fade-out drops fast at first and then tails off.
+- **Solution / Workaround**: `videoFadeCurveGain` takes the fraction left for a fade out, as ffmpeg does. The curve formulas were measured from ffmpeg itself (`tri`, `qsin`, `hsin`, `cub`, `ipar`), and `tests/video-editor-ffmpeg.test.ts` compares the rendered levels with `videoFrameAt`. When adding a curve, measure ffmpeg's version before writing the formula.
+
 ### [core/video-editor] A Ripple Is Refused Because of a Music Bed or Title on Another Track
 
 - **Issue / Symptom**: `delete_clips` / `trim_clip` with `ripple`, or `extract_range`, fails with "Rippling out … would pull track "a1" out of sync: clip "music" … is in that stretch", even though the edited track itself has room.

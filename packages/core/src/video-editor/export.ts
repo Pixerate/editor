@@ -96,6 +96,70 @@ export interface VideoFfmpegOptions {
 	 * the title's opacity and fades.
 	 */
 	titleImage?: (clip: VideoTextClip, size: { width: number; height: number }) => string;
+	/** Normalise the mix's loudness with ffmpeg's `loudnorm` (EBU R128). */
+	loudness?: VideoLoudnessTarget;
+}
+
+/** A loudness to normalise the mix to (`loudnorm`'s I, TP and LRA). */
+export interface VideoLoudnessTarget {
+	/** Integrated loudness, in LUFS (default -14, as streaming services play; -16 for podcasts, -23 for EBU R128 broadcast). */
+	integrated?: number;
+	/** Highest true peak, in dBTP (default -1). */
+	truePeak?: number;
+	/** Loudness range, in LU (default 11). */
+	range?: number;
+	/**
+	 * The mix as a first pass measured it (`toVideoLoudnessMeasure` then
+	 * `parseVideoLoudnessMeasurement`). With it the second pass applies one fixed gain where it can
+	 * (linear), so the dynamics are kept; without it `loudnorm` adjusts as it goes in one pass.
+	 */
+	measured?: VideoLoudnessMeasurement;
+}
+
+/** What a measuring pass found (`loudnorm`'s input_i, input_tp, input_lra, input_thresh and target_offset). */
+export interface VideoLoudnessMeasurement {
+	/** Integrated loudness (LUFS). */
+	integrated: number;
+	/** True peak (dBTP). */
+	truePeak: number;
+	/** Loudness range (LU). */
+	range: number;
+	/** Gating threshold (LUFS). */
+	threshold: number;
+	/** Offset for the second pass (LU). */
+	offset: number;
+}
+
+/** `loudnorm` with a target, measuring (`print_format=json`) or applying a measurement; then back to 48 kHz (it outputs 192 kHz). */
+function loudnormFilter(target: VideoLoudnessTarget = {}, measure = false): string {
+	const I = target.integrated ?? -14;
+	const TP = target.truePeak ?? -1;
+	const LRA = target.range ?? 11;
+	if (!(I >= -70 && I <= -5)) throw new Error(`The loudness target must be between -70 and -5 LUFS (got ${I}); -14 suits streaming, -23 broadcast.`);
+	if (!(TP >= -9 && TP <= 0)) throw new Error(`The true peak ceiling must be between -9 and 0 dBTP (got ${TP}); -1 is usual.`);
+	if (!(LRA >= 1 && LRA <= 50)) throw new Error(`The loudness range must be between 1 and 50 LU (got ${LRA}).`);
+	const parts = [`loudnorm=I=${I}:TP=${TP}:LRA=${LRA}`];
+	const m = target.measured;
+	if (m && !measure) {
+		for (const [k, v] of Object.entries(m)) if (!Number.isFinite(v)) throw new Error(`The measured ${k} is not a number (${v}); measure again, or leave "measured" out for a one-pass normalisation.`);
+		parts.push(`measured_I=${m.integrated}:measured_TP=${m.truePeak}:measured_LRA=${m.range}:measured_thresh=${m.threshold}:offset=${m.offset}:linear=true`);
+	}
+	if (measure) parts.push('print_format=json');
+	return `${parts.join(':')},aresample=48000`;
+}
+
+/**
+ * Reads the loudness a measuring pass printed (the JSON `loudnorm` writes to stderr at the end of
+ * `toVideoLoudnessMeasure`'s command). Throws when there is none, or when the mix is silent.
+ */
+export function parseVideoLoudnessMeasurement(output: string): VideoLoudnessMeasurement {
+	const blocks = output.match(/\{[^{}]*"input_i"[^{}]*\}/g);
+	if (!blocks) throw new Error('No loudness measurement found: pass the stderr of the command from toVideoLoudnessMeasure.');
+	const json = JSON.parse(blocks[blocks.length - 1]) as Record<string, string>;
+	const n = (k: string) => Number(json[k]);
+	const m = { integrated: n('input_i'), truePeak: n('input_tp'), range: n('input_lra'), threshold: n('input_thresh'), offset: n('target_offset') };
+	if (!Number.isFinite(m.integrated)) throw new Error('The mix is silent, so its loudness cannot be normalised.');
+	return m;
 }
 
 export interface VideoFfmpegExport {
@@ -152,6 +216,20 @@ function atempo(speed: number): string[] {
  * mixed and trimmed to the project's length. Render on a server or with ffmpeg.wasm.
  */
 export function toVideoFfmpeg(project: VideoProject, options: VideoFfmpegOptions = {}): VideoFfmpegExport {
+	return buildFfmpeg(project, options, false);
+}
+
+/**
+ * The first pass of a two-pass loudness normalisation: an ffmpeg command that mixes only the sound,
+ * as `toVideoFfmpeg` would, and prints its loudness as JSON on stderr instead of writing a file.
+ * Read it with `parseVideoLoudnessMeasurement` and pass it as `loudness.measured` to
+ * `toVideoFfmpeg`. Throws when nothing on the timeline makes a sound.
+ */
+export function toVideoLoudnessMeasure(project: VideoProject, options: Pick<VideoFfmpegOptions, 'resolve' | 'loudness'> = {}): VideoFfmpegExport {
+	return buildFfmpeg(project, { ...options, loudness: { ...options.loudness, measured: undefined } }, true);
+}
+
+function buildFfmpeg(project: VideoProject, options: VideoFfmpegOptions, measure: boolean): VideoFfmpegExport {
 	const notes: string[] = [];
 	const assets = videoAssetMap(project);
 	const D = videoProjectDuration(project);
@@ -160,7 +238,7 @@ export function toVideoFfmpeg(project: VideoProject, options: VideoFfmpegOptions
 	const H = even(project.height);
 	const fps = project.fps;
 	const inputs: string[][] = [];
-	const graph: string[] = [`color=c=${color(project.background ?? '#000000')}:s=${W}x${H}:r=${fps}:d=${sec(D)},format=yuva420p[base]`];
+	const graph: string[] = measure ? [] : [`color=c=${color(project.background ?? '#000000')}:s=${W}x${H}:r=${fps}:d=${sec(D)},format=yuva420p[base]`];
 	const audio: string[] = [];
 	let cur = 'base';
 	let usesDrawtext = false;
@@ -193,7 +271,7 @@ export function toVideoFfmpeg(project: VideoProject, options: VideoFfmpegOptions
 				continue;
 			}
 			let index: number | undefined;
-			if (asset && asset.kind !== 'audio' && track.kind === 'video' && !track.hidden) index = input(clip as VideoClip & { type: 'media' }, asset, lead, tail);
+			if (!measure && asset && asset.kind !== 'audio' && track.kind === 'video' && !track.hidden) index = input(clip as VideoClip & { type: 'media' }, asset, lead, tail);
 			const audible = videoAssetHasSound(asset);
 			if (audible && clip.type === 'media' && !clip.muted && !track.muted) {
 				const ai = index ?? input(clip, asset!, lead, tail);
@@ -212,7 +290,7 @@ export function toVideoFfmpeg(project: VideoProject, options: VideoFfmpegOptions
 				graph.push(`[${ai}:a]${chain.join(',')}[a${audio.length}]`);
 				audio.push(`[a${audio.length}]`);
 			}
-			if (track.kind !== 'video' || track.hidden) continue;
+			if (measure || track.kind !== 'video' || track.hidden) continue;
 			const enable = `enable='between(t,${sec(t0)},${sec(t0 + span)})'`;
 			const next = `v${k++}`;
 			// Clip time (ms) in a filter's `t`: timeline time on the composite, time from t0 on the clip's own chain.
@@ -303,14 +381,23 @@ export function toVideoFfmpeg(project: VideoProject, options: VideoFfmpegOptions
 			}
 		}
 	}
-	graph.push(`[${cur}]format=yuv420p[vout]`);
-	if (audio.length) graph.push(`${audio.join('')}amix=inputs=${audio.length}:normalize=0:duration=longest,apad,atrim=0:${sec(D)}[aout]`);
+	if (!measure) graph.push(`[${cur}]format=yuv420p[vout]`);
+	if (measure && !audio.length) throw new Error('Nothing on the timeline makes a sound, so there is no loudness to measure.');
+	const loudness = options.loudness || measure ? `,${loudnormFilter(options.loudness, measure)}` : '';
+	if (audio.length) graph.push(`${audio.join('')}amix=inputs=${audio.length}:normalize=0:duration=longest,apad,atrim=0:${sec(D)}${loudness}[aout]`);
+	if (options.loudness && !audio.length) notes.push('Nothing makes a sound, so there was no loudness to normalise.');
+	else if (options.loudness && !options.loudness.measured)
+		notes.push('Loudness is normalised in one pass, which adjusts the level as it goes; for a fixed gain that keeps the dynamics, run toVideoLoudnessMeasure first and pass its result as loudness.measured.');
 	if (project.tracks.some((t) => t.clips.some((c) => c.type === 'media' && assets.get(c.asset)?.kind === 'video' && assets.get(c.asset)?.hasAudio === undefined)))
 		notes.push('Video assets are assumed to have sound; set "hasAudio": false on any that do not, or ffmpeg will stop at a missing audio stream.');
 	if (animated.size)
 		notes.push(`Keyframed ${[...animated].sort().join(', ')} ${animated.size > 1 ? 'are' : 'is'} rendered as straight lines between keys, with eased segments sampled every two frames${animated.has('scale') ? '; animated scale needs ffmpeg 5 or later (scale with eval=frame)' : ''}.`);
 	if (usesDrawtext) notes.push('Titles use drawtext, which needs an ffmpeg built with libfreetype (Homebrew\'s is not: check `ffmpeg -filters | grep drawtext`); pass titleImage to render them as images instead.');
 	const filterComplex = graph.join(';');
+	if (measure) {
+		const args = ['-hide_banner', '-nostats', ...inputs.flat(), '-filter_complex', filterComplex, '-map', '[aout]', '-f', 'null', '-'];
+		return { args, command: ['ffmpeg', ...args].map(shellQuote).join(' '), filterComplex, duration: D, notes };
+	}
 	const args = [
 		'-y',
 		...inputs.flat(),

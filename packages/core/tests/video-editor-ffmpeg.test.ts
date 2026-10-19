@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { applyVideoEdits, createVideoProject, toVideoFfmpeg, videoFrameAt, type VideoEdit, type VideoProject } from '../src/video-editor';
+import { applyVideoEdits, createVideoProject, parseVideoLoudnessMeasurement, toVideoFfmpeg, toVideoLoudnessMeasure, videoFrameAt, type VideoEdit, type VideoProject } from '../src/video-editor';
 
 // Renders projects with a real ffmpeg (skipped when it is not on PATH): the string assertions in
 // video-editor.test.ts cannot tell whether ffmpeg accepts the filter graph.
@@ -116,6 +116,22 @@ describe.skipIf(!hasFfmpeg)('toVideoFfmpeg with a real ffmpeg', () => {
 			const gain = videoFrameAt(p, t * 1000).audio[0].gain;
 			expect(Math.abs(level(out, t) / full - gain), `gain at ${t} s`).toBeLessThan(0.05);
 		}
+	}, 120000);
+
+	it('normalises loudness in two passes to the target', () => {
+		const p = project([{ op: 'add_clip', track: 'a1', clip: { type: 'media', id: 's', asset: 'tone', duration: 6000, volume: 0.3 } }]);
+		const measure = (args: string[]) => {
+			const r = spawnSync('ffmpeg', args, { encoding: 'utf8' });
+			if (r.status !== 0) throw new Error(r.stderr.slice(-2000));
+			return parseVideoLoudnessMeasurement(r.stderr);
+		};
+		const before = measure(toVideoLoudnessMeasure(p, { loudness: { integrated: -16 } }).args);
+		expect(before.integrated).toBeLessThan(-20);
+		const out = media('loud.mp4');
+		ffmpeg(toVideoFfmpeg(p, { output: out, crf: 30, loudness: { integrated: -16, measured: before } }).args);
+		const after = measure(['-hide_banner', '-nostats', '-i', out, '-af', 'loudnorm=print_format=json', '-f', 'null', '-']);
+		expect(Math.abs(after.integrated - -16)).toBeLessThan(1);
+		expect(after.truePeak).toBeLessThanOrEqual(-0.5);
 	}, 120000);
 
 	it('overlays titles given as images, with their fades', () => {

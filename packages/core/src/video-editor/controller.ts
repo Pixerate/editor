@@ -7,7 +7,7 @@ import { VideoAudioPeaksCache, type VideoAudioPeaksLoader } from './audio.js';
 import { checkVideoProject, type VideoIssue } from './check.js';
 import { applyVideoEdits, type VideoEdit, type VideoEditResult } from './edit.js';
 import { videoFrameAt, type VideoFrame } from './evaluate.js';
-import { toVideoEdl, toVideoFfmpeg, type VideoEdlOptions, type VideoFfmpegExport, type VideoFfmpegOptions } from './export.js';
+import { toVideoEdl, toVideoFfmpeg, toVideoLoudnessMeasure, type VideoEdlOptions, type VideoFfmpegExport, type VideoFfmpegOptions } from './export.js';
 import { createVideoProject, parseVideoProject } from './parse.js';
 import { videoProjectSvg, type VideoSvgOptions } from './render.js';
 import { snapToVideoFrame, snapVideoTime, videoClipEnd, videoClipsAt, videoProjectDuration, videoSnapPoints, findVideoClip } from './timeline.js';
@@ -328,6 +328,11 @@ export class VideoEditorController {
 	/** The project as an ffmpeg command. */
 	toFfmpeg(options: VideoFfmpegOptions = {}): VideoFfmpegExport {
 		return toVideoFfmpeg(this.project, options);
+	}
+
+	/** The ffmpeg command that measures the mix's loudness (see `toVideoLoudnessMeasure`). */
+	toLoudnessMeasure(options: Pick<VideoFfmpegOptions, 'resolve' | 'loudness'> = {}): VideoFfmpegExport {
+		return toVideoLoudnessMeasure(this.project, options);
 	}
 
 	/** One track as a CMX 3600 EDL. */
