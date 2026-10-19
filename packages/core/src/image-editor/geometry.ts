@@ -170,7 +170,7 @@ function resolveViewport(
   isActivelyCropping: boolean,
   cropOverride?: CropBox | null
 ) {
-  const { imageDimensions, crop: stateCrop, transform, zoom, pan } = state;
+  const { imageDimensions, crop: stateCrop, transform, zoom, pan, fit = 'margin' } = state;
   const naturalWidth = imageDimensions.width || 800;
   const naturalHeight = imageDimensions.height || 600;
   const full: CropBox = { x: 0, y: 0, width: naturalWidth, height: naturalHeight };
@@ -183,7 +183,10 @@ function resolveViewport(
     !isActivelyCropping && activeCrop ? clampCropToImage(activeCrop, naturalWidth, naturalHeight) : full;
   const { width: baseW, height: baseH } = getRotatedSize(region.width, region.height, transform);
 
-  const fitScale = Math.min((vpWidth * 0.85) / baseW, (vpHeight * 0.85) / baseH, 1);
+  const fitScale =
+    fit === 'contain'
+      ? Math.min(vpWidth / baseW, vpHeight / baseH)
+      : Math.min((vpWidth * 0.85) / baseW, (vpHeight * 0.85) / baseH, 1);
   const centerX = vpWidth / 2 + pan.x;
   const centerY = vpHeight / 2 + pan.y;
 

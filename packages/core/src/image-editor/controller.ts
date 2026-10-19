@@ -10,6 +10,7 @@ import {
   ExportOptions,
   ImageAdjustments,
   ImageDimensions,
+  ImageEditorFit,
   ImageEditorOptions,
   ImageEditorState,
   ImageEditorTool,
@@ -230,6 +231,7 @@ export class ImageEditorController {
       isOriginalCompared: false,
       selection: null,
       quickMask: false,
+      fit: options.fit ?? 'margin',
     };
     if (options.initialState?.selection) {
       try {
@@ -1009,6 +1011,12 @@ export class ImageEditorController {
   public setComparing(comparing: boolean): void {
     if (this.state.isOriginalCompared === comparing) return;
     this.state.isOriginalCompared = comparing;
+    this.notify();
+  }
+
+  public setFit(fit: ImageEditorFit): void {
+    if (this.state.fit === fit) return;
+    this.state.fit = fit;
     this.notify();
   }
 

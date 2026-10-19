@@ -336,6 +336,8 @@ export type ImageEditorTool =
   | 'text'
   | 'watermark';
 
+export type ImageEditorFit = 'contain' | 'margin';
+
 export interface ImageEditorState {
   sourceUrl: string | null;
   imageDimensions: ImageDimensions;
@@ -349,6 +351,8 @@ export interface ImageEditorState {
   zoom: number;
   pan: ImagePoint;
   isOriginalCompared: boolean;
+  /** Viewport fit mode: 'contain' scales to full viewport bounds; 'margin' scales to 85% with 1.0 cap (default). */
+  fit?: ImageEditorFit;
   /**
    * The active selection (8-bit coverage over the source image), or null/missing when nothing is
    * selected. Recorded in undo history and saved as `selection` in `toJSON()`.
@@ -386,6 +390,8 @@ export interface ImageEditorOptions {
   initialState?: Partial<SerializedImageEditorState>;
   onStateChange?: (state: ImageEditorState) => void;
   maxHistoryDepth?: number;
+  /** Viewport fit mode: 'contain' scales to full viewport bounds; 'margin' scales to 85% with 1.0 cap (default). */
+  fit?: ImageEditorFit;
 }
 
 export interface InpaintOptions {
