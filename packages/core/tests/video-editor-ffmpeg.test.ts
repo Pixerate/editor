@@ -1,10 +1,10 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ToolRegistry } from '../src/tools';
-import { applyVideoEdits, applyVideoGrade, createVideoEditorToolProvider, createVideoProject, VideoEditorController, videoSpeedRampKeys, parseVideoLoudnessMeasurement, toVideoFfmpeg, toVideoLoudnessMeasure, videoFrameAt, type VideoEdit, type VideoProject } from '../src/video-editor';
+import { applyVideoEdits, applyVideoGrade, createVideoEditorToolProvider, createVideoProject, videoLutFromFunction, videoLutToCube, VideoEditorController, videoSpeedRampKeys, parseVideoLoudnessMeasurement, toVideoFfmpeg, toVideoLoudnessMeasure, videoFrameAt, type VideoEdit, type VideoProject } from '../src/video-editor';
 
 // Renders projects with a real ffmpeg (skipped when it is not on PATH): the string assertions in
 // video-editor.test.ts cannot tell whether ffmpeg accepts the filter graph.
@@ -223,6 +223,24 @@ describe.skipIf(!hasFfmpeg)('toVideoFfmpeg with a real ffmpeg', () => {
 		grades.forEach((grade, i) => {
 			const want = applyVideoGrade(grade, base);
 			const got = pixel(out, i + 0.5, 300, 170);
+			expect(got.every((v, k) => Math.abs(v - want[k]) < 10), `grade ${JSON.stringify(grade)}: got ${got}, want ${want}`).toBe(true);
+		});
+	}, 120000);
+
+	it('applies a LUT after the grade, at full and part strength, as the preview does', () => {
+		// A look no grade step can make: green into red, a curve on blue, a lift on black.
+		const lut = videoLutFromFunction(17, ([r, g, b]) => [0.05 + 0.9 * g ** 0.8, (r + b) / 2, b ** 1.5], 'Swap');
+		writeFileSync(media('look.cube'), videoLutToCube(lut));
+		const grades = [{ lut: { src: 'look.cube' } }, { exposure: 0.3, lut: { src: 'look.cube', strength: 0.5 } }, { saturation: -0.4, lut: { src: 'look.cube', strength: 0.25 } }];
+		const base: [number, number, number] = [180, 90, 60];
+		const p = project(grades.map((grade, i) => ({ op: 'add_clip' as const, track: 'v1', clip: { type: 'color' as const, id: `l${i}`, color: '#b45a3c', start: i * 1000, duration: 1000, grade } })));
+		const result = toVideoFfmpeg(p, { output: media('lut.mp4'), crf: 30, resolveLut: (src) => media(src) });
+		expect(result.filterComplex).toContain('lut3d=file=');
+		expect(result.filterComplex).toContain('blend=all_mode=normal:all_opacity=0.5');
+		ffmpeg(result.args);
+		grades.forEach((grade, i) => {
+			const want = applyVideoGrade(grade, base, lut);
+			const got = pixel(media('lut.mp4'), i + 0.5, 300, 170);
 			expect(got.every((v, k) => Math.abs(v - want[k]) < 10), `grade ${JSON.stringify(grade)}: got ${got}, want ${want}`).toBe(true);
 		});
 	}, 120000);
