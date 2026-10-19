@@ -15,6 +15,7 @@ that uses the tools can load the matching skill.
 | [`pixerate-chart`](pixerate-chart/SKILL.md) | Chart specs, data, series, presets, trendlines, Office and Mermaid charts. |
 | [`pixerate-diagram`](pixerate-diagram/SKILL.md) | Mermaid diagrams: nodes, edges, groups, layout. |
 | [`pixerate-image-editor`](pixerate-image-editor/SKILL.md) | Adjustments, adjustment layers, selections and masks. |
+| [`pixerate-paint-editor`](pixerate-paint-editor/SKILL.md) | Natural-media painting: paper and grain, dry-media brushes, the brush library, strokes as data, pigment mixing. |
 | [`pixerate-animation-editor`](pixerate-animation-editor/SKILL.md) | Vector animation: shots, commands, timing, Flair and Lottie. |
 | [`pixerate-video-editor`](pixerate-video-editor/SKILL.md) | Non-linear video editing: tracks, clips, transitions, export. |
 | [`pixerate-generation`](pixerate-generation/SKILL.md) | Planning, estimating and running paid media generation. |

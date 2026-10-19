@@ -2008,3 +2008,21 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: After a perspective, the warp mesh drawn on screen sat a little off the warped pixels near the far edge, and dragging a mesh point after a rotation moved it in the wrong direction.
 - **Root Cause**: A Free Transform is a warp of the untransformed frame followed by the corner map (`transformMap`), as in photocraft. The mesh's control points are in the frame's space. Mapping control points through a projective map does not give the Bézier patch of the mapped surface, only a close one, and pointer moves are in document space.
 - **Solution / Workaround**: `FreeTransformTool` maps pointer positions into the frame's space through the inverse corner map before `dragWarpMeshPoint` / `pullWarpMesh`, and draws the control points through the corner map. The drawing is exact for affine corners and approximate for perspective, but the resampling always uses the exact composition. Leaving Warp mode keeps the mesh, so a warp and a perspective commit together.
+
+### [core/paint-editor] Procedural Paper Grain Only Tiles With Whole Lattice Periods and an Even Thread Count
+
+- **Issue / Symptom**: Generated paper showed a visible seam every 256 px: fibre and streak patterns (charcoal paper, gesso) broke at the tile edge, and the canvas weave flipped from over to under across it.
+- **Root Cause**: Value noise wraps only when every octave's lattice has a whole number of cells across the tile. Stretching the coordinates (`x / stretch`) to make fibres leaves a fractional period. The weave alternates by `(column + row) % 2`, which only lines up with the next tile when the number of threads across it is even.
+- **Solution / Workaround**: `TileableNoise` takes separate cell counts per axis (`cellsX`, `cellsY`) instead of a stretch, and the canvas and linen patterns round the thread count to an even number. The paper test checks `at(x + 256, y) === at(x, y)` for every pattern; keep it when you add one.
+
+### [core/paint-editor] A Mixer Brush Preset With a Low Load Runs Dry in a Few Dozen Dabs
+
+- **Issue / Symptom**: The paint editor's Mixer Brush preset painted a short smear at the start of a stroke and then nothing.
+- **Root Cause**: The shared Mixer Brush drains its reservoir by `MIXER_DRAIN × (1 − load)` per dab (photocraft's model). At `load` 0.5 that is 4 % a dab, so after 50 dabs (about 100 px of a 30 px brush at 0.08 spacing) 13 % is left.
+- **Solution / Workaround**: The preset uses `load` 0.95 and spacing 0.1. Lower loads are right for a brush that should run out (oil paint loading), not for a general mixer. Blender and smudge have no reservoir (`loadsColor: false`), so load does not matter for them.
+
+### [core/paint-editor] A Rotated or Mirrored View Must Turn the Pen's Azimuth and Twist Too
+
+- **Issue / Symptom**: With the canvas view rotated, a tilted pencil shaded in a different direction on screen than with the view upright, and barrel-rotation brushes turned the wrong way when the view was mirrored.
+- **Root Cause**: Pointer Events report tilt, azimuth and twist in screen space. The view maps positions to document space, but nothing mapped the pen's orientation.
+- **Solution / Workaround**: `pointerToPenPoint(event, x, y, view)` converts tilt to altitude / azimuth and then `viewPenToDocument` subtracts the view rotation (and reflects for mirroring) from the azimuth and twist. Bindings must pass the view; recorded strokes store document-space values, so replays do not depend on the view.

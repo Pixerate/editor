@@ -34,6 +34,7 @@ import {
 	type CommandSpec
 } from '../src/commands';
 import { ImageEditorController, createImageEditorToolProvider } from '../src/image-editor';
+import { PaintEditorController, createPaintEditorToolProvider } from '../src/paint-editor';
 import { createGenerationToolProvider, createGenerationHistoryToolProvider, createGenerationRecordStore } from '../src/generation';
 import { createMemoryStorage } from '../src/persistence';
 import { ChartController, createChartToolProvider, createOfficeChartToolProvider, createChartCommands } from '../src/chart';
@@ -122,6 +123,7 @@ function expectedBySkill(): Record<string, string[]> {
 			createDiagramToolProvider(new DiagramController(), { id: 'diagram', renderSvg: () => ({ svg: '<svg/>', width: 1, height: 1 }) })
 		),
 		'pixerate-image-editor': toolNames(createImageEditorToolProvider(new ImageEditorController(), { id: 'img' })),
+		'pixerate-paint-editor': toolNames(createPaintEditorToolProvider(new PaintEditorController({ width: 64, height: 64 }), { id: 'paint' })),
 		'pixerate-animation-editor': toolNames(createAnimationEditorToolProvider(new AnimationEditorController(), { id: 'animation' })),
 		'pixerate-video-editor': toolNames(createVideoEditorToolProvider(new VideoEditorController(), { id: 'video' })),
 		'pixerate-generation': [
@@ -155,6 +157,7 @@ const FACTORIES: Record<string, string> = {
 	createChartCommands: 'pixerate-chart',
 	createDiagramToolProvider: 'pixerate-diagram',
 	createImageEditorToolProvider: 'pixerate-image-editor',
+	createPaintEditorToolProvider: 'pixerate-paint-editor',
 	createAnimationEditorToolProvider: 'pixerate-animation-editor',
 	createVideoEditorToolProvider: 'pixerate-video-editor',
 	createGenerationToolProvider: 'pixerate-generation',
