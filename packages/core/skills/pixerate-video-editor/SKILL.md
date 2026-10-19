@@ -1,6 +1,6 @@
 ---
 name: pixerate-video-editor
-description: How to edit video projects in the Pixerate non-linear video editor through its agent tools - adding video, audio and image assets, building a rough cut on video and audio tracks, inserting, moving, trimming, splitting and ripple-deleting clips, closing gaps, titles and colour clips, fades, volume and speed, crossfade, dip and wipe transitions with handles, J and L cuts, markers, checking the project, rendering frames and contact sheets, and exporting an ffmpeg command or a CMX 3600 EDL. Use when video tools such as get_video_project, add_video_clip or edit_video are available, or when asked to cut, trim, assemble, sequence or export footage on a timeline.
+description: How to edit video projects in the Pixerate non-linear video editor through its agent tools - adding video, audio and image assets, building a rough cut on video and audio tracks, inserting, overwriting, moving, trimming, splitting and ripple-deleting clips, slip, slide and roll edits, lift and extract of a time range, razor cuts across tracks, sync-locked tracks, keyframed opacity, volume and transform, closing gaps, titles and colour clips, fades, volume and speed, crossfade, dip and wipe transitions with handles, J and L cuts, markers, checking the project, rendering frames and contact sheets, and exporting an ffmpeg command or a CMX 3600 EDL. Use when video tools such as get_video_project, add_video_clip or edit_video are available, or when asked to cut, trim, assemble, sequence or export footage on a timeline.
 ---
 
 # Pixerate video editor
@@ -33,7 +33,11 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
    `add_clip` ops in order, with explicit clip ids so later ops (trim, transition) can name
    them. Run it with `dry_run: true` first; the error names the failing op.
 5. **Refine** with the single tools: `trim_video_clip`, `split_video_clip`, `move_video_clip`,
-   `update_video_clip`, `set_video_transition`, `delete_video_clips` / `close_video_gaps`.
+   `update_video_clip`, `set_video_transition`, `delete_video_clips` / `close_video_gaps`; for
+   timing between shots use the trim modes an editor would: `roll_video_edit` (move a cut),
+   `slip_video_clip` (change what a shot shows), `slide_video_clip` (move a shot between its
+   neighbours); for a whole stretch, `split_video_at`, `lift_video_range` or
+   `extract_video_range`. Animate opacity, volume or position with `set_video_keyframes`.
 6. **Check.** `check_video_project` and fix every error and warning; `find_video_gaps` for
    unintended black or silence.
 7. **Look and listen.** `get_video_frame` at cuts and transitions for layers and audio gains as
@@ -51,17 +55,27 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
   read as a glitch. Change angle or size, cover the cut with B-roll on a higher video track,
   or make it deliberate.
 - **J and L cuts.** Let sound lead or trail the picture: put the media's sound on an audio
-  track (a clip of the same video asset), mute the video clip (`muted: true`), and offset the
-  audio clip's `start` / `in` before (J) or after (L) the picture cut. This smooths dialogue
-  and scene changes.
+  track (a clip of the same video asset), mute the video clip (`muted: true`), and then
+  `roll_video_edit` the audio cut earlier (J) or later (L) than the picture cut. This smooths
+  dialogue and scene changes.
 - **Transitions sparingly.** A straight cut is the default. Use `crossfade` for passage of time
   or a soft scene change, `dip` (to black, or a `color`) for a section break, `wipe` rarely.
   Keep them short (300-1000 ms). Crossfades and wipes need handles: half the duration of
   unused media past the cut on both clips; `dip` needs none.
-- **Ripple vs overwrite.** Use `ripple: true` on add, trim and delete to keep everything after
-  the edit in sync (no gaps, no overlaps). There is no overwrite mode: an edit that would
-  overlap is refused with the next free place, so to overwrite, split or trim the clip
-  underneath first.
+- **Insert vs overwrite.** `add_video_clip` and `move_video_clip` take `mode`: `refuse`
+  (default; the error names the next free place), `overwrite` (replace what is underneath, like
+  an overwrite edit) or `insert` (push later material along). Use `ripple: true` on trim and
+  delete, and `extract_video_range` rather than `lift_video_range`, to keep everything after
+  the edit in sync with no gap. Ripple and insert move every unlocked sync-locked track, so
+  dialogue and its picture stay together; turn `syncLocked` off with `update_video_track` for a
+  music bed that should stay put.
+- **Trim with the right tool.** To change *when* a cut happens without moving anything else,
+  `roll_video_edit`; to change *which* moment a shot shows, `slip_video_clip`; to move a shot
+  earlier or later between two others, `slide_video_clip`. All three keep the timeline
+  gapless and report the delta they actually applied (clamped to available media).
+- **Keyframes sparingly.** Use `set_video_keyframes` for a push-in (`scale` 1 to 1.1 over the
+  shot), a duck under dialogue (`volume`), or a fade that is not at an edge; ease (`ease-in-out`)
+  rather than linear for motion. Simple fades at the clip edges are `fadeIn` / `fadeOut`.
 - **Close gaps.** Unintended gaps play as background colour and silence. `find_video_gaps`, then
   `close_video_gaps` or ripple deletes. Leave gaps only where you want black.
 - **Cut on frames.** Put starts, trims and splits on frame boundaries (multiples of 1000 / fps
@@ -101,28 +115,42 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
 | `update_video_asset` | Relink or correct an asset via `set` (src, name, duration, size, hasAudio, poster) and `remove`. Refused if clips would then run past its end. |
 | `remove_video_asset` | Remove an asset no clip uses; refused while clips use it, naming them. Use to clear `unused-asset` notes. |
 | `add_video_track` | Add an empty `video` or `audio` track (optional `id`, `at` position 0 = top, `name`, `muted`, `hidden`, `locked`, `volume`). Video tracks go on top and audio at the bottom by default. |
-| `update_video_track` | Rename, mute, hide, lock or set the gain (`volume` 0-4) of a track via `set` / `remove`. Lock tracks you must not disturb. |
+| `update_video_track` | Rename, mute, hide, lock, sync-lock or set the gain (`volume` 0-4) of a track via `set` / `remove`. Lock tracks you must not disturb; set `syncLocked: false` on a track that ripple and insert edits should leave in place (a music bed). |
 | `remove_video_track` | Delete a track and every clip on it (refused when locked). Returns the clips removed. |
 | `move_video_track` | Reorder a track to `to` (0 = top); an earlier video track draws over later ones. |
-| `add_video_clip` | Put a clip on a `track`: `media` (`asset`, `in` default 0, `duration` default rest of source; stills 5000), `text` title (`text`, `color`, `fontSize` 64, `fontFamily`, `fontWeight` 700, `background`; default 3000 ms) or `color`. No `start` appends at the end; `ripple: true` inserts at `start` pushing later clips; otherwise overlaps are refused with the next free place. |
-| `move_video_clip` | Move a `clip` to a new `start` and/or another `track` of the same kind. Refused on overlap, naming the clip in the way and the next free place. |
+| `add_video_clip` | Put a clip on a `track`: `media` (`asset`, `in` default 0, `duration` default rest of source; stills 5000), `text` title (`text`, `color`, `fontSize` 64, `fontFamily`, `fontWeight` 700, `background`; default 3000 ms) or `color`. No `start` appends at the end. `mode`: `refuse` (default, names the next free place), `overwrite` (replaces what is underneath) or `insert` (pushes later material along on every sync-locked track). Returns the clip plus any clips it cut, trimmed or removed. |
+| `move_video_clip` | Move a `clip` to a new `start` and/or another track of the same kind, leaving a gap where it was. `mode` as for `add_video_clip` (default `refuse`). To move a shot between its neighbours without a gap, use `slide_video_clip` instead. |
 | `trim_video_clip` | Move one `edge` (`start` also moves the in point, `end` the out point) `to` a timeline time. Refused past the source ends (the error says how far it can go) or below one frame. `ripple: true` keeps the clip's start and shifts later clips by the change. |
 | `split_video_clip` | Cut a `clip` in two `at` a timeline time (at least a frame from each end). The left keeps the id, fade in and transition; the right gets `id` (default `<clip>-1`) and the fade out. |
+| `slip_video_clip` | Show a different stretch of a media clip's source without moving it: `delta` ms (positive shows later media). Clamped to the media and what transitions need; returns the new source range and the delta applied. |
+| `roll_video_edit` | Move the cut between two touching clips (`left`, `right`) by `delta` ms: one gets longer as the other gets shorter, nothing else moves. Use for J / L cuts and tightening a cut. Returns both clips, the new cut time and the delta applied. |
+| `slide_video_clip` | Move a `clip` by `delta` ms keeping its content, trimming its neighbours so no gap opens (or moving through a gap where it has no neighbour). Returns the clip, its neighbours and the delta applied. |
+| `split_video_at` | Razor: cut every clip running across time `at` on all unlocked tracks or the given `tracks`, as one undo step. Refused when nothing crosses that time. Returns the `{ left, right }` pairs (right parts get new ids). |
+| `lift_video_range` | Empty `from`..`to` ms on all unlocked tracks or the given `tracks`, leaving a gap: clips inside are deleted, clips across an edge trimmed, a clip across both cut in two. Returns what was removed, trimmed and created. |
+| `extract_video_range` | Remove `from`..`to` ms and close it up: as lift, then later material moves earlier on those and every sync-locked track. Refused (naming the clip) when a sync-locked track outside `tracks` has material there. Use to cut a section out of a finished sequence. |
 | `delete_video_clips` | Remove `clips`; `ripple: true` pulls later clips up to close the gaps (a ripple delete). |
 | `update_video_clip` | Change properties via `set`: opacity, transform (`x`, `y` px from centre, `scale`, `rotation`), `fit` (contain default for media, cover, fill, none), `fadeIn` / `fadeOut`, name; media `volume` (0-4), `muted`, `speed` (0.05-20, keeps the source range so the length changes), `asset`; title text and style; colour. `remove` resets to defaults. Not for timing. |
+| `set_video_keyframes` | Animate one `property` of a `clip` (`opacity` 0-1, `volume` 0-4 for media, `x` / `y` px from centre, `scale`, `rotation` degrees) with `keys` `[{ t, v, ease? }]`, replacing its keys. `t` is clip time (ms from the clip's start), so keys travel with the clip. `ease`: linear (default), hold, ease-in, ease-out, ease-in-out or cubic-bezier points. Returns the sorted keys. |
+| `remove_video_keyframes` | Remove all keys of a clip `property`, leaving the value it had at the clip's start. |
 | `set_video_transition` | Set the transition into a `clip` from the clip ending where it starts on the same track: `{ type: crossfade, dip or wipe, duration ms centred on the cut, color (dip, default black), direction (wipe, default right) }`, or `null` to remove. When handles are short the error gives the longest that fits. |
 | `close_video_gaps` | Slide clips on a `track` earlier so no gaps remain, from time `from` (default the start). Returns the clips that moved. |
 | `add_video_marker` | Add a marker at `time` with `label`, `color` and optional `id`, for beats, sections or review notes. Returns its id. |
 | `remove_video_marker` | Remove a `marker` by id. |
-| `edit_video` | Apply up to 200 ops in order as one all-or-nothing undo step: `set_settings`, `add_asset { asset }`, `update_asset`, `remove_asset`, `add_track { track: { kind, id } , at }`, `update_track`, `remove_track`, `move_track`, `add_clip`, `move_clip`, `trim_clip`, `split_clip`, `delete_clips`, `update_clip`, `set_transition`, `close_gaps`, `add_marker { marker: { time, label } }`, `update_marker`, `remove_marker`; other fields match the single tools. `dry_run: true` validates only. The default for a rough cut. |
+| `edit_video` | Apply up to 200 ops in order as one all-or-nothing undo step: `set_settings`, `add_asset { asset }`, `update_asset`, `remove_asset`, `add_track { track: { kind, id }, at }`, `update_track`, `remove_track`, `move_track`, `add_clip { track, clip, mode }`, `move_clip { clip, start, track, mode }`, `trim_clip`, `split_clip`, `delete_clips`, `update_clip`, `set_transition`, `slip_clip`, `roll_edit`, `slide_clip`, `lift_range`, `extract_range`, `split_at`, `set_keyframes { clip, property, keys }` (null keys remove), `close_gaps`, `add_marker { marker: { time, label } }`, `update_marker`, `remove_marker`; other fields match the single tools. `dry_run: true` validates only. The default for a rough cut. |
 | `undo_video` | Undo your last edit (one tool call or one `edit_video` batch). |
 | `redo_video` | Redo the edit you just undid. |
 
 ## Pitfalls
 
 - **Edits never add errors.** Any edit that would create an overlap, a source overrun or an
-  impossible transition is refused whole; read the message (it names the next free place or
-  the longest trim / transition that fits) and retry with those numbers.
+  impossible transition is refused whole (unless you asked for `mode: "overwrite"` or
+  `"insert"`); read the message (it names the next free place or the longest trim /
+  transition that fits) and retry with those numbers.
+- **Numbers replace keyframes.** Setting `opacity` or `volume` as a plain
+  number (in `add_video_clip` or `update_video_clip`) drops that property's keys; animate with
+  `set_video_keyframes` after the static settings, not before.
+- **Slip, slide and roll clamp.** They move as far as the media allows and say how far in
+  `delta`; check it instead of assuming the full amount was applied.
 - **`edit_video` has no result references.** Unlike `edit_animation`, ops cannot say `$0.id`;
   set clip, track and marker ids yourself when later ops in the batch need them.
 - **`edit_video` op shapes differ slightly** from the single tools: `add_asset` wraps the asset
