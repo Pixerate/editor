@@ -1,6 +1,7 @@
 import { checkVideoProject, videoIssueKey, type VideoIssue } from './check.js';
 import { isVideoKeyframes, retimeVideoAnimatable, sortVideoKeys, splitVideoAnimatable, VIDEO_KEYFRAME_LIMITS, VIDEO_KEYFRAME_PROPERTIES, VIDEO_TRANSFORM_PROPERTIES, videoValueAt, type VideoAnimatable, type VideoKey, type VideoKeyframeProperty } from './keyframes.js';
-import { parseVideoAnimatable, parseVideoAsset, parseVideoClip, parseVideoMarker, parseVideoProject, parseVideoTransition } from './parse.js';
+import { parseVideoAnimatable, parseVideoAsset, parseVideoClip, parseVideoMarker, parseVideoProject, parseVideoTimeRemap, parseVideoTransition } from './parse.js';
+import { checkVideoTimeRemap, videoTimeRemapSpan } from './remap.js';
 import {
 	findVideoClip,
 	formatVideoSeconds,
@@ -17,7 +18,7 @@ import {
 	videoOverlap,
 	videoTrackSyncLocked
 } from './timeline.js';
-import { VIDEO_PLACEMENT_MODES, type VideoAsset, type VideoClip, type VideoMarker, type VideoPlacementMode, type VideoProject, type VideoTrack, type VideoTrackKind, type VideoTransition } from './types.js';
+import { VIDEO_PLACEMENT_MODES, type VideoAsset, type VideoClip, type VideoMarker, type VideoMediaClip, type VideoPlacementMode, type VideoProject, type VideoTrack, type VideoTrackKind, type VideoTransition } from './types.js';
 import { namedWithSuggestion } from '../animation-editor/issues.js';
 
 type Settings = { name?: string; width?: number; height?: number; fps?: number; background?: string };
@@ -51,6 +52,12 @@ export type VideoEdit =
 	| { op: 'split_at'; at: number; tracks?: string[] }
 	/** Keys for one property (in any order; clip-relative ms), or null to stop animating it and keep its value at the clip's start. */
 	| { op: 'set_keyframes'; clip: string; property: VideoKeyframeProperty; keys: VideoKey[] | null }
+	/**
+	 * A speed ramp: keys mapping clip time to source ms after the in point (see `timeRemap`), or
+	 * null to play at normal speed from where the ramp started. `duration` sets the clip's new length
+	 * (default: unchanged); `ripple` moves later material with the change.
+	 */
+	| { op: 'set_time_remap'; clip: string; keys: VideoKey[] | null; duration?: number; ripple?: boolean }
 	| { op: 'close_gaps'; track: string; from?: number }
 	| { op: 'add_marker'; marker: Omit<VideoMarker, 'id'> & { id?: string } }
 	| { op: 'update_marker'; marker: string; set?: Partial<Omit<VideoMarker, 'id'>>; remove?: string[] }
@@ -81,6 +88,7 @@ export const VIDEO_EDIT_OPS: readonly VideoEditOp[] = [
 	'extract_range',
 	'split_at',
 	'set_keyframes',
+	'set_time_remap',
 	'close_gaps',
 	'add_marker',
 	'update_marker',
@@ -146,12 +154,17 @@ function mergeSpans(spans: [number, number][]): [number, number][] {
 	return out;
 }
 
+/** Whether a clip plays through a speed ramp. */
+const isRamped = (clip: VideoClip): boolean => clip.type === 'media' && !!clip.timeRemap;
+
 /** Every keyframeable value of a clip, with a way to read and replace it. */
 function clipAnimatables(clip: VideoClip): { get: () => VideoAnimatable | undefined; set: (v: VideoAnimatable | undefined) => void }[] {
 	const c = clip as VideoClip & { volume?: VideoAnimatable };
 	const out = [
 		{ get: () => c.opacity, set: (v: VideoAnimatable | undefined) => (c.opacity = v) },
-		{ get: () => c.volume, set: (v: VideoAnimatable | undefined) => (c.volume = v) }
+		{ get: () => c.volume, set: (v: VideoAnimatable | undefined) => (c.volume = v) },
+		// A speed ramp is keys in clip time too, so trims and splits keep it on the same frames of source.
+		{ get: () => (c as { timeRemap?: VideoAnimatable }).timeRemap, set: (v: VideoAnimatable | undefined) => ((c as { timeRemap?: VideoAnimatable }).timeRemap = v) }
 	];
 	for (const p of VIDEO_TRANSFORM_PROPERTIES) out.push({ get: () => c.transform?.[p], set: (v) => c.transform && (c.transform[p] = v) });
 	return out;
@@ -165,7 +178,7 @@ function retimeClipKeys(clip: VideoClip, fn: (v: VideoAnimatable) => VideoAnimat
 	}
 }
 
-const OPTIONAL_CLIP_FIELDS = ['name', 'opacity', 'transform', 'fit', 'blend', 'grade', 'animateIn', 'animateOut', 'fadeIn', 'fadeOut', 'fadeInCurve', 'fadeOutCurve', 'transition', 'in', 'speed', 'volume', 'muted', 'color', 'fontSize', 'fontFamily', 'fontWeight', 'background'];
+const OPTIONAL_CLIP_FIELDS = ['name', 'opacity', 'transform', 'fit', 'blend', 'grade', 'animateIn', 'animateOut', 'fadeIn', 'fadeOut', 'fadeInCurve', 'fadeOutCurve', 'transition', 'in', 'speed', 'timeRemap', 'volume', 'muted', 'color', 'fontSize', 'fontFamily', 'fontWeight', 'background'];
 
 /** Times the new range and nudge ops require, checked before anything changes. */
 const TIME_FIELDS: Partial<Record<VideoEditOp, string[]>> = { slip_clip: ['delta'], roll_edit: ['delta'], slide_clip: ['delta'], lift_range: ['from', 'to'], extract_range: ['from', 'to'], split_at: ['at'] };
@@ -265,7 +278,7 @@ class Editor {
 
 	/** Moves a clip's head `delta` later in time (start, in point and keys); the caller sets start and duration. */
 	trimHead(clip: VideoClip, delta: number) {
-		this.moveIn(clip, delta);
+		if (!isRamped(clip)) this.moveIn(clip, delta);
 		// Keys stay on the picture they were set on, so they move by the trim.
 		retimeClipKeys(clip, (v) => retimeVideoAnimatable(v, -delta));
 	}
@@ -285,7 +298,7 @@ class Editor {
 			if (isVideoKeyframes(l)) leftValues[i].set(l);
 			if (isVideoKeyframes(rr)) r.set(rr);
 		});
-		this.moveIn(right, at - clip.start);
+		if (!isRamped(right)) this.moveIn(right, at - clip.start);
 		clip.duration = at - clip.start;
 		delete clip.fadeOut;
 		delete clip.animateOut;
@@ -508,7 +521,8 @@ class Editor {
 				if (e.edge === 'start') {
 					const delta = e.to - clip.start;
 					if (clip.duration - delta < minimum - VIDEO_TIME_EPSILON) refuse(`Trimming the start to ${formatVideoSeconds(e.to)} would leave "${clip.id}" shorter than a frame; it ends at ${formatVideoSeconds(end)}.`);
-					if (clip.type === 'media') {
+					// A ramp's keys carry its source: trimming moves them (and holds the first frame past them).
+					if (clip.type === 'media' && !isRamped(clip)) {
 						const sourceIn = (clip.in ?? 0) + delta * speed;
 						if (sourceIn < -VIDEO_TIME_EPSILON) refuse(`"${clip.id}" starts ${Math.round((clip.in ?? 0) / speed)} ms into its source, so its start can move at most that far earlier (to ${formatVideoSeconds(clip.start - (clip.in ?? 0) / speed)}).`);
 						clip.in = Math.max(0, sourceIn);
@@ -538,7 +552,7 @@ class Editor {
 				} else {
 					const duration = e.to - clip.start;
 					if (duration < minimum - VIDEO_TIME_EPSILON) refuse(`Trimming the end to ${formatVideoSeconds(e.to)} would leave "${clip.id}" shorter than a frame; it starts at ${formatVideoSeconds(clip.start)}.`);
-					if (clip.type === 'media') {
+					if (clip.type === 'media' && !isRamped(clip)) {
 						const asset = assets.get(clip.asset);
 						const out = (clip.in ?? 0) + duration * speed;
 						if (asset?.duration !== undefined && out > asset.duration + VIDEO_TIME_EPSILON)
@@ -597,6 +611,8 @@ class Editor {
 				for (const k of e.remove ?? []) if (!OPTIONAL_CLIP_FIELDS.includes(k)) refuse(`"${k}" cannot be removed; removable fields are ${OPTIONAL_CLIP_FIELDS.join(', ')}.`);
 				// A new speed keeps the stretch of source and changes the length, as in an NLE's rate stretch.
 				if ('speed' in set && (typeof set.speed !== 'number' || !(set.speed > 0))) refuse('"speed" must be a number greater than 0 (1 = normal speed).');
+				if ('speed' in set && isRamped(at.clip)) refuse(`Clip "${at.clip.id}" has a speed ramp, which sets its speed; change the ramp, or remove it first.`);
+				if ('timeRemap' in set) refuse('Set a speed ramp with set_time_remap, which checks it against the media and moves later clips if asked.');
 				let stretch = 1;
 				if (at.clip.type === 'media' && !('duration' in set)) {
 					const was = videoClipSpeed(at.clip);
@@ -616,6 +632,57 @@ class Editor {
 				at.track.clips[at.index] = clip;
 				at.track.clips.sort((a, b) => a.start - b.start);
 				return this.outcomes.push({ op: e.op, clip: clip.id, track: at.track.id });
+			}
+			case 'set_time_remap': {
+				const { track, clip } = this.clip(e.clip);
+				this.unlocked(track);
+				if (clip.type !== 'media') refuse(`Clip "${clip.id}" is a ${clip.type === 'text' ? 'title' : 'colour'}, so it has no source to ramp; only video and audio clips change speed.`);
+				const asset = this.asset((clip as VideoMediaClip).asset);
+				if (asset.kind === 'image') refuse(`Clip "${clip.id}" is a still ("${asset.id}"), so it has no motion to ramp.`);
+				const media = clip as VideoMediaClip;
+				const end = videoClipEnd(media);
+				const duration = e.duration ?? media.duration;
+				if (!(duration >= 1000 / this.p.fps - VIDEO_TIME_EPSILON)) refuse(`"duration" must be at least a frame (${Math.ceil(1000 / this.p.fps)} ms).`);
+				if (e.keys === null) {
+					if (!media.timeRemap) refuse(`Clip "${clip.id}" has no speed ramp to remove.`);
+					// Play on at normal speed from where the ramp started.
+					const from = (media.in ?? 0) + media.timeRemap!.keys[0].v;
+					if (asset.duration !== undefined && from + duration > asset.duration + VIDEO_TIME_EPSILON)
+						refuse(`At normal speed from ${Math.round(from)} ms, "${clip.id}" would run past the end of "${asset.id}" (${asset.duration} ms); give a duration of at most ${Math.floor(asset.duration - from)} ms.`);
+					delete media.timeRemap;
+					media.in = from;
+					if (media.in < 1e-9) delete media.in;
+				} else {
+					if (!Array.isArray(e.keys) || !e.keys.length) refuse('"keys" must be a list of at least one { t, v, ease } (or null to remove the ramp).');
+					const remap = parseVideoTimeRemap({ keys: e.keys }, undefined, 'keys')!;
+					remap.keys = sortVideoKeys(remap.keys);
+					checkVideoTimeRemap(remap, 'keys');
+					const span = videoTimeRemapSpan(remap);
+					if (asset.duration !== undefined && (media.in ?? 0) + span.to > asset.duration + VIDEO_TIME_EPSILON)
+						refuse(`The ramp plays ${Math.round(span.to)} ms of source from the in point (${media.in ?? 0} ms), past the end of "${asset.id}" (${asset.duration} ms); it can use at most ${Math.floor(asset.duration - (media.in ?? 0))} ms.`);
+					media.timeRemap = remap;
+					delete media.speed;
+				}
+				const newEnd = media.start + duration;
+				const outcome: VideoEditOutcome = { op: e.op, clip: clip.id, track: track.id };
+				if (Math.abs(newEnd - end) > VIDEO_TIME_EPSILON) {
+					if (e.ripple) {
+						const tracks = this.rippleTracks([track]);
+						if (newEnd < end) {
+							media.duration = duration;
+							this.close(tracks, newEnd, end);
+						} else {
+							const created = this.open(tracks, end, newEnd - end, new Set([clip.id]));
+							media.duration = duration;
+							if (created.length) outcome.created = created;
+						}
+						outcome.rippled = tracks.map((t) => t.id);
+					} else {
+						if (newEnd > end) this.fits(track, end, newEnd - end, new Set([clip.id]), `Lengthening "${clip.id}"`);
+						media.duration = duration;
+					}
+				}
+				return this.outcomes.push(outcome);
 			}
 			case 'set_transition': {
 				const { track, clip } = this.clip(e.clip);

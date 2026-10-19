@@ -5,11 +5,12 @@ import type { VideoEditorController } from './controller.js';
 import { VIDEO_EDIT_OPS, type VideoEdit, type VideoEditOutcome, type VideoEditResult } from './edit.js';
 import { findVideoAudioSilences, videoAudioLevels } from './audio.js';
 import { findVideoFillers, findVideoTranscriptPauses, findVideoTranscriptText, mergeVideoRanges, parseVideoTranscript, VIDEO_DEFAULT_FILLERS, videoRemoveRangesEdits, videoTimelineTranscript, videoTranscriptTrack, type VideoTranscriptRange } from './transcript.js';
+import { videoFreezeFrameEdit, videoSpeedRampEdit, videoSpeedRampKeys } from './remap.js';
 import { VIDEO_GRADE_CONTROLS, VIDEO_GRADE_PRESET_NAMES, videoGradePreset } from './grade.js';
 import { videoFrameAt } from './evaluate.js';
 import { VIDEO_EASE_NAMES, VIDEO_KEYFRAME_PROPERTIES, VIDEO_TRANSFORM_PROPERTIES, type VideoAnimatable, type VideoKeyframeProperty } from './keyframes.js';
 import { videoContactSheetSvg, videoProjectSvg } from './render.js';
-import { findVideoClip, findVideoGaps, formatVideoTimecode, sortedVideoClips, VIDEO_TIME_EPSILON, videoClipEnd, videoClipSourceRange, videoProjectDuration } from './timeline.js';
+import { findVideoClip, findVideoGaps, formatVideoSeconds, formatVideoTimecode, sortedVideoClips, VIDEO_TIME_EPSILON, videoClipEnd, videoClipSourceRange, videoProjectDuration } from './timeline.js';
 import { VIDEO_BLEND_MODES, VIDEO_CLIP_ANIMATION_EFFECTS, VIDEO_FADE_CURVES, VIDEO_FITS, VIDEO_PLACEMENT_MODES, VIDEO_TRANSITION_TYPES, VIDEO_WIPE_DIRECTIONS, type VideoAsset, type VideoProject } from './types.js';
 
 /** Times in results, to a tenth of a millisecond. */
@@ -764,6 +765,95 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 		}
 	};
 
+	// -----------------------------------------------------------------------------------------
+	// Speed ramps and freeze frames
+	// -----------------------------------------------------------------------------------------
+
+	/** A media clip a ramp can change, with its asset. */
+	const rampTarget = (id: string) => {
+		const at = findVideoClip(project(), id);
+		if (!at) throw new Error(`There is no clip "${id}"; get_video_project lists the clips.`);
+		const { clip } = at;
+		if (clip.type !== 'media') throw new Error(`Clip "${id}" is a ${clip.type === 'text' ? 'title' : 'colour'}, so it has no source to change the speed of; use a video or audio clip.`);
+		if (project().assets.find((a) => a.id === clip.asset)?.kind === 'image') throw new Error(`Clip "${id}" is a still, so it has no motion to change the speed of.`);
+		return clip;
+	};
+	const rampOut = (r: Extract<VideoEditResult, { ok: true }>, id: string) => {
+		const outcome = r.outcomes[r.outcomes.length - 1];
+		return { clip: clipOut(r.project, id), ...(outcome.rippled ? { rippled: outcome.rippled } : {}), duration: videoProjectDuration(r.project) };
+	};
+	const RIPPLE_RAMP = { type: 'boolean', description: 'Move later material on every sync-locked track by the change in length (default true); false refuses if the clip would overlap the next one.' } as const;
+
+	const setSpeedRamp: AgentTool = {
+		name: 'set_video_speed_ramp',
+		title: 'Ramp the speed',
+		description:
+			'Plays a video or audio clip through stretches of speed, from its first frame: e.g. [{ duration: 1500, speed: 1 }, { duration: 500, speed: 1, toSpeed: 0.25 }, { duration: 2000, speed: 0.25 }] for a slow-motion ramp. "toSpeed" glides evenly to a new speed over the stretch; speed 0 is a freeze frame. The clip\'s length becomes the stretches\' total (one undo step). Replaces any ramp or speed it had. Returns the clip (with its timeRemap keys and source range).',
+		inputSchema: object(
+			{
+				clip: CLIP_ID,
+				segments: {
+					type: 'array',
+					minItems: 1,
+					maxItems: 100,
+					description: 'The stretches in order, from the clip\'s start.',
+					items: object(
+						{
+							duration: { type: 'number', exclusiveMinimum: 0, description: 'Length of the stretch on the timeline, in ms.' },
+							speed: { type: 'number', minimum: 0, maximum: 20, description: 'Speed at its start: 1 normal, 0.5 half speed (slow motion), 2 double, 0 a freeze frame.' },
+							toSpeed: { type: 'number', minimum: 0, maximum: 20, description: 'Glide evenly to this speed by the stretch\'s end (default: stay at speed). A ramp between two speeds.' }
+						},
+						['duration', 'speed'],
+						'One stretch.'
+					)
+				},
+				ripple: RIPPLE_RAMP
+			},
+			['clip', 'segments']
+		),
+		annotations: { title: 'Ramp the speed', ...WRITE_IDEMPOTENT },
+		handler: ({ clip, segments, ripple }) => {
+			// Starts from the moment of source the clip shows at its first frame now.
+			const edit = videoSpeedRampEdit(rampTarget(clip), segments, ripple ?? true);
+			return apply(edit, 'Speed ramp', (r) => ({ ...rampOut(r, clip), source: Math.round(videoSpeedRampKeys(segments).source) }));
+		}
+	};
+
+	const addFreeze: AgentTool = {
+		name: 'add_video_freeze_frame',
+		title: 'Add a freeze frame',
+		description:
+			'Holds the frame a video clip shows at a timeline time for a while, then plays on (one undo step): the clip gets longer by the hold, and with ripple (default) everything after it on sync-locked tracks moves along. Works on clips with or without a speed ramp. Returns the clip.',
+		inputSchema: object(
+			{
+				clip: CLIP_ID,
+				at: MS('Timeline time of the frame to hold (inside the clip)'),
+				duration: { type: 'number', exclusiveMinimum: 0, description: 'How long to hold it, in ms.' },
+				ripple: RIPPLE_RAMP
+			},
+			['clip', 'at', 'duration']
+		),
+		annotations: { title: 'Add a freeze frame', ...WRITE },
+		handler: ({ clip, at, duration, ripple }) => {
+			const c = rampTarget(clip);
+			const t = at - c.start;
+			if (t < 0 || t > c.duration) throw new Error(`${formatVideoSeconds(at)} is outside clip "${clip}" (${formatVideoSeconds(c.start)}–${formatVideoSeconds(videoClipEnd(c))}); pick a time inside it.`);
+			return apply(videoFreezeFrameEdit(c, t, duration, ripple ?? true), 'Freeze frame', (r) => rampOut(r, clip));
+		}
+	};
+
+	const removeRamp: AgentTool = {
+		name: 'remove_video_speed_ramp',
+		title: 'Remove a speed ramp',
+		description: 'Puts a ramped clip back to normal speed from the moment its ramp started (one undo step), keeping its length unless "duration" is given. Returns the clip.',
+		inputSchema: object({ clip: CLIP_ID, duration: { type: 'number', exclusiveMinimum: 0, description: 'New length in ms (default: unchanged).' }, ripple: RIPPLE_RAMP }, ['clip']),
+		annotations: { title: 'Remove a speed ramp', ...WRITE },
+		handler: ({ clip, duration, ripple }) => {
+			rampTarget(clip);
+			return apply({ op: 'set_time_remap', clip, keys: null, ...(duration !== undefined ? { duration } : {}), ripple: ripple ?? true }, 'Remove speed ramp', (r) => rampOut(r, clip));
+		}
+	};
+
 	const setTransition: AgentTool = {
 		name: 'set_video_transition',
 		title: 'Set a transition',
@@ -899,7 +989,7 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 
 	const EDIT_OP: JsonSchema = {
 		type: 'object',
-		description: `One edit: { "op": one of ${VIDEO_EDIT_OPS.filter((o) => o !== 'replace_project').join(', ')}, …its fields }. Fields match the single tools: add_clip { track, clip, mode, ripple }, move_clip { clip, start, track, mode }, trim_clip { clip, edge, to, ripple }, split_clip { clip, at, id }, delete_clips { clips, ripple }, update_clip { clip, set, remove }, set_transition { clip, transition }, set_keyframes { clip, property, keys (null removes) }, slip_clip { clip, delta }, roll_edit { left, right, delta }, slide_clip { clip, delta }, lift_range { from, to, tracks }, extract_range { from, to, tracks }, split_at { at, tracks }, close_gaps { track, from }, add_asset { asset }, update_asset { asset, set, remove }, remove_asset { asset }, add_track { track: { kind, id, … }, at }, update_track { track, set, remove }, remove_track { track }, move_track { track, to }, add_marker { marker: { time, label } }, update_marker { marker, set }, remove_marker { marker }, set_settings { name, width, height, fps, background }.`,
+		description: `One edit: { "op": one of ${VIDEO_EDIT_OPS.filter((o) => o !== 'replace_project').join(', ')}, …its fields }. Fields match the single tools: add_clip { track, clip, mode, ripple }, move_clip { clip, start, track, mode }, trim_clip { clip, edge, to, ripple }, split_clip { clip, at, id }, delete_clips { clips, ripple }, update_clip { clip, set, remove }, set_transition { clip, transition }, set_keyframes { clip, property, keys (null removes) }, set_time_remap { clip, keys (clip ms → source ms after the in point; null removes), duration, ripple }, slip_clip { clip, delta }, roll_edit { left, right, delta }, slide_clip { clip, delta }, lift_range { from, to, tracks }, extract_range { from, to, tracks }, split_at { at, tracks }, close_gaps { track, from }, add_asset { asset }, update_asset { asset, set, remove }, remove_asset { asset }, add_track { track: { kind, id, … }, at }, update_track { track, set, remove }, remove_track { track }, move_track { track, to }, add_marker { marker: { time, label } }, update_marker { marker, set }, remove_marker { marker }, set_settings { name, width, height, fps, background }.`,
 		properties: { op: { type: 'string', enum: VIDEO_EDIT_OPS.filter((o) => o !== 'replace_project'), description: 'Which edit.' } },
 		required: ['op']
 	};
@@ -1018,7 +1108,7 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 	};
 
 	const reads = [getProject, getFrame, getTranscript, findText, findFillers, findPauses, findGaps, checkProject, renderFrame, exportFfmpeg, exportLoudnessMeasure, exportEdl, audioLevels, findSilences, seek];
-	const writes = [setSettings, addAsset, updateAsset, removeAsset, addTrack, updateTrack, removeTrack, moveTrack, addClip, moveClip, trimClip, splitClip, deleteClips, updateClip, setTransition, setTranscript, removeRanges, applyGradePreset, copyGrade, setKeyframes, removeKeyframes, slipClip, rollEdit, slideClip, liftRange, extractRange, splitAt, closeGaps, addMarker, removeMarker, editVideo, undo, redo];
+	const writes = [setSettings, addAsset, updateAsset, removeAsset, addTrack, updateTrack, removeTrack, moveTrack, addClip, moveClip, trimClip, splitClip, deleteClips, updateClip, setTransition, setSpeedRamp, addFreeze, removeRamp, setTranscript, removeRanges, applyGradePreset, copyGrade, setKeyframes, removeKeyframes, slipClip, rollEdit, slideClip, liftRange, extractRange, splitAt, closeGaps, addMarker, removeMarker, editVideo, undo, redo];
 
 	return {
 		id: options.id ?? 'video',

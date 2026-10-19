@@ -1,8 +1,9 @@
 import { videoClipAnimated } from './clip-animation.js';
 import { placeVideoRect } from './evaluate.js';
 import { videoIrisRadius } from './render.js';
+import { videoTimeRemapBreakpoints, videoTimeRemapSpan } from './remap.js';
 import { videoGradeFfmpegFilters } from './grade.js';
-import { isVideoKeyframes, VIDEO_TRANSFORM_PROPERTIES, videoKeyframeFfmpegExpr, type VideoAnimatable } from './keyframes.js';
+import { isVideoKeyframes, VIDEO_TRANSFORM_PROPERTIES, videoKeyframeFfmpegExpr, type VideoAnimatable, type VideoKeyframes } from './keyframes.js';
 import { formatVideoTimecode, formatVideoTimecodeFrames, isVideoDropFrameRate, videoHourFrames, videoTimecodeFrames, sortedVideoClips, videoAssetMap, videoClipBefore, videoClipEnd, videoClipOverhang, videoClipSpeed, videoProjectDuration, videoAssetHasSound } from './timeline.js';
 import { videoTransitionAudioCurve } from './types.js';
 import type { VideoWipeDirection, VideoAsset, VideoBlendMode, VideoClip, VideoFadeCurve, VideoProject, VideoTextClip, VideoTrack } from './types.js';
@@ -180,6 +181,8 @@ export interface VideoFfmpegExport {
 }
 
 const sec = (ms: number) => String(Math.round(ms) / 1000);
+/** A number for an expression, to a hundredth. */
+const fmtMs = (v: number) => String(Math.round(v * 100) / 100);
 /** ffmpeg `blend` modes for the blend modes. */
 const FFMPEG_BLEND: Record<Exclude<VideoBlendMode, 'normal'>, string> = {
 	multiply: 'multiply',
@@ -262,6 +265,68 @@ function buildFfmpeg(project: VideoProject, options: VideoFfmpegOptions, measure
 	let cur = 'base';
 	let usesDrawtext = false;
 	const animated = new Set<string>();
+	const ramped = new Set<'sound'>();
+	/**
+	 * A ramped picture: each source frame moved to the clip time where the ramp first shows it (the
+	 * ramp's inverse, as straight lines), `fps` repeating frames through slow stretches and freezes,
+	 * and `tpad` holding the first and last frames before and after the ramp (and through handles).
+	 */
+	const rampedPicture = (remap: VideoKeyframes, lead: number, end: number): string[] => {
+		const pts = videoTimeRemapBreakpoints(remap, 2000 / fps);
+		const first = pts[0];
+		const last = pts[pts.length - 1];
+		const s = `(T*1000+${fmtMs(first.v)})`;
+		let e = fmtMs(last.t - first.t);
+		for (let i = pts.length - 2; i >= 0; i--) {
+			const a = pts[i];
+			const b = pts[i + 1];
+			if (b.v - a.v < 1e-6) continue; // a freeze: its frames come from the next stretch
+			e = `if(lt(${s},${fmtMs(b.v)}),${fmtMs(a.t - first.t)}+(${s}-${fmtMs(a.v)})*${fmtMs((b.t - a.t) / (b.v - a.v))},${e})`;
+		}
+		const before = lead + first.t;
+		const after = Math.max(0, end - last.t);
+		return ['setpts=PTS-STARTPTS', `setpts='(${e})/1000/TB'`, `fps=${fps}`, ...(before > 0.5 || after > 0.5 ? [`tpad=start_mode=clone:start_duration=${sec(before)}:stop_mode=clone:stop_duration=${sec(after + 1000 / fps)}`] : [`tpad=stop_mode=clone:stop_duration=${sec(1000 / fps)}`]), `trim=duration=${sec(lead + end)}`];
+	};
+	/**
+	 * Ramped sound: the ramp cut into straight stretches, each played at its own speed with
+	 * `atempo` (silence where it is frozen or slower than a tenth), joined with `concat`, with silence
+	 * for the handles and holds around it. Gliding speed changes become small steps.
+	 */
+	const rampedSound = (remap: VideoKeyframes, input: string, output: string, lead: number, end: number): string[] => {
+		const pts = videoTimeRemapBreakpoints(remap, Math.max(80, 2000 / fps));
+		const first = pts[0];
+		const last = pts[pts.length - 1];
+		const n = audio.length;
+		const fmtA = 'aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo';
+		const silence = (ms: number) => `anullsrc=r=48000:cl=stereo,atrim=duration=${sec(ms)},${fmtA}`;
+		const pieces: string[] = [];
+		const out: string[] = [];
+		const parts: string[] = [];
+		if (lead + first.t > 0.5) parts.push(silence(lead + first.t));
+		const played: { from: number; to: number; speed: number }[] = [];
+		for (let i = 0; i + 1 < pts.length; i++) {
+			const dt = pts[i + 1].t - pts[i].t;
+			if (dt < 0.5) continue;
+			const speed = (pts[i + 1].v - pts[i].v) / dt;
+			if (speed < 0.1) parts.push(silence(dt));
+			else {
+				played.push({ from: pts[i].v - first.v, to: pts[i + 1].v - first.v, speed });
+				parts.push(`#${played.length - 1}`);
+			}
+		}
+		if (end - last.t > 0.5) parts.push(silence(end - last.t));
+		if (played.length) out.push(`[${input}]asplit=${played.length}${played.map((_, k) => `[r${n}s${k}]`).join('')}`);
+		parts.forEach((p, k) => {
+			const label = `[r${n}p${k}]`;
+			if (p.startsWith('#')) {
+				const piece = played[Number(p.slice(1))];
+				out.push(`[r${n}s${p.slice(1)}]atrim=start=${sec(piece.from)}:end=${sec(piece.to)},asetpts=PTS-STARTPTS,${atempo(piece.speed).join(',') || 'anull'},${fmtA}${label}`);
+			} else out.push(`${p}${label}`);
+			pieces.push(label);
+		});
+		out.push(`${pieces.join('')}concat=n=${pieces.length}:v=0:a=1${output}`);
+		return out;
+	};
 	const blended = new Set<VideoBlendMode>();
 	let k = 0;
 	// Keyframes become piecewise-linear expressions; eased segments get a breakpoint every two frames.
@@ -275,7 +340,11 @@ function buildFfmpeg(project: VideoProject, options: VideoFfmpegOptions, measure
 		const src = options.resolve ? options.resolve(asset) : asset.src;
 		const span = clip.duration + lead + tail;
 		if (asset.kind === 'image') inputs.push(['-loop', '1', '-framerate', String(fps), '-t', sec(span), '-i', src]);
-		else inputs.push(['-ss', sec((clip.in ?? 0) - lead * speed), '-t', sec(span * speed), '-i', src]);
+		else if (clip.timeRemap) {
+			// A ramp reads just the source it plays (plus a frame); it holds its ends for any handles.
+			const { from, to } = videoTimeRemapSpan(clip.timeRemap);
+			inputs.push(['-ss', sec((clip.in ?? 0) + from), '-t', sec(to - from + 1000 / fps), '-i', src]);
+		} else inputs.push(['-ss', sec((clip.in ?? 0) - lead * speed), '-t', sec(span * speed), '-i', src]);
 		return inputs.length - 1;
 	};
 	// Back to front: later tracks are further back.
@@ -299,7 +368,13 @@ function buildFfmpeg(project: VideoProject, options: VideoFfmpegOptions, measure
 				const ai = index ?? input(clip, asset!, lead, tail);
 				const trackGain = track.volume ?? 1;
 				const volume = isVideoKeyframes(clip.volume) ? `volume='${trackGain}*(${expr(clip.volume, `(t*1000${lead ? `-${Math.round(lead)}` : ''})`, 1, 'volume')})':eval=frame` : `volume=${(clip.volume ?? 1) * trackGain}`;
-				const chain = ['asetpts=PTS-STARTPTS', ...atempo(videoClipSpeed(clip)), volume];
+				let source = `[${ai}:a]`;
+				if (clip.timeRemap) {
+					source = `[r${audio.length}]`;
+					graph.push(...rampedSound(clip.timeRemap, `${ai}:a`, source, lead, clip.duration + tail));
+					ramped.add('sound');
+				}
+				const chain = [...(clip.timeRemap ? [] : ['asetpts=PTS-STARTPTS', ...atempo(videoClipSpeed(clip))]), volume];
 				const before = clip.transition ? videoClipBefore(track, clip) : null;
 				const next = sortedVideoClips(track).find((c) => c !== clip && Math.abs(c.start - end) < 0.5 && c.transition);
 				const inCurve = clip.transition ? afadeCurve(videoTransitionAudioCurve(clip.transition)) : '';
@@ -311,7 +386,7 @@ function buildFfmpeg(project: VideoProject, options: VideoFfmpegOptions, measure
 				if (clip.fadeIn) chain.push(`afade=t=in:st=${sec(lead)}:d=${sec(clip.fadeIn)}${afadeCurve(clip.fadeInCurve)}`);
 				if (clip.fadeOut) chain.push(`afade=t=out:st=${sec(lead + clip.duration - clip.fadeOut)}:d=${sec(clip.fadeOut)}${afadeCurve(clip.fadeOutCurve)}`);
 				chain.push(`adelay=${Math.round(t0)}:all=1`);
-				graph.push(`[${ai}:a]${chain.join(',')}[a${audio.length}]`);
+				graph.push(`${source}${chain.join(',')}[a${audio.length}]`);
 				audio.push(`[a${audio.length}]`);
 			}
 			if (measure || track.kind !== 'video' || track.hidden) continue;
@@ -365,7 +440,8 @@ function buildFfmpeg(project: VideoProject, options: VideoFfmpegOptions, measure
 			if (clip.type === 'color') source = `color=c=${color(clip.color)}:s=${even(rect.width)}x${even(rect.height)}:r=${fps}:d=${sec(span)}`;
 			else {
 				source = `[${index}:v]`;
-				chain.push(`setpts=${videoClipSpeed(clip) !== 1 ? `(PTS-STARTPTS)/${videoClipSpeed(clip)}` : 'PTS-STARTPTS'}`, `fps=${fps}`, `scale=${even(rect.width)}:${even(rect.height)}`);
+				if (clip.type === 'media' && clip.timeRemap) chain.push(...rampedPicture(clip.timeRemap, lead, clip.duration + tail), `scale=${even(rect.width)}:${even(rect.height)}`);
+				else chain.push(`setpts=${videoClipSpeed(clip) !== 1 ? `(PTS-STARTPTS)/${videoClipSpeed(clip)}` : 'PTS-STARTPTS'}`, `fps=${fps}`, `scale=${even(rect.width)}:${even(rect.height)}`);
 			}
 			const grade = videoGradeFfmpegFilters(clip.grade);
 			if (grade.length) chain.push('format=rgba', ...grade);
@@ -457,6 +533,7 @@ function buildFfmpeg(project: VideoProject, options: VideoFfmpegOptions, measure
 	if (animated.size)
 		notes.push(`Keyframed ${[...animated].sort().join(', ')} ${animated.size > 1 ? 'are' : 'is'} rendered as straight lines between keys, with eased segments sampled every two frames${animated.has('scale') ? '; animated scale needs ffmpeg 5 or later (scale with eval=frame)' : ''}.`);
 	if (blended.has('soft-light')) notes.push("ffmpeg's soft-light blend uses a slightly different formula from the browser's, so the render can differ a little from the preview.");
+	if (ramped.has('sound')) notes.push('Sound through a speed ramp plays each stretch at its own speed, so a gliding change is heard in small steps (about every 80 ms), and freezes are silent.');
 	if (usesDrawtext) notes.push('Titles use drawtext, which needs an ffmpeg built with libfreetype (Homebrew\'s is not: check `ffmpeg -filters | grep drawtext`); pass titleImage to render them as images instead.');
 	const filterComplex = graph.join(';');
 	if (measure) {

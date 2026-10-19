@@ -140,13 +140,15 @@ export class VideoPreviewEngine {
 			const { media } = this.entry(clip, src, kind);
 			active.add(clip);
 			const target = sourceTime / 1000;
-			if (Math.abs(media.playbackRate - speed) > 1e-6) media.playbackRate = speed;
+			// Browsers refuse rates below about 1/16; slower than that (a freeze) is shown by seeking a paused element.
+			const frozen = speed < 0.0625;
+			if (!frozen && Math.abs(media.playbackRate - speed) > 1e-6) media.playbackRate = speed;
 			if (gain === null) media.muted = true;
 			else {
 				media.muted = gain <= 0;
 				media.volume = Math.min(1, Math.max(0, gain));
 			}
-			if (playing) {
+			if (playing && !frozen) {
 				if (media.paused || Math.abs(media.currentTime - target) > tolerance) media.currentTime = target;
 				if (media.paused) void Promise.resolve(media.play()).catch(() => {});
 			} else {

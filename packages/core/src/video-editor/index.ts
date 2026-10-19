@@ -19,6 +19,7 @@ export * from './audio.js';
 export * from './grade.js';
 export * from './clip-animation.js';
 export * from './transcript.js';
+export * from './remap.js';
 export * from './render.js';
 export * from './export.js';
 export * from './preview.js';

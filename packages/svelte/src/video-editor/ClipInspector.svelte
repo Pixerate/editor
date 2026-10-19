@@ -16,7 +16,10 @@
     VIDEO_TRANSITION_TYPES,
     VIDEO_WIPE_DIRECTIONS,
     videoTransitionHasDirection,
+    videoFreezeFrameEdit,
     videoKeyframeRows,
+    videoSlowMotionRamp,
+    videoSpeedRampEdit,
     videoTransitionAudioCurve,
     videoKeyframeToggleEdit,
     videoKeyframeValueEdit,
@@ -47,6 +50,7 @@
   // A local error shows until the editor changes; then the editor's own error (if any) shows.
   const message = $derived((localError && localError.revision === editor.revision ? localError.text : null) ?? editor.error);
   const rows = $derived(clip ? videoKeyframeRows(editor.project, clip.id, editor.time) : []);
+  const btn = 'rounded border border-border px-1.5 py-0.5 text-[10px] disabled:opacity-40';
   const input = 'w-full min-w-0 rounded border border-border bg-transparent px-1 py-0.5 text-xs disabled:opacity-50';
 
   function apply(edit: VideoEdit, label: string) {
@@ -217,7 +221,21 @@
       {/each}
       {#if clip.type === 'media'}
         <span class="text-muted-foreground">Speed</span>
-        <input class={input} type="number" min="0.05" step="0.05" placeholder="1" aria-label="Speed" {disabled} value={clip.speed ?? ''} onchange={(e) => number('speed', e.currentTarget.value, 'Change speed', { above: 0, what: 'Speed must be a number above 0 (1 = normal speed).' })} data-field="speed" />
+        {#if clip.timeRemap}
+          <span class="flex items-center gap-1" data-ramped="">
+            <span class="text-muted-foreground">ramped</span>
+            <button type="button" class={btn} {disabled} onclick={() => clip && apply({ op: 'set_time_remap', clip: clip.id, keys: null, ripple: true }, 'Remove speed ramp')}>Remove ramp</button>
+          </span>
+        {:else}
+          <input class={input} type="number" min="0.05" step="0.05" placeholder="1" aria-label="Speed" {disabled} value={clip.speed ?? ''} onchange={(e) => number('speed', e.currentTarget.value, 'Change speed', { above: 0, what: 'Speed must be a number above 0 (1 = normal speed).' })} data-field="speed" />
+        {/if}
+        {#if editor.project.assets.find((a) => a.id === clip.asset)?.kind !== 'image'}
+        <span class="text-muted-foreground">Retime</span>
+        <span class="flex flex-wrap gap-1">
+          <button type="button" class={btn} disabled={disabled || editor.time < clip.start || editor.time > clip.start + clip.duration} title="Hold the frame at the playhead for a second, pushing later clips along" onclick={() => clip?.type === 'media' && apply(videoFreezeFrameEdit(clip, editor.time - clip.start, 1000), 'Freeze frame')} data-action="freeze">Freeze 1 s here</button>
+          <button type="button" class={btn} {disabled} title="Normal speed, then a glide into 0.3× slow motion" onclick={() => clip?.type === 'media' && apply(videoSpeedRampEdit(clip, videoSlowMotionRamp(clip.duration)), 'Speed ramp')} data-action="slow-mo">Slow-mo ramp</button>
+        </span>
+        {/if}
         <span class="text-muted-foreground">Muted</span>
         <input type="checkbox" class="justify-self-start" aria-label="Muted" {disabled} checked={!!clip.muted} onchange={(e) => set('muted', e.currentTarget.checked || undefined, e.currentTarget.checked ? 'Mute clip' : 'Unmute clip')} data-field="muted" />
         {#each [{ key: 'fadeInCurve', on: clip.fadeIn, label: 'Fade in sound', aria: 'Fade in curve', change: 'Change fade in curve' }, { key: 'fadeOutCurve', on: clip.fadeOut, label: 'Fade out sound', aria: 'Fade out curve', change: 'Change fade out curve' }] as const as row (row.key)}

@@ -493,6 +493,25 @@ describe("ClipInspector (React)", () => {
     controller.destroy();
   });
 
+  it("freezes a frame at the playhead, ramps into slow motion and takes the ramp off", () => {
+    const controller = make();
+    act(() => root.render(<ClipInspector controller={controller} />));
+    act(() => controller.select(["c1"]));
+    act(() => controller.seek(500));
+    const button = (label: string) => [...container.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === label)!;
+    act(() => button("Freeze 1 s here").click());
+    expect(clip(controller, "c1")!.clip.duration).toBe(3000);
+    expect(controller.getState().undoLabel).toBe("Freeze frame");
+    expect(container.querySelector("[data-ramped]")).not.toBeNull();
+    act(() => button("Remove ramp").click());
+    expect((clip(controller, "c1")!.clip as any).timeRemap).toBeUndefined();
+    act(() => button("Slow-mo ramp").click());
+    expect((clip(controller, "c1")!.clip as any).timeRemap.keys.length).toBeGreaterThan(2);
+    act(() => controller.seek(9000));
+    expect(button("Freeze 1 s here").disabled).toBe(true);
+    controller.destroy();
+  });
+
   it("offers a direction for push, slide and wipe only", () => {
     const controller = make();
     act(() => root.render(<ClipInspector controller={controller} />));

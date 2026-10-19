@@ -16,7 +16,10 @@ import {
   VIDEO_TRANSITION_TYPES,
   VIDEO_WIPE_DIRECTIONS,
   videoTransitionHasDirection,
+  videoFreezeFrameEdit,
   videoKeyframeRows,
+  videoSlowMotionRamp,
+  videoSpeedRampEdit,
   videoTransitionAudioCurve,
   videoKeyframeToggleEdit,
   videoKeyframeValueEdit,
@@ -35,6 +38,7 @@ export interface ClipInspectorProps {
   className?: string;
 }
 
+const btn = 'rounded border border-border px-1.5 py-0.5 text-[11px] disabled:opacity-40';
 const field = 'w-full rounded border border-border bg-transparent px-1 py-0.5 text-xs disabled:opacity-50';
 const DEFAULT_TRANSITION = 500;
 
@@ -259,8 +263,35 @@ export function ClipInspector({ controller, className = '' }: ClipInspectorProps
       {clip.type === 'media' && (
         <>
           <Row label="Speed" name="speed">
-            {number('speed', 'Speed', { min: 0.1, step: 0.25 })}
+            {clip.timeRemap ? (
+              <span className="flex items-center gap-1" data-ramped="">
+                <span className="text-muted-foreground">ramped</span>
+                <button type="button" className={btn} disabled={disabled} onClick={() => controller.apply({ op: 'set_time_remap', clip: clip.id, keys: null, ripple: true }, 'Remove speed ramp')}>
+                  Remove ramp
+                </button>
+              </span>
+            ) : (
+              number('speed', 'Speed', { min: 0.1, step: 0.25 })
+            )}
           </Row>
+          {project.assets.find((a) => a.id === clip.asset)?.kind !== 'image' && (
+            <Row label="Retime" name="retime">
+              <span className="flex flex-wrap gap-1">
+                <button
+                  type="button"
+                  className={btn}
+                  disabled={disabled || time < clip.start || time > clip.start + clip.duration}
+                  title="Hold the frame at the playhead for a second, pushing later clips along"
+                  onClick={() => controller.apply(videoFreezeFrameEdit(clip, time - clip.start, 1000), 'Freeze frame')}
+                >
+                  Freeze 1 s here
+                </button>
+                <button type="button" className={btn} disabled={disabled} title="Normal speed, then a glide into 0.3× slow motion" onClick={() => controller.apply(videoSpeedRampEdit(clip, videoSlowMotionRamp(clip.duration)), 'Speed ramp')}>
+                  Slow-mo ramp
+                </button>
+              </span>
+            </Row>
+          )}
           <Row label="Muted" name="muted">
             <input type="checkbox" className="justify-self-start" checked={!!clip.muted} disabled={disabled} aria-label="Muted" onChange={(e) => set('muted', e.target.checked || undefined, e.target.checked ? 'Mute clip' : 'Unmute clip')} />
           </Row>

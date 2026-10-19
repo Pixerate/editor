@@ -6,7 +6,7 @@
  * track draws over one on a later track. Clips on one track never overlap.
  */
 
-import type { VideoAnimatable } from './keyframes.js';
+import type { VideoAnimatable, VideoKeyframes } from './keyframes.js';
 
 export type VideoAssetKind = 'video' | 'audio' | 'image';
 
@@ -201,6 +201,13 @@ export interface VideoMediaClip extends VideoClipBase {
 	in?: number;
 	/** Playback speed (default 1): it uses `duration × speed` of the source. */
 	speed?: number;
+	/**
+	 * A speed ramp: keys mapping clip time to source time after the in point (`v` ms from `in`), so
+	 * a key's slope is the speed there, a flat stretch is a freeze frame and eased keys ramp between
+	 * speeds. Never runs backwards. Before the first key and after the last the picture holds. Takes
+	 * the place of `speed` (see `videoSpeedRampKeys` for building one from speeds).
+	 */
+	timeRemap?: VideoKeyframes;
 	/** Gain (1 = unchanged, default 1), or keyframes. */
 	volume?: VideoAnimatable;
 	/** Silences this clip. */
