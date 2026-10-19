@@ -136,7 +136,7 @@ function blendOf(d: Descriptor, key: string, fallback: BlendMode, notes: Notes):
 }
 
 /** A descriptor colour (RGB, HSB, CMYK, Lab, grayscale, or 0..1 floats) as `#rrggbb`. */
-function colorOf(d: Descriptor | undefined, fallback = '#000000'): string {
+export function colorOf(d: Descriptor | undefined, fallback = '#000000'): string {
   if (!d) return fallback;
   const g = (k: string) => descNumber(d, k);
   if (g('redFloat') !== undefined) return effectColorHex([g('redFloat')!, g('greenFloat') ?? 0, g('blueFloat') ?? 0]);
@@ -166,7 +166,7 @@ function colorOf(d: Descriptor | undefined, fallback = '#000000'): string {
   return effectColorHex([r / 255, gr / 255, b / 255]);
 }
 
-function colorDesc(hex: string): Descriptor {
+export function colorDesc(hex: string): Descriptor {
   const [r, g, b] = parseEffectColor(hex) ?? [0, 0, 0];
   return descriptor('RGBC', [
     ['Rd  ', dbl(r * 255)],
@@ -224,7 +224,7 @@ const GRADIENT_STYLES: Array<[GradientStyle, string]> = [
 ];
 
 /** A `Grad` descriptor's stops: midpoints become an extra stop each; smoothness is drawn linearly. */
-function gradientOf(d: Descriptor, notes: Notes): EffectGradient {
+export function gradientOf(d: Descriptor, notes: Notes): EffectGradient {
   const g: EffectGradient = {
     stops: [
       { position: 0, color: '#000000' },
@@ -276,7 +276,7 @@ function gradientOf(d: Descriptor, notes: Notes): EffectGradient {
   return g;
 }
 
-function gradientItems(g: EffectGradient): Array<[string, DescValue]> {
+export function gradientItems(g: EffectGradient): Array<[string, DescValue]> {
   const clrs: DescValue = {
     type: 'VlLs',
     items: g.stops.map((s) =>
@@ -329,12 +329,12 @@ function gradientItems(g: EffectGradient): Array<[string, DescValue]> {
   ];
 }
 
-function patternRefOf(d: Descriptor): { patternId: string; name: string } {
+export function patternRefOf(d: Descriptor): { patternId: string; name: string } {
   const p = descObject(d, 'Ptrn');
   return { patternId: text(p, 'Idnt') || text(p, 'Nm  '), name: text(p, 'Nm  ') };
 }
 
-function patternRefDesc(patternId: string, name: string | undefined): DescValue {
+export function patternRefDesc(patternId: string, name: string | undefined): DescValue {
   return obj(
     descriptor('Ptrn', [
       ['Nm  ', textV(name ?? patternId)],
@@ -343,7 +343,7 @@ function patternRefDesc(patternId: string, name: string | undefined): DescValue 
   );
 }
 
-function placementOf(d: Descriptor): { angle: number; link: boolean; phase: { x: number; y: number } } {
+export function placementOf(d: Descriptor): { angle: number; link: boolean; phase: { x: number; y: number } } {
   const phase = descObject(d, 'phase');
   return {
     angle: clamp(num(d, 'Angl', 0), -360, 360),
@@ -352,7 +352,7 @@ function placementOf(d: Descriptor): { angle: number; link: boolean; phase: { x:
   };
 }
 
-function placementItems(angle: number, link: boolean, phase: { x: number; y: number }): Array<[string, DescValue]> {
+export function placementItems(angle: number, link: boolean, phase: { x: number; y: number }): Array<[string, DescValue]> {
   const out: Array<[string, DescValue]> = [];
   if (angle) out.push(['Angl', unit('#Ang', angle)]);
   out.push(['Algn', boolV(link)]);

@@ -156,13 +156,14 @@ export interface SerializedShapeLayer extends SerializedLayerBase {
   type: 'shape';
   components: ShapeComponent[];
   fillRule?: 'evenodd';
+  inverted?: true;
   fill: ShapePaint | null;
   stroke: ShapeStroke | null;
   fillOpacity?: number;
   /** The annotation the layer was migrated from, while it still is that annotation. */
   annotation?: Annotation;
   /** PSD blocks kept for round trips (base64). */
-  psd?: { blocks: Array<{ key: string; data: string }> };
+  psd?: { blocks: Array<{ key: string; data: string }>; signature?: string };
 }
 
 /** A type layer: its text and styles, plus the pixels it showed (PNG) for loads without its fonts. */
@@ -183,7 +184,7 @@ export interface SerializedTypeLayer extends SerializedLayerBase {
   /** The text annotation the layer was migrated from, while it still is that annotation. */
   annotation?: Annotation;
   /** PSD blocks kept for round trips (base64). */
-  psd?: { tySh?: string; blocks?: Array<{ key: string; data: string }> };
+  psd?: { tySh?: string; blocks?: Array<{ key: string; data: string }>; signature?: string };
 }
 
 export type SerializedLayer = SerializedPixelLayer | SerializedAdjustmentLayer | SerializedGroupLayer | SerializedAnnotationLayer | SerializedSmartObjectLayer | SerializedShapeLayer | SerializedTypeLayer;
@@ -389,6 +390,7 @@ function serializeType(layer: TypeLayer, base: SerializedLayerBase, ctx: Seriali
     out.psd = {};
     if (layer.psd.tySh) out.psd.tySh = bytesToBase64(layer.psd.tySh);
     if (layer.psd.blocks?.length) out.psd.blocks = layer.psd.blocks.map((b) => ({ key: b.key, data: bytesToBase64(b.data) }));
+    if (layer.psd.signature) out.psd.signature = layer.psd.signature;
   }
   return out;
 }
@@ -434,6 +436,7 @@ function readType(r: Record<string, any>, base: LayerBase, ctx: DeserializeConte
       const psd: NonNullable<TypeLayer['psd']> = {};
       if (typeof r.psd.tySh === 'string') psd.tySh = base64ToBytes(r.psd.tySh);
       if (Array.isArray(r.psd.blocks)) psd.blocks = r.psd.blocks.filter((b: any) => b && typeof b.key === 'string' && typeof b.data === 'string').map((b: any) => ({ key: b.key, data: base64ToBytes(b.data) }));
+      if (typeof r.psd.signature === 'string') psd.signature = r.psd.signature;
       if (psd.tySh || psd.blocks?.length) layer.psd = psd;
     }
     if (typeof r.asset === 'string') return { ...layer, surface: readSurface(r.asset, r.x, r.y, 4, 0, ctx, label), rendering: 'stored' };
@@ -458,9 +461,10 @@ function serializeShape(layer: ShapeLayer, base: SerializedLayerBase): Serialize
     stroke: layer.stroke ? JSON.parse(JSON.stringify(layer.stroke)) : null,
   };
   if (layer.fillRule === 'evenodd') out.fillRule = 'evenodd';
+  if (layer.inverted) out.inverted = true;
   if (layer.fillOpacity !== undefined && layer.fillOpacity !== 1) out.fillOpacity = layer.fillOpacity;
   if (layer.annotation) out.annotation = JSON.parse(JSON.stringify(layer.annotation));
-  if (layer.psd?.blocks?.length) out.psd = { blocks: layer.psd.blocks.map((b) => ({ key: b.key, data: bytesToBase64(b.data) })) };
+  if (layer.psd?.blocks?.length) out.psd = { blocks: layer.psd.blocks.map((b) => ({ key: b.key, data: bytesToBase64(b.data) })), ...(layer.psd.signature ? { signature: layer.psd.signature } : {}) };
   return out;
 }
 
@@ -489,13 +493,14 @@ function readShape(r: Record<string, any>, base: LayerBase, ctx: DeserializeCont
         stroke: r.stroke === null || r.stroke === undefined ? null : normalizeShapeStroke(r.stroke, 'stroke'),
       };
     }
-    const layer = createShapeLayer({ ...data, fillRule: r.fillRule === 'evenodd' ? 'evenodd' : 'nonzero' }, env, base.id);
+    const layer = createShapeLayer({ ...data, fillRule: r.fillRule === 'evenodd' ? 'evenodd' : 'nonzero', inverted: r.inverted === true && !a }, env, base.id);
     const out: ShapeLayer = { ...layer, ...base, type: 'shape', components: layer.components, fill: layer.fill, stroke: layer.stroke, surface: layer.surface, offset: { x: 0, y: 0 } };
     if (typeof r.fillOpacity === 'number' && r.fillOpacity !== 1) out.fillOpacity = num(r.fillOpacity, 0, 1, 1);
     if (a && shapeFromAnnotation(a)) out.annotation = a;
     if (r.psd && Array.isArray(r.psd.blocks)) {
       const blocks = r.psd.blocks.filter((b: any) => b && typeof b.key === 'string' && typeof b.data === 'string').map((b: any) => ({ key: b.key, data: base64ToBytes(b.data) }));
       if (blocks.length) out.psd = { blocks };
+      if (out.psd && typeof r.psd.signature === 'string') out.psd.signature = r.psd.signature;
     }
     return out;
   } catch (e) {

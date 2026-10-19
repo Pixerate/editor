@@ -49,3 +49,12 @@ Detail for the `pixerate-image-editor` skill: how to draw and edit vector shapes
    refused: rasterize first. Masks, clipping, blend modes and effects work as on any layer.
 5. **Outlines and pixels**: `convert_text_to_shape` makes glyph outlines a shape layer (needs an
    outline font shaper; the browser canvas cannot); `rasterize_layer` makes it pixels.
+
+## Photoshop files
+
+`import_psd` brings Photoshop shape layers in as live shapes (paths with their path operations, fill,
+stroke, and live rectangles, rounded rectangles, ellipses and lines) and type layers as live text
+that shows Photoshop's pixels until it is edited. `get_text_layer` reports `rendering: "stored"`
+and `missingFonts` for those: if a font is missing, edits draw with a fallback, so tell the user
+before editing such text, or pick an available font with `set_text_style`. `export_psd` writes both
+kinds back as Photoshop layers; unchanged ones are written byte for byte as they were read.

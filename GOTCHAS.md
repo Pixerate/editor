@@ -2187,3 +2187,15 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Migrated text annotations would sit a few pixels off if their first baseline were placed by the font's ascent.
 - **Root Cause**: The old renderer drew with `textBaseline = 'top'`, which is the top of the em square. Fonts' ascent (`fontBoundingBoxAscent`) differs from the em box.
 - **Solution / Workaround**: Migrated type layers use `frame: { kind: 'point', origin: 'top' }`: the first baseline is one ascent below the origin, and the Canvas 2D shaper's `metrics` report `emHeightAscent` (falling back to the font box). `tests/image-type-tools.test.ts` checks that the new drawing calls match the old ones. Canvas also turned every whitespace character into a space, so migration replaces line breaks with spaces.
+
+### [core/image-editor] Photoshop's Shape Paths: Joined Subpaths, a Leading Subtract and Its Own Pixel Snapping
+
+- **Issue / Symptom**: Custom shapes lost their holes, shapes whose first component subtracted came in as their complement, and some shapes' stored pixels sat half a pixel or a stroke's fringe away from what our renderer draws for the same path.
+- **Root Cause**: In `vsms` / `vmsk` path records, operation -1 after a component's first subpath means "same component" (its subpaths are filled together, so opposite windings cut holes). A first component that subtracts starts from a full canvas. Photoshop also snaps 1 px strokes to the pixel grid ("Align Edges") and some files' stored pixels are offset by half a pixel from their paths.
+- **Solution / Workaround**: `componentsFromVectorBlock` starts a component at every subpath whose operation is not -1, and turns a leading subtract into `inverted: true` with the later operations swapped for their duals (combine ↔ subtract). We draw shapes from their paths on import (across 546 shape layers of the public corpus the alpha matches Photoshop's within antialiasing for all but a few snapped strokes and offset icons) and write the vector blocks back byte for byte while `shapeSignature` says the shape is unchanged.
+
+### [core/image-editor] EngineData Runs Cover One More Character Than the Text
+
+- **Issue / Symptom**: Text read from a `TySh` lost its last character's style, or Photoshop refused a written file.
+- **Root Cause**: EngineData's `Editor/Text` always ends with an extra `\r`, and the last paragraph run and the last style run each cover it; the descriptor's `Txt ` does not. Line breaks are `\r`. Box text keeps its own origin in `BoxBounds`, separate from the `TySh` transform.
+- **Solution / Workaround**: Read the text from `Txt ` (else the engine text minus its last `\r`), fit runs to it with `fitRuns`, and write the engine text with the extra `\r` and both last runs one longer (`buildEngineData`). Box text folds `BoxBounds`' top-left into our transform so our box starts at (0, 0). EngineData sizes are text-space units, which are our pixels, so no resolution conversion is needed for type (unlike `vstk` widths in points).

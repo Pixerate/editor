@@ -4367,7 +4367,7 @@ export class ImageEditorController {
     s.sourceUrl = null;
     s.imageDimensions = { width: result.width, height: result.height };
     if (!this.samplePixelsOverride) this.samplePixels = null;
-    s.layers = result.layers;
+    s.layers = this.checkPsdFonts(result);
     s.crop = null;
     s.transform = { ...DEFAULT_TRANSFORM_VALUES };
     s.outputOpacity = 1;
@@ -4391,6 +4391,33 @@ export class ImageEditorController {
       height: result.height,
       summary: result.summary,
     };
+  }
+
+  /**
+   * Type layers whose fonts the shaper lacks: they keep Photoshop's pixels, are marked with their
+   * `missingFonts`, and a warning names them (an edit draws them with a fallback).
+   */
+  private checkPsdFonts(result: PsdImportResult): ImageLayer[] {
+    const shaper = this.getTextShaper();
+    const types = flattenLayers(result.layers).filter((l): l is TypeLayer => l.type === 'type');
+    if (!types.length) return result.layers;
+    let layers = result.layers;
+    const missing = new Map<string, string[]>();
+    for (const l of types) {
+      const fonts = shaper ? layoutText(l, shaper).missingFonts : [...new Set(l.runs.map((r) => r.style.fontFamily))];
+      if (!fonts.length) continue;
+      layers = mapLayer(layers, l.id, () => ({ ...l, missingFonts: fonts }));
+      for (const f of fonts) missing.set(f, [...(missing.get(f) ?? []), l.name]);
+    }
+    for (const [font, names] of missing) {
+      result.warnings.push(
+        shaper
+          ? `The font "${font}" is missing here: the type shows Photoshop's pixels until it is edited, then a fallback font (${names.length === 1 ? 'layer' : 'layers'} ${names.map((n) => `"${n}"`).join(', ')}).`
+          : `Type layers show Photoshop's pixels; nothing here can draw text, so they cannot be edited (${names.length === 1 ? 'layer' : 'layers'} ${names.map((n) => `"${n}"`).join(', ')}).`
+      );
+      if (!shaper) break;
+    }
+    return layers;
   }
 
   /**
@@ -4475,8 +4502,9 @@ export class ImageEditorController {
         return out;
       }
       if (layer.type === 'shape' || layer.type === 'type') {
-        add(layer.type === 'shape' ? 'Shape layers were written as pixel layers' : 'Type layers were written as pixel layers', layer.name);
-        const out = layer.type === 'shape' ? shapeAsPixelLayer(layer) : typeAsPixelLayer(layer);
+        // Written as Photoshop shape and type layers (with their pixels for viewers that need them).
+        if (layer.type === 'type' && layer.missingFonts?.length) add(`Type layers drawn with a fallback for missing fonts (${layer.missingFonts.join(', ')}) keep the font names, so Photoshop may draw them differently`, layer.name);
+        const out = { ...layer };
         const mask = bakeMask(layer);
         if (mask) out.mask = mask;
         else delete out.mask;
