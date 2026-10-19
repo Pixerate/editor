@@ -10,6 +10,7 @@ import {
   ExportOptions,
   ImageAdjustments,
   ImageDimensions,
+  ImageEditorFit,
   ImageEditorOptions,
   ImageEditorState,
   ImageEditorTool,
@@ -557,6 +558,7 @@ export class ImageEditorController {
       activeTarget: 'pixels',
       outputOpacity: 1,
       paint: { brush: { ...DEFAULT_BRUSH }, foreground: '#000000', background: '#ffffff' },
+      fit: options.fit ?? 'margin',
     };
 
     if (options.image instanceof Object && 'width' in options.image) {
@@ -2454,6 +2456,12 @@ export class ImageEditorController {
   public setComparing(comparing: boolean): void {
     if (this.state.isOriginalCompared === comparing) return;
     this.state.isOriginalCompared = comparing;
+    this.notify();
+  }
+
+  public setFit(fit: ImageEditorFit): void {
+    if (this.state.fit === fit) return;
+    this.state.fit = fit;
     this.notify();
   }
 

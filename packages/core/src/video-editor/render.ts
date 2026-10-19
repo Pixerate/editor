@@ -1,5 +1,6 @@
 import { videoFrameAt, type VideoFrame, type VideoLayer, type VideoRect } from './evaluate.js';
 import { videoGradeCssFilter, videoGradeSvgDefs, videoGradeSvgFilter } from './grade.js';
+import { applyVideoLutToPixels, type VideoLut } from './lut.js';
 import { formatVideoTimecode } from './timeline.js';
 import type { VideoProject } from './types.js';
 
@@ -28,6 +29,8 @@ export interface VideoSvgOptions {
 	imageFor?: (layer: VideoLayer, frame: VideoFrame) => string | null;
 	/** Frame rate for the timecode on placeholders (default 30). */
 	fps?: number;
+	/** The loaded table of a grade's LUT `src`; drawn as an approximation (curves and a matrix). Without it LUTs are left out. */
+	lutFor?: (src: string) => VideoLut | null | undefined;
 }
 
 /** A frame as standalone SVG: images and posters as `<image>`, video without one as a labelled box. */
@@ -41,7 +44,7 @@ export function videoFrameToSvg(frame: VideoFrame, options: VideoSvgOptions = {}
 		if (layer.opacity < 1) attrs.push(`opacity="${n(layer.opacity)}"`);
 		if (layer.blend) attrs.push(`style="mix-blend-mode:${layer.blend === 'add' ? 'plus-lighter' : layer.blend}"`);
 		if (layer.grade) {
-			defs.push(videoGradeSvgFilter(`g${i}`, layer.grade));
+			defs.push(videoGradeSvgFilter(`g${i}`, layer.grade, layer.grade.lut ? options.lutFor?.(layer.grade.lut.src) : null));
 			attrs.push(`filter="url(#g${i})"`);
 		}
 		if (layer.rotation) attrs.push(`transform="rotate(${n(layer.rotation)} ${n(rect.x + rect.width / 2)} ${n(rect.y + rect.height / 2)})"`);
@@ -116,82 +119,122 @@ export type VideoCanvasContext = Pick<
 	'save' | 'restore' | 'fillRect' | 'drawImage' | 'translate' | 'rotate' | 'beginPath' | 'rect' | 'arc' | 'clip' | 'fillText' | 'measureText' | 'setTransform'
 > & { globalAlpha: number; globalCompositeOperation: GlobalCompositeOperation; filter?: string; fillStyle: string | CanvasGradient | CanvasPattern; font: string; textAlign: CanvasTextAlign; textBaseline: CanvasTextBaseline; strokeStyle: string | CanvasGradient | CanvasPattern; lineWidth: number; strokeRect(x: number, y: number, w: number, h: number): void };
 
+/** An offscreen canvas `drawVideoFrame` draws a LUT-graded layer on before running its pixels through the LUT. */
+export interface VideoScratchCanvas {
+	canvas: CanvasImageSource;
+	ctx: VideoCanvasContext & Pick<CanvasRenderingContext2D, 'getImageData' | 'putImageData' | 'clearRect'>;
+}
+
+export interface VideoDrawOptions {
+	/** Puts an SVG filter (white balance) in the page, so the canvas's `filter: url(#id)` finds it. */
+	defineSvgFilter?: (id: string, markup: string) => void;
+	/** The loaded table of a grade's LUT `src`, or nothing while it loads (the layer is drawn without it). */
+	lutFor?: (src: string) => VideoLut | null | undefined;
+	/** A cleared-on-use offscreen canvas of the given canvas-pixel size, for LUT layers (none: LUTs are left out). */
+	scratch?: (width: number, height: number) => VideoScratchCanvas | null;
+}
+
+/** Draws one layer's picture (clip shapes, grade filter, rotation and content), without its opacity or blend. */
+function paintVideoLayer(ctx: VideoCanvasContext, frame: VideoFrame, layer: VideoLayer, sourceFor: (layer: VideoLayer) => CanvasImageSource | null, options: VideoDrawOptions) {
+	const { rect } = layer;
+	if (layer.iris) {
+		ctx.beginPath();
+		ctx.arc(frame.width / 2, frame.height / 2, videoIrisRadius(frame, layer.iris.progress), 0, 2 * Math.PI);
+		ctx.clip();
+	}
+	if (layer.grade) {
+		const defs = videoGradeSvgDefs(layer.grade);
+		if (options.defineSvgFilter) for (const d of defs) options.defineSvgFilter(d.id, d.markup);
+		const css = videoGradeCssFilter(layer.grade);
+		ctx.filter = options.defineSvgFilter ? css || 'none' : css.replace(/\s*url\([^)]*\)/g, '').trim() || 'none';
+	}
+	if (layer.rotation) {
+		ctx.translate(rect.x + rect.width / 2, rect.y + rect.height / 2);
+		ctx.rotate((layer.rotation * Math.PI) / 180);
+		ctx.translate(-(rect.x + rect.width / 2), -(rect.y + rect.height / 2));
+	}
+	if (layer.wipe) {
+		const r = videoWipeRect(rect, layer.wipe);
+		ctx.beginPath();
+		ctx.rect(r.x, r.y, r.width, r.height);
+		ctx.clip();
+	}
+	if (layer.type === 'color') {
+		ctx.fillStyle = layer.color ?? '#000000';
+		ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
+	} else if (layer.type === 'text' && layer.text) {
+		const t = layer.text;
+		const lines = t.text.split('\n');
+		const lh = t.fontSize * 1.2;
+		const cx = rect.x + rect.width / 2;
+		const top = rect.y + rect.height / 2 - (lh * (lines.length - 1)) / 2;
+		ctx.font = `${t.fontWeight} ${t.fontSize}px ${t.fontFamily}`;
+		ctx.textAlign = 'center';
+		ctx.textBaseline = 'middle';
+		if (t.background) {
+			const w = Math.max(...lines.map((l) => ctx.measureText(l).width)) + t.fontSize;
+			const h = lh * lines.length + t.fontSize * 0.4;
+			ctx.fillStyle = t.background;
+			ctx.fillRect(cx - w / 2, rect.y + rect.height / 2 - h / 2, w, h);
+		}
+		ctx.fillStyle = t.color;
+		lines.forEach((l, k) => ctx.fillText(l, cx, top + k * lh));
+	} else {
+		const source = sourceFor(layer);
+		if (source) ctx.drawImage(source, rect.x, rect.y, rect.width, rect.height);
+		else {
+			ctx.fillStyle = '#334155';
+			ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
+			ctx.strokeStyle = '#94a3b8';
+			ctx.lineWidth = 2;
+			ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
+		}
+	}
+}
+
 /**
  * Draws a frame on a 2D canvas scaled by `scale` (canvas pixels per frame pixel). `sourceFor`
  * returns what to draw for a media layer (a `<video>` seeked to `layer.sourceTime`, an `<img>`,
  * an `ImageBitmap`…) or `null` for a placeholder box. Grades become the context's `filter`; white
  * balance there refers to an SVG filter, which `options.defineSvgFilter` is given to put in the page
- * (without it, white balance is left out of the canvas).
+ * (without it, white balance is left out of the canvas). A grade's LUT needs `options.lutFor` and
+ * `options.scratch`: the layer is drawn on the scratch canvas, its pixels run through the LUT, and
+ * the result is laid on the frame with the layer's opacity and blend.
  */
-export function drawVideoFrame(
-	ctx: VideoCanvasContext,
-	frame: VideoFrame,
-	sourceFor: (layer: VideoLayer) => CanvasImageSource | null,
-	scale = 1,
-	options: { defineSvgFilter?: (id: string, markup: string) => void } = {}
-): void {
+export function drawVideoFrame(ctx: VideoCanvasContext, frame: VideoFrame, sourceFor: (layer: VideoLayer) => CanvasImageSource | null, scale = 1, options: VideoDrawOptions = {}): void {
 	ctx.save();
 	ctx.setTransform(scale, 0, 0, scale, 0, 0);
 	ctx.globalAlpha = 1;
 	ctx.fillStyle = frame.background;
 	ctx.fillRect(0, 0, frame.width, frame.height);
+	const cw = Math.max(1, Math.round(frame.width * scale));
+	const ch = Math.max(1, Math.round(frame.height * scale));
 	for (const layer of frame.layers) {
-		const { rect } = layer;
+		const setting = layer.grade?.lut;
+		const lut = setting ? options.lutFor?.(setting.src) : null;
+		const scratch = lut ? options.scratch?.(cw, ch) : null;
 		ctx.save();
-		ctx.globalAlpha = layer.opacity;
-		if (layer.iris) {
-			ctx.beginPath();
-			ctx.arc(frame.width / 2, frame.height / 2, videoIrisRadius(frame, layer.iris.progress), 0, 2 * Math.PI);
-			ctx.clip();
-		}
-		if (layer.blend && layer.blend !== 'normal') ctx.globalCompositeOperation = layer.blend === 'add' ? 'lighter' : layer.blend;
-		if (layer.grade) {
-			const defs = videoGradeSvgDefs(layer.grade);
-			if (options.defineSvgFilter) for (const d of defs) options.defineSvgFilter(d.id, d.markup);
-			const css = videoGradeCssFilter(layer.grade);
-			ctx.filter = options.defineSvgFilter ? css : css.replace(/\s*url\([^)]*\)/g, '').trim() || 'none';
-		}
-		if (layer.rotation) {
-			ctx.translate(rect.x + rect.width / 2, rect.y + rect.height / 2);
-			ctx.rotate((layer.rotation * Math.PI) / 180);
-			ctx.translate(-(rect.x + rect.width / 2), -(rect.y + rect.height / 2));
-		}
-		if (layer.wipe) {
-			const r = videoWipeRect(rect, layer.wipe);
-			ctx.beginPath();
-			ctx.rect(r.x, r.y, r.width, r.height);
-			ctx.clip();
-		}
-		if (layer.type === 'color') {
-			ctx.fillStyle = layer.color ?? '#000000';
-			ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
-		} else if (layer.type === 'text' && layer.text) {
-			const t = layer.text;
-			const lines = t.text.split('\n');
-			const lh = t.fontSize * 1.2;
-			const cx = rect.x + rect.width / 2;
-			const top = rect.y + rect.height / 2 - (lh * (lines.length - 1)) / 2;
-			ctx.font = `${t.fontWeight} ${t.fontSize}px ${t.fontFamily}`;
-			ctx.textAlign = 'center';
-			ctx.textBaseline = 'middle';
-			if (t.background) {
-				const w = Math.max(...lines.map((l) => ctx.measureText(l).width)) + t.fontSize;
-				const h = lh * lines.length + t.fontSize * 0.4;
-				ctx.fillStyle = t.background;
-				ctx.fillRect(cx - w / 2, rect.y + rect.height / 2 - h / 2, w, h);
-			}
-			ctx.fillStyle = t.color;
-			lines.forEach((l, k) => ctx.fillText(l, cx, top + k * lh));
+		if (lut && scratch) {
+			const s = scratch.ctx;
+			s.save();
+			s.setTransform(1, 0, 0, 1, 0, 0);
+			s.clearRect(0, 0, cw, ch);
+			s.setTransform(scale, 0, 0, scale, 0, 0);
+			s.globalAlpha = 1;
+			s.globalCompositeOperation = 'source-over';
+			paintVideoLayer(s, frame, layer, sourceFor, options);
+			s.restore();
+			const img = s.getImageData(0, 0, cw, ch);
+			applyVideoLutToPixels(lut, img.data, setting!.strength ?? 1);
+			s.putImageData(img, 0, 0);
+			ctx.setTransform(1, 0, 0, 1, 0, 0);
+			ctx.globalAlpha = layer.opacity;
+			if (layer.blend && layer.blend !== 'normal') ctx.globalCompositeOperation = layer.blend === 'add' ? 'lighter' : layer.blend;
+			ctx.drawImage(scratch.canvas, 0, 0, cw, ch);
 		} else {
-			const source = sourceFor(layer);
-			if (source) ctx.drawImage(source, rect.x, rect.y, rect.width, rect.height);
-			else {
-				ctx.fillStyle = '#334155';
-				ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
-				ctx.strokeStyle = '#94a3b8';
-				ctx.lineWidth = 2;
-				ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
-			}
+			ctx.globalAlpha = layer.opacity;
+			if (layer.blend && layer.blend !== 'normal') ctx.globalCompositeOperation = layer.blend === 'add' ? 'lighter' : layer.blend;
+			paintVideoLayer(ctx, frame, layer, sourceFor, options);
 		}
 		ctx.restore();
 	}
