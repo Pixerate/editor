@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import type { ImageEditorController } from '@pixerate/editor/image-editor';
-import { BRUSH_OPTION_CONTROLS, PAINT_TOOLS } from '@pixerate/editor/image-editor';
+import { BRUSH_OPTION_CONTROLS, MIXER_MIXING_OPTIONS, MIXER_OPTION_CONTROLS, PAINT_TOOLS, rgbUnitToHex } from '@pixerate/editor/image-editor';
 import { ControlSlider } from './ControlSlider';
 
 export interface BrushOptionsBarProps {
@@ -11,16 +11,18 @@ export interface BrushOptionsBarProps {
 const chip = (on: boolean) => `px-2 py-1 rounded text-[11px] ${on ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-300 hover:text-white'}`;
 
 /**
- * The paint tools: Move / Brush / Eraser, the brush's size, hardness, opacity, flow and smoothing,
- * pressure toggles, the foreground and background colours (D resets, X swaps) and Edit › Fill /
- * Clear on the active layer. Shortcuts are handled by `handlePaintShortcut` in the editor.
+ * The paint tools: Move / Brush / Mixer / Eraser, the brush's size, hardness, opacity, flow and
+ * smoothing, pressure toggles, the foreground and background colours (D resets, X swaps) and
+ * Edit › Fill / Clear on the active layer. With the Mixer Brush: its load (Load brush / Clean
+ * brush), Wet / Load / Mix, load and clean each stroke, and the RGB / Pigment mixing toggle.
+ * Shortcuts are handled by `handlePaintShortcut` in the editor.
  */
 export const BrushOptionsBar: React.FC<BrushOptionsBarProps> = ({ controller, className }) => {
   const [, setTick] = useState(0);
   useEffect(() => controller.subscribe(() => setTick((n) => n + 1)), [controller]);
   const [error, setError] = useState<string | null>(null);
   const state = controller.getState();
-  const { brush, foreground, background } = state.paint;
+  const { brush, foreground, background, mixer, mixerLoad } = state.paint;
   const attempt = (fn: () => unknown) => {
     try {
       setError(null);
@@ -84,6 +86,64 @@ export const BrushOptionsBar: React.FC<BrushOptionsBarProps> = ({ controller, cl
           onChange={(v) => controller.setPaintOptions({ brush: { [spec.id]: v } })}
         />
       ))}
+
+      {state.activeTool === 'mixer' && (
+        <div className="flex flex-col gap-2 border-t border-slate-800 pt-2" role="group" aria-label="Mixer Brush" data-testid="mixer-options">
+          <div className="flex items-center gap-2">
+            <span
+              aria-label="Brush load"
+              title={mixerLoad.reservoir ? `Loaded ${rgbUnitToHex(mixerLoad.reservoir)}, ${Math.round(mixerLoad.amount * 100)}% left` : 'Unloaded'}
+              className="h-6 w-6 rounded border border-slate-700"
+              style={{ background: mixerLoad.reservoir ? rgbUnitToHex(mixerLoad.reservoir) : 'transparent' }}
+            />
+            <button type="button" title="Fill the reservoir with the foreground colour" className={chip(false)} onClick={() => controller.loadMixerBrush()}>
+              Load brush
+            </button>
+            <button type="button" title="Empty the picked-up colour" className={chip(false)} onClick={() => controller.cleanMixerBrush()}>
+              Clean brush
+            </button>
+          </div>
+          <div className="flex gap-1" role="group" aria-label="Mixing">
+            {MIXER_MIXING_OPTIONS.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                aria-pressed={mixer.mixing === m.id}
+                title={m.title}
+                className={chip(mixer.mixing === m.id)}
+                onClick={() => controller.setPaintOptions({ mixer: { mixing: m.id } })}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+          {MIXER_OPTION_CONTROLS.map((spec) => (
+            <ControlSlider key={spec.id} spec={spec} value={mixer[spec.id]} onChange={(v) => controller.setPaintOptions({ mixer: { [spec.id]: v } })} />
+          ))}
+          <div className="flex flex-wrap gap-3 text-slate-300">
+            <label className="flex items-center gap-1.5">
+              <input
+                type="checkbox"
+                aria-label="Load the brush after each stroke"
+                checked={mixer.loadEachStroke}
+                onChange={(e) => controller.setPaintOptions({ mixer: { loadEachStroke: e.target.checked } })}
+                className="accent-indigo-500"
+              />
+              Load each stroke
+            </label>
+            <label className="flex items-center gap-1.5">
+              <input
+                type="checkbox"
+                aria-label="Clean the brush after each stroke"
+                checked={mixer.cleanEachStroke}
+                onChange={(e) => controller.setPaintOptions({ mixer: { cleanEachStroke: e.target.checked } })}
+                className="accent-indigo-500"
+              />
+              Clean each stroke
+            </label>
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-3 text-slate-300" role="group" aria-label="Pressure">
         <label className="flex items-center gap-1.5">

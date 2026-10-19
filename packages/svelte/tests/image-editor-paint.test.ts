@@ -67,6 +67,36 @@ describe('Svelte paint tools', () => {
     expect(c.getLayerBounds(c.getState().activeLayerId!)).toEqual({ x: 0, y: 0, width: 300, height: 150 });
   });
 
+  it('BrushOptionsBar shows the Mixer Brush with its options and RGB / Pigment toggle', () => {
+    const c = controller();
+    component = mount(BrushOptionsBar, { target, props: { controller: c } });
+    flushSync();
+    expect(target.querySelector('[data-testid="mixer-options"]')).toBeNull();
+    click(button('Mixer'));
+    expect(c.getState().activeTool).toBe('mixer');
+    expect(target.querySelector('[data-testid="mixer-options"]')).not.toBeNull();
+    click(button('Pigment'));
+    expect(c.getState().paint.mixer.mixing).toBe('pigment');
+    expect(button('Pigment').getAttribute('aria-pressed')).toBe('true');
+    expect(button('RGB').getAttribute('aria-pressed')).toBe('false');
+    setValue(target.querySelector('input[aria-label="Wet"]')!, '0.8');
+    setValue(target.querySelector('input[aria-label="Load"]')!, '0.25');
+    setValue(target.querySelector('input[aria-label="Mix"]')!, '0.7');
+    expect(c.getState().paint.mixer).toMatchObject({ wet: 0.8, load: 0.25, mix: 0.7 });
+    click(target.querySelector('input[aria-label="Clean the brush after each stroke"]'));
+    click(target.querySelector('input[aria-label="Load the brush after each stroke"]'));
+    expect(c.getState().paint.mixer).toMatchObject({ cleanEachStroke: false, loadEachStroke: false });
+    c.setPaintOptions({ foreground: '#0000ff' });
+    flushSync();
+    click(button('Load brush'));
+    expect(c.getState().paint.mixerLoad).toMatchObject({ reservoir: [0, 0, 1], amount: 1 });
+    expect((target.querySelector('[aria-label="Brush load"]') as HTMLElement).title).toMatch(/#0000ff, 100% left/);
+    click(button('Clean brush'));
+    expect(c.getState().paint.mixerLoad.pickup).toBeNull();
+    click(button('RGB'));
+    expect(c.getState().paint.mixer.mixing).toBe('rgb');
+  });
+
   it('paints on the canvas in the Paint tab and handles shortcuts', () => {
     const editor = createReactiveImageEditor();
     const c = editor.controller;
@@ -84,6 +114,18 @@ describe('Svelte paint tools', () => {
     canvas.dispatchEvent(pointer('pointerup', 150, 75));
     flushSync();
     expect(c.getLayerBounds(id)).not.toBeNull();
+    // The Mixer Brush smears what is there as one undo step.
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'B', shiftKey: true }));
+    expect(c.getState().activeTool).toBe('mixer');
+    const before = c.getLayer(id);
+    canvas.dispatchEvent(pointer('pointerdown', 110, 70));
+    canvas.dispatchEvent(pointer('pointermove', 160, 72));
+    canvas.dispatchEvent(pointer('pointerup', 160, 72));
+    flushSync();
+    expect(c.getLayer(id)).not.toBe(before);
+    c.undo();
+    expect(c.getLayer(id)).toEqual(before);
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'b' }));
     window.dispatchEvent(new KeyboardEvent('keydown', { key: ']' }));
     expect(c.getState().paint.brush.size).toBe(25);
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'v' }));

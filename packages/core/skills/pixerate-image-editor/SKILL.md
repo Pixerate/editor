@@ -1,6 +1,6 @@
 ---
 name: pixerate-image-editor
-description: How to colour-correct, composite and retouch a photo in the Pixerate image editor through its agent tools - layers (pixel, adjustment, group and annotation layers with masks, clipping, blend modes, opacity and fill; merge, flatten, layer via copy, filters), live layer effects (shadows, glows, bevel and emboss, satin, overlays, strokes), base adjustments (exposure, contrast, white balance, saturation, blur), adjustment layers (curves, levels, hue/saturation, vibrance, color balance, black and white, photo filter, invert, posterize, threshold), selections (wand, color range, grow, shrink, feather, refine edge) and layer masks, crop, rotate and flip, undo, PSD, histogram and PNG previews. Use when asked to edit, grade, correct, brighten, warm up, crop, straighten or mask an image, add a shadow, glow or outline, or open or save a PSD, or when get_adjustments, set_adjustments, add_adjustment_layer, list_layers, add_layer_effect, paint_stroke, select_by_color, import_psd or render_preview are available.
+description: How to colour-correct, composite and retouch a photo in the Pixerate image editor through its agent tools - layers (pixel, adjustment, group and annotation layers with masks, clipping, blend modes, opacity and fill; merge, flatten, layer via copy, filters), live layer effects (shadows, glows, bevel and emboss, satin, overlays, strokes), base adjustments (exposure, contrast, white balance, saturation, blur), adjustment layers (curves, levels, hue/saturation, vibrance, color balance, black and white, photo filter, invert, posterize, threshold), selections (wand, color range, grow, shrink, feather, refine edge) and layer masks, crop, rotate, flip, Mixer Brush, undo, PSD, histogram and PNG previews. Use when asked to edit, grade, correct, brighten, warm up, crop, straighten or mask an image, add a shadow, glow or outline, or open or save a PSD, or when get_adjustments, set_adjustments, add_adjustment_layer, list_layers, add_layer_effect, paint_stroke, select_by_color, import_psd or render_preview are available.
 ---
 
 # Image editor
@@ -104,6 +104,21 @@ batching.
    make green and white makes a tint, where averaging RGB gives grey or a dull pastel. Pass its
    `mixed` hex as the `color` of `paint_stroke` or `fill_pixels`. Give a strong dark paint a
    `strength` above 1 when a little of it should tint a lot of white.
+6. **Blend and smear with the Mixer Brush** (`paint_stroke` with `tool: "mixer"`) when the
+   user wants paint to pick up and drag the colours already on the layer (wet blending, softening
+   an edge, pulling one colour into another). `mixer.wet` is how much it picks up (0 paints only
+   the loaded colour), `mixer.mix` how far each dab leans from the loaded colour to the picked-up
+   one, and `mixer.load` below 1 makes long strokes run dry. Use `mixing: "pigment"` for
+   painterly results (blue dragged through yellow goes green); keep `rgb` for retouching, where
+   colours should stay between the two you started with. A brush with `blend: "pigment"` mixes
+   its one colour into the layer; only the mixer carries picked-up colour along the stroke. A `brush.flow` around 0.3..0.6 keeps
+   some of the canvas under each dab and blends more naturally than 1. The stroke samples the
+   target layer only, so paint on the layer that holds the colours to blend.
+7. **Keep the mixer stateless unless you need a carried load.** By default each mixer stroke
+   loads `color` (or the foreground) and is cleaned afterwards, so every call is independent and
+   replays the same. To carry dirty paint from stroke to stroke, pass `mixer.loadEachStroke:
+   false` and `cleanEachStroke: false`, start with `load_mixer_brush`, read the brush with
+   `get_mixer_brush` when unsure, and reset it with `clean_mixer_brush`.
 
 ### Photoshop files
 
@@ -247,7 +262,10 @@ batching.
 | `remove_layer_effect` | Delete one effect. To hide it and keep its settings, set `enabled: false` with `update_layer_effect` instead. Returns the remaining effects. |
 | `set_layer_effects_enabled` | Switch all of a layer's effects on or off (`enabled`) and optionally set Scale Effects (`scale`, 1 = 100 %, multiplies sizes, distances and pattern scales). Returns the effects. |
 | `set_global_light` | Set the document light (`angle`, `altitude` in degrees) that every shadow and bevel with `useGlobalLight` follows. Returns the light. |
-| `paint_stroke` | Paint (`tool` brush) or erase (`tool` eraser) along `points` in document px (optional `pressure` 0..1) on a pixel layer or its mask (`channel`); `color` #rrggbb (on a mask: black hides, white reveals); `brush` `{size, hardness, spacing, angle, roundness, opacity, flow, smoothing, pressureSize, pressureOpacity, blend}`. The selection limits the paint. One undo step per call. Returns the layer, channel, changed `bounds` and dab count. |
+| `paint_stroke` | Paint (`tool` brush), blend with the Mixer Brush (`tool` mixer) or erase (`tool` eraser) along `points` in document px (optional `pressure` 0..1) on a pixel layer or its mask (`channel`; the mixer paints pixels only); `color` #rrggbb (on a mask: black hides, white reveals; for the mixer, the reservoir colour); `brush` `{size, hardness, spacing, angle, roundness, opacity, flow, smoothing, pressureSize, pressureOpacity, blend}`; `mixer` `{wet, load, mix, loadEachStroke, cleanEachStroke, mixing: rgb \| pigment}` (tool mixer only). The selection limits the paint. One undo step per call. Returns the layer, channel, changed `bounds`, dab count and, for the mixer, `mixerLoad` `{reservoir, amount, pickup}`. |
+| `get_mixer_brush` | Read-only. The Mixer Brush settings and what it carries (`reservoir` #rrggbb or null, `amount` left 0..1, `pickup` #rrggbb or null). Call it before a mixer stroke with `loadEachStroke: false`. |
+| `load_mixer_brush` | Fill the Mixer Brush reservoir with `color` (default the foreground), amount 1; keeps the pickup. View state, not an undo step. Use before strokes with `loadEachStroke: false`. Returns the load. |
+| `clean_mixer_brush` | Empty the Mixer Brush pickup well (`emptyReservoir: true` also drops the loaded paint, so it only smears). View state, not an undo step. Returns the load. |
 | `fill_pixels` | Fill the selection (or the canvas without one / with `useSelection: false`) on pixels or a mask with `color`, `opacity`, `blend`. Returns the changed bounds. |
 | `mix_colors` | Read-only. Mix 1 to 16 `colors` (`{color: #rrggbb, weight, strength?}`) like paint (Kubelka-Munk over reflectance spectra). Returns `mixed` (#rrggbb), `rgbLerp` (the plain RGB average, for comparison) and the normalised `weights`. Call it before `paint_stroke` / `fill_pixels` to pick a paint colour. |
 | `clear_pixels` | Remove the selected pixels (alpha to 0; a transparency-locked layer or a mask gets the background colour). Returns the changed bounds. |
@@ -279,6 +297,12 @@ batching.
 - `pigment` has no PSD equivalent: `export_psd` writes those layers as Normal (the merged image
   keeps the look) and says so in `warnings`, naming the layers. `import_psd` never produces it.
   Over transparent pixels there is nothing to mix with, so it lays the colour down as Normal.
+- The Mixer Brush ignores `brush.blend` (including `pigment`; use its own `mixer.mixing` instead) and the opacity ceiling: each dab lays paint at
+  `flow × opacity` over the pixels as they are now, so overlapping dabs build up. At `flow` 1
+  each dab covers what is under it, the pickup then sees mostly the brush's own paint, and the
+  stroke drifts towards the loaded colour; lower the flow for more blending.
+- An empty, dry mixer (no reservoir, `wet` 0) paints nothing; the call succeeds with
+  `bounds: null`. A mixer stroke over transparent pixels has nothing to pick up.
 - `export_psd` is in the source frame: a crop or rotation is not in the file (the warnings say
   so). Crop with `set_crop` only for PNG / JPEG output, or flatten the look you need first.
 - PSD opacity, fill and mask density come in as whole percents (Photoshop stores bytes), so a

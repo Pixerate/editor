@@ -342,7 +342,8 @@ export type ImageEditorTool =
   | 'watermark'
   | 'move'
   | 'brush'
-  | 'eraser';
+  | 'eraser'
+  | 'mixer';
 
 export type ImageEditorFit = 'contain' | 'margin';
 
