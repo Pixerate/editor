@@ -9,6 +9,7 @@
     InpaintHook,
     RemoveBackgroundHook,
     ImageEditorAIHooks,
+    ImageEditorFit,
   } from '@pixerate/editor/image-editor';
   import {
     canvasToImagePoint,
@@ -42,6 +43,7 @@
     onInpaint?: InpaintHook;
     onRemoveBackground?: RemoveBackgroundHook;
     aiHooks?: ImageEditorAIHooks;
+    fit?: ImageEditorFit;
   }
 
   let {
@@ -54,6 +56,7 @@
     onInpaint,
     onRemoveBackground,
     aiHooks,
+    fit,
   }: Props = $props();
 
   const internalEditor = createReactiveImageEditor();
@@ -193,6 +196,7 @@
     await editor.controller.render(canvasEl, {
       viewportWidth: vpWidth,
       viewportHeight: vpHeight,
+      fit,
       showCropOverlay: activeTab === 'crop',
       showSelectionOverlay: true,
       interactive: true,
