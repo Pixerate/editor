@@ -113,7 +113,7 @@ export function VideoTab() {
         </div>
       </div>
       <div className="relative rounded-xl border border-slate-800 bg-slate-900/50 p-3" ref={agentStage}>
-        <VideoEditor controller={controller} />
+        <VideoEditor controller={controller} showScopes />
       </div>
       <AgentScriptPanel
         scripts={VIDEO_SCRIPTS}

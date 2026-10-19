@@ -5,6 +5,7 @@
   import MediaBin from './MediaBin.svelte';
   import TranscriptPanel from './TranscriptPanel.svelte';
   import VideoPreview from './VideoPreview.svelte';
+  import VideoScopes from './VideoScopes.svelte';
   import VideoTimeline from './VideoTimeline.svelte';
   import VideoTransport from './VideoTransport.svelte';
   import { videoEditorStateOf } from './createVideoEditor.svelte.js';
@@ -25,10 +26,12 @@
     showIssues?: boolean;
     /** Show the transcript panel for editing by text (default true). */
     showTranscript?: boolean;
+    /** Show colour scopes (histogram, luma waveform, vectorscope) of the preview under it (default false). */
+    showScopes?: boolean;
     class?: string;
   }
 
-  let { controller, options, editable = true, pxPerSecond = $bindable(100), showIssues = true, showTranscript = true, class: className = '' }: Props = $props();
+  let { controller, options, editable = true, pxPerSecond = $bindable(100), showIssues = true, showTranscript = true, showScopes = false, class: className = '' }: Props = $props();
   let owned: VideoEditorController | null = null;
   // A controller is made only when none is passed, and kept for the component's lifetime.
   const ctl = $derived(controller ?? (owned ??= new VideoEditorController(options)));
@@ -56,6 +59,7 @@
   <div class="flex flex-col gap-2 {className}" data-video-editor="">
     <VideoPreview controller={ctl} class="rounded-md" />
     <VideoTransport controller={ctl} editable={false} />
+    {#if showScopes}<VideoScopes controller={ctl} />{/if}
     <VideoTimeline controller={ctl} bind:pxPerSecond editable={false} />
     {#if showTranscript}<TranscriptPanel controller={ctl} editable={false} />{/if}
     {@render issueList()}
@@ -66,6 +70,7 @@
     <div class="flex min-w-0 flex-col gap-2">
       <VideoPreview controller={ctl} class="rounded-md" />
       <VideoTransport controller={ctl} />
+      {#if showScopes}<VideoScopes controller={ctl} />{/if}
     </div>
     <ClipInspector controller={ctl} class="min-w-0" />
     <div class="flex min-w-0 flex-col gap-2 lg:col-span-3">

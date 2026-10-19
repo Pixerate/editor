@@ -103,7 +103,7 @@ import {
   writeRegion,
   type PixelSurface,
   type Tile,
-} from './layers/surface';
+} from '../raster/surface';
 import {
   LayerOperationError,
   addLayerFilter as addLayerFilterOp,
@@ -127,7 +127,7 @@ import {
   type LayerProperties,
 } from './layers/ops';
 import { coveringRect } from './layers/render';
-import { base64ToBytes, bytesToBase64, decodePng, isPng, parseDataUrl } from './layers/png';
+import { base64ToBytes, bytesToBase64, decodePng, isPng, parseDataUrl } from '../raster/png';
 import { getAnnotationBounds } from './geometry';
 
 /** Latest serialized schema version (`3`: layers). Documents with the old shape still write 1 or 2. */

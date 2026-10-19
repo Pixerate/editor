@@ -74,6 +74,11 @@
       "import": "./dist/tools/index.js",
       "require": "./dist/tools/index.cjs"
     },
+    "./raster": {
+      "types": "./dist/raster/index.d.ts",
+      "import": "./dist/raster/index.js",
+      "require": "./dist/raster/index.cjs"
+    },
     "./image-editor": {
       "types": "./dist/image-editor/index.d.ts",
       "import": "./dist/image-editor/index.js",

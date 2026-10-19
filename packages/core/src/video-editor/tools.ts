@@ -8,6 +8,7 @@ import { findVideoFillers, findVideoTranscriptPauses, findVideoTranscriptText, m
 import { videoFreezeFrameEdit, videoSpeedRampEdit, videoSpeedRampKeys } from './remap.js';
 import { VIDEO_GRADE_CONTROLS, VIDEO_GRADE_PRESET_NAMES, videoGradePreset } from './grade.js';
 import { videoFrameAt } from './evaluate.js';
+import { summarizeVideoScopes, type VideoPixels } from './scopes.js';
 import { VIDEO_EASE_NAMES, VIDEO_KEYFRAME_PROPERTIES, VIDEO_TRANSFORM_PROPERTIES, type VideoAnimatable, type VideoKeyframeProperty } from './keyframes.js';
 import { videoContactSheetSvg, videoProjectSvg } from './render.js';
 import { findVideoClip, findVideoGaps, formatVideoSeconds, formatVideoTimecode, sortedVideoClips, VIDEO_TIME_EPSILON, videoClipEnd, videoClipSourceRange, videoProjectDuration } from './timeline.js';
@@ -25,6 +26,14 @@ export interface VideoEditorToolProviderOptions {
 	readOnly?: boolean | string | (() => boolean | string);
 	/** Turns SVG into PNG (e.g. `rasterizeSvg`), so `render_video_frame` can return an image. */
 	rasterize?: (svg: string, size: { width: number; height: number }) => Promise<{ data: string; mimeType: string }> | { data: string; mimeType: string };
+	/**
+	 * The rendered pixels of the frame at `time` (ms), for `get_video_scopes` (e.g. a frame decoded
+	 * by ffmpeg on a server). Default: what the editor's `<VideoPreview>` draws, through
+	 * `controller.previewPixels`, seeking it there and back when `time` is not the playhead.
+	 */
+	framePixels?: (time: number) => VideoPixels | null | Promise<VideoPixels | null>;
+	/** How long `get_video_scopes` waits for the preview to finish drawing a frame (ms, default 5000). */
+	framePixelsTimeout?: number;
 }
 
 const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
@@ -1107,7 +1116,51 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 		}
 	};
 
-	const reads = [getProject, getFrame, getTranscript, findText, findFillers, findPauses, findGaps, checkProject, renderFrame, exportFfmpeg, exportLoudnessMeasure, exportEdl, audioLevels, findSilences, seek];
+
+	/** The pixels of the frame at `time`: the host's, or the preview's (seeking it there and back). */
+	const pixelsAt = async (time: number): Promise<VideoPixels> => {
+		if (options.framePixels) {
+			const px = await options.framePixels(time);
+			if (!px) throw new Error(`The host could not render the frame at ${Math.round(time)} ms; use render_video_frame to look at it instead.`);
+			return px;
+		}
+		const feed = controller.previewPixels;
+		if (!feed.attached) throw new Error('No preview is showing this project, so there are no pixels to measure. The host must show a <VideoPreview> for this editor (or pass framePixels to the tool provider); until then use get_video_frame and render_video_frame.');
+		const state = controller.getState();
+		if (Math.abs(time - state.time) < 0.5) return (await feed.next(state.time, options.framePixelsTimeout)).pixels;
+		const { time: before, playing } = state;
+		if (playing) controller.pause();
+		controller.seek(time);
+		try {
+			return (await feed.next(controller.getState().time, options.framePixelsTimeout)).pixels;
+		} finally {
+			controller.seek(before);
+			if (playing) controller.play();
+		}
+	};
+
+	const getScopes: AgentTool = {
+		name: 'get_video_scopes',
+		title: 'Measure a frame with scopes',
+		description:
+			'Measures the rendered picture at a moment as colour scopes would, without changing the project: luma (0 = black, 1 = white) mean, median, min, max and 1st / 99th percentiles; the share of pixels crushed to black or blown to white (and per channel); saturation; the average colour (a cast shows as a tint); a coarse luma and RGB histogram; the luma spread of vertical strips left to right (a waveform); the main hue and strength on a vectorscope; and notes on what to fix. Use it before and after grading (update_video_clip grade, apply_video_grade_preset) to check exposure and colour. Needs the pixels the host draws: fails with a reason when no preview is showing.',
+		inputSchema: object({
+			time: MS('Time from the start to measure (default: the playhead). Another time is shown briefly and the playhead put back'),
+			bins: { type: 'integer', minimum: 2, maximum: 64, description: 'Histogram steps, darkest first (default 16).' },
+			columns: { type: 'integer', minimum: 1, maximum: 32, description: 'Waveform strips across the picture, left to right (default 8).' }
+		}),
+		annotations: { title: 'Measure a frame with scopes', readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+		handler: async ({ time, bins, columns }) => {
+			const p = project();
+			const end = videoProjectDuration(p);
+			const t = time ?? controller.getState().time;
+			if (time !== undefined && time > end) throw new Error(`Time ${time} ms is past the end of the project (${end} ms).`);
+			const pixels = await pixelsAt(t);
+			return { time: t, timecode: formatVideoTimecode(t, p.fps), width: pixels.width, height: pixels.height, ...summarizeVideoScopes(pixels, { bins, columns }) };
+		}
+	};
+
+	const reads = [getProject, getFrame, getTranscript, findText, findFillers, findPauses, findGaps, checkProject, renderFrame, getScopes, exportFfmpeg, exportLoudnessMeasure, exportEdl, audioLevels, findSilences, seek];
 	const writes = [setSettings, addAsset, updateAsset, removeAsset, addTrack, updateTrack, removeTrack, moveTrack, addClip, moveClip, trimClip, splitClip, deleteClips, updateClip, setTransition, setSpeedRamp, addFreeze, removeRamp, setTranscript, removeRanges, applyGradePreset, copyGrade, setKeyframes, removeKeyframes, slipClip, rollEdit, slideClip, liftRange, extractRange, splitAt, closeGaps, addMarker, removeMarker, editVideo, undo, redo];
 
 	return {

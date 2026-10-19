@@ -16,7 +16,14 @@
  * The module has no DOM dependency, so it runs in Node, tests and workers.
  */
 
-import type { CropBox } from '../types';
+/** A pixel rectangle (`x`, `y` of the top-left corner, `width`, `height`). */
+export interface RasterRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+type CropBox = RasterRect;
 
 export const TILE = 256;
 export const TILE_SHIFT = 8;

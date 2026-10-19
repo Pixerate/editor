@@ -5,6 +5,7 @@ import { MediaBin } from './MediaBin';
 import { TranscriptPanel } from './TranscriptPanel';
 import { useVideoEditor } from './useVideoEditor';
 import { VideoPreview } from './VideoPreview';
+import { VideoScopes } from './VideoScopes';
 import { VideoTimeline } from './VideoTimeline';
 import { VideoTransport } from './VideoTransport';
 
@@ -28,6 +29,8 @@ export interface VideoEditorProps {
   showIssues?: boolean;
   /** Show the transcript panel for editing by text (default true). */
   showTranscript?: boolean;
+  /** Show colour scopes (histogram, luma waveform, vectorscope) of the preview under it (default false). */
+  showScopes?: boolean;
   className?: string;
 }
 
@@ -36,7 +39,7 @@ export interface VideoEditorProps {
  * transport, the timeline and the clip inspector, with the project's issues listed under the
  * timeline. Every edit is one undo step; the controller's agent tools edit the same project.
  */
-export function VideoEditor({ controller: given, options, editable = true, pxPerSecond, onPxPerSecondChange, resolution, showIssues = true, showTranscript = true, className = '' }: VideoEditorProps) {
+export function VideoEditor({ controller: given, options, editable = true, pxPerSecond, onPxPerSecondChange, resolution, showIssues = true, showTranscript = true, showScopes = false, className = '' }: VideoEditorProps) {
   const { controller, state } = useVideoEditor(given ?? options ?? {});
   useEffect(() => {
     if (editable) return;
@@ -61,6 +64,7 @@ export function VideoEditor({ controller: given, options, editable = true, pxPer
         <div className="flex min-w-0 flex-col gap-2">
           <VideoPreview controller={controller} resolution={resolution} className="rounded-md border border-border" />
           <VideoTransport controller={controller} editable={editable} />
+          {showScopes && <VideoScopes controller={controller} />}
         </div>
         {editable && <ClipInspector controller={controller} className="min-w-0" />}
       </div>
