@@ -1,5 +1,22 @@
 # @pixerate/editor-svelte
 
+## 0.68.0
+
+### Minor Changes
+
+- 97fa696: Image editor layers: operations, agent tools and a layers panel. The controller gains `addPixelLayer` (empty, colour or image), `addGroup`, `duplicateLayer`, `removeLayer`, `moveLayer`, `setLayerProperties` (name, visibility, opacity, fill, blend, clipping, locks), `groupLayers` / `ungroupLayer`, `mergeDown`, `mergeVisible`, `flattenImage`, `offsetLayer`, `addLayerMask` / `applyLayerMask` / `removeLayerMask` / `setLayerMaskProps`, `layerViaCopy` (copy or cut), layer filters (`addLayerFilter`, `updateLayerFilter`, `removeLayerFilter`) and `getLayerThumbnail`; each validates first, throws a `LayerOperationError` with the reason, and is one undo step. New agent tools: `set_active_layer`, `add_pixel_layer`, `duplicate_layer`, `remove_layer`, `move_layer`, `set_layer_properties`, `group_layers`, `add_group`, `ungroup_layer`, `merge_down`, `merge_visible`, `flatten_image`, `offset_layer`, `add_layer_mask`, `apply_layer_mask`, `remove_layer_mask`, `set_layer_mask_properties`, `layer_via_copy`, `add_layer_filter`, `update_layer_filter` and `remove_layer_filter`; `add_adjustment_layer` takes `aboveId` / `parentId` and `render_preview` takes `layerId`. React and Svelte get `<LayersPanel>` (thumbnails, drag to reorder and nest, visibility, locks, opacity, fill, blend, clipping, mask thumbnails, layer menu), also as a Layers tab in `<ImageEditor>`.
+- 97fa696: Image editor painting: a brush engine ported from photocraft, in the new shared `@pixerate/editor/paint` subpath (round computed tip with size, hardness, angle, roundness and spacing; opacity versus flow build-up; smoothing; pen pressure to size and opacity), Brush and Eraser strokes on pixel layers and layer masks (black hides, white reveals) limited by the selection and by transparency locks, Edit › Fill and Clear, and the Move tool. `beginStroke` returns a live stroke session (one undo step per stroke); `paintStroke`, `fillPixels`, `clearPixels`, `setPaintOptions`, `swapPaintColors` and `resetPaintColors` drive it, and `PaintGesture` / `handlePaintShortcut` give hosts the pointer handling and Photoshop shortcuts (B, E, V, [ ], Shift+[ ], 0–9, D, X). New agent tools `paint_stroke`, `fill_pixels` and `clear_pixels`. React and Svelte get `<BrushOptionsBar>` and a Paint tab in `<ImageEditor>` with pointer capture, coalesced events and a brush cursor.
+
+### Patch Changes
+
+- 504ac33: Add ImageEditorFit mode ('contain' | 'margin') to image editor geometry and renderer to allow edge-to-edge canvas fill without artificial letterboxing margins
+- Updated dependencies [504ac33]
+- Updated dependencies [97fa696]
+- Updated dependencies [97fa696]
+- Updated dependencies [97fa696]
+- Updated dependencies [97fa696]
+  - @pixerate/editor@0.89.0
+
 ## 0.67.0
 
 ### Minor Changes
