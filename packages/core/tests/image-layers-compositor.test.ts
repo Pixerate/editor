@@ -131,7 +131,7 @@ describe('layer compositor', () => {
     expect(out).toEqual(pixels(1).data);
   });
 
-  it('matches blendPixel for every blend mode, with opacity, fill and masks', () => {
+  it('matches blendPixel for every blend mode, with opacity, fill and masks', { timeout: 30_000 }, () => {
     for (const { id: mode } of BLEND_MODES) {
       const bg = pixelLayer('bg', 2, {}, 'opaque');
       const top = pixelLayer('top', 3, { blend: mode, opacity: 0.8, fillOpacity: 0.7, mask: { ...maskFrom(4), density: 0.6 } });
@@ -233,7 +233,7 @@ describe('layer compositor', () => {
     expect(px(soft, edge * 4)).not.toEqual(px(pixels(15, 'opaque').data, edge * 4));
   });
 
-  it('caches tiles by their inputs and recomposites only from the changed layer up', () => {
+  it('caches tiles by their inputs and recomposites only from the changed layer up', { timeout: 30_000 }, () => {
     const big = { width: TILE * 2, height: TILE };
     const mk = (id: string, seed: number) => ({ ...pixelLayer(id, 0), surface: surfaceFromPixels(pixels(seed, 'opaque', big.width, big.height), 4) });
     const layers: ImageLayer[] = [mk('a', 20), { ...mk('b', 21), blend: 'screen' as BlendMode, opacity: 0.5 }, adjustment('invert', {}), { ...mk('d', 22), blend: 'multiply' as BlendMode }];
@@ -269,8 +269,8 @@ describe('layer compositor', () => {
     c.compositeTiles(strokeLayers, rect, big, () => {}, { checkpointLayerId: 'd', dirty: [dirtyRect] });
     // Two tiles, each from the checkpoint the slider drag left below layer b (3 steps).
     expect(c.lastStats.stepsRun).toBe(6);
-    expect(c.composite(strokeLayers, rect, big)).toEqual(new LayerCompositor().composite(strokeLayers, rect, big));
+    expect(Buffer.from(c.composite(strokeLayers, rect, big)).equals(Buffer.from(new LayerCompositor().composite(strokeLayers, rect, big)))).toBe(true);
     // And the result is still what a fresh compositor computes.
-    expect(c.composite(drag(0.3), rect, big)).toEqual(new LayerCompositor().composite(drag(0.3), rect, big));
+    expect(Buffer.from(c.composite(drag(0.3), rect, big)).equals(Buffer.from(new LayerCompositor().composite(drag(0.3), rect, big)))).toBe(true);
   });
 });

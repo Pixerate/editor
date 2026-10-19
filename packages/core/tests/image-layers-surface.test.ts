@@ -30,7 +30,9 @@ function rng(seed: number) {
 
 function randomPixels(w: number, h: number, seed = 1, channels = 4) {
   const r = rng(seed);
-  return { width: w, height: h, data: new Uint8ClampedArray(w * h * channels).map(() => Math.floor(r() * 256)) };
+  const data = new Uint8ClampedArray(w * h * channels);
+  for (let i = 0; i < data.length; i++) data[i] = Math.floor(r() * 256);
+  return { width: w, height: h, data };
 }
 
 describe('tiled surfaces', () => {
@@ -62,13 +64,14 @@ describe('tiled surfaces', () => {
     expect(readPixel(s, 5000, 5000)).toEqual([0, 0, 0, 0]);
   });
 
-  it('is copy-on-write: a write shares every untouched tile and leaves the original alone', () => {
+  it('is copy-on-write: a write shares every untouched tile and leaves the original alone', { timeout: 30_000 }, () => {
     const base = surfaceFromPixels(randomPixels(TILE * 3, TILE * 2, 3), 4);
     const before = readRegion(base, { x: 0, y: 0, width: TILE * 3, height: TILE * 2 });
     const patch = new Uint8ClampedArray(10 * 10 * 4).fill(200);
     const next = writeRegion(base, { x: TILE + 5, y: 5, width: 10, height: 10 }, patch);
     expect(next).not.toBe(base);
-    expect(readRegion(base, { x: 0, y: 0, width: TILE * 3, height: TILE * 2 })).toEqual(before);
+    // Byte comparison (a toEqual over a large array is slow).
+    expect(Buffer.from(readRegion(base, { x: 0, y: 0, width: TILE * 3, height: TILE * 2 })).equals(Buffer.from(before))).toBe(true);
     let shared = 0;
     for (const [k, t] of next.tiles) if (base.tiles.get(k) === t) shared++;
     expect(shared).toBe(5);

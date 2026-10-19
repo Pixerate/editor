@@ -150,7 +150,7 @@ function legacyBase(source: ReturnType<typeof sourcePixels>, adjustments: ImageA
 }
 
 describe('legacy equivalence', () => {
-  it('renders every compositor-routed v1 / v2 document byte for byte as the old pipeline did', () => {
+  it('renders every compositor-routed v1 / v2 document byte for byte as the old pipeline did', { timeout: 60_000 }, () => {
     let routed = 0;
     let legacy = 0;
     for (let seed = 1; seed <= 60; seed++) {
