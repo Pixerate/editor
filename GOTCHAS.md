@@ -21,6 +21,24 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/video-editor] ffmpeg `loudnorm` Outputs 192 kHz Audio
+
+- **Issue / Symptom**: A normalised export came out with 192 kHz sound, much larger than it should be, and some players or encoders refuse that rate.
+- **Root Cause**: `loudnorm` upsamples to 192 kHz internally so it can measure true peaks, and it passes that rate on to whatever follows it in the graph.
+- **Solution / Workaround**: Always follow it with `aresample=48000`, as `loudnormFilter` in `export.ts` does. Two-pass normalisation also needs the measuring pass to use the same target (`I`, `TP`, `LRA`) as the second pass; `toVideoLoudnessMeasure` takes the same `loudness` option for that reason.
+
+### [core/video-editor] An Hour of 29.97 fps Is Not `01:00:00:00` in Non-Drop Timecode
+
+- **Issue / Symptom**: With drop-frame turned off at 29.97 fps, an EDL's record timecode started at `00:59:56:12` instead of `01:00:00:00`.
+- **Root Cause**: The record start was a clock time (3,600,000 ms). Non-drop timecode counts 30 labels a second while only 29.97 frames pass, so an hour of real time is 107,892 frames, which non-drop labels `00:59:56:12`. Drop-frame skips labels so that it matches the clock.
+- **Solution / Workaround**: Count timecode positions in frames, not milliseconds: `videoHourFrames(fps, dropFrame)` gives the frame count of `01:00:00:00` (107,892 in drop-frame, 108,000 in non-drop), and `formatVideoTimecodeFrames` formats a frame count. Count frames at the exact NTSC rate (30000/1001), not a rounded 29.97.
+
+### [core/video-editor] ffmpeg `afade` Curves Are Mirrored for Fade-Outs
+
+- **Issue / Symptom**: Exponential fade-outs sounded different in the browser preview and in the ffmpeg export.
+- **Root Cause**: `afade=t=out` applies the curve to the time *remaining*, gain = f(1 − progress); it does not flip the curve upside down to 1 − f(progress). For `cub`, a fade-out drops fast at first and then tails off.
+- **Solution / Workaround**: `videoFadeCurveGain` takes the fraction left for a fade out, as ffmpeg does. The curve formulas were measured from ffmpeg itself (`tri`, `qsin`, `hsin`, `cub`, `ipar`), and `tests/video-editor-ffmpeg.test.ts` compares the rendered levels with `videoFrameAt`. When adding a curve, measure ffmpeg's version before writing the formula.
+
 ### [core/tools] `capture_view` Screenshots Miss Web Fonts, Pseudo-Elements and Cross-Origin Images
 
 - **Issue / Symptom**: A canvas or DOM screenshot from `rasterizeElement` (used by `createCanvasCaptureToolProvider` and `createElementCaptureSurface`) shows text in a fallback font, leaves out `::before` / `::after` content, draws some images blank, or fails with "the canvas is tainted".
@@ -189,7 +207,6 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: Targets are gathered once per gesture from a document snapshot. The shape tool adds the new node on press, and Alt-drag swaps the drag's base document for one with duplicates, so targets taken from the wrong snapshot include (or exclude) the wrong nodes.
 - **Solution / Workaround**: The shape tool gathers drawing targets *before* inserting its node and keeps them on the drag; a move drops its targets when it duplicates, so the next move gathers them again excluding the new selection (the originals become targets). The anchor drag excludes the moving anchors and the segments through them, and the handle drag excludes its path's bounds and segments, which move with the pointer.
 
-
 ### [core/vector] The "Nearest Rotation" of a Mirrored Matrix Is Undefined
 
 - **Issue / Symptom**: Flipping a rotated vector shape made its selection box snap back to axis-aligned (the rotation was lost and everything was baked into the anchors).
@@ -231,7 +248,6 @@ All contributors and AI assistants should check this file before starting work a
   2. In `getShapeRenderData`, resolve gradient fills and strokes to deterministic def IDs (`shape-fill-${id}`, `shape-stroke-${id}`) and output `fillGradient` / `strokeGradient` defs.
   3. In `ShapeNode` (React and Svelte), render `<defs>` with `<linearGradient>` / `<radialGradient>` before rendering shape paths.
   4. In `CanvasDrawLayer` (React and Svelte), resolve the active live stroke gradient to an inline `<defs>` definition (`draw-active-stroke-gradient`) so user strokes render with gradients live during dragging.
-
 
 ### [svelte/canvas] Svelte 5 Runes and .svelte Imports in Vitest
 
@@ -404,7 +420,6 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: `recalculateAll` evaluated row by row and never cleared the dependency graph; cycle detection only flagged the edited cell; references are stored as A1 text, so moving cells without rewriting formulas changes what they point at; `[property]` resolved against the *selected* row.
 - **Solution / Workaround**: `DependencyGraph.getEvaluationPlan()` runs an iterative Tarjan SCC pass (no recursion, so long chains don't overflow) that returns cells dependencies-first plus every member of a cycle. `recalculateAll` rebuilds the graph and follows the plan. Row/column insert/delete calls `shiftFormulaReferences()` on every formula *before* mutating the grid; growing the grid during a paste is not an insertion and must not shift references. Ranges (including whole columns `A:A`) are stored whole in an interval index, never as one key per cell (see the large-sheet entry below). The controller sets the evaluating row while evaluating so `[property]` is per-row. In formula code, never use `Math.max(...values)` or `push(...values)` on range values: large ranges overflow the stack.
 
-
 ### [core/canvas] Streaming Layout: Debounce Starves Layouts, and Current Positions Are Not Layout Targets
 
 - **Issue / Symptom**: During an LLM stream, `StreamingLayoutManager` ran no layouts until the stream went quiet (updates every 20ms with `throttleMs: 50` resulted in zero layouts over 500ms). When a layout did run, nodes never glided; they stayed where they were.
@@ -428,7 +443,6 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: An agent calling `edit_canvas` with `side: 'top'` got the node placed *below* the anchor. `layout` without `incremental` discarded manual positions even though the schema says `incremental` defaults to `true`.
 - **Root Cause**: The tool schema (`top | right | bottom | left`, `incremental` default true) and the planner/`placeBeside` vocabulary (`right | below | left | above`, falsy default) drifted apart. Unknown sides fell through to `placeBeside`'s `default: below` branch.
 - **Solution / Workaround**: Normalize sides with `normalizeSide()` and use `command.incremental ?? true`. When changing `tools.ts`, update the planner and its tests in the same change. Validate `nearNodeId` against the snapshot before anchoring or adding an edge.
-
 
 ### [core/image-editor] One Canonical Coordinate Space for Crop, Annotations and Masks
 
@@ -465,7 +479,6 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: One snapping integration does not fit both libraries. In React Flow, a position rewritten in `onNodeDrag` is overwritten by the next `onNodesChange` batch, so the node does not stay snapped.
 - **Root Cause**: React Flow is controlled through `onNodesChange`, so a position must be snapped *before* `applyNodeChanges` runs. SvelteFlow binds `nodes` and calls `onnodedrag` after it has written the dragged position. Both compute each drag frame from the pointer and the drag-start position, not from the previous frame, so writing a snapped position does not accumulate offsets.
 - **Solution / Workaround**: React: `onNodesChange={(c) => setNodes((n) => applyNodeChanges(arrange.snapPositionChanges(c), n))}`. A batch with `dragging: false` ends the drag and clears the guides. Svelte: `onnodedragstart={() => arrange.beginDrag()}`, `onnodedrag={({ nodes }) => arrange.drag(nodes.map((n) => n.id))}`, `onnodedragstop={() => arrange.endDrag()}`. Snap targets are indexed once per drag (`createNodeGuideIndex`) and each frame is a binary search, so dragging stays fast with hundreds of nodes.
-
 
 ### [core/grammar] Escapes in `VARIABLE_REGEX` Can Backtrack Catastrophically, and Sections Are Scoped Per Body
 
@@ -726,7 +739,6 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: `controller.subscribe(listener)` calls the listener synchronously; a listener doing `tick++` reads and writes `tick` inside the effect, so the effect depends on the state it writes.
 - **Solution / Workaround**: Subscribe inside `untrack(() => controller.subscribe(...))` and return the unsubscribe function. Keep large per-render objects such as the histogram in `$state.raw`, so they are not deep-proxied on every render.
 
-
 ### [core/history] Keyed Gestures Merge Commands, so Commands Must Be Absolute or Untagged
 
 - **Issue / Symptom**: A held gesture (`beginGesture`) that drags two parameters (volume and pan) into one undo step would redo only the last one, and undo would restore only one of them, if the merge kept "first undo + last redo" as the time-window `executeMerged` does.
@@ -882,7 +894,6 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: With Track Changes on, Replace found its own struck-through text again and never advanced; `catfish` was found across a deleted space; or `fish` (whole word) was found right after a deleted space although the live text reads `catfish`.
 - **Root Cause**: Tracked deletions stay in the document with a `deletion` mark, and replacing while tracking re-inserts the found text as a deletion. Simply concatenating all text nodes searches deleted text; searching each live run separately loses the neighbouring live characters that word-boundary assertions need.
 - **Solution / Workaround**: Build one search string per textblock from the non-deleted runs (with a per-character map back to document positions), record a "cut" wherever deleted text was skipped, and search each cut segment with the whole string as context (the Pike VM checks assertions against the full string; the regex path searches a prefix with `lastIndex`). Paragraphs are only joined (with `\r`) when the pattern can match `^p`. Replacements go through ordinary `replaceWith`, so the `TrackChanges` `appendTransaction` turns them into tracked deletions and insertions in the same undo step.
-
 
 ### [core/serializers] Lazy and `[^>]*` Regexes Are Quadratic (or Cubic) on Malformed HTML
 
@@ -1246,7 +1257,6 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: `@changesets/cli` automatically synchronizes and bumps `peerDependencies` across monorepo workspace packages when a core package version increments. Any unit tests asserting strict exact string equality against a static version string fail as soon as Changeset bumps the package in the release pipeline.
 - **Solution / Workaround**: Test package.json `peerDependencies` using regex patterns that accommodate dynamic minor/patch version increases (e.g. `expect(pkg.peerDependencies["@pixerate/editor"]).toMatch(/^>=0\.\d+\.0.*<1/)`) while still enforcing exclusion from direct `dependencies`.
 
-
 ### [react|svelte/canvas] Pointer-Events and Spacebar Panning in Freehand Drawing Overlays
 
 - **Issue / Symptom**: When an interactive SVG drawing overlay (`CanvasDrawLayer`) covers the canvas, standard xyflow panning, node dragging, and canvas selection are blocked. Conversely, if pointer events are disabled, drawing gestures cannot be captured. Furthermore, users cannot pan the canvas without first switching away from the drawing tool.
@@ -1254,8 +1264,6 @@ All contributors and AI assistants should check this file before starting work a
 - **Solution / Workaround**:
   1. Set `pointer-events: auto` on `CanvasDrawLayer` only when `tool !== 'select'`. When `tool === 'select'`, set `pointer-events: none` to let xyflow handle selection, dragging, and box selection natively.
   2. Implement spacebar hold detection (`isSpacePressed` via `keydown` / `keyup`). While spacebar is held down, toggle the overlay's pointer events to `none` and switch the cursor to `grab`, allowing users to hold Space and drag to pan the xyflow canvas seamlessly without changing their active drawing tool.
-
-
 
 ### [core/vector] Live Corners Vanish When an Anchor Is Copied Field by Field
 

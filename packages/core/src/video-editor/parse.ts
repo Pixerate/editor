@@ -1,5 +1,5 @@
 import { VIDEO_EASE_NAMES, type VideoAnimatable, type VideoEase, type VideoKey, type VideoKeyframes } from './keyframes.js';
-import { VIDEO_CLIP_TYPES, VIDEO_FITS, VIDEO_TRANSITION_TYPES, VIDEO_WIPE_DIRECTIONS, type VideoAsset, type VideoClip, type VideoMarker, type VideoProject, type VideoTrack, type VideoTransform, type VideoTransition } from './types.js';
+import { VIDEO_CLIP_TYPES, VIDEO_FADE_CURVES, VIDEO_FITS, VIDEO_TRANSITION_TYPES, VIDEO_WIPE_DIRECTIONS, type VideoAsset, type VideoClip, type VideoMarker, type VideoProject, type VideoTrack, type VideoTransform, type VideoTransition } from './types.js';
 
 const isObject = (v: unknown): v is Record<string, any> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const fail = (path: string, what: string): never => {
@@ -131,7 +131,9 @@ export function parseVideoClip(v: unknown, path = 'clip'): VideoClip {
 			in: num(v.in, `${path}.in`, { optional: true, min: 0 }),
 			speed: num(v.speed, `${path}.speed`, { optional: true, min: 0.05, max: 20 }),
 			volume: parseVideoAnimatable(v.volume, `${path}.volume`, { optional: true, min: 0, max: 4 }),
-			muted: bool(v.muted, `${path}.muted`)
+			muted: bool(v.muted, `${path}.muted`),
+			fadeInCurve: oneOf(v.fadeInCurve, VIDEO_FADE_CURVES, `${path}.fadeInCurve`),
+			fadeOutCurve: oneOf(v.fadeOutCurve, VIDEO_FADE_CURVES, `${path}.fadeOutCurve`)
 		});
 	if (type === 'text')
 		return compact({

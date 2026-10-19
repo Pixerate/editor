@@ -3,10 +3,11 @@ import type { AnimationLoopMode } from '../animation/evaluate.js';
 import { AnimationPlayer } from '../animation/player.js';
 import { HistoryManager } from '../history/HistoryManager.js';
 import type { Command } from '../history/types.js';
+import { VideoAudioPeaksCache, type VideoAudioPeaksLoader } from './audio.js';
 import { checkVideoProject, type VideoIssue } from './check.js';
 import { applyVideoEdits, type VideoEdit, type VideoEditResult } from './edit.js';
 import { videoFrameAt, type VideoFrame } from './evaluate.js';
-import { toVideoEdl, toVideoFfmpeg, type VideoEdlOptions, type VideoFfmpegExport, type VideoFfmpegOptions } from './export.js';
+import { toVideoEdl, toVideoFfmpeg, toVideoLoudnessMeasure, type VideoEdlOptions, type VideoFfmpegExport, type VideoFfmpegOptions } from './export.js';
 import { createVideoProject, parseVideoProject } from './parse.js';
 import { videoProjectSvg, type VideoSvgOptions } from './render.js';
 import { snapToVideoFrame, snapVideoTime, videoClipEnd, videoClipsAt, videoProjectDuration, videoSnapPoints, findVideoClip } from './timeline.js';
@@ -22,6 +23,11 @@ export interface VideoEditorOptions {
 	readOnly?: boolean;
 	/** Called after every change to the project (not on playback or selection). */
 	onChange?: (project: VideoProject) => void;
+	/**
+	 * Where sound levels for waveforms and `get_video_audio_levels` come from: a shared cache, or a
+	 * loader for one (default: fetch and decode each asset's `src` with Web Audio, in a browser).
+	 */
+	audioPeaks?: VideoAudioPeaksCache | VideoAudioPeaksLoader;
 }
 
 /** A snapshot of the editor. The same object is returned until something changes. */
@@ -61,6 +67,8 @@ export interface VideoEditorState {
 export class VideoEditorController {
 	readonly history: HistoryManager;
 	readonly player: AnimationPlayer;
+	/** Sound levels per asset, loaded on demand for waveforms and agents. */
+	readonly audioPeaks: VideoAudioPeaksCache;
 	private project: VideoProject;
 	private issues: VideoIssue[];
 	private selection: string[] = [];
@@ -75,6 +83,7 @@ export class VideoEditorController {
 
 	constructor(options: VideoEditorOptions = {}) {
 		this.history = options.history ?? new HistoryManager();
+		this.audioPeaks = options.audioPeaks instanceof VideoAudioPeaksCache ? options.audioPeaks : new VideoAudioPeaksCache(options.audioPeaks);
 		this.project = options.project ? parseVideoProject(options.project) : createVideoProject();
 		this.issues = checkVideoProject(this.project);
 		this.readOnly = options.readOnly ?? false;
@@ -319,6 +328,11 @@ export class VideoEditorController {
 	/** The project as an ffmpeg command. */
 	toFfmpeg(options: VideoFfmpegOptions = {}): VideoFfmpegExport {
 		return toVideoFfmpeg(this.project, options);
+	}
+
+	/** The ffmpeg command that measures the mix's loudness (see `toVideoLoudnessMeasure`). */
+	toLoudnessMeasure(options: Pick<VideoFfmpegOptions, 'resolve' | 'loudness'> = {}): VideoFfmpegExport {
+		return toVideoLoudnessMeasure(this.project, options);
 	}
 
 	/** One track as a CMX 3600 EDL. */

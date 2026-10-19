@@ -30,18 +30,64 @@ export function snapToVideoFrame(time: number, fps: number): number {
 /** Whole frames in `time` at `fps` (rounded). */
 export const videoFrames = (time: number, fps: number): number => Math.round((time * fps) / 1000);
 
-/** Non-drop SMPTE timecode `HH:MM:SS:FF` for a time (ms). */
-export function formatVideoTimecode(time: number, fps: number): string {
+/**
+ * Whether `fps` is an NTSC rate that SMPTE counts in drop-frame timecode: 29.97 (30000/1001) or
+ * 59.94 (60000/1001). Other fractional rates (23.976) have no drop-frame form.
+ */
+export function isVideoDropFrameRate(fps: number): boolean {
+	const nominal = Math.round(fps);
+	return (nominal === 30 || nominal === 60) && Math.abs(fps - (nominal * 1000) / 1001) < 0.005;
+}
+
+/** The exact rate behind a rounded NTSC rate (29.97 → 30000/1001); other rates unchanged. */
+const exactVideoRate = (fps: number): number => {
+	const nominal = Math.round(fps);
+	return nominal !== fps && Math.abs(fps - (nominal * 1000) / 1001) < 0.005 ? (nominal * 1000) / 1001 : fps;
+};
+
+/** Frames elapsed in `time` (ms), counted at the exact rate behind a rounded NTSC rate. */
+export const videoTimecodeFrames = (time: number, fps: number): number => Math.max(0, Math.round((time * exactVideoRate(fps)) / 1000));
+
+/**
+ * SMPTE timecode for a time (ms): `HH:MM:SS:FF`, or `HH:MM:SS;FF` in drop-frame, which skips frame
+ * numbers 0 and 1 (0–3 at 59.94) at the start of every minute except each tenth, so the clock keeps
+ * up with real time at NTSC rates. `dropFrame` defaults to on at 29.97 and 59.94 and is ignored at
+ * rates without a drop-frame form.
+ */
+export function formatVideoTimecode(time: number, fps: number, dropFrame = isVideoDropFrameRate(fps)): string {
+	return formatVideoTimecodeFrames(videoTimecodeFrames(time, fps), fps, dropFrame);
+}
+
+/** SMPTE timecode for a frame count (see `formatVideoTimecode`). */
+export function formatVideoTimecodeFrames(frames: number, fps: number, dropFrame = isVideoDropFrameRate(fps)): string {
 	const base = Math.round(fps);
-	const total = Math.max(0, videoFrames(time, fps));
+	let total = Math.max(0, Math.round(frames));
+	const drop = dropFrame && isVideoDropFrameRate(fps);
+	if (drop) {
+		const skip = base / 15; // 2 at 29.97, 4 at 59.94
+		const perMinute = base * 60 - skip;
+		const perTen = perMinute * 10 + skip;
+		const tens = Math.floor(total / perTen);
+		const rest = total % perTen;
+		total += skip * 9 * tens + (rest > skip ? skip * Math.floor((rest - skip) / perMinute) : 0);
+	}
 	const ff = total % base;
 	const secs = Math.floor(total / base);
 	const pad = (n: number) => String(n).padStart(2, '0');
-	return `${pad(Math.floor(secs / 3600))}:${pad(Math.floor(secs / 60) % 60)}:${pad(secs % 60)}:${pad(ff)}`;
+	return `${pad(Math.floor(secs / 3600))}:${pad(Math.floor(secs / 60) % 60)}:${pad(secs % 60)}${drop ? ';' : ':'}${pad(ff)}`;
 }
+
+/** Frames up to timecode `01:00:00:00` (`;00` in drop-frame), where record timecode usually starts. */
+export const videoHourFrames = (fps: number, dropFrame = isVideoDropFrameRate(fps)): number => {
+	const base = Math.round(fps);
+	return dropFrame && isVideoDropFrameRate(fps) ? base * 3600 - (base / 15) * 54 : base * 3600;
+};
 
 /** Readable time for messages: `2.50 s`. */
 export const formatVideoSeconds = (time: number): string => `${(time / 1000).toFixed(2)} s`;
+
+/** Whether an asset carries sound: audio, or video not marked `hasAudio: false`. */
+export const videoAssetHasSound = (asset: VideoAsset | undefined): boolean => !!asset && (asset.kind === 'audio' || (asset.kind === 'video' && asset.hasAudio !== false));
 
 export function videoAssetMap(project: VideoProject): Map<string, VideoAsset> {
 	return new Map(project.assets.map((a) => [a.id, a]));

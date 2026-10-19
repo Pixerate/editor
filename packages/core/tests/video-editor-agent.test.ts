@@ -55,6 +55,52 @@ describe('video agent tasks, through the tools only', () => {
 		expect(ff.filterComplex).toContain('drawtext=text=Jo Smith\\, founder');
 	});
 
+	it('exports drop-frame EDLs at 29.97 fps unless asked not to', async () => {
+		const { call, fail } = tools();
+		await call('set_video_settings', { fps: 29.97 });
+		await call('add_video_asset', { kind: 'video', src: 'take.mp4', duration: 120000 });
+		await call('add_video_clip', { track: 'v1', clip: { type: 'media', asset: 'take', duration: 61000 } });
+		const df = await call('export_video_edl');
+		expect(df.edl).toContain('FCM: DROP FRAME');
+		// 61 s of footage reads as 61 s in drop-frame…
+		expect(df.edl).toContain('00:00:00;00 00:01:01;00 01:00:00;00 01:01:01;00');
+		const ndf = await call('export_video_edl', { dropFrame: false });
+		expect(ndf.edl).toContain('FCM: NON-DROP FRAME');
+		// …and as 1828 frames in non-drop, still recorded from 01:00:00:00.
+		expect(ndf.edl).toContain('00:00:00:00 00:01:00:28 01:00:00:00 01:01:00:28');
+		expect(await fail('export_video_edl', { dropFrame: 'yes' })).toContain('dropFrame');
+	});
+
+	it('normalises loudness in two passes through the tools', async () => {
+		const { call, fail } = tools();
+		await call('add_video_asset', { id: 'vo', kind: 'audio', src: 'vo.wav', duration: 5000 });
+		expect(await fail('export_video_loudness_measure')).toContain('no clips');
+		await call('add_video_clip', { track: 'a1', clip: { type: 'media', asset: 'vo' } });
+		const pass1 = await call('export_video_loudness_measure', { integrated: -16 });
+		expect(pass1.args).toContain('null');
+		expect(pass1.filterComplex).toContain('print_format=json');
+		const pass2 = await call('export_video_ffmpeg', { loudness: { integrated: -16, measured: { integrated: -30, truePeak: -12, range: 3, threshold: -40, offset: 0.2 } } });
+		expect(pass2.filterComplex).toContain('measured_I=-30');
+		expect(await fail('export_video_ffmpeg', { loudness: { integrated: 0 } })).toContain('integrated');
+		expect(await fail('export_video_ffmpeg', { loudness: { measured: { integrated: -30 } } })).toContain('truePeak');
+	});
+
+	it('shapes a sound fade and reads the gain back', async () => {
+		const { call, fail } = tools();
+		await call('add_video_asset', { id: 'music', kind: 'audio', src: 'music.mp3', duration: 30000 });
+		await call('add_video_clip', { track: 'a1', clip: { type: 'media', id: 'm', asset: 'music', duration: 10000 } });
+		const set = await call('update_video_clip', { clip: 'm', set: { fadeOut: 4000, fadeOutCurve: 'exponential' } });
+		expect(set.clip).toMatchObject({ fadeOut: 4000, fadeOutCurve: 'exponential' });
+		// Halfway through the fade out: 0.5³.
+		const frame = await call('get_video_frame', { time: 8000 });
+		expect(frame.audio[0].gain).toBeCloseTo(0.125, 6);
+		expect(await fail('update_video_clip', { clip: 'm', set: { fadeOutCurve: 'bendy' } })).toContain('fadeOutCurve');
+		await call('add_video_clip', { track: 'v1', clip: { type: 'text', id: 't', text: 'Hi' } });
+		expect(await fail('update_video_clip', { clip: 't', set: { fadeInCurve: 'linear' } })).toContain('cannot be set on a text clip');
+		const reset = await call('update_video_clip', { clip: 'm', remove: ['fadeOutCurve'] });
+		expect(reset.clip.fadeOutCurve).toBeUndefined();
+	});
+
 	it('tightens an edit: split, ripple delete, trim, close gaps, undo', async () => {
 		const { call, controller } = tools();
 		await call('add_video_asset', { kind: 'video', id: 'take', src: 'take.mp4', duration: 20000 });

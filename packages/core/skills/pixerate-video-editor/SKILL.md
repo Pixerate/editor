@@ -44,7 +44,9 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
    numbers; `render_video_frame` with `times` for a contact sheet of the sequence. Render
    after a batch, not after every edit.
 8. **Export** when asked: `export_video_ffmpeg` (a command to run, not a render) or
-   `export_video_edl` (one track) for finishing elsewhere. Read the returned notes.
+   `export_video_edl` (one track) for finishing elsewhere. Read the returned notes. For a
+   delivery loudness, have the host run `export_video_loudness_measure` first and pass what it
+   prints as `loudness.measured`; one pass (`loudness` without `measured`) is fine for a draft.
 
 ## Best practices
 
@@ -76,6 +78,11 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
 - **Keyframes sparingly.** Use `set_video_keyframes` for a push-in (`scale` 1 to 1.1 over the
   shot), a duck under dialogue (`volume`), or a fade that is not at an edge; ease (`ease-in-out`)
   rather than linear for motion. Simple fades at the clip edges are `fadeIn` / `fadeOut`.
+- **Tighten dialogue by ear, in numbers.** `find_video_silences` on an interview or voiceover clip
+  lists the pauses in timeline time; extract the long ones (keep 150-300 ms either side so speech
+  does not sound clipped: shrink each range before `extract_video_range`, and extract from the
+  last pause back to the first, or re-read, because each extract moves what follows). Use
+  `get_video_audio_levels` to find where a line starts before trimming or splitting at it.
 - **Close gaps.** Unintended gaps play as background colour and silence. `find_video_gaps`, then
   `close_video_gaps` or ripple deletes. Leave gaps only where you want black.
 - **Cut on frames.** Put starts, trims and splits on frame boundaries (multiples of 1000 / fps
@@ -83,7 +90,13 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
 - **Audio levels.** Dialogue is the reference; keep music under it (volume around 0.2-0.4 under
   speech, more between lines) and avoid gains above 1 that clip. Per-clip `volume` and track
   `volume` multiply. Give every audio clip that starts or ends mid-sound a short `fadeIn` /
-  `fadeOut` (10-50 ms) to avoid clicks; fade music beds over 1-3 s.
+  `fadeOut` (10-50 ms) to avoid clicks; fade music beds over 1-3 s. Shape sound fades with
+  `fadeInCurve` / `fadeOutCurve`: `equal-power` where two sounds overlap (it keeps loudness
+  steady, where linear dips in the middle), `exponential` to fade music out to silence
+  naturally, `s-curve` for a gentle start and finish. Linear is the default.
+- **Delivery loudness.** Normalise the final mix rather than pushing clip volumes: -14 LUFS for
+  web and streaming, -16 for podcasts, -23 (EBU R128) or -24 (ATSC) for broadcast, with true
+  peaks at or under -1 dBTP. Two passes keep the dynamics; one pass rides the level.
 - **Titles.** Keep text inside the title-safe area (about 90% of the frame), hold it at least as
   long as it takes to read twice, and use `background` for contrast over busy footage.
 - **Pacing.** Vary shot length with content; trim heads and tails of every clip to the
@@ -102,13 +115,16 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
 | `find_video_gaps` | List empty stretches between clips (and before the first) as `{ track, start, end }` ms, on every track or one `track`. Then `close_video_gaps` or ripple. |
 | `check_video_project` | After every batch and before export. Lists issues errors first with a code (`missing-asset`, `wrong-track`, `overlap`, `source-overrun`, `transition-without-cut`, `transition-too-long`, `transition-handles`, `fades-too-long`, `unknown-duration`, `unused-asset`, `marker-past-end`, `empty`), what it is about and how to fix it. |
 | `render_video_frame` | Look at the picture at `time`, or at 2-16 `times` as one labelled contact sheet (`columns` 1-8). SVG by default; `format: "png"` only when the host can rasterize. Video without a `poster` shows as a labelled box with its source timecode. |
-| `export_video_ffmpeg` | Get the ffmpeg command that renders the project: `args` (for spawn), `command` (one shell line), `filterComplex`, duration and notes on approximations. `output` default output.mp4, `crf` x264 quality 0-51 (default 18, lower is better). Fails when there are no clips. |
-| `export_video_edl` | Get one `track` (default the bottom video track) as a CMX 3600 EDL with source and record timecode, dissolves, speed changes and clip names, for conforming in another editor. `title` defaults to the project name. |
+| `export_video_ffmpeg` | Get the ffmpeg command that renders the project: `args` (for spawn), `command` (one shell line), `filterComplex`, duration and notes on approximations. `output` default output.mp4, `crf` x264 quality 0-51 (default 18, lower is better). `loudness` normalises the mix (`integrated` LUFS default -14, `truePeak` dBTP default -1, `range`); with `loudness.measured` from `export_video_loudness_measure` it applies one fixed gain. Fails when there are no clips. |
+| `export_video_loudness_measure` | First pass of loudness normalisation: the ffmpeg command that mixes only the sound and prints its loudness as JSON at the end of stderr. Takes the same target (`integrated` LUFS, `truePeak`, `range`) as the export. Map `input_i`, `input_tp`, `input_lra`, `input_thresh`, `target_offset` to `loudness.measured` for `export_video_ffmpeg`. |
+| `export_video_edl` | Get one `track` (default the bottom video track) as a CMX 3600 EDL with source and record timecode, dissolves, speed changes and clip names, for conforming in another editor. `title` defaults to the project name. At 29.97 and 59.94 fps it writes drop-frame timecode (`HH:MM:SS;FF`, `FCM: DROP FRAME`), as other editors expect; `dropFrame: false` forces non-drop. |
 
 ### Write
 
 | Tool | Use it to |
 | --- | --- |
+| `get_video_audio_levels` | Measure a media `clip`'s source sound (timeline times) or an `asset`'s (source times) between `from` and `to`: peak dBFS in each of `buckets` (default 50, up to 500) equal stretches, and the loudest peak. Levels are the recording before clip volume and fades. Use it to find where speech or a beat starts or to judge loudness. The first call for an asset decodes its file. |
+| `find_video_silences` | List stretches of a `clip` or `asset` that stay below `thresholdDb` (default -40) for at least `minDuration` ms (default 300). For a clip the `{ start, end }` are timeline times that go straight into `extract_video_range` (cut a pause, closing up) or `split_video_at`. |
 | `seek_video` | Show the person a moment: `time`, a `clip`'s start or a `marker`, with `play` true or false. Does not change the project. Returns the playhead and clips under it. |
 | `set_video_settings` | Set `name`, `width` / `height` (pixels, 16-8192), `fps` (e.g. 24, 25, 30, 60) or `background` colour. One undo step. |
 | `add_video_asset` | Register a file: `kind` (video, audio, image), `src` (URL, path or data URL), `duration` ms (required in practice for video and audio), optional `id`, `name`, `width`, `height`, `hasAudio` (default true for video), `poster`. Returns the asset id. |
@@ -129,7 +145,7 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
 | `lift_video_range` | Empty `from`..`to` ms on all unlocked tracks or the given `tracks`, leaving a gap: clips inside are deleted, clips across an edge trimmed, a clip across both cut in two. Returns what was removed, trimmed and created. |
 | `extract_video_range` | Remove `from`..`to` ms and close it up: as lift, then later material moves earlier on those and every sync-locked track. Refused (naming the clip) when a sync-locked track outside `tracks` has material there. Use to cut a section out of a finished sequence. |
 | `delete_video_clips` | Remove `clips`; `ripple: true` pulls later clips up to close the gaps (a ripple delete). |
-| `update_video_clip` | Change properties via `set`: opacity, transform (`x`, `y` px from centre, `scale`, `rotation`), `fit` (contain default for media, cover, fill, none), `fadeIn` / `fadeOut`, name; media `volume` (0-4), `muted`, `speed` (0.05-20, keeps the source range so the length changes), `asset`; title text and style; colour. `remove` resets to defaults. Not for timing. |
+| `update_video_clip` | Change properties via `set`: opacity, transform (`x`, `y` px from centre, `scale`, `rotation`), `fit` (contain default for media, cover, fill, none), `fadeIn` / `fadeOut`, name; media `volume` (0-4), `muted`, `fadeInCurve` / `fadeOutCurve` (the sound's fade shape: linear, equal-power, s-curve, exponential, logarithmic), `speed` (0.05-20, keeps the source range so the length changes), `asset`; title text and style; colour. `remove` resets to defaults. Not for timing. |
 | `set_video_keyframes` | Animate one `property` of a `clip` (`opacity` 0-1, `volume` 0-4 for media, `x` / `y` px from centre, `scale`, `rotation` degrees) with `keys` `[{ t, v, ease? }]`, replacing its keys. `t` is clip time (ms from the clip's start), so keys travel with the clip. `ease`: linear (default), hold, ease-in, ease-out, ease-in-out or cubic-bezier points. Returns the sorted keys. |
 | `remove_video_keyframes` | Remove all keys of a clip `property`, leaving the value it had at the clip's start. |
 | `set_video_transition` | Set the transition into a `clip` from the clip ending where it starts on the same track: `{ type: crossfade, dip or wipe, duration ms centred on the cut, color (dip, default black), direction (wipe, default right) }`, or `null` to remove. When handles are short the error gives the longest that fits. |
@@ -164,7 +180,9 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
   on the same track (`transition-without-cut`); close the gap first. Splitting keeps the
   transition on the left part.
 - **Fades are per clip.** `fadeIn + fadeOut` longer than the clip warns `fades-too-long`; fades
-  affect picture and sound together.
+  affect picture and sound together. Fade curves shape only the sound (media clips); the picture
+  always fades linearly. Splitting keeps the fade-in curve on the left part and the fade-out
+  curve on the right.
 - **Locked tracks** refuse edits to their clips; unlock with `update_video_track` only if the user
   wants that track changed.
 - **Read-only**: when `get_video_project` says the project cannot be edited, write tools are

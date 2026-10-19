@@ -6,14 +6,19 @@
     videoDragLabel,
     videoAssetMap,
     videoClipLabel,
+    videoClipShowsWaveform,
+    videoClipWaveformPath,
     videoClipTint,
     videoDropTracks,
     videoRulerTicks,
+    type VideoAsset,
     type VideoClip,
     type VideoClipDragMode,
     type VideoClipDragPlan,
     type VideoEditorController,
+    type VideoMediaClip,
     type VideoTrack,
+    type VideoWaveformMode,
   } from '@pixerate/editor/video-editor';
   import { onDestroy } from 'svelte';
   import { videoEditorStateOf } from './createVideoEditor.svelte.js';
@@ -26,10 +31,22 @@
     onpxpersecondchange?: (pxPerSecond: number) => void;
     /** Allow moving and trimming clips, the track toggles and the edit keys (default true). False still scrubs, selects and plays. */
     editable?: boolean;
+    /** Draw waveforms in audio clips (default), in every clip with sound (`all`), or not at all. Sound is decoded once per asset through `controller.audioPeaks`. */
+    waveforms?: VideoWaveformMode;
     class?: string;
   }
 
-  let { controller, pxPerSecond = $bindable(100), onpxpersecondchange, editable = true, class: className = '' }: Props = $props();
+  let { controller, pxPerSecond = $bindable(100), onpxpersecondchange, editable = true, waveforms = 'audio', class: className = '' }: Props = $props();
+  /** Bumped when more sound peaks have loaded, so waveforms redraw. */
+  let peaksVersion = $state(0);
+  $effect(() => controller.audioPeaks.subscribe(() => peaksVersion++));
+  const CLIP_HEIGHT = 40;
+  /** The waveform path for a clip, starting to load its asset's sound the first time. */
+  function waveformPath(clip: VideoMediaClip, asset: VideoAsset, w: number): string {
+    void peaksVersion;
+    const peaks = controller.audioPeaks.get(asset);
+    return peaks ? videoClipWaveformPath(clip, peaks, w, CLIP_HEIGHT) : '';
+  }
   const view = videoEditorStateOf(() => controller);
   const editor = $derived(view.current);
   const project = $derived(editor.project);
@@ -320,10 +337,17 @@
                 data-dragging={item.dragging ? '' : undefined}
                 onpointerdown={(e) => onclipdown(e, clip, track)}
               >
-                {#if clip.transition}
-                  <span class="shrink-0 rounded bg-black/40 px-1 text-[9px]" title="{clip.transition.type} {clip.transition.duration} ms" data-transition={clip.transition.type}>⋈</span>
+                {#if clip.type === 'media' && videoClipShowsWaveform(clip, asset, waveforms)}
+                  {@const w = Math.max(2, x(clip.duration))}
+                  {@const d = waveformPath(clip, asset, w)}
+                  {#if d}
+                    <svg class="pointer-events-none absolute inset-0" width={w} height={CLIP_HEIGHT} aria-hidden="true" data-waveform={clip.id}><path {d} fill="currentColor" fill-opacity="0.45" /></svg>
+                  {/if}
                 {/if}
-                <span class="truncate drop-shadow">{videoClipLabel(clip, asset)}</span>
+                {#if clip.transition}
+                  <span class="relative shrink-0 rounded bg-black/40 px-1 text-[9px]" title="{clip.transition.type} {clip.transition.duration} ms" data-transition={clip.transition.type}>⋈</span>
+                {/if}
+                <span class="relative truncate drop-shadow">{videoClipLabel(clip, asset)}</span>
                 {#if canEdit && !track.locked}
                   <div class="absolute inset-y-0 left-0 w-1.5 cursor-ew-resize bg-white/0 hover:bg-white/40" data-edge="start" aria-hidden="true"></div>
                   <div class="absolute inset-y-0 right-0 w-1.5 cursor-ew-resize bg-white/0 hover:bg-white/40" data-edge="end" aria-hidden="true"></div>

@@ -3,11 +3,15 @@ import type { JsonSchema } from '../tools/schema.js';
 import type { VideoIssue } from './check.js';
 import type { VideoEditorController } from './controller.js';
 import { VIDEO_EDIT_OPS, type VideoEdit, type VideoEditOutcome, type VideoEditResult } from './edit.js';
+import { findVideoAudioSilences, videoAudioLevels } from './audio.js';
 import { videoFrameAt } from './evaluate.js';
 import { VIDEO_EASE_NAMES, VIDEO_KEYFRAME_PROPERTIES, VIDEO_TRANSFORM_PROPERTIES, type VideoAnimatable, type VideoKeyframeProperty } from './keyframes.js';
 import { videoContactSheetSvg, videoProjectSvg } from './render.js';
-import { findVideoGaps, formatVideoTimecode, sortedVideoClips, videoClipEnd, videoClipSourceRange, videoProjectDuration } from './timeline.js';
-import { VIDEO_FITS, VIDEO_PLACEMENT_MODES, VIDEO_TRANSITION_TYPES, VIDEO_WIPE_DIRECTIONS, type VideoProject } from './types.js';
+import { findVideoClip, findVideoGaps, formatVideoTimecode, sortedVideoClips, videoClipEnd, videoClipSourceRange, videoProjectDuration } from './timeline.js';
+import { VIDEO_FADE_CURVES, VIDEO_FITS, VIDEO_PLACEMENT_MODES, VIDEO_TRANSITION_TYPES, VIDEO_WIPE_DIRECTIONS, type VideoAsset, type VideoProject } from './types.js';
+
+/** Times in results, to a tenth of a millisecond. */
+const round = (ms: number) => Math.round(ms * 10) / 10;
 
 export interface VideoEditorToolProviderOptions {
 	/** Provider id (unique per registry). Default `video`. */
@@ -84,7 +88,9 @@ const MEDIA_FIELDS: Record<string, JsonSchema> = {
 	in: MS('Where in the source it starts (default 0)'),
 	speed: { type: 'number', minimum: 0.05, maximum: 20, description: 'Playback speed (default 1). Changing it keeps the stretch of source, so the clip gets shorter or longer.' },
 	volume: { type: 'number', minimum: 0, maximum: 4, description: 'Gain (1 = unchanged, default 1). A number replaces any keyframes; set_video_keyframes animates it.' },
-	muted: { type: 'boolean', description: 'Silence this clip (default false).' }
+	muted: { type: 'boolean', description: 'Silence this clip (default false).' },
+	fadeInCurve: { type: 'string', enum: [...VIDEO_FADE_CURVES], description: 'Shape of the sound\'s fade in (default linear; the picture always fades linearly): linear, equal-power (steady loudness, best for crossfades), s-curve (gentle at both ends), exponential (slow start, natural from silence) or logarithmic (fast start).' },
+	fadeOutCurve: { type: 'string', enum: [...VIDEO_FADE_CURVES], description: 'Shape of the sound\'s fade out (default linear), the same choices as fadeInCurve; exponential sounds natural fading to silence.' }
 };
 const TEXT_FIELDS: Record<string, JsonSchema> = {
 	text: { type: 'string', minLength: 1, description: 'The title\'s text ("\\n" breaks lines).' },
@@ -312,28 +318,63 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 		}
 	};
 
+	const LOUDNESS_TARGET: Record<string, JsonSchema> = {
+		integrated: { type: 'number', minimum: -70, maximum: -5, description: 'Integrated loudness to reach, in LUFS (default -14, what streaming services play at; -16 for podcasts, -23 for EBU R128 broadcast).' },
+		truePeak: { type: 'number', minimum: -9, maximum: 0, description: 'Highest true peak, in dBTP (default -1).' },
+		range: { type: 'number', minimum: 1, maximum: 50, description: 'Loudness range, in LU (default 11).' }
+	};
 	const exportFfmpeg: AgentTool = {
 		name: 'export_video_ffmpeg',
 		title: 'Export an ffmpeg command',
-		description: 'Returns the ffmpeg command that renders the project to a file: { args (for spawn), command (one shell line), filterComplex, duration, notes on anything approximated }. Fails when the project has no clips.',
+		description:
+			'Returns the ffmpeg command that renders the project to a file: { args (for spawn), command (one shell line), filterComplex, duration, notes on anything approximated }. With loudness, the mix is normalised to a target loudness (EBU R128); add loudness.measured from a measuring pass (export_video_loudness_measure) for an exact fixed gain. Fails when the project has no clips.',
 		inputSchema: object({
 			output: { type: 'string', minLength: 1, description: 'Output file name (default output.mp4).' },
-			crf: { type: 'integer', minimum: 0, maximum: 51, description: 'x264 quality, lower is better (default 18).' }
+			crf: { type: 'integer', minimum: 0, maximum: 51, description: 'x264 quality, lower is better (default 18).' },
+			loudness: object(
+				{
+					...LOUDNESS_TARGET,
+					measured: object(
+						{
+							integrated: { type: 'number', description: 'Measured integrated loudness, LUFS (loudnorm\'s "input_i").' },
+							truePeak: { type: 'number', description: 'Measured true peak, dBTP ("input_tp").' },
+							range: { type: 'number', description: 'Measured loudness range, LU ("input_lra").' },
+							threshold: { type: 'number', description: 'Measured gating threshold, LUFS ("input_thresh").' },
+							offset: { type: 'number', description: 'Offset for the second pass, LU ("target_offset").' }
+						},
+						['integrated', 'truePeak', 'range', 'threshold', 'offset'],
+						'What the measuring pass printed (the JSON at the end of its stderr), for a linear second pass that keeps the dynamics. Leave out for one-pass normalisation.'
+					)
+				},
+				[],
+				'Normalise the mix\'s loudness (default: not normalised). An empty object uses -14 LUFS, -1 dBTP.'
+			)
 		}),
 		annotations: { title: 'Export an ffmpeg command', ...READ },
-		handler: ({ output, crf }) => controller.toFfmpeg({ ...(output ? { output } : {}), ...(crf !== undefined ? { crf } : {}) })
+		handler: ({ output, crf, loudness }) => controller.toFfmpeg({ ...(output ? { output } : {}), ...(crf !== undefined ? { crf } : {}), ...(loudness ? { loudness } : {}) })
+	};
+
+	const exportLoudnessMeasure: AgentTool = {
+		name: 'export_video_loudness_measure',
+		title: 'Export a loudness measuring command',
+		description:
+			'Returns the ffmpeg command for the first pass of a loudness normalisation: it mixes only the sound and prints its loudness as JSON at the end of stderr (input_i, input_tp, input_lra, input_thresh, target_offset) instead of writing a file. Pass those numbers as loudness.measured (integrated, truePeak, range, threshold, offset) to export_video_ffmpeg, with the same target. Fails when nothing makes a sound.',
+		inputSchema: object(LOUDNESS_TARGET),
+		annotations: { title: 'Export a loudness measuring command', ...READ },
+		handler: (target) => controller.toLoudnessMeasure({ loudness: target })
 	};
 
 	const exportEdl: AgentTool = {
 		name: 'export_video_edl',
 		title: 'Export an EDL',
-		description: 'Returns one track as a CMX 3600 edit decision list (text) for conforming in another editor: events with source and record timecode, dissolves, speed changes and clip names.',
+		description: 'Returns one track as a CMX 3600 edit decision list (text) for conforming in another editor: events with source and record timecode (drop-frame at 29.97 and 59.94 fps unless dropFrame is false), dissolves, speed changes and clip names.',
 		inputSchema: object({
 			track: { ...TRACK_ID, description: 'Track to export (default: the bottom video track).' },
-			title: { type: 'string', description: 'TITLE line (default: the project name).' }
+			title: { type: 'string', description: 'TITLE line (default: the project name).' },
+			dropFrame: { type: 'boolean', description: 'Drop-frame timecode (HH:MM:SS;FF). Default true at 29.97 and 59.94 fps, where it is the norm; ignored at other rates, which have no drop-frame form.' }
 		}),
 		annotations: { title: 'Export an EDL', ...READ },
-		handler: ({ track, title }) => ({ edl: controller.toEdl({ ...(track ? { track } : {}), ...(title ? { title } : {}) }) })
+		handler: ({ track, title, dropFrame }) => ({ edl: controller.toEdl({ ...(track ? { track } : {}), ...(title ? { title } : {}), ...(dropFrame !== undefined ? { dropFrame } : {}) }) })
 	};
 
 	const seek: AgentTool = {
@@ -503,12 +544,12 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 		name: 'update_video_clip',
 		title: 'Change a clip',
 		description:
-			'Changes a clip\'s properties (one undo step): opacity, transform, fit, fades, name; for media volume, mute, speed (keeps the stretch of source, so the length changes) or asset; for titles text and style; for colours the colour. Fields in "remove" go back to their defaults. Use move / trim for timing. Returns the clip.',
+			'Changes a clip\'s properties (one undo step): opacity, transform, fit, fades, name; for media volume, mute, the sound\'s fade curves, speed (keeps the stretch of source, so the length changes) or asset; for titles text and style; for colours the colour. Fields in "remove" go back to their defaults. Use move / trim for timing. Returns the clip.',
 		inputSchema: object(
 			{
 				clip: CLIP_ID,
 				set: object({ ...CLIP_COMMON, ...MEDIA_FIELDS, asset: { ...ASSET_ID, description: 'For media: play another asset (same in point).' }, ...TEXT_FIELDS, color: COLOR('Text colour, or a colour clip\'s fill') }, [], 'Fields to replace (only those that fit the clip\'s type).'),
-				remove: { type: 'array', items: { type: 'string', enum: ['name', 'opacity', 'transform', 'fit', 'fadeIn', 'fadeOut', 'in', 'speed', 'volume', 'muted', 'fontSize', 'fontFamily', 'fontWeight', 'background'] }, description: 'Fields to reset to their defaults.' }
+				remove: { type: 'array', items: { type: 'string', enum: ['name', 'opacity', 'transform', 'fit', 'fadeIn', 'fadeOut', 'fadeInCurve', 'fadeOutCurve', 'in', 'speed', 'volume', 'muted', 'fontSize', 'fontFamily', 'fontWeight', 'background'] }, description: 'Fields to reset to their defaults.' }
 			},
 			['clip']
 		),
@@ -516,7 +557,7 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 		handler: ({ clip, set, remove }) => {
 			const current = clipOut(project(), clip);
 			if (current && set) {
-				const allowed = new Set(['name', 'opacity', 'transform', 'fit', 'fadeIn', 'fadeOut', ...(current.type === 'media' ? ['in', 'speed', 'volume', 'muted', 'asset'] : current.type === 'text' ? Object.keys(TEXT_FIELDS) : ['color'])]);
+				const allowed = new Set(['name', 'opacity', 'transform', 'fit', 'fadeIn', 'fadeOut', ...(current.type === 'media' ? ['in', 'speed', 'volume', 'muted', 'asset', 'fadeInCurve', 'fadeOutCurve'] : current.type === 'text' ? Object.keys(TEXT_FIELDS) : ['color'])]);
 				const wrong = Object.keys(set).filter((k) => !allowed.has(k));
 				if (wrong.length) throw new Error(`${wrong.map((k) => `"${k}"`).join(', ')} cannot be set on a ${current.type} clip; it takes ${[...allowed].join(', ')}.`);
 			}
@@ -704,7 +745,80 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 		}
 	};
 
-	const reads = [getProject, getFrame, findGaps, checkProject, renderFrame, exportFfmpeg, exportEdl, seek];
+	/** The source stretch a level or silence query reads, and how to map its times back. */
+	const soundRange = (args: { clip?: string; asset?: string; from?: number; to?: number }) => {
+		const p = project();
+		if ((args.clip === undefined) === (args.asset === undefined)) throw new Error('Pass either "clip" (a media clip, times on the timeline) or "asset" (times in the source), not both.');
+		let asset: VideoAsset | undefined;
+		let toSource = (t: number) => t;
+		let toOut = (t: number) => t;
+		let from: number;
+		let to: number;
+		if (args.clip !== undefined) {
+			const found = findVideoClip(p, args.clip);
+			if (!found) throw new Error(`There is no clip "${args.clip}"; get_video_project lists the clips.`);
+			const c = found.clip;
+			if (c.type !== 'media') throw new Error(`Clip "${c.id}" is a ${c.type} clip and has no sound; pass a media clip.`);
+			asset = p.assets.find((a) => a.id === c.asset);
+			const speed = c.speed ?? 1;
+			toSource = (t: number) => (c.in ?? 0) + (t - c.start) * speed;
+			toOut = (s: number) => c.start + (s - (c.in ?? 0)) / speed;
+			from = Math.max(c.start, args.from ?? c.start);
+			to = Math.min(videoClipEnd(c), args.to ?? videoClipEnd(c));
+		} else {
+			asset = p.assets.find((a) => a.id === args.asset);
+			if (!asset) throw new Error(`There is no asset "${args.asset}"; the assets are ${p.assets.map((a) => `"${a.id}"`).join(', ') || 'none'}.`);
+			from = args.from ?? 0;
+			to = args.to ?? asset.duration ?? 0;
+		}
+		if (!asset) throw new Error(`Clip "${args.clip}" uses a missing asset.`);
+		if (asset.kind === 'image' || asset.hasAudio === false) throw new Error(`Asset "${asset.id}" has no sound.`);
+		if (!(to > from)) throw new Error(`The stretch to read is empty (${from}–${to} ms); "to" must be after "from"${args.clip !== undefined ? ' and both inside the clip' : asset.duration === undefined ? ', and the asset has no duration, so pass "to"' : ''}.`);
+		return { asset, from, to, toSource, toOut };
+	};
+	const SOUND_TARGET = {
+		clip: { ...CLIP_ID, description: 'A media clip: read the stretch of source it plays, with times on the timeline. Pass this or asset.' },
+		asset: { ...ASSET_ID, description: 'A video or audio asset: read its source, with times in the source. Pass this or clip.' },
+		from: MS('Start of the stretch (default: the clip\'s start, or 0 for an asset)'),
+		to: MS('End of the stretch (default: the clip\'s end, or the asset\'s duration)')
+	};
+	const SOUND_ANNOTATIONS = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true } as const;
+
+	const audioLevels: AgentTool = {
+		name: 'get_video_audio_levels',
+		title: 'Read sound levels',
+		description:
+			'Measures how loud the source sound is over a clip or an asset, without changing anything: the peak level in dBFS (0 = full scale, -100 = silence) for each of "buckets" equal stretches, plus the loudest peak. Levels are the recording as it is, before clip volume and fades. Use it to find where speech or a beat starts, or to judge whether a clip is too loud. The first call for an asset decodes its file, which can take a moment.',
+		inputSchema: object({ ...SOUND_TARGET, buckets: { type: 'integer', minimum: 1, maximum: 500, description: 'How many equal stretches to measure (default 50).' } }),
+		annotations: { title: 'Read sound levels', ...SOUND_ANNOTATIONS },
+		handler: async (args) => {
+			const r = soundRange(args);
+			const peaks = await controller.audioPeaks.load(r.asset);
+			const levels = videoAudioLevels(peaks, r.toSource(r.from), r.toSource(r.to), args.buckets ?? 50).map((l) => ({ start: round(r.toOut(l.start)), end: round(r.toOut(l.end)), peakDb: l.peakDb }));
+			return { asset: r.asset.id, from: r.from, to: r.to, peakDb: Math.max(...levels.map((l) => l.peakDb)), levels };
+		}
+	};
+
+	const findSilences: AgentTool = {
+		name: 'find_video_silences',
+		title: 'Find silences',
+		description:
+			'Lists the stretches of a clip or an asset whose source sound stays below a level for at least a minimum length, as { start, end } ms (timeline times for a clip, so they can go straight to extract_video_range or split_video_at; source times for an asset). Use it to cut pauses, dead air or the gaps between takes. The first call for an asset decodes its file.',
+		inputSchema: object({
+			...SOUND_TARGET,
+			thresholdDb: { type: 'number', minimum: -100, maximum: 0, description: 'Quieter than this peak level counts as silence, in dBFS (default -40; -50 for a quiet room, -30 over background noise).' },
+			minDuration: { type: 'number', exclusiveMinimum: 0, description: 'Shortest silence to report, in ms (default 300).' }
+		}),
+		annotations: { title: 'Find silences', ...SOUND_ANNOTATIONS },
+		handler: async (args) => {
+			const r = soundRange(args);
+			const peaks = await controller.audioPeaks.load(r.asset);
+			const silences = findVideoAudioSilences(peaks, r.toSource(r.from), r.toSource(r.to), { thresholdDb: args.thresholdDb, minDuration: args.minDuration }).map((x) => ({ start: round(r.toOut(x.start)), end: round(r.toOut(x.end)) }));
+			return { asset: r.asset.id, from: r.from, to: r.to, silences, total: round(silences.reduce((n, x) => n + x.end - x.start, 0)) };
+		}
+	};
+
+	const reads = [getProject, getFrame, findGaps, checkProject, renderFrame, exportFfmpeg, exportLoudnessMeasure, exportEdl, audioLevels, findSilences, seek];
 	const writes = [setSettings, addAsset, updateAsset, removeAsset, addTrack, updateTrack, removeTrack, moveTrack, addClip, moveClip, trimClip, splitClip, deleteClips, updateClip, setTransition, setKeyframes, removeKeyframes, slipClip, rollEdit, slideClip, liftRange, extractRange, splitAt, closeGaps, addMarker, removeMarker, editVideo, undo, redo];
 
 	return {

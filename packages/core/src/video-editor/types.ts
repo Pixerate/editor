@@ -105,6 +105,18 @@ interface VideoClipBase {
 	transition?: VideoTransition;
 }
 
+/**
+ * The shape of a sound fade, the same curves ffmpeg's `afade` draws, so previews and exports agree.
+ * With `x` running 0→1 through a fade in (1→0 through a fade out), the gain is:
+ * - `linear`: x (ffmpeg `tri`). Dips in loudness in the middle of a crossfade.
+ * - `equal-power`: sin(x·π/2) (`qsin`). Keeps loudness steady; the usual choice for crossfades.
+ * - `s-curve`: (1 − cos(x·π))/2 (`hsin`). Gentle at both ends.
+ * - `exponential`: x³ (`cub`). Slow start; a natural-sounding fade in from silence.
+ * - `logarithmic`: 1 − (1 − x)² (`ipar`). Fast start, slow finish.
+ */
+export type VideoFadeCurve = 'linear' | 'equal-power' | 's-curve' | 'exponential' | 'logarithmic';
+export const VIDEO_FADE_CURVES = ['linear', 'equal-power', 's-curve', 'exponential', 'logarithmic'] as const;
+
 /** A stretch of an asset. */
 export interface VideoMediaClip extends VideoClipBase {
 	type: 'media';
@@ -117,6 +129,10 @@ export interface VideoMediaClip extends VideoClipBase {
 	volume?: VideoAnimatable;
 	/** Silences this clip. */
 	muted?: boolean;
+	/** Shape of the sound's fade in (default linear). The picture always fades linearly. */
+	fadeInCurve?: VideoFadeCurve;
+	/** Shape of the sound's fade out (default linear). */
+	fadeOutCurve?: VideoFadeCurve;
 }
 
 /** A title. */
