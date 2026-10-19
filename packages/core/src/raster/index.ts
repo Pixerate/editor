@@ -22,6 +22,7 @@ export {
   contourLut,
   effectsAreLocal,
   gradientT,
+  patchEffectMaps,
   renderLayerEffects,
   STROKE_CHAMFER_MAX,
   type EffectCompositeInput,

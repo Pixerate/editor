@@ -241,7 +241,7 @@ describe('layer compositor', () => {
     const rect = { x: 0, y: 0, ...big };
     const tiles = new Map<number, Uint8ClampedArray>();
     c.compositeTiles(layers, rect, big, (tx, _ty, data) => tiles.set(tx, data));
-    expect(c.lastStats).toEqual({ tiles: 2, cached: 0, stepsRun: 8 });
+    expect(c.lastStats).toEqual({ tiles: 2, cached: 0, stepsRun: 8, effectsBuilt: 0, effectsPatched: 0 });
     // Same inputs: same buffers, nothing run.
     c.compositeTiles(layers, rect, big, (tx, _ty, data, changed) => {
       expect(data).toBe(tiles.get(tx));
@@ -255,7 +255,7 @@ describe('layer compositor', () => {
     const changed: number[] = [];
     c.compositeTiles(next, rect, big, (tx, _ty, _data, ch) => ch && changed.push(tx));
     expect(changed).toEqual([1]);
-    expect(c.lastStats).toEqual({ tiles: 2, cached: 1, stepsRun: 4 });
+    expect(c.lastStats).toEqual({ tiles: 2, cached: 1, stepsRun: 4, effectsBuilt: 0, effectsPatched: 0 });
     // A slider drag on the middle layer: the next drags start from the checkpoint below it.
     const drag = (opacity: number) => [layers[0], { ...(layers[1] as PixelLayer), opacity }, layers[2], edited];
     c.compositeTiles(drag(0.4), rect, big, () => {});

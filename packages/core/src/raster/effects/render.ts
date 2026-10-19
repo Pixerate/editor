@@ -400,14 +400,25 @@ function boxLine(src: Float64Array, x0: number, dst: Float64Array, bw: number): 
 
 /** Values a running-sum blur leaves where it should be zero (float residue) are flushed below this. */
 const BLUR_EPS = 1e-7;
+/**
+ * Fixed-point scale of the blur's running sums. Inputs are rounded to multiples of 1 / BLUR_FIX, so
+ * the sums are of integers and exact (|sum| stays far below 2^53): a value does not depend on where
+ * the line starts, which lets effect maps be rebuilt over a window and patched in.
+ */
+const BLUR_FIX = 2 ** 32;
 
 function tentLine(src: Float64Array, dst: Float64Array, bw: number, mid: Float64Array): void {
   const [r] = boxGeom(bw);
-  boxLine(src, -r, mid.subarray(0, src.length + 2 * r), bw);
-  boxLine(mid.subarray(0, src.length + 2 * r), r, dst, bw);
-  // The running sum is not exactly zero after it passes a shape: flush the residue so it never
-  // reads as coverage (noise would speckle it far from the shape).
-  for (let i = 0; i < dst.length; i++) if (Math.abs(dst[i]) < BLUR_EPS) dst[i] = 0;
+  const m = mid.subarray(0, src.length + 2 * r);
+  for (let i = 0; i < src.length; i++) src[i] = Math.round(src[i] * BLUR_FIX);
+  boxLine(src, -r, m, bw);
+  for (let i = 0; i < m.length; i++) m[i] = Math.round(m[i]);
+  boxLine(m, r, dst, bw);
+  // Flush what would read as coverage at a float's noise level (noise would speckle it).
+  for (let i = 0; i < dst.length; i++) {
+    const v = dst[i] / BLUR_FIX;
+    dst[i] = Math.abs(v) < BLUR_EPS ? 0 : v;
+  }
 }
 
 /** Two box passes of width `w` along each axis, zero outside the map. */
@@ -804,6 +815,39 @@ export function effectsAreLocal(items: readonly LayerEffect[]): boolean {
   });
 }
 
+/** Pixel bounds (document space) of the alpha above half a step in `shape` over `rect`, or `null`. */
+function shapeBounds(shape: Float32Array, rect: EffectRect): EffectRect | null {
+  const { width: w, height: h } = rect;
+  const rowHit = (y: number) => {
+    for (let x = 0, i = y * w; x < w; x++, i++) if (shape[i] > INSIDE_EPS) return true;
+    return false;
+  };
+  let y0 = 0;
+  while (y0 < h && !rowHit(y0)) y0++;
+  if (y0 === h) return null;
+  let y1 = h - 1;
+  while (!rowHit(y1)) y1--;
+  // Columns: each row only needs scanning outside the columns found so far.
+  let x0 = w;
+  let x1 = -1;
+  for (let y = y0; y <= y1; y++) {
+    const o = y * w;
+    for (let x = 0; x < x0; x++) {
+      if (shape[o + x] > INSIDE_EPS) {
+        x0 = x;
+        break;
+      }
+    }
+    for (let x = w - 1; x > x1; x--) {
+      if (shape[o + x] > INSIDE_EPS) {
+        x1 = x;
+        break;
+      }
+    }
+  }
+  return { x: rect.x + x0, y: rect.y + y0, width: x1 - x0 + 1, height: y1 - y0 + 1 };
+}
+
 /**
  * Builds every map `items` paints through from the layer's alpha `shape` (0..1) over `rect`.
  * `rect` should cover the layer's shape plus the effects' margin.
@@ -812,22 +856,7 @@ export function buildEffectMaps(items: LayerEffect[], shape: Float32Array, rect:
   const w = rect.width;
   const h = rect.height;
   const s: FMap = { w, h, v: shape };
-  // Shape bounds.
-  let x0 = Infinity;
-  let y0 = Infinity;
-  let x1 = -Infinity;
-  let y1 = -Infinity;
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      if (shape[y * w + x] > INSIDE_EPS) {
-        if (x < x0) x0 = x;
-        if (x > x1) x1 = x;
-        if (y < y0) y0 = y;
-        if (y > y1) y1 = y;
-      }
-    }
-  }
-  const bounds = x0 === Infinity ? null : { x: rect.x + x0, y: rect.y + y0, width: x1 - x0 + 1, height: y1 - y0 + 1 };
+  const bounds = shapeBounds(shape, rect);
   const anchor = bounds ? { x: bounds.x, y: bounds.y } : { x: rect.x, y: rect.y };
   const per: Float32Array[][] = [];
   const bevelPaint: (BevelPaint | null)[] = [];
@@ -874,6 +903,114 @@ export function buildEffectMaps(items: LayerEffect[], shape: Float32Array, rect:
   const doutExact = outW.some((x) => x >= STROKE_CHAMFER_MAX) ? distOutside(s, false) : null;
   for (const d of [din, dout, doutExact]) if (d) bytes += d.byteLength;
   return { rect, items, bounds, shape, per, bevelPaint, din, dout, doutExact, frames, bytes };
+}
+
+const rectArea = (r: EffectRect) => r.width * r.height;
+
+function clipRect(a: EffectRect, b: EffectRect): EffectRect | null {
+  const x0 = Math.max(a.x, b.x);
+  const y0 = Math.max(a.y, b.y);
+  const x1 = Math.min(a.x + a.width, b.x + b.width);
+  const y1 = Math.min(a.y + a.height, b.y + b.height);
+  return x1 > x0 && y1 > y0 ? { x: x0, y: y0, width: x1 - x0, height: y1 - y0 } : null;
+}
+
+const growRect = (r: EffectRect, m: number): EffectRect => ({ x: r.x - m, y: r.y - m, width: r.width + 2 * m, height: r.height + 2 * m });
+
+function unionRect(a: EffectRect, b: EffectRect): EffectRect {
+  const x0 = Math.min(a.x, b.x);
+  const y0 = Math.min(a.y, b.y);
+  return { x: x0, y: y0, width: Math.max(a.x + a.width, b.x + b.width) - x0, height: Math.max(a.y + a.height, b.y + b.height) - y0 };
+}
+
+/** The parts of `r` outside `cut`, as up to four rectangles. */
+function rectMinus(r: EffectRect, cut: EffectRect): EffectRect[] {
+  const i = clipRect(r, cut);
+  if (!i) return [r];
+  const parts: EffectRect[] = [
+    { x: r.x, y: r.y, width: r.width, height: i.y - r.y },
+    { x: r.x, y: i.y + i.height, width: r.width, height: r.y + r.height - (i.y + i.height) },
+    { x: r.x, y: i.y, width: i.x - r.x, height: i.height },
+    { x: i.x + i.width, y: i.y, width: r.x + r.width - (i.x + i.width), height: i.height },
+  ];
+  return parts.filter((p) => p.width > 0 && p.height > 0);
+}
+
+/** Copies the part `a` of `src` (over `from`) into `dst` (over `to`). */
+function pasteMap(dst: Float32Array, to: EffectRect, src: Float32Array, from: EffectRect, a: EffectRect): void {
+  for (let y = a.y; y < a.y + a.height; y++) {
+    const s = (y - from.y) * from.width + (a.x - from.x);
+    dst.set(src.subarray(s, s + a.width), (y - to.y) * to.width + (a.x - to.x));
+  }
+}
+
+/**
+ * `prev` brought up to date for a shape over `rect` that differs from the one it was built from only
+ * inside `changed` (document rects), or `null` when a full {@link buildEffectMaps} is the better
+ * deal (the change covers much of the region) or the effects are not local
+ * ({@link effectsAreLocal}). `items` must be the ones `prev` was built with, reaching at most
+ * `margin` px, and `shapeOver(r)` returns the new shape over `r`.
+ *
+ * Every map pixel within `margin` of a change, or outside `prev.rect`, is rebuilt from the shape
+ * within `margin` of it (a window of the change grown by twice the margin) and pasted in; the rest
+ * is kept. A local map pixel depends only on the shape within the margin and the blur sums exactly,
+ * so the result paints exactly what a full build over `rect` would. `prev`'s buffers are reused
+ * when `rect` is unchanged.
+ */
+export function patchEffectMaps(
+  prev: EffectMaps,
+  items: LayerEffect[],
+  rect: EffectRect,
+  changed: readonly EffectRect[],
+  margin: number,
+  shapeOver: (r: EffectRect) => Float32Array,
+  ctx: EffectContext
+): EffectMaps | null {
+  if (!effectsAreLocal(items) || rectArea(rect) <= 0) return null;
+  // Map pixels to rebuild: within the margin of a change, and new parts of the region.
+  let areas: EffectRect[] = [];
+  for (const c of changed) {
+    const a = clipRect(growRect(c, margin), rect);
+    if (a) areas.push(a);
+  }
+  areas.push(...rectMinus(rect, prev.rect));
+  // One window for areas whose windows overlap.
+  for (let merged = true; merged; ) {
+    merged = false;
+    for (let i = 0; i < areas.length && !merged; i++) {
+      for (let j = i + 1; j < areas.length; j++) {
+        if (clipRect(growRect(areas[i], 2 * margin), areas[j])) {
+          areas[i] = unionRect(areas[i], areas[j]);
+          areas.splice(j, 1);
+          merged = true;
+          break;
+        }
+      }
+    }
+  }
+  const windows = areas.map((a) => clipRect(growRect(a, margin), rect)!);
+  if (windows.reduce((n, w) => n + rectArea(w), 0) > rectArea(rect) / 2) return null;
+
+  const same = rect.x === prev.rect.x && rect.y === prev.rect.y && rect.width === prev.rect.width && rect.height === prev.rect.height;
+  const take = (v: Float32Array) => (same ? v : crop(v, prev.rect, rect, 0));
+  const shape = take(prev.shape);
+  const per = prev.per.map((maps) => maps.map(take));
+  const din = prev.din && take(prev.din);
+  const dout = prev.dout && take(prev.dout);
+  const doutExact = prev.doutExact && take(prev.doutExact);
+  areas.forEach((a, k) => {
+    const w = windows[k];
+    const part = buildEffectMaps(items, shapeOver(w), w, ctx);
+    pasteMap(shape, rect, part.shape, w, a);
+    per.forEach((maps, i) => maps.forEach((m, j) => pasteMap(m, rect, part.per[i][j], w, a)));
+    if (din) pasteMap(din, rect, part.din!, w, a);
+    if (dout) pasteMap(dout, rect, part.dout!, w, a);
+    if (doutExact) pasteMap(doutExact, rect, part.doutExact!, w, a);
+  });
+  let bytes = shape.byteLength;
+  for (const maps of per) for (const m of maps) bytes += m.byteLength;
+  for (const d of [din, dout, doutExact]) if (d) bytes += d.byteLength;
+  return { rect, items, bounds: shapeBounds(shape, rect), shape, per, bevelPaint: prev.bevelPaint, din, dout, doutExact, frames: new Map(), bytes };
 }
 
 // ---------------------------------------------------------------------------

@@ -254,4 +254,125 @@ describe('layer effects in the tiled compositor', () => {
     expect(px(out, 260, 130)).toEqual(px(plain, 260, 130));
     expect(() => mergeLayerEffect(defaultLayerEffect('satin', 's'), { blend: 'pigment' })).toThrow(/layer blend mode only/);
   });
+
+  describe('incremental effect maps while painting', () => {
+    const BIG = { x: 0, y: 0, width: 900, height: 700 };
+    const big: RasterSources = { width: 900, height: 700 };
+    type Pixel = Extract<RasterLayer, { type: 'pixel' }>;
+
+    /** A round dab with a half-covered rim, as rows of rectangles. */
+    function dab(s: Pixel['surface'], cx: number, cy: number, r: number, rgba: number[]) {
+      for (let y = -r; y <= r; y++) {
+        const half = Math.floor(Math.sqrt(r * r - y * y));
+        s = fillRect(s, { x: cx - half - 1, y: cy + y, width: 1, height: 1 }, [...rgba.slice(0, 3), Math.round(rgba[3] / 2)]);
+        s = fillRect(s, { x: cx - half, y: cy + y, width: 2 * half + 1, height: 1 }, rgba);
+        s = fillRect(s, { x: cx + half + 1, y: cy + y, width: 1, height: 1 }, [...rgba.slice(0, 3), Math.round(rgba[3] / 2)]);
+      }
+      return s;
+    }
+
+    /** Strokes of dabs: across a tile edge, growing the layer's bounds, at the canvas edge, erasing. */
+    const STROKES: Array<{ points: Array<[number, number]>; r: number; rgba: number[]; dirty: boolean }> = [
+      { points: [[230, 200], [250, 205], [270, 210], [290, 215]], r: 12, rgba: [20, 40, 200, 255], dirty: true },
+      { points: [[420, 300], [470, 330], [520, 360]], r: 16, rgba: [200, 200, 20, 180], dirty: true },
+      { points: [[600, 520], [640, 560], [680, 600]], r: 10, rgba: [0, 0, 0, 255], dirty: true },
+      { points: [[880, 690], [895, 698]], r: 8, rgba: [0, 120, 0, 255], dirty: true },
+      { points: [[180, 180], [200, 190]], r: 14, rgba: [0, 0, 0, 0], dirty: true },
+      { points: [[300, 120], [320, 125]], r: 6, rgba: [90, 10, 10, 255], dirty: false },
+    ];
+
+    const STACKS: Array<[string, LayerEffects]> = [
+      ['a drop shadow, a stroke and a bevel', { enabled: true, items: [fx('drop-shadow', { distance: 8, size: 10, spread: 0.1 }), fx('stroke', { size: 4, fill: { type: 'color', color: '#0000ff' } }), fx('bevel-emboss', { size: 6, depth: 2 })] }],
+      [
+        'every local kind',
+        {
+          enabled: true,
+          items: [
+            fx('inner-shadow', { distance: 5, size: 7, choke: 0.1 }),
+            fx('outer-glow', { technique: 'precise', size: 9 }),
+            fx('inner-glow', { size: 8, source: 'center' }),
+            fx('satin', { distance: 6, size: 8 }),
+            fx('bevel-emboss', { style: 'pillow-emboss', technique: 'chisel-soft', size: 8, soften: 2 }),
+            fx('stroke', { size: 22, position: 'outside', fill: { type: 'color', color: '#00ff00' } }),
+            fx('stroke', { size: 3, position: 'inside', fill: { type: 'color', color: '#ff00ff' } }),
+          ],
+        },
+      ],
+    ];
+
+    it.each(STACKS)('matches a fresh compositor after every stroke with %s', (_name, effects) => {
+      let surface = dab(solidSurface(4, { x: 150, y: 150, width: 160, height: 120 }, 0xd02020ff), 330, 160, 20, [200, 30, 30, 255]);
+      const layers = (): RasterLayer[] => [
+        { type: 'pixel', id: 'bg', name: 'bg', visible: true, opacity: 1, blend: 'normal', surface: solidSurface(4, BIG, 0xf0f0f0ff), offset: { x: 0, y: 0 } },
+        { type: 'pixel', id: 'paint', name: 'paint', visible: true, opacity: 1, blend: 'normal', surface, offset: { x: 0, y: 0 }, effects },
+      ];
+      const c = new RasterCompositor();
+      c.composite(layers(), BIG, big, { checkpointLayerId: 'paint' });
+      for (const stroke of STROKES) {
+        let incremental = new Uint8ClampedArray(0);
+        for (const [x, y] of stroke.points) {
+          surface = dab(surface, x, y, stroke.r, stroke.rgba);
+          const dirty = [{ x: x - stroke.r - 1, y: y - stroke.r, width: 2 * stroke.r + 3, height: 2 * stroke.r + 1 }];
+          incremental = c.composite(layers(), BIG, big, { checkpointLayerId: 'paint', dirty: stroke.dirty ? dirty : undefined });
+          expect(c.lastStats.effectsPatched).toBe(1);
+          expect(c.lastStats.effectsBuilt).toBe(0);
+        }
+        const fresh = new RasterCompositor().composite(layers(), BIG, big);
+        expect(maxDiff(incremental, fresh)).toBe(0);
+      }
+    }, 30_000);
+
+    it('keeps a neighbouring tile that only reads the change through the margin', () => {
+      const c = new RasterCompositor();
+      const wide = { x: 0, y: 0, width: 600, height: 280 };
+      const src: RasterSources = { width: 600, height: 280 };
+      const effects = one(fx('drop-shadow', { distance: 2, size: 6 }));
+      // The shape spans both tiles, so tile 1 has pixels of its own.
+      let surface = solidSurface(4, { x: 100, y: 100, width: 300, height: 80 }, 0xd02020ff);
+      const layers = (): RasterLayer[] => [{ type: 'pixel', id: 'paint', name: 'paint', visible: true, opacity: 1, blend: 'normal', surface, offset: { x: 0, y: 0 }, effects }];
+      const tiles = new Map<string, Uint8ClampedArray>();
+      c.compositeTiles(layers(), wide, src, (tx, ty, data) => tiles.set(`${tx},${ty}`, data));
+      // A dab well inside tile 0: tile 1 reads tile 0 within the margin, but nothing in it changes.
+      surface = dab(surface, 150, 140, 6, [0, 0, 0, 255]);
+      const changed: string[] = [];
+      c.compositeTiles(layers(), wide, src, (tx, ty, data, isNew) => isNew && changed.push(`${tx},${ty}`), { dirty: [{ x: 143, y: 134, width: 15, height: 13 }] });
+      expect(changed).toEqual(['0,0']);
+      expect(c.lastStats.effectsPatched).toBe(1);
+      const out = c.composite(layers(), wide, src);
+      expect(maxDiff(out, new RasterCompositor().composite(layers(), wide, src))).toBe(0);
+    });
+
+    it('redraws tiles far from the dirty rectangles when an effect is laid out over the layer bounds', () => {
+      const c = new RasterCompositor();
+      const wide = { x: 0, y: 0, width: 600, height: 280 };
+      const src: RasterSources = { width: 600, height: 280 };
+      const gradient = { stops: [{ position: 0, color: '#000000' }, { position: 1, color: '#ffffff' }], style: 'linear', angle: 0, scale: 1, reverse: false, align: true, offset: { x: 0, y: 0 } };
+      const effects = one(fx('gradient-overlay', { gradient }));
+      let surface = solidSurface(4, { x: 20, y: 20, width: 400, height: 200 }, 0xd02020ff);
+      const layers = (): RasterLayer[] => [{ type: 'pixel', id: 'paint', name: 'paint', visible: true, opacity: 1, blend: 'normal', surface, offset: { x: 0, y: 0 }, effects }];
+      c.composite(layers(), wide, src);
+      // Growing the bounds to the right stretches the gradient over tile 0 as well.
+      surface = dab(surface, 560, 120, 10, [0, 0, 0, 255]);
+      const out = c.composite(layers(), wide, src, { dirty: [{ x: 549, y: 110, width: 23, height: 21 }] });
+      expect(maxDiff(out, new RasterCompositor().composite(layers(), wide, src))).toBe(0);
+    });
+
+    it('rebuilds the whole region when the effects are not local or the change is large', () => {
+      const c = new RasterCompositor();
+      let surface = solidSurface(4, { x: 100, y: 100, width: 300, height: 200 }, 0xd02020ff);
+      const layers = (effects: LayerEffects): RasterLayer[] => [{ type: 'pixel', id: 'paint', name: 'paint', visible: true, opacity: 1, blend: 'normal', surface, offset: { x: 0, y: 0 }, effects }];
+      const noisy = one(fx('drop-shadow', { size: 6, noise: 0.2 }));
+      c.composite(layers(noisy), BIG, big);
+      surface = dab(surface, 200, 150, 8, [0, 0, 0, 255]);
+      const out = c.composite(layers(noisy), BIG, big);
+      expect(c.lastStats).toMatchObject({ effectsBuilt: 1, effectsPatched: 0 });
+      expect(maxDiff(out, new RasterCompositor().composite(layers(noisy), BIG, big))).toBe(0);
+      const shadow = one(fx('drop-shadow', { size: 6 }));
+      c.composite(layers(shadow), BIG, big);
+      surface = fillRect(surface, { x: 50, y: 50, width: 700, height: 500 }, [10, 10, 10, 255]);
+      const large = c.composite(layers(shadow), BIG, big);
+      expect(c.lastStats).toMatchObject({ effectsBuilt: 1, effectsPatched: 0 });
+      expect(maxDiff(large, new RasterCompositor().composite(layers(shadow), BIG, big))).toBe(0);
+    });
+  });
 });
