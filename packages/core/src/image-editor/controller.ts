@@ -108,7 +108,7 @@ import {
   TiledSurface as TiledSurfaceClass,
   finishTile,
   tileKey,
-} from './layers/surface';
+} from '../raster/surface';
 import {
   LayerOperationError,
   addLayerFilter as addLayerFilterOp,
@@ -141,8 +141,8 @@ import {
   type BrushSettings,
   type StrokeApply,
   type StrokePoint,
-} from './layers/paint';
-import { base64ToBytes, bytesToBase64, decodePng, isPng, parseDataUrl } from './layers/png';
+} from '../paint';
+import { base64ToBytes, bytesToBase64, decodePng, isPng, parseDataUrl } from '../raster/png';
 import { getAnnotationBounds } from './geometry';
 
 /** Latest serialized schema version (`3`: layers). Documents with the old shape still write 1 or 2. */

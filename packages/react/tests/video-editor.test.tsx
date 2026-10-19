@@ -11,6 +11,7 @@ import {
   TranscriptPanel,
   VideoEditor,
   VideoPreview,
+  VideoScopes,
   VideoTimeline,
   VideoTransport,
   useVideoEditor,
@@ -741,6 +742,59 @@ describe("TranscriptPanel (React)", () => {
     await pick("1\n00:00:00,000 --> 00:00:01,000\nHello there\n");
     expect(words()).toEqual(["Hello", "there"]);
     expect(controller.getState().undoLabel).toBe("Attach transcript");
+    controller.destroy();
+  });
+});
+
+describe("VideoScopes (React)", () => {
+  const pixels = (rgb: [number, number, number], w = 8, h = 8) => {
+    const data = new Uint8ClampedArray(w * h * 4);
+    for (let i = 0; i < data.length; i += 4) data.set([...rgb, 255], i);
+    return { width: w, height: h, data };
+  };
+  const tick = () => act(() => new Promise<void>((r) => setTimeout(r, 40)));
+
+  it("says to show the preview until one draws, then shows scopes and figures for each frame", async () => {
+    const controller = make();
+    const put = vi.fn();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({ putImageData: put } as any);
+    (globalThis as any).ImageData ??= class {
+      constructor(
+        public data: Uint8ClampedArray,
+        public width: number,
+        public height: number,
+      ) {}
+    };
+    act(() => root.render(<VideoScopes controller={controller} scopes={["waveform", "vectorscope"]} width={64} height={32} />));
+    await tick();
+    expect($("[data-scope-message]").textContent).toBe("Show the preview to see its scopes.");
+    expect([...container.querySelectorAll("canvas")].map((c) => [c.dataset.scope, c.width, c.height])).toEqual([
+      ["waveform", 64, 32],
+      ["vectorscope", 32, 32],
+    ]);
+    let colour: [number, number, number] = [0, 0, 0];
+    const detach = controller.previewPixels.attach(() => ({ time: 0, complete: true, pixels: pixels(colour) }));
+    act(() => controller.previewPixels.drawn(0, true));
+    await tick();
+    expect($("[data-scope-stats]").textContent).toMatch(/crushed 100%/);
+    expect(put).toHaveBeenCalledTimes(2);
+    colour = [255, 255, 255];
+    act(() => controller.previewPixels.drawn(0, true));
+    await tick();
+    expect($("[data-scope-stats]").textContent).toMatch(/blown 100%/);
+    expect($("[data-scope-stats]").textContent).toMatch(/blown to white/);
+    act(() => detach());
+    await tick();
+    expect($("[data-scope-message]").textContent).toBe("Show the preview to see its scopes.");
+    controller.destroy();
+  });
+
+  it("shows under the preview in <VideoEditor showScopes>", () => {
+    const controller = make();
+    act(() => root.render(<VideoEditor controller={controller} showScopes />));
+    expect(container.querySelectorAll("[data-video-scopes] canvas[data-scope]").length).toBe(3);
+    act(() => root.render(<VideoEditor controller={controller} />));
+    expect(container.querySelector("[data-video-scopes]")).toBeNull();
     controller.destroy();
   });
 });

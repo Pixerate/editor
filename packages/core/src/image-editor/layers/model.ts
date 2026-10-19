@@ -7,7 +7,6 @@
  * serialization can compare layers by identity.
  */
 
-import type { BlendMode } from '../blend';
 import type {
   AdjustmentKind,
   AdjustmentParamsMap,
@@ -15,52 +14,34 @@ import type {
   CropBox,
   DepthMaskOptions,
 } from '../types';
-import type { MaskSurface, PixelSurface } from './surface';
+import type { PixelSurface } from '../../raster/surface';
+import {
+  findLayer,
+  flattenLayers,
+  insertLayer,
+  isLayerLocked,
+  mapLayer,
+  type GroupBlendMode,
+  type LayerLocation as RasterLayerLocation,
+  type LayerLocks,
+  type RasterLayerBase,
+  type RasterMask as BaseRasterMask,
+  type RasterPixelLayer,
+} from '../../raster/layers';
 
 /** Blend modes of a layer; groups also accept `pass-through`. */
-export type LayerBlendMode = BlendMode | 'pass-through';
+export type LayerBlendMode = GroupBlendMode;
 
-export interface LayerLocks {
-  /** Painting and filling are refused. */
-  pixels?: boolean;
-  /** Painting keeps each pixel's alpha. */
-  transparency?: boolean;
-  /** Moving (offset) is refused. */
-  position?: boolean;
-  /** Everything above, plus property changes and deletion. */
-  all?: boolean;
-}
+export type { LayerLocks };
 
 /**
- * A layer mask: 8-bit coverage in document space (255 reveals, 0 hides), stored as a tiled
- * surface, plus non-destructive density and feather. A *parametric* mask (`source`) is generated
- * from a depth map instead of painted; its surface is unused.
+ * A layer mask (see the raster module's `RasterMask`) whose parametric `source` is a depth map:
+ * a depth mask is generated from it instead of painted, and its surface is unused.
  */
-export interface RasterMask {
-  surface: MaskSurface;
-  /** Value outside the painted tiles (PSD's default colour); equals `surface.defaultValue`. */
-  defaultValue: 0 | 255;
-  /** 0..1 (missing = 1): at 0.5 hidden areas still show half. */
-  density?: number;
-  /** Gaussian σ in pixels (missing = 0). */
-  feather?: number;
-  /** `false` keeps the mask but ignores it. */
-  enabled?: boolean;
-  /** Parametric depth mask: the mask is generated from this depth map. */
-  source?: DepthMaskOptions;
-}
+export type RasterMask = BaseRasterMask<DepthMaskOptions>;
 
-export interface LayerBase {
-  id: string;
-  name: string;
-  visible: boolean;
-  /** 0..1 */
-  opacity: number;
-  blend: BlendMode;
-  /** Clip to the nearest unclipped layer below (Photoshop's clipping mask). */
-  clipped?: boolean;
+export interface LayerBase extends RasterLayerBase {
   mask?: RasterMask;
-  locks?: LayerLocks;
 }
 
 /** The base sliders of the old document-level adjustments, as a filter on one layer. */
@@ -86,14 +67,7 @@ export interface BlurFilter {
 export type LayerFilter = DevelopFilter | BlurFilter;
 export type LayerFilterKind = LayerFilter['kind'];
 
-export interface PixelLayer extends LayerBase {
-  type: 'pixel';
-  /** Pixels in layer space; document position = layer position + `offset`. */
-  surface: PixelSurface;
-  /** Integer move without re-tiling. */
-  offset: { x: number; y: number };
-  /** 0..1, PSD "Fill" (missing = 1). */
-  fillOpacity?: number;
+export interface PixelLayer extends LayerBase, Omit<RasterPixelLayer, keyof RasterLayerBase> {
   /** Live filters, applied bottom (first) to top before the mask and blend. */
   filters?: LayerFilter[];
   /**
@@ -144,98 +118,13 @@ export function newLayerId(prefix = 'layer'): string {
 // Tree helpers (pure)
 // ---------------------------------------------------------------------------
 
-export interface LayerLocation {
-  layer: ImageLayer;
-  /** The containing group, or `null` at the top level. */
-  parent: GroupLayer | null;
-  /** Index within the parent's children (or the top-level list). */
-  index: number;
-  /** Ancestors from the top level down to the parent. */
-  path: GroupLayer[];
-}
+export type LayerLocation = RasterLayerLocation<ImageLayer>;
 
-/** Every layer, depth first, bottom to top (a group comes before its children). */
-export function flattenLayers(layers: readonly ImageLayer[]): ImageLayer[] {
-  const out: ImageLayer[] = [];
-  const walk = (list: readonly ImageLayer[]) => {
-    for (const l of list) {
-      out.push(l);
-      if (l.type === 'group') walk(l.children);
-    }
-  };
-  walk(layers);
-  return out;
-}
-
-export function findLayer(layers: readonly ImageLayer[], id: string): LayerLocation | null {
-  const walk = (list: readonly ImageLayer[], parent: GroupLayer | null, path: GroupLayer[]): LayerLocation | null => {
-    for (let i = 0; i < list.length; i++) {
-      const l = list[i];
-      if (l.id === id) return { layer: l, parent, index: i, path };
-      if (l.type === 'group') {
-        const hit = walk(l.children, l, [...path, l]);
-        if (hit) return hit;
-      }
-    }
-    return null;
-  };
-  return walk(layers, null, []);
-}
-
-/** Replaces the layer with `id` by `fn(layer)` (or removes it when `fn` returns `null`). */
-export function mapLayer(
-  layers: readonly ImageLayer[],
-  id: string,
-  fn: (layer: ImageLayer) => ImageLayer | null
-): ImageLayer[] {
-  let changed = false;
-  const walk = (list: readonly ImageLayer[]): ImageLayer[] => {
-    let out: ImageLayer[] | null = null;
-    for (let i = 0; i < list.length; i++) {
-      const l = list[i];
-      let next: ImageLayer | null = l;
-      if (l.id === id) {
-        next = fn(l);
-        changed = true;
-      } else if (l.type === 'group') {
-        const children = walk(l.children);
-        if (children !== l.children) next = { ...l, children };
-      }
-      if (next !== l) {
-        if (!out) out = list.slice(0, i);
-        if (next) out.push(next);
-      } else if (out) out.push(l);
-    }
-    return out ?? (list as ImageLayer[]);
-  };
-  const result = walk(layers);
-  return changed ? result : (layers as ImageLayer[]);
-}
-
-/** Inserts `layer` into `parentId`'s children (or the top level) at `index` (default: top). */
-export function insertLayer(
-  layers: readonly ImageLayer[],
-  layer: ImageLayer,
-  parentId: string | null,
-  index?: number
-): ImageLayer[] {
-  const put = (list: readonly ImageLayer[]) => {
-    const at = index === undefined ? list.length : Math.max(0, Math.min(list.length, index));
-    const next = list.slice();
-    next.splice(at, 0, layer);
-    return next;
-  };
-  if (!parentId) return put(layers);
-  return mapLayer(layers, parentId, (g) => (g.type === 'group' ? { ...g, children: put(g.children) } : g));
-}
+export { flattenLayers, findLayer, mapLayer, insertLayer, isLayerLocked };
 
 /** The top-level and nested pixel layers. */
 export function pixelLayers(layers: readonly ImageLayer[]): PixelLayer[] {
   return flattenLayers(layers).filter((l): l is PixelLayer => l.type === 'pixel');
-}
-
-export function isLayerLocked(layer: ImageLayer, what: keyof LayerLocks): boolean {
-  return Boolean(layer.locks?.all || layer.locks?.[what]);
 }
 
 /** The develop filter of a pixel layer, if any. */

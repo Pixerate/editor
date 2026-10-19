@@ -7,7 +7,7 @@
 import type { ControlSpec } from '../controls';
 import type { ImageEditorController, PaintStrokeSession } from '../controller';
 import type { ImagePoint } from '../types';
-import { MAX_BRUSH_SIZE, type BrushSettings } from './paint';
+import { MAX_BRUSH_SIZE, type BrushSettings } from '../../paint';
 
 const plain = { kind: 'plain' } as const;
 

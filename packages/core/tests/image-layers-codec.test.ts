@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as nodeZlib from 'node:zlib';
-import { deflate, deflateRaw, inflate, inflateRaw, ZlibError } from '../src/image-editor/layers/zlib';
-import { base64ToBytes, bytesToBase64, decodePng, encodePng, parseDataUrl, pngDataUrl } from '../src/image-editor/layers/png';
+import { deflate, deflateRaw, inflate, inflateRaw, ZlibError } from '../src/raster/zlib';
+import { base64ToBytes, bytesToBase64, decodePng, encodePng, parseDataUrl, pngDataUrl } from '../src/raster/png';
 
 function rng(seed: number) {
   let s = seed >>> 0;
