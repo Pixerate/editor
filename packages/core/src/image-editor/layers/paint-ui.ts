@@ -8,6 +8,7 @@
 import type { ControlSpec } from '../controls';
 import type { ImageEditorController, PaintStrokeSession } from '../controller';
 import type { ImagePoint } from '../types';
+import { shapeGeometryBounds } from './shape';
 import { MAX_BRUSH_SIZE, type BrushSettings, type MixerSettings } from '../../paint';
 
 const plain = { kind: 'plain' } as const;
@@ -150,9 +151,14 @@ export class PaintGesture {
       if (tool === 'move') {
         const layer = this.controller.getActiveLayer();
         if (!layer) throw new Error('Select a layer to move in the Layers panel.');
-        if (layer.type !== 'pixel') throw new Error(`Only pixel layers move; "${layer.name}" is a ${layer.type} layer.`);
+        if (layer.type !== 'pixel' && layer.type !== 'shape' && layer.type !== 'smart') throw new Error(`Only pixel, shape and smart object layers move; "${layer.name}" is a ${layer.type} layer.`);
         if (layer.locks?.all || layer.locks?.position) throw new Error(`Layer "${layer.name}" has its position locked.`);
-        this.move = { id: layer.id, start: { x: sample.x, y: sample.y }, origin: { ...layer.offset }, moved: false };
+        // Where `offsetLayer` measures the position: the offset, a shape's top-left, a smart object's first corner.
+        const origin = layer.type === 'pixel' ? { ...layer.offset } : layer.type === 'smart' ? { ...layer.placement.corners[0] } : (() => {
+          const b = shapeGeometryBounds(layer);
+          return b ? { x: b.x, y: b.y } : { x: 0, y: 0 };
+        })();
+        this.move = { id: layer.id, start: { x: sample.x, y: sample.y }, origin, moved: false };
         return null;
       }
       if (tool === 'brush' || tool === 'eraser' || tool === 'mixer') {

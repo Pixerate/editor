@@ -32,7 +32,8 @@ describe('list_layers', () => {
     const out = res.structuredContent as { canvas: unknown; activeLayerId: string; layers: Array<Record<string, any>> };
     expect(out.canvas).toEqual({ width: W, height: H });
     expect(out.activeLayerId).toBe('p');
-    expect(out.layers.map((l) => l.type)).toEqual(['pixel', 'adjustment', 'annotation', 'group']);
+    expect(out.layers.map((l) => l.type)).toEqual(['pixel', 'adjustment', 'shape', 'group']);
+    expect(out.layers[2]).toMatchObject({ name: 'Line', shape: { components: [{ op: 'combine', kind: 'line' }], fill: 'color', stroke: null }, annotation: { type: 'line' } });
     expect(out.layers[0]).toMatchObject({ id: 'background', name: 'Background', source: 'document', bounds: { x: 0, y: 0, width: W, height: H } });
     expect(out.layers[0].filters[0]).toMatchObject({ kind: 'develop', exposure: 12 });
     expect(out.layers[1]).toMatchObject({ id: adj, name: 'Contrast', kind: 'curves', mask: null });

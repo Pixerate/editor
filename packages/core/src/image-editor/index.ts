@@ -33,6 +33,10 @@ export { inflate, inflateRaw, deflate, deflateRaw, adler32, ZlibError } from '..
 export * from './layers/ops';
 export * from './layers/smart';
 export * from './smart-tools';
+export * from './layers/shape';
+export * from './shape-tools';
+export { rasterizeCoverage, flattenPath, type CoverageFillRule, type FlatPath } from './layers/vector-raster';
+export { parseCssColor } from './layers/css-color';
 export * from './layers/panel';
 export * from './layers/effects-ui';
 export * from '../paint';

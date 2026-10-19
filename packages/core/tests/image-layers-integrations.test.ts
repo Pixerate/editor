@@ -91,9 +91,13 @@ describe('rasterize layer', () => {
     await expect(c.rasterizeLayer(id)).rejects.toThrow(/no filters to bake/);
     const adj = c.addAdjustmentLayer('invert');
     await expect(c.rasterizeLayer(adj)).rejects.toThrow(/Merge it down or flatten/);
-    // Annotation layers need a canvas, and say so outside a browser.
-    const ann = c.addAnnotation({ type: 'rect', x: 1, y: 1, width: 5, height: 5, strokeColor: '#000', strokeWidth: 1 });
-    await expect(c.rasterizeLayer(ann)).rejects.toThrow(/needs a canvas/);
+    // A rectangle annotation is a shape layer now and rasterizes anywhere.
+    const rect = c.addAnnotation({ type: 'rect', x: 1, y: 1, width: 5, height: 5, strokeColor: '#000', strokeWidth: 1 });
+    await c.rasterizeLayer(rect);
+    expect(c.getLayer(rect)!.type).toBe('pixel');
+    // Image annotations still need a canvas, and say so outside a browser.
+    const img = c.addAnnotation({ type: 'image', x: 1, y: 1, width: 5, height: 5, src: 'data:image/png;base64,' });
+    await expect(c.rasterizeLayer(img)).rejects.toThrow(/needs a canvas/);
   });
 
   it('is an agent tool', async () => {

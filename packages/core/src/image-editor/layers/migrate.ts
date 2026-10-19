@@ -4,7 +4,8 @@
  *
  * - `layersFromLegacy` lifts a v1 / v2 state into layers: the source becomes the Background
  *   pixel layer carrying the base sliders as its `develop` filter and the depth mask as its
- *   parametric mask; adjustment layers go above it, annotations on top in their order. Blur
+ *   parametric mask; adjustment layers go above it, annotations on top in their order (pen,
+ *   rectangle, ellipse, line and arrow annotations as shape layers that remember them). Blur
  *   becomes a `blur` filter on the Background, or `legacyOutputBlur` when adjustment layers
  *   exist (blur used to run after them).
  * - `legacyView` reads the stack back as `adjustments` / `depthMask` / `annotations` (the
@@ -34,7 +35,9 @@ import {
   type LayerFilter,
   type PixelLayer,
   type RasterMask,
+  type ShapeLayer,
 } from './model';
+import { annotationOfShape, createShapeLayer, shapeFromAnnotation } from './shape';
 import { emptySurface, readRegion, surfaceFromPixels, type MaskSurface } from '../../raster/surface';
 
 export const BACKGROUND_LAYER_ID = 'background';
@@ -155,7 +158,21 @@ export function annotationLayerName(annotation: Annotation): string {
   }
 }
 
-export function annotationLayerFor(annotation: Annotation): AnnotationLayer {
+/**
+ * The layer an annotation becomes: a shape layer that remembers it (pen, rectangle, ellipse,
+ * line, arrow; rendered for a `canvas` of that size), else an annotation layer (text, image, or
+ * a colour a shape can't hold).
+ */
+export function annotationLayerFor(annotation: Annotation, canvas?: { width: number; height: number }): AnnotationLayer | ShapeLayer {
+  const shape = canvas ? shapeFromAnnotation(annotation) : null;
+  if (shape) {
+    const layer = createShapeLayer(
+      { ...shape, name: annotationLayerName(annotation), blend: annotation.blend && annotation.blend !== 'normal' ? annotation.blend : 'normal' },
+      canvas!,
+      annotation.id
+    );
+    return { ...layer, annotation };
+  }
   return {
     type: 'annotation',
     id: annotation.id,
@@ -165,6 +182,13 @@ export function annotationLayerFor(annotation: Annotation): AnnotationLayer {
     blend: 'normal',
     annotation,
   };
+}
+
+/** The annotation a layer still is (an annotation layer, or a shape layer migrated from one), or `null`. */
+export function annotationOfLayer(layer: ImageLayer): Annotation | null {
+  if (layer.type === 'annotation') return layer.annotation;
+  if (layer.type === 'shape') return annotationOfShape(layer);
+  return null;
 }
 
 export function adjustmentNodeFromLegacy(layer: AdjustmentLayer, width: number, height: number): AdjustmentLayerNode {
@@ -233,7 +257,7 @@ export function layersFromLegacy(parts: Partial<LegacyParts>, width: number, hei
   const mask = depth && !isDefaultDepthMask(depth) ? depthRasterMask({ ...DEFAULT_DEPTH_MASK_VALUES, ...depth }) : undefined;
   const layers: ImageLayer[] = [backgroundLayer(filters, mask)];
   for (const l of adjLayers) layers.push(adjustmentNodeFromLegacy(l, width, height));
-  for (const a of parts.annotations ?? []) layers.push(annotationLayerFor(JSON.parse(JSON.stringify(a))));
+  for (const a of parts.annotations ?? []) layers.push(annotationLayerFor(JSON.parse(JSON.stringify(a)), { width, height }));
   const out: LayerStack = { layers, outputOpacity: typeof adjustments.opacity === 'number' ? adjustments.opacity : 1 };
   if (legacyOutputBlur !== undefined) out.legacyOutputBlur = legacyOutputBlur;
   return out;
@@ -314,8 +338,11 @@ export function legacyView(stack: LayerStack, width: number, height: number, act
   const walk = (list: readonly ImageLayer[]) => {
     for (const l of list) {
       if (l.type === 'adjustment') adjNodes.push(l);
-      else if (l.type === 'annotation') annotations.push(l.annotation);
       else if (l.type === 'group') walk(l.children);
+      else {
+        const a = annotationOfLayer(l);
+        if (a) annotations.push(a);
+      }
     }
   };
   walk(layers);
@@ -354,6 +381,13 @@ export function isLegacyShape(stack: LayerStack): boolean {
   }
   for (; i < layers.length; i++) {
     const l = layers[i];
+    if (l.type === 'shape') {
+      // A migrated shape draws with its annotation's blend mode.
+      const a = l.annotation;
+      if (!a || (a.blend ?? 'normal') !== l.blend || !isPlain({ ...l, blend: 'normal' }) || l.fillOpacity !== undefined) return false;
+      if (l.id !== a.id || l.name !== annotationLayerName(a)) return false;
+      continue;
+    }
     if (l.type !== 'annotation' || !isPlain(l) || l.id !== l.annotation.id || l.name !== annotationLayerName(l.annotation)) return false;
   }
   if (blur && adjustments) return false;

@@ -111,7 +111,7 @@ describe('PSD export and import through the controller', () => {
     c.addAnnotation({ type: 'rect', x: 1, y: 1, width: 5, height: 5, strokeColor: '#000', strokeWidth: 1 });
     const { warnings } = await c.toPsd();
     expect(warnings.join(' ')).toMatch(/crop is not applied/);
-    expect(warnings.join(' ')).toMatch(/need a canvas/);
+    expect(warnings.join(' ')).toMatch(/Shape layers were written as pixel layers/);
   });
 
   it('undo restores the document that was open before', async () => {

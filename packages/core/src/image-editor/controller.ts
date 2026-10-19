@@ -23,7 +23,7 @@ import { ImageEditorRenderer, RenderOptions } from './renderer';
 import { clampCropToImage, isQuarterTurnSwapped } from './geometry';
 import { LATEST_PROCESS_VERSION, LEGACY_PROCESS_VERSION, normalizeProcessVersion } from './color';
 import { createAdjustmentLayer, normalizeAdjustmentLayer, normalizeAdjustmentLayers } from './adjustment-layers';
-import type { BlendMode } from './blend';
+import { isBlendMode, type BlendMode } from './blend';
 import type { ImageHistogram } from './histogram';
 import { applyAdjustments } from './filters';
 import {
@@ -68,7 +68,37 @@ import {
   type SmartFilter,
   type SmartObjectLayer,
   type SmartPlacement,
+  type LiveShape,
+  type ShapeComponent,
+  type ShapeFillRule,
+  type ShapeOperation,
+  type ShapeLayer,
+  type ShapePaint,
+  type ShapeStroke,
+  hasSurface,
 } from './layers/model';
+import {
+  annotationOfShape,
+  createShapeLayer,
+  liveComponent,
+  mergeShapeComponents as mergeShapeComponentsOp,
+  normalizeLiveShape,
+  normalizeShapePaint,
+  normalizeShapeStroke,
+  normalizeSubpaths,
+  offsetShape,
+  requireOperation,
+  requireShapeLayer,
+  rerenderShape,
+  shapeAsPixelLayer,
+  shapeFromAnnotation,
+  shapeGeometryBounds,
+  transformShapeComponents,
+  updateShapeLayer,
+  type ShapeEnv,
+} from './layers/shape';
+import { roundSubpaths } from '../vector/geometry';
+import type { VectorSubpath } from '../vector/types';
 import {
   addSmartFilter as addSmartFilterOp,
   contentsSurface,
@@ -100,6 +130,7 @@ import {
   adjustmentNodeFromLegacy,
   annotationLayerFor,
   annotationLayerName,
+  annotationOfLayer,
   depthRasterMask,
   developTarget,
   isDefaultDepthMask,
@@ -362,6 +393,49 @@ export interface PaintOptions {
   mixer: MixerSettings;
   /** What the Mixer Brush carries now: its reservoir, how much is left and the picked-up colour. */
   mixerLoad: MixerLoad;
+}
+
+/**
+ * The geometry of one shape component: a live shape (`{ kind: 'rect' | 'ellipse' | 'polygon' |
+ * 'star' | 'line', … }`, see `LiveShape`) or subpaths (`[{ anchors: [{ x, y, in?, out? }],
+ * closed }]` or SVG path data), and how it combines with the components below it.
+ */
+export interface ShapeGeometryInput {
+  shape?: LiveShape | Record<string, unknown>;
+  subpaths?: VectorSubpath[] | string;
+  /** Default `combine`. */
+  op?: ShapeOperation;
+}
+
+/** A new shape layer: its geometry (one component, or `components`), fill and stroke. */
+export interface ShapeLayerInit extends ShapeGeometryInput, LayerPlacement {
+  /** Several components instead of `shape` / `subpaths`, bottom first. */
+  components?: ShapeGeometryInput[];
+  name?: string;
+  /** A colour string or a paint; `null` for none. Default the foreground colour (none for a stroke-only open path). */
+  fill?: ShapePaint | string | null;
+  /** `{ width, paint, align?, cap?, join?, miterLimit?, dashes?, dashOffset? }`, or `null` / missing for none. */
+  stroke?: (Partial<ShapeStroke> & { paint?: ShapePaint | string; color?: string }) | null;
+  fillRule?: ShapeFillRule;
+  opacity?: number;
+  blend?: BlendMode;
+}
+
+/** A shape layer as tools and panels read it. */
+export interface ShapeLayerInfo {
+  id: string;
+  name: string;
+  /** Bottom to top; `index` is what component edits take. */
+  components: Array<{ index: number; op: ShapeOperation; live: LiveShape | null; subpaths: VectorSubpath[]; bounds: CropBox | null }>;
+  fillRule: ShapeFillRule;
+  fill: ShapePaint | null;
+  stroke: ShapeStroke | null;
+  /** Bounds of the paths (document pixels, not rounded), or `null` when empty. */
+  geometryBounds: CropBox | null;
+  /** Bounds of the rendered pixels (stroke and antialiasing included). */
+  bounds: CropBox | null;
+  /** The annotation id while the layer is still the annotation it was migrated from. */
+  annotationId?: string;
 }
 
 /** Paint tools a stroke can use. */
@@ -1166,7 +1240,7 @@ export class ImageEditorController {
    */
   public getLayerPixels(id: string): (PixelBuffer & { x: number; y: number }) | null {
     const layer = this.getLayer(id);
-    if (!layer || (layer.type !== 'pixel' && layer.type !== 'smart')) return null;
+    if (!layer || !hasSurface(layer)) return null;
     const surface = this.surfaceOf(layer);
     const b = contentBounds(surface);
     if (!b) return null;
@@ -1181,7 +1255,7 @@ export class ImageEditorController {
    */
   public getLayerBounds(id: string): CropBox | null {
     const layer = this.getLayer(id);
-    if (!layer || (layer.type !== 'pixel' && layer.type !== 'smart')) return null;
+    if (!layer || !hasSurface(layer)) return null;
     const surface = this.surfaceOf(layer);
     let b = this.boundsCache.get(surface);
     if (b === undefined) {
@@ -1197,7 +1271,7 @@ export class ImageEditorController {
    */
   public getLayerDataURL(id: string): string | null {
     const layer = this.getLayer(id);
-    if (!layer || (layer.type !== 'pixel' && layer.type !== 'smart')) return null;
+    if (!layer || !hasSurface(layer)) return null;
     const surface = this.surfaceOf(layer);
     const enc = encodeSurface(surface);
     return enc ? enc.url : null;
@@ -1247,9 +1321,9 @@ export class ImageEditorController {
     return String(id);
   }
 
-  /** The pixels a pixel layer or smart object composites (the decoded source for the Background). */
-  private surfaceOf(layer: PixelLayer | SmartObjectLayer): PixelSurface {
-    if (layer.type === 'smart' || layer.source !== 'document') return layer.surface;
+  /** The pixels a pixel layer, smart object or shape composites (the decoded source for the Background). */
+  private surfaceOf(layer: PixelLayer | SmartObjectLayer | ShapeLayer): PixelSurface {
+    if (layer.type !== 'pixel' || layer.source !== 'document') return layer.surface;
     return this.sourceSurface() ?? layer.surface;
   }
 
@@ -1446,7 +1520,7 @@ export class ImageEditorController {
   public removeLayer(id: string): void {
     const next = removeLayerOp(this.state.layers, id);
     this.commitLayers(next, () => {
-      if (this.state.selectedAnnotationId && !flattenLayers(next).some((l) => l.type === 'annotation' && l.annotation.id === this.state.selectedAnnotationId)) {
+      if (this.state.selectedAnnotationId && !flattenLayers(next).some((l) => annotationOfLayer(l)?.id === this.state.selectedAnnotationId)) {
         this.state.selectedAnnotationId = null;
       }
     });
@@ -1522,6 +1596,20 @@ export class ImageEditorController {
       this.commitLayers(offsetSmartObject(this.state.layers, id, dx, dy, this.canvasSize), undefined, commitToHistory);
       const moved = findLayer(this.state.layers, id)!.layer as SmartObjectLayer;
       return { offset: { x: Math.round(moved.placement.corners[0].x), y: Math.round(moved.placement.corners[0].y) }, bounds: this.getLayerBounds(id) };
+    }
+    if (layer.type === 'shape') {
+      // A shape moves its paths: x, y is where the top-left of its geometry goes.
+      const g = shapeGeometryBounds(layer) ?? { x: 0, y: 0 };
+      const dx = move.x !== undefined ? move.x - g.x : (move.dx ?? 0);
+      const dy = move.y !== undefined ? move.y - g.y : (move.dy ?? 0);
+      if (!Number.isFinite(dx) || !Number.isFinite(dy)) throw new LayerOperationError('x and y must be numbers.');
+      requireUnlocked(layer, 'position', 'move it');
+      let moved = offsetShape(layer, dx, dy, this.shapeEnv());
+      const mask = layer.mask;
+      if (mask && mask.linked !== false && !mask.source && (Math.round(dx) || Math.round(dy))) moved = { ...moved, mask: { ...mask, surface: translateSurface(mask.surface, Math.round(dx), Math.round(dy)) } };
+      this.commitLayers(mapLayer(this.state.layers, id, () => moved), undefined, commitToHistory);
+      const b = shapeGeometryBounds(moved) ?? { x: 0, y: 0 };
+      return { offset: { x: Math.round(b.x), y: Math.round(b.y) }, bounds: this.getLayerBounds(id) };
     }
     const current = layer.type === 'pixel' ? layer.offset : { x: 0, y: 0 };
     const x = move.x ?? current.x + (move.dx ?? 0);
@@ -1680,6 +1768,7 @@ export class ImageEditorController {
       selection: () => (this.state.selection?.bounds ? this.state.selection : null),
       canvas: () => this.naturalSize,
       pixelsOf: (layer) => this.surfaceOf(layer),
+      shapeEnv: () => this.shapeEnv(),
       capture: () => this.captureHistoryEntry(),
       show: (layers, selection, active) => {
         this.state.layers = layers;
@@ -2358,7 +2447,7 @@ export class ImageEditorController {
   private paintBounds(layer: ImageLayer): CropBox {
     const { width, height } = this.naturalSize;
     const canvas = { x: 0, y: 0, width, height };
-    if (layer.type === 'pixel') return this.getLayerBounds(layer.id) ?? { x: 0, y: 0, width: 0, height: 0 };
+    if (hasSurface(layer)) return this.getLayerBounds(layer.id) ?? { x: 0, y: 0, width: 0, height: 0 };
     if (layer.type === 'annotation') {
       const b = getAnnotationBounds(layer.annotation);
       const pad = 4 + ('strokeWidth' in layer.annotation ? (layer.annotation as { strokeWidth: number }).strokeWidth : 0);
@@ -2475,7 +2564,7 @@ export class ImageEditorController {
     const k = Math.min(1, side / Math.max(width, height));
     const tw = Math.max(1, Math.round(width * k));
     const th = Math.max(1, Math.round(height * k));
-    const surface = options.mask ? (layer.mask && !layer.mask.source ? layer.mask.surface : null) : layer.type === 'pixel' || layer.type === 'smart' ? this.surfaceOf(layer) : null;
+    const surface = options.mask ? (layer.mask && !layer.mask.source ? layer.mask.surface : null) : hasSurface(layer) ? this.surfaceOf(layer) : null;
     if (!surface) return null;
     const ox = layer.type === 'pixel' ? layer.offset.x : 0;
     const oy = layer.type === 'pixel' ? layer.offset.y : 0;
@@ -2590,6 +2679,7 @@ export class ImageEditorController {
       requireUnlocked(layer, 'all', action);
     } else {
       if (layer.type === 'smart') throw new LayerOperationError(`Layer "${layer.name || id}" is a smart object; its pixels come from its contents. Rasterize it (rasterize_smart_object), edit its contents (edit_smart_object_contents), or ${action} on its mask or filter mask.`);
+      if (layer.type === 'shape') throw new LayerOperationError(`Layer "${layer.name || id}" is a shape layer; its pixels are drawn from its paths. Rasterize it first (rasterize_layer), or ${action} on its mask (channel mask).`);
       if (layer.type !== 'pixel') throw new LayerOperationError(`Layer "${layer.name || id}" is a ${layer.type} layer; ${action} on a pixel layer, or on this layer's mask (channel mask).`);
       requireUnlocked(layer, 'pixels', action);
     }
@@ -3375,18 +3465,22 @@ export class ImageEditorController {
 
   // --- Annotations & Layers ---
 
-  private annotationLayer(id: string): AnnotationLayer | undefined {
-    return flattenLayers(this.state.layers).find(
-      (l): l is AnnotationLayer => l.type === 'annotation' && l.annotation.id === id
-    );
+  /** The layer showing annotation `id`: an annotation layer, or a shape layer migrated from it. */
+  private annotationLayer(id: string): AnnotationLayer | ShapeLayer | undefined {
+    return flattenLayers(this.state.layers).find((l): l is AnnotationLayer | ShapeLayer => (l.type === 'annotation' || l.type === 'shape') && annotationOfLayer(l)?.id === id);
   }
 
-  /** Adds an annotation as its own layer (top of the stack unless `aboveId` is given). */
+  /**
+   * Adds an annotation as its own layer (top of the stack unless `aboveId` is given). Pen,
+   * rectangle, ellipse, line and arrow annotations become shape layers that remember the
+   * annotation (so `annotations` and `updateAnnotation` keep working); text and images stay
+   * annotation layers.
+   */
   public addAnnotation(annotation: CreateAnnotationPayload, placement: AnnotationPlacement = {}): string {
     this.recordHistory();
     const id = `ann_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const fullAnnotation = { ...annotation, id } as Annotation;
-    const layer = annotationLayerFor(fullAnnotation);
+    const layer = annotationLayerFor(fullAnnotation, this.shapeEnv());
     const loc = placement.aboveId ? findLayer(this.state.layers, placement.aboveId) : null;
     this.state.layers = loc
       ? insertLayer(this.state.layers, layer, loc.parent?.id ?? null, loc.index + 1)
@@ -3401,12 +3495,33 @@ export class ImageEditorController {
       this.recordHistory();
     }
     const layer = this.annotationLayer(id);
-    if (layer) {
-      const annotation = { ...layer.annotation, ...partial, id } as Annotation;
-      const name = layer.name === annotationLayerName(layer.annotation) ? annotationLayerName(annotation) : layer.name;
-      this.state.layers = mapLayer(this.state.layers, layer.id, () => ({ ...layer, annotation, name }));
+    const current = layer ? annotationOfLayer(layer) : null;
+    if (layer && current) {
+      const annotation = { ...current, ...partial, id } as Annotation;
+      const name = layer.name === annotationLayerName(current) ? annotationLayerName(annotation) : layer.name;
+      this.state.layers = mapLayer(this.state.layers, layer.id, () => this.layerForAnnotation(layer, annotation, name));
     }
     this.notify();
+  }
+
+  /** `layer` (an annotation or migrated shape layer) showing `annotation` instead, keeping its other properties. */
+  private layerForAnnotation(layer: AnnotationLayer | ShapeLayer, annotation: Annotation, name: string): ImageLayer {
+    const shape = shapeFromAnnotation(annotation);
+    const { annotation: _old, ...props } = layer as ImageLayer & { annotation?: Annotation };
+    const blend = annotation.blend && annotation.blend !== 'normal' ? annotation.blend : 'normal';
+    if (shape) {
+      const base = { ...props, name, blend: layer.type === 'annotation' && layer.blend !== 'normal' ? layer.blend : blend } as ImageLayer;
+      if (layer.type === 'shape') {
+        const fresh = rerenderShape({ ...(base as ShapeLayer), components: shape.components, fill: shape.fill, stroke: shape.stroke }, this.shapeEnv());
+        delete fresh.fillRule;
+        return { ...fresh, annotation };
+      }
+      const created = createShapeLayer({ ...shape, name, blend: base.blend as BlendMode }, this.shapeEnv(), layer.id);
+      const { type: _t, ...rest } = base as AnnotationLayer;
+      return { ...rest, ...created, annotation } as ShapeLayer;
+    }
+    const { type: _t, components: _c, fill: _f, stroke: _s, surface: _sf, offset: _o, fillRule: _r, fillOpacity: _fo, psd: _p, ...rest } = props as ShapeLayer;
+    return { ...rest, type: 'annotation', name, blend: layer.type === 'shape' ? 'normal' : layer.blend, annotation } as AnnotationLayer;
   }
 
   public removeAnnotation(id: string): void {
@@ -3419,10 +3534,11 @@ export class ImageEditorController {
     this.notify();
   }
 
+  /** Deletes every annotation layer and every shape layer that still is the annotation it was migrated from. */
   public clearAnnotations(): void {
     this.recordHistory();
     let layers = this.state.layers;
-    for (const l of flattenLayers(layers)) if (l.type === 'annotation') layers = mapLayer(layers, l.id, () => null);
+    for (const l of flattenLayers(layers)) if (l.type === 'annotation' || (l.type === 'shape' && l.annotation)) layers = mapLayer(layers, l.id, () => null);
     this.state.layers = layers;
     this.state.selectedAnnotationId = null;
     this.notify();
@@ -3693,6 +3809,158 @@ export class ImageEditorController {
     return target.id;
   }
 
+  // --- Shape layers ---
+
+  /** What shape rendering needs: the canvas size and the document's patterns. */
+  private shapeEnv(): ShapeEnv {
+    return { ...this.naturalSize, pattern: (id) => this.state.patterns?.find((p) => p.id === id) ?? null };
+  }
+
+  /** One component from tool or UI input (validated). */
+  private componentFrom(spec: ShapeGeometryInput, path: string): ShapeComponent {
+    const op = requireOperation(spec.op, `${path}op`);
+    if (spec.shape !== undefined && spec.subpaths !== undefined) throw new LayerOperationError(`Give ${path}shape or ${path}subpaths, not both.`);
+    if (spec.shape !== undefined) return liveComponent(normalizeLiveShape(spec.shape, `${path}shape`), op);
+    if (spec.subpaths !== undefined) return { op, subpaths: normalizeSubpaths(spec.subpaths, `${path}subpaths`) };
+    throw new LayerOperationError(`${path}shape (a live shape: { kind: rect | ellipse | polygon | star | line, … }) or ${path}subpaths (anchors or SVG path data) is required.`);
+  }
+
+  private shapeInfo(id: string): ShapeLayerInfo {
+    const layer = requireShapeLayer(this.state.layers, id);
+    const r = (n: number) => Math.round(n * 1000) / 1000;
+    const box = (b: CropBox | null) => (b ? { x: r(b.x), y: r(b.y), width: r(b.width), height: r(b.height) } : null);
+    const info: ShapeLayerInfo = {
+      id: layer.id,
+      name: layer.name,
+      components: layer.components.map((c, index) => ({
+        index,
+        op: c.op,
+        live: c.live ? JSON.parse(JSON.stringify(c.live)) : null,
+        subpaths: roundSubpaths(c.subpaths),
+        bounds: box(shapeGeometryBounds({ components: [c] })),
+      })),
+      fillRule: layer.fillRule ?? 'nonzero',
+      fill: layer.fill ? JSON.parse(JSON.stringify(layer.fill)) : null,
+      stroke: layer.stroke ? JSON.parse(JSON.stringify(layer.stroke)) : null,
+      geometryBounds: box(shapeGeometryBounds(layer)),
+      bounds: this.getLayerBounds(id),
+    };
+    if (layer.annotation) info.annotationId = layer.annotation.id;
+    return info;
+  }
+
+  /** A shape layer's components, fill, stroke and bounds. */
+  public getShapeLayer(id: string): ShapeLayerInfo {
+    return this.shapeInfo(id);
+  }
+
+  /**
+   * Adds a shape layer (one undo step) and makes it active: a live shape or subpaths (or several
+   * `components`), filled with `fill` (default the foreground colour, except for a stroke-only
+   * open path) and stroked with `stroke`. Goes above the active layer unless placed. Returns its id.
+   */
+  public addShapeLayer(init: ShapeLayerInit): string {
+    const specs: ShapeGeometryInput[] = init.components?.length ? init.components : [init];
+    if (init.components?.length && (init.shape !== undefined || init.subpaths !== undefined)) throw new LayerOperationError('Give components, or shape / subpaths, not both.');
+    const components = specs.map((c, i) => this.componentFrom(c, init.components?.length ? `components[${i}].` : ''));
+    const stroke = init.stroke ? normalizeShapeStroke(init.stroke, 'stroke') : null;
+    const openOnly = components.every((c) => !c.live && c.subpaths.every((sp) => !sp.closed));
+    const fill = init.fill === undefined ? (stroke && openOnly ? null : normalizeShapePaint(this.state.paint.foreground, 'fill')) : init.fill === null ? null : normalizeShapePaint(init.fill, 'fill');
+    if (!fill && !stroke) throw new LayerOperationError('A shape with neither fill nor stroke draws nothing; give fill or stroke.');
+    if (init.fillRule !== undefined && init.fillRule !== 'nonzero' && init.fillRule !== 'evenodd') throw new LayerOperationError('fillRule must be nonzero or evenodd.');
+    if (init.opacity !== undefined && !(Number.isFinite(init.opacity) && init.opacity >= 0 && init.opacity <= 1)) throw new LayerOperationError('opacity must be between 0 and 1.');
+    if (init.blend !== undefined && !isBlendMode(init.blend)) throw new LayerOperationError(`Unknown blend mode "${String(init.blend)}".`);
+    const layer = createShapeLayer({ components, fill, stroke, fillRule: init.fillRule, name: init.name, opacity: init.opacity, blend: init.blend }, this.shapeEnv());
+    const next = placeLayer(this.state.layers, layer, this.newLayerPlacement(init));
+    this.commitLayers(next, () => {
+      this.state.activeLayerId = layer.id;
+      this.state.activeTarget = 'pixels';
+    });
+    return layer.id;
+  }
+
+  /**
+   * Sets a shape's fill, stroke or fill rule (one undo step unless `commitToHistory` is false):
+   * `fill` / `stroke` replace them (`null` removes); `stroke` given as a partial object changes
+   * only those settings of the current stroke. Returns the shape.
+   */
+  public setShapeStyle(
+    id: string,
+    changes: { fill?: ShapePaint | string | null; stroke?: (Partial<ShapeStroke> & { paint?: ShapePaint | string; color?: string }) | null; fillRule?: ShapeFillRule },
+    commitToHistory = true
+  ): ShapeLayerInfo {
+    const layer = requireShapeLayer(this.state.layers, id);
+    const fill = changes.fill === undefined ? layer.fill : changes.fill === null ? null : normalizeShapePaint(changes.fill, 'fill');
+    const stroke = changes.stroke === undefined ? layer.stroke : changes.stroke === null ? null : normalizeShapeStroke(changes.stroke, 'stroke', layer.stroke);
+    if (changes.fillRule !== undefined && changes.fillRule !== 'nonzero' && changes.fillRule !== 'evenodd') throw new LayerOperationError('fillRule must be nonzero or evenodd.');
+    const fillRule = changes.fillRule ?? layer.fillRule ?? 'nonzero';
+    const { layers } = updateShapeLayer(this.state.layers, id, () => ({ fill, stroke, fillRule: fillRule === 'nonzero' ? undefined : fillRule }), this.shapeEnv(), 'restyle it');
+    this.commitLayers(layers, undefined, commitToHistory);
+    return this.shapeInfo(id);
+  }
+
+  private componentIndex(layer: ShapeLayer, index: unknown): number {
+    if (!Number.isInteger(index) || (index as number) < 0 || (index as number) >= layer.components.length) {
+      throw new LayerOperationError(`componentIndex must be 0..${layer.components.length - 1} (get_shape_layer lists the components), got ${String(index)}.`);
+    }
+    return index as number;
+  }
+
+  /**
+   * Changes one component (one undo step unless `commitToHistory` is false): its live shape
+   * (fields not given keep their values when the kind stays the same), its subpaths (which drops
+   * the live shape) or its operation. Returns the shape.
+   */
+  public setShapeComponent(id: string, index: number, change: ShapeGeometryInput, commitToHistory = true): ShapeLayerInfo {
+    const layer = requireShapeLayer(this.state.layers, id);
+    const i = this.componentIndex(layer, index);
+    const current = layer.components[i];
+    let shape = change.shape;
+    if (shape && current.live && (shape as { kind?: unknown }).kind === undefined) shape = { ...current.live, ...shape } as LiveShape;
+    else if (shape && current.live && (shape as { kind?: unknown }).kind === current.live.kind) shape = { ...current.live, ...shape } as LiveShape;
+    const next = shape !== undefined || change.subpaths !== undefined ? this.componentFrom({ ...change, shape, op: change.op ?? current.op }, '') : { ...current, op: requireOperation(change.op) };
+    const components = layer.components.map((c, k) => (k === i ? next : c));
+    const { layers } = updateShapeLayer(this.state.layers, id, () => ({ components }), this.shapeEnv(), 'edit its path');
+    this.commitLayers(layers, undefined, commitToHistory);
+    return this.shapeInfo(id);
+  }
+
+  /** Adds a component to a shape (path operations), on top unless `index` is given (one undo step). Returns the shape. */
+  public addShapeComponent(id: string, spec: ShapeGeometryInput, index?: number): ShapeLayerInfo {
+    const layer = requireShapeLayer(this.state.layers, id);
+    const c = this.componentFrom(spec, '');
+    const at = index === undefined ? layer.components.length : index;
+    if (!Number.isInteger(at) || at < 0 || at > layer.components.length) throw new LayerOperationError(`index must be 0..${layer.components.length}, got ${String(index)}.`);
+    const components = [...layer.components.slice(0, at), c, ...layer.components.slice(at)];
+    const { layers } = updateShapeLayer(this.state.layers, id, () => ({ components }), this.shapeEnv(), 'edit its path');
+    this.commitLayers(layers);
+    return this.shapeInfo(id);
+  }
+
+  /** Removes one component of a shape (one undo step); the last one cannot go (delete the layer instead). Returns the shape. */
+  public removeShapeComponent(id: string, index: number): ShapeLayerInfo {
+    const layer = requireShapeLayer(this.state.layers, id);
+    const i = this.componentIndex(layer, index);
+    if (layer.components.length === 1) throw new LayerOperationError('This is the shape\'s only component; delete the layer instead (delete_layer).');
+    const components = layer.components.filter((_, k) => k !== i);
+    const { layers } = updateShapeLayer(this.state.layers, id, () => ({ components }), this.shapeEnv(), 'edit its path');
+    this.commitLayers(layers);
+    return this.shapeInfo(id);
+  }
+
+  /**
+   * Merge Shape Components: the area the components combine to becomes one plain component (live
+   * shapes become paths), as one undo step. Returns the shape.
+   */
+  public mergeShapeComponents(id: string): ShapeLayerInfo {
+    const layer = requireShapeLayer(this.state.layers, id);
+    if (layer.components.length < 2) throw new LayerOperationError('The shape has one component; there is nothing to merge.');
+    const components = mergeShapeComponentsOp(layer.components, layer.fillRule);
+    const { layers } = updateShapeLayer(this.state.layers, id, () => ({ components, fillRule: undefined }), this.shapeEnv(), 'edit its path');
+    this.commitLayers(layers);
+    return this.shapeInfo(id);
+  }
+
   /**
    * Rasterize Layer: an annotation layer becomes a pixel layer with the same id, name and
    * properties (needs a canvas), and a pixel layer's filters are baked into its pixels. One undo
@@ -3734,8 +4002,11 @@ export class ImageEditorController {
       }
     } else if (layer.type === 'smart') {
       return this.rasterizeSmartObject(id);
+    } else if (layer.type === 'shape') {
+      next = shapeAsPixelLayer(layer);
+      if (this.state.selectedAnnotationId && this.state.selectedAnnotationId === layer.annotation?.id) this.state.selectedAnnotationId = null;
     } else {
-      throw new LayerOperationError(`Only annotation layers, smart objects and pixel layers with filters rasterize; "${layer.name || id}" is a ${layer.type} layer. Merge it down or flatten instead.`);
+      throw new LayerOperationError(`Only shape and annotation layers, smart objects and pixel layers with filters rasterize; "${layer.name || id}" is a ${layer.type} layer. Merge it down or flatten instead.`);
     }
     this.commitLayers(mapLayer(this.state.layers, id, () => next));
     return id;
@@ -3868,6 +4139,14 @@ export class ImageEditorController {
         if (mask) out.mask = mask;
         return out;
       }
+      if (layer.type === 'shape') {
+        add('Shape layers were written as pixel layers', layer.name);
+        const out = shapeAsPixelLayer(layer);
+        const mask = bakeMask(layer);
+        if (mask) out.mask = mask;
+        else delete out.mask;
+        return out;
+      }
       if (layer.type === 'smart') {
         const out = { ...layer };
         const mask = bakeMask(layer);
@@ -3950,9 +4229,20 @@ export class ImageEditorController {
         );
       }
       layers = resizeLegacyMasks(layers, prev, next.dimensions);
+      const env: ShapeEnv = { ...next.dimensions, pattern: (pid) => this.state.patterns?.find((p) => p.id === pid) ?? null };
       for (const l of flattenLayers(layers)) {
         if (l.type === 'annotation') {
           layers = mapLayer(layers, l.id, () => ({ ...l, annotation: scaleAnnotation(l.annotation, sx, sy) }));
+        } else if (l.type === 'shape') {
+          const a = l.annotation;
+          const scaled = a ? scaleAnnotation(a, sx, sy) : null;
+          const fromAnnotation = scaled ? shapeFromAnnotation(scaled) : null;
+          const m: AffineMatrix = [sx, 0, 0, sy, 0, 0];
+          const components = fromAnnotation?.components ?? transformShapeComponents(l.components, (p) => ({ x: p.x * sx, y: p.y * sy }), m);
+          const moved: ShapeLayer = { ...l, components, ...(fromAnnotation ? { fill: fromAnnotation.fill, stroke: fromAnnotation.stroke } : {}) };
+          if (scaled && fromAnnotation) moved.annotation = scaled;
+          else delete moved.annotation;
+          layers = mapLayer(layers, l.id, () => rerenderShape(moved, env));
         }
       }
     }
@@ -3961,7 +4251,7 @@ export class ImageEditorController {
     if (bg && bg.source !== 'document') layers = mapLayer(layers, bg.id, () => ({ ...bg, source: 'document' }));
 
     if (clearAnnotations) {
-      for (const l of flattenLayers(layers)) if (l.type === 'annotation') layers = mapLayer(layers, l.id, () => null);
+      for (const l of flattenLayers(layers)) if (l.type === 'annotation' || (l.type === 'shape' && l.annotation)) layers = mapLayer(layers, l.id, () => null);
       this.state.selectedAnnotationId = null;
     }
     this.state.layers = layers;
@@ -4051,7 +4341,14 @@ export class ImageEditorController {
     if (isLayered(data)) {
       const problems: string[] = [];
       const canvas = typeof data.width === 'number' && data.width > 0 && typeof data.height === 'number' && data.height > 0 ? { width: data.width, height: data.height } : this.naturalSize;
-      s.layers = deserializeLayers(data.layers, { assets: data.assets ?? {}, problems, smartContents: Array.isArray(data.smartContents) ? data.smartContents : [], canvas });
+      const storedPatterns = deserializePatterns(data.patterns, []);
+      s.layers = deserializeLayers(data.layers, {
+        assets: data.assets ?? {},
+        problems,
+        smartContents: Array.isArray(data.smartContents) ? data.smartContents : [],
+        canvas,
+        pattern: (pid) => storedPatterns.find((p) => p.id === pid) ?? null,
+      });
       this.lastLoadProblems = problems;
       s.crop = data.crop ? { ...data.crop } : null;
       s.transform = { ...data.transform };
@@ -4273,6 +4570,7 @@ function collectStateTiles(layers: readonly ImageLayer[], into: Set<Tile>): void
   for (const l of flattenLayers(layers)) {
     if (l.type === 'pixel' && l.source !== 'document') collectTiles(l.surface, into);
     if (l.mask && !l.mask.source) collectTiles(l.mask.surface, into);
+    if (l.type === 'shape') collectTiles(l.surface, into);
     if (l.type === 'smart') {
       collectTiles(l.surface, into);
       if (l.smartFilters?.mask) collectTiles(l.smartFilters.mask.surface, into);
@@ -4326,7 +4624,7 @@ export function resizePixels(px: PixelBuffer, width: number, height: number): Pi
 function withoutAnnotations(layers: readonly ImageLayer[]): ImageLayer[] {
   const out: ImageLayer[] = [];
   for (const l of layers) {
-    if (l.type === 'annotation') continue;
+    if (l.type === 'annotation' || (l.type === 'shape' && l.annotation)) continue;
     out.push(l.type === 'group' ? { ...l, children: withoutAnnotations(l.children) } : l);
   }
   return out;
