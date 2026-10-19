@@ -31,6 +31,8 @@ export * from './layers/render';
 export { encodePng, decodePng, isPng, bytesToBase64, base64ToBytes, parseDataUrl, pngDataUrl, type DecodedPng } from '../raster/png';
 export { inflate, inflateRaw, deflate, deflateRaw, adler32, ZlibError } from '../raster/zlib';
 export * from './layers/ops';
+export * from './layers/smart';
+export * from './smart-tools';
 export * from './layers/panel';
 export * from './layers/effects-ui';
 export * from '../paint';
