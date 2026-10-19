@@ -21,6 +21,9 @@ import { createImageSelectionTools } from './selection-tools';
 import { createImageCaptureSurface } from './capture';
 import { createCaptureTool } from '../tools/capture.js';
 import { createImageEditTools } from './edit-tools';
+import { createImageLayerTools } from './layer-tools';
+import { createImagePaintTools } from './paint-tools';
+import { createImagePsdTools } from './psd-tools';
 
 export interface ImageEditorToolProviderOptions {
   /** Provider id (unique per registry). Default `image-editor`. */
@@ -200,6 +203,8 @@ export function createImageEditorToolProvider(
         opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Layer opacity 0-1 (default 1).' },
         blend: { type: 'string', enum: BLEND_MODES.map((m) => m.id), description: 'Blend mode (default normal).' },
         name: { type: 'string', description: 'Layer name shown in the layers panel.' },
+        aboveId: { type: 'string', description: 'Put the layer directly above this layer (from list_layers). Default: above the other adjustment layers, below annotations.' },
+        parentId: { type: 'string', description: 'Put the layer at the top of this group (from list_layers).' },
       },
       required: ['kind'],
       additionalProperties: false,
@@ -211,23 +216,30 @@ export function createImageEditorToolProvider(
       idempotentHint: false,
       openWorldHint: false,
     },
-    handler: ({ kind, params, opacity, blend, name }) => {
+    handler: ({ kind, params, opacity, blend, name, aboveId, parentId }) => {
       if (!isAdjustmentKind(kind)) throw new Error(`Unknown adjustment kind "${kind}".`);
       if (blend !== undefined && !isBlendMode(blend)) throw new Error(`Unknown blend mode "${blend}".`);
-      const id = controller.addAdjustmentLayer({ kind: kind as AdjustmentKind, params, opacity, blend, name });
+      if (aboveId !== undefined && parentId !== undefined) throw new Error('Give aboveId or parentId, not both.');
+      for (const ref of [aboveId, parentId]) {
+        if (ref !== undefined && !controller.getLayer(ref as string)) throw new Error(`Unknown layer "${ref}". Call list_layers for ids.`);
+      }
+      if (parentId !== undefined && controller.getLayer(parentId as string)?.type !== 'group') throw new Error(`Layer "${parentId}" is not a group.`);
+      const id = controller.addAdjustmentLayer({ kind: kind as AdjustmentKind, params, opacity, blend, name, aboveId, parentId });
       const layer = controller.getAdjustmentLayer(id)!;
-      return { layer: JSON.parse(JSON.stringify(layer)), index: controller.getAdjustmentLayers().length - 1 };
+      return { layer: JSON.parse(JSON.stringify(layer)), index: controller.getAdjustmentLayers().findIndex((l) => l.id === id) };
     },
   };
 
   const renderPreview: AgentTool = {
     name: 'render_preview',
     title: 'Render a preview',
-    description: 'Renders the edited image (crop, adjustments, layers, annotations) as a PNG whose longest side is at most maxSide pixels.',
+    description:
+      'Renders the edited image (crop, adjustments, layers, annotations) as a PNG whose longest side is at most maxSide pixels. With layerId, renders only that layer (a group with its children) through the same crop and rotation.',
     inputSchema: {
       type: 'object',
       properties: {
         maxSide: { type: 'integer', minimum: 16, maximum: 2048, description: 'Longest side in pixels (default 512).' },
+        layerId: { type: 'string', description: 'Render only this layer (from list_layers).' },
       },
       additionalProperties: false,
     },
@@ -238,7 +250,8 @@ export function createImageEditorToolProvider(
       idempotentHint: true,
       openWorldHint: false,
     },
-    handler: async ({ maxSide }) => {
+    handler: async ({ maxSide, layerId }) => {
+      if (layerId !== undefined && !controller.getLayer(layerId as string)) throw new Error(`Unknown layer "${layerId}". Call list_layers for ids.`);
       const side = Math.max(16, Math.min(2048, Math.round(typeof maxSide === 'number' ? maxSide : 512)));
       const state = controller.getState();
       const crop = state.crop ?? { x: 0, y: 0, ...state.imageDimensions };
@@ -250,6 +263,7 @@ export function createImageEditorToolProvider(
         format: 'image/png',
         width: Math.max(1, Math.round(w * k)),
         height: Math.max(1, Math.round(h * k)),
+        ...(layerId !== undefined ? { layerIds: [layerId as string] } : {}),
       });
       const comma = dataUrl.indexOf(',');
       if (!dataUrl.startsWith('data:image/png') || comma < 0 || comma === dataUrl.length - 1) {
@@ -276,6 +290,9 @@ export function createImageEditorToolProvider(
       createCaptureTool(createImageCaptureSurface(controller), { subject: 'the image (source orientation, before crop and rotation)', defaultPadding: 0 }),
       ...createImageSelectionTools(controller),
       ...createImageEditTools(controller),
+      ...createImageLayerTools(controller),
+      ...createImagePaintTools(controller),
+      ...createImagePsdTools(controller),
     ],
   };
 }

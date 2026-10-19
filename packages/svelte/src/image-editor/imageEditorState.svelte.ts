@@ -1,5 +1,6 @@
 import {
   ImageEditorController,
+  type ImageEditorFit,
   type ImageEditorOptions,
   type ImageEditorState,
   type ImageEditorTool,
@@ -11,6 +12,7 @@ import {
   type CreateAnnotationPayload,
   type ExportOptions,
   type SerializedImageEditorState,
+  type AIResultOptions,
   type ImagePoint,
   type AdjustmentKind,
   type AdjustmentLayerInit,
@@ -151,6 +153,9 @@ export function createReactiveImageEditor(options: ImageEditorOptions = {}) {
     setComparing(comparing: boolean) {
       controller.setComparing(comparing);
     },
+    setFit(fit: ImageEditorFit) {
+      controller.setFit(fit);
+    },
     loadImage(src: string | HTMLImageElement) {
       return controller.loadImage(src);
     },
@@ -175,11 +180,13 @@ export function createReactiveImageEditor(options: ImageEditorOptions = {}) {
     toSourceDataURL(opts?: Pick<ExportOptions, 'format' | 'quality'>) {
       return controller.toSourceDataURL(opts);
     },
-    applyInpaintedImage(newDataUrl: string) {
-      return controller.applyInpaintedImage(newDataUrl);
+    /** In documents with several layers (or `target: 'new-layer'`) the result goes to a new layer. */
+    applyInpaintedImage(newDataUrl: string, options?: AIResultOptions) {
+      return controller.applyInpaintedImage(newDataUrl, options);
     },
-    applyBackgroundRemovedImage(newDataUrl: string) {
-      return controller.applyBackgroundRemovedImage(newDataUrl);
+    /** In documents with several layers (or `target: 'new-layer'`) the result's alpha masks the active layer. */
+    applyBackgroundRemovedImage(newDataUrl: string, options?: AIResultOptions) {
+      return controller.applyBackgroundRemovedImage(newDataUrl, options);
     },
     /** Stops syncing controller state; call when the editor is no longer used. */
     destroy() {

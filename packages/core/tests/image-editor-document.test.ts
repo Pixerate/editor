@@ -31,7 +31,7 @@ describe("loadImageEditorDocument", () => {
       expect(report.migratedFrom).toBeNull();
       expect(unknown).toEqual({});
     }
-    expect(IMAGE_EDITOR_STATE_VERSION).toBe(1);
+    expect(IMAGE_EDITOR_STATE_VERSION).toBe(3);
   });
 
   it("keeps a missing process legacy (adjustments are passed through as stored)", () => {
@@ -76,11 +76,47 @@ describe("loadImageEditorDocument", () => {
   });
 
   it("reports a newer version read-only but still loads it, and preserves unknown keys", () => {
-    const { state, report, unknown } = loadImageEditorDocument({ ...valid, version: 2, layers: [{ id: "l1" }] });
-    expect(report.readOnly).toMatchObject({ kind: "newerVersion", version: 2, supported: 1 });
+    const { state, report, unknown } = loadImageEditorDocument({ ...valid, version: 4, layers: [{ id: "l1" }] });
+    expect(report.readOnly).toMatchObject({ kind: "newerVersion", version: 4, supported: 3 });
     expect(state.crop).toEqual(valid.crop);
     expect(unknown).toEqual({ layers: [{ id: "l1" }] });
     expect(report.unknownKeys).toEqual(["layers"]);
+  });
+
+  it("loads version 2 (adjustment layers) as current, keeping its version", () => {
+    const layer = { id: "adj_1", kind: "invert", enabled: true, opacity: 1, blend: "normal", params: {} };
+    const v2 = { ...valid, version: 2, adjustments: { ...valid.adjustments, layers: [layer] } };
+    const { state, report } = loadImageEditorDocument(v2);
+    expect(report.readOnly).toBeNull();
+    expect(report.version).toBe(2);
+    expect(state).toEqual(v2);
+  });
+
+  it("loads version 3 (layers) section by section and drops unreadable layers", () => {
+    const v3 = {
+      version: 3,
+      width: 40,
+      height: 30,
+      layers: [
+        { type: "pixel", id: "background", name: "Background", visible: true, opacity: 1, blend: "normal", offset: { x: 0, y: 0 }, source: "document" },
+        { type: "nonsense", id: "x" },
+        { type: "group", id: "g", name: "G", visible: true, opacity: 1, blend: "pass-through", children: [{ bad: true }] },
+      ],
+      assets: { a: "data:image/png;base64,AAAA", b: 3 },
+      activeLayerId: "background",
+      crop: null,
+      transform: { rotate: 0, flipH: false, flipV: false },
+      opacity: 2,
+    };
+    const { state, report } = loadImageEditorDocument(JSON.stringify(v3));
+    expect(report.readOnly).toBeNull();
+    expect(state.version).toBe(3);
+    if (state.version !== 3) return;
+    expect(state.layers.map((l) => l.id)).toEqual(["background", "g"]);
+    expect(state.layers[1]).toMatchObject({ type: "group", children: [] });
+    expect(state.assets).toEqual({ a: "data:image/png;base64,AAAA" });
+    expect(state.opacity).toBe(1);
+    expect(report.problems).toEqual([{ section: "layers", message: "2 invalid layers dropped" }]);
   });
 
   it("reports unparsable input and returns defaults", () => {

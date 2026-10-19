@@ -1,5 +1,57 @@
 # @pixerate/editor-svelte
 
+## 0.69.0
+
+### Minor Changes
+
+- 4f981e2: Image editor layer integrations. In documents with more than one pixel layer or group (`isMultiLayer`), `applyInpaintedImage` adds the result as a new layer above the active layer (limited to the selection) and `applyBackgroundRemovedImage` masks the active pixel layer with the result's alpha; single-layer documents keep replacing the Background, and both take `{ target: 'new-layer' | 'replace' }`. `toAIInputDataURL` gives hooks the matching input (the composite in new-layer mode). New `rasterizeLayer` (annotation layers to pixels, layer filters baked) with the `rasterize_layer` agent tool and a Rasterize Layer menu item; selection tools take `sample: 'composite' | 'active-layer'` (also on `select_by_color`); `toJSON({ assets: 'external', store })` and `loadJSONAsync(data, { store })` keep v3 layer pixels in an `ImageEditorAssetStore`. React and Svelte: an AI result target selector and a sample selector in `<SelectionOptionsBar>`.
+- 4f981e2: Image editor: open and export Photoshop PSD / PSB files on top of the layer stack (a TypeScript port of a photocraft-psd subset). `loadPsd(bytes)` opens a file as the document (one undo step): pixel, group and adjustment layers (our ten kinds), user masks with density and feather, 26 blend modes, opacity, fill, clipping, visibility and locks map directly; type, smart-object, fill and shape layers come in as their stored pixels, and CMYK, Lab, grayscale, indexed, bitmap, 16- and 32-bit files are converted to 8-bit RGB, each loss reported as a warning naming the layers. `toPsd()` writes an 8-bit RGB PSD (PSB above 30 000 px) with real layers, groups, adjustment layers and masks, baking filters and depth masks. Documents without a source image (an opened PSD, a v3 document) now render. New agent tools `inspect_psd`, `import_psd` and `export_psd`; Open PSD… / Export PSD buttons in `<LayersPanel>` (React and Svelte, `psd` and `psdFileName` props); `readPsd`, `writePsd`, `importPsd`, `exportPsd`, `openPsdFile` and `downloadPsd` exports. `pnpm test:corpus` runs the reader and writer over 490 public PSDs.
+
+### Patch Changes
+
+- Updated dependencies [4f981e2]
+- Updated dependencies [4f981e2]
+  - @pixerate/editor@0.90.0
+
+## 0.68.0
+
+### Minor Changes
+
+- 97fa696: Image editor layers: operations, agent tools and a layers panel. The controller gains `addPixelLayer` (empty, colour or image), `addGroup`, `duplicateLayer`, `removeLayer`, `moveLayer`, `setLayerProperties` (name, visibility, opacity, fill, blend, clipping, locks), `groupLayers` / `ungroupLayer`, `mergeDown`, `mergeVisible`, `flattenImage`, `offsetLayer`, `addLayerMask` / `applyLayerMask` / `removeLayerMask` / `setLayerMaskProps`, `layerViaCopy` (copy or cut), layer filters (`addLayerFilter`, `updateLayerFilter`, `removeLayerFilter`) and `getLayerThumbnail`; each validates first, throws a `LayerOperationError` with the reason, and is one undo step. New agent tools: `set_active_layer`, `add_pixel_layer`, `duplicate_layer`, `remove_layer`, `move_layer`, `set_layer_properties`, `group_layers`, `add_group`, `ungroup_layer`, `merge_down`, `merge_visible`, `flatten_image`, `offset_layer`, `add_layer_mask`, `apply_layer_mask`, `remove_layer_mask`, `set_layer_mask_properties`, `layer_via_copy`, `add_layer_filter`, `update_layer_filter` and `remove_layer_filter`; `add_adjustment_layer` takes `aboveId` / `parentId` and `render_preview` takes `layerId`. React and Svelte get `<LayersPanel>` (thumbnails, drag to reorder and nest, visibility, locks, opacity, fill, blend, clipping, mask thumbnails, layer menu), also as a Layers tab in `<ImageEditor>`.
+- 97fa696: Image editor painting: a brush engine ported from photocraft, in the new shared `@pixerate/editor/paint` subpath (round computed tip with size, hardness, angle, roundness and spacing; opacity versus flow build-up; smoothing; pen pressure to size and opacity), Brush and Eraser strokes on pixel layers and layer masks (black hides, white reveals) limited by the selection and by transparency locks, Edit › Fill and Clear, and the Move tool. `beginStroke` returns a live stroke session (one undo step per stroke); `paintStroke`, `fillPixels`, `clearPixels`, `setPaintOptions`, `swapPaintColors` and `resetPaintColors` drive it, and `PaintGesture` / `handlePaintShortcut` give hosts the pointer handling and Photoshop shortcuts (B, E, V, [ ], Shift+[ ], 0–9, D, X). New agent tools `paint_stroke`, `fill_pixels` and `clear_pixels`. React and Svelte get `<BrushOptionsBar>` and a Paint tab in `<ImageEditor>` with pointer capture, coalesced events and a brush cursor.
+
+### Patch Changes
+
+- 504ac33: Add ImageEditorFit mode ('contain' | 'margin') to image editor geometry and renderer to allow edge-to-edge canvas fill without artificial letterboxing margins
+- Updated dependencies [504ac33]
+- Updated dependencies [97fa696]
+- Updated dependencies [97fa696]
+- Updated dependencies [97fa696]
+- Updated dependencies [97fa696]
+  - @pixerate/editor@0.89.0
+
+## 0.67.0
+
+### Minor Changes
+
+- c78c7cc: Video editor: 3D LUTs on grades. `VideoGrade.lut` (`{ src, strength, name }`) applies a `.cube` file after the grade's other steps, mixed in at its strength. New `parseVideoCubeLut` (title, domain, input range; errors give the line), tetrahedral `applyVideoLut` and `applyVideoLutToPixels`, `videoLutFromFunction`, `videoLutToCube`, `videoLutSvgApproximation`, `videoGradeLook` (a preset that keeps the LUT), `videoLutEdits`, and `VideoLutCache` (`controller.luts`, with a `luts` loader option). The canvas preview draws LUT layers on a scratch canvas and runs them through the table (frames count as incomplete until the LUT loads). SVG frames approximate a LUT with curves and a colour matrix. The ffmpeg export uses `lut3d` (with `split` + `blend` at part strength, and `resolveLut` for file paths), checked against a real ffmpeg. New agent tools `set_video_lut` (reads the file first) and `remove_video_lut`; `apply_video_grade_preset` keeps a clip's LUT, and `render_video_frame` draws LUTs and says when one is approximate or missing. The React and Svelte `ClipInspector` add a LUT row (path or file, strength, remove).
+
+### Patch Changes
+
+- Updated dependencies [c78c7cc]
+  - @pixerate/editor@0.88.0
+
+## 0.66.0
+
+### Minor Changes
+
+- ed6d944: Video editor: colour scopes. Pure functions on RGBA pixels give a histogram (`videoHistogram`), a Rec. 709 luma waveform (`videoLumaWaveform`) and a vectorscope (`videoVectorscope`), sampled to a fixed cost, plus exposure figures (`videoExposureStats`: luma mean, median and percentiles, the share crushed or blown and per channel, saturation, average colour) with notes on what to fix (`videoExposureNotes`, `summarizeVideoScopes`), and drawn scope images (`videoScopeImage`). `VideoPreviewEngine` publishes the pixels it draws to `controller.previewPixels` (`VideoPreviewPixels`), marking frames whose media is still loading or seeking as incomplete. New agent tool `get_video_scopes` measures the rendered frame at any time, waiting for every picture to load; hosts without a preview pass `framePixels` (e.g. a frame decoded by ffmpeg). React and Svelte add `<VideoScopes>` and `<VideoEditor showScopes>`.
+
+### Patch Changes
+
+- Updated dependencies [ed6d944]
+  - @pixerate/editor@0.87.0
+
 ## 0.65.0
 
 ### Minor Changes

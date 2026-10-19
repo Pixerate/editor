@@ -1,15 +1,20 @@
 ---
 name: pixerate-image-editor
-description: How to colour-correct and retouch a photo in the Pixerate image editor through its agent tools - base adjustments (exposure, contrast, white balance temperature and tint, saturation, blur), non-destructive adjustment layers (curves, levels, hue/saturation, vibrance, color balance, black and white, photo filter, invert, posterize, threshold) with blend modes and opacity, selections (rectangle, ellipse, magic wand, color range, grow, shrink, feather, refine edge) and layer masks, crop, rotate and flip, undo, reading the histogram for clipping, and rendering a PNG preview to check the result. Use when asked to edit, grade, correct, brighten, warm up, desaturate, crop, straighten or mask an image, or when get_adjustments, set_adjustments, add_adjustment_layer, select_by_color or render_preview are available.
+description: How to colour-correct, composite and retouch a photo in the Pixerate image editor through its agent tools - layers (pixel, adjustment, group and annotation layers with masks, clipping, blend modes, opacity and fill; merge, flatten, layer via copy, develop and blur filters), base adjustments (exposure, contrast, white balance temperature and tint, saturation, blur), non-destructive adjustment layers (curves, levels, hue/saturation, vibrance, color balance, black and white, photo filter, invert, posterize, threshold) with blend modes and opacity, selections (wand, color range, grow, shrink, feather, refine edge) and layer masks, crop, rotate and flip, undo, PSD open and save, the histogram, and PNG previews. Use when asked to edit, grade, correct, brighten, warm up, desaturate, crop, straighten or mask an image, or to open or save a PSD, or when get_adjustments, set_adjustments, add_adjustment_layer, list_layers, paint_stroke, select_by_color, import_psd or render_preview are available.
 ---
 
 # Image editor
 
-The image editor holds one source image plus a stack of edits that never touch the source
-pixels: base adjustments (one value per control id), adjustment layers applied bottom to top
-on top of the base, an optional selection, crop/rotate/flip and annotations. Rendering order:
-base adjustments, then layers bottom to top (each through its mask, opacity and blend mode),
-then blur. See `pixerate-agent-tools` for errors, namespacing and command batching.
+The image editor holds a layer stack over a canvas the size of the source image. Opening an
+image gives one pixel layer, **Background**, whose pixels are the source and whose `develop`
+filter holds the base adjustments; adjustment layers sit above it (bottom to top, each through
+its mask, opacity and blend mode) and every annotation is its own layer on top. `list_layers`
+shows the whole stack. Edits never touch the source pixels. The base controls edit the develop
+filter of the active pixel layer (the Background unless another pixel layer is active); base
+`blur` blurs that layer (or, in documents saved before layers with blur and adjustment layers,
+the output after the layers), and base `opacity` is the output's alpha. Also an optional
+selection and crop/rotate/flip. See `pixerate-agent-tools` for errors, namespacing and command
+batching.
 
 - **Control ids** for base adjustments: `brightness`, `contrast`, `exposure`, `temperature`,
   `tint`, `saturation` (all -100..100, default 0), `blur` (0..30 px) and `opacity` (0..1).
@@ -42,6 +47,54 @@ then blur. See `pixerate-agent-tools` for errors, namespacing and command batchi
    `get_histogram` (it reads the last render) for clipping. Compare against the previous
    preview; read the `applied` and `clamped` lists that writes return. `undo_image` takes back a
    step that made things worse.
+
+### Working with layers
+
+1. **Read the stack** with `list_layers`. A photo opened in the editor has only the Background;
+   documents made elsewhere may have pixel layers, groups and masks. Note which layer is
+   `active`: `set_adjustments` base controls edit the active pixel layer's `develop` filter.
+2. **New content goes on its own layer**: `add_pixel_layer` (empty, a colour fill or a PNG at
+   `x`, `y`), `layer_via_copy` to lift a selection onto a layer, `duplicate_layer` before a
+   risky change. Name layers by intent.
+3. **Shape layers non-destructively**: masks (`add_layer_mask` from the selection, or
+   reveal-all / hide-all, softened with `density` / `feather`) instead of deleting pixels;
+   `clipped: true` (via `set_layer_properties`) to limit a layer or adjustment to the layer below;
+   `blend`, `opacity` and `fillOpacity` instead of baking.
+4. **Organise** with `group_layers` (pass-through by default: blend modes inside still see the
+   layers below; give the group a blend mode to isolate them), `move_layer` and
+   `offset_layer`.
+5. **Bake only when asked** (`merge_down`, `merge_visible`, `flatten_image`, `apply_layer_mask`):
+   they are destructive. `render_preview` with `layerId` shows one layer alone.
+
+### Painting
+
+1. **Paint on its own layer** (`add_pixel_layer`), never on the Background, unless asked: a
+   layer can be faded, masked, blended or deleted later. Painting the Background bakes it.
+2. **Retouch through masks**: to hide part of a layer, add a mask and paint black on it
+   (`paint_stroke` with `channel: "mask"`, `color: "#000000"`); paint white to bring it back.
+   A soft brush (`hardness` 0..0.3) gives soft transitions.
+3. **One stroke is one call and one undo step.** Send the path's points in order (a few points
+   per brush diameter is enough; dabs are spaced by `brush.spacing`). Use `opacity` for the
+   overall strength and `flow` for gradual build-up within the stroke.
+4. **Limit paint with a selection** (select first, then `paint_stroke` / `fill_pixels`), or lock
+   transparency (`set_layer_properties` `locks.transparency`) to paint only where the layer
+   already has pixels.
+
+### Photoshop files
+
+1. **Inspect before opening.** `inspect_psd` lists every layer with the type it would become and
+   a status: `mapped` (held exactly), `approximated` (type, smart-object, fill and shape layers
+   come in as their stored pixels; layer effects are not rendered; Dissolve becomes Normal) or
+   `dropped` (Brightness/Contrast, Exposure, Channel Mixer, Gradient Map, Selective Color and
+   Color Lookup adjustments). Tell the user what would be lost before `import_psd` when anything
+   is not `mapped`.
+2. **`import_psd` replaces the document** (one undo step). CMYK, Lab, grayscale, indexed, 16-bit
+   and 32-bit files are converted to 8-bit RGB, and ICC profiles are ignored; the warnings say
+   so. Afterwards work with `list_layers` as usual: there is no Background source image, every
+   pixel comes from the layers.
+3. **`export_psd` writes the stack as it is**, in the source frame: crop and rotation are not
+   applied, layer filters and depth masks are baked, annotation layers are rasterized (only in
+   a browser). Read its `warnings` and pass them on. The file comes back as base64 (`data`).
 
 ## Best practices
 
@@ -77,6 +130,10 @@ then blur. See `pixerate-agent-tools` for errors, namespacing and command batchi
   levels layer without shifting hue or saturation; `color` applies a tint without changing
   brightness; `soft-light` / `overlay` for gentle contrast.
 - **Name layers** (`name`) by intent ("Sky darken", "Warm skin"), so the stack stays readable.
+- **Merge Down only onto an opaque, 100 % lower layer** when the result must look the same:
+  the merged layer keeps the lower layer's opacity and blend, so a faded lower layer fades the
+  merged content too, and a blend mode on the upper layer stops seeing what was below the lower
+  layer where the lower one is transparent. Check with `render_preview` after merging.
 
 ## Tool reference
 
@@ -87,9 +144,12 @@ then blur. See `pixerate-agent-tools` for errors, namespacing and command batchi
 | `get_adjustments` | Read the current state: `values` by control id, `process` version (1 or 2), and `layers` bottom to top with id, kind, params, opacity, blend, enabled and mask. Call first, and to find layer ids. |
 | `list_controls` | Get every base control (id, label, section, min, max, step, default, `requiresProcess`), each layer kind's settable controls (plus `opacity`), the blend mode ids and the `layers.<layerId>.<controlId>` path format. Call once per session before writing. |
 | `get_selection` | Read the active selection: `empty`, `bounds` (natural pixels), `area` in pixels, `percent` of the image and a description. Check it after every select or modify step and before masking: a wand that covered 90% of the image is the wrong selection. |
+| `list_layers` | Read the layer stack bottom to top as a tree: id, type (`pixel`, `adjustment`, `group`, `annotation`), name, document `bounds` of pixel layers, visibility, opacity, `fillOpacity`, blend, `clipped`, locks, a `mask` summary, pixel-layer `filters` (the Background's `develop` filter is the base adjustments), adjustment `kind` and `params`, group `children`, and which layer is `active`. Call it to understand a document with more than the Background before changing it; adjustment layer ids work with every adjustment-layer tool. |
 | `get_image_info` | Read the geometry: source `image` size, `crop` box (source pixels, or null), `rotation` degrees, `flipH` / `flipV`, the `output` size after crop and rotation, the layer count and `canUndo` / `canRedo`. Call before cropping or selecting so coordinates are right. |
 | `get_histogram` | Judge exposure numerically: per channel and luminance `mean`, `p1` and `p99` (0..255), and `clipping` percent at pure black and white per channel. Reads the last render, so call `render_preview` first. `bins` (16, 32, 64 or 256) adds the counts. Cheaper than another image for checking a tonal change. |
-| `render_preview` | See the edited image (crop, adjustments, layers, annotations) as a PNG. `maxSide` 16..2048 px, default 512. Images cost tokens: render after a group of edits, use 512 for overall look and 1024+ to judge clipping, edges and masks. Fails in environments without rendering. |
+| `render_preview` | See the edited image (crop, adjustments, layers, annotations) as a PNG, or with `layerId` one layer alone. `maxSide` 16..2048 px, default 512. Images cost tokens: render after a group of edits, use 512 for overall look and 1024+ to judge clipping, edges and masks. Fails in environments without rendering. |
+| `inspect_psd` | Read a PSD / PSB (`data` base64) without opening it: size, `depth`, `colorMode`, `resolution`, every layer bottom first with `psdKind`, the `type` it would become and `status` (`mapped`, `approximated`, `dropped`) with `notes`, and the import `warnings`. Call before `import_psd`. |
+| `export_psd` | Save the document as an 8-bit RGB PSD (PSB above 30000 px) with layers, groups, adjustment layers and masks. Returns `data` (base64), `size` in bytes, `psb` and `warnings` (crop or rotation not applied, filters and depth masks baked, annotations rasterized or left out). Changes nothing. |
 | `capture_view` | Inspect detail in natural image pixels (the space of `get_selection` and `select_region`, before crop and rotation): `region` `content` (whole image, default), `selection` or `rect`; small regions are enlarged up to 8× with hard pixel edges, so a 64 px rect shows real pixels. `includeOverlays: true` shades unselected pixels and outlines the crop: use it to check a mask's edge before `apply_selection_as_mask`. Returns the `rect` and `scale`. Use `render_preview` for the final framed result. |
 
 ### Write
@@ -97,9 +157,9 @@ then blur. See `pixerate-agent-tools` for errors, namespacing and command batchi
 | Tool | Use it to |
 | --- | --- |
 | `set_adjustments` | Set base controls and existing layer parameters in one undo step: `values` is a map of control id or `layers.<layerId>.<controlId>` path to number; `label` is echoed. Values are clamped to range; returns `applied` and `clamped` (and a note when `tint` is set on a process 1 edit). Unknown ids fail and change nothing. Cannot set curves points, booleans or colours. |
-| `add_adjustment_layer` | Add a layer on top of the stack: `kind` (curves, levels, hueSaturation, vibrance, colorBalance, blackWhite, photoFilter, invert, posterize, threshold), optional `params` merged with neutral defaults, `opacity` 0..1 (default 1), `blend` (default normal), `name`. Returns the layer (with its new id) and its stack index. The only tool that sets curves points, `colorize`, `preserveLuminosity`, a black and white `tint` or a photo filter `color`. |
+| `add_adjustment_layer` | Add a layer above the other adjustment layers and below annotations (or directly above `aboveId`, or at the top of group `parentId`): `kind` (curves, levels, hueSaturation, vibrance, colorBalance, blackWhite, photoFilter, invert, posterize, threshold), optional `params` merged with neutral defaults, `opacity` 0..1 (default 1), `blend` (default normal), `name`. Returns the layer (with its new id) and its stack index. The only tool that sets curves points, `colorize`, `preserveLuminosity`, a black and white `tint` or a photo filter `color`. |
 | `select_region` | Select by `shape`: `rect` or `ellipse` (with `x`, `y`, `width`, `height` in natural pixels), `all`, `none` or `invert`. `mode` replace (default), add, subtract or intersect; `feather` px (default 0). Returns the selection summary. |
-| `select_by_color` | Magic wand from a seed (`x`, `y`, `tolerance` 0..255 default 32, `contiguous` default true) or Color Range for every similar pixel (`color` "#rrggbb", `fuzziness` 0..200 default 40). `sampleMerged: true` samples the adjusted image instead of the source. `mode` as above. Use it for skies, backdrops and flat-coloured objects. |
+| `select_by_color` | Magic wand from a seed (`x`, `y`, `tolerance` 0..255 default 32, `contiguous` default true) or Color Range for every similar pixel (`color` "#rrggbb", `fuzziness` 0..200 default 40). `sampleMerged: true` samples the adjusted image instead of the source; `sample: "active-layer"` samples only the active pixel layer (pick it with `set_active_layer`) instead of the whole image. `mode` as above. Use it for skies, backdrops and flat-coloured objects. |
 | `modify_selection` | Grow, shrink, feather, border or smooth the selection (`op`) by `radius` px (0..500). Use shrink then feather to keep an adjustment from bleeding over an edge; smooth to remove wand speckle. Fails when nothing is selected. |
 | `refine_selection` | Refine Edge: snap the selection edge to image edges within `radius` px (0..64, default 8), with `smartRadius`, `smooth` 0..100, `feather` px, `contrast` 0..100 and `shiftEdge` -100..100 %. Use on hair, fur, foliage or after loading a coarse AI mask. |
 | `update_adjustment_layer` | Change a layer's `enabled` (false hides it without deleting), `blend`, `opacity` (0..1) or `name` in one undo step. Returns the layer. Its parameters change with `set_adjustments`. Toggle `enabled` to compare a layer's effect before and after. |
@@ -111,6 +171,32 @@ then blur. See `pixerate-agent-tools` for errors, namespacing and command batchi
 | `flip_image` | Mirror the image `horizontal` (left-right) or `vertical`. Avoid flipping images with text, logos or recognisable places. |
 | `undo_image` | Undo the last edit (one tool call is one step). Returns `canUndo` / `canRedo`. |
 | `redo_image` | Redo the edit you just undid. |
+| `set_active_layer` | Make a layer active (`layerId`) and choose the paint `target` (`pixels` or `mask`). Base sliders then edit that pixel layer's develop filter. Not an undo step. Returns the layer. |
+| `add_pixel_layer` | Add a pixel layer above the active layer (or at `aboveId` / `belowId` / `parentId` / `index`): empty, `color` `#rrggbb[aa]` over the canvas, or `image` (PNG data URL or base64; other formats only in a browser) at `x`, `y`; with `name`, `opacity`, `blend`. Returns the layer with its id and bounds. |
+| `duplicate_layer` | Copy a layer (groups with their children) directly above it, e.g. before a destructive change. Returns the copy. |
+| `remove_layer` | Delete a layer or group (refused when locked). Prefer hiding with `set_layer_properties`. Returns the remaining top-level ids. |
+| `move_layer` | Reorder: give exactly one of `aboveId`, `belowId`, `parentId` (into a group, optional `index`) or `index` alone. Returns the new `parentId` and `index`. |
+| `set_layer_properties` | Change `name`, `visible`, `opacity`, `fillOpacity`, `blend` (`pass-through` for groups), `clipped`, `locks` or `collapsed`. Only given fields change. Returns the layer. |
+| `group_layers` | Put sibling layers (`layerIds`) into a new pass-through group at the topmost one's position. Returns the group and its children. |
+| `add_group` | Add an empty group (pass-through unless `blend` is given) above the active layer or at a placement, then move layers into it with `move_layer` `parentId`. Returns the group. |
+| `ungroup_layer` | Replace a group by its children (its own opacity, blend and mask are dropped). Returns the child ids. |
+| `merge_down` | Composite a layer onto the pixel layer below it (masks, fill and filters baked). Destructive; see Best practices. Returns the merged layer. |
+| `merge_visible` | Composite all visible top-level layers into one layer; hidden ones stay. Destructive. |
+| `flatten_image` | Composite everything visible into one Background; hidden layers are discarded. Destructive; do it only when asked. |
+| `offset_layer` | Move a pixel layer and its mask to `x`, `y` or by `dx`, `dy` (integers, document px). Refused when its position is locked. Returns the offset and bounds. |
+| `add_layer_mask` | Mask any layer `from` `reveal-all`, `hide-all` or `selection`, with optional `density` / `feather`. Replaces an existing mask. Returns the mask summary. |
+| `set_layer_mask_properties` | Change any layer mask's `density`, `feather` or `enabled` without touching its pixels. |
+| `apply_layer_mask` | Bake a pixel layer's mask into its alpha and remove it. Destructive. |
+| `remove_layer_mask` | Delete a mask without applying it; disable it instead to keep it. |
+| `layer_via_copy` | Copy the selected pixels of a pixel layer (default the active one) to a new layer above it; `cut: true` removes them from the source. Needs a selection. Returns the new layer. |
+| `rasterize_layer` | Turn an annotation layer into pixels (same id and properties; browser only) or bake a pixel layer's develop / blur filters into its pixels. Do it before painting over an annotation, or when the user wants the filters fixed. Destructive. |
+| `add_layer_filter` | Add a live `develop` (brightness … tint) or `blur` (`radius`) filter to a pixel layer; one of each kind. Returns the filters with ids. |
+| `update_layer_filter` | Change a filter's values (`filterId` from `list_layers`). Returns the filters. |
+| `remove_layer_filter` | Remove a filter. Returns the remaining filters. |
+| `paint_stroke` | Paint (`tool` brush) or erase (`tool` eraser) along `points` in document px (optional `pressure` 0..1) on a pixel layer or its mask (`channel`); `color` #rrggbb (on a mask: black hides, white reveals); `brush` `{size, hardness, spacing, angle, roundness, opacity, flow, smoothing, pressureSize, pressureOpacity, blend}`. The selection limits the paint. One undo step per call. Returns the layer, channel, changed `bounds` and dab count. |
+| `fill_pixels` | Fill the selection (or the canvas without one / with `useSelection: false`) on pixels or a mask with `color`, `opacity`, `blend`. Returns the changed bounds. |
+| `clear_pixels` | Remove the selected pixels (alpha to 0; a transparency-locked layer or a mask gets the background colour). Returns the changed bounds. |
+| `import_psd` | Open a PSD / PSB (`data` base64, a `data:` URL is fine) as the document, replacing the layers, crop and rotation (one undo step). Returns the new `layers` tree with ids, `layerIds`, size and `warnings` naming the affected layers. Call `inspect_psd` first when losses matter. |
 | `apply_selection_as_mask` | Mask a layer with the current selection: pass `layerId` to mask an existing layer, or `kind` (plus optional `params`) to create a new masked layer in one step. `density` 0..1 and `feather` px soften the mask non-destructively. Returns `layerId`, kind, mask info and the selection summary. |
 
 ## Pitfalls
@@ -118,6 +204,17 @@ then blur. See `pixerate-agent-tools` for errors, namespacing and command batchi
 - A layer's `kind` cannot change; to switch kinds add a new layer and remove the old one.
   Curves points, `colorize` and colours are only set when the layer is added, so get them
   right in `add_adjustment_layer` (or replace the layer).
+- Layer write tools refuse locked layers with the reason: unlock with `set_layer_properties`
+  `locks` only when the user wants that layer changed.
+- `merge_down`, `merge_visible` and `flatten_image` merge annotation layers only in a browser
+  (they need a canvas); elsewhere they fail and say so.
+- `paint_stroke`, `fill_pixels` and `clear_pixels` need a visible pixel layer (or a layer with a
+  raster mask and `channel: "mask"`); adjustment, group and annotation layers can only be
+  painted through their masks. A layer with `locks.pixels` refuses paint.
+- `export_psd` is in the source frame: a crop or rotation is not in the file (the warnings say
+  so). Crop with `set_crop` only for PNG / JPEG output, or flatten the look you need first.
+- PSD opacity, fill and mask density come in as whole percents (Photoshop stores bytes), so a
+  layer at 0.8 exported and reopened is 0.8, but 0.333 becomes 0.33.
 - `get_histogram` describes the last render, not the current state: render after edits, then
   read it.
 - Crop coordinates are always in the un-rotated source; after `set_rotation` the output size
@@ -126,8 +223,11 @@ then blur. See `pixerate-agent-tools` for errors, namespacing and command batchi
   the correction needs a layer (e.g. levels or curves), not a bigger number.
 - `tint` has no effect on process 1 edits (older saved documents); the result carries a note.
   Do not keep raising it; correct the green-magenta cast with a `colorBalance` layer instead.
-- Base `opacity` fades the whole image, not an adjustment. Base `blur` blurs the whole output
-  after all layers; it is not a local softening tool.
+- Base `opacity` fades the whole image, not an adjustment. Base `blur` blurs a whole layer (the
+  Background by default, before the adjustment layers; in older documents with blur and
+  adjustment layers, the output after them). It is not a local softening tool.
+- New adjustment layers go above the other adjustment layers and below annotations, so they
+  never tint arrows, labels or watermarks. `list_layers` shows where each one went.
 - `invert` and `threshold` are destructive-looking creative effects; never use them for a
   correction the user did not ask for. Posterize `levels` below ~8 bands visibly.
 - Selection coordinates ignore crop and rotation: they are source-image pixels. A rectangle in

@@ -1192,4 +1192,58 @@ describe('Image editor - undoable AI source replacement', () => {
     expect(controller.getState().sourceUrl).toBe('orig-bg.png');
     expect(controller.getState().annotations[0]).toMatchObject({ x: 100, y: 100, endX: 200, endY: 300 });
   });
+
+  describe('Viewport Fit Modes (contain vs margin)', () => {
+    it('initializes with default fit of margin, and supports setFit', () => {
+      const controller = new ImageEditorController();
+      expect(controller.getState().fit).toBe('margin');
+
+      controller.setFit('contain');
+      expect(controller.getState().fit).toBe('contain');
+
+      const custom = new ImageEditorController({ fit: 'contain' });
+      expect(custom.getState().fit).toBe('contain');
+    });
+
+    it('scales image to 100% of viewport without margin when fit is contain', () => {
+      const controller = new ImageEditorController({
+        image: fakeImage('test.png', 800, 400),
+        fit: 'contain',
+      });
+      const state = controller.getState();
+      const m = getViewportMetrics(state, 800, 800, false);
+      // In 800x800 viewport, 800x400 image should fit width 800, height 400 with fitScale = 1
+      expect(m.fitScale).toBe(1);
+      expect(m.renderW).toBe(800);
+      expect(m.renderH).toBe(400);
+
+      // With default margin mode:
+      const marginController = new ImageEditorController({
+        image: fakeImage('test.png', 800, 400),
+        fit: 'margin',
+      });
+      const marginM = getViewportMetrics(marginController.getState(), 800, 800, false);
+      expect(marginM.fitScale).toBeCloseTo((800 * 0.85) / 800, 5); // 0.85
+      expect(marginM.renderW).toBeCloseTo(680, 5);
+      expect(marginM.renderH).toBeCloseTo(340, 5);
+    });
+
+    it('upscales small images in contain mode while margin mode caps at 1.0', () => {
+      const smallImg = fakeImage('small.png', 200, 100);
+      const containController = new ImageEditorController({ image: smallImg, fit: 'contain' });
+      const containM = getViewportMetrics(containController.getState(), 800, 800, false);
+      // 800 / 200 = 4, 800 / 100 = 8 -> min is 4
+      expect(containM.fitScale).toBe(4);
+      expect(containM.renderW).toBe(800);
+      expect(containM.renderH).toBe(400);
+
+      const marginController = new ImageEditorController({ image: smallImg, fit: 'margin' });
+      const marginM = getViewportMetrics(marginController.getState(), 800, 800, false);
+      // min((800 * 0.85) / 200 = 3.4, (800 * 0.85) / 100 = 6.8, 1) -> capped at 1
+      expect(marginM.fitScale).toBe(1);
+      expect(marginM.renderW).toBe(200);
+      expect(marginM.renderH).toBe(100);
+    });
+  });
 });
+

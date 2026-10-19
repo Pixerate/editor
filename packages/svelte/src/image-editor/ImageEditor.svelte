@@ -9,6 +9,7 @@
     InpaintHook,
     RemoveBackgroundHook,
     ImageEditorAIHooks,
+    ImageEditorFit,
   } from '@pixerate/editor/image-editor';
   import {
     canvasToImagePoint,
@@ -22,11 +23,16 @@
     readAdjustmentControls,
     DEFAULT_SELECTION_TOOL_OPTIONS,
     SelectionGesture,
+    PaintGesture,
+    handlePaintShortcut,
+    pointerPressure,
     type SelectionToolOptions,
   } from '@pixerate/editor/image-editor';
   import ControlSlider from './ControlSlider.svelte';
   import Histogram from './Histogram.svelte';
   import AdjustmentLayersPanel from './AdjustmentLayersPanel.svelte';
+  import LayersPanel from './LayersPanel.svelte';
+  import BrushOptionsBar from './BrushOptionsBar.svelte';
   import SelectionOptionsBar from './SelectionOptionsBar.svelte';
   import RefineEdgePanel from './RefineEdgePanel.svelte';
   import { onDestroy, untrack } from 'svelte';
@@ -42,6 +48,7 @@
     onInpaint?: InpaintHook;
     onRemoveBackground?: RemoveBackgroundHook;
     aiHooks?: ImageEditorAIHooks;
+    fit?: ImageEditorFit;
   }
 
   let {
@@ -54,6 +61,7 @@
     onInpaint,
     onRemoveBackground,
     aiHooks,
+    fit,
   }: Props = $props();
 
   const internalEditor = createReactiveImageEditor();
@@ -65,11 +73,15 @@
 
   let canvasEl = $state<HTMLCanvasElement | null>(null);
   let containerEl = $state<HTMLDivElement | null>(null);
-  let activeTab = $state<'crop' | 'adjust' | 'select' | 'annotate' | 'depth' | 'ai'>('crop');
+  let activeTab = $state<'crop' | 'adjust' | 'layers' | 'paint' | 'select' | 'annotate' | 'depth' | 'ai'>('crop');
 
   // Selection tools (magic wand, marquees, lasso): options bar state and the pointer gesture.
   let selectionOptions = $state<SelectionToolOptions>({ ...DEFAULT_SELECTION_TOOL_OPTIONS });
   const selectionGesture = $derived(new SelectionGesture(editor.controller, () => selectionOptions));
+  // Paint tools (Move, Brush, Eraser): the pointer gesture and the brush cursor.
+  const paintGesture = $derived(new PaintGesture(editor.controller));
+  let brushCursor: ImagePoint | null = null;
+  let paintError = $state<string | null>(null);
   let selectionDraft = $state.raw<ImagePoint[] | null>(null);
   let selectionError = $state<string | null>(null);
   let activeCropRatio = $state<number | null>(null);
@@ -81,6 +93,9 @@
   let isInpainting = $state(false);
   let aiError = $state<string | null>(null);
   let aiSuccess = $state<string | null>(null);
+  /** Where AI results go: by layer count (auto), a new layer / mask, or replacing the Background. */
+  let aiTarget = $state<'auto' | 'new-layer' | 'replace'>('auto');
+  const aiOptions = $derived(aiTarget === 'auto' ? {} : { target: aiTarget });
 
   const effectiveOnInpaint = $derived(onInpaint || aiHooks?.onInpaint);
   const effectiveOnRemoveBg = $derived(onRemoveBackground || aiHooks?.onRemoveBackground);
@@ -94,12 +109,12 @@
     aiSuccess = null;
     isRemovingBg = true;
     try {
-      // AI hooks work on the untransformed source image (natural pixels); crop, rotation,
-      // adjustments and annotations stay non-destructive and are re-applied on top.
-      const imageDataUrl = await editor.toSourceDataURL();
+      // AI hooks work in natural pixels (no crop or rotation): the source when the result replaces
+      // it, the composite of the layers when the result becomes a layer or mask.
+      const imageDataUrl = await editor.controller.toAIInputDataURL(aiOptions);
       const result = await effectiveOnRemoveBg({ imageDataUrl });
       if (typeof result === 'string') {
-        await editor.applyBackgroundRemovedImage(result);
+        await editor.applyBackgroundRemovedImage(result, aiOptions);
         aiSuccess = 'Background removed successfully!';
       } else {
         aiSuccess = 'Background removal complete.';
@@ -125,7 +140,7 @@
     isInpainting = true;
     try {
       // Source image and mask share natural image space so they line up exactly.
-      const imageDataUrl = await editor.toSourceDataURL();
+      const imageDataUrl = await editor.controller.toAIInputDataURL(aiOptions);
       const maskDataUrl = await editor.toMaskDataURL({
         useAnnotations: inpaintMaskMode === 'annotations',
         useCrop: inpaintMaskMode === 'crop',
@@ -137,7 +152,7 @@
         cropBox: inpaintMaskMode === 'crop' ? editor.state.crop : null,
       });
       if (typeof result === 'string') {
-        await editor.applyInpaintedImage(result);
+        await editor.applyInpaintedImage(result, aiOptions);
         aiSuccess = 'Inpainting applied successfully!';
       } else {
         aiSuccess = 'Inpainting complete.';
@@ -193,14 +208,65 @@
     await editor.controller.render(canvasEl, {
       viewportWidth: vpWidth,
       viewportHeight: vpHeight,
+      fit,
       showCropOverlay: activeTab === 'crop',
       showSelectionOverlay: true,
       interactive: true,
       draftAnnotation: overrideAnnotation !== undefined ? overrideAnnotation : draftAnnotation,
       draftCrop: overrideCrop !== undefined ? overrideCrop : draftCrop,
       draftSelectionPath: selectionDraft,
+      brushCursor:
+        activeTab === 'paint' && brushCursor && editor.controller.getState().activeTool !== 'move'
+          ? { ...brushCursor, diameter: editor.controller.getState().paint.brush.size }
+          : null,
     });
   }
+
+  // Paint tools: pointer events (coalesced samples, pointer capture) into strokes and moves.
+  function paintSamples(e: PointerEvent) {
+    const events = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : [];
+    const list = events.length ? events : [e];
+    const rect = canvasEl!.getBoundingClientRect();
+    const sx = rect.width > 0 ? canvasEl!.width / rect.width : 1;
+    const sy = rect.height > 0 ? canvasEl!.height / rect.height : 1;
+    const s = editor.controller.getState();
+    return list.map((ev) => ({
+      ...canvasToImagePoint({ x: (ev.clientX - rect.left) * sx, y: (ev.clientY - rect.top) * sy }, s, canvasEl!.width, canvasEl!.height, false),
+      pressure: pointerPressure(ev),
+    }));
+  }
+  function handlePaintPointerDown(e: PointerEvent) {
+    if (activeTab !== 'paint' || e.button !== 0 || !canvasEl) return;
+    e.preventDefault();
+    try {
+      canvasEl.setPointerCapture?.(e.pointerId);
+    } catch {
+      // Synthetic events have no active pointer to capture.
+    }
+    paintError = paintGesture.down(paintSamples(e)[0]);
+  }
+  function handlePaintPointerMove(e: PointerEvent) {
+    if (activeTab !== 'paint' || !canvasEl) return;
+    const samples = paintSamples(e);
+    brushCursor = samples[samples.length - 1] ?? null;
+    if (paintGesture.active) paintGesture.moveTo(samples);
+    else void renderCanvas();
+  }
+  function handlePaintPointerUp() {
+    if (activeTab !== 'paint' || !paintGesture.active) return;
+    paintGesture.up();
+    if (paintGesture.error) paintError = paintGesture.error;
+  }
+
+  $effect(() => {
+    if (activeTab !== 'paint' || typeof window === 'undefined') return;
+    const c = editor.controller;
+    const onKey = (e: KeyboardEvent) => {
+      if (handlePaintShortcut(c, e)) e.preventDefault();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
 
   $effect(() => {
     // Re-render when editor state or activeTab changes
@@ -662,6 +728,30 @@
       <button
         type="button"
         onclick={() => {
+          activeTab = 'layers';
+          editor.setTool('select');
+        }}
+        class="px-3 py-1.5 rounded-md font-medium transition-colors {activeTab === 'layers'
+          ? 'bg-indigo-600 text-white shadow'
+          : 'text-slate-400 hover:text-slate-200'}"
+      >
+        Layers
+      </button>
+      <button
+        type="button"
+        onclick={() => {
+          activeTab = 'paint';
+          editor.setTool('brush');
+        }}
+        class="px-3 py-1.5 rounded-md font-medium transition-colors {activeTab === 'paint'
+          ? 'bg-indigo-600 text-white shadow'
+          : 'text-slate-400 hover:text-slate-200'}"
+      >
+        Paint
+      </button>
+      <button
+        type="button"
+        onclick={() => {
           activeTab = 'select';
           editor.setTool('select');
         }}
@@ -798,7 +888,12 @@
         onmousemove={handleMouseMove}
         onmouseup={handleMouseUp}
         onmouseleave={handleMouseUp}
-        class="absolute inset-0 w-full h-full block"
+        onpointerdown={handlePaintPointerDown}
+        onpointermove={handlePaintPointerMove}
+        onpointerup={handlePaintPointerUp}
+        onpointercancel={() => paintGesture.cancel()}
+        data-testid="image-editor-canvas"
+        class="absolute inset-0 w-full h-full block {activeTab === 'paint' ? 'touch-none cursor-crosshair' : ''}"
       ></canvas>
     </div>
 
@@ -978,6 +1073,26 @@
       {/if}
 
       <!-- TAB 3: ANNOTATIONS -->
+      {#if activeTab === 'layers'}
+        <div class="flex flex-col gap-3 text-xs">
+          <span class="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">Layers</span>
+          <LayersPanel controller={editor.controller} />
+        </div>
+      {/if}
+
+      {#if activeTab === 'paint'}
+        <div class="flex flex-col gap-3 text-xs">
+          <span class="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">Paint</span>
+          <BrushOptionsBar controller={editor.controller} />
+          {#if paintError}
+            <p role="alert" class="text-rose-400" data-testid="paint-error">{paintError}</p>
+          {/if}
+          <div class="border-t border-slate-700/60 pt-3">
+            <LayersPanel controller={editor.controller} />
+          </div>
+        </div>
+      {/if}
+
       {#if activeTab === 'annotate'}
         <div class="flex flex-col gap-3 text-xs">
           <span class="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">
@@ -1227,6 +1342,18 @@
       <!-- TAB 5: AI TOOLS / INPAINTING & BACKGROUND REMOVAL -->
       {#if activeTab === 'ai'}
         <div class="flex flex-col gap-4 text-xs">
+          <label class="flex items-center justify-between gap-2 text-slate-300">
+            <span>Results go to</span>
+            <select
+              aria-label="AI result target"
+              bind:value={aiTarget}
+              class="bg-slate-800 border border-slate-700 rounded px-1.5 py-1"
+            >
+              <option value="auto">{editor.controller.isMultiLayer ? 'Auto (new layer)' : 'Auto (replace image)'}</option>
+              <option value="new-layer">New layer / mask</option>
+              <option value="replace">Replace image</option>
+            </select>
+          </label>
           <!-- Background Removal Section -->
           <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800 flex flex-col gap-2.5">
             <div class="flex items-center justify-between">

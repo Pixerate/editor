@@ -1,6 +1,6 @@
 {
   "name": "@pixerate/editor",
-  "version": "0.86.0",
+  "version": "0.90.0",
   "description": "UI-agnostic rich text and media editing core library",
   "author": "Pixerate",
   "license": "MIT",
@@ -73,6 +73,16 @@
       "types": "./dist/tools/index.d.ts",
       "import": "./dist/tools/index.js",
       "require": "./dist/tools/index.cjs"
+    },
+    "./raster": {
+      "types": "./dist/raster/index.d.ts",
+      "import": "./dist/raster/index.js",
+      "require": "./dist/raster/index.cjs"
+    },
+    "./paint": {
+      "types": "./dist/paint/index.d.ts",
+      "import": "./dist/paint/index.js",
+      "require": "./dist/paint/index.cjs"
     },
     "./image-editor": {
       "types": "./dist/image-editor/index.d.ts",
@@ -147,7 +157,8 @@
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:corpus": "node scripts/fetch-psd-corpus.mjs && PSD_CORPUS=1 vitest run tests/psd-corpus.test.ts"
   },
   "dependencies": {
     "@tiptap/extension-character-count": "^2.11.5",
