@@ -212,7 +212,7 @@ export function loadImageEditorDocument(input: unknown): ImageEditorDocumentLoad
   return { state, report: result.report, unknown: result.unknown };
 }
 
-const LAYER_TYPES = new Set(['pixel', 'adjustment', 'group', 'annotation', 'smart', 'shape']);
+const LAYER_TYPES = new Set(['pixel', 'adjustment', 'group', 'annotation', 'smart', 'shape', 'type']);
 
 /** Keeps layers that have an id-like shape and a known type (children checked too); counts the rest. */
 function cleanLayers(value: unknown[], dropped: { count: number }): SerializedLayer[] {

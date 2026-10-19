@@ -25,9 +25,12 @@ import {
   type Interpolation,
   type ResampleOptions,
 } from '../raster/transform';
-import { applyHomography, multiplyHomographies, type Homography } from '../geom/homography';
+import { applyHomography, homographyFromAffine, multiplyHomographies, type Homography } from '../geom/homography';
+import { invertMatrix as invertAffine } from '../geom/affine';
 import { findLayer, insertLayer, mapLayer, newLayerId, type ImageLayer, type LayerTarget, type PixelLayer, type RasterMask, type ShapeLayer, type SmartObjectLayer } from './layers/model';
 import { renderShape, shapeGeometryBounds, transformShapeComponents, type ShapeEnv } from './layers/shape';
+import { rerenderText, textMatrix, typeFrame, type TextEnv } from './layers/text';
+import type { TypeLayer } from './layers/model';
 import { LayerOperationError, requireLayer, requireUnlocked } from './layers/ops';
 import { contentsBox, isContentsDecoded, placementGeometry, renderSmartObject, setSmartPlacement } from './layers/smart';
 import { createSelectionMask, type SelectionMask } from './selection/mask';
@@ -36,6 +39,7 @@ import {
   hasWarp,
   identityTransform,
   isIdentityTransform,
+  matrixFromCorners,
   transformMap,
   type FreeTransformGeometry,
 } from './transform';
@@ -104,6 +108,8 @@ export interface FreeTransformHost {
   pixelsOf(layer: PixelLayer | SmartObjectLayer): TiledSurface;
   /** What shape layers render with (canvas size, document patterns). */
   shapeEnv(): ShapeEnv;
+  /** What type layers lay out and draw with. */
+  textEnv(): TextEnv;
   /** Opaque pre-transform snapshot. */
   capture(): unknown;
   /** Shows a live state (no history). */
@@ -225,6 +231,9 @@ export class FreeTransformSession {
   /** True when the layer is a shape layer (the transform maps its paths and renders them again). */
   readonly shapeLayer: boolean = false;
   private readonly shape: ShapeLayer | null = null;
+  /** True when the layer is a type layer (the transform sets its text matrix; affine only). */
+  readonly typeLayer: boolean = false;
+  private readonly typeTarget: TypeLayer | null = null;
   private geometryValue: FreeTransformGeometry;
   private readonly smart: SmartObjectLayer | null = null;
   private readonly smartReduced = new Map<number, TiledSurface>();
@@ -254,7 +263,7 @@ export class FreeTransformSession {
     }
     const targetId = init.layerId ?? host.activeLayerId();
     const target = targetId && content !== 'selection-outline' ? findLayer(host.layers(), targetId)?.layer : undefined;
-    const smartTarget = (target?.type === 'smart' || target?.type === 'shape') && (init.channel ?? (target.id === host.activeLayerId() ? host.activeTarget() : 'pixels')) !== 'mask';
+    const smartTarget = (target?.type === 'smart' || target?.type === 'shape' || target?.type === 'type') && (init.channel ?? (target.id === host.activeLayerId() ? host.activeTarget() : 'pixels')) !== 'mask';
     // A smart object or a shape transforms as a whole, selection or not (as in Photoshop).
     if (content === 'auto') content = selected && !smartTarget ? 'selection' : 'layer';
     this.content = content;
@@ -283,7 +292,7 @@ export class FreeTransformSession {
       const linked = mask?.linked !== false;
       const maskAlone = channel === 'mask' && (!linked || layer.type !== 'pixel');
       if (channel === 'mask' && !mask) fail(layer.mask?.source ? `Layer "${layer.name || id}" has a depth mask, which is generated, not transformed.` : `Layer "${layer.name || id}" has no mask to transform; add one with add_layer_mask, or transform its pixels.`);
-      if (!maskAlone && layer.type !== 'pixel' && layer.type !== 'smart' && layer.type !== 'shape') fail(`Layer "${layer.name || id}" is a ${layer.type} layer; Free Transform works on pixel, shape and smart object layers, layer masks (channel mask) and selections.`);
+      if (!maskAlone && layer.type !== 'pixel' && layer.type !== 'smart' && layer.type !== 'shape' && layer.type !== 'type') fail(`Layer "${layer.name || id}" is a ${layer.type} layer; Free Transform works on pixel, shape, type and smart object layers, layer masks (channel mask) and selections.`);
       if (!layer.visible && content !== 'selection-copy') fail(`Layer "${layer.name || id}" is hidden; show it before you transform it.`);
       if (content !== 'selection-copy') {
         requireUnlocked(layer, 'position', 'transform it');
@@ -302,6 +311,27 @@ export class FreeTransformSession {
         this.box = contentsBox(layer.contents);
         this.moves = mask && linked ? ['pixels', 'mask'] : ['pixels'];
         this.geometryValue = this.startGeometry;
+        this.shown = this.startLayers;
+        return;
+      }
+      if (layer.type === 'type' && !maskAlone) {
+        if (content !== 'layer') fail(`Layer "${layer.name || id}" is a type layer, which transforms as a whole; use content layer (or rasterize it to transform part of it).`);
+        // As a smart object: the frame is the text's own box, the corners where it lands now.
+        const frame = typeFrame(layer, host.textEnv().shaper);
+        const m = textMatrix(layer);
+        const at = (x: number, y: number) => ({ x: m[0] * x + m[2] * y + m[4], y: m[1] * x + m[3] * y + m[5] });
+        this.typeTarget = layer;
+        this.typeLayer = true;
+        this.box = frame;
+        this.startGeometry = {
+          box: frame,
+          corners: [at(frame.x, frame.y), at(frame.x + frame.width, frame.y), at(frame.x + frame.width, frame.y + frame.height), at(frame.x, frame.y + frame.height)],
+          warp: null,
+        };
+        this.geometryValue = this.startGeometry;
+        this.startInterp = this.interp;
+        this.moves = mask && linked ? ['pixels', 'mask'] : ['pixels'];
+        if (mask && linked) this.parts.push({ what: 'mask', offset: o, moving: mask.surface, base: null, reduced: new Map() });
         this.shown = this.startLayers;
         return;
       }
@@ -427,6 +457,9 @@ export class FreeTransformSession {
     };
     if (next.corners.length !== 4 || !next.corners.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y))) fail('corners must be four finite points: top-left, top-right, bottom-right, bottom-left.');
     if (!transformMap(next)) fail('These corners fold the frame over itself or through the horizon; keep the quad convex.');
+    if (this.typeTarget && (hasWarp(next) || !matrixFromCorners(next.box, next.corners))) {
+      fail('Type layers take scale, rotate, skew and flips only (the corners must stay a parallelogram, no warp); rasterize the layer (rasterize_layer) for distort, perspective or warp.');
+    }
     this.geometryValue = next;
     if (preview !== false) this.render(preview);
     return next;
@@ -435,6 +468,7 @@ export class FreeTransformSession {
   /** Resamples every part for the current geometry and shows it (or returns it, for commit). */
   private resample(final: boolean, preview: FreeTransformPreview = {}): { layers: ImageLayer[]; selection: SelectionMask | null } {
     if (this.smart) return { layers: this.resampleSmart(final, preview), selection: this.startSelection };
+    if (this.typeTarget) return { layers: this.resampleType(), selection: this.startSelection };
     const g = this.geometryValue;
     const identity = isIdentityTransform(g);
     const warp = hasWarp(g);
@@ -518,6 +552,29 @@ export class FreeTransformSession {
     return mapLayer(this.startLayers, layer.id, () => ({ ...moved, surface }));
   }
 
+  /**
+   * A type layer with its text matrix set from the corners (affine only: scale, rotate, skew and
+   * flips), drawn again; a linked mask follows by the change's homography.
+   */
+  private resampleType(): ImageLayer[] {
+    const layer = this.typeTarget!;
+    const g = this.geometryValue;
+    if (hasWarp(g)) fail('Type layers cannot be warped here; rasterize the layer first (rasterize_layer), or transform it with scale, rotate and skew.');
+    const m = matrixFromCorners(g.box, g.corners);
+    if (!m) fail('Type layers take scale, rotate, skew and flips only (the corners must stay a parallelogram); rasterize the layer for distort or perspective.');
+    const next: TypeLayer = { ...layer, transform: m! };
+    delete next.annotation;
+    let layers = mapLayer(this.startLayers, layer.id, () => rerenderText(next, this.host.textEnv()));
+    // A linked mask follows the change of the matrix.
+    const change = multiplyHomographies(homographyFromAffine(invertAffine(textMatrix(layer))), homographyFromAffine(m!));
+    for (const part of this.parts) {
+      if (part.what !== 'mask') continue;
+      const surface = transformSurface(part.moving, change, { interpolation: this.interp === 'nearest' ? 'nearest' : 'bilinear' });
+      layers = mapLayer(layers, layer.id, (l) => ({ ...l, mask: { ...(l.mask as RasterMask), surface } }) as ImageLayer);
+    }
+    return layers;
+  }
+
   /** A smart object re-rendered from its contents for the current geometry (previews leave the smart filters out). */
   private resampleSmart(final: boolean, preview: FreeTransformPreview): ImageLayer[] {
     const layer = this.smart!;
@@ -542,7 +599,7 @@ export class FreeTransformSession {
   /** Whether the geometry (or the interpolation of a smart object) differs from where it started. */
   private isChanged(): boolean {
     const g = this.geometryValue;
-    if (!this.smart) return !isIdentityTransform(g);
+    if (!this.smart && !this.typeTarget) return !isIdentityTransform(g);
     const a = this.startGeometry;
     const same = g.corners.every((c, i) => Math.abs(c.x - a.corners[i].x) < 1e-9 && Math.abs(c.y - a.corners[i].y) < 1e-9);
     const warp = (w: FreeTransformGeometry['warp'], box: CropBox) => (w && hasWarp({ box, corners: a.corners, warp: w }) ? JSON.stringify(w) : '');
@@ -583,7 +640,7 @@ export class FreeTransformSession {
     const id = this.copyId ?? this.layerId;
     const layer = id ? findLayer(layers, id)?.layer : undefined;
     if (this.moves.includes('pixels') && layer?.type === 'pixel') bounds = toDoc(contentBounds(this.host.pixelsOf(layer)), layer.offset);
-    else if (this.moves.includes('pixels') && (layer?.type === 'smart' || layer?.type === 'shape')) bounds = contentBounds(layer.surface);
+    else if (this.moves.includes('pixels') && (layer?.type === 'smart' || layer?.type === 'shape' || layer?.type === 'type')) bounds = contentBounds(layer.surface);
     else if (this.moves.includes('mask') && layer?.mask) bounds = toDoc(contentBounds(layer.mask.surface), layer.type === 'pixel' ? layer.offset : { x: 0, y: 0 });
     else if (this.moves.includes('selection')) bounds = selection?.bounds ? { ...selection.bounds } : null;
     return {

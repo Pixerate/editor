@@ -5,6 +5,7 @@ import type { SelectionMask, SerializedSelection } from './selection/mask';
 import type { ImageLayer, LayerTarget } from './layers/model';
 import type { SerializedLayeredImageEditorState } from './layers/serialize';
 import type { PaintOptions } from './controller';
+import type { TextShaper } from './layers/text';
 
 export interface ImageDimensions {
   width: number;
@@ -450,6 +451,13 @@ export interface ExportOptions {
 }
 
 export interface ImageEditorOptions {
+  /**
+   * What lays out and draws type layers. Default: the browser's fonts through Canvas 2D
+   * (`createCanvasTextShaper`) where there is a 2D canvas; `null` (or no canvas) keeps type layers'
+   * stored pixels and refuses edits that would draw them. `createOutlineTextShaper` draws from
+   * fonts you load, anywhere, and enables Convert to Shape.
+   */
+  textShaper?: TextShaper | null;
   image?: string | HTMLImageElement;
   initialState?: Partial<SerializedImageEditorState>;
   onStateChange?: (state: ImageEditorState) => void;

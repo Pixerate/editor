@@ -2175,3 +2175,15 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Rebuilding an annotation from a shape (for the `annotations` view or a v1 / v2 save) changed numbers (an ellipse's box `x − rx` back to `x` is not exact in floating point) and broke byte-identical round trips.
 - **Root Cause**: Pen, rectangle, ellipse, line and arrow annotations now load as shape layers, but old documents and the `annotations` / `updateAnnotation` API still speak annotations.
 - **Solution / Workaround**: A migrated `ShapeLayer` keeps the source `annotation` while it is still exactly that annotation (`legacyView` and `isLegacyShape` read it; its blend mode moves to the layer). `updateAnnotation` rebuilds the layer from the merged annotation (back to an annotation layer when a colour can't be read). Any shape edit, a duplicate or a transform drops the field, and the layer leaves the `annotations` view. Plain migrated layers at the top of the stack still draw through the renderer's crisp annotation overlay, as before. Text and image annotations stay annotation layers.
+
+### [core/image-editor] Type Layers Draw Through a Shaper, Which Node and jsdom Do Not Have
+
+- **Issue / Symptom**: `addTextLayer` threw "Type layers need a text shaper" in tests, and a text annotation loaded in Node showed nothing.
+- **Root Cause**: Layout is ours, but fonts are not: metrics, advances and drawing come from a `TextShaper`. The default is `createCanvasTextShaper`, which needs a 2D canvas with `measureText` (jsdom's canvas has no context). A family is "missing" when it measures the same as both `monospace` and `serif`, so web fonts must be loaded before layout.
+- **Solution / Workaround**: Pass `textShaper` (for tests, `createOutlineTextShaper` with a font object; `tests/helpers/box-font.ts` is a deterministic box font) or call `setTextShaper`. Without one, type layers keep their stored pixels (`rendering: 'stored'`, saved as a PNG asset in v3 JSON) and edits that would draw them are refused. Migrated text annotations are created undrawn there and draw on the first edit where a shaper exists; at the top of the stack they still draw through the annotation overlay as before.
+
+### [core/image-editor] A Text Annotation's `top` Baseline Is the Em Box, Not the Font's Ascent
+
+- **Issue / Symptom**: Migrated text annotations would sit a few pixels off if their first baseline were placed by the font's ascent.
+- **Root Cause**: The old renderer drew with `textBaseline = 'top'`, which is the top of the em square. Fonts' ascent (`fontBoundingBoxAscent`) differs from the em box.
+- **Solution / Workaround**: Migrated type layers use `frame: { kind: 'point', origin: 'top' }`: the first baseline is one ascent below the origin, and the Canvas 2D shaper's `metrics` report `emHeightAscent` (falling back to the font box). `tests/image-type-tools.test.ts` checks that the new drawing calls match the old ones. Canvas also turned every whitespace character into a space, so migration replaces line breaks with spaces.

@@ -1,6 +1,6 @@
 ---
 name: pixerate-image-editor
-description: How to colour-correct, composite and retouch a photo in the Pixerate image editor through its agent tools - layers (pixel, adjustment, group, shape, annotation and smart object layers with masks, clipping, blend modes, opacity and fill; merge, flatten, filters), smart objects (non-destructive transforms, smart filters, linked contents), vector shape layers (live rectangles, ellipses, polygons, stars, lines and arrows, paths, path operations, fills and strokes), live layer effects, base adjustments, adjustment layers, selections and masks, Free Transform, crop, rotate, flip, Mixer Brush, undo, PSD, histogram and previews. Use when asked to edit, grade, correct, crop, straighten or mask an image, add a shadow, glow or outline, transform or warp a layer, draw a shape or arrow, make a smart object, or open or save a PSD, or when list_layers, set_adjustments, add_layer_effect, transform_layer, add_shape_layer, convert_to_smart_object, paint_stroke, import_psd or render_preview are available.
+description: How to colour-correct, composite and retouch a photo in the Pixerate image editor through its agent tools - layers (pixel, adjustment, group, shape, type, annotation and smart object layers with masks, clipping, blend modes, opacity and fill; merge, flatten, filters), smart objects (non-destructive transforms, smart filters, linked contents), vector shape layers (live shapes, arrows, paths, path operations, fills and strokes), live type layers, live layer effects, base adjustments, adjustment layers, selections and masks, Free Transform, crop, rotate, flip, Mixer Brush, undo, PSD, histogram and previews. Use when asked to edit, grade, correct, crop, straighten or mask an image, add a shadow, glow or outline, transform or warp a layer, draw a shape or arrow, add or edit text, make a smart object, or open or save a PSD, or when list_layers, set_adjustments, add_layer_effect, transform_layer, add_shape_layer, add_text_layer, convert_to_smart_object, paint_stroke, import_psd or render_preview are available.
 ---
 
 # Image editor
@@ -9,7 +9,8 @@ The image editor holds a layer stack over a canvas the size of the source image.
 image gives one pixel layer, **Background**, whose pixels are the source and whose `develop`
 filter holds the base adjustments; adjustment layers sit above it (bottom to top, each through
 its mask, opacity and blend mode) and every annotation is its own layer on top (pen, rectangle,
-ellipse, line and arrow annotations are shape layers that remember them). `list_layers`
+ellipse, line and arrow annotations are shape layers, text annotations type layers, that remember
+them). `list_layers`
 shows the whole stack. Edits never touch the source pixels. The base controls edit the develop
 filter of the active pixel layer (the Background unless another pixel layer is active); base
 `blur` blurs that layer (or, in documents saved before layers with blur and adjustment layers,
@@ -17,7 +18,8 @@ the output after the layers), and base `opacity` is the output's alpha. Pixel, a
 and smart object layers can carry live effects (shadows, glows, bevels, overlays, strokes). A smart
 object places contents (pixels or a nested layer document) through a transform and smart filters,
 re-rendered from the contents on every change. A shape layer holds vector paths with a fill and a
-stroke, rendered again from the paths on every change, so it stays sharp through any transform.
+stroke, rendered again from the paths on every change, so it stays sharp through any transform. A
+type layer holds live, styled text (point or paragraph) drawn with the editor's fonts.
 Also an optional selection and crop/rotate/flip. See `pixerate-agent-tools` for errors, namespacing and command
 batching.
 
@@ -119,31 +121,14 @@ batching.
 6. **Finish**: `rasterize_smart_object` only when the user wants plain pixels to paint on; the
    placement and filters are then gone.
 
-### Shape layers
+### Shapes and text
 
-1. **Draw it as a live shape**: `add_shape_layer` with `shape` `{ kind: 'rect', x, y, width,
-   height, radius | radii }`, `ellipse`, `polygon` (`sides`), `star` (`points`, `innerRatio`) or
-   `line` (`x1`…`y2`, `weight`, `startArrow` / `endArrow` `{ width, length, concavity }`), all in
-   document pixels. A free path takes `subpaths` (SVG path data, or anchors with absolute `in` /
-   `out` handles). `fill` is a colour string or `{ type: 'gradient' | 'pattern', … }` (default the
-   foreground colour; `null` for none); `stroke` is `{ width, paint, align, cap, join, dashes }`
-   (dashes in multiples of the width). It returns the layer id and `shape` (components with
-   index, op and live parameters, bounds).
-2. **Combine paths**: `add_shape_component` with `op` `combine`, `subtract`, `intersect` or
-   `exclude` (Photoshop's path operations; the bottom component always combines). The stroke
-   follows the outline of the combined area. `merge_shape_components` turns the result into one
-   plain path (same look).
-3. **Edit, don't redraw**: `set_shape_component` changes a live shape's fields (only `radii`, only
-   `x2` / `y2`, …; the rest stay), replaces a component's `subpaths` (ending its live shape) or
-   changes its `op`. `update_shape` restyles the fill, the stroke (only the settings given) or the
-   fill rule. Read `get_shape_layer` first for the component indices.
-4. **Place it**: `offset_layer`, `transform_layer`, `flip_layer`, `rotate_layer_90` and `warp_layer`
-   map the paths, never resample pixels; live shapes stay live under moves, scales, rotations and
-   skews (perspective and warps turn them into plain paths). Stroke widths do not scale.
-5. **Style it like any layer**: masks, clipping, blend modes, opacity, fill opacity and layer
-   effects (`add_layer_effect`) all work on shape layers.
-6. **Pixels only when needed**: painting a shape's pixels is refused; `rasterize_layer` turns it
-   into a pixel layer (paths gone) when the user wants to paint on it.
+Draw boxes, badges, arrows and callouts as shape layers (`add_shape_layer` with a live `shape`,
+then `set_shape_component` / `update_shape` / `add_shape_component`), and text as type layers
+(`add_text_layer`, then `set_text`, `set_text_style`, `set_paragraph_style` by `start` / `end`
+range). Both stay sharp through transforms and take effects, masks and blend modes; rasterize only
+to paint on them. Read [references/shapes-and-type.md](references/shapes-and-type.md) before
+drawing or editing either.
 
 ### Layer effects
 
@@ -316,9 +301,11 @@ batching.
 | `get_histogram` | Judge exposure numerically: per channel and luminance `mean`, `p1` and `p99` (0..255), and `clipping` percent at pure black and white per channel. Reads the last render, so call `render_preview` first. `bins` (16, 32, 64 or 256) adds the counts. Cheaper than another image for checking a tonal change. |
 | `render_preview` | See the edited image (crop, adjustments, layers, annotations) as a PNG, or with `layerId` one layer alone. `maxSide` 16..2048 px, default 512. Images cost tokens: render after a group of edits, use 512 for overall look and 1024+ to judge clipping, edges and masks. Fails in environments without rendering. |
 | `inspect_psd` | Read a PSD / PSB (`data` base64) without opening it: size, `depth`, `colorMode`, `resolution`, every layer bottom first with `psdKind`, the `type` it would become (`smart` for smart objects) and `status` (`mapped`, `approximated`, `dropped`) with `notes`, and the import `warnings`. Call before `import_psd`. |
-| `export_psd` | Save the document as an 8-bit RGB PSD (PSB above 30000 px) with layers, groups, adjustment layers and masks. Returns `data` (base64), `size` in bytes, `psb` and `warnings` (crop or rotation not applied, filters and depth masks baked, shape layers written as pixel layers, annotations rasterized or left out, Pigment blends written as Normal). Changes nothing. |
+| `export_psd` | Save the document as an 8-bit RGB PSD (PSB above 30000 px) with layers, groups, adjustment layers and masks. Returns `data` (base64), `size` in bytes, `psb` and `warnings` (crop or rotation not applied, filters and depth masks baked, shape and type layers written as pixel layers, annotations rasterized or left out, Pigment blends written as Normal). Changes nothing. |
 | `get_transform_frame` | Before a transform: what it would move (`content`, `moved`: pixels, mask, selection), its `frame` (document bounds of the content), `corners` (top-left, top-right, bottom-right, bottom-left) and `center`. `meshColumns` / `meshRows` also return an identity warp `mesh` over the frame to edit for `warp_layer`. Changes nothing. |
 | `get_smart_object` | Read a smart object: `contents` (`id` shared by linked instances, `name`, `kind` raster or document, `width` / `height`, `decoded`, `fileType`, `linkedPath`, `instances`), `placement` (`corners`, `warp` in contents px, `interpolation`, and when `affine` the `scaleX` / `scaleY` in percent of the contents, `rotate`, `skewX`, `center`, `bounds`) and `smartFilters` (`enabled`, `filters` bottom to top with ids, settings, `blend`, `opacity`; kind `psd` is a Photoshop filter kept but not drawn; the filter `mask`). Call before changing a smart object. |
+| `list_fonts` | Read the font families type layers can use here (generic families always work) and which shaper draws them. Call before choosing a font. |
+| `get_text_layer` | Read a type layer: `text`, character `runs` and `paragraphs` as `start` / `end` ranges (UTF-16 code units, end exclusive) with their styles, the `frame` (point, or box with its size), the text-to-document `transform`, laid-out `lines` (range, baseline, width), `bounds`, `missingFonts`, and `rendering` (`live`, or `stored` pixels from a file until the next edit). Call before editing text you did not write. |
 | `get_shape_layer` | Read a shape layer: `components` bottom to top (`index`, `op`, `live` shape parameters or null, `subpaths` with absolute anchors and handles, `bounds`), `fillRule`, `fill` and `stroke` (paint and settings), `geometryBounds` (the paths) and `bounds` (rendered pixels, stroke included), and `annotationId` while it is still a migrated annotation. Call before editing a shape you did not draw. |
 | `export_smart_object_contents` | Export Contents: the contents as a file (`name`, `mimeType`, `byteLength`, `base64`): the file they came from while unedited, else a PNG (raster) or PSD / PSB (nested document). Changes nothing. |
 | `capture_view` | Inspect detail in natural image pixels (the space of `get_selection` and `select_region`, before crop and rotation): `region` `content` (whole image, default), `selection` or `rect`; small regions are enlarged up to 8× with hard pixel edges, so a 64 px rect shows real pixels. `includeOverlays: true` shades unselected pixels and outlines the crop: use it to check a mask's edge before `apply_selection_as_mask`. Returns the `rect` and `scale`. Use `render_preview` for the final framed result. |
@@ -366,6 +353,12 @@ batching.
 | `remove_layer_mask` | Delete a mask without applying it; disable it instead to keep it. |
 | `layer_via_copy` | Copy the selected pixels of a pixel layer (default the active one) to a new layer above it; `cut: true` removes them from the source. Needs a selection. Returns the new layer. |
 | `rasterize_layer` | Turn a shape layer into a pixel layer showing the same pixels (same id, mask, effects, opacity, blend; the paths are gone), an annotation layer into pixels (browser only), a smart object into a pixel layer (as `rasterize_smart_object`), or bake a pixel layer's develop / blur filters into its pixels. Do it before painting over a shape or annotation, or when the user wants the filters fixed. Destructive. |
+| `add_text_layer` | Add live type above the active layer and make it active: `text`, `x`, `y`, optional `box` (paragraph text), `style`, `paragraph`, `rotation`, `name`, `opacity`, `blend`, placement. Returns the `layer` and `text` (with `lines` and `missingFonts`). One undo step. |
+| `set_text` | Replace text `start`..`end` (default all) with `text`; start = end inserts. New text takes the style at `start`. Returns the text layer. |
+| `set_text_style` | Set character style fields over `start`..`end` (default all): `fontFamily`, `fontWeight`, `italic`, `fontSize`, `color`, `opacity`, `tracking`, `leading`, `baselineShift`, `underline`, `strikethrough` (`null` resets optional ones). Returns the runs. |
+| `set_paragraph_style` | Set `align`, `autoLeading`, indents, `spaceBefore` / `spaceAfter` on every paragraph `start`..`end` touches (default all). Returns the text layer. |
+| `set_text_frame` | `kind: point` (one line per paragraph) or `kind: box` with `width` and `height` (wrapping paragraph text), or resize a box; the first line stays put. Returns the text layer and its lines. |
+| `convert_text_to_shape` | Type › Convert to Shape: glyph outlines become a shape layer with the same id (text no longer editable; fill from the first run's colour; `warnings` lists losses). Needs an outline font shaper. Destructive. |
 | `add_shape_layer` | Add a vector shape layer above the active layer (or placed with `aboveId` / `belowId` / `parentId` / `index`) and make it active: `shape` (live rect, ellipse, polygon, star or line, document px), `subpaths` (SVG path data or anchors) or several `components` with path ops; `fill` (colour, gradient or pattern, default the foreground colour; `null` none), `stroke` (`width`, `paint`, `align`, `cap`, `join`, `miterLimit`, `dashes` in widths), `fillRule`, `name`, `opacity`, `blend`. Returns the `layer` and the `shape`. One undo step. |
 | `update_shape` | Restyle a shape: `fill` (replace, `null` removes), `stroke` (only the settings given change; `null` removes; a new stroke needs `width` and `paint`), `fillRule`. Geometry is unchanged. Returns the shape. |
 | `set_shape_component` | Change component `componentIndex` (from `get_shape_layer`): `shape` fields (without `kind`, or with the same kind, unset fields keep their values), new `subpaths` (ends the live shape), or `op`. Returns the shape. |
@@ -421,10 +414,14 @@ batching.
 - `merge_down`, `merge_visible` and `flatten_image` merge annotation layers only in a browser
   (they need a canvas); elsewhere they fail and say so.
 - `paint_stroke`, `fill_pixels` and `clear_pixels` need a visible pixel layer (or a layer with a
-  raster mask and `channel: "mask"`); adjustment, group, shape, annotation and smart object layers can
+  raster mask and `channel: "mask"`); adjustment, group, shape, type, annotation and smart object layers can
   only be painted through their masks (and a smart object through `channel: "filter-mask"`).
   To paint a smart object's pixels, `edit_smart_object_contents` or rasterize it. A layer with
   `locks.pixels` refuses paint.
+- Text ranges count UTF-16 code units (an emoji is two). Point text grows from its origin: centred
+  text is centred on `x`. Type cannot be distorted, put in perspective or warped; it can be scaled,
+  rotated and skewed. Where no font shaper exists (a server without one), type layers keep their
+  stored pixels and edits are refused with a reason.
 - Shape strokes are not layer-effect strokes: `stroke` on `add_shape_layer` / `update_shape`
   follows the path (and its dashes and caps); `add_layer_effect` `stroke` outlines the rendered
   pixels. Arrowheads belong to `line` live shapes (their `width` and `length` are pixels), not to

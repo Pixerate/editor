@@ -120,7 +120,7 @@ export function withNewIds<T extends ImageLayer>(layer: T): T {
   if (next.type === 'group') (next as GroupLayer).children = (next as GroupLayer).children.map(withNewIds);
   if (next.type === 'annotation') next.annotation = { ...next.annotation, id: next.id };
   // A copy of a migrated shape is a shape of its own, not a second view of the annotation.
-  if (next.type === 'shape') delete next.annotation;
+  if (next.type === 'shape' || next.type === 'type') delete next.annotation;
   if (next.type === 'smart' && next.psd?.placed) {
     // A copy is another instance of the same contents: Photoshop needs it to have its own instance id.
     next.psd = { ...next.psd };
@@ -170,7 +170,7 @@ export function setLayerProperties(layers: readonly ImageLayer[], id: string, pr
     next.opacity = props.opacity;
   }
   if (props.fillOpacity !== undefined) {
-    if (layer.type !== 'pixel' && layer.type !== 'smart' && layer.type !== 'shape') fail(`fillOpacity applies to pixel, shape and smart object layers; "${id}" is a ${layer.type} layer.`);
+    if (layer.type !== 'pixel' && layer.type !== 'smart' && layer.type !== 'shape' && layer.type !== 'type') fail(`fillOpacity applies to pixel, shape, type and smart object layers; "${id}" is a ${layer.type} layer.`);
     if (!(typeof props.fillOpacity === 'number' && props.fillOpacity >= 0 && props.fillOpacity <= 1)) fail('fillOpacity must be a number from 0 to 1.');
     const p = next as { fillOpacity?: number };
     if (props.fillOpacity === 1) delete p.fillOpacity;

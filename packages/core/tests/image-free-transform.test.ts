@@ -144,7 +144,7 @@ describe('Free Transform on layers', () => {
     c.setLayerProperties(id, { locks: {}, visible: false });
     expect(() => c.transformLayer({ layerId: id, matrix: [2, 0, 0, 2, 0, 0] })).toThrow(/hidden/);
     const adj = c.addAdjustmentLayer('invert');
-    expect(() => c.transformLayer({ layerId: adj, matrix: [2, 0, 0, 2, 0, 0] })).toThrow(/works on pixel, shape and smart object layers/);
+    expect(() => c.transformLayer({ layerId: adj, matrix: [2, 0, 0, 2, 0, 0] })).toThrow(/works on pixel, shape, type and smart object layers/);
     expect(() => c.transformLayer({ layerId: id, matrix: [0, 0, 0, 0, 0, 0] })).toThrow(/singular/);
     expect(() => c.transformLayer({ layerId: id, matrix: [1, 0, 0, 1, 0, 0], params: {} })).toThrow(/only one/);
   });

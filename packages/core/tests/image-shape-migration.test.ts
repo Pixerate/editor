@@ -194,8 +194,8 @@ describe('annotations migrate to shape layers that render the same', () => {
     expect(diff.mean).toBeLessThan(0.05);
   });
 
-  it('keeps text, image and unreadable-colour annotations as annotation layers', () => {
-    expect(annotationLayerFor({ id: 't', type: 'text', x: 1, y: 1, text: 'hi', fontSize: 12, color: 'red' }, CANVAS).type).toBe('annotation');
+  it('keeps image and unreadable-colour annotations as annotation layers (text becomes a type layer)', () => {
+    expect(annotationLayerFor({ id: 't', type: 'text', x: 1, y: 1, text: 'hi', fontSize: 12, color: 'red' }, CANVAS).type).toBe('type');
     expect(annotationLayerFor({ id: 'i', type: 'image', x: 1, y: 1, width: 4, height: 4, src: 'data:x' }, CANVAS).type).toBe('annotation');
     expect(annotationLayerFor({ id: 'v', type: 'rect', x: 1, y: 1, width: 4, height: 4, strokeColor: 'var(--accent)', strokeWidth: 1 }, CANVAS).type).toBe('annotation');
     // Without a canvas size (no render target) nothing is migrated.
@@ -221,7 +221,7 @@ describe('old documents and the annotation API', () => {
         annotations,
       } as LegacySerializedImageEditorState) as LegacySerializedImageEditorState;
       const c = controllerFor(doc);
-      expect(c.getLayers().map((l) => l.type)).toEqual(version === 2 ? ['pixel', 'adjustment', 'shape', 'annotation', 'shape'] : ['pixel', 'shape', 'annotation', 'shape']);
+      expect(c.getLayers().map((l) => l.type)).toEqual(version === 2 ? ['pixel', 'adjustment', 'shape', 'type', 'shape'] : ['pixel', 'shape', 'type', 'shape']);
       // The arrow keeps its multiply blend, now on the layer.
       expect(c.getLayers().at(-1)!.blend).toBe('multiply');
       expect(c.getState().annotations).toEqual(annotations);

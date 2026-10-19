@@ -75,6 +75,9 @@ import {
   type ShapeLayer,
   type ShapePaint,
   type ShapeStroke,
+  type ParagraphStyle,
+  type TextStyle,
+  type TypeLayer,
   hasSurface,
 } from './layers/model';
 import {
@@ -97,7 +100,34 @@ import {
   updateShapeLayer,
   type ShapeEnv,
 } from './layers/shape';
-import { roundSubpaths } from '../vector/geometry';
+import { bezierToSubpaths, roundSubpaths } from '../vector/geometry';
+import {
+  DEFAULT_TEXT_STYLE,
+  annotationOfType,
+  caretAt,
+  createTypeLayer,
+  layoutText,
+  normalizeText,
+  patchParagraphStyle,
+  patchTextStyle,
+  replaceTextRange,
+  requireTypeLayer,
+  restyleRange,
+  styleAt,
+  textIndexAt,
+  textOutlines,
+  textMatrix,
+  textRange,
+  toTextSpace,
+  transformTypeLayer,
+  typeAsPixelLayer,
+  typeLayerName,
+  updateTypeLayer,
+  type TextEnv,
+  type TextLayout,
+  type TextShaper,
+} from './layers/text';
+import { createCanvasTextShaper } from './layers/text-shapers';
 import type { VectorSubpath } from '../vector/types';
 import {
   addSmartFilter as addSmartFilterOp,
@@ -248,7 +278,7 @@ import {
   type WarpPreset,
 } from './transform';
 import { WARP_STYLES } from '../geom/warp';
-import { applyMatrix, multiplyMatrices, translateMatrix } from '../geom/affine';
+import { applyMatrix, multiplyMatrices, rotateMatrix, translateMatrix } from '../geom/affine';
 import type { EffectPattern } from '../raster/effects/patterns';
 import { DEFAULT_GLOBAL_LIGHT, effectsMargin, type GlobalLight, type LayerEffect, type LayerEffectKind, type LayerEffects } from '../raster/effects/model';
 
@@ -435,6 +465,49 @@ export interface ShapeLayerInfo {
   /** Bounds of the rendered pixels (stroke and antialiasing included). */
   bounds: CropBox | null;
   /** The annotation id while the layer is still the annotation it was migrated from. */
+  annotationId?: string;
+}
+
+/** A new type layer: its text, where it goes, and its character and paragraph style. */
+export interface TextLayerInit extends LayerPlacement {
+  text: string;
+  /**
+   * Document x, y of the text's origin: point text's first baseline at its alignment edge (left
+   * edge for left-aligned, centre for centred, right edge for right-aligned); a paragraph box's
+   * top-left.
+   */
+  x: number;
+  y: number;
+  /** Paragraph (area) text: wrap inside a `width × height` box (pixels). Missing: point text. */
+  box?: { width: number; height: number };
+  /** Character style of the whole text (default 24 px sans-serif, the foreground colour). */
+  style?: Partial<TextStyle>;
+  paragraph?: ParagraphStyle;
+  /** Degrees clockwise about the origin. */
+  rotation?: number;
+  name?: string;
+  opacity?: number;
+  blend?: BlendMode;
+}
+
+/** A type layer as tools and panels read it. Ranges are UTF-16 code units, `end` exclusive. */
+export interface TypeLayerInfo {
+  id: string;
+  name: string;
+  text: string;
+  runs: Array<{ start: number; end: number; style: TextStyle }>;
+  paragraphs: Array<{ start: number; end: number; style: ParagraphStyle }>;
+  frame: TypeLayer['frame'];
+  /** Text space → document. */
+  transform: AffineMatrix;
+  /** Laid-out lines: text range, baseline (text space) and width; empty without a shaper. */
+  lines: Array<{ start: number; end: number; baseline: number; width: number }>;
+  /** Rendered bounds in the document. */
+  bounds: CropBox | null;
+  /** Families drawn with a fallback because they are missing here. */
+  missingFonts: string[];
+  /** `live`: drawn here from the text; `stored`: pixels kept from a file until the next edit. */
+  rendering: 'live' | 'stored';
   annotationId?: string;
 }
 
@@ -819,6 +892,7 @@ export class ImageEditorController {
 
   constructor(options: ImageEditorOptions = {}) {
     this.maxHistoryDepth = options.maxHistoryDepth ?? 50;
+    if (options.textShaper !== undefined) this.textShaperValue = options.textShaper;
     this.maxHistoryBytes = options.maxHistoryBytes ?? 512 * 1024 * 1024;
     this.onStateChange = options.onStateChange;
     this.renderer = new ImageEditorRenderer();
@@ -1322,7 +1396,7 @@ export class ImageEditorController {
   }
 
   /** The pixels a pixel layer, smart object or shape composites (the decoded source for the Background). */
-  private surfaceOf(layer: PixelLayer | SmartObjectLayer | ShapeLayer): PixelSurface {
+  private surfaceOf(layer: PixelLayer | SmartObjectLayer | ShapeLayer | TypeLayer): PixelSurface {
     if (layer.type !== 'pixel' || layer.source !== 'document') return layer.surface;
     return this.sourceSurface() ?? layer.surface;
   }
@@ -1611,6 +1685,22 @@ export class ImageEditorController {
       const b = shapeGeometryBounds(moved) ?? { x: 0, y: 0 };
       return { offset: { x: Math.round(b.x), y: Math.round(b.y) }, bounds: this.getLayerBounds(id) };
     }
+    if (layer.type === 'type') {
+      // A type layer moves through its transform: x, y is where its text-space origin goes.
+      const m = layer.transform ?? [1, 0, 0, 1, 0, 0];
+      const dx = move.x !== undefined ? move.x - m[4] : (move.dx ?? 0);
+      const dy = move.y !== undefined ? move.y - m[5] : (move.dy ?? 0);
+      if (!Number.isFinite(dx) || !Number.isFinite(dy)) throw new LayerOperationError('x and y must be numbers.');
+      requireUnlocked(layer, 'position', 'move it');
+      const mx = Math.round(dx);
+      const my = Math.round(dy);
+      let moved: TypeLayer = { ...transformTypeLayer(layer, [1, 0, 0, 1, mx, my]), surface: translateSurface(layer.surface, mx, my) };
+      const mask = layer.mask;
+      if (mask && mask.linked !== false && !mask.source && (mx || my)) moved = { ...moved, mask: { ...mask, surface: translateSurface(mask.surface, mx, my) } };
+      this.commitLayers(mapLayer(this.state.layers, id, () => moved), undefined, commitToHistory);
+      const t = moved.transform ?? [1, 0, 0, 1, 0, 0];
+      return { offset: { x: Math.round(t[4]), y: Math.round(t[5]) }, bounds: this.getLayerBounds(id) };
+    }
     const current = layer.type === 'pixel' ? layer.offset : { x: 0, y: 0 };
     const x = move.x ?? current.x + (move.dx ?? 0);
     const y = move.y ?? current.y + (move.dy ?? 0);
@@ -1769,6 +1859,7 @@ export class ImageEditorController {
       canvas: () => this.naturalSize,
       pixelsOf: (layer) => this.surfaceOf(layer),
       shapeEnv: () => this.shapeEnv(),
+      textEnv: () => this.textEnv(),
       capture: () => this.captureHistoryEntry(),
       show: (layers, selection, active) => {
         this.state.layers = layers;
@@ -1875,7 +1966,7 @@ export class ImageEditorController {
     const session = this.beginFreeTransform({ interpolation: 'nearest', ...init });
     try {
       // The frame in the document (a smart object's placed outline).
-      const b = session.smartObject ? (transformedBox(session.startGeometry) ?? session.box) : session.box;
+      const b = session.smartObject || session.typeLayer ? (transformedBox(session.startGeometry) ?? session.box) : session.box;
       // About the centre, rounded so an odd-by-even box still lands on the pixel grid.
       const cx = b.x + b.width / 2;
       const cy = b.y + b.height / 2;
@@ -2680,6 +2771,7 @@ export class ImageEditorController {
     } else {
       if (layer.type === 'smart') throw new LayerOperationError(`Layer "${layer.name || id}" is a smart object; its pixels come from its contents. Rasterize it (rasterize_smart_object), edit its contents (edit_smart_object_contents), or ${action} on its mask or filter mask.`);
       if (layer.type === 'shape') throw new LayerOperationError(`Layer "${layer.name || id}" is a shape layer; its pixels are drawn from its paths. Rasterize it first (rasterize_layer), or ${action} on its mask (channel mask).`);
+      if (layer.type === 'type') throw new LayerOperationError(`Layer "${layer.name || id}" is a type layer; its pixels are drawn from its text. Rasterize it first (rasterize_layer), or ${action} on its mask (channel mask).`);
       if (layer.type !== 'pixel') throw new LayerOperationError(`Layer "${layer.name || id}" is a ${layer.type} layer; ${action} on a pixel layer, or on this layer's mask (channel mask).`);
       requireUnlocked(layer, 'pixels', action);
     }
@@ -3466,8 +3558,13 @@ export class ImageEditorController {
   // --- Annotations & Layers ---
 
   /** The layer showing annotation `id`: an annotation layer, or a shape layer migrated from it. */
-  private annotationLayer(id: string): AnnotationLayer | ShapeLayer | undefined {
-    return flattenLayers(this.state.layers).find((l): l is AnnotationLayer | ShapeLayer => (l.type === 'annotation' || l.type === 'shape') && annotationOfLayer(l)?.id === id);
+  private annotationLayer(id: string): AnnotationLayer | ShapeLayer | TypeLayer | undefined {
+    return flattenLayers(this.state.layers).find((l): l is AnnotationLayer | ShapeLayer | TypeLayer => (l.type === 'annotation' || l.type === 'shape' || l.type === 'type') && annotationOfLayer(l)?.id === id);
+  }
+
+  /** What migrating an annotation needs: the canvas size, patterns and the text shaper. */
+  private annotationEnv(): ShapeEnv & TextEnv {
+    return { ...this.shapeEnv(), ...this.textEnv() };
   }
 
   /**
@@ -3480,7 +3577,7 @@ export class ImageEditorController {
     this.recordHistory();
     const id = `ann_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const fullAnnotation = { ...annotation, id } as Annotation;
-    const layer = annotationLayerFor(fullAnnotation, this.shapeEnv());
+    const layer = annotationLayerFor(fullAnnotation, this.annotationEnv());
     const loc = placement.aboveId ? findLayer(this.state.layers, placement.aboveId) : null;
     this.state.layers = loc
       ? insertLayer(this.state.layers, layer, loc.parent?.id ?? null, loc.index + 1)
@@ -3504,24 +3601,15 @@ export class ImageEditorController {
     this.notify();
   }
 
-  /** `layer` (an annotation or migrated shape layer) showing `annotation` instead, keeping its other properties. */
-  private layerForAnnotation(layer: AnnotationLayer | ShapeLayer, annotation: Annotation, name: string): ImageLayer {
-    const shape = shapeFromAnnotation(annotation);
-    const { annotation: _old, ...props } = layer as ImageLayer & { annotation?: Annotation };
-    const blend = annotation.blend && annotation.blend !== 'normal' ? annotation.blend : 'normal';
-    if (shape) {
-      const base = { ...props, name, blend: layer.type === 'annotation' && layer.blend !== 'normal' ? layer.blend : blend } as ImageLayer;
-      if (layer.type === 'shape') {
-        const fresh = rerenderShape({ ...(base as ShapeLayer), components: shape.components, fill: shape.fill, stroke: shape.stroke }, this.shapeEnv());
-        delete fresh.fillRule;
-        return { ...fresh, annotation };
-      }
-      const created = createShapeLayer({ ...shape, name, blend: base.blend as BlendMode }, this.shapeEnv(), layer.id);
-      const { type: _t, ...rest } = base as AnnotationLayer;
-      return { ...rest, ...created, annotation } as ShapeLayer;
-    }
-    const { type: _t, components: _c, fill: _f, stroke: _s, surface: _sf, offset: _o, fillRule: _r, fillOpacity: _fo, psd: _p, ...rest } = props as ShapeLayer;
-    return { ...rest, type: 'annotation', name, blend: layer.type === 'shape' ? 'normal' : layer.blend, annotation } as AnnotationLayer;
+  /** `layer` (an annotation, or a shape or type layer migrated from one) showing `annotation` instead, keeping its other properties. */
+  private layerForAnnotation(layer: AnnotationLayer | ShapeLayer | TypeLayer, annotation: Annotation, name: string): ImageLayer {
+    const fresh = annotationLayerFor(annotation, this.annotationEnv());
+    const keep: Partial<ImageLayer> = { id: layer.id, visible: layer.visible, opacity: layer.opacity };
+    for (const k of ['clipped', 'mask', 'locks', 'effects'] as const) if (layer[k] !== undefined) (keep as Record<string, unknown>)[k] = layer[k];
+    if (fresh.type !== 'annotation' && layer.type !== 'annotation' && layer.fillOpacity !== undefined) (keep as { fillOpacity?: number }).fillOpacity = layer.fillOpacity;
+    // An annotation layer's own blend (set on the layer) wins over the annotation's.
+    const blend = fresh.type === 'annotation' ? (layer.type === 'annotation' ? layer.blend : 'normal') : layer.type === 'annotation' && layer.blend !== 'normal' ? layer.blend : fresh.blend;
+    return { ...fresh, ...keep, name, blend } as ImageLayer;
   }
 
   public removeAnnotation(id: string): void {
@@ -3538,7 +3626,7 @@ export class ImageEditorController {
   public clearAnnotations(): void {
     this.recordHistory();
     let layers = this.state.layers;
-    for (const l of flattenLayers(layers)) if (l.type === 'annotation' || (l.type === 'shape' && l.annotation)) layers = mapLayer(layers, l.id, () => null);
+    for (const l of flattenLayers(layers)) if (l.type === 'annotation' || ((l.type === 'shape' || l.type === 'type') && l.annotation)) layers = mapLayer(layers, l.id, () => null);
     this.state.layers = layers;
     this.state.selectedAnnotationId = null;
     this.notify();
@@ -3809,6 +3897,253 @@ export class ImageEditorController {
     return target.id;
   }
 
+  // --- Type layers ---
+
+  private textShaperValue: TextShaper | null | undefined;
+
+  /** The shaper that lays out and draws type layers (`null` when there is none here). */
+  public getTextShaper(): TextShaper | null {
+    if (this.textShaperValue === undefined) this.textShaperValue = createCanvasTextShaper({ createCanvas: (w, h) => this.renderer.createCanvas(w, h) });
+    return this.textShaperValue;
+  }
+
+  /** Sets the text shaper (fonts) type layers lay out and draw with; existing layers redraw on their next edit. */
+  public setTextShaper(shaper: TextShaper | null): void {
+    this.textShaperValue = shaper;
+    this.notify();
+  }
+
+  /** What type layers lay out and draw with. */
+  private textEnv(): TextEnv {
+    return { ...this.naturalSize, shaper: this.getTextShaper(), createCanvas: (w, h) => this.renderer.createCanvas(w, h) };
+  }
+
+  /** Font families the shaper offers (generic families at least). */
+  public listFonts(): string[] {
+    return this.getTextShaper()?.families?.() ?? ['sans-serif', 'serif', 'monospace'];
+  }
+
+  private typeInfo(id: string): TypeLayerInfo {
+    const layer = requireTypeLayer(this.state.layers, id);
+    const ranges = <S>(runs: ReadonlyArray<{ length: number; style: S }>) => {
+      let at = 0;
+      return runs.map((r) => {
+        const out = { start: at, end: at + r.length, style: JSON.parse(JSON.stringify(r.style)) as S };
+        at += r.length;
+        return out;
+      });
+    };
+    const shaper = this.getTextShaper();
+    let lines: TypeLayerInfo['lines'] = [];
+    let missing = layer.missingFonts ?? [];
+    if (shaper) {
+      const layout = layoutText(layer, shaper);
+      const r = (n: number) => Math.round(n * 1000) / 1000;
+      lines = layout.lines.map((l) => ({ start: l.start, end: l.end, baseline: r(l.baseline), width: r(l.width) }));
+      if (layer.rendering === 'stored') missing = layout.missingFonts;
+    }
+    const info: TypeLayerInfo = {
+      id: layer.id,
+      name: layer.name,
+      text: layer.text,
+      runs: ranges(layer.runs),
+      paragraphs: ranges(layer.paragraphs),
+      frame: { ...layer.frame },
+      transform: [...(layer.transform ?? [1, 0, 0, 1, 0, 0])] as unknown as AffineMatrix,
+      lines,
+      bounds: this.getLayerBounds(id),
+      missingFonts: [...missing],
+      rendering: layer.rendering === 'stored' ? 'stored' : 'live',
+    };
+    if (layer.annotation) info.annotationId = layer.annotation.id;
+    return info;
+  }
+
+  /** A type layer's text, runs, paragraphs, frame, lines and bounds. */
+  public getTextLayer(id: string): TypeLayerInfo {
+    return this.typeInfo(id);
+  }
+
+  /**
+   * Adds a type layer (one undo step) and makes it active: point text at `x`, `y`, or paragraph
+   * text wrapped in `box`. Refused without a text shaper. Returns its id.
+   */
+  public addTextLayer(init: TextLayerInit): string {
+    const text = normalizeText(init.text);
+    if (!Number.isFinite(init.x) || !Number.isFinite(init.y)) throw new LayerOperationError('x and y must be numbers (document pixels).');
+    const style = patchTextStyle({ ...DEFAULT_TEXT_STYLE, color: this.state.paint.foreground }, (init.style ?? {}) as Record<string, unknown>);
+    const paragraph = patchParagraphStyle({}, (init.paragraph ?? {}) as Record<string, unknown>);
+    let frame: TypeLayer['frame'] = { kind: 'point' };
+    if (init.box) {
+      const { width, height } = init.box;
+      if (!(Number.isFinite(width) && width >= 1 && Number.isFinite(height) && height >= 1)) throw new LayerOperationError('box.width and box.height must be at least 1 pixel.');
+      frame = { kind: 'box', width, height };
+    }
+    if (init.rotation !== undefined && !Number.isFinite(init.rotation)) throw new LayerOperationError('rotation must be a number of degrees.');
+    if (init.opacity !== undefined && !(Number.isFinite(init.opacity) && init.opacity >= 0 && init.opacity <= 1)) throw new LayerOperationError('opacity must be between 0 and 1.');
+    if (init.blend !== undefined && !isBlendMode(init.blend)) throw new LayerOperationError(`Unknown blend mode "${String(init.blend)}".`);
+    const t: AffineMatrix = [1, 0, 0, 1, init.x, init.y];
+    const transform = init.rotation ? multiplyMatrices(t, rotateMatrix(init.rotation, { x: init.x, y: init.y })) : t;
+    const layer = createTypeLayer({ text, runs: [{ length: text.length, style }], paragraphs: [{ length: text.length, style: paragraph }], frame, transform, name: init.name ?? typeLayerName(text) }, this.textEnv());
+    if (init.opacity !== undefined) layer.opacity = init.opacity;
+    if (init.blend !== undefined) layer.blend = init.blend;
+    const next = placeLayer(this.state.layers, layer, this.newLayerPlacement(init));
+    this.commitLayers(next, () => {
+      this.state.activeLayerId = layer.id;
+      this.state.activeTarget = 'pixels';
+    });
+    return layer.id;
+  }
+
+  /**
+   * Replaces text [start, end) (default all of it) with `text`; inserted text takes the style at
+   * `start`. One undo step unless `commitToHistory` is false (typing). Returns the layer.
+   */
+  public setText(id: string, text: string, range: { start?: number; end?: number } = {}, commitToHistory = true): TypeLayerInfo {
+    const layer = requireTypeLayer(this.state.layers, id);
+    const insert = normalizeText(text);
+    const [start, end] = textRange(layer.text, range.start, range.end);
+    const { layers } = updateTypeLayer(this.state.layers, id, (l) => replaceTextRange(l, start, end, insert), this.textEnv(), 'edit its text');
+    this.commitLayers(layers, undefined, commitToHistory);
+    return this.typeInfo(id);
+  }
+
+  /** Sets character style fields over [start, end) (default all), one undo step. Returns the layer. */
+  public setTextStyle(id: string, style: Partial<TextStyle> & Record<string, unknown>, range: { start?: number; end?: number } = {}, commitToHistory = true): TypeLayerInfo {
+    const layer = requireTypeLayer(this.state.layers, id);
+    const [start, end] = textRange(layer.text, range.start, range.end);
+    if (!Object.keys(style).length) throw new LayerOperationError('Give at least one style field to set.');
+    // Validate once before touching the runs.
+    patchTextStyle(DEFAULT_TEXT_STYLE, style);
+    const { layers } = updateTypeLayer(
+      this.state.layers,
+      id,
+      (l) => {
+        if (start === end) {
+          // An empty range styles the whole of an empty text (the caret's style).
+          if (l.text.length) throw new LayerOperationError('The range is empty; give start < end (or leave both out for the whole text).');
+          return { runs: [{ length: 0, style: patchTextStyle(styleAt(l.runs, 0, DEFAULT_TEXT_STYLE), style) }] };
+        }
+        return { runs: restyleRange(l.runs, start, end, (s) => patchTextStyle(s, style)) as TypeLayer['runs'] };
+      },
+      this.textEnv(),
+      'restyle its text'
+    );
+    this.commitLayers(layers, undefined, commitToHistory);
+    return this.typeInfo(id);
+  }
+
+  /** Sets paragraph style fields on every paragraph that [start, end) touches (default all), one undo step. */
+  public setParagraphStyle(id: string, style: ParagraphStyle & Record<string, unknown>, range: { start?: number; end?: number } = {}, commitToHistory = true): TypeLayerInfo {
+    const layer = requireTypeLayer(this.state.layers, id);
+    const [start, end] = textRange(layer.text, range.start, range.end);
+    if (!Object.keys(style).length) throw new LayerOperationError('Give at least one paragraph field to set.');
+    patchParagraphStyle({}, style);
+    const { layers } = updateTypeLayer(
+      this.state.layers,
+      id,
+      (l) => {
+        let at = 0;
+        const paragraphs = l.paragraphs.map((p) => {
+          const a = at;
+          at += p.length;
+          const touches = (a < end && at > start) || (start === end && start >= a && (start < at || at === l.text.length));
+          return touches || !l.text.length ? { length: p.length, style: patchParagraphStyle(p.style, style) } : p;
+        });
+        return { paragraphs };
+      },
+      this.textEnv(),
+      'restyle its paragraphs'
+    );
+    this.commitLayers(layers, undefined, commitToHistory);
+    return this.typeInfo(id);
+  }
+
+  /**
+   * Point text ↔ paragraph text: `{ kind: 'box', width, height }` wraps the text in a box (its
+   * top-left where the first line's top-left is now), `{ kind: 'point' }` sets it on one line per
+   * paragraph. Also resizes a box. One undo step.
+   */
+  public setTextFrame(id: string, frame: { kind: 'point' } | { kind: 'box'; width: number; height: number }, commitToHistory = true): TypeLayerInfo {
+    const layer = requireTypeLayer(this.state.layers, id);
+    if (frame.kind === 'box' && !(Number.isFinite(frame.width) && frame.width >= 1 && Number.isFinite(frame.height) && frame.height >= 1)) throw new LayerOperationError('width and height must be at least 1 pixel.');
+    if (frame.kind !== 'box' && frame.kind !== 'point') throw new LayerOperationError('kind must be point or box.');
+    const shaper = this.getTextShaper();
+    const { layers } = updateTypeLayer(
+      this.state.layers,
+      id,
+      (l) => {
+        if (frame.kind === 'box' && l.frame.kind === 'box') return { frame: { kind: 'box', width: frame.width, height: frame.height } };
+        if (!shaper) throw new LayerOperationError('Changing between point and paragraph text needs a text shaper to measure the text.');
+        const lines = layoutText(l, shaper).lines;
+        const first = lines[0];
+        // Keep the first line where it is: shift the text-space origin.
+        const dx = frame.kind === 'box' ? (first ? first.x : 0) : 0;
+        const dy = frame.kind === 'box' ? (first ? first.baseline - first.ascent : 0) : first ? first.baseline : 0;
+        const m = textMatrix(l);
+        const shifted: AffineMatrix = [m[0], m[1], m[2], m[3], m[0] * dx + m[2] * dy + m[4], m[1] * dx + m[3] * dy + m[5]];
+        const nextFrame: TypeLayer['frame'] = frame.kind === 'box' ? { kind: 'box', width: frame.width, height: frame.height } : { kind: 'point' };
+        return { frame: nextFrame, transform: shifted };
+      },
+      this.textEnv(),
+      'change its frame'
+    );
+    this.commitLayers(layers, undefined, commitToHistory);
+    return this.typeInfo(id);
+  }
+
+  /**
+   * Convert to Shape: the text's glyph outlines become a shape layer with the same id, name and
+   * layer properties (needs a shaper that gives outlines). The fill is the first run's colour;
+   * `warnings` says when other colours were dropped. One undo step.
+   */
+  public convertTextToShape(id: string): { layerId: string; warnings: string[] } {
+    const layer = requireTypeLayer(this.state.layers, id);
+    requireUnlocked(layer, 'all', 'convert it');
+    const shaper = this.getTextShaper();
+    if (!shaper) throw new LayerOperationError('Convert to Shape needs a text shaper that gives glyph outlines; none is set here.');
+    const parts = textOutlines(layer, shaper);
+    const subpaths = parts.flatMap((p) => bezierToSubpaths(p.path));
+    if (!subpaths.length) throw new LayerOperationError('The text draws nothing (it is empty or only spaces), so there is no shape to make.');
+    const warnings: string[] = [];
+    const colors = new Set(layer.runs.filter((r) => r.length > 0).map((r) => `${r.style.color}/${r.style.opacity ?? 1}`));
+    if (colors.size > 1) warnings.push('The text had several colours; the shape takes the first one.');
+    const missing = layoutText(layer, shaper).missingFonts;
+    if (missing.length) warnings.push(`Missing fonts were drawn with a fallback: ${missing.join(', ')}.`);
+    const first = layer.runs.find((r) => r.length > 0)?.style ?? DEFAULT_TEXT_STYLE;
+    const fill: ShapePaint = first.opacity !== undefined && first.opacity !== 1 ? { type: 'color', color: first.color, opacity: first.opacity } : { type: 'color', color: first.color };
+    const shape = createShapeLayer({ components: [{ op: 'combine', subpaths }], fill, stroke: null, name: layer.name }, this.shapeEnv(), layer.id);
+    const keep: Partial<ShapeLayer> = { visible: layer.visible, opacity: layer.opacity, blend: layer.blend };
+    for (const k of ['clipped', 'mask', 'locks', 'effects', 'fillOpacity'] as const) if (layer[k] !== undefined) (keep as Record<string, unknown>)[k] = layer[k];
+    this.commitLayers(mapLayer(this.state.layers, id, () => ({ ...shape, ...keep }) as ShapeLayer));
+    return { layerId: id, warnings };
+  }
+
+  /** The layout of a type layer (lines, characters, bounds in text space), or `null` without a shaper. */
+  public getTextLayout(id: string): TextLayout | null {
+    const layer = requireTypeLayer(this.state.layers, id);
+    const shaper = this.getTextShaper();
+    return shaper ? layoutText(layer, shaper) : null;
+  }
+
+  /** The text index nearest a document point (for clicks on a type layer). */
+  public textIndexAt(id: string, point: ImagePoint): number {
+    const layer = requireTypeLayer(this.state.layers, id);
+    const layout = this.getTextLayout(id);
+    return layout ? textIndexAt(layout, toTextSpace(layer, point)) : layer.text.length;
+  }
+
+  /** The caret at text index `index` as a document-space segment (top to bottom), for drawing it. */
+  public textCaret(id: string, index: number): { top: ImagePoint; bottom: ImagePoint; line: number } | null {
+    const layer = requireTypeLayer(this.state.layers, id);
+    const layout = this.getTextLayout(id);
+    if (!layout) return null;
+    const c = caretAt(layout, Math.max(0, Math.min(layer.text.length, index)));
+    const m = textMatrix(layer);
+    const at = (x: number, y: number) => ({ x: m[0] * x + m[2] * y + m[4], y: m[1] * x + m[3] * y + m[5] });
+    return { top: at(c.x, c.top), bottom: at(c.x, c.bottom), line: c.line };
+  }
+
   // --- Shape layers ---
 
   /** What shape rendering needs: the canvas size and the document's patterns. */
@@ -4002,11 +4337,11 @@ export class ImageEditorController {
       }
     } else if (layer.type === 'smart') {
       return this.rasterizeSmartObject(id);
-    } else if (layer.type === 'shape') {
-      next = shapeAsPixelLayer(layer);
+    } else if (layer.type === 'shape' || layer.type === 'type') {
+      next = layer.type === 'shape' ? shapeAsPixelLayer(layer) : typeAsPixelLayer(layer);
       if (this.state.selectedAnnotationId && this.state.selectedAnnotationId === layer.annotation?.id) this.state.selectedAnnotationId = null;
     } else {
-      throw new LayerOperationError(`Only shape and annotation layers, smart objects and pixel layers with filters rasterize; "${layer.name || id}" is a ${layer.type} layer. Merge it down or flatten instead.`);
+      throw new LayerOperationError(`Only shape, type and annotation layers, smart objects and pixel layers with filters rasterize; "${layer.name || id}" is a ${layer.type} layer. Merge it down or flatten instead.`);
     }
     this.commitLayers(mapLayer(this.state.layers, id, () => next));
     return id;
@@ -4139,9 +4474,9 @@ export class ImageEditorController {
         if (mask) out.mask = mask;
         return out;
       }
-      if (layer.type === 'shape') {
-        add('Shape layers were written as pixel layers', layer.name);
-        const out = shapeAsPixelLayer(layer);
+      if (layer.type === 'shape' || layer.type === 'type') {
+        add(layer.type === 'shape' ? 'Shape layers were written as pixel layers' : 'Type layers were written as pixel layers', layer.name);
+        const out = layer.type === 'shape' ? shapeAsPixelLayer(layer) : typeAsPixelLayer(layer);
         const mask = bakeMask(layer);
         if (mask) out.mask = mask;
         else delete out.mask;
@@ -4251,7 +4586,7 @@ export class ImageEditorController {
     if (bg && bg.source !== 'document') layers = mapLayer(layers, bg.id, () => ({ ...bg, source: 'document' }));
 
     if (clearAnnotations) {
-      for (const l of flattenLayers(layers)) if (l.type === 'annotation' || (l.type === 'shape' && l.annotation)) layers = mapLayer(layers, l.id, () => null);
+      for (const l of flattenLayers(layers)) if (l.type === 'annotation' || ((l.type === 'shape' || l.type === 'type') && l.annotation)) layers = mapLayer(layers, l.id, () => null);
       this.state.selectedAnnotationId = null;
     }
     this.state.layers = layers;
@@ -4348,6 +4683,7 @@ export class ImageEditorController {
         smartContents: Array.isArray(data.smartContents) ? data.smartContents : [],
         canvas,
         pattern: (pid) => storedPatterns.find((p) => p.id === pid) ?? null,
+        text: this.textEnv(),
       });
       this.lastLoadProblems = problems;
       s.crop = data.crop ? { ...data.crop } : null;
@@ -4570,7 +4906,7 @@ function collectStateTiles(layers: readonly ImageLayer[], into: Set<Tile>): void
   for (const l of flattenLayers(layers)) {
     if (l.type === 'pixel' && l.source !== 'document') collectTiles(l.surface, into);
     if (l.mask && !l.mask.source) collectTiles(l.mask.surface, into);
-    if (l.type === 'shape') collectTiles(l.surface, into);
+    if (l.type === 'shape' || l.type === 'type') collectTiles(l.surface, into);
     if (l.type === 'smart') {
       collectTiles(l.surface, into);
       if (l.smartFilters?.mask) collectTiles(l.smartFilters.mask.surface, into);
@@ -4624,7 +4960,7 @@ export function resizePixels(px: PixelBuffer, width: number, height: number): Pi
 function withoutAnnotations(layers: readonly ImageLayer[]): ImageLayer[] {
   const out: ImageLayer[] = [];
   for (const l of layers) {
-    if (l.type === 'annotation' || (l.type === 'shape' && l.annotation)) continue;
+    if (l.type === 'annotation' || ((l.type === 'shape' || l.type === 'type') && l.annotation)) continue;
     out.push(l.type === 'group' ? { ...l, children: withoutAnnotations(l.children) } : l);
   }
   return out;
