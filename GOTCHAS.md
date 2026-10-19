@@ -2002,3 +2002,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Dragging a corner of a small layer moved the reference point instead of scaling.
 - **Root Cause**: The hit tolerance is a fixed number of screen pixels (6), converted to document pixels by the zoom. On a frame a few dozen screen pixels across, the centre reference point and every handle are all within reach, and the reference point was tested first.
 - **Solution / Workaround**: `FreeTransformTool.hit` returns the nearest handle within the tolerance, and the reference point only when it is strictly nearer. Ctrl/Cmd+T is reserved by some browsers (a new tab), so the editors also show Free Transform buttons in the Layers, Paint and Select tabs.
+
+### [core/image-editor] The Warp Mesh Lives in the Frame's Own Space, Before the Corner Map
+
+- **Issue / Symptom**: After a perspective, the warp mesh drawn on screen sat a little off the warped pixels near the far edge, and dragging a mesh point after a rotation moved it in the wrong direction.
+- **Root Cause**: A Free Transform is a warp of the untransformed frame followed by the corner map (`transformMap`), as in photocraft. The mesh's control points are in the frame's space. Mapping control points through a projective map does not give the Bézier patch of the mapped surface, only a close one, and pointer moves are in document space.
+- **Solution / Workaround**: `FreeTransformTool` maps pointer positions into the frame's space through the inverse corner map before `dragWarpMeshPoint` / `pullWarpMesh`, and draws the control points through the corner map. The drawing is exact for affine corners and approximate for perspective, but the resampling always uses the exact composition. Leaving Warp mode keeps the mesh, so a warp and a perspective commit together.

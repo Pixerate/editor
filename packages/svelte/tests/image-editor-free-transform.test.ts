@@ -66,6 +66,31 @@ describe('Svelte Free Transform', () => {
     expect(b.width).toBeLessThanOrEqual(21);
   });
 
+  it('FreeTransformOptionsBar shows Warp: style, bend, grid, and commits the warp', () => {
+    const { c, id } = setup();
+    const tool = new FreeTransformTool(c);
+    tool.begin();
+    component = mount(FreeTransformOptionsBar, { target, props: { tool } });
+    flushSync();
+    click(button('Warp'));
+    expect(tool.mode).toBe('warp');
+    expect(target.querySelector('input[aria-label="Width in percent of the original"]')).toBeNull();
+    const style = target.querySelector('select[aria-label="Warp style"]') as HTMLSelectElement;
+    style.value = 'arc';
+    style.dispatchEvent(new Event('change', { bubbles: true }));
+    flushSync();
+    expect(tool.warpBar().style).toBe('arc');
+    typeInto('Warp bend in percent', '-40');
+    expect(tool.warpBar().bend).toBe(-40);
+    const grid = target.querySelector('select[aria-label="Warp grid"]') as HTMLSelectElement;
+    grid.value = '3x3';
+    grid.dispatchEvent(new Event('change', { bubbles: true }));
+    flushSync();
+    expect(tool.overlay()!.warp!.anchors).toHaveLength(16);
+    click(button('Commit'));
+    expect(c.getLayerBounds(id)).not.toEqual({ x: 20, y: 20, width: 40, height: 20 });
+  });
+
   it('opens from the Layers tab, drags a handle on the canvas and commits with Enter', () => {
     const editor = createReactiveImageEditor();
     const c = editor.controller;

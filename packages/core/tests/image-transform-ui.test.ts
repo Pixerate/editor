@@ -163,4 +163,55 @@ describe('FreeTransformTool', () => {
     close(tool.overlay()!.outline[0], { x: 50, y: 50 });
     tool.cancel();
   });
+
+  it('warps: presets from the bar, dragging mesh points and pulling inside, committed as one step', () => {
+    const { c, id, tool } = setup();
+    tool.begin();
+    tool.setMode('warp');
+    let o = tool.overlay()!;
+    expect(o.handles).toEqual([]);
+    expect(o.warp!.anchors).toHaveLength(4);
+    expect(o.warp!.handles).toHaveLength(8);
+    expect(tool.hit({ x: 90, y: 70 }, 2)).toMatch(/^mesh:/);
+    tool.setWarp({ style: 'arc', bend: 50 });
+    expect(tool.warpBar()).toMatchObject({ style: 'arc', bend: 50 });
+    // Arc bends the frame: its corners leave the box's corners.
+    o = tool.overlay()!;
+    expect(o.warp!.anchors.some((a) => a.y !== 50 && a.y !== 70)).toBe(true);
+    tool.setWarp({ columns: 3, rows: 3 });
+    expect(tool.overlay()!.warp!.anchors).toHaveLength(16);
+    // Dragging an anchor turns the style into Custom.
+    const a = tool.overlay()!.warp!.anchors[5];
+    expect(tool.down(a, 1)).toMatch(/^mesh:/);
+    tool.move({ x: a.x + 5, y: a.y + 5 });
+    tool.up();
+    expect(tool.warpBar().style).toBe('custom');
+    // Pulling inside moves the surface under the pointer.
+    const [p5, p10] = [tool.overlay()!.warp!.anchors[5], tool.overlay()!.warp!.anchors[10]];
+    const mid = { x: (p5.x + p10.x) / 2, y: (p5.y + p10.y) / 2 };
+    expect(tool.down(mid, 0.5)).toBe('inside');
+    tool.move({ x: mid.x + 2, y: mid.y + 4 });
+    tool.up();
+    const steps = (c as unknown as { undoStack: unknown[] }).undoStack.length;
+    const res = tool.commit()!;
+    expect(res.changed).toBe(true);
+    expect((c as unknown as { undoStack: unknown[] }).undoStack.length).toBe(steps + 1);
+    expect(c.getLayerBounds(id)).not.toEqual({ x: 50, y: 50, width: 40, height: 20 });
+  });
+
+  it('keeps a warp and the corner map together', () => {
+    const { c, id, tool } = setup();
+    tool.begin();
+    tool.setWarp({ style: 'flag', bend: 30 });
+    tool.setMode('scale');
+    expect(tool.overlay()!.warp).toBeUndefined();
+    drag(tool, { x: 90, y: 70 }, { x: 130, y: 90 });
+    tool.setMode('warp');
+    expect(tool.warp).not.toBeNull();
+    // The mesh is drawn through the corner map: its bottom-right anchor sits on the moved corner.
+    const anchors = tool.overlay()!.warp!.anchors;
+    expect(anchors[anchors.length - 1].x).toBeCloseTo(130, 6);
+    tool.commit();
+    expect(c.getLayerBounds(id)!.width).toBeGreaterThan(60);
+  });
 });

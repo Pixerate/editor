@@ -12,7 +12,10 @@
  *   the centre); Mod + Alt + Shift + corner: perspective;
  * - outside the box: rotate about the reference point (Shift: 15° steps); inside: move (Shift:
  *   along one axis); the reference point: move it;
- * - the mode switch (rotate, skew, distort, perspective) makes every handle do that.
+ * - the mode switch (rotate, skew, distort, perspective) makes every handle do that;
+ * - Warp: drag a mesh anchor or handle (the grid stays smooth across its lines), or anywhere
+ *   inside to pull the surface; presets and the grid size come from the options bar. The warp is
+ *   applied in the frame's own space before the corner map, so both can be used together.
  */
 
 import type { ImageEditorController } from '../controller';
@@ -26,15 +29,29 @@ import {
   type TransformAnchor,
   type TransformReadout,
 } from '../transform';
-import { applyHomography, invertHomography, rectToQuad } from '../../geom/homography';
+import { applyHomography, invertHomography, rectToQuad, type Homography } from '../../geom/homography';
+import {
+  WARP_STYLES,
+  WARP_STYLE_LABELS,
+  dragWarpMeshPoint,
+  identityWarpMesh,
+  pullWarpMesh,
+  resizeWarpMesh,
+  warpMeshEditPoints,
+  warpMeshGridCurves,
+  warpMeshParamAt,
+  warpPresetMesh,
+  type WarpPreset,
+} from '../../geom/warp';
+import type { WarpMesh, WarpStyle } from '../../geom/types';
 import type { Vec2 } from '../../geom/types';
 import type { Interpolation } from '../../raster/transform';
 import type { ImagePoint } from '../types';
 import { flattenLayers } from './model';
 import type { ShortcutEvent } from './paint-ui';
 
-/** What a pointer is over. */
-export type TransformHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'reference' | 'inside' | 'outside';
+/** What a pointer is over (`mesh:<index>`: a warp mesh control point). */
+export type TransformHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'reference' | 'inside' | 'outside' | `mesh:${number}`;
 
 const CORNERS = ['nw', 'ne', 'se', 'sw'] as const;
 const SIDES = ['n', 'e', 's', 'w'] as const;
@@ -63,13 +80,38 @@ export interface TransformModifiers {
 }
 
 /** The modes of the options bar's switch (Warp comes with its own mesh UI). */
-export const FREE_TRANSFORM_MODE_OPTIONS: readonly { id: Exclude<FreeTransformMode, 'warp'>; label: string; title: string }[] = [
+export const FREE_TRANSFORM_MODE_OPTIONS: readonly { id: FreeTransformMode; label: string; title: string }[] = [
   { id: 'scale', label: 'Free', title: 'Free Transform: corners scale, outside rotates, Ctrl/Cmd distorts' },
   { id: 'rotate', label: 'Rotate', title: 'Every handle rotates about the reference point' },
   { id: 'skew', label: 'Skew', title: 'Sides slide along themselves' },
   { id: 'distort', label: 'Distort', title: 'Each corner moves freely' },
   { id: 'perspective', label: 'Perspective', title: 'A corner and its partner move symmetrically' },
+  { id: 'warp', label: 'Warp', title: 'Bend through a mesh: drag its points or pull inside; presets in the bar' },
 ];
+
+/** The Warp style menu: Custom (the mesh as dragged) and Photoshop's fifteen presets. */
+export const WARP_STYLE_OPTIONS: readonly { id: WarpStyle | 'custom'; label: string }[] = [
+  { id: 'custom', label: 'Custom' },
+  ...WARP_STYLES.map((id) => ({ id, label: WARP_STYLE_LABELS[id] })),
+];
+
+/** The Warp grid menu: patches across and down. */
+export const WARP_GRID_OPTIONS: readonly { id: string; label: string; columns: number; rows: number }[] = [
+  { id: '1x1', label: 'Default', columns: 1, rows: 1 },
+  { id: '3x3', label: '3 × 3', columns: 3, rows: 3 },
+  { id: '5x5', label: '5 × 5', columns: 5, rows: 5 },
+];
+
+/** Warp preset settings as the options bar shows them (percent). */
+export interface WarpBar {
+  style: WarpStyle | 'custom';
+  bend: number;
+  horizontal: number;
+  vertical: number;
+  orientation: 'horizontal' | 'vertical';
+  columns: number;
+  rows: number;
+}
 
 /** The options bar's numeric fields (Photoshop's X, Y, W, H, angle and skews). */
 export const FREE_TRANSFORM_FIELDS = [
@@ -93,9 +135,11 @@ export interface FreeTransformBar extends Record<FreeTransformField, number> {
 export interface TransformOverlay {
   /** The transformed frame, corner to corner (document pixels). */
   outline: ImagePoint[];
-  /** The eight handles. */
-  handles: Array<{ id: Exclude<TransformHandle, 'reference' | 'inside' | 'outside'>; x: number; y: number }>;
+  /** The eight handles (none in Warp mode). */
+  handles: Array<{ id: 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w'; x: number; y: number }>;
   reference: ImagePoint;
+  /** In Warp mode: the mesh's grid lines as cubics, its anchors, and its handles with the anchor each belongs to. */
+  warp?: { curves: ImagePoint[][]; anchors: ImagePoint[]; handles: Array<{ point: ImagePoint; anchor: ImagePoint }> };
 }
 
 const CURSOR: Record<TransformHandle, string> = {
@@ -111,6 +155,7 @@ const CURSOR: Record<TransformHandle, string> = {
   inside: 'move',
   outside: 'alias',
 };
+const meshIndex = (h: TransformHandle | null) => (h && h.startsWith('mesh:') ? Number(h.slice(5)) : -1);
 
 const mod = (m: TransformModifiers) => Boolean(m.ctrlKey || m.metaKey);
 const add = (a: Vec2, b: Vec2): Vec2 => ({ x: a.x + b.x, y: a.y + b.y });
@@ -137,6 +182,17 @@ function insideQuad(q: readonly Vec2[], p: Vec2): boolean {
   return true;
 }
 
+/** Even-odd point-in-polygon (the warped mesh's border). */
+function insidePolygon(poly: readonly Vec2[], p: Vec2): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i];
+    const b = poly[j];
+    if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
+  }
+  return inside;
+}
+
 export interface FreeTransformToolOptions {
   /** Defers preview resampling to the next frame (pass `requestAnimationFrame`; default: at once). */
   schedule?: (run: () => void) => void;
@@ -150,11 +206,14 @@ export interface FreeTransformToolOptions {
  */
 export class FreeTransformTool {
   private sessionRef: FreeTransformSession | null = null;
-  private modeValue: Exclude<FreeTransformMode, 'warp'> = 'scale';
+  private modeValue: FreeTransformMode = 'scale';
   /** The reference point in the untransformed frame's space (follows the transform). */
   private refBox: Vec2 = { x: 0, y: 0 };
   private corners: Quad | null = null;
-  private drag: { handle: TransformHandle; start: Vec2; corners: Quad; refBox: Vec2; ref: Vec2 } | null = null;
+  private drag: { handle: TransformHandle; start: Vec2; corners: Quad; refBox: Vec2; ref: Vec2; mesh: WarpMesh | null; st: { s: number; t: number } | null } | null = null;
+  /** The warp mesh in the frame's own space (null: no warp). */
+  private mesh: WarpMesh | null = null;
+  private warpSettings: WarpBar = { style: 'custom', bend: 50, horizontal: 0, vertical: 0, orientation: 'horizontal', columns: 1, rows: 1 };
   private pending = false;
   private viewScale = 1;
   private viewClip: { x: number; y: number; width: number; height: number } | undefined;
@@ -178,7 +237,7 @@ export class FreeTransformTool {
     return this.active ? this.sessionRef : null;
   }
 
-  get mode(): Exclude<FreeTransformMode, 'warp'> {
+  get mode(): FreeTransformMode {
     return this.modeValue;
   }
 
@@ -215,6 +274,8 @@ export class FreeTransformTool {
       this.corners = s.geometry.corners;
       this.refBox = { x: s.box.x + s.box.width / 2, y: s.box.y + s.box.height / 2 };
       this.modeValue = 'scale';
+      this.mesh = null;
+      this.warpSettings = { style: 'custom', bend: 50, horizontal: 0, vertical: 0, orientation: 'horizontal', columns: 1, rows: 1 };
       this.typed = {};
       this.error = null;
     } catch (e) {
@@ -224,9 +285,44 @@ export class FreeTransformTool {
     return this.error;
   }
 
-  setMode(mode: Exclude<FreeTransformMode, 'warp'>): void {
+  setMode(mode: FreeTransformMode): void {
     this.modeValue = mode;
+    const s = this.session;
+    if (mode === 'warp' && s && !this.mesh) this.mesh = identityWarpMesh(s.box, this.warpSettings.columns, this.warpSettings.rows);
     this.changed();
+  }
+
+  /** The Warp options bar's settings. */
+  warpBar(): WarpBar {
+    return { ...this.warpSettings };
+  }
+
+  /** The warp mesh (frame space), or null. */
+  get warp(): WarpMesh | null {
+    return this.mesh;
+  }
+
+  /**
+   * Applies Warp options: a preset `style` with `bend` / `horizontal` / `vertical` (percent) and
+   * `orientation` replaces the mesh; `custom` keeps it; the grid size re-splits it (exactly when it
+   * can). Switches to Warp mode.
+   */
+  setWarp(changes: Partial<WarpBar>): void {
+    const s = this.session;
+    if (!s) return;
+    this.modeValue = 'warp';
+    const next = { ...this.warpSettings, ...changes };
+    this.warpSettings = next;
+    let mesh = this.mesh ?? identityWarpMesh(s.box, next.columns, next.rows);
+    if (next.style !== 'custom' && ('style' in changes || 'bend' in changes || 'horizontal' in changes || 'vertical' in changes || 'orientation' in changes)) {
+      const preset: WarpPreset = { style: next.style, bend: next.bend, horizontal: next.horizontal, vertical: next.vertical, orientation: next.orientation };
+      mesh = warpPresetMesh(preset, s.box) ?? identityWarpMesh(s.box);
+      mesh = resizeWarpMesh(mesh, next.columns, next.rows);
+    }
+    if ('columns' in changes || 'rows' in changes) mesh = resizeWarpMesh(mesh, next.columns, next.rows);
+    this.mesh = mesh;
+    this.changed();
+    this.preview();
   }
 
   /** Sets the reference point to an anchor of the frame (the options bar's locator). */
@@ -271,13 +367,57 @@ export class FreeTransformTool {
       const p = applyHomography(h, { x: s.box.x + fx * s.box.width, y: s.box.y + fy * s.box.height }) ?? { x: 0, y: 0 };
       return { id, x: p.x, y: p.y };
     });
-    return { outline: this.corners.map((p) => ({ x: p.x, y: p.y })), handles, reference: this.referencePoint() ?? { x: 0, y: 0 } };
+    const out: TransformOverlay = { outline: this.corners.map((p) => ({ x: p.x, y: p.y })), handles, reference: this.referencePoint() ?? { x: 0, y: 0 } };
+    if (this.modeValue === 'warp' && this.mesh) {
+      // Control points through the corner map: exact for affine corners, close for perspective.
+      const m = this.mesh;
+      const at = (p: Vec2) => applyHomography(h, p) ?? p;
+      const pts = m.points.map(at);
+      const edit = warpMeshEditPoints(m);
+      out.handles = [];
+      out.outline = warpMeshGridCurves({ ...m, points: pts }).length ? this.meshOutline(pts, m) : out.outline;
+      out.warp = {
+        curves: warpMeshGridCurves({ ...m, points: pts }),
+        anchors: edit.anchors.map((i) => pts[i]),
+        handles: edit.handles.map((e) => ({ point: pts[e.index], anchor: pts[e.anchor] })),
+      };
+    }
+    return out;
+  }
+
+  /** The mesh's border anchors, clockwise (for the inside test). */
+  private meshOutline(pts: Vec2[], m: WarpMesh): Vec2[] {
+    const nx = 3 * (m.us.length - 1) + 1;
+    const ny = 3 * (m.vs.length - 1) + 1;
+    const ring: Vec2[] = [];
+    for (let i = 0; i < nx; i++) ring.push(pts[i]);
+    for (let j = 1; j < ny; j++) ring.push(pts[j * nx + nx - 1]);
+    for (let i = nx - 2; i >= 0; i--) ring.push(pts[(ny - 1) * nx + i]);
+    for (let j = ny - 2; j > 0; j--) ring.push(pts[j * nx]);
+    return ring;
   }
 
   /** What a document point is over (`tolerance` in document pixels: a few screen pixels / scale). */
   hit(p: ImagePoint, tolerance: number): TransformHandle | null {
     const o = this.overlay();
     if (!o) return null;
+    if (this.modeValue === 'warp' && this.mesh) {
+      const h = this.homography()!;
+      const edit = warpMeshEditPoints(this.mesh);
+      let best = -1;
+      let bestD = tolerance;
+      for (const i of [...edit.anchors, ...edit.handles.map((e) => e.index)]) {
+        const q = applyHomography(h, this.mesh.points[i]);
+        if (!q) continue;
+        const d = Math.hypot(q.x - p.x, q.y - p.y);
+        if (d <= bestD) {
+          best = i;
+          bestD = d;
+        }
+      }
+      if (best >= 0) return `mesh:${best}`;
+      return insidePolygon(o.outline, p) ? 'inside' : 'outside';
+    }
     // The nearest of the handles and the reference point within the tolerance (a small frame on
     // screen puts several within reach); handles win ties.
     let best: TransformHandle | null = null;
@@ -297,6 +437,8 @@ export class FreeTransformTool {
   /** The CSS cursor for a handle. */
   cursor(handle: TransformHandle | null): string {
     if (!handle) return 'default';
+    if (meshIndex(handle) >= 0) return 'pointer';
+    if (this.modeValue === 'warp') return handle === 'inside' ? 'grab' : 'default';
     if (this.modeValue === 'rotate' && handle !== 'inside' && handle !== 'reference') return CURSOR.outside;
     return CURSOR[handle];
   }
@@ -306,8 +448,24 @@ export class FreeTransformTool {
     if (!this.session || !this.corners) return null;
     const handle = this.hit(p, tolerance);
     if (!handle) return null;
-    this.drag = { handle, start: { x: p.x, y: p.y }, corners: this.corners, refBox: { ...this.refBox }, ref: this.referencePoint() ?? p };
+    let st: { s: number; t: number } | null = null;
+    if (this.modeValue === 'warp' && this.mesh && handle === 'inside') {
+      const q = this.toFrame(p, this.corners);
+      if (q) {
+        const r = warpMeshParamAt(this.mesh, q);
+        st = { s: r.s, t: r.t };
+      }
+    }
+    this.drag = { handle, start: { x: p.x, y: p.y }, corners: this.corners, refBox: { ...this.refBox }, ref: this.referencePoint() ?? p, mesh: this.mesh, st };
     return handle;
+  }
+
+  /** A document point in the frame's own space under `corners`. */
+  private toFrame(p: Vec2, corners: Quad): Vec2 | null {
+    const s = this.session;
+    const h: Homography | null = s ? rectToQuad(s.box, corners) : null;
+    const inv = h && invertHomography(h);
+    return inv ? applyHomography(inv, p) : null;
   }
 
   /** Continues the drag to `p` with the modifiers held now. */
@@ -321,6 +479,21 @@ export class FreeTransformTool {
       const q = inv && applyHomography(inv, p);
       if (q) this.refBox = q;
       this.changed();
+      return;
+    }
+    if (this.modeValue === 'warp' && d.mesh) {
+      // Warp: mesh points and pulls in the frame's own space; outside the mesh does nothing.
+      const a = this.toFrame(d.start, d.corners);
+      const b = this.toFrame(p, d.corners);
+      if (!a || !b) return;
+      const delta = { x: b.x - a.x, y: b.y - a.y };
+      const i = meshIndex(d.handle);
+      if (i >= 0) this.mesh = dragWarpMeshPoint(d.mesh, i, delta);
+      else if (d.handle === 'inside' && d.st) this.mesh = pullWarpMesh(d.mesh, d.st.s, d.st.t, delta);
+      else return;
+      this.warpSettings = { ...this.warpSettings, style: 'custom' };
+      this.changed();
+      this.preview();
       return;
     }
     const corners = this.dragCorners(d, p, m);
@@ -428,7 +601,7 @@ export class FreeTransformTool {
       this.pending = false;
       const s = this.session;
       if (!s || !this.corners) return;
-      this.run(() => s.update({ corners: this.corners! }, { scale: this.viewScale, clip: this.viewClip }));
+      this.run(() => s.update({ corners: this.corners!, warp: this.mesh }, { scale: this.viewScale, clip: this.viewClip }));
     };
     if (this.options.schedule) this.options.schedule(run);
     else run();
@@ -497,12 +670,13 @@ export class FreeTransformTool {
     let res: FreeTransformResult | null = null;
     this.pending = false;
     this.run(() => {
-      if (this.corners) s.update({ corners: this.corners }, false);
+      if (this.corners) s.update({ corners: this.corners, warp: this.mesh }, false);
       res = s.commit();
     });
     this.lastResult = res;
     this.sessionRef = null;
     this.corners = null;
+    this.mesh = null;
     this.drag = null;
     this.changed();
     return res;
@@ -513,6 +687,7 @@ export class FreeTransformTool {
     this.sessionRef?.cancel();
     this.sessionRef = null;
     this.corners = null;
+    this.mesh = null;
     this.drag = null;
     this.pending = false;
     this.error = null;
