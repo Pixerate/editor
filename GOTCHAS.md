@@ -1996,3 +1996,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Photoshop's mask link (the chain icon) had no field in our model, so an unlinked mask came back linked after a round trip.
 - **Root Cause**: The PSD layer-mask flags document bit 0 as "position relative to layer". Photoshop sets it when the mask is unlinked; photocraft reads `linked = flags & 1 == 0`.
 - **Solution / Workaround**: `RasterMask.linked === false` maps to `MASK_FLAG_UNLINKED` on import and export, and to `linked: false` in saved documents. Missing means linked.
+
+### [core/image-editor] Free Transform Handles Overlap on a Small Frame, So Hit-Test by Distance
+
+- **Issue / Symptom**: Dragging a corner of a small layer moved the reference point instead of scaling.
+- **Root Cause**: The hit tolerance is a fixed number of screen pixels (6), converted to document pixels by the zoom. On a frame a few dozen screen pixels across, the centre reference point and every handle are all within reach, and the reference point was tested first.
+- **Solution / Workaround**: `FreeTransformTool.hit` returns the nearest handle within the tolerance, and the reference point only when it is strictly nearer. Ctrl/Cmd+T is reserved by some browsers (a new tab), so the editors also show Free Transform buttons in the Layers, Paint and Select tabs.

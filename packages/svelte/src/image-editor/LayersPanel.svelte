@@ -326,6 +326,19 @@
             class="shrink-0 grid place-items-center rounded bg-slate-800 text-[9px] text-slate-400 ring-1 ring-slate-700"
             style="width: {thumbnailSize}px; height: {thumbnailSize}px">{layerBadge(layer)}</span>
         {/if}
+        {#if layer.mask && !layer.mask.source && layer.type === 'pixel'}
+          <button
+            type="button"
+            aria-label={`${layer.mask.linked === false ? 'Link' : 'Unlink'} ${row.label} mask`}
+            aria-pressed={layer.mask.linked !== false}
+            title={layer.mask.linked === false ? 'Mask unlinked: it stays put when the layer moves or transforms. Click to link.' : 'Mask linked: it moves with the layer. Click to unlink.'}
+            data-testid="layer-mask-link"
+            class="shrink-0 text-[10px] leading-none {layer.mask.linked === false ? 'text-slate-600' : 'text-slate-300'}"
+            onclick={(e) => {
+              e.stopPropagation();
+              attempt(() => controller.setLayerMaskProps(layer.id, { linked: layer.mask!.linked === false }));
+            }}>{layer.mask.linked === false ? '⛓︎̸' : '⛓︎'}</button>
+        {/if}
         {#if layer.mask}
           <canvas
             use:paint={maskThumb(layer)}

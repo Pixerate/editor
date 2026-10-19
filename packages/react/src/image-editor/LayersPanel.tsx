@@ -331,6 +331,22 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
                   {layerBadge(layer)}
                 </span>
               )}
+              {layer.mask && !layer.mask.source && layer.type === 'pixel' && (
+                <button
+                  type="button"
+                  aria-label={`${layer.mask.linked === false ? 'Link' : 'Unlink'} ${row.label} mask`}
+                  aria-pressed={layer.mask.linked !== false}
+                  title={layer.mask.linked === false ? 'Mask unlinked: it stays put when the layer moves or transforms. Click to link.' : 'Mask linked: it moves with the layer. Click to unlink.'}
+                  data-testid="layer-mask-link"
+                  className={`shrink-0 text-[10px] leading-none ${layer.mask.linked === false ? 'text-slate-600' : 'text-slate-300'}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    attempt(() => controller.setLayerMaskProps(layer.id, { linked: layer.mask!.linked === false }));
+                  }}
+                >
+                  {layer.mask.linked === false ? '⛓︎̸' : '⛓︎'}
+                </button>
+              )}
               {layer.mask && (
                 <Thumbnail
                   pixels={maskThumb(layer)}

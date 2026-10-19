@@ -92,7 +92,8 @@ export function ImageEditorTab() {
           </h2>
           <p className="text-xs text-slate-400 mt-1">
             UI-agnostic Canvas 2D engine with freeform/aspect crop, color adjustments, annotations, depth alpha masking,
-            and Select &amp; Mask: magic wand, marquees, lasso, Refine Edge and adjustment layer masks.
+            Select &amp; Mask: magic wand, marquees, lasso, Refine Edge and adjustment layer masks, and Free Transform
+            (Ctrl/Cmd+T or the Free Transform button: drag handles to scale, outside to rotate, Ctrl/Cmd to distort).
           </p>
         </div>
 
@@ -152,7 +153,7 @@ export function ImageEditorTab() {
           }}
         />
       </div>
-      <AgentScriptPanel scripts={IMAGE_SCRIPTS} stage={agentStage} hint="Plays a scripted agent turn with the image__* tools: adjustments and layers as single undo steps, selections, masks, and a rendered preview." />
+      <AgentScriptPanel scripts={IMAGE_SCRIPTS} stage={agentStage} hint="Plays a scripted agent turn with the image__* tools: adjustments and layers as single undo steps, selections, masks, Free Transform, and a rendered preview." />
 
       {/* Export Preview */}
       {exportedUrl && (

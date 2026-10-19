@@ -101,6 +101,7 @@ export type LayerMenuAction =
   | 'apply-mask'
   | 'delete-mask'
   | 'toggle-mask'
+  | 'toggle-mask-link'
   | 'toggle-clip'
   | 'rasterize';
 
@@ -136,6 +137,7 @@ export function layerMenu(controller: ImageEditorController): LayerMenuItem[] {
     { action: 'apply-mask', label: 'Apply Layer Mask', enabled: isPixel && Boolean(active?.mask) },
     { action: 'delete-mask', label: 'Delete Layer Mask', enabled: Boolean(active?.mask) },
     { action: 'toggle-mask', label: active?.mask?.enabled === false ? 'Enable Layer Mask' : 'Disable Layer Mask', enabled: Boolean(active?.mask) },
+    { action: 'toggle-mask-link', label: active?.mask?.linked === false ? 'Link Layer Mask' : 'Unlink Layer Mask', enabled: Boolean(active?.mask && !active.mask.source) },
     { action: 'rasterize', label: 'Rasterize Layer', enabled: active?.type === 'annotation' || (isPixel && Boolean(active?.type === 'pixel' && active.filters?.length)) },
     { action: 'toggle-clip', label: active?.clipped ? 'Release Clipping Mask' : 'Create Clipping Mask', enabled: Boolean(loc && loc.index > 0) },
   ];
@@ -192,6 +194,9 @@ export async function runLayerMenuAction(controller: ImageEditorController, acti
         break;
       case 'toggle-mask':
         if (id && active?.mask) controller.setLayerMaskProps(id, { enabled: active.mask.enabled === false });
+        break;
+      case 'toggle-mask-link':
+        if (id && active?.mask) controller.setLayerMaskProps(id, { linked: active.mask.linked === false });
         break;
       case 'rasterize':
         if (id) await controller.rasterizeLayer(id);
