@@ -33,8 +33,8 @@ export function maskSummary(mask: RasterMask | undefined): Record<string, unknow
 
 /**
  * A plain description of a layer (and its children) for agents: ids, types, names, document
- * bounds, visibility, opacity, fill, blend, clipping, locks, mask summary and whether it is
- * active. `boundsOf` gives a pixel layer's document bounds.
+ * bounds, visibility, opacity, fill, blend, clipping, locks, mask and effects summaries and
+ * whether it is active. `boundsOf` gives a pixel layer's document bounds.
  */
 export function describeLayer(
   layer: ImageLayer,
@@ -51,6 +51,9 @@ export function describeLayer(
     clipped: Boolean(layer.clipped),
     locks: layer.locks ? { ...layer.locks } : {},
     mask: maskSummary(layer.mask),
+    effects: layer.effects
+      ? { enabled: layer.effects.enabled, scale: layer.effects.scale ?? 1, items: layer.effects.items.map((e) => ({ id: e.id, kind: e.kind, enabled: e.enabled })) }
+      : null,
     active: layer.id === activeId,
   };
   switch (layer.type) {
@@ -123,7 +126,7 @@ export function createImageLayerTools(controller: ImageEditorController): AgentT
     name: 'list_layers',
     title: 'List image layers',
     description:
-      'Returns the layer stack bottom to top as a tree: id, type (pixel, adjustment, group, annotation), name, document bounds (pixel layers), visible, opacity, fillOpacity, blend, clipped, locks, a mask summary, filters (pixel layers), kind and params (adjustment layers), children (groups) and which layer is active. Also returns the active layer id and target (pixels or mask) and the canvas size.',
+      'Returns the layer stack bottom to top as a tree: id, type (pixel, adjustment, group, annotation), name, document bounds (pixel layers), visible, opacity, fillOpacity, blend, clipped, locks, a mask summary, an effects summary (master switch, scale, effect ids and kinds; details from list_layer_effects), filters (pixel layers), kind and params (adjustment layers), children (groups) and which layer is active. Also returns the active layer id and target (pixels or mask) and the canvas size.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     annotations: { title: 'List image layers', ...READ },
     handler: () => {

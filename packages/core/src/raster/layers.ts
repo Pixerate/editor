@@ -9,6 +9,7 @@
  */
 
 import type { BlendMode } from './blend';
+import type { LayerEffects } from './effects/model';
 import type { MaskSurface, PixelSurface } from './surface';
 
 /** Blend modes of a layer; groups also accept `pass-through`. */
@@ -54,6 +55,8 @@ export interface RasterLayerBase {
   clipped?: boolean;
   mask?: RasterMask;
   locks?: LayerLocks;
+  /** Live layer effects (drop shadow, stroke, …), rendered between the content and its blend. */
+  effects?: LayerEffects;
 }
 
 export interface RasterPixelLayer extends RasterLayerBase {

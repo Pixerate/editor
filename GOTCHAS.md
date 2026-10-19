@@ -1918,3 +1918,26 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Adding `pigment` like the other modes (a `blendChannel` / `blendRgb` case) gives the wrong result at any opacity below 100 %: blue over yellow at 50 % comes out grey-ish, not green, and it changes with the backdrop alpha in odd ways.
 - **Root Cause**: Every other mode computes `B(Cb, Cs)` and then mixes it with the backdrop linearly, `(1 − α)·Cb + α·B`. Paint mixing is the non-linear part itself: the interpolation has to happen in K/S space, so no choice of `B` gives it. `isSeparableBlendMode` must also say false, or the compositor would use its per-channel LUT.
 - **Solution / Workaround**: `blendPixel`, `blendTile` (compositor), `blendImageData`, the brush and adjustment layers special-case `pigment`: `Co = lerpPigment(Cb, Cs, αs / αo)` with the usual `αo = αs + αb(1 − αs)` (over an opaque backdrop the share is just `αs`; over a clear one it is the source). `blendRgb('pigment')` returns `Cs` and must not be used for it. The 8-bit paths go through `mixPigment8`, which caches K/S per packed RGB (cleared at 16 384 colours); a 1024² layer over random noise costs about 0.2–0.75 s against 15 ms for Normal, so keep the dirty rectangles tight. PSD has no such mode: `toPsd` warns and `exportPsd` writes `norm` (`BLEND_TO_PSD` is `Partial`).
+### [core/raster] A Running-Sum Blur Is Not Exactly Zero After It Passes a Shape
+
+- **Issue / Symptom**: A drop shadow with Noise speckled whole rows of the canvas far from the shape, and a tiled render differed from a whole-image render by up to 53 levels.
+- **Root Cause**: The effect blur is two box passes as running sums (`inner += next - leaving`). After the window leaves a shape the sum is about 1e-16, not 0. Noise adds speckle to any coverage above 0, so it lit up that residue. The residue runs to the end of the row, so how far it reaches depends on where the map's region ends.
+- **Solution / Workaround**: `tentLine` (`raster/effects/render.ts`) flushes values below `BLUR_EPS` (1e-7) to 0, and `noise` skips coverage at or below it. Keep both if you change the blur. Effects with noise also count as non-local in `effectsAreLocal`.
+
+### [core/raster] Chiselled Bevels Streak When Distances Go to Pixel Centres
+
+- **Issue / Symptom**: Chisel Hard and Soft bevels and embosses on round shapes showed radial streaks, worst on the outside half of an emboss.
+- **Root Cause**: The exact distance transform measures to the nearest covered pixel's centre. Its gradient jumps at the Voronoi cell borders of those centres, and the chisel lights the height map by its gradient, so every border shows as a streak. Placing the edge by coverage (`d - (a - 0.5)`) moves each cell but keeps the borders.
+- **Solution / Workaround**: `edgeDistances` measures to the straight edge through the nearest edge pixel: its normal is the coverage gradient (Sobel) there, and its position is the pixel's coverage. Smooth bevels blur the shape and do not need this. Photocraft solves it with a fuller sharp-edge refinement that was not ported.
+
+### [core/raster] Layer Effects Read Pixels Beyond the Tile, So Tile Signatures and Dirty Rects Must Grow
+
+- **Issue / Symptom**: A shadow cast into a neighbouring tile did not update after a stroke near the tile edge, and a tile with no layer pixels never showed the shadow at all.
+- **Root Cause**: The compositor caches a tile by the surface tiles it reads and recomposites only inside `dirty` rectangles. A layer with effects changes pixels up to its effects' reach (`effectsMargin`) away from its own pixels.
+- **Solution / Workaround**: Effect maps are built once over the layer's region (its bounds grown by the margin) and cropped per tile, so tiles always match a whole-image render. `effectSig` reads the layer's tiles within the margin around the tile, or the whole region when an effect is laid out over the layer's bounds (aligned gradients, gradient strokes, linked patterns, noise). `compositeTiles` grows every dirty rectangle by the stack's largest margin. Do not put the region rect into a local stack's signature: the region grows as you paint elsewhere, and every tile would recomposite.
+
+### [core/raster] The Raster Isolation Test Rejects the Word "document" in Strings
+
+- **Issue / Symptom**: `raster-module.test.ts` failed on `effects/model.ts` with "expected true to be false", and no import was wrong.
+- **Root Cause**: The test strips comments, then looks for `document`, `window` and canvas globals anywhere in the source, string literals included. An error message saying "a document pattern" matched.
+- **Solution / Workaround**: Word user-facing strings in `src/raster` without those words, or say "file" instead. Comments are fine.

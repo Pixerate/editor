@@ -8,6 +8,18 @@ import type { BlendMode } from '../blend';
 import { isBlendMode } from '../blend';
 import type { CropBox } from '../types';
 import {
+  defaultLayerEffect,
+  isLayerEffectKind,
+  LAYER_EFFECT_KINDS,
+  LayerEffectError,
+  mergeLayerEffect,
+  newEffectId,
+  validateLayerEffects,
+  type LayerEffect,
+  type LayerEffectKind,
+  type LayerEffects,
+} from '../../raster/effects/model';
+import {
   findLayer,
   flattenLayers,
   insertLayer,
@@ -318,6 +330,108 @@ export function removeLayerFilter(layers: readonly ImageLayer[], id: string, fil
   if (filters.length) next.filters = filters;
   else delete next.filters;
   return mapLayer(layers, id, () => next);
+}
+
+// ---------------------------------------------------------------------------
+// Layer effects
+// ---------------------------------------------------------------------------
+
+/** A layer that can carry effects (pixel, annotation and group layers), checked for locks. */
+function requireEffectLayer(layers: readonly ImageLayer[], id: string, action: string): ImageLayer {
+  const layer = requireLayer(layers, id).layer;
+  if (layer.type === 'adjustment') fail(`Layer "${layer.name || id}" is an adjustment layer; effects go on pixel, annotation and group layers.`);
+  requireUnlocked(layer, 'all', action);
+  return layer;
+}
+
+/** A layer's effects, or an empty, enabled list when it has none. */
+export function layerEffectsOf(layer: ImageLayer): LayerEffects {
+  return layer.effects ?? { enabled: true, items: [] };
+}
+
+/** Wraps an effect validation error as a layer operation error (same message). */
+function guard<T>(fn: () => T): T {
+  try {
+    return fn();
+  } catch (e) {
+    if (e instanceof LayerEffectError) fail(e.message);
+    throw e;
+  }
+}
+
+/** Replaces a layer's effects (validated); `null` or an empty list without a PSD block removes them. */
+export function setLayerEffects(layers: readonly ImageLayer[], id: string, effects: LayerEffects | null): ImageLayer[] {
+  const layer = requireEffectLayer(layers, id, 'change its effects');
+  const next = { ...layer };
+  if (effects && (effects.items.length || effects.psd || effects.scale !== undefined || !effects.enabled)) {
+    guard(() => validateLayerEffects(effects));
+    next.effects = effects;
+  } else delete next.effects;
+  return mapLayer(layers, id, () => next as ImageLayer);
+}
+
+/**
+ * Adds an effect of `kind` (Photoshop's defaults with `params` applied) to a layer's effects, at
+ * `index` in the list (default: the end; the first listed of a kind is on top). Returns the stack
+ * and the new effect.
+ */
+export function addLayerEffect(
+  layers: readonly ImageLayer[],
+  id: string,
+  kind: LayerEffectKind,
+  params: Record<string, unknown> = {},
+  index?: number
+): { layers: ImageLayer[]; effect: LayerEffect } {
+  if (!isLayerEffectKind(kind)) fail(`Unknown effect kind "${String(kind)}". Kinds: ${LAYER_EFFECT_KINDS.join(', ')}.`);
+  const layer = requireEffectLayer(layers, id, 'add effects');
+  const current = layerEffectsOf(layer);
+  const ids = new Set(current.items.map((e) => e.id));
+  let effectId = newEffectId();
+  while (ids.has(effectId)) effectId = newEffectId();
+  const { id: _ignored, kind: _kind, ...rest } = params;
+  const effect = guard(() => mergeLayerEffect(defaultLayerEffect(kind, effectId), rest));
+  const items = [...current.items];
+  const at = index === undefined ? items.length : Math.max(0, Math.min(items.length, Math.floor(index)));
+  items.splice(at, 0, effect);
+  return { layers: setLayerEffects(layers, id, { ...current, items }), effect };
+}
+
+/** The index of effect `effectId` on a layer, or a `LayerOperationError` listing the effect ids. */
+function requireEffect(layer: ImageLayer, effectId: string): number {
+  const items = layer.effects?.items ?? [];
+  const i = items.findIndex((e) => e.id === effectId);
+  if (i === -1) fail(`Layer "${layer.name || layer.id}" has no effect "${effectId}". Effects: ${items.map((e) => `${e.id} (${e.kind})`).join(', ') || 'none'}; call list_layer_effects.`);
+  return i;
+}
+
+/** Changes one effect (only the given fields; nested objects replace whole, `null` removes an optional one). */
+export function updateLayerEffect(layers: readonly ImageLayer[], id: string, effectId: string, changes: Record<string, unknown>): ImageLayer[] {
+  const layer = requireEffectLayer(layers, id, 'change its effects');
+  const i = requireEffect(layer, effectId);
+  const current = layer.effects!;
+  const items = [...current.items];
+  items[i] = guard(() => mergeLayerEffect(items[i], changes));
+  return setLayerEffects(layers, id, { ...current, items });
+}
+
+export function removeLayerEffect(layers: readonly ImageLayer[], id: string, effectId: string): ImageLayer[] {
+  const layer = requireEffectLayer(layers, id, 'change its effects');
+  requireEffect(layer, effectId);
+  const current = layer.effects!;
+  return setLayerEffects(layers, id, { ...current, items: current.items.filter((e) => e.id !== effectId) });
+}
+
+/** Sets the master switch and, when given, Scale Effects (0.01..10, 1 = 100 %). */
+export function setLayerEffectsEnabled(layers: readonly ImageLayer[], id: string, enabled: boolean, scale?: number): ImageLayer[] {
+  const layer = requireEffectLayer(layers, id, 'change its effects');
+  if (scale !== undefined && !(Number.isFinite(scale) && scale >= 0.01 && scale <= 10)) fail(`scale must be from 0.01 to 10 (1 = 100 %), got ${scale}.`);
+  const current = layerEffectsOf(layer);
+  const next: LayerEffects = { ...current, enabled };
+  if (scale !== undefined) {
+    if (scale === 1) delete next.scale;
+    else next.scale = scale;
+  }
+  return setLayerEffects(layers, id, next);
 }
 
 /** A blend mode check for tools. */

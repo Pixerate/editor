@@ -326,6 +326,13 @@ const FEATURES: ParityRow[] = [
     note: "Inpainting into a new layer and background removal as a mask in multi-layer documents; Rasterize Layer; sample all layers or the active layer; external asset store for v3 pixels",
   },
   {
+    feature: "Image Layer Effects",
+    core: true,
+    react: true,
+    svelte: true,
+    note: "Shadows, glows, bevel & emboss, satin, colour / gradient / pattern overlays and strokes, live in the tiled compositor; master switch, Scale Effects, global light; six agent tools",
+  },
+  {
     feature: "Photoshop PSD / PSB Open & Export",
     core: true,
     react: true,
