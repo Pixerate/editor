@@ -1,5 +1,5 @@
 import { useMemo, useState, useSyncExternalStore } from 'react';
-import { PaintEditorController, type PaintEditorOptions, type PaintEditorState } from '@pixerate/editor/paint-editor';
+import { PaintDirector, PaintEditorController, PaintPresence, type PaintDirectorOptions, type PaintEditorOptions, type PaintEditorState } from '@pixerate/editor/paint-editor';
 
 export interface UsePaintEditorReturn {
   controller: PaintEditorController;
@@ -24,4 +24,17 @@ export function usePaintEditorState(controller: PaintEditorController): PaintEdi
     () => controller.getState(),
     () => controller.getState()
   );
+}
+
+/**
+ * A `PaintPresence` and `PaintDirector` for a paint editor: pass `presence` to `PaintEditor` (or
+ * `PaintCanvas`) and `director` to `createPaintEditorToolProvider`, so agent strokes are painted
+ * live by a cursor on the canvas. Options are read on the first render.
+ */
+export function usePaintDirector(controller: PaintEditorController, options: Omit<PaintDirectorOptions, 'clock'> = {}): { presence: PaintPresence; director: PaintDirector } {
+  const [value] = useState(() => {
+    const presence = new PaintPresence();
+    return { presence, director: new PaintDirector(controller, presence, options) };
+  });
+  return value;
 }

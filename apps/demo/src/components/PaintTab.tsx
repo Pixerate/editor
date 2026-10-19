@@ -1,17 +1,23 @@
 import React, { useMemo, useRef } from 'react';
 import { useAgentToolProvider } from '@pixerate/editor-react';
-import { PaintEditor, usePaintEditor } from '@pixerate/editor-react/paint-editor';
+import { PaintEditor, usePaintDirector, usePaintEditor } from '@pixerate/editor-react/paint-editor';
 import { createPaintEditorToolProvider } from '@pixerate/editor/paint-editor';
 import { Brush } from 'lucide-react';
 import { demoToolRegistry } from '../agentTools';
 import { AgentScriptPanel } from './AgentScriptPanel';
 import { PAINT_SCRIPTS } from '../agentScripts';
+import { demoAgentSpeed } from '../agentScript';
 
 export function PaintTab() {
   const editor = usePaintEditor({ width: 1200, height: 800, paper: 'cold-pressed' });
   const stage = useRef<HTMLDivElement>(null);
+  // The agent paints on the canvas itself: its cursor draws each stroke live, rubs fills across the sheet and starts replays.
+  const { presence, director } = usePaintDirector(editor.controller, { speed: demoAgentSpeed() });
   // Agents get the paint__* tools (paper, brushes, strokes, guides, colour, layers, export).
-  const provider = useMemo(() => createPaintEditorToolProvider(editor.controller, { id: 'paint', namespace: 'paint' }), [editor.controller]);
+  const provider = useMemo(
+    () => createPaintEditorToolProvider(editor.controller, { id: 'paint', namespace: 'paint', director, actor: { id: 'agent', name: 'Agent' } }),
+    [editor.controller, director]
+  );
   useAgentToolProvider(demoToolRegistry, provider);
 
   return (
@@ -27,13 +33,13 @@ export function PaintTab() {
           mirrored or as a kaleidoscope, snap to perspective guides, trace an image, and mix colours on the pad. Every stroke is kept as data and can be replayed.
         </p>
       </div>
-      <div ref={stage}>
-        <PaintEditor controller={editor.controller} height={760} />
+      <div ref={stage} className="relative">
+        <PaintEditor controller={editor.controller} height={760} presence={presence} />
       </div>
       <AgentScriptPanel
         scripts={PAINT_SCRIPTS}
         stage={stage}
-        hint="Plays a scripted agent turn with the paint__* tools: paper, fills that follow the grain, pigment mixing, strokes, replayed and varied strokes, and kaleidoscope symmetry."
+        hint="Plays a scripted agent turn with the paint__* tools. Strokes go through the paint director, so its cursor paints each one live on the canvas: paper, fills that follow the grain, pigment mixing, replayed and varied strokes, and kaleidoscope symmetry."
       />
     </div>
   );

@@ -8,7 +8,7 @@
 import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import { createPigmentTools } from '../paint/pigment-tools';
 import { MIXING_MODELS, type MixerLoad } from '../paint/mixer';
-import { BLEND_MODES, type BlendMode } from '../raster/blend';
+import { BLEND_MODES, standardBlendMode, type BlendMode } from '../raster/blend';
 import { bytesToBase64, encodePng } from '../raster/png';
 import { BRUSH_ROTATIONS, MAX_BRUSH_SIZE, PAINT_BRUSH_CATEGORIES, PAINT_BRUSH_ENGINES, brushToJSON, type PaintBrush } from './brushes';
 import { MAX_CANVAS_SIDE } from './document';
@@ -17,6 +17,8 @@ import type { PenPoint } from './engine';
 import { GRAIN_PATTERNS, PAPER_FAMILIES, PAPER_LIBRARY } from './paper';
 import { MAX_ZOOM, MIN_ZOOM } from './view';
 import { createPaintGuideTools } from './guide-tools';
+import type { PaintAgentCommand, PaintDirector } from './presence';
+import type { PresenceActorInfo } from '../animation/presence';
 
 const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
 const WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } as const;
@@ -32,6 +34,13 @@ export interface PaintEditorToolProviderOptions {
   id?: string;
   /** Always prefix tool names with `<namespace>__`. */
   namespace?: string;
+  /**
+   * Acts out strokes, fills and replays with an agent cursor on the canvas (see `PaintDirector`):
+   * strokes paint live along their points. Each call is still one undo step. Without it, they apply at once.
+   */
+  director?: PaintDirector;
+  /** The agent's cursor (default `{ id: 'agent', name: 'Agent' }`). */
+  actor?: PresenceActorInfo;
 }
 
 const TIP = {
@@ -48,7 +57,11 @@ const TIP = {
     smoothing: { type: 'number', minimum: 0, maximum: 0.95, description: 'Position smoothing of the input, 0..0.95.' },
     pressureSize: { type: 'boolean', description: 'Pressure scales the size (down to dynamics.minSize).' },
     pressureOpacity: { type: 'boolean', description: 'Pressure scales the opacity.' },
-    blend: { type: 'string', enum: BLEND_MODES.map((m) => m.id), description: 'How paint combines with the layer. pigment mixes it in like real paint (blue into yellow gives green); multiply darkens like marker ink.' },
+    blend: {
+      type: 'string',
+      enum: BLEND_MODES.map((m) => m.id),
+      description: 'How paint combines with the layer. pigment mixes it in like real paint (blue into yellow gives green); multiply darkens like marker ink; watercolor glazes like a transparent wash; tint, highlight and shadow recolour, light and shade (see list_blend_modes).',
+    },
   },
   additionalProperties: false,
 } as const;
@@ -136,6 +149,13 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
   const c = controller;
   const tools: AgentTool[] = [];
   const add = (t: AgentTool) => tools.push(t);
+  /** Runs `command` through the director when there is one (its error becomes the tool error), else `direct`. */
+  const act = async <T>(command: PaintAgentCommand, direct: () => T): Promise<T> => {
+    if (!options.director) return direct();
+    const [r] = await options.director.perform(options.actor ?? { id: 'agent', name: 'Agent' }, [command]);
+    if (!r || !r.ok) throw new Error(r && !r.ok ? r.message : 'The director did not run the command.');
+    return r.result as T;
+  };
 
   // --- Canvas ------------------------------------------------------------------
 
@@ -313,7 +333,11 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
         name: { type: 'string', minLength: 1, description: 'New name.' },
         visible: { type: 'boolean', description: 'Show or hide.' },
         opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Layer opacity 0..1.' },
-        blend: { type: 'string', enum: [...BLEND_MODES.map((m) => m.id), 'pass-through'], description: 'Blend mode (pass-through for groups only).' },
+        blend: {
+          type: 'string',
+          enum: [...BLEND_MODES.map((m) => m.id), 'pass-through'],
+          description: 'Blend mode (pass-through for groups only). Painterly modes: watercolor (the layer glazes like a transparent wash), tint (recolours keeping lightness), highlight (adds soft coloured light), shadow (shades with ambient fill); see list_blend_modes.',
+        },
         clipped: { type: 'boolean', description: 'Clip to the layer below (paint only shows where it has paint).' },
         locks: {
           type: 'object',
@@ -332,6 +356,24 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
     },
     annotations: { title: 'Change a layer', ...SET },
     handler: ({ layerId, ...u }) => c.updateLayer(layerId, u as { blend?: BlendMode }),
+  });
+
+  add({
+    name: 'list_blend_modes',
+    title: 'List blend modes',
+    description:
+      'Lists every layer and brush blend mode: id, label, group (standard Photoshop modes, pigment, or painterly), what the pigment and painterly modes do, and the standard mode PSD export writes in their place. Changes nothing. Read it before choosing a painterly mode for update_layer or a brush tip.',
+    inputSchema: EMPTY,
+    annotations: { title: 'List blend modes', ...READ },
+    handler: () => ({
+      modes: BLEND_MODES.map((m) => ({
+        id: m.id,
+        label: m.label,
+        group: m.painterly ? 'painterly' : m.id === 'pigment' ? 'pigment' : 'standard',
+        ...(m.description ? { description: m.description } : {}),
+        psd: standardBlendMode(m.id),
+      })),
+    }),
   });
 
   add({
@@ -404,12 +446,12 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
         opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Opacity 0..1 (default 1).' },
         grain: { type: 'number', minimum: 0, maximum: 1, description: 'Paper grain response 0..1 (default 0: flat).' },
         pressure: { type: 'number', minimum: 0, maximum: 1, description: 'With grain: how far into the valleys, 0..1 (default 0.5).' },
-        blend: { type: 'string', enum: BLEND_MODES.map((m) => m.id), description: 'Blend mode (default normal; pigment mixes like paint).' },
+        blend: { type: 'string', enum: BLEND_MODES.map((m) => m.id), description: 'Blend mode (default normal; pigment mixes like paint, watercolor glazes; see list_blend_modes).' },
       },
       additionalProperties: false,
     },
     annotations: { title: 'Fill a layer', ...WRITE },
-    handler: (a) => c.fillLayer(a),
+    handler: (a) => act({ kind: 'fill', fill: a }, () => c.fillLayer(a)),
   });
 
   add({
@@ -617,7 +659,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
     name: 'paint_stroke',
     title: 'Paint a brush stroke',
     description:
-      'Paints one stroke through points (document pixels, with optional pressure, time, tilt and barrel rotation) on a pixel layer with a library brush or the active one, optionally changed for this stroke. Grain-responsive brushes follow the paper; the mixer engine (mixer-brush, blender, smudge) picks up and moves paint already on the layer. The symmetry guide adds its mirror copies; with a tracing image that samples colours, a stroke without color takes the image colour at its first point. One undo step. Returns the layer id, changed bounds, dab count, the recorded strokeId (for replay_strokes) and, for the mixer, its load after the stroke.',
+      'Paints one stroke through points (document pixels, with optional pressure, time, tilt and barrel rotation) on a pixel layer with a library brush or the active one, optionally changed for this stroke. Grain-responsive brushes follow the paper; the mixer engine (mixer-brush, blender, smudge) picks up and moves paint already on the layer. The symmetry guide adds its mirror copies; with a tracing image that samples colours, a stroke without color takes the image colour at its first point. With an agent cursor (a director), the stroke is painted live along the points at the pace of their times. One undo step. Returns the layer id, changed bounds, dab count, the recorded strokeId (for replay_strokes) and, for the mixer, its load after the stroke.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -633,8 +675,9 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
       additionalProperties: false,
     },
     annotations: { title: 'Paint a brush stroke', ...WRITE },
-    handler: (a) => {
-      const r = c.paintStroke({ points: a.points as PenPoint[], layerId: a.layerId, brushId: a.brushId, brush: a.brush, color: a.color, seed: a.seed, snapToPerspective: a.snapToPerspective });
+    handler: async (a) => {
+      const stroke = { points: a.points as PenPoint[], layerId: a.layerId, brushId: a.brushId, brush: a.brush, color: a.color, seed: a.seed, snapToPerspective: a.snapToPerspective };
+      const r = await act({ kind: 'stroke', stroke }, () => c.paintStroke(stroke));
       return r.mixerLoad ? { ...r, mixerLoad: loadResult(r.mixerLoad) } : r;
     },
   });
@@ -710,7 +753,10 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
       additionalProperties: false,
     },
     annotations: { title: 'Replay strokes, varied', ...WRITE },
-    handler: (a) => c.replayStrokes(a as Parameters<PaintEditorController['replayStrokes']>[0]),
+    handler: (a) => {
+      const replay = a as Parameters<PaintEditorController['replayStrokes']>[0];
+      return act({ kind: 'replay', replay }, () => c.replayStrokes(replay));
+    },
   });
 
   // --- View, hand, history -------------------------------------------------------
@@ -819,7 +865,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
     name: 'export_psd',
     title: 'Export as PSD',
     description:
-      'Writes the painting as an 8-bit RGB PSD (PSB above 30000 px) through the shared PSD writer: every layer and group with its opacity, blend, mask and locks, the paper as a locked "Paper" pixel layer at the bottom, and the composite as the merged image. Changes nothing. Returns the file as base64, its size, whether it is a PSB, and warnings (pigment blending has no PSD equivalent).',
+      'Writes the painting as an 8-bit RGB PSD (PSB above 30000 px) through the shared PSD writer: every layer and group with its opacity, blend, mask and locks, the paper as a locked "Paper" pixel layer at the bottom, and the composite as the merged image. Changes nothing. Returns the file as base64, its size, whether it is a PSB, and warnings (pigment and painterly blend modes have no PSD equivalent: they are written as the nearest standard mode, see list_blend_modes).',
     inputSchema: EMPTY,
     annotations: { title: 'Export as PSD', ...READ },
     handler: () => {

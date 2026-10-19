@@ -2092,6 +2092,18 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: The filter mask lives in the `FEid` / `FXid` block as a rectangle and a plane; outside the rectangle Photoshop treats it as white (`filterMaskExtendWithWhite`). Writing only the painted bounds of a mask whose default is black loses the black.
 - **Solution / Workaround**: `filterMaskItem` writes a mask whose default is not white over the whole canvas (plus anything painted outside it); reading uses default 255. The filter mask's enabled / linked flags are in `filterFX` (`filterMaskEnable`, `filterMaskLinked`), not in the block.
 
+### [core/paint-editor] Live Agent Strokes Run Slower Than Their Point Times With Big Brushes
+
+- **Issue / Symptom**: In the demo, the landscape script's 672 ms soft-pastel stroke (90 px tip on a 1200 × 800 canvas) took about 4 s to paint through `PaintDirector`.
+- **Root Cause**: The director pushes the points due in each 16 ms frame and then waits a frame. Each push lays the dabs and re-composites the touched tiles, and React then uploads those tiles. With a big tip this takes longer than a frame, so the wall-clock time adds up beyond the schedule.
+- **Solution / Workaround**: Accepted. The result is the same as `paintStroke` with the same seed (tested), and only the pacing differs. Hosts that want strokes to land faster can pass a higher `speed` or a lower `maxStrokeMs`, or leave out the director so strokes apply at once.
+
+### [core/raster] Painterly Blend Modes Reach Every `BLEND_MODES` Consumer, and Tint Must Replace Hue, Not Average It
+
+- **Issue / Symptom**: (1) After adding `watercolor`, `tint`, `highlight` and `shadow` to `BLEND_MODES`, they showed up in the image editor's layer, effect and smart-filter menus and agent enums, and its PSD export silently wrote them as Normal. (2) The first `tint` turned yellow under a blue tint into grey instead of light blue. (3) `watercolor` with a white source changed the backdrop by a level or two.
+- **Root Cause**: (1) Those menus and enums are built from `BLEND_MODES` and filter out only `pigment`; `BLEND_TO_PSD` is `Partial`, so any mode without a PSD key falls back to `norm`. (2) Interpolating Oklab `a, b` from the backdrop's towards the source's passes through the neutral axis when the hues are opposite. (3) The spectral uplift round-trips a colour only to within about 3.5/255, so `R_b·R_white` is not exactly `R_b`.
+- **Solution / Workaround**: (1) The painterly modes are real `B(Cb, Cs)` functions (`blendRgb` / `blendChannel`), so they work wherever a mode is accepted (compositor, adjustment layers, effects, brushes, canvas fallback); there is nothing to filter. Writers of formats without them must call `standardBlendMode(mode)` (the paint editor's `exportPsd` does, with a warning); the image editor's `toPsd` does not yet. (2) Tint replaces the hue: `ab = ab_s·√(4·L_b·(1 − L_b))`, then cuts chroma (never lightness) into the gamut. (3) `watercolor` short-circuits a white source to the backdrop and a white backdrop to the source, so "white is clear" is exact; other colours are quantised to 8 bits and their spectra cached like `mixPigment8`'s.
+
 ### [core/image-editor] A Shape Layer's Pixels Are a Render of Its Paths
 
 - **Issue / Symptom**: Changing a shape layer's `components`, `fill` or `stroke` with a plain object spread left it showing the old pixels; painting into its `surface` was thrown away by the next edit.

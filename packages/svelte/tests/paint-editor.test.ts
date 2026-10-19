@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
-import { PaintEditorController } from '@pixerate/editor/paint-editor';
-import { BrushPanel, ColorPanel, PaintCanvas, PaintEditor, PaintLayersPanel, PaperPanel, PaintToolbar, createReactivePaintEditor } from '../src/paint-editor';
+import { PaintEditorController, documentToScreen } from '@pixerate/editor/paint-editor';
+import { BrushPanel, ColorPanel, PaintCanvas, PaintEditor, PaintLayersPanel, PaperPanel, PaintToolbar, createPaintDirector, createReactivePaintEditor } from '../src/paint-editor';
 
 let target: HTMLDivElement;
 let component: Record<string, any> | null = null;
@@ -169,6 +169,11 @@ describe('Svelte paint editor', () => {
     expect(c.listLayers()[1].name).toBe('Ink');
     setValue(target.querySelector('select[aria-label="Layer blend"]')!, 'multiply');
     expect(c.listLayers().find((l) => l.name === 'Ink')?.blend).toBe('multiply');
+    const blendSelect = target.querySelector('select[aria-label="Layer blend"]')!;
+    expect(Array.from(blendSelect.querySelectorAll('optgroup')).map((g) => g.getAttribute('label'))).toEqual(['Standard', 'Paint']);
+    expect(Array.from(blendSelect.querySelectorAll('optgroup[label="Paint"] option')).map((o) => o.getAttribute('value'))).toEqual(['pigment', 'watercolor', 'tint', 'highlight', 'shadow']);
+    setValue(blendSelect, 'watercolor');
+    expect(c.listLayers().find((l) => l.name === 'Ink')?.blend).toBe('watercolor');
     click(byText('Lock pixels'));
     expect(c.listLayers().find((l) => l.name === 'Ink')?.locks.pixels).toBe(true);
     click(target.querySelector('button[aria-label="Hide Ink"]'));
@@ -185,5 +190,26 @@ describe('Svelte paint editor', () => {
     expect(target.querySelector('[data-testid="paper-panel"]')).not.toBeNull();
     click(byText('Layers'));
     expect(target.querySelector('[data-testid="paint-layers-panel"]')).not.toBeNull();
+  });
+
+  it('createPaintDirector paints agent strokes live with a cursor drawn through the view', async () => {
+    const controller = new PaintEditorController({ width: 200, height: 100 });
+    const { presence, director } = createPaintDirector(controller, { speed: Infinity, linger: 0 });
+    show(PaintEditor, { controller, presence });
+    presence.set({ id: 'agent', name: 'Agent', x: 50, y: 25, message: 'Sky first' });
+    flushSync();
+    const cursor = target.querySelector('[data-paint-presence] [data-actor="agent"]') as HTMLElement;
+    expect(cursor.textContent?.trim()).toBe('Sky first');
+    const s = controller.getState();
+    const at = documentToScreen(s.view, s.document.canvas, { width: 800, height: 600 }, 50, 25);
+    expect(parseFloat(cursor.style.left)).toBeCloseTo(at.x, 3);
+    expect(parseFloat(cursor.style.top)).toBeCloseTo(at.y, 3);
+    presence.remove('agent');
+    const results = await director.perform({ id: 'agent' }, [{ kind: 'stroke', stroke: { points: [{ x: 10, y: 10 }, { x: 150, y: 80 }] } }]);
+    flushSync();
+    expect(results[0]).toMatchObject({ ok: true, result: { strokeId: 's1' } });
+    expect(controller.getStrokes()).toHaveLength(1);
+    // linger 0 keeps the cursor where the stroke ended.
+    expect(target.querySelector('[data-paint-presence] [data-actor="agent"]')).not.toBeNull();
   });
 });

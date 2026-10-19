@@ -219,3 +219,166 @@ export function readAdjustmentControls(adjustments: ImageAdjustments): Record<st
   }
   return out;
 }
+
+export interface ImageFilterPreset {
+  id: string;
+  label: string;
+  adjustments: Partial<ImageAdjustments>;
+}
+
+/** Built-in colour-grade presets for quick one-click adjustment looks. */
+export const IMAGE_FILTER_PRESETS: readonly ImageFilterPreset[] = [
+  {
+    id: 'none',
+    label: 'Original',
+    adjustments: {
+      brightness: 0,
+      contrast: 0,
+      saturation: 0,
+      exposure: 0,
+      temperature: 0,
+      tint: 0,
+      blur: 0,
+      opacity: 1,
+    },
+  },
+  {
+    id: 'dramatic',
+    label: 'Dramatic',
+    adjustments: {
+      brightness: -5,
+      contrast: 45,
+      saturation: 20,
+      exposure: 5,
+      temperature: -10,
+      tint: 0,
+    },
+  },
+  {
+    id: 'cyberpunk',
+    label: 'Cyberpunk',
+    adjustments: {
+      brightness: 5,
+      contrast: 35,
+      saturation: 55,
+      exposure: 0,
+      temperature: -25,
+      tint: 40,
+    },
+  },
+  {
+    id: 'vintage',
+    label: 'Vintage',
+    adjustments: {
+      brightness: 8,
+      contrast: -15,
+      saturation: -35,
+      exposure: 5,
+      temperature: 35,
+      tint: 10,
+    },
+  },
+  {
+    id: 'warm',
+    label: 'Warm',
+    adjustments: {
+      brightness: 5,
+      contrast: 10,
+      saturation: 15,
+      exposure: 0,
+      temperature: 45,
+      tint: 5,
+    },
+  },
+  {
+    id: 'cool',
+    label: 'Cool',
+    adjustments: {
+      brightness: 0,
+      contrast: 15,
+      saturation: 10,
+      exposure: 0,
+      temperature: -45,
+      tint: -10,
+    },
+  },
+  {
+    id: 'grayscale',
+    label: 'B&W',
+    adjustments: {
+      brightness: 0,
+      contrast: 20,
+      saturation: -100,
+      exposure: 0,
+      temperature: 0,
+      tint: 0,
+    },
+  },
+  {
+    id: 'noir',
+    label: 'Noir',
+    adjustments: {
+      brightness: -15,
+      contrast: 65,
+      saturation: -100,
+      exposure: -5,
+      temperature: 0,
+      tint: 0,
+    },
+  },
+  {
+    id: 'fade',
+    label: 'Fade',
+    adjustments: {
+      brightness: 15,
+      contrast: -25,
+      saturation: -20,
+      exposure: 10,
+      temperature: 10,
+      tint: 0,
+    },
+  },
+];
+
+export interface ImageCropPreset {
+  id: string;
+  label: string;
+  aspectRatio: number | null;
+}
+
+/** Standard aspect-ratio presets for cropping. */
+export const IMAGE_CROP_PRESETS: readonly ImageCropPreset[] = [
+  { id: 'free', label: 'Free', aspectRatio: null },
+  { id: '1:1', label: '1:1', aspectRatio: 1 },
+  { id: '16:9', label: '16:9', aspectRatio: 16 / 9 },
+  { id: '4:3', label: '4:3', aspectRatio: 4 / 3 },
+  { id: '4:5', label: '4:5', aspectRatio: 4 / 5 },
+  { id: '9:16', label: '9:16', aspectRatio: 9 / 16 },
+];
+
+/** Numeric controls for depth-mask near/far threshold range. */
+export const DEPTH_MASK_CONTROLS: readonly ControlSpec[] = [
+  {
+    id: 'near',
+    label: 'Near Threshold',
+    section: 'effects',
+    min: 0,
+    max: 255,
+    step: 1,
+    default: 0,
+    decimals: 0,
+    track: plain,
+  },
+  {
+    id: 'far',
+    label: 'Far Threshold',
+    section: 'effects',
+    min: 0,
+    max: 255,
+    step: 1,
+    default: 255,
+    decimals: 0,
+    track: plain,
+  },
+];
+

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { PaintEditorController, PaintTool } from '@pixerate/editor/paint-editor';
+import type { PaintEditorController, PaintPresence, PaintTool } from '@pixerate/editor/paint-editor';
 import { BrushPanel } from './BrushPanel';
 import { ColorPanel } from './ColorPanel';
 import { PaintCanvas } from './PaintCanvas';
@@ -14,6 +14,8 @@ export interface PaintEditorProps {
   fileName?: string;
   /** Height of the editor (default 720 px). */
   height?: number | string;
+  /** Agent cursors to draw over the canvas (see `usePaintDirector`). */
+  presence?: PaintPresence;
   className?: string;
 }
 
@@ -23,7 +25,7 @@ type SideTab = 'color' | 'paper' | 'layers';
  * The paint editor: toolbar, brush library on the left, the canvas, and colour (wheel,
  * harmonies, swatches, mixing pad), paper and layers on the right.
  */
-export const PaintEditor: React.FC<PaintEditorProps> = ({ controller, fileName, height = 720, className }) => {
+export const PaintEditor: React.FC<PaintEditorProps> = ({ controller, fileName, height = 720, presence, className }) => {
   const [tool, setTool] = useState<PaintTool>('brush');
   const [tab, setTab] = useState<SideTab>('color');
   const [error, setError] = useState<string | null>(null);
@@ -33,7 +35,7 @@ export const PaintEditor: React.FC<PaintEditorProps> = ({ controller, fileName, 
       <div className="flex min-h-0 flex-1 gap-2">
         <BrushPanel controller={controller} className="w-60 shrink-0 overflow-y-auto pr-1" />
         <div className="flex min-w-0 flex-1 flex-col">
-          <PaintCanvas controller={controller} tool={tool} onError={setError} className="flex-1 rounded-lg" />
+          <PaintCanvas controller={controller} tool={tool} onError={setError} presence={presence} className="flex-1 rounded-lg" />
           {error && (
             <p role="alert" className="mt-1 text-[11px] text-rose-400">
               {error}

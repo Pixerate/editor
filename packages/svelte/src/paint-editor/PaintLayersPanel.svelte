@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { BLEND_MODES, type BlendMode, type PaintEditorController, type PaintLayerInfo } from '@pixerate/editor/paint-editor';
+  import { BLEND_MENU_GROUPS, type BlendMode, type PaintEditorController, type PaintLayerInfo } from '@pixerate/editor/paint-editor';
   import { untrack } from 'svelte';
   import { attempt, button, chip, paintEditorState, panel } from './paintEditorRune.svelte.js';
 
@@ -91,8 +91,12 @@
         <span class="w-14 text-slate-400">Blend</span>
         <select aria-label="Layer blend" value={active.blend} onchange={(e) => run(() => controller.updateLayer(active.id, { blend: e.currentTarget.value as BlendMode }))} class="flex-1 rounded bg-slate-800 px-1 py-0.5">
           {#if active.type === 'group'}<option value="pass-through">Pass through</option>{/if}
-          {#each BLEND_MODES as m (m.id)}
-            <option value={m.id}>{m.label}</option>
+          {#each BLEND_MENU_GROUPS as g (g.label)}
+            <optgroup label={g.label}>
+              {#each g.modes as m (m.id)}
+                <option value={m.id} title={m.description}>{m.label}</option>
+              {/each}
+            </optgroup>
           {/each}
         </select>
       </label>

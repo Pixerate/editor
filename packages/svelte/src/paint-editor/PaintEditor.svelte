@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { PaintEditorController, PaintTool } from '@pixerate/editor/paint-editor';
+  import type { PaintEditorController, PaintPresence, PaintTool } from '@pixerate/editor/paint-editor';
   import BrushPanel from './BrushPanel.svelte';
   import ColorPanel from './ColorPanel.svelte';
   import PaintCanvas from './PaintCanvas.svelte';
@@ -14,9 +14,11 @@
     fileName?: string;
     /** Height of the editor (default 720 px). */
     height?: number | string;
+    /** Agent cursors to draw over the canvas (see `createPaintDirector`). */
+    presence?: PaintPresence;
     class?: string;
   }
-  let { controller, fileName, height = 720, class: className = '' }: Props = $props();
+  let { controller, fileName, height = 720, presence, class: className = '' }: Props = $props();
   let tool = $state<PaintTool>('brush');
   let tab = $state<'color' | 'paper' | 'layers'>('color');
   let error = $state<string | null>(null);
@@ -28,7 +30,7 @@
   <div class="flex min-h-0 flex-1 gap-2">
     <BrushPanel {controller} class="w-60 shrink-0 overflow-y-auto pr-1" />
     <div class="flex min-w-0 flex-1 flex-col">
-      <PaintCanvas {controller} {tool} onerror={(e) => (error = e)} class="flex-1 rounded-lg" />
+      <PaintCanvas {controller} {tool} {presence} onerror={(e) => (error = e)} class="flex-1 rounded-lg" />
       {#if error}<p role="alert" class="mt-1 text-[11px] text-rose-400">{error}</p>{/if}
     </div>
     <div class="flex w-64 shrink-0 flex-col gap-2 overflow-y-auto pr-1">
