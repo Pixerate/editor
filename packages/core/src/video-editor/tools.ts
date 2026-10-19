@@ -327,13 +327,14 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 	const exportEdl: AgentTool = {
 		name: 'export_video_edl',
 		title: 'Export an EDL',
-		description: 'Returns one track as a CMX 3600 edit decision list (text) for conforming in another editor: events with source and record timecode, dissolves, speed changes and clip names.',
+		description: 'Returns one track as a CMX 3600 edit decision list (text) for conforming in another editor: events with source and record timecode (drop-frame at 29.97 and 59.94 fps unless dropFrame is false), dissolves, speed changes and clip names.',
 		inputSchema: object({
 			track: { ...TRACK_ID, description: 'Track to export (default: the bottom video track).' },
-			title: { type: 'string', description: 'TITLE line (default: the project name).' }
+			title: { type: 'string', description: 'TITLE line (default: the project name).' },
+			dropFrame: { type: 'boolean', description: 'Drop-frame timecode (HH:MM:SS;FF). Default true at 29.97 and 59.94 fps, where it is the norm; ignored at other rates, which have no drop-frame form.' }
 		}),
 		annotations: { title: 'Export an EDL', ...READ },
-		handler: ({ track, title }) => ({ edl: controller.toEdl({ ...(track ? { track } : {}), ...(title ? { title } : {}) }) })
+		handler: ({ track, title, dropFrame }) => ({ edl: controller.toEdl({ ...(track ? { track } : {}), ...(title ? { title } : {}), ...(dropFrame !== undefined ? { dropFrame } : {}) }) })
 	};
 
 	const seek: AgentTool = {

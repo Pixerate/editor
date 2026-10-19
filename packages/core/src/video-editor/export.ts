@@ -1,6 +1,6 @@
 import { placeVideoRect } from './evaluate.js';
 import { isVideoKeyframes, VIDEO_TRANSFORM_PROPERTIES, videoKeyframeFfmpegExpr, type VideoAnimatable } from './keyframes.js';
-import { formatVideoTimecode, sortedVideoClips, videoAssetMap, videoClipBefore, videoClipEnd, videoClipOverhang, videoClipSpeed, videoProjectDuration } from './timeline.js';
+import { formatVideoTimecode, formatVideoTimecodeFrames, isVideoDropFrameRate, videoHourFrames, videoTimecodeFrames, sortedVideoClips, videoAssetMap, videoClipBefore, videoClipEnd, videoClipOverhang, videoClipSpeed, videoProjectDuration } from './timeline.js';
 import type { VideoAsset, VideoClip, VideoProject, VideoTextClip, VideoTrack } from './types.js';
 
 // ---------------------------------------------------------------------------------------------
@@ -10,10 +10,12 @@ import type { VideoAsset, VideoClip, VideoProject, VideoTextClip, VideoTrack } f
 export interface VideoEdlOptions {
 	/** Track to export (default: the bottom video track, V1 in most NLEs). */
 	track?: string;
-	/** Record timecode of the timeline's start (ms, default 1 hour, the usual 01:00:00:00). */
+	/** Record timecode of the timeline's start (ms; default timecode 01:00:00:00, the usual start). */
 	recordStart?: number;
 	/** Title line (default: the project's name). */
 	title?: string;
+	/** Drop-frame timecode (default on at 29.97 and 59.94 fps, where it is the norm; ignored at other rates). */
+	dropFrame?: boolean;
 }
 
 /** Reel names are at most 8 characters, letters and digits. */
@@ -21,7 +23,7 @@ const reelName = (asset: VideoAsset | undefined) => (asset?.name ?? asset?.id ??
 
 /**
  * One track as a CMX 3600 edit decision list, for conforming in another NLE: an event per clip with
- * source and record timecode at the project's frame rate, dissolves (`D`) for crossfades, dips and
+ * source and record timecode at the project's frame rate (drop-frame at 29.97 and 59.94), dissolves (`D`) for crossfades, dips and
  * wipes (`W001`), `M2` lines for speed changes, and `* FROM CLIP NAME` comments. Titles and colour
  * clips become black (`BL`) events.
  */
@@ -29,16 +31,19 @@ export function toVideoEdl(project: VideoProject, options: VideoEdlOptions = {})
 	const track = options.track !== undefined ? project.tracks.find((t) => t.id === options.track) : [...project.tracks].reverse().find((t) => t.kind === 'video');
 	if (!track) throw new Error(options.track !== undefined ? `There is no track "${options.track}".` : 'The project has no video track.');
 	const fps = project.fps;
-	const tc = (ms: number) => formatVideoTimecode(ms, fps);
-	const rec0 = options.recordStart ?? 3600000;
+	const dropFrame = (options.dropFrame ?? true) && isVideoDropFrameRate(fps);
+	const tc = (ms: number) => formatVideoTimecode(ms, fps, dropFrame);
+	// Record time counts from a timecode, not a clock time: an hour of 29.97 frames is not 01:00:00:00 in non-drop.
+	const rec0 = options.recordStart !== undefined ? videoTimecodeFrames(options.recordStart, fps) : videoHourFrames(fps, dropFrame);
+	const rtc = (ms: number) => formatVideoTimecodeFrames(rec0 + videoTimecodeFrames(ms, fps), fps, dropFrame);
 	const assets = videoAssetMap(project);
 	const channel = track.kind === 'video' ? 'V' : 'A';
-	const lines = [`TITLE: ${(options.title ?? project.name ?? 'Untitled').toUpperCase()}`, 'FCM: NON-DROP FRAME', ''];
+	const lines = [`TITLE: ${(options.title ?? project.name ?? 'Untitled').toUpperCase()}`, `FCM: ${dropFrame ? 'DROP FRAME' : 'NON-DROP FRAME'}`, ''];
 	let event = 0;
 	const num = () => String(++event).padStart(3, '0');
 	const sourceAt = (clip: VideoClip, time: number) => (clip.type === 'media' ? (clip.in ?? 0) + (time - clip.start) * videoClipSpeed(clip) : time - clip.start);
 	const row = (n: string, reel: string, kind: string, srcIn: number, srcOut: number, recIn: number, recOut: number) =>
-		`${n}  ${reel.padEnd(8)} ${channel.padEnd(5)} ${kind.padEnd(8)} ${tc(srcIn)} ${tc(srcOut)} ${tc(rec0 + recIn)} ${tc(rec0 + recOut)}`;
+		`${n}  ${reel.padEnd(8)} ${channel.padEnd(5)} ${kind.padEnd(8)} ${tc(srcIn)} ${tc(srcOut)} ${rtc(recIn)} ${rtc(recOut)}`;
 	for (const clip of sortedVideoClips(track)) {
 		const asset = clip.type === 'media' ? assets.get(clip.asset) : undefined;
 		const reel = clip.type === 'media' ? reelName(asset) : 'BL';

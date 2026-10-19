@@ -55,6 +55,22 @@ describe('video agent tasks, through the tools only', () => {
 		expect(ff.filterComplex).toContain('drawtext=text=Jo Smith\\, founder');
 	});
 
+	it('exports drop-frame EDLs at 29.97 fps unless asked not to', async () => {
+		const { call, fail } = tools();
+		await call('set_video_settings', { fps: 29.97 });
+		await call('add_video_asset', { kind: 'video', src: 'take.mp4', duration: 120000 });
+		await call('add_video_clip', { track: 'v1', clip: { type: 'media', asset: 'take', duration: 61000 } });
+		const df = await call('export_video_edl');
+		expect(df.edl).toContain('FCM: DROP FRAME');
+		// 61 s of footage reads as 61 s in drop-frame…
+		expect(df.edl).toContain('00:00:00;00 00:01:01;00 01:00:00;00 01:01:01;00');
+		const ndf = await call('export_video_edl', { dropFrame: false });
+		expect(ndf.edl).toContain('FCM: NON-DROP FRAME');
+		// …and as 1828 frames in non-drop, still recorded from 01:00:00:00.
+		expect(ndf.edl).toContain('00:00:00:00 00:01:00:28 01:00:00:00 01:01:00:28');
+		expect(await fail('export_video_edl', { dropFrame: 'yes' })).toContain('dropFrame');
+	});
+
 	it('tightens an edit: split, ripple delete, trim, close gaps, undo', async () => {
 		const { call, controller } = tools();
 		await call('add_video_asset', { kind: 'video', id: 'take', src: 'take.mp4', duration: 20000 });

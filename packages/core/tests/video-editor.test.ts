@@ -8,6 +8,9 @@ import {
 	ffmpegFilterValue,
 	findVideoGaps,
 	formatVideoTimecode,
+	formatVideoTimecodeFrames,
+	isVideoDropFrameRate,
+	videoHourFrames,
 	parseVideoProject,
 	placeVideoRect,
 	snapToVideoFrame,
@@ -307,6 +310,42 @@ describe('exports', () => {
 		expect(formatVideoTimecode(3_723_480, 25)).toBe('01:02:03:12');
 		expect(snapToVideoFrame(1013, 25)).toBe(1000);
 		expect(snapToVideoFrame(1030, 25)).toBe(1040);
+	});
+
+	it('counts drop-frame timecode at 29.97 and 59.94 fps', () => {
+		const at = (frames: number, fps: number) => (frames * 1001) / Math.round(fps);
+		expect(isVideoDropFrameRate(29.97)).toBe(true);
+		expect(isVideoDropFrameRate(30000 / 1001)).toBe(true);
+		expect(isVideoDropFrameRate(59.94)).toBe(true);
+		expect(isVideoDropFrameRate(30)).toBe(false);
+		expect(isVideoDropFrameRate(23.976)).toBe(false);
+		// Frame numbers 0 and 1 are skipped at each minute but not each tenth minute.
+		expect(formatVideoTimecode(at(1799, 29.97), 29.97)).toBe('00:00:59;29');
+		expect(formatVideoTimecode(at(1800, 29.97), 29.97)).toBe('00:01:00;02');
+		expect(formatVideoTimecode(at(17982, 29.97), 29.97)).toBe('00:10:00;00');
+		expect(formatVideoTimecode(at(17981, 29.97), 29.97)).toBe('00:09:59;29');
+		expect(formatVideoTimecode(at(107892, 29.97), 29.97)).toBe('01:00:00;00');
+		expect(formatVideoTimecode(at(3600, 59.94), 59.94)).toBe('00:01:00;04');
+		// An hour of wall-clock time reads as an hour.
+		expect(formatVideoTimecode(3_600_000, 29.97)).toBe('01:00:00;00');
+		// Non-drop on request, and never at rates without a drop-frame form.
+		expect(formatVideoTimecode(at(1800, 29.97), 29.97, false)).toBe('00:01:00:00');
+		expect(formatVideoTimecode(1000, 25, true)).toBe('00:00:01:00');
+		expect(videoHourFrames(29.97)).toBe(107892);
+		expect(videoHourFrames(59.94)).toBe(215784);
+		expect(videoHourFrames(29.97, false)).toBe(108000);
+		expect(formatVideoTimecodeFrames(videoHourFrames(59.94), 59.94)).toBe('01:00:00;00');
+	});
+
+	it('writes drop-frame EDLs at NTSC rates', () => {
+		const p = { ...project(), fps: 29.97 };
+		const edl = toVideoEdl(p);
+		expect(edl).toContain('FCM: DROP FRAME');
+		expect(edl).toMatch(/01:00:00;00/);
+		const ndf = toVideoEdl(p, { dropFrame: false });
+		expect(ndf).toContain('FCM: NON-DROP FRAME');
+		expect(ndf).not.toContain(';');
+		expect(toVideoEdl(project(), { dropFrame: true })).toContain('FCM: NON-DROP FRAME');
 	});
 
 	it('writes a CMX 3600 EDL with dissolves and speed changes', () => {
