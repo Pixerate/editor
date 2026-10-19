@@ -1,5 +1,0 @@
----
-"@pixerate/editor": minor
----
-
-PSD / PSB read and write for smart objects. Placed layers (`SoLd`, `SoLE`, `PlLd`) now open as smart objects with their embedded contents from `lnk2` / `lnk3` / `lnkD` (an embedded PSD / PSB becomes a nested layer document, a PNG raster contents; JPEG, TIFF and SVG contents are kept and decoded in a browser with `prepareSmartObjects()`), their placement (affine or perspective quad, preset and single-patch custom warps), their smart filters (Box Blur maps to the `blur` filter; every other Photoshop filter, Camera Raw included, is kept, listed and written back but not drawn) and the filter mask from `FEid` / `FXid`. The layer shows Photoshop's stored pixels until it is changed. Linked (external-file) contents come in as their stored pixels, with a warning. Export writes smart objects back as Photoshop smart objects: contents embedded once per linked set, `PlLd` and `SoLd` blocks (an unchanged one byte for byte, keeping descriptor keys we do not model), `filterFX` and the filter mask. `inspect_psd` reports `smart` for placed layers.
