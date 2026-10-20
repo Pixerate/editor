@@ -2205,3 +2205,15 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Keys typed right after clicking the canvas with the Type tool were lost, and IME (composed) text never arrived when keys were read from `window`.
 - **Root Cause**: The canvas cannot take text input. Focus has to move to an element that can, and that element only exists once the click has opened a `TextEditSession` (after the pointer is released). Composed text comes as `compositionend` / `input`, not as `keydown` keys.
 - **Solution / Workaround**: Both editors render a 1 px transparent `<textarea data-testid="type-input">` while a session is open and focus it on the next tick after mouse-up. `keydown` goes to `TextEditSession.handleKey` (single characters, Backspace, Delete, Enter, arrows, Home / End, Cmd/Ctrl+A) unless `isComposing`; `compositionend` and `input` insert the composed or pasted text and clear the textarea. Cmd/Ctrl+Z / C / X / V are left to the browser. All edits of one session are one undo step (the first change records history, the rest pass `commitToHistory: false`). Automated tests type into the textarea; a browser driver that types immediately after the click can beat the focus.
+
+### [core/image-editor] Retouch Sources Must Be Captured When the Stroke Starts
+
+- **Issue / Symptom**: A Healing Brush stroke sampling Current & Below or All came out matched to its own clone instead of to the photo, and a Clone Stamp stroke running over its own source copied the same pixels on and on.
+- **Root Cause**: While a stroke is drawn, `_strokeUpdate` puts the live surface into `state.layers`, so a composite built at the end of the stroke (or a source that reads the live tiles) sees the stroke itself.
+- **Solution / Workaround**: `retouchStroke` builds every `PixelSource` (the layer's pre-stroke surface, or a `TilePixelSource` over a compositor and the layer list as they were) in `beginStroke`, and the heal's `finalPaint` reads only those. Sources cache their tiles, so make a new one per stroke.
+
+### [core/paint] Sequential Retouching on a Mask Needs an RGBA View, and an Empty Mask Tile Is Black, Not Transparent
+
+- **Issue / Symptom**: The Smudge did nothing on a "hide all" mask, and on other masks it skipped whole tiles.
+- **Root Cause**: `TileMedium` and `SmudgeTip` work on RGBA tiles, where a missing tile means transparent and a locked layer skips transparent pixels. A mask has one byte per pixel, and a missing tile (default 0) holds the value black.
+- **Solution / Workaround**: `PaintStrokeSession` wraps a one-channel target in `rgbaViewOfGrey`: it expands every tile it reads (an empty one as zeros) to opaque grey RGBA with transparency locked, and `flush` writes the red channel back through `writeTile` after each push. The Sponge refuses masks, since a mask has no saturation.

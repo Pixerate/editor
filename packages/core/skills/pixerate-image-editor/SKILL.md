@@ -1,6 +1,6 @@
 ---
 name: pixerate-image-editor
-description: How to colour-correct, composite and retouch a photo in the Pixerate image editor through its agent tools - layers (pixel, adjustment, group, shape, type, annotation and smart object layers with masks, clipping, blend modes, opacity and fill; merge, flatten, filters), smart objects (non-destructive transforms, smart filters, linked contents), vector shape layers (live shapes, arrows, paths, path operations, fills and strokes), live type layers, live layer effects, base adjustments, adjustment layers, selections and masks, Free Transform, crop, rotate, flip, Mixer Brush, undo, PSD, histogram and previews. Use when asked to edit, grade, correct, crop, straighten or mask an image, add a shadow, glow or outline, transform or warp a layer, draw a shape or arrow, add or edit text, make a smart object, or open or save a PSD, or when list_layers, set_adjustments, add_layer_effect, transform_layer, add_shape_layer, add_text_layer, convert_to_smart_object, paint_stroke, import_psd or render_preview are available.
+description: How to colour-correct, composite and retouch a photo in the Pixerate image editor through its agent tools - layers (pixel, adjustment, group, shape, type, annotation and smart object layers; masks, clipping, blend modes, merge, filters), smart objects and smart filters, shape and type layers, layer effects, adjustments, selections and masks, Free Transform, crop, rotate, flip, painting and the Mixer Brush, retouching (Clone Stamp, Healing Brush, Spot Healing, Smudge, Dodge, Burn, Sponge), undo, PSD, histogram and previews. Use when asked to edit, grade, correct, crop, straighten or mask an image, remove a blemish or spot, clone, dodge or burn, add a shadow, glow or outline, transform or warp a layer, draw a shape or arrow, add or edit text, make a smart object, or open or save a PSD, or when list_layers, set_adjustments, add_layer_effect, transform_layer, add_shape_layer, add_text_layer, paint_stroke, clone_stamp, spot_heal, import_psd or render_preview are available.
 ---
 
 # Image editor
@@ -182,6 +182,13 @@ drawing or editing either.
    replays the same. To carry dirty paint from stroke to stroke, pass `mixer.loadEachStroke:
    false` and `cleanEachStroke: false`, start with `load_mixer_brush`, read the brush with
    `get_mixer_brush` when unsure, and reset it with `clean_mixer_brush`.
+
+### Retouching
+
+Clone Stamp, Healing Brush, Spot Healing, Smudge, Dodge, Burn and Sponge: retouch on an empty
+layer with `sample: "current-below"`, pick `spot_heal` for small spots, `heal_brush` for larger
+flaws and `clone_stamp` to copy exactly, and keep strokes short and soft. Read
+[references/retouching.md](references/retouching.md) before retouching.
 
 ### Photoshop files
 
@@ -390,6 +397,16 @@ drawing or editing either.
 | `get_mixer_brush` | Read-only. The Mixer Brush settings and what it carries (`reservoir` #rrggbb or null, `amount` left 0..1, `pickup` #rrggbb or null). Call it before a mixer stroke with `loadEachStroke: false`. |
 | `load_mixer_brush` | Fill the Mixer Brush reservoir with `color` (default the foreground), amount 1; keeps the pickup. View state, not an undo step. Use before strokes with `loadEachStroke: false`. Returns the load. |
 | `clean_mixer_brush` | Empty the Mixer Brush pickup well (`emptyReservoir: true` also drops the loaded paint, so it only smears). View state, not an undo step. Returns the load. |
+| `clone_stamp` | Copy pixels from the clone source along `points`: each point paints what is at point + offset (source − first point, whole px). `source` `{x, y}` sets the source for this stroke (else the current one, see `set_clone_source`); `aligned` keeps the offset for later strokes; `sample` current \| current-below \| all; `brush` `{size, hardness, spacing, opacity, flow, smoothing, pressureSize, pressureOpacity}`; `layerId`, `channel` (a mask clones from itself). One undo step. Returns the layer, channel, `bounds`, dabs and `clone` `{offset, source, aligned}`. Call `set_clone_source` or pass `source` first. |
+| `heal_brush` | As `clone_stamp`, then blends the cloned texture into the colour and light around the stroke (Poisson seamless cloning, when the stroke ends). Use for blemishes, wrinkles, dust and seams where the surroundings have the right tone. Returns as `clone_stamp`. |
+| `spot_heal` | Remove what `points` cover with no source: `type` proximity-match (default: copies the best matching nearby patch, then heals it in) or smooth (fills from the edges). `sample`, `brush`, `layerId`, `channel`. One undo step. Returns the layer, channel, `bounds`, dabs and `spotHeal` `{offset}` (null for a smooth fill). |
+| `smudge` | Drag colour along `points` like a finger in wet paint; `strength` 0..1 (default 0.5) is how far. Works on masks too. One undo step. Returns the layer, channel, `bounds` and dabs. |
+| `dodge` | Lighten what `points` cover, most in `range` shadows \| midtones \| highlights, at `exposure` 0..1 (overlaps in one stroke never exceed it); `protectTones` keeps hue and saturation. Alpha kept. One undo step. Returns the layer, channel, `bounds` and dabs. |
+| `burn` | As `dodge`, darkening. |
+| `sponge` | Desaturate (`mode` desaturate, default) or saturate what `points` cover; `vibrance` damps clipping; passes compound, `brush.flow` sets each pass's strength. Pixels only. One undo step. Returns the layer, channel, `bounds` and dabs. |
+| `get_retouch_options` | Read-only. The retouching defaults (`aligned`, `sample`, `spotType`, `range`, `exposure`, `protectTones`, `spongeMode`, `vibrance`, `strength`) and the `cloneSource` `{x, y, offset}` or null. Call before a clone or heal stroke without `source`. |
+| `set_retouch_options` | Set those defaults (view state, not an undo step); each stroke tool can override them per call. Changing `aligned` clears the kept offset. Returns the options. |
+| `set_clone_source` | Set the clone source `{x, y}` in document px (the Alt-click), or remove it with `clear: true`. View state. The next `clone_stamp` / `heal_brush` fixes the offset from its first point. Returns the source. |
 | `fill_pixels` | Fill the selection (or the canvas without one / with `useSelection: false`) on pixels or a mask with `color`, `opacity`, `blend`. Returns the changed bounds. |
 | `mix_colors` | Read-only. Mix 1 to 16 `colors` (`{color: #rrggbb, weight, strength?}`) like paint (Kubelka-Munk over reflectance spectra). Returns `mixed` (#rrggbb), `rgbLerp` (the plain RGB average, for comparison) and the normalised `weights`. Call it before `paint_stroke` / `fill_pixels` to pick a paint colour. |
 | `clear_pixels` | Remove the selected pixels (alpha to 0; a transparency-locked layer or a mask gets the background colour). Returns the changed bounds. |
@@ -413,6 +430,7 @@ drawing or editing either.
   `locks` only when the user wants that layer changed.
 - `merge_down`, `merge_visible` and `flatten_image` merge annotation layers only in a browser
   (they need a canvas); elsewhere they fail and say so.
+- Retouching pitfalls (empty layers, sources, what ignores opacity): see references/retouching.md.
 - `paint_stroke`, `fill_pixels` and `clear_pixels` need a visible pixel layer (or a layer with a
   raster mask and `channel: "mask"`); adjustment, group, shape, type, annotation and smart object layers can
   only be painted through their masks (and a smart object through `channel: "filter-mask"`).
