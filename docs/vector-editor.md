@@ -317,6 +317,35 @@ Export puts the gradient itself on its first paint server as `data-vector-gradie
 
 **Editing.** `setGradient(patch, { ids, target, merge })` edits the selected paths' fill (or `target: "stroke"`; default: `state.gradientEdit.target`, set with `setGradientTarget`) — any gradient field, `aspect`, `reverse: true`, `focal: null` — and a colour becomes a gradient from it to white; `setGradientStop(index, { color, opacity, offset, midpoint })`, `addGradientStop(offset)`, `removeGradientStop(index)` (never below two), `selectGradientStop(index)` and `reverseGradient()` work on the stops by sorted index. `getVectorGradientEditor(state)` gives a gradient editor what to show (stops, the selected stop, a CSS preview of the ramp, spread, interpolation, smoothness and stroke mode); `getVectorOverlayRenderData(state).gradient` is the Gradient tool's annotator in screen pixels (`getGradientAnnotator()` on the controller for hit-testing: `hitVectorGradientAnnotator`). Blends mix two gradients of one style stop by stop (midpoints too) when they match, else resample both at every offset where either bends; points mix when both are explicit in the same units.
 
+### Gradient meshes and freeform gradients
+
+```ts
+controller.setMeshGradient({ rows: 2, columns: 2, corners: ["#bae6fd", "#38bdf8", "#e0f2fe", "#ffffff"] }, { ids: ["card"] });
+controller.setMeshPoint("card", 4, { x: 200, y: 120, color: "#fef9c3" }); // the middle point, row by row
+controller.setFreeformGradient({ colors: ["#15803d", "#4ade80"] }, { ids: ["hill"] }); // points placed inside
+controller.addFreeformPoint("hill", { x: 300, y: 420, color: "#166534", spread: 0.2 });
+```
+
+Both are paint objects in the node's own space, like its anchors, and move with the node.
+
+- **Mesh: `{ type: "mesh", rows, columns, points, colors, opacities? }`.**
+  - It is a lattice of `(rows + 1) × (columns + 1)` points.
+  - Each patch is a Coons surface whose sides are Catmull-Rom curves through the lattice, extended past the edges in straight lines, so moving a point bends its neighbouring patches smoothly.
+  - Colours blend bilinearly between each patch's corners.
+- **Freeform: `{ type: "freeform", points: [{ x, y, color, opacity?, spread? }], lines? }`, after vectorcraft.**
+  - Each point paints a disc of pure colour; `spread` is a fraction of half the box's longer side.
+  - Beyond the discs, points blend by inverse-square distance from each disc's edge.
+  - Lines are Catmull-Rom curves through points that carry colour along their length.
+  - `autoVectorFreeformGradient` places a 2 × n grid of points inside the shape.
+- **Drawing.** SVG has no shading for either, so `vectorShadedSvgDefs` returns a `<pattern>`, and both canvases draw it as they draw conic gradients.
+  - Mesh cells (8 per patch side) are flat tiles grown slightly so no seams show.
+  - Freeform is horizontal strips (96 across the longer side), each a linear gradient sampled across the field.
+  - Export writes the paint as `data-vector-shading`, so import restores it.
+- **Editing.**
+  - With the Gradient tool, `overlay.shading` shows the lattice or lines and the points of the selected paths.
+  - Drag a point to move it. Click inside a freeform shape to add a point in the colour shown there, and Alt-click a freeform point to remove it.
+  - The picked point is `state.shadingPoint`, which `VectorShadingPanel` recolours.
+
 ## Text
 
 ```ts

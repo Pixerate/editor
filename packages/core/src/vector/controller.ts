@@ -140,6 +140,24 @@ import {
 	type VectorConnectionSite
 } from './connectors.js';
 import { VECTOR_CONNECTOR_ROUTES, VECTOR_CONNECTOR_SIDES, type VectorArrowhead, type VectorConnector, type VectorConnectorEnd, type VectorConnectorRoute, type VectorConnectorSide } from './types.js';
+import {
+	autoVectorFreeformGradient,
+	createVectorMeshGradient,
+	isVectorFreeformGradient,
+	isVectorMeshGradient,
+	isVectorShadedPaint,
+	mapVectorShadedPaint,
+	removeVectorFreeformPoint,
+	sampleVectorFreeform,
+	sanitizeVectorShadedPaint,
+	vectorFreeformField,
+	vectorFreeformSpreadScale,
+	vectorRgbaToCss,
+	VECTOR_MESH_MAX
+} from './shading.js';
+import { parseVectorColor } from './gradient.js';
+import { pointInBezierPath } from '../canvas/pathops/bezier.js';
+import type { VectorFreeformGradient, VectorFreeformPoint, VectorMeshGradient } from './types.js';
 import { vectorBoundsInside, isVectorFrame, vectorFrameDocument, type VectorFrameGroup } from './frames.js';
 import { VECTOR_HORIZONTAL_RESIZING, VECTOR_VERTICAL_RESIZING, type VectorFrame, type VectorHorizontalResizing, type VectorResizing, type VectorVerticalResizing } from './types.js';
 import type { TextShaper } from '../text/types.js';
@@ -603,6 +621,8 @@ export interface VectorEditorState {
 	trackingPoints: readonly VectorTrackingPoint[];
 	/** A distance or coordinate being typed while the pen draws (Enter places the point), or null. */
 	typedEntry: string | null;
+	/** The selected point of a mesh or freeform fill (Gradient tool), or null. */
+	shadingPoint: { nodeId: string; index: number; kind: 'mesh' | 'freeform' } | null;
 	canUndo: boolean;
 	canRedo: boolean;
 	undoLabel: string;
@@ -1370,6 +1390,7 @@ type Drag =
 	| { kind: 'pull'; ref: VectorAnchorRef; before: Snapshot; base: VectorDocument; label: string; outOnly: boolean; closing: boolean; altBreaks: boolean }
 	| ({ kind: 'shape'; tool: VectorTool; start: Vec2; nodeId: string; before: Snapshot } & DragTargets)
 	| { kind: 'connector'; nodeId: string; start: Vec2; before: Snapshot }
+	| { kind: 'shading'; nodeId: string; index: number; start: Vec2; before: Snapshot; moved: boolean; alt: boolean }
 	| { kind: 'textBox'; start: Vec2; moved: boolean }
 	| { kind: 'textSelect'; nodeId: string }
 	| { kind: 'pencil'; nodeId: string; points: Point[]; before: Snapshot; lazy: LazyMouse; pressures: number[] | null; pressure: number }
@@ -1584,6 +1605,7 @@ export class VectorEditorController {
 			constraintIssues: this.constraintIssues,
 			trackingPoints: this.trackingPoints,
 			typedEntry: this.typed,
+			shadingPoint: this.getShadingSelection(),
 			canUndo: h.canUndo,
 			canRedo: h.canRedo,
 			undoLabel: h.undoName,
@@ -2360,6 +2382,15 @@ export class VectorEditorController {
 
 	private downGradient(screen: Vec2, p: Vec2, input: VectorPointerInput) {
 		const before = this.snapshot();
+		// A mesh or freeform fill: its points drag; a click in a freeform shape adds one.
+		const shaded = this.shadedUnder(screen);
+		if (shaded) {
+			this.shadingSel = shaded.index >= 0 ? { nodeId: shaded.nodeId, index: shaded.index } : null;
+			this.drag = { kind: 'shading', nodeId: shaded.nodeId, index: shaded.index, start: screen, before, moved: false, alt: !!input.alt };
+			this.interaction = { type: 'gradient', part: 'handle' };
+			this.notify();
+			return;
+		}
 		const a = this.getGradientAnnotator();
 		let part = a ? hitVectorGradientAnnotator(a, screen) : null;
 		if (a && part) {
@@ -4082,6 +4113,297 @@ export class VectorEditorController {
 			this.editingId = null;
 		});
 		return { ok: true, id };
+	}
+
+	// -----------------------------------------------------------------------------------------
+	// Gradient meshes and freeform gradients
+
+	/** The selected point of a mesh or freeform fill (Gradient tool), or null. */
+	private shadingSel: { nodeId: string; index: number } | null = null;
+
+	/** Selected paths with a mesh or freeform fill. */
+	private shadedPaths(): VectorPathNode[] {
+		return this.gradientPaths().filter((n) => isVectorShadedPaint(n.fill));
+	}
+
+	/** The shaded fill's point under `screen` (index), or a freeform shape under it (index -1), or null. */
+	private shadedUnder(screen: Vec2): { nodeId: string; index: number } | null {
+		const p = this.screenToDocument(screen);
+		for (const n of this.shadedPaths()) {
+			const world = this.worldOf(n.id);
+			const fill = n.fill as VectorMeshGradient | VectorFreeformGradient;
+			const z = this.viewport.zoom;
+			let best = -1;
+			let bestD = 8;
+			fill.points.forEach((q, k) => {
+				const w = applyMatrix(world, q);
+				const d = Math.hypot(w.x - p.x, w.y - p.y) * z;
+				if (d <= bestD) {
+					best = k;
+					bestD = d;
+				}
+			});
+			if (best >= 0) return { nodeId: n.id, index: best };
+			if (isVectorFreeformGradient(fill) && hitTestVectorNode(n, p, 0, this.parentMatrixOf(n.id))) return { nodeId: n.id, index: -1 };
+		}
+		return null;
+	}
+
+	private parentMatrixOf(id: string): AffineMatrix {
+		return vectorParentMatrix(this.doc.nodes, id) ?? IDENTITY_MATRIX;
+	}
+
+	private moveShading(drag: Extract<Drag, { kind: 'shading' }>, screen: Vec2, p: Vec2) {
+		if (drag.index < 0) return;
+		if (!drag.moved && Math.hypot(screen.x - drag.start.x, screen.y - drag.start.y) < 3) return;
+		drag.moved = true;
+		const node = this.getNode(drag.nodeId) as VectorPathNode | undefined;
+		if (!node || !isVectorShadedPaint(node.fill)) return;
+		const local = this.toLocal(drag.nodeId, p);
+		const fill = mapVectorShadedPaint(node.fill, (q) => q);
+		const moved = isVectorMeshGradient(fill)
+			? { ...fill, points: fill.points.map((q, k) => (k === drag.index ? { x: local.x, y: local.y } : q)) }
+			: { ...fill, points: fill.points.map((q, k) => (k === drag.index ? { ...q, x: local.x, y: local.y } : q)) };
+		this.replaceNode(drag.nodeId, normalizeVectorPaintStacks({ ...node, fill: moved }, 'shorthand'));
+		this.notify(true);
+	}
+
+	private upShading(drag: Extract<Drag, { kind: 'shading' }>) {
+		if (drag.moved) return this.commit(this.getNode(drag.nodeId) && isVectorMeshGradient((this.getNode(drag.nodeId) as VectorPathNode).fill) ? 'Move Mesh Point' : 'Move Freeform Point', drag.before);
+		const at = this.screenToDocument(drag.start);
+		if (drag.index < 0) {
+			// A click in a freeform shape adds a point there, in the colour it shows.
+			const r = this.addFreeformPoint(drag.nodeId, at);
+			if (r.ok) {
+				this.shadingSel = { nodeId: drag.nodeId, index: r.index! };
+				this.notify();
+			}
+			return;
+		}
+		if (drag.alt && isVectorFreeformGradient((this.getNode(drag.nodeId) as VectorPathNode).fill)) {
+			// Alt-click removes a freeform point.
+			if (this.removeFreeformPoint(drag.nodeId, drag.index).ok) {
+				this.shadingSel = null;
+				this.notify();
+			}
+			return;
+		}
+		this.notify();
+	}
+
+	/** The selected point of a mesh or freeform fill (Gradient tool), with its paint's kind, or null. */
+	getShadingSelection(): { nodeId: string; index: number; kind: 'mesh' | 'freeform' } | null {
+		const sel = this.shadingSel;
+		const node = sel ? (this.getNode(sel.nodeId) as VectorPathNode | undefined) : undefined;
+		if (!sel || node?.type !== 'path' || !isVectorShadedPaint(node.fill) || sel.index >= node.fill.points.length) return null;
+		return { ...sel, kind: node.fill.type };
+	}
+
+
+	/** The path `id` (or a message why it cannot take a mesh or freeform fill). */
+	private shadingTarget(id: string): VectorPathNode | string {
+		const n = this.getNode(id);
+		if (!n) return `There is no node "${id}".`;
+		if (n.type !== 'path') return `"${id}" is a ${n.type}: meshes and freeform gradients fill paths.`;
+		if (n.locked) return `"${id}" is locked; unlock it first.`;
+		return n;
+	}
+
+	/** Sets each node's fill in one undo step. */
+	private setFills(label: string, fills: Map<string, VectorPaint>, merge?: string) {
+		this.change(
+			label,
+			() => {
+				this.setDoc(mapTree(this.doc.nodes, (n) => (fills.has(n.id) && n.type === 'path' ? normalizeVectorPaintStacks({ ...n, fill: fills.get(n.id)! } as VectorPathNode, 'shorthand') : n)));
+			},
+			merge
+		);
+	}
+
+	/**
+	 * Gives paths (default: the selection) a gradient mesh over their own bounds: `rows` ×
+	 * `columns` patches (1–32) with points evenly spread, coloured by `colors` (one per point, row by
+	 * row), the four `corners` (top-left, top-right, bottom-right, bottom-left) blended, or the
+	 * current fill colour. One undo step.
+	 */
+	setMeshGradient(input: { rows: number; columns: number; colors?: readonly string[]; corners?: readonly [string, string, string, string] }, options: { ids?: readonly string[] } = {}): VectorActionResult {
+		const { rows, columns } = input;
+		if (!Number.isInteger(rows) || !Number.isInteger(columns) || rows < 1 || columns < 1 || rows > VECTOR_MESH_MAX || columns > VECTOR_MESH_MAX)
+			return { ok: false, message: `rows and columns must be whole numbers from 1 to ${VECTOR_MESH_MAX}.` };
+		const n = (rows + 1) * (columns + 1);
+		if (input.colors && input.colors.length !== n) return { ok: false, message: `colors needs ${n} colours ((rows + 1) × (columns + 1), row by row); got ${input.colors.length}.` };
+		if (input.corners && input.corners.length !== 4) return { ok: false, message: 'corners needs four colours: top-left, top-right, bottom-right, bottom-left.' };
+		const bad = [...(input.colors ?? []), ...(input.corners ?? [])].find((c) => !parseVectorColor(c));
+		if (bad !== undefined) return { ok: false, message: `"${bad}" is not a colour.` };
+		const ids = options.ids ?? this.selection;
+		if (!ids.length) return { ok: false, message: 'Select a path first.' };
+		const fills = new Map<string, VectorPaint>();
+		for (const id of ids) {
+			const t = this.shadingTarget(id);
+			if (typeof t === 'string') return { ok: false, message: t };
+			const b = vectorPathLocalBounds(t);
+			if (!b || !(b.width > 0 && b.height > 0)) return { ok: false, message: `"${id}" has no area to fill.` };
+			const base = typeof t.fill === 'string' && parseVectorColor(t.fill) ? t.fill : '#ffffff';
+			fills.set(id, createVectorMeshGradient(b, rows, columns, input.colors ? { colors: input.colors } : input.corners ? { corners: input.corners } : { colors: Array.from({ length: n }, () => base) }));
+		}
+		this.setFills('Gradient Mesh', fills);
+		return { ok: true };
+	}
+
+	/**
+	 * Gives paths (default: the selection) a freeform gradient: `points` in document units (each
+	 * `{ x, y, color, opacity?, spread? }`) with optional `lines` through them, or, without points,
+	 * four or more points placed inside each path and coloured along `colors` (default the current
+	 * fill to white). One undo step.
+	 */
+	setFreeformGradient(input: { points?: readonly VectorFreeformPoint[]; lines?: readonly number[][]; colors?: readonly string[] } = {}, options: { ids?: readonly string[] } = {}): VectorActionResult {
+		const ids = options.ids ?? this.selection;
+		if (!ids.length) return { ok: false, message: 'Select a path first.' };
+		const fills = new Map<string, VectorPaint>();
+		for (const id of ids) {
+			const t = this.shadingTarget(id);
+			if (typeof t === 'string') return { ok: false, message: t };
+			const b = vectorPathLocalBounds(t);
+			if (!b) return { ok: false, message: `"${id}" has no area to fill.` };
+			let f: VectorFreeformGradient | null;
+			if (input.points?.length) {
+				f = sanitizeVectorShadedPaint({ type: 'freeform', points: input.points.map((q) => ({ ...q, ...this.toLocal(id, q) })), ...(input.lines ? { lines: input.lines } : {}) }) as VectorFreeformGradient | null;
+				if (!f) return { ok: false, message: 'Each point needs x, y (numbers) and a colour.' };
+				if (input.lines && (f.lines?.length ?? 0) !== input.lines.length) return { ok: false, message: `Each line needs two or more point indices from 0 to ${input.points.length - 1}, none twice in a row.` };
+			} else {
+				const bad = (input.colors ?? []).find((c) => !parseVectorColor(c));
+				if (bad !== undefined) return { ok: false, message: `"${bad}" is not a colour.` };
+				const outline = subpathsToBezier(t.subpaths);
+				const inside = (q: Vec2) => pointInBezierPath(outline, [q.x, q.y], t.fillRule ?? 'nonzero');
+				const base = typeof t.fill === 'string' && parseVectorColor(t.fill) ? t.fill : '#000000';
+				f = autoVectorFreeformGradient(b, input.colors?.length ? input.colors : [base, '#ffffff'], inside);
+			}
+			fills.set(id, f);
+		}
+		this.setFills('Freeform Gradient', fills);
+		return { ok: true };
+	}
+
+	/** The mesh or freeform fill of path `id` with its points in document units, or null. */
+	getShading(id: string): (VectorMeshGradient | VectorFreeformGradient) | null {
+		const n = this.getNode(id);
+		if (n?.type !== 'path' || !isVectorShadedPaint(n.fill)) return null;
+		const world = this.worldOf(id);
+		return mapVectorShadedPaint(n.fill, (q) => applyMatrix(world, q));
+	}
+
+	/** Checks a shading point edit: the path, its shaded fill and the index. */
+	private shadingPoint(id: string, index: number, kind: 'mesh' | 'freeform'): { node: VectorPathNode; paint: VectorMeshGradient | VectorFreeformGradient } | string {
+		const t = this.shadingTarget(id);
+		if (typeof t === 'string') return t;
+		const paint = t.fill;
+		if (kind === 'mesh' ? !isVectorMeshGradient(paint) : !isVectorFreeformGradient(paint))
+			return `"${id}" has no ${kind === 'mesh' ? 'gradient mesh' : 'freeform gradient'} fill (add one with ${kind === 'mesh' ? 'vector.setMeshGradient' : 'vector.setFreeformGradient'}).`;
+		const p = paint as VectorMeshGradient | VectorFreeformGradient;
+		if (!Number.isInteger(index) || index < 0 || index >= p.points.length) return `Point ${index} is out of range: the ${kind} has ${p.points.length} points (0 to ${p.points.length - 1}).`;
+		return { node: t, paint: p };
+	}
+
+	/**
+	 * Changes point `index` (row by row) of path `id`'s gradient mesh: moves it to `x, y` (document
+	 * units) and / or sets its `color` and `opacity`. One undo step (merged while `merge` is the same key).
+	 */
+	setMeshPoint(id: string, index: number, patch: { x?: number; y?: number; color?: string; opacity?: number }, options: { merge?: string } = {}): VectorActionResult {
+		const r = this.shadingPoint(id, index, 'mesh');
+		if (typeof r === 'string') return { ok: false, message: r };
+		if (patch.color !== undefined && !parseVectorColor(patch.color)) return { ok: false, message: `"${patch.color}" is not a colour.` };
+		if ((patch.x === undefined) !== (patch.y === undefined)) return { ok: false, message: 'Give both x and y to move the point.' };
+		const m = r.paint as VectorMeshGradient;
+		const at = patch.x !== undefined ? this.toLocal(id, { x: patch.x, y: patch.y! }) : m.points[index];
+		const next: VectorMeshGradient = {
+			...m,
+			points: m.points.map((q, k) => (k === index ? { x: at.x, y: at.y } : q)),
+			colors: m.colors.map((c, k) => (k === index && patch.color !== undefined ? patch.color : c))
+		};
+		if (patch.opacity !== undefined) {
+			const ops = m.opacities ?? m.points.map(() => 1);
+			next.opacities = ops.map((o, k) => (k === index ? Math.min(1, Math.max(0, patch.opacity!)) : o));
+		}
+		this.setFills('Edit Mesh Point', new Map([[id, next]]), options.merge);
+		return { ok: true };
+	}
+
+	/** Adds a point to path `id`'s freeform gradient at `x, y` (document units), coloured `color` (default: the colour there now). One undo step. Returns its index. */
+	addFreeformPoint(id: string, point: { x: number; y: number; color?: string; opacity?: number; spread?: number }): VectorActionResult & { index?: number } {
+		const t = this.shadingTarget(id);
+		if (typeof t === 'string') return { ok: false, message: t };
+		if (!isVectorFreeformGradient(t.fill)) return { ok: false, message: `"${id}" has no freeform gradient fill (add one with vector.setFreeformGradient).` };
+		if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) return { ok: false, message: 'x and y must be numbers.' };
+		if (point.color !== undefined && !parseVectorColor(point.color)) return { ok: false, message: `"${point.color}" is not a colour.` };
+		const local = this.toLocal(id, point);
+		const f = t.fill;
+		const b = vectorPathLocalBounds(t);
+		const here = sampleVectorFreeform(vectorFreeformField(f, b ? vectorFreeformSpreadScale(b) : 1), local);
+		const next: VectorFreeformGradient = {
+			...f,
+			points: [
+				...f.points,
+				{
+					x: local.x,
+					y: local.y,
+					color: point.color ?? vectorRgbaToCss([here[0], here[1], here[2], 1]),
+					...(point.opacity !== undefined && point.opacity < 1 ? { opacity: Math.max(0, point.opacity) } : {}),
+					...(point.spread ? { spread: Math.min(1, Math.max(0, point.spread)) } : {})
+				}
+			]
+		};
+		this.setFills('Add Freeform Point', new Map([[id, next]]));
+		return { ok: true, index: next.points.length - 1 };
+	}
+
+	/** Changes point `index` of path `id`'s freeform gradient: position (document units), colour, opacity, spread. One undo step (merged while `merge` is the same key). */
+	setFreeformPoint(id: string, index: number, patch: { x?: number; y?: number; color?: string; opacity?: number; spread?: number }, options: { merge?: string } = {}): VectorActionResult {
+		const r = this.shadingPoint(id, index, 'freeform');
+		if (typeof r === 'string') return { ok: false, message: r };
+		if (patch.color !== undefined && !parseVectorColor(patch.color)) return { ok: false, message: `"${patch.color}" is not a colour.` };
+		if ((patch.x === undefined) !== (patch.y === undefined)) return { ok: false, message: 'Give both x and y to move the point.' };
+		const f = r.paint as VectorFreeformGradient;
+		const at = patch.x !== undefined ? this.toLocal(id, { x: patch.x, y: patch.y! }) : null;
+		const next: VectorFreeformGradient = {
+			...f,
+			points: f.points.map((q, k) => {
+				if (k !== index) return q;
+				const out: VectorFreeformPoint = { ...q, ...(at ? { x: at.x, y: at.y } : {}), ...(patch.color !== undefined ? { color: patch.color } : {}) };
+				if (patch.opacity !== undefined) {
+					if (patch.opacity >= 1) delete out.opacity;
+					else out.opacity = Math.max(0, patch.opacity);
+				}
+				if (patch.spread !== undefined) {
+					if (patch.spread <= 0) delete out.spread;
+					else out.spread = Math.min(1, patch.spread);
+				}
+				return out;
+			})
+		};
+		this.setFills('Edit Freeform Point', new Map([[id, next]]), options.merge);
+		return { ok: true };
+	}
+
+	/** Removes point `index` of path `id`'s freeform gradient (never the last one); lines through it close up. One undo step. */
+	removeFreeformPoint(id: string, index: number): VectorActionResult {
+		const r = this.shadingPoint(id, index, 'freeform');
+		if (typeof r === 'string') return { ok: false, message: r };
+		const next = removeVectorFreeformPoint(r.paint as VectorFreeformGradient, index);
+		if (!next) return { ok: false, message: 'A freeform gradient keeps at least one point.' };
+		this.setFills('Remove Freeform Point', new Map([[id, next]]));
+		return { ok: true };
+	}
+
+	/** Replaces the lines of path `id`'s freeform gradient: each a list of two or more point indices it runs through. One undo step. */
+	setFreeformLines(id: string, lines: readonly number[][]): VectorActionResult {
+		const t = this.shadingTarget(id);
+		if (typeof t === 'string') return { ok: false, message: t };
+		if (!isVectorFreeformGradient(t.fill)) return { ok: false, message: `"${id}" has no freeform gradient fill (add one with vector.setFreeformGradient).` };
+		const f = sanitizeVectorShadedPaint({ ...t.fill, lines }) as VectorFreeformGradient;
+		if ((f.lines?.length ?? 0) !== lines.length) return { ok: false, message: `Each line needs two or more point indices from 0 to ${t.fill.points.length - 1}, none twice in a row.` };
+		const { lines: _l, ...rest } = t.fill;
+		this.setFills('Freeform Lines', new Map([[id, lines.length ? { ...rest, lines: f.lines } : rest]]));
+		return { ok: true };
 	}
 
 	// -----------------------------------------------------------------------------------------
@@ -6471,6 +6793,8 @@ export class VectorEditorController {
 				return;
 			case 'gradient':
 				return this.moveGradient(drag, screen, p, input);
+			case 'shading':
+				return this.moveShading(drag, screen, p);
 			case 'envelope':
 				return this.moveEnvelope(drag, p);
 			case 'move': {
@@ -6895,6 +7219,8 @@ export class VectorEditorController {
 				return this.upBuilder(drag);
 			case 'gradient':
 				return this.upGradient(drag);
+			case 'shading':
+				return this.upShading(drag);
 			case 'stroke': {
 				this.notify();
 				if (drag.tool === 'knife') this.knife(drag.points);

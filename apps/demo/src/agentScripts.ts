@@ -388,6 +388,20 @@ export const VECTOR_SCRIPTS: AgentScript[] = [
     ],
   },
   {
+    id: "vector-shading",
+    prompt: "Shade the card with a mesh and the hill with a freeform gradient",
+    steps: [
+      {
+        say: "A 2 × 2 gradient mesh on the card, blue at the top fading to white…",
+        ...command("vector.setMeshGradient", { ids: ["card"], rows: 2, columns: 2, corners: ["#bae6fd", "#38bdf8", "#e0f2fe", "#ffffff"] }),
+        target: { selector: '[data-vector-id="card"]' },
+      },
+      { say: "…with its middle point pulled toward the star and brightened.", ...command("vector.setMeshPoint", { id: "card", index: 4, x: 200, y: 120, color: "#fef9c3" }), target: { selector: '[data-vector-id="card"]' } },
+      { say: "Freeform colour points across the hill, darker in the dips.", ...command("vector.setFreeformGradient", { ids: ["hill"], colors: ["#15803d", "#4ade80", "#166534", "#86efac"] }), target: { selector: '[data-vector-id="hill"]' } },
+      { say: "Checking the points to fine-tune.", ...command("vector.getShading", { id: "hill" }) },
+    ],
+  },
+  {
     id: "vector-connectors",
     prompt: "Connect the card to the sun and the badge",
     steps: [
