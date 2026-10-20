@@ -45,6 +45,8 @@ export * from './layers/panel';
 export * from './layers/effects-ui';
 export * from '../paint';
 export * from './paint-tools';
+export * from './color-tools';
+export * from './color-management';
 export * from './layers/paint-ui';
 export * from './psd';
 export * from './psd-tools';

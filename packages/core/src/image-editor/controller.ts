@@ -278,6 +278,20 @@ import {
   type WarpPreset,
 } from './transform';
 import { WARP_STYLES } from '../geom/warp';
+import { INTENTS, Transform, builtinProfile, canBeDestination, writeJpegIcc, writePngIcc, type BuiltinProfileId, type ColorSpace, type Intent, type Profile } from '../cms';
+import {
+  DEFAULT_PROOF,
+  convertSurfaceColors,
+  deserializeColorProfile,
+  displayTransform,
+  documentProfile,
+  isSrgb,
+  profileBytes,
+  resolveProfile,
+  serializeColorProfile,
+  type DocumentColorProfile,
+  type ProofSetup,
+} from './color-management';
 import { applyMatrix, multiplyMatrices, rotateMatrix, translateMatrix } from '../geom/affine';
 import type { EffectPattern } from '../raster/effects/patterns';
 import { DEFAULT_GLOBAL_LIGHT, effectsMargin, type GlobalLight, type LayerEffect, type LayerEffectKind, type LayerEffects } from '../raster/effects/model';
@@ -766,6 +780,7 @@ interface HistoryEntry {
   patterns?: EffectPattern[];
   selection: SelectionMask | null;
   source: SourceSnapshot;
+  colorProfile?: DocumentColorProfile;
 }
 
 export const DEFAULT_ADJUSTMENTS: ImageAdjustments = DEFAULT_ADJUSTMENTS_VALUES;
@@ -1042,9 +1057,24 @@ export class ImageEditorController {
     if (strokeRects && this.pendingDirty !== 'all') this.pendingDirty.push(...strokeRects);
     else if (!strokeRects) this.pendingDirty = 'all';
     this.syncViews();
+    this.syncDisplay();
     const currentState = { ...this.state };
     this.onStateChange?.(currentState);
     this.listeners.forEach((l) => l(currentState));
+  }
+
+  private displayFor: [DocumentColorProfile | undefined, ProofSetup | null | undefined] | null = null;
+
+  /** Keeps the renderer's display transform in step with the document profile and Proof Setup. */
+  private syncDisplay(): void {
+    const s = this.state;
+    if (this.displayFor && this.displayFor[0] === s.colorProfile && this.displayFor[1] === s.proofSetup) return;
+    this.displayFor = [s.colorProfile, s.proofSetup];
+    try {
+      this.renderer.setDisplayTransform(displayTransform(s.colorProfile, s.proofSetup));
+    } catch {
+      this.renderer.setDisplayTransform(null);
+    }
   }
 
   /** Recomputes the compatibility views (`adjustments`, `depthMask`, `annotations`) when the stack changed. */
@@ -1087,6 +1117,7 @@ export class ImageEditorController {
     if (s.legacyOutputBlur !== undefined) entry.legacyOutputBlur = s.legacyOutputBlur;
     if (s.globalLight) entry.globalLight = { ...s.globalLight };
     if (s.patterns) entry.patterns = s.patterns;
+    if (s.colorProfile) entry.colorProfile = s.colorProfile;
     return entry;
   }
 
@@ -1104,6 +1135,8 @@ export class ImageEditorController {
     else delete s.globalLight;
     if (entry.patterns) s.patterns = entry.patterns;
     else delete s.patterns;
+    if (entry.colorProfile) s.colorProfile = entry.colorProfile;
+    else delete s.colorProfile;
     s.selection = entry.selection;
     if (this.imageElement !== entry.source.element && !this.samplePixelsOverride) this.samplePixels = null;
     this.imageElement = entry.source.element;
@@ -3756,7 +3789,25 @@ export class ImageEditorController {
     const canvas = await this.renderExport(options);
     const format = options.format || 'image/png';
     const quality = options.quality ?? 0.92;
-    return canvas.toDataURL(format, quality);
+    const url = canvas.toDataURL(format, quality);
+    if (!this.state.colorProfile) return url;
+    // A document in another colour space carries its profile in the file.
+    const parsed = parseDataUrl(url);
+    if (!parsed) return url;
+    const bytes = this.withEmbeddedProfile(parsed.bytes, parsed.mime);
+    return bytes === parsed.bytes ? url : `data:${parsed.mime};base64,${bytesToBase64(bytes)}`;
+  }
+
+  /** PNG or JPEG bytes with the document's ICC profile embedded (other formats unchanged). */
+  private withEmbeddedProfile(bytes: Uint8Array, mime: string): Uint8Array {
+    const icc = profileBytes(this.state.colorProfile);
+    try {
+      if (mime === 'image/png') return writePngIcc(bytes, icc, this.getColorProfile().name);
+      if (mime === 'image/jpeg') return writeJpegIcc(bytes, icc);
+    } catch {
+      // Not the expected container (a mocked canvas): leave it.
+    }
+    return bytes;
   }
 
   public async toBlob(options: ExportOptions = {}): Promise<Blob> {
@@ -3764,10 +3815,16 @@ export class ImageEditorController {
     const format = options.format || 'image/png';
     const quality = options.quality ?? 0.92;
 
+    const tag = async (blob: Blob): Promise<Blob> => {
+      if (!this.state.colorProfile || typeof blob.arrayBuffer !== 'function') return blob;
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      const out = this.withEmbeddedProfile(bytes, blob.type || format);
+      return out === bytes ? blob : new Blob([out as BlobPart], { type: blob.type || format });
+    };
     return new Promise((resolve, reject) => {
       if (canvas.toBlob) {
         canvas.toBlob((blob) => {
-          if (blob) resolve(blob);
+          if (blob) tag(blob).then(resolve, reject);
           else reject(new Error('Failed to create Blob from canvas'));
         }, format, quality);
       } else {
@@ -3781,7 +3838,7 @@ export class ImageEditorController {
           for (let i = 0; i < byteStr.length; i++) {
             ia[i] = byteStr.charCodeAt(i);
           }
-          resolve(new Blob([ab], { type: format }));
+          tag(new Blob([ab], { type: format })).then(resolve, reject);
         } catch (err) {
           reject(err);
         }
@@ -4352,6 +4409,140 @@ export class ImageEditorController {
 
   // --- PSD ---
 
+  // --- Colour management ---
+
+  /** The document's colour profile: its name, built-in id (or `null` for an embedded profile) and colour space. */
+  public getColorProfile(): { name: string; builtin: BuiltinProfileId | null; colorSpace: ColorSpace; srgb: boolean } {
+    const doc = this.state.colorProfile;
+    const p = resolveProfile(doc);
+    return { name: doc?.name ?? p.description, builtin: doc ? (doc.builtin ?? null) : 'srgb', colorSpace: p.colorSpace, srgb: isSrgb(doc) };
+  }
+
+  /** Resolves a profile argument (built-in id or alias, or ICC bytes) as an RGB document profile. */
+  private rgbProfileArg(profile: string | Uint8Array, action: string): DocumentColorProfile {
+    let doc: DocumentColorProfile;
+    try {
+      doc = documentProfile(profile);
+    } catch (e) {
+      throw new LayerOperationError(e instanceof Error ? e.message : String(e));
+    }
+    const cs = resolveProfile(doc).colorSpace;
+    if (cs !== 'rgb') throw new LayerOperationError(`${action} needs an RGB profile; "${doc.name}" is ${cs.toUpperCase()}. The document is RGB: soft-proof CMYK with set_proof_setup, or export to it.`);
+    return doc;
+  }
+
+  /**
+   * Edit › Assign Profile (one undo step): the document's numbers now mean colours in
+   * `profile` (a built-in id such as `display-p3`, or ICC bytes); no pixel changes, so colours
+   * look different unless the profiles match. Returns the new profile.
+   */
+  public assignProfile(profile: string | Uint8Array): ReturnType<ImageEditorController['getColorProfile']> {
+    const doc = this.rgbProfileArg(profile, 'Assign Profile');
+    this.recordHistory();
+    if (doc.builtin === 'srgb') delete this.state.colorProfile;
+    else this.state.colorProfile = doc;
+    this.notify();
+    return this.getColorProfile();
+  }
+
+  /**
+   * Edit › Convert to Profile (one undo step): every pixel layer's numbers are converted so its
+   * colours stay the same in `profile` (with `intent` and black point compensation), and
+   * `profile` becomes the document's. Shape and type layers, layer effects and adjustment layers
+   * keep their numbers (they are listed in `unconvertedLayerIds`). Returns the profile and the
+   * layers changed.
+   */
+  public convertToProfile(
+    profile: string | Uint8Array,
+    options: { intent?: Intent; bpc?: boolean } = {}
+  ): { profile: ReturnType<ImageEditorController['getColorProfile']>; convertedLayerIds: string[]; unconvertedLayerIds: string[] } {
+    const doc = this.rgbProfileArg(profile, 'Convert to Profile');
+    const intent = options.intent ?? 'relative';
+    if (!INTENTS.includes(intent)) throw new LayerOperationError(`Unknown rendering intent "${String(intent)}"; use ${INTENTS.join(', ')}.`);
+    const t = Transform.create(resolveProfile(this.state.colorProfile), resolveProfile(doc), { intent, bpc: options.bpc ?? true });
+    const converted: string[] = [];
+    const unconverted: string[] = [];
+    const walk = (layers: readonly ImageLayer[]): ImageLayer[] =>
+      layers.map((l) => {
+        if (l.type === 'group') return { ...l, children: walk(l.children) };
+        if (l.type === 'pixel' && l.source !== 'document') {
+          converted.push(l.id);
+          return { ...l, surface: convertSurfaceColors(l.surface, t) };
+        }
+        if (l.type === 'pixel' && l.source === 'document') {
+          converted.push(l.id);
+          return { ...l, surface: convertSurfaceColors(this.surfaceOf(l), t), source: undefined } as ImageLayer;
+        }
+        if (l.type === 'shape' || l.type === 'type' || l.type === 'smart' || l.effects?.items.length) unconverted.push(l.id);
+        return l;
+      });
+    const next = walk(this.state.layers);
+    this.commitLayers(next, () => {
+      if (doc.builtin === 'srgb') delete this.state.colorProfile;
+      else this.state.colorProfile = doc;
+    });
+    return { profile: this.getColorProfile(), convertedLayerIds: converted, unconvertedLayerIds: unconverted };
+  }
+
+  /**
+   * View › Proof Setup (view state, not an undo step): shows the document as `profile` would
+   * reproduce it, or turns proofing off with `null`. Returns the setup.
+   */
+  public setProofSetup(setup: (Partial<Omit<ProofSetup, 'profile'>> & { profile: string | Uint8Array }) | null): ProofSetup | null {
+    if (!setup) {
+      this.state.proofSetup = null;
+      this.notify();
+      return null;
+    }
+    let doc: DocumentColorProfile;
+    try {
+      doc = documentProfile(setup.profile);
+    } catch (e) {
+      throw new LayerOperationError(e instanceof Error ? e.message : String(e));
+    }
+    const intent = setup.intent ?? DEFAULT_PROOF.intent;
+    if (!INTENTS.includes(intent)) throw new LayerOperationError(`Unknown rendering intent "${String(intent)}"; use ${INTENTS.join(', ')}.`);
+    const next: ProofSetup = { ...DEFAULT_PROOF, ...setup, intent, profile: doc };
+    if (!canBeDestination(resolveProfile(doc))) throw new LayerOperationError(`"${doc.name}" describes a source only, so colours cannot be proofed through it.`);
+    this.state.proofSetup = next;
+    this.notify();
+    return next;
+  }
+
+  /**
+   * Converts colours (`#rrggbb`) from one profile to another (default from the document's), with
+   * `intent`. For RGB targets returns hex; for others the channel values 0..1 (CMYK, grey, Lab
+   * encoded as L/100, (a+128)/255, (b+128)/255) and, for Lab, L*a*b*.
+   */
+  public convertColors(colors: string[], to: string | Uint8Array, options: { from?: string | Uint8Array; intent?: Intent; bpc?: boolean } = {}): Array<{ input: string; values: number[]; hex?: string; lab: [number, number, number] }> {
+    let src: Profile;
+    let dst: Profile;
+    try {
+      src = options.from !== undefined ? resolveProfile(documentProfile(options.from)) : resolveProfile(this.state.colorProfile);
+      dst = resolveProfile(documentProfile(to));
+    } catch (e) {
+      throw new LayerOperationError(e instanceof Error ? e.message : String(e));
+    }
+    if (src.colorSpace !== 'rgb') throw new LayerOperationError('Colours are given as #rrggbb, so the source profile must be RGB.');
+    const t = Transform.create(src, dst, { intent: options.intent ?? 'relative', bpc: options.bpc ?? true });
+    const toLab = Transform.create(src, builtinProfile('lab-d50'), { intent: 'relative', bpc: false });
+    return colors.map((input) => {
+      const m = /^#?([0-9a-f]{6})$/i.exec(input.trim());
+      if (!m) throw new LayerOperationError(`Invalid colour "${input}"; use #rrggbb.`);
+      const n = parseInt(m[1], 16);
+      const rgb = [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+      const out = new Float32Array(16);
+      t.eval(rgb, out);
+      const values = Array.from(out.subarray(0, t.outputs), (v) => Math.round(Math.min(1, Math.max(0, v)) * 10000) / 10000);
+      const l = new Float32Array(3);
+      toLab.eval(rgb, l);
+      const lab: [number, number, number] = [Math.round(l[0] * 10000) / 100, Math.round((l[1] * 255 - 128) * 100) / 100, Math.round((l[2] * 255 - 128) * 100) / 100];
+      const res: { input: string; values: number[]; hex?: string; lab: [number, number, number] } = { input, values, lab };
+      if (dst.colorSpace === 'rgb') res.hex = `#${values.map((v) => Math.round(v * 255).toString(16).padStart(2, '0')).join('')}`;
+      return res;
+    });
+  }
+
   /** Pixels per inch of the last opened PSD (written back by `toPsd`). */
   private psdResolution: number | undefined;
 
@@ -4385,6 +4576,18 @@ export class ImageEditorController {
     else delete s.patterns;
     if (result.globalLight) s.globalLight = result.globalLight;
     else delete s.globalLight;
+    delete s.colorProfile;
+    if (result.iccProfile) {
+      try {
+        const doc = documentProfile(result.iccProfile);
+        const cs = resolveProfile(doc).colorSpace;
+        if (cs === 'rgb') {
+          if (!isSrgb(doc)) s.colorProfile = doc;
+        } else result.warnings.push(`The file's ${cs.toUpperCase()} profile "${doc.name}" was not used; its colours were converted to sRGB numerically.`);
+      } catch (e) {
+        result.warnings.push(`The embedded ICC profile could not be read (${e instanceof Error ? e.message : String(e)}); colours are read as sRGB.`);
+      }
+    }
     this.lastLoadProblems = result.warnings;
     this.notify();
     return {
@@ -4557,7 +4760,7 @@ export class ImageEditorController {
     for (const [msg, names] of note) warnings.push(`${msg} (${names.length === 1 ? 'layer' : 'layers'} ${names.map((n) => `"${n}"`).join(', ')}).`);
 
     const merged = compositor.composite(prepared, canvas, { ...sources, version: `psd:${Date.now()}` });
-    const result = exportPsd({ width, height, layers: prepared, merged, resolution: this.psdResolution, patterns: this.state.patterns, globalLight: this.state.globalLight });
+    const result = exportPsd({ width, height, layers: prepared, merged, resolution: this.psdResolution, patterns: this.state.patterns, globalLight: this.state.globalLight, iccProfile: profileBytes(this.state.colorProfile) });
     warnings.push(...result.warnings);
     return { bytes: result.bytes, warnings, psb: result.psb, width, height };
   }
@@ -4729,6 +4932,9 @@ export class ImageEditorController {
       const patterns = deserializePatterns(data.patterns, problems);
       if (patterns.length) s.patterns = patterns;
       else delete s.patterns;
+      const profile = data.colorProfile ? deserializeColorProfile(data.colorProfile, problems) : null;
+      if (profile) s.colorProfile = profile;
+      else delete s.colorProfile;
       if (!this.imageElement && typeof data.width === 'number' && typeof data.height === 'number' && data.width > 0 && data.height > 0) {
         s.imageDimensions = { width: data.width, height: data.height };
       }
@@ -4744,6 +4950,7 @@ export class ImageEditorController {
       s.activeLayerId = null;
       delete s.globalLight;
       delete s.patterns;
+      delete s.colorProfile;
     }
     s.activeTarget = 'pixels';
     this.viewKey = [];
@@ -4755,7 +4962,7 @@ export class ImageEditorController {
     const { width, height } = this.naturalSize;
     const view = legacyView(this.stack(), width, height, null);
     // A global light is only stored in the layered schema.
-    if (view.exact && !this.state.globalLight && !this.state.patterns?.length) {
+    if (view.exact && !this.state.globalLight && !this.state.patterns?.length && !this.state.colorProfile) {
       return {
         // States without adjustment layers keep schema 1, so they round-trip unchanged.
         version: view.adjustments.layers?.length ? 2 : 1,
@@ -4785,6 +4992,7 @@ export class ImageEditorController {
     if (this.state.globalLight) out.globalLight = { ...this.state.globalLight };
     if (this.state.patterns?.length) out.patterns = serializePatterns(this.state.patterns);
     if (smartContents) out.smartContents = smartContents;
+    if (this.state.colorProfile) out.colorProfile = serializeColorProfile(this.state.colorProfile);
     return out;
   }
 }

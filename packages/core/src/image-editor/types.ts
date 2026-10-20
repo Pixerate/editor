@@ -352,6 +352,8 @@ export type ImageEditorTool =
 
 export type ImageEditorFit = 'contain' | 'margin';
 
+import type { DocumentColorProfile, ProofSetup } from './color-management';
+
 export interface ImageEditorState {
   sourceUrl: string | null;
   /** Canvas (document) size in pixels: the source image's natural size. */
@@ -416,6 +418,10 @@ export interface ImageEditorState {
    * `closeSmartObjectContents`. Missing when the document itself is shown.
    */
   editingContents?: Array<{ layerId: string; name: string }>;
+  /** The document's colour profile (working space); missing means sRGB. Recorded in history and saved. */
+  colorProfile?: DocumentColorProfile;
+  /** View › Proof Setup (view state): soft-proof the viewport through another profile, or `null`. */
+  proofSetup?: ProofSetup | null;
 }
 
 /**
