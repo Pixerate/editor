@@ -10,3 +10,4 @@ export * from './StickerPanel';
 export * from './PaintEditor';
 export { PaintSlider } from './shared';
 export * from './PaintGradientEditor';
+export * from './PaintEffectsPanel';

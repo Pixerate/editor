@@ -393,6 +393,7 @@ const FEATURES: ParityRow[] = [
   row("Procedural, Bristle & Sticker Brushes", "ParticleStroke, BristleStroke & StickerSpray", "<BrushPanel> engine controls & <StickerPanel>", "<BrushPanel> engine controls & <StickerPanel>", "Particle strings, springs, orbits, flow; bristles; editable stickers; 4 agent tools"),
   row("Stencils", "addStencil, StencilSnapper & stencilMask", "<PaintToolbar> Ruler / Circle / Mask", "<PaintToolbar> Ruler / Circle / Mask", "Ruler and arc guides, line and shape masks; 3 agent tools"),
   row("Paint Agent Cursors", "PaintDirector & PaintPresence", "usePaintDirector & <PaintEditor presence>", "createPaintDirector & <PaintEditor presence>", "Agent strokes painted live by a cursor on the canvas; one undo step per call"),
+  row("Paint Provider Effects (effect paper, effect layers, fills, light on dried paint)", "setPaperEffect, addEffectLayer, applyLightEffect & createPaintEffectsToolProvider", "<PaintEffectsPanel> & usePaintEffectsTools", "<PaintEffectsPanel> & usePaintEffectsTools", "Optional EffectProvider; effect paper multiplied over the grain; light baked onto dried paint; 9 agent tools"),
   row("Strokes as Data & Paint Agent Tools", "replayStrokes, createPaintEditorToolProvider", "useAgentToolProvider", "useAgentToolProvider", "89 tools; strokes replay exactly or varied; pixerate-paint-editor skill"),
   ...PRODUCTIVITY_FEATURES,
 ];

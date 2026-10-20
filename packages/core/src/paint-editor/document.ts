@@ -15,6 +15,7 @@ import type { RecordedStroke } from './strokes';
 import type { WetEvent } from './wet';
 import type { ThickChannels } from './thick';
 import type { Sticker } from './stickers';
+import type { PaintEffectSource, PaintPaperEffect } from './effects';
 
 export type PaintPixelLayer = RasterPixelLayer;
 export type PaintGroupLayer = RasterGroupLayer<PaintLayer>;
@@ -50,6 +51,10 @@ export interface PaintDocumentState {
   stickers?: Readonly<Record<string, Sticker[]>>;
   /** Thick paint: each layer's height and material channels (layers without relief are missing). */
   thick?: Readonly<Record<string, ThickChannels>>;
+  /** Effect layers: the provider effect each one is drawn from (layers that are gone are ignored). */
+  effectLayers?: Readonly<Record<string, PaintEffectSource>>;
+  /** Effect paper: a provider generator drawn over the paper, under the paint. */
+  paperEffect?: PaintPaperEffect;
 }
 
 /** A change a replay repeats besides strokes, recorded with how many strokes came before it. */

@@ -8,7 +8,8 @@
   import PaperPanel from './PaperPanel.svelte';
   import WetPanel from './WetPanel.svelte';
   import StickerPanel from './StickerPanel.svelte';
-  import { chip } from './paintEditorRune.svelte.js';
+  import PaintEffectsPanel from './PaintEffectsPanel.svelte';
+  import { chip, paintEffectsProvider } from './paintEditorRune.svelte.js';
 
   interface Props {
     controller: PaintEditorController;
@@ -22,7 +23,9 @@
   }
   let { controller, fileName, height = 720, presence, class: className = '' }: Props = $props();
   let tool = $state<PaintTool>('brush');
-  let tab = $state<'color' | 'wet' | 'paper' | 'layers'>('color');
+  let tab = $state<'color' | 'wet' | 'paper' | 'layers' | 'effects'>('color');
+  const effects = paintEffectsProvider(() => controller);
+  const tabs = $derived(effects.current ? (['color', 'wet', 'paper', 'layers', 'effects'] as const) : (['color', 'wet', 'paper', 'layers'] as const));
   let error = $state<string | null>(null);
 </script>
 
@@ -37,14 +40,15 @@
     </div>
     <div class="flex w-64 shrink-0 flex-col gap-2 overflow-y-auto pr-1">
       <div class="flex gap-1" role="tablist" aria-label="Paint panels">
-        {#each ['color', 'wet', 'paper', 'layers'] as const as t (t)}
-          <button type="button" role="tab" aria-selected={tab === t} class={chip(tab === t)} onclick={() => (tab = t)}>{t === 'color' ? 'Colour' : t === 'wet' ? 'Wet' : t === 'paper' ? 'Paper' : 'Layers'}</button>
+        {#each tabs as t (t)}
+          <button type="button" role="tab" aria-selected={tab === t} class={chip(tab === t)} onclick={() => (tab = t)}>{t === 'color' ? 'Colour' : t === 'wet' ? 'Wet' : t === 'paper' ? 'Paper' : t === 'layers' ? 'Layers' : 'Effects'}</button>
         {/each}
       </div>
       {#if tab === 'color'}<ColorPanel {controller} />{/if}
       {#if tab === 'wet'}<WetPanel {controller} />{/if}
       {#if tab === 'paper'}<PaperPanel {controller} />{/if}
       {#if tab === 'layers'}<PaintLayersPanel {controller} /><StickerPanel {controller} />{/if}
+      {#if tab === 'effects' && effects.current}<PaintEffectsPanel {controller} />{/if}
     </div>
   </div>
 </div>

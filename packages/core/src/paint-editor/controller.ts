@@ -22,6 +22,8 @@ import { bytesToBase64, decodePng, encodePng, parseDataUrl, pngDataUrl } from '.
 import {
   translateSurface,
   contentBounds,
+  readRegion,
+  writeRegion,
   emptySurface,
   readPixel,
   surfaceFromPixels,
@@ -50,7 +52,7 @@ import type { PenPoint } from './engine';
 import type { Hand } from './input';
 import { mix32 } from './noise';
 import { clonePaper, grainCatch, hexToRgb8, normalizePaper, paperPreset, type PaperSettings } from './paper';
-import { createPaintCompositor, downsampleRgba, paperGrain, paperNode, TRACING_NODE_ID, type ImageNode, type ViewLayer } from './render';
+import { createPaintCompositor, downsampleRgba, paperGrain, paperNode, PAPER_EFFECT_NODE_ID, TRACING_NODE_ID, type ImageNode, type ViewLayer } from './render';
 import {
   deserializePaintDocument,
   deserializePaintDocumentAsync,
@@ -88,6 +90,10 @@ import { normalizeFlow, type WetFlowSpec } from '../paint/wet/flow';
 import { MAX_WET_LANES, type WetBackendInfo, type WetSnapshot } from '../paint/wet/world';
 import { wetSupport } from '../paint/wet/wasm';
 import { buildTimeLapse, emptiedLayers, replayPainting, type TimeLapse, type TimeLapseOptions } from './replay';
+import { EffectsSlot } from '../effects/helpers.js';
+import { resolveEffectValues } from '../effects/helpers.js';
+import type { EffectDescription, EffectPixels, EffectProvider, EffectValue } from '../effects/types.js';
+import { checkPaintEffectPlace, effectLayersToJSON, mixPixels, nextPaperEffectVersion, overPixels, PaintEffectsRenderer, PAPER_EFFECT_BLENDS, paperEffectFromJSON, paperEffectToJSON, readPaintEffectSource, type PaintEffectPlace, type PaintEffectSource, type PaintPaperEffect, type PaperEffectBlend } from './effects';
 import { DEFAULT_LIGHTING, emptyThickChannels, LitCache, normalizeLighting, reliefInfo, thickFromJSON, thickToJSON, type PaintLighting, type ThickChannels } from './thick';
 
 /** A refusal with a message that says what is wrong and how to fix it. */
@@ -372,6 +378,10 @@ export class PaintEditorController {
   private liveThick: { layerId: string; channels: ThickChannels } | null = null;
   /** Set while an operation that changes wet paint runs: the simulation before it (for undo). */
   private wetOp: { before: WetSnapshot | null } | null = null;
+  /** The effects provider slot (see `setEffectsProvider`). */
+  readonly effects = new EffectsSlot();
+  private readonly effectsRenderer = new PaintEffectsRenderer();
+  private paperEffectNodeCache: ImageNode | null = null;
 
   constructor(options: PaintEditorOptions = {}) {
     this.historyLimit = Math.max(1, options.historyLimit ?? 200);
@@ -493,6 +503,22 @@ export class PaintEditorController {
     this.redoStack = [];
     this.doc = next;
     this.trimWetHistory();
+    this.emit();
+  }
+
+  /**
+   * Commits `next` as a new undo step, or with `commitToHistory` false folds it into the last step
+   * when that step has the same label (the later values of one slider drag).
+   */
+  private commitOrAmend(label: string, next: PaintDocumentState, commitToHistory: boolean): void {
+    const last = this.undoStack[this.undoStack.length - 1];
+    if (commitToHistory || !last || last.label !== label || last.wet || this.wetOp) {
+      this.commit(label, next);
+      return;
+    }
+    last.after = next;
+    this.redoStack = [];
+    this.doc = next;
     this.emit();
   }
 
@@ -940,6 +966,282 @@ export class PaintEditorController {
       else tiles.delete(key);
     }
     return new TiledSurface(4, tiles, 0);
+  }
+
+  // --- Provider effects ------------------------------------------------------------
+
+  /** The registered effects provider, or `null`. */
+  get effectsProvider(): EffectProvider | null {
+    return this.effects.provider;
+  }
+
+  /** Registers (or with `null` removes) the effects provider. Not an edit: no undo step. */
+  setEffectsProvider(provider: EffectProvider | null): void {
+    this.effects.set(provider);
+  }
+
+  /** Registers `provider` and returns a function that removes it again (if it is still the one set). */
+  useEffects(provider: EffectProvider): () => void {
+    return this.effects.use(provider);
+  }
+
+  /** The provider's description of an effect, checked for `place` (rejects without a provider or for an unknown id). */
+  async describeEffect(effect: string, place?: PaintEffectPlace): Promise<EffectDescription> {
+    const d = await this.effectsRenderer.describe(this.effects.require(), effect);
+    if (place) checkPaintEffectPlace(d, place);
+    return d;
+  }
+
+  /** Every effect layer (top first) with its effect. */
+  listEffectLayers(): { layerId: string; name: string; source: PaintEffectSource }[] {
+    const map = this.doc.effectLayers ?? {};
+    return this.listLayers()
+      .filter((l) => map[l.id])
+      .map((l) => ({ layerId: l.id, name: l.name, source: map[l.id] }));
+  }
+
+  /** The effect a layer is drawn from, or `undefined` for other layers. */
+  getEffectLayer(layerId: string): PaintEffectSource | undefined {
+    return findLayer(this.doc.layers, layerId) ? this.doc.effectLayers?.[layerId] : undefined;
+  }
+
+  /** The effect paper (without its pixels), or `null`. */
+  getPaperEffect(): Omit<PaintPaperEffect, 'image' | 'version'> | null {
+    const p = this.doc.paperEffect;
+    if (!p) return null;
+    const { image: _i, version: _v, ...rest } = p;
+    return { ...rest, values: { ...rest.values } };
+  }
+
+  /** Values over `base` (`null` resets a control to its default), checked against the effect's controls. */
+  private effectValues(d: EffectDescription, base: Record<string, EffectValue>, changes: Record<string, EffectValue | null> | undefined): Record<string, EffectValue> {
+    const merged = { ...base };
+    const given: Record<string, EffectValue> = {};
+    for (const [k, v] of Object.entries(changes ?? {})) {
+      if (!(k in d.controls.properties)) throw new PaintEditorError(`"${k}" is not a control of "${d.id}"; its controls are ${Object.keys(d.controls.properties).join(', ') || 'none'} (describe_effect).`);
+      if (v === null) merged[k] = d.defaults[k];
+      else given[k] = v;
+    }
+    return { ...merged, ...resolveEffectValues({ ...d, defaults: merged }, given) } as Record<string, EffectValue>;
+  }
+
+  /** Renders a generator, overlay or title effect at the canvas size. */
+  private renderEffectCanvas(d: EffectDescription, values: Record<string, EffectValue>, time = 0): Promise<EffectPixels> {
+    const { width, height } = this.doc.canvas;
+    return this.effectsRenderer.render(this.effects.require(), d.id, { width, height }, { time, values });
+  }
+
+  private sourceOf(d: EffectDescription, values: Record<string, EffectValue>, time?: number): PaintEffectSource {
+    return { effect: d.id, provider: this.effects.require().id, name: d.name, values, ...(time ? { time } : {}) };
+  }
+
+  private checkTime(time: number | undefined): void {
+    if (time !== undefined && !(Number.isFinite(time) && time >= 0)) throw new PaintEditorError(`time ${time} is not a moment of the effect; use 0 or more milliseconds.`);
+  }
+
+  private checkOpacity(opacity: number | undefined): void {
+    if (opacity !== undefined && !(opacity >= 0 && opacity <= 1)) throw new PaintEditorError(`opacity ${opacity} is out of range; use 0..1.`);
+  }
+
+  /** A pixel layer that takes effect pixels: unlocked, visible, no sticker layer, no wet paint. */
+  private effectTarget(layerId: string | undefined, what: string): PaintPixelLayer {
+    const l = this.paintTarget(layerId, what);
+    if (this.doc.stickers?.[l.id]?.length) throw new PaintEditorError(`Layer "${l.name}" is a sticker layer; ${what} another layer (add_layer).`);
+    if (this.wet.wetLayerIds().includes(l.id)) throw new PaintEditorError(`Layer "${l.name}" holds wet paint; effects go on dried paint, so dry it first (dry_paint) and try again.`);
+    return l;
+  }
+
+  /** After an effect rendered: the layer must be as it was when the render started. */
+  private sameLayerAfterRender(before: PaintPixelLayer): PaintPixelLayer {
+    this.requireIdle('applying an effect');
+    const now = this.getLayer(before.id);
+    if (!isPixelLayer(now)) throw new PaintEditorError(`Layer "${before.name}" was removed while the effect rendered.`);
+    if (now.surface !== before.surface || now.offset.x !== before.offset.x || now.offset.y !== before.offset.y) throw new PaintEditorError(`Layer "${before.name}" changed while the effect rendered; apply the effect again.`);
+    return now;
+  }
+
+  /** The canvas rectangle in a layer's own coordinates. */
+  private canvasRectOf(l: PaintPixelLayer): RasterRect {
+    return { x: -l.offset.x, y: -l.offset.y, width: this.doc.canvas.width, height: this.doc.canvas.height };
+  }
+
+  /**
+   * Sets the effect paper: a provider generator drawn over the paper and under the paint, at the
+   * canvas size (`multiply` by default, so the paper's colour and grain still show). `null` removes
+   * it. One undo step. Returns the effect paper (without pixels), or `null`.
+   */
+  async setPaperEffect(effect: string | null, options: { values?: Record<string, EffectValue>; opacity?: number; blend?: PaperEffectBlend; time?: number } = {}): Promise<ReturnType<PaintEditorController['getPaperEffect']>> {
+    this.requireIdle('changing the paper');
+    if (effect === null) {
+      if (!this.doc.paperEffect) return null;
+      const { paperEffect: _p, ...rest } = this.doc;
+      this.commit('Remove effect paper', rest);
+      return null;
+    }
+    this.checkOpacity(options.opacity);
+    this.checkTime(options.time);
+    if (options.blend !== undefined && !PAPER_EFFECT_BLENDS.includes(options.blend)) throw new PaintEditorError(`Unknown effect paper blend "${options.blend}"; use ${PAPER_EFFECT_BLENDS.join(', ')}.`);
+    const d = await this.describeEffect(effect, 'paper');
+    const values = this.effectValues(d, { ...d.defaults } as Record<string, EffectValue>, options.values);
+    const pixels = await this.renderEffectCanvas(d, values, options.time);
+    this.requireIdle('changing the paper');
+    const was = this.doc.paperEffect;
+    const paperEffect: PaintPaperEffect = {
+      ...this.sourceOf(d, values, options.time),
+      opacity: options.opacity ?? was?.opacity ?? 1,
+      blend: options.blend ?? was?.blend ?? 'multiply',
+      image: { width: pixels.width, height: pixels.height, data: new Uint8ClampedArray(pixels.data) },
+      version: nextPaperEffectVersion(),
+    };
+    this.commit('Effect paper', { ...this.doc, paperEffect });
+    return this.getPaperEffect();
+  }
+
+  /**
+   * Changes the effect paper: new control `values` (merged over its own; `null` resets one) or
+   * `time` draw it again at the canvas size; `opacity` and `blend` only change how it is drawn.
+   * One undo step; with `commitToHistory` false it joins the previous effect paper step (a slider
+   * drag). Returns the effect paper (without pixels).
+   */
+  async updatePaperEffect(changes: { values?: Record<string, EffectValue | null>; opacity?: number; blend?: PaperEffectBlend; time?: number }, commitToHistory = true): Promise<NonNullable<ReturnType<PaintEditorController['getPaperEffect']>>> {
+    this.requireIdle('changing the paper');
+    const was = this.doc.paperEffect;
+    if (!was) throw new PaintEditorError('There is no effect paper; set one with set_paper_effect.');
+    this.checkOpacity(changes.opacity);
+    this.checkTime(changes.time);
+    if (changes.blend !== undefined && !PAPER_EFFECT_BLENDS.includes(changes.blend)) throw new PaintEditorError(`Unknown effect paper blend "${changes.blend}"; use ${PAPER_EFFECT_BLENDS.join(', ')}.`);
+    let next: PaintPaperEffect = { ...was, ...(changes.opacity !== undefined ? { opacity: changes.opacity } : {}), ...(changes.blend !== undefined ? { blend: changes.blend } : {}) };
+    const { width, height } = this.doc.canvas;
+    if (changes.values !== undefined || changes.time !== undefined || was.image.width !== width || was.image.height !== height) {
+      const d = await this.describeEffect(was.effect, 'paper');
+      const values = this.effectValues(d, was.values, changes.values);
+      const time = changes.time ?? was.time ?? 0;
+      const pixels = await this.renderEffectCanvas(d, values, time);
+      this.requireIdle('changing the paper');
+      if (this.doc.paperEffect !== was) throw new PaintEditorError('The effect paper changed while it rendered; change it again.');
+      next = { ...next, ...this.sourceOf(d, values, time), image: { width: pixels.width, height: pixels.height, data: new Uint8ClampedArray(pixels.data) }, version: nextPaperEffectVersion() };
+      if (!time) delete next.time;
+    }
+    this.commitOrAmend('Effect paper', { ...this.doc, paperEffect: next }, commitToHistory);
+    return this.getPaperEffect()!;
+  }
+
+  /**
+   * Adds an effect layer above the active layer (or `aboveId`): a pixel layer drawn by a provider
+   * generator, overlay or title effect at the canvas size. It keeps its effect, so
+   * `updateEffectLayer` draws it again. One undo step. Returns the layer and its effect.
+   */
+  async addEffectLayer(effect: string, options: { values?: Record<string, EffectValue>; name?: string; aboveId?: string; opacity?: number; blend?: BlendMode; time?: number } = {}): Promise<{ layer: PaintLayerInfo; source: PaintEffectSource }> {
+    this.requireIdle('adding a layer');
+    this.checkOpacity(options.opacity);
+    this.checkTime(options.time);
+    if (options.blend !== undefined && !isBlendMode(options.blend)) throw new PaintEditorError(`Unknown blend mode "${options.blend}". Call get_canvas_info for the blend modes.`);
+    if (options.aboveId !== undefined) this.requireLayer(options.aboveId);
+    const d = await this.describeEffect(effect, 'layer');
+    const values = this.effectValues(d, { ...d.defaults } as Record<string, EffectValue>, options.values);
+    const pixels = await this.renderEffectCanvas(d, values, options.time);
+    this.requireIdle('adding a layer');
+    const above = options.aboveId ?? this.doc.activeLayerId;
+    const loc = above ? findLayer(this.doc.layers, above) : null;
+    if (options.aboveId !== undefined && !loc) throw new PaintEditorError(`Layer "${options.aboveId}" was removed while the effect rendered.`);
+    const layer: PaintPixelLayer = { ...createPaintLayer(options.name?.trim() || d.name), surface: surfaceFromPixels(pixels, 4), opacity: options.opacity ?? 1, blend: options.blend ?? 'normal' };
+    const layers = insertLayer(this.doc.layers, layer, loc?.parent?.id ?? null, loc ? loc.index + 1 : undefined);
+    const source = this.sourceOf(d, values, options.time);
+    this.commit('Add effect layer', { ...this.doc, layers, activeLayerId: layer.id, effectLayers: { ...(this.doc.effectLayers ?? {}), [layer.id]: source } });
+    return { layer: this.describeLayer(layer), source };
+  }
+
+  /**
+   * Draws an effect layer again with new `values` (merged over its own; `null` resets one) or
+   * `time`, at the canvas size, replacing its pixels (paint on it is lost). One undo step; with
+   * `commitToHistory` false it joins the previous effect layer step (a slider drag).
+   */
+  async updateEffectLayer(layerId: string, changes: { values?: Record<string, EffectValue | null>; time?: number }, commitToHistory = true): Promise<PaintEffectSource> {
+    this.requireIdle('changing an effect layer');
+    const was = this.getEffectLayer(layerId);
+    if (!was) throw new PaintEditorError(`"${layerId}" is not an effect layer; add one with add_effect_layer.`);
+    this.checkTime(changes.time);
+    const l = this.effectTarget(layerId, 'draw the effect on');
+    const d = await this.describeEffect(was.effect, 'layer');
+    const values = this.effectValues(d, was.values, changes.values);
+    const time = changes.time ?? was.time ?? 0;
+    const pixels = await this.renderEffectCanvas(d, values, time);
+    const now = this.getLayer(l.id);
+    this.requireIdle('changing an effect layer');
+    if (!isPixelLayer(now)) throw new PaintEditorError(`Layer "${l.name}" was removed while the effect rendered.`);
+    const source = this.sourceOf(d, values, time);
+    this.commitOrAmend('Effect layer', { ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...now, surface: surfaceFromPixels(pixels, 4), offset: { x: 0, y: 0 } })), effectLayers: { ...(this.doc.effectLayers ?? {}), [l.id]: source } }, commitToHistory);
+    return source;
+  }
+
+  /** Turns an effect layer into a plain pixel layer, keeping its pixels (one undo step). */
+  rasterizeEffectLayer(layerId: string): PaintLayerInfo {
+    this.requireIdle('changing an effect layer');
+    if (!this.getEffectLayer(layerId)) throw new PaintEditorError(`"${layerId}" is not an effect layer; list_applied_effects lists them.`);
+    const { [layerId]: _gone, ...rest } = this.doc.effectLayers ?? {};
+    this.commit('Rasterize effect layer', { ...this.doc, effectLayers: rest });
+    return this.describeLayer(this.requireLayer(layerId));
+  }
+
+  /**
+   * Fills a layer with a provider generator, overlay or title effect: its pixels, rendered at the
+   * canvas size, are composited onto the layer's paint at `opacity` (only where it is already
+   * painted with `lockTransparency`, or when the layer's transparency is locked). One undo step.
+   */
+  async fillLayerWithEffect(effect: string, options: { layerId?: string; values?: Record<string, EffectValue>; opacity?: number; time?: number; lockTransparency?: boolean } = {}): Promise<{ layerId: string; source: PaintEffectSource }> {
+    this.requireIdle('filling');
+    this.checkOpacity(options.opacity);
+    this.checkTime(options.time);
+    const l = this.effectTarget(options.layerId, 'fill');
+    const d = await this.describeEffect(effect, 'fill');
+    const values = this.effectValues(d, { ...d.defaults } as Record<string, EffectValue>, options.values);
+    const pixels = await this.renderEffectCanvas(d, values, options.time);
+    const now = this.sameLayerAfterRender(l);
+    const rect = this.canvasRectOf(now);
+    const before = readRegion(now.surface, rect);
+    let after = overPixels(before, pixels.data, options.opacity ?? 1);
+    if (options.lockTransparency || isLayerLocked(now, 'transparency')) after = mixPixels(before, after, 1);
+    const surface = writeRegion(now.surface, rect, after);
+    this.commit('Effect fill', { ...this.doc, layers: mapLayer(this.doc.layers, now.id, () => ({ ...now, surface })) });
+    return { layerId: now.id, source: this.sourceOf(d, values, options.time) };
+  }
+
+  /**
+   * Runs a filter effect (light, glow, colour grade …) on a layer's dried paint and bakes it in, at
+   * `amount` strength (0..1, default 1). Transparent areas stay transparent; thick paint keeps its
+   * relief, and an effect with a `height` input gets the relief as a height map. Wet paint is
+   * refused (dry it first). One undo step.
+   */
+  async applyLightEffect(layerId: string | undefined, effect: string, options: { values?: Record<string, EffectValue>; amount?: number; time?: number } = {}): Promise<{ layerId: string; source: PaintEffectSource; amount: number }> {
+    this.requireIdle('applying an effect');
+    const amount = options.amount ?? 1;
+    if (!(amount >= 0 && amount <= 1)) throw new PaintEditorError(`amount ${options.amount} is out of range; use 0..1.`);
+    this.checkTime(options.time);
+    const l = this.effectTarget(layerId, 'light');
+    if (!contentBounds(l.surface)) throw new PaintEditorError(`Layer "${l.name}" has no paint to light; paint on it first, or add an effect layer (add_effect_layer).`);
+    const d = await this.describeEffect(effect, 'light');
+    const values = this.effectValues(d, { ...d.defaults } as Record<string, EffectValue>, options.values);
+    const rect = this.canvasRectOf(l);
+    const before = readRegion(l.surface, rect);
+    const inputs: Record<string, EffectPixels> = { source: { width: rect.width, height: rect.height, data: before } };
+    const heightInput = d.inputs.find((i) => i.kind === 'image' && /^(height|depth|relief)$/i.test(i.name));
+    const relief = this.doc.thick?.[l.id];
+    if (heightInput && relief) {
+      const h = readRegion(relief.height, rect);
+      const rgba = new Uint8ClampedArray(rect.width * rect.height * 4);
+      for (let i = 0; i < h.length; i++) rgba.set([h[i], h[i], h[i], 255], i * 4);
+      inputs[heightInput.name] = { width: rect.width, height: rect.height, data: rgba };
+    }
+    const sourceInput = d.inputs.find((i) => i.kind === 'image' && i.name !== heightInput?.name)?.name ?? 'source';
+    if (sourceInput !== 'source') {
+      inputs[sourceInput] = inputs.source;
+      delete inputs.source;
+    }
+    const out = await this.effectsRenderer.render(this.effects.require(), d.id, { width: rect.width, height: rect.height }, { time: options.time ?? 0, values, inputs });
+    const now = this.sameLayerAfterRender(l);
+    const surface = writeRegion(now.surface, rect, mixPixels(before, out.data, amount));
+    this.commit('Light effect', { ...this.doc, layers: mapLayer(this.doc.layers, now.id, () => ({ ...now, surface })) });
+    return { layerId: now.id, source: this.sourceOf(d, values, options.time), amount };
   }
 
   // --- Brushes -------------------------------------------------------------------
@@ -1654,6 +1956,7 @@ export class PaintEditorController {
   /** Stops the wet simulation's worker threads (call when the editor goes away). */
   dispose(): void {
     this.wet.destroy();
+    this.effectsRenderer.dispose();
   }
 
   /** Resolves when wet paint is between steps (edits, undo and exports can run). */
@@ -1865,6 +2168,15 @@ export class PaintEditorController {
     return [this.tracingNode(t)];
   }
 
+  /** The effect paper as a compositor layer (one object per effect paper, so caches hold). */
+  private paperEffectNode(p: PaintPaperEffect): ImageNode {
+    const c = this.paperEffectNodeCache;
+    if (c && c.image === p.image && c.opacity === p.opacity && c.blend === p.blend) return c;
+    const node: ImageNode = { type: 'image', id: PAPER_EFFECT_NODE_ID, name: 'Effect paper', visible: true, opacity: p.opacity, blend: p.blend, image: p.image, version: p.version };
+    this.paperEffectNodeCache = node;
+    return node;
+  }
+
   /** The tracing image resampled onto the canvas (cached until it or the canvas changes). */
   private tracingNode(t: TracingImage): ImageNode {
     const { width, height } = this.doc.canvas;
@@ -1917,6 +2229,7 @@ export class PaintEditorController {
       layers = picked.map((l) => ({ ...l, visible: true }) as PaintLayer);
     }
     const under: ViewLayer[] = options.paper === false ? [] : [paperNode(this.doc.paper, this.lighting)];
+    if (options.paper !== false && this.doc.paperEffect) under.push(this.paperEffectNode(this.doc.paperEffect));
     if (view) under.push(...this.underlayLayers());
     return [...under, ...layers];
   }
@@ -1999,6 +2312,11 @@ export class PaintEditorController {
     for (const [id, list] of Object.entries(this.doc.stickers ?? {})) if (list.length && findLayer(this.doc.layers, id)) stickers[id] = list.map((x) => ({ ...x }));
     if (Object.keys(stickers).length) ext.stickers = stickers;
     else delete ext.stickers;
+    const effectLayers = effectLayersToJSON(this.doc.effectLayers ?? {}, (id) => isPixelLayer(findLayer(this.doc.layers, id)?.layer));
+    if (effectLayers) ext.effectLayers = effectLayers;
+    else delete ext.effectLayers;
+    if (this.doc.paperEffect) ext.paperEffect = paperEffectToJSON(this.doc.paperEffect);
+    else delete ext.paperEffect;
     if (this.lighting.azimuth !== DEFAULT_LIGHTING.azimuth || this.lighting.elevation !== DEFAULT_LIGHTING.elevation || this.lighting.relief !== DEFAULT_LIGHTING.relief) ext.lighting = { ...this.lighting };
     else delete ext.lighting;
     return ext;
@@ -2017,6 +2335,23 @@ export class PaintEditorController {
         stickers[id] = ok.map((x) => ({ ...x }));
       }
       if (Object.keys(stickers).length) state = { ...state, stickers };
+    }
+    if (ext.effectLayers && typeof ext.effectLayers === 'object') {
+      const effectLayers: Record<string, PaintEffectSource> = {};
+      for (const [id, v] of Object.entries(ext.effectLayers as Record<string, unknown>)) {
+        if (!isPixelLayer(findLayer(state.layers, id)?.layer)) continue;
+        const source = readPaintEffectSource(v);
+        if (source) effectLayers[id] = source;
+        else problems.push(`The effect of layer "${id}" could not be read; it loads as a plain layer.`);
+      }
+      if (Object.keys(effectLayers).length) state = { ...state, effectLayers };
+    }
+    if (ext.paperEffect !== undefined) {
+      try {
+        state = { ...state, paperEffect: paperEffectFromJSON(ext.paperEffect, state.canvas.width, state.canvas.height) };
+      } catch (e) {
+        problems.push(`The effect paper could not be read (${(e as Error).message}); the plain paper shows.`);
+      }
     }
     const raw = ext.layerChannels;
     if (!raw || typeof raw !== 'object') return state;
@@ -2057,6 +2392,8 @@ export class PaintEditorController {
     delete this.extensions.layerChannels;
     delete this.extensions.lighting;
     delete this.extensions.stickers;
+    delete this.extensions.effectLayers;
+    delete this.extensions.paperEffect;
     this.viewCompositor.clear();
     this.emit();
     return loaded.problems;
