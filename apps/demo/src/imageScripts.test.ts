@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ToolRegistry } from "@pixerate/editor/agent";
-import { ImageEditorController, createImageEditorToolProvider, createOutlineTextShaper, type OutlineFontFace, type TypeLayer } from "@pixerate/editor/image-editor";
+import { createFakeEffectProvider } from "@pixerate/editor/effects";
+import { ImageEditorController, createImageEditorToolProvider, createImageEffectsToolProvider, type PixelLayer, createOutlineTextShaper, type OutlineFontFace, type TypeLayer } from "@pixerate/editor/image-editor";
 import { runAgentScript } from "./agentScript";
 import { IMAGE_SCRIPTS } from "./agentScripts";
 
@@ -15,6 +16,23 @@ const boxFont: OutlineFontFace = {
 };
 
 describe("image agent scripts", () => {
+  it("the effects script adds a gradient wash and a lower-third bar as effect layers", async () => {
+    const fake = { width: 64, height: 36, naturalWidth: 64, naturalHeight: 36, src: "data:fake" } as unknown as HTMLImageElement;
+    const c = new ImageEditorController({ image: fake, effects: createFakeEffectProvider() });
+    const reg = new ToolRegistry();
+    reg.register(createImageEditorToolProvider(c, { id: "image", namespace: "image" }));
+    reg.register(createImageEffectsToolProvider(c, { id: "image-effects", namespace: "imagefx" }));
+    const script = IMAGE_SCRIPTS.find((s) => s.id === "image-effects")!;
+    const steps = script.steps.filter((s) => s.tool !== "image__render_preview");
+    const { ok } = await runAgentScript(reg, { ...script, steps }, { wait: () => Promise.resolve() });
+    expect(ok).toBe(true);
+    const layers = (c.getLayers() as PixelLayer[]).filter((l) => l.generator);
+    expect(layers.map((l) => [l.name, l.generator?.effect, l.blend])).toEqual([
+      ["Sunset wash", "fake.gradient", "soft-light"],
+      ["Lower third", "fake.bar", "normal"],
+    ]);
+  });
+
   it("the poster script adds a banner, a badge and a styled headline with the shape and type tools", async () => {
     const fake = { width: 320, height: 200, naturalWidth: 320, naturalHeight: 200, src: "data:fake" } as unknown as HTMLImageElement;
     const c = new ImageEditorController({ image: fake, textShaper: createOutlineTextShaper([boxFont]) });

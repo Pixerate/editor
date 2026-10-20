@@ -269,7 +269,7 @@ export function smartFilterRows(layer: ImageLayer): SmartFilterRow[] {
     filter: f,
     index,
     drawn: f.kind !== 'psd',
-    label: f.kind === 'psd' ? f.name.replace(/&/g, '').replace(/\.\.\.$/, '') : f.kind === 'blur' ? `Blur (${f.radius} px)` : 'Develop',
+    label: f.kind === 'psd' ? f.name.replace(/&/g, '').replace(/\.\.\.$/, '') : f.kind === 'effect' ? (f.name ?? f.effect) : f.kind === 'blur' ? `Blur (${f.radius} px)` : 'Develop',
   }));
   return rows.reverse();
 }

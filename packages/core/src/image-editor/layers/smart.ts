@@ -30,6 +30,7 @@ import { isValidWarpMesh, mapWarpMeshPoints } from '../../geom/warp';
 import type { Quad, WarpMesh } from '../../geom/types';
 import { hasWarp, transformHomography, transformMap, transformedBox, type FreeTransformGeometry } from '../transform';
 import type { CropBox } from '../types';
+import type { EffectValue } from '../../effects/types';
 import { LayerCompositor, runLayerFilters } from './compositor';
 import {
   findLayer,
@@ -45,6 +46,7 @@ import {
   type SmartContents,
   type SmartDocument,
   type SmartFilter,
+  type EffectSmartFilter,
   type SmartFilterStack,
   type SmartObjectLayer,
   type ShapeLayer,
@@ -70,7 +72,33 @@ export const SMART_RENDER_MARGIN = MAX_EFFECT_REACH;
 export interface SmartCanvas {
   width: number;
   height: number;
+  /** Where provider effect smart filters get their results (the controller's effects engine); without it they pass pixels through. */
+  effects?: SmartEffectResolver;
 }
+
+/**
+ * Runs provider effect smart filters for `applySmartFilters`, which is synchronous: a result is
+ * returned when it is ready, else `null` (the filter passes the pixels through for now) and, when
+ * `pending` is set, the surface is marked incomplete (`isSmartSurfaceIncomplete`) so it is
+ * rendered again once the result lands.
+ */
+export interface SmartEffectResolver {
+  /** Changes whenever results may differ (a new provider): part of the cache key. */
+  readonly token: number;
+  resolve(filter: EffectSmartFilter, input: Uint8ClampedArray, width: number, height: number, key: string): { result: Uint8ClampedArray | null; pending: boolean };
+}
+
+const incompleteSurfaces = new WeakSet<PixelSurface>();
+/** True for a smart object surface rendered while one of its effect smart filters was still rendering. */
+export const isSmartSurfaceIncomplete = (surface: PixelSurface): boolean => incompleteSurfaces.has(surface);
+
+const surfaceIds = new WeakMap<PixelSurface, number>();
+let nextSurfaceId = 0;
+const surfaceId = (s: PixelSurface) => {
+  let id = surfaceIds.get(s);
+  if (id === undefined) surfaceIds.set(s, (id = ++nextSurfaceId));
+  return id;
+};
 
 /** A fresh contents id (independent contents). */
 export function newContentsId(): string {
@@ -262,10 +290,22 @@ export function placeContents(layer: Pick<SmartObjectLayer, 'contents' | 'placem
   return out;
 }
 
-/** The filters of a stack that change pixels (the stack enabled, each filter active, a modelled kind). */
+/** The filters of a stack that change pixels (the stack enabled, each filter active, a modelled kind). Provider effects are listed by `activeEffectSmartFilters`. */
 export function activeSmartFilters(stack: SmartFilterStack | undefined): Array<SmartFilter & LayerFilter> {
   if (!stack?.enabled) return [];
-  return stack.filters.filter((f): f is SmartFilter & LayerFilter => f.kind !== 'psd' && isActiveFilter(f as LayerFilter) && f.opacity > 0);
+  return stack.filters.filter((f): f is SmartFilter & LayerFilter => f.kind !== 'psd' && f.kind !== 'effect' && isActiveFilter(f as LayerFilter) && f.opacity > 0);
+}
+
+/** The enabled provider effect smart filters of a stack. */
+export function activeEffectSmartFilters(stack: SmartFilterStack | undefined): Array<SmartFilter & EffectSmartFilter> {
+  if (!stack?.enabled) return [];
+  return stack.filters.filter((f): f is SmartFilter & EffectSmartFilter => f.kind === 'effect' && f.enabled && f.opacity > 0);
+}
+
+/** Every filter a stack runs, in order: modelled filters and provider effects. */
+function runnableSmartFilters(stack: SmartFilterStack | undefined): Array<SmartFilter & (LayerFilter | EffectSmartFilter)> {
+  if (!stack?.enabled) return [];
+  return stack.filters.filter((f): f is SmartFilter & (LayerFilter | EffectSmartFilter) => f.opacity > 0 && (f.kind === 'effect' ? f.enabled : f.kind !== 'psd' && isActiveFilter(f as LayerFilter)));
 }
 
 /** A filter mask's coverage over the canvas (0..1), after density and feather; `null` reveals all. */
@@ -295,18 +335,34 @@ export function filterMaskCoverage(mask: RasterMask | undefined, canvas: SmartCa
  * result with the unfiltered contents. Returns `placed` itself when no filter is active.
  */
 export function applySmartFilters(placed: PixelSurface, stack: SmartFilterStack | undefined, canvas: SmartCanvas): PixelSurface {
-  const active = activeSmartFilters(stack);
+  const active = runnableSmartFilters(stack);
   if (!active.length || !(canvas.width > 0 && canvas.height > 0)) return placed;
   const W = canvas.width;
   const H = canvas.height;
-  const key = JSON.stringify([W, H, active.map((f) => ({ ...f, id: undefined }))]);
+  const token = active.some((f) => f.kind === 'effect') ? (canvas.effects?.token ?? -1) : 0;
+  const key = JSON.stringify([W, H, token, active.map((f) => ({ ...f, id: undefined }))]);
   let entry = filteredCache.get(placed);
+  let incomplete = false;
   if (!entry || entry.key !== key) {
     const base = readRegion(placed, { x: 0, y: 0, width: W, height: H });
     let acc = new Uint8ClampedArray(base);
-    for (const f of active) {
-      const out = new Uint8ClampedArray(acc);
-      runLayerFilters(out, W, H, [f]);
+    for (const [i, f] of active.entries()) {
+      let out: Uint8ClampedArray<ArrayBuffer>;
+      if (f.kind === 'effect') {
+        // An effect above one still rendering would get the wrong input: wait for that one first.
+        if (incomplete) continue;
+        // The input is the placed contents through the filters below: key it by those.
+        const inputKey = JSON.stringify([surfaceId(placed), W, H, active.slice(0, i + 1).map((x) => ({ ...x, id: undefined, blend: x === f ? undefined : x.blend, opacity: x === f ? undefined : x.opacity }))]);
+        const r = canvas.effects?.resolve(f, acc, W, H, inputKey);
+        if (!r?.result) {
+          if (r?.pending) incomplete = true;
+          continue;
+        }
+        out = new Uint8ClampedArray(r.result);
+      } else {
+        out = new Uint8ClampedArray(acc);
+        runLayerFilters(out, W, H, [f]);
+      }
       if (f.blend === 'normal') {
         if (f.opacity >= 1) acc = out;
         else lerpInto(acc, out, f.opacity, null);
@@ -315,7 +371,8 @@ export function applySmartFilters(placed: PixelSurface, stack: SmartFilterStack 
       }
     }
     entry = { key, base, filtered: acc };
-    filteredCache.set(placed, entry);
+    // A result still rendering is not cached, so the next render asks for it again.
+    if (!incomplete) filteredCache.set(placed, entry);
   }
   const cov = filterMaskCoverage(stack!.mask, canvas);
   let result = entry.filtered;
@@ -323,7 +380,9 @@ export function applySmartFilters(placed: PixelSurface, stack: SmartFilterStack 
     result = new Uint8ClampedArray(entry.base);
     lerpInto(result, entry.filtered, 1, cov);
   }
-  return surfaceFromPixels({ width: W, height: H, data: result }, 4, 0, 0);
+  const out = surfaceFromPixels({ width: W, height: H, data: result }, 4, 0, 0);
+  if (incomplete) incompleteSurfaces.add(out);
+  return out;
 }
 
 /** `dst = lerp(dst, src, k · coverage)` per channel. */
@@ -448,7 +507,7 @@ export function offsetSmartObject(layers: readonly ImageLayer[], id: string, dx:
   if (layer.mask) next.mask = moveMask(layer.mask);
   if (layer.smartFilters?.mask) next.smartFilters = { ...layer.smartFilters, mask: moveMask(layer.smartFilters.mask) };
   // Shifting is exact unless a filter reads across the canvas edge, or the render was cut at its margin.
-  const spatial = activeSmartFilters(layer.smartFilters).some((f) => f.kind === 'blur');
+  const spatial = activeSmartFilters(layer.smartFilters).some((f) => f.kind === 'blur') || activeEffectSmartFilters(layer.smartFilters).length > 0;
   const b = contentBounds(layer.surface);
   const m = SMART_RENDER_MARGIN;
   const cut = b && (b.x <= -m || b.y <= -m || b.x + b.width >= canvas.width + m || b.y + b.height >= canvas.height + m);
@@ -768,12 +827,28 @@ function refitPlacement(layer: SmartObjectLayer, contents: Pick<SmartContents, '
 /** A clean smart filter from loose input: a `develop` or `blur` filter plus blend and opacity. */
 export function normalizeSmartFilter(raw: Record<string, unknown> & { kind: string }, id = newLayerId('flt')): SmartFilter {
   if (raw.kind === 'psd') fail('Photoshop filters can only come from a PSD; add develop or blur.');
-  const base = normalizeFilter(raw as Partial<LayerFilter> & { kind: LayerFilter['kind'] }, id);
+  const base = raw.kind === 'effect' ? normalizeEffectSmartFilter(raw, id) : normalizeFilter(raw as Partial<LayerFilter> & { kind: LayerFilter['kind'] }, id);
   const blend = raw.blend ?? 'normal';
   if (!isBlendMode(blend) || blend === 'pigment') fail(`Unknown blend mode "${String(blend)}" for a smart filter.`);
   const opacity = raw.opacity ?? 1;
   if (!(typeof opacity === 'number' && opacity >= 0 && opacity <= 1)) fail('opacity must be a number from 0 to 1.');
   return { ...base, blend: blend as BlendMode, opacity: opacity as number };
+}
+
+/** An effect smart filter's own fields; its values are checked against the provider by the controller. */
+function normalizeEffectSmartFilter(raw: Record<string, unknown>, id: string): EffectSmartFilter {
+  if (typeof raw.effect !== 'string' || !raw.effect) fail('An effect smart filter needs an "effect" id from search_effects.');
+  const values = raw.values ?? {};
+  if (typeof values !== 'object' || values === null || Array.isArray(values)) fail('"values" must be an object of control values.');
+  return {
+    id,
+    kind: 'effect',
+    enabled: raw.enabled !== false,
+    effect: raw.effect as string,
+    ...(typeof raw.provider === 'string' ? { provider: raw.provider } : {}),
+    ...(typeof raw.name === 'string' ? { name: raw.name } : {}),
+    values: { ...(values as Record<string, EffectValue>) }
+  };
 }
 
 function withStack(layer: SmartObjectLayer, stack: SmartFilterStack | undefined, canvas: SmartCanvas): SmartObjectLayer {

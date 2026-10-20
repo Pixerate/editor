@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/image-editor] An Effect Smart Filter Above One Still Rendering Must Not Be Requested
+
+- **Issue / Symptom**: With two provider effect smart filters stacked, the upper one sometimes showed its result as if the lower one was not there, even after both had rendered.
+- **Root Cause**: `applySmartFilters` is synchronous. A missing provider result passes the pixels through while it renders. Results are cached by a key made from the placed contents and the filters below. While the lower filter was still rendering, the upper filter was requested with the unfiltered input, under the key that means "after the lower filter". That wrong result was then served from the cache.
+- **Solution / Workaround**: Once a filter in the stack is pending, the effect filters above it are not requested; they pass through until the next render. The surface is marked incomplete, so the controller renders it again as each result lands (`refreshEffectSurfaces`). The cache key also carries the engine's `token`, so a new or removed provider never reuses old results.
+
 ### [core/video-editor] Provider Effects Render Asynchronously, but the Canvas Draws Synchronously
 
 - **Issue / Symptom**: An effects provider's `render` returns a promise, while `drawVideoFrame` draws a whole frame synchronously. Awaiting effects inside a draw would stall playback. Drawing the playhead's exact time while playing also missed the effect cache on every animation frame, and a layer whose media was still loading got cached with the wrong picture.

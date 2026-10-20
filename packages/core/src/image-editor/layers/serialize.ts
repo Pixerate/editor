@@ -11,12 +11,15 @@ import { normalizeAdjustmentLayer } from '../adjustment-layers';
 import { isBlendMode, normalizeBlendMode } from '../blend';
 import { normalizeProcessVersion } from '../color';
 import type { Annotation, CropBox, DepthMaskOptions, ImageTransform } from '../types';
+import type { EffectValue } from '../../effects/types';
 import type { SerializedSelection } from '../selection/mask';
 import { DEFAULT_DEPTH_MASK_VALUES } from './defaults';
 import type { SerializedColorMode, SerializedColorProfile } from '../color-management';
 import {
   newLayerId,
   type PsdSmartFilter,
+  type EffectSmartFilter,
+  type ImageEffectGenerator,
   type SmartContents,
   type SmartFilter,
   type SmartFilterStack,
@@ -101,6 +104,8 @@ export interface SerializedPixelLayer extends SerializedLayerBase {
   filters?: LayerFilter[];
   /** `'document'`: the pixels are the document's source image (no asset is stored). */
   source?: 'document';
+  /** An effect layer's provider effect (its pixels are stored as usual). */
+  generator?: ImageEffectGenerator;
   /** 16- or 32-bit samples of the pixels (the PNG asset is their 8-bit rendering), see `raster/deep`. */
   deep?: SerializedDeepPixels;
 }
@@ -137,7 +142,7 @@ export interface SerializedAnnotationLayer extends SerializedLayerBase {
 }
 
 /** A smart filter as stored (a Photoshop filter keeps its descriptor as base64). */
-export type SerializedSmartFilter = (LayerFilter | (Omit<PsdSmartFilter, 'data'> & { data: string })) & { blend: string; opacity: number };
+export type SerializedSmartFilter = (LayerFilter | EffectSmartFilter | (Omit<PsdSmartFilter, 'data'> & { data: string })) & { blend: string; opacity: number };
 
 export interface SerializedSmartObjectLayer extends SerializedLayerBase {
   type: 'smart';
@@ -416,6 +421,7 @@ export function serializeLayer(layer: ImageLayer, ctx: SerializeContext): Serial
       }
       if (layer.fillOpacity !== undefined && layer.fillOpacity !== 1) out.fillOpacity = layer.fillOpacity;
       if (layer.filters?.length) out.filters = JSON.parse(JSON.stringify(layer.filters));
+      if (layer.generator) out.generator = JSON.parse(JSON.stringify(layer.generator));
       if (layer.source !== 'document') {
         const deep = encodeDeepSurface(layer.surface);
         if (deep) out.deep = deep;
@@ -892,6 +898,8 @@ export function deserializeLayer(raw: unknown, ctx: DeserializeContext): ImageLa
       if (typeof r.fillOpacity === 'number' && r.fillOpacity !== 1) layer.fillOpacity = num(r.fillOpacity, 0, 1, 1);
       const filters = readFilters(r.filters);
       if (filters) layer.filters = filters;
+      const generator = readEffectRef(r.generator);
+      if (generator) layer.generator = { ...generator, ...(typeof r.generator.time === 'number' && r.generator.time > 0 ? { time: r.generator.time } : {}) };
       return layer;
     }
     case 'adjustment': {
@@ -982,6 +990,17 @@ function readContents(id: string, ctx: DeserializeContext): SmartContents | null
   return c;
 }
 
+const isEffectValue = (x: unknown) =>
+  typeof x === 'string' || typeof x === 'boolean' || (typeof x === 'number' && Number.isFinite(x)) || (Array.isArray(x) && x.every((n) => typeof n === 'number' && Number.isFinite(n)));
+
+/** `{ effect, provider, name, values }` of an effect smart filter or effect layer, or `undefined`. */
+function readEffectRef(raw: any): { effect: string; provider?: string; name?: string; values: Record<string, EffectValue> } | undefined {
+  if (!raw || typeof raw !== 'object' || typeof raw.effect !== 'string' || !raw.effect) return undefined;
+  const values: Record<string, EffectValue> = {};
+  if (raw.values && typeof raw.values === 'object') for (const [k, v] of Object.entries(raw.values)) if (isEffectValue(v)) values[k] = Array.isArray(v) ? [...v] : (v as EffectValue);
+  return { effect: raw.effect, ...(typeof raw.provider === 'string' ? { provider: raw.provider } : {}), ...(typeof raw.name === 'string' ? { name: raw.name } : {}), values };
+}
+
 function readSmartFilters(raw: unknown, ctx: DeserializeContext, what: string): SmartFilterStack | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
   const r = raw as Record<string, any>;
@@ -1002,6 +1021,10 @@ function readSmartFilters(raw: unknown, ctx: DeserializeContext, what: string): 
     } else if (f.kind === 'develop' || f.kind === 'blur') {
       const base = plain[k++];
       if (base) filters.push({ ...base, blend, opacity });
+    } else if (f.kind === 'effect') {
+      const ref = readEffectRef(f);
+      if (ref) filters.push({ id: typeof f.id === 'string' ? f.id : newLayerId('flt'), kind: 'effect', enabled: f.enabled !== false, ...ref, blend, opacity });
+      else ctx.problems.push(`${what}: an effect smart filter without an effect id was left out`);
     }
   }
   const stack: SmartFilterStack = { enabled: r.enabled !== false, filters };

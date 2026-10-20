@@ -477,6 +477,8 @@ export interface ExportOptions {
   layerIds?: string[];
 }
 
+import type { EffectProvider } from '../effects/types';
+
 export interface ImageEditorOptions {
   /**
    * What lays out and draws type layers. Default: the browser's fonts through Canvas 2D
@@ -496,6 +498,13 @@ export interface ImageEditorOptions {
   maxHistoryBytes?: number;
   /** Viewport fit mode: 'contain' scales to full viewport bounds; 'margin' scales to 85% with 1.0 cap (default). */
   fit?: ImageEditorFit;
+  /**
+   * An effects provider (see `@pixerate/editor/effects`) for effect smart filters and effect
+   * layers. Optional: without one the editor behaves as before; documents keep their effects
+   * (effect filters pass pixels through, effect layers keep their last pixels). Change it later
+   * with `setEffectsProvider`.
+   */
+  effects?: EffectProvider | null;
 }
 
 export interface InpaintOptions {
