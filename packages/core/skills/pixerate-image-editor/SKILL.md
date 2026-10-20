@@ -183,6 +183,10 @@ drawing or editing either.
    false` and `cleanEachStroke: false`, start with `load_mixer_brush`, read the brush with
    `get_mixer_brush` when unsure, and reset it with `clean_mixer_brush`.
 
+### Colour management
+
+The working space, Assign / Convert to Profile with intents, soft proofing with a gamut warning
+and colour conversions for print briefs: read [references/color-management.md](references/color-management.md).
 ### Retouching
 
 Clone Stamp, Healing Brush, Spot Healing, Smudge, Dodge, Burn and Sponge: retouch on an empty
@@ -192,42 +196,9 @@ flaws and `clone_stamp` to copy exactly, and keep strokes short and soft. Read
 
 ### Photoshop files
 
-1. **Inspect before opening.** `inspect_psd` lists every layer with the type it would become and
-   a status: `mapped` (held exactly), `approximated` (type, fill and shape layers come in as their
-   stored pixels; linked smart objects as their stored pixels; Photoshop smart filters other than
-   Box Blur are kept but not drawn; Dissolve becomes Normal; effects with gradient midpoints or
-   smoothness, noise gradients, glow jitter, legacy bevels or patterns missing from the file are
-   drawn approximately) or
-   `dropped` (Brightness/Contrast, Exposure, Channel Mixer, Gradient Map, Selective Color and
-   Color Lookup adjustments). Tell the user what would be lost before `import_psd` when anything
-   is not `mapped`.
-2. **Layer effects come in live**: every Photoshop layer style maps to an effect you can read
-   with `list_layer_effects` and change as usual, with the file's patterns (listed in
-   `list_layer_effects.patterns`) and its global light. An effects block the editor cannot read
-   is kept and written back by `export_psd`, but not drawn; the warnings say so.
-3. **`import_psd` replaces the document** (one undo step). 16- and 32-bit files keep their
-   depth (`get_image_info.bitDepth`); CMYK, Lab, grayscale and indexed files are converted to RGB,
-   and ICC profiles are ignored; the warnings say so. `export_psd` writes at the document's depth.
-   Change it with `set_bit_depth`: 16-bit for smooth gradients and strong grades, 32-bit for
-   linear-light HDR (layers blend in linear light there). Adjustment layers, blend modes, merges
-   and the exported merged image keep the depth; layer effects, layer filters, painting and
-   transforms still work in 8 bits on what they change, so grade a deep file with adjustment
-   layers rather than repainting it when the depth matters. Afterwards work with `list_layers` as usual: there is no Background source image, every
-   pixel comes from the layers.
-4. **Smart objects come in live**: embedded contents (a PSB opens as a nested document you can
-   edit with `edit_smart_object_contents`, a PNG as raster contents), the placement and warp, the
-   smart filters and the filter mask; the layer shows Photoshop's own pixels until you change it.
-   JPEG, TIFF and SVG contents are decoded only in a browser, so elsewhere such a smart object
-   cannot be transformed (the error says so). Photoshop filters we do not model stay in the list
-   (kind `psd`): hide, reorder, re-blend or remove them, and `export_psd` writes them back.
-5. **`export_psd` writes the stack as it is**, in the source frame: crop and rotation are not
-   applied, layer filters and depth masks are baked, annotation layers are rasterized (only in
-   a browser). Effects are written as Photoshop layer styles: an effects block opened from a PSD
-   goes back byte for byte while its effects are unchanged, and the patterns effects use (the
-   built-in ones too) are embedded. Only the first outer glow, inner glow, bevel, satin and
-   pattern overlay of a layer fit in a PSD. Smart objects are written as smart objects (an
-   unchanged one byte for byte); a Develop smart filter has no Photoshop filter and is left out of
-   the list (the pixels still show it). Read its `warnings` and pass them on. The file comes back as base64 (`data`).
+`inspect_psd` before `import_psd`, then work with `list_layers`; `export_psd` writes the stack
+in the source frame at the document's bit depth, colour mode and profile. Read
+[references/photoshop-files.md](references/photoshop-files.md) before opening or saving a PSD.
 
 ## Best practices
 
@@ -403,6 +374,11 @@ flaws and `clone_stamp` to copy exactly, and keep strokes short and soft. Read
 | `get_mixer_brush` | Read-only. The Mixer Brush settings and what it carries (`reservoir` #rrggbb or null, `amount` left 0..1, `pickup` #rrggbb or null). Call it before a mixer stroke with `loadEachStroke: false`. |
 | `load_mixer_brush` | Fill the Mixer Brush reservoir with `color` (default the foreground), amount 1; keeps the pickup. View state, not an undo step. Use before strokes with `loadEachStroke: false`. Returns the load. |
 | `clean_mixer_brush` | Empty the Mixer Brush pickup well (`emptyReservoir: true` also drops the loaded paint, so it only smears). View state, not an undo step. Returns the load. |
+| `get_color_profile` | Read-only. The document's profile (`name`, `builtin` id or null, `colorSpace`, `srgb`), the Proof Setup or null, and the built-in profiles. |
+| `assign_profile` | Make the document's numbers mean colours in `profile` (built-in id or `icc:<base64>`; RGB only). The look changes, pixels do not. One undo step. Returns the profile. |
+| `convert_to_profile` | Convert pixel layers into `profile` keeping their look (`intent`, `bpc`), then assign it. One undo step. Returns the profile, `convertedLayerIds` and `unconvertedLayerIds` (shape, type, effects, smart objects). |
+| `set_proof_setup` | Soft-proof the viewport through `profile` (`intent`, `bpc`, `simulatePaper`, `gamutWarning`), or `off: true`. View state. Returns the setup. |
+| `convert_colors` | Read-only. `colors` #rrggbb from the document's profile (or `from`) to `to`: channel `values` 0..1 (CMYK, RGB, grey), `hex` for RGB, and `lab`. |
 | `clone_stamp` | Copy pixels from the clone source along `points`: each point paints what is at point + offset (source − first point, whole px). `source` `{x, y}` sets the source for this stroke (else the current one, see `set_clone_source`); `aligned` keeps the offset for later strokes; `sample` current \| current-below \| all; `brush` `{size, hardness, spacing, opacity, flow, smoothing, pressureSize, pressureOpacity}`; `layerId`, `channel` (a mask clones from itself). One undo step. Returns the layer, channel, `bounds`, dabs and `clone` `{offset, source, aligned}`. Call `set_clone_source` or pass `source` first. |
 | `heal_brush` | As `clone_stamp`, then blends the cloned texture into the colour and light around the stroke (Poisson seamless cloning, when the stroke ends). Use for blemishes, wrinkles, dust and seams where the surroundings have the right tone. Returns as `clone_stamp`. |
 | `spot_heal` | Remove what `points` cover with no source: `type` proximity-match (default: copies the best matching nearby patch, then heals it in) or smooth (fills from the edges). `sample`, `brush`, `layerId`, `channel`. One undo step. Returns the layer, channel, `bounds`, dabs and `spotHeal` `{offset}` (null for a smooth fill). |

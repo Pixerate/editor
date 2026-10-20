@@ -143,6 +143,8 @@ export interface PsdImportResult {
   /** The global light (image resources 1037 and 1049), when the file has one. */
   globalLight?: GlobalLight;
   info: { psb: boolean; depth: number; colorMode: string; channels: number };
+  /** The embedded ICC profile (image resource 1039), raw bytes, when the file has one. */
+  iccProfile?: Uint8Array;
   /** The bits per channel the layers keep: 16 or 32 for such files (not indexed or bitmap), else 8. */
   bitDepth: 8 | 16 | 32;
 }
@@ -774,7 +776,6 @@ export function psdToLayers(file: PsdFile, options: PsdImportOptions = {}): PsdI
   } else if (mode !== 'rgb' || (header.depth !== 8 && header.depth !== 16 && header.depth !== 32)) {
     warn.extra.push(`The file is ${header.depth}-bit ${mode}; it was converted to 8-bit RGB.`);
   }
-  if (resource(file, 1039)) warn.extra.push('The embedded ICC profile is ignored; colours are read as sRGB.');
 
   let layers: ImageLayer[] = [];
   if (file.layers.length) {
@@ -812,6 +813,7 @@ export function psdToLayers(file: PsdFile, options: PsdImportOptions = {}): PsdI
       ? { globalLight: { angle: Math.max(-360, Math.min(360, angle ?? 120)), altitude: Math.max(0, Math.min(90, altitude ?? 30)) } }
       : {}),
     info: { psb: header.psb, depth: header.depth, colorMode: mode, channels: header.channels },
+    ...(resource(file, 1039) ? { iccProfile: resource(file, 1039)!.slice() } : {}),
     bitDepth: (header.depth === 16 || header.depth === 32) && header.colorMode !== MODE_INDEXED && header.colorMode !== MODE_BITMAP ? header.depth : 8,
   };
 }

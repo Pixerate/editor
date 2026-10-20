@@ -42,6 +42,7 @@ import { Histogram } from './Histogram';
 import { AdjustmentLayersPanel } from './AdjustmentLayersPanel';
 import { LayersPanel } from './LayersPanel';
 import { BrushOptionsBar } from './BrushOptionsBar';
+import { ColorProfilePanel } from './ColorProfilePanel';
 import { SelectionOptionsBar } from './SelectionOptionsBar';
 import { RefineEdgePanel } from './RefineEdgePanel';
 import { FreeTransformOptionsBar } from './FreeTransformOptionsBar';
@@ -1337,6 +1338,8 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                 Free Transform
               </button>
               <LayersPanel controller={controller} />
+              <span className="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">Colour</span>
+              <ColorProfilePanel controller={controller} />
             </div>
           )}
 
