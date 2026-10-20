@@ -28,6 +28,7 @@ import {
 	createHistoryCommands,
 	createArrangeCommands,
 	createShapeCommands,
+	createDrawCommands,
 	createComponentCommands,
 	createSpreadsheetCommands,
 	createCanvasAnimationCommands,
@@ -110,6 +111,7 @@ function expectedBySkill(): Record<string, string[]> {
 			...toolNames(createCanvasCaptureToolProvider({ element: null, getViewport: () => ({ x: 0, y: 0, zoom: 1 }), getNodes: () => [] })),
 			...commandIds(createArrangeCommands(stub)),
 			...commandIds(createShapeCommands(stub)),
+			...commandIds(createDrawCommands(stub)),
 			...commandIds(createComponentCommands(stub)),
 			...commandIds(createCanvasAnimationCommands(stub))
 		],
@@ -149,6 +151,7 @@ const FACTORIES: Record<string, string> = {
 	createCanvasComponentToolProvider: 'pixerate-canvas',
 	createArrangeCommands: 'pixerate-canvas',
 	createShapeCommands: 'pixerate-canvas',
+	createDrawCommands: 'pixerate-canvas',
 	createComponentCommands: 'pixerate-canvas',
 	createCanvasAnimationCommands: 'pixerate-canvas',
 	createVectorCommands: 'pixerate-vector',

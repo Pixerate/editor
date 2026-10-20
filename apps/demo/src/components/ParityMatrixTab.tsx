@@ -48,6 +48,7 @@ const PRODUCTIVITY_FEATURES: ParityRow[] = [
   row("Canvas Components & Instances (variants, properties, overrides)", "syncCanvasComponents & createCanvasComponentsController", "useCanvasComponents, <CanvasComponentsPanel>, <CanvasInstanceInspector>", "createCanvasComponents, <CanvasComponentsPanel>, <CanvasInstanceInspector>", "Overrides survive main edits; undoable; commands & agent tools"),
   row("Canvas Variant Editing (add / remove / rename variants)", "addCanvasVariant & removeCanvasVariant", "<CanvasComponentsPanel components>", "<CanvasComponentsPanel components>", "Duplicates refused; instances re-pointed; undoable"),
   row("Canvas Bézier Curve Fitting (boolean results, freehand)", "fitCubics & fitPathData", "Via core", "Via core", "Corners kept; error within tolerance"),
+  row("Canvas Brushed Freehand Strokes (dry paint brushes, pen pressure / tilt)", "FreehandStrokeStyle.brush & renderShapeBrushstroke", "<ShapeNode>, <ShapeNodeZoomProvider> & useCanvasBrushes", "<ShapeNode>, setShapeNodeZoom & createCanvasBrushes", "Paint engine loads lazily; agent canvas.drawFreehand"),
   row("Canvas Scenes (saved viewports, next / previous)", "CanvasScenesStore", "useCanvasScenes", "createCanvasScenes", "JSON persistence, reorder and rename"),
   row("Canvas Connector Snapping to Shape Sides", true, "Via core", "Via core", "findConnectorSnap, nearestHandlePositions"),
   row("Canvas Arrange Keyboard Shortcuts", "matchArrangeShortcut", "useCanvasArrangeShortcuts", "createCanvasArrangeShortcuts", "Matched by KeyboardEvent.code"),

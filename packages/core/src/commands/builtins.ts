@@ -2,6 +2,7 @@ import type { HistoryState } from '../history/types.js';
 import type { CanvasArrangeAction } from '../canvas/arrangeShortcuts.js';
 import type { AlignEdge, DistributeAxis, DistributeMode, ZOrderOperation } from '../canvas/arrange.js';
 import { DEFAULT_ARRANGE_SHORTCUTS } from '../canvas/arrangeShortcuts.js';
+import type { CanvasBrush, CanvasBrushPreset } from '../canvas/brushTypes.js';
 import type { CommandParamsSchema, CommandSpec } from './registry.js';
 import { ShortcutMap, type ShortcutBinding } from './shortcuts.js';
 import type { KeyboardEventLike, Platform } from './chords.js';
@@ -316,6 +317,149 @@ export function createShapeCommands(controller: ShapeCommandTarget, options: Sha
 					...(params?.cap ? { cap: params.cap } : {}),
 					...(params?.miterLimit !== undefined ? { miterLimit: params.miterLimit } : {})
 				})
+		}
+	];
+}
+
+// ---------------------------------------------------------------------------
+// Canvas freehand drawing
+// ---------------------------------------------------------------------------
+
+/** Draw surface of the freehand draw controller (`createCanvasDrawController` satisfies it). */
+export interface DrawCommandTarget {
+	drawStroke(input: {
+		points: readonly (readonly [number, number])[];
+		tool?: 'pen' | 'highlighter';
+		style?: { color?: string; width?: number; opacity?: number; brush?: CanvasBrush };
+		pressure?: readonly number[];
+		tiltX?: readonly number[];
+		tiltY?: readonly number[];
+		streamline?: boolean;
+	}): Promise<{ id: string; bounds: { x: number; y: number; width: number; height: number }; brush?: unknown }>;
+	/** The dry paint presets a stroke can be brushed with (loads the paint engine). */
+	listBrushes(): Promise<CanvasBrushPreset[]>;
+}
+
+export interface DrawCommandOptions {
+	/** Id prefix (default `canvas.`). */
+	prefix?: string;
+	group?: string;
+	/** Scope of the commands (default `canvas`). Pass `null` for global. */
+	scope?: string | null;
+	/** Refuse drawing with this reason (e.g. a read-only canvas); `canvas.listBrushes` still runs. */
+	readOnlyReason?: () => string | null | undefined;
+}
+
+const PROFILE_PARAM = (what: string, lo: number, hi: number) =>
+	({
+		type: 'array',
+		minItems: 1,
+		maxItems: 256,
+		items: { type: 'number', minimum: lo, maximum: hi },
+		description: `${what} spread evenly along the stroke's length: the first value at the start, the last at the end, linearly in between; one value is constant. Only with a brush.`
+	}) as const;
+
+const BRUSH_SETTINGS_PARAM = {
+	type: 'object',
+	additionalProperties: false,
+	description: 'Tip settings instead of a preset.',
+	properties: {
+		size: { type: 'number', minimum: 1, maximum: 2500, description: 'Brush diameter in canvas units (default: the stroke width).' },
+		hardness: { type: 'number', minimum: 0, maximum: 1, description: 'Edge hardness, 0 soft to 1 hard (default 1).' },
+		spacing: { type: 'number', minimum: 0.01, maximum: 10, description: 'Dab spacing as a fraction of the diameter (default 0.1).' },
+		angle: { type: 'number', minimum: -360, maximum: 360, description: 'Tip angle in degrees (default 0).' },
+		roundness: { type: 'number', minimum: 0.01, maximum: 1, description: 'Tip roundness, 1 round to 0.01 flat (default 1).' },
+		opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Opacity ceiling of the stroke 0..1 (default 1).' },
+		flow: { type: 'number', minimum: 0, maximum: 1, description: 'Build-up per dab 0..1 (default 1).' },
+		pressureSize: { type: 'boolean', description: 'Pressure scales the size (default true).' },
+		pressureOpacity: { type: 'boolean', description: 'Pressure scales the opacity (default false).' }
+	}
+} as const;
+
+/**
+ * Agent / palette commands for freehand drawing: `canvas.drawFreehand` (a pen or highlighter
+ * stroke through given points, optionally brushed with a dry paint preset and a pressure / tilt
+ * profile; one undo step) and the read-only `canvas.listBrushes` (the dry presets it accepts).
+ */
+export function createDrawCommands(target: DrawCommandTarget, options: DrawCommandOptions = {}): CommandSpec[] {
+	const prefix = options.prefix ?? 'canvas.';
+	const group = options.group ?? 'Draw';
+	const scope = options.scope === null ? undefined : options.scope ?? 'canvas';
+	const base = { group, ...(scope ? { scope } : {}) };
+	return [
+		{
+			...base,
+			id: `${prefix}drawFreehand`,
+			label: 'Draw Freehand Stroke',
+			keywords: ['pen', 'highlighter', 'brush', 'sketch', 'draw', 'stroke', 'pencil', 'ink'],
+			description:
+				'Draws a freehand pen or highlighter stroke through points (canvas coordinates) as one path shape node, in one undo step. With `brush` it is painted with a dry paint brush (a preset id from canvas.listBrushes, or tip settings) and `pressure` / `tiltX` / `tiltY` profiles shape it along its length; wet brushes are refused. Returns the new node `id`, its `bounds` and the stored `brush`.',
+			params: {
+				type: 'object',
+				additionalProperties: false,
+				required: ['points'],
+				properties: {
+					points: {
+						type: 'array',
+						minItems: 1,
+						maxItems: 5000,
+						items: { type: 'array', minItems: 2, maxItems: 2, items: { type: 'number' } },
+						description: 'Stroke points as [x, y] pairs in canvas (flow) units, in drawing order. Use a point every few units along curves.'
+					},
+					tool: { type: 'string', enum: ['pen', 'highlighter'], description: 'Pen (default: blue, width 3) or highlighter (yellow, width 24, opacity 0.35); sets the defaults below.' },
+					color: { type: 'string', description: 'Stroke colour, any CSS colour (default from the tool).' },
+					width: { type: 'number', exclusiveMinimum: 0, maximum: 2500, description: 'Stroke width in canvas units; the brush size for brushed strokes (default from the tool).' },
+					opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Stroke opacity 0..1 (default from the tool).' },
+					brush: {
+						description: 'Paint the stroke with a dry paint brush: a preset id such as "ink-pen", "pencil-hb", "brush-pen", "charcoal-stick", "soft-pastel", "marker" or "airbrush" (all ids: canvas.listBrushes), or tip settings. Omit for a plain vector stroke.',
+						oneOf: [{ type: 'string', minLength: 1 }, BRUSH_SETTINGS_PARAM]
+					},
+					pressure: PROFILE_PARAM('Pen pressure 0..1', 0, 1),
+					tiltX: PROFILE_PARAM('Pen tilt along x in degrees (−90..90)', -90, 90),
+					tiltY: PROFILE_PARAM('Pen tilt along y in degrees (−90..90)', -90, 90),
+					streamline: { type: 'boolean', description: 'Smooth jittery points before fitting the path (default false).' }
+				}
+			},
+			enabled: () => options.readOnlyReason?.() || true,
+			run: (
+				_ctx: unknown,
+				params: {
+					points: [number, number][];
+					tool?: 'pen' | 'highlighter';
+					color?: string;
+					width?: number;
+					opacity?: number;
+					brush?: CanvasBrush;
+					pressure?: number[];
+					tiltX?: number[];
+					tiltY?: number[];
+					streamline?: boolean;
+				}
+			) =>
+				target.drawStroke({
+					points: params.points,
+					...(params.tool ? { tool: params.tool } : {}),
+					style: {
+						...(params.color !== undefined ? { color: params.color } : {}),
+						...(params.width !== undefined ? { width: params.width } : {}),
+						...(params.opacity !== undefined ? { opacity: params.opacity } : {}),
+						...(params.brush !== undefined ? { brush: params.brush } : {})
+					},
+					...(params.pressure ? { pressure: params.pressure } : {}),
+					...(params.tiltX ? { tiltX: params.tiltX } : {}),
+					...(params.tiltY ? { tiltY: params.tiltY } : {}),
+					...(params.streamline ? { streamline: true } : {})
+				})
+		},
+		{
+			...base,
+			id: `${prefix}listBrushes`,
+			label: 'List Freehand Brushes',
+			keywords: ['brushes', 'presets', 'paint', 'pencil', 'ink'],
+			description: 'Read-only: the dry paint presets canvas.drawFreehand accepts as `brush`, as { id, name, category, size } (size is the preset\'s own diameter; the stroke width replaces it).',
+			params: { type: 'object', additionalProperties: false, properties: {} },
+			readOnly: true,
+			run: async () => ({ brushes: await target.listBrushes() })
 		}
 	];
 }

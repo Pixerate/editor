@@ -1,5 +1,6 @@
 import React from 'react';
 import { getShapeRenderData, isShapeDescription, type ShapeDescription } from '@pixerate/editor/canvas';
+import { useShapeBrushstroke } from './useShapeBrushstroke.js';
 
 export interface ShapeNodeProps {
 	/** Node data; `data.shape` holds the shape description. */
@@ -19,9 +20,12 @@ export interface ShapeNodeProps {
  * Register it as a React Flow node type (`nodeTypes={{ shape: ShapeNode }}`), or wrap it
  * to add handles. Strokes keep their width when the node is resized
  * (`vector-effect: non-scaling-stroke`). Renders nothing when `data.shape` is missing.
+ * A brushed stroke (`shape.brush`) is drawn as its paint-engine image (sharp at the zoom a
+ * `ShapeNodeZoomProvider` gives), with the plain path shown until the image is ready.
  */
 export function ShapeNode({ id, data, width, height, selected, className = '', children }: ShapeNodeProps) {
 	const shape = data?.shape;
+	const brushImage = useShapeBrushstroke(isShapeDescription(shape) ? shape : null, width, height);
 	if (!isShapeDescription(shape)) return null;
 	const render = getShapeRenderData(shape, { width, height }, { id: id || data?.id });
 	return (
@@ -71,6 +75,20 @@ export function ShapeNode({ id, data, width, height, selected, className = '', c
 						)}
 					</defs>
 				)}
+				{brushImage ? (
+					<g transform={render.transform}>
+						<image
+							className="pixerate-shape-brushstroke"
+							href={brushImage.href}
+							x={brushImage.x}
+							y={brushImage.y}
+							width={brushImage.width}
+							height={brushImage.height}
+							preserveAspectRatio="none"
+							opacity={render.opacity}
+						/>
+					</g>
+				) : (
 				<path
 					d={render.d}
 					transform={render.transform}
@@ -83,6 +101,7 @@ export function ShapeNode({ id, data, width, height, selected, className = '', c
 					opacity={render.opacity}
 					vectorEffect="non-scaling-stroke"
 				/>
+				)}
 			</svg>
 			{children}
 		</div>
