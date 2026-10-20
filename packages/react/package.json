@@ -144,7 +144,7 @@
   },
   "peerDependencies": {
     "@dagrejs/dagre": "^1.1.8",
-    "@pixerate/editor": ">=0.121.0 <1.0.0-0",
+    "@pixerate/editor": ">=0.122.0 <1.0.0-0",
     "@tiptap/core": "^2.11.5",
     "@tiptap/pm": "^2.11.5",
     "@tiptap/react": "^2.11.5",
