@@ -21,7 +21,7 @@ import { VideoEditorController, createVideoEditorToolProvider, createVideoEffect
 import { createFakeEffectProvider } from '../src/effects';
 import { createRichTextPreset, SpreadsheetController } from '../src';
 import { createCaptureToolProvider, createElementCaptureSurface } from '../src/tools';
-import { createCanvasCaptureToolProvider } from '../src/canvas';
+import { createCanvasCaptureToolProvider, createCanvasEffectsController, createCanvasEffectsToolProvider } from '../src/canvas';
 import { PaintEditorController, createPaintEditorToolProvider } from '../src/paint-editor';
 
 beforeAll(() => {
@@ -193,6 +193,7 @@ describe('built-in tool providers have complete MCP annotations', () => {
 		expect(tools.length).toBe(8 + 10 + 13 + 3 + 17);
 		// Hosts with their own tool sets: checked to the same standard.
 		registry.register(createImageEditorToolProvider(new ImageEditorController(), { id: 'img', namespace: 'img' }));
+		registry.register(createCanvasEffectsToolProvider(createCanvasEffectsController({ getNodes: () => [], setNodes: () => {}, effects: createFakeEffectProvider() }), { id: 'canvas-effects', namespace: 'canvasfx' }));
 		registry.register(createImageEffectsToolProvider(new ImageEditorController({ effects: createFakeEffectProvider() }), { id: 'img-effects', namespace: 'imgfx' }));
 		registry.register(createPaintEditorToolProvider(new PaintEditorController({ width: 64, height: 64 }), { id: 'paint', namespace: 'paint' }));
 		registry.register(createCanvasCaptureToolProvider({ id: 'capture', namespace: 'capture', element: null, getViewport: () => ({ x: 0, y: 0, zoom: 1 }), getNodes: () => [] }));

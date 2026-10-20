@@ -5,8 +5,10 @@ import {
 	type CanvasScenesOptions,
 	type CanvasScenesState,
 	type CanvasViewport,
-	type FitViewportOptions
+	type FitViewportOptions,
+	transitionCanvasView
 } from '@pixerate/editor/canvas';
+import type { EffectProvider } from '@pixerate/editor/effects';
 import type { CanvasNode } from './types.js';
 
 export interface CreateCanvasScenesOptions extends CanvasScenesOptions {
@@ -16,6 +18,12 @@ export interface CreateCanvasScenesOptions extends CanvasScenesOptions {
 	setViewport?: (viewport: CanvasViewport, options?: { duration?: number }) => void;
 	/** Transition duration passed to `setViewport` when showing a scene (default 300ms). */
 	duration?: number;
+	/**
+	 * Plays a scene's provider transition (`scene.transition`) when showing it: `element` is the
+	 * canvas view to capture and cover (e.g. the SvelteFlow wrapper). Without a provider or an
+	 * element, scenes are shown with the plain viewport move.
+	 */
+	transitions?: { provider: () => EffectProvider | null | undefined; element: () => HTMLElement | null };
 }
 
 /**
@@ -31,7 +39,12 @@ export function createCanvasScenes(options: CreateCanvasScenesOptions = {}) {
 	});
 
 	const show = (scene: CanvasScene | undefined) => {
-		if (scene) options.setViewport?.(scene.viewport, { duration: options.duration ?? 300 });
+		if (!scene) return scene;
+		const provider = options.transitions?.provider();
+		const element = options.transitions?.element();
+		if (scene.transition && provider && element) {
+			void transitionCanvasView({ provider, transition: scene.transition, element, jump: () => options.setViewport?.(scene.viewport, { duration: 0 }) });
+		} else options.setViewport?.(scene.viewport, { duration: options.duration ?? 300 });
 		return scene;
 	};
 

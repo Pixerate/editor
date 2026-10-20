@@ -15,7 +15,28 @@ import type { CanvasBrushstroke } from './brushTypes.js';
 import { gradientToSvgDef, resolveCanvasGradient } from './gradient.js';
 
 /** Paint shared by every shape kind. Colours are any CSS colour, preset name, or gradient definition. */
+/**
+ * A provider effect (see `@pixerate/editor/effects`) drawn on a shape: `fill` paints the shape's
+ * inside with the effect (clipped to its outline), `overlay` draws it over the node's box. Kept,
+ * and not drawn, without an effects provider.
+ */
+export interface CanvasShapeEffect {
+	/** The provider's effect id. */
+	effect: string;
+	provider?: string;
+	name?: string;
+	/** Control values (over the effect's defaults). */
+	values: Record<string, number | string | boolean | readonly number[]>;
+	mode: 'fill' | 'overlay';
+	/** 0–1 (default 1). */
+	opacity?: number;
+	/** Animated effects play while true (default true); false holds the first frame. */
+	playing?: boolean;
+}
+
 export interface ShapePaint {
+	/** A provider effect drawn on the shape (see `CanvasShapeEffect`). */
+	effect?: CanvasShapeEffect;
 	fill?: string | CanvasGradientDef;
 	stroke?: string | CanvasGradientDef;
 	strokeWidth?: number;

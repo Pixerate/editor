@@ -40,7 +40,7 @@ import { createGenerationToolProvider, createGenerationHistoryToolProvider, crea
 import { createMemoryStorage } from '../src/persistence';
 import { ChartController, createChartToolProvider, createOfficeChartToolProvider, createChartCommands } from '../src/chart';
 import { DiagramController, createDiagramToolProvider } from '../src/diagram';
-import { createCanvasCaptureToolProvider } from '../src/canvas';
+import { createCanvasCaptureToolProvider, createCanvasEffectsController, createCanvasEffectsToolProvider } from '../src/canvas';
 import { AnimationEditorController, createAnimationEditorToolProvider } from '../src/animation-editor';
 import { VideoEditorController, createVideoEditorToolProvider, createVideoEffectsToolProvider } from '../src/video-editor';
 import { VectorEditorController, createVectorCommands } from '../src/vector';
@@ -108,6 +108,7 @@ function expectedBySkill(): Record<string, string[]> {
 		'pixerate-canvas': [
 			...toolNames(editorMcp, (n) => n.startsWith('canvas_') || shared.includes(n)),
 			...toolNames(createCanvasComponentToolProvider({ addVariant: () => {}, removeVariant: () => {} } as any)),
+			...toolNames(createCanvasEffectsToolProvider(createCanvasEffectsController({ getNodes: () => [], setNodes: () => {} }))),
 			...toolNames(createCanvasCaptureToolProvider({ element: null, getViewport: () => ({ x: 0, y: 0, zoom: 1 }), getNodes: () => [] })),
 			...commandIds(createArrangeCommands(stub)),
 			...commandIds(createShapeCommands(stub)),
@@ -172,13 +173,14 @@ const FACTORIES: Record<string, string> = {
 	createVideoEditorToolProvider: 'pixerate-video-editor',
 	createVideoEffectsToolProvider: 'pixerate-video-editor',
 	// The shared effect tools; each editor that hosts them documents them in its own skill.
-	createEffectToolProvider: 'pixerate-video-editor, pixerate-image-editor',
+	createEffectToolProvider: 'pixerate-video-editor, pixerate-image-editor, pixerate-canvas',
 	createGenerationToolProvider: 'pixerate-generation',
 	createGenerationHistoryToolProvider: 'pixerate-generation',
 	createParameterCommands: 'pixerate-parameters',
 	// Generic `capture_view`; hosts document it in the skill for the surface they capture.
 	createCaptureToolProvider: 'pixerate-canvas, pixerate-image-editor',
-	createCanvasCaptureToolProvider: 'pixerate-canvas'
+	createCanvasCaptureToolProvider: 'pixerate-canvas',
+	createCanvasEffectsToolProvider: 'pixerate-canvas'
 };
 
 function walk(dir: string): string[] {
