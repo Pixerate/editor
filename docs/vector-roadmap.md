@@ -28,6 +28,12 @@ This plan covers the work still open on `@pixerate/editor/vector` after the craf
 | #250 | Frames / artboards and resizing constraints |
 | #251 | Connectors glued to shapes |
 | #253 | CAD tracking, polar increments and typed dimensions |
+| #255 | Mesh and freeform gradients |
+| #256 | Image Trace (bitmap to vector) |
+| #258, #259 | Lottie import and export; PDF export |
+| #262 | Rendering performance: cached render data, culling, level of detail |
+| #264 | Live symmetry groups (replace symmetry drawing) |
+| #265 | Contour path effect |
 
 ## How each item is run
 
