@@ -37,22 +37,24 @@ function disc(cx: number, cy: number, r: number) {
 
 describe('WetWorld.stepRegion', () => {
   it('steps the live tiles in the region and holds the others still', () => {
-    const w = new WetWorld(512, 256, paper, { kernel: 'typescript' });
+    // Two tiles side by side, half a tile tall: the TypeScript kernel costs ~50 ms per full
+    // tile-step on CI, and a 512 × 256 world with 3 + 3 steps timed out under load.
+    const w = new WetWorld(512, 128, paper, { kernel: 'typescript' });
     w.ensureLane('a');
-    const left = disc(128, 128, 20);
-    const right = disc(384, 128, 20);
+    const left = disc(128, 64, 20);
+    const right = disc(384, 64, 20);
     w.paint('a', left.rect, left.cov, 0.8, null);
     w.paint('a', right.rect, right.cov, 0.8, null);
-    const probe = (x: number) => w.waterAt("a", x, 128 + 19);
-    const before = { left: probe(128), right: probe(384), rightCentre: w.waterAt('a', 384, 128) };
+    const probe = (x: number) => w.waterAt("a", x, 64 + 19);
+    const before = { left: probe(128), right: probe(384), rightCentre: w.waterAt('a', 384, 64) };
     // Three steps (odd): held tiles must still read the same state afterwards.
-    w.stepRegionSync(3, { x: 0, y: 0, width: 256, height: 256 });
+    w.stepRegionSync(3, { x: 0, y: 0, width: 256, height: 128 });
     expect(w.clock).toBe(3);
     expect(probe(128)).not.toBe(before.left);
     expect(probe(384)).toBe(before.right);
-    expect(w.waterAt('a', 384, 128)).toBe(before.rightCentre);
+    expect(w.waterAt('a', 384, 64)).toBe(before.rightCentre);
     // A normal step moves both again.
-    w.stepSync(3);
+    w.stepSync(1);
     expect(probe(384)).not.toBe(before.right);
     w.destroy();
   });

@@ -9,8 +9,7 @@
 import { applyAdjustmentLayers, applyAdjustmentLayersFloat } from '../adjustment-layers';
 import { DeepCompositor } from '../../raster/deep-compositor';
 import type { RasterRect } from '../../raster/surface';
-import { applyBoxBlur, applyBoxBlurFloat, applyLegacyAdjustments, applyProcess2Adjustments, applyProcess2Float } from '../filters';
-import { to32From8, to8From32 } from '../../raster/deep';
+import { applyBoxBlur, applyBoxBlurFloat, applyLegacyAdjustments, applyLegacyFloat, applyProcess2Adjustments, applyProcess2Float } from '../filters';
 import { LATEST_PROCESS_VERSION, normalizeProcessVersion } from '../color';
 import type { BlendMode } from '../blend';
 import type { AdjustmentLayer, Annotation, CropBox, DepthMaskOptions, ImageAdjustments } from '../types';
@@ -114,8 +113,7 @@ export function runLayerFilters(data: Uint8ClampedArray, width: number, height: 
 
 /**
  * `runLayerFilters` on float RGBA for high bit depth (sRGB-encoded 0..1, or linear light when
- * `linear`). Develop filters on the current process and blurs keep full precision; a develop
- * filter on a legacy process runs on the 8-bit rendering.
+ * `linear`). Develop filters (current and legacy process) and blurs keep full precision.
  */
 export function runLayerFiltersFloat(data: Float32Array, width: number, height: number, filters: readonly LayerFilter[], linear: boolean): void {
   for (const f of filters) {
@@ -124,12 +122,7 @@ export function runLayerFiltersFloat(data: Float32Array, width: number, height: 
     else if (f.kind === 'develop') {
       const adj = developAdjustments(f);
       if (normalizeProcessVersion(adj.process) === LATEST_PROCESS_VERSION) applyProcess2Float(data, adj, linear);
-      else {
-        const bytes = linear ? to8From32(data, 4) : Uint8ClampedArray.from(data, (v) => v * 255);
-        applyLegacyAdjustments({ data: bytes }, adj);
-        if (linear) data.set(to32From8(bytes, 4));
-        else for (let i = 0; i < data.length; i++) data[i] = bytes[i] / 255;
-      }
+      else applyLegacyFloat(data, adj, linear);
     }
   }
 }
@@ -199,8 +192,7 @@ export class LayerCompositor extends RasterCompositor<ImageLayer, CompositorSour
 /**
  * The composite of an image editor stack at 16 or 32 bits (see `raster/deep-compositor`): float
  * RGBA over `rect`, sRGB-encoded 0..1 at 16 bits, linear light at 32. Adjustment layers, layer
- * filters and layer effects run in float; groups with effects, legacy-process develop filters and
- * annotation layers are drawn at 8 bits.
+ * filters and layer effects (groups' included) run in float; annotation layers are drawn at 8 bits.
  */
 export function compositeDeep(layers: readonly ImageLayer[], rect: RasterRect, sources: CompositorSources, depth: 16 | 32): Float32Array {
   const deep = new DeepCompositor(new LayerCompositor(), PHOTO_PROFILE, {

@@ -148,7 +148,7 @@ export function createImageColorTools(controller: ImageEditorController): AgentT
     name: 'set_color_mode',
     title: 'Set the colour mode',
     description:
-      "Image › Mode: rgb, cmyk (for print: give the press `profile`, default coated-cmyk, and the `intent` RGB is separated with) or lab. The document is still edited as RGB in its working space; a CMYK document is soft-proofed through its profile in the viewport (unless set_proof_setup says otherwise), and export_psd writes CMYK or Lab channels with the profile. Changes no pixels. One undo step. Returns the profile summary with mode and cmykProfile.",
+      "Image › Mode: rgb, cmyk (for print: give the press `profile`, default coated-cmyk, and the `intent` RGB is separated with) or lab. The document is still edited as RGB in its working space; a CMYK document is soft-proofed through its profile in the viewport (unless set_proof_setup says otherwise), and export_psd writes CMYK or Lab channels with the profile, at 8 or 16 bits (a 32-bit document is written at 16). Changes no pixels. One undo step. Returns the profile summary with mode and cmykProfile.",
     inputSchema: {
       type: 'object',
       properties: {

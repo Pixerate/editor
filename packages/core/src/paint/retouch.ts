@@ -28,7 +28,7 @@ import { srgbDecode, srgbEncode } from '../raster/deep';
 import { DabWalker, dabRect, rasterizeDab, type BrushSettings, type CoverageMap, type Dab, type StrokePoint } from './brush';
 import { SmudgeTip, type SmudgeSettings } from './blending';
 import { TileMedium, put255, type PaintPixels, type PaintTileTarget } from './exchange';
-import { bestOffset, dilateMask, maskBounds, membraneFill, seamlessClone } from './heal';
+import { bestOffset, contentAwareFill, dilateMask, maskBounds, membraneFill, seamlessClone } from './heal';
 
 // ---------------------------------------------------------------------------
 // Tone kernels
@@ -128,9 +128,9 @@ export type RetouchSample = 'current' | 'current-below' | 'all';
 export const RETOUCH_SAMPLES: readonly RetouchSample[] = ['current', 'current-below', 'all'];
 
 /** How the Spot Healing Brush finds its source. */
-export type SpotHealType = 'proximity-match' | 'smooth';
+export type SpotHealType = 'proximity-match' | 'content-aware' | 'smooth';
 
-export const SPOT_HEAL_TYPES: readonly SpotHealType[] = ['proximity-match', 'smooth'];
+export const SPOT_HEAL_TYPES: readonly SpotHealType[] = ['proximity-match', 'content-aware', 'smooth'];
 
 /** The retouching tools' options. */
 export interface RetouchSettings {
@@ -138,7 +138,7 @@ export interface RetouchSettings {
   aligned: boolean;
   /** Clone / heal / spot heal: what is sampled (default `current`: the target layer). */
   sample: RetouchSample;
-  /** Spot heal: `proximity-match` (default: the best matching patch nearby) or `smooth` (a smooth fill from the edges). */
+  /** Spot heal: `proximity-match` (default: the best matching patch nearby), `content-aware` (texture and edges synthesised from patches around it) or `smooth` (a smooth fill from the edges). */
   spotType: SpotHealType;
   /** Dodge / burn: the tonal range (default `midtones`). */
   range: ToneRange;
@@ -150,8 +150,10 @@ export interface RetouchSettings {
   spongeMode: 'desaturate' | 'saturate';
   /** Sponge: damp the change where colours would clip (default true). */
   vibrance: boolean;
-  /** Smudge: how strongly the finger carries and lays paint, 0..1 (default 0.5). */
+  /** Smudge: how strongly the finger carries and lays paint; Blur / Sharpen: how strongly they act, 0..1 (default 0.5). */
   strength: number;
+  /** History Brush: how many undo steps back it paints from; 0 (default) is the oldest state history keeps. */
+  historySteps: number;
 }
 
 export const DEFAULT_RETOUCH: Readonly<RetouchSettings> = {
@@ -164,6 +166,7 @@ export const DEFAULT_RETOUCH: Readonly<RetouchSettings> = {
   spongeMode: 'desaturate',
   vibrance: true,
   strength: 0.5,
+  historySteps: 0,
 };
 
 /** Retouch settings with every field valid (missing or invalid fields from `base`). */
@@ -181,7 +184,63 @@ export function normalizeRetouch(raw: Partial<RetouchSettings> = {}, base: Retou
     spongeMode: pick(raw.spongeMode, ['desaturate', 'saturate'] as const, base.spongeMode),
     vibrance: bool(raw.vibrance, base.vibrance),
     strength: unit(raw.strength, base.strength),
+    historySteps: typeof raw.historySteps === 'number' && Number.isFinite(raw.historySteps) ? Math.min(1000, Math.max(0, Math.round(raw.historySteps))) : base.historySteps,
   };
+}
+
+/**
+ * Box blur of `data` (`w × h × n` floats) in place, `r` pixels each side, edges clamped. RGBA
+ * blurs premultiplied, so transparent pixels lend no colour. Run twice for a near-Gaussian.
+ */
+export function boxBlurPixels(data: Float32Array, w: number, h: number, n: 1 | 4, r: number): void {
+  if (r < 1) return;
+  if (n === 4) for (let i = 0; i < data.length; i += 4) for (let c = 0; c < 3; c++) data[i + c] *= data[i + 3] / 255;
+  const tmp = new Float32Array(data.length);
+  const k = 1 / (2 * r + 1);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      for (let c = 0; c < n; c++) {
+        let s = 0;
+        for (let d = -r; d <= r; d++) s += data[(y * w + Math.min(w - 1, Math.max(0, x + d))) * n + c];
+        tmp[(y * w + x) * n + c] = s * k;
+      }
+    }
+  }
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      for (let c = 0; c < n; c++) {
+        let s = 0;
+        for (let d = -r; d <= r; d++) s += tmp[(Math.min(h - 1, Math.max(0, y + d)) * w + x) * n + c];
+        data[(y * w + x) * n + c] = s * k;
+      }
+    }
+  }
+  if (n === 4) {
+    for (let i = 0; i < data.length; i += 4) {
+      const a = data[i + 3] / 255;
+      for (let c = 0; c < 3; c++) data[i + c] = a > 0 ? data[i + c] / a : 0;
+    }
+  }
+}
+
+/**
+ * The Blur / Sharpen tools' filter over a padded region (`w × h × n` floats on the 0..255 scale,
+ * in place): `blur` is two box passes of `radius`; `sharpen` is an unsharp mask of `amount`
+ * over a radius-1 blur (colour only; alpha kept). Values stay at or above 0.
+ */
+export function retouchFilter(data: Float32Array, w: number, h: number, n: 1 | 4, kind: 'blur' | 'sharpen', radius = 2, amount = 1): void {
+  if (kind === 'blur') {
+    boxBlurPixels(data, w, h, n, radius);
+    boxBlurPixels(data, w, h, n, radius);
+    return;
+  }
+  const soft = data.slice();
+  boxBlurPixels(soft, w, h, n, 1);
+  for (let i = 0; i < data.length; i++) {
+    if (n === 4 && (i & 3) === 3) continue;
+    const v = data[i] + amount * (data[i] - soft[i]);
+    data[i] = v > 0 ? v : 0;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -606,6 +665,8 @@ export function spotHealPixels(
     }
   }
   onOffset?.(filled ? (bestFound as [number, number]) : null);
+  // Content-aware: texture and edges synthesised from patches all around (PatchMatch).
+  if (!filled && type === 'content-aware') filled = contentAwareFill(w, h, 4, img, domain);
   if (!filled) filled = membraneFill(w, h, 4, img, domain);
   return healPixels(w, h, filled, img, healMask);
 }

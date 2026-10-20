@@ -29,6 +29,7 @@
   import VectorShadingPanel from './VectorShadingPanel.svelte';
   import VectorTracePanel from './VectorTracePanel.svelte';
   import VectorSymmetryPanel from './VectorSymmetryPanel.svelte';
+  import VectorPerspectivePanel from './VectorPerspectivePanel.svelte';
   import VectorLensPanel from './VectorLensPanel.svelte';
   import VectorGradientEditor from './VectorGradientEditor.svelte';
 
@@ -259,6 +260,7 @@
   <VectorConnectorPanel {controller} />
   <VectorShadingPanel {controller} />
   <VectorSymmetryPanel {controller} />
+  <VectorPerspectivePanel {controller} />
   <VectorLensPanel {controller} />
   <VectorTracePanel {controller} />
   <VectorConstraintsPanel {controller} />

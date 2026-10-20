@@ -281,6 +281,21 @@ An `extrude` path effect works like CorelDRAW's Extrude and draws each shape as 
 - **Draw order.** Faces are drawn back to front: two faces overlap only over viewing rays that cross both edges, and there the edge further along the ray is in front. A topological sort of that relation keeps concave outlines correct. The shape itself is drawn on top.
 - **Export.** Each face also gets a hairline stroke in its own colour, which hides anti-aliasing seams between neighbouring faces. Lottie gets the drawn shapes.
 
+## Drawing in perspective
+
+A document can have a perspective grid (`document.perspective`), after CorelDRAW's Perspective Drawing. It has 1 to 3 `vanishingPoints`, an `origin` where its planes meet (below the horizon, in front of the viewer), a `gridSize` and an `extent` in cells, and `visible`.
+
+- **Planes.** One point gives the `floor`, a `side` wall receding to it and the `front` (the page itself). Two give the `floor` and the `left` and `right` walls, which recede to the first and second points. A third point is where the walls' verticals meet (a bird's or worm's eye view).
+- **Plane maps.** `vectorPerspectivePlaneMap(grid, plane)` is the plane's projective map. Its columns are the plane's two directions and the origin. Plane coordinates are document units at the origin, x right and y up as seen there.
+  - `vectorPerspectiveFlatToPlane` / `vectorPerspectivePlaneToFlat` map points between flat art and the plane.
+  - `vectorPerspectiveMapPath` maps paths, re-fitting curves.
+  - Points behind the viewer (beyond a plane's horizon) are refused.
+- **Drawing.** `setPerspectivePlane(plane)` makes the Rectangle, Ellipse, Polygon and Star tools draw on that plane. The drag's two corners stay under the pointer, and the shape is built flat between their plane positions and projected, so it recedes.
+- **Attaching.** `attachToPerspective(plane, { ids })` reads objects flat, relative to the origin (right and up), and projects them onto the plane, with transforms baked in. Text and instances must be outlines first. It is one undo step.
+- **Grid.** `setPerspective(grid | null)` is one undo step, and `vectorPerspectivePreset(1 | 2 | 3, width, height)` gives a starting grid for a page. The overlay's `perspective` draws each plane's lines (the active one stronger), the vanishing points and the origin.
+- **Panel.** `<VectorPerspectivePanel>` adds a grid, picks the drawing plane, attaches the selection, and shows or removes the grid.
+- **Agent commands.** `vector.getPerspective`, `vector.setPerspective`, `vector.removePerspective`, `vector.setPerspectivePlane` and `vector.attachToPerspective`.
+
 ### Bevel
 
 A `bevel` path effect works like CorelDRAW's Bevel and gives each shape a chiselled edge.

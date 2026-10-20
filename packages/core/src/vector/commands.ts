@@ -24,7 +24,8 @@ import type { VectorFreeformPoint, VectorPathNode } from './types.js';
 import { VECTOR_TRACE_MAX_PIXELS, type VectorTraceOptions } from './trace.js';
 import { bytesToBase64, decodePng, isPng, parseDataUrl } from '../raster/png.js';
 import type { VectorPdfOptions } from './pdf.js';
-import { VECTOR_LENS_TYPES, VECTOR_SYMMETRY_MODES, type VectorLens, type VectorLensType, type VectorSymmetry, type VectorSymmetryMode } from './types.js';
+import { VECTOR_LENS_TYPES, VECTOR_PERSPECTIVE_PLANES, VECTOR_SYMMETRY_MODES, type VectorLens, type VectorLensType, type VectorPerspective, type VectorPerspectivePlane, type VectorSymmetry, type VectorSymmetryMode } from './types.js';
+import { vectorPerspectivePlanes } from './perspective.js';
 import { VECTOR_CONNECTOR_ROUTES, VECTOR_CONNECTOR_SIDES, type VectorConnector, type VectorConnectorEnd, type VectorConnectorRoute } from './types.js';
 import { VECTOR_HORIZONTAL_RESIZING, VECTOR_VERTICAL_RESIZING, type VectorFrame, type VectorHorizontalResizing, type VectorResizing, type VectorVerticalResizing } from './types.js';
 import { layoutVectorText, vectorTextFamilies, vectorTextHasOutlines } from './text.js';
@@ -1385,6 +1386,89 @@ export function createVectorCommands(controller: VectorEditorController, options
 		}
 	];
 
+	const PLANE = { type: 'string', enum: [...VECTOR_PERSPECTIVE_PLANES], description: 'A plane of the grid: floor, left and right (2 or 3 vanishing points), or floor, side and front (1 point).' } as const;
+	const perspectiveResult = () => {
+		const grid = controller.getPerspective();
+		return { perspective: grid, planes: grid ? vectorPerspectivePlanes(grid) : [], drawingOn: controller.getState().perspectivePlane };
+	};
+	const perspectiveCommands = (): CommandSpec[] => [
+		{
+			...base,
+			id: `${prefix}getPerspective`,
+			label: 'Perspective Grid',
+			keywords: ['perspective', 'grid', 'vanishing point', 'horizon'],
+			description: 'Reads the document\'s perspective grid: { perspective: { vanishingPoints, origin, gridSize, extent, visible } or null, planes (the planes it has), drawingOn (the plane new shapes are drawn on, or null) }.',
+			params: { type: 'object', properties: {}, additionalProperties: false },
+			run: () => perspectiveResult()
+		},
+		{
+			...base,
+			id: `${prefix}setPerspective`,
+			label: 'Perspective Grid…',
+			keywords: ['perspective', 'grid', 'vanishing point', 'one point', 'two point', 'three point', 'horizon', 'drawing in perspective'],
+			description:
+				'Sets the document\'s perspective grid (CorelDRAW\'s Perspective Drawing): 1 vanishing point (planes floor, side, front), 2 (floor, left, right; walls recede to the first and second) or 3 (the third is where the walls\' verticals meet). Put the vanishing points on the horizon line and the origin below it, where the planes meet. One undo step. Returns the grid as vector.getPerspective does.',
+			params: {
+				type: 'object',
+				properties: {
+					vanishingPoints: { type: 'array', minItems: 1, maxItems: 3, items: { ...POINT, description: 'A vanishing point (document units).' }, description: '1 to 3 vanishing points, document units.' },
+					origin: { ...POINT, description: 'Where the planes meet (document units), not on a vanishing point.' },
+					gridSize: { type: 'number', exclusiveMinimum: 0, description: 'Grid cell size at the origin, document units (default 20).' },
+					extent: { type: 'integer', minimum: 1, maximum: 100, description: 'Cells drawn out from the origin along each axis (default 12).' },
+					visible: { type: 'boolean', description: 'Show the grid on the canvas (default true).' }
+				},
+				required: ['vanishingPoints', 'origin'],
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: VectorPerspective) => {
+				check(controller.setPerspective(params));
+				return perspectiveResult();
+			}
+		},
+		{
+			...base,
+			id: `${prefix}removePerspective`,
+			label: 'Remove Perspective Grid',
+			keywords: ['perspective', 'grid', 'remove'],
+			description: 'Removes the perspective grid (art already on its planes stays as drawn). One undo step. Returns { perspective: null }.',
+			params: { type: 'object', properties: {}, additionalProperties: false },
+			undoable: true,
+			run: () => {
+				check(controller.setPerspective(null));
+				return { perspective: null };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}setPerspectivePlane`,
+			label: 'Draw on Perspective Plane',
+			keywords: ['perspective', 'plane', 'draw', 'floor', 'wall'],
+			description: 'Makes the Rectangle, Ellipse, Polygon and Star tools draw on a plane of the grid (their drag box is taken on the plane, so shapes recede with it), or flat again with plane null. Not an undo step. Returns the grid as vector.getPerspective does.',
+			params: { type: 'object', properties: { plane: { ...PLANE, type: ['string', 'null'], enum: [...VECTOR_PERSPECTIVE_PLANES, null], description: `${PLANE.description} null draws flat.` } }, required: ['plane'], additionalProperties: false },
+			run: (_ctx: unknown, params: { plane: VectorPerspectivePlane | null }) => {
+				check(controller.setPerspectivePlane(params.plane));
+				return perspectiveResult();
+			}
+		},
+		{
+			...base,
+			id: `${prefix}attachToPerspective`,
+			label: 'Attach to Perspective',
+			keywords: ['perspective', 'attach', 'plane', 'project', 'wall', 'floor', 'sign'],
+			description:
+				'Lays objects (`ids`, default the selection) onto a plane of the grid: each is read flat relative to the grid origin (right and up) and projected, so art near the origin keeps its size and further art recedes. Draw or place the flat art beside the origin first. Text and instances must be outlines (vector.createOutlines). One undo step. Returns { ids }.',
+			params: { type: 'object', properties: { ids: { ...IDS, description: 'Objects to project (default: the selection).' }, plane: PLANE }, required: ['plane'], additionalProperties: false },
+			undoable: true,
+			enabled: enabledFor,
+			run: (_ctx: unknown, params: { ids?: string[]; plane: VectorPerspectivePlane }) => {
+				const r = controller.attachToPerspective(params.plane, params.ids ? { ids: params.ids } : {});
+				check(r);
+				return { ids: r.ids ?? [] };
+			}
+		}
+	];
+
 	const pdfCommands = (): CommandSpec[] => [
 		{
 			...base,
@@ -2315,6 +2399,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 		...pdfCommands(),
 		...symmetryCommands(),
 		...stylizeCommands(),
+		...perspectiveCommands(),
 		...lensCommands(),
 		{
 			...base,

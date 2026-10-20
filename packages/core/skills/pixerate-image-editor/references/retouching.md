@@ -5,8 +5,9 @@
    untouched, so a bad stroke is easy to mask or erase. Smudge, Dodge, Burn and Sponge change the
    pixels they touch, so run them on a duplicate (`duplicate_layer`) instead.
 2. **Pick the tool by the job.** A small spot or blemish on skin, sky or a wall: `spot_heal` with
-   a brush a little larger than the spot (`proximity-match` copies a nearby patch; `smooth` fills
-   from the edges and suits flat areas). A larger flaw, or one next to an edge: `heal_brush` from a
+   a brush a little larger than the spot (`proximity-match` copies a nearby patch; `content-aware`
+   synthesises texture and continues lines and patterns across the spot, best for larger spots and
+   where an edge runs through; `smooth` fills from the edges and suits flat areas). A larger flaw, or one next to an edge: `heal_brush` from a
    clean source of the same texture; it takes the colour and light around the stroke, so the source
    may be lighter or darker. Copy exactly (a repeat, a straight line, an edge): `clone_stamp`.
 3. **Sources and offsets.** `set_clone_source` (or `source` on the stroke) is the Alt-click. The
@@ -24,6 +25,14 @@
    eyes), `saturate` adds it; passes compound, so use a low `brush.flow`.
 6. **Smudge** drags colour along the stroke like a finger in wet paint (`strength` how far); for
    blending paint colours use the Mixer Brush instead.
+7. **Blur and sharpen locally**: `blur_stroke` softens (a background, a harsh edge, skin texture)
+   and `sharpen_stroke` crisps (eyes, a detail). Keep `strength` low (sharpen 0.2..0.5) and check
+   with `capture_view`; for the whole layer use a layer filter instead. Dabs in one stroke do not
+   compound; another stroke goes further.
+8. **Take back part of a change** with `history_brush`: it paints the layer as it was
+   `historySteps` undo steps back (0, the default, is the oldest state history keeps). Filter or
+   grade the whole layer, then paint the original back where it should not apply. It fails when the
+   layer did not exist in that state; read `historySteps` from how many steps you have made since.
 
 ## Pitfalls
 
@@ -33,4 +42,4 @@
 - `heal_brush` and `spot_heal` show a plain clone or a dark trail while a person draws and blend
   when the stroke ends; through the tools the result is already blended.
 - `dodge`, `burn`, `sponge` and `smudge` ignore `brush.opacity` (exposure, flow and strength set
-  their strength) and `brush.blend`. The Sponge refuses masks, which have no colour.
+  their strength) and `brush.blend`; `blur_stroke` and `sharpen_stroke` multiply it by `strength`. The Sponge refuses masks, which have no colour.

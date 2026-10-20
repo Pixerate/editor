@@ -1,5 +1,16 @@
 # @pixerate/editor
 
+## 0.132.0
+
+### Minor Changes
+
+- 6fab591: Image editor: the Clone Stamp and Healing Brush show their source on the canvas as a crosshair. It sits on the source point, and once an aligned stroke has fixed the offset, it follows the brush. The new `controller.cloneSourceMarker(cursor)` gives the position, and the renderer's new `cloneSourceMarker` render option draws it (filled from the brush cursor automatically, so the React and Svelte editors both show it).
+- e1a6801: Image editor: 16-bit CMYK and Lab PSDs. A 16- or 32-bit document in CMYK or Lab mode now saves a 16-bit CMYK or Lab file (Photoshop has no 32-bit CMYK or Lab), separated through the profile at 16 bits (`colorModePlanes16`, `colorPlanes16` in `exportPsd`). 16-bit CMYK files now open at 16 bits, layers and masks included, through their profile.
+
+### Patch Changes
+
+- 7f213f2: PDF import keeps same-width ruled tables apart. Horizontal rules with the same extent were joined as one booktabs-style table even when they belonged to separate grids, so every ruled table of that width on a page, and the text between them, came out as a single table. Rules that meet a vertical rule now join only through their grid.
+
 ## 0.131.0
 
 ### Minor Changes
