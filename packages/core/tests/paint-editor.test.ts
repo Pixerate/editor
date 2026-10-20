@@ -522,10 +522,12 @@ describe('PaintEditorController', () => {
     expect(() => d.importBrushes('nonsense')).toThrow(/Not a brush library/);
     d.removeBrush('my-pastel');
     expect(() => d.removeBrush('pencil-hb')).toThrow(/cannot be removed/);
-    const thumbs = BUILTIN_BRUSHES.map((x) => renderBrushThumbnail(x, { paper: c.document.paper, color: '#202020' }));
-    for (const t of thumbs) expect(t.data.length).toBe(160 * 48 * 4);
+    // Every built-in brush's thumbnail is checked in paint-blending.test.ts; here, the controller's.
+    const thumb = c.brushThumbnail('my-pastel', { color: '#202020' });
+    expect([thumb.width, thumb.height, thumb.data.length]).toEqual([160, 48, 160 * 48 * 4]);
     const key = (t: { data: Uint8ClampedArray }) => Buffer.from(t.data).toString('base64');
-    expect(new Set(thumbs.map(key)).size).toBe(thumbs.length);
+    expect(key(thumb)).toBe(key(renderBrushThumbnail(saved, { paper: c.document.paper, color: '#202020' })));
+    expect(key(c.brushThumbnail('airbrush', { color: '#202020' }))).not.toBe(key(thumb));
   });
 
   it('view and hand are editor state, not undo steps', () => {

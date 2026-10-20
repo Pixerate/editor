@@ -2,12 +2,15 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
 import { PaintEditorController, documentToScreen } from '@pixerate/editor/paint-editor';
 import { BrushPanel, ColorPanel, PaintCanvas, PaintEditor, PaintLayersPanel, PaperPanel, PaintToolbar, WetPanel, createPaintDirector, createReactivePaintEditor } from '../src/paint-editor';
+import { stubBrushThumbnails } from './paint-thumbnails';
 
 let target: HTMLDivElement;
 let component: Record<string, any> | null = null;
+let thumbnails: ReturnType<typeof stubBrushThumbnails>;
 
 beforeEach(() => {
   HTMLCanvasElement.prototype.getContext = vi.fn(() => null) as any;
+  thumbnails = stubBrushThumbnails();
   target = document.createElement('div');
   document.body.appendChild(target);
 });
@@ -16,6 +19,7 @@ afterEach(() => {
   if (component) unmount(component);
   component = null;
   target.remove();
+  vi.restoreAllMocks();
 });
 
 const show = (C: any, props: Record<string, unknown>) => {
@@ -92,8 +96,6 @@ describe('Svelte paint editor', () => {
     expect(c.getState().hand).toBe('left');
   });
 
-  // The first brush panel in the file renders every brush preview synchronously, which can take
-  // over 5 s on a loaded CI runner.
   it('the brush panel picks brushes and edits settings', () => {
     const c = new PaintEditorController({ width: 32, height: 32 });
     show(BrushPanel, { controller: c });
@@ -108,7 +110,11 @@ describe('Svelte paint editor', () => {
     setValue(target.querySelector('input[aria-label="Brush name"]')!, 'My Charcoal');
     click(byText('Save brush'));
     expect(c.getUserBrushes().map((b) => b.id)).toEqual(['my-charcoal']);
-  }, 20_000);
+    // A preview of every brush in the library, the saved one included.
+    const previewed = new Set(thumbnails.mock.calls.map(([id]) => id));
+    expect(c.getState().brushes.map((b) => b.id).filter((id) => !previewed.has(id))).toEqual([]);
+    expect(target.querySelectorAll('canvas[aria-label$=" thumbnail"]')).toHaveLength(c.getState().brushes.length);
+  });
 
   it("the brush panel shows each engine's controls: blender, smudge, behaviour, brush gradient and load", () => {
     const c = new PaintEditorController({ width: 32, height: 32 });
