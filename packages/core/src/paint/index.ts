@@ -16,3 +16,5 @@ export * from './pigment';
 export * from './pigment-tools';
 export * from './heal';
 export * from './retouch';
+export * from './wet';
+export * from './path-stroke';

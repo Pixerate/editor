@@ -7,6 +7,7 @@
 import { normalizePaintBrush, type PaintBrushInput, type PaintBrush } from './brushes';
 import type { Linear2, PenPoint, StrokeCopy } from './engine';
 import type { MixerLoad } from '../paint/exchange';
+import { normalizeStencil, type Stencil } from './stencils';
 
 /** An affine map [a, b, c, d, e, f]: (x, y) → (a·x + b·y + e, c·x + d·y + f). */
 export type Affine = readonly [number, number, number, number, number, number];
@@ -26,6 +27,10 @@ export interface RecordedStroke {
   copies?: Affine[];
   /** What the brush carried at the start (Mixer Brush and wet-capable brushes), so a replay mixes the same. */
   load?: MixerLoad;
+  /** Wet brushes: the wet simulation's clock (steps) at which each point was applied, so a replay lets the paint flow the same. */
+  steps?: number[];
+  /** The mask stencils it was painted through (so a replay keeps to them). */
+  stencils?: Stencil[];
 }
 
 export function applyAffine(m: Affine, x: number, y: number): { x: number; y: number } {
@@ -113,6 +118,18 @@ export function normalizeBrushStroke(raw: unknown): RecordedStroke | null {
   if (copies.length) out.copies = copies;
   const load = readLoad(r.load);
   if (load) out.load = load;
+  if (Array.isArray(r.stencils)) {
+    const st: Stencil[] = [];
+    for (const raw of r.stencils as Stencil[]) {
+      try {
+        st.push(normalizeStencil(raw, typeof raw?.id === 'string' ? raw.id : 'stencil'));
+      } catch {
+        // an unreadable stencil is dropped
+      }
+    }
+    if (st.length) out.stencils = st;
+  }
+  if (Array.isArray(r.steps) && r.steps.length === points.length && r.steps.every((v) => Number.isInteger(v) && v >= 0)) out.steps = [...(r.steps as number[])];
   return out;
 }
 

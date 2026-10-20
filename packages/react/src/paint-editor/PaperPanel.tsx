@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { PAPER_FAMILIES, PAPER_LIBRARY, PAPER_SLIDERS, patchPath, readPath, renderPaper, type PaintEditorController } from '@pixerate/editor/paint-editor';
+import { LIGHT_SLIDERS, PAPER_FAMILIES, PAPER_LIBRARY, PAPER_SLIDERS, patchPath, readPath, renderPaper, type PaintEditorController } from '@pixerate/editor/paint-editor';
 import { usePaintEditorState } from './usePaintEditor';
 import { CommitColorInput, ErrorLine, PaintSlider, PixelCanvas, panel, useAttempt } from './shared';
 
@@ -12,8 +12,9 @@ const SWATCH = { x: 0, y: 0, width: 64, height: 40 };
 
 /**
  * The paper library by family (each a generated grain preview) and the current paper's colour,
- * grain depth, scale, shading and contrast, plus the wet-media properties stored for later.
- * Each change is one undo step (sliders commit on release).
+ * grain depth, scale, shading and contrast, the wet-media properties and metallic sheen (each
+ * change one undo step; sliders commit on release); then the light for thick paint and metallic
+ * paper (not an undo step) and Flatten relief for the active layer.
  */
 export const PaperPanel: React.FC<PaperPanelProps> = ({ controller, className }) => {
   const state = usePaintEditorState(controller);
@@ -57,6 +58,15 @@ export const PaperPanel: React.FC<PaperPanelProps> = ({ controller, className })
       <button type="button" className="self-start px-2 py-1 rounded text-[11px] bg-slate-800 text-slate-200 hover:bg-slate-700" onClick={() => attempt(() => controller.setPaper({ seed: paper.seed + 1 }))}>
         New sheet
       </button>
+      <div className="flex flex-col gap-1.5" data-testid="light-panel">
+        <span className="font-medium text-slate-300">Light (thick paint, metallic paper)</span>
+        {LIGHT_SLIDERS.map((c) => (
+          <PaintSlider key={c.path} control={c} value={readPath(controller.getLighting(), c.path)} onChange={(v) => attempt(() => controller.setLighting({ [c.path]: v }))} />
+        ))}
+        <button type="button" className="self-start px-2 py-1 rounded text-[11px] bg-slate-800 text-slate-200 hover:bg-slate-700" onClick={() => attempt(() => controller.flattenRelief())}>
+          Flatten relief
+        </button>
+      </div>
       <ErrorLine error={error} />
     </div>
   );

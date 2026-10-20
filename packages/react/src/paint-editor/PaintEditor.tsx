@@ -6,6 +6,8 @@ import { PaintCanvas } from './PaintCanvas';
 import { PaintLayersPanel } from './PaintLayersPanel';
 import { PaintToolbar } from './PaintToolbar';
 import { PaperPanel } from './PaperPanel';
+import { WetPanel } from './WetPanel';
+import { StickerPanel } from './StickerPanel';
 import { chip } from './shared';
 
 export interface PaintEditorProps {
@@ -19,11 +21,11 @@ export interface PaintEditorProps {
   className?: string;
 }
 
-type SideTab = 'color' | 'paper' | 'layers';
+type SideTab = 'color' | 'wet' | 'paper' | 'layers';
 
 /**
  * The paint editor: toolbar, brush library on the left, the canvas, and colour (wheel,
- * harmonies, swatches, mixing pad), paper and layers on the right.
+ * harmonies, swatches, mixing pad), wet media, paper and layers on the right.
  */
 export const PaintEditor: React.FC<PaintEditorProps> = ({ controller, fileName, height = 720, presence, className }) => {
   const [tool, setTool] = useState<PaintTool>('brush');
@@ -44,15 +46,17 @@ export const PaintEditor: React.FC<PaintEditorProps> = ({ controller, fileName, 
         </div>
         <div className="flex w-64 shrink-0 flex-col gap-2 overflow-y-auto pr-1">
           <div className="flex gap-1" role="tablist" aria-label="Paint panels">
-            {(['color', 'paper', 'layers'] as const).map((t) => (
+            {(['color', 'wet', 'paper', 'layers'] as const).map((t) => (
               <button key={t} type="button" role="tab" aria-selected={tab === t} className={chip(tab === t)} onClick={() => setTab(t)}>
-                {t === 'color' ? 'Colour' : t === 'paper' ? 'Paper' : 'Layers'}
+                {t === 'color' ? 'Colour' : t === 'wet' ? 'Wet' : t === 'paper' ? 'Paper' : 'Layers'}
               </button>
             ))}
           </div>
           {tab === 'color' && <ColorPanel controller={controller} />}
+          {tab === 'wet' && <WetPanel controller={controller} />}
           {tab === 'paper' && <PaperPanel controller={controller} />}
           {tab === 'layers' && <PaintLayersPanel controller={controller} />}
+          {tab === 'layers' && <StickerPanel controller={controller} />}
         </div>
       </div>
     </div>

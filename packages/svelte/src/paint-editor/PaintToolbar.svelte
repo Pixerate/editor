@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { PAINT_TOOLS, SYMMETRY_MODES, decodeImageBlob, downloadBytes, type PaintEditorController, type PaintTool, type SymmetryMode } from '@pixerate/editor/paint-editor';
+  import { PAINT_TOOLS, SYMMETRY_MODES, decodeImageBlob, downloadBytes, quickStencil, timeLapseZip, type PaintEditorController, type PaintTool, type SymmetryMode } from '@pixerate/editor/paint-editor';
   import { attempt, button, chip, paintEditorState } from './paintEditorRune.svelte.js';
 
   interface Props {
@@ -18,10 +18,32 @@
   const tracing = $derived(snap.guides.tracing);
   const canvas = $derived(snap.document.canvas);
   let error = $state<string | null>(null);
+  let busy = $state<string | null>(null);
+  let note = $state<string | null>(null);
   let openInput = $state<HTMLInputElement | null>(null);
   let tracingInput = $state<HTMLInputElement | null>(null);
   let refInput = $state<HTMLInputElement | null>(null);
   const run = (fn: () => unknown) => attempt(fn, (m) => (error = m));
+  const timeLapse = () =>
+    run(async () => {
+      busy = 'Repainting…';
+      try {
+        const tl = await controller.timeLapse({ onProgress: (p) => (busy = `Repainting… ${Math.round(p * 100)}%`) });
+        downloadBytes(await timeLapseZip(tl), `${fileName}-timelapse.zip`, 'application/zip');
+        note = `Time-lapse: ${tl.frames.length} frames, ${(tl.durationMs / 1000).toFixed(1)} s (run render.sh in the zip for the MP4).`;
+      } finally {
+        busy = null;
+      }
+    });
+  const highRes = () =>
+    run(async () => {
+      busy = 'Repainting at 2×…';
+      try {
+        downloadBytes(await controller.exportHighResPng({ scale: 2 }), `${fileName}@2x.png`, 'image/png');
+      } finally {
+        busy = null;
+      }
+    });
   const exportImage = (format: 'image/png' | 'image/jpeg') =>
     run(async () => downloadBytes(await controller.exportImage({ format }), `${fileName}.${format === 'image/png' ? 'png' : 'jpg'}`, format));
   const vanishing = (n: number) => {
@@ -88,6 +110,12 @@
     <button type="button" class={button} onclick={() => controller.clearTracingImage()}>Remove tracing</button>
   {/if}
   <button type="button" class={button} onclick={() => refInput?.click()}>Reference…</button>
+  <span class="flex items-center gap-1" role="group" aria-label="Stencils">
+    <button type="button" class={button} title="A ruler: strokes that start near it follow it" onclick={() => run(() => controller.addStencil(quickStencil('ruler', canvas)))}>Ruler</button>
+    <button type="button" class={button} title="A circle guide: strokes that start near it follow it" onclick={() => run(() => controller.addStencil(quickStencil('circle', canvas)))}>Circle</button>
+    <button type="button" class={button} title="An ellipse mask: paint lands only inside it" onclick={() => run(() => controller.addStencil(quickStencil('ellipse-mask', canvas)))}>Mask</button>
+    {#if snap.guides.stencils.length > 0}<button type="button" class={button} onclick={() => run(() => controller.removeStencils())}>Clear stencils</button>{/if}
+  </span>
   <button type="button" class={button} title="Which hand holds the pen (palm rejection)" onclick={() => controller.setHand(snap.hand === 'right' ? 'left' : 'right')}>{snap.hand === 'right' ? 'Right-handed' : 'Left-handed'}</button>
   <span class="mx-1 h-4 w-px bg-slate-700"></span>
   <button type="button" class={button} onclick={() => run(() => downloadBytes(JSON.stringify(controller.toJSON()), `${fileName}.paint.json`, 'application/json'))}>Save</button>
@@ -95,6 +123,9 @@
   <button type="button" class={button} onclick={() => exportImage('image/png')}>PNG</button>
   <button type="button" class={button} onclick={() => exportImage('image/jpeg')}>JPEG</button>
   <button type="button" class={button} onclick={() => run(() => downloadBytes(controller.exportPsd().bytes, `${fileName}.psd`, 'image/vnd.adobe.photoshop'))}>PSD</button>
+  <button type="button" class={button} disabled={busy !== null} title="Repaint the painting from its strokes as a time-lapse: frames, a video project and the ffmpeg command, zipped" onclick={timeLapse}>Time-lapse</button>
+  <button type="button" class={button} disabled={busy !== null} title="Repaint the painting from its strokes at twice the size (more detail, not upscaled)" onclick={highRes}>PNG 2×</button>
+  {#if busy ?? note}<span class="text-[11px] text-slate-400" data-testid="paint-replay-status">{busy ?? note}</span>{/if}
   <input
     bind:this={openInput}
     type="file"
