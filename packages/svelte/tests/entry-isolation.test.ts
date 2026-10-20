@@ -29,6 +29,8 @@ function reachablePackages(entry: string): Set<string> {
 const EXTRA: Record<string, readonly string[]> = {
   "video-editor": ["effects", "parameters"],
   "image-editor": ["effects", "parameters"],
+  vector: ["effects", "parameters"],
+  "animation-editor": ["effects", "parameters"],
   effects: ["parameters"],
 };
 

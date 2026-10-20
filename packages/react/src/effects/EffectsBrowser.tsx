@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { EFFECT_USE_LABELS, type EffectProvider, type EffectSummary, type EffectUse } from '@pixerate/editor/effects';
+import { EFFECT_USE_LABELS, type EffectKind, type EffectProvider, type EffectSummary, type EffectUse } from '@pixerate/editor/effects';
 import { EffectThumbnail } from './EffectThumbnail';
 
 export interface EffectsBrowserProps {
@@ -7,6 +7,8 @@ export interface EffectsBrowserProps {
   provider: EffectProvider | null | undefined;
   /** Only effects with one of these uses (default: all but motion). */
   uses?: readonly EffectUse[];
+  /** Only effects of these kinds (default: any). */
+  kinds?: readonly EffectKind[];
   /** Called with the effect the user picks. */
   onPick: (effect: EffectSummary) => void;
   /** Draw previews with the provider's renderer (default true). */
@@ -20,7 +22,7 @@ export interface EffectsBrowserProps {
  * Browses a provider's effects: a search box, a category filter (and a use filter when more than
  * one use is allowed), and a grid of effects with previews. Picking one calls `onPick`.
  */
-export function EffectsBrowser({ provider, uses, onPick, thumbnails = true, title = 'Effects', className = '' }: EffectsBrowserProps) {
+export function EffectsBrowser({ provider, uses, kinds, onPick, thumbnails = true, title = 'Effects', className = '' }: EffectsBrowserProps) {
   const [all, setAll] = useState<readonly EffectSummary[]>([]);
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('');
@@ -50,8 +52,8 @@ export function EffectsBrowser({ provider, uses, onPick, thumbnails = true, titl
       live = false;
     };
   }, [provider, query, category, use]);
-  const allowed = (e: EffectSummary) => (uses ? e.kind !== 'motion' || uses.includes('motion') : e.kind !== 'motion') && (!uses || e.uses.some((u) => uses.includes(u)));
-  const categories = useMemo(() => [...new Set(all.filter(allowed).map((e) => e.category))], [all, uses]);
+  const allowed = (e: EffectSummary) => (!kinds || kinds.includes(e.kind)) && (uses ? e.kind !== 'motion' || uses.includes('motion') : e.kind !== 'motion') && (!uses || e.uses.some((u) => uses.includes(u)));
+  const categories = useMemo(() => [...new Set(all.filter(allowed).map((e) => e.category))], [all, uses, kinds]);
   const shown = found.filter(allowed);
   if (!provider)
     return (

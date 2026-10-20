@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { renderEffectThumbnail, type EffectProvider, type EffectSummary } from '@pixerate/editor/effects';
 
   interface Props {
@@ -15,10 +16,13 @@
   let failed = $state(false);
 
   $effect(() => {
-    failed = item.kind === 'motion';
-    if (failed) return;
+    // Reads only what picks the picture: setting `failed` below must not run this again.
+    const motion = item.kind === 'motion';
+    const request = { provider, item, size: { width, height } };
+    failed = motion;
+    if (motion) return;
     let live = true;
-    renderEffectThumbnail(provider, item, { width, height }).then(
+    untrack(() => renderEffectThumbnail(request.provider, request.item, request.size)).then(
       (pixels) => {
         const ctx = live ? canvas?.getContext('2d') : null;
         if (!ctx || typeof ImageData === 'undefined') return;

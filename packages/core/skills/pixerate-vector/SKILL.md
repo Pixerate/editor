@@ -383,6 +383,21 @@ contents whole while you work, without losing the mask.
 | `vector.setSnapOptions` | Set those options, e.g. `polarIncrement: 15` for 15° polar tracking, or a grid, before handing the canvas to the user. Moves nothing. Returns the options. |
 | `vector.setTool` | Switch the interactive tool (select, direct, pen, pencil, rect, ellipse, polygon, star, line, scissors, knife, eraser, width, shapeBuilder, paintBucket, blend, gradient, envelope, type, typePath, frame, connector). Only for handing the canvas to the user in a given mode; commands do not need a tool. |
 
+### Provider effects
+
+From `createVectorEffectsToolProvider`, when the host has registered an effects provider (for
+example Flair). Only vector effects apply here: they bring their own picture. Motion is applied in
+the animation editor.
+
+| Tool | Use it to |
+| --- | --- |
+| `search_effects` | Find effects with `kind` vector (lower thirds, stickers, loaders, badges). |
+| `describe_effect` | Read an effect's controls, defaults and presets before adding it. |
+| `list_applied_effects` | List the groups that show provider effects, with their values. |
+| `apply_effect` | Add an effect's picture at rest as a selected group of editable shapes (`target` "document" or a parent group id), fitted into the middle of the document. Returns the group id. |
+| `update_effect` | Draw an effect group again with new `values` (`effect` "picture"); its place and transform are kept, but edits to its shapes are replaced. |
+| `remove_effect` | Keep the group's shapes as a plain group, detached from the effect. |
+
 ## Pitfalls
 
 - Mesh and freeform fills draw as fine tiles, not SVG gradients: they cannot be edited with

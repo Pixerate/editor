@@ -44,3 +44,4 @@ export * from './spatial.js';
 export { createCanvasTextShaper, createMetricTextShaper, createOutlineTextShaper, cssFontFamily, type CanvasTextShaperOptions, type OutlineFontEntry, type OutlineFontFace, type OutlinePathCommand } from '../text/shapers.js';
 export { loadOpenTypeFont, parseOpenTypeFont, type OpenTypeFont } from '../text/opentype.js';
 export type { TextFont, TextShaper } from '../text/types.js';
+export * from './effect-tools.js';

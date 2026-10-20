@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import {
   AnimationEditorController,
   createAnimationEditorToolProvider,
+  createAnimationEffectsToolProvider,
+  type AnimationEffectsToolProviderOptions,
   type AnimationEditorOptions,
   type AnimationEditorState,
   type AnimationEditorToolProviderOptions,
@@ -78,4 +80,21 @@ export function useAnimationEditorTools(
     if (!registry) return;
     return registry.register(createAnimationEditorToolProvider(controller, { id, namespace, readOnly, rasterize }));
   }, [registry, controller, id, namespace, readOnly, rasterize]);
+}
+
+/**
+ * Registers the animation editor's provider-effect tools (`search_effects`, `apply_effect`,
+ * `add_vector_effect`, …) in `registry` while mounted. They work once an effects provider is
+ * registered (see `useEffects`).
+ */
+export function useAnimationEffectsTools(
+  registry: ToolRegistry | null | undefined,
+  controller: AnimationEditorController,
+  options: AnimationEffectsToolProviderOptions = {},
+): void {
+  const { id, namespace, readOnly } = options;
+  useEffect(() => {
+    if (!registry) return;
+    return registry.register(createAnimationEffectsToolProvider(controller, { id, namespace, readOnly }));
+  }, [registry, controller, id, namespace, readOnly]);
 }

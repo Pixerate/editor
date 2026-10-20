@@ -174,7 +174,7 @@ export function createEffectToolProvider(host: EffectToolHost): AgentToolProvide
 		description: `${what}: control name → value, as listed by describe_effect (its "controls" schema: types, ranges, units and defaults). Only the given controls change; colours are "#rrggbb".${keyframes ? ' A number control may instead be keyframes { keys: [{ t: ms from the start, v, ease }] }.' : ''} Unknown controls and out-of-range values are refused with the valid ones.`
 	});
 	const effectIdSchema = (uses: readonly EffectUse[]): JsonSchema => {
-		const effects = catalogFor(host.provider())?.filter((e) => e.kind !== 'motion' && e.uses.some((u) => uses.includes(u)));
+		const effects = catalogFor(host.provider())?.filter((e) => (e.kind !== 'motion' || uses.includes('motion')) && e.uses.some((u) => uses.includes(u)));
 		const base = `An effect id from search_effects (use ${uses.map((u) => `"${u}"`).join(' or ')}).`;
 		return effects && effects.length && effects.length <= ENUM_LIMIT
 			? { type: 'string', enum: effects.map((e) => e.id), description: `${base} One of: ${effects.map((e) => `${e.id} (${e.name})`).join(', ')}.` }
@@ -219,7 +219,7 @@ export function createEffectToolProvider(host: EffectToolHost): AgentToolProvide
 				const p = host.provider();
 				if (!p) return { available: false, reason: NO_PROVIDER };
 				const d: EffectDescription = await explain(async () => p.describe(args.effect as string));
-				return { available: true, ...summaryOut(d), controls: d.controls, defaults: d.defaults, presets: d.presets, inputs: d.inputs, appliesHere: d.kind !== 'motion' && d.uses.some((u) => host.applyUses.includes(u)) };
+				return { available: true, ...summaryOut(d), controls: d.controls, defaults: d.defaults, presets: d.presets, inputs: d.inputs, appliesHere: (d.kind !== 'motion' || host.applyUses.includes('motion')) && d.uses.some((u) => host.applyUses.includes(u)) };
 			}
 		},
 		{

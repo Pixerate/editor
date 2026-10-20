@@ -1,8 +1,10 @@
 import React, { useRef, useState } from "react";
 import { createOutlineTextShaper, createVectorEffect, ellipseSubpath, loadOpenTypeFont, rectSubpath, setSubpathCorners, starSubpath, type OpenTypeFont, type VectorDocument, type VectorEffect } from "@pixerate/editor/vector";
-import { VectorEditor, useVectorCommands, useVectorEditorController, useVectorEditorState } from "@pixerate/editor-react/vector";
+import { VectorEditor, useVectorCommands, useVectorEditorController, useVectorEditorState, useVectorEffectsTools } from "@pixerate/editor-react/vector";
+import { useDemoEffects } from "../demoEffects";
+import { EffectsProviderSwitch } from "./EffectsProviderSwitch";
 import { PenTool } from "lucide-react";
-import { demoCommandRegistry } from "../agentTools";
+import { demoCommandRegistry, demoToolRegistry } from "../agentTools";
 import { AgentScriptPanel } from "./AgentScriptPanel";
 import { VECTOR_SCRIPTS } from "../agentScripts";
 
@@ -313,6 +315,9 @@ export function VectorTab() {
   const controller = useVectorEditorController({ document: STARTER });
   const state = useVectorEditorState(controller);
   useVectorCommands(demoCommandRegistry, controller);
+  // The demo-wide effects provider (built-in test effects, or Flair).
+  const { provider: effects } = useDemoEffects();
+  useVectorEffectsTools(demoToolRegistry, controller, { id: "vector-effects", namespace: "vectorfx" });
   const [svg, setSvg] = useState<string | null>(null);
   const agentStage = useRef<HTMLDivElement>(null);
   // Fonts read from files make text draw as glyph outlines (Create Outlines, effects on text).
@@ -346,8 +351,9 @@ export function VectorTab() {
           </p>
         </div>
       </div>
+      <EffectsProviderSwitch />
       <div className="relative rounded-xl border border-slate-800 bg-slate-900/50 p-3" ref={agentStage}>
-        <VectorEditor controller={controller} height={520} />
+        <VectorEditor controller={controller} height={520} effects={effects} />
       </div>
       <AgentScriptPanel scripts={VECTOR_SCRIPTS} stage={agentStage} hint="Plays a scripted agent turn through commands__run_command with the vector.* commands (the same ones in the command palette)." />
       <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
