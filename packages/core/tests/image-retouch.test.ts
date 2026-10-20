@@ -406,3 +406,24 @@ describe('retouch agent tools', () => {
     expect(cleared.isError).toBeFalsy();
   });
 });
+
+describe('clone source marker', () => {
+  it('sits on the source point, then follows the brush by the aligned offset', () => {
+    const { c, id } = setup();
+    expect(c.cloneSourceMarker({ x: 5, y: 5 })).toBeNull();
+    c.setTool('clone');
+    expect(c.cloneSourceMarker({ x: 5, y: 5 })).toBeNull();
+    c.setCloneSource({ x: 10, y: 12 });
+    expect(c.cloneSourceMarker({ x: 30, y: 30 })).toEqual({ x: 10, y: 12 });
+    c.paintStroke({ tool: 'clone', layerId: id, points: [{ x: 30, y: 20 }], brush: { size: 6 } });
+    // Aligned: the stroke fixed an offset of (-20, -8); the marker rides with the cursor.
+    expect(c.cloneSourceMarker({ x: 40, y: 25 })).toEqual({ x: 20, y: 17 });
+    c.setPaintOptions({ retouch: { aligned: false } });
+    expect(c.cloneSourceMarker({ x: 40, y: 25 })).toEqual({ x: 10, y: 12 });
+    c.setTool('heal');
+    expect(c.cloneSourceMarker()).toEqual({ x: 10, y: 12 });
+    c.setTool('brush');
+    expect(c.cloneSourceMarker({ x: 40, y: 25 })).toBeNull();
+  });
+});
+
