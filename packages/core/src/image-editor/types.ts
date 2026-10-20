@@ -360,6 +360,8 @@ export type ImageEditorTool =
 
 export type ImageEditorFit = 'contain' | 'margin';
 
+import type { BitDepth } from '../raster/deep';
+
 export interface ImageEditorState {
   sourceUrl: string | null;
   /** Canvas (document) size in pixels: the source image's natural size. */
@@ -424,6 +426,12 @@ export interface ImageEditorState {
    * `closeSmartObjectContents`. Missing when the document itself is shown.
    */
   editingContents?: Array<{ layerId: string; name: string }>;
+  /**
+   * Bits per channel of the document (Image › Mode): 8 (missing), 16 or 32 (linear float).
+   * Pixel layers keep 16- or 32-bit samples where they have them (see `raster/deep`); the
+   * viewport shows their 8-bit rendering. Recorded in undo history and saved in `toJSON()`.
+   */
+  bitDepth?: BitDepth;
 }
 
 /**

@@ -206,6 +206,7 @@ import {
   tileCoord,
   tileKey,
 } from '../raster/surface';
+import { convertSurfaceDepth, isBitDepth, type BitDepth } from '../raster/deep';
 import {
   LayerOperationError,
   addLayerEffect as addLayerEffectOp,
@@ -901,6 +902,7 @@ interface HistoryEntry {
   patterns?: EffectPattern[];
   selection: SelectionMask | null;
   source: SourceSnapshot;
+  bitDepth?: BitDepth;
 }
 
 export const DEFAULT_ADJUSTMENTS: ImageAdjustments = DEFAULT_ADJUSTMENTS_VALUES;
@@ -1222,6 +1224,7 @@ export class ImageEditorController {
     if (s.legacyOutputBlur !== undefined) entry.legacyOutputBlur = s.legacyOutputBlur;
     if (s.globalLight) entry.globalLight = { ...s.globalLight };
     if (s.patterns) entry.patterns = s.patterns;
+    if (s.bitDepth && s.bitDepth !== 8) entry.bitDepth = s.bitDepth;
     return entry;
   }
 
@@ -1239,6 +1242,8 @@ export class ImageEditorController {
     else delete s.globalLight;
     if (entry.patterns) s.patterns = entry.patterns;
     else delete s.patterns;
+    if (entry.bitDepth) s.bitDepth = entry.bitDepth;
+    else delete s.bitDepth;
     s.selection = entry.selection;
     if (this.imageElement !== entry.source.element && !this.samplePixelsOverride) this.samplePixels = null;
     this.imageElement = entry.source.element;
@@ -4608,6 +4613,42 @@ export class ImageEditorController {
 
   // --- PSD ---
 
+  /** The document's bits per channel (8 unless set to 16 or 32). */
+  public get bitDepth(): BitDepth {
+    return this.state.bitDepth ?? 8;
+  }
+
+  /**
+   * Image › Mode › 8 / 16 / 32 Bits/Channel (one undo step). Going up costs nothing: layers keep
+   * their pixels and read them at the new depth, and edits that understand depth keep the extra
+   * precision from then on. Going down rounds every pixel layer's deep samples to the new depth
+   * (8 bits: their 8-bit rendering; 32 → 16: colour above 1 is clipped). Returns the depth and
+   * the ids of the layers whose pixels changed.
+   */
+  public setBitDepth(depth: BitDepth): { bitDepth: BitDepth; changedLayerIds: string[] } {
+    if (!isBitDepth(depth)) throw new LayerOperationError(`Bit depth must be 8, 16 or 32, not ${String(depth)}.`);
+    const changed: string[] = [];
+    const convert = (layers: readonly ImageLayer[]): ImageLayer[] =>
+      layers.map((l) => {
+        if (l.type === 'group') {
+          const children = convert(l.children);
+          return children.some((c, i) => c !== l.children[i]) ? { ...l, children } : l;
+        }
+        if (l.type !== 'pixel') return l;
+        const surface = convertSurfaceDepth(l.surface, depth);
+        if (surface === l.surface) return l;
+        changed.push(l.id);
+        return { ...l, surface };
+      });
+    if (depth === this.bitDepth) return { bitDepth: depth, changedLayerIds: [] };
+    const next = convert(this.state.layers);
+    this.commitLayers(next, () => {
+      if (depth === 8) delete this.state.bitDepth;
+      else this.state.bitDepth = depth;
+    });
+    return { bitDepth: depth, changedLayerIds: changed };
+  }
+
   /** Pixels per inch of the last opened PSD (written back by `toPsd`). */
   private psdResolution: number | undefined;
 
@@ -4641,6 +4682,8 @@ export class ImageEditorController {
     else delete s.patterns;
     if (result.globalLight) s.globalLight = result.globalLight;
     else delete s.globalLight;
+    if (result.bitDepth !== 8) s.bitDepth = result.bitDepth;
+    else delete s.bitDepth;
     this.lastLoadProblems = result.warnings;
     this.notify();
     return {
@@ -4680,7 +4723,7 @@ export class ImageEditorController {
   }
 
   /**
-   * The document as an 8-bit RGB PSD (PSB above 30 000 px) with real layers, groups, adjustment
+   * The document as an RGB PSD at its bit depth (8, 16 or 32) (PSB above 30 000 px) with real layers, groups, adjustment
    * layers and masks, in the source frame. Layer filters and parametric (depth) masks are baked
    * into pixels and masks, annotation layers are rasterized (in a browser; elsewhere they are left
    * out), and the merged image is our composite. `warnings` lists every such change.
@@ -4813,7 +4856,7 @@ export class ImageEditorController {
     for (const [msg, names] of note) warnings.push(`${msg} (${names.length === 1 ? 'layer' : 'layers'} ${names.map((n) => `"${n}"`).join(', ')}).`);
 
     const merged = compositor.composite(prepared, canvas, { ...sources, version: `psd:${Date.now()}` });
-    const result = exportPsd({ width, height, layers: prepared, merged, resolution: this.psdResolution, patterns: this.state.patterns, globalLight: this.state.globalLight });
+    const result = exportPsd({ width, height, layers: prepared, merged, resolution: this.psdResolution, patterns: this.state.patterns, globalLight: this.state.globalLight, depth: this.bitDepth });
     warnings.push(...result.warnings);
     return { bytes: result.bytes, warnings, psb: result.psb, width, height };
   }
@@ -4985,6 +5028,8 @@ export class ImageEditorController {
       const patterns = deserializePatterns(data.patterns, problems);
       if (patterns.length) s.patterns = patterns;
       else delete s.patterns;
+      if (data.bitDepth === 16 || data.bitDepth === 32) s.bitDepth = data.bitDepth;
+      else delete s.bitDepth;
       if (!this.imageElement && typeof data.width === 'number' && typeof data.height === 'number' && data.width > 0 && data.height > 0) {
         s.imageDimensions = { width: data.width, height: data.height };
       }
@@ -5000,6 +5045,7 @@ export class ImageEditorController {
       s.activeLayerId = null;
       delete s.globalLight;
       delete s.patterns;
+      delete s.bitDepth;
     }
     s.activeTarget = 'pixels';
     this.viewKey = [];
@@ -5010,8 +5056,8 @@ export class ImageEditorController {
   private serializeState(): SerializedImageEditorState {
     const { width, height } = this.naturalSize;
     const view = legacyView(this.stack(), width, height, null);
-    // A global light is only stored in the layered schema.
-    if (view.exact && !this.state.globalLight && !this.state.patterns?.length) {
+    // A global light and a bit depth are only stored in the layered schema.
+    if (view.exact && !this.state.globalLight && !this.state.patterns?.length && this.bitDepth === 8) {
       return {
         // States without adjustment layers keep schema 1, so they round-trip unchanged.
         version: view.adjustments.layers?.length ? 2 : 1,
@@ -5041,6 +5087,7 @@ export class ImageEditorController {
     if (this.state.globalLight) out.globalLight = { ...this.state.globalLight };
     if (this.state.patterns?.length) out.patterns = serializePatterns(this.state.patterns);
     if (smartContents) out.smartContents = smartContents;
+    if (this.state.bitDepth === 16 || this.state.bitDepth === 32) out.bitDepth = this.state.bitDepth;
     return out;
   }
 }

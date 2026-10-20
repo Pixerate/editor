@@ -2266,6 +2266,17 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: The canvas cannot take text input. Focus has to move to an element that can, and that element only exists once the click has opened a `TextEditSession` (after the pointer is released). Composed text comes as `compositionend` / `input`, not as `keydown` keys.
 - **Solution / Workaround**: Both editors render a 1 px transparent `<textarea data-testid="type-input">` while a session is open and focus it on the next tick after mouse-up. `keydown` goes to `TextEditSession.handleKey` (single characters, Backspace, Delete, Enter, arrows, Home / End, Cmd/Ctrl+A) unless `isComposing`; `compositionend` and `input` insert the composed or pasted text and clear the textarea. Cmd/Ctrl+Z / C / X / V are left to the browser. All edits of one session are one undo step (the first change records history, the rest pass `commitToHistory: false`). Automated tests type into the textarea; a browser driver that types immediately after the click can beat the focus.
 
+### [core/raster] Deep Samples Ride Next to the 8-bit Tile, and 8-bit Writers Drop Them
+
+- **Issue / Symptom**: In a 16-bit document, a brush stroke (or a filter, transform or merge) left the tiles it touched at 8-bit precision, while the rest of the layer kept its 16-bit samples.
+- **Root Cause**: High bit depth is additive: a `Tile` may carry `deep` samples (`Uint16Array`, or `Float32Array` in linear light) and its `data` is always their 8-bit rendering. Every existing 8-bit path (compositor, viewport, brushes, the paint editor) reads and writes `data` only, and a tile it rewrites is built by `finishTile` without `deep`.
+- **Solution / Workaround**: Read at depth with `tileSamples16` / `tileSamples32` / `readDeepRegion` (a tile without `deep` converts exactly as a bit-depth change would), and write with `deepTile` / `writeDeepRegion`, which also keep `data` in step. Never build a tile by spreading another one and replacing `data`: its old `deep` would no longer match. Making each editing path depth-aware is follow-up work; until then the skill tells agents to grade and export deep files rather than repaint them.
+
+### [core/image-editor] 16- and 32-bit PSDs Keep Their Layers in an Lr16 / Lr32 Block, and 32-bit Is Linear Light
+
+- **Issue / Symptom**: A 16-bit PSD written with the layer records in the usual layer-info section read back fine here but is not how Photoshop writes such files; and 32-bit values read as sRGB looked washed out.
+- **Root Cause**: Photoshop stores the layer info of 16- and 32-bit files in a global `Lr16` / `Lr32` tagged block and leaves the layer-info section empty. Its 32-bit mode is scene-referred linear light, so float samples can exceed 1.
+- **Solution / Workaround**: `writePsd` puts the layer info into `Lr16` / `Lr32` when the header depth is 16 or 32 (`readPsd` reads both places). 32-bit channels are ZIP with prediction (byte planes, then deltas); 16-bit channels are RLE. Our `Float32Array` samples are linear too; converting to 16 or 8 bits encodes to sRGB and clips colour above 1.
 ### [core/image-editor] Retouch Sources Must Be Captured When the Stroke Starts
 
 - **Issue / Symptom**: A Healing Brush stroke sampling Current & Below or All came out matched to its own clone instead of to the photo, and a Clone Stamp stroke running over its own source copied the same pixels on and on.

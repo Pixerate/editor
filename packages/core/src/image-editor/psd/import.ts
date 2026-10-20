@@ -63,7 +63,8 @@ import {
   u32Block,
   u8Block,
 } from './file';
-import { MODE_INDEXED, colorChannelCount, toMask8, toRgba8, unmatteWhite } from './pixels';
+import { MODE_BITMAP, MODE_INDEXED, colorChannelCount, toMask8, toRgba8, toRgbaDeep, unmatteWhite } from './pixels';
+import { surfaceFromDeepPixels } from '../../raster/deep';
 import { parseLfx2, parseLrfx } from './effects';
 import { PATTERN_BLOCK_KEYS, parsePatternBlock, psdPatternToEffectPattern } from './patterns';
 import { builtinPattern, type EffectPattern } from '../../raster/effects/patterns';
@@ -142,6 +143,8 @@ export interface PsdImportResult {
   /** The global light (image resources 1037 and 1049), when the file has one. */
   globalLight?: GlobalLight;
   info: { psb: boolean; depth: number; colorMode: string; channels: number };
+  /** The bits per channel the layers keep: 16 or 32 for such files (not indexed or bitmap), else 8. */
+  bitDepth: 8 | 16 | 32;
 }
 
 export interface PsdImportOptions {
@@ -251,7 +254,7 @@ function recordPixels(ctx: Ctx, rec: PsdLayerRecord, name: string): PixelLayer['
   // A channel that is in the file but unreadable leaves the layer empty (as the warning says).
   if (planes.some((p) => p === null)) return emptySurface(4);
   if (planes.every((p) => p === undefined)) return emptySurface(4);
-  const data = toRgba8({
+  const set = {
     width,
     height,
     depth: ctx.file.header.depth,
@@ -259,8 +262,11 @@ function recordPixels(ctx: Ctx, rec: PsdLayerRecord, name: string): PixelLayer['
     color: planes.slice(0, ctx.colorCount) as Array<Uint8Array | undefined>,
     alpha: planes[ctx.colorCount] as Uint8Array | undefined,
     palette: ctx.palette,
-  });
-  return surfaceFromPixels({ width, height, data }, 4, rec.rect.left, rec.rect.top);
+  };
+  // 16- and 32-bit files keep their depth (see `raster/deep`).
+  const deep = toRgbaDeep(set);
+  if (deep) return surfaceFromDeepPixels({ width, height, data: deep }, 4, rec.rect.left, rec.rect.top);
+  return surfaceFromPixels({ width, height, data: toRgba8(set) }, 4, rec.rect.left, rec.rect.top);
 }
 
 function recordMask(ctx: Ctx, rec: PsdLayerRecord, name: string): RasterMask | undefined {
@@ -695,7 +701,7 @@ function mergedLayer(ctx: Ctx): PixelLayer | null {
   const plane = (i: number) => (i < header.channels ? planes.subarray(i * size, (i + 1) * size) : undefined);
   const cc = ctx.colorCount;
   const hasAlpha = header.channels > cc && (ctx.file.layers.length === 0 || ctx.file.mergedAlpha);
-  const data = toRgba8({
+  const set = {
     width,
     height,
     depth: header.depth,
@@ -703,8 +709,15 @@ function mergedLayer(ctx: Ctx): PixelLayer | null {
     color: Array.from({ length: cc }, (_, i) => plane(i)),
     alpha: hasAlpha ? plane(cc) : undefined,
     palette: ctx.palette,
-  });
-  if (hasAlpha) unmatteWhite(data);
+  };
+  const deep = hasAlpha ? null : toRgbaDeep(set);
+  let surface: PixelLayer['surface'];
+  if (deep) surface = surfaceFromDeepPixels({ width, height, data: deep }, 4);
+  else {
+    const data = toRgba8(set);
+    if (hasAlpha) unmatteWhite(data);
+    surface = surfaceFromPixels({ width, height, data }, 4);
+  }
   return {
     type: 'pixel',
     id: ctx.newId('Background'),
@@ -712,7 +725,7 @@ function mergedLayer(ctx: Ctx): PixelLayer | null {
     visible: true,
     opacity: 1,
     blend: 'normal',
-    surface: surfaceFromPixels({ width, height, data }, 4),
+    surface,
     offset: { x: 0, y: 0 },
   };
 }
@@ -756,7 +769,9 @@ export function psdToLayers(file: PsdFile, options: PsdImportOptions = {}): PsdI
     }
   }
   const mode = COLOR_MODES[header.colorMode] ?? `mode ${header.colorMode}`;
-  if (mode !== 'rgb' || header.depth !== 8) {
+  if (mode !== 'rgb' && header.depth > 8 && header.colorMode !== MODE_INDEXED && header.colorMode !== MODE_BITMAP) {
+    warn.extra.push(`The file is ${header.depth}-bit ${mode}; it was converted to ${header.depth}-bit RGB.`);
+  } else if (mode !== 'rgb' || (header.depth !== 8 && header.depth !== 16 && header.depth !== 32)) {
     warn.extra.push(`The file is ${header.depth}-bit ${mode}; it was converted to 8-bit RGB.`);
   }
   if (resource(file, 1039)) warn.extra.push('The embedded ICC profile is ignored; colours are read as sRGB.');
@@ -797,6 +812,7 @@ export function psdToLayers(file: PsdFile, options: PsdImportOptions = {}): PsdI
       ? { globalLight: { angle: Math.max(-360, Math.min(360, angle ?? 120)), altitude: Math.max(0, Math.min(90, altitude ?? 30)) } }
       : {}),
     info: { psb: header.psb, depth: header.depth, colorMode: mode, channels: header.channels },
+    bitDepth: (header.depth === 16 || header.depth === 32) && header.colorMode !== MODE_INDEXED && header.colorMode !== MODE_BITMAP ? header.depth : 8,
   };
 }
 
