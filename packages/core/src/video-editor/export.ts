@@ -6,6 +6,7 @@ import { normalizeVideoGradeLut, videoGradeFfmpegFilters } from './grade.js';
 import { isVideoKeyframes, VIDEO_TRANSFORM_PROPERTIES, videoKeyframeFfmpegExpr, type VideoAnimatable, type VideoKeyframes } from './keyframes.js';
 import { allVideoTracks, formatVideoTimecode, formatVideoTimecodeFrames, isVideoDropFrameRate, videoHourFrames, videoTimecodeFrames, sortedVideoClips, videoAssetMap, videoClipBefore, videoClipEnd, videoClipOverhang, videoClipSpeed, videoProjectDuration, videoAssetHasSound, videoSequenceDuration, videoSequenceMap } from './timeline.js';
 import { videoTransitionAudioCurve } from './types.js';
+import { videoClipEffectUses, type VideoEffectUse } from './effects.js';
 import type { VideoWipeDirection, VideoAsset, VideoBlendMode, VideoClip, VideoFadeCurve, VideoProject, VideoTextClip, VideoTrack } from './types.js';
 
 // ---------------------------------------------------------------------------------------------
@@ -72,6 +73,9 @@ export function toVideoEdl(project: VideoProject, options: VideoEdlOptions = {})
 		if (clip.type === 'media') lines.push(`* FROM CLIP NAME: ${asset?.name ?? asset?.src ?? clip.asset}`);
 		if (clip.type === 'text') lines.push(`* TITLE: ${clip.text.replace(/\n/g, ' ')}`);
 		if (clip.type === 'color') lines.push(`* COLOR: ${clip.color}`);
+		if (clip.type === 'effect') lines.push(`* EFFECT CLIP: ${clip.name ?? clip.effect} (${clip.effect})`);
+		if (clip.transition?.type === 'effect') lines.push(`* EFFECT TRANSITION: ${clip.transition.effect?.name ?? clip.transition.effect?.effect}`);
+		for (const e of clip.effects ?? []) if (e.enabled !== false) lines.push(`* EFFECT: ${e.name ?? e.effect} (${e.effect})`);
 		// CMX 3600 has no nesting: a compound clip stands in as black, named, until EDLs flatten them.
 		if (clip.type === 'sequence') lines.push(`* COMPOUND CLIP: ${clip.name ?? clip.sequence} (sequence ${clip.sequence} from ${tc(clip.in ?? 0)}, not flattened)`);
 		lines.push('');
@@ -107,6 +111,23 @@ export interface VideoFfmpegOptions {
 	titleImage?: (clip: VideoTextClip, size: { width: number; height: number }) => string;
 	/** Normalise the mix's loudness with ffmpeg's `loudnorm` (EBU R128). */
 	loudness?: VideoLoudnessTarget;
+	/**
+	 * The picture as frames the host rendered, instead of ffmpeg's filters: one per frame of the
+	 * project's frame grid from 0, each the project's size rounded up to even numbers, drawn with
+	 * `renderVideoFrameExact` (the preview's own drawing, provider effects included). `input` is an
+	 * image sequence pattern (`frames/%06d.png`, format `image2`, the default) or raw RGBA on a
+	 * pipe (`pipe:0`, format `rawvideo`). The sound is still mixed by ffmpeg. Projects that use
+	 * provider effects need this: ffmpeg cannot draw them, so without it the export is refused.
+	 */
+	frames?: { input: string; format?: 'image2' | 'rawvideo' };
+}
+
+/** The provider effects in a project's video tracks that ffmpeg's filters cannot draw. */
+export function videoFfmpegUnsupportedEffects(project: VideoProject): VideoEffectUse[] {
+	return allVideoTracks(project)
+		.filter(({ track }) => track.kind === 'video' && !track.hidden)
+		.flatMap(({ track }) => track.clips.flatMap(videoClipEffectUses))
+		.filter((u) => u.enabled);
 }
 
 /** A loudness to normalise the mix to (`loudnorm`'s I, TP and LRA). */
@@ -266,7 +287,24 @@ function buildFfmpeg(project: VideoProject, options: VideoFfmpegOptions, measure
 	const H = even(project.height);
 	const fps = project.fps;
 	const inputs: string[][] = [];
-	const graph: string[] = measure ? [] : [`color=c=${color(project.background ?? '#000000')}:s=${W}x${H}:r=${fps}:d=${sec(D)},format=yuva420p[base]`];
+	const frames = measure ? undefined : options.frames;
+	if (!measure && !frames) {
+		const effects = videoFfmpegUnsupportedEffects(project);
+		if (effects.length) {
+			const list = effects
+				.slice(0, 5)
+				.map((u) => `${u.kind === 'generator' ? 'effect clip' : u.kind === 'transition' ? 'the transition into' : 'an effect on'} "${u.clip}" (${u.name ?? u.effect})`)
+				.join(', ');
+			throw new Error(
+				`ffmpeg cannot draw provider effects, and this project uses ${effects.length}: ${list}${effects.length > 5 ? ', ...' : ''}. Render the picture frame by frame with renderVideoFrameExact (the preview's drawing, with the effects provider) to PNGs or raw RGBA and pass them as frames: { input: "frames/%06d.png" } (or { input: "pipe:0", format: "rawvideo" }); ffmpeg still mixes the sound. Or turn the effects off.`
+			);
+		}
+	}
+	if (frames) {
+		if (frames.format === 'rawvideo') inputs.push(['-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${W}x${H}`, '-framerate', String(fps), '-i', frames.input]);
+		else inputs.push(['-framerate', String(fps), '-i', frames.input]);
+	}
+	const graph: string[] = measure || frames ? [] : [`color=c=${color(project.background ?? '#000000')}:s=${W}x${H}:r=${fps}:d=${sec(D)},format=yuva420p[base]`];
 	let usesDrawtext = false;
 	const animated = new Set<string>();
 	const ramped = new Set<'sound'>();
@@ -596,10 +634,11 @@ function buildFfmpeg(project: VideoProject, options: VideoFfmpegOptions, measure
 		}
 		return { video: cur, audio: sounds };
 	};
-	const top = compose(project.tracks, measure ? null : 'base', D, { within: [], picture: !measure, sound: true });
+	const top = compose(project.tracks, measure || frames ? null : 'base', D, { within: [], picture: !measure && !frames, sound: true });
 	const audio = top.audio;
 	const cur = top.video;
-	if (!measure) graph.push(`[${cur}]format=yuv420p[vout]`);
+	if (frames) graph.push(`[0:v]scale=${W}:${H},format=yuv420p,trim=duration=${sec(D)}[vout]`);
+	else if (!measure) graph.push(`[${cur}]format=yuv420p[vout]`);
 	if (measure && !audio.length) throw new Error('Nothing on the timeline makes a sound, so there is no loudness to measure.');
 	const loudness = options.loudness || measure ? `,${loudnormFilter(options.loudness, measure)}` : '';
 	if (audio.length) graph.push(`${audio.join('')}amix=inputs=${audio.length}:normalize=0:duration=longest,apad,atrim=0:${sec(D)}${loudness}[aout]`);

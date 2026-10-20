@@ -19,6 +19,11 @@
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
     },
+    "./effects": {
+      "types": "./dist/effects/index.d.ts",
+      "import": "./dist/effects/index.js",
+      "require": "./dist/effects/index.cjs"
+    },
     "./spreadsheet": {
       "types": "./dist/spreadsheet/index.d.ts",
       "import": "./dist/spreadsheet/index.js",

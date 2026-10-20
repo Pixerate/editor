@@ -21,6 +21,24 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/video-editor] Provider Effects Render Asynchronously, but the Canvas Draws Synchronously
+
+- **Issue / Symptom**: An effects provider's `render` returns a promise, while `drawVideoFrame` draws a whole frame synchronously. Awaiting effects inside a draw would stall playback. Drawing the playhead's exact time while playing also missed the effect cache on every animation frame, and a layer whose media was still loading got cached with the wrong picture.
+- **Root Cause**: The playhead moves continuously, so values derived from it (source time, fades, keyframes) never repeat between frames. An effect's input is read from a scratch canvas: if the media was not ready, the provider received a placeholder.
+- **Solution / Workaround**: `VideoEffectsEngine` keeps rendered pictures by key, using the LUT cache's pattern. A draw asks for a picture: if it is cached it draws at once; if not it requests one, draws the layer without effects, and redraws when the engine notifies. With effects on screen, the preview evaluates the frame at the start of its frame (`videoEffectFrameTime`), so each frame has one key. Inputs go to the provider only when the draw found every media picture ready. `renderVideoFrameExact` draws, awaits `engine.idle()` and draws again until nothing is waiting, which is what exports use.
+
+### [core/video-editor] Clip Effects Cannot Be ffmpeg Filters: Export Takes Rendered Frames
+
+- **Issue / Symptom**: A project with provider effects (from Flair, for example) cannot be expressed as an ffmpeg filter graph.
+- **Root Cause**: Provider effects are arbitrary shaders or CPU code that run in the host. ffmpeg has no equivalent.
+- **Solution / Workaround**: `toVideoFfmpeg` throws, naming the clips with enabled effects, unless `frames` is passed. With `frames`, the host renders every frame with `renderVideoFrameExact` (the preview's own drawing) to PNGs or to raw RGBA on a pipe. ffmpeg then takes those as the picture and still builds the sound graph. Turning the effects off (`enabled: false`) makes a quick draft export possible again.
+
+### [core/effects] Effect Errors From a Provider May Not Be `instanceof` This Library's Classes
+
+- **Issue / Symptom**: An editor's `catch (e) { if (e instanceof UnknownEffectError) ... }` missed errors thrown by an effects provider, so a bad effect id surfaced as a generic failure instead of a useful tool error.
+- **Root Cause**: Providers live in other packages (Flair's `flairEffects()`). A provider bundled with its own copy of `@pixerate/editor/effects`, or a second install of a different version, throws errors from a different class object, and `instanceof` compares identity.
+- **Solution / Workaround**: Check `isEffectError(e)` and `e.code` (`unknown_effect`, `invalid_values`, `unsupported`, `disposed`, `no_provider`) instead of `instanceof`. Providers should run `checkEffectProvider` in their own tests: it fails when an error has no `code`.
+
 ### [core/vector] Constraints Need Anchor Ids, and Every Hand-Built Anchor Copy Must Carry Them
 
 - **Issue / Symptom**: Constraints disappeared after ordinary edits (a move, a reverse, a shape-keeping delete of a neighbour).

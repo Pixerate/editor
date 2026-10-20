@@ -109,7 +109,11 @@
   function setTransition(type: string) {
     if (!clip) return;
     if (!type) apply({ op: 'set_transition', clip: clip.id, transition: null }, 'Remove transition');
-    else apply({ op: 'set_transition', clip: clip.id, transition: { ...clip.transition, type: type as VideoTransitionType, duration: clip.transition?.duration ?? 500 } }, 'Set transition');
+    else {
+      // A provider transition's effect does not carry over to a built-in type.
+      const { effect: _effect, ...rest } = clip.transition ?? { duration: 500 };
+      apply({ op: 'set_transition', clip: clip.id, transition: { ...rest, type: type as VideoTransitionType, duration: clip.transition?.duration ?? 500 } }, 'Set transition');
+    }
   }
   function gradeValue(c: VideoGradeControl, raw: string) {
     if (!clip) return;
@@ -318,6 +322,9 @@
         <span class="truncate" title="A compound clip plays its sequence as one picture and sound; its clips cannot be edited here yet" data-field="sequence">{sequence?.name ?? clip.sequence} · from {formatVideoSeconds(clip.in ?? 0)}</span>
         <span class="text-muted-foreground">Muted</span>
         <input type="checkbox" class="justify-self-start" aria-label="Muted" {disabled} checked={!!clip.muted} onchange={(e) => set('muted', e.currentTarget.checked || undefined, e.currentTarget.checked ? 'Mute clip' : 'Unmute clip')} data-field="muted" />
+      {:else if clip.type === 'effect'}
+        <span class="text-muted-foreground">Effect</span>
+        <span class="truncate" title="Change its controls in the Effects panel" data-field="effect">{clip.name ?? clip.effect}</span>
       {:else}
         <span class="text-muted-foreground">Colour</span>
         <input class={input} aria-label="Clip colour" {disabled} value={clip.color} onchange={(e) => text('color', e.currentTarget.value, 'Change colour', true)} data-field="color" />
@@ -326,8 +333,8 @@
       <div class="flex items-center gap-1">
         <select class={input} aria-label="Transition" {disabled} value={clip.transition?.type ?? ''} onchange={(e) => setTransition(e.currentTarget.value)} data-field="transition">
           <option value="">none</option>
-          {#each VIDEO_TRANSITION_TYPES as t (t)}
-            <option value={t}>{VIDEO_TRANSITION_LABELS[t]}</option>
+          {#each VIDEO_TRANSITION_TYPES.filter((t) => t !== 'effect' || clip?.transition?.type === 'effect') as t (t)}
+            <option value={t}>{t === 'effect' ? `Effect: ${clip.transition?.effect?.name ?? clip.transition?.effect?.effect}` : VIDEO_TRANSITION_LABELS[t]}</option>
           {/each}
         </select>
         {#if clip.transition}
