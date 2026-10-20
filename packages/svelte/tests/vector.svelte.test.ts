@@ -1227,3 +1227,24 @@ describe("VectorLensPanel (svelte)", () => {
     expect((c.getNode("a") as VectorPathNode).lens).toBeUndefined();
   });
 });
+
+describe("VectorPagesPanel (svelte)", () => {
+  it("adds pages and a master page, goes to a page and changes its master", async () => {
+    const { VectorPagesPanel } = await import("../src/vector");
+    const c = make();
+    const el = render(VectorPagesPanel, { controller: c });
+    click(el.querySelector('[data-vector-pages-action="add"]'));
+    click(el.querySelector('[data-vector-pages-action="add"]'));
+    click(el.querySelector('[data-vector-pages-action="master"]'));
+    const { pages, masters } = c.getPages();
+    expect(pages).toHaveLength(2);
+    expect(pages.every((p) => p.masterId === masters[0].id)).toBe(true);
+    click(el.querySelector(`[data-vector-page="${pages[1].id}"]`));
+    expect(c.getState().selection).toEqual([pages[1].id]);
+    const select = el.querySelector('select[aria-label="Master page"]') as HTMLSelectElement;
+    select.value = "";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    flushSync();
+    expect(c.getPages().pages[1].masterId).toBeNull();
+  });
+});
