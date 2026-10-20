@@ -140,6 +140,12 @@ describe('Svelte paint tools', () => {
     click(button('Highlights'));
     setValue(target.querySelector('input[aria-label="Exposure"]')!, '0.2');
     expect(c.getState().paint.retouch).toMatchObject({ range: 'highlights', exposure: 0.2 });
+    click(button('Blur'));
+    setValue(target.querySelector('input[aria-label="Strength"]')!, '0.3');
+    expect(c.getState().paint.retouch.strength).toBe(0.3);
+    click(button('History'));
+    setValue(target.querySelector('input[aria-label="Steps back"]')!, '2');
+    expect(c.getState().paint.retouch.historySteps).toBe(2);
     click(button('Sponge'));
     click(button('Saturate'));
     expect(c.getState().paint.retouch.spongeMode).toBe('saturate');

@@ -48,6 +48,9 @@ export const PAINT_TOOLS = [
   { id: 'dodge', label: 'Dodge', shortcut: 'O' },
   { id: 'burn', label: 'Burn', shortcut: 'Shift+O' },
   { id: 'sponge', label: 'Sponge', shortcut: 'Shift+O' },
+  { id: 'blur', label: 'Blur', shortcut: '' },
+  { id: 'sharpen', label: 'Sharpen', shortcut: '' },
+  { id: 'history', label: 'History', shortcut: 'Y' },
 ] as const;
 
 export type PaintTool = (typeof PAINT_TOOLS)[number]['id'];
@@ -56,12 +59,13 @@ export const isPaintTool = (tool: string): tool is PaintTool => PAINT_TOOLS.some
 
 /** The paint tools that retouch (their options show instead of the brush colours). */
 export const isRetouchPaintTool = (tool: string): boolean =>
-  tool === 'clone' || tool === 'heal' || tool === 'spot-heal' || tool === 'smudge' || tool === 'dodge' || tool === 'burn' || tool === 'sponge';
+  tool === 'clone' || tool === 'heal' || tool === 'spot-heal' || tool === 'smudge' || tool === 'dodge' || tool === 'burn' || tool === 'sponge' || tool === 'blur' || tool === 'sharpen' || tool === 'history';
 
 /** Retouch sliders: dodge / burn exposure and smudge strength (shown in %). */
-export const RETOUCH_OPTION_CONTROLS: readonly (ControlSpec & { id: 'exposure' | 'strength'; tools: readonly PaintTool[] })[] = [
+export const RETOUCH_OPTION_CONTROLS: readonly (ControlSpec & { id: 'exposure' | 'strength' | 'historySteps'; tools: readonly PaintTool[] })[] = [
   { id: 'exposure', label: 'Exposure', section: 'layer', min: 0, max: 1, step: 0.01, default: 0.5, decimals: 0, track: plain, displayScale: 100, unit: '%', tools: ['dodge', 'burn'] },
-  { id: 'strength', label: 'Strength', section: 'layer', min: 0, max: 1, step: 0.01, default: 0.5, decimals: 0, track: plain, displayScale: 100, unit: '%', tools: ['smudge'] },
+  { id: 'strength', label: 'Strength', section: 'layer', min: 0, max: 1, step: 0.01, default: 0.5, decimals: 0, track: plain, displayScale: 100, unit: '%', tools: ['smudge', 'blur', 'sharpen'] },
+  { id: 'historySteps', label: 'Steps back', section: 'layer', min: 0, max: 50, step: 1, default: 0, decimals: 0, track: plain, unit: '', tools: ['history'] },
 ];
 
 /** Retouch choices, each a row of toggle buttons, with the tools that show it. */
@@ -188,6 +192,9 @@ export function handlePaintShortcut(controller: ImageEditorController, e: Shortc
       controller.setTool(next);
       return true;
     }
+    case 'y':
+      controller.setTool('history');
+      return true;
     case 'd':
       controller.resetPaintColors();
       return true;

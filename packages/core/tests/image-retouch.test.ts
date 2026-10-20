@@ -446,6 +446,53 @@ describe('content-aware spot heal', () => {
   });
 });
 
+describe('Blur, Sharpen and History Brush', () => {
+  it('blur_stroke softens an edge where it passes, as one undo step', async () => {
+    const { c, id, registry } = setup();
+    const before = pixel(c, id, 60, 30);
+    const res = await registry.callTool('blur_stroke', { layerId: id, points: [{ x: 60, y: 20 }, { x: 60, y: 40 }], strength: 1, brush: { size: 16, hardness: 1 } });
+    expect(res.isError).toBeFalsy();
+    const at = pixel(c, id, 60, 30);
+    // x = 60 is the first blue pixel: the red | blue edge mixes into it; far away nothing changes.
+    expect(at[0]).toBeGreaterThan(before[0]);
+    expect(at[2]).toBeLessThan(before[2]);
+    expect(pixel(c, id, 20, 30)).toEqual([220, 20, 20, 255]);
+    c.undo();
+    expect(pixel(c, id, 60, 30)).toEqual(before);
+  });
+
+  it('sharpen_stroke steepens a soft ramp', async () => {
+    const { c, id, registry } = setup((x) => {
+      const v = 60 + 4 * Math.max(0, Math.min(30, x - 50));
+      return [v, v, v];
+    });
+    expect(pixel(c, id, 50, 30)[0]).toBe(60);
+    await registry.callTool('sharpen_stroke', { layerId: id, points: [{ x: 65, y: 30 }], strength: 1, brush: { size: 40, hardness: 1 } });
+    // At the ramp's foot and shoulder the unsharp mask overshoots: darker below, lighter above.
+    expect(pixel(c, id, 50, 30)[0]).toBeLessThan(60);
+    expect(pixel(c, id, 80, 30)[0]).toBeGreaterThan(180);
+  });
+
+  it('history_brush paints the layer back from an earlier state', async () => {
+    const { c, id, registry } = setup();
+    // The layer was just added: the oldest state has no such layer.
+    const none = await registry.callTool('history_brush', { layerId: id, points: [{ x: 20, y: 30 }] });
+    expect(none.isError).toBe(true);
+    expect(String((none.content?.[0] as { text?: string }).text)).toMatch(/did not exist/);
+    c.fillPixels({ layerId: id, color: '#00ff00', useSelection: false });
+    expect(pixel(c, id, 20, 30)).toEqual([0, 255, 0, 255]);
+    const res = await registry.callTool('history_brush', { layerId: id, historySteps: 1, points: [{ x: 20, y: 30 }], brush: { size: 10, hardness: 1 } });
+    expect(res.isError).toBeFalsy();
+    // Back to the red it was before the fill, only under the brush.
+    expect(pixel(c, id, 20, 30)).toEqual([220, 20, 20, 255]);
+    expect(pixel(c, id, 40, 30)).toEqual([0, 255, 0, 255]);
+    c.undo();
+    expect(pixel(c, id, 20, 30)).toEqual([0, 255, 0, 255]);
+    const bad = await registry.callTool('history_brush', { layerId: id, historySteps: -1, points: [{ x: 1, y: 1 }] });
+    expect(bad.isError).toBe(true);
+  });
+});
+
 describe('clone source marker', () => {
   it('sits on the source point, then follows the brush by the aligned offset', () => {
     const { c, id } = setup();

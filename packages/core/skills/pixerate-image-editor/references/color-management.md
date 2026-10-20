@@ -22,7 +22,7 @@ means sRGB. The viewport assumes an sRGB display and converts other working spac
    look with `capture_view`; adjust (lower saturation in the greyed areas); then `off: true`.
 5. **Print documents**: `set_color_mode` `cmyk` with the press profile makes the document a
    CMYK one: you keep editing RGB, the viewport proofs through the press, and `export_psd`
-   writes a CMYK PSD (the separation uses `intent`). Opening a CMYK PSD does this for you. Check
+   writes a CMYK PSD (the separation uses `intent`), at 16 bits for a 16- or 32-bit document. Opening a CMYK PSD does this for you. Check
    out-of-gamut colours with `set_proof_setup` `gamutWarning` before exporting.
 6. **Numbers for a print brief**: `convert_colors` gives CMYK percentages (values × 100) and
    Lab for any `#rrggbb`, without changing the document.
