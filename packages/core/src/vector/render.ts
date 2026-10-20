@@ -60,6 +60,7 @@ import { layoutVectorText, vectorTextPaintSource, vectorTextBoxOutline, vectorTe
 import { applyMatrix } from '../geom/affine.js';
 import { vectorConstraintGlyphs } from './constraints/glyphs.js';
 import { isVectorMaskActive, isVectorMaskGroup, vectorMaskRenderData, vectorMaskSummary, type VectorMaskRenderData, type VectorMaskSummary } from './mask.js';
+import { isVectorFrame, vectorFrameRectPath } from './frames.js';
 import { vectorMeshEditPoints, vectorMeshGridCurves, VECTOR_WARP_STYLES, VECTOR_WARP_STYLE_LABELS } from './warp.js';
 import { VECTOR_EFFECT_TYPES, type VectorEffectType } from './types.js';
 import { isVectorBlendGroup, resolveVectorBlendOptions, vectorBlendRailAt, vectorBlendSpine } from './blendGroup.js';
@@ -391,6 +392,11 @@ export interface VectorOverlayRenderData {
 	 * glyph, or `name = value`), a dimension line for distances, `satisfied` false when the solve
 	 * could not meet it (draw it in a warning colour).
 	 */
+	/**
+	 * Name labels of the top-level frames (artboards), screen space: draw `name` just above (x, y),
+	 * the frame's top-left corner (bold when `selected`). Clicking a label should select the frame.
+	 */
+	frames: { id: string; name: string; x: number; y: number; selected: boolean }[];
 	constraints: { id: string; kind: string; label: string; x: number; y: number; dimension: { x1: number; y1: number; x2: number; y2: number } | null; satisfied: boolean }[];
 	/** A short status, e.g. "W 120 × H 80" or "45°". */
 	status: string | null;
@@ -629,9 +635,23 @@ function outlinePaths(node: VectorNode, parent: AffineMatrix, entered: ReadonlyS
 		const g = vectorInstanceDrawn(node);
 		return [transformBezierPath(vectorAppearanceOutline(g), multiplyMatrices(nodeMatrix(g), parent))];
 	}
+	// A frame outlines as its rectangle.
+	if (isVectorFrame(node)) return [transformBezierPath(subpathsToBezier(vectorFrameRectPath(node.frame)), m)];
 	// Live and mask groups outline as drawn (masked) unless they are being edited.
 	if ((hasOwnVectorAppearance(node) || isVectorMaskActive(node)) && !entered.has(node.id)) return [transformBezierPath(vectorAppearanceOutline(node), m)];
 	return node.children.filter((c) => c.visible !== false).flatMap((c) => outlinePaths(c, m, entered));
+}
+
+/** Name labels of the top-level frames (see `VectorOverlayRenderData.frames`). */
+function frameLabels(state: VectorEditorState): VectorOverlayRenderData['frames'] {
+	const out: VectorOverlayRenderData['frames'] = [];
+	for (const n of state.document.nodes) {
+		if (!isVectorFrame(n) || n.visible === false) continue;
+		const corner = applyMatrix(nodeMatrix(n), { x: n.frame.x, y: n.frame.y });
+		const p = toScreen(state, corner);
+		out.push({ id: n.id, name: n.name ?? 'Frame', x: p.x, y: p.y, selected: state.selection.includes(n.id) });
+	}
+	return out;
 }
 
 /** Constraint glyphs of what is selected or edited (see `VectorOverlayRenderData.constraints`). */
@@ -883,7 +903,7 @@ export function getVectorOverlayRenderData(state: VectorEditorState): VectorOver
 		const tl = toScreen(state, b);
 		textBox = { x: tl.x, y: tl.y, width: b.width * z, height: b.height * z };
 	}
-	return { outlines, selectionBox, distort, anchors, handles, marquee, penPreview, artboard, guides, status, toolStroke, pencilString, cutPoint, cornerWidgets, widthPoints, widthSpot, builder, blend, gradient, envelope, masks: maskOverlay(state), text: textOverlay(state), textBox, constraints: constraintOverlay(state) };
+	return { outlines, selectionBox, distort, anchors, handles, marquee, penPreview, artboard, guides, status, toolStroke, pencilString, cutPoint, cornerWidgets, widthPoints, widthSpot, builder, blend, gradient, envelope, masks: maskOverlay(state), text: textOverlay(state), textBox, constraints: constraintOverlay(state), frames: frameLabels(state) };
 }
 
 /** Mask indicators of the mask groups that are selected or hold the selection (see `VectorOverlayRenderData.masks`). */

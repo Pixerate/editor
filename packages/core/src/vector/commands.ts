@@ -15,6 +15,8 @@ import { vectorFilterParamKeys } from './filters.js';
 import { VECTOR_BLEND_MODES, VECTOR_FILTER_TYPES, type VectorBlendMode, type VectorFilter, type VectorFilterType, type VectorPaint, type VectorPaintLayer, type VectorStrokeLayer } from './types.js';
 import { isValidVectorMesh, VECTOR_WARP_STYLES } from './warp.js';
 import { isVectorMaskGroup, vectorMaskSummary, type VectorMaskSummary } from './mask.js';
+import { isVectorFrame } from './frames.js';
+import { VECTOR_HORIZONTAL_RESIZING, VECTOR_VERTICAL_RESIZING, type VectorFrame, type VectorHorizontalResizing, type VectorResizing, type VectorVerticalResizing } from './types.js';
 import { layoutVectorText, vectorTextFamilies, vectorTextHasOutlines } from './text.js';
 import type { VectorMaskType } from './types.js';
 import type { VectorEnvelopeParams } from './appearance.js';
@@ -72,6 +74,10 @@ export interface VectorNodeListing {
 	blendMode?: VectorBlendMode;
 	/** The node's visual filters (shadows, glows, blurs, feather). */
 	filters?: VectorFilter[];
+	/** A frame's rectangle (in its own space), fill and clip (see vector.listFrames). */
+	frameRect?: VectorFrame;
+	/** A frame child's resizing constraints, when set. */
+	resizing?: VectorResizing;
 	/** A mask group's mask: type, inversion, the mask's id (its first child) and the masked contents. */
 	mask?: VectorMaskSummary;
 }
@@ -300,7 +306,9 @@ export function createVectorCommands(controller: VectorEditorController, options
 					...((n.type === 'path' || n.type === 'text') && Array.isArray(n.strokes) ? { strokes: n.strokes } : {}),
 					...(n.blendMode && n.blendMode !== 'normal' ? { blendMode: n.blendMode } : {}),
 					...(n.filters?.length ? { filters: n.filters } : {}),
-					...(isVectorMaskGroup(n) ? { mask: vectorMaskSummary(n)! } : {})
+					...(isVectorMaskGroup(n) ? { mask: vectorMaskSummary(n)! } : {}),
+					...(isVectorFrame(n) ? { frameRect: n.frame } : {}),
+					...(n.resizing ? { resizing: n.resizing } : {})
 				});
 				if (n.type === 'group') visit(n.children, depth + 1);
 			}
@@ -1217,6 +1225,154 @@ export function createVectorCommands(controller: VectorEditorController, options
 			issues: state.constraintIssues
 		};
 	};
+	const frameResult = (id: string) => controller.getFrames().find((f) => f.id === id) ?? fail(`"${id}" is not a frame.`);
+	const FRAME_PAINT = { ...PAINT, description: `The frame's background, drawn below its children. ${PAINT.description}` };
+	const frameCommands = (): CommandSpec[] => [
+		{
+			...base,
+			id: `${prefix}listFrames`,
+			label: 'List Frames',
+			readOnly: true,
+			keywords: ['frame', 'frames', 'artboard', 'artboards', 'board', 'page', 'constraints'],
+			description:
+				'Lists every frame (top-level ones are artboards): id, name, parentId, artboard, frame { x, y, width, height, fill, clip } in its own space, bounds in document space, and its children with their resizing constraints (horizontal left|right|leftRight|center|scale, vertical top|bottom|topBottom|center|scale).',
+			params: { type: 'object', properties: {}, additionalProperties: false },
+			run: () => ({ frames: controller.getFrames() })
+		},
+		{
+			...base,
+			id: `${prefix}addFrame`,
+			label: 'Add Frame…',
+			keywords: ['frame', 'artboard', 'board', 'page', 'new artboard', 'canvas size'],
+			description:
+				'Adds an empty top-level frame (an artboard) at x, y with width × height (document units), white unless `fill` says otherwise, clipping its contents unless clip is false. With adopt: true the top-level objects it fully encloses move into it. Selects it. One undo step. Returns the frame as vector.listFrames lists it.',
+			params: {
+				type: 'object',
+				properties: {
+					x: { type: 'number', description: 'Left edge (document units).' },
+					y: { type: 'number', description: 'Top edge (document units).' },
+					width: { type: 'number', exclusiveMinimum: 0, description: 'Width (document units).' },
+					height: { type: 'number', exclusiveMinimum: 0, description: 'Height (document units).' },
+					name: { type: 'string', description: 'Frame name (default "Frame n").' },
+					fill: FRAME_PAINT,
+					clip: { type: 'boolean', description: 'Clip the children to the frame (default true).' },
+					adopt: { type: 'boolean', description: 'Move the top-level objects wholly inside the rectangle into the frame (default false).' }
+				},
+				required: ['x', 'y', 'width', 'height'],
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: { x: number; y: number; width: number; height: number; name?: string; fill?: VectorPaint; clip?: boolean; adopt?: boolean }) => {
+				const r = controller.addFrame(params);
+				if (!r.ok) fail(r.message);
+				return frameResult((r as { id: string }).id);
+			}
+		},
+		{
+			...base,
+			id: `${prefix}frameSelection`,
+			label: 'Frame Selection',
+			shortcut: 'Mod+Alt+G',
+			keywords: ['frame', 'artboard', 'wrap', 'group', 'board', 'container'],
+			description:
+				'Puts objects that share a parent (`ids`, default the selection) into a new frame fitted to their bounds plus padding, in their place in the stacking order. No fill unless given; clips unless clip is false. Selects the frame. One undo step. Returns the frame as vector.listFrames lists it.',
+			params: {
+				type: 'object',
+				properties: {
+					ids: { ...IDS, description: 'Objects to frame, sharing a parent (default: the selection).' },
+					padding: { type: 'number', minimum: 0, description: 'Space around the objects inside the frame, document units (default 0).' },
+					name: { type: 'string', description: 'Frame name (default "Frame n").' },
+					fill: FRAME_PAINT,
+					clip: { type: 'boolean', description: 'Clip the children to the frame (default true).' }
+				},
+				additionalProperties: false
+			},
+			undoable: true,
+			enabled: enabledFor,
+			run: (_ctx: unknown, params: { ids?: string[]; padding?: number; name?: string; fill?: VectorPaint; clip?: boolean } | undefined) => {
+				const r = controller.frameSelection({ ...params, ids: ids(params) });
+				if (!r.ok) fail(r.message);
+				return frameResult((r as { id: string }).id);
+			}
+		},
+		{
+			...base,
+			id: `${prefix}setFrame`,
+			label: 'Frame Options…',
+			keywords: ['frame', 'artboard', 'resize', 'size', 'background', 'clip', 'clip content'],
+			description:
+				'Changes frames (`ids`, default the selected frame or the one holding the selection). x, y, width, height move and resize the rectangle (frame space); the children follow their resizing constraints instead of scaling (see vector.setResizing). fill sets the background (null for none); clip whether children outside are hidden. Pass at least one. One undo step. Returns { frames } as vector.listFrames lists them.',
+			params: {
+				type: 'object',
+				properties: {
+					ids: { ...IDS, description: 'Frame ids (default: the selected frame, or the frame holding the selection).' },
+					x: { type: 'number', description: 'New left edge (frame space, document units).' },
+					y: { type: 'number', description: 'New top edge (frame space, document units).' },
+					width: { type: 'number', exclusiveMinimum: 0, description: 'New width (document units).' },
+					height: { type: 'number', exclusiveMinimum: 0, description: 'New height (document units).' },
+					fill: FRAME_PAINT,
+					clip: { type: 'boolean', description: 'true: hide children outside the frame; false: let them show.' }
+				},
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: { ids?: string[]; x?: number; y?: number; width?: number; height?: number; fill?: VectorPaint; clip?: boolean } | undefined) => {
+				const { ids: list, ...patch } = params ?? {};
+				if (!Object.keys(patch).length) fail('Pass at least one of x, y, width, height, fill, clip.');
+				const before = new Set(controller.getFrames().map((f) => f.id));
+				check(controller.setFrame(patch, list ? { ids: list } : {}));
+				const targets = list ?? controller.getFrames().filter((f) => before.has(f.id) && (controller.getState().selection.includes(f.id) || f.children.some((c) => controller.getState().selection.includes(c.id)))).map((f) => f.id);
+				return { frames: targets.map(frameResult) };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}setResizing`,
+			label: 'Resizing Constraints…',
+			keywords: ['constraints', 'resizing', 'pin', 'anchor', 'responsive', 'stretch', 'frame', 'artboard'],
+			description:
+				'Sets how objects directly inside a frame (`ids`, default the selection) follow it when the frame is resized: horizontal left (keep the left margin, the default), right, leftRight (keep both margins: stretch), center or scale; vertical top (default), bottom, topBottom, center or scale. Text keeps its font size (area text takes the new width). A missing axis keeps its value. One undo step. Returns { nodes: [{ id, horizontal, vertical }] }.',
+			params: {
+				type: 'object',
+				properties: {
+					ids: { ...IDS, description: 'Objects directly inside a frame (default: the selection).' },
+					horizontal: { type: 'string', enum: VECTOR_HORIZONTAL_RESIZING, description: 'left, right, leftRight (stretch), center or scale.' },
+					vertical: { type: 'string', enum: VECTOR_VERTICAL_RESIZING, description: 'top, bottom, topBottom (stretch), center or scale.' }
+				},
+				additionalProperties: false
+			},
+			undoable: true,
+			enabled: enabledFor,
+			run: (_ctx: unknown, params: { ids?: string[]; horizontal?: VectorHorizontalResizing; vertical?: VectorVerticalResizing } | undefined) => {
+				const list = ids(params);
+				check(controller.setResizing({ ...(params?.horizontal ? { horizontal: params.horizontal } : {}), ...(params?.vertical ? { vertical: params.vertical } : {}) }, { ids: list }));
+				return { nodes: list.map((id) => ({ id, horizontal: controller.getNode(id)?.resizing?.horizontal ?? 'left', vertical: controller.getNode(id)?.resizing?.vertical ?? 'top' })) };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}exportFrameSvg`,
+			label: 'Export Frame as SVG',
+			readOnly: true,
+			keywords: ['export', 'artboard', 'frame', 'svg', 'download', 'save'],
+			description: 'Returns one frame (an artboard) as an SVG document of its own size, its top-left corner at the origin. Returns { svg, width, height }.',
+			params: {
+				type: 'object',
+				properties: {
+					id: { type: 'string', description: 'The frame (from vector.listFrames).' },
+					precision: { type: 'integer', minimum: 0, maximum: 8, description: 'Decimal places in coordinates (default 3).' }
+				},
+				required: ['id'],
+				additionalProperties: false
+			},
+			run: (_ctx: unknown, params: { id: string; precision?: number }) => {
+				const f = frameResult(params.id);
+				const svg = controller.frameToSvg(params.id, params.precision !== undefined ? { precision: params.precision } : {})!;
+				return { svg, width: f.frame.width, height: f.frame.height };
+			}
+		}
+	];
+
 	const constraintCommands = (): CommandSpec[] => [
 		{
 			...base,
@@ -1427,6 +1583,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 		...textCommands(),
 		...symbolCommands(),
 		...constraintCommands(),
+		...frameCommands(),
 		{
 			...base,
 			id: `${prefix}setCorners`,

@@ -2265,3 +2265,15 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Keys typed right after clicking the canvas with the Type tool were lost, and IME (composed) text never arrived when keys were read from `window`.
 - **Root Cause**: The canvas cannot take text input. Focus has to move to an element that can, and that element only exists once the click has opened a `TextEditSession` (after the pointer is released). Composed text comes as `compositionend` / `input`, not as `keydown` keys.
 - **Solution / Workaround**: Both editors render a 1 px transparent `<textarea data-testid="type-input">` while a session is open and focus it on the next tick after mouse-up. `keydown` goes to `TextEditSession.handleKey` (single characters, Backspace, Delete, Enter, arrows, Home / End, Cmd/Ctrl+A) unless `isComposing`; `compositionend` and `input` insert the composed or pasted text and clear the textarea. Cmd/Ctrl+Z / C / X / V are left to the browser. All edits of one session are one undo step (the first change records history, the rest pass `commitToHistory: false`). Automated tests type into the textarea; a browser driver that types immediately after the click can beat the focus.
+
+### [core/vector] A Frame's Size Field Must Not Apply Each Keystroke
+
+- **Issue / Symptom**: Typing a new width such as 400 into a frame's size field squashed children that stretch with the frame (`leftRight` / `topBottom`), and their margins came back wrong.
+- **Root Cause**: Resizing a frame lays its children out again by their constraints. Applied on every keystroke, the frame went through widths 4, 40 and 400. At width 4 a stretched child's span became a sliver, and its margins could not be recovered from that.
+- **Solution / Workaround**: Both frame panels apply x, y, width and height on Enter or blur (React: an uncontrolled input keyed by the value; Svelte: `onchange`), never per keystroke. Code that drives `setFrame` in steps should go straight to the final size, or start every step from the original document.
+
+### [core/vector] Frames Draw, Hit and Bound Through Different Paths
+
+- **Issue / Symptom**: An empty frame could not be selected, and children outside a clipping frame stayed clickable, while the frame itself drew correctly.
+- **Root Cause**: Drawing goes through `expandVectorAppearance`, which turns a frame into a clip group (`vectorFrameDrawn`). Hit-testing and bounds instead start from the stored node, where a frame is just a group.
+- **Solution / Workaround**: `vectorNodeBounds` and `hitTestVectorNode` handle frames first: the bounds are the rectangle (plus the children when it does not clip), and a hit is any point inside the rectangle. `vectorAppearanceShapes`, `expandVectorAppearance` and `vectorMaskRegionShapes` swap in the drawn clip group. Any new code that walks groups should check `isVectorFrame` before treating a frame as a plain group.

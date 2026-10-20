@@ -131,6 +131,8 @@ import {
 import { isIdentityMatrix } from '../geom/affine.js';
 import { vectorNodesNear } from './spatial.js';
 import { isVectorMaskActive, isVectorMaskGroup, isVectorMaskType, vectorMaskedGeometry } from './mask.js';
+import { boundsInside, isVectorFrame, vectorFrameDocument, type VectorFrameGroup } from './frames.js';
+import { VECTOR_HORIZONTAL_RESIZING, VECTOR_VERTICAL_RESIZING, type VectorFrame, type VectorHorizontalResizing, type VectorResizing, type VectorVerticalResizing } from './types.js';
 import type { TextShaper } from '../text/types.js';
 import { resolveVectorSymbols, stripVectorSymbolArt, vectorSymbolUses } from './symbols.js';
 import {
@@ -590,6 +592,21 @@ export type VectorActionResult = { ok: true } | { ok: false; message: string };
 
 /** What Make Clipping Mask / Make Opacity Mask return: the new group's id, or why not. */
 export type VectorMaskResult = { ok: true; id: string } | { ok: false; message: string };
+
+/** A frame as `getFrames` lists it. */
+export interface VectorFrameListing {
+	id: string;
+	name: string;
+	/** The group holding it (null for an artboard: a top-level frame). */
+	parentId: string | null;
+	artboard: boolean;
+	/** Its rectangle in its own space, fill and clip. */
+	frame: VectorFrame;
+	/** Its rectangle in document space (axis-aligned). */
+	bounds: VectorBounds | null;
+	/** Its children, bottom to top, with their resizing constraints. */
+	children: { id: string; type: VectorNode['type']; name?: string; horizontal: VectorHorizontalResizing; vertical: VectorVerticalResizing }[];
+}
 
 /** The shape the Blend tool blends from (its first click). */
 export interface VectorBlendStart {
@@ -1075,7 +1092,8 @@ const TOOL_LABELS: Record<VectorTool, string> = {
 	gradient: 'Gradient',
 	envelope: 'Envelope Mesh',
 	type: 'Type',
-	typePath: 'Type on a Path'
+	typePath: 'Type on a Path',
+	frame: 'Frame'
 };
 
 const TOOL_KEYS: Record<string, VectorTool> = {
@@ -1098,7 +1116,8 @@ const TOOL_KEYS: Record<string, VectorTool> = {
 	g: 'gradient',
 	u: 'envelope',
 	t: 'type',
-	q: 'typePath'
+	q: 'typePath',
+	f: 'frame'
 };
 
 export function vectorToolLabel(tool: VectorTool): string {
@@ -1126,7 +1145,8 @@ export const VECTOR_TOOL_SHORTCUTS: Readonly<Record<VectorTool, string>> = {
 	gradient: 'G',
 	envelope: 'U',
 	type: 'T',
-	typePath: 'Q'
+	typePath: 'Q',
+	frame: 'F'
 };
 
 /** Short glyphs for tool buttons (pair them with `vectorToolLabel` for the accessible name). */
@@ -1150,11 +1170,12 @@ export const VECTOR_TOOL_GLYPHS: Readonly<Record<VectorTool, string>> = {
 	gradient: '◐',
 	envelope: '⌗',
 	type: 'T',
-	typePath: '𝒯'
+	typePath: '𝒯',
+	frame: '⬚'
 };
 
 /** Tools that drag out a shape (they snap while hovering). */
-const SHAPE_TOOLS: ReadonlySet<VectorTool> = new Set(['rect', 'ellipse', 'polygon', 'star', 'line']);
+const SHAPE_TOOLS: ReadonlySet<VectorTool> = new Set(['rect', 'ellipse', 'polygon', 'star', 'line', 'frame']);
 
 const BOOLEAN_OPS: Record<VectorBooleanOperation, 'union' | 'difference' | 'intersection' | 'xor'> = {
 	union: 'union',
@@ -4009,6 +4030,216 @@ export class VectorEditorController {
 		return { ok: true, id };
 	}
 
+	// -----------------------------------------------------------------------------------------
+	// Frames (artboards) and resizing constraints
+
+	/** A name for a new frame: "Frame <n>" after the frames there are. */
+	private frameName(): string {
+		let n = 0;
+		walkVectorNodes(this.doc.nodes, (x) => {
+			if (isVectorFrame(x)) n++;
+		});
+		return `Frame ${n + 1}`;
+	}
+
+	/**
+	 * Adds an empty frame (an artboard when top-level) with its rectangle at `x, y, width, height`
+	 * (document units), filled white by default and clipping its contents. With `adopt`, the
+	 * top-level objects it fully encloses move into it. One undo step; selects it.
+	 */
+	addFrame(input: { x: number; y: number; width: number; height: number; name?: string; fill?: VectorPaint; clip?: boolean; adopt?: boolean }): VectorMaskResult {
+		const { x, y, width, height } = input;
+		if (![x, y, width, height].every(Number.isFinite)) return { ok: false, message: 'x, y, width and height must be numbers.' };
+		if (!(width > 0 && height > 0)) return { ok: false, message: 'A frame needs a positive width and height.' };
+		const id = this.newId();
+		const rect: VectorBounds = { x, y, width, height };
+		const adopted = input.adopt ? this.doc.nodes.filter((n) => !n.locked && n.visible !== false && !n.blendStep && boundsInside(vectorNodeBounds(n), rect)) : [];
+		const frame: VectorFrameGroup = {
+			id,
+			type: 'group',
+			name: input.name ?? this.frameName(),
+			frame: { x, y, width, height, fill: input.fill === undefined ? '#ffffff' : input.fill, ...(input.clip === false ? { clip: false } : {}) },
+			children: adopted
+		};
+		const taken = new Set(adopted.map((n) => n.id));
+		this.change('Add Frame', () => {
+			this.setDoc([...this.doc.nodes.filter((n) => !taken.has(n.id)), frame]);
+			this.selection = [id];
+			this.anchors = [];
+			this.editingId = null;
+		});
+		return { ok: true, id };
+	}
+
+	/**
+	 * Frame Selection: puts the selected (or given) objects, which must share a parent, into a new
+	 * frame fitted to their bounds plus `padding` (document units, default 0), in their place in the
+	 * stacking order. No fill unless `fill` is given; clips unless `clip: false`. One undo step;
+	 * selects the frame.
+	 */
+	frameSelection(options: { ids?: readonly string[]; padding?: number; name?: string; fill?: VectorPaint; clip?: boolean } = {}): VectorMaskResult {
+		const ids = [...new Set(options.ids ?? this.selectedRoots())];
+		if (!ids.length) return { ok: false, message: 'Select the objects to frame first.' };
+		const padding = options.padding ?? 0;
+		if (!(Number.isFinite(padding) && padding >= 0)) return { ok: false, message: 'padding must be zero or more.' };
+		for (const id of ids) {
+			const n = this.getNode(id);
+			if (!n) return { ok: false, message: `There is no node "${id}".` };
+			if (n.locked) return { ok: false, message: `"${id}" is locked; unlock it first.` };
+			if (n.blendStep) return { ok: false, message: `"${id}" is a blend step; select its blend instead.` };
+		}
+		const locs = ids.map((id) => locateVectorNode(this.doc.nodes, id)!);
+		const parent = locs[0].parent ?? null;
+		if (locs.some((l) => (l.parent?.id ?? null) !== (parent?.id ?? null))) return { ok: false, message: 'The objects must share a parent (pick objects at one level).' };
+		const b = unionBounds(ids.map((id) => vectorNodeBounds(this.getNode(id)!)));
+		if (!b) return { ok: false, message: 'The objects have no extent to frame.' };
+		const id = this.newId();
+		const order = ids.slice().sort((a, c) => locs[ids.indexOf(a)].index - locs[ids.indexOf(c)].index);
+		const set = new Set(order);
+		const frame = {
+			x: b.x - padding,
+			y: b.y - padding,
+			width: b.width + 2 * padding,
+			height: b.height + 2 * padding,
+			...(options.fill !== undefined && options.fill !== null ? { fill: options.fill } : {}),
+			...(options.clip === false ? { clip: false } : {})
+		};
+		this.change('Frame Selection', () => {
+			const regroup = (list: readonly VectorNode[]): VectorNode[] => {
+				const members = order.map((m) => list.find((n) => n.id === m)!);
+				const top = Math.max(...members.map((m) => list.indexOf(m)));
+				const out: VectorNode[] = [];
+				list.forEach((n, i) => {
+					if (i === top) out.push({ id, type: 'group', name: options.name ?? this.frameName(), frame, children: members });
+					if (!set.has(n.id)) out.push(n);
+				});
+				return out;
+			};
+			if (!parent) this.setDoc(regroup(this.doc.nodes));
+			else this.setDoc(mapTree(this.doc.nodes, (n) => (n.id === parent.id && n.type === 'group' ? { ...n, children: regroup(n.children) } : n)));
+			this.selection = [id];
+			this.anchors = [];
+			this.editingId = null;
+		});
+		return { ok: true, id };
+	}
+
+	/** Frames among `ids` (default: the selection), or holding one of them directly. */
+	private frameTargets(ids?: readonly string[]): VectorFrameGroup[] {
+		const out = new Map<string, VectorFrameGroup>();
+		for (const id of ids ?? this.selection) {
+			const n = this.getNode(id);
+			if (isVectorFrame(n)) out.set(n.id, n);
+			else if (!ids) {
+				const parent = locateVectorNode(this.doc.nodes, id)?.parent;
+				if (isVectorFrame(parent)) out.set(parent.id, parent);
+			}
+		}
+		return [...out.values()];
+	}
+
+	/**
+	 * Changes frames (default: the selected ones, or the frame holding the selection): `x`, `y`,
+	 * `width`, `height` move and resize the rectangle (in the frame's own space), and its children
+	 * follow their resizing constraints; `fill` (null for none) and `clip` set how it draws.
+	 * One undo step (merged while `merge` is the same key).
+	 */
+	setFrame(patch: { x?: number; y?: number; width?: number; height?: number; fill?: VectorPaint; clip?: boolean }, options: { ids?: readonly string[]; merge?: string } = {}): VectorActionResult {
+		for (const k of ['x', 'y', 'width', 'height'] as const) if (patch[k] !== undefined && !Number.isFinite(patch[k])) return { ok: false, message: `${k} must be a number.` };
+		if ((patch.width !== undefined && !(patch.width > 0)) || (patch.height !== undefined && !(patch.height > 0))) return { ok: false, message: 'A frame needs a positive width and height.' };
+		if (patch.clip !== undefined && typeof patch.clip !== 'boolean') return { ok: false, message: 'clip must be true or false.' };
+		if (options.ids) for (const id of options.ids) if (!isVectorFrame(this.getNode(id))) return { ok: false, message: `"${id}" is not a frame (use frameSelection or addFrame to make one).` };
+		const frames = this.frameTargets(options.ids);
+		if (!frames.length) return { ok: false, message: 'Select a frame (or something in one).' };
+		const locked = frames.find((f) => f.locked);
+		if (locked) return { ok: false, message: `"${locked.id}" is locked; unlock it first.` };
+		const next = new Map<string, VectorNode>();
+		for (const f of frames) {
+			const from = f.frame;
+			const to = { x: patch.x ?? from.x, y: patch.y ?? from.y, width: patch.width ?? from.width, height: patch.height ?? from.height };
+			let node: VectorFrameGroup = f;
+			if (to.x !== from.x || to.y !== from.y || to.width !== from.width || to.height !== from.height) {
+				// The rectangle's map in the frame's own space, carried into its parent's space.
+				const sx = from.width > 1e-9 ? to.width / from.width : 1;
+				const sy = from.height > 1e-9 ? to.height / from.height : 1;
+				const local: AffineMatrix = [sx, 0, 0, sy, to.x - sx * from.x, to.y - sy * from.y];
+				const own = nodeMatrix(f);
+				node = transformVectorNode(f, multiplyMatrices(multiplyMatrices(invertMatrix(own), local), own));
+				// Exact numbers (the map can round); the placement is unchanged.
+				node = { ...node, frame: { ...node.frame, ...to }, ...(f.transform ? { transform: f.transform } : {}) };
+			}
+			const frame = { ...node.frame };
+			if (patch.fill !== undefined) {
+				if (patch.fill === null || patch.fill === 'none') delete frame.fill;
+				else frame.fill = patch.fill;
+			}
+			if (patch.clip !== undefined) {
+				if (patch.clip) delete frame.clip;
+				else frame.clip = false;
+			}
+			next.set(f.id, { ...node, frame });
+		}
+		this.change(
+			'Frame',
+			() => {
+				this.setDoc(mapTree(this.doc.nodes, (n) => next.get(n.id) ?? n));
+			},
+			options.merge
+		);
+		return { ok: true };
+	}
+
+	/**
+	 * Sets the resizing constraints of the selected (or given) objects, which must be children of
+	 * frames: how each follows its frame when the frame is resized. A missing axis keeps its value.
+	 * One undo step.
+	 */
+	setResizing(resizing: VectorResizing, options: { ids?: readonly string[] } = {}): VectorActionResult {
+		if (resizing.horizontal !== undefined && !VECTOR_HORIZONTAL_RESIZING.includes(resizing.horizontal)) return { ok: false, message: `Unknown horizontal constraint "${resizing.horizontal}": use ${VECTOR_HORIZONTAL_RESIZING.join(', ')}.` };
+		if (resizing.vertical !== undefined && !VECTOR_VERTICAL_RESIZING.includes(resizing.vertical)) return { ok: false, message: `Unknown vertical constraint "${resizing.vertical}": use ${VECTOR_VERTICAL_RESIZING.join(', ')}.` };
+		if (!resizing.horizontal && !resizing.vertical) return { ok: false, message: 'Pass horizontal, vertical or both.' };
+		const ids = options.ids ?? this.selection;
+		if (!ids.length) return { ok: false, message: 'Select objects inside a frame first.' };
+		for (const id of ids) {
+			if (!this.getNode(id)) return { ok: false, message: `There is no node "${id}".` };
+			if (!isVectorFrame(locateVectorNode(this.doc.nodes, id)?.parent)) return { ok: false, message: `"${id}" is not directly inside a frame: resizing constraints only apply to a frame's children.` };
+		}
+		const set = new Set(ids);
+		this.change('Constraints', () => {
+			this.setDoc(mapTree(this.doc.nodes, (n) => (set.has(n.id) ? { ...n, resizing: { ...n.resizing, ...resizing } } : n)));
+		});
+		return { ok: true };
+	}
+
+	/** Every frame in the document (top-level ones are artboards), with its rectangle, parent and children's constraints. */
+	getFrames(): VectorFrameListing[] {
+		const out: VectorFrameListing[] = [];
+		const visit = (list: readonly VectorNode[], parent: string | null) => {
+			for (const n of list) {
+				if (isVectorFrame(n)) {
+					out.push({
+						id: n.id,
+						name: n.name ?? 'Frame',
+						parentId: parent,
+						artboard: parent === null,
+						frame: n.frame,
+						bounds: vectorNodeBounds(n, vectorParentMatrix(this.doc.nodes, n.id) ?? IDENTITY_MATRIX),
+						children: n.children.map((c) => ({ id: c.id, type: c.type, ...(c.name ? { name: c.name } : {}), horizontal: c.resizing?.horizontal ?? 'left', vertical: c.resizing?.vertical ?? 'top' }))
+					});
+				}
+				if (n.type === 'group') visit(n.children, n.id);
+			}
+		};
+		visit(this.doc.nodes, null);
+		return out;
+	}
+
+	/** One frame as an SVG document of its own size (its corner at the origin), or null when `id` is not a frame. */
+	frameToSvg(id: string, options: VectorSvgExportOptions = {}): string | null {
+		const doc = vectorFrameDocument(this.storedDocument(), id, findVectorNode);
+		return doc ? vectorDocumentToSvg(doc, options) : null;
+	}
+
 	/** Mask groups among `ids` (default: the selection), or holding one of them directly. */
 	private maskTargets(ids?: readonly string[]): VectorGroupNode[] {
 		const out = new Map<string, VectorGroupNode>();
@@ -5719,8 +5950,10 @@ export class VectorEditorController {
 		// The targets are gathered before the new shape joins the document, and kept for the drag.
 		const targets = this.drawingTargets(null);
 		const start = this.snapDrawn(p, null, input, () => targets);
-		const kind = this.tool as VectorShapeInput['kind'];
+		// The Frame tool drags out a rectangle that becomes the frame when released.
+		const kind = (this.tool === 'frame' ? 'rect' : this.tool) as VectorShapeInput['kind'];
 		const node = this.createShapeNode({ kind, x: start.x, y: start.y, width: 0, height: 0 });
+		if (this.tool === 'frame') Object.assign(node, { fill: '#ffffff', stroke: '#a3a3a3', strokeWidth: 1 / this.viewport.zoom });
 		this.setDoc([...this.doc.nodes, node]);
 		this.drag = { kind: 'shape', tool: this.tool, start, nodeId: node.id, before, targets };
 		this.interaction = { type: 'draw', tool: this.tool, nodeId: node.id, bounds: { x: start.x, y: start.y, width: 0, height: 0 } };
@@ -5949,7 +6182,7 @@ export class VectorEditorController {
 					const y2 = drag.start.y + h;
 					bounds = boundsFromPoints(start, { x: x2, y: y2 });
 				}
-				const shaped = this.createShapeNode({ kind: drag.tool as VectorShapeInput['kind'], ...bounds });
+				const shaped = this.createShapeNode({ kind: (drag.tool === 'frame' ? 'rect' : drag.tool) as VectorShapeInput['kind'], ...bounds });
 				this.replaceNode(drag.nodeId, { ...node, subpaths: shaped.subpaths });
 				this.interaction = { type: 'draw', tool: drag.tool, nodeId: drag.nodeId, bounds };
 				this.notify(true);
@@ -6198,6 +6431,14 @@ export class VectorEditorController {
 					this.doc = drag.before.doc;
 					this.notify(true);
 					return;
+				}
+				if (drag.tool === 'frame') {
+					// The rectangle becomes a frame holding the top-level objects it encloses.
+					const rest = this.doc.nodes.filter((n) => n.id !== drag.nodeId);
+					const adopted = rest.filter((n) => !n.locked && n.visible !== false && !n.blendStep && boundsInside(vectorNodeBounds(n), b));
+					const taken = new Set(adopted.map((n) => n.id));
+					const frame: VectorFrameGroup = { id: drag.nodeId, type: 'group', name: this.frameName(), frame: { ...b, fill: '#ffffff' }, children: adopted };
+					this.setDoc([...rest.filter((n) => !taken.has(n.id)), frame]);
 				}
 				this.selection = [drag.nodeId];
 				this.anchors = [];
