@@ -2474,3 +2474,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: A replayed gradient stroke would follow whatever the editor colours are at replay time.
 - **Root Cause**: Gradients may name the editor's colours (presets that follow the chosen colours, migrated multi-colour brushes without colours of their own).
 - **Solution / Workaround**: `resolvePaintGradient` replaces them with the stroke's colours when it starts, and the stroke records the resolved gradient (`RecordedStroke.paint`); replays pass it back as `paint`, which wins over the brush's and the editor's.
+
+### [core/vector] A Swept Shape's Edge Bands Must All Wind The Same Way
+
+- **Issue / Symptom**: A block shadow (`sweepPath`) came out with holes along some sides of the shape.
+- **Root Cause**: The sweep puts one band (edge, edge moved, back) per flattened edge into a single `nonzero` operand. Edges facing against the sweep direction give bands that wind the other way, so where two bands overlap their windings cancel to zero.
+- **Solution / Workaround**: Swap an edge's ends when the cross product of the edge and the sweep is negative, and skip edges parallel to the sweep. Every band then winds the same way and `nonzero` unites them.

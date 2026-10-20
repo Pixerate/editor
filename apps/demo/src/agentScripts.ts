@@ -423,6 +423,13 @@ export const VECTOR_SCRIPTS: AgentScript[] = [
     ],
   },
   {
+    id: "vector-block-shadow",
+    prompt: "Give the star a long shadow",
+    steps: [
+      { say: "A block shadow swept down-right from the star, fading out along its length.", ...command("vector.addEffect", { ids: ["star"], type: "blockShadow", params: { angle: 45, distance: 120, color: "#0f172a", opacity: 60, endOpacity: 0 } }), target: { selector: '[data-vector-id="star"]' } },
+    ],
+  },
+  {
     id: "vector-symmetry",
     prompt: "Draw a mandala in the sky with live symmetry",
     steps: [

@@ -35,6 +35,7 @@ import {
 	puckerBloatPaths,
 	repeatPaths,
 	roundCornerPaths,
+	sweepPath,
 	trimPaths,
 	trimPathsIndividually,
 	twistPaths,
@@ -112,7 +113,8 @@ export const VECTOR_EFFECT_DEFAULTS: { readonly [K in VectorEffectType]: VectorE
 		composite: 'below'
 	},
 	envelope: { style: 'arc', bend: 50, horizontal: 0, vertical: 0, orientation: 'horizontal', rows: 2, columns: 2, mesh: null },
-	contour: { direction: 'inside', steps: 4, offset: 6, join: 'round', miterLimit: 4, fillColor: '#ffffff', strokeColor: null, acceleration: 0 }
+	contour: { direction: 'inside', steps: 4, offset: 6, join: 'round', miterLimit: 4, fillColor: '#ffffff', strokeColor: null, acceleration: 0 },
+	blockShadow: { angle: 45, distance: 20, color: '#1e293b', opacity: 100, endOpacity: 100 }
 };
 
 export const VECTOR_EFFECT_LABELS: Record<VectorEffectType, string> = {
@@ -126,7 +128,8 @@ export const VECTOR_EFFECT_LABELS: Record<VectorEffectType, string> = {
 	merge: 'Merge Paths',
 	repeater: 'Repeater',
 	envelope: 'Envelope',
-	contour: 'Contour'
+	contour: 'Contour',
+	blockShadow: 'Block Shadow'
 };
 
 /** How a panel edits one effect parameter. */
@@ -230,6 +233,13 @@ export const VECTOR_EFFECT_PARAM_SPECS: Record<VectorEffectType, VectorEffectPar
 				{ value: 'bevel', label: 'Bevel' }
 			]
 		}
+	],
+	blockShadow: [
+		{ key: 'angle', label: 'Angle °', kind: 'number', min: -360, max: 360, step: 1, slider: true },
+		{ key: 'distance', label: 'Distance', kind: 'number', min: 0, max: 2000, step: 1, slider: true },
+		{ key: 'color', label: 'Colour', kind: 'color' },
+		{ key: 'opacity', label: 'Opacity %', kind: 'number', min: 0, max: 100, step: 1, slider: true },
+		{ key: 'endOpacity', label: 'End opacity %', kind: 'number', min: 0, max: 100, step: 1, slider: true }
 	],
 	repeater: [
 		{ key: 'copies', label: 'Copies', kind: 'number', min: 0, max: 50, step: 0.1, slider: true },
@@ -597,6 +607,49 @@ function contourShapes(shapes: readonly VectorAppearanceShape[], c: VectorEffect
 	return out;
 }
 
+/**
+ * The block shadow of each shape (see `VectorEffectParamsMap.blockShadow`): the shape swept
+ * `distance` along `angle` (`sweepPath`), filled with the shadow colour (a gradient toward
+ * `endOpacity` when it fades), drawn under every shape. After CorelDRAW's Block Shadow (concept).
+ */
+function blockShadowShapes(shapes: readonly VectorAppearanceShape[], b: VectorEffectParamsMap['blockShadow']): VectorAppearanceShape[] {
+	const rad = (b.angle * Math.PI) / 180;
+	const u = { x: Math.cos(rad), y: Math.sin(rad) };
+	const distance = Math.max(0, b.distance);
+	const shadows: VectorAppearanceShape[] = [];
+	for (const s of shapes) {
+		const color = b.color ?? (typeof s.source.fill === 'string' && s.source.fill !== 'none' ? s.source.fill : '#000000');
+		const path = sweepPath(s.path, u.x * distance, u.y * distance, s.source.fillRule === 'evenodd' ? 'evenodd' : 'nonzero');
+		const box = bezierPathBounds(s.path);
+		if (!path.length || !box) continue;
+		let fill: VectorPaint = color;
+		const near = Math.min(100, Math.max(0, b.opacity));
+		const far = Math.min(100, Math.max(0, b.endOpacity));
+		const top = Math.max(near, far);
+		if (near !== far && distance > 0) {
+			// From the near side of the shape to the far end of the shadow.
+			const along = [box.minX * u.x + box.minY * u.y, box.maxX * u.x + box.minY * u.y, box.minX * u.x + box.maxY * u.y, box.maxX * u.x + box.maxY * u.y];
+			const t0 = Math.min(...along);
+			const t1 = Math.max(...along) + distance;
+			const c = { x: (box.minX + box.maxX) / 2, y: (box.minY + box.maxY) / 2 };
+			const k = c.x * u.x + c.y * u.y;
+			fill = {
+				type: 'linear',
+				units: 'userSpaceOnUse',
+				start: { x: c.x + u.x * (t0 - k), y: c.y + u.y * (t0 - k) },
+				end: { x: c.x + u.x * (t1 - k), y: c.y + u.y * (t1 - k) },
+				stops: [
+					{ offset: 0, color, opacity: near / top },
+					{ offset: 1, color, opacity: far / top }
+				]
+			};
+		}
+		const source: VectorPathNode = { ...s.source, fill, stroke: null, fills: undefined, strokes: undefined, fillRule: 'nonzero' };
+		shadows.push({ source, path, opacity: (s.opacity * top) / 100, order: [0, ...s.order] });
+	}
+	return [...shadows, ...shapes.map((s) => ({ ...s, order: [1, ...s.order] }))];
+}
+
 /** Applies an effect stack to shapes, top to bottom (disabled effects skipped). */
 export function applyVectorEffects(shapes: readonly VectorAppearanceShape[], effects: readonly VectorEffect[] | null | undefined): VectorAppearanceShape[] {
 	let list = shapes.slice();
@@ -640,6 +693,9 @@ export function applyVectorEffects(shapes: readonly VectorAppearanceShape[], eff
 			}
 			case 'contour':
 				list = contourShapes(list, e.params);
+				break;
+			case 'blockShadow':
+				list = blockShadowShapes(list, e.params);
 				break;
 			case 'repeater': {
 				const r = e.params;
