@@ -778,6 +778,64 @@ export class WetWorld {
     return this.clock - start;
   }
 
+  /**
+   * Steps only the live tiles that touch `region` (canvas pixels): a viewport, say, so a huge wet
+   * canvas costs what is on screen. The other live tiles hold still (no flow, no drying) until a
+   * later step reaches them, and water flowing out of the region stops at their edge; tiles the
+   * region's water wakes up are stepped as usual. Holding tiles makes the result depend on the
+   * regions, so a replay is only bit-identical with the same regions. Returns the clock.
+   */
+  async stepRegion(steps: number, region: RasterRect): Promise<number> {
+    const release = this.hold(region);
+    try {
+      return await this.step(steps);
+    } finally {
+      release();
+    }
+  }
+
+  /** `stepRegion` on this thread (throws while worker threads are in use, like `stepSync`). */
+  stepRegionSync(steps: number, region: RasterRect): number {
+    const release = this.hold(region);
+    try {
+      return this.stepSync(steps);
+    } finally {
+      release();
+    }
+  }
+
+  /**
+   * Takes the live tiles that miss `region` out of the active list until the returned release
+   * is called. Their state is copied into the other ping-pong set first, so they read the same
+   * whichever set is current when they come back.
+   */
+  private hold(region: RasterRect): () => void {
+    this.requireIdle();
+    const x0 = Math.floor(region.x / WET_TILE);
+    const y0 = Math.floor(region.y / WET_TILE);
+    const x1 = Math.floor((region.x + Math.max(0, region.width) - 1) / WET_TILE);
+    const y1 = Math.floor((region.y + Math.max(0, region.height) - 1) / WET_TILE);
+    const held = this.active.filter((key) => {
+      const [tx, ty] = this.tileXY(key);
+      return tx < x0 || tx > x1 || ty < y0 || ty > y1;
+    });
+    if (!held.length) return () => {};
+    const setFloats = SET_PLANES * PLANE;
+    for (const key of held) {
+      const base = this.slotBase(this.slotOf(key));
+      const src = base + this.parity * setFloats;
+      this.f32.copyWithin(base + (1 - this.parity) * setFloats, src, src + setFloats);
+    }
+    const heldSet = new Set(held);
+    this.active.splice(0, this.active.length, ...this.active.filter((k) => !heldSet.has(k)));
+    this.syncList();
+    return () => {
+      for (const key of held) if (this.slotOf(key) >= 0 && !this.active.includes(key)) this.active.push(key);
+      this.syncList();
+      this.refreshHalos();
+    };
+  }
+
   // --- Edits ---------------------------------------------------------------------
 
   /** Float index of a cell's plane-0 value in the current set, or −1 (inactive / off the canvas). */
