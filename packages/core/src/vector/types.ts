@@ -458,6 +458,41 @@ export interface VectorPathNode extends VectorNodeBase, VectorStyle {
 	 * connection sites. Its geometry is routed again after every edit, so it follows them.
 	 */
 	connector?: VectorConnector | null;
+	/**
+	 * Makes the path a lens (CorelDRAW's Lens): inside its outline, what is drawn below it shows
+	 * changed (magnified, recoloured, as wireframe…). Bounds and hit-testing stay the path's own.
+	 */
+	lens?: VectorLens | null;
+	/**
+	 * Derived, not stored: what is drawn below a lens, in the lens's parent space, brought up to
+	 * date after every edit (`resolveVectorLenses`) and stripped when the document is saved.
+	 */
+	lensView?: VectorNode[];
+}
+
+/**
+ * What a lens does to what is below it (`VectorLens.type`):
+ * - `transparency`: the lens's own fill drawn `amount` percent see-through over it;
+ * - `magnify`: scaled `amount` times about the lens's centre;
+ * - `fisheye`: bulged (`amount` > 0) or pinched (< 0, −100…100) within the lens;
+ * - `brighten`: lightened (`amount` > 0) or darkened (< 0) by `amount` percent;
+ * - `invert`: colours inverted;
+ * - `tintedGrayscale`: brightness shown in shades of `color`;
+ * - `colorAdd`: `color` added at `amount` percent;
+ * - `colorLimit`: only `color` let through, `amount` percent strong;
+ * - `heatMap`: brightness shown on a cold-to-hot palette, turned `amount` percent along it;
+ * - `wireframe`: outlines only, stroked in `color`.
+ */
+export type VectorLensType = 'transparency' | 'magnify' | 'fisheye' | 'brighten' | 'invert' | 'tintedGrayscale' | 'colorAdd' | 'colorLimit' | 'heatMap' | 'wireframe';
+export const VECTOR_LENS_TYPES: readonly VectorLensType[] = ['transparency', 'magnify', 'fisheye', 'brighten', 'invert', 'tintedGrayscale', 'colorAdd', 'colorLimit', 'heatMap', 'wireframe'];
+
+/** A lens's settings (`VectorPathNode.lens`). */
+export interface VectorLens {
+	type: VectorLensType;
+	/** Strength; its meaning and range depend on the type (see `VectorLensType`). */
+	amount: number;
+	/** The tint, added, limiting or wireframe colour (types that use one). */
+	color?: string | null;
 }
 
 /**

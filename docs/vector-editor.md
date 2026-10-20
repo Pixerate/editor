@@ -306,6 +306,31 @@ The Distort Brush tool (D) bends outlines with a soft round brush, after CorelDR
 - **Canvas.** The overlay's `brush` is the circle drawn while dragging.
 - **Agent commands.** `distortBrush(mode, points, { ids, radius, strength, angle, seed })` runs a whole stroke. Agents call `vector.smudgeBrush`, `vector.twirlBrush`, `vector.attractBrush`, `vector.repelBrush` and `vector.roughenBrush`. A stroke that reaches no outline fails without changing anything.
 
+## Lenses
+
+A closed path with `lens` set is a lens, after CorelDRAW's Lens. Inside its outline, what is drawn below it shows changed.
+
+- **Types.**
+  - `magnify` scales the backdrop `amount` times about the lens's centre.
+  - `fisheye` bulges it (positive amounts) or pinches it (negative), keeping the lens edge in place.
+  - `brighten`, `invert`, `tintedGrayscale`, `colorAdd`, `colorLimit` and `heatMap` recolour every fill and stroke paint (solids, gradient stops, mesh and freeform colours), using `vectorLensColorMap` with `mapVectorPaintColors`.
+  - `wireframe` draws outlines only, in `color`.
+  - `transparency` draws the lens's own fill `amount` percent see-through.
+  - `VECTOR_LENS_SPECS` gives each type's amount range, unit and default colour.
+- **Backdrop.** `lensView` holds everything drawn before the lens, in its parent's space. The outer levels are wrapped in the inverse of the parents' transforms. It is derived, not stored:
+  - `resolveVectorLenses` brings it up to date after every edit (the controller's refresh), so a lens follows what moves below it.
+  - `stripVectorLensViews` removes it from `toJSON()`.
+  - Rendering and the SVG, PDF and Lottie exports resolve it themselves for documents that do not carry it.
+- **Drawing.** `vectorLensDrawn` builds a clip group, using the mask model's `clip` (the extension point named in `mask.ts`). The lens outline is the mask, and the changed backdrop is the contents. On top come the lens's own fill (invisible except for `transparency`, but there to be clicked) and its stroke.
+  - Everything is vector: SVG, PDF and the canvas draw it the same way.
+  - Only the parts of the backdrop the lens can show are drawn.
+  - Bounds, hit-testing and snapping use the lens's own shape.
+- **Editing.**
+  - `setLens(lens, { ids })` makes closed paths lenses or changes their lens. A different `type` starts from that type's defaults, and `null` removes the lens. It is one undo step.
+  - `<VectorLensPanel>` edits the type, amount and colour.
+  - Agents use `vector.setLens` / `vector.removeLens`, and `vector.list` shows each lens.
+  - SVG export writes `data-vector-lens` and imports it back.
+
 ## Distort and envelopes
 
 **Free Distort.** With `setFreeDistort(true)` (the toolbar's Distort toggle) the selection box distorts instead of scaling, Illustrator's Free Transform way:

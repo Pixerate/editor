@@ -1205,3 +1205,26 @@ describe("Distort Brush (svelte)", () => {
     c.pointerUp({ x: 60, y: 50 });
   });
 });
+
+describe("VectorLensPanel (svelte)", () => {
+  it("makes the selected closed path a lens, edits its amount and removes it", async () => {
+    const { VectorLensPanel } = await import("../src/vector");
+    const c = make();
+    c.select(["a"]);
+    const el = render(VectorLensPanel, { controller: c });
+    const select = el.querySelector('select[aria-label="Lens type"]') as HTMLSelectElement;
+    select.value = "magnify";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    flushSync();
+    expect((c.getNode("a") as VectorPathNode).lens).toEqual({ type: "magnify", amount: 2 });
+    const amount = el.querySelector('input[aria-label="Lens amount"]') as HTMLInputElement;
+    amount.value = "3";
+    amount.dispatchEvent(new Event("input", { bubbles: true }));
+    flushSync();
+    expect((c.getNode("a") as VectorPathNode).lens?.amount).toBe(3);
+    select.value = "";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    flushSync();
+    expect((c.getNode("a") as VectorPathNode).lens).toBeUndefined();
+  });
+});

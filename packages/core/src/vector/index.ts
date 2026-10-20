@@ -20,6 +20,7 @@ export * from './pathEffects.js';
 export * from './distortBrush.js';
 export * from './extrude.js';
 export * from './bevel.js';
+export * from './lens.js';
 export * from './gradient.js';
 export * from './gradientStroke.js';
 export * from './gradientTool.js';

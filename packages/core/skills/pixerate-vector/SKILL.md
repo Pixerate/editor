@@ -325,6 +325,13 @@ the browser's shaper they are kept but not drawn until outlines are available.
 | `vector.enterSymmetry` | Hand the canvas to the user drawing inside a symmetry group (pen, pencil, shapes, text go in, mirrored live). Returns `{ id }`. |
 | `vector.exitSymmetry` | Stop drawing inside it. |
 
+### Lenses
+
+| Command | Use it to |
+| --- | --- |
+| `vector.setLens` | Make closed paths lenses (`type` magnify, fisheye, brighten, invert, tintedGrayscale, colorAdd, colorLimit, heatMap, wireframe, transparency; `amount`, `color`) or change them. What is below shows changed inside the outline and follows every edit; bounds stay the lens's own. Use for loupes, callouts, "X-ray" wireframes, duotone windows. Returns `{ lenses: [{ id, lens }] }`. |
+| `vector.removeLens` | Make lenses plain paths again. Returns `{ ids }`. |
+
 ### Masks and clipping
 
 | Command | Use it to |

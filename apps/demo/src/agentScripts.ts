@@ -453,6 +453,15 @@ export const VECTOR_SCRIPTS: AgentScript[] = [
     ],
   },
   {
+    id: "vector-lens",
+    prompt: "Hold a magnifying glass over the scene",
+    steps: [
+      { say: "A round glass over the middle of the scene…", ...command("vector.addShape", { kind: "ellipse", x: 230, y: 150, width: 140, height: 140, fill: "#ffffff", stroke: "#0f172a", strokeWidth: 4, name: "Magnifier" }), as: "glass", target: artboardBox(230, 150, 140, 140) },
+      { say: "…made a 2× magnifying lens: what is below it shows enlarged, and follows when it moves.", ...commandWith("vector.setLens", (r) => ({ ids: [r("glass").id], type: "magnify", amount: 2 })) },
+      { say: "Switching it to a heat map lens.", ...commandWith("vector.setLens", (r) => ({ ids: [r("glass").id], type: "heatMap" })) },
+    ],
+  },
+  {
     id: "vector-symmetry",
     prompt: "Draw a mandala in the sky with live symmetry",
     steps: [
