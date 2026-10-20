@@ -7,6 +7,7 @@ export * from './AdjustmentLayersPanel';
 export * from './SelectionOptionsBar';
 export * from './RefineEdgePanel';
 export * from './LayersPanel';
+export * from './ColorProfilePanel';
 export * from './LayerEffectsPanel';
 export * from './BrushOptionsBar';
 export * from './FreeTransformOptionsBar';

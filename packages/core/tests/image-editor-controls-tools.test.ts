@@ -127,6 +127,7 @@ describe('image editor agent tools', () => {
       'list_fonts', 'get_text_layer', 'add_text_layer', 'set_text', 'set_text_style', 'set_paragraph_style', 'set_text_frame', 'convert_text_to_shape',
       'list_layer_effects', 'add_layer_effect', 'update_layer_effect', 'remove_layer_effect', 'set_layer_effects_enabled', 'set_global_light',
       'paint_stroke', 'fill_pixels', 'clear_pixels', 'get_mixer_brush', 'load_mixer_brush', 'clean_mixer_brush',
+      'get_color_profile', 'assign_profile', 'convert_to_profile', 'set_proof_setup', 'convert_colors',
       'clone_stamp', 'heal_brush', 'spot_heal', 'smudge', 'dodge', 'burn', 'sponge', 'get_retouch_options', 'set_retouch_options', 'set_clone_source',
       'mix_colors', 'inspect_psd', 'import_psd', 'export_psd',
     ]);
@@ -138,7 +139,7 @@ describe('image editor agent tools', () => {
       }
     }
     const readOnly = tools.filter((t) => t.annotations!.readOnlyHint).map((t) => t.name);
-    expect(readOnly).toEqual(['get_adjustments', 'list_controls', 'render_preview', 'capture_view', 'get_selection', 'get_image_info', 'get_histogram', 'list_layers', 'get_transform_frame', 'get_smart_object', 'export_smart_object_contents', 'get_shape_layer', 'list_fonts', 'get_text_layer', 'list_layer_effects', 'get_mixer_brush', 'get_retouch_options', 'mix_colors', 'inspect_psd', 'export_psd']);
+    expect(readOnly).toEqual(['get_adjustments', 'list_controls', 'render_preview', 'capture_view', 'get_selection', 'get_image_info', 'get_histogram', 'list_layers', 'get_transform_frame', 'get_smart_object', 'export_smart_object_contents', 'get_shape_layer', 'list_fonts', 'get_text_layer', 'list_layer_effects', 'get_mixer_brush', 'get_color_profile', 'convert_colors', 'get_retouch_options', 'mix_colors', 'inspect_psd', 'export_psd']);
   });
 
   it('get_adjustments and list_controls describe the state', async () => {
