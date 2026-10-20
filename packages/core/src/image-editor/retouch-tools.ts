@@ -292,12 +292,12 @@ export function createImageRetouchTools(controller: ImageEditorController): Agen
     name: 'get_retouch_options',
     title: 'Get retouch options',
     description:
-      'Reads the retouching tools\' options (aligned, sample, spotType, range, exposure, protectTones, spongeMode, vibrance, strength, historySteps) and the clone source ({x, y, offset} or null; offset is the aligned offset the last clone or heal stroke fixed: an aligned stroke samples at the brush plus offset, which the editors show as a crosshair). Call it before clone_stamp or heal_brush without a source to see where they will sample.',
+      'Reads the retouching tools\' options (aligned, sample, spotType, range, exposure, protectTones, spongeMode, vibrance, strength, historySteps), the Clone Source transform ({scaleX, scaleY, rotate}) and the clone source ({x, y, offset} or null; offset is the aligned offset the last clone or heal stroke fixed: an aligned stroke samples at the brush plus offset, which the editors show as a crosshair). Call it before clone_stamp or heal_brush without a source to see where they will sample.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     annotations: { title: 'Get retouch options', ...READ },
     handler: () => {
-      const { retouch, cloneSource } = controller.getState().paint;
-      return { options: { ...retouch }, cloneSource: cloneSource ? { ...cloneSource } : null };
+      const { retouch, cloneSource, cloneTransform } = controller.getState().paint;
+      return { options: { ...retouch }, cloneSource: cloneSource ? { ...cloneSource } : null, cloneTransform: { ...cloneTransform } };
     },
   };
 
@@ -351,7 +351,42 @@ export function createImageRetouchTools(controller: ImageEditorController): Agen
     },
   };
 
-  return [cloneStamp, healBrush, spotHeal, smudge, dodge, burn, spongeTool, blurTool, sharpenTool, historyBrush, getOptions, setOptions, setSource];
+  const setTransform: AgentTool = {
+    name: 'set_clone_transform',
+    title: 'Transform the clone source',
+    description:
+      "Photoshop's Clone Source panel: the Clone Stamp and Healing Brush lay the source scaled by `scaleX` / `scaleY` (percent, default 100; negative or the flip flags mirror it) and rotated by `rotate` degrees clockwise about the stroke's start. Merged into the current transform; reset true goes back to 100 %, 0°. Use it to clone a reflection, a smaller copy or a tilted patch. View state, not an undo step. Returns the transform ({scaleX, scaleY, rotate} as factors and degrees).",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        scaleX: { type: 'number', description: 'Width in percent of the source (1..1000; negative flips horizontally).' },
+        scaleY: { type: 'number', description: 'Height in percent of the source (1..1000; negative flips vertically).' },
+        rotate: { type: 'number', description: 'Rotation in degrees, clockwise (-180..180).' },
+        flipHorizontal: { type: 'boolean', description: 'Mirror the source left to right (negates the width scale; default false).' },
+        flipVertical: { type: 'boolean', description: 'Mirror the source top to bottom (negates the height scale; default false).' },
+        reset: { type: 'boolean', description: 'Back to 100 %, no flip, 0° (default false); other arguments are not allowed with it.' },
+      },
+      additionalProperties: false,
+    },
+    annotations: { title: 'Transform the clone source', ...WRITE, idempotentHint: false },
+    handler: (args) => {
+      if (args.reset === true) {
+        if (Object.keys(args).some((k) => k !== 'reset')) throw new LayerOperationError('Give either reset true or transform values, not both.');
+        return controller.setCloneTransform(null);
+      }
+      const cur = controller.getState().paint.cloneTransform;
+      const next: Partial<{ scaleX: number; scaleY: number; rotate: number }> = {};
+      if (args.scaleX !== undefined) next.scaleX = (args.scaleX as number) / 100;
+      if (args.scaleY !== undefined) next.scaleY = (args.scaleY as number) / 100;
+      if (args.rotate !== undefined) next.rotate = args.rotate as number;
+      if (args.flipHorizontal === true) next.scaleX = -(next.scaleX ?? cur.scaleX);
+      if (args.flipVertical === true) next.scaleY = -(next.scaleY ?? cur.scaleY);
+      if (!Object.keys(next).length) throw new LayerOperationError('Pass scaleX, scaleY, rotate, flipHorizontal or flipVertical, or reset true.');
+      return controller.setCloneTransform(next);
+    },
+  };
+
+  return [cloneStamp, healBrush, spotHeal, smudge, dodge, burn, spongeTool, blurTool, sharpenTool, historyBrush, getOptions, setOptions, setSource, setTransform];
 }
 
 function pick(args: Record<string, unknown>, keys: string[]): Partial<RetouchSettings> {

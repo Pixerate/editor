@@ -349,6 +349,8 @@ export interface VectorOverlayRenderData {
 	 * eraser's with a round-capped stroke `width` pixels wide (0 for the knife: a thin line).
 	 */
 	toolStroke: { tool: 'knife' | 'eraser'; d: string; width: number } | null;
+	/** The Distort Brush's circle while it is dragged (screen space: centre and radius), or null. */
+	brush: { x: number; y: number; r: number } | null;
 	/** The pencil's lazy-mouse string from the pen to the pointer, screen space. */
 	pencilString: { x1: number; y1: number; x2: number; y2: number } | null;
 	/** Where the scissors would cut (screen space). */
@@ -1088,6 +1090,11 @@ export function getVectorOverlayRenderData(state: VectorEditorState): VectorOver
 		const d = pts.map((q, i) => `${i ? 'L' : 'M'}${fmt(q.x)} ${fmt(q.y)}`).join('') + (pts.length === 1 ? `L${fmt(pts[0].x)} ${fmt(pts[0].y)}` : '');
 		toolStroke = { tool: it.tool, d, width: fmt(it.width * z) };
 	}
+	let brush: VectorOverlayRenderData['brush'] = null;
+	if (it?.type === 'brush') {
+		const c = toScreen(state, it);
+		brush = { x: fmt(c.x), y: fmt(c.y), r: fmt(it.radius * z) };
+	}
 	let pencilString: VectorOverlayRenderData['pencilString'] = null;
 	if (it?.type === 'draw' && it.string) {
 		const a = toScreen(state, it.string[0]);
@@ -1164,7 +1171,7 @@ export function getVectorOverlayRenderData(state: VectorEditorState): VectorOver
 		const tl = toScreen(state, b);
 		textBox = { x: tl.x, y: tl.y, width: b.width * z, height: b.height * z };
 	}
-	return { outlines, selectionBox, distort, anchors, handles, marquee, penPreview, artboard, guides, status, toolStroke, pencilString, cutPoint, cornerWidgets, widthPoints, widthSpot, builder, blend, gradient, envelope, masks: maskOverlay(state), text: textOverlay(state), textBox, constraints: constraintOverlay(state), frames: frameLabels(state), connectorSites: connectorSiteOverlay(state),
+	return { outlines, selectionBox, distort, anchors, handles, marquee, penPreview, artboard, guides, status, toolStroke, brush, pencilString, cutPoint, cornerWidgets, widthPoints, widthSpot, builder, blend, gradient, envelope, masks: maskOverlay(state), text: textOverlay(state), textBox, constraints: constraintOverlay(state), frames: frameLabels(state), connectorSites: connectorSiteOverlay(state),
 		shading: shadingOverlay(state),
 		symmetry: symmetryOverlay(state),
 		perspective: perspectiveOverlay(state),
