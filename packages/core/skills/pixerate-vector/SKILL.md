@@ -1,13 +1,14 @@
 ---
 name: pixerate-vector
-description: How to draw and edit vector artwork in the Pixerate vector editor through its vector.* commands - adding shapes and SVG paths, fills, strokes, stacked fills and strokes with blend modes, drop shadows, glows and blurs, clipping masks and opacity masks, gradients (linear, radial, conic, Oklab interpolation), stroke alignment, arrowheads, variable-width and tapered strokes, live corner radii, boolean operations and Pathfinder (unite, subtract, divide, trim), Shape Builder, paint bucket, live path effects (trim paths, repeater, zig zag, offset), envelope warps and free distort, blends and morphing, anchor editing (join, smooth, simplify, scissors, knife, eraser), align, distribute, group, stacking order, and SVG import and export. Use when creating an icon, logo, illustration, glyph, badge or any Bezier path artwork, or editing an SVG in a Pixerate vector editor.
+description: How to draw and edit vector artwork in the Pixerate vector editor through its vector.* commands - adding shapes and SVG paths, text (point, area and text on a path, character and paragraph styles, Create Outlines), fills, strokes, stacked fills and strokes with blend modes, drop shadows, glows and blurs, clipping masks and opacity masks, gradients (linear, radial, conic, Oklab interpolation), stroke alignment, arrowheads, variable-width and tapered strokes, live corner radii, boolean operations and Pathfinder (unite, subtract, divide, trim), Shape Builder, paint bucket, live path effects (trim paths, repeater, zig zag, offset), envelope warps and free distort, blends and morphing, anchor editing (join, smooth, simplify, scissors, knife, eraser), align, distribute, group, stacking order, and SVG import and export. Use when creating an icon, logo, illustration, glyph, badge or any Bezier path artwork, or editing an SVG in a Pixerate vector editor.
 ---
 
 # Pixerate vector editor
 
 The vector document is an artboard (`width` x `height` in document units, y down) holding a tree
 of **nodes**: `path` nodes (one or more subpaths of Bezier anchors, with fill, stroke and stroke
-settings) and `group` nodes. Groups can also be live booleans, live blends, mask groups, or
+settings), `text` nodes (a string set as point text, area text or along a path, painted with
+the same fills and strokes) and `group` nodes. Groups can also be live booleans, live blends, mask groups, or
 carry a live effect stack. Every command is a `vector.*` command run with `run_command` / `run_commands` (see
 `pixerate-agent-tools` for batching with `"$0.id"` references, `atomic: true` and error codes).
 
@@ -28,6 +29,10 @@ carry a live effect stack. Every command is a `vector.*` command run with `run_c
   inside the mask's outline (`clip`), or where it is bright (`luminance`) or opaque (`alpha`).
   `invert` swaps shown and hidden. `vector.list` gives a mask group a `mask`
   `{ type, invert, maskId, contents, enabled }`; a hidden mask (`enabled: false`) masks nothing.
+- **Text** has a base `font` (family, weight, italic, size, tracking, leading, baseline shift,
+  underline, strike-through), optional runs that override fields over ranges (`start` / `end`
+  in UTF-16 code units, plus a range `fill`), a `paragraph` style and a `frame`: `point` (x, y
+  of the first baseline), `area` (a box it wraps in) or `path` (a line it follows).
 - Coordinates are document units. A rotated node stores its geometry in its own space: the
   `bounds` that `vector.list` reports are document-space, its `d` is the node's own.
 
@@ -53,6 +58,15 @@ Parameter details (gradient fields, effect parameters, width profiles, envelopes
    it over.
 
 ## Best practices
+
+- **Text.** Use point text for labels and headlines, area text (`width`, `height`) for anything
+  that should wrap, text on a path for badges and seals. Check `overflow` in the summary every
+  text write returns: hidden lines or characters mean the box or path is too small. Keep one or
+  two families per design (`vector.listFonts` lists what the shaper has; a missing family draws
+  in a fallback and appears in `missingFonts`). Style ranges with `vector.setTextStyle` rather
+  than splitting text into separate nodes, so it still edits as one paragraph. Create Outlines
+  only for final artwork or logos that must not depend on fonts; keep a copy as text if it may
+  change.
 
 - **Clean paths.** Use the fewest anchors that describe the shape: anchors at extrema (top,
   bottom, left, right of a curve) and at true corners, handles horizontal or vertical at extrema,
@@ -120,7 +134,7 @@ Parameter details (gradient fields, effect parameters, width profiles, envelopes
 | --- | --- |
 | `vector.addShape` | Add a `kind` `rect`, `ellipse`, `polygon` (`sides`, at least 3), `star` (`points`, `innerRatio` 0 to 1) or `line` at `x`, `y`, `width`, `height` (all required; for a line, width and height are the end's offset). `cornerRadius` and `cornerKind` give live corners; any style field and `name` apply. Uses the editor's default style for anything not given. Returns `{ id }`. |
 | `vector.addPath` | Add a path from SVG path data `d` (absolute or relative M, L, H, V, C, S, Q, T, A, Z; arcs and quadratics become cubics) in document units, with `name` and style fields; unset style comes from the editor defaults. Fails when `d` has no points. Returns `{ id }`. |
-| `vector.importSvg` | Add the shapes of SVG markup `svg` on top of the document, or replace the document with `replace: true`. Reads paths, basic shapes, groups, transforms, linear and radial gradients, and `clip-path` / `mask` references (as mask groups); skips text, images, foreign filters and `use`. |
+| `vector.importSvg` | Add the shapes of SVG markup `svg` on top of the document, or replace the document with `replace: true`. Reads paths, basic shapes, groups, transforms, linear and radial gradients, `clip-path` / `mask` references (as mask groups) and `<text>` (as point text: content, font, anchor and fill); skips images, foreign filters and `use`. |
 | `vector.delete` | Delete nodes (`ids`). |
 
 ### Style
@@ -179,6 +193,25 @@ arrays, to build or replace a stack in one call.
 | `vector.fillRegion` | Paint bucket: fill the area visible outlines enclose around `point` `[x, y]` with a new path in the current fill (islands stay holes). `gap` closes gaps up to that size between loose ends. Returns `{ id }`. |
 | `vector.outlineStroke` | Turn strokes into filled shapes of exactly the painted area (alignment, caps, joins, dashes, arrowheads, width profiles included), above a copy keeping the fill. Returns the new ids. |
 
+### Text
+
+| Command | Use it to |
+| --- | --- |
+| `vector.listFonts` | See which families the text shaper can draw and whether it gives glyph outlines (`outlines`); read it before choosing fonts or calling `vector.createOutlines`. Returns `{ shaper, outlines, families }`. |
+| `vector.addText` | Add point text (`x`, `y`: the first baseline's start), area text (`x`, `y`, `width`, `height`: wrapped in the box) or text along `path` (SVG path data, with `start`, `end`, `flip`, `orientation`, `baseline`). `font`, `paragraph`, `name`, `fill`, `stroke`, `strokeWidth` optional; black, no stroke by default. Returns the text summary (`id`, lines, bounds, overflow). |
+| `vector.getText` | Read a text node: text, base font, runs as `{ start, end, style }`, paragraph, frame, fill, stroke, laid-out lines, document bounds, `overflow`, `outlines`, shaper and missing fonts. Call before editing ranges. |
+| `vector.setText` | Replace `[start, end)` of the text with `text` (default the whole text; `start` = `end` inserts, `""` deletes). Inserted characters take the style before them. Returns the summary. |
+| `vector.setTextStyle` | Set character fields (`fontFamily`, `fontWeight`, `italic`, `fontSize`, `tracking`, `leading`, `baselineShift`, `underline`, `strikethrough`; null clears) and `fill` over `[start, end)`; the whole text (default) changes the base font and the node's fill. Returns the summary with runs. |
+| `vector.setParagraphStyle` | Set `align` (left, center, right, justify), `autoLeading`, indents and spacing for the node's paragraphs. Returns the summary. |
+| `vector.setTextFrame` | Switch between point, area and path text (`kind`), resize an area (`width`, `height`), move the origin (`x`, `y`) or change path options. Returns the summary. |
+| `vector.typeOnPath` | Turn path node `pathId` into text along it (it takes the path's place and drops its paint) with `text`, `font`, `paragraph` (`align` places it along the path) and path options. Returns the summary with the new id. |
+| `vector.createOutlines` | Turn text (`ids`, or text inside groups; default the selection) into paths of its glyph outlines, keeping paint, effects, filters, placement and id. Needs `outlines: true` from `vector.listFonts`. Returns `{ ids }`. |
+
+Fill, stroke, stacked layers, filters, blend modes, transforms, masks and blends work on text as
+on paths (`vector.setStyle`, `vector.addFill`, `vector.addFilter`, `vector.transform`, …). Path
+effects, envelopes and booleans act on its glyph outlines, so they need an outline shaper; with
+the browser's shaper they are kept but not drawn until outlines are available.
+
 ### Masks and clipping
 
 | Command | Use it to |
@@ -233,7 +266,7 @@ contents whole while you work, without losing the mask.
 | Command | Use it to |
 | --- | --- |
 | `vector.setEditing` | Set editing behaviour: `keepShapeOnDelete`, `curvatureMoves`, `pencilSmoothing` (0 to 1), `recognizeShapes`, `eraserSize`, `pencilPressure` (pen, all, off). Returns the settings. |
-| `vector.setTool` | Switch the interactive tool (select, direct, pen, pencil, rect, ellipse, polygon, star, line, scissors, knife, eraser, width, shapeBuilder, paintBucket, blend, gradient, envelope). Only for handing the canvas to the user in a given mode; commands do not need a tool. |
+| `vector.setTool` | Switch the interactive tool (select, direct, pen, pencil, rect, ellipse, polygon, star, line, scissors, knife, eraser, width, shapeBuilder, paintBucket, blend, gradient, envelope, type, typePath). Only for handing the canvas to the user in a given mode; commands do not need a tool. |
 
 ## Pitfalls
 
@@ -267,5 +300,13 @@ contents whole while you work, without losing the mask.
 - Filters and blend modes are drawn, not geometry: bounds, snapping, booleans and Outline Stroke
   ignore them. A node's blend mode and filter isolate its layers, so layer blend modes inside a
   node with a filter mix only with the node's own layers. Background blur is not available.
+- Text positions are code units: an emoji or other character outside the Basic Multilingual
+  Plane counts 2. Take ranges from `vector.getText` rather than counting characters yourself.
+- Scaling text scales its font size (by the square root of the area change) and an area box per
+  axis; it is never stretched. Skew is not kept on text.
+- Without an outline shaper (`vector.listFonts` `outlines: false`), text exports as SVG `<text>`
+  positioned character by character; other viewers need the same fonts installed. Create Outlines
+  (with an outline shaper) when the SVG must look the same everywhere.
+- `vector.typeOnPath` consumes the path. Duplicate it first if the path should stay visible.
 - A command that fails changes nothing; read its message (for example "Nothing is selected; pass
   ids.") and retry with the missing input.

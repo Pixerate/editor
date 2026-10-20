@@ -199,7 +199,7 @@ describe('vector svg', () => {
 				<path d="M10 10 L 20 20" stroke="red" fill="url(#g)"/>
 				<line x1="0" y1="0" x2="10" y2="0" stroke="black"/>
 				<polygon points="0,0 10,0 5,10" fill-rule="evenodd"/>
-				<text>ignored</text>
+				<text x="4" y="90" font-size="12">imported</text>
 			</svg>`);
 		expect(parsed.width).toBe(200);
 		expect(parsed.height).toBe(100);
@@ -219,7 +219,9 @@ describe('vector svg', () => {
 		expect((line as VectorPathNode).fill).toBeNull();
 		expect((poly as VectorPathNode).fillRule).toBe('evenodd');
 		expect((poly as VectorPathNode).subpaths[0].closed).toBe(true);
-		expect(parsed.nodes).toHaveLength(4);
+		// Foreign text comes in as point text.
+		expect(parsed.nodes).toHaveLength(5);
+		expect(parsed.nodes[4]).toMatchObject({ type: 'text', text: 'imported', frame: { kind: 'point', x: -6, y: 80 }, font: { fontSize: 12 } });
 	});
 
 	it('parses transform lists right to left', () => {
@@ -493,7 +495,7 @@ describe('VectorEditorController', () => {
 		expect(c.getState().tool).toBe('pen');
 		expect(c.keyDown({ key: 'Escape' })).toBe(true);
 		expect(c.getState().tool).toBe('select');
-		expect(c.keyDown({ key: 'q' })).toBe(false);
+		expect(c.keyDown({ key: 'i' })).toBe(false);
 	});
 
 	it('groups, ungroups, arranges and duplicates', () => {

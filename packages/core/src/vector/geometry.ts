@@ -37,6 +37,7 @@ import { mirrorWidthProfile } from './width.js';
 import { hitTestVectorPaintStack } from './paintLayers.js';
 import { expandVectorAppearance, hasOwnVectorAppearance, transformVectorEffects, vectorAppearanceOutline, vectorAppearanceShapes } from './appearance.js';
 import { isVectorMaskActive, isVectorMaskGroup, vectorMaskContains } from './mask.js';
+import { bakeVectorTextGeometry } from './text.js';
 import type {
 	VectorAnchor,
 	VectorAnchorType,
@@ -49,7 +50,8 @@ import type {
 	VectorPathNode,
 	VectorSubpath,
 	VectorWidthPoint,
-	Vec2
+	Vec2,
+	VectorTextNode
 } from './types.js';
 
 export type { AffineMatrix };
@@ -262,9 +264,19 @@ export function locateVectorNode(nodes: VectorNode[], id: string): { list: Vecto
 	return search(nodes, null);
 }
 
+/** Every node that paints with fills and strokes in the subtree: paths and text. */
+export function collectPaintedNodes(node: VectorNode): Array<VectorPathNode | VectorTextNode> {
+	const out: Array<VectorPathNode | VectorTextNode> = [];
+	walkVectorNodes([node], (n) => {
+		if (n.type !== 'group') out.push(n);
+	});
+	return out;
+}
+
 /** Every path node in the subtree (a path node itself, or a group's descendants). */
 export function collectPathNodes(node: VectorNode): VectorPathNode[] {
 	if (node.type === 'path') return [node];
+	if (node.type === 'text') return [];
 	const out: VectorPathNode[] = [];
 	walkVectorNodes(node.children, (n) => {
 		if (n.type === 'path') out.push(n);
@@ -483,7 +495,8 @@ function bakeIntoGeometry<T extends VectorNode>(node: T, m: AffineMatrix): T {
 		const moved = { closed: spine.closed, anchors: spine.anchors.map((a) => mapAnchor(a, m)) };
 		return { ...group, children, blend: { ...group.blend, spine: moved } } as T;
 	}
-	const path = node as VectorPathNode;
+	// Text: its frame maps and its font sizes scale (`bakeVectorTextGeometry`); paints as for paths.
+	const path = (node.type === 'text' ? bakeVectorTextGeometry(node as VectorTextNode, m) : node) as VectorPathNode;
 	// A mirror swaps the sides of a variable-width stroke (the path still runs the same way).
 	const flips = m[0] * m[3] - m[1] * m[2] < 0;
 	const mirrored = flips && path.strokeWidthProfile?.length;
@@ -501,10 +514,14 @@ function bakeIntoGeometry<T extends VectorNode>(node: T, m: AffineMatrix): T {
 		...(isVectorGradient(path.stroke) ? { stroke: transformVectorPaint(path.stroke, m) } : {}),
 		...(Array.isArray(path.fills) ? { fills: path.fills.map(layer) } : {}),
 		...(Array.isArray(path.strokes) ? { strokes: path.strokes.map(layer) } : {}),
-		subpaths: path.subpaths.map((sp) => ({
-			closed: sp.closed,
-			anchors: sp.anchors.map((a) => mapAnchor(a, m))
-		}))
+		...(path.type === 'path'
+			? {
+					subpaths: path.subpaths.map((sp) => ({
+						closed: sp.closed,
+						anchors: sp.anchors.map((a) => mapAnchor(a, m))
+					}))
+				}
+			: {})
 	} as T;
 }
 

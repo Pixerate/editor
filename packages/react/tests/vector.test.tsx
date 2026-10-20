@@ -1142,3 +1142,43 @@ describe("masks (react)", () => {
     expect(c.getState().document.nodes.map((n) => n.id)).toEqual(["a", "m", "b"]);
   });
 });
+
+describe("text (react)", () => {
+  it("types into new text through the hidden textarea, draws it as SVG text, and styles it from the panel", async () => {
+    const c = new VectorEditorController({ document: { width: 400, height: 300, nodes: [] }, createId: () => `t${++n}` });
+    c.setTool("type");
+    await act(async () => root.render(<><VectorCanvas controller={c} fitOnMount={false} /><VectorStylePanel controller={c} /></>));
+    const svg = q("svg");
+    pointer(svg, "pointerdown", 40, 60);
+    pointer(svg, "pointerup", 40, 60);
+    const input = q<HTMLTextAreaElement>('[data-testid="vector-type-input"]');
+    expect(input).not.toBeNull();
+    await act(async () => {
+      input.value = "Hi";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const id = c.getState().textEdit!.nodeId;
+    expect((c.getNode(id) as any).text).toBe("Hi");
+    expect(q('[data-vector-text-caret]')).not.toBeNull();
+    // Editing keys go to the controller from the textarea; letters do not trigger tools.
+    key(input, "Backspace");
+    expect((c.getNode(id) as any).text).toBe("H");
+    expect(key(input, "v").defaultPrevented).toBe(false);
+    expect(c.getState().tool).toBe("type");
+    await act(async () => {
+      input.value = "ey";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(q(`[data-vector-scene] [data-vector-id="${id}"] tspan`)?.textContent).toBe("Hey");
+    key(input, "Escape");
+    expect(c.getState().textEdit).toBeNull();
+    expect(q('[data-testid="vector-type-input"]')).toBeNull();
+    // Selected text: the panel styles the whole node, one undo step.
+    await act(async () => q<HTMLButtonElement>('[data-vector-text-panel] button[aria-label="Bold"]').click());
+    expect((c.getNode(id) as any).font.fontWeight).toBe(700);
+    await act(async () => q<HTMLButtonElement>('[data-vector-text-panel] button[aria-label="Align Centre"]').click());
+    expect((c.getNode(id) as any).paragraph).toEqual({ align: "center" });
+    c.undo();
+    expect((c.getNode(id) as any).paragraph).toBeUndefined();
+  });
+});

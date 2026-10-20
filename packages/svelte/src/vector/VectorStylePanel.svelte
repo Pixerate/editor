@@ -21,6 +21,7 @@
   import VectorAppearancePanel from './VectorAppearancePanel.svelte';
   import VectorEnvelopePanel from './VectorEnvelopePanel.svelte';
   import VectorMaskPanel from './VectorMaskPanel.svelte';
+  import VectorTextPanel from './VectorTextPanel.svelte';
   import VectorGradientEditor from './VectorGradientEditor.svelte';
 
   interface Props {
@@ -209,6 +210,7 @@
       {#if style?.mixed.cornerRadius}<span class="text-[11px] text-muted-foreground">Mixed</span>{/if}
     </div>
   {/if}
+  <VectorTextPanel {controller} />
   {#if style}
     <label class="flex items-center gap-2 text-xs text-foreground">
       <span class="w-16">Opacity</span>

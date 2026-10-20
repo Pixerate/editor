@@ -26,6 +26,7 @@ import { hasStrokeExtras, strokeWidthProfileOf, vectorStrokeLineArea, vectorStro
 import { sanitizeWidthProfile } from './width.js';
 import { expandVectorAppearance, hasOwnVectorAppearance, sanitizeVectorEffects, transformVectorEffects, vectorAppearanceNodes } from './appearance.js';
 import { isVectorMaskGroup, sanitizeVectorMask, vectorMaskRenderData } from './mask.js';
+import { sanitizeVectorTextFields, vectorTextGeometryNode, vectorTextPaths, vectorTextSpans, vectorTextSpanSvg } from './text.js';
 import { activeVectorFilters, sanitizeVectorFilters, vectorFilterMarkup, vectorFilterSvg, type VectorRenderFilter } from './filters.js';
 import {
 	needsVectorPaintLayers,
@@ -39,7 +40,9 @@ import {
 	vectorStrokeStackReach,
 	normalizeVectorPaintStacks,
 	withVectorFills,
-	withVectorStrokes
+	withVectorStrokes,
+	hasVectorPaintStacks,
+	vectorStrokeSettings
 } from './paintLayers.js';
 import { angleToSvgLinearCoords, type SvgGradientDef } from '../canvas/gradient.js';
 import { bezierPathBounds as pathBounds } from '../canvas/pathops/bezier.js';
@@ -88,7 +91,8 @@ import {
 	type VectorPathNode,
 	type VectorPaintLayer,
 	type VectorStrokeAlign,
-	type VectorSubpath
+	type VectorSubpath,
+	type VectorTextNode
 } from './types.js';
 
 // ---------------------------------------------------------------------------
@@ -117,6 +121,13 @@ export interface VectorSvgExportOptions {
 	 * or clip it (the animation editor's reveals and its Flair export use this).
 	 */
 	wrap?: Readonly<Record<string, readonly VectorSvgWrapper[]>>;
+	/**
+	 * How text is written: `text` (default) as SVG `<text>` placed character by character, or
+	 * `outlines` as its glyph outlines (needs an outline shaper; otherwise text stays text). Text with
+	 * path effects is always written as outlines when it has them. Either way the text is kept for
+	 * import.
+	 */
+	text?: 'text' | 'outlines';
 }
 
 /** A group written round a node (see `VectorSvgExportOptions.wrap`). */
@@ -158,6 +169,7 @@ export function applyVectorCornersAttribute(subpaths: VectorSubpath[], value: st
 }
 
 const escapeAttr = (value: string) => value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const escapeText = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 /** Where a paint goes: what `vectorPaintToSvg` needs to place a gradient on a shape. */
 export interface VectorPaintSvgOptions {
@@ -267,7 +279,7 @@ function computeStrokeSvgParts(node: VectorPathNode, clipId: string, precision: 
  */
 export function vectorNodeLocalPaintBounds(node: VectorNode): VectorBounds | null {
 	const drawn = expandVectorAppearance(node);
-	const reach = (n: VectorNode): number => (n.type === 'path' ? vectorStrokeStackReach(n) : Math.max(0, ...n.children.map(reach)));
+	const reach = (n: VectorNode): number => (n.type === 'path' ? vectorStrokeStackReach(n) : n.type === 'text' ? reach(expandVectorAppearance(n)) : Math.max(0, ...n.children.map(reach)));
 	let b: VectorBounds | null;
 	if (drawn.type === 'path') b = vectorPathLocalBounds(drawn);
 	else b = unionBounds(drawn.children.filter((c) => c.visible !== false).map((c) => vectorNodeBounds(c, IDENTITY_MATRIX)));
@@ -555,9 +567,86 @@ export function vectorDocumentToSvg(doc: VectorDocument, options: VectorSvgExpor
 		lines.push(`${indent(depth)}</g>`);
 	};
 
+	/**
+	 * A text node as SVG text: a `<g data-vector-text>` carrying the text and its stacks (JSON, for
+	 * import), holding one `<text>` per drawn paint layer with a `<tspan>` per styled fragment, every
+	 * character placed by our layout.
+	 */
+	const emitTextElement = (node: VectorTextNode, depth: number, attrs: string) => {
+		const geometry = vectorTextGeometryNode(node);
+		const fields = { text: node.text, font: node.font, ...(node.runs?.length ? { runs: node.runs } : {}), ...(node.paragraph ? { paragraph: node.paragraph } : {}), frame: node.frame, ...(node.effects?.length ? { effects: node.effects } : {}) };
+		let data = ` data-vector-text="${escapeAttr(JSON.stringify(fields))}"`;
+		if (hasVectorPaintStacks(node)) data += ` data-vector-fills="${escapeAttr(JSON.stringify(vectorFills(node)))}" data-vector-strokes="${escapeAttr(JSON.stringify(vectorStrokes(node)))}"`;
+		else {
+			data += ` data-vector-fill="${escapeAttr(JSON.stringify(node.fill ?? null))}" data-vector-stroke="${escapeAttr(JSON.stringify(node.stroke ?? null))}"`;
+			const settings = vectorStrokeSettings(node);
+			if (Object.keys(settings).length) data += ` data-vector-stroke-settings="${escapeAttr(JSON.stringify(settings))}"`;
+		}
+		lines.push(`${indent(depth)}<g${attrs}${data}>`);
+		const nodes = vectorPaintLayerNodes(geometry).filter((l) => l.drawn);
+		const topFill = nodes.filter((l) => l.kind === 'fill').at(-1);
+		const spans = vectorTextSpans(node).map((sp, i) => {
+			if (sp.fill === undefined) return vectorTextSpanSvg(sp);
+			const paint = vectorPaintToSvg(sp.fill, `${prefix}run-${node.id}-${i}`, { node: geometry, precision });
+			defs.push(...paintMarkup(sp.fill, paint.defs));
+			return vectorTextSpanSvg(sp, paint.value);
+		});
+		const tspans = (runFills: boolean) =>
+			spans
+				.map((sp) => {
+					let a = ` x="${sp.x}" y="${sp.y}"`;
+					if (sp.rotate) a += ` rotate="${sp.rotate}"`;
+					a += ` font-family="${escapeAttr(sp.fontFamily)}" font-size="${num(sp.fontSize)}"`;
+					if (sp.fontWeight !== 400) a += ` font-weight="${sp.fontWeight}"`;
+					if (sp.fontStyle) a += ` font-style="italic"`;
+					if (sp.textDecoration) a += ` text-decoration="${sp.textDecoration}"`;
+					if (runFills && sp.fill) a += ` fill="${escapeAttr(sp.fill)}"`;
+					return `<tspan${a}>${escapeText(sp.text)}</tspan>`;
+				})
+				.join('');
+		const layers = nodes.length ? nodes : [];
+		if (!topFill && spans.some((sp) => sp.fill)) lines.push(`${indent(depth + 1)}<text data-vector-part="fill" fill="none" xml:space="preserve">${tspans(true)}</text>`);
+		for (const l of layers) {
+			const id = `${prefix}${l.kind}-${node.id}-${l.index}`;
+			const paint = vectorPaintToSvg(l.layer.paint, id, { node: l.node, precision, ...(l.kind === 'stroke' ? { role: 'stroke' as const } : {}) });
+			defs.push(...paintMarkup(l.layer.paint, paint.defs));
+			const attrs = ` data-vector-part="${l.kind}" data-vector-layer="${l.index}"${layerAttrs(l.layer)}`;
+			const paintAttrs = l.kind === 'fill' ? ` fill="${escapeAttr(paint.value)}"` : ` fill="none"${lineAttrsOf(l.node, paint.value)(l.node.strokeWidth ?? 1)}`;
+			lines.push(`${indent(depth + 1)}<text${attrs}${paintAttrs} xml:space="preserve">${tspans(l === topFill)}</text>`);
+		}
+		if (!layers.length && !spans.some((sp) => sp.fill)) lines.push(`${indent(depth + 1)}<text data-vector-part="fill" fill="none" xml:space="preserve">${tspans(false)}</text>`);
+		lines.push(`${indent(depth)}</g>`);
+	};
+
+	/**
+	 * Text: as SVG text, or (with glyph outlines, when it has path effects or `text: 'outlines'`)
+	 * as its outlines with the text kept hidden for import, like other live art.
+	 */
+	const emitText = (node: VectorTextNode, depth: number) => {
+		const outlines = vectorTextPaths(node).outlines;
+		const effects = !!node.effects?.some((e) => e.enabled !== false);
+		if (!outlines || (!effects && options.text !== 'outlines')) {
+			emitTextElement(node, depth, common(node));
+			return;
+		}
+		lines.push(`${indent(depth)}<g${common(node)} data-vector-live="${escapeAttr(JSON.stringify({ kind: 'text', ...(node.effects?.length ? { effects: node.effects } : {}) }))}">`);
+		lines.push(`${indent(depth + 1)}<g data-vector-part="appearance">`);
+		for (const shape of vectorAppearanceNodes(node)) emit(shape, depth + 2);
+		lines.push(`${indent(depth + 1)}</g>`);
+		lines.push(`${indent(depth + 1)}<g data-vector-part="source" display="none">`);
+		const { effects: _e, transform: _t, opacity: _o, visible: _v, booleanOperation: _b, blendStep: _s, blendMode: _bm, filters: _f, ...source } = node;
+		emitTextElement({ ...source, id: `${node.id}~src` }, depth + 2, ` id="${escapeAttr(`${node.id}~src`)}"`);
+		lines.push(`${indent(depth + 1)}</g>`);
+		lines.push(`${indent(depth)}</g>`);
+	};
+
 	const emitNode = (node: VectorNode, depth: number) => {
 		if (isVectorMaskGroup(node)) {
 			emitMaskGroup(node, depth);
+			return;
+		}
+		if (node.type === 'text') {
+			emitText(node, depth);
 			return;
 		}
 		if (hasOwnVectorAppearance(node)) {
@@ -659,7 +748,11 @@ interface Element {
 	name: string;
 	attrs: Record<string, string>;
 	children: Element[];
+	/** Character data of text content elements (`text`, `tspan`, `textPath`), in order with their children. */
+	content?: Array<string | Element>;
 }
+
+const TEXT_CONTENT = new Set(['text', 'tspan', 'textPath']);
 
 /** A tiny non-validating XML reader: elements and attributes only. */
 function parseXml(source: string): Element | null {
@@ -673,8 +766,13 @@ function parseXml(source: string): Element | null {
 	const tag = /<(\/?)([A-Za-z_][\w:.-]*)((?:\s+[^\s=/>]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))?)*)\s*(\/?)>/g;
 	const attr = /([^\s=/>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g;
 	let m: RegExpExecArray | null;
+	let last = 0;
 	while ((m = tag.exec(text))) {
 		const [, closing, rawName, rawAttrs, selfClosing] = m;
+		// Character data between tags belongs to the open text element, if any.
+		const top = stack[stack.length - 1];
+		if (m.index > last && TEXT_CONTENT.has(top.name)) (top.content ??= []).push(decodeEntities(text.slice(last, m.index)));
+		last = tag.lastIndex;
 		const name = rawName.replace(/^svg:/, '');
 		if (closing) {
 			for (let i = stack.length - 1; i > 0; i--) {
@@ -691,6 +789,7 @@ function parseXml(source: string): Element | null {
 		while ((a = attr.exec(rawAttrs))) attrs[a[1]] = decodeEntities(a[2] ?? a[3] ?? a[4] ?? '');
 		const el: Element = { name, attrs, children: [] };
 		stack[stack.length - 1].children.push(el);
+		if (TEXT_CONTENT.has(top.name)) (top.content ??= []).push(el);
 		if (!selfClosing) stack.push(el);
 	}
 	const find = (el: Element): Element | null => {
@@ -1057,7 +1156,7 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 	const height = viewBox.length === 4 ? viewBox[3] : length(root.attrs.height, 150);
 	const rootMatrix: AffineMatrix = viewBox.length === 4 ? translateMatrix(-viewBox[0], -viewBox[1]) : IDENTITY_MATRIX;
 
-	const SKIP = new Set(['defs', 'clipPath', 'mask', 'symbol', 'style', 'title', 'desc', 'metadata', 'pattern', 'marker', 'filter', 'text', 'image', 'use', 'linearGradient', 'radialGradient', 'script', 'foreignObject']);
+	const SKIP = new Set(['defs', 'clipPath', 'mask', 'symbol', 'style', 'title', 'desc', 'metadata', 'pattern', 'marker', 'filter', 'image', 'use', 'linearGradient', 'radialGradient', 'script', 'foreignObject']);
 
 	const shapeOf = (el: Element): VectorSubpath[] | null => {
 		const a = el.attrs;
@@ -1251,6 +1350,13 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 		const effects = sanitizeVectorEffects(raw.effects);
 		const liveBoolean = BOOLEAN_OPERATIONS.includes(raw.liveBoolean as VectorBooleanOperation) ? (raw.liveBoolean as VectorBooleanOperation) : null;
 		const id = idFor(g);
+		if (raw.kind === 'text') {
+			const text = inner.find((n): n is VectorTextNode => n.type === 'text');
+			if (!text) return null;
+			const { residual } = decomposeRigid(m);
+			const { visible: _v, ...rest } = text;
+			return { ...rest, id, ...meta, ...(effects.length ? { effects: transformVectorEffects(effects, residual) } : {}) };
+		}
 		if (raw.kind === 'path') {
 			const path = inner.find((n): n is VectorPathNode => n.type === 'path');
 			if (!path) return null;
@@ -1266,6 +1372,95 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 		if (blend) group.blend = blend;
 		return group;
 	};
+
+	const json = (v: string | undefined): unknown => {
+		try {
+			return v === undefined ? undefined : JSON.parse(v);
+		} catch {
+			return undefined;
+		}
+	};
+
+	/** A `<g data-vector-text>` from our own export as the text node it came from. */
+	const ownText = (g: Element, m: AffineMatrix, meta: Partial<VectorTextNode>): VectorTextNode | null => {
+		const raw = json(g.attrs['data-vector-text']) as Record<string, unknown> | undefined;
+		if (!raw || typeof raw !== 'object') return null;
+		let fields: ReturnType<typeof sanitizeVectorTextFields>;
+		try {
+			fields = sanitizeVectorTextFields(raw);
+		} catch {
+			return null;
+		}
+		const effects = sanitizeVectorEffects(raw.effects);
+		let node: VectorTextNode = { id: idFor(g), type: 'text', ...meta, ...fields, ...(effects.length ? { effects } : {}) };
+		if (g.attrs['data-vector-fills'] !== undefined) {
+			node = withVectorFills({ ...node, fill: null, stroke: null }, sanitizeVectorFills(json(g.attrs['data-vector-fills']) ?? []));
+			node = withVectorStrokes(node, sanitizeVectorStrokes(json(g.attrs['data-vector-strokes']) ?? []));
+		} else {
+			const fill = json(g.attrs['data-vector-fill']);
+			const stroke = json(g.attrs['data-vector-stroke']);
+			node.fill = fill == null ? null : (sanitizeVectorFills([{ paint: fill }])[0]?.paint ?? null);
+			node.stroke = stroke == null ? null : (sanitizeVectorFills([{ paint: stroke }])[0]?.paint ?? null);
+			const settings = json(g.attrs['data-vector-stroke-settings']);
+			if (settings && typeof settings === 'object') {
+				const strokes = sanitizeVectorStrokes([{ paint: node.stroke ?? '#000', ...(settings as object) }]);
+				if (strokes[0]) {
+					const { paint: _p, ...rest } = strokes[0];
+					node = { ...node, ...rest };
+				}
+			}
+		}
+		return m === IDENTITY_MATRIX ? node : normalizeVectorPaintStacks(transformVectorNode(node, m), 'stack');
+	};
+
+	/**
+	 * A foreign `<text>` as point text: its characters (tspans that start a new line at their own
+	 * `x` become line breaks), font, anchor and paint. Per-character positions, `textPath` and
+	 * `textLength` are not kept.
+	 */
+	const foreignText = (el: Element, style: InheritedStyle, m: AffineMatrix, meta: Partial<VectorTextNode>): VectorTextNode | null => {
+		let text = '';
+		let first = true;
+		const walk = (e: Element) => {
+			for (const part of e.content ?? []) {
+				if (typeof part === 'string') text += part.replace(/\s+/g, ' ');
+				else if (part.name === 'tspan' || part.name === 'textPath') {
+					if (!first && part.attrs.x !== undefined && (part.attrs.dy !== undefined || part.attrs.y !== undefined)) text += '\n';
+					walk(part);
+				}
+				first = false;
+			}
+		};
+		walk(el);
+		text = text.replace(/^ +| +$/gm, '');
+		if (!text.trim()) return null;
+		const font = (name: string) => attrOrStyle(el, name) ?? el.children.map((c) => attrOrStyle(c, name)).find((v) => v !== undefined);
+		const size = length(font('font-size'), 16);
+		const weightRaw = font('font-weight');
+		const weight = weightRaw === 'bold' ? 700 : weightRaw === 'normal' || !weightRaw ? 400 : Math.round(length(weightRaw, 400));
+		const family = (font('font-family') ?? 'sans-serif').split(',')[0].trim().replace(/^["']|["']$/g, '') || 'sans-serif';
+		const anchor = attrOrStyle(el, 'text-anchor');
+		const first0 = (v: string | undefined) => numberList(v)[0] ?? 0;
+		const tspan = el.children.find((c) => c.name === 'tspan');
+		const x = el.attrs.x !== undefined ? first0(el.attrs.x) : first0(tspan?.attrs.x);
+		const y = el.attrs.y !== undefined ? first0(el.attrs.y) : first0(tspan?.attrs.y);
+		const fillValue = attrOrStyle(el, 'fill') ?? style.fill;
+		let node: VectorTextNode = {
+			id: idFor(el),
+			type: 'text',
+			...meta,
+			text,
+			font: { fontFamily: family, fontWeight: Math.max(1, Math.min(1000, weight)), fontSize: size > 0 ? size : 16, ...(font('font-style') === 'italic' ? { italic: true } : {}) },
+			...(anchor === 'middle' ? { paragraph: { align: 'center' as const } } : anchor === 'end' ? { paragraph: { align: 'right' as const } } : {}),
+			frame: { kind: 'point', x, y },
+			fill: paint(fillValue ?? '#000'),
+			stroke: paint(s0(style.stroke)),
+			...(style.strokeWidth ? { strokeWidth: length(style.strokeWidth, 1) } : {})
+		};
+		if (m !== IDENTITY_MATRIX) node = transformVectorNode(node, m);
+		return node;
+	};
+	const s0 = (v: string | undefined) => v ?? 'none';
 
 	const visit = (el: Element, style: InheritedStyle, matrix: AffineMatrix): VectorNode[] => {
 		const out: VectorNode[] = [];
@@ -1302,7 +1497,7 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 		const inner = visit(content, readStyle(content, rootStyle), multiplyMatrices(parseSvgTransform(el.attrs.transform), space));
 		resolving.delete(id);
 		// A clip's paint is not drawn: imported clips are unpainted outlines.
-		const strip = (n: VectorNode): VectorNode => (n.type === 'path' ? withVectorStrokes(withVectorFills({ ...n, fill: null, stroke: null }, []), []) : { ...n, children: n.children.map(strip) });
+		const strip = (n: VectorNode): VectorNode => (n.type !== 'group' ? withVectorStrokes(withVectorFills({ ...n, fill: null, stroke: null }, []), []) : { ...n, children: n.children.map(strip) });
 		const list = isClip ? inner.map(strip) : inner;
 		if (!list.length) return null;
 		return list.length === 1 ? list[0] : { id: idFor({ name: 'g', attrs: {}, children: [] }), type: 'group', name: isClip ? 'Clip' : 'Mask', children: list };
@@ -1390,6 +1585,16 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 		}
 		if (child.name === 'g' && child.attrs['data-vector-live'] !== undefined) {
 			const node = liveNode(child, s, m, meta);
+			if (node) out.push(node);
+			return out;
+		}
+		if (child.name === 'g' && child.attrs['data-vector-text'] !== undefined) {
+			const node = ownText(child, m, meta);
+			if (node) out.push(node);
+			return out;
+		}
+		if (child.name === 'text') {
+			const node = foreignText(child, s, m, meta);
 			if (node) out.push(node);
 			return out;
 		}

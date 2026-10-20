@@ -311,7 +311,7 @@ export class VectorSnapTargets {
 			for (const n of list) {
 				const m = multiplyMatrices(nodeMatrix(n), parent);
 				if (n.type === 'group') visit(n.children, m);
-				else if (ids.has(n.id) && n.visible !== false) {
+				else if (n.type === 'path' && ids.has(n.id) && n.visible !== false) {
 					n.subpaths.forEach((sp, s) => {
 						sp.anchors.forEach((a, i) => {
 							if (anchors <= 0 || moving(n.id, s, i)) return;
@@ -408,7 +408,7 @@ export class VectorSnapTargets {
 					visit(n.children, m);
 					continue;
 				}
-				if (anchors <= 0) continue;
+				if (anchors <= 0 || n.type !== 'path') continue;
 				for (const sp of n.subpaths) {
 					for (const a of sp.anchors) {
 						if (anchors-- <= 0) break;
