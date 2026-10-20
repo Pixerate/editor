@@ -546,6 +546,15 @@ The following adds CAD-style drawing aids from cadcraft's `snap/tracking.rs`.
 
 `getVectorSceneRenderData(state)` returns the document as SVG-ready paths (with gradient defs) and a `transform` for the document layer; `getVectorOverlayRenderData(state)` returns the overlay in screen pixels: outlines, the selection box with its handles, anchors, handles, the marquee, the pen's rubber band, smart guide lines and labels (`guides`), the knife or eraser stroke being drawn (`toolStroke`), the pencil's lazy-mouse string (`pencilString`), the scissors cut point (`cutPoint`), the live corner widgets (`cornerWidgets`), the width tool's `widthPoints` and `widthSpot`, each selected blend's spine and the Blend tool's picks (`blend`), the Gradient tool's annotator (`gradient`: start, end / radius, aspect and focal handles, stop chips with ticks to the bar, midpoint diamonds and the extent outline), the Shape Builder / paint bucket highlight (`builder`: faces to fill translucent, `hatches` to stroke over them (45° lines `VECTOR_BUILDER_HATCH_GAP` pixels apart; empty strings for the paint bucket), line pieces and outline edges an erase deletes, the drag's trail; `mode` `merge`, `erase` or `fill`), and a status string. Draw the overlay outside the transformed layer so handles keep their size at any zoom. Scene nodes carry an SVG `transform` when rotated, and the selection box comes unrotated with a `transform` (`rotate(angle cx cy)`) to draw it in — handle `screen` positions are the true on-screen points. A path whose stroke is aligned or has arrowheads carries `strokeParts`: draw `d` with the fill only, then `strokeParts.d` at `strokeParts.width` with its `clip` (a `<clipPath>` of the shape for inside, a user-space `<mask>` over `clip.bounds` that hides the shape for outside), then each head filled with the stroke; a variable-width stroke has `strokeParts.outline` instead, filled with the stroke paint under the same clip. The canvases group them under the node's id as `<g data-vector-id data-vector-stroke-align>` with `data-vector-part="fill" | "stroke" | "stroke-outline" | "head"` children. The bundled React and Svelte canvases are thin renderers over these two functions.
 
+**Performance.** `getVectorSceneRenderData` caches each node's render data by node object, id prefix and text shaper generation, together with the defs and filters it made. An untouched node comes back as the same object, so `<VectorCanvas>` skips it: React through `React.memo`, Svelte through its keyed blocks. A one-node edit of a 3000-shape drawing rebuilds in about 0.2 ms instead of 12 ms.
+
+The canvases also pass their measured size (`viewportSize`):
+
+- **Culling.** Top-level nodes whose paint box is off screen are left out, found through the spatial index on large documents.
+- **Level of detail.** Groups, text and instances smaller than `lod` screen pixels (default 2) draw as one rectangle in their main colour.
+
+`scene.stats` reports the counts. Exports such as SVG, PDF and the symbol thumbnails call it without a size, so they draw everything exactly.
+
 ## SVG
 
 ```ts
