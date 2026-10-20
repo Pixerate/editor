@@ -410,7 +410,7 @@ export interface BrushEngineControls {
   mixingPath: 'behavior.mixing' | 'blender.mixing' | 'smudge.mixing' | null;
   /** The dirty-brush toggle (`behavior.dirty`). */
   dirty: boolean;
-  /** The multi-colour controls (`behavior.multicolor`). */
+  /** The multi-colour controls (`behavior.multicolor`; the panels show the brush gradient, `brush.paint`, instead). */
   multicolor: boolean;
   /** Load / Clean buttons and a swatch of what the brush carries. */
   load: boolean;

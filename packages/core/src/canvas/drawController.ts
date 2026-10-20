@@ -11,10 +11,38 @@ import {
 	streamlinePoints,
 	strokeToShapeNode,
 	type FreehandDrawOptions,
+	type FreehandPenSample,
 	type FreehandStroke,
 	type FreehandStrokeStyle,
 	type FreehandTool
 } from './freehand.js';
+import { listCanvasBrushes, validateCanvasBrush, type CanvasBrush } from './brushstroke.js';
+
+/** A stroke drawn by code or an agent (`drawStroke`). */
+export interface DrawStrokeInput {
+	/** Points in canvas (flow) coordinates, at least one. */
+	points: readonly Point[];
+	/** `pen` (default) or `highlighter`: picks the default style. */
+	tool?: 'pen' | 'highlighter';
+	/** Style over the tool's defaults (colour, width, opacity, cap, join, brush). */
+	style?: Partial<FreehandStrokeStyle>;
+	/** Pressure 0..1 spread evenly along the stroke (one value is constant). Brushed strokes only. */
+	pressure?: readonly number[];
+	/** Pen tilt in degrees (−90..90) spread evenly along the stroke. Brushed strokes only. */
+	tiltX?: readonly number[];
+	tiltY?: readonly number[];
+	/** Smooth the points before fitting (default false: agent points are taken as given). */
+	streamline?: boolean;
+}
+
+export interface DrawStrokeResult<TNode extends CanvasNode = CanvasNode> {
+	id: string;
+	node: TNode;
+	/** The new node's box in canvas coordinates. */
+	bounds: { x: number; y: number; width: number; height: number };
+	/** The brush of a brushed stroke, with the profiles it stored. */
+	brush?: unknown;
+}
 
 export interface CanvasDrawControllerOptions<TNode extends CanvasNode = CanvasNode> {
 	getNodes: () => TNode[];
@@ -64,7 +92,7 @@ export function createCanvasDrawController<TNode extends CanvasNode = CanvasNode
 		options.onStyleChange?.(currentStyle);
 	}
 
-	function startStroke(point: Point) {
+	function startStroke(point: Point, pen?: FreehandPenSample) {
 		if (currentTool === 'select') return;
 
 		if (currentTool === 'eraser') {
@@ -82,6 +110,7 @@ export function createCanvasDrawController<TNode extends CanvasNode = CanvasNode
 			id,
 			tool: currentTool,
 			points: [point],
+			...(pen ? { samples: [{ ...pen }] } : {}),
 			style: { ...currentStyle },
 			startTime: Date.now()
 		};
@@ -89,7 +118,7 @@ export function createCanvasDrawController<TNode extends CanvasNode = CanvasNode
 		options.onActiveStrokeChange?.(activeStroke);
 	}
 
-	function continueStroke(point: Point) {
+	function continueStroke(point: Point, pen?: FreehandPenSample) {
 		if (currentTool === 'eraser') {
 			eraseAt(point);
 			return;
@@ -103,6 +132,8 @@ export function createCanvasDrawController<TNode extends CanvasNode = CanvasNode
 		if (Math.hypot(point[0] - last[0], point[1] - last[1]) < 0.25) return;
 
 		points.push(point);
+		if (pen && !activeStroke.samples) activeStroke.samples = points.slice(0, -1).map(() => ({}));
+		activeStroke.samples?.push(pen ? { ...pen } : {});
 		options.onActiveStrokeChange?.({ ...activeStroke, points: [...points] });
 	}
 
@@ -146,9 +177,15 @@ export function createCanvasDrawController<TNode extends CanvasNode = CanvasNode
 			}
 		) as TNode;
 
+		addStrokeNode(node, `Draw ${stroke.tool}`);
+		options.onStrokeComplete?.(node);
+		return node;
+	}
+
+	function addStrokeNode(node: TNode, name: string) {
 		if (options.history) {
 			options.history.execute({
-				name: `Draw ${stroke.tool}`,
+				name,
 				execute: () => {
 					options.setNodes([...options.getNodes(), node]);
 				},
@@ -159,9 +196,58 @@ export function createCanvasDrawController<TNode extends CanvasNode = CanvasNode
 		} else {
 			options.setNodes([...options.getNodes(), node]);
 		}
+	}
 
+	/**
+	 * Draws a whole stroke at once (for agents and code): validates the points and the brush (an
+	 * unknown or wet brush is refused before anything changes), adds the stroke node as one undo
+	 * step and returns its id and bounds. Brushed strokes load the paint engine first, so this is
+	 * async.
+	 */
+	async function drawStroke(input: DrawStrokeInput): Promise<DrawStrokeResult<TNode>> {
+		const points = input.points;
+		if (!Array.isArray(points) || points.length === 0) throw new Error('drawStroke needs at least one point ([x, y] in canvas coordinates).');
+		for (const p of points) {
+			if (!Array.isArray(p) || p.length < 2 || !Number.isFinite(p[0]) || !Number.isFinite(p[1])) {
+				throw new Error('Every point must be [x, y] with finite numbers (canvas coordinates).');
+			}
+		}
+		const tool = input.tool ?? 'pen';
+		if (tool !== 'pen' && tool !== 'highlighter') throw new Error(`Unknown tool '${String(tool)}': use 'pen' or 'highlighter'.`);
+		const style: FreehandStrokeStyle = { ...createDefaultStrokeStyle(tool), ...input.style };
+		if (!(style.width > 0)) throw new Error('width must be a positive number of canvas units.');
+		const profiles = { pressure: input.pressure, tiltX: input.tiltX, tiltY: input.tiltY };
+		for (const [key, values] of Object.entries(profiles)) {
+			if (values === undefined) continue;
+			const [lo, hi] = key === 'pressure' ? [0, 1] : [-90, 90];
+			if (!Array.isArray(values) || values.length === 0 || values.some((v) => !Number.isFinite(v) || v < lo || v > hi)) {
+				throw new Error(`${key} must be a non-empty list of numbers in ${lo}..${hi}.`);
+			}
+		}
+		if ((input.pressure || input.tiltX || input.tiltY) && style.brush === undefined) {
+			throw new Error('pressure and tilt profiles only shape brushed strokes: pass a brush too (see canvas.listBrushes).');
+		}
+		if (style.brush !== undefined) await validateCanvasBrush(style.brush as CanvasBrush);
+
+		const id = options.generateNodeId?.() ?? `stroke-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+		const smoothed = input.streamline ? streamlinePoints(points, options.drawOptions?.streamline ?? 0.35) : [...points];
+		const node = strokeToShapeNode(
+			{ id, tool, points: smoothed, style },
+			{ tolerance: options.drawOptions?.tolerance ?? 1.0, cornerAngleDeg: options.drawOptions?.cornerAngleDeg ?? 40 }
+		) as TNode;
+		const shape = (node.data as { shape: { brush?: Record<string, unknown> } }).shape;
+		if (shape.brush) {
+			for (const [key, values] of Object.entries(profiles)) if (values) shape.brush[key] = [...values];
+		}
+		addStrokeNode(node, `Draw ${tool}`);
 		options.onStrokeComplete?.(node);
-		return node;
+		const pos = node.position ?? { x: 0, y: 0 };
+		return {
+			id: node.id,
+			node,
+			bounds: { x: pos.x, y: pos.y, width: Number(node.width ?? 0), height: Number(node.height ?? 0) },
+			...(shape.brush ? { brush: shape.brush } : {})
+		};
 	}
 
 	function cancelStroke() {
@@ -227,7 +313,10 @@ export function createCanvasDrawController<TNode extends CanvasNode = CanvasNode
 		continueStroke,
 		endStroke,
 		cancelStroke,
-		eraseAt
+		eraseAt,
+		drawStroke,
+		/** The dry paint presets a stroke can be brushed with (loads the paint engine). */
+		listBrushes: listCanvasBrushes
 	};
 }
 

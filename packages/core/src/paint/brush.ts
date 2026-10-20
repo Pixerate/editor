@@ -17,6 +17,7 @@ import { blendPixel, mixPigment8, mixPigmentRgb, type BlendMode } from '../raste
 import { srgbDecode, srgbEncode } from '../raster/deep';
 import type { RasterRect as CropBox } from '../raster/surface';
 import { TILE, tileKey, tileCoord, type TileKey } from '../raster/surface';
+import { PaintGradientSampler, type PaintDabParams, type PaintGradientSample, type PaintGradientSource, type PaintRgb } from './gradient-paint';
 
 /** One input sample. Missing pressure is a mouse (1). */
 export interface StrokePoint {
@@ -160,6 +161,8 @@ export interface Dab {
   /** Radians. */
   angle: number;
   roundness: number;
+  /** What gradient paint maps by (travel, index, pressure, time …); set by the dab walkers. */
+  params?: PaintDabParams;
 }
 
 /** Exponential smoothing of input points; the first and last point are kept. */
@@ -187,6 +190,13 @@ export class DabWalker {
   private last: StrokePoint | null = null;
   private nextAt = 0;
   private pendingFirst: StrokePoint | null = null;
+  private index = 0;
+  private travelled = 0;
+  private dir = 0;
+  private firstT: number | null = null;
+  private lastSpeedT: number | null = null;
+  private lastSpeedAt: StrokePoint | null = null;
+  private speed: number | null = null;
 
   constructor(readonly brush: BrushSettings) {}
 
@@ -198,8 +208,9 @@ export class DabWalker {
     return Math.max(0.5, Math.max(1, this.diameter(p)) * Math.max(0.01, this.brush.spacing));
   }
 
-  private dab(p: StrokePoint): Dab {
+  private dab(p: StrokePoint, travel: number): Dab {
     const b = this.brush;
+    const time = typeof p.t === 'number' && Number.isFinite(p.t) && this.firstT !== null ? p.t - this.firstT : null;
     return {
       x: p.x,
       y: p.y,
@@ -208,24 +219,40 @@ export class DabWalker {
       opacity: b.pressureOpacity ? pressureOf(p) : 1,
       angle: (b.angle * Math.PI) / 180,
       roundness: Math.min(1, Math.max(0.01, b.roundness)),
+      params: { travel, index: this.index++, pressure: pressureOf(p), lean: 0, speed: time === null ? null : (this.speed ?? 0), direction: this.dir, time },
     };
+  }
+
+  /** Tracks time and a smoothed speed from timed samples (for gradient paint). */
+  private timeOf(p: StrokePoint): void {
+    if (typeof p.t !== 'number' || !Number.isFinite(p.t)) return;
+    if (this.firstT === null) this.firstT = p.t;
+    const a = this.lastSpeedAt;
+    if (a && this.lastSpeedT !== null && p.t > this.lastSpeedT) {
+      const v = Math.hypot(p.x - a.x, p.y - a.y) / (p.t - this.lastSpeedT);
+      this.speed = this.speed === null ? v : this.speed + (v - this.speed) * 0.35;
+    }
+    this.lastSpeedT = p.t;
+    this.lastSpeedAt = p;
   }
 
   push(p: StrokePoint, out: Dab[]): void {
     const a = this.last;
+    this.timeOf(p);
     if (!a) {
       this.last = p;
       this.pendingFirst = p;
       this.nextAt = this.stepLen(p);
       return;
     }
-    if (this.pendingFirst) {
-      out.push(this.dab(this.pendingFirst));
-      this.pendingFirst = null;
-    }
     const dx = p.x - a.x;
     const dy = p.y - a.y;
     const len = Math.hypot(dx, dy);
+    if (len > 1e-9) this.dir = Math.atan2(-dy, dx);
+    if (this.pendingFirst) {
+      out.push(this.dab(this.pendingFirst, 0));
+      this.pendingFirst = null;
+    }
     if (len > 1e-9) {
       while (this.nextAt <= len + 1e-9) {
         const f = Math.min(1, this.nextAt / len);
@@ -234,17 +261,19 @@ export class DabWalker {
           y: a.y + dy * f,
           pressure: pressureOf(a) + (pressureOf(p) - pressureOf(a)) * f,
         };
-        out.push(this.dab(q));
+        if (typeof a.t === 'number' && typeof p.t === 'number') q.t = a.t + (p.t - a.t) * f;
+        out.push(this.dab(q, this.travelled + this.nextAt));
         this.nextAt += this.stepLen(q);
       }
       this.nextAt -= len;
+      this.travelled += len;
     }
     this.last = p;
   }
 
   finish(out: Dab[]): void {
     if (this.pendingFirst) {
-      out.push(this.dab(this.pendingFirst));
+      out.push(this.dab(this.pendingFirst, 0));
       this.pendingFirst = null;
     }
   }
@@ -325,8 +354,27 @@ const TILE_PIXELS = TILE * TILE;
 /** A stroke's accumulated coverage, in 256 px tiles over document space. */
 export class CoverageMap {
   readonly tiles = new Map<TileKey, Float32Array>();
+  /**
+   * Gradient paint: the colour laid at each pixel (sRGB 0..1, 3 per pixel), when dabs carry their
+   * own colours. Each dab blends its colour in by the share of coverage it adds. Missing: the
+   * stroke's one colour (`StrokeApply.color`).
+   */
+  readonly colors = new Map<TileKey, Float32Array>();
   bounds: CropBox | null = null;
   private dirty = new Set<TileKey>();
+
+  /** The colour at a pixel (gradient paint), or `null` when the stroke has one colour there. */
+  colorAt(x: number, y: number, out: number[]): number[] | null {
+    const tx = Math.floor(x / TILE);
+    const ty = Math.floor(y / TILE);
+    const t = this.colors.get(tileKey(tx, ty));
+    if (!t) return null;
+    const i = ((y - ty * TILE) * TILE + (x - tx * TILE)) * 3;
+    out[0] = t[i];
+    out[1] = t[i + 1];
+    out[2] = t[i + 2];
+    return out;
+  }
 
   get(x: number, y: number): number {
     const tx = Math.floor(x / TILE);
@@ -335,8 +383,12 @@ export class CoverageMap {
     return t ? t[(y - ty * TILE) * TILE + (x - tx * TILE)] : 0;
   }
 
-  /** Builds up `vals` (over `rect`) with flow towards `ceil`: `c ← c + v·(ceil − c)`. */
-  accumulate(rect: CropBox, vals: Float32Array, ceil: number): void {
+  /**
+   * Builds up `vals` (over `rect`) with flow towards `ceil`: `c ← c + v·(ceil − c)`. With `color`
+   * (one sRGB colour for the dab) or `field` (sRGB per pixel of `rect`, 3 each), the pixels' colours
+   * move towards it by the share of coverage this dab adds (gradient paint).
+   */
+  accumulate(rect: CropBox, vals: Float32Array, ceil: number, color: readonly number[] | null = null, field: Float32Array | null = null): void {
     if (rect.width <= 0 || rect.height <= 0) return;
     const w = rect.width;
     const tx0 = Math.floor(rect.x / TILE);
@@ -369,7 +421,25 @@ export class CoverageMap {
             }
             const ti = trow + (x - tx * TILE);
             const c = tile[ti];
-            if (ceil > c) tile[ti] = c + v * (ceil - c);
+            if (ceil > c) {
+              const next = c + v * (ceil - c);
+              tile[ti] = next;
+              if (color || field) {
+                const key = tileKey(tx, ty);
+                let ct = this.colors.get(key);
+                if (!ct) {
+                  ct = new Float32Array(TILE_PIXELS * 3);
+                  this.colors.set(key, ct);
+                }
+                const w = c > 0 ? (next - c) / next : 1;
+                const fi = (row + (x - rect.x)) * 3;
+                const ci = ti * 3;
+                for (let ch = 0; ch < 3; ch++) {
+                  const col = field ? field[fi + ch] : color![ch];
+                  ct[ci + ch] += (col - ct[ci + ch]) * w;
+                }
+              }
+            }
           }
         }
       }
@@ -399,11 +469,22 @@ export class StrokeCoverage {
   private smoothing: number;
   private smoothPos: StrokePoint | null = null;
   private buf = new Float32Array(0);
+  private field = new Float32Array(0);
+  private readonly sampler: PaintGradientSampler | null;
+  private readonly tipTable: PaintGradientSample[] | null;
+  private readonly sample: PaintGradientSample = { rgb: [0, 0, 0], alpha: 1 };
   dabCount = 0;
 
-  constructor(readonly brush: BrushSettings) {
+  /** `paint`: a gradient source (resolved: no `paint` / `secondary` stops) for gradient paint; `seed` for its `random` mapping. */
+  constructor(
+    readonly brush: BrushSettings,
+    paint: PaintGradientSource | null = null,
+    seed = 0
+  ) {
     this.walker = new DabWalker(brush);
     this.smoothing = brush.smoothing;
+    this.sampler = paint ? new PaintGradientSampler(paint, seed) : null;
+    this.tipTable = this.sampler?.acrossTip ? this.sampler.tipTable(TIP_GRADIENT_STEPS) : null;
   }
 
   /** Feeds input points; returns the document rectangles the new dabs touched. */
@@ -437,12 +518,63 @@ export class StrokeCoverage {
       if (this.buf.length < n) this.buf = new Float32Array(n);
       const vals = this.buf.subarray(0, n);
       rasterizeDab(d, this.brush.hardness, rect, vals);
-      this.coverage.accumulate(rect, vals, d.opacity);
+      if (this.sampler) this.paintDab(d, rect, vals);
+      else this.coverage.accumulate(rect, vals, d.opacity);
       rects.push(rect);
       this.dabCount++;
     }
     return rects;
   }
+
+  private paintDab(d: Dab, rect: CropBox, vals: Float32Array): void {
+    const scratch = { field: this.field, sample: this.sample };
+    const { color, field } = gradientDabColor(this.sampler!, this.tipTable, d, d.params!, rect, vals, scratch);
+    this.field = scratch.field;
+    this.coverage.accumulate(rect, vals, d.opacity, color, field);
+  }
+}
+
+/** Colours across the tip of an `across-tip` gradient. */
+export const TIP_GRADIENT_STEPS = 32;
+
+/**
+ * Gradient paint for one dab: the dab's colour (or, across the tip, a colour per pixel) and its
+ * opacity, which multiplies the flow. Shared by every coverage stroke.
+ */
+export function gradientDabColor(
+  sampler: PaintGradientSampler,
+  tipTable: readonly PaintGradientSample[] | null,
+  d: Dab,
+  params: PaintDabParams,
+  rect: CropBox,
+  vals: Float32Array,
+  scratch: { field: Float32Array; sample: PaintGradientSample }
+): { color: PaintRgb | null; field: Float32Array | null } {
+  if (!tipTable) {
+    const s = sampler.dab(params, scratch.sample);
+    if (s.alpha < 1) for (let k = 0; k < vals.length; k++) vals[k] *= s.alpha;
+    return { color: s.rgb, field: null };
+  }
+  const n = rect.width * rect.height;
+  if (scratch.field.length < n * 3) scratch.field = new Float32Array(n * 3);
+  const f = scratch.field;
+  // Across the stroke: the normal to the direction of travel (document y points down).
+  const nx = Math.sin(params.direction);
+  const ny = Math.cos(params.direction);
+  const r = Math.max(0.5, d.radius);
+  const last = tipTable.length - 1;
+  for (let yy = 0, k = 0; yy < rect.height; yy++) {
+    const py = rect.y + yy + 0.5 - d.y;
+    for (let xx = 0; xx < rect.width; xx++, k++) {
+      const u = ((rect.x + xx + 0.5 - d.x) * nx + py * ny) / r;
+      const e = tipTable[Math.min(last, Math.max(0, Math.round(((u + 1) / 2) * last)))];
+      f[k * 3] = e.rgb[0];
+      f[k * 3 + 1] = e.rgb[1];
+      f[k * 3 + 2] = e.rgb[2];
+      if (e.alpha < 1) vals[k] *= e.alpha;
+    }
+  }
+  return { color: null, field: f };
 }
 
 /** How a stroke changes pixels. */
@@ -504,12 +636,18 @@ export function applyStrokeToTile(
   const aligned = s.offset.x % TILE === 0 && s.offset.y % TILE === 0;
   const covTile = aligned ? coverage.tiles.get(tileKey(Math.floor(ox / TILE), Math.floor(oy / TILE))) : undefined;
   if (aligned && !covTile) return out;
+  // Gradient paint: each pixel's own colour (alpha stays the stroke's).
+  const colored = s.mode === 'paint' && coverage.colors.size > 0;
+  const own = [0, 0, 0, cs[3]];
+  const ownBytes: [number, number, number, number] = [0, 0, 0, s.color[3]];
   for (let y = y0; y < y1; y++) {
     const dy = oy + y;
     for (let x = x0; x < x1; x++) {
       const dx = ox + x;
       const c = covTile ? covTile[y * TILE + x] : coverage.get(dx, dy);
       if (c <= 0) continue;
+      const pixelColor = colored ? coverage.colorAt(dx, dy, own) : null;
+      if (pixelColor) for (let ch = 0; ch < 3; ch++) ownBytes[ch] = Math.round(Math.min(1, Math.max(0, own[ch])) * 255);
       let k = c * s.opacity;
       if (sel) {
         if (dx < 0 || dy < 0 || dx >= sel.width || dy >= sel.height) continue;
@@ -519,7 +657,7 @@ export function applyStrokeToTile(
       if (k <= 0) continue;
       const p = y * TILE + x;
       if (channels === 1) {
-        const target = s.mode === 'erase' ? s.background[0] : s.color[0];
+        const target = s.mode === 'erase' ? s.background[0] : pixelColor ? Math.round(0.299 * ownBytes[0] + 0.587 * ownBytes[1] + 0.114 * ownBytes[2]) : s.color[0];
         out[p] = Math.round(out[p] + (target - out[p]) * k);
         continue;
       }
@@ -529,10 +667,10 @@ export function applyStrokeToTile(
         continue;
       }
       if (s.lockTransparency && out[i + 3] === 0) continue;
-      const src = s.mode === 'erase' ? bg : cs;
+      const src = s.mode === 'erase' ? bg : pixelColor ? own : cs;
       if (s.blend === 'pigment') {
         // `blendPixel`'s paint mix on the 8-bit colours, with their spectra cached.
-        const bytes = s.mode === 'erase' ? s.background : s.color;
+        const bytes = s.mode === 'erase' ? s.background : pixelColor ? ownBytes : s.color;
         const as = src[3] * k;
         if (!(as > 0)) continue;
         const ao = as + (out[i + 3] / 255) * (1 - as);
@@ -595,12 +733,17 @@ export function applyStrokeToDeepTile(
     if (linear) for (let k = 0; k < 3; k++) v[k] = srgbDecode(v[k]);
     return v;
   };
-  const src = colour(s.mode === 'erase' ? s.background : s.color);
+  const src0 = colour(s.mode === 'erase' ? s.background : s.color);
+  let src = src0;
+  // Gradient paint: each pixel's own colour (alpha stays the stroke's).
+  const colored = s.mode === 'paint' && coverage.colors.size > 0;
+  const own = [0, 0, 0, src0[3]];
+  const ownSrc = [0, 0, 0, src0[3]];
   const sel = s.selection;
   const cb = [0, 0, 0, 0];
   const mix = [0, 0, 0];
   const encCb = [0, 0, 0];
-  const encSrc = linear ? [srgbEncode(src[0]), srgbEncode(src[1]), srgbEncode(src[2])] : src;
+  const encSrc0 = linear ? [srgbEncode(src0[0]), srgbEncode(src0[1]), srgbEncode(src0[2])] : src0;
   const put = (i: number, v: number) => {
     out[i] = linear ? v : v <= 0 ? 0 : v >= 1 ? 65535 : Math.round(v * 65535);
   };
@@ -610,6 +753,7 @@ export function applyStrokeToDeepTile(
       const dx = ox + x;
       const c = coverage.get(dx, dy);
       if (c <= 0) continue;
+      const pixelColor = colored ? coverage.colorAt(dx, dy, own) : null;
       let k = c * s.opacity;
       if (sel) {
         if (dx < 0 || dy < 0 || dx >= sel.width || dy >= sel.height) continue;
@@ -617,10 +761,16 @@ export function applyStrokeToDeepTile(
       }
       if (k > 1) k = 1;
       if (k <= 0) continue;
+      src = src0;
+      if (pixelColor) {
+        for (let ch = 0; ch < 3; ch++) ownSrc[ch] = linear ? srgbDecode(own[ch]) : own[ch];
+        src = ownSrc;
+      }
       if (n === 1) {
         // Mask coverage: towards the paint's grey (masks take the colour's grey value).
         const p = y * TILE + x;
-        const v = out[p] + (grey - out[p]) * k;
+        const g = pixelColor ? (0.299 * own[0] + 0.587 * own[1] + 0.114 * own[2]) * scale : grey;
+        const v = out[p] + (g - out[p]) * k;
         out[p] = linear ? v : Math.round(v);
         continue;
       }
@@ -638,7 +788,7 @@ export function applyStrokeToDeepTile(
         if (!(as > 0)) continue;
         const ao = as + cb[3] * (1 - as);
         for (let ch = 0; ch < 3; ch++) encCb[ch] = linear ? srgbEncode(cb[ch]) : cb[ch];
-        mixPigmentRgb(encCb, encSrc, as / ao, mix);
+        mixPigmentRgb(encCb, pixelColor ? own : encSrc0, as / ao, mix);
         for (let ch = 0; ch < 3; ch++) put(i + ch, linear ? srgbDecode(mix[ch]) : mix[ch]);
         if (!s.lockTransparency) put(i + 3, ao);
         continue;

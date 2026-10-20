@@ -13,6 +13,8 @@ import {
   rgbUnitToHex,
   setRetouchChoice,
 } from '@pixerate/editor/image-editor';
+import { DEFAULT_PAINT_GRADIENT } from '@pixerate/editor/image-editor';
+import { PaintGradientEditor } from './PaintGradientEditor';
 import { ControlSlider } from './ControlSlider';
 
 export interface BrushOptionsBarProps {
@@ -25,7 +27,8 @@ const chip = (on: boolean) => `px-2 py-1 rounded text-[11px] ${on ? 'bg-indigo-6
 /**
  * The paint tools: Move / Brush / Mixer / Eraser, the brush's size, hardness, opacity, flow and
  * smoothing, pressure toggles, the foreground and background colours (D resets, X swaps) and
- * Edit › Fill / Clear on the active layer. With the Mixer Brush: its load (Load brush / Clean
+ * Edit › Fill / Clear on the active layer, and gradient paint for the brush (the colour changes as
+ * the stroke goes; `PaintGradientEditor`). With the Mixer Brush: its load (Load brush / Clean
  * brush), Wet / Load / Mix, load and clean each stroke, and the RGB / Pigment mixing toggle.
  * With a retouching tool: the clone source (Alt-click the canvas to set it), Sample, the Spot
  * Healing type, the tone Range, Exposure / Strength and the Aligned / Protect tones / Vibrance
@@ -37,7 +40,7 @@ export const BrushOptionsBar: React.FC<BrushOptionsBarProps> = ({ controller, cl
   useEffect(() => controller.subscribe(() => setTick((n) => n + 1)), [controller]);
   const [error, setError] = useState<string | null>(null);
   const state = controller.getState();
-  const { brush, foreground, background, mixer, mixerLoad, retouch, cloneSource } = state.paint;
+  const { brush, foreground, background, mixer, mixerLoad, retouch, cloneSource, paint } = state.paint;
   const tool = state.activeTool as (typeof PAINT_TOOLS)[number]['id'];
   const attempt = (fn: () => unknown) => {
     try {
@@ -92,7 +95,21 @@ export const BrushOptionsBar: React.FC<BrushOptionsBarProps> = ({ controller, cl
         <button type="button" title="Default colours (D)" className={chip(false)} onClick={() => controller.resetPaintColors()}>
           Default
         </button>
+        {state.activeTool === 'brush' && (
+          <button
+            type="button"
+            aria-pressed={paint.type === 'gradient'}
+            title="Gradient paint: the brush changes colour as the stroke goes"
+            className={chip(paint.type === 'gradient')}
+            onClick={() => attempt(() => controller.setPaintOptions(paint.type === 'gradient' ? { foreground } : { paint: DEFAULT_PAINT_GRADIENT }))}
+          >
+            Gradient
+          </button>
+        )}
       </div>
+      {state.activeTool === 'brush' && paint.type === 'gradient' && (
+        <PaintGradientEditor value={paint} colors={{ paint: foreground, secondary: background }} onChange={(g) => attempt(() => controller.setPaintOptions({ paint: g }))} />
+      )}
 
       {BRUSH_OPTION_CONTROLS.map((spec) => (
         <ControlSlider

@@ -1,6 +1,6 @@
 ---
 name: pixerate-canvas
-description: How to build and edit a Pixerate design canvas or node graph through its agent tools - adding, connecting, updating and laying out nodes (canvas_add_node, canvas_layout), reading state with get_editor_state and looking at it with view_editor, reusable components with variants, instances and overrides (create_component, add_variant, set_instance_properties), align, distribute, lock and layer order, shape boolean operations (unite, subtract, offset path, outline stroke), auto layout frames, and keyframe animation with easing and CSS export. Use when working on a canvas, whiteboard, flow chart, node graph, frame, design system, component library, button variants, layout, alignment, z-order or a canvas animation in a Pixerate editor.
+description: How to build and edit a Pixerate design canvas or node graph through its agent tools - drawing freehand pen, highlighter and dry-brush strokes (canvas.drawFreehand), adding, connecting, updating and laying out nodes (canvas_add_node, canvas_layout), reading state with get_editor_state and looking at it with view_editor, reusable components with variants, instances and overrides (create_component, add_variant, set_instance_properties), align, distribute, lock and layer order, shape boolean operations (unite, subtract, offset path, outline stroke), auto layout frames, and keyframe animation with easing and CSS export. Use when working on a canvas, whiteboard, flow chart, node graph, frame, design system, component library, button variants, layout, alignment, z-order or a canvas animation in a Pixerate editor.
 ---
 
 # Pixerate canvas
@@ -70,6 +70,12 @@ batching and error codes.
   under about 600 ms; stagger related elements by 30 to 80 ms with `delay` rather than moving
   everything at once. Animate `opacity`, `x`, `y`, `scale` and `rotation`; colour tweens
   interpolate in OKLab.
+
+- **Brushed strokes.** Use a brush when the user wants a hand-drawn look (sketching, ink,
+  pencil, marker); keep plain strokes for diagrams and UI. Send points every 2 to 8 canvas units
+  along a curve, and shape the line with a short `pressure` profile (tapered ends:
+  `[0.2, 0.9, 1, 0.9, 0.2]`) rather than many points of different widths. `width` is the brush
+  size.
 
 ## Tool reference
 
@@ -157,6 +163,17 @@ are kept exactly). They need unlocked shapes; other selected nodes are ignored.
 | `canvas.offsetPath` | Grow (`distance` > 0) or shrink (< 0) shapes by `distance` canvas units (default 10), with `join` `miter` (default), `round` or `bevel` and `miterLimit` (default 4). |
 | `canvas.outlineStroke` | Turn shapes' strokes into filled shapes: `join` (default miter), `cap` `butt` (default), `round` or `square`, `miterLimit` (default 4). The fill stays as a separate shape below. |
 
+### Draw
+
+Freehand strokes are `path` shape nodes, so they select, move, group, erase and export like any
+shape. A stroke with `data.shape.brush` is painted with a dry paint brush instead of an SVG stroke
+(the path stays the data; the paint is rendered from it).
+
+| Command | Use it to |
+| --- | --- |
+| `canvas.drawFreehand` | Draw a pen or highlighter stroke through `points` (`[x, y]` pairs in canvas units, in drawing order; one undo step). `tool` picks the defaults (`pen`: blue, width 3; `highlighter`: yellow, width 24, opacity 0.35); `color`, `width`, `opacity` override them. Pass `brush` (a preset id from `canvas.listBrushes`, or tip settings) to paint it with a dry brush, plus `pressure` / `tiltX` / `tiltY` profiles spread along its length (`[0.2, 1, 0.3]` swells in the middle). Returns the node `id`, its `bounds` and the stored `brush`. |
+| `canvas.listBrushes` | Read-only: the dry paint presets `canvas.drawFreehand` accepts as `brush` (`id`, `name`, `category`, the preset's own `size`). Call it before the first brushed stroke instead of guessing ids. |
+
 ### Components (command form)
 
 The same operations as the component tools, for command palettes and `run_commands` batches.
@@ -210,6 +227,11 @@ easing applies to the segment leaving a keyframe. Animatable properties: `x`, `y
 
 ## Pitfalls
 
+- **Brushes are dry only.** Wet presets (watercolour, gouache, wet oils), mixer, blender, smudge and
+  eraser presets are refused: wet paint needs an area to flow in, and the others need paint under
+  them. `pressure` and tilt without a `brush` are refused too.
+- **Shape operations drop the brush.** Unite, subtract, offset path and outline stroke turn
+  brushed strokes into plain filled or stroked paths.
 - `canvas_*` tools validate ids against the current state; an "Unknown node id" error means call
   `get_editor_state` again, not guess.
 - `canvas_add_node` with `nearNodeId` also adds an edge from that node. Pass an explicit

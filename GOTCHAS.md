@@ -2356,7 +2356,7 @@ All contributors and AI assistants should check this file before starting work a
 
 - **Issue / Symptom**: In a 16-bit merge, a layer with a drop shadow or a develop filter kept only 8-bit precision, and a Multiply shadow over a coloured backdrop looked slightly different from the viewport.
 - **Root Cause**: `DeepCompositor` hands those layers to the 8-bit compositor it wraps, rendered alone (normal blend, full opacity, over transparency), converts the result and blends it in float with the layer's blend mode and opacity. An effect's own blend mode therefore sees a transparent backdrop.
-- **Solution / Workaround**: Expected until effects and filters get float paths. Everything else in the stack (pixel layers, masks, clipping, groups, adjustment layers) keeps full depth. If a deep merge must match the viewport exactly, rasterize the effects first.
+- **Solution / Workaround**: Fixed for pixel-like layers. Their filters run in float (`pixelFiltersDeep` → `runLayerFiltersFloat`), and their effects composite in float over the real backdrop (`runEffects`: `effectsInput` from the 8-bit compositor gives the area, the effect maps and context; `compositeLayerEffects` takes float buffers). Effect maps are still built from the 8-bit shape, which is coverage and plenty for shadows and glows. At 32 bits the effects composite in sRGB-encoded values (their colours and blend modes are defined there) and are decoded back. These are still rendered alone at 8 bits: groups with effects, annotation layers, and develop filters on a legacy process.
 
 ### [core/image-editor] Retouch Sources Must Be Captured When the Stroke Starts
 
@@ -2480,8 +2480,29 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: Each test called the `webgpu` package's `create()`, making a new Dawn instance per test.
 - **Solution / Workaround**: Create the provider once per file and reuse it. The package is ~140 MB and CI has no GPU, so it is not a dependency: GPU tests run when `WET_GPU` names a local install (`WET_GPU=/path/to/node_modules/webgpu`); without it only the capability checks run.
 
+### [core/paint] A Gradient Stroke's Colour Lags Half a Tip Behind the Pen
+- **Issue / Symptom**: With gradient paint by distance, the colour at a pixel was that of a dab up to a radius behind, and tests sampling "the pixel at 100 px of travel" found a mixed colour.
+- **Root Cause**: Build-up stops at the stroke's opacity ceiling: the first dab to reach a pixel lays most of its coverage, and later dabs only top up the antialiased edge. Each pixel's colour is the coverage-weighted mix of the dabs that added to it (`CoverageMap.colors`), as paint would be.
+- **Solution / Workaround**: Expected: it is what a loaded brush does. Test colours half a tip ahead of the travel you mean, or check closeness, not exact bytes, at antialiased edges.
+
+### [core/paint-editor] Migrating the Multi-Colour Brush Bit for Bit Needs Its Arithmetic, Not Just Its Gradient
+- **Issue / Symptom**: Converting `behavior.multicolor` to an equivalent gradient changed a few pixels of old strokes.
+- **Root Cause**: The old brush computed the colour position as `(index / length) % colours` and `j / (steps − 1) · (n − 1)`; a gradient sampler that finds the segment by comparing offsets computes `(t − o₀) / (o₁ − o₀)`, which differs in the last bits and can flip a byte after pigment mixing.
+- **Solution / Workaround**: `PaintGradientSampler` uses the same arithmetic when the stops are evenly spaced (`uniform`): the segment by `f = t · (n − 1)`, and for repeating `distance` in dabs `f = (travel / (length / segments)) % segments`. `tests/paint-gradient-migration.test.ts` keeps the pixel hashes the old code gave; keep them passing.
+
+### [core/paint] Stop Colours "paint" / "secondary" Must Be Resolved Before a Stroke Is Recorded
+- **Issue / Symptom**: A replayed gradient stroke would follow whatever the editor colours are at replay time.
+- **Root Cause**: Gradients may name the editor's colours (presets that follow the chosen colours, migrated multi-colour brushes without colours of their own).
+- **Solution / Workaround**: `resolvePaintGradient` replaces them with the stroke's colours when it starts, and the stroke records the resolved gradient (`RecordedStroke.paint`); replays pass it back as `paint`, which wins over the brush's and the editor's.
+
 ### [core/vector] A Swept Shape's Edge Bands Must All Wind The Same Way
 
 - **Issue / Symptom**: A block shadow (`sweepPath`) came out with holes along some sides of the shape.
 - **Root Cause**: The sweep puts one band (edge, edge moved, back) per flattened edge into a single `nonzero` operand. Edges facing against the sweep direction give bands that wind the other way, so where two bands overlap their windings cancel to zero.
 - **Solution / Workaround**: Swap an edge's ends when the cross product of the edge and the sweep is negative, and skip edges parallel to the sweep. Every band then winds the same way and `nonzero` unites them.
+
+### [core/canvas] Lazy Paint for Brushed Strokes: Keep Every Paint Import in `brushstrokeRender.ts`, and Keep Types Out of the Graph
+
+- **Issue / Symptom**: (1) A canvas consumer that never uses brushes would load the whole brush engine and the paint presets if a canvas file imported `src/paint` or `src/paint-editor` statically. (2) After brushed strokes were added, `pnpm build` died in the DTS step with `ERR_WORKER_OUT_OF_MEMORY`. Nothing was wrong with the code.
+- **Root Cause**: (1) tsup puts a statically imported module into a chunk that the canvas entry imports. (2) The DTS worker was already close to its heap limit (about 4.4 GB RSS on main). It overflowed once `commands` imported canvas types (`DrawStrokeInput`), the canvas shape types imported `BrushSettings` from the paint engine, and an exported `typeof import('./brushstrokeRender.js')` dragged the paint editor's types into the canvas declarations.
+- **Solution / Workaround**: Every value import of the paint engine for the canvas lives in `src/canvas/brushstrokeRender.ts`, which `brushstroke.ts` loads with `import()`. `brushstrokeScaleBucket` sits in the import-free `paint/brushstroke-scale.ts` so the canvas can use it statically. `entry-isolation.test.ts` checks that the canvas entry's static graph has no brush engine code. The data types (`CanvasBrush`, `CanvasBrushstroke`, …) live in the import-free `canvas/brushTypes.ts`, the renderer type is a hand-written interface, and `commands/builtins.ts` describes its targets structurally instead of importing canvas types. If the DTS build runs out of memory again, look for new type imports across entries before raising the heap.

@@ -1,13 +1,14 @@
 import type { AgentTool } from '../tools/registry.js';
 import type { ImageEditorController } from './controller';
 import { BLEND_MODES, type BlendMode } from './blend';
-import { MAX_BRUSH_SIZE, MIXING_MODELS, type BrushSettings, type MixerLoad, type MixerSettings, type StrokePoint } from '../paint';
+import { MAX_BRUSH_SIZE, MIXING_MODELS, PAINT_SOURCE_JSON_SCHEMA, type BrushSettings, type MixerLoad, type MixerSettings, type PaintSource, type StrokePoint } from '../paint';
 import type { LayerTarget } from './layers/model';
 import { rgbUnitToHex } from './layers/paint-ui';
 import { LayerOperationError } from './layers/ops';
 
 const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
 const WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } as const;
+const SET = { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
 const DESTRUCTIVE = { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false } as const;
 
 const TARGET = {
@@ -103,6 +104,11 @@ export function createImagePaintTools(controller: ImageEditorController): AgentT
           description:
             'Paint colour #rrggbb (default the foreground). On a mask its grey value: #000000 hides, #ffffff reveals. For the mixer, the colour its reservoir is loaded with before the stroke (given, it loads even with loadEachStroke false).',
         },
+        paint: {
+          ...PAINT_SOURCE_JSON_SCHEMA,
+          description:
+            "Brush only: what this stroke paints with instead of the paint options' paint (set_paint): a colour, or gradient paint that changes colour as the stroke goes (by distance, pressure, velocity, direction, time, across the tip or at random). On a mask each colour's grey value.",
+        },
         brush: BRUSH,
         mixer: MIXER,
         ...TARGET,
@@ -114,10 +120,13 @@ export function createImagePaintTools(controller: ImageEditorController): AgentT
     handler: (args) => {
       const tool = args.tool as 'brush' | 'eraser' | 'mixer' | undefined;
       if (args.mixer !== undefined && tool !== 'mixer') throw new LayerOperationError('mixer settings apply to the Mixer Brush only; pass tool "mixer", or drop mixer.');
+      if (args.paint !== undefined && (tool ?? 'brush') !== 'brush') throw new LayerOperationError('paint applies to the brush only (the eraser removes paint; the Mixer Brush loads color); drop paint or use tool "brush".');
+      if (args.paint !== undefined && args.color !== undefined) throw new LayerOperationError('Give color or paint, not both.');
       const result = controller.paintStroke({
         tool,
         points: args.points as StrokePoint[],
         color: args.color as string | undefined,
+        paint: args.paint as PaintSource | undefined,
         brush: args.brush as Partial<BrushSettings> | undefined,
         mixer: args.mixer as Partial<MixerSettings> | undefined,
         ...readTarget(args),
@@ -213,5 +222,29 @@ export function createImagePaintTools(controller: ImageEditorController): AgentT
       controller.clearPixels({ opacity: args.opacity as number | undefined, useSelection: args.useSelection as boolean | undefined, ...readTarget(args) }),
   };
 
-  return [paintStroke, fill, clear, getMixer, loadMixerTool, cleanMixerTool];
+  const paintView = () => {
+    const p = controller.getState().paint;
+    return { paint: p.paint, foreground: p.foreground, background: p.background, brush: p.brush };
+  };
+  const setPaint: AgentTool = {
+    name: 'set_paint',
+    title: 'Set the paint (colour or gradient)',
+    description:
+      'Sets what the brush paints: one colour (it becomes the foreground), or gradient paint that changes colour as the stroke goes. Gradient paint: 2..16 stops sorted by offset (#rrggbb, or "paint" / "secondary" for the foreground and background colours), space pigment (default: mixes like paint) / oklab / srgb, and map: distance (default: the colour changes as the stroke is dragged out, 300 px then mirrored back), pressure, tilt, velocity, direction, time, across-tip or random. paint_stroke with tool brush samples it per dab (on a mask, each colour\'s grey); the eraser and the Mixer Brush ignore it, and Fill uses the foreground. View state, not an undo step. Returns paint, foreground, background and brush.',
+    inputSchema: { type: 'object', properties: { paint: PAINT_SOURCE_JSON_SCHEMA }, required: ['paint'], additionalProperties: false },
+    annotations: { title: 'Set the paint (colour or gradient)', ...SET },
+    handler: ({ paint }) => {
+      controller.setPaintOptions({ paint: paint as PaintSource });
+      return paintView();
+    },
+  };
+  const getPaint: AgentTool = {
+    name: 'get_paint',
+    title: 'Get the paint',
+    description: 'Reads what the brush paints (paint: the foreground colour or gradient paint), the foreground and background colours and the brush settings (size, hardness, spacing, opacity, flow …). Changes nothing.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    annotations: { title: 'Get the paint', ...READ },
+    handler: () => paintView(),
+  };
+  return [paintStroke, fill, clear, getMixer, loadMixerTool, cleanMixerTool, setPaint, getPaint];
 }

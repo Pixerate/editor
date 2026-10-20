@@ -176,7 +176,7 @@ export async function replayPainting(
     const st = s === 1 ? item.stroke : varyStroke(item.stroke, scaleM, { scale: s });
     strokes++;
     if (!target.getLayer(st.layerId)) continue;
-    const init = { layerId: st.layerId, color: st.color, brush: st.brush, seed: st.seed, copies: (st.copies ?? []) as Affine[], ...(st.load ? { load: st.load } : {}), snapToPerspective: false, stencils: false, maskStencils: (st.stencils ?? []).map((x) => (s === 1 ? x : scaleStencil(x, s))) };
+    const init = { layerId: st.layerId, color: st.color, brush: st.brush, seed: st.seed, copies: (st.copies ?? []) as Affine[], ...(st.load ? { load: st.load } : {}), ...(st.paint ? { paint: st.paint } : {}), snapToPerspective: false, stencils: false, maskStencils: (st.stencils ?? []).map((x) => (s === 1 ? x : scaleStencil(x, s))) };
     if (st.brush.engine === 'wet' && st.steps?.length === st.points.length) {
       // Each point at the clock it was recorded at, the simulation stepped in between.
       await target.wetIdle();

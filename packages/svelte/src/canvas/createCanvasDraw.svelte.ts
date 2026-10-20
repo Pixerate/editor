@@ -68,7 +68,11 @@ export function createCanvasDraw<TNode extends CanvasNode = CanvasNode>(
 		continueStroke: controller.continueStroke,
 		endStroke: controller.endStroke,
 		cancelStroke: controller.cancelStroke,
-		eraseAt: controller.eraseAt
+		eraseAt: controller.eraseAt,
+		/** Draws a whole stroke at once (agents, code); validates the brush first. One undo step. */
+		drawStroke: controller.drawStroke,
+		/** The dry paint presets `style.brush` accepts (loads the paint engine). */
+		listBrushes: controller.listBrushes
 	};
 }
 

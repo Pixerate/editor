@@ -117,9 +117,10 @@ describe('React paint editor', () => {
     setValue(container.querySelector('input[aria-label="Brush name"]')!, 'My Charcoal');
     click(byText('Save brush'));
     expect(c.getUserBrushes().map((b) => b.id)).toEqual(['my-charcoal']);
-  });
+    // It renders a preview of every brush, which takes several seconds on a loaded CI runner.
+  }, 30_000);
 
-  it('the brush panel shows each engine\'s controls: blender, smudge, behaviour, multi-colour and load', () => {
+  it('the brush panel shows each engine\'s controls: blender, smudge, behaviour, brush gradient and load', () => {
     const c = new PaintEditorController({ width: 32, height: 32 });
     render(<BrushPanel controller={c} />);
     const pick = (name: string) => click(Array.from(container.querySelectorAll('[role="option"]')).find((o) => o.getAttribute('title')?.startsWith(name))!);
@@ -131,16 +132,14 @@ describe('React paint editor', () => {
     expect(c.getState().brush.behavior.pickup).toBe(0.4);
     click(q('input[aria-label="Dirty brush"]'));
     expect(c.getState().brush.behavior.dirty).toBe(true);
-    setValue(q('select[aria-label="Multi-colour"]'), 'dab');
-    expect(c.getState().brush.behavior.multicolor.mode).toBe('dab');
-    click(q('button[aria-label="Add multi-colour"]'));
-    expect(c.getState().brush.behavior.multicolor.colors).toHaveLength(3);
-    setValue(q('select[aria-label="Colour order"]'), 'random');
-    expect(c.getState().brush.behavior.multicolor.order).toBe('random');
-    setValue(q('input[aria-label="Dabs per colour"]'), '7');
-    expect(c.getState().brush.behavior.multicolor.length).toBe(7);
-    click(q('button[aria-label="Remove multi-colour 1"]'));
-    expect(c.getState().brush.behavior.multicolor.colors).toHaveLength(2);
+    // The multi-colour brush is the brush's own gradient now.
+    click(q('[data-testid="brush-gradient"] button[aria-pressed]'));
+    expect(c.getState().brush.paint).toMatchObject({ type: 'gradient', stops: [{ color: 'paint' }, { color: 'secondary' }] });
+    setValue(q('[data-testid="brush-gradient"] select[aria-label="Gradient follows"]'), 'across-tip');
+    expect(c.getState().brush.paint?.map.by).toBe('across-tip');
+    expect(c.getState().brush.behavior.multicolor.mode).toBe('tip');
+    setValue(q('[data-testid="brush-gradient"] select[aria-label="Gradient follows"]'), 'random');
+    expect(c.getState().brush.paint?.map).toEqual({ by: 'random', every: 1 });
     // Blender: strength, blend distance, mixing; no behaviour section.
     pick('Blender');
     expect(q('[data-testid="brush-engine"]')!.textContent).toContain('Blender');
@@ -148,7 +147,7 @@ describe('React paint editor', () => {
     expect(c.getState().brush.blender.distance).toBe(0.6);
     setValue(q('select[aria-label="Brush mixing"]'), 'rgb');
     expect(c.getState().brush.blender.mixing).toBe('rgb');
-    expect(q('select[aria-label="Multi-colour"]')).toBeNull();
+    expect(q('[data-testid="brush-gradient"]')).toBeNull();
     // Smudge with the pigment option.
     pick('Smudge');
     setValue(q('select[aria-label="Brush mixing"]'), 'pigment');
@@ -188,6 +187,39 @@ describe('React paint editor', () => {
     expect(c.mixingPad.pick(180, 110, 0)).toBe(mixed);
     click(container.querySelector('button[aria-label="Remove Greens"]')!);
     expect(c.listMixingPads()).toEqual([]);
+  });
+
+  it('gradient paint: the colour panel toggles it, edits stops and the mapping, and keeps it as a swatch', () => {
+    const c = new PaintEditorController({ width: 32, height: 32 });
+    c.setColor('#1d4ed8');
+    c.setSecondaryColor('#facc15');
+    render(<ColorPanel controller={c} mixingPad={false} />);
+    click(byText('Gradient'));
+    expect(c.getState().paint).toMatchObject({ type: 'gradient', map: { by: 'distance' } });
+    const editor = container.querySelector('[data-testid="paint-gradient-editor"]')!;
+    expect(editor).not.toBeNull();
+    expect((container.querySelector('[data-testid="paint-well"]') as HTMLElement).style.background).toContain('linear-gradient');
+    // A third stop from the ramp, then its colour and position.
+    const ramp = container.querySelector('[data-testid="paint-gradient-ramp"]') as HTMLElement;
+    act(() => ramp.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 0 })));
+    expect((c.getState().paint as { stops: unknown[] }).stops).toHaveLength(3);
+    setValue(container.querySelector('select[aria-label="Stop colour source"]')!, 'color');
+    setValue(container.querySelector('input[aria-label="Stop colour"]')!, '#ff0000');
+    setValue(container.querySelector('input[aria-label="Stop position"]')!, '40');
+    const g = c.getState().paint as { stops: { offset: number; color: string }[] };
+    expect(g.stops.find((s) => s.color === '#ff0000')?.offset).toBe(0.4);
+    setValue(container.querySelector('select[aria-label="Gradient follows"]')!, 'pressure');
+    expect(c.getState().paint).toMatchObject({ map: { by: 'pressure' } });
+    setValue(container.querySelector('select[aria-label="Gradient mixing"]')!, 'oklab');
+    expect(c.getState().paint).toMatchObject({ space: 'oklab' });
+    click(container.querySelector('button[aria-label="Add swatch"]')!);
+    const swatch = c.getState().swatches.at(-1)!;
+    expect(swatch.paint?.map.by).toBe('pressure');
+    click(byText('Gradient'));
+    expect(c.getState().paint.type).toBe('color');
+    const swatches = container.querySelectorAll('[aria-label="Swatches"] [role="option"]');
+    click(swatches[swatches.length - 1]);
+    expect(c.getState().paint.type).toBe('gradient');
   });
 
   it('the paper panel sets presets and commits sliders on release (one undo step)', () => {
