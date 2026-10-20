@@ -1,6 +1,6 @@
 ---
 name: pixerate-animation-editor
-description: How to author and edit vector animations (motion graphics, logo reveals, animated icons, explainer scenes, UI micro-interactions) in the Pixerate animation editor through its agent tools - artwork SVG with ids, shots of commands (enter, exit, draw, move, rotate, scale, fade, morph, Smart Animate match, follow a path, pulse, shake, wiggle), easing and springs, stagger, camera, beat and voiceover cues, drivers, reusable clips, checking, rendering frames and contact sheets, and exporting to Flair or Lottie. Use when animation tools such as get_animation, insert_shots or edit_animation are available, or when asked to animate, time, ease, stagger or export vector motion.
+description: How to author and edit vector animations (motion graphics, logo reveals, animated icons, explainer scenes, UI micro-interactions) in the Pixerate animation editor through its agent tools - artwork SVG with ids, shots of commands (enter, exit, draw, move, rotate, scale, fade, morph, Smart Animate match, follow a path, pulse, shake, wiggle), easing and springs, stagger, camera, beat and voiceover cues, drivers, reusable clips, checking, rendering frames and contact sheets, and exporting to Flair or Lottie. Use when animation tools such as get_animation, insert_shots or edit_animation are available, or when asked to animate, time, ease, stagger or export vector motion, and provider motion and vector effects (for example Flair) applied to nodes.
 ---
 
 # Pixerate animation editor
@@ -125,7 +125,30 @@ The full command vocabulary (every type, option and default) is in
 | `undo_animation` | Undo your last edit (one tool call or one `edit_animation` batch). |
 | `redo_animation` | Redo the edit you just undid. |
 
+### Effects
+
+These tools come from `createAnimationEffectsToolProvider` and work when the host has registered an
+effects provider (for example Flair). Without one, `search_effects` and `describe_effect` return
+`available: false`, `list_applied_effects` still lists what the scene holds, and the write tools
+refuse.
+
+| Tool | Use it to |
+| --- | --- |
+| `search_effects` | Find effects: `kind` motion (primitives to apply to nodes) or vector (effects with their own picture), `query`, `category`. |
+| `describe_effect` | Read an effect's `controls` (names, ranges, units), `defaults` and `presets`, and whether it `appliesHere` (a motion effect). |
+| `list_applied_effects` | See the provider effects in the scene: their `instance` ids, the nodes they animate, their shots and values. |
+| `apply_effect` | Animate a node (`target`, a group animates as one) with a motion effect: the changes become ordinary commands, tagged with the effect, in a new shot after the last. Returns the instance id. |
+| `update_effect` | Make an applied effect again with new `values`, in the same place (`effect` is its instance id). |
+| `remove_effect` | Remove an applied effect: its commands, shots it alone filled and a vector effect's group. |
+| `add_vector_effect` | Add a vector effect's own picture as an artwork group (fitted into `box`) with its motion as new shots. Returns the instance and group ids. |
+
 ## Pitfalls
+
+- **Effect commands are ordinary commands.** You can retime or edit them with `edit_animation` like
+  any command, but `update_effect` replaces all of an effect's commands. Change values through the
+  effect, and timing through the commands.
+- **Some provider motion cannot be carried over.** Counting, writing text and similar changes are
+  skipped. The result's `notes` say what was left out.
 
 - **Unknown ids are refused** with a "did you mean" suggestion. Take ids from `get_animation` or
   the elements `set_animation_artwork_svg` returns; never guess them.

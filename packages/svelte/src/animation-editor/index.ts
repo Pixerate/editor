@@ -18,6 +18,7 @@ export { default as CommandInspector } from "./CommandInspector.svelte";
 export { default as EasePicker } from "./EasePicker.svelte";
 export { default as ShotInspector } from "./ShotInspector.svelte";
 export { default as SceneSettings } from "./SceneSettings.svelte";
+export { default as AnimationEffectsPanel } from "./AnimationEffectsPanel.svelte";
 export * from "./createAnimationEditor.svelte.js";
 
 export type AnimationEditorProps = ComponentProps<typeof AnimationEditorComponent>;

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { EFFECT_USE_LABELS, type EffectProvider, type EffectSummary, type EffectUse } from '@pixerate/editor/effects';
+  import { EFFECT_USE_LABELS, type EffectKind, type EffectProvider, type EffectSummary, type EffectUse } from '@pixerate/editor/effects';
   import EffectThumbnail from './EffectThumbnail.svelte';
 
   interface Props {
@@ -7,6 +7,8 @@
     provider: EffectProvider | null | undefined;
     /** Only effects with one of these uses (default: all but motion). */
     uses?: readonly EffectUse[];
+    /** Only effects of these kinds (default: any). */
+    kinds?: readonly EffectKind[];
     /** Called with the effect the user picks. */
     onpick: (effect: EffectSummary) => void;
     /** Draw previews with the provider's renderer (default true). */
@@ -16,7 +18,7 @@
     class?: string;
   }
 
-  let { provider, uses, onpick, thumbnails = true, title = 'Effects', class: className = '' }: Props = $props();
+  let { provider, uses, kinds, onpick, thumbnails = true, title = 'Effects', class: className = '' }: Props = $props();
   let all = $state.raw<readonly EffectSummary[]>([]);
   let found = $state.raw<readonly EffectSummary[]>([]);
   let query = $state('');
@@ -66,7 +68,7 @@
       live = false;
     };
   });
-  const allowed = (e: EffectSummary) => (uses ? e.kind !== 'motion' || uses.includes('motion') : e.kind !== 'motion') && (!uses || e.uses.some((u) => uses.includes(u)));
+  const allowed = (e: EffectSummary) => (!kinds || kinds.includes(e.kind)) && (uses ? e.kind !== 'motion' || uses.includes('motion') : e.kind !== 'motion') && (!uses || e.uses.some((u) => uses.includes(u)));
   const categories = $derived([...new Set(all.filter(allowed).map((e) => e.category))]);
   const shown = $derived(found.filter(allowed));
 </script>

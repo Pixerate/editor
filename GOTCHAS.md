@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [svelte] An `$effect` That Writes State and Then Reads It Re-runs Itself Forever
+
+- **Issue / Symptom**: The Svelte effects browser froze the page (and hung its test) when a thumbnail's render failed, for example for a vector effect the provider cannot draw as pixels. React was fine.
+- **Root Cause**: `EffectThumbnail.svelte`'s `$effect` set `failed = item.kind === 'motion'` and then read it back (`if (failed) return`). That read made `failed` a dependency of the effect. The failed render set `failed = true`, which re-ran the effect. The effect reset `failed`, rendered again (failures are not cached) and failed again, in an endless microtask loop that starved timers.
+- **Solution / Workaround**: Keep the value in a local (`const motion = …`), read only the inputs that pick the picture, and start async work inside `untrack`. Never read back, in the same `$effect`, state that the effect or its callbacks write.
+
 ### [core/image-editor] An Effect Smart Filter Above One Still Rendering Must Not Be Requested
 
 - **Issue / Symptom**: With two provider effect smart filters stacked, the upper one sometimes showed its result as if the lower one was not there, even after both had rendered.

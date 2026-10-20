@@ -2,11 +2,14 @@ import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import {
   VectorEditorController,
   createVectorCommands,
+  createVectorEffectsToolProvider,
+  type VectorEffectsToolProviderOptions,
   type VectorCommandOptions,
   type VectorEditorOptions,
   type VectorEditorState,
   type VectorTool,
 } from '@pixerate/editor/vector';
+import type { ToolRegistry } from '@pixerate/editor/tools';
 
 /** A `VectorEditorController` created once for the component's lifetime (destroyed on unmount). */
 export function useVectorEditorController(options: VectorEditorOptions = {}): VectorEditorController {
@@ -77,4 +80,20 @@ export function useVectorCommands(
     if (!registry) return;
     return registry.register(createVectorCommands(controller, { prefix, group, scope }));
   }, [registry, controller, prefix, group, scope]);
+}
+
+/**
+ * Registers the vector editor's provider-effect tools (`search_effects`, `apply_effect`, …) in
+ * `registry` while mounted. They work once an effects provider is registered (see `useEffects`).
+ */
+export function useVectorEffectsTools(
+  registry: ToolRegistry | null | undefined,
+  controller: VectorEditorController,
+  options: VectorEffectsToolProviderOptions = {},
+): void {
+  const { id, namespace, readOnly } = options;
+  useEffect(() => {
+    if (!registry) return;
+    return registry.register(createVectorEffectsToolProvider(controller, { id, namespace, readOnly }));
+  }, [registry, controller, id, namespace, readOnly]);
 }

@@ -1,3 +1,4 @@
+import type { EffectValue } from '../effects/types.js';
 import type { AnimationEasing } from '../animation/easing.js';
 import type { AnimationLoopMode } from '../animation/evaluate.js';
 import type { VectorDocument } from '../vector/types.js';
@@ -180,6 +181,23 @@ export interface MotionCommandBase {
 	repeatMode?: 'loop' | 'mirror' | 'offset';
 	/** Stepped time: hold the change on a grid of this many frames per second (default: the scene's `steps`, else smooth). */
 	steps?: number;
+	/**
+	 * The provider effect this command came from (see `applyMotionEffect`): commands that share a
+	 * `source.instance` are one applied effect, changed or removed together. Plain commands have none.
+	 */
+	source?: MotionEffectSource;
+}
+
+/** Where a command came from when an effects provider made it (`@pixerate/editor/effects`). */
+export interface MotionEffectSource {
+	/** The applied effect's id in the scene (e.g. `fx1`), shared by all its commands. */
+	instance: string;
+	/** The provider's effect id. */
+	effect: string;
+	provider?: string;
+	name?: string;
+	/** The control values it was applied with. */
+	values?: Record<string, EffectValue>;
 }
 
 export type MotionEnterStyle = 'fade' | 'pop' | 'grow' | 'slide' | 'draw' | 'zoom' | 'rise' | 'wipe' | 'iris' | 'split';

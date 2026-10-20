@@ -256,6 +256,9 @@ import {
 	withVectorStrokes,
 	withVectorTargetPaint
 } from './paintLayers.js';
+import { EffectsSlot, resolveEffectValues } from '../effects/helpers.js';
+import { EffectUnsupportedError } from '../effects/errors.js';
+import type { EffectProvider, EffectValue } from '../effects/types.js';
 import { createVectorFilter, isVectorFilterType, normalizeVectorFilterParams, VECTOR_FILTER_LABELS } from './filters.js';
 import type {
 	Vec2,
@@ -276,6 +279,7 @@ import type {
 	VectorDistribute,
 	VectorDocument,
 	VectorGroupNode,
+	VectorProviderEffect,
 	VectorHandleRef,
 	VectorMask,
 	VectorMaskType,
@@ -2079,6 +2083,92 @@ export class VectorEditorController {
 		} catch (error) {
 			return { ok: false, message: error instanceof Error ? error.message : String(error) };
 		}
+	}
+
+
+	// --- Provider effects ---
+
+	/** The effects provider slot (see `setEffectsProvider`). */
+	readonly effects = new EffectsSlot();
+
+	/** The registered effects provider, or `null`. */
+	get effectsProvider(): EffectProvider | null {
+		return this.effects.provider;
+	}
+
+	/** Registers (or with `null` removes) the effects provider. Not an edit: no undo step. */
+	setEffectsProvider(provider: EffectProvider | null): void {
+		this.effects.set(provider);
+	}
+
+	/** Registers `provider` and returns a function that removes it again (if it is still the one set). */
+	useEffects(provider: EffectProvider): () => void {
+		return this.effects.use(provider);
+	}
+
+	/** The groups that show provider vector effects. */
+	vectorEffectGroups(): VectorGroupNode[] {
+		const out: VectorGroupNode[] = [];
+		walkVectorNodes(this.doc.nodes, (n) => {
+			if (n.type === 'group' && n.providerEffect) out.push(n);
+		});
+		return out;
+	}
+
+	/** The effect's picture as group children, scaled into `box` (an affine fit). */
+	private async vectorEffectPicture(effect: string, values: Record<string, EffectValue> | undefined): Promise<{ children: VectorNode[]; width: number; height: number; tag: VectorProviderEffect }> {
+		const provider = this.effects.require();
+		if (!provider.applyVectorEffect) throw new EffectUnsupportedError(`${provider.name} has no vector effects.`);
+		const d = await provider.describe(effect);
+		if (d.kind !== 'vector') throw new EffectUnsupportedError(`"${d.id}" (${d.name}) is a ${d.kind} effect; the vector editor adds vector effects, which bring their own picture${d.kind === 'motion' ? ' (apply motion in the animation editor)' : ''}.`, d.id);
+		const resolved = resolveEffectValues(d, values);
+		const motion = await provider.applyVectorEffect(d.id, this.toSvg(), resolved);
+		const parsed = parseVectorSvg(motion.svg);
+		if (!parsed.nodes.length) throw new Error(`"${d.name}" drew no shapes the editor can read.`);
+		const children = parsed.nodes.map((n) => this.freshIds(n));
+		return { children, width: parsed.width, height: parsed.height, tag: { effect: d.id, provider: provider.id, name: d.name, values: resolved as VectorProviderEffect['values'] } };
+	}
+
+	/**
+	 * Adds a provider vector effect's picture (at rest: its SVG without the motion) as a group,
+	 * fitted into `box` (default the middle half of the document), selected. One undo step.
+	 * Returns the group id.
+	 */
+	async addVectorEffect(effect: string, options: { values?: Record<string, EffectValue>; box?: { x: number; y: number; width: number; height: number }; parentId?: string } = {}): Promise<string> {
+		const { children, width, height, tag } = await this.vectorEffectPicture(effect, options.values);
+		const box = options.box ?? { x: this.doc.width / 4, y: this.doc.height / 4, width: this.doc.width / 2, height: this.doc.height / 2 };
+		const k = Math.min(box.width / width, box.height / height);
+		const group = { type: 'group', id: this.newId(), name: tag.name ?? tag.effect, children, transform: [k, 0, 0, k, box.x + (box.width - width * k) / 2, box.y + (box.height - height * k) / 2], providerEffect: tag } as VectorGroupNode;
+		return this.addNode(group, { label: `Add ${tag.name ?? tag.effect}`, ...(options.parentId ? { parentId: options.parentId } : {}) });
+	}
+
+	/**
+	 * Draws a vector effect group again with new `values` (merged over its own; `null` resets a
+	 * control), keeping its place and transform. One undo step. Returns the group's effect.
+	 */
+	async updateVectorEffect(id: string, values: Record<string, EffectValue | null>): Promise<VectorProviderEffect> {
+		const node = this.getNode(id);
+		if (!node || node.type !== 'group' || !node.providerEffect) throw new Error(`"${id}" is not a vector effect group; list_applied_effects lists them.`);
+		const was = node.providerEffect;
+		const d = await this.effects.require().describe(was.effect);
+		const merged: Record<string, EffectValue> = { ...(was.values as Record<string, EffectValue>) };
+		for (const [k, v] of Object.entries(values)) {
+			if (v === null) {
+				if (!(k in d.controls.properties)) throw new Error(`"${k}" is not a control of "${d.id}"; its controls are ${Object.keys(d.controls.properties).join(', ')}.`);
+				merged[k] = d.defaults[k];
+			} else merged[k] = v;
+		}
+		const { children, tag } = await this.vectorEffectPicture(was.effect, merged);
+		this.change(`Change ${tag.name ?? tag.effect}`, () => this.replaceNode(id, { ...node, children, providerEffect: tag }));
+		return tag;
+	}
+
+	/** Keeps a vector effect group's shapes as a plain group (drops its effect). One undo step. */
+	detachVectorEffect(id: string): void {
+		const node = this.getNode(id);
+		if (!node || node.type !== 'group' || !node.providerEffect) throw new Error(`"${id}" is not a vector effect group.`);
+		const { providerEffect: _e, ...rest } = node;
+		this.change('Detach effect', () => this.replaceNode(id, rest as VectorGroupNode));
 	}
 
 	/** Adds the nodes of SVG markup on top of the document, selected. */

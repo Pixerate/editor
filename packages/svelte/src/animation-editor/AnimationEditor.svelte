@@ -7,6 +7,9 @@
   import SceneSettings from './SceneSettings.svelte';
   import ShotInspector from './ShotInspector.svelte';
   import { animationEditorStateOf } from './createAnimationEditor.svelte.js';
+  import type { EffectProvider } from '@pixerate/editor/effects';
+  import { useEffects } from '../effects/effects.svelte.js';
+  import AnimationEffectsPanel from './AnimationEffectsPanel.svelte';
 
   interface Props {
     controller: AnimationEditorController;
@@ -23,10 +26,17 @@
      * scrubber and issues only.
      */
     editable?: boolean;
+    /**
+     * An effects provider (see `@pixerate/editor/effects`), registered with the controller while
+     * mounted: provider motion applied to the picked element and vector effects, with an Effects
+     * panel. Optional: without one the editor is as before.
+     */
+    effects?: EffectProvider | null;
     class?: string;
   }
 
-  let { controller, values, onionSkin, motionPaths, showIssues = true, editable = true, class: className = '' }: Props = $props();
+  let { controller, values, onionSkin, motionPaths, showIssues = true, editable = true, effects, class: className = '' }: Props = $props();
+  useEffects(() => controller, () => effects);
   const view = animationEditorStateOf(() => controller);
   const editor = $derived(view.current);
   const ONION: MotionOnionSkin = { before: 3, after: 1 };
@@ -115,6 +125,7 @@
     </div>
     <div class="flex min-w-0 flex-col gap-3">
       <CommandList {controller} targets={pickedValid ? [pickedValid] : undefined} />
+      {#if editor.effectsProvider || controller.appliedEffects().length > 0}<AnimationEffectsPanel {controller} node={pickedValid} class="border-t border-border pt-2" />{/if}
       <CommandInspector {controller} picked={pickedValid} class="border-t border-border pt-2" />
       <details open class="border-t border-border pt-2">
         <summary class="cursor-pointer text-xs font-medium">Shot</summary>
