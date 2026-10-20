@@ -75,6 +75,17 @@ describe('React LayersPanel', () => {
     expect(rowNames()).toEqual(['Group', 'Background']);
   });
 
+  it('sets the bits per channel as an undo step', async () => {
+    const c = controller();
+    await act(async () => root.render(<LayersPanel controller={c} />));
+    const select = container.querySelector('select[aria-label="Bits per channel"]') as HTMLSelectElement;
+    expect(select.value).toBe('8');
+    await act(async () => setValue(select, '16'));
+    expect(c.bitDepth).toBe(16);
+    await act(async () => c.undo());
+    expect((container.querySelector('select[aria-label="Bits per channel"]') as HTMLSelectElement).value).toBe('8');
+  });
+
   it('renames on double-click, shows refusals, and drops into groups', async () => {
     const c = controller();
     const a = c.addPixelLayer({ name: 'A' });

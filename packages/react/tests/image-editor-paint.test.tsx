@@ -35,8 +35,8 @@ function controller() {
   return c;
 }
 
-const pointer = (type: string, x: number, y: number) => {
-  const e = new win.MouseEvent(type, { bubbles: true, clientX: x, clientY: y, button: 0 });
+const pointer = (type: string, x: number, y: number, altKey = false) => {
+  const e = new win.MouseEvent(type, { bubbles: true, clientX: x, clientY: y, button: 0, altKey });
   Object.assign(e, { pointerId: 1, pointerType: 'mouse', pressure: 0.5 });
   return e;
 };
@@ -91,6 +91,36 @@ describe('React paint tools', () => {
     expect(c.getState().paint.mixer.mixing).toBe('rgb');
   });
 
+  it('BrushOptionsBar shows each retouching tool with its options', async () => {
+    const c = controller();
+    await act(async () => root.render(<BrushOptionsBar controller={c} />));
+    expect(container.querySelector('[data-testid="retouch-options"]')).toBeNull();
+    await act(async () => button('Clone').click());
+    expect(c.getState().activeTool).toBe('clone');
+    expect(container.querySelector('[data-testid="clone-source"]')!.textContent).toMatch(/Alt-click/);
+    await act(async () => button('Current & Below').click());
+    expect(c.getState().paint.retouch.sample).toBe('current-below');
+    await act(async () => (container.querySelector('input[aria-label="Aligned"]') as HTMLInputElement).click());
+    expect(c.getState().paint.retouch.aligned).toBe(false);
+    await act(async () => c.setCloneSource({ x: 12, y: 34 }));
+    expect(container.querySelector('[data-testid="clone-source"]')!.textContent).toBe('Source 12, 34');
+    await act(async () => button('Clear source').click());
+    expect(c.getState().paint.cloneSource).toBeNull();
+    await act(async () => button('Spot Heal').click());
+    await act(async () => button('Smooth').click());
+    expect(c.getState().paint.retouch.spotType).toBe('smooth');
+    await act(async () => button('Dodge').click());
+    await act(async () => button('Highlights').click());
+    await act(async () => setValue(container.querySelector('input[aria-label="Exposure"]')!, '0.2'));
+    expect(c.getState().paint.retouch).toMatchObject({ range: 'highlights', exposure: 0.2 });
+    await act(async () => button('Sponge').click());
+    await act(async () => button('Saturate').click());
+    expect(c.getState().paint.retouch.spongeMode).toBe('saturate');
+    await act(async () => button('Smudge').click());
+    await act(async () => setValue(container.querySelector('input[aria-label="Strength"]')!, '0.9'));
+    expect(c.getState().paint.retouch.strength).toBe(0.9);
+  });
+
   it('paints on the canvas in the Paint tab and handles shortcuts', async () => {
     let c!: ImageEditorController;
     function Host() {
@@ -132,5 +162,21 @@ describe('React paint tools', () => {
     expect(c.getState().paint.brush.size).toBe(25);
     await act(async () => window.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'v' })));
     expect(c.getState().activeTool).toBe('move');
+    // Clone Stamp: Alt-click sets the source, a drag clones as one undo step.
+    await act(async () => window.dispatchEvent(new win.KeyboardEvent('keydown', { key: 's' })));
+    expect(c.getState().activeTool).toBe('clone');
+    await act(async () => {
+      canvas.dispatchEvent(pointer('pointerdown', 130, 72, true));
+      canvas.dispatchEvent(pointer('pointerup', 130, 72, true));
+    });
+    expect(c.getState().paint.cloneSource).not.toBeNull();
+    const undoDepth = c.getState().layers;
+    await act(async () => {
+      canvas.dispatchEvent(pointer('pointerdown', 40, 30));
+      canvas.dispatchEvent(pointer('pointermove', 60, 30));
+      canvas.dispatchEvent(pointer('pointerup', 60, 30));
+    });
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(c.getState().layers).not.toBe(undoDepth);
   });
 });

@@ -1,6 +1,6 @@
 ---
 name: pixerate-image-editor
-description: How to colour-correct, composite and retouch a photo in the Pixerate image editor through its agent tools - layers (pixel, adjustment, group, shape, type, annotation and smart object layers with masks, clipping, blend modes, opacity and fill; merge, flatten, filters), smart objects (non-destructive transforms, smart filters, linked contents), vector shape layers (live shapes, arrows, paths, path operations, fills and strokes), live type layers, live layer effects, base adjustments, adjustment layers, selections and masks, Free Transform, crop, rotate, flip, Mixer Brush, undo, PSD, histogram and previews. Use when asked to edit, grade, correct, crop, straighten or mask an image, add a shadow, glow or outline, transform or warp a layer, draw a shape or arrow, add or edit text, make a smart object, or open or save a PSD, or when list_layers, set_adjustments, add_layer_effect, transform_layer, add_shape_layer, add_text_layer, convert_to_smart_object, paint_stroke, import_psd or render_preview are available.
+description: How to colour-correct, composite and retouch a photo in the Pixerate image editor through its agent tools - layers (pixel, adjustment, group, shape, type, annotation and smart object layers; masks, clipping, blend modes, merge, filters), smart objects and smart filters, shape and type layers, layer effects, adjustments, selections and masks, Free Transform, crop, rotate, flip, painting and the Mixer Brush, retouching (Clone Stamp, Healing Brush, Spot Healing, Smudge, Dodge, Burn, Sponge), undo, PSD, histogram and previews. Use when asked to edit, grade, correct, crop, straighten or mask an image, remove a blemish or spot, clone, dodge or burn, add a shadow, glow or outline, transform or warp a layer, draw a shape or arrow, add or edit text, make a smart object, or open or save a PSD, or when list_layers, set_adjustments, add_layer_effect, transform_layer, add_shape_layer, add_text_layer, paint_stroke, clone_stamp, spot_heal, import_psd or render_preview are available.
 ---
 
 # Image editor
@@ -183,6 +183,13 @@ drawing or editing either.
    false` and `cleanEachStroke: false`, start with `load_mixer_brush`, read the brush with
    `get_mixer_brush` when unsure, and reset it with `clean_mixer_brush`.
 
+### Retouching
+
+Clone Stamp, Healing Brush, Spot Healing, Smudge, Dodge, Burn and Sponge: retouch on an empty
+layer with `sample: "current-below"`, pick `spot_heal` for small spots, `heal_brush` for larger
+flaws and `clone_stamp` to copy exactly, and keep strokes short and soft. Read
+[references/retouching.md](references/retouching.md) before retouching.
+
 ### Photoshop files
 
 1. **Inspect before opening.** `inspect_psd` lists every layer with the type it would become and
@@ -198,9 +205,14 @@ drawing or editing either.
    with `list_layer_effects` and change as usual, with the file's patterns (listed in
    `list_layer_effects.patterns`) and its global light. An effects block the editor cannot read
    is kept and written back by `export_psd`, but not drawn; the warnings say so.
-3. **`import_psd` replaces the document** (one undo step). CMYK, Lab, grayscale, indexed, 16-bit
-   and 32-bit files are converted to 8-bit RGB, and ICC profiles are ignored; the warnings say
-   so. Afterwards work with `list_layers` as usual: there is no Background source image, every
+3. **`import_psd` replaces the document** (one undo step). 16- and 32-bit files keep their
+   depth (`get_image_info.bitDepth`); CMYK, Lab, grayscale and indexed files are converted to RGB,
+   and ICC profiles are ignored; the warnings say so. `export_psd` writes at the document's depth.
+   Change it with `set_bit_depth`: 16-bit for smooth gradients and strong grades, 32-bit for
+   linear-light HDR (layers blend in linear light there). Adjustment layers, blend modes, merges
+   and the exported merged image keep the depth; layer effects, layer filters, painting and
+   transforms still work in 8 bits on what they change, so grade a deep file with adjustment
+   layers rather than repainting it when the depth matters. Afterwards work with `list_layers` as usual: there is no Background source image, every
    pixel comes from the layers.
 4. **Smart objects come in live**: embedded contents (a PSB opens as a nested document you can
    edit with `edit_smart_object_contents`, a PNG as raster contents), the placement and warp, the
@@ -297,11 +309,11 @@ drawing or editing either.
 | `get_selection` | Read the active selection: `empty`, `bounds` (natural pixels), `area` in pixels, `percent` of the image and a description. Check it after every select or modify step and before masking: a wand that covered 90% of the image is the wrong selection. |
 | `list_layers` | Read the layer stack bottom to top as a tree: id, type (`pixel`, `adjustment`, `group`, `shape`, `annotation`, `smart`; smart objects add their `contents`, `smartFilters` and `filterMask`; shapes a `shape` summary of component ops and kinds and paint types, and `annotation` when migrated from one), name, document `bounds` of pixel layers, visibility, opacity, `fillOpacity`, blend, `clipped`, locks, a `mask` summary, an `effects` summary (master switch, scale, effect ids and kinds), pixel-layer `filters` (the Background's `develop` filter is the base adjustments), adjustment `kind` and `params`, group `children`, and which layer is `active`. Call it to understand a document with more than the Background before changing it; adjustment layer ids work with every adjustment-layer tool. |
 | `list_layer_effects` | Read one layer's effects: `enabled` (master switch), `scale` (Scale Effects), `margin` (px they reach beyond the shape), `fromPsd`, and every effect with `id`, `kind`, `label` and all its settings. Also returns the `globalLight`, the `patterns` pattern effects can use and the effect `kinds`. Call before changing effects you did not add. |
-| `get_image_info` | Read the geometry: source `image` size, `crop` box (source pixels, or null), `rotation` degrees, `flipH` / `flipV`, the `output` size after crop and rotation, the layer count and `canUndo` / `canRedo`. Call before cropping or selecting so coordinates are right. |
+| `get_image_info` | Read the geometry: source `image` size, `crop` box (source pixels, or null), `rotation` degrees, `flipH` / `flipV`, the `output` size after crop and rotation, `bitDepth` (8, 16 or 32), the layer count and `canUndo` / `canRedo`. Call before cropping or selecting so coordinates are right. |
 | `get_histogram` | Judge exposure numerically: per channel and luminance `mean`, `p1` and `p99` (0..255), and `clipping` percent at pure black and white per channel. Reads the last render, so call `render_preview` first. `bins` (16, 32, 64 or 256) adds the counts. Cheaper than another image for checking a tonal change. |
 | `render_preview` | See the edited image (crop, adjustments, layers, annotations) as a PNG, or with `layerId` one layer alone. `maxSide` 16..2048 px, default 512. Images cost tokens: render after a group of edits, use 512 for overall look and 1024+ to judge clipping, edges and masks. Fails in environments without rendering. |
 | `inspect_psd` | Read a PSD / PSB (`data` base64) without opening it: size, `depth`, `colorMode`, `resolution`, every layer bottom first with `psdKind`, the `type` it would become (`smart`, `shape` and `type` for Photoshop smart objects, shapes and text) and `status` (`mapped`, `approximated`, `dropped`) with `notes`, and the import `warnings`. Call before `import_psd`. |
-| `export_psd` | Save the document as an 8-bit RGB PSD (PSB above 30000 px) with layers, groups, adjustment layers and masks. Returns `data` (base64), `size` in bytes, `psb` and `warnings` (crop or rotation not applied, filters and depth masks baked, annotations rasterized or left out, Pigment blends written as Normal). Shape and type layers are written as real Photoshop shape and type layers. Changes nothing. |
+| `export_psd` | Save the document as an RGB PSD at its bit depth (PSB above 30000 px) with layers, groups, adjustment layers and masks. Returns `data` (base64), `size` in bytes, `psb` and `warnings` (crop or rotation not applied, filters and depth masks baked, annotations rasterized or left out, Pigment blends written as Normal). Shape and type layers are written as real Photoshop shape and type layers. Changes nothing. |
 | `get_transform_frame` | Before a transform: what it would move (`content`, `moved`: pixels, mask, selection), its `frame` (document bounds of the content), `corners` (top-left, top-right, bottom-right, bottom-left) and `center`. `meshColumns` / `meshRows` also return an identity warp `mesh` over the frame to edit for `warp_layer`. Changes nothing. |
 | `get_smart_object` | Read a smart object: `contents` (`id` shared by linked instances, `name`, `kind` raster or document, `width` / `height`, `decoded`, `fileType`, `linkedPath`, `instances`), `placement` (`corners`, `warp` in contents px, `interpolation`, and when `affine` the `scaleX` / `scaleY` in percent of the contents, `rotate`, `skewX`, `center`, `bounds`) and `smartFilters` (`enabled`, `filters` bottom to top with ids, settings, `blend`, `opacity`; kind `psd` is a Photoshop filter kept but not drawn; the filter `mask`). Call before changing a smart object. |
 | `list_fonts` | Read the font families type layers can use here (generic families always work) and which shaper draws them. Call before choosing a font. |
@@ -326,6 +338,7 @@ drawing or editing either.
 | `set_crop` | Crop to `x`, `y`, `width`, `height` in source pixels of the un-rotated image (see `get_image_info`). Non-destructive; refused if the box leaves the image. For an aspect ratio, compute the largest box of that ratio inside the image and centre it on the subject. Returns the geometry. |
 | `reset_crop` | Remove the crop and show the whole image again. |
 | `set_rotation` | Set the absolute rotation in degrees clockwise (-360..360). Quarter turns keep every pixel; small angles straighten a horizon but add transparent corners to crop away. Returns the geometry. |
+| `set_bit_depth` | Image › Mode: `depth` 8, 16 or 32 (float, linear light). Up costs nothing; down rounds the layers' extra precision away (32 → 16 clips colour above 1). One undo step. Returns `bitDepth` and `changedLayerIds`. |
 | `flip_image` | Mirror the image `horizontal` (left-right) or `vertical`. Avoid flipping images with text, logos or recognisable places. |
 | `undo_image` | Undo the last edit (one tool call is one step). Returns `canUndo` / `canRedo`. |
 | `redo_image` | Redo the edit you just undid. |
@@ -390,6 +403,16 @@ drawing or editing either.
 | `get_mixer_brush` | Read-only. The Mixer Brush settings and what it carries (`reservoir` #rrggbb or null, `amount` left 0..1, `pickup` #rrggbb or null). Call it before a mixer stroke with `loadEachStroke: false`. |
 | `load_mixer_brush` | Fill the Mixer Brush reservoir with `color` (default the foreground), amount 1; keeps the pickup. View state, not an undo step. Use before strokes with `loadEachStroke: false`. Returns the load. |
 | `clean_mixer_brush` | Empty the Mixer Brush pickup well (`emptyReservoir: true` also drops the loaded paint, so it only smears). View state, not an undo step. Returns the load. |
+| `clone_stamp` | Copy pixels from the clone source along `points`: each point paints what is at point + offset (source − first point, whole px). `source` `{x, y}` sets the source for this stroke (else the current one, see `set_clone_source`); `aligned` keeps the offset for later strokes; `sample` current \| current-below \| all; `brush` `{size, hardness, spacing, opacity, flow, smoothing, pressureSize, pressureOpacity}`; `layerId`, `channel` (a mask clones from itself). One undo step. Returns the layer, channel, `bounds`, dabs and `clone` `{offset, source, aligned}`. Call `set_clone_source` or pass `source` first. |
+| `heal_brush` | As `clone_stamp`, then blends the cloned texture into the colour and light around the stroke (Poisson seamless cloning, when the stroke ends). Use for blemishes, wrinkles, dust and seams where the surroundings have the right tone. Returns as `clone_stamp`. |
+| `spot_heal` | Remove what `points` cover with no source: `type` proximity-match (default: copies the best matching nearby patch, then heals it in) or smooth (fills from the edges). `sample`, `brush`, `layerId`, `channel`. One undo step. Returns the layer, channel, `bounds`, dabs and `spotHeal` `{offset}` (null for a smooth fill). |
+| `smudge` | Drag colour along `points` like a finger in wet paint; `strength` 0..1 (default 0.5) is how far. Works on masks too. One undo step. Returns the layer, channel, `bounds` and dabs. |
+| `dodge` | Lighten what `points` cover, most in `range` shadows \| midtones \| highlights, at `exposure` 0..1 (overlaps in one stroke never exceed it); `protectTones` keeps hue and saturation. Alpha kept. One undo step. Returns the layer, channel, `bounds` and dabs. |
+| `burn` | As `dodge`, darkening. |
+| `sponge` | Desaturate (`mode` desaturate, default) or saturate what `points` cover; `vibrance` damps clipping; passes compound, `brush.flow` sets each pass's strength. Pixels only. One undo step. Returns the layer, channel, `bounds` and dabs. |
+| `get_retouch_options` | Read-only. The retouching defaults (`aligned`, `sample`, `spotType`, `range`, `exposure`, `protectTones`, `spongeMode`, `vibrance`, `strength`) and the `cloneSource` `{x, y, offset}` or null. Call before a clone or heal stroke without `source`. |
+| `set_retouch_options` | Set those defaults (view state, not an undo step); each stroke tool can override them per call. Changing `aligned` clears the kept offset. Returns the options. |
+| `set_clone_source` | Set the clone source `{x, y}` in document px (the Alt-click), or remove it with `clear: true`. View state. The next `clone_stamp` / `heal_brush` fixes the offset from its first point. Returns the source. |
 | `fill_pixels` | Fill the selection (or the canvas without one / with `useSelection: false`) on pixels or a mask with `color`, `opacity`, `blend`. Returns the changed bounds. |
 | `mix_colors` | Read-only. Mix 1 to 16 `colors` (`{color: #rrggbb, weight, strength?}`) like paint (Kubelka-Munk over reflectance spectra). Returns `mixed` (#rrggbb), `rgbLerp` (the plain RGB average, for comparison) and the normalised `weights`. Call it before `paint_stroke` / `fill_pixels` to pick a paint colour. |
 | `clear_pixels` | Remove the selected pixels (alpha to 0; a transparency-locked layer or a mask gets the background colour). Returns the changed bounds. |
@@ -413,6 +436,7 @@ drawing or editing either.
   `locks` only when the user wants that layer changed.
 - `merge_down`, `merge_visible` and `flatten_image` merge annotation layers only in a browser
   (they need a canvas); elsewhere they fail and say so.
+- Retouching pitfalls (empty layers, sources, what ignores opacity): see references/retouching.md.
 - `paint_stroke`, `fill_pixels` and `clear_pixels` need a visible pixel layer (or a layer with a
   raster mask and `channel: "mask"`); adjustment, group, shape, type, annotation and smart object layers can
   only be painted through their masks (and a smart object through `channel: "filter-mask"`).
