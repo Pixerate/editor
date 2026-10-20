@@ -24,6 +24,7 @@
 import { blendPixel, type BlendMode } from '../raster/blend';
 import type { RasterRect } from '../raster/surface';
 import { TILE, tileKey } from '../raster/surface';
+import { srgbDecode, srgbEncode } from '../raster/deep';
 import { DabWalker, dabRect, rasterizeDab, type BrushSettings, type CoverageMap, type Dab, type StrokePoint } from './brush';
 import { SmudgeTip, type SmudgeSettings } from './blending';
 import { TileMedium, type PaintTileTarget } from './exchange';
@@ -427,6 +428,86 @@ export function applyRetouchToTile(
       out[i + 1] = Math.round(o[1] * 255);
       out[i + 2] = Math.round(o[2] * 255);
       if (!s.lockTransparency) out[i + 3] = Math.round(o[3] * 255);
+    }
+  }
+  return out;
+}
+
+/**
+ * Dodge / Burn at 16 or 32 bits: `applyRetouchToTile`'s tone paint on a layer tile's deep samples
+ * (`Uint16Array` sRGB-encoded, or `Float32Array` linear light, RGBA). The tone curves work on
+ * encoded values as at 8 bits, so 32-bit samples are encoded, toned and decoded (colour above 1 is
+ * toned at 1 and keeps its excess). Returns the new samples.
+ */
+export function applyToneToDeepTile(
+  coverage: CoverageMap,
+  samples: Uint16Array | Float32Array,
+  tx: number,
+  ty: number,
+  tone: (rgb: number[]) => void,
+  s: RetouchApply,
+  options: { into?: Uint16Array | Float32Array; region?: RasterRect } = {}
+): Uint16Array | Float32Array {
+  const linear = samples instanceof Float32Array;
+  const out = (options.into ?? samples).slice() as Uint16Array | Float32Array;
+  const ox = tx * TILE + s.offset.x;
+  const oy = ty * TILE + s.offset.y;
+  let x0 = 0;
+  let y0 = 0;
+  let x1 = TILE;
+  let y1 = TILE;
+  if (options.region) {
+    const r = options.region;
+    x0 = Math.max(0, Math.floor(r.x) - ox);
+    y0 = Math.max(0, Math.floor(r.y) - oy);
+    x1 = Math.min(TILE, Math.ceil(r.x + r.width) - ox);
+    y1 = Math.min(TILE, Math.ceil(r.y + r.height) - oy);
+    if (x1 <= x0 || y1 <= y0) return out;
+    if (options.into) for (let y = y0; y < y1; y++) out.set(samples.subarray((y * TILE + x0) * 4, (y * TILE + x1) * 4), (y * TILE + x0) * 4);
+  }
+  const sel = s.selection;
+  const rgb = [0, 0, 0];
+  const before = [0, 0, 0];
+  const excess = [0, 0, 0];
+  let covKey = NaN;
+  let covTile: Float32Array | undefined;
+  for (let y = y0; y < y1; y++) {
+    const dy = oy + y;
+    const cty = Math.floor(dy / TILE);
+    for (let x = x0; x < x1; x++) {
+      const dx = ox + x;
+      const ctx = Math.floor(dx / TILE);
+      const key = tileKey(ctx, cty);
+      if (key !== covKey) {
+        covKey = key;
+        covTile = coverage.tiles.get(key);
+      }
+      if (!covTile) continue;
+      const c = covTile[(dy - cty * TILE) * TILE + (dx - ctx * TILE)];
+      if (c <= 0) continue;
+      let k = c * s.opacity;
+      if (sel) {
+        if (dx < 0 || dy < 0 || dx >= sel.width || dy >= sel.height) continue;
+        k *= sel.data[dy * sel.width + dx] / 255;
+      }
+      if (k > 1) k = 1;
+      if (k <= 0) continue;
+      const i = (y * TILE + x) * 4;
+      if (out[i + 3] === 0) continue;
+      for (let ch = 0; ch < 3; ch++) {
+        const v = out[i + ch];
+        if (linear) {
+          excess[ch] = v > 1 ? v - 1 : 0;
+          rgb[ch] = srgbEncode(v > 1 ? 1 : v < 0 ? 0 : v);
+        } else rgb[ch] = v / 65535;
+        before[ch] = rgb[ch];
+      }
+      tone(rgb);
+      for (let ch = 0; ch < 3; ch++) {
+        const e = before[ch] + (rgb[ch] - before[ch]) * k;
+        if (linear) out[i + ch] = srgbDecode(e) + excess[ch];
+        else out[i + ch] = e <= 0 ? 0 : e >= 1 ? 65535 : Math.round(e * 65535);
+      }
     }
   }
   return out;

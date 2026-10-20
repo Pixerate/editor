@@ -206,7 +206,7 @@ import {
   tileCoord,
   tileKey,
 } from '../raster/surface';
-import { convertSurfaceDepth, deepTile, isBitDepth, proxyOf, surfaceFromDeepPixels, tileSamples, to16From8, type BitDepth, type DeepSamples } from '../raster/deep';
+import { convertSurfaceDepth, deepTile, isBitDepth, keepDeepSamples, proxyOf, surfaceFromDeepPixels, tileSamples, to16From8, type BitDepth, type DeepSamples } from '../raster/deep';
 import { workingToSamples } from '../raster/deep-compositor';
 import {
   LayerOperationError,
@@ -249,6 +249,7 @@ import {
   StrokeCoverage,
   TilePixelSource,
   applyRetouchToTile,
+  applyToneToDeepTile,
   applyStrokeToDeepTile,
   applyStrokeToTile,
   cleanMixer,
@@ -750,7 +751,8 @@ export class PaintStrokeSession {
     /** Composite brush / eraser strokes at this bit depth (layers only); `null` for 8 bits. */
     depth: 16 | 32 | null = null
   ) {
-    this.deep = depth && stroke instanceof StrokeCoverage && target.surface.channels === 4 ? depth : null;
+    const coverage = stroke instanceof StrokeCoverage || ('kind' in stroke && stroke.kind === 'coverage' && !stroke.finalPaint);
+    this.deep = depth && coverage && target.surface.channels === 4 ? depth : null;
     this.before = controller._captureForStroke();
     this.base = target.surface;
     this.live = new Map(this.base.tiles);
@@ -846,7 +848,13 @@ export class PaintStrokeSession {
         const src = tileSamples(this.base.tiles.get(key), 4, this.deep, this.base.defaultValue);
         const prev = this.touched.has(key) ? this.liveDeep.get(key) : undefined;
         this.touched.add(key);
-        const d = applyStrokeToDeepTile(stroke.coverage, src, tx, ty, this.apply, prev ? { into: prev, region: r } : {});
+        const opts = prev ? { into: prev, region: r } : {};
+        const rt = this.retouch;
+        const paint = rt?.kind === 'coverage' ? rt.paint() : null;
+        const d =
+          rt?.kind === 'coverage' && paint?.kind === 'tone'
+            ? applyToneToDeepTile(stroke.coverage, src, tx, ty, paint.tone, rt.apply, opts)
+            : applyStrokeToDeepTile(stroke.coverage, src, tx, ty, this.apply, opts);
         this.liveDeep.set(key, d);
         this.live.set(key, { data: proxyOf(d, 4), uniform: null, deep: d });
         continue;
@@ -908,6 +916,33 @@ export class PaintStrokeSession {
     this.closed = true;
     this.controller._strokeCommit(this.before, this.target.id, this.target.channel, null);
   }
+}
+
+/**
+ * `next` with deep samples kept on pixel layers (and their masks) an 8-bit operation rewrote from
+ * `prev`: see `keepDeepSamples`. Layers whose surfaces did not change are returned as they are.
+ */
+function keepDeepLayers(prev: readonly ImageLayer[], next: ImageLayer[]): ImageLayer[] {
+  const before = new Map<string, ImageLayer>();
+  for (const l of flattenLayers(prev)) before.set(l.id, l);
+  let out = next;
+  for (const l of flattenLayers(next)) {
+    const p = before.get(l.id);
+    if (!p || p === l) continue;
+    let layer: ImageLayer = l;
+    if (l.type === 'pixel' && p.type === 'pixel' && l.surface !== p.surface) {
+      const surface = keepDeepSamples(p.surface, l.surface);
+      if (surface !== l.surface) layer = { ...l, surface };
+    }
+    const m = layer.mask;
+    const pm = p.mask;
+    if (m && pm && m.surface !== pm.surface) {
+      const surface = keepDeepSamples(pm.surface, m.surface);
+      if (surface !== m.surface) layer = { ...layer, mask: { ...m, surface } } as ImageLayer;
+    }
+    if (layer !== l) out = mapLayer(out, l.id, () => layer);
+  }
+  return out;
 }
 
 function sameTile(a: Tile | undefined, b: Tile | null): boolean {
@@ -1689,8 +1724,11 @@ export class ImageEditorController {
   /** Records one undo step and applies a new stack (and any other state change in `extra`). */
   private commitLayers(next: ImageLayer[], extra?: () => void, commitToHistory = true): void {
     if (commitToHistory) this.recordHistory();
+    const prev = this.state.layers;
+    const depth = this.bitDepth;
     this.state.layers = next;
     extra?.();
+    if (depth !== 8 && this.bitDepth === depth) this.state.layers = keepDeepLayers(prev, this.state.layers);
     if (this.state.activeLayerId && !findLayer(next, this.state.activeLayerId)) {
       this.state.activeLayerId = null;
       this.state.activeTarget = 'pixels';
@@ -3081,8 +3119,9 @@ export class ImageEditorController {
       offset: target.offset,
     };
     if (tool === 'mixer') return new PaintStrokeSession(this, target, this.mixerStroke(init, brush), apply);
-    if (isRetouchTool(tool)) return new PaintStrokeSession(this, target, this.retouchStroke(tool, init, brush, target, apply), apply);
     const depth = target.channel === 'pixels' && this.bitDepth !== 8 ? this.bitDepth : null;
+    // Dodge and Burn tone the deep samples; the other retouching tools work in 8 bits on what they change.
+    if (isRetouchTool(tool)) return new PaintStrokeSession(this, target, this.retouchStroke(tool, init, brush, target, apply), apply, tool === 'dodge' || tool === 'burn' ? depth : null);
     return new PaintStrokeSession(this, target, new StrokeCoverage(brush), apply, depth);
   }
 
@@ -3212,7 +3251,11 @@ export class ImageEditorController {
 
   /** @internal Commits a finished stroke as one undo step (`before` is the pre-stroke state). */
   public _strokeCommit(before: HistoryEntryHandle, layerId: string, channel: LayerTarget, surface: TiledSurface | null): void {
-    if (surface) this.state.layers = mapLayer(this.state.layers, layerId, (l) => this.withSurface(l, channel, surface));
+    if (surface) {
+      const prev = (before as unknown as HistoryEntry).layers;
+      this.state.layers = mapLayer(this.state.layers, layerId, (l) => this.withSurface(l, channel, surface));
+      if (this.bitDepth !== 8) this.state.layers = keepDeepLayers(prev, this.state.layers);
+    }
     else this.state.layers = (before as unknown as HistoryEntry).layers;
     if (surface && !this.isApplyingHistory) {
       this.undoStack.push(before as unknown as HistoryEntry);

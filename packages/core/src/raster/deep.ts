@@ -355,3 +355,42 @@ export function deepBytes(surface: TiledSurface): number {
   for (const t of surface.tiles.values()) if (t.deep) n += t.deep.byteLength;
   return n;
 }
+
+/**
+ * `after` (a surface an 8-bit operation rewrote from `before`) with the deep samples kept where
+ * the operation left a pixel's 8-bit value alone: a rewritten tile of a deep surface becomes deep
+ * again, its unchanged pixels taking `before`'s samples and its changed ones the 8-bit result
+ * lifted to the depth. The result renders exactly as `after` does, so it is never worse than the
+ * 8-bit path, and an untouched area of a filtered, smudged or cloned 16-bit layer keeps 16 bits.
+ */
+export function keepDeepSamples(before: TiledSurface, after: TiledSurface): TiledSurface {
+  if (before === after || before.channels !== after.channels || before.defaultValue !== after.defaultValue) return after;
+  const depth = surfaceDepth(before);
+  if (depth === 8) return after;
+  const ch = after.channels;
+  let tiles: Map<number, Tile> | null = null;
+  for (const [key, ta] of after.tiles) {
+    if (ta.deep) continue;
+    const tb = before.tiles.get(key);
+    if (!tb?.deep || tb === ta) continue;
+    // A fresh array: `ta` has no deep samples to share.
+    const out = tileSamples(ta, ch, depth, after.defaultValue);
+    const a = ta.data;
+    const b = tb.data;
+    const deep = tb.deep;
+    let kept = false;
+    for (let i = 0; i < a.length; i += ch) {
+      let same = true;
+      for (let c = 0; c < ch; c++) if (a[i + c] !== b[i + c]) same = false;
+      if (!same) continue;
+      for (let c = 0; c < ch; c++) out[i + c] = deep[i + c];
+      kept = true;
+    }
+    if (!kept) continue;
+    const tile = deepTile(out, ch, after.defaultValue);
+    tiles ??= new Map(after.tiles);
+    if (tile) tiles.set(key, tile);
+    else tiles.delete(key);
+  }
+  return tiles ? new TiledSurface(ch, tiles, after.defaultValue) : after;
+}
