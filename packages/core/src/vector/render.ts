@@ -3,6 +3,7 @@
  * gradient defs) and the overlay (screen-space selection box, anchors, handles, marquee and
  * pen preview). React, Svelte or plain DOM code turns these into `<svg>` elements.
  */
+import { vectorPerspectiveGridLines, vectorPerspectivePlanes } from './perspective.js';
 import { resolveVectorLenses } from './lens.js';
 import { bezierPathToSvg, transformBezierPath, type BezierPath } from '../canvas/pathops/bezier.js';
 import { hatchPath } from '../canvas/pathops/hatch.js';
@@ -100,6 +101,7 @@ import type {
 	VectorNode,
 	VectorPaint,
 	VectorPathfinderOperation,
+	VectorPerspectivePlane,
 	VectorPathNode,
 	VectorTextNode,
 	VectorStrokeAlign,
@@ -425,6 +427,12 @@ export interface VectorOverlayRenderData {
 	 * `x1, y1, x2, y2`; `drawing` when new art goes into that group (draw it more strongly).
 	 */
 	symmetry: { nodeId: string; drawing: boolean; lines: { x1: number; y1: number; x2: number; y2: number }[] }[];
+	/**
+	 * The document's perspective grid while it shows, screen space: each plane's grid lines as one
+	 * path `d` (`active` for the plane new shapes are drawn on: draw it more strongly), the
+	 * vanishing points and the origin; null without a grid or while it is hidden.
+	 */
+	perspective: { planes: { plane: VectorPerspectivePlane; active: boolean; d: string }[]; vanishingPoints: { x: number; y: number }[]; origin: { x: number; y: number } } | null;
 	/** Points acquired for object snap tracking, screen space: draw a small `+` at each. */
 	trackingPoints: { x: number; y: number }[];
 	/** The distance or coordinate being typed while the pen draws, and where to show it (screen space, by the pointer), or null. */
@@ -817,6 +825,25 @@ function shadingOverlay(state: VectorEditorState): VectorOverlayRenderData['shad
 	return out;
 }
 
+/** The perspective grid in screen space (see `VectorOverlayRenderData.perspective`). */
+function perspectiveOverlay(state: VectorEditorState): VectorOverlayRenderData['perspective'] {
+	const grid = state.document.perspective;
+	if (!grid || grid.visible === false) return null;
+	const r = (n: number) => Math.round(n * 10) / 10;
+	const planes = vectorPerspectivePlanes(grid).map((plane) => ({
+		plane,
+		active: state.perspectivePlane === plane,
+		d: vectorPerspectiveGridLines(grid, plane)
+			.map(({ a, b }) => {
+				const p = toScreen(state, a);
+				const q = toScreen(state, b);
+				return `M${r(p.x)} ${r(p.y)}L${r(q.x)} ${r(q.y)}`;
+			})
+			.join('')
+	}));
+	return { planes, vanishingPoints: grid.vanishingPoints.map((v) => toScreen(state, v)), origin: toScreen(state, grid.origin) };
+}
+
 /** The axes of selected (or drawn-into) symmetry groups (see `VectorOverlayRenderData.symmetry`). */
 function symmetryOverlay(state: VectorEditorState): VectorOverlayRenderData['symmetry'] {
 	const ids = new Set([...state.selection, ...(state.symmetryTarget ? [state.symmetryTarget] : [])]);
@@ -1139,6 +1166,7 @@ export function getVectorOverlayRenderData(state: VectorEditorState): VectorOver
 	return { outlines, selectionBox, distort, anchors, handles, marquee, penPreview, artboard, guides, status, toolStroke, pencilString, cutPoint, cornerWidgets, widthPoints, widthSpot, builder, blend, gradient, envelope, masks: maskOverlay(state), text: textOverlay(state), textBox, constraints: constraintOverlay(state), frames: frameLabels(state), connectorSites: connectorSiteOverlay(state),
 		shading: shadingOverlay(state),
 		symmetry: symmetryOverlay(state),
+		perspective: perspectiveOverlay(state),
 		trackingPoints: (state.trackingPoints ?? []).map((p) => toScreen(state, p)),
 		typedEntry: state.typedEntry ? { text: state.typedEntry, ...(state.pointer ? toScreen(state, state.pointer) : { x: 0, y: 0 }) } : null
 	};

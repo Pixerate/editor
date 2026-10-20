@@ -46,6 +46,7 @@ import { VectorConnectorPanel } from './VectorConnectorPanel';
 import { VectorShadingPanel } from './VectorShadingPanel';
 import { VectorTracePanel } from './VectorTracePanel';
 import { VectorSymmetryPanel } from './VectorSymmetryPanel';
+import { VectorPerspectivePanel } from './VectorPerspectivePanel';
 import { VectorLensPanel } from './VectorLensPanel';
 import { VectorGradientEditor } from './VectorGradientEditor';
 
@@ -626,6 +627,7 @@ export function VectorStylePanel({ controller, className }: VectorStylePanelProp
       <VectorConnectorPanel controller={controller} />
       <VectorShadingPanel controller={controller} />
       <VectorSymmetryPanel controller={controller} />
+      <VectorPerspectivePanel controller={controller} />
       <VectorLensPanel controller={controller} />
       <VectorTracePanel controller={controller} />
       <VectorConstraintsPanel controller={controller} />

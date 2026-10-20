@@ -140,7 +140,7 @@ import {
 	vectorConnectorTargetAt,
 	type VectorConnectionSite
 } from './connectors.js';
-import { VECTOR_CONNECTOR_ROUTES, VECTOR_CONNECTOR_SIDES, VECTOR_LENS_TYPES, type VectorLens, type VectorArrowhead, type VectorConnector, type VectorConnectorEnd, type VectorConnectorRoute, type VectorConnectorSide } from './types.js';
+import { VECTOR_CONNECTOR_ROUTES, VECTOR_CONNECTOR_SIDES, VECTOR_LENS_TYPES, type VectorLens, type VectorPerspective, type VectorPerspectivePlane, type VectorArrowhead, type VectorConnector, type VectorConnectorEnd, type VectorConnectorRoute, type VectorConnectorSide } from './types.js';
 import {
 	autoVectorFreeformGradient,
 	createVectorMeshGradient,
@@ -202,7 +202,7 @@ import {
 	VectorTextError,
 	type VectorTextLayout
 } from './text.js';
-import { applyVectorHomography, vectorHomography, vectorHomographyKeepsQuad } from './perspective.js';
+import { applyVectorHomography, sanitizeVectorPerspective, vectorHomography, vectorHomographyKeepsQuad, vectorPerspectiveMapPath, vectorPerspectivePlaneToFlat, vectorPerspectivePlanes } from './perspective.js';
 import { distortVectorNode, vectorBoxCorners, vectorDistortQuad, vectorShearForSide, vectorSkewMatrix, VECTOR_DISTORT_TOLERANCE, type VectorDistortMode } from './distort.js';
 import {
 	dragVectorMeshPoint,
@@ -633,6 +633,8 @@ export interface VectorEditorState {
 	typedEntry: string | null;
 	/** The symmetry group new drawn art goes into (`enterSymmetry`), or null. */
 	symmetryTarget: string | null;
+	/** The perspective plane new rectangles, ellipses, polygons and stars are drawn on (`setPerspectivePlane`), or null. */
+	perspectivePlane: VectorPerspectivePlane | null;
 	/** The selected point of a mesh or freeform fill (Gradient tool), or null. */
 	shadingPoint: { nodeId: string; index: number; kind: 'mesh' | 'freeform' } | null;
 	canUndo: boolean;
@@ -1619,6 +1621,7 @@ export class VectorEditorController {
 			typedEntry: this.typed,
 			shadingPoint: this.getShadingSelection(),
 			symmetryTarget: this.symmetryTarget && this.doc.nodes.some((n) => n.id === this.symmetryTarget) ? this.symmetryTarget : null,
+			perspectivePlane: this.perspectivePlane && this.doc.perspective && vectorPerspectivePlanes(this.doc.perspective).includes(this.perspectivePlane) ? this.perspectivePlane : null,
 			canUndo: h.canUndo,
 			canRedo: h.canRedo,
 			undoLabel: h.undoName,
@@ -4370,6 +4373,117 @@ export class VectorEditorController {
 		if (!this.symmetryTarget) return;
 		this.symmetryTarget = null;
 		this.notify();
+	}
+
+	// -----------------------------------------------------------------------------------------
+	// Perspective drawing
+
+	private perspectivePlane: VectorPerspectivePlane | null = null;
+
+	/** The document's perspective grid, or null. */
+	getPerspective(): VectorPerspective | null {
+		return this.doc.perspective ?? null;
+	}
+
+	/**
+	 * Sets the document's perspective grid (CorelDRAW's Perspective Drawing): 1 to 3 vanishing
+	 * points, the origin where its planes meet, the cell size and extent, and whether it shows;
+	 * `null` removes it. One undo step.
+	 */
+	setPerspective(grid: VectorPerspective | null): VectorActionResult & { perspective?: VectorPerspective | null } {
+		let next: VectorPerspective | null = null;
+		if (grid) {
+			next = sanitizeVectorPerspective(grid);
+			if (!next) return { ok: false, message: 'A perspective grid needs 1 to 3 vanishing points { x, y } away from an origin { x, y }.' };
+		}
+		this.change(next ? 'Perspective Grid' : 'Remove Perspective Grid', () => {
+			const { perspective: _p, ...rest } = this.doc;
+			this.doc = next ? { ...rest, perspective: next } : rest;
+		});
+		if (!next) this.perspectivePlane = null;
+		return { ok: true, perspective: next };
+	}
+
+	/**
+	 * Draws new rectangles, ellipses, polygons and stars on a plane of the perspective grid (their
+	 * drag box is taken on the plane, so they recede with it), or flat again with `null`.
+	 */
+	setPerspectivePlane(plane: VectorPerspectivePlane | null): VectorActionResult {
+		if (plane !== null) {
+			const grid = this.doc.perspective;
+			if (!grid) return { ok: false, message: 'There is no perspective grid: set one with vector.setPerspective first.' };
+			const planes = vectorPerspectivePlanes(grid);
+			if (!planes.includes(plane)) return { ok: false, message: `This grid's planes are ${planes.join(', ')}.` };
+		}
+		this.perspectivePlane = plane;
+		this.notify();
+		return { ok: true };
+	}
+
+	/**
+	 * Lays objects onto a plane of the perspective grid: each is read flat, relative to the grid's
+	 * origin (right and up), and projected onto the plane, so art near the origin keeps its size and
+	 * art further along recedes. Paths and groups are mapped in document space (their transforms
+	 * baked in); text and instances must be converted to outlines first. One undo step. Returns
+	 * the ids changed.
+	 */
+	attachToPerspective(plane: VectorPerspectivePlane, options: { ids?: readonly string[] } = {}): VectorActionResult & { ids?: string[] } {
+		const grid = this.doc.perspective;
+		if (!grid) return { ok: false, message: 'There is no perspective grid: set one with vector.setPerspective first.' };
+		const planes = vectorPerspectivePlanes(grid);
+		if (!planes.includes(plane)) return { ok: false, message: `This grid's planes are ${planes.join(', ')}.` };
+		const ids = [...new Set(options.ids ?? this.selectedRoots())];
+		if (!ids.length) return { ok: false, message: 'Select objects to put on the plane first.' };
+		const next = new Map<string, VectorNode>();
+		const project = (n: VectorNode, m: AffineMatrix): VectorNode | string => {
+			const own = n.transform ? multiplyMatrices(m, n.transform) : m;
+			if (n.type === 'text' || n.type === 'instance') return `"${n.id}" is ${n.type === 'text' ? 'text' : 'a symbol instance'}: convert it to outlines first (vector.createOutlines${n.type === 'instance' ? ' after vector.detachInstance' : ''}).`;
+			if (n.type === 'group') {
+				const children: VectorNode[] = [];
+				for (const c of n.children) {
+					const r = project(c, own);
+					if (typeof r === 'string') return r;
+					children.push(r);
+				}
+				const { transform: _t, ...rest } = n;
+				return { ...rest, children };
+			}
+			const flat = transformBezierPath(subpathsToBezier(n.subpaths), own);
+			const mapped = vectorPerspectiveMapPath(grid, plane, flat);
+			if (!mapped) return `"${n.id}" reaches beyond the plane's horizon: move it nearer the origin, or the vanishing points further out.`;
+			const { transform: _t, ...rest } = n;
+			return { ...rest, subpaths: bezierToSubpaths(mapped) };
+		};
+		for (const id of ids) {
+			const loc = locateVectorNode(this.doc.nodes, id);
+			if (!loc) return { ok: false, message: `There is no node "${id}".` };
+			const node = loc.list[loc.index];
+			if (node.locked) return { ok: false, message: `"${id}" is locked; unlock it first.` };
+			const parentM = this.parentMatrixOf(id);
+			const r = project(node, parentM);
+			if (typeof r === 'string') return { ok: false, message: r };
+			// Back into the parent's space.
+			const inv = invertMatrix(parentM);
+			next.set(id, isIdentityMatrix(inv) ? r : transformVectorNode(r, inv));
+		}
+		this.change(`Attach to ${plane[0].toUpperCase()}${plane.slice(1)} Plane`, () => {
+			this.setDoc(mapTree(this.doc.nodes, (n) => next.get(n.id) ?? n));
+		});
+		return { ok: true, ids };
+	}
+
+	/** A shape's subpaths drawn on the active perspective plane from its flat drag box, or null to keep it flat. */
+	private perspectiveShape(kind: VectorShapeInput['kind'], start: Vec2, end: Vec2): VectorSubpath[] | null {
+		const grid = this.doc.perspective;
+		const plane = this.perspectivePlane;
+		if (!grid || !plane || kind === 'line' || !vectorPerspectivePlanes(grid).includes(plane)) return null;
+		const toFlat = vectorPerspectivePlaneToFlat(grid, plane);
+		const a = toFlat?.(start);
+		const b = toFlat?.(end);
+		if (!a || !b) return null;
+		const flat = this.createShapeNode({ kind, ...boundsFromPoints(a, b) });
+		const mapped = vectorPerspectiveMapPath(grid, plane, subpathsToBezier(flat.subpaths));
+		return mapped ? bezierToSubpaths(mapped) : null;
 	}
 
 	// -----------------------------------------------------------------------------------------
@@ -7375,7 +7489,10 @@ export class VectorEditorController {
 					const y2 = drag.start.y + h;
 					bounds = boundsFromPoints(start, { x: x2, y: y2 });
 				}
-				const shaped = this.createShapeNode({ kind: (drag.tool === 'frame' ? 'rect' : drag.tool) as VectorShapeInput['kind'], ...bounds });
+				const kind = (drag.tool === 'frame' ? 'rect' : drag.tool) as VectorShapeInput['kind'];
+				// On a perspective plane the drag box is taken on the plane (its corners where the pointer is).
+				const onPlane = drag.tool !== 'frame' ? this.perspectiveShape(kind, start, { x: bounds.x === start.x ? bounds.x + bounds.width : bounds.x, y: bounds.y === start.y ? bounds.y + bounds.height : bounds.y }) : null;
+				const shaped = onPlane ? { subpaths: onPlane } : this.createShapeNode({ kind, ...bounds });
 				this.replaceNode(drag.nodeId, { ...node, subpaths: shaped.subpaths });
 				this.interaction = { type: 'draw', tool: drag.tool, nodeId: drag.nodeId, bounds };
 				this.notify(true);
