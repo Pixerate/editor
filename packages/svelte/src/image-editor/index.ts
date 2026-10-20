@@ -16,6 +16,7 @@ import type TypeOptionsBarComponent from "./TypeOptionsBar.svelte";
 import type ImageProviderEffectsPanelComponent from "./ImageProviderEffectsPanel.svelte";
 
 export { default as ImageEditor } from './ImageEditor.svelte';
+export { default as PaintGradientEditor } from './PaintGradientEditor.svelte';
 export { default as Histogram } from './Histogram.svelte';
 export { default as AdjustmentLayersPanel } from './AdjustmentLayersPanel.svelte';
 export { default as CurvesEditor } from './CurvesEditor.svelte';

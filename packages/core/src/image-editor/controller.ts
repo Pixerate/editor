@@ -243,6 +243,7 @@ import {
   type LayerProperties,
 } from './layers/ops';
 import { coveringRect } from './layers/render';
+import { parsePaintSource, PaintSourceError, resolvePaintGradient, type PaintSource } from '../paint/gradient-paint';
 import {
   CoverageMap,
   DEFAULT_BRUSH,
@@ -468,6 +469,13 @@ export interface PaintOptions {
   foreground: string;
   /** `#rrggbb`: what the eraser paints on transparency-locked layers and masks. */
   background: string;
+  /**
+   * What the brush paints: the foreground colour (`{ type: 'color' }`), or gradient paint that
+   * changes colour as the stroke goes (`@pixerate/editor/paint` `PaintSource`; its `paint` /
+   * `secondary` stops are the foreground and background colours). Setting `foreground` goes back
+   * to one colour.
+   */
+  paint: PaintSource;
   /** Mixer Brush options (wet, load, mix, load / clean each stroke, RGB or pigment mixing). */
   mixer: MixerSettings;
   /** What the Mixer Brush carries now: its reservoir, how much is left and the picked-up colour. */
@@ -600,6 +608,11 @@ export interface StrokeInit {
    * the reservoir is loaded with: given, it loads the brush whatever `loadEachStroke` says.
    */
   color?: string | number[];
+  /**
+   * Brush only: what this stroke paints with instead of the paint options' paint: a colour, or
+   * gradient paint (`@pixerate/editor/paint` `PaintSource`). A colour here is the same as `color`.
+   */
+  paint?: PaintSource | string;
   /** Overrides of the paint options' Mixer Brush settings (tool `mixer`). */
   mixer?: Partial<MixerSettings>;
   /** Eraser colour on locked transparency / masks (default the background). */
@@ -1285,7 +1298,7 @@ export class ImageEditorController {
       activeLayerId: null,
       activeTarget: 'pixels',
       outputOpacity: 1,
-      paint: { brush: { ...DEFAULT_BRUSH }, foreground: '#000000', background: '#ffffff', mixer: { ...DEFAULT_MIXER }, mixerLoad: EMPTY_MIXER_LOAD, retouch: { ...DEFAULT_RETOUCH }, cloneSource: null },
+      paint: { brush: { ...DEFAULT_BRUSH }, foreground: '#000000', background: '#ffffff', paint: { type: 'color', color: '#000000' }, mixer: { ...DEFAULT_MIXER }, mixerLoad: EMPTY_MIXER_LOAD, retouch: { ...DEFAULT_RETOUCH }, cloneSource: null },
       fit: options.fit ?? 'margin',
     };
 
@@ -3346,10 +3359,19 @@ export class ImageEditorController {
     const retouch = options.retouch ? normalizeRetouch(options.retouch, cur.retouch) : cur.retouch;
     // Turning Aligned off (or on) starts the offset afresh at the next stroke.
     const cloneSource = cur.cloneSource && retouch.aligned !== cur.retouch.aligned ? { ...cur.cloneSource, offset: null } : cur.cloneSource;
+    let source = cur.paint;
+    let foreground = options.foreground !== undefined ? toHex(parseColor(options.foreground)) : cur.foreground;
+    if (options.paint !== undefined) {
+      const p = readImagePaint(options.paint);
+      if (p.type === 'color') foreground = p.color;
+      source = p;
+    }
+    if (source.type === 'color' || options.foreground !== undefined) source = { type: 'color', color: foreground };
     const next: PaintOptions = {
       brush: options.brush ? normalizeBrush({ ...cur.brush, ...options.brush }) : cur.brush,
-      foreground: options.foreground !== undefined ? toHex(parseColor(options.foreground)) : cur.foreground,
+      foreground,
       background: options.background !== undefined ? toHex(parseColor(options.background)) : cur.background,
+      paint: source,
       mixer: options.mixer ? normalizeMixer({ ...cur.mixer, ...options.mixer }) : cur.mixer,
       mixerLoad: cur.mixerLoad,
       retouch,
@@ -3463,6 +3485,12 @@ export class ImageEditorController {
       throw new LayerOperationError('The Mixer Brush paints colour on pixels, not on masks; target pixels (channel pixels), or paint the mask with the brush.');
     }
     const brush = normalizeBrush({ ...this.state.paint.brush, ...(init.brush ?? {}) });
+    // Gradient paint (the brush only): the stroke's own paint, else the paint options' unless a colour is given.
+    let strokePaint: PaintSource | null = null;
+    if (init.paint !== undefined) {
+      strokePaint = readImagePaint(init.paint);
+      if (strokePaint.type === 'color') init = { ...init, color: strokePaint.color };
+    } else if (init.color === undefined) strokePaint = this.state.paint.paint;
     const color = parseColor(init.color ?? this.state.paint.foreground);
     const background = parseColor(init.background ?? this.state.paint.background);
     const toMaskGrey = (c: [number, number, number, number]) => {
@@ -3483,7 +3511,8 @@ export class ImageEditorController {
     if (tool === 'mixer') return new PaintStrokeSession(this, target, this.mixerStroke(init, brush), apply, depth);
     // The retouching tools work on the deep samples too (sources read at depth).
     if (isRetouchTool(tool)) return new PaintStrokeSession(this, target, this.retouchStroke(tool, init, brush, target, apply), apply, depth);
-    return new PaintStrokeSession(this, target, new StrokeCoverage(brush), apply, depth);
+    const gradient = tool === 'brush' && strokePaint?.type === 'gradient' ? resolvePaintGradient(strokePaint, { paint: toHex(color), secondary: toHex(background) }) : null;
+    return new PaintStrokeSession(this, target, new StrokeCoverage(brush, gradient, init.seed ?? 0), apply, depth);
   }
 
   /** A retouching stroke's start: its settings, what it samples and how it composites. */
@@ -6106,6 +6135,16 @@ export function parseColor(value: string | number[]): [number, number, number, n
 }
 
 /** `#rrggbb` of RGBA bytes (alpha dropped). */
+/** A paint source read strictly, its problems as `LayerOperationError`s. */
+function readImagePaint(raw: unknown): PaintSource {
+  try {
+    return parsePaintSource(raw);
+  } catch (e) {
+    if (e instanceof PaintSourceError) throw new LayerOperationError(e.message);
+    throw e;
+  }
+}
+
 export function toHex(c: readonly number[]): string {
   return '#' + [c[0], c[1], c[2]].map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
 }

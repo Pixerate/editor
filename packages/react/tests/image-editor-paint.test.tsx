@@ -42,6 +42,23 @@ const pointer = (type: string, x: number, y: number, altKey = false) => {
 };
 
 describe('React paint tools', () => {
+  it('BrushOptionsBar turns on gradient paint for the brush and edits it', async () => {
+    const c = controller();
+    await act(async () => root.render(<BrushOptionsBar controller={c} />));
+    await act(async () => button('Brush').click());
+    await act(async () => button('Gradient').click());
+    expect(c.getState().paint.paint).toMatchObject({ type: 'gradient', stops: [{ color: 'paint' }, { color: 'secondary' }] });
+    expect(container.querySelector('[data-testid="paint-gradient-editor"]')).not.toBeNull();
+    const follows = container.querySelector('select[aria-label="Gradient follows"]') as HTMLSelectElement;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(win.HTMLSelectElement.prototype, 'value')!.set!.call(follows, 'velocity');
+      follows.dispatchEvent(new win.Event('change', { bubbles: true }));
+    });
+    expect(c.getState().paint.paint).toMatchObject({ map: { by: 'velocity' } });
+    await act(async () => button('Gradient').click());
+    expect(c.getState().paint.paint.type).toBe('color');
+  });
+
   it('BrushOptionsBar sets tools, brush settings, colours and fills', async () => {
     const c = controller();
     await act(async () => root.render(<BrushOptionsBar controller={c} />));

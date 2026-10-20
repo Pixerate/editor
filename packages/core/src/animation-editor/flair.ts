@@ -71,7 +71,14 @@ export interface FlairSvgAnimation {
 	alternate?: boolean;
 	/** Flair features scenes do not have (imports skip them with a note). */
 	count?: readonly [number, number];
+	/** With `count`: how the number is written (Flair's number format) and to how many decimals. */
+	format?: string;
+	decimals?: number;
 	write?: string;
+	/** With `write`: the caret drawn while typing. */
+	caret?: string;
+	/** Flair's label for the change, e.g. `entrance.fade＠logo`; motion primitives set it to find their changes again. */
+	tag?: string;
 	scramble?: string;
 	solo?: number;
 	view?: readonly [number, number, number, number] | string;

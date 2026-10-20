@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { WET_FLOW_KINDS, WET_PARAM_SLIDERS, WET_SPEED_SLIDER, WET_TILT_SLIDERS, readPath, type PaintEditorController, type WetFlowKind } from '@pixerate/editor/paint-editor';
+  import { WET_FLOW_KINDS, WET_GPU_OPTIONS, WET_PARAM_SLIDERS, WET_SPEED_SLIDER, WET_TILT_SLIDERS, readPath, wetEngineSummary, type PaintEditorController, type WetFlowKind, type WetGpuMode } from '@pixerate/editor/paint-editor';
   import PaintSlider from './PaintSlider.svelte';
   import { attempt, button, chip, paintEditorState, panel } from './paintEditorRune.svelte.js';
 
@@ -24,7 +24,7 @@
   const FLOW_LABELS: Record<WetFlowKind, string> = { none: 'None', linear: 'One way', swirl: 'Swirl', radial: 'Outwards', turbulent: 'Eddies' };
 </script>
 
-<!-- Wet media: status, Dry now, Pause, the water overlay, speed, Wet paper, tilt, the active layer's wet settings and flow map, and the kernel in use. -->
+<!-- Wet media: status, Dry now, Pause, the water overlay, speed, Wet paper, tilt, the active layer's wet settings and flow map, the kernel in use, and Engine B (the WebGPU accelerator) with a switch to force the CPU. -->
 <div class={`${panel} ${className}`} data-testid="wet-panel">
   <div class="flex items-center justify-between">
     <span class={wet.wet ? 'text-sky-300' : 'text-slate-400'} data-testid="wet-status">{wet.wet ? (wet.paused ? 'Wet (paused)' : 'Wet') : 'Dry'}</span>
@@ -62,5 +62,12 @@
   {#if backend.backend}
     <p class="text-[10px] text-slate-500">{backend.backend.kind === 'wasm-threads' ? `WebAssembly, ${backend.backend.threads} threads` : backend.backend.kind === 'wasm' ? 'WebAssembly, one thread' : 'JavaScript'}</p>
   {/if}
+  <label class="flex items-center justify-between gap-2">
+    <span class="text-slate-400">Engine</span>
+    <select aria-label="Wet engine" value={wet.gpu} onchange={(e) => run(() => controller.setWetEngine({ gpu: (e.currentTarget as HTMLSelectElement).value as WetGpuMode }))} class="rounded bg-slate-800 px-1 py-0.5">
+      {#each WET_GPU_OPTIONS as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
+    </select>
+  </label>
+  <p class={`text-[10px] ${backend.engine.state === 'active' ? 'text-emerald-300' : 'text-slate-500'}`} data-testid="wet-engine">{wetEngineSummary(backend.engine)}</p>
   {#if error}<p role="alert" class="text-[11px] text-rose-400">{error}</p>{/if}
 </div>

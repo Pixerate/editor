@@ -274,6 +274,82 @@ export function applyProcess2Adjustments(imageData: { data: Uint8ClampedArray },
 }
 
 /**
+ * `applyProcess2Adjustments` on float RGBA for high bit depth: `data` is sRGB-encoded 0..1 (16
+ * bits), or linear light (`linear`, 32 bits, colour may exceed 1). The same stages with no LUT
+ * rounding; the final encode clamps to 0..1 only for encoded data. Opacity is not applied.
+ */
+export function applyProcess2Float(data: Float32Array, adjustments: ImageAdjustments, linear: boolean): void {
+  const hasColor =
+    !!adjustments.brightness ||
+    !!adjustments.contrast ||
+    !!adjustments.saturation ||
+    !!adjustments.exposure ||
+    !!adjustments.temperature ||
+    !!adjustments.tint;
+  if (!hasColor) return;
+  const { m, luts, scale, saturation } = getProcess2Plan(adjustments);
+  const N = TONE_LUT_SIZE;
+  const wr = LUMA_709[0], wg = LUMA_709[1], wb = LUMA_709[2];
+  const c = [0, 0, 0];
+  const dec = (v: number) => (v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+  const enc = (v: number) => (v <= 0 ? 0 : v >= 1 ? 1 : v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055);
+  for (let i = 0; i < data.length; i += 4) {
+    if (!(data[i + 3] > 0)) continue;
+    const r0 = linear ? data[i] : dec(data[i]);
+    const g0 = linear ? data[i + 1] : dec(data[i + 1]);
+    const b0 = linear ? data[i + 2] : dec(data[i + 2]);
+    c[0] = m[0] * r0 + m[1] * g0 + m[2] * b0;
+    c[1] = m[3] * r0 + m[4] * g0 + m[5] * b0;
+    c[2] = m[6] * r0 + m[7] * g0 + m[8] * b0;
+    for (let ch = 0; ch < 3; ch++) {
+      const lut = luts[ch];
+      const v = c[ch];
+      let f: number;
+      if (v <= 0) c[ch] = lut[0];
+      // Past the table: clamp for encoded data; HDR (linear) continues along the curve's end slope.
+      else if ((f = v * scale[ch]) >= N) c[ch] = linear ? lut[N] + (lut[N] - lut[N - 1]) * (f - N) : lut[N];
+      else {
+        const k = f | 0;
+        c[ch] = lut[k] + (lut[k + 1] - lut[k]) * (f - k);
+      }
+    }
+    if (saturation !== 1) {
+      const y = wr * c[0] + wg * c[1] + wb * c[2];
+      for (let ch = 0; ch < 3; ch++) c[ch] = y + (c[ch] - y) * saturation;
+    }
+    for (let ch = 0; ch < 3; ch++) data[i + ch] = linear ? Math.max(0, c[ch]) : enc(c[ch]);
+  }
+}
+
+/** `applyBoxBlur` on float RGBA (any scale), without rounding between the passes. */
+export function applyBoxBlurFloat(imageData: { width: number; height: number; data: Float32Array }, radius: number): void {
+  if (radius < 1) return;
+  const { width: w, height: h, data: src } = imageData;
+  const temp = new Float32Array(src.length);
+  const n = 2 * radius + 1;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const d = (y * w + x) * 4;
+      for (let c = 0; c < 4; c++) {
+        let s = 0;
+        for (let k = -radius; k <= radius; k++) s += src[(y * w + Math.min(w - 1, Math.max(0, x + k))) * 4 + c];
+        temp[d + c] = s / n;
+      }
+    }
+  }
+  for (let x = 0; x < w; x++) {
+    for (let y = 0; y < h; y++) {
+      const d = (y * w + x) * 4;
+      for (let c = 0; c < 4; c++) {
+        let s = 0;
+        for (let k = -radius; k <= radius; k++) s += temp[(Math.min(h - 1, Math.max(0, y + k)) * w + x) * 4 + c];
+        src[d + c] = s / n;
+      }
+    }
+  }
+}
+
+/**
  * Fast separable box blur running horizontally and vertically (`adjustments.blur` and the `blur`
  * layer filter): `radius` pixels each side, edges clamped, rounded after each pass.
  */

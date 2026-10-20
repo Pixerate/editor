@@ -19,6 +19,7 @@ import { perspectiveGuideLines, symmetryAxisSegments, type Point2 } from './guid
 import { stencilOutline, type StencilInput } from './stencils';
 import type { ParticleKind, ParticleRender } from './procedural';
 import type { StampKind } from './stickers';
+import type { WetEngineInfo, WetGpuMode } from './wet';
 import { isPalmTouch, pointerToPenPoint, type PointerSample } from './input';
 import { MAX_ZOOM, MIN_ZOOM, screenToDocument } from './view';
 import { hsvToRgb, parseHexColor, rgbToHexColor, rgbToHsv, wheelToHue, type ColorWheel } from './color';
@@ -409,7 +410,7 @@ export interface BrushEngineControls {
   mixingPath: 'behavior.mixing' | 'blender.mixing' | 'smudge.mixing' | null;
   /** The dirty-brush toggle (`behavior.dirty`). */
   dirty: boolean;
-  /** The multi-colour controls (`behavior.multicolor`). */
+  /** The multi-colour controls (`behavior.multicolor`; the panels show the brush gradient, `brush.paint`, instead). */
   multicolor: boolean;
   /** Load / Clean buttons and a swatch of what the brush carries. */
   load: boolean;
@@ -630,6 +631,31 @@ export const WET_TILT_SLIDERS: readonly SliderControl[] = [
 
 /** The speed slider (steps per second). */
 export const WET_SPEED_SLIDER: SliderControl = { path: 'speed', label: 'Speed', min: 15, max: 480, step: 15 };
+
+/** The wet-engine choices a panel offers (Engine B, the WebGPU accelerator). */
+export const WET_GPU_OPTIONS: readonly { value: WetGpuMode; label: string }[] = [
+  { value: 'auto', label: 'GPU for large washes' },
+  { value: 'off', label: 'CPU only' },
+];
+
+/** One line saying what runs the wet paint (for panels). */
+export function wetEngineSummary(e: WetEngineInfo): string {
+  const gpu = e.adapter ? `GPU (${e.adapter})` : 'GPU';
+  switch (e.state) {
+    case 'off':
+      return 'CPU only (GPU off).';
+    case 'not-started':
+      return 'The GPU starts with the first wet stroke.';
+    case 'starting':
+      return 'Starting the GPU…';
+    case 'active':
+      return `${gpu} shading ${e.activeTiles} wet tiles; the CPU keeps the result.`;
+    case 'standby':
+      return `${gpu} ready; it takes over at ${e.minTiles} wet tiles (${e.activeTiles} now).`;
+    default:
+      return e.reason ?? 'The GPU is not in use.';
+  }
+}
 
 /**
  * Runs the wet paint's clock with the display: `controller.tickWet(now)` every animation frame

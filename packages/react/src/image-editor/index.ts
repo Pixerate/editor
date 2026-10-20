@@ -14,3 +14,4 @@ export * from './FreeTransformOptionsBar';
 export * from './ShapeOptionsBar';
 export * from './TypeOptionsBar';
 export * from './ImageProviderEffectsPanel';
+export * from './PaintGradientEditor';

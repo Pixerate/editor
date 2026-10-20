@@ -1372,10 +1372,13 @@ function crop(v: Float32Array, from: EffectRect, to: EffectRect, fill: number): 
 }
 
 export interface EffectCompositeInput {
-  /** The accumulator (straight RGBA over `rect`); receives the layer and its effects. */
-  backdrop: Uint8ClampedArray;
-  /** The layer's pixels over `rect` (straight RGBA, mask applied to alpha, clipped layers applied). */
-  content: Uint8ClampedArray;
+  /**
+   * The accumulator (straight RGBA over `rect`); receives the layer and its effects. Bytes, or
+   * (high bit depth) floats 0..1 sRGB-encoded, written back unrounded.
+   */
+  backdrop: Uint8ClampedArray | Float32Array;
+  /** The layer's pixels over `rect` (straight RGBA, mask applied to alpha, clipped layers applied); bytes or floats 0..1 as `backdrop`. */
+  content: Uint8ClampedArray | Float32Array;
   rect: EffectRect;
   maps: EffectMaps;
   blend: BlendMode;
@@ -1393,10 +1396,14 @@ export function compositeLayerEffects(input: EffectCompositeInput): void {
   const { backdrop, content, rect, maps, ctx } = input;
   const items = maps.items;
   const n = rect.width * rect.height;
+  // Floats (16 / 32 bits) are already 0..1; bytes scale by 1/255.
+  const cs = content instanceof Float32Array ? 1 : 1 / 255;
+  const bs = backdrop instanceof Float32Array ? 1 : 1 / 255;
+  const floatOut = backdrop instanceof Float32Array;
   const shape = new Float32Array(n);
-  for (let i = 0; i < n; i++) shape[i] = content[i * 4 + 3] / 255;
+  for (let i = 0; i < n; i++) shape[i] = content[i * 4 + 3] * cs;
   const before = new Float32Array(n * 4);
-  for (let i = 0; i < n * 4; i++) before[i] = backdrop[i] / 255;
+  for (let i = 0; i < n * 4; i++) before[i] = backdrop[i] * bs;
   const work = new Float32Array(before);
   const fx = (i: number, k: number) => crop(maps.per[i][k], maps.rect, rect, 0);
   const bounds = maps.bounds ?? rect;
@@ -1431,9 +1438,9 @@ export function compositeLayerEffects(input: EffectCompositeInput): void {
   // The layer: content at fill opacity, then the interior effects, relative to the shape.
   const lay = new Float32Array(n * 4);
   for (let i = 0; i < n; i++) {
-    lay[i * 4] = content[i * 4] / 255;
-    lay[i * 4 + 1] = content[i * 4 + 1] / 255;
-    lay[i * 4 + 2] = content[i * 4 + 2] / 255;
+    lay[i * 4] = content[i * 4] * cs;
+    lay[i * 4 + 1] = content[i * 4 + 1] * cs;
+    lay[i * 4 + 2] = content[i * 4 + 2] * cs;
     lay[i * 4 + 3] = inside(shape[i]) ? fill : 0;
   }
   const premerge = !normalLike;
@@ -1585,6 +1592,11 @@ export function compositeLayerEffects(input: EffectCompositeInput): void {
     const alpha = aa + (ba - aa) * op;
     if (alpha <= 0) {
       backdrop[p] = backdrop[p + 1] = backdrop[p + 2] = backdrop[p + 3] = 0;
+      continue;
+    }
+    if (floatOut) {
+      for (let c = 0; c < 3; c++) backdrop[p + c] = (before[p + c] * aa + (work[p + c] * ba - before[p + c] * aa) * op) / alpha;
+      backdrop[p + 3] = alpha;
       continue;
     }
     for (let c = 0; c < 3; c++) backdrop[p + c] = Math.round(((before[p + c] * aa + (work[p + c] * ba - before[p + c] * aa) * op) / alpha) * 255);

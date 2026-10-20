@@ -182,6 +182,10 @@ drawing or editing either.
    replays the same. To carry dirty paint from stroke to stroke, pass `mixer.loadEachStroke:
    false` and `cleanEachStroke: false`, start with `load_mixer_brush`, read the brush with
    `get_mixer_brush` when unsure, and reset it with `clean_mixer_brush`.
+8. **Gradient paint** (colour that changes as the stroke goes): `set_paint` with `{ type:
+   "gradient", stops, map }`, or `paint_stroke` `paint` for one stroke (brush only). `map.by`
+   `distance` (default 300 px, mirrored) for drag-it-out colour, `pressure`, `direction`,
+   `across-tip`, `random`; stops may be `"paint"` / `"secondary"` (foreground / background).
 
 ### Colour management
 
@@ -373,7 +377,9 @@ in the source frame at the document's bit depth, colour mode and profile. Read
 | `remove_layer_effect` | Delete one effect. To hide it and keep its settings, set `enabled: false` with `update_layer_effect` instead. Returns the remaining effects. |
 | `set_layer_effects_enabled` | Switch all of a layer's effects on or off (`enabled`) and optionally set Scale Effects (`scale`, 1 = 100 %, multiplies sizes, distances and pattern scales). Returns the effects. |
 | `set_global_light` | Set the document light (`angle`, `altitude` in degrees) that every shadow and bevel with `useGlobalLight` follows. Returns the light. |
-| `paint_stroke` | Paint (`tool` brush), blend with the Mixer Brush (`tool` mixer) or erase (`tool` eraser) along `points` in document px (optional `pressure` 0..1) on a pixel layer or its mask (`channel`; the mixer paints pixels only); `color` #rrggbb (on a mask: black hides, white reveals; for the mixer, the reservoir colour); `brush` `{size, hardness, spacing, angle, roundness, opacity, flow, smoothing, pressureSize, pressureOpacity, blend}`; `mixer` `{wet, load, mix, loadEachStroke, cleanEachStroke, mixing: rgb \| pigment}` (tool mixer only). The selection limits the paint. One undo step per call. Returns the layer, channel, changed `bounds`, dab count and, for the mixer, `mixerLoad` `{reservoir, amount, pickup}`. |
+| `paint_stroke` | Paint (`tool` brush), blend with the Mixer Brush (`tool` mixer) or erase (`tool` eraser) along `points` in document px (optional `pressure` 0..1) on a pixel layer or its mask (`channel`; the mixer paints pixels only); `color` #rrggbb (on a mask: black hides, white reveals; for the mixer, the reservoir colour) or `paint` (brush only: a gradient for this stroke); `brush` `{size, hardness, spacing, angle, roundness, opacity, flow, smoothing, pressureSize, pressureOpacity, blend}`; `mixer` `{wet, load, mix, loadEachStroke, cleanEachStroke, mixing: rgb \| pigment}` (tool mixer only). The selection limits the paint. One undo step per call. Returns the layer, channel, changed `bounds`, dab count and, for the mixer, `mixerLoad` `{reservoir, amount, pickup}`. |
+| `set_paint` | Set what the brush paints: one colour (it becomes the foreground) or gradient paint (`stops` sorted by offset, `space` pigment / oklab / srgb, `map`, `softness`). Errors say what is wrong. Returns `paint`, `foreground`, `background`, `brush`. |
+| `get_paint` | Read-only. What the brush paints (`paint`), the foreground and background colours and the brush settings. |
 | `get_mixer_brush` | Read-only. The Mixer Brush settings and what it carries (`reservoir` #rrggbb or null, `amount` left 0..1, `pickup` #rrggbb or null). Call it before a mixer stroke with `loadEachStroke: false`. |
 | `load_mixer_brush` | Fill the Mixer Brush reservoir with `color` (default the foreground), amount 1; keeps the pickup. View state, not an undo step. Use before strokes with `loadEachStroke: false`. Returns the load. |
 | `clean_mixer_brush` | Empty the Mixer Brush pickup well (`emptyReservoir: true` also drops the loaded paint, so it only smears). View state, not an undo step. Returns the load. |

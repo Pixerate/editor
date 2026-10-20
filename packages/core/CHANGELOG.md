@@ -1,5 +1,17 @@
 # @pixerate/editor
 
+## 0.122.0
+
+### Minor Changes
+
+- ef69e0c: Image editor at 16 and 32 bits: layer filters (develop, blur) and layer effects now composite in float in merges, `compositeDeepPixels` and the PSD merged image, instead of being drawn at 8 bits. `compositeLayerEffects` accepts float buffers, and new float filters are `applyProcess2Float`, `applyBoxBlurFloat` and `runLayerFiltersFloat`. Groups with effects and legacy-process develop filters still render at 8 bits.
+
+## 0.121.0
+
+### Minor Changes
+
+- 65b098b: `renderBrushstroke(samples, brush, { scale, color })` in `@pixerate/editor/paint` renders a dry brushstroke on its own, to RGBA bytes and its bounds in path units. Samples are a polyline with pressure, tilt and time, or points plus pressure and tilt profiles along the length. Brushes are tip settings or dry paint-editor presets; wet, mixer, blender, smudge and eraser brushes are refused with an error saying why. `brushstrokeScaleBucket` snaps a zoom to a power of √2, `BrushstrokeCache` keeps recent renders by path, brush, colour and scale, and `brushstrokeDataUrl` / `brushstrokeToCanvas` (with an injected canvas factory) turn the result into a PNG or a canvas. Built on `paintPathStroke`; deterministic and DOM-free.
+
 ## 0.120.0
 
 ### Minor Changes

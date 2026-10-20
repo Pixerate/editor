@@ -11,6 +11,8 @@ import { getNodeRect } from './arrange.js';
 export type FreehandTool = 'select' | 'pen' | 'highlighter' | 'eraser';
 
 import type { CanvasGradientDef } from './gradient.js';
+import { profileAlongPolyline } from './brushstroke.js';
+import type { CanvasBrush, CanvasBrushstroke } from './brushTypes.js';
 
 export interface FreehandStrokeStyle {
 	/** Stroke color (any CSS color string) or gradient definition. */
@@ -25,6 +27,19 @@ export interface FreehandStrokeStyle {
 	join?: 'round' | 'bevel' | 'miter';
 	/** Optional gradient definition for the stroke. */
 	gradient?: CanvasGradientDef;
+	/**
+	 * Paint the stroke with a dry paint brush (a preset id such as `ink-pen`, or tip settings)
+	 * instead of an SVG stroke; `width` is the brush size. Without it strokes are plain vector
+	 * paths, exactly as before.
+	 */
+	brush?: CanvasBrush;
+}
+
+/** Pen data for one freehand point (Pointer Events: pressure 0..1, tilt in degrees). */
+export interface FreehandPenSample {
+	pressure?: number;
+	tiltX?: number;
+	tiltY?: number;
 }
 
 export interface FreehandDrawOptions {
@@ -36,10 +51,34 @@ export interface FreehandDrawOptions {
 	streamline?: number;
 }
 
+/** The Pointer Event fields `pointerPenSample` reads (structural; no DOM types). */
+export interface FreehandPointerLike {
+	pointerType?: string;
+	pressure?: number;
+	tiltX?: number;
+	tiltY?: number;
+}
+
+/**
+ * Pen data of a pointer event for `startStroke` / `continueStroke`: pressure and tilt from pens,
+ * nothing from mice and touch (a mouse reports 0.5 while pressed, which is not pressure). A pen
+ * reporting 0 pressure (some do on the first event) counts as full.
+ */
+export function pointerPenSample(e: FreehandPointerLike): FreehandPenSample | undefined {
+	if (e.pointerType !== 'pen') return undefined;
+	const out: FreehandPenSample = {};
+	if (typeof e.pressure === 'number' && e.pressure > 0) out.pressure = Math.min(1, e.pressure);
+	if (typeof e.tiltX === 'number' && e.tiltX !== 0) out.tiltX = e.tiltX;
+	if (typeof e.tiltY === 'number' && e.tiltY !== 0) out.tiltY = e.tiltY;
+	return out;
+}
+
 export interface FreehandStroke {
 	id: string;
 	tool: FreehandTool;
 	points: Point[];
+	/** Pen data per point (same length as `points`), when the input reported any. Used by brushed strokes. */
+	samples?: FreehandPenSample[];
 	style: FreehandStrokeStyle;
 	startTime?: number;
 }
@@ -144,6 +183,33 @@ export interface StrokeToShapeNodeOptions {
 	id?: string;
 	tolerance?: number;
 	cornerAngleDeg?: number;
+	/** Values per pen profile of a brushed stroke (default 32). */
+	profileLength?: number;
+}
+
+/**
+ * The brush of a brushed stroke node: the style's brush plus pressure and tilt profiles along the
+ * points, from the stroke's pen samples. Profiles that carry nothing (no pressure reported, an
+ * upright pen) are left out.
+ */
+export function freehandBrushstroke(
+	brush: CanvasBrush,
+	points: readonly Point[],
+	samples: readonly FreehandPenSample[] | undefined,
+	profileLength = 32
+): CanvasBrushstroke {
+	const out: CanvasBrushstroke = { brush };
+	if (!samples || samples.length !== points.length) return out;
+	const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+	if (samples.some((s) => finite(s.pressure))) {
+		const pressure = profileAlongPolyline(points, samples.map((s) => (finite(s.pressure) ? Math.min(1, Math.max(0, s.pressure)) : 1)), profileLength);
+		if (pressure.some((p) => p !== 1)) out.pressure = pressure;
+	}
+	for (const key of ['tiltX', 'tiltY'] as const) {
+		if (!samples.some((s) => finite(s[key]) && s[key] !== 0)) continue;
+		out[key] = profileAlongPolyline(points, samples.map((s) => (finite(s[key]) ? Math.min(90, Math.max(-90, s[key])) : 0)), profileLength);
+	}
+	return out;
 }
 
 /**
@@ -197,6 +263,9 @@ export function strokeToShapeNode(
 				strokeLinecap: stroke.style.cap ?? 'round',
 				strokeLinejoin: stroke.style.join ?? 'round',
 				...(strokeGradient ? { strokeGradient } : {}),
+				...(stroke.style.brush !== undefined
+					? { brush: freehandBrushstroke(stroke.style.brush, localPoints, stroke.samples, options.profileLength) }
+					: {}),
 				fill: 'none'
 			},
 			tool: stroke.tool

@@ -165,3 +165,55 @@ describe('wet media agent tools', () => {
     c.dispose();
   });
 });
+
+describe('Engine B (WebGPU) setting, without a GPU', () => {
+  it('reports why the GPU is not used, and forcing the CPU is a setting, not an undo step', async () => {
+    const c = await editor();
+    expect(c.wetEngine()).toMatchObject({ mode: 'auto', state: 'not-started', minTiles: 16 });
+    c.paintStroke({ points: line(), brushId: 'watercolor-round', color: '#1d4ed8' });
+    const info = await c.setWetEngine({});
+    expect(info).toMatchObject({ mode: 'auto', state: 'unavailable', adapter: null, maxTiles: 0 });
+    expect(info.reason).toMatch(/no WebGPU/);
+    expect(info.cpu?.kind).toBe('wasm');
+    const undo = c.getState().undoLabel;
+    const off = await c.setWetEngine({ gpu: 'off', minTiles: 8 });
+    expect(off).toMatchObject({ mode: 'off', state: 'off', minTiles: 8 });
+    expect(c.getState().wet).toMatchObject({ gpu: 'off', gpuActive: false });
+    expect(c.getState().undoLabel).toBe(undo);
+    expect(c.wetState().engine.state).toBe('off');
+    await expect(c.setWetEngine({ gpu: 'fast' as never })).rejects.toThrow(/gpu must be auto or off/);
+    await expect(c.setWetEngine({ minTiles: 0 })).rejects.toThrow(/minTiles 0 is out of range/);
+    c.dispose();
+  });
+
+  it('a GPU that cannot hold enough tiles is unavailable, with the reason', async () => {
+    const tiny = { limits: { maxStorageBufferBindingSize: 16 << 20, maxBufferSize: 16 << 20 }, info: { vendor: 'tiny', architecture: 'test' }, requestDevice: async () => ({}) };
+    const c = new PaintEditorController({ width: 320, height: 256, paper: 'cold-pressed', wet: { kernel: 'wasm', threads: 0, gpuProvider: { requestAdapter: async () => tiny } } });
+    c.paintStroke({ points: line(), brushId: 'watercolor-round', color: '#1d4ed8' });
+    const info = await c.setWetEngine({ gpu: 'auto' });
+    expect(info).toMatchObject({ state: 'unavailable', adapter: 'tiny test' });
+    expect(info.reason).toMatch(/hold 1 wet tiles; at least 4/);
+    c.dispose();
+  });
+
+  it('set_wet_engine and get_wet_paint through the tool registry', async () => {
+    const c = await editor();
+    const reg = new ToolRegistry();
+    reg.register(createPaintEditorToolProvider(c));
+    const parse = (r: { content: Array<{ text?: string }>; structuredContent?: unknown }) => (r.structuredContent ?? JSON.parse(r.content[0].text!)) as Record<string, any>;
+    let r = await reg.callTool('set_wet_engine', { gpu: 'off' });
+    expect(r.isError).toBeFalsy();
+    expect(parse(r).engine).toMatchObject({ mode: 'off', state: 'off' });
+    r = await reg.callTool('get_wet_paint', {});
+    expect(parse(r).engine.mode).toBe('off');
+    r = await reg.callTool('set_wet_engine', { gpu: 'auto', minTiles: 4 });
+    expect(parse(r).engine).toMatchObject({ mode: 'auto', minTiles: 4 });
+    r = await reg.callTool('set_wet_engine', { gpu: 'gpu-only' });
+    expect(r.isError).toBe(true);
+    r = await reg.callTool('set_wet_engine', { gpu: 'auto', minTiles: 0 });
+    expect(r.isError).toBe(true);
+    r = await reg.callTool('set_wet_engine', {});
+    expect(r.isError).toBe(true);
+    c.dispose();
+  });
+});
