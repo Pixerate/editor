@@ -1,6 +1,6 @@
 ---
 name: pixerate-vector
-description: How to draw and edit vector artwork in the Pixerate vector editor through its vector.* commands - adding shapes and SVG paths, text (point, area, on a path, styles, Create Outlines), symbols and instances, fills, strokes, stacked fills and strokes with blend modes, drop shadows, glows and blurs, clipping masks and opacity masks, gradients (linear, radial, conic, Oklab interpolation), stroke alignment, arrowheads, variable-width and tapered strokes, live corner radii, boolean operations and Pathfinder (unite, subtract, divide, trim), Shape Builder, paint bucket, live path effects (trim paths, repeater, zig zag, offset), envelope warps and free distort, blends and morphing, anchor editing (join, smooth, simplify, scissors, knife, eraser), align, distribute, group, stacking order, and SVG import and export. Use when creating an icon, logo, illustration, glyph, badge or any Bezier path artwork, or editing an SVG in a Pixerate vector editor.
+description: How to draw and edit vector artwork in the Pixerate vector editor through its vector.* commands - adding shapes and SVG paths, text (point, area, on a path, styles, Create Outlines), symbols and instances, CAD constraints (parallel, tangent, dimensions, auto-constrain), fills, strokes, stacked fills and strokes with blend modes, drop shadows, glows and blurs, clipping masks and opacity masks, gradients (linear, radial, conic, Oklab interpolation), stroke alignment, arrowheads, variable-width and tapered strokes, live corner radii, boolean operations and Pathfinder (unite, subtract, divide, trim), Shape Builder, paint bucket, live path effects (trim paths, repeater, zig zag, offset), envelope warps and free distort, blends and morphing, anchor editing (join, smooth, simplify, scissors, knife, eraser), align, distribute, group, stacking order, and SVG import and export. Use when creating an icon, logo, illustration, glyph, badge or any Bezier path artwork, or editing an SVG in a Pixerate vector editor.
 ---
 
 # Pixerate vector editor
@@ -36,6 +36,8 @@ carry a live effect stack. Every command is a `vector.*` command run with `run_c
 - **Symbols** are reusable art kept with the document (`vector.listSymbols`), drawn by `instance`
   nodes through a transform that, unlike other nodes', may scale and skew. Editing a symbol
   (`vector.editSymbol` … `vector.exitSymbolEdit`) changes every instance.
+- **Constraints** (CAD-style) keep geometric relations and dimensions between anchors, segments
+  and round paths; they are solved after every edit, so later moves keep them.
 - Coordinates are document units. A rotated node stores its geometry in its own space: the
   `bounds` that `vector.list` reports are document-space, its `d` is the node's own.
 
@@ -61,6 +63,13 @@ Parameter details (gradient fields, effect parameters, width profiles, envelopes
    it over.
 
 ## Best practices
+
+- **Constraints for precise, editable geometry.** For technical drawings, diagrams, floor plans or
+  any shape that must keep exact relations, draw it roughly, run `vector.autoConstrain`, then add
+  the dimensions that matter (`vector.addConstraint` distance / angle / radius) and name them so
+  related sizes follow one another (`vector.setConstraintValue` with expressions like `w / 2`).
+  Check `vector.listConstraints` `dof`: aim for `fully` on parts that must not drift; `over`
+  means some constraints repeat others. Prefer few, meaningful constraints over many.
 
 - **Symbols for repeats.** When the same art appears several times (icons in a set, trees in a
   scene, bullets, a logo mark), make it once and place instances (`vector.makeSymbol`, then
@@ -236,6 +245,16 @@ the browser's shaper they are kept but not drawn until outlines are available.
 | `vector.renameSymbol` | Rename `symbolId` to `name`. Returns the symbol summary. |
 | `vector.deleteSymbol` | Delete `symbolId`; fails while instances use it unless `detach: true` turns them into groups. |
 
+### Constraints
+
+| Command | Use it to |
+| --- | --- |
+| `vector.listConstraints` | Read every constraint (id, kind, refs with anchor ids, value, name, evaluated value, satisfied), the parameters, the degrees of freedom left (`dof`, `status`, `redundant`, per path) and conflicts from the last solve. |
+| `vector.addConstraint` | Add a constraint (`kind`, `refs` by `{ nodeId, subpath, index }` or anchor id, with `segment`, `handle` or `circle`; `value` / `name` / `axis` for dimensions) and solve. Fails, changing nothing, on conflicts or redundancy, naming the others. Returns `{ id, constraint }`. |
+| `vector.removeConstraint` | Remove constraints by `ids`; geometry stays. |
+| `vector.setConstraintValue` | Set a dimension's value (by id or name) or a named parameter (`null` removes a parameter); values are expressions. Returns the summary. |
+| `vector.autoConstrain` | Add what a sketch nearly satisfies (tolerances `distanceTolerance`, `angleTolerance`), skipping redundant or conflicting candidates. Returns `{ ids }`. |
+
 ### Masks and clipping
 
 | Command | Use it to |
@@ -336,6 +355,13 @@ contents whole while you work, without losing the mask.
 - While a symbol is being edited (`vector.listSymbols` `editing`), `vector.list` lists its art, not
   the document. Always finish with `vector.exitSymbolEdit`. A symbol cannot contain an instance
   of itself (directly or through another symbol).
+- Constraint refs to anchors give them stable ids; later anchor edits keep them, but rebuilding a
+  path (booleans, Outline Stroke, Expand) drops them, and constraints on missing anchors are
+  removed. `segment` means the straight line between two anchors, even when the segment is curved;
+  `tangent` / `smooth` on one anchor act on its handles.
+- After any edit the solver moves the rest of the geometry to keep the constraints; the anchors
+  you just moved move least. A fixed or fully constrained part will not move: remove or change a
+  constraint first.
 - `vector.typeOnPath` consumes the path. Duplicate it first if the path should stay visible.
 - A command that fails changes nothing; read its message (for example "Nothing is selected; pass
   ids.") and retry with the missing input.

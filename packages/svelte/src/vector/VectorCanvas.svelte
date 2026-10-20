@@ -444,6 +444,12 @@
         {/if}
       </g>
     {/if}
+    {#each overlay.constraints as c (c.id)}
+      <g data-vector-constraint-glyph={c.kind} data-satisfied={c.satisfied ? 'true' : 'false'}>
+        {#if c.dimension}<line x1={c.dimension.x1} y1={c.dimension.y1} x2={c.dimension.x2} y2={c.dimension.y2} stroke={c.satisfied ? THEME.guide : '#dc2626'} stroke-dasharray="2 2" />{/if}
+        <text x={c.x} y={c.y} font-size="10" text-anchor="middle" fill={c.satisfied ? accentColor : '#dc2626'} stroke="#ffffff" stroke-width="3" paint-order="stroke" style="font-family:system-ui,sans-serif">{c.label}</text>
+      </g>
+    {/each}
     {#if overlay.textBox}
       <rect data-vector-text-box="" x={overlay.textBox.x} y={overlay.textBox.y} width={overlay.textBox.width} height={overlay.textBox.height} stroke={accentColor} stroke-dasharray="3 2" />
     {/if}

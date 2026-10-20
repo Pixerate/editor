@@ -708,6 +708,14 @@ export function VectorCanvas({
             )}
           </g>
         )}
+        {overlay.constraints.map((c) => (
+          <g key={`constraint:${c.id}`} data-vector-constraint-glyph={c.kind} data-satisfied={c.satisfied ? 'true' : 'false'}>
+            {c.dimension && <line x1={c.dimension.x1} y1={c.dimension.y1} x2={c.dimension.x2} y2={c.dimension.y2} stroke={c.satisfied ? THEME.guide : '#dc2626'} strokeDasharray="2 2" />}
+            <text x={c.x} y={c.y} fontSize={10} textAnchor="middle" fill={c.satisfied ? accentColor : '#dc2626'} stroke="#ffffff" strokeWidth={3} paintOrder="stroke" style={{ fontFamily: 'system-ui, sans-serif' }}>
+              {c.label}
+            </text>
+          </g>
+        ))}
         {overlay.textBox && (
           <rect data-vector-text-box="" x={overlay.textBox.x} y={overlay.textBox.y} width={overlay.textBox.width} height={overlay.textBox.height} stroke={accentColor} strokeDasharray="3 2" />
         )}

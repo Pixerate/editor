@@ -1209,3 +1209,27 @@ describe("symbols (react)", () => {
     expect(c.getNode(instanceId)?.type).toBe("group");
   });
 });
+
+describe("constraints (react)", () => {
+  it("adds a constraint from selected anchors, shows its glyph and the DOF, and edits its value", async () => {
+    const c = new VectorEditorController({ document: { width: 400, height: 300, nodes: [{ id: "p", type: "path", fill: null, stroke: "#000", subpaths: [{ closed: false, anchors: [{ x: 0, y: 0 }, { x: 100, y: 4 }] }] }] } });
+    c.setTool("direct");
+    c.select(["p"]);
+    c.selectAnchors([{ nodeId: "p", subpath: 0, index: 0 }, { nodeId: "p", subpath: 0, index: 1 }]);
+    await act(async () => root.render(<><VectorCanvas controller={c} fitOnMount={false} /><VectorStylePanel controller={c} /></>));
+    expect(qa("[data-vector-constraint-action]").map((b) => b.getAttribute("data-vector-constraint-action"))).toEqual(["horizontal", "vertical", "distance", "fix"]);
+    await act(async () => q<HTMLButtonElement>('[data-vector-constraint-action="horizontal"]').click());
+    await act(async () => q<HTMLButtonElement>('[data-vector-constraint-action="distance"]').click());
+    expect(c.getConstraints().map((k) => k.kind)).toEqual(["horizontal", "distance"]);
+    expect(q("[data-vector-dof]")?.textContent).toMatch(/2 degrees of freedom remaining/);
+    expect(qa('[data-vector-constraint-glyph]').length).toBe(2);
+    const input = q<HTMLInputElement>('input[aria-label="Value of d1"]');
+    await act(async () => {
+      input.value = "40";
+      input.dispatchEvent(new FocusEvent("blur", { bubbles: true }));
+      input.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+    });
+    const a = (c.getNode("p") as VectorPathNode).subpaths[0].anchors;
+    expect(Math.hypot(a[1].x - a[0].x, a[1].y - a[0].y)).toBeCloseTo(40, 5);
+  });
+});

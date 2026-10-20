@@ -133,6 +133,19 @@ import { isVectorMaskActive, isVectorMaskGroup, isVectorMaskType, vectorMaskedGe
 import type { TextShaper } from '../text/types.js';
 import { resolveVectorSymbols, stripVectorSymbolArt, vectorSymbolUses } from './symbols.js';
 import {
+	addVectorConstraint,
+	findVectorAnchorById,
+	purgeVectorConstraints,
+	solveVectorConstraints,
+	vectorConstraintDof,
+	vectorConstraintEnv,
+	VectorConstraintError,
+	VECTOR_DIMENSIONAL_KINDS,
+	type VectorDofReport
+} from './constraints/solve.js';
+import { autoConstrainVector, withVectorAnchorIds, type VectorInferOptions } from './constraints/auto.js';
+import { checkVectorExpression, isValidVectorParameterName } from './constraints/expr.js';
+import {
 	DEFAULT_VECTOR_FONT,
 	getVectorTextShaper,
 	layoutVectorText,
@@ -251,7 +264,11 @@ import type {
 	VectorSymbol,
 	VectorInstanceNode,
 	VectorInstanceOverrides,
-	VectorPaint
+	VectorPaint,
+	VectorConstraint,
+	VectorConstraintKind,
+	VectorGeomRef,
+	VectorParameter
 } from './types.js';
 
 // ---------------------------------------------------------------------------
@@ -373,6 +390,26 @@ export interface VectorTextInput extends VectorStyle {
 	font?: Partial<VectorCharacterStyle>;
 	paragraph?: VectorParagraphStyle;
 	name?: string;
+}
+
+/** A constraint reference from loose input: an anchor by `subpath` / `index` (or its `id` as `anchor`), its handle, its segment, or a path as a circle. */
+export interface VectorConstraintRefInput {
+	nodeId: string;
+	subpath?: number;
+	index?: number;
+	anchor?: string;
+	handle?: 'in' | 'out';
+	segment?: boolean;
+	circle?: boolean;
+}
+
+/** A constraint to add (`addConstraint`). */
+export interface VectorConstraintInput {
+	kind: VectorConstraintKind;
+	refs: VectorConstraintRefInput[];
+	value?: string | number;
+	name?: string;
+	axis?: 'aligned' | 'horizontal' | 'vertical';
 }
 
 /** The text being edited on the canvas: the node and the selection in UTF-16 code units (`anchor` where it started, `focus` the caret). */
@@ -538,6 +575,8 @@ export interface VectorEditorState {
 	 * which lines the instance it was entered from up with the art).
 	 */
 	symbolEdit: { symbolId: string; name: string; instanceId: string | null; host: VectorDocument; hostTransform: VectorMatrix | null } | null;
+	/** Constraints the last solve could not satisfy (`conflicts`) or interpret (`skipped`), or null when all hold. */
+	constraintIssues: { conflicts: string[]; skipped: { id: string; message: string }[] } | null;
 	canUndo: boolean;
 	canRedo: boolean;
 	undoLabel: string;
@@ -1363,6 +1402,9 @@ export class VectorEditorController {
 	private textEdit: (VectorTextEditState & { before: Snapshot | null; key: string; created: boolean }) | null = null;
 	private textEditCount = 0;
 	private symbolEdit: SymbolEditContext | null = null;
+	/** The document as last solved: what differs from it was just edited, so the solver moves it least. */
+	private lastSolved: VectorDocument | null = null;
+	private constraintIssues: VectorEditorState['constraintIssues'] = null;
 	private textDefaults: VectorTextDefaults = { ...DEFAULT_VECTOR_FONT };
 	/** What the highlight shows, to skip notifying when the pointer stays over the same face. */
 	private builderHoverKey: string | null = null;
@@ -1476,6 +1518,7 @@ export class VectorEditorController {
 			textEdit: this.textEdit ? { nodeId: this.textEdit.nodeId, anchor: this.textEdit.anchor, focus: this.textEdit.focus } : null,
 			textDefaults: this.textDefaults,
 			symbolEdit: this.symbolEditState(),
+			constraintIssues: this.constraintIssues,
 			canUndo: h.canUndo,
 			canRedo: h.canRedo,
 			undoLabel: h.undoName,
@@ -1495,7 +1538,26 @@ export class VectorEditorController {
 			out = { ...out, symbols: out.symbols.map((s) => (s.id === edit.symbolId ? { ...s, nodes: out.nodes } : s)) };
 		}
 		// Instances draw their symbols' art.
-		return resolveVectorSymbols(out);
+		out = resolveVectorSymbols(out);
+		return this.solved(out);
+	}
+
+	/**
+	 * `doc` with its constraints solved (geometry edited since the last solve moving least) and
+	 * constraints on deleted anchors removed; the same object when nothing changes.
+	 */
+	private solved(doc: VectorDocument): VectorDocument {
+		if (!doc.constraints?.length) {
+			this.constraintIssues = null;
+			this.lastSolved = doc;
+			return doc;
+		}
+		if (this.lastSolved && doc.nodes === this.lastSolved.nodes && doc.constraints === this.lastSolved.constraints && doc.parameters === this.lastSolved.parameters) return doc;
+		const purged = purgeVectorConstraints(doc).document;
+		const r = solveVectorConstraints(purged, this.lastSolved);
+		this.constraintIssues = r.conflicts.length || r.skipped.length ? { conflicts: [...new Set(r.conflicts)], skipped: r.skipped } : null;
+		this.lastSolved = r.document;
+		return r.document;
 	}
 
 	private notify(docChanged = false) {
@@ -4593,7 +4655,7 @@ export class VectorEditorController {
 		const map = (p: Vec2) => applyMatrix(m, p);
 		return from.subpaths.map((sp) => ({
 			closed: sp.closed,
-			anchors: sp.anchors.map((a) => ({ ...map(a), ...(a.in ? { in: map(a.in) } : {}), ...(a.out ? { out: map(a.out) } : {}), ...(a.type ? { type: a.type } : {}), ...(a.corner ? { corner: { ...a.corner } } : {}) }))
+			anchors: sp.anchors.map((a) => ({ ...map(a), ...(a.in ? { in: map(a.in) } : {}), ...(a.out ? { out: map(a.out) } : {}), ...(a.type ? { type: a.type } : {}), ...(a.corner ? { corner: { ...a.corner } } : {}), ...(a.id ? { id: a.id } : {}) }))
 		}));
 	}
 
@@ -7169,6 +7231,174 @@ export class VectorEditorController {
 		this.editingId = null;
 		this.history.endGesture();
 		this.notify(true);
+	}
+
+
+	// -------------------------------------------------------------------------
+	// Constraints
+	// -------------------------------------------------------------------------
+
+	/** The document's constraints. */
+	getConstraints(): readonly VectorConstraint[] {
+		return this.doc.constraints ?? [];
+	}
+
+	/** The document's named parameters. */
+	getParameters(): readonly VectorParameter[] {
+		return this.doc.parameters ?? [];
+	}
+
+	/** Degrees of freedom the constraints leave, and whether any are redundant. */
+	getConstraintDof(): VectorDofReport {
+		return vectorConstraintDof(this.doc);
+	}
+
+	/**
+	 * References from loose input to stable ones: anchors given by `subpath` / `index` get ids (the
+	 * path is updated in `nodes`). Throws on a missing path or anchor.
+	 */
+	private resolveRefs(refs: readonly VectorConstraintRefInput[], nodes: Map<string, VectorPathNode>): VectorGeomRef[] {
+		return refs.map((r, i) => {
+			const node = nodes.get(r.nodeId) ?? (this.getNode(r.nodeId) as VectorNode | undefined);
+			if (!node) throw new VectorConstraintError(`refs[${i}]: there is no node "${r.nodeId}".`);
+			if (node.type !== 'path') throw new VectorConstraintError(`refs[${i}]: "${r.nodeId}" is a ${node.type}; constraints refer to paths.`);
+			if (r.circle) return { nodeId: r.nodeId, circle: true };
+			let anchor = r.anchor;
+			if (anchor === undefined) {
+				if (r.subpath === undefined || r.index === undefined) throw new VectorConstraintError(`refs[${i}]: give an anchor (subpath and index, or its id), or circle: true.`);
+				const sp = node.subpaths[r.subpath];
+				if (!sp?.anchors[r.index]) throw new VectorConstraintError(`refs[${i}]: "${r.nodeId}" has no anchor ${r.index} on subpath ${r.subpath}.`);
+				const withIds = withVectorAnchorIds(node);
+				nodes.set(node.id, withIds);
+				anchor = withIds.subpaths[r.subpath].anchors[r.index].id!;
+			} else if (!findVectorAnchorById(node, anchor)) throw new VectorConstraintError(`refs[${i}]: "${r.nodeId}" has no anchor "${anchor}".`);
+			return { nodeId: r.nodeId, anchor, ...(r.handle ? { handle: r.handle } : {}), ...(r.segment ? { segment: true } : {}) };
+		});
+	}
+
+	private newConstraintId(): string {
+		const used = new Set((this.doc.constraints ?? []).map((c) => c.id));
+		let id = `k${used.size + 1}`;
+		for (let n = used.size + 1; used.has(id); n++) id = `k${n}`;
+		return id;
+	}
+
+	/**
+	 * Adds a constraint: refs by anchor (`subpath` / `index`, or its id), handle, segment or circle;
+	 * dimensional kinds take a `value` expression (default: what the geometry measures now) and a
+	 * `name`. Refuses (changing nothing) one that conflicts with the others or repeats them, naming
+	 * them. One undo step. Returns the new constraint's id.
+	 */
+	addConstraint(input: VectorConstraintInput): VectorActionResult & { id?: string; ids?: string[] } {
+		const nodes = new Map<string, VectorPathNode>();
+		let refs: VectorGeomRef[];
+		try {
+			refs = this.resolveRefs(input.refs, nodes);
+		} catch (e) {
+			return { ok: false, message: e instanceof Error ? e.message : String(e) };
+		}
+		const id = this.newConstraintId();
+		const withIds = nodes.size ? { ...this.doc, nodes: mapTree(this.doc.nodes, (n) => nodes.get(n.id) ?? n) } : this.doc;
+		let next: VectorDocument;
+		try {
+			next = addVectorConstraint(withIds, {
+				id,
+				kind: input.kind,
+				refs,
+				...(input.value !== undefined ? { value: String(input.value) } : {}),
+				...(input.name ? { name: input.name } : {}),
+				...(input.axis && input.axis !== 'aligned' ? { axis: input.axis } : {})
+			});
+		} catch (e) {
+			if (e instanceof VectorConstraintError) return { ok: false, message: e.message, ids: e.ids };
+			throw e;
+		}
+		this.change(`Add ${input.kind[0].toUpperCase()}${input.kind.slice(1)} Constraint`, () => {
+			this.doc = next;
+			this.lastSolved = next;
+		});
+		return { ok: true, id };
+	}
+
+	/** Removes constraints by id. One undo step. */
+	removeConstraints(ids: readonly string[]): VectorActionResult {
+		const set = new Set(ids);
+		const missing = ids.filter((id) => !(this.doc.constraints ?? []).some((c) => c.id === id));
+		if (missing.length) return { ok: false, message: `There is no constraint ${missing.map((m) => `"${m}"`).join(', ')}.` };
+		this.change(ids.length === 1 ? 'Remove Constraint' : 'Remove Constraints', () => {
+			const kept = (this.doc.constraints ?? []).filter((c) => !set.has(c.id));
+			this.doc = { ...this.doc, constraints: kept };
+			if (!kept.length) delete this.doc.constraints;
+		});
+		return { ok: true };
+	}
+
+	/**
+	 * Sets a dimensional constraint's value expression (by id or name), or a named parameter's
+	 * (creating it; `null` removes a parameter), then solves. Refuses (changing nothing) a value
+	 * that does not evaluate or that the constraints cannot meet. One undo step.
+	 */
+	setConstraintValue(key: string, value: string | number | null, options: { merge?: string } = {}): VectorActionResult & { ids?: string[] } {
+		const text = value === null ? null : String(value).trim();
+		const cons = this.doc.constraints ?? [];
+		const c = cons.find((x) => x.id === key || x.name === key);
+		let trial: VectorDocument;
+		if (c) {
+			if (!VECTOR_DIMENSIONAL_KINDS.has(c.kind)) return { ok: false, message: `"${key}" is a ${c.kind} constraint, which has no value.` };
+			if (text === null || text === '') return { ok: false, message: 'A dimensional constraint needs a value; remove the constraint instead.' };
+			trial = { ...this.doc, constraints: cons.map((x) => (x === c ? { ...x, value: text } : x)) };
+		} else {
+			if (!isValidVectorParameterName(key)) return { ok: false, message: `"${key}" is not a constraint or a valid parameter name (a letter or _, then letters, digits or _).` };
+			const params = this.doc.parameters ?? [];
+			if (text === null) {
+				if (!params.some((p) => p.name === key)) return { ok: false, message: `There is no parameter "${key}".` };
+				trial = { ...this.doc, parameters: params.filter((p) => p.name !== key) };
+			} else {
+				trial = { ...this.doc, parameters: params.some((p) => p.name === key) ? params.map((p) => (p.name === key ? { ...p, value: text } : p)) : [...params, { name: key, value: text }] };
+			}
+		}
+		try {
+			if (text !== null) checkVectorExpression(text);
+			// Every dimensional constraint must still evaluate.
+			const env = vectorConstraintEnv(trial);
+			for (const x of trial.constraints ?? []) if (VECTOR_DIMENSIONAL_KINDS.has(x.kind)) (x.name && env.has(x.name) ? env.value(x.name) : env.eval(x.value ?? ''));
+		} catch (e) {
+			return { ok: false, message: `${key}: ${e instanceof Error ? e.message : String(e)}` };
+		}
+		const r = solveVectorConstraints(trial, null);
+		if (!r.converged) return { ok: false, message: `The constraints cannot meet ${key} = ${text}: it conflicts with ${[...new Set(r.conflicts)].map((i) => `"${i}"`).join(', ')}.`, ids: r.conflicts };
+		this.change(c ? 'Constraint Value' : 'Parameter', () => {
+			this.doc = r.document;
+			this.lastSolved = r.document;
+		}, options.merge);
+		return { ok: true };
+	}
+
+	/**
+	 * Auto-constrain: constraints the paths `ids` (default the selection, or every path) nearly
+	 * satisfy, added one by one (redundant or conflicting ones skipped). One undo step. Returns the
+	 * ids of the constraints added.
+	 */
+	autoConstrain(options: { ids?: readonly string[] } & VectorInferOptions = {}): VectorActionResult & { ids?: string[] } {
+		const { ids, ...infer } = options;
+		const roots = ids ?? (this.selection.length ? this.selection : null);
+		if (roots) for (const id of roots) if (!this.getNode(id)) return { ok: false, message: `There is no node "${id}".` };
+		const used = new Set((this.doc.constraints ?? []).map((c) => c.id));
+		let n = used.size;
+		const newId = () => {
+			let id = `k${++n}`;
+			while (used.has(id)) id = `k${++n}`;
+			used.add(id);
+			return id;
+		};
+		const pathIds = roots ? roots.flatMap((id) => collectPathNodes(this.getNode(id)!).map((p) => p.id)) : null;
+		const r = autoConstrainVector(this.doc, pathIds, newId, infer);
+		if (!r.added.length) return { ok: true, ids: [] };
+		this.change('Auto Constrain', () => {
+			this.doc = r.document;
+			this.lastSolved = r.document;
+		});
+		return { ok: true, ids: r.added.map((c) => c.id) };
 	}
 
 	// -------------------------------------------------------------------------

@@ -68,7 +68,8 @@ export const cloneAnchor = (a: VectorAnchor): VectorAnchor => ({
 	...(a.in ? { in: { x: a.in.x, y: a.in.y } } : {}),
 	...(a.out ? { out: { x: a.out.x, y: a.out.y } } : {}),
 	...(a.type && a.type !== 'corner' ? { type: a.type } : {}),
-	...(a.corner ? { corner: { ...a.corner } } : {})
+	...(a.corner ? { corner: { ...a.corner } } : {}),
+	...(a.id ? { id: a.id } : {})
 });
 
 export const cloneSubpath = (s: VectorSubpath): VectorSubpath => ({ anchors: s.anchors.map(cloneAnchor), closed: s.closed });
@@ -479,6 +480,7 @@ function mapAnchor(a: VectorAnchor, m: AffineMatrix): VectorAnchor {
 	if (a.out) next.out = applyMatrix(m, a.out);
 	if (a.type) next.type = a.type;
 	if (a.corner) next.corner = { ...a.corner };
+	if (a.id) next.id = a.id;
 	return next;
 }
 
@@ -696,6 +698,7 @@ export function reverseSubpath(sp: VectorSubpath): VectorSubpath {
 			if (a.in) next.out = { ...a.in };
 			if (a.type) next.type = a.type;
 			if (a.corner) next.corner = { ...a.corner };
+			if (a.id) next.id = a.id;
 			return next;
 		});
 	return { anchors, closed: sp.closed };

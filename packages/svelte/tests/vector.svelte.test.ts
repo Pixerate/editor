@@ -1147,3 +1147,26 @@ describe("symbols (svelte)", () => {
     expect(c.getNode(instanceId)?.type).toBe("group");
   });
 });
+
+describe("constraints (svelte)", () => {
+  it("adds a constraint from selected anchors, shows its glyph and the DOF, and edits its value", () => {
+    const c = new VectorEditorController({ document: { width: 400, height: 300, nodes: [{ id: "p", type: "path", fill: null, stroke: "#000", subpaths: [{ closed: false, anchors: [{ x: 0, y: 0 }, { x: 100, y: 4 }] }] }] } });
+    c.setTool("direct");
+    c.select(["p"]);
+    c.selectAnchors([{ nodeId: "p", subpath: 0, index: 0 }, { nodeId: "p", subpath: 0, index: 1 }]);
+    const t = render(VectorCanvas, { controller: c, fitOnMount: false });
+    const panel = render(VectorStylePanel, { controller: c });
+    expect([...panel.querySelectorAll("[data-vector-constraint-action]")].map((b) => b.getAttribute("data-vector-constraint-action"))).toEqual(["horizontal", "vertical", "distance", "fix"]);
+    click(panel.querySelector('[data-vector-constraint-action="horizontal"]'));
+    click(panel.querySelector('[data-vector-constraint-action="distance"]'));
+    expect(c.getConstraints().map((k) => k.kind)).toEqual(["horizontal", "distance"]);
+    expect(panel.querySelector("[data-vector-dof]")?.textContent).toMatch(/2 degrees of freedom remaining/);
+    expect(t.querySelectorAll("[data-vector-constraint-glyph]").length).toBe(2);
+    const input = panel.querySelector<HTMLInputElement>('input[aria-label="Value of d1"]')!;
+    input.value = "40";
+    input.dispatchEvent(new FocusEvent("blur"));
+    flushSync();
+    const a = (c.getNode("p") as VectorPathNode).subpaths[0].anchors;
+    expect(Math.hypot(a[1].x - a[0].x, a[1].y - a[0].y)).toBeCloseTo(40, 5);
+  });
+});

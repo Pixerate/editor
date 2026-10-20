@@ -58,6 +58,7 @@ import {
 } from './appearance.js';
 import { layoutVectorText, vectorTextPaintSource, vectorTextBoxOutline, vectorTextCaret, vectorTextGeometryNode, vectorTextHasOutlines, vectorTextSelectionQuads, vectorTextSpans, vectorTextSpanSvg, type VectorRenderTextSpan } from './text.js';
 import { applyMatrix } from '../geom/affine.js';
+import { vectorConstraintGlyphs } from './constraints/glyphs.js';
 import { isVectorMaskActive, isVectorMaskGroup, vectorMaskRenderData, vectorMaskSummary, type VectorMaskRenderData, type VectorMaskSummary } from './mask.js';
 import { vectorMeshEditPoints, vectorMeshGridCurves, VECTOR_WARP_STYLES, VECTOR_WARP_STYLE_LABELS } from './warp.js';
 import { VECTOR_EFFECT_TYPES, type VectorEffectType } from './types.js';
@@ -385,6 +386,12 @@ export interface VectorOverlayRenderData {
 	text: { nodeId: string; frame: string; caret: { x1: number; y1: number; x2: number; y2: number } | null; selection: string[]; overflow: Vec2 | null; editing: boolean } | null;
 	/** The Type tool's area text box being dragged out (screen space). */
 	textBox: VectorBounds | null;
+	/**
+	 * Constraint glyphs of the selected or edited paths (screen space): a label at (`x`, `y`) (a
+	 * glyph, or `name = value`), a dimension line for distances, `satisfied` false when the solve
+	 * could not meet it (draw it in a warning colour).
+	 */
+	constraints: { id: string; kind: string; label: string; x: number; y: number; dimension: { x1: number; y1: number; x2: number; y2: number } | null; satisfied: boolean }[];
 	/** A short status, e.g. "W 120 × H 80" or "45°". */
 	status: string | null;
 }
@@ -627,6 +634,23 @@ function outlinePaths(node: VectorNode, parent: AffineMatrix, entered: ReadonlyS
 	return node.children.filter((c) => c.visible !== false).flatMap((c) => outlinePaths(c, m, entered));
 }
 
+/** Constraint glyphs of what is selected or edited (see `VectorOverlayRenderData.constraints`). */
+function constraintOverlay(state: VectorEditorState): VectorOverlayRenderData['constraints'] {
+	if (!state.document.constraints?.length) return [];
+	const ids = new Set([...state.selection, ...(state.editingId ? [state.editingId] : []), ...state.selectedAnchors.map((a) => a.nodeId)]);
+	for (const id of [...ids]) {
+		const n = findVectorNode(state.document.nodes, id);
+		if (n?.type === 'group') walkVectorNodes(n.children, (c) => ids.add(c.id));
+	}
+	if (!ids.size) return [];
+	const conflicts = new Set(state.constraintIssues?.conflicts ?? []);
+	return vectorConstraintGlyphs(state.document, ids).map((g) => {
+		const at = toScreen(state, g.at);
+		const d = g.dimension ? { a: toScreen(state, g.dimension.a), b: toScreen(state, g.dimension.b) } : null;
+		return { id: g.id, kind: g.kind, label: g.label, x: at.x, y: at.y - 10, dimension: d ? { x1: d.a.x, y1: d.a.y, x2: d.b.x, y2: d.b.y } : null, satisfied: g.satisfied && !conflicts.has(g.id) };
+	});
+}
+
 /** The text editing overlay (see `VectorOverlayRenderData.text`). */
 function textOverlay(state: VectorEditorState): VectorOverlayRenderData['text'] {
 	const edit = state.textEdit;
@@ -859,7 +883,7 @@ export function getVectorOverlayRenderData(state: VectorEditorState): VectorOver
 		const tl = toScreen(state, b);
 		textBox = { x: tl.x, y: tl.y, width: b.width * z, height: b.height * z };
 	}
-	return { outlines, selectionBox, distort, anchors, handles, marquee, penPreview, artboard, guides, status, toolStroke, pencilString, cutPoint, cornerWidgets, widthPoints, widthSpot, builder, blend, gradient, envelope, masks: maskOverlay(state), text: textOverlay(state), textBox };
+	return { outlines, selectionBox, distort, anchors, handles, marquee, penPreview, artboard, guides, status, toolStroke, pencilString, cutPoint, cornerWidgets, widthPoints, widthSpot, builder, blend, gradient, envelope, masks: maskOverlay(state), text: textOverlay(state), textBox, constraints: constraintOverlay(state) };
 }
 
 /** Mask indicators of the mask groups that are selected or hold the selection (see `VectorOverlayRenderData.masks`). */

@@ -52,6 +52,12 @@ export interface VectorAnchor {
 	type?: VectorAnchorType;
 	/** Live corner radius. Ignored on smooth / symmetric anchors and the ends of open subpaths. */
 	corner?: VectorCorner | null;
+	/**
+	 * A stable id, unique within its path, given when a constraint refers to the anchor (see
+	 * `VectorConstraint`). Edits that move or restyle the anchor keep it; edits that rebuild a path
+	 * drop it, and constraints on a dropped anchor are removed.
+	 */
+	id?: string;
 }
 
 /** A chain of anchors joined by line or cubic Bézier segments. */
@@ -585,6 +591,93 @@ export interface VectorDocument {
 	nodes: VectorNode[];
 	/** Symbols the document's instances draw (see `VectorInstanceNode`). */
 	symbols?: VectorSymbol[];
+	/** Constraints between anchors, segments and circles, solved after every edit. */
+	constraints?: VectorConstraint[];
+	/** Named values the constraints' expressions use. */
+	parameters?: VectorParameter[];
+}
+
+/**
+ * Constraint kinds (CAD-style parametric drawing). Geometric: `coincident` (two points, a point on
+ * a segment's line, or a point on a circle), `collinear` (two segments on one line), `concentric`
+ * (two circles, or a circle's centre on a point), `fix`, `parallel`, `perpendicular`, `horizontal`
+ * / `vertical` (a segment, or two points level), `tangent` (a segment and a circle, two circles, or
+ * G1 at an anchor: its handles in line), `smooth` (G2 at an anchor: G1 and equal curvature),
+ * `symmetric` (two points about a segment's line) and `equal` (segment lengths or radii).
+ * Dimensional (with a `value`): `distance`, `angle` (degrees), `radius` and `diameter`.
+ */
+export type VectorConstraintKind =
+	| 'coincident'
+	| 'collinear'
+	| 'concentric'
+	| 'fix'
+	| 'parallel'
+	| 'perpendicular'
+	| 'horizontal'
+	| 'vertical'
+	| 'tangent'
+	| 'smooth'
+	| 'symmetric'
+	| 'equal'
+	| 'distance'
+	| 'angle'
+	| 'radius'
+	| 'diameter';
+export const VECTOR_CONSTRAINT_KINDS: readonly VectorConstraintKind[] = [
+	'coincident',
+	'collinear',
+	'concentric',
+	'fix',
+	'parallel',
+	'perpendicular',
+	'horizontal',
+	'vertical',
+	'tangent',
+	'smooth',
+	'symmetric',
+	'equal',
+	'distance',
+	'angle',
+	'radius',
+	'diameter'
+];
+
+/**
+ * What a constraint refers to: an anchor of a path (by its stable `id`), one of the anchor's
+ * handles, the segment from the anchor to the next one, or (no `anchor`) a whole path as a circle
+ * (its centre and radius, for closed round paths).
+ */
+export interface VectorGeomRef {
+	nodeId: string;
+	/** The anchor's `id` (see `VectorAnchor.id`). */
+	anchor?: string;
+	/** With `anchor`: the handle instead of the anchor point. */
+	handle?: 'in' | 'out';
+	/** With `anchor`: the segment from it to the next anchor. */
+	segment?: boolean;
+	/** Without `anchor`: the path as a circle. */
+	circle?: boolean;
+}
+
+/** A constraint kept by the document and solved after every edit. */
+export interface VectorConstraint {
+	id: string;
+	kind: VectorConstraintKind;
+	refs: VectorGeomRef[];
+	/** Dimensional constraints: the value as an expression (document units, degrees for angles), e.g. `"40"` or `"w / 2"`. */
+	value?: string;
+	/** Dimensional constraints: a name other expressions can use (`d1`, `ang2`). */
+	name?: string;
+	/** `distance`: measured along the line between (default), or only horizontally or vertically. */
+	axis?: 'aligned' | 'horizontal' | 'vertical';
+}
+
+/** A named value constraints' expressions can use. */
+export interface VectorParameter {
+	name: string;
+	/** An expression (numbers, other names, `+ - * /`, parentheses, `pi`). */
+	value: string;
+	description?: string;
 }
 
 /** An axis-aligned rectangle. */
