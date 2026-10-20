@@ -11,7 +11,7 @@
 
 import type { MixerLoad } from '../paint/exchange';
 import { BLEND_MODES, type BlendModeInfo } from '../raster/blend';
-import type { PaintBrush, PaintBrushInput } from './brushes';
+import type { PaintBrush, PaintBrushInput, WetTool } from './brushes';
 import { TILE, type RasterRect } from '../raster/surface';
 import type { PaintEditorController } from './controller';
 import type { PenPoint } from './engine';
@@ -404,6 +404,8 @@ export interface BrushEngineControls {
   multicolor: boolean;
   /** Load / Clean buttons and a swatch of what the brush carries. */
   load: boolean;
+  /** The wet tool menu (`wet.tool`, `WET_TOOLS`). */
+  wetTool?: boolean;
 }
 
 const PICKUP_SLIDERS: readonly SliderControl[] = [
@@ -418,8 +420,27 @@ const PICKUP_SLIDERS: readonly SliderControl[] = [
  * pigment choice; dab and mixer brushes also have the dirty and multi-colour controls. Pick-up
  * and mix always go through `behavior`, which keeps a Mixer Brush's `mixer` block in sync.
  */
-export function brushEngineControls(brush: Pick<PaintBrush, 'engine'>): BrushEngineControls | null {
+export function brushEngineControls(brush: Pick<PaintBrush, 'engine'> & { wet?: PaintBrush['wet'] }): BrushEngineControls | null {
   switch (brush.engine) {
+    case 'wet': {
+      const tool = brush.wet?.tool ?? 'paint';
+      const sliders: SliderControl[] =
+        tool === 'paint'
+          ? [
+              { path: 'wet.water', label: 'Water', min: 0, max: 1, step: 0.01 },
+              { path: 'wet.pigment', label: 'Pigment', min: 0, max: 1, step: 0.01 },
+              { path: 'wet.body', label: 'Body (opacity)', min: 0, max: 1, step: 0.01 },
+              { path: 'wet.rewet', label: 'Re-wet', min: 0, max: 1, step: 0.01 },
+              ...PICKUP_SLIDERS,
+            ]
+          : tool === 'water'
+            ? [
+                { path: 'wet.water', label: 'Water', min: 0, max: 1, step: 0.01 },
+                { path: 'wet.rewet', label: 'Re-wet', min: 0, max: 1, step: 0.01 },
+              ]
+            : [{ path: 'wet.strength', label: 'Strength', min: 0, max: 1, step: 0.01 }];
+      return { title: 'Wet brush', sliders, mixingPath: tool === 'paint' ? 'behavior.mixing' : null, dirty: tool === 'paint', multicolor: false, load: tool === 'paint', wetTool: true };
+    }
     case 'blender':
       return {
         title: 'Blender',
@@ -484,4 +505,83 @@ export const PAD_SAMPLE_SIZES: readonly number[] = [1, 3, 5, 9, 15];
 /** The averaging radius `mixingPadPick` takes for a sample size: 1 → 0, 3 → 1, 5 → 2 … */
 export function padSampleRadius(size: number): number {
   return Math.max(0, Math.floor((size - 1) / 2));
+}
+
+// ---------------------------------------------------------------------------
+// Wet media
+// ---------------------------------------------------------------------------
+
+/** Labels of the wet tools, for the wet brush's tool menu. */
+export const WET_TOOL_LABELS: Readonly<Record<WetTool, string>> = {
+  paint: 'Paint',
+  water: 'Add water',
+  dry: 'Dry',
+  blow: 'Blow',
+  blend: 'Blend',
+  smudge: 'Smudge',
+  blot: 'Blot (erase wet)',
+};
+
+/** The wet panel's sliders for a layer's wet settings (paths into `WetParams`). */
+export const WET_PARAM_SLIDERS: readonly SliderControl[] = [
+  { path: 'viscosity', label: 'Viscosity', min: 0, max: 1, step: 0.01 },
+  { path: 'evaporation', label: 'Evaporation', min: 0, max: 1, step: 0.01 },
+  { path: 'edgeDarkening', label: 'Edge darkening', min: 0, max: 1, step: 0.01 },
+  { path: 'granulation', label: 'Granulation', min: 0, max: 1, step: 0.01 },
+  { path: 'bloom', label: 'Blooms', min: 0, max: 1, step: 0.01 },
+  { path: 'bleed', label: 'Colour bleed', min: 0, max: 1, step: 0.01 },
+  { path: 'pigmentWeight', label: 'Pigment weight', min: 0, max: 1, step: 0.01 },
+  { path: 'pickup', label: 'Lifting', min: 0, max: 1, step: 0.01 },
+  { path: 'fixture', label: 'Staining', min: 0, max: 1, step: 0.01 },
+];
+
+/** The canvas tilt sliders. */
+export const WET_TILT_SLIDERS: readonly SliderControl[] = [
+  { path: 'angle', label: 'Tilt', min: 0, max: 90, step: 1 },
+  { path: 'direction', label: 'Downhill', min: 0, max: 359, step: 1 },
+];
+
+/** The speed slider (steps per second). */
+export const WET_SPEED_SLIDER: SliderControl = { path: 'speed', label: 'Speed', min: 15, max: 480, step: 15 };
+
+/**
+ * Runs the wet paint's clock with the display: `controller.tickWet(now)` every animation frame
+ * (it does nothing while nothing is wet or time is paused). Returns a function that stops it.
+ * Bindings call it once per mounted canvas.
+ */
+export function startWetClock(controller: PaintEditorController, frame?: (cb: (t: number) => void) => number, cancel?: (id: number) => void): () => void {
+  const g = globalThis as { requestAnimationFrame?: (cb: (t: number) => void) => number; cancelAnimationFrame?: (id: number) => void };
+  const raf = frame ?? g.requestAnimationFrame;
+  const caf = cancel ?? g.cancelAnimationFrame;
+  if (!raf) return () => {};
+  let stopped = false;
+  let id = 0;
+  const loop = (t: number) => {
+    if (stopped) return;
+    controller.tickWet(t).catch(() => {});
+    id = raf(loop);
+  };
+  id = raf(loop);
+  return () => {
+    stopped = true;
+    caf?.(id);
+  };
+}
+
+/**
+ * Draws the water overlay (blue where the surface is wet, faint where the paper is damp) into a
+ * document-sized 2D context, clearing it first. Draws nothing when the overlay is off.
+ */
+export function drawWaterOverlay(controller: PaintEditorController, ctx: Paint2DContext & { clearRect(x: number, y: number, w: number, h: number): void }): number {
+  const { width, height } = controller.document.canvas;
+  ctx.clearRect(0, 0, width, height);
+  if (!controller.getState().wet.overlay) return 0;
+  const tiles = controller.waterOverlayTiles({ x: 0, y: 0, width, height });
+  if (!tiles.length) return 0;
+  const img = ctx.createImageData(TILE, TILE);
+  for (const t of tiles) {
+    img.data.set(t.data);
+    ctx.putImageData(img as never, t.tx * TILE, t.ty * TILE, 0, 0, Math.min(TILE, width - t.tx * TILE), Math.min(TILE, height - t.ty * TILE));
+  }
+  return tiles.length;
 }

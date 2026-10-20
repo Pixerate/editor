@@ -354,8 +354,9 @@ const FEATURES: ParityRow[] = [
   row("Painting Guides (symmetry, perspective, tracing, references)", "setSymmetry, PerspectiveSnapper, setTracingImage", "<PaintToolbar> & <PaintCanvas>", "<PaintToolbar> & <PaintCanvas>", "Mirror and kaleidoscope as one stroke; 1–3 vanishing points; tracing in the view only with colour sampling; floating references to pick from"),
   row("Paint Colour (wheel, harmonies, swatches, mixing pad)", "colorHarmony, MixingPad", "<ColorPanel>", "<ColorPanel>", "RYB or RGB wheel; a mixing pad with a pigment Mixer Brush and palette knife"),
   row("Paint Layers", "addLayer, updateLayer, mergeDown", "<PaintLayersPanel>", "<PaintLayersPanel>", "Pixel layers and groups, opacity, blend, clipping, locks"),
+  row("Wet Media", "WetWorld, PaintWetLayers, tickWet & dryPaint", "<WetPanel> & <PaintCanvas> wet clock", "<WetPanel> & <PaintCanvas> wet clock", "Watercolour and gouache on a fluid simulation (wasm SIMD in workers); dried on save; 9 wet agent tools"),
   row("Paint Agent Cursors", "PaintDirector & PaintPresence", "usePaintDirector & <PaintEditor presence>", "createPaintDirector & <PaintEditor presence>", "Agent strokes painted live by a cursor on the canvas; one undo step per call"),
-  row("Strokes as Data & Paint Agent Tools", "replayStrokes, createPaintEditorToolProvider", "useAgentToolProvider", "useAgentToolProvider", "61 tools; strokes replay exactly or varied; pixerate-paint-editor skill"),
+  row("Strokes as Data & Paint Agent Tools", "replayStrokes, createPaintEditorToolProvider", "useAgentToolProvider", "useAgentToolProvider", "76 tools; strokes replay exactly or varied; pixerate-paint-editor skill"),
   ...PRODUCTIVITY_FEATURES,
 ];
 

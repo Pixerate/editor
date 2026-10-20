@@ -2205,3 +2205,45 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Keys typed right after clicking the canvas with the Type tool were lost, and IME (composed) text never arrived when keys were read from `window`.
 - **Root Cause**: The canvas cannot take text input. Focus has to move to an element that can, and that element only exists once the click has opened a `TextEditSession` (after the pointer is released). Composed text comes as `compositionend` / `input`, not as `keydown` keys.
 - **Solution / Workaround**: Both editors render a 1 px transparent `<textarea data-testid="type-input">` while a session is open and focus it on the next tick after mouse-up. `keydown` goes to `TextEditSession.handleKey` (single characters, Backspace, Delete, Enter, arrows, Home / End, Cmd/Ctrl+A) unless `isComposing`; `compositionend` and `input` insert the composed or pasted text and clear the textarea. Cmd/Ctrl+Z / C / X / V are left to the browser. All edits of one session are one undo step (the first change records history, the rest pass `commitToHistory: false`). Automated tests type into the textarea; a browser driver that types immediately after the click can beat the focus.
+
+### [core/paint] The Wet Kernels Only Agree Bit for Bit If Every Operation Is the Same f32 Operation
+
+- **Issue / Symptom**: After adding the edge field, the TypeScript and WebAssembly wet kernels drifted apart (different state hashes after a few steps), although the maths was "the same".
+- **Root Cause**: The TypeScript kernel is the specification and must round every intermediate to f32 (`Math.fround`) in exactly the SIMD kernel's order. One constant, `0.99`, was multiplied as an f64 literal in TypeScript but splatted as an f32 in AssemblyScript. (Rounding an f64 `+ − × ÷ √` of two f32 values once to f32 *is* the f32 operation, so `F(a * b)` matches `f32x4.mul`; an f64 constant breaks that.)
+- **Solution / Workaround**: Declare every non-trivial constant once as `F(value)` (`DECAY`, `W0`…) and use it; never write a decimal literal inside a kernel expression unless it is exact in binary (0.25, 0.5, 1.5, 4.5). Keep masked SIMD lanes' maths identical to the scalar branch (compute both, select). `tests/paint-wet-kernel.test.ts` compares the two kernels' state hashes and checks that `kernel-wasm.ts` was generated from the current `assembly/wet.ts` (`pnpm --filter @pixerate/editor build:wasm`).
+
+### [core/paint] Wet Media Is Only Deterministic If Nothing Depends on When Batches End
+
+- **Issue / Symptom**: The same strokes could dry differently depending on frame rate, worker count or how many steps each frame ran.
+- **Root Cause**: Anything decided at a batch boundary (waking tiles, baking and freeing dry ones) depends on where the boundaries fall, and frames decide those.
+- **Solution / Workaround**: Time is the step `clock`, never wall time; edits (dabs) happen between batches and record the clock. Batches are at most `MAX_BATCH` (32) steps and never cross a multiple of `FREE_INTERVAL`. Tiles wake when anything *alive* (water on the surface or in the paper) comes within `STRIP` (64) cells of their edge, which stays ahead of anything that moves a cell a step, so an earlier or later wake-up changes nothing. Dry tiles are baked and freed only on multiples of `FREE_INTERVAL`, from the last step's flags (not the batch's), and only when no neighbour is alive. Dry cells must compute to exactly zero (that is why the edge field is 0 where dry). The tests run the same scene in different batchings and on 1–10 workers (in a browser) and compare hashes.
+
+### [core/paint] `Math.exp` and `Math.pow` Differ Between JavaScript Engines, So the Dry-on-Save Bake Uses Its Own
+
+- **Issue / Symptom**: A wet painting baked in Chrome and in Safari could differ by a level on a few pixels, which breaks "the saved file is the same everywhere".
+- **Root Cause**: Only `+ − × ÷` and `Math.sqrt` are correctly rounded in JavaScript; `exp`, `log`, `pow`, `sin`, `cos` come from each engine's own maths library.
+- **Solution / Workaround**: `film.ts` has `dexp` / `dlog` / `dpow` built from `+ − ×` only, and the sRGB tables and the `e^(−x)` table are made with them. Paper heights are quantised to 1/65536 and dab coverage to 1/4096 before they reach the simulation, so last-bit differences in the grain generator or the dab rasterizer (which use `Math.sin`) almost never matter. Flow maps use `dsincos`.
+
+### [core/paint] A Glaze Must Be Shaded Over What Is Below as the Compositor Blends It
+
+- **Issue / Symptom**: Blue glazed over a dried yellow wash came out blue-grey instead of green.
+- **Root Cause**: The film was laid over the layer pixel mixed with the paper in *linear* light, but the compositor blends a semi-transparent pixel over the paper in *encoded* sRGB. A dark yellow channel at alpha 0.9 is 10 % of the paper in linear light (bright) but 0.1 × 255 encoded (dark), so the glaze saw a much lighter yellow than the screen showed.
+- **Solution / Workaround**: `filmPixel` / `shadeTile` blend the pixel over the paper in encoded values first (`a·C + (1 − a)·P`) and only then convert to linear (`srgbByteToLinear` interpolates the byte table). The result goes back as colour plus alpha over the paper colour (exact over the paper), never lowering the pixel's own alpha.
+
+### [core/paint] Web Workers From a Library: `Function.prototype.toString` Needs a Self-Contained Function
+
+- **Issue / Symptom**: A worker built from a function's source failed with "x is not defined" in a consumer's minified bundle.
+- **Root Cause**: `toString()` gives only the function body; anything it refers to outside itself (an imported constant, a helper) is not in the worker.
+- **Solution / Workaround**: `wetWorkerMain` uses nothing outside its own body: every address and size arrives in the `init` message, and the kernel (halo exchange included) is in the wasm module. The pool runs it from a Blob URL, so hosts serve no extra file. CSPs that forbid `blob:` workers make the pool fail, and the world falls back to one thread with a warning.
+
+### [core|demo/paint] Threads Need Cross-Origin Isolation; GitHub Pages Cannot Send the Headers
+
+- **Issue / Symptom**: In the deployed demo wet paint runs on one thread and the Wet panel says why; locally it uses every core.
+- **Root Cause**: Shared wasm memory needs `SharedArrayBuffer`, which browsers give only to cross-origin isolated pages (`Cross-Origin-Opener-Policy: same-origin` plus `Cross-Origin-Embedder-Policy: require-corp` or `credentialless`). GitHub Pages cannot set response headers.
+- **Solution / Workaround**: The demo's Vite dev and preview servers send COOP `same-origin` and COEP `credentialless` (which, unlike `require-corp`, still loads cross-origin images without CORP headers). Without isolation the world steps on one thread (wasm SIMD, about 1/8 the speed on a 10-core machine) and `wetSupport().message` explains how to turn threads on. Results are identical either way.
+
+### [core/paint-editor] Wet Layer Pixels Change Without Undo Steps, and Undo Restores a Snapshot
+
+- **Issue / Symptom**: Undoing a watercolour stroke while other paint was still wet showed the wrong wet paint, and a fill on a wet layer could be overwritten by the next frame.
+- **Root Cause**: A wet layer's pixels are the simulation's display: every frame replaces the layer's surface in the document (not an undo step). History entries hold documents, but the wet state lives in the world.
+- **Solution / Workaround**: Every operation that changes wet paint takes a world snapshot before it (`beginWetOp`) and after it, kept on the history entry within `undoMemory` (oldest dropped: undoing past them leaves that paint dry). Undo and redo restore the snapshot with the document. Non-wet operations on a wet layer (a dry brush, fill, merge, duplicate, resize) dry it first inside the same undo step. Operations that touch the world while a worker batch runs throw; async callers (the agent tools, the Wet panel) `await controller.wetIdle()` first.

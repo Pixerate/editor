@@ -28,4 +28,14 @@ describe("paint agent scripts", () => {
     expect(glaze).toMatchObject({ blend: "watercolor", opacity: 0.45 });
     expect(controller.getStrokes().map((s) => s.brush.id)).toEqual(["oil-pastel", "dirty-round", "blender", "multicolor-flat"]);
   }, 60_000);
+
+  it("paints a watercolour: wet-in-wet sky, blotted clouds, granulating hills, all dried", async () => {
+    const { controller, registry } = setup();
+    await runAgentScript(registry, PAINT_SCRIPTS.find((s) => s.id === "paint-watercolor")!, { control: { speed: Infinity, stopped: false } });
+    expect(controller.getState().wet.wet).toBe(false);
+    expect(controller.getStrokes().map((s) => s.brush.id)).toEqual(["watercolor-wash", "watercolor-wash", "blot", "watercolor-wash"]);
+    const sky = controller.listLayers().find((l) => l.name === "Sky wash")!;
+    expect(sky.bounds).not.toBeNull();
+    controller.dispose();
+  }, 120_000);
 });

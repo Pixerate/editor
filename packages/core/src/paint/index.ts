@@ -13,3 +13,4 @@ export * from './exchange';
 export * from './blending';
 export * from './pigment';
 export * from './pigment-tools';
+export * from './wet';

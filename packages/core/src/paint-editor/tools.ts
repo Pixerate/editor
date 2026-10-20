@@ -10,13 +10,14 @@ import { createPigmentTools } from '../paint/pigment-tools';
 import { MIXING_MODELS, type MixerLoad } from '../paint/mixer';
 import { BLEND_MODES, standardBlendMode, type BlendMode } from '../raster/blend';
 import { bytesToBase64, encodePng } from '../raster/png';
-import { BRUSH_ROTATIONS, MAX_BRUSH_SIZE, MULTI_COLOR_MODES, PAINT_BRUSH_CATEGORIES, PAINT_BRUSH_ENGINES, brushToJSON, isWetCapable, type PaintBrush } from './brushes';
+import { BRUSH_ROTATIONS, MAX_BRUSH_SIZE, MULTI_COLOR_MODES, PAINT_BRUSH_CATEGORIES, PAINT_BRUSH_ENGINES, WET_TOOLS, brushToJSON, isWetCapable, type PaintBrush } from './brushes';
 import { MAX_CANVAS_SIDE } from './document';
 import type { PaintEditorController } from './controller';
 import type { PenPoint } from './engine';
 import { GRAIN_PATTERNS, PAPER_FAMILIES, PAPER_LIBRARY } from './paper';
 import { MAX_ZOOM, MIN_ZOOM } from './view';
 import { createPaintGuideTools } from './guide-tools';
+import { createPaintWetTools } from './wet-tools';
 import type { PaintAgentCommand, PaintDirector } from './presence';
 import type { PresenceActorInfo } from '../animation/presence';
 
@@ -148,6 +149,25 @@ const SMUDGE = {
   additionalProperties: false,
 } as const;
 
+const WET_BRUSH = {
+  type: 'object',
+  description: 'Wet engine settings (watercolour, gouache and the wet tools). Missing fields keep their current values.',
+  properties: {
+    tool: {
+      type: 'string',
+      enum: [...WET_TOOLS],
+      description:
+        'paint: water and pigment (picks up and mixes wet paint by behavior.pickup / mix); water: clear water (with rewet it lifts dried paint); dry: a hair dryer, takes water; blow: pushes the water along the stroke; blend: evens out wet pigment; smudge: drags wet paint; blot: a tissue, takes wet paint up (erase wet).',
+    },
+    water: { type: 'number', minimum: 0, maximum: 1, description: 'Wetness: water laid per stroke, 0.2 a damp brush .. 1 a dripping one.' },
+    pigment: { type: 'number', minimum: 0, maximum: 1, description: 'Pigment concentration: 0 clear water .. 1 straight from the tube.' },
+    body: { type: 'number', minimum: 0, maximum: 1, description: 'Body: 0 a transparent watercolour (glazes) .. 1 opaque gouache (hides what is under it).' },
+    strength: { type: 'number', minimum: 0, maximum: 1, description: 'Strength of dry, blow, blend, smudge and blot.' },
+    rewet: { type: 'number', minimum: 0, maximum: 1, description: 'How much dried paint the water lifts again: 0 none (staining) .. 1.' },
+  },
+  additionalProperties: false,
+} as const;
+
 const BRUSH_FIELDS = {
   name: { type: 'string', minLength: 1, maxLength: 80, description: 'Display name.' },
   category: { type: 'string', enum: [...PAINT_BRUSH_CATEGORIES], description: 'Library category.' },
@@ -166,6 +186,7 @@ const BRUSH_FIELDS = {
   behavior: BEHAVIOR,
   blender: BLENDER,
   smudge: SMUDGE,
+  wet: WET_BRUSH,
 } as const;
 
 const POINTS = {
@@ -209,6 +230,7 @@ function brushSummary(b: PaintBrush) {
     pickup: b.behavior.pickup,
     dirty: b.behavior.dirty,
     multicolor: b.behavior.multicolor.mode,
+    ...(b.engine === 'wet' ? { wetTool: b.wet.tool } : {}),
     builtin: Boolean(b.builtin),
   };
 }
@@ -729,7 +751,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
     name: 'paint_stroke',
     title: 'Paint a brush stroke',
     description:
-      'Paints one stroke through points (document pixels, with optional pressure, time, tilt and barrel rotation) on a pixel layer with a library brush or the active one, optionally changed for this stroke. Grain-responsive brushes follow the paper; the mixer engine (mixer-brush) picks up and mixes paint already on the layer, the blender mixes nearby colours, the smudge drags paint, and dab brushes with behavior.pickup lift and carry paint. The symmetry guide adds its mirror copies; with a tracing image that samples colours, a stroke without color takes the image colour at its first point. With an agent cursor (a director), the stroke is painted live along the points at the pace of their times. One undo step. Returns the layer id, changed bounds, dab count, the recorded strokeId (for replay_strokes) and, for brushes that pick up paint, mixerLoad: what the brush carries after the stroke.',
+      'Paints one stroke through points (document pixels, with optional pressure, time, tilt and barrel rotation) on a pixel layer with a library brush or the active one, optionally changed for this stroke. Grain-responsive brushes follow the paper; the mixer engine (mixer-brush) picks up and mixes paint already on the layer, the blender mixes nearby colours, the smudge drags paint, and dab brushes with behavior.pickup lift and carry paint, and wet brushes (engine wet: watercolour, gouache, add water, dry, blow, wet blend, wet smudge, blot) paint on the layer’s wet layer, where the paint keeps moving until it dries (the result says wet: true while it is; see advance_wet_paint and dry_paint; a dry brush on wet paint dries it first). The symmetry guide adds its mirror copies; with a tracing image that samples colours, a stroke without color takes the image colour at its first point. With an agent cursor (a director), the stroke is painted live along the points at the pace of their times. One undo step. Returns the layer id, changed bounds, dab count, the recorded strokeId (for replay_strokes), for wet brushes wet (paint still wet) and, for brushes that pick up paint, mixerLoad: what the brush carries after the stroke.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -746,6 +768,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
     },
     annotations: { title: 'Paint a brush stroke', ...WRITE },
     handler: async (a) => {
+      await c.wetIdle();
       const stroke = { points: a.points as PenPoint[], layerId: a.layerId, brushId: a.brushId, brush: a.brush, color: a.color, seed: a.seed, snapToPerspective: a.snapToPerspective };
       const r = await act({ kind: 'stroke', stroke }, () => c.paintStroke(stroke));
       return r.mixerLoad ? { ...r, mixerLoad: loadResult(r.mixerLoad) } : r;
@@ -967,6 +990,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
   });
 
   tools.push(...createPaintGuideTools(c));
+  tools.push(...createPaintWetTools(c));
   tools.push(...createPigmentTools());
 
   return { id: options.id ?? 'paint-editor', namespace: options.namespace, tools };

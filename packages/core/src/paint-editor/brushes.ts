@@ -15,13 +15,51 @@ import { DEFAULT_MIXER, normalizeMixer, type MixerSettings } from '../paint/mixe
  * mix exchange when its behaviour asks for it), `eraser` (removes alpha), `mixer` (the Mixer
  * Brush), `blender` (mixes the colours under and near the tip) or `smudge` (drags paint along).
  */
-export type PaintBrushEngine = 'dab' | 'eraser' | 'mixer' | 'blender' | 'smudge';
+export type PaintBrushEngine = 'dab' | 'eraser' | 'mixer' | 'blender' | 'smudge' | 'wet';
 
-export const PAINT_BRUSH_ENGINES: readonly PaintBrushEngine[] = ['dab', 'eraser', 'mixer', 'blender', 'smudge'];
+export const PAINT_BRUSH_ENGINES: readonly PaintBrushEngine[] = ['dab', 'eraser', 'mixer', 'blender', 'smudge', 'wet'];
 
-export type PaintBrushCategory = 'pencil' | 'pastel' | 'charcoal' | 'airbrush' | 'marker' | 'ink' | 'paint' | 'eraser' | 'blender' | 'smudge' | 'mixer' | 'custom';
+export type PaintBrushCategory = 'pencil' | 'pastel' | 'charcoal' | 'airbrush' | 'marker' | 'ink' | 'paint' | 'eraser' | 'blender' | 'smudge' | 'mixer' | 'watercolor' | 'wet-tool' | 'custom';
 
-export const PAINT_BRUSH_CATEGORIES: readonly PaintBrushCategory[] = ['pencil', 'pastel', 'charcoal', 'airbrush', 'marker', 'ink', 'paint', 'eraser', 'blender', 'smudge', 'mixer', 'custom'];
+export const PAINT_BRUSH_CATEGORIES: readonly PaintBrushCategory[] = ['pencil', 'pastel', 'charcoal', 'airbrush', 'marker', 'ink', 'paint', 'eraser', 'blender', 'smudge', 'mixer', 'watercolor', 'wet-tool', 'custom'];
+
+/**
+ * What a wet brush does to the wet layer: `paint` (water and pigment), `water` (clear water;
+ * with `rewet` it lifts dried paint), `dry` (a hair dryer: takes water, the pigment settles),
+ * `blow` (pushes the water along the stroke), `blend` (evens out the wet pigment under the tip),
+ * `smudge` (drags wet paint along) or `blot` (a tissue: takes up wet paint).
+ */
+export type WetTool = 'paint' | 'water' | 'dry' | 'blow' | 'blend' | 'smudge' | 'blot';
+
+export const WET_TOOLS: readonly WetTool[] = ['paint', 'water', 'dry', 'blow', 'blend', 'smudge', 'blot'];
+
+/** Wet engine settings, each 0..1. */
+export interface WetBrushSettings {
+  tool: WetTool;
+  /** Water the brush lays down (wetness): 0.2 a damp brush, 1 a dripping one. */
+  water: number;
+  /** Pigment concentration: 0 clear water .. 1 paint straight from the tube. */
+  pigment: number;
+  /** Body: 0 a transparent watercolour .. 1 opaque gouache that hides what is under it. */
+  body: number;
+  /** Strength of the dry, blow, blend, smudge and blot tools. */
+  strength: number;
+  /** How much dried paint the water lifts again (re-wetting): 0 none (staining) .. 1. */
+  rewet: number;
+}
+
+export const DEFAULT_WET_BRUSH: Readonly<WetBrushSettings> = { tool: 'paint', water: 0.5, pigment: 0.5, body: 0, strength: 0.5, rewet: 0 };
+
+export function normalizeWetBrush(raw: Partial<WetBrushSettings> = {}, base: WetBrushSettings = DEFAULT_WET_BRUSH): WetBrushSettings {
+  return {
+    tool: WET_TOOLS.includes(raw.tool as WetTool) ? (raw.tool as WetTool) : base.tool,
+    water: unit(raw.water, base.water),
+    pigment: unit(raw.pigment, base.pigment),
+    body: unit(raw.body, base.body),
+    strength: unit(raw.strength, base.strength),
+    rewet: unit(raw.rewet, base.rewet),
+  };
+}
 
 /** Multi-coloured brush: `tip` lays the colours across the tip, `dab` changes colour from dab to dab. */
 export type MultiColorMode = 'off' | 'tip' | 'dab';
@@ -132,6 +170,8 @@ export interface PaintBrush {
   blender: BlenderSettings;
   /** Smudge engine only: strength, length and mixing. */
   smudge: SmudgeSettings;
+  /** Wet engine only: the wet tool, water, pigment, body and strength. */
+  wet: WetBrushSettings;
   /** True for the built-in presets (they cannot be removed or overwritten). */
   builtin?: boolean;
 }
@@ -184,18 +224,24 @@ export function normalizeBehavior(raw: BrushBehaviorInput = {}, base: BrushBehav
 }
 
 /** Brush settings to change or read: any subset of a brush and of its blocks. */
-export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mixer' | 'behavior' | 'blender' | 'smudge'>> & {
+export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mixer' | 'behavior' | 'blender' | 'smudge' | 'wet'>> & {
   tip?: Partial<BrushSettings>;
   dynamics?: Partial<BrushDynamics>;
   mixer?: Partial<MixerSettings>;
   behavior?: BrushBehaviorInput;
   blender?: Partial<BlenderSettings>;
   smudge?: Partial<SmudgeSettings>;
+  wet?: Partial<WetBrushSettings>;
 };
 
-/** Whether a brush can pick paint up from the canvas (the pick-up / mix ratios apply): dab and mixer brushes. */
+/** Whether a brush can pick paint up from the canvas (the pick-up / mix ratios apply): dab, mixer and wet brushes. */
 export function isWetCapable(brush: Pick<PaintBrush, 'engine'>): boolean {
-  return brush.engine === 'dab' || brush.engine === 'mixer';
+  return brush.engine === 'dab' || brush.engine === 'mixer' || brush.engine === 'wet';
+}
+
+/** Whether a brush paints wet media (on the layer's wet layer). */
+export function isWetBrush(brush: Pick<PaintBrush, 'engine'>): boolean {
+  return brush.engine === 'wet';
 }
 
 /**
@@ -239,6 +285,7 @@ export function normalizePaintBrush(raw: PaintBrushInput = {}, base?: PaintBrush
     behavior,
     blender: normalizeBlender(raw.blender ?? {}, b.blender),
     smudge: normalizeSmudge(raw.smudge ?? {}, b.smudge),
+    wet: normalizeWetBrush(raw.wet ?? {}, b.wet ?? DEFAULT_WET_BRUSH),
     ...(raw.builtin ? { builtin: true } : {}),
   };
 }
@@ -258,6 +305,7 @@ const BASE_BRUSH: PaintBrush = {
   behavior: { ...DEFAULT_BEHAVIOR, multicolor: { ...DEFAULT_MULTI_COLOR, colors: [] } },
   blender: { ...DEFAULT_BLENDER },
   smudge: { ...DEFAULT_SMUDGE },
+  wet: { ...DEFAULT_WET_BRUSH },
 };
 
 type BrushInit = PaintBrushInput & { id: string; name: string; category: PaintBrushCategory };
@@ -374,6 +422,63 @@ export const BUILTIN_BRUSHES: readonly PaintBrush[] = [
     tip: { size: 30, hardness: 0.7, spacing: 0.1, opacity: 1, flow: 0.5, smoothing: 0.2, pressureSize: true, pressureOpacity: false },
     mixer: { wet: 0.5, load: 0.95, mix: 0.5, loadEachStroke: true, cleanEachStroke: true, mixing: 'pigment' },
     dynamics: { minSize: 0.5 },
+  }),
+  builtin({
+    id: 'watercolor-round', name: 'Watercolour round', category: 'watercolor', engine: 'wet',
+    tip: { size: 28, hardness: 0.6, spacing: 0.12, opacity: 1, flow: 1, smoothing: 0.25, pressureSize: true, pressureOpacity: true },
+    dynamics: { minSize: 0.35 },
+    behavior: { pickup: 0.3, mix: 0.4, mixing: 'pigment' },
+    wet: { tool: 'paint', water: 0.55, pigment: 0.5, body: 0 },
+  }),
+  builtin({
+    id: 'watercolor-wash', name: 'Wash brush', category: 'watercolor', engine: 'wet', rotation: 'stroke',
+    tip: { size: 90, hardness: 0.35, spacing: 0.1, angle: 90, roundness: 0.45, opacity: 1, flow: 1, smoothing: 0.3, pressureSize: false, pressureOpacity: true },
+    behavior: { pickup: 0.2, mix: 0.3, mixing: 'pigment' },
+    wet: { tool: 'paint', water: 0.8, pigment: 0.45, body: 0 },
+  }),
+  builtin({
+    id: 'watercolor-detail', name: 'Watercolour rigger', category: 'watercolor', engine: 'wet',
+    tip: { size: 7, hardness: 0.75, spacing: 0.1, opacity: 1, flow: 1, smoothing: 0.4, pressureSize: true, pressureOpacity: false },
+    dynamics: { minSize: 0.2 },
+    wet: { tool: 'paint', water: 0.4, pigment: 0.7, body: 0 },
+  }),
+  builtin({
+    id: 'gouache', name: 'Gouache', category: 'watercolor', engine: 'wet',
+    tip: { size: 26, hardness: 0.7, spacing: 0.1, opacity: 1, flow: 1, smoothing: 0.25, pressureSize: true, pressureOpacity: false },
+    dynamics: { minSize: 0.5 },
+    behavior: { pickup: 0.35, mix: 0.5, mixing: 'pigment' },
+    wet: { tool: 'paint', water: 0.35, pigment: 0.8, body: 1 },
+  }),
+  builtin({
+    id: 'add-water', name: 'Add water', category: 'wet-tool', engine: 'wet',
+    tip: { size: 40, hardness: 0.4, spacing: 0.12, opacity: 1, flow: 1, smoothing: 0.25, pressureSize: true, pressureOpacity: true },
+    dynamics: { minSize: 0.5 },
+    wet: { tool: 'water', water: 0.6, pigment: 0, rewet: 0.3 },
+  }),
+  builtin({
+    id: 'hair-dryer', name: 'Dry', category: 'wet-tool', engine: 'wet',
+    tip: { size: 80, hardness: 0.1, spacing: 0.15, opacity: 1, flow: 1, smoothing: 0.3, pressureSize: false, pressureOpacity: true },
+    wet: { tool: 'dry', strength: 0.5 },
+  }),
+  builtin({
+    id: 'blow', name: 'Blow', category: 'wet-tool', engine: 'wet',
+    tip: { size: 50, hardness: 0.2, spacing: 0.1, opacity: 1, flow: 1, smoothing: 0.3, pressureSize: false, pressureOpacity: true },
+    wet: { tool: 'blow', strength: 0.6 },
+  }),
+  builtin({
+    id: 'wet-blend', name: 'Wet blend', category: 'wet-tool', engine: 'wet',
+    tip: { size: 36, hardness: 0.3, spacing: 0.1, opacity: 1, flow: 1, smoothing: 0.25, pressureSize: false, pressureOpacity: true },
+    wet: { tool: 'blend', strength: 0.4 },
+  }),
+  builtin({
+    id: 'wet-drag', name: 'Wet smudge', category: 'wet-tool', engine: 'wet',
+    tip: { size: 30, hardness: 0.5, spacing: 0.08, opacity: 1, flow: 1, smoothing: 0.25, pressureSize: false, pressureOpacity: true },
+    wet: { tool: 'smudge', strength: 0.6 },
+  }),
+  builtin({
+    id: 'blot', name: 'Blot (erase wet)', category: 'wet-tool', engine: 'wet',
+    tip: { size: 40, hardness: 0.5, spacing: 0.12, opacity: 1, flow: 1, smoothing: 0.2, pressureSize: false, pressureOpacity: true },
+    wet: { tool: 'blot', strength: 0.7 },
   }),
 ];
 

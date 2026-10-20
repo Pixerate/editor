@@ -2,7 +2,9 @@
   import {
     PaintCanvasPresenter,
     PaintGesture,
+    drawWaterOverlay,
     fitZoom,
+    startWetClock,
     guideOverlay,
     handlePaintShortcut,
     viewCssTransform,
@@ -35,6 +37,7 @@
   const snap = $derived(editor.current);
   let viewport = $state<HTMLDivElement | null>(null);
   let canvas = $state<HTMLCanvasElement | null>(null);
+  let water = $state<HTMLCanvasElement | null>(null);
   let size = $state({ width: 800, height: 600 });
   let predicted = $state<Array<{ x: number; y: number }>>([]);
   const presenter = $derived(new PaintCanvasPresenter(controller));
@@ -80,6 +83,21 @@
     untrack(() => {
       if (ctx && typeof ctx.createImageData === 'function') presenter.render(ctx as never);
       else controller.takeDirty();
+    });
+  });
+
+  // Wet paint flows with the display.
+  $effect(() => {
+    const c = controller;
+    return untrack(() => startWetClock(c));
+  });
+
+  // The water overlay.
+  $effect(() => {
+    void snap;
+    const ctx = water?.getContext('2d');
+    untrack(() => {
+      if (ctx && typeof ctx.createImageData === 'function') drawWaterOverlay(controller, ctx as never);
     });
   });
 
@@ -141,6 +159,16 @@
     class="absolute left-0 top-0 shadow-2xl"
     style={`transform: ${transform}; transform-origin: 0 0; image-rendering: ${snap.view.zoom > 2 ? 'pixelated' : 'auto'}`}
   ></canvas>
+  {#if snap.wet.overlay}
+    <canvas
+      bind:this={water}
+      width={doc.width}
+      height={doc.height}
+      data-testid="paint-water-overlay"
+      class="absolute left-0 top-0 pointer-events-none opacity-60"
+      style={`transform: ${transform}; transform-origin: 0 0`}
+    ></canvas>
+  {/if}
   <svg class="absolute left-0 top-0 pointer-events-none overflow-visible" width={doc.width} height={doc.height} style={`transform: ${transform}; transform-origin: 0 0`} aria-hidden="true">
     {#each lines as l, i (i)}
       <line
