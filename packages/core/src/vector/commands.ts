@@ -833,7 +833,8 @@ export function createVectorCommands(controller: VectorEditorController, options
 					name: { type: 'string', description: 'Layer name (default the text\'s start).' },
 					fill: PAINT,
 					stroke: PAINT,
-					strokeWidth: { type: 'number', minimum: 0, description: 'Stroke width (default 1).' }
+					strokeWidth: { type: 'number', minimum: 0, description: 'Stroke width (default 1).' },
+					parentId: { type: 'string', description: 'A group (frame, master page, symmetry group) to add it into, on top of its children (default: the top of the document). On a master page, {page} and {pages} show each page\'s number and the page count.' }
 				},
 				required: ['text'],
 				additionalProperties: false
@@ -853,7 +854,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 						...(params.paragraph ? { paragraph: params.paragraph as Record<string, unknown> } : {}),
 						...(params.fill !== undefined ? { fill: checkPaint(params.fill, 'fill') } : {}),
 						...(params.stroke !== undefined ? { stroke: checkPaint(params.stroke, 'stroke') } : {})
-					});
+					}, parentOf(params.parentId as string | undefined));
 				} catch (e) {
 					fail(e instanceof Error ? e.message : String(e));
 				}
@@ -2030,6 +2031,112 @@ export function createVectorCommands(controller: VectorEditorController, options
 
 	const frameResult = (id: string) => controller.getFrames().find((f) => f.id === id) ?? fail(`"${id}" is not a frame.`);
 	const FRAME_PAINT = { ...PAINT, description: `The frame's background, drawn below its children. ${PAINT.description}` };
+	const pagesResult = () => controller.getPages();
+	const pageCommands = (): CommandSpec[] => [
+		{
+			...base,
+			id: `${prefix}listPages`,
+			label: 'Pages',
+			keywords: ['pages', 'master page', 'multipage', 'page numbers', 'document pages'],
+			description: 'Lists the document\'s pages (top-level frames that are not master pages, in order) and its master pages: { pages: [{ id, name, number, masterId, bounds }], masters: [{ id, name, usedBy, bounds }] }. Place master art inside the master bounds.',
+			params: { type: 'object', properties: {}, additionalProperties: false },
+			run: () => pagesResult()
+		},
+		{
+			...base,
+			id: `${prefix}addPage`,
+			label: 'Add Page',
+			keywords: ['page', 'add page', 'new page', 'insert page', 'multipage'],
+			description:
+				'Adds a page: a frame the size of the last page (or the document) right of the others, after page `after` (default last), using master `masterId` (default: the last page\'s master; null for none). The first page of a document without frames covers the artboard and takes its art in. Add art to it with parentId. One undo step. Returns { id } and the pages.',
+			params: {
+				type: 'object',
+				properties: {
+					name: { type: 'string', description: 'Page name (default "Page n").' },
+					masterId: { type: ['string', 'null'], description: 'Master page id, or null for none (default: the last page\'s master).' },
+					after: { type: 'string', description: 'Page id to insert after (default: at the end).' }
+				},
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: { name?: string; masterId?: string | null; after?: string } | undefined) => {
+				const r = controller.addPage(params ?? {});
+				check(r);
+				return { id: (r as { id: string }).id, ...pagesResult() };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}addMasterPage`,
+			label: 'Add Master Page',
+			keywords: ['master page', 'template page', 'header', 'footer', 'page numbers'],
+			description:
+				'Adds an empty master page (a frame below the pages, not a page itself). Art added to it (parentId: its id) shows on every page using it, laid out by each object\'s resizing constraints; text there can show {page} and {pages}. `assignTo` page ids or "all" make pages use it. One undo step. Returns { id } and the pages.',
+			params: {
+				type: 'object',
+				properties: {
+					name: { type: 'string', description: 'Master name (default "Master A", "Master B", …).' },
+					assignTo: { anyOf: [{ type: 'string', enum: ['all'] }, { ...IDS }], description: 'Pages that use it: "all" or page ids (default none).' }
+				},
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: { name?: string; assignTo?: string[] | 'all' } | undefined) => {
+				const r = controller.addMasterPage(params ?? {});
+				check(r);
+				return { id: (r as { id: string }).id, ...pagesResult() };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}setPageMaster`,
+			label: 'Apply Master Page',
+			keywords: ['master page', 'apply master', 'page template'],
+			description: 'Makes pages (`ids`, default the selected pages) use master page `masterId`, or none with null. One undo step. Returns the pages.',
+			params: { type: 'object', properties: { ids: { ...IDS, description: 'Page ids (default: the selected pages).' }, masterId: { type: ['string', 'null'], description: 'Master page id, or null for none.' } }, required: ['masterId'], additionalProperties: false },
+			undoable: true,
+			run: (_ctx: unknown, params: { ids?: string[]; masterId: string | null }) => {
+				check(controller.setPageMaster(params.masterId, params.ids ? { ids: params.ids } : {}));
+				return pagesResult();
+			}
+		},
+		{
+			...base,
+			id: `${prefix}movePage`,
+			label: 'Move Page',
+			keywords: ['page order', 'reorder pages', 'move page'],
+			description: 'Moves page `id` to position `index` (0-based) in the page order; page numbers follow. One undo step. Returns the pages.',
+			params: { type: 'object', properties: { id: { type: 'string', description: 'The page.' }, index: { type: 'integer', minimum: 0, description: 'New position, 0 for first.' } }, required: ['id', 'index'], additionalProperties: false },
+			undoable: true,
+			run: (_ctx: unknown, params: { id: string; index: number }) => {
+				check(controller.movePage(params.id, params.index));
+				return pagesResult();
+			}
+		},
+		{
+			...base,
+			id: `${prefix}goToPage`,
+			label: 'Go to Page',
+			keywords: ['go to page', 'navigate', 'show page', 'zoom to page'],
+			description: 'Selects a page or master page and brings it into view for the user (fitted when the canvas size is given). Not an undo step. Returns { id }.',
+			params: {
+				type: 'object',
+				properties: {
+					id: { type: 'string', description: 'Page or master page id.' },
+					canvasWidth: { type: 'number', exclusiveMinimum: 0, description: 'Canvas width in screen pixels, to fit the page (optional).' },
+					canvasHeight: { type: 'number', exclusiveMinimum: 0, description: 'Canvas height in screen pixels, to fit the page (optional).' }
+				},
+				required: ['id'],
+				additionalProperties: false
+			},
+			run: (_ctx: unknown, params: { id: string; canvasWidth?: number; canvasHeight?: number }) => {
+				const size = params.canvasWidth && params.canvasHeight ? { width: params.canvasWidth, height: params.canvasHeight } : undefined;
+				check(controller.goToPage(params.id, size ? { size } : {}));
+				return { id: params.id };
+			}
+		}
+	];
+
 	const frameCommands = (): CommandSpec[] => [
 		{
 			...base,
@@ -2391,6 +2498,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 		...symbolCommands(),
 		...constraintCommands(),
 		...frameCommands(),
+		...pageCommands(),
 		...connectorCommands(),
 		...trackingCommands(),
 		...shadingCommands(),

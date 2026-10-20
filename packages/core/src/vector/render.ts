@@ -3,6 +3,7 @@
  * gradient defs) and the overlay (screen-space selection box, anchors, handles, marquee and
  * pen preview). React, Svelte or plain DOM code turns these into `<svg>` elements.
  */
+import { resolveVectorMasterPages } from './pages.js';
 import { vectorPerspectiveGridLines, vectorPerspectivePlanes } from './perspective.js';
 import { resolveVectorLenses } from './lens.js';
 import { bezierPathToSvg, transformBezierPath, type BezierPath } from '../canvas/pathops/bezier.js';
@@ -694,7 +695,7 @@ const lensResolved = new WeakMap<readonly VectorNode[], VectorNode[]>();
 function resolvedLensNodes(doc: VectorDocument): VectorNode[] {
 	const hit = lensResolved.get(doc.nodes);
 	if (hit) return hit;
-	const nodes = resolveVectorLenses(doc).nodes;
+	const nodes = resolveVectorLenses(resolveVectorMasterPages(doc)).nodes;
 	lensResolved.set(doc.nodes, nodes);
 	return nodes;
 }

@@ -12,6 +12,7 @@
  * and `notes` lists everything that was approximated. Import reads one frame of the animation.
  */
 
+import { resolveVectorMasterPages } from './pages.js';
 import { isVectorLens, resolveVectorLenses } from './lens.js';
 import type { AffineMatrix } from '../geom/types.js';
 import { applyMatrix, matrixRotation, multiplyMatrices, rotateMatrix, scaleMatrix, translateMatrix } from '../geom/affine.js';
@@ -326,7 +327,7 @@ export function vectorDocumentToLottie(doc: VectorDocument, options: VectorLotti
 	const op = Math.max(1, Math.round(options.frames ?? 1));
 	const shapes: Json[] = [];
 	// Lenses draw what is below them: resolve their backdrops when the caller has not.
-	if (!options.nodes) doc = resolveVectorLenses(doc);
+	if (!options.nodes) doc = resolveVectorLenses(resolveVectorMasterPages(doc));
 	for (const n of [...(options.nodes ?? doc.nodes)].reverse()) {
 		const g = nodeGroup(n, notes);
 		if (g) shapes.push(g);

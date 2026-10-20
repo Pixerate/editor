@@ -462,6 +462,18 @@ export const VECTOR_SCRIPTS: AgentScript[] = [
     ],
   },
   {
+    id: "vector-pages",
+    prompt: "Make this a two-page document with a numbered footer",
+    steps: [
+      { say: "The drawing becomes page 1…", ...command("vector.addPage", { name: "Cover" }), as: "p1" },
+      { say: "…a second page beside it…", ...command("vector.addPage", { name: "Back" }), as: "p2" },
+      { say: "…and a master page both use.", ...command("vector.addMasterPage", { name: "Footer", assignTo: "all" }), as: "m" },
+      { say: "A footer bar on the master, pinned to the bottom…", ...commandWith("vector.addShape", (r) => ({ kind: "rect", x: r("m").masters[0].bounds.x, y: r("m").masters[0].bounds.y + r("m").masters[0].bounds.height - 24, width: r("m").masters[0].bounds.width, height: 24, fill: "#0f172a", parentId: r("m").id })), as: "bar" },
+      { say: "…and the page number on it: every page shows its own.", ...commandWith("vector.addText", (r) => ({ text: "Page {page} of {pages}", x: r("m").masters[0].bounds.x + 12, y: r("m").masters[0].bounds.y + r("m").masters[0].bounds.height - 8, font: { fontSize: 12 }, fill: "#ffffff", parentId: r("m").id })) },
+      { say: "Going to page 2.", ...commandWith("vector.goToPage", (r) => ({ id: r("p2").id })) },
+    ],
+  },
+  {
     id: "vector-symmetry",
     prompt: "Draw a mandala in the sky with live symmetry",
     steps: [
