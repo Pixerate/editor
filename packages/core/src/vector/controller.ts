@@ -1,4 +1,5 @@
 import { sanitizeVectorBrushstroke, vectorBrushstrokeBrush, vectorBrushstrokeBrushes } from './brushstroke.js';
+import { VECTOR_DISTORT_BRUSH_MODES, distortVectorPath, type VectorDistortBrushMode, type VectorDistortDab } from './distortBrush.js';
 import { isVectorMasterPage, resolveVectorMasterPages, stripVectorMasterArt, vectorMasterPages, vectorPages } from './pages.js';
 import { VECTOR_LENS_SPECS, resolveVectorLenses, sanitizeVectorLens, stripVectorLensViews } from './lens.js';
 import { HistoryManager } from '../history/HistoryManager.js';
@@ -365,6 +366,12 @@ export interface VectorPathEditOptions {
 	recognizeShapes: boolean;
 	/** Eraser diameter in document units (default 10). */
 	eraserSize: number;
+	/** What the Distort Brush does: smudge, twirl, attract, repel or roughen (default smudge). */
+	distortMode: VectorDistortBrushMode;
+	/** Distort Brush radius in document units (default 20). */
+	distortSize: number;
+	/** Distort Brush strength, 0–1 (default 0.5). */
+	distortStrength: number;
 	/**
 	 * Record pointer pressure on pencil strokes as a width profile: `pen` (default) for pen input
 	 * only, `all` for any pointer that reports pressure, `off` never.
@@ -387,6 +394,9 @@ export const DEFAULT_VECTOR_PATH_EDIT: Readonly<VectorPathEditOptions> = {
 	pencilSmoothing: 0,
 	recognizeShapes: false,
 	eraserSize: 10,
+	distortMode: 'smudge',
+	distortSize: 20,
+	distortStrength: 0.5,
 	pencilPressure: 'pen',
 	fillGap: 0
 };
@@ -555,6 +565,7 @@ export type VectorInteraction =
 	| { type: 'corner'; ref: VectorAnchorRef; radius: number }
 	| { type: 'draw'; tool: VectorTool; nodeId: string; bounds: VectorBounds; string?: [Vec2, Vec2] }
 	| { type: 'stroke'; tool: 'knife' | 'eraser'; points: Vec2[]; width: number }
+	| { type: 'brush'; x: number; y: number; radius: number }
 	| { type: 'builder'; mode: 'merge' | 'erase'; points: Vec2[] }
 	| { type: 'width'; ref: VectorWidthPointRef; mode: 'width' | 'move' | 'copy'; width: number }
 	| { type: 'pen'; nodeId: string }
@@ -1165,8 +1176,11 @@ const TOOL_LABELS: Record<VectorTool, string> = {
 	type: 'Type',
 	typePath: 'Type on a Path',
 	frame: 'Frame',
-	connector: 'Connector'
+	connector: 'Connector',
+	distort: 'Distort Brush'
 };
+
+const DISTORT_LABELS: Record<VectorDistortBrushMode, string> = { smudge: 'Smudge', twirl: 'Twirl', attract: 'Attract', repel: 'Repel', roughen: 'Roughen' };
 
 const TOOL_KEYS: Record<string, VectorTool> = {
 	v: 'select',
@@ -1190,7 +1204,8 @@ const TOOL_KEYS: Record<string, VectorTool> = {
 	t: 'type',
 	q: 'typePath',
 	f: 'frame',
-	x: 'connector'
+	x: 'connector',
+	d: 'distort'
 };
 
 export function vectorToolLabel(tool: VectorTool): string {
@@ -1220,7 +1235,8 @@ export const VECTOR_TOOL_SHORTCUTS: Readonly<Record<VectorTool, string>> = {
 	type: 'T',
 	typePath: 'Q',
 	frame: 'F',
-	connector: 'X'
+	connector: 'X',
+	distort: 'D'
 };
 
 /** Short glyphs for tool buttons (pair them with `vectorToolLabel` for the accessible name). */
@@ -1246,7 +1262,8 @@ export const VECTOR_TOOL_GLYPHS: Readonly<Record<VectorTool, string>> = {
 	type: 'T',
 	typePath: '𝒯',
 	frame: '⬚',
-	connector: '⤳'
+	connector: '⤳',
+	distort: '≈'
 };
 
 /** Tools that drag out a shape (they snap while hovering). */
@@ -1403,6 +1420,7 @@ type Drag =
 	| { kind: 'bend'; ref: VectorSegmentRef; t: number; start: Vec2; before: Snapshot; base: VectorDocument; moved: boolean }
 	| { kind: 'corner'; widget: VectorCornerWidget; refs: VectorAnchorRef[]; start: Vec2; before: Snapshot; base: VectorDocument; moved: boolean; alt: boolean; shift: boolean }
 	| { kind: 'stroke'; tool: 'knife' | 'eraser'; points: Vec2[]; before: Snapshot }
+	| { kind: 'distort'; mode: VectorDistortBrushMode; base: VectorDocument; before: Snapshot; targets: Set<string>; dabs: VectorDistortDab[]; last: Vec2 }
 	| { kind: 'builder'; erase: boolean; points: Vec2[]; touched: VectorBuilderTouched; map: VectorShapeBuilderMap }
 	| { kind: 'pull'; ref: VectorAnchorRef; before: Snapshot; base: VectorDocument; label: string; outOnly: boolean; closing: boolean; altBreaks: boolean }
 	| ({ kind: 'shape'; tool: VectorTool; start: Vec2; nodeId: string; before: Snapshot } & DragTargets)
@@ -1961,6 +1979,9 @@ export class VectorEditorController {
 		const next = { ...this.editing, ...editing };
 		next.pencilSmoothing = Math.min(1, Math.max(0, Number.isFinite(next.pencilSmoothing) ? next.pencilSmoothing : 0));
 		if (!(next.eraserSize > 0)) next.eraserSize = this.editing.eraserSize;
+		if (!VECTOR_DISTORT_BRUSH_MODES.includes(next.distortMode)) next.distortMode = this.editing.distortMode;
+		if (!(next.distortSize > 0)) next.distortSize = this.editing.distortSize;
+		next.distortStrength = Math.min(1, Math.max(0, Number.isFinite(next.distortStrength) ? next.distortStrength : this.editing.distortStrength));
 		this.editing = next;
 		this.notify();
 	}
@@ -6573,6 +6594,88 @@ export class VectorEditorController {
 		return out;
 	}
 
+	/** Starts a Distort Brush stroke at `p` (document space). */
+	private downDistort(p: Vec2) {
+		const before = this.snapshot();
+		const r = this.editing.distortSize;
+		const drag = { kind: 'distort' as const, mode: this.editing.distortMode, base: this.doc, before, targets: new Set<string>(), dabs: [] as VectorDistortDab[], last: p };
+		this.addDistortDab(drag, p, true);
+		this.drag = drag;
+		this.interaction = { type: 'brush', x: p.x, y: p.y, radius: r };
+		this.notify();
+	}
+
+	/** Adds the paths the brush reaches at `p` to the stroke's targets, and (unless `targetsOnly`) a dab there. */
+	private addDistortDab(drag: { mode: VectorDistortBrushMode; base: VectorDocument; targets: Set<string>; dabs: VectorDistortDab[]; last: Vec2 }, p: Vec2, targetsOnly = false) {
+		const radius = this.editing.distortSize;
+		const strength = this.editing.distortStrength;
+		const base = this.doc;
+		this.doc = drag.base;
+		for (const n of this.strokeTargets([p], undefined, radius)) drag.targets.add(n.id);
+		this.doc = base;
+		if (targetsOnly) return;
+		if (drag.mode === 'smudge') drag.dabs.push({ x: drag.last.x, y: drag.last.y, radius, strength, dx: p.x - drag.last.x, dy: p.y - drag.last.y });
+		else drag.dabs.push({ x: p.x, y: p.y, radius, strength, angle: 15, seed: drag.dabs.length + 1 });
+	}
+
+	/** `base` with the target paths distorted by the dabs (document space dabs, mapped into each path's own space). */
+	private distortedDoc(base: VectorDocument, targets: ReadonlySet<string>, mode: VectorDistortBrushMode, dabs: readonly VectorDistortDab[]): VectorDocument {
+		if (!dabs.length || !targets.size) return base;
+		const nodes = mapTree(base.nodes, (n) => {
+			if (!targets.has(n.id) || n.type !== 'path' || n.locked) return n;
+			const world = vectorWorldMatrix(base.nodes, n.id) ?? IDENTITY_MATRIX;
+			const inv = invertMatrix(world);
+			const k = 1 / Math.sqrt(Math.abs(world[0] * world[3] - world[1] * world[2]) || 1);
+			const local = dabs.map((d) => {
+				const c = applyMatrix(inv, d);
+				const moved = d.dx !== undefined || d.dy !== undefined ? applyMatrix(inv, { x: d.x + (d.dx ?? 0), y: d.y + (d.dy ?? 0) }) : null;
+				return { ...d, x: c.x, y: c.y, radius: d.radius * k, ...(moved ? { dx: moved.x - c.x, dy: moved.y - c.y } : {}) };
+			});
+			const path = subpathsToBezier(n.subpaths);
+			const out = distortVectorPath(path, mode, local);
+			return out === path ? n : { ...n, subpaths: bezierToSubpaths(out) };
+		});
+		return nodes === base.nodes ? base : { ...base, nodes };
+	}
+
+	/**
+	 * Distortion brush (CorelDRAW's Smudge, Twirl, Attract, Repel and Roughen tools): runs a round
+	 * brush of `radius` (default: the `distortSize` setting) and `strength` 0–1 along `points`
+	 * (document space). Smudge pushes the outlines along the stroke (needs two or more points),
+	 * twirl turns them about each point by `angle` degrees (default 15) at full strength, attract
+	 * pulls them toward each point, repel pushes them away, roughen spikes them. It acts on `ids`,
+	 * the selection, or every path the brush reaches. One undo step. Returns the changed ids.
+	 */
+	distortBrush(mode: VectorDistortBrushMode, points: readonly Vec2[], options: { ids?: readonly string[]; radius?: number; strength?: number; angle?: number; seed?: number } = {}): VectorActionResult & { ids?: string[] } {
+		if (!VECTOR_DISTORT_BRUSH_MODES.includes(mode)) return { ok: false, message: `Unknown brush "${mode}": use ${VECTOR_DISTORT_BRUSH_MODES.join(', ')}.` };
+		if (!points.length || points.some((q) => !Number.isFinite(q?.x) || !Number.isFinite(q?.y))) return { ok: false, message: 'points must be one or more { x, y } numbers.' };
+		if (mode === 'smudge' && points.length < 2) return { ok: false, message: 'Smudge needs two or more points: the stroke pushes the outlines along it.' };
+		const radius = options.radius ?? this.editing.distortSize;
+		const strength = options.strength ?? this.editing.distortStrength;
+		if (!(radius > 0)) return { ok: false, message: 'radius must be more than 0.' };
+		if (!(strength >= 0 && strength <= 1)) return { ok: false, message: 'strength must be from 0 to 1.' };
+		if (options.ids) {
+			for (const id of options.ids) {
+				const n = this.getNode(id);
+				if (!n) return { ok: false, message: `There is no node "${id}".` };
+				if (n.locked) return { ok: false, message: `"${id}" is locked; unlock it first.` };
+			}
+		}
+		const targets = new Set(this.strokeTargets(points, options.ids, radius).map((n) => n.id));
+		const dabs: VectorDistortDab[] =
+			mode === 'smudge'
+				? points.slice(1).map((q, i) => ({ x: points[i].x, y: points[i].y, radius, strength, dx: q.x - points[i].x, dy: q.y - points[i].y }))
+				: points.map((q, i) => ({ x: q.x, y: q.y, radius, strength, angle: options.angle ?? 15, seed: (options.seed ?? 1) + i }));
+		const next = this.distortedDoc(this.doc, targets, mode, dabs);
+		const changed = [...targets].filter((id) => findVectorNode(next.nodes, id) !== this.getNode(id));
+		if (!changed.length) return { ok: false, message: 'The brush reached no outline: put the points within radius of a path (or pass its id).' };
+		this.change(DISTORT_LABELS[mode], () => {
+			this.doc = next;
+			this.anchors = [];
+		});
+		return { ok: true, ids: changed };
+	}
+
 	/** A stroke's points in node `id`'s own space. */
 	private localPoints(id: string, points: readonly Vec2[]): Point[] {
 		const inv = invertMatrix(this.worldOf(id));
@@ -7183,6 +7286,8 @@ export class VectorEditorController {
 				return;
 			case 'connector':
 				return this.downConnector(p);
+			case 'distort':
+				return this.downDistort(p);
 			default:
 				return this.downShape(p, input);
 		}
@@ -7630,6 +7735,16 @@ export class VectorEditorController {
 			}
 			case 'builder':
 				return this.moveBuilder(drag, p);
+			case 'distort': {
+				const r = this.editing.distortSize;
+				if (Math.hypot(p.x - drag.last.x, p.y - drag.last.y) < r * 0.1) return;
+				this.addDistortDab(drag, p);
+				drag.last = p;
+				this.doc = this.distortedDoc(drag.base, drag.targets, drag.mode, drag.dabs);
+				this.interaction = { type: 'brush', x: p.x, y: p.y, radius: r };
+				this.notify(true);
+				return;
+			}
 			case 'stroke': {
 				const last = drag.points[drag.points.length - 1];
 				if (Math.hypot(p.x - last.x, p.y - last.y) * this.viewport.zoom < 1.5) return;
@@ -7937,6 +8052,18 @@ export class VectorEditorController {
 				if (drag.tool === 'knife') this.knife(drag.points);
 				else this.erase(drag.points);
 				return;
+			}
+			case 'distort': {
+				// A click without a drag is one dab where it was (smudge needs a drag).
+				if (!drag.dabs.length && drag.mode !== 'smudge') {
+					this.addDistortDab(drag, drag.last);
+					this.doc = this.distortedDoc(drag.base, drag.targets, drag.mode, drag.dabs);
+				}
+				if (this.doc === drag.base) {
+					this.notify(true);
+					return;
+				}
+				return this.commit(DISTORT_LABELS[drag.mode], drag.before);
 			}
 			case 'pull':
 				if (drag.closing) this.pen = null;

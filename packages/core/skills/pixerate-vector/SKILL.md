@@ -401,6 +401,11 @@ contents whole while you work, without losing the mask.
 | `vector.cut` | Scissors: cut `nodeId` at the outline point nearest `x`, `y`, or cut at `anchors`. A closed path opens; an open one splits in two. Returns the ids. |
 | `vector.knife` | Cut closed paths along a polyline `points` (at least two `[x, y]`) wherever it crosses them edge to edge, leaving no gap. Cuts `ids`, else the selection, else every path crossed. Returns the pieces. |
 | `vector.erase` | Erase along a polyline `points` with a round eraser of diameter `size` (default the eraser setting, 10): fills lose the area, outlines are cut. Returns the changed ids. |
+| `vector.smudgeBrush` | Push outlines along a stroke `points` (two or more) with a soft round brush (`radius`, `strength` 0–1): drips, tentacles, organic lobes. Returns `{ ids }`. |
+| `vector.twirlBrush` | Twirl outlines about each point by `angle` degrees (default 15) at the brush centre: swirls, curls. |
+| `vector.attractBrush` | Pinch outlines toward each point. |
+| `vector.repelBrush` | Bloat outlines away from each point. |
+| `vector.roughenBrush` | Spike the outlines under the brush (`seed` for repeatable spikes): fur, grass, torn paper. |
 
 ### Brushstrokes
 
@@ -414,7 +419,7 @@ contents whole while you work, without losing the mask.
 
 | Command | Use it to |
 | --- | --- |
-| `vector.setEditing` | Set editing behaviour: `keepShapeOnDelete`, `curvatureMoves`, `pencilSmoothing` (0 to 1), `recognizeShapes`, `eraserSize`, `pencilPressure` (pen, all, off). Returns the settings. |
+| `vector.setEditing` | Set editing behaviour: `keepShapeOnDelete`, `curvatureMoves`, `pencilSmoothing` (0 to 1), `recognizeShapes`, `eraserSize`, `distortMode` / `distortSize` / `distortStrength` (the Distort Brush tool the user drags), `pencilPressure` (pen, all, off). Returns the settings. |
 | `vector.getSnapOptions` | Read how drawing snaps for people at the pointer: grid, objects, guides, threshold, polar `angles`, object snap `tracking`, `trackPolar`, `polarRelative`. |
 | `vector.setSnapOptions` | Set those options, e.g. `polarIncrement: 15` for 15° polar tracking, or a grid, before handing the canvas to the user. Moves nothing. Returns the options. |
 | `vector.setTool` | Switch the interactive tool (select, direct, pen, pencil, rect, ellipse, polygon, star, line, scissors, knife, eraser, width, shapeBuilder, paintBucket, blend, gradient, envelope, type, typePath, frame, connector). Only for handing the canvas to the user in a given mode; commands do not need a tool. |

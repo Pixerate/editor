@@ -1,6 +1,8 @@
 import React from 'react';
 import {
   VECTOR_TOOLS,
+  VECTOR_DISTORT_BRUSH_MODES,
+  type VectorDistortBrushMode,
   VECTOR_TOOL_GLYPHS,
   VECTOR_TOOL_SHORTCUTS,
   VECTOR_EDIT_TOGGLES,
@@ -224,6 +226,28 @@ export function VectorToolbar({
                 }}
               />
             </label>
+          )}
+          {state.tool === 'distort' && (
+            <span className="flex flex-wrap items-center gap-1" data-vector-distort-options="">
+              <select aria-label="Distort brush" title="What the brush does to the outlines it passes over" className="h-7 rounded border border-border bg-background px-1 text-xs" value={editing.distortMode} onChange={(e) => controller.setEditing({ distortMode: e.target.value as VectorDistortBrushMode })}>
+                {VECTOR_DISTORT_BRUSH_MODES.map((m) => (
+                  <option key={m} value={m}>
+                    {m[0].toUpperCase() + m.slice(1)}
+                  </option>
+                ))}
+              </select>
+              <label className="flex items-center gap-1 text-xs text-foreground">
+                Size
+                <input type="number" min={1} step={1} aria-label="Distort brush size" className="h-7 w-16 rounded border border-border bg-background px-1.5 text-xs" value={editing.distortSize} onChange={(e) => {
+                  const n = parseFloat(e.target.value);
+                  if (Number.isFinite(n) && n > 0) controller.setEditing({ distortSize: n });
+                }} />
+              </label>
+              <label className="flex items-center gap-1 text-xs text-foreground">
+                Strength
+                <input type="range" min={0} max={1} step={0.05} aria-label="Distort brush strength" className="h-4 w-20 accent-primary" value={editing.distortStrength} onChange={(e) => controller.setEditing({ distortStrength: parseFloat(e.target.value) })} />
+              </label>
+            </span>
           )}
           {state.tool === 'paintBucket' && (
             <button
