@@ -731,6 +731,18 @@ export function VectorCanvas({
             )}
           </g>
         )}
+        {overlay.connectorSites.map((s) => (
+          <circle
+            key={`site:${s.nodeId}:${s.side}`}
+            data-vector-connection-site={s.side}
+            data-active={s.active || undefined}
+            cx={s.x}
+            cy={s.y}
+            r={s.active ? 5 : 3.5}
+            fill={s.active ? accentColor : THEME.handleFill}
+            stroke={accentColor}
+          />
+        ))}
         {overlay.constraints.map((c) => (
           <g key={`constraint:${c.id}`} data-vector-constraint-glyph={c.kind} data-satisfied={c.satisfied ? 'true' : 'false'}>
             {c.dimension && <line x1={c.dimension.x1} y1={c.dimension.y1} x2={c.dimension.x2} y2={c.dimension.y2} stroke={c.satisfied ? THEME.guide : '#dc2626'} strokeDasharray="2 2" />}

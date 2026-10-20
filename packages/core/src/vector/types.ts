@@ -412,6 +412,41 @@ export interface VectorFrame {
 export interface VectorPathNode extends VectorNodeBase, VectorStyle {
 	type: 'path';
 	subpaths: VectorSubpath[];
+	/**
+	 * Makes the path a connector: an open line whose ends may be glued to other objects'
+	 * connection sites. Its geometry is routed again after every edit, so it follows them.
+	 */
+	connector?: VectorConnector | null;
+}
+
+/**
+ * Where a connector end meets an object: the middle of a side of the object's own (unrotated)
+ * bounds, its centre, or `auto` (the side facing the connector's other end, chosen on every route).
+ */
+export type VectorConnectorSide = 'top' | 'right' | 'bottom' | 'left' | 'center' | 'auto';
+export const VECTOR_CONNECTOR_SIDES: readonly VectorConnectorSide[] = ['auto', 'top', 'right', 'bottom', 'left', 'center'];
+
+/** How a connector runs between its ends: a straight line, right-angled elbows or an S-curve. */
+export type VectorConnectorRoute = 'straight' | 'elbow' | 'curved';
+export const VECTOR_CONNECTOR_ROUTES: readonly VectorConnectorRoute[] = ['straight', 'elbow', 'curved'];
+
+/** A glued connector end. */
+export interface VectorConnectorEnd {
+	nodeId: string;
+	/** Default `auto`. */
+	side?: VectorConnectorSide;
+}
+
+/** A connector's settings (`VectorPathNode.connector`). An end that is not glued stays where it is. */
+export interface VectorConnector {
+	start?: VectorConnectorEnd | null;
+	end?: VectorConnectorEnd | null;
+	/** Default `straight`. */
+	route?: VectorConnectorRoute;
+	/** Corner radius of an elbow route's bends (document units, default 0). */
+	radius?: number;
+	/** How far an elbow or curve leaves a glued end straight out of its side before turning (document units, default 16). */
+	gap?: number;
 }
 
 /**
@@ -760,6 +795,7 @@ export interface VectorHandleRef extends VectorAnchorRef {
  * anchors and handles, or inside a patch to pull the surface. `type` adds point text (click) or
  * area text (drag) and edits text it clicks; `typePath` sets text along the path it clicks. `frame`
  * drags out a frame (`VectorGroupNode.frame`), taking in the top-level objects it fully encloses.
+ * `connector` drags a connector between objects, gluing each end to the side it starts or ends on.
  */
 export type VectorTool =
 	| 'select'
@@ -782,7 +818,8 @@ export type VectorTool =
 	| 'envelope'
 	| 'type'
 	| 'typePath'
-	| 'frame';
+	| 'frame'
+	| 'connector';
 
 export const VECTOR_TOOLS: readonly VectorTool[] = [
 	'select',
@@ -805,7 +842,8 @@ export const VECTOR_TOOLS: readonly VectorTool[] = [
 	'envelope',
 	'type',
 	'typePath',
-	'frame'
+	'frame',
+	'connector'
 ];
 
 /** Keyboard modifiers held during a pointer event. */

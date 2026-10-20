@@ -1,6 +1,6 @@
 ---
 name: pixerate-vector
-description: How to draw and edit vector artwork in the Pixerate vector editor through its vector.* commands - adding shapes and SVG paths, text (point, area, on a path, styles, Create Outlines), symbols and instances, CAD constraints (parallel, tangent, dimensions, auto-constrain), artboards and frames with resizing constraints, fills, strokes, stacked fills and strokes with blend modes, drop shadows, glows and blurs, clipping masks and opacity masks, gradients (linear, radial, conic, Oklab), stroke alignment, arrowheads, variable-width and tapered strokes, live corner radii, boolean operations and Pathfinder (unite, subtract, divide, trim), Shape Builder, paint bucket, path effects (trim, repeater, zig zag, offset), envelope warps and free distort, blends and morphing, anchor editing (join, smooth, simplify, scissors, knife, eraser), align, distribute, group, and SVG import and export. Use when creating an icon, logo, illustration, glyph, badge or any Bezier path artwork, or editing an SVG in a Pixerate vector editor.
+description: How to draw and edit vector artwork in the Pixerate vector editor through its vector.* commands - adding shapes and SVG paths, text (point, area, on a path, styles, Create Outlines), symbols and instances, CAD constraints (parallel, tangent, dimensions, auto-constrain), artboards and frames with resizing constraints, connectors, fills, strokes, stacked fills and strokes with blend modes, drop shadows, glows and blurs, clipping masks and opacity masks, gradients (linear, radial, conic, Oklab), stroke alignment, arrowheads, variable-width and tapered strokes, live corner radii, boolean operations and Pathfinder (unite, subtract, divide, trim), Shape Builder, paint bucket, path effects (trim, repeater, zig zag, offset), envelope warps and free distort, blends and morphing, anchor editing (join, smooth, simplify, knife, eraser), align, distribute, group, and SVG import and export. Use when creating an icon, logo, illustration, glyph, badge or any Bezier path artwork, or editing an SVG in a Pixerate vector editor.
 ---
 
 # Pixerate vector editor
@@ -43,6 +43,9 @@ carry a live effect stack. Every command is a `vector.*` command run with `run_c
   frame is resized its children follow their **resizing constraints** (horizontal `left` /
   `right` / `leftRight` / `center` / `scale`, vertical `top` / `bottom` / `topBottom` / `center` /
   `scale`) instead of scaling.
+- **Connectors** are open paths with a `connector` whose ends are glued to other objects' sites
+  (the middle of a side, or the centre); they are routed again after every edit, so they follow
+  what they connect. A free end stays where it is.
 - Coordinates are document units. A rotated node stores its geometry in its own space: the
   `bounds` that `vector.list` reports are document-space, its `d` is the node's own.
 
@@ -68,6 +71,11 @@ Parameter details (gradient fields, effect parameters, width profiles, envelopes
    it over.
 
 ## Best practices
+
+- **Diagrams with connectors.** Lay the boxes out first, then `vector.connect` them (in one
+  `run_commands` batch) rather than drawing lines: connectors stay attached when boxes move, and
+  `route: "elbow"` with a small `radius` reads well in flowcharts. Leave sides `auto` unless a
+  connector must leave a particular side.
 
 - **Frames for anything that resizes.** Build screens, cards, buttons and banners inside a frame
   (`vector.addFrame` or `vector.frameSelection`), set each child's constraints with
@@ -278,6 +286,15 @@ the browser's shaper they are kept but not drawn until outlines are available.
 | `vector.setResizing` | Set how children of a frame follow it on resize (`horizontal`, `vertical`; a missing axis keeps its value). Fails on objects not directly inside a frame. Returns `{ nodes: [{ id, horizontal, vertical }] }`. |
 | `vector.exportFrameSvg` | Export one frame as an SVG of its own size (its corner at the origin). Returns `{ svg, width, height }`; use it per artboard instead of `vector.exportSvg`. |
 
+### Connectors
+
+| Command | Use it to |
+| --- | --- |
+| `vector.connect` | Join two objects (or free points) with a connector: `start` / `end` as `{ nodeId, side? }` (side `auto` by default: the side facing the other end) or `{ x, y }`, `route` straight / elbow / curved, elbow `radius`, `gap`, stroke and arrowheads (a triangle at the end by default). Use for flowcharts and diagrams instead of drawing lines. Returns the connector as listed. |
+| `vector.setConnector` | Reglue an end (`{ nodeId, side? }`), unglue it (`null`), or change `route`, `radius`, `gap`; also turns a plain open path into a connector. Returns `{ connectors }`. |
+| `vector.listConnectors` | Read every connector: route and each end's glued object, side setting, side in use and position. |
+| `vector.listConnectionSites` | Read an object's sites (top, right, bottom, left, centre) with positions and outward normals, to pick a `side`. |
+
 ### Masks and clipping
 
 | Command | Use it to |
@@ -335,6 +352,10 @@ contents whole while you work, without losing the mask.
 | `vector.setTool` | Switch the interactive tool (select, direct, pen, pencil, rect, ellipse, polygon, star, line, scissors, knife, eraser, width, shapeBuilder, paintBucket, blend, gradient, envelope, type, typePath). Only for handing the canvas to the user in a given mode; commands do not need a tool. |
 
 ## Pitfalls
+
+- A connector's geometry is regenerated after every edit while an end is glued: editing its
+  anchors directly does not stick. Unglue the end (`vector.setConnector` with `null`) or change
+  `route` instead. Connectors cannot be glued to connectors.
 
 - Scaling a frame (`vector.scale`, the selection handles) lays its children out by their
   constraints, so it is a resize, not a zoom; group the frame (or scale its children) to scale the

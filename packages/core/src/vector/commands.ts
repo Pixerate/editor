@@ -16,6 +16,7 @@ import { VECTOR_BLEND_MODES, VECTOR_FILTER_TYPES, type VectorBlendMode, type Vec
 import { isValidVectorMesh, VECTOR_WARP_STYLES } from './warp.js';
 import { isVectorMaskGroup, vectorMaskSummary, type VectorMaskSummary } from './mask.js';
 import { isVectorFrame } from './frames.js';
+import { VECTOR_CONNECTOR_ROUTES, VECTOR_CONNECTOR_SIDES, type VectorConnector, type VectorConnectorEnd, type VectorConnectorRoute } from './types.js';
 import { VECTOR_HORIZONTAL_RESIZING, VECTOR_VERTICAL_RESIZING, type VectorFrame, type VectorHorizontalResizing, type VectorResizing, type VectorVerticalResizing } from './types.js';
 import { layoutVectorText, vectorTextFamilies, vectorTextHasOutlines } from './text.js';
 import type { VectorMaskType } from './types.js';
@@ -78,6 +79,8 @@ export interface VectorNodeListing {
 	frameRect?: VectorFrame;
 	/** A frame child's resizing constraints, when set. */
 	resizing?: VectorResizing;
+	/** A connector's ends and route (see vector.listConnectors). */
+	connector?: VectorConnector;
 	/** A mask group's mask: type, inversion, the mask's id (its first child) and the masked contents. */
 	mask?: VectorMaskSummary;
 }
@@ -308,7 +311,8 @@ export function createVectorCommands(controller: VectorEditorController, options
 					...(n.filters?.length ? { filters: n.filters } : {}),
 					...(isVectorMaskGroup(n) ? { mask: vectorMaskSummary(n)! } : {}),
 					...(isVectorFrame(n) ? { frameRect: n.frame } : {}),
-					...(n.resizing ? { resizing: n.resizing } : {})
+					...(n.resizing ? { resizing: n.resizing } : {}),
+					...(n.type === 'path' && n.connector ? { connector: n.connector } : {})
 				});
 				if (n.type === 'group') visit(n.children, depth + 1);
 			}
@@ -1225,6 +1229,103 @@ export function createVectorCommands(controller: VectorEditorController, options
 			issues: state.constraintIssues
 		};
 	};
+	const connectorResult = (id: string) => controller.getConnectors().find((x) => x.id === id) ?? fail(`"${id}" is not a connector.`);
+	const SIDE = { type: 'string', enum: VECTOR_CONNECTOR_SIDES, description: 'Which site: the middle of the object\'s top, right, bottom or left side (its own, unrotated bounds, turned with it), its centre, or auto (the side facing the other end, chosen again on every edit; the default).' } as const;
+	const GLUED_END = {
+		type: 'object',
+		properties: { nodeId: { type: 'string', description: 'The object to glue to (not a connector).' }, side: SIDE },
+		required: ['nodeId'],
+		additionalProperties: false
+	} as const;
+	const CONNECTOR_END = {
+		description: 'An end glued to an object, { nodeId, side? }, or a free point { x, y } in document units.',
+		anyOf: [GLUED_END, { type: 'object', properties: { x: { type: 'number', description: 'Document units.' }, y: { type: 'number', description: 'Document units.' } }, required: ['x', 'y'], additionalProperties: false }]
+	} as const;
+	const ROUTE_PROPS = {
+		route: { type: 'string', enum: VECTOR_CONNECTOR_ROUTES, description: 'straight (default), elbow (right angles, leaving and entering along the sides) or curved (an S-curve with handles along the sides).' },
+		radius: { type: 'number', minimum: 0, description: 'Corner radius of an elbow route\'s bends, document units (default 0).' },
+		gap: { type: 'number', minimum: 0, description: 'How far an elbow or curve runs straight out of a glued side before turning, document units (default 16).' }
+	} as const;
+	const connectorCommands = (): CommandSpec[] => [
+		{
+			...base,
+			id: `${prefix}listConnectors`,
+			label: 'List Connectors',
+			readOnly: true,
+			keywords: ['connector', 'connectors', 'arrows', 'links', 'edges', 'diagram', 'flowchart'],
+			description:
+				'Lists every connector: id, name, route, radius, and each end: the glued nodeId, its side setting and the side in use (resolvedSide), and where the end is (x, y, document units). An end without nodeId is free.',
+			params: { type: 'object', properties: {}, additionalProperties: false },
+			run: () => ({ connectors: controller.getConnectors() })
+		},
+		{
+			...base,
+			id: `${prefix}listConnectionSites`,
+			label: 'List Connection Sites',
+			readOnly: true,
+			keywords: ['connector', 'sites', 'anchors', 'ports', 'glue'],
+			description: 'Returns the connection sites of an object: { sites: [{ side, x, y, nx, ny }] } in document units for top, right, bottom, left and centre (n is the outward normal). Empty for connectors, hidden objects or ones without extent.',
+			params: { type: 'object', properties: { id: { type: 'string', description: 'The object (from vector.list).' } }, required: ['id'], additionalProperties: false },
+			run: (_ctx: unknown, params: { id: string }) => ({ sites: controller.getConnectionSites(params.id) ?? fail(`There is no node "${params.id}".`) })
+		},
+		{
+			...base,
+			id: `${prefix}connect`,
+			label: 'Connect…',
+			keywords: ['connector', 'connect', 'arrow', 'link', 'edge', 'flowchart', 'diagram', 'line between'],
+			description:
+				'Adds a connector between two objects (or free points): each glued end follows its object whenever it moves, resizes or turns, through every later edit. Default: straight, the default stroke, a triangle arrowhead at the end. One undo step; selects it. Returns the connector as vector.listConnectors lists it.',
+			params: {
+				type: 'object',
+				properties: {
+					start: CONNECTOR_END,
+					end: CONNECTOR_END,
+					...ROUTE_PROPS,
+					name: { type: 'string', description: 'Connector name (default "Connector").' },
+					stroke: PAINT,
+					strokeWidth: { type: 'number', minimum: 0, description: 'Stroke width in document units (default the editor default).' },
+					startArrow: { type: ['string', 'null'], enum: [...VECTOR_ARROWHEADS, null], description: 'Head at the start, or null for none (default none).' },
+					endArrow: { type: ['string', 'null'], enum: [...VECTOR_ARROWHEADS, null], description: 'Head at the end, or null for none (default triangle).' }
+				},
+				required: ['start', 'end'],
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: Parameters<VectorEditorController['addConnector']>[0]) => {
+				const r = controller.addConnector(params);
+				if (!r.ok) fail(r.message);
+				return connectorResult((r as { id: string }).id);
+			}
+		},
+		{
+			...base,
+			id: `${prefix}setConnector`,
+			label: 'Connector Options…',
+			keywords: ['connector', 'glue', 'unglue', 'route', 'elbow', 'curved', 'straight', 'reconnect'],
+			description:
+				'Changes connectors (`ids`, default the selection): start / end glue an end to another object ({ nodeId, side? }) or unglue it (null; the end stays where it is); route, radius, gap set how they run. A plain open path given by id becomes a connector. Pass at least one. One undo step. Returns { connectors } as vector.listConnectors lists them.',
+			params: {
+				type: 'object',
+				properties: {
+					ids: { ...IDS, description: 'Connector (or open path) ids (default: the selection).' },
+					start: { anyOf: [GLUED_END, { type: 'null' }], description: 'Glue the start to { nodeId, side? }, or null to unglue it.' },
+					end: { anyOf: [GLUED_END, { type: 'null' }], description: 'Glue the end to { nodeId, side? }, or null to unglue it.' },
+					...ROUTE_PROPS
+				},
+				additionalProperties: false
+			},
+			undoable: true,
+			enabled: enabledFor,
+			run: (_ctx: unknown, params: { ids?: string[]; start?: VectorConnectorEnd | null; end?: VectorConnectorEnd | null; route?: VectorConnectorRoute; radius?: number; gap?: number } | undefined) => {
+				const { ids: list, ...patch } = params ?? {};
+				if (!Object.keys(patch).length) fail('Pass at least one of start, end, route, radius, gap.');
+				const targets = ids({ ids: list });
+				check(controller.setConnector(patch, { ids: targets }));
+				return { connectors: targets.map(connectorResult) };
+			}
+		}
+	];
+
 	const frameResult = (id: string) => controller.getFrames().find((f) => f.id === id) ?? fail(`"${id}" is not a frame.`);
 	const FRAME_PAINT = { ...PAINT, description: `The frame's background, drawn below its children. ${PAINT.description}` };
 	const frameCommands = (): CommandSpec[] => [
@@ -1584,6 +1685,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 		...symbolCommands(),
 		...constraintCommands(),
 		...frameCommands(),
+		...connectorCommands(),
 		{
 			...base,
 			id: `${prefix}setCorners`,

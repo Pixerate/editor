@@ -466,6 +466,9 @@
         {/if}
       </g>
     {/if}
+    {#each overlay.connectorSites as s (`${s.nodeId}:${s.side}`)}
+      <circle data-vector-connection-site={s.side} data-active={s.active || undefined} cx={s.x} cy={s.y} r={s.active ? 5 : 3.5} fill={s.active ? accentColor : THEME.handleFill} stroke={accentColor} />
+    {/each}
     {#each overlay.constraints as c (c.id)}
       <g data-vector-constraint-glyph={c.kind} data-satisfied={c.satisfied ? 'true' : 'false'}>
         {#if c.dimension}<line x1={c.dimension.x1} y1={c.dimension.y1} x2={c.dimension.x2} y2={c.dimension.y2} stroke={c.satisfied ? THEME.guide : '#dc2626'} stroke-dasharray="2 2" />{/if}
