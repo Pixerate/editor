@@ -1,5 +1,22 @@
 # @pixerate/editor
 
+## 0.133.0
+
+### Minor Changes
+
+- 4f8039d: Image editor: Blur, Sharpen and History Brush tools.
+  - Blur and Sharpen lay a soft blur or an unsharp mask of the layer through the brush, at `strength`.
+  - The History Brush paints the layer (or its mask) back from `historySteps` undo steps ago, or from the oldest state history keeps.
+  - They work on pixels and masks at any bit depth, and each stroke is one undo step.
+  - New agent tools: `blur_stroke`, `sharpen_stroke` and `history_brush`. The tools are in the palette (History on `Y`), with Strength and Steps back controls in the React and Svelte options bars.
+  - New in `/paint`: `retouchFilter` and `boxBlurPixels`.
+- dccb717: Image editor: Content-Aware spot healing. The Spot Healing Brush has a new `content-aware` type that synthesises texture and continues lines and patterns across the spot from patches all around it. It runs PatchMatch nearest-neighbour fields with patch voting, coarse to fine, and then blends seamlessly. It's available through `spot_heal` `type: "content-aware"` and the Content-Aware choice in the React and Svelte options bars. New `contentAwareFill` in `/paint`.
+- b7ec850: Drawing in perspective in the vector editor: 1-, 2- and 3-point perspective grids whose floor and wall planes shapes are drawn on and flat art is attached to, like CorelDRAW's Perspective Drawing. New `setPerspective`, `setPerspectivePlane`, `attachToPerspective`, the `vector.*Perspective*` commands, the grid on the canvas and `<VectorPerspectivePanel>` in React and Svelte.
+
+### Patch Changes
+
+- 090b87f: Image editor at 16 and 32 bits: groups with layer effects and develop filters on the legacy process now composite in float in merges, `compositeDeepPixels` and the PSD merged image. New `applyLegacyFloat`.
+
 ## 0.132.0
 
 ### Minor Changes
