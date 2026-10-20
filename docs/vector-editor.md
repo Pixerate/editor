@@ -263,6 +263,14 @@ A `contour` path effect works like CorelDRAW's Contour.
 - **Interaction with other effects.** Like the other effects, it acts on what is above it in the stack, and the effects after it act on its steps.
 - **Panels and export.** The effects panels edit end colours with the new `color` parameter kind. Lottie has no equivalent, so it gets the drawn shapes.
 
+### Block shadow
+
+A `blockShadow` path effect works like CorelDRAW's Block Shadow.
+
+- **Shape.** Each shape is swept `distance` along `angle` (degrees, 0 right, 90 down, in the node's own space) by `sweepPath`: the shape, its moved copy and the band each edge sweeps, united. The result is one solid shape drawn under all the shapes.
+- **Colour.** `color` fills it (null: the shape's own solid fill) at `opacity` percent. An `endOpacity` different from `opacity` fades it along the direction, from the near side of the shape to the far end, for a flat-design long shadow.
+- **Export.** SVG and PDF draw it as a path, with a linear gradient when it fades. PDF shadings have no stop opacity, so a fading shadow is drawn opaque there, with a note. Lottie has no equivalent, so it gets the drawn shapes.
+
 ## Distort and envelopes
 
 **Free Distort.** With `setFreeDistort(true)` (the toolbar's Distort toggle) the selection box distorts instead of scaling, Illustrator's Free Transform way:

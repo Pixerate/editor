@@ -967,11 +967,12 @@ export type VectorAverageAxis = 'horizontal' | 'vertical' | 'both';
 /**
  * Live path effects (After Effects' path operators): `trim` (Trim Paths), `roundCorners`,
  * `puckerBloat`, `twist`, `zigzag`, `wiggle` (Wiggle Paths), `offset` (Offset Paths), `merge`
- * (Merge Paths), `repeater`, `envelope` (an envelope distortion: a warp preset or a mesh) and
- * `contour` (CorelDRAW's Contour: concentric offset steps blending toward end colours).
+ * (Merge Paths), `repeater`, `envelope` (an envelope distortion: a warp preset or a mesh),
+ * `contour` (CorelDRAW's Contour: concentric offset steps blending toward end colours) and
+ * `blockShadow` (CorelDRAW's Block Shadow: the shape swept along a direction, under it).
  */
-export type VectorEffectType = 'trim' | 'roundCorners' | 'puckerBloat' | 'twist' | 'zigzag' | 'wiggle' | 'offset' | 'merge' | 'repeater' | 'envelope' | 'contour';
-export const VECTOR_EFFECT_TYPES: readonly VectorEffectType[] = ['trim', 'roundCorners', 'puckerBloat', 'twist', 'zigzag', 'wiggle', 'offset', 'merge', 'repeater', 'envelope', 'contour'];
+export type VectorEffectType = 'trim' | 'roundCorners' | 'puckerBloat' | 'twist' | 'zigzag' | 'wiggle' | 'offset' | 'merge' | 'repeater' | 'envelope' | 'contour' | 'blockShadow';
+export const VECTOR_EFFECT_TYPES: readonly VectorEffectType[] = ['trim', 'roundCorners', 'puckerBloat', 'twist', 'zigzag', 'wiggle', 'offset', 'merge', 'repeater', 'envelope', 'contour', 'blockShadow'];
 
 /** Warp presets (Photoshop's fifteen, in menu order); shared with the image editor (`src/geom`). */
 export type VectorWarpStyle = WarpStyle;
@@ -1065,12 +1066,6 @@ export interface VectorEffectParamsMap {
 		composite: 'below' | 'above';
 	};
 	/**
-	 * Envelope distortion: the paths above it are mapped from their combined bounds through a warp
-	 * preset (bend and horizontal / vertical distortion in percent) or, with style `mesh`, through
-	 * `mesh` (null: the flat mesh of `columns × rows` patches over the bounds). The bounds are
-	 * taken afresh each time, so editing the contents keeps the envelope.
-	 */
-	/**
 	 * Contour: concentric copies of each shape offset `offset` apart, `steps` of them `inside`,
 	 * `outside`, or `center` (inside until the shape is used up), their fill and stroke blending
 	 * from the shape's own colours to `fillColor` / `strokeColor` (null keeps the colour).
@@ -1086,6 +1081,25 @@ export interface VectorEffectParamsMap {
 		strokeColor: string | null;
 		acceleration: number;
 	};
+	/**
+	 * Block shadow (CorelDRAW's Block Shadow; a long shadow when it fades): each shape swept
+	 * `distance` along `angle` (degrees, 0 right, 90 down, in the node's own space) as one solid
+	 * shape under the art, in `color` (null: the shape's own solid fill) at `opacity` percent,
+	 * fading to `endOpacity` percent at the far end.
+	 */
+	blockShadow: {
+		angle: number;
+		distance: number;
+		color: string | null;
+		opacity: number;
+		endOpacity: number;
+	};
+	/**
+	 * Envelope distortion: the paths above it are mapped from their combined bounds through a warp
+	 * preset (bend and horizontal / vertical distortion in percent) or, with style `mesh`, through
+	 * `mesh` (null: the flat mesh of `columns × rows` patches over the bounds). The bounds are
+	 * taken afresh each time, so editing the contents keeps the envelope.
+	 */
 	envelope: {
 		style: VectorWarpStyle | 'mesh';
 		bend: number;
