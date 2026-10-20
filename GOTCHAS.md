@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [svelte] An `$effect` That Writes State and Then Reads It Re-runs Itself Forever
+
+- **Issue / Symptom**: The Svelte effects browser froze the page (and hung its test) when a thumbnail's render failed, for example for a vector effect the provider cannot draw as pixels. React was fine.
+- **Root Cause**: `EffectThumbnail.svelte`'s `$effect` set `failed = item.kind === 'motion'` and then read it back (`if (failed) return`). That read made `failed` a dependency of the effect. The failed render set `failed = true`, which re-ran the effect. The effect reset `failed`, rendered again (failures are not cached) and failed again, in an endless microtask loop that starved timers.
+- **Solution / Workaround**: Keep the value in a local (`const motion = …`), read only the inputs that pick the picture, and start async work inside `untrack`. Never read back, in the same `$effect`, state that the effect or its callbacks write.
+
 ### [core/effects] GPU Effect Providers Hold a WebGL Context per Renderer, and Browsers Allow About Sixteen
 
 - **Issue / Symptom**: With Flair as the provider, opening the effects browser printed "Too many active WebGL contexts. Oldest context will be lost." more than a hundred times. Most thumbnails showed "No preview", and effects already on clips failed with "The graphics context was lost." The engines record failures and don't retry them, so those clips stayed plain until the provider changed.

@@ -8,6 +8,7 @@
  * - `bar` (title / overlay: a lower-third bar that slides in, transparent)
  * - `crossfade` (transition)
  * - `fade-in` (motion, vector only)
+ * - `badge` (a vector effect with its own picture: a disc that fades in; vector only)
  */
 
 import { EffectDisposedError, EffectUnsupportedError, UnknownEffectError } from './errors.js';
@@ -170,6 +171,29 @@ const DESCRIPTIONS: readonly EffectDescription[] = [
 		defaults: { ms: 600, stagger: 0 },
 		presets: [{ name: 'Cascade', values: { ms: 400, stagger: 120 } }],
 		inputs: []
+	},
+	{
+		id: 'fake.badge',
+		name: 'Badge',
+		kind: 'vector',
+		category: 'sticker',
+		uses: ['title'],
+		description: 'A coloured disc that fades in: a vector effect that brings its own picture.',
+		tags: ['sticker', 'disc'],
+		transparent: true,
+		loop: false,
+		duration: 500,
+		controls: {
+			type: 'object',
+			additionalProperties: false,
+			properties: {
+				color: colour('Disc colour as #rrggbb. Default #f43f5e.'),
+				ms: { type: 'number', minimum: 0, maximum: 10000, description: 'Fade-in time (ms). Default 500.' }
+			}
+		},
+		defaults: { color: '#f43f5e', ms: 500 },
+		presets: [],
+		inputs: []
 	}
 ];
 
@@ -321,7 +345,7 @@ export function createFakeEffectProvider(options: FakeEffectProviderOptions = {}
 		describe: (id) => structuredClone(get(id)),
 		createRenderer(id: string, ro: EffectRendererOptions): EffectRenderer {
 			const d = get(id);
-			if (d.kind === 'motion') throw new EffectUnsupportedError(`"${id}" is a motion effect; use applyVectorEffect.`, id);
+			if (d.kind !== 'shader') throw new EffectUnsupportedError(`"${id}" is a ${d.kind} effect; use applyVectorEffect.`, id);
 			const { width, height } = ro;
 			const depth = ro.depth ?? 8;
 			if (!(width > 0 && height > 0) || width > capabilities.maxSize! || height > capabilities.maxSize!) {
@@ -357,6 +381,10 @@ export function createFakeEffectProvider(options: FakeEffectProviderOptions = {}
 			const d = get(id);
 			if (d.kind !== 'motion' && d.kind !== 'vector') throw new EffectUnsupportedError(`"${id}" is a ${d.kind} effect, not a vector one.`, id);
 			const v = resolveEffectValues(d, values);
+			if (d.kind === 'vector') {
+				// Its own picture: the target is not used.
+				return { svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"><circle id="badge" cx="50" cy="50" r="40" fill="${v.color}"/></svg>`, animate: [{ id: 'badge', ms: v.ms as number, attrs: { opacity: [0, 1] as const } }], duration: v.ms as number, loop: false };
+			}
 			const svg = typeof target === 'string' ? target : target.svg;
 			const ids = typeof target === 'string' || !target.nodeIds ? [...svg.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]) : [...target.nodeIds];
 			const ms = v.ms as number;

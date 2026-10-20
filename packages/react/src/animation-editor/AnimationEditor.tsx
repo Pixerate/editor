@@ -7,6 +7,9 @@ import { PlayheadScrubber } from './PlayheadScrubber';
 import { SceneSettings } from './SceneSettings';
 import { ShotInspector } from './ShotInspector';
 import { useAnimationEditorState } from './useAnimationEditor';
+import type { EffectProvider } from '@pixerate/editor/effects';
+import { useEffects } from '../effects';
+import { AnimationEffectsPanel } from './AnimationEffectsPanel';
 
 export interface AnimationEditorProps {
   controller: AnimationEditorController;
@@ -23,6 +26,12 @@ export interface AnimationEditorProps {
    * scrubber and issues only.
    */
   editable?: boolean;
+  /**
+   * An effects provider (see `@pixerate/editor/effects`), registered with the controller while
+   * mounted: provider motion applied to the picked element and vector effects, with an Effects
+   * panel. Optional: without one the editor is as before.
+   */
+  effects?: EffectProvider | null;
   className?: string;
 }
 
@@ -35,8 +44,9 @@ const btn = 'rounded border border-border px-2 py-0.5 text-xs disabled:opacity-4
  * playhead scrubber, and panels to edit commands, shots and scene settings by hand. Every edit
  * is one undo step.
  */
-export function AnimationEditor({ controller, values, onionSkin, motionPaths, showIssues = true, editable = true, className = '' }: AnimationEditorProps) {
+export function AnimationEditor({ controller, values, onionSkin, motionPaths, showIssues = true, editable = true, effects, className = '' }: AnimationEditorProps) {
   const state = useAnimationEditorState(controller);
+  useEffects(controller, effects);
   const { issues, scene, selection, readOnly } = state;
   const [picked, setPicked] = useState<string | null>(null);
   const [onion, setOnion] = useState(false);
@@ -131,6 +141,7 @@ export function AnimationEditor({ controller, values, onionSkin, motionPaths, sh
       </div>
       <div className="flex min-w-0 flex-col gap-3">
         <CommandList controller={controller} targets={pickedValid ? [pickedValid] : undefined} />
+        {(state.effectsProvider || controller.appliedEffects().length > 0) && <AnimationEffectsPanel controller={controller} node={pickedValid} className="border-t border-border pt-2" />}
         <CommandInspector controller={controller} picked={pickedValid} className="border-t border-border pt-2" />
         <details open className="border-t border-border pt-2">
           <summary className="cursor-pointer text-xs font-medium">Shot</summary>

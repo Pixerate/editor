@@ -2,6 +2,8 @@ import { untrack } from "svelte";
 import {
   AnimationEditorController,
   createAnimationEditorToolProvider,
+  createAnimationEffectsToolProvider,
+  type AnimationEffectsToolProviderOptions,
   type AnimationEditorOptions,
   type AnimationEditorState,
   type AnimationEditorToolProviderOptions,
@@ -87,5 +89,22 @@ export function useAnimationEditorTools(
     const target = typeof registry === "function" ? registry() : registry;
     if (!target) return;
     return target.register(createAnimationEditorToolProvider(controller, options));
+  });
+}
+
+/**
+ * Registers the animation editor's provider-effect tools (`search_effects`, `apply_effect`,
+ * `add_vector_effect`, …) for the lifetime of the calling component. They work once an effects
+ * provider is registered (see `useEffects`).
+ */
+export function useAnimationEffectsTools(
+  registry: ToolRegistry | null | undefined | (() => ToolRegistry | null | undefined),
+  controller: AnimationEditorController,
+  options: AnimationEffectsToolProviderOptions = {},
+): void {
+  $effect(() => {
+    const target = typeof registry === "function" ? registry() : registry;
+    if (!target) return;
+    return target.register(createAnimationEffectsToolProvider(controller, options));
   });
 }

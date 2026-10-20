@@ -1,11 +1,14 @@
 import {
   VectorEditorController,
   createVectorCommands,
+  createVectorEffectsToolProvider,
+  type VectorEffectsToolProviderOptions,
   type VectorCommandOptions,
   type VectorEditorOptions,
   type VectorEditorState,
   type VectorTool,
 } from "@pixerate/editor/vector";
+import type { ToolRegistry } from "@pixerate/editor/tools";
 
 export interface SvelteVectorEditor {
   readonly controller: VectorEditorController;
@@ -69,5 +72,22 @@ export function useVectorCommands(
     const target = typeof registry === "function" ? registry() : registry;
     if (!target) return;
     return target.register(createVectorCommands(controller, options));
+  });
+}
+
+/**
+ * Registers the vector editor's provider-effect tools (`search_effects`, `apply_effect`, …) for the
+ * lifetime of the calling component. They work once an effects provider is registered (see
+ * `useEffects`).
+ */
+export function useVectorEffectsTools(
+  registry: ToolRegistry | null | undefined | (() => ToolRegistry | null | undefined),
+  controller: VectorEditorController,
+  options: VectorEffectsToolProviderOptions = {},
+): void {
+  $effect(() => {
+    const target = typeof registry === "function" ? registry() : registry;
+    if (!target) return;
+    return target.register(createVectorEffectsToolProvider(controller, options));
   });
 }
