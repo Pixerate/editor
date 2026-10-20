@@ -28,6 +28,7 @@ import {
 } from '../cms';
 import { base64ToBytes, bytesToBase64 } from '../raster/png';
 import { TiledSurface, finishTile, type Tile } from '../raster/surface';
+import { deepTile, srgbDecode, srgbEncode } from '../raster/deep';
 
 /** A document's colour profile: a built-in one by id, or embedded ICC bytes. */
 export interface DocumentColorProfile {
@@ -190,7 +191,11 @@ export function convertHex(hex: string, from: Profile, to: Profile, intent: Inte
   return `#${c(out[0])}${c(out[1])}${c(out[2])}`;
 }
 
-/** A layer surface with every pixel's colour converted through `t` (an RGB → RGB transform); alpha is kept. */
+/**
+ * A layer surface with every pixel's colour converted through `t` (an RGB → RGB transform):
+ * 8-bit tiles through its tables, 16-bit tiles at 16 bits, 32-bit (linear) tiles through the
+ * float path. Alpha is kept.
+ */
 export function convertSurfaceColors(surface: TiledSurface, t: Transform): TiledSurface {
   if (surface.channels !== 4 || t.inputs !== 3 || t.outputs !== 3) return surface;
   const tiles = new Map<number, Tile>();
@@ -198,9 +203,24 @@ export function convertSurfaceColors(surface: TiledSurface, t: Transform): Tiled
   for (const [key, tile] of surface.tiles) {
     let next = memo.get(tile);
     if (next === undefined) {
-      const out = new Uint8ClampedArray(tile.data.length);
-      t.convert8(tile.data, 4, out, 4);
-      next = finishTile(out, 4, surface.defaultValue);
+      if (tile.deep instanceof Uint16Array) {
+        const out = new Uint16Array(tile.deep.length);
+        t.convert16(tile.deep, 4, out, 4);
+        next = deepTile(out, 4, surface.defaultValue);
+      } else if (tile.deep instanceof Float32Array) {
+        const enc = new Float32Array(tile.deep.length);
+        for (let i = 0; i < enc.length; i += 4) {
+          for (let c = 0; c < 3; c++) enc[i + c] = srgbEncode(tile.deep[i + c]);
+          enc[i + 3] = tile.deep[i + 3];
+        }
+        t.convertFloat(enc, 4, enc, 4);
+        for (let i = 0; i < enc.length; i += 4) for (let c = 0; c < 3; c++) enc[i + c] = srgbDecode(enc[i + c]);
+        next = deepTile(enc, 4, surface.defaultValue);
+      } else {
+        const out = new Uint8ClampedArray(tile.data.length);
+        t.convert8(tile.data, 4, out, 4);
+        next = finishTile(out, 4, surface.defaultValue);
+      }
       memo.set(tile, next);
     }
     if (next) tiles.set(key, next);

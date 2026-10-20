@@ -133,3 +133,23 @@ describe('colour management agent tools', () => {
     }
   }, 60_000);
 });
+
+describe('converting deep layers', () => {
+  it('Convert to Profile keeps 16-bit samples at 16 bits', async () => {
+    const { surfaceFromDeepPixels, surfaceDepth, readDeepRegion } = await import('../src/image-editor');
+    const fake = { width: 4, height: 1, naturalWidth: 4, naturalHeight: 1 } as unknown as HTMLImageElement;
+    const c = new ImageEditorController({ image: fake });
+    c.setBitDepth(16);
+    const data = Uint16Array.from([40000, 20001, 10003, 65535, 40001, 20002, 10004, 65535, 1, 2, 3, 65535, 65535, 0, 0, 65535]);
+    const id = c.addPixelLayer({ name: 'Deep' });
+    // Put deep samples on the layer directly (as a 16-bit PSD would).
+    (c as unknown as { state: { layers: PixelLayer[] } }).state.layers = c.getLayers().map((l) => (l.id === id ? { ...(l as PixelLayer), surface: surfaceFromDeepPixels({ width: 4, height: 1, data }, 4) } : l)) as PixelLayer[];
+    c.convertToProfile('display-p3');
+    const s = (c.getLayer(id) as PixelLayer).surface;
+    expect(surfaceDepth(s)).toBe(16);
+    const out = readDeepRegion(s, { x: 0, y: 0, width: 4, height: 1 }, 16);
+    // Neighbouring samples one code apart stay distinct after conversion.
+    expect(out[0]).not.toBe(out[4]);
+    expect(out[3]).toBe(65535);
+  });
+});

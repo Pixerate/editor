@@ -1,5 +1,5 @@
 import React, { useRef, useState } from "react";
-import { createVectorEffect, ellipseSubpath, rectSubpath, setSubpathCorners, starSubpath, type VectorDocument, type VectorEffect } from "@pixerate/editor/vector";
+import { createOutlineTextShaper, createVectorEffect, ellipseSubpath, loadOpenTypeFont, rectSubpath, setSubpathCorners, starSubpath, type OpenTypeFont, type VectorDocument, type VectorEffect } from "@pixerate/editor/vector";
 import { VectorEditor, useVectorCommands, useVectorEditorController, useVectorEditorState } from "@pixerate/editor-react/vector";
 import { PenTool } from "lucide-react";
 import { demoCommandRegistry } from "../agentTools";
@@ -13,6 +13,17 @@ const STARTER: VectorDocument = {
   width: 800,
   height: 500,
   background: "#ffffff",
+  // A symbol: double-click a tree to edit them all (isolation mode); Esc or Done to leave.
+  symbols: [
+    {
+      id: "tree",
+      name: "Tree",
+      nodes: [
+        { id: "trunk", type: "path", name: "Trunk", fill: "#78350f", stroke: null, subpaths: [rectSubpath({ x: -3, y: 0, width: 6, height: 18 })] },
+        { id: "crown", type: "path", name: "Crown", fill: "#15803d", stroke: "#14532d", strokeWidth: 1.5, subpaths: [ellipseSubpath({ x: -14, y: -26, width: 28, height: 32 })] },
+      ],
+    },
+  ],
   nodes: [
     {
       id: "sun",
@@ -231,6 +242,46 @@ const STARTER: VectorDocument = {
       ],
     },
     {
+      // Point text (Type tool, T: click to type, drag for area text; double-click text to edit it).
+      id: "title",
+      type: "text",
+      name: "Title",
+      text: "Pixerate vectors",
+      font: { fontFamily: "Georgia, serif", fontWeight: 700, fontSize: 30 },
+      runs: [{ length: 8, style: { fill: "#0369a1" } }],
+      fill: "#0f172a",
+      stroke: null,
+      frame: { kind: "point", x: 340, y: 50 },
+    },
+    {
+      // Area text wraps inside its box (drag a box with the Type tool).
+      id: "blurb",
+      type: "text",
+      name: "Blurb",
+      text: "Text lays out with the same engine as the image editor's type layers, so it wraps, aligns and styles the same in React, Svelte and for agents.",
+      font: { fontFamily: "sans-serif", fontWeight: 400, fontSize: 12 },
+      paragraph: { align: "justify" },
+      fill: "#334155",
+      stroke: null,
+      frame: { kind: "area", x: 90, y: 215, width: 200, height: 70 },
+    },
+    {
+      // Text on a path (Type on a Path, Q: click a path); load a font below for outlines.
+      id: "arc-text",
+      type: "text",
+      name: "Path text",
+      text: "along the hill",
+      font: { fontFamily: "sans-serif", fontWeight: 600, fontSize: 16, tracking: 80 },
+      paragraph: { align: "center" },
+      fill: "#14532d",
+      stroke: null,
+      frame: { kind: "path", path: { closed: false, anchors: [{ x: 20, y: 330, out: { x: 160, y: 250 } }, { x: 380, y: 318, in: { x: 260, y: 290 } }] }, baseline: "descender" },
+    },
+    // Instances of the Tree symbol: scaled and skewed copies that follow the symbol.
+    { id: "tree-1", type: "instance", name: "Tree", symbolId: "tree", transform: [1, 0, 0, 1, 610, 300] },
+    { id: "tree-2", type: "instance", name: "Tree", symbolId: "tree", transform: [1.4, 0, 0, 1.4, 660, 292] },
+    { id: "tree-3", type: "instance", name: "Tree", symbolId: "tree", transform: [0.8, 0, -0.15, 0.8, 715, 298], overrides: { fill: "#65a30d" } },
+    {
       id: "brush",
       type: "path",
       name: "Tapered stroke",
@@ -264,6 +315,21 @@ export function VectorTab() {
   useVectorCommands(demoCommandRegistry, controller);
   const [svg, setSvg] = useState<string | null>(null);
   const agentStage = useRef<HTMLDivElement>(null);
+  // Fonts read from files make text draw as glyph outlines (Create Outlines, effects on text).
+  const [fonts, setFonts] = useState<OpenTypeFont[]>([]);
+  const [fontError, setFontError] = useState<string | null>(null);
+  const loadFonts = async (files: FileList | null) => {
+    if (!files?.length) return;
+    try {
+      const loaded = await Promise.all(Array.from(files).map((f) => loadOpenTypeFont(f)));
+      const next = [...fonts, ...loaded];
+      setFonts(next);
+      setFontError(null);
+      controller.setTextShaper(createOutlineTextShaper(next));
+    } catch (e) {
+      setFontError(e instanceof Error ? e.message : String(e));
+    }
+  };
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
@@ -274,7 +340,8 @@ export function VectorTab() {
             Headless <code>VectorEditorController</code> (<code>@pixerate/editor/vector</code>) with React bindings. Pen (P): click for corners, drag for curves,
             click the first point to close. Direct select (A): drag points and handles, Alt-drag a point for smooth handles, Alt-click a segment to add a point. Width (W): drag a stroke to taper it (Alt: one side); pen pressure shapes pencil strokes.
             Distort (toolbar): drag a corner of the selection box in perspective (Shift+Alt+Cmd/Ctrl: symmetric, Cmd/Ctrl-drag a side: skew). Envelope tool (U): drag the mesh of a warped object.
-            Masks: select two or more objects and press Cmd/Ctrl+7 (or Clip / Opacity in the Mask panel); the topmost masks the others. Cmd/Ctrl+Alt+7 releases.
+            Type (T): click for point text, drag for area text, double-click text to edit; Type on a Path (Q): click a path. Without loaded fonts, text draws as SVG text in the browser's fonts.
+            Symbols: select objects and press F8 (or New in the Symbols panel); double-click an instance to edit the symbol. Masks: select two or more objects and press Cmd/Ctrl+7 (or Clip / Opacity in the Mask panel); the topmost masks the others. Cmd/Ctrl+Alt+7 releases.
             Drags snap to other shapes with labelled smart guides (hold Cmd/Ctrl to bypass, or switch Snap off in the toolbar). Space-drag pans, Cmd/Ctrl+wheel zooms.
           </p>
         </div>
@@ -290,6 +357,23 @@ export function VectorTab() {
         <button type="button" className="rounded border border-slate-700 px-2 py-1 hover:bg-slate-800" onClick={() => setSvg(controller.toSvg())}>
           Export SVG
         </button>
+        <label className="cursor-pointer rounded border border-slate-700 px-2 py-1 hover:bg-slate-800" title="Load TTF, OTF or WOFF fonts: text then draws as glyph outlines, so Create Outlines and effects on text work">
+          Load fonts…
+          <input type="file" accept=".ttf,.otf,.woff,.ttc,font/ttf,font/otf,font/woff" multiple className="hidden" onChange={(e) => void loadFonts(e.target.files)} />
+        </label>
+        {fonts.length > 0 && (
+          <button
+            type="button"
+            className="rounded border border-slate-700 px-2 py-1 hover:bg-slate-800"
+            onClick={() => {
+              setFonts([]);
+              controller.setTextShaper(null);
+            }}
+          >
+            Browser fonts ({fonts.map((f) => f.family).join(", ")} loaded)
+          </button>
+        )}
+        {fontError && <span className="text-red-400">{fontError}</span>}
         {svg && (
           <button type="button" className="rounded border border-slate-700 px-2 py-1 hover:bg-slate-800" onClick={() => setSvg(null)}>
             Hide

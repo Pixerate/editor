@@ -188,6 +188,41 @@ export function encodeRle(decoded: Uint8Array, l: PlaneLayout): Uint8Array {
   return out;
 }
 
+/** The inverse of `unpredict`: per-row deltas (16-bit samples, or 32-bit byte planes). */
+function predict(buf: Uint8Array, l: PlaneLayout): void {
+  const rb = rowBytes(l.width, l.depth);
+  if (rb === 0) return;
+  const w = l.width;
+  const scratch = l.depth === 32 ? new Uint8Array(rb) : null;
+  for (let o = 0; o + rb <= buf.length; o += rb) {
+    if (l.depth === 1 || l.depth === 8) {
+      for (let i = rb - 1; i > 0; i--) buf[o + i] = (buf[o + i] - buf[o + i - 1]) & 255;
+    } else if (l.depth === 16) {
+      for (let i = w - 1; i > 0; i--) {
+        const a = (buf[o + 2 * i] << 8) | buf[o + 2 * i + 1];
+        const b = (buf[o + 2 * i - 2] << 8) | buf[o + 2 * i - 1];
+        const v = (a - b) & 0xffff;
+        buf[o + 2 * i] = v >> 8;
+        buf[o + 2 * i + 1] = v & 255;
+      }
+    } else if (l.depth === 32) {
+      // Byte planes (all high bytes first), then byte deltas along the row.
+      scratch!.set(buf.subarray(o, o + rb));
+      for (let i = 0; i < w; i++) for (let k = 0; k < 4; k++) buf[o + k * w + i] = scratch![4 * i + k];
+      for (let i = rb - 1; i > 0; i--) buf[o + i] = (buf[o + i] - buf[o + i - 1]) & 255;
+    } else {
+      throw new PsdError(`ZIP prediction is not defined for depth ${l.depth}.`);
+    }
+  }
+}
+
+/** ZIP with prediction (compression 3), as Photoshop writes 16- and 32-bit channels. */
+export function encodeZipPredicted(decoded: Uint8Array, l: PlaneLayout): Uint8Array {
+  const buf = decoded.slice();
+  predict(buf, l);
+  return deflate(buf);
+}
+
 /** ZIP without prediction (used by tests to build fixtures). */
 export function encodeZip(decoded: Uint8Array): Uint8Array {
   return deflate(decoded);

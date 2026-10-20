@@ -9,6 +9,8 @@
  */
 
 export * from './surface';
+export * from './deep';
+export * from './deep-compositor';
 export * from './blend';
 export * from './blur';
 export * from './layers';

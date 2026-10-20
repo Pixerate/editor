@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { ImageEditorController, ImageLayer, LayerMenuAction, LayerPanelRow, PixelBuffer } from '@pixerate/editor/image-editor';
   import {
+    BIT_DEPTH_OPTIONS,
     BLEND_MODES,
     PSD_FILE_ACCEPT,
     downloadPsd,
@@ -50,6 +51,7 @@
       rows: layerPanelRows(s.layers, s.activeLayerId),
       active: controller.getActiveLayer() ?? null,
       menu: layerMenu(controller),
+      bitDepth: controller.bitDepth,
     };
   });
 
@@ -167,6 +169,16 @@
         const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
         menu = menu ? null : { x: r.left, y: r.bottom };
       }}>⋯</button>
+    <select
+      aria-label="Bits per channel"
+      title="Image › Mode: bits per channel"
+      class="rounded bg-slate-800 px-1 py-0.5 text-[11px] text-slate-200"
+      value={snapshot.bitDepth}
+      onchange={(e) => attempt(() => controller.setBitDepth(Number((e.target as HTMLSelectElement).value) as 8 | 16 | 32))}>
+      {#each BIT_DEPTH_OPTIONS as o (o.depth)}
+        <option value={o.depth} title={o.title}>{o.label}</option>
+      {/each}
+    </select>
     {#if psd}
       <button type="button" class={iconButton} onclick={() => fileInput?.click()}>Open PSD…</button>
       <button type="button" class={iconButton} onclick={() => psdTask(async () => (await downloadPsd(controller, psdFileName)).warnings)}>Export PSD</button>
