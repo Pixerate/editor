@@ -31,6 +31,7 @@ const EXTRA: Record<string, readonly string[]> = {
   "image-editor": ["effects", "parameters"],
   vector: ["effects", "parameters"],
   "animation-editor": ["effects", "parameters"],
+  "paint-editor": ["effects", "parameters", "tools"],
   effects: ["parameters"],
 };
 

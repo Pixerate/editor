@@ -8,6 +8,7 @@ import { PaintToolbar } from './PaintToolbar';
 import { PaperPanel } from './PaperPanel';
 import { WetPanel } from './WetPanel';
 import { StickerPanel } from './StickerPanel';
+import { PaintEffectsPanel, usePaintEffectsProvider } from './PaintEffectsPanel';
 import { chip } from './shared';
 
 export interface PaintEditorProps {
@@ -21,16 +22,19 @@ export interface PaintEditorProps {
   className?: string;
 }
 
-type SideTab = 'color' | 'wet' | 'paper' | 'layers';
+type SideTab = 'color' | 'wet' | 'paper' | 'layers' | 'effects';
 
 /**
  * The paint editor: toolbar, brush library on the left, the canvas, and colour (wheel,
- * harmonies, swatches, mixing pad), wet media, paper and layers on the right.
+ * harmonies, swatches, mixing pad), wet media, paper and layers on the right, and provider effects
+ * when an effects provider is registered.
  */
 export const PaintEditor: React.FC<PaintEditorProps> = ({ controller, fileName, height = 720, presence, className }) => {
   const [tool, setTool] = useState<PaintTool>('brush');
   const [tab, setTab] = useState<SideTab>('color');
   const [error, setError] = useState<string | null>(null);
+  const effects = usePaintEffectsProvider(controller);
+  const tabs: SideTab[] = effects ? ['color', 'wet', 'paper', 'layers', 'effects'] : ['color', 'wet', 'paper', 'layers'];
   return (
     <div className={`flex flex-col gap-2 rounded-xl border border-slate-800 bg-slate-900 p-2 ${className ?? ''}`} style={{ height }} data-testid="paint-editor">
       <PaintToolbar controller={controller} tool={tool} onToolChange={setTool} fileName={fileName} />
@@ -46,9 +50,9 @@ export const PaintEditor: React.FC<PaintEditorProps> = ({ controller, fileName, 
         </div>
         <div className="flex w-64 shrink-0 flex-col gap-2 overflow-y-auto pr-1">
           <div className="flex gap-1" role="tablist" aria-label="Paint panels">
-            {(['color', 'wet', 'paper', 'layers'] as const).map((t) => (
+            {tabs.map((t) => (
               <button key={t} type="button" role="tab" aria-selected={tab === t} className={chip(tab === t)} onClick={() => setTab(t)}>
-                {t === 'color' ? 'Colour' : t === 'wet' ? 'Wet' : t === 'paper' ? 'Paper' : 'Layers'}
+                {t === 'color' ? 'Colour' : t === 'wet' ? 'Wet' : t === 'paper' ? 'Paper' : t === 'layers' ? 'Layers' : 'Effects'}
               </button>
             ))}
           </div>
@@ -57,6 +61,7 @@ export const PaintEditor: React.FC<PaintEditorProps> = ({ controller, fileName, 
           {tab === 'paper' && <PaperPanel controller={controller} />}
           {tab === 'layers' && <PaintLayersPanel controller={controller} />}
           {tab === 'layers' && <StickerPanel controller={controller} />}
+          {tab === 'effects' && effects && <PaintEffectsPanel controller={controller} />}
         </div>
       </div>
     </div>

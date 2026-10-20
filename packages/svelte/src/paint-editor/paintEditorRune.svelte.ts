@@ -1,5 +1,7 @@
 import { untrack } from 'svelte';
-import { PaintDirector, PaintEditorController, PaintPresence, type PaintDirectorOptions, type PaintEditorOptions, type PaintEditorState } from '@pixerate/editor/paint-editor';
+import { createPaintEffectsToolProvider, PaintDirector, PaintEditorController, PaintPresence, type PaintDirectorOptions, type PaintEditorOptions, type PaintEditorState, type PaintEffectsToolProviderOptions } from '@pixerate/editor/paint-editor';
+import type { EffectProvider } from '@pixerate/editor/effects';
+import type { ToolRegistry } from '@pixerate/editor/tools';
 
 /**
  * A `PaintEditorController` (created from `options`, or the one given) with its state as a
@@ -70,4 +72,40 @@ export function attempt(fn: () => unknown, onError: (msg: string | null) => void
   } catch (e) {
     onError(e instanceof Error ? e.message : String(e));
   }
+}
+
+/** The controller's effects provider as a rune, following `setEffectsProvider`. */
+export function paintEffectsProvider(controller: () => PaintEditorController): { readonly current: EffectProvider | null } {
+  let provider = $state.raw<EffectProvider | null>(controller().effectsProvider);
+  $effect(() => {
+    const c = controller();
+    return untrack(() => {
+      provider = c.effectsProvider;
+      return c.effects.subscribe((p) => {
+        provider = p;
+      });
+    });
+  });
+  return {
+    get current() {
+      return provider;
+    },
+  };
+}
+
+/**
+ * Registers the paint editor's provider-effect tools (`set_paper_effect`, `add_effect_layer`,
+ * `fill_layer_with_effect`, `apply_effect`, …) for the lifetime of the calling component. Before
+ * an effects provider is registered the read tools say so and the write tools refuse.
+ */
+export function usePaintEffectsTools(
+  registry: ToolRegistry | null | undefined | (() => ToolRegistry | null | undefined),
+  controller: PaintEditorController,
+  options: PaintEffectsToolProviderOptions = {},
+): void {
+  $effect(() => {
+    const target = typeof registry === 'function' ? registry() : registry;
+    if (!target) return;
+    return target.register(createPaintEffectsToolProvider(controller, options));
+  });
 }
