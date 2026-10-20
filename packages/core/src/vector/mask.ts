@@ -319,6 +319,7 @@ export function vectorMaskedLocalBounds(group: VectorMaskGroup): VectorBounds | 
 function paintReach(node: VectorNode): number {
 	const own = vectorFilterReach(activeVectorFilters(node));
 	if (node.type === 'path') return own + vectorStrokeStackReach(node);
+	if (node.type === 'text' || node.type === 'instance') return own + paintReach(expandVectorAppearance(node));
 	return own + Math.max(0, ...node.children.map(paintReach));
 }
 

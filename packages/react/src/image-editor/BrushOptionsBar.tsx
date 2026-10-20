@@ -1,6 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import type { ImageEditorController } from '@pixerate/editor/image-editor';
-import { BRUSH_OPTION_CONTROLS, MIXER_MIXING_OPTIONS, MIXER_OPTION_CONTROLS, PAINT_TOOLS, rgbUnitToHex } from '@pixerate/editor/image-editor';
+import {
+  BRUSH_OPTION_CONTROLS,
+  MIXER_MIXING_OPTIONS,
+  MIXER_OPTION_CONTROLS,
+  PAINT_TOOLS,
+  RETOUCH_CHOICES,
+  RETOUCH_OPTION_CONTROLS,
+  RETOUCH_TOGGLES,
+  cloneSourceLabel,
+  isRetouchPaintTool,
+  rgbUnitToHex,
+  setRetouchChoice,
+} from '@pixerate/editor/image-editor';
 import { ControlSlider } from './ControlSlider';
 
 export interface BrushOptionsBarProps {
@@ -15,6 +27,9 @@ const chip = (on: boolean) => `px-2 py-1 rounded text-[11px] ${on ? 'bg-indigo-6
  * smoothing, pressure toggles, the foreground and background colours (D resets, X swaps) and
  * Edit › Fill / Clear on the active layer. With the Mixer Brush: its load (Load brush / Clean
  * brush), Wet / Load / Mix, load and clean each stroke, and the RGB / Pigment mixing toggle.
+ * With a retouching tool: the clone source (Alt-click the canvas to set it), Sample, the Spot
+ * Healing type, the tone Range, Exposure / Strength and the Aligned / Protect tones / Vibrance
+ * toggles that tool uses.
  * Shortcuts are handled by `handlePaintShortcut` in the editor.
  */
 export const BrushOptionsBar: React.FC<BrushOptionsBarProps> = ({ controller, className }) => {
@@ -22,7 +37,8 @@ export const BrushOptionsBar: React.FC<BrushOptionsBarProps> = ({ controller, cl
   useEffect(() => controller.subscribe(() => setTick((n) => n + 1)), [controller]);
   const [error, setError] = useState<string | null>(null);
   const state = controller.getState();
-  const { brush, foreground, background, mixer, mixerLoad } = state.paint;
+  const { brush, foreground, background, mixer, mixerLoad, retouch, cloneSource } = state.paint;
+  const tool = state.activeTool as (typeof PAINT_TOOLS)[number]['id'];
   const attempt = (fn: () => unknown) => {
     try {
       setError(null);
@@ -34,13 +50,13 @@ export const BrushOptionsBar: React.FC<BrushOptionsBarProps> = ({ controller, cl
 
   return (
     <div className={`flex flex-col gap-2 text-xs text-slate-200 ${className ?? ''}`} data-testid="brush-options">
-      <div className="flex gap-1" role="toolbar" aria-label="Paint tools">
+      <div className="flex flex-wrap gap-1" role="toolbar" aria-label="Paint tools">
         {PAINT_TOOLS.map((t) => (
           <button
             key={t.id}
             type="button"
             aria-pressed={state.activeTool === t.id}
-            title={`${t.label} (${t.shortcut})`}
+            title={t.shortcut ? `${t.label} (${t.shortcut})` : t.label}
             className={chip(state.activeTool === t.id)}
             onClick={() => controller.setTool(t.id)}
           >
@@ -141,6 +157,57 @@ export const BrushOptionsBar: React.FC<BrushOptionsBarProps> = ({ controller, cl
               />
               Clean each stroke
             </label>
+          </div>
+        </div>
+      )}
+
+      {isRetouchPaintTool(tool) && (
+        <div className="flex flex-col gap-2 border-t border-slate-800 pt-2" role="group" aria-label="Retouch options" data-testid="retouch-options">
+          {(tool === 'clone' || tool === 'heal') && (
+            <div className="flex items-center gap-2">
+              <span className="text-slate-400" data-testid="clone-source">
+                {cloneSourceLabel(controller)}
+              </span>
+              {cloneSource && (
+                <button type="button" title="Forget the source point" className={chip(false)} onClick={() => controller.setCloneSource(null)}>
+                  Clear source
+                </button>
+              )}
+            </div>
+          )}
+          {RETOUCH_CHOICES.filter((c) => c.tools.includes(tool)).map((choice) => (
+            <div key={choice.id} className="flex flex-wrap items-center gap-1" role="group" aria-label={choice.label}>
+              <span className="text-slate-400">{choice.label}</span>
+              {choice.options.map((o) => (
+                <button
+                  key={o.id}
+                  type="button"
+                  aria-pressed={retouch[choice.id] === o.id}
+                  title={o.title}
+                  className={chip(retouch[choice.id] === o.id)}
+                  onClick={() => setRetouchChoice(controller, choice.id, o.id)}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          ))}
+          {RETOUCH_OPTION_CONTROLS.filter((c) => c.tools.includes(tool)).map((spec) => (
+            <ControlSlider key={spec.id} spec={spec} value={retouch[spec.id]} onChange={(v) => controller.setPaintOptions({ retouch: { [spec.id]: v } })} />
+          ))}
+          <div className="flex flex-wrap gap-3 text-slate-300">
+            {RETOUCH_TOGGLES.filter((t) => t.tools.includes(tool)).map((t) => (
+              <label key={t.id} className="flex items-center gap-1.5">
+                <input
+                  type="checkbox"
+                  aria-label={t.label}
+                  checked={retouch[t.id]}
+                  onChange={(e) => controller.setPaintOptions({ retouch: { [t.id]: e.target.checked } })}
+                  className="accent-indigo-500"
+                />
+                {t.label}
+              </label>
+            ))}
           </div>
         </div>
       )}

@@ -24,6 +24,7 @@ import { createImageEditTools } from './edit-tools';
 import { createImageLayerTools } from './layer-tools';
 import { createImageEffectTools } from './effect-tools';
 import { createImagePaintTools } from './paint-tools';
+import { createImageRetouchTools } from './retouch-tools';
 import { createPigmentTools } from '../paint/pigment-tools';
 import { createImagePsdTools } from './psd-tools';
 import { createImageTransformTools } from './transform-tools';
@@ -78,6 +79,8 @@ function adjustmentsSummary(adjustments: ImageAdjustments) {
  *   `createImageShapeTools`); `rasterize_layer` turns one into pixels.
  * - Type layers: `list_fonts`, `get_text_layer`, `add_text_layer`, `set_text`, `set_text_style`,
  *   `set_paragraph_style`, `set_text_frame`, `convert_text_to_shape` (see `createImageTypeTools`).
+ * - Retouching: `clone_stamp`, `heal_brush`, `spot_heal`, `smudge`, `dodge`, `burn`, `sponge`,
+ *   `get_retouch_options`, `set_retouch_options`, `set_clone_source` (see `createImageRetouchTools`).
  */
 export function createImageEditorToolProvider(
   controller: ImageEditorController,
@@ -316,6 +319,7 @@ export function createImageEditorToolProvider(
       ...createImageTypeTools(controller),
       ...createImageEffectTools(controller),
       ...createImagePaintTools(controller),
+      ...createImageRetouchTools(controller),
       ...createPigmentTools(),
       ...createImagePsdTools(controller),
     ],

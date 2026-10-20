@@ -3,6 +3,7 @@ import {
   VECTOR_OVERLAY_THEME as THEME,
   getVectorOverlayRenderData,
   getVectorSceneRenderData,
+  getVectorSymbolEditBackground,
   isVectorTextTarget,
   toVectorKeyInput,
   toVectorPointerInput,
@@ -17,6 +18,7 @@ import {
   type SvgGradientDef,
   type VectorPaintDef,
   type VectorRenderGradientAnnotator,
+  type VectorRenderText,
 } from '@pixerate/editor/vector';
 import { useVectorEditorState } from './useVectorEditor';
 import { VectorWidthPointEditor } from './VectorWidthPointEditor';
@@ -139,12 +141,56 @@ export function VectorFilterDefs({ filters }: { filters: readonly VectorRenderFi
 
 const blendStyle = (blendMode: string | undefined): React.CSSProperties | undefined => (blendMode ? { mixBlendMode: blendMode as React.CSSProperties['mixBlendMode'] } : undefined);
 
-/** Renders scene nodes (paths and groups) from `getVectorSceneRenderData`. */
+/**
+ * Text drawn as SVG text: one `<text>` per paint layer, every span a `<tspan>` placed character by
+ * character (the layout is the editor's, not the browser's).
+ */
+export function VectorTextElement({ node }: { node: VectorRenderText }) {
+  return (
+    <g data-vector-id={node.id} data-vector-text="" transform={node.transform} opacity={node.opacity < 1 ? node.opacity : undefined} filter={node.filter} style={blendStyle(node.blendMode)}>
+      {node.layers.map((layer, i) => (
+        <text
+          key={i}
+          data-vector-layer={layer.kind}
+          xmlSpace="preserve"
+          fill={layer.fill}
+          stroke={layer.stroke}
+          strokeWidth={layer.stroke === 'none' ? undefined : layer.strokeWidth}
+          strokeLinejoin={layer.strokeLinejoin as any}
+          strokeDasharray={layer.strokeDasharray}
+          opacity={layer.opacity < 1 ? layer.opacity : undefined}
+          style={{ whiteSpace: 'pre', ...blendStyle(layer.blendMode) }}
+        >
+          {node.spans.map((sp, k) => (
+            <tspan
+              key={k}
+              x={sp.x}
+              y={sp.y}
+              rotate={sp.rotate}
+              fontFamily={sp.fontFamily}
+              fontSize={sp.fontSize}
+              fontWeight={sp.fontWeight}
+              fontStyle={sp.fontStyle}
+              textDecoration={sp.textDecoration}
+              fill={layer.runFills && sp.fill ? sp.fill : undefined}
+            >
+              {sp.text}
+            </tspan>
+          ))}
+        </text>
+      ))}
+    </g>
+  );
+}
+
+/** Renders scene nodes (paths, text and groups) from `getVectorSceneRenderData`. */
 export function VectorSceneNodes({ nodes }: { nodes: readonly VectorRenderNode[] }) {
   return (
     <>
       {nodes.map((node) =>
-        node.kind === 'group' ? (
+        node.kind === 'text' ? (
+          <VectorTextElement key={node.id} node={node} />
+        ) : node.kind === 'group' ? (
           <g
             key={node.id}
             data-vector-id={node.id}
@@ -336,10 +382,14 @@ export function VectorCanvas({
 }: VectorCanvasProps) {
   const state = useVectorEditorState(controller);
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const textRef = useRef<HTMLTextAreaElement | null>(null);
+  const editingText = state.textEdit?.nodeId ?? null;
   const fitted = useRef(!fitOnMount);
   const uid = useId().replace(/:/g, '');
   const scene = getVectorSceneRenderData(state, { idPrefix: `ve${uid}-` });
   const overlay = getVectorOverlayRenderData(state);
+  // Isolation mode: the rest of the document, dimmed behind the symbol's art.
+  const host = getVectorSymbolEditBackground(state, { idPrefix: `ve${uid}-host-` });
 
   useEffect(() => {
     const el = svgRef.current;
@@ -356,6 +406,13 @@ export function VectorCanvas({
     observer.observe(el);
     return () => observer.disconnect();
   }, [controller]);
+
+  // Typing goes into a hidden textarea while text is edited (focused after the click that started it).
+  useEffect(() => {
+    if (!editingText) return;
+    const t = setTimeout(() => textRef.current?.focus({ preventScroll: true }), 0);
+    return () => clearTimeout(t);
+  }, [editingText]);
 
   // Wheel needs a non-passive listener to stop page scroll / browser zoom.
   useEffect(() => {
@@ -447,6 +504,13 @@ export function VectorCanvas({
         fill={scene.background ?? (checkerboard ? `url(#ve${uid}-checker)` : '#ffffff')}
         stroke="rgba(0,0,0,0.12)"
       />
+      {host && (
+        <g data-vector-symbol-host="" opacity={0.3} pointerEvents="none" transform={host.transform}>
+          <VectorGradientDefs defs={host.defs} />
+          <VectorFilterDefs filters={host.filters} />
+          <VectorSceneNodes nodes={host.nodes} />
+        </g>
+      )}
       <g data-vector-scene="" transform={scene.transform}>
         <VectorSceneNodes nodes={scene.nodes} />
       </g>
@@ -627,6 +691,34 @@ export function VectorCanvas({
           />
         )}
         {overlay.cutPoint && <circle data-vector-cut-point="" cx={overlay.cutPoint.x} cy={overlay.cutPoint.y} r={THEME.handleRadius + 1} fill={THEME.handleFill} stroke={accentColor} />}
+        {overlay.text && (
+          <g data-vector-text-edit={overlay.text.nodeId} data-editing={overlay.text.editing || undefined}>
+            <path d={overlay.text.frame} stroke={accentColor} strokeDasharray={overlay.text.editing ? '3 2' : undefined} opacity={0.8} />
+            {overlay.text.selection.map((d, i) => (
+              <path key={i} data-vector-text-selection="" d={d} fill={accentColor} fillOpacity={0.25} stroke="none" />
+            ))}
+            {overlay.text.caret && (
+              <line data-vector-text-caret="" x1={overlay.text.caret.x1} y1={overlay.text.caret.y1} x2={overlay.text.caret.x2} y2={overlay.text.caret.y2} stroke={accentColor} strokeWidth={1.5} />
+            )}
+            {overlay.text.overflow && (
+              <g data-vector-text-overflow="" transform={`translate(${overlay.text.overflow.x} ${overlay.text.overflow.y})`}>
+                <rect x={-5} y={-5} width={10} height={10} fill={THEME.handleFill} stroke="#dc2626" />
+                <path d="M-3 0H3M0 -3V3" stroke="#dc2626" />
+              </g>
+            )}
+          </g>
+        )}
+        {overlay.constraints.map((c) => (
+          <g key={`constraint:${c.id}`} data-vector-constraint-glyph={c.kind} data-satisfied={c.satisfied ? 'true' : 'false'}>
+            {c.dimension && <line x1={c.dimension.x1} y1={c.dimension.y1} x2={c.dimension.x2} y2={c.dimension.y2} stroke={c.satisfied ? THEME.guide : '#dc2626'} strokeDasharray="2 2" />}
+            <text x={c.x} y={c.y} fontSize={10} textAnchor="middle" fill={c.satisfied ? accentColor : '#dc2626'} stroke="#ffffff" strokeWidth={3} paintOrder="stroke" style={{ fontFamily: 'system-ui, sans-serif' }}>
+              {c.label}
+            </text>
+          </g>
+        ))}
+        {overlay.textBox && (
+          <rect data-vector-text-box="" x={overlay.textBox.x} y={overlay.textBox.y} width={overlay.textBox.width} height={overlay.textBox.height} stroke={accentColor} strokeDasharray="3 2" />
+        )}
         {overlay.marquee && (
           <rect
             data-vector-marquee=""
@@ -668,6 +760,79 @@ export function VectorCanvas({
           </text>
         )}
       </g>
+      {state.textEdit && overlay.text && (
+        // A hidden textarea at the caret takes typing and composed (IME) text.
+        <foreignObject x={overlay.text.caret?.x1 ?? 0} y={overlay.text.caret?.y1 ?? 0} width={1} height={1} style={{ overflow: 'visible' }}>
+          <textarea
+            ref={textRef}
+            data-testid="vector-type-input"
+            aria-label="Text"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            style={{ position: 'absolute', width: 1, height: 1, padding: 0, border: 0, opacity: 0, resize: 'none', overflow: 'hidden' }}
+            onPointerDown={(e) => e.stopPropagation()}
+            onInput={(e) => {
+              const el = e.currentTarget;
+              if ((e.nativeEvent as InputEvent).isComposing) return;
+              if (el.value) controller.textInput(el.value);
+              el.value = '';
+            }}
+            onCompositionEnd={(e) => {
+              const el = e.currentTarget;
+              if (el.value) controller.textInput(el.value);
+              el.value = '';
+            }}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.nativeEvent.isComposing) return;
+              // Characters come through `input`; editing keys and shortcuts go to the controller.
+              if (e.key.length === 1 && !e.metaKey && !e.ctrlKey) return;
+              if (controller.keyDown(toVectorKeyInput(e))) e.preventDefault();
+              if (!controller.getState().textEdit) svgRef.current?.focus({ preventScroll: true });
+            }}
+            onKeyUp={(e) => e.stopPropagation()}
+            onCopy={(e) => {
+              const text = controller.getSelectedText();
+              if (text) {
+                e.clipboardData.setData('text/plain', text);
+                e.preventDefault();
+              }
+              e.stopPropagation();
+            }}
+            onCut={(e) => {
+              const text = controller.cutText();
+              if (text) {
+                e.clipboardData.setData('text/plain', text);
+                e.preventDefault();
+              }
+              e.stopPropagation();
+            }}
+            onPaste={(e) => {
+              const text = e.clipboardData.getData('text/plain');
+              if (text) controller.textInput(text);
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+          />
+        </foreignObject>
+      )}
+      {state.symbolEdit && (
+        // Isolation mode: which symbol, and the way out (Escape with nothing selected works too).
+        <foreignObject data-vector-symbol-edit={state.symbolEdit.symbolId} x={8} y={8} width={320} height={32} style={{ overflow: 'visible' }}>
+          <div
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '4px 8px', borderRadius: 6, background: 'rgba(15,23,42,0.85)', color: '#fff', font: '12px system-ui, sans-serif' }}
+            onPointerDown={(e) => e.stopPropagation()}
+            onDoubleClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            <span>Symbol: {state.symbolEdit.name}</span>
+            <button type="button" aria-label="Exit symbol" style={{ border: '1px solid rgba(255,255,255,0.4)', borderRadius: 4, padding: '0 6px', background: 'transparent', color: '#fff', cursor: 'pointer' }} onClick={() => controller.exitSymbolEdit()}>
+              Done
+            </button>
+          </div>
+        </foreignObject>
+      )}
       {edit && editAt && (
         // Width Point Edit (double-click with the width tool), beside the point.
         <foreignObject data-vector-width-point-edit="" x={editAt.x + 12} y={editAt.y + 12} width={180} height={140} style={{ overflow: 'visible' }}>

@@ -37,6 +37,8 @@ import { mirrorWidthProfile } from './width.js';
 import { hitTestVectorPaintStack } from './paintLayers.js';
 import { expandVectorAppearance, hasOwnVectorAppearance, transformVectorEffects, vectorAppearanceOutline, vectorAppearanceShapes } from './appearance.js';
 import { isVectorMaskActive, isVectorMaskGroup, vectorMaskContains } from './mask.js';
+import { bakeVectorTextGeometry } from './text.js';
+import { vectorNodesNear } from './spatial.js';
 import type {
 	VectorAnchor,
 	VectorAnchorType,
@@ -49,7 +51,8 @@ import type {
 	VectorPathNode,
 	VectorSubpath,
 	VectorWidthPoint,
-	Vec2
+	Vec2,
+	VectorTextNode
 } from './types.js';
 
 export type { AffineMatrix };
@@ -66,7 +69,8 @@ export const cloneAnchor = (a: VectorAnchor): VectorAnchor => ({
 	...(a.in ? { in: { x: a.in.x, y: a.in.y } } : {}),
 	...(a.out ? { out: { x: a.out.x, y: a.out.y } } : {}),
 	...(a.type && a.type !== 'corner' ? { type: a.type } : {}),
-	...(a.corner ? { corner: { ...a.corner } } : {})
+	...(a.corner ? { corner: { ...a.corner } } : {}),
+	...(a.id ? { id: a.id } : {})
 });
 
 export const cloneSubpath = (s: VectorSubpath): VectorSubpath => ({ anchors: s.anchors.map(cloneAnchor), closed: s.closed });
@@ -262,9 +266,19 @@ export function locateVectorNode(nodes: VectorNode[], id: string): { list: Vecto
 	return search(nodes, null);
 }
 
+/** Every node that paints with fills and strokes in the subtree: paths and text. */
+export function collectPaintedNodes(node: VectorNode): Array<VectorPathNode | VectorTextNode> {
+	const out: Array<VectorPathNode | VectorTextNode> = [];
+	walkVectorNodes([node], (n) => {
+		if (n.type === 'path' || n.type === 'text') out.push(n);
+	});
+	return out;
+}
+
 /** Every path node in the subtree (a path node itself, or a group's descendants). */
 export function collectPathNodes(node: VectorNode): VectorPathNode[] {
 	if (node.type === 'path') return [node];
+	if (node.type === 'text' || node.type === 'instance') return [];
 	const out: VectorPathNode[] = [];
 	walkVectorNodes(node.children, (n) => {
 		if (n.type === 'path') out.push(n);
@@ -407,8 +421,10 @@ export function vectorStrokeOutline(node: VectorPathNode, parent: AffineMatrix =
 
 /** The topmost node hit by `p` (skipping hidden and locked ones), or null. */
 export function hitTestVectorNodes(nodes: readonly VectorNode[], p: Vec2, tolerance = 0, options: VectorHitTestOptions = {}): VectorNode | null {
-	for (let i = nodes.length - 1; i >= 0; i--) {
-		const node = nodes[i];
+	// Large documents: only the nodes whose paint box reaches the point (the same tests then run).
+	const candidates = vectorNodesNear(nodes, { x: p.x, y: p.y, width: 0, height: 0 }, tolerance);
+	for (let k = candidates.length - 1; k >= 0; k--) {
+		const node = nodes[candidates[k]];
 		if (node.visible === false || node.locked) continue;
 		if (hitTestVectorNode(node, p, tolerance, IDENTITY_MATRIX, options)) return node;
 	}
@@ -467,6 +483,7 @@ function mapAnchor(a: VectorAnchor, m: AffineMatrix): VectorAnchor {
 	if (a.out) next.out = applyMatrix(m, a.out);
 	if (a.type) next.type = a.type;
 	if (a.corner) next.corner = { ...a.corner };
+	if (a.id) next.id = a.id;
 	return next;
 }
 
@@ -483,7 +500,8 @@ function bakeIntoGeometry<T extends VectorNode>(node: T, m: AffineMatrix): T {
 		const moved = { closed: spine.closed, anchors: spine.anchors.map((a) => mapAnchor(a, m)) };
 		return { ...group, children, blend: { ...group.blend, spine: moved } } as T;
 	}
-	const path = node as VectorPathNode;
+	// Text: its frame maps and its font sizes scale (`bakeVectorTextGeometry`); paints as for paths.
+	const path = (node.type === 'text' ? bakeVectorTextGeometry(node as VectorTextNode, m) : node) as VectorPathNode;
 	// A mirror swaps the sides of a variable-width stroke (the path still runs the same way).
 	const flips = m[0] * m[3] - m[1] * m[2] < 0;
 	const mirrored = flips && path.strokeWidthProfile?.length;
@@ -501,10 +519,14 @@ function bakeIntoGeometry<T extends VectorNode>(node: T, m: AffineMatrix): T {
 		...(isVectorGradient(path.stroke) ? { stroke: transformVectorPaint(path.stroke, m) } : {}),
 		...(Array.isArray(path.fills) ? { fills: path.fills.map(layer) } : {}),
 		...(Array.isArray(path.strokes) ? { strokes: path.strokes.map(layer) } : {}),
-		subpaths: path.subpaths.map((sp) => ({
-			closed: sp.closed,
-			anchors: sp.anchors.map((a) => mapAnchor(a, m))
-		}))
+		...(path.type === 'path'
+			? {
+					subpaths: path.subpaths.map((sp) => ({
+						closed: sp.closed,
+						anchors: sp.anchors.map((a) => mapAnchor(a, m))
+					}))
+				}
+			: {})
 	} as T;
 }
 
@@ -515,6 +537,11 @@ function bakeIntoGeometry<T extends VectorNode>(node: T, m: AffineMatrix): T {
  */
 export function transformVectorNode<T extends VectorNode>(node: T, m: AffineMatrix): T {
 	const total = multiplyMatrices(nodeMatrix(node), m);
+	// An instance keeps the whole matrix: its art is drawn through it.
+	if (node.type === 'instance') {
+		const { transform: _t, ...rest } = node as VectorNode;
+		return (isIdentityMatrix(total) ? rest : { ...rest, transform: total }) as T;
+	}
 	const { rigid, residual } = decomposeRigid(total);
 	const { transform: _old, ...rest } = node as VectorNode;
 	const baked = bakeIntoGeometry(rest as T, residual);
@@ -674,6 +701,7 @@ export function reverseSubpath(sp: VectorSubpath): VectorSubpath {
 			if (a.in) next.out = { ...a.in };
 			if (a.type) next.type = a.type;
 			if (a.corner) next.corner = { ...a.corner };
+			if (a.id) next.id = a.id;
 			return next;
 		});
 	return { anchors, closed: sp.closed };

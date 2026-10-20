@@ -249,6 +249,7 @@ export function curvatureMoveAnchor(sp: VectorSubpath, index: number, q: Vec2): 
 	if (own[1]) moved.out = { x: q.x + own[1].x, y: q.y + own[1].y };
 	if (a.type) moved.type = a.type;
 	if (a.corner) moved.corner = { ...a.corner };
+	if (a.id) moved.id = a.id;
 	const [prev, next] = ends;
 	if (a.type && a.type !== 'corner' && prev && next) {
 		const dx = next.x - prev.x;
@@ -337,6 +338,7 @@ function reverse(sp: VectorSubpath): VectorSubpath {
 				if (a.in) next.out = { ...a.in };
 				if (a.type) next.type = a.type;
 				if (a.corner) next.corner = { ...a.corner };
+				if (a.id) next.id = a.id;
 				return next;
 			})
 	};
