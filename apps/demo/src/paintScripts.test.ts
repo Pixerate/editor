@@ -28,4 +28,32 @@ describe("paint agent scripts", () => {
     expect(glaze).toMatchObject({ blend: "watercolor", opacity: 0.45 });
     expect(controller.getStrokes().map((s) => s.brush.id)).toEqual(["oil-pastel", "dirty-round", "blender", "multicolor-flat"]);
   }, 60_000);
+
+  it("paints a watercolour: wet-in-wet sky, blotted clouds, granulating hills, all dried", async () => {
+    const { controller, registry } = setup();
+    await runAgentScript(registry, PAINT_SCRIPTS.find((s) => s.id === "paint-watercolor")!, { control: { speed: Infinity, stopped: false } });
+    expect(controller.getState().wet.wet).toBe(false);
+    expect(controller.getStrokes().map((s) => s.brush.id)).toEqual(["watercolor-wash", "watercolor-wash", "blot", "watercolor-wash"]);
+    const sky = controller.listLayers().find((l) => l.name === "Sky wash")!;
+    expect(sky.bounds).not.toBeNull();
+    controller.dispose();
+  }, 120_000);
+
+  it("paints thick oil: a blended wet ground, tube petals dragged by the knife, a metallic centre", async () => {
+    const { controller, registry } = setup();
+    await runAgentScript(registry, PAINT_SCRIPTS.find((s) => s.id === "paint-impasto")!, { control: { speed: Infinity, stopped: false } });
+    expect(controller.getLighting().elevation).toBe(28);
+    const flowers = controller.listLayers().find((l) => l.name === "Flowers")!;
+    expect(controller.reliefOf(flowers.id)!.maxHeight).toBeGreaterThan(50);
+    expect(controller.getState().wet.wet).toBe(false);
+    controller.dispose();
+  }, 120_000);
+
+  it("draws with stencils, particle and bristle brushes and editable stickers", async () => {
+    const { controller, registry } = setup();
+    await runAgentScript(registry, PAINT_SCRIPTS.find((s) => s.id === "paint-procedural")!, { control: { speed: Infinity, stopped: false } });
+    const stars = controller.listLayers().find((l) => l.name === "Stars")!;
+    expect(controller.listStickers(stars.id)[0].size).toBe(70);
+    expect(controller.listStencils()).toHaveLength(0);
+  }, 120_000);
 });

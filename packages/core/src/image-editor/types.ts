@@ -360,7 +360,7 @@ export type ImageEditorTool =
 
 export type ImageEditorFit = 'contain' | 'margin';
 
-import type { DocumentColorProfile, ProofSetup } from './color-management';
+import type { DocumentColorMode, DocumentColorProfile, ProofSetup } from './color-management';
 import type { BitDepth } from '../raster/deep';
 
 export interface ImageEditorState {
@@ -431,6 +431,8 @@ export interface ImageEditorState {
   colorProfile?: DocumentColorProfile;
   /** View › Proof Setup (view state): soft-proof the viewport through another profile, or `null`. */
   proofSetup?: ProofSetup | null;
+  /** Image › Mode CMYK or Lab (missing: RGB): what the document is for (see `DocumentColorMode`). Recorded in history and saved. */
+  colorMode?: DocumentColorMode;
   /**
    * Bits per channel of the document (Image › Mode): 8 (missing), 16 or 32 (linear float).
    * Pixel layers keep 16- or 32-bit samples where they have them (see `raster/deep`); the

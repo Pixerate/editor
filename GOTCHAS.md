@@ -2280,6 +2280,12 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: The profile is generated from a printing model (its B2A tables are a damped least-squares separation at every grid node) instead of shipping 230 KB of measured data, and `builtinProfile` caches the result.
 - **Solution / Workaround**: Expected. Call `builtinProfile('coated-cmyk')` early (e.g. idle time) to warm it. Tests that touch it need a timeout of about a minute on slow CI machines.
 
+### [core/image-editor] A CMYK Document Is Edited as RGB, and Its Adjustment Layers Do Not Translate
+
+- **Issue / Symptom**: A Curves layer that looked right in a CMYK document looked different when the exported CMYK PSD was opened in Photoshop.
+- **Root Cause**: Pixels are always RGB in the working space here; CMYK mode only changes the viewport (a soft proof through the CMYK profile) and what `toPsd` writes (pixels separated through the profile, stored inverted with 255 = no ink). Adjustment layers are written with their RGB parameters, and Photoshop applies them to the C, M, Y and K channels of a CMYK file.
+- **Solution / Workaround**: `toPsd` warns when a CMYK or Lab file has visible adjustment layers. Merge or flatten them first when the file must look the same in Photoshop. Out-of-gamut RGB colours clip in the separation, so check them with Proof Setup's gamut warning (and test colours in gamut: saturated sRGB blues are not).
+
 ### [core/vector] A Frame's Size Field Must Not Apply Each Keystroke
 
 - **Issue / Symptom**: Typing a new width such as 400 into a frame's size field squashed children that stretch with the frame (`leftRight` / `topBottom`), and their margins came back wrong.
@@ -2351,3 +2357,74 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: A mesh or freeform fill disappeared after a transform, and code that read `fill.stops` crashed on it.
 - **Root Cause**: `VectorPaint` now also holds `{ type: 'mesh' }` and `{ type: 'freeform' }` paints. They have points and colours, not stops, so `isVectorGradient` is false for them. Code that treated every paint object as a gradient, such as transform baking or blend colour distance, skipped them or broke.
 - **Solution / Workaround**: Check `isVectorShadedPaint` (or `isVectorMeshGradient` / `isVectorFreeformGradient`) next to `isVectorGradient`. `transformVectorPaint` and `mapVectorPaint` move both kinds of point, and `vectorPaintToSvg` draws them as a pattern. Freeform is drawn as gradient strips, not flat cells: flat cells showed visible blocks at normal zoom.
+
+### [core/paint] The Wet Kernels Only Agree Bit for Bit If Every Operation Is the Same f32 Operation
+
+- **Issue / Symptom**: After adding the edge field, the TypeScript and WebAssembly wet kernels drifted apart (different state hashes after a few steps), although the maths was "the same".
+- **Root Cause**: The TypeScript kernel is the specification and must round every intermediate to f32 (`Math.fround`) in exactly the SIMD kernel's order. One constant, `0.99`, was multiplied as an f64 literal in TypeScript but splatted as an f32 in AssemblyScript. (Rounding an f64 `+ − × ÷ √` of two f32 values once to f32 *is* the f32 operation, so `F(a * b)` matches `f32x4.mul`; an f64 constant breaks that.)
+- **Solution / Workaround**: Declare every non-trivial constant once as `F(value)` (`DECAY`, `W0`…) and use it; never write a decimal literal inside a kernel expression unless it is exact in binary (0.25, 0.5, 1.5, 4.5). Keep masked SIMD lanes' maths identical to the scalar branch (compute both, select). `tests/paint-wet-kernel.test.ts` compares the two kernels' state hashes and checks that `kernel-wasm.ts` was generated from the current `assembly/wet.ts` (`pnpm --filter @pixerate/editor build:wasm`).
+
+### [core/paint] Wet Media Is Only Deterministic If Nothing Depends on When Batches End
+
+- **Issue / Symptom**: The same strokes could dry differently depending on frame rate, worker count or how many steps each frame ran.
+- **Root Cause**: Anything decided at a batch boundary (waking tiles, baking and freeing dry ones) depends on where the boundaries fall, and frames decide those.
+- **Solution / Workaround**: Time is the step `clock`, never wall time; edits (dabs) happen between batches and record the clock. Batches are at most `MAX_BATCH` (32) steps and never cross a multiple of `FREE_INTERVAL`. Tiles wake when anything *alive* (water on the surface or in the paper) comes within `STRIP` (64) cells of their edge, which stays ahead of anything that moves a cell a step, so an earlier or later wake-up changes nothing. Dry tiles are baked and freed only on multiples of `FREE_INTERVAL`, from the last step's flags (not the batch's), and only when no neighbour is alive. Dry cells must compute to exactly zero (that is why the edge field is 0 where dry). The tests run the same scene in different batchings and on 1–10 workers (in a browser) and compare hashes.
+
+### [core/paint] `Math.exp` and `Math.pow` Differ Between JavaScript Engines, So the Dry-on-Save Bake Uses Its Own
+
+- **Issue / Symptom**: A wet painting baked in Chrome and in Safari could differ by a level on a few pixels, which breaks "the saved file is the same everywhere".
+- **Root Cause**: Only `+ − × ÷` and `Math.sqrt` are correctly rounded in JavaScript; `exp`, `log`, `pow`, `sin`, `cos` come from each engine's own maths library.
+- **Solution / Workaround**: `film.ts` has `dexp` / `dlog` / `dpow` built from `+ − ×` only, and the sRGB tables and the `e^(−x)` table are made with them. Paper heights are quantised to 1/65536 and dab coverage to 1/4096 before they reach the simulation, so last-bit differences in the grain generator or the dab rasterizer (which use `Math.sin`) almost never matter. Flow maps use `dsincos`.
+
+### [core/paint] A Glaze Must Be Shaded Over What Is Below as the Compositor Blends It
+
+- **Issue / Symptom**: Blue glazed over a dried yellow wash came out blue-grey instead of green.
+- **Root Cause**: The film was laid over the layer pixel mixed with the paper in *linear* light, but the compositor blends a semi-transparent pixel over the paper in *encoded* sRGB. A dark yellow channel at alpha 0.9 is 10 % of the paper in linear light (bright) but 0.1 × 255 encoded (dark), so the glaze saw a much lighter yellow than the screen showed.
+- **Solution / Workaround**: `filmPixel` / `shadeTile` blend the pixel over the paper in encoded values first (`a·C + (1 − a)·P`) and only then convert to linear (`srgbByteToLinear` interpolates the byte table). The result goes back as colour plus alpha over the paper colour (exact over the paper), never lowering the pixel's own alpha.
+
+### [core/paint] Web Workers From a Library: `Function.prototype.toString` Needs a Self-Contained Function
+
+- **Issue / Symptom**: A worker built from a function's source failed with "x is not defined" in a consumer's minified bundle.
+- **Root Cause**: `toString()` gives only the function body; anything it refers to outside itself (an imported constant, a helper) is not in the worker.
+- **Solution / Workaround**: `wetWorkerMain` uses nothing outside its own body: every address and size arrives in the `init` message, and the kernel (halo exchange included) is in the wasm module. The pool runs it from a Blob URL, so hosts serve no extra file. CSPs that forbid `blob:` workers make the pool fail, and the world falls back to one thread with a warning.
+
+### [core|demo/paint] Threads Need Cross-Origin Isolation; GitHub Pages Cannot Send the Headers
+
+- **Issue / Symptom**: In the deployed demo wet paint runs on one thread and the Wet panel says why; locally it uses every core.
+- **Root Cause**: Shared wasm memory needs `SharedArrayBuffer`, which browsers give only to cross-origin isolated pages (`Cross-Origin-Opener-Policy: same-origin` plus `Cross-Origin-Embedder-Policy: require-corp` or `credentialless`). GitHub Pages cannot set response headers.
+- **Solution / Workaround**: The demo's Vite dev and preview servers send COOP `same-origin` and COEP `credentialless` (which, unlike `require-corp`, still loads cross-origin images without CORP headers). Without isolation the world steps on one thread (wasm SIMD, about 1/8 the speed on a 10-core machine) and `wetSupport().message` explains how to turn threads on. Results are identical either way.
+
+### [core/paint-editor] Wet Layer Pixels Change Without Undo Steps, and Undo Restores a Snapshot
+
+- **Issue / Symptom**: Undoing a watercolour stroke while other paint was still wet showed the wrong wet paint, and a fill on a wet layer could be overwritten by the next frame.
+- **Root Cause**: A wet layer's pixels are the simulation's display: every frame replaces the layer's surface in the document (not an undo step). History entries hold documents, but the wet state lives in the world.
+- **Solution / Workaround**: Every operation that changes wet paint takes a world snapshot before it (`beginWetOp`) and after it, kept on the history entry within `undoMemory` (oldest dropped: undoing past them leaves that paint dry). Undo and redo restore the snapshot with the document. Non-wet operations on a wet layer (a dry brush, fill, merge, duplicate, resize) dry it first inside the same undo step. Operations that touch the world while a worker batch runs throw; async callers (the agent tools, the Wet panel) `await controller.wetIdle()` first.
+
+### [core/paint-editor] Thick Paint Is Lit at Render Time, So Relit Tiles Must Be Cached by Their Inputs' Identity
+
+- **Issue / Symptom**: Moving the light, or painting one impasto dab, relit every tile of every thick layer and made strokes stutter on large canvases.
+- **Root Cause**: A lit tile depends on its colour tile, its material tile, the light and the height of nine tiles (slopes reach across tile borders). Without a cache every composite relights everything.
+- **Solution / Workaround**: `LitCache` keeps each lit tile with the identities of its inputs (colour, material, the 3 × 3 height tiles, the light key) and reuses it while they are the same objects. The live impasto stroke hands out new `Tile` objects for the height tiles it touched (`ThickStrokeDriver.channels()`), so only those and their neighbours relight. The layer's own pixels stay the unlit colour (albedo); exports, PSD layers and merges use the lit pixels, and merging drops the upper layer's relief.
+
+### [core/paint-editor] A Replay Is Only Exact If Every Change Between Strokes Is Data, at the Right Place and Clock
+
+- **Issue / Symptom**: A time-lapse of a painting with a ground fill showed strokes on bare paper; a replayed watercolour bloomed differently from the original.
+- **Root Cause**: Strokes were recorded, but fills, clears and drying were not, and wet strokes replayed all their points at once although the simulation ran between them while the user painted.
+- **Solution / Workaround**: Fills, clears and relief flattening are recorded as `paintEvents` with `at` (strokes recorded before them); wet events also carry `at` and their `clock`. Wet strokes record the clock of every point (`RecordedStroke.steps`), and `replayPainting` steps the scratch editor's simulation to each clock before pushing that point (`advanceWet` steps even when nothing is wet, so clocks stay in line). The replay test paints a live stroke with time passing between points and compares the replay byte for byte. Imported pixels, merges and transforms are still not data: those layers replay empty.
+
+### [core/paint-editor] Simulated Brushes Must Step by Distance, Not by Input Sample
+
+- **Issue / Symptom**: A spring-ink line drawn with a mouse looked different from the same path painted by `paint_stroke`, and a replay did not match the original.
+- **Root Cause**: Particle and bristle simulations advance a step per update; pointer events arrive at whatever rate the device sends them, so steps per pixel differed.
+- **Solution / Workaround**: `MarkStroke` walks the smoothed path with a fine dab walk (about 1.5 px per step) and advances the simulation once per walked dab, so the number of steps depends only on the path. Randomness comes from `rand01(seed, index, stream)`. The test pushes the same points in chunks of three and compares the pixels.
+
+### [core/paint-editor] A Sticker Layer's Pixels Are Drawn From Its Stickers, So Other Paint Is Refused There
+
+- **Issue / Symptom**: Editing a sticker after painting a pencil line on the same layer would wipe the line.
+- **Root Cause**: Every sticker edit redraws the layer from its sticker list (`stickerSurface`), the only way to keep stickers editable objects with exact pixels.
+- **Solution / Workaround**: Sticker spray needs an empty layer (or a sticker layer), and other brushes and fills on a sticker layer are refused with a message to add a layer. Sticker edits record a `stickers` paint event with the whole list, so replays rebuild the same layer.
+
+### Wet-media tests time out on CI when the scene is "small"
+- **Issue / Symptom**: `paint-wet-kernel.test.ts` took ~130 s on CI (Ubuntu, Node 24) and the physics tests in `paint-wet.test.ts` 5–9 s each, although they looked modest locally.
+- **Root Cause**: The TypeScript spec kernel costs ~45–70 ms per 256² tile-step, and a disc centred on a tile seam (e.g. 256, 256) wakes four tiles. A 600×420 scene for 160 steps is ~1000 TS tile-steps; CI runners are ~3× slower than a laptop and run test files in parallel.
+- **Solution / Workaround**: Keep CI scenes to one tile (centre marks at 128 on a 256 grid) unless the test is about tiles, use `evaporation: 1` for tests that wait for drying, and keep the TS-vs-wasm parity scene to 2 tiles and a few steps (bit differences show from the first step). The full parity and batching scenes run with `WET_BENCH=1`.

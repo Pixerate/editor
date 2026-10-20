@@ -1,6 +1,6 @@
 {
   "name": "@pixerate/editor",
-  "version": "0.113.0",
+  "version": "0.114.0",
   "description": "UI-agnostic rich text and media editing core library",
   "author": "Pixerate",
   "license": "MIT",
@@ -168,7 +168,8 @@
     "build": "tsup",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:corpus": "node scripts/fetch-psd-corpus.mjs && PSD_CORPUS=1 vitest run tests/psd-corpus.test.ts"
+    "test:corpus": "node scripts/fetch-psd-corpus.mjs && PSD_CORPUS=1 vitest run tests/psd-corpus.test.ts",
+    "build:wasm": "node scripts/build-wet-wasm.mjs"
   },
   "dependencies": {
     "@tiptap/extension-character-count": "^2.11.5",
@@ -203,6 +204,7 @@
     "@types/dagre": "^0.7.54",
     "@types/markdown-it": "^14.2.0",
     "@types/node": "^26.6.5",
+    "assemblyscript": "0.28.20",
     "fast-check": "^3.23.2",
     "mermaid": "12.0.0",
     "tiptap-markdown": "^0.8.10",

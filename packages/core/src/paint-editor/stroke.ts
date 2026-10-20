@@ -19,6 +19,10 @@ import { PaintDabStroke } from './dab-stroke';
 import { DryStroke, IDENTITY_COPY, type PenPoint, type StrokeCopy } from './engine';
 import type { PaperGrain } from './paper';
 import type { Affine } from './strokes';
+import type { WetStrokeDriver } from './wet';
+import { ThickStrokeDriver, type ThickChannels } from './thick';
+import { BristleStroke, ParticleStroke, type CoverageStroke } from './procedural';
+import { StickerSpray, type Sticker } from './stickers';
 
 export interface StrokeSessionHost {
   /** Shows the layer's live surface (no history); `rects` are where it changed. */
@@ -51,6 +55,17 @@ export interface StrokeSessionInit {
   mixerLoad: MixerLoad;
   /** The secondary colour 0..255 RGBA (a multi-colour brush without its own colours uses it). */
   secondary?: readonly [number, number, number, number];
+  /**
+   * Wet brushes: the driver that applies the stroke to the wet layer, and the layer's current
+   * pixels (the wet layer's display). The session's own surface is not used.
+   */
+  wet?: { driver: WetStrokeDriver; surface: () => TiledSurface };
+  /** Impasto brushes: the layer's thick-paint channels before the stroke. */
+  thick?: { channels: ThickChannels };
+  /** Where paint may land (canvas-sized coverage 0..255: the stencils' mask), or none. */
+  selection?: { width: number; height: number; data: ArrayLike<number> } | null;
+  /** Sticker brushes: the next sticker number on the layer. */
+  sticker?: { nextId: number };
 }
 
 export interface PaintStrokeResult {
@@ -62,6 +77,8 @@ export interface PaintStrokeResult {
   strokeId: string | null;
   /** Mixer and wet-capable dab brushes: what the brush carries after the stroke (cleaned unless it is dirty). */
   mixerLoad?: MixerLoad;
+  /** Wet brushes: the paint is wet (it keeps moving until it dries; see dry_paint / advance_wet_paint). */
+  wet?: boolean;
 }
 
 function defaultTile(surface: TiledSurface): Uint8ClampedArray {
@@ -93,14 +110,21 @@ export class PaintStrokeSession {
   private readonly live: Map<TileKey, Tile>;
   private readonly touched = new Set<TileKey>();
   private readonly fresh = new Set<TileKey>();
-  private readonly dry: DryStroke | null = null;
+  private readonly dry: CoverageStroke | null = null;
   private readonly wet: PaintDabStroke | null = null;
+  private readonly wetDriver: WetStrokeDriver | null = null;
+  private readonly thickDriver: ThickStrokeDriver | null = null;
+  private readonly stickerSpray: StickerSpray | null = null;
+  /** A wet stroke that ended while the simulation was mid-batch: it commits when the driver catches up. */
+  private wetEndPending = false;
   private readonly apply: StrokeApply;
   private readonly copies: readonly StrokeCopy[];
   private bounds: RasterRect | null = null;
   private lastRaw: PenPoint | null = null;
   private closed = false;
   result: PaintStrokeResult | null = null;
+  /** The mask stencils this stroke was painted with when they are not the editor's (replays). */
+  maskStencils: readonly import('./stencils').Stencil[] | null = null;
 
   constructor(private readonly host: StrokeSessionHost, readonly init: StrokeSessionInit) {
     this.layerId = init.layerId;
@@ -108,6 +132,7 @@ export class PaintStrokeSession {
     this.live = new Map(this.base.tiles);
     this.copies = init.copies.length ? init.copies : [IDENTITY_COPY];
     const brush = init.brush;
+    if (init.wet) this.wetDriver = init.wet.driver;
     this.apply = {
       mode: brush.engine === 'eraser' ? 'erase' : 'paint',
       color: init.color,
@@ -115,10 +140,17 @@ export class PaintStrokeSession {
       opacity: brush.tip.opacity,
       blend: brush.tip.blend,
       lockTransparency: init.lockTransparency,
-      selection: null,
+      selection: init.selection ?? null,
       offset: init.offset,
     };
-    if (brush.engine === 'mixer' || brush.engine === 'blender' || brush.engine === 'smudge' || usesPaintExchange(brush)) {
+    if (this.wetDriver) {
+      // the wet layer paints; nothing else to set up
+    } else if (init.sticker) {
+      this.stickerSpray = new StickerSpray({ brush, target: this.tileTarget(), color: init.colorHex, seed: init.seed, copies: this.copies, nextId: init.sticker.nextId });
+    } else if (init.thick) {
+      const rgb = (c: readonly number[]): [number, number, number] => [c[0] / 255, c[1] / 255, c[2] / 255];
+      this.thickDriver = new ThickStrokeDriver({ brush, target: this.tileTarget(), channels: init.thick.channels, color: rgb(init.color), load: init.mixerLoad, seed: init.seed, copies: this.copies });
+    } else if (brush.engine === 'mixer' || brush.engine === 'blender' || brush.engine === 'smudge' || usesPaintExchange(brush)) {
       const rgb = (c: readonly number[]): [number, number, number] => [c[0] / 255, c[1] / 255, c[2] / 255];
       this.wet = new PaintDabStroke(brush, {
         target: this.tileTarget(),
@@ -131,7 +163,8 @@ export class PaintStrokeSession {
         copies: this.copies,
       });
     } else {
-      this.dry = new DryStroke(brush, { grain: init.grain, paperDepth: init.paperDepth, seed: init.seed, copies: this.copies });
+      const opts = { grain: init.grain, paperDepth: init.paperDepth, seed: init.seed, copies: this.copies };
+      this.dry = brush.engine === 'particle' ? new ParticleStroke(brush, opts) : brush.engine === 'bristle' ? new BristleStroke(brush, opts) : new DryStroke(brush, opts);
     }
   }
 
@@ -139,7 +172,7 @@ export class PaintStrokeSession {
     return {
       offset: this.init.offset,
       lockTransparency: this.init.lockTransparency,
-      selection: null,
+      selection: this.init.selection ?? null,
       readTile: (tx, ty) => this.live.get(tileKey(tx, ty))?.data ?? null,
       writeTile: (tx, ty) => {
         const key = tileKey(tx, ty);
@@ -165,7 +198,49 @@ export class PaintStrokeSession {
     if (filter) points = points.map(filter);
     for (const p of points) this.points.push(p);
     this.lastRaw = points[points.length - 1];
-    this.update(this.dry ? this.dry.push(points) : this.wet!.push(points));
+    if (this.wetDriver) {
+      this.wetUpdate(this.wetDriver.push(points));
+      return;
+    }
+    this.update(this.dry ? this.dry.push(points) : this.thickDriver ? this.thickDriver.push(points) : this.stickerSpray ? this.stickerSpray.push(points) : this.wet!.push(points));
+  }
+
+  /** Sticker strokes: the stickers sprayed so far. */
+  stickers(): Sticker[] | null {
+    return this.stickerSpray ? this.stickerSpray.stickers.map((s) => ({ ...s })) : null;
+  }
+
+  /** Impasto strokes: the layer's thick-paint channels with the stroke so far. */
+  thickChannels(): ThickChannels | null {
+    return this.thickDriver?.channels() ?? null;
+  }
+
+  /** Shows a wet stroke's progress (the wet layer's display). */
+  wetUpdate(rects: RasterRect[]): void {
+    if (!rects.length || !this.init.wet) return;
+    for (const r of rects) this.bounds = union(this.bounds, r);
+    this.host.update(this.layerId, this.init.wet.surface(), rects);
+  }
+
+  /** Whether a wet stroke has ended but waits for the simulation to finish a batch. */
+  get pendingEnd(): boolean {
+    return this.wetEndPending;
+  }
+
+  /** Completes a wet stroke whose end waited (the controller calls it when the driver is done). */
+  completeWetEnd(): void {
+    if (!this.wetEndPending || !this.wetDriver || !this.wetDriver.done) return;
+    this.wetEndPending = false;
+    this.finishWet();
+  }
+
+  private finishWet(): void {
+    const d = this.wetDriver!;
+    const changed = d.dabCount > 0;
+    this.result = { layerId: this.layerId, bounds: changed ? d.bounds : null, dabs: d.dabCount, strokeId: null, wet: true };
+    const carried = d.load;
+    if (carried) this.result.mixerLoad = this.init.brush.behavior.dirty ? carried : cleanMixer(carried);
+    this.host.commit(this, changed ? this.init.wet!.surface() : null, false);
   }
 
   private update(rects: RasterRect[]): void {
@@ -200,7 +275,17 @@ export class PaintStrokeSession {
   /** Ends the stroke (one undo step) and returns what changed. */
   end(): PaintStrokeResult {
     if (this.closed) throw new Error('This stroke has already ended.');
-    this.update(this.dry ? this.dry.finish() : this.wet!.finish());
+    if (this.wetDriver) {
+      this.wetUpdate(this.wetDriver.finish());
+      this.closed = true;
+      if (this.wetDriver.done) this.finishWet();
+      else {
+        this.wetEndPending = true;
+        this.result = { layerId: this.layerId, bounds: this.bounds, dabs: this.wetDriver.dabCount, strokeId: null, wet: true };
+      }
+      return this.result!;
+    }
+    this.update(this.dry ? this.dry.finish() : this.thickDriver ? this.thickDriver.finish() : this.stickerSpray ? this.stickerSpray.finish() : this.wet!.finish());
     this.closed = true;
     const ch = this.base.channels;
     const tiles = new Map(this.base.tiles);
@@ -212,10 +297,12 @@ export class PaintStrokeSession {
       else tiles.delete(key);
       if (!sameTile(prev, tile)) changed = true;
     }
+    // An impasto stroke can change only the relief (a knife on dry colour).
+    if (this.thickDriver && this.thickDriver.dabCount > 0) changed = true;
     const surface = changed ? new TiledSurface(ch, tiles, this.base.defaultValue) : null;
-    const dabs = this.dry ? this.dry.dabCount : this.wet!.dabCount;
+    const dabs = this.dry ? this.dry.dabCount : this.thickDriver ? this.thickDriver.dabCount : this.stickerSpray ? this.stickerSpray.dabCount : this.wet!.dabCount;
     this.result = { layerId: this.layerId, bounds: changed ? this.bounds : null, dabs, strokeId: null };
-    const carried = this.wet?.load;
+    const carried = this.wet?.load ?? this.thickDriver?.load;
     if (carried) this.result.mixerLoad = this.init.brush.behavior.dirty ? carried : cleanMixer(carried);
     this.host.commit(this, surface, false);
     return this.result;
@@ -243,6 +330,8 @@ export function mixerLoadForStroke(brush: PaintBrush, current: MixerLoad, color:
  */
 export function brushLoadForStroke(brush: PaintBrush, current: MixerLoad, color: readonly [number, number, number]): MixerLoad {
   if (brush.engine === 'mixer') return mixerLoadForStroke(brush, current, color);
+  if (brush.engine === 'impasto') return { reservoir: [color[0], color[1], color[2]], amount: 1, pickup: brush.behavior.dirty ? current.pickup : null };
+  if (brush.engine === 'wet') return brush.wet.tool === 'paint' ? { reservoir: [color[0], color[1], color[2]], amount: 1, pickup: brush.behavior.dirty ? current.pickup : null } : EMPTY_MIXER_LOAD;
   if (usesPaintExchange(brush)) return { reservoir: [color[0], color[1], color[2]], amount: 1, pickup: brush.behavior.dirty ? current.pickup : null };
   return EMPTY_MIXER_LOAD;
 }
