@@ -1,13 +1,15 @@
 // @vitest-environment jsdom
 // The DOM must exist before react-dom loads, or range inputs never fire onChange.
-import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { PaintEditorController, documentToScreen } from '@pixerate/editor/paint-editor';
 import { BrushPanel, ColorPanel, PaintCanvas, PaintEditor, PaintLayersPanel, PaperPanel, PaintToolbar, StickerPanel, WetPanel, usePaintDirector, usePaintEditor } from '../src/paint-editor';
+import { stubBrushThumbnails } from './paint-thumbnails';
 
 let container: HTMLDivElement;
 let root: any;
+let thumbnails: ReturnType<typeof stubBrushThumbnails>;
 const win: any = window;
 
 beforeAll(() => {
@@ -19,9 +21,13 @@ beforeEach(() => {
   document.body.innerHTML = '<div id="root"></div>';
   container = document.getElementById('root') as HTMLDivElement;
   root = createRoot(container);
+  thumbnails = stubBrushThumbnails();
 });
 
-afterEach(() => act(() => root.unmount()));
+afterEach(() => {
+  act(() => root.unmount());
+  vi.restoreAllMocks();
+});
 
 const render = (el: React.ReactElement) => act(() => root.render(el));
 const byText = (text: string) => Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.trim() === text) as HTMLButtonElement;
@@ -117,8 +123,11 @@ describe('React paint editor', () => {
     setValue(container.querySelector('input[aria-label="Brush name"]')!, 'My Charcoal');
     click(byText('Save brush'));
     expect(c.getUserBrushes().map((b) => b.id)).toEqual(['my-charcoal']);
-    // It renders a preview of every brush, which takes several seconds on a loaded CI runner.
-  }, 30_000);
+    // A preview of every brush in the library, the saved one included.
+    const previewed = new Set(thumbnails.mock.calls.map(([id]) => id));
+    expect(c.getState().brushes.map((b) => b.id).filter((id) => !previewed.has(id))).toEqual([]);
+    expect(container.querySelectorAll('canvas[aria-label$=" thumbnail"]')).toHaveLength(c.getState().brushes.length);
+  });
 
   it('the brush panel shows each engine\'s controls: blender, smudge, behaviour, brush gradient and load', () => {
     const c = new PaintEditorController({ width: 32, height: 32 });

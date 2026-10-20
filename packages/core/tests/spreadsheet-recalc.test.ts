@@ -18,6 +18,21 @@ import {
 } from '../src/spreadsheet';
 import { measureGrowth } from './helpers/growth';
 
+/**
+ * Interval-tree nodes `run` visits. "Stays O(log n + k)" tests count these rather than time
+ * the work: a wall-clock ratio with little headroom (log growth is ~1.2× for 4× the size,
+ * linear 4×) flaked on loaded CI runners.
+ */
+function indexVisits(run: () => void): number {
+  const walk = vi.spyOn(IntervalIndex.prototype as any, 'walk');
+  try {
+    run();
+    return walk.mock.calls.length;
+  } finally {
+    walk.mockRestore();
+  }
+}
+
 /** A seeded pseudo-random generator (mulberry32), so failures reproduce. */
 function rng(seed: number) {
   let a = seed >>> 0;
@@ -196,8 +211,13 @@ describe('DependencyGraph with ranges', () => {
       for (let i = 0; i < 200; i++) graph.getDependents(`A${1 + ((i * 37) % n)}`);
     };
     expect(large.getDependents('A4000').sort()).toEqual(['B3995', 'B3996', 'B3997', 'B3998', 'B3999', 'B4000']);
+    const smallVisits = indexVisits(lookups(small, 2_000));
+    const largeVisits = indexVisits(lookups(large, 8_000));
+    // The lookups go through the tree, touching about log2(n) + k nodes each, not all n.
+    expect(smallVisits).toBeGreaterThan(0);
+    expect(largeVisits / 200).toBeLessThan(4 * (Math.log2(8_000) + 6));
     // A linear scan per lookup would be 4×.
-    expect(measureGrowth(lookups(small, 2_000), lookups(large, 8_000), { limit: 2.5 })).toBeLessThan(2.5);
+    expect(largeVisits / smallVisits).toBeLessThan(2.5);
   });
 });
 
@@ -328,8 +348,16 @@ describe('incremental recalculation work counts', () => {
     const large = build(8_000);
     let n = 0;
     const edit = (target: ReturnType<typeof build>) => () => target.ctrl.setCellValue(...target.ids, String(n++ % 7));
+    // Counted, not timed (see indexVisits): the same formulas recalculate whatever the sheet's
+    // size, and finding them visits about as many index nodes.
+    const smallVisits = indexVisits(edit(small));
+    const smallStats = small.ctrl.getRecalculationStats();
+    const largeVisits = indexVisits(edit(large));
+    expect(large.ctrl.getRecalculationStats()).toEqual(smallStats);
+    expect(smallStats.evaluated).toBeGreaterThan(0);
+    expect(smallVisits).toBeGreaterThan(0);
     // Linear work per edit would be 4×.
-    expect(measureGrowth(edit(small), edit(large), { limit: 2.5 })).toBeLessThan(2.5);
+    expect(largeVisits / smallVisits).toBeLessThan(2.5);
   });
 
   it('registering formulas over large ranges grows linearly', () => {

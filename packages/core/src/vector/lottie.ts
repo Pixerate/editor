@@ -12,6 +12,7 @@
  * and `notes` lists everything that was approximated. Import reads one frame of the animation.
  */
 
+import { isVectorLens, resolveVectorLenses } from './lens.js';
 import type { AffineMatrix } from '../geom/types.js';
 import { applyMatrix, matrixRotation, multiplyMatrices, rotateMatrix, scaleMatrix, translateMatrix } from '../geom/affine.js';
 import { bezierPathBounds, type BezierPath } from '../canvas/pathops/bezier.js';
@@ -257,10 +258,11 @@ function nodeGroup(node: VectorNode, notes: string[]): Json | null {
 	if (node.filters?.length) notes.push(`${label(node)}: filters (shadows, glows, blurs) are not part of Lottie (left out).`);
 	const m = nodeMatrix(node);
 	let items: Json[] = [];
-	const live = (node.effects ?? []).some((e) => e.enabled !== false && (e.type === 'wiggle' || e.type === 'envelope' || e.type === 'contour' || e.type === 'blockShadow'));
-	if (node.type === 'text' || node.type === 'instance' || live || isVectorMaskGroup(node) || isVectorFrame(node) || isVectorSymmetryGroup(node)) {
+	const live = (node.effects ?? []).some((e) => e.enabled !== false && (e.type === 'wiggle' || e.type === 'envelope' || e.type === 'contour' || e.type === 'blockShadow' || e.type === 'extrude' || e.type === 'bevel'));
+	if (node.type === 'text' || node.type === 'instance' || live || isVectorMaskGroup(node) || isVectorFrame(node) || isVectorSymmetryGroup(node) || isVectorLens(node)) {
 		// Drawn shapes: text as glyph outlines, instances as their art, masks clipped, frames as clip groups.
-		if (live) notes.push(`${label(node)}: wiggle, envelope, contour and block shadow effects have no Lottie equivalent (exported as drawn).`);
+		if (live) notes.push(`${label(node)}: wiggle, envelope, contour, block shadow, extrude and bevel effects have no Lottie equivalent (exported as drawn).`);
+		if (isVectorLens(node)) notes.push(`${label(node)}: a lens exports as drawn (what it shows now, clipped by its outline).`);
 		if (isVectorMaskGroup(node) && node.mask?.type !== 'clip') notes.push(`${label(node)}: opacity masks are not exported (the contents are drawn whole).`);
 		const drawn = isVectorFrame(node) ? vectorFrameDrawn(node) : node;
 		const shapes = isVectorMaskGroup(drawn) && drawn.mask?.type === 'clip' ? vectorAppearanceShapes({ ...drawn, transform: undefined }) : null;
@@ -323,6 +325,8 @@ export function vectorDocumentToLottie(doc: VectorDocument, options: VectorLotti
 	const fps = options.fps ?? 30;
 	const op = Math.max(1, Math.round(options.frames ?? 1));
 	const shapes: Json[] = [];
+	// Lenses draw what is below them: resolve their backdrops when the caller has not.
+	if (!options.nodes) doc = resolveVectorLenses(doc);
 	for (const n of [...(options.nodes ?? doc.nodes)].reverse()) {
 		const g = nodeGroup(n, notes);
 		if (g) shapes.push(g);

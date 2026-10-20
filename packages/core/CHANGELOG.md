@@ -1,5 +1,18 @@
 # @pixerate/editor
 
+## 0.130.0
+
+### Minor Changes
+
+- 8e1700d: A live Bevel path effect (`bevel`): a shaded chiselled edge inside each shape with the middle kept flat in its own paint, like CorelDRAW's Bevel. `vectorBevelFaces` is exported.
+- 218817c: A live Extrude path effect (`extrude`): shapes drawn as solids with shaded side faces going back along an angle or toward a vanishing point, like CorelDRAW's Extrude. `vectorExtrudeFaces` and `shadeVectorColor` are exported.
+
+## 0.129.0
+
+### Minor Changes
+
+- aaa0bcd: Image editor: Convert to Profile now also converts shape fills and strokes, text colours, layer-effect colours (gradient stops included) and annotation colours, and re-renders shape and type layers. Only smart objects are reported in `unconvertedLayerIds` now. New `convertColorFields` helper.
+
 ## 0.128.0
 
 ### Minor Changes

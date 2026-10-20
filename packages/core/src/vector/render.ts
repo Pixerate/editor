@@ -3,6 +3,7 @@
  * gradient defs) and the overlay (screen-space selection box, anchors, handles, marquee and
  * pen preview). React, Svelte or plain DOM code turns these into `<svg>` elements.
  */
+import { resolveVectorLenses } from './lens.js';
 import { bezierPathToSvg, transformBezierPath, type BezierPath } from '../canvas/pathops/bezier.js';
 import { hatchPath } from '../canvas/pathops/hatch.js';
 import type { SvgGradientDef } from '../canvas/gradient.js';
@@ -95,6 +96,7 @@ import type {
 	VectorStrokeGradientMode,
 	VectorGroupNode,
 	VectorHandleRef,
+	VectorDocument,
 	VectorNode,
 	VectorPaint,
 	VectorPathfinderOperation,
@@ -679,6 +681,16 @@ function collapsedNode(node: VectorNode, box: { minX: number; minY: number; maxX
 	return out;
 }
 
+const lensResolved = new WeakMap<readonly VectorNode[], VectorNode[]>();
+/** The document's nodes with lens backdrops up to date (the same array when they already are). */
+function resolvedLensNodes(doc: VectorDocument): VectorNode[] {
+	const hit = lensResolved.get(doc.nodes);
+	if (hit) return hit;
+	const nodes = resolveVectorLenses(doc).nodes;
+	lensResolved.set(doc.nodes, nodes);
+	return nodes;
+}
+
 /**
  * The document layer. Render the nodes inside `<g transform={transform}>` and `defs` in a
  * `<defs>` block. Pass a unique `idPrefix` when several editors share a page, and the canvas size
@@ -689,7 +701,8 @@ export function getVectorSceneRenderData(state: Pick<VectorEditorState, 'documen
 	const filters: VectorRenderFilter[] = [];
 	const prefix = options.idPrefix ?? 've-';
 	const v = state.viewport;
-	const all = state.document.nodes;
+	// Lenses draw what is below them: resolve their backdrops when the caller's document has not.
+	const all = resolvedLensNodes(state.document);
 	const stats = { nodes: all.length, culled: 0, collapsed: 0 };
 	let nodes: VectorRenderNode[];
 	const size = options.viewportSize;

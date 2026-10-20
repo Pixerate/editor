@@ -32,9 +32,10 @@ means sRGB. The viewport assumes an sRGB display and converts other working spac
 - The working space must be RGB: CMYK and Lab are document modes (`set_color_mode`) for
   output, not spaces you edit numbers in. Adjustment layers keep their RGB settings in a CMYK or
   Lab PSD, where Photoshop applies them to its own channels; `export_psd` warns.
-- `convert_to_profile` converts pixel layers (and the source image). Shape and type colours,
-  layer effects and smart objects keep their numbers and are listed in `unconvertedLayerIds`:
-  check them and recolour if the look matters.
+- `convert_to_profile` converts pixel layers (and the source image), shape fills and strokes,
+  text colours, layer-effect colours (gradient stops included) and annotation colours, and
+  re-renders shape and type layers. Smart objects keep their contents' numbers and are listed in
+  `unconvertedLayerIds`: convert inside them (`edit_smart_object_contents`) if the look matters.
 - Images opened from a URL or file in the browser arrive already converted to sRGB by the
   browser, so their own profile is not kept; PSDs keep theirs (resource 1039).
 - `export_psd` always embeds the profile; PNG and JPEG exports embed it when it is not sRGB.

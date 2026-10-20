@@ -4,12 +4,14 @@ import { createFakeEffectProvider } from '@pixerate/editor/effects';
 import { PaintEditorController, type PaintPixelLayer } from '@pixerate/editor/paint-editor';
 import { readPixel } from '@pixerate/editor/raster';
 import { PaintEditor, PaintEffectsPanel } from '../src/paint-editor';
+import { stubBrushThumbnails } from './paint-thumbnails';
 
 let target: HTMLDivElement;
 let component: Record<string, any> | null = null;
 
 beforeEach(() => {
   HTMLCanvasElement.prototype.getContext = vi.fn(() => null) as any;
+  stubBrushThumbnails();
   target = document.createElement('div');
   document.body.appendChild(target);
 });
@@ -17,6 +19,7 @@ afterEach(() => {
   if (component) unmount(component);
   component = null;
   target.remove();
+  vi.restoreAllMocks();
 });
 
 const show = (C: any, props: Record<string, unknown>) => {
