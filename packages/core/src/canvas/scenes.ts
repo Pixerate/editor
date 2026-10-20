@@ -20,6 +20,23 @@ export interface CanvasScene {
 	viewport: CanvasViewport;
 	/** Optional nodes the scene is about, e.g. to re-fit the scene after they move. */
 	nodeIds?: string[];
+	/**
+	 * A provider transition effect (see `@pixerate/editor/effects`) played when the canvas moves
+	 * to this scene. Kept, and ignored, without an effects provider.
+	 */
+	transition?: CanvasSceneTransition;
+}
+
+/** A transition effect into a scene (see `CanvasScene.transition`). */
+export interface CanvasSceneTransition {
+	/** The provider's transition effect id. */
+	effect: string;
+	provider?: string;
+	name?: string;
+	/** Control values (over the effect's defaults). */
+	values: Record<string, number | string | boolean | readonly number[]>;
+	/** Length in ms (default 600). */
+	duration?: number;
 }
 
 export interface CanvasScenesState {
@@ -83,6 +100,8 @@ function cloneScene(scene: CanvasScene): CanvasScene {
 		viewport: { x: scene.viewport.x, y: scene.viewport.y, zoom: scene.viewport.zoom }
 	};
 	if (scene.nodeIds) copy.nodeIds = [...scene.nodeIds];
+	const t = scene.transition;
+	if (t && typeof t.effect === 'string' && t.effect) copy.transition = JSON.parse(JSON.stringify(t)) as CanvasSceneTransition;
 	return copy;
 }
 

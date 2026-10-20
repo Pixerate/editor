@@ -288,7 +288,7 @@ Every feature is available from core and from both framework packages. "Via core
 </details>
 
 <details>
-<summary><strong>Canvas</strong> (33)</summary>
+<summary><strong>Canvas</strong> (34)</summary>
 
 | Feature | Core | React | Svelte |
 | :--- | :---: | :---: | :---: |
@@ -307,6 +307,7 @@ Every feature is available from core and from both framework packages. "Via core
 | Canvas Component Commands & Agent Tools | `createComponentCommands` & `createCanvasComponentToolProvider` | Via core & `useRegisterCommands` | Via core & `useRegisterCommands` |
 | Canvas Bézier Curve Fitting (boolean results, freehand) | `fitCubics` & `fitPathData` | Via core | Via core |
 | Canvas Scenes (saved viewports, next / previous) | `CanvasScenesStore` | `useCanvasScenes` | `createCanvasScenes` |
+| Canvas Provider Effects (optional: with an `EffectProvider`, shape nodes take an effect fill clipped to the shape or an overlay above it, live and playing or held, with opacity and one undo step per change; scenes take a provider transition played over captured views when stepping into them; agent tools `apply_effect`, `set_canvas_effect_mode`, `set_scene_transition` and the shared effect tools) | `createCanvasEffectsController`, `createCanvasEffectsToolProvider`, `transitionCanvasView` (`/canvas`) | `useCanvasEffects`, `<CanvasEffectsProvider>`, `<CanvasEffectsPanel>`, `useCanvasScenes({ transitions })` | `createCanvasEffects`, `setCanvasEffectsProvider`, `<CanvasEffectsPanel>`, `createCanvasScenes({ transitions })` |
 | Canvas Connector Snapping to Shape Sides | ✅ | Via core | Via core |
 | Canvas Arrange Keyboard Shortcuts | `matchArrangeShortcut` | `useCanvasArrangeShortcuts` | `createCanvasArrangeShortcuts` |
 | Mermaid Diagram Model (flowchart, state, class, ER, pie, mindmap, quadrant, C4, architecture, sequence, gitGraph, Gantt, timeline, journey, XY, radar; lossless parse / serialise, statement-level edits, `%% @pixerate` layout comment, Ursula's `@ursula` read; sankey, block, packet, kanban, treemap kept as text, sankey and treemap data readable) | `parseMermaid`, `applyEdits`, `serializeMermaid`, `DiagramController`, `parseSankey` & `parseTreemap` (`/diagram`) | `useMermaidDiagram` & `useDiagramState` | `createMermaidDiagram` |
