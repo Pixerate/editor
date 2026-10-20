@@ -2364,6 +2364,12 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: In Lottie, a fill, stroke or modifier applies to every shape item above it in its group, nested groups included. Shapes that share a paint therefore form one compound path. Items listed first draw on top, which is the reverse of our bottom-to-top order.
 - **Solution / Workaround**: `parseVectorLottie` splits a group's items at its paint items. The shapes before them become one compound path, with all the paints and modifiers after them (top first, so the stack is reversed). The export writes strokes before fills and repeaters after the paint, so the painted result is what gets copied.
 
+### [core/vector] PDF Viewers Show Hairlines Between Pattern Tiles
+
+- **Issue / Symptom**: Conic, diamond, mesh and freeform fills in an exported PDF can show faint lines between their tiles in some viewers.
+- **Root Cause**: These paints have no PDF shading equivalent here, so the PDF draws them as many abutting tiles, and each tile's edge is anti-aliased on its own. Overlap only hides the seams in some cases: a later tile covers an earlier one where they overlap, but not the gap anti-aliasing leaves along wedge edges.
+- **Solution / Workaround**: Linear and radial gradients are exact PDF shadings, so prefer them for print. For the other kinds, accept the seams or expand the appearance first. A future fix could write conic gradients as a type 1 (function-based) shading.
+
 ### [core/paint] The Wet Kernels Only Agree Bit for Bit If Every Operation Is the Same f32 Operation
 
 - **Issue / Symptom**: After adding the edge field, the TypeScript and WebAssembly wet kernels drifted apart (different state hashes after a few steps), although the maths was "the same".

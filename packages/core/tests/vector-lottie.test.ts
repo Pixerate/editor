@@ -7,6 +7,7 @@ import { ToolRegistry } from '../src/tools';
 import {
 	VectorEditorController,
 	createVectorCommands,
+	createVectorFilter,
 	createVectorEffect,
 	ellipseSubpath,
 	lottieValueAt,
@@ -72,7 +73,7 @@ describe('Lottie export', () => {
 
 	it('notes what it cannot carry and draws masks clipped', () => {
 		const masked: VectorGroupNode = { id: 'm', type: 'group', name: 'Clip', mask: { type: 'clip' }, children: [rect('mask', 0, 0, 10, 10), rect('art', 5, 5, 20, 20)] };
-		const shadowed = rect('s', 50, 0, 10, 10, { filters: [{ id: 'f', type: 'dropShadow', params: {} } as never] });
+		const shadowed = rect('s', 50, 0, 10, 10, { filters: [createVectorFilter('dropShadow', 'f')!] });
 		const { lottie, notes } = vectorDocumentToLottie({ ...doc(masked, shadowed), background: '#ffffff' });
 		expect(notes.some((n) => n.includes('filters'))).toBe(true);
 		const clip = ((lottie.layers[0] as Json).shapes as Json[]).find((g) => g.nm === 'Clip')!;

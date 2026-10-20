@@ -393,6 +393,23 @@ This follows effectcraft's `lottie/shapes.rs` and `anim.rs`.
 - **Transforms:** group and layer transforms are baked through `transformVectorNode`. Additive layer masks clip the layer.
 - **Left out, with notes:** images, text layers, mattes, layer effects, expressions and skew.
 
+## PDF
+
+```ts
+const { bytes, pages, notes } = controller.toPdf({ pages: "artboards", scale: 1, title: "Poster" });
+```
+
+`vectorDocumentToPdf` writes a vector PDF with a writer of its own, after cadcraft's `io/pdf.rs` and pdfcraft's content operators. It draws the scene render data (`getVectorSceneRenderData` with an identity viewport), so the PDF shows what the canvas shows: effects expanded, text as glyph outlines, paint stacks, clip masks and frames. The page is flipped to y down at `scale` points per unit.
+
+- **Paths** become `m` / `l` / `c` / `h` and are filled (`f`, `f*`) or stroked (`S`) with width, caps, joins and dashes.
+- **Opacity and blend modes** become ExtGStates (`ca`, `CA`, `BM`). A group's opacity and blend mode are applied to each object in it.
+- **Clip masks** become clipping paths. Inside strokes clip to the shape; outside strokes clip to the box minus the shape (even-odd).
+- **Linear and radial gradients** become PDF axial and radial shadings with stitched functions, clipped to the shape, with object-box units and `gradientTransform` applied by `cm`.
+- **Pattern paints** (conic, diamond, mesh, freeform) draw as their tiles.
+- **Left out, named in `notes`:** filters, opacity masks, stop opacity, repeat and reflect spreads, and text without glyph outlines.
+
+`pages: "artboards"` writes one page per top-level frame at the frame's size (see `vectorFrameDocument`). The demo's Export PDF button downloads the file. Agents get it as a base64 data URL from `vector.exportPdf`.
+
 ## Text
 
 ```ts
