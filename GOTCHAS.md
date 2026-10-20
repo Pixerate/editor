@@ -2363,6 +2363,20 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: A mesh or freeform fill disappeared after a transform, and code that read `fill.stops` crashed on it.
 - **Root Cause**: `VectorPaint` now also holds `{ type: 'mesh' }` and `{ type: 'freeform' }` paints. They have points and colours, not stops, so `isVectorGradient` is false for them. Code that treated every paint object as a gradient, such as transform baking or blend colour distance, skipped them or broke.
 - **Solution / Workaround**: Check `isVectorShadedPaint` (or `isVectorMeshGradient` / `isVectorFreeformGradient`) next to `isVectorGradient`. `transformVectorPaint` and `mapVectorPaint` move both kinds of point, and `vectorPaintToSvg` draws them as a pattern. Freeform is drawn as gradient strips, not flat cells: flat cells showed visible blocks at normal zoom.
+
+### [core/vector] Lottie Paints Act on Every Shape Above Them
+
+- **Issue / Symptom**: An imported Lottie donut came in as two filled discs, and a shape with a stroke above its fill lost the fill.
+- **Root Cause**: In Lottie, a fill, stroke or modifier applies to every shape item above it in its group, nested groups included. Shapes that share a paint therefore form one compound path. Items listed first draw on top, which is the reverse of our bottom-to-top order.
+- **Solution / Workaround**: `parseVectorLottie` splits a group's items at its paint items. The shapes before them become one compound path, with all the paints and modifiers after them (top first, so the stack is reversed). The export writes strokes before fills and repeaters after the paint, so the painted result is what gets copied.
+
+
+### [core/vector] PDF Viewers Show Hairlines Between Pattern Tiles
+
+- **Issue / Symptom**: Conic, diamond, mesh and freeform fills in an exported PDF can show faint lines between their tiles in some viewers.
+- **Root Cause**: These paints have no PDF shading equivalent here, so the PDF draws them as many abutting tiles, and each tile's edge is anti-aliased on its own. Overlap only hides the seams in some cases: a later tile covers an earlier one where they overlap, but not the gap anti-aliasing leaves along wedge edges.
+- **Solution / Workaround**: Linear and radial gradients are exact PDF shadings, so prefer them for print. For the other kinds, accept the seams or expand the appearance first. A future fix could write conic gradients as a type 1 (function-based) shading.
+
 ### [core/paint] The Wet Kernels Only Agree Bit for Bit If Every Operation Is the Same f32 Operation
 
 - **Issue / Symptom**: After adding the edge field, the TypeScript and WebAssembly wet kernels drifted apart (different state hashes after a few steps), although the maths was "the same".

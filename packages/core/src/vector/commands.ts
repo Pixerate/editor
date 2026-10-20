@@ -20,7 +20,8 @@ import { vectorPolarAngles } from './snap.js';
 import { sanitizeVectorShadedPaint } from './shading.js';
 import type { VectorFreeformPoint, VectorPathNode } from './types.js';
 import { VECTOR_TRACE_MAX_PIXELS, type VectorTraceOptions } from './trace.js';
-import { decodePng, isPng, parseDataUrl } from '../raster/png.js';
+import { bytesToBase64, decodePng, isPng, parseDataUrl } from '../raster/png.js';
+import type { VectorPdfOptions } from './pdf.js';
 import { VECTOR_CONNECTOR_ROUTES, VECTOR_CONNECTOR_SIDES, type VectorConnector, type VectorConnectorEnd, type VectorConnectorRoute } from './types.js';
 import { VECTOR_HORIZONTAL_RESIZING, VECTOR_VERTICAL_RESIZING, type VectorFrame, type VectorHorizontalResizing, type VectorResizing, type VectorVerticalResizing } from './types.js';
 import { layoutVectorText, vectorTextFamilies, vectorTextHasOutlines } from './text.js';
@@ -1236,6 +1237,82 @@ export function createVectorCommands(controller: VectorEditorController, options
 			issues: state.constraintIssues
 		};
 	};
+	const pdfCommands = (): CommandSpec[] => [
+		{
+			...base,
+			id: `${prefix}exportPdf`,
+			label: 'Export PDF',
+			readOnly: true,
+			keywords: ['pdf', 'export', 'print', 'vector pdf', 'artboards', 'pages'],
+			description:
+				'Returns the drawing as a vector PDF (real paths, gradients as PDF shadings) as a base64 data URL: one page of the artboard, or one page per artboard (top-level frame) with pages "artboards". Returns { pdf, pages, bytes, notes }; notes lists what was approximated or left out (filters, opacity masks, text without glyph outlines).',
+			params: {
+				type: 'object',
+				properties: {
+					pages: { type: 'string', enum: ['document', 'artboards'], description: 'document: one page of the artboard (default); artboards: a page per top-level frame.' },
+					scale: { type: 'number', exclusiveMinimum: 0, description: 'PDF points per document unit (default 1).' },
+					title: { type: 'string', description: 'Document title.' },
+					compress: { type: 'boolean', description: 'Flate-compress page contents (default true).' }
+				},
+				additionalProperties: false
+			},
+			run: (_ctx: unknown, params: VectorPdfOptions | undefined) => {
+				const r = controller.toPdf(params ?? {});
+				return { pdf: `data:application/pdf;base64,${bytesToBase64(r.bytes)}`, pages: r.pages, bytes: r.bytes.length, notes: r.notes };
+			}
+		}
+	];
+
+	const lottieCommands = (): CommandSpec[] => [
+		{
+			...base,
+			id: `${prefix}exportLottie`,
+			label: 'Export Lottie',
+			readOnly: true,
+			keywords: ['lottie', 'bodymovin', 'json', 'export', 'animation', 'after effects'],
+			description:
+				'Returns the document (or `ids`) as Lottie (Bodymovin v5 JSON): one shape layer whose groups mirror the nodes, path effects as live Lottie modifiers (trim, round corners, pucker & bloat, twist, zig zag, offset, merge, repeater) and gradients as gradient fills. Returns { lottie, notes } where notes lists what was approximated (filters, text without outlines, mesh gradients…).',
+			params: {
+				type: 'object',
+				properties: {
+					ids: { ...IDS, description: 'Nodes to export (default: the whole document).' },
+					fps: { type: 'number', exclusiveMinimum: 0, description: 'Frames per second (default 30).' },
+					frames: { type: 'integer', minimum: 1, description: 'Length in frames (default 1: a still).' },
+					name: { type: 'string', description: 'The animation name (default "Vector").' }
+				},
+				additionalProperties: false
+			},
+			run: (_ctx: unknown, params: { ids?: string[]; fps?: number; frames?: number; name?: string } | undefined) => {
+				if (params?.ids) for (const id of params.ids) if (!controller.getNode(id)) fail(`There is no node "${id}".`);
+				return controller.toLottie(params ?? {});
+			}
+		},
+		{
+			...base,
+			id: `${prefix}importLottie`,
+			label: 'Import Lottie…',
+			keywords: ['lottie', 'bodymovin', 'json', 'import', 'animation', 'after effects'],
+			description:
+				'Adds one frame of a Lottie animation (JSON object or text) as editable groups on top (or replaces the document with `replace`, taking its size). Shape modifiers become live path effects; image and text layers, mattes and expressions are left out. One undo step. Returns { ids, notes }.',
+			params: {
+				type: 'object',
+				properties: {
+					lottie: { description: 'The Lottie animation: a JSON object, or its text.', anyOf: [{ type: 'object' }, { type: 'string' }] },
+					frame: { type: 'number', description: 'Which frame to read (default the in point).' },
+					replace: { type: 'boolean', description: 'Replace the document instead of adding to it (default false).' }
+				},
+				required: ['lottie'],
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: { lottie: unknown; frame?: number; replace?: boolean }) => {
+				const r = controller.importLottie(params.lottie, { ...(params.frame !== undefined ? { frame: params.frame } : {}), ...(params.replace ? { replace: true } : {}) });
+				check(r);
+				return { ids: r.ids, notes: r.notes };
+			}
+		}
+	];
+
 	const traceCommands = (): CommandSpec[] => [
 		{
 			...base,
@@ -2017,6 +2094,8 @@ export function createVectorCommands(controller: VectorEditorController, options
 		...trackingCommands(),
 		...shadingCommands(),
 		...traceCommands(),
+		...lottieCommands(),
+		...pdfCommands(),
 		{
 			...base,
 			id: `${prefix}setCorners`,

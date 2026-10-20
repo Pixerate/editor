@@ -165,6 +165,8 @@ Parameter details (gradient fields, effect parameters, width profiles, envelopes
 | `vector.list` | Read the document: `{ width, height, nodes, selection, tool }`. Each node has id, type, name, depth, document-space `bounds`, `rotation` (degrees clockwise), visible, locked, selected, and for paths fill, stroke, strokeWidth and `d`; groups list `children`, `blend`, `liveBoolean`, `effects`, `mask`. A mask group's `bounds` are its masked result. Call it first and after any batch. |
 | `vector.shapeBuilderFaces` | List the regions the given paths divide the plane into: path data, area, a point inside each and the ids of paths filling it. Use the points with `vector.shapeBuilder`. |
 | `vector.exportSvg` | Get the document as standalone SVG markup (`{ svg }`); `precision` 0 to 8 decimals (default 3). |
+| `vector.exportPdf` | Get a print-ready vector PDF as a base64 data URL: one page, or one per artboard with `pages: "artboards"`. Returns `{ pdf, pages, bytes, notes }`; check `notes` (filters, opacity masks and text without loaded fonts are left out). |
+| `vector.exportLottie` | Get the document (or `ids`) as Lottie JSON for animation players: path effects stay live as Lottie modifiers, gradients as gradient fills. Returns `{ lottie, notes }`; read `notes` for what was approximated (filters, mesh gradients, text without outlines). |
 
 ### Create and delete
 
@@ -175,6 +177,7 @@ Parameter details (gradient fields, effect parameters, width profiles, envelopes
 | `vector.addShape` | Add a `kind` `rect`, `ellipse`, `polygon` (`sides`, at least 3), `star` (`points`, `innerRatio` 0 to 1) or `line` at `x`, `y`, `width`, `height` (all required; for a line, width and height are the end's offset). `cornerRadius` and `cornerKind` give live corners; any style field and `name` apply. Uses the editor's default style for anything not given. Returns `{ id }`. |
 | `vector.addPath` | Add a path from SVG path data `d` (absolute or relative M, L, H, V, C, S, Q, T, A, Z; arcs and quadratics become cubics) in document units, with `name` and style fields; unset style comes from the editor defaults. Fails when `d` has no points. Returns `{ id }`. |
 | `vector.importSvg` | Add the shapes of SVG markup `svg` on top of the document, or replace the document with `replace: true`. Reads paths, basic shapes, groups, transforms, linear and radial gradients, `clip-path` / `mask` references (as mask groups) `<text>` (as point text: content, font, anchor and fill) and `<use>` (as instances of symbols made from what they refer to); skips images and foreign filters. |
+| `vector.importLottie` | Add one `frame` of a Lottie animation (object or text) as editable groups, or replace the document (`replace: true`). Modifiers become live effects. Returns `{ ids, notes }`. |
 | `vector.delete` | Delete nodes (`ids`). |
 
 ### Style

@@ -357,6 +357,51 @@ export function VectorTab() {
         <button type="button" className="rounded border border-slate-700 px-2 py-1 hover:bg-slate-800" onClick={() => setSvg(controller.toSvg())}>
           Export SVG
         </button>
+        <button
+          type="button"
+          className="rounded border border-slate-700 px-2 py-1 hover:bg-slate-800"
+          title="Export the drawing as Lottie JSON (path effects stay live as Lottie modifiers)"
+          onClick={() => {
+            const { lottie, notes } = controller.toLottie({ name: "Vector" });
+            setSvg(JSON.stringify(lottie, null, 2) + (notes.length ? `\n\n/* ${notes.join("\n   ")} */` : ""));
+          }}
+        >
+          Export Lottie
+        </button>
+        <button
+          type="button"
+          className="rounded border border-slate-700 px-2 py-1 hover:bg-slate-800"
+          title="Download the drawing as a vector PDF (a page per artboard when there are frames)"
+          onClick={() => {
+            const hasBoards = controller.getFrames().some((f) => f.artboard);
+            const { bytes, notes } = controller.toPdf({ pages: hasBoards ? "artboards" : "document", title: "Vector" });
+            const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: "application/pdf" }));
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "vector.pdf";
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+            setFontError(notes.length ? `PDF: ${notes.join(" ")}` : null);
+          }}
+        >
+          Export PDF
+        </button>
+        <label className="cursor-pointer rounded border border-slate-700 px-2 py-1 hover:bg-slate-800" title="Import the first frame of a Lottie JSON animation as editable shapes">
+          Import Lottie…
+          <input
+            type="file"
+            accept=".json,application/json"
+            className="hidden"
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              if (file) {
+                const r = controller.importLottie(await file.text());
+                setFontError(r.ok ? null : r.message);
+              }
+            }}
+          />
+        </label>
         <label className="cursor-pointer rounded border border-slate-700 px-2 py-1 hover:bg-slate-800" title="Load TTF, OTF or WOFF fonts: text then draws as glyph outlines, so Create Outlines and effects on text work">
           Load fonts…
           <input type="file" accept=".ttf,.otf,.woff,.ttc,font/ttf,font/otf,font/woff" multiple className="hidden" onChange={(e) => void loadFonts(e.target.files)} />

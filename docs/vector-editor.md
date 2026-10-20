@@ -368,6 +368,48 @@ The two modes:
 
 `traceImage` places the result as one group (one undo step). Agents pass a PNG data URL to `vector.traceImage`, which core decodes with its own PNG reader, up to 4 million pixels. The panels decode any image the browser can read, scaled to at most 1 million pixels.
 
+## Lottie
+
+```ts
+const { lottie, notes } = controller.toLottie({ fps: 30, frames: 60 });   // or vectorDocumentToLottie(doc)
+controller.importLottie(json, { frame: 12 });                              // or parseVectorLottie(json, { frame })
+```
+
+This follows effectcraft's `lottie/shapes.rs` and `anim.rs`.
+
+**Export** writes one shape layer with a group per node, top first. Each group's `tr` carries the node's rotation, position and opacity.
+
+- **Paths** are `sh` items in the node's own space, followed by their effects, then strokes and fills (top layer first), and repeaters after the paint so they copy it.
+- **Effects** map one to one onto Lottie modifiers: trim `tm`, round corners `rd`, pucker & bloat `pb`, twist `tw` (centre made absolute), zig zag `zz`, offset `op`, merge `mm`, repeater `rp` (anchor made absolute).
+- **Gradients** become `gf` / `gs` with absolute start and end points and expanded stops. Conic and diamond gradients are written as radial, and reflected as linear.
+- **Live booleans** become Merge Paths in the bottom operand's style.
+- **Drawn shapes.** Clip masks and frames export their clipped shapes. Text, instances and wiggle or envelope effects export as drawn. Aligned, arrowed or profiled strokes export as filled outlines.
+- **Left out:** filters, mesh and freeform gradients (written as their first colour) and opacity masks. `notes` lists each of them.
+
+**Import** reads one frame (`lottieValueAt` eases keyframes with their bezier handles and honours held keys).
+
+- **Layers:** shape layers, solids, nulls (for parenting) and precomps, read recursively.
+- **Paints and modifiers** act on every shape above them in their group, so the shapes between two paint items become one compound path with those paints and modifiers. The modifiers become live effects.
+- **Transforms:** group and layer transforms are baked through `transformVectorNode`. Additive layer masks clip the layer.
+- **Left out, with notes:** images, text layers, mattes, layer effects, expressions and skew.
+
+## PDF
+
+```ts
+const { bytes, pages, notes } = controller.toPdf({ pages: "artboards", scale: 1, title: "Poster" });
+```
+
+`vectorDocumentToPdf` writes a vector PDF with a writer of its own, after cadcraft's `io/pdf.rs` and pdfcraft's content operators. It draws the scene render data (`getVectorSceneRenderData` with an identity viewport), so the PDF shows what the canvas shows: effects expanded, text as glyph outlines, paint stacks, clip masks and frames. The page is flipped to y down at `scale` points per unit.
+
+- **Paths** become `m` / `l` / `c` / `h` and are filled (`f`, `f*`) or stroked (`S`) with width, caps, joins and dashes.
+- **Opacity and blend modes** become ExtGStates (`ca`, `CA`, `BM`). A group's opacity and blend mode are applied to each object in it.
+- **Clip masks** become clipping paths. Inside strokes clip to the shape; outside strokes clip to the box minus the shape (even-odd).
+- **Linear and radial gradients** become PDF axial and radial shadings with stitched functions, clipped to the shape, with object-box units and `gradientTransform` applied by `cm`.
+- **Pattern paints** (conic, diamond, mesh, freeform) draw as their tiles.
+- **Left out, named in `notes`:** filters, opacity masks, stop opacity, repeat and reflect spreads, and text without glyph outlines.
+
+`pages: "artboards"` writes one page per top-level frame at the frame's size (see `vectorFrameDocument`). The demo's Export PDF button downloads the file. Agents get it as a base64 data URL from `vector.exportPdf`.
+
 ## Text
 
 ```ts

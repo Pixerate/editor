@@ -156,6 +156,8 @@ import {
 	VECTOR_MESH_MAX
 } from './shading.js';
 import { parseVectorColor } from './gradient.js';
+import { vectorDocumentToPdf, type VectorPdfExport, type VectorPdfOptions } from './pdf.js';
+import { parseVectorLottie, vectorDocumentToLottie, type VectorLottieExport, type VectorLottieExportOptions, type VectorLottieImport, type VectorLottieImportOptions } from './lottie.js';
 import { traceVectorImage, type VectorTraceOptions, type VectorTracePixels } from './trace.js';
 import { pointInBezierPath } from '../canvas/pathops/bezier.js';
 import type { VectorFreeformGradient, VectorFreeformPoint, VectorMeshGradient } from './types.js';
@@ -4114,6 +4116,56 @@ export class VectorEditorController {
 			this.editingId = null;
 		});
 		return { ok: true, id };
+	}
+
+	// -----------------------------------------------------------------------------------------
+	// PDF
+
+	/**
+	 * The document as a vector PDF (see `vectorDocumentToPdf`): one page of the artboard, or a page
+	 * per artboard (`pages: 'artboards'`). Returns the file's bytes, its page count and notes on
+	 * what was approximated or left out.
+	 */
+	toPdf(options: VectorPdfOptions = {}): VectorPdfExport {
+		return vectorDocumentToPdf(resolveVectorSymbols(this.storedDocument()), options);
+	}
+
+	// -----------------------------------------------------------------------------------------
+	// Lottie
+
+	/**
+	 * The document (or the selected / given nodes) as a Lottie animation (Bodymovin JSON): path
+	 * effects stay live as shape modifiers, gradients are gradient fills; `notes` lists what was
+	 * approximated or left out.
+	 */
+	toLottie(options: VectorLottieExportOptions & { ids?: readonly string[] } = {}): VectorLottieExport {
+		const doc = this.storedDocument();
+		const nodes = options.ids ? options.ids.map((id) => this.getNode(id)).filter((n): n is VectorNode => !!n) : undefined;
+		return vectorDocumentToLottie(resolveVectorSymbols(doc), { ...options, ...(nodes ? { nodes: resolveVectorSymbols({ ...doc, nodes }).nodes } : {}) });
+	}
+
+	/**
+	 * Adds one frame of a Lottie animation (JSON text or object) on top of the document as a group,
+	 * or replaces the document with it (`replace`, taking its size). One undo step. Returns the new
+	 * nodes' ids and what was approximated or left out.
+	 */
+	importLottie(input: unknown, options: VectorLottieImportOptions & { replace?: boolean } = {}): VectorActionResult & { ids?: string[]; notes?: string[] } {
+		let parsed: VectorLottieImport;
+		try {
+			parsed = parseVectorLottie(input, { ...options, idPrefix: `${this.newId()}-` });
+		} catch (e) {
+			return { ok: false, message: `Not a Lottie animation this editor can read: ${(e as Error).message}` };
+		}
+		if (!parsed.document.nodes.length) return { ok: false, message: 'The Lottie animation has nothing to draw at that frame (no visible shape layers).' };
+		const ids = parsed.document.nodes.map((n) => n.id);
+		this.change('Import Lottie', () => {
+			if (options.replace) this.doc = { ...this.doc, width: parsed.document.width, height: parsed.document.height, nodes: parsed.document.nodes };
+			else this.setDoc([...this.doc.nodes, ...parsed.document.nodes]);
+			this.selection = ids;
+			this.anchors = [];
+			this.editingId = null;
+		});
+		return { ok: true, ids, notes: parsed.notes };
 	}
 
 	// -----------------------------------------------------------------------------------------
