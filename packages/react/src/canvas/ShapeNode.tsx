@@ -10,6 +10,9 @@ export interface ShapeNodeProps {
 	width?: number;
 	height?: number;
 	selected?: boolean;
+	/** Absolute canvas position (React Flow passes it): brushed strokes sample the paper grain there. */
+	positionAbsoluteX?: number;
+	positionAbsoluteY?: number;
 	className?: string;
 	/** Rendered over the shape, e.g. React Flow `<Handle>`s or a label. */
 	children?: React.ReactNode;
@@ -26,9 +29,9 @@ export interface ShapeNodeProps {
  * effect (`shape.effect`) is drawn inside the shape or over it when a `<CanvasEffectsProvider>`
  * gives a provider.
  */
-export function ShapeNode({ id, data, width, height, selected, className = '', children }: ShapeNodeProps) {
+export function ShapeNode({ id, data, width, height, selected, className = '', children, positionAbsoluteX, positionAbsoluteY }: ShapeNodeProps) {
 	const shape = data?.shape;
-	const brushImage = useShapeBrushstroke(isShapeDescription(shape) ? shape : null, width, height);
+	const brushImage = useShapeBrushstroke(isShapeDescription(shape) ? shape : null, width, height, { x: positionAbsoluteX ?? 0, y: positionAbsoluteY ?? 0 });
 	if (!isShapeDescription(shape)) return null;
 	const render = getShapeRenderData(shape, { width, height }, { id: id || data?.id });
 	return (

@@ -10,7 +10,7 @@ import { parseSvgPath, type PathShape, type ShapeDescription, type ShapeSize } f
 import type { Point } from './types.js';
 import type { CanvasBrush, CanvasBrushPaint, CanvasBrushPreset, CanvasBrushstroke } from './brushTypes.js';
 
-export type { CanvasBrush, CanvasBrushPaint, CanvasBrushPaintMapping, CanvasBrushPaintStop, CanvasBrushPreset, CanvasBrushSettings, CanvasBrushstroke } from './brushTypes.js';
+export type { CanvasBrush, CanvasBrushPaint, CanvasBrushPaintMapping, CanvasBrushPaintStop, CanvasBrushPaper, CanvasBrushPreset, CanvasBrushSettings, CanvasBrushstroke } from './brushTypes.js';
 
 export { brushstrokeScaleBucket };
 
@@ -123,8 +123,9 @@ export interface CanvasBrushstrokeRenderer {
 	resolveCanvasBrush(brush: CanvasBrush, width: number): unknown;
 	/** Throws for paint that is not a colour or gradient paint a canvas stroke can use; the result is the paint engine's `PaintSource`. */
 	resolveCanvasPaint(paint: unknown): unknown;
-	renderShapeBrushstrokeNow(shape: BrushedPathShape, scale: number): CanvasBrushstrokeImage | null;
-	brushedShapeSvgNow(shape: BrushedPathShape, size: ShapeSize, scale: number): string;
+	renderShapeBrushstrokeNow(shape: BrushedPathShape, scale: number, place?: { origin?: { x: number; y: number }; unit?: number }): CanvasBrushstrokeImage | null;
+	brushSwatchNow(brush: CanvasBrush, options: CanvasBrushSwatchOptions): string;
+	brushedShapeSvgNow(shape: BrushedPathShape, size: ShapeSize, scale: number, place?: { origin?: { x: number; y: number }; unit?: number }): string;
 }
 
 let loading: Promise<CanvasBrushstrokeRenderer> | null = null;
@@ -165,6 +166,23 @@ export async function validateCanvasBrushPaint(paint: CanvasBrushPaint): Promise
 export interface RenderShapeBrushstrokeOptions {
 	/** Image pixels per path unit; pass `brushstrokeScaleBucket(zoom × node scale, devicePixelRatio)` (default 1). */
 	scale?: number;
+	/**
+	 * Where the path's (0, 0) is on the canvas, and canvas units per path unit (the node's
+	 * absolute position and width ÷ view box width). The paper grain is sampled there, so
+	 * neighbouring strokes share one sheet of paper. Default 0, 0 and 1.
+	 */
+	origin?: { x: number; y: number };
+	unit?: number;
+}
+
+/** A stable character seed for a stroke (FNV-1a of its id). */
+export function brushstrokeSeed(id: string): number {
+	let h = 0x811c9dc5;
+	for (let i = 0; i < id.length; i++) {
+		h ^= id.charCodeAt(i);
+		h = Math.imul(h, 0x01000193);
+	}
+	return h >>> 0;
 }
 
 /**
@@ -173,7 +191,7 @@ export interface RenderShapeBrushstrokeOptions {
  */
 export async function renderShapeBrushstroke(shape: ShapeDescription, options: RenderShapeBrushstrokeOptions = {}): Promise<CanvasBrushstrokeImage | null> {
 	if (!isBrushedShape(shape)) return null;
-	return (await loadCanvasBrushstrokeRenderer()).renderShapeBrushstrokeNow(shape, options.scale ?? 1);
+	return (await loadCanvasBrushstrokeRenderer()).renderShapeBrushstrokeNow(shape, options.scale ?? 1, options);
 }
 
 /**
@@ -183,5 +201,24 @@ export async function renderShapeBrushstroke(shape: ShapeDescription, options: R
  */
 export async function getBrushedShapeSvg(shape: ShapeDescription, size: ShapeSize, options: RenderShapeBrushstrokeOptions = {}): Promise<string | null> {
 	if (!isBrushedShape(shape)) return null;
-	return (await loadCanvasBrushstrokeRenderer()).brushedShapeSvgNow(shape, size, options.scale ?? 2);
+	return (await loadCanvasBrushstrokeRenderer()).brushedShapeSvgNow(shape, size, options.scale ?? 2, options);
+}
+
+export interface CanvasBrushSwatchOptions {
+	/** Swatch size in pixels (default 96 × 24). */
+	width?: number;
+	height?: number;
+	/** CSS colour (default `#1f2937`). */
+	color?: string;
+	/** Image pixels per swatch pixel (default 2, for sharp swatches on high-density screens). */
+	scale?: number;
+}
+
+/**
+ * A preview of a brush for a brush menu: a short wavy stroke with the brush's character (jitter
+ * and grain), its size capped to fit, as a PNG data URL ('' when nothing renders). Throws for an
+ * unknown or non-dry brush.
+ */
+export async function renderCanvasBrushSwatch(brush: CanvasBrush, options: CanvasBrushSwatchOptions = {}): Promise<string> {
+	return (await loadCanvasBrushstrokeRenderer()).brushSwatchNow(brush, options);
 }

@@ -74,8 +74,14 @@ batching and error codes.
 - **Brushed strokes.** Use a brush when the user wants a hand-drawn look (sketching, ink,
   pencil, marker); keep plain strokes for diagrams and UI. Send points every 2 to 8 canvas units
   along a curve, and shape the line with a short `pressure` profile (tapered ends:
-  `[0.2, 0.9, 1, 0.9, 0.2]`) rather than many points of different widths. `width` is the brush
-  size.
+  `[0.2, 0.9, 1, 0.9, 0.2]`) rather than many points of different widths. Leave `width` out to
+  use the preset's own size (`canvas.listBrushes` gives it); pass it only to make the mark finer
+  or bolder.
+- **Brush character.** Each preset draws with its own character: charcoal and pastel are broad and
+  grainy (they catch the paper's tooth), pencil is fine and slightly grainy, ink, marker and brush
+  pen are clean, the airbrush is a soft spray. The grain and jitter are seeded per stroke, so a
+  stroke always looks the same, and neighbouring strokes share one sheet of paper. Pick the brush
+  for the look, then the colour; for a sketch, use one or two brushes rather than all of them.
 
 ## Tool reference
 
@@ -168,12 +174,13 @@ are kept exactly). They need unlocked shapes; other selected nodes are ignored.
 Freehand strokes are `path` shape nodes, so they select, move, group, erase and export like any
 shape. A stroke with `data.shape.brush` is painted with a dry paint brush instead of an SVG stroke
 (the path stays the data; the paint is rendered from it); `brush.paint` gives it gradient paint, sampled dab by dab
-along the path, instead of the stroke colour).
+along the path, instead of the stroke colour). New brushed strokes store a `brush.seed` (their
+character: seeded jitter and the paper grain they catch) and, when a width was chosen, `brush.size`.
 
 | Command | Use it to |
 | --- | --- |
-| `canvas.drawFreehand` | Draw a pen or highlighter stroke through `points` (`[x, y]` pairs in canvas units, in drawing order; one undo step). `tool` picks the defaults (`pen`: blue, width 3; `highlighter`: yellow, width 24, opacity 0.35); `color`, `width`, `opacity` override them. Pass `brush` (a preset id from `canvas.listBrushes`, or tip settings) to paint it with a dry brush, plus `pressure` / `tiltX` / `tiltY` profiles spread along its length (`[0.2, 1, 0.3]` swells in the middle). Add `paint` (only with `brush`) for gradient paint that changes colour along the stroke: `{ "type": "gradient", "stops": [...], "map": { "by": "distance", "length": 200 } }` (length in canvas units), or `by` `pressure`, `tilt`, `direction`, `across-tip`, `random`. Returns the node `id`, its `bounds` and the stored `brush` (with `paint` normalised: defaults filled in, colours lowercased). |
-| `canvas.listBrushes` | Read-only: the dry paint presets `canvas.drawFreehand` accepts as `brush` (`id`, `name`, `category`, the preset's own `size`). Call it before the first brushed stroke instead of guessing ids. |
+| `canvas.drawFreehand` | Draw a pen or highlighter stroke through `points` (`[x, y]` pairs in canvas units, in drawing order; one undo step). `tool` picks the defaults (`pen`: blue, width 3; `highlighter`: yellow, width 24, opacity 0.35); `color`, `width`, `opacity` override them (with a `brush`, `width` is the brush diameter and defaults to the preset's own size). Pass `brush` (a preset id from `canvas.listBrushes`, or tip settings) to paint it with a dry brush, plus `pressure` / `tiltX` / `tiltY` profiles spread along its length (`[0.2, 1, 0.3]` swells in the middle). Add `paint` (only with `brush`) for gradient paint that changes colour along the stroke: `{ "type": "gradient", "stops": [...], "map": { "by": "distance", "length": 200 } }` (length in canvas units), or `by` `pressure`, `tilt`, `direction`, `across-tip`, `random`. Returns the node `id`, its `bounds` and the stored `brush` (with `paint` normalised: defaults filled in, colours lowercased). |
+| `canvas.listBrushes` | Read-only: the dry paint presets `canvas.drawFreehand` accepts as `brush` (`id`, `name`, `category`, the preset's own `size`, which a stroke uses unless you pass `width`). Call it before the first brushed stroke instead of guessing ids. |
 
 ### Components (command form)
 

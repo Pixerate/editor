@@ -22,3 +22,4 @@ export * from './gradient-paint';
 export * from './rand';
 export * from './brushstroke';
 export * from './pointer';
+export * from './grain';

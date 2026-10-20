@@ -163,7 +163,7 @@ describe('gradient paint on brushed strokes', () => {
 		(strokeToShapeNode({ id: 'g', tool: 'pen', points: straight, style: { color, width: 10, opacity: 1, brush: { hardness: 1 }, paint: paint as any } }).data as any).shape as PathShape;
 
 	it('stores the paint on the brushstroke', () => {
-		expect(painted(blueToYellow).brush).toEqual({ brush: { hardness: 1 }, paint: blueToYellow });
+		expect(painted(blueToYellow).brush).toEqual({ brush: { hardness: 1 }, paint: blueToYellow, seed: expect.any(Number) });
 	});
 
 	it('a distance gradient paints the start and the end in different colours', async () => {
@@ -218,7 +218,7 @@ describe('drawStroke and the canvas.drawFreehand command', () => {
 		const out = (result.structuredContent as any).result;
 		expect(out.id).toBe('n1');
 		expect(out.bounds).toMatchObject({ x: 10, width: 152 });
-		expect(out.brush).toEqual({ brush: 'brush-pen', pressure: [0.1, 1, 0.3] });
+		expect(out.brush).toEqual({ brush: 'brush-pen', pressure: [0.1, 1, 0.3], seed: expect.any(Number), size: 10 });
 		expect(nodes()).toHaveLength(1);
 		history.undo();
 		expect(nodes()).toHaveLength(0);
@@ -324,5 +324,60 @@ describe('pointerPenSample', () => {
 		expect(pointerPenSample({ pointerType: 'touch', pressure: 1 })).toBeUndefined();
 		expect(pointerPenSample({ pointerType: 'pen', pressure: 0.4, tiltX: 30, tiltY: 0 })).toEqual({ pressure: 0.4, tiltX: 30 });
 		expect(pointerPenSample({ pointerType: 'pen', pressure: 0 })).toEqual({});
+	});
+});
+
+describe('brushed stroke character on the canvas', () => {
+	const line = 'M0 20 L60 18 L120 24 L180 20';
+	const shape = (brush: Record<string, unknown>, extra: Partial<PathShape> = {}): PathShape =>
+		({ kind: 'path', d: line, viewBox: [0, 0, 180, 40], stroke: '#222222', strokeWidth: 4, brush, ...extra }) as PathShape;
+
+	it('renders older strokes (no seed) exactly as before: stroke width, plain dabs', async () => {
+		const { renderBrushstroke, brushstrokeDataUrl } = await import('../src/paint');
+		const { BUILTIN_BRUSHES } = await import('../src/paint-editor/brushes');
+		const charcoal = BUILTIN_BRUSHES.find((b) => b.id === 'charcoal-stick')!;
+		const old = await renderShapeBrushstroke(shape({ brush: 'charcoal-stick' }), { scale: 1, origin: { x: 50, y: 50 } });
+		const expected = renderBrushstroke({ points: pathDataToPolyline(line).map(([x, y]) => ({ x, y })) }, { ...charcoal, tip: { ...charcoal.tip, size: 4 } }, { scale: 1, color: [34, 34, 34, 255] });
+		expect(old!.href).toBe(brushstrokeDataUrl(expected));
+	});
+
+	it('new strokes get a seed, use the preset size unless one is chosen, and render with character', async () => {
+		const node = strokeToShapeNode(stroke({ style: { ...stroke().style, brush: 'charcoal-stick' } }));
+		const s = (node.data as any).shape as PathShape;
+		expect(s.brush!.seed).toEqual(expect.any(Number));
+		expect(s.brush!.size).toBeUndefined();
+		const presetSized = await renderShapeBrushstroke(shape({ brush: 'charcoal-stick', seed: 5 }));
+		const widthSized = await renderShapeBrushstroke(shape({ brush: 'charcoal-stick' }));
+		// Charcoal's own tip is 26 px; the stroke width is 4.
+		expect(presetSized!.height).toBeGreaterThan(widthSized!.height + 10);
+		const chosen = strokeToShapeNode(stroke({ style: { ...stroke().style, brush: 'charcoal-stick', brushSize: 12 } }));
+		expect((chosen.data as any).shape.brush.size).toBe(12);
+		expect((chosen.data as any).shape.strokeWidth).toBe(12);
+		const twelve = await renderShapeBrushstroke(shape({ brush: 'charcoal-stick', seed: 5, size: 12 }));
+		expect(twelve!.height).toBeLessThan(presetSized!.height);
+	});
+
+	it('samples the grain where the stroke sits on the canvas, so neighbours share one paper', async () => {
+		const brush = { brush: { size: 14, hardness: 0.5 }, seed: 9, paper: { pattern: 'sanded', depth: 1 } };
+		// Plain tip settings have no grain response; give the stroke a dry preset with grain instead.
+		const grainy = { ...brush, brush: 'soft-pastel' };
+		const here = await renderShapeBrushstroke(shape(grainy), { origin: { x: 100, y: 0 } });
+		const moved = await renderShapeBrushstroke(shape(grainy, { d: 'M100 20 L160 18 L220 24 L280 20', viewBox: [100, 0, 180, 40] }), { origin: { x: 0, y: 0 } });
+		expect(moved!.href).toBe(here!.href);
+		const elsewhere = await renderShapeBrushstroke(shape(grainy), { origin: { x: 133, y: 7 } });
+		expect(elsewhere!.href).not.toBe(here!.href);
+		expect(await renderShapeBrushstroke(shape({ ...grainy, paper: null }))).not.toEqual(here);
+	});
+});
+
+describe('renderCanvasBrushSwatch', () => {
+	it('previews each dry brush differently and refuses wet ones', async () => {
+		const { renderCanvasBrushSwatch } = await import('../src/canvas');
+		const charcoal = await renderCanvasBrushSwatch('charcoal-stick', { width: 80, height: 24 });
+		const airbrush = await renderCanvasBrushSwatch('airbrush', { width: 80, height: 24 });
+		expect(charcoal).toMatch(/^data:image\/png;base64,/);
+		expect(charcoal).not.toBe(airbrush);
+		expect(await renderCanvasBrushSwatch('charcoal-stick', { width: 80, height: 24 })).toBe(charcoal);
+		await expect(renderCanvasBrushSwatch('watercolor-round')).rejects.toThrow(/not a dry brush/);
 	});
 });

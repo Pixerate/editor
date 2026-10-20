@@ -2631,3 +2631,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: After a brushstroke layer was changed in place (in a test, or in a host mutating a document), the canvas kept drawing the old stroke.
 - **Root Cause**: `vectorBrushstrokeImages` caches per path object and layer object (a `WeakMap` of `Map`s), and the shared `BrushstrokeCache` keys on the samples, brush and colour. Mutating a layer object keeps the stale entry.
 - **Solution / Workaround**: Change brushstrokes through `setBrushstroke` / `updatePaintLayer`, which make new path and layer objects, as every other edit does. Treat document nodes as immutable.
+
+### [core/paint] Standalone Brushstrokes Lost Their Grain: Full Pressure and Overlapping Dabs Fill the Valleys
+
+- **Issue / Symptom**: On the canvas, charcoal, pastel and pencil drew the same smooth line. Applying the paint editor's per-dab `grainCatch` to `renderBrushstroke` barely changed it.
+- **Root Cause**: `grainCatch` fills the valleys as pressure rises, and a mouse reports full pressure. Also, each dab's coverage builds up towards its ceiling (`c ← c + v·(ceil − c)`), so with tight spacing (charcoal 0.05, about 20 dabs over each pixel) a valley that loses half of every dab still ends up almost full. The paint editor relies on light, repeated passes over a shaded paper; a standalone stroke has neither.
+- **Solution / Workaround**: `renderBrushstroke`'s `character` applies `strokeGrainCatch` once to the finished stroke's coverage, at the stroke's mean pressure. Its valleys lose up to `depth × (1.4 − 0.6 × pressure)`, so texture survives at full pressure. The paint editor keeps `grainCatch` per dab. The grain is sampled in path units via `origin` / `unit` (not image pixels), so it is the same at every zoom bucket and lines up across strokes.

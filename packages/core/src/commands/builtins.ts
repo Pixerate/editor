@@ -330,7 +330,7 @@ export interface DrawCommandTarget {
 	drawStroke(input: {
 		points: readonly (readonly [number, number])[];
 		tool?: 'pen' | 'highlighter';
-		style?: { color?: string; width?: number; opacity?: number; brush?: CanvasBrush; paint?: CanvasBrushPaint };
+		style?: { color?: string; width?: number; opacity?: number; brush?: CanvasBrush; brushSize?: number; paint?: CanvasBrushPaint };
 		pressure?: readonly number[];
 		tiltX?: readonly number[];
 		tiltY?: readonly number[];
@@ -364,7 +364,7 @@ const BRUSH_SETTINGS_PARAM = {
 	additionalProperties: false,
 	description: 'Tip settings instead of a preset.',
 	properties: {
-		size: { type: 'number', minimum: 1, maximum: 2500, description: 'Brush diameter in canvas units (default: the stroke width).' },
+		size: { type: 'number', minimum: 1, maximum: 2500, description: 'Brush diameter in canvas units (default: `width` when given, else 3).' },
 		hardness: { type: 'number', minimum: 0, maximum: 1, description: 'Edge hardness, 0 soft to 1 hard (default 1).' },
 		spacing: { type: 'number', minimum: 0.01, maximum: 10, description: 'Dab spacing as a fraction of the diameter (default 0.1).' },
 		angle: { type: 'number', minimum: -360, maximum: 360, description: 'Tip angle in degrees (default 0).' },
@@ -482,7 +482,7 @@ export function createDrawCommands(target: DrawCommandTarget, options: DrawComma
 					},
 					tool: { type: 'string', enum: ['pen', 'highlighter'], description: 'Pen (default: blue, width 3) or highlighter (yellow, width 24, opacity 0.35); sets the defaults below.' },
 					color: { type: 'string', description: 'Stroke colour, any CSS colour (default from the tool).' },
-					width: { type: 'number', exclusiveMinimum: 0, maximum: 2500, description: 'Stroke width in canvas units; the brush size for brushed strokes (default from the tool).' },
+					width: { type: 'number', exclusiveMinimum: 0, maximum: 2500, description: 'Stroke width in canvas units (default from the tool). For brushed strokes it is the brush diameter; leave it out to use the preset\'s own size (canvas.listBrushes gives it).' },
 					opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Stroke opacity 0..1 (default from the tool).' },
 					brush: {
 						description: 'Paint the stroke with a dry paint brush: a preset id such as "ink-pen", "pencil-hb", "brush-pen", "charcoal-stick", "soft-pastel", "marker" or "airbrush" (all ids: canvas.listBrushes), or tip settings. Omit for a plain vector stroke.',
@@ -518,6 +518,7 @@ export function createDrawCommands(target: DrawCommandTarget, options: DrawComma
 					style: {
 						...(params.color !== undefined ? { color: params.color } : {}),
 						...(params.width !== undefined ? { width: params.width } : {}),
+						...(params.width !== undefined && params.brush !== undefined ? { brushSize: params.width } : {}),
 						...(params.opacity !== undefined ? { opacity: params.opacity } : {}),
 						...(params.brush !== undefined ? { brush: params.brush } : {}),
 						...(params.paint !== undefined ? { paint: params.paint } : {})
@@ -533,7 +534,7 @@ export function createDrawCommands(target: DrawCommandTarget, options: DrawComma
 			id: `${prefix}listBrushes`,
 			label: 'List Freehand Brushes',
 			keywords: ['brushes', 'presets', 'paint', 'pencil', 'ink'],
-			description: 'Read-only: the dry paint presets canvas.drawFreehand accepts as `brush`, as { id, name, category, size } (size is the preset\'s own diameter; the stroke width replaces it).',
+			description: 'Read-only: the dry paint presets canvas.drawFreehand accepts as `brush`, as { id, name, category, size } (size is the preset\'s own diameter, which a brushed stroke uses unless `width` is given).',
 			params: { type: 'object', additionalProperties: false, properties: {} },
 			readOnly: true,
 			run: async () => ({ brushes: await target.listBrushes() })

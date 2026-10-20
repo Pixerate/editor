@@ -18,6 +18,7 @@
 import { normalizeBrush, type BrushSettings } from './brush';
 import { paintPathStroke, type PathSample, type PathStrokeOptions } from './path-stroke';
 import { scalePaintGradient, type PaintSource } from './gradient-paint';
+import { PaperGrain, type GrainPattern } from './grain';
 import { emptySurface, readRegion, type RasterRect } from '../raster/surface';
 import { pngDataUrl } from '../raster/png';
 import { BRUSHSTROKE_MAX_SCALE as MAX_SCALE, BRUSHSTROKE_MIN_SCALE as MIN_SCALE } from './brushstroke-scale';
@@ -48,8 +49,9 @@ export type BrushstrokeInput = readonly BrushstrokeSample[] | BrushstrokeProfile
 /**
  * A brush for a brushstroke: plain tip settings, or a paint-editor brush (`PaintBrush` matches this
  * shape structurally). Only dab-engine brushes render; `rotation: 'stroke'` turns the tip with the
- * path, and `dynamics` give the size at zero pressure and how tilt shapes the tip. Grain, jitter and
- * velocity dynamics are not applied (there is no paper, and the result must be deterministic).
+ * path, and `dynamics` give the size at zero pressure and how tilt shapes the tip. With the
+ * `character` option the brush's `grain` response and its size, angle, opacity and scatter jitter
+ * apply too (seeded, so still deterministic). Velocity dynamics are never applied.
  */
 export type BrushstrokeBrush =
   | Partial<BrushSettings>
@@ -59,8 +61,40 @@ export type BrushstrokeBrush =
       engine?: string;
       tip: Partial<BrushSettings>;
       rotation?: string;
-      dynamics?: { minSize?: number; tiltSize?: number; tiltRoundness?: number };
+      /** How strongly the mark follows the paper grain, 0..1 (with `character`). */
+      grain?: number;
+      dynamics?: { minSize?: number; tiltSize?: number; tiltRoundness?: number; sizeJitter?: number; angleJitter?: number; opacityJitter?: number; scatter?: number };
     };
+
+/** The paper a brushstroke's grain comes from (all optional). */
+export interface BrushstrokePaper {
+  /** Grain pattern (default `sanded`: a fine, even tooth). */
+  pattern?: GrainPattern;
+  /** Grain seed (default 1). */
+  seed?: number;
+  /** Grain scale in path units: 1 is the pattern's natural size (default 1). */
+  scale?: number;
+  /** Grain depth 0..1, multiplied by the brush's `grain` response (default 0.5). */
+  depth?: number;
+}
+
+/**
+ * A brush's character: its jitter and the paper grain it catches. Seeded, so a stroke always
+ * renders the same bytes.
+ */
+export interface BrushstrokeCharacter {
+  /** Jitter seed (default: a hash of the path, so each stroke differs but repeats exactly). */
+  seed?: number;
+  /** The paper (default: the built-in sanded grain); `null` for no grain. */
+  paper?: BrushstrokePaper | null;
+  /**
+   * Where the path sits on the paper: paper point = `origin + path point × unit` (default origin
+   * 0, 0 and unit 1). Pass the stroke's world position so neighbouring strokes share one sheet of
+   * paper and the grain stays put on screen.
+   */
+  origin?: { x: number; y: number };
+  unit?: number;
+}
 
 /**
  * What the stroke is painted with: a solid RGBA colour, or a `PaintSource` (one `#rrggbb` colour,
@@ -80,6 +114,12 @@ export interface BrushstrokeOptions {
   seed?: number;
   /** Join the last sample back to the first. */
   closed?: boolean;
+  /**
+   * Render the brush's character: its seeded size / angle / opacity / scatter jitter and the paper
+   * grain it catches (charcoal, pastel and pencil get their look from these). Default off: plain
+   * dabs, as before.
+   */
+  character?: BrushstrokeCharacter;
   /**
    * The largest image to render, in pixels (default 16 777 216, 4096²). A stroke that would be
    * bigger at `scale` renders at a lower scale instead; the result's `scale` says which.
@@ -171,6 +211,31 @@ export function isBrushstrokeBrush(brush: BrushstrokeBrush): boolean {
 
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
+/** The jitter and grain settings of a brush (zero for plain tip settings). */
+function brushCharacterOf(brush: BrushstrokeBrush): { grain: number; size: number; angle: number; opacity: number; scatter: number } {
+  if (!('tip' in brush) || !brush.tip) return { grain: 0, size: 0, angle: 0, opacity: 0, scatter: 0 };
+  const d = brush.dynamics ?? {};
+  const u = (v: unknown, hi = 1) => (finite(v) ? Math.min(hi, Math.max(0, v)) : 0);
+  return { grain: u(brush.grain), size: u(d.sizeJitter), angle: u(d.angleJitter), opacity: u(d.opacityJitter), scatter: u(d.scatter, 4) };
+}
+
+const papers = new Map<string, PaperGrain>();
+
+/** The grain of a paper (built once per pattern, seed and scale). */
+function paperGrain(paper: BrushstrokePaper): PaperGrain {
+  const pattern = paper.pattern ?? 'sanded';
+  const seed = finite(paper.seed) ? Math.round(Math.abs(paper.seed)) : 1;
+  const scale = finite(paper.scale) && paper.scale > 0 ? Math.min(8, Math.max(0.25, paper.scale)) : 1;
+  const key = `${pattern}:${seed}:${scale}`;
+  let g = papers.get(key);
+  if (!g) {
+    g = new PaperGrain({ pattern, seed, scale, tiling: 'mirror', dry: { contrast: 1, invert: false }, wet: { contrast: 1, invert: false } });
+    if (papers.size > 16) papers.delete(papers.keys().next().value as string);
+    papers.set(key, g);
+  }
+  return g;
+}
+
 /**
  * Renders a dry brushstroke along `input` with `brush` to an RGBA image. The same input, brush and
  * options always give the same bytes. Throws for a wet (or other non-dry) brush and for samples
@@ -198,8 +263,28 @@ export function renderBrushstroke(input: BrushstrokeInput, brush: BrushstrokeBru
   if (area * scale * scale > maxPixels) scale = Math.max(MIN_SCALE, Math.sqrt(maxPixels / area));
 
   const scaled = samples.map((s) => ({ ...s, x: s.x * scale, y: s.y * scale }));
+  // Character: seeded jitter and paper grain, sampled where the path lies on the paper.
+  let character: Pick<PathStrokeOptions, 'jitter' | 'grain'> = {};
+  if (options.character) {
+    const c = brushCharacterOf(brush);
+    const ch = options.character;
+    const seed = finite(ch.seed) ? ch.seed | 0 : hashString(JSON.stringify(input));
+    const jitter = c.size || c.angle || c.opacity || c.scatter ? { seed, size: c.size, angle: c.angle, opacity: c.opacity, scatter: c.scatter } : undefined;
+    const paper = ch.paper === null ? null : (ch.paper ?? {});
+    const depth = paper ? Math.min(1, Math.max(0, (finite(paper.depth) ? paper.depth : 0.5) * c.grain)) : 0;
+    let grain: PathStrokeOptions['grain'];
+    if (paper && depth > 0) {
+      const g = paperGrain(paper);
+      const ox = ch.origin?.x ?? 0;
+      const oy = ch.origin?.y ?? 0;
+      const k = (finite(ch.unit) && ch.unit > 0 ? ch.unit : 1) / scale;
+      grain = { depth, at: (x, y) => g.at(ox + x * k, oy + y * k) };
+    }
+    character = { ...(jitter ? { jitter } : {}), ...(grain ? { grain } : {}) };
+  }
   const { surface, bounds, dabs } = paintPathStroke(emptySurface(4), scaled, {
     ...strokeOptions,
+    ...character,
     brush: { ...tip, size: tip.size * scale },
     closed: options.closed ?? strokeOptions.closed,
     color,
@@ -264,7 +349,8 @@ function hashString(s: string, h = 0x811c9dc5): number {
 export function brushstrokeKey(input: BrushstrokeInput, brush: BrushstrokeBrush, options: BrushstrokeOptions = {}): string {
   const path = JSON.stringify(input);
   const { brush: tip, ...rest } = brushstrokeStrokeOptions(brush);
-  const rest2 = JSON.stringify([tip, rest, options.paint ?? options.color ?? null, options.seed ?? 0, options.closed ?? false, options.maxPixels ?? null]);
+  const character = options.character ? [options.character, brushCharacterOf(brush)] : null;
+  const rest2 = JSON.stringify([tip, rest, options.paint ?? options.color ?? null, options.seed ?? 0, options.closed ?? false, options.maxPixels ?? null, ...(character ? [character] : [])]);
   const scale = finite(options.scale) ? options.scale : 1;
   return `${hashString(path).toString(16)}:${path.length}:${hashString(rest2).toString(16)}:${scale}`;
 }

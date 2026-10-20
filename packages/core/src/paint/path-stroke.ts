@@ -16,8 +16,10 @@
 
 import { applyStrokeToTile, CoverageMap, dabRect, gradientDabColor, normalizeBrush, rasterizeDab, TIP_GRADIENT_STEPS, type BrushSettings, type Dab } from './brush';
 import { hexToPaintRgb, PaintGradientSampler, resolvePaintGradient, type PaintGradientSample, type PaintSource } from './gradient-paint';
-import { TiledSurface, finishTile, tileKey, tilesInRect, TILE, type RasterRect } from '../raster/surface';
+import { TiledSurface, finishTile, tileCoord, tileKey, tilesInRect, TILE, type RasterRect } from '../raster/surface';
 import type { BlendMode } from '../raster/blend';
+import { randSigned } from './rand';
+import { strokeGrainCatch } from './grain';
 
 /** One sample of the path (document pixels). */
 export interface PathSample {
@@ -46,7 +48,25 @@ export interface PathStrokeOptions {
   minSize?: number;
   /** Join the last sample back to the first. */
   closed?: boolean;
+  /**
+   * Per-dab jitter, as the paint editor's brush dynamics apply it: size, angle (fraction of ±180°),
+   * opacity drop and scatter across the path (in diameters), each 0..1 (scatter 0..4). Hashed from
+   * `seed` and the dab index, so the same stroke always jitters the same way. Default none.
+   */
+  jitter?: { seed: number; size?: number; angle?: number; opacity?: number; scatter?: number };
+  /**
+   * Paper grain the finished stroke catches (dry media; `strokeGrainCatch` at the stroke's mean
+   * pressure): `at(x, y)` is the grain height 0..1 at a sample-space point, `depth` 0..1 how much
+   * the valleys lose (paper depth × the brush's grain response). Default none.
+   */
+  grain?: { at(x: number, y: number): number; depth: number } | null;
 }
+
+/** Jitter streams (the paint editor's dab walker uses the same, so a preset jitters alike). */
+const JITTER_SIZE = 1;
+const JITTER_ANGLE = 2;
+const JITTER_OPACITY = 3;
+const JITTER_SCATTER = 4;
 
 /** A pen's lean from a sample: 0 upright .. 1 flat, and the direction it leans (radians, clockwise from +x). */
 function lean(s: PathSample): { amount: number; azimuth: number } | null {
@@ -82,8 +102,23 @@ export function pathStrokeDabs(samples: readonly PathSample[], options: PathStro
     if (tilt.followAzimuth && l) angle = -l.azimuth;
     const roundness = Math.max(0.05, brush.roundness * (1 - 0.85 * (tilt.roundness ?? 0) * lean0));
     const op = brush.pressureOpacity ? pr : 1;
-    const params = { travel, index: index++, pressure: pr, lean: lean0, speed, direction: dir, time: time === null || t0 === null ? null : time - t0 };
-    return { x, y, radius: Math.max(0.5, size / 2), alpha: brush.flow, opacity: brush.opacity * op, angle, roundness, params };
+    const i = index++;
+    const params = { travel, index: i, pressure: pr, lean: lean0, speed, direction: dir, time: time === null || t0 === null ? null : time - t0 };
+    let diameter = size;
+    let opacity = brush.opacity * op;
+    const j = options.jitter;
+    if (j) {
+      if (j.size) diameter *= Math.max(0.05, 1 + j.size * randSigned(j.seed, i, JITTER_SIZE));
+      if (j.angle) angle += j.angle * Math.PI * randSigned(j.seed, i, JITTER_ANGLE);
+      if (j.opacity) opacity *= 1 - j.opacity * (randSigned(j.seed, i, JITTER_OPACITY) * 0.5 + 0.5);
+      if (j.scatter) {
+        // Across the path: the direction of travel turned a quarter (y points down).
+        const off = j.scatter * diameter * randSigned(j.seed, i, JITTER_SCATTER);
+        x += Math.sin(dir) * off;
+        y += Math.cos(dir) * off;
+      }
+    }
+    return { x, y, radius: Math.max(0.5, diameter / 2), alpha: brush.flow, opacity, angle, roundness, params };
   };
   const out: Dab[] = [];
   const pressure = (s: PathSample) => (typeof s.pressure === 'number' && Number.isFinite(s.pressure) ? s.pressure : 1);
@@ -165,6 +200,18 @@ export function pathStrokeCoverage(samples: readonly PathSample[], options: Path
       const x = Math.min(bounds.x, rect.x);
       const y = Math.min(bounds.y, rect.y);
       bounds = { x, y, width: Math.max(bounds.x + bounds.width, rect.x + rect.width) - x, height: Math.max(bounds.y + bounds.height, rect.y + rect.height) - y };
+    }
+  }
+  const grain = options.grain;
+  if (grain && grain.depth > 0 && dabs.length) {
+    // Once over the finished stroke, so overlapping dabs cannot fill the valleys back in.
+    const pressure = dabs.reduce((sum, d) => sum + (d.params?.pressure ?? 1), 0) / dabs.length;
+    for (const [key, t] of coverage.tiles) {
+      const { tx, ty } = tileCoord(key);
+      for (let y = 0, k = 0; y < TILE; y++) {
+        const gy = ty * TILE + y + 0.5;
+        for (let x = 0; x < TILE; x++, k++) if (t[k] > 0) t[k] *= strokeGrainCatch(grain.at(tx * TILE + x + 0.5, gy), grain.depth, pressure);
+      }
     }
   }
   return { coverage, bounds, dabs: dabs.length };

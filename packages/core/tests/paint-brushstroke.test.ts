@@ -165,3 +165,72 @@ describe('brushstrokes with gradient paint (PaintSource)', () => {
     expect(brushstrokeKey(line, { size: 4 }, { paint: blueToYellow, seed: 1 })).not.toBe(brushstrokeKey(line, { size: 4 }, { paint: blueToYellow, seed: 2 }));
   });
 });
+
+describe('brushstroke character: seeded jitter and paper grain', () => {
+  const path = Array.from({ length: 16 }, (_, i) => ({ x: 20 + i * 14, y: 60 + Math.sin(i / 3) * 12, pressure: 0.6 }));
+  /** Mean |Δalpha| between horizontal neighbours where either is painted: 0 for a smooth stroke, higher for a grainy one. */
+  const roughness = (img: ReturnType<typeof renderBrushstroke>['image']) => {
+    let sum = 0;
+    let n = 0;
+    for (let y = 0; y < img.height; y++)
+      for (let x = 1; x < img.width; x++) {
+        const a = img.data[(y * img.width + x) * 4 + 3];
+        const b = img.data[(y * img.width + x - 1) * 4 + 3];
+        if (a > 20 || b > 20) {
+          sum += Math.abs(a - b);
+          n++;
+        }
+      }
+    return n ? sum / n : 0;
+  };
+  const render = (id: string, character?: Parameters<typeof renderBrushstroke>[2]['character']) => renderBrushstroke(path, preset(id), { scale: 1, ...(character ? { character } : {}) });
+
+  it('gives charcoal, pastel and pencil their grain, and leaves the airbrush smooth', () => {
+    for (const id of ['charcoal-stick', 'soft-pastel', 'pencil-hb']) {
+      const plain = roughness(render(id).image);
+      const textured = roughness(render(id, { seed: 7 }).image);
+      expect(textured, id).toBeGreaterThan(plain * 1.5 + 2);
+    }
+    // No grain response, no jitter: character changes nothing.
+    expect(Buffer.from(render('airbrush', { seed: 7 }).image.data).equals(Buffer.from(render('airbrush').image.data))).toBe(true);
+  });
+
+  it('makes the presets look different from each other', () => {
+    const stats = ['charcoal-stick', 'soft-pastel', 'pencil-hb', 'airbrush'].map((id) => {
+      const s = render(id, { seed: 3 });
+      let alpha = 0;
+      for (let i = 3; i < s.image.data.length; i += 4) alpha += s.image.data[i];
+      return [Math.round(s.bounds!.height), Math.round(roughness(s.image)), Math.round(alpha / 1e5)].join('/');
+    });
+    expect(new Set(stats).size).toBe(4);
+  });
+
+  it('is deterministic: the same seed gives the same bytes, another seed other bytes', () => {
+    const a = render('charcoal-stick', { seed: 11 });
+    expect(Buffer.from(a.image.data).equals(Buffer.from(render('charcoal-stick', { seed: 11 }).image.data))).toBe(true);
+    expect(Buffer.from(a.image.data).equals(Buffer.from(render('charcoal-stick', { seed: 12 }).image.data))).toBe(false);
+    // Without a seed, a hash of the path: still the same every time.
+    expect(Buffer.from(render('charcoal-stick', {}).image.data).equals(Buffer.from(render('charcoal-stick', {}).image.data))).toBe(true);
+  });
+
+  it('samples the grain on the paper, so a stroke moved by its origin keeps the same grain under it', () => {
+    const brush = { ...preset('charcoal-stick'), dynamics: {} }; // grain only, no jitter
+    const here = renderBrushstroke(path, brush, { character: { seed: 1, origin: { x: 0, y: 0 } } });
+    const shifted = path.map((s) => ({ ...s, x: s.x - 100, y: s.y - 40 }));
+    const there = renderBrushstroke(shifted, brush, { character: { seed: 1, origin: { x: 100, y: 40 } } });
+    expect(Buffer.from(there.image.data).equals(Buffer.from(here.image.data))).toBe(true);
+    // The same path elsewhere on the paper catches different grain.
+    const elsewhere = renderBrushstroke(path, brush, { character: { seed: 1, origin: { x: 37, y: 11 } } });
+    expect(Buffer.from(elsewhere.image.data).equals(Buffer.from(here.image.data))).toBe(false);
+    // At twice the scale the grain is still sampled in path units: similar texture, not finer.
+    const two = renderBrushstroke(path, brush, { scale: 2, character: { seed: 1 } });
+    expect(Math.abs(roughness(two.image) / 2 - roughness(here.image))).toBeLessThan(roughness(here.image));
+  });
+
+  it('turns grain off with paper: null, and keys the cache by character', () => {
+    const brush = { ...preset('charcoal-stick'), dynamics: {} };
+    expect(Buffer.from(renderBrushstroke(path, brush, { character: { paper: null } }).image.data).equals(Buffer.from(renderBrushstroke(path, brush).image.data))).toBe(true);
+    expect(brushstrokeKey(path, brush, { character: { seed: 1 } })).not.toBe(brushstrokeKey(path, brush));
+    expect(brushstrokeKey(path, brush, { character: { seed: 1 } })).not.toBe(brushstrokeKey(path, brush, { character: { seed: 1, origin: { x: 1, y: 0 } } }));
+  });
+});
