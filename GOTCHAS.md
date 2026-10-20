@@ -2328,6 +2328,12 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: Their engines (`TileMedium`, `SmudgeTip`, `applyRetouchToTile`) read `px / 255` and wrote `Math.round(v * 255)`. On a float working tile the read is exact but the write rounds every pixel to a whole level. The pigment caches key on `(r << 16) | (g << 8) | b`, which truncates fractions.
 - **Solution / Workaround**: On a deep document `PaintStrokeSession` hands them `Float32Array` working tiles on the same 0..255 sRGB-encoded scale (`workTileOf`, back with `deepOfWorkTile`, which copies the exact original samples for pixels still equal to what was read). Write through `put255` (rounds bytes as before, keeps fractions on floats), pass `Math.round(px[i])` to `mixPigment8` / `pigment8`, and skip byte-keyed caches on floats. Sources for Clone and healing read the same scale (`TilePixelSource` over working tiles, or `compositeDeep` encoded to it).
 
+### [core/raster] A Deep Mask Is Coverage, Not Colour
+
+- **Issue / Symptom**: A 32-bit mask read back from a PSD or painted at depth came out darker or lighter than its 16-bit copy, and a soft mask on a 16-bit layer banded in the deep composite.
+- **Root Cause**: Deep RGBA samples at 32 bits are linear light, but a mask holds coverage. Running a one-channel surface through the colour transfer functions would linearise it. And the compositor read mask coverage through `readRegion`, the 8-bit rendering, whatever the mask held.
+- **Solution / Workaround**: The deep helpers already take `channels`: for 1 they treat samples as plain 0..1 coverage (16-bit `v / 65535`, 32-bit as is). Always pass the surface's channel count (`tileSamples(tile, ch, …)`, `deepTile(d, ch, …)`, `applyStrokeToDeepTile(…, { channels })`). The compositor's `maskTile` reads `readDeepRegion(mask.surface, rect, 32)` when the mask has deep tiles (depth cached per surface). PSD masks at 16/32 bits are big-endian planes (`toMaskDeep`, `deepMaskPlane`). CMYK files keep 8-bit masks, as their layers do.
+
 ### [core/paint] A Deep Eraser Must Zero the Colour of Pixels It Clears
 
 - **Issue / Symptom**: In a 16-bit document, Edit › Clear left full tiles of transparent pixels behind instead of removing them, so the layer kept its memory and its bounds.
