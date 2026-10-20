@@ -392,6 +392,20 @@ controller.frameToSvg(id); // the artboard alone, its corner at the origin
 - **SVG.** A frame exports as a `<g data-vector-frame>` with the frame as JSON, a `frame-fill` part and a `frame-contents` part clipped by a `<clipPath>` rectangle. Import rebuilds the frame, keeping its rotation as the group's transform. `data-vector-resizing` carries constraints. `vectorFrameDocument` / `frameToSvg` export one frame as a document of its own size.
 - **UI.** `getVectorFramePanel(state)` gives the selected frame and the resizing constraints of the selected children of frames (`mixed` when they differ). Both panels apply typed sizes on Enter or blur.
 
+## Connectors
+
+```ts
+const { id } = controller.addConnector({ start: { nodeId: "a" }, end: { nodeId: "b", side: "top" }, route: "elbow", radius: 6 }) as { ok: true; id: string };
+controller.setConnector({ end: null }, { ids: [id] }); // unglue: the end stays where it is
+controller.getConnectors(); // ends with the glued object, the side in use and the position
+```
+
+- **Model.** A connector is an open path with `connector: { start?, end?, route?, radius?, gap? }`. Each end is `{ nodeId, side? }` or absent (free). A side is `top`, `right`, `bottom`, `left`, `center` or `auto` (the default).
+- **Sites.** `vectorConnectionSites` gives the middle of each side of the object's own bounds and its centre, mapped through its rotation and its ancestors' transforms, each with an outward normal. `auto` picks the side whose normal faces the other end (its object's centre, or its free point).
+- **Routing.** `rerouteVectorConnectors` runs in the controller's `refreshed`, after the constraint solve. It is part of every edit and its undo step, and runs on every frame of a drag. `straight` is one segment. `elbow` leaves and enters along the sides' normals (straight out by `gap`, default 16), then turns at right angles through the middle, with `radius` as live corners on the bends. `curved` puts the handles along the normals. Glue to an object that is gone or has no extent is dropped, and the end stays put. The routed points are written into the connector's own space, so a connector in a moved group still meets its objects.
+- **Connector tool (X).** Pressing near a site (12 px) glues the start to that side; pressing on an object glues it `auto`; anywhere else leaves it free. The end glues the same way on release, and the tool gives the line a triangle arrowhead unless the defaults set one. While the tool is on, `overlay.connectorSites` lists the sites of the object under the pointer and marks the one that would glue.
+- **SVG.** `data-vector-connector` carries the settings, and import restores them.
+
 ## Large documents
 
 Hit-testing (`hitTestVectorNodes`), marquee selection and snapping to segments go through an R-tree once a node list (or a gesture's segment targets) reaches 256 entries (`VECTOR_SPATIAL_MIN`). The tree is packed sort-tile-recursive over each node's paint box (strokes and filters included) and cached per node array; each node's box is cached per node object, so after an edit only the nodes it replaced are measured again. Queries return candidates in draw order and the same exact tests then run, so results match a scan.

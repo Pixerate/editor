@@ -24,7 +24,8 @@ import { bezierPathToSvg } from '../canvas/pathops/bezier.js';
 import { bezierPathBounds, transformBezierPath } from '../canvas/pathops/bezier.js';
 import { invertMatrix } from '../geom/affine.js';
 import { isVectorFrame, sanitizeVectorFrame, sanitizeVectorResizing, vectorFrameRectPath, type VectorFrameGroup } from './frames.js';
-import type { VectorResizing } from './types.js';
+import type { VectorConnector, VectorResizing } from './types.js';
+import { sanitizeVectorConnector } from './connectors.js';
 
 /** `v` rounded to a whole number when within 1e-9 of one. */
 const tidy = (v: number) => (Math.abs(v - Math.round(v)) < 1e-9 ? Math.round(v) + 0 : v);
@@ -421,6 +422,7 @@ export function vectorDocumentToSvg(doc: VectorDocument, options: VectorSvgExpor
 		if (node.type === 'group' && node.blend) out += ` data-vector-blend="${escapeAttr(JSON.stringify(node.blend))}"`;
 		if (node.booleanOperation) out += ` data-vector-boolean-operation="${node.booleanOperation}"`;
 		if (node.resizing) out += ` data-vector-resizing="${escapeAttr(JSON.stringify(node.resizing))}"`;
+		if (node.type === 'path' && node.connector) out += ` data-vector-connector="${escapeAttr(JSON.stringify(node.connector))}"`;
 		const blend = vectorBlendModeCss(node.blendMode);
 		if (blend) out += ` style="mix-blend-mode:${blend}"`;
 		if (node.filters?.length) {
@@ -1772,6 +1774,8 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 		if (BOOLEAN_OPERATIONS.includes(operation as VectorBooleanOperation)) (meta as { booleanOperation?: VectorBooleanOperation }).booleanOperation = operation as VectorBooleanOperation;
 		const resizing = child.attrs['data-vector-resizing'] !== undefined ? sanitizeVectorResizing(parseJson(child.attrs['data-vector-resizing'])) : null;
 		if (resizing) (meta as { resizing?: VectorResizing }).resizing = resizing;
+		const connector = child.attrs['data-vector-connector'] !== undefined ? sanitizeVectorConnector(parseJson(child.attrs['data-vector-connector'])) : null;
+		if (connector) (meta as { connector?: VectorConnector }).connector = connector;
 		if (child.name === 'g' && child.attrs['data-vector-frame'] !== undefined) {
 			const node = frameGroup(child, s, m, meta);
 			if (node) out.push(node);

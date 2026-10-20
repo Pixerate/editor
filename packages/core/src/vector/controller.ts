@@ -131,6 +131,15 @@ import {
 import { isIdentityMatrix } from '../geom/affine.js';
 import { vectorNodesNear } from './spatial.js';
 import { isVectorMaskActive, isVectorMaskGroup, isVectorMaskType, vectorMaskedGeometry } from './mask.js';
+import {
+	isVectorConnector,
+	rerouteVectorConnectors,
+	routeVectorConnector,
+	vectorConnectionSites,
+	vectorConnectorTargetAt,
+	type VectorConnectionSite
+} from './connectors.js';
+import { VECTOR_CONNECTOR_ROUTES, VECTOR_CONNECTOR_SIDES, type VectorArrowhead, type VectorConnector, type VectorConnectorEnd, type VectorConnectorRoute, type VectorConnectorSide } from './types.js';
 import { vectorBoundsInside, isVectorFrame, vectorFrameDocument, type VectorFrameGroup } from './frames.js';
 import { VECTOR_HORIZONTAL_RESIZING, VECTOR_VERTICAL_RESIZING, type VectorFrame, type VectorHorizontalResizing, type VectorResizing, type VectorVerticalResizing } from './types.js';
 import type { TextShaper } from '../text/types.js';
@@ -592,6 +601,17 @@ export type VectorActionResult = { ok: true } | { ok: false; message: string };
 
 /** What Make Clipping Mask / Make Opacity Mask return: the new group's id, or why not. */
 export type VectorMaskResult = { ok: true; id: string } | { ok: false; message: string };
+
+/** A connector as `getConnectors` lists it. */
+export interface VectorConnectorListing {
+	id: string;
+	name?: string;
+	route: VectorConnectorRoute;
+	radius?: number;
+	/** Each end: the glued object, its side setting and the side in use, and where the end is (document units). */
+	start: { nodeId?: string; side?: VectorConnectorSide; resolvedSide?: string | null; x?: number; y?: number };
+	end: { nodeId?: string; side?: VectorConnectorSide; resolvedSide?: string | null; x?: number; y?: number };
+}
 
 /** A frame as `getFrames` lists it. */
 export interface VectorFrameListing {
@@ -1093,7 +1113,8 @@ const TOOL_LABELS: Record<VectorTool, string> = {
 	envelope: 'Envelope Mesh',
 	type: 'Type',
 	typePath: 'Type on a Path',
-	frame: 'Frame'
+	frame: 'Frame',
+	connector: 'Connector'
 };
 
 const TOOL_KEYS: Record<string, VectorTool> = {
@@ -1117,7 +1138,8 @@ const TOOL_KEYS: Record<string, VectorTool> = {
 	u: 'envelope',
 	t: 'type',
 	q: 'typePath',
-	f: 'frame'
+	f: 'frame',
+	x: 'connector'
 };
 
 export function vectorToolLabel(tool: VectorTool): string {
@@ -1146,7 +1168,8 @@ export const VECTOR_TOOL_SHORTCUTS: Readonly<Record<VectorTool, string>> = {
 	envelope: 'U',
 	type: 'T',
 	typePath: 'Q',
-	frame: 'F'
+	frame: 'F',
+	connector: 'X'
 };
 
 /** Short glyphs for tool buttons (pair them with `vectorToolLabel` for the accessible name). */
@@ -1171,7 +1194,8 @@ export const VECTOR_TOOL_GLYPHS: Readonly<Record<VectorTool, string>> = {
 	envelope: '⌗',
 	type: 'T',
 	typePath: '𝒯',
-	frame: '⬚'
+	frame: '⬚',
+	connector: '⤳'
 };
 
 /** Tools that drag out a shape (they snap while hovering). */
@@ -1331,6 +1355,7 @@ type Drag =
 	| { kind: 'builder'; erase: boolean; points: Vec2[]; touched: VectorBuilderTouched; map: VectorShapeBuilderMap }
 	| { kind: 'pull'; ref: VectorAnchorRef; before: Snapshot; base: VectorDocument; label: string; outOnly: boolean; closing: boolean; altBreaks: boolean }
 	| ({ kind: 'shape'; tool: VectorTool; start: Vec2; nodeId: string; before: Snapshot } & DragTargets)
+	| { kind: 'connector'; nodeId: string; start: Vec2; before: Snapshot }
 	| { kind: 'textBox'; start: Vec2; moved: boolean }
 	| { kind: 'textSelect'; nodeId: string }
 	| { kind: 'pencil'; nodeId: string; points: Point[]; before: Snapshot; lazy: LazyMouse; pressures: number[] | null; pressure: number }
@@ -1561,7 +1586,8 @@ export class VectorEditorController {
 		}
 		// Instances draw their symbols' art.
 		out = resolveVectorSymbols(out);
-		return this.solved(out);
+		// Connectors follow what they are glued to (after the constraints have moved it).
+		return rerouteVectorConnectors(this.solved(out));
 	}
 
 	/**
@@ -4031,6 +4057,207 @@ export class VectorEditorController {
 	}
 
 	// -----------------------------------------------------------------------------------------
+	// Connectors
+
+	/** How near (document units) a connector end snaps to a connection site. */
+	private connectorRadius(): number {
+		return 12 / this.viewport.zoom;
+	}
+
+	private downConnector(p: Vec2) {
+		const before = this.snapshot();
+		const target = vectorConnectorTargetAt(this.doc.nodes, p, this.connectorRadius());
+		const at = target?.site ?? p;
+		const node: VectorPathNode = {
+			id: this.newId(),
+			type: 'path',
+			name: 'Connector',
+			...this.styleFor(true),
+			...(this.defaults.endArrow === undefined ? { endArrow: 'triangle' as const } : {}),
+			connector: { start: target ? { nodeId: target.nodeId, ...(target.side && target.side !== 'auto' ? { side: target.side } : {}) } : null, end: null, route: this.connectorRoute },
+			subpaths: [{ closed: false, anchors: [{ x: at.x, y: at.y }, { x: at.x, y: at.y }] }]
+		};
+		this.setDoc([...this.doc.nodes, node]);
+		this.drag = { kind: 'connector', nodeId: node.id, start: { x: at.x, y: at.y }, before };
+		this.interaction = { type: 'draw', tool: 'connector', nodeId: node.id, bounds: { x: at.x, y: at.y, width: 0, height: 0 } };
+		this.notify(true);
+	}
+
+	/** The route new connectors get (the Connector tool and `addConnector`). Default straight. */
+	private connectorRoute: VectorConnectorRoute = 'straight';
+
+	/** Sets the route the Connector tool draws with. */
+	setConnectorRoute(route: VectorConnectorRoute): VectorActionResult {
+		if (!VECTOR_CONNECTOR_ROUTES.includes(route)) return { ok: false, message: `Unknown route "${route}": use ${VECTOR_CONNECTOR_ROUTES.join(', ')}.` };
+		this.connectorRoute = route;
+		this.notify();
+		return { ok: true };
+	}
+
+	/** The route the Connector tool draws with. */
+	getConnectorRoute(): VectorConnectorRoute {
+		return this.connectorRoute;
+	}
+
+	/** Checks a connector end given by an API caller: the object must exist and not be a connector. */
+	private checkConnectorEnd(end: VectorConnectorEnd, self?: string): string | null {
+		if (!end || typeof end.nodeId !== 'string') return 'A glued end needs a nodeId.';
+		const n = this.getNode(end.nodeId);
+		if (!n) return `There is no node "${end.nodeId}".`;
+		if (end.nodeId === self) return 'A connector cannot be glued to itself.';
+		if (isVectorConnector(n)) return `"${end.nodeId}" is a connector: glue ends to shapes, text, groups or instances.`;
+		if (end.side !== undefined && !VECTOR_CONNECTOR_SIDES.includes(end.side)) return `Unknown side "${end.side}": use ${VECTOR_CONNECTOR_SIDES.join(', ')}.`;
+		if (!vectorConnectionSites(this.doc.nodes, end.nodeId).length) return `"${end.nodeId}" has no extent (or is hidden) to connect to.`;
+		return null;
+	}
+
+	/**
+	 * Adds a connector from `start` to `end`, each glued to an object (`{ nodeId, side? }`, side
+	 * default `auto`) or a free point (`{ x, y }`, document units). It is routed now and after every
+	 * later edit, so it follows the objects. Stroked in the default stroke with an arrowhead at the
+	 * end unless given. One undo step; selects it.
+	 */
+	addConnector(input: {
+		start: VectorConnectorEnd | Vec2;
+		end: VectorConnectorEnd | Vec2;
+		route?: VectorConnectorRoute;
+		radius?: number;
+		gap?: number;
+		name?: string;
+		stroke?: VectorPaint;
+		strokeWidth?: number;
+		startArrow?: VectorArrowhead | null;
+		endArrow?: VectorArrowhead | null;
+	}): VectorMaskResult {
+		const glued = (e: VectorConnectorEnd | Vec2): e is VectorConnectorEnd => !!e && typeof (e as VectorConnectorEnd).nodeId === 'string';
+		for (const e of [input.start, input.end]) {
+			if (glued(e)) {
+				const problem = this.checkConnectorEnd(e);
+				if (problem) return { ok: false, message: problem };
+			} else if (!e || !Number.isFinite((e as Vec2).x) || !Number.isFinite((e as Vec2).y)) return { ok: false, message: 'Each end is { nodeId, side? } or a point { x, y }.' };
+		}
+		if (glued(input.start) && glued(input.end) && input.start.nodeId === input.end.nodeId) return { ok: false, message: 'Both ends are glued to the same object; connect two different objects.' };
+		const route = input.route ?? this.connectorRoute;
+		if (!VECTOR_CONNECTOR_ROUTES.includes(route)) return { ok: false, message: `Unknown route "${route}": use ${VECTOR_CONNECTOR_ROUTES.join(', ')}.` };
+		if (input.radius !== undefined && !(Number.isFinite(input.radius) && input.radius >= 0)) return { ok: false, message: 'radius must be zero or more.' };
+		if (input.gap !== undefined && !(Number.isFinite(input.gap) && input.gap >= 0)) return { ok: false, message: 'gap must be zero or more.' };
+		const point = (e: VectorConnectorEnd | Vec2): Vec2 => (glued(e) ? { x: 0, y: 0 } : { x: (e as Vec2).x, y: (e as Vec2).y });
+		const endOf = (e: VectorConnectorEnd | Vec2) => (glued(e) ? { nodeId: e.nodeId, ...(e.side && e.side !== 'auto' ? { side: e.side } : {}) } : null);
+		const id = this.newId();
+		const style = this.styleFor(true);
+		const node: VectorPathNode = {
+			id,
+			type: 'path',
+			name: input.name ?? 'Connector',
+			...style,
+			stroke: input.stroke !== undefined ? input.stroke : (style.stroke ?? '#000000'),
+			...(input.strokeWidth !== undefined ? { strokeWidth: input.strokeWidth } : {}),
+			...(input.startArrow !== undefined ? { startArrow: input.startArrow } : {}),
+			endArrow: input.endArrow !== undefined ? input.endArrow : (style.endArrow ?? 'triangle'),
+			connector: {
+				start: endOf(input.start),
+				end: endOf(input.end),
+				...(route !== 'straight' ? { route } : {}),
+				...(input.radius ? { radius: input.radius } : {}),
+				...(input.gap !== undefined ? { gap: input.gap } : {})
+			},
+			subpaths: [{ closed: false, anchors: [point(input.start), point(input.end)] }]
+		};
+		this.change('Connect', () => {
+			this.setDoc([...this.doc.nodes, node]);
+			this.selection = [id];
+			this.anchors = [];
+			this.editingId = null;
+		});
+		return { ok: true, id };
+	}
+
+	/**
+	 * Changes connectors (default: the selected ones): `start` / `end` glue an end to an object
+	 * (`{ nodeId, side? }`) or unglue it (`null`, the end staying where it is), and `route`,
+	 * `radius`, `gap` set how they run. Plain open paths given by id become connectors. One undo step.
+	 */
+	setConnector(
+		patch: { start?: VectorConnectorEnd | null; end?: VectorConnectorEnd | null; route?: VectorConnectorRoute; radius?: number; gap?: number },
+		options: { ids?: readonly string[] } = {}
+	): VectorActionResult {
+		const ids = options.ids ?? this.selection;
+		if (!ids.length) return { ok: false, message: 'Select a connector first.' };
+		if (patch.route !== undefined && !VECTOR_CONNECTOR_ROUTES.includes(patch.route)) return { ok: false, message: `Unknown route "${patch.route}": use ${VECTOR_CONNECTOR_ROUTES.join(', ')}.` };
+		if (patch.radius !== undefined && !(Number.isFinite(patch.radius) && patch.radius >= 0)) return { ok: false, message: 'radius must be zero or more.' };
+		if (patch.gap !== undefined && !(Number.isFinite(patch.gap) && patch.gap >= 0)) return { ok: false, message: 'gap must be zero or more.' };
+		for (const id of ids) {
+			const n = this.getNode(id);
+			if (!n) return { ok: false, message: `There is no node "${id}".` };
+			if (n.locked) return { ok: false, message: `"${id}" is locked; unlock it first.` };
+			if (!isVectorConnector(n) && !(n.type === 'path' && n.subpaths.length === 1 && !n.subpaths[0].closed && n.subpaths[0].anchors.length >= 2))
+				return { ok: false, message: `"${id}" is not a connector or an open path (draw one with vector.connect or the Connector tool).` };
+			for (const key of ['start', 'end'] as const) {
+				const e = patch[key];
+				if (e) {
+					const problem = this.checkConnectorEnd(e, id);
+					if (problem) return { ok: false, message: problem };
+				}
+			}
+		}
+		const set = new Set(ids);
+		const endOf = (e: VectorConnectorEnd | null) => (e ? { nodeId: e.nodeId, ...(e.side && e.side !== 'auto' ? { side: e.side } : {}) } : null);
+		this.change('Connector', () => {
+			this.setDoc(
+				mapTree(this.doc.nodes, (n) => {
+					if (!set.has(n.id) || n.type !== 'path') return n;
+					const c: VectorConnector = { ...(n.connector ?? {}) };
+					if (patch.start !== undefined) c.start = endOf(patch.start);
+					if (patch.end !== undefined) c.end = endOf(patch.end);
+					if (patch.route !== undefined) {
+						if (patch.route === 'straight') delete c.route;
+						else c.route = patch.route;
+					}
+					if (patch.radius !== undefined) {
+						if (patch.radius > 0) c.radius = patch.radius;
+						else delete c.radius;
+					}
+					if (patch.gap !== undefined) c.gap = patch.gap;
+					return { ...n, connector: c };
+				})
+			);
+		});
+		return { ok: true };
+	}
+
+	/** Every connector: its ends (glued object and resolved side, or the free point) and route. */
+	getConnectors(): VectorConnectorListing[] {
+		const out: VectorConnectorListing[] = [];
+		walkVectorNodes(this.doc.nodes, (n) => {
+			if (!isVectorConnector(n)) return;
+			const r = routeVectorConnector(this.doc.nodes, n.id);
+			const world = vectorWorldMatrix(this.doc.nodes, n.id) ?? IDENTITY_MATRIX;
+			const sp = n.subpaths[0];
+			const first = sp?.anchors[0];
+			const last = sp?.anchors[sp.anchors.length - 1];
+			const end = (e: VectorConnectorEnd | null | undefined, side: string | null, a: VectorAnchor | undefined) => {
+				const at = a ? applyMatrix(world, a) : null;
+				return { ...(e ? { nodeId: e.nodeId, side: e.side ?? 'auto', resolvedSide: side } : {}), ...(at ? { x: at.x, y: at.y } : {}) };
+			};
+			out.push({
+				id: n.id,
+				...(n.name ? { name: n.name } : {}),
+				route: n.connector.route ?? 'straight',
+				...(n.connector.radius ? { radius: n.connector.radius } : {}),
+				start: end(n.connector.start, r?.startSide ?? null, first),
+				end: end(n.connector.end, r?.endSide ?? null, last)
+			});
+		});
+		return out;
+	}
+
+	/** The connection sites of node `id` in document space (top, right, bottom, left, centre), or null when there is no such node. */
+	getConnectionSites(id: string): VectorConnectionSite[] | null {
+		if (!this.getNode(id)) return null;
+		return vectorConnectionSites(this.doc.nodes, id);
+	}
+
+	// -----------------------------------------------------------------------------------------
 	// Frames (artboards) and resizing constraints
 
 	/** A name for a new frame: "Frame <n>" after the frames there are. */
@@ -5689,6 +5916,8 @@ export class VectorEditorController {
 				this.interaction = { type: 'stroke', tool: this.tool, points: [p], width: this.tool === 'eraser' ? this.editing.eraserSize : 0 };
 				this.notify();
 				return;
+			case 'connector':
+				return this.downConnector(p);
 			default:
 				return this.downShape(p, input);
 		}
@@ -5969,6 +6198,12 @@ export class VectorEditorController {
 			if (this.hoverBuilder(p, !!input.alt)) this.notify();
 			return;
 		}
+		if (!drag && this.tool === 'connector') {
+			// The sites under the pointer show while hovering (see the overlay's connectorSites).
+			this.pointer = p;
+			this.notify();
+			return;
+		}
 		if (!drag) {
 			const hover = this.computeHover(screen);
 			const pointerMatters = this.tool === 'pen' && !!this.pen;
@@ -6154,6 +6389,17 @@ export class VectorEditorController {
 					if (drag.outOnly || (drag.altBreaks && input.alt)) return moveAnchorHandle(a, side, pos, true);
 					return moveAnchorHandle({ ...a, type: 'symmetric' }, side, pos);
 				});
+				this.notify(true);
+				return;
+			}
+			case 'connector': {
+				const node = this.getNode(drag.nodeId);
+				if (!isVectorConnector(node)) return;
+				const target = vectorConnectorTargetAt(this.doc.nodes, p, this.connectorRadius(), drag.nodeId);
+				const startGlue = node.connector.start;
+				const end = target && target.nodeId !== startGlue?.nodeId ? { nodeId: target.nodeId, ...(target.side && target.side !== 'auto' ? { side: target.side } : {}) } : null;
+				const first = node.subpaths[0]?.anchors[0] ?? drag.start;
+				this.replaceNode(drag.nodeId, { ...node, connector: { ...node.connector, end }, subpaths: [{ closed: false, anchors: [{ x: first.x, y: first.y }, { x: p.x, y: p.y }] }] });
 				this.notify(true);
 				return;
 			}
@@ -6423,6 +6669,20 @@ export class VectorEditorController {
 			case 'pull':
 				if (drag.closing) this.pen = null;
 				return this.commit(drag.label, drag.before);
+			case 'connector': {
+				const node = this.getNode(drag.nodeId);
+				const b = node ? vectorNodeBounds(node) : null;
+				const glued = isVectorConnector(node) && !!node.connector.end;
+				if (!b || (!glued && Math.hypot(b.width, b.height) < 2 / this.viewport.zoom)) {
+					this.doc = drag.before.doc;
+					this.notify(true);
+					return;
+				}
+				this.selection = [drag.nodeId];
+				this.anchors = [];
+				this.tool = 'select';
+				return this.commit('Draw Connector', drag.before);
+			}
 			case 'shape': {
 				const node = this.getNode(drag.nodeId);
 				const b = node ? vectorNodeBounds(node) : null;

@@ -2277,3 +2277,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: An empty frame could not be selected, and children outside a clipping frame stayed clickable, while the frame itself drew correctly.
 - **Root Cause**: Drawing goes through `expandVectorAppearance`, which turns a frame into a clip group (`vectorFrameDrawn`). Hit-testing and bounds instead start from the stored node, where a frame is just a group.
 - **Solution / Workaround**: `vectorNodeBounds` and `hitTestVectorNode` handle frames first: the bounds are the rectangle (plus the children when it does not clip), and a hit is any point inside the rectangle. `vectorAppearanceShapes`, `expandVectorAppearance` and `vectorMaskRegionShapes` swap in the drawn clip group. Any new code that walks groups should check `isVectorFrame` before treating a frame as a plain group.
+
+### [core/vector] Connector Anchors Are Overwritten After Every Edit
+
+- **Issue / Symptom**: Moving a glued connector's anchors, or setting its subpaths through `updateNode`, appeared to do nothing.
+- **Root Cause**: `rerouteVectorConnectors` runs in the controller's `refreshed`, after every edit (and after the constraint solve). It writes each glued connector's geometry again from its ends' sites. Only a free end keeps its stored point.
+- **Solution / Workaround**: To reshape a connector, change its `route`, `radius` or `gap`, or unglue the end (`setConnector({ end: null })`); the end then stays where it is. The method is `addConnector`, not `connect`, because `connect()` is the controller's private history subscription.

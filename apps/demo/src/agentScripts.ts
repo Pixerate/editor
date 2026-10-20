@@ -387,6 +387,20 @@ export const VECTOR_SCRIPTS: AgentScript[] = [
       { say: "Now a wider banner: the contents follow their constraints.", ...commandWith("vector.setFrame", (r) => ({ ids: [r("banner").id], width: 340, height: 120 })), target: artboardBox(424, 234, 340, 120) },
     ],
   },
+  {
+    id: "vector-connectors",
+    prompt: "Connect the card to the sun and the badge",
+    steps: [
+      { say: "Where can things attach to the card? Checking its connection sites.", ...command("vector.listConnectionSites", { id: "card" }), target: { selector: '[data-vector-id="card"]' } },
+      {
+        say: "An elbow connector from the card to the sun, with rounded bends…",
+        ...command("vector.connect", { start: { nodeId: "card" }, end: { nodeId: "sun" }, route: "elbow", radius: 8, stroke: "#0369a1", strokeWidth: 2 }),
+        as: "toSun",
+      },
+      { say: "…and a curved one down to the badge.", ...command("vector.connect", { start: { nodeId: "card", side: "bottom" }, end: { nodeId: "badge" }, route: "curved", stroke: "#7e22ce", strokeWidth: 2 }), as: "toBadge" },
+      { say: "Moving the card: both connectors follow it.", ...command("vector.transform", { ids: ["card", "star"], dx: 40, dy: 30 }), target: { selector: '[data-vector-id="card"]' } },
+    ],
+  },
 ];
 
 export const ANIMATION_SCRIPTS: AgentScript[] = [

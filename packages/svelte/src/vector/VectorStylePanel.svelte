@@ -25,6 +25,7 @@
   import VectorSymbolsPanel from './VectorSymbolsPanel.svelte';
   import VectorConstraintsPanel from './VectorConstraintsPanel.svelte';
   import VectorFramePanel from './VectorFramePanel.svelte';
+  import VectorConnectorPanel from './VectorConnectorPanel.svelte';
   import VectorGradientEditor from './VectorGradientEditor.svelte';
 
   interface Props {
@@ -251,6 +252,7 @@
     <VectorMaskPanel {controller} />
   {/if}
   <VectorFramePanel {controller} />
+  <VectorConnectorPanel {controller} />
   <VectorConstraintsPanel {controller} />
   <VectorSymbolsPanel {controller} />
 </div>
