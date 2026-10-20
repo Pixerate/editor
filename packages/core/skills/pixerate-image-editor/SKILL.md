@@ -194,10 +194,9 @@ and colour conversions for print briefs: read [references/color-management.md](r
 ### Retouching
 
 Clone Stamp, Healing Brush, Spot Healing, Smudge, Dodge, Burn, Sponge, Blur, Sharpen and the
-History Brush: retouch on an empty
-layer with `sample: "current-below"`, pick `spot_heal` for small spots, `heal_brush` for larger
-flaws and `clone_stamp` to copy exactly, and keep strokes short and soft. Read
-[references/retouching.md](references/retouching.md) before retouching.
+History Brush: retouch on an empty layer with `sample: "current-below"`, pick `spot_heal` for small
+spots, `heal_brush` for larger flaws and `clone_stamp` to copy exactly (`set_clone_transform` scales,
+rotates or flips the source), and keep strokes short and soft. Read [references/retouching.md](references/retouching.md) first.
 
 ### Photoshop files
 
