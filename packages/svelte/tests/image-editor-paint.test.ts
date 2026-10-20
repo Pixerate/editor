@@ -132,6 +132,8 @@ describe('Svelte paint tools', () => {
     click(button('Clear source'));
     expect(c.getState().paint.cloneSource).toBeNull();
     click(button('Spot Heal'));
+    click(button('Content-Aware'));
+    expect(c.getState().paint.retouch.spotType).toBe('content-aware');
     click(button('Smooth'));
     expect(c.getState().paint.retouch.spotType).toBe('smooth');
     click(button('Dodge'));

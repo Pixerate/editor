@@ -309,3 +309,215 @@ export function bestOffset(w: number, h: number, ch: number, img: ArrayLike<numb
   }
   return found.best;
 }
+
+// ---------------------------------------------------------------------------
+// Content-aware fill (PatchMatch, coarse to fine)
+// ---------------------------------------------------------------------------
+
+const PATCH_R = 3;
+
+/** A small deterministic generator (mulberry32). */
+function rng(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+interface Level {
+  w: number;
+  h: number;
+  img: Float32Array;
+  hole: Uint8Array;
+}
+
+/** Half-size level: known pixels averaged, a block is hole when any of it is. */
+function downsample(l: Level, ch: number): Level {
+  const w = Math.max(1, l.w >> 1);
+  const h = Math.max(1, l.h >> 1);
+  const img = new Float32Array(w * h * ch);
+  const hole = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let n = 0;
+      const o = (y * w + x) * ch;
+      for (let dy = 0; dy < 2; dy++) {
+        for (let dx = 0; dx < 2; dx++) {
+          const sx = Math.min(l.w - 1, 2 * x + dx);
+          const sy = Math.min(l.h - 1, 2 * y + dy);
+          const i = sy * l.w + sx;
+          if (l.hole[i]) {
+            hole[y * w + x] = 1;
+            continue;
+          }
+          for (let c = 0; c < ch; c++) img[o + c] += l.img[i * ch + c];
+          n++;
+        }
+      }
+      if (n) for (let c = 0; c < ch; c++) img[o + c] /= n;
+    }
+  }
+  return { w, h, img, hole };
+}
+
+/**
+ * Fills `hole` in `img` (`w × h × ch` floats) from the rest of the image, so texture and edges
+ * continue across it: PatchMatch nearest-neighbour fields over 7 × 7 patches with patch voting
+ * (Wexler et al. / Barnes et al.), run coarse to fine from a smooth fill. Deterministic for the
+ * same input. Returns the filled image; pixels outside `hole` are unchanged. Falls back to a
+ * smooth fill when there is no whole patch to copy from.
+ */
+export function contentAwareFill(w: number, h: number, ch: number, img: ArrayLike<number>, hole: ArrayLike<boolean | number>, options: { iterations?: number; seed?: number } = {}): Float32Array {
+  const iters = options.iterations ?? 4;
+  const base: Level = { w, h, img: Float32Array.from(img), hole: Uint8Array.from(hole as ArrayLike<number>, (v) => (v ? 1 : 0)) };
+  const levels: Level[] = [base];
+  // Coarser levels while the hole is still more than a couple of patches across.
+  while (levels.length < 4) {
+    const top = levels[levels.length - 1];
+    const b = maskBounds(top.w, top.h, top.hole);
+    if (!b || Math.max(b[2] - b[0], b[3] - b[1]) < 4 * PATCH_R || top.w < 8 * PATCH_R || top.h < 8 * PATCH_R) break;
+    levels.push(downsample(top, ch));
+  }
+  const random = rng(options.seed ?? w * 73856093 + h * 19349663);
+  let prevFill: Float32Array | null = null;
+  let prevNnf: Int32Array | null = null;
+  let prevW = 0;
+  for (let li = levels.length - 1; li >= 0; li--) {
+    const { w: W, h: H, hole: holeL } = levels[li];
+    const cur = new Float32Array(levels[li].img);
+    // Start: the coarser fill scaled up, or a smooth fill at the coarsest level.
+    if (prevFill) {
+      for (let i = 0; i < W * H; i++) {
+        if (!holeL[i]) continue;
+        const x = Math.min(prevW - 1, (i % W) >> 1);
+        const y = Math.min(Math.floor(prevFill.length / ch / prevW) - 1, Math.floor(i / W) >> 1);
+        for (let c = 0; c < ch; c++) cur[i * ch + c] = prevFill[(y * prevW + x) * ch + c];
+      }
+    } else cur.set(membraneFill(W, H, ch, cur, holeL));
+    // Valid sources: whole patches with no hole in them.
+    const blocked = dilateMask(W, H, holeL, PATCH_R);
+    const valid: number[] = [];
+    for (let y = PATCH_R; y < H - PATCH_R; y++) for (let x = PATCH_R; x < W - PATCH_R; x++) if (!blocked[y * W + x]) valid.push(y * W + x);
+    if (!valid.length) {
+      prevFill = cur;
+      prevNnf = null;
+      prevW = W;
+      continue;
+    }
+    // Targets: patch centres whose patch touches the hole (kept inside the image).
+    const targets: number[] = [];
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (blocked[y * W + x]) targets.push(y * W + x);
+    const nnf = new Int32Array(W * H).fill(-1);
+    const cost = new Float64Array(W * H);
+    const clampC = (v: number, n: number) => Math.min(n - 1 - PATCH_R, Math.max(PATCH_R, v));
+    const dist = (t: number, s: number, limit: number) => {
+      const tx = clampC(t % W, W);
+      const ty = clampC(Math.floor(t / W), H);
+      const sx = s % W;
+      const sy = Math.floor(s / W);
+      let d = 0;
+      for (let dy = -PATCH_R; dy <= PATCH_R; dy++) {
+        const tr = (ty + dy) * W;
+        const sr = (sy + dy) * W;
+        for (let dx = -PATCH_R; dx <= PATCH_R; dx++) {
+          const a = (tr + tx + dx) * ch;
+          const b = (sr + sx + dx) * ch;
+          for (let c = 0; c < ch; c++) {
+            const e = cur[a + c] - cur[b + c];
+            d += e * e;
+          }
+        }
+        if (d >= limit) return d;
+      }
+      return d;
+    };
+    const isValid = (s: number) => {
+      const x = s % W;
+      const y = Math.floor(s / W);
+      return s >= 0 && x >= PATCH_R && y >= PATCH_R && x < W - PATCH_R && y < H - PATCH_R && !blocked[s];
+    };
+    for (const t of targets) {
+      let s = -1;
+      if (prevNnf) {
+        const px = Math.min(prevW - 1, (t % W) >> 1);
+        const py = Math.floor(t / W) >> 1;
+        const ps = prevNnf[py * prevW + px];
+        if (ps >= 0) {
+          const cand = (Math.floor(ps / prevW) * 2 + (Math.floor(t / W) & 1)) * W + (ps % prevW) * 2 + ((t % W) & 1);
+          if (isValid(cand)) s = cand;
+        }
+      }
+      if (s < 0) s = valid[Math.floor(random() * valid.length)];
+      nnf[t] = s;
+    }
+    for (let em = 0; em < iters; em++) {
+      for (const t of targets) cost[t] = dist(t, nnf[t], Infinity);
+      for (let pass = 0; pass < 4; pass++) {
+        const fwd = pass % 2 === 0;
+        const step = fwd ? 1 : -1;
+        for (let k = 0; k < targets.length; k++) {
+          const t = targets[fwd ? k : targets.length - 1 - k];
+          const tx = t % W;
+          const ty = Math.floor(t / W);
+          // Propagation: a neighbour's match, shifted by one.
+          for (const [nx, ny] of [[tx - step, ty], [tx, ty - step]]) {
+            if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+            const ns = nnf[ny * W + nx];
+            if (ns < 0) continue;
+            const cand = ns + step * (nx === tx ? W : 1);
+            if (!isValid(cand) || cand === nnf[t]) continue;
+            const d = dist(t, cand, cost[t]);
+            if (d < cost[t]) {
+              cost[t] = d;
+              nnf[t] = cand;
+            }
+          }
+          // Random search in shrinking windows around the current match.
+          const bx = nnf[t] % W;
+          const by = Math.floor(nnf[t] / W);
+          for (let r = Math.max(W, H); r >= 1; r >>= 1) {
+            const cx = Math.round(bx + (random() * 2 - 1) * r);
+            const cy = Math.round(by + (random() * 2 - 1) * r);
+            const cand = cy * W + cx;
+            if (cx < 0 || cy < 0 || cx >= W || cy >= H || !isValid(cand)) continue;
+            const d = dist(t, cand, cost[t]);
+            if (d < cost[t]) {
+              cost[t] = d;
+              nnf[t] = cand;
+            }
+          }
+        }
+      }
+      // Voting: each hole pixel averages what the patches covering it propose.
+      const acc = new Float64Array(W * H * ch);
+      const wsum = new Float64Array(W * H);
+      for (const t of targets) {
+        const tx = clampC(t % W, W);
+        const ty = clampC(Math.floor(t / W), H);
+        const s = nnf[t];
+        const sx = s % W;
+        const sy = Math.floor(s / W);
+        for (let dy = -PATCH_R; dy <= PATCH_R; dy++) {
+          for (let dx = -PATCH_R; dx <= PATCH_R; dx++) {
+            const q = (ty + dy) * W + tx + dx;
+            if (!holeL[q]) continue;
+            const src = ((sy + dy) * W + sx + dx) * ch;
+            for (let c = 0; c < ch; c++) acc[q * ch + c] += cur[src + c];
+            wsum[q] += 1;
+          }
+        }
+      }
+      for (let q = 0; q < W * H; q++) if (holeL[q] && wsum[q] > 0) for (let c = 0; c < ch; c++) cur[q * ch + c] = acc[q * ch + c] / wsum[q];
+    }
+    prevFill = cur;
+    prevNnf = nnf;
+    prevW = W;
+  }
+  const out = Float32Array.from(img);
+  for (let i = 0; i < w * h; i++) if (base.hole[i]) for (let c = 0; c < ch; c++) out[i * ch + c] = prevFill![i * ch + c];
+  return out;
+}
