@@ -462,6 +462,15 @@ export const VECTOR_SCRIPTS: AgentScript[] = [
     ],
   },
   {
+    id: "vector-generate",
+    prompt: "Generate a rocket and a tree from a prompt",
+    steps: [
+      { say: "Checking which models can make vector art.", tool: "vectorgen__list_vector_art_models", args: {} },
+      { say: "Asking the sketcher for a rocket next to a tree, in the lower left.", tool: "vectorgen__generate_vector_art", args: () => ({ prompt: "a rocket next to a tree", model: "demo-sketcher", x: 40, y: 330, width: 220, height: 110, idempotencyKey: `demo-rocket-tree-${Date.now()}` }), as: "art" },
+      { say: "Listing what it made: ordinary paths in one group, ready to edit.", ...command("vector.list") },
+    ],
+  },
+  {
     id: "vector-pages",
     prompt: "Make this a two-page document with a numbered footer",
     steps: [

@@ -20,3 +20,4 @@ export * from './VectorSymmetryPanel';
 export * from './VectorPerspectivePanel';
 export * from './VectorLensPanel';
 export * from './VectorProviderEffectsPanel';
+export * from './VectorGeneratePanel';

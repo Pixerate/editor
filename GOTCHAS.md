@@ -2608,6 +2608,12 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: What a lens draws depends on nodes other than itself. The per-node caches (`renderCache`, `expandCache`, `shapeCache`) can't see that.
 - **Solution / Workaround**: The backdrop lives on the lens as a derived `lensView`. `resolveVectorLenses` sets it in the controller's refresh, as connectors' routes and instances' art are set. It keeps node objects (and so caches) when the backdrop's nodes are the same objects, and `toJSON()` strips it. Code drawing a caller's document resolves it first (`getVectorSceneRenderData`, `vectorDocumentToSvg`, `vectorDocumentToPdf`, `vectorDocumentToLottie`).
 
+### [core/vector] Generation Calls Cost Money, So Retries Must Not Generate Twice
+
+- **Issue / Symptom**: An agent that retried `generate_vector_art` after a timeout got two copies of the art (and two charges).
+- **Root Cause**: Model calls are slow and paid for. A retry after a lost response is indistinguishable from a new request unless the caller says otherwise.
+- **Solution / Workaround**: `generateVectorArt` and `regenerateVectorArt` require an `idempotencyKey`, remembered per controller. A repeat with the same key and input returns the first call's result, or joins it while it runs. The same key with other input is refused. A failed call forgets its key so it can be retried. UIs make a fresh key per click, and scripts that replay make one per run.
+
 ### [core/vector] A Page's Master Art Is Placed By The Master's Frame, So Put It In The Master's Space
 
 - **Issue / Symptom**: Art added to a master page showed on its pages shifted by the distance between the master and the page.

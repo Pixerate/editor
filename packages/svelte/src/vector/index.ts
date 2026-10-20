@@ -37,3 +37,4 @@ export * from "./styles.js";
 
 export type VectorCanvasProps = ComponentProps<typeof VectorCanvasComponent>;
 export type VectorEditorProps = ComponentProps<typeof VectorEditorComponent>;
+export { default as VectorGeneratePanel } from "./VectorGeneratePanel.svelte";

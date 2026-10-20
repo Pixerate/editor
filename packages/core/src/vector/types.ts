@@ -1,3 +1,4 @@
+import type { GenerationProvenance } from '../generation/provenance.js';
 import type { CanvasGradientDef } from '../canvas/gradient.js';
 import type { WarpMesh, WarpStyle } from '../geom/types.js';
 
@@ -625,6 +626,11 @@ export interface VectorGroupNode extends VectorNodeBase {
 	 * when resized. Ignored on blends, live booleans and mask groups.
 	 */
 	frame?: VectorFrame | null;
+	/**
+	 * Set on a group made by a generative prompt (`generateVectorArt`): what produced it (prompt,
+	 * model, planned request; see `@pixerate/editor/generation`), so it can be regenerated.
+	 */
+	generation?: GenerationProvenance;
 	/**
 	 * Derived, not stored: a page's master art (its master page's children laid out on it), brought
 	 * up to date after every edit (`resolveVectorMasterPages`) and drawn under the page's children.
