@@ -43,7 +43,7 @@ import { DiagramController, createDiagramToolProvider } from '../src/diagram';
 import { createCanvasCaptureToolProvider, createCanvasEffectsController, createCanvasEffectsToolProvider } from '../src/canvas';
 import { AnimationEditorController, createAnimationEditorToolProvider, createAnimationEffectsToolProvider } from '../src/animation-editor';
 import { VideoEditorController, createVideoEditorToolProvider, createVideoEffectsToolProvider } from '../src/video-editor';
-import { VectorEditorController, createVectorEffectsToolProvider, createVectorCommands } from '../src/vector';
+import { VectorEditorController, createVectorEffectsToolProvider, createVectorCommands, createVectorGenerationToolProvider } from '../src/vector';
 import { createParameterCommands } from '../src/parameters';
 import { createRichTextPreset, SpreadsheetController, createFindReplaceCommands, createTableCommands } from '../src';
 
@@ -116,7 +116,7 @@ function expectedBySkill(): Record<string, string[]> {
 			...commandIds(createComponentCommands(stub)),
 			...commandIds(createCanvasAnimationCommands(stub))
 		],
-		'pixerate-vector': [...commandIds(createVectorCommands(new VectorEditorController())), ...toolNames(createVectorEffectsToolProvider(new VectorEditorController(), { id: 'vector-effects' }))],
+		'pixerate-vector': [...commandIds(createVectorCommands(new VectorEditorController())), ...toolNames(createVectorEffectsToolProvider(new VectorEditorController(), { id: 'vector-effects' })), ...toolNames(createVectorGenerationToolProvider(new VectorEditorController(), { models: [], generate: () => ({ svg: '' }) }))],
 		'pixerate-chart': [
 			...toolNames(createChartToolProvider(new ChartController(), { id: 'chart' })),
 			...toolNames(createOfficeChartToolProvider({ id: 'office', files: () => [], controller: new ChartController() })),
@@ -169,6 +169,7 @@ const FACTORIES: Record<string, string> = {
 	createCanvasAnimationCommands: 'pixerate-canvas',
 	createVectorCommands: 'pixerate-vector',
 	createVectorEffectsToolProvider: 'pixerate-vector',
+	createVectorGenerationToolProvider: 'pixerate-vector',
 	createChartToolProvider: 'pixerate-chart',
 	createOfficeChartToolProvider: 'pixerate-chart',
 	createChartCommands: 'pixerate-chart',

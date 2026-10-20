@@ -1227,3 +1227,21 @@ describe("VectorLensPanel (svelte)", () => {
     expect((c.getNode("a") as VectorPathNode).lens).toBeUndefined();
   });
 });
+
+describe("VectorGeneratePanel (svelte)", () => {
+  it("generates art from a prompt into the document", async () => {
+    const { VectorGeneratePanel } = await import("../src/vector");
+    const c = make();
+    const models = [{ id: "sketch", media: "text" as const, name: "Sketcher" }];
+    const generate = async () => ({ svg: '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="#f00"/></svg>' });
+    const el = render(VectorGeneratePanel, { controller: c, models, generate });
+    const input = el.querySelector('input[aria-label="Prompt"]') as HTMLInputElement;
+    input.value = "a red square";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    flushSync();
+    click(el.querySelector("[data-vector-generate-action]"));
+    await new Promise((r) => setTimeout(r, 0));
+    const group = c.getState().document.nodes.at(-1) as any;
+    expect(group.generation.rawPrompt).toBe("a red square");
+  });
+});

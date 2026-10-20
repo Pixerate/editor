@@ -20,6 +20,7 @@
  * clip's `<clipPath>` holds the mask's outlines; for import, the mask itself is kept in a hidden
  * `<g data-vector-part="mask-source">`. An opacity mask's `<mask>` holds the mask as drawn.
  */
+import { parseProvenance } from '../generation/provenance.js';
 import { bezierPathToSvg } from '../canvas/pathops/bezier.js';
 import { bezierPathBounds, transformBezierPath } from '../canvas/pathops/bezier.js';
 import { invertMatrix } from '../geom/affine.js';
@@ -442,6 +443,7 @@ export function vectorDocumentToSvg(doc: VectorDocument, options: VectorSvgExpor
 		if (node.resizing) out += ` data-vector-resizing="${escapeAttr(JSON.stringify(node.resizing))}"`;
 		if (node.type === 'path' && isVectorShadedPaint(node.fill)) out += ` data-vector-shading="${escapeAttr(JSON.stringify(node.fill))}"`;
 		if (node.type === 'path' && node.connector) out += ` data-vector-connector="${escapeAttr(JSON.stringify(node.connector))}"`;
+		if (node.type === 'group' && node.generation) out += ` data-vector-generation="${escapeAttr(JSON.stringify(node.generation))}"`;
 		if (node.type === 'path' && node.lens) out += ` data-vector-lens="${escapeAttr(JSON.stringify(node.lens))}"`;
 		const blend = vectorBlendModeCss(node.blendMode);
 		if (blend) out += ` style="mix-blend-mode:${blend}"`;
@@ -1800,6 +1802,13 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 		if (resizing) (meta as { resizing?: VectorResizing }).resizing = resizing;
 		const connector = child.attrs['data-vector-connector'] !== undefined ? sanitizeVectorConnector(parseJson(child.attrs['data-vector-connector'])) : null;
 		if (connector) (meta as { connector?: VectorConnector }).connector = connector;
+		if (child.attrs['data-vector-generation'] !== undefined) {
+			try {
+				(meta as { generation?: VectorGroupNode['generation'] }).generation = parseProvenance(parseJson(child.attrs['data-vector-generation']));
+			} catch {
+				// Unreadable provenance is dropped; the art stays.
+			}
+		}
 		const lens = child.attrs['data-vector-lens'] !== undefined ? sanitizeVectorLens(parseJson(child.attrs['data-vector-lens'])) : null;
 		if (lens) (meta as { lens?: VectorLens }).lens = lens;
 		if (child.name === 'g' && child.attrs['data-vector-frame'] !== undefined) {

@@ -3,7 +3,9 @@ import {
   VectorEditorController,
   createVectorCommands,
   createVectorEffectsToolProvider,
+  createVectorGenerationToolProvider,
   type VectorEffectsToolProviderOptions,
+  type VectorGenerationToolProviderOptions,
   type VectorCommandOptions,
   type VectorEditorOptions,
   type VectorEditorState,
@@ -96,4 +98,34 @@ export function useVectorEffectsTools(
     if (!registry) return;
     return registry.register(createVectorEffectsToolProvider(controller, { id, namespace, readOnly }));
   }, [registry, controller, id, namespace, readOnly]);
+}
+
+/**
+ * Registers the vector editor's generative-prompt tools (`list_vector_art_models`,
+ * `generate_vector_art`, `regenerate_vector_art`) for the lifetime of the component. `models` and
+ * `generate` are read fresh on every call, so they may change between renders.
+ */
+export function useVectorGenerationTools(registry: ToolRegistry | null | undefined, controller: VectorEditorController, options: VectorGenerationToolProviderOptions): void {
+  const latest = useRef(options);
+  latest.current = options;
+  const { id, namespace } = options;
+  useEffect(() => {
+    if (!registry) return;
+    const models = () => {
+      const m = latest.current.models;
+      return typeof m === 'function' ? m() : m;
+    };
+    return registry.register(
+      createVectorGenerationToolProvider(controller, {
+        id,
+        namespace,
+        models,
+        generate: (request, context) => latest.current.generate(request, context),
+        readOnly: () => {
+          const r = latest.current.readOnly;
+          return (typeof r === 'function' ? r() : r) ?? false;
+        },
+      }),
+    );
+  }, [registry, controller, id, namespace]);
 }

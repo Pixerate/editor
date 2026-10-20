@@ -404,6 +404,16 @@ contents whole while you work, without losing the mask.
 | `vector.setSnapOptions` | Set those options, e.g. `polarIncrement: 15` for 15° polar tracking, or a grid, before handing the canvas to the user. Moves nothing. Returns the options. |
 | `vector.setTool` | Switch the interactive tool (select, direct, pen, pencil, rect, ellipse, polygon, star, line, scissors, knife, eraser, width, shapeBuilder, paintBucket, blend, gradient, envelope, type, typePath, frame, connector). Only for handing the canvas to the user in a given mode; commands do not need a tool. |
 
+### Generative prompts
+
+Only when the host registered the generation tools (they cost money; pass a fresh `idempotencyKey` each time, the same one only to retry).
+
+| Tool | Use it to |
+| --- | --- |
+| `list_vector_art_models` | See which models can make vector art: image models (traced or stylised) and text models that write SVG. |
+| `generate_vector_art` | Draw from a `prompt` into a box (`x`, `y`, `width`, `height`); `as` picks how pictures become vectors (color, threshold, mosaic, halftone, lowPoly, hatch). Returns `{ id, ids, model, adjustments }`: the art is ordinary paths in one group, ready to restyle or edit. |
+| `regenerate_vector_art` | Make a generated group again in place with a new `seed` or `prompt`. |
+
 ### Provider effects
 
 From `createVectorEffectsToolProvider`, when the host has registered an effects provider (for

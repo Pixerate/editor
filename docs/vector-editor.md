@@ -345,6 +345,22 @@ Besides tracing outlines (Image Trace), a picture can become stylised vector art
 - **Limits.** At most 60,000 shapes; a larger `cell` draws fewer.
 - **Panel and agents.** The trace panel's mode menu offers the four styles next to tracing. Agents use `vector.mosaicImage`, `vector.halftoneImage`, `vector.lowPolyImage` and `vector.hatchImage` with a PNG data URL.
 
+## Generative prompts
+
+The vector editor generates art from prompts through `@pixerate/editor/generation`. The host supplies its models (`ModelCapabilities`) and a generator (`VectorArtGenerator`) that sends a planned request to a model and returns `{ svg }`, `{ image }` (RGBA pixels) or `{ png }` (a data URL).
+
+- **Generating.** `generateVectorArt(controller, { prompt, model, negativePrompt, seed, x, y, width, height, as, colors, name, idempotencyKey }, { models, generate })` works in these steps:
+  1. It picks a vector-capable model (`vectorArtModels`: image models, and text models that write SVG).
+  2. It plans the request (`planGenerationRequest`, nearest). The aspect ratio comes from the box, and anything the model does not support is adjusted or dropped.
+  3. It calls the generator and turns the result into paths. SVG goes through the SVG importer. Pixels are traced (`color`, `threshold`) or stylised (`mosaic`, `halftone`, `lowPoly`, `hatch`).
+  4. It fits the art into the box (default: a square in the artboard's middle) and adds it as one group, in one undo step.
+
+  The group's `generation` holds the provenance (`createProvenance`: prompt, model, planned request, adjustments). It survives `toJSON()` and the SVG round trip.
+- **Regenerating.** `regenerateVectorArt(controller, { id, prompt, seed, idempotencyKey }, options)` makes the art again from that provenance, with a new seed (default random) or prompt. It replaces the group's children in place in one undo step (`replaceGeneratedArt`).
+- **Idempotency.** Requests cost money, so every call takes an `idempotencyKey`. A retry with the same key and input returns the first result without generating again, the same key with other input is refused, and failed calls forget their key.
+- **Agents.** `createVectorGenerationToolProvider(controller, { models, generate, readOnly })` gives `list_vector_art_models`, `generate_vector_art` and `regenerate_vector_art`. The write tools are hidden while read-only. Register it with `useVectorGenerationTools` in React or Svelte.
+- **Panel.** `<VectorGeneratePanel models generate>` has a prompt field, a model menu and (for image models) how the picture becomes vectors.
+
 ## Distort and envelopes
 
 **Free Distort.** With `setFreeDistort(true)` (the toolbar's Distort toggle) the selection box distorts instead of scaling, Illustrator's Free Transform way:

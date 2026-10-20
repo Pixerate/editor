@@ -2607,3 +2607,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: A lens didn't follow edits to the art below it, because render data is cached per node object and the lens node itself hadn't changed.
 - **Root Cause**: What a lens draws depends on nodes other than itself. The per-node caches (`renderCache`, `expandCache`, `shapeCache`) can't see that.
 - **Solution / Workaround**: The backdrop lives on the lens as a derived `lensView`. `resolveVectorLenses` sets it in the controller's refresh, as connectors' routes and instances' art are set. It keeps node objects (and so caches) when the backdrop's nodes are the same objects, and `toJSON()` strips it. Code drawing a caller's document resolves it first (`getVectorSceneRenderData`, `vectorDocumentToSvg`, `vectorDocumentToPdf`, `vectorDocumentToLottie`).
+
+### [core/vector] Generation Calls Cost Money, So Retries Must Not Generate Twice
+
+- **Issue / Symptom**: An agent that retried `generate_vector_art` after a timeout got two copies of the art (and two charges).
+- **Root Cause**: Model calls are slow and paid for. A retry after a lost response is indistinguishable from a new request unless the caller says otherwise.
+- **Solution / Workaround**: `generateVectorArt` and `regenerateVectorArt` require an `idempotencyKey`, remembered per controller. A repeat with the same key and input returns the first call's result, or joins it while it runs. The same key with other input is refused. A failed call forgets its key so it can be retried. UIs make a fresh key per click, and scripts that replay make one per run.

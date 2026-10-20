@@ -1306,3 +1306,22 @@ describe("VectorLensPanel (react)", () => {
     expect((c.getNode("a") as VectorPathNode).lens).toBeUndefined();
   });
 });
+
+describe("VectorGeneratePanel (react)", () => {
+  it("generates art from a prompt into the document", async () => {
+    const { VectorGeneratePanel } = await import("../src/vector");
+    const c = new VectorEditorController({ document: doc() });
+    const models = [{ id: "sketch", media: "text" as const, name: "Sketcher" }];
+    const generate = async () => ({ svg: '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="#f00"/></svg>' });
+    await act(async () => root.render(<VectorGeneratePanel controller={c} models={models} generate={generate} />));
+    const input = container.querySelector('input[aria-label="Prompt"]') as HTMLInputElement;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "a red square");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => (container.querySelector("[data-vector-generate-action]") as HTMLButtonElement).click());
+    await act(async () => new Promise((r) => setTimeout(r, 0)));
+    const group = c.getState().document.nodes.at(-1) as any;
+    expect(group.generation.rawPrompt).toBe("a red square");
+  });
+});

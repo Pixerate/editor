@@ -2229,6 +2229,24 @@ export class VectorEditorController {
 		return next.id;
 	}
 
+	/**
+	 * Replaces a generated group's art (its children) and provenance, in one undo step; used by
+	 * `regenerateVectorArt`. The group keeps its id, name, transform and place.
+	 */
+	replaceGeneratedArt(id: string, children: VectorNode[], generation: VectorGroupNode['generation']): VectorActionResult {
+		const node = this.getNode(id);
+		if (!node || node.type !== 'group' || !node.generation) return { ok: false, message: `"${id}" is not generated art.` };
+		if (node.locked) return { ok: false, message: `"${id}" is locked; unlock it first.` };
+		// The art comes in document space: bring it into the group's own space.
+		const inv = invertMatrix(this.worldOf(id));
+		const placed = children.map((c) => this.freshIds(isIdentityMatrix(inv) ? c : transformVectorNode(c, inv)));
+		this.change('Regenerate Art', () => {
+			this.replaceNode(id, { ...node, generation, children: placed });
+			this.anchors = [];
+		});
+		return { ok: true };
+	}
+
 	/** Builds a path node for a shape with the current defaults (not added). */
 	createShapeNode(input: VectorShapeInput): VectorPathNode {
 		const b = { x: input.x, y: input.y, width: input.width, height: input.height };
