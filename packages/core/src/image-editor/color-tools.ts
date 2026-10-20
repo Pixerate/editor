@@ -67,7 +67,7 @@ export function createImageColorTools(controller: ImageEditorController): AgentT
     name: 'convert_to_profile',
     title: 'Convert to a colour profile',
     description:
-      "Edit › Convert to Profile: converts every pixel layer's numbers so its colours stay the same in `profile`, then makes `profile` the document's. Colours outside the new space are mapped by `intent`. Shape and type layers, layer effects and smart objects keep their numbers and are listed in unconvertedLayerIds. RGB profiles only (proof CMYK with set_proof_setup). One undo step. Returns the profile, convertedLayerIds and unconvertedLayerIds.",
+      "Edit › Convert to Profile: converts every pixel layer's numbers so its colours stay the same in `profile`, then makes `profile` the document's. Colours outside the new space are mapped by `intent`. Shape fills and strokes, text colours, layer-effect colours and annotation colours convert too (and re-render); smart objects keep their contents' numbers and are listed in unconvertedLayerIds. RGB profiles only (proof CMYK with set_proof_setup). One undo step. Returns the profile, convertedLayerIds and unconvertedLayerIds.",
     inputSchema: {
       type: 'object',
       properties: {
