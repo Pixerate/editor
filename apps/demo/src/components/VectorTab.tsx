@@ -368,6 +368,24 @@ export function VectorTab() {
         >
           Export Lottie
         </button>
+        <button
+          type="button"
+          className="rounded border border-slate-700 px-2 py-1 hover:bg-slate-800"
+          title="Download the drawing as a vector PDF (a page per artboard when there are frames)"
+          onClick={() => {
+            const hasBoards = controller.getFrames().some((f) => f.artboard);
+            const { bytes, notes } = controller.toPdf({ pages: hasBoards ? "artboards" : "document", title: "Vector" });
+            const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "vector.pdf";
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+            setFontError(notes.length ? `PDF: ${notes.join(" ")}` : null);
+          }}
+        >
+          Export PDF
+        </button>
         <label className="cursor-pointer rounded border border-slate-700 px-2 py-1 hover:bg-slate-800" title="Import the first frame of a Lottie JSON animation as editable shapes">
           Import Lottie…
           <input
