@@ -67,6 +67,7 @@ reproduced at the end of this file. Paths are relative to each source repository
 
 © 2026 ArtCraft Team and the FigCraft contributors.
 
+- `crates/geom/src/lib.rs` (`corner_profile`: a smoothed (squircle) corner reaching (1 + s) times the radius along each side, a circular arc over (1 − s) of the turn and cubic transitions whose lengths `a`, `b`, `c`, `d` come from the arc's tangent; smoothing reduced first when the corner does not fit; `append_corner`) → `smoothCut` in `packages/core/src/vector/corners.ts`, generalised from 90° to any corner angle (the transition's second handle is where the arc's tangent meets the side) and limited to round corners between straight sides; it follows the MIT-licensed figma-squircle algorithm (© 2021 Phamfoo), which figcraft does not credit; test cases our own → `packages/core/tests/vector-corners-strokes.test.ts`
 - `crates/ui-egui/src/present.rs` (`match_layers`: Smart Animate pairs layers by their name path, nested groups pairing their own layers, and fades out what has no partner) → `matchMotionNodes` in `packages/core/src/animation-editor/match.ts`
 - `crates/engine/src/distance.rs` (`between`, `inside`, `to_guide`, `label`) → `packages/core/src/canvas/measure.ts`
 - `crates/engine/src/measure_tests.rs` (test cases re-expressed) → `packages/core/tests/canvas-measure.test.ts`

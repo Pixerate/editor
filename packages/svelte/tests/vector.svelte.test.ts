@@ -1170,3 +1170,18 @@ describe("constraints (svelte)", () => {
     expect(Math.hypot(a[1].x - a[0].x, a[1].y - a[0].y)).toBeCloseTo(40, 5);
   });
 });
+
+describe("corner smoothing (svelte)", () => {
+  it("shows the smoothing slider for rounded corners and sets it", () => {
+    const c = make();
+    c.select(["a"]);
+    c.setCornerRadius(10);
+    const t = render(VectorStylePanel, { controller: c });
+    const slider = t.querySelector<HTMLInputElement>('input[aria-label="Corner smoothing"]')!;
+    expect(slider).not.toBeNull();
+    slider.value = "0.6";
+    slider.dispatchEvent(new Event("input", { bubbles: true }));
+    flushSync();
+    expect((c.getNode("a") as VectorPathNode).subpaths[0].anchors[0].corner).toEqual({ radius: 10, smoothing: 0.6 });
+  });
+});

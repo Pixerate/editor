@@ -35,6 +35,12 @@ export interface VectorCorner {
 	radius: number;
 	/** Default `round`. */
 	kind?: VectorCornerKind;
+	/**
+	 * Corner smoothing (squircle, as in Figma and iOS), 0–1, round corners between straight sides
+	 * only: the cut reaches (1 + smoothing) times as far along each side and eases into a shorter arc,
+	 * so curvature builds up gradually. Default 0 (a circular arc).
+	 */
+	smoothing?: number;
 }
 
 /**

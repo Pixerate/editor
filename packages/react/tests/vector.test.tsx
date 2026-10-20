@@ -1233,3 +1233,20 @@ describe("constraints (react)", () => {
     expect(Math.hypot(a[1].x - a[0].x, a[1].y - a[0].y)).toBeCloseTo(40, 5);
   });
 });
+
+describe("corner smoothing (react)", () => {
+  it("shows the smoothing slider for rounded corners and sets it", async () => {
+    const c = make();
+    c.select(["a"]);
+    c.setCornerRadius(10);
+    await act(async () => root.render(<VectorStylePanel controller={c} />));
+    const slider = q<HTMLInputElement>('input[aria-label="Corner smoothing"]');
+    expect(slider).not.toBeNull();
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      setter.call(slider, "0.6");
+      slider.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect((c.getNode("a") as VectorPathNode).subpaths[0].anchors[0].corner).toEqual({ radius: 10, smoothing: 0.6 });
+  });
+});

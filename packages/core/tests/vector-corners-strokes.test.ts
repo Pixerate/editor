@@ -441,3 +441,36 @@ describe('style panel and commands', () => {
 		expect(c.getState().document.nodes).toHaveLength(1);
 	});
 });
+
+describe('corner smoothing (squircle)', () => {
+	it('eases a round corner over a longer stretch of each side, staying inside the square', async () => {
+		const { expandVectorCorners, rectSubpath, setSubpathCorners, subpathsToBezier, VectorEditorController } = await import('../src/vector');
+		const { bezierPathBounds } = await import('../src/canvas/pathops/bezier');
+		const square = rectSubpath({ x: 0, y: 0, width: 100, height: 100 });
+		const round = expandVectorCorners([setSubpathCorners(square, 20)])[0];
+		const smooth = expandVectorCorners([setSubpathCorners(square, 20, 'round', 0.6)])[0];
+		// Two more anchors per corner (the arc's ends).
+		expect(smooth.anchors.length).toBe(round.anchors.length + 8);
+		// The cut starts (1 + 0.6) × 20 = 32 from the corner instead of 20.
+		const xs = smooth.anchors.filter((a) => Math.abs(a.y) < 1e-9).map((a) => a.x).sort((a, b) => a - b);
+		expect(xs[0]).toBeCloseTo(32, 6);
+		expect(xs[xs.length - 1]).toBeCloseTo(68, 6);
+		// Same box, symmetric, and the curve leaves the side along it (no kink).
+		const b = bezierPathBounds(subpathsToBezier([smooth]))!;
+		expect([b.minX, b.minY, b.maxX, b.maxY].map((v) => Math.round(v * 1e6) / 1e6)).toEqual([0, 0, 100, 100]);
+		const start = smooth.anchors.find((a) => Math.abs(a.y) < 1e-9 && Math.abs(a.x - 68) < 1e-6)!;
+		expect(start.out!.y).toBeCloseTo(0, 9);
+		// No smoothing: the plain round corner.
+		expect(expandVectorCorners([setSubpathCorners(square, 20, 'round', 0)])[0]).toEqual(round);
+		// Smoothing shrinks to fit: a radius of 40 leaves no room for more.
+		const tight = expandVectorCorners([setSubpathCorners(square, 40, 'round', 1)])[0];
+		expect(tight.anchors.length).toBeGreaterThanOrEqual(8);
+		const c = new VectorEditorController({ document: { width: 200, height: 200, nodes: [{ id: 'r', type: 'path', fill: '#000', stroke: null, subpaths: [square] }] } });
+		c.select(['r']);
+		expect(c.setCornerSmoothing(0.5)).toEqual({ ok: false, message: expect.stringMatching(/radius first/) });
+		expect(c.setCornerRadius(10, { smoothing: 0.6 }).ok).toBe(true);
+		expect((c.getNode('r') as any).subpaths[0].anchors[0].corner).toEqual({ radius: 10, smoothing: 0.6 });
+		expect(c.setCornerSmoothing(0.2).ok).toBe(true);
+		expect((c.getNode('r') as any).subpaths[0].anchors[0].corner).toEqual({ radius: 10, smoothing: 0.2 });
+	});
+});

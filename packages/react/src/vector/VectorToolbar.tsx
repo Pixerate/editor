@@ -387,6 +387,7 @@ export function VectorStylePanel({ controller, className }: VectorStylePanelProp
     widthProfile: widthProfilePresetId(d.strokeWidthProfile),
     cornerRadius: d.cornerRadius,
     cornerKind: d.cornerKind ?? 'round',
+    cornerSmoothing: 0,
     corners: 1,
     hasOpenPath: true,
   };
@@ -561,6 +562,22 @@ export function VectorStylePanel({ controller, className }: VectorStylePanelProp
           </select>
           {mixed('cornerRadius')}
         </div>
+      )}
+      {style && source.corners > 0 && source.cornerKind === 'round' && source.cornerRadius > 0 && (
+        <label className="flex items-center gap-2 text-xs text-foreground" data-vector-style="corner-smoothing" title="Corner smoothing: squircle corners that ease into the curve (0.6 is iOS-like)">
+          <span className="w-16">Smoothing</span>
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.05}
+            aria-label="Corner smoothing"
+            className="h-4 flex-1 accent-primary"
+            value={source.cornerSmoothing}
+            onChange={(e) => controller.setCornerSmoothing(parseFloat(e.target.value), { merge: 'corner-smoothing' })}
+            onPointerUp={() => controller.endMergedEdit()}
+          />
+        </label>
       )}
       {style && (
         <label className="flex items-center gap-2 text-xs text-foreground">

@@ -110,6 +110,8 @@ Any corner anchor (not smooth, not the end of an open subpath, where two straigh
 - `setCornerRadius(radius, { kind, refs, ids })` and `setCornerKind(kind, …)` change the selected points' corners with the direct tool, else every corner of the selected paths. Scaling a node keeps its radii.
 - **Corner widgets**: with the direct tool, each editable path shows a widget inside its selected corners (every corner when none of its points is selected), on the bisector at the arc's centre and at least 10 px in; corners with a side shorter than 30 px on screen hide theirs. Drag one to set the radius of all shown corners (it follows the pointer along the bisector, up to fully round; status `R …`), Alt-click to cycle round → inverted → chamfer, click to pick that corner alone. `getVectorCornerWidgets(state)` and `getVectorOverlayRenderData(state).cornerWidgets` give their positions.
 
+
+**Corner smoothing.** `corner.smoothing` (0–1, `setCornerRadius(r, { smoothing })` or `setCornerSmoothing`) turns a round corner between straight sides into a squircle: the cut starts `(1 + smoothing)` times as far along each side, eases in with a cubic whose second handle is where the arc's tangent meets the side, and follows a circular arc over the rest of the turn (figma-squircle's profile, generalised from 90° to any angle). Smoothing shrinks before the radius when the corner does not fit. The arc's ends become two more drawn anchors.
 ## Stroke alignment and arrowheads
 
 ```ts

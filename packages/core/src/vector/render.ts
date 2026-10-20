@@ -1213,6 +1213,8 @@ export interface VectorSelectionStyle {
 	 */
 	cornerRadius: number;
 	cornerKind: VectorCornerKind;
+	/** Squircle smoothing (0–1) of the first corner. */
+	cornerSmoothing: number;
 	corners: number;
 	/** Some selected path is open, so arrowheads apply. */
 	hasOpenPath: boolean;
@@ -1255,15 +1257,15 @@ export function getVectorSelectionStyle(
 	const first = paths[0];
 	const same = (get: (p: VectorPathNode) => unknown) => paths.every((p) => JSON.stringify(get(p) ?? null) === JSON.stringify(get(first) ?? null));
 	// Corners: those of the selected anchors in the direct tool, else every corner of the paths.
-	const corners: { radius: number; kind: VectorCornerKind }[] = [];
+	const corners: { radius: number; kind: VectorCornerKind; smoothing: number }[] = [];
 	for (const p of paths) {
 		for (const c of vectorCorners(p.subpaths)) {
 			if (anchorMode && !state.selectedAnchors!.some((r) => r.nodeId === p.id && r.subpath === c.subpath && r.index === c.index)) continue;
 			const corner = p.subpaths[c.subpath].anchors[c.index].corner;
-			corners.push({ radius: corner?.radius ?? 0, kind: corner?.kind ?? 'round' });
+			corners.push({ radius: corner?.radius ?? 0, kind: corner?.kind ?? 'round', smoothing: corner?.smoothing ?? 0 });
 		}
 	}
-	const c0 = corners[0] ?? { radius: 0, kind: 'round' as const };
+	const c0 = corners[0] ?? { radius: 0, kind: 'round' as const, smoothing: 0 };
 	return {
 		fill: first.fill ?? null,
 		stroke: first.stroke ?? null,
@@ -1279,6 +1281,7 @@ export function getVectorSelectionStyle(
 		widthProfile: widthProfilePresetId(profileOf(first)),
 		cornerRadius: c0.radius,
 		cornerKind: c0.kind,
+		cornerSmoothing: c0.smoothing,
 		corners: corners.length,
 		hasOpenPath: paths.some((p) => p.subpaths.some((sp) => !sp.closed && sp.anchors.length > 1)),
 		mixed: {
