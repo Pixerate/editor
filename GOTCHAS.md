@@ -1780,6 +1780,7 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: A Svelte test that opened a real WebSocket under the jsdom environment threw `The "event" argument must be an instance of Event`.
 - **Root Cause**: jsdom replaces the global `Event`, and Node's built-in WebSocket (undici) rejects events that are not its own. Under the `node` environment, the Svelte tests resolve the server build, where `$effect.root` does not run.
 - **Solution / Workaround**: Test the network path in core under the `node` environment (`tests/tool-bridge.test.ts`). Test runes with a fake socket passed as `options.WebSocket`.
+
 ### [core/chart] Agent Cursors Never Disappeared After `linger`
 
 - **Issue / Symptom**: A `ChartDirector` cursor stayed on the chart after its command finished, although `linger` should hide it.
@@ -2158,6 +2159,7 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Dragging the paper's grain-depth slider, or the colour picker, in the React paint editor left dozens of "Paper" entries in the undo history.
 - **Root Cause**: `setPaper` is one undo step per call. React's `onChange` on a range or colour input fires on every `input` event, not on release. Brush settings are editor state, so updating them live is fine, but paper settings are document state.
 - **Solution / Workaround**: `PaintSlider` takes `onCommit`, which runs on the native `change` event (attached with `addEventListener` in React, `onchange` in Svelte), and keeps a local draft value while dragging. `CommitColorInput` does the same for the React colour input. Tests dispatch `input` then `change` and check for exactly one undo step.
+
 ### [core/image-editor] A Smart Object's Pixels Are a Cache the Compositor Draws Like a Pixel Layer
 
 - **Issue / Symptom**: A smart object's `surface` looks like a pixel layer's, but painting into it, or changing `placement` / `smartFilters` / `contents` with a plain object spread, leaves the layer showing stale pixels (and the next transform throws the paint away).
@@ -2277,6 +2279,7 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: The first `set_proof_setup` or `convert_colors` with `coated-cmyk` took one to three seconds; later calls were instant.
 - **Root Cause**: The profile is generated from a printing model (its B2A tables are a damped least-squares separation at every grid node) instead of shipping 230 KB of measured data, and `builtinProfile` caches the result.
 - **Solution / Workaround**: Expected. Call `builtinProfile('coated-cmyk')` early (e.g. idle time) to warm it. Tests that touch it need a timeout of about a minute on slow CI machines.
+
 ### [core/raster] Deep Samples Ride Next to the 8-bit Tile, and 8-bit Writers Drop Them
 
 - **Issue / Symptom**: In a 16-bit document, a brush stroke (or a filter, transform or merge) left the tiles it touched at 8-bit precision, while the rest of the layer kept its 16-bit samples.
@@ -2300,6 +2303,7 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: In a 16-bit merge, a layer with a drop shadow or a develop filter kept only 8-bit precision, and a Multiply shadow over a coloured backdrop looked slightly different from the viewport.
 - **Root Cause**: `DeepCompositor` hands those layers to the 8-bit compositor it wraps, rendered alone (normal blend, full opacity, over transparency), converts the result and blends it in float with the layer's blend mode and opacity. An effect's own blend mode therefore sees a transparent backdrop.
 - **Solution / Workaround**: Expected until effects and filters get float paths. Everything else in the stack (pixel layers, masks, clipping, groups, adjustment layers) keeps full depth. If a deep merge must match the viewport exactly, rasterize the effects first.
+
 ### [core/image-editor] Retouch Sources Must Be Captured When the Stroke Starts
 
 - **Issue / Symptom**: A Healing Brush stroke sampling Current & Below or All came out matched to its own clone instead of to the photo, and a Clone Stamp stroke running over its own source copied the same pixels on and on.

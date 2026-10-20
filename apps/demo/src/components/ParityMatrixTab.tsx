@@ -326,6 +326,8 @@ const FEATURES: ParityRow[] = [
     react: true,
     svelte: true,
     note: "TypeScript ICC engine (@pixerate/editor/cms); document profile in history and JSON; intents and BPC; colour-managed viewport; Proof Setup with gamut warning; profiles in PSD, PNG and JPEG; five agent tools",
+  },
+  {
     feature: "Image Retouching (Clone Stamp, Healing, Spot Healing, Smudge, Dodge, Burn, Sponge)",
     core: true,
     react: true,

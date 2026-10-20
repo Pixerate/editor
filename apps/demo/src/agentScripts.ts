@@ -499,6 +499,9 @@ export const IMAGE_SCRIPTS: AgentScript[] = [
         args: { colors: ["#1e40af", "#808080"], to: "coated-cmyk" },
       },
       { say: "Proofing off again; the pixels never changed.", tool: "image__set_proof_setup", args: { off: true } },
+    ],
+  },
+  {
     id: "image-retouch",
     prompt: "Clean up a spot, clone over a patch and lift the midtones",
     steps: [
