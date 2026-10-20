@@ -92,6 +92,8 @@ describe('Svelte paint editor', () => {
     expect(c.getState().hand).toBe('left');
   });
 
+  // The first brush panel in the file renders every brush preview synchronously, which can take
+  // over 5 s on a loaded CI runner.
   it('the brush panel picks brushes and edits settings', () => {
     const c = new PaintEditorController({ width: 32, height: 32 });
     show(BrushPanel, { controller: c });
@@ -106,7 +108,7 @@ describe('Svelte paint editor', () => {
     setValue(target.querySelector('input[aria-label="Brush name"]')!, 'My Charcoal');
     click(byText('Save brush'));
     expect(c.getUserBrushes().map((b) => b.id)).toEqual(['my-charcoal']);
-  });
+  }, 20_000);
 
   it("the brush panel shows each engine's controls: blender, smudge, behaviour, brush gradient and load", () => {
     const c = new PaintEditorController({ width: 32, height: 32 });
