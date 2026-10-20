@@ -375,7 +375,7 @@ export function VectorTab() {
           onClick={() => {
             const hasBoards = controller.getFrames().some((f) => f.artboard);
             const { bytes, notes } = controller.toPdf({ pages: hasBoards ? "artboards" : "document", title: "Vector" });
-            const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+            const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: "application/pdf" }));
             const a = document.createElement("a");
             a.href = url;
             a.download = "vector.pdf";
