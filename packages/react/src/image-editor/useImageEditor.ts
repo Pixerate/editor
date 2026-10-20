@@ -1,6 +1,9 @@
 import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
+import type { ToolRegistry } from '@pixerate/editor/tools';
 import {
   ImageEditorController,
+  createImageEffectsToolProvider,
+  type ImageEffectsToolProviderOptions,
   type ImageEditorOptions,
   type ImageEditorState,
   type ImageEditorTool,
@@ -241,4 +244,22 @@ export function useImageEditor(options: ImageEditorOptions = {}): UseImageEditor
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [controller, state, historyTicks, histogram]
   );
+}
+
+/**
+ * Registers the image editor's provider-effect tools (`search_effects`, `describe_effect`,
+ * `apply_effect`, `add_effect_layer`, …) in `registry` while mounted. They work once an effects
+ * provider is registered (see `useEffects`); before that the read tools say so and the write tools
+ * refuse.
+ */
+export function useImageEffectsTools(
+  registry: ToolRegistry | null | undefined,
+  controller: ImageEditorController,
+  options: ImageEffectsToolProviderOptions = {},
+): void {
+  const { id, namespace, readOnly } = options;
+  useEffect(() => {
+    if (!registry) return;
+    return registry.register(createImageEffectsToolProvider(controller, { id, namespace, readOnly }));
+  }, [registry, controller, id, namespace, readOnly]);
 }

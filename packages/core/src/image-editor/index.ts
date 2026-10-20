@@ -89,3 +89,5 @@ export {
   WARP_STYLE_LABELS,
 } from '../geom';
 export * from './layers/transform-ui';
+export * from './effects';
+export * from './provider-effect-tools';

@@ -1,5 +1,8 @@
+import type { ToolRegistry } from '@pixerate/editor/tools';
 import {
   ImageEditorController,
+  createImageEffectsToolProvider,
+  type ImageEffectsToolProviderOptions,
   type ImageEditorFit,
   type ImageEditorOptions,
   type ImageEditorState,
@@ -212,4 +215,22 @@ export function createImageHistogram(controller: ImageEditorController) {
       unsubscribe();
     },
   };
+}
+
+/**
+ * Registers the image editor's provider-effect tools (`search_effects`, `describe_effect`,
+ * `apply_effect`, `add_effect_layer`, …) for the lifetime of the calling component. They work once
+ * an effects provider is registered (see `useEffects`); before that the read tools say so and the
+ * write tools refuse.
+ */
+export function useImageEffectsTools(
+  registry: ToolRegistry | null | undefined | (() => ToolRegistry | null | undefined),
+  controller: ImageEditorController,
+  options: ImageEffectsToolProviderOptions = {},
+): void {
+  $effect(() => {
+    const target = typeof registry === 'function' ? registry() : registry;
+    if (!target) return;
+    return target.register(createImageEffectsToolProvider(controller, options));
+  });
 }

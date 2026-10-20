@@ -1,7 +1,7 @@
 import { VIDEO_GRADE_CONTROLS } from './grade.js';
 import { checkVideoTimeRemap } from './remap.js';
 import { VIDEO_EASE_NAMES, type VideoAnimatable, type VideoEase, type VideoKey, type VideoKeyframes } from './keyframes.js';
-import { VIDEO_BLEND_MODES, VIDEO_CLIP_ANIMATION_EFFECTS, VIDEO_CLIP_TYPES, VIDEO_FADE_CURVES, VIDEO_FITS, VIDEO_TRANSITION_TYPES, VIDEO_WIPE_DIRECTIONS, type VideoAsset, type VideoAssetProxy, type VideoClip, type VideoClipAnimation, type VideoGrade, type VideoGradeLut, type VideoMarker, type VideoProject, type VideoSequence, type VideoTrack, type VideoTranscriptWord, type VideoTransform, type VideoTransition } from './types.js';
+import { VIDEO_BLEND_MODES, VIDEO_CLIP_ANIMATION_EFFECTS, VIDEO_CLIP_TYPES, VIDEO_FADE_CURVES, VIDEO_FITS, VIDEO_TRANSITION_TYPES, VIDEO_WIPE_DIRECTIONS, type VideoAsset, type VideoAssetProxy, type VideoClip, type VideoClipEffect, type VideoEffectRef, type VideoEffectValues, type VideoClipAnimation, type VideoGrade, type VideoGradeLut, type VideoMarker, type VideoProject, type VideoSequence, type VideoTrack, type VideoTranscriptWord, type VideoTransform, type VideoTransition } from './types.js';
 
 const isObject = (v: unknown): v is Record<string, any> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const fail = (path: string, what: string): never => {
@@ -123,13 +123,64 @@ export function parseVideoGradeLut(v: unknown, path: string): VideoGradeLut | un
 export function parseVideoTransition(v: unknown, path: string): VideoTransition | undefined {
 	if (v === undefined) return undefined;
 	if (!isObject(v)) return fail(path, 'must be an object { type, duration }');
+	const type = oneOf(v.type, VIDEO_TRANSITION_TYPES, `${path}.type`, false)!;
+	if (type === 'effect' && v.effect === undefined) fail(`${path}.effect`, 'is required for an effect transition: { effect: "<effect id>", values }');
+	if (type !== 'effect' && v.effect !== undefined) fail(`${path}.effect`, 'is only for transitions of type "effect"');
 	return compact({
-		type: oneOf(v.type, VIDEO_TRANSITION_TYPES, `${path}.type`, false)!,
+		type,
 		duration: num(v.duration, `${path}.duration`, { positive: true })!,
 		color: str(v.color, `${path}.color`, true),
 		direction: oneOf(v.direction, VIDEO_WIPE_DIRECTIONS, `${path}.direction`),
-		audioCurve: oneOf(v.audioCurve, VIDEO_FADE_CURVES, `${path}.audioCurve`)
+		audioCurve: oneOf(v.audioCurve, VIDEO_FADE_CURVES, `${path}.audioCurve`),
+		effect: v.effect === undefined ? undefined : parseVideoEffectRef(v.effect, `${path}.effect`, false)
 	});
+}
+
+const isEffectValue = (x: unknown) =>
+	typeof x === 'string' || typeof x === 'boolean' || (typeof x === 'number' && Number.isFinite(x)) || (Array.isArray(x) && x.every((n) => typeof n === 'number' && Number.isFinite(n)));
+
+/**
+ * Effect control values: plain values (numbers, strings, switches, number lists) or, when
+ * `keyframes` is allowed, keyframes for numbers. Only their shape is checked here; the effect's
+ * control schema needs the provider (`resolveEffectValues`).
+ */
+export function parseVideoEffectValues(v: unknown, path: string, keyframes = true): VideoEffectValues | undefined {
+	if (v === undefined) return undefined;
+	if (!isObject(v)) return fail(path, 'must be an object of control values from describe_effect');
+	const out: VideoEffectValues = {};
+	for (const [k, x] of Object.entries(v)) {
+		if (isEffectValue(x)) out[k] = Array.isArray(x) ? [...x] : x;
+		else if (keyframes && isObject(x)) out[k] = parseVideoKeyframes(x, `${path}.${k}`);
+		else fail(`${path}.${k}`, keyframes ? 'must be a number, string, true / false, a list of numbers, or keyframes { keys }' : 'must be a number, string, true / false or a list of numbers');
+	}
+	return out;
+}
+
+/** `{ effect, provider, name, values }`. */
+export function parseVideoEffectRef(v: unknown, path: string, keyframes = true): VideoEffectRef {
+	if (!isObject(v)) return fail(path, 'must be an object { effect, values }');
+	const unknown = Object.keys(v).find((k) => !['effect', 'provider', 'name', 'values'].includes(k));
+	if (unknown) fail(`${path}.${unknown}`, 'is not an effect field; use effect, provider, name, values');
+	return compact({ effect: str(v.effect, `${path}.effect`)!, provider: str(v.provider, `${path}.provider`, true), name: str(v.name, `${path}.name`, true), values: parseVideoEffectValues(v.values, `${path}.values`, keyframes) });
+}
+
+/** A clip's effect stack: unique ids, each `{ id, effect, provider, name, enabled, opacity, values }`. */
+export function parseVideoClipEffects(v: unknown, path: string): VideoClipEffect[] | undefined {
+	if (v === undefined) return undefined;
+	if (!Array.isArray(v)) return fail(path, 'must be a list of effects { id, effect, values }');
+	const ids = new Set<string>();
+	const out = v.map((e, i): VideoClipEffect => {
+		const at = `${path}[${i}]`;
+		if (!isObject(e)) return fail(at, 'must be an object { id, effect, values }');
+		const unknown = Object.keys(e).find((k) => !['id', 'effect', 'provider', 'name', 'values', 'enabled', 'opacity'].includes(k));
+		if (unknown) fail(`${at}.${unknown}`, 'is not a clip effect field; use id, effect, provider, name, values, enabled, opacity');
+		const id = str(e.id, `${at}.id`)!;
+		if (ids.has(id)) fail(`${at}.id`, `repeats "${id}"; each effect on a clip needs its own id`);
+		ids.add(id);
+		const { effect, provider, name, values } = parseVideoEffectRef({ effect: e.effect, provider: e.provider, name: e.name, values: e.values }, at);
+		return compact({ id, effect, provider, name, values, enabled: bool(e.enabled, `${at}.enabled`), opacity: parseVideoAnimatable(e.opacity, `${at}.opacity`, { optional: true, min: 0, max: 1 }) });
+	});
+	return out.length ? out : undefined;
 }
 
 export function parseVideoTranscriptWords(v: unknown, path: string): VideoTranscriptWord[] | undefined {
@@ -204,7 +255,8 @@ export function parseVideoClip(v: unknown, path = 'clip'): VideoClip {
 		animateOut: parseVideoClipAnimation(v.animateOut, `${path}.animateOut`),
 		fadeIn: num(v.fadeIn, `${path}.fadeIn`, { optional: true, min: 0 }),
 		fadeOut: num(v.fadeOut, `${path}.fadeOut`, { optional: true, min: 0 }),
-		transition: parseVideoTransition(v.transition, `${path}.transition`)
+		transition: parseVideoTransition(v.transition, `${path}.transition`),
+		effects: parseVideoClipEffects(v.effects, `${path}.effects`)
 	};
 	if (type === 'media')
 		return compact({
@@ -245,6 +297,10 @@ export function parseVideoClip(v: unknown, path = 'clip'): VideoClip {
 			fontWeight: num(v.fontWeight, `${path}.fontWeight`, { optional: true, min: 100, max: 1000 }),
 			background: str(v.background, `${path}.background`, true)
 		});
+	if (type === 'effect') {
+		const ref = parseVideoEffectRef({ effect: v.effect, provider: v.provider, name: v.name === undefined ? undefined : v.name, values: v.values }, path);
+		return compact({ type, ...base, ...ref, name: base.name });
+	}
 	return compact({ type, ...base, color: str(v.color, `${path}.color`)! });
 }
 

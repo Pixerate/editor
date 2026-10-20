@@ -1,6 +1,6 @@
 {
   "name": "@pixerate/editor",
-  "version": "0.121.0",
+  "version": "0.126.0",
   "description": "UI-agnostic rich text and media editing core library",
   "author": "Pixerate",
   "license": "MIT",
@@ -143,6 +143,11 @@
       "types": "./dist/chart/index.d.ts",
       "import": "./dist/chart/index.js",
       "require": "./dist/chart/index.cjs"
+    },
+    "./effects": {
+      "types": "./dist/effects/index.d.ts",
+      "import": "./dist/effects/index.js",
+      "require": "./dist/effects/index.cjs"
     },
     "./diagram": {
       "types": "./dist/diagram/index.d.ts",

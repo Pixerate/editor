@@ -703,3 +703,4 @@ export { MermaidThumbnail, type MermaidThumbnailProps } from './MermaidThumbnail
 // Agent cursors acting out diagram edits
 export { useDiagramDirector, usePresenceState, type UseDiagramDirectorOptions } from './useDiagramDirector.js';
 export { DiagramPresenceLayer, type DiagramPresenceLayerProps } from './DiagramPresenceLayer.js';
+export * from './CanvasEffects';

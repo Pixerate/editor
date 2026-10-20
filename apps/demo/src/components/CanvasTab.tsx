@@ -28,6 +28,10 @@ import {
   CanvasDrawLayer,
   CanvasGuidesLayer,
   ShapeNode,
+  CanvasEffectsPanel,
+  CanvasEffectsProvider,
+  useCanvasEffects,
+  useCanvasEffectsTools,
   ShapeNodeZoomProvider,
   useCanvasBrushes,
   type CanvasBrushPaint,
@@ -79,6 +83,9 @@ import {
   type CanvasGradientDef,
 } from "@pixerate/editor-react/canvas";
 import { demoCommandRegistry, demoToolRegistry } from "../agentTools";
+import { useDemoEffects } from "../demoEffects";
+import { EffectsProviderSwitch } from "./EffectsProviderSwitch";
+import { CanvasPaintLayerRecipe } from "./CanvasPaintLayerRecipe";
 import { AutoLayoutDemo } from "./AutoLayoutDemo";
 import { MermaidDiagramDemo } from "./MermaidDiagramDemo";
 import { TokensDemo } from "./TokensDemo";
@@ -224,6 +231,7 @@ const CanvasDemo: React.FC = () => {
     guides: { gridSize: 10 },
   });
   const [activeGradientKey, setActiveGradientKey] = useState<string | null>(null);
+  const [showPaintRecipe, setShowPaintRecipe] = useState(false);
 
   const draw = useCanvasDraw<BoxNode>({
     nodes,
@@ -262,11 +270,19 @@ const CanvasDemo: React.FC = () => {
   // Hold Alt / Option and hover a node to measure distances from the selection.
   const measure = useCanvasMeasure<BoxNode>({ nodes });
 
+  // The demo-wide effects provider (built-in test effects, or Flair): effect fills and overlays on
+  // shapes, and transitions between scenes.
+  const { provider: effects } = useDemoEffects();
+  const effectNodesRef = useRef(nodes);
+  effectNodesRef.current = nodes;
   const scenes = useCanvasScenes({
     getViewport: flow.getViewport,
     setViewport: flow.setViewport,
     wrap: true,
+    transitions: { provider: effects, element: () => agentStage.current },
   });
+  const canvasEffects = useCanvasEffects<BoxNode>({ getNodes: () => effectNodesRef.current, setNodes, history: history.manager, scenes: scenes.store, effects });
+  useCanvasEffectsTools(demoToolRegistry, canvasEffects, { id: "canvas-effects", namespace: "canvasfx" });
 
   useCanvasArrangeShortcuts({ arrange, scenes });
 
@@ -677,6 +693,7 @@ const CanvasDemo: React.FC = () => {
       </div>
 
       <div className="h-[520px] rounded-xl overflow-hidden border border-slate-800 bg-slate-950 relative" data-testid="canvas-pane" ref={agentStage}>
+        <CanvasEffectsProvider provider={effects}>
         <ShapeNodeZoomProvider zoom={viewport.zoom}>
         <ReactFlow
           nodes={nodes}
@@ -696,8 +713,29 @@ const CanvasDemo: React.FC = () => {
           <CanvasDrawLayer draw={draw} viewport={viewport} />
         </ReactFlow>
         </ShapeNodeZoomProvider>
+        </CanvasEffectsProvider>
       </div>
+      <EffectsProviderSwitch />
+      {(() => {
+        const selectedShape = nodes.find((n) => n.selected && (n.data as { shape?: unknown }).shape);
+        return (
+          <CanvasEffectsPanel
+            controller={canvasEffects}
+            nodeId={selectedShape?.id ?? null}
+            shape={((selectedShape?.data as { shape?: never } | undefined)?.shape) ?? null}
+            sceneId={scenes.currentId}
+            className="rounded-xl border border-slate-800 bg-slate-900/50 p-3 text-slate-200"
+          />
+        );
+      })()}
       <AgentScriptPanel scripts={CANVAS_SCRIPTS} stage={agentStage} hint="Plays a scripted agent turn with the canvas__* tools: list_nodes returns the ids that align_nodes takes." />
+      {showPaintRecipe ? (
+        <CanvasPaintLayerRecipe />
+      ) : (
+        <button type="button" className="text-xs text-sky-400 hover:underline" onClick={() => setShowPaintRecipe(true)}>
+          Show the recipe: a paint layer (dry and wet brushes) under the canvas
+        </button>
+      )}
 
       {/* Scene strip */}
       <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-3 flex flex-wrap items-center gap-2" aria-label="Scenes">

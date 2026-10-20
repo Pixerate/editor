@@ -10,6 +10,8 @@
 		type ShapeDescription
 	} from '@pixerate/editor/canvas';
 	import { getShapeNodeZoom } from './shapeBrushstroke.svelte.js';
+	import { getCanvasEffectsProvider } from './canvasEffects.svelte.js';
+	import CanvasNodeEffectLayer from './CanvasNodeEffectLayer.svelte';
 
 	interface Props {
 		/** Unique node id (passed by SvelteFlow or user). */
@@ -29,6 +31,7 @@
 	let { id, data, width, height, selected = false, class: className = '', children }: Props = $props();
 
 	const shape = $derived(isShapeDescription(data?.shape) ? data.shape : null);
+	const effectsProvider = getCanvasEffectsProvider();
 	const render = $derived(shape ? getShapeRenderData(shape, { width, height }, { id: id || data?.id }) : null);
 
 	// Brushed strokes: the paint-engine image at the bucketed zoom (the plain path until it is ready).
@@ -144,6 +147,9 @@
 			/>
 			{/if}
 		</svg>
+		{#if shape?.effect && effectsProvider && render && width && height}
+			<CanvasNodeEffectLayer provider={effectsProvider} effect={shape.effect} {width} {height} clipPath={render.d} clipTransform={render.transform} />
+		{/if}
 		{@render children?.()}
 	</div>
 {/if}

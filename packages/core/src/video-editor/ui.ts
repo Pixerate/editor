@@ -61,7 +61,8 @@ export const VIDEO_TRANSITION_LABELS: Readonly<Record<VideoTransitionType, strin
 	wipe: 'Wipe',
 	push: 'Push',
 	slide: 'Slide',
-	iris: 'Iris'
+	iris: 'Iris',
+	effect: 'Effect'
 };
 
 /** Whether a transition type takes a `direction`. */
@@ -97,6 +98,7 @@ export function videoClipTint(clip: VideoClip, asset?: VideoAsset): string {
 	if (clip.type === 'text') return '#a855f7';
 	if (clip.type === 'sequence') return '#0d9488';
 	if (clip.type === 'color') return clip.color;
+	if (clip.type === 'effect') return '#db2777';
 	if (!asset) return '#ef4444';
 	return asset.kind === 'audio' ? '#10b981' : asset.kind === 'image' ? '#f59e0b' : '#3b82f6';
 }
@@ -107,6 +109,7 @@ export function videoClipLabel(clip: VideoClip, asset?: VideoAsset, sequence?: V
 	if (clip.type === 'text') return clip.text.split('\n')[0];
 	if (clip.type === 'color') return clip.color;
 	if (clip.type === 'sequence') return `Compound: ${sequence?.name ?? clip.sequence}`;
+	if (clip.type === 'effect') return `Effect: ${clip.effect}`;
 	const base = asset?.name ?? asset?.src.replace(/^.*[\\/]/, '') ?? clip.asset;
 	const speed = videoClipSpeed(clip);
 	return speed !== 1 ? `${base} (${Math.round(speed * 100)}%)` : base;

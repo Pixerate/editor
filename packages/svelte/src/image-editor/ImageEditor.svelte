@@ -50,6 +50,9 @@
   import TypeOptionsBar from './TypeOptionsBar.svelte';
   import { onDestroy, untrack } from 'svelte';
   import { createReactiveImageEditor, type ReactiveImageEditor } from './imageEditorState.svelte.js';
+  import ImageProviderEffectsPanel from './ImageProviderEffectsPanel.svelte';
+  import type { EffectProvider } from '@pixerate/editor/effects';
+  import { useEffects } from '../effects/effects.svelte.js';
 
   interface Props {
     editor?: ReactiveImageEditor;
@@ -62,6 +65,12 @@
     onRemoveBackground?: RemoveBackgroundHook;
     aiHooks?: ImageEditorAIHooks;
     fit?: ImageEditorFit;
+    /**
+     * An effects provider (see `@pixerate/editor/effects`), registered with the controller while
+     * mounted: filter effects as smart filters and generator or overlay effects as effect layers,
+     * with an Effects section in the Layers tab. Optional: without one the editor is as before.
+     */
+    effects?: EffectProvider | null;
   }
 
   let {
@@ -75,11 +84,16 @@
     onRemoveBackground,
     aiHooks,
     fit,
+    effects,
   }: Props = $props();
 
   const internalEditor = createReactiveImageEditor();
   const editor = $derived(propEditor || internalEditor);
   onDestroy(() => internalEditor.destroy());
+  useEffects(() => editor.controller, () => effects);
+  const hasEffects = (l: import('@pixerate/editor/image-editor').ImageLayer): boolean =>
+    (l.type === 'pixel' && !!l.generator) || (l.type === 'smart' && !!l.smartFilters?.filters.some((f) => f.kind === 'effect')) || (l.type === 'group' && l.children.some(hasEffects));
+  const effectsShown = $derived(!!effects || !!editor.controller.effectsProvider || editor.state.layers.some(hasEffects));
   const legacyProcess = $derived(
     normalizeProcessVersion(editor.state.adjustments.process) < LATEST_PROCESS_VERSION
   );
@@ -1280,6 +1294,7 @@
             disabled={transformActive}
             onclick={() => transformTool.begin()}>Free Transform</button>
           <LayersPanel controller={editor.controller} />
+          {#if effectsShown}<ImageProviderEffectsPanel controller={editor.controller} class="border-t border-slate-700/60 pt-3" />{/if}
           <span class="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">Colour</span>
           <ColorProfilePanel controller={editor.controller} />
         </div>

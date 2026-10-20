@@ -540,9 +540,24 @@ export interface VectorMask {
 }
 
 /** A group of nodes that select and transform together. */
+/**
+ * A group drawn by a provider vector effect (see `@pixerate/editor/effects`): its children are the
+ * effect's picture, made again when its values change. Kept as plain shapes without a provider.
+ */
+export interface VectorProviderEffect {
+	/** The provider's effect id. */
+	effect: string;
+	provider?: string;
+	name?: string;
+	/** Control values (over the effect's defaults). */
+	values: Record<string, number | string | boolean | readonly number[]>;
+}
+
 export interface VectorGroupNode extends VectorNodeBase {
 	type: 'group';
 	children: VectorNode[];
+	/** The provider vector effect this group shows (see `VectorProviderEffect`). */
+	providerEffect?: VectorProviderEffect | null;
 	/**
 	 * Makes the group a live blend: its children that are not `blendStep`s are the keys, in
 	 * stacking order, and the steps between them are regenerated whenever a key changes.

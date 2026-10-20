@@ -6,8 +6,10 @@ import {
 	type CanvasScene,
 	type CanvasScenesOptions,
 	type CanvasViewport,
-	type FitViewportOptions
+	type FitViewportOptions,
+	transitionCanvasView
 } from '@pixerate/editor/canvas';
+import type { EffectProvider } from '@pixerate/editor/effects';
 
 export interface UseCanvasScenesOptions extends CanvasScenesOptions {
 	/** Reads the live viewport, used by `capture` / `recapture` (e.g. `useReactFlow().getViewport`). */
@@ -18,6 +20,12 @@ export interface UseCanvasScenesOptions extends CanvasScenesOptions {
 	duration?: number;
 	/** Use an existing store (e.g. one shared with non-React code) instead of creating one. */
 	store?: CanvasScenesStore;
+	/**
+	 * Plays a scene's provider transition (`scene.transition`) when showing it: `element` is the
+	 * canvas view to capture and cover (e.g. the React Flow wrapper). Without a provider or an
+	 * element, scenes are shown with the plain viewport move.
+	 */
+	transitions?: { provider: EffectProvider | null | undefined; element: () => HTMLElement | null };
 }
 
 /**
@@ -40,9 +48,13 @@ export function useCanvasScenes(options: UseCanvasScenesOptions = {}) {
 
 	const actions = useMemo(() => {
 		const show = (scene: CanvasScene | undefined) => {
-			if (scene) {
-				optionsRef.current.setViewport?.(scene.viewport, { duration: optionsRef.current.duration ?? 300 });
-			}
+			if (!scene) return scene;
+			const o = optionsRef.current;
+			const provider = o.transitions?.provider;
+			const element = o.transitions?.element();
+			if (scene.transition && provider && element) {
+				void transitionCanvasView({ provider, transition: scene.transition, element, jump: () => o.setViewport?.(scene.viewport, { duration: 0 }) });
+			} else o.setViewport?.(scene.viewport, { duration: o.duration ?? 300 });
 			return scene;
 		};
 		return {

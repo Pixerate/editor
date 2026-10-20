@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ImageEditor, useAgentToolProvider, useImageEditor } from '@pixerate/editor-react';
-import { createImageEditorToolProvider } from '@pixerate/editor/image-editor';
+import { createImageEditorToolProvider, createImageEffectsToolProvider } from '@pixerate/editor/image-editor';
+import { useDemoEffects } from '../demoEffects';
+import { EffectsProviderSwitch } from './EffectsProviderSwitch';
 import { demoToolRegistry } from '../agentTools';
 import { AgentScriptPanel } from './AgentScriptPanel';
 import { IMAGE_SCRIPTS } from '../agentScripts';
@@ -49,6 +51,12 @@ export function ImageEditorTab() {
   // Agents get the image__* tools (adjustments, layers, selections, previews).
   const provider = useMemo(() => createImageEditorToolProvider(editor.controller, { id: 'image', namespace: 'image' }), [editor.controller]);
   useAgentToolProvider(demoToolRegistry, provider);
+  // The demo-wide effects provider (the built-in test effects, or Flair once it is published).
+  const { provider: effects, source: effectsSource } = useDemoEffects();
+  // The effects turn names effect ids, so play the one written for the selected provider.
+  const scripts = useMemo(() => IMAGE_SCRIPTS.filter((s) => s.id !== (effectsSource === "flair" ? "image-effects" : "image-effects-flair")), [effectsSource]);
+  const effectTools = useMemo(() => createImageEffectsToolProvider(editor.controller, { id: 'image-effects', namespace: 'imagefx' }), [editor.controller]);
+  useAgentToolProvider(demoToolRegistry, effectTools);
 
   useEffect(() => {
     void editor.controller.loadImage(selectedImage);
@@ -145,15 +153,17 @@ export function ImageEditorTab() {
 
 
       {/* Editor Component */}
+      <EffectsProviderSwitch />
       <div className="relative w-full" ref={agentStage}>
         <ImageEditor
           editor={editor}
+          effects={effects}
           onSave={(dataUrl) => {
             setExportedUrl(dataUrl);
           }}
         />
       </div>
-      <AgentScriptPanel scripts={IMAGE_SCRIPTS} stage={agentStage} hint="Plays a scripted agent turn with the image__* tools: adjustments and layers as single undo steps, selections, masks, Free Transform, and a rendered preview." />
+      <AgentScriptPanel scripts={scripts} stage={agentStage} hint="Plays a scripted agent turn with the image__* tools: adjustments and layers as single undo steps, selections, masks, Free Transform, and a rendered preview." />
 
       {/* Export Preview */}
       {exportedUrl && (

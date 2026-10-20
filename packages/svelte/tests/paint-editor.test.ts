@@ -92,6 +92,8 @@ describe('Svelte paint editor', () => {
     expect(c.getState().hand).toBe('left');
   });
 
+  // The first brush panel in the file renders every brush preview synchronously, which can take
+  // over 5 s on a loaded CI runner.
   it('the brush panel picks brushes and edits settings', () => {
     const c = new PaintEditorController({ width: 32, height: 32 });
     show(BrushPanel, { controller: c });
@@ -106,7 +108,7 @@ describe('Svelte paint editor', () => {
     setValue(target.querySelector('input[aria-label="Brush name"]')!, 'My Charcoal');
     click(byText('Save brush'));
     expect(c.getUserBrushes().map((b) => b.id)).toEqual(['my-charcoal']);
-  });
+  }, 20_000);
 
   it("the brush panel shows each engine's controls: blender, smudge, behaviour, brush gradient and load", () => {
     const c = new PaintEditorController({ width: 32, height: 32 });
@@ -341,6 +343,18 @@ describe('Svelte paint editor', () => {
     setValue(tool, 'blot');
     expect(c.getState().brush.wet.tool).toBe('blot');
     expect(target.querySelector('input[aria-label="Strength"]')).not.toBeNull();
+    // Engine B: force the CPU, then let the GPU run again (there is none in jsdom: the reason shows).
+    const engine = () => target.querySelector('[data-testid="wet-engine"]')!.textContent;
+    setValue(target.querySelector('select[aria-label="Wet engine"]') as HTMLSelectElement, 'off');
+    await new Promise((r) => setTimeout(r, 0));
+    flushSync();
+    expect(c.getState().wet.gpu).toBe('off');
+    expect(engine()).toBe('CPU only (GPU off).');
+    setValue(target.querySelector('select[aria-label="Wet engine"]') as HTMLSelectElement, 'auto');
+    await c.setWetEngine({});
+    flushSync();
+    expect(c.getState().wet.gpu).toBe('auto');
+    expect(engine()).toMatch(/no WebGPU/);
     c.dispose();
   });
 

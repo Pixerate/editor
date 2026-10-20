@@ -21,6 +21,42 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [svelte] An `$effect` That Writes State and Then Reads It Re-runs Itself Forever
+
+- **Issue / Symptom**: The Svelte effects browser froze the page (and hung its test) when a thumbnail's render failed, for example for a vector effect the provider cannot draw as pixels. React was fine.
+- **Root Cause**: `EffectThumbnail.svelte`'s `$effect` set `failed = item.kind === 'motion'` and then read it back (`if (failed) return`). That read made `failed` a dependency of the effect. The failed render set `failed = true`, which re-ran the effect. The effect reset `failed`, rendered again (failures are not cached) and failed again, in an endless microtask loop that starved timers.
+- **Solution / Workaround**: Keep the value in a local (`const motion = …`), read only the inputs that pick the picture, and start async work inside `untrack`. Never read back, in the same `$effect`, state that the effect or its callbacks write.
+
+### [core/effects] GPU Effect Providers Hold a WebGL Context per Renderer, and Browsers Allow About Sixteen
+
+- **Issue / Symptom**: With Flair as the provider, opening the effects browser printed "Too many active WebGL contexts. Oldest context will be lost." more than a hundred times. Most thumbnails showed "No preview", and effects already on clips failed with "The graphics context was lost." The engines record failures and don't retry them, so those clips stayed plain until the provider changed.
+- **Root Cause**: Each Flair renderer (a `ShaderPipeline`) owns one WebGL context. The effects browser rendered every thumbnail at once, around 300 renderers in parallel. The video and image engines also kept one renderer per effect and size for as long as the provider was set. Chrome keeps about sixteen contexts alive and loses the oldest beyond that, which breaks renders still in flight.
+- **Solution / Workaround**: `renderEffectThumbnail` renders one thumbnail at a time, disposes each renderer before making the next, and caches the results per provider. Both engines render through `EffectRendererPool`, which keeps at most four live renderers (`maxRenderers`) and disposes the least recently used one once its queued renders finish. If you write a provider host, keep few renderers alive and always `dispose()` them. When the demo seems to ignore a fix, check for a stale bundle in the browser cache: `vite preview` pages can keep the previous hashed chunks until a hard reload.
+
+### [core/image-editor] An Effect Smart Filter Above One Still Rendering Must Not Be Requested
+
+- **Issue / Symptom**: With two provider effect smart filters stacked, the upper one sometimes showed its result as if the lower one was not there, even after both had rendered.
+- **Root Cause**: `applySmartFilters` is synchronous. A missing provider result passes the pixels through while it renders. Results are cached by a key made from the placed contents and the filters below. While the lower filter was still rendering, the upper filter was requested with the unfiltered input, under the key that means "after the lower filter". That wrong result was then served from the cache.
+- **Solution / Workaround**: Once a filter in the stack is pending, the effect filters above it are not requested; they pass through until the next render. The surface is marked incomplete, so the controller renders it again as each result lands (`refreshEffectSurfaces`). The cache key also carries the engine's `token`, so a new or removed provider never reuses old results.
+
+### [core/video-editor] Provider Effects Render Asynchronously, but the Canvas Draws Synchronously
+
+- **Issue / Symptom**: An effects provider's `render` returns a promise, while `drawVideoFrame` draws a whole frame synchronously. Awaiting effects inside a draw would stall playback. Drawing the playhead's exact time while playing also missed the effect cache on every animation frame, and a layer whose media was still loading got cached with the wrong picture.
+- **Root Cause**: The playhead moves continuously, so values derived from it (source time, fades, keyframes) never repeat between frames. An effect's input is read from a scratch canvas: if the media was not ready, the provider received a placeholder.
+- **Solution / Workaround**: `VideoEffectsEngine` keeps rendered pictures by key, using the LUT cache's pattern. A draw asks for a picture: if it is cached it draws at once; if not it requests one, draws the layer without effects, and redraws when the engine notifies. With effects on screen, the preview evaluates the frame at the start of its frame (`videoEffectFrameTime`), so each frame has one key. Inputs go to the provider only when the draw found every media picture ready. `renderVideoFrameExact` draws, awaits `engine.idle()` and draws again until nothing is waiting, which is what exports use.
+
+### [core/video-editor] Clip Effects Cannot Be ffmpeg Filters: Export Takes Rendered Frames
+
+- **Issue / Symptom**: A project with provider effects (from Flair, for example) cannot be expressed as an ffmpeg filter graph.
+- **Root Cause**: Provider effects are arbitrary shaders or CPU code that run in the host. ffmpeg has no equivalent.
+- **Solution / Workaround**: `toVideoFfmpeg` throws, naming the clips with enabled effects, unless `frames` is passed. With `frames`, the host renders every frame with `renderVideoFrameExact` (the preview's own drawing) to PNGs or to raw RGBA on a pipe. ffmpeg then takes those as the picture and still builds the sound graph. Turning the effects off (`enabled: false`) makes a quick draft export possible again.
+
+### [core/effects] Effect Errors From a Provider May Not Be `instanceof` This Library's Classes
+
+- **Issue / Symptom**: An editor's `catch (e) { if (e instanceof UnknownEffectError) ... }` missed errors thrown by an effects provider, so a bad effect id surfaced as a generic failure instead of a useful tool error.
+- **Root Cause**: Providers live in other packages (Flair's `flairEffects()`). A provider bundled with its own copy of `@pixerate/editor/effects`, or a second install of a different version, throws errors from a different class object, and `instanceof` compares identity.
+- **Solution / Workaround**: Check `isEffectError(e)` and `e.code` (`unknown_effect`, `invalid_values`, `unsupported`, `disposed`, `no_provider`) instead of `instanceof`. Providers should run `checkEffectProvider` in their own tests: it fails when an error has no `code`.
+
 ### [core/vector] Constraints Need Anchor Ids, and Every Hand-Built Anchor Copy Must Carry Them
 
 - **Issue / Symptom**: Constraints disappeared after ordinary edits (a move, a reverse, a shape-keeping delete of a neighbour).
@@ -2460,6 +2496,26 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: The TypeScript spec kernel costs ~45–70 ms per 256² tile-step, and a disc centred on a tile seam (e.g. 256, 256) wakes four tiles. A 600×420 scene for 160 steps is ~1000 TS tile-steps; CI runners are ~3× slower than a laptop and run test files in parallel.
 - **Solution / Workaround**: Keep CI scenes to one tile (centre marks at 128 on a 256 grid) unless the test is about tiles, use `evaporation: 1` for tests that wait for drying, and keep the TS-vs-wasm parity scene to 2 tiles and a few steps (bit differences show from the first step). The full parity and batching scenes run with `WET_BENCH=1`.
 
+### [core/paint] WebGPU Shading Looks 240 Levels Off in Straight RGBA, Yet Is Within 1/255 on Screen
+- **Issue / Symptom**: Comparing Engine B's shaded wet tiles with the CPU's byte by byte found channels up to 243 apart, all at alpha 1..40.
+- **Root Cause**: Wet layer pixels are stored as straight (unpremultiplied) colour over the paper; the colour is `(film − (1 − a)·paper) / a`. At a tiny alpha a one-level difference in the composited film (GPU `exp`/`pow` against the CPU's tables) becomes a huge difference in the straight colour, though the pixel looks the same.
+- **Solution / Workaround**: Compare what shows: each pixel composited over the paper (`a·rgb + (1 − a)·paper`). Both engines round colour and alpha to bytes, so allow up to ~1.5 levels and require almost no pixels over 1 (`tests/paint-wet-gpu.test.ts`).
+
+### [core/paint] WGSL Kernels: Reserved Words, Dynamic Indexing and One Hot Atomic
+- **Issue / Symptom**: The halo shader failed to compile only with "is invalid due to a previous error"; the step ran at half the expected speed.
+- **Root Cause**: `from` is a reserved word in WGSL. `createComputePipeline` errors don't name the line: `getCompilationInfo()` on the shader module does. Speed: every one of the 65,536 threads of a tile did `atomicOr` on one flag word each step, and loops over 9 directions indexed private arrays dynamically (spilled to memory).
+- **Solution / Workaround**: Read `getCompilationInfo()` and put its messages in the error (`gpu.ts`). OR flags into a `var<workgroup>` atomic and let one thread per workgroup touch global memory. Generate the per-direction code unrolled from TypeScript. The step is then bandwidth-bound (~47 floats per cell-step for this model).
+
+### [core/paint] Engine B Cannot Make the Simulation Faster While the CPU Is the Authority
+- **Issue / Symptom**: A WebGPU wet step is 1.5–2× the wasm engine, yet turning it on doesn't let wet paint run more steps per second.
+- **Root Cause**: Saved output must never depend on the GPU (GPU results are close, not bit-identical, and differ between browsers), so the CPU still runs every step; edits and pick-up read CPU state.
+- **Solution / Workaround**: Engine B mirrors the CPU (the same slot layout; edits upload only the rows `markEdited` reports; each batch is also stepped on the GPU) and takes over the display: `displayGpu` shades every stale tile in one dispatch instead of 24 tiles of main-thread JS per frame. A GPU result is dropped when the lane's stamp changed while it was in flight. Between strokes the GPU may run ahead, but only within the CPU batch in flight (`gpuLead`, at most 16 steps): edits only happen between batches, so the GPU never has to be rewound. Making the GPU the live engine ("option B": the CPU follows by replaying strokes) is a possible later upgrade for very large, fully wet canvases; it needs async pick-up readback, accepts a live picture that differs from the saved one within 1/255, and makes save wait for the replay.
+
+### [core/tests] Node WebGPU (Dawn): One Instance per Process, Opt-In Tests
+- **Issue / Symptom**: The GPU bench crashed the vitest worker with SIGSEGV.
+- **Root Cause**: Each test called the `webgpu` package's `create()`, making a new Dawn instance per test.
+- **Solution / Workaround**: Create the provider once per file and reuse it. The package is ~140 MB and CI has no GPU, so it is not a dependency: GPU tests run when `WET_GPU` names a local install (`WET_GPU=/path/to/node_modules/webgpu`); without it only the capability checks run.
+
 ### [core/paint] A Gradient Stroke's Colour Lags Half a Tip Behind the Pen
 - **Issue / Symptom**: With gradient paint by distance, the colour at a pixel was that of a dab up to a radius behind, and tests sampling "the pixel at 100 px of travel" found a mixed colour.
 - **Root Cause**: Build-up stops at the stroke's opacity ceiling: the first dab to reach a pixel lays most of its coverage, and later dabs only top up the antialiased edge. Each pixel's colour is the coverage-weighted mix of the dabs that added to it (`CoverageMap.colors`), as paint would be.
@@ -2481,8 +2537,26 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: The sweep puts one band (edge, edge moved, back) per flattened edge into a single `nonzero` operand. Edges facing against the sweep direction give bands that wind the other way, so where two bands overlap their windings cancel to zero.
 - **Solution / Workaround**: Swap an edge's ends when the cross product of the edge and the sweep is negative, and skip edges parallel to the sweep. Every band then winds the same way and `nonzero` unites them.
 
+### [core/paint] Stepping Part of a Wet World: Held Tiles Must Survive the Parity Flip
+
+- **Issue / Symptom**: To simulate only the wet tiles in view, the obvious approach is to take the other tiles out of the active list for a step. After an odd number of steps those tiles jumped back to an older state.
+- **Root Cause**: Every slot holds two ping-pong sets, and one global `parity` says which is current. A step writes the new state into the other set and flips `parity` for all tiles, including tiles that were not stepped. Their current set then becomes the stale one.
+- **Solution / Workaround**: `WetWorld.stepRegion` copies each held tile's current set into the other set before stepping, so the tile reads the same state whatever the parity, and it puts the tiles back afterwards (with `syncList` and `refreshHalos`). Held tiles keep their last flags, so they are never freed as dead. Water that reaches a held tile stops at its edge until it is stepped again. With a region covering every live tile, the result is bit-identical to `step`.
+
 ### [core/canvas] Lazy Paint for Brushed Strokes: Keep Every Paint Import in `brushstrokeRender.ts`, and Keep Types Out of the Graph
 
 - **Issue / Symptom**: (1) A canvas consumer that never uses brushes would load the whole brush engine and the paint presets if a canvas file imported `src/paint` or `src/paint-editor` statically. (2) After brushed strokes were added, `pnpm build` died in the DTS step with `ERR_WORKER_OUT_OF_MEMORY`. Nothing was wrong with the code.
 - **Root Cause**: (1) tsup puts a statically imported module into a chunk that the canvas entry imports. (2) The DTS worker was already close to its heap limit (about 4.4 GB RSS on main). It overflowed once `commands` imported canvas types (`DrawStrokeInput`), the canvas shape types imported `BrushSettings` from the paint engine, and an exported `typeof import('./brushstrokeRender.js')` dragged the paint editor's types into the canvas declarations.
 - **Solution / Workaround**: Every value import of the paint engine for the canvas lives in `src/canvas/brushstrokeRender.ts`, which `brushstroke.ts` loads with `import()`. `brushstrokeScaleBucket` sits in the import-free `paint/brushstroke-scale.ts` so the canvas can use it statically. `entry-isolation.test.ts` checks that the canvas entry's static graph has no brush engine code. The data types (`CanvasBrush`, `CanvasBrushstroke`, …) live in the import-free `canvas/brushTypes.ts`, the renderer type is a hand-written interface, and `commands/builtins.ts` describes its targets structurally instead of importing canvas types. If the DTS build runs out of memory again, look for new type imports across entries before raising the heap.
+
+### [core/canvas] Scene Transitions Capture the Stage: Keep the Transition Canvas Out of the Second Capture
+
+- **Issue / Symptom**: A provider transition between canvas scenes needs a picture of the view before and after the jump. If the canvas that plays the transition sits on the stage when the "after" view is captured, the after frame contains the before frame, and the transition dissolves into itself.
+- **Root Cause**: `transitionCanvasView` covers the stage with its canvas as soon as the "before" view is captured (so the jump is hidden), and `rasterizeElement` captures every descendant of the stage.
+- **Solution / Workaround**: The transition canvas is marked `data-capture="overlay"`, which is in `CAPTURE_OVERLAY_SELECTORS`, so captures leave it out. Any other layer you put over the stage during a transition needs the same mark. If capturing fails (no provider, an unknown effect, a capture error), `transitionCanvasView` removes its canvas and just jumps.
+
+### [core/paint-editor] Effects Render Asynchronously: Render First, Commit After, and Refuse if the Layer Changed
+
+- **Issue / Symptom**: Provider effects (`setPaperEffect`, `fillLayerWithEffect`, `applyLightEffect`) return promises. If the controller committed the undo step before the render, or wrote the result onto the layer as it is after the render, a stroke painted while the effect rendered would be lost or the effect would land on paint it never saw.
+- **Root Cause**: The paint controller's history holds whole document states, and the wet simulation keeps changing wet layers between steps. Anything can change during the `await`.
+- **Solution / Workaround**: Each effect method validates first, renders, then re-checks (no stroke in progress, the layer still exists with the same surface and offset) and commits in one synchronous step; otherwise it throws "changed while the effect rendered; apply the effect again". Fills and light refuse layers that hold wet paint ("dry it first"), so no wet snapshot has to be rolled back if the render fails. Slider drags pass `commitToHistory: false` after the first change, which folds into the last step only when it has the same label.

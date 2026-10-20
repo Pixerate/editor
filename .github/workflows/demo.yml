@@ -28,6 +28,10 @@ jobs:
     name: Build demo
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      # The core build's type-declaration worker outgrew Node's default heap (ERR_WORKER_OUT_OF_MEMORY).
+      # ubuntu-latest runners for public repos have 16 GB.
+      NODE_OPTIONS: --max-old-space-size=8192
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7

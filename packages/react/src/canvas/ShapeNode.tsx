@@ -1,6 +1,7 @@
 import React from 'react';
 import { getShapeRenderData, isShapeDescription, type ShapeDescription } from '@pixerate/editor/canvas';
 import { useShapeBrushstroke } from './useShapeBrushstroke.js';
+import { CanvasNodeEffectLayer } from './CanvasEffects.js';
 
 export interface ShapeNodeProps {
 	/** Node data; `data.shape` holds the shape description. */
@@ -21,7 +22,9 @@ export interface ShapeNodeProps {
  * to add handles. Strokes keep their width when the node is resized
  * (`vector-effect: non-scaling-stroke`). Renders nothing when `data.shape` is missing.
  * A brushed stroke (`shape.brush`) is drawn as its paint-engine image (sharp at the zoom a
- * `ShapeNodeZoomProvider` gives), with the plain path shown until the image is ready.
+ * `ShapeNodeZoomProvider` gives), with the plain path shown until the image is ready. A provider
+ * effect (`shape.effect`) is drawn inside the shape or over it when a `<CanvasEffectsProvider>`
+ * gives a provider.
  */
 export function ShapeNode({ id, data, width, height, selected, className = '', children }: ShapeNodeProps) {
 	const shape = data?.shape;
@@ -103,6 +106,7 @@ export function ShapeNode({ id, data, width, height, selected, className = '', c
 				/>
 				)}
 			</svg>
+			{shape.effect && width && height ? <CanvasNodeEffectLayer effect={shape.effect} width={width} height={height} clipPath={render.d} clipTransform={render.transform} /> : null}
 			{children}
 		</div>
 	);

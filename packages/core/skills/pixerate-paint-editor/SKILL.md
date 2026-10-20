@@ -1,6 +1,6 @@
 ---
 name: pixerate-paint-editor
-description: How to paint in the Pixerate paint editor (natural media) through its agent tools - canvas and paper (generated grain, depth, families from cold pressed watercolour to canvas), layers with painterly blend modes (watercolor, tint, highlight, shadow), dry media (pencil, pastel, charcoal, airbrush, marker, ink) with pen dynamics, wet media (watercolour, gouache and oil that flow, bloom, granulate and dry), thick impasto paint lit by a movable light, blending tools (blender, smudge, Mixer Brush), brush behaviours (pick-up and mix ratios, dirty and multi-coloured brushes), the brush library, replayable strokes, symmetry and perspective guides, tracing and reference images, harmonies, swatches, a mixing pad and pigment mixing, and PNG, JPEG, WebP, PSD and JSON output. Use when asked to paint, sketch, paint in watercolour, shade, blend, smudge, glaze, mix colours, paint symmetric or in perspective, trace an image, or when paint_stroke, set_paper, replay_strokes or mix_colors are available.
+description: How to paint in the Pixerate paint editor (natural media) through its agent tools - canvas and paper (generated grain, depth, families from cold pressed watercolour to canvas), layers with painterly blend modes (watercolor, tint, highlight, shadow), dry media (pencil, pastel, charcoal, ink) with pen dynamics, wet media (watercolour, gouache and oil that flow, bloom, granulate and dry), thick impasto paint lit by a movable light, blending tools (blender, smudge, Mixer Brush), brush behaviours (pick-up, dirty and multi-coloured brushes), the brush library, replayable strokes, symmetry and perspective guides, tracing and reference images, harmonies, swatches, a mixing pad, and PNG, JPEG, WebP, PSD and JSON output. Use when asked to paint, sketch, paint in watercolour, shade, blend, smudge, glaze, mix colours, paint symmetric or in perspective, trace an image, or when paint_stroke, set_paper, replay_strokes or mix_colors are available. Also effect paper, effect layers and light on paint from an effects provider.
 ---
 
 # Paint editor
@@ -166,6 +166,11 @@ is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y do
   dries it first (in the same undo step).
 - **Time** runs by itself in an editor on screen (`pause_wet_paint` stops it); for an agent with
   no screen, nothing moves until `advance_wet_paint` or `dry_paint`.
+- **The GPU only draws.** With WebGPU and a large wet area (16 tiles of 256 px by default), Engine B
+  shades the wet paint on the GPU; the CPU engine still computes every step, so the painting,
+  `dry_paint`, saving, export and replay come out the same with it on or off. `get_wet_paint`
+  shows it as `engine` (`state`, `reason`). Leave it on `auto`; `set_wet_engine` with `gpu` "off"
+  only when the user says the display looks wrong or the GPU is needed for something else.
 
 ## Oils and thick paint
 
@@ -230,6 +235,28 @@ Paint that changes colour as the stroke goes: give a gradient where a colour wou
   it exactly: straight lines, circles, rainbows) or a `line` / `shape` mask (paint lands only on
   one side or inside a rect, ellipse or polygon; `invert` for outside). Stencils stay until
   removed (`remove_stencils`); masks are recorded with each stroke so replays keep them.
+
+## Provider effects
+
+When the host registers an effects provider (`setEffectsProvider`), shaders and generators from
+it work with the painting. Search first: `search_effects` with `use` `generator` (paper, layers,
+fills), `overlay` / `title` (layers, fills) or `filter` (light on paint), then `describe_effect`
+for the controls and presets.
+
+- **Effect paper**: `set_paper_effect` draws a generator over the sheet, under every layer.
+  `multiply` (the default) keeps the paper's colour and grain showing through, which is what
+  makes it look like printed or dyed paper; `normal` covers it. It saves and exports with the
+  painting, and brush grain still follows the real paper.
+- **Effect layers** (`add_effect_layer`): a pixel layer drawn by a generator, overlay or title
+  effect. Use them for backgrounds you want to change later, and for overlays (grain, light
+  leaks, captions) above the paint with a blend mode (`screen` / `linear-dodge` for light,
+  `multiply` for textures). `update_effect` draws the layer again and replaces its pixels, paint
+  on it included, so paint on a layer above it.
+- **Effect fills** (`fill_layer_with_effect`): the effect composited onto a layer's pixels with
+  no link kept; `lockTransparency` colours only what is painted (an effect inside a shape).
+- **Light on dried paint** (`apply_effect`): a filter (light, glow, grade) run on a layer's paint
+  and baked in, at `opacity` strength. Transparent areas stay transparent, and thick paint keeps
+  its relief and stays lit by the editor's light. Dry wet paint first (`dry_paint`).
 
 ## Tool reference
 
@@ -312,7 +339,7 @@ Paint that changes colour as the stroke goes: give a gradient where a colour wou
 
 | Tool | Use |
 | --- | --- |
-| `get_wet_paint` | Read the wet paint: `wet`, the clock, `paused`, `speed`, `tilt`, the kernel (`backend`, `message` when it runs slower than it could) and each wet layer (`wetCells`, `wetBounds`, `activeTiles`, settings, flow map). Call after wet strokes. |
+| `get_wet_paint` | Read the wet paint: `wet`, the clock, `paused`, `speed`, `tilt`, the kernel (`backend`, `message` when it runs slower than it could), the GPU accelerator (`engine`) and each wet layer (`wetCells`, `wetBounds`, `activeTiles`, settings, flow map). Call after wet strokes. |
 | `advance_wet_paint` | Let time pass: `steps` (120 = one second at the default speed) or `seconds`. The paint spreads, blooms, runs and dries. Not an undo step. Returns `steps`, `clock`, `stillWet`, `layers`. Call after a group of wet strokes, before `render_preview`. |
 | `dry_paint` | Dry wet paint at once where it is (one layer with `layerId` or all, optionally inside `rect`). One undo step. Returns `dried` (layer ids and rectangles) and `stillWet`. Dry before glazing over a wash. |
 | `wet_paper` | Pre-wet the paper with clear water over `rect` (default the canvas) on a layer, `amount` 0..1, for wet-in-wet. One undo step. Returns the rectangle and `wet`. Then paint into it. |
@@ -321,6 +348,7 @@ Paint that changes colour as the stroke goes: give a gradient where a colour wou
 | `set_canvas_tilt` | Tilt the canvas (`angle` 0..90°, `direction` downhill clockwise from the bottom): wet paint runs downhill, very wet paint drips. Returns `tilt`, `stillWet`. |
 | `pause_wet_paint` | Stop or resume time (`paused`) and set `speed` (steps per second). Editor state. |
 | `set_water_overlay` | Show where the water is (`visible`), view only. |
+| `set_wet_engine` | Let Engine B (WebGPU) shade large washes (`gpu` "auto", the default) or force the CPU (`gpu` "off"); `minTiles` sets the wet area at which the GPU takes over. Never changes the result, only how it is drawn; editor setting, not saved, not an undo step. Returns `engine` (`state`: off, not-started, starting, unavailable, standby, active, failed; `reason`, `adapter`). |
 | `set_instant_dry` | `on`: every wet stroke dries as it ends (same undo step); off (default) wet paint keeps moving. Returns `instantDry`. |
 
 ### Thick paint and light
@@ -339,6 +367,20 @@ Paint that changes colour as the stroke goes: give a gradient where a colour wou
 | `update_sticker` | Change one sticker by `id`: `stamp`, `x`, `y`, `size`, `rotation`, `color`, `opacity`. One undo step. Returns it. |
 | `arrange_stickers` | Move stickers (`ids`) to the `front` or `back` of their layer. One undo step. |
 | `remove_stickers` | Delete stickers by `ids`, or all on the layer. One undo step. |
+
+### Provider effects
+
+| Tool | Use |
+| --- | --- |
+| `search_effects` | Find provider effects by `query`, `kind`, `category` and `use` (`generator` for paper and layers, `overlay` / `title` for layers and fills, `filter` for light on paint). `available: false` when no provider is registered. Call before the tools below. |
+| `describe_effect` | Read an effect's controls (types, ranges, defaults), presets and inputs. Call before passing `values`. |
+| `list_applied_effects` | Read the effect paper (target `paper`) and every effect layer with its effect and values; with `target`, one of them. Baked light and fills are pixels and are not listed. Works without a provider. |
+| `apply_effect` | Light on dried paint: run a `filter` effect on a layer's paint and bake it in (`values`, `opacity` = strength 0..1). Refused on empty, wet, locked or hidden layers, with the fix. One undo step; undo takes it back. Returns the effect used and `baked: true`. |
+| `update_effect` | Change the effect paper (`target` and `effect` "paper": `values`, `opacity`) or draw an effect layer again (`effect` "effect": `values`; `null` resets a control). Returns the effect. |
+| `remove_effect` | Remove the effect paper, or turn an effect layer into a plain layer keeping its pixels (`keptPixels`). |
+| `set_paper_effect` | Draw a generator over the paper (`values`, `opacity`, `blend` default `multiply`, `time`); `effect: null` removes it. One undo step. Returns the effect paper. |
+| `add_effect_layer` | Add a layer drawn by a generator, overlay or title effect (`values`, `name`, `aboveId`, `opacity`, `blend`, `time`); it becomes active. Returns the layer and its effect. |
+| `fill_layer_with_effect` | Composite a generator, overlay or title effect onto a layer (`layerId`, `values`, `opacity`, `lockTransparency`, `time`). One undo step. Returns the layer id and the effect. |
 
 ### Guides
 
@@ -412,5 +454,8 @@ Paint that changes colour as the stroke goes: give a gradient where a colour wou
 - **Replays repeat what was recorded**: strokes, fills, clears, flattened relief and wet events.
   Imported pixels, merges and layer moves are not data, so `export_time_lapse` and
   `export_high_res` start those layers empty; paint with strokes when the replay matters.
+- **Effects are pixels in replays.** Effect paper, effect layers, effect fills and baked light
+  need the provider when they are made; replays and time-lapses do not repeat them. Add them
+  after the painting, or keep the effect layer and redraw it.
 - **Recorded strokes are kept in saved documents**; `save_document` with `strokes: false` when
   only the pixels matter (smaller JSON).

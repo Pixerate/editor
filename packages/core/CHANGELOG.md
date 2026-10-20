@@ -1,5 +1,74 @@
 # @pixerate/editor
 
+## 0.126.0
+
+### Minor Changes
+
+- 480c798: Paint provider effects: with an optional `EffectProvider`, the paint editor takes effect paper (a generator drawn over the sheet and under the paint, multiplied by default so the paper's grain shows), effect layers (`addEffectLayer`, redrawn with `updateEffectLayer`, `rasterizeEffectLayer`), effect fills (`fillLayerWithEffect`) and light baked onto dried paint (`applyLightEffect`, any filter effect; thick paint keeps its relief). Each change is one undo step (a slider drag is one) and effect paper and effect layers are saved with the document. Adds `createPaintEffectsToolProvider` (`set_paper_effect`, `add_effect_layer`, `fill_layer_with_effect` and the shared effect tools) in core, and `<PaintEffectsPanel>`, `usePaintEffectsTools` and an Effects tab in `<PaintEditor>` (shown when a provider is registered) in React and Svelte.
+
+## 0.125.0
+
+### Minor Changes
+
+- 64ae3fb: Provider effects in the animation and vector editors.
+
+  - **Animation editor.** `applyMotionEffect` animates nodes with a provider motion effect. Its changes become ordinary commands tagged with `source`, so they preview, export to Flair and import like any command. `addVectorEffect` adds a vector effect's own picture as an artwork group with its shots. `updateMotionEffect` makes an effect again in place, and `removeMotionEffect` takes it out.
+  - **Vector editor.** `addVectorEffect`, `updateVectorEffect` and `detachVectorEffect` work with groups tagged `providerEffect`.
+  - **Agent tools.** New providers are `createAnimationEffectsToolProvider` (which adds `add_vector_effect`) and `createVectorEffectsToolProvider`.
+  - **UI.** React and Svelte add `<AnimationEffectsPanel>`, `<VectorProviderEffectsPanel>`, an `effects` prop on `<AnimationEditor>` and `<VectorEditor>`, `useAnimationEffectsTools` and `useVectorEffectsTools`. `<EffectsBrowser>` gains a `kinds` filter.
+  - **Fake provider.** It gains `fake.badge`, a vector effect with its own picture.
+
+## 0.124.1
+
+### Patch Changes
+
+- e501ee0: Keep GPU effect providers within the browser's WebGL context limit. `EffectRendererPool` keeps at most four live renderers (`maxRenderers`) and disposes the least recently used one once its renders finish; the video and image effects engines render through it. `renderEffectThumbnail` renders one thumbnail at a time and caches the results per provider. Before this, browsing Flair's catalog lost contexts and left thumbnails and clip effects blank. `<EffectsBrowser>` now scrolls its grid within a fixed height.
+
+## 0.124.0
+
+### Minor Changes
+
+- 244ccba: Gradient paint for brushstrokes along paths. `renderBrushstroke(…, { paint })` and `paintPathStroke(…, { paint: { paint, seed } })` take a `PaintSource`: one colour, or a gradient sampled dab by dab by distance along the path, pressure, tilt, speed, direction, time, across the tip or at random, through the same `gradientDabColor` the paint editor uses. Distance gradients scale with `renderBrushstroke`'s `scale`, so a stroke looks the same at every zoom. `pathStrokeDabs` now records each dab's `params` (travel, index, pressure, lean, speed, direction, time), and `PathSample` takes an optional time `t`.
+- bd1ff5f: Add `@pixerate/editor/effects`, a dependency-free contract for optional effects providers. `EffectProvider` lists, searches and describes effects (strict JSON Schema controls, defaults, presets and named inputs) and creates frame-exact renderers at 8, 16 or 32 bits with masks, plus `applyVectorEffect` for vector motion. Typed errors (`UnknownEffectError`, `EffectControlError`, `EffectUnsupportedError`, `EffectDisposedError`, `NoEffectsProviderError`), capability flags, `resolveEffectValues`, `searchEffectSummaries`, `applyEffectMask`, `EffectsSlot`, a `checkEffectProvider` conformance check for provider test suites, and `createFakeEffectProvider`, a deterministic CPU provider for tests and demos.
+
+  `FlairSvgAnimation` gains Flair's `tag`, `format`, `decimals` and `caret` fields. `checkEffectProvider` accepts `unsupported` from a vector effect's renderer and from the vector probe.
+
+- d995e9d: Optional provider effects in the image editor. With an `EffectProvider` (`effects` option, `setEffectsProvider` / `useEffects`), filter effects become `effect` smart filters (`applyEffectFilter`; a pixel, shape or type layer converts to a smart object in the same undo step) with blend, opacity, order and the filter mask. Generator, overlay and title effects become effect layers (`addEffectLayer` / `updateEffectLayer` / `rasterizeEffectLayer`): pixel layers with a `generator`, rendered at the document's size and bit depth. Effect filters render in the background (`ImageEffectsEngine`). Without a provider they pass pixels through, and effect layers keep their pixels; both round-trip through JSON. New agent tools via `createImageEffectsToolProvider`: the shared effect tools plus `add_effect_layer`. React and Svelte add `<ImageProviderEffectsPanel>`, `<ImageEditor effects>` and `useImageEffectsTools`.
+- 27b6502: Optional provider effects in the video editor. With an `EffectProvider` (`effects` option, `setEffectsProvider` / `useEffects`), clips get an ordered effect stack (`effects`, with enabled, opacity and keyframable values), transitions can use a provider effect (`type: 'effect'`), and effect clips (`type: 'effect'`) draw generators, titles and overlays. Effects render frame-exact through the provider, cached per frame (`VideoEffectsEngine`), in the preview and in `renderVideoFrameExact`. `toVideoFfmpeg` refuses projects with enabled provider effects unless it gets the rendered `frames`. Without a provider, projects keep their effects and show them as placeholders. New agent tools: `search_effects`, `describe_effect`, `list_applied_effects`, `apply_effect`, `update_effect`, `remove_effect`, `add_video_effect_clip`, `set_video_effect_transition` and `set_video_effect_keyframes` (`createVideoEffectsToolProvider`; the shared `createEffectToolProvider` is in `@pixerate/editor/effects`). React and Svelte add a new `effects` subpath with `<EffectsBrowser>`, `<EffectParameters>`, `<EffectThumbnail>` and `useEffects`, plus `<VideoEffectsPanel>`, `<VideoEditor effects>` and `useVideoEffectsTools`.
+
+## 0.123.0
+
+### Minor Changes
+
+- 09befd1: Brushed freehand strokes on the canvas, opt-in. `FreehandStrokeStyle.brush` takes a dry paint preset id (`ink-pen`, `pencil-hb`, …) or tip settings. The stroke stays a path shape node and gains `data.shape.brush`, with pressure and tilt profiles along its length taken from the pen, so selecting, erasing, grouping and export work as before. It is drawn with the paint engine's `renderBrushstroke` and re-rendered when the path, the brush or the zoom bucket changes. The paint engine loads only when the first brushed stroke is drawn. Strokes without a brush are unchanged.
+
+  - Core: `renderShapeBrushstroke`, `getBrushedShapeSvg` (SVG with the image embedded), `listCanvasBrushes`, `pointerPenSample`. The draw controller takes pen samples in `startStroke` / `continueStroke`, and its `drawStroke` draws a whole stroke in one undo step.
+  - Agents: `createDrawCommands` adds `canvas.drawFreehand` (points, tool, colour, width, opacity, `brush`, and `pressure` / `tiltX` / `tiltY` profiles; wet brushes are refused) and `canvas.listBrushes`.
+  - React: `<ShapeNode>` draws brushed shapes, `<ShapeNodeZoomProvider>` keeps them sharp, `useCanvasBrushes` lists the brushes, and `<CanvasDrawLayer>` passes pen pressure and tilt (coalesced events for brushed strokes).
+  - Svelte: the same, with `setShapeNodeZoom` and `createCanvasBrushes`.
+
+- 280b767: Helpers for building a paint layer on an infinite canvas yourself (the demo has a recipe):
+
+  - `@pixerate/editor/raster`:
+    - World ↔ surface mapping: `worldToSurface`, `surfaceToWorld`, `worldRectToSurface`, `screenToWorld`, `visibleSurfaceRect`.
+    - A resolution policy: `surfaceResolutionForZoom` and `surfaceMipLevel`.
+    - `drawSurfaceToViewport` / `SurfaceViewportRenderer`, which draws the visible tiles of a surface onto a 2D context at the right mip level with seam-free placement. Tile images are cached by tile and the canvas factory is injected.
+  - `@pixerate/editor/paint`:
+    - `pointerStrokeSamples` / `pointerStrokeSample` / `pointerPressure` turn Pointer Events into stroke samples in your coordinates, with pen pressure, tilt and coalesced events. The paint and image editors now share `pointerPressure`.
+    - `WetWorld.stepRegion` / `stepRegionSync` simulate only the live wet tiles that touch a region (the viewport), holding the rest still.
+
+- aea6c2c: Gradient paint: a colour slot can hold a gradient (`PaintSource`) that brushes sample dab by dab, by distance dragged out (the default: 300 px, mirrored), pressure, tilt, speed, direction, time, across the tip or at random, mixed as pigment, Oklab or sRGB, with opacity stops, midpoints and softness. Every colour engine paints it (dab, Mixer Brush, watercolour and gouache, oil and impasto, particles, bristles, stickers), in the paint editor (`setPaint`, `paint` on strokes, `brush.paint`, gradient swatches) and the image editor's brush (`PaintOptions.paint`, also on masks and at 16 / 32 bits). Strokes record the resolved gradient, so replays and re-renders are exact.
+
+  The multi-colour brush is now a brush's own gradient (`brush.paint`): `behavior.multicolor` is still accepted on input and in old documents and presets, converted to the gradient that paints the same pixels, and reported back as a read-only view when the gradient has a multi-colour equivalent. New agent tools: `set_paint` (both editors), `get_paint` (image editor); `paint_stroke` takes `paint`, `set_brush` takes `paint`, `get_brush` returns `paint` and `strokePaint`, `add_swatch` takes `paint`. React and Svelte add `PaintGradientEditor` to the colour panel, the brush panel (replacing the multi-colour controls) and the image editor's brush options.
+
+- b89d301: Wet media: Engine B, a WebGPU accelerator for large wet areas. With `navigator.gpu` and at least 16 wet tiles (256 px), the wet step and the display shading also run in WebGPU compute shaders on the CPU engine's tile layout, and every stale tile is shaded at once instead of in main-thread JavaScript. Between strokes the GPU runs up to 16 steps ahead within the batch the CPU is computing, so large washes keep moving on screen. The CPU engine stays the authority: drying, saving, export and replay are byte-identical with the GPU on or off, and the display stays within 1/255. New in `/paint`: `createWetGpuEngine`, `wetGpuSupport`, `WetGpuEngine`, `WetWorld.attachGpu` and `displayGpu`. New in the paint editor: the `gpu` and `gpuMinTiles` wet options, `setWetEngine`, `wetEngine`, `engine` in `wetState`, `wetEngineSummary`, and the `set_wet_engine` agent tool. React and Svelte `WetPanel` get an engine select (GPU for large washes, or CPU only) and a status line.
+
+## 0.122.0
+
+### Minor Changes
+
+- ef69e0c: Image editor at 16 and 32 bits: layer filters (develop, blur) and layer effects now composite in float in merges, `compositeDeepPixels` and the PSD merged image, instead of being drawn at 8 bits. `compositeLayerEffects` accepts float buffers, and new float filters are `applyProcess2Float`, `applyBoxBlurFloat` and `runLayerFiltersFloat`. Groups with effects and legacy-process develop filters still render at 8 bits.
+
 ## 0.121.0
 
 ### Minor Changes

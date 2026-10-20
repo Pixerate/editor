@@ -226,7 +226,26 @@ easing applies to the segment leaving a keyframe. Animatable properties: `x`, `y
 | `canvas.animation.previousKeyframe` | Jump the playhead to the previous keyframe. |
 | `canvas.animation.exportCss` | Read-only: CSS `@keyframes` for `nodeId`'s animation, as `{ css, exact }`. `exact: false` means some tracks were sampled (OKLab colour tweens, `x` / `y` with different timing, motion paths). |
 
+### Provider effects
+
+These tools come from `createCanvasEffectsToolProvider`. They work once the host registers an
+effects provider (for example Flair); without one the read tools say so and the write tools refuse.
+
+| Tool | Use it to |
+| --- | --- |
+| `search_effects` | Find effects: use `generator` for fills, `overlay`, `title` or `interactive` for overlays, and `transition` for scene transitions. |
+| `describe_effect` | Read an effect's controls, ranges, defaults and presets before applying it. |
+| `list_applied_effects` | List the shape nodes that carry effects, with each effect's role (fill or overlay), opacity and values. |
+| `apply_effect` | Put an effect on a shape node: a generator fills the shape (clipped to its outline), anything else draws over its box. This replaces any effect already there. Returns the effect. |
+| `update_effect` | Change a node's effect (`effect` is "effect"): `values` (`null` resets a control), `opacity`, and `enabled` (false holds the first frame). |
+| `remove_effect` | Take the effect off a node. |
+| `set_canvas_effect_mode` | Switch a node's effect between `fill` and `overlay`. |
+| `list_scene_transitions` | List the Scenes in order, each with the transition played when moving to it. |
+| `set_scene_transition` | Set (or with `effect` null, remove) the transition effect played when moving to a scene, with its `duration` in ms. |
+
 ## Pitfalls
+
+- **A shape node holds one effect.** `apply_effect` replaces the effect that is there. Effects draw on shape nodes only (nodes with `data.shape`).
 
 - **Brushes are dry only.** Wet presets (watercolour, gouache, wet oils), mixer, blender, smudge and
   eraser presets are refused: wet paint needs an area to flow in, and the others need paint under

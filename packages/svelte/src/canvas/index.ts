@@ -232,6 +232,9 @@ export {
 } from '@pixerate/editor/canvas';
 
 export { default as ShapeNode } from './ShapeNode.svelte';
+export { default as CanvasNodeEffectLayer } from './CanvasNodeEffectLayer.svelte';
+export { default as CanvasEffectsPanel } from './CanvasEffectsPanel.svelte';
+export * from './canvasEffects.svelte.js';
 export { setShapeNodeZoom, getShapeNodeZoom, createCanvasBrushes } from './shapeBrushstroke.svelte.js';
 
 // Shape nodes and boolean operations (Unite / Intersect / Subtract / Exclude / Divide)

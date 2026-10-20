@@ -522,6 +522,49 @@ export const ANIMATION_SCRIPTS: AgentScript[] = [
 
 export const IMAGE_SCRIPTS: AgentScript[] = [
   {
+    id: "image-effects-flair",
+    prompt: "Give the photo a film look with Flair, plus an aurora wash and a vignette",
+    steps: [
+      { say: "Searching Flair's catalog for a film look.", tool: "imagefx__search_effects", args: { query: "film", use: "filter" } },
+      { say: "Reading its controls: tint, grain, halation, vignette.", tool: "imagefx__describe_effect", args: { effect: "film-look" } },
+      {
+        say: "Film look on the photo as a smart filter, so it stays editable (the layer becomes a smart object in the same undo step).",
+        tool: "imagefx__apply_effect",
+        args: { target: "background", effect: "film-look", values: { uTint: "#ffe2c0", uGrain: 0.1, uHalation: 0.35 } },
+        open: "Layers",
+      },
+      {
+        say: "An aurora on its own layer, soft-light at half strength, to wash the sky.",
+        tool: "imagefx__add_effect_layer",
+        args: { effect: "aurora", values: { uIntensity: 0.8 }, name: "Aurora wash", blend: "soft-light", opacity: 0.5 },
+      },
+      { say: "A vignette with grain on top.", tool: "imagefx__add_effect_layer", args: { effect: "vignette-grain", values: { uStrength: 0.5 }, name: "Vignette" } },
+      { say: "Checking what is applied.", tool: "imagefx__list_applied_effects", args: {} },
+      { say: "Rendering a preview to check it.", tool: "image__render_preview", args: { maxSide: 360 } },
+    ],
+  },
+  {
+    id: "image-effects",
+    prompt: "Add a colour wash and a lower-third bar from the effects library",
+    steps: [
+      { say: "Looking for generators in the effects provider.", tool: "imagefx__search_effects", args: { use: "generator" } },
+      { say: "Reading the gradient's controls.", tool: "imagefx__describe_effect", args: { effect: "fake.gradient" } },
+      {
+        say: "A sunset gradient as its own layer, soft-light at half strength, so it washes the photo without hiding it.",
+        tool: "imagefx__add_effect_layer",
+        args: { effect: "fake.gradient", values: { from: "#f97316", to: "#7c3aed", angle: 45 }, name: "Sunset wash", blend: "soft-light", opacity: 0.5 },
+        open: "Layers",
+      },
+      {
+        say: "A lower-third bar on top, fully slid in.",
+        tool: "imagefx__add_effect_layer",
+        args: { effect: "fake.bar", values: { color: "#0ea5e9", height: 0.1 }, time: 2000, name: "Lower third" },
+      },
+      { say: "Checking what is applied.", tool: "imagefx__list_applied_effects", args: {} },
+      { say: "Rendering a preview to check it.", tool: "image__render_preview", args: { maxSide: 360 } },
+    ],
+  },
+  {
     id: "image-grade",
     prompt: "Give the photo a warm, punchy grade",
     steps: [
@@ -747,6 +790,67 @@ const clipTarget = (id: string) => ({ selector: `[data-clip="${id}"]` });
 
 export const VIDEO_SCRIPTS: AgentScript[] = [
   {
+    id: "video-effects-flair",
+    prompt: "Give the sunrise a film look with Flair, dissolve into the ocean, and flare the ending",
+    steps: [
+      { say: "Searching Flair's catalog for a film look.", tool: "videofx__search_effects", args: { query: "film", use: "filter" } },
+      { say: "Reading its controls: tint, grain, halation, vignette.", tool: "videofx__describe_effect", args: { effect: "film-look" } },
+      {
+        say: "Film look on the sunrise shot, warm and grainy.",
+        tool: "videofx__apply_effect",
+        args: { target: "shot-1", effect: "film-look", values: { uTint: "#ffd9a8", uGrain: 0.12 } },
+        target: clipTarget("shot-1"),
+      },
+      {
+        say: "Closing the vignette in over the shot with keyframes.",
+        tool: "videofx__set_video_effect_keyframes",
+        args: { clip: "shot-1", effect: "fx1", control: "uVignette", keys: [{ t: 0, v: 0 }, { t: 3500, v: 0.7, ease: "ease-in" }] },
+        target: clipTarget("shot-1"),
+      },
+      {
+        say: "A pixel dissolve into the ocean instead of the crossfade.",
+        tool: "videofx__set_video_effect_transition",
+        args: { clip: "shot-2", effect: "transition-pixel-dissolve", duration: 800, values: { uMaxBlock: 32 } },
+        target: clipTarget("shot-2"),
+      },
+      {
+        say: "A lens flare over the last two seconds, on the titles track.",
+        tool: "videofx__add_video_effect_clip",
+        args: { track: "titles", effect: "lens-flare", start: 10000, duration: 2000, name: "Flare" },
+      },
+      { say: "Listing what is applied now.", tool: "videofx__list_applied_effects", args: {} },
+      { say: "Playing the dissolve.", tool: "video__seek_video", args: { time: 3200, play: true }, target: clipTarget("shot-2") },
+    ],
+  },
+  {
+    id: "video-effects",
+    prompt: "Give the sunrise a warm tint and use an effect transition into the ocean",
+    steps: [
+      { say: "Searching the effects provider for filters.", tool: "videofx__search_effects", args: { use: "filter" } },
+      { say: "Reading the tint's controls: a colour and an amount from 0 to 1.", tool: "videofx__describe_effect", args: { effect: "fake.tint" } },
+      {
+        say: "A warm tint on the sunrise shot, at a third.",
+        tool: "videofx__apply_effect",
+        args: { target: "shot-1", effect: "fake.tint", values: { color: "#ff7a1a", amount: 0.35 } },
+        target: clipTarget("shot-1"),
+      },
+      {
+        say: "Easing it in over the first two seconds with keyframes.",
+        tool: "videofx__set_video_effect_keyframes",
+        args: { clip: "shot-1", effect: "fx1", control: "amount", keys: [{ t: 0, v: 0 }, { t: 2000, v: 0.35, ease: "ease-out" }] },
+        target: clipTarget("shot-1"),
+      },
+      {
+        say: "Swapping the crossfade into the ocean for the provider's crossfade transition.",
+        tool: "videofx__set_video_effect_transition",
+        args: { clip: "shot-2", effect: "fake.crossfade", duration: 800, values: { curve: "smooth" } },
+        target: clipTarget("shot-2"),
+      },
+      { say: "Listing what is applied now.", tool: "videofx__list_applied_effects", args: {} },
+      { say: "Playing the transition.", tool: "video__seek_video", args: { time: 3200, play: true }, target: clipTarget("shot-2") },
+    ],
+  },
+  {
     id: "video-tighten",
     prompt: "Cut the ocean shot to 2 seconds and add an end card",
     steps: [
@@ -822,6 +926,55 @@ function ring(cx: number, cy: number, r: number, n = 48) {
 }
 
 export const PAINT_SCRIPTS: AgentScript[] = [
+  {
+    id: "paint-effects-flair",
+    prompt: "Print the sheet with a Flair gradient, light the hills with Flair and add film grain",
+    steps: [
+      { say: "Searching Flair for a soft gradient to print the sheet with.", tool: "paintfx__search_effects", args: { query: "gradient", use: "generator" } },
+      {
+        say: "A grainy gradient as effect paper at 60%: multiplied, so the paper's own grain still shows.",
+        tool: "paintfx__set_paper_effect",
+        args: { effect: "grainy-gradient", opacity: 0.6 },
+        open: "Effects",
+      },
+      { say: "Hills in pastel, rubbed into the grain.", tool: "paint__add_layer", args: { name: "Hills" }, as: "hills", open: "Layers" },
+      { tool: "paint__fill_layer", args: (ctx) => ({ layerId: ctx.results.hills.id, color: "#1e3a8a", grain: 0.6, pressure: 0.5 }) },
+      { say: "Looking for light that suits dried pastel.", tool: "paintfx__search_effects", args: { query: "light", use: "filter" } },
+      {
+        say: "A rim light baked onto the dried pastel at 70%.",
+        tool: "paintfx__apply_effect",
+        args: (ctx) => ({ target: ctx.results.hills.id, effect: "rim-light", opacity: 0.7 }),
+        open: "Effects",
+      },
+      { say: "Film grain and a vignette on their own effect layer.", tool: "paintfx__add_effect_layer", args: { effect: "vignette-grain", name: "Vignette" } },
+      { say: "Checking what is applied.", tool: "paintfx__list_applied_effects", args: {} },
+      { say: "Rendering a preview to check it.", tool: "paint__render_preview", args: { maxSide: 420 } },
+    ],
+  },
+  {
+    id: "paint-effects",
+    prompt: "Print the sheet with a gradient, glaze the hills with warm light and add a caption",
+    steps: [
+      { say: "Looking for generators in the effects provider.", tool: "paintfx__search_effects", args: { use: "generator" } },
+      {
+        say: "A pale sunset gradient as effect paper: multiplied over the sheet, so the paper's grain still shows.",
+        tool: "paintfx__set_paper_effect",
+        args: { effect: "fake.gradient", values: { from: "#fde68a", to: "#fbcfe8", angle: 90 } },
+        open: "Effects",
+      },
+      { say: "Hills in pastel, rubbed into the grain.", tool: "paint__add_layer", args: { name: "Hills" }, as: "hills", open: "Layers" },
+      { tool: "paint__fill_layer", args: (ctx) => ({ layerId: ctx.results.hills.id, color: "#1e3a8a", grain: 0.6, pressure: 0.5 }) },
+      {
+        say: "Warm evening light baked onto the dried pastel.",
+        tool: "paintfx__apply_effect",
+        args: (ctx) => ({ target: ctx.results.hills.id, effect: "fake.tint", values: { color: "#f59e0b", amount: 0.5 }, opacity: 0.8 }),
+        open: "Effects",
+      },
+      { say: "A caption bar on its own effect layer.", tool: "paintfx__add_effect_layer", args: { effect: "fake.bar", values: { color: "#0ea5e9", height: 0.08 }, time: 2000, name: "Caption" } },
+      { say: "Checking what is applied.", tool: "paintfx__list_applied_effects", args: {} },
+      { say: "Rendering a preview to check it.", tool: "paint__render_preview", args: { maxSide: 420 } },
+    ],
+  },
   {
     id: "paint-landscape",
     prompt: "Block in a sunset landscape in pastel",

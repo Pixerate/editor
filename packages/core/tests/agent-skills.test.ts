@@ -34,16 +34,16 @@ import {
 	createCanvasAnimationCommands,
 	type CommandSpec
 } from '../src/commands';
-import { ImageEditorController, createImageEditorToolProvider } from '../src/image-editor';
-import { PaintEditorController, createPaintEditorToolProvider } from '../src/paint-editor';
+import { ImageEditorController, createImageEditorToolProvider, createImageEffectsToolProvider } from '../src/image-editor';
+import { PaintEditorController, createPaintEditorToolProvider, createPaintEffectsToolProvider } from '../src/paint-editor';
 import { createGenerationToolProvider, createGenerationHistoryToolProvider, createGenerationRecordStore } from '../src/generation';
 import { createMemoryStorage } from '../src/persistence';
 import { ChartController, createChartToolProvider, createOfficeChartToolProvider, createChartCommands } from '../src/chart';
 import { DiagramController, createDiagramToolProvider } from '../src/diagram';
-import { createCanvasCaptureToolProvider } from '../src/canvas';
-import { AnimationEditorController, createAnimationEditorToolProvider } from '../src/animation-editor';
-import { VideoEditorController, createVideoEditorToolProvider } from '../src/video-editor';
-import { VectorEditorController, createVectorCommands } from '../src/vector';
+import { createCanvasCaptureToolProvider, createCanvasEffectsController, createCanvasEffectsToolProvider } from '../src/canvas';
+import { AnimationEditorController, createAnimationEditorToolProvider, createAnimationEffectsToolProvider } from '../src/animation-editor';
+import { VideoEditorController, createVideoEditorToolProvider, createVideoEffectsToolProvider } from '../src/video-editor';
+import { VectorEditorController, createVectorEffectsToolProvider, createVectorCommands } from '../src/vector';
 import { createParameterCommands } from '../src/parameters';
 import { createRichTextPreset, SpreadsheetController, createFindReplaceCommands, createTableCommands } from '../src';
 
@@ -108,6 +108,7 @@ function expectedBySkill(): Record<string, string[]> {
 		'pixerate-canvas': [
 			...toolNames(editorMcp, (n) => n.startsWith('canvas_') || shared.includes(n)),
 			...toolNames(createCanvasComponentToolProvider({ addVariant: () => {}, removeVariant: () => {} } as any)),
+			...toolNames(createCanvasEffectsToolProvider(createCanvasEffectsController({ getNodes: () => [], setNodes: () => {} }))),
 			...toolNames(createCanvasCaptureToolProvider({ element: null, getViewport: () => ({ x: 0, y: 0, zoom: 1 }), getNodes: () => [] })),
 			...commandIds(createArrangeCommands(stub)),
 			...commandIds(createShapeCommands(stub)),
@@ -115,7 +116,7 @@ function expectedBySkill(): Record<string, string[]> {
 			...commandIds(createComponentCommands(stub)),
 			...commandIds(createCanvasAnimationCommands(stub))
 		],
-		'pixerate-vector': commandIds(createVectorCommands(new VectorEditorController())),
+		'pixerate-vector': [...commandIds(createVectorCommands(new VectorEditorController())), ...toolNames(createVectorEffectsToolProvider(new VectorEditorController(), { id: 'vector-effects' }))],
 		'pixerate-chart': [
 			...toolNames(createChartToolProvider(new ChartController(), { id: 'chart' })),
 			...toolNames(createOfficeChartToolProvider({ id: 'office', files: () => [], controller: new ChartController() })),
@@ -124,10 +125,22 @@ function expectedBySkill(): Record<string, string[]> {
 		'pixerate-diagram': toolNames(
 			createDiagramToolProvider(new DiagramController(), { id: 'diagram', renderSvg: () => ({ svg: '<svg/>', width: 1, height: 1 }) })
 		),
-		'pixerate-image-editor': toolNames(createImageEditorToolProvider(new ImageEditorController(), { id: 'img' })),
-		'pixerate-paint-editor': toolNames(createPaintEditorToolProvider(new PaintEditorController({ width: 64, height: 64 }), { id: 'paint' })),
-		'pixerate-animation-editor': toolNames(createAnimationEditorToolProvider(new AnimationEditorController(), { id: 'animation' })),
-		'pixerate-video-editor': toolNames(createVideoEditorToolProvider(new VideoEditorController(), { id: 'video' })),
+		'pixerate-image-editor': [
+			...toolNames(createImageEditorToolProvider(new ImageEditorController(), { id: 'img' })),
+			...toolNames(createImageEffectsToolProvider(new ImageEditorController(), { id: 'img-effects' }))
+		],
+		'pixerate-paint-editor': [
+			...toolNames(createPaintEditorToolProvider(new PaintEditorController({ width: 64, height: 64 }), { id: 'paint' })),
+			...toolNames(createPaintEffectsToolProvider(new PaintEditorController({ width: 64, height: 64 }), { id: 'paint-effects' }))
+		],
+		'pixerate-animation-editor': [
+			...toolNames(createAnimationEditorToolProvider(new AnimationEditorController(), { id: 'animation' })),
+			...toolNames(createAnimationEffectsToolProvider(new AnimationEditorController(), { id: 'animation-effects' }))
+		],
+		'pixerate-video-editor': [
+			...toolNames(createVideoEditorToolProvider(new VideoEditorController(), { id: 'video' })),
+			...toolNames(createVideoEffectsToolProvider(new VideoEditorController(), { id: 'video-effects' }))
+		],
 		'pixerate-generation': [
 			...toolNames(createGenerationToolProvider({ models: [], generate: () => ({}), estimate: () => ({}) } as any)),
 			...toolNames(createGenerationHistoryToolProvider({ store: createGenerationRecordStore({ storage: createMemoryStorage() }) }))
@@ -155,20 +168,28 @@ const FACTORIES: Record<string, string> = {
 	createComponentCommands: 'pixerate-canvas',
 	createCanvasAnimationCommands: 'pixerate-canvas',
 	createVectorCommands: 'pixerate-vector',
+	createVectorEffectsToolProvider: 'pixerate-vector',
 	createChartToolProvider: 'pixerate-chart',
 	createOfficeChartToolProvider: 'pixerate-chart',
 	createChartCommands: 'pixerate-chart',
 	createDiagramToolProvider: 'pixerate-diagram',
 	createImageEditorToolProvider: 'pixerate-image-editor',
+	createImageEffectsToolProvider: 'pixerate-image-editor',
 	createPaintEditorToolProvider: 'pixerate-paint-editor',
+	createPaintEffectsToolProvider: 'pixerate-paint-editor',
 	createAnimationEditorToolProvider: 'pixerate-animation-editor',
+	createAnimationEffectsToolProvider: 'pixerate-animation-editor',
 	createVideoEditorToolProvider: 'pixerate-video-editor',
+	createVideoEffectsToolProvider: 'pixerate-video-editor',
+	// The shared effect tools; each editor that hosts them documents them in its own skill.
+	createEffectToolProvider: 'pixerate-video-editor, pixerate-image-editor, pixerate-animation-editor, pixerate-vector, pixerate-canvas, pixerate-paint-editor',
 	createGenerationToolProvider: 'pixerate-generation',
 	createGenerationHistoryToolProvider: 'pixerate-generation',
 	createParameterCommands: 'pixerate-parameters',
 	// Generic `capture_view`; hosts document it in the skill for the surface they capture.
 	createCaptureToolProvider: 'pixerate-canvas, pixerate-image-editor',
-	createCanvasCaptureToolProvider: 'pixerate-canvas'
+	createCanvasCaptureToolProvider: 'pixerate-canvas',
+	createCanvasEffectsToolProvider: 'pixerate-canvas'
 };
 
 function walk(dir: string): string[] {

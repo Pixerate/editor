@@ -22,14 +22,14 @@ export interface PaperNode extends CompositorLayer {
   light?: { azimuth: number; elevation: number };
 }
 
-/** A view-only RGBA image under the paint (the tracing image), drawn at its opacity. */
+/** An RGBA image under the paint (the tracing image, effect paper), drawn at its opacity and blend. */
 export interface ImageNode extends CompositorLayer {
   type: 'image';
   id: string;
   name: string;
   visible: boolean;
   opacity: number;
-  blend: 'normal';
+  blend: string;
   /** Canvas-sized RGBA. */
   image: { width: number; height: number; data: Uint8ClampedArray };
   /** Changes when the pixels change. */
@@ -40,6 +40,7 @@ export type ViewLayer = PaintLayer | PaperNode | ImageNode;
 
 export const PAPER_NODE_ID = '__paper';
 export const TRACING_NODE_ID = '__tracing';
+export const PAPER_EFFECT_NODE_ID = '__paper_effect';
 
 export function paperKey(p: PaperSettings, light?: { azimuth: number; elevation: number }): string {
   const metal = p.metallic ?? 0;

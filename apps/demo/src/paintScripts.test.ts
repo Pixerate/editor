@@ -1,19 +1,24 @@
 import { describe, expect, it } from "vitest";
 import { ToolRegistry } from "@pixerate/editor/tools";
-import { createPaintEditorToolProvider, PaintEditorController } from "@pixerate/editor/paint-editor";
+import { createFakeEffectProvider } from "@pixerate/editor/effects";
+import { createPaintEditorToolProvider, createPaintEffectsToolProvider, PaintEditorController } from "@pixerate/editor/paint-editor";
 import { runAgentScript } from "./agentScript";
 import { PAINT_SCRIPTS } from "./agentScripts";
 
 // The Paint tab's scripts, replayed against the tab's canvas through the real tools.
 function setup() {
   const controller = new PaintEditorController({ width: 1200, height: 800, paper: "cold-pressed" });
+  // The tab's effects provider: the built-in test effects (Flair needs a page to render; its script is checked in the browser).
+  controller.setEffectsProvider(createFakeEffectProvider());
   const registry = new ToolRegistry();
   registry.register(createPaintEditorToolProvider(controller, { id: "paint", namespace: "paint" }));
+  registry.register(createPaintEffectsToolProvider(controller, { id: "paint-effects", namespace: "paintfx" }));
   return { controller, registry };
 }
 
 describe("paint agent scripts", () => {
-  it.each(PAINT_SCRIPTS.map((s) => [s.id, s] as const))("%s runs to the end", async (_id, script) => {
+  // Flair renders on a GPU canvas, which Node does not have: its script is left to the browser.
+  it.each(PAINT_SCRIPTS.filter((s) => s.id !== "paint-effects-flair").map((s) => [s.id, s] as const))("%s runs to the end", async (_id, script) => {
     const { registry } = setup();
     const errors: string[] = [];
     const { ok } = await runAgentScript(registry, script, { control: { speed: Infinity, stopped: false }, onEvent: (e) => e.type === "error" && errors.push(e.message) });
