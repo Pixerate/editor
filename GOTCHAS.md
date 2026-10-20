@@ -2566,3 +2566,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: On concave outlines (an L, a star), some side faces of an extrusion were drawn over faces that should cover them.
 - **Root Cause**: Painter's order by each face's midpoint depth is only right when faces don't overlap unevenly. Two faces overlap only over the viewing rays (lines along the extrusion, or rays to the vanishing point) that cross both edges, and their order there can differ from the order of their middles.
 - **Solution / Workaround**: `vectorExtrudeFaces` compares each pair of faces at a ray inside their shared range: the edge further along the ray is in front. It then sorts topologically, using the midpoint order to break ties. The edges of a simple outline don't cross, so the relation has no cycles. It's O(n²) in faces, which is fine for flattened outlines.
+
+### [core/vector] A Perspective Plane Map Has A Horizon: Points Beyond It Come Back Mirrored
+
+- **Issue / Symptom**: Art attached to a perspective plane far past a vanishing point came out flipped on the other side of the page.
+- **Root Cause**: A projective map divides by `w = h6·x + h7·y + 1`. Where `w` passes 0 (the plane's horizon) points go to infinity, and beyond it they come back on the other side, mirrored.
+- **Solution / Workaround**: `vectorPerspectiveFlatToPlane` / `vectorPerspectivePlaneToFlat` return null where `w` is not positive. `vectorPerspectiveMapPath` returns null if any sample does, and attaching refuses with a message. Grid lines are cut where `w` falls below 0.05.

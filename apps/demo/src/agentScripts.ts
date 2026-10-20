@@ -437,6 +437,15 @@ export const VECTOR_SCRIPTS: AgentScript[] = [
     ],
   },
   {
+    id: "vector-perspective",
+    prompt: "Put a sign on a wall in perspective",
+    steps: [
+      { say: "A two-point perspective grid: vanishing points beyond the page on the horizon, the origin near the bottom.", ...command("vector.setPerspective", { vanishingPoints: [{ x: -200, y: 140 }, { x: 800, y: 140 }], origin: { x: 300, y: 330 }, gridSize: 20, extent: 10 }) },
+      { say: "A flat sign drawn just right of the origin…", ...command("vector.addShape", { kind: "rect", x: 310, y: 240, width: 160, height: 70, fill: "#f97316", stroke: "#7c2d12", strokeWidth: 3, name: "Sign" }), as: "sign" },
+      { say: "…laid onto the right wall: it recedes toward the right vanishing point.", ...commandWith("vector.attachToPerspective", (r) => ({ ids: [r("sign").id], plane: "right" })) },
+    ],
+  },
+  {
     id: "vector-symmetry",
     prompt: "Draw a mandala in the sky with live symmetry",
     steps: [

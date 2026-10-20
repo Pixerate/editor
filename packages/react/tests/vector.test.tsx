@@ -1250,3 +1250,29 @@ describe("corner smoothing (react)", () => {
     expect((c.getNode("a") as VectorPathNode).subpaths[0].anchors[0].corner).toEqual({ radius: 10, smoothing: 0.6 });
   });
 });
+
+describe("VectorPerspectivePanel (react)", () => {
+  it("adds a grid, draws on a plane, and the canvas shows the grid", async () => {
+    const { VectorPerspectivePanel } = await import("../src/vector");
+    const c = new VectorEditorController({ document: doc() });
+    await act(async () =>
+      root.render(
+        <>
+          <VectorPerspectivePanel controller={c} />
+          <VectorCanvas controller={c} />
+        </>,
+      ),
+    );
+    await act(async () => (container.querySelector('[data-vector-perspective-preset="2"]') as HTMLButtonElement).click());
+    expect(c.getPerspective()?.vanishingPoints).toHaveLength(2);
+    const select = container.querySelector('select[aria-label="Draw on plane"]') as HTMLSelectElement;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(select, "left");
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(c.getState().perspectivePlane).toBe("left");
+    expect(container.querySelector('[data-vector-perspective-plane="left"][data-active]')).not.toBeNull();
+    await act(async () => (Array.from(container.querySelectorAll("button")).find((b) => b.textContent?.trim() === "Remove") as HTMLButtonElement).click());
+    expect(c.getPerspective()).toBeNull();
+  });
+});

@@ -762,7 +762,31 @@ export interface VectorDocument {
 	constraints?: VectorConstraint[];
 	/** Named values the constraints' expressions use. */
 	parameters?: VectorParameter[];
+	/** The perspective grid art can be drawn on or attached to (see `VectorPerspective`). */
+	perspective?: VectorPerspective | null;
 }
+
+/**
+ * A perspective grid (CorelDRAW's Perspective Drawing): 1, 2 or 3 vanishing points and the
+ * grid's origin (where its planes meet, on the ground in front of the viewer). With one point
+ * the planes are the `floor`, a `side` wall receding to it and the `front`; with two, the `floor`
+ * and the `left` and `right` walls, receding to the first and second points; a third point is
+ * where the walls' verticals meet (a bird's or worm's eye view).
+ */
+export interface VectorPerspective {
+	vanishingPoints: Vec2[];
+	origin: Vec2;
+	/** Grid cell size at the origin, in document units (default 20). */
+	gridSize?: number;
+	/** Cells drawn out from the origin along each axis (default 12). */
+	extent?: number;
+	/** Whether the grid is shown on the canvas (default true). */
+	visible?: boolean;
+}
+
+/** A plane of a perspective grid. */
+export type VectorPerspectivePlane = 'floor' | 'left' | 'right' | 'side' | 'front';
+export const VECTOR_PERSPECTIVE_PLANES: readonly VectorPerspectivePlane[] = ['floor', 'left', 'right', 'side', 'front'];
 
 /**
  * Constraint kinds (CAD-style parametric drawing). Geometric: `coincident` (two points, a point on
