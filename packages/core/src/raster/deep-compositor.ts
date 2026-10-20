@@ -9,11 +9,13 @@
  * bits (as Photoshop blends in each mode). Results come back in that space.
  *
  * What it delegates to the 8-bit compositor it wraps:
- * - mask coverage (density, feather and parametric masks), which is coverage, not colour;
- * - layers with layer effects or pixel filters, and content layers the editor draws itself
- *   (annotations): each is rendered alone at 8 bits, converted, and blended in float with its
- *   blend mode and opacity. Such layers keep 8-bit precision (and an effect's own blend mode sees
- *   a transparent backdrop); everything else keeps the samples' full depth.
+ * - mask coverage (density, feather and parametric masks: deep masks are read at depth);
+ * - the effect maps of layers with effects (built from the 8-bit shape); the effects themselves
+ *   composite in float over the deep content (`runEffects`), and pixel filters run in float when
+ *   the profile gives `pixelFiltersDeep`;
+ * - groups with effects, filters it cannot run in float, and content layers the editor draws
+ *   itself (annotations): each is rendered alone at 8 bits, converted, and blended in float with
+ *   its blend mode and opacity.
  */
 
 import { blendRgb, mixPigmentRgb, type BlendMode } from './blend';

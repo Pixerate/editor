@@ -198,8 +198,9 @@ export class LayerCompositor extends RasterCompositor<ImageLayer, CompositorSour
 
 /**
  * The composite of an image editor stack at 16 or 32 bits (see `raster/deep-compositor`): float
- * RGBA over `rect`, sRGB-encoded 0..1 at 16 bits, linear light at 32. Adjustment layers run in
- * float; layers with effects or filters and annotation layers are drawn at 8 bits.
+ * RGBA over `rect`, sRGB-encoded 0..1 at 16 bits, linear light at 32. Adjustment layers, layer
+ * filters and layer effects run in float; groups with effects, legacy-process develop filters and
+ * annotation layers are drawn at 8 bits.
  */
 export function compositeDeep(layers: readonly ImageLayer[], rect: RasterRect, sources: CompositorSources, depth: 16 | 32): Float32Array {
   const deep = new DeepCompositor(new LayerCompositor(), PHOTO_PROFILE, {
