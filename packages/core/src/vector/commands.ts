@@ -17,6 +17,10 @@ import { isValidVectorMesh, VECTOR_WARP_STYLES } from './warp.js';
 import { isVectorMaskGroup, vectorMaskSummary, type VectorMaskSummary } from './mask.js';
 import { isVectorFrame } from './frames.js';
 import { vectorPolarAngles } from './snap.js';
+import { sanitizeVectorShadedPaint } from './shading.js';
+import type { VectorFreeformPoint, VectorPathNode } from './types.js';
+import { VECTOR_TRACE_MAX_PIXELS, type VectorTraceOptions } from './trace.js';
+import { decodePng, isPng, parseDataUrl } from '../raster/png.js';
 import { VECTOR_CONNECTOR_ROUTES, VECTOR_CONNECTOR_SIDES, type VectorConnector, type VectorConnectorEnd, type VectorConnectorRoute } from './types.js';
 import { VECTOR_HORIZONTAL_RESIZING, VECTOR_VERTICAL_RESIZING, type VectorFrame, type VectorHorizontalResizing, type VectorResizing, type VectorVerticalResizing } from './types.js';
 import { layoutVectorText, vectorTextFamilies, vectorTextHasOutlines } from './text.js';
@@ -223,6 +227,8 @@ const STYLE_PROPS = {
 } as const;
 
 const checkPaint = (paint: unknown, where: string): VectorPaint => {
+	if (paint && typeof paint === 'object' && ((paint as { type?: string }).type === 'mesh' || (paint as { type?: string }).type === 'freeform'))
+		return sanitizeVectorShadedPaint(paint) ?? fail(`${where} is not a valid mesh or freeform gradient (see vector.setMeshGradient / vector.setFreeformGradient).`);
 	if (paint && typeof paint === 'object') return sanitizeVectorGradient(paint) ?? fail(`${where} is not a valid gradient: give a type and at least one stop { offset, color }.`);
 	return paint as VectorPaint;
 };
@@ -1230,6 +1236,241 @@ export function createVectorCommands(controller: VectorEditorController, options
 			issues: state.constraintIssues
 		};
 	};
+	const traceCommands = (): CommandSpec[] => [
+		{
+			...base,
+			id: `${prefix}traceImage`,
+			label: 'Image Trace…',
+			keywords: ['trace', 'image trace', 'live trace', 'vectorize', 'bitmap to vector', 'png to svg', 'autotrace', 'posterize'],
+			description:
+				'Traces a PNG (base64 data URL) into vector paths and adds them as one group: `threshold` mode makes one even-odd path where the image is dark (or opaque with channel alpha); `color` mode makes a stacked path per colour (median-cut to `colors`, the most common at the bottom). Placed with its top-left at x, y and `width` wide (default one unit per pixel). One undo step. Returns { id, paths: [{ id, name, fill, subpaths }] }.',
+			params: {
+				type: 'object',
+				properties: {
+					image: { type: 'string', description: 'The image as a data:image/png;base64,… URL (up to 4 million pixels).' },
+					mode: { type: 'string', enum: ['threshold', 'color'], description: 'threshold (one colour, default) or color (a path per colour).' },
+					channel: { type: 'string', enum: ['luminance', 'alpha'], description: 'Threshold mode: trace dark pixels (luminance, default) or opaque ones (alpha).' },
+					threshold: { type: 'number', minimum: 0, maximum: 1, description: 'Threshold mode: inside where darkness (or alpha) reaches this (default 0.5).' },
+					color: { type: 'string', description: 'Threshold mode: the fill (default black).' },
+					colors: { type: 'integer', minimum: 2, maximum: 32, description: 'Colour mode: how many colours (default 6).' },
+					tolerance: { type: 'number', exclusiveMinimum: 0, description: 'How far the outline may stray from the pixels, in pixels (default 1; larger is simpler).' },
+					minArea: { type: 'number', minimum: 0, description: 'Drop shapes smaller than this many square pixels (default 10).' },
+					cornerRoundness: { type: 'number', minimum: 0, maximum: 1, description: '0: polygons with sharp corners; 1: smooth curves (default 0.5).' },
+					x: { type: 'number', description: 'Left edge in document units (default 0).' },
+					y: { type: 'number', description: 'Top edge in document units (default 0).' },
+					width: { type: 'number', exclusiveMinimum: 0, description: 'Width in document units (default: the image width in pixels).' },
+					name: { type: 'string', description: 'Group name (default "Image Trace").' }
+				},
+				required: ['image'],
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: { image: string } & VectorTraceOptions & { x?: number; y?: number; width?: number; name?: string }) => {
+				const { image, ...options } = params;
+				const parsed = parseDataUrl(image);
+				if (!parsed || !isPng(parsed.bytes)) fail('image must be a PNG data URL (data:image/png;base64,…).');
+				let decoded: { width: number; height: number; data: ArrayLike<number> };
+				try {
+					decoded = decodePng(parsed!.bytes, { maxPixels: VECTOR_TRACE_MAX_PIXELS });
+				} catch (e) {
+					return fail(`The PNG could not be read: ${(e as Error).message}`);
+				}
+				const r = controller.traceImage(decoded, options);
+				check(r);
+				return {
+					id: r.id,
+					paths: r.ids!.map((id) => {
+						const n = controller.getNode(id) as VectorPathNode;
+						return { id, name: n.name, fill: n.fill, subpaths: n.subpaths.length };
+					})
+				};
+			}
+		}
+	];
+
+	const shadingResult = (id: string) => ({ id, shading: controller.getShading(id) ?? fail(`"${id}" has no mesh or freeform fill.`) });
+	const COLOR = { type: 'string', description: 'A CSS colour.' } as const;
+	const FREEFORM_POINT = {
+		type: 'object',
+		properties: {
+			x: { type: 'number', description: 'Document units.' },
+			y: { type: 'number', description: 'Document units.' },
+			color: COLOR,
+			opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Opacity 0–1 (default 1).' },
+			spread: { type: 'number', minimum: 0, maximum: 1, description: 'Radius of pure colour round the point, as a fraction of half the shape\'s longer side (default 0).' }
+		},
+		required: ['x', 'y', 'color'],
+		additionalProperties: false
+	} as const;
+	const LINES = { type: 'array', items: { type: 'array', items: { type: 'integer', minimum: 0 }, minItems: 2 }, description: 'Lines, each the point indices (two or more) a smooth curve runs through; the colours flow along it.' } as const;
+	const shadingCommands = (): CommandSpec[] => [
+		{
+			...base,
+			id: `${prefix}getShading`,
+			label: 'Get Mesh or Freeform Gradient',
+			readOnly: true,
+			keywords: ['mesh', 'gradient mesh', 'freeform', 'freeform gradient', 'points'],
+			description:
+				'Returns a path\'s mesh or freeform fill with its points in document units: { id, shading } where shading is { type: "mesh", rows, columns, points (row by row), colors, opacities? } or { type: "freeform", points: [{ x, y, color, opacity?, spread? }], lines? }. Point indices are what the edit commands take.',
+			params: { type: 'object', properties: { id: { type: 'string', description: 'The path (from vector.list).' } }, required: ['id'], additionalProperties: false },
+			run: (_ctx: unknown, params: { id: string }) => shadingResult(params.id)
+		},
+		{
+			...base,
+			id: `${prefix}setMeshGradient`,
+			label: 'Create Gradient Mesh…',
+			keywords: ['mesh', 'gradient mesh', 'coons', 'patch', 'shading', 'realistic', 'smooth shading'],
+			description:
+				'Fills paths (`ids`, default the selection) with a gradient mesh over their bounds: rows × columns smooth patches whose points blend colours. Colour it with `colors` (one per point, (rows + 1) × (columns + 1), row by row) or the four `corners`, else the current fill colour, then move and recolour points with vector.setMeshPoint. One undo step. Returns { meshes: [{ id, shading }] }.',
+			params: {
+				type: 'object',
+				properties: {
+					ids: { ...IDS, description: 'Paths to fill (default: the selection).' },
+					rows: { type: 'integer', minimum: 1, maximum: 32, description: 'Patch rows.' },
+					columns: { type: 'integer', minimum: 1, maximum: 32, description: 'Patch columns.' },
+					colors: { type: 'array', items: COLOR, description: 'A colour per point, row by row ((rows + 1) × (columns + 1) of them).' },
+					corners: { type: 'array', items: COLOR, minItems: 4, maxItems: 4, description: 'Top-left, top-right, bottom-right and bottom-left colours, blended across.' }
+				},
+				required: ['rows', 'columns'],
+				additionalProperties: false
+			},
+			undoable: true,
+			enabled: enabledFor,
+			run: (_ctx: unknown, params: { ids?: string[]; rows: number; columns: number; colors?: string[]; corners?: [string, string, string, string] }) => {
+				const list = ids(params);
+				check(controller.setMeshGradient({ rows: params.rows, columns: params.columns, ...(params.colors ? { colors: params.colors } : {}), ...(params.corners ? { corners: params.corners } : {}) }, { ids: list }));
+				return { meshes: list.map(shadingResult) };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}setMeshPoint`,
+			label: 'Edit Mesh Point',
+			keywords: ['mesh', 'mesh point', 'colour', 'move point'],
+			description: 'Moves point `index` (row by row, from vector.getShading) of a path\'s gradient mesh to x, y (document units, both or neither) and / or sets its colour and opacity. One undo step. Returns { id, shading }.',
+			params: {
+				type: 'object',
+				properties: {
+					id: { type: 'string', description: 'The path.' },
+					index: { type: 'integer', minimum: 0, description: 'Point index, row by row.' },
+					x: { type: 'number', description: 'New position (document units).' },
+					y: { type: 'number', description: 'New position (document units).' },
+					color: COLOR,
+					opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Opacity 0–1.' }
+				},
+				required: ['id', 'index'],
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: { id: string; index: number; x?: number; y?: number; color?: string; opacity?: number }) => {
+				const { id, index, ...patch } = params;
+				if (!Object.keys(patch).length) fail('Pass at least one of x / y, color, opacity.');
+				check(controller.setMeshPoint(id, index, patch));
+				return shadingResult(id);
+			}
+		},
+		{
+			...base,
+			id: `${prefix}setFreeformGradient`,
+			label: 'Create Freeform Gradient…',
+			keywords: ['freeform', 'freeform gradient', 'colour points', 'shading', 'blend colours'],
+			description:
+				'Fills paths (`ids`, default the selection) with a freeform gradient: colour `points` placed anywhere (document units) blending into each other, with optional `lines` that carry colour along smooth curves. Without points, four or more are placed inside each path, coloured along `colors` (default its fill to white). One undo step. Returns { gradients: [{ id, shading }] }.',
+			params: {
+				type: 'object',
+				properties: {
+					ids: { ...IDS, description: 'Paths to fill (default: the selection).' },
+					points: { type: 'array', items: FREEFORM_POINT, description: 'The colour points (document units).' },
+					lines: LINES,
+					colors: { type: 'array', items: COLOR, description: 'Without points: colours the placed points take, first to last.' }
+				},
+				additionalProperties: false
+			},
+			undoable: true,
+			enabled: enabledFor,
+			run: (_ctx: unknown, params: { ids?: string[]; points?: VectorFreeformPoint[]; lines?: number[][]; colors?: string[] } | undefined) => {
+				const { ids: _i, ...input } = params ?? {};
+				const list = ids(params);
+				check(controller.setFreeformGradient(input, { ids: list }));
+				return { gradients: list.map(shadingResult) };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}addFreeformPoint`,
+			label: 'Add Freeform Point',
+			keywords: ['freeform', 'colour point', 'add point'],
+			description: 'Adds a colour point to a path\'s freeform gradient at x, y (document units), coloured `color` (default: the colour there now). One undo step. Returns { id, index, shading }.',
+			params: {
+				type: 'object',
+				properties: { id: { type: 'string', description: 'The path.' }, x: { type: 'number', description: 'Document units.' }, y: { type: 'number', description: 'Document units.' }, color: COLOR, opacity: FREEFORM_POINT.properties.opacity, spread: FREEFORM_POINT.properties.spread },
+				required: ['id', 'x', 'y'],
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: { id: string; x: number; y: number; color?: string; opacity?: number; spread?: number }) => {
+				const { id, ...point } = params;
+				const r = controller.addFreeformPoint(id, point);
+				check(r);
+				return { ...shadingResult(id), index: r.index };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}setFreeformPoint`,
+			label: 'Edit Freeform Point',
+			keywords: ['freeform', 'colour point', 'move point', 'spread'],
+			description: 'Changes point `index` (from vector.getShading) of a path\'s freeform gradient: x, y (document units, both or neither), color, opacity, spread. One undo step. Returns { id, shading }.',
+			params: {
+				type: 'object',
+				properties: {
+					id: { type: 'string', description: 'The path.' },
+					index: { type: 'integer', minimum: 0, description: 'Point index.' },
+					x: { type: 'number', description: 'New position (document units).' },
+					y: { type: 'number', description: 'New position (document units).' },
+					color: COLOR,
+					opacity: FREEFORM_POINT.properties.opacity,
+					spread: FREEFORM_POINT.properties.spread
+				},
+				required: ['id', 'index'],
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: { id: string; index: number; x?: number; y?: number; color?: string; opacity?: number; spread?: number }) => {
+				const { id, index, ...patch } = params;
+				if (!Object.keys(patch).length) fail('Pass at least one of x / y, color, opacity, spread.');
+				check(controller.setFreeformPoint(id, index, patch));
+				return shadingResult(id);
+			}
+		},
+		{
+			...base,
+			id: `${prefix}removeFreeformPoint`,
+			label: 'Remove Freeform Point',
+			keywords: ['freeform', 'colour point', 'delete point'],
+			description: 'Removes point `index` of a path\'s freeform gradient (never the last one); lines through it close up and later indices shift down. One undo step. Returns { id, shading }.',
+			params: { type: 'object', properties: { id: { type: 'string', description: 'The path.' }, index: { type: 'integer', minimum: 0, description: 'Point index.' } }, required: ['id', 'index'], additionalProperties: false },
+			undoable: true,
+			run: (_ctx: unknown, params: { id: string; index: number }) => {
+				check(controller.removeFreeformPoint(params.id, params.index));
+				return shadingResult(params.id);
+			}
+		},
+		{
+			...base,
+			id: `${prefix}setFreeformLines`,
+			label: 'Freeform Lines',
+			keywords: ['freeform', 'lines', 'colour lines', 'curve'],
+			description: 'Replaces the lines of a path\'s freeform gradient (an empty list removes them): each line is the point indices a smooth curve runs through, carrying the colours along it. One undo step. Returns { id, shading }.',
+			params: { type: 'object', properties: { id: { type: 'string', description: 'The path.' }, lines: LINES }, required: ['id', 'lines'], additionalProperties: false },
+			undoable: true,
+			run: (_ctx: unknown, params: { id: string; lines: number[][] }) => {
+				check(controller.setFreeformLines(params.id, params.lines));
+				return shadingResult(params.id);
+			}
+		}
+	];
+
 	const snapResult = () => {
 		const { grid, objects, guides, threshold, angles, tracking, trackPolar, polarRelative } = controller.getState().snap;
 		return { grid, objects, guides, threshold, angles: [...angles], tracking: tracking !== false, trackPolar: !!trackPolar, polarRelative: !!polarRelative };
@@ -1774,6 +2015,8 @@ export function createVectorCommands(controller: VectorEditorController, options
 		...frameCommands(),
 		...connectorCommands(),
 		...trackingCommands(),
+		...shadingCommands(),
+		...traceCommands(),
 		{
 			...base,
 			id: `${prefix}setCorners`,

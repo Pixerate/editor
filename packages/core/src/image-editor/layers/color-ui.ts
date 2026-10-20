@@ -20,6 +20,13 @@ export const INTENT_OPTIONS: readonly { id: Intent; label: string; title: string
   { id: 'absolute', label: 'Absolute Colorimetric', title: 'Keep the source white too (paper proofs)' },
 ];
 
+/** Image › Mode choices. */
+export const COLOR_MODE_OPTIONS: readonly { id: 'rgb' | 'cmyk' | 'lab'; label: string; title: string }[] = [
+  { id: 'rgb', label: 'RGB', title: 'Edit and export RGB in the working space' },
+  { id: 'cmyk', label: 'CMYK', title: 'For print: proof through the CMYK profile and export CMYK' },
+  { id: 'lab', label: 'Lab', title: 'Export Lab channels' },
+];
+
 /** What the colour panel shows. */
 export function colorPanelView(controller: ImageEditorController) {
   const profile = controller.getColorProfile();
@@ -27,6 +34,8 @@ export function colorPanelView(controller: ImageEditorController) {
   return {
     profileName: profile.name,
     workingSpace: profile.builtin,
+    mode: profile.mode,
+    cmykProfileName: profile.cmykProfile?.name ?? null,
     proof: proof ? { id: proof.profile.builtin ?? null, name: proof.profile.name, intent: proof.intent, simulatePaper: proof.simulatePaper, gamutWarning: proof.gamutWarning, bpc: proof.bpc } : null,
   };
 }

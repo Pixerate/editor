@@ -24,6 +24,7 @@
  * `StrokeLayer`, each stroke with its own settings). Ported from ArtCraft (MIT OR Apache-2.0,
  * © ArtCraft Team and contributors; see THIRD_PARTY_NOTICES.md).
  */
+import { sanitizeVectorShadedPaint } from './shading.js';
 import { pointInBezierPath, distanceToBezierPath, type BezierPath } from '../canvas/pathops/bezier.js';
 import { isVectorGradient, sanitizeVectorGradient } from './gradient.js';
 import { hitTestVectorStroke, vectorStrokeReach } from './stroke.js';
@@ -248,7 +249,7 @@ export function normalizeVectorPaintStacks<T extends VectorStyle>(node: T, prefe
 function sanitizePaint(value: unknown): VectorPaint {
 	if (value === null || value === undefined) return null;
 	if (typeof value === 'string') return value;
-	return sanitizeVectorGradient(value);
+	return sanitizeVectorShadedPaint(value) ?? sanitizeVectorGradient(value);
 }
 
 function sanitizeLayerBase(raw: Record<string, unknown>): VectorPaintLayer {

@@ -24,6 +24,7 @@
  * unit-box frame) and vectorcraft `crates/svg/src/import/spread.rs` (`expand`: spread modes as
  * repeated stop periods).
  */
+import { isVectorShadedPaint, mapVectorShadedPaint, transformVectorShadedPaint } from './shading.js';
 import { hexToRgba, normalizeTokenColor, rgbaToHex } from '../tokens/color.js';
 import { rgbToOklab, oklabToRgb } from '../animation/color.js';
 import { angleToSvgLinearCoords, type SvgGradientDef, type SvgGradientStop } from '../canvas/gradient.js';
@@ -620,11 +621,13 @@ export function mapVectorGradient(g: VectorGradient, f: (p: Vec2) => Vec2): Vect
 
 /** A paint after its node's geometry goes through a non-affine map `f` (see `mapVectorGradient`). */
 export function mapVectorPaint<T extends VectorPaint | undefined>(paint: T, f: (p: Vec2) => Vec2): T {
+	if (isVectorShadedPaint(paint)) return mapVectorShadedPaint(paint, f) as T;
 	return (isVectorGradient(paint) ? mapVectorGradient(paint, f) : paint) as T;
 }
 
 /** A paint after its node's geometry is mapped by `m` (colours unchanged). */
 export function transformVectorPaint<T extends VectorPaint | undefined>(paint: T, m: VectorMatrix): T {
+	if (isVectorShadedPaint(paint)) return transformVectorShadedPaint(paint, m) as T;
 	return (isVectorGradient(paint) ? transformVectorGradient(paint, m) : paint) as T;
 }
 

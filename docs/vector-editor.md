@@ -317,6 +317,57 @@ Export puts the gradient itself on its first paint server as `data-vector-gradie
 
 **Editing.** `setGradient(patch, { ids, target, merge })` edits the selected paths' fill (or `target: "stroke"`; default: `state.gradientEdit.target`, set with `setGradientTarget`) — any gradient field, `aspect`, `reverse: true`, `focal: null` — and a colour becomes a gradient from it to white; `setGradientStop(index, { color, opacity, offset, midpoint })`, `addGradientStop(offset)`, `removeGradientStop(index)` (never below two), `selectGradientStop(index)` and `reverseGradient()` work on the stops by sorted index. `getVectorGradientEditor(state)` gives a gradient editor what to show (stops, the selected stop, a CSS preview of the ramp, spread, interpolation, smoothness and stroke mode); `getVectorOverlayRenderData(state).gradient` is the Gradient tool's annotator in screen pixels (`getGradientAnnotator()` on the controller for hit-testing: `hitVectorGradientAnnotator`). Blends mix two gradients of one style stop by stop (midpoints too) when they match, else resample both at every offset where either bends; points mix when both are explicit in the same units.
 
+### Gradient meshes and freeform gradients
+
+```ts
+controller.setMeshGradient({ rows: 2, columns: 2, corners: ["#bae6fd", "#38bdf8", "#e0f2fe", "#ffffff"] }, { ids: ["card"] });
+controller.setMeshPoint("card", 4, { x: 200, y: 120, color: "#fef9c3" }); // the middle point, row by row
+controller.setFreeformGradient({ colors: ["#15803d", "#4ade80"] }, { ids: ["hill"] }); // points placed inside
+controller.addFreeformPoint("hill", { x: 300, y: 420, color: "#166534", spread: 0.2 });
+```
+
+Both are paint objects in the node's own space, like its anchors, and move with the node.
+
+- **Mesh: `{ type: "mesh", rows, columns, points, colors, opacities? }`.**
+  - It is a lattice of `(rows + 1) × (columns + 1)` points.
+  - Each patch is a Coons surface whose sides are Catmull-Rom curves through the lattice, extended past the edges in straight lines, so moving a point bends its neighbouring patches smoothly.
+  - Colours blend bilinearly between each patch's corners.
+- **Freeform: `{ type: "freeform", points: [{ x, y, color, opacity?, spread? }], lines? }`, after vectorcraft.**
+  - Each point paints a disc of pure colour; `spread` is a fraction of half the box's longer side.
+  - Beyond the discs, points blend by inverse-square distance from each disc's edge.
+  - Lines are Catmull-Rom curves through points that carry colour along their length.
+  - `autoVectorFreeformGradient` places a 2 × n grid of points inside the shape.
+- **Drawing.** SVG has no shading for either, so `vectorShadedSvgDefs` returns a `<pattern>`, and both canvases draw it as they draw conic gradients.
+  - Mesh cells (8 per patch side) are flat tiles grown slightly so no seams show.
+  - Freeform is horizontal strips (96 across the longer side), each a linear gradient sampled across the field.
+  - Export writes the paint as `data-vector-shading`, so import restores it.
+- **Editing.**
+  - With the Gradient tool, `overlay.shading` shows the lattice or lines and the points of the selected paths.
+  - Drag a point to move it. Click inside a freeform shape to add a point in the colour shown there, and Alt-click a freeform point to remove it.
+  - The picked point is `state.shadingPoint`, which `VectorShadingPanel` recolours.
+
+## Image Trace
+
+```ts
+controller.traceImage(pixels, { mode: "threshold", threshold: 0.5, tolerance: 1, cornerRoundness: 0.5, x: 0, y: 0, width: 200 });
+controller.traceImage(pixels, { mode: "color", colors: 6 }); // a stacked path per colour
+traceVectorImage({ width, height, data }, options); // the paths alone, in pixel units
+```
+
+After effectcraft's `trace.rs`. The steps:
+
+- **Contours.** Marching squares runs over the samples at pixel centres. Each crossing is interpolated along its cell edge, a saddle cell is resolved by the cell's mean, and the field is padded with "outside" so every contour closes.
+- **Simplification.** Each loop is simplified with Douglas–Peucker to `tolerance` (pixels), and loops smaller than `minArea` are dropped.
+- **Nesting.** Each loop gets its nesting depth. Holes come out as even-odd subpaths of one compound path, outer loops first.
+- **Fitting.** Loops are fitted with our `fitCubics`. `cornerRoundness` 0 keeps the simplified polygon. Higher values let larger turns stay smooth: the corner angle is 25° + 125° × roundness.
+
+The two modes:
+
+- **Threshold** traces where darkness over white reaches `threshold`, or where alpha does with `channel: "alpha"`.
+- **Colour** quantises the opaque pixels by median cut. A split falls where the channel value changes, so identical colours stay in one box. The colours are traced from the most common up, and each colour's path also covers the colours traced after it, so the stacked shapes leave no gaps between them.
+
+`traceImage` places the result as one group (one undo step). Agents pass a PNG data URL to `vector.traceImage`, which core decodes with its own PNG reader, up to 4 million pixels. The panels decode any image the browser can read, scaled to at most 1 million pixels.
+
 ## Text
 
 ```ts

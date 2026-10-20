@@ -466,6 +466,14 @@
         {/if}
       </g>
     {/if}
+    {#each overlay.shading as sh (sh.nodeId)}
+      <g data-vector-shading={sh.kind}>
+        {#each sh.lines as d, i (i)}<path {d} stroke={accentColor} stroke-width="1" opacity="0.7" />{/each}
+        {#each sh.points as p (p.index)}
+          <circle data-vector-shading-point={p.index} data-selected={p.selected || undefined} cx={p.x} cy={p.y} r={p.selected ? 6 : 4.5} fill={p.color} stroke={p.selected ? accentColor : '#ffffff'} stroke-width={p.selected ? 2 : 1.5} />
+        {/each}
+      </g>
+    {/each}
     {#each overlay.trackingPoints as t, i (i)}
       <path data-vector-tracking-point="" d="M{t.x - 5} {t.y}H{t.x + 5}M{t.x} {t.y - 5}V{t.y + 5}" stroke={guideColor} stroke-width="1.5" />
     {/each}

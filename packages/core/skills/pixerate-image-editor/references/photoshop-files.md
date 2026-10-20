@@ -14,16 +14,18 @@
    `list_layer_effects.patterns`) and its global light. An effects block the editor cannot read
    is kept and written back by `export_psd`, but not drawn; the warnings say so.
 3. **`import_psd` replaces the document** (one undo step). 16- and 32-bit files keep their
-   depth (`get_image_info.bitDepth`); CMYK, Lab, grayscale and indexed files are converted to
-   RGB; an RGB file's ICC profile becomes the document's colour profile. The warnings say what
-   changed. `export_psd` writes at the document's depth and embeds its profile. Change the depth
-   with `set_bit_depth`: 16-bit for smooth gradients and strong grades, 32-bit for linear-light
-   HDR (layers blend in linear light there). Adjustment layers, blend modes, merges, the
-   exported merged image, the brush, eraser, `fill_pixels` and `clear_pixels` keep the depth
-   (32-bit paint mixes in linear light). Layer effects, layer filters, the Mixer Brush, the
-   retouching tools, masks and transforms still work in 8 bits on what they change, so grade and
-   paint a deep file rather than filter or transform it when the depth matters. Afterwards work with `list_layers` as usual: there
-   is no Background source image, every pixel comes from the layers.
+   depth (`get_image_info.bitDepth`). CMYK files are converted to RGB through their embedded (or
+   the default coated) CMYK profile and stay in CMYK mode, Lab files stay in Lab mode, so
+   `export_psd` writes them back as they came (`set_color_mode`); grayscale and indexed files are
+   converted to RGB; an RGB file's ICC profile becomes the document's colour profile. The
+   warnings say what changed. `export_psd` writes at the document's depth, mode and profile.
+   Change the depth with `set_bit_depth`: 16-bit for smooth gradients and strong grades, 32-bit
+   for linear-light HDR (layers blend in linear light there). Adjustment layers, blend modes,
+   merges, the exported merged image, the brush, eraser, `fill_pixels` and `clear_pixels` keep
+   the depth (32-bit paint mixes in linear light). Layer effects, layer filters, the Mixer Brush,
+   the retouching tools, masks and transforms still work in 8 bits on what they change, so grade
+   and paint a deep file rather than filter or transform it when the depth matters. Afterwards work with `list_layers` as
+   usual: there is no Background source image, every pixel comes from the layers.
 4. **Smart objects come in live**: embedded contents (a PSB opens as a nested document you can
    edit with `edit_smart_object_contents`, a PNG as raster contents), the placement and warp, the
    smart filters and the filter mask; the layer shows Photoshop's own pixels until you change it.

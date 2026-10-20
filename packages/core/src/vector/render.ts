@@ -30,6 +30,7 @@ import {
 	locateVectorNode,
 	subpathsToBezier,
 	vectorWorldMatrix,
+	collectPathNodes,
 	IDENTITY_MATRIX,
 	inferAnchorType,
 	multiplyMatrices,
@@ -62,6 +63,8 @@ import { vectorConstraintGlyphs } from './constraints/glyphs.js';
 import { isVectorMaskActive, isVectorMaskGroup, vectorMaskRenderData, vectorMaskSummary, type VectorMaskRenderData, type VectorMaskSummary } from './mask.js';
 import { isVectorFrame, vectorFrameRectPath } from './frames.js';
 import { vectorConnectionSites, vectorConnectorTargetAt } from './connectors.js';
+import { isVectorMeshGradient, isVectorShadedPaint, vectorFreeformLineSegments, vectorMeshLines } from './shading.js';
+import type { VectorFreeformGradient, VectorMeshGradient } from './types.js';
 import { vectorMeshEditPoints, vectorMeshGridCurves, VECTOR_WARP_STYLES, VECTOR_WARP_STYLE_LABELS } from './warp.js';
 import { VECTOR_EFFECT_TYPES, type VectorEffectType } from './types.js';
 import { isVectorBlendGroup, resolveVectorBlendOptions, vectorBlendRailAt, vectorBlendSpine } from './blendGroup.js';
@@ -403,6 +406,12 @@ export interface VectorOverlayRenderData {
 	 * pointer (top, right, bottom, left, centre), `active` on the one an end would glue to.
 	 */
 	connectorSites: { nodeId: string; side: string; x: number; y: number; active: boolean }[];
+	/**
+	 * Mesh and freeform fills of the selection while the Gradient tool is on, screen space: the
+	 * lattice or freeform lines (`lines`, path data) and the points (drag them; `selected` is the one
+	 * the panel edits), each with its colour.
+	 */
+	shading: { nodeId: string; kind: 'mesh' | 'freeform'; lines: string[]; points: { index: number; x: number; y: number; color: string; selected: boolean }[] }[];
 	/** Points acquired for object snap tracking, screen space: draw a small `+` at each. */
 	trackingPoints: { x: number; y: number }[];
 	/** The distance or coordinate being typed while the pen draws, and where to show it (screen space, by the pointer), or null. */
@@ -650,6 +659,42 @@ function outlinePaths(node: VectorNode, parent: AffineMatrix, entered: ReadonlyS
 	// Live and mask groups outline as drawn (masked) unless they are being edited.
 	if ((hasOwnVectorAppearance(node) || isVectorMaskActive(node)) && !entered.has(node.id)) return [transformBezierPath(vectorAppearanceOutline(node), m)];
 	return node.children.filter((c) => c.visible !== false).flatMap((c) => outlinePaths(c, m, entered));
+}
+
+/** The mesh and freeform fills of the selection while the Gradient tool is on (see `VectorOverlayRenderData.shading`). */
+function shadingOverlay(state: VectorEditorState): VectorOverlayRenderData['shading'] {
+	if (state.tool !== 'gradient') return [];
+	const out: VectorOverlayRenderData['shading'] = [];
+	const seen = new Set<string>();
+	for (const id of state.selection) {
+		const root = findVectorNode(state.document.nodes, id);
+		if (!root) continue;
+		for (const n of collectPathNodes(root)) {
+			if (seen.has(n.id) || !isVectorShadedPaint(n.fill)) continue;
+			seen.add(n.id);
+			const world = vectorWorldMatrix(state.document.nodes, n.id);
+			if (!world) continue;
+			const sc = (q: Vec2) => toScreen(state, applyMatrix(world, q));
+			const curve = (c: readonly Vec2[]) => {
+				const [a, b, d, e] = c.map(sc);
+				return `M${fmt(a.x)} ${fmt(a.y)}C${fmt(b.x)} ${fmt(b.y)} ${fmt(d.x)} ${fmt(d.y)} ${fmt(e.x)} ${fmt(e.y)}`;
+			};
+			const fill = n.fill as VectorMeshGradient | VectorFreeformGradient;
+			const lines: string[] = [];
+			if (isVectorMeshGradient(fill)) {
+				const l = vectorMeshLines(fill);
+				for (const row of [...l.rows, ...l.columns]) lines.push(row.map(curve).join(''));
+			} else (fill.lines ?? []).forEach((_, k) => lines.push(vectorFreeformLineSegments(fill, k).map(curve).join('')));
+			const sel = state.shadingPoint && state.shadingPoint.nodeId === n.id ? state.shadingPoint.index : -1;
+			out.push({
+				nodeId: n.id,
+				kind: fill.type,
+				lines,
+				points: fill.points.map((q, index) => ({ index, ...sc(q), color: isVectorMeshGradient(fill) ? fill.colors[index] : (fill.points[index] as { color: string }).color, selected: index === sel }))
+			});
+		}
+	}
+	return out;
 }
 
 /** Connection sites under the pointer while the Connector tool is on (see `VectorOverlayRenderData.connectorSites`). */
@@ -927,6 +972,7 @@ export function getVectorOverlayRenderData(state: VectorEditorState): VectorOver
 		textBox = { x: tl.x, y: tl.y, width: b.width * z, height: b.height * z };
 	}
 	return { outlines, selectionBox, distort, anchors, handles, marquee, penPreview, artboard, guides, status, toolStroke, pencilString, cutPoint, cornerWidgets, widthPoints, widthSpot, builder, blend, gradient, envelope, masks: maskOverlay(state), text: textOverlay(state), textBox, constraints: constraintOverlay(state), frames: frameLabels(state), connectorSites: connectorSiteOverlay(state),
+		shading: shadingOverlay(state),
 		trackingPoints: (state.trackingPoints ?? []).map((p) => toScreen(state, p)),
 		typedEntry: state.typedEntry ? { text: state.typedEntry, ...(state.pointer ? toScreen(state, state.pointer) : { x: 0, y: 0 }) } : null
 	};

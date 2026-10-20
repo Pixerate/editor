@@ -13,3 +13,5 @@ export * from './VectorSymbolsPanel';
 export * from './VectorConstraintsPanel';
 export * from './VectorFramePanel';
 export * from './VectorConnectorPanel';
+export * from './VectorShadingPanel';
+export * from './VectorTracePanel';

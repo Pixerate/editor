@@ -166,7 +166,48 @@ export interface VectorGradient {
 }
 
 /** A fill or stroke: any CSS colour, a gradient, or `null` / `'none'` for no paint. */
-export type VectorPaint = string | VectorGradient | CanvasGradientDef | null;
+export type VectorPaint = string | VectorGradient | VectorMeshGradient | VectorFreeformGradient | CanvasGradientDef | null;
+
+/**
+ * A gradient mesh (Illustrator's Gradient Mesh, PDF shading types 6 and 7): a lattice of
+ * `(rows + 1) × (columns + 1)` points in the node's own space, row by row, each with a colour.
+ * Each cell is a smooth patch whose sides are curves through the lattice and whose colour blends
+ * between its four corners. Outside the patches the paint is transparent.
+ */
+export interface VectorMeshGradient {
+	type: 'mesh';
+	rows: number;
+	columns: number;
+	/** Lattice points, row by row (`(rows + 1) × (columns + 1)` of them). */
+	points: Vec2[];
+	/** A CSS colour per point. */
+	colors: string[];
+	/** Opacity per point (0–1, default 1 each). */
+	opacities?: number[];
+}
+
+/** One colour point of a freeform gradient. */
+export interface VectorFreeformPoint {
+	x: number;
+	y: number;
+	color: string;
+	/** 0–1, default 1. */
+	opacity?: number;
+	/** Radius of the disc of pure colour round the point, as a fraction of half the box's longer side (0–1, default 0). */
+	spread?: number;
+}
+
+/**
+ * A freeform gradient (Illustrator's Freeform Gradient): colour points placed anywhere in the
+ * node's own space, blended across the shape by distance, and optional smooth lines through some
+ * of them that carry their colours along their length.
+ */
+export interface VectorFreeformGradient {
+	type: 'freeform';
+	points: VectorFreeformPoint[];
+	/** Each line runs smoothly through the points at these indices, in order. */
+	lines?: number[][];
+}
 
 export type VectorFillRule = 'nonzero' | 'evenodd';
 export type VectorLineCap = 'butt' | 'round' | 'square';

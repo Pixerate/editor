@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { ImageEditorController, Intent } from '@pixerate/editor/image-editor';
-  import { INTENT_OPTIONS, PROOF_PROFILE_OPTIONS, WORKING_SPACE_OPTIONS, colorPanelView } from '@pixerate/editor/image-editor';
+  import { COLOR_MODE_OPTIONS, INTENT_OPTIONS, PROOF_PROFILE_OPTIONS, WORKING_SPACE_OPTIONS, colorPanelView } from '@pixerate/editor/image-editor';
   import { untrack } from 'svelte';
 
   interface Props {
@@ -55,6 +55,17 @@
   <div class="flex items-center gap-2">
     <span class="text-slate-400">Profile</span>
     <span data-testid="color-profile-name">{view.profileName}</span>
+  </div>
+  <div class="flex flex-wrap items-center gap-1" role="group" aria-label="Colour mode">
+    <span class="text-slate-400">Mode</span>
+    <select aria-label="Colour mode" class={select} value={view.mode} onchange={(e) => attempt(() => controller.setColorMode((e.target as HTMLSelectElement).value as 'rgb' | 'cmyk' | 'lab'))}>
+      {#each COLOR_MODE_OPTIONS as o (o.id)}
+        <option value={o.id} title={o.title}>{o.label}</option>
+      {/each}
+    </select>
+    {#if view.cmykProfileName}
+      <span class="text-slate-400">{view.cmykProfileName}</span>
+    {/if}
   </div>
   <div class="flex flex-wrap items-center gap-1" role="group" aria-label="Assign or convert">
     <select aria-label="Target profile" class={select} value={target} onchange={(e) => (target = (e.target as HTMLSelectElement).value)}>

@@ -15,6 +15,8 @@ export { default as VectorSymbolsPanel } from "./VectorSymbolsPanel.svelte";
 export { default as VectorConstraintsPanel } from "./VectorConstraintsPanel.svelte";
 export { default as VectorFramePanel } from "./VectorFramePanel.svelte";
 export { default as VectorConnectorPanel } from "./VectorConnectorPanel.svelte";
+export { default as VectorShadingPanel } from "./VectorShadingPanel.svelte";
+export { default as VectorTracePanel } from "./VectorTracePanel.svelte";
 export { default as VectorTextElement } from "./VectorTextElement.svelte";
 export { default as VectorMaskedNodes } from "./VectorMaskedNodes.svelte";
 export { default as VectorSceneNodes } from "./VectorSceneNodes.svelte";

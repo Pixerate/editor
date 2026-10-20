@@ -26,6 +26,7 @@ import { invertMatrix } from '../geom/affine.js';
 import { isVectorFrame, sanitizeVectorFrame, sanitizeVectorResizing, vectorFrameRectPath, type VectorFrameGroup } from './frames.js';
 import type { VectorConnector, VectorResizing } from './types.js';
 import { sanitizeVectorConnector } from './connectors.js';
+import { isVectorShadedPaint, sanitizeVectorShadedPaint, vectorShadedSvgDefs } from './shading.js';
 
 /** `v` rounded to a whole number when within 1e-9 of one. */
 const tidy = (v: number) => (Math.abs(v - Math.round(v)) < 1e-9 ? Math.round(v) + 0 : v);
@@ -217,6 +218,21 @@ const paintCache = new WeakMap<object, Map<string, VectorPaintDef[]>>();
 export function vectorPaintToSvg(paint: VectorPaint | undefined, gradientId: string, options: VectorPaintSvgOptions = {}): { value: string; defs: VectorPaintDef[] } {
 	if (!hasPaint(paint)) return { value: 'none', defs: [] };
 	if (typeof paint === 'string') return { value: paint, defs: [] };
+	if (isVectorShadedPaint(paint)) {
+		// Meshes and freeform gradients: a pattern of flat tiles over the shape (cached per paint and box).
+		const node = options.node;
+		const bounds = node ? vectorPathLocalBounds(node) : null;
+		const reach = node && options.role === 'stroke' ? vectorStrokeReach(node) + 1 : 1;
+		const area = bounds ? { x: bounds.x - reach, y: bounds.y - reach, width: bounds.width + 2 * reach, height: bounds.height + 2 * reach } : null;
+		const key = `${gradientId}|${options.role ?? 'fill'}|${options.precision ?? 3}|${area ? [area.x, area.y, area.width, area.height].join(',') : ''}`;
+		let byKey = paintCache.get(paint);
+		const hit = byKey?.get(key);
+		if (hit) return { value: `url(#${gradientId})`, defs: hit };
+		const defs = vectorShadedSvgDefs(paint, gradientId, { bounds, area, precision: options.precision ?? 3 });
+		if (!byKey) paintCache.set(paint, (byKey = new Map()));
+		byKey.set(key, defs);
+		return { value: `url(#${gradientId})`, defs };
+	}
 	if (!isVectorGradient(paint)) return { value: 'none', defs: [] };
 	const role = options.role ?? 'fill';
 	const precision = options.precision ?? 3;
@@ -422,6 +438,7 @@ export function vectorDocumentToSvg(doc: VectorDocument, options: VectorSvgExpor
 		if (node.type === 'group' && node.blend) out += ` data-vector-blend="${escapeAttr(JSON.stringify(node.blend))}"`;
 		if (node.booleanOperation) out += ` data-vector-boolean-operation="${node.booleanOperation}"`;
 		if (node.resizing) out += ` data-vector-resizing="${escapeAttr(JSON.stringify(node.resizing))}"`;
+		if (node.type === 'path' && isVectorShadedPaint(node.fill)) out += ` data-vector-shading="${escapeAttr(JSON.stringify(node.fill))}"`;
 		if (node.type === 'path' && node.connector) out += ` data-vector-connector="${escapeAttr(JSON.stringify(node.connector))}"`;
 		const blend = vectorBlendModeCss(node.blendMode);
 		if (blend) out += ` style="mix-blend-mode:${blend}"`;
@@ -1839,7 +1856,7 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 					type: 'path',
 					...meta,
 					subpaths,
-					fill: child.name === 'line' ? null : paint(s.fill),
+					fill: child.name === 'line' ? null : (sanitizeVectorShadedPaint(parseJson(child.attrs['data-vector-shading'])) ?? paint(s.fill)),
 					stroke: paint(s.stroke),
 					...strokeStyle(s)
 				},

@@ -1,4 +1,5 @@
 import type { AgentScript, AgentScriptContext } from "./agentScript";
+import { pngDataUrl } from "@pixerate/editor/raster";
 
 // One or two scripted requests per editor. Every step is a real tool call through the demo's
 // ToolRegistry (the same tools listed in "Agent tools for this editor"); later steps take ids and
@@ -278,6 +279,24 @@ function artboardBox(x: number, y: number, width: number, height: number) {
   };
 }
 
+/** A small two-colour "P" badge as a PNG data URL, for the tracing script. */
+function badgePng(): string {
+  const w = 96;
+  const h = 96;
+  const data = new Uint8ClampedArray(w * h * 4);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const r = Math.hypot(x + 0.5 - 48, y + 0.5 - 48);
+      const inBowl = Math.hypot(x + 0.5 - 52, y + 0.5 - 38) <= 16 && Math.hypot(x + 0.5 - 52, y + 0.5 - 38) >= 7;
+      const inStem = x >= 30 && x < 40 && y >= 22 && y < 74;
+      const inBar = x >= 30 && x < 52 && ((y >= 22 && y < 29) || (y >= 47 && y < 54));
+      const c = r > 44 ? [0, 0, 0, 0] : inBowl || inStem || inBar ? [255, 255, 255, 255] : [139, 92, 246, 255];
+      data.set(c, (y * w + x) * 4);
+    }
+  }
+  return pngDataUrl(w, h, data);
+}
+
 export const VECTOR_SCRIPTS: AgentScript[] = [
   {
     id: "vector-night",
@@ -385,6 +404,33 @@ export const VECTOR_SCRIPTS: AgentScript[] = [
       { say: "The bar stretches with the banner, the badge stays in its corner.", ...commandWith("vector.setResizing", (r) => ({ ids: [r("bar").id], horizontal: "leftRight", vertical: "bottom" })) },
       { ...commandWith("vector.setResizing", (r) => ({ ids: [r("badge").id], horizontal: "right", vertical: "top" })) },
       { say: "Now a wider banner: the contents follow their constraints.", ...commandWith("vector.setFrame", (r) => ({ ids: [r("banner").id], width: 340, height: 120 })), target: artboardBox(424, 234, 340, 120) },
+    ],
+  },
+  {
+    id: "vector-trace",
+    prompt: "Trace this badge image into vectors",
+    steps: [
+      {
+        say: "Tracing the badge in colour: a stacked path per colour, smooth curves.",
+        ...commandWith("vector.traceImage", () => ({ image: badgePng(), mode: "color", colors: 3, cornerRoundness: 0.8, x: 620, y: 360, width: 120, name: "Badge trace" })),
+        as: "trace",
+        target: artboardBox(620, 360, 120, 120),
+      },
+      { say: "Checking what it made.", ...command("vector.list") },
+    ],
+  },
+  {
+    id: "vector-shading",
+    prompt: "Shade the card with a mesh and the hill with a freeform gradient",
+    steps: [
+      {
+        say: "A 2 × 2 gradient mesh on the card, blue at the top fading to white…",
+        ...command("vector.setMeshGradient", { ids: ["card"], rows: 2, columns: 2, corners: ["#bae6fd", "#38bdf8", "#e0f2fe", "#ffffff"] }),
+        target: { selector: '[data-vector-id="card"]' },
+      },
+      { say: "…with its middle point pulled toward the star and brightened.", ...command("vector.setMeshPoint", { id: "card", index: 4, x: 200, y: 120, color: "#fef9c3" }), target: { selector: '[data-vector-id="card"]' } },
+      { say: "Freeform colour points across the hill, darker in the dips.", ...command("vector.setFreeformGradient", { ids: ["hill"], colors: ["#15803d", "#4ade80", "#166534", "#86efac"] }), target: { selector: '[data-vector-id="hill"]' } },
+      { say: "Checking the points to fine-tune.", ...command("vector.getShading", { id: "hill" }) },
     ],
   },
   {
@@ -737,6 +783,11 @@ const wave = (y: number, amp: number, n = 48, x0 = 40, x1 = 1160) =>
  * Strokes, fills and replays have no target: the paint director's cursor paints them on the canvas
  * itself. Panel steps open the panel the change shows in.
  */
+/** Points around a circle (for petals and rings). */
+function ring(cx: number, cy: number, r: number, n = 48) {
+  return Array.from({ length: n + 1 }, (_, i) => ({ x: Math.round(cx + r * Math.cos((i / n) * Math.PI * 2)), y: Math.round(cy + r * Math.sin((i / n) * Math.PI * 2)), pressure: 0.9 }));
+}
+
 export const PAINT_SCRIPTS: AgentScript[] = [
   {
     id: "paint-landscape",
@@ -813,6 +864,78 @@ export const PAINT_SCRIPTS: AgentScript[] = [
       { say: "An evening glaze on its own layer, in watercolour mode: it darkens like a transparent wash.", tool: "paint__add_layer", args: { name: "Glaze" }, as: "glaze" },
       { tool: "paint__fill_layer", args: (ctx) => ({ layerId: ctx.results.glaze.id, color: "#9a7fd1" }) },
       { tool: "paint__update_layer", args: (ctx) => ({ layerId: ctx.results.glaze.id, blend: "watercolor", opacity: 0.45 }) },
+      { tool: "paint__render_preview", args: { maxSide: 420 } },
+    ],
+  },
+  {
+    id: "paint-watercolor",
+    prompt: "Paint a watercolour sky over hills",
+    steps: [
+      { say: "Watercolour wants rough paper: its grain pins the edges and catches granulating pigment.", tool: "paint__set_paper", args: { preset: "rough-watercolor" }, open: "Paper", target: { selector: '[data-testid="paper-panel"] [aria-selected="true"]' } },
+      { say: "Sky first, wet-in-wet: soak the top of the sheet with clear water.", tool: "paint__add_layer", args: { name: "Sky wash" }, as: "sky", open: "Wet", target: { selector: '[data-testid="wet-panel"]' } },
+      { tool: "paint__wet_paper", args: (ctx) => ({ layerId: ctx.results.sky.id, rect: { x: 0, y: 0, width: 1200, height: 430 } }) },
+      {
+        say: "A broad wash of blue into the wet paper: it spreads softly, with no hard edge.",
+        tool: "paint__paint_stroke",
+        args: (ctx) => ({ layerId: ctx.results.sky.id, brushId: "watercolor-wash", brush: { tip: { size: 140 } }, color: "#3b6fc4", points: wave(110, 20) }),
+      },
+      { tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.sky.id, brushId: "watercolor-wash", brush: { tip: { size: 120 } }, color: "#e9a46b", points: wave(330, 15) }) },
+      { say: "Letting it flow for two seconds: the colours bleed where they meet.", tool: "paint__advance_wet_paint", args: { seconds: 2 } },
+      {
+        say: "Lifting clouds out of the wet sky with a tissue.",
+        tool: "paint__paint_stroke",
+        args: (ctx) => ({ layerId: ctx.results.sky.id, brushId: "blot", brush: { tip: { size: 90 } }, points: [{ x: 300, y: 140 }, { x: 420, y: 120 }, { x: 520, y: 150 }] }),
+      },
+      { say: "Drying the sky, so the hills glaze over it instead of mixing in.", tool: "paint__dry_paint", args: {} },
+      { say: "Hills on dry paper, with heavy granulating pigment and darker rims as they dry.", tool: "paint__add_layer", args: { name: "Hills" }, as: "hills" },
+      { tool: "paint__set_wet_settings", args: (ctx) => ({ layerId: ctx.results.hills.id, granulation: 0.9, edgeDarkening: 0.8 }) },
+      {
+        tool: "paint__paint_stroke",
+        args: (ctx) => ({ layerId: ctx.results.hills.id, brushId: "watercolor-wash", brush: { tip: { size: 150 }, wet: { pigment: 0.6 } }, color: "#3f5f4a", points: wave(560, 45) }),
+      },
+      { say: "Tilting the board so the wet hills bead and run down a little.", tool: "paint__set_canvas_tilt", args: { angle: 35, direction: 0 } },
+      { tool: "paint__advance_wet_paint", args: { seconds: 3 } },
+      { tool: "paint__set_canvas_tilt", args: { angle: 0 } },
+      { tool: "paint__dry_paint", args: {} },
+      { say: "Checking the result.", tool: "paint__render_preview", args: { maxSide: 420 } },
+    ],
+  },  {
+    id: "paint-impasto",
+    prompt: "Paint thick oil sunflowers with a palette knife",
+    steps: [
+      { say: "Canvas for oils, lit low from the top left so the brushwork shows.", tool: "paint__set_paper", args: { preset: "cotton-canvas" }, open: "Paper", target: { selector: '[data-testid="light-panel"]' } },
+      { tool: "paint__set_lighting", args: { azimuth: 315, elevation: 28, relief: 0.8 } },
+      { say: "A wet oil ground: wet colours blend where they meet.", tool: "paint__add_layer", args: { name: "Ground" }, as: "ground" },
+      { tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.ground.id, brushId: "oil-flat", brush: { tip: { size: 180 } }, color: "#2f6f9f", points: wave(160, 20) }) },
+      { tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.ground.id, brushId: "oil-flat", brush: { tip: { size: 180 } }, color: "#d9b44a", points: wave(330, 20) }) },
+      { say: "Dry the ground before the thick paint goes on.", tool: "paint__dry_paint", args: {} },
+      { say: "Thick petals squeezed from the tube.", tool: "paint__add_layer", args: { name: "Flowers" }, as: "flowers" },
+      {
+        tool: "paint__paint_stroke",
+        args: (ctx) => ({ layerId: ctx.results.flowers.id, brushId: "paint-tube", brush: { tip: { size: 34 } }, color: "#f4c20d", points: ring(400, 260, 90) }),
+      },
+      { say: "The palette knife drags the petals into ridges.", tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.flowers.id, brushId: "palette-knife", points: ring(400, 260, 70) }) },
+      { say: "A glossy, gold-flecked centre.", tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.flowers.id, brushId: "metallic-paint", color: "#7a4a12", points: ring(400, 260, 25) }) },
+      { tool: "paint__render_preview", args: { maxSide: 420 } },
+    ],
+  },
+  {
+    id: "paint-procedural",
+    prompt: "Draw a stencilled moon with hair, curls and stickers",
+    steps: [
+      { say: "A circle stencil as a mask: everything painted next lands inside it.", tool: "paint__add_stencil", args: { kind: "shape", shape: "ellipse", rect: { x: 420, y: 140, width: 360, height: 360 } }, as: "moon" },
+      { tool: "paint__add_layer", args: { name: "Moon" }, as: "moonLayer" },
+      { tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.moonLayer.id, brushId: "dry-brush", brush: { tip: { size: 160 } }, color: "#e8e1c8", points: wave(320, 60) }) },
+      { tool: "paint__remove_stencils", args: {} },
+      { say: "A ruler: the stroke follows it exactly for a straight horizon.", tool: "paint__add_stencil", args: { kind: "ruler", from: { x: 0, y: 600 }, to: { x: 1200, y: 600 } } },
+      { tool: "paint__add_layer", args: { name: "Grass" }, as: "grass" },
+      { tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.grass.id, brushId: "hair-strands", color: "#2f6b3a", points: wave(605, 10) }) },
+      { tool: "paint__remove_stencils", args: {} },
+      { say: "Orbit curls for the wind.", tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.grass.id, brushId: "orbit-curls", color: "#8aa4c8", points: wave(180, 40) }) },
+      { say: "Stars as stickers: each one stays editable.", tool: "paint__add_layer", args: { name: "Stars" }, as: "stars" },
+      { tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.stars.id, brushId: "sticker-stars", color: "#f5d76e", points: wave(90, 30) }) },
+      { tool: "paint__list_stickers", args: (ctx) => ({ layerId: ctx.results.stars.id }), as: "list" },
+      { say: "One star bigger, as the brightest.", tool: "paint__update_sticker", args: (ctx) => ({ layerId: ctx.results.stars.id, id: ctx.results.list.stickers[0].id, size: 70 }) },
       { tool: "paint__render_preview", args: { maxSide: 420 } },
     ],
   },

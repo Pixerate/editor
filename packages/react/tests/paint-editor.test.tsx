@@ -4,7 +4,7 @@ import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { PaintEditorController, documentToScreen } from '@pixerate/editor/paint-editor';
-import { BrushPanel, ColorPanel, PaintCanvas, PaintEditor, PaintLayersPanel, PaperPanel, PaintToolbar, usePaintDirector, usePaintEditor } from '../src/paint-editor';
+import { BrushPanel, ColorPanel, PaintCanvas, PaintEditor, PaintLayersPanel, PaperPanel, PaintToolbar, StickerPanel, WetPanel, usePaintDirector, usePaintEditor } from '../src/paint-editor';
 
 let container: HTMLDivElement;
 let root: any;
@@ -299,5 +299,155 @@ describe('React paint editor', () => {
     expect(controller.getStrokes()).toHaveLength(1);
     // linger 0 keeps the cursor where the stroke ended.
     expect(container.querySelector('[data-paint-presence] [data-actor="agent"]')).not.toBeNull();
+  });
+
+  it('WetPanel shows wet paint and dries, pauses, tilts and tunes it; the brush panel picks the wet tool', async () => {
+    const c = new PaintEditorController({ width: 300, height: 200, wet: { kernel: 'typescript' } });
+    render(
+      <>
+        <WetPanel controller={c} />
+        <BrushPanel controller={c} />
+        <PaintCanvas controller={c} fitOnMount={false} />
+      </>
+    );
+    const status = () => container.querySelector('[data-testid="wet-status"]')!.textContent;
+    expect(status()).toBe('Dry');
+    act(() => {
+      c.paintStroke({ points: [{ x: 50, y: 100 }, { x: 200, y: 100 }], brushId: 'watercolor-round', color: '#1d4ed8' });
+    });
+    expect(status()).toBe('Wet');
+    click(byText('Pause'));
+    expect(c.getState().wet.paused).toBe(true);
+    expect(status()).toBe('Wet (paused)');
+    expect(container.querySelector('[data-testid="paint-water-overlay"]')).toBeNull();
+    click(byText('Water'));
+    expect(container.querySelector('[data-testid="paint-water-overlay"]')).not.toBeNull();
+    setValue(container.querySelector('[data-testid="wet-layer"] input[aria-label="Granulation"]') as HTMLInputElement, '0.9', true);
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(c.wetLayerInfo().params.granulation).toBe(0.9);
+    setValue(container.querySelector('input[aria-label="Tilt"]') as HTMLInputElement, '40', true);
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(c.getState().wet.tilt.angle).toBe(40);
+    await act(async () => {
+      byText('Dry now').click();
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(status()).toBe('Dry');
+    act(() => {
+      c.setBrush({ id: 'watercolor-round' });
+    });
+    const tool = container.querySelector('select[aria-label="Wet tool"]') as HTMLSelectElement;
+    expect(tool.value).toBe('paint');
+    setValue(tool, 'blot');
+    expect(c.getState().brush.wet.tool).toBe('blot');
+    expect(container.querySelector('input[aria-label="Strength"]')).not.toBeNull();
+    c.dispose();
+  });
+
+  it('thick paint and oil controls: impasto tool, wet medium, instant dry and the light', () => {
+    const c = new PaintEditorController({ width: 300, height: 200, wet: { kernel: 'typescript' } });
+    render(
+      <>
+        <BrushPanel controller={c} />
+        <PaperPanel controller={c} />
+        <WetPanel controller={c} />
+      </>
+    );
+    act(() => {
+      c.setBrush({ id: 'impasto-brush' });
+    });
+    const tool = container.querySelector('select[aria-label="Impasto tool"]') as HTMLSelectElement;
+    expect(tool.value).toBe('brush');
+    setValue(tool, 'knife');
+    expect(c.getState().brush.impasto.tool).toBe('knife');
+    expect(container.querySelector('input[aria-label="Thickness"]')).not.toBeNull();
+    act(() => {
+      c.setBrush({ id: 'oil-round' });
+    });
+    const medium = container.querySelector('select[aria-label="Wet medium"]') as HTMLSelectElement;
+    expect(medium.value).toBe('oil');
+    setValue(medium, 'gouache');
+    expect(c.getState().brush.wet.medium).toBe('gouache');
+    click(byText('Instant dry'));
+    expect(c.getState().wet.instantDry).toBe(true);
+    setValue(container.querySelector('[data-testid="light-panel"] input[aria-label="Light height"]') as HTMLInputElement, '20');
+    expect(c.getLighting().elevation).toBe(20);
+    act(() => {
+      c.setBrush({ id: 'impasto-brush' });
+      c.paintStroke({ points: [{ x: 20, y: 50 }, { x: 200, y: 50 }] });
+    });
+    expect(c.reliefOf()).not.toBeNull();
+    click(byText('Flatten relief'));
+    expect(c.reliefOf()).toBeNull();
+  });
+
+  it('the toolbar exports a time-lapse and a PNG repainted at twice the size', async () => {
+    const c = new PaintEditorController({ width: 120, height: 80 });
+    c.paintStroke({ points: [{ x: 10, y: 40 }, { x: 110, y: 40 }], brushId: 'soft-pastel' });
+    const downloads: string[] = [];
+    (win.URL as any).createObjectURL = () => 'blob:x';
+    (win.URL as any).revokeObjectURL = () => {};
+    const click = win.HTMLAnchorElement.prototype.click;
+    win.HTMLAnchorElement.prototype.click = function (this: HTMLAnchorElement) {
+      downloads.push(this.download);
+    };
+    render(<PaintToolbar controller={c} tool="brush" onToolChange={() => {}} />);
+    await act(async () => {
+      byText('Time-lapse').click();
+      for (let i = 0; i < 50 && downloads.length < 1; i++) await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(downloads).toContain('painting-timelapse.zip');
+    expect(container.querySelector('[data-testid="paint-replay-status"]')!.textContent).toMatch(/frames/);
+    await act(async () => {
+      byText('PNG 2×').click();
+      for (let i = 0; i < 50 && downloads.length < 2; i++) await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(downloads).toContain('painting@2x.png');
+    win.HTMLAnchorElement.prototype.click = click;
+  });
+
+  it('procedural, bristle and sticker controls, stencils in the toolbar, and the sticker panel', () => {
+    const c = new PaintEditorController({ width: 300, height: 200 });
+    render(
+      <>
+        <PaintToolbar controller={c} tool="brush" onToolChange={() => {}} />
+        <BrushPanel controller={c} />
+        <PaintCanvas controller={c} fitOnMount={false} />
+        <StickerPanel controller={c} />
+      </>
+    );
+    act(() => {
+      c.setBrush({ id: 'hair-strands' });
+    });
+    setValue(container.querySelector('select[aria-label="Particle kind"]') as HTMLSelectElement, 'orbit');
+    expect(c.getState().brush.particle.kind).toBe('orbit');
+    setValue(container.querySelector('select[aria-label="Particle render"]') as HTMLSelectElement, 'sequence');
+    expect(c.getState().brush.particle.render).toBe('sequence');
+    act(() => {
+      c.setBrush({ id: 'bristle-round' });
+    });
+    expect(container.querySelector('input[aria-label="Splay"]')).not.toBeNull();
+    act(() => {
+      c.setBrush({ id: 'sticker-stars' });
+    });
+    click(container.querySelector('[aria-label="Sticker stamps"] button[aria-pressed="false"]')!);
+    expect(c.getState().brush.sticker.stamps.length).toBe(3);
+    click(byText('Ruler'));
+    expect(c.listStencils()[0].kind).toBe('ruler');
+    expect(container.querySelectorAll('svg line[stroke="#fbbf24"]').length).toBeGreaterThan(0);
+    click(byText('Clear stencils'));
+    expect(c.listStencils()).toHaveLength(0);
+    act(() => {
+      c.paintStroke({ points: [{ x: 20, y: 100 }, { x: 280, y: 100 }] });
+    });
+    const list = container.querySelectorAll('[data-testid="sticker-panel"] [role="option"]');
+    expect(list.length).toBe(c.listStickers().length);
+    click(list[0]);
+    click(byText('Delete'));
+    expect(c.listStickers().length).toBe(list.length - 1);
   });
 });

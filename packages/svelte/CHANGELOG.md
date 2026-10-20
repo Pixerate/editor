@@ -1,5 +1,67 @@
 # @pixerate/editor-svelte
 
+## 0.84.0
+
+### Minor Changes
+
+- 051ea82: Add CMYK and Lab document modes. CMYK PSDs now open through their embedded CMYK profile (or the default coated CMYK) instead of a plain ink approximation, and keep CMYK mode; Lab PSDs keep Lab mode. `setColorMode('cmyk' | 'lab' | 'rgb', { profile, intent })` (and the `set_color_mode` agent tool) keeps editing in RGB, soft-proofs a CMYK document through its profile, and makes `toPsd` write CMYK (with the profile in resource 1039) or Lab channels. `<ColorProfilePanel>` gets a Mode menu in React and Svelte.
+
+### Patch Changes
+
+- Updated dependencies [051ea82]
+  - @pixerate/editor@0.115.0
+
+## 0.83.0
+
+### Minor Changes
+
+- 08884db: Add colour management. New `@pixerate/editor/cms`: a TypeScript ICC engine (ICC v2 / v4 profiles with matrix/TRC, grey and LUT tags, ICC v4.3 writing, transforms with all four rendering intents and black point compensation, soft-proof chains, gamut checks, built-in sRGB, Display P3, Adobe RGB- and ProPhoto-compatible, Rec. 2020, grey, Lab and a synthetic coated CMYK, and embedded profiles in PNG / JPEG / PSD). The image editor gets a document colour profile (working space) in history and JSON, `assignProfile` / `convertToProfile` with intents and BPC, a colour-managed viewport, `setProofSetup` soft proofing with a gamut warning, profiles read from and written to PSD and embedded in PNG / JPEG exports, `convertColors`, and the `get_color_profile`, `assign_profile`, `convert_to_profile`, `set_proof_setup` and `convert_colors` agent tools. React and Svelte get `<ColorProfilePanel>` in the Layers tab.
+- 3a2fc3d: Add 16-bit and 32-bit float layers, additively. `@pixerate/editor/raster` tiles may carry deep samples (`Uint16Array` sRGB or `Float32Array` linear light) next to their 8-bit rendering, so every 8-bit consumer, the paint editor included, works unchanged; new `deepTile`, `readDeepRegion`, `writeDeepRegion`, `convertSurfaceDepth`, `surfaceFromDeepPixels` and sample conversions. The image editor gets a document bit depth (`setBitDepth`, `bitDepth`, Image › Mode as one undo step), opens and saves 16- and 32-bit PSDs at their depth (layers in Lr16 / Lr32), keeps deep samples in v3 JSON, and exposes `set_bit_depth` plus `bitDepth` in `get_image_info` to agents. React and Svelte `<LayersPanel>` show a Bits per channel menu.
+- e0f9a18: Vector connectors: open paths whose ends are glued to other objects' sides or centres.
+
+  - Connectors follow those objects through every edit.
+  - Routes can be straight, elbow (with an optional bend radius) or curved. `auto` sides pick the side facing the other end.
+  - A Connector tool (X) shows connection sites as you draw. Settings round-trip through SVG.
+  - New controller methods: `addConnector`, `setConnector`, `getConnectors` and `getConnectionSites`.
+  - New agent commands: `vector.connect`, `vector.setConnector`, `vector.listConnectors` and `vector.listConnectionSites`.
+  - New `VectorConnectorPanel` components for React and Svelte.
+
+- 8438ea7: Vector constraints: CAD-style geometric constraints and dimensions between anchors, segments and round paths (coincident, collinear, concentric, fix, parallel, perpendicular, horizontal, vertical, tangent, smooth G2, symmetric, equal, distance, angle, radius, diameter) with named parameters and expressions, solved after every edit (edited geometry moving least), conflicts and redundancy refused, degrees of freedom, Auto Constrain, stable anchor ids, canvas glyphs and `vector.*Constraint` agent commands. React and Svelte add `VectorConstraintsPanel`.
+- 056722d: Vector live corners: squircle corner smoothing (`corner.smoothing`, `setCornerSmoothing`, `smoothing` on `vector.setCorners`), Figma / iOS style continuous corners at any angle, with a Smoothing slider in the React and Svelte style panels.
+- 48ba7ca: Vector frames and artboards with resizing constraints.
+
+  - A group with `frame` set draws a background and clips its children, and selects and snaps by its rectangle. Top-level frames are artboards, and their names show on the canvas.
+  - New ways to make and edit frames: the Frame tool (F), `addFrame`, `frameSelection` and `setFrame`.
+  - When a frame is resized, its children follow their `resizing` constraints: left, right, left & right, centre or scale, and the vertical equivalents.
+  - `frameToSvg` exports a single artboard. SVG export and import round-trip frames.
+  - New agent commands: `vector.listFrames`, `vector.addFrame`, `vector.frameSelection`, `vector.setFrame`, `vector.setResizing` and `vector.exportFrameSvg`.
+  - New `VectorFramePanel` components for React and Svelte.
+
+- fa91d30: Vector symbols and instances: `VectorDocument.symbols` and `instance` nodes that draw a symbol through a transform that may scale and skew, Make Symbol, Place, Replace, Detach, per-instance tints and hidden parts, Edit Symbol in isolation mode (the document dimmed behind, undo stepping in and out), SVG `<symbol>` / `<use>` export and import (foreign `<use>` included) and `vector.*Symbol` agent commands. React and Svelte add `VectorSymbolsPanel` and draw isolation mode in the canvas.
+- 1747793: Vector text: point, area and path text nodes in `@pixerate/editor/vector`, with styled runs, paragraph styles, the Type and Type on a Path tools, on-canvas editing, Create Outlines, SVG text export / import and `vector.*Text` agent commands. Text lays out with the engine of the image editor's type layers, now shared in `src/text` (the image editor re-exports it unchanged), and a built-in OpenType reader (`parseOpenTypeFont`, `loadOpenTypeFont`) gives the outline shaper glyphs from TrueType, CFF and WOFF files. React and Svelte add `VectorTextPanel` and `VectorTextElement`, and the canvases take typing through a hidden textarea.
+- 6224007: CAD-style drawing aids in the vector editor: object snap tracking, polar increments and typed dimensions.
+
+  - **Object snap tracking:** rest on an anchor to acquire it. It then sends alignment paths, plus an open path's extension, and points snap where those paths cross.
+  - **Polar tracking:** pick an increment (`vectorPolarAngles`), optionally measured from the last segment.
+  - **Typed entry while the pen draws:** a distance, `length<angle`, an `@offset` or a position. `placePenPoint` does the same from code, and `addPathByDimensions` draws a whole path from dimensions.
+  - **New agent commands:** `vector.getSnapOptions`, `vector.setSnapOptions` and `vector.addPathByDimensions`.
+  - **Bindings:** the canvases draw tracking markers and the typed entry, and the toolbars gain a polar increment picker.
+
+### Patch Changes
+
+- Updated dependencies [08884db]
+- Updated dependencies [aade46b]
+- Updated dependencies [3a2fc3d]
+- Updated dependencies [e0f9a18]
+- Updated dependencies [8438ea7]
+- Updated dependencies [056722d]
+- Updated dependencies [48ba7ca]
+- Updated dependencies [dbed701]
+- Updated dependencies [fa91d30]
+- Updated dependencies [1747793]
+- Updated dependencies [6224007]
+  - @pixerate/editor@0.114.0
+
 ## 0.82.0
 
 ### Minor Changes

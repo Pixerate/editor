@@ -31,16 +31,16 @@ function profileArg(v: unknown): string | Uint8Array {
 }
 
 /**
- * Agent tools for colour management: `get_color_profile` (the document's profile, Proof Setup
- * and the built-in profiles), `assign_profile`, `convert_to_profile` (each one undo step),
- * `set_proof_setup` (view state) and `convert_colors` (read-only).
+ * Agent tools for colour management: `get_color_profile` (the document's profile, mode, Proof
+ * Setup and the built-in profiles), `assign_profile`, `convert_to_profile`, `set_color_mode`
+ * (each one undo step), `set_proof_setup` (view state) and `convert_colors` (read-only).
  */
 export function createImageColorTools(controller: ImageEditorController): AgentTool[] {
   const getProfile: AgentTool = {
     name: 'get_color_profile',
     title: 'Get the colour profile',
     description:
-      "Reads the document's colour profile (its working space: name, builtin id or null for an embedded profile, colorSpace, srgb true when it means sRGB), the Proof Setup (profile, intent, bpc, simulatePaper, gamutWarning, or null) and the built-in profiles you can assign, convert to or proof with ({id, description, colorSpace}).",
+      "Reads the document's colour profile (its working space: name, builtin id or null for an embedded profile, colorSpace, srgb true when it means sRGB, mode rgb / cmyk / lab and, for cmyk, cmykProfile), the Proof Setup (profile, intent, bpc, simulatePaper, gamutWarning, or null) and the built-in profiles you can assign, convert to or proof with ({id, description, colorSpace}).",
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     annotations: { title: 'Get the colour profile', ...READ },
     handler: () => {
@@ -144,5 +144,30 @@ export function createImageColorTools(controller: ImageEditorController): AgentT
     }),
   };
 
-  return [getProfile, assign, convert, proof, convertColors];
+  const setMode: AgentTool = {
+    name: 'set_color_mode',
+    title: 'Set the colour mode',
+    description:
+      "Image › Mode: rgb, cmyk (for print: give the press `profile`, default coated-cmyk, and the `intent` RGB is separated with) or lab. The document is still edited as RGB in its working space; a CMYK document is soft-proofed through its profile in the viewport (unless set_proof_setup says otherwise), and export_psd writes CMYK or Lab channels with the profile. Changes no pixels. One undo step. Returns the profile summary with mode and cmykProfile.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        mode: { type: 'string', enum: ['rgb', 'cmyk', 'lab'], description: 'The colour mode.' },
+        profile: { ...PROFILE, description: `CMYK mode only: the CMYK profile (default coated-cmyk). ${PROFILE.description}` },
+        intent: INTENT,
+      },
+      required: ['mode'],
+      additionalProperties: false,
+    },
+    annotations: { title: 'Set the colour mode', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    handler: (args) => {
+      if (args.mode !== 'cmyk' && (args.profile !== undefined || args.intent !== undefined)) throw new LayerOperationError('profile and intent apply to CMYK mode only.');
+      return controller.setColorMode(args.mode as 'rgb' | 'cmyk' | 'lab', {
+        ...(args.profile !== undefined ? { profile: profileArg(args.profile) } : {}),
+        ...(args.intent !== undefined ? { intent: args.intent as Intent } : {}),
+      });
+    },
+  };
+
+  return [getProfile, assign, convert, proof, convertColors, setMode];
 }
