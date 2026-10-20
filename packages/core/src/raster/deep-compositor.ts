@@ -30,6 +30,12 @@ export interface DeepCompositorProfile<L extends CompositorLayer, S extends Rast
    * Missing: filter layers run at 8 bits.
    */
   applyFilterRunDeep?(layers: L[], acc: Float32Array, r: RasterRect, coverage: Map<string, Float32Array> | undefined, sources: S): void;
+  /**
+   * A pixel layer's filters in float (`null`: none, or none it can run): `apply` filters float
+   * RGBA in the working space (`linear` at 32 bits) in place; `reach` is how many pixels each
+   * side they read (0 for per-pixel filters). Missing: filtered layers are drawn at 8 bits.
+   */
+  pixelFiltersDeep?(layer: L): { reach: number; apply(data: Float32Array, width: number, height: number, linear: boolean): void } | null;
 }
 
 type Step<L> = { kind: 'content'; layer: L; clipped: L[] } | { kind: 'adjust'; layers: L[] } | { kind: 'group'; layer: L; clipped: L[]; steps: Step<L>[] };
@@ -193,7 +199,7 @@ export class DeepCompositor<L extends CompositorLayer, S extends RasterSources> 
   /** Layers drawn by the 8-bit compositor alone (effects, pixel filters, content the editor draws). */
   private renderedAlone(layer: L): boolean {
     if (hasActiveEffects(layer.effects) && !this.isFilter(layer)) return true;
-    if (this.isPixel(layer)) return Boolean(this.profile.pixelFilters?.(layer));
+    if (this.isPixel(layer)) return Boolean(this.profile.pixelFilters?.(layer)) && !this.deep.pixelFiltersDeep?.(layer);
     return !isGroup(layer);
   }
 
@@ -213,7 +219,43 @@ export class DeepCompositor<L extends CompositorLayer, S extends RasterSources> 
     if (!surface) return null;
     const ox = layer.offset?.x ?? 0;
     const oy = layer.offset?.y ?? 0;
-    const samples = readDeepRegion(surface, { x: r.x - ox, y: r.y - oy, width: r.width, height: r.height }, this.depth);
+    const filters = this.isPixel(layer) ? (this.deep.pixelFiltersDeep?.(layer) ?? null) : null;
+    if (!filters) return this.samples(surface, { x: r.x - ox, y: r.y - oy, width: r.width, height: r.height });
+    // Filters in float: read what they reach (clamped at the canvas edge, as the 8-bit path
+    // filters over the canvas), filter, and keep `r`.
+    const m = filters.reach;
+    const W = this.sources.width;
+    const H = this.sources.height;
+    const x0 = m ? Math.max(0, r.x - m) : r.x;
+    const y0 = m ? Math.max(0, r.y - m) : r.y;
+    const x1 = m ? Math.min(W, r.x + r.width + m) : r.x + r.width;
+    const y1 = m ? Math.min(H, r.y + r.height + m) : r.y + r.height;
+    if (x1 <= x0 || y1 <= y0) return new Float32Array(r.width * r.height * 4);
+    const big = { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
+    const data = this.samples(surface, { ...big, x: big.x - ox, y: big.y - oy });
+    filters.apply(data, big.width, big.height, this.linear);
+    if (big.x === r.x && big.y === r.y && big.width === r.width && big.height === r.height) return data;
+    const out = new Float32Array(r.width * r.height * 4);
+    for (let y = 0; y < r.height; y++) {
+      const sy = r.y + y - big.y;
+      if (sy < 0 || sy >= big.height) continue;
+      for (let x = 0; x < r.width; x++) {
+        const sx = r.x + x - big.x;
+        if (sx < 0 || sx >= big.width) continue;
+        const s = (sy * big.width + sx) * 4;
+        const d = (y * r.width + x) * 4;
+        out[d] = data[s];
+        out[d + 1] = data[s + 1];
+        out[d + 2] = data[s + 2];
+        out[d + 3] = data[s + 3];
+      }
+    }
+    return out;
+  }
+
+  /** A surface's samples over `rect` (layer space) in the working space. */
+  private samples(surface: NonNullable<CompositorLayer['surface']>, rect: RasterRect): Float32Array {
+    const samples = readDeepRegion(surface, rect, this.depth);
     if (samples instanceof Float32Array) return samples;
     const out = new Float32Array(samples.length);
     for (let i = 0; i < samples.length; i++) out[i] = samples[i] / 65535;
