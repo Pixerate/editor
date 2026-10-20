@@ -12,12 +12,12 @@ function rng(seed: number) {
 	};
 }
 
-function scene(count: number, seed = 1): VectorNode[] {
+function scene(count: number, seed = 1, size = 2000): VectorNode[] {
 	const r = rng(seed);
 	const nodes: VectorNode[] = [];
 	for (let i = 0; i < count; i++) {
-		const x = r() * 2000;
-		const y = r() * 2000;
+		const x = r() * size;
+		const y = r() * size;
 		const w = 5 + r() * 60;
 		const h = 5 + r() * 60;
 		const turned = r() < 0.3;
@@ -70,13 +70,24 @@ describe('spatial index on documents', () => {
 	});
 
 	it('hit-tests exactly like a scan (parity on random points, rotated and stroked shapes)', () => {
-		const nodes = scene(1500, 3);
+		// Above the index threshold, dense enough that shapes overlap; kept small so the scan it is
+		// checked against stays fast on CI.
+		const nodes = scene(400, 3, 800);
+		expect(nodes.length).toBeGreaterThan(VECTOR_SPATIAL_MIN);
 		const r = rng(11);
-		for (let k = 0; k < 400; k++) {
-			const p = { x: r() * 2000, y: r() * 2000 };
+		let hits = 0;
+		for (let k = 0; k < 200; k++) {
+			// Half the points at random, half near a shape's edge (where strokes and tolerance decide).
+			const n = nodes[Math.floor(r() * nodes.length)] as { transform: number[] };
+			const p = k % 2 ? { x: r() * 800, y: r() * 800 } : { x: n.transform[4] + (r() - 0.5) * 80, y: n.transform[5] + (r() - 0.5) * 80 };
 			const tol = r() * 6;
-			expect(hitTestVectorNodes(nodes, p, tol)?.id ?? null).toBe(scan(nodes, p, tol)?.id ?? null);
+			const want = scan(nodes, p, tol)?.id ?? null;
+			if (want) hits++;
+			expect(hitTestVectorNodes(nodes, p, tol)?.id ?? null).toBe(want);
 		}
+		// Both outcomes are exercised.
+		expect(hits).toBeGreaterThan(40);
+		expect(hits).toBeLessThan(180);
 	});
 
 	it('selects with the marquee exactly like a scan', () => {
