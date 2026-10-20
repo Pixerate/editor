@@ -13,18 +13,16 @@
    with `list_layer_effects` and change as usual, with the file's patterns (listed in
    `list_layer_effects.patterns`) and its global light. An effects block the editor cannot read
    is kept and written back by `export_psd`, but not drawn; the warnings say so.
-3. **`import_psd` replaces the document** (one undo step). CMYK, Lab, grayscale, indexed, 16-bit
-   and 32-bit files are converted to 8-bit RGB; an RGB file's ICC profile becomes the document's
-   colour profile; the warnings say what changed. Afterwards work with `list_layers` as usual: there is no Background source image, every
 3. **`import_psd` replaces the document** (one undo step). 16- and 32-bit files keep their
-   depth (`get_image_info.bitDepth`); CMYK, Lab, grayscale and indexed files are converted to RGB,
-   and ICC profiles are ignored; the warnings say so. `export_psd` writes at the document's depth.
-   Change it with `set_bit_depth`: 16-bit for smooth gradients and strong grades, 32-bit for
-   linear-light HDR (layers blend in linear light there). Adjustment layers, blend modes, merges
-   and the exported merged image keep the depth; layer effects, layer filters, painting and
-   transforms still work in 8 bits on what they change, so grade a deep file with adjustment
-   layers rather than repainting it when the depth matters. Afterwards work with `list_layers` as usual: there is no Background source image, every
-   pixel comes from the layers.
+   depth (`get_image_info.bitDepth`); CMYK, Lab, grayscale and indexed files are converted to
+   RGB; an RGB file's ICC profile becomes the document's colour profile. The warnings say what
+   changed. `export_psd` writes at the document's depth and embeds its profile. Change the depth
+   with `set_bit_depth`: 16-bit for smooth gradients and strong grades, 32-bit for linear-light
+   HDR (layers blend in linear light there). Adjustment layers, blend modes, merges and the
+   exported merged image keep the depth; layer effects, layer filters, painting and transforms
+   still work in 8 bits on what they change, so grade a deep file with adjustment layers rather
+   than repainting it when the depth matters. Afterwards work with `list_layers` as usual: there
+   is no Background source image, every pixel comes from the layers.
 4. **Smart objects come in live**: embedded contents (a PSB opens as a nested document you can
    edit with `edit_smart_object_contents`, a PNG as raster contents), the placement and warp, the
    smart filters and the filter mask; the layer shows Photoshop's own pixels until you change it.
