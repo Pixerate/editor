@@ -18,6 +18,8 @@
     type PaintEditorController,
   } from '@pixerate/editor/paint-editor';
   import { untrack } from 'svelte';
+  import { DEFAULT_PAINT_GRADIENT, paintSourceCss } from '@pixerate/editor/paint-editor';
+  import PaintGradientEditor from './PaintGradientEditor.svelte';
   import PixelCanvas from './PixelCanvas.svelte';
   import { attempt, button, chip, paintEditorState, panel } from './paintEditorRune.svelte.js';
 
@@ -59,7 +61,7 @@
   };
 </script>
 
-<!-- Hue wheel with harmonies, saturation and value, colours, harmony chips, swatches, mixing pad (paint, knife, pick with a sample size, measured mixes, kept pads). -->
+<!-- Hue wheel with harmonies, saturation and value, colours, gradient paint, harmony chips, swatches (colours and gradients), mixing pad (paint, knife, pick with a sample size, measured mixes, kept pads). -->
 <div class={`${panel} ${className}`} data-testid="color-panel">
   <div class="relative self-center" style={`width: ${wheelSize}px; height: ${wheelSize}px`}>
     <div
@@ -101,6 +103,24 @@
       />
     {/key}
   </div>
+  <div class="flex items-center gap-2" data-testid="paint-source">
+    <span
+      class="h-5 flex-1 rounded ring-1 ring-slate-700"
+      aria-label={snap.paint.type === 'gradient' ? 'Gradient paint' : 'Paint colour'}
+      data-testid="paint-well"
+      style:background={paintSourceCss(snap.paint, { paint: color, secondary: snap.secondaryColor })}
+    ></span>
+    <button
+      type="button"
+      class={chip(snap.paint.type === 'gradient')}
+      aria-pressed={snap.paint.type === 'gradient'}
+      title="Paint that changes colour as the stroke goes"
+      onclick={() => run(() => (snap.paint.type === 'gradient' ? controller.setColor(color) : controller.setPaint(DEFAULT_PAINT_GRADIENT)))}>Gradient</button
+    >
+  </div>
+  {#if snap.paint.type === 'gradient'}
+    <PaintGradientEditor value={snap.paint} colors={{ paint: color, secondary: snap.secondaryColor }} onchange={(g) => run(() => controller.setPaint(g))} />
+  {/if}
   <label class="flex items-center gap-2">
     <span class="w-16 text-slate-400">Saturation</span>
     <input type="range" aria-label="Saturation" min="0" max="1" step="0.01" value={hsv.s} oninput={(e) => setHsv(Number(e.currentTarget.value), hsv.v)} class="flex-1 accent-indigo-500" />
@@ -129,19 +149,19 @@
       <button
         type="button"
         role="option"
-        aria-selected={s.color === color}
-        aria-label={s.name ?? s.color}
-        title={`${s.name ?? s.color} (right-click to remove)`}
+        aria-selected={s.paint ? snap.paint === s.paint : snap.paint.type === 'color' && s.color === color}
+        aria-label={s.name ?? (s.paint ? 'Gradient' : s.color)}
+        title={`${s.name ?? (s.paint ? 'Gradient' : s.color)} (right-click to remove)`}
         class="h-5 w-5 rounded ring-1 ring-slate-700"
-        style={`background: ${s.color}`}
-        onclick={() => controller.setColor(s.color)}
+        style:background={s.paint ? paintSourceCss(s.paint, { paint: color, secondary: snap.secondaryColor }) : s.color}
+        onclick={() => run(() => (s.paint ? controller.setPaint(s.paint) : controller.setColor(s.color)))}
         oncontextmenu={(e) => {
           e.preventDefault();
           controller.removeSwatch(i);
         }}
       ></button>
     {/each}
-    <button type="button" class={button} aria-label="Add swatch" onclick={() => controller.addSwatch(color)}>+</button>
+    <button type="button" class={button} aria-label="Add swatch" onclick={() => run(() => controller.addSwatch(snap.paint))}>+</button>
   </div>
   {#if mixingPad}
     <div class="flex flex-col gap-1" data-testid="mixing-pad">

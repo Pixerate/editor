@@ -2460,6 +2460,21 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: The TypeScript spec kernel costs ~45–70 ms per 256² tile-step, and a disc centred on a tile seam (e.g. 256, 256) wakes four tiles. A 600×420 scene for 160 steps is ~1000 TS tile-steps; CI runners are ~3× slower than a laptop and run test files in parallel.
 - **Solution / Workaround**: Keep CI scenes to one tile (centre marks at 128 on a 256 grid) unless the test is about tiles, use `evaporation: 1` for tests that wait for drying, and keep the TS-vs-wasm parity scene to 2 tiles and a few steps (bit differences show from the first step). The full parity and batching scenes run with `WET_BENCH=1`.
 
+### [core/paint] A Gradient Stroke's Colour Lags Half a Tip Behind the Pen
+- **Issue / Symptom**: With gradient paint by distance, the colour at a pixel was that of a dab up to a radius behind, and tests sampling "the pixel at 100 px of travel" found a mixed colour.
+- **Root Cause**: Build-up stops at the stroke's opacity ceiling: the first dab to reach a pixel lays most of its coverage, and later dabs only top up the antialiased edge. Each pixel's colour is the coverage-weighted mix of the dabs that added to it (`CoverageMap.colors`), as paint would be.
+- **Solution / Workaround**: Expected: it is what a loaded brush does. Test colours half a tip ahead of the travel you mean, or check closeness, not exact bytes, at antialiased edges.
+
+### [core/paint-editor] Migrating the Multi-Colour Brush Bit for Bit Needs Its Arithmetic, Not Just Its Gradient
+- **Issue / Symptom**: Converting `behavior.multicolor` to an equivalent gradient changed a few pixels of old strokes.
+- **Root Cause**: The old brush computed the colour position as `(index / length) % colours` and `j / (steps − 1) · (n − 1)`; a gradient sampler that finds the segment by comparing offsets computes `(t − o₀) / (o₁ − o₀)`, which differs in the last bits and can flip a byte after pigment mixing.
+- **Solution / Workaround**: `PaintGradientSampler` uses the same arithmetic when the stops are evenly spaced (`uniform`): the segment by `f = t · (n − 1)`, and for repeating `distance` in dabs `f = (travel / (length / segments)) % segments`. `tests/paint-gradient-migration.test.ts` keeps the pixel hashes the old code gave; keep them passing.
+
+### [core/paint] Stop Colours "paint" / "secondary" Must Be Resolved Before a Stroke Is Recorded
+- **Issue / Symptom**: A replayed gradient stroke would follow whatever the editor colours are at replay time.
+- **Root Cause**: Gradients may name the editor's colours (presets that follow the chosen colours, migrated multi-colour brushes without colours of their own).
+- **Solution / Workaround**: `resolvePaintGradient` replaces them with the stroke's colours when it starts, and the stroke records the resolved gradient (`RecordedStroke.paint`); replays pass it back as `paint`, which wins over the brush's and the editor's.
+
 ### [core/vector] A Swept Shape's Edge Bands Must All Wind The Same Way
 
 - **Issue / Symptom**: A block shadow (`sweepPath`) came out with holes along some sides of the shape.

@@ -18,6 +18,7 @@ import { dabRect, rasterizeDab } from '../paint/brush';
 import { SmudgeTip } from '../paint/blending';
 import { exchangeRates, PaintExchange, TileMedium, type MixerLoad, type PaintTileTarget, type RgbTriple } from '../paint/exchange';
 import { SRGB_TO_LINEAR, linearToSrgb8 } from '../paint/wet/film';
+import { PaintGradientSampler, type PaintGradientSample, type PaintGradientSource } from '../paint/gradient-paint';
 import { TILE, TiledSurface, finishTile, readRegion, surfaceFromPixels, tileKey, type RasterRect, type Tile, type TileKey } from '../raster/surface';
 import { decodePng, parseDataUrl, pngDataUrl } from '../raster/png';
 import type { PaintBrush } from './brushes';
@@ -196,6 +197,8 @@ export interface ThickStrokeInit {
   load: MixerLoad;
   seed: number;
   copies: readonly StrokeCopy[];
+  /** Gradient paint (resolved): the colour varies along the impasto. */
+  paint?: PaintGradientSource | null;
 }
 
 interface CopyState {
@@ -235,9 +238,13 @@ export class ThickStrokeDriver {
       amount: 1,
     }));
     this.medium = new TileMedium(init.target, {});
+    // Across the tip makes no sense for a loaded impasto tip: the colour follows the dab instead.
+    this.sampler = init.paint ? new PaintGradientSampler(init.paint.map.by === 'across-tip' ? { ...init.paint, map: { by: 'distance', length: 300, repeat: 'mirror' } } : init.paint, init.seed) : null;
   }
 
   private readonly copies: readonly StrokeCopy[];
+  private readonly sampler: PaintGradientSampler | null;
+  private readonly sample: PaintGradientSample = { rgb: [0, 0, 0], alpha: 1 };
 
   /** What copy 0 carries after the dabs so far. */
   get load(): MixerLoad {
@@ -372,10 +379,16 @@ export class ThickStrokeDriver {
     }
     // Colour: the exchange mixes the brush paint with the wet paint it picks up (like oil).
     const ex = st.exchange;
+    let flow = 1;
+    if (this.sampler) {
+      const g = this.sampler.dab(d, this.sample);
+      ex.setReservoirColor(g.rgb[0], g.rgb[1], g.rgb[2]);
+      flow = g.alpha;
+    }
     ex.pickUp(this.medium.sample(rect, tip));
     const total = ex.paint(this.paint);
     ex.drain();
-    const dep = Math.min(1, total) * k * (1 - 0.5 * im.thinner);
+    const dep = Math.min(1, total) * k * (1 - 0.5 * im.thinner) * flow;
     if (dep > 0) {
       const cov = new Float32Array(n);
       for (let p = 0; p < n; p++) cov[p] = tip[p] > 0 ? Math.min(1, tip[p] * (im.tool === 'roller' || im.tool === 'gloop' || im.tool === 'tube' ? 1.6 : 1.1)) : 0;

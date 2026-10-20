@@ -18,7 +18,8 @@
  * engine, so opacity, blend modes, locks, stencils and symmetry work as for any dry brush.
  */
 
-import { CoverageMap, dabRect, rasterizeDab, type Dab } from '../paint/brush';
+import { CoverageMap, dabRect, rasterizeDab, TIP_GRADIENT_STEPS, type Dab } from '../paint/brush';
+import { PaintGradientSampler, type PaintGradientSample, type PaintGradientSource } from '../paint/gradient-paint';
 import type { RasterRect } from '../raster/surface';
 import type { PaintBrush } from './brushes';
 import { IDENTITY_COPY, PenDabWalker, PenSmoother, type PenDab, type PenPoint, type StrokeCopy } from './engine';
@@ -30,6 +31,8 @@ export interface ProceduralStrokeOptions {
   paperDepth: number;
   seed?: number;
   copies?: readonly StrokeCopy[];
+  /** Gradient paint (resolved): each mark takes the colour of the pen dab that made it. */
+  paint?: PaintGradientSource | null;
 }
 
 /** What a coverage-building stroke engine provides to the stroke session. */
@@ -55,11 +58,18 @@ abstract class MarkStroke implements CoverageStroke {
   private lastRaw: PenPoint | null = null;
   private lastFed: PenPoint | null = null;
   protected readonly seed: number;
+  private readonly sampler: PaintGradientSampler | null;
+  private readonly tipTable: PaintGradientSample[] | null;
+  /** The pen dab the marks being made belong to, and its gradient colour. */
+  private pen: PenDab | null = null;
+  private penColor: PaintGradientSample = { rgb: [0, 0, 0], alpha: 1 };
 
   constructor(
     readonly brush: PaintBrush,
     protected readonly options: ProceduralStrokeOptions
   ) {
+    this.sampler = options.paint ? new PaintGradientSampler(options.paint, options.seed ?? 0) : null;
+    this.tipTable = this.sampler?.acrossTip ? this.sampler.tipTable(TIP_GRADIENT_STEPS) : null;
     this.smoother = new PenSmoother(brush.tip.smoothing, brush.pressureSmoothing);
     this.copies = options.copies?.length ? options.copies : [IDENTITY_COPY];
     this.seed = options.seed ?? 0;
@@ -78,10 +88,28 @@ abstract class MarkStroke implements CoverageStroke {
       this.copies.forEach((c, i) => {
         const dabs: PenDab[] = [];
         this.walkers[i].push(c.map(p), dabs);
-        for (const d of dabs) this.advance(i, d, rects);
+        for (const d of dabs) this.step(i, d, rects);
       });
     }
     return rects;
+  }
+
+  private step(copy: number, d: PenDab, rects: RasterRect[]): void {
+    if (this.sampler) {
+      this.pen = d;
+      if (!this.tipTable) this.sampler.dab(d, this.penColor);
+    }
+    this.advance(copy, d, rects);
+  }
+
+  /** The colour of a mark at (x, y): its pen dab's, or across the tip by its offset from the pen. */
+  private markColor(x: number, y: number): PaintGradientSample | null {
+    if (!this.sampler || !this.pen) return null;
+    if (!this.tipTable) return this.penColor;
+    const d = this.pen;
+    const u = ((x - d.x) * Math.sin(d.direction) + (y - d.y) * Math.cos(d.direction)) / Math.max(0.5, d.radius);
+    const last = this.tipTable.length - 1;
+    return this.tipTable[Math.min(last, Math.max(0, Math.round(((u + 1) / 2) * last)))];
   }
 
   finish(): RasterRect[] {
@@ -92,7 +120,7 @@ abstract class MarkStroke implements CoverageStroke {
       const dabs: PenDab[] = [];
       if (raw && fed && (raw.x !== fed.x || raw.y !== fed.y)) this.walkers[i].push(c.map({ ...raw, pressure: fed.pressure }), dabs);
       this.walkers[i].finish(dabs);
-      for (const d of dabs) this.advance(i, d, rects);
+      for (const d of dabs) this.step(i, d, rects);
     });
     return rects;
   }
@@ -116,7 +144,9 @@ abstract class MarkStroke implements CoverageStroke {
       for (let yy = 0, k = 0; yy < rect.height; yy++)
         for (let xx = 0; xx < rect.width; xx++, k++) if (vals[k] > 0) vals[k] *= grainCatch(grain.at(rect.x + xx + 0.5, rect.y + yy + 0.5), this.depth, pressure);
     }
-    this.coverage.accumulate(rect, vals, dab.opacity);
+    const color = this.markColor(x, y);
+    if (color && color.alpha < 1) for (let k = 0; k < n; k++) vals[k] *= color.alpha;
+    this.coverage.accumulate(rect, vals, dab.opacity, color ? color.rgb : null);
     rects.push(rect);
     this.dabCount++;
   }

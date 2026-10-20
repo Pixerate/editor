@@ -262,7 +262,9 @@ describe('paint editor brushes', () => {
     // Out-of-range and unknown values are clamped or ignored.
     const e = normalizePaintBrush({ behavior: { pickup: 3, multicolor: { mode: 'stripes' as never, colors: ['#ff0000', 'red', '#00FF00'], length: 0 } } });
     expect(e.behavior.pickup).toBe(1);
-    expect(e.behavior.multicolor).toMatchObject({ mode: 'off', colors: ['#ff0000', '#00ff00'], length: 1 });
+    // An unknown multi-colour mode turns nothing on (multi-colour is gradient paint now: `brush.paint`).
+    expect(e.paint).toBeNull();
+    expect(e.behavior.multicolor.mode).toBe('off');
   });
 
   it('a pick-up brush drags the colour it crosses, and a dirty brush carries it into the next stroke', () => {

@@ -43,6 +43,23 @@ function controller() {
 }
 
 describe('Svelte paint tools', () => {
+  it('BrushOptionsBar turns on gradient paint for the brush and edits it', () => {
+    const c = controller();
+    component = mount(BrushOptionsBar, { target, props: { controller: c } });
+    flushSync();
+    click(button('Brush'));
+    click(button('Gradient'));
+    expect(c.getState().paint.paint).toMatchObject({ type: 'gradient', stops: [{ color: 'paint' }, { color: 'secondary' }] });
+    expect(target.querySelector('[data-testid="paint-gradient-editor"]')).not.toBeNull();
+    const follows = target.querySelector('select[aria-label="Gradient follows"]') as HTMLSelectElement;
+    follows.value = 'velocity';
+    follows.dispatchEvent(new Event('change', { bubbles: true }));
+    flushSync();
+    expect(c.getState().paint.paint).toMatchObject({ map: { by: 'velocity' } });
+    click(button('Gradient'));
+    expect(c.getState().paint.paint.type).toBe('color');
+  });
+
   it('BrushOptionsBar sets tools, brush settings, colours and fills', () => {
     const c = controller();
     component = mount(BrushOptionsBar, { target, props: { controller: c } });

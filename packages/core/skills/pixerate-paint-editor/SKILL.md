@@ -187,6 +187,30 @@ is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y do
   `get_relief` reads a layer's relief; `flatten_relief` removes it but keeps the colour.
 - **Metallic paper**: `set_paper` `metallic` 0..1 makes the grain sparkle under the light.
 
+## Gradient paint
+
+Paint that changes colour as the stroke goes: give a gradient where a colour would go.
+
+1. **`set_paint`** with `{ type: "gradient", stops, map }` makes it the paint for every following
+   stroke (`set_color` goes back to one colour); `paint_stroke` `paint` overrides it for one stroke;
+   a brush can carry its own (`set_brush` `paint`, presets `gradient-round`, `pressure-ombre`,
+   `rainbow-marker`, `gradient-wash`).
+2. **Choose the mapping by what the stroke should do**: `distance` (default, 300 px then
+   `mirror` back) for "drag it out" colour; `pressure` for light-to-heavy shading in one stroke;
+   `direction` for strokes coloured by their heading; `across-tip` for a brush loaded with several
+   colours side by side; `random` (`every` dabs) for speckled or confetti colour; `time` and
+   `velocity` need timed points (`t`). Set `length` to about the stroke length you will paint.
+3. **Stops**: 2..16, sorted by `offset`; `"paint"` / `"secondary"` follow the two editor colours;
+   `opacity` multiplies flow (fade a stroke out); `midpoint` shifts where two colours meet;
+   `softness` 0 makes hard bands. `space` `pigment` (default) mixes like paint (blue to yellow
+   through green), `oklab` keeps rainbows bright.
+4. **It works with every colour engine**: dab, Mixer Brush (each dab reloads its reservoir),
+   watercolour and gouache (each deposit carries its pigment into the wet layer, which then flows
+   and mixes), oil and impasto (the colour varies along the relief), particles, bristles and
+   stickers. Erasers, blenders and smudges ignore it; the eyedropper picks one colour.
+5. Strokes record the gradient (with concrete colours), so replays, time-lapses, high-res
+   re-renders and drying are exact. `get_brush` `strokePaint` says what the next stroke paints.
+
 ## Procedural brushes, bristles, stickers and stencils
 
 - **Particle brushes** (category `procedural`): `hair-strands` (strings of masses dragged behind
@@ -240,9 +264,9 @@ is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y do
 
 | Tool | Use |
 | --- | --- |
-| `list_brushes` | Read the library (built-in and saved): id, name, category, engine, size, grain response, rotation, `wetCapable`, `pickup`, `dirty`, `multicolor` mode, `builtin`; plus the active brush id and whether it is edited. |
-| `get_brush` | Read every setting of a brush, or of the active brush as edited (no `id`). Read before changing a brush you did not build. |
-| `set_brush` | Choose the active brush (`id`) and / or change it: `tip` (size px, hardness, spacing, angle, roundness, opacity, flow, smoothing, pressureSize, pressureOpacity, blend), `grain`, `pressureSmoothing`, `rotation`, `dynamics` (minSize, pressureFlow, tiltSize, tiltRoundness, tiltOpacity, velocitySize, velocityOpacity, jitters, scatter), `engine`, `mixer`, `loadsColor`, `behavior` (pickup, mix, dirty, mixing, multicolor: mode, colors, order, length, softness), `blender` (strength, distance, mixing), `smudge` (strength, length, mixing). Editor state. Returns the brush. |
+| `list_brushes` | Read the library (built-in and saved): id, name, category, engine, size, grain response, rotation, `wetCapable`, `pickup`, `dirty`, `gradient` (has its own gradient paint), `multicolor` mode, `builtin`; plus the active brush id and whether it is edited. |
+| `get_brush` | Read every setting of a brush, or of the active brush as edited (no `id`), including `paint` (its own gradient, or null) and `strokePaint` (what its next stroke paints). Read before changing a brush you did not build. |
+| `set_brush` | Choose the active brush (`id`) and / or change it: `tip` (size px, hardness, spacing, angle, roundness, opacity, flow, smoothing, pressureSize, pressureOpacity, blend), `grain`, `pressureSmoothing`, `rotation`, `dynamics` (minSize, pressureFlow, tiltSize, tiltRoundness, tiltOpacity, velocitySize, velocityOpacity, jitters, scatter), `engine`, `mixer`, `loadsColor`, `behavior` (pickup, mix, dirty, mixing; multicolor is the older form of `paint`), `paint` (the brush's own gradient, or null for the editor's paint), `blender` (strength, distance, mixing), `smudge` (strength, length, mixing). Editor state. Returns the brush. |
 | `save_brush` | Store the active brush in the user library under `id` (lowercase, digits, dashes) and `name`. Built-in ids are refused. |
 | `remove_brush` | Delete a user brush. Built-in brushes cannot be removed. |
 | `export_brushes` | Get a brush library file (JSON) of `ids`, or of every user brush. |
@@ -254,14 +278,15 @@ is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y do
 | Tool | Use |
 | --- | --- |
 | `mix_colors` | Predict a mix: `colors` with `weight` parts (and optional tinting `strength`), `model` `pigment` (default, Kubelka-Munk: what pigment blends, the Mixer Brush, pigment blending tools and the pad do) or `rgb` (what normal blending and rgb mixing do). Returns `mixed` by the model plus `pigment` and `rgbLerp` for comparison. Changes nothing. Use it to choose stroke colours. |
-| `set_color` | Set the default paint `color` (and `secondaryColor`). |
+| `set_color` | Set the default paint `color` (and `secondaryColor`); back to one colour after gradient paint. |
+| `set_paint` | Set the paint: one colour, or gradient paint (`stops`, `space`, `map`, `softness`; see Gradient paint). Errors say what is wrong (unsorted stops, a bad mapping). Returns `paint`, `color`, `secondaryColor`. |
 | `pick_color` | Read the colour at `x`, `y`: of the painting with its paper, or of one layer (with alpha). |
 | `get_mixer_brush` | Read what the brush carries: the Mixer Brush `reservoir` and `amount` left, and `pickup` (paint picked up, kept by dirty brushes). |
 | `load_mixer_brush` | Fill the Mixer Brush reservoir with a colour (keeps its pickup). |
 | `clean_mixer_brush` | Wipe the brush: drop the picked-up paint a dirty brush or the Mixer Brush carries (and with `emptyReservoir` the Mixer Brush paint). |
 | `color_harmony` | Get a harmony (`kind`: complementary, split-complementary, analogous, triadic, tetradic, square, monochromatic) around `color` (default the paint colour), on the `ryb` painter's wheel (default; red ↔ green) or the `rgb` wheel (red ↔ cyan), `spread` degrees for analogous and split. Changes nothing. |
-| `list_swatches` | Read the swatches (index, colour, name). |
-| `add_swatch` | Keep a colour as a swatch (saved with the document). |
+| `list_swatches` | Read the swatches (index, colour, name, and `paint` for a gradient swatch). |
+| `add_swatch` | Keep a colour (`color`) or a gradient (`paint`) as a swatch (saved with the document). |
 | `remove_swatch` | Remove a swatch by `index`. |
 | `mixing_pad_stroke` | Paint on the 360 × 220 mixing pad (pad px): `tool` paint lays `color` with a pigment Mixer Brush, `knife` smears what is there and mixes it as paint. Scratch space, not the painting, no undo. |
 | `pick_mixing_pad_color` | Read the mix on the pad at `x`, `y` (averaged over `radius`, default 3); `setColor` makes it the paint colour. Null where the pad is bare. |
@@ -277,7 +302,7 @@ is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y do
 
 | Tool | Use |
 | --- | --- |
-| `paint_stroke` | Paint one stroke through `points` (document px; `pressure` 0..1, `t` ms, `tiltX` / `tiltY` or `altitude` / `azimuth`, `twist`) with `brushId` (default the active brush), optional per-stroke `brush` changes, `color`, `layerId`, `seed`, `snapToPerspective`. The symmetry guide adds its copies; a sampling tracing image supplies the colour when `color` is missing. Returns `layerId`, `bounds`, `dabs`, `strokeId` and, for brushes that pick up paint, `mixerLoad` (what the brush carries now). Refused on locked, hidden or group layers, with the fix in the message. |
+| `paint_stroke` | Paint one stroke through `points` (document px; `pressure` 0..1, `t` ms, `tiltX` / `tiltY` or `altitude` / `azimuth`, `twist`) with `brushId` (default the active brush), optional per-stroke `brush` changes, `color` or `paint` (a gradient for this stroke), `layerId`, `seed`, `snapToPerspective`. The symmetry guide adds its copies; a sampling tracing image supplies the colour when `color` is missing. Returns `layerId`, `bounds`, `dabs`, `strokeId` and, for brushes that pick up paint, `mixerLoad` (what the brush carries now). Refused on locked, hidden or group layers, with the fix in the message. |
 | `list_strokes` | Read the recorded strokes, oldest first (default the last 100): id, layer, brush, colour, point count, seed, bounds. With `ids`, their points too. |
 | `replay_strokes` | Paint recorded `strokeIds` again: exactly, or varied by `dx` / `dy` (px), `rotate` (degrees clockwise), `scale` (brush size follows), `flipX`, `origin`, `pressureScale`, `color`, `brushId`, `layerId`, `repeat` (each copy applies the variation again). One undo step. Returns the new stroke ids, bounds and layers. |
 | `undo_paint` | Undo the last step (a wet stroke's undo puts the wet paint back as it was before it). Returns what was undone and what is next. |

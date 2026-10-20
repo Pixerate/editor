@@ -49,6 +49,14 @@ describe("paint agent scripts", () => {
     controller.dispose();
   }, 120_000);
 
+  it("paints with gradient paint: a sunset by distance, a rainbow across the tip, hills by pressure", async () => {
+    const { controller, registry } = setup();
+    await runAgentScript(registry, PAINT_SCRIPTS.find((s) => s.id === "paint-gradient")!, { control: { speed: Infinity, stopped: false } });
+    const strokes = controller.getStrokes();
+    expect(strokes.map((s) => s.paint?.map.by)).toEqual(["distance", "distance", "across-tip", "pressure"]);
+    expect(controller.getState().swatches.at(-1)!.name).toBe("Sunset");
+  }, 120_000);
+
   it("draws with stencils, particle and bristle brushes and editable stickers", async () => {
     const { controller, registry } = setup();
     await runAgentScript(registry, PAINT_SCRIPTS.find((s) => s.id === "paint-procedural")!, { control: { speed: Infinity, stopped: false } });
