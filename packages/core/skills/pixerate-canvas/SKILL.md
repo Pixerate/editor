@@ -167,11 +167,12 @@ are kept exactly). They need unlocked shapes; other selected nodes are ignored.
 
 Freehand strokes are `path` shape nodes, so they select, move, group, erase and export like any
 shape. A stroke with `data.shape.brush` is painted with a dry paint brush instead of an SVG stroke
-(the path stays the data; the paint is rendered from it).
+(the path stays the data; the paint is rendered from it); `brush.paint` gives it gradient paint, sampled dab by dab
+along the path, instead of the stroke colour).
 
 | Command | Use it to |
 | --- | --- |
-| `canvas.drawFreehand` | Draw a pen or highlighter stroke through `points` (`[x, y]` pairs in canvas units, in drawing order; one undo step). `tool` picks the defaults (`pen`: blue, width 3; `highlighter`: yellow, width 24, opacity 0.35); `color`, `width`, `opacity` override them. Pass `brush` (a preset id from `canvas.listBrushes`, or tip settings) to paint it with a dry brush, plus `pressure` / `tiltX` / `tiltY` profiles spread along its length (`[0.2, 1, 0.3]` swells in the middle). Returns the node `id`, its `bounds` and the stored `brush`. |
+| `canvas.drawFreehand` | Draw a pen or highlighter stroke through `points` (`[x, y]` pairs in canvas units, in drawing order; one undo step). `tool` picks the defaults (`pen`: blue, width 3; `highlighter`: yellow, width 24, opacity 0.35); `color`, `width`, `opacity` override them. Pass `brush` (a preset id from `canvas.listBrushes`, or tip settings) to paint it with a dry brush, plus `pressure` / `tiltX` / `tiltY` profiles spread along its length (`[0.2, 1, 0.3]` swells in the middle). Add `paint` (only with `brush`) for gradient paint that changes colour along the stroke: `{ "type": "gradient", "stops": [...], "map": { "by": "distance", "length": 200 } }` (length in canvas units), or `by` `pressure`, `tilt`, `direction`, `across-tip`, `random`. Returns the node `id`, its `bounds` and the stored `brush` (with `paint` normalised: defaults filled in, colours lowercased). |
 | `canvas.listBrushes` | Read-only: the dry paint presets `canvas.drawFreehand` accepts as `brush` (`id`, `name`, `category`, the preset's own `size`). Call it before the first brushed stroke instead of guessing ids. |
 
 ### Components (command form)
@@ -249,6 +250,14 @@ effects provider (for example Flair); without one the read tools say so and the 
 - **Brushes are dry only.** Wet presets (watercolour, gouache, wet oils), mixer, blender, smudge and
   eraser presets are refused: wet paint needs an area to flow in, and the others need paint under
   them. `pressure` and tilt without a `brush` are refused too.
+- **Gradient paint needs a brush, and no timing.** `paint` without `brush` is refused; use
+  `color` for a plain stroke. Canvas strokes record no timing, so `velocity` and `time` mappings
+  are refused: use `distance` for colour that changes along the stroke. The stroke `color` still
+  sets the alpha and fills `"paint"` stops (`"secondary"` is white). A distance `length` shorter
+  than the stroke with `repeat: "mirror"` (the default) runs back and forth; use `clamp` and a
+  length near the stroke's to go from one end to the other once.
+- A canvas gradient in `color` does not reach the brush: a brushed stroke with a gradient
+  `color` and no `paint` uses its first stop. Pass `paint` instead.
 - **Shape operations drop the brush.** Unite, subtract, offset path and outline stroke turn
   brushed strokes into plain filled or stroked paths.
 - `canvas_*` tools validate ids against the current state; an "Unknown node id" error means call

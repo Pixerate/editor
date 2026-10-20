@@ -8,9 +8,9 @@
 import { brushstrokeScaleBucket } from '../paint/brushstroke-scale.js';
 import { parseSvgPath, type PathShape, type ShapeDescription, type ShapeSize } from './shapeGeometry.js';
 import type { Point } from './types.js';
-import type { CanvasBrush, CanvasBrushPreset, CanvasBrushstroke } from './brushTypes.js';
+import type { CanvasBrush, CanvasBrushPaint, CanvasBrushPreset, CanvasBrushstroke } from './brushTypes.js';
 
-export type { CanvasBrush, CanvasBrushPreset, CanvasBrushSettings, CanvasBrushstroke } from './brushTypes.js';
+export type { CanvasBrush, CanvasBrushPaint, CanvasBrushPaintMapping, CanvasBrushPaintStop, CanvasBrushPreset, CanvasBrushSettings, CanvasBrushstroke } from './brushTypes.js';
 
 export { brushstrokeScaleBucket };
 
@@ -121,6 +121,8 @@ export interface CanvasBrushstrokeRenderer {
 	listCanvasBrushes(): CanvasBrushPreset[];
 	/** Throws for an unknown or non-dry brush; the result is the paint engine's brush. */
 	resolveCanvasBrush(brush: CanvasBrush, width: number): unknown;
+	/** Throws for paint that is not a colour or gradient paint a canvas stroke can use; the result is the paint engine's `PaintSource`. */
+	resolveCanvasPaint(paint: unknown): unknown;
 	renderShapeBrushstrokeNow(shape: BrushedPathShape, scale: number): CanvasBrushstrokeImage | null;
 	brushedShapeSvgNow(shape: BrushedPathShape, size: ShapeSize, scale: number): string;
 }
@@ -150,6 +152,14 @@ export async function listCanvasBrushes(): Promise<CanvasBrushPreset[]> {
  */
 export async function validateCanvasBrush(brush: CanvasBrush): Promise<void> {
 	(await loadCanvasBrushstrokeRenderer()).resolveCanvasBrush(brush, 1);
+}
+
+/**
+ * Checks a brushed stroke's `paint` (a colour or gradient paint): bad stops, an unknown mapping,
+ * or a mapping that needs timed samples (`velocity`, `time`) throw an error saying what to use.
+ */
+export async function validateCanvasBrushPaint(paint: CanvasBrushPaint): Promise<void> {
+	(await loadCanvasBrushstrokeRenderer()).resolveCanvasPaint(paint);
 }
 
 export interface RenderShapeBrushstrokeOptions {

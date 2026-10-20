@@ -19,6 +19,7 @@ import {
 import { CommandRegistry, createCommandToolProvider, createDrawCommands } from '../src/commands';
 import { ToolRegistry } from '../src/tools';
 import { HistoryManager } from '../src/history';
+import { decodePng, parseDataUrl } from '../src/raster/png';
 
 const wave: Point[] = Array.from({ length: 20 }, (_, i) => [10 + i * 8, 40 + Math.sin(i / 3) * 15] as Point);
 const pen = (i: number) => ({ pressure: 0.2 + (0.8 * i) / 19, tiltX: 20, tiltY: 0 });
@@ -130,6 +131,73 @@ describe('brushed freehand strokes', () => {
 	});
 });
 
+const blueToYellow = {
+	type: 'gradient' as const,
+	stops: [
+		{ offset: 0, color: '#1d4ed8' },
+		{ offset: 1, color: '#facc15' }
+	],
+	space: 'srgb' as const,
+	map: { by: 'distance' as const, length: 140, repeat: 'clamp' as const }
+};
+
+/** The mean RGB of the painted pixels of a brushstroke image in a column range (fractions of its width). */
+function meanColor(href: string, from: number, to: number): [number, number, number] {
+	const png = decodePng(parseDataUrl(href)!.bytes);
+	const sum = [0, 0, 0];
+	let n = 0;
+	for (let y = 0; y < png.height; y++) {
+		for (let x = Math.floor(from * png.width); x < Math.ceil(to * png.width); x++) {
+			const i = (y * png.width + x) * 4;
+			if (png.data[i + 3] < 200) continue;
+			for (let c = 0; c < 3; c++) sum[c] += png.data[i + c];
+			n++;
+		}
+	}
+	return sum.map((v) => v / Math.max(1, n)) as [number, number, number];
+}
+
+describe('gradient paint on brushed strokes', () => {
+	const straight: Point[] = Array.from({ length: 16 }, (_, i) => [i * 10, 20] as Point);
+	const painted = (paint: unknown, color = '#e11d48') =>
+		(strokeToShapeNode({ id: 'g', tool: 'pen', points: straight, style: { color, width: 10, opacity: 1, brush: { hardness: 1 }, paint: paint as any } }).data as any).shape as PathShape;
+
+	it('stores the paint on the brushstroke', () => {
+		expect(painted(blueToYellow).brush).toEqual({ brush: { hardness: 1 }, paint: blueToYellow });
+	});
+
+	it('a distance gradient paints the start and the end in different colours', async () => {
+		const image = await renderShapeBrushstroke(painted(blueToYellow), { scale: 1 });
+		const start = meanColor(image!.href, 0, 0.1);
+		const end = meanColor(image!.href, 0.9, 1);
+		expect(start[2]).toBeGreaterThan(150); // blue
+		expect(start[0]).toBeLessThan(80);
+		expect(end[0]).toBeGreaterThan(200); // yellow
+		expect(end[2]).toBeLessThan(80);
+	});
+
+	it('keeps the gradient in place along the path at every zoom', async () => {
+		const at1 = meanColor((await renderShapeBrushstroke(painted(blueToYellow), { scale: 1 }))!.href, 0.9, 1);
+		const at4 = meanColor((await renderShapeBrushstroke(painted(blueToYellow), { scale: 4 }))!.href, 0.9, 1);
+		for (let c = 0; c < 3; c++) expect(Math.abs(at1[c] - at4[c])).toBeLessThan(24);
+	});
+
+	it('fills "paint" stops with the stroke colour, and a colour source replaces it', async () => {
+		const fromStroke = await renderShapeBrushstroke(painted({ ...blueToYellow, stops: [{ offset: 0, color: 'paint' }, { offset: 1, color: '#facc15' }] }, '#e11d48'), { scale: 1 });
+		const start = meanColor(fromStroke!.href, 0, 0.1);
+		expect(start[0]).toBeGreaterThan(180);
+		expect(start[2]).toBeLessThan(120);
+		const solid = meanColor((await renderShapeBrushstroke(painted({ type: 'color', color: '#16a34a' }), { scale: 1 }))!.href, 0, 1);
+		expect(solid[1]).toBeGreaterThan(solid[0] + 60);
+	});
+
+	it('falls back to the stroke colour for invalid stored paint', async () => {
+		const plain = await renderShapeBrushstroke(painted(undefined), { scale: 1 });
+		const broken = await renderShapeBrushstroke(painted({ type: 'gradient', stops: [] }), { scale: 1 });
+		expect(broken!.href).toBe(plain!.href);
+	});
+});
+
 describe('drawStroke and the canvas.drawFreehand command', () => {
 	function tools() {
 		const env = setup();
@@ -177,6 +245,59 @@ describe('drawStroke and the canvas.drawFreehand command', () => {
 		expect((extra.structuredContent as any).error.code).toBe('invalid_params');
 		const empty = await call({ points: [] });
 		expect(empty.isError).toBe(true);
+		expect(nodes()).toHaveLength(0);
+	});
+
+	it('draws a stroke with gradient paint and returns the normalised paint', async () => {
+		const { registry, nodes, history } = tools();
+		const result = await registry.callTool('run_command', {
+			id: 'canvas.drawFreehand',
+			params: {
+				points: [[0, 0], [100, 0], [200, 0]],
+				brush: 'marker',
+				width: 12,
+				paint: { type: 'gradient', stops: [{ offset: 0, color: '#1D4ED8' }, { offset: 1, color: 'paint' }], map: { by: 'distance', length: 200 } }
+			}
+		});
+		expect(result.isError).toBeUndefined();
+		const out = (result.structuredContent as any).result;
+		expect(out.brush.paint).toEqual({
+			type: 'gradient',
+			stops: [{ offset: 0, color: '#1d4ed8' }, { offset: 1, color: 'paint' }],
+			space: 'pigment',
+			map: { by: 'distance', length: 200, repeat: 'mirror', unit: 'px' }
+		});
+		expect((nodes()[0].data as any).shape.brush.paint).toEqual(out.brush.paint);
+		expect(await renderShapeBrushstroke((nodes()[0].data as any).shape)).not.toBeNull();
+		history.undo();
+		expect(nodes()).toHaveLength(0);
+	});
+
+	it('validates paint before changing anything', async () => {
+		const { registry, nodes } = tools();
+		const call = (params: unknown) => registry.callTool('run_command', { id: 'canvas.drawFreehand', params });
+		const points = [[0, 0], [10, 0]];
+		const noBrush = await call({ points, paint: blueToYellow });
+		expect((noBrush.structuredContent as any).error.message).toMatch(/only colours brushed strokes: pass a brush too/);
+		const oneStop = await call({ points, brush: 'ink-pen', paint: { type: 'gradient', stops: [{ offset: 0, color: '#000000' }] } });
+		expect((oneStop.structuredContent as any).error.code).toBe('invalid_params');
+		const timed = await call({ points, brush: 'ink-pen', paint: { type: 'gradient', stops: blueToYellow.stops, map: { by: 'time' } } });
+		expect((timed.structuredContent as any).error.code).toBe('invalid_params');
+		const badColor = await call({ points, brush: 'ink-pen', paint: { type: 'color', color: 'red' } });
+		expect((badColor.structuredContent as any).error.code).toBe('invalid_params');
+		const extra = await call({ points, brush: 'ink-pen', paint: { ...blueToYellow, angle: 90 } });
+		expect((extra.structuredContent as any).error.code).toBe('invalid_params');
+		const unsorted = await call({ points, brush: 'ink-pen', paint: { type: 'gradient', stops: [{ offset: 1, color: '#000000' }, { offset: 0, color: '#ffffff' }] } });
+		expect(unsorted.isError).toBe(true);
+		expect((unsorted.structuredContent as any).error.message).toMatch(/sorted by offset/);
+		expect(nodes()).toHaveLength(0);
+	});
+
+	it('drawStroke refuses paint mappings that need timed samples', async () => {
+		const { draw, nodes } = setup();
+		await expect(
+			draw.drawStroke({ points: [[0, 0], [10, 0]], style: { brush: 'ink-pen', paint: { type: 'gradient', stops: blueToYellow.stops, map: { by: 'velocity' } } as any } })
+		).rejects.toThrow(/needs timed samples.*use distance/);
 		expect(nodes()).toHaveLength(0);
 	});
 

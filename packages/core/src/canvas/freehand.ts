@@ -12,7 +12,7 @@ export type FreehandTool = 'select' | 'pen' | 'highlighter' | 'eraser';
 
 import type { CanvasGradientDef } from './gradient.js';
 import { profileAlongPolyline } from './brushstroke.js';
-import type { CanvasBrush, CanvasBrushstroke } from './brushTypes.js';
+import type { CanvasBrush, CanvasBrushPaint, CanvasBrushstroke } from './brushTypes.js';
 
 export interface FreehandStrokeStyle {
 	/** Stroke color (any CSS color string) or gradient definition. */
@@ -33,6 +33,11 @@ export interface FreehandStrokeStyle {
 	 * paths, exactly as before.
 	 */
 	brush?: CanvasBrush;
+	/**
+	 * Gradient paint (or one colour) for a brushed stroke instead of `color`, sampled dab by dab
+	 * along the path; `color` still gives the alpha and fills `paint` stops. Only with `brush`.
+	 */
+	paint?: CanvasBrushPaint;
 }
 
 /** Pen data for one freehand point (Pointer Events: pressure 0..1, tilt in degrees). */
@@ -264,7 +269,12 @@ export function strokeToShapeNode(
 				strokeLinejoin: stroke.style.join ?? 'round',
 				...(strokeGradient ? { strokeGradient } : {}),
 				...(stroke.style.brush !== undefined
-					? { brush: freehandBrushstroke(stroke.style.brush, localPoints, stroke.samples, options.profileLength) }
+					? {
+							brush: {
+								...freehandBrushstroke(stroke.style.brush, localPoints, stroke.samples, options.profileLength),
+								...(stroke.style.paint !== undefined ? { paint: stroke.style.paint } : {})
+							}
+						}
 					: {}),
 				fill: 'none'
 			},

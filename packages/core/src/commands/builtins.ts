@@ -2,7 +2,7 @@ import type { HistoryState } from '../history/types.js';
 import type { CanvasArrangeAction } from '../canvas/arrangeShortcuts.js';
 import type { AlignEdge, DistributeAxis, DistributeMode, ZOrderOperation } from '../canvas/arrange.js';
 import { DEFAULT_ARRANGE_SHORTCUTS } from '../canvas/arrangeShortcuts.js';
-import type { CanvasBrush, CanvasBrushPreset } from '../canvas/brushTypes.js';
+import type { CanvasBrush, CanvasBrushPaint, CanvasBrushPreset } from '../canvas/brushTypes.js';
 import type { CommandParamsSchema, CommandSpec } from './registry.js';
 import { ShortcutMap, type ShortcutBinding } from './shortcuts.js';
 import type { KeyboardEventLike, Platform } from './chords.js';
@@ -330,7 +330,7 @@ export interface DrawCommandTarget {
 	drawStroke(input: {
 		points: readonly (readonly [number, number])[];
 		tool?: 'pen' | 'highlighter';
-		style?: { color?: string; width?: number; opacity?: number; brush?: CanvasBrush };
+		style?: { color?: string; width?: number; opacity?: number; brush?: CanvasBrush; paint?: CanvasBrushPaint };
 		pressure?: readonly number[];
 		tiltX?: readonly number[];
 		tiltY?: readonly number[];
@@ -376,6 +376,80 @@ const BRUSH_SETTINGS_PARAM = {
 	}
 } as const;
 
+const HEX_PARAM = '^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$';
+
+/**
+ * Gradient paint for a brushed stroke: the paint engine's `PaintSource` described structurally,
+ * so commands never import the paint module (see GOTCHAS: the DTS build runs out of memory).
+ * The canvas renderer validates it again (sorted stops, defaults) before anything is drawn.
+ */
+const BRUSH_PAINT_PARAM = {
+	description:
+		'Paint the brushed stroke with gradient paint (or one colour) instead of `color`, sampled dab by dab along the path; `color` still gives the alpha and fills "paint" stops. Only with `brush`. Example (blue to yellow over 200 canvas units, and back): { "type": "gradient", "stops": [{ "offset": 0, "color": "#1d4ed8" }, { "offset": 1, "color": "#facc15" }], "map": { "by": "distance", "length": 200, "repeat": "mirror" } }.',
+	oneOf: [
+		{
+			type: 'object',
+			additionalProperties: false,
+			required: ['type', 'color'],
+			description: 'One colour.',
+			properties: {
+				type: { type: 'string', enum: ['color'], description: 'Always "color".' },
+				color: { type: 'string', pattern: HEX_PARAM, description: 'The colour as #rrggbb (or #rgb).' }
+			}
+		},
+		{
+			type: 'object',
+			additionalProperties: false,
+			required: ['type', 'stops'],
+			description: 'Gradient paint: the brush samples it dab by dab as the stroke goes.',
+			properties: {
+				type: { type: 'string', enum: ['gradient'], description: 'Always "gradient".' },
+				stops: {
+					type: 'array',
+					minItems: 2,
+					maxItems: 16,
+					description: '2..16 stops sorted by offset.',
+					items: {
+						type: 'object',
+						additionalProperties: false,
+						required: ['offset', 'color'],
+						properties: {
+							offset: { type: 'number', minimum: 0, maximum: 1, description: 'Position 0..1 along the gradient.' },
+							color: {
+								type: 'string',
+								description: 'The stop colour as #rrggbb, or "paint" (the stroke colour) or "secondary" (white).',
+								anyOf: [{ pattern: HEX_PARAM }, { enum: ['paint', 'secondary'] }]
+							},
+							opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Multiplies the brush flow where this colour is laid, 0..1 (default 1).' },
+							midpoint: { type: 'number', minimum: 0.05, maximum: 0.95, description: 'Where between this stop and the next the colours are half mixed, 0.05..0.95 (default 0.5).' }
+						}
+					}
+				},
+				space: { type: 'string', enum: ['pigment', 'oklab', 'srgb'], description: 'How neighbouring stops mix: pigment (default; like paint, blue to yellow passes green), oklab (perceptual) or srgb (plain numbers).' },
+				map: {
+					type: 'object',
+					additionalProperties: false,
+					required: ['by'],
+					description: 'What moves the stroke along the gradient (default distance, 300 canvas units, mirror).',
+					properties: {
+						by: {
+							type: 'string',
+							enum: ['distance', 'pressure', 'tilt', 'direction', 'across-tip', 'random'],
+							description:
+								'distance: canvas units (or dabs) travelled along the path; pressure: the pressure profile 0..1; tilt: pen lean from the tilt profiles, upright 0 .. flat 1; direction: direction of travel, once round per 360°; across-tip: left to right across the tip (a brush loaded with several colours); random: a seeded random point per dab. Canvas strokes carry no timing, so velocity and time are not available.'
+						},
+						length: { type: 'number', minimum: 1, maximum: 100000, description: 'distance: canvas units (or dabs, with unit "dabs") per run through the gradient (default 300).' },
+						repeat: { type: 'string', enum: ['clamp', 'repeat', 'mirror'], description: 'distance: past the end, clamp (hold the last colour), repeat (start again) or mirror (run back; default).' },
+						unit: { type: 'string', enum: ['px', 'dabs'], description: 'distance: canvas units ("px", default) or dabs.' },
+						every: { type: 'integer', minimum: 1, maximum: 500, description: 'random: dabs per random pick (default 1).' }
+					}
+				},
+				softness: { type: 'number', minimum: 0, maximum: 1, description: 'How softly neighbouring stops blend: 1 smooth (default) .. 0 hard steps.' }
+			}
+		}
+	]
+} as const;
+
 /**
  * Agent / palette commands for freehand drawing: `canvas.drawFreehand` (a pen or highlighter
  * stroke through given points, optionally brushed with a dry paint preset and a pressure / tilt
@@ -393,7 +467,7 @@ export function createDrawCommands(target: DrawCommandTarget, options: DrawComma
 			label: 'Draw Freehand Stroke',
 			keywords: ['pen', 'highlighter', 'brush', 'sketch', 'draw', 'stroke', 'pencil', 'ink'],
 			description:
-				'Draws a freehand pen or highlighter stroke through points (canvas coordinates) as one path shape node, in one undo step. With `brush` it is painted with a dry paint brush (a preset id from canvas.listBrushes, or tip settings) and `pressure` / `tiltX` / `tiltY` profiles shape it along its length; wet brushes are refused. Returns the new node `id`, its `bounds` and the stored `brush`.',
+				'Draws a freehand pen or highlighter stroke through points (canvas coordinates) as one path shape node, in one undo step. With `brush` it is painted with a dry paint brush (a preset id from canvas.listBrushes, or tip settings) and `pressure` / `tiltX` / `tiltY` profiles shape it along its length; `paint` gives it gradient paint that changes colour along the stroke. Wet brushes are refused. Returns the new node `id`, its `bounds` and the stored `brush`.',
 			params: {
 				type: 'object',
 				additionalProperties: false,
@@ -414,6 +488,7 @@ export function createDrawCommands(target: DrawCommandTarget, options: DrawComma
 						description: 'Paint the stroke with a dry paint brush: a preset id such as "ink-pen", "pencil-hb", "brush-pen", "charcoal-stick", "soft-pastel", "marker" or "airbrush" (all ids: canvas.listBrushes), or tip settings. Omit for a plain vector stroke.',
 						oneOf: [{ type: 'string', minLength: 1 }, BRUSH_SETTINGS_PARAM]
 					},
+					paint: BRUSH_PAINT_PARAM,
 					pressure: PROFILE_PARAM('Pen pressure 0..1', 0, 1),
 					tiltX: PROFILE_PARAM('Pen tilt along x in degrees (−90..90)', -90, 90),
 					tiltY: PROFILE_PARAM('Pen tilt along y in degrees (−90..90)', -90, 90),
@@ -430,6 +505,7 @@ export function createDrawCommands(target: DrawCommandTarget, options: DrawComma
 					width?: number;
 					opacity?: number;
 					brush?: CanvasBrush;
+					paint?: CanvasBrushPaint;
 					pressure?: number[];
 					tiltX?: number[];
 					tiltY?: number[];
@@ -443,7 +519,8 @@ export function createDrawCommands(target: DrawCommandTarget, options: DrawComma
 						...(params.color !== undefined ? { color: params.color } : {}),
 						...(params.width !== undefined ? { width: params.width } : {}),
 						...(params.opacity !== undefined ? { opacity: params.opacity } : {}),
-						...(params.brush !== undefined ? { brush: params.brush } : {})
+						...(params.brush !== undefined ? { brush: params.brush } : {}),
+						...(params.paint !== undefined ? { paint: params.paint } : {})
 					},
 					...(params.pressure ? { pressure: params.pressure } : {}),
 					...(params.tiltX ? { tiltX: params.tiltX } : {}),

@@ -29,6 +29,19 @@ describe('brushed freehand strokes (Svelte)', () => {
 		expect((await draw.listBrushes()).some((b) => b.id === 'pencil-hb')).toBe(true);
 	});
 
+	it('carries gradient paint from the style to the brushed stroke, interactively and through drawStroke', async () => {
+		const paint = { type: 'gradient', stops: [{ offset: 0, color: '#1d4ed8' }, { offset: 1, color: '#facc15' }], map: { by: 'distance', length: 80 } } as const;
+		let nodes: CanvasNode[] = [];
+		const draw = createCanvasDraw({ getNodes: () => nodes, setNodes: (n) => (nodes = n), tool: 'pen', style: { brush: 'ink-pen', width: 8, paint } });
+		draw.startStroke([0, 0]);
+		draw.continueStroke([80, 0]);
+		draw.endStroke();
+		expect((nodes[0].data as any).shape.brush.paint).toEqual(paint);
+		const drawn = await draw.drawStroke({ points: [[0, 50], [50, 60]], style: { brush: 'pencil-hb', paint } });
+		expect(drawn.brush).toMatchObject({ paint: { type: 'gradient', space: 'pigment', map: { by: 'distance', length: 80, repeat: 'mirror' } } });
+		await expect(draw.drawStroke({ points: [[0, 0]], style: { paint } })).rejects.toThrow(/pass a brush too/);
+	});
+
 	it('ShapeNode draws a brushed shape as an image, and a plain one as a path', async () => {
 		const target = document.createElement('div');
 		document.body.appendChild(target);

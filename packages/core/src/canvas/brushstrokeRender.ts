@@ -4,11 +4,12 @@
  * every import of the paint engine in this file, so the canvas entry never reaches it statically.
  */
 import { BrushstrokeCache, brushstrokeDataUrl, isBrushstrokeBrush, type BrushstrokeBrush, type BrushstrokeImage } from '../paint/brushstroke.js';
+import { parsePaintSource, type PaintSource } from '../paint/gradient-paint.js';
 import { BUILTIN_BRUSHES } from '../paint-editor/brushes.js';
 import { parseCssColor } from '../image-editor/layers/css-color.js';
 import { resolveCanvasGradient } from './gradient.js';
 import { formatNumber, getShapeSvg, type ShapeSize } from './shapeGeometry.js';
-import { pathDataToPolyline, type BrushedPathShape, type CanvasBrush, type CanvasBrushPreset, type CanvasBrushstrokeImage } from './brushstroke.js';
+import { pathDataToPolyline, type BrushedPathShape, type CanvasBrush, type CanvasBrushPaint, type CanvasBrushPreset, type CanvasBrushstrokeImage } from './brushstroke.js';
 
 const DRY = BUILTIN_BRUSHES.filter((b) => isBrushstrokeBrush(b));
 
@@ -34,7 +35,32 @@ export function resolveCanvasBrush(brush: CanvasBrush, width: number): Brushstro
 	return { size, ...brush };
 }
 
-/** RGBA of a shape's stroke paint. Gradients use their first stop until gradient paint (`PaintSource`) reaches the brush engine. */
+/**
+ * The paint engine's `PaintSource` for a brushed stroke's `paint`; throws with what is wrong.
+ * Mappings that need timed samples (`velocity`, `time`) are refused: canvas strokes carry no timing.
+ */
+export function resolveCanvasPaint(paint: CanvasBrushPaint | unknown): PaintSource {
+	const source = parsePaintSource(paint, 'paint');
+	if (source.type === 'gradient' && (source.map.by === 'velocity' || source.map.by === 'time')) {
+		throw new Error(`paint.map.by "${source.map.by}" needs timed samples, which canvas strokes do not record; use distance, pressure, tilt, direction, across-tip or random.`);
+	}
+	return source;
+}
+
+/** A stored stroke's paint, or null when it has none or it is not valid paint (the stroke colour is used then). */
+function shapePaint(shape: BrushedPathShape): PaintSource | null {
+	if (shape.brush.paint === undefined || shape.brush.paint === null) return null;
+	try {
+		return resolveCanvasPaint(shape.brush.paint);
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * RGBA of a shape's stroke paint: with `brush.paint` its alpha and the colour of `paint` stops.
+ * A canvas gradient stroke without `brush.paint` uses its first stop.
+ */
 function strokeColor(shape: BrushedPathShape): [number, number, number, number] {
 	const gradient = resolveCanvasGradient(shape.strokeGradient ?? shape.stroke);
 	const css = gradient ? (gradient.stops[0]?.color ?? '#000') : typeof shape.stroke === 'string' && shape.stroke !== 'none' ? shape.stroke : '#000';
@@ -57,7 +83,8 @@ export function renderShapeBrushstrokeNow(shape: BrushedPathShape, scale: number
 		...(tiltX?.length ? { tiltX } : {}),
 		...(tiltY?.length ? { tiltY } : {})
 	};
-	const stroke = cache.render(input, brush, { scale, color: strokeColor(shape) });
+	const paint = shapePaint(shape);
+	const stroke = cache.render(input, brush, { scale, color: strokeColor(shape), ...(paint ? { paint } : {}) });
 	if (!stroke.bounds) return null;
 	let href = urls.get(stroke);
 	if (href === undefined) {

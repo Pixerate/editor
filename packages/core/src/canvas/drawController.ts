@@ -16,7 +16,7 @@ import {
 	type FreehandStrokeStyle,
 	type FreehandTool
 } from './freehand.js';
-import { listCanvasBrushes, validateCanvasBrush, type CanvasBrush } from './brushstroke.js';
+import { listCanvasBrushes, loadCanvasBrushstrokeRenderer, validateCanvasBrush, type CanvasBrush, type CanvasBrushPaint } from './brushstroke.js';
 
 /** A stroke drawn by code or an agent (`drawStroke`). */
 export interface DrawStrokeInput {
@@ -24,7 +24,7 @@ export interface DrawStrokeInput {
 	points: readonly Point[];
 	/** `pen` (default) or `highlighter`: picks the default style. */
 	tool?: 'pen' | 'highlighter';
-	/** Style over the tool's defaults (colour, width, opacity, cap, join, brush). */
+	/** Style over the tool's defaults (colour, width, opacity, cap, join, brush, paint). */
 	style?: Partial<FreehandStrokeStyle>;
 	/** Pressure 0..1 spread evenly along the stroke (one value is constant). Brushed strokes only. */
 	pressure?: readonly number[];
@@ -199,9 +199,9 @@ export function createCanvasDrawController<TNode extends CanvasNode = CanvasNode
 	}
 
 	/**
-	 * Draws a whole stroke at once (for agents and code): validates the points and the brush (an
-	 * unknown or wet brush is refused before anything changes), adds the stroke node as one undo
-	 * step and returns its id and bounds. Brushed strokes load the paint engine first, so this is
+	 * Draws a whole stroke at once (for agents and code): validates the points, the brush and its
+	 * paint (an unknown or wet brush, or bad gradient paint, is refused before anything changes),
+	 * adds the stroke node as one undo step and returns its id and bounds. Brushed strokes load the paint engine first, so this is
 	 * async.
 	 */
 	async function drawStroke(input: DrawStrokeInput): Promise<DrawStrokeResult<TNode>> {
@@ -227,7 +227,12 @@ export function createCanvasDrawController<TNode extends CanvasNode = CanvasNode
 		if ((input.pressure || input.tiltX || input.tiltY) && style.brush === undefined) {
 			throw new Error('pressure and tilt profiles only shape brushed strokes: pass a brush too (see canvas.listBrushes).');
 		}
+		if (style.paint !== undefined && style.brush === undefined) {
+			throw new Error('paint (gradient paint) only colours brushed strokes: pass a brush too (see canvas.listBrushes), or use color for a plain stroke.');
+		}
 		if (style.brush !== undefined) await validateCanvasBrush(style.brush as CanvasBrush);
+		// Store the paint normalised (lowercase #rrggbb, defaults filled in) so the result shows what renders.
+		if (style.paint !== undefined) style.paint = (await loadCanvasBrushstrokeRenderer()).resolveCanvasPaint(style.paint) as CanvasBrushPaint;
 
 		const id = options.generateNodeId?.() ?? `stroke-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 		const smoothed = input.streamline ? streamlinePoints(points, options.drawOptions?.streamline ?? 0.35) : [...points];

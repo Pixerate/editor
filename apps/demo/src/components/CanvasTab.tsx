@@ -34,6 +34,7 @@ import {
   useCanvasEffectsTools,
   ShapeNodeZoomProvider,
   useCanvasBrushes,
+  type CanvasBrushPaint,
   DEFAULT_ARRANGE_SHORTCUTS,
   type AlignEdge,
   type CanvasNode,
@@ -118,6 +119,35 @@ const BoxNodeView: React.FC<NodeProps<BoxNode>> = ({ data, selected }) => (
 );
 
 const NODE_TYPES = { box: BoxNodeView, shape: ShapeNode };
+
+/** Gradient paint choices for brushed freehand strokes (`style.paint`, a `PaintSource`). */
+const BRUSH_PAINTS: { id: string; name: string; paint: CanvasBrushPaint }[] = [
+  {
+    id: "along",
+    name: "Colour to yellow",
+    paint: { type: "gradient", stops: [{ offset: 0, color: "paint" }, { offset: 1, color: "#facc15" }], map: { by: "distance", length: 240, repeat: "mirror" } },
+  },
+  {
+    id: "sunset",
+    name: "Sunset",
+    paint: {
+      type: "gradient",
+      stops: [{ offset: 0, color: "#7c3aed" }, { offset: 0.5, color: "#e11d48" }, { offset: 1, color: "#f59e0b" }],
+      space: "oklab",
+      map: { by: "distance", length: 400, repeat: "mirror" },
+    },
+  },
+  {
+    id: "tip",
+    name: "Loaded tip",
+    paint: { type: "gradient", stops: [{ offset: 0, color: "#1d4ed8" }, { offset: 1, color: "#facc15" }], map: { by: "across-tip" } },
+  },
+  {
+    id: "pressure",
+    name: "By pressure",
+    paint: { type: "gradient", stops: [{ offset: 0, color: "#93c5fd" }, { offset: 1, color: "#1e3a8a" }], map: { by: "pressure" } },
+  },
+];
 
 const box = (
   id: string,
@@ -217,6 +247,12 @@ const CanvasDemo: React.FC = () => {
       draw.setStyle({ brush: brushId || undefined });
     }
   }, [draw, brushId]);
+  // Gradient paint for brushed strokes, sampled dab by dab (the stroke colour fills "paint" stops).
+  const [brushPaintId, setBrushPaintId] = useState("");
+  useEffect(() => {
+    const paint = BRUSH_PAINTS.find((p) => p.id === brushPaintId)?.paint;
+    if ((draw.tool === "pen" || draw.tool === "highlighter") && draw.style.paint !== paint) draw.setStyle({ paint });
+  }, [draw, brushPaintId]);
 
   const selectColor = useCallback((color: string) => {
     setActiveGradientKey(null);
@@ -590,6 +626,20 @@ const CanvasDemo: React.FC = () => {
               <option value="">Vector stroke</option>
               {brushes.brushes.map((b) => (
                 <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+          )}
+          {draw.tool !== "select" && draw.tool !== "eraser" && brushId && (
+            <select
+              value={brushPaintId}
+              onChange={(e) => setBrushPaintId(e.target.value)}
+              className="bg-slate-800 text-slate-200 text-xs rounded px-1 py-1 max-w-[8.5rem]"
+              title="Brush paint: the stroke colour, or gradient paint that changes colour along the stroke"
+              aria-label="Brush paint"
+            >
+              <option value="">Stroke colour</option>
+              {BRUSH_PAINTS.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
               ))}
             </select>
           )}
