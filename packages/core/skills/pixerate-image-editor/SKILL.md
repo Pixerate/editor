@@ -204,8 +204,9 @@ and colour conversions for print briefs: read [references/color-management.md](r
    `list_layer_effects.patterns`) and its global light. An effects block the editor cannot read
    is kept and written back by `export_psd`, but not drawn; the warnings say so.
 3. **`import_psd` replaces the document** (one undo step). CMYK, Lab, grayscale, indexed, 16-bit
-   and 32-bit files are converted to 8-bit RGB; an RGB file's ICC profile becomes the document's
-   colour profile; the warnings say what changed. Afterwards work with `list_layers` as usual: there is no Background source image, every
+   and 32-bit files are converted to 8-bit RGB (CMYK through its embedded or the default CMYK
+   profile, and the document stays in CMYK mode, as Lab files stay in Lab mode); an RGB file's ICC
+   profile becomes the document's colour profile; the warnings say what changed. Afterwards work with `list_layers` as usual: there is no Background source image, every
    pixel comes from the layers.
 4. **Smart objects come in live**: embedded contents (a PSB opens as a nested document you can
    edit with `edit_smart_object_contents`, a PNG as raster contents), the placement and warp, the
@@ -399,6 +400,7 @@ and colour conversions for print briefs: read [references/color-management.md](r
 | `assign_profile` | Make the document's numbers mean colours in `profile` (built-in id or `icc:<base64>`; RGB only). The look changes, pixels do not. One undo step. Returns the profile. |
 | `convert_to_profile` | Convert pixel layers into `profile` keeping their look (`intent`, `bpc`), then assign it. One undo step. Returns the profile, `convertedLayerIds` and `unconvertedLayerIds` (shape, type, effects, smart objects). |
 | `set_proof_setup` | Soft-proof the viewport through `profile` (`intent`, `bpc`, `simulatePaper`, `gamutWarning`), or `off: true`. View state. Returns the setup. |
+| `set_color_mode` | Image › Mode: `rgb`, `cmyk` (with the press `profile`, default coated-cmyk, and the separation `intent`) or `lab`. Pixels stay RGB; CMYK documents proof through their profile and `export_psd` writes CMYK / Lab channels. One undo step. Returns the profile summary with `mode`. |
 | `convert_colors` | Read-only. `colors` #rrggbb from the document's profile (or `from`) to `to`: channel `values` 0..1 (CMYK, RGB, grey), `hex` for RGB, and `lab`. |
 | `fill_pixels` | Fill the selection (or the canvas without one / with `useSelection: false`) on pixels or a mask with `color`, `opacity`, `blend`. Returns the changed bounds. |
 | `mix_colors` | Read-only. Mix 1 to 16 `colors` (`{color: #rrggbb, weight, strength?}`) like paint (Kubelka-Munk over reflectance spectra). Returns `mixed` (#rrggbb), `rgbLerp` (the plain RGB average, for comparison) and the normalised `weights`. Call it before `paint_stroke` / `fill_pixels` to pick a paint colour. |
