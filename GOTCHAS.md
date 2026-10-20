@@ -2394,6 +2394,18 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: A wet layer's pixels are the simulation's display: every frame replaces the layer's surface in the document (not an undo step). History entries hold documents, but the wet state lives in the world.
 - **Solution / Workaround**: Every operation that changes wet paint takes a world snapshot before it (`beginWetOp`) and after it, kept on the history entry within `undoMemory` (oldest dropped: undoing past them leaves that paint dry). Undo and redo restore the snapshot with the document. Non-wet operations on a wet layer (a dry brush, fill, merge, duplicate, resize) dry it first inside the same undo step. Operations that touch the world while a worker batch runs throw; async callers (the agent tools, the Wet panel) `await controller.wetIdle()` first.
 
+### [core/paint-editor] Thick Paint Is Lit at Render Time, So Relit Tiles Must Be Cached by Their Inputs' Identity
+
+- **Issue / Symptom**: Moving the light, or painting one impasto dab, relit every tile of every thick layer and made strokes stutter on large canvases.
+- **Root Cause**: A lit tile depends on its colour tile, its material tile, the light and the height of nine tiles (slopes reach across tile borders). Without a cache every composite relights everything.
+- **Solution / Workaround**: `LitCache` keeps each lit tile with the identities of its inputs (colour, material, the 3 × 3 height tiles, the light key) and reuses it while they are the same objects. The live impasto stroke hands out new `Tile` objects for the height tiles it touched (`ThickStrokeDriver.channels()`), so only those and their neighbours relight. The layer's own pixels stay the unlit colour (albedo); exports, PSD layers and merges use the lit pixels, and merging drops the upper layer's relief.
+
+### [core/paint-editor] A Replay Is Only Exact If Every Change Between Strokes Is Data, at the Right Place and Clock
+
+- **Issue / Symptom**: A time-lapse of a painting with a ground fill showed strokes on bare paper; a replayed watercolour bloomed differently from the original.
+- **Root Cause**: Strokes were recorded, but fills, clears and drying were not, and wet strokes replayed all their points at once although the simulation ran between them while the user painted.
+- **Solution / Workaround**: Fills, clears and relief flattening are recorded as `paintEvents` with `at` (strokes recorded before them); wet events also carry `at` and their `clock`. Wet strokes record the clock of every point (`RecordedStroke.steps`), and `replayPainting` steps the scratch editor's simulation to each clock before pushing that point (`advanceWet` steps even when nothing is wet, so clocks stay in line). The replay test paints a live stroke with time passing between points and compares the replay byte for byte. Imported pixels, merges and transforms are still not data: those layers replay empty.
+
 ### Wet-media tests time out on CI when the scene is "small"
 - **Issue / Symptom**: `paint-wet-kernel.test.ts` took ~130 s on CI (Ubuntu, Node 24) and the physics tests in `paint-wet.test.ts` 5–9 s each, although they looked modest locally.
 - **Root Cause**: The TypeScript spec kernel costs ~45–70 ms per 256² tile-step, and a disc centred on a tile seam (e.g. 256, 256) wakes four tiles. A 600×420 scene for 160 steps is ~1000 TS tile-steps; CI runners are ~3× slower than a laptop and run test files in parallel.

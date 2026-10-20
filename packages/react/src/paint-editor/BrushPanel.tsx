@@ -12,6 +12,12 @@ import {
   readPath,
   WET_TOOLS,
   WET_TOOL_LABELS,
+  WET_MEDIA,
+  WET_MEDIUM_LABELS,
+  IMPASTO_TOOLS,
+  IMPASTO_TOOL_LABELS,
+  type ImpastoTool,
+  type WetMediumKind,
   type BlendMode,
   type BrushRotation,
   type WetTool,
@@ -121,6 +127,30 @@ export const BrushPanel: React.FC<BrushPanelProps> = ({ controller, thumbnailWid
                 {WET_TOOLS.map((t) => (
                   <option key={t} value={t}>
                     {WET_TOOL_LABELS[t]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {engine.wetTool && (
+            <label className="flex items-center justify-between gap-2">
+              <span className="text-slate-400">Medium</span>
+              <select aria-label="Wet medium" value={brush.wet.medium} onChange={(e) => controller.setBrush({ wet: { medium: e.target.value as WetMediumKind } })} className="rounded bg-slate-800 px-1 py-0.5">
+                {WET_MEDIA.map((m) => (
+                  <option key={m} value={m}>
+                    {WET_MEDIUM_LABELS[m]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {engine.impastoTool && (
+            <label className="flex items-center justify-between gap-2">
+              <span className="text-slate-400">Tool</span>
+              <select aria-label="Impasto tool" value={brush.impasto.tool} onChange={(e) => controller.setBrush({ impasto: { tool: e.target.value as ImpastoTool } })} className="rounded bg-slate-800 px-1 py-0.5">
+                {IMPASTO_TOOLS.map((t) => (
+                  <option key={t} value={t}>
+                    {IMPASTO_TOOL_LABELS[t]}
                   </option>
                 ))}
               </select>

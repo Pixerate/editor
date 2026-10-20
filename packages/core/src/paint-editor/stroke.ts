@@ -20,6 +20,7 @@ import { DryStroke, IDENTITY_COPY, type PenPoint, type StrokeCopy } from './engi
 import type { PaperGrain } from './paper';
 import type { Affine } from './strokes';
 import type { WetStrokeDriver } from './wet';
+import { ThickStrokeDriver, type ThickChannels } from './thick';
 
 export interface StrokeSessionHost {
   /** Shows the layer's live surface (no history); `rects` are where it changed. */
@@ -57,6 +58,8 @@ export interface StrokeSessionInit {
    * pixels (the wet layer's display). The session's own surface is not used.
    */
   wet?: { driver: WetStrokeDriver; surface: () => TiledSurface };
+  /** Impasto brushes: the layer's thick-paint channels before the stroke. */
+  thick?: { channels: ThickChannels };
 }
 
 export interface PaintStrokeResult {
@@ -104,6 +107,7 @@ export class PaintStrokeSession {
   private readonly dry: DryStroke | null = null;
   private readonly wet: PaintDabStroke | null = null;
   private readonly wetDriver: WetStrokeDriver | null = null;
+  private readonly thickDriver: ThickStrokeDriver | null = null;
   /** A wet stroke that ended while the simulation was mid-batch: it commits when the driver catches up. */
   private wetEndPending = false;
   private readonly apply: StrokeApply;
@@ -132,6 +136,9 @@ export class PaintStrokeSession {
     };
     if (this.wetDriver) {
       // the wet layer paints; nothing else to set up
+    } else if (init.thick) {
+      const rgb = (c: readonly number[]): [number, number, number] => [c[0] / 255, c[1] / 255, c[2] / 255];
+      this.thickDriver = new ThickStrokeDriver({ brush, target: this.tileTarget(), channels: init.thick.channels, color: rgb(init.color), load: init.mixerLoad, seed: init.seed, copies: this.copies });
     } else if (brush.engine === 'mixer' || brush.engine === 'blender' || brush.engine === 'smudge' || usesPaintExchange(brush)) {
       const rgb = (c: readonly number[]): [number, number, number] => [c[0] / 255, c[1] / 255, c[2] / 255];
       this.wet = new PaintDabStroke(brush, {
@@ -183,7 +190,12 @@ export class PaintStrokeSession {
       this.wetUpdate(this.wetDriver.push(points));
       return;
     }
-    this.update(this.dry ? this.dry.push(points) : this.wet!.push(points));
+    this.update(this.dry ? this.dry.push(points) : this.thickDriver ? this.thickDriver.push(points) : this.wet!.push(points));
+  }
+
+  /** Impasto strokes: the layer's thick-paint channels with the stroke so far. */
+  thickChannels(): ThickChannels | null {
+    return this.thickDriver?.channels() ?? null;
   }
 
   /** Shows a wet stroke's progress (the wet layer's display). */
@@ -256,7 +268,7 @@ export class PaintStrokeSession {
       }
       return this.result!;
     }
-    this.update(this.dry ? this.dry.finish() : this.wet!.finish());
+    this.update(this.dry ? this.dry.finish() : this.thickDriver ? this.thickDriver.finish() : this.wet!.finish());
     this.closed = true;
     const ch = this.base.channels;
     const tiles = new Map(this.base.tiles);
@@ -268,10 +280,12 @@ export class PaintStrokeSession {
       else tiles.delete(key);
       if (!sameTile(prev, tile)) changed = true;
     }
+    // An impasto stroke can change only the relief (a knife on dry colour).
+    if (this.thickDriver && this.thickDriver.dabCount > 0) changed = true;
     const surface = changed ? new TiledSurface(ch, tiles, this.base.defaultValue) : null;
-    const dabs = this.dry ? this.dry.dabCount : this.wet!.dabCount;
+    const dabs = this.dry ? this.dry.dabCount : this.thickDriver ? this.thickDriver.dabCount : this.wet!.dabCount;
     this.result = { layerId: this.layerId, bounds: changed ? this.bounds : null, dabs, strokeId: null };
-    const carried = this.wet?.load;
+    const carried = this.wet?.load ?? this.thickDriver?.load;
     if (carried) this.result.mixerLoad = this.init.brush.behavior.dirty ? carried : cleanMixer(carried);
     this.host.commit(this, surface, false);
     return this.result;
@@ -299,6 +313,7 @@ export function mixerLoadForStroke(brush: PaintBrush, current: MixerLoad, color:
  */
 export function brushLoadForStroke(brush: PaintBrush, current: MixerLoad, color: readonly [number, number, number]): MixerLoad {
   if (brush.engine === 'mixer') return mixerLoadForStroke(brush, current, color);
+  if (brush.engine === 'impasto') return { reservoir: [color[0], color[1], color[2]], amount: 1, pickup: brush.behavior.dirty ? current.pickup : null };
   if (brush.engine === 'wet') return brush.wet.tool === 'paint' ? { reservoir: [color[0], color[1], color[2]], amount: 1, pickup: brush.behavior.dirty ? current.pickup : null } : EMPTY_MIXER_LOAD;
   if (usesPaintExchange(brush)) return { reservoir: [color[0], color[1], color[2]], amount: 1, pickup: brush.behavior.dirty ? current.pickup : null };
   return EMPTY_MIXER_LOAD;

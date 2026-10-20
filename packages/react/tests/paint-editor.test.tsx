@@ -347,4 +347,66 @@ describe('React paint editor', () => {
     expect(container.querySelector('input[aria-label="Strength"]')).not.toBeNull();
     c.dispose();
   });
+
+  it('thick paint and oil controls: impasto tool, wet medium, instant dry and the light', () => {
+    const c = new PaintEditorController({ width: 300, height: 200, wet: { kernel: 'typescript' } });
+    render(
+      <>
+        <BrushPanel controller={c} />
+        <PaperPanel controller={c} />
+        <WetPanel controller={c} />
+      </>
+    );
+    act(() => {
+      c.setBrush({ id: 'impasto-brush' });
+    });
+    const tool = container.querySelector('select[aria-label="Impasto tool"]') as HTMLSelectElement;
+    expect(tool.value).toBe('brush');
+    setValue(tool, 'knife');
+    expect(c.getState().brush.impasto.tool).toBe('knife');
+    expect(container.querySelector('input[aria-label="Thickness"]')).not.toBeNull();
+    act(() => {
+      c.setBrush({ id: 'oil-round' });
+    });
+    const medium = container.querySelector('select[aria-label="Wet medium"]') as HTMLSelectElement;
+    expect(medium.value).toBe('oil');
+    setValue(medium, 'gouache');
+    expect(c.getState().brush.wet.medium).toBe('gouache');
+    click(byText('Instant dry'));
+    expect(c.getState().wet.instantDry).toBe(true);
+    setValue(container.querySelector('[data-testid="light-panel"] input[aria-label="Light height"]') as HTMLInputElement, '20');
+    expect(c.getLighting().elevation).toBe(20);
+    act(() => {
+      c.setBrush({ id: 'impasto-brush' });
+      c.paintStroke({ points: [{ x: 20, y: 50 }, { x: 200, y: 50 }] });
+    });
+    expect(c.reliefOf()).not.toBeNull();
+    click(byText('Flatten relief'));
+    expect(c.reliefOf()).toBeNull();
+  });
+
+  it('the toolbar exports a time-lapse and a PNG repainted at twice the size', async () => {
+    const c = new PaintEditorController({ width: 120, height: 80 });
+    c.paintStroke({ points: [{ x: 10, y: 40 }, { x: 110, y: 40 }], brushId: 'soft-pastel' });
+    const downloads: string[] = [];
+    (win.URL as any).createObjectURL = () => 'blob:x';
+    (win.URL as any).revokeObjectURL = () => {};
+    const click = win.HTMLAnchorElement.prototype.click;
+    win.HTMLAnchorElement.prototype.click = function (this: HTMLAnchorElement) {
+      downloads.push(this.download);
+    };
+    render(<PaintToolbar controller={c} tool="brush" onToolChange={() => {}} />);
+    await act(async () => {
+      byText('Time-lapse').click();
+      for (let i = 0; i < 50 && downloads.length < 1; i++) await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(downloads).toContain('painting-timelapse.zip');
+    expect(container.querySelector('[data-testid="paint-replay-status"]')!.textContent).toMatch(/frames/);
+    await act(async () => {
+      byText('PNG 2×').click();
+      for (let i = 0; i < 50 && downloads.length < 2; i++) await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(downloads).toContain('painting@2x.png');
+    win.HTMLAnchorElement.prototype.click = click;
+  });
 });

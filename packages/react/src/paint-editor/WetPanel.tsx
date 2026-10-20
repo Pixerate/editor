@@ -41,6 +41,9 @@ export const WetPanel: React.FC<WetPanelProps> = ({ controller, className }) => 
         <button type="button" className={chip(wet.overlay)} aria-pressed={wet.overlay} onClick={() => controller.setWaterOverlay(!wet.overlay)}>
           Water
         </button>
+        <button type="button" className={chip(wet.instantDry)} aria-pressed={wet.instantDry} title="Each wet stroke dries as soon as it ends" onClick={() => controller.setInstantDry(!wet.instantDry)}>
+          Instant dry
+        </button>
         <button type="button" className={button} disabled={!layerId} onClick={() => attempt(async () => (await controller.wetIdle(), controller.wetPaper({})))}>
           Wet paper
         </button>

@@ -30,7 +30,7 @@ import { WetMedium } from '../paint/wet/medium';
 import { DEFAULT_WET_PARAMS, FLAT, normalizeTilt, normalizeWetParams, type WetParams, type WetTilt } from '../paint/wet/model';
 import { WetWorld, type WetBackendInfo, type WetLaneStats, type WetPaperInput, type WetSnapshot, type WetWorldOptions } from '../paint/wet/world';
 import { TILE, TiledSurface, type RasterRect } from '../raster/surface';
-import type { PaintBrush } from './brushes';
+import type { PaintBrush, WetMediumKind } from './brushes';
 import { IDENTITY_COPY, PenDabWalker, PenSmoother, type PenDab, type PenPoint, type StrokeCopy } from './engine';
 import { grainCatch, hexToRgb8, PaperGrain, type PaperGrain as PaperGrainType, type PaperSettings } from './paper';
 
@@ -111,8 +111,15 @@ export class WetStrokeDriver {
     const spacing = Math.max(0.02, brush.tip.spacing);
     // A stroke lays `STROKE_WATER × water` at the tip's centre: each dab a share by its spacing.
     const perDab = Math.min(1, spacing * 1.2);
-    this.medium = new WetMedium(init.world, init.laneId, { water: STROKE_WATER * wet.water * perDab, mass: STROKE_MASS * wet.pigment * perDab, body: wet.body });
-    const rates = exchangeRates(brush.behavior.pickup, brush.behavior.mix, 1, brush.behavior.mixing);
+    // Thinner: more water, less pigment and body.
+    const thin = wet.thinner;
+    this.medium = new WetMedium(init.world, init.laneId, {
+      water: STROKE_WATER * Math.min(1, wet.water * (1 + thin)) * perDab,
+      mass: STROKE_MASS * wet.pigment * (1 - 0.6 * thin) * perDab,
+      body: wet.body * (1 - thin),
+    });
+    // Loading: below 1 the reservoir drains along the stroke, so the paint runs out.
+    const rates = exchangeRates(brush.behavior.pickup, brush.behavior.mix, wet.load, brush.behavior.mixing);
     this.states = copies.map((c, i) => ({
       walker: new PenDabWalker(brush, (init.seed + i * 7919) | 0, c.linear),
       exchange: wet.tool === 'paint' ? new PaintExchange(rates, init.load) : null,
@@ -258,6 +265,13 @@ export class WetStrokeDriver {
   }
 }
 
+/** The wet settings each medium gives a layer the first time it holds wet paint. */
+export const WET_MEDIUM_PARAMS: Readonly<Record<WetMediumKind, Partial<WetParams>>> = {
+  watercolor: {},
+  gouache: { viscosity: 0.45, edgeDarkening: 0.15, granulation: 0.1, bloom: 0.1, bleed: 0.15, pigmentWeight: 0.5 },
+  oil: { viscosity: 0.95, evaporation: 0.03, edgeDarkening: 0, granulation: 0, bloom: 0, bleed: 0.08, pickup: 0.6, fixture: 0.02, pigmentWeight: 0.8 },
+};
+
 /** Settings of one wet layer (saved with the document). */
 export interface WetLayerSettings {
   params: WetParams;
@@ -282,6 +296,8 @@ export interface WetLayerInfo {
 /** An event recorded with the clock it happened at (strokes are recorded separately), for replays. */
 export interface WetEvent {
   clock: number;
+  /** How many strokes were recorded before it (where it falls between strokes in a replay). */
+  at?: number;
   kind: 'dry' | 'tilt' | 'params' | 'flow' | 'wet-paper';
   layerId?: string;
   data?: unknown;
@@ -314,6 +330,8 @@ export class PaintWetLayers {
   tilt: WetTilt = { ...FLAT };
   readonly settings = new Map<string, WetLayerSettings>();
   paused = false;
+  /** Wet strokes dry as soon as they end (one undo step with the stroke). */
+  instantDry = false;
   speed: number;
   overlay = false;
   readonly undoMemory: number;
@@ -365,21 +383,21 @@ export class PaintWetLayers {
     while (this.ticking) await this.ticking;
   }
 
-  settingsOf(layerId: string): WetLayerSettings {
+  settingsOf(layerId: string, medium: WetMediumKind = 'watercolor'): WetLayerSettings {
     let s = this.settings.get(layerId);
     if (!s) {
-      s = { params: { ...DEFAULT_WET_PARAMS }, flow: { ...DEFAULT_FLOW } };
+      s = { params: normalizeWetParams(WET_MEDIUM_PARAMS[medium], DEFAULT_WET_PARAMS), flow: { ...DEFAULT_FLOW } };
       this.settings.set(layerId, s);
     }
     return s;
   }
 
   /** Puts a layer in the world (its current pixels become the base under the wet paint). */
-  ensureLane(layerId: string): WetWorld {
+  ensureLane(layerId: string, medium?: WetMediumKind): WetWorld {
     const w = this.ensureWorld();
     if (!w.hasLane(layerId)) {
       const base = this.host.layerSurface(layerId) ?? new TiledSurface(4, new Map(), 0);
-      const s = this.settingsOf(layerId);
+      const s = this.settingsOf(layerId, medium);
       w.ensureLane(layerId, { params: s.params, base });
       const { width, height } = this.host.canvas();
       if (s.flow.kind !== 'none') w.setFlow(layerId, flowField(s.flow, width, height), s.flow.strength);
@@ -517,7 +535,7 @@ export class PaintWetLayers {
   async advance(steps: number): Promise<number> {
     await this.idle();
     const w = this.world;
-    if (!w || !w.isActive()) return 0;
+    if (!w) return 0;
     // The fastest kernel (it gives the same bits; the TypeScript one is only a stand-in while it loads).
     await w.ready;
     await this.idle();

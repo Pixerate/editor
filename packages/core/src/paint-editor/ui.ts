@@ -11,7 +11,7 @@
 
 import type { MixerLoad } from '../paint/exchange';
 import { BLEND_MODES, type BlendModeInfo } from '../raster/blend';
-import type { PaintBrush, PaintBrushInput, WetTool } from './brushes';
+import type { ImpastoTool, PaintBrush, PaintBrushInput, WetMediumKind, WetTool } from './brushes';
 import { TILE, type RasterRect } from '../raster/surface';
 import type { PaintEditorController } from './controller';
 import type { PenPoint } from './engine';
@@ -314,6 +314,7 @@ export const PAPER_SLIDERS: readonly SliderControl[] = [
   { path: 'absorption', label: 'Absorption', min: 0, max: 1, step: 0.01 },
   { path: 'permeability', label: 'Permeability', min: 0, max: 1, step: 0.01 },
   { path: 'roughness', label: 'Roughness', min: 0, max: 1, step: 0.01 },
+  { path: 'metallic', label: 'Metallic', min: 0, max: 1, step: 0.01 },
 ];
 
 /** Reads `a.b` from an object. */
@@ -404,8 +405,10 @@ export interface BrushEngineControls {
   multicolor: boolean;
   /** Load / Clean buttons and a swatch of what the brush carries. */
   load: boolean;
-  /** The wet tool menu (`wet.tool`, `WET_TOOLS`). */
+  /** The wet tool menu (`wet.tool`, `WET_TOOLS`) and medium menu (`wet.medium`, `WET_MEDIA`). */
   wetTool?: boolean;
+  /** The impasto tool menu (`impasto.tool`, `IMPASTO_TOOLS`). */
+  impastoTool?: boolean;
 }
 
 const PICKUP_SLIDERS: readonly SliderControl[] = [
@@ -422,6 +425,24 @@ const PICKUP_SLIDERS: readonly SliderControl[] = [
  */
 export function brushEngineControls(brush: Pick<PaintBrush, 'engine'> & { wet?: PaintBrush['wet'] }): BrushEngineControls | null {
   switch (brush.engine) {
+    case 'impasto':
+      return {
+        title: 'Thick paint',
+        sliders: [
+          { path: 'impasto.thickness', label: 'Thickness', min: 0, max: 1, step: 0.01 },
+          { path: 'impasto.gloss', label: 'Gloss', min: 0, max: 1, step: 0.01 },
+          { path: 'impasto.metallic', label: 'Metallic', min: 0, max: 1, step: 0.01 },
+          { path: 'impasto.load', label: 'Load', min: 0, max: 1, step: 0.01 },
+          { path: 'impasto.thinner', label: 'Thinner', min: 0, max: 1, step: 0.01 },
+          { path: 'impasto.drag', label: 'Drag', min: 0, max: 1, step: 0.01 },
+          ...PICKUP_SLIDERS,
+        ],
+        mixingPath: 'behavior.mixing',
+        dirty: true,
+        multicolor: false,
+        load: true,
+        impastoTool: true,
+      };
     case 'wet': {
       const tool = brush.wet?.tool ?? 'paint';
       const sliders: SliderControl[] =
@@ -431,6 +452,8 @@ export function brushEngineControls(brush: Pick<PaintBrush, 'engine'> & { wet?: 
               { path: 'wet.pigment', label: 'Pigment', min: 0, max: 1, step: 0.01 },
               { path: 'wet.body', label: 'Body (opacity)', min: 0, max: 1, step: 0.01 },
               { path: 'wet.rewet', label: 'Re-wet', min: 0, max: 1, step: 0.01 },
+              { path: 'wet.load', label: 'Load', min: 0, max: 1, step: 0.01 },
+              { path: 'wet.thinner', label: 'Thinner', min: 0, max: 1, step: 0.01 },
               ...PICKUP_SLIDERS,
             ]
           : tool === 'water'
@@ -585,3 +608,16 @@ export function drawWaterOverlay(controller: PaintEditorController, ctx: Paint2D
   }
   return tiles.length;
 }
+
+/** Labels of the wet media, for the wet brush's medium menu. */
+export const WET_MEDIUM_LABELS: Readonly<Record<WetMediumKind, string>> = { watercolor: 'Watercolour', gouache: 'Gouache', oil: 'Oil' };
+
+/** Labels of the impasto tools. */
+export const IMPASTO_TOOL_LABELS: Readonly<Record<ImpastoTool, string>> = { brush: 'Brush', tube: 'Paint tube', knife: 'Palette knife', roller: 'Roller', gloop: 'Gloop pen' };
+
+/** The light sliders (thick paint and metallic paper). */
+export const LIGHT_SLIDERS: readonly SliderControl[] = [
+  { path: 'azimuth', label: 'Light direction', min: 0, max: 359, step: 1 },
+  { path: 'elevation', label: 'Light height', min: 5, max: 90, step: 1 },
+  { path: 'relief', label: 'Relief', min: 0, max: 1, step: 0.01 },
+];

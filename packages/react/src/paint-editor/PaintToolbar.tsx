@@ -1,5 +1,5 @@
-import React, { useRef } from 'react';
-import { PAINT_TOOLS, SYMMETRY_MODES, decodeImageBlob, downloadBytes, type PaintEditorController, type PaintTool, type SymmetryMode } from '@pixerate/editor/paint-editor';
+import React, { useRef, useState } from 'react';
+import { PAINT_TOOLS, SYMMETRY_MODES, decodeImageBlob, downloadBytes, timeLapseZip, type PaintEditorController, type PaintTool, type SymmetryMode } from '@pixerate/editor/paint-editor';
 import { usePaintEditorState } from './usePaintEditor';
 import { ErrorLine, button, chip, useAttempt } from './shared';
 
@@ -15,11 +15,14 @@ export interface PaintToolbarProps {
 /**
  * Tools (brush, eyedropper, pan, rotate view), undo / redo, view rotation, mirroring and reset,
  * the symmetry and perspective guides, the tracing image and reference images, the drawing hand,
- * and file actions: save / open JSON, export PNG, JPEG and PSD.
+ * and file actions: save / open JSON, export PNG, JPEG and PSD, a time-lapse (zipped frames, video
+ * project and ffmpeg command) and a PNG repainted from the strokes at twice the size.
  */
 export const PaintToolbar: React.FC<PaintToolbarProps> = ({ controller, tool, onToolChange, fileName = 'painting', className }) => {
   const state = usePaintEditorState(controller);
   const [error, attempt] = useAttempt();
+  const [busy, setBusy] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
   const openRef = useRef<HTMLInputElement>(null);
   const tracingRef = useRef<HTMLInputElement>(null);
   const refRef = useRef<HTMLInputElement>(null);
@@ -163,6 +166,49 @@ export const PaintToolbar: React.FC<PaintToolbarProps> = ({ controller, tool, on
       <button type="button" className={button} onClick={() => attempt(() => downloadBytes(controller.exportPsd().bytes, `${fileName}.psd`, 'image/vnd.adobe.photoshop'))}>
         PSD
       </button>
+      <button
+        type="button"
+        className={button}
+        disabled={busy !== null}
+        title="Repaint the painting from its strokes as a time-lapse: frames, a video project and the ffmpeg command, zipped"
+        onClick={() =>
+          attempt(async () => {
+            setBusy('Repainting…');
+            try {
+              const tl = await controller.timeLapse({ onProgress: (p) => setBusy(`Repainting… ${Math.round(p * 100)}%`) });
+              downloadBytes(await timeLapseZip(tl), `${fileName}-timelapse.zip`, 'application/zip');
+              setNote(`Time-lapse: ${tl.frames.length} frames, ${(tl.durationMs / 1000).toFixed(1)} s (run render.sh in the zip for the MP4).`);
+            } finally {
+              setBusy(null);
+            }
+          })
+        }
+      >
+        Time-lapse
+      </button>
+      <button
+        type="button"
+        className={button}
+        disabled={busy !== null}
+        title="Repaint the painting from its strokes at twice the size (more detail, not upscaled)"
+        onClick={() =>
+          attempt(async () => {
+            setBusy('Repainting at 2×…');
+            try {
+              downloadBytes(await controller.exportHighResPng({ scale: 2 }), `${fileName}@2x.png`, 'image/png');
+            } finally {
+              setBusy(null);
+            }
+          })
+        }
+      >
+        PNG 2×
+      </button>
+      {(busy ?? note) && (
+        <span className="text-[11px] text-slate-400" data-testid="paint-replay-status">
+          {busy ?? note}
+        </span>
+      )}
       <input
         ref={openRef}
         type="file"
