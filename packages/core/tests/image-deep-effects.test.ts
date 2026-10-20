@@ -75,4 +75,29 @@ describe('layer effects at 16 and 32 bits', () => {
     // The glow reaches outside the band.
     expect(deep.data[(10 * W + 150) * 4 + 3]).toBeGreaterThan(0);
   });
+
+  it('a group with a drop shadow keeps the 16-bit samples of its children', () => {
+    const { c, id } = setup();
+    const g = c.groupLayers([id], 'Group');
+    c.addLayerEffect(g, 'drop-shadow', { distance: 6, size: 4, opacity: 0.6 });
+    const deep = c.compositeDeepPixels();
+    const row = 30 * W;
+    for (const x of [40, 150, 270]) expect(deep.data[(row + x) * 4]).toBe(12000 + x * 2);
+    const eight = composite8(c);
+    let worst = 0;
+    for (let i = 0; i < W * H * 4; i++) worst = Math.max(worst, Math.abs((deep.data[i] as number) / 257 - eight[i]));
+    expect(worst).toBeLessThan(2.5);
+  });
+
+  it('a legacy-process develop filter grades in float', () => {
+    const { c, id } = setup();
+    c.addLayerFilter(id, { kind: 'develop', process: 1, contrast: 20, exposure: 10 } as never);
+    const deep = c.compositeDeepPixels();
+    const row = 30 * W;
+    expect(distinct(deep.data, row + 20, row + 280)).toBeGreaterThan(256);
+    const eight = composite8(c);
+    const i = (row + 150) * 4;
+    expect(Math.abs((deep.data[i] as number) / 257 - eight[i])).toBeLessThan(1.5);
+  });
 });
+
