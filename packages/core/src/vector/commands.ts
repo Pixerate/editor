@@ -1,6 +1,9 @@
 import type { CommandSpec } from '../commands/registry.js';
-import type { VectorEditorController, VectorShapeInput } from './controller.js';
+import type { VectorConstraintInput, VectorEditorController, VectorShapeInput } from './controller.js';
 import { vectorNodeBounds, vectorNodeRotation, vectorParentMatrix, vectorPathData, IDENTITY_MATRIX } from './geometry.js';
+import type { VectorConstraintKind, VectorMatrix, VectorTextNode } from './types.js';
+import { VECTOR_CONSTRAINT_KINDS } from './types.js';
+import { vectorConstraintEnv, vectorConstraintResiduals, vectorConstraintValue } from './constraints/solve.js';
 import type { VectorAlign, VectorAnchorRef, VectorArrange, VectorAverageAxis, VectorBooleanOperation, VectorCornerKind, VectorNode, VectorPathfinderOperation, VectorStyle, VectorTool } from './types.js';
 import { VECTOR_ARROWHEADS, VECTOR_CORNER_KINDS, VECTOR_EFFECT_TYPES, VECTOR_PATHFINDER_OPERATIONS, VECTOR_TOOLS, type VectorEffect, type VectorEffectType, type VectorWidthPoint } from './types.js';
 import { VECTOR_WIDTH_PRESET_IDS, type VectorTaperOptions, type VectorWaveOptions, type VectorWidthPreset } from './width.js';
@@ -12,6 +15,11 @@ import { vectorFilterParamKeys } from './filters.js';
 import { VECTOR_BLEND_MODES, VECTOR_FILTER_TYPES, type VectorBlendMode, type VectorFilter, type VectorFilterType, type VectorPaint, type VectorPaintLayer, type VectorStrokeLayer } from './types.js';
 import { isValidVectorMesh, VECTOR_WARP_STYLES } from './warp.js';
 import { isVectorMaskGroup, vectorMaskSummary, type VectorMaskSummary } from './mask.js';
+import { isVectorFrame } from './frames.js';
+import { vectorPolarAngles } from './snap.js';
+import { VECTOR_CONNECTOR_ROUTES, VECTOR_CONNECTOR_SIDES, type VectorConnector, type VectorConnectorEnd, type VectorConnectorRoute } from './types.js';
+import { VECTOR_HORIZONTAL_RESIZING, VECTOR_VERTICAL_RESIZING, type VectorFrame, type VectorHorizontalResizing, type VectorResizing, type VectorVerticalResizing } from './types.js';
+import { layoutVectorText, vectorTextFamilies, vectorTextHasOutlines } from './text.js';
 import type { VectorMaskType } from './types.js';
 import type { VectorEnvelopeParams } from './appearance.js';
 
@@ -27,7 +35,7 @@ export interface VectorCommandOptions {
 /** A node as listed for agents. */
 export interface VectorNodeListing {
 	id: string;
-	type: 'path' | 'group';
+	type: 'path' | 'group' | 'text' | 'instance';
 	name?: string;
 	depth: number;
 	/** Axis-aligned bounds in document units. */
@@ -42,6 +50,13 @@ export interface VectorNodeListing {
 	strokeWidth?: number;
 	/** SVG path data (paths only). */
 	d?: string;
+	/** An instance's symbol, transform (it may scale and skew) and overrides. */
+	symbolId?: string;
+	transform?: number[];
+	overrides?: unknown;
+	/** A text node's text and frame kind (`point`, `area` or `path`); `vector.getText` has the rest. */
+	text?: string;
+	frame?: 'point' | 'area' | 'path';
 	children?: number;
 	/** A blend group's options (its steps are listed as children with `blendStep`). */
 	blend?: { spacing: string; steps: number; distance: number; orientToSpine: boolean; linear: boolean; spine: boolean; keys: string[] };
@@ -61,6 +76,12 @@ export interface VectorNodeListing {
 	blendMode?: VectorBlendMode;
 	/** The node's visual filters (shadows, glows, blurs, feather). */
 	filters?: VectorFilter[];
+	/** A frame's rectangle (in its own space), fill and clip (see vector.listFrames). */
+	frameRect?: VectorFrame;
+	/** A frame child's resizing constraints, when set. */
+	resizing?: VectorResizing;
+	/** A connector's ends and route (see vector.listConnectors). */
+	connector?: VectorConnector;
 	/** A mask group's mask: type, inversion, the mask's id (its first child) and the masked contents. */
 	mask?: VectorMaskSummary;
 }
@@ -273,7 +294,11 @@ export function createVectorCommands(controller: VectorEditorController, options
 					selected: state.selection.includes(n.id),
 					...(n.type === 'path'
 						? { fill: n.fill ?? null, stroke: n.stroke ?? null, strokeWidth: n.strokeWidth ?? 1, d: vectorPathData(n, 2) }
-						: { children: n.children.length }),
+						: n.type === 'text'
+							? { fill: n.fill ?? null, stroke: n.stroke ?? null, strokeWidth: n.strokeWidth ?? 1, text: n.text, frame: n.frame.kind }
+							: n.type === 'instance'
+								? { symbolId: n.symbolId, ...(n.transform ? { transform: [...n.transform] } : {}), ...(n.overrides ? { overrides: n.overrides } : {}) }
+								: { children: n.children.length }),
 					...(n.type === 'group' && n.blend
 						? { blend: { ...resolveVectorBlendOptions(n.blend), spine: !!n.blend.spine, keys: vectorBlendKeys(n).map((k) => k.id) } }
 						: {}),
@@ -281,11 +306,14 @@ export function createVectorCommands(controller: VectorEditorController, options
 					...(n.effects?.length ? { effects: n.effects } : {}),
 					...(n.type === 'group' && n.liveBoolean ? { liveBoolean: n.liveBoolean } : {}),
 					...(n.booleanOperation ? { booleanOperation: n.booleanOperation } : {}),
-					...(n.type === 'path' && Array.isArray(n.fills) ? { fills: n.fills } : {}),
-					...(n.type === 'path' && Array.isArray(n.strokes) ? { strokes: n.strokes } : {}),
+					...((n.type === 'path' || n.type === 'text') && Array.isArray(n.fills) ? { fills: n.fills } : {}),
+					...((n.type === 'path' || n.type === 'text') && Array.isArray(n.strokes) ? { strokes: n.strokes } : {}),
 					...(n.blendMode && n.blendMode !== 'normal' ? { blendMode: n.blendMode } : {}),
 					...(n.filters?.length ? { filters: n.filters } : {}),
-					...(isVectorMaskGroup(n) ? { mask: vectorMaskSummary(n)! } : {})
+					...(isVectorMaskGroup(n) ? { mask: vectorMaskSummary(n)! } : {}),
+					...(isVectorFrame(n) ? { frameRect: n.frame } : {}),
+					...(n.resizing ? { resizing: n.resizing } : {}),
+					...(n.type === 'path' && n.connector ? { connector: n.connector } : {})
 				});
 				if (n.type === 'group') visit(n.children, depth + 1);
 			}
@@ -323,7 +351,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 	};
 	const pathsUnder = (list: readonly string[]) => {
 		const out: string[] = [];
-		const walk = (n: VectorNode) => (n.type === 'path' ? out.push(n.id) : n.children.forEach(walk));
+		const walk = (n: VectorNode) => (n.type === 'group' ? n.children.forEach(walk) : n.type === 'instance' ? undefined : out.push(n.id));
 		for (const id of list) walk(controller.getNode(id)!);
 		return out;
 	};
@@ -676,6 +704,962 @@ export function createVectorCommands(controller: VectorEditorController, options
 		}
 	];
 
+
+	// --- Text ----------------------------------------------------------------
+	const round = (n: number) => Math.round(n * 100) / 100;
+	/** A text node as agents read it: text, styles as ranges, frame, laid-out lines and bounds. */
+	const textSummary = (id: string) => {
+		const n = controller.getNode(id) ?? fail(`There is no node "${id}".`);
+		if (n.type !== 'text') fail(`"${id}" is a ${n.type}, not text; vector.list shows each node's type.`);
+		const t = n as VectorTextNode;
+		const layout = layoutVectorText(t);
+		const parent = vectorParentMatrix(controller.getDocument().nodes, id) ?? IDENTITY_MATRIX;
+		const b = vectorNodeBounds(t, parent);
+		let at = 0;
+		const runs = (t.runs ?? []).flatMap((r) => {
+			const range = { start: at, end: at + r.length };
+			at += r.length;
+			return Object.keys(r.style).length ? [{ ...range, style: r.style }] : [];
+		});
+		return {
+			id,
+			text: t.text,
+			font: t.font,
+			runs,
+			paragraph: t.paragraph ?? {},
+			frame: t.frame,
+			fill: t.fill ?? null,
+			stroke: t.stroke ?? null,
+			lines: layout.lines.map((l) => ({ start: l.start, end: l.end, text: t.text.slice(l.start, l.end) })),
+			bounds: b && { x: round(b.x), y: round(b.y), width: round(b.width), height: round(b.height) },
+			overflow: layout.overflow,
+			outlines: vectorTextHasOutlines(),
+			shaper: layout.shaper,
+			missingFonts: layout.missingFonts
+		};
+	};
+	const FONT_PROPS = {
+		fontFamily: { type: 'string', description: 'Font family name ("Inter", "serif"). A family the text shaper lacks draws in a fallback and is listed in missingFonts (vector.listFonts shows what it has).' },
+		fontWeight: { type: 'integer', minimum: 1, maximum: 1000, description: 'CSS weight: 400 regular, 700 bold.' },
+		italic: { type: 'boolean', description: 'Italic (default false).' },
+		fontSize: { type: 'number', minimum: 0.5, maximum: 5000, description: 'Size in document units (default 24).' },
+		tracking: { type: ['number', 'null'], minimum: -1000, maximum: 10000, description: 'Letter spacing in 1/1000 em (0 default; null clears).' },
+		leading: { type: ['number', 'null'], minimum: 0, maximum: 10000, description: 'Baseline-to-baseline distance in document units; null for auto (autoLeading × size).' },
+		baselineShift: { type: ['number', 'null'], minimum: -5000, maximum: 5000, description: 'Raises (positive) or lowers the text, document units (0 default).' },
+		underline: { type: 'boolean', description: 'Underline.' },
+		strikethrough: { type: 'boolean', description: 'Strike through.' }
+	} as const;
+	const PARAGRAPH_PROPS = {
+		align: { type: 'string', enum: ['left', 'center', 'right', 'justify'], description: 'Alignment (default left). justify stretches area text lines but the last of a paragraph, and spreads path text over the path.' },
+		autoLeading: { type: ['number', 'null'], minimum: 0.1, maximum: 10, description: 'Auto leading as a multiple of the font size (default 1.2).' },
+		firstLineIndent: { type: ['number', 'null'], description: 'Extra indent of each paragraph\'s first line, document units.' },
+		startIndent: { type: ['number', 'null'], description: 'Indent from the start edge, document units.' },
+		endIndent: { type: ['number', 'null'], description: 'Indent from the end edge, document units.' },
+		spaceBefore: { type: ['number', 'null'], description: 'Space above each paragraph but the first, document units.' },
+		spaceAfter: { type: ['number', 'null'], description: 'Space below each paragraph, document units.' }
+	} as const;
+	const PATH_TEXT_PROPS = {
+		start: { type: 'number', minimum: 0, description: 'Margin from the path\'s start where the text may begin (default 0).' },
+		end: { type: 'number', minimum: 0, description: 'Margin from the path\'s end (default 0).' },
+		flip: { type: 'boolean', description: 'Run the text the other way along the path, on its other side.' },
+		orientation: { type: 'string', enum: ['rotate', 'upright'], description: 'rotate (default): characters turn with the path; upright: they stay level.' },
+		baseline: { type: 'string', enum: ['baseline', 'ascender', 'descender', 'center'], description: 'What sits on the path (default baseline; ascender hangs the text below it).' }
+	} as const;
+	const RANGE_PROPS = {
+		start: { type: 'integer', minimum: 0, description: 'Start of the range in UTF-16 code units (default 0; vector.getText gives the text and its runs).' },
+		end: { type: 'integer', minimum: 0, description: 'End of the range, exclusive (default the text\'s length).' }
+	} as const;
+	const pick = (params: Record<string, unknown>, keys: readonly string[]) => {
+		const out: Record<string, unknown> = {};
+		for (const k of keys) if (params[k] !== undefined) out[k] = params[k];
+		return out;
+	};
+	const textCommands = (): CommandSpec[] => [
+		{
+			...base,
+			id: `${prefix}listFonts`,
+			label: 'List Fonts',
+			readOnly: true,
+			keywords: ['font', 'typeface', 'family', 'text'],
+			description:
+				'Lists the font families the text shaper can draw, which shaper it is, and whether it gives glyph outlines (needed for Create Outlines, and for path effects and envelopes on text). Returns { shaper, outlines, families }.',
+			params: { type: 'object', properties: {}, additionalProperties: false },
+			run: () => ({ shaper: controller.getTextShaper().id, outlines: vectorTextHasOutlines(), families: vectorTextFamilies() })
+		},
+		{
+			...base,
+			id: `${prefix}addText`,
+			label: 'Add Text…',
+			keywords: ['text', 'type', 'label', 'title', 'headline', 'caption', 'paragraph', 'words'],
+			description:
+				'Adds text: point text whose first baseline starts at (x, y), area text wrapped in a box (x, y, width, height), or text along `path` (SVG path data, document units). Paragraphs are separated by "\\n". Paint defaults to black with no stroke; style it with fill / stroke here or vector.setStyle. One undo step. Returns vector.getText\'s summary of the new text (id, lines, bounds, overflow).',
+			params: {
+				type: 'object',
+				properties: {
+					text: { type: 'string', description: 'The text; "\\n" starts a new paragraph.' },
+					x: { type: 'number', description: 'Point text: x of the first baseline\'s start; area text: the box\'s left (default 0).' },
+					y: { type: 'number', description: 'Point text: y of the first baseline; area text: the box\'s top (default 0).' },
+					width: { type: 'number', minimum: 0, description: 'Area text: the box width (with height).' },
+					height: { type: 'number', minimum: 0, description: 'Area text: the box height; lines below it are hidden (overflow).' },
+					path: { type: 'string', description: 'Text on a path: SVG path data of the line the text follows (its first subpath).' },
+					...PATH_TEXT_PROPS,
+					font: { type: 'object', properties: FONT_PROPS, additionalProperties: false, description: 'Character style (default the editor\'s text defaults: 24 sans-serif).' },
+					paragraph: { type: 'object', properties: PARAGRAPH_PROPS, additionalProperties: false, description: 'Paragraph style.' },
+					name: { type: 'string', description: 'Layer name (default the text\'s start).' },
+					fill: PAINT,
+					stroke: PAINT,
+					strokeWidth: { type: 'number', minimum: 0, description: 'Stroke width (default 1).' }
+				},
+				required: ['text'],
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: Record<string, unknown> & { text: string }) => {
+				const pathOptions = pick(params, Object.keys(PATH_TEXT_PROPS));
+				if (params.path === undefined && Object.keys(pathOptions).length) fail(`${Object.keys(pathOptions).join(', ')} only apply to text on a path; pass path too.`);
+				if ((params.width === undefined) !== (params.height === undefined)) fail('Area text needs both width and height; leave both out for point text.');
+				let id = '';
+				try {
+					id = controller.addText({
+						text: params.text,
+						...pick(params, ['x', 'y', 'width', 'height', 'name', 'strokeWidth']),
+						...(params.path !== undefined ? { path: params.path as string, pathOptions } : {}),
+						...(params.font ? { font: params.font as Record<string, unknown> } : {}),
+						...(params.paragraph ? { paragraph: params.paragraph as Record<string, unknown> } : {}),
+						...(params.fill !== undefined ? { fill: checkPaint(params.fill, 'fill') } : {}),
+						...(params.stroke !== undefined ? { stroke: checkPaint(params.stroke, 'stroke') } : {})
+					});
+				} catch (e) {
+					fail(e instanceof Error ? e.message : String(e));
+				}
+				return textSummary(id);
+			}
+		},
+		{
+			...base,
+			id: `${prefix}getText`,
+			label: 'Get Text',
+			readOnly: true,
+			keywords: ['text', 'type', 'read', 'font', 'runs'],
+			description:
+				'Reads a text node: its text, base font, runs (styled ranges as { start, end, style } in UTF-16 code units; style fields override the font, fill a range\'s colour), paragraph style, frame (point / area / path), fill and stroke, the laid-out lines (start, end, text), document bounds, overflow (text that does not fit its box or path), whether it draws as outlines, the shaper and missing fonts. Use the ranges with vector.setText and vector.setTextStyle.',
+			params: { type: 'object', properties: { id: { type: 'string', description: 'Text node id (from vector.list).' } }, required: ['id'], additionalProperties: false },
+			run: (_ctx: unknown, params: { id: string }) => textSummary(params.id)
+		},
+		{
+			...base,
+			id: `${prefix}setText`,
+			label: 'Set Text…',
+			keywords: ['text', 'type', 'edit', 'replace', 'insert', 'delete'],
+			description:
+				'Replaces [start, end) of a text node\'s text with `text` (default the whole text; start = end inserts). Inserted characters take the style of the character before them. One undo step. Returns the text summary (vector.getText).',
+			params: {
+				type: 'object',
+				properties: { id: { type: 'string', description: 'Text node id.' }, text: { type: 'string', description: 'The new characters ("" deletes the range).' }, ...RANGE_PROPS },
+				required: ['id', 'text'],
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: { id: string; text: string; start?: number; end?: number }) => {
+				check(controller.setText(params.id, params.text, { start: params.start, end: params.end }));
+				return textSummary(params.id);
+			}
+		},
+		{
+			...base,
+			id: `${prefix}setTextStyle`,
+			label: 'Character Style…',
+			keywords: ['font', 'bold', 'italic', 'size', 'tracking', 'kerning', 'leading', 'underline', 'colour', 'color', 'text'],
+			description:
+				'Sets character style fields (and `fill`, a colour or gradient for those characters) over [start, end) of a text node; the whole text (the default) changes the node\'s own font and fill. null clears tracking, leading and baseline shift. One undo step. Returns the text summary with its runs.',
+			params: {
+				type: 'object',
+				properties: { id: { type: 'string', description: 'Text node id.' }, ...RANGE_PROPS, ...FONT_PROPS, fill: { ...PAINT, description: 'Paint of these characters (the whole text: the node\'s fill).' } },
+				required: ['id'],
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: Record<string, unknown> & { id: string; start?: number; end?: number }) => {
+				const patch = pick(params, [...Object.keys(FONT_PROPS), 'fill']);
+				if (!Object.keys(patch).length) fail(`Pass at least one of ${[...Object.keys(FONT_PROPS), 'fill'].join(', ')}.`);
+				if (patch.fill !== undefined) patch.fill = checkPaint(patch.fill, 'fill');
+				check(controller.setTextStyle(params.id, patch, { start: params.start, end: params.end }));
+				return textSummary(params.id);
+			}
+		},
+		{
+			...base,
+			id: `${prefix}setParagraphStyle`,
+			label: 'Paragraph Style…',
+			keywords: ['align', 'centre', 'center', 'justify', 'indent', 'spacing', 'leading', 'paragraph'],
+			description: 'Sets paragraph fields of a text node (all its paragraphs): align, autoLeading, indents and spacing; null clears one. One undo step. Returns the text summary.',
+			params: { type: 'object', properties: { id: { type: 'string', description: 'Text node id.' }, ...PARAGRAPH_PROPS }, required: ['id'], additionalProperties: false },
+			undoable: true,
+			run: (_ctx: unknown, params: Record<string, unknown> & { id: string }) => {
+				const patch = pick(params, Object.keys(PARAGRAPH_PROPS));
+				if (!Object.keys(patch).length) fail(`Pass at least one of ${Object.keys(PARAGRAPH_PROPS).join(', ')}.`);
+				check(controller.setParagraphStyle(params.id, patch));
+				return textSummary(params.id);
+			}
+		},
+		{
+			...base,
+			id: `${prefix}setTextFrame`,
+			label: 'Text Frame…',
+			keywords: ['point text', 'area text', 'text box', 'wrap', 'resize text', 'path text', 'convert'],
+			description:
+				'Changes how a text node is set: kind point (no wrapping; x, y the first baseline), area (wrapped in a box; width / height default to its current size) or path (with `path` data in the node\'s own space, or the current path), plus the path options. Omitting kind keeps the current one and edits its fields. One undo step. Returns the text summary.',
+			params: {
+				type: 'object',
+				properties: {
+					id: { type: 'string', description: 'Text node id.' },
+					kind: { type: 'string', enum: ['point', 'area', 'path'], description: 'The frame to switch to (default: keep).' },
+					x: { type: 'number', description: 'Point: the first baseline\'s start; area: the box\'s left.' },
+					y: { type: 'number', description: 'Point: the first baseline; area: the box\'s top.' },
+					width: { type: 'number', minimum: 0, description: 'Area: box width.' },
+					height: { type: 'number', minimum: 0, description: 'Area: box height.' },
+					path: { type: 'string', description: 'Path: SVG path data of the line to follow, in the node\'s own space.' },
+					...PATH_TEXT_PROPS
+				},
+				required: ['id'],
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: Record<string, unknown> & { id: string }) => {
+				const { id, ...patch } = params;
+				if (!Object.keys(patch).length) fail('Pass kind or a frame field to change.');
+				check(controller.setTextFrame(id, patch));
+				return textSummary(id);
+			}
+		},
+		{
+			...base,
+			id: `${prefix}typeOnPath`,
+			label: 'Type on a Path',
+			keywords: ['text on path', 'path text', 'curved text', 'circle text', 'text along'],
+			description:
+				'Turns a path node into text set along it (Type on a Path): the text takes the path\'s place and its first subpath (the path\'s paint is dropped; the text is black unless fill is given). One undo step. Returns the text summary (its id is new).',
+			params: {
+				type: 'object',
+				properties: {
+					pathId: { type: 'string', description: 'The path node to set text along (from vector.list).' },
+					text: { type: 'string', description: 'The text (default empty).' },
+					font: { type: 'object', properties: FONT_PROPS, additionalProperties: false, description: 'Character style (default the text defaults).' },
+					paragraph: { type: 'object', properties: PARAGRAPH_PROPS, additionalProperties: false, description: 'Paragraph style; align places the text along the path.' },
+					...PATH_TEXT_PROPS,
+					fill: PAINT
+				},
+				required: ['pathId'],
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: Record<string, unknown> & { pathId: string }) => {
+				const r = controller.typeOnPath(params.pathId, {
+					...(params.text !== undefined ? { text: params.text as string } : {}),
+					...(params.font ? { font: params.font as Record<string, unknown> } : {}),
+					...(params.paragraph ? { paragraph: params.paragraph as Record<string, unknown> } : {}),
+					pathOptions: pick(params, Object.keys(PATH_TEXT_PROPS)),
+					...(params.fill !== undefined ? { fill: checkPaint(params.fill, 'fill') } : {})
+				});
+				check(r);
+				return textSummary(r.id!);
+			}
+		},
+		{
+			...base,
+			id: `${prefix}createOutlines`,
+			label: 'Create Outlines',
+			shortcut: 'Mod+Shift+O',
+			keywords: ['outline text', 'text to paths', 'convert text', 'expand text', 'glyphs'],
+			description:
+				'Turns text (the given nodes, or text inside given groups; default the selection) into paths of its glyph outlines, keeping paint, effects, filters, placement and id (runs with their own fill become a group of paths). The text can no longer be edited as text. Needs a text shaper with outlines (vector.listFonts says); fails otherwise. One undo step. Returns { ids }.',
+			params: { type: 'object', properties: { ids: { ...IDS, description: 'Text nodes or groups holding text (default: the selection).' } }, additionalProperties: false },
+			undoable: true,
+			enabled: enabledFor,
+			run: (_ctx: unknown, params: { ids?: string[] } | undefined) => {
+				const r = controller.createOutlines({ ids: ids(params) });
+				check(r);
+				return { ids: r.ids };
+			}
+		}
+	];
+
+
+	// --- Symbols ---------------------------------------------------------------
+	const symbolSummary = (id: string) => {
+		const sym = controller.getSymbols().find((x) => x.id === id) ?? fail(`There is no symbol "${id}"; vector.listSymbols lists them.`);
+		const nodes: { id: string; type: string; name?: string }[] = [];
+		const walk = (list: readonly VectorNode[]) => {
+			for (const n of list) {
+				nodes.push({ id: n.id, type: n.type, ...(n.name ? { name: n.name } : {}) });
+				if (n.type === 'group') walk(n.children);
+			}
+		};
+		walk(sym.nodes);
+		const b = unionBoundsOf(sym.nodes);
+		return { id: sym.id, name: sym.name, nodes, bounds: b, instances: controller.getSymbolInstances(sym.id) };
+	};
+	const unionBoundsOf = (list: readonly VectorNode[]) => {
+		let x0 = Infinity;
+		let y0 = Infinity;
+		let x1 = -Infinity;
+		let y1 = -Infinity;
+		for (const n of list) {
+			const b = vectorNodeBounds(n, IDENTITY_MATRIX);
+			if (!b) continue;
+			x0 = Math.min(x0, b.x);
+			y0 = Math.min(y0, b.y);
+			x1 = Math.max(x1, b.x + b.width);
+			y1 = Math.max(y1, b.y + b.height);
+		}
+		return x0 < Infinity ? { x: round(x0), y: round(y0), width: round(x1 - x0), height: round(y1 - y0) } : null;
+	};
+	const MATRIX = { type: 'array', items: { type: 'number' }, minItems: 6, maxItems: 6, description: 'An affine matrix [a, b, c, d, e, f] (SVG order): x\' = a·x + c·y + e, y\' = b·x + d·y + f. Instances may scale and skew.' } as const;
+	const symbolCommands = (): CommandSpec[] => [
+		{
+			...base,
+			id: `${prefix}listSymbols`,
+			label: 'List Symbols',
+			readOnly: true,
+			keywords: ['symbol', 'symbols', 'library', 'component', 'reuse', 'instance'],
+			description:
+				'Lists the document\'s symbols: id, name, the art\'s nodes (ids, types, names; use them for hidden overrides), its bounds in symbol space (around the registration point at 0, 0) and the ids of its instances. Also says which symbol is being edited in isolation, if any.',
+			params: { type: 'object', properties: {}, additionalProperties: false },
+			run: () => ({ symbols: controller.getSymbols().map((x) => symbolSummary(x.id)), editing: controller.getState().symbolEdit?.symbolId ?? null })
+		},
+		{
+			...base,
+			id: `${prefix}makeSymbol`,
+			label: 'Make Symbol',
+			shortcut: 'F8',
+			keywords: ['symbol', 'make symbol', 'component', 'reuse', 'library'],
+			description:
+				'Turns objects that share a parent (`ids`, default the selection) into a new symbol, its registration point at their centre, and puts an instance of it in their place (selected). One undo step. Returns { symbolId, instanceId, symbol } (the symbol summary of vector.listSymbols).',
+			params: { type: 'object', properties: { ids: { ...IDS, description: 'Objects to make the symbol from (default: the selection).' }, name: { type: 'string', description: 'Symbol name (default "Symbol n").' } }, additionalProperties: false },
+			undoable: true,
+			enabled: enabledFor,
+			run: (_ctx: unknown, params: { ids?: string[]; name?: string } | undefined) => {
+				const r = controller.makeSymbol({ ids: ids(params), ...(params?.name ? { name: params.name } : {}) });
+				check(r);
+				return { symbolId: r.symbolId, instanceId: r.instanceId, symbol: symbolSummary(r.symbolId!) };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}placeSymbol`,
+			label: 'Place Symbol…',
+			keywords: ['symbol', 'instance', 'place', 'stamp', 'reuse'],
+			description:
+				'Places a new instance of symbol `symbolId` with its registration point at (x, y) (default the artboard centre), or through `transform` (which may scale, rotate and skew). Fails when the symbol is being edited and would contain itself. One undo step. Returns { id }.',
+			params: {
+				type: 'object',
+				properties: {
+					symbolId: { type: 'string', description: 'The symbol (from vector.listSymbols).' },
+					x: { type: 'number', description: 'Where the registration point goes (document units).' },
+					y: { type: 'number', description: 'Where the registration point goes (document units).' },
+					transform: { ...MATRIX, description: 'Placement instead of x / y: an affine matrix [a, b, c, d, e, f] (scale and skew allowed).' },
+					name: { type: 'string', description: 'Instance name (default the symbol\'s).' }
+				},
+				required: ['symbolId'],
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: { symbolId: string; x?: number; y?: number; transform?: number[]; name?: string }) => {
+				if (params.transform && (params.x !== undefined || params.y !== undefined)) fail('Pass either x / y or transform, not both.');
+				const r = controller.placeSymbol(params.symbolId, {
+					...(params.x !== undefined ? { x: params.x } : {}),
+					...(params.y !== undefined ? { y: params.y } : {}),
+					...(params.transform ? { transform: params.transform as unknown as VectorMatrix } : {}),
+					...(params.name ? { name: params.name } : {})
+				});
+				check(r);
+				return { id: r.id };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}setInstanceOptions`,
+			label: 'Instance Options…',
+			keywords: ['symbol', 'instance', 'override', 'tint', 'scale strokes', 'hide'],
+			description:
+				'Changes instances (`ids`, default the selection): `scaleStrokes` (strokes of the art scale with the instance, default true), and overrides — `fill` / `stroke` paint every fill or stroke of the art with one paint (null clears), `hidden` lists art node ids (from vector.listSymbols) not drawn ([] clears). Pass at least one. One undo step. Returns the instances as vector.list lists them.',
+			params: {
+				type: 'object',
+				properties: {
+					ids: { ...IDS, description: 'Instance ids (default: the selection).' },
+					scaleStrokes: { type: 'boolean', description: 'Strokes scale with the instance (true, default) or keep their width (false).' },
+					fill: { ...PAINT, description: 'Paint for every fill of the art in these instances; null clears the override.' },
+					stroke: { ...PAINT, description: 'Paint for every stroke of the art; null clears the override.' },
+					hidden: { type: ['array', 'null'], items: { type: 'string' }, description: 'Ids of art nodes to hide in these instances; [] or null shows them all.' }
+				},
+				additionalProperties: false
+			},
+			undoable: true,
+			enabled: enabledFor,
+			run: (_ctx: unknown, params: { ids?: string[]; scaleStrokes?: boolean; fill?: unknown; stroke?: unknown; hidden?: string[] | null } | undefined) => {
+				const patch = {
+					...(params?.scaleStrokes !== undefined ? { scaleStrokes: params.scaleStrokes } : {}),
+					...(params?.fill !== undefined ? { fill: params.fill === null ? null : checkPaint(params.fill, 'fill') } : {}),
+					...(params?.stroke !== undefined ? { stroke: params.stroke === null ? null : checkPaint(params.stroke, 'stroke') } : {}),
+					...(params?.hidden !== undefined ? { hidden: params.hidden } : {})
+				};
+				if (!Object.keys(patch).length) fail('Pass at least one of scaleStrokes, fill, stroke, hidden.');
+				const targetIds = ids(params);
+				check(controller.setInstanceOptions(patch, { ids: targetIds }));
+				const listed = list().nodes;
+				return { instances: targetIds.map((id) => listed.find((n) => n.id === id)) };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}replaceSymbol`,
+			label: 'Replace Symbol…',
+			keywords: ['symbol', 'instance', 'swap', 'replace'],
+			description: 'Makes instances (`ids`, default the selection) draw symbol `symbolId` instead, keeping their placement and colour overrides (hidden art ids are dropped). One undo step. Returns { ids }.',
+			params: { type: 'object', properties: { ids: { ...IDS, description: 'Instance ids (default: the selection).' }, symbolId: { type: 'string', description: 'The symbol to draw (from vector.listSymbols).' } }, required: ['symbolId'], additionalProperties: false },
+			undoable: true,
+			run: (_ctx: unknown, params: { ids?: string[]; symbolId: string }) => {
+				const targetIds = ids(params);
+				check(controller.replaceSymbol(params.symbolId, { ids: targetIds }));
+				return { ids: targetIds };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}detachInstance`,
+			label: 'Break Link to Symbol',
+			keywords: ['symbol', 'instance', 'detach', 'break link', 'unlink', 'expand'],
+			description: 'Replaces instances (`ids`, default the selection) by plain groups of their art as drawn (placement, scaled strokes and overrides baked in), no longer linked to the symbol. One undo step. Returns { ids } (the groups keep the instances\' ids).',
+			params: { type: 'object', properties: { ids: { ...IDS, description: 'Instance ids (default: the selection).' } }, additionalProperties: false },
+			undoable: true,
+			enabled: enabledFor,
+			run: (_ctx: unknown, params: { ids?: string[] } | undefined) => {
+				const r = controller.detachInstances({ ids: ids(params) });
+				check(r);
+				return { ids: r.ids };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}renameSymbol`,
+			label: 'Rename Symbol…',
+			keywords: ['symbol', 'rename', 'name'],
+			description: 'Renames symbol `symbolId`. One undo step. Returns the symbol summary.',
+			params: { type: 'object', properties: { symbolId: { type: 'string', description: 'The symbol (from vector.listSymbols).' }, name: { type: 'string', minLength: 1, description: 'Its new name.' } }, required: ['symbolId', 'name'], additionalProperties: false },
+			undoable: true,
+			run: (_ctx: unknown, params: { symbolId: string; name: string }) => {
+				check(controller.renameSymbol(params.symbolId, params.name));
+				return symbolSummary(params.symbolId);
+			}
+		},
+		{
+			...base,
+			id: `${prefix}deleteSymbol`,
+			label: 'Delete Symbol…',
+			keywords: ['symbol', 'delete', 'remove'],
+			description: 'Deletes symbol `symbolId`. Fails while instances use it unless `detach: true` turns them into plain groups first. One undo step. Returns { ok }.',
+			params: { type: 'object', properties: { symbolId: { type: 'string', description: 'The symbol (from vector.listSymbols).' }, detach: { type: 'boolean', description: 'Turn its instances into groups first (default false: fail when it is used).' } }, required: ['symbolId'], additionalProperties: false },
+			undoable: true,
+			run: (_ctx: unknown, params: { symbolId: string; detach?: boolean }) => {
+				check(controller.deleteSymbol(params.symbolId, { detach: params.detach }));
+				return { ok: true };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}editSymbol`,
+			label: 'Edit Symbol',
+			keywords: ['symbol', 'edit symbol', 'isolation', 'master'],
+			description:
+				'Enters isolation mode on a symbol (`id` of the symbol, or of one of its instances): the document then holds the symbol\'s art in its own space (registration point at 0, 0), so every vector.* command edits the art and every instance follows. Call vector.exitSymbolEdit when done. Not an undo step itself. Returns { symbolId, nodes } (vector.list for the art).',
+			params: { type: 'object', properties: { id: { type: 'string', description: 'A symbol id (vector.listSymbols) or an instance id (vector.list).' } }, required: ['id'], additionalProperties: false },
+			run: (_ctx: unknown, params: { id: string }) => {
+				check(controller.editSymbol(params.id));
+				return { symbolId: controller.getState().symbolEdit!.symbolId, nodes: list().nodes };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}exitSymbolEdit`,
+			label: 'Exit Symbol',
+			keywords: ['symbol', 'done', 'exit isolation'],
+			description: 'Leaves isolation mode: back to the whole document, every instance of the edited symbol updated. Returns { symbolId } of the symbol that was edited (null when none was).',
+			params: { type: 'object', properties: {}, additionalProperties: false },
+			enabled: () => (controller.getState().symbolEdit ? true : 'No symbol is being edited.'),
+			run: () => {
+				const id = controller.getState().symbolEdit?.symbolId ?? null;
+				controller.exitSymbolEdit();
+				return { symbolId: id };
+			}
+		}
+	];
+
+
+	// --- Constraints -------------------------------------------------------------
+	const CONSTRAINT_REF = {
+		type: 'object',
+		properties: {
+			nodeId: { type: 'string', description: 'The path (from vector.list).' },
+			subpath: { type: 'integer', minimum: 0, description: 'Subpath of the anchor (with index).' },
+			index: { type: 'integer', minimum: 0, description: 'Anchor index in the subpath (with subpath).' },
+			anchor: { type: 'string', description: 'The anchor\'s id instead of subpath / index (vector.listConstraints shows ids in use).' },
+			handle: { type: 'string', enum: ['in', 'out'], description: 'The anchor\'s handle instead of the anchor point.' },
+			segment: { type: 'boolean', description: 'The segment from the anchor to the next one (a line between them) instead of the point.' },
+			circle: { type: 'boolean', description: 'The whole path as a circle (its centre and radius): for round closed paths, no anchor.' }
+		},
+		required: ['nodeId'],
+		additionalProperties: false
+	} as const;
+	const constraintsSummary = () => {
+		const state = controller.getState();
+		const residuals = vectorConstraintResiduals(controller.getDocument());
+		const env = vectorConstraintEnv(controller.getDocument());
+		return {
+			constraints: controller.getConstraints().map((c) => {
+				let current: number | null = null;
+				try {
+					current = c.kind === 'distance' || c.kind === 'angle' || c.kind === 'radius' || c.kind === 'diameter' ? round(vectorConstraintValue(env, c)) : null;
+				} catch {
+					current = null;
+				}
+				const r = residuals.get(c.id);
+				return { ...c, ...(current !== null ? { evaluated: current } : {}), satisfied: r !== null && r !== undefined && r <= 1e-6 * Math.max(state.document.width, state.document.height, 1) };
+			}),
+			parameters: controller.getParameters(),
+			dof: controller.getConstraintDof(),
+			issues: state.constraintIssues
+		};
+	};
+	const snapResult = () => {
+		const { grid, objects, guides, threshold, angles, tracking, trackPolar, polarRelative } = controller.getState().snap;
+		return { grid, objects, guides, threshold, angles: [...angles], tracking: tracking !== false, trackPolar: !!trackPolar, polarRelative: !!polarRelative };
+	};
+	const trackingCommands = (): CommandSpec[] => [
+		{
+			...base,
+			id: `${prefix}getSnapOptions`,
+			label: 'Snap Options',
+			readOnly: true,
+			keywords: ['snap', 'grid', 'polar', 'tracking', 'angles', 'guides'],
+			description: 'Returns the snap options: grid (0 = off), objects, guides, threshold (screen px), angles (polar / construction angles in degrees, counter-clockwise on the page), tracking, trackPolar, polarRelative.',
+			params: { type: 'object', properties: {}, additionalProperties: false },
+			run: () => snapResult()
+		},
+		{
+			...base,
+			id: `${prefix}setSnapOptions`,
+			label: 'Set Snap Options…',
+			keywords: ['snap', 'grid', 'polar', 'polar tracking', 'object snap tracking', 'otrack', 'angles', 'increment'],
+			description:
+				'Changes how drawing snaps for people at the pointer (it does not move anything already drawn). polarIncrement sets angles to every multiple of it (plus additionalAngles). Pass at least one. Returns the options as vector.getSnapOptions does.',
+			params: {
+				type: 'object',
+				properties: {
+					grid: { type: 'number', minimum: 0, description: 'Grid size in document units; 0 turns the grid off.' },
+					objects: { type: 'boolean', description: 'Snap to other objects, construction angles and tracking.' },
+					guides: { type: 'boolean', description: 'Show smart guide lines and labels.' },
+					threshold: { type: 'number', exclusiveMinimum: 0, description: 'How near a target pulls, in screen pixels (default 5).' },
+					angles: { type: 'array', items: { type: 'number' }, description: 'Polar / construction angles in degrees (counter-clockwise on the page). Overrides polarIncrement.' },
+					polarIncrement: { type: 'number', exclusiveMinimum: 0, maximum: 360, description: 'Polar tracking increment in degrees (e.g. 15, 30, 45, 90): sets angles to its multiples.' },
+					additionalAngles: { type: 'array', items: { type: 'number' }, description: 'Extra polar angles in degrees, added to polarIncrement\'s.' },
+					tracking: { type: 'boolean', description: 'Object snap tracking: resting the pointer on an anchor acquires it (default true).' },
+					trackPolar: { type: 'boolean', description: 'Acquired points send paths at every polar angle, not only horizontal and vertical (default false).' },
+					polarRelative: { type: 'boolean', description: 'The pen measures polar angles from its last segment (default false).' }
+				},
+				additionalProperties: false
+			},
+			run: (_ctx: unknown, params: { grid?: number; objects?: boolean; guides?: boolean; threshold?: number; angles?: number[]; polarIncrement?: number; additionalAngles?: number[]; tracking?: boolean; trackPolar?: boolean; polarRelative?: boolean } | undefined) => {
+				const { polarIncrement, additionalAngles, ...rest } = params ?? {};
+				if (!Object.keys(params ?? {}).length) fail('Pass at least one option.');
+				if (rest.angles?.some((a) => !Number.isFinite(a))) fail('angles must be numbers (degrees).');
+				if (additionalAngles && polarIncrement === undefined) fail('additionalAngles go with polarIncrement.');
+				const angles = rest.angles ?? (polarIncrement !== undefined ? vectorPolarAngles(polarIncrement, additionalAngles) : undefined);
+				controller.setSnap({ ...rest, ...(angles ? { angles } : {}) });
+				return snapResult();
+			}
+		},
+		{
+			...base,
+			id: `${prefix}addPathByDimensions`,
+			label: 'Draw by Dimensions…',
+			keywords: ['dimensions', 'length', 'angle', 'polar', 'typed', 'direct distance', 'polyline', 'cad', 'turtle'],
+			description:
+				'Adds a path drawn by typed dimensions, as in CAD: from start, each step goes { length, angle } (degrees, counter-clockwise on the page: 0 right, 90 up), { dx, dy } (an offset) or { x, y } (a position), all in document units. closed joins the last point to the first. Default style. One undo step; selects it. Returns { id, anchors }.',
+			params: {
+				type: 'object',
+				properties: {
+					start: { type: 'object', properties: { x: { type: 'number', description: 'Document units.' }, y: { type: 'number', description: 'Document units.' } }, required: ['x', 'y'], additionalProperties: false, description: 'The first point.' },
+					steps: {
+						type: 'array',
+						minItems: 1,
+						description: 'Each next point: { length, angle }, { dx, dy } or { x, y }.',
+						items: {
+							anyOf: [
+								{ type: 'object', properties: { length: { type: 'number', description: 'Distance from the previous point.' }, angle: { type: 'number', description: 'Degrees counter-clockwise on the page (0 right, 90 up).' } }, required: ['length', 'angle'], additionalProperties: false },
+								{ type: 'object', properties: { dx: { type: 'number', description: 'Offset right.' }, dy: { type: 'number', description: 'Offset down.' } }, required: ['dx', 'dy'], additionalProperties: false },
+								{ type: 'object', properties: { x: { type: 'number', description: 'Position.' }, y: { type: 'number', description: 'Position.' } }, required: ['x', 'y'], additionalProperties: false }
+							]
+						}
+					},
+					closed: { type: 'boolean', description: 'Close the path (default false).' },
+					name: { type: 'string', description: 'Path name (default "Path").' }
+				},
+				required: ['start', 'steps'],
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: Parameters<VectorEditorController['addPathByDimensions']>[0]) => {
+				const r = controller.addPathByDimensions(params);
+				if (!r.ok) fail(r.message);
+				return { id: (r as { id: string }).id, anchors: r.anchors };
+			}
+		}
+	];
+
+	const connectorResult = (id: string) => controller.getConnectors().find((x) => x.id === id) ?? fail(`"${id}" is not a connector.`);
+	const SIDE = { type: 'string', enum: VECTOR_CONNECTOR_SIDES, description: 'Which site: the middle of the object\'s top, right, bottom or left side (its own, unrotated bounds, turned with it), its centre, or auto (the side facing the other end, chosen again on every edit; the default).' } as const;
+	const GLUED_END = {
+		type: 'object',
+		properties: { nodeId: { type: 'string', description: 'The object to glue to (not a connector).' }, side: SIDE },
+		required: ['nodeId'],
+		additionalProperties: false
+	} as const;
+	const CONNECTOR_END = {
+		description: 'An end glued to an object, { nodeId, side? }, or a free point { x, y } in document units.',
+		anyOf: [GLUED_END, { type: 'object', properties: { x: { type: 'number', description: 'Document units.' }, y: { type: 'number', description: 'Document units.' } }, required: ['x', 'y'], additionalProperties: false }]
+	} as const;
+	const ROUTE_PROPS = {
+		route: { type: 'string', enum: VECTOR_CONNECTOR_ROUTES, description: 'straight (default), elbow (right angles, leaving and entering along the sides) or curved (an S-curve with handles along the sides).' },
+		radius: { type: 'number', minimum: 0, description: 'Corner radius of an elbow route\'s bends, document units (default 0).' },
+		gap: { type: 'number', minimum: 0, description: 'How far an elbow or curve runs straight out of a glued side before turning, document units (default 16).' }
+	} as const;
+	const connectorCommands = (): CommandSpec[] => [
+		{
+			...base,
+			id: `${prefix}listConnectors`,
+			label: 'List Connectors',
+			readOnly: true,
+			keywords: ['connector', 'connectors', 'arrows', 'links', 'edges', 'diagram', 'flowchart'],
+			description:
+				'Lists every connector: id, name, route, radius, and each end: the glued nodeId, its side setting and the side in use (resolvedSide), and where the end is (x, y, document units). An end without nodeId is free.',
+			params: { type: 'object', properties: {}, additionalProperties: false },
+			run: () => ({ connectors: controller.getConnectors() })
+		},
+		{
+			...base,
+			id: `${prefix}listConnectionSites`,
+			label: 'List Connection Sites',
+			readOnly: true,
+			keywords: ['connector', 'sites', 'anchors', 'ports', 'glue'],
+			description: 'Returns the connection sites of an object: { sites: [{ side, x, y, nx, ny }] } in document units for top, right, bottom, left and centre (n is the outward normal). Empty for connectors, hidden objects or ones without extent.',
+			params: { type: 'object', properties: { id: { type: 'string', description: 'The object (from vector.list).' } }, required: ['id'], additionalProperties: false },
+			run: (_ctx: unknown, params: { id: string }) => ({ sites: controller.getConnectionSites(params.id) ?? fail(`There is no node "${params.id}".`) })
+		},
+		{
+			...base,
+			id: `${prefix}connect`,
+			label: 'Connect…',
+			keywords: ['connector', 'connect', 'arrow', 'link', 'edge', 'flowchart', 'diagram', 'line between'],
+			description:
+				'Adds a connector between two objects (or free points): each glued end follows its object whenever it moves, resizes or turns, through every later edit. Default: straight, the default stroke, a triangle arrowhead at the end. One undo step; selects it. Returns the connector as vector.listConnectors lists it.',
+			params: {
+				type: 'object',
+				properties: {
+					start: CONNECTOR_END,
+					end: CONNECTOR_END,
+					...ROUTE_PROPS,
+					name: { type: 'string', description: 'Connector name (default "Connector").' },
+					stroke: PAINT,
+					strokeWidth: { type: 'number', minimum: 0, description: 'Stroke width in document units (default the editor default).' },
+					startArrow: { type: ['string', 'null'], enum: [...VECTOR_ARROWHEADS, null], description: 'Head at the start, or null for none (default none).' },
+					endArrow: { type: ['string', 'null'], enum: [...VECTOR_ARROWHEADS, null], description: 'Head at the end, or null for none (default triangle).' }
+				},
+				required: ['start', 'end'],
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: Parameters<VectorEditorController['addConnector']>[0]) => {
+				const r = controller.addConnector(params);
+				if (!r.ok) fail(r.message);
+				return connectorResult((r as { id: string }).id);
+			}
+		},
+		{
+			...base,
+			id: `${prefix}setConnector`,
+			label: 'Connector Options…',
+			keywords: ['connector', 'glue', 'unglue', 'route', 'elbow', 'curved', 'straight', 'reconnect'],
+			description:
+				'Changes connectors (`ids`, default the selection): start / end glue an end to another object ({ nodeId, side? }) or unglue it (null; the end stays where it is); route, radius, gap set how they run. A plain open path given by id becomes a connector. Pass at least one. One undo step. Returns { connectors } as vector.listConnectors lists them.',
+			params: {
+				type: 'object',
+				properties: {
+					ids: { ...IDS, description: 'Connector (or open path) ids (default: the selection).' },
+					start: { anyOf: [GLUED_END, { type: 'null' }], description: 'Glue the start to { nodeId, side? }, or null to unglue it.' },
+					end: { anyOf: [GLUED_END, { type: 'null' }], description: 'Glue the end to { nodeId, side? }, or null to unglue it.' },
+					...ROUTE_PROPS
+				},
+				additionalProperties: false
+			},
+			undoable: true,
+			enabled: enabledFor,
+			run: (_ctx: unknown, params: { ids?: string[]; start?: VectorConnectorEnd | null; end?: VectorConnectorEnd | null; route?: VectorConnectorRoute; radius?: number; gap?: number } | undefined) => {
+				const { ids: list, ...patch } = params ?? {};
+				if (!Object.keys(patch).length) fail('Pass at least one of start, end, route, radius, gap.');
+				const targets = ids({ ids: list });
+				check(controller.setConnector(patch, { ids: targets }));
+				return { connectors: targets.map(connectorResult) };
+			}
+		}
+	];
+
+	const frameResult = (id: string) => controller.getFrames().find((f) => f.id === id) ?? fail(`"${id}" is not a frame.`);
+	const FRAME_PAINT = { ...PAINT, description: `The frame's background, drawn below its children. ${PAINT.description}` };
+	const frameCommands = (): CommandSpec[] => [
+		{
+			...base,
+			id: `${prefix}listFrames`,
+			label: 'List Frames',
+			readOnly: true,
+			keywords: ['frame', 'frames', 'artboard', 'artboards', 'board', 'page', 'constraints'],
+			description:
+				'Lists every frame (top-level ones are artboards): id, name, parentId, artboard, frame { x, y, width, height, fill, clip } in its own space, bounds in document space, and its children with their resizing constraints (horizontal left|right|leftRight|center|scale, vertical top|bottom|topBottom|center|scale).',
+			params: { type: 'object', properties: {}, additionalProperties: false },
+			run: () => ({ frames: controller.getFrames() })
+		},
+		{
+			...base,
+			id: `${prefix}addFrame`,
+			label: 'Add Frame…',
+			keywords: ['frame', 'artboard', 'board', 'page', 'new artboard', 'canvas size'],
+			description:
+				'Adds an empty top-level frame (an artboard) at x, y with width × height (document units), white unless `fill` says otherwise, clipping its contents unless clip is false. With adopt: true the top-level objects it fully encloses move into it. Selects it. One undo step. Returns the frame as vector.listFrames lists it.',
+			params: {
+				type: 'object',
+				properties: {
+					x: { type: 'number', description: 'Left edge (document units).' },
+					y: { type: 'number', description: 'Top edge (document units).' },
+					width: { type: 'number', exclusiveMinimum: 0, description: 'Width (document units).' },
+					height: { type: 'number', exclusiveMinimum: 0, description: 'Height (document units).' },
+					name: { type: 'string', description: 'Frame name (default "Frame n").' },
+					fill: FRAME_PAINT,
+					clip: { type: 'boolean', description: 'Clip the children to the frame (default true).' },
+					adopt: { type: 'boolean', description: 'Move the top-level objects wholly inside the rectangle into the frame (default false).' }
+				},
+				required: ['x', 'y', 'width', 'height'],
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: { x: number; y: number; width: number; height: number; name?: string; fill?: VectorPaint; clip?: boolean; adopt?: boolean }) => {
+				const r = controller.addFrame(params);
+				if (!r.ok) fail(r.message);
+				return frameResult((r as { id: string }).id);
+			}
+		},
+		{
+			...base,
+			id: `${prefix}frameSelection`,
+			label: 'Frame Selection',
+			shortcut: 'Mod+Alt+G',
+			keywords: ['frame', 'artboard', 'wrap', 'group', 'board', 'container'],
+			description:
+				'Puts objects that share a parent (`ids`, default the selection) into a new frame fitted to their bounds plus padding, in their place in the stacking order. No fill unless given; clips unless clip is false. Selects the frame. One undo step. Returns the frame as vector.listFrames lists it.',
+			params: {
+				type: 'object',
+				properties: {
+					ids: { ...IDS, description: 'Objects to frame, sharing a parent (default: the selection).' },
+					padding: { type: 'number', minimum: 0, description: 'Space around the objects inside the frame, document units (default 0).' },
+					name: { type: 'string', description: 'Frame name (default "Frame n").' },
+					fill: FRAME_PAINT,
+					clip: { type: 'boolean', description: 'Clip the children to the frame (default true).' }
+				},
+				additionalProperties: false
+			},
+			undoable: true,
+			enabled: enabledFor,
+			run: (_ctx: unknown, params: { ids?: string[]; padding?: number; name?: string; fill?: VectorPaint; clip?: boolean } | undefined) => {
+				const r = controller.frameSelection({ ...params, ids: ids(params) });
+				if (!r.ok) fail(r.message);
+				return frameResult((r as { id: string }).id);
+			}
+		},
+		{
+			...base,
+			id: `${prefix}setFrame`,
+			label: 'Frame Options…',
+			keywords: ['frame', 'artboard', 'resize', 'size', 'background', 'clip', 'clip content'],
+			description:
+				'Changes frames (`ids`, default the selected frame or the one holding the selection). x, y, width, height move and resize the rectangle (frame space); the children follow their resizing constraints instead of scaling (see vector.setResizing). fill sets the background (null for none); clip whether children outside are hidden. Pass at least one. One undo step. Returns { frames } as vector.listFrames lists them.',
+			params: {
+				type: 'object',
+				properties: {
+					ids: { ...IDS, description: 'Frame ids (default: the selected frame, or the frame holding the selection).' },
+					x: { type: 'number', description: 'New left edge (frame space, document units).' },
+					y: { type: 'number', description: 'New top edge (frame space, document units).' },
+					width: { type: 'number', exclusiveMinimum: 0, description: 'New width (document units).' },
+					height: { type: 'number', exclusiveMinimum: 0, description: 'New height (document units).' },
+					fill: FRAME_PAINT,
+					clip: { type: 'boolean', description: 'true: hide children outside the frame; false: let them show.' }
+				},
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: { ids?: string[]; x?: number; y?: number; width?: number; height?: number; fill?: VectorPaint; clip?: boolean } | undefined) => {
+				const { ids: list, ...patch } = params ?? {};
+				if (!Object.keys(patch).length) fail('Pass at least one of x, y, width, height, fill, clip.');
+				const before = new Set(controller.getFrames().map((f) => f.id));
+				check(controller.setFrame(patch, list ? { ids: list } : {}));
+				const targets = list ?? controller.getFrames().filter((f) => before.has(f.id) && (controller.getState().selection.includes(f.id) || f.children.some((c) => controller.getState().selection.includes(c.id)))).map((f) => f.id);
+				return { frames: targets.map(frameResult) };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}setResizing`,
+			label: 'Resizing Constraints…',
+			keywords: ['constraints', 'resizing', 'pin', 'anchor', 'responsive', 'stretch', 'frame', 'artboard'],
+			description:
+				'Sets how objects directly inside a frame (`ids`, default the selection) follow it when the frame is resized: horizontal left (keep the left margin, the default), right, leftRight (keep both margins: stretch), center or scale; vertical top (default), bottom, topBottom, center or scale. Text keeps its font size (area text takes the new width). A missing axis keeps its value. One undo step. Returns { nodes: [{ id, horizontal, vertical }] }.',
+			params: {
+				type: 'object',
+				properties: {
+					ids: { ...IDS, description: 'Objects directly inside a frame (default: the selection).' },
+					horizontal: { type: 'string', enum: VECTOR_HORIZONTAL_RESIZING, description: 'left, right, leftRight (stretch), center or scale.' },
+					vertical: { type: 'string', enum: VECTOR_VERTICAL_RESIZING, description: 'top, bottom, topBottom (stretch), center or scale.' }
+				},
+				additionalProperties: false
+			},
+			undoable: true,
+			enabled: enabledFor,
+			run: (_ctx: unknown, params: { ids?: string[]; horizontal?: VectorHorizontalResizing; vertical?: VectorVerticalResizing } | undefined) => {
+				const list = ids(params);
+				check(controller.setResizing({ ...(params?.horizontal ? { horizontal: params.horizontal } : {}), ...(params?.vertical ? { vertical: params.vertical } : {}) }, { ids: list }));
+				return { nodes: list.map((id) => ({ id, horizontal: controller.getNode(id)?.resizing?.horizontal ?? 'left', vertical: controller.getNode(id)?.resizing?.vertical ?? 'top' })) };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}exportFrameSvg`,
+			label: 'Export Frame as SVG',
+			readOnly: true,
+			keywords: ['export', 'artboard', 'frame', 'svg', 'download', 'save'],
+			description: 'Returns one frame (an artboard) as an SVG document of its own size, its top-left corner at the origin. Returns { svg, width, height }.',
+			params: {
+				type: 'object',
+				properties: {
+					id: { type: 'string', description: 'The frame (from vector.listFrames).' },
+					precision: { type: 'integer', minimum: 0, maximum: 8, description: 'Decimal places in coordinates (default 3).' }
+				},
+				required: ['id'],
+				additionalProperties: false
+			},
+			run: (_ctx: unknown, params: { id: string; precision?: number }) => {
+				const f = frameResult(params.id);
+				const svg = controller.frameToSvg(params.id, params.precision !== undefined ? { precision: params.precision } : {})!;
+				return { svg, width: f.frame.width, height: f.frame.height };
+			}
+		}
+	];
+
+	const constraintCommands = (): CommandSpec[] => [
+		{
+			...base,
+			id: `${prefix}listConstraints`,
+			label: 'List Constraints',
+			readOnly: true,
+			keywords: ['constraints', 'dimensions', 'parametric', 'dof', 'degrees of freedom', 'cad'],
+			description:
+				'Reads the parametric state: every constraint (id, kind, refs with anchor ids, value expression, name, evaluated value, satisfied), the named parameters, the degrees of freedom left (dof, status unconstrained / under / fully / over, redundant equations, per path) and any conflicts the last solve reported. Constraints are solved after every edit.',
+			params: { type: 'object', properties: {}, additionalProperties: false },
+			run: () => constraintsSummary()
+		},
+		{
+			...base,
+			id: `${prefix}addConstraint`,
+			label: 'Add Constraint…',
+			keywords: ['constraint', 'coincident', 'parallel', 'perpendicular', 'horizontal', 'vertical', 'tangent', 'equal', 'distance', 'angle', 'radius', 'dimension', 'fix', 'cad'],
+			description:
+				'Adds a constraint and solves (geometry moves as little as possible). Refs: anchors by { nodeId, subpath, index } (or anchor id), `handle`, `segment: true` (the line from the anchor to the next), or `circle: true` (a round path). Kinds: coincident (2 points, point + segment, point + circle), collinear (2 segments), concentric (2 circles or circle + point), fix (any), parallel / perpendicular (2 segments), horizontal / vertical (a segment or 2 points), tangent (segment + circle, 2 circles, or 1 anchor: G1), smooth (1 anchor: G2), symmetric (2 points + a segment axis), equal (2 segments or 2 circles), distance (a segment, 2 points or point + segment; `axis`), angle (2 segments, degrees), radius / diameter (a circle). Dimensional kinds take `value` (an expression; default the current measure) and `name`. Fails, changing nothing, on a conflict or a redundant constraint, naming the constraints involved. One undo step. Returns { id, constraint }.',
+			params: {
+				type: 'object',
+				properties: {
+					kind: { type: 'string', enum: VECTOR_CONSTRAINT_KINDS, description: 'The constraint kind.' },
+					refs: { type: 'array', items: CONSTRAINT_REF, minItems: 1, maxItems: 3, description: 'What it constrains, in the order the kind lists.' },
+					value: { type: ['string', 'number'], description: 'Dimensional kinds: the value (document units, degrees for angle) or an expression of parameters ("w / 2").' },
+					name: { type: 'string', description: 'Dimensional kinds: a name expressions can use (default d1, ang1, rad1, dia1, …).' },
+					axis: { type: 'string', enum: ['aligned', 'horizontal', 'vertical'], description: 'distance: measured along the line between (default), horizontally or vertically.' }
+				},
+				required: ['kind', 'refs'],
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: VectorConstraintInput) => {
+				const r = controller.addConstraint(params);
+				check(r);
+				return { id: r.id, constraint: controller.getConstraints().find((c) => c.id === r.id) };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}removeConstraint`,
+			label: 'Remove Constraint',
+			keywords: ['constraint', 'delete', 'remove', 'unconstrain'],
+			description: 'Removes constraints by id (from vector.listConstraints); the geometry stays where it is. One undo step. Returns { ids }.',
+			params: { type: 'object', properties: { ids: { type: 'array', items: { type: 'string' }, minItems: 1, description: 'Constraint ids.' } }, required: ['ids'], additionalProperties: false },
+			undoable: true,
+			run: (_ctx: unknown, params: { ids: string[] }) => {
+				check(controller.removeConstraints(params.ids));
+				return { ids: params.ids };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}setConstraintValue`,
+			label: 'Set Dimension…',
+			keywords: ['dimension', 'value', 'parameter', 'expression', 'driving'],
+			description:
+				'Sets the value of a dimensional constraint (by id or name) or of a named parameter (creating it; null removes a parameter) and solves. Values are expressions: numbers, names, + - * /, parentheses, pi. Fails, changing nothing, when it does not evaluate or the constraints cannot meet it. One undo step. Returns the parametric summary (vector.listConstraints).',
+			params: {
+				type: 'object',
+				properties: {
+					key: { type: 'string', description: 'A dimensional constraint\'s id or name, or a parameter name.' },
+					value: { type: ['string', 'number', 'null'], description: 'The new value or expression; null removes a parameter.' }
+				},
+				required: ['key', 'value'],
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: { key: string; value: string | number | null }) => {
+				check(controller.setConstraintValue(params.key, params.value));
+				return constraintsSummary();
+			}
+		},
+		{
+			...base,
+			id: `${prefix}autoConstrain`,
+			label: 'Auto Constrain',
+			keywords: ['auto constrain', 'infer', 'constraints', 'parametric', 'sketch'],
+			description:
+				'Adds the constraints a sketch already nearly satisfies (within `distanceTolerance` document units, default 0.5, and `angleTolerance` degrees, default 1): coincident points of different paths, concentric / tangent circles, a segment tangent to a circle, horizontal and vertical segments, collinear, perpendicular (connected) and parallel segments, equal lengths and radii. Skips any that would conflict or repeat others. `ids` limits it to some paths (default the selection, or all). One undo step. Returns { ids } of the constraints added.',
+			params: {
+				type: 'object',
+				properties: {
+					ids: { ...IDS, description: 'Paths or groups to constrain (default: the selection, or every path).' },
+					distanceTolerance: { type: 'number', minimum: 0, description: 'How close points must be to count as coincident (document units, default 0.5).' },
+					angleTolerance: { type: 'number', minimum: 0, maximum: 45, description: 'How close to level, square or parallel lines must be (degrees, default 1).' },
+					kinds: { type: 'array', items: { type: 'string', enum: VECTOR_CONSTRAINT_KINDS }, description: 'Kinds to infer (default all).' }
+				},
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: { ids?: string[]; distanceTolerance?: number; angleTolerance?: number; kinds?: VectorConstraintKind[] } | undefined) => {
+				const r = controller.autoConstrain(params ?? {});
+				check(r);
+				return { ids: r.ids };
+			}
+		}
+	];
+
 	return [
 		{
 			...base,
@@ -784,21 +1768,37 @@ export function createVectorCommands(controller: VectorEditorController, options
 		},
 		...appearanceCommands(),
 		...maskCommands(),
+		...textCommands(),
+		...symbolCommands(),
+		...constraintCommands(),
+		...frameCommands(),
+		...connectorCommands(),
+		...trackingCommands(),
 		{
 			...base,
 			id: `${prefix}setCorners`,
 			label: 'Corner Radius…',
 			keywords: ['round', 'rounded', 'corners', 'radius', 'fillet', 'chamfer', 'live corners'],
 			description:
-				'Sets the live corner radius (and optionally `kind`: round, inverted or chamfer) of `anchors`, else the selected points (direct tool), else every corner of `ids` / the selection. Radius 0 makes corners sharp; radii shrink to fit short sides. The anchors stay editable.',
-			params: { type: 'object', properties: { radius: { type: 'number', minimum: 0 }, kind: { type: 'string', enum: VECTOR_CORNER_KINDS }, ids: IDS, anchors: ANCHORS } },
+				'Sets the live corner radius (and optionally `kind`: round, inverted or chamfer, and `smoothing`) of `anchors`, else the selected points (direct tool), else every corner of `ids` / the selection. Radius 0 makes corners sharp; radii shrink to fit short sides. `smoothing` (0–1) turns round corners between straight sides into squircles (Figma / iOS style continuous corners), easing into a shorter arc over (1 + smoothing) times the distance. The anchors stay editable.',
+			params: {
+				type: 'object',
+				properties: {
+					radius: { type: 'number', minimum: 0, description: 'Corner radius in document units (0: sharp).' },
+					kind: { type: 'string', enum: VECTOR_CORNER_KINDS, description: 'round (default), inverted or chamfer.' },
+					smoothing: { type: 'number', minimum: 0, maximum: 1, description: 'Squircle smoothing of round corners between straight sides, 0 (a circular arc, default) to 1 (0.6 is iOS-like).' },
+					ids: IDS,
+					anchors: ANCHORS
+				}
+			},
 			undoable: true,
-			run: (_ctx: unknown, params: { radius?: number; kind?: VectorCornerKind; ids?: string[]; anchors?: VectorAnchorRef[] } | undefined) => {
+			run: (_ctx: unknown, params: { radius?: number; kind?: VectorCornerKind; smoothing?: number; ids?: string[]; anchors?: VectorAnchorRef[] } | undefined) => {
 				const refs = params?.anchors ? anchorsOf(params.anchors) : undefined;
 				const target = { refs, ids: params?.ids ? ids(params) : undefined };
-				if (params?.radius !== undefined) check(controller.setCornerRadius(params.radius, { ...target, kind: params.kind }));
+				if (params?.radius !== undefined) check(controller.setCornerRadius(params.radius, { ...target, kind: params.kind, ...(params.smoothing !== undefined ? { smoothing: params.smoothing } : {}) }));
 				else if (params?.kind) check(controller.setCornerKind(params.kind, target));
-				else fail('Pass `radius` and / or `kind`.');
+				if (params?.radius === undefined && params?.smoothing !== undefined) check(controller.setCornerSmoothing(params.smoothing, target));
+				if (params?.radius === undefined && !params?.kind && params?.smoothing === undefined) fail('Pass `radius`, `kind` and / or `smoothing`.');
 				return { ok: true };
 			}
 		},

@@ -9,6 +9,8 @@
     VECTOR_FILL_GAP,
     vectorToolLabel,
     isVectorMaskGroup,
+    vectorPolarAngles,
+    vectorPolarIncrementOf,
     type VectorEditorController,
     type VectorTool
   } from '@pixerate/editor/vector';
@@ -130,6 +132,17 @@
       >
         Snap
       </button>
+      <select
+        data-vector-polar=""
+        aria-label="Polar tracking increment"
+        title="Polar tracking: the angles drawn points snap to from where they leave"
+        class="h-8 rounded-md border border-border bg-background px-1 text-xs"
+        value={String(vectorPolarIncrementOf(view.snap.angles) ?? '')}
+        onchange={(e) => controller.setSnap({ angles: vectorPolarAngles(Number(e.currentTarget.value)) })}
+      >
+        {#if vectorPolarIncrementOf(view.snap.angles) === null}<option value="">Custom</option>{/if}
+        {#each [90, 45, 30, 15] as n (n)}<option value={String(n)}>{n}°</option>{/each}
+      </select>
     </div>
   {/if}
   {#if showPathEdit}

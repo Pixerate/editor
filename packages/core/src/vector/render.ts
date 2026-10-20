@@ -49,13 +49,19 @@ import {
 	hasOwnVectorAppearance,
 	hasVectorAppearance,
 	vectorAppearanceOutline,
+	vectorInstanceDrawn,
 	vectorEnteredGroups,
 	VECTOR_EFFECT_LABELS,
 	VECTOR_EFFECT_PARAM_SPECS,
 	type VectorEffectParamSpec,
 	type VectorEnvelopeParams
 } from './appearance.js';
+import { layoutVectorText, vectorTextPaintSource, vectorTextBoxOutline, vectorTextCaret, vectorTextGeometryNode, vectorTextHasOutlines, vectorTextSelectionQuads, vectorTextSpans, vectorTextSpanSvg, type VectorRenderTextSpan } from './text.js';
+import { applyMatrix } from '../geom/affine.js';
+import { vectorConstraintGlyphs } from './constraints/glyphs.js';
 import { isVectorMaskActive, isVectorMaskGroup, vectorMaskRenderData, vectorMaskSummary, type VectorMaskRenderData, type VectorMaskSummary } from './mask.js';
+import { isVectorFrame, vectorFrameRectPath } from './frames.js';
+import { vectorConnectionSites, vectorConnectorTargetAt } from './connectors.js';
 import { vectorMeshEditPoints, vectorMeshGridCurves, VECTOR_WARP_STYLES, VECTOR_WARP_STYLE_LABELS } from './warp.js';
 import { VECTOR_EFFECT_TYPES, type VectorEffectType } from './types.js';
 import { isVectorBlendGroup, resolveVectorBlendOptions, vectorBlendRailAt, vectorBlendSpine } from './blendGroup.js';
@@ -86,6 +92,7 @@ import type {
 	VectorPaint,
 	VectorPathfinderOperation,
 	VectorPathNode,
+	VectorTextNode,
 	VectorStrokeAlign,
 	VectorTransformHandle,
 	VectorWidthPoint,
@@ -174,7 +181,30 @@ export interface VectorRenderMask extends Omit<VectorMaskRenderData, 'invertFilt
 	nodes?: VectorRenderNode[];
 }
 
-export type VectorRenderNode = VectorRenderPath | VectorRenderGroup;
+/**
+ * Text drawn as SVG text (when the text shaper gives no glyph outlines; with outlines, text renders
+ * as a `VectorRenderPath` or group). Draw a `<g>` with `id`, `transform`, `opacity`, `blendMode` and
+ * `filter`, holding one `<text>` per layer, bottom to top, each holding every span as a `<tspan>`.
+ */
+export interface VectorRenderText {
+	kind: 'text';
+	id: string;
+	transform?: string;
+	opacity: number;
+	blendMode?: string;
+	filter?: string;
+	/**
+	 * Paint layers, bottom to top: a fill (`fill` set, `stroke` none) or a stroke. Draw each as a
+	 * `<text>` with these attributes (and `mix-blend-mode`). `runFills`: spans with their own `fill`
+	 * use it on this layer (the top fill).
+	 */
+	layers: Array<{ kind: 'fill' | 'stroke'; fill: string; stroke: string; strokeWidth: number; strokeLinejoin?: string; strokeDasharray?: string; opacity: number; blendMode?: string; runFills?: boolean }>;
+	spans: VectorRenderTextSpan[];
+}
+
+export type { VectorRenderTextSpan };
+
+export type VectorRenderNode = VectorRenderPath | VectorRenderGroup | VectorRenderText;
 
 export interface VectorSceneRenderData {
 	/** SVG `transform` for the document layer: `translate(x y) scale(zoom)`. */
@@ -349,6 +379,35 @@ export interface VectorOverlayRenderData {
 	 * whether the mask itself is selected (`editing`).
 	 */
 	masks: { id: string; maskId: string; d: string; type: VectorMaskType; invert: boolean; enabled: boolean; editing: boolean }[];
+	/**
+	 * Text editing (screen space): the edited text's frame outline (`frame`, draw it thin and
+	 * dashed), the caret (a line, when the selection is collapsed), the selection's quads (`selection`,
+	 * filled translucent) and the overflow marker (a small boxed plus at `overflow` when text does
+	 * not fit). Also set, without caret, for the selected text while a Type tool is active.
+	 */
+	text: { nodeId: string; frame: string; caret: { x1: number; y1: number; x2: number; y2: number } | null; selection: string[]; overflow: Vec2 | null; editing: boolean } | null;
+	/** The Type tool's area text box being dragged out (screen space). */
+	textBox: VectorBounds | null;
+	/**
+	 * Constraint glyphs of the selected or edited paths (screen space): a label at (`x`, `y`) (a
+	 * glyph, or `name = value`), a dimension line for distances, `satisfied` false when the solve
+	 * could not meet it (draw it in a warning colour).
+	 */
+	/**
+	 * Name labels of the top-level frames (artboards), screen space: draw `name` just above (x, y),
+	 * the frame's top-left corner (bold when `selected`). Clicking a label should select the frame.
+	 */
+	frames: { id: string; name: string; x: number; y: number; selected: boolean }[];
+	/**
+	 * Connection sites, screen space, while the Connector tool is on: those of the object under the
+	 * pointer (top, right, bottom, left, centre), `active` on the one an end would glue to.
+	 */
+	connectorSites: { nodeId: string; side: string; x: number; y: number; active: boolean }[];
+	/** Points acquired for object snap tracking, screen space: draw a small `+` at each. */
+	trackingPoints: { x: number; y: number }[];
+	/** The distance or coordinate being typed while the pen draws, and where to show it (screen space, by the pointer), or null. */
+	typedEntry: { text: string; x: number; y: number } | null;
+	constraints: { id: string; kind: string; label: string; x: number; y: number; dimension: { x1: number; y1: number; x2: number; y2: number } | null; satisfied: boolean }[];
 	/** A short status, e.g. "W 120 × H 80" or "45°". */
 	status: string | null;
 }
@@ -420,8 +479,55 @@ function renderLayers(node: VectorPathNode, defs: VectorPaintDef[], idPrefix: st
 	return out;
 }
 
+/** A text node drawn as SVG text (no glyph outlines here). */
+function renderText(node: VectorTextNode, defs: VectorPaintDef[], filters: VectorRenderFilter[], idPrefix: string): VectorRenderText {
+	const geometry = vectorTextGeometryNode(node);
+	const layers: VectorRenderText['layers'] = [];
+	const nodes = vectorPaintLayerNodes(geometry);
+	const topFill = nodes.filter((l) => l.kind === 'fill' && l.drawn).at(-1);
+	for (const l of nodes) {
+		if (!l.drawn) continue;
+		const paint = vectorPaintToSvg(l.layer.paint, `${idPrefix}${l.kind}-${node.id}-${l.index}`, { node: l.node, ...(l.kind === 'stroke' ? { role: 'stroke' as const } : {}) });
+		defs.push(...paint.defs);
+		const blend = vectorBlendModeCss(l.layer.blendMode);
+		const base = { kind: l.kind, opacity: l.layer.opacity ?? 1, ...(blend ? { blendMode: blend } : {}) };
+		if (l.kind === 'fill') layers.push({ ...base, fill: paint.value, stroke: 'none', strokeWidth: 0, ...(l === topFill ? { runFills: true } : {}) });
+		else
+			layers.push({
+				...base,
+				fill: 'none',
+				stroke: paint.value,
+				strokeWidth: l.node.strokeWidth ?? 1,
+				...(l.node.strokeLinejoin ? { strokeLinejoin: l.node.strokeLinejoin } : {}),
+				...(l.node.strokeDasharray?.length ? { strokeDasharray: l.node.strokeDasharray.join(' ') } : {})
+			});
+	}
+	// Runs with their own fill paint the top fill (or are the only fill when the node has none).
+	const spans = vectorTextSpans(node).map((sp, i): VectorRenderTextSpan => {
+		let fill: string | undefined;
+		if (sp.fill !== undefined) {
+			const paint = vectorPaintToSvg(sp.fill, `${idPrefix}run-${node.id}-${i}`, { node: geometry });
+			defs.push(...paint.defs);
+			fill = paint.value;
+		}
+		return vectorTextSpanSvg(sp, fill);
+	});
+	if (!topFill && spans.some((s) => s.fill)) layers.unshift({ kind: 'fill', fill: 'none', stroke: 'none', strokeWidth: 0, opacity: 1, runFills: true });
+	return {
+		kind: 'text',
+		id: node.id,
+		...(node.transform ? { transform: fmtMatrix(node.transform) } : {}),
+		opacity: node.opacity ?? 1,
+		...nodeFinish(node, filters, idPrefix),
+		layers,
+		spans
+	};
+}
+
 function renderNode(stored: VectorNode, defs: VectorPaintDef[], filters: VectorRenderFilter[], idPrefix: string): VectorRenderNode | null {
 	if (stored.visible === false) return null;
+	// Text without glyph outlines draws as SVG text; with them it draws as its outlines below.
+	if (stored.type === 'text' && !vectorTextHasOutlines()) return renderText(stored, defs, filters, idPrefix);
 	// Path effects and live booleans draw as their expanded shapes.
 	const node = expandVectorAppearance(stored);
 	if (node.type === 'group') {
@@ -532,9 +638,93 @@ function screenOutline(state: VectorEditorState, node: VectorNode, entered: Read
 function outlinePaths(node: VectorNode, parent: AffineMatrix, entered: ReadonlySet<string>): BezierPath[] {
 	if (node.type === 'path') return [vectorPathWorldBezier(node, parent, { effects: false })];
 	const m = multiplyMatrices(nodeMatrix(node), parent);
+	// Text outlines by its glyph boxes (its frame shows while it is edited).
+	if (node.type === 'text') return [transformBezierPath(vectorTextBoxOutline(node), m)];
+	// An instance outlines as its art draws (through its drawn group's rigid transform).
+	if (node.type === 'instance') {
+		const g = vectorInstanceDrawn(node);
+		return [transformBezierPath(vectorAppearanceOutline(g), multiplyMatrices(nodeMatrix(g), parent))];
+	}
+	// A frame outlines as its rectangle.
+	if (isVectorFrame(node)) return [transformBezierPath(subpathsToBezier(vectorFrameRectPath(node.frame)), m)];
 	// Live and mask groups outline as drawn (masked) unless they are being edited.
 	if ((hasOwnVectorAppearance(node) || isVectorMaskActive(node)) && !entered.has(node.id)) return [transformBezierPath(vectorAppearanceOutline(node), m)];
 	return node.children.filter((c) => c.visible !== false).flatMap((c) => outlinePaths(c, m, entered));
+}
+
+/** Connection sites under the pointer while the Connector tool is on (see `VectorOverlayRenderData.connectorSites`). */
+function connectorSiteOverlay(state: VectorEditorState): VectorOverlayRenderData['connectorSites'] {
+	if (state.tool !== 'connector' || !state.pointer) return [];
+	const drawing = state.interaction?.type === 'draw' && state.interaction.tool === 'connector' ? state.interaction.nodeId : undefined;
+	const nodes = state.document.nodes;
+	const target = vectorConnectorTargetAt(nodes, state.pointer, 12 / state.viewport.zoom, drawing);
+	if (!target) return [];
+	return vectorConnectionSites(nodes, target.nodeId).map((site) => {
+		const p = toScreen(state, site);
+		return { nodeId: target.nodeId, side: site.side, x: p.x, y: p.y, active: target.site?.side === site.side };
+	});
+}
+
+/** Name labels of the top-level frames (see `VectorOverlayRenderData.frames`). */
+function frameLabels(state: VectorEditorState): VectorOverlayRenderData['frames'] {
+	const out: VectorOverlayRenderData['frames'] = [];
+	for (const n of state.document.nodes) {
+		if (!isVectorFrame(n) || n.visible === false) continue;
+		const corner = applyMatrix(nodeMatrix(n), { x: n.frame.x, y: n.frame.y });
+		const p = toScreen(state, corner);
+		out.push({ id: n.id, name: n.name ?? 'Frame', x: p.x, y: p.y, selected: state.selection.includes(n.id) });
+	}
+	return out;
+}
+
+/** Constraint glyphs of what is selected or edited (see `VectorOverlayRenderData.constraints`). */
+function constraintOverlay(state: VectorEditorState): VectorOverlayRenderData['constraints'] {
+	if (!state.document.constraints?.length) return [];
+	const ids = new Set([...state.selection, ...(state.editingId ? [state.editingId] : []), ...state.selectedAnchors.map((a) => a.nodeId)]);
+	for (const id of [...ids]) {
+		const n = findVectorNode(state.document.nodes, id);
+		if (n?.type === 'group') walkVectorNodes(n.children, (c) => ids.add(c.id));
+	}
+	if (!ids.size) return [];
+	const conflicts = new Set(state.constraintIssues?.conflicts ?? []);
+	return vectorConstraintGlyphs(state.document, ids).map((g) => {
+		const at = toScreen(state, g.at);
+		const d = g.dimension ? { a: toScreen(state, g.dimension.a), b: toScreen(state, g.dimension.b) } : null;
+		return { id: g.id, kind: g.kind, label: g.label, x: at.x, y: at.y - 10, dimension: d ? { x1: d.a.x, y1: d.a.y, x2: d.b.x, y2: d.b.y } : null, satisfied: g.satisfied && !conflicts.has(g.id) };
+	});
+}
+
+/** The text editing overlay (see `VectorOverlayRenderData.text`). */
+function textOverlay(state: VectorEditorState): VectorOverlayRenderData['text'] {
+	const edit = state.textEdit;
+	const id = edit?.nodeId ?? (state.tool === 'type' || state.tool === 'typePath' ? state.selection.find((s) => findVectorNode(state.document.nodes, s)?.type === 'text') : undefined);
+	if (!id) return null;
+	const node = findVectorNode(state.document.nodes, id);
+	if (node?.type !== 'text') return null;
+	const world = vectorWorldMatrix(state.document.nodes, id) ?? IDENTITY_MATRIX;
+	const v = state.viewport;
+	const m = multiplyMatrices(world, [v.zoom, 0, 0, v.zoom, v.x, v.y]);
+	const at = (p: Vec2) => applyMatrix(m, p);
+	const frame = bezierPathToSvg(transformBezierPath(vectorTextBoxOutline(node), m), { precision: 2 });
+	let caret: NonNullable<VectorOverlayRenderData['text']>['caret'] = null;
+	let selection: string[] = [];
+	if (edit) {
+		const a = Math.min(edit.anchor, edit.focus);
+		const b = Math.max(edit.anchor, edit.focus);
+		if (a === b) {
+			const c = vectorTextCaret(node, edit.focus);
+			const top = at(c.top);
+			const bottom = at(c.bottom);
+			caret = { x1: top.x, y1: top.y, x2: bottom.x, y2: bottom.y };
+		} else selection = vectorTextSelectionQuads(node, a, b).map((q) => `M${q.map((p) => at(p)).map((p) => `${fmt(p.x)} ${fmt(p.y)}`).join('L')}Z`);
+	}
+	const layout = layoutVectorText(node);
+	let overflow: Vec2 | null = null;
+	if (layout.overflow) {
+		const f = node.frame;
+		overflow = at(f.kind === 'area' ? { x: f.x + f.width, y: f.y + f.height } : (layout.glyphs.at(-1) ? { x: layout.glyphs.at(-1)!.x, y: layout.glyphs.at(-1)!.y } : { x: 0, y: 0 }));
+	}
+	return { nodeId: id, frame, caret, selection, overflow, editing: !!edit };
 }
 
 /** Live groups being edited in `state` (see `vectorEnteredGroups`). */
@@ -542,8 +732,11 @@ export function getVectorEnteredGroups(state: Pick<VectorEditorState, 'document'
 	return vectorEnteredGroups(state.document.nodes, state.editingId ? [...state.selection, state.editingId] : state.selection);
 }
 
+/** Paths (and text, as a path in its style) of a subtree, for style panels. */
 function collect(node: VectorNode): VectorPathNode[] {
 	if (node.type === 'path') return [node];
+	if (node.type === 'text') return [vectorTextPaintSource(node)];
+	if (node.type === 'instance') return [];
 	return node.children.flatMap(collect);
 }
 
@@ -618,7 +811,16 @@ export function getVectorOverlayRenderData(state: VectorEditorState): VectorOver
 	}
 
 	const origin = toScreen(state, { x: 0, y: 0 });
-	const artboard = { x: origin.x, y: origin.y, width: doc.width * z, height: doc.height * z };
+	let artboard = { x: origin.x, y: origin.y, width: doc.width * z, height: doc.height * z };
+	// Isolation mode: the document's artboard where the dimmed document draws (none without it).
+	const se = state.symbolEdit;
+	if (se) {
+		const m = se.hostTransform;
+		if (m) {
+			const tl = toScreen(state, { x: m[4], y: m[5] });
+			artboard = { x: tl.x, y: tl.y, width: se.host.width * m[0] * z, height: se.host.height * m[3] * z };
+		} else artboard = { x: origin.x, y: origin.y, width: 0, height: 0 };
+	}
 
 	let status: string | null = null;
 	const it = state.interaction;
@@ -718,7 +920,16 @@ export function getVectorOverlayRenderData(state: VectorEditorState): VectorOver
 	const envelope = state.tool === 'envelope' ? envelopeOverlay(state) : null;
 	if (state.tool === 'envelope' && !envelope && !it) status = 'Select an object with an envelope to edit its mesh';
 
-	return { outlines, selectionBox, distort, anchors, handles, marquee, penPreview, artboard, guides, status, toolStroke, pencilString, cutPoint, cornerWidgets, widthPoints, widthSpot, builder, blend, gradient, envelope, masks: maskOverlay(state) };
+	let textBox: VectorBounds | null = null;
+	if (state.interaction?.type === 'textBox') {
+		const b = state.interaction.bounds;
+		const tl = toScreen(state, b);
+		textBox = { x: tl.x, y: tl.y, width: b.width * z, height: b.height * z };
+	}
+	return { outlines, selectionBox, distort, anchors, handles, marquee, penPreview, artboard, guides, status, toolStroke, pencilString, cutPoint, cornerWidgets, widthPoints, widthSpot, builder, blend, gradient, envelope, masks: maskOverlay(state), text: textOverlay(state), textBox, constraints: constraintOverlay(state), frames: frameLabels(state), connectorSites: connectorSiteOverlay(state),
+		trackingPoints: (state.trackingPoints ?? []).map((p) => toScreen(state, p)),
+		typedEntry: state.typedEntry ? { text: state.typedEntry, ...(state.pointer ? toScreen(state, state.pointer) : { x: 0, y: 0 }) } : null
+	};
 }
 
 /** Mask indicators of the mask groups that are selected or hold the selection (see `VectorOverlayRenderData.masks`). */
@@ -1048,6 +1259,8 @@ export interface VectorSelectionStyle {
 	 */
 	cornerRadius: number;
 	cornerKind: VectorCornerKind;
+	/** Squircle smoothing (0–1) of the first corner. */
+	cornerSmoothing: number;
 	corners: number;
 	/** Some selected path is open, so arrowheads apply. */
 	hasOpenPath: boolean;
@@ -1090,15 +1303,15 @@ export function getVectorSelectionStyle(
 	const first = paths[0];
 	const same = (get: (p: VectorPathNode) => unknown) => paths.every((p) => JSON.stringify(get(p) ?? null) === JSON.stringify(get(first) ?? null));
 	// Corners: those of the selected anchors in the direct tool, else every corner of the paths.
-	const corners: { radius: number; kind: VectorCornerKind }[] = [];
+	const corners: { radius: number; kind: VectorCornerKind; smoothing: number }[] = [];
 	for (const p of paths) {
 		for (const c of vectorCorners(p.subpaths)) {
 			if (anchorMode && !state.selectedAnchors!.some((r) => r.nodeId === p.id && r.subpath === c.subpath && r.index === c.index)) continue;
 			const corner = p.subpaths[c.subpath].anchors[c.index].corner;
-			corners.push({ radius: corner?.radius ?? 0, kind: corner?.kind ?? 'round' });
+			corners.push({ radius: corner?.radius ?? 0, kind: corner?.kind ?? 'round', smoothing: corner?.smoothing ?? 0 });
 		}
 	}
-	const c0 = corners[0] ?? { radius: 0, kind: 'round' as const };
+	const c0 = corners[0] ?? { radius: 0, kind: 'round' as const, smoothing: 0 };
 	return {
 		fill: first.fill ?? null,
 		stroke: first.stroke ?? null,
@@ -1114,6 +1327,7 @@ export function getVectorSelectionStyle(
 		widthProfile: widthProfilePresetId(profileOf(first)),
 		cornerRadius: c0.radius,
 		cornerKind: c0.kind,
+		cornerSmoothing: c0.smoothing,
 		corners: corners.length,
 		hasOpenPath: paths.some((p) => p.subpaths.some((sp) => !sp.closed && sp.anchors.length > 1)),
 		mixed: {

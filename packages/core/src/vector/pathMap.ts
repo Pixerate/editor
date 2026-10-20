@@ -69,7 +69,8 @@ const mapAnchorPoints = (a: VectorAnchor, f: VectorPointMap): VectorAnchor => {
 		...(a.in ? { in: f(a.in) } : {}),
 		...(a.out ? { out: f(a.out) } : {}),
 		...(a.type && a.type !== 'corner' ? { type: a.type } : {}),
-		...(a.corner ? { corner: { ...a.corner } } : {})
+		...(a.corner ? { corner: { ...a.corner } } : {}),
+		...(a.id ? { id: a.id } : {})
 	};
 };
 

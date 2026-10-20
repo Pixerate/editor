@@ -36,6 +36,8 @@ const doc: VectorDocument = {
 
 - A **path** has one or more subpaths (holes and compound shapes), a fill and stroke (any CSS colour, a gradient, or `null`), stroke width / caps / joins / dashes / alignment, an optional width profile (`strokeWidthProfile`), arrowheads, a fill rule and opacity.
 - An **anchor** has optional `in` / `out` handles (absolute document positions). A segment with no handles at either end is a straight line; otherwise it is a cubic Bézier. `type` is `corner`, `smooth` (handles in line) or `symmetric` (in line, equal length) and decides how the opposite handle follows when one is dragged. An optional `corner: { radius, kind }` is a live corner (see below).
+- A **text** node sets `text` in a `frame` (point, area or a path) with a base `font`, optional styled `runs` and a `paragraph` style, and paints with the same fills and strokes as a path (see [Text](#text)).
+- An **instance** draws a symbol of the document (`symbols`) through its `transform`, which, unlike other nodes', may scale and skew (see [Symbols and instances](#symbols-and-instances)).
 - A **group** selects and transforms its children together. Nodes can be hidden (`visible: false`) or locked (drawn, not pickable).
 - Paths and groups can carry an **effect stack** (`effects`, see [Path effects](#path-effects)), and a group can be a **live boolean** (`liveBoolean`, see [Live booleans](#live-booleans)).
 - A node's optional **`transform`** places it in its parent's space. It is always *rigid* (rotation + translation): anchors and children live in the node's own space. `transformVectorNode(node, m)` composes `m`, keeps the rotation in `transform` and bakes any scale, skew or mirroring into the anchors (or children), so stroke widths, hit-testing tolerances and the rotated selection box stay exact. Unrotated nodes have no `transform` and store document positions directly.
@@ -108,6 +110,8 @@ Any corner anchor (not smooth, not the end of an open subpath, where two straigh
 - `setCornerRadius(radius, { kind, refs, ids })` and `setCornerKind(kind, …)` change the selected points' corners with the direct tool, else every corner of the selected paths. Scaling a node keeps its radii.
 - **Corner widgets**: with the direct tool, each editable path shows a widget inside its selected corners (every corner when none of its points is selected), on the bisector at the arc's centre and at least 10 px in; corners with a side shorter than 30 px on screen hide theirs. Drag one to set the radius of all shown corners (it follows the pointer along the bisector, up to fully round; status `R …`), Alt-click to cycle round → inverted → chamfer, click to pick that corner alone. `getVectorCornerWidgets(state)` and `getVectorOverlayRenderData(state).cornerWidgets` give their positions.
 
+
+**Corner smoothing.** `corner.smoothing` (0–1, `setCornerRadius(r, { smoothing })` or `setCornerSmoothing`) turns a round corner between straight sides into a squircle: the cut starts `(1 + smoothing)` times as far along each side, eases in with a cubic whose second handle is where the arc's tangent meets the side, and follows a circular arc over the rest of the turn (figma-squircle's profile, generalised from 90° to any angle). Smoothing shrinks before the radius when the corner does not fit. The arc's ends become two more drawn anchors.
 ## Stroke alignment and arrowheads
 
 ```ts
@@ -313,6 +317,99 @@ Export puts the gradient itself on its first paint server as `data-vector-gradie
 
 **Editing.** `setGradient(patch, { ids, target, merge })` edits the selected paths' fill (or `target: "stroke"`; default: `state.gradientEdit.target`, set with `setGradientTarget`) — any gradient field, `aspect`, `reverse: true`, `focal: null` — and a colour becomes a gradient from it to white; `setGradientStop(index, { color, opacity, offset, midpoint })`, `addGradientStop(offset)`, `removeGradientStop(index)` (never below two), `selectGradientStop(index)` and `reverseGradient()` work on the stops by sorted index. `getVectorGradientEditor(state)` gives a gradient editor what to show (stops, the selected stop, a CSS preview of the ramp, spread, interpolation, smoothness and stroke mode); `getVectorOverlayRenderData(state).gradient` is the Gradient tool's annotator in screen pixels (`getGradientAnnotator()` on the controller for hit-testing: `hitVectorGradientAnnotator`). Blends mix two gradients of one style stop by stop (midpoints too) when they match, else resample both at every offset where either bends; points mix when both are explicit in the same units.
 
+## Text
+
+```ts
+import { createOutlineTextShaper, loadOpenTypeFont } from "@pixerate/editor/vector";
+
+const id = controller.addText({ text: "Hello", x: 40, y: 80, font: { fontFamily: "Inter", fontWeight: 700, fontSize: 32 } });
+controller.setTextStyle(id, { fill: "#16a34a" }, { start: 0, end: 1 });      // a run: the "H" in green
+controller.addText({ text: "Wraps in its box", x: 40, y: 120, width: 200, height: 80, paragraph: { align: "justify" } });
+const arc = controller.addPath("M40 300 C140 220 300 220 400 300");
+controller.typeOnPath(arc, { text: "Along the arc", paragraph: { align: "center" } });
+
+// Glyph outlines: Create Outlines, and path effects / envelopes acting on the letters.
+controller.setTextShaper(createOutlineTextShaper([await loadOpenTypeFont(fontFile)]));
+controller.createOutlines({ ids: [id] });
+```
+
+- **Model.** `VectorTextNode` has `text`, a base `font` (`VectorCharacterStyle`: family, weight, italic, size, tracking in 1/1000 em, leading, baseline shift, underline, strike-through), optional `runs` (`{ length, style }` in UTF-16 code units; a style overrides fields of `font` and may carry its own `fill`), an optional `paragraph` (align, auto leading, indents, spacing) and a `frame`: `point` (`x`, `y` of the first baseline), `area` (a box at `x`, `y`; lines past its height are hidden and reported as overflow) or `path` (a subpath in the node's space with `start` / `end` margins, `flip`, `orientation` rotate / upright and `baseline` baseline / ascender / descender / center). It extends `VectorStyle`, so fills, strokes, stacks, filters, blend modes, opacity, masks and blends work as on paths. Scale bakes into the font size (by √|det|) and an area's box per axis; the transform stays rigid.
+- **Layout is shared with the image editor.** `src/text` holds the type-layer layout (`layoutText`: paragraphs, line breaking, justification, tracking, leading, indents, caret positions) and the `TextShaper` interface the image editor introduced. `layoutVectorText` turns it into glyphs placed in the node's space; path text lays the line out once and places each character by the middle of its advance along the measured path (`measureVectorPath`, `vectorPathTextPositions`).
+- **Fonts come from one shaper per page** (`setVectorTextShaper`, or the controller's `textShaper` option / `setTextShaper`). The default in a browser is the Canvas 2D shaper (`createCanvasTextShaper`): the browser's fonts, measured, with text drawn as SVG `<text>` whose characters are placed by our layout. Outside a browser it is `createMetricTextShaper`, which estimates advances so layout still works. `createOutlineTextShaper` over fonts read by `parseOpenTypeFont` / `loadOpenTypeFont` (TrueType `glyf`, CFF and CID-keyed CFF, collections, WOFF 1; `cmap` 4 and 12; `kern` and GPOS pair kerning; no GSUB, so ligatures and complex scripts are not shaped) gives glyph outlines: text then draws as paths, so path effects, envelopes, booleans, the Shape Builder and Create Outlines act on the letters.
+- **Editing.** The Type tool (T) adds point text on a click and area text on a drag; Type on a Path (Q) turns the clicked path into path text; double-clicking text (any of the select and type tools) edits it. `editText`, `selectText`, `textInput`, `endTextEdit` and `keyDown` (arrows, Alt for words, Home / End, Backspace / Delete, Enter, Escape, Mod+A / B / I / U) drive the session; `state.textEdit` holds the node and the selection, and `getVectorOverlayRenderData(state).text` the caret, selection quads, frame and overflow marker in screen space. A session is one undo step; new text left empty disappears without one.
+- **Styles.** `setText`, `setTextStyle` (a range, or the whole text which changes `font` and the node's `fill`), `setParagraphStyle`, `styleTexts` (several nodes, one step) and `setTextFrame` (point ↔ area ↔ path, box size, path options). `getVectorTextPanel` / `applyVectorTextStyle` / `applyVectorParagraphStyle` back the text panels: they edit the selected characters while editing, else the selected text, else `textDefaults` for new text.
+- **SVG.** Text exports as `<g data-vector-text>` holding a `<text>` per paint layer with a `<tspan>` per styled fragment and per-character `x` / `y` / `rotate`, plus the text's JSON for a lossless re-import. With outlines and path effects (or `text: "outlines"`), it exports as its outlines with the text kept in a hidden source group. Import also reads foreign `<text>` as point text (content, font, `text-anchor`, fill).
+
+## Symbols and instances
+
+```ts
+const { symbolId, instanceId } = controller.makeSymbol({ ids: ["leaf", "stem"], name: "Plant" });
+controller.placeSymbol(symbolId, { transform: [1.5, 0, 0.2, 1.5, 300, 200] }); // scaled and skewed
+controller.setInstanceOptions({ fill: "#65a30d", hidden: ["stem"] }, { ids: [instanceId] });
+controller.editSymbol(instanceId); // isolation: the document is now the symbol's art
+controller.addShape({ kind: "ellipse", x: -4, y: -30, width: 8, height: 8 });
+controller.exitSymbolEdit(); // every instance has the new shape
+```
+
+- **Model.** `VectorDocument.symbols` holds `{ id, name, nodes }`, the art in the symbol's own space around its registration point (0, 0). An `instance` node has `symbolId`, a `transform` that may scale and skew (the one exception to rigid transforms), `scaleStrokes` (default true: strokes and other paint lengths scale by √|det|, as in Illustrator) and `overrides` (`fill` / `stroke` paint every fill or stroke of the art, `hidden` art node ids).
+- **Resolved art.** Geometry, rendering and export see one node at a time, so each instance carries its symbol's art (`art`, the symbol's own `nodes` array) and draws it as a group (`vectorInstanceGroup`): its rotation stays on the group (rigid), scale and skew are baked into the art, and ids are `<instance>~<art>`. The controller resolves after every change (`resolveVectorSymbols`, as blend steps are refreshed); `toJSON` and SVG export leave `art` out (`stripVectorSymbolArt`), and loading resolves it again. A missing symbol, or one that would contain itself, draws nothing.
+- **Editing.** Make Symbol (F8) turns objects sharing a parent into a symbol with its registration point at their centre and an instance in their place. Detach (Break Link) turns an instance into a plain group of its art as drawn. Edit Symbol (double-click an instance, or `editSymbol(id)`) is isolation mode: `state.document` becomes the symbol's art, every command edits it, and `state.symbolEdit.host` is the whole document, which the canvases draw dimmed behind it through `hostTransform` (the instance's origin and scale; the view moves so the art shows where the instance was). Escape with nothing selected, or Done, leaves. Snapshots keep the isolation state, so undo steps back into the symbol with the edits made there; `toJSON`, `toSvg` and `onChange` always give the whole document.
+- **SVG.** Symbols export as `<symbol>` in `defs` (unused ones too) and instances as `<use>` when that draws them exactly; instances with overrides, unscaled strokes, effects or filters export as their drawn art in a `<g data-vector-instance>`. Import restores both, and reads foreign `<use>` as instances of a symbol made from what they refer to (a `<symbol>`'s children or the element itself).
+
+## Constraints
+
+```ts
+const h = controller.addConstraint({ kind: "horizontal", refs: [{ nodeId: "frame", subpath: 0, index: 0, segment: true }] });
+controller.setConstraintValue("w", 120); // a named parameter
+controller.addConstraint({ kind: "distance", refs: [{ nodeId: "frame", subpath: 0, index: 0, segment: true }], value: "w", name: "width" });
+controller.addConstraint({ kind: "tangent", refs: [{ nodeId: "frame", subpath: 0, index: 1, segment: true }, { nodeId: "wheel", circle: true }] });
+controller.autoConstrain({ ids: ["frame"] });
+controller.getConstraintDof(); // { dof, status: "under" | "fully" | "over", redundant, nodes, message }
+```
+
+- **Model.** `VectorDocument.constraints` holds `{ id, kind, refs, value?, name?, axis? }` and `parameters` named expressions. A reference is an anchor of a path by its stable `id` (`VectorAnchor.id`, given when a constraint first refers to it; `addConstraint` takes `subpath` / `index` and assigns it), one of its handles, the segment from it to the next anchor (`segment`: the straight line between their points), or a round closed path as a circle (`circle`: its centre and radius). Kinds and the references they take are listed on `VectorConstraintKind` and in the agent skill. Dimensional values are expressions over parameters and other dimensions' names (`+ - * /`, parentheses, `pi`).
+- **Solving.** The referenced points, handles and circles become a parameter vector in document space; each constraint becomes residual rows (in length units, angles scaled by their segments' size), and a damped, weighted, minimum-norm Gauss–Newton solve (ported from cadcraft) runs per connected component. The controller solves after every change (`refreshed`, so during drags too), weighting what changed since the last solve a million times heavier, so the anchor being dragged stays under the pointer and the rest follows. A circle scales and moves its path's anchors and handles about the centre; an anchor that moves carries its handles unless they are constrained themselves. Constraints on deleted anchors or paths are dropped. A component that cannot be solved keeps its best compromise and is reported in `state.constraintIssues`.
+- **Adding.** `addConstraint` measures a dimension without a value, names it (`d1`, `ang1`, `rad1`, `dia1`), and refuses — changing nothing — a constraint that conflicts with the others (naming each whose removal would let it hold) or adds no independent equation (over-constrains, naming the constraints it repeats), as AutoCAD does. `setConstraintValue` sets a dimension or parameter and refuses values the constraints cannot meet.
+- **Degrees of freedom.** `vectorConstraintDof` gives the free parameters minus the Jacobian's rank per component (Householder QR with column pivoting on a balanced matrix), the redundant equations, and per path the rank of the null space restricted to its parameters.
+- **Auto Constrain.** `inferVectorConstraints` lists what a sketch nearly satisfies (coincident points of different paths, concentric / tangent circles, a segment tangent to a circle, horizontal / vertical segments, collinear, connected perpendicular and parallel segments, equal lengths and radii); `autoConstrain` adds them one by one, skipping refused ones.
+- **UI.** `getVectorOverlayRenderData(state).constraints` places a glyph (or `name = value`) and a dimension line per constraint of the selected paths; `getVectorConstraintPanel` gives the DOF message, the constraints the selected anchors (direct tool) or round paths allow, the selection's constraints and the parameters.
+
+## Frames and artboards
+
+```ts
+const { id } = controller.addFrame({ x: 0, y: 0, width: 375, height: 812, name: "Phone", adopt: true }) as { ok: true; id: string };
+controller.frameSelection({ ids: ["bar", "badge"], padding: 16, fill: "#0f172a" });
+controller.setResizing({ horizontal: "leftRight", vertical: "bottom" }, { ids: ["bar"] });
+controller.setFrame({ width: 414 }, { ids: [id] }); // children follow their constraints
+controller.frameToSvg(id); // the artboard alone, its corner at the origin
+```
+
+- **Model.** A frame is a group with `frame: { x, y, width, height, fill?, clip? }`, a rectangle in the group's own space. Top-level frames are artboards. Blends, live booleans and mask groups ignore `frame`. Each node may carry `resizing: { horizontal?, vertical? }`, used when its parent is a frame.
+- **Drawing.** `vectorFrameDrawn` turns a frame into an equivalent clip group: the rectangle as the mask (`<id>~frame-clip`), then the fill (`<id>~frame-fill`) and the children. Without the clip it becomes a plain group of the fill and the children. Rendering, appearance shapes, mask regions and snapping go through it, so both canvases draw frames with no code of their own.
+- **Selection.** Bounds are the rectangle (plus the children when `clip: false`). A frame is hit anywhere in its rectangle, filled or not. Clicking it selects the frame; double-click enters it like a group. The overlay's `frames` lists each artboard's name label in screen space, and clicking a label selects that frame.
+- **Resizing.** `transformVectorNode` on a frame maps its rectangle. With an axis-aligned scale and translation, each child then takes the matrix `vectorFrameChildMatrix` gives for its constraints: the child keeps its left or right margin, keeps both (stretch), keeps its offset from the centre, or scales. These are figcraft's `apply_constraints`, as the canvas package's auto layout has them. Area text takes the new box at the same font size, and point and path text move with their box's centre. A skew, rotation or mirror scales every child instead. This applies to the selection handles, `scale` and `setFrame`, which maps the rectangle in the frame's own space so a rotated frame keeps its rotation.
+- **Frame tool (F).** Drags out a rectangle, previewed as a white rectangle. On release it becomes a frame holding the top-level objects it fully encloses. `frameSelection` wraps objects that share a parent in a frame fitted to their bounds, placed where they sit in the stacking order.
+- **SVG.** A frame exports as a `<g data-vector-frame>` with the frame as JSON, a `frame-fill` part and a `frame-contents` part clipped by a `<clipPath>` rectangle. Import rebuilds the frame, keeping its rotation as the group's transform. `data-vector-resizing` carries constraints. `vectorFrameDocument` / `frameToSvg` export one frame as a document of its own size.
+- **UI.** `getVectorFramePanel(state)` gives the selected frame and the resizing constraints of the selected children of frames (`mixed` when they differ). Both panels apply typed sizes on Enter or blur.
+
+## Connectors
+
+```ts
+const { id } = controller.addConnector({ start: { nodeId: "a" }, end: { nodeId: "b", side: "top" }, route: "elbow", radius: 6 }) as { ok: true; id: string };
+controller.setConnector({ end: null }, { ids: [id] }); // unglue: the end stays where it is
+controller.getConnectors(); // ends with the glued object, the side in use and the position
+```
+
+- **Model.** A connector is an open path with `connector: { start?, end?, route?, radius?, gap? }`. Each end is `{ nodeId, side? }` or absent (free). A side is `top`, `right`, `bottom`, `left`, `center` or `auto` (the default).
+- **Sites.** `vectorConnectionSites` gives the middle of each side of the object's own bounds and its centre, mapped through its rotation and its ancestors' transforms, each with an outward normal. `auto` picks the side whose normal faces the other end (its object's centre, or its free point).
+- **Routing.** `rerouteVectorConnectors` runs in the controller's `refreshed`, after the constraint solve. It is part of every edit and its undo step, and runs on every frame of a drag. `straight` is one segment. `elbow` leaves and enters along the sides' normals (straight out by `gap`, default 16), then turns at right angles through the middle, with `radius` as live corners on the bends. `curved` puts the handles along the normals. Glue to an object that is gone or has no extent is dropped, and the end stays put. The routed points are written into the connector's own space, so a connector in a moved group still meets its objects.
+- **Connector tool (X).** Pressing near a site (12 px) glues the start to that side; pressing on an object glues it `auto`; anywhere else leaves it free. The end glues the same way on release, and the tool gives the line a triangle arrowhead unless the defaults set one. While the tool is on, `overlay.connectorSites` lists the sites of the object under the pointer and marks the one that would glue.
+- **SVG.** `data-vector-connector` carries the settings, and import restores them.
+
+## Large documents
+
+Hit-testing (`hitTestVectorNodes`), marquee selection and snapping to segments go through an R-tree once a node list (or a gesture's segment targets) reaches 256 entries (`VECTOR_SPATIAL_MIN`). The tree is packed sort-tile-recursive over each node's paint box (strokes and filters included) and cached per node array; each node's box is cached per node object, so after an edit only the nodes it replaced are measured again. Queries return candidates in draw order and the same exact tests then run, so results match a scan.
+
 ## Smart guides and snapping
 
 Drags snap to the other objects in the drawing while `snap.objects` is on (the default), and show labelled smart guides while `snap.guides` is on:
@@ -337,6 +434,20 @@ A point snaps, in this order: kept to its Shift constraint (45° steps, a square
 Hold **Cmd / Ctrl** during a drag to bypass snapping. The pull distance is `threshold` screen pixels, so it stays the same at any zoom. Targets are in document space (world matrices and `vectorPathWorldBezier`), so rotated nodes snap exactly, and they are gathered once per gesture and kept sorted by x and y, so each pointer move is a few binary searches. The pen and shape tools snap (and show guides) while hovering too.
 
 `state.guides` holds the guides of the snap in progress in document units: `lines` (`kind`: `align`, `construction`, `spacing` or `size`) and `labels` (`anchor`, `centre`, `intersect`, `perpendicular`, `tangent`, `path`, `align`, gap distances and `W …` / `H …` sizes). For custom tools, `VectorSnapTargets.forMove` / `forResize` / `forDrawing` / `forAnchorDrag` / `forHandle` gather targets and `snapFrom`, `snapRect` and `snapScale` snap with them; `segmentIntersections` (path ops) finds every crossing of two Bézier segments.
+
+### Tracking, polar angles and typed entry
+
+The following adds CAD-style drawing aids from cadcraft's `snap/tracking.rs`.
+
+- **Object snap tracking (`snap.tracking`, on by default).** While the pen or a shape tool hovers, resting on an anchor, centre or crossing for `TRACKING_DWELL_MS` (400 ms) acquires that point. Resting there again releases it. The editor keeps at most `VECTOR_MAX_TRACKING_POINTS` (7) acquired points, dropping the oldest. Each one sends horizontal and vertical paths, or one along every polar angle with `snap.trackPolar`. An open path's acquired end also sends its extension. A point snaps first where two paths cross (`tracking`), then where a path crosses the drawing (`intersect`), and finally onto the nearest path. The pen's polar paths from its last point take part in the crossings too. Escape releases acquired points, and so does switching tools. `acquireTrackingPoint({ x, y })` toggles a point from code.
+- **Polar angles.** `snap.angles` holds the polar / construction angles. `vectorPolarAngles(increment, additional)` builds them from an increment (as POLARANG / POLARADDANG). With `snap.polarRelative`, the pen measures them from its last segment. The toolbars have a 90° / 45° / 30° / 15° picker.
+- **Typed entry.** While the pen draws, typing digits builds an entry that shows next to the pointer (`state.typedEntry`, `overlay.typedEntry`), and Enter places the next point:
+  - `120`: that far toward the pointer;
+  - `120<30`: that far at 30°;
+  - `@40,-10`: an offset;
+  - `200,150`: a position.
+
+  `placePenPoint(text)` does the same from code. `addPathByDimensions({ start, steps, closed })` draws a whole path from lengths and angles, offsets or positions. Agents use `vector.addPathByDimensions`, and set snapping with `vector.getSnapOptions` and `vector.setSnapOptions`.
 
 ## Rendering
 
@@ -392,4 +503,4 @@ function Drawing() {
 
 ## Agent commands
 
-`createVectorCommands(controller)` returns `vector.list`, `vector.select`, `vector.addShape`, `vector.addPath`, `vector.setStyle` (fill, stroke — colours or gradient objects, sanitized —, width, caps, joins, dashes, fill rule, `strokeAlign`, `startArrow` / `endArrow`, `arrowAlign`, `startArrowScale` / `endArrowScale`, `strokeWidthProfile`), `vector.setGradient` (the fill's or `target: "stroke"`'s gradient: any gradient field, `aspect`, `reverse`), `vector.setWidthProfile` (a `preset`, `points`, or a parametric `taper` / `wave`), `vector.setWidthPoint` (one point by `index`, or a new one at `t`; side widths in document units), `vector.setCorners` (radius and / or kind of anchors or paths), `vector.outlineStroke`, `vector.transform`, `vector.skew` (`ax`, `ay` degrees), `vector.distort` (the selection box's four new `corners`), `vector.envelope` (a warp `preset` with `bend`, `horizontal`, `vertical`, `orientation`; or a `mesh` of `rows` × `columns`, optionally with its `points`; or `topObject`, `release` or `expand`), `vector.delete`, `vector.boolean` (`live: true` for a live boolean), `vector.addEffect`, `vector.updateEffect` (parameters, `enabled`, `index`), `vector.removeEffect`, `vector.expandAppearance`, `vector.pathfinder`, `vector.blend`, `vector.blendOptions`, `vector.expandBlend`, `vector.releaseBlend`, `vector.replaceSpine`, `vector.shapeBuilderFaces`, `vector.shapeBuilder`, `vector.fillRegion`, `vector.align`, `vector.distribute`, `vector.arrange`, `vector.group`, `vector.ungroup`, `vector.deleteAnchors`, `vector.moveAnchor`, `vector.bendSegment`, `vector.join`, `vector.average`, `vector.removeRedundantPoints`, `vector.smooth`, `vector.cut`, `vector.knife`, `vector.erase`, `vector.setEditing`, `vector.setTool`, `vector.exportSvg` and `vector.importSvg`. Register them in a `CommandRegistry` and `createCommandToolProvider` exposes them as agent tools.
+`createVectorCommands(controller)` returns `vector.list`, `vector.select`, `vector.addShape`, `vector.addPath`, `vector.setStyle` (fill, stroke — colours or gradient objects, sanitized —, width, caps, joins, dashes, fill rule, `strokeAlign`, `startArrow` / `endArrow`, `arrowAlign`, `startArrowScale` / `endArrowScale`, `strokeWidthProfile`), `vector.setGradient` (the fill's or `target: "stroke"`'s gradient: any gradient field, `aspect`, `reverse`), `vector.setWidthProfile` (a `preset`, `points`, or a parametric `taper` / `wave`), `vector.setWidthPoint` (one point by `index`, or a new one at `t`; side widths in document units), `vector.setCorners` (radius and / or kind of anchors or paths), `vector.outlineStroke`, `vector.transform`, `vector.skew` (`ax`, `ay` degrees), `vector.distort` (the selection box's four new `corners`), `vector.envelope` (a warp `preset` with `bend`, `horizontal`, `vertical`, `orientation`; or a `mesh` of `rows` × `columns`, optionally with its `points`; or `topObject`, `release` or `expand`), `vector.delete`, `vector.boolean` (`live: true` for a live boolean), `vector.addEffect`, `vector.updateEffect` (parameters, `enabled`, `index`), `vector.removeEffect`, `vector.expandAppearance`, `vector.pathfinder`, `vector.blend`, `vector.blendOptions`, `vector.expandBlend`, `vector.releaseBlend`, `vector.replaceSpine`, `vector.shapeBuilderFaces`, `vector.shapeBuilder`, `vector.fillRegion`, `vector.align`, `vector.distribute`, `vector.arrange`, `vector.group`, `vector.ungroup`, `vector.deleteAnchors`, `vector.moveAnchor`, `vector.bendSegment`, `vector.join`, `vector.average`, `vector.removeRedundantPoints`, `vector.smooth`, `vector.cut`, `vector.knife`, `vector.erase`, `vector.setEditing`, `vector.setTool`, `vector.listFonts`, `vector.addText`, `vector.getText`, `vector.setText`, `vector.setTextStyle`, `vector.setParagraphStyle`, `vector.setTextFrame`, `vector.typeOnPath`, `vector.createOutlines`, `vector.listSymbols`, `vector.makeSymbol`, `vector.placeSymbol`, `vector.setInstanceOptions`, `vector.replaceSymbol`, `vector.detachInstance`, `vector.renameSymbol`, `vector.deleteSymbol`, `vector.editSymbol`, `vector.exitSymbolEdit`, `vector.listConstraints`, `vector.addConstraint`, `vector.removeConstraint`, `vector.setConstraintValue`, `vector.autoConstrain`, `vector.exportSvg` and `vector.importSvg`. Register them in a `CommandRegistry` and `createCommandToolProvider` exposes them as agent tools.

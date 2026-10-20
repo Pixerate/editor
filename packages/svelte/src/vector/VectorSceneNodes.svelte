@@ -3,6 +3,7 @@
   import Self from './VectorSceneNodes.svelte';
   import VectorPaintPath from './VectorPaintPath.svelte';
   import VectorMaskedNodes from './VectorMaskedNodes.svelte';
+  import VectorTextElement from './VectorTextElement.svelte';
 
   interface Props {
     nodes: readonly VectorRenderNode[];
@@ -13,7 +14,9 @@
 </script>
 
 {#each nodes as node (node.id)}
-  {#if node.kind === 'group'}
+  {#if node.kind === 'text'}
+    <VectorTextElement {node} />
+  {:else if node.kind === 'group'}
     <g
       data-vector-id={node.id}
       data-vector-mask={node.mask?.type}

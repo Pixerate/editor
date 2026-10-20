@@ -35,6 +35,12 @@ export interface VectorCorner {
 	radius: number;
 	/** Default `round`. */
 	kind?: VectorCornerKind;
+	/**
+	 * Corner smoothing (squircle, as in Figma and iOS), 0–1, round corners between straight sides
+	 * only: the cut reaches (1 + smoothing) times as far along each side and eases into a shorter arc,
+	 * so curvature builds up gradually. Default 0 (a circular arc).
+	 */
+	smoothing?: number;
 }
 
 /**
@@ -52,6 +58,12 @@ export interface VectorAnchor {
 	type?: VectorAnchorType;
 	/** Live corner radius. Ignored on smooth / symmetric anchors and the ends of open subpaths. */
 	corner?: VectorCorner | null;
+	/**
+	 * A stable id, unique within its path, given when a constraint refers to the anchor (see
+	 * `VectorConstraint`). Edits that move or restyle the anchor keep it; edits that rebuild a path
+	 * drop it, and constraints on a dropped anchor are removed.
+	 */
+	id?: string;
 }
 
 /** A chain of anchors joined by line or cubic Bézier segments. */
@@ -357,12 +369,84 @@ interface VectorNodeBase {
 	 * booleans ignore them.
 	 */
 	filters?: VectorFilter[] | null;
+	/**
+	 * How the node follows its frame when the frame is resized (`VectorGroupNode.frame`): per
+	 * axis, pinned to the start (default `left` / `top`), the end, both (it stretches), the centre,
+	 * or scaled with the frame. Ignored outside frames.
+	 */
+	resizing?: VectorResizing | null;
+}
+
+/** Horizontal resizing constraint of a frame's child (see `VectorNodeBase.resizing`). */
+export type VectorHorizontalResizing = 'left' | 'right' | 'leftRight' | 'center' | 'scale';
+/** Vertical resizing constraint of a frame's child (see `VectorNodeBase.resizing`). */
+export type VectorVerticalResizing = 'top' | 'bottom' | 'topBottom' | 'center' | 'scale';
+export const VECTOR_HORIZONTAL_RESIZING: readonly VectorHorizontalResizing[] = ['left', 'right', 'leftRight', 'center', 'scale'];
+export const VECTOR_VERTICAL_RESIZING: readonly VectorVerticalResizing[] = ['top', 'bottom', 'topBottom', 'center', 'scale'];
+
+/** A frame child's resizing constraints (Figma's "constraints"). */
+export interface VectorResizing {
+	/** Default `left`. */
+	horizontal?: VectorHorizontalResizing;
+	/** Default `top`. */
+	vertical?: VectorVerticalResizing;
+}
+
+/**
+ * Makes a group a frame (an artboard when top-level): a rectangle in the group's own space with an
+ * optional fill drawn below the children, which by default it clips. Resizing the frame moves and
+ * resizes its children by their `resizing` constraints instead of scaling them.
+ */
+export interface VectorFrame {
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+	/** The frame's background, drawn below its children (default none). */
+	fill?: VectorPaint;
+	/** Clip the children to the frame (default true). */
+	clip?: boolean;
 }
 
 /** A shape made of one or more subpaths (holes and compound shapes included). */
 export interface VectorPathNode extends VectorNodeBase, VectorStyle {
 	type: 'path';
 	subpaths: VectorSubpath[];
+	/**
+	 * Makes the path a connector: an open line whose ends may be glued to other objects'
+	 * connection sites. Its geometry is routed again after every edit, so it follows them.
+	 */
+	connector?: VectorConnector | null;
+}
+
+/**
+ * Where a connector end meets an object: the middle of a side of the object's own (unrotated)
+ * bounds, its centre, or `auto` (the side facing the connector's other end, chosen on every route).
+ */
+export type VectorConnectorSide = 'top' | 'right' | 'bottom' | 'left' | 'center' | 'auto';
+export const VECTOR_CONNECTOR_SIDES: readonly VectorConnectorSide[] = ['auto', 'top', 'right', 'bottom', 'left', 'center'];
+
+/** How a connector runs between its ends: a straight line, right-angled elbows or an S-curve. */
+export type VectorConnectorRoute = 'straight' | 'elbow' | 'curved';
+export const VECTOR_CONNECTOR_ROUTES: readonly VectorConnectorRoute[] = ['straight', 'elbow', 'curved'];
+
+/** A glued connector end. */
+export interface VectorConnectorEnd {
+	nodeId: string;
+	/** Default `auto`. */
+	side?: VectorConnectorSide;
+}
+
+/** A connector's settings (`VectorPathNode.connector`). An end that is not glued stays where it is. */
+export interface VectorConnector {
+	start?: VectorConnectorEnd | null;
+	end?: VectorConnectorEnd | null;
+	/** Default `straight`. */
+	route?: VectorConnectorRoute;
+	/** Corner radius of an elbow route's bends (document units, default 0). */
+	radius?: number;
+	/** How far an elbow or curve leaves a glued end straight out of its side before turning (document units, default 16). */
+	gap?: number;
 }
 
 /**
@@ -437,9 +521,150 @@ export interface VectorGroupNode extends VectorNodeBase {
 	 * path effects to the contents (not the mask). Ignored on blends and live booleans.
 	 */
 	mask?: VectorMask | null;
+	/**
+	 * Makes the group a frame (see `VectorFrame`): it draws its fill below the children, clips them,
+	 * selects and snaps by its rectangle, and lays its children out by their `resizing` constraints
+	 * when resized. Ignored on blends, live booleans and mask groups.
+	 */
+	frame?: VectorFrame | null;
 }
 
-export type VectorNode = VectorPathNode | VectorGroupNode;
+/**
+ * The character style of text (a font and how it is set). Sizes are document units; `tracking` is in
+ * 1/1000 em. Paint comes from the node's fills and strokes (and a run's own `fill`).
+ */
+export interface VectorCharacterStyle {
+	/** Family name ("Inter"); a family the shaper lacks draws in a fallback and is listed as missing. */
+	fontFamily: string;
+	/** CSS weight, 1–1000 (400 regular, 700 bold). */
+	fontWeight: number;
+	/** Default false. */
+	italic?: boolean;
+	fontSize: number;
+	/** Letter spacing in 1/1000 em (default 0). */
+	tracking?: number;
+	/** Baseline-to-baseline distance; absent: auto (`autoLeading` × size). */
+	leading?: number;
+	/** Raises (positive) or lowers the text (default 0). */
+	baselineShift?: number;
+	underline?: boolean;
+	strikethrough?: boolean;
+}
+
+/** Character style fields a run can set over the node's own style, plus its own fill. */
+export type VectorTextRunStyle = Partial<VectorCharacterStyle> & {
+	/** The run's fill: replaces the paint of the node's top fill for these characters. */
+	fill?: VectorPaint;
+};
+
+/** A style over `length` UTF-16 code units of the text, in order. */
+export interface VectorTextRun {
+	length: number;
+	style: VectorTextRunStyle;
+}
+
+export type VectorTextAlign = 'left' | 'center' | 'right' | 'justify';
+export const VECTOR_TEXT_ALIGNS: readonly VectorTextAlign[] = ['left', 'center', 'right', 'justify'];
+
+/** Paragraph settings of a text node (all its paragraphs). Lengths in document units. */
+export interface VectorParagraphStyle {
+	/** Default `left`. `justify` stretches every line of area text but a paragraph's last; on a path it spreads the text over the path. */
+	align?: VectorTextAlign;
+	/** Auto leading as a multiple of the font size (default 1.2). */
+	autoLeading?: number;
+	firstLineIndent?: number;
+	startIndent?: number;
+	endIndent?: number;
+	spaceBefore?: number;
+	spaceAfter?: number;
+}
+
+/** Where text on a path sits across the path: its baseline, ascender, descender or centre on the line. */
+export type VectorPathTextBaseline = 'baseline' | 'ascender' | 'descender' | 'center';
+export const VECTOR_PATH_TEXT_BASELINES: readonly VectorPathTextBaseline[] = ['baseline', 'ascender', 'descender', 'center'];
+
+/**
+ * Where a text node's text goes, in the node's own space:
+ * - `point`: one line per paragraph, the first baseline starting at (`x`, `y`);
+ * - `area`: lines wrapped inside the box at (`x`, `y`) of `width` × `height` (lines that do not fit
+ *   are hidden: the text overflows);
+ * - `path`: one line set along `path` (paragraph breaks become spaces), from `start` to `end`
+ *   (distances from the path's ends), turned with the path (`orientation: 'rotate'`) or upright.
+ *   `flip` runs the text the other way, on the other side.
+ */
+export type VectorTextFrame =
+	| { kind: 'point'; x: number; y: number }
+	| { kind: 'area'; x: number; y: number; width: number; height: number }
+	| {
+			kind: 'path';
+			path: VectorSubpath;
+			/** Margin from the path's start (default 0). */
+			start?: number;
+			/** Margin from the path's end (default 0). */
+			end?: number;
+			flip?: boolean;
+			/** Default `rotate`. */
+			orientation?: 'rotate' | 'upright';
+			/** Default `baseline`. */
+			baseline?: VectorPathTextBaseline;
+	  };
+
+/**
+ * Text: a string with a character style, optional styled runs and a paragraph style, set in a
+ * frame. It paints with the node's fills and strokes like a path. Layout and glyphs come from the
+ * editor's text shaper (`setVectorTextShaper`); with an outline shaper the text draws as glyph
+ * outlines (so path effects, envelopes, booleans and Create Outlines work), otherwise as SVG text.
+ */
+export interface VectorTextNode extends VectorNodeBase, VectorStyle {
+	type: 'text';
+	text: string;
+	/** The base character style. */
+	font: VectorCharacterStyle;
+	/** Runs over the text, each overriding some fields of `font` (absent: one style throughout). */
+	runs?: VectorTextRun[] | null;
+	paragraph?: VectorParagraphStyle | null;
+	frame: VectorTextFrame;
+}
+
+/**
+ * Per-instance changes to a symbol's art: every fill and / or stroke of the art painted with one
+ * paint (a tint), and art nodes (by their id in the symbol) hidden.
+ */
+export interface VectorInstanceOverrides {
+	fill?: VectorPaint;
+	stroke?: VectorPaint;
+	/** Ids of nodes of the symbol's art (top-level or nested) not drawn in this instance. */
+	hidden?: string[];
+}
+
+/**
+ * A placed copy of a symbol (`VectorDocument.symbols`): it draws the symbol's art through its
+ * `transform`, which, unlike other nodes', may scale and skew. Editing the symbol changes every
+ * instance.
+ */
+export interface VectorInstanceNode extends VectorNodeBase {
+	type: 'instance';
+	symbolId: string;
+	/** Strokes (and other lengths of the art's paint) scale with the instance (default true, as in Illustrator). */
+	scaleStrokes?: boolean;
+	overrides?: VectorInstanceOverrides | null;
+	/**
+	 * The symbol's art, resolved by the editor (the same array as the symbol's `nodes`). Not part of
+	 * the stored document: `VectorEditorController.toJSON` and SVG export leave it out, and loading
+	 * resolves it again (`resolveVectorSymbols`).
+	 */
+	art?: VectorNode[];
+}
+
+export type VectorNode = VectorPathNode | VectorGroupNode | VectorTextNode | VectorInstanceNode;
+
+/** A symbol: reusable art its instances draw. */
+export interface VectorSymbol {
+	id: string;
+	name: string;
+	/** The art, bottom to top, in the symbol's own space (its origin is the registration point instances are placed by). */
+	nodes: VectorNode[];
+}
 
 /** A vector drawing: an artboard and its nodes, bottom to top. */
 export interface VectorDocument {
@@ -448,6 +673,95 @@ export interface VectorDocument {
 	/** Artboard colour (default: transparent). */
 	background?: string;
 	nodes: VectorNode[];
+	/** Symbols the document's instances draw (see `VectorInstanceNode`). */
+	symbols?: VectorSymbol[];
+	/** Constraints between anchors, segments and circles, solved after every edit. */
+	constraints?: VectorConstraint[];
+	/** Named values the constraints' expressions use. */
+	parameters?: VectorParameter[];
+}
+
+/**
+ * Constraint kinds (CAD-style parametric drawing). Geometric: `coincident` (two points, a point on
+ * a segment's line, or a point on a circle), `collinear` (two segments on one line), `concentric`
+ * (two circles, or a circle's centre on a point), `fix`, `parallel`, `perpendicular`, `horizontal`
+ * / `vertical` (a segment, or two points level), `tangent` (a segment and a circle, two circles, or
+ * G1 at an anchor: its handles in line), `smooth` (G2 at an anchor: G1 and equal curvature),
+ * `symmetric` (two points about a segment's line) and `equal` (segment lengths or radii).
+ * Dimensional (with a `value`): `distance`, `angle` (degrees), `radius` and `diameter`.
+ */
+export type VectorConstraintKind =
+	| 'coincident'
+	| 'collinear'
+	| 'concentric'
+	| 'fix'
+	| 'parallel'
+	| 'perpendicular'
+	| 'horizontal'
+	| 'vertical'
+	| 'tangent'
+	| 'smooth'
+	| 'symmetric'
+	| 'equal'
+	| 'distance'
+	| 'angle'
+	| 'radius'
+	| 'diameter';
+export const VECTOR_CONSTRAINT_KINDS: readonly VectorConstraintKind[] = [
+	'coincident',
+	'collinear',
+	'concentric',
+	'fix',
+	'parallel',
+	'perpendicular',
+	'horizontal',
+	'vertical',
+	'tangent',
+	'smooth',
+	'symmetric',
+	'equal',
+	'distance',
+	'angle',
+	'radius',
+	'diameter'
+];
+
+/**
+ * What a constraint refers to: an anchor of a path (by its stable `id`), one of the anchor's
+ * handles, the segment from the anchor to the next one, or (no `anchor`) a whole path as a circle
+ * (its centre and radius, for closed round paths).
+ */
+export interface VectorGeomRef {
+	nodeId: string;
+	/** The anchor's `id` (see `VectorAnchor.id`). */
+	anchor?: string;
+	/** With `anchor`: the handle instead of the anchor point. */
+	handle?: 'in' | 'out';
+	/** With `anchor`: the segment from it to the next anchor. */
+	segment?: boolean;
+	/** Without `anchor`: the path as a circle. */
+	circle?: boolean;
+}
+
+/** A constraint kept by the document and solved after every edit. */
+export interface VectorConstraint {
+	id: string;
+	kind: VectorConstraintKind;
+	refs: VectorGeomRef[];
+	/** Dimensional constraints: the value as an expression (document units, degrees for angles), e.g. `"40"` or `"w / 2"`. */
+	value?: string;
+	/** Dimensional constraints: a name other expressions can use (`d1`, `ang2`). */
+	name?: string;
+	/** `distance`: measured along the line between (default), or only horizontally or vertically. */
+	axis?: 'aligned' | 'horizontal' | 'vertical';
+}
+
+/** A named value constraints' expressions can use. */
+export interface VectorParameter {
+	name: string;
+	/** An expression (numbers, other names, `+ - * /`, parentheses, `pi`). */
+	value: string;
+	description?: string;
 }
 
 /** An axis-aligned rectangle. */
@@ -478,7 +792,10 @@ export interface VectorHandleRef extends VectorAnchorRef {
  * fills the region the visible outlines enclose around a click with a new shape. `blend`
  * blends the shape clicked first into the one clicked next (clicking an anchor of a closed path
  * starts the blend there). `envelope` edits the mesh of the selection's envelope: drag its
- * anchors and handles, or inside a patch to pull the surface.
+ * anchors and handles, or inside a patch to pull the surface. `type` adds point text (click) or
+ * area text (drag) and edits text it clicks; `typePath` sets text along the path it clicks. `frame`
+ * drags out a frame (`VectorGroupNode.frame`), taking in the top-level objects it fully encloses.
+ * `connector` drags a connector between objects, gluing each end to the side it starts or ends on.
  */
 export type VectorTool =
 	| 'select'
@@ -498,7 +815,11 @@ export type VectorTool =
 	| 'paintBucket'
 	| 'blend'
 	| 'gradient'
-	| 'envelope';
+	| 'envelope'
+	| 'type'
+	| 'typePath'
+	| 'frame'
+	| 'connector';
 
 export const VECTOR_TOOLS: readonly VectorTool[] = [
 	'select',
@@ -518,7 +839,11 @@ export const VECTOR_TOOLS: readonly VectorTool[] = [
 	'paintBucket',
 	'blend',
 	'gradient',
-	'envelope'
+	'envelope',
+	'type',
+	'typePath',
+	'frame',
+	'connector'
 ];
 
 /** Keyboard modifiers held during a pointer event. */

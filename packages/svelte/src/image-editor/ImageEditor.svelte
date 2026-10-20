@@ -41,6 +41,7 @@
   import Histogram from './Histogram.svelte';
   import AdjustmentLayersPanel from './AdjustmentLayersPanel.svelte';
   import LayersPanel from './LayersPanel.svelte';
+  import ColorProfilePanel from './ColorProfilePanel.svelte';
   import BrushOptionsBar from './BrushOptionsBar.svelte';
   import SelectionOptionsBar from './SelectionOptionsBar.svelte';
   import RefineEdgePanel from './RefineEdgePanel.svelte';
@@ -381,7 +382,7 @@
     } catch {
       // Synthetic events have no active pointer to capture.
     }
-    paintError = paintGesture.down(paintSamples(e)[0]);
+    paintError = paintGesture.down({ ...paintSamples(e)[0], altKey: e.altKey });
   }
   function handlePaintPointerMove(e: PointerEvent) {
     if (handleTransformPointerMove(e)) return;
@@ -1279,6 +1280,8 @@
             disabled={transformActive}
             onclick={() => transformTool.begin()}>Free Transform</button>
           <LayersPanel controller={editor.controller} />
+          <span class="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">Colour</span>
+          <ColorProfilePanel controller={editor.controller} />
         </div>
       {/if}
 

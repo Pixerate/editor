@@ -42,6 +42,7 @@ import { Histogram } from './Histogram';
 import { AdjustmentLayersPanel } from './AdjustmentLayersPanel';
 import { LayersPanel } from './LayersPanel';
 import { BrushOptionsBar } from './BrushOptionsBar';
+import { ColorProfilePanel } from './ColorProfilePanel';
 import { SelectionOptionsBar } from './SelectionOptionsBar';
 import { RefineEdgePanel } from './RefineEdgePanel';
 import { FreeTransformOptionsBar } from './FreeTransformOptionsBar';
@@ -445,7 +446,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
       // Synthetic events have no active pointer to capture.
     }
     const [first] = paintSamples(e);
-    setPaintError(paintGestureRef.current!.down(first));
+    setPaintError(paintGestureRef.current!.down({ ...first, altKey: e.altKey }));
   };
   const handlePaintPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (handleTransformPointerMove(e)) return;
@@ -1337,6 +1338,8 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                 Free Transform
               </button>
               <LayersPanel controller={controller} />
+              <span className="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">Colour</span>
+              <ColorProfilePanel controller={controller} />
             </div>
           )}
 

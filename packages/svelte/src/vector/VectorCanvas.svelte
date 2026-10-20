@@ -9,6 +9,7 @@
     VECTOR_OVERLAY_THEME as THEME,
     getVectorOverlayRenderData,
     getVectorSceneRenderData,
+    getVectorSymbolEditBackground,
     isVectorTextTarget,
     toVectorKeyInput,
     toVectorPointerInput,
@@ -56,6 +57,8 @@
   const view = $derived(store.current);
   const scene = $derived(getVectorSceneRenderData(view, { idPrefix }));
   const overlay = $derived(getVectorOverlayRenderData(view));
+  // Isolation mode: the rest of the document, dimmed behind the symbol's art.
+  const host = $derived(getVectorSymbolEditBackground(view, { idPrefix: `${idPrefix}host-` }));
   const box = $derived(overlay.selectionBox);
   const edit = $derived(view.widthPointEdit);
   const editAt = $derived(edit ? { x: edit.point.x * view.viewport.zoom + view.viewport.x, y: edit.point.y * view.viewport.zoom + view.viewport.y } : null);
@@ -64,6 +67,54 @@
   const as = THEME.anchorSize;
 
   let svg: SVGSVGElement | undefined = $state();
+  let textInput: HTMLTextAreaElement | undefined = $state();
+  const editingText = $derived(view.textEdit?.nodeId ?? null);
+
+  // Typing goes into a hidden textarea while text is edited (focused after the click that started it).
+  $effect(() => {
+    if (!editingText) return;
+    const t = setTimeout(() => textInput?.focus({ preventScroll: true }), 0);
+    return () => clearTimeout(t);
+  });
+
+  function onTextInput(e: Event) {
+    const el = e.currentTarget as HTMLTextAreaElement;
+    if ((e as InputEvent).isComposing) return;
+    if (el.value) controller.textInput(el.value);
+    el.value = '';
+  }
+
+  function onTextCompositionEnd(e: CompositionEvent) {
+    const el = e.currentTarget as HTMLTextAreaElement;
+    if (el.value) controller.textInput(el.value);
+    el.value = '';
+  }
+
+  function onTextKeyDown(e: KeyboardEvent) {
+    e.stopPropagation();
+    if (e.isComposing) return;
+    // Characters come through `input`; editing keys and shortcuts go to the controller.
+    if (e.key.length === 1 && !e.metaKey && !e.ctrlKey) return;
+    if (controller.keyDown(toVectorKeyInput(e))) e.preventDefault();
+    if (!controller.getState().textEdit) svg?.focus({ preventScroll: true });
+  }
+
+  function onTextClipboard(kind: 'copy' | 'cut' | 'paste') {
+    return (e: ClipboardEvent) => {
+      e.stopPropagation();
+      if (kind === 'paste') {
+        const text = e.clipboardData?.getData('text/plain');
+        if (text) controller.textInput(text);
+        e.preventDefault();
+        return;
+      }
+      const text = kind === 'cut' ? controller.cutText() : controller.getSelectedText();
+      if (text && e.clipboardData) {
+        e.clipboardData.setData('text/plain', text);
+        e.preventDefault();
+      }
+    };
+  }
   let fitted = untrack(() => !fitOnMount);
 
   $effect(() => {
@@ -186,9 +237,38 @@
     fill={scene.background ?? (checkerboard ? `url(#${idPrefix}checker)` : '#ffffff')}
     stroke="rgba(0,0,0,0.12)"
   />
+  {#if host}
+    <g data-vector-symbol-host="" opacity="0.3" pointer-events="none" transform={host.transform}>
+      <VectorGradientDefs defs={host.defs} />
+      <VectorFilterDefs filters={host.filters} />
+      <VectorSceneNodes nodes={host.nodes} />
+    </g>
+  {/if}
   <g data-vector-scene="" transform={scene.transform}>
     <VectorSceneNodes nodes={scene.nodes} />
   </g>
+  {#if overlay.frames.length}
+    <g data-vector-frame-labels="">
+      {#each overlay.frames as f (f.id)}
+        <!-- A frame's name selects it (clicking inside a frame may pick its contents). -->
+        <text
+          role="button"
+          tabindex="-1"
+          data-vector-frame-label={f.id}
+          x={f.x}
+          y={f.y - 6}
+          font-size="11"
+          font-weight={f.selected ? 600 : 400}
+          fill={f.selected ? accentColor : '#737373'}
+          style="font-family:system-ui,sans-serif;cursor:default;user-select:none"
+          onpointerdown={(e) => {
+            e.stopPropagation();
+            controller.select([f.id]);
+          }}>{f.name}</text
+        >
+      {/each}
+    </g>
+  {/if}
   <g data-vector-overlay="" pointer-events="none" fill="none">
     {#each overlay.outlines as o (o.id)}
       <path d={o.d} stroke={accentColor} stroke-width={o.selected ? 1 : 1.5} opacity={o.selected ? 1 : 0.7} />
@@ -369,6 +449,44 @@
     {#if overlay.cutPoint}
       <circle data-vector-cut-point="" cx={overlay.cutPoint.x} cy={overlay.cutPoint.y} r={THEME.handleRadius + 1} fill={THEME.handleFill} stroke={accentColor} />
     {/if}
+    {#if overlay.text}
+      <g data-vector-text-edit={overlay.text.nodeId} data-editing={overlay.text.editing || undefined}>
+        <path d={overlay.text.frame} stroke={accentColor} stroke-dasharray={overlay.text.editing ? '3 2' : undefined} opacity="0.8" />
+        {#each overlay.text.selection as d, i (i)}
+          <path data-vector-text-selection="" {d} fill={accentColor} fill-opacity="0.25" stroke="none" />
+        {/each}
+        {#if overlay.text.caret}
+          <line data-vector-text-caret="" x1={overlay.text.caret.x1} y1={overlay.text.caret.y1} x2={overlay.text.caret.x2} y2={overlay.text.caret.y2} stroke={accentColor} stroke-width="1.5" />
+        {/if}
+        {#if overlay.text.overflow}
+          <g data-vector-text-overflow="" transform="translate({overlay.text.overflow.x} {overlay.text.overflow.y})">
+            <rect x="-5" y="-5" width="10" height="10" fill={THEME.handleFill} stroke="#dc2626" />
+            <path d="M-3 0H3M0 -3V3" stroke="#dc2626" />
+          </g>
+        {/if}
+      </g>
+    {/if}
+    {#each overlay.trackingPoints as t, i (i)}
+      <path data-vector-tracking-point="" d="M{t.x - 5} {t.y}H{t.x + 5}M{t.x} {t.y - 5}V{t.y + 5}" stroke={guideColor} stroke-width="1.5" />
+    {/each}
+    {#if overlay.typedEntry}
+      <g data-vector-typed-entry="" transform="translate({overlay.typedEntry.x + 14} {overlay.typedEntry.y + 18})">
+        <rect x="-3" y="-12" width={overlay.typedEntry.text.length * 7 + 8} height="17" rx="3" fill={THEME.handleFill} stroke={accentColor} />
+        <text x="1" y="1" font-size="11" fill={accentColor} style="font-family:ui-monospace,monospace">{overlay.typedEntry.text}</text>
+      </g>
+    {/if}
+    {#each overlay.connectorSites as s (`${s.nodeId}:${s.side}`)}
+      <circle data-vector-connection-site={s.side} data-active={s.active || undefined} cx={s.x} cy={s.y} r={s.active ? 5 : 3.5} fill={s.active ? accentColor : THEME.handleFill} stroke={accentColor} />
+    {/each}
+    {#each overlay.constraints as c (c.id)}
+      <g data-vector-constraint-glyph={c.kind} data-satisfied={c.satisfied ? 'true' : 'false'}>
+        {#if c.dimension}<line x1={c.dimension.x1} y1={c.dimension.y1} x2={c.dimension.x2} y2={c.dimension.y2} stroke={c.satisfied ? THEME.guide : '#dc2626'} stroke-dasharray="2 2" />{/if}
+        <text x={c.x} y={c.y} font-size="10" text-anchor="middle" fill={c.satisfied ? accentColor : '#dc2626'} stroke="#ffffff" stroke-width="3" paint-order="stroke" style="font-family:system-ui,sans-serif">{c.label}</text>
+      </g>
+    {/each}
+    {#if overlay.textBox}
+      <rect data-vector-text-box="" x={overlay.textBox.x} y={overlay.textBox.y} width={overlay.textBox.width} height={overlay.textBox.height} stroke={accentColor} stroke-dasharray="3 2" />
+    {/if}
     {#if overlay.marquee}
       <rect
         data-vector-marquee=""
@@ -405,6 +523,43 @@
       <text data-vector-status="" x="8" y="100%" dy="-8" font-size="11" fill={accentColor} style="font-family:system-ui,sans-serif">{overlay.status}</text>
     {/if}
   </g>
+  {#if view.textEdit && overlay.text}
+    <!-- A hidden textarea at the caret takes typing and composed (IME) text. -->
+    <foreignObject x={overlay.text.caret?.x1 ?? 0} y={overlay.text.caret?.y1 ?? 0} width="1" height="1" style="overflow:visible">
+      <textarea
+        bind:this={textInput}
+        data-testid="vector-type-input"
+        aria-label="Text"
+        autocapitalize="off"
+        autocomplete="off"
+        spellcheck="false"
+        style="position:absolute;width:1px;height:1px;padding:0;border:0;opacity:0;resize:none;overflow:hidden"
+        onpointerdown={(e) => e.stopPropagation()}
+        oninput={onTextInput}
+        oncompositionend={onTextCompositionEnd}
+        onkeydown={onTextKeyDown}
+        onkeyup={(e) => e.stopPropagation()}
+        oncopy={onTextClipboard('copy')}
+        oncut={onTextClipboard('cut')}
+        onpaste={onTextClipboard('paste')}
+      ></textarea>
+    </foreignObject>
+  {/if}
+  {#if view.symbolEdit}
+    <!-- Isolation mode: which symbol, and the way out (Escape with nothing selected works too). -->
+    <foreignObject data-vector-symbol-edit={view.symbolEdit.symbolId} x="8" y="8" width="320" height="32" style="overflow:visible">
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div
+        style="display:inline-flex;align-items:center;gap:8px;padding:4px 8px;border-radius:6px;background:rgba(15,23,42,0.85);color:#fff;font:12px system-ui,sans-serif"
+        onpointerdown={(e) => e.stopPropagation()}
+        ondblclick={(e) => e.stopPropagation()}
+        onkeydown={(e) => e.stopPropagation()}
+      >
+        <span>Symbol: {view.symbolEdit.name}</span>
+        <button type="button" aria-label="Exit symbol" style="border:1px solid rgba(255,255,255,0.4);border-radius:4px;padding:0 6px;background:transparent;color:#fff;cursor:pointer" onclick={() => controller.exitSymbolEdit()}>Done</button>
+      </div>
+    </foreignObject>
+  {/if}
   {#if edit && editAt}
     <!-- Width Point Edit (double-click with the width tool), beside the point. -->
     <foreignObject data-vector-width-point-edit="" x={editAt.x + 12} y={editAt.y + 12} width="180" height="140" style="overflow:visible">

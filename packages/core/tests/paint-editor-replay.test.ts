@@ -35,14 +35,14 @@ describe('replay', () => {
     const s = c.beginStroke({ brushId: 'watercolor-round', color: '#1d4ed8', seed: 4 });
     for (const [i, p] of wave(60).entries()) {
       s.push([p]);
-      if (i % 5 === 0) await c.advanceWet({ steps: 7 });
+      if (i % 5 === 0) await c.advanceWet({ steps: 3 });
     }
     s.end();
-    await c.advanceWet({ steps: 90 });
+    await c.advanceWet({ steps: 30 });
     c.paintStroke({ points: wave(100), brushId: 'gouache', color: '#e67e22', seed: 5 });
-    await c.advanceWet({ steps: 50 });
+    await c.advanceWet({ steps: 20 });
     c.dryPaint({ rect: { x: 0, y: 0, width: 160, height: 240 } });
-    await c.advanceWet({ steps: 33 });
+    await c.advanceWet({ steps: 11 });
     const t = c.createReplayTarget(1);
     const { replayPainting } = await import('../src/paint-editor/replay');
     await replayPainting(c.document, t);

@@ -30,12 +30,19 @@ import {
   type VectorStrokeAlign,
   type VectorTool,
   type VectorWidthPreset,
+  vectorPolarAngles,
+  vectorPolarIncrementOf
 } from '@pixerate/editor/vector';
 import { useVectorEditorState } from './useVectorEditor';
 import { VectorEffectsPanel } from './VectorEffectsPanel';
 import { VectorAppearancePanel } from './VectorAppearancePanel';
 import { VectorEnvelopePanel } from './VectorEnvelopePanel';
 import { VectorMaskPanel } from './VectorMaskPanel';
+import { VectorTextPanel } from './VectorTextPanel';
+import { VectorSymbolsPanel } from './VectorSymbolsPanel';
+import { VectorConstraintsPanel } from './VectorConstraintsPanel';
+import { VectorFramePanel } from './VectorFramePanel';
+import { VectorConnectorPanel } from './VectorConnectorPanel';
 import { VectorGradientEditor } from './VectorGradientEditor';
 
 const VECTOR_SNAP_TITLE = 'Snap to objects';
@@ -133,6 +140,21 @@ export function VectorToolbar({
           >
             Snap
           </button>
+          <select
+            data-vector-polar=""
+            aria-label="Polar tracking increment"
+            title="Polar tracking: the angles drawn points snap to from where they leave"
+            className="h-8 rounded-md border border-border bg-background px-1 text-xs"
+            value={String(vectorPolarIncrementOf(state.snap.angles) ?? '')}
+            onChange={(e) => controller.setSnap({ angles: vectorPolarAngles(Number(e.target.value)) })}
+          >
+            {vectorPolarIncrementOf(state.snap.angles) === null && <option value="">Custom</option>}
+            {[90, 45, 30, 15].map((n) => (
+              <option key={n} value={n}>
+                {n}°
+              </option>
+            ))}
+          </select>
         </div>
       )}
       {showPathEdit && (
@@ -384,6 +406,7 @@ export function VectorStylePanel({ controller, className }: VectorStylePanelProp
     widthProfile: widthProfilePresetId(d.strokeWidthProfile),
     cornerRadius: d.cornerRadius,
     cornerKind: d.cornerKind ?? 'round',
+    cornerSmoothing: 0,
     corners: 1,
     hasOpenPath: true,
   };
@@ -559,6 +582,22 @@ export function VectorStylePanel({ controller, className }: VectorStylePanelProp
           {mixed('cornerRadius')}
         </div>
       )}
+      {style && source.corners > 0 && source.cornerKind === 'round' && source.cornerRadius > 0 && (
+        <label className="flex items-center gap-2 text-xs text-foreground" data-vector-style="corner-smoothing" title="Corner smoothing: squircle corners that ease into the curve (0.6 is iOS-like)">
+          <span className="w-16">Smoothing</span>
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.05}
+            aria-label="Corner smoothing"
+            className="h-4 flex-1 accent-primary"
+            value={source.cornerSmoothing}
+            onChange={(e) => controller.setCornerSmoothing(parseFloat(e.target.value), { merge: 'corner-smoothing' })}
+            onPointerUp={() => controller.endMergedEdit()}
+          />
+        </label>
+      )}
       {style && (
         <label className="flex items-center gap-2 text-xs text-foreground">
           <span className="w-16">Opacity</span>
@@ -574,10 +613,15 @@ export function VectorStylePanel({ controller, className }: VectorStylePanelProp
           />
         </label>
       )}
+      <VectorTextPanel controller={controller} />
       {style && <VectorAppearancePanel controller={controller} />}
       {style && <VectorEffectsPanel controller={controller} />}
       {style && <VectorEnvelopePanel controller={controller} />}
       {style && <VectorMaskPanel controller={controller} />}
+      <VectorFramePanel controller={controller} />
+      <VectorConnectorPanel controller={controller} />
+      <VectorConstraintsPanel controller={controller} />
+      <VectorSymbolsPanel controller={controller} />
     </div>
   );
 }
