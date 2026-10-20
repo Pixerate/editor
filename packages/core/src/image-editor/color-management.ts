@@ -115,6 +115,23 @@ export function colorModePlanes(doc: DocumentColorProfile | null | undefined, mo
   };
 }
 
+/** `colorModePlanes` at 16 bits: 16-bit sRGB-encoded RGBA in, the mode's 16-bit planes out (CMYK 65535 = no ink). */
+export function colorModePlanes16(doc: DocumentColorProfile | null | undefined, mode: DocumentColorMode): (rgba: Uint16Array, n: number) => Uint16Array[] {
+  const src = resolveProfile(doc);
+  const cmyk = mode.mode === 'cmyk';
+  const t = cmyk
+    ? Transform.create(src, resolveProfile(mode.profile), { intent: mode.intent, bpc: true })
+    : Transform.create(src, builtinProfile('lab-d50'), { intent: 'relative', bpc: false });
+  const k = cmyk ? 4 : 3;
+  return (rgba, n) => {
+    const out = new Uint16Array(n * 4);
+    t.convert16(rgba, 4, out, 4, false);
+    const planes = Array.from({ length: k }, () => new Uint16Array(n));
+    for (let i = 0; i < n; i++) for (let c = 0; c < k; c++) planes[c][i] = cmyk ? 65535 - out[i * 4 + c] : out[i * 4 + c];
+    return planes;
+  };
+}
+
 const resolved = new WeakMap<object, Profile>();
 const fromBytes = new Map<string, Profile>();
 

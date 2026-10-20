@@ -313,6 +313,7 @@ import { INTENTS, Transform, builtinProfile, canBeDestination, writeJpegIcc, wri
 import {
   DEFAULT_PROOF,
   colorModePlanes,
+  colorModePlanes16,
   convertSurfaceColors,
   deserializeColorMode,
   effectiveProof,
@@ -5403,14 +5404,22 @@ export class ImageEditorController {
   }
 
   /** How `toPsd` writes colour: RGB with the working space, or CMYK / Lab channels for those modes. */
-  private psdColorOptions(warnings: string[]): { iccProfile?: Uint8Array; colorMode?: 'rgb' | 'cmyk' | 'lab'; colorPlanes?: (rgba: Uint8ClampedArray, n: number) => Uint8Array[] } {
+  private psdColorOptions(warnings: string[]): {
+    iccProfile?: Uint8Array;
+    colorMode?: 'rgb' | 'cmyk' | 'lab';
+    colorPlanes?: (rgba: Uint8ClampedArray, n: number) => Uint8Array[];
+    colorPlanes16?: (rgba: Uint16Array, n: number) => Uint16Array[];
+  } {
     const m = this.state.colorMode;
     if (!m) return { iccProfile: profileBytes(this.state.colorProfile) };
     if (flattenLayers(this.state.layers).some((l) => l.type === 'adjustment' && l.visible)) {
       warnings.push(`Adjustment layers were written with their RGB settings; in a ${m.mode.toUpperCase()} file Photoshop applies them to its own channels, so they may look different there.`);
     }
     const planes = colorModePlanes(this.state.colorProfile, m);
-    return m.mode === 'cmyk' ? { colorMode: 'cmyk', colorPlanes: planes, iccProfile: profileBytes(m.profile) } : { colorMode: 'lab', colorPlanes: planes };
+    const planes16 = this.bitDepth === 8 ? undefined : colorModePlanes16(this.state.colorProfile, m);
+    return m.mode === 'cmyk'
+      ? { colorMode: 'cmyk', colorPlanes: planes, colorPlanes16: planes16, iccProfile: profileBytes(m.profile) }
+      : { colorMode: 'lab', colorPlanes: planes, colorPlanes16: planes16 };
   }
 
   /** Pixels per inch of the last opened PSD (written back by `toPsd`). */
@@ -5636,9 +5645,9 @@ export class ImageEditorController {
 
     const merged = compositor.composite(prepared, canvas, { ...sources, version: `psd:${Date.now()}` });
     const color = this.psdColorOptions(warnings);
-    // CMYK and Lab files are written at 8 bits.
-    if (color.colorMode && this.bitDepth !== 8) warnings.push(`${color.colorMode.toUpperCase()} files are written at 8 bits per channel; the ${this.bitDepth}-bit samples were rounded.`);
-    const depth = color.colorMode ? 8 : this.bitDepth;
+    // CMYK and Lab files are written at 8 or 16 bits (Photoshop has no 32-bit CMYK or Lab).
+    if (color.colorMode && this.bitDepth === 32) warnings.push(`${color.colorMode.toUpperCase()} files are written at 16 bits per channel at most; the 32-bit samples were converted (colour above 1 clipped).`);
+    const depth = color.colorMode && this.bitDepth === 32 ? 16 : this.bitDepth;
     // At 16 or 32 bits the merged image is composited at that depth too.
     const mergedDeep = depth === 8 ? undefined : workingToSamples(compositeDeep(prepared, canvas, sources, depth), depth);
     const result = exportPsd({ width, height, layers: prepared, merged, mergedDeep, resolution: this.psdResolution, patterns: this.state.patterns, globalLight: this.state.globalLight, depth, ...color });
