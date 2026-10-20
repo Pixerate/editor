@@ -15,7 +15,12 @@ import type { VideoPreviewScale } from './proxy.js';
 import type { VideoFrameCache } from './frame-cache.js';
 import { videoProjectSvg, type VideoSvgOptions } from './render.js';
 import { snapToVideoFrame, snapVideoTime, videoClipEnd, videoClipsAt, videoProjectDuration, videoSnapPoints, findVideoClip } from './timeline.js';
-import type { VideoProject } from './types.js';
+import type { VideoClip, VideoClipEffect, VideoEffectValues, VideoPlacementMode, VideoProject } from './types.js';
+import { EffectsSlot } from '../effects/helpers.js';
+import { isEffectError } from '../effects/errors.js';
+import type { EffectDescription, EffectProvider, EffectValue } from '../effects/types.js';
+import { checkVideoEffectPlace, checkVideoEffectValues, VideoEffectsEngine, type VideoEffectPlace } from './effects.js';
+import { isVideoKeyframes, type VideoAnimatable, type VideoKey } from './keyframes.js';
 
 export interface VideoEditorOptions {
 	/** The project to open (default: an empty 1920 × 1080, 30 fps project with tracks v1 and a1). */
@@ -41,7 +46,16 @@ export interface VideoEditorOptions {
 	 * stepping then show cached frames at once. Host-side and optional (default none).
 	 */
 	frameCache?: VideoFrameCache;
+	/**
+	 * An effects provider (see `@pixerate/editor/effects`) for clip effects, effect transitions and
+	 * effect clips. Optional: without one the editor behaves as before, and projects that use
+	 * effects keep them, drawn as placeholders. Set or change it later with `setEffectsProvider`.
+	 */
+	effects?: EffectProvider | null;
 }
+
+/** What `applyClipEffect` and the other effect edits return: the edit result plus what they made or changed. */
+export type VideoEffectEditResult = (VideoEditResult & { ok: true; clip: string; effect?: VideoClipEffect }) | { ok: false; error: string };
 
 /** A snapshot of the editor. The same object is returned until something changes. */
 export interface VideoEditorState {
@@ -67,6 +81,8 @@ export interface VideoEditorState {
 	redoLabel: string;
 	/** How large a picture the preview plays: `auto`, `full` or a fraction that picks a proxy. */
 	previewScale: VideoPreviewScale;
+	/** The registered effects provider, or `null` (effects are then drawn as placeholders and cannot be added). */
+	effectsProvider: EffectProvider | null;
 	/** Bumped on every change. */
 	revision: number;
 }
@@ -90,6 +106,10 @@ export class VideoEditorController {
 	readonly luts: VideoLutCache;
 	/** The host's frame cache, if it gave one (the preview fills and reads it). */
 	readonly frameCache: VideoFrameCache | null;
+	/** The effects provider slot (see `setEffectsProvider`). */
+	readonly effects: EffectsSlot;
+	/** Rendered effect pictures for the preview and frame-exact exports. */
+	readonly effectsEngine: VideoEffectsEngine;
 	private project: VideoProject;
 	private issues: VideoIssue[];
 	private selection: string[] = [];
@@ -108,6 +128,9 @@ export class VideoEditorController {
 		this.audioPeaks = options.audioPeaks instanceof VideoAudioPeaksCache ? options.audioPeaks : new VideoAudioPeaksCache(options.audioPeaks);
 		this.luts = options.luts instanceof VideoLutCache ? options.luts : new VideoLutCache(options.luts);
 		this.frameCache = options.frameCache ?? null;
+		this.effects = new EffectsSlot();
+		if (options.effects) this.effects.set(options.effects);
+		this.effectsEngine = new VideoEffectsEngine({ slot: this.effects });
 		this.project = options.project ? parseVideoProject(options.project) : createVideoProject();
 		this.issues = checkVideoProject(this.project);
 		this.readOnly = options.readOnly ?? false;
@@ -124,13 +147,15 @@ export class VideoEditorController {
 			this.player.subscribe(() => this.notify()),
 			this.history.subscribe(() => {
 				if (!this.applying) this.notify();
-			})
+			}),
+			this.effects.subscribe(() => this.notify())
 		);
 	}
 
 	/** Pauses and stops listening to the player and history. Subscribing again reconnects (React StrictMode). */
 	destroy(): void {
 		this.player.pause();
+		this.effectsEngine.reset();
 		this.unsubscribers.splice(0).forEach((u) => u());
 	}
 
@@ -168,6 +193,7 @@ export class VideoEditorController {
 			undoLabel: h.undoName,
 			redoLabel: h.redoName,
 			previewScale: this.previewScale,
+			effectsProvider: this.effects.provider,
 			revision: this.revision
 		};
 	}
@@ -200,7 +226,7 @@ export class VideoEditorController {
 		this.onChange?.(project);
 	}
 
-	private commit(label: string, next: VideoProject) {
+	private commit(label: string, next: VideoProject, merge?: string) {
 		const before = this.project;
 		this.error = null;
 		if (next === before) {
@@ -214,7 +240,8 @@ export class VideoEditorController {
 			undo: () => this.setProject(before),
 			redo: () => this.setProject(next)
 		};
-		this.history.execute(command);
+		if (merge) this.history.executeMerged(command, { key: merge });
+		else this.history.execute(command);
 	}
 
 	private refuse(message: string): VideoEditResult {
@@ -230,14 +257,15 @@ export class VideoEditorController {
 
 	/**
 	 * Applies edits as one undo step, all or nothing (see `applyVideoEdits`). With `dryRun` it
-	 * reports what would happen and changes nothing.
+	 * reports what would happen and changes nothing. Edits with the same `merge` key in a row
+	 * (a slider drag) fold into one undo step.
 	 */
-	apply(edits: VideoEdit | readonly VideoEdit[], label = 'Edit video', options: { dryRun?: boolean } = {}): VideoEditResult {
+	apply(edits: VideoEdit | readonly VideoEdit[], label = 'Edit video', options: { dryRun?: boolean; merge?: string } = {}): VideoEditResult {
 		const reason = this.readOnlyReason();
 		if (reason) return this.refuse(reason);
 		const result = applyVideoEdits(this.project, edits);
 		if (!result.ok) return options.dryRun ? result : this.refuse(result.error);
-		if (!options.dryRun) this.commit(label, result.project);
+		if (!options.dryRun) this.commit(label, result.project, options.merge);
 		return result;
 	}
 
@@ -351,6 +379,197 @@ export class VideoEditorController {
 	deleteSelection(options: { ripple?: boolean } = {}): VideoEditResult {
 		if (!this.selection.length) return this.refuse('Select clips to delete first.');
 		return this.apply({ op: 'delete_clips', clips: [...this.selection], ripple: options.ripple }, options.ripple ? 'Ripple delete' : 'Delete clips');
+	}
+
+
+	// -----------------------------------------------------------------------------------------
+	// Effects
+	// -----------------------------------------------------------------------------------------
+
+	/** The registered effects provider, or `null`. */
+	get effectsProvider(): EffectProvider | null {
+		return this.effects.provider;
+	}
+
+	/** Registers (or with `null` removes) the effects provider. Not an edit: no undo step. */
+	setEffectsProvider(provider: EffectProvider | null): void {
+		this.effects.set(provider);
+	}
+
+	/** Registers `provider` and returns a function that removes it again (if it is still the one set). */
+	useEffects(provider: EffectProvider): () => void {
+		return this.effects.use(provider);
+	}
+
+	/** The provider's description of an effect, checked for `place` (rejects without a provider or for an unknown id). */
+	async describeEffect(effect: string, place?: VideoEffectPlace): Promise<EffectDescription> {
+		const d = await this.effects.require().describe(effect);
+		if (place) checkVideoEffectPlace(d, place);
+		return d;
+	}
+
+	private refused(message: string): { ok: false; error: string } {
+		return this.refuse(message) as { ok: false; error: string };
+	}
+
+	private async effectEdit(run: () => Promise<{ edit: VideoEdit; label: string; clip: string; effect?: () => VideoClipEffect | undefined }>, merge?: string): Promise<VideoEffectEditResult> {
+		const reason = this.readOnlyReason();
+		if (reason) return this.refused(reason);
+		let plan;
+		try {
+			plan = await run();
+		} catch (error) {
+			if (isEffectError(error) || error instanceof Error) return this.refused((error as Error).message);
+			throw error;
+		}
+		const result = this.apply(plan.edit, plan.label, { merge });
+		if (!result.ok) return result;
+		return { ...result, clip: plan.clip, ...(plan.effect ? { effect: plan.effect() } : {}) };
+	}
+
+	private clipOrThrow(id: string): VideoClip {
+		const at = findVideoClip(this.project, id);
+		if (!at) throw new Error(`There is no clip "${id}"; list_applied_effects or get_video_project lists the clips.`);
+		return at.clip;
+	}
+
+	/**
+	 * Adds a filter or overlay effect to a clip's effect stack (at `index`, default the end: applied
+	 * last), with `values` over the effect's defaults (numbers may be keyframes). One undo step.
+	 * Returns the effect with its new id.
+	 */
+	applyClipEffect(clip: string, effect: string, options: { values?: VideoEffectValues; index?: number; enabled?: boolean; opacity?: VideoAnimatable } = {}): Promise<VideoEffectEditResult> {
+		return this.effectEdit(async () => {
+			const current = this.clipOrThrow(clip);
+			const d = await this.describeEffect(effect, 'clip');
+			const values = checkVideoEffectValues(d, options.values, { keyframes: true });
+			const stack = [...(current.effects ?? [])];
+			const taken = new Set(stack.map((e) => e.id));
+			let n = 1;
+			while (taken.has(`fx${n}`)) n++;
+			const added: VideoClipEffect = { id: `fx${n}`, effect: d.id, provider: this.effects.require().id, name: d.name, values };
+			if (options.enabled === false) added.enabled = false;
+			if (options.opacity !== undefined) added.opacity = options.opacity;
+			const index = options.index ?? stack.length;
+			if (!(Number.isInteger(index) && index >= 0 && index <= stack.length)) throw new Error(`"index" must be a whole number from 0 to ${stack.length}.`);
+			stack.splice(index, 0, added);
+			return { edit: { op: 'update_clip', clip, set: { effects: stack } }, label: `Add effect ${d.name}`, clip, effect: () => added };
+		});
+	}
+
+	/**
+	 * Changes an effect on a clip: `values` (merged over its current ones; numbers may be
+	 * keyframes, `null` resets a control to its default), `enabled`, `opacity` or its place in the
+	 * stack (`index`). Values are checked against the provider's controls. One undo step.
+	 */
+	updateClipEffect(clip: string, instance: string, changes: { values?: Record<string, EffectValue | { keys: VideoKey[] } | null>; enabled?: boolean; opacity?: VideoAnimatable; index?: number }, options: { merge?: string } = {}): Promise<VideoEffectEditResult> {
+		return this.effectEdit(async () => {
+			const current = this.clipOrThrow(clip);
+			const stack = [...(current.effects ?? [])];
+			const i = stack.findIndex((e) => e.id === instance);
+			if (i < 0) throw new Error(`Clip "${clip}" has no effect "${instance}"; its effects are ${stack.map((e) => `"${e.id}" (${e.name ?? e.effect})`).join(', ') || 'none'}.`);
+			const was = stack[i];
+			const next: VideoClipEffect = { ...was };
+			if (changes.values) {
+				const d = await this.describeEffect(was.effect);
+				const reset = Object.keys(changes.values).filter((k) => changes.values![k] === null);
+				const given = Object.fromEntries(Object.entries(changes.values).filter(([, v]) => v !== null)) as VideoEffectValues;
+				const base = { ...(was.values ?? {}) };
+				for (const k of reset) {
+					if (!(k in d.controls.properties)) throw new Error(`"${k}" is not a control of "${d.id}"; its controls are ${Object.keys(d.controls.properties).join(', ')}.`);
+					base[k] = d.defaults[k];
+				}
+				next.values = checkVideoEffectValues(d, given, { base, keyframes: true });
+			}
+			if (changes.enabled !== undefined) {
+				if (changes.enabled) delete next.enabled;
+				else next.enabled = false;
+			}
+			if (changes.opacity !== undefined) next.opacity = changes.opacity;
+			stack.splice(i, 1);
+			const index = changes.index ?? i;
+			if (!(Number.isInteger(index) && index >= 0 && index <= stack.length)) throw new Error(`"index" must be a whole number from 0 to ${stack.length}.`);
+			stack.splice(index, 0, next);
+			return { edit: { op: 'update_clip', clip, set: { effects: stack } }, label: `Change effect ${was.name ?? was.effect}`, clip, effect: () => next };
+		}, options.merge);
+	}
+
+	/** Removes an effect from a clip's stack (works without a provider, so placeholders can be cleared). One undo step. */
+	removeClipEffect(clip: string, instance: string): VideoEffectEditResult {
+		const reason = this.readOnlyReason();
+		if (reason) return this.refused(reason);
+		const at = findVideoClip(this.project, clip);
+		if (!at) return this.refused(`There is no clip "${clip}".`);
+		const stack = at.clip.effects ?? [];
+		const was = stack.find((e) => e.id === instance);
+		if (!was) return this.refused(`Clip "${clip}" has no effect "${instance}"; its effects are ${stack.map((e) => `"${e.id}"`).join(', ') || 'none'}.`);
+		const rest = stack.filter((e) => e !== was);
+		const result = rest.length ? this.apply({ op: 'update_clip', clip, set: { effects: rest } }, `Remove effect ${was.name ?? was.effect}`) : this.apply({ op: 'update_clip', clip, remove: ['effects'] }, `Remove effect ${was.name ?? was.effect}`);
+		return result.ok ? { ...result, clip, effect: was } : result;
+	}
+
+	/**
+	 * Sets a provider transition into `clip` from the clip that ends where it starts (centred on the
+	 * cut, `duration` ms, default the effect's own length or 1000). One undo step.
+	 */
+	setEffectTransition(clip: string, effect: string, options: { duration?: number; values?: Record<string, EffectValue> } = {}): Promise<VideoEffectEditResult> {
+		return this.effectEdit(async () => {
+			this.clipOrThrow(clip);
+			const d = await this.describeEffect(effect, 'transition');
+			const values = checkVideoEffectValues(d, options.values) as Record<string, EffectValue>;
+			const duration = options.duration ?? d.duration ?? 1000;
+			return { edit: { op: 'set_transition', clip, transition: { type: 'effect', duration, effect: { effect: d.id, provider: this.effects.require().id, name: d.name, values } } }, label: `Transition ${d.name}`, clip };
+		});
+	}
+
+	/**
+	 * Adds an effect clip: a generator, title or overlay effect drawn over the whole frame for
+	 * `duration` ms (default the effect's own length, else 5 s) at `start` (default the end of the
+	 * track). One undo step. Returns the new clip's id.
+	 */
+	addEffectClip(track: string, effect: string, options: { start?: number; duration?: number; values?: VideoEffectValues; name?: string; mode?: VideoPlacementMode; ripple?: boolean; id?: string } = {}): Promise<VideoEffectEditResult> {
+		return this.effectEdit(async () => {
+			const d = await this.describeEffect(effect, 'generator');
+			const values = checkVideoEffectValues(d, options.values, { keyframes: true });
+			const duration = options.duration ?? d.duration ?? 5000;
+			const label = `Add ${d.name}`;
+			const clipId = options.id ?? '';
+			return {
+				edit: { op: 'add_clip', track, mode: options.mode, ripple: options.ripple, clip: { type: 'effect', ...(options.id ? { id: options.id } : {}), effect: d.id, provider: this.effects.require().id, name: options.name ?? d.name, values, start: options.start, duration } },
+				label,
+				clip: clipId
+			};
+		}).then((r) => (r.ok && !r.clip ? { ...r, clip: r.outcomes[0]?.clip ?? '' } : r));
+	}
+
+	/**
+	 * Changes the values of an effect clip's picture (`target` its id) or of the effect transition
+	 * into a clip, merged over the current ones and checked against the provider's controls.
+	 * Transition values cannot be keyframed. One undo step.
+	 */
+	updateEffectValues(clip: string, part: 'generator' | 'transition', values: VideoEffectValues, options: { merge?: string } = {}): Promise<VideoEffectEditResult> {
+		return this.effectEdit(async () => {
+			const current = this.clipOrThrow(clip);
+			if (part === 'generator') {
+				if (current.type !== 'effect') throw new Error(`Clip "${clip}" is not an effect clip.`);
+				const d = await this.describeEffect(current.effect);
+				return { edit: { op: 'update_clip', clip, set: { values: checkVideoEffectValues(d, values, { base: current.values ?? {}, keyframes: true }) } }, label: `Change ${current.name ?? d.name}`, clip };
+			}
+			const t = current.transition;
+			if (t?.type !== 'effect' || !t.effect) throw new Error(`Clip "${clip}" has no effect transition.`);
+			const d = await this.describeEffect(t.effect.effect);
+			const merged = checkVideoEffectValues(d, values, { base: t.effect.values ?? {} });
+			return { edit: { op: 'set_transition', clip, transition: { ...t, effect: { ...t.effect, values: merged } } }, label: `Change transition ${d.name}`, clip };
+		}, options.merge);
+	}
+
+	/** Keys for one numeric control of a clip effect (clip-relative ms), or `null` to stop animating it (keeping its value at the clip's start). */
+	setClipEffectKeyframes(clip: string, instance: string, control: string, keys: VideoKey[] | null): Promise<VideoEffectEditResult> {
+		const current = findVideoClip(this.project, clip)?.clip;
+		const was = current?.effects?.find((e) => e.id === instance);
+		const value = was?.values?.[control];
+		const plain = keys === null ? (isVideoKeyframes(value) ? value.keys[0]?.v : value) : { keys: [...keys].sort((a, b) => a.t - b.t) };
+		return this.updateClipEffect(clip, instance, { values: { [control]: (plain ?? null) as EffectValue | { keys: VideoKey[] } | null } });
 	}
 
 	/** What plays at `time` (default: the playhead). */

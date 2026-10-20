@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import {
   VideoEditorController,
   createVideoEditorToolProvider,
+  createVideoEffectsToolProvider,
+  type VideoEffectsToolProviderOptions,
   type VideoEditResult,
   type VideoEditorOptions,
   type VideoEditorState,
@@ -86,4 +88,22 @@ export function useVideoEditorTools(
     if (!registry) return;
     return registry.register(createVideoEditorToolProvider(controller, { id, namespace, readOnly, rasterize, framePixels, framePixelsTimeout }));
   }, [registry, controller, id, namespace, readOnly, rasterize, framePixels, framePixelsTimeout]);
+}
+
+/**
+ * Registers the video editor's effect tools (`search_effects`, `describe_effect`, `apply_effect`,
+ * `add_video_effect_clip`, `set_video_effect_transition`, …) in `registry` while mounted. They
+ * work once an effects provider is registered (see `useEffects`); before that the read tools say
+ * so and the write tools refuse.
+ */
+export function useVideoEffectsTools(
+  registry: ToolRegistry | null | undefined,
+  controller: VideoEditorController,
+  options: VideoEffectsToolProviderOptions = {},
+): void {
+  const { id, namespace, readOnly } = options;
+  useEffect(() => {
+    if (!registry) return;
+    return registry.register(createVideoEffectsToolProvider(controller, { id, namespace, readOnly }));
+  }, [registry, controller, id, namespace, readOnly]);
 }

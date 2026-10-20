@@ -18,6 +18,11 @@
       "svelte": "./dist/index.js",
       "default": "./dist/index.js"
     },
+    "./effects": {
+      "types": "./dist/effects/index.d.ts",
+      "svelte": "./dist/effects/index.js",
+      "default": "./dist/effects/index.js"
+    },
     "./spreadsheet": {
       "types": "./dist/spreadsheet/index.d.ts",
       "svelte": "./dist/spreadsheet/index.js",
