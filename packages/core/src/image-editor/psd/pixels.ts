@@ -1,9 +1,12 @@
 // Portions ported from photocraft/crates/io/src/pixels.rs (MIT OR Apache-2.0, © ArtCraft Team and contributors). See THIRD_PARTY_NOTICES.md.
 
-/** Planar PSD channels (any colour mode, 1 / 8 / 16 / 32 bits) → 8-bit sRGB RGBA, and back. */
+/**
+ * Planar PSD channels (any colour mode, 1 / 8 / 16 / 32 bits) → 8-bit sRGB RGBA, and back; and
+ * at high bit depth, 16-bit sRGB or 32-bit linear RGBA samples (`toRgbaDeep`) and their planes.
+ */
 
 import { D50, XYZ_D50_TO_SRGB } from '../adjustment-layers';
-import { linearToSrgb } from '../color';
+import { linearToSrgb, srgbToLinear } from '../color';
 import { PsdError } from './binary';
 
 export const MODE_BITMAP = 0;
@@ -172,6 +175,114 @@ export function toRgba8(set: ChannelSet): Uint8ClampedArray {
   return out;
 }
 
+/**
+ * Interleaved RGBA at the file's depth: 16-bit files give 16-bit sRGB samples, 32-bit files
+ * 32-bit linear float samples (colour unclamped, as stored). `null` for 1- and 8-bit files and
+ * for indexed colour, which have no more than 8 bits to keep.
+ */
+export function toRgbaDeep(set: ChannelSet): Uint16Array | Float32Array | null {
+  const { width, height, depth, mode } = set;
+  if ((depth !== 16 && depth !== 32) || mode === MODE_INDEXED || mode === MODE_BITMAP) return null;
+  const n = width * height;
+  const isLab = mode === MODE_LAB;
+  const cmyk = mode === MODE_CMYK;
+  // Raw samples: 16-bit as 0..1, 32-bit linear floats unclamped.
+  const raw = (plane: Uint8Array | undefined, fill: number): ((i: number) => number) => {
+    if (!plane) return () => fill;
+    if (depth === 16) return (i) => ((plane[2 * i] << 8) | plane[2 * i + 1]) / 65535;
+    const view = new DataView(plane.buffer, plane.byteOffset, plane.byteLength);
+    return (i) => view.getFloat32(4 * i, false) || 0;
+  };
+  const planes = set.color.map((p) => raw(p, cmyk ? 1 : 0));
+  const alpha = raw(set.alpha, 1);
+  if (depth === 16) {
+    const out = new Uint16Array(n * 4);
+    const q = (v: number) => Math.round(clamp01(v) * 65535);
+    for (let i = 0, o = 0; i < n; i++, o += 4) {
+      let r: number;
+      let g: number;
+      let b: number;
+      if (mode === MODE_CMYK) {
+        const k = planes[3] ? planes[3](i) : 1;
+        r = planes[0](i) * k;
+        g = planes[1](i) * k;
+        b = planes[2](i) * k;
+      } else if (isLab) {
+        [r, g, b] = labToSrgb(planes[0](i) * 100, planes[1](i) * 255 - 128, planes[2](i) * 255 - 128);
+      } else if (mode === MODE_RGB || mode === MODE_MULTICHANNEL) {
+        r = planes[0](i);
+        g = planes[1] ? planes[1](i) : r;
+        b = planes[2] ? planes[2](i) : r;
+      } else r = g = b = planes[0](i);
+      out[o] = q(r);
+      out[o + 1] = q(g);
+      out[o + 2] = q(b);
+      out[o + 3] = q(alpha(i));
+    }
+    return out;
+  }
+  // 32-bit: RGB and grey are linear already; Lab and CMYK go through sRGB and back to linear.
+  const out = new Float32Array(n * 4);
+  for (let i = 0, o = 0; i < n; i++, o += 4) {
+    let r: number;
+    let g: number;
+    let b: number;
+    if (isLab) {
+      [r, g, b] = labToSrgb(planes[0](i) * 100, planes[1](i) * 255 - 128, planes[2](i) * 255 - 128).map(srgbToLinear) as [number, number, number];
+    } else if (cmyk) {
+      const k = planes[3] ? planes[3](i) : 1;
+      r = planes[0](i) * k;
+      g = planes[1](i) * k;
+      b = planes[2](i) * k;
+    } else if (mode === MODE_RGB || mode === MODE_MULTICHANNEL) {
+      r = planes[0](i);
+      g = planes[1] ? planes[1](i) : r;
+      b = planes[2] ? planes[2](i) : r;
+    } else r = g = b = planes[0](i);
+    out[o] = r;
+    out[o + 1] = g;
+    out[o + 2] = b;
+    out[o + 3] = clamp01(alpha(i));
+  }
+  return out;
+}
+
+/**
+ * Splits interleaved deep RGBA into big-endian planes `[r, g, b, a]` at its depth (2 bytes per
+ * sample for 16-bit, IEEE float for 32-bit).
+ */
+export function deepToPlanes(data: Uint16Array | Float32Array, n: number): [Uint8Array, Uint8Array, Uint8Array, Uint8Array] {
+  const bytes = data instanceof Uint16Array ? 2 : 4;
+  const planes = [0, 1, 2, 3].map(() => new Uint8Array(n * bytes)) as [Uint8Array, Uint8Array, Uint8Array, Uint8Array];
+  if (data instanceof Uint16Array) {
+    for (let i = 0; i < n; i++) {
+      for (let c = 0; c < 4; c++) {
+        const v = data[i * 4 + c];
+        planes[c][2 * i] = v >> 8;
+        planes[c][2 * i + 1] = v & 255;
+      }
+    }
+  } else {
+    const views = planes.map((p) => new DataView(p.buffer));
+    for (let i = 0; i < n; i++) for (let c = 0; c < 4; c++) views[c].setFloat32(4 * i, data[i * 4 + c], false);
+  }
+  return planes;
+}
+
+/** An 8-bit plane at `depth` (16: × 257; 32: / 255 as float), big-endian. */
+export function planeAtDepth(plane: Uint8Array, depth: 8 | 16 | 32): Uint8Array {
+  if (depth === 8) return plane;
+  if (depth === 16) {
+    const out = new Uint8Array(plane.length * 2);
+    for (let i = 0; i < plane.length; i++) out[2 * i] = out[2 * i + 1] = plane[i];
+    return out;
+  }
+  const out = new Uint8Array(plane.length * 4);
+  const view = new DataView(out.buffer);
+  for (let i = 0; i < plane.length; i++) view.setFloat32(4 * i, plane[i] / 255, false);
+  return out;
+}
+
 /** An 8-bit coverage plane (masks) from any depth. */
 export function toMask8(plane: Uint8Array, width: number, height: number, depth: number): Uint8ClampedArray {
   if (depth === 8) return new Uint8ClampedArray(plane.buffer, plane.byteOffset, width * height);
@@ -212,6 +323,18 @@ export function matteWhite(data: ArrayLike<number>): Uint8ClampedArray {
     const a = out[i + 3];
     if (a === 255) continue;
     for (let c = 0; c < 3; c++) out[i + c] = Math.round((out[i + c] * a + 255 * (255 - a)) / 255);
+  }
+  return out;
+}
+
+/** `matteWhite` for deep RGBA: 16-bit sRGB samples, or 32-bit linear (white is 1 in both). */
+export function matteWhiteDeep(data: Uint16Array | Float32Array): Uint16Array | Float32Array {
+  const out = data.slice() as Uint16Array | Float32Array;
+  const one = out instanceof Uint16Array ? 65535 : 1;
+  for (let i = 0; i < out.length; i += 4) {
+    const a = Math.min(1, Math.max(0, out[i + 3] / one));
+    if (a >= 1) continue;
+    for (let c = 0; c < 3; c++) out[i + c] = out instanceof Uint16Array ? Math.round(out[i + c] * a + one * (1 - a)) : out[i + c] * a + one * (1 - a);
   }
   return out;
 }

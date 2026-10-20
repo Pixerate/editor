@@ -25,6 +25,7 @@ import { createImageLayerTools } from './layer-tools';
 import { createImageEffectTools } from './effect-tools';
 import { createImagePaintTools } from './paint-tools';
 import { createImageColorTools } from './color-tools';
+import { createImageRetouchTools } from './retouch-tools';
 import { createPigmentTools } from '../paint/pigment-tools';
 import { createImagePsdTools } from './psd-tools';
 import { createImageTransformTools } from './transform-tools';
@@ -81,6 +82,8 @@ function adjustmentsSummary(adjustments: ImageAdjustments) {
  *   `set_paragraph_style`, `set_text_frame`, `convert_text_to_shape` (see `createImageTypeTools`).
  * - Colour management: `get_color_profile`, `assign_profile`, `convert_to_profile`,
  *   `set_proof_setup`, `convert_colors` (see `createImageColorTools`).
+ * - Retouching: `clone_stamp`, `heal_brush`, `spot_heal`, `smudge`, `dodge`, `burn`, `sponge`,
+ *   `get_retouch_options`, `set_retouch_options`, `set_clone_source` (see `createImageRetouchTools`).
  */
 export function createImageEditorToolProvider(
   controller: ImageEditorController,
@@ -320,6 +323,7 @@ export function createImageEditorToolProvider(
       ...createImageEffectTools(controller),
       ...createImagePaintTools(controller),
       ...createImageColorTools(controller),
+      ...createImageRetouchTools(controller),
       ...createPigmentTools(),
       ...createImagePsdTools(controller),
     ],

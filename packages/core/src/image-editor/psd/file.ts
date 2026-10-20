@@ -519,23 +519,32 @@ export function writePsd(file: PsdFile, encodeName: (s: string) => Uint8Array): 
   w.endLen(res);
   const lm = w.beginLen(psb);
   if (file.layers.length || file.globalBlocks.length) {
-    const li = w.beginLen(psb);
-    if (file.layers.length) {
-      const start = w.length;
-      w.i16(file.mergedAlpha ? -file.layers.length : file.layers.length);
-      for (const rec of file.layers) writeLayerRecord(w, rec, psb, encodeName(rec.legacyName));
+    const writeLayerInfo = (out: PsdWriter) => {
+      const start = out.length;
+      out.i16(file.mergedAlpha ? -file.layers.length : file.layers.length);
+      for (const rec of file.layers) writeLayerRecord(out, rec, psb, encodeName(rec.legacyName));
       for (const rec of file.layers) {
         for (const c of rec.channels) {
           if (c.compression === null) continue;
-          w.u16(c.compression);
-          w.bytes(c.data);
+          out.u16(c.compression);
+          out.bytes(c.data);
         }
       }
-      if ((w.length - start) % 2) w.u8(0);
-    }
+      if ((out.length - start) % 2) out.u8(0);
+    };
+    // 16- and 32-bit files keep their layers in an Lr16 / Lr32 block, as Photoshop writes them.
+    const deepKey = header.depth === 16 ? 'Lr16' : header.depth === 32 ? 'Lr32' : null;
+    let blocks = file.globalBlocks;
+    const li = w.beginLen(psb);
+    if (file.layers.length && !deepKey) writeLayerInfo(w);
     w.endLen(li);
+    if (file.layers.length && deepKey) {
+      const lw = new PsdWriter();
+      writeLayerInfo(lw);
+      blocks = [{ key: deepKey, data: lw.result() }, ...blocks];
+    }
     w.u32(0); // no global layer mask
-    writeBlocks(w, file.globalBlocks, psb, 4);
+    writeBlocks(w, blocks, psb, 4);
   }
   w.endLen(lm);
   w.u16(file.imageCompression);

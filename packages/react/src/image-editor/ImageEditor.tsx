@@ -446,7 +446,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
       // Synthetic events have no active pointer to capture.
     }
     const [first] = paintSamples(e);
-    setPaintError(paintGestureRef.current!.down(first));
+    setPaintError(paintGestureRef.current!.down({ ...first, altKey: e.altKey }));
   };
   const handlePaintPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (handleTransformPointerMove(e)) return;
