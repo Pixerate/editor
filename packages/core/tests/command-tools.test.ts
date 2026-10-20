@@ -16,9 +16,10 @@ import { createGenerationToolProvider, createGenerationHistoryToolProvider, crea
 import { createMemoryStorage } from '../src/persistence';
 import { ChartController, createChartToolProvider, createOfficeChartToolProvider } from '../src/chart';
 import { DiagramController, createDiagramToolProvider } from '../src/diagram';
-import { AnimationEditorController, createAnimationEditorToolProvider } from '../src/animation-editor';
+import { AnimationEditorController, createAnimationEditorToolProvider, createAnimationEffectsToolProvider } from '../src/animation-editor';
 import { VideoEditorController, createVideoEditorToolProvider, createVideoEffectsToolProvider } from '../src/video-editor';
 import { createFakeEffectProvider } from '../src/effects';
+import { VectorEditorController, createVectorEffectsToolProvider } from '../src/vector';
 import { createRichTextPreset, SpreadsheetController } from '../src';
 import { createCaptureToolProvider, createElementCaptureSurface } from '../src/tools';
 import { createCanvasCaptureToolProvider } from '../src/canvas';
@@ -200,6 +201,8 @@ describe('built-in tool providers have complete MCP annotations', () => {
 		registry.register(createChartToolProvider(new ChartController(), { id: 'chart', namespace: 'chart' }));
 		registry.register(createDiagramToolProvider(new DiagramController(), { id: 'diagram', namespace: 'diagram', renderSvg: () => ({ svg: '<svg/>', width: 1, height: 1 }) }));
 		registry.register(createAnimationEditorToolProvider(new AnimationEditorController(), { id: 'animation', namespace: 'animation' }));
+		registry.register(createVectorEffectsToolProvider(new VectorEditorController(), { id: 'vector-effects', namespace: 'vecfx' }));
+		registry.register(createAnimationEffectsToolProvider(new AnimationEditorController({ effects: createFakeEffectProvider() }), { id: 'animation-effects', namespace: 'animfx' }));
 		registry.register(createVideoEditorToolProvider(new VideoEditorController(), { id: 'video', namespace: 'video' }));
 		registry.register(createVideoEffectsToolProvider(new VideoEditorController({ effects: createFakeEffectProvider() }), { id: 'video-effects', namespace: 'videofx' }));
 		registry.register(createOfficeChartToolProvider({ id: 'office', namespace: 'office', files: () => [], controller: new ChartController() }));
@@ -230,7 +233,7 @@ describe('built-in tool providers have complete MCP annotations', () => {
 			}
 		}
 		expect(undescribed).toEqual([]);
-		expect(allTools.map((t) => t.name)).toEqual(expect.arrayContaining(['diagram__get_diagram', 'diagram__add_diagram_node', 'diagram__render_diagram', 'animation__get_animation', 'animation__add_commands', 'animation__export_flair_effect', 'video__get_video_project', 'video__list_video_sequences', 'video__add_video_clip', 'video__export_video_ffmpeg', 'video__get_video_scopes', 'video__set_video_lut', 'video__remove_video_lut', 'video__plan_video_proxies', 'video__set_video_proxies', 'video__set_video_preview_scale', 'video__get_video_preview_cache', 'video__set_video_keyframes', 'video__remove_video_keyframes', 'video__slip_video_clip', 'video__roll_video_edit', 'video__slide_video_clip', 'video__lift_video_range', 'video__extract_video_range', 'video__split_video_at', 'videofx__search_effects', 'imgfx__apply_effect', 'imgfx__add_effect_layer', 'videofx__apply_effect', 'videofx__add_video_effect_clip', 'videofx__set_video_effect_transition', 'capture__capture_view', 'dom__capture_view', 'img__capture_view', 'paint__paint_stroke', 'paint__set_paper', 'paint__list_brushes', 'paint__render_preview', 'chartdoc__insert_chart', 'chartdoc__update_chart_in_document', 'chartdoc__list_document_charts', 'chartdoc__insert_sparkline']));
+		expect(allTools.map((t) => t.name)).toEqual(expect.arrayContaining(['diagram__get_diagram', 'diagram__add_diagram_node', 'diagram__render_diagram', 'animation__get_animation', 'animation__add_commands', 'animation__export_flair_effect', 'video__get_video_project', 'video__list_video_sequences', 'video__add_video_clip', 'video__export_video_ffmpeg', 'video__get_video_scopes', 'video__set_video_lut', 'video__remove_video_lut', 'video__plan_video_proxies', 'video__set_video_proxies', 'video__set_video_preview_scale', 'video__get_video_preview_cache', 'video__set_video_keyframes', 'video__remove_video_keyframes', 'video__slip_video_clip', 'video__roll_video_edit', 'video__slide_video_clip', 'video__lift_video_range', 'video__extract_video_range', 'video__split_video_at', 'videofx__search_effects', 'animfx__add_vector_effect', 'imgfx__apply_effect', 'imgfx__add_effect_layer', 'videofx__apply_effect', 'videofx__add_video_effect_clip', 'videofx__set_video_effect_transition', 'capture__capture_view', 'dom__capture_view', 'img__capture_view', 'paint__paint_stroke', 'paint__set_paper', 'paint__list_brushes', 'paint__render_preview', 'chartdoc__insert_chart', 'chartdoc__update_chart_in_document', 'chartdoc__list_document_charts', 'chartdoc__insert_sparkline']));
 		editor.destroy();
 		chartDoc.destroy();
 	});

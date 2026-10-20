@@ -2,7 +2,9 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Clapperboard } from "lucide-react";
 import { createVectorEffect, ellipseSubpath, rectSubpath, starSubpath, type VectorDocument } from "@pixerate/editor/vector";
 import { AnimationEditorController, fromFlairVectorEffect, fromPptxAnimation, toLottie, type FlairVectorEffect, type LottieAnimation, type MotionScene } from "@pixerate/editor/animation-editor";
-import { AnimationEditor, useAnimationEditorController, useAnimationEditorState, useAnimationEditorTools } from "@pixerate/editor-react/animation-editor";
+import { AnimationEditor, useAnimationEditorController, useAnimationEditorState, useAnimationEditorTools, useAnimationEffectsTools } from "@pixerate/editor-react/animation-editor";
+import { useDemoEffects } from "../demoEffects";
+import { EffectsProviderSwitch } from "./EffectsProviderSwitch";
 import { VectorEditor, useVectorEditorController } from "@pixerate/editor-react/vector";
 import { demoToolRegistry } from "../agentTools";
 import { AgentScriptPanel } from "./AgentScriptPanel";
@@ -141,6 +143,9 @@ export function AnimationTab() {
   const controller = useAnimationEditorController({ scene: SCENE });
   const state = useAnimationEditorState(controller);
   useAnimationEditorTools(demoToolRegistry, controller, { id: "animation", namespace: "animation" });
+  // The demo-wide effects provider (built-in test effects, or Flair).
+  const { provider: effects } = useDemoEffects();
+  useAnimationEffectsTools(demoToolRegistry, controller, { id: "animation-effects", namespace: "animationfx" });
   const [accent, setAccent] = useState("#f43f5e");
   const [exported, setExported] = useState<Exported | null>(null);
   const [message, setMessage] = useState<{ title: string; lines: string[] } | null>(null);
@@ -189,8 +194,9 @@ export function AnimationTab() {
           </p>
         </div>
       </div>
+      <EffectsProviderSwitch />
       <div className="relative rounded-xl border border-slate-800 bg-slate-900/50 p-3" ref={agentStage}>
-        <AnimationEditor controller={controller} values={accentControl ? { accent } : undefined} />
+        <AnimationEditor controller={controller} values={accentControl ? { accent } : undefined} effects={effects} />
       </div>
       <AgentScriptPanel scripts={ANIMATION_SCRIPTS} stage={agentStage} hint="Plays a scripted agent turn with the animation__* tools: a new shot, its commands, a reorder, a check, then playback." />
       <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">

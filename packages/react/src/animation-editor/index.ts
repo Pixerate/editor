@@ -8,3 +8,4 @@ export * from './CommandInspector';
 export * from './EasePicker';
 export * from './ShotInspector';
 export * from './SceneSettings';
+export * from './AnimationEffectsPanel';

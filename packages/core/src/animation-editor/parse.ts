@@ -19,7 +19,7 @@ export class MotionSceneFormatError extends Error {
 const SCENE_KEYS = ['version', 'name', 'description', 'artwork', 'shots', 'clips', 'drivers', 'motionBlur', 'loop', 'trigger', 'fps', 'steps', 'beat', 'narration', 'target', 'controls', 'presets'];
 const SHOT_KEYS = ['id', 'label', 'camera', 'at', 'run', 'hold', 'speed'];
 const CAMERA_KEYS = ['x', 'y', 'width', 'height', 'frame', 'padding', 'ease', 'ms', 'geometric'];
-const BASE_KEYS = ['type', 'targets', 'duration', 'delay', 'stagger', 'with', 'ease', 'note', 'repeat', 'repeatMode', 'steps', 'split', 'cascade'];
+const BASE_KEYS = ['type', 'targets', 'duration', 'delay', 'stagger', 'with', 'ease', 'note', 'repeat', 'repeatMode', 'steps', 'split', 'cascade', 'source'];
 const DRAW_ORDER_KEYS = ['order', 'pace', 'align', 'sortBy', 'origin'];
 const COMMAND_KEYS: Record<string, string[]> = {
 	enter: [...BASE_KEYS, ...DRAW_ORDER_KEYS, 'style', 'direction', 'distance', 'scale', 'shape', 'orientation'],
@@ -81,6 +81,11 @@ export function commandShapeProblems(command: unknown, where: string): string[] 
 		if (command.origin !== undefined && !isPoint(command.origin)) p(`"origin" must be { "x": number, "y": number } (document units).`);
 	}
 	if (command.note !== undefined && typeof command.note !== 'string') p(`"note" must be a string.`);
+	if (command.source !== undefined) {
+		const src = command.source;
+		if (!isObject(src) || typeof src.instance !== 'string' || !src.instance || typeof src.effect !== 'string' || !src.effect) p(`"source" must be { instance, effect, provider?, name?, values? } (set by applyMotionEffect).`);
+		else unknownKeys(src, ['instance', 'effect', 'provider', 'name', 'values'], `${where} (${type}) source`, problems);
+	}
 	if (type === 'wait') {
 		if (!isNum(command.duration) || command.duration < 0) p(`"duration" must be a number of milliseconds ≥ 0.`);
 		return problems;

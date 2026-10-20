@@ -12,7 +12,11 @@ import { motionFrameAt, motionFrameToSvg, type MotionFrame, type MotionFrameOpti
 import { toFlairEffectDocument, toFlairSvgMotion, toFlairVectorEffect, type FlairEffectOptions, type FlairExportOptions } from './flair.js';
 import type { MotionIssue } from './issues.js';
 import { parseMotionScene } from './parse.js';
-import type { MotionScene } from './types.js';
+import type { MotionEffectSource, MotionScene } from './types.js';
+import { EffectsSlot, resolveEffectValues } from '../effects/helpers.js';
+import { EffectUnsupportedError, isEffectError } from '../effects/errors.js';
+import type { EffectDescription, EffectProvider, EffectValue } from '../effects/types.js';
+import { motionArtworkSvg, motionCommandsFromEffect, motionPartsFromVectorEffect, motionSceneEffects, nextMotionEffectInstance, withoutMotionEffect, type AppliedMotionEffect } from './effects.js';
 
 export interface AnimationEditorOptions {
 	/** The scene to open (default: an empty one over a blank 800 × 450 artwork). */
@@ -24,7 +28,16 @@ export interface AnimationEditorOptions {
 	readOnly?: boolean;
 	/** Called after every change to the scene (not on playback or selection). */
 	onChange?: (scene: MotionScene) => void;
+	/**
+	 * An effects provider (see `@pixerate/editor/effects`) for motion effects on nodes and vector
+	 * effects with their own picture. Optional: without one the editor behaves as before, and
+	 * scenes keep the commands effects made. Change it later with `setEffectsProvider`.
+	 */
+	effects?: EffectProvider | null;
 }
+
+/** What the effect edits return. */
+export type MotionEffectResult = { ok: true; effect: AppliedMotionEffect; notes: string[] } | { ok: false; error: string };
 
 /** What is selected on the timeline: a shot, and optionally one of its commands. */
 export interface AnimationEditorSelection {
@@ -57,6 +70,8 @@ export interface AnimationEditorState {
 	redoLabel: string;
 	/** Bumped on every change. */
 	revision: number;
+	/** The registered effects provider, or `null`. */
+	effectsProvider: EffectProvider | null;
 }
 
 const BLANK: VectorDocument = { width: 800, height: 450, background: '#ffffff', nodes: [] };
@@ -71,6 +86,8 @@ const BLANK: VectorDocument = { width: 800, height: 450, background: '#ffffff', 
 export class AnimationEditorController {
 	readonly history: HistoryManager;
 	readonly player: AnimationPlayer;
+	/** The effects provider slot (see `setEffectsProvider`). */
+	readonly effects = new EffectsSlot();
 	private scene: MotionScene;
 	private issues: MotionIssue[];
 	private selection: AnimationEditorSelection | null = null;
@@ -89,6 +106,7 @@ export class AnimationEditorController {
 		this.issues = checkMotionScene(this.scene);
 		this.readOnly = options.readOnly ?? false;
 		this.onChange = options.onChange;
+		if (options.effects) this.effects.set(options.effects);
 		this.player = new AnimationPlayer({ clock: options.clock, duration: () => compileMotionScene(this.scene).duration, loop: this.scene.loop ?? 'none' });
 		this.state = this.computeState();
 		this.connect();
@@ -100,7 +118,8 @@ export class AnimationEditorController {
 			this.player.subscribe(() => this.notify()),
 			this.history.subscribe(() => {
 				if (!this.applying) this.notify();
-			})
+			}),
+			this.effects.subscribe(() => this.notify())
 		);
 	}
 
@@ -148,7 +167,8 @@ export class AnimationEditorController {
 			canRedo: h.canRedo,
 			undoLabel: h.undoName,
 			redoLabel: h.redoName,
-			revision: this.revision
+			revision: this.revision,
+			effectsProvider: this.effects.provider
 		};
 	}
 
@@ -184,7 +204,7 @@ export class AnimationEditorController {
 		this.onChange?.(scene);
 	}
 
-	private commit(label: string, next: MotionScene) {
+	private commit(label: string, next: MotionScene, merge?: string) {
 		const before = this.scene;
 		this.error = null;
 		if (next === before) {
@@ -198,7 +218,8 @@ export class AnimationEditorController {
 			undo: () => this.setScene(before),
 			redo: () => this.setScene(next)
 		};
-		this.history.execute(command);
+		if (merge) this.history.executeMerged(command, { key: merge });
+		else this.history.execute(command);
 	}
 
 	private refuse(message: string): MotionEditResult {
@@ -216,18 +237,173 @@ export class AnimationEditorController {
 	 * Applies edits as one undo step, all or nothing (see `applyMotionEdits`). With
 	 * `dryRun` it reports what would happen and changes nothing.
 	 */
-	apply(edits: MotionEdit | readonly MotionEdit[], label = 'Edit animation', options: { dryRun?: boolean } = {}): MotionEditResult {
+	apply(edits: MotionEdit | readonly MotionEdit[], label = 'Edit animation', options: { dryRun?: boolean; merge?: string } = {}): MotionEditResult {
 		const reason = this.readOnlyReason();
 		if (reason) return this.refuse(reason);
 		const result = applyMotionEdits(this.scene, edits);
 		if (!result.ok) return options.dryRun ? result : this.refuse(result.error);
-		if (!options.dryRun) this.commit(label, result.scene);
+		if (!options.dryRun) this.commit(label, result.scene, options.merge);
 		return result;
 	}
 
 	/** Replaces the artwork (e.g. from a vector editor's `onChange`), as one undo step. */
 	setArtwork(artwork: VectorDocument, label = 'Change artwork'): MotionEditResult {
 		return this.apply({ op: 'set_artwork', artwork }, label);
+	}
+
+
+	// ---------------------------------------------------------------------------------------
+	// Effects
+	// ---------------------------------------------------------------------------------------
+
+	/** The registered effects provider, or `null`. */
+	get effectsProvider(): EffectProvider | null {
+		return this.effects.provider;
+	}
+
+	/** Registers (or with `null` removes) the effects provider. Not an edit: no undo step. */
+	setEffectsProvider(provider: EffectProvider | null): void {
+		this.effects.set(provider);
+	}
+
+	/** Registers `provider` and returns a function that removes it again (if it is still the one set). */
+	useEffects(provider: EffectProvider): () => void {
+		return this.effects.use(provider);
+	}
+
+	/** The provider effects applied in the scene. */
+	appliedEffects(): AppliedMotionEffect[] {
+		return motionSceneEffects(this.scene);
+	}
+
+	private async effectEdit(work: () => Promise<{ scene: MotionScene; label: string; instance: string; notes: string[] }>, merge?: string): Promise<MotionEffectResult> {
+		const reason = this.readOnlyReason();
+		if (reason) return this.refuse(reason) as { ok: false; error: string };
+		let plan;
+		try {
+			plan = await work();
+		} catch (error) {
+			if (isEffectError(error) || error instanceof Error) return this.refuse((error as Error).message) as { ok: false; error: string };
+			throw error;
+		}
+		const r = this.apply({ op: 'replace_scene', scene: plan.scene }, plan.label, { merge });
+		if (!r.ok) return r;
+		const effect = motionSceneEffects(this.scene).find((e) => e.instance === plan.instance);
+		if (!effect) return this.refuse('The effect made no changes the scene can play.') as { ok: false; error: string };
+		return { ok: true, effect, notes: plan.notes };
+	}
+
+	private async describeFor(effect: string, kinds: readonly ('motion' | 'vector')[]): Promise<EffectDescription> {
+		const provider = this.effects.require();
+		if (!provider.applyVectorEffect) throw new EffectUnsupportedError(`${provider.name} has no vector or motion effects.`);
+		const d = await provider.describe(effect);
+		if (!kinds.includes(d.kind as 'motion' | 'vector')) {
+			const hint = d.kind === 'motion' ? 'apply it to nodes with apply_effect' : d.kind === 'vector' ? 'add it with add_vector_effect' : 'it draws pixels, which scenes cannot hold';
+			throw new EffectUnsupportedError(`"${d.id}" (${d.name}) is a ${d.kind} effect: ${hint}.`, d.id);
+		}
+		return d;
+	}
+
+	private knownNodes(ids: readonly string[]): void {
+		const all = new Set<string>();
+		const walk = (nodes: MotionScene['artwork']['nodes']) => nodes.forEach((n) => (all.add(n.id), n.type === 'group' && walk(n.children)));
+		walk(this.scene.artwork.nodes);
+		const missing = ids.filter((id) => !all.has(id));
+		if (missing.length) throw new Error(`The artwork has no node ${missing.map((m) => `"${m}"`).join(', ')}; get_animation lists the node ids.`);
+		if (!ids.length) throw new Error('Give at least one node to animate.');
+	}
+
+	/**
+	 * Applies a provider motion effect to artwork nodes: the provider animates them and the changes
+	 * become commands, in a new shot (default) or added to the end of `shot`. One undo step.
+	 * Returns the applied effect (its `instance` id changes or removes it).
+	 */
+	applyMotionEffect(effect: string, targets: readonly string[], options: { values?: Record<string, EffectValue>; shot?: string; instance?: string } = {}): Promise<MotionEffectResult> {
+		return this.effectEdit(async () => {
+			this.knownNodes(targets);
+			const d = await this.describeFor(effect, ['motion']);
+			const values = resolveEffectValues(d, options.values);
+			const instance = options.instance ?? nextMotionEffectInstance(this.scene);
+			const motion = await this.effects.require().applyVectorEffect!(d.id, { svg: motionArtworkSvg(this.scene.artwork), nodeIds: [...targets] }, values);
+			const source: MotionEffectSource = { instance, effect: d.id, provider: this.effects.require().id, name: d.name, values };
+			const { commands, notes } = motionCommandsFromEffect(this.scene.artwork, motion, source);
+			if (!commands.length) throw new Error(`"${d.name}" made no changes the scene can play${notes.length ? `: ${notes.join(' ')}` : ''}.`);
+			let shots = this.scene.shots;
+			if (options.shot) {
+				if (!shots.some((s) => s.id === options.shot)) throw new Error(`There is no shot "${options.shot}"; the shots are ${shots.map((s) => `"${s.id}"`).join(', ')}.`);
+				shots = shots.map((s) => (s.id === options.shot ? { ...s, run: [...s.run, ...commands] } : s));
+			} else shots = [...shots, { id: instance, label: d.name, run: commands }];
+			return { scene: { ...this.scene, shots }, label: `Apply ${d.name}`, instance, notes };
+		});
+	}
+
+	/**
+	 * Adds a provider vector effect (one with its own picture: a lower third, a loader): its SVG as
+	 * an artwork group (id: the instance) fitted into `box` (default the whole artwork), and its
+	 * motion as shots after the last one. One undo step.
+	 */
+	addVectorEffect(effect: string, options: { values?: Record<string, EffectValue>; box?: { x: number; y: number; width: number; height: number }; instance?: string } = {}): Promise<MotionEffectResult> {
+		return this.effectEdit(async () => {
+			const d = await this.describeFor(effect, ['vector']);
+			const values = resolveEffectValues(d, options.values);
+			const instance = options.instance ?? nextMotionEffectInstance(this.scene);
+			const motion = await this.effects.require().applyVectorEffect!(d.id, motionArtworkSvg(this.scene.artwork), values);
+			const source: MotionEffectSource = { instance, effect: d.id, provider: this.effects.require().id, name: d.name, values };
+			const { group, shots, notes } = motionPartsFromVectorEffect(this.scene.artwork, motion, source, options.box);
+			return { scene: { ...this.scene, artwork: { ...this.scene.artwork, nodes: [...this.scene.artwork.nodes, group] }, shots: [...this.scene.shots, ...shots] }, label: `Add ${d.name}`, instance, notes };
+		});
+	}
+
+	/**
+	 * Makes an applied effect again with new `values` (merged over its own; `null` resets a
+	 * control), in the same place. One undo step.
+	 */
+	updateMotionEffect(instance: string, values: Record<string, EffectValue | null>, options: { merge?: string } = {}): Promise<MotionEffectResult> {
+		return this.effectEdit(async () => {
+			const was = motionSceneEffects(this.scene).find((e) => e.instance === instance);
+			if (!was) throw new Error(`There is no applied effect "${instance}"; list_applied_effects lists them.`);
+			const d = await this.describeFor(was.effect, [was.kind]);
+			const base = { ...was.values };
+			const given: Record<string, EffectValue> = {};
+			for (const [k, v] of Object.entries(values)) {
+				if (v !== null) given[k] = v;
+				else if (k in d.controls.properties) base[k] = d.defaults[k];
+				else throw new Error(`"${k}" is not a control of "${d.id}"; its controls are ${Object.keys(d.controls.properties).join(', ')}.`);
+			}
+			const merged = { ...base, ...resolveEffectValues({ ...d, defaults: base }, given) };
+			const { scene: bare, place } = withoutMotionEffect(this.scene, instance);
+			const provider = this.effects.require();
+			const source: MotionEffectSource = { instance, effect: d.id, provider: provider.id, name: d.name, values: merged };
+			if (was.kind === 'vector') {
+				const old = this.scene.artwork.nodes.find((n) => n.id === instance);
+				const motion = await provider.applyVectorEffect!(d.id, motionArtworkSvg(bare.artwork), merged);
+				const { group, shots, notes } = motionPartsFromVectorEffect(bare.artwork, motion, source);
+				const index = this.scene.artwork.nodes.findIndex((n) => n.id === instance);
+				const nodes = [...bare.artwork.nodes];
+				nodes.splice(Math.max(0, index), 0, old?.transform ? { ...group, transform: old.transform } : group);
+				const at = this.scene.shots.findIndex((s) => was.shots.includes(s.id));
+				const kept = bare.shots;
+				const nextShots = [...kept.slice(0, Math.max(0, at)), ...shots, ...kept.slice(Math.max(0, at))];
+				return { scene: { ...bare, artwork: { ...bare.artwork, nodes }, shots: nextShots }, label: `Change ${d.name}`, instance, notes };
+			}
+			const motion = await provider.applyVectorEffect!(d.id, { svg: motionArtworkSvg(bare.artwork), nodeIds: was.targets }, merged);
+			const { commands, notes } = motionCommandsFromEffect(bare.artwork, motion, source);
+			let shots = bare.shots;
+			if (place && shots.some((s) => s.id === place.shot)) shots = shots.map((s) => (s.id === place.shot ? { ...s, run: [...s.run.slice(0, place.index), ...commands, ...s.run.slice(place.index)] } : s));
+			else {
+				const at = this.scene.shots.findIndex((s) => s.id === place?.shot);
+				shots = [...shots.slice(0, Math.max(0, at)), { id: instance, label: d.name, run: commands }, ...shots.slice(Math.max(0, at))];
+			}
+			return { scene: { ...bare, shots }, label: `Change ${d.name}`, instance, notes };
+		}, options.merge);
+	}
+
+	/** Removes an applied effect: its commands, shots it alone filled and a vector effect's group. One undo step. Works without a provider. */
+	removeMotionEffect(instance: string): MotionEffectResult {
+		const was = motionSceneEffects(this.scene).find((e) => e.instance === instance);
+		if (!was) return this.refuse(`There is no applied effect "${instance}"; list_applied_effects lists them.`) as { ok: false; error: string };
+		const r = this.apply({ op: 'replace_scene', scene: withoutMotionEffect(this.scene, instance).scene }, `Remove ${was.name ?? was.effect}`);
+		return r.ok ? { ok: true, effect: was, notes: [] } : r;
 	}
 
 	/** Opens a scene (JSON or object). `clearHistory` drops the undo stack (opening a file); otherwise it is one undo step. */

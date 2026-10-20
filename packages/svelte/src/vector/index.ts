@@ -27,6 +27,7 @@ export { default as VectorPaintPath } from "./VectorPaintPath.svelte";
 export { default as VectorAppearancePanel } from "./VectorAppearancePanel.svelte";
 export { default as VectorGradientAnnotator } from "./VectorGradientAnnotator.svelte";
 export { default as VectorGradientEditor } from "./VectorGradientEditor.svelte";
+export { default as VectorProviderEffectsPanel } from "./VectorProviderEffectsPanel.svelte";
 export * from "./createVectorEditor.svelte.js";
 export { vectorStateOf } from "./subscribe.svelte.js";
 export * from "./styles.js";

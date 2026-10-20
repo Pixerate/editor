@@ -41,9 +41,9 @@ import { createMemoryStorage } from '../src/persistence';
 import { ChartController, createChartToolProvider, createOfficeChartToolProvider, createChartCommands } from '../src/chart';
 import { DiagramController, createDiagramToolProvider } from '../src/diagram';
 import { createCanvasCaptureToolProvider } from '../src/canvas';
-import { AnimationEditorController, createAnimationEditorToolProvider } from '../src/animation-editor';
+import { AnimationEditorController, createAnimationEditorToolProvider, createAnimationEffectsToolProvider } from '../src/animation-editor';
 import { VideoEditorController, createVideoEditorToolProvider, createVideoEffectsToolProvider } from '../src/video-editor';
-import { VectorEditorController, createVectorCommands } from '../src/vector';
+import { VectorEditorController, createVectorEffectsToolProvider, createVectorCommands } from '../src/vector';
 import { createParameterCommands } from '../src/parameters';
 import { createRichTextPreset, SpreadsheetController, createFindReplaceCommands, createTableCommands } from '../src';
 
@@ -115,7 +115,7 @@ function expectedBySkill(): Record<string, string[]> {
 			...commandIds(createComponentCommands(stub)),
 			...commandIds(createCanvasAnimationCommands(stub))
 		],
-		'pixerate-vector': commandIds(createVectorCommands(new VectorEditorController())),
+		'pixerate-vector': [...commandIds(createVectorCommands(new VectorEditorController())), ...toolNames(createVectorEffectsToolProvider(new VectorEditorController(), { id: 'vector-effects' }))],
 		'pixerate-chart': [
 			...toolNames(createChartToolProvider(new ChartController(), { id: 'chart' })),
 			...toolNames(createOfficeChartToolProvider({ id: 'office', files: () => [], controller: new ChartController() })),
@@ -129,7 +129,10 @@ function expectedBySkill(): Record<string, string[]> {
 			...toolNames(createImageEffectsToolProvider(new ImageEditorController(), { id: 'img-effects' }))
 		],
 		'pixerate-paint-editor': toolNames(createPaintEditorToolProvider(new PaintEditorController({ width: 64, height: 64 }), { id: 'paint' })),
-		'pixerate-animation-editor': toolNames(createAnimationEditorToolProvider(new AnimationEditorController(), { id: 'animation' })),
+		'pixerate-animation-editor': [
+			...toolNames(createAnimationEditorToolProvider(new AnimationEditorController(), { id: 'animation' })),
+			...toolNames(createAnimationEffectsToolProvider(new AnimationEditorController(), { id: 'animation-effects' }))
+		],
 		'pixerate-video-editor': [
 			...toolNames(createVideoEditorToolProvider(new VideoEditorController(), { id: 'video' })),
 			...toolNames(createVideoEffectsToolProvider(new VideoEditorController(), { id: 'video-effects' }))
@@ -161,6 +164,7 @@ const FACTORIES: Record<string, string> = {
 	createComponentCommands: 'pixerate-canvas',
 	createCanvasAnimationCommands: 'pixerate-canvas',
 	createVectorCommands: 'pixerate-vector',
+	createVectorEffectsToolProvider: 'pixerate-vector',
 	createChartToolProvider: 'pixerate-chart',
 	createOfficeChartToolProvider: 'pixerate-chart',
 	createChartCommands: 'pixerate-chart',
@@ -169,10 +173,11 @@ const FACTORIES: Record<string, string> = {
 	createImageEffectsToolProvider: 'pixerate-image-editor',
 	createPaintEditorToolProvider: 'pixerate-paint-editor',
 	createAnimationEditorToolProvider: 'pixerate-animation-editor',
+	createAnimationEffectsToolProvider: 'pixerate-animation-editor',
 	createVideoEditorToolProvider: 'pixerate-video-editor',
 	createVideoEffectsToolProvider: 'pixerate-video-editor',
 	// The shared effect tools; each editor that hosts them documents them in its own skill.
-	createEffectToolProvider: 'pixerate-video-editor, pixerate-image-editor',
+	createEffectToolProvider: 'pixerate-video-editor, pixerate-image-editor, pixerate-animation-editor, pixerate-vector',
 	createGenerationToolProvider: 'pixerate-generation',
 	createGenerationHistoryToolProvider: 'pixerate-generation',
 	createParameterCommands: 'pixerate-parameters',

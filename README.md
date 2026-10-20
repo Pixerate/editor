@@ -332,7 +332,7 @@ Every feature is available from core and from both framework packages. "Via core
 </details>
 
 <details>
-<summary><strong>Vector editor</strong> (21)</summary>
+<summary><strong>Vector editor</strong> (22)</summary>
 
 | Feature | Core | React | Svelte |
 | :--- | :---: | :---: | :---: |
@@ -368,11 +368,12 @@ Every feature is available from core and from both framework packages. "Via core
 | Vector Connectors (open paths whose ends are glued to other objects' connection sites — the middle of each side of their own bounds, through their rotation, or the centre — or left free; `auto` sides pick the side facing the other end; straight, elbow (right angles leaving along the sides, optional bend radius) and curved routes; routed again after every edit, including constraint solves, so connectors follow moved, resized and turned objects in the same undo step, with glue to deleted objects dropped; Connector tool (X) showing the sites under the pointer; SVG round-trip; agent commands `vector.connect`, `vector.setConnector`, `vector.listConnectors`, `vector.listConnectionSites`) | `addConnector`, `setConnector`, `getConnectors`, `getConnectionSites`, `setConnectorRoute`, `rerouteVectorConnectors`, `vectorConnectionSites`, `getVectorConnectorPanel` & `getVectorOverlayRenderData().connectorSites` | `<VectorConnectorPanel>` (in `<VectorToolbar>`) & `<VectorCanvas>` site dots | `<VectorConnectorPanel>` (in `<VectorStylePanel>`) & `<VectorCanvas>` site dots |
 | Vector Style Panel (fill, stroke, gradient editor, width, alignment, width profile, arrowheads, corner radius and kind, opacity, fill and stroke stacks, blend mode, filters, effects, envelope; defaults for new shapes) | `getVectorSelectionStyle`, `setStyle` & `setCornerRadius` | `<VectorStylePanel>` | `<VectorStylePanel>` |
 | Vector SVG Import / Export & Agent Commands | `parseVectorSvg`, `vectorDocumentToSvg` & `createVectorCommands` | `useVectorCommands` | `useVectorCommands` |
+| Vector Provider Effects (optional: `addVectorEffect` adds a provider vector effect's picture at rest as a group of editable shapes tagged `providerEffect`; `updateVectorEffect` draws it again with new values, keeping its place; `detachVectorEffect` keeps the shapes; tags survive save and load without a provider; 6 agent tools) | `vectorEffectGroups`, `createVectorEffectsToolProvider` | `<VectorEditor effects>`, `<VectorProviderEffectsPanel>`, `useVectorEffectsTools` | `<VectorEditor effects>`, `<VectorProviderEffectsPanel>`, `useVectorEffectsTools` |
 
 </details>
 
 <details>
-<summary><strong>Vector animation</strong> (10)</summary>
+<summary><strong>Vector animation</strong> (11)</summary>
 
 | Feature | Core | React | Svelte |
 | :--- | :---: | :---: | :---: |
@@ -386,6 +387,7 @@ Every feature is available from core and from both framework packages. "Via core
 | PowerPoint Import (a slide's shapes — preset and custom geometry, groups, fills, outlines, theme colours — become the artwork and its animation pane becomes a shot per click: entrances, exits, emphasis and motion paths mapped to commands, with previous / after previous, delays, repeats and acceleration kept; notes for text, pictures and unmatched effects) | `fromPptxAnimation` | Via core | Via core |
 | Flair Import (a Flair `SvgMotion` or catalog `VectorEffect` becomes a scene: SVG as artwork, `{{name: color}}` placeholders as colour controls, each step a shot of commands, behaviours back to emphasis commands, with notes on what does not carry over) | `fromFlairSvgMotion`, `fromFlairVectorEffect` | Via core | Via core |
 | Animation Agent Tools (33 tools: read, read outlined text as letters, words and lines, import a PowerPoint slide, set drivers, define clips, copy one node's motion to others, find elements, trace a node's motion path, render a frame with onion skin and paths, read the beat grid and narration, check, render a frame, export to Flair or Lottie, import a Flair effect, fit to a length, artwork from SVG, add / change / move / delete shots and commands (`move_command` reorders a command), settings, controls, batched edits with dry run where later ops refer to earlier ones' outcomes (`"$0.indexes[0]"`, `resolveMotionEditRefs`), a contact-sheet render, seek, undo / redo) | `createAnimationEditorToolProvider`, `ANIMATION_EDITOR_AGENT_INSTRUCTIONS` | `useAnimationEditorTools` | `useAnimationEditorTools` |
+| Animation Provider Effects (optional: with an `EffectProvider`, `applyMotionEffect` animates nodes with a provider motion effect, whose changes become ordinary commands tagged with `source`, so they preview, export to Flair and import like any command; `addVectorEffect` adds a vector effect's own picture as an artwork group with its shots; `updateMotionEffect` makes one again in place, `removeMotionEffect` takes it out; commands are kept without a provider; 7 agent tools) | `appliedEffects`, `createAnimationEffectsToolProvider` | `<AnimationEditor effects>`, `<AnimationEffectsPanel>`, `useAnimationEffectsTools` | `<AnimationEditor effects>`, `<AnimationEffectsPanel>`, `useAnimationEffectsTools` |
 
 </details>
 
