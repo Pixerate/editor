@@ -1,5 +1,40 @@
 # @pixerate/editor-svelte
 
+## 0.85.0
+
+### Minor Changes
+
+- 116de0e: Oils and thick paint in the paint editor. Wet oil runs on the wet simulation as a thick, slow-drying medium that blends into the wet paint it meets (`wet.medium`: watercolour, gouache or oil, with paint loading and thinner). Thick paint (`engine: 'impasto'`) gives a layer height and material channels (gloss, metallic) lit at render time by a movable light: impasto brush, paint tube, palette knife, roller, gloop pen and metallic paint, with paint loading and thinners. Instant dry, metallic paper, and relief and lighting saved with the document. New agent tools `set_lighting`, `get_relief`, `flatten_relief` and `set_instant_dry`; React and Svelte add impasto and medium menus in `<BrushPanel>`, a light section in `<PaperPanel>` and Instant dry in `<WetPanel>`.
+- 3344fab: Procedural brushes, bristles, stickers and stencils in the paint editor. Particle brushes (`engine: 'particle'`: spring-and-mass strings, springs, orbits and flow particles, drawn as dots, lines or bead sequences), bristle brushes that splay, flatten, bend and run dry bristle by bristle, and sticker spray of procedural stamps that stay editable objects on a sticker layer (`list_stickers`, `update_sticker`, `arrange_stickers`, `remove_stickers`). Stencils: ruler and arc guides that strokes follow, and line and shape masks (`add_stencil`, `update_stencil`, `remove_stencils`), recorded with strokes so replays keep them. `@pixerate/editor/paint` adds `paintPathStroke` / `pathStrokeDabs` for brushstrokes along polyline paths with pressure and tilt profiles. React and Svelte add particle, bristle and stamp controls, stencil buttons and outlines, and `<StickerPanel>`.
+- 116de0e: Time-lapse and high-resolution replay in the paint editor. `timeLapse()` repaints the painting from its recorded strokes and events (fills, clears, flattened relief and wet-media events at their simulation clock; wet strokes point by point, so wet paint flows as it did) and returns PNG frames, a video project of the frames and the ffmpeg command from the video editor's export path (`timeLapseZip` packs them); `renderHighRes({ scale })` repaints at 2–8× instead of upscaling. Fills, clears and relief flattening are now recorded for replays (`paintEvents`), and wet events record where they fall between strokes. New agent tools `export_time_lapse` and `export_high_res`; React and Svelte toolbars add Time-lapse and PNG 2×.
+- 66ab4c4: Wet media in the paint editor (watercolour first). A lattice Boltzmann water and pigment simulation (`WetWorld` in `@pixerate/editor/paint`) runs on sparse 256 px tiles in WebAssembly SIMD, in Web Workers on shared memory when the page is cross-origin isolated and on one thread otherwise, with a TypeScript kernel that gives the same bits; the ~8 KB kernels load lazily as a separate chunk. Results are deterministic across browsers, kernels and thread counts. The paint editor gets wet brushes (Watercolour round, Wash brush, Watercolour rigger, Gouache) and wet tools (Add water, Dry, Blow, Wet blend, Wet smudge, Blot) with wet-in-wet, edge darkening, granulation, blooms, colour bleed, glazing, re-wetting, canvas tilt with drips and flow maps; dry now, pause, speed and a water overlay; wet paint dries deterministically on save and export, and undo restores the wet state. New agent tools: `get_wet_paint`, `advance_wet_paint`, `dry_paint`, `wet_paper`, `set_wet_settings`, `set_flow_map`, `set_canvas_tilt`, `pause_wet_paint`, `set_water_overlay`. React and Svelte add `<WetPanel>`, a wet tool menu in `<BrushPanel>`, and the wet clock and water overlay in `<PaintCanvas>`.
+- 78e6f18: Gradient meshes and freeform gradients for vector paths.
+
+  - Meshes are smooth Coons patches over a lattice of coloured points. Freeform gradients are colour points with spreads and lines.
+  - Both render as SVG pattern tiles, move with their paths and round-trip through SVG.
+  - In the Gradient tool, drag points to move them, click to add a freeform point and Alt-click to remove one.
+  - New controller methods: `setMeshGradient`, `setMeshPoint`, `setFreeformGradient`, `addFreeformPoint`, `setFreeformPoint`, `removeFreeformPoint`, `setFreeformLines` and `getShading`.
+  - New agent commands, one per controller method.
+  - New `VectorShadingPanel` components for React and Svelte.
+
+- 2a89b60: Vector Image Trace turns raster pixels into paths.
+
+  - **Black and white:** traces by darkness or by alpha.
+  - **Colour:** stacked paths, one per colour, after median-cut quantising.
+  - **Options:** tolerance, minimum area and corner roundness.
+  - **New API and agent command:** `traceImage`, `traceVectorImage` and `vector.traceImage`, which takes a PNG data URL.
+  - **New components:** `VectorTracePanel` for React and Svelte.
+
+### Patch Changes
+
+- Updated dependencies [116de0e]
+- Updated dependencies [3344fab]
+- Updated dependencies [116de0e]
+- Updated dependencies [66ab4c4]
+- Updated dependencies [78e6f18]
+- Updated dependencies [2a89b60]
+  - @pixerate/editor@0.116.0
+
 ## 0.84.0
 
 ### Minor Changes
