@@ -2548,13 +2548,29 @@ export class VectorEditorController {
 	 * anchors (direct tool), else every anchor of the `ids` / selected paths. Radius 0 makes the
 	 * corners sharp again. Corners shrink to fit when drawn, so any radius is accepted.
 	 */
-	setCornerRadius(radius: number, options: { kind?: VectorCornerKind; refs?: readonly VectorAnchorRef[]; ids?: readonly string[] } = {}): VectorActionResult {
+	setCornerRadius(radius: number, options: { kind?: VectorCornerKind; smoothing?: number; refs?: readonly VectorAnchorRef[]; ids?: readonly string[] } = {}): VectorActionResult {
 		if (!Number.isFinite(radius) || radius < 0) return { ok: false, message: 'The radius must be a number of at least 0.' };
+		if (options.smoothing !== undefined && !(options.smoothing >= 0 && options.smoothing <= 1)) return { ok: false, message: 'Corner smoothing must be from 0 to 1.' };
 		const refs = this.cornerTargets(options);
 		if (!refs.length) return { ok: false, message: 'Nothing is selected.' };
 		this.change(radius > 0 ? 'Corner Radius' : 'Sharpen Corners', () => {
-			this.doc = this.updateAnchors(this.doc, refs, (a) => setAnchorCorner(a, radius, options.kind));
+			this.doc = this.updateAnchors(this.doc, refs, (a) => setAnchorCorner(a, radius, options.kind, options.smoothing));
 		});
+		return { ok: true };
+	}
+
+	/** Sets corner smoothing (squircle, 0–1) of the same anchors as `setCornerRadius`, keeping their radii. */
+	setCornerSmoothing(smoothing: number, options: { refs?: readonly VectorAnchorRef[]; ids?: readonly string[]; merge?: string } = {}): VectorActionResult {
+		if (!(smoothing >= 0 && smoothing <= 1)) return { ok: false, message: 'Corner smoothing must be from 0 to 1.' };
+		const refs = this.cornerTargets(options).filter((r) => (getAnchor(this.doc, r)?.corner?.radius ?? 0) > 0);
+		if (!refs.length) return { ok: false, message: 'Give the corners a radius first: smoothing shapes rounded corners.' };
+		this.change(
+			'Corner Smoothing',
+			() => {
+				this.doc = this.updateAnchors(this.doc, refs, (a) => setAnchorCorner(a, a.corner?.radius ?? 0, undefined, smoothing));
+			},
+			options.merge
+		);
 		return { ok: true };
 	}
 

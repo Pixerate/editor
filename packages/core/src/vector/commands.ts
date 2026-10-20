@@ -1433,15 +1433,25 @@ export function createVectorCommands(controller: VectorEditorController, options
 			label: 'Corner Radius…',
 			keywords: ['round', 'rounded', 'corners', 'radius', 'fillet', 'chamfer', 'live corners'],
 			description:
-				'Sets the live corner radius (and optionally `kind`: round, inverted or chamfer) of `anchors`, else the selected points (direct tool), else every corner of `ids` / the selection. Radius 0 makes corners sharp; radii shrink to fit short sides. The anchors stay editable.',
-			params: { type: 'object', properties: { radius: { type: 'number', minimum: 0 }, kind: { type: 'string', enum: VECTOR_CORNER_KINDS }, ids: IDS, anchors: ANCHORS } },
+				'Sets the live corner radius (and optionally `kind`: round, inverted or chamfer, and `smoothing`) of `anchors`, else the selected points (direct tool), else every corner of `ids` / the selection. Radius 0 makes corners sharp; radii shrink to fit short sides. `smoothing` (0–1) turns round corners between straight sides into squircles (Figma / iOS style continuous corners), easing into a shorter arc over (1 + smoothing) times the distance. The anchors stay editable.',
+			params: {
+				type: 'object',
+				properties: {
+					radius: { type: 'number', minimum: 0, description: 'Corner radius in document units (0: sharp).' },
+					kind: { type: 'string', enum: VECTOR_CORNER_KINDS, description: 'round (default), inverted or chamfer.' },
+					smoothing: { type: 'number', minimum: 0, maximum: 1, description: 'Squircle smoothing of round corners between straight sides, 0 (a circular arc, default) to 1 (0.6 is iOS-like).' },
+					ids: IDS,
+					anchors: ANCHORS
+				}
+			},
 			undoable: true,
-			run: (_ctx: unknown, params: { radius?: number; kind?: VectorCornerKind; ids?: string[]; anchors?: VectorAnchorRef[] } | undefined) => {
+			run: (_ctx: unknown, params: { radius?: number; kind?: VectorCornerKind; smoothing?: number; ids?: string[]; anchors?: VectorAnchorRef[] } | undefined) => {
 				const refs = params?.anchors ? anchorsOf(params.anchors) : undefined;
 				const target = { refs, ids: params?.ids ? ids(params) : undefined };
-				if (params?.radius !== undefined) check(controller.setCornerRadius(params.radius, { ...target, kind: params.kind }));
+				if (params?.radius !== undefined) check(controller.setCornerRadius(params.radius, { ...target, kind: params.kind, ...(params.smoothing !== undefined ? { smoothing: params.smoothing } : {}) }));
 				else if (params?.kind) check(controller.setCornerKind(params.kind, target));
-				else fail('Pass `radius` and / or `kind`.');
+				if (params?.radius === undefined && params?.smoothing !== undefined) check(controller.setCornerSmoothing(params.smoothing, target));
+				if (params?.radius === undefined && !params?.kind && params?.smoothing === undefined) fail('Pass `radius`, `kind` and / or `smoothing`.');
 				return { ok: true };
 			}
 		},

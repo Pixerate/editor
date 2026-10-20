@@ -175,9 +175,64 @@ interface Cut {
 	out: Vec2 | null;
 	in: Vec2 | null;
 	end: Vec2;
+	/** Anchors between `start` and `end` (a smoothed corner's arc ends), with their handles. */
+	inner?: VectorAnchor[];
 }
 
-function cutCorner(c: CornerData, radius: number, kind: VectorCornerKind): Cut | null {
+/**
+ * A smoothed round corner between straight sides (the squircle of figma-squircle and figcraft's
+ * `corner_profile`, generalised from 90° to any angle): along each side it starts `(1 + s)` times
+ * the round setback from the corner, eases in with a cubic whose second handle is where the arc's
+ * tangent meets the side, follows a circular arc over `(1 − s)` of the turn, and eases out the same
+ * way. Smoothing shrinks first when the cut would not fit halfway along the shorter side.
+ */
+function smoothCut(c: CornerData, radius: number, smoothing: number): Cut | null {
+	const turn = Math.PI - Math.acos(Math.max(-1, Math.min(1, c.cos)));
+	const t = cornerSetback(c, radius);
+	const room = Math.min(c.lu, c.lv) / 2;
+	let s = Math.max(0, Math.min(1, smoothing));
+	if ((1 + s) * t > room) s = Math.max(0, Math.min(s, room / t - 1));
+	const beta = (turn * s) / 2;
+	if (!(beta > 1e-6) || !(t > EPS)) return null;
+	const p = Math.min((1 + s) * t, room);
+	const qa = radius * Math.tan(beta / 2);
+	const q = t - qa;
+	const side = (u: Vec2, v: Vec2) => {
+		const n = squareTo(u, v);
+		const e = add(c.at, mul(u, p));
+		const c1 = add(c.at, mul(u, (p + 2 * q) / 3));
+		const qp = add(c.at, mul(u, q));
+		const a = add(sub(qp, mul(u, qa * Math.cos(beta))), mul(n, qa * Math.sin(beta)));
+		return { e, c1, q: qp, a };
+	};
+	const U = side(c.u, c.v);
+	const V = side(c.v, c.u);
+	// The arc between the two ends, its handles along the tangents (away from the sides' crossings).
+	const sweep = turn * (1 - s);
+	const h = radius * (4 / 3) * Math.tan(sweep / 4);
+	const tanU = sub(U.a, U.q);
+	const tanV = sub(V.a, V.q);
+	const lu = len(tanU) || 1;
+	const lv = len(tanV) || 1;
+	const arcOut = add(U.a, mul(tanU, h / lu));
+	const arcIn = add(V.a, mul(tanV, h / lv));
+	const tu = c.sideU.at(p, c.u).t;
+	const tv = c.sideV.at(p, c.v).t;
+	return {
+		tu,
+		tv,
+		start: U.e,
+		out: U.c1,
+		inner: [
+			{ x: U.a.x, y: U.a.y, in: U.q, out: arcOut },
+			{ x: V.a.x, y: V.a.y, in: arcIn, out: V.q }
+		],
+		in: V.c1,
+		end: V.e
+	};
+}
+
+function cutCorner(c: CornerData, radius: number, kind: VectorCornerKind, smoothing = 0): Cut | null {
 	// figcraft `corner`: trim each side by arc length, at most half of it.
 	const s = Math.min(cornerSetback(c, radius), Math.min(c.lu, c.lv) / 2);
 	if (!(s > EPS)) return null;
@@ -188,6 +243,10 @@ function cutCorner(c: CornerData, radius: number, kind: VectorCornerKind): Cut |
 		// vectorcraft `cut`: an arc centred on the corner through both ends, spanning the corner's angle.
 		const h = s * arcHandle(dot(a.dir, b.dir));
 		return { tu: a.t, tv: b.t, start: a.p, out: add(a.p, mul(squareTo(a.dir, b.dir), h)), in: add(b.p, mul(squareTo(b.dir, a.dir), h)), end: b.p };
+	}
+	if (smoothing > 0 && c.sideU.straight && c.sideV.straight) {
+		const smooth = smoothCut(c, radius, smoothing);
+		if (smooth) return smooth;
 	}
 	// Round: d1, d2 point back towards the corner at the cut's ends; φ is the turn between them
 	// and ρ the radius of the circle through both ends.
@@ -219,7 +278,7 @@ export function expandVectorCornersOf(sp: VectorSubpath, subpath = 0): { subpath
 		const c = cornerOf(sp, subpath, i);
 		if (!c) return null;
 		const fitted = fitCornerRadius(c, r);
-		return fitted > EPS ? cutCorner(c, fitted, a.corner?.kind ?? 'round') : null;
+		return fitted > EPS ? cutCorner(c, fitted, a.corner?.kind ?? 'round', a.corner?.smoothing ?? 0) : null;
 	});
 	if (!cuts.some(Boolean)) return { subpath: { closed: sp.closed, anchors: sp.anchors.map(plain) }, sources: sp.anchors.map((_, i) => i) };
 	// Each segment from anchor j trimmed to what the cuts at its ends leave: its handles, or
@@ -263,6 +322,10 @@ export function expandVectorCornersOf(sp: VectorSubpath, subpath = 0): { subpath
 			anchors.push(start);
 			sources.push(i);
 		}
+		for (const inner of c.inner ?? []) {
+			anchors.push({ ...inner });
+			sources.push(i);
+		}
 		anchors.push(end);
 		sources.push(i);
 	});
@@ -299,12 +362,13 @@ export function expandVectorCorners(subpaths: readonly VectorSubpath[]): VectorS
  * Sets (or clears, with radius 0) the live corner of anchors. `kind` keeps each anchor's own
  * kind when omitted. Anchors that make no corner keep the radius too, so it applies once they do.
  */
-export function setAnchorCorner(a: VectorAnchor, radius: number, kind?: VectorCornerKind): VectorAnchor {
+export function setAnchorCorner(a: VectorAnchor, radius: number, kind?: VectorCornerKind, smoothing?: number): VectorAnchor {
 	const { corner, ...rest } = a;
 	const r = Number.isFinite(radius) ? Math.max(0, radius) : 0;
 	const k = kind ?? corner?.kind;
+	const s = Math.max(0, Math.min(1, smoothing ?? corner?.smoothing ?? 0));
 	if (r <= 0 && !kind) return rest;
-	return { ...rest, corner: { radius: r, ...(k && k !== 'round' ? { kind: k } : {}) } };
+	return { ...rest, corner: { radius: r, ...(k && k !== 'round' ? { kind: k } : {}), ...(s > 0 ? { smoothing: s } : {}) } };
 }
 
 /** The next corner kind (Alt-clicking a corner widget cycles round → inverted → chamfer). */
@@ -313,6 +377,6 @@ export function nextVectorCornerKind(kind: VectorCornerKind | undefined): Vector
 }
 
 /** Every anchor of a subpath given the same live corner (radius 0 clears them). */
-export function setSubpathCorners(sp: VectorSubpath, radius: number, kind?: VectorCornerKind): VectorSubpath {
-	return { closed: sp.closed, anchors: sp.anchors.map((a) => setAnchorCorner(a, radius, kind)) };
+export function setSubpathCorners(sp: VectorSubpath, radius: number, kind?: VectorCornerKind, smoothing?: number): VectorSubpath {
+	return { closed: sp.closed, anchors: sp.anchors.map((a) => setAnchorCorner(a, radius, kind, smoothing)) };
 }

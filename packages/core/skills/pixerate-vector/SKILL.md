@@ -93,7 +93,8 @@ Parameter details (gradient fields, effect parameters, width profiles, envelopes
   keeps the outline by refitting neighbours.
 - **Live corners over drawn arcs.** Give rectangles, polygons and stars a `cornerRadius`
   (`vector.addShape`) or set it with `vector.setCorners`; the anchors stay sharp and editable and
-  radii shrink to fit short sides. Keep one radius scale across a design.
+  radii shrink to fit short sides. Keep one radius scale across a design. For app icons and UI
+  cards use `smoothing` (about 0.6) on `vector.setCorners` for continuous, squircle corners.
 - **Non-destructive first.** Live booleans (`vector.boolean` with `live: true`), path effects
   and envelopes keep the operands editable. A destructive boolean or Pathfinder replaces its
   inputs; do that last, and only when asked for flat output.
