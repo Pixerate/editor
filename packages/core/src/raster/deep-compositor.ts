@@ -9,16 +9,19 @@
  * bits (as Photoshop blends in each mode). Results come back in that space.
  *
  * What it delegates to the 8-bit compositor it wraps:
- * - mask coverage (density, feather and parametric masks), which is coverage, not colour;
- * - layers with layer effects or pixel filters, and content layers the editor draws itself
- *   (annotations): each is rendered alone at 8 bits, converted, and blended in float with its
- *   blend mode and opacity. Such layers keep 8-bit precision (and an effect's own blend mode sees
- *   a transparent backdrop); everything else keeps the samples' full depth.
+ * - mask coverage (density, feather and parametric masks: deep masks are read at depth);
+ * - the effect maps of layers with effects (built from the 8-bit shape); the effects themselves
+ *   composite in float over the deep content (`runEffects`), and pixel filters run in float when
+ *   the profile gives `pixelFiltersDeep`;
+ * - groups with effects, filters it cannot run in float, and content layers the editor draws
+ *   itself (annotations): each is rendered alone at 8 bits, converted, and blended in float with
+ *   its blend mode and opacity.
  */
 
 import { blendRgb, mixPigmentRgb, type BlendMode } from './blend';
 import type { CompositorLayer, CompositorProfile, RasterCompositor, RasterSources } from './compositor';
 import { hasActiveEffects } from './effects/model';
+import { compositeLayerEffects } from './effects/render';
 import { readDeepRegion, srgbDecode, srgbEncode, to32From8 } from './deep';
 import type { RasterRect } from './surface';
 
@@ -30,6 +33,12 @@ export interface DeepCompositorProfile<L extends CompositorLayer, S extends Rast
    * Missing: filter layers run at 8 bits.
    */
   applyFilterRunDeep?(layers: L[], acc: Float32Array, r: RasterRect, coverage: Map<string, Float32Array> | undefined, sources: S): void;
+  /**
+   * A pixel layer's filters in float (`null`: none, or none it can run): `apply` filters float
+   * RGBA in the working space (`linear` at 32 bits) in place; `reach` is how many pixels each
+   * side they read (0 for per-pixel filters). Missing: filtered layers are drawn at 8 bits.
+   */
+  pixelFiltersDeep?(layer: L): { reach: number; apply(data: Float32Array, width: number, height: number, linear: boolean): void } | null;
 }
 
 type Step<L> = { kind: 'content'; layer: L; clipped: L[] } | { kind: 'adjust'; layers: L[] } | { kind: 'group'; layer: L; clipped: L[]; steps: Step<L>[] };
@@ -99,6 +108,7 @@ export class DeepCompositor<L extends CompositorLayer, S extends RasterSources> 
     const layer = step.layer;
     if (!layer.visible) return empty;
     const clipped = step.clipped.filter((l) => l.visible);
+    if (step.kind === 'content' && this.deepEffects(layer)) return this.runEffects(layer, clipped, acc, r) ? false : empty;
     const coverage = this.renderedAlone(layer) ? null : this.base.maskCoverage(layer, r, this.sources);
     if (coverage && coverage.every((v) => v <= 0)) return empty;
     if (step.kind === 'group' && !this.renderedAlone(layer)) {
@@ -131,6 +141,35 @@ export class DeepCompositor<L extends CompositorLayer, S extends RasterSources> 
     this.applyClipped(clipped, buf, r);
     this.blend(acc, buf, mode, layer.opacity, null);
     return false;
+  }
+
+  /**
+   * A pixel layer with effects onto `acc` over `r`: its deep content (filters, mask, clipped
+   * layers) and the effects composited in float. Effect maps come from the 8-bit shape. At 32
+   * bits the effects composite in sRGB-encoded values (their colours and blends are defined
+   * there) and the result is decoded back. Returns whether anything was drawn.
+   */
+  private runEffects(layer: L, clipped: L[], acc: Float32Array, r: RasterRect): boolean {
+    const fx = this.base.effectsInput(layer, r, this.sources);
+    if (!fx) return false;
+    const a = fx.rect;
+    const content = this.content(layer, a) ?? new Float32Array(a.width * a.height * 4);
+    const coverage = this.base.maskCoverage(layer, a, this.sources);
+    if (coverage) for (let i = 0; i < coverage.length; i++) content[i * 4 + 3] *= coverage[i];
+    if (clipped.length) this.applyClipped(clipped, content, a);
+    const sub = new Float32Array(a.width * a.height * 4);
+    for (let y = 0; y < a.height; y++) {
+      const s = ((a.y - r.y + y) * r.width + (a.x - r.x)) * 4;
+      sub.set(acc.subarray(s, s + a.width * 4), y * a.width * 4);
+    }
+    if (this.linear) {
+      encodeInPlace(sub);
+      encodeInPlace(content);
+    }
+    compositeLayerEffects({ ...fx, backdrop: sub, content });
+    if (this.linear) decodeInPlace(sub);
+    for (let y = 0; y < a.height; y++) acc.set(sub.subarray(y * a.width * 4, (y + 1) * a.width * 4), ((a.y - r.y + y) * r.width + (a.x - r.x)) * 4);
+    return true;
   }
 
   private applyClipped(clipped: L[], buf: Float32Array, r: RasterRect): void {
@@ -191,9 +230,14 @@ export class DeepCompositor<L extends CompositorLayer, S extends RasterSources> 
   // --- Layer content ---------------------------------------------------------------
 
   /** Layers drawn by the 8-bit compositor alone (effects, pixel filters, content the editor draws). */
+  /** A pixel(-like) layer with effects: composited in float through `compositeLayerEffects`. */
+  private deepEffects(layer: L): boolean {
+    return hasActiveEffects(layer.effects) && !this.isFilter(layer) && this.isPixel(layer) && !isGroup(layer);
+  }
+
   private renderedAlone(layer: L): boolean {
-    if (hasActiveEffects(layer.effects) && !this.isFilter(layer)) return true;
-    if (this.isPixel(layer)) return Boolean(this.profile.pixelFilters?.(layer));
+    if (hasActiveEffects(layer.effects) && !this.isFilter(layer) && !this.deepEffects(layer)) return true;
+    if (this.isPixel(layer)) return Boolean(this.profile.pixelFilters?.(layer)) && !this.deep.pixelFiltersDeep?.(layer);
     return !isGroup(layer);
   }
 
@@ -213,7 +257,43 @@ export class DeepCompositor<L extends CompositorLayer, S extends RasterSources> 
     if (!surface) return null;
     const ox = layer.offset?.x ?? 0;
     const oy = layer.offset?.y ?? 0;
-    const samples = readDeepRegion(surface, { x: r.x - ox, y: r.y - oy, width: r.width, height: r.height }, this.depth);
+    const filters = this.isPixel(layer) ? (this.deep.pixelFiltersDeep?.(layer) ?? null) : null;
+    if (!filters) return this.samples(surface, { x: r.x - ox, y: r.y - oy, width: r.width, height: r.height });
+    // Filters in float: read what they reach (clamped at the canvas edge, as the 8-bit path
+    // filters over the canvas), filter, and keep `r`.
+    const m = filters.reach;
+    const W = this.sources.width;
+    const H = this.sources.height;
+    const x0 = m ? Math.max(0, r.x - m) : r.x;
+    const y0 = m ? Math.max(0, r.y - m) : r.y;
+    const x1 = m ? Math.min(W, r.x + r.width + m) : r.x + r.width;
+    const y1 = m ? Math.min(H, r.y + r.height + m) : r.y + r.height;
+    if (x1 <= x0 || y1 <= y0) return new Float32Array(r.width * r.height * 4);
+    const big = { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
+    const data = this.samples(surface, { ...big, x: big.x - ox, y: big.y - oy });
+    filters.apply(data, big.width, big.height, this.linear);
+    if (big.x === r.x && big.y === r.y && big.width === r.width && big.height === r.height) return data;
+    const out = new Float32Array(r.width * r.height * 4);
+    for (let y = 0; y < r.height; y++) {
+      const sy = r.y + y - big.y;
+      if (sy < 0 || sy >= big.height) continue;
+      for (let x = 0; x < r.width; x++) {
+        const sx = r.x + x - big.x;
+        if (sx < 0 || sx >= big.width) continue;
+        const s = (sy * big.width + sx) * 4;
+        const d = (y * r.width + x) * 4;
+        out[d] = data[s];
+        out[d + 1] = data[s + 1];
+        out[d + 2] = data[s + 2];
+        out[d + 3] = data[s + 3];
+      }
+    }
+    return out;
+  }
+
+  /** A surface's samples over `rect` (layer space) in the working space. */
+  private samples(surface: NonNullable<CompositorLayer['surface']>, rect: RasterRect): Float32Array {
+    const samples = readDeepRegion(surface, rect, this.depth);
     if (samples instanceof Float32Array) return samples;
     const out = new Float32Array(samples.length);
     for (let i = 0; i < samples.length; i++) out[i] = samples[i] / 65535;
@@ -316,4 +396,22 @@ export function workingToSamples(data: Float32Array, depth: 16 | 32): Uint16Arra
     out[i] = v > 0 ? (v < 1 ? Math.round(v * 65535) : 65535) : 0;
   }
   return out;
+}
+
+/** Linear float RGBA to sRGB-encoded in place (colour only; values above 1 extend the curve). */
+function encodeInPlace(d: Float32Array): void {
+  for (let i = 0; i < d.length; i += 4) {
+    d[i] = srgbEncode(d[i]);
+    d[i + 1] = srgbEncode(d[i + 1]);
+    d[i + 2] = srgbEncode(d[i + 2]);
+  }
+}
+
+/** sRGB-encoded float RGBA to linear in place (colour only). */
+function decodeInPlace(d: Float32Array): void {
+  for (let i = 0; i < d.length; i += 4) {
+    d[i] = srgbDecode(d[i]);
+    d[i + 1] = srgbDecode(d[i + 1]);
+    d[i + 2] = srgbDecode(d[i + 2]);
+  }
 }

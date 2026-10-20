@@ -118,6 +118,14 @@ export interface PenDab extends Dab {
   direction: number;
   /** The dab's index within its copy of the stroke (0, 1, 2 …). */
   index: number;
+  /** Path length (px, along the smoothed samples of this copy) travelled to the dab: what gradient paint maps by distance. */
+  travel: number;
+  /** ms since the stroke's first timed sample, or `null` when the samples carry no time. */
+  time: number | null;
+  /** Pen lean, 0 upright .. 1 flat. */
+  lean: number;
+  /** Pen speed (px/ms), or `null` when the samples carry no time. */
+  speed: number | null;
 }
 
 const enum Stream {
@@ -135,6 +143,10 @@ interface Sample {
   azimuth: number;
   twist: number | null;
   speed: number | null;
+  /** Path length to this sample. */
+  travel: number;
+  /** ms since the first timed sample. */
+  time: number | null;
 }
 
 /** Speed (px/ms) at which velocity dynamics reach their full effect. */
@@ -151,7 +163,9 @@ export class PenDabWalker {
   private index = 0;
   private dir = 0;
   private lastT: number | null = null;
+  private firstT: number | null = null;
   private speed: number | null = null;
+  private travelled = 0;
 
   constructor(
     readonly brush: PaintBrush,
@@ -162,7 +176,11 @@ export class PenDabWalker {
   private sample(p: PenPoint): Sample {
     const o = penOrientation(p);
     let speed: number | null = null;
+    let time: number | null = null;
+    if (this.last) this.travelled += Math.hypot(p.x - this.last.x, p.y - this.last.y);
     if (typeof p.t === 'number' && Number.isFinite(p.t)) {
+      if (this.firstT === null) this.firstT = p.t;
+      time = p.t - this.firstT;
       if (this.last && this.lastT !== null && p.t > this.lastT) {
         const v = Math.hypot(p.x - this.last.x, p.y - this.last.y) / (p.t - this.lastT);
         this.speed = this.speed === null ? v : this.speed + (v - this.speed) * 0.35;
@@ -178,6 +196,8 @@ export class PenDabWalker {
       azimuth: o ? o.azimuth : 0,
       twist: typeof p.twist === 'number' && Number.isFinite(p.twist) ? p.twist : null,
       speed,
+      travel: this.travelled,
+      time,
     };
   }
 
@@ -240,6 +260,10 @@ export class PenDabWalker {
       pressure: s.pressure,
       direction: this.dir,
       index: i,
+      travel: s.travel,
+      time: s.time,
+      lean: s.lean,
+      speed: s.speed,
     };
   }
 
@@ -272,6 +296,8 @@ export class PenDabWalker {
           azimuth: lerpAngle(a.azimuth, s.azimuth, f),
           twist: a.twist !== null && s.twist !== null ? lerpDegrees(a.twist, s.twist, f) : s.twist,
           speed: a.speed !== null && s.speed !== null ? lerp(a.speed, s.speed) : s.speed,
+          travel: a.travel + this.nextAt,
+          time: a.time !== null && s.time !== null ? lerp(a.time, s.time) : s.time,
         };
         out.push(this.dab(q));
         this.nextAt += this.stepLen(q);

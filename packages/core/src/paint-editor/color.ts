@@ -4,6 +4,8 @@
  * cyan), harmonies on it, and swatches.
  */
 
+import { paintSourceColor, readPaintSource, type PaintGradientSource } from '../paint/gradient-paint';
+
 export type Rgb255 = [number, number, number];
 
 const HEX = /^#?([0-9a-f]{6})$/i;
@@ -143,8 +145,24 @@ export function colorHarmony(base: string, kind: HarmonyKind, options: { wheel?:
 }
 
 export interface Swatch {
+  /** #rrggbb (for a gradient swatch: its first colour, what plain colour slots show). */
   color: string;
   name?: string;
+  /** Gradient paint held by the swatch (`setPaint` picks it); missing for a colour swatch. */
+  paint?: PaintGradientSource;
+}
+
+/** A swatch read from JSON, or `null` when it is not one (a gradient swatch keeps its gradient). */
+export function readSwatch(raw: unknown): Swatch | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const g = readPaintSource(r.paint);
+  const color = typeof r.color === 'string' && /^#[0-9a-f]{6}$/i.test(r.color) ? r.color.toLowerCase() : g?.type === 'gradient' ? paintSourceColor(g) : null;
+  if (!color) return null;
+  const out: Swatch = { color };
+  if (typeof r.name === 'string' && r.name.trim()) out.name = r.name.trim().slice(0, 80);
+  if (g?.type === 'gradient') out.paint = g;
+  return out;
 }
 
 /** A starting palette of our own generic paint colours. */

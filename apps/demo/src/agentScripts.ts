@@ -981,6 +981,54 @@ export const PAINT_SCRIPTS: AgentScript[] = [
     ],
   },
   {
+    id: "paint-gradient",
+    prompt: "Paint a sunset sky and a rainbow with gradient paint",
+    steps: [
+      {
+        say: "Gradient paint: the colour changes as the stroke is dragged out. Purple to rose to amber over 600 px, mixed like paint.",
+        tool: "paint__set_paint",
+        args: {
+          paint: {
+            type: "gradient",
+            stops: [
+              { offset: 0, color: "#5b21b6" },
+              { offset: 0.55, color: "#e11d48" },
+              { offset: 1, color: "#f59e0b" },
+            ],
+            map: { by: "distance", length: 600, repeat: "mirror" },
+          },
+        },
+      },
+      { tool: "paint__add_layer", args: { name: "Sky" }, as: "sky" },
+      { tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.sky.id, brushId: "soft-pastel", brush: { tip: { size: 90 } }, points: wave(150, 30) }) },
+      { tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.sky.id, brushId: "soft-pastel", brush: { tip: { size: 90 } }, points: wave(240, 25) }) },
+      { say: "A rainbow: a brush with its own gradient, stripes laid side by side across the tip.", tool: "paint__add_layer", args: { name: "Rainbow" }, as: "rainbow" },
+      {
+        tool: "paint__paint_stroke",
+        args: (ctx) => ({
+          layerId: ctx.results.rainbow.id,
+          brushId: "ink-pen",
+          brush: { tip: { size: 70, hardness: 0.6 } },
+          paint: {
+            type: "gradient",
+            stops: ["#e11d48", "#f59e0b", "#facc15", "#22c55e", "#3b82f6", "#8b5cf6"].map((color, k) => ({ offset: k / 5, color })),
+            space: "oklab",
+            map: { by: "across-tip" },
+          },
+          points: ring(600, 560, 330).slice(24),
+        }),
+      },
+      { say: "Pressure maps the gradient too: light pressure lays the second colour, full pressure the paint colour.", tool: "paint__set_color", args: { color: "#1f2937", secondaryColor: "#9ca3af" } },
+      { tool: "paint__add_layer", args: { name: "Hills" }, as: "hills" },
+      {
+        tool: "paint__paint_stroke",
+        args: (ctx) => ({ layerId: ctx.results.hills.id, brushId: "pressure-ombre", brush: { tip: { size: 60 } }, points: wave(560, 40).map((p: { x: number; y: number }, i: number) => ({ ...p, pressure: 0.2 + 0.8 * Math.abs(Math.sin(i / 6)) })) }),
+      },
+      { say: "Keep the sunset as a swatch.", tool: "paint__add_swatch", args: { paint: { type: "gradient", stops: [{ offset: 0, color: "#5b21b6" }, { offset: 0.55, color: "#e11d48" }, { offset: 1, color: "#f59e0b" }] }, name: "Sunset" } },
+      { tool: "paint__render_preview", args: { maxSide: 420 } },
+    ],
+  },
+  {
     id: "paint-procedural",
     prompt: "Draw a stencilled moon with hair, curls and stickers",
     steps: [
