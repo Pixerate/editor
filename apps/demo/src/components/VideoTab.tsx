@@ -69,7 +69,9 @@ export function VideoTab() {
   const state = useVideoEditorState(controller);
   useVideoEditorTools(demoToolRegistry, controller, { id: "video", namespace: "video" });
   // The demo-wide effects provider (the built-in test effects, or Flair once it is published).
-  const { provider: effects } = useDemoEffects();
+  const { provider: effects, source: effectsSource } = useDemoEffects();
+  // The effects turn names effect ids, so play the one written for the selected provider.
+  const scripts = useMemo(() => VIDEO_SCRIPTS.filter((s) => s.id !== (effectsSource === "flair" ? "video-effects" : "video-effects-flair")), [effectsSource]);
   useVideoEffectsTools(demoToolRegistry, controller, { id: "video-effects", namespace: "videofx" });
   const [output, setOutput] = useState<{ title: string; text: string } | null>(null);
   const [recording, setRecording] = useState(false);
@@ -126,7 +128,7 @@ export function VideoTab() {
         <VideoEditor controller={controller} showScopes effects={effects} />
       </div>
       <AgentScriptPanel
-        scripts={VIDEO_SCRIPTS}
+        scripts={scripts}
         stage={agentStage}
         hint="Plays a scripted agent turn with the video__* tools: it reads the project, then splits, ripple deletes, trims, adds titles and markers, checks and plays."
       />

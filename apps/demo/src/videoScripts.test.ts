@@ -3,13 +3,16 @@ import { ToolRegistry } from "@pixerate/editor/tools";
 import { ManualClock } from "@pixerate/editor/animation";
 import { createVideoEditorToolProvider, createVideoEffectsToolProvider, VideoEditorController, videoClipEnd } from "@pixerate/editor/video-editor";
 import { createFakeEffectProvider } from "@pixerate/editor/effects";
+import { flairEffects } from "@pixerate/flair/integrations";
 import { runAgentScript } from "./agentScript";
 import { VIDEO_SCRIPTS } from "./agentScripts";
 import { sampleProject } from "./videoSample";
 
 // The Video tab's scripts, replayed against the tab's sample project through the real tools.
-function setup() {
-  const controller = new VideoEditorController({ project: sampleProject(), clock: new ManualClock(), effects: createFakeEffectProvider() });
+function setup(script?: string) {
+  // The Flair turn names Flair's effect ids; the others use the built-in test effects.
+  const effects = script === "video-effects-flair" ? flairEffects() : createFakeEffectProvider();
+  const controller = new VideoEditorController({ project: sampleProject(), clock: new ManualClock(), effects });
   const registry = new ToolRegistry();
   registry.register(createVideoEditorToolProvider(controller, { id: "video", namespace: "video" }));
   registry.register(createVideoEffectsToolProvider(controller, { id: "video-effects", namespace: "videofx" }));
@@ -19,13 +22,24 @@ function setup() {
 const clip = (c: VideoEditorController, id: string) => c.getProject().tracks.flatMap((t) => t.clips).find((x) => x.id === id);
 
 describe("video agent scripts", () => {
-  it.each(VIDEO_SCRIPTS.map((s) => [s.id, s] as const))("%s runs to the end", async (_id, script) => {
-    const { controller, registry } = setup();
+  it.each(VIDEO_SCRIPTS.map((s) => [s.id, s] as const))("%s runs to the end", async (id, script) => {
+    const { controller, registry } = setup(id);
     const errors: string[] = [];
     const { ok } = await runAgentScript(registry, script, { control: { speed: Infinity, stopped: false }, onEvent: (e) => e.type === "error" && errors.push(e.message) });
     expect(errors).toEqual([]);
     expect(ok).toBe(true);
     expect(controller.getState().issues.filter((i) => i.severity === "error")).toEqual([]);
+    controller.destroy();
+  });
+
+  it("the Flair turn applies Flair's film look, pixel dissolve and lens flare from the real catalog", async () => {
+    const { controller, registry } = setup("video-effects-flair");
+    const script = VIDEO_SCRIPTS.find((s) => s.id === "video-effects-flair")!;
+    const { ok } = await runAgentScript(registry, script, { control: { speed: Infinity, stopped: false } });
+    expect(ok).toBe(true);
+    expect(clip(controller, "shot-1")?.effects?.[0]).toMatchObject({ effect: "film-look", provider: "flair", values: { uTint: "#ffd9a8", uGrain: 0.12 } });
+    expect(clip(controller, "shot-2")?.transition).toMatchObject({ type: "effect", effect: { effect: "transition-pixel-dissolve", provider: "flair" } });
+    expect(controller.getProject().tracks.find((t) => t.id === "titles")?.clips.some((c) => c.type === "effect" && c.effect === "lens-flare")).toBe(true);
     controller.destroy();
   });
 
