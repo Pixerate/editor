@@ -46,6 +46,7 @@ import { isVectorMaskGroup, vectorMaskedShapes } from './mask.js';
 import { vectorTextPaintSource, vectorTextPaths, vectorTextShaperGeneration } from './text.js';
 import { vectorInstanceGroup } from './symbols.js';
 import { isVectorFrame, vectorFrameDrawn } from './frames.js';
+import { parseVectorColor } from './gradient.js';
 import { isVectorSymmetryGroup, vectorSymmetryDrawn, type VectorSymmetryGroup } from './symmetry.js';
 import { transformVectorNode } from './geometry.js';
 import {
@@ -58,6 +59,7 @@ import {
 	vectorIdentityMesh,
 	vectorWarpPresetMesh
 } from './warp.js';
+import type { VectorPaint } from './types.js';
 import type {
 	VectorBounds,
 	Vec2,
@@ -109,7 +111,8 @@ export const VECTOR_EFFECT_DEFAULTS: { readonly [K in VectorEffectType]: VectorE
 		endOpacity: 100,
 		composite: 'below'
 	},
-	envelope: { style: 'arc', bend: 50, horizontal: 0, vertical: 0, orientation: 'horizontal', rows: 2, columns: 2, mesh: null }
+	envelope: { style: 'arc', bend: 50, horizontal: 0, vertical: 0, orientation: 'horizontal', rows: 2, columns: 2, mesh: null },
+	contour: { direction: 'inside', steps: 4, offset: 6, join: 'round', miterLimit: 4, fillColor: '#ffffff', strokeColor: null, acceleration: 0 }
 };
 
 export const VECTOR_EFFECT_LABELS: Record<VectorEffectType, string> = {
@@ -122,7 +125,8 @@ export const VECTOR_EFFECT_LABELS: Record<VectorEffectType, string> = {
 	offset: 'Offset Paths',
 	merge: 'Merge Paths',
 	repeater: 'Repeater',
-	envelope: 'Envelope'
+	envelope: 'Envelope',
+	contour: 'Contour'
 };
 
 /** How a panel edits one effect parameter. */
@@ -130,7 +134,8 @@ export type VectorEffectParamSpec =
 	| { key: string; label: string; kind: 'number'; min?: number; max?: number; step: number; slider?: boolean }
 	| { key: string; label: string; kind: 'vec2'; step: number }
 	| { key: string; label: string; kind: 'boolean' }
-	| { key: string; label: string; kind: 'select'; options: { value: string; label: string }[] };
+	| { key: string; label: string; kind: 'select'; options: { value: string; label: string }[] }
+	| { key: string; label: string; kind: 'color' };
 
 /** The editable parameters of each effect type, in panel order. */
 export const VECTOR_EFFECT_PARAM_SPECS: Record<VectorEffectType, VectorEffectParamSpec[]> = {
@@ -196,6 +201,33 @@ export const VECTOR_EFFECT_PARAM_SPECS: Record<VectorEffectType, VectorEffectPar
 				{ value: 'subtract', label: 'Subtract' },
 				{ value: 'intersect', label: 'Intersect' },
 				{ value: 'exclude', label: 'Exclude' }
+			]
+		}
+	],
+	contour: [
+		{
+			key: 'direction',
+			label: 'Direction',
+			kind: 'select',
+			options: [
+				{ value: 'inside', label: 'Inside' },
+				{ value: 'outside', label: 'Outside' },
+				{ value: 'center', label: 'To centre' }
+			]
+		},
+		{ key: 'steps', label: 'Steps', kind: 'number', min: 1, max: 200, step: 1, slider: true },
+		{ key: 'offset', label: 'Offset', kind: 'number', min: 0.1, max: 200, step: 0.5, slider: true },
+		{ key: 'fillColor', label: 'Fill to', kind: 'color' },
+		{ key: 'strokeColor', label: 'Stroke to', kind: 'color' },
+		{ key: 'acceleration', label: 'Acceleration', kind: 'number', min: -100, max: 100, step: 1, slider: true },
+		{
+			key: 'join',
+			label: 'Join',
+			kind: 'select',
+			options: [
+				{ value: 'miter', label: 'Miter' },
+				{ value: 'round', label: 'Round' },
+				{ value: 'bevel', label: 'Bevel' }
 			]
 		}
 	],
@@ -312,6 +344,7 @@ export function normalizeVectorEffectParams<K extends VectorEffectType>(type: K,
 		else if (spec.kind === 'boolean' && typeof v === 'boolean') out[spec.key] = v;
 		else if (spec.kind === 'vec2' && isVec2(v)) out[spec.key] = { x: v.x, y: v.y };
 		else if (spec.kind === 'select' && spec.options.some((o) => o.value === v)) out[spec.key] = v;
+		else if (spec.kind === 'color' && (v === null || (typeof v === 'string' && parseVectorColor(v)))) out[spec.key] = v;
 	}
 	if (type === 'envelope') {
 		const o = out as unknown as VectorEnvelopeParams;
@@ -520,6 +553,50 @@ const mapPaths = (shapes: VectorAppearanceShape[], fn: (paths: BezierPath[]) => 
 	return shapes.map((s, i) => ({ ...s, path: out[i] ?? [] }));
 };
 
+/** A paint blended toward `to` by `t` (only solid colours blend; gradients and null `to` keep it). */
+function blendPaint(from: VectorPaint | undefined, to: string | null, t: number): VectorPaint | undefined {
+	if (to === null || typeof from !== 'string') return from;
+	const a = parseVectorColor(from);
+	const b = parseVectorColor(to);
+	if (!a || !b) return from;
+	const h = (v: number) =>
+		Math.round(Math.min(1, Math.max(0, v)) * 255)
+			.toString(16)
+			.padStart(2, '0');
+	const m = a.map((v, k) => v + (b[k] - v) * t);
+	return `#${h(m[0])}${h(m[1])}${h(m[2])}`;
+}
+
+/**
+ * The contour steps of each shape (see `VectorEffectParamsMap.contour`): offset copies `offset`
+ * apart, their colours blended toward the end colours, drawn over the shape inside and under it
+ * outside. After CorelDRAW's Contour (concept); offsetting is our own `offsetPaths`.
+ */
+function contourShapes(shapes: readonly VectorAppearanceShape[], c: VectorEffectParamsMap['contour']): VectorAppearanceShape[] {
+	const out: VectorAppearanceShape[] = [];
+	const step = Math.max(0.01, c.offset);
+	const outside = c.direction === 'outside';
+	for (const s of shapes) {
+		let n = Math.min(200, Math.max(1, Math.round(c.steps)));
+		if (c.direction === 'center') {
+			const b = bezierPathBounds(s.path);
+			n = b ? Math.min(200, Math.max(1, Math.ceil(Math.min(b.maxX - b.minX, b.maxY - b.minY) / 2 / step))) : 0;
+		}
+		// The original: on top outside, at the bottom inside.
+		out.push({ ...s, order: [outside ? n : 0, ...s.order] });
+		// Colour progress per step, bunched by the acceleration.
+		const power = 2 ** (Math.min(100, Math.max(-100, c.acceleration)) / 50);
+		for (let k = 1; k <= n; k++) {
+			const [path] = offsetPaths([s.path], (outside ? 1 : -1) * step * k, c.join, c.miterLimit, 1, 0);
+			if (!path?.length) break;
+			const t = (k / n) ** power;
+			const source = { ...s.source, fill: blendPaint(s.source.fill, c.fillColor, t) ?? null, stroke: blendPaint(s.source.stroke, c.strokeColor, t) ?? null, fills: undefined, strokes: undefined };
+			out.push({ source, path, opacity: s.opacity, order: [outside ? n - k : k, ...s.order] });
+		}
+	}
+	return out;
+}
+
 /** Applies an effect stack to shapes, top to bottom (disabled effects skipped). */
 export function applyVectorEffects(shapes: readonly VectorAppearanceShape[], effects: readonly VectorEffect[] | null | undefined): VectorAppearanceShape[] {
 	let list = shapes.slice();
@@ -561,6 +638,9 @@ export function applyVectorEffects(shapes: readonly VectorAppearanceShape[], eff
 				list = mapPaths(list, (p) => envelopePaths(p, params));
 				break;
 			}
+			case 'contour':
+				list = contourShapes(list, e.params);
+				break;
 			case 'repeater': {
 				const r = e.params;
 				const copies = repeatPaths(

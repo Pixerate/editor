@@ -2,6 +2,7 @@ import React from 'react';
 import {
   VECTOR_EFFECT_MENU,
   getVectorEffectsPanel,
+  vectorPaintToHex,
   type VectorEditorController,
   type VectorEffectParamSpec,
   type VectorEffectsPanelItem,
@@ -109,6 +110,18 @@ export function VectorEffectsPanel({ controller, className }: VectorEffectsPanel
           <input type="checkbox" aria-label={`${e.label} ${spec.label}`} checked={!!e.params[spec.key]} onChange={(ev) => set(e, spec.key, ev.target.checked, false)} />
         </label>
       );
+    if (spec.kind === 'color') {
+      // A colour, or none (the checkbox): none keeps the shape's own colour.
+      const c = e.params[spec.key] as string | null;
+      return (
+        <div key={spec.key} className="flex items-center gap-2 text-xs text-foreground" data-vector-effect-param={spec.key}>
+          <span className={labelClass}>{spec.label}</span>
+          <input type="checkbox" aria-label={`${e.label} ${spec.label} on`} checked={c !== null} onChange={(ev) => set(e, spec.key, ev.target.checked ? '#ffffff' : null, false)} />
+          <input type="color" aria-label={`${e.label} ${spec.label}`} className="h-6 w-8 cursor-pointer rounded border border-border bg-background disabled:opacity-40" disabled={c === null} value={vectorPaintToHex(c ?? '#ffffff') ?? '#ffffff'} onChange={(ev) => set(e, spec.key, ev.target.value, true)} onBlur={end} />
+        </div>
+      );
+    }
+    if (spec.kind !== 'select') return null;
     return (
       <label key={spec.key} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-foreground" data-vector-effect-param={spec.key}>
         <span className={labelClass}>{spec.label}</span>

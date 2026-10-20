@@ -110,6 +110,7 @@ default below. Lengths are in the node's own units, angles degrees, percentages 
 | offset | amount 5, join `miter`, miterLimit 4, copies 1, copyOffset 0 | Grow or shrink; copies make concentric rings. |
 | merge | mode `add` (also `merge`, `subtract`, `intersect`, `exclude`) | Combine the shapes above it into one, in the bottom shape's style. |
 | repeater | copies 3, offset 0, position {x 100, y 0}, anchor {x 0, y 0}, rotation 0, scale {x 100, y 100} (%), startOpacity 100, endOpacity 100 (%), composite `below` | Copy i is moved, rotated and scaled k = i + offset times about the anchor; fractional copies fade the last one. Radial patterns: position {0, 0}, rotation 360 / copies. |
+| contour | direction `inside`, steps 4, offset 6, fillColor `#ffffff`, strokeColor null, acceleration 0, join `round`, miterLimit 4 | CorelDRAW's Contour: each shape plus `steps` concentric copies `offset` apart (`center`: inward until the shape is used up), their fill and stroke blending to the end colours (null keeps the shape's colour); inside steps draw over the shape, outside ones under it. Acceleration −100…100 holds the colour back (positive) or rushes it (negative). Use for embossed badges, topographic lines and soft glows. |
 | envelope | style `arc`, bend 50, horizontal 0, vertical 0, orientation `horizontal`, rows 2, columns 2, mesh null | Prefer `vector.envelope`. |
 
 Effects apply in stack order (index 0 first) to everything above them; effects after a repeater
