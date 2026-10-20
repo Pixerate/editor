@@ -1,3 +1,4 @@
+import { VECTOR_LENS_SPECS, resolveVectorLenses, sanitizeVectorLens, stripVectorLensViews } from './lens.js';
 import { HistoryManager } from '../history/HistoryManager.js';
 import type { Command } from '../history/types.js';
 import { fitCubics } from '../canvas/curveFit.js';
@@ -139,7 +140,7 @@ import {
 	vectorConnectorTargetAt,
 	type VectorConnectionSite
 } from './connectors.js';
-import { VECTOR_CONNECTOR_ROUTES, VECTOR_CONNECTOR_SIDES, type VectorArrowhead, type VectorConnector, type VectorConnectorEnd, type VectorConnectorRoute, type VectorConnectorSide } from './types.js';
+import { VECTOR_CONNECTOR_ROUTES, VECTOR_CONNECTOR_SIDES, VECTOR_LENS_TYPES, type VectorLens, type VectorArrowhead, type VectorConnector, type VectorConnectorEnd, type VectorConnectorRoute, type VectorConnectorSide } from './types.js';
 import {
 	autoVectorFreeformGradient,
 	createVectorMeshGradient,
@@ -1639,7 +1640,8 @@ export class VectorEditorController {
 		// Instances draw their symbols' art.
 		out = resolveVectorSymbols(out);
 		// Connectors follow what they are glued to (after the constraints have moved it).
-		return rerouteVectorConnectors(this.solved(out));
+		// Lenses show what is below them (after connectors have moved).
+		return resolveVectorLenses(rerouteVectorConnectors(this.solved(out)));
 	}
 
 	/**
@@ -2193,7 +2195,7 @@ export class VectorEditorController {
 	}
 
 	toJSON(): VectorDocument {
-		return cloneVectorDocument(stripVectorSymbolArt(this.storedDocument()));
+		return cloneVectorDocument(stripVectorLensViews(stripVectorSymbolArt(this.storedDocument())));
 	}
 
 	/** Adds a node (ids are kept unless taken). Returns its id. */
@@ -5074,6 +5076,52 @@ export class VectorEditorController {
 	 * (`{ nodeId, side? }`) or unglue it (`null`, the end staying where it is), and `route`,
 	 * `radius`, `gap` set how they run. Plain open paths given by id become connectors. One undo step.
 	 */
+	/**
+	 * Makes closed paths lenses (CorelDRAW's Lens) or changes their lens: `lens` is merged over the
+	 * current settings (a different `type` starts from that type's defaults), and `null` makes
+	 * them plain paths again. One undo step. Returns each path's id and resulting lens.
+	 */
+	setLens(lens: Partial<VectorLens> | null, options: { ids?: readonly string[]; merge?: string } = {}): VectorActionResult & { lenses?: { id: string; lens: VectorLens | null }[] } {
+		const ids = options.ids ?? this.selection;
+		if (!ids.length) return { ok: false, message: 'Select a closed path to make a lens first.' };
+		if (lens && lens.type !== undefined && !VECTOR_LENS_TYPES.includes(lens.type)) return { ok: false, message: `Unknown lens "${lens.type}": use ${VECTOR_LENS_TYPES.join(', ')}.` };
+		if (lens?.color !== undefined && lens.color !== null && !parseVectorColor(lens.color)) return { ok: false, message: `"${lens.color}" is not a colour: use a CSS colour such as #ff0000.` };
+		const next = new Map<string, VectorLens | null>();
+		for (const id of ids) {
+			const n = this.getNode(id);
+			if (!n) return { ok: false, message: `There is no node "${id}".` };
+			if (n.locked) return { ok: false, message: `"${id}" is locked; unlock it first.` };
+			if (lens === null) {
+				if (n.type === 'path' && n.lens) next.set(id, null);
+				continue;
+			}
+			if (n.type !== 'path' || !n.subpaths.some((sp) => sp.closed) || isVectorConnector(n)) return { ok: false, message: `"${id}" is not a closed path: only closed paths can be lenses.` };
+			const type = lens.type ?? n.lens?.type;
+			if (!type) return { ok: false, message: `"${id}" is not a lens yet: pass a type (${VECTOR_LENS_TYPES.join(', ')}).` };
+			const spec = VECTOR_LENS_SPECS[type];
+			if (lens.amount !== undefined && !(Number.isFinite(lens.amount) && lens.amount >= spec.min && lens.amount <= spec.max)) return { ok: false, message: `amount for a ${type} lens must be from ${spec.min} to ${spec.max} (${spec.unit}).` };
+			const base = n.lens && n.lens.type === type ? n.lens : { type };
+			next.set(id, sanitizeVectorLens({ ...base, ...lens, type }));
+		}
+		if (!next.size) return { ok: true, lenses: [] };
+		this.change(
+			lens === null ? 'Remove Lens' : 'Lens',
+			() => {
+				this.setDoc(
+					mapTree(this.doc.nodes, (n) => {
+						if (!next.has(n.id) || n.type !== 'path') return n;
+						const l = next.get(n.id);
+						if (l) return { ...n, lens: l };
+						const { lens: _l, lensView: _v, ...rest } = n;
+						return rest;
+					})
+				);
+			},
+			options.merge
+		);
+		return { ok: true, lenses: [...next].map(([id, l]) => ({ id, lens: l })) };
+	}
+
 	setConnector(
 		patch: { start?: VectorConnectorEnd | null; end?: VectorConnectorEnd | null; route?: VectorConnectorRoute; radius?: number; gap?: number },
 		options: { ids?: readonly string[] } = {}
