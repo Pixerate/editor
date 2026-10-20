@@ -453,6 +453,15 @@ export const VECTOR_SCRIPTS: AgentScript[] = [
     ],
   },
   {
+    id: "vector-distort-brush",
+    prompt: "Make the sun look hand-made with the distortion brushes",
+    steps: [
+      { say: "Twirling the sun's top edge…", ...command("vector.twirlBrush", { ids: ["sun"], points: [[630, 72]], radius: 40, strength: 0.8, angle: 30 }), target: { selector: '[data-vector-id="sun"]' } },
+      { say: "…pulling a drip down from its bottom…", ...command("vector.smudgeBrush", { ids: ["sun"], points: [[630, 205], [630, 222], [633, 240]], radius: 18, strength: 0.9 }) },
+      { say: "…and roughening its left side.", ...command("vector.roughenBrush", { ids: ["sun"], points: [[562, 140]], radius: 25, strength: 0.7, seed: 7 }) },
+    ],
+  },
+  {
     id: "vector-lens",
     prompt: "Hold a magnifying glass over the scene",
     steps: [

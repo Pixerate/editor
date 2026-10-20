@@ -691,6 +691,7 @@ export function VectorCanvas({
             {overlay.builder.trail && <path data-vector-builder-trail="" d={overlay.builder.trail} fill="none" stroke={overlay.builder.mode === 'erase' ? THEME.builderErase : accentColor} strokeWidth={1} />}
           </g>
         )}
+        {overlay.brush && <circle data-vector-brush="" cx={overlay.brush.x} cy={overlay.brush.y} r={overlay.brush.r} fill="none" stroke={accentColor} strokeWidth={1} strokeDasharray="4 3" pointerEvents="none" />}
         {overlay.toolStroke && (
           <path
             data-vector-tool-stroke={overlay.toolStroke.tool}

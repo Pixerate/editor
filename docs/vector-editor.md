@@ -307,6 +307,20 @@ A `bevel` path effect works like CorelDRAW's Bevel and gives each shape a chisel
 - **Shading.** A face slopes up from the edge toward the middle. It is lightened or darkened by up to `shading` percent as that slope faces toward or away from a light coming from `lightAngle`. Faces use `color`, or the shape's paint as one colour (`vectorPaintSolid`).
 - **Drawing.** The shape's fill goes under the faces. The middle (the shape inset by `width`, exact) is drawn over them in the shape's own paint, so gradients survive, and the stroke goes on top. Bounds do not change. Lottie gets the drawn shapes.
 
+## Distortion brushes
+
+The Distort Brush tool (D) bends outlines with a soft round brush, after CorelDRAW's Smudge, Twirl, Attract, Repel and Roughen tools. `setEditing` sets its options: `distortMode`, `distortSize` (radius, document units) and `distortStrength` (0–1).
+
+- **Dabs.** Each dab is a point map that is full strength at the centre and fades smoothly to nothing at the rim (`vectorDistortFalloff`, `vectorDistortDabMap`).
+  - `smudge` pushes points the way the brush moved.
+  - `twirl` turns them about the dab.
+  - `attract` pulls them in and `repel` pushes them out.
+- **Strokes.** A stroke's dabs are composed into one map, applied to the paths as they were when the stroke began, with the curves re-fitted (`distortVectorPath`). Dragging back and forth does not pile up anchors, and each drag is one undo step. A click is one dab (except for smudge).
+- **Roughen** breaks the parts of an outline under the brush into short segments and pushes their points in and out by a seeded hash. The same seed always gives the same spikes.
+- **Targets.** The brush acts on the selection, or, with nothing selected, on every path it passes over. Dabs are mapped into each path's own space.
+- **Canvas.** The overlay's `brush` is the circle drawn while dragging.
+- **Agent commands.** `distortBrush(mode, points, { ids, radius, strength, angle, seed })` runs a whole stroke. Agents call `vector.smudgeBrush`, `vector.twirlBrush`, `vector.attractBrush`, `vector.repelBrush` and `vector.roughenBrush`. A stroke that reaches no outline fails without changing anything.
+
 ## Lenses
 
 A closed path with `lens` set is a lens, after CorelDRAW's Lens. Inside its outline, what is drawn below it shows changed.

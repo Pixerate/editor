@@ -440,6 +440,9 @@
         {/if}
       </g>
     {/if}
+    {#if overlay.brush}
+      <circle data-vector-brush="" cx={overlay.brush.x} cy={overlay.brush.y} r={overlay.brush.r} fill="none" stroke={accentColor} stroke-width="1" stroke-dasharray="4 3" pointer-events="none" />
+    {/if}
     {#if overlay.toolStroke}
       <path
         data-vector-tool-stroke={overlay.toolStroke.tool}

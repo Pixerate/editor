@@ -973,7 +973,8 @@ export type VectorTool =
 	| 'type'
 	| 'typePath'
 	| 'frame'
-	| 'connector';
+	| 'connector'
+	| 'distort';
 
 export const VECTOR_TOOLS: readonly VectorTool[] = [
 	'select',
@@ -997,7 +998,8 @@ export const VECTOR_TOOLS: readonly VectorTool[] = [
 	'type',
 	'typePath',
 	'frame',
-	'connector'
+	'connector',
+	'distort'
 ];
 
 /** Keyboard modifiers held during a pointer event. */

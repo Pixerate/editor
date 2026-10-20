@@ -23,6 +23,7 @@ import type { VectorFreeformPoint, VectorPathNode } from './types.js';
 import { VECTOR_TRACE_MAX_PIXELS, type VectorTraceOptions } from './trace.js';
 import { bytesToBase64, decodePng, isPng, parseDataUrl } from '../raster/png.js';
 import type { VectorPdfOptions } from './pdf.js';
+import { VECTOR_DISTORT_BRUSH_MODES, type VectorDistortBrushMode } from './distortBrush.js';
 import { VECTOR_LENS_TYPES, VECTOR_PERSPECTIVE_PLANES, VECTOR_SYMMETRY_MODES, type VectorLens, type VectorLensType, type VectorPerspective, type VectorPerspectivePlane, type VectorSymmetry, type VectorSymmetryMode } from './types.js';
 import { vectorPerspectivePlanes } from './perspective.js';
 import { VECTOR_CONNECTOR_ROUTES, VECTOR_CONNECTOR_SIDES, type VectorConnector, type VectorConnectorEnd, type VectorConnectorRoute } from './types.js';
@@ -1384,6 +1385,39 @@ export function createVectorCommands(controller: VectorEditorController, options
 				return { ids: (r.lenses ?? []).map((l) => l.id) };
 			}
 		}
+	];
+
+	const BRUSH_PROPS = {
+		ids: { ...IDS, description: 'Paths to distort (default: the selection, else every path the brush reaches).' },
+		radius: { type: 'number', exclusiveMinimum: 0, description: 'Brush radius, document units (default: the distortSize setting, 20).' },
+		strength: { type: 'number', minimum: 0, maximum: 1, description: 'Strength at the brush centre, 0–1, fading to 0 at the rim (default: the distortStrength setting, 0.5).' }
+	} as const;
+	const brushRun = (mode: VectorDistortBrushMode) => (_ctx: unknown, params: { points: [number, number][]; ids?: string[]; radius?: number; strength?: number; angle?: number; seed?: number }) => {
+		const { points, ids: list, ...rest } = params;
+		const r = controller.distortBrush(
+			mode,
+			points.map(([x, y]) => ({ x, y })),
+			{ ...rest, ...(list ? { ids: list } : {}) }
+		);
+		check(r);
+		return { ids: r.ids ?? [] };
+	};
+	const brush = (mode: VectorDistortBrushMode, label: string, keywords: string[], description: string, extra: Record<string, unknown> = {}, minPoints = 1): CommandSpec => ({
+		...base,
+		id: `${prefix}${mode}Brush`,
+		label,
+		keywords: ['distort', 'brush', 'corel', ...keywords],
+		description: `${description} One undo step. Returns { ids } of the changed paths; fails, changing nothing, when the brush reaches no outline.`,
+		params: { type: 'object', properties: { points: { ...POINTS, minItems: minPoints, description: minPoints > 1 ? 'The brush stroke [[x, y], …] in document units: at least two points.' : 'Where the brush dabs [[x, y], …], document units: one dab per point.' }, ...BRUSH_PROPS, ...extra }, required: ['points'], additionalProperties: false },
+		undoable: true,
+		run: brushRun(mode)
+	});
+	const distortCommands = (): CommandSpec[] => [
+		brush('smudge', 'Smudge Brush…', ['smudge', 'push', 'drag', 'liquify'], 'Smudges outlines along a stroke: what is under the brush is pushed the way it moves, most at its centre (CorelDRAW\'s Smudge).', {}, 2),
+		brush('twirl', 'Twirl Brush…', ['twirl', 'swirl', 'spiral', 'twist'], 'Twirls the outlines under the brush about each point (CorelDRAW\'s Twirl).', { angle: { type: 'number', description: 'Degrees turned at the brush centre per point, clockwise on screen; negative turns the other way (default 15).' } }),
+		brush('attract', 'Attract Brush…', ['attract', 'pinch', 'pull', 'pucker'], 'Pulls the outlines under the brush toward each point (CorelDRAW\'s Attract).'),
+		brush('repel', 'Repel Brush…', ['repel', 'bloat', 'push out', 'inflate'], 'Pushes the outlines under the brush away from each point (CorelDRAW\'s Repel).'),
+		brush('roughen', 'Roughen Brush…', ['roughen', 'jagged', 'spiky', 'fur', 'grass'], 'Breaks the outlines under the brush into spikes (CorelDRAW\'s Roughen): use for fur, grass and torn edges.', { seed: { type: 'integer', description: 'Seed of the spikes (default 1): the same seed gives the same spikes.' } })
 	];
 
 	const PLANE = { type: 'string', enum: [...VECTOR_PERSPECTIVE_PLANES], description: 'A plane of the grid: floor, left and right (2 or 3 vanishing points), or floor, side and front (1 point).' } as const;
@@ -3194,13 +3228,14 @@ export function createVectorCommands(controller: VectorEditorController, options
 				return { ids: changed.filter((id) => controller.getNode(id)) };
 			}
 		},
+		...distortCommands(),
 		{
 			...base,
 			id: `${prefix}setEditing`,
 			label: 'Path Editing Options…',
 			keywords: ['settings', 'curvature', 'pencil', 'smoothing', 'lazy mouse', 'shapes', 'eraser'],
 			description:
-				'Sets how editing behaves: `keepShapeOnDelete`, `curvatureMoves` (anchor drags bend like the Curvature tool), `pencilSmoothing` (lazy mouse, 0–1), `recognizeShapes` (pencil scribbles become lines, rectangles, ellipses, polygons), `eraserSize` and `pencilPressure` (`pen`: record pen pressure on pencil strokes as a width profile, `all`: any pointer reporting pressure, `off`).',
+				'Sets how editing behaves: `keepShapeOnDelete`, `curvatureMoves` (anchor drags bend like the Curvature tool), `pencilSmoothing` (lazy mouse, 0–1), `recognizeShapes` (pencil scribbles become lines, rectangles, ellipses, polygons), `eraserSize`, the Distort Brush settings `distortMode` (smudge, twirl, attract, repel, roughen), `distortSize` (radius) and `distortStrength` (0–1), and `pencilPressure` (`pen`: record pen pressure on pencil strokes as a width profile, `all`: any pointer reporting pressure, `off`).',
 			params: {
 				type: 'object',
 				properties: {
@@ -3209,12 +3244,15 @@ export function createVectorCommands(controller: VectorEditorController, options
 					pencilSmoothing: { type: 'number', minimum: 0, maximum: 1 },
 					recognizeShapes: { type: 'boolean' },
 					eraserSize: { type: 'number', exclusiveMinimum: 0 },
-					pencilPressure: { type: 'string', enum: ['pen', 'all', 'off'] }
+					pencilPressure: { type: 'string', enum: ['pen', 'all', 'off'] },
+					distortMode: { type: 'string', enum: [...VECTOR_DISTORT_BRUSH_MODES], description: 'What the Distort Brush tool does when the user drags it.' },
+					distortSize: { type: 'number', exclusiveMinimum: 0, description: 'Distort Brush radius, document units.' },
+					distortStrength: { type: 'number', minimum: 0, maximum: 1, description: 'Distort Brush strength, 0–1.' }
 				}
 			},
 			run: (_ctx: unknown, params: Record<string, unknown> | undefined) => {
 				const patch: Record<string, unknown> = {};
-				for (const key of ['keepShapeOnDelete', 'curvatureMoves', 'pencilSmoothing', 'recognizeShapes', 'eraserSize', 'pencilPressure']) if (params?.[key] !== undefined) patch[key] = params[key];
+				for (const key of ['keepShapeOnDelete', 'curvatureMoves', 'pencilSmoothing', 'recognizeShapes', 'eraserSize', 'pencilPressure', 'distortMode', 'distortSize', 'distortStrength']) if (params?.[key] !== undefined) patch[key] = params[key];
 				controller.setEditing(patch);
 				return { editing: controller.getState().editing };
 			}

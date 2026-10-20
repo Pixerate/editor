@@ -1,6 +1,8 @@
 <script lang="ts">
   import {
     VECTOR_TOOLS,
+    VECTOR_DISTORT_BRUSH_MODES,
+    type VectorDistortBrushMode,
     VECTOR_TOOL_GLYPHS,
     VECTOR_TOOL_SHORTCUTS,
     VECTOR_EDIT_TOGGLES,
@@ -204,6 +206,24 @@
             }}
           />
         </label>
+      {/if}
+      {#if view.tool === 'distort'}
+        <span class="flex flex-wrap items-center gap-1" data-vector-distort-options="">
+          <select aria-label="Distort brush" title="What the brush does to the outlines it passes over" class="h-7 rounded border border-border bg-background px-1 text-xs" value={view.editing.distortMode} onchange={(e) => controller.setEditing({ distortMode: e.currentTarget.value as VectorDistortBrushMode })}>
+            {#each VECTOR_DISTORT_BRUSH_MODES as m (m)}<option value={m}>{m[0].toUpperCase() + m.slice(1)}</option>{/each}
+          </select>
+          <label class="flex items-center gap-1 text-xs text-foreground">
+            Size
+            <input type="number" min="1" step="1" aria-label="Distort brush size" class="h-7 w-16 rounded border border-border bg-background px-1.5 text-xs" value={view.editing.distortSize} oninput={(e) => {
+              const n = parseFloat(e.currentTarget.value);
+              if (Number.isFinite(n) && n > 0) controller.setEditing({ distortSize: n });
+            }} />
+          </label>
+          <label class="flex items-center gap-1 text-xs text-foreground">
+            Strength
+            <input type="range" min="0" max="1" step="0.05" aria-label="Distort brush strength" class="h-4 w-20 accent-primary" value={view.editing.distortStrength} oninput={(e) => controller.setEditing({ distortStrength: parseFloat(e.currentTarget.value) })} />
+          </label>
+        </span>
       {/if}
       {#if view.tool === 'paintBucket'}
         <button
