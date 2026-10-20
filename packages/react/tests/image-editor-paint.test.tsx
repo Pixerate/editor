@@ -131,6 +131,8 @@ describe('React paint tools', () => {
     await act(async () => button('Reset transform').click());
     expect(c.getState().paint.cloneTransform).toEqual({ scaleX: 1, scaleY: 1, rotate: 0 });
     await act(async () => button('Spot Heal').click());
+    await act(async () => button('Content-Aware').click());
+    expect(c.getState().paint.retouch.spotType).toBe('content-aware');
     await act(async () => button('Smooth').click());
     expect(c.getState().paint.retouch.spotType).toBe('smooth');
     await act(async () => button('Dodge').click());

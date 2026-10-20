@@ -28,7 +28,7 @@ import { srgbDecode, srgbEncode } from '../raster/deep';
 import { DabWalker, dabRect, rasterizeDab, type BrushSettings, type CoverageMap, type Dab, type StrokePoint } from './brush';
 import { SmudgeTip, type SmudgeSettings } from './blending';
 import { TileMedium, put255, type PaintPixels, type PaintTileTarget } from './exchange';
-import { bestOffset, dilateMask, maskBounds, membraneFill, seamlessClone } from './heal';
+import { bestOffset, contentAwareFill, dilateMask, maskBounds, membraneFill, seamlessClone } from './heal';
 
 // ---------------------------------------------------------------------------
 // Tone kernels
@@ -128,9 +128,9 @@ export type RetouchSample = 'current' | 'current-below' | 'all';
 export const RETOUCH_SAMPLES: readonly RetouchSample[] = ['current', 'current-below', 'all'];
 
 /** How the Spot Healing Brush finds its source. */
-export type SpotHealType = 'proximity-match' | 'smooth';
+export type SpotHealType = 'proximity-match' | 'content-aware' | 'smooth';
 
-export const SPOT_HEAL_TYPES: readonly SpotHealType[] = ['proximity-match', 'smooth'];
+export const SPOT_HEAL_TYPES: readonly SpotHealType[] = ['proximity-match', 'content-aware', 'smooth'];
 
 /** The retouching tools' options. */
 export interface RetouchSettings {
@@ -138,7 +138,7 @@ export interface RetouchSettings {
   aligned: boolean;
   /** Clone / heal / spot heal: what is sampled (default `current`: the target layer). */
   sample: RetouchSample;
-  /** Spot heal: `proximity-match` (default: the best matching patch nearby) or `smooth` (a smooth fill from the edges). */
+  /** Spot heal: `proximity-match` (default: the best matching patch nearby), `content-aware` (texture and edges synthesised from patches around it) or `smooth` (a smooth fill from the edges). */
   spotType: SpotHealType;
   /** Dodge / burn: the tonal range (default `midtones`). */
   range: ToneRange;
@@ -735,6 +735,8 @@ export function spotHealPixels(
     }
   }
   onOffset?.(filled ? (bestFound as [number, number]) : null);
+  // Content-aware: texture and edges synthesised from patches all around (PatchMatch).
+  if (!filled && type === 'content-aware') filled = contentAwareFill(w, h, 4, img, domain);
   if (!filled) filled = membraneFill(w, h, 4, img, domain);
   return healPixels(w, h, filled, img, healMask);
 }

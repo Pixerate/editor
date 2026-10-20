@@ -9,6 +9,7 @@ import {
   dodgeBurnCurve,
   handlePaintShortcut,
   healPixels,
+  contentAwareFill,
   membraneFill,
   PaintGesture,
   readPixel,
@@ -404,6 +405,44 @@ describe('retouch agent tools', () => {
     }
     const cleared = await registry.callTool('set_clone_source', { clear: true });
     expect(cleared.isError).toBeFalsy();
+  });
+});
+
+describe('content-aware spot heal', () => {
+  it('continues a stripe pattern across the hole better than a smooth fill', () => {
+    const w = 60;
+    const h = 40;
+    const truth = new Float32Array(w * h * 4);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) truth.set([x % 6 < 3 ? 230 : 30, 80, (y * 3) % 255, 255], (y * w + x) * 4);
+    const hole = new Uint8Array(w * h);
+    for (let y = 14; y < 26; y++) for (let x = 24; x < 36; x++) hole[y * w + x] = 1;
+    const img = truth.slice();
+    for (let i = 0; i < w * h; i++) if (hole[i]) img.set([0, 0, 0, 255], i * 4);
+    const err = (out: Float32Array) => {
+      let e = 0;
+      for (let i = 0; i < w * h; i++) if (hole[i]) e += Math.abs(out[i * 4] - truth[i * 4]);
+      return e / 144;
+    };
+    const ca = contentAwareFill(w, h, 4, img, hole);
+    const smooth = membraneFill(w, h, 4, img, hole);
+    expect(err(ca)).toBeLessThan(err(smooth) / 3);
+    // Deterministic, and nothing outside the hole moves.
+    expect(contentAwareFill(w, h, 4, img, hole)).toEqual(ca);
+    for (let i = 0; i < w * h; i++) if (!hole[i]) expect(ca[i * 4]).toBe(img[i * 4]);
+  });
+
+  it('spot_heal type content-aware removes a spot from a striped layer', async () => {
+    const { c, id, registry } = setup((x) => (x % 6 < 3 ? [230, 80, 80] : [30, 80, 80]));
+    // A black blot over the stripes.
+    c.selectRect({ x: 50, y: 25, width: 8, height: 8 });
+    c.fillPixels({ layerId: id, color: '#000000' });
+    c.deselect();
+    const res = await registry.callTool('spot_heal', { layerId: id, type: 'content-aware', points: [{ x: 54, y: 29 }], brush: { size: 16, hardness: 1 } });
+    expect(res.isError).toBeFalsy();
+    expect(res.structuredContent).toMatchObject({ spotHeal: { offset: null } });
+    // The blot is gone: the centre is a stripe colour again, not black.
+    const p = pixel(c, id, 54, 29);
+    expect(Math.max(p[0], p[1], p[2])).toBeGreaterThan(60);
   });
 });
 

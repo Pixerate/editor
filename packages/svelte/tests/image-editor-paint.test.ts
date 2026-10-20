@@ -139,6 +139,8 @@ describe('Svelte paint tools', () => {
     click(button('Reset transform'));
     expect(c.getState().paint.cloneTransform).toEqual({ scaleX: 1, scaleY: 1, rotate: 0 });
     click(button('Spot Heal'));
+    click(button('Content-Aware'));
+    expect(c.getState().paint.retouch.spotType).toBe('content-aware');
     click(button('Smooth'));
     expect(c.getState().paint.retouch.spotType).toBe('smooth');
     click(button('Dodge'));

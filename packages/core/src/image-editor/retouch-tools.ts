@@ -143,12 +143,12 @@ export function createImageRetouchTools(controller: ImageEditorController): Agen
     name: 'spot_heal',
     title: 'Spot Healing stroke',
     description:
-      "Removes what a stroke covers without a source point (Photoshop's Spot Healing Brush): proximity-match copies the best matching patch nearby and blends it in; smooth fills from the edges inwards (for spots on smooth areas). Paint just over the spot with a brush a little larger than it. One undo step. Returns the layerId, channel, changed bounds, dab count and spotHeal {offset} (the patch offset copied, or null for a smooth fill).",
+      "Removes what a stroke covers without a source point (Photoshop's Spot Healing Brush): proximity-match copies the best matching patch nearby and blends it in; content-aware synthesises texture and continues edges from patches all around (best across lines, on patterns and for larger spots, a little slower); smooth fills from the edges inwards (for spots on smooth areas). Paint just over the spot with a brush a little larger than it. One undo step. Returns the layerId, channel, changed bounds, dab count and spotHeal {offset} (the patch offset copied, or null for a smooth fill).",
     inputSchema: {
       type: 'object',
       properties: {
         points: POINTS,
-        type: { type: 'string', enum: [...SPOT_HEAL_TYPES], description: 'proximity-match (default) or smooth.' },
+        type: { type: 'string', enum: [...SPOT_HEAL_TYPES], description: 'proximity-match (default the current option), content-aware or smooth.' },
         sample: SAMPLE,
         brush: BRUSH,
         ...TARGET,
@@ -311,7 +311,7 @@ export function createImageRetouchTools(controller: ImageEditorController): Agen
       properties: {
         aligned: { type: 'boolean', description: 'Clone / heal: keep the offset from stroke to stroke (default true).' },
         sample: SAMPLE,
-        spotType: { type: 'string', enum: [...SPOT_HEAL_TYPES], description: 'Spot heal: proximity-match (default) or smooth.' },
+        spotType: { type: 'string', enum: [...SPOT_HEAL_TYPES], description: 'Spot heal: proximity-match (default), content-aware or smooth.' },
         range: { type: 'string', enum: [...TONE_RANGES], description: 'Dodge / burn: shadows, midtones (default) or highlights.' },
         exposure: { type: 'number', minimum: 0, maximum: 1, description: 'Dodge / burn strength 0..1 (default 0.5).' },
         protectTones: { type: 'boolean', description: 'Dodge / burn: keep hue and saturation (default true).' },

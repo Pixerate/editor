@@ -5,8 +5,9 @@
    untouched, so a bad stroke is easy to mask or erase. Smudge, Dodge, Burn and Sponge change the
    pixels they touch, so run them on a duplicate (`duplicate_layer`) instead.
 2. **Pick the tool by the job.** A small spot or blemish on skin, sky or a wall: `spot_heal` with
-   a brush a little larger than the spot (`proximity-match` copies a nearby patch; `smooth` fills
-   from the edges and suits flat areas). A larger flaw, or one next to an edge: `heal_brush` from a
+   a brush a little larger than the spot (`proximity-match` copies a nearby patch; `content-aware`
+   synthesises texture and continues lines and patterns across the spot, best for larger spots and
+   where an edge runs through; `smooth` fills from the edges and suits flat areas). A larger flaw, or one next to an edge: `heal_brush` from a
    clean source of the same texture; it takes the colour and light around the stroke, so the source
    may be lighter or darker. Copy exactly (a repeat, a straight line, an edge): `clone_stamp`.
 3. **Sources and offsets.** `set_clone_source` (or `source` on the stroke) is the Alt-click. The
