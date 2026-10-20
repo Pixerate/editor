@@ -236,11 +236,63 @@ export function createImageRetouchTools(controller: ImageEditorController): Agen
       stroke('sponge', { ...args, channel: 'pixels' }, { ...pick(args, ['vibrance']), ...(args.mode !== undefined ? { spongeMode: args.mode as RetouchSettings['spongeMode'] } : {}) }),
   };
 
+  const filterSchema = (verb: string) => ({
+    type: 'object' as const,
+    properties: {
+      points: POINTS,
+      strength: { type: 'number', minimum: 0, maximum: 1, description: `How strongly to ${verb}, 0..1 (default the current option, 0.5); multiplies the brush opacity.` },
+      brush: BRUSH,
+      ...TARGET,
+    },
+    required: ['points'],
+    additionalProperties: false,
+  }) as const;
+
+  const blurTool: AgentTool = {
+    name: 'blur_stroke',
+    title: 'Blur stroke',
+    description:
+      "Softens the pixels a stroke covers (Photoshop's Blur tool): a soft blur of the layer laid through the brush at `strength`. Overlapping dabs in one stroke do not compound; another stroke blurs further. Works on pixels and masks, at any bit depth. One undo step. Returns the layerId, channel, changed bounds and dab count.",
+    inputSchema: filterSchema('blur'),
+    annotations: { title: 'Blur stroke', ...WRITE },
+    handler: (args) => stroke('blur', args, pick(args, ['strength'])),
+  };
+
+  const sharpenTool: AgentTool = {
+    name: 'sharpen_stroke',
+    title: 'Sharpen stroke',
+    description:
+      "Crisps the pixels a stroke covers (Photoshop's Sharpen tool): an unsharp mask of the layer laid through the brush at `strength`. Keep strength low (0.2..0.5) and inspect with capture_view; strong sharpening shows halos and noise. One undo step. Returns the layerId, channel, changed bounds and dab count.",
+    inputSchema: filterSchema('sharpen'),
+    annotations: { title: 'Sharpen stroke', ...WRITE },
+    handler: (args) => stroke('sharpen', args, pick(args, ['strength'])),
+  };
+
+  const historyBrush: AgentTool = {
+    name: 'history_brush',
+    title: 'History Brush stroke',
+    description:
+      "Paints the layer back as it was earlier (Photoshop's History Brush): the same layer's pixels (or mask) from `historySteps` undo steps back, or from the oldest state history keeps (0, the default, usually the document as opened), laid through the brush. Use it to undo part of a filter, paint or retouch in one area. Fails if the layer did not exist then or there is no history yet. One undo step. Returns the layerId, channel, changed bounds and dab count.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        points: POINTS,
+        historySteps: { type: 'integer', minimum: 0, maximum: 1000, description: 'Undo steps back to paint from; 0 (default the current option) is the oldest state history keeps.' },
+        brush: BRUSH,
+        ...TARGET,
+      },
+      required: ['points'],
+      additionalProperties: false,
+    },
+    annotations: { title: 'History Brush stroke', ...WRITE },
+    handler: (args) => stroke('history', args, pick(args, ['historySteps'])),
+  };
+
   const getOptions: AgentTool = {
     name: 'get_retouch_options',
     title: 'Get retouch options',
     description:
-      'Reads the retouching tools\' options (aligned, sample, spotType, range, exposure, protectTones, spongeMode, vibrance, strength) and the clone source ({x, y, offset} or null; offset is the aligned offset the last clone or heal stroke fixed). Call it before clone_stamp or heal_brush without a source to see where they will sample.',
+      'Reads the retouching tools\' options (aligned, sample, spotType, range, exposure, protectTones, spongeMode, vibrance, strength, historySteps) and the clone source ({x, y, offset} or null; offset is the aligned offset the last clone or heal stroke fixed). Call it before clone_stamp or heal_brush without a source to see where they will sample.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     annotations: { title: 'Get retouch options', ...READ },
     handler: () => {
@@ -265,7 +317,8 @@ export function createImageRetouchTools(controller: ImageEditorController): Agen
         protectTones: { type: 'boolean', description: 'Dodge / burn: keep hue and saturation (default true).' },
         spongeMode: { type: 'string', enum: ['desaturate', 'saturate'], description: 'Sponge: desaturate (default) or saturate.' },
         vibrance: { type: 'boolean', description: 'Sponge: damp clipping (default true).' },
-        strength: { type: 'number', minimum: 0, maximum: 1, description: 'Smudge strength 0..1 (default 0.5).' },
+        strength: { type: 'number', minimum: 0, maximum: 1, description: 'Smudge, blur and sharpen strength 0..1 (default 0.5).' },
+        historySteps: { type: 'integer', minimum: 0, maximum: 1000, description: 'History Brush: undo steps back it paints from; 0 is the oldest state (default 0).' },
       },
       additionalProperties: false,
     },
@@ -298,7 +351,7 @@ export function createImageRetouchTools(controller: ImageEditorController): Agen
     },
   };
 
-  return [cloneStamp, healBrush, spotHeal, smudge, dodge, burn, spongeTool, getOptions, setOptions, setSource];
+  return [cloneStamp, healBrush, spotHeal, smudge, dodge, burn, spongeTool, blurTool, sharpenTool, historyBrush, getOptions, setOptions, setSource];
 }
 
 function pick(args: Record<string, unknown>, keys: string[]): Partial<RetouchSettings> {
