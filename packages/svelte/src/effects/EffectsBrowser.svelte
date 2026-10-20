@@ -98,7 +98,7 @@
       {/if}
     </div>
     {#if error}<p role="alert" class="text-[11px] text-destructive">{error}</p>{/if}
-    <ul class="grid grid-cols-[repeat(auto-fill,minmax(6.5rem,1fr))] gap-1.5" role="list">
+    <ul class="grid max-h-96 grid-cols-[repeat(auto-fill,minmax(6.5rem,1fr))] gap-1.5 overflow-y-auto" role="list">
       {#each shown as e (e.id)}
         <li>
           <button type="button" class="flex w-full flex-col gap-1 rounded border border-transparent p-1 text-left hover:border-border focus-visible:border-border" title={e.description ?? e.name} data-effect-id={e.id} onclick={() => onpick(e)}>

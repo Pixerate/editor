@@ -3,8 +3,8 @@ import { DEMO_EFFECTS_OPTIONS, setDemoEffectsSource, useDemoEffects } from "../d
 
 /** Picks the effects provider every effects-enabled tab uses. */
 export function EffectsProviderSwitch() {
-  const { source } = useDemoEffects();
-  const note = DEMO_EFFECTS_OPTIONS.find((o) => o.unavailable)?.unavailable;
+  const { source, loading, error } = useDemoEffects();
+  const note = error ?? (loading ? "Loading Flair…" : DEMO_EFFECTS_OPTIONS.find((o) => o.id === source)?.note);
   return (
     <div className="flex flex-wrap items-center gap-2 text-xs" data-effects-switch="">
       <span className="text-muted-foreground">Effects</span>
@@ -24,7 +24,7 @@ export function EffectsProviderSwitch() {
           </button>
         ))}
       </div>
-      {note && <span className="text-muted-foreground">{note}</span>}
+      {note && <span className={error ? "text-destructive" : "text-muted-foreground"} role={error ? "alert" : undefined}>{note}</span>}
     </div>
   );
 }

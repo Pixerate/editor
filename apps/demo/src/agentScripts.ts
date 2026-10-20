@@ -522,6 +522,28 @@ export const ANIMATION_SCRIPTS: AgentScript[] = [
 
 export const IMAGE_SCRIPTS: AgentScript[] = [
   {
+    id: "image-effects-flair",
+    prompt: "Give the photo a film look with Flair, plus an aurora wash and a vignette",
+    steps: [
+      { say: "Searching Flair's catalog for a film look.", tool: "imagefx__search_effects", args: { query: "film", use: "filter" } },
+      { say: "Reading its controls: tint, grain, halation, vignette.", tool: "imagefx__describe_effect", args: { effect: "film-look" } },
+      {
+        say: "Film look on the photo as a smart filter, so it stays editable (the layer becomes a smart object in the same undo step).",
+        tool: "imagefx__apply_effect",
+        args: { target: "background", effect: "film-look", values: { uTint: "#ffe2c0", uGrain: 0.1, uHalation: 0.35 } },
+        open: "Layers",
+      },
+      {
+        say: "An aurora on its own layer, soft-light at half strength, to wash the sky.",
+        tool: "imagefx__add_effect_layer",
+        args: { effect: "aurora", values: { uIntensity: 0.8 }, name: "Aurora wash", blend: "soft-light", opacity: 0.5 },
+      },
+      { say: "A vignette with grain on top.", tool: "imagefx__add_effect_layer", args: { effect: "vignette-grain", values: { uStrength: 0.5 }, name: "Vignette" } },
+      { say: "Checking what is applied.", tool: "imagefx__list_applied_effects", args: {} },
+      { say: "Rendering a preview to check it.", tool: "image__render_preview", args: { maxSide: 360 } },
+    ],
+  },
+  {
     id: "image-effects",
     prompt: "Add a colour wash and a lower-third bar from the effects library",
     steps: [
@@ -767,6 +789,39 @@ export const PARAMETER_SCRIPTS: AgentScript[] = [
 const clipTarget = (id: string) => ({ selector: `[data-clip="${id}"]` });
 
 export const VIDEO_SCRIPTS: AgentScript[] = [
+  {
+    id: "video-effects-flair",
+    prompt: "Give the sunrise a film look with Flair, dissolve into the ocean, and flare the ending",
+    steps: [
+      { say: "Searching Flair's catalog for a film look.", tool: "videofx__search_effects", args: { query: "film", use: "filter" } },
+      { say: "Reading its controls: tint, grain, halation, vignette.", tool: "videofx__describe_effect", args: { effect: "film-look" } },
+      {
+        say: "Film look on the sunrise shot, warm and grainy.",
+        tool: "videofx__apply_effect",
+        args: { target: "shot-1", effect: "film-look", values: { uTint: "#ffd9a8", uGrain: 0.12 } },
+        target: clipTarget("shot-1"),
+      },
+      {
+        say: "Closing the vignette in over the shot with keyframes.",
+        tool: "videofx__set_video_effect_keyframes",
+        args: { clip: "shot-1", effect: "fx1", control: "uVignette", keys: [{ t: 0, v: 0 }, { t: 3500, v: 0.7, ease: "ease-in" }] },
+        target: clipTarget("shot-1"),
+      },
+      {
+        say: "A pixel dissolve into the ocean instead of the crossfade.",
+        tool: "videofx__set_video_effect_transition",
+        args: { clip: "shot-2", effect: "transition-pixel-dissolve", duration: 800, values: { uMaxBlock: 32 } },
+        target: clipTarget("shot-2"),
+      },
+      {
+        say: "A lens flare over the last two seconds, on the titles track.",
+        tool: "videofx__add_video_effect_clip",
+        args: { track: "titles", effect: "lens-flare", start: 10000, duration: 2000, name: "Flare" },
+      },
+      { say: "Listing what is applied now.", tool: "videofx__list_applied_effects", args: {} },
+      { say: "Playing the dissolve.", tool: "video__seek_video", args: { time: 3200, play: true }, target: clipTarget("shot-2") },
+    ],
+  },
   {
     id: "video-effects",
     prompt: "Give the sunrise a warm tint and use an effect transition into the ocean",

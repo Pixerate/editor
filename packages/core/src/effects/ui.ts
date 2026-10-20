@@ -85,10 +85,29 @@ export function effectSamplePicture(width: number, height: number, variant = 0):
 /**
  * A small preview of an effect from the provider's own renderer: filters run on a sample picture,
  * transitions go half way between two, generators and overlays draw at `time` (default half
- * their length, or 1 s). The renderer is disposed afterwards. Rejects like the provider does
- * (motion effects have no pixels).
+ * their length, or 1 s). Thumbnails render one at a time (each renderer is disposed before the
+ * next is made) and are kept per provider. Rejects like the provider does (motion effects have
+ * no pixels).
  */
-export async function renderEffectThumbnail(provider: EffectProvider, effect: EffectSummary | EffectDescription, size: { width: number; height: number } = { width: 96, height: 54 }): Promise<EffectPixels> {
+export function renderEffectThumbnail(provider: EffectProvider, effect: EffectSummary | EffectDescription, size: { width: number; height: number } = { width: 96, height: 54 }): Promise<EffectPixels> {
+	let cache = thumbnails.get(provider);
+	if (!cache) thumbnails.set(provider, (cache = new Map()));
+	const key = `${effect.id}@${size.width}x${size.height}`;
+	let out = cache.get(key);
+	if (!out) {
+		// One at a time: a browser full of previews would otherwise open a graphics context each.
+		out = thumbnailQueue.then(() => renderThumbnail(provider, effect, size));
+		thumbnailQueue = out.catch(() => undefined);
+		out.catch(() => cache!.delete(key));
+		cache.set(key, out);
+	}
+	return out;
+}
+
+const thumbnails = new WeakMap<EffectProvider, Map<string, Promise<EffectPixels>>>();
+let thumbnailQueue: Promise<unknown> = Promise.resolve();
+
+async function renderThumbnail(provider: EffectProvider, effect: EffectSummary | EffectDescription, size: { width: number; height: number }): Promise<EffectPixels> {
 	const d = 'inputs' in effect ? effect : await provider.describe(effect.id);
 	const renderer = await provider.createRenderer(d.id, size);
 	try {

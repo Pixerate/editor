@@ -11,7 +11,8 @@
 
 import { EffectsSlot, createEffectPixels, linearToSrgb } from '../effects/helpers.js';
 import { EffectUnsupportedError } from '../effects/errors.js';
-import type { EffectDescription, EffectPixels, EffectProvider, EffectRenderer, EffectRenderRequest, EffectUse, EffectValue } from '../effects/types.js';
+import { EffectRendererPool } from '../effects/pool.js';
+import type { EffectDescription, EffectPixels, EffectProvider, EffectRenderRequest, EffectUse, EffectValue } from '../effects/types.js';
 import { surfaceFromPixels, type PixelSurface } from '../raster/surface.js';
 import { surfaceFromDeepPixels } from '../raster/deep.js';
 import type { EffectSmartFilter } from './layers/model.js';
@@ -76,6 +77,8 @@ export interface ImageEffectsEngineOptions {
   slot?: EffectsSlot;
   /** Smart filter results kept (default 24). */
   maxEntries?: number;
+  /** Live renderers kept (default 4): GPU providers hold a graphics context each (see `EffectRendererPool`). */
+  maxRenderers?: number;
 }
 
 /**
@@ -88,7 +91,7 @@ export class ImageEffectsEngine implements SmartEffectResolver {
   private readonly cache = new Map<string, Uint8ClampedArray>();
   private readonly pending = new Map<string, Promise<void>>();
   private readonly failures = new Map<string, Error>();
-  private readonly renderers = new Map<string, { renderer: Promise<EffectRenderer>; queue: Promise<unknown> }>();
+  private readonly pool: EffectRendererPool;
   private readonly descriptions = new Map<string, Promise<EffectDescription>>();
   private readonly listeners = new Set<() => void>();
   private readonly maxEntries: number;
@@ -98,6 +101,7 @@ export class ImageEffectsEngine implements SmartEffectResolver {
   constructor(options: ImageEffectsEngineOptions = {}) {
     this.slot = options.slot ?? new EffectsSlot();
     this.maxEntries = options.maxEntries ?? 24;
+    this.pool = new EffectRendererPool({ maxRenderers: options.maxRenderers });
     this.detach = this.slot.subscribe(() => {
       this.reset();
       this.notify();
@@ -194,18 +198,7 @@ export class ImageEffectsEngine implements SmartEffectResolver {
   }
 
   private render(provider: EffectProvider, id: string, width: number, height: number, depth: 8 | 16 | 32, request: EffectRenderRequest): Promise<EffectPixels> {
-    const k = `${id}@${width}x${height}x${depth}`;
-    let r = this.renderers.get(k);
-    if (!r) {
-      const renderer = Promise.resolve().then(() => provider.createRenderer(id, { width, height, depth }));
-      renderer.catch(() => this.renderers.delete(k));
-      r = { renderer, queue: Promise.resolve() };
-      this.renderers.set(k, r);
-    }
-    const entry = r;
-    const next = entry.queue.then(() => entry.renderer).then((renderer) => renderer.render(request));
-    entry.queue = next.catch(() => undefined);
-    return next;
+    return this.pool.render(provider, id, { width, height, depth }, request);
   }
 
   /** Forgets every result and failure and disposes the renderers. */
@@ -215,8 +208,7 @@ export class ImageEffectsEngine implements SmartEffectResolver {
     this.pending.clear();
     this.failures.clear();
     this.descriptions.clear();
-    for (const r of this.renderers.values()) r.renderer.then((x) => x.dispose(), () => {});
-    this.renderers.clear();
+    this.pool.clear();
   }
 
   subscribe(listener: () => void): () => void {
