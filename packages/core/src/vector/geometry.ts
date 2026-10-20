@@ -4,6 +4,7 @@
  */
 import { isVectorGradient, transformVectorPaint } from './gradient.js';
 import { isVectorShadedPaint } from './shading.js';
+import { transformVectorSymmetry } from './symmetry.js';
 import type { Point } from '../canvas/types.js';
 import {
 	bezierPathBounds,
@@ -510,9 +511,11 @@ function bakeIntoGeometry<T extends VectorNode>(node: T, m: AffineMatrix): T {
 	if (node.type === 'group') {
 		const group = node as VectorGroupNode;
 		const children = group.children.map((c) => transformVectorNode(c, m));
+		// A symmetry's centre and axes live in the group's space too.
+		const sym = group.symmetry ? { symmetry: transformVectorSymmetry(group.symmetry, m) } : {};
 		// A blend's replaced spine lives in the group's space too.
 		const spine = group.blend?.spine;
-		if (!spine) return { ...group, children } as T;
+		if (!spine) return { ...group, ...sym, children } as T;
 		const moved = { closed: spine.closed, anchors: spine.anchors.map((a) => mapAnchor(a, m)) };
 		return { ...group, children, blend: { ...group.blend, spine: moved } } as T;
 	}

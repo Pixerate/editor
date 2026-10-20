@@ -46,6 +46,8 @@ carry a live effect stack. Every command is a `vector.*` command run with `run_c
 - **Connectors** are open paths with a `connector` whose ends are glued to other objects' sites
   (the middle of a side, or the centre); they are routed again after every edit, so they follow
   what they connect. A free end stays where it is.
+- **Symmetry groups** draw their children plus mirrored or rotated copies. Add art to one with
+  `parentId` on `vector.addShape` / `vector.addPath`; only the originals are stored and edited.
 - Coordinates are document units. A rotated node stores its geometry in its own space: the
   `bounds` that `vector.list` reports are document-space, its `d` is the node's own.
 
@@ -312,6 +314,16 @@ the browser's shaper they are kept but not drawn until outlines are available.
 | `vector.setConnector` | Reglue an end (`{ nodeId, side? }`), unglue it (`null`), or change `route`, `radius`, `gap`; also turns a plain open path into a connector. Returns `{ connectors }`. |
 | `vector.listConnectors` | Read every connector: route and each end's glued object, side setting, side in use and position. |
 | `vector.listConnectionSites` | Read an object's sites (top, right, bottom, left, centre) with positions and outward normals, to pick a `side`. |
+
+### Symmetry
+
+| Command | Use it to |
+| --- | --- |
+| `vector.makeSymmetry` | Put objects (or, with `ids: []`, nothing yet) in a live symmetry group: `mode` vertical / horizontal / dual / diagonal / radial (`copies`, `mirror`), `center`, `rotation`. Its copies follow every edit. Use for logos, mandalas, faces, ornaments: draw one half or one wedge. Returns `{ id, symmetry, children }`. |
+| `vector.setSymmetry` | Change mode, centre, rotation, copies or mirroring. Returns `{ groups }`. |
+| `vector.releaseSymmetry` | Stop repeating; `expand: true` keeps the copies as real objects (to edit one side alone). Returns `{ ids }` of the added objects. |
+| `vector.enterSymmetry` | Hand the canvas to the user drawing inside a symmetry group (pen, pencil, shapes, text go in, mirrored live). Returns `{ id }`. |
+| `vector.exitSymmetry` | Stop drawing inside it. |
 
 ### Masks and clipping
 

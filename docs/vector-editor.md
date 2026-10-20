@@ -467,6 +467,30 @@ controller.getConstraintDof(); // { dof, status: "under" | "fully" | "over", red
 - **Auto Constrain.** `inferVectorConstraints` lists what a sketch nearly satisfies (coincident points of different paths, concentric / tangent circles, a segment tangent to a circle, horizontal / vertical segments, collinear, connected perpendicular and parallel segments, equal lengths and radii); `autoConstrain` adds them one by one, skipping refused ones.
 - **UI.** `getVectorOverlayRenderData(state).constraints` places a glyph (or `name = value`) and a dimension line per constraint of the selected paths; `getVectorConstraintPanel` gives the DOF message, the constraints the selected anchors (direct tool) or round paths allow, the selection's constraints and the parameters.
 
+## Live symmetry
+
+```ts
+const { id } = controller.makeSymmetry({ mode: "radial", copies: 8, mirror: true, center: { x: 200, y: 150 } }, { ids: [] }) as { ok: true; id: string };
+controller.addShape({ kind: "ellipse", x: 205, y: 100, width: 10, height: 30 }, { parentId: id }); // repeated 16×
+controller.enterSymmetry(id); // new pen, pencil, shape and text art goes in, mirrored as it is drawn
+controller.releaseSymmetry({ ids: [id], expand: true }); // the copies become real objects
+```
+
+- **Model.** A group with `symmetry: { mode, center, rotation?, copies?, mirror? }` draws its children and their copies.
+- **Modes.** The mirror modes follow photocraft's `symmetry.rs`:
+  - `vertical`: mirror across a vertical axis;
+  - `horizontal`: mirror across a horizontal axis;
+  - `diagonal`: mirror across the diagonal;
+  - `dual`: both mirrors plus a half turn;
+  - all turned by `rotation`.
+- **Radial** gives `copies` turns. With `mirror` it also adds the `copies` reflections, the dihedral group (like a kaleidoscope).
+- **Copies are appearance.** `vectorSymmetryDrawn` adds locked copies (ids `<id>~sym<k>`) through the appearance pipeline. They draw, hit-test, bound, snap and export (SVG keeps `symmetry` in the live group's data, so it round-trips; Lottie and PDF draw them) but are never stored or edited.
+- **Transforms.** A transform baked into the group moves its centre and turns or flips its axes (`transformVectorSymmetry`).
+- **Drawing inside.** `enterSymmetry` (the panel's Draw inside) sends new pen, pencil, shape and text nodes into a top-level, unturned symmetry group until Escape or `exitSymmetry`.
+  - A new empty group starts entered.
+  - `overlay.symmetry` gives the axes to draw: dashed, solid while drawing inside.
+  - Agents add art with `parentId` on `vector.addShape` / `vector.addPath`.
+
 ## Frames and artboards
 
 ```ts

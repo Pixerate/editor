@@ -568,6 +568,33 @@ export interface VectorGroupNode extends VectorNodeBase {
 	 * when resized. Ignored on blends, live booleans and mask groups.
 	 */
 	frame?: VectorFrame | null;
+	/**
+	 * Makes the group a live symmetry group: it draws its children and their mirrored (or rotated)
+	 * copies, regenerated whenever a child changes. Ignored on blends, live booleans, mask groups
+	 * and frames.
+	 */
+	symmetry?: VectorSymmetry | null;
+}
+
+/**
+ * How a symmetry group repeats its children: mirrored across a `vertical`, `horizontal` or
+ * `diagonal` axis, across both axes (`dual`: four quarters), or `radial`ly round the centre
+ * (`copies` turns, each mirrored too with `mirror`, like a kaleidoscope).
+ */
+export type VectorSymmetryMode = 'vertical' | 'horizontal' | 'dual' | 'diagonal' | 'radial';
+export const VECTOR_SYMMETRY_MODES: readonly VectorSymmetryMode[] = ['vertical', 'horizontal', 'dual', 'diagonal', 'radial'];
+
+/** A symmetry group's settings (`VectorGroupNode.symmetry`). */
+export interface VectorSymmetry {
+	mode: VectorSymmetryMode;
+	/** Where the axes cross (the group's own space). */
+	center: Vec2;
+	/** Turn of the axes, degrees clockwise (default 0). */
+	rotation?: number;
+	/** Radial: how many turns round the circle (2–64, default 6). */
+	copies?: number;
+	/** Radial: mirror each turn too (default false). */
+	mirror?: boolean;
 }
 
 /**

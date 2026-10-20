@@ -474,6 +474,11 @@
         {/each}
       </g>
     {/each}
+    {#each overlay.symmetry as sy (sy.nodeId)}
+      <g data-vector-symmetry-axes={sy.nodeId} stroke={accentColor} stroke-dasharray={sy.drawing ? undefined : '6 4'} opacity={sy.drawing ? 0.9 : 0.6}>
+        {#each sy.lines as l, i (i)}<line x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} />{/each}
+      </g>
+    {/each}
     {#each overlay.trackingPoints as t, i (i)}
       <path data-vector-tracking-point="" d="M{t.x - 5} {t.y}H{t.x + 5}M{t.x} {t.y - 5}V{t.y + 5}" stroke={guideColor} stroke-width="1.5" />
     {/each}
