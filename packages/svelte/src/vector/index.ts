@@ -19,6 +19,7 @@ export { default as VectorShadingPanel } from "./VectorShadingPanel.svelte";
 export { default as VectorTracePanel } from "./VectorTracePanel.svelte";
 export { default as VectorSymmetryPanel } from "./VectorSymmetryPanel.svelte";
 export { default as VectorPerspectivePanel } from "./VectorPerspectivePanel.svelte";
+export { default as VectorLensPanel } from "./VectorLensPanel.svelte";
 export { default as VectorTextElement } from "./VectorTextElement.svelte";
 export { default as VectorMaskedNodes } from "./VectorMaskedNodes.svelte";
 export { default as VectorSceneNodes } from "./VectorSceneNodes.svelte";

@@ -113,6 +113,7 @@ default below. Lengths are in the node's own units, angles degrees, percentages 
 | contour | direction `inside`, steps 4, offset 6, fillColor `#ffffff`, strokeColor null, acceleration 0, join `round`, miterLimit 4 | CorelDRAW's Contour: each shape plus `steps` concentric copies `offset` apart (`center`: inward until the shape is used up), their fill and stroke blending to the end colours (null keeps the shape's colour); inside steps draw over the shape, outside ones under it. Acceleration −100…100 holds the colour back (positive) or rushes it (negative). Use for embossed badges, topographic lines and soft glows. |
 | blockShadow | angle 45 (degrees, 0 right, 90 down), distance 20, color `#1e293b` (null: the shape's own fill), opacity 100, endOpacity 100 (%) | CorelDRAW's Block Shadow: each shape swept `distance` along `angle` as one solid shape drawn under all of them. Set endOpacity below opacity (e.g. 0) with a long distance for a flat-design long shadow. The direction is in the node's own space, so it turns with the node. Put it last in the stack so it shadows the final shapes. |
 | extrude | mode `parallel`, angle 45, depth 30, vanishingPoint {x 0, y -300} (offset from the middle), toward 30 (%), color null (the shape's own fill), lightAngle -135 (light from the top left), shading 60 (%) | CorelDRAW's Extrude: one side face per edge (curves flattened), back to front, under the shape. Parallel moves the back `depth` along `angle`; perspective pulls it `toward` percent to the vanishing point. Faces lighten as they face the light and darken facing away. Use for 3D lettering, isometric blocks and buttons; put it last in the stack. |
+| bevel | width 8, lightAngle -135 (light from the top left), shading 60 (%), color null (the shape's own paint as one colour) | CorelDRAW's Bevel: a band `width` wide inside the outline, one sloped face per edge shaded by the light, the middle flat in the shape's own paint, the stroke on top. Bounds do not change. Use for buttons, badges and chiselled lettering; combine with extrude for a bevelled solid. |
 | envelope | style `arc`, bend 50, horizontal 0, vertical 0, orientation `horizontal`, rows 2, columns 2, mesh null | Prefer `vector.envelope`. |
 
 Effects apply in stack order (index 0 first) to everything above them; effects after a repeater
@@ -160,3 +161,22 @@ fill; an unfilled stroked path takes part as the area its stroke paints. Pathfin
 `outline` also run on a single path; the other operations need two or more overlapping paths. Shape Builder
 `points` should come from `vector.shapeBuilderFaces` (`point` of each face) so a click lands
 inside the intended face.
+
+## Lenses
+
+`vector.setLens` types, their `amount` and `color`. Missing values take these defaults; switching type resets to them.
+
+| Type | amount (default) | color | What shows inside the lens |
+| --- | --- | --- | --- |
+| magnify | 1–20 times (2) | – | The backdrop scaled about the lens centre. |
+| fisheye | −100…100 (50) | – | Bulged (positive) or pinched (negative); the lens edge stays put. |
+| brighten | −100…100 % (40) | – | Lighter, or darker for negative amounts. |
+| invert | 0–100 % strength (100) | – | Inverted colours. |
+| tintedGrayscale | 0–100 % (100) | `#b45309` | Brightness as dark → tint → white (a duotone). |
+| colorAdd | 0–100 % (50) | `#ff0000` | The colour added. |
+| colorLimit | 0–100 % (100) | `#22c55e` | Only the colour let through. |
+| heatMap | 0–100 % palette turn (0) | – | Brightness on a cold-to-hot palette. |
+| wireframe | 0–100 % opacity (100) | `#0f172a` | Outlines only, 1 unit wide. |
+| transparency | 0–100 % see-through (50) | – | The lens's own fill, see-through. |
+
+The lens shows what is drawn before it (below it), follows edits there, and keeps its own bounds. Move it with `vector.transform` like any path. Remove it with `vector.removeLens`.

@@ -1,5 +1,18 @@
 # @pixerate/editor
 
+## 0.131.0
+
+### Minor Changes
+
+- fceeaca: Lens objects in the vector editor: a closed path that shows what is drawn below it magnified, fish-eyed, recoloured (brighten, invert, tinted grayscale, colour add, colour limit, heat map), as wireframe or through a see-through fill, like CorelDRAW's Lens. The lens follows edits below it and exports to SVG, PDF and Lottie. New `setLens`, `vector.setLens` / `vector.removeLens` and `<VectorLensPanel>` in React and Svelte.
+
+## 0.130.0
+
+### Minor Changes
+
+- 8e1700d: A live Bevel path effect (`bevel`): a shaded chiselled edge inside each shape with the middle kept flat in its own paint, like CorelDRAW's Bevel. `vectorBevelFaces` is exported.
+- 218817c: A live Extrude path effect (`extrude`): shapes drawn as solids with shaded side faces going back along an angle or toward a vanishing point, like CorelDRAW's Extrude. `vectorExtrudeFaces` and `shadeVectorColor` are exported.
+
 ## 0.129.0
 
 ### Minor Changes

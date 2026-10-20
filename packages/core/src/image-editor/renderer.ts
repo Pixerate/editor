@@ -77,6 +77,8 @@ export interface RenderOptions {
   checkpointLayerId?: string | null;
   /** The paint tools' cursor: a circle of `diameter` px at (`x`, `y`) in natural pixels. */
   brushCursor?: { x: number; y: number; diameter: number } | null;
+  /** Clone Stamp / Healing Brush: where the stroke samples from (a crosshair, document pixels). */
+  cloneSourceMarker?: { x: number; y: number } | null;
   /**
    * On-canvas text editing (`TextEditSession.overlay()`): the caret as a segment, the selected
    * ranges as quads and the text's frame, in natural pixels.
@@ -389,6 +391,30 @@ export class ImageEditorRenderer {
         ctx.strokeStyle = 'rgba(0,0,0,0.6)';
         ctx.stroke();
         ctx.lineWidth = px;
+        ctx.strokeStyle = '#ffffff';
+        ctx.stroke();
+      } catch {
+        // Best effort (headless / mocked contexts).
+      }
+      ctx.restore();
+    }
+
+    // Clone source: a crosshair in a circle, a fixed size on screen.
+    if (options.cloneSourceMarker) {
+      const m = projectImagePoint(options.cloneSourceMarker, projection);
+      ctx.save();
+      try {
+        const r = 7;
+        ctx.beginPath();
+        ctx.arc(m.x, m.y, r, 0, Math.PI * 2);
+        ctx.moveTo(m.x - r - 4, m.y);
+        ctx.lineTo(m.x + r + 4, m.y);
+        ctx.moveTo(m.x, m.y - r - 4);
+        ctx.lineTo(m.x, m.y + r + 4);
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+        ctx.stroke();
+        ctx.lineWidth = 1;
         ctx.strokeStyle = '#ffffff';
         ctx.stroke();
       } catch {

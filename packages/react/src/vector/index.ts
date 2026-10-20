@@ -17,4 +17,5 @@ export * from './VectorShadingPanel';
 export * from './VectorTracePanel';
 export * from './VectorSymmetryPanel';
 export * from './VectorPerspectivePanel';
+export * from './VectorLensPanel';
 export * from './VectorProviderEffectsPanel';
