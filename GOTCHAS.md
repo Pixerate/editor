@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [tests] A Growth Test Must Do the Same Work at Both Sizes, and Count It Where It Can
+
+- **Issue / Symptom**: The `analyzePdfLayout` "grows near-linearly" test timed `bigPage(100)` against `bigPage(400)` and measured ~6× for 4× the input (an 8× step gave 10–18×), so it sat close to its limit of 10 and failed under load. It looked like ~n^1.3 growth in the layout code.
+- **Root Cause**: The two sizes did different work. Every section's table had the same width, and `ruledTables` joined stacked horizontal rules of the same extent (the booktabs pass) whatever their distance, so the whole page became one ruled table (a real import bug: two same-width tables and the paragraph between them came out as one table). At 400 sections the page also passed `MAX_RULES` (2000), so later tables fell to the unruled path and column detection. No step of the code was superlinear; the fixture changed which steps ran. Timing was also too noisy: once the work was like for like, wall-clock ratios still reached 8–10× on a loaded machine, against 16× for quadratic, mostly from GC.
+- **Solution / Workaround**: Assert the fixture's output scales with its size (`bigPage(200)` gives 200 headings, paragraphs, lists and tables) and keep it under the code's caps. Count work instead of timing it: for private module functions `vi.spyOn` can't reach, `arrayVisits` (`packages/core/tests/helpers/array-visits.ts`) counts the array elements visited through `for…of`, spreads, the callback methods and `indexOf`/`includes`; it is exact, so the limit can be tight (6× for 4× the input). It does not see index loops or `sort`. Check the test by making the code quadratic once (e.g. an `indexOf` per fragment in `flowLines` gives 15.9×), on a path the fixture actually reaches.
+
 ### [svelte] An `$effect` That Writes State and Then Reads It Re-runs Itself Forever
 
 - **Issue / Symptom**: The Svelte effects browser froze the page (and hung its test) when a thumbnail's render failed, for example for a vector effect the provider cannot draw as pixels. React was fine.

@@ -507,6 +507,8 @@ function ruledTables(
   // Horizontal ↔ vertical intersections: sweep verticals sorted by x against horizontals.
   const vOrder = v.map((_, i) => i).sort((a, b) => v[a].x - v[b].x);
   const vxs = vOrder.map((i) => v[i].x);
+  /** Horizontals that meet a vertical: they belong to a grid. */
+  const meetsVertical = new Array<boolean>(h.length).fill(false);
   h.forEach((seg, hi) => {
     let lo = 0;
     let hiIdx = vxs.length;
@@ -517,15 +519,23 @@ function ruledTables(
     }
     for (let k = lo; k < vxs.length && vxs[k] <= seg.x1 + tol; k++) {
       const vs = v[vOrder[k]];
-      if (seg.y >= vs.y0 - tol && seg.y <= vs.y1 + tol) union(hi, h.length + vOrder[k]);
+      if (seg.y >= vs.y0 - tol && seg.y <= vs.y1 + tol) {
+        union(hi, h.length + vOrder[k]);
+        meetsVertical[hi] = true;
+      }
     }
   });
-  // Stacked horizontal rules with the same extent (booktabs-style tables).
+  // Stacked horizontal rules with the same extent (booktabs-style tables). A rule meeting a
+  // vertical belongs to a grid, which the intersections above already joined: stacking it
+  // would merge every same-width table on the page, and the text between them, into one.
   const hOrder = h.map((_, i) => i).sort((a, b) => h[a].x0 - h[b].x0 || h[a].x1 - h[b].x1 || h[b].y - h[a].y);
   for (let k = 1; k < hOrder.length; k++) {
-    const a = h[hOrder[k - 1]];
-    const b = h[hOrder[k]];
-    if (Math.abs(a.x0 - b.x0) <= 4 && Math.abs(a.x1 - b.x1) <= 4) union(hOrder[k - 1], hOrder[k]);
+    const ia = hOrder[k - 1];
+    const ib = hOrder[k];
+    if (meetsVertical[ia] || meetsVertical[ib]) continue;
+    const a = h[ia];
+    const b = h[ib];
+    if (Math.abs(a.x0 - b.x0) <= 4 && Math.abs(a.x1 - b.x1) <= 4) union(ia, ib);
   }
   const groups = new Map<number, { h: HSeg[]; v: VSeg[] }>();
   h.forEach((seg, i) => {
