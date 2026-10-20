@@ -458,6 +458,41 @@ export interface VectorPathNode extends VectorNodeBase, VectorStyle {
 	 * connection sites. Its geometry is routed again after every edit, so it follows them.
 	 */
 	connector?: VectorConnector | null;
+	/**
+	 * Makes the path a lens (CorelDRAW's Lens): inside its outline, what is drawn below it shows
+	 * changed (magnified, recoloured, as wireframe…). Bounds and hit-testing stay the path's own.
+	 */
+	lens?: VectorLens | null;
+	/**
+	 * Derived, not stored: what is drawn below a lens, in the lens's parent space, brought up to
+	 * date after every edit (`resolveVectorLenses`) and stripped when the document is saved.
+	 */
+	lensView?: VectorNode[];
+}
+
+/**
+ * What a lens does to what is below it (`VectorLens.type`):
+ * - `transparency`: the lens's own fill drawn `amount` percent see-through over it;
+ * - `magnify`: scaled `amount` times about the lens's centre;
+ * - `fisheye`: bulged (`amount` > 0) or pinched (< 0, −100…100) within the lens;
+ * - `brighten`: lightened (`amount` > 0) or darkened (< 0) by `amount` percent;
+ * - `invert`: colours inverted;
+ * - `tintedGrayscale`: brightness shown in shades of `color`;
+ * - `colorAdd`: `color` added at `amount` percent;
+ * - `colorLimit`: only `color` let through, `amount` percent strong;
+ * - `heatMap`: brightness shown on a cold-to-hot palette, turned `amount` percent along it;
+ * - `wireframe`: outlines only, stroked in `color`.
+ */
+export type VectorLensType = 'transparency' | 'magnify' | 'fisheye' | 'brighten' | 'invert' | 'tintedGrayscale' | 'colorAdd' | 'colorLimit' | 'heatMap' | 'wireframe';
+export const VECTOR_LENS_TYPES: readonly VectorLensType[] = ['transparency', 'magnify', 'fisheye', 'brighten', 'invert', 'tintedGrayscale', 'colorAdd', 'colorLimit', 'heatMap', 'wireframe'];
+
+/** A lens's settings (`VectorPathNode.lens`). */
+export interface VectorLens {
+	type: VectorLensType;
+	/** Strength; its meaning and range depend on the type (see `VectorLensType`). */
+	amount: number;
+	/** The tint, added, limiting or wireframe colour (types that use one). */
+	color?: string | null;
 }
 
 /**
@@ -984,10 +1019,12 @@ export type VectorAverageAxis = 'horizontal' | 'vertical' | 'both';
  * `puckerBloat`, `twist`, `zigzag`, `wiggle` (Wiggle Paths), `offset` (Offset Paths), `merge`
  * (Merge Paths), `repeater`, `envelope` (an envelope distortion: a warp preset or a mesh),
  * `contour` (CorelDRAW's Contour: concentric offset steps blending toward end colours) and
- * `blockShadow` (CorelDRAW's Block Shadow: the shape swept along a direction, under it).
+ * `blockShadow` (CorelDRAW's Block Shadow: the shape swept along a direction, under it),
+ * `extrude` (CorelDRAW's Extrude: shaded side faces drawing the shape as a solid) and `bevel`
+ * (CorelDRAW's Bevel: a shaded chiselled edge inside the shape).
  */
-export type VectorEffectType = 'trim' | 'roundCorners' | 'puckerBloat' | 'twist' | 'zigzag' | 'wiggle' | 'offset' | 'merge' | 'repeater' | 'envelope' | 'contour' | 'blockShadow';
-export const VECTOR_EFFECT_TYPES: readonly VectorEffectType[] = ['trim', 'roundCorners', 'puckerBloat', 'twist', 'zigzag', 'wiggle', 'offset', 'merge', 'repeater', 'envelope', 'contour', 'blockShadow'];
+export type VectorEffectType = 'trim' | 'roundCorners' | 'puckerBloat' | 'twist' | 'zigzag' | 'wiggle' | 'offset' | 'merge' | 'repeater' | 'envelope' | 'contour' | 'blockShadow' | 'extrude' | 'bevel';
+export const VECTOR_EFFECT_TYPES: readonly VectorEffectType[] = ['trim', 'roundCorners', 'puckerBloat', 'twist', 'zigzag', 'wiggle', 'offset', 'merge', 'repeater', 'envelope', 'contour', 'blockShadow', 'extrude', 'bevel'];
 
 /** Warp presets (Photoshop's fifteen, in menu order); shared with the image editor (`src/geom`). */
 export type VectorWarpStyle = WarpStyle;
@@ -1108,6 +1145,35 @@ export interface VectorEffectParamsMap {
 		color: string | null;
 		opacity: number;
 		endOpacity: number;
+	};
+	/**
+	 * Extrude (CorelDRAW's Extrude): each shape drawn as a solid. `parallel` moves the back
+	 * `depth` along `angle` (degrees, 0 right, 90 down); `perspective` pulls it `toward` percent
+	 * of the way to `vanishingPoint` (offset from the shape's middle). Side faces are filled with
+	 * `color` (null: the shape's own solid fill), lightened or darkened by `shading` percent as
+	 * they face toward or away from a light coming from `lightAngle` degrees.
+	 */
+	extrude: {
+		mode: 'parallel' | 'perspective';
+		angle: number;
+		depth: number;
+		vanishingPoint: Vec2;
+		toward: number;
+		color: string | null;
+		lightAngle: number;
+		shading: number;
+	};
+	/**
+	 * Bevel (CorelDRAW's Bevel): a chiselled edge `width` wide inside each shape, one face per
+	 * edge, each lightened or darkened by `shading` percent as it faces toward or away from a
+	 * light coming from `lightAngle` degrees, in `color` (null: the shape's own paint as one
+	 * colour). The middle stays flat in the shape's own paint.
+	 */
+	bevel: {
+		width: number;
+		lightAngle: number;
+		shading: number;
+		color: string | null;
 	};
 	/**
 	 * Envelope distortion: the paths above it are mapped from their combined bounds through a warp

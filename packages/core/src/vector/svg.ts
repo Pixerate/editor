@@ -24,8 +24,9 @@ import { bezierPathToSvg } from '../canvas/pathops/bezier.js';
 import { bezierPathBounds, transformBezierPath } from '../canvas/pathops/bezier.js';
 import { invertMatrix } from '../geom/affine.js';
 import { isVectorFrame, sanitizeVectorFrame, sanitizeVectorResizing, vectorFrameRectPath, type VectorFrameGroup } from './frames.js';
-import type { VectorConnector, VectorResizing } from './types.js';
+import type { VectorConnector, VectorLens, VectorResizing } from './types.js';
 import { sanitizeVectorConnector } from './connectors.js';
+import { isVectorLens, resolveVectorLenses, sanitizeVectorLens, vectorLensDrawn } from './lens.js';
 import { sanitizeVectorSymmetry, transformVectorSymmetry } from './symmetry.js';
 import { isVectorShadedPaint, sanitizeVectorShadedPaint, vectorShadedSvgDefs } from './shading.js';
 
@@ -421,7 +422,7 @@ function blendFromAttribute(value: string | undefined, m: AffineMatrix): VectorB
 /** Serializes a vector document as a standalone SVG string. */
 export function vectorDocumentToSvg(doc: VectorDocument, options: VectorSvgExportOptions = {}): string {
 	// Instances draw their symbol's art: resolve it when the caller's document has not.
-	doc = resolveVectorSymbols(doc);
+	doc = resolveVectorLenses(resolveVectorSymbols(doc));
 	const precision = options.precision ?? 3;
 	const prefix = options.idPrefix ?? 'vg-';
 	const pretty = options.pretty !== false;
@@ -441,6 +442,7 @@ export function vectorDocumentToSvg(doc: VectorDocument, options: VectorSvgExpor
 		if (node.resizing) out += ` data-vector-resizing="${escapeAttr(JSON.stringify(node.resizing))}"`;
 		if (node.type === 'path' && isVectorShadedPaint(node.fill)) out += ` data-vector-shading="${escapeAttr(JSON.stringify(node.fill))}"`;
 		if (node.type === 'path' && node.connector) out += ` data-vector-connector="${escapeAttr(JSON.stringify(node.connector))}"`;
+		if (node.type === 'path' && node.lens) out += ` data-vector-lens="${escapeAttr(JSON.stringify(node.lens))}"`;
 		const blend = vectorBlendModeCss(node.blendMode);
 		if (blend) out += ` style="mix-blend-mode:${blend}"`;
 		if (node.filters?.length) {
@@ -770,11 +772,12 @@ export function vectorDocumentToSvg(doc: VectorDocument, options: VectorSvgExpor
 			};
 			lines.push(`${indent(depth)}<g${common(node)} data-vector-live="${escapeAttr(JSON.stringify(live))}">`);
 			lines.push(`${indent(depth + 1)}<g data-vector-part="appearance">`);
-			for (const shape of vectorAppearanceNodes(node)) emit(shape, depth + 2);
+			// A lens draws its changed backdrop clipped by its outline (its shapes are only its own outline).
+			for (const shape of isVectorLens(node) ? vectorLensDrawn(node).children : vectorAppearanceNodes(node)) emit(shape, depth + 2);
 			lines.push(`${indent(depth + 1)}</g>`);
 			lines.push(`${indent(depth + 1)}<g data-vector-part="source" display="none">`);
 			if (node.type === 'path') {
-				const { effects: _e, transform: _t, opacity: _o, visible: _v, booleanOperation: _b, blendStep: _s, blendMode: _bm, filters: _f, ...source } = node;
+				const { effects: _e, transform: _t, opacity: _o, visible: _v, booleanOperation: _b, blendStep: _s, blendMode: _bm, filters: _f, lens: _l, lensView: _lv, ...source } = node;
 				emit({ ...source, id: `${node.id}~src` }, depth + 2);
 			} else for (const child of node.children) emit(child, depth + 2);
 			lines.push(`${indent(depth + 1)}</g>`);
@@ -1797,6 +1800,8 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 		if (resizing) (meta as { resizing?: VectorResizing }).resizing = resizing;
 		const connector = child.attrs['data-vector-connector'] !== undefined ? sanitizeVectorConnector(parseJson(child.attrs['data-vector-connector'])) : null;
 		if (connector) (meta as { connector?: VectorConnector }).connector = connector;
+		const lens = child.attrs['data-vector-lens'] !== undefined ? sanitizeVectorLens(parseJson(child.attrs['data-vector-lens'])) : null;
+		if (lens) (meta as { lens?: VectorLens }).lens = lens;
 		if (child.name === 'g' && child.attrs['data-vector-frame'] !== undefined) {
 			const node = frameGroup(child, s, m, meta);
 			if (node) out.push(node);

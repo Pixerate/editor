@@ -240,7 +240,7 @@ export function createImageRetouchTools(controller: ImageEditorController): Agen
     name: 'get_retouch_options',
     title: 'Get retouch options',
     description:
-      'Reads the retouching tools\' options (aligned, sample, spotType, range, exposure, protectTones, spongeMode, vibrance, strength) and the clone source ({x, y, offset} or null; offset is the aligned offset the last clone or heal stroke fixed). Call it before clone_stamp or heal_brush without a source to see where they will sample.',
+      'Reads the retouching tools\' options (aligned, sample, spotType, range, exposure, protectTones, spongeMode, vibrance, strength) and the clone source ({x, y, offset} or null; offset is the aligned offset the last clone or heal stroke fixed: an aligned stroke samples at the brush plus offset, which the editors show as a crosshair). Call it before clone_stamp or heal_brush without a source to see where they will sample.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     annotations: { title: 'Get retouch options', ...READ },
     handler: () => {

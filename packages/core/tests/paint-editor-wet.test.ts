@@ -90,9 +90,10 @@ describe('paint editor wet media', () => {
       c.wetPaper({ rect: { x: 40, y: 80, width: 200, height: 100 }, amount: 0.8 });
       c.paintStroke({ points: line(), brushId: 'watercolor-wash', color: '#0f766e', seed: 3 });
       await c.wetReady();
-      await c.advanceWet({ steps: 100 });
+      // Differences show from the first steps; more steps only made it slow (100 + 70 took ~2.5 s).
+      await c.advanceWet({ steps: 30 });
       c.paintStroke({ points: line(140, 80, 240), brushId: 'gouache', color: '#facc15', seed: 4 });
-      await c.advanceWet({ steps: 70 });
+      await c.advanceWet({ steps: 20 });
       const out = c.exportPng();
       c.dispose();
       return Buffer.from(out).toString('base64');

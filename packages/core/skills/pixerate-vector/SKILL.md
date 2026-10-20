@@ -325,6 +325,13 @@ the browser's shaper they are kept but not drawn until outlines are available.
 | `vector.enterSymmetry` | Hand the canvas to the user drawing inside a symmetry group (pen, pencil, shapes, text go in, mirrored live). Returns `{ id }`. |
 | `vector.exitSymmetry` | Stop drawing inside it. |
 
+### Lenses
+
+| Command | Use it to |
+| --- | --- |
+| `vector.setLens` | Make closed paths lenses (`type` magnify, fisheye, brighten, invert, tintedGrayscale, colorAdd, colorLimit, heatMap, wireframe, transparency; `amount`, `color`) or change them. What is below shows changed inside the outline and follows every edit; bounds stay the lens's own. Use for loupes, callouts, "X-ray" wireframes, duotone windows. Returns `{ lenses: [{ id, lens }] }`. |
+| `vector.removeLens` | Make lenses plain paths again. Returns `{ ids }`. |
+
 ### Masks and clipping
 
 | Command | Use it to |
@@ -343,7 +350,7 @@ contents whole while you work, without losing the mask.
 
 | Command | Use it to |
 | --- | --- |
-| `vector.addEffect` | Add a live path effect `type` (trim, roundCorners, puckerBloat, twist, zigzag, wiggle, offset, merge, repeater, envelope, contour: concentric steps blending to end colours, blockShadow: the shape swept along an angle under it, a long shadow when endOpacity fades) with `params` to `ids`, at `index` in the stack (default last). Effects apply top to bottom. Returns `{ effects: [{ nodeId, effectId }] }`. |
+| `vector.addEffect` | Add a live path effect `type` (trim, roundCorners, puckerBloat, twist, zigzag, wiggle, offset, merge, repeater, envelope, contour: concentric steps blending to end colours, blockShadow: the shape swept along an angle under it, a long shadow when endOpacity fades, extrude: shaded side faces making the shape a solid, parallel or toward a vanishing point, bevel: a shaded chiselled edge inside the shape) with `params` to `ids`, at `index` in the stack (default last). Effects apply top to bottom. Returns `{ effects: [{ nodeId, effectId }] }`. |
 | `vector.updateEffect` | Change effect `effectId` on `nodeId`: `params` (merged), `enabled`, or move it to `index` (0 applies first). Returns the node's effect stack. |
 | `vector.removeEffect` | Remove effect `effectId` from `nodeId`. |
 | `vector.envelope` | Warp with a live envelope: a `preset` (arc, arcLower, arcUpper, arch, bulge, shellLower, shellUpper, flag, wave, fish, rise, fisheye, inflate, squeeze, twist) with `bend`, `horizontal`, `vertical` (percent, -100 to 100) and `orientation`; or a `mesh` of `rows` x `columns` (1 to 16, optional control `points`); or `topObject: true` (top closed path becomes the envelope), `release: true`, `expand: true`. Reapplying changes an existing envelope. |
