@@ -21,7 +21,24 @@
  * `<g data-vector-part="mask-source">`. An opacity mask's `<mask>` holds the mask as drawn.
  */
 import { bezierPathToSvg } from '../canvas/pathops/bezier.js';
-import { bezierPathBounds } from '../canvas/pathops/bezier.js';
+import { bezierPathBounds, transformBezierPath } from '../canvas/pathops/bezier.js';
+import { invertMatrix } from '../geom/affine.js';
+import { isVectorFrame, sanitizeVectorFrame, sanitizeVectorResizing, vectorFrameRectPath, type VectorFrameGroup } from './frames.js';
+import type { VectorConnector, VectorResizing } from './types.js';
+import { sanitizeVectorConnector } from './connectors.js';
+
+/** `v` rounded to a whole number when within 1e-9 of one. */
+const tidy = (v: number) => (Math.abs(v - Math.round(v)) < 1e-9 ? Math.round(v) + 0 : v);
+
+/** JSON from an attribute, or null when it does not parse. */
+const parseJson = (text: string | undefined): unknown => {
+	if (text === undefined) return null;
+	try {
+		return JSON.parse(text);
+	} catch {
+		return null;
+	}
+};
 import { hasStrokeExtras, strokeWidthProfileOf, vectorStrokeLineArea, vectorStrokeOutlinePath, vectorStrokeParts, vectorStrokeReach } from './stroke.js';
 import { sanitizeWidthProfile } from './width.js';
 import { expandVectorAppearance, hasOwnVectorAppearance, sanitizeVectorEffects, transformVectorEffects, vectorAppearanceNodes, vectorInstanceDrawn } from './appearance.js';
@@ -404,6 +421,8 @@ export function vectorDocumentToSvg(doc: VectorDocument, options: VectorSvgExpor
 		if (node.blendStep) out += ` data-vector-blend-step=""`;
 		if (node.type === 'group' && node.blend) out += ` data-vector-blend="${escapeAttr(JSON.stringify(node.blend))}"`;
 		if (node.booleanOperation) out += ` data-vector-boolean-operation="${node.booleanOperation}"`;
+		if (node.resizing) out += ` data-vector-resizing="${escapeAttr(JSON.stringify(node.resizing))}"`;
+		if (node.type === 'path' && node.connector) out += ` data-vector-connector="${escapeAttr(JSON.stringify(node.connector))}"`;
 		const blend = vectorBlendModeCss(node.blendMode);
 		if (blend) out += ` style="mix-blend-mode:${blend}"`;
 		if (node.filters?.length) {
@@ -679,7 +698,38 @@ export function vectorDocumentToSvg(doc: VectorDocument, options: VectorSvgExpor
 		lines.push(`${indent(depth)}</g>`);
 	};
 
+	/**
+	 * A frame: a `<g data-vector-frame>` (the frame as JSON, with the group's effects, which the
+	 * export does not draw) holding its fill (`data-vector-part="frame-fill"`) and its children in a
+	 * `<g data-vector-part="frame-contents">` clipped to the frame's rectangle.
+	 */
+	const emitFrame = (node: VectorFrameGroup, depth: number) => {
+		const f = node.frame;
+		const data = { ...f, ...(node.effects?.length ? { effects: node.effects } : {}) };
+		lines.push(`${indent(depth)}<g${common(node)} data-vector-frame="${escapeAttr(JSON.stringify(data))}">`);
+		const rect = vectorFrameRectPath(f);
+		if (f.fill !== undefined && f.fill !== null && f.fill !== 'none') {
+			lines.push(`${indent(depth + 1)}<g data-vector-part="frame-fill">`);
+			emitNode({ id: `${node.id}~frame-fill`, type: 'path', fill: f.fill, stroke: null, subpaths: rect }, depth + 2);
+			lines.push(`${indent(depth + 1)}</g>`);
+		}
+		let ref = '';
+		if (f.clip !== false) {
+			const id = `${prefix}frame-${node.id}`;
+			defs.push(`<clipPath id="${escapeAttr(id)}"><rect x="${num(f.x)}" y="${num(f.y)}" width="${num(f.width)}" height="${num(f.height)}"/></clipPath>`);
+			ref = ` clip-path="url(#${escapeAttr(id)})"`;
+		}
+		lines.push(`${indent(depth + 1)}<g data-vector-part="frame-contents"${ref}>`);
+		for (const child of node.children) emit(child, depth + 2);
+		lines.push(`${indent(depth + 1)}</g>`);
+		lines.push(`${indent(depth)}</g>`);
+	};
+
 	const emitNode = (node: VectorNode, depth: number) => {
+		if (isVectorFrame(node)) {
+			emitFrame(node, depth);
+			return;
+		}
 		if (isVectorMaskGroup(node)) {
 			emitMaskGroup(node, depth);
 			return;
@@ -1675,6 +1725,34 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 		return { id, type: 'group', ...meta, mask, ...(effects?.length ? { effects } : {}), children: [source, ...contents] };
 	};
 
+	/**
+	 * A `<g data-vector-frame>` from our own export as its frame: the contents from the
+	 * `frame-contents` part (the fill part is regenerated), the frame's rotation kept as the group's
+	 * transform and the rest of `m` mapped into its rectangle.
+	 */
+	const frameGroup = (g: Element, style: InheritedStyle, m: AffineMatrix, meta: Partial<VectorGroupNode>): VectorNode | null => {
+		const raw = parseJson(g.attrs['data-vector-frame']);
+		const frame = sanitizeVectorFrame(raw);
+		const contentsEl = g.children.find((c) => c.name === 'g' && c.attrs['data-vector-part'] === 'frame-contents');
+		const children = contentsEl ? visit(contentsEl, style, m) : [];
+		const id = idFor(g);
+		if (!frame) return children.length ? { id, type: 'group', ...meta, children } : null;
+		const { rigid, residual } = decomposeRigid(m);
+		const r = bezierPathBounds(transformBezierPath(subpathsToBezier(vectorFrameRectPath(frame)), residual))!;
+		const back = invertMatrix(rigid);
+		const effects = sanitizeVectorEffects((raw as { effects?: unknown } | null)?.effects);
+		return {
+			id,
+			type: 'group',
+			...meta,
+			...(isIdentityMatrix(rigid) ? {} : { transform: rigid }),
+			// Whole numbers stay whole (the rotation split leaves float noise).
+			frame: { ...frame, x: tidy(r.minX), y: tidy(r.minY), width: tidy(r.maxX - r.minX), height: tidy(r.maxY - r.minY) },
+			...(effects.length ? { effects: transformVectorEffects(effects, residual) } : {}),
+			children: isIdentityMatrix(rigid) ? children : children.map((c) => transformVectorNode(c, back))
+		};
+	};
+
 	const visitOne = (child: Element, style: InheritedStyle, matrix: AffineMatrix): VectorNode[] => {
 		const out: VectorNode[] = [];
 		const m = multiplyMatrices(parseSvgTransform(child.attrs.transform), matrix);
@@ -1694,6 +1772,15 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 		if (child.attrs['data-vector-blend-step'] !== undefined) return out;
 		const operation = child.attrs['data-vector-boolean-operation'];
 		if (BOOLEAN_OPERATIONS.includes(operation as VectorBooleanOperation)) (meta as { booleanOperation?: VectorBooleanOperation }).booleanOperation = operation as VectorBooleanOperation;
+		const resizing = child.attrs['data-vector-resizing'] !== undefined ? sanitizeVectorResizing(parseJson(child.attrs['data-vector-resizing'])) : null;
+		if (resizing) (meta as { resizing?: VectorResizing }).resizing = resizing;
+		const connector = child.attrs['data-vector-connector'] !== undefined ? sanitizeVectorConnector(parseJson(child.attrs['data-vector-connector'])) : null;
+		if (connector) (meta as { connector?: VectorConnector }).connector = connector;
+		if (child.name === 'g' && child.attrs['data-vector-frame'] !== undefined) {
+			const node = frameGroup(child, s, m, meta);
+			if (node) out.push(node);
+			return out;
+		}
 		if (child.name === 'g' && child.attrs['data-vector-mask'] !== undefined) {
 			const node = maskGroup(child, s, m, meta);
 			if (node) out.push(node);

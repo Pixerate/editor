@@ -374,6 +374,38 @@ controller.getConstraintDof(); // { dof, status: "under" | "fully" | "over", red
 - **Auto Constrain.** `inferVectorConstraints` lists what a sketch nearly satisfies (coincident points of different paths, concentric / tangent circles, a segment tangent to a circle, horizontal / vertical segments, collinear, connected perpendicular and parallel segments, equal lengths and radii); `autoConstrain` adds them one by one, skipping refused ones.
 - **UI.** `getVectorOverlayRenderData(state).constraints` places a glyph (or `name = value`) and a dimension line per constraint of the selected paths; `getVectorConstraintPanel` gives the DOF message, the constraints the selected anchors (direct tool) or round paths allow, the selection's constraints and the parameters.
 
+## Frames and artboards
+
+```ts
+const { id } = controller.addFrame({ x: 0, y: 0, width: 375, height: 812, name: "Phone", adopt: true }) as { ok: true; id: string };
+controller.frameSelection({ ids: ["bar", "badge"], padding: 16, fill: "#0f172a" });
+controller.setResizing({ horizontal: "leftRight", vertical: "bottom" }, { ids: ["bar"] });
+controller.setFrame({ width: 414 }, { ids: [id] }); // children follow their constraints
+controller.frameToSvg(id); // the artboard alone, its corner at the origin
+```
+
+- **Model.** A frame is a group with `frame: { x, y, width, height, fill?, clip? }`, a rectangle in the group's own space. Top-level frames are artboards. Blends, live booleans and mask groups ignore `frame`. Each node may carry `resizing: { horizontal?, vertical? }`, used when its parent is a frame.
+- **Drawing.** `vectorFrameDrawn` turns a frame into an equivalent clip group: the rectangle as the mask (`<id>~frame-clip`), then the fill (`<id>~frame-fill`) and the children. Without the clip it becomes a plain group of the fill and the children. Rendering, appearance shapes, mask regions and snapping go through it, so both canvases draw frames with no code of their own.
+- **Selection.** Bounds are the rectangle (plus the children when `clip: false`). A frame is hit anywhere in its rectangle, filled or not. Clicking it selects the frame; double-click enters it like a group. The overlay's `frames` lists each artboard's name label in screen space, and clicking a label selects that frame.
+- **Resizing.** `transformVectorNode` on a frame maps its rectangle. With an axis-aligned scale and translation, each child then takes the matrix `vectorFrameChildMatrix` gives for its constraints: the child keeps its left or right margin, keeps both (stretch), keeps its offset from the centre, or scales. These are figcraft's `apply_constraints`, as the canvas package's auto layout has them. Area text takes the new box at the same font size, and point and path text move with their box's centre. A skew, rotation or mirror scales every child instead. This applies to the selection handles, `scale` and `setFrame`, which maps the rectangle in the frame's own space so a rotated frame keeps its rotation.
+- **Frame tool (F).** Drags out a rectangle, previewed as a white rectangle. On release it becomes a frame holding the top-level objects it fully encloses. `frameSelection` wraps objects that share a parent in a frame fitted to their bounds, placed where they sit in the stacking order.
+- **SVG.** A frame exports as a `<g data-vector-frame>` with the frame as JSON, a `frame-fill` part and a `frame-contents` part clipped by a `<clipPath>` rectangle. Import rebuilds the frame, keeping its rotation as the group's transform. `data-vector-resizing` carries constraints. `vectorFrameDocument` / `frameToSvg` export one frame as a document of its own size.
+- **UI.** `getVectorFramePanel(state)` gives the selected frame and the resizing constraints of the selected children of frames (`mixed` when they differ). Both panels apply typed sizes on Enter or blur.
+
+## Connectors
+
+```ts
+const { id } = controller.addConnector({ start: { nodeId: "a" }, end: { nodeId: "b", side: "top" }, route: "elbow", radius: 6 }) as { ok: true; id: string };
+controller.setConnector({ end: null }, { ids: [id] }); // unglue: the end stays where it is
+controller.getConnectors(); // ends with the glued object, the side in use and the position
+```
+
+- **Model.** A connector is an open path with `connector: { start?, end?, route?, radius?, gap? }`. Each end is `{ nodeId, side? }` or absent (free). A side is `top`, `right`, `bottom`, `left`, `center` or `auto` (the default).
+- **Sites.** `vectorConnectionSites` gives the middle of each side of the object's own bounds and its centre, mapped through its rotation and its ancestors' transforms, each with an outward normal. `auto` picks the side whose normal faces the other end (its object's centre, or its free point).
+- **Routing.** `rerouteVectorConnectors` runs in the controller's `refreshed`, after the constraint solve. It is part of every edit and its undo step, and runs on every frame of a drag. `straight` is one segment. `elbow` leaves and enters along the sides' normals (straight out by `gap`, default 16), then turns at right angles through the middle, with `radius` as live corners on the bends. `curved` puts the handles along the normals. Glue to an object that is gone or has no extent is dropped, and the end stays put. The routed points are written into the connector's own space, so a connector in a moved group still meets its objects.
+- **Connector tool (X).** Pressing near a site (12 px) glues the start to that side; pressing on an object glues it `auto`; anywhere else leaves it free. The end glues the same way on release, and the tool gives the line a triangle arrowhead unless the defaults set one. While the tool is on, `overlay.connectorSites` lists the sites of the object under the pointer and marks the one that would glue.
+- **SVG.** `data-vector-connector` carries the settings, and import restores them.
+
 ## Large documents
 
 Hit-testing (`hitTestVectorNodes`), marquee selection and snapping to segments go through an R-tree once a node list (or a gesture's segment targets) reaches 256 entries (`VECTOR_SPATIAL_MIN`). The tree is packed sort-tile-recursive over each node's paint box (strokes and filters included) and cached per node array; each node's box is cached per node object, so after an edit only the nodes it replaced are measured again. Queries return candidates in draw order and the same exact tests then run, so results match a scan.
@@ -402,6 +434,20 @@ A point snaps, in this order: kept to its Shift constraint (45° steps, a square
 Hold **Cmd / Ctrl** during a drag to bypass snapping. The pull distance is `threshold` screen pixels, so it stays the same at any zoom. Targets are in document space (world matrices and `vectorPathWorldBezier`), so rotated nodes snap exactly, and they are gathered once per gesture and kept sorted by x and y, so each pointer move is a few binary searches. The pen and shape tools snap (and show guides) while hovering too.
 
 `state.guides` holds the guides of the snap in progress in document units: `lines` (`kind`: `align`, `construction`, `spacing` or `size`) and `labels` (`anchor`, `centre`, `intersect`, `perpendicular`, `tangent`, `path`, `align`, gap distances and `W …` / `H …` sizes). For custom tools, `VectorSnapTargets.forMove` / `forResize` / `forDrawing` / `forAnchorDrag` / `forHandle` gather targets and `snapFrom`, `snapRect` and `snapScale` snap with them; `segmentIntersections` (path ops) finds every crossing of two Bézier segments.
+
+### Tracking, polar angles and typed entry
+
+The following adds CAD-style drawing aids from cadcraft's `snap/tracking.rs`.
+
+- **Object snap tracking (`snap.tracking`, on by default).** While the pen or a shape tool hovers, resting on an anchor, centre or crossing for `TRACKING_DWELL_MS` (400 ms) acquires that point. Resting there again releases it. The editor keeps at most `VECTOR_MAX_TRACKING_POINTS` (7) acquired points, dropping the oldest. Each one sends horizontal and vertical paths, or one along every polar angle with `snap.trackPolar`. An open path's acquired end also sends its extension. A point snaps first where two paths cross (`tracking`), then where a path crosses the drawing (`intersect`), and finally onto the nearest path. The pen's polar paths from its last point take part in the crossings too. Escape releases acquired points, and so does switching tools. `acquireTrackingPoint({ x, y })` toggles a point from code.
+- **Polar angles.** `snap.angles` holds the polar / construction angles. `vectorPolarAngles(increment, additional)` builds them from an increment (as POLARANG / POLARADDANG). With `snap.polarRelative`, the pen measures them from its last segment. The toolbars have a 90° / 45° / 30° / 15° picker.
+- **Typed entry.** While the pen draws, typing digits builds an entry that shows next to the pointer (`state.typedEntry`, `overlay.typedEntry`), and Enter places the next point:
+  - `120`: that far toward the pointer;
+  - `120<30`: that far at 30°;
+  - `@40,-10`: an offset;
+  - `200,150`: a position.
+
+  `placePenPoint(text)` does the same from code. `addPathByDimensions({ start, steps, closed })` draws a whole path from lengths and angles, offsets or positions. Agents use `vector.addPathByDimensions`, and set snapping with `vector.getSnapOptions` and `vector.setSnapOptions`.
 
 ## Rendering
 

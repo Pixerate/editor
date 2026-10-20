@@ -30,6 +30,8 @@ import {
   type VectorStrokeAlign,
   type VectorTool,
   type VectorWidthPreset,
+  vectorPolarAngles,
+  vectorPolarIncrementOf
 } from '@pixerate/editor/vector';
 import { useVectorEditorState } from './useVectorEditor';
 import { VectorEffectsPanel } from './VectorEffectsPanel';
@@ -39,6 +41,8 @@ import { VectorMaskPanel } from './VectorMaskPanel';
 import { VectorTextPanel } from './VectorTextPanel';
 import { VectorSymbolsPanel } from './VectorSymbolsPanel';
 import { VectorConstraintsPanel } from './VectorConstraintsPanel';
+import { VectorFramePanel } from './VectorFramePanel';
+import { VectorConnectorPanel } from './VectorConnectorPanel';
 import { VectorGradientEditor } from './VectorGradientEditor';
 
 const VECTOR_SNAP_TITLE = 'Snap to objects';
@@ -136,6 +140,21 @@ export function VectorToolbar({
           >
             Snap
           </button>
+          <select
+            data-vector-polar=""
+            aria-label="Polar tracking increment"
+            title="Polar tracking: the angles drawn points snap to from where they leave"
+            className="h-8 rounded-md border border-border bg-background px-1 text-xs"
+            value={String(vectorPolarIncrementOf(state.snap.angles) ?? '')}
+            onChange={(e) => controller.setSnap({ angles: vectorPolarAngles(Number(e.target.value)) })}
+          >
+            {vectorPolarIncrementOf(state.snap.angles) === null && <option value="">Custom</option>}
+            {[90, 45, 30, 15].map((n) => (
+              <option key={n} value={n}>
+                {n}°
+              </option>
+            ))}
+          </select>
         </div>
       )}
       {showPathEdit && (
@@ -599,6 +618,8 @@ export function VectorStylePanel({ controller, className }: VectorStylePanelProp
       {style && <VectorEffectsPanel controller={controller} />}
       {style && <VectorEnvelopePanel controller={controller} />}
       {style && <VectorMaskPanel controller={controller} />}
+      <VectorFramePanel controller={controller} />
+      <VectorConnectorPanel controller={controller} />
       <VectorConstraintsPanel controller={controller} />
       <VectorSymbolsPanel controller={controller} />
     </div>

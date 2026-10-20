@@ -45,6 +45,7 @@ import { mapBezierPath } from './pathMap.js';
 import { isVectorMaskGroup, vectorMaskedShapes } from './mask.js';
 import { vectorTextPaintSource, vectorTextPaths, vectorTextShaperGeneration } from './text.js';
 import { vectorInstanceGroup } from './symbols.js';
+import { isVectorFrame, vectorFrameDrawn } from './frames.js';
 import { transformVectorNode } from './geometry.js';
 import {
 	VECTOR_WARP_STYLES,
@@ -345,7 +346,7 @@ export function activeVectorEffects(node: VectorNode): VectorEffect[] {
  * Text always does: it draws as its glyphs.
  */
 export function hasOwnVectorAppearance(node: VectorNode): boolean {
-	return node.type === 'text' || node.type === 'instance' || (node.type === 'group' && !!node.liveBoolean) || !!node.effects?.some(isEnabled);
+	return node.type === 'text' || node.type === 'instance' || (node.type === 'group' && !!node.liveBoolean) || isVectorFrame(node) || !!node.effects?.some(isEnabled);
 }
 
 const liveCache = new WeakMap<VectorNode, boolean>();
@@ -686,6 +687,12 @@ export function vectorAppearanceShapes(node: VectorNode): VectorAppearanceShape[
 		shapeCache.set(node, [vectorTextShaperGeneration(), shapes]);
 		return shapes;
 	}
+	// A frame draws as its clip group (its fill and children inside its rectangle).
+	if (isVectorFrame(node)) {
+		const shapes = vectorAppearanceShapes(vectorFrameDrawn(node));
+		shapeCache.set(node, [vectorTextShaperGeneration(), shapes]);
+		return shapes;
+	}
 	// A mask group draws its contents (effects applied) clipped by its mask. Text without glyph
 	// outlines has only glyph boxes, which effects would distort meaninglessly: they are skipped.
 	const effects = node.type === 'text' && !vectorTextPaths(node).outlines ? null : node.effects;
@@ -767,6 +774,12 @@ export function expandVectorAppearance(node: VectorNode): VectorPathNode | Vecto
 		const drawn = expandVectorAppearance(vectorInstanceDrawn(node));
 		expandCache.set(node, [vectorTextShaperGeneration(), drawn]);
 		return drawn;
+	}
+	if (isVectorFrame(node)) {
+		const drawn = vectorFrameDrawn(node);
+		const out = hasVectorAppearance(drawn) ? expandVectorAppearance(drawn) : drawn;
+		expandCache.set(node, [vectorTextShaperGeneration(), out]);
+		return out;
 	}
 	let out: VectorPathNode | VectorGroupNode;
 	if (!hasOwnVectorAppearance(node)) {

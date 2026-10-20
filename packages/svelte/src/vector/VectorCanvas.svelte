@@ -247,6 +247,28 @@
   <g data-vector-scene="" transform={scene.transform}>
     <VectorSceneNodes nodes={scene.nodes} />
   </g>
+  {#if overlay.frames.length}
+    <g data-vector-frame-labels="">
+      {#each overlay.frames as f (f.id)}
+        <!-- A frame's name selects it (clicking inside a frame may pick its contents). -->
+        <text
+          role="button"
+          tabindex="-1"
+          data-vector-frame-label={f.id}
+          x={f.x}
+          y={f.y - 6}
+          font-size="11"
+          font-weight={f.selected ? 600 : 400}
+          fill={f.selected ? accentColor : '#737373'}
+          style="font-family:system-ui,sans-serif;cursor:default;user-select:none"
+          onpointerdown={(e) => {
+            e.stopPropagation();
+            controller.select([f.id]);
+          }}>{f.name}</text
+        >
+      {/each}
+    </g>
+  {/if}
   <g data-vector-overlay="" pointer-events="none" fill="none">
     {#each overlay.outlines as o (o.id)}
       <path d={o.d} stroke={accentColor} stroke-width={o.selected ? 1 : 1.5} opacity={o.selected ? 1 : 0.7} />
@@ -444,6 +466,18 @@
         {/if}
       </g>
     {/if}
+    {#each overlay.trackingPoints as t, i (i)}
+      <path data-vector-tracking-point="" d="M{t.x - 5} {t.y}H{t.x + 5}M{t.x} {t.y - 5}V{t.y + 5}" stroke={guideColor} stroke-width="1.5" />
+    {/each}
+    {#if overlay.typedEntry}
+      <g data-vector-typed-entry="" transform="translate({overlay.typedEntry.x + 14} {overlay.typedEntry.y + 18})">
+        <rect x="-3" y="-12" width={overlay.typedEntry.text.length * 7 + 8} height="17" rx="3" fill={THEME.handleFill} stroke={accentColor} />
+        <text x="1" y="1" font-size="11" fill={accentColor} style="font-family:ui-monospace,monospace">{overlay.typedEntry.text}</text>
+      </g>
+    {/if}
+    {#each overlay.connectorSites as s (`${s.nodeId}:${s.side}`)}
+      <circle data-vector-connection-site={s.side} data-active={s.active || undefined} cx={s.x} cy={s.y} r={s.active ? 5 : 3.5} fill={s.active ? accentColor : THEME.handleFill} stroke={accentColor} />
+    {/each}
     {#each overlay.constraints as c (c.id)}
       <g data-vector-constraint-glyph={c.kind} data-satisfied={c.satisfied ? 'true' : 'false'}>
         {#if c.dimension}<line x1={c.dimension.x1} y1={c.dimension.y1} x2={c.dimension.x2} y2={c.dimension.y2} stroke={c.satisfied ? THEME.guide : '#dc2626'} stroke-dasharray="2 2" />{/if}

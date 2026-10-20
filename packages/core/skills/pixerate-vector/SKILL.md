@@ -1,6 +1,6 @@
 ---
 name: pixerate-vector
-description: How to draw and edit vector artwork in the Pixerate vector editor through its vector.* commands - adding shapes and SVG paths, text (point, area, on a path, styles, Create Outlines), symbols and instances, CAD constraints (parallel, tangent, dimensions, auto-constrain), fills, strokes, stacked fills and strokes with blend modes, drop shadows, glows and blurs, clipping masks and opacity masks, gradients (linear, radial, conic, Oklab interpolation), stroke alignment, arrowheads, variable-width and tapered strokes, live corner radii, boolean operations and Pathfinder (unite, subtract, divide, trim), Shape Builder, paint bucket, live path effects (trim paths, repeater, zig zag, offset), envelope warps and free distort, blends and morphing, anchor editing (join, smooth, simplify, scissors, knife, eraser), align, distribute, group, stacking order, and SVG import and export. Use when creating an icon, logo, illustration, glyph, badge or any Bezier path artwork, or editing an SVG in a Pixerate vector editor.
+description: How to draw and edit vector artwork in the Pixerate vector editor through its vector.* commands - adding shapes and SVG paths, text (point, area, on a path, styles, Create Outlines), symbols and instances, CAD constraints (parallel, tangent, dimensions, auto-constrain), artboards and frames with resizing constraints, connectors, fills, strokes, stacked fills and strokes with blend modes, drop shadows, glows and blurs, clipping masks and opacity masks, gradients (linear, radial, conic, Oklab), stroke alignment, arrowheads, variable-width and tapered strokes, live corner radii, boolean operations and Pathfinder (unite, subtract, divide, trim), Shape Builder, paint bucket, path effects (trim, repeater, zig zag, offset), envelope warps and free distort, blends and morphing, anchor editing (join, smooth, simplify, knife, eraser), align, distribute, group, and SVG import and export. Use when creating an icon, logo, illustration, glyph, badge or any Bezier path artwork, or editing an SVG in a Pixerate vector editor.
 ---
 
 # Pixerate vector editor
@@ -38,6 +38,14 @@ carry a live effect stack. Every command is a `vector.*` command run with `run_c
   (`vector.editSymbol` … `vector.exitSymbolEdit`) changes every instance.
 - **Constraints** (CAD-style) keep geometric relations and dimensions between anchors, segments
   and round paths; they are solved after every edit, so later moves keep them.
+- **Frames** are groups with a `frame` rectangle (`vector.listFrames`): they draw a background,
+  clip their children and select by their rectangle; top-level frames are **artboards**. When a
+  frame is resized its children follow their **resizing constraints** (horizontal `left` /
+  `right` / `leftRight` / `center` / `scale`, vertical `top` / `bottom` / `topBottom` / `center` /
+  `scale`) instead of scaling.
+- **Connectors** are open paths with a `connector` whose ends are glued to other objects' sites
+  (the middle of a side, or the centre); they are routed again after every edit, so they follow
+  what they connect. A free end stays where it is.
 - Coordinates are document units. A rotated node stores its geometry in its own space: the
   `bounds` that `vector.list` reports are document-space, its `d` is the node's own.
 
@@ -63,6 +71,17 @@ Parameter details (gradient fields, effect parameters, width profiles, envelopes
    it over.
 
 ## Best practices
+
+- **Diagrams with connectors.** Lay the boxes out first, then `vector.connect` them (in one
+  `run_commands` batch) rather than drawing lines: connectors stay attached when boxes move, and
+  `route: "elbow"` with a small `radius` reads well in flowcharts. Leave sides `auto` unless a
+  connector must leave a particular side.
+
+- **Frames for anything that resizes.** Build screens, cards, buttons and banners inside a frame
+  (`vector.addFrame` or `vector.frameSelection`), set each child's constraints with
+  `vector.setResizing` (backgrounds and dividers `leftRight`, icons pinned to their corner, titles
+  `center`), then resize with `vector.setFrame` to produce other sizes from one design. Export each
+  artboard with `vector.exportFrameSvg`.
 
 - **Constraints for precise, editable geometry.** For technical drawings, diagrams, floor plans or
   any shape that must keep exact relations, draw it roughly, run `vector.autoConstrain`, then add
@@ -151,6 +170,7 @@ Parameter details (gradient fields, effect parameters, width profiles, envelopes
 
 | Command | Use it to |
 | --- | --- |
+| `vector.addPathByDimensions` | Draw a path the way a CAD user types it: from `start`, each step `{ length, angle }` (degrees counter-clockwise on the page: 0 right, 90 up), `{ dx, dy }` or `{ x, y }`; `closed` joins the ends. Use it for exact technical outlines (brackets, floor plans, given lengths and angles) instead of computing coordinates by hand. Returns `{ id, anchors }`. |
 | `vector.addShape` | Add a `kind` `rect`, `ellipse`, `polygon` (`sides`, at least 3), `star` (`points`, `innerRatio` 0 to 1) or `line` at `x`, `y`, `width`, `height` (all required; for a line, width and height are the end's offset). `cornerRadius` and `cornerKind` give live corners; any style field and `name` apply. Uses the editor's default style for anything not given. Returns `{ id }`. |
 | `vector.addPath` | Add a path from SVG path data `d` (absolute or relative M, L, H, V, C, S, Q, T, A, Z; arcs and quadratics become cubics) in document units, with `name` and style fields; unset style comes from the editor defaults. Fails when `d` has no points. Returns `{ id }`. |
 | `vector.importSvg` | Add the shapes of SVG markup `svg` on top of the document, or replace the document with `replace: true`. Reads paths, basic shapes, groups, transforms, linear and radial gradients, `clip-path` / `mask` references (as mask groups) `<text>` (as point text: content, font, anchor and fill) and `<use>` (as instances of symbols made from what they refer to); skips images and foreign filters. |
@@ -256,6 +276,26 @@ the browser's shaper they are kept but not drawn until outlines are available.
 | `vector.setConstraintValue` | Set a dimension's value (by id or name) or a named parameter (`null` removes a parameter); values are expressions. Returns the summary. |
 | `vector.autoConstrain` | Add what a sketch nearly satisfies (tolerances `distanceTolerance`, `angleTolerance`), skipping redundant or conflicting candidates. Returns `{ ids }`. |
 
+### Frames and artboards
+
+| Command | Use it to |
+| --- | --- |
+| `vector.listFrames` | Read every frame: id, name, parent, whether it is an artboard (top-level), its rectangle, fill and clip, document bounds, and its children's resizing constraints. Call before resizing or exporting frames. |
+| `vector.addFrame` | Add an empty artboard at `x, y, width, height` (white unless `fill`; `adopt: true` takes in the top-level objects it encloses). Use for screens, cards, pages and export areas. Returns the frame as listed. |
+| `vector.frameSelection` | Put objects sharing a parent into a frame fitted to their bounds plus `padding` (no fill unless given), in their place. Use to turn finished art into a resizable component. Returns the frame as listed. |
+| `vector.setFrame` | Move or resize a frame's rectangle (`x`, `y`, `width`, `height`; children follow their constraints) or change its `fill` / `clip`. Returns `{ frames }`. Set the children's constraints first. |
+| `vector.setResizing` | Set how children of a frame follow it on resize (`horizontal`, `vertical`; a missing axis keeps its value). Fails on objects not directly inside a frame. Returns `{ nodes: [{ id, horizontal, vertical }] }`. |
+| `vector.exportFrameSvg` | Export one frame as an SVG of its own size (its corner at the origin). Returns `{ svg, width, height }`; use it per artboard instead of `vector.exportSvg`. |
+
+### Connectors
+
+| Command | Use it to |
+| --- | --- |
+| `vector.connect` | Join two objects (or free points) with a connector: `start` / `end` as `{ nodeId, side? }` (side `auto` by default: the side facing the other end) or `{ x, y }`, `route` straight / elbow / curved, elbow `radius`, `gap`, stroke and arrowheads (a triangle at the end by default). Use for flowcharts and diagrams instead of drawing lines. Returns the connector as listed. |
+| `vector.setConnector` | Reglue an end (`{ nodeId, side? }`), unglue it (`null`), or change `route`, `radius`, `gap`; also turns a plain open path into a connector. Returns `{ connectors }`. |
+| `vector.listConnectors` | Read every connector: route and each end's glued object, side setting, side in use and position. |
+| `vector.listConnectionSites` | Read an object's sites (top, right, bottom, left, centre) with positions and outward normals, to pick a `side`. |
+
 ### Masks and clipping
 
 | Command | Use it to |
@@ -310,9 +350,21 @@ contents whole while you work, without losing the mask.
 | Command | Use it to |
 | --- | --- |
 | `vector.setEditing` | Set editing behaviour: `keepShapeOnDelete`, `curvatureMoves`, `pencilSmoothing` (0 to 1), `recognizeShapes`, `eraserSize`, `pencilPressure` (pen, all, off). Returns the settings. |
-| `vector.setTool` | Switch the interactive tool (select, direct, pen, pencil, rect, ellipse, polygon, star, line, scissors, knife, eraser, width, shapeBuilder, paintBucket, blend, gradient, envelope, type, typePath). Only for handing the canvas to the user in a given mode; commands do not need a tool. |
+| `vector.getSnapOptions` | Read how drawing snaps for people at the pointer: grid, objects, guides, threshold, polar `angles`, object snap `tracking`, `trackPolar`, `polarRelative`. |
+| `vector.setSnapOptions` | Set those options, e.g. `polarIncrement: 15` for 15° polar tracking, or a grid, before handing the canvas to the user. Moves nothing. Returns the options. |
+| `vector.setTool` | Switch the interactive tool (select, direct, pen, pencil, rect, ellipse, polygon, star, line, scissors, knife, eraser, width, shapeBuilder, paintBucket, blend, gradient, envelope, type, typePath, frame, connector). Only for handing the canvas to the user in a given mode; commands do not need a tool. |
 
 ## Pitfalls
+
+- A connector's geometry is regenerated after every edit while an end is glued: editing its
+  anchors directly does not stick. Unglue the end (`vector.setConnector` with `null`) or change
+  `route` instead. Connectors cannot be glued to connectors.
+
+- Scaling a frame (`vector.scale`, the selection handles) lays its children out by their
+  constraints, so it is a resize, not a zoom; group the frame (or scale its children) to scale the
+  art itself. A frame clips by default: objects moved outside it disappear (`clip: false` shows
+  them). Moving an object over a frame does not put it inside; use `vector.frameSelection` or
+  `adopt`.
 
 - The `d` in `vector.list` draws live corners cut, which adds anchors. On a path with corner
   radii, anchor indices counted from `d` do not match the stored anchors; count anchors on a path
