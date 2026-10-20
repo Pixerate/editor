@@ -19,6 +19,7 @@ import {
 	bezierPathBounds,
 	closeContour,
 	contoursToPath,
+	flattenChain,
 	pathToContours,
 	segmentDerivative,
 	segmentLength,
@@ -290,6 +291,32 @@ export function offsetPaths(paths: readonly BezierPath[], amount: number, join: 
 		for (let i = 0; i < n; i++) out.push(...offsetPath(p, amount * (i + 1 + copyOffset), { join, miterLimit }));
 		return out;
 	});
+}
+
+/**
+ * The area a path covers when it slides `dx, dy` (its Minkowski sum with that segment): the path,
+ * its moved copy and, for every edge (curves flattened within `tolerance`), the band the edge
+ * sweeps, united into one path. Block and long shadows are drawn with it. Open subpaths are
+ * closed, as for filling.
+ */
+export function sweepPath(path: BezierPath, dx: number, dy: number, fillRule: 'nonzero' | 'evenodd' = 'nonzero', tolerance = 0.25): BezierPath {
+	if (!path.length) return [];
+	if (!Number.isFinite(dx) || !Number.isFinite(dy) || Math.hypot(dx, dy) < 1e-9) return path.slice();
+	// Every band runs the same way round, so nonzero unites the overlapping ones.
+	const bands: BezierPath = [];
+	for (const contour of pathToContours(path)) {
+		const ring = flattenChain(closeContour(contour, true), Math.max(1e-3, tolerance));
+		for (let i = 0; i < ring.length; i++) {
+			let p = ring[i];
+			let q = ring[(i + 1) % ring.length];
+			const turn = (q[0] - p[0]) * dy - (q[1] - p[1]) * dx;
+			if (Math.abs(turn) < 1e-9) continue;
+			if (turn < 0) [p, q] = [q, p];
+			bands.push({ type: 'M', x: p[0], y: p[1] }, { type: 'L', x: q[0], y: q[1] }, { type: 'L', x: q[0] + dx, y: q[1] + dy }, { type: 'L', x: p[0] + dx, y: p[1] + dy }, { type: 'Z' });
+		}
+	}
+	const moved = transformBezierPath(path, [1, 0, 0, 1, dx, dy]);
+	return pathBoolean('union', [{ path, fillRule }, { path: moved, fillRule }, ...(bands.length ? [{ path: bands, fillRule: 'nonzero' as const }] : [])]).path;
 }
 
 // ---------------------------------------------------------------------------
