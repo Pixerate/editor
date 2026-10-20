@@ -9,6 +9,9 @@
   import VideoTimeline from './VideoTimeline.svelte';
   import VideoTransport from './VideoTransport.svelte';
   import { videoEditorStateOf } from './createVideoEditor.svelte.js';
+  import type { EffectProvider } from '@pixerate/editor/effects';
+  import { useEffects } from '../effects/effects.svelte.js';
+  import VideoEffectsPanel from './VideoEffectsPanel.svelte';
 
   interface Props {
     /** The editor to show (default: one made from `options`, destroyed with the component). */
@@ -28,16 +31,26 @@
     showTranscript?: boolean;
     /** Show colour scopes (histogram, luma waveform, vectorscope) of the preview under it (default false). */
     showScopes?: boolean;
+    /**
+     * An effects provider (see `@pixerate/editor/effects`), registered with the controller while
+     * mounted: clip effects, effect transitions and effect clips, with the effects panel. Optional:
+     * without one the editor is as before (effects in a project show as placeholders).
+     */
+    effects?: EffectProvider | null;
+    /** Show the effects panel (default: when a provider is given or the project has effects). */
+    showEffects?: boolean;
     class?: string;
   }
 
-  let { controller, options, editable = true, pxPerSecond = $bindable(100), showIssues = true, showTranscript = true, showScopes = false, class: className = '' }: Props = $props();
+  let { controller, options, editable = true, pxPerSecond = $bindable(100), showIssues = true, showTranscript = true, showScopes = false, effects, showEffects, class: className = '' }: Props = $props();
   let owned: VideoEditorController | null = null;
   // A controller is made only when none is passed, and kept for the component's lifetime.
   const ctl = $derived(controller ?? (owned ??= new VideoEditorController(options)));
   onDestroy(() => owned?.destroy());
   const view = videoEditorStateOf(() => ctl);
   const editor = $derived(view.current);
+  useEffects(() => ctl, () => effects);
+  const effectsShown = $derived(showEffects ?? !!(editor.effectsProvider || editor.project.tracks.some((t) => t.clips.some((c) => c.type === 'effect' || c.effects?.length || c.transition?.type === 'effect'))));
 </script>
 
 {#snippet issueList()}
@@ -72,7 +85,10 @@
       <VideoTransport controller={ctl} />
       {#if showScopes}<VideoScopes controller={ctl} />{/if}
     </div>
-    <ClipInspector controller={ctl} class="min-w-0" />
+    <div class="flex min-w-0 flex-col gap-3">
+      <ClipInspector controller={ctl} class="min-w-0" />
+      {#if effectsShown}<VideoEffectsPanel controller={ctl} class="min-w-0" />{/if}
+    </div>
     <div class="flex min-w-0 flex-col gap-2 lg:col-span-3">
       <VideoTimeline controller={ctl} bind:pxPerSecond />
       {#if showTranscript}<TranscriptPanel controller={ctl} />{/if}

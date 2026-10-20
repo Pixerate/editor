@@ -25,8 +25,15 @@ function reachablePackages(entry: string): Set<string> {
   return packages;
 }
 
-// Allowed: the framework itself and the matching narrow core subpath.
+/** Dependency-free core subpaths an entry may use besides its own: editors with effects support use the effects UI. */
+const EXTRA: Record<string, readonly string[]> = {
+  "video-editor": ["effects", "parameters"],
+  effects: ["parameters"],
+};
+
+// Allowed: the framework itself and the matching narrow core subpath (plus its EXTRA ones).
 const isAllowed = (specifier: string, coreSubpath: string) =>
+  (EXTRA[coreSubpath] ?? []).some((extra) => specifier === `@pixerate/editor/${extra}`) ||
   specifier === "react" ||
   specifier.startsWith("react/") ||
   specifier === "react-dom" ||
@@ -46,6 +53,7 @@ describe("subpath entry isolation", () => {
     ["chart/index.js", "chart"],
     ["animation-editor/index.js", "animation-editor"],
     ["video-editor/index.js", "video-editor"],
+    ["effects/index.js", "effects"],
   ])("%s pulls in nothing beyond React and @pixerate/editor/%s", (entry, coreSubpath) => {
     const packages = [...reachablePackages(entry)];
     expect(packages).toContain(`@pixerate/editor/${coreSubpath}`);

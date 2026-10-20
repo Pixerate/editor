@@ -4,6 +4,9 @@ import { normalizeVideoGrade } from './grade.js';
 import { videoValueAt } from './keyframes.js';
 import { sortedVideoClips, videoAssetMap, videoClipAfter, videoClipBefore, videoClipEnd, videoClipSpeed, videoAssetHasSound, videoSequenceMap } from './timeline.js';
 import { videoTransitionAudioCurve } from './types.js';
+import type { EffectValue } from '../effects/types.js';
+import { isVideoKeyframes } from './keyframes.js';
+import type { VideoEffectValues } from './types.js';
 import type { VideoAsset, VideoBlendMode, VideoGrade, VideoClip, VideoFadeCurve, VideoFit, VideoProject, VideoSequence, VideoTransition, VideoTextClip, VideoTrack, VideoWipeDirection } from './types.js';
 
 /** A rectangle in frame pixels. */
@@ -57,6 +60,35 @@ export interface VideoLayer {
 	blend?: VideoBlendMode;
 	/** Colour correction (absent = none). */
 	grade?: VideoGrade;
+	/** The clip's enabled provider effects, in order, with values at this moment (see `VideoClipEffect`). */
+	effects?: VideoLayerEffect[];
+	/** For an effect clip: the provider effect drawing the picture, at `time` ms into the clip. */
+	generator?: { effect: string; name?: string; values: Record<string, EffectValue>; time: number };
+	/**
+	 * For a clip coming in through an effect transition: the provider transition from the outgoing
+	 * clip's layer (`from`, drawn in its place) to this one, `progress` (0–1) and `time` ms through it.
+	 */
+	transitionEffect?: { effect: string; name?: string; values: Record<string, EffectValue>; progress: number; time: number; from: VideoLayer | null };
+}
+
+/** One provider effect on a layer at a moment. */
+export interface VideoLayerEffect {
+	/** The effect's id within its clip. */
+	id: string;
+	effect: string;
+	name?: string;
+	/** 0–1 after keyframes. */
+	opacity: number;
+	values: Record<string, EffectValue>;
+	/** Ms into the clip. */
+	time: number;
+}
+
+/** Effect values at clip-relative `clipTime` (ms): keyframed numbers resolved. */
+export function videoEffectValuesAt(values: VideoEffectValues | undefined, clipTime: number): Record<string, EffectValue> {
+	const out: Record<string, EffectValue> = {};
+	for (const [k, v] of Object.entries(values ?? {})) out[k] = isVideoKeyframes(v) ? videoValueAt(v, clipTime, 0) : v;
+	return out;
 }
 
 /** One sound playing at a moment. */
@@ -260,6 +292,7 @@ function tracksAt(project: VideoProject, tracks: readonly VideoTrack[], time: nu
 			let wipe: VideoLayer['wipe'];
 			let dip: { color: string; opacity: number } | null = null;
 			let iris: VideoLayer['iris'];
+			let effectIn: Active['incoming'];
 			// Push and slide move whole pictures by a frame, eased in and out.
 			let shift = 0;
 			let shiftDirection: VideoWipeDirection = 'right';
@@ -267,6 +300,7 @@ function tracksAt(project: VideoProject, tracks: readonly VideoTrack[], time: nu
 				if (incoming.type === 'crossfade') opacity *= incoming.progress;
 				else if (incoming.type === 'wipe') wipe = { direction: incoming.transition.direction ?? 'right', progress: incoming.progress };
 				else if (incoming.type === 'iris') iris = { progress: incoming.progress };
+				else if (incoming.type === 'effect') effectIn = incoming;
 				else if (incoming.type === 'push' || incoming.type === 'slide') {
 					shiftDirection = incoming.transition.direction ?? 'right';
 					shift = videoTransitionEase(incoming.progress) - 1;
@@ -294,6 +328,20 @@ function tracksAt(project: VideoProject, tracks: readonly VideoTrack[], time: nu
 			if (clip.type === 'sequence') Object.assign(layer, { sequence: clip.sequence, sourceTime, layers: nested!.layers });
 			if (clip.type === 'text') layer.text = videoTextStyle(clip);
 			if (clip.type === 'color') layer.color = clip.color;
+			if (clip.type === 'effect') layer.generator = { effect: clip.effect, ...(clip.name ? { name: clip.name } : {}), values: videoEffectValuesAt(clip.values, clipTime), time: Math.max(0, clipTime) };
+			const effects = (clip.effects ?? [])
+				.filter((e) => e.enabled !== false)
+				.map((e): VideoLayerEffect => ({ id: e.id, effect: e.effect, ...(e.name ? { name: e.name } : {}), opacity: clamp01(videoValueAt(e.opacity, clipTime, 1)), values: videoEffectValuesAt(e.values, clipTime), time: clipTime }))
+				.filter((e) => e.opacity > 0);
+			if (effects.length) layer.effects = effects;
+			if (effectIn) {
+				// The outgoing clip's layer is drawn by the transition instead of on its own.
+				const before = videoClipBefore(track, clip);
+				const i = before ? layers.findIndex((l) => l.clip === prefix + before.id && l.track === track.id) : -1;
+				const from = i >= 0 ? layers.splice(i, 1)[0] : null;
+				const t = effectIn.transition;
+				layer.transitionEffect = { effect: t.effect!.effect, ...(t.effect!.name ? { name: t.effect!.name } : {}), values: videoEffectValuesAt(t.effect!.values, 0), progress: effectIn.progress, time: effectIn.progress * t.duration, from };
+			}
 			if (layer.opacity > 0) layers.push(layer);
 			if (dip && dip.opacity > 0) layers.push({ clip: `transition:${prefix}${incoming ? clip.id : outgoing!.next.id}`, track: track.id, type: 'color', color: dip.color, opacity: clamp01(dip.opacity), rect: { x: 0, y: 0, width: project.width, height: project.height }, rotation: 0 });
 		}
@@ -302,9 +350,24 @@ function tracksAt(project: VideoProject, tracks: readonly VideoTrack[], time: nu
 }
 
 /**
+ * Layers as drawn without an effects provider: an effect transition becomes a crossfade (the
+ * outgoing layer, then this one faded up by the progress). Clip effects are left on the layers,
+ * where they are simply not drawn.
+ */
+export function videoLayersWithoutTransitionEffects(layers: readonly VideoLayer[]): VideoLayer[] {
+	return layers.flatMap((l) => {
+		const t = l.transitionEffect;
+		if (!t) return [l];
+		const { transitionEffect: _t, ...rest } = l;
+		const self = { ...rest, opacity: rest.opacity * t.progress };
+		return t.from ? [t.from, self] : [self];
+	});
+}
+
+/**
  * Every layer of a frame that draws a picture of its own, compounds opened up (each compound's
  * layers in place of it), back to front. Hosts use it to find the media a frame needs.
  */
 export function videoFrameLeafLayers(layers: readonly VideoLayer[]): VideoLayer[] {
-	return layers.flatMap((l) => (l.layers ? videoFrameLeafLayers(l.layers) : [l]));
+	return layers.flatMap((l) => [...(l.transitionEffect?.from ? videoFrameLeafLayers([l.transitionEffect.from]) : []), ...(l.layers ? videoFrameLeafLayers(l.layers) : [l])]);
 }

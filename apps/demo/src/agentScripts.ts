@@ -747,6 +747,34 @@ const clipTarget = (id: string) => ({ selector: `[data-clip="${id}"]` });
 
 export const VIDEO_SCRIPTS: AgentScript[] = [
   {
+    id: "video-effects",
+    prompt: "Give the sunrise a warm tint and use an effect transition into the ocean",
+    steps: [
+      { say: "Searching the effects provider for filters.", tool: "videofx__search_effects", args: { use: "filter" } },
+      { say: "Reading the tint's controls: a colour and an amount from 0 to 1.", tool: "videofx__describe_effect", args: { effect: "fake.tint" } },
+      {
+        say: "A warm tint on the sunrise shot, at a third.",
+        tool: "videofx__apply_effect",
+        args: { target: "shot-1", effect: "fake.tint", values: { color: "#ff7a1a", amount: 0.35 } },
+        target: clipTarget("shot-1"),
+      },
+      {
+        say: "Easing it in over the first two seconds with keyframes.",
+        tool: "videofx__set_video_effect_keyframes",
+        args: { clip: "shot-1", effect: "fx1", control: "amount", keys: [{ t: 0, v: 0 }, { t: 2000, v: 0.35, ease: "ease-out" }] },
+        target: clipTarget("shot-1"),
+      },
+      {
+        say: "Swapping the crossfade into the ocean for the provider's crossfade transition.",
+        tool: "videofx__set_video_effect_transition",
+        args: { clip: "shot-2", effect: "fake.crossfade", duration: 800, values: { curve: "smooth" } },
+        target: clipTarget("shot-2"),
+      },
+      { say: "Listing what is applied now.", tool: "videofx__list_applied_effects", args: {} },
+      { say: "Playing the transition.", tool: "video__seek_video", args: { time: 3200, play: true }, target: clipTarget("shot-2") },
+    ],
+  },
+  {
     id: "video-tighten",
     prompt: "Cut the ocean shot to 2 seconds and add an end card",
     steps: [

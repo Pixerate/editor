@@ -2,6 +2,8 @@ import { untrack } from "svelte";
 import {
   VideoEditorController,
   createVideoEditorToolProvider,
+  createVideoEffectsToolProvider,
+  type VideoEffectsToolProviderOptions,
   type VideoEditorOptions,
   type VideoEditorState,
   type VideoEditorToolProviderOptions,
@@ -95,5 +97,23 @@ export function useVideoEditorTools(
     const target = typeof registry === "function" ? registry() : registry;
     if (!target) return;
     return target.register(createVideoEditorToolProvider(controller, options));
+  });
+}
+
+/**
+ * Registers the video editor's effect tools (`search_effects`, `describe_effect`, `apply_effect`,
+ * `add_video_effect_clip`, `set_video_effect_transition`, …) for the lifetime of the calling
+ * component. They work once an effects provider is registered (see `useEffects`); before that the
+ * read tools say so and the write tools refuse.
+ */
+export function useVideoEffectsTools(
+  registry: ToolRegistry | null | undefined | (() => ToolRegistry | null | undefined),
+  controller: VideoEditorController,
+  options: VideoEffectsToolProviderOptions = {},
+): void {
+  $effect(() => {
+    const target = typeof registry === "function" ? registry() : registry;
+    if (!target) return;
+    return target.register(createVideoEffectsToolProvider(controller, options));
   });
 }

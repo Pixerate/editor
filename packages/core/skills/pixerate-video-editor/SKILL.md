@@ -1,6 +1,6 @@
 ---
 name: pixerate-video-editor
-description: How to edit video projects in the Pixerate non-linear video editor through its agent tools - adding video, audio and image assets, building a rough cut on video and audio tracks, inserting, overwriting, moving, trimming, splitting and ripple-deleting clips, slip, slide and roll edits, lift and extract of a time range, razor cuts across tracks, sync-locked tracks, keyframed opacity, volume and transform, closing gaps, titles and colour clips, fades, volume and speed, crossfade, dip and wipe transitions with handles, J and L cuts, markers, checking the project, rendering frames and contact sheets, and exporting an ffmpeg command or a CMX 3600 EDL. Use when video tools such as get_video_project, add_video_clip or edit_video are available, or when asked to cut, trim, assemble, sequence or export footage on a timeline.
+description: How to edit video projects in the Pixerate non-linear video editor through its agent tools - adding video, audio and image assets, building a rough cut on video and audio tracks, inserting, overwriting, moving, trimming, splitting and ripple-deleting clips, slip, slide and roll edits, lift and extract of a time range, razor cuts across tracks, sync-locked tracks, keyframed opacity, volume and transform, closing gaps, titles and colour clips, fades, volume and speed, crossfade, dip and wipe transitions with handles, J and L cuts, markers, checking the project, provider effects (clip effects, effect clips, effect transitions), rendering frames and contact sheets, and exporting an ffmpeg command or a CMX 3600 EDL. Use when video tools such as get_video_project, add_video_clip or edit_video are available, or when asked to cut, trim, assemble, sequence or export footage on a timeline.
 ---
 
 # Pixerate video editor
@@ -60,6 +60,12 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
    `export_video_edl` (one track) for finishing elsewhere. Read the returned notes. For a
    delivery loudness, have the host run `export_video_loudness_measure` first and pass what it
    prints as `loudness.measured`; one pass (`loudness` without `measured`) is fine for a draft.
+10. **Effects** (only when the host registered an effects provider; `search_effects` says
+    `available: false` otherwise): `search_effects` with a `use`, then `describe_effect` for its
+    controls, then `apply_effect` (filters and overlays on a clip), `set_video_effect_transition`
+    or `add_video_effect_clip` (generators and titles). Tune with `update_effect` and
+    `set_video_effect_keyframes`; check with `get_video_frame` (layers list `effects`) and
+    `list_applied_effects`.
 
 ## Best practices
 
@@ -229,7 +235,39 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
 | `undo_video` | Undo your last edit (one tool call or one `edit_video` batch). |
 | `redo_video` | Redo the edit you just undid. |
 
+### Effects
+
+These tools come from `createVideoEffectsToolProvider` and work when the host registered an
+effects provider (for example Flair). Without one, `search_effects` and `describe_effect` return
+`available: false` with the reason, `list_applied_effects` still lists what the project holds,
+and every write tool is refused with the reason.
+
+| Tool | Use it to |
+| --- | --- |
+| `search_effects` | Find effects: words in `query`, filtered by `kind`, `category` or `use` (filter, overlay for clips; transition; generator, title). Returns ids, names, uses, whether they are transparent or loop, and their length. Call `describe_effect` next. |
+| `describe_effect` | Read one effect's `controls` (a strict JSON Schema: names, types, ranges, units), `defaults`, `presets` and `inputs`, and whether it `appliesHere` (as a clip effect). Use the names and ranges for values. |
+| `list_applied_effects` | See the effects in the project per clip, in order: clip effects (`fx1`...), an effect clip's own effect (`generator`) and an effect transition (`transition`), with their saved values and `available` (false when the provider lacks it: drawn as a placeholder). |
+| `apply_effect` | Add a filter or overlay effect to a clip's stack (`target` clip id, `effect`, `values`, `index`, `enabled`, `opacity`). Effects run in order on the clip's picture before its grade and placement. Returns the effect's new id and the clip's effects. |
+| `update_effect` | Change an applied effect: `values` merged over its own (null resets a control), `enabled`, `opacity`, `index` (reorder). For `generator` and `transition` only `values`. Returns the effect now. |
+| `remove_effect` | Take an effect off a clip (`transition` removes an effect transition; an effect clip is deleted with `delete_video_clips`). Returns what was removed and what is left. |
+| `add_video_effect_clip` | Put a generator, title or overlay effect on a video `track` as a clip filling the frame (`start`, `duration` default the effect's own length, `values`, `mode`). Transparent effects show the tracks beneath. Returns the clip id. |
+| `set_video_effect_transition` | Use a provider transition effect into a `clip` from the one ending where it starts (`duration` centred on the cut, `values`). Needs handles like a crossfade. |
+| `set_video_effect_keyframes` | Animate one number `control` of a clip effect (or an effect clip's `generator`) with `keys` in clip ms, or `null` to stop animating it. |
+
 ## Pitfalls
+
+- **Effects need rendered frames to export.** ffmpeg cannot draw provider effects, so
+  `export_video_ffmpeg` refuses a project with enabled effects unless the host renders the
+  picture frame by frame (`renderVideoFrameExact`) and passes `frames`. Tell the user, or turn
+  the effects off (`update_effect` with `enabled: false`) for a quick draft export.
+- **Effects render a frame later.** The preview draws a clip without its effect until the
+  provider's picture for that frame arrives; `get_video_frame` and the project are always
+  exact. Effects are cached per frame of the project's frame grid.
+- **Values are checked, keys too.** Out-of-range or unknown controls are refused with the
+  control's description; only number controls can be keyframed, and transition values cannot.
+- **Effects survive without a provider.** A project opened where no provider (or a different
+  one) is registered keeps every effect id and value, shows effect clips as labelled boxes and
+  effect transitions as crossfades, and saves them back unchanged.
 
 - **Edits never add errors.** Any edit that would create an overlap, a source overrun or an
   impossible transition is refused whole (unless you asked for `mode: "overwrite"` or
