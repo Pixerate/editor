@@ -123,6 +123,13 @@ describe('React paint tools', () => {
     expect(container.querySelector('[data-testid="clone-source"]')!.textContent).toBe('Source 12, 34');
     await act(async () => button('Clear source').click());
     expect(c.getState().paint.cloneSource).toBeNull();
+    // The Clone Source panel: scale, angle and flips, and a reset.
+    await act(async () => setValue(container.querySelector('input[aria-label="Source W"]')!, '50'));
+    await act(async () => setValue(container.querySelector('input[aria-label="Source angle"]')!, '30'));
+    await act(async () => button('Flip H').click());
+    expect(c.getState().paint.cloneTransform).toEqual({ scaleX: -0.5, scaleY: 1, rotate: 30 });
+    await act(async () => button('Reset transform').click());
+    expect(c.getState().paint.cloneTransform).toEqual({ scaleX: 1, scaleY: 1, rotate: 0 });
     await act(async () => button('Spot Heal').click());
     await act(async () => button('Content-Aware').click());
     expect(c.getState().paint.retouch.spotType).toBe('content-aware');
