@@ -8,7 +8,10 @@ import {
   RETOUCH_CHOICES,
   RETOUCH_OPTION_CONTROLS,
   RETOUCH_TOGGLES,
+  CLONE_TRANSFORM_CONTROLS,
   cloneSourceLabel,
+  cloneTransformView,
+  setCloneTransformValue,
   isRetouchPaintTool,
   rgbUnitToHex,
   setRetouchChoice,
@@ -190,6 +193,26 @@ export const BrushOptionsBar: React.FC<BrushOptionsBarProps> = ({ controller, cl
                   Clear source
                 </button>
               )}
+            </div>
+          )}
+          {(tool === 'clone' || tool === 'heal') && (
+            <div className="flex flex-col gap-1" role="group" aria-label="Clone source transform" data-testid="clone-transform">
+              {CLONE_TRANSFORM_CONTROLS.map((spec) => (
+                <ControlSlider key={spec.id} spec={spec} value={cloneTransformView(controller)[spec.id]} onChange={(v) => setCloneTransformValue(controller, spec.id, v)} />
+              ))}
+              <div className="flex items-center gap-1">
+                <button type="button" aria-pressed={cloneTransformView(controller).flipH} title="Mirror the source left to right" className={chip(cloneTransformView(controller).flipH)} onClick={() => setCloneTransformValue(controller, 'flipH')}>
+                  Flip H
+                </button>
+                <button type="button" aria-pressed={cloneTransformView(controller).flipV} title="Mirror the source top to bottom" className={chip(cloneTransformView(controller).flipV)} onClick={() => setCloneTransformValue(controller, 'flipV')}>
+                  Flip V
+                </button>
+                {!cloneTransformView(controller).identity && (
+                  <button type="button" title="Back to 100 %, no flip, 0°" className={chip(false)} onClick={() => controller.setCloneTransform(null)}>
+                    Reset transform
+                  </button>
+                )}
+              </div>
             </div>
           )}
           {RETOUCH_CHOICES.filter((c) => c.tools.includes(tool)).map((choice) => (

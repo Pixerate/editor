@@ -1,5 +1,16 @@
 # @pixerate/editor-svelte
 
+## 0.95.0
+
+### Minor Changes
+
+- c0d64fd: Multipage vector documents with master pages: the top-level frames are pages, and master pages draw their art (laid out by resizing constraints, with `{page}` / `{pages}` in text) on every page that uses them, in the canvas and every export. New `addPage`, `addMasterPage`, `setPageMaster`, `movePage`, `goToPage`, the `vector.*Page*` commands, `parentId` on `vector.addText`, and `<VectorPagesPanel>` in React and Svelte. The skill's pitfalls moved to `references/pitfalls.md`.
+
+### Patch Changes
+
+- Updated dependencies [c0d64fd]
+  - @pixerate/editor@0.134.0
+
 ## 0.94.0
 
 ### Minor Changes

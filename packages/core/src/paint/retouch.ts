@@ -254,6 +254,76 @@ export interface PixelSource {
 }
 
 /**
+ * Photoshop's Clone Source transform: the cloned pixels appear scaled by `scaleX` / `scaleY`
+ * (negative flips) and rotated by `rotate` degrees (clockwise) about the stroke's start.
+ */
+export interface CloneTransform {
+  scaleX: number;
+  scaleY: number;
+  rotate: number;
+}
+
+export const IDENTITY_CLONE_TRANSFORM: CloneTransform = { scaleX: 1, scaleY: 1, rotate: 0 };
+
+export function isIdentityCloneTransform(t: CloneTransform): boolean {
+  return t.scaleX === 1 && t.scaleY === 1 && ((t.rotate % 360) + 360) % 360 === 0;
+}
+
+/**
+ * Where a clone samples for target point (`x`, `y`): `source + M⁻¹ · (p − anchor)`, with `M` the
+ * transform (scale then rotate) and `anchor` the target point that maps onto the source point.
+ */
+export function cloneSamplePoint(t: CloneTransform, source: { x: number; y: number }, anchor: { x: number; y: number }, x: number, y: number): [number, number] {
+  const a = (-t.rotate * Math.PI) / 180;
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  const dx = x - anchor.x;
+  const dy = y - anchor.y;
+  return [source.x + (c * dx - s * dy) / t.scaleX, source.y + (s * dx + c * dy) / t.scaleY];
+}
+
+/** A source seen through a map from document points to source points (bilinear, premultiplied). */
+export class TransformedPixelSource implements PixelSource {
+  private readonly px = [0, 0, 0, 0];
+
+  constructor(
+    private readonly inner: PixelSource,
+    private readonly map: (x: number, y: number) => [number, number]
+  ) {}
+
+  sample(x: number, y: number, out: number[]): boolean {
+    const [u, v] = this.map(x, y);
+    const x0 = Math.floor(u);
+    const y0 = Math.floor(v);
+    const fx = u - x0;
+    const fy = v - y0;
+    let r = 0;
+    let g = 0;
+    let b = 0;
+    let a = 0;
+    for (let k = 0; k < 4; k++) {
+      const w = (k & 1 ? fx : 1 - fx) * (k & 2 ? fy : 1 - fy);
+      if (w <= 0) continue;
+      if (!this.inner.sample(x0 + (k & 1), y0 + (k >> 1), this.px)) continue;
+      const pa = this.px[3] * w;
+      r += this.px[0] * pa;
+      g += this.px[1] * pa;
+      b += this.px[2] * pa;
+      a += pa;
+    }
+    if (!(a > 0)) {
+      out[0] = out[1] = out[2] = out[3] = 0;
+      return false;
+    }
+    out[0] = r / a;
+    out[1] = g / a;
+    out[2] = b / a;
+    out[3] = a;
+    return true;
+  }
+}
+
+/**
  * A source over raster tiles (layer pixels, a mask, or composite tiles): `readTile` gives tile
  * (tx, ty) in source space or `null` when it is empty; source pixel = document pixel − `offset`.
  * One-channel tiles read as grey (alpha 255). Tiles are cached, so make one per stroke.
