@@ -32,12 +32,59 @@ export interface CanvasBrushSettings {
  */
 export type CanvasBrush = string | CanvasBrushSettings;
 
+/** A gradient stop of brushed stroke paint (the paint engine's `PaintGradientStop`). */
+export interface CanvasBrushPaintStop {
+	/** 0..1 along the gradient. */
+	offset: number;
+	/** `#rrggbb`, or `paint` (the stroke colour) / `secondary` (white). */
+	color: string;
+	/** 0..1 (default 1): multiplies the brush's flow where this colour is laid. */
+	opacity?: number;
+	/** Where between this stop and the next (0.05..0.95) the colours are half mixed (default 0.5). */
+	midpoint?: number;
+}
+
+/**
+ * What moves a brushed stroke along its gradient. `distance` is in canvas units of the path
+ * (default 300, mirrored), so the colours keep their place at every zoom. Canvas strokes carry no
+ * timing, so the paint engine's `velocity` and `time` mappings are refused.
+ */
+export type CanvasBrushPaintMapping =
+	| { by: 'distance'; length?: number; repeat?: 'clamp' | 'repeat' | 'mirror'; unit?: 'px' | 'dabs' }
+	| { by: 'pressure' }
+	| { by: 'tilt' }
+	| { by: 'direction' }
+	| { by: 'across-tip' }
+	| { by: 'random'; every?: number };
+
+/**
+ * What a brushed stroke paints with, instead of its stroke colour (the paint engine's
+ * `PaintSource`, described structurally so the canvas types never import the paint engine): one
+ * colour, or gradient paint sampled dab by dab. The stroke colour still gives the alpha and fills
+ * `paint` stops.
+ */
+export type CanvasBrushPaint =
+	| { type: 'color'; color: string }
+	| {
+			type: 'gradient';
+			/** 2..16 stops sorted by offset. */
+			stops: CanvasBrushPaintStop[];
+			/** How neighbouring stops mix (default `pigment`). */
+			space?: 'pigment' | 'oklab' | 'srgb';
+			/** Default: distance, 300 canvas units, mirror. */
+			map?: CanvasBrushPaintMapping;
+			/** 0 (hard steps) .. 1 (smooth, default). */
+			softness?: number;
+	  };
+
 /**
  * What makes a path shape a brushed stroke: the brush, plus pen profiles spread evenly along the
  * path's length (first value at the start, last at the end).
  */
 export interface CanvasBrushstroke {
 	brush: CanvasBrush;
+	/** Gradient paint (or one colour) instead of the stroke colour. */
+	paint?: CanvasBrushPaint;
 	/** Pressure 0..1 along the length (default full pressure). */
 	pressure?: number[];
 	/** Pointer Events pen tilt in degrees (−90..90) along the length. */

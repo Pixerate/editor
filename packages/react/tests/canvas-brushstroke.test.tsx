@@ -66,6 +66,30 @@ describe('brushed freehand strokes (react)', () => {
 		expect((await ref.draw!.listBrushes()).some((b) => b.id === 'pencil-hb')).toBe(true);
 	});
 
+	it('carries gradient paint from the style to the brushed stroke, interactively and through drawStroke', async () => {
+		const paint = { type: 'gradient', stops: [{ offset: 0, color: '#1d4ed8' }, { offset: 1, color: '#facc15' }], map: { by: 'distance', length: 80 } } as const;
+		const ref: { draw: CanvasDraw | null; nodes: CanvasNode[] } = { draw: null, nodes: [] };
+		function Test() {
+			const [nodes, setNodes] = useState<CanvasNode[]>([]);
+			ref.nodes = nodes;
+			ref.draw = useCanvasDraw({ nodes, setNodes, initialTool: 'pen', initialStyle: { brush: 'ink-pen', width: 8, paint } });
+			return null;
+		}
+		await act(async () => root.render(<Test />));
+		await act(async () => {
+			ref.draw!.startStroke([0, 0]);
+			ref.draw!.continueStroke([80, 0]);
+			ref.draw!.endStroke();
+		});
+		expect((ref.nodes[0].data as any).shape.brush.paint).toEqual(paint);
+		let drawn: any;
+		await act(async () => {
+			drawn = await ref.draw!.drawStroke({ points: [[0, 50], [50, 60]], style: { brush: 'pencil-hb', paint } });
+		});
+		expect(drawn.brush.paint).toMatchObject({ type: 'gradient', space: 'pigment', map: { by: 'distance', length: 80, repeat: 'mirror' } });
+		await expect(ref.draw!.drawStroke({ points: [[0, 0]], style: { paint } })).rejects.toThrow(/pass a brush too/);
+	});
+
 	it('ShapeNode draws a brushed shape as an image, and a plain one as a path', async () => {
 		const brushed = { kind: 'path', d: 'M0 10 L100 10', viewBox: [0, 0, 100, 20], stroke: '#123456', strokeWidth: 6, brush: { brush: 'ink-pen', pressure: [0.3, 1] } };
 		await act(async () =>
