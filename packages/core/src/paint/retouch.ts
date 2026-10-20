@@ -27,7 +27,7 @@ import { TILE, tileKey } from '../raster/surface';
 import { srgbDecode, srgbEncode } from '../raster/deep';
 import { DabWalker, dabRect, rasterizeDab, type BrushSettings, type CoverageMap, type Dab, type StrokePoint } from './brush';
 import { SmudgeTip, type SmudgeSettings } from './blending';
-import { TileMedium, type PaintTileTarget } from './exchange';
+import { TileMedium, put255, type PaintTileTarget } from './exchange';
 import { bestOffset, dilateMask, maskBounds, membraneFill, seamlessClone } from './heal';
 
 // ---------------------------------------------------------------------------
@@ -716,9 +716,9 @@ export function spongeEffect(brush: BrushSettings, saturate: boolean, vibrance: 
         rgb[1] = px[i + 1] / 255;
         rgb[2] = px[i + 2] / 255;
         sponge(rgb, k, saturate, vibrance);
-        px[i] = Math.round(rgb[0] * 255);
-        px[i + 1] = Math.round(rgb[1] * 255);
-        px[i + 2] = Math.round(rgb[2] * 255);
+        put255(px, i, rgb[0]);
+        put255(px, i + 1, rgb[1]);
+        put255(px, i + 2, rgb[2]);
       }
     }
   };
@@ -749,7 +749,7 @@ export function rgbaViewOfGrey(target: PaintTileTarget): { target: PaintTileTarg
       let v = views.get(key);
       if (!v) {
         // An empty mask tile is still values (0), not transparency: always give a tile.
-        v = expand(target.readTile(tx, ty) ?? new Uint8ClampedArray(TILE * TILE));
+        v = expand((target.readTile(tx, ty) as Uint8ClampedArray | null) ?? new Uint8ClampedArray(TILE * TILE));
         views.set(key, v);
       }
       return v;
@@ -758,7 +758,7 @@ export function rgbaViewOfGrey(target: PaintTileTarget): { target: PaintTileTarg
       const key = tileKey(tx, ty);
       let v = views.get(key);
       if (!v) {
-        v = expand(target.readTile(tx, ty) ?? new Uint8ClampedArray(TILE * TILE));
+        v = expand((target.readTile(tx, ty) as Uint8ClampedArray | null) ?? new Uint8ClampedArray(TILE * TILE));
         views.set(key, v);
       }
       dirty.set(key, { tx, ty, data: v });

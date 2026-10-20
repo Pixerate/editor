@@ -18,7 +18,7 @@
 import { mixPigment8, pigment8 } from '../raster/blend';
 import { PIGMENT_BANDS, lerpPigmentInto, type Pigment } from '../raster/pigment';
 import type { RasterRect } from '../raster/surface';
-import type { MixingModel, TileMedium } from './exchange';
+import { put255, type MixingModel, type TileMedium } from './exchange';
 
 /** Blender options. */
 export interface BlenderSettings {
@@ -103,7 +103,7 @@ export function blenderDab(medium: TileMedium, rect: RasterRect, cov: ArrayLike<
         const a = px[i + 3] / 255;
         if (a > 0) {
           if (pigment) {
-            const p = pigment8(px[i], px[i + 1], px[i + 2]);
+            const p = pigment8(Math.round(px[i]), Math.round(px[i + 1]), Math.round(px[i + 2]));
             const sa = p.scatter * p.strength * a;
             for (let k = 0; k < N; k++) row[k] += sa * p.ks[k];
             row[N] += sa;
@@ -153,7 +153,7 @@ export function blenderDab(medium: TileMedium, rect: RasterRect, cov: ArrayLike<
         // Only bare canvas nearby: the paint thins out (edges soften).
         if (lock || a <= 0) continue;
         const i = medium.locate(dx, dy, true);
-        medium.pixels[i + 3] = Math.round(na * 255);
+        put255(medium.pixels, i + 3, na);
         continue;
       }
       // The neighbourhood's share of the paint in the result.
@@ -165,17 +165,17 @@ export function blenderDab(medium: TileMedium, rect: RasterRect, cov: ArrayLike<
         for (let c = 0; c < N; c++) mixPig.ks[c] = sum(c, x1, y1, x2, y2) / sa;
         mixPig.scatter = sa / asum;
         if (a <= 0 || share >= 1) lerpPigmentInto(mixPig, mixPig, 0, out, 0);
-        else lerpPigmentInto(pigment8(px[i], px[i + 1], px[i + 2]), mixPig, share, out, 0);
+        else lerpPigmentInto(pigment8(Math.round(px[i]), Math.round(px[i + 1]), Math.round(px[i + 2])), mixPig, share, out, 0);
       } else {
         for (let c = 0; c < 3; c++) {
           const m = sum(c, x1, y1, x2, y2) / asum;
           out[c] = a <= 0 || share >= 1 ? m : px[i + c] / 255 + (m - px[i + c] / 255) * share;
         }
       }
-      px[i] = Math.round(out[0] * 255);
-      px[i + 1] = Math.round(out[1] * 255);
-      px[i + 2] = Math.round(out[2] * 255);
-      if (!lock) px[i + 3] = Math.round(na * 255);
+      put255(px, i, out[0]);
+      put255(px, i + 1, out[1]);
+      put255(px, i + 2, out[2]);
+      if (!lock) put255(px, i + 3, na);
     }
   }
 }
@@ -301,10 +301,10 @@ export class SmudgeTip {
           }
           const i = medium.locate(dx, dy, true);
           const out = medium.pixels;
-          out[i] = Math.round(r * 255);
-          out[i + 1] = Math.round(g * 255);
-          out[i + 2] = Math.round(b * 255);
-          out[i + 3] = Math.round(na * 255);
+          put255(out, i, r);
+          put255(out, i + 1, g);
+          put255(out, i + 2, b);
+          put255(out, i + 3, na);
         }
         // Pick up: the patch takes `1 − length` of the paint that was under it (alpha-weighted).
         const pick = (1 - length) * Math.min(1, cv * d.opacity);
