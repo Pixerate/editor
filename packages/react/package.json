@@ -19,6 +19,11 @@
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
     },
+    "./effects": {
+      "types": "./dist/effects/index.d.ts",
+      "import": "./dist/effects/index.js",
+      "require": "./dist/effects/index.cjs"
+    },
     "./spreadsheet": {
       "types": "./dist/spreadsheet/index.d.ts",
       "import": "./dist/spreadsheet/index.js",
@@ -144,7 +149,7 @@
   },
   "peerDependencies": {
     "@dagrejs/dagre": "^1.1.8",
-    "@pixerate/editor": ">=0.120.0 <1.0.0-0",
+    "@pixerate/editor": ">=0.122.0 <1.0.0-0",
     "@tiptap/core": "^2.11.5",
     "@tiptap/pm": "^2.11.5",
     "@tiptap/react": "^2.11.5",

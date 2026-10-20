@@ -43,3 +43,4 @@ export { WET_FLOW_KINDS, DEFAULT_FLOW, normalizeFlow, type WetFlowKind, type Wet
 export { DEFAULT_WET_PARAMS, WET_PARAM_KEYS, normalizeWetParams, type WetParams, type WetTilt } from '../paint/wet/model';
 export { wetSupport, type WetSupport } from '../paint/wet/wasm';
 export type { WetBackendInfo } from '../paint/wet/world';
+export * from '../paint/gradient-paint';

@@ -17,6 +17,8 @@ import {
   type HarmonyKind,
   type PaintEditorController,
 } from '@pixerate/editor/paint-editor';
+import { DEFAULT_PAINT_GRADIENT, paintSourceCss } from '@pixerate/editor/paint-editor';
+import { PaintGradientEditor } from './PaintGradientEditor';
 import { usePaintEditorState } from './usePaintEditor';
 import { ErrorLine, PixelCanvas, button, chip, panel, useAttempt } from './shared';
 
@@ -106,6 +108,26 @@ export const ColorPanel: React.FC<ColorPanelProps> = ({ controller, wheelSize = 
           className="w-20 rounded bg-slate-800 px-1.5 py-0.5 font-mono"
         />
       </div>
+      <div className="flex items-center gap-2" data-testid="paint-source">
+        <span
+          className="h-5 flex-1 rounded ring-1 ring-slate-700"
+          aria-label={state.paint.type === 'gradient' ? 'Gradient paint' : 'Paint colour'}
+          data-testid="paint-well"
+          style={{ background: paintSourceCss(state.paint, { paint: color, secondary: state.secondaryColor }) }}
+        />
+        <button
+          type="button"
+          className={chip(state.paint.type === 'gradient')}
+          aria-pressed={state.paint.type === 'gradient'}
+          title="Paint that changes colour as the stroke goes"
+          onClick={() => attempt(() => (state.paint.type === 'gradient' ? controller.setColor(color) : controller.setPaint(DEFAULT_PAINT_GRADIENT)))}
+        >
+          Gradient
+        </button>
+      </div>
+      {state.paint.type === 'gradient' && (
+        <PaintGradientEditor value={state.paint} colors={{ paint: color, secondary: state.secondaryColor }} onChange={(g) => attempt(() => controller.setPaint(g))} />
+      )}
       <label className="flex items-center gap-2">
         <span className="w-16 text-slate-400">Saturation</span>
         <input type="range" aria-label="Saturation" min={0} max={1} step={0.01} value={hsv.s} onChange={(e) => setHsv(Number(e.target.value), hsv.v)} className="flex-1 accent-indigo-500" />
@@ -143,19 +165,19 @@ export const ColorPanel: React.FC<ColorPanelProps> = ({ controller, wheelSize = 
             key={i}
             type="button"
             role="option"
-            aria-selected={s.color === color}
-            aria-label={s.name ?? s.color}
-            title={`${s.name ?? s.color} (right-click to remove)`}
+            aria-selected={s.paint ? state.paint === s.paint : state.paint.type === 'color' && s.color === color}
+            aria-label={s.name ?? (s.paint ? 'Gradient' : s.color)}
+            title={`${s.name ?? (s.paint ? 'Gradient' : s.color)} (right-click to remove)`}
             className="h-5 w-5 rounded ring-1 ring-slate-700"
-            style={{ background: s.color }}
-            onClick={() => controller.setColor(s.color)}
+            style={{ background: s.paint ? paintSourceCss(s.paint, { paint: color, secondary: state.secondaryColor }) : s.color }}
+            onClick={() => attempt(() => (s.paint ? controller.setPaint(s.paint) : controller.setColor(s.color)))}
             onContextMenu={(e) => {
               e.preventDefault();
               controller.removeSwatch(i);
             }}
           />
         ))}
-        <button type="button" className={button} aria-label="Add swatch" onClick={() => controller.addSwatch(color)}>
+        <button type="button" className={button} aria-label="Add swatch" onClick={() => attempt(() => controller.addSwatch(state.paint))}>
           +
         </button>
       </div>

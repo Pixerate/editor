@@ -9,3 +9,4 @@ export * from './WetPanel';
 export * from './StickerPanel';
 export * from './PaintEditor';
 export { PaintSlider } from './shared';
+export * from './PaintGradientEditor';

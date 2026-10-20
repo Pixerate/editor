@@ -108,7 +108,7 @@ describe('Svelte paint editor', () => {
     expect(c.getUserBrushes().map((b) => b.id)).toEqual(['my-charcoal']);
   });
 
-  it("the brush panel shows each engine's controls: blender, smudge, behaviour, multi-colour and load", () => {
+  it("the brush panel shows each engine's controls: blender, smudge, behaviour, brush gradient and load", () => {
     const c = new PaintEditorController({ width: 32, height: 32 });
     show(BrushPanel, { controller: c });
     const pick = (name: string) => click(Array.from(target.querySelectorAll('[role="option"]')).find((o) => o.getAttribute('title')?.startsWith(name))!);
@@ -119,23 +119,21 @@ describe('Svelte paint editor', () => {
     expect(c.getState().brush.behavior.pickup).toBe(0.4);
     click(q('input[aria-label="Dirty brush"]'));
     expect(c.getState().brush.behavior.dirty).toBe(true);
-    setValue(q('select[aria-label="Multi-colour"]'), 'dab');
-    expect(c.getState().brush.behavior.multicolor.mode).toBe('dab');
-    click(q('button[aria-label="Add multi-colour"]'));
-    expect(c.getState().brush.behavior.multicolor.colors).toHaveLength(3);
-    setValue(q('select[aria-label="Colour order"]'), 'random');
-    expect(c.getState().brush.behavior.multicolor.order).toBe('random');
-    setValue(q('input[aria-label="Dabs per colour"]'), '7');
-    expect(c.getState().brush.behavior.multicolor.length).toBe(7);
-    click(q('button[aria-label="Remove multi-colour 1"]'));
-    expect(c.getState().brush.behavior.multicolor.colors).toHaveLength(2);
+    // The multi-colour brush is the brush's own gradient now.
+    click(q('[data-testid="brush-gradient"] button[aria-pressed]'));
+    expect(c.getState().brush.paint).toMatchObject({ type: 'gradient', stops: [{ color: 'paint' }, { color: 'secondary' }] });
+    setValue(q('[data-testid="brush-gradient"] select[aria-label="Gradient follows"]'), 'across-tip');
+    expect(c.getState().brush.paint?.map.by).toBe('across-tip');
+    expect(c.getState().brush.behavior.multicolor.mode).toBe('tip');
+    setValue(q('[data-testid="brush-gradient"] select[aria-label="Gradient follows"]'), 'random');
+    expect(c.getState().brush.paint?.map).toEqual({ by: 'random', every: 1 });
     pick('Blender');
     expect(q('[data-testid="brush-engine"]')!.textContent).toContain('Blender');
     setValue(q('input[aria-label="Blend distance"]'), '0.6');
     expect(c.getState().brush.blender.distance).toBe(0.6);
     setValue(q('select[aria-label="Brush mixing"]'), 'rgb');
     expect(c.getState().brush.blender.mixing).toBe('rgb');
-    expect(q('select[aria-label="Multi-colour"]')).toBeNull();
+    expect(q('[data-testid="brush-gradient"]')).toBeNull();
     pick('Smudge');
     setValue(q('select[aria-label="Brush mixing"]'), 'pigment');
     expect(c.getState().brush.smudge.mixing).toBe('pigment');
@@ -280,6 +278,37 @@ describe('Svelte paint editor', () => {
     expect(target.querySelector('[data-paint-presence] [data-actor="agent"]')).not.toBeNull();
   });
 
+  it('gradient paint: the colour panel toggles it, edits stops and the mapping, and keeps it as a swatch', () => {
+    const c = new PaintEditorController({ width: 32, height: 32 });
+    c.setColor('#1d4ed8');
+    c.setSecondaryColor('#facc15');
+    show(ColorPanel, { controller: c, mixingPad: false });
+    click(byText('Gradient'));
+    expect(c.getState().paint).toMatchObject({ type: 'gradient', map: { by: 'distance' } });
+    expect(target.querySelector('[data-testid="paint-gradient-editor"]')).not.toBeNull();
+    expect((target.querySelector('[data-testid="paint-well"]') as HTMLElement).style.background).toContain('linear-gradient');
+    const ramp = target.querySelector('[data-testid="paint-gradient-ramp"]') as HTMLElement;
+    ramp.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 0 }));
+    flushSync();
+    expect((c.getState().paint as { stops: unknown[] }).stops).toHaveLength(3);
+    setValue(target.querySelector('select[aria-label="Stop colour source"]')!, 'color');
+    setValue(target.querySelector('input[aria-label="Stop colour"]')!, '#ff0000');
+    setValue(target.querySelector('input[aria-label="Stop position"]')!, '40');
+    const g = c.getState().paint as { stops: { offset: number; color: string }[] };
+    expect(g.stops.find((s) => s.color === '#ff0000')?.offset).toBe(0.4);
+    setValue(target.querySelector('select[aria-label="Gradient follows"]')!, 'pressure');
+    expect(c.getState().paint).toMatchObject({ map: { by: 'pressure' } });
+    setValue(target.querySelector('select[aria-label="Gradient mixing"]')!, 'oklab');
+    expect(c.getState().paint).toMatchObject({ space: 'oklab' });
+    click(target.querySelector('button[aria-label="Add swatch"]'));
+    expect(c.getState().swatches.at(-1)!.paint?.map.by).toBe('pressure');
+    click(byText('Gradient'));
+    expect(c.getState().paint.type).toBe('color');
+    const swatches = target.querySelectorAll('[aria-label="Swatches"] [role="option"]');
+    click(swatches[swatches.length - 1]);
+    expect(c.getState().paint.type).toBe('gradient');
+  });
+
   it('WetPanel shows wet paint and dries, pauses, tilts and tunes it; the brush panel picks the wet tool', async () => {
     const c = new PaintEditorController({ width: 300, height: 200, wet: { kernel: 'typescript' } });
     show(PaintEditor, { controller: c });
@@ -312,6 +341,18 @@ describe('Svelte paint editor', () => {
     setValue(tool, 'blot');
     expect(c.getState().brush.wet.tool).toBe('blot');
     expect(target.querySelector('input[aria-label="Strength"]')).not.toBeNull();
+    // Engine B: force the CPU, then let the GPU run again (there is none in jsdom: the reason shows).
+    const engine = () => target.querySelector('[data-testid="wet-engine"]')!.textContent;
+    setValue(target.querySelector('select[aria-label="Wet engine"]') as HTMLSelectElement, 'off');
+    await new Promise((r) => setTimeout(r, 0));
+    flushSync();
+    expect(c.getState().wet.gpu).toBe('off');
+    expect(engine()).toBe('CPU only (GPU off).');
+    setValue(target.querySelector('select[aria-label="Wet engine"]') as HTMLSelectElement, 'auto');
+    await c.setWetEngine({});
+    flushSync();
+    expect(c.getState().wet.gpu).toBe('auto');
+    expect(engine()).toMatch(/no WebGPU/);
     c.dispose();
   });
 

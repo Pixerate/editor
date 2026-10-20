@@ -422,6 +422,13 @@ export function ClipInspector({ controller, className = '' }: ClipInspectorProps
           </Row>
         </>
       )}
+      {clip.type === 'effect' && (
+        <Row label="Effect" name="effect">
+          <span className="truncate text-xs" title="Change its controls in the Effects panel">
+            {clip.name ?? clip.effect}
+          </span>
+        </Row>
+      )}
       {clip.type === 'color' && (
         <Row label="Colour" name="color">
           <Commit value={clip.color} aria-label="Colour" disabled={disabled} onCommit={(raw) => raw.trim() && set('color', raw.trim(), 'Change colour')} />
@@ -435,16 +442,18 @@ export function ClipInspector({ controller, className = '' }: ClipInspectorProps
           aria-label="Transition"
           onChange={(e) => {
             const type = e.target.value as VideoTransitionType | '';
+            // A provider transition's effect does not carry over to a built-in type.
+            const { effect: _effect, ...rest } = transition ?? { duration: DEFAULT_TRANSITION };
             controller.apply(
-              { op: 'set_transition', clip: clip.id, transition: type ? { ...transition, type, duration: transition?.duration ?? DEFAULT_TRANSITION } : null },
+              { op: 'set_transition', clip: clip.id, transition: type ? { ...rest, type, duration: transition?.duration ?? DEFAULT_TRANSITION } : null },
               type ? 'Set transition' : 'Remove transition',
             );
           }}
         >
           <option value="">None</option>
-          {VIDEO_TRANSITION_TYPES.map((t) => (
+          {VIDEO_TRANSITION_TYPES.filter((t) => t !== 'effect' || transition?.type === 'effect').map((t) => (
             <option key={t} value={t}>
-              {VIDEO_TRANSITION_LABELS[t]}
+              {t === 'effect' ? `Effect: ${transition?.effect?.name ?? transition?.effect?.effect}` : VIDEO_TRANSITION_LABELS[t]}
             </option>
           ))}
         </select>

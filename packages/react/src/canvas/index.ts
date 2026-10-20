@@ -169,6 +169,7 @@ export {
 } from '@pixerate/editor/canvas';
 
 export { ShapeNode, type ShapeNodeProps } from './ShapeNode.js';
+export { ShapeNodeZoomContext, ShapeNodeZoomProvider, useShapeBrushstroke, useCanvasBrushes } from './useShapeBrushstroke.js';
 
 // Shape nodes and boolean operations (Unite / Intersect / Subtract / Exclude / Divide)
 export {
@@ -633,6 +634,29 @@ export {
 	type FreehandStrokeStyle,
 	type FreehandTool,
 	type StrokeToShapeNodeOptions,
+	// Brushed freehand strokes (the paint engine loads on first use)
+	pointerPenSample,
+	freehandBrushstroke,
+	isBrushedShape,
+	listCanvasBrushes,
+	validateCanvasBrush,
+	renderShapeBrushstroke,
+	getBrushedShapeSvg,
+	loadCanvasBrushstrokeRenderer,
+	brushstrokeScaleBucket,
+	pathDataToPolyline,
+	profileAlongPolyline,
+	type FreehandPenSample,
+	type FreehandPointerLike,
+	type DrawStrokeInput,
+	type DrawStrokeResult,
+	type CanvasBrush,
+	type CanvasBrushSettings,
+	type CanvasBrushstroke,
+	type CanvasBrushPreset,
+	type CanvasBrushstrokeImage,
+	type BrushedPathShape,
+	type RenderShapeBrushstrokeOptions,
 	// Gradients
 	CANVAS_GRADIENT_PRESETS,
 	isCanvasGradient,

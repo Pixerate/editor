@@ -1,5 +1,8 @@
 import React, { useEffect } from 'react';
 import type { VideoEditorController, VideoEditorOptions } from '@pixerate/editor/video-editor';
+import type { EffectProvider } from '@pixerate/editor/effects';
+import { useEffects } from '../effects';
+import { VideoEffectsPanel } from './VideoEffectsPanel';
 import { ClipInspector } from './ClipInspector';
 import { MediaBin } from './MediaBin';
 import { TranscriptPanel } from './TranscriptPanel';
@@ -31,6 +34,14 @@ export interface VideoEditorProps {
   showTranscript?: boolean;
   /** Show colour scopes (histogram, luma waveform, vectorscope) of the preview under it (default false). */
   showScopes?: boolean;
+  /**
+   * An effects provider (see `@pixerate/editor/effects`), registered with the controller while
+   * mounted: clip effects, effect transitions and effect clips, with the effects panel. Optional:
+   * without one the editor is as before (effects in a project show as placeholders).
+   */
+  effects?: EffectProvider | null;
+  /** Show the effects panel (default: when a provider is given or the project has effects). */
+  showEffects?: boolean;
   className?: string;
 }
 
@@ -39,8 +50,10 @@ export interface VideoEditorProps {
  * transport, the timeline and the clip inspector, with the project's issues listed under the
  * timeline. Every edit is one undo step; the controller's agent tools edit the same project.
  */
-export function VideoEditor({ controller: given, options, editable = true, pxPerSecond, onPxPerSecondChange, resolution, showIssues = true, showTranscript = true, showScopes = false, className = '' }: VideoEditorProps) {
+export function VideoEditor({ controller: given, options, editable = true, pxPerSecond, onPxPerSecondChange, resolution, showIssues = true, showTranscript = true, showScopes = false, effects, showEffects, className = '' }: VideoEditorProps) {
   const { controller, state } = useVideoEditor(given ?? options ?? {});
+  useEffects(controller, effects);
+  const effectsShown = showEffects ?? !!(state.effectsProvider || state.project.tracks.some((t) => t.clips.some((c) => c.type === 'effect' || c.effects?.length || c.transition?.type === 'effect')));
   useEffect(() => {
     if (editable) return;
     const was = controller.getState().readOnly;
@@ -66,7 +79,12 @@ export function VideoEditor({ controller: given, options, editable = true, pxPer
           <VideoTransport controller={controller} editable={editable} />
           {showScopes && <VideoScopes controller={controller} />}
         </div>
-        {editable && <ClipInspector controller={controller} className="min-w-0" />}
+        {editable && (
+          <div className="flex min-w-0 flex-col gap-3">
+            <ClipInspector controller={controller} className="min-w-0" />
+            {effectsShown && <VideoEffectsPanel controller={controller} className="min-w-0" />}
+          </div>
+        )}
       </div>
       <VideoTimeline controller={controller} editable={editable} pxPerSecond={pxPerSecond} onPxPerSecondChange={onPxPerSecondChange} />
       {showTranscript && <TranscriptPanel controller={controller} editable={editable} />}

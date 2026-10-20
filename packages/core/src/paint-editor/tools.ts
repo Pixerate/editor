@@ -8,6 +8,7 @@
 import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import { createPigmentTools } from '../paint/pigment-tools';
 import { MIXING_MODELS, type MixerLoad } from '../paint/mixer';
+import { PAINT_GRADIENT_JSON_SCHEMA, PAINT_SOURCE_JSON_SCHEMA } from '../paint/gradient-paint';
 import { BLEND_MODES, standardBlendMode, type BlendMode } from '../raster/blend';
 import { bytesToBase64, encodePng } from '../raster/png';
 import { PARTICLE_KINDS, PARTICLE_RENDERS } from './procedural';
@@ -118,7 +119,7 @@ const BEHAVIOR = {
     mixing: MIXING,
     multicolor: {
       type: 'object',
-      description: 'Multi-coloured brush. Missing fields keep their current values.',
+      description: 'Multi-coloured brush (the older form of paint, the brush\'s own gradient: tip is across-tip, dab is distance in dabs or random). Read back from paint when it has a multi-colour equivalent. Missing fields keep their current values.',
       properties: {
         mode: { type: 'string', enum: [...MULTI_COLOR_MODES], description: 'off; tip: the colours lie side by side across the tip (stripes along the stroke, like a brush loaded with several paints); dab: the colour changes along the stroke.' },
         colors: { type: 'array', maxItems: 8, items: { ...COLOR }, description: '2..8 colours #rrggbb; fewer than 2 uses the paint colour and the secondary colour.' },
@@ -130,6 +131,11 @@ const BEHAVIOR = {
     },
   },
   additionalProperties: false,
+} as const;
+
+const BRUSH_PAINT = {
+  description: "The brush's own gradient paint, used instead of the editor's paint (null: the editor's paint). It is what the multi-colour settings became; stops may be \"paint\" / \"secondary\" for the editor's two colours.",
+  anyOf: [PAINT_GRADIENT_JSON_SCHEMA, { type: 'null', description: "No gradient of its own: the editor's paint." }],
 } as const;
 
 const BLENDER = {
@@ -248,7 +254,7 @@ const BRUSH_FIELDS = {
   engine: {
     type: 'string',
     enum: [...PAINT_BRUSH_ENGINES],
-    description: 'dab: paints dabs (with behavior.pickup or multicolor it paints dab by dab, lifting and mixing paint); eraser: removes paint; mixer: the Mixer Brush (a reservoir plus picked-up paint); blender: mixes the colours under and near the tip; smudge: drags paint along the stroke; wet: watercolour, gouache, oil and the wet tools on a simulated wet layer (see wet); impasto: thick paint with relief (see impasto); particle: procedural particle brushes (see particle); bristle: a tuft of bristles that bend and splay (see bristle); sticker: sprays editable sticker stamps (see sticker).',
+    description: 'dab: paints dabs (with behavior.pickup or gradient paint it paints dab by dab, lifting and mixing paint); eraser: removes paint; mixer: the Mixer Brush (a reservoir plus picked-up paint); blender: mixes the colours under and near the tip; smudge: drags paint along the stroke; wet: watercolour, gouache, oil and the wet tools on a simulated wet layer (see wet); impasto: thick paint with relief (see impasto); particle: procedural particle brushes (see particle); bristle: a tuft of bristles that bend and splay (see bristle); sticker: sprays editable sticker stamps (see sticker).',
   },
   tip: TIP,
   grain: { type: 'number', minimum: 0, maximum: 1, description: 'Paper grain response: 0 ignores the grain, 1 catches only its peaks at light pressure (pencil, pastel, charcoal). Multiplied by the paper depth.' },
@@ -265,6 +271,7 @@ const BRUSH_FIELDS = {
   particle: PARTICLE_BRUSH,
   bristle: BRISTLE_BRUSH,
   sticker: STICKER_BRUSH,
+  paint: BRUSH_PAINT,
 } as const;
 
 const POINTS = {
@@ -297,6 +304,7 @@ function loadResult(load: MixerLoad) {
 
 function brushSummary(b: PaintBrush) {
   return {
+    gradient: b.paint !== null,
     id: b.id,
     name: b.name,
     category: b.category,
@@ -654,14 +662,16 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
   add({
     name: 'get_brush',
     title: 'Get a brush',
-    description: 'Reads every setting of a brush (tip, grain, pressure smoothing, rotation, dynamics, mixer, behavior: pick-up / mix / dirty / multi-colour, blender, smudge). Without id, the active brush as edited.',
+    description:
+      "Reads every setting of a brush (tip, grain, pressure smoothing, rotation, dynamics, mixer, behavior: pick-up / mix / dirty, blender, smudge, its own gradient paint as paint, null when it paints the editor's paint). Without id, the active brush as edited. Also returns strokePaint: what a stroke with it would paint now (its gradient, else the editor's paint from set_paint).",
     inputSchema: { type: 'object', properties: { id: { type: 'string', description: 'Brush id from list_brushes (default the active brush).' } }, additionalProperties: false },
     annotations: { title: 'Get a brush', ...READ },
     handler: ({ id }) => {
-      if (id === undefined) return brushToJSON(c.getState().brush);
+      const st = c.getState();
+      if (id === undefined) return { ...brushToJSON(st.brush), strokePaint: st.brush.paint ?? st.paint };
       const b = c.getBrush(id);
       if (!b) throw new Error(`Unknown brush "${id}". Call list_brushes for the ids.`);
-      return { ...brushToJSON(b), builtin: Boolean(b.builtin) };
+      return { ...brushToJSON(b), builtin: Boolean(b.builtin), strokePaint: b.paint ?? st.paint };
     },
   });
 
@@ -782,6 +792,20 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
   });
 
   add({
+    name: 'set_paint',
+    title: 'Set the paint (colour or gradient)',
+    description:
+      'Sets what strokes paint with: one colour, or gradient paint that changes colour as the stroke goes. Gradient paint: 2..16 stops sorted by offset (#rrggbb, or "paint" / "secondary" for the two editor colours), space pigment (default: mixes like paint) / oklab / srgb, and map: distance (default: the colour changes as the stroke is dragged out, 300 px then mirrored back), pressure, tilt, velocity, direction, time, across-tip or random. Every stroking brush samples it per dab (dab, mixer, watercolour and gouache, oil and impasto, particle, bristle, sticker); erasers, blenders and smudges ignore it, and a brush with its own gradient (get_brush paint) paints that instead. set_color goes back to one colour. Editor state, not an undo step. Returns paint, color and secondaryColor.',
+    inputSchema: { type: 'object', properties: { paint: PAINT_SOURCE_JSON_SCHEMA }, required: ['paint'], additionalProperties: false },
+    annotations: { title: 'Set the paint (colour or gradient)', ...SET },
+    handler: ({ paint }) => {
+      const p = c.setPaint(paint);
+      const s = c.getState();
+      return { paint: p, color: s.color, secondaryColor: s.secondaryColor };
+    },
+  });
+
+  add({
     name: 'pick_color',
     title: 'Pick a colour',
     description: 'Reads the colour at a document pixel: of the painting with its paper, or of one layer (with its alpha). Changes nothing. Returns #rrggbb and alpha 0..1.',
@@ -842,6 +866,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
         brushId: { type: 'string', description: 'Brush id from list_brushes (default the active brush).' },
         brush: { type: 'object', description: 'Brush changes for this stroke only.', properties: BRUSH_FIELDS, additionalProperties: false },
         color: { ...COLOR, description: 'Paint colour #rrggbb (default the paint colour).' },
+        paint: { ...PAINT_SOURCE_JSON_SCHEMA, description: "What this stroke paints with instead of the editor's paint: a colour, or gradient paint that changes colour as the stroke goes (by distance, pressure, tilt, speed, direction, time, across the tip or at random). Wins over the brush's own gradient." },
         seed: { type: 'integer', minimum: 0, description: 'Jitter seed (default a new one); the same seed and points give the same marks.' },
         snapToPerspective: { type: 'boolean', description: 'Snap the points to the perspective guide, as a pen stroke would (default false).' },
       },
@@ -851,7 +876,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
     annotations: { title: 'Paint a brush stroke', ...WRITE },
     handler: async (a) => {
       await c.wetIdle();
-      const stroke = { points: a.points as PenPoint[], layerId: a.layerId, brushId: a.brushId, brush: a.brush, color: a.color, seed: a.seed, snapToPerspective: a.snapToPerspective };
+      const stroke = { points: a.points as PenPoint[], layerId: a.layerId, brushId: a.brushId, brush: a.brush, color: a.color, paint: a.paint, seed: a.seed, snapToPerspective: a.snapToPerspective };
       const r = await act({ kind: 'stroke', stroke }, () => c.paintStroke(stroke));
       return r.mixerLoad ? { ...r, mixerLoad: loadResult(r.mixerLoad) } : r;
     },

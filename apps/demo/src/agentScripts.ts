@@ -747,6 +747,34 @@ const clipTarget = (id: string) => ({ selector: `[data-clip="${id}"]` });
 
 export const VIDEO_SCRIPTS: AgentScript[] = [
   {
+    id: "video-effects",
+    prompt: "Give the sunrise a warm tint and use an effect transition into the ocean",
+    steps: [
+      { say: "Searching the effects provider for filters.", tool: "videofx__search_effects", args: { use: "filter" } },
+      { say: "Reading the tint's controls: a colour and an amount from 0 to 1.", tool: "videofx__describe_effect", args: { effect: "fake.tint" } },
+      {
+        say: "A warm tint on the sunrise shot, at a third.",
+        tool: "videofx__apply_effect",
+        args: { target: "shot-1", effect: "fake.tint", values: { color: "#ff7a1a", amount: 0.35 } },
+        target: clipTarget("shot-1"),
+      },
+      {
+        say: "Easing it in over the first two seconds with keyframes.",
+        tool: "videofx__set_video_effect_keyframes",
+        args: { clip: "shot-1", effect: "fx1", control: "amount", keys: [{ t: 0, v: 0 }, { t: 2000, v: 0.35, ease: "ease-out" }] },
+        target: clipTarget("shot-1"),
+      },
+      {
+        say: "Swapping the crossfade into the ocean for the provider's crossfade transition.",
+        tool: "videofx__set_video_effect_transition",
+        args: { clip: "shot-2", effect: "fake.crossfade", duration: 800, values: { curve: "smooth" } },
+        target: clipTarget("shot-2"),
+      },
+      { say: "Listing what is applied now.", tool: "videofx__list_applied_effects", args: {} },
+      { say: "Playing the transition.", tool: "video__seek_video", args: { time: 3200, play: true }, target: clipTarget("shot-2") },
+    ],
+  },
+  {
     id: "video-tighten",
     prompt: "Cut the ocean shot to 2 seconds and add an end card",
     steps: [
@@ -949,6 +977,54 @@ export const PAINT_SCRIPTS: AgentScript[] = [
       },
       { say: "The palette knife drags the petals into ridges.", tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.flowers.id, brushId: "palette-knife", points: ring(400, 260, 70) }) },
       { say: "A glossy, gold-flecked centre.", tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.flowers.id, brushId: "metallic-paint", color: "#7a4a12", points: ring(400, 260, 25) }) },
+      { tool: "paint__render_preview", args: { maxSide: 420 } },
+    ],
+  },
+  {
+    id: "paint-gradient",
+    prompt: "Paint a sunset sky and a rainbow with gradient paint",
+    steps: [
+      {
+        say: "Gradient paint: the colour changes as the stroke is dragged out. Purple to rose to amber over 600 px, mixed like paint.",
+        tool: "paint__set_paint",
+        args: {
+          paint: {
+            type: "gradient",
+            stops: [
+              { offset: 0, color: "#5b21b6" },
+              { offset: 0.55, color: "#e11d48" },
+              { offset: 1, color: "#f59e0b" },
+            ],
+            map: { by: "distance", length: 600, repeat: "mirror" },
+          },
+        },
+      },
+      { tool: "paint__add_layer", args: { name: "Sky" }, as: "sky" },
+      { tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.sky.id, brushId: "soft-pastel", brush: { tip: { size: 90 } }, points: wave(150, 30) }) },
+      { tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.sky.id, brushId: "soft-pastel", brush: { tip: { size: 90 } }, points: wave(240, 25) }) },
+      { say: "A rainbow: a brush with its own gradient, stripes laid side by side across the tip.", tool: "paint__add_layer", args: { name: "Rainbow" }, as: "rainbow" },
+      {
+        tool: "paint__paint_stroke",
+        args: (ctx) => ({
+          layerId: ctx.results.rainbow.id,
+          brushId: "ink-pen",
+          brush: { tip: { size: 70, hardness: 0.6 } },
+          paint: {
+            type: "gradient",
+            stops: ["#e11d48", "#f59e0b", "#facc15", "#22c55e", "#3b82f6", "#8b5cf6"].map((color, k) => ({ offset: k / 5, color })),
+            space: "oklab",
+            map: { by: "across-tip" },
+          },
+          points: ring(600, 560, 330).slice(24),
+        }),
+      },
+      { say: "Pressure maps the gradient too: light pressure lays the second colour, full pressure the paint colour.", tool: "paint__set_color", args: { color: "#1f2937", secondaryColor: "#9ca3af" } },
+      { tool: "paint__add_layer", args: { name: "Hills" }, as: "hills" },
+      {
+        tool: "paint__paint_stroke",
+        args: (ctx) => ({ layerId: ctx.results.hills.id, brushId: "pressure-ombre", brush: { tip: { size: 60 } }, points: wave(560, 40).map((p: { x: number; y: number }, i: number) => ({ ...p, pressure: 0.2 + 0.8 * Math.abs(Math.sin(i / 6)) })) }),
+      },
+      { say: "Keep the sunset as a swatch.", tool: "paint__add_swatch", args: { paint: { type: "gradient", stops: [{ offset: 0, color: "#5b21b6" }, { offset: 0.55, color: "#e11d48" }, { offset: 1, color: "#f59e0b" }] }, name: "Sunset" } },
       { tool: "paint__render_preview", args: { maxSide: 420 } },
     ],
   },

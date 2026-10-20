@@ -31,7 +31,7 @@ import { gaussianBlur } from './blur';
 import { readDeepRegion, surfaceDepth } from './deep';
 import { DEFAULT_GLOBAL_LIGHT, effectReach, effectsFingerprint, effectsMargin, hasActiveEffects, MAX_EFFECT_REACH, type GlobalLight, type LayerEffects } from './effects/model';
 import { builtinPattern, PatternTile, type EffectPattern } from './effects/patterns';
-import { activeEffectItems, buildEffectMaps, compositeLayerEffects, effectsAreLocal, patchEffectMaps, type EffectContext, type EffectMaps } from './effects/render';
+import { activeEffectItems, buildEffectMaps, compositeLayerEffects, effectsAreLocal, patchEffectMaps, type EffectCompositeInput, type EffectContext, type EffectMaps } from './effects/render';
 import type { RasterMask, RasterNode } from './layers';
 import {
   TILE,
@@ -485,6 +485,27 @@ export class RasterCompositor<L extends CompositorLayer = CompositorLayer, S ext
   maskCoverage(layer: L, r: RasterRect, sources: S): Float32Array | null {
     this.setSources(sources);
     return this.maskTile(layer, r);
+  }
+
+  /**
+   * For the float compositor: everything `compositeLayerEffects` needs for `layer` over `r` but
+   * the pixels (the area its effects reach inside `r`, the effect maps built from its 8-bit
+   * shape, blend, opacities, canvas and context), or `null` when nothing reaches `r`.
+   */
+  effectsInput(layer: L, r: RasterRect, sources: S): Omit<EffectCompositeInput, 'backdrop' | 'content'> | null {
+    this.setSources(sources);
+    const maps = this.effectMapsOf(layer);
+    const rect = this.effectArea(layer, maps, r);
+    if (!rect) return null;
+    return {
+      rect,
+      maps,
+      blend: (isGroup(layer) ? (layer.blend === 'pass-through' ? 'normal' : layer.blend) : this.contentBlend(layer)) as BlendMode,
+      opacity: layer.opacity,
+      fillOpacity: this.isPixel(layer) ? (layer.fillOpacity ?? 1) : 1,
+      canvas: { x: 0, y: 0, width: this.sources.width, height: this.sources.height },
+      ctx: this.effectContext(),
+    };
   }
 
   // --- Steps -------------------------------------------------------------------

@@ -15,6 +15,7 @@ import { exportPsd, type PsdExportResult } from '../image-editor/psd/export';
 import type { ImageLayer } from '../image-editor/layers/model';
 import { applyStrokeToTile, CoverageMap, type StrokeApply } from '../paint/brush';
 import { cleanMixer, EMPTY_MIXER_LOAD, loadMixer, type MixerLoad } from '../paint/mixer';
+import { paintSourceColor, parsePaintSource, PaintSourceError, resolvePaintGradient, type PaintGradientSource, type PaintSource } from '../paint/gradient-paint';
 import { BLEND_MODES, isBlendMode, standardBlendMode, type BlendMode } from '../raster/blend';
 import { findLayer, flattenLayers, insertLayer, isLayerLocked, mapLayer, type LayerLocks } from '../raster/layers';
 import { bytesToBase64, decodePng, encodePng, parseDataUrl, pngDataUrl } from '../raster/png';
@@ -62,7 +63,7 @@ import {
 import { brushLoadForStroke, PaintStrokeSession, type PaintStrokeResult, type StrokeSessionHost } from './stroke';
 import { affineCopy, strokeBounds, variationAffine, varyStroke, IDENTITY_AFFINE, type Affine, type RecordedStroke, type StrokeVariation } from './strokes';
 import { renderBrushThumbnail, type BrushThumbnail } from './thumbnails';
-import { colorHarmony, DEFAULT_SWATCHES, type ColorWheel, type HarmonyColor, type HarmonyKind, type Swatch } from './color';
+import { colorHarmony, DEFAULT_SWATCHES, readSwatch, type ColorWheel, type HarmonyColor, type HarmonyKind, type Swatch } from './color';
 import {
   defaultGuides,
   normalizePerspective,
@@ -79,7 +80,8 @@ import { MixingPad, type MixingPadTool, type PadMixOptions } from './mixing-pad'
 import { normalizeStencil, StencilSnapper, stencilMask, type Stencil, type StencilInput } from './stencils';
 import { normalizeStickerUpdate, STAMP_KINDS, stickerSurface, type Sticker } from './stickers';
 import { DEFAULT_VIEW, normalizeView, type PaintView } from './view';
-import { PaintWetLayers, WetStrokeDriver, type PaintWetOptions, type WetEvent, type WetLayerInfo, type WetLayerSettings } from './wet';
+import { brushTakesPaint } from './brushes';
+import { PaintWetLayers, WET_GPU_MODES, WetStrokeDriver, type PaintWetOptions, type WetEngineInfo, type WetEvent, type WetGpuMode, type WetLayerInfo, type WetLayerSettings } from './wet';
 import { isWetBrush } from './brushes';
 import { normalizeWetParams, normalizeTilt, type WetParams, type WetTilt } from '../paint/wet/model';
 import { normalizeFlow, type WetFlowSpec } from '../paint/wet/flow';
@@ -131,6 +133,10 @@ export interface PaintWetStateInfo {
   /** Simulation steps so far. */
   clock: number;
   tilt: WetTilt;
+  /** Engine B (WebGPU): `auto` (used for large wet areas when there is a GPU) or `off` (CPU only). */
+  gpu: WetGpuMode;
+  /** Engine B is shading the wet paint now. */
+  gpuActive: boolean;
 }
 
 export interface PaintEditorState {
@@ -143,6 +149,11 @@ export interface PaintEditorState {
   color: string;
   /** The second colour (swap with `swapColors`). */
   secondaryColor: string;
+  /**
+   * What strokes paint with: the paint colour, or gradient paint (`setPaint`). A brush with its
+   * own gradient (`brush.paint`) paints that instead.
+   */
+  paint: PaintSource;
   /** What the Mixer Brush carries between strokes. */
   mixerLoad: MixerLoad;
   view: PaintView;
@@ -189,6 +200,11 @@ export interface PaintStrokeInit {
   layerId?: string;
   /** Default the editor colour. */
   color?: string;
+  /**
+   * What this stroke paints with, instead of the editor's paint: a colour, or gradient paint
+   * (`@pixerate/editor/paint` `PaintSource`). A colour here is the same as `color`.
+   */
+  paint?: PaintSource | string;
   /** Default the active brush. */
   brushId?: string;
   /** Changes to the brush for this stroke only. */
@@ -320,6 +336,8 @@ export class PaintEditorController {
   private library: readonly PaintBrush[] | null = null;
   private color: string;
   private secondaryColor = '#ffffff';
+  /** Gradient paint chosen with `setPaint` (`null`: the paint colour). */
+  private gradient: PaintGradientSource | null = null;
   private mixerLoad: MixerLoad = EMPTY_MIXER_LOAD;
   private view: PaintView = { ...DEFAULT_VIEW, pan: { ...DEFAULT_VIEW.pan } };
   private hand: Hand;
@@ -414,6 +432,7 @@ export class PaintEditorController {
       brushes: (this.library ??= [...BUILTIN_BRUSHES, ...this.userBrushes]),
       color: this.color,
       secondaryColor: this.secondaryColor,
+      paint: this.gradient ?? { type: 'color', color: this.color },
       mixerLoad: this.mixerLoad,
       view: this.view,
       hand: this.hand,
@@ -435,6 +454,8 @@ export class PaintEditorController {
         speed: this.wet.speed,
         clock: this.wet.world?.clock ?? 0,
         tilt: { ...this.wet.tilt },
+        gpu: this.wet.gpuMode,
+        gpuActive: Boolean(this.wet.world?.gpuActive),
       },
       version: this.version,
     };
@@ -946,6 +967,8 @@ export class PaintEditorController {
   setBrush(update: { id?: string } & Omit<PaintBrushInput, 'id'> = {}): PaintBrush {
     const { id, ...changes } = update;
     const base = id !== undefined ? this.requireBrush(id) : this.brush;
+    // Gradient paint is checked strictly here (documents and presets are read leniently).
+    if (changes.paint !== undefined && changes.paint !== null) this.readStrokePaint(changes.paint);
     const next = normalizePaintBrush({ ...changes, id: base.id }, base);
     // The active brush is `builtin` only while it is an unchanged built-in preset.
     if (base.builtin && !Object.keys(changes).length) next.builtin = true;
@@ -1034,10 +1057,59 @@ export class PaintEditorController {
 
   // --- Colour --------------------------------------------------------------------
 
+  /** Sets the paint colour (and goes back to one colour from gradient paint). */
   setColor(color: string): string {
     this.color = parseColor(color);
+    this.gradient = null;
     this.emit([]);
     return this.color;
+  }
+
+  /**
+   * Sets what strokes paint with: one colour (`{ type: 'color', color }` or `#rrggbb`), or gradient
+   * paint (`{ type: 'gradient', stops, space?, map?, softness? }`, see `@pixerate/editor/paint`),
+   * which brushes sample dab by dab as the stroke goes. Not an undo step. Throws with what is wrong
+   * with an invalid source. Returns the paint.
+   */
+  setPaint(paint: PaintSource | string): PaintSource {
+    let p: PaintSource;
+    try {
+      p = parsePaintSource(paint);
+    } catch (e) {
+      if (e instanceof PaintSourceError) throw new PaintEditorError(e.message);
+      throw e;
+    }
+    if (p.type === 'color') {
+      this.setColor(p.color);
+      return p;
+    }
+    this.gradient = p;
+    this.emit([]);
+    return p;
+  }
+
+  /**
+   * The gradient a stroke paints (resolved against its colours: no `paint` / `secondary` stops),
+   * or `null` for one colour: the stroke's own `paint`, else (without an explicit `color`) the
+   * brush's gradient, else the editor's gradient paint. Erasers, blenders and smudges take none.
+   */
+  private strokeGradient(init: PaintStrokeInit, brush: PaintBrush, color: string): PaintGradientSource | null {
+    if (!brushTakesPaint(brush)) return null;
+    let g: PaintGradientSource | null = null;
+    if (init.paint !== undefined) {
+      const p = this.readStrokePaint(init.paint);
+      g = p.type === 'gradient' ? p : null;
+    } else g = brush.paint ?? (init.color === undefined ? this.gradient : null);
+    return g ? resolvePaintGradient(g, { paint: color, secondary: this.secondaryColor }) : null;
+  }
+
+  private readStrokePaint(raw: unknown): PaintSource {
+    try {
+      return parsePaintSource(raw);
+    } catch (e) {
+      if (e instanceof PaintSourceError) throw new PaintEditorError(e.message);
+      throw e;
+    }
   }
 
   setSecondaryColor(color: string): string {
@@ -1127,6 +1199,11 @@ export class PaintEditorController {
   }
 
   private sessionFor(doc: PaintDocumentState, init: PaintStrokeInit, host: StrokeSessionHost): PaintStrokeSession {
+    if (init.paint !== undefined) {
+      const p = this.readStrokePaint(init.paint);
+      if (p.type === 'color') init = { ...init, color: p.color, paint: undefined };
+      else init = { ...init, paint: p };
+    }
     let layer = (() => {
       const id = init.layerId ?? doc.activeLayerId;
       if (!id) throw new PaintEditorError('There is no active layer to paint on; add one with add_layer.');
@@ -1161,7 +1238,9 @@ export class PaintEditorController {
       this.beginWetOp();
       const world = this.wet.ensureLane(layer.id, brush.wet.medium);
       const id = layer.id;
-      const [r, g, b] = hexToRgb8(init.color === undefined ? this.color : parseColor(init.color));
+      const wetColor = init.color === undefined ? this.color : parseColor(init.color);
+      const [r, g, b] = hexToRgb8(wetColor);
+      const wetGradient = this.strokeGradient(init, brush, wetColor);
       const load = init.load ?? brushLoadForStroke(brush, this.mixerLoad, [r / 255, g / 255, b / 255]);
       const seedW = init.seed ?? mix32((this.seedCounter * 0x9e3779b1) >>> 0) & 0x7fffffff;
       const copiesW = (init.copies ?? this.strokeCopies()).filter((m) => m.some((v, i) => v !== IDENTITY_AFFINE[i]));
@@ -1177,6 +1256,7 @@ export class PaintEditorController {
         seed: seedW,
         copies: [IDENTITY_AFFINE, ...copiesW].map(affineCopy),
         mask: init.maskStencils ? this.stencilSelection(init.maskStencils) : init.stencils !== false ? this.stencilSelection() : null,
+        paint: wetGradient,
       });
       init = { ...init, seed: seedW, load };
       wet = { driver, surface: () => world.display(id).surface };
@@ -1219,6 +1299,7 @@ export class PaintEditorController {
       wet,
       thick: brush.engine === 'impasto' ? { channels: doc.thick?.[layer.id] ?? emptyThickChannels() } : undefined,
       sticker: brush.engine === 'sticker' ? { nextId: this.nextStickerNumber(doc) } : undefined,
+      paint: this.strokeGradient(init, brush, color),
     });
     if (wet) this.wet.driver = wet.driver;
     if (init.maskStencils) session.maskStencils = init.maskStencils;
@@ -1236,6 +1317,7 @@ export class PaintEditorController {
       seed: init.seed,
     };
     if (init.affineCopies.length) stroke.copies = init.affineCopies.map((m) => [...m] as unknown as Affine);
+    if (init.paint) stroke.paint = JSON.parse(JSON.stringify(init.paint));
     if (init.mixerLoad.reservoir || init.mixerLoad.pickup) stroke.load = JSON.parse(JSON.stringify(init.mixerLoad));
     if (init.wet) stroke.steps = [...init.wet.driver.steps];
     if (init.selection) {
@@ -1439,7 +1521,9 @@ export class PaintEditorController {
           const [r, g, b] = hexToRgb8(options.color);
           load = { ...load, reservoir: [r / 255, g / 255, b / 255] };
         }
-        const run = this.runStroke(doc, { layerId, color: options.color ?? s.color, brush, seed: s.seed, copies: v.copies ?? [], stencils: false, maskStencils: [], ...(load && options.brushId === undefined ? { load } : {}) }, v.points);
+        // Gradient paint replays as recorded; a recolour paints the one new colour.
+        const paint = v.paint && options.color === undefined ? { paint: v.paint } : {};
+        const run = this.runStroke(doc, { layerId, color: options.color ?? s.color, brush, seed: s.seed, copies: v.copies ?? [], stencils: false, maskStencils: [], ...paint, ...(load && options.brushId === undefined ? { load } : {}) }, v.points);
         doc = run.doc;
         bounds = unionRect(bounds, run.result.bounds);
         if (run.result.strokeId) ids.push(run.result.strokeId);
@@ -1595,10 +1679,36 @@ export class PaintEditorController {
   }
 
   /** Wet media as panels and tools show it, with each wet layer's state. */
-  wetState(): PaintWetStateInfo & { layers: WetLayerInfo[]; backend: WetBackendInfo | null; message: string | null } {
+  wetState(): PaintWetStateInfo & { layers: WetLayerInfo[]; backend: WetBackendInfo | null; message: string | null; engine: WetEngineInfo } {
     const st = this.getState().wet;
     const backend = this.wet.backend();
-    return { ...st, layers: this.wet.wetLayerIds().map((id) => this.wet.info(id)), backend, message: backend?.message ?? wetSupport().message };
+    return { ...st, layers: this.wet.wetLayerIds().map((id) => this.wet.info(id)), backend, message: backend?.message ?? wetSupport().message, engine: this.wet.engineInfo() };
+  }
+
+  /**
+   * Engine B, the WebGPU accelerator for large wet areas: whether it may run, its state (`off`,
+   * `not-started`, `starting`, `unavailable`, `standby`, `active`, `failed`), why, and the GPU.
+   * The CPU engine stays the authority: drying, saving, export and replay never use the GPU.
+   */
+  wetEngine(): WetEngineInfo {
+    return this.wet.engineInfo();
+  }
+
+  /**
+   * Lets Engine B run (`gpu: 'auto'`, the default) or forces the CPU (`'off'`); `minTiles` is the
+   * wet area (live 256 px tiles) at which the GPU takes over. Not an undo step and not saved with
+   * the painting (it changes how wet paint is computed on this machine, never the result).
+   * Resolves once the GPU has started or turned out unavailable.
+   */
+  async setWetEngine(options: { gpu?: WetGpuMode; minTiles?: number }): Promise<WetEngineInfo> {
+    const gpu = options.gpu ?? this.wet.gpuMode;
+    if (!WET_GPU_MODES.includes(gpu)) throw new PaintEditorError(`gpu must be ${WET_GPU_MODES.join(' or ')}, not ${JSON.stringify(gpu)}.`);
+    if (options.minTiles !== undefined && !(Number.isInteger(options.minTiles) && options.minTiles >= 1 && options.minTiles <= 1024)) throw new PaintEditorError(`minTiles ${options.minTiles} is out of range; use 1..1024 tiles of 256 px.`);
+    this.wet.setGpu(gpu, options.minTiles);
+    this.emit();
+    const info = await this.wet.gpuReady();
+    this.emit();
+    return info;
   }
 
   /** One layer's wet settings and state. */
@@ -1936,11 +2046,7 @@ export class PaintEditorController {
     this.readWet(loaded.wet, loaded.problems);
     this.readMixingPad(loaded.mixingPad, loaded.problems);
     this.readGuides(loaded.guides, loaded.state, loaded.problems);
-    if (Array.isArray(loaded.swatches)) {
-      this.swatches = loaded.swatches
-        .filter((x): x is Swatch => Boolean(x) && typeof (x as Swatch).color === 'string' && /^#[0-9a-f]{6}$/i.test((x as Swatch).color))
-        .map((x) => (typeof x.name === 'string' ? { color: x.color.toLowerCase(), name: x.name } : { color: x.color.toLowerCase() }));
-    }
+    if (Array.isArray(loaded.swatches)) this.swatches = loaded.swatches.map(readSwatch).filter((x): x is Swatch => x !== null);
     for (const s of loaded.state.strokes) {
       const n = Number(/^s(\d+)$/.exec(s.id)?.[1] ?? 0);
       if (n >= this.strokeCounter) this.strokeCounter = n + 1;
@@ -2431,11 +2537,19 @@ export class PaintEditorController {
     }
   }
 
-  addSwatch(color: string, name?: string): Swatch[] {
-    const c = parseColor(color);
-    this.swatches = [...this.swatches, name?.trim() ? { color: c, name: name.trim() } : { color: c }];
+  /** Adds a swatch: a colour, or a paint source (a gradient swatch holds its gradient). */
+  addSwatch(color: string | PaintSource, name?: string): Swatch[] {
+    this.swatches = [...this.swatches, this.makeSwatch(color, name)];
     this.emit([]);
     return this.swatches;
+  }
+
+  private makeSwatch(color: string | PaintSource, name?: string): Swatch {
+    const p = typeof color === 'string' ? ({ type: 'color', color: parseColor(color) } as PaintSource) : this.readStrokePaint(color);
+    const out: Swatch = { color: paintSourceColor(p, { paint: this.color, secondary: this.secondaryColor }) };
+    if (name?.trim()) out.name = name.trim();
+    if (p.type === 'gradient') out.paint = p;
+    return out;
   }
 
   removeSwatch(index: number): Swatch[] {
@@ -2446,7 +2560,7 @@ export class PaintEditorController {
   }
 
   setSwatches(swatches: readonly Swatch[]): Swatch[] {
-    this.swatches = swatches.map((x) => (x.name ? { color: parseColor(x.color), name: x.name } : { color: parseColor(x.color) }));
+    this.swatches = swatches.map((x) => this.makeSwatch(x.paint ?? x.color, x.name));
     this.emit([]);
     return this.swatches;
   }

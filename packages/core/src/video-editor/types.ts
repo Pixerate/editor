@@ -7,6 +7,7 @@
  */
 
 import type { VideoAnimatable, VideoKeyframes } from './keyframes.js';
+import type { EffectValue } from '../effects/types.js';
 
 export type VideoAssetKind = 'video' | 'audio' | 'image';
 
@@ -97,9 +98,40 @@ export const VIDEO_FITS = ['contain', 'cover', 'fill', 'none'] as const;
  * - `push`: this clip slides in, pushing the one before out.
  * - `slide`: this clip slides in over the one before, which stays put.
  * - `iris`: a circle opens from the centre, revealing this clip.
+ * - `effect`: a transition effect from the editor's effects provider (`VideoTransition.effect`).
  */
-export type VideoTransitionType = 'crossfade' | 'dip' | 'wipe' | 'push' | 'slide' | 'iris';
-export const VIDEO_TRANSITION_TYPES = ['crossfade', 'dip', 'wipe', 'push', 'slide', 'iris'] as const;
+export type VideoTransitionType = 'crossfade' | 'dip' | 'wipe' | 'push' | 'slide' | 'iris' | 'effect';
+export const VIDEO_TRANSITION_TYPES = ['crossfade', 'dip', 'wipe', 'push', 'slide', 'iris', 'effect'] as const;
+
+/**
+ * Values of a provider effect's controls (see `@pixerate/editor/effects`): plain values, or
+ * keyframes (clip-relative ms) for numeric controls.
+ */
+export type VideoEffectValues = Record<string, EffectValue | VideoKeyframes>;
+
+/** A provider effect used by a transition or an effect clip. Kept in the project even without a provider. */
+export interface VideoEffectRef {
+	/** The provider's effect id. */
+	effect: string;
+	/** The provider it was applied with (its `id`). */
+	provider?: string;
+	/** The effect's name when it was applied, shown where no provider can draw it. */
+	name?: string;
+	values?: VideoEffectValues;
+}
+
+/**
+ * A provider effect on a clip's picture (see `VideoClipBase.effects`). Effects run in order on the
+ * picture as it comes from the source, before the clip's grade, placement, opacity and blend.
+ */
+export interface VideoClipEffect extends VideoEffectRef {
+	/** Unique within the clip (e.g. `fx1`). */
+	id: string;
+	/** Default true. */
+	enabled?: boolean;
+	/** How much of the effect's result shows over its input, 0–1 (default 1), or keyframes. */
+	opacity?: VideoAnimatable;
+}
 export type VideoWipeDirection = 'left' | 'right' | 'up' | 'down';
 export const VIDEO_WIPE_DIRECTIONS = ['left', 'right', 'up', 'down'] as const;
 
@@ -116,6 +148,8 @@ export interface VideoTransition {
 	color?: string;
 	/** For wipe, push and slide: the way the edge or picture travels (default right: in from the left). */
 	direction?: VideoWipeDirection;
+	/** For effect: the provider's transition effect and its values (plain values only). */
+	effect?: VideoEffectRef;
 	/**
 	 * Shape of the sound's fades through the transition (see `VideoFadeCurve`). Default
 	 * `equal-power` for crossfades and wipes, where two sounds overlap and a linear mix dips in
@@ -207,6 +241,8 @@ interface VideoClipBase {
 	fadeOut?: number;
 	/** Transition from the clip before (see `VideoTransition`). */
 	transition?: VideoTransition;
+	/** Provider effects on the picture, applied in order (see `VideoClipEffect`). */
+	effects?: VideoClipEffect[];
 }
 
 /**
@@ -290,7 +326,15 @@ export interface VideoSequenceClip extends VideoClipBase {
 	fadeOutCurve?: VideoFadeCurve;
 }
 
-export type VideoClip = VideoMediaClip | VideoTextClip | VideoColorClip | VideoSequenceClip;
+/**
+ * A picture drawn by a provider effect (a generator, title or overlay), filling the frame. Without
+ * a provider it shows as a placeholder and keeps its effect id and values.
+ */
+export interface VideoEffectClip extends VideoClipBase, VideoEffectRef {
+	type: 'effect';
+}
+
+export type VideoClip = VideoMediaClip | VideoTextClip | VideoColorClip | VideoSequenceClip | VideoEffectClip;
 export type VideoClipType = VideoClip['type'];
 
 /**
@@ -300,7 +344,7 @@ export type VideoClipType = VideoClip['type'];
  */
 export type VideoPlacementMode = 'refuse' | 'overwrite' | 'insert';
 export const VIDEO_PLACEMENT_MODES = ['refuse', 'overwrite', 'insert'] as const;
-export const VIDEO_CLIP_TYPES = ['media', 'text', 'color', 'sequence'] as const;
+export const VIDEO_CLIP_TYPES = ['media', 'text', 'color', 'sequence', 'effect'] as const;
 
 export interface VideoMarker {
 	id: string;

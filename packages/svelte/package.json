@@ -1,6 +1,6 @@
 {
   "name": "@pixerate/editor-svelte",
-  "version": "0.86.1",
+  "version": "0.86.3",
   "description": "Svelte bindings and prompt/rich-text components for @pixerate/editor",
   "author": "Pixerate",
   "license": "MIT",
@@ -17,6 +17,11 @@
       "types": "./dist/index.d.ts",
       "svelte": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./effects": {
+      "types": "./dist/effects/index.d.ts",
+      "svelte": "./dist/effects/index.js",
+      "default": "./dist/effects/index.js"
     },
     "./spreadsheet": {
       "types": "./dist/spreadsheet/index.d.ts",

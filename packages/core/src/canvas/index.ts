@@ -27,6 +27,7 @@ export * from './components.js';
 export * from './componentsController.js';
 export * from './freehand.js';
 export * from './drawController.js';
+export * from './brushstroke.js';
 export * from './gradient.js';
 export * from './mermaid/index.js';
 export * from './agent-presence.js';

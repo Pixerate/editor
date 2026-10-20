@@ -1,16 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { ToolRegistry } from "@pixerate/editor/tools";
 import { ManualClock } from "@pixerate/editor/animation";
-import { createVideoEditorToolProvider, VideoEditorController, videoClipEnd } from "@pixerate/editor/video-editor";
+import { createVideoEditorToolProvider, createVideoEffectsToolProvider, VideoEditorController, videoClipEnd } from "@pixerate/editor/video-editor";
+import { createFakeEffectProvider } from "@pixerate/editor/effects";
 import { runAgentScript } from "./agentScript";
 import { VIDEO_SCRIPTS } from "./agentScripts";
 import { sampleProject } from "./videoSample";
 
 // The Video tab's scripts, replayed against the tab's sample project through the real tools.
 function setup() {
-  const controller = new VideoEditorController({ project: sampleProject(), clock: new ManualClock() });
+  const controller = new VideoEditorController({ project: sampleProject(), clock: new ManualClock(), effects: createFakeEffectProvider() });
   const registry = new ToolRegistry();
   registry.register(createVideoEditorToolProvider(controller, { id: "video", namespace: "video" }));
+  registry.register(createVideoEffectsToolProvider(controller, { id: "video-effects", namespace: "videofx" }));
   return { controller, registry };
 }
 
@@ -24,6 +26,15 @@ describe("video agent scripts", () => {
     expect(errors).toEqual([]);
     expect(ok).toBe(true);
     expect(controller.getState().issues.filter((i) => i.severity === "error")).toEqual([]);
+    controller.destroy();
+  });
+
+  it("tints the sunrise with keyframes and swaps in the provider's crossfade", async () => {
+    const { controller, registry } = setup();
+    const script = VIDEO_SCRIPTS.find((s) => s.id === "video-effects")!;
+    await runAgentScript(registry, script, { control: { speed: Infinity, stopped: false } });
+    expect(clip(controller, "shot-1")?.effects?.[0]).toMatchObject({ effect: "fake.tint", values: { color: "#ff7a1a", amount: { keys: [{ t: 0, v: 0 }, { t: 2000, v: 0.35, ease: "ease-out" }] } } });
+    expect(clip(controller, "shot-2")?.transition).toMatchObject({ type: "effect", duration: 800, effect: { effect: "fake.crossfade" } });
     controller.destroy();
   });
 

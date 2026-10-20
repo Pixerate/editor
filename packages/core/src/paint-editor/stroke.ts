@@ -15,6 +15,7 @@ import { EMPTY_MIXER_LOAD, type PaintTileTarget } from '../paint/exchange';
 import { cleanMixer, loadMixer, type MixerLoad } from '../paint/mixer';
 import { TILE, TiledSurface, finishTile, tileKey, tilesInRect, type RasterRect, type Tile, type TileKey } from '../raster/surface';
 import { usesPaintExchange, type PaintBrush } from './brushes';
+import type { PaintGradientSource } from '../paint/gradient-paint';
 import { PaintDabStroke } from './dab-stroke';
 import { DryStroke, IDENTITY_COPY, type PenPoint, type StrokeCopy } from './engine';
 import type { PaperGrain } from './paper';
@@ -66,6 +67,8 @@ export interface StrokeSessionInit {
   selection?: { width: number; height: number; data: ArrayLike<number> } | null;
   /** Sticker brushes: the next sticker number on the layer. */
   sticker?: { nextId: number };
+  /** Gradient paint (resolved: concrete colours), or `null` for the one colour. Recorded with the stroke. */
+  paint?: PaintGradientSource | null;
 }
 
 export interface PaintStrokeResult {
@@ -146,11 +149,11 @@ export class PaintStrokeSession {
     if (this.wetDriver) {
       // the wet layer paints; nothing else to set up
     } else if (init.sticker) {
-      this.stickerSpray = new StickerSpray({ brush, target: this.tileTarget(), color: init.colorHex, seed: init.seed, copies: this.copies, nextId: init.sticker.nextId });
+      this.stickerSpray = new StickerSpray({ brush, target: this.tileTarget(), color: init.colorHex, seed: init.seed, copies: this.copies, nextId: init.sticker.nextId, paint: init.paint ?? null });
     } else if (init.thick) {
       const rgb = (c: readonly number[]): [number, number, number] => [c[0] / 255, c[1] / 255, c[2] / 255];
-      this.thickDriver = new ThickStrokeDriver({ brush, target: this.tileTarget(), channels: init.thick.channels, color: rgb(init.color), load: init.mixerLoad, seed: init.seed, copies: this.copies });
-    } else if (brush.engine === 'mixer' || brush.engine === 'blender' || brush.engine === 'smudge' || usesPaintExchange(brush)) {
+      this.thickDriver = new ThickStrokeDriver({ brush, target: this.tileTarget(), channels: init.thick.channels, color: rgb(init.color), load: init.mixerLoad, seed: init.seed, copies: this.copies, paint: init.paint ?? null });
+    } else if (brush.engine === 'mixer' || brush.engine === 'blender' || brush.engine === 'smudge' || usesPaintExchange(brush, Boolean(init.paint))) {
       const rgb = (c: readonly number[]): [number, number, number] => [c[0] / 255, c[1] / 255, c[2] / 255];
       this.wet = new PaintDabStroke(brush, {
         target: this.tileTarget(),
@@ -161,9 +164,10 @@ export class PaintStrokeSession {
         paperDepth: init.paperDepth,
         seed: init.seed,
         copies: this.copies,
+        paint: init.paint ?? null,
       });
     } else {
-      const opts = { grain: init.grain, paperDepth: init.paperDepth, seed: init.seed, copies: this.copies };
+      const opts = { grain: init.grain, paperDepth: init.paperDepth, seed: init.seed, copies: this.copies, paint: init.paint ?? null };
       this.dry = brush.engine === 'particle' ? new ParticleStroke(brush, opts) : brush.engine === 'bristle' ? new BristleStroke(brush, opts) : new DryStroke(brush, opts);
     }
   }

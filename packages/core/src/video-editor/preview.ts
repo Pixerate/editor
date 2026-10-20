@@ -5,6 +5,7 @@ import type { VideoLut, VideoLutCache } from './lut.js';
 import type { VideoPreviewPixels, VideoPreviewSnapshot } from './scopes.js';
 import { resolveVideoPreviewScale, videoPreviewSrc, type VideoPreviewScale } from './proxy.js';
 import type { VideoProject } from './types.js';
+import { videoEffectFrameTime, videoLayersUseEffects, type VideoEffectsEngine } from './effects.js';
 
 /** What a preview follows: a `VideoEditorController` fits. */
 export interface VideoPreviewSource {
@@ -16,6 +17,8 @@ export interface VideoPreviewSource {
 	luts?: VideoLutCache;
 	/** Decoded source frames with prefetch (a controller has one when the host gives it). */
 	frameCache?: VideoFrameCache | null;
+	/** Provider effect pictures (a controller has one; it draws nothing until a provider is set). */
+	effectsEngine?: VideoEffectsEngine | null;
 }
 
 /** The parts of a media element the preview drives (so tests can pass fakes). */
@@ -81,6 +84,8 @@ export interface VideoPreviewOptions {
 	 * run on the CPU, so a lower `resolution` keeps playback smooth.
 	 */
 	createScratch?: (width: number, height: number, slot: number) => VideoScratchCanvas | null;
+	/** Where provider effect pictures come from (default: the source's `effectsEngine`; `null` draws none). */
+	effects?: VideoEffectsEngine | null;
 }
 
 interface Entry {
@@ -118,6 +123,8 @@ export class VideoPreviewEngine {
 	private fps = 30;
 	private readonly unsubscribeLuts: () => void;
 	private readonly scratchCanvases = new Map<number, VideoScratchCanvas | null>();
+	private readonly effects: VideoEffectsEngine | null;
+	private readonly unsubscribeEffects: () => void;
 
 	constructor(
 		private readonly source: VideoPreviewSource,
@@ -131,6 +138,8 @@ export class VideoPreviewEngine {
 		this.unsubscribeLuts = this.lutCache ? this.lutCache.subscribe(() => this.redraw()) : () => {};
 		this.frameCache = options.frameCache !== undefined ? options.frameCache : (source.frameCache ?? null);
 		this.unsubscribeFrames = this.frameCache ? this.frameCache.subscribe(() => this.redraw()) : () => {};
+		this.effects = options.effects !== undefined ? options.effects : (source.effectsEngine ?? null);
+		this.unsubscribeEffects = this.effects ? this.effects.subscribe(() => this.redraw()) : () => {};
 		const pixels = options.pixels !== undefined ? options.pixels : source.previewPixels;
 		this.detachPixels = pixels ? pixels.attach(() => this.readPixels()) : () => {};
 		this.pixelsTarget = pixels ?? null;
@@ -232,7 +241,14 @@ export class VideoPreviewEngine {
 		// Sound with no picture (audio tracks, hidden video tracks): an audio element is enough.
 		for (const a of sounding.values()) sync(a.clip, a.src, 'audio', a.sourceTime, a.speed, a.gain);
 		for (const entry of [...this.media.values()]) if (!active.has(entry.clip)) this.release(entry);
-		this.draw(frame);
+		this.draw(this.drawable(project, frame));
+	}
+
+	/** With effects, the frame is drawn at the start of its frame, so effect pictures are cached once per frame. */
+	private drawable(project: VideoProject, frame: VideoFrame): VideoFrame {
+		if (!this.effects?.available || !videoLayersUseEffects(frame.layers)) return frame;
+		const at = videoEffectFrameTime(frame.time, project.fps);
+		return at === frame.time ? frame : { ...videoFrameAt(project, at), time: frame.time };
 	}
 
 	private redraw() {
@@ -240,7 +256,9 @@ export class VideoPreviewEngine {
 		this.scheduled = true;
 		queueMicrotask(() => {
 			this.scheduled = false;
-			if (!this.destroyed) this.draw(videoFrameAt(this.source.getState().project, this.source.getState().time));
+			if (this.destroyed) return;
+			const { project, time } = this.source.getState();
+			this.draw(this.drawable(project, videoFrameAt(project, time)));
 		});
 	}
 
@@ -282,11 +300,21 @@ export class VideoPreviewEngine {
 		if (this.canvas.height !== h) this.canvas.height = h;
 		this.complete = true;
 		const sourceFor = (layer: VideoLayer) => {
+			// An effect clip has no media: without a provider it is a placeholder, which is complete.
+			if (layer.type === 'effect') return null;
 			const source = this.sourceFor(layer);
 			if (!source) this.complete = false;
 			return source;
 		};
-		drawVideoFrame(this.ctx, frame, sourceFor, resolution, { defineSvgFilter: this.defineSvgFilter, lutFor: this.lutFor, scratch: this.scratch });
+		drawVideoFrame(this.ctx, frame, sourceFor, resolution, {
+			defineSvgFilter: this.defineSvgFilter,
+			lutFor: this.lutFor,
+			scratch: this.scratch,
+			effects: this.effects,
+			onEffectWaiting: () => {
+				this.complete = false;
+			}
+		});
 		this.drawn = { time: frame.time, complete: this.complete };
 		this.options.onFrame?.(frame);
 		this.pixelsTarget?.drawn(frame.time, this.complete);
@@ -341,6 +369,7 @@ export class VideoPreviewEngine {
 		this.detachPixels();
 		this.unsubscribeLuts();
 		this.unsubscribeFrames();
+		this.unsubscribeEffects();
 		this.filterHost?.remove();
 		this.filterHost = null;
 		this.filters.clear();

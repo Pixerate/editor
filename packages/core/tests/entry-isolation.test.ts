@@ -41,6 +41,29 @@ describe("subpath entry isolation", () => {
     expect([...reachablePackages("canvas/index.js")]).toEqual(["@dagrejs/dagre"]);
   });
 
+  it("canvas/index.js loads the paint engine only lazily, for brushed strokes", () => {
+    // Files reachable through static imports only (a dynamic `import()` is not followed).
+    const seen = new Set<string>();
+    const visit = (file: string) => {
+      if (seen.has(file)) return;
+      seen.add(file);
+      const source = readFileSync(file, "utf8");
+      for (const m of source.matchAll(/(?<![\w$."'])(?:import|export)\s*(?:[^'"]*?\sfrom\s*)?['"](\.[^'"]+)['"]/g)) visit(path.resolve(path.dirname(file), m[1]));
+    };
+    visit(path.join(dist, "canvas/index.js"));
+    const paint = [...seen].filter((f) => /function renderBrushstroke\b|BUILTIN_BRUSHES/.test(readFileSync(f, "utf8")));
+    expect(paint).toEqual([]);
+    // ... and is reached once the dynamic imports are followed too.
+    const all = new Set<string>();
+    const visitAll = (file: string) => {
+      if (all.has(file)) return;
+      all.add(file);
+      for (const m of readFileSync(file, "utf8").matchAll(/(?:from\s*|import\(\s*|import\s+)["'](\.\.?\/[\w./-]+\.js)["']/g)) visitAll(path.resolve(path.dirname(file), m[1]));
+    };
+    visitAll(path.join(dist, "canvas/index.js"));
+    expect([...all].some((f) => /function renderBrushstroke\b/.test(readFileSync(f, "utf8")))).toBe(true);
+  });
+
   it("compare/index.js only pulls in TipTap / ProseMirror", () => {
     const packages = [...reachablePackages("compare/index.js")];
     expect(packages.every((name) => name === "@tiptap/core" || name.startsWith("@tiptap/pm/"))).toBe(true);
