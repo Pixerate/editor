@@ -731,6 +731,17 @@ export function VectorCanvas({
             )}
           </g>
         )}
+        {overlay.trackingPoints.map((t, i) => (
+          <path key={`track:${i}`} data-vector-tracking-point="" d={`M${t.x - 5} ${t.y}H${t.x + 5}M${t.x} ${t.y - 5}V${t.y + 5}`} stroke={guideColor} strokeWidth={1.5} />
+        ))}
+        {overlay.typedEntry && (
+          <g data-vector-typed-entry="" transform={`translate(${overlay.typedEntry.x + 14} ${overlay.typedEntry.y + 18})`}>
+            <rect x={-3} y={-12} width={overlay.typedEntry.text.length * 7 + 8} height={17} rx={3} fill={THEME.handleFill} stroke={accentColor} />
+            <text x={1} y={1} fontSize={11} fill={accentColor} style={{ fontFamily: 'ui-monospace, monospace' }}>
+              {overlay.typedEntry.text}
+            </text>
+          </g>
+        )}
         {overlay.connectorSites.map((s) => (
           <circle
             key={`site:${s.nodeId}:${s.side}`}

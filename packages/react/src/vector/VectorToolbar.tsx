@@ -30,6 +30,8 @@ import {
   type VectorStrokeAlign,
   type VectorTool,
   type VectorWidthPreset,
+  vectorPolarAngles,
+  vectorPolarIncrementOf
 } from '@pixerate/editor/vector';
 import { useVectorEditorState } from './useVectorEditor';
 import { VectorEffectsPanel } from './VectorEffectsPanel';
@@ -138,6 +140,21 @@ export function VectorToolbar({
           >
             Snap
           </button>
+          <select
+            data-vector-polar=""
+            aria-label="Polar tracking increment"
+            title="Polar tracking: the angles drawn points snap to from where they leave"
+            className="h-8 rounded-md border border-border bg-background px-1 text-xs"
+            value={String(vectorPolarIncrementOf(state.snap.angles) ?? '')}
+            onChange={(e) => controller.setSnap({ angles: vectorPolarAngles(Number(e.target.value)) })}
+          >
+            {vectorPolarIncrementOf(state.snap.angles) === null && <option value="">Custom</option>}
+            {[90, 45, 30, 15].map((n) => (
+              <option key={n} value={n}>
+                {n}°
+              </option>
+            ))}
+          </select>
         </div>
       )}
       {showPathEdit && (

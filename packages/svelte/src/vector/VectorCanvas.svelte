@@ -466,6 +466,15 @@
         {/if}
       </g>
     {/if}
+    {#each overlay.trackingPoints as t, i (i)}
+      <path data-vector-tracking-point="" d="M{t.x - 5} {t.y}H{t.x + 5}M{t.x} {t.y - 5}V{t.y + 5}" stroke={guideColor} stroke-width="1.5" />
+    {/each}
+    {#if overlay.typedEntry}
+      <g data-vector-typed-entry="" transform="translate({overlay.typedEntry.x + 14} {overlay.typedEntry.y + 18})">
+        <rect x="-3" y="-12" width={overlay.typedEntry.text.length * 7 + 8} height="17" rx="3" fill={THEME.handleFill} stroke={accentColor} />
+        <text x="1" y="1" font-size="11" fill={accentColor} style="font-family:ui-monospace,monospace">{overlay.typedEntry.text}</text>
+      </g>
+    {/if}
     {#each overlay.connectorSites as s (`${s.nodeId}:${s.side}`)}
       <circle data-vector-connection-site={s.side} data-active={s.active || undefined} cx={s.x} cy={s.y} r={s.active ? 5 : 3.5} fill={s.active ? accentColor : THEME.handleFill} stroke={accentColor} />
     {/each}
