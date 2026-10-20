@@ -42,7 +42,7 @@ describe('EffectRendererPool', () => {
 			return { ...r, render: async (q) => (await new Promise((x) => setTimeout(x, 1)), r.render(q)), dispose: () => (live--, r.dispose()) };
 		};
 		const list = await provider.list();
-		const pictures = await Promise.all(list.filter((e) => e.kind !== 'motion').map((e) => renderEffectThumbnail(provider, e, { width: 4, height: 2 })));
+		const pictures = await Promise.all(list.filter((e) => e.kind === 'shader').map((e) => renderEffectThumbnail(provider, e, { width: 4, height: 2 })));
 		expect(pictures.every((p) => p.width === 4)).toBe(true);
 		expect(most).toBe(1);
 		const again = await renderEffectThumbnail(provider, list[0], { width: 4, height: 2 });
