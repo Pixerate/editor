@@ -1,5 +1,28 @@
 # @pixerate/editor-svelte
 
+## 0.94.0
+
+### Minor Changes
+
+- b7ec850: Drawing in perspective in the vector editor: 1-, 2- and 3-point perspective grids whose floor and wall planes shapes are drawn on and flat art is attached to, like CorelDRAW's Perspective Drawing. New `setPerspective`, `setPerspectivePlane`, `attachToPerspective`, the `vector.*Perspective*` commands, the grid on the canvas and `<VectorPerspectivePanel>` in React and Svelte.
+
+### Patch Changes
+
+- Updated dependencies [4f8039d]
+- Updated dependencies [dccb717]
+- Updated dependencies [090b87f]
+- Updated dependencies [b7ec850]
+  - @pixerate/editor@0.133.0
+
+## 0.93.1
+
+### Patch Changes
+
+- Updated dependencies [6fab591]
+- Updated dependencies [e1a6801]
+- Updated dependencies [7f213f2]
+  - @pixerate/editor@0.132.0
+
 ## 0.93.0
 
 ### Minor Changes

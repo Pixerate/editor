@@ -51,13 +51,15 @@ const drawnCache = new WeakMap<VectorFrameGroup, VectorGroupNode>();
 export function vectorFrameDrawn(node: VectorFrameGroup): VectorGroupNode {
 	let hit = drawnCache.get(node);
 	if (hit) return hit;
-	const { frame, ...group } = node;
+	const { frame, masterArt, ...group } = node;
 	const rect = vectorFrameRectPath(frame);
+	// A page draws its master page's art under its own.
+	const below = masterArt ?? [];
 	const fill = frame.fill !== undefined && frame.fill !== null && frame.fill !== 'none' ? [{ id: `${node.id}~frame-fill`, type: 'path' as const, fill: frame.fill, stroke: null, subpaths: rect }] : [];
 	hit =
 		frame.clip === false
-			? { ...group, children: [...fill, ...node.children] }
-			: { ...group, mask: { type: 'clip' }, children: [{ id: `${node.id}~frame-clip`, type: 'path', fill: '#000000', stroke: null, subpaths: rect }, ...fill, ...node.children] };
+			? { ...group, children: [...fill, ...below, ...node.children] }
+			: { ...group, mask: { type: 'clip' }, children: [{ id: `${node.id}~frame-clip`, type: 'path', fill: '#000000', stroke: null, subpaths: rect }, ...fill, ...below, ...node.children] };
 	drawnCache.set(node, hit);
 	return hit;
 }
@@ -117,6 +119,8 @@ export function sanitizeVectorFrame(value: unknown): VectorFrame | null {
 	const out: VectorFrame = { x: r.x, y: r.y, width: r.width, height: r.height };
 	if (typeof r.fill === 'string' || (r.fill && typeof r.fill === 'object')) out.fill = r.fill as VectorFrame['fill'];
 	if (r.clip === false) out.clip = false;
+	if (r.master === true) out.master = true;
+	if (typeof r.masterId === 'string' && r.masterId) out.masterId = r.masterId;
 	return out;
 }
 

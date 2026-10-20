@@ -24,7 +24,8 @@ import { VECTOR_TRACE_MAX_PIXELS, type VectorTraceOptions } from './trace.js';
 import { bytesToBase64, decodePng, isPng, parseDataUrl } from '../raster/png.js';
 import type { VectorPdfOptions } from './pdf.js';
 import { VECTOR_DISTORT_BRUSH_MODES, type VectorDistortBrushMode } from './distortBrush.js';
-import { VECTOR_LENS_TYPES, VECTOR_SYMMETRY_MODES, type VectorLens, type VectorLensType, type VectorSymmetry, type VectorSymmetryMode } from './types.js';
+import { VECTOR_LENS_TYPES, VECTOR_PERSPECTIVE_PLANES, VECTOR_SYMMETRY_MODES, type VectorLens, type VectorLensType, type VectorPerspective, type VectorPerspectivePlane, type VectorSymmetry, type VectorSymmetryMode } from './types.js';
+import { vectorPerspectivePlanes } from './perspective.js';
 import { VECTOR_CONNECTOR_ROUTES, VECTOR_CONNECTOR_SIDES, type VectorConnector, type VectorConnectorEnd, type VectorConnectorRoute } from './types.js';
 import { VECTOR_HORIZONTAL_RESIZING, VECTOR_VERTICAL_RESIZING, type VectorFrame, type VectorHorizontalResizing, type VectorResizing, type VectorVerticalResizing } from './types.js';
 import { layoutVectorText, vectorTextFamilies, vectorTextHasOutlines } from './text.js';
@@ -832,7 +833,8 @@ export function createVectorCommands(controller: VectorEditorController, options
 					name: { type: 'string', description: 'Layer name (default the text\'s start).' },
 					fill: PAINT,
 					stroke: PAINT,
-					strokeWidth: { type: 'number', minimum: 0, description: 'Stroke width (default 1).' }
+					strokeWidth: { type: 'number', minimum: 0, description: 'Stroke width (default 1).' },
+					parentId: { type: 'string', description: 'A group (frame, master page, symmetry group) to add it into, on top of its children (default: the top of the document). On a master page, {page} and {pages} show each page\'s number and the page count.' }
 				},
 				required: ['text'],
 				additionalProperties: false
@@ -852,7 +854,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 						...(params.paragraph ? { paragraph: params.paragraph as Record<string, unknown> } : {}),
 						...(params.fill !== undefined ? { fill: checkPaint(params.fill, 'fill') } : {}),
 						...(params.stroke !== undefined ? { stroke: checkPaint(params.stroke, 'stroke') } : {})
-					});
+					}, parentOf(params.parentId as string | undefined));
 				} catch (e) {
 					fail(e instanceof Error ? e.message : String(e));
 				}
@@ -1418,6 +1420,89 @@ export function createVectorCommands(controller: VectorEditorController, options
 		brush('roughen', 'Roughen Brush…', ['roughen', 'jagged', 'spiky', 'fur', 'grass'], 'Breaks the outlines under the brush into spikes (CorelDRAW\'s Roughen): use for fur, grass and torn edges.', { seed: { type: 'integer', description: 'Seed of the spikes (default 1): the same seed gives the same spikes.' } })
 	];
 
+	const PLANE = { type: 'string', enum: [...VECTOR_PERSPECTIVE_PLANES], description: 'A plane of the grid: floor, left and right (2 or 3 vanishing points), or floor, side and front (1 point).' } as const;
+	const perspectiveResult = () => {
+		const grid = controller.getPerspective();
+		return { perspective: grid, planes: grid ? vectorPerspectivePlanes(grid) : [], drawingOn: controller.getState().perspectivePlane };
+	};
+	const perspectiveCommands = (): CommandSpec[] => [
+		{
+			...base,
+			id: `${prefix}getPerspective`,
+			label: 'Perspective Grid',
+			keywords: ['perspective', 'grid', 'vanishing point', 'horizon'],
+			description: 'Reads the document\'s perspective grid: { perspective: { vanishingPoints, origin, gridSize, extent, visible } or null, planes (the planes it has), drawingOn (the plane new shapes are drawn on, or null) }.',
+			params: { type: 'object', properties: {}, additionalProperties: false },
+			run: () => perspectiveResult()
+		},
+		{
+			...base,
+			id: `${prefix}setPerspective`,
+			label: 'Perspective Grid…',
+			keywords: ['perspective', 'grid', 'vanishing point', 'one point', 'two point', 'three point', 'horizon', 'drawing in perspective'],
+			description:
+				'Sets the document\'s perspective grid (CorelDRAW\'s Perspective Drawing): 1 vanishing point (planes floor, side, front), 2 (floor, left, right; walls recede to the first and second) or 3 (the third is where the walls\' verticals meet). Put the vanishing points on the horizon line and the origin below it, where the planes meet. One undo step. Returns the grid as vector.getPerspective does.',
+			params: {
+				type: 'object',
+				properties: {
+					vanishingPoints: { type: 'array', minItems: 1, maxItems: 3, items: { ...POINT, description: 'A vanishing point (document units).' }, description: '1 to 3 vanishing points, document units.' },
+					origin: { ...POINT, description: 'Where the planes meet (document units), not on a vanishing point.' },
+					gridSize: { type: 'number', exclusiveMinimum: 0, description: 'Grid cell size at the origin, document units (default 20).' },
+					extent: { type: 'integer', minimum: 1, maximum: 100, description: 'Cells drawn out from the origin along each axis (default 12).' },
+					visible: { type: 'boolean', description: 'Show the grid on the canvas (default true).' }
+				},
+				required: ['vanishingPoints', 'origin'],
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: VectorPerspective) => {
+				check(controller.setPerspective(params));
+				return perspectiveResult();
+			}
+		},
+		{
+			...base,
+			id: `${prefix}removePerspective`,
+			label: 'Remove Perspective Grid',
+			keywords: ['perspective', 'grid', 'remove'],
+			description: 'Removes the perspective grid (art already on its planes stays as drawn). One undo step. Returns { perspective: null }.',
+			params: { type: 'object', properties: {}, additionalProperties: false },
+			undoable: true,
+			run: () => {
+				check(controller.setPerspective(null));
+				return { perspective: null };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}setPerspectivePlane`,
+			label: 'Draw on Perspective Plane',
+			keywords: ['perspective', 'plane', 'draw', 'floor', 'wall'],
+			description: 'Makes the Rectangle, Ellipse, Polygon and Star tools draw on a plane of the grid (their drag box is taken on the plane, so shapes recede with it), or flat again with plane null. Not an undo step. Returns the grid as vector.getPerspective does.',
+			params: { type: 'object', properties: { plane: { ...PLANE, type: ['string', 'null'], enum: [...VECTOR_PERSPECTIVE_PLANES, null], description: `${PLANE.description} null draws flat.` } }, required: ['plane'], additionalProperties: false },
+			run: (_ctx: unknown, params: { plane: VectorPerspectivePlane | null }) => {
+				check(controller.setPerspectivePlane(params.plane));
+				return perspectiveResult();
+			}
+		},
+		{
+			...base,
+			id: `${prefix}attachToPerspective`,
+			label: 'Attach to Perspective',
+			keywords: ['perspective', 'attach', 'plane', 'project', 'wall', 'floor', 'sign'],
+			description:
+				'Lays objects (`ids`, default the selection) onto a plane of the grid: each is read flat relative to the grid origin (right and up) and projected, so art near the origin keeps its size and further art recedes. Draw or place the flat art beside the origin first. Text and instances must be outlines (vector.createOutlines). One undo step. Returns { ids }.',
+			params: { type: 'object', properties: { ids: { ...IDS, description: 'Objects to project (default: the selection).' }, plane: PLANE }, required: ['plane'], additionalProperties: false },
+			undoable: true,
+			enabled: enabledFor,
+			run: (_ctx: unknown, params: { ids?: string[]; plane: VectorPerspectivePlane }) => {
+				const r = controller.attachToPerspective(params.plane, params.ids ? { ids: params.ids } : {});
+				check(r);
+				return { ids: r.ids ?? [] };
+			}
+		}
+	];
+
 	const pdfCommands = (): CommandSpec[] => [
 		{
 			...base,
@@ -1914,6 +1999,112 @@ export function createVectorCommands(controller: VectorEditorController, options
 
 	const frameResult = (id: string) => controller.getFrames().find((f) => f.id === id) ?? fail(`"${id}" is not a frame.`);
 	const FRAME_PAINT = { ...PAINT, description: `The frame's background, drawn below its children. ${PAINT.description}` };
+	const pagesResult = () => controller.getPages();
+	const pageCommands = (): CommandSpec[] => [
+		{
+			...base,
+			id: `${prefix}listPages`,
+			label: 'Pages',
+			keywords: ['pages', 'master page', 'multipage', 'page numbers', 'document pages'],
+			description: 'Lists the document\'s pages (top-level frames that are not master pages, in order) and its master pages: { pages: [{ id, name, number, masterId, bounds }], masters: [{ id, name, usedBy, bounds }] }. Place master art inside the master bounds.',
+			params: { type: 'object', properties: {}, additionalProperties: false },
+			run: () => pagesResult()
+		},
+		{
+			...base,
+			id: `${prefix}addPage`,
+			label: 'Add Page',
+			keywords: ['page', 'add page', 'new page', 'insert page', 'multipage'],
+			description:
+				'Adds a page: a frame the size of the last page (or the document) right of the others, after page `after` (default last), using master `masterId` (default: the last page\'s master; null for none). The first page of a document without frames covers the artboard and takes its art in. Add art to it with parentId. One undo step. Returns { id } and the pages.',
+			params: {
+				type: 'object',
+				properties: {
+					name: { type: 'string', description: 'Page name (default "Page n").' },
+					masterId: { type: ['string', 'null'], description: 'Master page id, or null for none (default: the last page\'s master).' },
+					after: { type: 'string', description: 'Page id to insert after (default: at the end).' }
+				},
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: { name?: string; masterId?: string | null; after?: string } | undefined) => {
+				const r = controller.addPage(params ?? {});
+				check(r);
+				return { id: (r as { id: string }).id, ...pagesResult() };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}addMasterPage`,
+			label: 'Add Master Page',
+			keywords: ['master page', 'template page', 'header', 'footer', 'page numbers'],
+			description:
+				'Adds an empty master page (a frame below the pages, not a page itself). Art added to it (parentId: its id) shows on every page using it, laid out by each object\'s resizing constraints; text there can show {page} and {pages}. `assignTo` page ids or "all" make pages use it. One undo step. Returns { id } and the pages.',
+			params: {
+				type: 'object',
+				properties: {
+					name: { type: 'string', description: 'Master name (default "Master A", "Master B", …).' },
+					assignTo: { anyOf: [{ type: 'string', enum: ['all'] }, { ...IDS }], description: 'Pages that use it: "all" or page ids (default none).' }
+				},
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: { name?: string; assignTo?: string[] | 'all' } | undefined) => {
+				const r = controller.addMasterPage(params ?? {});
+				check(r);
+				return { id: (r as { id: string }).id, ...pagesResult() };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}setPageMaster`,
+			label: 'Apply Master Page',
+			keywords: ['master page', 'apply master', 'page template'],
+			description: 'Makes pages (`ids`, default the selected pages) use master page `masterId`, or none with null. One undo step. Returns the pages.',
+			params: { type: 'object', properties: { ids: { ...IDS, description: 'Page ids (default: the selected pages).' }, masterId: { type: ['string', 'null'], description: 'Master page id, or null for none.' } }, required: ['masterId'], additionalProperties: false },
+			undoable: true,
+			run: (_ctx: unknown, params: { ids?: string[]; masterId: string | null }) => {
+				check(controller.setPageMaster(params.masterId, params.ids ? { ids: params.ids } : {}));
+				return pagesResult();
+			}
+		},
+		{
+			...base,
+			id: `${prefix}movePage`,
+			label: 'Move Page',
+			keywords: ['page order', 'reorder pages', 'move page'],
+			description: 'Moves page `id` to position `index` (0-based) in the page order; page numbers follow. One undo step. Returns the pages.',
+			params: { type: 'object', properties: { id: { type: 'string', description: 'The page.' }, index: { type: 'integer', minimum: 0, description: 'New position, 0 for first.' } }, required: ['id', 'index'], additionalProperties: false },
+			undoable: true,
+			run: (_ctx: unknown, params: { id: string; index: number }) => {
+				check(controller.movePage(params.id, params.index));
+				return pagesResult();
+			}
+		},
+		{
+			...base,
+			id: `${prefix}goToPage`,
+			label: 'Go to Page',
+			keywords: ['go to page', 'navigate', 'show page', 'zoom to page'],
+			description: 'Selects a page or master page and brings it into view for the user (fitted when the canvas size is given). Not an undo step. Returns { id }.',
+			params: {
+				type: 'object',
+				properties: {
+					id: { type: 'string', description: 'Page or master page id.' },
+					canvasWidth: { type: 'number', exclusiveMinimum: 0, description: 'Canvas width in screen pixels, to fit the page (optional).' },
+					canvasHeight: { type: 'number', exclusiveMinimum: 0, description: 'Canvas height in screen pixels, to fit the page (optional).' }
+				},
+				required: ['id'],
+				additionalProperties: false
+			},
+			run: (_ctx: unknown, params: { id: string; canvasWidth?: number; canvasHeight?: number }) => {
+				const size = params.canvasWidth && params.canvasHeight ? { width: params.canvasWidth, height: params.canvasHeight } : undefined;
+				check(controller.goToPage(params.id, size ? { size } : {}));
+				return { id: params.id };
+			}
+		}
+	];
+
 	const frameCommands = (): CommandSpec[] => [
 		{
 			...base,
@@ -2275,6 +2466,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 		...symbolCommands(),
 		...constraintCommands(),
 		...frameCommands(),
+		...pageCommands(),
 		...connectorCommands(),
 		...trackingCommands(),
 		...shadingCommands(),
@@ -2282,6 +2474,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 		...lottieCommands(),
 		...pdfCommands(),
 		...symmetryCommands(),
+		...perspectiveCommands(),
 		...lensCommands(),
 		{
 			...base,

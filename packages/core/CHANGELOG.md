@@ -1,5 +1,33 @@
 # @pixerate/editor
 
+## 0.133.0
+
+### Minor Changes
+
+- 4f8039d: Image editor: Blur, Sharpen and History Brush tools.
+  - Blur and Sharpen lay a soft blur or an unsharp mask of the layer through the brush, at `strength`.
+  - The History Brush paints the layer (or its mask) back from `historySteps` undo steps ago, or from the oldest state history keeps.
+  - They work on pixels and masks at any bit depth, and each stroke is one undo step.
+  - New agent tools: `blur_stroke`, `sharpen_stroke` and `history_brush`. The tools are in the palette (History on `Y`), with Strength and Steps back controls in the React and Svelte options bars.
+  - New in `/paint`: `retouchFilter` and `boxBlurPixels`.
+- dccb717: Image editor: Content-Aware spot healing. The Spot Healing Brush has a new `content-aware` type that synthesises texture and continues lines and patterns across the spot from patches all around it. It runs PatchMatch nearest-neighbour fields with patch voting, coarse to fine, and then blends seamlessly. It's available through `spot_heal` `type: "content-aware"` and the Content-Aware choice in the React and Svelte options bars. New `contentAwareFill` in `/paint`.
+- b7ec850: Drawing in perspective in the vector editor: 1-, 2- and 3-point perspective grids whose floor and wall planes shapes are drawn on and flat art is attached to, like CorelDRAW's Perspective Drawing. New `setPerspective`, `setPerspectivePlane`, `attachToPerspective`, the `vector.*Perspective*` commands, the grid on the canvas and `<VectorPerspectivePanel>` in React and Svelte.
+
+### Patch Changes
+
+- 090b87f: Image editor at 16 and 32 bits: groups with layer effects and develop filters on the legacy process now composite in float in merges, `compositeDeepPixels` and the PSD merged image. New `applyLegacyFloat`.
+
+## 0.132.0
+
+### Minor Changes
+
+- 6fab591: Image editor: the Clone Stamp and Healing Brush show their source on the canvas as a crosshair. It sits on the source point, and once an aligned stroke has fixed the offset, it follows the brush. The new `controller.cloneSourceMarker(cursor)` gives the position, and the renderer's new `cloneSourceMarker` render option draws it (filled from the brush cursor automatically, so the React and Svelte editors both show it).
+- e1a6801: Image editor: 16-bit CMYK and Lab PSDs. A 16- or 32-bit document in CMYK or Lab mode now saves a 16-bit CMYK or Lab file (Photoshop has no 32-bit CMYK or Lab), separated through the profile at 16 bits (`colorModePlanes16`, `colorPlanes16` in `exportPsd`). 16-bit CMYK files now open at 16 bits, layers and masks included, through their profile.
+
+### Patch Changes
+
+- 7f213f2: PDF import keeps same-width ruled tables apart. Horizontal rules with the same extent were joined as one booktabs-style table even when they belonged to separate grids, so every ruled table of that width on a page, and the text between them, came out as a single table. Rules that meet a vertical rule now join only through their grid.
+
 ## 0.131.0
 
 ### Minor Changes

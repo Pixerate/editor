@@ -213,7 +213,9 @@ describe("role parsing stays linear", () => {
       findTextMentions(s);
       parseMentionSegments(s, { roles: true });
     };
-    expect(growthRatio(unit, all)).toBeLessThan(10);
+    // 16× the input: linear ≈ 16×, quadratic ≈ 256×. A 4× step (limit 10 against 16×
+    // quadratic) left too little room either side and failed under load.
+    expect(growthRatio(unit, all, { small: 4_000, large: 64_000, limit: 64 })).toBeLessThan(64);
   }, 30_000);
 
   // preprocessMarkdownMentions builds one span per mention, so its own cost

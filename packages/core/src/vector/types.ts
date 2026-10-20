@@ -447,6 +447,13 @@ export interface VectorFrame {
 	fill?: VectorPaint;
 	/** Clip the children to the frame (default true). */
 	clip?: boolean;
+	/**
+	 * A top-level frame with `master` set is a master page: it is not a page itself (not numbered
+	 * or exported as one), and its children are drawn on every page that uses it.
+	 */
+	master?: boolean;
+	/** The master page (a top-level master frame's id) this page draws under its own art, or null. */
+	masterId?: string | null;
 }
 
 /** A shape made of one or more subpaths (holes and compound shapes included). */
@@ -618,6 +625,11 @@ export interface VectorGroupNode extends VectorNodeBase {
 	 * when resized. Ignored on blends, live booleans and mask groups.
 	 */
 	frame?: VectorFrame | null;
+	/**
+	 * Derived, not stored: a page's master art (its master page's children laid out on it), brought
+	 * up to date after every edit (`resolveVectorMasterPages`) and drawn under the page's children.
+	 */
+	masterArt?: VectorNode[];
 	/**
 	 * Makes the group a live symmetry group: it draws its children and their mirrored (or rotated)
 	 * copies, regenerated whenever a child changes. Ignored on blends, live booleans, mask groups
@@ -797,7 +809,31 @@ export interface VectorDocument {
 	constraints?: VectorConstraint[];
 	/** Named values the constraints' expressions use. */
 	parameters?: VectorParameter[];
+	/** The perspective grid art can be drawn on or attached to (see `VectorPerspective`). */
+	perspective?: VectorPerspective | null;
 }
+
+/**
+ * A perspective grid (CorelDRAW's Perspective Drawing): 1, 2 or 3 vanishing points and the
+ * grid's origin (where its planes meet, on the ground in front of the viewer). With one point
+ * the planes are the `floor`, a `side` wall receding to it and the `front`; with two, the `floor`
+ * and the `left` and `right` walls, receding to the first and second points; a third point is
+ * where the walls' verticals meet (a bird's or worm's eye view).
+ */
+export interface VectorPerspective {
+	vanishingPoints: Vec2[];
+	origin: Vec2;
+	/** Grid cell size at the origin, in document units (default 20). */
+	gridSize?: number;
+	/** Cells drawn out from the origin along each axis (default 12). */
+	extent?: number;
+	/** Whether the grid is shown on the canvas (default true). */
+	visible?: boolean;
+}
+
+/** A plane of a perspective grid. */
+export type VectorPerspectivePlane = 'floor' | 'left' | 'right' | 'side' | 'front';
+export const VECTOR_PERSPECTIVE_PLANES: readonly VectorPerspectivePlane[] = ['floor', 'left', 'right', 'side', 'front'];
 
 /**
  * Constraint kinds (CAD-style parametric drawing). Geometric: `coincident` (two points, a point on

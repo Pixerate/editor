@@ -2391,7 +2391,7 @@ All contributors and AI assistants should check this file before starting work a
 
 - **Issue / Symptom**: A 32-bit mask read back from a PSD or painted at depth came out darker or lighter than its 16-bit copy, and a soft mask on a 16-bit layer banded in the deep composite.
 - **Root Cause**: Deep RGBA samples at 32 bits are linear light, but a mask holds coverage. Running a one-channel surface through the colour transfer functions would linearise it. And the compositor read mask coverage through `readRegion`, the 8-bit rendering, whatever the mask held.
-- **Solution / Workaround**: The deep helpers already take `channels`: for 1 they treat samples as plain 0..1 coverage (16-bit `v / 65535`, 32-bit as is). Always pass the surface's channel count (`tileSamples(tile, ch, …)`, `deepTile(d, ch, …)`, `applyStrokeToDeepTile(…, { channels })`). The compositor's `maskTile` reads `readDeepRegion(mask.surface, rect, 32)` when the mask has deep tiles (depth cached per surface). PSD masks at 16/32 bits are big-endian planes (`toMaskDeep`, `deepMaskPlane`). CMYK files keep 8-bit masks, as their layers do.
+- **Solution / Workaround**: The deep helpers already take `channels`: for 1 they treat samples as plain 0..1 coverage (16-bit `v / 65535`, 32-bit as is). Always pass the surface's channel count (`tileSamples(tile, ch, …)`, `deepTile(d, ch, …)`, `applyStrokeToDeepTile(…, { channels })`). The compositor's `maskTile` reads `readDeepRegion(mask.surface, rect, 32)` when the mask has deep tiles (depth cached per surface). PSD masks at 16/32 bits are big-endian planes (`toMaskDeep`, `deepMaskPlane`). 16-bit CMYK files keep deep masks and layers too (`cmykToRgb16` through the profile at 16 bits); Photoshop has no 32-bit CMYK or Lab, so those modes export at 16 bits at most (`colorModePlanes16`). The 16-bit Lab planes use the importer's encoding (L/100, (a+128)/255 over 0..65535).
 
 ### [core/paint] A Deep Eraser Must Zero the Colour of Pixels It Clears
 
@@ -2415,7 +2415,7 @@ All contributors and AI assistants should check this file before starting work a
 
 - **Issue / Symptom**: In a 16-bit merge, a layer with a drop shadow or a develop filter kept only 8-bit precision, and a Multiply shadow over a coloured backdrop looked slightly different from the viewport.
 - **Root Cause**: `DeepCompositor` hands those layers to the 8-bit compositor it wraps, rendered alone (normal blend, full opacity, over transparency), converts the result and blends it in float with the layer's blend mode and opacity. An effect's own blend mode therefore sees a transparent backdrop.
-- **Solution / Workaround**: Fixed for pixel-like layers. Their filters run in float (`pixelFiltersDeep` → `runLayerFiltersFloat`), and their effects composite in float over the real backdrop (`runEffects`: `effectsInput` from the 8-bit compositor gives the area, the effect maps and context; `compositeLayerEffects` takes float buffers). Effect maps are still built from the 8-bit shape, which is coverage and plenty for shadows and glows. At 32 bits the effects composite in sRGB-encoded values (their colours and blend modes are defined there) and are decoded back. These are still rendered alone at 8 bits: groups with effects, annotation layers, and develop filters on a legacy process.
+- **Solution / Workaround**: Fixed for pixel-like layers. Their filters run in float (`pixelFiltersDeep` → `runLayerFiltersFloat`), and their effects composite in float over the real backdrop (`runEffects`: `effectsInput` from the 8-bit compositor gives the area, the effect maps and context; `compositeLayerEffects` takes float buffers). Effect maps are still built from the 8-bit shape, which is coverage and plenty for shadows and glows. At 32 bits the effects composite in sRGB-encoded values (their colours and blend modes are defined there) and are decoded back. Groups with effects composite their children in float as the effects' content, and legacy-process develop filters have a float path too (`applyLegacyFloat`). Still at 8 bits: annotation layers (drawn by the editor) and smart objects, whose contents and smart filters render at 8 bits.
 
 ### [core/image-editor] Retouch Sources Must Be Captured When the Stroke Starts
 
@@ -2590,6 +2590,12 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: Painter's order by each face's midpoint depth is only right when faces don't overlap unevenly. Two faces overlap only over the viewing rays (lines along the extrusion, or rays to the vanishing point) that cross both edges, and their order there can differ from the order of their middles.
 - **Solution / Workaround**: `vectorExtrudeFaces` compares each pair of faces at a ray inside their shared range: the edge further along the ray is in front. It then sorts topologically, using the midpoint order to break ties. The edges of a simple outline don't cross, so the relation has no cycles. It's O(n²) in faces, which is fine for flattened outlines.
 
+### [core/vector] A Perspective Plane Map Has A Horizon: Points Beyond It Come Back Mirrored
+
+- **Issue / Symptom**: Art attached to a perspective plane far past a vanishing point came out flipped on the other side of the page.
+- **Root Cause**: A projective map divides by `w = h6·x + h7·y + 1`. Where `w` passes 0 (the plane's horizon) points go to infinity, and beyond it they come back on the other side, mirrored.
+- **Solution / Workaround**: `vectorPerspectiveFlatToPlane` / `vectorPerspectivePlaneToFlat` return null where `w` is not positive. `vectorPerspectiveMapPath` returns null if any sample does, and attaching refuses with a message. Grid lines are cut where `w` falls below 0.05.
+
 ### [core/vector] A Bevel's Inset Corners Must Know Which Side Is Inside, Ring By Ring
 
 - **Issue / Symptom**: Holes (a frame, the counter of an "O") were bevelled into the hole, and thin parts had faces poking out the other side.
@@ -2607,3 +2613,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: A lens didn't follow edits to the art below it, because render data is cached per node object and the lens node itself hadn't changed.
 - **Root Cause**: What a lens draws depends on nodes other than itself. The per-node caches (`renderCache`, `expandCache`, `shapeCache`) can't see that.
 - **Solution / Workaround**: The backdrop lives on the lens as a derived `lensView`. `resolveVectorLenses` sets it in the controller's refresh, as connectors' routes and instances' art are set. It keeps node objects (and so caches) when the backdrop's nodes are the same objects, and `toJSON()` strips it. Code drawing a caller's document resolves it first (`getVectorSceneRenderData`, `vectorDocumentToSvg`, `vectorDocumentToPdf`, `vectorDocumentToLottie`).
+
+### [core/vector] A Page's Master Art Is Placed By The Master's Frame, So Put It In The Master's Space
+
+- **Issue / Symptom**: Art added to a master page showed on its pages shifted by the distance between the master and the page.
+- **Root Cause**: The master's children are in the master frame's space. Each is laid onto a page by `vectorFrameChildMatrix(resizing, box, masterFrame, pageFrame)`, which moves art relative to the master frame's corner. Art drawn at the page's coordinates but added to the master sits outside the master's rectangle.
+- **Solution / Workaround**: Place master art inside the master page's own rectangle: `vector.listPages` and `vector.addMasterPage` give each master's `bounds`. Give each object a `resizing` (e.g. `vertical: "bottom"` for a footer) so it follows pages of other sizes.

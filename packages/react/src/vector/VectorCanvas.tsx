@@ -742,6 +742,17 @@ export function VectorCanvas({
             ))}
           </g>
         ))}
+        {overlay.perspective && (
+          <g data-vector-perspective-grid="" fill="none" pointerEvents="none">
+            {overlay.perspective.planes.map((pl) => (
+              <path key={pl.plane} data-vector-perspective-plane={pl.plane} data-active={pl.active || undefined} d={pl.d} stroke={pl.active ? accentColor : guideColor} strokeWidth={pl.active ? 1 : 0.75} opacity={pl.active ? 0.55 : 0.25} />
+            ))}
+            {overlay.perspective.vanishingPoints.map((v, i) => (
+              <circle key={i} data-vector-vanishing-point={i} cx={v.x} cy={v.y} r={4} stroke={accentColor} strokeWidth={1.5} />
+            ))}
+            <circle data-vector-perspective-origin="" cx={overlay.perspective.origin.x} cy={overlay.perspective.origin.y} r={3} fill={accentColor} />
+          </g>
+        )}
         {overlay.symmetry.map((sy) => (
           <g key={`sym:${sy.nodeId}`} data-vector-symmetry-axes={sy.nodeId} stroke={accentColor} strokeDasharray={sy.drawing ? undefined : '6 4'} opacity={sy.drawing ? 0.9 : 0.6}>
             {sy.lines.map((l, i) => (

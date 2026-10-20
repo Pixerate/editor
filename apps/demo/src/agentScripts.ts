@@ -437,6 +437,15 @@ export const VECTOR_SCRIPTS: AgentScript[] = [
     ],
   },
   {
+    id: "vector-perspective",
+    prompt: "Put a sign on a wall in perspective",
+    steps: [
+      { say: "A two-point perspective grid: vanishing points beyond the page on the horizon, the origin near the bottom.", ...command("vector.setPerspective", { vanishingPoints: [{ x: -200, y: 140 }, { x: 800, y: 140 }], origin: { x: 300, y: 330 }, gridSize: 20, extent: 10 }) },
+      { say: "A flat sign drawn just right of the origin…", ...command("vector.addShape", { kind: "rect", x: 310, y: 240, width: 160, height: 70, fill: "#f97316", stroke: "#7c2d12", strokeWidth: 3, name: "Sign" }), as: "sign" },
+      { say: "…laid onto the right wall: it recedes toward the right vanishing point.", ...commandWith("vector.attachToPerspective", (r) => ({ ids: [r("sign").id], plane: "right" })) },
+    ],
+  },
+  {
     id: "vector-bevel",
     prompt: "Bevel the star like a badge",
     steps: [
@@ -459,6 +468,18 @@ export const VECTOR_SCRIPTS: AgentScript[] = [
       { say: "A round glass over the middle of the scene…", ...command("vector.addShape", { kind: "ellipse", x: 230, y: 150, width: 140, height: 140, fill: "#ffffff", stroke: "#0f172a", strokeWidth: 4, name: "Magnifier" }), as: "glass", target: artboardBox(230, 150, 140, 140) },
       { say: "…made a 2× magnifying lens: what is below it shows enlarged, and follows when it moves.", ...commandWith("vector.setLens", (r) => ({ ids: [r("glass").id], type: "magnify", amount: 2 })) },
       { say: "Switching it to a heat map lens.", ...commandWith("vector.setLens", (r) => ({ ids: [r("glass").id], type: "heatMap" })) },
+    ],
+  },
+  {
+    id: "vector-pages",
+    prompt: "Make this a two-page document with a numbered footer",
+    steps: [
+      { say: "The drawing becomes page 1…", ...command("vector.addPage", { name: "Cover" }), as: "p1" },
+      { say: "…a second page beside it…", ...command("vector.addPage", { name: "Back" }), as: "p2" },
+      { say: "…and a master page both use.", ...command("vector.addMasterPage", { name: "Footer", assignTo: "all" }), as: "m" },
+      { say: "A footer bar on the master, pinned to the bottom…", ...commandWith("vector.addShape", (r) => ({ kind: "rect", x: r("m").masters[0].bounds.x, y: r("m").masters[0].bounds.y + r("m").masters[0].bounds.height - 24, width: r("m").masters[0].bounds.width, height: 24, fill: "#0f172a", parentId: r("m").id })), as: "bar" },
+      { say: "…and the page number on it: every page shows its own.", ...commandWith("vector.addText", (r) => ({ text: "Page {page} of {pages}", x: r("m").masters[0].bounds.x + 12, y: r("m").masters[0].bounds.y + r("m").masters[0].bounds.height - 8, font: { fontSize: 12 }, fill: "#ffffff", parentId: r("m").id })) },
+      { say: "Going to page 2.", ...commandWith("vector.goToPage", (r) => ({ id: r("p2").id })) },
     ],
   },
   {

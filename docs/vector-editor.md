@@ -281,6 +281,21 @@ An `extrude` path effect works like CorelDRAW's Extrude and draws each shape as 
 - **Draw order.** Faces are drawn back to front: two faces overlap only over viewing rays that cross both edges, and there the edge further along the ray is in front. A topological sort of that relation keeps concave outlines correct. The shape itself is drawn on top.
 - **Export.** Each face also gets a hairline stroke in its own colour, which hides anti-aliasing seams between neighbouring faces. Lottie gets the drawn shapes.
 
+## Drawing in perspective
+
+A document can have a perspective grid (`document.perspective`), after CorelDRAW's Perspective Drawing. It has 1 to 3 `vanishingPoints`, an `origin` where its planes meet (below the horizon, in front of the viewer), a `gridSize` and an `extent` in cells, and `visible`.
+
+- **Planes.** One point gives the `floor`, a `side` wall receding to it and the `front` (the page itself). Two give the `floor` and the `left` and `right` walls, which recede to the first and second points. A third point is where the walls' verticals meet (a bird's or worm's eye view).
+- **Plane maps.** `vectorPerspectivePlaneMap(grid, plane)` is the plane's projective map. Its columns are the plane's two directions and the origin. Plane coordinates are document units at the origin, x right and y up as seen there.
+  - `vectorPerspectiveFlatToPlane` / `vectorPerspectivePlaneToFlat` map points between flat art and the plane.
+  - `vectorPerspectiveMapPath` maps paths, re-fitting curves.
+  - Points behind the viewer (beyond a plane's horizon) are refused.
+- **Drawing.** `setPerspectivePlane(plane)` makes the Rectangle, Ellipse, Polygon and Star tools draw on that plane. The drag's two corners stay under the pointer, and the shape is built flat between their plane positions and projected, so it recedes.
+- **Attaching.** `attachToPerspective(plane, { ids })` reads objects flat, relative to the origin (right and up), and projects them onto the plane, with transforms baked in. Text and instances must be outlines first. It is one undo step.
+- **Grid.** `setPerspective(grid | null)` is one undo step, and `vectorPerspectivePreset(1 | 2 | 3, width, height)` gives a starting grid for a page. The overlay's `perspective` draws each plane's lines (the active one stronger), the vanishing points and the origin.
+- **Panel.** `<VectorPerspectivePanel>` adds a grid, picks the drawing plane, attaches the selection, and shows or removes the grid.
+- **Agent commands.** `vector.getPerspective`, `vector.setPerspective`, `vector.removePerspective`, `vector.setPerspectivePlane` and `vector.attachToPerspective`.
+
 ### Bevel
 
 A `bevel` path effect works like CorelDRAW's Bevel and gives each shape a chiselled edge.
@@ -330,6 +345,27 @@ A closed path with `lens` set is a lens, after CorelDRAW's Lens. Inside its outl
   - `<VectorLensPanel>` edits the type, amount and colour.
   - Agents use `vector.setLens` / `vector.removeLens`, and `vector.list` shows each lens.
   - SVG export writes `data-vector-lens` and imports it back.
+
+## Pages and master pages
+
+A document's pages are its top-level frames in order, numbered from 1 (`vectorPages`). This follows CorelDRAW's pages and master page.
+
+- **Master pages.** A frame with `frame.master` set is a master page (`vectorMasterPages`). It is not a page: it is not numbered, and PDF export by artboards skips it.
+- **Using a master.** A page whose `frame.masterId` names a master draws the master's children under its own art. Each child is laid out by its `resizing` constraints from the master's rectangle to the page's (`vectorFrameChildMatrix`), so a footer pinned to the bottom stays at the bottom of a taller page. Master text can show `{page}` and `{pages}`.
+- **Derived art.** The drawn master art (`masterArt`, its ids prefixed with the page's and locked) is derived:
+  - `resolveVectorMasterPages` brings it up to date after every edit, before lenses, so a lens can show it.
+  - `stripVectorMasterArt` removes it from `toJSON()`.
+  - Rendering and the SVG, PDF and Lottie exports resolve it themselves.
+  - SVG writes it in a `frame-master` part that import skips.
+- **Editing.** Each of these is one undo step:
+  - `addPage({ name, masterId, after })` adds a frame the size of the last page, to the right of the others. The first page of a document without frames covers the artboard and takes its art in.
+  - `addMasterPage({ name, assignTo })` adds a master below the pages.
+  - `setPageMaster(masterId | null, { ids })` applies or removes a master.
+  - `movePage(id, index)` reorders pages.
+
+  `goToPage(id, { size })` selects a page and brings it into view, and `getPages()` lists them.
+- **Panel.** `<VectorPagesPanel>` has page buttons, + Page, + Master, and the selected page's master.
+- **Agent commands.** `vector.listPages`, `vector.addPage`, `vector.addMasterPage`, `vector.setPageMaster`, `vector.movePage` and `vector.goToPage`. `vector.addText` takes `parentId`, to put text on a master page.
 
 ## Distort and envelopes
 

@@ -1,4 +1,5 @@
 import { VECTOR_DISTORT_BRUSH_MODES, distortVectorPath, type VectorDistortBrushMode, type VectorDistortDab } from './distortBrush.js';
+import { isVectorMasterPage, resolveVectorMasterPages, stripVectorMasterArt, vectorMasterPages, vectorPages } from './pages.js';
 import { VECTOR_LENS_SPECS, resolveVectorLenses, sanitizeVectorLens, stripVectorLensViews } from './lens.js';
 import { HistoryManager } from '../history/HistoryManager.js';
 import type { Command } from '../history/types.js';
@@ -141,7 +142,7 @@ import {
 	vectorConnectorTargetAt,
 	type VectorConnectionSite
 } from './connectors.js';
-import { VECTOR_CONNECTOR_ROUTES, VECTOR_CONNECTOR_SIDES, VECTOR_LENS_TYPES, type VectorLens, type VectorArrowhead, type VectorConnector, type VectorConnectorEnd, type VectorConnectorRoute, type VectorConnectorSide } from './types.js';
+import { VECTOR_CONNECTOR_ROUTES, VECTOR_CONNECTOR_SIDES, VECTOR_LENS_TYPES, type VectorLens, type VectorPerspective, type VectorPerspectivePlane, type VectorArrowhead, type VectorConnector, type VectorConnectorEnd, type VectorConnectorRoute, type VectorConnectorSide } from './types.js';
 import {
 	autoVectorFreeformGradient,
 	createVectorMeshGradient,
@@ -203,7 +204,7 @@ import {
 	VectorTextError,
 	type VectorTextLayout
 } from './text.js';
-import { applyVectorHomography, vectorHomography, vectorHomographyKeepsQuad } from './perspective.js';
+import { applyVectorHomography, sanitizeVectorPerspective, vectorHomography, vectorHomographyKeepsQuad, vectorPerspectiveMapPath, vectorPerspectivePlaneToFlat, vectorPerspectivePlanes } from './perspective.js';
 import { distortVectorNode, vectorBoxCorners, vectorDistortQuad, vectorShearForSide, vectorSkewMatrix, VECTOR_DISTORT_TOLERANCE, type VectorDistortMode } from './distort.js';
 import {
 	dragVectorMeshPoint,
@@ -644,6 +645,8 @@ export interface VectorEditorState {
 	typedEntry: string | null;
 	/** The symmetry group new drawn art goes into (`enterSymmetry`), or null. */
 	symmetryTarget: string | null;
+	/** The perspective plane new rectangles, ellipses, polygons and stars are drawn on (`setPerspectivePlane`), or null. */
+	perspectivePlane: VectorPerspectivePlane | null;
 	/** The selected point of a mesh or freeform fill (Gradient tool), or null. */
 	shadingPoint: { nodeId: string; index: number; kind: 'mesh' | 'freeform' } | null;
 	canUndo: boolean;
@@ -1637,6 +1640,7 @@ export class VectorEditorController {
 			typedEntry: this.typed,
 			shadingPoint: this.getShadingSelection(),
 			symmetryTarget: this.symmetryTarget && this.doc.nodes.some((n) => n.id === this.symmetryTarget) ? this.symmetryTarget : null,
+			perspectivePlane: this.perspectivePlane && this.doc.perspective && vectorPerspectivePlanes(this.doc.perspective).includes(this.perspectivePlane) ? this.perspectivePlane : null,
 			canUndo: h.canUndo,
 			canRedo: h.canRedo,
 			undoLabel: h.undoName,
@@ -1659,7 +1663,8 @@ export class VectorEditorController {
 		out = resolveVectorSymbols(out);
 		// Connectors follow what they are glued to (after the constraints have moved it).
 		// Lenses show what is below them (after connectors have moved).
-		return resolveVectorLenses(rerouteVectorConnectors(this.solved(out)));
+		// Pages draw their master page's art (before lenses, which may show it).
+		return resolveVectorLenses(resolveVectorMasterPages(rerouteVectorConnectors(this.solved(out))));
 	}
 
 	/**
@@ -2216,7 +2221,7 @@ export class VectorEditorController {
 	}
 
 	toJSON(): VectorDocument {
-		return cloneVectorDocument(stripVectorLensViews(stripVectorSymbolArt(this.storedDocument())));
+		return cloneVectorDocument(stripVectorMasterArt(stripVectorLensViews(stripVectorSymbolArt(this.storedDocument()))));
 	}
 
 	/** Adds a node (ids are kept unless taken). Returns its id. */
@@ -4394,6 +4399,117 @@ export class VectorEditorController {
 	}
 
 	// -----------------------------------------------------------------------------------------
+	// Perspective drawing
+
+	private perspectivePlane: VectorPerspectivePlane | null = null;
+
+	/** The document's perspective grid, or null. */
+	getPerspective(): VectorPerspective | null {
+		return this.doc.perspective ?? null;
+	}
+
+	/**
+	 * Sets the document's perspective grid (CorelDRAW's Perspective Drawing): 1 to 3 vanishing
+	 * points, the origin where its planes meet, the cell size and extent, and whether it shows;
+	 * `null` removes it. One undo step.
+	 */
+	setPerspective(grid: VectorPerspective | null): VectorActionResult & { perspective?: VectorPerspective | null } {
+		let next: VectorPerspective | null = null;
+		if (grid) {
+			next = sanitizeVectorPerspective(grid);
+			if (!next) return { ok: false, message: 'A perspective grid needs 1 to 3 vanishing points { x, y } away from an origin { x, y }.' };
+		}
+		this.change(next ? 'Perspective Grid' : 'Remove Perspective Grid', () => {
+			const { perspective: _p, ...rest } = this.doc;
+			this.doc = next ? { ...rest, perspective: next } : rest;
+		});
+		if (!next) this.perspectivePlane = null;
+		return { ok: true, perspective: next };
+	}
+
+	/**
+	 * Draws new rectangles, ellipses, polygons and stars on a plane of the perspective grid (their
+	 * drag box is taken on the plane, so they recede with it), or flat again with `null`.
+	 */
+	setPerspectivePlane(plane: VectorPerspectivePlane | null): VectorActionResult {
+		if (plane !== null) {
+			const grid = this.doc.perspective;
+			if (!grid) return { ok: false, message: 'There is no perspective grid: set one with vector.setPerspective first.' };
+			const planes = vectorPerspectivePlanes(grid);
+			if (!planes.includes(plane)) return { ok: false, message: `This grid's planes are ${planes.join(', ')}.` };
+		}
+		this.perspectivePlane = plane;
+		this.notify();
+		return { ok: true };
+	}
+
+	/**
+	 * Lays objects onto a plane of the perspective grid: each is read flat, relative to the grid's
+	 * origin (right and up), and projected onto the plane, so art near the origin keeps its size and
+	 * art further along recedes. Paths and groups are mapped in document space (their transforms
+	 * baked in); text and instances must be converted to outlines first. One undo step. Returns
+	 * the ids changed.
+	 */
+	attachToPerspective(plane: VectorPerspectivePlane, options: { ids?: readonly string[] } = {}): VectorActionResult & { ids?: string[] } {
+		const grid = this.doc.perspective;
+		if (!grid) return { ok: false, message: 'There is no perspective grid: set one with vector.setPerspective first.' };
+		const planes = vectorPerspectivePlanes(grid);
+		if (!planes.includes(plane)) return { ok: false, message: `This grid's planes are ${planes.join(', ')}.` };
+		const ids = [...new Set(options.ids ?? this.selectedRoots())];
+		if (!ids.length) return { ok: false, message: 'Select objects to put on the plane first.' };
+		const next = new Map<string, VectorNode>();
+		const project = (n: VectorNode, m: AffineMatrix): VectorNode | string => {
+			const own = n.transform ? multiplyMatrices(m, n.transform) : m;
+			if (n.type === 'text' || n.type === 'instance') return `"${n.id}" is ${n.type === 'text' ? 'text' : 'a symbol instance'}: convert it to outlines first (vector.createOutlines${n.type === 'instance' ? ' after vector.detachInstance' : ''}).`;
+			if (n.type === 'group') {
+				const children: VectorNode[] = [];
+				for (const c of n.children) {
+					const r = project(c, own);
+					if (typeof r === 'string') return r;
+					children.push(r);
+				}
+				const { transform: _t, ...rest } = n;
+				return { ...rest, children };
+			}
+			const flat = transformBezierPath(subpathsToBezier(n.subpaths), own);
+			const mapped = vectorPerspectiveMapPath(grid, plane, flat);
+			if (!mapped) return `"${n.id}" reaches beyond the plane's horizon: move it nearer the origin, or the vanishing points further out.`;
+			const { transform: _t, ...rest } = n;
+			return { ...rest, subpaths: bezierToSubpaths(mapped) };
+		};
+		for (const id of ids) {
+			const loc = locateVectorNode(this.doc.nodes, id);
+			if (!loc) return { ok: false, message: `There is no node "${id}".` };
+			const node = loc.list[loc.index];
+			if (node.locked) return { ok: false, message: `"${id}" is locked; unlock it first.` };
+			const parentM = this.parentMatrixOf(id);
+			const r = project(node, parentM);
+			if (typeof r === 'string') return { ok: false, message: r };
+			// Back into the parent's space.
+			const inv = invertMatrix(parentM);
+			next.set(id, isIdentityMatrix(inv) ? r : transformVectorNode(r, inv));
+		}
+		this.change(`Attach to ${plane[0].toUpperCase()}${plane.slice(1)} Plane`, () => {
+			this.setDoc(mapTree(this.doc.nodes, (n) => next.get(n.id) ?? n));
+		});
+		return { ok: true, ids };
+	}
+
+	/** A shape's subpaths drawn on the active perspective plane from its flat drag box, or null to keep it flat. */
+	private perspectiveShape(kind: VectorShapeInput['kind'], start: Vec2, end: Vec2): VectorSubpath[] | null {
+		const grid = this.doc.perspective;
+		const plane = this.perspectivePlane;
+		if (!grid || !plane || kind === 'line' || !vectorPerspectivePlanes(grid).includes(plane)) return null;
+		const toFlat = vectorPerspectivePlaneToFlat(grid, plane);
+		const a = toFlat?.(start);
+		const b = toFlat?.(end);
+		if (!a || !b) return null;
+		const flat = this.createShapeNode({ kind, ...boundsFromPoints(a, b) });
+		const mapped = vectorPerspectiveMapPath(grid, plane, subpathsToBezier(flat.subpaths));
+		return mapped ? bezierToSubpaths(mapped) : null;
+	}
+
+	// -----------------------------------------------------------------------------------------
 	// PDF
 
 	/**
@@ -5262,6 +5378,155 @@ export class VectorEditorController {
 			this.editingId = null;
 		});
 		return { ok: true, id };
+	}
+
+	// -----------------------------------------------------------------------------------------
+	// Pages and master pages
+
+	/**
+	 * The document's pages (top-level frames that are not master pages, in order: `number` from 1)
+	 * with the master each uses, and its master pages.
+	 */
+	getPages(): { pages: { id: string; name: string; number: number; masterId: string | null; bounds: VectorBounds }[]; masters: { id: string; name: string; usedBy: string[]; bounds: VectorBounds }[] } {
+		const pages = vectorPages(this.doc);
+		const masters = vectorMasterPages(this.doc);
+		const box = (f: VectorFrameGroup) => ({ x: f.frame.x, y: f.frame.y, width: f.frame.width, height: f.frame.height });
+		return {
+			pages: pages.map((p, i) => ({ id: p.id, name: p.name ?? `Page ${i + 1}`, number: i + 1, masterId: p.frame.masterId && masters.some((m) => m.id === p.frame.masterId) ? p.frame.masterId : null, bounds: box(p) })),
+			masters: masters.map((m) => ({ id: m.id, name: m.name ?? 'Master', usedBy: pages.filter((p) => p.frame.masterId === m.id).map((p) => p.id), bounds: box(m) }))
+		};
+	}
+
+	/** Where a new page or master goes: right of every top-level frame, or below them for a master. */
+	private nextPageRect(master: boolean): VectorBounds {
+		const frames = this.doc.nodes.filter(isVectorFrame);
+		const pages = vectorPages(this.doc);
+		const like = pages[pages.length - 1]?.frame ?? frames[frames.length - 1]?.frame;
+		const width = like?.width ?? this.doc.width;
+		const height = like?.height ?? this.doc.height;
+		if (!frames.length) return { x: 0, y: 0, width, height };
+		const gap = Math.max(20, Math.round(width * 0.1));
+		if (master) {
+			const bottom = Math.max(...frames.map((f) => f.frame.y + f.frame.height));
+			const left = Math.min(...frames.map((f) => f.frame.x));
+			return { x: left, y: bottom + gap * 2, width, height };
+		}
+		const right = Math.max(...pages.map((f) => f.frame.x + f.frame.width), ...(pages.length ? [] : frames.map((f) => f.frame.x + f.frame.width)));
+		const top = pages.length ? Math.min(...pages.map((f) => f.frame.y)) : Math.min(...frames.map((f) => f.frame.y));
+		return { x: right + gap, y: top, width, height };
+	}
+
+	/**
+	 * Adds a page: a frame the size of the last page (or the document), to the right of the others,
+	 * after page `after` in the page order (default last), using master page `masterId` (default:
+	 * the master the last page uses). The first page added to a document without frames covers the
+	 * artboard and takes the existing top-level art in. One undo step; selects it. Returns its id.
+	 */
+	addPage(input: { name?: string; masterId?: string | null; after?: string } = {}): VectorMaskResult {
+		const pages = vectorPages(this.doc);
+		if (input.masterId && !isVectorMasterPage(this.doc.nodes.find((n) => n.id === input.masterId))) return { ok: false, message: `"${input.masterId}" is not a master page (add one with vector.addMasterPage).` };
+		if (input.after !== undefined && !pages.some((p) => p.id === input.after)) return { ok: false, message: `"${input.after}" is not a page.` };
+		const first = !this.doc.nodes.some(isVectorFrame);
+		const rect = this.nextPageRect(false);
+		const id = this.newId();
+		const masterId = input.masterId === undefined ? (pages[pages.length - 1]?.frame.masterId ?? null) : input.masterId;
+		const adopted = first ? this.doc.nodes.filter((n) => !n.locked && n.visible !== false && !n.blendStep) : [];
+		const page: VectorFrameGroup = {
+			id,
+			type: 'group',
+			name: input.name ?? `Page ${pages.length + 1}`,
+			frame: { ...rect, fill: '#ffffff', ...(masterId ? { masterId } : {}) },
+			children: adopted
+		};
+		const taken = new Set(adopted.map((n) => n.id));
+		this.change('Add Page', () => {
+			const rest = this.doc.nodes.filter((n) => !taken.has(n.id));
+			const at = input.after ? rest.findIndex((n) => n.id === input.after) + 1 : rest.length;
+			this.setDoc([...rest.slice(0, at), page, ...rest.slice(at)]);
+			this.selection = [id];
+			this.anchors = [];
+			this.editingId = null;
+		});
+		return { ok: true, id };
+	}
+
+	/**
+	 * Adds an empty master page (a frame with `master` set, the size of the last page) below the
+	 * pages. Art drawn in it shows on every page that uses it; text can show `{page}` and `{pages}`.
+	 * With `assignTo` (page ids, or `all`), those pages use it. One undo step; selects it.
+	 */
+	addMasterPage(input: { name?: string; assignTo?: readonly string[] | 'all' } = {}): VectorMaskResult {
+		const pages = vectorPages(this.doc);
+		const assign = input.assignTo === 'all' ? pages.map((p) => p.id) : (input.assignTo ?? []);
+		for (const pid of assign) if (!pages.some((p) => p.id === pid)) return { ok: false, message: `"${pid}" is not a page.` };
+		const rect = this.nextPageRect(true);
+		const id = this.newId();
+		const master: VectorFrameGroup = { id, type: 'group', name: input.name ?? `Master ${String.fromCharCode(65 + vectorMasterPages(this.doc).length % 26)}`, frame: { ...rect, master: true }, children: [] };
+		const set = new Set(assign);
+		this.change('Add Master Page', () => {
+			this.setDoc([...this.doc.nodes.map((n) => (set.has(n.id) && isVectorFrame(n) ? { ...n, frame: { ...n.frame, masterId: id } } : n)), master]);
+			this.selection = [id];
+			this.anchors = [];
+			this.editingId = null;
+		});
+		return { ok: true, id };
+	}
+
+	/** Makes pages use master page `masterId`, or none with null. One undo step. */
+	setPageMaster(masterId: string | null, options: { ids?: readonly string[] } = {}): VectorActionResult & { ids?: string[] } {
+		const pages = vectorPages(this.doc);
+		const ids = options.ids ?? this.selection.filter((id) => pages.some((p) => p.id === id));
+		if (!ids.length) return { ok: false, message: 'Select a page (a top-level frame) first.' };
+		for (const id of ids) if (!pages.some((p) => p.id === id)) return { ok: false, message: `"${id}" is not a page${isVectorMasterPage(this.getNode(id)) ? ' (it is a master page)' : ''}.` };
+		if (masterId !== null && !isVectorMasterPage(this.doc.nodes.find((n) => n.id === masterId))) return { ok: false, message: `"${masterId}" is not a master page.` };
+		const set = new Set(ids);
+		this.change(masterId ? 'Apply Master Page' : 'Remove Master Page', () => {
+			this.setDoc(
+				this.doc.nodes.map((n) => {
+					if (!set.has(n.id) || !isVectorFrame(n)) return n;
+					const { masterId: _m, ...frame } = n.frame;
+					return { ...n, frame: masterId ? { ...frame, masterId } : frame };
+				})
+			);
+		});
+		return { ok: true, ids: [...ids] };
+	}
+
+	/** Moves page `id` to position `index` (0-based) in the page order. One undo step. Returns the new order. */
+	movePage(id: string, index: number): VectorActionResult & { order?: string[] } {
+		const pages = vectorPages(this.doc);
+		const from = pages.findIndex((p) => p.id === id);
+		if (from < 0) return { ok: false, message: `"${id}" is not a page.` };
+		if (!Number.isInteger(index) || index < 0 || index >= pages.length) return { ok: false, message: `index must be from 0 to ${pages.length - 1}.` };
+		if (index === from) return { ok: true, order: pages.map((p) => p.id) };
+		const order = pages.map((p) => p.id);
+		order.splice(index, 0, ...order.splice(from, 1));
+		// Pages keep their slots in the document; only which page sits in each slot changes.
+		const slots = this.doc.nodes.map((n, i) => (pages.some((p) => p.id === n.id) ? i : -1)).filter((i) => i >= 0);
+		const byId = new Map(pages.map((p) => [p.id, p as VectorNode]));
+		this.change('Move Page', () => {
+			const nodes = this.doc.nodes.slice();
+			slots.forEach((slot, k) => (nodes[slot] = byId.get(order[k])!));
+			this.setDoc(nodes);
+		});
+		return { ok: true, order };
+	}
+
+	/**
+	 * Goes to a page (or master page): selects it and brings it into view, fitted to a canvas of
+	 * `size` screen pixels when given, otherwise at the current zoom with its corner near the
+	 * canvas's top-left. Not an undo step.
+	 */
+	goToPage(id: string, options: { size?: { width: number; height: number } } = {}): VectorActionResult {
+		const n = this.doc.nodes.find((x) => x.id === id);
+		if (!isVectorFrame(n)) return { ok: false, message: `"${id}" is not a page or master page.` };
+		const b = vectorNodeBounds(n) ?? { x: n.frame.x, y: n.frame.y, width: n.frame.width, height: n.frame.height };
+		this.selection = [id];
+		this.anchors = [];
+		if (options.size) this.zoomToFit(options.size, { bounds: b });
+		else this.setViewport({ x: 40 - b.x * this.viewport.zoom, y: 40 - b.y * this.viewport.zoom });
+		this.notify();
+		return { ok: true };
 	}
 
 	/**
@@ -7490,7 +7755,10 @@ export class VectorEditorController {
 					const y2 = drag.start.y + h;
 					bounds = boundsFromPoints(start, { x: x2, y: y2 });
 				}
-				const shaped = this.createShapeNode({ kind: (drag.tool === 'frame' ? 'rect' : drag.tool) as VectorShapeInput['kind'], ...bounds });
+				const kind = (drag.tool === 'frame' ? 'rect' : drag.tool) as VectorShapeInput['kind'];
+				// On a perspective plane the drag box is taken on the plane (its corners where the pointer is).
+				const onPlane = drag.tool !== 'frame' ? this.perspectiveShape(kind, start, { x: bounds.x === start.x ? bounds.x + bounds.width : bounds.x, y: bounds.y === start.y ? bounds.y + bounds.height : bounds.y }) : null;
+				const shaped = onPlane ? { subpaths: onPlane } : this.createShapeNode({ kind, ...bounds });
 				this.replaceNode(drag.nodeId, { ...node, subpaths: shaped.subpaths });
 				this.interaction = { type: 'draw', tool: drag.tool, nodeId: drag.nodeId, bounds };
 				this.notify(true);

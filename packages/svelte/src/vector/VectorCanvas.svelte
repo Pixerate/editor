@@ -493,6 +493,17 @@
         {/each}
       </g>
     {/each}
+    {#if overlay.perspective}
+      <g data-vector-perspective-grid="" fill="none" pointer-events="none">
+        {#each overlay.perspective.planes as pl (pl.plane)}
+          <path data-vector-perspective-plane={pl.plane} data-active={pl.active || undefined} d={pl.d} stroke={pl.active ? accentColor : guideColor} stroke-width={pl.active ? 1 : 0.75} opacity={pl.active ? 0.55 : 0.25} />
+        {/each}
+        {#each overlay.perspective.vanishingPoints as v, i (i)}
+          <circle data-vector-vanishing-point={i} cx={v.x} cy={v.y} r="4" stroke={accentColor} stroke-width="1.5" />
+        {/each}
+        <circle data-vector-perspective-origin="" cx={overlay.perspective.origin.x} cy={overlay.perspective.origin.y} r="3" fill={accentColor} />
+      </g>
+    {/if}
     {#each overlay.symmetry as sy (sy.nodeId)}
       <g data-vector-symmetry-axes={sy.nodeId} stroke={accentColor} stroke-dasharray={sy.drawing ? undefined : '6 4'} opacity={sy.drawing ? 0.9 : 0.6}>
         {#each sy.lines as l, i (i)}<line x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} />{/each}

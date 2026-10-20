@@ -14,6 +14,7 @@
  * opacity masks, stop opacity and text without glyph outlines are left out and named in `notes`.
  */
 
+import { resolveVectorMasterPages, vectorPages } from './pages.js';
 import { resolveVectorLenses } from './lens.js';
 import { deflate } from '../raster/zlib.js';
 import { parseSvgPath } from '../canvas/shapeGeometry.js';
@@ -21,7 +22,7 @@ import type { SvgGradientDef } from '../canvas/gradient.js';
 import { parseVectorColor, type VectorPaintDef, type VectorSvgPatternDef } from './gradient.js';
 import { getVectorSceneRenderData, type VectorRenderGroup, type VectorRenderNode, type VectorRenderPaintLayer, type VectorRenderPath } from './render.js';
 import type { VectorRenderStrokeParts } from './svg.js';
-import { vectorFrameDocument, vectorArtboards } from './frames.js';
+import { vectorFrameDocument } from './frames.js';
 import { findVectorNode } from './geometry.js';
 import type { VectorDocument } from './types.js';
 
@@ -397,10 +398,11 @@ const pdfString = (s: string) => `(${s.replace(/[\\()]/g, (c) => `\\${c}`).repla
  */
 export function vectorDocumentToPdf(doc: VectorDocument, options: VectorPdfOptions = {}): VectorPdfExport {
 	const notes = new Set<string>();
-	doc = resolveVectorLenses(doc);
+	doc = resolveVectorLenses(resolveVectorMasterPages(doc));
 	const scale = options.scale ?? 1;
 	const compress = options.compress !== false;
-	const frames = options.pages === 'artboards' ? vectorArtboards(doc) : [];
+	// Master pages are not pages: they show only through the pages that use them.
+	const frames = options.pages === 'artboards' ? vectorPages(doc) : [];
 	if (options.pages === 'artboards' && !frames.length) notes.add('There are no artboards (top-level frames): the whole drawing is one page.');
 	const docs = frames.length ? frames.map((f) => vectorFrameDocument(doc, f.id, findVectorNode)!) : [doc];
 	const w = new PdfWriter();

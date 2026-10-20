@@ -9,6 +9,7 @@ import {
   dodgeBurnCurve,
   handlePaintShortcut,
   healPixels,
+  contentAwareFill,
   membraneFill,
   PaintGesture,
   readPixel,
@@ -404,6 +405,91 @@ describe('retouch agent tools', () => {
     }
     const cleared = await registry.callTool('set_clone_source', { clear: true });
     expect(cleared.isError).toBeFalsy();
+  });
+});
+
+describe('content-aware spot heal', () => {
+  it('continues a stripe pattern across the hole better than a smooth fill', () => {
+    const w = 60;
+    const h = 40;
+    const truth = new Float32Array(w * h * 4);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) truth.set([x % 6 < 3 ? 230 : 30, 80, (y * 3) % 255, 255], (y * w + x) * 4);
+    const hole = new Uint8Array(w * h);
+    for (let y = 14; y < 26; y++) for (let x = 24; x < 36; x++) hole[y * w + x] = 1;
+    const img = truth.slice();
+    for (let i = 0; i < w * h; i++) if (hole[i]) img.set([0, 0, 0, 255], i * 4);
+    const err = (out: Float32Array) => {
+      let e = 0;
+      for (let i = 0; i < w * h; i++) if (hole[i]) e += Math.abs(out[i * 4] - truth[i * 4]);
+      return e / 144;
+    };
+    const ca = contentAwareFill(w, h, 4, img, hole);
+    const smooth = membraneFill(w, h, 4, img, hole);
+    expect(err(ca)).toBeLessThan(err(smooth) / 3);
+    // Deterministic, and nothing outside the hole moves.
+    expect(contentAwareFill(w, h, 4, img, hole)).toEqual(ca);
+    for (let i = 0; i < w * h; i++) if (!hole[i]) expect(ca[i * 4]).toBe(img[i * 4]);
+  });
+
+  it('spot_heal type content-aware removes a spot from a striped layer', async () => {
+    const { c, id, registry } = setup((x) => (x % 6 < 3 ? [230, 80, 80] : [30, 80, 80]));
+    // A black blot over the stripes.
+    c.selectRect({ x: 50, y: 25, width: 8, height: 8 });
+    c.fillPixels({ layerId: id, color: '#000000' });
+    c.deselect();
+    const res = await registry.callTool('spot_heal', { layerId: id, type: 'content-aware', points: [{ x: 54, y: 29 }], brush: { size: 16, hardness: 1 } });
+    expect(res.isError).toBeFalsy();
+    expect(res.structuredContent).toMatchObject({ spotHeal: { offset: null } });
+    // The blot is gone: the centre is a stripe colour again, not black.
+    const p = pixel(c, id, 54, 29);
+    expect(Math.max(p[0], p[1], p[2])).toBeGreaterThan(60);
+  });
+});
+
+describe('Blur, Sharpen and History Brush', () => {
+  it('blur_stroke softens an edge where it passes, as one undo step', async () => {
+    const { c, id, registry } = setup();
+    const before = pixel(c, id, 60, 30);
+    const res = await registry.callTool('blur_stroke', { layerId: id, points: [{ x: 60, y: 20 }, { x: 60, y: 40 }], strength: 1, brush: { size: 16, hardness: 1 } });
+    expect(res.isError).toBeFalsy();
+    const at = pixel(c, id, 60, 30);
+    // x = 60 is the first blue pixel: the red | blue edge mixes into it; far away nothing changes.
+    expect(at[0]).toBeGreaterThan(before[0]);
+    expect(at[2]).toBeLessThan(before[2]);
+    expect(pixel(c, id, 20, 30)).toEqual([220, 20, 20, 255]);
+    c.undo();
+    expect(pixel(c, id, 60, 30)).toEqual(before);
+  });
+
+  it('sharpen_stroke steepens a soft ramp', async () => {
+    const { c, id, registry } = setup((x) => {
+      const v = 60 + 4 * Math.max(0, Math.min(30, x - 50));
+      return [v, v, v];
+    });
+    expect(pixel(c, id, 50, 30)[0]).toBe(60);
+    await registry.callTool('sharpen_stroke', { layerId: id, points: [{ x: 65, y: 30 }], strength: 1, brush: { size: 40, hardness: 1 } });
+    // At the ramp's foot and shoulder the unsharp mask overshoots: darker below, lighter above.
+    expect(pixel(c, id, 50, 30)[0]).toBeLessThan(60);
+    expect(pixel(c, id, 80, 30)[0]).toBeGreaterThan(180);
+  });
+
+  it('history_brush paints the layer back from an earlier state', async () => {
+    const { c, id, registry } = setup();
+    // The layer was just added: the oldest state has no such layer.
+    const none = await registry.callTool('history_brush', { layerId: id, points: [{ x: 20, y: 30 }] });
+    expect(none.isError).toBe(true);
+    expect(String((none.content?.[0] as { text?: string }).text)).toMatch(/did not exist/);
+    c.fillPixels({ layerId: id, color: '#00ff00', useSelection: false });
+    expect(pixel(c, id, 20, 30)).toEqual([0, 255, 0, 255]);
+    const res = await registry.callTool('history_brush', { layerId: id, historySteps: 1, points: [{ x: 20, y: 30 }], brush: { size: 10, hardness: 1 } });
+    expect(res.isError).toBeFalsy();
+    // Back to the red it was before the fill, only under the brush.
+    expect(pixel(c, id, 20, 30)).toEqual([220, 20, 20, 255]);
+    expect(pixel(c, id, 40, 30)).toEqual([0, 255, 0, 255]);
+    c.undo();
+    expect(pixel(c, id, 20, 30)).toEqual([0, 255, 0, 255]);
+    const bad = await registry.callTool('history_brush', { layerId: id, historySteps: -1, points: [{ x: 1, y: 1 }] });
+    expect(bad.isError).toBe(true);
   });
 });
 

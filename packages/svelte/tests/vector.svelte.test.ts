@@ -1186,6 +1186,69 @@ describe("corner smoothing (svelte)", () => {
   });
 });
 
+describe("VectorPerspectivePanel (svelte)", () => {
+  it("adds a grid, draws on a plane, and the canvas shows the grid", async () => {
+    const { VectorPerspectivePanel } = await import("../src/vector");
+    const c = make();
+    const el = render(VectorPerspectivePanel, { controller: c });
+    click(el.querySelector('[data-vector-perspective-preset="2"]'));
+    expect(c.getPerspective()?.vanishingPoints).toHaveLength(2);
+    const select = el.querySelector('select[aria-label="Draw on plane"]') as HTMLSelectElement;
+    select.value = "left";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    flushSync();
+    expect(c.getState().perspectivePlane).toBe("left");
+    const canvas = render(VectorCanvas, { controller: c });
+    expect(canvas.querySelector('[data-vector-perspective-plane="left"][data-active]')).not.toBeNull();
+    click(Array.from(el.querySelectorAll("button")).find((b) => b.textContent?.trim() === "Remove")!);
+    expect(c.getPerspective()).toBeNull();
+  });
+});
+
+describe("VectorLensPanel (svelte)", () => {
+  it("makes the selected closed path a lens, edits its amount and removes it", async () => {
+    const { VectorLensPanel } = await import("../src/vector");
+    const c = make();
+    c.select(["a"]);
+    const el = render(VectorLensPanel, { controller: c });
+    const select = el.querySelector('select[aria-label="Lens type"]') as HTMLSelectElement;
+    select.value = "magnify";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    flushSync();
+    expect((c.getNode("a") as VectorPathNode).lens).toEqual({ type: "magnify", amount: 2 });
+    const amount = el.querySelector('input[aria-label="Lens amount"]') as HTMLInputElement;
+    amount.value = "3";
+    amount.dispatchEvent(new Event("input", { bubbles: true }));
+    flushSync();
+    expect((c.getNode("a") as VectorPathNode).lens?.amount).toBe(3);
+    select.value = "";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    flushSync();
+    expect((c.getNode("a") as VectorPathNode).lens).toBeUndefined();
+  });
+});
+
+describe("VectorPagesPanel (svelte)", () => {
+  it("adds pages and a master page, goes to a page and changes its master", async () => {
+    const { VectorPagesPanel } = await import("../src/vector");
+    const c = make();
+    const el = render(VectorPagesPanel, { controller: c });
+    click(el.querySelector('[data-vector-pages-action="add"]'));
+    click(el.querySelector('[data-vector-pages-action="add"]'));
+    click(el.querySelector('[data-vector-pages-action="master"]'));
+    const { pages, masters } = c.getPages();
+    expect(pages).toHaveLength(2);
+    expect(pages.every((p) => p.masterId === masters[0].id)).toBe(true);
+    click(el.querySelector(`[data-vector-page="${pages[1].id}"]`));
+    expect(c.getState().selection).toEqual([pages[1].id]);
+    const select = el.querySelector('select[aria-label="Master page"]') as HTMLSelectElement;
+    select.value = "";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    flushSync();
+    expect(c.getPages().pages[1].masterId).toBeNull();
+  });
+});
+
 describe("Distort Brush (svelte)", () => {
   it("shows its options for the tool and draws the brush circle while dragging", () => {
     const c = make();

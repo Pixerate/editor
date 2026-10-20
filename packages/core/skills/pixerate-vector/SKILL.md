@@ -306,6 +306,17 @@ the browser's shaper they are kept but not drawn until outlines are available.
 | `vector.setResizing` | Set how children of a frame follow it on resize (`horizontal`, `vertical`; a missing axis keeps its value). Fails on objects not directly inside a frame. Returns `{ nodes: [{ id, horizontal, vertical }] }`. |
 | `vector.exportFrameSvg` | Export one frame as an SVG of its own size (its corner at the origin). Returns `{ svg, width, height }`; use it per artboard instead of `vector.exportSvg`. |
 
+### Pages and master pages
+
+| Command | Use it to |
+| --- | --- |
+| `vector.listPages` | Read the pages (top-level frames in order, with `number`, `masterId`, `bounds`) and master pages (`usedBy`, `bounds`: place master art inside them). |
+| `vector.addPage` | Add a page right of the others (`after`, `name`, `masterId`); the first page takes the artboard's art in. Add art with `parentId`. Returns `{ id }` and the pages. |
+| `vector.addMasterPage` | Add a master page (`assignTo` page ids or "all"): art in it (parentId) shows on its pages, laid out by `resizing`; text can show `{page}` and `{pages}`. Use for headers, footers, page numbers, backgrounds. |
+| `vector.setPageMaster` | Make pages use a master, or none with null. |
+| `vector.movePage` | Reorder a page (`index` from 0); numbers follow. |
+| `vector.goToPage` | Select a page and show it to the user. |
+
 ### Connectors
 
 | Command | Use it to |
@@ -324,6 +335,16 @@ the browser's shaper they are kept but not drawn until outlines are available.
 | `vector.releaseSymmetry` | Stop repeating; `expand: true` keeps the copies as real objects (to edit one side alone). Returns `{ ids }` of the added objects. |
 | `vector.enterSymmetry` | Hand the canvas to the user drawing inside a symmetry group (pen, pencil, shapes, text go in, mirrored live). Returns `{ id }`. |
 | `vector.exitSymmetry` | Stop drawing inside it. |
+
+### Perspective drawing
+
+| Command | Use it to |
+| --- | --- |
+| `vector.getPerspective` | Read the grid (`vanishingPoints`, `origin`, `gridSize`, `extent`, `visible`), its `planes` and `drawingOn`. |
+| `vector.setPerspective` | Set a 1-, 2- or 3-point grid: vanishing points on the horizon, the origin below where the planes meet. Returns the grid. |
+| `vector.removePerspective` | Remove the grid (art stays). |
+| `vector.setPerspectivePlane` | Make the rectangle, ellipse, polygon and star tools (the user's drags) draw on a plane, or flat with `null`. |
+| `vector.attachToPerspective` | Project objects onto a plane: draw them flat next to the origin (x right, y up from it), then attach. Use for signs on walls, tiles on floors, windows. Returns `{ ids }`. |
 
 ### Lenses
 
@@ -412,32 +433,11 @@ the animation editor.
 
 ## Pitfalls
 
-- Mesh and freeform fills draw as fine tiles, not SVG gradients: they cannot be edited with
-  `vector.setGradient` or as stops, and other tools see them as SVG patterns. Point indices
-  shift after `vector.removeFreeformPoint`; read them again with `vector.getShading`.
+The most common ones are below. Read [references/pitfalls.md](references/pitfalls.md) before working with connectors, frames, masks, filters, text, symbols, constraints, blends, gradient meshes or live corners.
 
-- A connector's geometry is regenerated after every edit while an end is glued: editing its
-  anchors directly does not stick. Unglue the end (`vector.setConnector` with `null`) or change
-  `route` instead. Connectors cannot be glued to connectors.
-
-- Scaling a frame (`vector.scale`, the selection handles) lays its children out by their
-  constraints, so it is a resize, not a zoom; group the frame (or scale its children) to scale the
-  art itself. A frame clips by default: objects moved outside it disappear (`clip: false` shows
-  them). Moving an object over a frame does not put it inside; use `vector.frameSelection` or
-  `adopt`.
-
-- The `d` in `vector.list` draws live corners cut, which adds anchors. On a path with corner
-  radii, anchor indices counted from `d` do not match the stored anchors; count anchors on a path
-  without corners, or clear corners first.
 - `d` and anchor positions are in the node's own space; `bounds` are in document space. For
   rotated nodes (`rotation` not 0), `vector.moveAnchor` and `vector.bendSegment` take document
   coordinates, so compute them from the drawn position, not from `d`.
-- `vector.boolean` without `live` fails when the result is empty (shapes that do not overlap)
-  and consumes its inputs. Subtract removes upper shapes from the lowest: restack with
-  `vector.arrange` first.
-- `vector.blend`, `vector.group` and live booleans need nodes that share a parent.
-- Blend in-betweens are locked and regenerate; edit the keys, not the steps.
-- `strokeAlign` inside and outside only apply when every subpath is closed.
 - Stroke widths, corner radii and effect sizes are kept when scaling: scale them yourself if the
   design should grow proportionally.
 - `vector.importSvg` without `replace` adds on top; with `replace: true` it discards the current
@@ -445,36 +445,5 @@ the animation editor.
 - With a stack, `vector.setStyle` `fill` / `stroke` and the stroke settings edit only the top
   layer, and `fill: null` / `stroke: null` remove every layer. Edit other layers with
   `vector.updateFill` / `vector.updateStroke`, by the index `vector.getAppearance` reports.
-- Layer indexes shift after a remove or a move: use the stack each write returns.
-- Path effects apply to the whole node, every layer alike. Blend in-betweens mix the top fill and
-  stroke only.
-- In a mask group the order matters: the bottom child is always the mask. `vector.arrange` inside
-  the group can change which object masks; deleting the mask releases the group instead.
-- A mask group's path effects act on its contents, not on the mask. Hit-testing, bounds,
-  snapping and booleans use the masked result; an opacity mask counts wherever it paints, even
-  where it is dark.
-- Filters and blend modes are drawn, not geometry: bounds, snapping, booleans and Outline Stroke
-  ignore them. A node's blend mode and filter isolate its layers, so layer blend modes inside a
-  node with a filter mix only with the node's own layers. Background blur is not available.
-- Text positions are code units: an emoji or other character outside the Basic Multilingual
-  Plane counts 2. Take ranges from `vector.getText` rather than counting characters yourself.
-- Scaling text scales its font size (by the square root of the area change) and an area box per
-  axis; it is never stretched. Skew is not kept on text.
-- Without an outline shaper (`vector.listFonts` `outlines: false`), text exports as SVG `<text>`
-  positioned character by character; other viewers need the same fonts installed. Create Outlines
-  (with an outline shaper) when the SVG must look the same everywhere.
-- An instance's `transform` may scale; its art's strokes scale with it unless `scaleStrokes: false`.
-  Transform commands act on the instance, not the art: edit the art with `vector.editSymbol`.
-- While a symbol is being edited (`vector.listSymbols` `editing`), `vector.list` lists its art, not
-  the document. Always finish with `vector.exitSymbolEdit`. A symbol cannot contain an instance
-  of itself (directly or through another symbol).
-- Constraint refs to anchors give them stable ids; later anchor edits keep them, but rebuilding a
-  path (booleans, Outline Stroke, Expand) drops them, and constraints on missing anchors are
-  removed. `segment` means the straight line between two anchors, even when the segment is curved;
-  `tangent` / `smooth` on one anchor act on its handles.
-- After any edit the solver moves the rest of the geometry to keep the constraints; the anchors
-  you just moved move least. A fixed or fully constrained part will not move: remove or change a
-  constraint first.
-- `vector.typeOnPath` consumes the path. Duplicate it first if the path should stay visible.
 - A command that fails changes nothing; read its message (for example "Nothing is selected; pass
   ids.") and retry with the missing input.

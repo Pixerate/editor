@@ -82,6 +82,8 @@ export interface PsdExportInput {
    */
   colorMode?: 'rgb' | 'cmyk' | 'lab';
   colorPlanes?: (rgba: Uint8ClampedArray, n: number) => Uint8Array[];
+  /** `colorPlanes` at 16 bits (16-bit sRGB RGBA in): needed to write a CMYK or Lab file at 16 bits. */
+  colorPlanes16?: (rgba: Uint16Array, n: number) => Uint16Array[];
   /** The document's ICC profile, written as image resource 1039. */
   iccProfile?: Uint8Array;
   /** Bits per channel to write (default 8): 16 and 32 write the layers' deep samples (see `raster/deep`). */
@@ -270,7 +272,8 @@ export function exportPsd(input: PsdExportInput): PsdExportResult {
   if (width < 1 || height < 1) throw new PsdError('The document is empty.');
   const mode = input.colorMode ?? 'rgb';
   if (mode !== 'rgb' && !input.colorPlanes) throw new PsdError(`A ${mode.toUpperCase()} file needs colorPlanes to convert the pixels.`);
-  if (mode !== 'rgb' && depth !== 8) throw new PsdError(`${mode.toUpperCase()} files are written at 8 bits per channel.`);
+  if (mode !== 'rgb' && depth === 32) throw new PsdError(`${mode.toUpperCase()} files are written at 8 or 16 bits per channel.`);
+  if (mode !== 'rgb' && depth === 16 && !input.colorPlanes16) throw new PsdError(`A 16-bit ${mode.toUpperCase()} file needs colorPlanes16 to convert the pixels.`);
   const colorIds = mode === 'cmyk' ? [0, 1, 2, 3] : [0, 1, 2];
   /** Colour planes of RGBA pixels in the file's mode. */
   const colorPlanes = (rgba: Uint8ClampedArray, n: number): Uint8Array[] => (mode === 'rgb' ? rgbaToPlanes(rgba, n).slice(0, 3) : input.colorPlanes!(rgba, n));
@@ -279,8 +282,16 @@ export function exportPsd(input: PsdExportInput): PsdExportResult {
     const alpha = rgbaToPlanes(rgba, n)[3];
     return [rleChannel(CHANNEL_ALPHA, alpha, w, h, psb), ...colorPlanes(rgba, n).map((p, i) => rleChannel(i, p, w, h, psb))];
   };
-  /** A layer surface's channels: RGB at the file's depth, or the mode's planes (8-bit). */
+  /** A layer surface's channels: RGB at the file's depth, or the mode's planes (8 or 16 bits). */
   const surfaceChannels = (surface: TiledSurface, bounds: CropBox): PsdChannel[] => {
+    if (mode !== 'rgb' && depth === 16) {
+      const n = bounds.width * bounds.height;
+      const s = readDeepRegion(surface, bounds, 16);
+      const alpha = new Uint16Array(n);
+      for (let i = 0; i < n; i++) alpha[i] = s[i * 4 + 3];
+      const planes = [alpha, ...input.colorPlanes16!(s, n)];
+      return [CHANNEL_ALPHA, ...colorIds].map((id, i) => rleChannel(id, deepMaskPlane(planes[i]), bounds.width, bounds.height, psb, 16));
+    }
     if (mode !== 'rgb') return pixelChannels(readRegion(surface, bounds), bounds.width, bounds.height);
     const [r, g, b, a] = surfacePlanes(surface, bounds, depth);
     return [CHANNEL_ALPHA, 0, 1, 2].map((id, i) => rleChannel(id, [a, r, g, b][i], bounds.width, bounds.height, psb, depth));
@@ -496,8 +507,15 @@ export function exportPsd(input: PsdExportInput): PsdExportResult {
   let planes = [...colorPlanes(matted, n), ...(transparent ? [a] : [])].map((p) => planeAtDepth(p, depth));
   const deep = input.mergedDeep;
   if (deep && depth !== 8 && deep.length >= n * 4 && (deep instanceof Uint16Array ? depth === 16 : depth === 32)) {
-    const dp = deepToPlanes(matteWhiteDeep(deep), n);
-    planes = transparent ? dp : dp.slice(0, 3);
+    const mattedDeep = matteWhiteDeep(deep);
+    if (mode !== 'rgb' && mattedDeep instanceof Uint16Array) {
+      const alpha = new Uint16Array(n);
+      for (let i = 0; i < n; i++) alpha[i] = mattedDeep[i * 4 + 3];
+      planes = [...input.colorPlanes16!(mattedDeep, n), ...(transparent ? [alpha] : [])].map(deepMaskPlane);
+    } else {
+      const dp = deepToPlanes(mattedDeep, n);
+      planes = transparent ? dp : dp.slice(0, 3);
+    }
   }
   const planeBytes = n * (depth >> 3);
   const merged = new Uint8Array(planeBytes * planes.length);

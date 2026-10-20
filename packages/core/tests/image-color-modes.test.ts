@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ToolRegistry } from '../src/tools';
-import { ImageEditorController, createImageEditorToolProvider, readPixel, type PixelLayer } from '../src/image-editor';
+import { ImageEditorController, createImageEditorToolProvider, readDeepRegion, readPixel, surfaceDepth, writeDeepRegion, type PixelLayer } from '../src/image-editor';
 import { builtinProfile, parseProfile } from '../src/cms';
 import { decodeLayerChannel, readPsd, resource } from '../src/image-editor/psd/file';
 import { importPsd } from '../src/image-editor/psd/import';
@@ -99,3 +99,48 @@ describe('CMYK and Lab documents', () => {
     }
   }, 60_000);
 });
+
+describe('16-bit CMYK and Lab files', () => {
+  /** A 16-bit document: a smooth green ramp (more levels than 8 bits hold). */
+  function deepDoc() {
+    const w = 300;
+    const fake = { width: w, height: 2, naturalWidth: w, naturalHeight: 2 } as unknown as HTMLImageElement;
+    const c = new ImageEditorController({ image: fake });
+    c.setSamplePixels({ width: w, height: 2, data: new Uint8ClampedArray(w * 2 * 4).fill(255) });
+    const id = c.addPixelLayer({ name: 'Ramp', color: '#409060' });
+    c.setBitDepth(16);
+    const data = new Uint16Array(w * 2 * 4);
+    for (let y = 0; y < 2; y++) for (let x = 0; x < w; x++) data.set([16000 + x * 7, 36000, 24000, 65535], (y * w + x) * 4);
+    const surface = writeDeepRegion((c.getLayer(id) as PixelLayer).surface, { x: 0, y: 0, width: w, height: 2 }, data);
+    (c as unknown as { state: { layers: PixelLayer[] } }).state.layers = [{ ...(c.getLayer(id) as PixelLayer), surface }];
+    return { c, w, data };
+  }
+
+  it('a 16-bit CMYK document saves a 16-bit CMYK PSD and opens back at 16 bits', async () => {
+    const { c, w, data } = deepDoc();
+    c.setColorMode('cmyk');
+    const saved = await c.toPsd();
+    expect(saved.warnings.join(' ')).not.toMatch(/8 bits/);
+    const file = readPsd(saved.bytes);
+    expect(file.header).toMatchObject({ colorMode: 4, depth: 16 });
+    const back = importPsd(saved.bytes);
+    expect(back.bitDepth).toBe(16);
+    const layer = back.layers.find((l) => l.name === 'Ramp') as PixelLayer;
+    expect(surfaceDepth(layer.surface)).toBe(16);
+    const px = readDeepRegion(layer.surface, { x: 0, y: 0, width: w, height: 1 }, 16);
+    // More distinct levels than 8 bits can hold, and close to the original.
+    expect(new Set(Array.from({ length: w }, (_, x) => px[x * 4])).size).toBeGreaterThan(200);
+    for (const x of [10, 150, 290]) expect(Math.abs(px[x * 4] - data[x * 4])).toBeLessThan(1200);
+  }, 60_000);
+
+  it('a 16-bit Lab document saves a 16-bit Lab PSD', async () => {
+    const { c, w, data } = deepDoc();
+    c.setColorMode('lab');
+    const saved = await c.toPsd();
+    expect(readPsd(saved.bytes).header).toMatchObject({ colorMode: 9, depth: 16 });
+    const layer = importPsd(saved.bytes).layers.find((l) => l.name === 'Ramp') as PixelLayer;
+    const px = readDeepRegion(layer.surface, { x: 0, y: 0, width: w, height: 1 }, 16);
+    for (const x of [10, 150, 290]) expect(Math.abs(px[x * 4] - data[x * 4])).toBeLessThan(400);
+  });
+});
+

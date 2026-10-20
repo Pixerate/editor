@@ -1251,6 +1251,85 @@ describe("corner smoothing (react)", () => {
   });
 });
 
+describe("VectorPerspectivePanel (react)", () => {
+  it("adds a grid, draws on a plane, and the canvas shows the grid", async () => {
+    const { VectorPerspectivePanel } = await import("../src/vector");
+    const c = new VectorEditorController({ document: doc() });
+    await act(async () =>
+      root.render(
+        <>
+          <VectorPerspectivePanel controller={c} />
+          <VectorCanvas controller={c} />
+        </>,
+      ),
+    );
+    await act(async () => (container.querySelector('[data-vector-perspective-preset="2"]') as HTMLButtonElement).click());
+    expect(c.getPerspective()?.vanishingPoints).toHaveLength(2);
+    const select = container.querySelector('select[aria-label="Draw on plane"]') as HTMLSelectElement;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(select, "left");
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(c.getState().perspectivePlane).toBe("left");
+    expect(container.querySelector('[data-vector-perspective-plane="left"][data-active]')).not.toBeNull();
+    await act(async () => (Array.from(container.querySelectorAll("button")).find((b) => b.textContent?.trim() === "Remove") as HTMLButtonElement).click());
+    expect(c.getPerspective()).toBeNull();
+  });
+});
+
+describe("VectorLensPanel (react)", () => {
+  it("makes the selected closed path a lens, edits its amount and removes it", async () => {
+    const { VectorLensPanel } = await import("../src/vector");
+    const c = new VectorEditorController({ document: doc() });
+    c.select(["a"]);
+    await act(async () => root.render(<VectorLensPanel controller={c} />));
+    const select = container.querySelector('select[aria-label="Lens type"]') as HTMLSelectElement;
+    const setValue = (el: HTMLInputElement | HTMLSelectElement, value: string) => {
+      const proto = el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+      Object.getOwnPropertyDescriptor(proto, "value")!.set!.call(el, value);
+    };
+    await act(async () => {
+      setValue(select, "magnify");
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect((c.getNode("a") as VectorPathNode).lens).toEqual({ type: "magnify", amount: 2 });
+    const amount = container.querySelector('input[aria-label="Lens amount"]') as HTMLInputElement;
+    await act(async () => {
+      setValue(amount, "3");
+      amount.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect((c.getNode("a") as VectorPathNode).lens?.amount).toBe(3);
+    await act(async () => {
+      setValue(select, "");
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect((c.getNode("a") as VectorPathNode).lens).toBeUndefined();
+  });
+});
+
+describe("VectorPagesPanel (react)", () => {
+  it("adds pages and a master page, goes to a page and changes its master", async () => {
+    const { VectorPagesPanel } = await import("../src/vector");
+    const c = new VectorEditorController({ document: doc() });
+    await act(async () => root.render(<VectorPagesPanel controller={c} />));
+    const click = async (sel: string) => act(async () => (container.querySelector(sel) as HTMLButtonElement).click());
+    await click('[data-vector-pages-action="add"]');
+    await click('[data-vector-pages-action="add"]');
+    await click('[data-vector-pages-action="master"]');
+    const { pages, masters } = c.getPages();
+    expect(pages).toHaveLength(2);
+    expect(pages.every((p) => p.masterId === masters[0].id)).toBe(true);
+    await click(`[data-vector-page="${pages[1].id}"]`);
+    expect(c.getState().selection).toEqual([pages[1].id]);
+    const select = container.querySelector('select[aria-label="Master page"]') as HTMLSelectElement;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(select, "");
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(c.getPages().pages[1].masterId).toBeNull();
+  });
+});
+
 describe("Distort Brush (react)", () => {
   it("shows its options for the tool and draws the brush circle while dragging", async () => {
     const c = new VectorEditorController({ document: doc() });
