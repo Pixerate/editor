@@ -29,6 +29,7 @@ export default defineConfig({
     "vector/index": "src/vector/index.ts",
     "chart/index": "src/chart/index.ts",
     "diagram/index": "src/diagram/index.ts",
+    "effects/index": "src/effects/index.ts",
     "bridge/index": "src/bridge/index.ts",
     "bridge/cli": "src/bridge/cli.ts",
   },

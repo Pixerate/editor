@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/effects] Effect Errors From a Provider May Not Be `instanceof` This Library's Classes
+
+- **Issue / Symptom**: An editor's `catch (e) { if (e instanceof UnknownEffectError) ... }` missed errors thrown by an effects provider, so a bad effect id surfaced as a generic failure instead of a useful tool error.
+- **Root Cause**: Providers live in other packages (Flair's `flairEffects()`). A provider bundled with its own copy of `@pixerate/editor/effects`, or a second install of a different version, throws errors from a different class object, and `instanceof` compares identity.
+- **Solution / Workaround**: Check `isEffectError(e)` and `e.code` (`unknown_effect`, `invalid_values`, `unsupported`, `disposed`, `no_provider`) instead of `instanceof`. Providers should run `checkEffectProvider` in their own tests: it fails when an error has no `code`.
+
 ### [core/vector] Constraints Need Anchor Ids, and Every Hand-Built Anchor Copy Must Carry Them
 
 - **Issue / Symptom**: Constraints disappeared after ordinary edits (a move, a reverse, a shape-keeping delete of a neighbour).

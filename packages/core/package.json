@@ -144,6 +144,11 @@
       "import": "./dist/chart/index.js",
       "require": "./dist/chart/index.cjs"
     },
+    "./effects": {
+      "types": "./dist/effects/index.d.ts",
+      "import": "./dist/effects/index.js",
+      "require": "./dist/effects/index.cjs"
+    },
     "./diagram": {
       "types": "./dist/diagram/index.d.ts",
       "import": "./dist/diagram/index.js",
