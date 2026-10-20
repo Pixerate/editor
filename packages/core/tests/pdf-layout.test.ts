@@ -9,7 +9,7 @@ import {
   type PdfRuleLine,
   type PdfTextRun,
 } from "../src";
-import { measureGrowth } from "./helpers/growth";
+import { arrayVisits } from "./helpers/array-visits";
 
 /** A run at baseline `y`; ~0.5 em per character. */
 const run = (text: string, x: number, y: number, extra: Partial<PdfTextRun> = {}): PdfTextRun => {
@@ -312,6 +312,28 @@ describe("analyzePdfLayout: tables", () => {
     expect(pdfLayoutBlocksToHtml([table])).toContain('<td colspan="2"><p>Group heading</p></td>');
   });
 
+  it("keeps same-width ruled tables apart, with the text between them", () => {
+    const xs = [50, 150, 250, 350];
+    const table = (top: number) => ({
+      runs: [0, 1, 2].flatMap((r) => [0, 1, 2].map((c) => run(`t${top} ${r}${c}`, 54 + c * 100, top - r * 20 - 14))),
+      rules: grid(xs, [top, top - 20, top - 40, top - 60]),
+    });
+    const first = table(700);
+    const second = table(500);
+    const { blocks } = analyzePdfLayout([
+      {
+        runs: [...first.runs, ...prose(words("p", 40).concat("end."), 50, 620, 450), ...second.runs],
+        rules: [...first.rules, ...second.rules],
+      },
+    ]);
+    // Their rules stack with the same extent, which must not join two grids into one table.
+    expect(types(blocks)).toEqual(["table", "paragraph", "table"]);
+    const [top, between, bottom] = blocks as any[];
+    expect(top.rows.map((row: any[]) => row[0].text)).toEqual(["t700 00", "t700 10", "t700 20"]);
+    expect(between.text.startsWith("p0 p1")).toBe(true);
+    expect(bottom.rows.map((row: any[]) => row[0].text)).toEqual(["t500 00", "t500 10", "t500 20"]);
+  });
+
   it("detects a booktabs-style table (horizontal rules only) and its header", () => {
     const rules: PdfRuleLine[] = [
       { x1: 50, y1: 715, x2: 400, y2: 715 },
@@ -439,12 +461,22 @@ describe("analyzePdfLayout: performance", () => {
     return { runs, rules };
   }
 
-  it("grows near-linearly with the number of runs", { timeout: 60_000 }, () => {
-    const small = bigPage(100);
-    const large = bigPage(400);
-    // 4× the input: linear ≈ 4×, quadratic ≈ 16×.
-    const ratio = measureGrowth(() => analyzePdfLayout([small]), () => analyzePdfLayout([large]), { limit: 10 });
-    expect(ratio).toBeLessThan(10);
+  it("does near-linear work in the number of runs", () => {
+    const small = bigPage(50);
+    const large = bigPage(200);
+    // Like for like: every section comes out the same at both sizes. 9 rules per section keeps
+    // the page under MAX_RULES (2000); past it, later tables take the unruled path.
+    const counts = (blocks: PdfLayoutBlock[]) => {
+      const out: Record<string, number> = {};
+      for (const block of blocks) out[block.type] = (out[block.type] ?? 0) + 1;
+      return out;
+    };
+    expect(counts(analyzePdfLayout([large]).blocks)).toEqual({ heading: 200, paragraph: 200, list: 200, table: 200 });
+    // Counted, not timed (see arrayVisits): wall-clock ratios of this reached 8–10× on a
+    // loaded machine against the 16× of quadratic work.
+    const ratio = arrayVisits(() => analyzePdfLayout([large])) / arrayVisits(() => analyzePdfLayout([small]));
+    // 4× the input: linear ≈ 4× (measured 4.1×), quadratic ≈ 16×.
+    expect(ratio).toBeLessThan(6);
   });
 
   it("keeps a staircase of cells from exploding into a huge table", { timeout: 30_000 }, () => {
