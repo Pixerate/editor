@@ -437,6 +437,13 @@ export const VECTOR_SCRIPTS: AgentScript[] = [
     ],
   },
   {
+    id: "vector-bevel",
+    prompt: "Bevel the star like a badge",
+    steps: [
+      { say: "A 4-unit bevel round the star, lit from the top left.", ...command("vector.addEffect", { ids: ["star"], type: "bevel", params: { width: 4, lightAngle: -135, shading: 70 } }), target: { selector: '[data-vector-id="star"]' } },
+    ],
+  },
+  {
     id: "vector-symmetry",
     prompt: "Draw a mandala in the sky with live symmetry",
     steps: [

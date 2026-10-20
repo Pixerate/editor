@@ -2583,3 +2583,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: On concave outlines (an L, a star), some side faces of an extrusion were drawn over faces that should cover them.
 - **Root Cause**: Painter's order by each face's midpoint depth is only right when faces don't overlap unevenly. Two faces overlap only over the viewing rays (lines along the extrusion, or rays to the vanishing point) that cross both edges, and their order there can differ from the order of their middles.
 - **Solution / Workaround**: `vectorExtrudeFaces` compares each pair of faces at a ray inside their shared range: the edge further along the ray is in front. It then sorts topologically, using the midpoint order to break ties. The edges of a simple outline don't cross, so the relation has no cycles. It's O(n²) in faces, which is fine for flattened outlines.
+
+### [core/vector] A Bevel's Inset Corners Must Know Which Side Is Inside, Ring By Ring
+
+- **Issue / Symptom**: Holes (a frame, the counter of an "O") were bevelled into the hole, and thin parts had faces poking out the other side.
+- **Root Cause**: A ring's winding alone doesn't say where the inside is: holes may wind either way under `evenodd`. And a mitred inset corner `width` deep can cross the opposite outline wherever the shape is thinner than the bevel.
+- **Solution / Workaround**: `vectorBevelFaces` finds each ring's inside by testing a point just off its longest edge against all rings with the shape's fill rule. It then cuts each corner's inset to half the distance at which it would cross any outline edge.

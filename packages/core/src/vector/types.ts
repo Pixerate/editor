@@ -984,11 +984,12 @@ export type VectorAverageAxis = 'horizontal' | 'vertical' | 'both';
  * `puckerBloat`, `twist`, `zigzag`, `wiggle` (Wiggle Paths), `offset` (Offset Paths), `merge`
  * (Merge Paths), `repeater`, `envelope` (an envelope distortion: a warp preset or a mesh),
  * `contour` (CorelDRAW's Contour: concentric offset steps blending toward end colours) and
- * `blockShadow` (CorelDRAW's Block Shadow: the shape swept along a direction, under it) and
- * `extrude` (CorelDRAW's Extrude: shaded side faces drawing the shape as a solid).
+ * `blockShadow` (CorelDRAW's Block Shadow: the shape swept along a direction, under it),
+ * `extrude` (CorelDRAW's Extrude: shaded side faces drawing the shape as a solid) and `bevel`
+ * (CorelDRAW's Bevel: a shaded chiselled edge inside the shape).
  */
-export type VectorEffectType = 'trim' | 'roundCorners' | 'puckerBloat' | 'twist' | 'zigzag' | 'wiggle' | 'offset' | 'merge' | 'repeater' | 'envelope' | 'contour' | 'blockShadow' | 'extrude';
-export const VECTOR_EFFECT_TYPES: readonly VectorEffectType[] = ['trim', 'roundCorners', 'puckerBloat', 'twist', 'zigzag', 'wiggle', 'offset', 'merge', 'repeater', 'envelope', 'contour', 'blockShadow', 'extrude'];
+export type VectorEffectType = 'trim' | 'roundCorners' | 'puckerBloat' | 'twist' | 'zigzag' | 'wiggle' | 'offset' | 'merge' | 'repeater' | 'envelope' | 'contour' | 'blockShadow' | 'extrude' | 'bevel';
+export const VECTOR_EFFECT_TYPES: readonly VectorEffectType[] = ['trim', 'roundCorners', 'puckerBloat', 'twist', 'zigzag', 'wiggle', 'offset', 'merge', 'repeater', 'envelope', 'contour', 'blockShadow', 'extrude', 'bevel'];
 
 /** Warp presets (Photoshop's fifteen, in menu order); shared with the image editor (`src/geom`). */
 export type VectorWarpStyle = WarpStyle;
@@ -1126,6 +1127,18 @@ export interface VectorEffectParamsMap {
 		color: string | null;
 		lightAngle: number;
 		shading: number;
+	};
+	/**
+	 * Bevel (CorelDRAW's Bevel): a chiselled edge `width` wide inside each shape, one face per
+	 * edge, each lightened or darkened by `shading` percent as it faces toward or away from a
+	 * light coming from `lightAngle` degrees, in `color` (null: the shape's own paint as one
+	 * colour). The middle stays flat in the shape's own paint.
+	 */
+	bevel: {
+		width: number;
+		lightAngle: number;
+		shading: number;
+		color: string | null;
 	};
 	/**
 	 * Envelope distortion: the paths above it are mapped from their combined bounds through a warp
