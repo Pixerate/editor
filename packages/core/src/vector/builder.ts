@@ -68,7 +68,7 @@ export function vectorPathEntries(doc: VectorDocument, roots: readonly string[] 
 		if (node.type === 'group') {
 			const m = multiplyMatrices(nodeMatrix(node), parent);
 			for (const c of node.children) visit(c, m, picked);
-		} else if (picked) out.push({ node, parent });
+		} else if (picked && node.type === 'path') out.push({ node, parent });
 	};
 	for (const n of doc.nodes) visit(n, IDENTITY_MATRIX, false);
 	return out;

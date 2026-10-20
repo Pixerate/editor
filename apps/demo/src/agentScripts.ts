@@ -325,6 +325,26 @@ export const VECTOR_SCRIPTS: AgentScript[] = [
       { ...commandWith("vector.setMaskOptions", (r) => ({ ids: [r("clip").id], type: "luminance" })), target: artboardBox(716, 306, 60, 60) },
     ],
   },
+  {
+    id: "vector-text",
+    prompt: "Add a title and a curved caption",
+    steps: [
+      { say: "Checking which fonts the shaper has.", ...command("vector.listFonts") },
+      {
+        say: "A bold title, centred over the card.",
+        ...command("vector.addText", { text: "Hello, hills", x: 190, y: 250, font: { fontFamily: "sans-serif", fontWeight: 700, fontSize: 36 }, paragraph: { align: "center" }, fill: "#0f172a", name: "Title" }),
+        as: "title",
+        target: artboardBox(80, 215, 220, 45),
+      },
+      { say: "Colouring the second word.", ...commandWith("vector.setTextStyle", (r) => ({ id: r("title").id, start: 7, end: 12, fill: "#16a34a" })), target: artboardBox(80, 215, 220, 45) },
+      { say: "An arc for the caption to follow…", ...command("vector.addPath", { d: "M440 470 C520 400 640 400 720 470", name: "Caption path" }), as: "arc", target: artboardBox(440, 400, 280, 70) },
+      {
+        say: "…and the caption set along it, centred.",
+        ...commandWith("vector.typeOnPath", (r) => ({ pathId: r("arc").id, text: "rolling green since forever", font: { fontSize: 18, italic: true }, paragraph: { align: "center" }, fill: "#14532d" })),
+        target: artboardBox(440, 400, 280, 70),
+      },
+    ],
+  },
 ];
 
 export const ANIMATION_SCRIPTS: AgentScript[] = [

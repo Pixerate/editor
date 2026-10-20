@@ -21,6 +21,30 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/text] `r.pos += r.u16()` Reads the Old Position Before the Call Advances It
+
+- **Issue / Symptom**: The OpenType reader drew garbage glyph outlines (points shifted and mixed on and off curve) for a valid TrueType font.
+- **Root Cause**: In `x += f()` JavaScript reads `x` before calling `f`, so `r.pos += r.u16()` added the instruction length to the position from before the two-byte length was read, landing two bytes short.
+- **Solution / Workaround**: Read into a local first (`const n = r.u16(); r.pos += n;`). Watch for the same pattern with any reader whose methods move a cursor.
+
+### [core/vector] Text Lays Out with One Page-Wide Shaper, and Caches Key on It
+
+- **Issue / Symptom**: After loading fonts (`setTextShaper`), text kept its old glyphs: expanded appearance, bounds and outlines were cached per node object, and the node objects had not changed.
+- **Root Cause**: Geometry helpers (`vectorNodeBounds`, `expandVectorAppearance`, hit-testing) are pure functions of the node, with no editor to ask for fonts, so text reaches its shaper through a module-level setting (`setVectorTextShaper`). Every cache keyed only by node object went stale when it changed.
+- **Solution / Workaround**: `setVectorTextShaper` bumps a generation that the appearance caches (`shapeCache`, `outlineCache`, `expandCache`) and the text caches store with each entry, and `controller.setTextShaper` also gives every text node a new object so views keyed on the document draw again. The shaper is shared by every vector editor on the page: set it once, before documents load where possible. Web fonts must be loaded before the Canvas shaper measures them, or the fallback's widths are cached.
+
+### [core/vector] Text Without Glyph Outlines Draws as SVG Text but Has Box Geometry
+
+- **Issue / Symptom**: With the browser's (Canvas 2D) shaper, path effects and envelopes on text did nothing visible, and hit-testing, snapping and bounds used rectangles rather than letter shapes.
+- **Root Cause**: Canvas 2D measures and draws text but cannot give glyph outlines. Without outlines, text renders as SVG `<text>` (placed character by character from our layout, so it matches the measurements), and its geometry is a box per line fragment (a box per character on a path).
+- **Solution / Workaround**: Effects need geometry to act on, so `vectorAppearanceShapes` skips a text node's effects while it has no outlines (they stay stored and apply as soon as an outline shaper is set). Create Outlines refuses with the reason. Hosts that need effects on text or font-independent SVG load font files (`loadOpenTypeFont`) into `createOutlineTextShaper`; the demo's "Load fonts…" button does this.
+
+### [react|svelte/vector] The Hidden Textarea Must Not Forward Printable Keys, and Must Stop Its Events
+
+- **Issue / Symptom**: Typing "v" into text switched to the Select tool, and typed characters were inserted twice.
+- **Root Cause**: The canvas `<svg>` handles tool shortcuts on `keydown`, and the textarea sits inside it, so its key events bubbled to the canvas; forwarding every key to `controller.keyDown` also inserted characters that the textarea's `input` event delivers again.
+- **Solution / Workaround**: The textarea stops propagation of its key and clipboard events, lets printable keys (no Cmd / Ctrl) through to the browser so they arrive as `input` (and as `compositionend` for IME), and forwards only editing keys and shortcuts to `controller.keyDown`, whose text mode handles them (and swallows other Mod shortcuts while editing). Keys typed while the canvas itself has focus are inserted by the controller.
+
 ### [core/video-editor] A Frame Cache Keyed by Clip Is Thrown Away by Every Edit
 
 - **Issue / Symptom**: Keyed by clip and timeline frame, as a sequencer's final-frame cache is, every trim, slip or move invalidated frames whose pictures had not changed. Two clips cut from one shot each decoded it again.

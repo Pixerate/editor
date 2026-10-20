@@ -27,3 +27,9 @@ export * from './distort.js';
 export * from './paintLayers.js';
 export * from './filters.js';
 export * from './mask.js';
+export * from './text.js';
+export * from './textPanel.js';
+// Fonts for text: the shapers and font reader shared with the image editor.
+export { createCanvasTextShaper, createMetricTextShaper, createOutlineTextShaper, cssFontFamily, type CanvasTextShaperOptions, type OutlineFontEntry, type OutlineFontFace, type OutlinePathCommand } from '../text/shapers.js';
+export { loadOpenTypeFont, parseOpenTypeFont, type OpenTypeFont } from '../text/opentype.js';
+export type { TextFont, TextShaper } from '../text/types.js';

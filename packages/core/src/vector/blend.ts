@@ -43,6 +43,7 @@ import {
 	type AffineMatrix
 } from './geometry.js';
 import { reverseWidthProfile, widthProfileAt } from './width.js';
+import { expandVectorAppearance } from './appearance.js';
 import type { Vec2, VectorAnchor, VectorBounds, VectorGradient, VectorGradientStop, VectorGroupNode, VectorNode, VectorPaint, VectorPathNode, VectorStyle, VectorSubpath, VectorWidthPoint } from './types.js';
 
 // ---------------------------------------------------------------------------
@@ -895,6 +896,8 @@ function preparePathMorph(
 function flattenPaths(node: VectorNode, parent: AffineMatrix = IDENTITY_MATRIX): { path: VectorPathNode; m: AffineMatrix; opacity: number }[] {
 	const m = multiplyMatrices(nodeMatrix(node), parent);
 	if (node.type === 'path') return [{ path: node, m, opacity: 1 }];
+	// Text blends as its glyphs.
+	if (node.type === 'text') return flattenPaths(expandVectorAppearance(node), parent);
 	const o = node.opacity ?? 1;
 	return node.children
 		.filter((c) => c.visible !== false)

@@ -439,7 +439,104 @@ export interface VectorGroupNode extends VectorNodeBase {
 	mask?: VectorMask | null;
 }
 
-export type VectorNode = VectorPathNode | VectorGroupNode;
+/**
+ * The character style of text (a font and how it is set). Sizes are document units; `tracking` is in
+ * 1/1000 em. Paint comes from the node's fills and strokes (and a run's own `fill`).
+ */
+export interface VectorCharacterStyle {
+	/** Family name ("Inter"); a family the shaper lacks draws in a fallback and is listed as missing. */
+	fontFamily: string;
+	/** CSS weight, 1–1000 (400 regular, 700 bold). */
+	fontWeight: number;
+	/** Default false. */
+	italic?: boolean;
+	fontSize: number;
+	/** Letter spacing in 1/1000 em (default 0). */
+	tracking?: number;
+	/** Baseline-to-baseline distance; absent: auto (`autoLeading` × size). */
+	leading?: number;
+	/** Raises (positive) or lowers the text (default 0). */
+	baselineShift?: number;
+	underline?: boolean;
+	strikethrough?: boolean;
+}
+
+/** Character style fields a run can set over the node's own style, plus its own fill. */
+export type VectorTextRunStyle = Partial<VectorCharacterStyle> & {
+	/** The run's fill: replaces the paint of the node's top fill for these characters. */
+	fill?: VectorPaint;
+};
+
+/** A style over `length` UTF-16 code units of the text, in order. */
+export interface VectorTextRun {
+	length: number;
+	style: VectorTextRunStyle;
+}
+
+export type VectorTextAlign = 'left' | 'center' | 'right' | 'justify';
+export const VECTOR_TEXT_ALIGNS: readonly VectorTextAlign[] = ['left', 'center', 'right', 'justify'];
+
+/** Paragraph settings of a text node (all its paragraphs). Lengths in document units. */
+export interface VectorParagraphStyle {
+	/** Default `left`. `justify` stretches every line of area text but a paragraph's last; on a path it spreads the text over the path. */
+	align?: VectorTextAlign;
+	/** Auto leading as a multiple of the font size (default 1.2). */
+	autoLeading?: number;
+	firstLineIndent?: number;
+	startIndent?: number;
+	endIndent?: number;
+	spaceBefore?: number;
+	spaceAfter?: number;
+}
+
+/** Where text on a path sits across the path: its baseline, ascender, descender or centre on the line. */
+export type VectorPathTextBaseline = 'baseline' | 'ascender' | 'descender' | 'center';
+export const VECTOR_PATH_TEXT_BASELINES: readonly VectorPathTextBaseline[] = ['baseline', 'ascender', 'descender', 'center'];
+
+/**
+ * Where a text node's text goes, in the node's own space:
+ * - `point`: one line per paragraph, the first baseline starting at (`x`, `y`);
+ * - `area`: lines wrapped inside the box at (`x`, `y`) of `width` × `height` (lines that do not fit
+ *   are hidden: the text overflows);
+ * - `path`: one line set along `path` (paragraph breaks become spaces), from `start` to `end`
+ *   (distances from the path's ends), turned with the path (`orientation: 'rotate'`) or upright.
+ *   `flip` runs the text the other way, on the other side.
+ */
+export type VectorTextFrame =
+	| { kind: 'point'; x: number; y: number }
+	| { kind: 'area'; x: number; y: number; width: number; height: number }
+	| {
+			kind: 'path';
+			path: VectorSubpath;
+			/** Margin from the path's start (default 0). */
+			start?: number;
+			/** Margin from the path's end (default 0). */
+			end?: number;
+			flip?: boolean;
+			/** Default `rotate`. */
+			orientation?: 'rotate' | 'upright';
+			/** Default `baseline`. */
+			baseline?: VectorPathTextBaseline;
+	  };
+
+/**
+ * Text: a string with a character style, optional styled runs and a paragraph style, set in a
+ * frame. It paints with the node's fills and strokes like a path. Layout and glyphs come from the
+ * editor's text shaper (`setVectorTextShaper`); with an outline shaper the text draws as glyph
+ * outlines (so path effects, envelopes, booleans and Create Outlines work), otherwise as SVG text.
+ */
+export interface VectorTextNode extends VectorNodeBase, VectorStyle {
+	type: 'text';
+	text: string;
+	/** The base character style. */
+	font: VectorCharacterStyle;
+	/** Runs over the text, each overriding some fields of `font` (absent: one style throughout). */
+	runs?: VectorTextRun[] | null;
+	paragraph?: VectorParagraphStyle | null;
+	frame: VectorTextFrame;
+}
+
+export type VectorNode = VectorPathNode | VectorGroupNode | VectorTextNode;
 
 /** A vector drawing: an artboard and its nodes, bottom to top. */
 export interface VectorDocument {
@@ -478,7 +575,8 @@ export interface VectorHandleRef extends VectorAnchorRef {
  * fills the region the visible outlines enclose around a click with a new shape. `blend`
  * blends the shape clicked first into the one clicked next (clicking an anchor of a closed path
  * starts the blend there). `envelope` edits the mesh of the selection's envelope: drag its
- * anchors and handles, or inside a patch to pull the surface.
+ * anchors and handles, or inside a patch to pull the surface. `type` adds point text (click) or
+ * area text (drag) and edits text it clicks; `typePath` sets text along the path it clicks.
  */
 export type VectorTool =
 	| 'select'
@@ -498,7 +596,9 @@ export type VectorTool =
 	| 'paintBucket'
 	| 'blend'
 	| 'gradient'
-	| 'envelope';
+	| 'envelope'
+	| 'type'
+	| 'typePath';
 
 export const VECTOR_TOOLS: readonly VectorTool[] = [
 	'select',
@@ -518,7 +618,9 @@ export const VECTOR_TOOLS: readonly VectorTool[] = [
 	'paintBucket',
 	'blend',
 	'gradient',
-	'envelope'
+	'envelope',
+	'type',
+	'typePath'
 ];
 
 /** Keyboard modifiers held during a pointer event. */

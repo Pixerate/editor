@@ -1082,3 +1082,40 @@ describe("masks (svelte)", () => {
     expect(c.getState().document.nodes.map((n) => n.id)).toEqual(["a", "m", "b"]);
   });
 });
+
+describe("text (svelte)", () => {
+  it("types into new text through the hidden textarea, draws it as SVG text, and styles it from the panel", async () => {
+    const c = new VectorEditorController({ document: { width: 400, height: 300, nodes: [] }, createId: () => `t${++n}` });
+    c.setTool("type");
+    const t = render(VectorCanvas, { controller: c, fitOnMount: false });
+    const panel = render(VectorStylePanel, { controller: c });
+    const svg = t.querySelector("svg")!;
+    pointer(svg, "pointerdown", 40, 60);
+    pointer(svg, "pointerup", 40, 60);
+    const input = t.querySelector<HTMLTextAreaElement>('[data-testid="vector-type-input"]')!;
+    expect(input).not.toBeNull();
+    input.value = "Hi";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    flushSync();
+    const id = c.getState().textEdit!.nodeId;
+    expect((c.getNode(id) as any).text).toBe("Hi");
+    expect(t.querySelector("[data-vector-text-caret]")).not.toBeNull();
+    key(input, "Backspace");
+    expect((c.getNode(id) as any).text).toBe("H");
+    expect(key(input, "v").defaultPrevented).toBe(false);
+    expect(c.getState().tool).toBe("type");
+    input.value = "ey";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    flushSync();
+    expect(t.querySelector(`[data-vector-scene] [data-vector-id="${id}"] tspan`)?.textContent).toBe("Hey");
+    key(input, "Escape");
+    expect(c.getState().textEdit).toBeNull();
+    expect(t.querySelector('[data-testid="vector-type-input"]')).toBeNull();
+    click(panel.querySelector('[data-vector-text-panel] button[aria-label="Bold"]'));
+    expect((c.getNode(id) as any).font.fontWeight).toBe(700);
+    click(panel.querySelector('[data-vector-text-panel] button[aria-label="Align Centre"]'));
+    expect((c.getNode(id) as any).paragraph).toEqual({ align: "center" });
+    c.undo();
+    expect((c.getNode(id) as any).paragraph).toBeUndefined();
+  });
+});

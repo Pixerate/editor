@@ -1,6 +1,7 @@
 import type { CommandSpec } from '../commands/registry.js';
 import type { VectorEditorController, VectorShapeInput } from './controller.js';
 import { vectorNodeBounds, vectorNodeRotation, vectorParentMatrix, vectorPathData, IDENTITY_MATRIX } from './geometry.js';
+import type { VectorTextNode } from './types.js';
 import type { VectorAlign, VectorAnchorRef, VectorArrange, VectorAverageAxis, VectorBooleanOperation, VectorCornerKind, VectorNode, VectorPathfinderOperation, VectorStyle, VectorTool } from './types.js';
 import { VECTOR_ARROWHEADS, VECTOR_CORNER_KINDS, VECTOR_EFFECT_TYPES, VECTOR_PATHFINDER_OPERATIONS, VECTOR_TOOLS, type VectorEffect, type VectorEffectType, type VectorWidthPoint } from './types.js';
 import { VECTOR_WIDTH_PRESET_IDS, type VectorTaperOptions, type VectorWaveOptions, type VectorWidthPreset } from './width.js';
@@ -12,6 +13,7 @@ import { vectorFilterParamKeys } from './filters.js';
 import { VECTOR_BLEND_MODES, VECTOR_FILTER_TYPES, type VectorBlendMode, type VectorFilter, type VectorFilterType, type VectorPaint, type VectorPaintLayer, type VectorStrokeLayer } from './types.js';
 import { isValidVectorMesh, VECTOR_WARP_STYLES } from './warp.js';
 import { isVectorMaskGroup, vectorMaskSummary, type VectorMaskSummary } from './mask.js';
+import { layoutVectorText, vectorTextFamilies, vectorTextHasOutlines } from './text.js';
 import type { VectorMaskType } from './types.js';
 import type { VectorEnvelopeParams } from './appearance.js';
 
@@ -27,7 +29,7 @@ export interface VectorCommandOptions {
 /** A node as listed for agents. */
 export interface VectorNodeListing {
 	id: string;
-	type: 'path' | 'group';
+	type: 'path' | 'group' | 'text';
 	name?: string;
 	depth: number;
 	/** Axis-aligned bounds in document units. */
@@ -42,6 +44,9 @@ export interface VectorNodeListing {
 	strokeWidth?: number;
 	/** SVG path data (paths only). */
 	d?: string;
+	/** A text node's text and frame kind (`point`, `area` or `path`); `vector.getText` has the rest. */
+	text?: string;
+	frame?: 'point' | 'area' | 'path';
 	children?: number;
 	/** A blend group's options (its steps are listed as children with `blendStep`). */
 	blend?: { spacing: string; steps: number; distance: number; orientToSpine: boolean; linear: boolean; spine: boolean; keys: string[] };
@@ -273,7 +278,9 @@ export function createVectorCommands(controller: VectorEditorController, options
 					selected: state.selection.includes(n.id),
 					...(n.type === 'path'
 						? { fill: n.fill ?? null, stroke: n.stroke ?? null, strokeWidth: n.strokeWidth ?? 1, d: vectorPathData(n, 2) }
-						: { children: n.children.length }),
+						: n.type === 'text'
+							? { fill: n.fill ?? null, stroke: n.stroke ?? null, strokeWidth: n.strokeWidth ?? 1, text: n.text, frame: n.frame.kind }
+							: { children: n.children.length }),
 					...(n.type === 'group' && n.blend
 						? { blend: { ...resolveVectorBlendOptions(n.blend), spine: !!n.blend.spine, keys: vectorBlendKeys(n).map((k) => k.id) } }
 						: {}),
@@ -281,8 +288,8 @@ export function createVectorCommands(controller: VectorEditorController, options
 					...(n.effects?.length ? { effects: n.effects } : {}),
 					...(n.type === 'group' && n.liveBoolean ? { liveBoolean: n.liveBoolean } : {}),
 					...(n.booleanOperation ? { booleanOperation: n.booleanOperation } : {}),
-					...(n.type === 'path' && Array.isArray(n.fills) ? { fills: n.fills } : {}),
-					...(n.type === 'path' && Array.isArray(n.strokes) ? { strokes: n.strokes } : {}),
+					...(n.type !== 'group' && Array.isArray(n.fills) ? { fills: n.fills } : {}),
+					...(n.type !== 'group' && Array.isArray(n.strokes) ? { strokes: n.strokes } : {}),
 					...(n.blendMode && n.blendMode !== 'normal' ? { blendMode: n.blendMode } : {}),
 					...(n.filters?.length ? { filters: n.filters } : {}),
 					...(isVectorMaskGroup(n) ? { mask: vectorMaskSummary(n)! } : {})
@@ -323,7 +330,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 	};
 	const pathsUnder = (list: readonly string[]) => {
 		const out: string[] = [];
-		const walk = (n: VectorNode) => (n.type === 'path' ? out.push(n.id) : n.children.forEach(walk));
+		const walk = (n: VectorNode) => (n.type !== 'group' ? out.push(n.id) : n.children.forEach(walk));
 		for (const id of list) walk(controller.getNode(id)!);
 		return out;
 	};
@@ -676,6 +683,286 @@ export function createVectorCommands(controller: VectorEditorController, options
 		}
 	];
 
+
+	// --- Text ----------------------------------------------------------------
+	const round = (n: number) => Math.round(n * 100) / 100;
+	/** A text node as agents read it: text, styles as ranges, frame, laid-out lines and bounds. */
+	const textSummary = (id: string) => {
+		const n = controller.getNode(id) ?? fail(`There is no node "${id}".`);
+		if (n.type !== 'text') fail(`"${id}" is a ${n.type}, not text; vector.list shows each node's type.`);
+		const t = n as VectorTextNode;
+		const layout = layoutVectorText(t);
+		const parent = vectorParentMatrix(controller.getDocument().nodes, id) ?? IDENTITY_MATRIX;
+		const b = vectorNodeBounds(t, parent);
+		let at = 0;
+		const runs = (t.runs ?? []).flatMap((r) => {
+			const range = { start: at, end: at + r.length };
+			at += r.length;
+			return Object.keys(r.style).length ? [{ ...range, style: r.style }] : [];
+		});
+		return {
+			id,
+			text: t.text,
+			font: t.font,
+			runs,
+			paragraph: t.paragraph ?? {},
+			frame: t.frame,
+			fill: t.fill ?? null,
+			stroke: t.stroke ?? null,
+			lines: layout.lines.map((l) => ({ start: l.start, end: l.end, text: t.text.slice(l.start, l.end) })),
+			bounds: b && { x: round(b.x), y: round(b.y), width: round(b.width), height: round(b.height) },
+			overflow: layout.overflow,
+			outlines: vectorTextHasOutlines(),
+			shaper: layout.shaper,
+			missingFonts: layout.missingFonts
+		};
+	};
+	const FONT_PROPS = {
+		fontFamily: { type: 'string', description: 'Font family name ("Inter", "serif"). A family the text shaper lacks draws in a fallback and is listed in missingFonts (vector.listFonts shows what it has).' },
+		fontWeight: { type: 'integer', minimum: 1, maximum: 1000, description: 'CSS weight: 400 regular, 700 bold.' },
+		italic: { type: 'boolean', description: 'Italic (default false).' },
+		fontSize: { type: 'number', minimum: 0.5, maximum: 5000, description: 'Size in document units (default 24).' },
+		tracking: { type: ['number', 'null'], minimum: -1000, maximum: 10000, description: 'Letter spacing in 1/1000 em (0 default; null clears).' },
+		leading: { type: ['number', 'null'], minimum: 0, maximum: 10000, description: 'Baseline-to-baseline distance in document units; null for auto (autoLeading × size).' },
+		baselineShift: { type: ['number', 'null'], minimum: -5000, maximum: 5000, description: 'Raises (positive) or lowers the text, document units (0 default).' },
+		underline: { type: 'boolean', description: 'Underline.' },
+		strikethrough: { type: 'boolean', description: 'Strike through.' }
+	} as const;
+	const PARAGRAPH_PROPS = {
+		align: { type: 'string', enum: ['left', 'center', 'right', 'justify'], description: 'Alignment (default left). justify stretches area text lines but the last of a paragraph, and spreads path text over the path.' },
+		autoLeading: { type: ['number', 'null'], minimum: 0.1, maximum: 10, description: 'Auto leading as a multiple of the font size (default 1.2).' },
+		firstLineIndent: { type: ['number', 'null'], description: 'Extra indent of each paragraph\'s first line, document units.' },
+		startIndent: { type: ['number', 'null'], description: 'Indent from the start edge, document units.' },
+		endIndent: { type: ['number', 'null'], description: 'Indent from the end edge, document units.' },
+		spaceBefore: { type: ['number', 'null'], description: 'Space above each paragraph but the first, document units.' },
+		spaceAfter: { type: ['number', 'null'], description: 'Space below each paragraph, document units.' }
+	} as const;
+	const PATH_TEXT_PROPS = {
+		start: { type: 'number', minimum: 0, description: 'Margin from the path\'s start where the text may begin (default 0).' },
+		end: { type: 'number', minimum: 0, description: 'Margin from the path\'s end (default 0).' },
+		flip: { type: 'boolean', description: 'Run the text the other way along the path, on its other side.' },
+		orientation: { type: 'string', enum: ['rotate', 'upright'], description: 'rotate (default): characters turn with the path; upright: they stay level.' },
+		baseline: { type: 'string', enum: ['baseline', 'ascender', 'descender', 'center'], description: 'What sits on the path (default baseline; ascender hangs the text below it).' }
+	} as const;
+	const RANGE_PROPS = {
+		start: { type: 'integer', minimum: 0, description: 'Start of the range in UTF-16 code units (default 0; vector.getText gives the text and its runs).' },
+		end: { type: 'integer', minimum: 0, description: 'End of the range, exclusive (default the text\'s length).' }
+	} as const;
+	const pick = (params: Record<string, unknown>, keys: readonly string[]) => {
+		const out: Record<string, unknown> = {};
+		for (const k of keys) if (params[k] !== undefined) out[k] = params[k];
+		return out;
+	};
+	const textCommands = (): CommandSpec[] => [
+		{
+			...base,
+			id: `${prefix}listFonts`,
+			label: 'List Fonts',
+			readOnly: true,
+			keywords: ['font', 'typeface', 'family', 'text'],
+			description:
+				'Lists the font families the text shaper can draw, which shaper it is, and whether it gives glyph outlines (needed for Create Outlines, and for path effects and envelopes on text). Returns { shaper, outlines, families }.',
+			params: { type: 'object', properties: {}, additionalProperties: false },
+			run: () => ({ shaper: controller.getTextShaper().id, outlines: vectorTextHasOutlines(), families: vectorTextFamilies() })
+		},
+		{
+			...base,
+			id: `${prefix}addText`,
+			label: 'Add Text…',
+			keywords: ['text', 'type', 'label', 'title', 'headline', 'caption', 'paragraph', 'words'],
+			description:
+				'Adds text: point text whose first baseline starts at (x, y), area text wrapped in a box (x, y, width, height), or text along `path` (SVG path data, document units). Paragraphs are separated by "\\n". Paint defaults to black with no stroke; style it with fill / stroke here or vector.setStyle. One undo step. Returns vector.getText\'s summary of the new text (id, lines, bounds, overflow).',
+			params: {
+				type: 'object',
+				properties: {
+					text: { type: 'string', description: 'The text; "\\n" starts a new paragraph.' },
+					x: { type: 'number', description: 'Point text: x of the first baseline\'s start; area text: the box\'s left (default 0).' },
+					y: { type: 'number', description: 'Point text: y of the first baseline; area text: the box\'s top (default 0).' },
+					width: { type: 'number', minimum: 0, description: 'Area text: the box width (with height).' },
+					height: { type: 'number', minimum: 0, description: 'Area text: the box height; lines below it are hidden (overflow).' },
+					path: { type: 'string', description: 'Text on a path: SVG path data of the line the text follows (its first subpath).' },
+					...PATH_TEXT_PROPS,
+					font: { type: 'object', properties: FONT_PROPS, additionalProperties: false, description: 'Character style (default the editor\'s text defaults: 24 sans-serif).' },
+					paragraph: { type: 'object', properties: PARAGRAPH_PROPS, additionalProperties: false, description: 'Paragraph style.' },
+					name: { type: 'string', description: 'Layer name (default the text\'s start).' },
+					fill: PAINT,
+					stroke: PAINT,
+					strokeWidth: { type: 'number', minimum: 0, description: 'Stroke width (default 1).' }
+				},
+				required: ['text'],
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: Record<string, unknown> & { text: string }) => {
+				const pathOptions = pick(params, Object.keys(PATH_TEXT_PROPS));
+				if (params.path === undefined && Object.keys(pathOptions).length) fail(`${Object.keys(pathOptions).join(', ')} only apply to text on a path; pass path too.`);
+				if ((params.width === undefined) !== (params.height === undefined)) fail('Area text needs both width and height; leave both out for point text.');
+				let id = '';
+				try {
+					id = controller.addText({
+						text: params.text,
+						...pick(params, ['x', 'y', 'width', 'height', 'name', 'strokeWidth']),
+						...(params.path !== undefined ? { path: params.path as string, pathOptions } : {}),
+						...(params.font ? { font: params.font as Record<string, unknown> } : {}),
+						...(params.paragraph ? { paragraph: params.paragraph as Record<string, unknown> } : {}),
+						...(params.fill !== undefined ? { fill: checkPaint(params.fill, 'fill') } : {}),
+						...(params.stroke !== undefined ? { stroke: checkPaint(params.stroke, 'stroke') } : {})
+					});
+				} catch (e) {
+					fail(e instanceof Error ? e.message : String(e));
+				}
+				return textSummary(id);
+			}
+		},
+		{
+			...base,
+			id: `${prefix}getText`,
+			label: 'Get Text',
+			readOnly: true,
+			keywords: ['text', 'type', 'read', 'font', 'runs'],
+			description:
+				'Reads a text node: its text, base font, runs (styled ranges as { start, end, style } in UTF-16 code units; style fields override the font, fill a range\'s colour), paragraph style, frame (point / area / path), fill and stroke, the laid-out lines (start, end, text), document bounds, overflow (text that does not fit its box or path), whether it draws as outlines, the shaper and missing fonts. Use the ranges with vector.setText and vector.setTextStyle.',
+			params: { type: 'object', properties: { id: { type: 'string', description: 'Text node id (from vector.list).' } }, required: ['id'], additionalProperties: false },
+			run: (_ctx: unknown, params: { id: string }) => textSummary(params.id)
+		},
+		{
+			...base,
+			id: `${prefix}setText`,
+			label: 'Set Text…',
+			keywords: ['text', 'type', 'edit', 'replace', 'insert', 'delete'],
+			description:
+				'Replaces [start, end) of a text node\'s text with `text` (default the whole text; start = end inserts). Inserted characters take the style of the character before them. One undo step. Returns the text summary (vector.getText).',
+			params: {
+				type: 'object',
+				properties: { id: { type: 'string', description: 'Text node id.' }, text: { type: 'string', description: 'The new characters ("" deletes the range).' }, ...RANGE_PROPS },
+				required: ['id', 'text'],
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: { id: string; text: string; start?: number; end?: number }) => {
+				check(controller.setText(params.id, params.text, { start: params.start, end: params.end }));
+				return textSummary(params.id);
+			}
+		},
+		{
+			...base,
+			id: `${prefix}setTextStyle`,
+			label: 'Character Style…',
+			keywords: ['font', 'bold', 'italic', 'size', 'tracking', 'kerning', 'leading', 'underline', 'colour', 'color', 'text'],
+			description:
+				'Sets character style fields (and `fill`, a colour or gradient for those characters) over [start, end) of a text node; the whole text (the default) changes the node\'s own font and fill. null clears tracking, leading and baseline shift. One undo step. Returns the text summary with its runs.',
+			params: {
+				type: 'object',
+				properties: { id: { type: 'string', description: 'Text node id.' }, ...RANGE_PROPS, ...FONT_PROPS, fill: { ...PAINT, description: 'Paint of these characters (the whole text: the node\'s fill).' } },
+				required: ['id'],
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: Record<string, unknown> & { id: string; start?: number; end?: number }) => {
+				const patch = pick(params, [...Object.keys(FONT_PROPS), 'fill']);
+				if (!Object.keys(patch).length) fail(`Pass at least one of ${[...Object.keys(FONT_PROPS), 'fill'].join(', ')}.`);
+				if (patch.fill !== undefined) patch.fill = checkPaint(patch.fill, 'fill');
+				check(controller.setTextStyle(params.id, patch, { start: params.start, end: params.end }));
+				return textSummary(params.id);
+			}
+		},
+		{
+			...base,
+			id: `${prefix}setParagraphStyle`,
+			label: 'Paragraph Style…',
+			keywords: ['align', 'centre', 'center', 'justify', 'indent', 'spacing', 'leading', 'paragraph'],
+			description: 'Sets paragraph fields of a text node (all its paragraphs): align, autoLeading, indents and spacing; null clears one. One undo step. Returns the text summary.',
+			params: { type: 'object', properties: { id: { type: 'string', description: 'Text node id.' }, ...PARAGRAPH_PROPS }, required: ['id'], additionalProperties: false },
+			undoable: true,
+			run: (_ctx: unknown, params: Record<string, unknown> & { id: string }) => {
+				const patch = pick(params, Object.keys(PARAGRAPH_PROPS));
+				if (!Object.keys(patch).length) fail(`Pass at least one of ${Object.keys(PARAGRAPH_PROPS).join(', ')}.`);
+				check(controller.setParagraphStyle(params.id, patch));
+				return textSummary(params.id);
+			}
+		},
+		{
+			...base,
+			id: `${prefix}setTextFrame`,
+			label: 'Text Frame…',
+			keywords: ['point text', 'area text', 'text box', 'wrap', 'resize text', 'path text', 'convert'],
+			description:
+				'Changes how a text node is set: kind point (no wrapping; x, y the first baseline), area (wrapped in a box; width / height default to its current size) or path (with `path` data in the node\'s own space, or the current path), plus the path options. Omitting kind keeps the current one and edits its fields. One undo step. Returns the text summary.',
+			params: {
+				type: 'object',
+				properties: {
+					id: { type: 'string', description: 'Text node id.' },
+					kind: { type: 'string', enum: ['point', 'area', 'path'], description: 'The frame to switch to (default: keep).' },
+					x: { type: 'number', description: 'Point: the first baseline\'s start; area: the box\'s left.' },
+					y: { type: 'number', description: 'Point: the first baseline; area: the box\'s top.' },
+					width: { type: 'number', minimum: 0, description: 'Area: box width.' },
+					height: { type: 'number', minimum: 0, description: 'Area: box height.' },
+					path: { type: 'string', description: 'Path: SVG path data of the line to follow, in the node\'s own space.' },
+					...PATH_TEXT_PROPS
+				},
+				required: ['id'],
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: Record<string, unknown> & { id: string }) => {
+				const { id, ...patch } = params;
+				if (!Object.keys(patch).length) fail('Pass kind or a frame field to change.');
+				check(controller.setTextFrame(id, patch));
+				return textSummary(id);
+			}
+		},
+		{
+			...base,
+			id: `${prefix}typeOnPath`,
+			label: 'Type on a Path',
+			keywords: ['text on path', 'path text', 'curved text', 'circle text', 'text along'],
+			description:
+				'Turns a path node into text set along it (Type on a Path): the text takes the path\'s place and its first subpath (the path\'s paint is dropped; the text is black unless fill is given). One undo step. Returns the text summary (its id is new).',
+			params: {
+				type: 'object',
+				properties: {
+					pathId: { type: 'string', description: 'The path node to set text along (from vector.list).' },
+					text: { type: 'string', description: 'The text (default empty).' },
+					font: { type: 'object', properties: FONT_PROPS, additionalProperties: false, description: 'Character style (default the text defaults).' },
+					paragraph: { type: 'object', properties: PARAGRAPH_PROPS, additionalProperties: false, description: 'Paragraph style; align places the text along the path.' },
+					...PATH_TEXT_PROPS,
+					fill: PAINT
+				},
+				required: ['pathId'],
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: Record<string, unknown> & { pathId: string }) => {
+				const r = controller.typeOnPath(params.pathId, {
+					...(params.text !== undefined ? { text: params.text as string } : {}),
+					...(params.font ? { font: params.font as Record<string, unknown> } : {}),
+					...(params.paragraph ? { paragraph: params.paragraph as Record<string, unknown> } : {}),
+					pathOptions: pick(params, Object.keys(PATH_TEXT_PROPS)),
+					...(params.fill !== undefined ? { fill: checkPaint(params.fill, 'fill') } : {})
+				});
+				check(r);
+				return textSummary(r.id!);
+			}
+		},
+		{
+			...base,
+			id: `${prefix}createOutlines`,
+			label: 'Create Outlines',
+			shortcut: 'Mod+Shift+O',
+			keywords: ['outline text', 'text to paths', 'convert text', 'expand text', 'glyphs'],
+			description:
+				'Turns text (the given nodes, or text inside given groups; default the selection) into paths of its glyph outlines, keeping paint, effects, filters, placement and id (runs with their own fill become a group of paths). The text can no longer be edited as text. Needs a text shaper with outlines (vector.listFonts says); fails otherwise. One undo step. Returns { ids }.',
+			params: { type: 'object', properties: { ids: { ...IDS, description: 'Text nodes or groups holding text (default: the selection).' } }, additionalProperties: false },
+			undoable: true,
+			enabled: enabledFor,
+			run: (_ctx: unknown, params: { ids?: string[] } | undefined) => {
+				const r = controller.createOutlines({ ids: ids(params) });
+				check(r);
+				return { ids: r.ids };
+			}
+		}
+	];
+
 	return [
 		{
 			...base,
@@ -784,6 +1071,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 		},
 		...appearanceCommands(),
 		...maskCommands(),
+		...textCommands(),
 		{
 			...base,
 			id: `${prefix}setCorners`,
