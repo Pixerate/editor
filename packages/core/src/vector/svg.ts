@@ -20,13 +20,14 @@
  * clip's `<clipPath>` holds the mask's outlines; for import, the mask itself is kept in a hidden
  * `<g data-vector-part="mask-source">`. An opacity mask's `<mask>` holds the mask as drawn.
  */
+import { isVectorBrushstrokeLayer, vectorBrushstrokeImages } from './brushstroke.js';
 import { parseProvenance } from '../generation/provenance.js';
 import { resolveVectorMasterPages } from './pages.js';
 import { bezierPathToSvg } from '../canvas/pathops/bezier.js';
 import { bezierPathBounds, transformBezierPath } from '../canvas/pathops/bezier.js';
 import { invertMatrix } from '../geom/affine.js';
 import { isVectorFrame, sanitizeVectorFrame, sanitizeVectorResizing, vectorFrameRectPath, type VectorFrameGroup } from './frames.js';
-import type { VectorConnector, VectorLens, VectorResizing } from './types.js';
+import type { VectorConnector, VectorLens, VectorResizing, VectorStrokeLayer } from './types.js';
 import { sanitizeVectorConnector } from './connectors.js';
 import { isVectorLens, resolveVectorLenses, sanitizeVectorLens, vectorLensDrawn } from './lens.js';
 import { sanitizeVectorSymmetry, transformVectorSymmetry } from './symmetry.js';
@@ -526,13 +527,20 @@ export function vectorDocumentToSvg(doc: VectorDocument, options: VectorSvgExpor
 		let data = ` data-vector-path="" data-vector-fills="${escapeAttr(JSON.stringify(vectorFills(node)))}" data-vector-strokes="${escapeAttr(JSON.stringify(vectorStrokes(node)))}"`;
 		if (node.fillRule === 'evenodd') data += ` data-vector-fill-rule="evenodd"`;
 		lines.push(`${indent(depth)}<g${common(node)}${data}>`);
-		const layers = vectorPaintLayerNodes(node).filter((l) => l.drawn);
+		const layers = vectorPaintLayerNodes(node).filter((l) => l.drawn || (l.kind === 'stroke' && isVectorBrushstrokeLayer(l.layer as VectorStrokeLayer) && l.layer.visible !== false));
 		let geometry = liveCorners(node);
 		if (!layers.some((l) => l.kind === 'fill')) {
 			lines.push(`${indent(depth + 1)}<path data-vector-part="fill" d="${d}" fill="none"${rule}${geometry}/>`);
 			geometry = '';
 		}
 		for (const l of layers) {
+			if (l.kind === 'stroke' && isVectorBrushstrokeLayer(l.layer as VectorStrokeLayer)) {
+				// A brushstroke draws as its rendered images (the layer data above rebuilds it on import).
+				lines.push(`${indent(depth + 1)}<g data-vector-part="brushstroke" data-vector-layer="${l.index}"${layerAttrs(l.layer)}>`);
+				for (const im of vectorBrushstrokeImages(node, l.layer as VectorStrokeLayer)) lines.push(`${indent(depth + 2)}<image href="${im.href}" x="${num(im.x)}" y="${num(im.y)}" width="${num(im.width)}" height="${num(im.height)}" preserveAspectRatio="none"/>`);
+				lines.push(`${indent(depth + 1)}</g>`);
+				continue;
+			}
 			const id = `${prefix}${l.kind}-${node.id}-${l.index}`;
 			const paint = vectorPaintToSvg(l.layer.paint, id, { node: l.node, precision, ...(l.kind === 'stroke' ? { role: 'stroke' as const } : {}) });
 			defs.push(...paintMarkup(l.layer.paint, paint.defs));

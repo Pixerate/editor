@@ -14,6 +14,7 @@
  * opacity masks, stop opacity and text without glyph outlines are left out and named in `notes`.
  */
 
+import { decodePng, isPng, parseDataUrl } from '../raster/png.js';
 import { resolveVectorMasterPages, vectorPages } from './pages.js';
 import { resolveVectorLenses } from './lens.js';
 import { deflate } from '../raster/zlib.js';
@@ -142,6 +143,7 @@ class Page {
 	content: string[] = [];
 	states = new Map<string, string>();
 	shadings = new Map<string, string>();
+	images = new Map<string, string>();
 	constructor(
 		readonly writer: PdfWriter,
 		readonly defs: Map<string, VectorPaintDef>,
@@ -159,6 +161,37 @@ class Page {
 			this.states.set(key, name);
 			this.writer.gsDicts.set(`${this.writer.pageIndex}:${name}`, `<< /Type /ExtGState /ca ${n(alpha)} /CA ${n(strokeAlpha)}${bm ? ` /BM /${bm}` : ''} >>`);
 		}
+		return name;
+	}
+
+	/** An image (a PNG data URL) as an XObject with its alpha as a soft mask, by name; null when unreadable. */
+	image(href: string): string | null {
+		const hit = this.images.get(href);
+		if (hit) return hit;
+		const parsed = parseDataUrl(href);
+		if (!parsed || !isPng(parsed.bytes)) return null;
+		let img: { width: number; height: number; data: ArrayLike<number> };
+		try {
+			img = decodePng(parsed.bytes);
+		} catch {
+			return null;
+		}
+		const px = img.width * img.height;
+		const rgb = new Uint8Array(px * 3);
+		const alpha = new Uint8Array(px);
+		for (let i = 0; i < px; i++) {
+			rgb[i * 3] = img.data[i * 4];
+			rgb[i * 3 + 1] = img.data[i * 4 + 1];
+			rgb[i * 3 + 2] = img.data[i * 4 + 2];
+			alpha[i] = img.data[i * 4 + 3];
+		}
+		const w = this.writer;
+		const dims = `/Type /XObject /Subtype /Image /Width ${img.width} /Height ${img.height} /BitsPerComponent 8`;
+		const mask = w.add(w.stream(`${dims} /ColorSpace /DeviceGray`, alpha, true));
+		const id = w.add(w.stream(`${dims} /ColorSpace /DeviceRGB /SMask ${mask} 0 R`, rgb, true));
+		const name = `Im${this.images.size + 1}`;
+		this.images.set(href, name);
+		w.imageIds.set(`${w.pageIndex}:${name}`, id);
 		return name;
 	}
 
@@ -323,6 +356,15 @@ class Page {
 		for (const l of layers) {
 			const a = alpha * l.opacity;
 			const blend = l.blendMode ?? p.blendMode;
+			if (l.kind === 'brushstroke') {
+				// Each image drawn over its box (y down: the image's top row at the box's top).
+				for (const im of l.images ?? []) {
+					const name = this.image(im.href);
+					if (!name) continue;
+					this.content.push('q', `/${this.gs(a, a, blend)} gs`, `${n(im.width)} 0 0 ${n(-im.height)} ${n(im.x)} ${n(im.y + im.height)} cm`, `/${name} Do`, 'Q');
+				}
+				continue;
+			}
 			if (l.kind === 'fill') {
 				if (l.fill !== 'none') this.fill(p.d, l.fill, a, evenodd, blend);
 			} else if (l.stroke !== 'none' && l.strokeWidth > 0) {
@@ -344,6 +386,7 @@ class PdfWriter {
 	objects: (Uint8Array | string)[] = [];
 	gsDicts = new Map<string, string>();
 	shadingDicts = new Map<string, string>();
+	imageIds = new Map<string, number>();
 	pageIndex = 0;
 	add(body: Uint8Array | string): number {
 		this.objects.push(body);
@@ -426,7 +469,8 @@ export function vectorDocumentToPdf(doc: VectorDocument, options: VectorPdfOptio
 		const content = w.add(w.stream('', new TextEncoder().encode(page.content.join('\n')), compress));
 		const gsEntries = [...page.states.values()].map((name) => `/${name} ${w.add(w.gsDicts.get(`${k}:${name}`)!)} 0 R`);
 		const shEntries = [...page.shadings.values()].map((name) => `/${name} ${w.add(w.shadingDicts.get(`${k}:${name}`)!)} 0 R`);
-		const resources = `<< ${gsEntries.length ? `/ExtGState << ${gsEntries.join(' ')} >> ` : ''}${shEntries.length ? `/Shading << ${shEntries.join(' ')} >>` : ''} >>`;
+		const imEntries = [...page.images.values()].map((name) => `/${name} ${w.imageIds.get(`${k}:${name}`)} 0 R`);
+		const resources = `<< ${gsEntries.length ? `/ExtGState << ${gsEntries.join(' ')} >> ` : ''}${shEntries.length ? `/Shading << ${shEntries.join(' ')} >> ` : ''}${imEntries.length ? `/XObject << ${imEntries.join(' ')} >>` : ''} >>`;
 		pageIds.push(w.add(`<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${n(W)} ${n(H)}] /Resources ${resources} /Contents ${content} 0 R >>`));
 	});
 	w.set(catalog, `<< /Type /Catalog /Pages ${pagesId} 0 R >>`);

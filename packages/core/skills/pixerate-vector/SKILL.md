@@ -411,6 +411,14 @@ contents whole while you work, without losing the mask.
 | `vector.repelBrush` | Bloat outlines away from each point. |
 | `vector.roughenBrush` | Spike the outlines under the brush (`seed` for repeatable spikes): fur, grass, torn paper. |
 
+### Brushstrokes
+
+| Command | Use it to |
+| --- | --- |
+| `vector.listBrushes` | List the natural-media brushes (pencils, pastels, charcoal, markers, inks) with their sizes. |
+| `vector.addBrushstroke` | Paint paths with a brush along their outline (`brushId`, `size`, `pressure` profile such as [0.2, 1, 0.2] for a taper, `color`): sketchy, hand-drawn or inked lines that stay editable. Returns the stroke stacks. |
+| `vector.setBrushstroke` | Change brushstroke layer `index` of path `id`: brush, size, pressure, colour, opacity. Remove it with `vector.removeStroke`. |
+
 ### Editor settings
 
 | Command | Use it to |

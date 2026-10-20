@@ -313,18 +313,30 @@ export type VectorStrokeSettings = Pick<
 >;
 
 /**
- * What a stroke layer draws. Only `paint` (a paint along the outline, the default) exists today.
- * Other kinds are the extension point for strokes drawn some other way, such as a raster
- * brushstroke from `@pixerate/editor/paint` laid along the path: a layer with an unknown kind is
- * kept through edits, load and SVG round trips, listed to agents, and skipped when drawing and
- * hit-testing.
+ * What a stroke layer draws: `paint` (a paint along the outline, the default) or `brushstroke` (a
+ * natural-media brush from `@pixerate/editor/paint` laid along the path; see `brushstroke.ts`).
+ * A layer of a kind this version does not know is kept through edits, load and SVG round trips,
+ * listed to agents, and skipped when drawing and hit-testing.
  */
-export type VectorStrokeLayerKind = 'paint';
+export type VectorStrokeLayerKind = 'paint' | 'brushstroke';
+
+/**
+ * A brushstroke stroke layer's brush (`VectorStrokeLayer.brush`): a brush from the paint editor's
+ * library by id, its size in document units (default the brush's own), and an optional pressure
+ * profile along the path's length (values 0–1 spread evenly from start to end).
+ */
+export interface VectorBrushstroke {
+	brushId: string;
+	size?: number;
+	pressure?: number[];
+}
 
 /** One stroke of a path's stroke stack (`VectorStyle.strokes`): a paint plus its own stroke settings. */
 export interface VectorStrokeLayer extends VectorPaintLayer, VectorStrokeSettings {
 	/** Default `paint`. See `VectorStrokeLayerKind`. */
 	kind?: VectorStrokeLayerKind;
+	/** Kind `brushstroke`: the brush the path is painted with (the layer's paint is its colour). */
+	brush?: VectorBrushstroke;
 }
 
 /** Paint and stroke settings of a path. */

@@ -24,6 +24,7 @@
  * `StrokeLayer`, each stroke with its own settings). Ported from ArtCraft (MIT OR Apache-2.0,
  * © ArtCraft Team and contributors; see THIRD_PARTY_NOTICES.md).
  */
+import { sanitizeVectorBrushstroke, vectorBrushstrokeReach } from './brushstroke.js';
 import { sanitizeVectorShadedPaint } from './shading.js';
 import { pointInBezierPath, distanceToBezierPath, type BezierPath } from '../canvas/pathops/bezier.js';
 import { isVectorGradient, sanitizeVectorGradient } from './gradient.js';
@@ -303,6 +304,10 @@ export function sanitizeVectorStrokes(value: unknown): VectorStrokeLayer[] {
 	return value
 		.filter((l): l is Record<string, unknown> => !!l && typeof l === 'object')
 		.map((raw) => {
+			if (raw.kind === 'brushstroke') {
+				const brush = sanitizeVectorBrushstroke(raw.brush);
+				if (brush) return { ...sanitizeLayerBase(raw), kind: 'brushstroke' as const, brush };
+			}
 			if (raw.kind !== undefined && raw.kind !== 'paint') return { ...(raw as unknown as VectorStrokeLayer) };
 			return { ...sanitizeLayerBase(raw), ...sanitizeVectorStrokeSettings(raw) };
 		});
@@ -360,7 +365,11 @@ export function needsVectorPaintLayers(node: VectorPathNode): boolean {
 /** How far the drawn strokes of a path reach past its outline (the widest layer's reach; 0 without strokes). */
 export function vectorStrokeStackReach(node: VectorPathNode): number {
 	let reach = 0;
-	for (const l of vectorPaintLayerNodes(node)) if (l.kind === 'stroke' && l.drawn) reach = Math.max(reach, vectorStrokeReach(l.node));
+	for (const l of vectorPaintLayerNodes(node)) {
+		if (l.kind === 'stroke' && l.drawn) reach = Math.max(reach, vectorStrokeReach(l.node));
+		// A brushstroke reaches half its brush size past the path.
+		else if (l.kind === 'stroke' && l.layer.visible !== false) reach = Math.max(reach, vectorBrushstrokeReach(l.layer as VectorStrokeLayer));
+	}
 	return reach;
 }
 

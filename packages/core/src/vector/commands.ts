@@ -1,3 +1,4 @@
+import { vectorBrushstrokeBrushes } from './brushstroke.js';
 import { type VectorStylizeOptions, type VectorStylizeStyle } from './stylize.js';
 import { VECTOR_LENS_SPECS } from './lens.js';
 import type { CommandSpec } from '../commands/registry.js';
@@ -1504,6 +1505,88 @@ export function createVectorCommands(controller: VectorEditorController, options
 		}
 	];
 
+	const brushstrokeCommands = (): CommandSpec[] => [
+		{
+			...base,
+			id: `${prefix}listBrushes`,
+			label: 'Brushstroke Brushes',
+			readOnly: true,
+			keywords: ['brush', 'brushstroke', 'pencil', 'pastel', 'charcoal', 'ink', 'marker', 'natural media'],
+			description: 'Lists the brushes a brushstroke can use (the paint editor\'s dry brushes): { brushes: [{ id, name, category, size }] } (size: the brush\'s own diameter in document units).',
+			params: { type: 'object', properties: {}, additionalProperties: false },
+			run: () => ({ brushes: vectorBrushstrokeBrushes().map((b) => ({ id: b.id, name: b.name, category: b.category, size: b.tip.size })) })
+		},
+		{
+			...base,
+			id: `${prefix}addBrushstroke`,
+			label: 'Add Brushstroke…',
+			keywords: ['brushstroke', 'brush', 'natural media', 'pencil line', 'chalk', 'sketchy', 'hand-drawn', 'ink stroke'],
+			description:
+				'Paints paths (`ids`, default the selection; groups: every path inside) with a natural-media brush along their outline, as a stroke layer of kind brushstroke: `brushId` from vector.listBrushes, `size` (document units), an optional `pressure` profile (0–1 values spread from start to end, e.g. [0.2, 1, 0.2] for a tapered stroke), `color` and `opacity`. The path stays editable; the strokes follow it. One undo step. Returns { paths: [{ id, strokes }] } (the brushstroke is a stroke layer; change it with vector.setBrushstroke, remove it with vector.removeStroke).',
+			params: {
+				type: 'object',
+				properties: {
+					ids: { ...IDS, description: 'Paths or groups (default: the selection).' },
+					brushId: { type: 'string', description: 'Brush id from vector.listBrushes, e.g. "pencil-hb".' },
+					size: { type: 'number', exclusiveMinimum: 0, maximum: 500, description: 'Brush diameter in document units (default: the brush\'s own).' },
+					pressure: { type: 'array', items: { type: 'number', minimum: 0, maximum: 1 }, minItems: 1, maxItems: 64, description: 'Pressure 0–1 along the length, spread evenly from start to end (default: full pressure).' },
+					color: { type: 'string', description: 'CSS colour (default: the path\'s stroke colour, else black).' },
+					opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Layer opacity 0–1 (default 1).' },
+					index: { type: 'integer', minimum: 0, description: 'Position in the stroke stack, 0 the bottom (default: on top).' }
+				},
+				required: ['brushId'],
+				additionalProperties: false
+			},
+			undoable: true,
+			enabled: enabledFor,
+			run: (_ctx: unknown, params: { ids?: string[]; brushId: string; size?: number; pressure?: number[]; color?: string; opacity?: number; index?: number }) => {
+				const targets = params.ids ?? controller.getState().selection;
+				check(
+					controller.addBrushstroke(
+						{ brushId: params.brushId, ...(params.size !== undefined ? { size: params.size } : {}), ...(params.pressure ? { pressure: params.pressure } : {}) },
+						{ ...(params.ids ? { ids: params.ids } : {}), ...(params.index !== undefined ? { index: params.index } : {}), ...(params.color ? { color: params.color } : {}), ...(params.opacity !== undefined ? { opacity: params.opacity } : {}) }
+					)
+				);
+				const paths: unknown[] = [];
+				for (const id of targets) {
+					const n = controller.getNode(id);
+					if (n?.type === 'path') paths.push(stackResult(id, 'stroke'));
+				}
+				return { paths };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}setBrushstroke`,
+			label: 'Edit Brushstroke…',
+			keywords: ['brushstroke', 'brush', 'size', 'pressure', 'taper'],
+			description:
+				'Changes the brushstroke at stroke layer `index` of path `id` (vector.getAppearance lists strokes; 0 is the bottom): `brushId`, `size` (null: the brush\'s own), `pressure` (null: full pressure), `color`, `opacity`. Pass at least one. One undo step. Returns { id, strokes }.',
+			params: {
+				type: 'object',
+				properties: {
+					id: { type: 'string', description: 'The path.' },
+					index: { type: 'integer', minimum: 0, description: 'Stroke layer index of the brushstroke.' },
+					brushId: { type: 'string', description: 'Another brush from vector.listBrushes.' },
+					size: { type: ['number', 'null'], description: 'Diameter in document units, or null for the brush\'s own.' },
+					pressure: { type: ['array', 'null'], items: { type: 'number', minimum: 0, maximum: 1 }, description: 'Pressure profile 0–1 from start to end, or null for full pressure.' },
+					color: { type: 'string', description: 'CSS colour.' },
+					opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Layer opacity 0–1.' }
+				},
+				required: ['id', 'index'],
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: { id: string; index: number; brushId?: string; size?: number | null; pressure?: number[] | null; color?: string; opacity?: number }) => {
+				const { id, index, ...patch } = params;
+				if (!Object.keys(patch).length) fail('Pass at least one of brushId, size, pressure, color, opacity.');
+				layerIndex(id, 'stroke', index);
+				check(controller.setBrushstroke(index, patch, { ids: [id] }));
+				return stackResult(id, 'stroke');
+			}
+		}
+	];
+
 	const pdfCommands = (): CommandSpec[] => [
 		{
 			...base,
@@ -2540,6 +2623,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 		...lottieCommands(),
 		...pdfCommands(),
 		...symmetryCommands(),
+		...brushstrokeCommands(),
 		...stylizeCommands(),
 		...perspectiveCommands(),
 		...lensCommands(),

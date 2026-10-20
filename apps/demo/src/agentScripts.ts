@@ -492,6 +492,15 @@ export const VECTOR_SCRIPTS: AgentScript[] = [
     ],
   },
   {
+    id: "vector-brushstroke",
+    prompt: "Ink the arrow and sketch the flag outline with real brushes",
+    steps: [
+      { say: "Which brushes can paint along a path?", ...command("vector.listBrushes") },
+      { say: "An ink pen along the arrow, tapering at both ends.", ...command("vector.addBrushstroke", { ids: ["arrow"], brushId: "ink-pen", size: 5, pressure: [0.15, 1, 0.15], color: "#0f172a" }), target: { selector: '[data-vector-id="arrow"]' } },
+      { say: "A charcoal outline round the flag; the stripes stay editable vectors.", ...command("vector.addBrushstroke", { ids: ["flag-top", "flag-mid", "flag-low"], brushId: "charcoal-stick", size: 6, color: "#1e293b" }), target: { selector: '[data-vector-id="flag"]' } },
+    ],
+  },
+  {
     id: "vector-symmetry",
     prompt: "Draw a mandala in the sky with live symmetry",
     steps: [

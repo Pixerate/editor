@@ -1309,3 +1309,17 @@ describe("VectorLensPanel (svelte)", () => {
     expect((c.getNode("a") as VectorPathNode).lens).toBeUndefined();
   });
 });
+
+describe("Brushstrokes (svelte)", () => {
+  it("adds a brushstroke from the appearance panel and draws its images on the canvas", async () => {
+    const { VectorAppearancePanel } = await import("../src/vector");
+    const c = make();
+    c.select(["a"]);
+    const el = render(VectorAppearancePanel, { controller: c });
+    click(el.querySelector("[data-vector-add-brushstroke]"));
+    expect((c.getNode("a") as VectorPathNode).strokes?.at(-1)?.kind).toBe("brushstroke");
+    expect(el.querySelector("[data-vector-brushstroke]")).not.toBeNull();
+    const canvas = render(VectorCanvas, { controller: c });
+    expect(canvas.querySelector('[data-vector-layer^="brushstroke-"] image')).not.toBeNull();
+  });
+});

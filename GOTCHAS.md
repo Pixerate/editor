@@ -2625,3 +2625,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Art added to a master page showed on its pages shifted by the distance between the master and the page.
 - **Root Cause**: The master's children are in the master frame's space. Each is laid onto a page by `vectorFrameChildMatrix(resizing, box, masterFrame, pageFrame)`, which moves art relative to the master frame's corner. Art drawn at the page's coordinates but added to the master sits outside the master's rectangle.
 - **Solution / Workaround**: Place master art inside the master page's own rectangle: `vector.listPages` and `vector.addMasterPage` give each master's `bounds`. Give each object a `resizing` (e.g. `vertical: "bottom"` for a footer) so it follows pages of other sizes.
+
+### [core/vector] Brushstroke Images Are Cached By Path And Layer Objects, So Edits Must Make New Ones
+
+- **Issue / Symptom**: After a brushstroke layer was changed in place (in a test, or in a host mutating a document), the canvas kept drawing the old stroke.
+- **Root Cause**: `vectorBrushstrokeImages` caches per path object and layer object (a `WeakMap` of `Map`s), and the shared `BrushstrokeCache` keys on the samples, brush and colour. Mutating a layer object keeps the stale entry.
+- **Solution / Workaround**: Change brushstrokes through `setBrushstroke` / `updatePaintLayer`, which make new path and layer objects, as every other edit does. Treat document nodes as immutable.
