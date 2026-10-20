@@ -16,6 +16,7 @@ import { VECTOR_BLEND_MODES, VECTOR_FILTER_TYPES, type VectorBlendMode, type Vec
 import { isValidVectorMesh, VECTOR_WARP_STYLES } from './warp.js';
 import { isVectorMaskGroup, vectorMaskSummary, type VectorMaskSummary } from './mask.js';
 import { isVectorFrame } from './frames.js';
+import { vectorPolarAngles } from './snap.js';
 import { VECTOR_CONNECTOR_ROUTES, VECTOR_CONNECTOR_SIDES, type VectorConnector, type VectorConnectorEnd, type VectorConnectorRoute } from './types.js';
 import { VECTOR_HORIZONTAL_RESIZING, VECTOR_VERTICAL_RESIZING, type VectorFrame, type VectorHorizontalResizing, type VectorResizing, type VectorVerticalResizing } from './types.js';
 import { layoutVectorText, vectorTextFamilies, vectorTextHasOutlines } from './text.js';
@@ -1229,6 +1230,92 @@ export function createVectorCommands(controller: VectorEditorController, options
 			issues: state.constraintIssues
 		};
 	};
+	const snapResult = () => {
+		const { grid, objects, guides, threshold, angles, tracking, trackPolar, polarRelative } = controller.getState().snap;
+		return { grid, objects, guides, threshold, angles: [...angles], tracking: tracking !== false, trackPolar: !!trackPolar, polarRelative: !!polarRelative };
+	};
+	const trackingCommands = (): CommandSpec[] => [
+		{
+			...base,
+			id: `${prefix}getSnapOptions`,
+			label: 'Snap Options',
+			readOnly: true,
+			keywords: ['snap', 'grid', 'polar', 'tracking', 'angles', 'guides'],
+			description: 'Returns the snap options: grid (0 = off), objects, guides, threshold (screen px), angles (polar / construction angles in degrees, counter-clockwise on the page), tracking, trackPolar, polarRelative.',
+			params: { type: 'object', properties: {}, additionalProperties: false },
+			run: () => snapResult()
+		},
+		{
+			...base,
+			id: `${prefix}setSnapOptions`,
+			label: 'Set Snap Options…',
+			keywords: ['snap', 'grid', 'polar', 'polar tracking', 'object snap tracking', 'otrack', 'angles', 'increment'],
+			description:
+				'Changes how drawing snaps for people at the pointer (it does not move anything already drawn). polarIncrement sets angles to every multiple of it (plus additionalAngles). Pass at least one. Returns the options as vector.getSnapOptions does.',
+			params: {
+				type: 'object',
+				properties: {
+					grid: { type: 'number', minimum: 0, description: 'Grid size in document units; 0 turns the grid off.' },
+					objects: { type: 'boolean', description: 'Snap to other objects, construction angles and tracking.' },
+					guides: { type: 'boolean', description: 'Show smart guide lines and labels.' },
+					threshold: { type: 'number', exclusiveMinimum: 0, description: 'How near a target pulls, in screen pixels (default 5).' },
+					angles: { type: 'array', items: { type: 'number' }, description: 'Polar / construction angles in degrees (counter-clockwise on the page). Overrides polarIncrement.' },
+					polarIncrement: { type: 'number', exclusiveMinimum: 0, maximum: 360, description: 'Polar tracking increment in degrees (e.g. 15, 30, 45, 90): sets angles to its multiples.' },
+					additionalAngles: { type: 'array', items: { type: 'number' }, description: 'Extra polar angles in degrees, added to polarIncrement\'s.' },
+					tracking: { type: 'boolean', description: 'Object snap tracking: resting the pointer on an anchor acquires it (default true).' },
+					trackPolar: { type: 'boolean', description: 'Acquired points send paths at every polar angle, not only horizontal and vertical (default false).' },
+					polarRelative: { type: 'boolean', description: 'The pen measures polar angles from its last segment (default false).' }
+				},
+				additionalProperties: false
+			},
+			run: (_ctx: unknown, params: { grid?: number; objects?: boolean; guides?: boolean; threshold?: number; angles?: number[]; polarIncrement?: number; additionalAngles?: number[]; tracking?: boolean; trackPolar?: boolean; polarRelative?: boolean } | undefined) => {
+				const { polarIncrement, additionalAngles, ...rest } = params ?? {};
+				if (!Object.keys(params ?? {}).length) fail('Pass at least one option.');
+				if (rest.angles?.some((a) => !Number.isFinite(a))) fail('angles must be numbers (degrees).');
+				if (additionalAngles && polarIncrement === undefined) fail('additionalAngles go with polarIncrement.');
+				const angles = rest.angles ?? (polarIncrement !== undefined ? vectorPolarAngles(polarIncrement, additionalAngles) : undefined);
+				controller.setSnap({ ...rest, ...(angles ? { angles } : {}) });
+				return snapResult();
+			}
+		},
+		{
+			...base,
+			id: `${prefix}addPathByDimensions`,
+			label: 'Draw by Dimensions…',
+			keywords: ['dimensions', 'length', 'angle', 'polar', 'typed', 'direct distance', 'polyline', 'cad', 'turtle'],
+			description:
+				'Adds a path drawn by typed dimensions, as in CAD: from start, each step goes { length, angle } (degrees, counter-clockwise on the page: 0 right, 90 up), { dx, dy } (an offset) or { x, y } (a position), all in document units. closed joins the last point to the first. Default style. One undo step; selects it. Returns { id, anchors }.',
+			params: {
+				type: 'object',
+				properties: {
+					start: { type: 'object', properties: { x: { type: 'number', description: 'Document units.' }, y: { type: 'number', description: 'Document units.' } }, required: ['x', 'y'], additionalProperties: false, description: 'The first point.' },
+					steps: {
+						type: 'array',
+						minItems: 1,
+						description: 'Each next point: { length, angle }, { dx, dy } or { x, y }.',
+						items: {
+							anyOf: [
+								{ type: 'object', properties: { length: { type: 'number', description: 'Distance from the previous point.' }, angle: { type: 'number', description: 'Degrees counter-clockwise on the page (0 right, 90 up).' } }, required: ['length', 'angle'], additionalProperties: false },
+								{ type: 'object', properties: { dx: { type: 'number', description: 'Offset right.' }, dy: { type: 'number', description: 'Offset down.' } }, required: ['dx', 'dy'], additionalProperties: false },
+								{ type: 'object', properties: { x: { type: 'number', description: 'Position.' }, y: { type: 'number', description: 'Position.' } }, required: ['x', 'y'], additionalProperties: false }
+							]
+						}
+					},
+					closed: { type: 'boolean', description: 'Close the path (default false).' },
+					name: { type: 'string', description: 'Path name (default "Path").' }
+				},
+				required: ['start', 'steps'],
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: Parameters<VectorEditorController['addPathByDimensions']>[0]) => {
+				const r = controller.addPathByDimensions(params);
+				if (!r.ok) fail(r.message);
+				return { id: (r as { id: string }).id, anchors: r.anchors };
+			}
+		}
+	];
+
 	const connectorResult = (id: string) => controller.getConnectors().find((x) => x.id === id) ?? fail(`"${id}" is not a connector.`);
 	const SIDE = { type: 'string', enum: VECTOR_CONNECTOR_SIDES, description: 'Which site: the middle of the object\'s top, right, bottom or left side (its own, unrotated bounds, turned with it), its centre, or auto (the side facing the other end, chosen again on every edit; the default).' } as const;
 	const GLUED_END = {
@@ -1686,6 +1773,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 		...constraintCommands(),
 		...frameCommands(),
 		...connectorCommands(),
+		...trackingCommands(),
 		{
 			...base,
 			id: `${prefix}setCorners`,

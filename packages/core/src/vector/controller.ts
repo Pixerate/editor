@@ -189,7 +189,7 @@ import {
 	vectorMeshOutline,
 	vectorMeshParamAt
 } from './warp.js';
-import { constrainToLeave, VECTOR_CONSTRUCTION_ANGLES, VectorSnapTargets, type VectorSnapGuides, type VectorSnapLeave } from './snap.js';
+import { constrainToLeave, VECTOR_CONSTRUCTION_ANGLES, VECTOR_MAX_TRACKING_POINTS, VectorSnapTargets, vectorAngleDirection, vectorTrackingPaths, type VectorSnapGuides, type VectorSnapLeave, type VectorTrackingPoint } from './snap.js';
 import {
 	bendSegment as bendSubpathSegment,
 	curvatureMoveAnchor,
@@ -299,12 +299,22 @@ export interface VectorSnapOptions {
 	guides: boolean;
 	/** How near a target pulls, in screen pixels (default 5). */
 	threshold: number;
-	/** Construction guide angles through the point a drawn point leaves from, in degrees (default 0, 45, 90, 135). */
+	/** Construction guide angles through the point a drawn point leaves from, in degrees (default 0, 45, 90, 135). Polar tracking: see `vectorPolarAngles`. */
 	angles: readonly number[];
+	/**
+	 * Object snap tracking (default true): resting the pointer on an anchor, centre or crossing
+	 * while drawing acquires it (again releases it); acquired points send alignment paths, an open
+	 * path's end its extension, and points snap where paths cross, cross the drawing or onto them.
+	 */
+	tracking?: boolean;
+	/** Acquired points send paths along every polar angle (`angles`) instead of only horizontal and vertical (default false). */
+	trackPolar?: boolean;
+	/** The pen measures polar angles from its last segment's direction instead of the page's x axis (default false). */
+	polarRelative?: boolean;
 }
 
 /** Snap options new editors start with. Hold Cmd / Ctrl (`mod`) during a drag to bypass snapping. */
-export const DEFAULT_VECTOR_SNAP: Readonly<VectorSnapOptions> = { grid: 0, objects: true, guides: true, threshold: 5, angles: VECTOR_CONSTRUCTION_ANGLES };
+export const DEFAULT_VECTOR_SNAP: Readonly<VectorSnapOptions> = { grid: 0, objects: true, guides: true, threshold: 5, angles: VECTOR_CONSTRUCTION_ANGLES, tracking: true, trackPolar: false, polarRelative: false };
 
 /** How path-editing gestures and the pencil, knife and eraser behave. */
 export interface VectorPathEditOptions {
@@ -589,6 +599,10 @@ export interface VectorEditorState {
 	symbolEdit: { symbolId: string; name: string; instanceId: string | null; host: VectorDocument; hostTransform: VectorMatrix | null } | null;
 	/** Constraints the last solve could not satisfy (`conflicts`) or interpret (`skipped`), or null when all hold. */
 	constraintIssues: { conflicts: string[]; skipped: { id: string; message: string }[] } | null;
+	/** Points acquired for object snap tracking (document units), oldest first. */
+	trackingPoints: readonly VectorTrackingPoint[];
+	/** A distance or coordinate being typed while the pen draws (Enter places the point), or null. */
+	typedEntry: string | null;
 	canUndo: boolean;
 	canRedo: boolean;
 	undoLabel: string;
@@ -1506,6 +1520,8 @@ export class VectorEditorController {
 	 * controller torn down by React StrictMode's double effect keeps working when it is reused.
 	 */
 	destroy(): void {
+		if (this.dwellTimer) clearTimeout(this.dwellTimer);
+		this.dwellTimer = null;
 		this.cleanups.splice(0).forEach((fn) => fn());
 		this.listeners.clear();
 	}
@@ -1566,6 +1582,8 @@ export class VectorEditorController {
 			textDefaults: this.textDefaults,
 			symbolEdit: this.symbolEditState(),
 			constraintIssues: this.constraintIssues,
+			trackingPoints: this.trackingPoints,
+			typedEntry: this.typed,
 			canUndo: h.canUndo,
 			canRedo: h.canRedo,
 			undoLabel: h.undoName,
@@ -1868,6 +1886,7 @@ export class VectorEditorController {
 		if (tool !== 'type' && tool !== 'typePath') this.endTextEdit();
 		this.finishPath();
 		this.cancelDrag();
+		this.clearTracking(false);
 		this.tool = tool;
 		this.hover = null;
 		this.guides = null;
@@ -1933,13 +1952,16 @@ export class VectorEditorController {
 	 */
 	private snapDrawn(p: Vec2, leave: VectorSnapLeave | null, input: VectorModifiers, targets: () => VectorSnapTargets): Vec2 {
 		this.snappedToObject = false;
+		this.lastSnap = null;
 		if (input.mod) {
 			this.setGuides(null);
 			return constrainToLeave(leave, p);
 		}
 		if (this.snap.objects) {
-			const withAngles = leave ? { ...leave, angles: this.snap.angles } : null;
-			const res = targets().snapFrom(p, withAngles, this.snapTolerance());
+			const withAngles = leave ? { ...leave, angles: leave.angles ?? this.snap.angles } : null;
+			const tracking = this.snap.tracking !== false ? vectorTrackingPaths(this.trackingPoints, this.snap.trackPolar ? this.snap.angles.flatMap((a) => [a, a + 180]) : undefined) : [];
+			const res = targets().snapFrom(p, withAngles, this.snapTolerance(), tracking);
+			this.lastSnap = res.kind ? { kind: res.kind, point: res.point } : null;
 			if (res.kind) {
 				this.snappedToObject = true;
 				this.setGuides(res);
@@ -1970,10 +1992,16 @@ export class VectorEditorController {
 				return p;
 			}
 			const last = this.pen && sp ? getAnchorWorld(this.doc, { nodeId: this.pen.nodeId, subpath: this.pen.subpath, index: sp.anchors.length - 1 }) : undefined;
-			const leave = last ? { at: { x: last.x, y: last.y }, constrain: input.shift ? ('angle' as const) : null } : null;
-			return this.snapDrawn(p, leave, input, () => this.drawingTargets(this.pen?.nodeId ?? null));
+			const leave = last ? { at: { x: last.x, y: last.y }, constrain: input.shift ? ('angle' as const) : null, ...this.penAngles() } : null;
+			const q = this.snapDrawn(p, leave, input, () => this.drawingTargets(this.pen?.nodeId ?? null));
+			this.dwell();
+			return q;
 		}
-		if (SHAPE_TOOLS.has(this.tool)) return this.snapDrawn(p, null, input, () => this.drawingTargets(null));
+		if (SHAPE_TOOLS.has(this.tool)) {
+			const q = this.snapDrawn(p, null, input, () => this.drawingTargets(null));
+			this.dwell();
+			return q;
+		}
 		this.setGuides(null);
 		return p;
 	}
@@ -4057,6 +4085,213 @@ export class VectorEditorController {
 	}
 
 	// -----------------------------------------------------------------------------------------
+	// Object snap tracking and typed entry (after cadcraft's snap/tracking.rs and its direct
+	// distance entry)
+
+	private trackingPoints: VectorTrackingPoint[] = [];
+	private lastSnap: { kind: string; point: Vec2 } | null = null;
+	private dwellTimer: ReturnType<typeof setTimeout> | null = null;
+	private dwellAt: Vec2 | null = null;
+	private dwellToggled: Vec2 | null = null;
+	private typed: string | null = null;
+
+	/** How long (ms) the pointer rests on a point before it is acquired or released for tracking. */
+	static readonly TRACKING_DWELL_MS = 400;
+
+	/** The pen's polar angles: measured from its last segment with `polarRelative`, else the page's (`snap.angles`). */
+	private penAngles(): { angles?: readonly number[] } {
+		if (!this.snap.polarRelative || !this.pen) return {};
+		const node = this.getNode(this.pen.nodeId) as VectorPathNode | undefined;
+		const sp = node?.subpaths[this.pen.subpath];
+		if (!sp || sp.anchors.length < 2) return {};
+		const n = sp.anchors.length;
+		const a = getAnchorWorld(this.doc, { nodeId: this.pen.nodeId, subpath: this.pen.subpath, index: n - 2 })!;
+		const b = getAnchorWorld(this.doc, { nodeId: this.pen.nodeId, subpath: this.pen.subpath, index: n - 1 })!;
+		if (Math.hypot(b.x - a.x, b.y - a.y) < 1e-9) return {};
+		const base = (Math.atan2(-(b.y - a.y), b.x - a.x) * 180) / Math.PI;
+		return { angles: this.snap.angles.map((x) => x + base) };
+	}
+
+	/** Pointer rested on the snapped anchor, centre or crossing: starts (or keeps) the dwell that acquires it. */
+	private dwell(): void {
+		const hit = this.snap.tracking !== false && this.lastSnap && (this.lastSnap.kind === 'anchor' || this.lastSnap.kind === 'centre' || this.lastSnap.kind === 'intersect') ? this.lastSnap.point : null;
+		const same = (a: Vec2 | null, b: Vec2 | null) => !!a && !!b && Math.hypot(a.x - b.x, a.y - b.y) < 1e-9;
+		if (!hit) {
+			this.dwellAt = null;
+			this.dwellToggled = null;
+			if (this.dwellTimer) clearTimeout(this.dwellTimer);
+			this.dwellTimer = null;
+			return;
+		}
+		if (same(hit, this.dwellToggled) || same(hit, this.dwellAt)) return;
+		this.dwellToggled = null;
+		this.dwellAt = hit;
+		if (this.dwellTimer) clearTimeout(this.dwellTimer);
+		this.dwellTimer = setTimeout(() => {
+			this.dwellTimer = null;
+			const at = this.dwellAt;
+			this.dwellAt = null;
+			if (!at) return;
+			this.toggleTracking(at);
+			this.dwellToggled = at;
+			this.notify();
+		}, VectorEditorController.TRACKING_DWELL_MS);
+	}
+
+	/** The direction an open path's end at `p` (document space) would extend in, or null when no open path ends there. */
+	private extensionAt(p: Vec2): Vec2 | null {
+		let out: Vec2 | null = null;
+		walkVectorNodes(this.doc.nodes, (n) => {
+			if (out || n.type !== 'path' || n.visible === false) return;
+			n.subpaths.forEach((sp, s) => {
+				if (out || sp.closed || sp.anchors.length < 2) return;
+				for (const end of [0, sp.anchors.length - 1]) {
+					const a = getAnchorWorld(this.doc, { nodeId: n.id, subpath: s, index: end })!;
+					if (Math.hypot(a.x - p.x, a.y - p.y) > 1e-6) continue;
+					const nextIndex = end === 0 ? 1 : end - 1;
+					const handle = end === 0 ? a.out : a.in;
+					const b = handle && Math.hypot(handle.x - a.x, handle.y - a.y) > 1e-9 ? handle : getAnchorWorld(this.doc, { nodeId: n.id, subpath: s, index: nextIndex })!;
+					const d = { x: a.x - b.x, y: a.y - b.y };
+					if (Math.hypot(d.x, d.y) > 1e-9) out = d;
+					return;
+				}
+			});
+		});
+		return out;
+	}
+
+	private toggleTracking(p: Vec2): void {
+		const i = this.trackingPoints.findIndex((t) => Math.hypot(t.x - p.x, t.y - p.y) < 1e-9);
+		if (i >= 0) this.trackingPoints = this.trackingPoints.filter((_, k) => k !== i);
+		else {
+			const ext = this.extensionAt(p);
+			this.trackingPoints = [...this.trackingPoints, { x: p.x, y: p.y, ...(ext ? { extension: ext } : {}) }].slice(-VECTOR_MAX_TRACKING_POINTS);
+		}
+	}
+
+	/**
+	 * Acquires the point at `x, y` (document units) for object snap tracking, or releases it when
+	 * it is acquired already, as resting the pointer on it does. An open path's end also sends its
+	 * extension. At most seven are kept, the oldest dropped. Returns the acquired points.
+	 */
+	acquireTrackingPoint(p: Vec2): readonly VectorTrackingPoint[] {
+		if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) return this.trackingPoints;
+		this.toggleTracking(p);
+		this.notify();
+		return this.trackingPoints;
+	}
+
+	/** Releases every acquired tracking point. */
+	clearTracking(notify = true): void {
+		const had = this.trackingPoints.length > 0;
+		this.trackingPoints = [];
+		this.dwellAt = null;
+		this.dwellToggled = null;
+		if (this.dwellTimer) clearTimeout(this.dwellTimer);
+		this.dwellTimer = null;
+		if (had && notify) this.notify();
+	}
+
+	/** A key typed while the pen draws: digits and `. , < @ -` build a typed entry, Enter places it, Backspace and Escape edit or drop it. */
+	private typedKey(input: VectorKeyInput): boolean {
+		if (input.mod || this.tool !== 'pen' || !this.pen || this.drag) return false;
+		const key = input.key;
+		if (this.typed === null) {
+			if (!/^[0-9.@-]$/.test(key)) return false;
+			this.typed = key;
+			this.notify();
+			return true;
+		}
+		if (/^[0-9.,<@-]$/.test(key)) this.typed += key;
+		else if (key === 'Backspace') this.typed = this.typed.length > 1 ? this.typed.slice(0, -1) : null;
+		else if (key === 'Escape') this.typed = null;
+		else if (key === 'Enter') {
+			const text = this.typed;
+			this.typed = null;
+			const r = this.placePenPoint(text);
+			if (!r.ok) this.notify();
+			return true;
+		} else return false;
+		this.notify();
+		return true;
+	}
+
+	/**
+	 * Places the pen's next point from typed text, as CAD direct distance entry does: `120` is that
+	 * far from the last point toward the pointer (along the path it tracks), `120<30` that far at 30°
+	 * (counter-clockwise on the page, from the last segment with `snap.polarRelative`), `@40,-10`
+	 * an offset from the last point and `200,150` a position. One undo step. Fails without a path
+	 * being drawn with the pen.
+	 */
+	placePenPoint(text: string): VectorActionResult {
+		const pen = this.pen;
+		const node = pen ? (this.getNode(pen.nodeId) as VectorPathNode | undefined) : undefined;
+		const sp = pen && node ? node.subpaths[pen.subpath] : undefined;
+		if (!pen || !node || !sp?.anchors.length) return { ok: false, message: 'Start a path with the pen first: typed entry places its next point.' };
+		const last = getAnchorWorld(this.doc, { nodeId: pen.nodeId, subpath: pen.subpath, index: sp.anchors.length - 1 })!;
+		const num = '(-?(?:\\d+\\.?\\d*|\\.\\d+))';
+		const t = text.replace(/\s+/g, '');
+		let target: Vec2 | null = null;
+		let m: RegExpMatchArray | null;
+		if ((m = t.match(new RegExp(`^@${num},${num}$`)))) target = { x: last.x + parseFloat(m[1]), y: last.y + parseFloat(m[2]) };
+		else if ((m = t.match(new RegExp(`^${num},${num}$`)))) target = { x: parseFloat(m[1]), y: parseFloat(m[2]) };
+		else if ((m = t.match(new RegExp(`^${num}<${num}$`)))) {
+			const base = this.snap.polarRelative ? (this.penAngles().angles?.[0] ?? this.snap.angles[0] ?? 0) - (this.snap.angles[0] ?? 0) : 0;
+			const dir = vectorAngleDirection(parseFloat(m[2]) + base);
+			const len = parseFloat(m[1]);
+			target = { x: last.x + dir.x * len, y: last.y + dir.y * len };
+		} else if ((m = t.match(new RegExp(`^${num}$`)))) {
+			const toward = this.pointer;
+			const d = toward ? Math.hypot(toward.x - last.x, toward.y - last.y) : 0;
+			if (!toward || d < 1e-9) return { ok: false, message: 'Point the pointer the way the distance should go (or type length<angle).' };
+			const len = parseFloat(m[1]);
+			target = { x: last.x + ((toward.x - last.x) / d) * len, y: last.y + ((toward.y - last.y) / d) * len };
+		}
+		if (!target || !Number.isFinite(target.x) || !Number.isFinite(target.y)) return { ok: false, message: `Cannot read "${text}": type a distance (120), length<angle (120<30), an offset (@40,-10) or a position (200,150).` };
+		const local = this.toLocal(pen.nodeId, target);
+		const anchors = [...sp.anchors, { x: local.x, y: local.y }];
+		this.change('Add Point', () => {
+			this.replaceNode(pen.nodeId, { ...node, subpaths: node.subpaths.map((s2, i) => (i === pen.subpath ? { ...s2, anchors } : s2)) });
+			this.anchors = [{ nodeId: pen.nodeId, subpath: pen.subpath, index: anchors.length - 1 }];
+		});
+		return { ok: true };
+	}
+
+	/**
+	 * Adds an open (or closed) path drawn by dimensions, the way a CAD user types them: from
+	 * `start`, each step goes `length` at `angle` degrees (counter-clockwise on the page), by an
+	 * offset `dx, dy`, or to a position `x, y` (document units). Default style. One undo step;
+	 * selects it. Returns its id and the anchors placed.
+	 */
+	addPathByDimensions(input: { start: Vec2; steps: readonly ({ length: number; angle: number } | { dx: number; dy: number } | { x: number; y: number })[]; closed?: boolean; name?: string }): VectorMaskResult & { anchors?: Vec2[] } {
+		if (!input.start || !Number.isFinite(input.start.x) || !Number.isFinite(input.start.y)) return { ok: false, message: 'start must be { x, y } in document units.' };
+		if (!input.steps?.length) return { ok: false, message: 'Give at least one step.' };
+		const pts: Vec2[] = [{ x: input.start.x, y: input.start.y }];
+		for (const [i, step] of input.steps.entries()) {
+			const at = pts[pts.length - 1];
+			const st = step as Record<string, number>;
+			let q: Vec2 | null = null;
+			if ('length' in st && 'angle' in st) {
+				const dir = vectorAngleDirection(st.angle);
+				q = { x: at.x + dir.x * st.length, y: at.y + dir.y * st.length };
+			} else if ('dx' in st && 'dy' in st) q = { x: at.x + st.dx, y: at.y + st.dy };
+			else if ('x' in st && 'y' in st) q = { x: st.x, y: st.y };
+			if (!q || !Number.isFinite(q.x) || !Number.isFinite(q.y)) return { ok: false, message: `Step ${i} must be { length, angle }, { dx, dy } or { x, y } with numbers.` };
+			pts.push(q);
+		}
+		const id = this.newId();
+		const closed = !!input.closed;
+		const node: VectorPathNode = { id, type: 'path', name: input.name ?? 'Path', ...this.styleFor(!closed), subpaths: [{ closed, anchors: pts.map((p) => ({ x: p.x, y: p.y })) }] };
+		this.change('Add Path', () => {
+			this.setDoc([...this.doc.nodes, node]);
+			this.selection = [id];
+			this.anchors = [];
+			this.editingId = null;
+		});
+		return { ok: true, id, anchors: pts };
+	}
+
+	// -----------------------------------------------------------------------------------------
 	// Connectors
 
 	/** How near (document units) a connector end snaps to a connection site. */
@@ -6106,7 +6341,7 @@ export class VectorEditorController {
 				return;
 			}
 			const last = getAnchorWorld(this.doc, { nodeId: pen.nodeId, subpath: pen.subpath, index: sp.anchors.length - 1 })!;
-			const leave = { at: { x: last.x, y: last.y }, constrain: input.shift ? ('angle' as const) : null };
+			const leave = { at: { x: last.x, y: last.y }, constrain: input.shift ? ('angle' as const) : null, ...this.penAngles() };
 			let pt = this.snapDrawn(p, leave, input, () => this.drawingTargets(pen.nodeId));
 			pt = this.toLocal(pen.nodeId, pt);
 			const node = this.getNode(pen.nodeId) as VectorPathNode;
@@ -7930,6 +8165,7 @@ export class VectorEditorController {
 	 */
 	keyDown(input: VectorKeyInput): boolean {
 		if (this.textEdit && this.textKey(input)) return true;
+		if (this.typedKey(input)) return true;
 		const key = input.key;
 		const lower = key.length === 1 ? key.toLowerCase() : key;
 		if (key === ' ') {
@@ -7984,6 +8220,7 @@ export class VectorEditorController {
 		switch (key) {
 			case 'Escape':
 				if (this.drag) this.cancelDrag();
+				else if (this.trackingPoints.length) this.clearTracking();
 				else if (this.widthEdit) this.closeWidthPointEdit();
 				else if (this.tool === 'width' && this.widthPoints.length) {
 					this.widthPoints = [];

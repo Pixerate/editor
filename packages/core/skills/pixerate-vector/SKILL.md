@@ -170,6 +170,7 @@ Parameter details (gradient fields, effect parameters, width profiles, envelopes
 
 | Command | Use it to |
 | --- | --- |
+| `vector.addPathByDimensions` | Draw a path the way a CAD user types it: from `start`, each step `{ length, angle }` (degrees counter-clockwise on the page: 0 right, 90 up), `{ dx, dy }` or `{ x, y }`; `closed` joins the ends. Use it for exact technical outlines (brackets, floor plans, given lengths and angles) instead of computing coordinates by hand. Returns `{ id, anchors }`. |
 | `vector.addShape` | Add a `kind` `rect`, `ellipse`, `polygon` (`sides`, at least 3), `star` (`points`, `innerRatio` 0 to 1) or `line` at `x`, `y`, `width`, `height` (all required; for a line, width and height are the end's offset). `cornerRadius` and `cornerKind` give live corners; any style field and `name` apply. Uses the editor's default style for anything not given. Returns `{ id }`. |
 | `vector.addPath` | Add a path from SVG path data `d` (absolute or relative M, L, H, V, C, S, Q, T, A, Z; arcs and quadratics become cubics) in document units, with `name` and style fields; unset style comes from the editor defaults. Fails when `d` has no points. Returns `{ id }`. |
 | `vector.importSvg` | Add the shapes of SVG markup `svg` on top of the document, or replace the document with `replace: true`. Reads paths, basic shapes, groups, transforms, linear and radial gradients, `clip-path` / `mask` references (as mask groups) `<text>` (as point text: content, font, anchor and fill) and `<use>` (as instances of symbols made from what they refer to); skips images and foreign filters. |
@@ -349,7 +350,9 @@ contents whole while you work, without losing the mask.
 | Command | Use it to |
 | --- | --- |
 | `vector.setEditing` | Set editing behaviour: `keepShapeOnDelete`, `curvatureMoves`, `pencilSmoothing` (0 to 1), `recognizeShapes`, `eraserSize`, `pencilPressure` (pen, all, off). Returns the settings. |
-| `vector.setTool` | Switch the interactive tool (select, direct, pen, pencil, rect, ellipse, polygon, star, line, scissors, knife, eraser, width, shapeBuilder, paintBucket, blend, gradient, envelope, type, typePath). Only for handing the canvas to the user in a given mode; commands do not need a tool. |
+| `vector.getSnapOptions` | Read how drawing snaps for people at the pointer: grid, objects, guides, threshold, polar `angles`, object snap `tracking`, `trackPolar`, `polarRelative`. |
+| `vector.setSnapOptions` | Set those options, e.g. `polarIncrement: 15` for 15° polar tracking, or a grid, before handing the canvas to the user. Moves nothing. Returns the options. |
+| `vector.setTool` | Switch the interactive tool (select, direct, pen, pencil, rect, ellipse, polygon, star, line, scissors, knife, eraser, width, shapeBuilder, paintBucket, blend, gradient, envelope, type, typePath, frame, connector). Only for handing the canvas to the user in a given mode; commands do not need a tool. |
 
 ## Pitfalls
 

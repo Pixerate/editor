@@ -403,6 +403,10 @@ export interface VectorOverlayRenderData {
 	 * pointer (top, right, bottom, left, centre), `active` on the one an end would glue to.
 	 */
 	connectorSites: { nodeId: string; side: string; x: number; y: number; active: boolean }[];
+	/** Points acquired for object snap tracking, screen space: draw a small `+` at each. */
+	trackingPoints: { x: number; y: number }[];
+	/** The distance or coordinate being typed while the pen draws, and where to show it (screen space, by the pointer), or null. */
+	typedEntry: { text: string; x: number; y: number } | null;
 	constraints: { id: string; kind: string; label: string; x: number; y: number; dimension: { x1: number; y1: number; x2: number; y2: number } | null; satisfied: boolean }[];
 	/** A short status, e.g. "W 120 × H 80" or "45°". */
 	status: string | null;
@@ -922,7 +926,10 @@ export function getVectorOverlayRenderData(state: VectorEditorState): VectorOver
 		const tl = toScreen(state, b);
 		textBox = { x: tl.x, y: tl.y, width: b.width * z, height: b.height * z };
 	}
-	return { outlines, selectionBox, distort, anchors, handles, marquee, penPreview, artboard, guides, status, toolStroke, pencilString, cutPoint, cornerWidgets, widthPoints, widthSpot, builder, blend, gradient, envelope, masks: maskOverlay(state), text: textOverlay(state), textBox, constraints: constraintOverlay(state), frames: frameLabels(state), connectorSites: connectorSiteOverlay(state) };
+	return { outlines, selectionBox, distort, anchors, handles, marquee, penPreview, artboard, guides, status, toolStroke, pencilString, cutPoint, cornerWidgets, widthPoints, widthSpot, builder, blend, gradient, envelope, masks: maskOverlay(state), text: textOverlay(state), textBox, constraints: constraintOverlay(state), frames: frameLabels(state), connectorSites: connectorSiteOverlay(state),
+		trackingPoints: (state.trackingPoints ?? []).map((p) => toScreen(state, p)),
+		typedEntry: state.typedEntry ? { text: state.typedEntry, ...(state.pointer ? toScreen(state, state.pointer) : { x: 0, y: 0 }) } : null
+	};
 }
 
 /** Mask indicators of the mask groups that are selected or hold the selection (see `VectorOverlayRenderData.masks`). */
