@@ -29,6 +29,7 @@ import { DEFAULT_FLOW, flowField, normalizeFlow, type WetFlowSpec } from '../pai
 import { WetMedium } from '../paint/wet/medium';
 import { PaintGradientSampler, type PaintGradientSample, type PaintGradientSource } from '../paint/gradient-paint';
 import { DEFAULT_WET_PARAMS, FLAT, normalizeTilt, normalizeWetParams, type WetParams, type WetTilt } from '../paint/wet/model';
+import { createWetGpuEngine, findWebGpu, type WetGpuEngine, type WetGpuProvider, type WetGpuSupport } from '../paint/wet/gpu';
 import { WetWorld, type WetBackendInfo, type WetLaneStats, type WetPaperInput, type WetSnapshot, type WetWorldOptions } from '../paint/wet/world';
 import { TILE, TiledSurface, type RasterRect } from '../raster/surface';
 import type { PaintBrush, WetMediumKind } from './brushes';
@@ -343,7 +344,45 @@ export interface PaintWetOptions extends WetWorldOptions {
   speed?: number;
   /** Bytes of wet snapshots kept for undo (default 512 MB). */
   undoMemory?: number;
+  /**
+   * Engine B, the WebGPU accelerator for large wet areas: `auto` (default: used when WebGPU is
+   * there and at least `gpuMinTiles` tiles are wet) or `off` (the CPU does everything).
+   */
+  gpu?: WetGpuMode;
+  /** Live 256 px tiles at which the GPU takes over (default 16, a fully wet 1024² canvas). */
+  gpuMinTiles?: number;
+  /** The WebGPU to use (default `navigator.gpu`; tests pass Node's). */
+  gpuProvider?: WetGpuProvider | null;
 }
+
+/** Whether Engine B (WebGPU) may run: `auto`, or `off` to force the CPU. */
+export type WetGpuMode = 'auto' | 'off';
+export const WET_GPU_MODES: readonly WetGpuMode[] = ['auto', 'off'];
+
+/**
+ * Engine B as panels and tools show it. `state`: `off` (forced to the CPU), `not-started` (it
+ * starts with the first wet stroke), `starting`, `unavailable` (no usable WebGPU: see `reason`),
+ * `standby` (ready; the wet area is below `minTiles`), `active` (the GPU shades the wet paint), or
+ * `failed` (it stopped: see `reason`). The CPU stays the authority in every state.
+ */
+export interface WetEngineInfo {
+  mode: WetGpuMode;
+  state: 'off' | 'not-started' | 'starting' | 'unavailable' | 'standby' | 'active' | 'failed';
+  reason: string | null;
+  /** The GPU, when known. */
+  adapter: string | null;
+  /** Most wet tiles the GPU can hold. */
+  maxTiles: number;
+  /** Live tiles at which the GPU takes over. */
+  minTiles: number;
+  /** Live tiles now (all wet layers). */
+  activeTiles: number;
+  /** The CPU kernel (the authority), or `null` before the first wet stroke. */
+  cpu: WetBackendInfo | null;
+}
+
+/** Steps the GPU may show ahead of the CPU between strokes (the longest CPU batch then). */
+export const GPU_LEAD = 16;
 
 /** Tiles reshaded per frame at most (the rest catch up over the next frames). */
 const DISPLAY_TILES_PER_TICK = 24;
@@ -364,6 +403,13 @@ export class PaintWetLayers {
   private lastTick: number | null = null;
   private ticking: Promise<void> | null = null;
   private stepsOwed = 0;
+  private displaying: Promise<void> | null = null;
+  private leadAt = 0;
+  gpuMode: WetGpuMode;
+  gpuMinTiles: number;
+  private gpu: WetGpuEngine | null = null;
+  private gpuSupport: WetGpuSupport | null = null;
+  private gpuStarting: Promise<void> | null = null;
 
   constructor(
     private readonly host: PaintWetHost,
@@ -371,6 +417,68 @@ export class PaintWetLayers {
   ) {
     this.speed = Math.max(1, Math.min(2000, options.speed ?? 120));
     this.undoMemory = Math.max(0, options.undoMemory ?? 512 * 1024 * 1024);
+    this.gpuMode = options.gpu === 'off' ? 'off' : 'auto';
+    this.gpuMinTiles = Math.max(1, Math.floor(options.gpuMinTiles ?? 16));
+  }
+
+  // --- Engine B ------------------------------------------------------------------
+
+  /** Starts the GPU engine for the world (once; it may turn out unavailable). */
+  private startGpu(): void {
+    if (this.gpuMode === 'off' || this.gpu || this.gpuStarting || this.gpuSupport) return;
+    const provider = this.options.gpuProvider === undefined ? findWebGpu() : this.options.gpuProvider;
+    this.gpuStarting = createWetGpuEngine(provider)
+      .then(({ engine, support }) => {
+        this.gpuSupport = support;
+        if (!engine) return;
+        if (this.gpuMode === 'off' || !this.world) {
+          engine.destroy();
+          this.gpuSupport = null;
+          return;
+        }
+        this.gpu = engine;
+        this.world.gpuMinTiles = this.gpuMinTiles;
+        this.world.attachGpu(engine);
+      })
+      .finally(() => {
+        this.gpuStarting = null;
+        this.host.changed();
+      });
+  }
+
+  /** Resolves once the GPU engine has started or turned out unavailable. */
+  async gpuReady(): Promise<WetEngineInfo> {
+    if (this.gpuStarting) await this.gpuStarting;
+    return this.engineInfo();
+  }
+
+  /** `auto`: use the GPU for large wet areas when there is one; `off`: the CPU only. */
+  setGpu(mode: WetGpuMode, minTiles?: number): WetEngineInfo {
+    if (minTiles !== undefined) {
+      this.gpuMinTiles = Math.max(1, Math.floor(minTiles));
+      if (this.world) this.world.gpuMinTiles = this.gpuMinTiles;
+    }
+    if (mode === this.gpuMode) return this.engineInfo();
+    this.gpuMode = mode;
+    if (mode === 'off') {
+      this.world?.attachGpu(null);
+      this.gpu?.destroy();
+      this.gpu = null;
+      this.gpuSupport = null;
+    } else if (this.world) this.startGpu();
+    return this.engineInfo();
+  }
+
+  engineInfo(): WetEngineInfo {
+    const w = this.world;
+    const base = { mode: this.gpuMode, adapter: this.gpuSupport?.adapter ?? null, maxTiles: this.gpuSupport?.maxSlots ?? 0, minTiles: this.gpuMinTiles, activeTiles: w?.activeTiles() ?? 0, cpu: this.backend() };
+    if (this.gpuMode === 'off') return { ...base, state: 'off', reason: 'Forced to the CPU.' };
+    if (this.gpuStarting) return { ...base, state: 'starting', reason: null };
+    if (w?.gpuError) return { ...base, state: 'failed', reason: w.gpuError };
+    if (this.gpuSupport && !this.gpuSupport.supported) return { ...base, state: 'unavailable', reason: this.gpuSupport.reason };
+    if (!this.gpu) return { ...base, state: 'not-started', reason: 'Starts with the first wet stroke.' };
+    if (w?.gpuActive) return { ...base, state: 'active', reason: null };
+    return { ...base, state: 'standby', reason: `The GPU takes over at ${this.gpuMinTiles} wet tiles (256 px).` };
   }
 
   /** The world (made on first use, at the canvas size). */
@@ -380,6 +488,9 @@ export class PaintWetLayers {
     if (!this.world) {
       this.world = new WetWorld(width, height, wetPaperInput(this.host.paper()), { kernel: this.options.kernel, threads: this.options.threads });
       this.world.setTilt(this.tilt);
+      this.world.gpuMinTiles = this.gpuMinTiles;
+      if (this.gpu) this.world.attachGpu(this.gpu);
+      else this.startGpu();
     }
     return this.world;
   }
@@ -491,6 +602,22 @@ export class PaintWetLayers {
     return rects;
   }
 
+  /** Like `syncDisplays`, shading on the GPU when Engine B is active (all stale tiles at once). */
+  async syncDisplaysGpu(maxCpuTiles: number, lead = false): Promise<RasterRect[]> {
+    const w = this.world;
+    if (!w) return [];
+    const surfaces = new Map<string, TiledSurface>();
+    const rects: RasterRect[] = [];
+    for (const id of w.laneIds()) {
+      const d = await w.displayGpu(id, maxCpuTiles, lead);
+      if (!w.hasLane(id)) continue;
+      if (this.host.layerSurface(id) !== d.surface) surfaces.set(id, d.surface);
+      rects.push(...d.changed);
+    }
+    if (surfaces.size) this.host.updateSurfaces(surfaces, rects);
+    return rects;
+  }
+
   /** Drops the wet layers whose paint has all dried (they become ordinary pixel layers). */
   private retireDry(): void {
     const w = this.world;
@@ -509,7 +636,13 @@ export class PaintWetLayers {
    * Resolves when the steps are done and the display is up to date.
    */
   tick(now: number, maxSteps = 8): Promise<void> {
-    if (this.ticking) return this.ticking;
+    if (this.ticking) {
+      // Between strokes, while the CPU works through a batch, the GPU shows its steps as they come.
+      this.leadFrame(now);
+      return this.ticking;
+    }
+    // The GPU is still shading the last frame: wait for it (edits need not; they just win).
+    if (this.displaying) return this.displaying;
     const last = this.lastTick;
     this.lastTick = now;
     const w = this.world;
@@ -522,8 +655,13 @@ export class PaintWetLayers {
       this.retireDry();
       return Promise.resolve();
     }
-    this.stepsOwed = Math.min(maxSteps * 4, this.stepsOwed + ((now - last) / 1000) * this.speed);
-    const n = Math.min(maxSteps, Math.floor(this.stepsOwed));
+    // Engine B between strokes: longer CPU batches (up to GPU_LEAD steps) that the GPU runs ahead through.
+    const lead = w.gpuActive && !this.driver;
+    w.gpuLeadMode = lead;
+    const most = lead ? Math.max(maxSteps, GPU_LEAD) : maxSteps;
+    this.stepsOwed = Math.min(most * 4, this.stepsOwed + ((now - last) / 1000) * this.speed);
+    const n = Math.min(most, Math.floor(this.stepsOwed));
+    this.leadAt = now;
     if (n < 1) {
       this.flushDriver();
       return Promise.resolve();
@@ -536,12 +674,34 @@ export class PaintWetLayers {
         this.ticking = null;
       }
       this.flushDriver();
-      this.syncDisplays(DISPLAY_TILES_PER_TICK);
+      if (w.gpuActive) {
+        const shading = this.syncDisplaysGpu(DISPLAY_TILES_PER_TICK).then(() => undefined);
+        this.displaying = shading;
+        try {
+          await shading;
+        } finally {
+          this.displaying = null;
+        }
+      } else this.syncDisplays(DISPLAY_TILES_PER_TICK);
       this.retireDry();
       this.host.changed();
     })();
     this.ticking = run;
     return run;
+  }
+
+  /** Lead mode: steps the GPU on by the time since the last frame (within the running batch) and shows it. */
+  private leadFrame(now: number): void {
+    const w = this.world;
+    if (!w || this.displaying || this.driver || !w.gpuLeading) return;
+    const k = Math.max(1, Math.round(((now - this.leadAt) / 1000) * this.speed));
+    if (!w.gpuLead(k)) return;
+    this.leadAt = now;
+    const shading = this.syncDisplaysGpu(0, true).then(() => this.host.changed());
+    this.displaying = shading;
+    void shading.finally(() => {
+      if (this.displaying === shading) this.displaying = null;
+    });
   }
 
   private flushDriver(): void {
@@ -574,7 +734,8 @@ export class PaintWetLayers {
     })();
     this.ticking = job;
     await job;
-    this.syncDisplays();
+    if (w.gpuActive) await this.syncDisplaysGpu(Infinity);
+    else this.syncDisplays();
     this.retireDry();
     return w.clock - start;
   }
@@ -654,6 +815,8 @@ export class PaintWetLayers {
   destroy(): void {
     this.world?.destroy();
     this.world = null;
+    this.gpu?.destroy();
+    this.gpu = null;
   }
 }
 

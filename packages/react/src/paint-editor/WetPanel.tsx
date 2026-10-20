@@ -1,5 +1,5 @@
 import React from 'react';
-import { WET_FLOW_KINDS, WET_PARAM_SLIDERS, WET_SPEED_SLIDER, WET_TILT_SLIDERS, readPath, type PaintEditorController, type WetFlowKind } from '@pixerate/editor/paint-editor';
+import { WET_FLOW_KINDS, WET_GPU_OPTIONS, WET_PARAM_SLIDERS, WET_SPEED_SLIDER, WET_TILT_SLIDERS, readPath, wetEngineSummary, type PaintEditorController, type WetFlowKind, type WetGpuMode } from '@pixerate/editor/paint-editor';
 import { usePaintEditorState } from './usePaintEditor';
 import { ErrorLine, PaintSlider, button, chip, panel, useAttempt } from './shared';
 
@@ -14,7 +14,8 @@ const FLOW_LABELS: Record<WetFlowKind, string> = { none: 'None', linear: 'One wa
  * Wet media: whether paint is wet, Dry now, Pause / Resume, the water overlay and speed; Wet paper
  * on the active layer; canvas tilt; the active layer's wet settings (viscosity, evaporation, edge
  * darkening, granulation, blooms, bleed, pigment weight, lifting, staining) and flow map; and the
- * kernel in use, with a note when it runs slower than it could (no cross-origin isolation).
+ * kernel in use, with a note when it runs slower than it could (no cross-origin isolation); and
+ * Engine B, the WebGPU accelerator for large washes, with a switch to force the CPU.
  */
 export const WetPanel: React.FC<WetPanelProps> = ({ controller, className }) => {
   const state = usePaintEditorState(controller);
@@ -87,6 +88,19 @@ export const WetPanel: React.FC<WetPanelProps> = ({ controller, className }) => 
           {backend.backend.kind === 'wasm-threads' ? `WebAssembly, ${backend.backend.threads} threads` : backend.backend.kind === 'wasm' ? 'WebAssembly, one thread' : 'JavaScript'}
         </p>
       )}
+      <label className="flex items-center justify-between gap-2">
+        <span className="text-slate-400">Engine</span>
+        <select aria-label="Wet engine" value={wet.gpu} onChange={(e) => attempt(() => controller.setWetEngine({ gpu: e.target.value as WetGpuMode }))} className="rounded bg-slate-800 px-1 py-0.5">
+          {WET_GPU_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <p className={`text-[10px] ${backend.engine.state === 'active' ? 'text-emerald-300' : 'text-slate-500'}`} data-testid="wet-engine">
+        {wetEngineSummary(backend.engine)}
+      </p>
       <ErrorLine error={error} />
     </div>
   );
