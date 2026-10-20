@@ -24,7 +24,8 @@ import { bezierPathToSvg } from '../canvas/pathops/bezier.js';
 import { bezierPathBounds } from '../canvas/pathops/bezier.js';
 import { hasStrokeExtras, strokeWidthProfileOf, vectorStrokeLineArea, vectorStrokeOutlinePath, vectorStrokeParts, vectorStrokeReach } from './stroke.js';
 import { sanitizeWidthProfile } from './width.js';
-import { expandVectorAppearance, hasOwnVectorAppearance, sanitizeVectorEffects, transformVectorEffects, vectorAppearanceNodes } from './appearance.js';
+import { expandVectorAppearance, hasOwnVectorAppearance, sanitizeVectorEffects, transformVectorEffects, vectorAppearanceNodes, vectorInstanceDrawn } from './appearance.js';
+import { resolveVectorSymbols } from './symbols.js';
 import { isVectorMaskGroup, sanitizeVectorMask, vectorMaskRenderData } from './mask.js';
 import { sanitizeVectorTextFields, vectorTextGeometryNode, vectorTextPaths, vectorTextSpans, vectorTextSpanSvg } from './text.js';
 import { activeVectorFilters, sanitizeVectorFilters, vectorFilterMarkup, vectorFilterSvg, type VectorRenderFilter } from './filters.js';
@@ -55,6 +56,7 @@ import {
 	ellipseSubpath,
 	hasPaint,
 	IDENTITY_MATRIX,
+	isIdentityMatrix,
 	lineSubpath,
 	multiplyMatrices,
 	rectSubpath,
@@ -92,6 +94,8 @@ import {
 	type VectorPaintLayer,
 	type VectorStrokeAlign,
 	type VectorSubpath,
+	type VectorSymbol,
+	type VectorInstanceNode,
 	type VectorTextNode
 } from './types.js';
 
@@ -279,7 +283,7 @@ function computeStrokeSvgParts(node: VectorPathNode, clipId: string, precision: 
  */
 export function vectorNodeLocalPaintBounds(node: VectorNode): VectorBounds | null {
 	const drawn = expandVectorAppearance(node);
-	const reach = (n: VectorNode): number => (n.type === 'path' ? vectorStrokeStackReach(n) : n.type === 'text' ? reach(expandVectorAppearance(n)) : Math.max(0, ...n.children.map(reach)));
+	const reach = (n: VectorNode): number => (n.type === 'path' ? vectorStrokeStackReach(n) : n.type === 'text' || n.type === 'instance' ? reach(expandVectorAppearance(n)) : Math.max(0, ...n.children.map(reach)));
 	let b: VectorBounds | null;
 	if (drawn.type === 'path') b = vectorPathLocalBounds(drawn);
 	else b = unionBounds(drawn.children.filter((c) => c.visible !== false).map((c) => vectorNodeBounds(c, IDENTITY_MATRIX)));
@@ -382,6 +386,8 @@ function blendFromAttribute(value: string | undefined, m: AffineMatrix): VectorB
 
 /** Serializes a vector document as a standalone SVG string. */
 export function vectorDocumentToSvg(doc: VectorDocument, options: VectorSvgExportOptions = {}): string {
+	// Instances draw their symbol's art: resolve it when the caller's document has not.
+	doc = resolveVectorSymbols(doc);
 	const precision = options.precision ?? 3;
 	const prefix = options.idPrefix ?? 'vg-';
 	const pretty = options.pretty !== false;
@@ -640,9 +646,46 @@ export function vectorDocumentToSvg(doc: VectorDocument, options: VectorSvgExpor
 		lines.push(`${indent(depth)}</g>`);
 	};
 
+	/** Symbols referenced by `<use>`: written once into `defs` as `<symbol>`. */
+	const symbolIds = new Map<string, string>();
+	const symbolRef = (symbolId: string): string | null => {
+		const hit = symbolIds.get(symbolId);
+		if (hit) return hit;
+		const sym = doc.symbols?.find((x) => x.id === symbolId);
+		if (!sym) return null;
+		const id = `${prefix}symbol-${symbolId}`;
+		symbolIds.set(symbolId, id);
+		const inner = capture(() => sym.nodes.forEach((n) => emit(n, 2)));
+		defs.push(`<symbol id="${escapeAttr(id)}" data-vector-symbol="${escapeAttr(JSON.stringify({ id: sym.id, name: sym.name }))}" overflow="visible">${inner}</symbol>`);
+		return id;
+	};
+
+	/**
+	 * An instance: a `<use>` of its symbol through its transform when that draws it exactly, else
+	 * its drawn art (overrides, unscaled strokes, effects or filters, which would be placed in the
+	 * symbol's space) in a `<g data-vector-instance>` that keeps what import needs.
+	 */
+	const emitInstance = (node: VectorInstanceNode, depth: number) => {
+		const data = { symbolId: node.symbolId, ...(node.scaleStrokes === false ? { scaleStrokes: false } : {}), ...(node.overrides ? { overrides: node.overrides } : {}) };
+		const exact = !node.overrides && node.scaleStrokes !== false && !node.effects?.length && !node.filters?.length;
+		const ref = symbolRef(node.symbolId);
+		if (exact && ref) {
+			lines.push(`${indent(depth)}<use${common(node)} href="#${escapeAttr(ref)}" data-vector-instance="${escapeAttr(JSON.stringify(data))}"/>`);
+			return;
+		}
+		const full = { ...data, ...(node.transform ? { transform: node.transform } : {}), ...(node.effects?.length ? { effects: node.effects } : {}) };
+		lines.push(`${indent(depth)}<g data-vector-instance="${escapeAttr(JSON.stringify(full))}">`);
+		emitNode(vectorInstanceDrawn(node), depth + 1);
+		lines.push(`${indent(depth)}</g>`);
+	};
+
 	const emitNode = (node: VectorNode, depth: number) => {
 		if (isVectorMaskGroup(node)) {
 			emitMaskGroup(node, depth);
+			return;
+		}
+		if (node.type === 'instance') {
+			emitInstance(node, depth);
 			return;
 		}
 		if (node.type === 'text') {
@@ -714,6 +757,8 @@ export function vectorDocumentToSvg(doc: VectorDocument, options: VectorSvgExpor
 	};
 
 	for (const node of doc.nodes) emit(node, 1);
+	// Symbols no instance uses still go into `defs`, so they come back on import.
+	for (const sym of doc.symbols ?? []) symbolRef(sym.id);
 	const w = num(doc.width);
 	const h = num(doc.height);
 	const nl = pretty ? '\n' : '';
@@ -1156,7 +1201,7 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 	const height = viewBox.length === 4 ? viewBox[3] : length(root.attrs.height, 150);
 	const rootMatrix: AffineMatrix = viewBox.length === 4 ? translateMatrix(-viewBox[0], -viewBox[1]) : IDENTITY_MATRIX;
 
-	const SKIP = new Set(['defs', 'clipPath', 'mask', 'symbol', 'style', 'title', 'desc', 'metadata', 'pattern', 'marker', 'filter', 'image', 'use', 'linearGradient', 'radialGradient', 'script', 'foreignObject']);
+	const SKIP = new Set(['defs', 'clipPath', 'mask', 'symbol', 'style', 'title', 'desc', 'metadata', 'pattern', 'marker', 'filter', 'image', 'linearGradient', 'radialGradient', 'script', 'foreignObject']);
 
 	const shapeOf = (el: Element): VectorSubpath[] | null => {
 		const a = el.attrs;
@@ -1462,6 +1507,77 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 	};
 	const s0 = (v: string | undefined) => v ?? 'none';
 
+	// Symbols: our `<symbol data-vector-symbol>`, or any element a `<use>` refers to.
+	const byId = new Map<string, Element>();
+	const index = (el: Element) => {
+		if (el.attrs.id && !byId.has(el.attrs.id)) byId.set(el.attrs.id, el);
+		el.children.forEach(index);
+	};
+	index(root);
+	const symbols: VectorSymbol[] = [];
+	const symbolOfElement = new Map<Element, string | null>();
+	const usedSymbolIds = new Set<string>();
+	const symbolFor = (el: Element): string | null => {
+		if (symbolOfElement.has(el)) return symbolOfElement.get(el)!;
+		symbolOfElement.set(el, null); // a symbol that uses itself draws nothing
+		const own = json(el.attrs['data-vector-symbol']) as { id?: string; name?: string } | undefined;
+		let id = typeof own?.id === 'string' && own.id ? own.id : (el.attrs.id ?? createId());
+		while (usedSymbolIds.has(id)) id = `${id}-${usedSymbolIds.size}`;
+		usedSymbolIds.add(id);
+		const style = readStyle(el, rootStyle);
+		// A `<symbol>` holds its art; any other element referred to is the art itself.
+		const nodes = el.name === 'symbol' ? visit(el, style, IDENTITY_MATRIX) : visitOne({ ...el, attrs: { ...el.attrs, transform: '' } }, rootStyle, parseSvgTransform(el.attrs.transform));
+		symbols.push({ id, name: typeof own?.name === 'string' && own.name ? own.name : (el.attrs.id ?? 'Symbol'), nodes });
+		symbolOfElement.set(el, id);
+		return id;
+	};
+	/** A `<use>` as an instance of the symbol it refers to, placed by its transform and `x` / `y`. */
+	const useInstance = (el: Element, m: AffineMatrix, meta: Partial<VectorInstanceNode>): VectorInstanceNode | null => {
+		const href = (el.attrs.href ?? el.attrs['xlink:href'] ?? '').trim();
+		const target = href.startsWith('#') ? byId.get(href.slice(1)) : undefined;
+		if (!target) return null;
+		const symbolId = symbolFor(target);
+		if (!symbolId) return null;
+		const own = json(el.attrs['data-vector-instance']) as { scaleStrokes?: boolean; overrides?: VectorInstanceNode['overrides'] } | undefined;
+		const place = multiplyMatrices(translateMatrix(length(el.attrs.x), length(el.attrs.y)), m);
+		const node: VectorInstanceNode = { id: idFor(el), type: 'instance', ...meta, symbolId, ...(own?.scaleStrokes === false ? { scaleStrokes: false } : {}), ...(own?.overrides ? { overrides: own.overrides } : {}) };
+		return isIdentityMatrix(place) ? node : { ...node, transform: place };
+	};
+	/** A `<g data-vector-instance>` (an instance written as its drawn art) as the instance it came from. */
+	const ownInstance = (g: Element, m: AffineMatrix, meta: Partial<VectorInstanceNode>): VectorInstanceNode | null => {
+		const raw = json(g.attrs['data-vector-instance']) as { symbolId?: string; transform?: number[]; scaleStrokes?: boolean; overrides?: VectorInstanceNode['overrides']; effects?: unknown } | undefined;
+		if (!raw || typeof raw.symbolId !== 'string') return null;
+		const sym = [...byId.values()].find((e) => e.name === 'symbol' && (json(e.attrs['data-vector-symbol']) as { id?: string } | undefined)?.id === raw.symbolId);
+		const symbolId = sym ? symbolFor(sym) : raw.symbolId;
+		if (!symbolId) return null;
+		const t = Array.isArray(raw.transform) && raw.transform.length === 6 && raw.transform.every(Number.isFinite) ? (raw.transform as unknown as AffineMatrix) : IDENTITY_MATRIX;
+		const place = multiplyMatrices(t, m);
+		const drawn = g.children.find((c) => c.name === 'g');
+		const effects = sanitizeVectorEffects(raw.effects);
+		const node: VectorInstanceNode = {
+			id: drawn?.attrs.id ?? idFor(g),
+			type: 'instance',
+			...meta,
+			symbolId,
+			...(raw.scaleStrokes === false ? { scaleStrokes: false } : {}),
+			...(raw.overrides ? { overrides: raw.overrides } : {}),
+			...(effects.length ? { effects } : {})
+		};
+		if (drawn) {
+			// The drawn group carries the instance's own opacity, blend mode and filters.
+			const ds = readStyle(drawn, rootStyle);
+			const op = drawn.attrs.opacity !== undefined ? parseFloat(drawn.attrs.opacity) : undefined;
+			if (op !== undefined && Number.isFinite(op) && op < 1) node.opacity = op;
+			const blend = vectorBlendModeFromCss(ds.mixBlendMode);
+			if (blend && blend !== 'normal') node.blendMode = blend;
+			const filters = filtersOf(ds.filter);
+			if (filters.length) node.filters = filters;
+			if (drawn.attrs.display === 'none') node.visible = false;
+			usedIds.add(node.id);
+		}
+		return isIdentityMatrix(place) ? node : { ...node, transform: place };
+	};
+
 	const visit = (el: Element, style: InheritedStyle, matrix: AffineMatrix): VectorNode[] => {
 		const out: VectorNode[] = [];
 		for (const child of el.children) {
@@ -1588,6 +1704,16 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 			if (node) out.push(node);
 			return out;
 		}
+		if (child.name === 'use') {
+			const node = useInstance(child, m, meta);
+			if (node) out.push(node);
+			return out;
+		}
+		if (child.name === 'g' && child.attrs['data-vector-instance'] !== undefined) {
+			const node = ownInstance(child, m, meta);
+			if (node) out.push(node);
+			return out;
+		}
 		if (child.name === 'g' && child.attrs['data-vector-text'] !== undefined) {
 			const node = ownText(child, m, meta);
 			if (node) out.push(node);
@@ -1639,6 +1765,12 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 	};
 
 	rootStyle = readStyle(root, rootStyle);
+	// Our own symbols come back whether or not an instance uses them.
+	const walkAll = (el: Element) => {
+		if (el.name === 'symbol' && el.attrs['data-vector-symbol'] !== undefined) symbolFor(el);
+		el.children.forEach(walkAll);
+	};
+	walkAll(root);
 	const nodes = visit(root, rootStyle, rootMatrix);
-	return { width, height, nodes };
+	return resolveVectorSymbols({ width, height, nodes, ...(symbols.length ? { symbols } : {}) });
 }

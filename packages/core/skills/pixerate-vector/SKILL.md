@@ -1,6 +1,6 @@
 ---
 name: pixerate-vector
-description: How to draw and edit vector artwork in the Pixerate vector editor through its vector.* commands - adding shapes and SVG paths, text (point, area and text on a path, character and paragraph styles, Create Outlines), fills, strokes, stacked fills and strokes with blend modes, drop shadows, glows and blurs, clipping masks and opacity masks, gradients (linear, radial, conic, Oklab interpolation), stroke alignment, arrowheads, variable-width and tapered strokes, live corner radii, boolean operations and Pathfinder (unite, subtract, divide, trim), Shape Builder, paint bucket, live path effects (trim paths, repeater, zig zag, offset), envelope warps and free distort, blends and morphing, anchor editing (join, smooth, simplify, scissors, knife, eraser), align, distribute, group, stacking order, and SVG import and export. Use when creating an icon, logo, illustration, glyph, badge or any Bezier path artwork, or editing an SVG in a Pixerate vector editor.
+description: How to draw and edit vector artwork in the Pixerate vector editor through its vector.* commands - adding shapes and SVG paths, text (point, area, on a path, styles, Create Outlines), symbols and instances, fills, strokes, stacked fills and strokes with blend modes, drop shadows, glows and blurs, clipping masks and opacity masks, gradients (linear, radial, conic, Oklab interpolation), stroke alignment, arrowheads, variable-width and tapered strokes, live corner radii, boolean operations and Pathfinder (unite, subtract, divide, trim), Shape Builder, paint bucket, live path effects (trim paths, repeater, zig zag, offset), envelope warps and free distort, blends and morphing, anchor editing (join, smooth, simplify, scissors, knife, eraser), align, distribute, group, stacking order, and SVG import and export. Use when creating an icon, logo, illustration, glyph, badge or any Bezier path artwork, or editing an SVG in a Pixerate vector editor.
 ---
 
 # Pixerate vector editor
@@ -8,7 +8,7 @@ description: How to draw and edit vector artwork in the Pixerate vector editor t
 The vector document is an artboard (`width` x `height` in document units, y down) holding a tree
 of **nodes**: `path` nodes (one or more subpaths of Bezier anchors, with fill, stroke and stroke
 settings), `text` nodes (a string set as point text, area text or along a path, painted with
-the same fills and strokes) and `group` nodes. Groups can also be live booleans, live blends, mask groups, or
+the same fills and strokes), `instance` nodes (a placed copy of a symbol) and `group` nodes. Groups can also be live booleans, live blends, mask groups, or
 carry a live effect stack. Every command is a `vector.*` command run with `run_command` / `run_commands` (see
 `pixerate-agent-tools` for batching with `"$0.id"` references, `atomic: true` and error codes).
 
@@ -33,6 +33,9 @@ carry a live effect stack. Every command is a `vector.*` command run with `run_c
   underline, strike-through), optional runs that override fields over ranges (`start` / `end`
   in UTF-16 code units, plus a range `fill`), a `paragraph` style and a `frame`: `point` (x, y
   of the first baseline), `area` (a box it wraps in) or `path` (a line it follows).
+- **Symbols** are reusable art kept with the document (`vector.listSymbols`), drawn by `instance`
+  nodes through a transform that, unlike other nodes', may scale and skew. Editing a symbol
+  (`vector.editSymbol` … `vector.exitSymbolEdit`) changes every instance.
 - Coordinates are document units. A rotated node stores its geometry in its own space: the
   `bounds` that `vector.list` reports are document-space, its `d` is the node's own.
 
@@ -58,6 +61,12 @@ Parameter details (gradient fields, effect parameters, width profiles, envelopes
    it over.
 
 ## Best practices
+
+- **Symbols for repeats.** When the same art appears several times (icons in a set, trees in a
+  scene, bullets, a logo mark), make it once and place instances (`vector.makeSymbol`, then
+  `vector.placeSymbol` with `x` / `y` or a `transform`), so one edit in isolation changes them all.
+  Give each a clear name. Use `vector.setInstanceOptions` `fill` / `stroke` for colour variants and
+  `hidden` to drop a part, rather than detaching; detach only when one copy must diverge for good.
 
 - **Text.** Use point text for labels and headlines, area text (`width`, `height`) for anything
   that should wrap, text on a path for badges and seals. Check `overflow` in the summary every
@@ -134,7 +143,7 @@ Parameter details (gradient fields, effect parameters, width profiles, envelopes
 | --- | --- |
 | `vector.addShape` | Add a `kind` `rect`, `ellipse`, `polygon` (`sides`, at least 3), `star` (`points`, `innerRatio` 0 to 1) or `line` at `x`, `y`, `width`, `height` (all required; for a line, width and height are the end's offset). `cornerRadius` and `cornerKind` give live corners; any style field and `name` apply. Uses the editor's default style for anything not given. Returns `{ id }`. |
 | `vector.addPath` | Add a path from SVG path data `d` (absolute or relative M, L, H, V, C, S, Q, T, A, Z; arcs and quadratics become cubics) in document units, with `name` and style fields; unset style comes from the editor defaults. Fails when `d` has no points. Returns `{ id }`. |
-| `vector.importSvg` | Add the shapes of SVG markup `svg` on top of the document, or replace the document with `replace: true`. Reads paths, basic shapes, groups, transforms, linear and radial gradients, `clip-path` / `mask` references (as mask groups) and `<text>` (as point text: content, font, anchor and fill); skips images, foreign filters and `use`. |
+| `vector.importSvg` | Add the shapes of SVG markup `svg` on top of the document, or replace the document with `replace: true`. Reads paths, basic shapes, groups, transforms, linear and radial gradients, `clip-path` / `mask` references (as mask groups) `<text>` (as point text: content, font, anchor and fill) and `<use>` (as instances of symbols made from what they refer to); skips images and foreign filters. |
 | `vector.delete` | Delete nodes (`ids`). |
 
 ### Style
@@ -211,6 +220,21 @@ Fill, stroke, stacked layers, filters, blend modes, transforms, masks and blends
 on paths (`vector.setStyle`, `vector.addFill`, `vector.addFilter`, `vector.transform`, …). Path
 effects, envelopes and booleans act on its glyph outlines, so they need an outline shaper; with
 the browser's shaper they are kept but not drawn until outlines are available.
+
+### Symbols and instances
+
+| Command | Use it to |
+| --- | --- |
+| `vector.listSymbols` | Read the symbols: id, name, the art's node ids (for `hidden`), bounds around the registration point, instance ids, and which symbol is being edited. |
+| `vector.makeSymbol` | Turn objects sharing a parent (`ids`, default the selection) into a symbol, registration point at their centre, with an instance in their place. Returns `{ symbolId, instanceId, symbol }`. |
+| `vector.placeSymbol` | Place an instance of `symbolId` with its registration point at `x`, `y` (default the artboard centre) or through `transform` (scale, rotate and skew allowed). Returns `{ id }`. |
+| `vector.setInstanceOptions` | Change instances: `scaleStrokes` (default true), `fill` / `stroke` overrides painting all of the art (null clears), `hidden` art node ids. Returns the instances as listed. |
+| `vector.replaceSymbol` | Make instances (`ids`) draw `symbolId` instead, keeping placement and colour overrides. Returns `{ ids }`. |
+| `vector.detachInstance` | Break instances' link: they become plain groups of their art as drawn. Returns `{ ids }`. |
+| `vector.editSymbol` | Enter isolation mode on a symbol (its id or an instance's): every command then edits the art in symbol space (registration point at 0, 0). Returns `{ symbolId, nodes }`. |
+| `vector.exitSymbolEdit` | Leave isolation mode; the edited symbol's instances update. Returns `{ symbolId }`. |
+| `vector.renameSymbol` | Rename `symbolId` to `name`. Returns the symbol summary. |
+| `vector.deleteSymbol` | Delete `symbolId`; fails while instances use it unless `detach: true` turns them into groups. |
 
 ### Masks and clipping
 
@@ -307,6 +331,11 @@ contents whole while you work, without losing the mask.
 - Without an outline shaper (`vector.listFonts` `outlines: false`), text exports as SVG `<text>`
   positioned character by character; other viewers need the same fonts installed. Create Outlines
   (with an outline shaper) when the SVG must look the same everywhere.
+- An instance's `transform` may scale; its art's strokes scale with it unless `scaleStrokes: false`.
+  Transform commands act on the instance, not the art: edit the art with `vector.editSymbol`.
+- While a symbol is being edited (`vector.listSymbols` `editing`), `vector.list` lists its art, not
+  the document. Always finish with `vector.exitSymbolEdit`. A symbol cannot contain an instance
+  of itself (directly or through another symbol).
 - `vector.typeOnPath` consumes the path. Duplicate it first if the path should stay visible.
 - A command that fails changes nothing; read its message (for example "Nothing is selected; pass
   ids.") and retry with the missing input.

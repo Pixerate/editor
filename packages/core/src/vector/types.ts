@@ -536,7 +536,45 @@ export interface VectorTextNode extends VectorNodeBase, VectorStyle {
 	frame: VectorTextFrame;
 }
 
-export type VectorNode = VectorPathNode | VectorGroupNode | VectorTextNode;
+/**
+ * Per-instance changes to a symbol's art: every fill and / or stroke of the art painted with one
+ * paint (a tint), and art nodes (by their id in the symbol) hidden.
+ */
+export interface VectorInstanceOverrides {
+	fill?: VectorPaint;
+	stroke?: VectorPaint;
+	/** Ids of nodes of the symbol's art (top-level or nested) not drawn in this instance. */
+	hidden?: string[];
+}
+
+/**
+ * A placed copy of a symbol (`VectorDocument.symbols`): it draws the symbol's art through its
+ * `transform`, which, unlike other nodes', may scale and skew. Editing the symbol changes every
+ * instance.
+ */
+export interface VectorInstanceNode extends VectorNodeBase {
+	type: 'instance';
+	symbolId: string;
+	/** Strokes (and other lengths of the art's paint) scale with the instance (default true, as in Illustrator). */
+	scaleStrokes?: boolean;
+	overrides?: VectorInstanceOverrides | null;
+	/**
+	 * The symbol's art, resolved by the editor (the same array as the symbol's `nodes`). Not part of
+	 * the stored document: `VectorEditorController.toJSON` and SVG export leave it out, and loading
+	 * resolves it again (`resolveVectorSymbols`).
+	 */
+	art?: VectorNode[];
+}
+
+export type VectorNode = VectorPathNode | VectorGroupNode | VectorTextNode | VectorInstanceNode;
+
+/** A symbol: reusable art its instances draw. */
+export interface VectorSymbol {
+	id: string;
+	name: string;
+	/** The art, bottom to top, in the symbol's own space (its origin is the registration point instances are placed by). */
+	nodes: VectorNode[];
+}
 
 /** A vector drawing: an artboard and its nodes, bottom to top. */
 export interface VectorDocument {
@@ -545,6 +583,8 @@ export interface VectorDocument {
 	/** Artboard colour (default: transparent). */
 	background?: string;
 	nodes: VectorNode[];
+	/** Symbols the document's instances draw (see `VectorInstanceNode`). */
+	symbols?: VectorSymbol[];
 }
 
 /** An axis-aligned rectangle. */

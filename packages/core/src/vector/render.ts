@@ -49,6 +49,7 @@ import {
 	hasOwnVectorAppearance,
 	hasVectorAppearance,
 	vectorAppearanceOutline,
+	vectorInstanceDrawn,
 	vectorEnteredGroups,
 	VECTOR_EFFECT_LABELS,
 	VECTOR_EFFECT_PARAM_SPECS,
@@ -616,6 +617,11 @@ function outlinePaths(node: VectorNode, parent: AffineMatrix, entered: ReadonlyS
 	const m = multiplyMatrices(nodeMatrix(node), parent);
 	// Text outlines by its glyph boxes (its frame shows while it is edited).
 	if (node.type === 'text') return [transformBezierPath(vectorTextBoxOutline(node), m)];
+	// An instance outlines as its art draws (through its drawn group's rigid transform).
+	if (node.type === 'instance') {
+		const g = vectorInstanceDrawn(node);
+		return [transformBezierPath(vectorAppearanceOutline(g), multiplyMatrices(nodeMatrix(g), parent))];
+	}
 	// Live and mask groups outline as drawn (masked) unless they are being edited.
 	if ((hasOwnVectorAppearance(node) || isVectorMaskActive(node)) && !entered.has(node.id)) return [transformBezierPath(vectorAppearanceOutline(node), m)];
 	return node.children.filter((c) => c.visible !== false).flatMap((c) => outlinePaths(c, m, entered));
@@ -663,6 +669,7 @@ export function getVectorEnteredGroups(state: Pick<VectorEditorState, 'document'
 function collect(node: VectorNode): VectorPathNode[] {
 	if (node.type === 'path') return [node];
 	if (node.type === 'text') return [vectorTextPaintSource(node)];
+	if (node.type === 'instance') return [];
 	return node.children.flatMap(collect);
 }
 
@@ -737,7 +744,16 @@ export function getVectorOverlayRenderData(state: VectorEditorState): VectorOver
 	}
 
 	const origin = toScreen(state, { x: 0, y: 0 });
-	const artboard = { x: origin.x, y: origin.y, width: doc.width * z, height: doc.height * z };
+	let artboard = { x: origin.x, y: origin.y, width: doc.width * z, height: doc.height * z };
+	// Isolation mode: the document's artboard where the dimmed document draws (none without it).
+	const se = state.symbolEdit;
+	if (se) {
+		const m = se.hostTransform;
+		if (m) {
+			const tl = toScreen(state, { x: m[4], y: m[5] });
+			artboard = { x: tl.x, y: tl.y, width: se.host.width * m[0] * z, height: se.host.height * m[3] * z };
+		} else artboard = { x: origin.x, y: origin.y, width: 0, height: 0 };
+	}
 
 	let status: string | null = null;
 	const it = state.interaction;

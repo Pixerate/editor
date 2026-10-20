@@ -44,6 +44,8 @@ import {
 import { mapBezierPath } from './pathMap.js';
 import { isVectorMaskGroup, vectorMaskedShapes } from './mask.js';
 import { vectorTextPaintSource, vectorTextPaths, vectorTextShaperGeneration } from './text.js';
+import { vectorInstanceGroup } from './symbols.js';
+import { transformVectorNode } from './geometry.js';
 import {
 	VECTOR_WARP_STYLES,
 	VECTOR_WARP_STYLE_LABELS,
@@ -63,6 +65,7 @@ import type {
 	VectorEffectType,
 	VectorFillRule,
 	VectorGroupNode,
+	VectorInstanceNode,
 	VectorNode,
 	VectorPathNode,
 	VectorWarpMesh
@@ -342,7 +345,7 @@ export function activeVectorEffects(node: VectorNode): VectorEffect[] {
  * Text always does: it draws as its glyphs.
  */
 export function hasOwnVectorAppearance(node: VectorNode): boolean {
-	return node.type === 'text' || (node.type === 'group' && !!node.liveBoolean) || !!node.effects?.some(isEnabled);
+	return node.type === 'text' || node.type === 'instance' || (node.type === 'group' && !!node.liveBoolean) || !!node.effects?.some(isEnabled);
 }
 
 const liveCache = new WeakMap<VectorNode, boolean>();
@@ -578,9 +581,23 @@ export function applyVectorEffects(shapes: readonly VectorAppearanceShape[], eff
 	return list;
 }
 
+const instanceGroups = new WeakMap<VectorInstanceNode, VectorGroupNode>();
+
+/** What an instance draws as a plain group (cached per instance object; see `vectorInstanceGroup`). */
+export function vectorInstanceDrawn(node: VectorInstanceNode): VectorGroupNode {
+	let g = instanceGroups.get(node);
+	if (!g) {
+		g = vectorInstanceGroup(node, (n, m) => transformVectorNode(n, m));
+		instanceGroups.set(node, g);
+	}
+	return g;
+}
+
 /** The shapes of a child in its parent's space (hidden children have none), ordered by its index. */
 export function vectorChildAppearanceShapes(child: VectorNode, index: number): VectorAppearanceShape[] {
 	if (child.visible === false) return [];
+	// An instance's transform may scale: its drawn group's is rigid.
+	if (child.type === 'instance') child = vectorInstanceDrawn(child);
 	const m = child.transform;
 	const k = child.opacity ?? 1;
 	return vectorAppearanceShapes(child).map((s) => ({
@@ -617,6 +634,7 @@ function baseShapes(node: VectorNode): VectorAppearanceShape[] {
 	if (node.type === 'path') return [{ source: node, path: subpathsToBezier(node.subpaths), opacity: 1, order: [] }];
 	// Text: its glyphs, one shape per fill (a run's own fill paints its characters).
 	if (node.type === 'text') return vectorTextPaths(node).parts.map((p, k) => ({ source: vectorTextPaintSource(node, p.fill), path: p.path, opacity: 1, order: [k] }));
+	if (node.type === 'instance') return baseShapes(vectorInstanceDrawn(node));
 	if (node.liveBoolean) return liveBooleanShapes(node);
 	// A mask group's effects act on its contents (the mask stays as it is).
 	if (isVectorMaskGroup(node)) return node.children.flatMap((c, i) => (i === 0 ? [] : vectorChildAppearanceShapes(c, i)));
@@ -662,6 +680,12 @@ export function vectorEnvelopeFrame(node: VectorNode, effectId?: string): { effe
 export function vectorAppearanceShapes(node: VectorNode): VectorAppearanceShape[] {
 	const hit = fresh(shapeCache.get(node));
 	if (hit) return hit;
+	if (node.type === 'instance') {
+		// In the space of the drawn group (the instance's rotation and translation not applied).
+		const shapes = vectorAppearanceShapes(vectorInstanceDrawn(node));
+		shapeCache.set(node, [vectorTextShaperGeneration(), shapes]);
+		return shapes;
+	}
 	// A mask group draws its contents (effects applied) clipped by its mask. Text without glyph
 	// outlines has only glyph boxes, which effects would distort meaninglessly: they are skipped.
 	const effects = node.type === 'text' && !vectorTextPaths(node).outlines ? null : node.effects;
@@ -739,6 +763,11 @@ export function expandVectorAppearance(node: VectorNode): VectorPathNode | Vecto
 	if (!hasVectorAppearance(node)) return node as VectorPathNode | VectorGroupNode;
 	const hit = fresh(expandCache.get(node));
 	if (hit) return hit;
+	if (node.type === 'instance') {
+		const drawn = expandVectorAppearance(vectorInstanceDrawn(node));
+		expandCache.set(node, [vectorTextShaperGeneration(), drawn]);
+		return drawn;
+	}
 	let out: VectorPathNode | VectorGroupNode;
 	if (!hasOwnVectorAppearance(node)) {
 		const group = node as VectorGroupNode;

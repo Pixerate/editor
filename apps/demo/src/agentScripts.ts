@@ -345,6 +345,19 @@ export const VECTOR_SCRIPTS: AgentScript[] = [
       },
     ],
   },
+  {
+    id: "vector-symbols",
+    prompt: "Plant a row of trees and make them autumn",
+    steps: [
+      { say: "Reading the document's symbols.", ...command("vector.listSymbols") },
+      { say: "Placing three more trees along the hill.", ...command("vector.placeSymbol", { symbolId: "tree", x: 470, y: 330, name: "Tree" }), target: artboardBox(455, 300, 30, 50) },
+      { ...command("vector.placeSymbol", { symbolId: "tree", transform: [1.2, 0, 0, 1.2, 520, 322], name: "Tree" }), target: artboardBox(500, 290, 36, 56) },
+      { ...command("vector.placeSymbol", { symbolId: "tree", transform: [0.9, 0, 0.1, 0.9, 565, 316], name: "Tree" }), target: artboardBox(550, 290, 30, 46) },
+      { say: "Editing the symbol once turns every tree orange.", ...command("vector.editSymbol", { id: "tree" }) },
+      { ...command("vector.setStyle", { ids: ["crown"], fill: "#ea580c", stroke: "#7c2d12" }) },
+      { say: "Back to the whole drawing.", ...command("vector.exitSymbolEdit"), target: artboardBox(455, 260, 300, 90) },
+    ],
+  },
 ];
 
 export const ANIMATION_SCRIPTS: AgentScript[] = [

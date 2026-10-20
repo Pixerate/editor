@@ -897,7 +897,7 @@ function flattenPaths(node: VectorNode, parent: AffineMatrix = IDENTITY_MATRIX):
 	const m = multiplyMatrices(nodeMatrix(node), parent);
 	if (node.type === 'path') return [{ path: node, m, opacity: 1 }];
 	// Text blends as its glyphs.
-	if (node.type === 'text') return flattenPaths(expandVectorAppearance(node), parent);
+	if (node.type === 'text' || node.type === 'instance') return flattenPaths(expandVectorAppearance(node), parent);
 	const o = node.opacity ?? 1;
 	return node.children
 		.filter((c) => c.visible !== false)

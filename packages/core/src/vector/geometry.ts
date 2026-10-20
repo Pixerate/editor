@@ -268,7 +268,7 @@ export function locateVectorNode(nodes: VectorNode[], id: string): { list: Vecto
 export function collectPaintedNodes(node: VectorNode): Array<VectorPathNode | VectorTextNode> {
 	const out: Array<VectorPathNode | VectorTextNode> = [];
 	walkVectorNodes([node], (n) => {
-		if (n.type !== 'group') out.push(n);
+		if (n.type === 'path' || n.type === 'text') out.push(n);
 	});
 	return out;
 }
@@ -276,7 +276,7 @@ export function collectPaintedNodes(node: VectorNode): Array<VectorPathNode | Ve
 /** Every path node in the subtree (a path node itself, or a group's descendants). */
 export function collectPathNodes(node: VectorNode): VectorPathNode[] {
 	if (node.type === 'path') return [node];
-	if (node.type === 'text') return [];
+	if (node.type === 'text' || node.type === 'instance') return [];
 	const out: VectorPathNode[] = [];
 	walkVectorNodes(node.children, (n) => {
 		if (n.type === 'path') out.push(n);
@@ -532,6 +532,11 @@ function bakeIntoGeometry<T extends VectorNode>(node: T, m: AffineMatrix): T {
  */
 export function transformVectorNode<T extends VectorNode>(node: T, m: AffineMatrix): T {
 	const total = multiplyMatrices(nodeMatrix(node), m);
+	// An instance keeps the whole matrix: its art is drawn through it.
+	if (node.type === 'instance') {
+		const { transform: _t, ...rest } = node as VectorNode;
+		return (isIdentityMatrix(total) ? rest : { ...rest, transform: total }) as T;
+	}
 	const { rigid, residual } = decomposeRigid(total);
 	const { transform: _old, ...rest } = node as VectorNode;
 	const baked = bakeIntoGeometry(rest as T, residual);
