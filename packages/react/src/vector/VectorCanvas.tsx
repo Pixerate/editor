@@ -731,6 +731,16 @@ export function VectorCanvas({
             )}
           </g>
         )}
+        {overlay.shading.map((sh) => (
+          <g key={`shading:${sh.nodeId}`} data-vector-shading={sh.kind}>
+            {sh.lines.map((d, i) => (
+              <path key={i} d={d} stroke={accentColor} strokeWidth={1} opacity={0.7} />
+            ))}
+            {sh.points.map((p) => (
+              <circle key={p.index} data-vector-shading-point={p.index} data-selected={p.selected || undefined} cx={p.x} cy={p.y} r={p.selected ? 6 : 4.5} fill={p.color} stroke={p.selected ? accentColor : '#ffffff'} strokeWidth={p.selected ? 2 : 1.5} />
+            ))}
+          </g>
+        ))}
         {overlay.trackingPoints.map((t, i) => (
           <path key={`track:${i}`} data-vector-tracking-point="" d={`M${t.x - 5} ${t.y}H${t.x + 5}M${t.x} ${t.y - 5}V${t.y + 5}`} stroke={guideColor} strokeWidth={1.5} />
         ))}

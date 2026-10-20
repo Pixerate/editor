@@ -1,6 +1,6 @@
 ---
 name: pixerate-vector
-description: How to draw and edit vector artwork in the Pixerate vector editor through its vector.* commands - adding shapes and SVG paths, text (point, area, on a path, styles, Create Outlines), symbols and instances, CAD constraints (parallel, tangent, dimensions, auto-constrain), artboards and frames with resizing constraints, connectors, fills, strokes, stacked fills and strokes with blend modes, drop shadows, glows and blurs, clipping masks and opacity masks, gradients (linear, radial, conic, Oklab), stroke alignment, arrowheads, variable-width and tapered strokes, live corner radii, boolean operations and Pathfinder (unite, subtract, divide, trim), Shape Builder, paint bucket, path effects (trim, repeater, zig zag, offset), envelope warps and free distort, blends and morphing, anchor editing (join, smooth, simplify, knife, eraser), align, distribute, group, and SVG import and export. Use when creating an icon, logo, illustration, glyph, badge or any Bezier path artwork, or editing an SVG in a Pixerate vector editor.
+description: How to draw and edit vector artwork in the Pixerate vector editor through its vector.* commands - adding shapes and SVG paths, text (point, area, on a path, styles, Create Outlines), symbols and instances, CAD constraints, artboards and frames with resizing constraints, connectors, fills, strokes, stacked fills and strokes with blend modes, drop shadows, glows and blurs, clipping and opacity masks, gradients (linear, radial, conic, mesh, freeform), stroke alignment, arrowheads, variable-width and tapered strokes, live corner radii, boolean operations and Pathfinder (unite, subtract, divide, trim), Shape Builder, paint bucket, path effects (trim, repeater, zig zag, offset), envelope warps and free distort, blends and morphing, anchor editing (join, smooth, simplify, knife, eraser), align, distribute, group, and SVG import and export. Use when creating an icon, logo, illustration, glyph, badge or any Bezier path artwork, or editing an SVG in a Pixerate vector editor.
 ---
 
 # Pixerate vector editor
@@ -186,6 +186,19 @@ Parameter details (gradient fields, effect parameters, width profiles, envelopes
 | `vector.setWidthProfile` | Give strokes a variable width: a `preset` (uniform, taperStart, taperEnd, taperBoth, bulge, pinch, teardrop, wave, pressure; `uniform` removes it), explicit `points`, or a parametric `taper` and / or `wave`. Returns the profile points. |
 | `vector.setWidthPoint` | Set one width point of path `id`: `index` of an existing point (from the profile `vector.setWidthProfile` returns) or none to add one at `t` (0 to 1); `left` / `right` are side widths in document units. Returns the profile. |
 
+### Gradient meshes and freeform gradients
+
+| Command | Use it to |
+| --- | --- |
+| `vector.setMeshGradient` | Fill paths with a gradient mesh: `rows` × `columns` smooth patches over their bounds, coloured per point (`colors`, row by row) or by four `corners`. Use for realistic shading (fruit, metal, skin, soft folds). Returns `{ meshes: [{ id, shading }] }`. |
+| `vector.setMeshPoint` | Move a mesh point (`index`, row by row; `x`, `y` in document units) and / or set its `color` and `opacity`; neighbouring patches bend smoothly. Returns `{ id, shading }`. |
+| `vector.setFreeformGradient` | Fill paths with a freeform gradient: colour `points` anywhere (with `spread` for pure-colour discs) and `lines` carrying colour along curves, or, with no points, four or more placed inside each path along `colors`. Use for soft, organic colour that a linear or radial gradient cannot make. Returns `{ gradients }`. |
+| `vector.addFreeformPoint` | Add a colour point at `x`, `y` (default colour: what shows there). Returns `{ id, index, shading }`. |
+| `vector.setFreeformPoint` | Move a freeform point or change its `color`, `opacity`, `spread`. Returns `{ id, shading }`. |
+| `vector.removeFreeformPoint` | Remove a freeform point (never the last); later indices shift down. Returns `{ id, shading }`. |
+| `vector.setFreeformLines` | Replace the freeform lines (point indices each curve runs through; `[]` removes them). Returns `{ id, shading }`. |
+| `vector.getShading` | Read a path's mesh or freeform fill with points in document units (the indices the edit commands take). Call it before editing points. |
+
 ### Appearance: fill and stroke stacks, blend modes, filters
 
 | Command | Use it to |
@@ -355,6 +368,10 @@ contents whole while you work, without losing the mask.
 | `vector.setTool` | Switch the interactive tool (select, direct, pen, pencil, rect, ellipse, polygon, star, line, scissors, knife, eraser, width, shapeBuilder, paintBucket, blend, gradient, envelope, type, typePath, frame, connector). Only for handing the canvas to the user in a given mode; commands do not need a tool. |
 
 ## Pitfalls
+
+- Mesh and freeform fills draw as fine tiles, not SVG gradients: they cannot be edited with
+  `vector.setGradient` or as stops, and other tools see them as SVG patterns. Point indices
+  shift after `vector.removeFreeformPoint`; read them again with `vector.getShading`.
 
 - A connector's geometry is regenerated after every edit while an end is glued: editing its
   anchors directly does not stick. Unglue the end (`vector.setConnector` with `null`) or change

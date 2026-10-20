@@ -3,6 +3,7 @@
  * affine transforms, segment splitting, anchor-type conversion and shape factories.
  */
 import { isVectorGradient, transformVectorPaint } from './gradient.js';
+import { isVectorShadedPaint } from './shading.js';
 import type { Point } from '../canvas/types.js';
 import {
 	bezierPathBounds,
@@ -523,15 +524,15 @@ function bakeIntoGeometry<T extends VectorNode>(node: T, m: AffineMatrix): T {
 	// Each layer of a stack: its gradient moves with the geometry, its profile mirrors.
 	const layer = <L extends { paint: VectorPaint; strokeWidthProfile?: VectorWidthPoint[] | null }>(l: L): L => ({
 		...l,
-		...(isVectorGradient(l.paint) ? { paint: transformVectorPaint(l.paint, m) } : {}),
+		...(isVectorGradient(l.paint) || isVectorShadedPaint(l.paint) ? { paint: transformVectorPaint(l.paint, m) } : {}),
 		...(flips && l.strokeWidthProfile?.length ? { strokeWidthProfile: mirrorWidthProfile(l.strokeWidthProfile) } : {})
 	});
 	return {
 		...path,
 		...(mirrored ? { strokeWidthProfile: mirrorWidthProfile(path.strokeWidthProfile!) } : {}),
 		// Gradients in the node's own space move with its geometry.
-		...(isVectorGradient(path.fill) ? { fill: transformVectorPaint(path.fill, m) } : {}),
-		...(isVectorGradient(path.stroke) ? { stroke: transformVectorPaint(path.stroke, m) } : {}),
+		...(isVectorGradient(path.fill) || isVectorShadedPaint(path.fill) ? { fill: transformVectorPaint(path.fill, m) } : {}),
+		...(isVectorGradient(path.stroke) || isVectorShadedPaint(path.stroke) ? { stroke: transformVectorPaint(path.stroke, m) } : {}),
 		...(Array.isArray(path.fills) ? { fills: path.fills.map(layer) } : {}),
 		...(Array.isArray(path.strokes) ? { strokes: path.strokes.map(layer) } : {}),
 		...(path.type === 'path'

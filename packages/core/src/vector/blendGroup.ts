@@ -66,7 +66,11 @@ export function resolveVectorBlendOptions(options: VectorBlendOptions | null | u
 
 function paintColors(p: VectorPaint | undefined): string[] {
 	if (typeof p === 'string') return [p];
-	if (p && typeof p === 'object') return p.stops.map((s) => s.color);
+	if (p && typeof p === 'object') {
+		if (p.type === 'mesh') return p.colors;
+		if (p.type === 'freeform') return p.points.map((q) => q.color);
+		return p.stops.map((s) => s.color);
+	}
 	return [];
 }
 

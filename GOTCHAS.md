@@ -2352,6 +2352,11 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: `TileMedium` and `SmudgeTip` work on RGBA tiles, where a missing tile means transparent and a locked layer skips transparent pixels. A mask has one byte per pixel, and a missing tile (default 0) holds the value black.
 - **Solution / Workaround**: `PaintStrokeSession` wraps a one-channel target in `rgbaViewOfGrey`: it expands every tile it reads (an empty one as zeros) to opaque grey RGBA with transparency locked, and `flush` writes the red channel back through `writeTile` after each push. The Sponge refuses masks, since a mask has no saturation.
 
+### [core/vector] Mesh and Freeform Fills Are Not `VectorGradient`s
+
+- **Issue / Symptom**: A mesh or freeform fill disappeared after a transform, and code that read `fill.stops` crashed on it.
+- **Root Cause**: `VectorPaint` now also holds `{ type: 'mesh' }` and `{ type: 'freeform' }` paints. They have points and colours, not stops, so `isVectorGradient` is false for them. Code that treated every paint object as a gradient, such as transform baking or blend colour distance, skipped them or broke.
+- **Solution / Workaround**: Check `isVectorShadedPaint` (or `isVectorMeshGradient` / `isVectorFreeformGradient`) next to `isVectorGradient`. `transformVectorPaint` and `mapVectorPaint` move both kinds of point, and `vectorPaintToSvg` draws them as a pattern. Freeform is drawn as gradient strips, not flat cells: flat cells showed visible blocks at normal zoom.
 ### [core/paint] The Wet Kernels Only Agree Bit for Bit If Every Operation Is the Same f32 Operation
 
 - **Issue / Symptom**: After adding the edge field, the TypeScript and WebAssembly wet kernels drifted apart (different state hashes after a few steps), although the maths was "the same".
