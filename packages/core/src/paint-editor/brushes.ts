@@ -8,6 +8,7 @@
 import { DEFAULT_BRUSH, MAX_BRUSH_SIZE, normalizeBrush, type BrushSettings } from '../paint/brush';
 import { DEFAULT_BLENDER, DEFAULT_SMUDGE, normalizeBlender, normalizeSmudge, type BlenderSettings, type SmudgeSettings } from '../paint/blending';
 import type { MixingModel } from '../paint/exchange';
+import { readPaintSource, type PaintGradientSource, type PaintSource } from '../paint/gradient-paint';
 import { DEFAULT_MIXER, normalizeMixer, type MixerSettings } from '../paint/mixer';
 import { DEFAULT_STICKER, normalizeStickerSettings, type StickerSettings } from './stickers';
 import { DEFAULT_BRISTLE, DEFAULT_PARTICLE, normalizeBristle, normalizeParticle, type BristleSettings, type ParticleSettings } from './procedural';
@@ -242,6 +243,12 @@ export interface PaintBrush {
   bristle: BristleSettings;
   /** Sticker engine only: the stamps and how they are sprayed. */
   sticker: StickerSettings;
+  /**
+   * The brush's own gradient paint (`@pixerate/editor/paint` `PaintGradientSource`), used instead
+   * of the editor's paint; `null` (default): the editor's paint. Stops may be `paint` / `secondary`
+   * (the editor's two colours). This is what the multi-colour brush became.
+   */
+  paint: PaintGradientSource | null;
   /** True for the built-in presets (they cannot be removed or overwritten). */
   builtin?: boolean;
 }
@@ -294,7 +301,9 @@ export function normalizeBehavior(raw: BrushBehaviorInput = {}, base: BrushBehav
 }
 
 /** Brush settings to change or read: any subset of a brush and of its blocks. */
-export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mixer' | 'behavior' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker'>> & {
+export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mixer' | 'behavior' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker' | 'paint'>> & {
+  /** A gradient (or `null` for the editor's paint); a plain colour source clears it. */
+  paint?: PaintSource | null;
   tip?: Partial<BrushSettings>;
   dynamics?: Partial<BrushDynamics>;
   mixer?: Partial<MixerSettings>;
@@ -319,11 +328,73 @@ export function isWetBrush(brush: Pick<PaintBrush, 'engine'>): boolean {
 }
 
 /**
- * Whether a dab brush paints dab by dab through the exchange (it picks up paint or is
- * multi-coloured) instead of building one coverage buffer of one colour.
+ * Whether a dab brush paints dab by dab through the exchange (it picks up paint or paints a
+ * gradient) instead of building one coverage buffer of one colour.
  */
-export function usesPaintExchange(brush: PaintBrush): boolean {
-  return brush.engine === 'dab' && (brush.behavior.pickup > 0 || brush.behavior.multicolor.mode !== 'off');
+export function usesPaintExchange(brush: PaintBrush, gradient = brush.paint !== null): boolean {
+  return brush.engine === 'dab' && (brush.behavior.pickup > 0 || gradient);
+}
+
+/** Whether strokes of a brush paint colour, so gradient paint applies (not erasers, blenders, smudges or the wet tools other than paint). */
+export function brushTakesPaint(brush: Pick<PaintBrush, 'engine' | 'loadsColor' | 'wet'>): boolean {
+  if (brush.engine === 'eraser' || brush.engine === 'blender' || brush.engine === 'smudge') return false;
+  if (brush.engine === 'wet') return brush.wet.tool === 'paint';
+  if (brush.engine === 'mixer') return brush.loadsColor;
+  return true;
+}
+
+/**
+ * The multi-colour settings a gradient paints the same as (the inverse of `multiColorToPaint`), or
+ * `null` when the gradient has no multi-colour equivalent. Brushes report it as
+ * `behavior.multicolor`, so older readers keep working.
+ */
+export function paintToMultiColor(g: PaintGradientSource | null): MultiColorSettings | null {
+  if (!g || g.space === 'oklab' || g.stops.some((s) => s.opacity !== undefined || s.midpoint !== undefined)) return null;
+  const colors = g.stops.map((s) => s.color);
+  const own = (list: string[]) => (list.length === 2 && list[0] === 'paint' && list[1] === 'secondary' ? [] : list.some((c) => c === 'paint' || c === 'secondary') ? null : list);
+  const uniform = (n: number) => g.stops.every((s, k) => s.offset === k / n);
+  const softness = g.softness ?? 1;
+  if (g.map.by === 'across-tip' && colors.length <= 8 && uniform(colors.length - 1)) {
+    const c = own(colors);
+    return c ? { mode: 'tip', colors: c, order: 'sequence', length: DEFAULT_MULTI_COLOR.length, softness } : null;
+  }
+  if (g.map.by === 'random' && colors.length % 2 === 0 && colors.length <= 16) {
+    const n = colors.length / 2;
+    const pairs = Array.from({ length: n }, (_, k) => colors[2 * k]);
+    const hard = g.stops.every((s, i) => s.offset === (Math.floor(i / 2) + (i % 2)) / n && s.color === pairs[Math.floor(i / 2)]);
+    const c = hard ? own(pairs) : null;
+    return c ? { mode: 'dab', colors: c, order: 'random', length: g.map.every ?? 1, softness } : null;
+  }
+  if (g.map.by === 'distance' && g.map.unit === 'dabs' && g.map.repeat === 'repeat' && colors.length >= 3 && colors.length <= 9 && colors[0] === colors[colors.length - 1] && uniform(colors.length - 1)) {
+    const n = colors.length - 1;
+    const c = own(colors.slice(0, n));
+    const length = g.map.length / n;
+    return c && Number.isInteger(length) ? { mode: 'dab', colors: c, order: 'sequence', length, softness } : null;
+  }
+  return null;
+}
+
+/**
+ * The gradient paint a multi-coloured brush (`behavior.multicolor`, before gradient paint) paints
+ * the same pixels with: `tip` → `across-tip`; `dab` in sequence → `distance` in dabs, repeating
+ * through the colours and back to the first; `dab` at random → `random` per run of dabs, with hard
+ * stops. Without 2 colours of its own it uses the editor's paint and second colours.
+ */
+export function multiColorToPaint(mc: MultiColorSettings, mixing: MixingModel): PaintGradientSource | null {
+  if (mc.mode === 'off') return null;
+  const colors = mc.colors.length >= 2 ? mc.colors : ['paint', 'secondary'];
+  const n = colors.length;
+  const space = mixing === 'rgb' ? 'srgb' : 'pigment';
+  const soft = mc.softness < 1 ? { softness: mc.softness } : {};
+  if (mc.mode === 'tip') return { type: 'gradient', stops: colors.map((color, k) => ({ offset: k / (n - 1), color })), space, map: { by: 'across-tip' }, ...soft };
+  if (mc.order === 'random') {
+    const stops = colors.flatMap((color, k) => [
+      { offset: k / n, color },
+      { offset: (k + 1) / n, color },
+    ]);
+    return { type: 'gradient', stops, space, map: { by: 'random', every: mc.length } };
+  }
+  return { type: 'gradient', stops: [...colors, colors[0]].map((color, k) => ({ offset: k / n, color })), space, map: { by: 'distance', length: mc.length * n, repeat: 'repeat', unit: 'dabs' }, ...soft };
 }
 
 /** A brush with every field in range; missing fields come from `base` (default: a plain round dab brush). */
@@ -344,6 +415,18 @@ export function normalizePaintBrush(raw: PaintBrushInput = {}, base?: PaintBrush
   const mixer = normalizeMixer(mixerIn);
   let behavior = normalizeBehavior(rb, b.behavior);
   if (engine === 'mixer') behavior = { ...behavior, pickup: mixer.wet, mix: mixer.mix, dirty: !mixer.cleanEachStroke, mixing: mixer.mixing };
+  // Gradient paint: given (a plain colour or null clears it), or the multi-colour settings of
+  // older brushes and tools, merged into what the brush's gradient amounts to.
+  let paint: PaintGradientSource | null = b.paint ?? null;
+  if (raw.paint !== undefined) {
+    const p = readPaintSource(raw.paint);
+    paint = p && p.type === 'gradient' ? p : null;
+  } else if (rb.multicolor !== undefined) {
+    const mc = normalizeMultiColor(rb.multicolor, paintToMultiColor(paint) ?? DEFAULT_MULTI_COLOR);
+    paint = mc.mode === 'off' ? (paintToMultiColor(paint) ? null : paint) : multiColorToPaint(mc, behavior.mixing);
+  }
+  // `behavior.multicolor` is a read-only view of the gradient, for older readers.
+  behavior = { ...behavior, multicolor: paintToMultiColor(paint) ?? { ...DEFAULT_MULTI_COLOR, colors: [] } };
   return {
     id,
     name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim().slice(0, 80) : b.name,
@@ -364,6 +447,7 @@ export function normalizePaintBrush(raw: PaintBrushInput = {}, base?: PaintBrush
     particle: normalizeParticle(raw.particle ?? {}, b.particle ?? DEFAULT_PARTICLE),
     bristle: normalizeBristle(raw.bristle ?? {}, b.bristle ?? DEFAULT_BRISTLE),
     sticker: normalizeStickerSettings(raw.sticker ?? {}, b.sticker ?? DEFAULT_STICKER),
+    paint,
     ...(raw.builtin ? { builtin: true } : {}),
   };
 }
@@ -388,6 +472,7 @@ const BASE_BRUSH: PaintBrush = {
   particle: { ...DEFAULT_PARTICLE },
   bristle: { ...DEFAULT_BRISTLE },
   sticker: { ...DEFAULT_STICKER, stamps: [...DEFAULT_STICKER.stamps] },
+  paint: null,
 };
 
 type BrushInit = PaintBrushInput & { id: string; name: string; category: PaintBrushCategory };
@@ -490,14 +575,47 @@ export const BUILTIN_BRUSHES: readonly PaintBrush[] = [
   builtin({
     id: 'multicolor-flat', name: 'Multi-colour flat', category: 'paint', rotation: 'stroke',
     tip: { size: 30, hardness: 0.75, spacing: 0.05, angle: 90, roundness: 0.3, opacity: 1, flow: 0.85, smoothing: 0.2, pressureSize: true, pressureOpacity: false },
-    behavior: { pickup: 0.15, mix: 0.4, mixing: 'pigment', multicolor: { mode: 'tip', softness: 0.7 } },
+    behavior: { pickup: 0.15, mix: 0.4, mixing: 'pigment' },
+    // The paint and second colours side by side across the tip.
+    paint: { type: 'gradient', stops: [{ offset: 0, color: 'paint' }, { offset: 1, color: 'secondary' }], space: 'pigment', map: { by: 'across-tip' }, softness: 0.7 },
     dynamics: { minSize: 0.6 },
   }),
   builtin({
     id: 'palette-dabber', name: 'Palette dabber', category: 'paint',
     tip: { size: 18, hardness: 0.7, spacing: 0.35, opacity: 1, flow: 0.9, smoothing: 0.1, pressureSize: true, pressureOpacity: false },
-    behavior: { multicolor: { mode: 'dab', order: 'sequence', length: 6, softness: 0.4 } },
+    // From the paint colour to the second colour and back, every 6 dabs.
+    paint: { type: 'gradient', stops: [{ offset: 0, color: 'paint' }, { offset: 0.5, color: 'secondary' }, { offset: 1, color: 'paint' }], space: 'pigment', map: { by: 'distance', length: 12, repeat: 'repeat', unit: 'dabs' }, softness: 0.4 },
     dynamics: { minSize: 0.5, sizeJitter: 0.15, scatter: 0.3 },
+  }),
+  builtin({
+    id: 'gradient-round', name: 'Gradient round', category: 'paint',
+    tip: { size: 24, hardness: 0.8, spacing: 0.05, opacity: 1, flow: 0.9, smoothing: 0.2, pressureSize: true, pressureOpacity: false },
+    // Changes colour as it is dragged out: paint → second colour over 300 px, and back.
+    paint: { type: 'gradient', stops: [{ offset: 0, color: 'paint' }, { offset: 1, color: 'secondary' }], space: 'pigment', map: { by: 'distance', length: 300, repeat: 'mirror' } },
+    dynamics: { minSize: 0.5 },
+  }),
+  builtin({
+    id: 'pressure-ombre', name: 'Pressure ombré', category: 'paint',
+    tip: { size: 26, hardness: 0.6, spacing: 0.05, opacity: 1, flow: 0.8, smoothing: 0.2, pressureSize: false, pressureOpacity: false },
+    // Light pressure lays the second colour, full pressure the paint colour.
+    paint: { type: 'gradient', stops: [{ offset: 0, color: 'secondary' }, { offset: 1, color: 'paint' }], space: 'pigment', map: { by: 'pressure' } },
+  }),
+  builtin({
+    id: 'rainbow-marker', name: 'Rainbow marker', category: 'marker', rotation: 'stroke',
+    tip: { size: 18, hardness: 0.9, spacing: 0.04, angle: 90, roundness: 0.4, opacity: 1, flow: 1, smoothing: 0.25, pressureSize: false, pressureOpacity: false },
+    paint: {
+      type: 'gradient',
+      stops: [
+        { offset: 0, color: '#e11d48' },
+        { offset: 0.2, color: '#f59e0b' },
+        { offset: 0.4, color: '#facc15' },
+        { offset: 0.6, color: '#22c55e' },
+        { offset: 0.8, color: '#3b82f6' },
+        { offset: 1, color: '#8b5cf6' },
+      ],
+      space: 'oklab',
+      map: { by: 'distance', length: 600, repeat: 'repeat' },
+    },
   }),
   builtin({
     id: 'mixer-brush', name: 'Mixer Brush', category: 'mixer', engine: 'mixer',
@@ -517,6 +635,14 @@ export const BUILTIN_BRUSHES: readonly PaintBrush[] = [
     tip: { size: 90, hardness: 0.35, spacing: 0.1, angle: 90, roundness: 0.45, opacity: 1, flow: 1, smoothing: 0.3, pressureSize: false, pressureOpacity: true },
     behavior: { pickup: 0.2, mix: 0.3, mixing: 'pigment' },
     wet: { tool: 'paint', water: 0.8, pigment: 0.45, body: 0 },
+  }),
+  builtin({
+    id: 'gradient-wash', name: 'Gradient wash', category: 'watercolor', engine: 'wet', rotation: 'stroke',
+    tip: { size: 80, hardness: 0.35, spacing: 0.1, angle: 90, roundness: 0.5, opacity: 1, flow: 1, smoothing: 0.3, pressureSize: false, pressureOpacity: true },
+    behavior: { pickup: 0.2, mix: 0.3, mixing: 'pigment' },
+    wet: { tool: 'paint', water: 0.8, pigment: 0.45, body: 0 },
+    // A graded wash: the paint colour runs into the second colour as the brush travels.
+    paint: { type: 'gradient', stops: [{ offset: 0, color: 'paint' }, { offset: 1, color: 'secondary' }], space: 'pigment', map: { by: 'distance', length: 500, repeat: 'mirror' } },
   }),
   builtin({
     id: 'watercolor-detail', name: 'Watercolour rigger', category: 'watercolor', engine: 'wet',

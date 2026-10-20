@@ -8,6 +8,7 @@ import { normalizePaintBrush, type PaintBrushInput, type PaintBrush } from './br
 import type { Linear2, PenPoint, StrokeCopy } from './engine';
 import type { MixerLoad } from '../paint/exchange';
 import { normalizeStencil, type Stencil } from './stencils';
+import { readPaintSource, scalePaintGradient, type PaintGradientSource } from '../paint/gradient-paint';
 
 /** An affine map [a, b, c, d, e, f]: (x, y) → (a·x + b·y + e, c·x + d·y + f). */
 export type Affine = readonly [number, number, number, number, number, number];
@@ -31,6 +32,8 @@ export interface RecordedStroke {
   steps?: number[];
   /** The mask stencils it was painted through (so a replay keeps to them). */
   stencils?: Stencil[];
+  /** Gradient paint, with concrete colours (`color` is then its first stop's colour, for older readers). */
+  paint?: PaintGradientSource;
 }
 
 export function applyAffine(m: Affine, x: number, y: number): { x: number; y: number } {
@@ -129,6 +132,8 @@ export function normalizeBrushStroke(raw: unknown): RecordedStroke | null {
     }
     if (st.length) out.stencils = st;
   }
+  const paint = readPaintSource(r.paint);
+  if (paint && paint.type === 'gradient') out.paint = paint;
   if (Array.isArray(r.steps) && r.steps.length === points.length && r.steps.every((v) => Number.isInteger(v) && v >= 0)) out.steps = [...(r.steps as number[])];
   return out;
 }
@@ -189,6 +194,7 @@ export function varyStroke(stroke: RecordedStroke, m: Affine, v: StrokeVariation
   });
   const brush = s !== 1 ? normalizePaintBrush({ ...stroke.brush, tip: { ...stroke.brush.tip, size: stroke.brush.tip.size * s } }) : stroke.brush;
   const out: RecordedStroke = { ...stroke, brush, points };
+  if (stroke.paint && s !== 1) out.paint = scalePaintGradient(stroke.paint, s);
   if (stroke.copies?.length) {
     const inv = invertAffine(m);
     out.copies = stroke.copies.map((c) => composeAffine(m, composeAffine(c, inv)));

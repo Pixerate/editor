@@ -12,6 +12,7 @@
 
 import { TILE, TiledSurface, finishTile, tileKey, type RasterRect, type Tile, type TileKey } from '../raster/surface';
 import { TileMedium, type PaintTileTarget } from '../paint/exchange';
+import { PaintGradientSampler, type PaintGradientSource } from '../paint/gradient-paint';
 import type { PaintBrush } from './brushes';
 import { IDENTITY_COPY, PenDabWalker, PenSmoother, type PenDab, type PenPoint, type StrokeCopy } from './engine';
 import { hash2, rand01 } from './noise';
@@ -204,6 +205,8 @@ export interface StickerSprayInit {
   copies: readonly StrokeCopy[];
   /** The next sticker number on the layer (ids `st<n>`). */
   nextId: number;
+  /** Gradient paint (resolved): each sticker takes its dab's colour (across the tip: by its offset). */
+  paint?: PaintGradientSource | null;
 }
 
 /** A sticker-spray stroke: drops stickers along the path and draws them as it goes. */
@@ -266,6 +269,7 @@ export class StickerSpray {
     const off = st.scatter * d.radius * 2;
     const a = rand01(seed, i, 53) * Math.PI * 2;
     const dist = rand01(seed, i, 55) * off;
+    const base = this.colorAt(d, Math.cos(a) * dist, Math.sin(a) * dist);
     const sticker: Sticker = {
       id: `st${this.next++}`,
       stamp: st.stamps[Math.floor(rand01(seed, i, 57) * st.stamps.length)] ?? 'dot',
@@ -273,13 +277,27 @@ export class StickerSpray {
       y: Math.round((d.y + Math.sin(a) * dist) * 100) / 100,
       size: Math.max(2, Math.round(size * 10) / 10),
       rotation: Math.round(((-d.angle * 180) / Math.PI + (rand01(seed, i, 59) * 2 - 1) * 180 * st.rotationJitter) * 10) / 10,
-      color: st.colorJitter > 0 ? jitterColor(this.init.color, st.colorJitter, seed, i) : this.init.color,
-      opacity: Math.round(Math.min(1, d.opacity * this.init.brush.tip.opacity) * 1000) / 1000,
+      color: st.colorJitter > 0 ? jitterColor(base.color, st.colorJitter, seed, i) : base.color,
+      opacity: Math.round(Math.min(1, d.opacity * this.init.brush.tip.opacity * base.alpha) * 1000) / 1000,
       seed: Math.floor(rand01(seed, i, 65) * 1e9),
     };
     this.stickers.push(sticker);
     rects.push(drawSticker(this.medium, sticker));
     this.dabCount++;
+  }
+
+  private sampler: PaintGradientSampler | null | undefined;
+
+  /** A sticker's colour: the paint colour, or gradient paint at its dab (`dx`, `dy` from the dab's centre). */
+  private colorAt(d: PenDab, dx: number, dy: number): { color: string; alpha: number } {
+    const g = this.init.paint;
+    if (!g) return { color: this.init.color, alpha: 1 };
+    this.sampler ??= new PaintGradientSampler(g, this.init.seed);
+    const s =
+      g.map.by === 'across-tip'
+        ? this.sampler.sample(((dx * Math.sin(d.direction) + dy * Math.cos(d.direction)) / Math.max(0.5, d.radius) + 1) / 2)
+        : this.sampler.dab(d);
+    return { color: '#' + s.rgb.map((c) => Math.round(Math.min(1, Math.max(0, c)) * 255).toString(16).padStart(2, '0')).join(''), alpha: s.alpha };
   }
 }
 

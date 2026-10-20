@@ -8,6 +8,7 @@ import type ColorPanelComponent from './ColorPanel.svelte';
 import type PaintLayersPanelComponent from './PaintLayersPanel.svelte';
 import type WetPanelComponent from './WetPanel.svelte';
 import type StickerPanelComponent from './StickerPanel.svelte';
+import type PaintGradientEditorComponent from './PaintGradientEditor.svelte';
 
 export { default as PaintEditor } from './PaintEditor.svelte';
 export { default as PaintCanvas } from './PaintCanvas.svelte';
@@ -18,6 +19,7 @@ export { default as ColorPanel } from './ColorPanel.svelte';
 export { default as PaintLayersPanel } from './PaintLayersPanel.svelte';
 export { default as WetPanel } from './WetPanel.svelte';
 export { default as StickerPanel } from './StickerPanel.svelte';
+export { default as PaintGradientEditor } from './PaintGradientEditor.svelte';
 export { default as PaintSlider } from './PaintSlider.svelte';
 export { default as PaintPresenceLayer } from './PaintPresenceLayer.svelte';
 export { createPaintDirector, createReactivePaintEditor, paintEditorState } from './paintEditorRune.svelte.js';
@@ -31,3 +33,5 @@ export type ColorPanelProps = ComponentProps<typeof ColorPanelComponent>;
 export type PaintLayersPanelProps = ComponentProps<typeof PaintLayersPanelComponent>;
 export type WetPanelProps = ComponentProps<typeof WetPanelComponent>;
 export type StickerPanelProps = ComponentProps<typeof StickerPanelComponent>;
+
+export type PaintGradientEditorProps = ComponentProps<typeof PaintGradientEditorComponent>;

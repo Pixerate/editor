@@ -22,6 +22,7 @@ import { exchangeRates, PaintExchange, TileMedium, type MixerLoad, type MixingMo
 import { mixerRates } from '../paint/mixer';
 import { mixPigment8 } from '../raster/blend';
 import type { RasterRect } from '../raster/surface';
+import { PaintGradientSampler, type PaintGradientSample, type PaintGradientSource } from '../paint/gradient-paint';
 import type { MultiColorSettings, PaintBrush } from './brushes';
 import { IDENTITY_COPY, PenDabWalker, PenSmoother, type PenDab, type PenPoint, type StrokeCopy } from './engine';
 import { rand01 } from './noise';
@@ -40,6 +41,8 @@ export interface PaintDabStrokeOptions {
   paperDepth: number;
   seed?: number;
   copies?: readonly StrokeCopy[];
+  /** Gradient paint (resolved: no `paint` / `secondary` stops): each dab's colour comes from it. */
+  paint?: PaintGradientSource | null;
 }
 
 /** Entries in a multi-colour gradient table. */
@@ -115,8 +118,12 @@ export class PaintDabStroke {
   private readonly medium: TileMedium;
   private readonly depth: number;
   private readonly coverage: CoverageMap | null;
-  private readonly palette: RgbTriple[] | null;
+  private readonly sampler: PaintGradientSampler | null;
+  private readonly sample: PaintGradientSample = { rgb: [0, 0, 0], alpha: 1 };
   private readonly gradient: RgbTriple[] | null;
+  /** Opacity across the tip (`across-tip` gradients with opacity stops), or `null`. */
+  private readonly gradientAlpha: number[] | null;
+  private alphaCov = new Float32Array(0);
   private readonly fieldLut: RgbTriple[] = [];
   private readonly scratch: BlenderScratch | null;
   private readonly mixing: MixingModel;
@@ -145,9 +152,10 @@ export class PaintDabStroke {
     this.medium = new TileMedium(options.target, brush.engine === 'dab' ? { blend: brush.tip.blend } : {});
     this.depth = options.grain && !options.grain.flat ? Math.min(1, Math.max(0, options.paperDepth * brush.grain)) : 0;
     this.coverage = brush.engine === 'dab' ? new CoverageMap() : null;
-    const mc = brush.behavior.multicolor;
-    this.palette = exchanging && mc.mode !== 'off' ? multiColorPalette(mc, options.color, options.secondary) : null;
-    this.gradient = this.palette && mc.mode === 'tip' ? multiColorGradient(this.palette, mc.softness, this.mixing) : null;
+    this.sampler = exchanging && options.paint ? new PaintGradientSampler(options.paint, options.seed ?? 0) : null;
+    const table = this.sampler?.acrossTip ? this.sampler.tipTable(GRADIENT_STEPS) : null;
+    this.gradient = table ? table.map((e) => e.rgb) : null;
+    this.gradientAlpha = table && table.some((e) => e.alpha < 1) ? table.map((e) => e.alpha) : null;
     this.scratch = brush.engine === 'blender' ? createBlenderScratch() : null;
   }
 
@@ -230,23 +238,26 @@ export class PaintDabStroke {
     const ex = st.exchange!;
     // 1. Pick up from under the tip (the pure footprint, as the Mixer Brush samples).
     ex.pickUp(this.medium.sample(rect, tip));
-    // 2. The dab's paint: one colour, or a colour per pixel across the tip.
-    const mc = brush.behavior.multicolor;
-    if (this.palette && mc.mode === 'dab') {
-      const c = multiColorForDab(mc, this.palette, d.index, this.options.seed ?? 0, this.mixing);
-      ex.setReservoirColor(c[0], c[1], c[2]);
+    // 2. The dab's paint: one colour, gradient paint's colour for this dab, or a colour per pixel across the tip.
+    let flow = 1;
+    if (this.sampler && !this.gradient) {
+      const g = this.sampler.dab(d, this.sample);
+      ex.setReservoirColor(g.rgb[0], g.rgb[1], g.rgb[2]);
+      flow = g.alpha;
     }
     let field: Float32Array | null = null;
     let total: number;
+    let laid = cov;
     if (this.gradient) {
       total = this.tipField(ex, d, rect);
       field = this.field;
+      if (this.gradientAlpha) laid = this.tipAlpha(d, rect, cov);
     } else total = ex.paint(this.paint);
-    if (total > 0) {
-      if (this.coverage) this.depositWithCeiling(d, rect, cov, field, ex);
+    if (total > 0 && flow > 0) {
+      if (this.coverage) this.depositWithCeiling(d, rect, laid, field, ex, flow);
       else {
-        const dep = Math.min(1, total) * d.alpha * brush.tip.opacity * d.opacity;
-        if (dep > 0) this.medium.deposit(rect, cov, dep, this.paint, ex.paintPigment, field);
+        const dep = Math.min(1, total) * d.alpha * brush.tip.opacity * d.opacity * flow;
+        if (dep > 0) this.medium.deposit(rect, laid, dep, this.paint, ex.paintPigment, field);
       }
     }
     // 3. Drain.
@@ -285,8 +296,28 @@ export class PaintDabStroke {
     return total;
   }
 
+  /** `cov` scaled by the gradient's opacity across the tip. */
+  private tipAlpha(d: PenDab, rect: RasterRect, cov: Float32Array): Float32Array {
+    const a = this.gradientAlpha!;
+    const n = rect.width * rect.height;
+    if (this.alphaCov.length < n) this.alphaCov = new Float32Array(n);
+    const out = this.alphaCov.subarray(0, n);
+    const nx = Math.sin(d.direction);
+    const ny = Math.cos(d.direction);
+    const r = Math.max(0.5, d.radius);
+    const last = a.length - 1;
+    for (let yy = 0, k = 0; yy < rect.height; yy++) {
+      const py = rect.y + yy + 0.5 - d.y;
+      for (let xx = 0; xx < rect.width; xx++, k++) {
+        const u = ((rect.x + xx + 0.5 - d.x) * nx + py * ny) / r;
+        out[k] = cov[k] * a[Math.min(last, Math.max(0, Math.round(((u + 1) / 2) * last)))];
+      }
+    }
+    return out;
+  }
+
   /** A dab brush's deposit: only what this dab adds to the stroke's coverage, under its opacity ceiling. */
-  private depositWithCeiling(d: PenDab, rect: RasterRect, cov: Float32Array, field: Float32Array | null, ex: PaintExchange): void {
+  private depositWithCeiling(d: PenDab, rect: RasterRect, cov: Float32Array, field: Float32Array | null, ex: PaintExchange, flow = 1): void {
     const map = this.coverage!;
     const n = rect.width * rect.height;
     const before = new Float32Array(n);
@@ -295,7 +326,7 @@ export class PaintDabStroke {
       for (let xx = 0; xx < rect.width; xx++, k++) {
         if (cov[k] <= 0) continue;
         before[k] = map.get(rect.x + xx, rect.y + yy);
-        vals[k] = cov[k] * d.alpha;
+        vals[k] = cov[k] * d.alpha * flow;
       }
     }
     map.accumulate(rect, vals, d.opacity);

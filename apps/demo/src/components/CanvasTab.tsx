@@ -28,13 +28,15 @@ import {
   CanvasDrawLayer,
   CanvasGuidesLayer,
   ShapeNode,
+  ShapeNodeZoomProvider,
+  useCanvasBrushes,
   DEFAULT_ARRANGE_SHORTCUTS,
   type AlignEdge,
   type CanvasNode,
   type FreehandTool,
 } from "@pixerate/editor-react/canvas";
 import { useAgentToolProvider, useHistory, useHistoryShortcuts, useRegisterCommands } from "@pixerate/editor-react";
-import { createArrangeCommands, createHistoryCommands } from "@pixerate/editor/commands";
+import { createArrangeCommands, createDrawCommands, createHistoryCommands } from "@pixerate/editor/commands";
 import type { AgentTool, AgentToolProvider } from "@pixerate/editor/agent";
 import {
   AlignStartVertical,
@@ -201,6 +203,14 @@ const CanvasDemo: React.FC = () => {
     history: history.manager,
     initialTool: "select",
   });
+  // Dry paint brushes for freehand strokes; the paint engine loads when this list is first read.
+  const [brushId, setBrushId] = useState("");
+  const brushes = useCanvasBrushes();
+  useEffect(() => {
+    if ((draw.tool === "pen" || draw.tool === "highlighter") && (draw.style.brush ?? "") !== brushId) {
+      draw.setStyle({ brush: brushId || undefined });
+    }
+  }, [draw, brushId]);
 
   const selectColor = useCallback((color: string) => {
     setActiveGradientKey(null);
@@ -239,8 +249,10 @@ const CanvasDemo: React.FC = () => {
         getSelectedIds: () => nodesRef.current.filter((n) => n.selected).map((n) => n.id),
         scenes: { next: () => scenesRef.current.next(), previous: () => scenesRef.current.previous() },
       }),
+      // canvas.drawFreehand (optionally brushed, with a pressure profile) and canvas.listBrushes.
+      ...createDrawCommands(draw, { scope: null }),
     ],
-    [history.manager, arrange],
+    [history.manager, arrange, draw.drawStroke, draw.listBrushes],
   );
   useRegisterCommands(demoCommandRegistry, commands);
   useEffect(() => demoCommandRegistry.invalidate(), [nodes, history.canUndo, history.canRedo]);
@@ -546,12 +558,26 @@ const CanvasDemo: React.FC = () => {
             <input
               type="range"
               min={draw.tool === "highlighter" ? 12 : 1}
-              max={draw.tool === "highlighter" ? 48 : 16}
+              max={draw.tool === "highlighter" ? 48 : draw.style.brush ? 60 : 16}
               value={draw.style.width}
               onChange={(e) => draw.setStyle({ width: Number(e.target.value) })}
               className="w-16 accent-sky-500 cursor-pointer"
               title={`Stroke width: ${draw.style.width}px`}
             />
+          )}
+          {draw.tool !== "select" && draw.tool !== "eraser" && (
+            <select
+              value={brushId}
+              onChange={(e) => setBrushId(e.target.value)}
+              className="bg-slate-800 text-slate-200 text-xs rounded px-1 py-1 max-w-[8.5rem]"
+              title="Brush: a plain vector stroke, or a dry paint brush (pressure and tilt from a pen)"
+              aria-label="Freehand brush"
+            >
+              <option value="">Vector stroke</option>
+              {brushes.brushes.map((b) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
           )}
         </div>
         <div className="w-px h-5 bg-slate-800 mx-1" />
@@ -603,6 +629,7 @@ const CanvasDemo: React.FC = () => {
       </div>
 
       <div className="h-[520px] rounded-xl overflow-hidden border border-slate-800 bg-slate-950 relative" data-testid="canvas-pane" ref={agentStage}>
+        <ShapeNodeZoomProvider zoom={viewport.zoom}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -620,6 +647,7 @@ const CanvasDemo: React.FC = () => {
           <CanvasGuidesLayer guides={[...arrange.guides, ...measure.guides]} viewport={viewport} />
           <CanvasDrawLayer draw={draw} viewport={viewport} />
         </ReactFlow>
+        </ShapeNodeZoomProvider>
       </div>
       <AgentScriptPanel scripts={CANVAS_SCRIPTS} stage={agentStage} hint="Plays a scripted agent turn with the canvas__* tools: list_nodes returns the ids that align_nodes takes." />
       {showPaintRecipe ? (

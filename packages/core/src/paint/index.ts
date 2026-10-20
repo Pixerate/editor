@@ -18,5 +18,7 @@ export * from './heal';
 export * from './retouch';
 export * from './wet';
 export * from './path-stroke';
+export * from './gradient-paint';
+export * from './rand';
 export * from './brushstroke';
 export * from './pointer';

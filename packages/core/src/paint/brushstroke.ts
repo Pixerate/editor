@@ -19,6 +19,9 @@ import { normalizeBrush, type BrushSettings } from './brush';
 import { paintPathStroke, type PathSample, type PathStrokeOptions } from './path-stroke';
 import { emptySurface, readRegion, type RasterRect } from '../raster/surface';
 import { pngDataUrl } from '../raster/png';
+import { BRUSHSTROKE_MAX_SCALE as MAX_SCALE, BRUSHSTROKE_MIN_SCALE as MIN_SCALE } from './brushstroke-scale';
+
+export { brushstrokeScaleBucket, BRUSHSTROKE_MAX_SCALE, BRUSHSTROKE_MIN_SCALE } from './brushstroke-scale';
 
 /** One sample of a brushstroke: a {@link PathSample} plus an optional time stamp (milliseconds). */
 export interface BrushstrokeSample extends PathSample {
@@ -94,8 +97,6 @@ export interface BrushstrokeImage {
 }
 
 const DEFAULT_MAX_PIXELS = 4096 * 4096;
-const MIN_SCALE = 1 / 16;
-const MAX_SCALE = 16;
 
 const isProfilePath = (input: BrushstrokeInput): input is BrushstrokeProfilePath => !Array.isArray(input) && typeof input === 'object' && input !== null && 'points' in input;
 
@@ -163,18 +164,6 @@ export function brushstrokeStrokeOptions(brush: BrushstrokeBrush): PathStrokeOpt
 /** Whether a brush renders as a brushstroke (a dry dab brush, or plain tip settings). */
 export function isBrushstrokeBrush(brush: BrushstrokeBrush): boolean {
   return !('tip' in brush) || !brush.tip || (brush.engine ?? 'dab') === 'dab';
-}
-
-/**
- * The scale to render at for a zoom (and device pixel ratio): the smallest power of √2 at or above
- * it, clamped to 1/16..16. Every zoom in a bucket shares one cached image and never draws it
- * enlarged by more than √2.
- */
-export function brushstrokeScaleBucket(zoom: number, devicePixelRatio = 1): number {
-  const s = zoom * devicePixelRatio;
-  if (!Number.isFinite(s) || s <= 0) return 1;
-  const b = Math.pow(Math.SQRT2, Math.ceil(Math.log2(Math.min(MAX_SCALE, Math.max(MIN_SCALE, s))) * 2 - 1e-9));
-  return Math.min(MAX_SCALE, Math.max(MIN_SCALE, Math.round(b * 1e9) / 1e9));
 }
 
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
