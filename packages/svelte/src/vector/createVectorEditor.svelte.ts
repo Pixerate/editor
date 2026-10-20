@@ -2,7 +2,9 @@ import {
   VectorEditorController,
   createVectorCommands,
   createVectorEffectsToolProvider,
+  createVectorGenerationToolProvider,
   type VectorEffectsToolProviderOptions,
+  type VectorGenerationToolProviderOptions,
   type VectorCommandOptions,
   type VectorEditorOptions,
   type VectorEditorState,
@@ -89,5 +91,38 @@ export function useVectorEffectsTools(
     const target = typeof registry === "function" ? registry() : registry;
     if (!target) return;
     return target.register(createVectorEffectsToolProvider(controller, options));
+  });
+}
+
+/**
+ * Registers the vector editor's generative-prompt tools (`list_vector_art_models`,
+ * `generate_vector_art`, `regenerate_vector_art`) for the lifetime of the calling component.
+ * Pass `options` as a function to change models or the generator later.
+ */
+export function useVectorGenerationTools(
+  registry: ToolRegistry | null | undefined | (() => ToolRegistry | null | undefined),
+  controller: VectorEditorController,
+  options: VectorGenerationToolProviderOptions | (() => VectorGenerationToolProviderOptions),
+): void {
+  const current = () => (typeof options === "function" ? options() : options);
+  $effect(() => {
+    const target = typeof registry === "function" ? registry() : registry;
+    if (!target) return;
+    const { id, namespace } = current();
+    return target.register(
+      createVectorGenerationToolProvider(controller, {
+        id,
+        namespace,
+        models: () => {
+          const m = current().models;
+          return typeof m === "function" ? m() : m;
+        },
+        generate: (request, context) => current().generate(request, context),
+        readOnly: () => {
+          const r = current().readOnly;
+          return (typeof r === "function" ? r() : r) ?? false;
+        },
+      }),
+    );
   });
 }
