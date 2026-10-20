@@ -477,7 +477,7 @@ Every feature is available from core and from both framework packages. "Via core
 </details>
 
 <details>
-<summary><strong>Paint editor</strong> (18)</summary>
+<summary><strong>Paint editor</strong> (19)</summary>
 
 | Feature | Core | React | Svelte |
 | :--- | :---: | :---: | :---: |
@@ -500,6 +500,7 @@ Every feature is available from core and from both framework packages. "Via core
 | Procedural, Bristle & Sticker Brushes (particle brushes: spring-and-mass strings, springs, orbits and flow particles drawn as dots, lines or bead sequences; bristle brushes whose bristles splay with pressure, flatten with tilt, bend at turns and run dry one by one; sticker spray of procedural textured stamps that stay editable objects on a sticker layer: move, turn, resize, recolour, restamp, reorder, delete; all seeded and replayable; `list_stickers`, `update_sticker`, `arrange_stickers`, `remove_stickers` agent tools) | `ParticleStroke`, `BristleStroke`, `StickerSpray`, `updateSticker`, `stickerSurface` | `<BrushPanel>` particle, bristle and stamp controls & `<StickerPanel>` | `<BrushPanel>` particle, bristle and stamp controls & `<StickerPanel>` |
 | Stencils (ruler and arc guides that strokes starting near them follow exactly; line and shape (rect, ellipse, polygon) masks with soft edges and invert; any stencil can guide or mask; masks recorded with strokes so replays keep them; saved with the document; `add_stencil`, `update_stencil`, `remove_stencils` agent tools) | `addStencil`, `StencilSnapper`, `stencilMask` | `<PaintToolbar>` Ruler, Circle, Mask & stencil outlines in `<PaintCanvas>` | `<PaintToolbar>` Ruler, Circle, Mask & stencil outlines in `<PaintCanvas>` |
 | Paint Agent Cursors (an agent's strokes painted live by its cursor on the canvas, paced by the points' times, as one undo step; fills rubbed across the sheet, replays starting from the strokes they copy; cursors placed through the view's zoom, rotation and mirroring; `paint_stroke`, `fill_layer` and `replay_strokes` act out through a `director`) | `PaintDirector`, `PaintPresence` & `createPaintEditorToolProvider({ director })` | `usePaintDirector` & `<PaintEditor presence>` / `<PaintCanvas presence>` | `createPaintDirector` & `<PaintEditor presence>` / `<PaintCanvas presence>` |
+| Paint Provider Effects (optional: with an `EffectProvider`, effect paper drawn over the sheet and under the paint, multiplied so the grain shows; effect layers drawn by generators, overlays and titles and redrawn with new values; effect fills; filter light baked onto dried paint, thick paint keeping its relief; each one undo step, a slider drag one; saved with the document; agent tools `set_paper_effect`, `add_effect_layer`, `fill_layer_with_effect` and the shared effect tools) | `setPaperEffect`, `addEffectLayer`, `applyLightEffect`, `createPaintEffectsToolProvider` (`/paint-editor`) | `<PaintEffectsPanel>`, `usePaintEffectsTools` (`/paint-editor`) | `<PaintEffectsPanel>`, `usePaintEffectsTools` (`/paint-editor`) |
 
 </details>
 

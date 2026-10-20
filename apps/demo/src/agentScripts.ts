@@ -927,6 +927,55 @@ function ring(cx: number, cy: number, r: number, n = 48) {
 
 export const PAINT_SCRIPTS: AgentScript[] = [
   {
+    id: "paint-effects-flair",
+    prompt: "Print the sheet with a Flair gradient, light the hills with Flair and add film grain",
+    steps: [
+      { say: "Searching Flair for a soft gradient to print the sheet with.", tool: "paintfx__search_effects", args: { query: "gradient", use: "generator" } },
+      {
+        say: "A grainy gradient as effect paper at 60%: multiplied, so the paper's own grain still shows.",
+        tool: "paintfx__set_paper_effect",
+        args: { effect: "grainy-gradient", opacity: 0.6 },
+        open: "Effects",
+      },
+      { say: "Hills in pastel, rubbed into the grain.", tool: "paint__add_layer", args: { name: "Hills" }, as: "hills", open: "Layers" },
+      { tool: "paint__fill_layer", args: (ctx) => ({ layerId: ctx.results.hills.id, color: "#1e3a8a", grain: 0.6, pressure: 0.5 }) },
+      { say: "Looking for light that suits dried pastel.", tool: "paintfx__search_effects", args: { query: "light", use: "filter" } },
+      {
+        say: "A rim light baked onto the dried pastel at 70%.",
+        tool: "paintfx__apply_effect",
+        args: (ctx) => ({ target: ctx.results.hills.id, effect: "rim-light", opacity: 0.7 }),
+        open: "Effects",
+      },
+      { say: "Film grain and a vignette on their own effect layer.", tool: "paintfx__add_effect_layer", args: { effect: "vignette-grain", name: "Vignette" } },
+      { say: "Checking what is applied.", tool: "paintfx__list_applied_effects", args: {} },
+      { say: "Rendering a preview to check it.", tool: "paint__render_preview", args: { maxSide: 420 } },
+    ],
+  },
+  {
+    id: "paint-effects",
+    prompt: "Print the sheet with a gradient, glaze the hills with warm light and add a caption",
+    steps: [
+      { say: "Looking for generators in the effects provider.", tool: "paintfx__search_effects", args: { use: "generator" } },
+      {
+        say: "A pale sunset gradient as effect paper: multiplied over the sheet, so the paper's grain still shows.",
+        tool: "paintfx__set_paper_effect",
+        args: { effect: "fake.gradient", values: { from: "#fde68a", to: "#fbcfe8", angle: 90 } },
+        open: "Effects",
+      },
+      { say: "Hills in pastel, rubbed into the grain.", tool: "paint__add_layer", args: { name: "Hills" }, as: "hills", open: "Layers" },
+      { tool: "paint__fill_layer", args: (ctx) => ({ layerId: ctx.results.hills.id, color: "#1e3a8a", grain: 0.6, pressure: 0.5 }) },
+      {
+        say: "Warm evening light baked onto the dried pastel.",
+        tool: "paintfx__apply_effect",
+        args: (ctx) => ({ target: ctx.results.hills.id, effect: "fake.tint", values: { color: "#f59e0b", amount: 0.5 }, opacity: 0.8 }),
+        open: "Effects",
+      },
+      { say: "A caption bar on its own effect layer.", tool: "paintfx__add_effect_layer", args: { effect: "fake.bar", values: { color: "#0ea5e9", height: 0.08 }, time: 2000, name: "Caption" } },
+      { say: "Checking what is applied.", tool: "paintfx__list_applied_effects", args: {} },
+      { say: "Rendering a preview to check it.", tool: "paint__render_preview", args: { maxSide: 420 } },
+    ],
+  },
+  {
     id: "paint-landscape",
     prompt: "Block in a sunset landscape in pastel",
     steps: [
