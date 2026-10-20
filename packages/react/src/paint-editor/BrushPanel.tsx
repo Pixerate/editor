@@ -10,8 +10,26 @@ import {
   patchBrushValue,
   patchPath,
   readPath,
+  WET_TOOLS,
+  WET_TOOL_LABELS,
+  WET_MEDIA,
+  WET_MEDIUM_LABELS,
+  IMPASTO_TOOLS,
+  IMPASTO_TOOL_LABELS,
+  PARTICLE_KINDS,
+  PARTICLE_KIND_LABELS,
+  PARTICLE_RENDERS,
+  PARTICLE_RENDER_LABELS,
+  STAMP_KINDS,
+  STAMP_LABELS,
+  toggleStamp,
+  type ParticleKind,
+  type ParticleRender,
+  type ImpastoTool,
+  type WetMediumKind,
   type BlendMode,
   type BrushRotation,
+  type WetTool,
   type MultiColorMode,
   type PaintEditorController,
 } from '@pixerate/editor/paint-editor';
@@ -111,6 +129,81 @@ export const BrushPanel: React.FC<BrushPanelProps> = ({ controller, thumbnailWid
       {engine && (
         <div className="flex flex-col gap-1.5" data-testid="brush-engine">
           <span className="font-medium text-slate-300">{engine.title}</span>
+          {engine.wetTool && (
+            <label className="flex items-center justify-between gap-2">
+              <span className="text-slate-400">Wet tool</span>
+              <select aria-label="Wet tool" value={brush.wet.tool} onChange={(e) => controller.setBrush({ wet: { tool: e.target.value as WetTool } })} className="rounded bg-slate-800 px-1 py-0.5">
+                {WET_TOOLS.map((t) => (
+                  <option key={t} value={t}>
+                    {WET_TOOL_LABELS[t]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {engine.wetTool && (
+            <label className="flex items-center justify-between gap-2">
+              <span className="text-slate-400">Medium</span>
+              <select aria-label="Wet medium" value={brush.wet.medium} onChange={(e) => controller.setBrush({ wet: { medium: e.target.value as WetMediumKind } })} className="rounded bg-slate-800 px-1 py-0.5">
+                {WET_MEDIA.map((m) => (
+                  <option key={m} value={m}>
+                    {WET_MEDIUM_LABELS[m]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {engine.particleMenus && (
+            <>
+              <label className="flex items-center justify-between gap-2">
+                <span className="text-slate-400">Particles</span>
+                <select aria-label="Particle kind" value={brush.particle.kind} onChange={(e) => controller.setBrush({ particle: { kind: e.target.value as ParticleKind } })} className="rounded bg-slate-800 px-1 py-0.5">
+                  {PARTICLE_KINDS.map((k) => (
+                    <option key={k} value={k}>
+                      {PARTICLE_KIND_LABELS[k]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center justify-between gap-2">
+                <span className="text-slate-400">Drawn as</span>
+                <select aria-label="Particle render" value={brush.particle.render} onChange={(e) => controller.setBrush({ particle: { render: e.target.value as ParticleRender } })} className="rounded bg-slate-800 px-1 py-0.5">
+                  {PARTICLE_RENDERS.map((k) => (
+                    <option key={k} value={k}>
+                      {PARTICLE_RENDER_LABELS[k]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </>
+          )}
+          {engine.stickerStamps && (
+            <div className="flex flex-wrap gap-1" role="group" aria-label="Sticker stamps">
+              {STAMP_KINDS.map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  aria-pressed={brush.sticker.stamps.includes(k)}
+                  className={`px-1.5 py-0.5 rounded text-[10px] ${brush.sticker.stamps.includes(k) ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-300'}`}
+                  onClick={() => controller.setBrush({ sticker: { stamps: toggleStamp(brush.sticker.stamps, k) } })}
+                >
+                  {STAMP_LABELS[k]}
+                </button>
+              ))}
+            </div>
+          )}
+          {engine.impastoTool && (
+            <label className="flex items-center justify-between gap-2">
+              <span className="text-slate-400">Tool</span>
+              <select aria-label="Impasto tool" value={brush.impasto.tool} onChange={(e) => controller.setBrush({ impasto: { tool: e.target.value as ImpastoTool } })} className="rounded bg-slate-800 px-1 py-0.5">
+                {IMPASTO_TOOLS.map((t) => (
+                  <option key={t} value={t}>
+                    {IMPASTO_TOOL_LABELS[t]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           {engine.sliders.map((c) => (
             <PaintSlider key={c.path} control={c} value={readPath(brush, c.path)} onChange={(v) => controller.setBrush(patchPath(brush as never, c.path, v) as never)} />
           ))}

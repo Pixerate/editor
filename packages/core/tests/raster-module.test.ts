@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   RasterCompositor,
@@ -108,12 +108,19 @@ describe('paint module', () => {
   });
 
   it('imports only from itself, the raster module and the dependency-free tool types', () => {
-    const dir = join(__dirname, '../src/paint');
-    for (const f of readdirSync(dir)) {
-      const src = readFileSync(join(dir, f), 'utf8');
-      const imports = [...src.matchAll(/from '([^']+)'/g)].map((m) => m[1]);
-      // `../tools/registry` is dependency-free (entry-isolation enforces it); the agent tools use its types.
-      expect(imports.filter((i) => !i.startsWith('./') && !i.startsWith('../raster/') && i !== '../tools/registry.js'), f).toEqual([]);
+    const root = join(__dirname, '../src');
+    const dir = join(root, 'paint');
+    const files = (d: string): string[] => readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? files(join(d, e.name)) : [join(d, e.name)]));
+    for (const file of files(dir)) {
+      const src = readFileSync(file, 'utf8');
+      const imports = [...src.matchAll(/from '([^']+)'|import\('([^']+)'\)/g)].map((m) => m[1] ?? m[2]);
+      // `tools/registry` is dependency-free (entry-isolation enforces it); the agent tools use its types.
+      const bad = imports.filter((i) => {
+        if (!i.startsWith('.')) return true;
+        const target = relative(root, resolve(dirname(file), i)).replace(/\\/g, '/');
+        return !target.startsWith('paint/') && !target.startsWith('raster/') && target !== 'tools/registry.js';
+      });
+      expect(bad, relative(root, file)).toEqual([]);
     }
   });
 });

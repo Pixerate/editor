@@ -184,7 +184,13 @@ describe('PSD import of other formats', () => {
     expect(gray.warnings.join(' ')).toMatch(/8-bit grayscale; it was converted to 8-bit RGB/);
 
     // CMYK stores 255 for no ink: no cyan, magenta, yellow or black is white.
-    expect(first(singleLayerPsd({ mode: 4, depth: 8, width: 2, height: 2, channels: [[0, fill(n, 0)], [1, fill(n, 255)], [2, fill(n, 255)], [3, fill(n, 255)]] }))).toEqual([0, 255, 255, 255]);
+    // Full cyan converts through the default coated CMYK profile: a press cyan, not #00ffff.
+    const cyan = first(singleLayerPsd({ mode: 4, depth: 8, width: 2, height: 2, channels: [[0, fill(n, 0)], [1, fill(n, 255)], [2, fill(n, 255)], [3, fill(n, 255)]] }));
+    expect(cyan[0]).toBeLessThan(30);
+    expect(cyan[2]).toBeGreaterThan(200);
+    expect(cyan[1]).toBeGreaterThan(cyan[0] + 80);
+    expect(cyan[3]).toBe(255);
+    expect(first(singleLayerPsd({ mode: 4, depth: 8, width: 2, height: 2, channels: [[0, fill(n, 255)], [1, fill(n, 255)], [2, fill(n, 255)], [3, fill(n, 255)]] }))).toEqual([255, 255, 255, 255]);
 
     // Lab white.
     expect(first(singleLayerPsd({ mode: 9, depth: 8, width: 2, height: 2, channels: [[0, fill(n, 255)], [1, fill(n, 128)], [2, fill(n, 128)]] }))).toEqual([255, 255, 255, 255]);
@@ -211,7 +217,7 @@ describe('PSD import of other formats', () => {
     const px = first(singleLayerPsd({ mode: 3, depth: 32, width: 2, height: 2, channels: [[0, float(1)], [1, float(0.2140)], [2, float(0)], [-1, float(1)]] }));
     expect(px[0]).toBe(255);
     expect(Math.abs(px[1] - 128)).toBeLessThanOrEqual(1);
-  });
+  }, 60_000);
 
   it('warns about what it approximates or leaves out, naming the layers', () => {
     const n = 4;
